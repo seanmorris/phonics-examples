@@ -18,6 +18,9 @@ final class Simulation
 	private const RACK_GAP = .00004;
 	private const CONTACT_SLOP = .00008;
 	private const CONTACT_ITERATIONS = 24;
+	private const POCKET_DRAFT = .24007875908011603; // tan(13.5 degrees)
+	private const POCKET_RESTITUTION = .52;
+	private const POCKET_SINK_DEPTH = .115;
 
 	/** @var list<Ball> */
 	public array $balls = [];
@@ -176,34 +179,31 @@ final class Simulation
 			$collision = $this->earliest($remaining);
 			$advance = $collision ? max(0, $collision['time']) : $remaining;
 
-			foreach($this->balls as $ball) if($ball->active) $ball->advance($advance);
+			$this->advanceActive($advance);
 			$remaining -= $advance;
 
 			if(!$collision) break;
 
 			if($collision['type'] === 'ball') $this->resolveContactIsland($collision['a'], $collision['b']);
+			elseif($collision['type'] === 'jaw') $this->resolveJaw($collision['ball'], $collision);
 			else $this->resolveCushion($collision['ball'], $collision['axis']);
 
 			if($advance < 1e-8) $remaining = max(0, $remaining - 1e-7);
 		}
 
 		if($remaining > 0)
-		foreach($this->balls as $ball) if($ball->active) $ball->advance($remaining);
+		$this->advanceActive($remaining);
 
-		foreach($this->balls as $ball) if($ball->active)
+		foreach($this->balls as $ball) if($ball->active && $ball->pocket === null)
 		{
-			$pocket = Table::capture($ball->x, $ball->y);
+			$pocket = Table::pocketEntry($ball->x, $ball->y);
 
 			if($pocket !== null)
 			{
-				$ball->x = $ball->previousX = $pocket['x'];
-				$ball->y = $ball->previousY = $pocket['y'];
-				$ball->active = false;
-				$ball->vx = $ball->vy = $ball->spinX = $ball->spinY = $ball->spinZ = 0;
-				$this->events[] = ['type' => 'pocket','ball' => $ball->number,'pocket' => $pocket['index']];
-
-				if($ball->number === 0) $this->scratched = true;
-
+				$ball->pocket = $pocket['index'];
+				$ball->drop = $ball->previousDrop = 0;
+				$ball->vDrop = 0;
+				$this->events[] = ['type' => 'pocket-enter','ball' => $ball->number,'pocket' => $pocket['index']];
 				continue;
 			}
 
@@ -211,11 +211,93 @@ final class Simulation
 		}
 	}
 
+	/** Advance cloth balls and balls rattling inside the conical pocket liners. */
+	private function advanceActive(float $seconds): void
+	{
+		if($seconds <= 0) return;
+
+		foreach($this->balls as $ball) if($ball->active)
+		{
+			$ball->advance($seconds);
+
+			if($ball->pocket !== null) $this->advancePocket($ball, $seconds);
+		}
+	}
+
+	/** Gravity and inelastic cone contacts decide whether a ball rattles out or sinks. */
+	private function advancePocket(Ball $ball, float $seconds): void
+	{
+		$index = $ball->pocket;
+		[$pocketX,$pocketY] = Table::pockets()[$index];
+		$ball->vDrop += self::GRAVITY * $seconds;
+		$ball->drop += $ball->vDrop * $seconds;
+		$relativeX = $ball->x - $pocketX;
+		$relativeY = $ball->y - $pocketY;
+		$radial = hypot($relativeX, $relativeY);
+		$clearance = Table::pocketRadius($index) - Ball::RADIUS;
+		$allowed = max(.001, $clearance - self::POCKET_DRAFT * $ball->drop);
+
+		if($radial > $allowed)
+		{
+			if($radial < 1e-9) [$radialX,$radialY] = [1.0,0.0];
+			else [$radialX,$radialY] = [$relativeX / $radial,$relativeY / $radial];
+
+			$normalLength = hypot(1, self::POCKET_DRAFT);
+			$nx = $radialX / $normalLength;
+			$ny = $radialY / $normalLength;
+			$nz = self::POCKET_DRAFT / $normalLength;
+			$normalSpeed = $ball->vx * $nx + $ball->vy * $ny + $ball->vDrop * $nz;
+			$ball->x = $pocketX + $radialX * $allowed;
+			$ball->y = $pocketY + $radialY * $allowed;
+
+			if($normalSpeed > 0)
+			{
+				$impulse = (1 + self::POCKET_RESTITUTION) * $normalSpeed;
+				$ball->vx -= $impulse * $nx;
+				$ball->vy -= $impulse * $ny;
+				$ball->vDrop -= $impulse * $nz;
+				$ball->vx *= .985;
+				$ball->vy *= .985;
+				$ball->spinY *= .92;
+				$this->events[] = ['type' => 'pocket-rattle','ball' => $ball->number,'pocket' => $index
+					,'strength' => min(1, $normalSpeed / self::MAX_SPEED)];
+			}
+		}
+
+		if($ball->drop < 0)
+		{
+			// Return the centre just behind both cushion planes. This prevents an
+			// upward crossing from re-entering the liner in the same integration slice.
+			$limitX = Table::WIDTH / 2 - Ball::RADIUS - 1e-5;
+			$limitY = Table::HEIGHT / 2 - Ball::RADIUS - 1e-5;
+			$ball->x = max(-$limitX, min($limitX, $ball->x));
+			$ball->y = max(-$limitY, min($limitY, $ball->y));
+
+			$ball->drop = $ball->previousDrop = 0;
+			$ball->vDrop = 0;
+			$ball->pocket = null;
+			$this->events[] = ['type' => 'pocket-reject','ball' => $ball->number,'pocket' => $index];
+
+			return;
+		}
+
+		if($ball->drop >= self::POCKET_SINK_DEPTH)
+		{
+			$ball->drop = $ball->previousDrop = self::POCKET_SINK_DEPTH;
+			$ball->active = false;
+			$ball->vx = $ball->vy = $ball->vDrop = $ball->spinX = $ball->spinY = $ball->spinZ = 0;
+			$this->events[] = ['type' => 'pocket','ball' => $ball->number,'pocket' => $index];
+
+			if($ball->number === 0) $this->scratched = true;
+		}
+	}
+
 	/** @return array<string,mixed>|null */
 	private function earliest(float $limit): ?array
 	{
 		$best = null;
-		$balls = array_values(array_filter($this->balls, static fn(Ball $ball): bool => $ball->active));
+		$balls = array_values(array_filter($this->balls,
+			static fn(Ball $ball): bool => $ball->active && $ball->pocket === null));
 		usort($balls, static fn(Ball $left, Ball $right): int => $left->number <=> $right->number);
 		$count = count($balls);
 
@@ -272,6 +354,37 @@ final class Simulation
 				if($best === null || $time < $best['time'])
 				$best = ['type' => 'cushion','time' => max(0, $time),'ball' => $a,'axis' => $axis];
 			}
+
+			foreach(Table::jaws() as [$jawX,$jawY])
+			{
+				$relativeX = $a->x - $jawX;
+				$relativeY = $a->y - $jawY;
+				$speedSquared = $a->vx ** 2 + $a->vy ** 2;
+				$approach = 2 * ($relativeX * $a->vx + $relativeY * $a->vy);
+				$separation = $relativeX ** 2 + $relativeY ** 2 - Ball::RADIUS ** 2;
+
+				if($separation <= 0 && $approach < 0) $time = 0.0;
+				elseif($speedSquared <= 1e-12 || $approach >= 0) continue;
+				else
+				{
+					$discriminant = $approach ** 2 - 4 * $speedSquared * $separation;
+
+					if($discriminant < 0) continue;
+
+					$time = (-$approach - sqrt($discriminant)) / (2 * $speedSquared);
+				}
+
+				if($time < -1e-9 || $time > $limit || $best !== null && $time >= $best['time']) continue;
+
+				$contactX = $a->x + $a->vx * max(0, $time) - $jawX;
+				$contactY = $a->y + $a->vy * max(0, $time) - $jawY;
+				$length = hypot($contactX, $contactY);
+
+				if($length < 1e-9) continue;
+
+				$best = ['type' => 'jaw','time' => max(0, $time),'ball' => $a
+					,'x' => $jawX,'y' => $jawY,'nx' => $contactX / $length,'ny' => $contactY / $length];
+			}
 		}
 
 		return $best;
@@ -280,7 +393,8 @@ final class Simulation
 	/** Resolve every touching ball connected to the first impact as one stable contact island. */
 	private function resolveContactIsland(Ball $seedA, Ball $seedB): void
 	{
-		$balls = array_values(array_filter($this->balls, static fn(Ball $ball): bool => $ball->active));
+		$balls = array_values(array_filter($this->balls,
+			static fn(Ball $ball): bool => $ball->active && $ball->pocket === null));
 		usort($balls, static fn(Ball $left, Ball $right): int => $left->number <=> $right->number);
 		$candidates = [];
 
@@ -413,6 +527,35 @@ final class Simulation
 		$this->events[] = ['type' => 'cushion','strength' => min(1, $normalSpeed / self::MAX_SPEED)];
 	}
 
+	/** Resolve a rounded rubber jaw rather than treating its pocket gap as empty space. */
+	private function resolveJaw(Ball $ball, array $collision): void
+	{
+		$nx = $collision['nx'];
+		$ny = $collision['ny'];
+		$normalSpeed = $ball->vx * $nx + $ball->vy * $ny;
+
+		if($normalSpeed >= 0) return;
+
+		$tangentX = $ball->vx - $normalSpeed * $nx;
+		$tangentY = $ball->vy - $normalSpeed * $ny;
+		$reflected = -$normalSpeed * self::CUSHION_RESTITUTION;
+		$ball->vx = $tangentX * .96 + $reflected * $nx;
+		$ball->vy = $tangentY * .96 + $reflected * $ny;
+		$ball->spinY *= .90;
+
+		$offsetX = $ball->x - $collision['x'];
+		$offsetY = $ball->y - $collision['y'];
+		$distance = hypot($offsetX, $offsetY);
+
+		if($distance < Ball::RADIUS)
+		{
+			$ball->x = $collision['x'] + $nx * (Ball::RADIUS + 1e-8);
+			$ball->y = $collision['y'] + $ny * (Ball::RADIUS + 1e-8);
+		}
+
+		$this->events[] = ['type' => 'cushion','strength' => min(1, -$normalSpeed / self::MAX_SPEED)];
+	}
+
 	private function applyCloth(Ball $ball, float $seconds): void
 	{
 		$r = Ball::RADIUS;
@@ -455,7 +598,8 @@ final class Simulation
 	public function moving(): bool
 	{
 		foreach($this->balls as $ball)
-		if($ball->active && (hypot($ball->vx, $ball->vy) >= .006 || abs($ball->spinY) >= .18)) return true;
+		if($ball->active && ($ball->pocket !== null || hypot($ball->vx, $ball->vy) >= .006
+			|| abs($ball->spinY) >= .18)) return true;
 
 		return false;
 	}
@@ -478,6 +622,8 @@ final class Simulation
 		$cue->x = $cue->previousX = $x;
 		$cue->y = $cue->previousY = $y;
 		$cue->vx = $cue->vy = $cue->spinX = $cue->spinY = $cue->spinZ = 0;
+		$cue->pocket = null;
+		$cue->drop = $cue->previousDrop = $cue->vDrop = 0;
 		$cue->active = true;
 		$this->scratched = false;
 		$this->phase = 'aim';
@@ -533,7 +679,8 @@ final class Simulation
 		foreach($this->balls as $ball)
 		array_push($values, $ball->number, $ball->active, round($ball->x, 9), round($ball->y, 9)
 			, round($ball->vx, 9), round($ball->vy, 9), round($ball->spinX, 8)
-			, round($ball->spinY, 8), round($ball->spinZ, 8));
+			, round($ball->spinY, 8), round($ball->spinZ, 8), $ball->pocket, round($ball->drop, 9)
+			, round($ball->vDrop, 9));
 
 		return hash('sha256', json_encode($values, JSON_THROW_ON_ERROR));
 	}

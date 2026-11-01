@@ -1,7 +1,19 @@
 /** Place the cue above the first rail it crosses while keeping its tip on the cue ball. */
+export const cueAppearance = Object.freeze({
+	length:1.35
+	, buttDiameter:.0285
+	, shaftDiameter:.0125
+	, chalkTipLength:.007
+	, copperCollarLength:.025
+	, patternPoints:12
+});
+
+/** Preserve an intuitive horizontal orbit on either side of the on-screen rotation target. */
+export const orbitYawDelta = (deltaX,pointerY,targetY) => deltaX*.006*(pointerY<targetY?-1:1);
+
 export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
 {
-	const length = 1.35, thickness = .014, dx = Math.cos(angle), dz = Math.sin(angle);
+	const {length,buttDiameter}=cueAppearance,dx = Math.cos(angle), dz = Math.sin(angle);
 	const tipGap = ballRadius + .008, tipY = ballRadius + .012;
 	const tip = [cueX - dx * tipGap,tipY,cueY - dz * tipGap];
 	const backX = -dx, backZ = -dz, inset = .04, distances = [];
@@ -20,7 +32,7 @@ export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
 	}
 
 	const railDistance = Math.max(.001, Math.min(...distances));
-	const railClearance = .105 + thickness / 2 + .006;
+	const railClearance = .105 + buttDiameter / 2 + .006;
 	const pitch = Math.max(8 * Math.PI / 180, Math.atan2(railClearance - tipY, railDistance));
 	const sinYaw = Math.sin(angle / 2), cosYaw = Math.cos(angle / 2);
 	const sinPitch = Math.sin(pitch / 2), cosPitch = Math.cos(pitch / 2);
@@ -28,9 +40,10 @@ export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
 
 	return {
 		position: tip.map((value, index) => value - direction[index] * length / 2)
-		, scale: [length,thickness,thickness]
+		, scale: [length,buttDiameter,buttDiameter]
 		, rotation: [sinYaw * sinPitch,-sinYaw * cosPitch,-cosYaw * sinPitch,cosYaw * cosPitch]
 		, tip
+		, direction
 		, pitch
 		, railDistance
 		, railClearance
@@ -43,6 +56,38 @@ const roundedRectangleSdf = (x,z,halfX,halfZ,radius) => {
 };
 const circleSdf = (x,z,cx,cz,radius) => Math.hypot(x-cx,z-cz)-radius;
 const subtractSdf = (solid,...cuts) => Math.max(solid,-Math.min(...cuts));
+const polygonSdf = (x,z,vertices) => {
+	let distanceSquared=Infinity,inside=false;
+
+	for(let index=0,previous=vertices.length-1;index<vertices.length;previous=index++)
+	{
+		const [ax,az]=vertices[previous],[bx,bz]=vertices[index],edgeX=bx-ax,edgeZ=bz-az;
+		const pointX=x-ax,pointZ=z-az,edgeLength=edgeX*edgeX+edgeZ*edgeZ;
+		const amount=Math.max(0,Math.min(1,(pointX*edgeX+pointZ*edgeZ)/edgeLength));
+		const dx=pointX-edgeX*amount,dz=pointZ-edgeZ*amount;
+		distanceSquared=Math.min(distanceSquared,dx*dx+dz*dz);
+		if((az>z)!==(bz>z)&&x<(bx-ax)*(z-az)/(bz-az)+ax)inside=!inside;
+	}
+
+	return Math.sqrt(distanceSquared)*(inside?-1:1);
+};
+const insetPolygon = (vertices,radius) => {
+	const area=vertices.reduce((sum,[x,z],index)=>{const [nextX,nextZ]=vertices[(index+1)%vertices.length];
+		return sum+x*nextZ-nextX*z;},0);
+	const direction=Math.sign(area)||1,lines=vertices.map(([x,z],index)=>{
+		const [nextX,nextZ]=vertices[(index+1)%vertices.length],dx=nextX-x,dz=nextZ-z,length=Math.hypot(dx,dz);
+		const nx=-dz/length*direction,nz=dx/length*direction;
+		return {x:x+nx*radius,z:z+nz*radius,dx,dz};
+	});
+
+	return lines.map((line,index)=>{
+		const previous=lines[(index+lines.length-1)%lines.length];
+		const determinant=previous.dx*line.dz-previous.dz*line.dx;
+		const offsetX=line.x-previous.x,offsetZ=line.z-previous.z;
+		const amount=(offsetX*line.dz-offsetZ*line.dx)/determinant;
+		return [previous.x+previous.dx*amount,previous.z+previous.dz*amount];
+	});
+};
 
 /** Signed distance for a vertically extruded profile with a circular fillet around both cap edges. */
 export function roundedExtrusionSdf(horizontalDistance,y,bottom,top,radius)
@@ -56,16 +101,68 @@ export function roundedExtrusionSdf(horizontalDistance,y,bottom,top,radius)
 		+Math.hypot(Math.max(horizontal,0),Math.max(vertical,0))-radius;
 }
 
+/** Unit normal for a fillet whose solved horizontal inset differs from its vertical radius. */
+export function roundedFilletNormal(nx,nz,angle,horizontalRadius,verticalRadius,yDirection=1)
+{
+	const horizontal=Math.cos(angle)/Math.max(horizontalRadius,1e-9);
+	const vertical=Math.sin(angle)/Math.max(verticalRadius,1e-9),length=Math.hypot(horizontal,vertical)||1;
+	return [nx*horizontal/length,yDirection*vertical/length,nz*horizontal/length];
+}
+
 export function tablePocketDefinitions(width,height,cornerMouth=.1158875,sideMouth=.1285875)
 {
+	// A corner mouth is measured diagonally between its jaws; treating that
+	// diagonal as the radius makes the rendered bowl larger than a side pocket.
+	// Keep the jaw chord exact and shift a smaller circular bowl slightly inward.
+	const cornerRadius=(cornerMouth+sideMouth)/4,cornerHalf=cornerMouth/2;
+	const cornerDepth=cornerHalf-Math.sqrt(cornerRadius*cornerRadius-cornerHalf*cornerHalf);
+	const cornerInset=cornerDepth/Math.SQRT2,cornerX=width/2-cornerInset,cornerZ=height/2-cornerInset;
 	return [
-		{x:-width/2,z:-height/2,mouth:cornerMouth,outward:[-Math.SQRT1_2,-Math.SQRT1_2]}
-		, {x:0,z:-height/2,mouth:sideMouth,outward:[0,-1]}
-		, {x:width/2,z:-height/2,mouth:cornerMouth,outward:[Math.SQRT1_2,-Math.SQRT1_2]}
-		, {x:-width/2,z:height/2,mouth:cornerMouth,outward:[-Math.SQRT1_2,Math.SQRT1_2]}
-		, {x:0,z:height/2,mouth:sideMouth,outward:[0,1]}
-		, {x:width/2,z:height/2,mouth:cornerMouth,outward:[Math.SQRT1_2,Math.SQRT1_2]}
+		{x:-cornerX,z:-cornerZ,mouth:cornerMouth,radius:cornerRadius,outward:[-Math.SQRT1_2,-Math.SQRT1_2]}
+		, {x:0,z:-height/2,mouth:sideMouth,radius:sideMouth/2,outward:[0,-1]}
+		, {x:cornerX,z:-cornerZ,mouth:cornerMouth,radius:cornerRadius,outward:[Math.SQRT1_2,-Math.SQRT1_2]}
+		, {x:-cornerX,z:cornerZ,mouth:cornerMouth,radius:cornerRadius,outward:[-Math.SQRT1_2,Math.SQRT1_2]}
+		, {x:0,z:height/2,mouth:sideMouth,radius:sideMouth/2,outward:[0,1]}
+		, {x:cornerX,z:cornerZ,mouth:cornerMouth,radius:cornerRadius,outward:[Math.SQRT1_2,Math.SQRT1_2]}
 	];
+}
+
+export const billiardsTableMeshing = Object.freeze({
+	columns:432
+	, rows:240
+	// 55 mm cushion depth with the specified 13.5-degree pocket back draft.
+	, cushionJawTaper:.055*Math.tan(13.5*Math.PI/180)
+	, cushionTopSegments:6
+});
+
+/** Six convex rails with explicit angled pocket facings and exact jaw endpoints. */
+export function tableCushionPolygons(width,height,cornerMouth=.1158875,sideMouth=.1285875)
+{
+	const cushionWidth=.055,taper=billiardsTableMeshing.cushionJawTaper;
+	const cornerJaw=cornerMouth/Math.SQRT2,polygons=[];
+	const horizontal=(start,end,edge,outward)=>polygons.push([
+		[start,edge],[end,edge]
+		, [end-taper,edge+outward*cushionWidth],[start+taper,edge+outward*cushionWidth]
+	]);
+	const vertical=(start,end,edge,outward)=>polygons.push([
+		[edge,start],[edge+outward*cushionWidth,start+taper]
+		, [edge+outward*cushionWidth,end-taper],[edge,end]
+	]);
+
+	for(const outward of [-1,1])
+	{
+		const edge=outward*height/2;
+		horizontal(-width/2+cornerJaw,-sideMouth/2,edge,outward);
+		horizontal(sideMouth/2,width/2-cornerJaw,edge,outward);
+	}
+	vertical(-height/2+cornerJaw,height/2-cornerJaw,-width/2,-1);
+	vertical(-height/2+cornerJaw,height/2-cornerJaw,width/2,1);
+
+	return polygons.map(vertices=>{
+		const area=vertices.reduce((sum,[x,z],index)=>{const [nextX,nextZ]=vertices[(index+1)%vertices.length];
+			return sum+x*nextZ-nextX*z;},0);
+		return area<0?[...vertices].reverse():vertices;
+	});
 }
 
 /** Shared implicit profiles used to construct the table as nested solids and cuts. */
@@ -73,27 +170,28 @@ export function tableCsgProfiles(width,height,cornerMouth=.1158875,sideMouth=.12
 {
 	const outerX=width/2+.17,outerZ=height/2+.17,bounds=[-outerX-.02,-outerZ-.02,outerX+.02,outerZ+.02];
 	const pockets=tablePocketDefinitions(width,height,cornerMouth,sideMouth);
-	const pocketSdf=(x,z,extra=0)=>Math.min(...pockets.map(pocket=>circleSdf(x,z,pocket.x,pocket.z,pocket.mouth/2+extra)));
+	const pocketSdf=(x,z,extra=0)=>Math.min(...pockets.map(pocket=>circleSdf(x,z,pocket.x,pocket.z,pocket.radius+extra)));
 	const outer=(x,z)=>roundedRectangleSdf(x,z,outerX,outerZ,.16);
+	const cushionRails=tableCushionPolygons(width,height,cornerMouth,sideMouth);
+	const cushionBand=(x,z)=>Math.min(...cushionRails.map(vertices=>polygonSdf(x,z,vertices)));
+	const pocketCut=(x,z)=>pocketSdf(x,z);
+	const woodCut=(x,z)=>Math.min(
+		roundedRectangleSdf(x,z,width/2+.052,height/2+.052,.072)
+		, pocketCut(x,z)
+	);
 
 	return {
 		bounds
 		, pockets
-		, apron:(x,z)=>subtractSdf(outer(x,z),pocketSdf(x,z,.006))
-		, bed:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2,height/2,.02),pocketSdf(x,z,.001))
-		, wood:(x,z)=>subtractSdf(outer(x,z)
-			,roundedRectangleSdf(x,z,width/2+.052,height/2+.052,.072),pocketSdf(x,z,.006))
-		, cushion:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2+.055,height/2+.055,.075)
-			,roundedRectangleSdf(x,z,width/2,height/2,.02),pocketSdf(x,z,.003))
+		, cushionRails
+		, pocketCut
+		, apron:(x,z)=>subtractSdf(outer(x,z),pocketCut(x,z))
+		, bed:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2,height/2,.02),pocketCut(x,z))
+		, wood:(x,z)=>subtractSdf(outer(x,z),woodCut(x,z))
+		// The rail caps are explicit faces. Avoiding a Boolean at the pocket edge
+		// keeps their topology and normals stable when pocket dimensions change.
+		, cushion:cushionBand
 	};
-}
-
-export function pocketDropPose(pocket,ballRadius,progress)
-{
-	progress=Math.max(0,Math.min(1,progress));
-	const smooth=progress*progress*(3-2*progress),roll=Math.max(0,(progress-.38)/.62),travel=.055*roll;
-
-	return [pocket.x+pocket.outward[0]*travel,ballRadius+.012-.19*smooth,pocket.z+pocket.outward[1]*travel];
 }
 
 /** Identify a ball close enough in the shot direction to take the cue impulse immediately. */
@@ -119,9 +217,11 @@ export function cueContactWarning(balls,ballRadius,angle,threshold=.0012)
 export const billiardsMaterials = Object.freeze({
 	ball:Object.freeze([.03,1.56,1,.35])
 	, wood:Object.freeze([.5,1.52,2,1])
+	, cueWood:Object.freeze([.42,1.52,6,1])
 	, felt:Object.freeze([.9,1.5,3,.85])
 	, cushionFelt:Object.freeze([.93,1.5,3,1.15])
 });
+export const billiardsEdgeRadii = Object.freeze({wood:.018,cushion:.006,cushionBottom:0});
 
 /** Direct browser shell and WebGL2 renderer for PHP Billiards. */
 export function activate({module, canvas, session})
@@ -275,13 +375,15 @@ export function activate({module, canvas, session})
 	canvas.addEventListener('pointerdown', event => {
 		canvas.focus({preventScroll: true});
 		canvas.setPointerCapture(event.pointerId);
-		dragging = {id: event.pointerId,x: event.clientX,y: event.clientY,yaw: camera.yaw,pitch: camera.pitch};
+		dragging = {id: event.pointerId,x: event.clientX,y: event.clientY};
 	}, {signal});
 	canvas.addEventListener('pointermove', event => {
 		if(!dragging || dragging.id !== event.pointerId) return;
 
-		camera.yaw = dragging.yaw - (event.clientX - dragging.x) * .006;
-		camera.pitch = Math.max(.28, Math.min(1.18, dragging.pitch + (event.clientY - dragging.y) * .005));
+		const bounds=canvas.getBoundingClientRect(),targetY=bounds.top+bounds.height/2;
+		camera.yaw += orbitYawDelta(event.clientX-dragging.x,event.clientY,targetY);
+		camera.pitch = Math.max(.28, Math.min(1.18, camera.pitch + (event.clientY-dragging.y)*.005));
+		dragging.x=event.clientX;dragging.y=event.clientY;
 	}, {signal});
 	const release = event => { if(dragging?.id === event.pointerId) dragging = null; };
 	canvas.addEventListener('pointerup', release, {signal});
@@ -378,13 +480,18 @@ export function activate({module, canvas, session})
 				float F=.04+.96*pow(1.0-vh,5.0),D=distribution(nh,rough),k=(rough+1.0)*(rough+1.0)/8.0;
 				float G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));return D*G*F*nl/max(.01,4.0*nl*nv);}
 			void main(){vec3 N=normalize(vNormal),V=normalize(uEye-vPosition),base=uBase.rgb;float mode=uMaterial.z;
-				if(mode>3.5){float edge=length(vUv-.5)*2.0,opacity=(1.0-smoothstep(.18,1.0,edge))*uBase.a;
+				if(mode>3.5&&mode<4.5){float edge=length(vUv-.5)*2.0,opacity=(1.0-smoothstep(.18,1.0,edge))*uBase.a;
 					if(opacity<.002)discard;color=vec4(vec3(0.0),opacity);return;}
 				if(mode>0.5&&mode<1.5){vec2 pad=vec2(4.0)/vec2(textureSize(uBallAtlas,0));
 					// Raw atlas rows run opposite WebGL's vertical axis; longitude must stay unchanged to preserve numeral chirality.
 					vec2 uv=mix(uAtlasCell/4.0+pad,(uAtlasCell+1.0)/4.0-pad,vec2(vUv.x,1.0-vUv.y));base=texture(uBallAtlas,uv).rgb;}
-				else if(mode>1.5&&mode<2.5)base*=wood(vPosition,N)*1.45;
-				else if(mode>2.5){float macro=feltMacro(vPosition),grain=noise3(vPosition*430.0+vec3(4.7,1.3,9.1));
+				else if((mode>1.5&&mode<2.5)||mode>5.5){base*=wood(vPosition,N)*1.45;
+					if(mode>5.5){float phase=fract(vUv.y+1.0/24.0)*12.0,sector=floor(phase),across=abs(fract(phase)-.5)*2.0;
+						float rear=1.0-step(1.0,mod(sector,2.0)),progress=mix((.22-vUv.x)/.095,(vUv.x-.03)/.095,rear);
+						float inside=step(0.0,progress)*step(progress,1.0),edge=max(fwidth(across)*1.5,.008);
+						float point=inside*(1.0-smoothstep(1.0-progress-edge,1.0-progress+edge,across));
+						vec3 blueDye=base*vec3(.16,.36,.78)+vec3(.012,.045,.14);base=mix(base,blueDye,point*.84);}}
+				else if(mode>2.5&&mode<3.5){float macro=feltMacro(vPosition),grain=noise3(vPosition*430.0+vec3(4.7,1.3,9.1));
 					float looseFiber=smoothstep(.68,.9,noise3(vPosition*760.0+vec3(2.1,7.4,3.8)));
 					float height=(macro-.5)*.00055+(grain-.5)*.00016+looseFiber*.00007;
 					N=bumpNormal(vPosition,N,height);float top=smoothstep(.62,.92,N.y);
@@ -392,17 +499,19 @@ export function activate({module, canvas, session})
 					base*=.92+macro*.13+(grain-.5)*.045+looseFiber*.035;base=mix(base,base*1.04,track*.035);}
 				float rough=uMaterial.x;if(mode>0.5&&mode<1.5)rough=clamp(rough+(random(floor(vPosition*900.0))-.5)*.012,.01,.05);
 				float ior=uMaterial.y>1.0?uMaterial.y:1.5,f0Value=pow((ior-1.0)/(ior+1.0),2.0),nv=max(dot(N,V),.001);
-				vec3 f0=vec3(f0Value),key=vec3(-.45,2.8,-.7),fill=vec3(1.8,1.45,2.15);
+				bool metallic=mode>4.5&&mode<5.5;
+				vec3 f0=metallic?mix(vec3(.04),base,.82):vec3(f0Value),key=vec3(-.45,2.8,-.7),fill=vec3(1.8,1.45,2.15);
 				float skyAmbient=clamp(N.y*.5+.5,0.0,1.0);
 				vec3 ambient=mix(vec3(.15,.21,.17),vec3(.25,.27,.3),skyAmbient);
-				vec3 lit=base*ambient+lightPbr(key,vec3(1.0,.94,.82),3.7,N,V,base,f0,rough,.14)
-					+lightPbr(fill,vec3(.58,.72,1.0),.58,N,V,base,f0,rough,.18);
+				vec3 diffuseBase=metallic?base*.14:base;
+				vec3 lit=diffuseBase*ambient+lightPbr(key,vec3(1.0,.94,.82),3.7,N,V,diffuseBase,f0,rough,.14)
+					+lightPbr(fill,vec3(.58,.72,1.0),.58,N,V,diffuseBase,f0,rough,.18);
 				if(mode>0.5&&mode<1.5){lit+=base*.035*(1.0-max(dot(N,normalize(key-vPosition)),0.0));
 					float coat=coatSpec(key,N,V,.018,.16)*3.7+coatSpec(fill,N,V,.028,.2)*.58;
 					lit+=vec3(.55*coat/(1.0+coat))*uMaterial.w;}
-				else if(mode>1.5&&mode<2.5){float coat=coatSpec(key,N,V,.11,.12)*3.7+coatSpec(fill,N,V,.14,.16)*.58;
+				else if((mode>1.5&&mode<2.5)||mode>5.5){float coat=coatSpec(key,N,V,.11,.12)*3.7+coatSpec(fill,N,V,.14,.16)*.58;
 					lit+=vec3(.55*coat/(1.0+coat))*uMaterial.w;}
-				else if(mode>2.5){float backLight=max(dot(-N,normalize(key-vPosition)),0.0);
+				else if(mode>2.5&&mode<3.5){float backLight=max(dot(-N,normalize(key-vPosition)),0.0);
 					vec3 fiberTint=mix(base,sqrt(max(base,vec3(0.0))),.28);
 					lit+=base*(.04+.055*backLight)+fiberTint*pow(1.0-nv,1.8)*uMaterial.w*.68;}
 				else lit+=base*pow(1.0-nv,3.0)*.08;
@@ -433,13 +542,21 @@ export function activate({module, canvas, session})
 	/** Extrude a composed two-dimensional signed-distance field into one watertight mesh. */
 	const extrudeCsg = (field,bounds,columns,rows,bottom,top) => {
 		const [minX,minZ,maxX,maxZ]=bounds,stepX=(maxX-minX)/columns,stepZ=(maxZ-minZ)/rows;
-		const vertices=[],indices=[],epsilon=Math.min(stepX,stepZ)*.2;
+		const vertices=[],indices=[],epsilon=Math.min(stepX,stepZ)*.7;
 		const point=(x,z)=>({x,z,distance:field(x,z)});
 		const interpolate=(a,b)=>{const amount=a.distance/(a.distance-b.distance);return {
 			x:a.x+(b.x-a.x)*amount,z:a.z+(b.z-a.z)*amount,distance:0
 		};};
 		const unique=points=>points.filter((entry,index)=>points.findIndex(candidate=>
 			Math.hypot(entry.x-candidate.x,entry.z-candidate.z)<1e-9)===index);
+		const endpoints=points=>{let pair=[],distance=-1;
+			for(let a=0;a<points.length;a++)for(let b=a+1;b<points.length;b++)
+			{
+				const candidate=(points[a].x-points[b].x)**2+(points[a].z-points[b].z)**2;
+				if(candidate>distance){distance=candidate;pair=[points[a],points[b]];}
+			}
+			return pair;
+		};
 		const vertex=(entry,y,normal,u,v)=>{const index=vertices.length/8;vertices.push(entry.x,y,entry.z,...normal,u,v);return index;};
 		const gradient=entry=>{const x=field(entry.x+epsilon,entry.z)-field(entry.x-epsilon,entry.z);
 			const z=field(entry.x,entry.z+epsilon)-field(entry.x,entry.z-epsilon),length=Math.hypot(x,z)||1;return [x/length,z/length];};
@@ -479,10 +596,11 @@ export function activate({module, canvas, session})
 				{
 					const a=triangle[edge],b=triangle[(edge+1)%3],inside=a.distance<=0,nextInside=b.distance<=0;
 					if(inside)polygon.push(a);
+					if(Math.abs(a.distance)<1e-10)crossings.push(a);
 					if(inside!==nextInside){const crossing=interpolate(a,b);polygon.push(crossing);crossings.push(crossing);}
 				}
 
-				const clipped=unique(polygon),boundary=unique(crossings);
+				const clipped=unique(polygon),boundary=endpoints(unique(crossings));
 				if(clipped.length>=3){addSurface(clipped,top,[0,1,0],true);addSurface(clipped,bottom,[0,-1,0],false);}
 				if(boundary.length===2)addWall(boundary[0],boundary[1]);
 			}
@@ -492,15 +610,23 @@ export function activate({module, canvas, session})
 	};
 
 	/** Sweep explicit quarter-round bands around a high-resolution CSG contour. */
-	const extrudeRoundedCsg = (field,bounds,columns,rows,bottom,top,radius,roundSegments=6) => {
+	const extrudeRoundedCsg = (field,bounds,columns,rows,bottom,top,radius,roundSegments=6,bottomRadius=radius) => {
 		const [minX,minZ,maxX,maxZ]=bounds,stepX=(maxX-minX)/columns,stepZ=(maxZ-minZ)/rows;
-		const vertices=[],indices=[],epsilon=Math.min(stepX,stepZ)*.2;
+		const vertices=[],indices=[],epsilon=Math.min(stepX,stepZ)*.7;
 		const point=(x,z,offset=0)=>({x,z,distance:field(x,z)+offset});
 		const interpolate=(a,b)=>{const amount=a.distance/(a.distance-b.distance);return {
 			x:a.x+(b.x-a.x)*amount,z:a.z+(b.z-a.z)*amount,distance:0
 		};};
 		const unique=points=>points.filter((entry,index)=>points.findIndex(candidate=>
 			Math.hypot(entry.x-candidate.x,entry.z-candidate.z)<1e-9)===index);
+		const endpoints=points=>{let pair=[],distance=-1;
+			for(let a=0;a<points.length;a++)for(let b=a+1;b<points.length;b++)
+			{
+				const candidate=(points[a].x-points[b].x)**2+(points[a].z-points[b].z)**2;
+				if(candidate>distance){distance=candidate;pair=[points[a],points[b]];}
+			}
+			return pair;
+		};
 		const gradient=entry=>{const x=field(entry.x+epsilon,entry.z)-field(entry.x-epsilon,entry.z);
 			const z=field(entry.x,entry.z+epsilon)-field(entry.x,entry.z-epsilon),length=Math.hypot(x,z)||1;return [x/length,z/length];};
 		const addVertex=(entry,y,normal)=>{const index=vertices.length/8;vertices.push(entry.x,y,entry.z,...normal,
@@ -510,11 +636,27 @@ export function activate({module, canvas, session})
 				(entry.x-minX)/(maxX-minX),(entry.z-minZ)/(maxZ-minZ));
 			indices.push(base,base+1,base+2,base,base+2,base+3);
 		};
+		const insetDistance=(entry,edgeRadius)=>{
+			if(edgeRadius<=0)return 0;
+			entry.insets??=new Map;
+			if(entry.insets.has(edgeRadius))return entry.insets.get(edgeRadius);
+			const [nx,nz]=gradient(entry),target=-edgeRadius;
+			let low=0,high=edgeRadius,value=field(entry.x-nx*high,entry.z-nz*high);
+			while(value>target&&high<edgeRadius*6){high*=1.5;value=field(entry.x-nx*high,entry.z-nz*high);}
+			if(value<=target)for(let iteration=0;iteration<12;iteration++)
+			{
+				const middle=(low+high)/2,middleValue=field(entry.x-nx*middle,entry.z-nz*middle);
+				if(middleValue>target)low=middle;else high=middle;
+			}
+			else high=edgeRadius;
+			entry.insets.set(edgeRadius,high);return high;
+		};
 		const ringPoint=(entry,angle,yDirection)=>{
-			const [nx,nz]=gradient(entry),inset=radius*(1-Math.cos(angle));
+			const edgeRadius=yDirection>0?radius:bottomRadius,[nx,nz]=gradient(entry),horizontalRadius=insetDistance(entry,edgeRadius);
+			const inset=horizontalRadius*(1-Math.cos(angle));
 			return {x:entry.x-nx*inset,z:entry.z-nz*inset,
-				y:yDirection>0?top-radius+Math.sin(angle)*radius:bottom+radius-Math.sin(angle)*radius,
-				normal:[nx*Math.cos(angle),yDirection*Math.sin(angle),nz*Math.cos(angle)]};
+				y:yDirection>0?top-radius+Math.sin(angle)*radius:bottom+bottomRadius-Math.sin(angle)*bottomRadius,
+				normal:roundedFilletNormal(nx,nz,angle,horizontalRadius,edgeRadius,yDirection)};
 		};
 		const addRoundedWall=(first,second)=>{
 			let a=first,b=second,dx=b.x-a.x,dz=b.z-a.z;
@@ -522,8 +664,8 @@ export function activate({module, canvas, session})
 			if(-dz*nx+dx*nz<0)[a,b]=[b,a];
 			const normalA=gradient(a),normalB=gradient(b);
 			addQuad(
-				{x:a.x,y:bottom+radius,z:a.z,normal:[normalA[0],0,normalA[1]]}
-				, {x:b.x,y:bottom+radius,z:b.z,normal:[normalB[0],0,normalB[1]]}
+				{x:a.x,y:bottom+bottomRadius,z:a.z,normal:[normalA[0],0,normalA[1]]}
+				, {x:b.x,y:bottom+bottomRadius,z:b.z,normal:[normalB[0],0,normalB[1]]}
 				, {x:b.x,y:top-radius,z:b.z,normal:[normalB[0],0,normalB[1]]}
 				, {x:a.x,y:top-radius,z:a.z,normal:[normalA[0],0,normalA[1]]}
 			);
@@ -531,7 +673,7 @@ export function activate({module, canvas, session})
 			{
 				const angle=segment/roundSegments*Math.PI/2,next=(segment+1)/roundSegments*Math.PI/2;
 				addQuad(ringPoint(a,angle,1),ringPoint(b,angle,1),ringPoint(b,next,1),ringPoint(a,next,1));
-				addQuad(ringPoint(a,next,-1),ringPoint(b,next,-1),ringPoint(b,angle,-1),ringPoint(a,angle,-1));
+				if(bottomRadius>0)addQuad(ringPoint(a,next,-1),ringPoint(b,next,-1),ringPoint(b,angle,-1),ringPoint(a,angle,-1));
 			}
 		};
 		const addCap=(polygon,y,normal,reverse)=>{
@@ -545,8 +687,9 @@ export function activate({module, canvas, session})
 		for(let row=0;row<rows;row++)for(let column=0;column<columns;column++)
 		{
 			const left=minX+column*stepX,right=left+stepX,near=minZ+row*stepZ,far=near+stepZ;
-			for(const offset of [0,radius])
+			for(const layer of [{offset:0,wall:true},{offset:radius,top:true},{offset:bottomRadius,bottom:true}])
 			{
+				const {offset}=layer;
 				const corners=[point(left,near,offset),point(right,near,offset),point(right,far,offset),point(left,far,offset)];
 				const center=point((left+right)/2,(near+far)/2,offset);
 				for(let corner=0;corner<4;corner++)
@@ -556,11 +699,13 @@ export function activate({module, canvas, session})
 					{
 						const a=triangle[edge],b=triangle[(edge+1)%3],inside=a.distance<=0,nextInside=b.distance<=0;
 						if(inside)polygon.push(a);
+						if(Math.abs(a.distance)<1e-10)crossings.push(a);
 						if(inside!==nextInside){const crossing=interpolate(a,b);polygon.push(crossing);crossings.push(crossing);}
 					}
-					const clipped=unique(polygon),boundary=unique(crossings);
-					if(offset===radius&&clipped.length>=3){addCap(clipped,top,[0,1,0],true);addCap(clipped,bottom,[0,-1,0],false);}
-					if(offset===0&&boundary.length===2)addRoundedWall(boundary[0],boundary[1]);
+					const clipped=unique(polygon),boundary=endpoints(unique(crossings));
+					if(layer.top&&clipped.length>=3)addCap(clipped,top,[0,1,0],true);
+					if(layer.bottom&&clipped.length>=3)addCap(clipped,bottom,[0,-1,0],false);
+					if(layer.wall&&boundary.length===2)addRoundedWall(boundary[0],boundary[1]);
 				}
 			}
 		}
@@ -568,14 +713,72 @@ export function activate({module, canvas, session})
 		return mesh(vertices,indices);
 	};
 
-	/** Leather facings and a 13.5-degree tapered drop under every CSG pocket cut. */
+	/** Build each felt rail from analytic rings instead of rounding a Boolean contour. */
+	const buildCushionMesh = (polygons,bounds,bottom=.013,top=.083,radius=billiardsEdgeRadii.cushion) => {
+		const [minX,minZ,maxX,maxZ]=bounds,vertices=[],indices=[];
+		const add=([x,z],y,[nx,ny,nz])=>{const index=vertices.length/8;
+			vertices.push(x,y,z,nx,ny,nz,(x-minX)/(maxX-minX),(z-minZ)/(maxZ-minZ));return index;};
+		const quad=(a,b,c,d)=>indices.push(a,b,c,a,c,d);
+
+		for(const source of polygons)
+		{
+			const polygon=[...source],count=polygon.length;
+			const edgeNormals=polygon.map(([x,z],index)=>{
+				const [nextX,nextZ]=polygon[(index+1)%count],dx=nextX-x,dz=nextZ-z,length=Math.hypot(dx,dz);
+				return [dz/length,-dx/length];
+			});
+			const cornerNormals=edgeNormals.map((normal,index)=>{
+				const previous=edgeNormals[(index+count-1)%count],x=previous[0]+normal[0],z=previous[1]+normal[1];
+				const length=Math.hypot(x,z)||1;return [x/length,z/length];
+			});
+
+			// Flat side faces retain one exact normal, including both angled pocket facings.
+			for(let edge=0;edge<count;edge++)
+			{
+				const next=(edge+1)%count,[nx,nz]=edgeNormals[edge];
+				const lowerA=add(polygon[edge],bottom,[nx,0,nz]),upperA=add(polygon[edge],top-radius,[nx,0,nz]);
+				const upperB=add(polygon[next],top-radius,[nx,0,nz]),lowerB=add(polygon[next],bottom,[nx,0,nz]);
+				quad(lowerA,upperA,upperB,lowerB);
+			}
+
+			// Insetting the whole convex polygon for every ring guarantees matching
+			// vertices at the corners; no independently generated edge can tear away.
+			const rings=[];
+			for(let segment=0;segment<=billiardsTableMeshing.cushionTopSegments;segment++)
+			{
+				const angle=segment/billiardsTableMeshing.cushionTopSegments*Math.PI/2;
+				const ring=insetPolygon(polygon,radius*(1-Math.cos(angle)));
+				rings.push(ring.map((point,index)=>{
+					const [nx,nz]=cornerNormals[index],horizontal=Math.cos(angle);
+					return add(point,top-radius+Math.sin(angle)*radius,[nx*horizontal,Math.sin(angle),nz*horizontal]);
+				}));
+			}
+			for(let segment=0;segment<rings.length-1;segment++)for(let edge=0;edge<count;edge++)
+			{
+				const next=(edge+1)%count;
+				quad(rings[segment][edge],rings[segment+1][edge],rings[segment+1][next],rings[segment][next]);
+			}
+
+			const topRing=rings.at(-1),bottomRing=polygon.map(point=>add(point,bottom,[0,-1,0]));
+			for(let index=1;index<count-1;index++)
+			{
+				indices.push(topRing[0],topRing[index+1],topRing[index]);
+				indices.push(bottomRing[0],bottomRing[index],bottomRing[index+1]);
+			}
+		}
+
+		return mesh(vertices,indices);
+	};
+
+	/** A 13.5-degree tapered drop beginning just below every CSG pocket cut. */
 	const buildPocketLiners = (pockets,ballRadius) => {
-		const vertices=[],indices=[],segments=40,top=.017,throat=-.09,bottom=-.235,draft=13.5*Math.PI/180;
+		const vertices=[],indices=[];
+		const segments=96,top=.0105,throat=-.09,bottom=-.235,draft=13.5*Math.PI/180;
 		const add=(x,y,z,nx,ny,nz,u,v)=>{const index=vertices.length/8;vertices.push(x,y,z,nx,ny,nz,u,v);return index;};
 
 		for(const pocket of pockets)
 		{
-			const outer=pocket.mouth/2+.006,inner=pocket.mouth/2-.001;
+			const outer=pocket.radius+.027,inner=pocket.radius+.0005;
 			const throatRadius=Math.max(ballRadius*1.12,inner-(top-throat)*Math.tan(draft));
 			const rim=[],upper=[],lower=[];
 
@@ -609,18 +812,20 @@ export function activate({module, canvas, session})
 			}
 		}
 
-		const result=mesh(vertices,indices);result.doubleSided=true;return result;
+		const liners=mesh(vertices,indices);liners.doubleSided=true;return {liners};
 	};
 
 	const buildTableMeshes = (width,height,ballRadius,cornerMouth,sideMouth) => {
-		const {bounds,pockets,apron,bed,wood,cushion}=tableCsgProfiles(width,height,cornerMouth,sideMouth);
+		const {bounds,pockets,cushionRails,apron,bed,wood}=tableCsgProfiles(width,height,cornerMouth,sideMouth);
+		const pocketMeshes=buildPocketLiners(pockets,ballRadius);
 
 		return {
 			apron:extrudeCsg(apron,bounds,112,64,-.25,-.042)
 			, bed:extrudeCsg(bed,bounds,128,72,-.047,.012)
-			, wood:extrudeRoundedCsg(wood,bounds,288,160,.012,.105,.018,6)
-			, cushion:extrudeCsg(cushion,bounds,144,80,.013,.083)
-			, liners:buildPocketLiners(pockets,ballRadius)
+			, wood:extrudeRoundedCsg(wood,bounds,billiardsTableMeshing.columns,billiardsTableMeshing.rows
+				,.012,.105,billiardsEdgeRadii.wood,8)
+			, cushion:buildCushionMesh(cushionRails,bounds)
+			, ...pocketMeshes
 		};
 	};
 	const cube = (() => {
@@ -642,6 +847,33 @@ export function activate({module, canvas, session})
 
 		return mesh(v,i);
 	})();
+	const cueCylinder = (rearRadius=.5,frontRadius=.5,segments=48) => {
+		const v=[],i=[],slope=rearRadius-frontRadius,normalLength=Math.hypot(slope,1);
+		for(let end=0;end<2;end++)for(let segment=0;segment<=segments;segment++)
+		{
+			const amount=segment/segments,angle=amount*Math.PI*2,c=Math.cos(angle),s=Math.sin(angle),radius=end?frontRadius:rearRadius;
+			v.push(end-.5,c*radius,s*radius,slope/normalLength,c/normalLength,s/normalLength,end,amount);
+		}
+		for(let segment=0;segment<segments;segment++)
+		{
+			const rear=segment,front=segments+1+segment;
+			i.push(rear,rear+1,front,rear+1,front+1,front);
+		}
+		for(const [x,radius,normal,direction] of [[-.5,rearRadius,[-1,0,0],-1],[.5,frontRadius,[1,0,0],1]])
+		{
+			const center=v.length/8;v.push(x,0,0,...normal,.5,.5);
+			const ring=v.length/8;
+			for(let segment=0;segment<=segments;segment++)
+			{
+				const angle=segment/segments*Math.PI*2,c=Math.cos(angle),s=Math.sin(angle);
+				v.push(x,c*radius,s*radius,...normal,(c+1)/2,(s+1)/2);
+				if(segment>0)i.push(center,direction>0?ring+segment-1:ring+segment,direction>0?ring+segment:ring+segment-1);
+			}
+		}
+		return mesh(v,i);
+	};
+	const cueWood=cueCylinder(.5,cueAppearance.shaftDiameter/cueAppearance.buttDiameter/2);
+	const cueTrim=cueCylinder();
 	const sphere = (() => {
 		const v = [], i = [], rows = 32, columns = 64;
 		for(let row=0;row<=rows;row++) for(let column=0;column<=columns;column++)
@@ -690,8 +922,9 @@ export function activate({module, canvas, session})
 		return new Float32Array([(1-(yy+zz))*sx,(xy+wz)*sx,(xz-wy)*sx,0,(xy-wz)*sy,(1-(xx+zz))*sy,(yz+wx)*sy,0,
 			(xz+wy)*sz,(yz-wx)*sz,(1-(xx+yy))*sz,0,...position,1]);
 	};
-	const normalMatrix = rotation => {
-		const m=model([0,0,0],[1,1,1],rotation);return new Float32Array([m[0],m[1],m[2],m[4],m[5],m[6],m[8],m[9],m[10]]);
+	const normalMatrix = (rotation,scale) => {
+		const inverse=scale.map(value=>1/value),m=model([0,0,0],inverse,rotation);
+		return new Float32Array([m[0],m[1],m[2],m[4],m[5],m[6],m[8],m[9],m[10]]);
 	};
 	const texture = () => {
 		const result=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,result);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
@@ -709,17 +942,18 @@ export function activate({module, canvas, session})
 
 	const draw = (geometry,position,scale,rotation,color,material=[.4,0,0,0],cell=[0,0]) => {
 		const transform=model(position,scale,rotation);gl.uniformMatrix4fv(locations.uModel,false,transform);
-		gl.uniformMatrix3fv(locations.uNormal,false,normalMatrix(rotation));gl.uniform4fv(locations.uBase,color);
+		gl.uniformMatrix3fv(locations.uNormal,false,normalMatrix(rotation,scale));gl.uniform4fv(locations.uBase,color);
 		gl.uniform4fv(locations.uMaterial,material);gl.uniform2fv(locations.uAtlasCell,cell);gl.bindVertexArray(geometry.vao);
-		if(material[2]>3.5)gl.depthMask(false);
+		const translucent=material[2]>3.5&&material[2]<4.5;
+		if(translucent)gl.depthMask(false);
 		if(geometry.doubleSided)gl.disable(gl.CULL_FACE);
 		gl.drawElements(gl.TRIANGLES,geometry.count,geometry.type,0);
 		if(geometry.doubleSided)gl.enable(gl.CULL_FACE);
-		if(material[2]>3.5)gl.depthMask(true);
+		if(translucent)gl.depthMask(true);
 	};
 	const colors = ['#f3eee0','#e7bb21','#1f62b5','#bd2830','#5c3399','#e66e20','#237a48','#761d24','#151515','#e5b824','#2467b7','#bc2931','#653b9c','#e57523','#287c4e','#7b2028']
 		.map(hex=>[parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255,1]);
-	let latest = null, assetsReady = false, previousGamepad = {}, tableMeshes = null, tableMeshSize = null, pocketDrops = [];
+	let latest = null, assetsReady = false, previousGamepad = {}, tableMeshes = null, tableMeshSize = null;
 
 	function controls()
 	{
@@ -760,10 +994,9 @@ export function activate({module, canvas, session})
 			if(event.type==='pocket')
 			{
 				tone(72,.11,.16);
-				const ball=latest.balls.find(candidate=>candidate.number===event.ball);
-				pocketDrops.push({number:event.ball,index:event.pocket,rotation:ball?.rotation??[0,0,0,1],started:performance.now()});
 			}
-			if(event.type==='rack'||event.type==='reset')pocketDrops=[];
+			if(event.type==='pocket-rattle')tone(118,.025+.04*(event.strength??0),.032);
+			if(event.type==='pocket-reject')tone(145,.035,.04);
 		}
 
 		const box=screen.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1),width=Math.max(1,Math.round(box.width*dpr)),height=Math.max(1,Math.round(box.height*dpr));
@@ -787,29 +1020,31 @@ export function activate({module, canvas, session})
 		draw(tableMeshes.bed,[0,0,0],[1,1,1],[0,0,0,1],[.055,.285,.18,1],billiardsMaterials.felt);
 		draw(tableMeshes.wood,[0,0,0],[1,1,1],[0,0,0,1],[.38,.18,.07,1],billiardsMaterials.wood);
 		draw(tableMeshes.cushion,[0,0,0],[1,1,1],[0,0,0,1],[.042,.21,.13,1],billiardsMaterials.cushionFelt);
-		draw(tableMeshes.liners,[0,0,0],[1,1,1],[0,0,0,1],[.16,.065,.032,1],[.68,1.52,0,0]);
+		draw(tableMeshes.liners,[0,0,0],[1,1,1],[0,0,0,1],[.018,.014,.011,1],[.82,1.52,0,0]);
 		for(const pocket of pockets)
 			draw(disc,[pocket.x,-.237,pocket.z],[pocket.mouth*.34,1,pocket.mouth*.34],[0,0,0,1],[.001,.0015,.001,1],[.96,1.5,0,0]);
-		for(const ball of latest.balls)if(ball.active)
+		for(const ball of latest.balls)if(ball.active&&ball.pocket===null)
 		{
 			const shadowOffset=.0085;
 			draw(disc,[ball.x+(ball.x+.45)*shadowOffset,.0124,ball.y+(ball.y+.7)*shadowOffset]
 				,[radius*1.28,1,radius*1.28],[0,0,0,1],[0,0,0,.3],[1,0,4,0]);
 		}
 		for(const ball of latest.balls)if(ball.active)
-			draw(sphere,[ball.x,radius+.012,ball.y],[radius,radius,radius],ball.rotation,colors[ball.number],billiardsMaterials.ball,[ball.number%4,Math.floor(ball.number/4)]);
-		const now=performance.now();pocketDrops=pocketDrops.filter(drop=>now-drop.started<900);
-		for(const drop of pocketDrops)
-		{
-			const pocket=pockets[drop.index],progress=(now-drop.started)/720;
-			draw(sphere,pocketDropPose(pocket,radius,progress)
-				,[radius,radius,radius],drop.rotation,colors[drop.number],billiardsMaterials.ball,[drop.number%4,Math.floor(drop.number/4)]);
-		}
+			draw(sphere,[ball.x,radius+.012-(ball.drop??0),ball.y],[radius,radius,radius]
+				,ball.rotation,colors[ball.number],billiardsMaterials.ball,[ball.number%4,Math.floor(ball.number/4)]);
 		if(latest.phase==='aim')
 		{
 			const cue=latest.balls.find(ball=>ball.number===0&&ball.active),angle=latest.aim,dx=Math.cos(angle),dz=Math.sin(angle);
 			if(cue){const pose=cuePose(cue.x,cue.y,angle,tableWidth,tableHeight,radius),guideRotation=[0,-Math.sin(angle/2),0,Math.cos(angle/2)];
-				draw(cube,pose.position,pose.scale,pose.rotation,[.75,.57,.31,1],billiardsMaterials.wood);
+				const {length,buttDiameter,shaftDiameter,chalkTipLength,copperCollarLength}=cueAppearance;
+				const segmentPosition=(fromTip,toTip)=>pose.tip.map((value,index)=>value-pose.direction[index]*(fromTip+toTip)/2);
+				const woodStart=chalkTipLength+copperCollarLength,woodScale=[length-woodStart,buttDiameter,buttDiameter];
+				const woodPosition=segmentPosition(woodStart,length);
+				draw(cueWood,woodPosition,woodScale,pose.rotation,[.75,.57,.31,1],billiardsMaterials.cueWood);
+				draw(cueTrim,segmentPosition(chalkTipLength,woodStart),[copperCollarLength,shaftDiameter*1.06,shaftDiameter*1.06]
+					,pose.rotation,[.72,.31,.12,1],[.2,1.5,5,0]);
+				draw(cueTrim,segmentPosition(0,chalkTipLength),[chalkTipLength,shaftDiameter,shaftDiameter]
+					,pose.rotation,[.08,.28,.52,1],[.82,1.5,0,0]);
 				draw(cube,[cue.x+dx*.38,.017,cue.y+dz*.38],[.66,.003,.006],guideRotation,[.94,.76,.26,.72],[.6,0,0,0]);}
 		}
 	}
@@ -823,7 +1058,8 @@ export function activate({module, canvas, session})
 	return async() => {
 		abort.abort();
 		if(document.fullscreenElement===ui)await document.exitFullscreen().catch(()=>{});
-		for(const item of [cube,sphere,disc,...Object.values(tableMeshes??{})]){gl.deleteVertexArray(item.vao);gl.deleteBuffer(item.buffer);gl.deleteBuffer(item.elements);}
+		for(const item of [cube,cueWood,cueTrim,sphere,disc,...Object.values(tableMeshes??{})])
+			{gl.deleteVertexArray(item.vao);gl.deleteBuffer(item.buffer);gl.deleteBuffer(item.elements);}
 		gl.deleteTexture(ballTexture);gl.deleteTexture(woodTexture);gl.deleteProgram(program);audio?.close();
 		if(next?.parentNode===parent)parent.insertBefore(canvas,next);else parent.append(canvas);
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);

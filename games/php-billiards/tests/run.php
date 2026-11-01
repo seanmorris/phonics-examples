@@ -143,6 +143,14 @@ $test('pocket mouths use regulation American pool dimensions', static function()
 	$expect(Table::CORNER_MOUTH >= 4.5 * .0254 && Table::CORNER_MOUTH <= 4.625 * .0254);
 	$expect(Table::SIDE_MOUTH >= 5 * .0254 && Table::SIDE_MOUTH <= 5.25 * .0254);
 	$expect(abs(Ball::RADIUS * 2 - .05715) < 1e-12, 'Ball diameter is not 2 1/4 inches');
+	$expect(Table::pocketRadius(0) < Table::pocketRadius(1),
+		'Rendered corner bowl is not smaller than the wider side pocket');
+	[$cornerX,$cornerY] = Table::pockets()[0];
+	$jawX = -Table::WIDTH / 2 + Table::CORNER_MOUTH / M_SQRT2;
+	$jawY = -Table::HEIGHT / 2;
+	$expect(abs(hypot($jawX - $cornerX,$jawY - $cornerY) - Table::pocketRadius(0)) < 1e-12,
+		'Corner bowl no longer passes through its regulation jaw');
+	$expect(count(Table::jaws()) === 12, 'Every pocket opening must have two physical jaws');
 });
 
 $test('identical shots replay deterministically', static function() use ($expect): void {
@@ -217,10 +225,12 @@ $test('pockets retain object balls and scratches require legal placement', stati
 	foreach($game->balls as $ball) $ball->active = false;
 	$cue = $game->cue();
 	$cue->active = true;
-	$cue->x = -Table::WIDTH / 2 + .03;
-	$cue->y = -Table::HEIGHT / 2 + .03;
+	$cue->x = 0;
+	$cue->y = Table::HEIGHT / 2 - Ball::RADIUS - .005;
+	$cue->vy = .5;
 	$game->phase = 'moving';
-	$game->step();
+	$ticks = 0;
+	while($game->moving() && $ticks++ < 120) $game->step();
 	$expect(!$cue->active && $game->scratched, 'Cue ball did not scratch');
 	$expect($game->phase === 'placing', 'Scratch did not enter placement mode');
 	$expect(!$game->placeCue(Table::WIDTH, 0), 'Placement accepted a point beyond the cloth');
@@ -228,32 +238,61 @@ $test('pockets retain object balls and scratches require legal placement', stati
 	$expect($cue->active && $game->phase === 'aim' && !$game->scratched);
 });
 
-$test('pocket mouths capture balls before they can leave the table', static function() use ($expect): void {
-	foreach([
-		[-Table::WIDTH / 2 + Ball::RADIUS + .005,-Table::HEIGHT / 2 + .075,-2.0,0.0,0]
-		, [.05,Table::HEIGHT / 2 - Ball::RADIUS - .005,0.0,2.0,4]
-	] as [$x,$y,$vx,$vy,$pocketIndex])
-	{
-		$game = new Simulation;
-		foreach($game->balls as $ball) $ball->active = false;
-		$ball = $game->balls[1];
-		$ball->active = true;
-		$ball->x = $ball->previousX = $x;
-		$ball->y = $ball->previousY = $y;
-		$ball->vx = $vx;
-		$ball->vy = $vy;
-		$game->phase = 'moving';
-		$game->consumeEvents();
-		$game->step();
-		$pocket = Table::pockets()[$pocketIndex];
-		$events = $game->consumeEvents();
+$test('pocket shelves and jaws reject glancing balls instead of vacuuming them in', static function() use ($expect): void {
+	$edge = Table::HEIGHT / 2;
+	$game = new Simulation;
+	foreach($game->balls as $ball) $ball->active = false;
+	$ball = $game->balls[1];
+	$ball->active = true;
+	$ball->x = $ball->previousX = .06;
+	$ball->y = $ball->previousY = $edge - Ball::RADIUS - .005;
+	$ball->vy = 2;
+	$game->phase = 'moving';
+	$game->consumeEvents();
+	$game->step();
+	$events = $game->consumeEvents();
 
-		$expect(!$ball->active, 'Ball escaped through an open pocket mouth');
-		$expect(abs($ball->x - $pocket[0]) < 1e-9 && abs($ball->y - $pocket[1]) < 1e-9,
-			'Captured ball was not retained at its pocket');
-		$expect(count($events) === 1 && $events[0]['pocket'] === $pocketIndex,
-			'Pocket event did not identify the capture point');
+	$expect($ball->active && $ball->pocket === null, 'Glancing ball was swallowed by the side pocket');
+	$expect($ball->vy < 0, 'Rounded jaw did not return the glancing ball to the table');
+	$expect(count(array_filter($events, static fn(array $event): bool => $event['type'] === 'cushion')) === 1,
+		'Jaw collision did not emit a cushion contact');
+});
+
+$test('pocket cone can reject an energetic ball and loses energy deterministically', static function() use ($expect): void {
+	$game = new Simulation;
+	$replay = new Simulation;
+	foreach($game->balls as $ball) $ball->active = false;
+	foreach($replay->balls as $ball) $ball->active = false;
+	$ball = $game->balls[1];
+	$copy = $replay->balls[1];
+	$ball->active = true;
+	$copy->active = true;
+	$ball->x = $ball->previousX = 0;
+	$copy->x = $copy->previousX = 0;
+	$ball->y = $ball->previousY = Table::HEIGHT / 2 - Ball::RADIUS - .005;
+	$copy->y = $copy->previousY = $ball->y;
+	$ball->vy = 5;
+	$copy->vy = 5;
+	$game->phase = 'moving';
+	$replay->phase = 'moving';
+	$game->consumeEvents();
+	$replay->consumeEvents();
+	$rejected = false;
+
+	for($tick = 0; $tick < 30 && !$rejected; $tick++)
+	{
+		$game->step();
+		$replay->step();
+
+		foreach($game->consumeEvents() as $event)
+		if($event['type'] === 'pocket-reject') $rejected = true;
 	}
+
+	$expect($rejected, 'Energetic ball could not bounce out of the pocket liner');
+	$expect($ball->active && $ball->pocket === null && $ball->drop === 0.0,
+		'Rejected ball did not return to the cloth');
+	$expect(hypot($ball->vx, $ball->vy) < 5, 'Inelastic pocket contacts failed to remove energy');
+	$expect($game->hash() === $replay->hash(), 'Pocket bounce changed between identical simulations');
 });
 
 $test('reset restores the exact pre-shot state', static function() use ($expect): void {

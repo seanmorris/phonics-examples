@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsMaterials, cueContactWarning, cuePose, pocketDropPose, roundedExtrusionSdf, tableCsgProfiles, tablePocketDefinitions} from '../games/php-billiards/browser/game.mjs';
+import {billiardsEdgeRadii, billiardsMaterials, billiardsTableMeshing, cueAppearance, cueContactWarning, cuePose, orbitYawDelta, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
@@ -29,6 +29,18 @@ test('cue rises over the solid rail while its tip stays aligned with the ball', 
 	}
 });
 
+test('cue dimensions describe a tapered cylinder with distinct tip and collar sections', () => {
+	assert.ok(cueAppearance.buttDiameter>cueAppearance.shaftDiameter);
+	assert.ok(cueAppearance.chalkTipLength>0);
+	assert.ok(cueAppearance.copperCollarLength>cueAppearance.chalkTipLength);
+	assert.equal(cueAppearance.patternPoints%2,0);
+});
+
+test('horizontal orbit direction reverses below the on-screen target', () => {
+	assert.equal(orbitYawDelta(20,40,50),-.12);
+	assert.equal(orbitYawDelta(20,60,50),.12);
+});
+
 test('table CSG profiles round the shell and cut every pocket through the playing surfaces', () => {
 	const profiles = tableCsgProfiles(width, height);
 	const outerX = width / 2 + .17, outerZ = height / 2 + .17;
@@ -39,6 +51,19 @@ test('table CSG profiles round the shell and cut every pocket through the playin
 	assert.ok(profiles.cushion(0, 0) > 0, 'Cushion did not subtract the playing area');
 	assert.ok(profiles.cushion(width / 2 - radius, .2) > 0, 'Cushion intersects a ball at its collision limit');
 	assert.ok(Math.abs(profiles.cushion(width / 2, .2)) < 1e-12, 'Cushion face does not match the physics boundary');
+	assert.ok(profiles.cushion(.25,height/2+.0275)<0, 'Straight cushion band is missing');
+	assert.ok(profiles.cushion(.25,height/2-.001)>0, 'Cushion widened into the playing area');
+	assert.ok(profiles.cushion(.25,height/2+.056)>0, 'Cushion exceeded its constant rail width');
+	assert.ok(profiles.cushion(0,height/2+.0275)>0, 'Side-pocket cushion wrapped around the pocket back');
+	const sidePocket=profiles.pockets[1],sideRadius=sidePocket.radius;
+	assert.ok(profiles.bed(sidePocket.x,sidePocket.z+sideRadius-.005)>0,
+		'Cloth bed entered the shared pocket cylinder');
+	assert.ok(profiles.bed(sidePocket.x,sidePocket.z+sideRadius+.005)<0,
+		'Cloth bed stopped beyond the shared pocket cylinder');
+	assert.ok(profiles.apron(sidePocket.x,sidePocket.z-sideRadius+.005)>0,
+		'Lower table body entered the shared pocket cylinder');
+	assert.ok(profiles.apron(sidePocket.x,sidePocket.z-sideRadius-.005)<0,
+		'Lower table body stopped beyond the shared pocket cylinder');
 
 	for(const pocket of profiles.pockets)
 	{
@@ -50,8 +75,71 @@ test('table CSG profiles round the shell and cut every pocket through the playin
 	}
 });
 
+test('all cushion noses stay on their logical jaw points while tapering toward the liner', () => {
+	const profiles=tableCsgProfiles(width,height),[minX,minZ,maxX,maxZ]=profiles.bounds;
+	const cellSize=Math.max((maxX-minX)/billiardsTableMeshing.columns,
+		(maxZ-minZ)/billiardsTableMeshing.rows);
+	assert.ok(billiardsTableMeshing.cushionJawTaper>=cellSize*1.75,
+		'Jaw taper collapsed into too few cells to remain continuous');
+	assert.ok(Math.abs(Math.atan(billiardsTableMeshing.cushionJawTaper/.055)*180/Math.PI-13.5)<1e-12,
+		'Jaw taper no longer follows the pocket back-draft angle');
+	assert.equal(profiles.pockets.length,6);
+	assert.equal(profiles.cushionRails.length,6);
+	for(const rail of profiles.cushionRails)
+	{
+		assert.equal(rail.length,4,'Explicit cushion rail stopped being a convex quadrilateral');
+		const area=rail.reduce((sum,[x,z],index)=>{const [nextX,nextZ]=rail[(index+1)%rail.length];
+			return sum+x*nextZ-nextX*z;},0);
+		assert.ok(area>0,'Explicit cushion rail changed winding');
+	}
+	const cornerJaw=profiles.pockets[0].mouth/Math.SQRT2;
+	const sideJaw=profiles.pockets[1].mouth/2;
+
+	for(const side of [-1,1])
+	{
+		const z=side*height/2;
+		for(const x of [-sideJaw,sideJaw,-width/2+cornerJaw,width/2-cornerJaw])
+		assert.ok(Math.abs(profiles.cushion(x,z))<1e-12,'Horizontal cushion nose moved away from its logical jaw');
+
+		const x=side*width/2;
+		for(const jawZ of [-height/2+cornerJaw,height/2-cornerJaw])
+		assert.ok(Math.abs(profiles.cushion(x,jawZ))<1e-12,'Vertical cushion nose moved away from its logical jaw');
+	}
+});
+
+test('explicit felt cushion caps stay outside every pocket profile', () => {
+	const profiles=tableCsgProfiles(width,height);
+	for(const pocket of profiles.pockets)
+	{
+		for(let step=0;step<96;step++)
+		{
+			const angle=step/96*Math.PI*2;
+			const x=pocket.x+Math.cos(angle)*(pocket.radius-.0005);
+			const z=pocket.z+Math.sin(angle)*(pocket.radius-.0005);
+			assert.ok(profiles.cushion(x,z)>=0,
+				`Felt entered pocket ${pocket.x},${pocket.z} at angle ${angle}`);
+		}
+	}
+});
+
+test('all table materials subtract one shared pocket cylinder', () => {
+	const profiles=tableCsgProfiles(width,height);
+	for(const pocket of profiles.pockets)
+	{
+		for(let step=0;step<96;step++)
+		{
+			const angle=step/96*Math.PI*2,c=Math.cos(angle),s=Math.sin(angle);
+			const boundary=profiles.pocketCut(pocket.x+c*pocket.radius,pocket.z+s*pocket.radius);
+			const inside=profiles.pocketCut(pocket.x+c*(pocket.radius-.0005),pocket.z+s*(pocket.radius-.0005));
+			const outside=profiles.pocketCut(pocket.x+c*(pocket.radius+.0005),pocket.z+s*(pocket.radius+.0005));
+			assert.ok(Math.abs(boundary)<1e-12,'Shared pocket cylinder moved away from its declared radius');
+			assert.ok(inside<0&&outside>0,'Shared pocket cylinder changed sign in the wrong direction');
+		}
+	}
+});
+
 test('wood extrusion rounds its inner and outer top edges with a true quarter-circle fillet', () => {
-	const bottom=.012,top=.105,radius=.018,middle=(bottom+top)/2;
+	const bottom=.012,top=.105,radius=billiardsEdgeRadii.wood,middle=(bottom+top)/2;
 	assert.ok(Math.abs(roundedExtrusionSdf(0,middle,bottom,top,radius))<1e-12, 'Vertical wall moved inward');
 	assert.ok(Math.abs(roundedExtrusionSdf(-radius,top,bottom,top,radius))<1e-12, 'Inset cap does not meet the fillet');
 	assert.ok(roundedExtrusionSdf(0,top,bottom,top,radius)>0, 'Former hard cap corner remains solid');
@@ -65,19 +153,38 @@ test('wood extrusion rounds its inner and outer top edges with a true quarter-ci
 	}
 });
 
+test('rounded fillet normals follow the solved elliptical cross-section', () => {
+	assert.deepEqual(roundedFilletNormal(1,0,0,.028,.018),[1,0,0]);
+	const top=roundedFilletNormal(1,0,Math.PI/2,.028,.018);
+	assert.ok(Math.abs(top[0])<1e-12&&Math.abs(top[1]-1)<1e-12&&top[2]===0);
+	const middle=roundedFilletNormal(Math.SQRT1_2,Math.SQRT1_2,Math.PI/4,.028,.018);
+	assert.ok(Math.abs(Math.hypot(...middle)-1)<1e-12);
+	assert.ok(middle[1]>middle[0], 'Elliptical fillet kept a circular normal after its inset changed');
+});
+
+test('felt cushion rounding is shallower than the wood rail rounding', () => {
+	assert.ok(billiardsEdgeRadii.cushion>0);
+	assert.ok(billiardsEdgeRadii.cushion<billiardsEdgeRadii.wood/2);
+	assert.ok(billiardsTableMeshing.cushionTopSegments>=4,
+		'Explicit cushion top fillet is visibly faceted');
+	assert.equal(billiardsEdgeRadii.cushionBottom,0, 'Cushion must remain flush with the cloth at its lower edge');
+});
+
 test('visual pocket mouths use regulation widths', () => {
 	const pockets=tablePocketDefinitions(width,height),corners=pockets.filter((_,index)=>![1,4].includes(index)),sides=[pockets[1],pockets[4]];
 	assert.ok(corners.every(pocket=>pocket.mouth>=4.5*.0254&&pocket.mouth<=4.625*.0254));
 	assert.ok(sides.every(pocket=>pocket.mouth>=5*.0254&&pocket.mouth<=5.25*.0254));
-});
-
-test('captured balls descend into the pocket before rolling outward down the return', () => {
-	const pocket=tablePocketDefinitions(width,height)[0],start=pocketDropPose(pocket,radius,0);
-	const throat=pocketDropPose(pocket,radius,.38),end=pocketDropPose(pocket,radius,1);
-	assert.deepEqual(start,[pocket.x,radius+.012,pocket.z]);
-	assert.ok(throat[1]<start[1]&&end[1]<throat[1], 'Captured ball did not descend');
-	assert.ok(Math.hypot(throat[0]-pocket.x,throat[2]-pocket.z)<1e-12, 'Ball left the mouth before reaching the throat');
-	assert.ok(Math.hypot(end[0]-pocket.x,end[2]-pocket.z)>.05, 'Ball did not roll outward along the return');
+	assert.ok(sides.every(pocket=>Math.abs(pocket.radius*2-pocket.mouth)<1e-12));
+	assert.ok(corners.every(pocket=>pocket.radius<sides[0].radius),
+		'Corner bowl should be visibly smaller than the wider side pocket');
+	const cornerJaw=cornerMouth=>cornerMouth/Math.SQRT2;
+	for(const [index,pocket] of pockets.entries())if(![1,4].includes(index))
+	{
+		const signX=Math.sign(pocket.x),signZ=Math.sign(pocket.z),jaw=cornerJaw(pocket.mouth);
+		const horizontalJaw=[signX*(width/2-jaw),signZ*height/2];
+		assert.ok(Math.abs(Math.hypot(horizontalJaw[0]-pocket.x,horizontalJaw[1]-pocket.z)-pocket.radius)<1e-12,
+			'Shifted corner bowl missed its regulation jaw');
+	}
 });
 
 test('a nearly frozen cue warns only when the contact is in the shot direction', () => {
@@ -90,6 +197,7 @@ test('a nearly frozen cue warns only when the contact is in the shot direction',
 test('material presets model resin, varnished wood, and felt as dielectrics', () => {
 	const [ballRoughness,ballIor,ballMode,ballCoat] = billiardsMaterials.ball;
 	const [woodRoughness,woodIor,woodMode,woodCoat] = billiardsMaterials.wood;
+	const [cueRoughness,cueIor,cueMode,cueCoat] = billiardsMaterials.cueWood;
 	const [feltRoughness,,feltMode,feltSheen] = billiardsMaterials.felt;
 	const [cushionRoughness,,cushionMode,cushionSheen] = billiardsMaterials.cushionFelt;
 
@@ -99,6 +207,8 @@ test('material presets model resin, varnished wood, and felt as dielectrics', ()
 	assert.ok(woodRoughness >= .4 && woodRoughness <= .6);
 	assert.ok(woodIor >= 1.5 && woodIor <= 1.55);
 	assert.deepEqual([woodMode,woodCoat], [2,1]);
+	assert.ok(cueRoughness<woodRoughness);
+	assert.deepEqual([cueIor,cueMode,cueCoat], [woodIor,6,1]);
 	assert.ok(feltRoughness >= .85 && feltRoughness <= .95);
 	assert.deepEqual([feltMode,feltSheen], [3,.85]);
 	assert.ok(cushionRoughness >= .85 && cushionRoughness <= .95);

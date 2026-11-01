@@ -18,6 +18,10 @@ final class Ball
 	public float $qy = 0;
 	public float $qz = 0;
 	public float $qw = 1;
+	public ?int $pocket = null;
+	public float $drop = 0;
+	public float $previousDrop = 0;
+	public float $vDrop = 0;
 	public bool $active = true;
 
 	public function __construct(
@@ -34,6 +38,7 @@ final class Ball
 	{
 		$this->previousX = $this->x;
 		$this->previousY = $this->y;
+		$this->previousDrop = $this->drop;
 	}
 
 	/** Integrate position and visible sphere orientation. */
@@ -70,6 +75,9 @@ final class Ball
 			, 'vy' => $this->vy
 			, 'spin' => [$this->spinX,$this->spinY,$this->spinZ]
 			, 'rotation' => [$this->qx,$this->qy,$this->qz,$this->qw]
+			, 'pocket' => $this->pocket
+			, 'drop' => $this->previousDrop + ($this->drop - $this->previousDrop) * $alpha
+			, 'vDrop' => $this->vDrop
 			, 'active' => $this->active
 		];
 	}
@@ -84,6 +92,10 @@ final class Ball
 		$ball->vy = (float)$state['vy'];
 		[$ball->spinX,$ball->spinY,$ball->spinZ] = array_map('floatval', $state['spin']);
 		[$ball->qx,$ball->qy,$ball->qz,$ball->qw] = array_map('floatval', $state['rotation']);
+		$ball->pocket = isset($state['pocket']) ? (int)$state['pocket'] : null;
+		$ball->drop = (float)($state['drop'] ?? 0);
+		$ball->previousDrop = (float)($state['previousDrop'] ?? $ball->drop);
+		$ball->vDrop = (float)($state['vDrop'] ?? 0);
 		$ball->active = (bool)$state['active'];
 
 		return $ball;
@@ -92,6 +104,7 @@ final class Ball
 	/** @return array<string,mixed> Exact snapshot, including the prior render pose. */
 	public function snapshot(): array
 	{
-		return $this->state() + ['previousX' => $this->previousX,'previousY' => $this->previousY];
+		return $this->state() + ['previousX' => $this->previousX,'previousY' => $this->previousY
+			,'previousDrop' => $this->previousDrop];
 	}
 }
