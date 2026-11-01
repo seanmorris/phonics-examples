@@ -14,6 +14,12 @@ test('full page boots the direct application and executes a resettable shot', as
 	const initialState = JSON.parse(initial);
 	expect(initialState.balls.filter(ball => ball.active)).toHaveLength(16);
 	expect(initialState.table).toEqual([2.54,1.27,.028575,.1158875,.1285875]);
+	const hostBox=await page.locator('.game-host').boundingBox(),uiBox=await page.locator('.php-billiards-ui').boundingBox();
+	expect(Math.abs(hostBox.width-uiBox.width)).toBeLessThan(1);
+	expect(Math.abs(hostBox.height-uiBox.height)).toBeLessThan(1);
+	await canvas.hover();
+	await page.mouse.wheel(0,-5000);
+	await expect.poll(()=>canvas.evaluate(element=>element.phpBilliardsDebug.camera.distance)).toBe(.85);
 	await page.getByRole('button', {name: 'SHOOT'}).click();
 	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).shots).toBe(1);
 	await page.getByRole('button', {name: 'RESET SHOT'}).click();

@@ -144,10 +144,10 @@ export function activate({module, canvas, session})
 	fullscreen.setAttribute('aria-label', 'Enter fullscreen');
 	quick.append(mute, fullscreen);
 	style.textContent = `
-		.php-billiards-ui{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 238px;width:100%;
-			max-width:1500px;margin:auto;background:#050807;color:#eef7f0;font-family:Inter,ui-sans-serif,system-ui,sans-serif;
+		.php-billiards-ui{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 238px;width:100%;height:100%;min-height:0;
+			background:#050807;color:#eef7f0;font-family:Inter,ui-sans-serif,system-ui,sans-serif;
 			box-shadow:0 24px 80px #000a;overflow:hidden}
-		.php-billiards-screen{position:relative;min-width:0;aspect-ratio:16/9;background:radial-gradient(circle at 50% 30%,#17241e,#020403 68%)}
+		.php-billiards-screen{position:relative;min-width:0;min-height:0;width:100%;height:100%;background:radial-gradient(circle at 50% 30%,#17241e,#020403 68%)}
 		.php-billiards-screen>canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
 		.php-billiards-panel{display:flex;flex-direction:column;gap:12px;padding:18px;background:linear-gradient(160deg,#17221d,#090d0b);
 			border-left:1px solid #b99b5c42;box-sizing:border-box}
@@ -170,14 +170,14 @@ export function activate({module, canvas, session})
 			font:700 9px/1 system-ui;letter-spacing:.08em}
 		.php-billiards-sr{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
 			overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important}
-		.php-billiards-ui:fullscreen{display:flex;align-items:center;justify-content:center;width:100vw;height:100vh;max-width:none;background:#020403}
-		.php-billiards-ui:fullscreen .php-billiards-screen{width:min(calc(100vw - 238px),calc((100vh) * 16 / 9));height:auto}
+		.php-billiards-ui:fullscreen{width:100vw;height:100vh;background:#020403}
+		.php-billiards-ui:fullscreen .php-billiards-screen{width:100%;height:100%}
 		[data-game-embed=true] .php-billiards-ui{width:100%;height:100%;max-width:none}
 		@media(max-width:760px){.php-billiards-ui{display:block}.php-billiards-panel{position:absolute;left:8px;right:8px;bottom:8px;display:grid;
 			grid-template-columns:repeat(4,1fr);gap:6px;padding:8px;background:#07100ee8;border:1px solid #ceb77655;border-radius:6px}
 			.php-billiards-panel header,.php-billiards-status{display:none}.php-billiards-panel label{font-size:10px}.php-billiards-actions{display:contents}
 			.php-billiards-panel button{min-height:34px}.php-billiards-placement{grid-column:1/-1;grid-template-columns:1fr 1fr auto}
-			.php-billiards-screen{width:100%;height:100%;aspect-ratio:auto;min-height:420px}}
+			.php-billiards-screen{width:100%;height:100%;min-height:0}}
 	`;
 
 	parent.insertBefore(ui, canvas);
@@ -275,7 +275,7 @@ export function activate({module, canvas, session})
 	canvas.addEventListener('pointercancel', release, {signal});
 	canvas.addEventListener('wheel', event => {
 		event.preventDefault();
-		camera.distance = Math.max(2.35, Math.min(5.2, camera.distance * Math.exp(event.deltaY * .001)));
+		camera.distance = Math.max(.85, Math.min(5.2, camera.distance * Math.exp(event.deltaY * .001)));
 	}, {signal, passive: false});
 	canvas.addEventListener('contextmenu', event => event.preventDefault(), {signal});
 	canvas.addEventListener('webglcontextlost', event => event.preventDefault(), {signal});
@@ -341,12 +341,16 @@ export function activate({module, canvas, session})
 				vec3 x=texture(uWood,p.zy*vec2(2.7,7.1)).rgb,y=texture(uWood,p.xz*vec2(2.7,7.1)).rgb;
 				vec3 z=texture(uWood,p.xy*vec2(2.7,7.1)).rgb;return x*blend.x+y*blend.y+z*blend.z;}
 			vec3 fresnel(vec3 f0,float vDotH){return f0+(1.0-f0)*pow(1.0-vDotH,5.0);}
-			vec3 lightPbr(vec3 lightPosition,vec3 lightColor,float intensity,vec3 N,vec3 V,vec3 base,vec3 f0,float rough){
+			vec3 lightPbr(vec3 lightPosition,vec3 lightColor,float intensity,vec3 N,vec3 V,vec3 base,vec3 f0,float rough,float lightSize){
+				rough=sqrt(rough*rough+lightSize*lightSize);
 				vec3 L=normalize(lightPosition-vPosition),H=normalize(L+V);float nl=max(dot(N,L),0.0),nv=max(dot(N,V),.001);
 				float nh=max(dot(N,H),0.0),vh=max(dot(V,H),0.0);vec3 F=fresnel(f0,vh);float D=distribution(nh,rough);
 				float k=(rough+1.0)*(rough+1.0)/8.0,G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));
-				vec3 spec=D*G*F/max(.01,4.0*nl*nv),diffuse=(1.0-F)*base/3.14159;return (diffuse+spec)*nl*lightColor*intensity;}
-			float coatSpec(vec3 lightPosition,vec3 N,vec3 V,float rough){vec3 L=normalize(lightPosition-vPosition),H=normalize(L+V);
+				vec3 spec=D*G*F/max(.01,4.0*nl*nv),diffuse=(1.0-F)*base/3.14159;
+				vec3 diffuseLight=diffuse*nl*lightColor*intensity,specularLight=spec*nl*lightColor*intensity;
+				return diffuseLight+.55*specularLight/(1.0+specularLight);}
+			float coatSpec(vec3 lightPosition,vec3 N,vec3 V,float rough,float lightSize){rough=sqrt(rough*rough+lightSize*lightSize);
+				vec3 L=normalize(lightPosition-vPosition),H=normalize(L+V);
 				float nl=max(dot(N,L),0.0),nv=max(dot(N,V),.001),nh=max(dot(N,H),0.0),vh=max(dot(V,H),0.0);
 				float F=.04+.96*pow(1.0-vh,5.0),D=distribution(nh,rough),k=(rough+1.0)*(rough+1.0)/8.0;
 				float G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));return D*G*F*nl/max(.01,4.0*nl*nv);}
@@ -362,11 +366,15 @@ export function activate({module, canvas, session})
 				float rough=uMaterial.x;if(mode>0.5&&mode<1.5)rough=clamp(rough+(random(floor(vPosition*900.0))-.5)*.012,.01,.05);
 				float ior=uMaterial.y>1.0?uMaterial.y:1.5,f0Value=pow((ior-1.0)/(ior+1.0),2.0),nv=max(dot(N,V),.001);
 				vec3 f0=vec3(f0Value),key=vec3(-.45,2.8,-.7),fill=vec3(1.8,1.45,2.15);
-				vec3 lit=base*.14+lightPbr(key,vec3(1.0,.94,.82),3.7,N,V,base,f0,rough)
-					+lightPbr(fill,vec3(.58,.72,1.0),.58,N,V,base,f0,rough);
+				float skyAmbient=clamp(N.y*.5+.5,0.0,1.0);
+				vec3 ambient=mix(vec3(.15,.21,.17),vec3(.25,.27,.3),skyAmbient);
+				vec3 lit=base*ambient+lightPbr(key,vec3(1.0,.94,.82),3.7,N,V,base,f0,rough,.14)
+					+lightPbr(fill,vec3(.58,.72,1.0),.58,N,V,base,f0,rough,.18);
 				if(mode>0.5&&mode<1.5){lit+=base*.035*(1.0-max(dot(N,normalize(key-vPosition)),0.0));
-					lit+=vec3(coatSpec(key,N,V,.018)*3.7+coatSpec(fill,N,V,.028)*.58)*uMaterial.w;}
-				else if(mode>1.5&&mode<2.5)lit+=vec3(coatSpec(key,N,V,.11)*3.7+coatSpec(fill,N,V,.14)*.58)*uMaterial.w;
+					float coat=coatSpec(key,N,V,.018,.16)*3.7+coatSpec(fill,N,V,.028,.2)*.58;
+					lit+=vec3(.55*coat/(1.0+coat))*uMaterial.w;}
+				else if(mode>1.5&&mode<2.5){float coat=coatSpec(key,N,V,.11,.12)*3.7+coatSpec(fill,N,V,.14,.16)*.58;
+					lit+=vec3(.55*coat/(1.0+coat))*uMaterial.w;}
 				else if(mode>2.5)lit+=base*pow(1.0-nv,2.2)*uMaterial.w*.72;
 				else lit+=base*pow(1.0-nv,3.0)*.08;
 				color=vec4(lit,uBase.a);}`));
