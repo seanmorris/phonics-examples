@@ -1,0 +1,13 @@
+:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#050807;color:#e8efe9}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%}body{min-height:100vh;background:radial-gradient(circle at 60% 0,#1a2b24,#050807 55%)}
+a{color:inherit}.catalog{width:min(1160px,calc(100% - 40px));margin:auto;padding:72px 0}.catalog>header{max-width:760px;margin-bottom:42px}
+.eyebrow{color:#d9bd76;font-size:.78rem;font-weight:800;letter-spacing:.18em}.catalog h1{margin:.25rem 0;font:700 clamp(2.4rem,7vw,5rem)/.98 Georgia,serif;color:#f2e7c9}
+.catalog header>p:last-child{max-width:680px;color:#aebbb2;font-size:1.08rem;line-height:1.65}.catalog section{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+.game-card{overflow:hidden;border:1px solid #d6bc7844;border-radius:10px;background:#0c1411;box-shadow:0 18px 55px #0008}.game-card a{text-decoration:none}.game-card img{display:block;width:100%;height:auto}
+.game-card div{padding:22px}.game-card h2{margin:0;color:#efd79b;font:700 1.65rem Georgia,serif}.game-card p{min-height:3em;color:#acb8b0;line-height:1.5}.game-card span{font-weight:700;color:#e3c474}
+.game-page{display:grid;grid-template-rows:auto 1fr auto;min-height:100vh}.game-page nav,.game-page footer{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:12px 24px;background:#080d0b;color:#aeb9b2;font-size:.82rem}
+.game-page nav span{color:#ead49c;font-weight:700;letter-spacing:.08em}.game-page footer p{margin:0}.game-host{position:relative;display:flex;align-items:center;justify-content:center;min-height:0;background:#020403;overflow:hidden}
+.game-page>.game-host{height:calc(100vh - 102px)}.game-host>canvas{display:block;width:100%;height:100%;outline:none}.loading{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#06100d;color:#e8d095;transition:opacity .35s}
+.loading span{color:#aeb9b2;font-size:.82rem}.loading.complete{opacity:0;pointer-events:none}.loading.failed span{max-width:620px;color:#ffb3a7;text-align:center}.embed-page,.embed-page body,.embed-host,.embed-host>.game-host{width:100%;height:100%;min-height:100%;overflow:hidden}.embed-host{position:fixed;inset:0}.embed-host .game-host{position:absolute;inset:0}
+@media(max-width:760px){.game-page nav,.game-page footer{padding:8px 12px}.game-page footer p:last-child{display:none}.game-page>.game-host{height:calc(100vh - 75px)}}
+

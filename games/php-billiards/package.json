@@ -1,0 +1,30 @@
+{
+  "name": "@seanmorris/php-billiards",
+  "version": "0.1.0",
+  "description": "A deterministic 3D billiards practice table built directly on Phonics",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./phonics.json": "./phonics.json"
+  },
+  "peerDependencies": {
+    "@seanmorris/phonics": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@seanmorris/phonics": {
+      "optional": true
+    }
+  },
+  "files": [
+    "application.php",
+    "autoload.php",
+    "browser/",
+    "src/",
+    "assets/generated/",
+    "phonics.json",
+    "example.json",
+    "README.md",
+    "LICENSE"
+  ]
+}
+

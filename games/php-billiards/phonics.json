@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "name": "@seanmorris/php-billiards",
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.0.0"
+  },
+  "php": {
+    "autoload": {
+      "PhpBilliards\\": "src/"
+    },
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "files": [
+      "autoload.php",
+      "src/Physics/Ball.php",
+      "src/Physics/Table.php",
+      "src/Physics/Simulation.php"
+    ]
+  },
+  "browser": {
+    "files": [
+      "browser/game.mjs"
+    ]
+  },
+  "application": {
+    "entry": "application.php",
+    "assets": [
+      "assets/generated/ball-atlas.rgba",
+      "assets/generated/wood.rgba",
+      "assets/generated/textures.json"
+    ]
+  },
+  "integrity": {
+    "application.php": "sha256-Fb4x8D0dtbzPyyLXmxBu5oqB6rC+bqXvZNy06NPFXoI=",
+    "assets/generated/ball-atlas.rgba": "sha256-q9j8QvExoIAdQVuFPFT3Jbw50/vMzbhaY3mh6bQyUcA=",
+    "assets/generated/textures.json": "sha256-2lQMbDXEoGnfBo78ChgYHT/ja2d7md5RnwyGgJFyXkM=",
+    "assets/generated/wood.rgba": "sha256-+08C5IAGdPj/rp8cMGE6DwkdDsSkqdtYyGPUGO+4keI=",
+    "autoload.php": "sha256-EmJY/5T4hGtkgHDoBwucyEMFN7n3N9BJCi2D0f7IKwE=",
+    "browser/game.mjs": "sha256-PjToklf8YtWcryOyAUtOlOu2OJAii8kd+88Tuaw6eT4=",
+    "src/Physics/Ball.php": "sha256-yeyhpOUgQHMPkgtLg0UUAxr0uQB8MNG2B5X3d1+RC3E=",
+    "src/Physics/Simulation.php": "sha256-VH8Q9KLrvkLpJJzNSOG7dq3L2oSKGHpekqzpR6r7d+k=",
+    "src/Physics/Table.php": "sha256-WWhQj9VGsoAotuFiovxQctDm29cJRgVRAze3Y/krKUE="
+  }
+}

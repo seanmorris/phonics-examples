@@ -1,0 +1,34 @@
+{
+  "name": "@seanmorris/phonics-examples",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "games/*"
+  ],
+  "scripts": {
+    "generate": "node scripts/generate-billiards-textures.mjs",
+    "check:generated": "node scripts/generate-billiards-textures.mjs --check",
+    "build:applications": "node scripts/build-applications.mjs",
+    "build:site": "node scripts/build-site.mjs",
+    "build": "npm run generate && npm run build:applications && npm run build:site",
+    "test:php": "php games/php-billiards/tests/run.php",
+    "test:node": "node --test tests/*.test.mjs",
+    "test:manifest": "phonics validate games/php-billiards",
+    "test:browser": "playwright test",
+    "test": "npm run test:php && npm run test:node && npm run check:generated && npm run test:manifest",
+    "serve": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "@seanmorris/phonics": "https://github.com/seanmorris/php-wasm-engine/archive/984d81e80934f5d30c5662eaf99d650eb7682a2e.tar.gz"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@resvg/resvg-js": "2.6.2",
+    "pngjs": "7.0.0"
+  },
+  "license": "Apache-2.0"
+}

@@ -1,0 +1,14 @@
+{
+  "ballAtlas": {
+    "file": "ball-atlas.rgba",
+    "width": 512,
+    "height": 512,
+    "sha256": "abd8fc42f131a0801d415b853c54f725bc39d3fbcccdb85a6379a1e9b43251c0"
+  },
+  "wood": {
+    "file": "wood.rgba",
+    "width": 256,
+    "height": 256,
+    "sha256": "fb4f02e4800674f8ffae9f1c30613a0f091d0ec4a4a9db58c863d418efb891e2"
+  }
+}

@@ -1,0 +1,40 @@
+<?php
+declare(strict_types=1);
+namespace PhpBilliards\Physics;
+
+/** Standard nine-foot pool-table playfield and pocket geometry, in metres. */
+final class Table
+{
+	public const WIDTH = 2.54;
+	public const HEIGHT = 1.27;
+	public const CORNER_MOUTH = 0.105;
+	public const SIDE_MOUTH = 0.09;
+	public const POCKET_RADIUS = 0.062;
+
+	/** @return list<array{float,float}> */
+	public static function pockets(): array
+	{
+		$x = self::WIDTH / 2;
+		$y = self::HEIGHT / 2;
+
+		return [[-$x,-$y],[0,-$y],[$x,-$y],[-$x,$y],[0,$y],[$x,$y]];
+	}
+
+	/** Whether a rail face exists at the supplied along-rail coordinate. */
+	public static function cushion(string $axis, float $coordinate): bool
+	{
+		if($axis === 'x') return abs($coordinate) < self::HEIGHT / 2 - self::CORNER_MOUTH;
+
+		return abs($coordinate) < self::WIDTH / 2 - self::CORNER_MOUTH
+			&& abs($coordinate) > self::SIDE_MOUTH;
+	}
+
+	public static function pocketed(float $x, float $y): bool
+	{
+		foreach(self::pockets() as [$px,$py])
+		if(hypot($x - $px, $y - $py) <= self::POCKET_RADIUS) return true;
+
+		return false;
+	}
+}
+

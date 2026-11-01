@@ -1,0 +1,8 @@
+node_modules/
+vendor/
+.cache/
+site/dist/
+games/*/dist/
+test-results/
+playwright-report/
+
