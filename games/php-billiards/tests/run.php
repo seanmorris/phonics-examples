@@ -156,6 +156,8 @@ $test('three full-power zero-spin shots clear and spread the rack', static funct
 		$ticks = 0;
 		while($game->moving() && $ticks++ < 2400) $game->step();
 		$expect($ticks < 2400, "Shot $shot never settled");
+		if($game->phase === 'placing')
+		$expect($game->placeCue(-Table::WIDTH * .28, 0), "Shot $shot scratch could not be placed legally");
 		$expect($game->phase === 'aim', "Shot $shot did not return to aim mode");
 		$expect(hypot($game->cue()->x - $startX, $game->cue()->y - $startY) > .075,
 			"Shot $shot left the cue ball at the contact point");
@@ -311,6 +313,46 @@ $test('pocket shelves and jaws reject glancing balls instead of vacuuming them i
 	$expect($ball->vy < 0, 'Rounded jaw did not return the glancing ball to the table');
 	$expect(count(array_filter($events, static fn(array $event): bool => $event['type'] === 'cushion')) === 1,
 		'Jaw collision did not emit a cushion contact');
+});
+
+$test('crowded pocket entries cannot skip the circular drop boundary', static function() use ($expect): void {
+	$game = new Simulation;
+	foreach($game->balls as $ball) $ball->active = false;
+	$states = [
+		[0,-.055856477510466,.604425,3.0952740570054,3.7948976588758]
+		, [1,-.0011575308680337,.604425,-.38633643755657,7.0377743110714]
+		, [9,.058290443913564,.604425,-4.9040369983854,5.7525813341049]
+		, [2,-.05610232213738,.547175,1.9904427082911,6.9387064615708]
+		, [10,.0015375528836332,.547175,.8617267653076,6.2348432039698]
+		, [8,.058407036088015,.547175,-.30240035166822,.57292006250256]
+	];
+
+	foreach($states as [$number,$x,$y,$vx,$vy])
+	foreach($game->balls as $ball) if($ball->number === $number)
+	{
+		$ball->active = true;
+		$ball->x = $ball->previousX = $x;
+		$ball->y = $ball->previousY = $y;
+		$ball->vx = $vx;
+		$ball->vy = $vy;
+	}
+
+	$game->phase = 'moving';
+	$entered = false;
+
+	for($tick = 0; $tick < 240; $tick++)
+	{
+		$game->step();
+
+		foreach($game->consumeEvents() as $event)
+		if($event['type'] === 'pocket-enter') $entered = true;
+
+		foreach($game->balls as $ball) if($ball->active && $ball->pocket === null)
+		$expect(abs($ball->x) <= Table::WIDTH / 2 + .08 && abs($ball->y) <= Table::HEIGHT / 2 + .08,
+			"Ball {$ball->number} escaped behind a crowded pocket");
+	}
+
+	$expect($entered, 'Crowded side pocket never registered a swept entry');
 });
 
 $test('rendered tangent pocket facings are physical collision surfaces', static function() use ($expect): void {

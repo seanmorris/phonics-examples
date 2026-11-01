@@ -185,6 +185,8 @@ final class Simulation
 			if(!$collision) break;
 
 			if($collision['type'] === 'ball') $this->resolveContactIsland($collision['a'], $collision['b']);
+			elseif($collision['type'] === 'pocket') $this->enterPocket($collision['ball'], $collision['index']);
+			elseif($collision['type'] === 'backstop') $this->resolvePocketBackstop($collision['ball'], $collision);
 			elseif($collision['type'] === 'jaw') $this->resolveJaw($collision['ball'], $collision);
 			elseif($collision['type'] === 'facing') $this->resolveFacing($collision['ball'], $collision);
 			else $this->resolveCushion($collision['ball'], $collision['axis']);
@@ -201,15 +203,23 @@ final class Simulation
 
 			if($pocket !== null)
 			{
-				$ball->pocket = $pocket['index'];
-				$ball->drop = $ball->previousDrop = 0;
-				$ball->vDrop = 0;
-				$this->events[] = ['type' => 'pocket-enter','ball' => $ball->number,'pocket' => $pocket['index']];
+				$this->enterPocket($ball, $pocket['index']);
 				continue;
 			}
 
 			$this->applyCloth($ball, $seconds);
 		}
+	}
+
+	/** Transfer a ball to its liner at the exact swept crossing of the circular clearance. */
+	private function enterPocket(Ball $ball, int $index): void
+	{
+		if($ball->pocket !== null) return;
+
+		$ball->pocket = $index;
+		$ball->drop = $ball->previousDrop = 0;
+		$ball->vDrop = 0;
+		$this->events[] = ['type' => 'pocket-enter','ball' => $ball->number,'pocket' => $index];
 	}
 
 	/** Advance cloth balls and balls rattling inside the conical pocket liners. */
@@ -332,6 +342,65 @@ final class Simulation
 
 				if($time >= -1e-9 && $time <= $limit && ($best === null || $time < $best['time']))
 				$best = ['type' => 'ball','time' => max(0, $time),'a' => $a,'b' => $b];
+			}
+
+			// Pocket entry is a swept event, just like a rail or ball impact. Checking
+			// only after a substep lets a fast ball cross the narrow clearance circle
+			// and reach the back of the table, especially when a contact cluster
+			// redirects it inside the mouth.
+			foreach(Table::pockets() as $index => [$pocketX,$pocketY])
+			{
+				$relativeX = $a->x - $pocketX;
+				$relativeY = $a->y - $pocketY;
+				$speedSquared = $a->vx ** 2 + $a->vy ** 2;
+				$radius = Table::pocketRadius($index) - Ball::RADIUS;
+				$separation = $relativeX ** 2 + $relativeY ** 2 - $radius ** 2;
+				$approach = 2 * ($relativeX * $a->vx + $relativeY * $a->vy);
+
+				if($separation <= 0) $time = 0.0;
+				elseif($speedSquared <= 1e-12 || $approach >= 0) continue;
+				else
+				{
+					$discriminant = $approach ** 2 - 4 * $speedSquared * $separation;
+
+					if($discriminant < 0) continue;
+
+					$time = (-$approach - sqrt($discriminant)) / (2 * $speedSquared);
+				}
+
+				if($time < -1e-9 || $time > $limit || $best !== null && $time >= $best['time']) continue;
+
+				$best = ['type' => 'pocket','time' => max(0, $time),'ball' => $a,'index' => $index];
+			}
+
+			// A ball whose trajectory misses the drop clearance can still enter the
+			// visible throat. The far half of the round liner must return it through
+			// the mouth instead of allowing it to continue behind the table.
+			foreach(Table::pockets() as $index => [$pocketX,$pocketY])
+			{
+				[$outwardX,$outwardY] = Table::pocketOutward($index);
+				$lateralX = -$outwardY;
+				$lateralY = $outwardX;
+				$relativeX = $a->x - $pocketX;
+				$relativeY = $a->y - $pocketY;
+				$distance = $relativeX * $outwardX + $relativeY * $outwardY;
+				$outwardSpeed = $a->vx * $outwardX + $a->vy * $outwardY;
+
+				if($outwardSpeed <= 1e-12) continue;
+
+				$time = $distance >= 0 ? 0.0 : -$distance / $outwardSpeed;
+
+				if($time < -1e-9 || $time > $limit || $best !== null && $time >= $best['time']) continue;
+
+				$lateral = ($relativeX + $a->vx * max(0, $time)) * $lateralX
+					+ ($relativeY + $a->vy * max(0, $time)) * $lateralY;
+				$clearance = Table::pocketRadius($index) - Ball::RADIUS;
+
+				if(abs($lateral) < $clearance - 1e-9
+					|| abs($lateral) > Table::THROAT_RADIUS + Ball::RADIUS) continue;
+
+				$best = ['type' => 'backstop','time' => max(0, $time),'ball' => $a,'index' => $index
+					,'x' => $pocketX,'y' => $pocketY,'nx' => -$outwardX,'ny' => -$outwardY];
 			}
 
 			$halfX = Table::WIDTH / 2 - Ball::RADIUS;
@@ -623,6 +692,34 @@ final class Simulation
 		}
 
 		$this->events[] = ['type' => 'cushion','strength' => min(1, -$normalSpeed / self::MAX_SPEED)];
+	}
+
+	/** Resolve the closed rear half of a pocket liner after a ball misses its drop clearance. */
+	private function resolvePocketBackstop(Ball $ball, array $collision): void
+	{
+		$nx = $collision['nx'];
+		$ny = $collision['ny'];
+		$normalSpeed = $ball->vx * $nx + $ball->vy * $ny;
+
+		if($normalSpeed < 0)
+		{
+			$tangentX = $ball->vx - $normalSpeed * $nx;
+			$tangentY = $ball->vy - $normalSpeed * $ny;
+			$reflected = -$normalSpeed * self::CUSHION_RESTITUTION;
+			$ball->vx = $tangentX * .96 + $reflected * $nx;
+			$ball->vy = $tangentY * .96 + $reflected * $ny;
+			$ball->spinY *= .90;
+		}
+
+		$distance = ($ball->x - $collision['x']) * -$nx + ($ball->y - $collision['y']) * -$ny;
+
+		if($distance > 0)
+		{
+			$ball->x += $nx * ($distance + 1e-8);
+			$ball->y += $ny * ($distance + 1e-8);
+		}
+
+		$this->events[] = ['type' => 'cushion','strength' => min(1, max(0, -$normalSpeed) / self::MAX_SPEED)];
 	}
 
 	private function applyCloth(Ball $ball, float $seconds): void
