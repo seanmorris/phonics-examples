@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsEdgeRadii, billiardsMaterials, billiardsRailSights, billiardsTableMeshing, cueAppearance, cueContactWarning, cuePlacementValid, cuePose, orbitYawDelta, pocketVoidRadius, reflectedGuideSegments, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer, tableRailSightDefinitions} from '../games/php-billiards/browser/game.mjs';
+import {billiardsEdgeRadii, billiardsMaterials, billiardsRailSights, billiardsTableMeshing, cueAppearance, cueContactWarning, cueDyeMask, cuePlacementValid, cuePose, orbitYawDelta, pocketVoidRadius, reflectedGuideSegments, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer, tableRailSightDefinitions} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
@@ -57,6 +57,19 @@ test('cue dimensions describe a tapered cylinder with distinct tip and collar se
 	assert.ok(cueAppearance.chalkTipLength>0);
 	assert.ok(cueAppearance.copperCollarLength>cueAppearance.chalkTipLength);
 	assert.equal(cueAppearance.patternPoints%2,0);
+});
+
+test('cue dye forms one dark butt with joined points facing the tip', () => {
+	const {patternBase,patternLength,patternPoints}=cueAppearance;
+	for(let point=0;point<patternPoints;point++)
+	{
+		const centre=point/patternPoints,boundary=(point+.5)/patternPoints;
+		assert.equal(cueDyeMask(patternBase-.001,centre),1,'Dyed butt has a gap behind a point');
+		assert.equal(cueDyeMask(patternBase-.001,boundary),1,'Adjacent point bases do not join');
+		assert.equal(cueDyeMask(patternBase+patternLength*.9,centre),1,'Triangle does not point toward the tip');
+		assert.equal(cueDyeMask(patternBase+patternLength*.9,boundary),0,'Triangle direction reverses between points');
+	}
+	assert.equal(cueDyeMask(patternBase+patternLength+.001,0),0,'Dye extends beyond the forward point tips');
 });
 
 test('horizontal orbit direction reverses below the on-screen target', () => {

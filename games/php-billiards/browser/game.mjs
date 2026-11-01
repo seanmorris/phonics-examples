@@ -5,8 +5,18 @@ export const cueAppearance = Object.freeze({
 	, shaftDiameter:.0125
 	, chalkTipLength:.007
 	, copperCollarLength:.025
-	, patternPoints:12
+	, patternPoints:6
+	, patternBase:.34
+	, patternLength:.15
 });
+
+/** Continuous dyed butt with equal, forward-pointing triangular extensions. */
+export function cueDyeMask(axial,around)
+{
+	const sector=((around*cueAppearance.patternPoints+.5)%1+1)%1;
+	const across=Math.abs(sector-.5)*2;
+	return axial<=cueAppearance.patternBase+cueAppearance.patternLength*(1-across)?1:0;
+}
 
 /** WPA rail-cap sights for a nine-foot table, expressed in metres. */
 export const billiardsRailSights = Object.freeze({
@@ -658,11 +668,11 @@ export function activate({module, canvas, session})
 					if(mode<2.5){float sight=railSightMask(vPosition.xz)*smoothstep(.78,.96,N.y)*step(.08,vPosition.y);
 						float pearl=noise3(vPosition*190.0+vec3(4.3,8.1,2.6));vec3 ivory=vec3(.72,.68,.52)+vec3(.12,.13,.15)*pearl;
 						base=mix(base,ivory,sight);}
-					if(mode>5.5){float phase=fract(vUv.y+1.0/24.0)*12.0,sector=floor(phase),across=abs(fract(phase)-.5)*2.0;
-						float rear=1.0-step(1.0,mod(sector,2.0)),progress=mix((.22-vUv.x)/.095,(vUv.x-.03)/.095,rear);
-						float inside=step(0.0,progress)*step(progress,1.0),edge=max(fwidth(across)*1.5,.008);
-						float point=inside*(1.0-smoothstep(1.0-progress-edge,1.0-progress+edge,across));
-						vec3 blueDye=base*vec3(.16,.36,.78)+vec3(.012,.045,.14);base=mix(base,blueDye,point*.84);}}
+					if(mode>5.5){float sector=fract(vUv.y*${cueAppearance.patternPoints.toFixed(1)}+.5),across=abs(sector-.5)*2.0;
+						float pointFront=${cueAppearance.patternBase.toFixed(2)}+${cueAppearance.patternLength.toFixed(2)}*(1.0-across);
+						float edge=max(fwidth(vUv.x-pointFront)*1.5,.0015);
+						float dyed=1.0-smoothstep(pointFront-edge,pointFront+edge,vUv.x);
+						vec3 blueDye=base*vec3(.16,.36,.78)+vec3(.012,.045,.14);base=mix(base,blueDye,dyed*.84);}}
 				else if(mode>2.5&&mode<3.5){float macro=feltMacro(vPosition),grain=noise3(vPosition*430.0+vec3(4.7,1.3,9.1));
 					float looseFiber=smoothstep(.68,.9,noise3(vPosition*760.0+vec3(2.1,7.4,3.8)));
 					float height=(macro-.5)*.00055+(grain-.5)*.00016+looseFiber*.00007;
