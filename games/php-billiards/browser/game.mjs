@@ -337,6 +337,16 @@ export function activate({module, canvas, session})
 			uniform sampler2D uBallAtlas; uniform sampler2D uWood; out vec4 color;
 			float distribution(float nDotH,float rough){float a=rough*rough;float a2=a*a;float d=nDotH*nDotH*(a2-1.0)+1.0;return a2/(3.14159*d*d);}
 			float random(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}
+			float noise3(vec3 p){vec3 cell=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+				float n000=random(cell),n100=random(cell+vec3(1.0,0.0,0.0)),n010=random(cell+vec3(0.0,1.0,0.0)),n110=random(cell+vec3(1.0,1.0,0.0));
+				float n001=random(cell+vec3(0.0,0.0,1.0)),n101=random(cell+vec3(1.0,0.0,1.0)),n011=random(cell+vec3(0.0,1.0,1.0)),n111=random(cell+vec3(1.0));
+				return mix(mix(mix(n000,n100,f.x),mix(n010,n110,f.x),f.y),mix(mix(n001,n101,f.x),mix(n011,n111,f.x),f.y),f.z);}
+			float feltMacro(vec3 p){return noise3(p*11.0)*.58+noise3(p*27.0+vec3(8.1,2.7,5.4))*.29
+				+noise3(p*61.0+vec3(3.2,9.4,1.8))*.13;}
+			vec3 bumpNormal(vec3 position,vec3 normal,float height){vec3 sigmaX=dFdx(position),sigmaY=dFdy(position);
+				vec3 r1=cross(sigmaY,normal),r2=cross(normal,sigmaX);float determinant=dot(sigmaX,r1);
+				vec3 gradient=sign(determinant)*(dFdx(height)*r1+dFdy(height)*r2);
+				return normalize(abs(determinant)*normal-gradient);}
 			vec3 wood(vec3 p,vec3 n){vec3 blend=pow(abs(n),vec3(6.0));blend/=max(.001,blend.x+blend.y+blend.z);
 				vec3 x=texture(uWood,p.zy*vec2(2.7,7.1)).rgb,y=texture(uWood,p.xz*vec2(2.7,7.1)).rgb;
 				vec3 z=texture(uWood,p.xy*vec2(2.7,7.1)).rgb;return x*blend.x+y*blend.y+z*blend.z;}
@@ -361,8 +371,12 @@ export function activate({module, canvas, session})
 					// Raw atlas rows run opposite WebGL's vertical axis; longitude must stay unchanged to preserve numeral chirality.
 					vec2 uv=mix(uAtlasCell/4.0+pad,(uAtlasCell+1.0)/4.0-pad,vec2(vUv.x,1.0-vUv.y));base=texture(uBallAtlas,uv).rgb;}
 				else if(mode>1.5&&mode<2.5)base*=wood(vPosition,N)*1.45;
-				else if(mode>2.5){float fiber=random(floor(vPosition*520.0)),weave=.995+.01*fiber;
-					float track=exp(-pow(abs(vPosition.z-.055*sin(vPosition.x*5.0))*18.0,2.0));base*=weave*(.985+.03*fiber);base=mix(base,base*1.045,track*.035);}
+				else if(mode>2.5){float macro=feltMacro(vPosition),grain=noise3(vPosition*430.0+vec3(4.7,1.3,9.1));
+					float looseFiber=smoothstep(.68,.9,noise3(vPosition*760.0+vec3(2.1,7.4,3.8)));
+					float height=(macro-.5)*.00055+(grain-.5)*.00016+looseFiber*.00007;
+					N=bumpNormal(vPosition,N,height);float top=smoothstep(.62,.92,N.y);
+					float track=exp(-pow(abs(vPosition.z-.055*sin(vPosition.x*5.0))*18.0,2.0))*top;
+					base*=.92+macro*.13+(grain-.5)*.045+looseFiber*.035;base=mix(base,base*1.04,track*.035);}
 				float rough=uMaterial.x;if(mode>0.5&&mode<1.5)rough=clamp(rough+(random(floor(vPosition*900.0))-.5)*.012,.01,.05);
 				float ior=uMaterial.y>1.0?uMaterial.y:1.5,f0Value=pow((ior-1.0)/(ior+1.0),2.0),nv=max(dot(N,V),.001);
 				vec3 f0=vec3(f0Value),key=vec3(-.45,2.8,-.7),fill=vec3(1.8,1.45,2.15);
@@ -375,7 +389,8 @@ export function activate({module, canvas, session})
 					lit+=vec3(.55*coat/(1.0+coat))*uMaterial.w;}
 				else if(mode>1.5&&mode<2.5){float coat=coatSpec(key,N,V,.11,.12)*3.7+coatSpec(fill,N,V,.14,.16)*.58;
 					lit+=vec3(.55*coat/(1.0+coat))*uMaterial.w;}
-				else if(mode>2.5)lit+=base*pow(1.0-nv,2.2)*uMaterial.w*.72;
+				else if(mode>2.5){float backLight=max(dot(-N,normalize(key-vPosition)),0.0);
+					lit+=base*(.04+.055*backLight)+base*pow(1.0-nv,1.8)*uMaterial.w*.82;}
 				else lit+=base*pow(1.0-nv,3.0)*.08;
 				color=vec4(lit,uBase.a);}`));
 		gl.linkProgram(result);
