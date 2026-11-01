@@ -197,7 +197,7 @@ export function cuePlacementValid(state,x,y)
 	if(Math.abs(x)>width/2-radius*1.2||Math.abs(y)>height/2-radius*1.2)return false;
 
 	for(const pocket of tablePocketDefinitions(width,height,cornerMouth,sideMouth))
-	if(Math.hypot(x-pocket.x,y-pocket.z)<=pocket.radius-billiardsTableMeshing.pocketLipInset)return false;
+	if(Math.hypot(x-pocket.x,y-pocket.z)<=pocketVoidRadius(pocket.radius))return false;
 
 	for(const ball of state.balls??[])
 	if(ball.number!==0&&ball.active&&Math.hypot(x-ball.x,y-ball.y)<radius*2.05)return false;
@@ -211,10 +211,16 @@ export const billiardsTableMeshing = Object.freeze({
 	, cushionWidth:.055
 	, cushionTopSegments:6
 	, pocketSegments:96
+	, tabletopTop:.012
+	// Keep the leather annulus below the cloth so it cannot overpaint the cut.
+	, pocketLinerTop:.0095
 	// The analytic leather lip masks the sub-millimetre chord error from the
 	// full-table marching grid and leaves a smooth circular visible hole.
 	, pocketLipInset:.0025
 });
+
+/** Radius of the black void and logical liner inside the leather lip. */
+export const pocketVoidRadius = throatRadius => throatRadius-billiardsTableMeshing.pocketLipInset;
 
 /** Six constant-width rails ending on the shared tangent pocket facings. */
 export function tableCushionPolygons(width,height,cornerMouth=.1158875,sideMouth=.1285875)
@@ -868,12 +874,12 @@ export function activate({module, canvas, session})
 	/** A tapered drop beginning at the circular tabletop hole behind each mouth. */
 	const buildPocketLiners = (pockets,ballRadius) => {
 		const vertices=[],indices=[];
-		const top=.0135,throat=-.09,bottom=-.235,draft=13.5*Math.PI/180;
+		const top=billiardsTableMeshing.pocketLinerTop,throat=-.09,bottom=-.235,draft=13.5*Math.PI/180;
 		const add=(x,y,z,nx,ny,nz,u,v)=>{const index=vertices.length/8;vertices.push(x,y,z,nx,ny,nz,u,v);return index;};
 
 		for(const pocket of pockets)
 		{
-			const segments=billiardsTableMeshing.pocketSegments,lipRadius=pocket.radius-billiardsTableMeshing.pocketLipInset;
+			const segments=billiardsTableMeshing.pocketSegments,lipRadius=pocketVoidRadius(pocket.radius);
 			const outline=Array.from({length:segments},(_,step)=>{
 				const angle=step/segments*Math.PI*2;
 				return [pocket.x+Math.cos(angle)*lipRadius,pocket.z+Math.sin(angle)*lipRadius];
@@ -925,9 +931,9 @@ export function activate({module, canvas, session})
 
 		return {
 			apron:extrudeCsg(apron,bounds,112,64,-.25,-.042)
-			, bed:extrudeCsg(bed,bounds,128,72,-.047,.012)
+			, bed:extrudeCsg(bed,bounds,128,72,-.047,billiardsTableMeshing.tabletopTop)
 			, wood:extrudeRoundedCsg(wood,bounds,billiardsTableMeshing.columns,billiardsTableMeshing.rows
-				,.012,.105,billiardsEdgeRadii.wood,8)
+				,billiardsTableMeshing.tabletopTop,.105,billiardsEdgeRadii.wood,8)
 			, cushion:buildCushionMesh(cushionRails,bounds)
 			, ...pocketMeshes
 		};
@@ -1160,9 +1166,12 @@ export function activate({module, canvas, session})
 		draw(tableMeshes.bed,[0,0,0],[1,1,1],[0,0,0,1],[.055,.285,.18,1],billiardsMaterials.felt);
 		draw(tableMeshes.wood,[0,0,0],[1,1,1],[0,0,0,1],[.38,.18,.07,1],billiardsMaterials.wood);
 		draw(tableMeshes.cushion,[0,0,0],[1,1,1],[0,0,0,1],[.042,.21,.13,1],billiardsMaterials.cushionFelt);
-		draw(tableMeshes.liners,[0,0,0],[1,1,1],[0,0,0,1],[.018,.014,.011,1],[.82,1.52,0,0]);
+		draw(tableMeshes.liners,[0,0,0],[1,1,1],[0,0,0,1],[.12,.045,.022,1],[.72,1.52,0,0]);
 		for(const pocket of pockets)
-			draw(disc,[pocket.x,-.237,pocket.z],[pocket.radius*.96,1,pocket.radius*.96],[0,0,0,1],[.001,.0015,.001,1],[.96,1.5,0,0]);
+		{
+			const voidRadius=pocketVoidRadius(pocket.radius);
+			draw(disc,[pocket.x,-.237,pocket.z],[voidRadius,1,voidRadius],[0,0,0,1],[.001,.0015,.001,1],[.96,1.5,0,0]);
+		}
 		for(const ball of latest.balls)if(ball.active&&ball.pocket===null)
 		{
 			const shadowOffset=.0085;

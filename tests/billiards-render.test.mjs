@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsEdgeRadii, billiardsMaterials, billiardsTableMeshing, cueAppearance, cueContactWarning, cuePlacementValid, cuePose, orbitYawDelta, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer} from '../games/php-billiards/browser/game.mjs';
+import {billiardsEdgeRadii, billiardsMaterials, billiardsTableMeshing, cueAppearance, cueContactWarning, cuePlacementValid, cuePose, orbitYawDelta, pocketVoidRadius, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
@@ -161,6 +161,16 @@ test('tabletop materials subtract the round throat while cloth preserves the mou
 			'Mouth shelf did not separate the flared cushion opening from the round hole');
 		assert.ok(profiles.bed(...shelf)<0,'Cloth shelf was cut away between the jaws and round hole');
 		assert.ok(profiles.wood(...shelf)>0,'Wood covered the cloth pocket shelf');
+	}
+});
+
+test('black pocket surfaces remain inside and below the tabletop hole', () => {
+	assert.ok(billiardsTableMeshing.pocketLinerTop<billiardsTableMeshing.tabletopTop,
+		'Leather liner can overpaint the cloth surface');
+	for(const pocket of tablePocketDefinitions(width,height))
+	{
+		assert.equal(pocketVoidRadius(pocket.radius),pocket.radius-billiardsTableMeshing.pocketLipInset);
+		assert.ok(pocketVoidRadius(pocket.radius)<pocket.radius,'Black void reached beyond the leather lip');
 	}
 });
 
