@@ -1,9 +1,9 @@
 {
   "ballAtlas": {
     "file": "ball-atlas.rgba",
-    "width": 512,
-    "height": 512,
-    "sha256": "4a1536980eb92ef951e6c7cd9fcb4b1ac7763c449bbe9e617c5d13337b12dbab"
+    "width": 2048,
+    "height": 1024,
+    "sha256": "e8e6c764145da6091ba060a39aebfbc60df6ae003b2a0967b32fbbd9cf801818"
   },
   "wood": {
     "file": "wood.rgba",

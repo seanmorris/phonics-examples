@@ -351,7 +351,8 @@ export function activate({module, canvas, session})
 				float F=.04+.96*pow(1.0-vh,5.0),D=distribution(nh,rough),k=(rough+1.0)*(rough+1.0)/8.0;
 				float G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));return D*G*F*nl/max(.01,4.0*nl*nv);}
 			void main(){vec3 N=normalize(vNormal),V=normalize(uEye-vPosition),base=uBase.rgb;float mode=uMaterial.z;
-				if(mode>0.5&&mode<1.5){vec2 uv=(uAtlasCell+vec2(vUv.x,1.0-vUv.y))/4.0;base=texture(uBallAtlas,uv).rgb;}
+				if(mode>0.5&&mode<1.5){vec2 pad=vec2(4.0)/vec2(textureSize(uBallAtlas,0));
+					vec2 uv=mix(uAtlasCell/4.0+pad,(uAtlasCell+1.0)/4.0-pad,vec2(1.0-vUv.x,1.0-vUv.y));base=texture(uBallAtlas,uv).rgb;}
 				else if(mode>1.5&&mode<2.5)base*=wood(vPosition,N)*1.45;
 				else if(mode>2.5){float fiber=random(floor(vPosition*520.0)),weave=.995+.01*fiber;
 					float track=exp(-pow(abs(vPosition.z-.055*sin(vPosition.x*5.0))*18.0,2.0));base*=weave*(.985+.03*fiber);base=mix(base,base*1.045,track*.035);}
@@ -525,7 +526,7 @@ export function activate({module, canvas, session})
 		return mesh(v,i);
 	})();
 	const sphere = (() => {
-		const v = [], i = [], rows = 18, columns = 28;
+		const v = [], i = [], rows = 32, columns = 64;
 		for(let row=0;row<=rows;row++) for(let column=0;column<=columns;column++)
 		{
 			const y = row / rows, x = column / columns, phi = y*Math.PI, theta = x*Math.PI*2;

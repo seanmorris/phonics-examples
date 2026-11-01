@@ -101,3 +101,20 @@ test('generated wood grain tiles without visible edge discontinuities', () => {
 	assert.ok(leftRight / (image.height * 3) < 8, 'Wood texture has a visible left/right seam');
 	assert.ok(topBottom / (image.width * 3) < 8, 'Wood texture has a visible top/bottom seam');
 });
+
+test('ball skins use high-resolution two-to-one equirectangular cells', () => {
+	const image = PNG.sync.read(fs.readFileSync(new URL('../games/php-billiards/assets/generated/ball-atlas.png', import.meta.url)));
+	const cellWidth=image.width/4,cellHeight=image.height/4;
+	assert.deepEqual([image.width,image.height], [2048,1024]);
+	assert.equal(cellWidth/cellHeight,2, 'Ball skin cells distort longitude relative to latitude');
+
+	const points=[];
+	for(let y=0;y<cellHeight;y++)for(let x=0;x<cellWidth/2;x++)
+	{
+		const offset=((y*image.width)+(cellWidth+x))*4;
+		if(image.data[offset]>245&&image.data[offset+1]>245&&image.data[offset+2]>245)points.push([x,y]);
+	}
+	const xs=points.map(point=>point[0]),ys=points.map(point=>point[1]);
+	const width=Math.max(...xs)-Math.min(...xs),height=Math.max(...ys)-Math.min(...ys);
+	assert.ok(Math.abs(width-height)<=2, 'Number spot is not circular in equirectangular space');
+});
