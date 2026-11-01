@@ -29,7 +29,8 @@ test('billiards is a direct application without world adapters', async() => {
 test('framework dependencies are pinned to an immutable commit', async() => {
 	const packageData = JSON.parse(await fs.readFile(new URL('package.json', root)));
 	const composer = JSON.parse(await fs.readFile(new URL('composer.json', root)));
-	assert.match(packageData.dependencies['@seanmorris/phonics'], /#[0-9a-f]{40}$/);
-	assert.match(composer.require['seanmorris/phonics'], /#[0-9a-f]{40}$/);
+	const npmCommit = packageData.dependencies['@seanmorris/phonics'].match(/([0-9a-f]{40})(?:\.tar\.gz|$)/)?.[1];
+	const composerCommit = composer.require['seanmorris/phonics'].match(/#([0-9a-f]{40})$/)?.[1];
+	assert.ok(npmCommit, 'npm dependency must contain a complete commit SHA');
+	assert.equal(composerCommit, npmCommit, 'npm and Composer must resolve the same Phonics commit');
 });
-
