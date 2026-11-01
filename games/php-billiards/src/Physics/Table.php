@@ -36,5 +36,36 @@ final class Table
 
 		return false;
 	}
-}
 
+	/**
+	 * Resolve a ball that has reached a pocket bowl or crossed a rail through a pocket mouth.
+	 *
+	 * @return array{index:int,x:float,y:float}|null
+	 */
+	public static function capture(float $x, float $y): ?array
+	{
+		$pockets = self::pockets();
+		$nearest = null;
+		$nearestDistance = INF;
+
+		foreach($pockets as $index => [$px,$py])
+		{
+			$distance = hypot($x - $px, $y - $py);
+
+			if($distance < $nearestDistance)
+			{
+				$nearest = ['index' => $index,'x' => $px,'y' => $py];
+				$nearestDistance = $distance;
+			}
+		}
+
+		if($nearestDistance <= self::POCKET_RADIUS) return $nearest;
+
+		$edgeX = self::WIDTH / 2 - Ball::RADIUS;
+		$edgeY = self::HEIGHT / 2 - Ball::RADIUS;
+		$throughMouth = abs($x) >= $edgeX && !self::cushion('x', $y)
+			|| abs($y) >= $edgeY && !self::cushion('y', $x);
+
+		return $throughMouth ? $nearest : null;
+	}
+}

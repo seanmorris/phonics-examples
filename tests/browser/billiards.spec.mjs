@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import assert from 'node:assert/strict';
 
 test('full page boots the direct application and executes a resettable shot', async ({page}) => {
 	const errors = [];
@@ -37,4 +38,17 @@ test('a restored WebGL context restarts the direct application cleanly', async (
 	await loaded;
 	await expect(page.locator('canvas')).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout: 45_000});
 	await expect(page.locator('.php-billiards-ui')).toHaveCount(1);
+});
+
+test('an off-centre corner-pocket shot is captured instead of leaving the table', async ({page}) => {
+	await page.goto('/games/php-billiards/');
+	const canvas = page.locator('canvas');
+	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout: 45_000});
+	await page.locator('input[name="aim"]').fill('-135');
+	await page.locator('input[name="power"]').fill('1');
+	await page.getByRole('button', {name: 'SHOOT'}).click();
+	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).phase).toBe('placing');
+	const state = JSON.parse(await canvas.getAttribute('data-php-billiards'));
+	const cue = state.balls.find(ball => ball.number === 0);
+	assert.deepEqual([cue.active,cue.x,cue.y], [false,-1.27,-.635]);
 });

@@ -1,3 +1,42 @@
+/** Place the cue above the first rail it crosses while keeping its tip on the cue ball. */
+export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
+{
+	const length = 1.35, thickness = .014, dx = Math.cos(angle), dz = Math.sin(angle);
+	const tipGap = ballRadius + .008, tipY = ballRadius + .012;
+	const tip = [cueX - dx * tipGap,tipY,cueY - dz * tipGap];
+	const backX = -dx, backZ = -dz, inset = .04, distances = [];
+	const edgeX = tableWidth / 2 - inset, edgeZ = tableHeight / 2 - inset;
+
+	if(Math.abs(backX) > 1e-8)
+	{
+		const distance = ((backX > 0 ? edgeX : -edgeX) - tip[0]) / backX;
+		if(distance > 0) distances.push(distance);
+	}
+
+	if(Math.abs(backZ) > 1e-8)
+	{
+		const distance = ((backZ > 0 ? edgeZ : -edgeZ) - tip[2]) / backZ;
+		if(distance > 0) distances.push(distance);
+	}
+
+	const railDistance = Math.max(.001, Math.min(...distances));
+	const railClearance = .038 + .11 / 2 + thickness / 2 + .006;
+	const pitch = Math.max(8 * Math.PI / 180, Math.atan2(railClearance - tipY, railDistance));
+	const sinYaw = Math.sin(angle / 2), cosYaw = Math.cos(angle / 2);
+	const sinPitch = Math.sin(pitch / 2), cosPitch = Math.cos(pitch / 2);
+	const direction = [dx * Math.cos(pitch),-Math.sin(pitch),dz * Math.cos(pitch)];
+
+	return {
+		position: tip.map((value, index) => value - direction[index] * length / 2)
+		, scale: [length,thickness,thickness]
+		, rotation: [sinYaw * sinPitch,-sinYaw * cosPitch,-cosYaw * sinPitch,cosYaw * cosPitch]
+		, tip
+		, pitch
+		, railDistance
+		, railClearance
+	};
+}
+
 /** Direct browser shell and WebGL2 renderer for PHP Billiards. */
 export function activate({module, canvas, session})
 {
@@ -412,9 +451,10 @@ export function activate({module, canvas, session})
 			draw(sphere,[ball.x,radius+.012,ball.y],[radius,radius,radius],ball.rotation,colors[ball.number],[.18,0,1,0],[ball.number%4,Math.floor(ball.number/4)]);
 		if(latest.phase==='aim')
 		{
-			const cue=latest.balls.find(ball=>ball.number===0&&ball.active),angle=latest.aim,dx=Math.cos(angle),dz=Math.sin(angle),rotation=[0,-Math.sin(angle/2),0,Math.cos(angle/2)];
-			if(cue){draw(cube,[cue.x-dx*.73,.055,cue.y-dz*.73],[1.35,.014,.014],rotation,[.75,.57,.31,1],[.42,0,2,0]);
-				draw(cube,[cue.x+dx*.38,.017,cue.y+dz*.38],[.66,.003,.006],rotation,[.94,.76,.26,.72],[.6,0,0,0]);}
+			const cue=latest.balls.find(ball=>ball.number===0&&ball.active),angle=latest.aim,dx=Math.cos(angle),dz=Math.sin(angle);
+			if(cue){const pose=cuePose(cue.x,cue.y,angle,tableWidth,tableHeight,radius),guideRotation=[0,-Math.sin(angle/2),0,Math.cos(angle/2)];
+				draw(cube,pose.position,pose.scale,pose.rotation,[.75,.57,.31,1],[.42,0,2,0]);
+				draw(cube,[cue.x+dx*.38,.017,cue.y+dz*.38],[.66,.003,.006],guideRotation,[.94,.76,.26,.72],[.6,0,0,0]);}
 		}
 	}
 

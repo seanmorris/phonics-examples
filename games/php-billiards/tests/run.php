@@ -117,6 +117,34 @@ $test('pockets retain object balls and scratches require legal placement', stati
 	$expect($cue->active && $game->phase === 'aim' && !$game->scratched);
 });
 
+$test('pocket mouths capture balls before they can leave the table', static function() use ($expect): void {
+	foreach([
+		[-Table::WIDTH / 2 + Ball::RADIUS + .005,-Table::HEIGHT / 2 + .075,-2.0,0.0,0]
+		, [.075,Table::HEIGHT / 2 - Ball::RADIUS - .005,0.0,2.0,4]
+	] as [$x,$y,$vx,$vy,$pocketIndex])
+	{
+		$game = new Simulation;
+		foreach($game->balls as $ball) $ball->active = false;
+		$ball = $game->balls[1];
+		$ball->active = true;
+		$ball->x = $ball->previousX = $x;
+		$ball->y = $ball->previousY = $y;
+		$ball->vx = $vx;
+		$ball->vy = $vy;
+		$game->phase = 'moving';
+		$game->consumeEvents();
+		$game->step();
+		$pocket = Table::pockets()[$pocketIndex];
+		$events = $game->consumeEvents();
+
+		$expect(!$ball->active, 'Ball escaped through an open pocket mouth');
+		$expect(abs($ball->x - $pocket[0]) < 1e-9 && abs($ball->y - $pocket[1]) < 1e-9,
+			'Captured ball was not retained at its pocket');
+		$expect(count($events) === 1 && $events[0]['pocket'] === $pocketIndex,
+			'Pocket event did not identify the capture point');
+	}
+});
+
 $test('reset restores the exact pre-shot state', static function() use ($expect): void {
 	$game = new Simulation;
 	$before = $game->hash();
@@ -146,4 +174,3 @@ catch(Throwable $error)
 if($failures) exit(1);
 
 echo count($tests) . " PHP Billiards physics tests passed.\n";
-

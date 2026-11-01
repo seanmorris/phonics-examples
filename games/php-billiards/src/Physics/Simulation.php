@@ -123,11 +123,15 @@ final class Simulation
 
 		foreach($this->balls as $ball) if($ball->active)
 		{
-			if(Table::pocketed($ball->x, $ball->y))
+			$pocket = Table::capture($ball->x, $ball->y);
+
+			if($pocket !== null)
 			{
+				$ball->x = $ball->previousX = $pocket['x'];
+				$ball->y = $ball->previousY = $pocket['y'];
 				$ball->active = false;
 				$ball->vx = $ball->vy = $ball->spinX = $ball->spinY = $ball->spinZ = 0;
-				$this->events[] = ['type' => 'pocket','ball' => $ball->number];
+				$this->events[] = ['type' => 'pocket','ball' => $ball->number,'pocket' => $pocket['index']];
 
 				if($ball->number === 0) $this->scratched = true;
 
