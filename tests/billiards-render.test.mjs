@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsMaterials, cueContactWarning, cuePose, pocketDropPose, tableCsgProfiles, tablePocketDefinitions} from '../games/php-billiards/browser/game.mjs';
+import {billiardsMaterials, cueContactWarning, cuePose, pocketDropPose, roundedExtrusionSdf, tableCsgProfiles, tablePocketDefinitions} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
@@ -50,6 +50,21 @@ test('table CSG profiles round the shell and cut every pocket through the playin
 	}
 });
 
+test('wood extrusion rounds its inner and outer top edges with a true quarter-circle fillet', () => {
+	const bottom=.012,top=.105,radius=.018,middle=(bottom+top)/2;
+	assert.ok(Math.abs(roundedExtrusionSdf(0,middle,bottom,top,radius))<1e-12, 'Vertical wall moved inward');
+	assert.ok(Math.abs(roundedExtrusionSdf(-radius,top,bottom,top,radius))<1e-12, 'Inset cap does not meet the fillet');
+	assert.ok(roundedExtrusionSdf(0,top,bottom,top,radius)>0, 'Former hard cap corner remains solid');
+
+	for(const angle of [Math.PI/8,Math.PI/4,Math.PI*3/8])
+	{
+		const horizontal=-radius+Math.cos(angle)*radius;
+		const y=top-radius+Math.sin(angle)*radius;
+		assert.ok(Math.abs(roundedExtrusionSdf(horizontal,y,bottom,top,radius))<1e-12,
+			'Fillet does not follow a circular profile');
+	}
+});
+
 test('visual pocket mouths use regulation widths', () => {
 	const pockets=tablePocketDefinitions(width,height),corners=pockets.filter((_,index)=>![1,4].includes(index)),sides=[pockets[1],pockets[4]];
 	assert.ok(corners.every(pocket=>pocket.mouth>=4.5*.0254&&pocket.mouth<=4.625*.0254));
@@ -76,6 +91,7 @@ test('material presets model resin, varnished wood, and felt as dielectrics', ()
 	const [ballRoughness,ballIor,ballMode,ballCoat] = billiardsMaterials.ball;
 	const [woodRoughness,woodIor,woodMode,woodCoat] = billiardsMaterials.wood;
 	const [feltRoughness,,feltMode,feltSheen] = billiardsMaterials.felt;
+	const [cushionRoughness,,cushionMode,cushionSheen] = billiardsMaterials.cushionFelt;
 
 	assert.ok(ballRoughness >= .01 && ballRoughness <= .05);
 	assert.ok(ballIor >= 1.54 && ballIor <= 1.58);
@@ -85,6 +101,9 @@ test('material presets model resin, varnished wood, and felt as dielectrics', ()
 	assert.deepEqual([woodMode,woodCoat], [2,1]);
 	assert.ok(feltRoughness >= .85 && feltRoughness <= .95);
 	assert.deepEqual([feltMode,feltSheen], [3,.85]);
+	assert.ok(cushionRoughness >= .85 && cushionRoughness <= .95);
+	assert.equal(cushionMode,3);
+	assert.ok(cushionSheen>feltSheen);
 });
 
 test('generated wood grain tiles without visible edge discontinuities', () => {
