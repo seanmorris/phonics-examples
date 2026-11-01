@@ -4,7 +4,7 @@ import {readFile, writeFile} from 'node:fs/promises';
 import {PNG} from 'pngjs';
 
 test('full page boots the direct application and executes a resettable shot', async ({page}) => {
-	test.setTimeout(90_000);
+	test.setTimeout(120_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	page.on('console', message => { if(message.type() === 'error') errors.push(message.text()); });
@@ -34,6 +34,20 @@ test('full page boots the direct application and executes a resettable shot', as
 	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).shots).toBe(1);
 	await page.getByRole('button', {name: 'RESET SHOT'}).click();
 	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).phase).toBe('aim');
+	await expect(page.locator('input[name="cueX"],input[name="cueY"]')).toHaveCount(0);
+	await page.locator('input[name="aim"]').fill('131.5');
+	await page.locator('input[name="power"]').fill('0.5');
+	await page.getByRole('button', {name: 'SHOOT'}).click();
+	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).phase,{timeout:15_000}).toBe('placing');
+	await expect(page.locator('.php-billiards-placement')).toBeVisible();
+	await expect(canvas).toHaveAttribute('data-placing','true');
+	await canvas.evaluate(element=>element.phpBilliardsDebug.camera.target=[-.65,0,0]);
+	const placementFrame=await canvas.boundingBox();
+	await page.mouse.click(placementFrame.x+placementFrame.width/2,placementFrame.y+placementFrame.height/2);
+	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).phase).toBe('aim');
+	const placed=JSON.parse(await canvas.getAttribute('data-php-billiards')).balls.find(ball=>ball.number===0);
+	expect(placed.active).toBe(true);
+	expect(Math.hypot(placed.x+.65,placed.y)).toBeLessThan(.04);
 	expect(errors).toEqual([]);
 });
 

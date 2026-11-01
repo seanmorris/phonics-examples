@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsEdgeRadii, billiardsMaterials, billiardsTableMeshing, cueAppearance, cueContactWarning, cuePose, orbitYawDelta, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions} from '../games/php-billiards/browser/game.mjs';
+import {billiardsEdgeRadii, billiardsMaterials, billiardsTableMeshing, cueAppearance, cueContactWarning, cuePlacementValid, cuePose, orbitYawDelta, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
@@ -39,6 +39,21 @@ test('cue dimensions describe a tapered cylinder with distinct tip and collar se
 test('horizontal orbit direction reverses below the on-screen target', () => {
 	assert.equal(orbitYawDelta(20,40,50),-.12);
 	assert.equal(orbitYawDelta(20,60,50),.12);
+});
+
+test('scratch pointer projection and placement preview follow the simulation rules', () => {
+	const camera={yaw:-.42,pitch:.72,distance:3.35,target:[0,0,0]},bounds={left:100,top:50,width:900,height:600};
+	const center=tablePointFromPointer(550,350,bounds,camera,0);
+	assert.ok(Math.abs(center[0])<1e-12&&Math.abs(center[1])<1e-12,
+		'Screen centre did not project onto the camera target');
+	const state={table:[width,height,radius,.1158875,.1285875],balls:[
+		{number:0,x:0,y:0,active:false},{number:4,x:.2,y:.1,active:true}
+	]};
+	assert.equal(cuePlacementValid(state,-.65,0),true);
+	assert.equal(cuePlacementValid(state,.2,.1),false,'Preview allowed overlap with an object ball');
+	assert.equal(cuePlacementValid(state,width/2,0),false,'Preview allowed placement through a cushion');
+	const sidePocket=tablePocketDefinitions(width,height)[1];
+	assert.equal(cuePlacementValid(state,sidePocket.x,sidePocket.z),false,'Preview allowed placement in a pocket');
 });
 
 test('table CSG profiles round the shell and cut every pocket through the playing surfaces', () => {

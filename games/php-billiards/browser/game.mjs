@@ -166,6 +166,45 @@ export function tablePocketDefinitions(width,height,cornerMouth=.1158875,sideMou
 	return [corner(-1,-1),side(-1),corner(1,-1),corner(-1,1),side(1),corner(1,1)];
 }
 
+/** Project a screen pointer onto the horizontal cloth plane. */
+export function tablePointFromPointer(clientX,clientY,bounds,camera,planeY=.012,fovy=.63)
+{
+	if(!bounds?.width||!bounds?.height)return null;
+	const normalize=vector=>{const length=Math.hypot(...vector)||1;return vector.map(value=>value/length);};
+	const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+	const {yaw,pitch,distance,target}=camera;
+	const eye=[target[0]+Math.cos(yaw)*Math.cos(pitch)*distance,target[1]+Math.sin(pitch)*distance
+		,target[2]+Math.sin(yaw)*Math.cos(pitch)*distance];
+	const forward=normalize(target.map((value,index)=>value-eye[index]));
+	const right=normalize(cross(forward,[0,1,0])),up=normalize(cross(right,forward));
+	const ndcX=((clientX-bounds.left)/bounds.width)*2-1,ndcY=1-((clientY-bounds.top)/bounds.height)*2;
+	const halfHeight=Math.tan(fovy/2),halfWidth=halfHeight*bounds.width/bounds.height;
+	const direction=normalize(forward.map((value,index)=>value+right[index]*ndcX*halfWidth+up[index]*ndcY*halfHeight));
+
+	if(Math.abs(direction[1])<1e-9)return null;
+
+	const distanceToPlane=(planeY-eye[1])/direction[1];
+	if(distanceToPlane<=0)return null;
+
+	return [eye[0]+direction[0]*distanceToPlane,eye[2]+direction[2]*distanceToPlane];
+}
+
+/** Mirror the simulation's scratch-placement rules for immediate visual feedback. */
+export function cuePlacementValid(state,x,y)
+{
+	if(!state?.table||!Number.isFinite(x)||!Number.isFinite(y))return false;
+	const [width,height,radius,cornerMouth=.1158875,sideMouth=.1285875]=state.table;
+	if(Math.abs(x)>width/2-radius*1.2||Math.abs(y)>height/2-radius*1.2)return false;
+
+	for(const pocket of tablePocketDefinitions(width,height,cornerMouth,sideMouth))
+	if(Math.hypot(x-pocket.x,y-pocket.z)<=pocket.radius-billiardsTableMeshing.pocketLipInset)return false;
+
+	for(const ball of state.balls??[])
+	if(ball.number!==0&&ball.active&&Math.hypot(x-ball.x,y-ball.y)<radius*2.05)return false;
+
+	return true;
+}
+
 export const billiardsTableMeshing = Object.freeze({
 	columns:432
 	, rows:240
@@ -310,6 +349,7 @@ export function activate({module, canvas, session})
 			box-shadow:0 24px 80px #000a;overflow:hidden}
 		.php-billiards-screen{position:relative;min-width:0;min-height:0;width:100%;height:100%;background:radial-gradient(circle at 50% 30%,#17241e,#020403 68%)}
 		.php-billiards-screen>canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
+		.php-billiards-screen>canvas[data-placing=true]{cursor:crosshair}
 		.php-billiards-panel{display:flex;flex-direction:column;gap:12px;padding:18px;background:linear-gradient(160deg,#17221d,#090d0b);
 			border-left:1px solid #b99b5c42;box-sizing:border-box}
 		.php-billiards-panel header{display:flex;flex-direction:column;gap:2px;padding-bottom:8px;border-bottom:1px solid #d0ba8240}
@@ -324,7 +364,8 @@ export function activate({module, canvas, session})
 		.php-billiards-panel button:hover,.php-billiards-panel button:focus-visible{background:#315645;outline:2px solid #e9cb80;outline-offset:1px}
 		.php-billiards-panel button[data-primary]{grid-column:1/-1;background:#9b7135;color:#fff9ea;border-color:#e5ca8a}
 		.php-billiards-panel button:disabled,.php-billiards-panel input:disabled{opacity:.42;cursor:not-allowed}
-		.php-billiards-placement{display:grid;gap:8px;padding:9px;border:1px solid #d7bd7f40;border-radius:5px;background:#0003}
+		.php-billiards-placement{padding:10px;border:1px solid #d7bd7f40;border-radius:5px;background:#0003;color:#dce6df;
+			font-size:12px;line-height:1.45}
 		.php-billiards-placement[hidden]{display:none}
 		.php-billiards-quick{position:absolute;right:10px;top:10px;display:flex;gap:6px;z-index:4}
 		.php-billiards-quick button{min-width:48px;height:30px;border:1px solid #ffffff44;border-radius:4px;background:#07110dcc;color:#fff;
@@ -337,7 +378,7 @@ export function activate({module, canvas, session})
 		@media(max-width:760px){.php-billiards-ui{display:block}.php-billiards-panel{position:absolute;left:8px;right:8px;bottom:8px;display:grid;
 			grid-template-columns:repeat(4,1fr);gap:6px;padding:8px;background:#07100ee8;border:1px solid #ceb77655;border-radius:6px}
 			.php-billiards-panel header,.php-billiards-status{display:none}.php-billiards-panel label{font-size:10px}.php-billiards-actions{display:contents}
-			.php-billiards-panel button{min-height:34px}.php-billiards-placement{grid-column:1/-1;grid-template-columns:1fr 1fr auto}
+			.php-billiards-panel button{min-height:34px}.php-billiards-placement{grid-column:1/-1}
 			.php-billiards-screen{width:100%;height:100%;min-height:0}}
 	`;
 
@@ -372,21 +413,8 @@ export function activate({module, canvas, session})
 	const placement = document.createElement('div');
 	placement.className = 'php-billiards-placement';
 	placement.hidden = true;
+	placement.textContent = 'Move over the cloth and click or tap to place the cue ball.';
 	panel.append(placement);
-	const cueX = document.createElement('input'), cueY = document.createElement('input');
-	for(const [input,name,label,min,max] of [
-		[cueX,'cueX','Cue position, length',-1.20,1.20]
-		, [cueY,'cueY','Cue position, width',-.57,.57]
-	])
-	{
-		const wrapper = document.createElement('label');
-		wrapper.textContent = label;
-		input.type = 'range'; input.name = name; input.min = min; input.max = max; input.step = .01;
-		input.value = name === 'cueX' ? -.65 : 0;
-		wrapper.append(input); placement.append(wrapper);
-	}
-	const place = document.createElement('button');
-	place.type = 'button'; place.textContent = 'PLACE CUE'; placement.append(place);
 	const actions = document.createElement('div');
 	actions.className = 'php-billiards-actions';
 	const shoot = document.createElement('button');
@@ -402,7 +430,6 @@ export function activate({module, canvas, session})
 	shoot.addEventListener('click', () => enqueue('shoot'), {signal});
 	reset.addEventListener('click', () => enqueue('reset'), {signal});
 	rack.addEventListener('click', () => enqueue('rack'), {signal});
-	place.addEventListener('click', () => enqueue('place'), {signal});
 
 	canvas.addEventListener('keydown', event => {
 		if(['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyR','Backspace'].includes(event.code)) event.preventDefault();
@@ -413,19 +440,39 @@ export function activate({module, canvas, session})
 		if(event.code === 'Space') enqueue('shoot');
 		if(event.code === 'KeyR') enqueue('rack');
 		if(event.code === 'Backspace') enqueue('reset');
-		if(event.code === 'Enter' && placement.hidden === false) enqueue('place');
+		if(event.code === 'Enter' && placement.hidden === false&&cuePlacementValid(latest,...placementCandidate))
+		{
+			pendingPlacement=[...placementCandidate];
+			enqueue('place');
+		}
 	}, {signal});
 	canvas.addEventListener('keyup', event => held.delete(event.code), {signal});
 	canvas.addEventListener('blur', () => held.clear(), {signal});
 
 	let dragging = null;
 	const camera = {yaw: -.42, pitch: .72, distance: 3.35, target: [0,0,0]};
+	let placementCandidate = [-.65,0], pendingPlacement = null, previousPhase = null;
+	const updatePlacement = event => {
+		const point=tablePointFromPointer(event.clientX,event.clientY,canvas.getBoundingClientRect(),camera);
+		if(point)placementCandidate=point;
+		return point;
+	};
 	canvas.addEventListener('pointerdown', event => {
 		canvas.focus({preventScroll: true});
+		if(latest?.phase==='placing')
+		{
+			if(updatePlacement(event)&&cuePlacementValid(latest,...placementCandidate))
+			{
+				pendingPlacement=[...placementCandidate];
+				enqueue('place');
+			}
+			return;
+		}
 		canvas.setPointerCapture(event.pointerId);
 		dragging = {id: event.pointerId,x: event.clientX,y: event.clientY};
 	}, {signal});
 	canvas.addEventListener('pointermove', event => {
+		if(latest?.phase==='placing'){updatePlacement(event);return;}
 		if(!dragging || dragging.id !== event.pointerId) return;
 
 		const bounds=canvas.getBoundingClientRect(),targetY=bounds.top+bounds.height/2;
@@ -1014,22 +1061,50 @@ export function activate({module, canvas, session})
 
 	function controls()
 	{
-		if(held.has('ArrowLeft')) aim.value=String(Math.max(-180,Number(aim.value)-1.1));
-		if(held.has('ArrowRight')) aim.value=String(Math.min(180,Number(aim.value)+1.1));
-		if(held.has('ArrowUp')) power.value=String(Math.min(1,Number(power.value)+.012));
-		if(held.has('ArrowDown')) power.value=String(Math.max(.05,Number(power.value)-.012));
+		if(latest?.phase==='placing')
+		{
+			if(held.has('ArrowLeft'))placementCandidate[0]-=.012;
+			if(held.has('ArrowRight'))placementCandidate[0]+=.012;
+			if(held.has('ArrowUp'))placementCandidate[1]+=.012;
+			if(held.has('ArrowDown'))placementCandidate[1]-=.012;
+		}
+		else
+		{
+			if(held.has('ArrowLeft')) aim.value=String(Math.max(-180,Number(aim.value)-1.1));
+			if(held.has('ArrowRight')) aim.value=String(Math.min(180,Number(aim.value)+1.1));
+			if(held.has('ArrowUp')) power.value=String(Math.min(1,Number(power.value)+.012));
+			if(held.has('ArrowDown')) power.value=String(Math.max(.05,Number(power.value)-.012));
+		}
 		const pad=navigator.getGamepads?.()[0];
 		if(pad)
 		{
-			if(Math.abs(pad.axes[0]??0)>.18)aim.value=String(Math.max(-180,Math.min(180,Number(aim.value)+(pad.axes[0]??0)*1.4)));
-			if(Math.abs(pad.axes[1]??0)>.18)power.value=String(Math.max(.05,Math.min(1,Number(power.value)-(pad.axes[1]??0)*.012)));
-			const buttons={shoot:pad.buttons[0]?.pressed,rack:pad.buttons[3]?.pressed,reset:pad.buttons[1]?.pressed};
-			for(const [action,pressed] of Object.entries(buttons))if(pressed&&!previousGamepad[action])enqueue(action);
+			if(latest?.phase==='placing')
+			{
+				if(Math.abs(pad.axes[0]??0)>.18)placementCandidate[0]+=(pad.axes[0]??0)*.014;
+				if(Math.abs(pad.axes[1]??0)>.18)placementCandidate[1]-=(pad.axes[1]??0)*.014;
+			}
+			else
+			{
+				if(Math.abs(pad.axes[0]??0)>.18)aim.value=String(Math.max(-180,Math.min(180,Number(aim.value)+(pad.axes[0]??0)*1.4)));
+				if(Math.abs(pad.axes[1]??0)>.18)power.value=String(Math.max(.05,Math.min(1,Number(power.value)-(pad.axes[1]??0)*.012)));
+			}
+			const buttons={primary:pad.buttons[0]?.pressed,rack:pad.buttons[3]?.pressed,reset:pad.buttons[1]?.pressed};
+			for(const [button,pressed] of Object.entries(buttons))if(pressed&&!previousGamepad[button])
+			{
+				const action=button==='primary'?(latest?.phase==='placing'?'place':'shoot'):button;
+				if(action!=='place'||cuePlacementValid(latest,...placementCandidate))
+				{
+					if(action==='place')pendingPlacement=[...placementCandidate];
+					enqueue(action);
+				}
+			}
 			previousGamepad=buttons;
 		}
 		for(const input of [aim,power,top,side])input.dispatchEvent(new Event('input'));
+		const actions=actionsQueue.splice(0),submitted=pendingPlacement??placementCandidate;
+		pendingPlacement=null;
 		const result={aim:Number(aim.value),power:Number(power.value),top:Number(top.value),side:Number(side.value),
-			cueX:Number(cueX.value),cueY:Number(cueY.value),actions:actionsQueue.splice(0)};
+			cueX:submitted[0],cueY:submitted[1],actions};
 		return JSON.stringify(result);
 	}
 
@@ -1037,10 +1112,18 @@ export function activate({module, canvas, session})
 	{
 		latest=JSON.parse(json);canvas.dataset.phpBilliards=json;
 		if(gl.isContextLost()) return;
+		if(latest.phase==='placing'&&previousPhase!=='placing')placementCandidate=[-.65,0];
+		previousPhase=latest.phase;
 		placement.hidden=latest.phase!=='placing';
+		canvas.dataset.placing=String(latest.phase==='placing');
+		canvas.setAttribute('aria-label',latest.phase==='placing'
+			?'Billiards table. Move the pointer over the cloth and click to place the cue ball.'
+			:'Billiards table. Drag to orbit and use the mouse wheel to zoom.');
 		const locked=latest.phase!=='aim';for(const input of [aim,power,top,side,shoot])input.disabled=locked;
 		const contact=latest.phase==='aim'?cueContactWarning(latest.balls,latest.table[2],latest.aim):null;
-		reset.disabled=latest.shots<1;status.textContent=latest.phase==='placing'?'Scratch — place the cue ball':latest.moving?'Balls in motion'
+		const placementValid=latest.phase==='placing'&&cuePlacementValid(latest,...placementCandidate);
+		reset.disabled=latest.shots<1;status.textContent=latest.phase==='placing'
+			?(placementValid?'Scratch — click to place the cue ball':'Scratch — choose a clear point on the cloth'):latest.moving?'Balls in motion'
 			:contact!==null?`Cue nearly frozen to ball ${contact} · impact will be immediate`
 			:`Ready · ${latest.shots} shot${latest.shots===1?'':'s'}`;
 		live.textContent=status.textContent;
@@ -1089,6 +1172,12 @@ export function activate({module, canvas, session})
 		for(const ball of latest.balls)if(ball.active)
 			draw(sphere,[ball.x,radius+.012-(ball.drop??0),ball.y],[radius,radius,radius]
 				,ball.rotation,colors[ball.number],billiardsMaterials.ball,[ball.number%4,Math.floor(ball.number/4)]);
+		if(latest.phase==='placing')
+		{
+			const [x,z]=placementCandidate,valid=cuePlacementValid(latest,x,z),previewColor=valid?[.72,.92,.82,.72]:[1,.12,.08,.72];
+			draw(disc,[x,.0124,z],[radius*1.35,1,radius*1.35],[0,0,0,1],valid?[.05,.5,.22,.32]:[.7,.02,.01,.35],[1,0,4,0]);
+			draw(sphere,[x,radius+.012,z],[radius,radius,radius],[0,0,0,1],previewColor,[.08,1.5,0,.2]);
+		}
 		if(latest.phase==='aim')
 		{
 			const cue=latest.balls.find(ball=>ball.number===0&&ball.active),angle=latest.aim,dx=Math.cos(angle),dz=Math.sin(angle);
@@ -1109,8 +1198,10 @@ export function activate({module, canvas, session})
 	module.billiardsAssets=json=>{const data=JSON.parse(json);upload(ballTexture,data.ballAtlas);upload(woodTexture,data.wood);assetsReady=true;};
 	module.billiardsInput=controls;
 	module.billiardsRender=json=>{if(assetsReady)render(json);};
-	session.phpBilliards={get state(){return latest?structuredClone(latest):null;},camera};
-	Object.defineProperty(canvas,'phpBilliardsDebug',{configurable:true,value:{camera,get state(){return latest?structuredClone(latest):null;}}});
+	session.phpBilliards={get state(){return latest?structuredClone(latest):null;},camera
+		,get placement(){return {position:[...placementCandidate],valid:cuePlacementValid(latest,...placementCandidate)};}};
+	Object.defineProperty(canvas,'phpBilliardsDebug',{configurable:true,value:{camera,get state(){return latest?structuredClone(latest):null;}
+		,get placement(){return {position:[...placementCandidate],valid:cuePlacementValid(latest,...placementCandidate)};}}});
 
 	return async() => {
 		abort.abort();
