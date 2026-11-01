@@ -20,7 +20,7 @@ export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
 	}
 
 	const railDistance = Math.max(.001, Math.min(...distances));
-	const railClearance = .038 + .11 / 2 + thickness / 2 + .006;
+	const railClearance = .105 + thickness / 2 + .006;
 	const pitch = Math.max(8 * Math.PI / 180, Math.atan2(railClearance - tipY, railDistance));
 	const sinYaw = Math.sin(angle / 2), cosYaw = Math.cos(angle / 2);
 	const sinPitch = Math.sin(pitch / 2), cosPitch = Math.cos(pitch / 2);
@@ -34,6 +34,33 @@ export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
 		, pitch
 		, railDistance
 		, railClearance
+	};
+}
+
+const roundedRectangleSdf = (x,z,halfX,halfZ,radius) => {
+	const qx=Math.abs(x)-halfX+radius,qz=Math.abs(z)-halfZ+radius;
+	return Math.hypot(Math.max(qx,0),Math.max(qz,0))+Math.min(Math.max(qx,qz),0)-radius;
+};
+const circleSdf = (x,z,cx,cz,radius) => Math.hypot(x-cx,z-cz)-radius;
+const subtractSdf = (solid,...cuts) => Math.max(solid,-Math.min(...cuts));
+
+/** Shared implicit profiles used to construct the table as nested solids and cuts. */
+export function tableCsgProfiles(width,height)
+{
+	const outerX=width/2+.17,outerZ=height/2+.17,bounds=[-outerX-.02,-outerZ-.02,outerX+.02,outerZ+.02];
+	const pocketCenters=[[-width/2,-height/2],[0,-height/2],[width/2,-height/2]
+		,[-width/2,height/2],[0,height/2],[width/2,height/2]];
+	const pockets=(x,z,radius)=>Math.min(...pocketCenters.map(([cx,cz])=>circleSdf(x,z,cx,cz,radius)));
+
+	return {
+		bounds
+		, pocketCenters
+		, apron:(x,z)=>roundedRectangleSdf(x,z,outerX,outerZ,.16)
+		, bed:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2-.018,height/2-.018,.075),pockets(x,z,.078))
+		, wood:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,outerX,outerZ,.16)
+			,roundedRectangleSdf(x,z,width/2+.035,height/2+.035,.105),pockets(x,z,.102))
+		, cushion:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2+.045,height/2+.045,.105)
+			,roundedRectangleSdf(x,z,width/2-.035,height/2-.035,.065),pockets(x,z,.087))
 	};
 }
 
@@ -288,14 +315,85 @@ export function activate({module, canvas, session})
 		gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elements);
-		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+		gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(indices), gl.STATIC_DRAW);
 		for(const [location,size,offset] of [[0,3,0],[1,3,12],[2,2,24]])
 		{
 			gl.enableVertexAttribArray(location); gl.vertexAttribPointer(location,size,gl.FLOAT,false,32,offset);
 		}
 		gl.bindVertexArray(null);
 
-		return {vao,buffer,elements,count: indices.length};
+		return {vao,buffer,elements,count: indices.length,type: gl.UNSIGNED_INT};
+	};
+	/** Extrude a composed two-dimensional signed-distance field into one watertight mesh. */
+	const extrudeCsg = (field,bounds,columns,rows,bottom,top) => {
+		const [minX,minZ,maxX,maxZ]=bounds,stepX=(maxX-minX)/columns,stepZ=(maxZ-minZ)/rows;
+		const vertices=[],indices=[],epsilon=Math.min(stepX,stepZ)*.2;
+		const point=(x,z)=>({x,z,distance:field(x,z)});
+		const interpolate=(a,b)=>{const amount=a.distance/(a.distance-b.distance);return {
+			x:a.x+(b.x-a.x)*amount,z:a.z+(b.z-a.z)*amount,distance:0
+		};};
+		const unique=points=>points.filter((entry,index)=>points.findIndex(candidate=>
+			Math.hypot(entry.x-candidate.x,entry.z-candidate.z)<1e-9)===index);
+		const vertex=(entry,y,normal,u,v)=>{const index=vertices.length/8;vertices.push(entry.x,y,entry.z,...normal,u,v);return index;};
+		const gradient=entry=>{const x=field(entry.x+epsilon,entry.z)-field(entry.x-epsilon,entry.z);
+			const z=field(entry.x,entry.z+epsilon)-field(entry.x,entry.z-epsilon),length=Math.hypot(x,z)||1;return [x/length,z/length];};
+
+		const addSurface=(polygon,y,normal,reverse) => {
+			for(let index=1;index<polygon.length-1;index++)
+			{
+				const points=reverse?[polygon[0],polygon[index+1],polygon[index]]:[polygon[0],polygon[index],polygon[index+1]];
+				for(const entry of points)indices.push(vertex(entry,y,normal,(entry.x-minX)/(maxX-minX),(entry.z-minZ)/(maxZ-minZ)));
+			}
+		};
+		const addWall=(first,second) => {
+			let a=first,b=second,dx=b.x-a.x,dz=b.z-a.z;
+			const midpoint={x:(a.x+b.x)/2,z:(a.z+b.z)/2},[nx,nz]=gradient(midpoint);
+
+			if(-dz*nx+dx*nz<0)[a,b]=[b,a];
+
+			const normalA=gradient(a),normalB=gradient(b),base=vertices.length/8;
+			vertices.push(a.x,bottom,a.z,normalA[0],0,normalA[1],0,0);
+			vertices.push(b.x,bottom,b.z,normalB[0],0,normalB[1],1,0);
+			vertices.push(b.x,top,b.z,normalB[0],0,normalB[1],1,1);
+			vertices.push(a.x,top,a.z,normalA[0],0,normalA[1],0,1);
+			indices.push(base,base+1,base+2,base,base+2,base+3);
+		};
+
+		for(let row=0;row<rows;row++)for(let column=0;column<columns;column++)
+		{
+			const left=minX+column*stepX,right=left+stepX,near=minZ+row*stepZ,far=near+stepZ;
+			const corners=[point(left,near),point(right,near),point(right,far),point(left,far)];
+			const center=point((left+right)/2,(near+far)/2);
+
+			for(let corner=0;corner<4;corner++)
+			{
+				const triangle=[corners[corner],corners[(corner+1)%4],center],polygon=[],crossings=[];
+
+				for(let edge=0;edge<3;edge++)
+				{
+					const a=triangle[edge],b=triangle[(edge+1)%3],inside=a.distance<=0,nextInside=b.distance<=0;
+					if(inside)polygon.push(a);
+					if(inside!==nextInside){const crossing=interpolate(a,b);polygon.push(crossing);crossings.push(crossing);}
+				}
+
+				const clipped=unique(polygon),boundary=unique(crossings);
+				if(clipped.length>=3){addSurface(clipped,top,[0,1,0],true);addSurface(clipped,bottom,[0,-1,0],false);}
+				if(boundary.length===2)addWall(boundary[0],boundary[1]);
+			}
+		}
+
+		return mesh(vertices,indices);
+	};
+
+	const buildTableMeshes = (width,height) => {
+		const {bounds,apron,bed,wood,cushion}=tableCsgProfiles(width,height);
+
+		return {
+			apron:extrudeCsg(apron,bounds,112,64,-.25,-.042)
+			, bed:extrudeCsg(bed,bounds,128,72,-.047,.012)
+			, wood:extrudeCsg(wood,bounds,144,80,.012,.105)
+			, cushion:extrudeCsg(cushion,bounds,144,80,.013,.083)
+		};
 	};
 	const cube = (() => {
 		const v = [], i = [];
@@ -385,11 +483,11 @@ export function activate({module, canvas, session})
 		const transform=model(position,scale,rotation);gl.uniformMatrix4fv(locations.uModel,false,transform);
 		gl.uniformMatrix3fv(locations.uNormal,false,normalMatrix(rotation));gl.uniform4fv(locations.uBase,color);
 		gl.uniform4fv(locations.uMaterial,material);gl.uniform2fv(locations.uAtlasCell,cell);gl.bindVertexArray(geometry.vao);
-		gl.drawElements(gl.TRIANGLES,geometry.count,gl.UNSIGNED_SHORT,0);
+		gl.drawElements(gl.TRIANGLES,geometry.count,geometry.type,0);
 	};
 	const colors = ['#f3eee0','#e7bb21','#1f62b5','#bd2830','#5c3399','#e66e20','#237a48','#761d24','#151515','#e5b824','#2467b7','#bc2931','#653b9c','#e57523','#287c4e','#7b2028']
 		.map(hex=>[parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255,1]);
-	let latest = null, assetsReady = false, previousGamepad = {};
+	let latest = null, assetsReady = false, previousGamepad = {}, tableMeshes = null, tableMeshSize = null;
 
 	function controls()
 	{
@@ -437,12 +535,15 @@ export function activate({module, canvas, session})
 		gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,ballTexture);gl.uniform1i(locations.uBallAtlas,0);
 		gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,woodTexture);gl.uniform1i(locations.uWood,1);
 		const [tableWidth,tableHeight,radius]=latest.table;
-		draw(cube,[0,-.14,0],[tableWidth+.34,.22,tableHeight+.34],[0,0,0,1],[.45,.23,.095,1],[.28,0,2,0]);
-		draw(cube,[0,-.018,0],[tableWidth,.055,tableHeight],[0,0,0,1],[.055,.285,.18,1],[.76,0,3,0]);
-		for(const z of [-1,1]){draw(cube,[0,.038,z*(tableHeight/2+.055)],[tableWidth+.18,.11,.12],[0,0,0,1],[.38,.18,.07,1],[.3,0,2,0]);
-			draw(cube,[0,.038,z*(tableHeight/2+.005)],[tableWidth-.15,.095,.075],[0,0,0,1],[.035,.17,.105,1],[.84,0,0,0]);}
-		for(const x of [-1,1]){draw(cube,[x*(tableWidth/2+.055),.038,0],[.12,.11,tableHeight+.18],[0,0,0,1],[.38,.18,.07,1],[.3,0,2,0]);
-			draw(cube,[x*(tableWidth/2+.005),.038,0],[.075,.095,tableHeight-.16],[0,0,0,1],[.035,.17,.105,1],[.84,0,0,0]);}
+		if(tableMeshSize?.[0]!==tableWidth||tableMeshSize?.[1]!==tableHeight)
+		{
+			for(const item of Object.values(tableMeshes??{})){gl.deleteVertexArray(item.vao);gl.deleteBuffer(item.buffer);gl.deleteBuffer(item.elements);}
+			tableMeshes=buildTableMeshes(tableWidth,tableHeight);tableMeshSize=[tableWidth,tableHeight];
+		}
+		draw(tableMeshes.apron,[0,0,0],[1,1,1],[0,0,0,1],[.45,.23,.095,1],[.28,0,2,0]);
+		draw(tableMeshes.bed,[0,0,0],[1,1,1],[0,0,0,1],[.055,.285,.18,1],[.76,0,3,0]);
+		draw(tableMeshes.wood,[0,0,0],[1,1,1],[0,0,0,1],[.38,.18,.07,1],[.3,0,2,0]);
+		draw(tableMeshes.cushion,[0,0,0],[1,1,1],[0,0,0,1],[.035,.17,.105,1],[.84,0,0,0]);
 		for(const [x,z] of [[-tableWidth/2,-tableHeight/2],[0,-tableHeight/2],[tableWidth/2,-tableHeight/2],[-tableWidth/2,tableHeight/2],[0,tableHeight/2],[tableWidth/2,tableHeight/2]])
 			draw(disc,[x,.014,z],[.075,1,.075],[0,0,0,1],[.003,.004,.003,1],[.95,0,0,0]);
 		for(const ball of latest.balls)if(ball.active)
@@ -466,7 +567,7 @@ export function activate({module, canvas, session})
 	return async() => {
 		abort.abort();
 		if(document.fullscreenElement===ui)await document.exitFullscreen().catch(()=>{});
-		for(const item of [cube,sphere,disc]){gl.deleteVertexArray(item.vao);gl.deleteBuffer(item.buffer);gl.deleteBuffer(item.elements);}
+		for(const item of [cube,sphere,disc,...Object.values(tableMeshes??{})]){gl.deleteVertexArray(item.vao);gl.deleteBuffer(item.buffer);gl.deleteBuffer(item.elements);}
 		gl.deleteTexture(ballTexture);gl.deleteTexture(woodTexture);gl.deleteProgram(program);audio?.close();
 		if(next?.parentNode===parent)parent.insertBefore(canvas,next);else parent.append(canvas);
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);
