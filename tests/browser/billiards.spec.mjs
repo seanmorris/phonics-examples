@@ -9,7 +9,9 @@ test('full page boots the direct application and executes a resettable shot', as
 	const canvas = page.locator('canvas');
 	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout: 45_000});
 	const initial = await canvas.getAttribute('data-php-billiards');
-	expect(JSON.parse(initial).balls.filter(ball => ball.active)).toHaveLength(16);
+	const initialState = JSON.parse(initial);
+	expect(initialState.balls.filter(ball => ball.active)).toHaveLength(16);
+	expect(initialState.table).toEqual([2.54,1.27,.028575,.1158875,.1285875]);
 	await page.getByRole('button', {name: 'SHOOT'}).click();
 	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).shots).toBe(1);
 	await page.getByRole('button', {name: 'RESET SHOT'}).click();
@@ -44,7 +46,7 @@ test('an off-centre corner-pocket shot is captured instead of leaving the table'
 	await page.goto('/games/php-billiards/');
 	const canvas = page.locator('canvas');
 	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout: 45_000});
-	await page.locator('input[name="aim"]').fill('-135');
+	await page.locator('input[name="aim"]').fill('-133');
 	await page.locator('input[name="power"]').fill('1');
 	await page.getByRole('button', {name: 'SHOOT'}).click();
 	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).phase).toBe('placing');

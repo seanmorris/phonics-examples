@@ -41,9 +41,10 @@ final class Simulation
 		for($row = 0; $row < 5; $row++)
 		for($column = 0; $column <= $row; $column++)
 		{
-			$x = $apex + $row * $spacing * .866025403784;
-			$y = ($column - $row / 2) * $spacing;
-			$this->balls[] = new Ball($numbers[$index++], $x, $y);
+			$number = $numbers[$index++];
+			$x = $apex + $row * $spacing * .866025403784 + self::rackNoise($number, 0);
+			$y = ($column - $row / 2) * $spacing + self::rackNoise($number, 1);
+			$this->balls[] = new Ball($number, $x, $y);
 		}
 
 		$this->phase = 'aim';
@@ -51,6 +52,14 @@ final class Simulation
 		$this->shots = 0;
 		$this->shotSnapshot = null;
 		$this->events[] = ['type' => 'rack'];
+	}
+
+	/** Fixed sub-pixel variation prevents a perfectly symmetric break without changing replay. */
+	private static function rackNoise(int $number, int $axis): float
+	{
+		$hash = (($number + 11) * 48271 + ($axis + 3) * 69621 + 0x35a7bd) % 2147483647;
+
+		return (($hash % 2001) / 2000 - .5) * .00012;
 	}
 
 	public function cue(): Ball
@@ -410,7 +419,7 @@ final class Simulation
 			, 'scratched' => $this->scratched
 			, 'shots' => $this->shots
 			, 'moving' => $this->moving()
-			, 'table' => [Table::WIDTH,Table::HEIGHT,Ball::RADIUS]
+			, 'table' => [Table::WIDTH,Table::HEIGHT,Ball::RADIUS,Table::CORNER_MOUTH,Table::SIDE_MOUTH]
 			, 'balls' => array_map(static fn(Ball $ball): array => $ball->state($alpha), $this->balls)
 		];
 	}

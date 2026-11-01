@@ -44,24 +44,44 @@ const roundedRectangleSdf = (x,z,halfX,halfZ,radius) => {
 const circleSdf = (x,z,cx,cz,radius) => Math.hypot(x-cx,z-cz)-radius;
 const subtractSdf = (solid,...cuts) => Math.max(solid,-Math.min(...cuts));
 
+export function tablePocketDefinitions(width,height,cornerMouth=.1158875,sideMouth=.1285875)
+{
+	return [
+		{x:-width/2,z:-height/2,mouth:cornerMouth,outward:[-Math.SQRT1_2,-Math.SQRT1_2]}
+		, {x:0,z:-height/2,mouth:sideMouth,outward:[0,-1]}
+		, {x:width/2,z:-height/2,mouth:cornerMouth,outward:[Math.SQRT1_2,-Math.SQRT1_2]}
+		, {x:-width/2,z:height/2,mouth:cornerMouth,outward:[-Math.SQRT1_2,Math.SQRT1_2]}
+		, {x:0,z:height/2,mouth:sideMouth,outward:[0,1]}
+		, {x:width/2,z:height/2,mouth:cornerMouth,outward:[Math.SQRT1_2,Math.SQRT1_2]}
+	];
+}
+
 /** Shared implicit profiles used to construct the table as nested solids and cuts. */
-export function tableCsgProfiles(width,height)
+export function tableCsgProfiles(width,height,cornerMouth=.1158875,sideMouth=.1285875)
 {
 	const outerX=width/2+.17,outerZ=height/2+.17,bounds=[-outerX-.02,-outerZ-.02,outerX+.02,outerZ+.02];
-	const pocketCenters=[[-width/2,-height/2],[0,-height/2],[width/2,-height/2]
-		,[-width/2,height/2],[0,height/2],[width/2,height/2]];
-	const pockets=(x,z,radius)=>Math.min(...pocketCenters.map(([cx,cz])=>circleSdf(x,z,cx,cz,radius)));
+	const pockets=tablePocketDefinitions(width,height,cornerMouth,sideMouth);
+	const pocketSdf=(x,z,extra=0)=>Math.min(...pockets.map(pocket=>circleSdf(x,z,pocket.x,pocket.z,pocket.mouth/2+extra)));
+	const outer=(x,z)=>roundedRectangleSdf(x,z,outerX,outerZ,.16);
 
 	return {
 		bounds
-		, pocketCenters
-		, apron:(x,z)=>roundedRectangleSdf(x,z,outerX,outerZ,.16)
-		, bed:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2-.018,height/2-.018,.075),pockets(x,z,.078))
-		, wood:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,outerX,outerZ,.16)
-			,roundedRectangleSdf(x,z,width/2+.035,height/2+.035,.105),pockets(x,z,.102))
-		, cushion:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2+.045,height/2+.045,.105)
-			,roundedRectangleSdf(x,z,width/2-.035,height/2-.035,.065),pockets(x,z,.087))
+		, pockets
+		, apron:(x,z)=>subtractSdf(outer(x,z),pocketSdf(x,z,.006))
+		, bed:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2,height/2,.02),pocketSdf(x,z,.001))
+		, wood:(x,z)=>subtractSdf(outer(x,z)
+			,roundedRectangleSdf(x,z,width/2+.052,height/2+.052,.072),pocketSdf(x,z,.006))
+		, cushion:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2+.055,height/2+.055,.075)
+			,roundedRectangleSdf(x,z,width/2,height/2,.02),pocketSdf(x,z,.003))
 	};
+}
+
+export function pocketDropPose(pocket,ballRadius,progress)
+{
+	progress=Math.max(0,Math.min(1,progress));
+	const smooth=progress*progress*(3-2*progress),roll=Math.max(0,(progress-.38)/.62),travel=.055*roll;
+
+	return [pocket.x+pocket.outward[0]*travel,ballRadius+.012-.19*smooth,pocket.z+pocket.outward[1]*travel];
 }
 
 /** roughness, index of refraction, material mode, clearcoat or sheen strength */
@@ -411,14 +431,59 @@ export function activate({module, canvas, session})
 		return mesh(vertices,indices);
 	};
 
-	const buildTableMeshes = (width,height) => {
-		const {bounds,apron,bed,wood,cushion}=tableCsgProfiles(width,height);
+	/** Leather facings and a 13.5-degree tapered drop under every CSG pocket cut. */
+	const buildPocketLiners = (pockets,ballRadius) => {
+		const vertices=[],indices=[],segments=40,top=.017,throat=-.09,bottom=-.235,draft=13.5*Math.PI/180;
+		const add=(x,y,z,nx,ny,nz,u,v)=>{const index=vertices.length/8;vertices.push(x,y,z,nx,ny,nz,u,v);return index;};
+
+		for(const pocket of pockets)
+		{
+			const outer=pocket.mouth/2+.006,inner=pocket.mouth/2-.001;
+			const throatRadius=Math.max(ballRadius*1.12,inner-(top-throat)*Math.tan(draft));
+			const rim=[],upper=[],lower=[];
+
+			for(let step=0;step<=segments;step++)
+			{
+				const angle=step/segments*Math.PI*2,c=Math.cos(angle),s=Math.sin(angle),slope=(inner-throatRadius)/(top-throat);
+				const normalLength=Math.hypot(1,slope),nx=-c/normalLength,ny=slope/normalLength,nz=-s/normalLength,u=step/segments;
+				rim.push([
+					add(pocket.x+c*outer,top,pocket.z+s*outer,0,1,0,u,0)
+					, add(pocket.x+c*inner,top,pocket.z+s*inner,0,1,0,u,1)
+				]);
+				upper.push([
+					add(pocket.x+c*inner,top,pocket.z+s*inner,nx,ny,nz,u,0)
+					, add(pocket.x+c*throatRadius,throat,pocket.z+s*throatRadius,nx,ny,nz,u,.55)
+				]);
+				lower.push([
+					add(pocket.x+c*throatRadius,throat,pocket.z+s*throatRadius,-c,0,-s,u,.55)
+					, add(pocket.x+c*throatRadius,bottom,pocket.z+s*throatRadius,-c,0,-s,u,1)
+				]);
+			}
+
+			for(let step=0;step<segments;step++)
+			{
+				const [outerA,innerA]=rim[step],[outerB,innerB]=rim[step+1];
+				indices.push(outerA,innerA,innerB,outerA,innerB,outerB);
+				for(const wall of [upper,lower])
+				{
+					const [topA,bottomA]=wall[step],[topB,bottomB]=wall[step+1];
+					indices.push(topA,bottomA,bottomB,topA,bottomB,topB);
+				}
+			}
+		}
+
+		const result=mesh(vertices,indices);result.doubleSided=true;return result;
+	};
+
+	const buildTableMeshes = (width,height,ballRadius,cornerMouth,sideMouth) => {
+		const {bounds,pockets,apron,bed,wood,cushion}=tableCsgProfiles(width,height,cornerMouth,sideMouth);
 
 		return {
 			apron:extrudeCsg(apron,bounds,112,64,-.25,-.042)
 			, bed:extrudeCsg(bed,bounds,128,72,-.047,.012)
 			, wood:extrudeCsg(wood,bounds,144,80,.012,.105)
 			, cushion:extrudeCsg(cushion,bounds,144,80,.013,.083)
+			, liners:buildPocketLiners(pockets,ballRadius)
 		};
 	};
 	const cube = (() => {
@@ -460,7 +525,7 @@ export function activate({module, canvas, session})
 		for(let index=0;index<=40;index++)
 		{
 			const angle=index/40*Math.PI*2;v.push(Math.cos(angle),0,Math.sin(angle),0,1,0,(Math.cos(angle)+1)/2,(Math.sin(angle)+1)/2);
-			if(index>0)i.push(0,index,index+1);
+			if(index>0)i.push(0,index+1,index);
 		}
 
 		return mesh(v,i);
@@ -509,11 +574,13 @@ export function activate({module, canvas, session})
 		const transform=model(position,scale,rotation);gl.uniformMatrix4fv(locations.uModel,false,transform);
 		gl.uniformMatrix3fv(locations.uNormal,false,normalMatrix(rotation));gl.uniform4fv(locations.uBase,color);
 		gl.uniform4fv(locations.uMaterial,material);gl.uniform2fv(locations.uAtlasCell,cell);gl.bindVertexArray(geometry.vao);
+		if(geometry.doubleSided)gl.disable(gl.CULL_FACE);
 		gl.drawElements(gl.TRIANGLES,geometry.count,geometry.type,0);
+		if(geometry.doubleSided)gl.enable(gl.CULL_FACE);
 	};
 	const colors = ['#f3eee0','#e7bb21','#1f62b5','#bd2830','#5c3399','#e66e20','#237a48','#761d24','#151515','#e5b824','#2467b7','#bc2931','#653b9c','#e57523','#287c4e','#7b2028']
 		.map(hex=>[parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255,1]);
-	let latest = null, assetsReady = false, previousGamepad = {}, tableMeshes = null, tableMeshSize = null;
+	let latest = null, assetsReady = false, previousGamepad = {}, tableMeshes = null, tableMeshSize = null, pocketDrops = [];
 
 	function controls()
 	{
@@ -548,7 +615,13 @@ export function activate({module, canvas, session})
 		{
 			if(event.type==='impact')tone(240+220*(event.strength??0),.025+.07*(event.strength??0),.045);
 			if(event.type==='cushion')tone(150,.018+.035*(event.strength??0),.035);
-			if(event.type==='pocket')tone(72,.11,.16);
+			if(event.type==='pocket')
+			{
+				tone(72,.11,.16);
+				const ball=latest.balls.find(candidate=>candidate.number===event.ball);
+				pocketDrops.push({number:event.ball,index:event.pocket,rotation:ball?.rotation??[0,0,0,1],started:performance.now()});
+			}
+			if(event.type==='rack'||event.type==='reset')pocketDrops=[];
 		}
 
 		const box=screen.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1),width=Math.max(1,Math.round(box.width*dpr)),height=Math.max(1,Math.round(box.height*dpr));
@@ -560,22 +633,32 @@ export function activate({module, canvas, session})
 		gl.uniformMatrix4fv(locations.uViewProjection,false,vp);gl.uniform3fv(locations.uEye,eye);
 		gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,ballTexture);gl.uniform1i(locations.uBallAtlas,0);
 		gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,woodTexture);gl.uniform1i(locations.uWood,1);
-		const [tableWidth,tableHeight,radius]=latest.table;
-		if(tableMeshSize?.[0]!==tableWidth||tableMeshSize?.[1]!==tableHeight)
+		const [tableWidth,tableHeight,radius,cornerMouth=.1158875,sideMouth=.1285875]=latest.table;
+		const meshSize=[tableWidth,tableHeight,radius,cornerMouth,sideMouth];
+		const pockets=tablePocketDefinitions(tableWidth,tableHeight,cornerMouth,sideMouth);
+		if(!tableMeshSize||meshSize.some((value,index)=>tableMeshSize[index]!==value))
 		{
 			for(const item of Object.values(tableMeshes??{})){gl.deleteVertexArray(item.vao);gl.deleteBuffer(item.buffer);gl.deleteBuffer(item.elements);}
-			tableMeshes=buildTableMeshes(tableWidth,tableHeight);tableMeshSize=[tableWidth,tableHeight];
+			tableMeshes=buildTableMeshes(...meshSize);tableMeshSize=meshSize;
 		}
 		draw(tableMeshes.apron,[0,0,0],[1,1,1],[0,0,0,1],[.45,.23,.095,1],billiardsMaterials.wood);
 		draw(tableMeshes.bed,[0,0,0],[1,1,1],[0,0,0,1],[.055,.285,.18,1],billiardsMaterials.felt);
 		draw(tableMeshes.wood,[0,0,0],[1,1,1],[0,0,0,1],[.38,.18,.07,1],billiardsMaterials.wood);
 		draw(tableMeshes.cushion,[0,0,0],[1,1,1],[0,0,0,1],[.035,.17,.105,1],billiardsMaterials.felt);
-		for(const [x,z] of [[-tableWidth/2,-tableHeight/2],[0,-tableHeight/2],[tableWidth/2,-tableHeight/2],[-tableWidth/2,tableHeight/2],[0,tableHeight/2],[tableWidth/2,tableHeight/2]])
-			draw(disc,[x,.014,z],[.075,1,.075],[0,0,0,1],[.003,.004,.003,1],[.95,0,0,0]);
+		draw(tableMeshes.liners,[0,0,0],[1,1,1],[0,0,0,1],[.16,.065,.032,1],[.68,1.52,0,0]);
+		for(const pocket of pockets)
+			draw(disc,[pocket.x,-.237,pocket.z],[pocket.mouth*.34,1,pocket.mouth*.34],[0,0,0,1],[.001,.0015,.001,1],[.96,1.5,0,0]);
 		for(const ball of latest.balls)if(ball.active)
 			draw(disc,[ball.x,.012,ball.y],[radius*1.15,1,radius*.72],[0,0,0,1],[0,0,0,.25],[1,0,0,0]);
 		for(const ball of latest.balls)if(ball.active)
 			draw(sphere,[ball.x,radius+.012,ball.y],[radius,radius,radius],ball.rotation,colors[ball.number],billiardsMaterials.ball,[ball.number%4,Math.floor(ball.number/4)]);
+		const now=performance.now();pocketDrops=pocketDrops.filter(drop=>now-drop.started<900);
+		for(const drop of pocketDrops)
+		{
+			const pocket=pockets[drop.index],progress=(now-drop.started)/720;
+			draw(sphere,pocketDropPose(pocket,radius,progress)
+				,[radius,radius,radius],drop.rotation,colors[drop.number],billiardsMaterials.ball,[drop.number%4,Math.floor(drop.number/4)]);
+		}
 		if(latest.phase==='aim')
 		{
 			const cue=latest.balls.find(ball=>ball.number===0&&ball.active),angle=latest.aim,dx=Math.cos(angle),dz=Math.sin(angle);

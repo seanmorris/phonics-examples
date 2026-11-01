@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsMaterials, cuePose, tableCsgProfiles} from '../games/php-billiards/browser/game.mjs';
+import {billiardsMaterials, cuePose, pocketDropPose, tableCsgProfiles, tablePocketDefinitions} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
@@ -37,15 +37,32 @@ test('table CSG profiles round the shell and cut every pocket through the playin
 	assert.ok(profiles.apron(outerX, outerZ) > 0, 'Apron corner was not rounded');
 	assert.ok(profiles.wood(0, 0) > 0, 'Wood rail did not subtract the cloth opening');
 	assert.ok(profiles.cushion(0, 0) > 0, 'Cushion did not subtract the playing area');
+	assert.ok(profiles.cushion(width / 2 - radius, .2) > 0, 'Cushion intersects a ball at its collision limit');
+	assert.ok(Math.abs(profiles.cushion(width / 2, .2)) < 1e-12, 'Cushion face does not match the physics boundary');
 
-	for(const [x,z] of profiles.pocketCenters)
+	for(const pocket of profiles.pockets)
 	{
-		const towardRailX = x === 0 ? x : x - Math.sign(x) * .035;
-		const towardRailZ = Math.abs(z) === height / 2 ? z - Math.sign(z) * .035 : z;
+		const x=pocket.x+pocket.outward[0]*pocket.mouth*.35,z=pocket.z+pocket.outward[1]*pocket.mouth*.35;
+		assert.ok(profiles.apron(x, z) > 0, 'Pocket was not cut through the table body');
 		assert.ok(profiles.bed(x, z) > 0, 'Pocket was not cut through the cloth bed');
-		assert.ok(profiles.wood(towardRailX, towardRailZ) > 0, 'Pocket was not cut through the wood rim');
-		assert.ok(profiles.cushion(towardRailX, towardRailZ) > 0, 'Pocket was not cut through the cushion');
+		assert.ok(profiles.wood(x, z) > 0, 'Pocket was not cut through the wood rim');
+		assert.ok(profiles.cushion(x, z) > 0, 'Pocket was not cut through the cushion');
 	}
+});
+
+test('visual pocket mouths use regulation widths', () => {
+	const pockets=tablePocketDefinitions(width,height),corners=pockets.filter((_,index)=>![1,4].includes(index)),sides=[pockets[1],pockets[4]];
+	assert.ok(corners.every(pocket=>pocket.mouth>=4.5*.0254&&pocket.mouth<=4.625*.0254));
+	assert.ok(sides.every(pocket=>pocket.mouth>=5*.0254&&pocket.mouth<=5.25*.0254));
+});
+
+test('captured balls descend into the pocket before rolling outward down the return', () => {
+	const pocket=tablePocketDefinitions(width,height)[0],start=pocketDropPose(pocket,radius,0);
+	const throat=pocketDropPose(pocket,radius,.38),end=pocketDropPose(pocket,radius,1);
+	assert.deepEqual(start,[pocket.x,radius+.012,pocket.z]);
+	assert.ok(throat[1]<start[1]&&end[1]<throat[1], 'Captured ball did not descend');
+	assert.ok(Math.hypot(throat[0]-pocket.x,throat[2]-pocket.z)<1e-12, 'Ball left the mouth before reaching the throat');
+	assert.ok(Math.hypot(end[0]-pocket.x,end[2]-pocket.z)>.05, 'Ball did not roll outward along the return');
 });
 
 test('material presets model resin, varnished wood, and felt as dielectrics', () => {

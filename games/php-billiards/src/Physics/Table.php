@@ -7,9 +7,10 @@ final class Table
 {
 	public const WIDTH = 2.54;
 	public const HEIGHT = 1.27;
-	public const CORNER_MOUTH = 0.105;
-	public const SIDE_MOUTH = 0.09;
-	public const POCKET_RADIUS = 0.062;
+	/** Midpoints of the WPA mouth ranges: 4 9/16 and 5 1/16 inches. */
+	public const CORNER_MOUTH = 0.1158875;
+	public const SIDE_MOUTH = 0.1285875;
+	private const CORNER_JAW = 0.08194483710475602;
 
 	/** @return list<array{float,float}> */
 	public static function pockets(): array
@@ -23,16 +24,21 @@ final class Table
 	/** Whether a rail face exists at the supplied along-rail coordinate. */
 	public static function cushion(string $axis, float $coordinate): bool
 	{
-		if($axis === 'x') return abs($coordinate) < self::HEIGHT / 2 - self::CORNER_MOUTH;
+		if($axis === 'x') return abs($coordinate) < self::HEIGHT / 2 - self::CORNER_JAW;
 
-		return abs($coordinate) < self::WIDTH / 2 - self::CORNER_MOUTH
-			&& abs($coordinate) > self::SIDE_MOUTH;
+		return abs($coordinate) < self::WIDTH / 2 - self::CORNER_JAW
+			&& abs($coordinate) > self::SIDE_MOUTH / 2;
+	}
+
+	public static function pocketRadius(int $index): float
+	{
+		return $index === 1 || $index === 4 ? self::SIDE_MOUTH / 2 : self::CORNER_MOUTH / 2;
 	}
 
 	public static function pocketed(float $x, float $y): bool
 	{
-		foreach(self::pockets() as [$px,$py])
-		if(hypot($x - $px, $y - $py) <= self::POCKET_RADIUS) return true;
+		foreach(self::pockets() as $index => [$px,$py])
+		if(hypot($x - $px, $y - $py) <= self::pocketRadius($index)) return true;
 
 		return false;
 	}
@@ -59,7 +65,7 @@ final class Table
 			}
 		}
 
-		if($nearestDistance <= self::POCKET_RADIUS) return $nearest;
+		if($nearestDistance <= self::pocketRadius($nearest['index'])) return $nearest;
 
 		$edgeX = self::WIDTH / 2 - Ball::RADIUS;
 		$edgeY = self::HEIGHT / 2 - Ball::RADIUS;

@@ -34,6 +34,36 @@ $test('standard rack is complete and separated', static function() use ($expect)
 	$expect(hypot($a->x - $b->x, $a->y - $b->y) >= Ball::RADIUS * 1.99, 'Rack balls overlap');
 });
 
+$test('rack variation is imperceptible and deterministic', static function() use ($expect): void {
+	$left = new Simulation;
+	$right = new Simulation;
+	$spacing = Ball::RADIUS * 2.015;
+	$apex = Table::WIDTH * .23;
+	$index = 1;
+	$varied = false;
+
+	for($row = 0; $row < 5; $row++)
+	for($column = 0; $column <= $row; $column++)
+	{
+		$idealX = $apex + $row * $spacing * .866025403784;
+		$idealY = ($column - $row / 2) * $spacing;
+		$dx = abs($left->balls[$index]->x - $idealX);
+		$dy = abs($left->balls[$index]->y - $idealY);
+		$expect($dx <= .000061 && $dy <= .000061, 'Rack noise became visible');
+		$varied = $varied || $dx > 1e-9 || $dy > 1e-9;
+		$index++;
+	}
+
+	$expect($varied, 'Rack remained mathematically perfect');
+	$expect($left->hash() === $right->hash(), 'Rack noise changed between identical games');
+});
+
+$test('pocket mouths use regulation American pool dimensions', static function() use ($expect): void {
+	$expect(Table::CORNER_MOUTH >= 4.5 * .0254 && Table::CORNER_MOUTH <= 4.625 * .0254);
+	$expect(Table::SIDE_MOUTH >= 5 * .0254 && Table::SIDE_MOUTH <= 5.25 * .0254);
+	$expect(abs(Ball::RADIUS * 2 - .05715) < 1e-12, 'Ball diameter is not 2 1/4 inches');
+});
+
 $test('identical shots replay deterministically', static function() use ($expect): void {
 	$left = new Simulation;
 	$right = new Simulation;
@@ -120,7 +150,7 @@ $test('pockets retain object balls and scratches require legal placement', stati
 $test('pocket mouths capture balls before they can leave the table', static function() use ($expect): void {
 	foreach([
 		[-Table::WIDTH / 2 + Ball::RADIUS + .005,-Table::HEIGHT / 2 + .075,-2.0,0.0,0]
-		, [.075,Table::HEIGHT / 2 - Ball::RADIUS - .005,0.0,2.0,4]
+		, [.05,Table::HEIGHT / 2 - Ball::RADIUS - .005,0.0,2.0,4]
 	] as [$x,$y,$vx,$vy,$pocketIndex])
 	{
 		$game = new Simulation;
