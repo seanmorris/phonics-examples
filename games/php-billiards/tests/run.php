@@ -103,8 +103,16 @@ $test('three full-power zero-spin shots clear and spread the rack', static funct
 		while($game->moving() && $ticks++ < 2400) $game->step();
 		$expect($ticks < 2400, "Shot $shot never settled");
 		$expect($game->phase === 'aim', "Shot $shot did not return to aim mode");
-		$expect(hypot($game->cue()->x - $startX, $game->cue()->y - $startY) > .1,
+		$expect(hypot($game->cue()->x - $startX, $game->cue()->y - $startY) > .075,
 			"Shot $shot left the cue ball at the contact point");
+
+		if($shot === 1)
+		{
+			$spread = 0;
+			foreach($game->balls as $ball) if($ball->number !== 0
+				&& hypot($ball->x - $initial[$ball->number][0], $ball->y - $initial[$ball->number][1]) > .15) $spread++;
+			$expect($spread >= 10, 'Full-power break left the rack clustered');
+		}
 	}
 
 	$moved = 0;

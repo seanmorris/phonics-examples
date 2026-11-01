@@ -16,7 +16,7 @@ final class Simulation
 	private const ROLLING_RESISTANCE = .013;
 	private const GRAVITY = 9.80665;
 	private const RACK_GAP = .00004;
-	private const CONTACT_SLOP = .00001;
+	private const CONTACT_SLOP = .00008;
 	private const CONTACT_ITERATIONS = 24;
 
 	/** @var list<Ball> */
@@ -273,87 +273,93 @@ final class Simulation
 			if($distance < 1e-9) [$nx,$ny] = [1.0,0.0];
 			else [$nx,$ny] = [$dx / $distance,$dy / $distance];
 
-			$relative = ($b->vx - $a->vx) * $nx + ($b->vy - $a->vy) * $ny;
-			$candidates[] = ['a' => $a,'b' => $b,'nx' => $nx,'ny' => $ny
-				, 'initial' => $relative,'target' => $relative < 0 ? -self::BALL_RESTITUTION * $relative : 0.0
-				, 'impulse' => 0.0];
+			$candidates[] = ['a' => $a,'b' => $b,'nx' => $nx,'ny' => $ny];
 		}
 
-		$connected = [spl_object_id($seedA) => true,spl_object_id($seedB) => true];
-
-		do
-		{
-			$changed = false;
-
-			foreach($candidates as $contact)
-			{
-				$aId = spl_object_id($contact['a']);
-				$bId = spl_object_id($contact['b']);
-
-				if(isset($connected[$aId]) === isset($connected[$bId])) continue;
-
-				$connected[$aId] = $connected[$bId] = true;
-				$changed = true;
-			}
-		}
-		while($changed);
-
-		$contacts = array_values(array_filter($candidates, static fn(array $contact): bool =>
-			isset($connected[spl_object_id($contact['a'])], $connected[spl_object_id($contact['b'])])));
-
-		for($iteration = 0; $iteration < self::CONTACT_ITERATIONS; $iteration++)
-		foreach($contacts as &$contact)
-		{
-			$a = $contact['a'];
-			$b = $contact['b'];
-			$nx = $contact['nx'];
-			$ny = $contact['ny'];
-			$relative = ($b->vx - $a->vx) * $nx + ($b->vy - $a->vy) * $ny;
-			$nextImpulse = max(0, $contact['impulse'] + ($contact['target'] - $relative) / 2);
-			$impulse = $nextImpulse - $contact['impulse'];
-			$contact['impulse'] = $nextImpulse;
-
-			$a->vx -= $impulse * $nx;
-			$a->vy -= $impulse * $ny;
-			$b->vx += $impulse * $nx;
-			$b->vy += $impulse * $ny;
-		}
-		unset($contact);
-
+		$reached = [spl_object_id($seedA) => true,spl_object_id($seedB) => true];
+		$resolved = [];
 		$impactStrength = 0.0;
 
-		foreach($contacts as $contact) if($contact['impulse'] > 1e-9)
+		for($wave = 0; $wave < count($balls); $wave++)
+		{
+			$contacts = [];
+
+			foreach($candidates as $index => $candidate)
+			{
+				if(isset($resolved[$index])) continue;
+				$a = $candidate['a'];
+				$b = $candidate['b'];
+				$isSeed = $a === $seedA && $b === $seedB || $a === $seedB && $b === $seedA;
+
+				if($wave === 0 && !$isSeed) continue;
+				if($wave > 0 && !isset($reached[spl_object_id($a)]) && !isset($reached[spl_object_id($b)])) continue;
+
+				$relative = ($b->vx - $a->vx) * $candidate['nx'] + ($b->vy - $a->vy) * $candidate['ny'];
+				if($relative >= -1e-7) continue;
+
+				$contacts[] = $candidate + ['index' => $index,'initial' => $relative
+					, 'target' => -self::BALL_RESTITUTION * $relative,'impulse' => 0.0];
+			}
+
+			if(!$contacts) break;
+
+			for($iteration = 0; $iteration < self::CONTACT_ITERATIONS; $iteration++)
+			foreach($contacts as &$contact)
+			{
+				$a = $contact['a'];
+				$b = $contact['b'];
+				$nx = $contact['nx'];
+				$ny = $contact['ny'];
+				$relative = ($b->vx - $a->vx) * $nx + ($b->vy - $a->vy) * $ny;
+				$nextImpulse = max(0, $contact['impulse'] + ($contact['target'] - $relative) / 2);
+				$impulse = $nextImpulse - $contact['impulse'];
+				$contact['impulse'] = $nextImpulse;
+
+				$a->vx -= $impulse * $nx;
+				$a->vy -= $impulse * $ny;
+				$b->vx += $impulse * $nx;
+				$b->vy += $impulse * $ny;
+			}
+			unset($contact);
+
+			foreach($contacts as $contact)
+			{
+				$resolved[$contact['index']] = true;
+				$a = $contact['a'];
+				$b = $contact['b'];
+				$reached[spl_object_id($a)] = $reached[spl_object_id($b)] = true;
+				$nx = $contact['nx'];
+				$ny = $contact['ny'];
+				$tx = -$ny;
+				$ty = $nx;
+				$slip = ($b->vx - $a->vx) * $tx + ($b->vy - $a->vy) * $ty
+					+ Ball::RADIUS * ($a->spinY + $b->spinY);
+				$tangentImpulse = max(-$contact['impulse'] * .06, min($contact['impulse'] * .06, -$slip / 7));
+				$a->vx -= $tangentImpulse * $tx;
+				$a->vy -= $tangentImpulse * $ty;
+				$b->vx += $tangentImpulse * $tx;
+				$b->vy += $tangentImpulse * $ty;
+				$spinChange = -2.5 * $tangentImpulse / Ball::RADIUS;
+				$a->spinY += $spinChange;
+				$b->spinY += $spinChange;
+				$impactStrength = max($impactStrength, abs($contact['initial']) / self::MAX_SPEED
+					, $contact['impulse'] / self::MAX_SPEED);
+			}
+		}
+
+		foreach($candidates as $contact)
 		{
 			$a = $contact['a'];
 			$b = $contact['b'];
-			$nx = $contact['nx'];
-			$ny = $contact['ny'];
-			$tx = -$ny;
-			$ty = $nx;
-			$slip = ($b->vx - $a->vx) * $tx + ($b->vy - $a->vy) * $ty
-				+ Ball::RADIUS * ($a->spinY + $b->spinY);
-			$tangentImpulse = max(-$contact['impulse'] * .06, min($contact['impulse'] * .06, -$slip / 7));
-			$a->vx -= $tangentImpulse * $tx;
-			$a->vy -= $tangentImpulse * $ty;
-			$b->vx += $tangentImpulse * $tx;
-			$b->vy += $tangentImpulse * $ty;
-			$spinChange = -2.5 * $tangentImpulse / Ball::RADIUS;
-			$a->spinY += $spinChange;
-			$b->spinY += $spinChange;
-
 			$distance = hypot($b->x - $a->x, $b->y - $a->y);
 			$overlap = Ball::RADIUS * 2 - $distance;
 
-			if($overlap > 0)
-			{
-				$a->x -= $nx * ($overlap / 2 + 1e-8);
-				$a->y -= $ny * ($overlap / 2 + 1e-8);
-				$b->x += $nx * ($overlap / 2 + 1e-8);
-				$b->y += $ny * ($overlap / 2 + 1e-8);
-			}
+			if($overlap <= 0) continue;
 
-			$impactStrength = max($impactStrength, abs($contact['initial']) / self::MAX_SPEED
-				, $contact['impulse'] / self::MAX_SPEED);
+			$a->x -= $contact['nx'] * ($overlap / 2 + 1e-8);
+			$a->y -= $contact['ny'] * ($overlap / 2 + 1e-8);
+			$b->x += $contact['nx'] * ($overlap / 2 + 1e-8);
+			$b->y += $contact['ny'] * ($overlap / 2 + 1e-8);
 		}
 
 		if($impactStrength > 0)

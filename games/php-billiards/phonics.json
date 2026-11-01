@@ -41,7 +41,7 @@
     "autoload.php": "sha256-EmJY/5T4hGtkgHDoBwucyEMFN7n3N9BJCi2D0f7IKwE=",
     "browser/game.mjs": "sha256-IsKKwzenCVzjUlBAlsX1nLImFAkLUxauDCb8mmLPwlA=",
     "src/Physics/Ball.php": "sha256-yeyhpOUgQHMPkgtLg0UUAxr0uQB8MNG2B5X3d1+RC3E=",
-    "src/Physics/Simulation.php": "sha256-sKWkgagIi6XPcbv5qWtrZHJEgfqyfX7EY3rR+nY4kdc=",
+    "src/Physics/Simulation.php": "sha256-MFNB7hfRIpGrxyTDO+I1EbBy7JNpuDnDruo8vsPjYO4=",
     "src/Physics/Table.php": "sha256-Hst6Z7beFXFB5aCN5+cW3gr7z4Tga5NfpfWwHKKgPIE="
   }
 }
