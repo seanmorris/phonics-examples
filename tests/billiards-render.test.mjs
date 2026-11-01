@@ -2,16 +2,37 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsEdgeRadii, billiardsMaterials, billiardsTableMeshing, cueAppearance, cueContactWarning, cuePlacementValid, cuePose, orbitYawDelta, pocketVoidRadius, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer} from '../games/php-billiards/browser/game.mjs';
+import {billiardsEdgeRadii, billiardsMaterials, billiardsRailSights, billiardsTableMeshing, cueAppearance, cueContactWarning, cuePlacementValid, cuePose, orbitYawDelta, pocketVoidRadius, reflectedGuideSegments, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer, tableRailSightDefinitions} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
+test('rail sights follow the WPA nine-foot table layout', () => {
+	const sights=tableRailSightDefinitions(width,height),long=sights.filter(sight=>sight.rail==='long');
+	const short=sights.filter(sight=>sight.rail==='short');
+
+	assert.equal(sights.length,18);
+	assert.equal(long.length,12);
+	assert.equal(short.length,6);
+	assert.ok(sights.every(sight=>Math.abs(sight.radius*2-billiardsRailSights.diameter)<1e-12));
+	assert.ok(billiardsRailSights.diameter>=.01111&&billiardsRailSights.diameter<=.0127);
+	assert.ok(long.every(sight=>Math.abs(Math.abs(sight.z)-height/2-billiardsRailSights.offsetFromCushion)<1e-12));
+	assert.ok(short.every(sight=>Math.abs(Math.abs(sight.x)-width/2-billiardsRailSights.offsetFromCushion)<1e-12));
+	assert.ok(long.every(sight=>Math.abs(sight.x)>1e-12),'A sight was placed over a side pocket');
+	for(const side of [-1,1])
+	{
+		const xs=long.filter(sight=>Math.sign(sight.z)===side).map(sight=>sight.x).sort((a,b)=>a-b);
+		const zs=short.filter(sight=>Math.sign(sight.x)===side).map(sight=>sight.z).sort((a,b)=>a-b);
+		assert.ok(xs.every((value,index)=>Math.abs(value-[-3,-2,-1,1,2,3][index]*width/8)<1e-12));
+		assert.ok(zs.every((value,index)=>Math.abs(value-[-1,0,1][index]*height/4)<1e-12));
+	}
+});
+
 test('cue rises over the solid rail while its tip stays aligned with the ball', () => {
-	for(const [x,y,angle] of [[-width * .28,0,0],[0,0,Math.PI / 2],[width / 2 - radius * 1.2,.2,Math.PI]])
+	for(const [x,y,angle] of [[-width * .28,0,0],[0,0,Math.PI / 2]
+		,[width / 2 - radius * 1.02,.2,Math.PI],[-width / 2 + radius * 1.02,-.2,0]])
 	{
 		const pose = cuePose(x, y, angle, width, height, radius);
-		const heightAtRail = pose.tip[1] + Math.tan(pose.pitch) * pose.railDistance;
-		const forward = [Math.cos(angle),Math.sin(angle)];
+		const heightAtRail = pose.ballCenter[1] + Math.tan(pose.pitch) * pose.railDistance;
 		const [qx,qy,qz,qw] = pose.rotation;
 		const cueAxis = [
 			1 - 2 * (qy * qy + qz * qz)
@@ -22,8 +43,10 @@ test('cue rises over the solid rail while its tip stays aligned with the ball', 
 
 		assert.ok(heightAtRail >= pose.railClearance - 1e-12, 'Shaft intersects the rail');
 		assert.ok(pose.position[1] > pose.tip[1], 'Cue butt did not rise toward the player');
-		assert.ok(Math.abs(pose.tip[0] - (x - forward[0] * (radius + .008))) < 1e-12);
-		assert.ok(Math.abs(pose.tip[2] - (y - forward[1] * (radius + .008))) < 1e-12);
+		assert.ok(pose.tip.every((value,index)=>Math.abs(value-(pose.ballCenter[index]-pose.direction[index]*pose.contactDistance))<1e-12),
+			'Cue tip stopped following the pitched contact axis');
+		assert.ok(Math.abs(Math.hypot(...pose.tip.map((value,index)=>value-pose.ballCenter[index]))-radius-.008)<1e-12,
+			'Cue tip moved away from the ball surface');
 		assert.ok(renderedTip.every((value, index) => Math.abs(value - pose.tip[index]) < 1e-12),
 			'Cue rotation moved the rendered tip away from its intended contact point');
 	}
@@ -39,6 +62,29 @@ test('cue dimensions describe a tapered cylinder with distinct tip and collar se
 test('horizontal orbit direction reverses below the on-screen target', () => {
 	assert.equal(orbitYawDelta(20,40,50),-.12);
 	assert.equal(orbitYawDelta(20,60,50),.12);
+});
+
+test('aiming guide reflects at cushions and remains inside the playing limits', () => {
+	const limitX=width/2-radius,limitZ=height/2-radius;
+	const straight=reflectedGuideSegments(0,0,0,width,height,radius);
+	assert.equal(straight.length,1);
+	assert.deepEqual(straight[0].start,[.05,0]);
+	assert.ok(Math.abs(straight[0].length-.66)<1e-12);
+
+	const reflected=reflectedGuideSegments(limitX-.09,0,0,width,height,radius);
+	assert.equal(reflected.length,2);
+	assert.ok(Math.abs(reflected[0].end[0]-limitX)<1e-12);
+	assert.deepEqual(reflected[1].direction,[-1,0]);
+	assert.ok(Math.abs(reflected.reduce((sum,segment)=>sum+segment.length,0)-.66)<1e-12);
+	for(const segment of reflected)for(const point of [segment.start,segment.end])
+	{
+		assert.ok(Math.abs(point[0])<=limitX+1e-12);
+		assert.ok(Math.abs(point[1])<=limitZ+1e-12);
+	}
+
+	const corner=reflectedGuideSegments(limitX-.02,limitZ-.02,Math.PI/4,width,height,radius,.3,0);
+	assert.equal(corner.length,2);
+	assert.ok(corner[1].direction[0]<0&&corner[1].direction[1]<0,'Corner contact did not reflect both axes');
 });
 
 test('scratch pointer projection and placement preview follow the simulation rules', () => {

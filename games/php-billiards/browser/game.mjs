@@ -8,35 +8,57 @@ export const cueAppearance = Object.freeze({
 	, patternPoints:12
 });
 
+/** WPA rail-cap sights for a nine-foot table, expressed in metres. */
+export const billiardsRailSights = Object.freeze({
+	offsetFromCushion:.0936625
+	, diameter:.012
+});
+
+export function tableRailSightDefinitions(width,height)
+{
+	const {offsetFromCushion,diameter}=billiardsRailSights,sights=[];
+	const longRailZ=height/2+offsetFromCushion,shortRailX=width/2+offsetFromCushion;
+
+	for(const side of [-1,1])
+	{
+		for(let step=1;step<8;step++)if(step!==4)
+			sights.push({x:-width/2+step*width/8,z:side*longRailZ,rail:'long',radius:diameter/2});
+		for(let step=1;step<4;step++)
+			sights.push({x:side*shortRailX,z:-height/2+step*height/4,rail:'short',radius:diameter/2});
+	}
+
+	return sights;
+}
+
 /** Preserve an intuitive horizontal orbit on either side of the on-screen rotation target. */
 export const orbitYawDelta = (deltaX,pointerY,targetY) => deltaX*.006*(pointerY<targetY?-1:1);
 
 export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
 {
 	const {length,buttDiameter}=cueAppearance,dx = Math.cos(angle), dz = Math.sin(angle);
-	const tipGap = ballRadius + .008, tipY = ballRadius + .012;
-	const tip = [cueX - dx * tipGap,tipY,cueY - dz * tipGap];
-	const backX = -dx, backZ = -dz, inset = .04, distances = [];
-	const edgeX = tableWidth / 2 - inset, edgeZ = tableHeight / 2 - inset;
+	const ballCenter = [cueX,ballRadius + .012,cueY], contactDistance = ballRadius + .008;
+	const backX = -dx, backZ = -dz, distances = [];
+	const edgeX = tableWidth / 2, edgeZ = tableHeight / 2;
 
 	if(Math.abs(backX) > 1e-8)
 	{
-		const distance = ((backX > 0 ? edgeX : -edgeX) - tip[0]) / backX;
+		const distance = ((backX > 0 ? edgeX : -edgeX) - cueX) / backX;
 		if(distance > 0) distances.push(distance);
 	}
 
 	if(Math.abs(backZ) > 1e-8)
 	{
-		const distance = ((backZ > 0 ? edgeZ : -edgeZ) - tip[2]) / backZ;
+		const distance = ((backZ > 0 ? edgeZ : -edgeZ) - cueY) / backZ;
 		if(distance > 0) distances.push(distance);
 	}
 
 	const railDistance = Math.max(.001, Math.min(...distances));
 	const railClearance = .105 + buttDiameter / 2 + .006;
-	const pitch = Math.max(8 * Math.PI / 180, Math.atan2(railClearance - tipY, railDistance));
+	const pitch = Math.max(8 * Math.PI / 180, Math.atan2(railClearance - ballCenter[1], railDistance));
 	const sinYaw = Math.sin(angle / 2), cosYaw = Math.cos(angle / 2);
 	const sinPitch = Math.sin(pitch / 2), cosPitch = Math.cos(pitch / 2);
 	const direction = [dx * Math.cos(pitch),-Math.sin(pitch),dz * Math.cos(pitch)];
+	const tip = ballCenter.map((value,index)=>value-direction[index]*contactDistance);
 
 	return {
 		position: tip.map((value, index) => value - direction[index] * length / 2)
@@ -47,7 +69,43 @@ export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
 		, pitch
 		, railDistance
 		, railClearance
+		, ballCenter
+		, contactDistance
 	};
+}
+
+/** Keep the aiming guide on the cloth by reflecting its ray at cushion limits. */
+export function reflectedGuideSegments(x,z,angle,width,height,ballRadius,totalLength=.71,startOffset=.05)
+{
+	const limitX=width/2-ballRadius,limitZ=height/2-ballRadius,epsilon=1e-9,raw=[];
+	let point=[Math.max(-limitX,Math.min(limitX,x)),Math.max(-limitZ,Math.min(limitZ,z))];
+	let direction=[Math.cos(angle),Math.sin(angle)],remaining=totalLength;
+
+	for(let bounce=0;bounce<5&&remaining>epsilon;bounce++)
+	{
+		const distanceX=Math.abs(direction[0])<epsilon?Infinity:
+			((direction[0]>0?limitX:-limitX)-point[0])/direction[0];
+		const distanceZ=Math.abs(direction[1])<epsilon?Infinity:
+			((direction[1]>0?limitZ:-limitZ)-point[1])/direction[1];
+		const contactDistance=Math.max(0,Math.min(distanceX,distanceZ));
+		const length=Math.min(remaining,contactDistance),end=[point[0]+direction[0]*length,point[1]+direction[1]*length];
+
+		if(length>epsilon)raw.push({start:point,end,length,direction:[...direction]});
+		remaining-=length;
+		if(remaining<=epsilon||contactDistance===Infinity)break;
+
+		if(Math.abs(distanceX-contactDistance)<epsilon)direction[0]*=-1;
+		if(Math.abs(distanceZ-contactDistance)<epsilon)direction[1]*=-1;
+		point=[Math.max(-limitX,Math.min(limitX,end[0])),Math.max(-limitZ,Math.min(limitZ,end[1]))];
+	}
+
+	let skip=Math.max(0,startOffset);
+	return raw.flatMap(segment=>{
+		if(skip>=segment.length-epsilon){skip-=segment.length;return [];}
+		const start=[segment.start[0]+segment.direction[0]*skip,segment.start[1]+segment.direction[1]*skip];
+		const length=segment.length-skip;skip=0;
+		return [{start,end:segment.end,length,direction:segment.direction}];
+	});
 }
 
 const roundedRectangleSdf = (x,z,halfX,halfZ,radius) => {
@@ -549,7 +607,7 @@ export function activate({module, canvas, session})
 			gl_Position=uViewProjection*world;}`));
 		gl.attachShader(result, compile(gl.FRAGMENT_SHADER, `#version 300 es
 			precision highp float; in vec3 vPosition; in vec3 vNormal; in vec2 vUv;
-			uniform vec4 uBase; uniform vec3 uEye; uniform vec4 uMaterial; uniform vec2 uAtlasCell;
+			uniform vec4 uBase; uniform vec3 uEye; uniform vec4 uMaterial; uniform vec2 uAtlasCell; uniform vec2 uTableSize;
 			uniform sampler2D uBallAtlas; uniform sampler2D uWood; out vec4 color;
 			float distribution(float nDotH,float rough){float a=rough*rough;float a2=a*a;float d=nDotH*nDotH*(a2-1.0)+1.0;return a2/(3.14159*d*d);}
 			float random(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}
@@ -566,6 +624,16 @@ export function activate({module, canvas, session})
 			vec3 wood(vec3 p,vec3 n){vec3 blend=pow(abs(n),vec3(6.0));blend/=max(.001,blend.x+blend.y+blend.z);
 				vec3 x=texture(uWood,p.zy*vec2(2.7,7.1)).rgb,y=texture(uWood,p.xz*vec2(2.7,7.1)).rgb;
 				vec3 z=texture(uWood,p.xy*vec2(2.7,7.1)).rgb;return x*blend.x+y*blend.y+z*blend.z;}
+			float sightDisc(vec2 point,vec2 centre){float distanceToCentre=length(point-centre),edge=max(fwidth(distanceToCentre),.00018);
+				return 1.0-smoothstep(.006-edge,.006+edge,distanceToCentre);}
+			float railSightMask(vec2 point){float result=0.0,offset=.0936625;
+				for(int step=1;step<8;step++){if(step==4)continue;float x=-uTableSize.x*.5+float(step)*uTableSize.x/8.0;
+					result=max(result,sightDisc(point,vec2(x,uTableSize.y*.5+offset)));
+					result=max(result,sightDisc(point,vec2(x,-uTableSize.y*.5-offset)));}
+				for(int step=1;step<4;step++){float z=-uTableSize.y*.5+float(step)*uTableSize.y/4.0;
+					result=max(result,sightDisc(point,vec2(uTableSize.x*.5+offset,z)));
+					result=max(result,sightDisc(point,vec2(-uTableSize.x*.5-offset,z)));}
+				return result;}
 			vec3 fresnel(vec3 f0,float vDotH){return f0+(1.0-f0)*pow(1.0-vDotH,5.0);}
 			vec3 lightPbr(vec3 lightPosition,vec3 lightColor,float intensity,vec3 N,vec3 V,vec3 base,vec3 f0,float rough,float lightSize){
 				rough=sqrt(rough*rough+lightSize*lightSize);
@@ -587,6 +655,9 @@ export function activate({module, canvas, session})
 					// Raw atlas rows run opposite WebGL's vertical axis; longitude must stay unchanged to preserve numeral chirality.
 					vec2 uv=mix(uAtlasCell/4.0+pad,(uAtlasCell+1.0)/4.0-pad,vec2(vUv.x,1.0-vUv.y));base=texture(uBallAtlas,uv).rgb;}
 				else if((mode>1.5&&mode<2.5)||mode>5.5){base*=wood(vPosition,N)*1.45;
+					if(mode<2.5){float sight=railSightMask(vPosition.xz)*smoothstep(.78,.96,N.y)*step(.08,vPosition.y);
+						float pearl=noise3(vPosition*190.0+vec3(4.3,8.1,2.6));vec3 ivory=vec3(.72,.68,.52)+vec3(.12,.13,.15)*pearl;
+						base=mix(base,ivory,sight);}
 					if(mode>5.5){float phase=fract(vUv.y+1.0/24.0)*12.0,sector=floor(phase),across=abs(fract(phase)-.5)*2.0;
 						float rear=1.0-step(1.0,mod(sector,2.0)),progress=mix((.22-vUv.x)/.095,(vUv.x-.03)/.095,rear);
 						float inside=step(0.0,progress)*step(progress,1.0),edge=max(fwidth(across)*1.5,.008);
@@ -623,7 +694,7 @@ export function activate({module, canvas, session})
 
 		return result;
 	})();
-	const locations = Object.fromEntries(['uModel','uViewProjection','uNormal','uBase','uEye','uMaterial','uAtlasCell','uBallAtlas','uWood']
+	const locations = Object.fromEntries(['uModel','uViewProjection','uNormal','uBase','uEye','uMaterial','uAtlasCell','uTableSize','uBallAtlas','uWood']
 		.map(name => [name,gl.getUniformLocation(program, name)]));
 
 	const mesh = (vertices, indices) => {
@@ -1155,6 +1226,7 @@ export function activate({module, canvas, session})
 		gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,ballTexture);gl.uniform1i(locations.uBallAtlas,0);
 		gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,woodTexture);gl.uniform1i(locations.uWood,1);
 		const [tableWidth,tableHeight,radius,cornerMouth=.1158875,sideMouth=.1285875]=latest.table;
+		gl.uniform2f(locations.uTableSize,tableWidth,tableHeight);
 		const meshSize=[tableWidth,tableHeight,radius,cornerMouth,sideMouth];
 		const pockets=tablePocketDefinitions(tableWidth,tableHeight,cornerMouth,sideMouth);
 		if(!tableMeshSize||meshSize.some((value,index)=>tableMeshSize[index]!==value))
@@ -1189,8 +1261,8 @@ export function activate({module, canvas, session})
 		}
 		if(latest.phase==='aim')
 		{
-			const cue=latest.balls.find(ball=>ball.number===0&&ball.active),angle=latest.aim,dx=Math.cos(angle),dz=Math.sin(angle);
-			if(cue){const pose=cuePose(cue.x,cue.y,angle,tableWidth,tableHeight,radius),guideRotation=[0,-Math.sin(angle/2),0,Math.cos(angle/2)];
+			const cue=latest.balls.find(ball=>ball.number===0&&ball.active),angle=latest.aim;
+			if(cue){const pose=cuePose(cue.x,cue.y,angle,tableWidth,tableHeight,radius);
 				const {length,buttDiameter,shaftDiameter,chalkTipLength,copperCollarLength}=cueAppearance;
 				const segmentPosition=(fromTip,toTip)=>pose.tip.map((value,index)=>value-pose.direction[index]*(fromTip+toTip)/2);
 				const woodStart=chalkTipLength+copperCollarLength,woodScale=[length-woodStart,buttDiameter,buttDiameter];
@@ -1200,7 +1272,13 @@ export function activate({module, canvas, session})
 					,pose.rotation,[.72,.31,.12,1],[.2,1.5,5,0]);
 				draw(cueTrim,segmentPosition(0,chalkTipLength),[chalkTipLength,shaftDiameter,shaftDiameter]
 					,pose.rotation,[.08,.28,.52,1],[.82,1.5,0,0]);
-				draw(cube,[cue.x+dx*.38,.017,cue.y+dz*.38],[.66,.003,.006],guideRotation,[.94,.76,.26,.72],[.6,0,0,0]);}
+				for(const guide of reflectedGuideSegments(cue.x,cue.y,angle,tableWidth,tableHeight,radius))
+				{
+					const guideAngle=Math.atan2(guide.direction[1],guide.direction[0]);
+					const guideRotation=[0,-Math.sin(guideAngle/2),0,Math.cos(guideAngle/2)];
+					draw(cube,[(guide.start[0]+guide.end[0])/2,.017,(guide.start[1]+guide.end[1])/2]
+						,[guide.length,.003,.006],guideRotation,[.94,.76,.26,.72],[.6,0,0,0]);
+				}}
 		}
 	}
 
