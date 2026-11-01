@@ -31,13 +31,13 @@ $test('standard rack is complete and separated', static function() use ($expect)
 
 	foreach($game->balls as $index => $a)
 	foreach(array_slice($game->balls, $index + 1) as $b)
-	$expect(hypot($a->x - $b->x, $a->y - $b->y) >= Ball::RADIUS * 1.99, 'Rack balls overlap');
+	$expect(hypot($a->x - $b->x, $a->y - $b->y) >= Ball::RADIUS * 2 + .000004, 'Rack balls overlap');
 });
 
 $test('rack variation is imperceptible and deterministic', static function() use ($expect): void {
 	$left = new Simulation;
 	$right = new Simulation;
-	$spacing = Ball::RADIUS * 2.015;
+	$spacing = Ball::RADIUS * 2 + .00004;
 	$apex = Table::WIDTH * .23;
 	$index = 1;
 	$varied = false;
@@ -49,13 +49,68 @@ $test('rack variation is imperceptible and deterministic', static function() use
 		$idealY = ($column - $row / 2) * $spacing;
 		$dx = abs($left->balls[$index]->x - $idealX);
 		$dy = abs($left->balls[$index]->y - $idealY);
-		$expect($dx <= .000061 && $dy <= .000061, 'Rack noise became visible');
+		$expect($dx <= .000011 && $dy <= .000011, 'Rack noise became visible');
 		$varied = $varied || $dx > 1e-9 || $dy > 1e-9;
 		$index++;
 	}
 
 	$expect($varied, 'Rack remained mathematically perfect');
 	$expect($left->hash() === $right->hash(), 'Rack noise changed between identical games');
+});
+
+$test('shot power preserves touch shots and reaches break speed', static function() use ($expect): void {
+	$expect(abs(Simulation::shotSpeed(1) - 8.75) < 1e-12, 'Maximum power is not calibrated for a break');
+	$expect(Simulation::shotSpeed(.05) >= .5 && Simulation::shotSpeed(.05) < .51, 'Touch shot is too fast');
+	$expect(Simulation::shotSpeed(.58) > 2.5 && Simulation::shotSpeed(.58) < 2.6,
+		'Mid-power shot changed normal play speed');
+	$expect(Simulation::shotSpeed(.8) > Simulation::shotSpeed(.58), 'Power curve is not monotonic');
+});
+
+$test('rack contacts are independent of ball storage order', static function() use ($expect): void {
+	$left = new Simulation;
+	$right = new Simulation;
+	$right->balls = array_reverse($right->balls);
+	$expect($left->shoot(0, 1) && $right->shoot(0, 1));
+
+	for($tick = 0; $tick < 240; $tick++)
+	{
+		$left->step();
+		$right->step();
+	}
+
+	$states = static function(Simulation $game): array {
+		$result = [];
+		foreach($game->balls as $ball) $result[$ball->number] = $ball->snapshot();
+		ksort($result);
+		return $result;
+	};
+	$expect($states($left) === $states($right), 'Rack result depends on array order');
+});
+
+$test('three full-power zero-spin shots clear and spread the rack', static function() use ($expect): void {
+	$game = new Simulation;
+	$initial = [];
+	foreach($game->balls as $ball) if($ball->number !== 0) $initial[$ball->number] = [$ball->x,$ball->y];
+
+	for($shot = 1; $shot <= 3; $shot++)
+	{
+		$startX = $game->cue()->x;
+		$startY = $game->cue()->y;
+		$expect($game->shoot(0, 1, 0, 0), "Shot $shot was rejected");
+		$expect(abs(hypot($game->cue()->vx, $game->cue()->vy) - Simulation::MAX_SPEED) < 1e-12,
+			"Shot $shot did not launch at break speed");
+		$ticks = 0;
+		while($game->moving() && $ticks++ < 2400) $game->step();
+		$expect($ticks < 2400, "Shot $shot never settled");
+		$expect($game->phase === 'aim', "Shot $shot did not return to aim mode");
+		$expect(hypot($game->cue()->x - $startX, $game->cue()->y - $startY) > .1,
+			"Shot $shot left the cue ball at the contact point");
+	}
+
+	$moved = 0;
+	foreach($game->balls as $ball) if($ball->number !== 0
+		&& hypot($ball->x - $initial[$ball->number][0], $ball->y - $initial[$ball->number][1]) > .15) $moved++;
+	$expect($moved >= 5, 'Break left most of the rack at its starting points');
 });
 
 $test('pocket mouths use regulation American pool dimensions', static function() use ($expect): void {

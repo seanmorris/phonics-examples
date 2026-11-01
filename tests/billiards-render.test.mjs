@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsMaterials, cuePose, pocketDropPose, tableCsgProfiles, tablePocketDefinitions} from '../games/php-billiards/browser/game.mjs';
+import {billiardsMaterials, cueContactWarning, cuePose, pocketDropPose, tableCsgProfiles, tablePocketDefinitions} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
@@ -63,6 +63,13 @@ test('captured balls descend into the pocket before rolling outward down the ret
 	assert.ok(throat[1]<start[1]&&end[1]<throat[1], 'Captured ball did not descend');
 	assert.ok(Math.hypot(throat[0]-pocket.x,throat[2]-pocket.z)<1e-12, 'Ball left the mouth before reaching the throat');
 	assert.ok(Math.hypot(end[0]-pocket.x,end[2]-pocket.z)>.05, 'Ball did not roll outward along the return');
+});
+
+test('a nearly frozen cue warns only when the contact is in the shot direction', () => {
+	const cue={number:0,x:0,y:0,active:true},close={number:4,x:radius*2+.0005,y:0,active:true};
+	assert.equal(cueContactWarning([cue,close],radius,0),4);
+	assert.equal(cueContactWarning([cue,close],radius,Math.PI),null);
+	assert.equal(cueContactWarning([cue,{...close,x:radius*2+.002}],radius,0),null);
 });
 
 test('material presets model resin, varnished wood, and felt as dielectrics', () => {

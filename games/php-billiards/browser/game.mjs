@@ -84,6 +84,25 @@ export function pocketDropPose(pocket,ballRadius,progress)
 	return [pocket.x+pocket.outward[0]*travel,ballRadius+.012-.19*smooth,pocket.z+pocket.outward[1]*travel];
 }
 
+/** Identify a ball close enough in the shot direction to take the cue impulse immediately. */
+export function cueContactWarning(balls,ballRadius,angle,threshold=.0012)
+{
+	const cue=balls.find(ball=>ball.number===0&&ball.active);
+	if(!cue)return null;
+	const dx=Math.cos(angle),dy=Math.sin(angle);
+	let nearest=null,nearestGap=Infinity;
+
+	for(const ball of balls)if(ball.number!==0&&ball.active)
+	{
+		const offsetX=ball.x-cue.x,offsetY=ball.y-cue.y,distance=Math.hypot(offsetX,offsetY);
+		if(distance<1e-9)continue;
+		const gap=distance-ballRadius*2,alignment=(offsetX*dx+offsetY*dy)/distance;
+		if(gap<=threshold&&alignment>.7&&gap<nearestGap){nearest=ball.number;nearestGap=gap;}
+	}
+
+	return nearest;
+}
+
 /** roughness, index of refraction, material mode, clearcoat or sheen strength */
 export const billiardsMaterials = Object.freeze({
 	ball:Object.freeze([.03,1.56,1,.35])
@@ -609,7 +628,10 @@ export function activate({module, canvas, session})
 		if(gl.isContextLost()) return;
 		placement.hidden=latest.phase!=='placing';
 		const locked=latest.phase!=='aim';for(const input of [aim,power,top,side,shoot])input.disabled=locked;
-		reset.disabled=latest.shots<1;status.textContent=latest.phase==='placing'?'Scratch — place the cue ball':latest.moving?'Balls in motion':`Ready · ${latest.shots} shot${latest.shots===1?'':'s'}`;
+		const contact=latest.phase==='aim'?cueContactWarning(latest.balls,latest.table[2],latest.aim):null;
+		reset.disabled=latest.shots<1;status.textContent=latest.phase==='placing'?'Scratch — place the cue ball':latest.moving?'Balls in motion'
+			:contact!==null?`Cue nearly frozen to ball ${contact} · impact will be immediate`
+			:`Ready · ${latest.shots} shot${latest.shots===1?'':'s'}`;
 		live.textContent=status.textContent;
 		for(const event of latest.events??[])
 		{
