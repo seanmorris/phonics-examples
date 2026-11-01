@@ -258,7 +258,7 @@ export function activate({module, canvas, session})
 	canvas.addEventListener('blur', () => held.clear(), {signal});
 
 	let dragging = null;
-	const camera = {yaw: -.42, pitch: .72, distance: 3.35};
+	const camera = {yaw: -.42, pitch: .72, distance: 3.35, target: [0,0,0]};
 	canvas.addEventListener('pointerdown', event => {
 		canvas.focus({preventScroll: true});
 		canvas.setPointerCapture(event.pointerId);
@@ -351,8 +351,11 @@ export function activate({module, canvas, session})
 				float F=.04+.96*pow(1.0-vh,5.0),D=distribution(nh,rough),k=(rough+1.0)*(rough+1.0)/8.0;
 				float G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));return D*G*F*nl/max(.01,4.0*nl*nv);}
 			void main(){vec3 N=normalize(vNormal),V=normalize(uEye-vPosition),base=uBase.rgb;float mode=uMaterial.z;
+				if(mode>3.5){float edge=length(vUv-.5)*2.0,opacity=(1.0-smoothstep(.18,1.0,edge))*uBase.a;
+					if(opacity<.002)discard;color=vec4(vec3(0.0),opacity);return;}
 				if(mode>0.5&&mode<1.5){vec2 pad=vec2(4.0)/vec2(textureSize(uBallAtlas,0));
-					vec2 uv=mix(uAtlasCell/4.0+pad,(uAtlasCell+1.0)/4.0-pad,vec2(1.0-vUv.x,1.0-vUv.y));base=texture(uBallAtlas,uv).rgb;}
+					// Raw atlas rows run opposite WebGL's vertical axis; longitude must stay unchanged to preserve numeral chirality.
+					vec2 uv=mix(uAtlasCell/4.0+pad,(uAtlasCell+1.0)/4.0-pad,vec2(vUv.x,1.0-vUv.y));base=texture(uBallAtlas,uv).rgb;}
 				else if(mode>1.5&&mode<2.5)base*=wood(vPosition,N)*1.45;
 				else if(mode>2.5){float fiber=random(floor(vPosition*520.0)),weave=.995+.01*fiber;
 					float track=exp(-pow(abs(vPosition.z-.055*sin(vPosition.x*5.0))*18.0,2.0));base*=weave*(.985+.03*fiber);base=mix(base,base*1.045,track*.035);}
@@ -535,7 +538,7 @@ export function activate({module, canvas, session})
 		}
 		for(let row=0;row<rows;row++) for(let column=0;column<columns;column++)
 		{
-			const a=row*(columns+1)+column,b=a+columns+1;i.push(a,b,a+1,b,b+1,a+1);
+			const a=row*(columns+1)+column,b=a+columns+1;i.push(a,a+1,b,b,a+1,b+1);
 		}
 
 		return mesh(v,i);
@@ -594,9 +597,11 @@ export function activate({module, canvas, session})
 		const transform=model(position,scale,rotation);gl.uniformMatrix4fv(locations.uModel,false,transform);
 		gl.uniformMatrix3fv(locations.uNormal,false,normalMatrix(rotation));gl.uniform4fv(locations.uBase,color);
 		gl.uniform4fv(locations.uMaterial,material);gl.uniform2fv(locations.uAtlasCell,cell);gl.bindVertexArray(geometry.vao);
+		if(material[2]>3.5)gl.depthMask(false);
 		if(geometry.doubleSided)gl.disable(gl.CULL_FACE);
 		gl.drawElements(gl.TRIANGLES,geometry.count,geometry.type,0);
 		if(geometry.doubleSided)gl.enable(gl.CULL_FACE);
+		if(material[2]>3.5)gl.depthMask(true);
 	};
 	const colors = ['#f3eee0','#e7bb21','#1f62b5','#bd2830','#5c3399','#e66e20','#237a48','#761d24','#151515','#e5b824','#2467b7','#bc2931','#653b9c','#e57523','#287c4e','#7b2028']
 		.map(hex=>[parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255,1]);
@@ -651,8 +656,8 @@ export function activate({module, canvas, session})
 		if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
 		gl.viewport(0,0,width,height);gl.enable(gl.DEPTH_TEST);gl.enable(gl.CULL_FACE);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
 		gl.clearColor(.012,.021,.017,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(program);
-		const moving=latest.moving,distance=camera.distance+(moving?.32:0),eye=[Math.cos(camera.yaw)*Math.cos(camera.pitch)*distance,Math.sin(camera.pitch)*distance,Math.sin(camera.yaw)*Math.cos(camera.pitch)*distance];
-		const vp=mat4Multiply(perspective(.63,width/height,.05,20),lookAt(eye,[0,0,0],[0,1,0]));
+		const moving=latest.moving,distance=camera.distance+(moving?.32:0),target=camera.target,eye=[target[0]+Math.cos(camera.yaw)*Math.cos(camera.pitch)*distance,target[1]+Math.sin(camera.pitch)*distance,target[2]+Math.sin(camera.yaw)*Math.cos(camera.pitch)*distance];
+		const vp=mat4Multiply(perspective(.63,width/height,.05,20),lookAt(eye,target,[0,1,0]));
 		gl.uniformMatrix4fv(locations.uViewProjection,false,vp);gl.uniform3fv(locations.uEye,eye);
 		gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,ballTexture);gl.uniform1i(locations.uBallAtlas,0);
 		gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,woodTexture);gl.uniform1i(locations.uWood,1);
@@ -672,7 +677,11 @@ export function activate({module, canvas, session})
 		for(const pocket of pockets)
 			draw(disc,[pocket.x,-.237,pocket.z],[pocket.mouth*.34,1,pocket.mouth*.34],[0,0,0,1],[.001,.0015,.001,1],[.96,1.5,0,0]);
 		for(const ball of latest.balls)if(ball.active)
-			draw(disc,[ball.x,.012,ball.y],[radius*1.15,1,radius*.72],[0,0,0,1],[0,0,0,.25],[1,0,0,0]);
+		{
+			const shadowOffset=.0085;
+			draw(disc,[ball.x+(ball.x+.45)*shadowOffset,.0124,ball.y+(ball.y+.7)*shadowOffset]
+				,[radius*1.28,1,radius*1.28],[0,0,0,1],[0,0,0,.3],[1,0,4,0]);
+		}
 		for(const ball of latest.balls)if(ball.active)
 			draw(sphere,[ball.x,radius+.012,ball.y],[radius,radius,radius],ball.rotation,colors[ball.number],billiardsMaterials.ball,[ball.number%4,Math.floor(ball.number/4)]);
 		const now=performance.now();pocketDrops=pocketDrops.filter(drop=>now-drop.started<900);
@@ -695,6 +704,7 @@ export function activate({module, canvas, session})
 	module.billiardsInput=controls;
 	module.billiardsRender=json=>{if(assetsReady)render(json);};
 	session.phpBilliards={get state(){return latest?structuredClone(latest):null;},camera};
+	Object.defineProperty(canvas,'phpBilliardsDebug',{configurable:true,value:{camera,get state(){return latest?structuredClone(latest):null;}}});
 
 	return async() => {
 		abort.abort();
@@ -703,6 +713,6 @@ export function activate({module, canvas, session})
 		gl.deleteTexture(ballTexture);gl.deleteTexture(woodTexture);gl.deleteProgram(program);audio?.close();
 		if(next?.parentNode===parent)parent.insertBefore(canvas,next);else parent.append(canvas);
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);
-		ui.remove();delete canvas.dataset.phpBilliards;
+		ui.remove();delete canvas.dataset.phpBilliards;delete canvas.phpBilliardsDebug;
 	};
 }

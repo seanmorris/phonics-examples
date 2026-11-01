@@ -1,5 +1,7 @@
 import {test, expect} from '@playwright/test';
 import assert from 'node:assert/strict';
+import {readFile, writeFile} from 'node:fs/promises';
+import {PNG} from 'pngjs';
 
 test('full page boots the direct application and executes a resettable shot', async ({page}) => {
 	const errors = [];
@@ -28,17 +30,81 @@ test('embed route contains only the game host and cleans up its runtime', async 
 	await expect(page.locator('.php-billiards-ui')).toHaveCount(0);
 });
 
-test('orbiting the camera does not rotate stationary balls', async ({page}) => {
+test('a stationary ball texture landmark follows its fixed world position while the camera orbits', async ({page}, testInfo) => {
 	await page.goto('/games/php-billiards/');
 	const canvas=page.locator('canvas');
 	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout:45_000});
 	const rotations=async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).balls.map(ball=>ball.rotation);
-	const before=await rotations(),box=await canvas.boundingBox();
-	await page.mouse.move(box.x+box.width*.45,box.y+box.height*.5);
-	await page.mouse.down();
-	await page.mouse.move(box.x+box.width*.7,box.y+box.height*.5,{steps:12});
-	await page.mouse.up();
-	await page.waitForTimeout(250);
+	const before=await rotations();
+	await canvas.evaluate(element=>{
+		// Five is asymmetric, so the saved frames also make a horizontal atlas reversal obvious.
+		const state=element.phpBilliardsDebug.state,ball=state.balls.find(candidate=>candidate.number===5),radius=state.table[2];
+		const [x,y,z,w]=ball.rotation;
+		// The atlas spot at source UV (.25,.5) maps to the sphere's local +Z pole.
+		const normal=[2*(x*z+w*y),2*(y*z-w*x),1-2*(x*x+y*y)];
+		const camera=element.phpBilliardsDebug.camera;
+		camera.target=[ball.x,radius+.012,ball.y];
+		camera.distance=.22;
+		camera.yaw=Math.atan2(normal[2],normal[0]);
+		camera.pitch=Math.asin(normal[1]);
+	});
+	await page.waitForTimeout(350);
+	const firstPath=testInfo.outputPath('ball-landmark-head-on.png');
+	const first=await canvas.screenshot({path:firstPath});
+	await canvas.evaluate(element=>element.phpBilliardsDebug.camera.yaw+=.28);
+	await page.waitForTimeout(350);
+	const secondPath=testInfo.outputPath('ball-landmark-after-orbit.png');
+	const second=await canvas.screenshot({path:secondPath});
+	await testInfo.attach('ball-landmark-head-on.png',{body:first,contentType:'image/png'});
+	await testInfo.attach('ball-landmark-after-orbit.png',{body:second,contentType:'image/png'});
+
+	const whiteSpot=buffer=>{
+		const image=PNG.sync.read(buffer),center=[image.width/2,image.height/2],limit=Math.min(image.width,image.height)*.14;
+		let count=0,sumX=0,sumY=0;
+		for(let y=0;y<image.height;y++)for(let x=0;x<image.width;x++)
+		{
+			if(Math.hypot(x-center[0],y-center[1])>limit)continue;
+			const index=(y*image.width+x)*4,[red,green,blue]=image.data.subarray(index,index+3);
+			if(Math.min(red,green,blue)>30&&Math.max(red,green,blue)-Math.min(red,green,blue)<20)
+			{count++;sumX+=x;sumY+=y;}
+		}
+		return {count,x:sumX/count,y:sumY/count,width:image.width,height:image.height};
+	};
+	const reflectionMoment=points=>{
+		const center=points.reduce((sum,[x,y])=>[sum[0]+x,sum[1]+y],[0,0]).map(value=>value/points.length);
+		const moment=(p,q)=>points.reduce((sum,[x,y])=>sum+(x-center[0])**p*(y-center[1])**q,0);
+		const normalized=(p,q)=>moment(p,q)/points.length**(1+(p+q)/2);
+		const e30=normalized(3,0),e12=normalized(1,2),e21=normalized(2,1),e03=normalized(0,3);
+		return (3*e21-e03)*(e30+e12)*((e30+e12)**2-3*(e21+e03)**2)
+			-(e30-3*e12)*(e21+e03)*(3*(e30+e12)**2-(e21+e03)**2);
+	};
+	const darkPixels=(image,center,radius,threshold)=>{
+		const points=[];
+		for(let y=Math.floor(center[1]-radius);y<=center[1]+radius;y++)for(let x=Math.floor(center[0]-radius);x<=center[0]+radius;x++)
+		{
+			if(Math.hypot(x-center[0],y-center[1])>radius)continue;
+			const index=(y*image.width+x)*4;
+			if(Math.max(...image.data.subarray(index,index+3))<threshold)points.push([x,y]);
+		}
+		return points;
+	};
+	const headOn=whiteSpot(first),orbited=whiteSpot(second),frameImage=PNG.sync.read(first);
+	const atlasImage=PNG.sync.read(await readFile(new URL('../../games/php-billiards/assets/generated/ball-atlas.png',import.meta.url)));
+	const frameNumeral=darkPixels(frameImage,[headOn.x,headOn.y],45,50);
+	const sourceNumeral=darkPixels(atlasImage,[640,384],30,50);
+	const frameReflection=reflectionMoment(frameNumeral),sourceReflection=reflectionMoment(sourceNumeral);
+	const measurements=Buffer.from(JSON.stringify({headOn,orbited,frameReflection,sourceReflection},null,2));
+	await writeFile(testInfo.outputPath('ball-landmark-measurements.json'),measurements);
+	await testInfo.attach('ball-landmark-measurements.json',{body:measurements,contentType:'application/json'});
+	expect(headOn.count).toBeGreaterThan(100);
+	expect(orbited.count).toBeGreaterThan(100);
+	expect(Math.abs(headOn.x-headOn.width/2)).toBeLessThan(18);
+	expect(Math.abs(headOn.y-headOn.height/2)).toBeLessThan(18);
+	expect(frameNumeral.length).toBeGreaterThan(100);
+	expect(Math.sign(frameReflection)).toBe(Math.sign(sourceReflection));
+	// A fixed point initially facing the camera moves right on screen after this positive yaw orbit.
+	expect(orbited.x-headOn.x).toBeGreaterThan(8);
+	expect(Math.abs(orbited.y-headOn.y)).toBeLessThan(14);
 	assert.deepEqual(await rotations(),before);
 });
 
