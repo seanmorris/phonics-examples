@@ -75,14 +75,8 @@ test('table CSG profiles round the shell and cut every pocket through the playin
 	}
 });
 
-test('all cushion noses stay on their logical jaw points while tapering toward the liner', () => {
-	const profiles=tableCsgProfiles(width,height),[minX,minZ,maxX,maxZ]=profiles.bounds;
-	const cellSize=Math.max((maxX-minX)/billiardsTableMeshing.columns,
-		(maxZ-minZ)/billiardsTableMeshing.rows);
-	assert.ok(billiardsTableMeshing.cushionJawTaper>=cellSize*1.75,
-		'Jaw taper collapsed into too few cells to remain continuous');
-	assert.ok(Math.abs(Math.atan(billiardsTableMeshing.cushionJawTaper/.055)*180/Math.PI-13.5)<1e-12,
-		'Jaw taper no longer follows the pocket back-draft angle');
+test('all cushion noses stay on their logical jaw points and meet the shared facings', () => {
+	const profiles=tableCsgProfiles(width,height);
 	assert.equal(profiles.pockets.length,6);
 	assert.equal(profiles.cushionRails.length,6);
 	for(const rail of profiles.cushionRails)
@@ -91,6 +85,19 @@ test('all cushion noses stay on their logical jaw points while tapering toward t
 		const area=rail.reduce((sum,[x,z],index)=>{const [nextX,nextZ]=rail[(index+1)%rail.length];
 			return sum+x*nextZ-nextX*z;},0);
 		assert.ok(area>0,'Explicit cushion rail changed winding');
+		const spanX=Math.max(...rail.map(point=>point[0]))-Math.min(...rail.map(point=>point[0]));
+		const spanZ=Math.max(...rail.map(point=>point[1]))-Math.min(...rail.map(point=>point[1]));
+		const depth=spanX>spanZ?spanZ:spanX;
+		assert.ok(Math.abs(depth-billiardsTableMeshing.cushionWidth)<1e-12,
+			'Cushion stopped being a constant-width band');
+		for(let index=0;index<rail.length;index++)
+		{
+			const next=rail[(index+1)%rail.length],length=Math.hypot(next[0]-rail[index][0],next[1]-rail[index][1]);
+			if(length>.15)continue;
+			const midpoint=[(rail[index][0]+next[0])/2,(rail[index][1]+next[1])/2];
+			assert.ok(Math.min(...profiles.pockets.map(pocket=>Math.abs(pocket.openingSdf(...midpoint))))<1e-10,
+				'Cushion end stopped following its pocket facing');
+		}
 	}
 	const cornerJaw=profiles.pockets[0].mouth/Math.SQRT2;
 	const sideJaw=profiles.pockets[1].mouth/2;
@@ -107,34 +114,38 @@ test('all cushion noses stay on their logical jaw points while tapering toward t
 	}
 });
 
-test('explicit felt cushion caps stay outside every pocket profile', () => {
+test('explicit felt cushion caps stay outside every jaw-facing-throat profile', () => {
 	const profiles=tableCsgProfiles(width,height);
 	for(const pocket of profiles.pockets)
 	{
-		for(let step=0;step<96;step++)
-		{
-			const angle=step/96*Math.PI*2;
-			const x=pocket.x+Math.cos(angle)*(pocket.radius-.0005);
-			const z=pocket.z+Math.sin(angle)*(pocket.radius-.0005);
-			assert.ok(profiles.cushion(x,z)>=0,
-				`Felt entered pocket ${pocket.x},${pocket.z} at angle ${angle}`);
-		}
+		const samples=[[pocket.x,pocket.z],pocket.mouthCenter
+			,...pocket.faces.map(({jaw,tangent})=>[(jaw[0]+tangent[0])/2,(jaw[1]+tangent[1])/2])];
+		for(const [x,z] of samples)assert.ok(profiles.cushion(x,z)>=-1e-10,
+			`Felt entered pocket ${pocket.x},${pocket.z} at ${x},${z}`);
 	}
 });
 
-test('all table materials subtract one shared pocket cylinder', () => {
+test('tabletop materials subtract the round throat while cloth preserves the mouth shelf', () => {
 	const profiles=tableCsgProfiles(width,height);
 	for(const pocket of profiles.pockets)
 	{
-		for(let step=0;step<96;step++)
+		assert.ok(profiles.pocketCut(pocket.x,pocket.z)<0,'Round throat is not inside the shared cut');
+		for(let step=0;step<48;step++)
 		{
-			const angle=step/96*Math.PI*2,c=Math.cos(angle),s=Math.sin(angle);
-			const boundary=profiles.pocketCut(pocket.x+c*pocket.radius,pocket.z+s*pocket.radius);
-			const inside=profiles.pocketCut(pocket.x+c*(pocket.radius-.0005),pocket.z+s*(pocket.radius-.0005));
-			const outside=profiles.pocketCut(pocket.x+c*(pocket.radius+.0005),pocket.z+s*(pocket.radius+.0005));
-			assert.ok(Math.abs(boundary)<1e-12,'Shared pocket cylinder moved away from its declared radius');
-			assert.ok(inside<0&&outside>0,'Shared pocket cylinder changed sign in the wrong direction');
+			const angle=step/48*Math.PI*2,point=[pocket.x+Math.cos(angle)*pocket.radius,pocket.z+Math.sin(angle)*pocket.radius];
+			assert.ok(Math.abs(profiles.pocketCut(...point))<1e-10,'Circular tabletop hole changed radius');
 		}
+		for(const material of ['apron','bed','wood'])assert.ok(profiles[material](pocket.x,pocket.z)>0,
+			`${material} did not subtract the circular tabletop hole`);
+
+		const lateral=[-pocket.outward[1],pocket.outward[0]],shelf=[
+			pocket.mouthCenter[0]+lateral[0]*pocket.mouth*.35+pocket.outward[0]*.005
+			, pocket.mouthCenter[1]+lateral[1]*pocket.mouth*.35+pocket.outward[1]*.005
+		];
+		assert.ok(pocket.openingSdf(...shelf)<0&&profiles.pocketCut(...shelf)>0,
+			'Mouth shelf did not separate the flared cushion opening from the round hole');
+		assert.ok(profiles.bed(...shelf)<0,'Cloth shelf was cut away between the jaws and round hole');
+		assert.ok(profiles.wood(...shelf)>0,'Wood covered the cloth pocket shelf');
 	}
 });
 
@@ -174,17 +185,23 @@ test('visual pocket mouths use regulation widths', () => {
 	const pockets=tablePocketDefinitions(width,height),corners=pockets.filter((_,index)=>![1,4].includes(index)),sides=[pockets[1],pockets[4]];
 	assert.ok(corners.every(pocket=>pocket.mouth>=4.5*.0254&&pocket.mouth<=4.625*.0254));
 	assert.ok(sides.every(pocket=>pocket.mouth>=5*.0254&&pocket.mouth<=5.25*.0254));
-	assert.ok(sides.every(pocket=>Math.abs(pocket.radius*2-pocket.mouth)<1e-12));
-	assert.ok(corners.every(pocket=>pocket.radius<sides[0].radius),
-		'Corner bowl should be visibly smaller than the wider side pocket');
-	const cornerJaw=cornerMouth=>cornerMouth/Math.SQRT2;
-	for(const [index,pocket] of pockets.entries())if(![1,4].includes(index))
+	assert.ok(pockets.every(pocket=>Math.abs(pocket.radius*2-corners[0].mouth)<1e-12),
+		'The six round drop throats stopped sharing the reference diameter');
+	assert.ok(sides.every(pocket=>pocket.mouth>pocket.radius*2),
+		'Side mouth no longer flares wider than its round throat');
+	for(const pocket of pockets)
 	{
-		const signX=Math.sign(pocket.x),signZ=Math.sign(pocket.z),jaw=cornerJaw(pocket.mouth);
-		const horizontalJaw=[signX*(width/2-jaw),signZ*height/2];
-		assert.ok(Math.abs(Math.hypot(horizontalJaw[0]-pocket.x,horizontalJaw[1]-pocket.z)-pocket.radius)<1e-12,
-			'Shifted corner bowl missed its regulation jaw');
+		assert.ok(Math.abs(Math.hypot(pocket.jaws[1][0]-pocket.jaws[0][0],pocket.jaws[1][1]-pocket.jaws[0][1])-pocket.mouth)<1e-12,
+			'Jaw chord stopped matching its regulation width');
+		for(const {jaw,tangent} of pocket.faces)
+		{
+			const radius=[tangent[0]-pocket.x,tangent[1]-pocket.z],facing=[tangent[0]-jaw[0],tangent[1]-jaw[1]];
+			assert.ok(Math.abs(Math.hypot(...radius)-pocket.radius)<1e-12,'Facing missed the round throat');
+			assert.ok(Math.abs(radius[0]*facing[0]+radius[1]*facing[1])<1e-12,'Facing stopped being tangent to the throat');
+		}
 	}
+	assert.ok(sides.every(pocket=>Math.abs(Math.hypot(pocket.x-pocket.mouthCenter[0],pocket.z-pocket.mouthCenter[1])
+		-billiardsTableMeshing.cushionWidth)<1e-12),'Side throat is not one cushion width behind its mouth');
 });
 
 test('a nearly frozen cue warns only when the contact is in the shot direction', () => {

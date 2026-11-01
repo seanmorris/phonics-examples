@@ -89,6 +89,31 @@ const insetPolygon = (vertices,radius) => {
 	});
 };
 
+const convexHull = points => {
+	const sorted=[...points].sort(([ax,az],[bx,bz])=>ax-bx||az-bz),cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+	const half=[];
+	for(const point of sorted)
+	{
+		while(half.length>=2&&cross(half.at(-2),half.at(-1),point)<=1e-12)half.pop();
+		half.push(point);
+	}
+	const lower=[...half];half.length=0;
+	for(const point of sorted.reverse())
+	{
+		while(half.length>=2&&cross(half.at(-2),half.at(-1),point)<=1e-12)half.pop();
+		half.push(point);
+	}
+	return [...lower.slice(0,-1),...half.slice(0,-1)];
+};
+
+const pocketTangent = (jaw,center,radius,mouthCenter,outward) => {
+	const dx=jaw[0]-center[0],dz=jaw[1]-center[1],distance=Math.hypot(dx,dz);
+	const base=Math.atan2(dz,dx),offset=Math.acos(radius/distance);
+	return [base-offset,base+offset].map(angle=>[center[0]+Math.cos(angle)*radius,center[1]+Math.sin(angle)*radius])
+		.sort((a,b)=>((b[0]-mouthCenter[0])*outward[0]+(b[1]-mouthCenter[1])*outward[1])
+			-((a[0]-mouthCenter[0])*outward[0]+(a[1]-mouthCenter[1])*outward[1]))[0];
+};
+
 /** Signed distance for a vertically extruded profile with a circular fillet around both cap edges. */
 export function roundedExtrusionSdf(horizontalDistance,y,bottom,top,radius)
 {
@@ -111,52 +136,75 @@ export function roundedFilletNormal(nx,nz,angle,horizontalRadius,verticalRadius,
 
 export function tablePocketDefinitions(width,height,cornerMouth=.1158875,sideMouth=.1285875)
 {
-	// A corner mouth is measured diagonally between its jaws; treating that
-	// diagonal as the radius makes the rendered bowl larger than a side pocket.
-	// Keep the jaw chord exact and shift a smaller circular bowl slightly inward.
-	const cornerRadius=(cornerMouth+sideMouth)/4,cornerHalf=cornerMouth/2;
-	const cornerDepth=cornerHalf-Math.sqrt(cornerRadius*cornerRadius-cornerHalf*cornerHalf);
-	const cornerInset=cornerDepth/Math.SQRT2,cornerX=width/2-cornerInset,cornerZ=height/2-cornerInset;
-	return [
-		{x:-cornerX,z:-cornerZ,mouth:cornerMouth,radius:cornerRadius,outward:[-Math.SQRT1_2,-Math.SQRT1_2]}
-		, {x:0,z:-height/2,mouth:sideMouth,radius:sideMouth/2,outward:[0,-1]}
-		, {x:cornerX,z:-cornerZ,mouth:cornerMouth,radius:cornerRadius,outward:[Math.SQRT1_2,-Math.SQRT1_2]}
-		, {x:-cornerX,z:cornerZ,mouth:cornerMouth,radius:cornerRadius,outward:[-Math.SQRT1_2,Math.SQRT1_2]}
-		, {x:0,z:height/2,mouth:sideMouth,radius:sideMouth/2,outward:[0,1]}
-		, {x:cornerX,z:cornerZ,mouth:cornerMouth,radius:cornerRadius,outward:[Math.SQRT1_2,Math.SQRT1_2]}
-	];
+	// The regulation dimension is the chord between cushion noses. The round
+	// drop is a separate throat behind it, joined by two tangent facings.
+	const cushionWidth=.055,throatRadius=cornerMouth/2;
+	const makePocket=(mouthCenter,outward,mouth,center,type)=>{
+		const lateral=[-outward[1],outward[0]],jaws=[-1,1].map(sign=>[
+			mouthCenter[0]+lateral[0]*mouth/2*sign,mouthCenter[1]+lateral[1]*mouth/2*sign
+		]);
+		const faces=jaws.map(jaw=>({jaw,tangent:pocketTangent(jaw,center,throatRadius,mouthCenter,outward)}));
+		const bridge=convexHull([...jaws,...faces.map(face=>face.tangent)]);
+		const circle=Array.from({length:48},(_,step)=>{
+			const angle=step/48*Math.PI*2;return [center[0]+Math.cos(angle)*throatRadius,center[1]+Math.sin(angle)*throatRadius];
+		});
+		const openingProfile=convexHull([...circle,...jaws,...faces.map(face=>face.tangent)]);
+		const throatSdf=(x,z)=>circleSdf(x,z,center[0],center[1],throatRadius);
+		return {x:center[0],z:center[1],mouth,radius:throatRadius,outward,mouthCenter,jaws,faces,bridge,openingProfile,type
+			, cutSdf:throatSdf
+			, openingSdf:(x,z)=>Math.min(throatSdf(x,z),polygonSdf(x,z,bridge))};
+	};
+	const corner=(signX,signZ)=>{
+		const outward=[signX*Math.SQRT1_2,signZ*Math.SQRT1_2],corner=[signX*width/2,signZ*height/2];
+		return makePocket(corner.map((value,index)=>value-outward[index]*cornerMouth/2),outward,cornerMouth
+			, corner.map((value,index)=>value+outward[index]*cushionWidth/Math.SQRT2),'corner');
+	};
+	const side=signZ=>{
+		const outward=[0,signZ],mouthCenter=[0,signZ*height/2];
+		return makePocket(mouthCenter,outward,sideMouth,[0,signZ*(height/2+cushionWidth)],'side');
+	};
+	return [corner(-1,-1),side(-1),corner(1,-1),corner(-1,1),side(1),corner(1,1)];
 }
 
 export const billiardsTableMeshing = Object.freeze({
 	columns:432
 	, rows:240
-	// 55 mm cushion depth with the specified 13.5-degree pocket back draft.
-	, cushionJawTaper:.055*Math.tan(13.5*Math.PI/180)
+	, cushionWidth:.055
 	, cushionTopSegments:6
+	, pocketSegments:96
+	// The analytic leather lip masks the sub-millimetre chord error from the
+	// full-table marching grid and leaves a smooth circular visible hole.
+	, pocketLipInset:.0025
 });
 
-/** Six convex rails with explicit angled pocket facings and exact jaw endpoints. */
+/** Six constant-width rails ending on the shared tangent pocket facings. */
 export function tableCushionPolygons(width,height,cornerMouth=.1158875,sideMouth=.1285875)
 {
-	const cushionWidth=.055,taper=billiardsTableMeshing.cushionJawTaper;
-	const cornerJaw=cornerMouth/Math.SQRT2,polygons=[];
-	const horizontal=(start,end,edge,outward)=>polygons.push([
-		[start,edge],[end,edge]
-		, [end-taper,edge+outward*cushionWidth],[start+taper,edge+outward*cushionWidth]
-	]);
-	const vertical=(start,end,edge,outward)=>polygons.push([
-		[edge,start],[edge+outward*cushionWidth,start+taper]
-		, [edge+outward*cushionWidth,end-taper],[edge,end]
-	]);
-
-	for(const outward of [-1,1])
+	const pockets=tablePocketDefinitions(width,height,cornerMouth,sideMouth),polygons=[];
+	const faceAt=(pocket,predicate)=>pocket.faces.find(face=>predicate(face.jaw));
+	const backPoint=(face,axis,value)=>{
+		const amount=(value-face.jaw[axis])/(face.tangent[axis]-face.jaw[axis]);
+		return face.jaw.map((coordinate,index)=>coordinate+(face.tangent[index]-coordinate)*amount);
+	};
+	const horizontal=(left,right,edge,outward)=>{
+		const back=edge+outward*billiardsTableMeshing.cushionWidth;
+		polygons.push([left.jaw,right.jaw,backPoint(right,1,back),backPoint(left,1,back)]);
+	};
+	const vertical=(bottom,top,edge,outward)=>{
+		const back=edge+outward*billiardsTableMeshing.cushionWidth;
+		polygons.push([bottom.jaw,backPoint(bottom,0,back),backPoint(top,0,back),top.jaw]);
+	};
+	for(const [cornerLeft,side,cornerRight,signZ] of [[pockets[0],pockets[1],pockets[2],-1],[pockets[3],pockets[4],pockets[5],1]])
 	{
-		const edge=outward*height/2;
-		horizontal(-width/2+cornerJaw,-sideMouth/2,edge,outward);
-		horizontal(sideMouth/2,width/2-cornerJaw,edge,outward);
+		const edge=signZ*height/2;
+		horizontal(faceAt(cornerLeft,jaw=>Math.abs(jaw[1]-edge)<1e-9),faceAt(side,jaw=>jaw[0]<0),edge,signZ);
+		horizontal(faceAt(side,jaw=>jaw[0]>0),faceAt(cornerRight,jaw=>Math.abs(jaw[1]-edge)<1e-9),edge,signZ);
 	}
-	vertical(-height/2+cornerJaw,height/2-cornerJaw,-width/2,-1);
-	vertical(-height/2+cornerJaw,height/2-cornerJaw,width/2,1);
+	for(const [cornerBottom,cornerTop,signX] of [[pockets[0],pockets[3],-1],[pockets[2],pockets[5],1]])
+	{
+		const edge=signX*width/2;
+		vertical(faceAt(cornerBottom,jaw=>Math.abs(jaw[0]-edge)<1e-9),faceAt(cornerTop,jaw=>Math.abs(jaw[0]-edge)<1e-9),edge,signX);
+	}
 
 	return polygons.map(vertices=>{
 		const area=vertices.reduce((sum,[x,z],index)=>{const [nextX,nextZ]=vertices[(index+1)%vertices.length];
@@ -170,15 +218,13 @@ export function tableCsgProfiles(width,height,cornerMouth=.1158875,sideMouth=.12
 {
 	const outerX=width/2+.17,outerZ=height/2+.17,bounds=[-outerX-.02,-outerZ-.02,outerX+.02,outerZ+.02];
 	const pockets=tablePocketDefinitions(width,height,cornerMouth,sideMouth);
-	const pocketSdf=(x,z,extra=0)=>Math.min(...pockets.map(pocket=>circleSdf(x,z,pocket.x,pocket.z,pocket.radius+extra)));
+	const pocketSdf=(x,z)=>Math.min(...pockets.map(pocket=>pocket.cutSdf(x,z)));
 	const outer=(x,z)=>roundedRectangleSdf(x,z,outerX,outerZ,.16);
 	const cushionRails=tableCushionPolygons(width,height,cornerMouth,sideMouth);
 	const cushionBand=(x,z)=>Math.min(...cushionRails.map(vertices=>polygonSdf(x,z,vertices)));
 	const pocketCut=(x,z)=>pocketSdf(x,z);
-	const woodCut=(x,z)=>Math.min(
-		roundedRectangleSdf(x,z,width/2+.052,height/2+.052,.072)
-		, pocketCut(x,z)
-	);
+	const tabletop=(x,z)=>roundedRectangleSdf(x,z,width/2+.052,height/2+.052,.072);
+	const woodCut=(x,z)=>Math.min(tabletop(x,z),pocketCut(x,z));
 
 	return {
 		bounds
@@ -186,7 +232,9 @@ export function tableCsgProfiles(width,height,cornerMouth=.1158875,sideMouth=.12
 		, cushionRails
 		, pocketCut
 		, apron:(x,z)=>subtractSdf(outer(x,z),pocketCut(x,z))
-		, bed:(x,z)=>subtractSdf(roundedRectangleSdf(x,z,width/2,height/2,.02),pocketCut(x,z))
+		// Cloth continues beneath the cushions to form the solid shelf shown
+		// between each jaw chord and its separate circular tabletop hole.
+		, bed:(x,z)=>subtractSdf(tabletop(x,z),pocketCut(x,z))
 		, wood:(x,z)=>subtractSdf(outer(x,z),woodCut(x,z))
 		// The rail caps are explicit faces. Avoiding a Boolean at the pocket edge
 		// keeps their topology and normals stable when pocket dimensions change.
@@ -770,28 +818,37 @@ export function activate({module, canvas, session})
 		return mesh(vertices,indices);
 	};
 
-	/** A 13.5-degree tapered drop beginning just below every CSG pocket cut. */
+	/** A tapered drop beginning at the circular tabletop hole behind each mouth. */
 	const buildPocketLiners = (pockets,ballRadius) => {
 		const vertices=[],indices=[];
-		const segments=96,top=.0105,throat=-.09,bottom=-.235,draft=13.5*Math.PI/180;
+		const top=.0135,throat=-.09,bottom=-.235,draft=13.5*Math.PI/180;
 		const add=(x,y,z,nx,ny,nz,u,v)=>{const index=vertices.length/8;vertices.push(x,y,z,nx,ny,nz,u,v);return index;};
 
 		for(const pocket of pockets)
 		{
-			const outer=pocket.radius+.027,inner=pocket.radius+.0005;
-			const throatRadius=Math.max(ballRadius*1.12,inner-(top-throat)*Math.tan(draft));
+			const segments=billiardsTableMeshing.pocketSegments,lipRadius=pocket.radius-billiardsTableMeshing.pocketLipInset;
+			const outline=Array.from({length:segments},(_,step)=>{
+				const angle=step/segments*Math.PI*2;
+				return [pocket.x+Math.cos(angle)*lipRadius,pocket.z+Math.sin(angle)*lipRadius];
+			});
+			const outer=outline.map(([x,z])=>{
+				const dx=x-pocket.x,dz=z-pocket.z,length=Math.hypot(dx,dz)||1;
+				return [pocket.x+dx/length*pocket.radius,pocket.z+dz/length*pocket.radius];
+			});
+			const throatRadius=Math.max(ballRadius*1.12,lipRadius-(top-throat)*Math.tan(draft));
 			const rim=[],upper=[],lower=[];
 
-			for(let step=0;step<=segments;step++)
+			for(let step=0;step<segments;step++)
 			{
-				const angle=step/segments*Math.PI*2,c=Math.cos(angle),s=Math.sin(angle),slope=(inner-throatRadius)/(top-throat);
+				const [x,z]=outline[step],dx=x-pocket.x,dz=z-pocket.z,radial=Math.hypot(dx,dz)||1;
+				const c=dx/radial,s=dz/radial,slope=(radial-throatRadius)/(top-throat);
 				const normalLength=Math.hypot(1,slope),nx=-c/normalLength,ny=slope/normalLength,nz=-s/normalLength,u=step/segments;
 				rim.push([
-					add(pocket.x+c*outer,top,pocket.z+s*outer,0,1,0,u,0)
-					, add(pocket.x+c*inner,top,pocket.z+s*inner,0,1,0,u,1)
+					add(outer[step][0],top,outer[step][1],0,1,0,u,0)
+					, add(x,top,z,0,1,0,u,1)
 				]);
 				upper.push([
-					add(pocket.x+c*inner,top,pocket.z+s*inner,nx,ny,nz,u,0)
+					add(x,top,z,nx,ny,nz,u,0)
 					, add(pocket.x+c*throatRadius,throat,pocket.z+s*throatRadius,nx,ny,nz,u,.55)
 				]);
 				lower.push([
@@ -802,11 +859,11 @@ export function activate({module, canvas, session})
 
 			for(let step=0;step<segments;step++)
 			{
-				const [outerA,innerA]=rim[step],[outerB,innerB]=rim[step+1];
+				const next=(step+1)%segments,[outerA,innerA]=rim[step],[outerB,innerB]=rim[next];
 				indices.push(outerA,innerA,innerB,outerA,innerB,outerB);
 				for(const wall of [upper,lower])
 				{
-					const [topA,bottomA]=wall[step],[topB,bottomB]=wall[step+1];
+					const [topA,bottomA]=wall[step],[topB,bottomB]=wall[next];
 					indices.push(topA,bottomA,bottomB,topA,bottomB,topB);
 				}
 			}
@@ -1022,7 +1079,7 @@ export function activate({module, canvas, session})
 		draw(tableMeshes.cushion,[0,0,0],[1,1,1],[0,0,0,1],[.042,.21,.13,1],billiardsMaterials.cushionFelt);
 		draw(tableMeshes.liners,[0,0,0],[1,1,1],[0,0,0,1],[.018,.014,.011,1],[.82,1.52,0,0]);
 		for(const pocket of pockets)
-			draw(disc,[pocket.x,-.237,pocket.z],[pocket.mouth*.34,1,pocket.mouth*.34],[0,0,0,1],[.001,.0015,.001,1],[.96,1.5,0,0]);
+			draw(disc,[pocket.x,-.237,pocket.z],[pocket.radius*.96,1,pocket.radius*.96],[0,0,0,1],[.001,.0015,.001,1],[.96,1.5,0,0]);
 		for(const ball of latest.balls)if(ball.active&&ball.pocket===null)
 		{
 			const shadowOffset=.0085;

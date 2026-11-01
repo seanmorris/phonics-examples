@@ -39,9 +39,9 @@
     "assets/generated/textures.json": "sha256-BWrTkaL+ICWDaXs9oxHJpoxZhYltni5vIh4eZfh0KtE=",
     "assets/generated/wood.rgba": "sha256-99hb5OP7GSaEdImLeohPJz1VUwz1ngXBRRJFgteU780=",
     "autoload.php": "sha256-EmJY/5T4hGtkgHDoBwucyEMFN7n3N9BJCi2D0f7IKwE=",
-    "browser/game.mjs": "sha256-HxCMG0hL8qM2UuQyj00Xh8PyHysksIn87DorS/N48PM=",
+    "browser/game.mjs": "sha256-Ev+6pvUDtUyVnqlon3cKKprxLL6Ou4RJanaFa6gFGIk=",
     "src/Physics/Ball.php": "sha256-6t/9hlWdFgkiSj+eQywt9WjshqMMQ9QzoiBqXbJDjlI=",
-    "src/Physics/Simulation.php": "sha256-X+hAu3K3c2DTS4KV7/b/rneYY4HzA3Ge+iAyXUkNVkU=",
-    "src/Physics/Table.php": "sha256-qcp66HmT05ALHWAWaPdOB+Hwn3AMWlvHUYq53mlUAnI="
+    "src/Physics/Simulation.php": "sha256-laSmxXUvbVLCx+cwqnDig6VcYTU7URCNsfhaLi1ktyw=",
+    "src/Physics/Table.php": "sha256-+Avlv3pKG1nd04z0g+g1w9+jX4G6AK+X8/D2TA+BoHw="
   }
 }

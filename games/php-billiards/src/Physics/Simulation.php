@@ -186,6 +186,7 @@ final class Simulation
 
 			if($collision['type'] === 'ball') $this->resolveContactIsland($collision['a'], $collision['b']);
 			elseif($collision['type'] === 'jaw') $this->resolveJaw($collision['ball'], $collision);
+			elseif($collision['type'] === 'facing') $this->resolveFacing($collision['ball'], $collision);
 			else $this->resolveCushion($collision['ball'], $collision['axis']);
 
 			if($advance < 1e-8) $remaining = max(0, $remaining - 1e-7);
@@ -385,6 +386,40 @@ final class Simulation
 				$best = ['type' => 'jaw','time' => max(0, $time),'ball' => $a
 					,'x' => $jawX,'y' => $jawY,'nx' => $contactX / $length,'ny' => $contactY / $length];
 			}
+
+			foreach(Table::facings() as [$startX,$startY,$endX,$endY])
+			{
+				$segmentX = $endX - $startX;
+				$segmentY = $endY - $startY;
+				$segmentLength = hypot($segmentX, $segmentY);
+				$tx = $segmentX / $segmentLength;
+				$ty = $segmentY / $segmentLength;
+				$lineX = -$ty;
+				$lineY = $tx;
+				$distance = ($a->x - $startX) * $lineX + ($a->y - $startY) * $lineY;
+				$normalVelocity = $a->vx * $lineX + $a->vy * $lineY;
+
+				if(abs($normalVelocity) < 1e-12) continue;
+
+				foreach([-1.0,1.0] as $side)
+				{
+					$nx = $lineX * $side;
+					$ny = $lineY * $side;
+					$time = ($side * Ball::RADIUS - $distance) / $normalVelocity;
+
+					if($time < -1e-9 || $time > $limit || $a->vx * $nx + $a->vy * $ny >= -1e-9) continue;
+
+					$contactX = $a->x + $a->vx * max(0, $time);
+					$contactY = $a->y + $a->vy * max(0, $time);
+					$along = ($contactX - $startX) * $tx + ($contactY - $startY) * $ty;
+
+					if($along <= 1e-8 || $along >= $segmentLength - 1e-8
+						|| $best !== null && $time >= $best['time']) continue;
+
+					$best = ['type' => 'facing','time' => max(0, $time),'ball' => $a
+						,'x' => $startX,'y' => $startY,'nx' => $nx,'ny' => $ny];
+				}
+			}
 		}
 
 		return $best;
@@ -413,78 +448,85 @@ final class Simulation
 			$candidates[] = ['a' => $a,'b' => $b,'nx' => $nx,'ny' => $ny];
 		}
 
+		// Collect the whole touching graph before applying any impulse. Solving one
+		// wave at a time lets a later rack row push an already-resolved row backward.
 		$reached = [spl_object_id($seedA) => true,spl_object_id($seedB) => true];
-		$resolved = [];
-		$impactStrength = 0.0;
+		$island = [];
 
 		for($wave = 0; $wave < count($balls); $wave++)
 		{
-			$contacts = [];
+			$added = false;
 
 			foreach($candidates as $index => $candidate)
 			{
-				if(isset($resolved[$index])) continue;
+				if(isset($island[$index])) continue;
 				$a = $candidate['a'];
 				$b = $candidate['b'];
-				$isSeed = $a === $seedA && $b === $seedB || $a === $seedB && $b === $seedA;
+				if(!isset($reached[spl_object_id($a)]) && !isset($reached[spl_object_id($b)])) continue;
 
-				if($wave === 0 && !$isSeed) continue;
-				if($wave > 0 && !isset($reached[spl_object_id($a)]) && !isset($reached[spl_object_id($b)])) continue;
-
-				$relative = ($b->vx - $a->vx) * $candidate['nx'] + ($b->vy - $a->vy) * $candidate['ny'];
-				if($relative >= -1e-7) continue;
-
-				$contacts[] = $candidate + ['index' => $index,'initial' => $relative
-					, 'target' => -self::BALL_RESTITUTION * $relative,'impulse' => 0.0];
-			}
-
-			if(!$contacts) break;
-
-			for($iteration = 0; $iteration < self::CONTACT_ITERATIONS; $iteration++)
-			foreach($contacts as &$contact)
-			{
-				$a = $contact['a'];
-				$b = $contact['b'];
-				$nx = $contact['nx'];
-				$ny = $contact['ny'];
-				$relative = ($b->vx - $a->vx) * $nx + ($b->vy - $a->vy) * $ny;
-				$nextImpulse = max(0, $contact['impulse'] + ($contact['target'] - $relative) / 2);
-				$impulse = $nextImpulse - $contact['impulse'];
-				$contact['impulse'] = $nextImpulse;
-
-				$a->vx -= $impulse * $nx;
-				$a->vy -= $impulse * $ny;
-				$b->vx += $impulse * $nx;
-				$b->vy += $impulse * $ny;
-			}
-			unset($contact);
-
-			foreach($contacts as $contact)
-			{
-				$resolved[$contact['index']] = true;
-				$a = $contact['a'];
-				$b = $contact['b'];
+				$island[$index] = $candidate;
 				$reached[spl_object_id($a)] = $reached[spl_object_id($b)] = true;
-				$nx = $contact['nx'];
-				$ny = $contact['ny'];
-				$tx = -$ny;
-				$ty = $nx;
-				$slip = ($b->vx - $a->vx) * $tx + ($b->vy - $a->vy) * $ty
-					+ Ball::RADIUS * ($a->spinY + $b->spinY);
-				$tangentImpulse = max(-$contact['impulse'] * .06, min($contact['impulse'] * .06, -$slip / 7));
-				$a->vx -= $tangentImpulse * $tx;
-				$a->vy -= $tangentImpulse * $ty;
-				$b->vx += $tangentImpulse * $tx;
-				$b->vy += $tangentImpulse * $ty;
-				$spinChange = -2.5 * $tangentImpulse / Ball::RADIUS;
-				$a->spinY += $spinChange;
-				$b->spinY += $spinChange;
-				$impactStrength = max($impactStrength, abs($contact['initial']) / self::MAX_SPEED
-					, $contact['impulse'] / self::MAX_SPEED);
+				$added = true;
 			}
+
+			if(!$added) break;
 		}
 
-		foreach($candidates as $contact)
+		$contacts = [];
+
+		foreach($island as $index => $candidate)
+		{
+			$a = $candidate['a'];
+			$b = $candidate['b'];
+			$relative = ($b->vx - $a->vx) * $candidate['nx'] + ($b->vy - $a->vy) * $candidate['ny'];
+			$contacts[] = $candidate + ['index' => $index,'initial' => $relative
+				, 'target' => $relative < -1e-7 ? -self::BALL_RESTITUTION * $relative : 0.0,'impulse' => 0.0];
+		}
+
+		for($iteration = 0; $iteration < self::CONTACT_ITERATIONS; $iteration++)
+		foreach($contacts as &$contact)
+		{
+			$a = $contact['a'];
+			$b = $contact['b'];
+			$nx = $contact['nx'];
+			$ny = $contact['ny'];
+			$relative = ($b->vx - $a->vx) * $nx + ($b->vy - $a->vy) * $ny;
+			$nextImpulse = max(0, $contact['impulse'] + ($contact['target'] - $relative) / 2);
+			$impulse = $nextImpulse - $contact['impulse'];
+			$contact['impulse'] = $nextImpulse;
+
+			$a->vx -= $impulse * $nx;
+			$a->vy -= $impulse * $ny;
+			$b->vx += $impulse * $nx;
+			$b->vy += $impulse * $ny;
+		}
+		unset($contact);
+
+		$impactStrength = 0.0;
+
+		foreach($contacts as $contact) if($contact['impulse'] > 0)
+		{
+			$a = $contact['a'];
+			$b = $contact['b'];
+			$nx = $contact['nx'];
+			$ny = $contact['ny'];
+			$tx = -$ny;
+			$ty = $nx;
+			$slip = ($b->vx - $a->vx) * $tx + ($b->vy - $a->vy) * $ty
+				+ Ball::RADIUS * ($a->spinY + $b->spinY);
+			$tangentImpulse = max(-$contact['impulse'] * .06, min($contact['impulse'] * .06, -$slip / 7));
+			$a->vx -= $tangentImpulse * $tx;
+			$a->vy -= $tangentImpulse * $ty;
+			$b->vx += $tangentImpulse * $tx;
+			$b->vy += $tangentImpulse * $ty;
+			$spinChange = -2.5 * $tangentImpulse / Ball::RADIUS;
+			$a->spinY += $spinChange;
+			$b->spinY += $spinChange;
+			$impactStrength = max($impactStrength, abs($contact['initial']) / self::MAX_SPEED
+				, $contact['impulse'] / self::MAX_SPEED);
+		}
+
+		foreach($island as $contact)
 		{
 			$a = $contact['a'];
 			$b = $contact['b'];
@@ -551,6 +593,33 @@ final class Simulation
 		{
 			$ball->x = $collision['x'] + $nx * (Ball::RADIUS + 1e-8);
 			$ball->y = $collision['y'] + $ny * (Ball::RADIUS + 1e-8);
+		}
+
+		$this->events[] = ['type' => 'cushion','strength' => min(1, -$normalSpeed / self::MAX_SPEED)];
+	}
+
+	/** Resolve a ball against one of the same tangent pocket facings used by the renderer. */
+	private function resolveFacing(Ball $ball, array $collision): void
+	{
+		$nx = $collision['nx'];
+		$ny = $collision['ny'];
+		$normalSpeed = $ball->vx * $nx + $ball->vy * $ny;
+
+		if($normalSpeed >= 0) return;
+
+		$tangentX = $ball->vx - $normalSpeed * $nx;
+		$tangentY = $ball->vy - $normalSpeed * $ny;
+		$reflected = -$normalSpeed * self::CUSHION_RESTITUTION;
+		$ball->vx = $tangentX * .96 + $reflected * $nx;
+		$ball->vy = $tangentY * .96 + $reflected * $ny;
+		$ball->spinY *= .90;
+		$distance = ($ball->x - $collision['x']) * $nx + ($ball->y - $collision['y']) * $ny;
+
+		if($distance < Ball::RADIUS)
+		{
+			$correction = Ball::RADIUS - $distance + 1e-8;
+			$ball->x += $nx * $correction;
+			$ball->y += $ny * $correction;
 		}
 
 		$this->events[] = ['type' => 'cushion','strength' => min(1, -$normalSpeed / self::MAX_SPEED)];

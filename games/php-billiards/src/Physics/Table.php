@@ -10,23 +10,27 @@ final class Table
 	/** Midpoints of the WPA mouth ranges: 4 9/16 and 5 1/16 inches. */
 	public const CORNER_MOUTH = 0.1158875;
 	public const SIDE_MOUTH = 0.1285875;
-	/** Rounded corner bowl diameter is midway between the corner and side mouth widths. */
-	public const CORNER_BOWL_RADIUS = 0.06111875;
+	public const CUSHION_WIDTH = 0.055;
+	/** The reference uses one circular tabletop cut behind every dimensioned mouth. */
+	public const THROAT_RADIUS = self::CORNER_MOUTH / 2;
+	/** Analytic leather lip inset used by the renderer to hide full-table grid chords. */
+	public const POCKET_LIP_INSET = 0.0025;
+	public const LINER_RADIUS = self::THROAT_RADIUS - self::POCKET_LIP_INSET;
 	private const CORNER_JAW = 0.08194483710475602;
 
 	/** @return list<array{float,float}> */
 	public static function pockets(): array
 	{
-		$x = self::WIDTH / 2;
-		$y = self::HEIGHT / 2;
-		$mouthHalf = self::CORNER_MOUTH / 2;
-		$depth = $mouthHalf - sqrt(self::CORNER_BOWL_RADIUS ** 2 - $mouthHalf ** 2);
-		$inset = $depth * M_SQRT1_2;
-		$cornerX = $x - $inset;
-		$cornerY = $y - $inset;
+		static $pockets = null;
 
-		return [[-$cornerX,-$cornerY],[0,-$y],[$cornerX,-$cornerY]
-			,[-$cornerX,$cornerY],[0,$y],[$cornerX,$cornerY]];
+		if($pockets !== null) return $pockets;
+
+		$cornerX = self::WIDTH / 2 + self::CUSHION_WIDTH / 2;
+		$cornerY = self::HEIGHT / 2 + self::CUSHION_WIDTH / 2;
+		$sideY = self::HEIGHT / 2 + self::CUSHION_WIDTH;
+
+		return $pockets = [[-$cornerX,-$cornerY],[0,-$sideY],[$cornerX,-$cornerY]
+			,[-$cornerX,$cornerY],[0,$sideY],[$cornerX,$cornerY]];
 	}
 
 	/** Whether a rail face exists at the supplied along-rail coordinate. */
@@ -40,7 +44,7 @@ final class Table
 
 	public static function pocketRadius(int $index): float
 	{
-		return $index === 1 || $index === 4 ? self::SIDE_MOUTH / 2 : self::CORNER_BOWL_RADIUS;
+		return self::LINER_RADIUS;
 	}
 
 	/** Half of the measured jaw-to-jaw mouth, independent of the liner radius. */
@@ -59,21 +63,87 @@ final class Table
 		return [($x <=> 0.0) * M_SQRT1_2,($y <=> 0.0) * M_SQRT1_2];
 	}
 
+	/** @return array{float,float} Centre of the regulation jaw chord. */
+	public static function pocketMouthCenter(int $index): array
+	{
+		[$outwardX,$outwardY] = self::pocketOutward($index);
+
+		if($index === 1 || $index === 4)
+		return [0.0,$outwardY * self::HEIGHT / 2];
+
+		$cornerX = ($outwardX <=> 0.0) * self::WIDTH / 2;
+		$cornerY = ($outwardY <=> 0.0) * self::HEIGHT / 2;
+
+		return [$cornerX - $outwardX * self::CORNER_MOUTH / 2
+			, $cornerY - $outwardY * self::CORNER_MOUTH / 2];
+	}
+
+	/** @return array{array{float,float},array{float,float}} */
+	public static function pocketJaws(int $index): array
+	{
+		[$mouthX,$mouthY] = self::pocketMouthCenter($index);
+		[$outwardX,$outwardY] = self::pocketOutward($index);
+		$mouth = $index === 1 || $index === 4 ? self::SIDE_MOUTH : self::CORNER_MOUTH;
+		$lateralX = -$outwardY;
+		$lateralY = $outwardX;
+
+		return [[$mouthX - $lateralX * $mouth / 2,$mouthY - $lateralY * $mouth / 2]
+			, [$mouthX + $lateralX * $mouth / 2,$mouthY + $lateralY * $mouth / 2]];
+	}
+
+	/** Tangency from one jaw to the rendered round tabletop hole. @return array{float,float} */
+	private static function facingTangent(int $index, array $jaw): array
+	{
+		[$centerX,$centerY] = self::pockets()[$index];
+		[$mouthX,$mouthY] = self::pocketMouthCenter($index);
+		[$outwardX,$outwardY] = self::pocketOutward($index);
+		$dx = $jaw[0] - $centerX;
+		$dy = $jaw[1] - $centerY;
+		$base = atan2($dy, $dx);
+		$offset = acos(self::THROAT_RADIUS / hypot($dx, $dy));
+		$candidates = [];
+
+		foreach([$base - $offset,$base + $offset] as $angle)
+		{
+			$x = $centerX + cos($angle) * self::THROAT_RADIUS;
+			$y = $centerY + sin($angle) * self::THROAT_RADIUS;
+			$candidates[] = [$x,$y,($x - $mouthX) * $outwardX + ($y - $mouthY) * $outwardY];
+		}
+
+		return $candidates[0][2] >= $candidates[1][2]
+			? [$candidates[0][0],$candidates[0][1]] : [$candidates[1][0],$candidates[1][1]];
+	}
+
+	/** Render-matched rubber faces from every jaw to its round throat. @return list<array{float,float,float,float}> */
+	public static function facings(): array
+	{
+		static $facings = null;
+
+		if($facings !== null) return $facings;
+
+		$facings = [];
+
+		foreach(array_keys(self::pockets()) as $index)
+		foreach(self::pocketJaws($index) as $jaw)
+		{
+			[$x,$y] = self::facingTangent($index, $jaw);
+			$facings[] = [$jaw[0],$jaw[1],$x,$y];
+		}
+
+		return $facings;
+	}
+
 	/** Cushion-nose endpoints whose ball-radius offsets form the playable pocket jaws. */
 	public static function jaws(): array
 	{
-		$halfWidth = self::WIDTH / 2;
-		$halfHeight = self::HEIGHT / 2;
-		$side = self::SIDE_MOUTH / 2;
+		static $jaws = null;
+
+		if($jaws !== null) return $jaws;
+
 		$jaws = [];
 
-		foreach([-1,1] as $vertical)
-		foreach([-$halfWidth + self::CORNER_JAW,-$side,$side,$halfWidth - self::CORNER_JAW] as $x)
-		$jaws[] = [$x,$vertical * $halfHeight];
-
-		foreach([-1,1] as $horizontal)
-		foreach([-$halfHeight + self::CORNER_JAW,$halfHeight - self::CORNER_JAW] as $y)
-		$jaws[] = [$horizontal * $halfWidth,$y];
+		foreach(array_keys(self::pockets()) as $index)
+		foreach(self::pocketJaws($index) as $jaw) $jaws[] = $jaw;
 
 		return $jaws;
 	}
@@ -90,39 +160,17 @@ final class Table
 	public static function pocketEntry(float $x, float $y): ?array
 	{
 		$pockets = self::pockets();
-		$nearest = null;
-		$nearestDistance = INF;
 
 		foreach($pockets as $index => [$px,$py])
 		{
 			$distance = hypot($x - $px, $y - $py);
 
-			if($distance < $nearestDistance)
-			{
-				$nearestDistance = $distance;
-				$nearest = ['index' => $index,'x' => $px,'y' => $py];
-			}
-
-			[$outwardX,$outwardY] = self::pocketOutward($index);
-
-			$relativeX = $x - $px;
-			$relativeY = $y - $py;
-			$depth = $relativeX * $outwardX + $relativeY * $outwardY;
-			$lateral = abs(-$outwardY * $relativeX + $outwardX * $relativeY);
-			$clearance = self::pocketMouthHalf($index) - Ball::RADIUS;
-
-			// The centre must pass the cushion nose and fit through the throat. Merely
-			// overlapping the visible mouth leaves the ball on the shelf.
-			if($depth >= -Ball::RADIUS * .45 && $lateral <= $clearance)
+			// Crossing a jaw chord leaves the ball on the rendered cloth shelf. It
+			// enters liner physics only when its centre fits inside the circular lip.
+			if($distance <= self::pocketRadius($index) - Ball::RADIUS)
 			return ['index' => $index,'x' => $px,'y' => $py];
 		}
 
-		$edgeX = self::WIDTH / 2 - Ball::RADIUS;
-		$edgeY = self::HEIGHT / 2 - Ball::RADIUS;
-		$throughMouth = abs($x) >= $edgeX && !self::cushion('x', $y)
-			|| abs($y) >= $edgeY && !self::cushion('y', $x);
-
-		// Crossing a mouth starts liner physics; it does not imply that the ball sank.
-		return $throughMouth ? $nearest : null;
+		return null;
 	}
 }
