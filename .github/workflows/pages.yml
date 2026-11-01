@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
       - run: npm ci
       - run: npm test
       - run: npm run build
@@ -40,4 +43,3 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
-
