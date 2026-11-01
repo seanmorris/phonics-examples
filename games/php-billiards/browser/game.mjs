@@ -64,6 +64,13 @@ export function tableCsgProfiles(width,height)
 	};
 }
 
+/** roughness, index of refraction, material mode, clearcoat or sheen strength */
+export const billiardsMaterials = Object.freeze({
+	ball:Object.freeze([.03,1.56,1,.35])
+	, wood:Object.freeze([.5,1.52,2,1])
+	, felt:Object.freeze([.9,1.5,3,.85])
+});
+
 /** Direct browser shell and WebGL2 renderer for PHP Billiards. */
 export function activate({module, canvas, session})
 {
@@ -290,17 +297,36 @@ export function activate({module, canvas, session})
 			uniform vec4 uBase; uniform vec3 uEye; uniform vec4 uMaterial; uniform vec2 uAtlasCell;
 			uniform sampler2D uBallAtlas; uniform sampler2D uWood; out vec4 color;
 			float distribution(float nDotH,float rough){float a=rough*rough;float a2=a*a;float d=nDotH*nDotH*(a2-1.0)+1.0;return a2/(3.14159*d*d);}
-			void main(){vec3 base=uBase.rgb;float mode=uMaterial.z;
-			if(mode>0.5&&mode<1.5){vec2 uv=(uAtlasCell+vec2(vUv.x,1.0-vUv.y))/4.0;base=texture(uBallAtlas,uv).rgb;}
-			else if(mode>1.5&&mode<2.5)base*=texture(uWood,vUv*vec2(3.0,2.0)).rgb*1.45;
-			else if(mode>2.5){float weave=.94+.06*sin(vUv.x*900.0)*sin(vUv.y*700.0);base*=weave;}
-			vec3 N=normalize(vNormal),V=normalize(uEye-vPosition);vec3 L=normalize(vec3(-.45,2.8,-.7)-vPosition);vec3 H=normalize(L+V);
-			float nl=max(dot(N,L),0.0),nv=max(dot(N,V),.001),nh=max(dot(N,H),0.0),vh=max(dot(V,H),0.0);
-			float rough=max(.08,uMaterial.x),metal=uMaterial.y;vec3 f0=mix(vec3(.035),base,metal);
-			vec3 F=f0+(1.0-f0)*pow(1.0-vh,5.0);float D=distribution(nh,rough);float k=(rough+1.0)*(rough+1.0)/8.0;
-			float G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));vec3 spec=D*G*F/max(.01,4.0*nl*nv);
-			vec3 diffuse=(1.0-F)*(1.0-metal)*base/3.14159;float rim=pow(1.0-nv,3.0);
-			vec3 lit=base*.21+(diffuse+spec)*nl*3.7+base*rim*.11;color=vec4(lit,uBase.a);}`));
+			float random(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}
+			vec3 wood(vec3 p,vec3 n){vec3 blend=pow(abs(n),vec3(6.0));blend/=max(.001,blend.x+blend.y+blend.z);
+				vec3 x=texture(uWood,p.zy*vec2(2.7,7.1)).rgb,y=texture(uWood,p.xz*vec2(2.7,7.1)).rgb;
+				vec3 z=texture(uWood,p.xy*vec2(2.7,7.1)).rgb;return x*blend.x+y*blend.y+z*blend.z;}
+			vec3 fresnel(vec3 f0,float vDotH){return f0+(1.0-f0)*pow(1.0-vDotH,5.0);}
+			vec3 lightPbr(vec3 lightPosition,vec3 lightColor,float intensity,vec3 N,vec3 V,vec3 base,vec3 f0,float rough){
+				vec3 L=normalize(lightPosition-vPosition),H=normalize(L+V);float nl=max(dot(N,L),0.0),nv=max(dot(N,V),.001);
+				float nh=max(dot(N,H),0.0),vh=max(dot(V,H),0.0);vec3 F=fresnel(f0,vh);float D=distribution(nh,rough);
+				float k=(rough+1.0)*(rough+1.0)/8.0,G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));
+				vec3 spec=D*G*F/max(.01,4.0*nl*nv),diffuse=(1.0-F)*base/3.14159;return (diffuse+spec)*nl*lightColor*intensity;}
+			float coatSpec(vec3 lightPosition,vec3 N,vec3 V,float rough){vec3 L=normalize(lightPosition-vPosition),H=normalize(L+V);
+				float nl=max(dot(N,L),0.0),nv=max(dot(N,V),.001),nh=max(dot(N,H),0.0),vh=max(dot(V,H),0.0);
+				float F=.04+.96*pow(1.0-vh,5.0),D=distribution(nh,rough),k=(rough+1.0)*(rough+1.0)/8.0;
+				float G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));return D*G*F*nl/max(.01,4.0*nl*nv);}
+			void main(){vec3 N=normalize(vNormal),V=normalize(uEye-vPosition),base=uBase.rgb;float mode=uMaterial.z;
+				if(mode>0.5&&mode<1.5){vec2 uv=(uAtlasCell+vec2(vUv.x,1.0-vUv.y))/4.0;base=texture(uBallAtlas,uv).rgb;}
+				else if(mode>1.5&&mode<2.5)base*=wood(vPosition,N)*1.45;
+				else if(mode>2.5){float fiber=random(floor(vPosition*520.0)),weave=.995+.01*fiber;
+					float track=exp(-pow(abs(vPosition.z-.055*sin(vPosition.x*5.0))*18.0,2.0));base*=weave*(.985+.03*fiber);base=mix(base,base*1.045,track*.035);}
+				float rough=uMaterial.x;if(mode>0.5&&mode<1.5)rough=clamp(rough+(random(floor(vPosition*900.0))-.5)*.012,.01,.05);
+				float ior=uMaterial.y>1.0?uMaterial.y:1.5,f0Value=pow((ior-1.0)/(ior+1.0),2.0),nv=max(dot(N,V),.001);
+				vec3 f0=vec3(f0Value),key=vec3(-.45,2.8,-.7),fill=vec3(1.8,1.45,2.15);
+				vec3 lit=base*.14+lightPbr(key,vec3(1.0,.94,.82),3.7,N,V,base,f0,rough)
+					+lightPbr(fill,vec3(.58,.72,1.0),.58,N,V,base,f0,rough);
+				if(mode>0.5&&mode<1.5){lit+=base*.035*(1.0-max(dot(N,normalize(key-vPosition)),0.0));
+					lit+=vec3(coatSpec(key,N,V,.018)*3.7+coatSpec(fill,N,V,.028)*.58)*uMaterial.w;}
+				else if(mode>1.5&&mode<2.5)lit+=vec3(coatSpec(key,N,V,.11)*3.7+coatSpec(fill,N,V,.14)*.58)*uMaterial.w;
+				else if(mode>2.5)lit+=base*pow(1.0-nv,2.2)*uMaterial.w*.72;
+				else lit+=base*pow(1.0-nv,3.0)*.08;
+				color=vec4(lit,uBase.a);}`));
 		gl.linkProgram(result);
 
 		if(!gl.getProgramParameter(result, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(result));
@@ -540,21 +566,21 @@ export function activate({module, canvas, session})
 			for(const item of Object.values(tableMeshes??{})){gl.deleteVertexArray(item.vao);gl.deleteBuffer(item.buffer);gl.deleteBuffer(item.elements);}
 			tableMeshes=buildTableMeshes(tableWidth,tableHeight);tableMeshSize=[tableWidth,tableHeight];
 		}
-		draw(tableMeshes.apron,[0,0,0],[1,1,1],[0,0,0,1],[.45,.23,.095,1],[.28,0,2,0]);
-		draw(tableMeshes.bed,[0,0,0],[1,1,1],[0,0,0,1],[.055,.285,.18,1],[.76,0,3,0]);
-		draw(tableMeshes.wood,[0,0,0],[1,1,1],[0,0,0,1],[.38,.18,.07,1],[.3,0,2,0]);
-		draw(tableMeshes.cushion,[0,0,0],[1,1,1],[0,0,0,1],[.035,.17,.105,1],[.84,0,0,0]);
+		draw(tableMeshes.apron,[0,0,0],[1,1,1],[0,0,0,1],[.45,.23,.095,1],billiardsMaterials.wood);
+		draw(tableMeshes.bed,[0,0,0],[1,1,1],[0,0,0,1],[.055,.285,.18,1],billiardsMaterials.felt);
+		draw(tableMeshes.wood,[0,0,0],[1,1,1],[0,0,0,1],[.38,.18,.07,1],billiardsMaterials.wood);
+		draw(tableMeshes.cushion,[0,0,0],[1,1,1],[0,0,0,1],[.035,.17,.105,1],billiardsMaterials.felt);
 		for(const [x,z] of [[-tableWidth/2,-tableHeight/2],[0,-tableHeight/2],[tableWidth/2,-tableHeight/2],[-tableWidth/2,tableHeight/2],[0,tableHeight/2],[tableWidth/2,tableHeight/2]])
 			draw(disc,[x,.014,z],[.075,1,.075],[0,0,0,1],[.003,.004,.003,1],[.95,0,0,0]);
 		for(const ball of latest.balls)if(ball.active)
 			draw(disc,[ball.x,.012,ball.y],[radius*1.15,1,radius*.72],[0,0,0,1],[0,0,0,.25],[1,0,0,0]);
 		for(const ball of latest.balls)if(ball.active)
-			draw(sphere,[ball.x,radius+.012,ball.y],[radius,radius,radius],ball.rotation,colors[ball.number],[.18,0,1,0],[ball.number%4,Math.floor(ball.number/4)]);
+			draw(sphere,[ball.x,radius+.012,ball.y],[radius,radius,radius],ball.rotation,colors[ball.number],billiardsMaterials.ball,[ball.number%4,Math.floor(ball.number/4)]);
 		if(latest.phase==='aim')
 		{
 			const cue=latest.balls.find(ball=>ball.number===0&&ball.active),angle=latest.aim,dx=Math.cos(angle),dz=Math.sin(angle);
 			if(cue){const pose=cuePose(cue.x,cue.y,angle,tableWidth,tableHeight,radius),guideRotation=[0,-Math.sin(angle/2),0,Math.cos(angle/2)];
-				draw(cube,pose.position,pose.scale,pose.rotation,[.75,.57,.31,1],[.42,0,2,0]);
+				draw(cube,pose.position,pose.scale,pose.rotation,[.75,.57,.31,1],billiardsMaterials.wood);
 				draw(cube,[cue.x+dx*.38,.017,cue.y+dz*.38],[.66,.003,.006],guideRotation,[.94,.76,.26,.72],[.6,0,0,0]);}
 		}
 	}
