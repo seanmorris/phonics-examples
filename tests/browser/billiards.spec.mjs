@@ -28,6 +28,20 @@ test('embed route contains only the game host and cleans up its runtime', async 
 	await expect(page.locator('.php-billiards-ui')).toHaveCount(0);
 });
 
+test('orbiting the camera does not rotate stationary balls', async ({page}) => {
+	await page.goto('/games/php-billiards/');
+	const canvas=page.locator('canvas');
+	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout:45_000});
+	const rotations=async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).balls.map(ball=>ball.rotation);
+	const before=await rotations(),box=await canvas.boundingBox();
+	await page.mouse.move(box.x+box.width*.45,box.y+box.height*.5);
+	await page.mouse.down();
+	await page.mouse.move(box.x+box.width*.7,box.y+box.height*.5,{steps:12});
+	await page.mouse.up();
+	await page.waitForTimeout(250);
+	assert.deepEqual(await rotations(),before);
+});
+
 test('a restored WebGL context restarts the direct application cleanly', async ({page}) => {
 	await page.goto('/games/php-billiards/');
 	await expect(page.locator('canvas')).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout: 45_000});

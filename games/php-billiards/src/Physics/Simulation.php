@@ -75,6 +75,8 @@ final class Simulation
 			$this->balls[] = new Ball($number, $x, $y);
 		}
 
+		foreach($this->balls as $ball) self::orientBall($ball);
+
 		$this->phase = 'aim';
 		$this->scratched = false;
 		$this->shots = 0;
@@ -88,6 +90,27 @@ final class Simulation
 		$hash = (($number + 11) * 48271 + ($axis + 3) * 69621 + 0x35a7bd) % 2147483647;
 
 		return (($hash % 2001) / 2000 - .5) * .00002;
+	}
+
+	/** Give every racked ball a stable independent orientation instead of a camera-visible uniform alignment. */
+	private static function orientBall(Ball $ball): void
+	{
+		$sample = static function(int $salt) use ($ball): float {
+			// Keep the largest intermediate (1008 * 2,000,003) inside signed 32-bit PHP.
+			$value = (($ball->number + 1) * 97 + ($salt + 1) * 193 + 17) % 1009;
+			$hash = ($value * 2000003) % 2147483629;
+
+			return ($hash + .5) / 2147483629;
+		};
+		$u1 = $sample(0);
+		$u2 = $sample(1) * M_PI * 2;
+		$u3 = $sample(2) * M_PI * 2;
+		$lower = sqrt(1 - $u1);
+		$upper = sqrt($u1);
+		$ball->qx = $lower * sin($u2);
+		$ball->qy = $lower * cos($u2);
+		$ball->qz = $upper * sin($u3);
+		$ball->qw = $upper * cos($u3);
 	}
 
 	public static function shotSpeed(float $power): float

@@ -58,6 +58,24 @@ $test('rack variation is imperceptible and deterministic', static function() use
 	$expect($left->hash() === $right->hash(), 'Rack noise changed between identical games');
 });
 
+$test('racked ball textures have deterministic independent orientations', static function() use ($expect): void {
+	$left = new Simulation;
+	$right = new Simulation;
+	$orientations = [];
+
+	foreach($left->balls as $index => $ball)
+	{
+		$length = sqrt($ball->qx ** 2 + $ball->qy ** 2 + $ball->qz ** 2 + $ball->qw ** 2);
+		$expect(abs($length - 1) < 1e-9, 'Initial ball orientation is not normalized');
+		$expect($ball->snapshot()['rotation'] === $right->balls[$index]->snapshot()['rotation'],
+			'Initial ball orientation changed between games');
+		$orientations[] = implode(',', array_map(static fn(float $value): string => sprintf('%.6f', $value),
+			[$ball->qx,$ball->qy,$ball->qz,$ball->qw]));
+	}
+
+	$expect(count(array_unique($orientations)) === 16, 'Racked ball textures share one orientation');
+});
+
 $test('shot power preserves touch shots and reaches break speed', static function() use ($expect): void {
 	$expect(abs(Simulation::shotSpeed(1) - 8.75) < 1e-12, 'Maximum power is not calibrated for a break');
 	$expect(Simulation::shotSpeed(.05) >= .5 && Simulation::shotSpeed(.05) < .51, 'Touch shot is too fast');
