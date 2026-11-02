@@ -34,14 +34,14 @@
     ]
   },
   "integrity": {
-    "application.php": "sha256-Fb4x8D0dtbzPyyLXmxBu5oqB6rC+bqXvZNy06NPFXoI=",
+    "application.php": "sha256-fjHLH8SCnwFuh+2JG1qR6/Ts2m/mAUUMgdv2Rp+NnMU=",
     "assets/generated/ball-atlas.rgba": "sha256-6ObHZBRdpgkboGCjmuv7xg32rgA7Kglnsy+72c+AGBg=",
     "assets/generated/textures.json": "sha256-BWrTkaL+ICWDaXs9oxHJpoxZhYltni5vIh4eZfh0KtE=",
     "assets/generated/wood.rgba": "sha256-99hb5OP7GSaEdImLeohPJz1VUwz1ngXBRRJFgteU780=",
     "autoload.php": "sha256-EmJY/5T4hGtkgHDoBwucyEMFN7n3N9BJCi2D0f7IKwE=",
-    "browser/game.mjs": "sha256-kaIBMyQM5o4EqjNet0DKva+KrRJyQ6D7KE6OzTUM2Es=",
+    "browser/game.mjs": "sha256-+OxqKM2NUkg0EFrH6vy+54hkrTUy6ubmySiNmNvtJkI=",
     "src/Physics/Ball.php": "sha256-6t/9hlWdFgkiSj+eQywt9WjshqMMQ9QzoiBqXbJDjlI=",
-    "src/Physics/Simulation.php": "sha256-nci3DhJwMF2uz/NCITvuX9RBl7oCZzDEj5cTogw2IZM=",
+    "src/Physics/Simulation.php": "sha256-hjBsRsGmEuKbspps3RtXjt5tc92QqQiYiErmJD2xqno=",
     "src/Physics/Table.php": "sha256-+Avlv3pKG1nd04z0g+g1w9+jX4G6AK+X8/D2TA+BoHw="
   }
 }

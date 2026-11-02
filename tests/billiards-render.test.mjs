@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {PNG} from 'pngjs';
-import {billiardsEdgeRadii, billiardsMaterials, billiardsRailSights, billiardsTableMeshing, cueAppearance, cueContactWarning, cueDyeMask, cuePlacementValid, cuePose, orbitYawDelta, pocketVoidRadius, reflectedGuideSegments, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer, tableRailSightDefinitions} from '../games/php-billiards/browser/game.mjs';
+import {billiardsEdgeRadii, billiardsMaterials, billiardsRailSights, billiardsTableMeshing, cueAppearance, cueContactWarning, cueDyeMask, cuePlacementValid, cuePose, cueWoodGrain, guidePathSegments, orbitYawDelta, pocketVoidRadius, roundedExtrusionSdf, roundedFilletNormal, tableCsgProfiles, tablePocketDefinitions, tablePointFromPointer, tableRailSightDefinitions} from '../games/php-billiards/browser/game.mjs';
 
 const width = 2.54, height = 1.27, radius = .028575;
 
@@ -72,32 +72,27 @@ test('cue dye forms one dark butt with joined points facing the tip', () => {
 	assert.equal(cueDyeMask(patternBase+patternLength+.001,0),0,'Dye extends beyond the forward point tips');
 });
 
+test('cue wood maps its long grain axis along the shaft', () => {
+	assert.ok(cueWoodGrain.axialRepeats>cueWoodGrain.aroundRepeats*4,
+		'Wood grain repeats more rapidly around the cue than along it');
+	const source=fs.readFileSync(new URL('../games/php-billiards/art/svg/wood.svg',import.meta.url),'utf8');
+	assert.match(source,/baseFrequency="\.015625 \.125"/,
+		'Wood texture no longer has its low-frequency grain axis on texture X');
+});
+
 test('horizontal orbit direction reverses below the on-screen target', () => {
 	assert.equal(orbitYawDelta(20,40,50),-.12);
 	assert.equal(orbitYawDelta(20,60,50),.12);
 });
 
-test('aiming guide reflects at cushions and remains inside the playing limits', () => {
-	const limitX=width/2-radius,limitZ=height/2-radius;
-	const straight=reflectedGuideSegments(0,0,0,width,height,radius);
-	assert.equal(straight.length,1);
-	assert.deepEqual(straight[0].start,[.05,0]);
-	assert.ok(Math.abs(straight[0].length-.66)<1e-12);
-
-	const reflected=reflectedGuideSegments(limitX-.09,0,0,width,height,radius);
-	assert.equal(reflected.length,2);
-	assert.ok(Math.abs(reflected[0].end[0]-limitX)<1e-12);
-	assert.deepEqual(reflected[1].direction,[-1,0]);
-	assert.ok(Math.abs(reflected.reduce((sum,segment)=>sum+segment.length,0)-.66)<1e-12);
-	for(const segment of reflected)for(const point of [segment.start,segment.end])
-	{
-		assert.ok(Math.abs(point[0])<=limitX+1e-12);
-		assert.ok(Math.abs(point[1])<=limitZ+1e-12);
-	}
-
-	const corner=reflectedGuideSegments(limitX-.02,limitZ-.02,Math.PI/4,width,height,radius,.3,0);
-	assert.equal(corner.length,2);
-	assert.ok(corner[1].direction[0]<0&&corner[1].direction[1]<0,'Corner contact did not reflect both axes');
+test('simulation guide points become finite drawable segments', () => {
+	const segments=guidePathSegments([[.05,0],[.2,0],[.2,.25],[.2,.25],[NaN,.3]]);
+	assert.equal(segments.length,2);
+	assert.deepEqual(segments[0].start,[.05,0]);
+	assert.deepEqual(segments[0].end,[.2,0]);
+	assert.ok(Math.abs(segments[0].length-.15)<1e-12);
+	assert.deepEqual(segments[0].direction,[1,0]);
+	assert.deepEqual(segments[1],{start:[.2,0],end:[.2,.25],length:.25,direction:[0,1]});
 });
 
 test('scratch pointer projection and placement preview follow the simulation rules', () => {

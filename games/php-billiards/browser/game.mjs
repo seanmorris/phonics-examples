@@ -9,6 +9,7 @@ export const cueAppearance = Object.freeze({
 	, patternBase:.34
 	, patternLength:.15
 });
+export const cueWoodGrain = Object.freeze({axialRepeats:2.8,aroundRepeats:.5});
 
 /** Continuous dyed butt with equal, forward-pointing triangular extensions. */
 export function cueDyeMask(axial,around)
@@ -84,38 +85,19 @@ export function cuePose(cueX, cueY, angle, tableWidth, tableHeight, ballRadius)
 	};
 }
 
-/** Keep the aiming guide on the cloth by reflecting its ray at cushion limits. */
-export function reflectedGuideSegments(x,z,angle,width,height,ballRadius,totalLength=.71,startOffset=.05)
+/** Convert a simulation-projected centre path into drawable guide segments. */
+export function guidePathSegments(points=[])
 {
-	const limitX=width/2-ballRadius,limitZ=height/2-ballRadius,epsilon=1e-9,raw=[];
-	let point=[Math.max(-limitX,Math.min(limitX,x)),Math.max(-limitZ,Math.min(limitZ,z))];
-	let direction=[Math.cos(angle),Math.sin(angle)],remaining=totalLength;
-
-	for(let bounce=0;bounce<5&&remaining>epsilon;bounce++)
+	const segments=[];
+	for(let index=1;index<points.length;index++)
 	{
-		const distanceX=Math.abs(direction[0])<epsilon?Infinity:
-			((direction[0]>0?limitX:-limitX)-point[0])/direction[0];
-		const distanceZ=Math.abs(direction[1])<epsilon?Infinity:
-			((direction[1]>0?limitZ:-limitZ)-point[1])/direction[1];
-		const contactDistance=Math.max(0,Math.min(distanceX,distanceZ));
-		const length=Math.min(remaining,contactDistance),end=[point[0]+direction[0]*length,point[1]+direction[1]*length];
-
-		if(length>epsilon)raw.push({start:point,end,length,direction:[...direction]});
-		remaining-=length;
-		if(remaining<=epsilon||contactDistance===Infinity)break;
-
-		if(Math.abs(distanceX-contactDistance)<epsilon)direction[0]*=-1;
-		if(Math.abs(distanceZ-contactDistance)<epsilon)direction[1]*=-1;
-		point=[Math.max(-limitX,Math.min(limitX,end[0])),Math.max(-limitZ,Math.min(limitZ,end[1]))];
+		const start=points[index-1],end=points[index];
+		if(!Array.isArray(start)||!Array.isArray(end))continue;
+		const dx=end[0]-start[0],dz=end[1]-start[1],length=Math.hypot(dx,dz);
+		if(length>1e-8&&[...start,...end,length].every(Number.isFinite))
+		segments.push({start,end,length,direction:[dx/length,dz/length]});
 	}
-
-	let skip=Math.max(0,startOffset);
-	return raw.flatMap(segment=>{
-		if(skip>=segment.length-epsilon){skip-=segment.length;return [];}
-		const start=[segment.start[0]+segment.direction[0]*skip,segment.start[1]+segment.direction[1]*skip];
-		const length=segment.length-skip;skip=0;
-		return [{start,end:segment.end,length,direction:segment.direction}];
-	});
+	return segments;
 }
 
 const roundedRectangleSdf = (x,z,halfX,halfZ,radius) => {
@@ -634,6 +616,7 @@ export function activate({module, canvas, session})
 			vec3 wood(vec3 p,vec3 n){vec3 blend=pow(abs(n),vec3(6.0));blend/=max(.001,blend.x+blend.y+blend.z);
 				vec3 x=texture(uWood,p.zy*vec2(2.7,7.1)).rgb,y=texture(uWood,p.xz*vec2(2.7,7.1)).rgb;
 				vec3 z=texture(uWood,p.xy*vec2(2.7,7.1)).rgb;return x*blend.x+y*blend.y+z*blend.z;}
+			vec3 cueWood(vec2 uv){return texture(uWood,vec2(uv.x*${cueWoodGrain.axialRepeats.toFixed(1)},uv.y*${cueWoodGrain.aroundRepeats.toFixed(1)})).rgb;}
 			float sightDisc(vec2 point,vec2 centre){float distanceToCentre=length(point-centre),edge=max(fwidth(distanceToCentre),.00018);
 				return 1.0-smoothstep(.006-edge,.006+edge,distanceToCentre);}
 			float railSightMask(vec2 point){float result=0.0,offset=.0936625;
@@ -664,7 +647,7 @@ export function activate({module, canvas, session})
 				if(mode>0.5&&mode<1.5){vec2 pad=vec2(4.0)/vec2(textureSize(uBallAtlas,0));
 					// Raw atlas rows run opposite WebGL's vertical axis; longitude must stay unchanged to preserve numeral chirality.
 					vec2 uv=mix(uAtlasCell/4.0+pad,(uAtlasCell+1.0)/4.0-pad,vec2(vUv.x,1.0-vUv.y));base=texture(uBallAtlas,uv).rgb;}
-				else if((mode>1.5&&mode<2.5)||mode>5.5){base*=wood(vPosition,N)*1.45;
+				else if((mode>1.5&&mode<2.5)||mode>5.5){base*=(mode>5.5?cueWood(vUv):wood(vPosition,N))*1.45;
 					if(mode<2.5){float sight=railSightMask(vPosition.xz)*smoothstep(.78,.96,N.y)*step(.08,vPosition.y);
 						float pearl=noise3(vPosition*190.0+vec3(4.3,8.1,2.6));vec3 ivory=vec3(.72,.68,.52)+vec3(.12,.13,.15)*pearl;
 						base=mix(base,ivory,sight);}
@@ -1282,7 +1265,7 @@ export function activate({module, canvas, session})
 					,pose.rotation,[.72,.31,.12,1],[.2,1.5,5,0]);
 				draw(cueTrim,segmentPosition(0,chalkTipLength),[chalkTipLength,shaftDiameter,shaftDiameter]
 					,pose.rotation,[.08,.28,.52,1],[.82,1.5,0,0]);
-				for(const guide of reflectedGuideSegments(cue.x,cue.y,angle,tableWidth,tableHeight,radius))
+				for(const guide of guidePathSegments(latest.guide))
 				{
 					const guideAngle=Math.atan2(guide.direction[1],guide.direction[0]);
 					const guideRotation=[0,-Math.sin(guideAngle/2),0,Math.cos(guideAngle/2)];

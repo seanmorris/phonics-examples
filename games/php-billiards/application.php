@@ -33,10 +33,13 @@ $aim = 0.0;
 $power = .58;
 $top = 0.0;
 $side = 0.0;
+$guideKey = null;
+$guide = [];
 
 $frame = null;
 $frame = static function(float $now) use (
 	$game, $window, &$frame, &$last, &$accumulator, &$raf, &$running, &$aim, &$power, &$top, &$side
+	, &$guideKey, &$guide
 ): void {
 	if(!$running) return;
 
@@ -68,11 +71,21 @@ $frame = static function(float $now) use (
 
 	if($steps > 6) $accumulator = 0;
 
+	$currentGuideKey = $game->phase === 'aim'
+		? $game->hash() . ':' . sprintf('%.9f:%.6f:%.6f:%.6f', $aim, $power, $top, $side)
+		: null;
+	if($currentGuideKey !== $guideKey)
+	{
+		$guideKey = $currentGuideKey;
+		$guide = $currentGuideKey === null ? [] : $game->projectPath($aim, $power, $top, $side);
+	}
+
 	$state = $game->state($accumulator / Simulation::STEP) + [
 		'aim' => $aim
 		, 'power' => $power
 		, 'top' => $top
 		, 'side' => $side
+		, 'guide' => $guide
 		, 'events' => $game->consumeEvents()
 	];
 

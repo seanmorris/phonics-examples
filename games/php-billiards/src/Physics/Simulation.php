@@ -31,6 +31,9 @@ final class Simulation
 	private array $events = [];
 	/** @var array<string,mixed>|null */
 	private ?array $shotSnapshot = null;
+	/** @var list<array{float,float}>|null Exact cue contacts captured by a simulation-backed aim preview. */
+	private ?array $projectionPoints = null;
+	private bool $projectionStop = false;
 
 	public function __construct()
 	{
@@ -155,6 +158,54 @@ final class Simulation
 		return true;
 	}
 
+	/**
+	 * Predict the visible cue-ball centre path with the same collision solver used
+	 * by a real shot. The source simulation is never mutated.
+	 *
+	 * @return list<array{float,float}>
+	 */
+	public function projectPath(
+		float $angle, float $power = .58, float $top = 0, float $side = 0
+		, float $length = .71, float $startOffset = .05
+	): array {
+		if($this->phase !== 'aim' || $this->moving() || !$this->cue()->active
+			|| !is_finite($angle) || $length <= 0 || !is_finite($length)) return [];
+
+		$preview = new self;
+		$preview->restoreSnapshot($this->snapshot());
+		$preview->events = [];
+		$preview->shotSnapshot = null;
+
+		if(!$preview->shoot($angle, $power, $top, $side)) return [];
+
+		$cue = $preview->cue();
+		$preview->events = [];
+		$preview->projectionPoints = [[$cue->x,$cue->y]];
+		$preview->projectionStop = false;
+		$travel = 0.0;
+		$iterations = 0;
+
+		while(!$preview->projectionStop && $preview->moving() && $cue->active && $cue->pocket === null
+			&& $travel < $length && $iterations++ < 2400)
+		{
+			$before = count($preview->projectionPoints);
+			$preview->substep(1 / 240);
+			$preview->appendProjectionPoint($cue->x, $cue->y);
+
+			for($index = max(1, $before); $index < count($preview->projectionPoints); $index++)
+			{
+				[$x1,$y1] = $preview->projectionPoints[$index - 1];
+				[$x2,$y2] = $preview->projectionPoints[$index];
+				$travel += hypot($x2 - $x1, $y2 - $y1);
+			}
+		}
+
+		$path = self::clipPath($preview->projectionPoints, $length);
+		$path = self::trimPathStart($path, max(0, $startOffset));
+
+		return self::simplifyPath($path, .00005);
+	}
+
 	/** Advance one display-rate tick through four 240 Hz integration slices. */
 	public function step(float $seconds = self::STEP): void
 	{
@@ -184,12 +235,25 @@ final class Simulation
 
 			if(!$collision) break;
 
+			$cueCollision = $this->projectionPoints !== null && $this->collisionTouchesCue($collision);
+			if($cueCollision)
+			{
+				$cue = $this->cue();
+				$this->appendProjectionPoint($cue->x, $cue->y);
+			}
+
 			if($collision['type'] === 'ball') $this->resolveContactIsland($collision['a'], $collision['b']);
 			elseif($collision['type'] === 'pocket') $this->enterPocket($collision['ball'], $collision['index']);
 			elseif($collision['type'] === 'backstop') $this->resolvePocketBackstop($collision['ball'], $collision);
 			elseif($collision['type'] === 'jaw') $this->resolveJaw($collision['ball'], $collision);
 			elseif($collision['type'] === 'facing') $this->resolveFacing($collision['ball'], $collision);
 			else $this->resolveCushion($collision['ball'], $collision['axis']);
+
+			if($cueCollision && ($collision['type'] === 'ball' || $collision['type'] === 'pocket'))
+			{
+				$this->projectionStop = true;
+				return;
+			}
 
 			if($advance < 1e-8) $remaining = max(0, $remaining - 1e-7);
 		}
@@ -209,6 +273,111 @@ final class Simulation
 
 			$this->applyCloth($ball, $seconds);
 		}
+	}
+
+	/** @param array<string,mixed> $collision */
+	private function collisionTouchesCue(array $collision): bool
+	{
+		if($collision['type'] === 'ball')
+		return $collision['a']->number === 0 || $collision['b']->number === 0;
+
+		return isset($collision['ball']) && $collision['ball']->number === 0;
+	}
+
+	private function appendProjectionPoint(float $x, float $y): void
+	{
+		if($this->projectionPoints === null || !is_finite($x) || !is_finite($y)) return;
+
+		$last = $this->projectionPoints[array_key_last($this->projectionPoints)];
+		if(hypot($x - $last[0], $y - $last[1]) > 1e-10) $this->projectionPoints[] = [$x,$y];
+	}
+
+	/** @param list<array{float,float}> $points @return list<array{float,float}> */
+	private static function clipPath(array $points, float $length): array
+	{
+		if(count($points) < 2 || $length <= 0) return [];
+
+		$result = [$points[0]];
+		$remaining = $length;
+
+		for($index = 1; $index < count($points) && $remaining > 1e-12; $index++)
+		{
+			[$x1,$y1] = $points[$index - 1];
+			[$x2,$y2] = $points[$index];
+			$segment = hypot($x2 - $x1, $y2 - $y1);
+			if($segment <= 1e-12) continue;
+
+			if($segment <= $remaining + 1e-12)
+			{
+				$result[] = [$x2,$y2];
+				$remaining -= $segment;
+				continue;
+			}
+
+			$amount = $remaining / $segment;
+			$result[] = [$x1 + ($x2 - $x1) * $amount,$y1 + ($y2 - $y1) * $amount];
+			$remaining = 0;
+		}
+
+		return $result;
+	}
+
+	/** @param list<array{float,float}> $points @return list<array{float,float}> */
+	private static function trimPathStart(array $points, float $skip): array
+	{
+		if(count($points) < 2 || $skip <= 0) return $points;
+
+		for($index = 1; $index < count($points); $index++)
+		{
+			[$x1,$y1] = $points[$index - 1];
+			[$x2,$y2] = $points[$index];
+			$segment = hypot($x2 - $x1, $y2 - $y1);
+			if($segment <= 1e-12) continue;
+
+			if($skip >= $segment - 1e-12)
+			{
+				$skip -= $segment;
+				continue;
+			}
+
+			$amount = $skip / $segment;
+
+			return array_merge([[$x1 + ($x2 - $x1) * $amount,$y1 + ($y2 - $y1) * $amount]]
+				, array_slice($points, $index));
+		}
+
+		return [];
+	}
+
+	/** @param list<array{float,float}> $points @return list<array{float,float}> */
+	private static function simplifyPath(array $points, float $tolerance): array
+	{
+		if(count($points) <= 2) return $points;
+
+		$first = $points[0];
+		$last = $points[array_key_last($points)];
+		$dx = $last[0] - $first[0];
+		$dy = $last[1] - $first[1];
+		$denominator = hypot($dx, $dy);
+		$furthest = 0.0;
+		$split = 0;
+
+		for($index = 1; $index < count($points) - 1; $index++)
+		{
+			$distance = $denominator < 1e-12
+				? hypot($points[$index][0] - $first[0], $points[$index][1] - $first[1])
+				: abs($dy * $points[$index][0] - $dx * $points[$index][1]
+					+ $last[0] * $first[1] - $last[1] * $first[0]) / $denominator;
+
+			if($distance > $furthest) [$furthest,$split] = [$distance,$index];
+		}
+
+		if($furthest <= $tolerance) return [$first,$last];
+
+		$left = self::simplifyPath(array_slice($points, 0, $split + 1), $tolerance);
+		$right = self::simplifyPath(array_slice($points, $split), $tolerance);
+
+		return array_merge(array_slice($left, 0, -1), $right);
 	}
 
 	/** Transfer a ball to its liner at the exact swept crossing of the circular clearance. */

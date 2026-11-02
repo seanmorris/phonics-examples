@@ -23,6 +23,12 @@ $energy = static function(Simulation $game): float {
 
 	return $total;
 };
+$isolateCue = static function(Simulation $game): Ball {
+	foreach($game->balls as $ball) $ball->active = $ball->number === 0;
+	$game->consumeEvents();
+
+	return $game->cue();
+};
 
 $test('standard rack is complete and separated', static function() use ($expect): void {
 	$game = new Simulation;
@@ -82,6 +88,154 @@ $test('shot power preserves touch shots and reaches break speed', static functio
 	$expect(Simulation::shotSpeed(.58) > 2.5 && Simulation::shotSpeed(.58) < 2.6,
 		'Mid-power shot changed normal play speed');
 	$expect(Simulation::shotSpeed(.8) > Simulation::shotSpeed(.58), 'Power curve is not monotonic');
+});
+
+$test('aim projection uses cushion damping and leaves its source untouched', static function() use ($expect,$isolateCue): void {
+	$game = new Simulation;
+	$cue = $isolateCue($game);
+	$limit = Table::WIDTH / 2 - Ball::RADIUS;
+	$cue->x = $cue->previousX = $limit - .12;
+	$cue->y = $cue->previousY = .12;
+	$before = $game->hash();
+	$angle = .35;
+	$path = $game->projectPath($angle, .8);
+	$contact = null;
+
+	foreach($path as $index => $point)
+	if(abs($point[0] - $limit) < 1e-7) {$contact = $index; break;}
+
+	$expect($game->hash() === $before, 'Computing the guide mutated the live game');
+	$expect($contact !== null && $contact > 0 && $contact < count($path) - 1,
+		'Projection did not preserve the exact cushion contact');
+	$incoming = abs(($path[$contact][1] - $path[$contact - 1][1])
+		/ ($path[$contact][0] - $path[$contact - 1][0]));
+	$outgoing = abs(($path[$contact + 1][1] - $path[$contact][1])
+		/ ($path[$contact + 1][0] - $path[$contact][0]));
+	$expect(abs($outgoing - $incoming * .96 / .78) < .002,
+		'Projection still uses equal-angle reflection instead of cushion damping');
+});
+
+$test('aim projection enters all six pocket openings instead of reflecting from missing rails', static function() use ($expect,$isolateCue): void {
+	foreach(array_keys(Table::pockets()) as $index)
+	{
+		$game = new Simulation;
+		$cue = $isolateCue($game);
+		[$mouthX,$mouthY] = Table::pocketMouthCenter($index);
+		[$outwardX,$outwardY] = Table::pocketOutward($index);
+		$cue->x = $cue->previousX = $mouthX - $outwardX * .35;
+		$cue->y = $cue->previousY = $mouthY - $outwardY * .35;
+		$path = $game->projectPath(atan2($outwardY, $outwardX), 1);
+		$expect(count($path) === 2, "Pocket $index projection reflected before its opening");
+		[$lastX,$lastY] = $path[array_key_last($path)];
+		[$pocketX,$pocketY] = Table::pockets()[$index];
+		$clearance = Table::pocketRadius($index) - Ball::RADIUS;
+		$expect(abs(hypot($lastX - $pocketX, $lastY - $pocketY) - $clearance) < 1e-8,
+			"Pocket $index guide did not end at the physical liner entry");
+	}
+});
+
+$test('aim projection stops at the first object-ball contact', static function() use ($expect,$isolateCue): void {
+	$game = new Simulation;
+	$cue = $isolateCue($game);
+	$target = $game->balls[1];
+	$cue->x = $cue->previousX = 0;
+	$cue->y = $cue->previousY = 0;
+	$target->active = true;
+	$target->x = $target->previousX = .25;
+	$target->y = $target->previousY = 0;
+	$path = $game->projectPath(0, 1);
+	[$lastX,$lastY] = $path[array_key_last($path)];
+
+	$expect(abs($lastX - (.25 - Ball::RADIUS * 2)) < 1e-8 && abs($lastY) < 1e-10,
+		'Guide passed through the first object ball');
+});
+
+$test('aim projection follows rounded side-pocket jaws', static function() use ($expect,$isolateCue): void {
+	$game = new Simulation;
+	$cue = $isolateCue($game);
+	$cue->x = $cue->previousX = 0;
+	$cue->y = $cue->previousY = 0;
+	$path = $game->projectPath(deg2rad(86), .8, 0, 0, 1, 0);
+	$rectangularLimit = Table::HEIGHT / 2 - Ball::RADIUS;
+
+	$expect(count($path) >= 4, 'Jaw glance was flattened into one rectangular reflection');
+	$expect(abs($path[1][1] - $rectangularLimit) > .005,
+		'Jaw contact was projected on the rectangular cushion plane');
+	$expect($path[2][0] < $path[1][0], 'Rounded jaw did not redirect the cue ball across the pocket mouth');
+});
+
+$test('projected vertices stay on the independently executed path at edge cases', static function() use ($expect,$isolateCue): void {
+	$distanceToSegment = static function(array $point, array $start, array $end): float {
+		$dx = $end[0] - $start[0];
+		$dy = $end[1] - $start[1];
+		$lengthSquared = $dx ** 2 + $dy ** 2;
+		if($lengthSquared < 1e-18) return hypot($point[0] - $start[0], $point[1] - $start[1]);
+		$amount = max(0, min(1, (($point[0] - $start[0]) * $dx + ($point[1] - $start[1]) * $dy) / $lengthSquared));
+
+		return hypot($point[0] - $start[0] - $dx * $amount, $point[1] - $start[1] - $dy * $amount);
+	};
+	$cases = [
+		'rail' => [static function(Simulation $game) use ($isolateCue): void {
+			$cue = $isolateCue($game);
+			$cue->x = $cue->previousX = Table::WIDTH / 2 - Ball::RADIUS - .12;
+			$cue->y = $cue->previousY = .12;
+		}, .35, .8, .71]
+		, 'jaw' => [static function(Simulation $game) use ($isolateCue): void {
+			$cue = $isolateCue($game);
+			$cue->x = $cue->previousX = 0;
+			$cue->y = $cue->previousY = 0;
+		}, deg2rad(86), .8, 1.0]
+		, 'pocket' => [static function(Simulation $game) use ($isolateCue): void {
+			$cue = $isolateCue($game);
+			$cue->x = $cue->previousX = 0;
+			$cue->y = $cue->previousY = 0;
+		}, M_PI / 2, .8, .71]
+		, 'object ball' => [static function(Simulation $game) use ($isolateCue): void {
+			$cue = $isolateCue($game);
+			$cue->x = $cue->previousX = 0;
+			$cue->y = $cue->previousY = 0;
+			$target = $game->balls[1];
+			$target->active = true;
+			$target->x = $target->previousX = .25;
+			$target->y = $target->previousY = 0;
+		}, 0.0, .8, .71]
+	];
+
+	foreach($cases as $name => [$setup,$angle,$power,$length])
+	{
+		$projectedGame = new Simulation;
+		$executedGame = new Simulation;
+		$setup($projectedGame);
+		$setup($executedGame);
+		$projection = $projectedGame->projectPath($angle, $power, 0, 0, $length);
+		$expect($executedGame->shoot($angle, $power), "$name shot was rejected");
+		$cue = $executedGame->cue();
+		$trace = [[$cue->x,$cue->y]];
+		$travel = 0.0;
+
+		for($step = 0; $step < 5000 && $travel < $length + .03; $step++)
+		{
+			$before = [$cue->x,$cue->y];
+			$executedGame->step(Simulation::STEP / 16);
+			$after = [$cue->x,$cue->y];
+			$travel += hypot($after[0] - $before[0], $after[1] - $before[1]);
+			$trace[] = $after;
+			$stop = false;
+
+			foreach($executedGame->consumeEvents() as $event)
+			if($event['type'] === 'impact' || $event['type'] === 'pocket-enter') $stop = true;
+
+			if($stop) break;
+		}
+
+		foreach($projection as $vertex)
+		{
+			$distance = INF;
+			for($index = 1; $index < count($trace); $index++)
+			$distance = min($distance, $distanceToSegment($vertex, $trace[$index - 1], $trace[$index]));
+			$expect($distance < .0025, "$name projection diverged " . round($distance * 1000, 3) . ' mm from its shot');
+		}
+	}
 });
 
 $test('rack contacts are independent of ball storage order', static function() use ($expect): void {
