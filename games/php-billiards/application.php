@@ -62,8 +62,7 @@ $engine->input->bindButton(20, [SDLK_LSHIFT,SDLK_RSHIFT]);
 $engine->input->bindGamepad(20, [SDL_CONTROLLER_BUTTON_LEFTSTICK]);
 $engine->input->bindButton(21, [SDLK_SLASH]);
 $engine->input->bindButton(22, [SDLK_h]);
-$game = new Game;
-$ecs = new BilliardsEntities($engine->entities, $game);
+$ecs = new BilliardsEntities($engine->entities, new Game);
 $scene = new Scene(__DIR__);
 $hud = new Hud(__DIR__);
 $width = 1280;
@@ -81,7 +80,9 @@ $engine->systems->add('php-billiards.simulation', static function(Registry $enti
 	if($animated || $game->stroking() || $game->simulation->moving()) $frameDirty = true;
 });
 
-$engine->setInputHandler(static function(Engine $engine, float $elapsed) use ($game, $ecs, $hud, &$width, &$height, &$dpr, &$frameDirty): bool {
+$engine->setInputHandler(static function(Engine $engine, float $elapsed) use ($ecs, $hud, &$width, &$height, &$dpr, &$frameDirty): bool {
+	$game = $ecs->game($engine->entities);
+
 	try
 	{
 		$viewport = json_decode((string)(vrzno_env('billiardsViewport'))(), true, flags: JSON_THROW_ON_ERROR);
@@ -141,8 +142,10 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use ($g
 
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$game, $scene, $hud, $framePacer, &$width, &$height, &$dpr, &$lastFrame, &$frameDirty
+		$ecs, $scene, $hud, $framePacer, &$width, &$height, &$dpr, &$lastFrame, &$frameDirty
 	): void {
+		$game = $ecs->game($engine->entities);
+
 		if(!$frameDirty && $lastFrame !== null)
 		{
 			$framePacer->idle();
@@ -158,6 +161,7 @@ $engine->start(
 		if(!Game::finite($status))
 		{
 			$game->simulation->rack();
+			$ecs->reconcile($engine->entities, $game->simulation);
 			$status = $game->status(1);
 			$status['status'] = 'Recovered invalid simulation state';
 		}
