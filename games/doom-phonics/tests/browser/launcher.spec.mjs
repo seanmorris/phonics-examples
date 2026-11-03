@@ -318,7 +318,8 @@ test('launcher starts local game modes, recovers from invalid starts, and opens 
 	await expect(dialog).toBeHidden();
 	const lobby = page.locator('.phonics-lobby');
 	await expect(lobby).toBeVisible();
-	await expect(lobby.locator('.phonics-lobby-status')).toHaveText('available');
+	await expect(lobby.locator('.phonics-lobby-status')).toHaveAttribute('data-state', 'available');
+	await expect(lobby.locator('.phonics-lobby-status')).toHaveText('Connected');
 	await lobby.getByRole('button', {name: 'Game settings', exact: true}).click();
 	await expect(mode).toHaveValue('deathmatch');
 	await expect(skill).toHaveValue('4');
