@@ -18,6 +18,10 @@ final class Game
 	private const STROKE_BACKSWING = Simulation::STEP * 7;
 	private const STROKE_CONTACT = Simulation::STEP * 12;
 	private const STROKE_END = Simulation::STEP * 20;
+	/** Seconds an opponent may take over their shot before their cue starts looking the table over. */
+	private const CONSIDER_DELAY = 4.0;
+	/** Closest a practice stroke brings the tip to the cue ball, as a cue offset: 3 mm short of contact at -.008. */
+	private const PRACTICE_REACH = -.005;
 	/** Authoritative deterministic table simulation. */
 	public Simulation $simulation;
 	/** View camera used for rendering, picking, and player orbit controls. */
@@ -109,6 +113,12 @@ final class Game
 	private int $networkMessageId = 0;
 	/** @var array{time:float,previousTime:float,contacted:bool,aim:float,power:float,top:float,side:float,x:float,y:float}|null */
 	private ?array $stroke = null;
+	/** Session time from which the opponent has been free to shoot, or null when the move is not theirs. */
+	private ?float $waitingSince = null;
+	/** @var array{index:int,start:float,plan:array<string,mixed>}|null The opponent's current look at the table. */
+	private ?array $look = null;
+	/** @var array{aim:float,offset:float,look:int}|null Display-only cue pose while the opponent considers a shot. */
+	private ?array $consider = null;
 
 	public function __construct()
 	{
@@ -244,6 +254,7 @@ final class Game
 		}
 
 		$this->phaseTransition();
+		$this->considerShot();
 		$cue = $this->simulation->cue();
 		if($this->follow && $cue->active && $this->drag === null && $this->clock - $this->manualCamera > 1.5
 			&& in_array($this->simulation->phase, ['aim','placing'], true) && $this->stroke === null)
@@ -1194,6 +1205,133 @@ final class Game
 	public function stroking(): bool { return $this->stroke !== null; }
 
 	/**
+	 * Return the opponent's idle cue pose while this browser waits on their shot, or null.
+	 *
+	 * @return array{aim:float,offset:float,look:int}|null Cue angle, pull-back offset, and look number.
+	 */
+	public function considering(): ?array { return $this->consider; }
+
+	/**
+	 * Advance the opponent's idle cue once their move has kept this browser waiting.
+	 *
+	 * After CONSIDER_DELAY the cue looks the table over on its own: it backs off and swings to a candidate object
+	 * ball, settles with a slight sway, takes a few practice strokes that stop short of the cue ball, and pauses before
+	 * the next look. The pose is display-only. It never touches aim, the guide, or the deterministic simulation, and
+	 * the real action replaces it as soon as it arrives.
+	 */
+	private function considerShot(): void
+	{
+		$waiting = $this->match !== null && $this->match->outcome === null && $this->match->actor !== $this->localPlayer
+			&& $this->roomConfirmed && $this->activeSequence === null && $this->stroke === null
+			&& $this->simulation->phase === 'aim' && $this->simulation->cue()->active;
+		$this->waitingSince = $waiting ? ($this->waitingSince ?? $this->clock) : null;
+		$time = $waiting ? $this->clock - $this->waitingSince - self::CONSIDER_DELAY : -1.0;
+		if($time < 0)
+		{
+			$this->look = null;
+			$this->consider = null;
+			return;
+		}
+
+		$this->look ??= ['index' => 0,'start' => 0.0,'plan' => $this->planLook(0, $this->aim)];
+		while($time >= $this->look['start'] + $this->look['plan']['duration'])
+		$this->look = [
+			'index' => $this->look['index'] + 1
+			, 'start' => $this->look['start'] + $this->look['plan']['duration']
+			, 'plan' => $this->planLook($this->look['index'] + 1, $this->look['plan']['to'])
+		];
+
+		$plan = $this->look['plan'];
+		$time -= $this->look['start'];
+		$ease = static fn(float $amount): float => $amount * $amount * (3 - 2 * $amount);
+		$turn = self::wrapAngle($plan['to'] - $plan['from']);
+		if($time < $plan['turn'])
+		{
+			// Walking round to the next angle: the cue backs off the ball while it swings.
+			$amount = $time / $plan['turn'];
+			$this->consider = [
+				'aim' => self::wrapAngle($plan['from'] + $turn * $ease($amount))
+				, 'offset' => .045 * sin(M_PI * $amount)
+				, 'look' => $this->look['index']
+			];
+			return;
+		}
+
+		// Down on the shot: a slight sway that dies away before the next turn, and practice strokes after a settle.
+		$down = $time - $plan['turn'];
+		$span = $plan['duration'] - $plan['turn'];
+		$sway = .006 * sin(M_PI * $down / $span) * sin(2 * M_PI * .55 * $down);
+		$offset = 0.0;
+		$stroke = $down - $plan['settle'];
+		$index = $stroke >= 0 ? (int)floor($stroke / $plan['strokeTime']) : -1;
+		if($index >= 0 && $index < count($plan['strokes']))
+		{
+			$depth = $plan['strokes'][$index];
+			$amount = $stroke / $plan['strokeTime'] - $index;
+			// Draw back slowly, push through to just short of the ball, and ease back to the address.
+			if($amount < .45) $offset = $depth * $ease($amount / .45);
+			elseif($amount < .75) $offset = $depth + (self::PRACTICE_REACH - $depth) * $ease(($amount - .45) / .3);
+			else $offset = self::PRACTICE_REACH * (1 - $ease(($amount - .75) / .25));
+		}
+		$this->consider = ['aim' => self::wrapAngle($plan['to'] + $sway),'offset' => $offset,'look' => $this->look['index']];
+	}
+
+	/**
+	 * Plan one look of the opponent's idle cue: a target angle at one of their candidate balls and its timing.
+	 *
+	 * Plans are seeded from the match and its action sequence, so every waiting browser shows the same performance
+	 * for the same wait, and each turn gets a fresh one.
+	 *
+	 * @param int $index Look number within the current wait.
+	 * @param float $from Cue angle the look starts from.
+	 * @return array{from:float,to:float,turn:float,settle:float,strokes:list<float>,strokeTime:float,duration:float}
+	 */
+	private function planLook(int $index, float $from): array
+	{
+		$seed = ($this->match?->seed ?? '') . ':' . ($this->match?->sequence ?? 0) . ':' . $index;
+		$random = static fn(string $salt): float => (crc32($seed . ':' . $salt) & 0xffffff) / 0x1000000;
+		$cue = $this->simulation->cue();
+		$group = $this->match?->groups[$this->match->actor] ?? null;
+		$candidates = [];
+		$others = [];
+		foreach($this->simulation->balls as $ball) if($ball->active && $ball->number > 0)
+		{
+			$kind = $ball->number < 8 ? 'solid' : ($ball->number > 8 ? 'stripe' : 'eight');
+			// An open table weighs every ball but the eight; an assigned group looks at its own until it is gone.
+			if($group === null ? $kind !== 'eight' : $kind === $group) $candidates[] = $ball;
+			else $others[] = $ball;
+		}
+		$candidates = $candidates ?: $others;
+
+		$to = $from + M_PI * ($random('free') - .5);
+		if($candidates)
+		{
+			$pick = (int)floor($random('ball') * count($candidates));
+			for($tries = 0; $tries < count($candidates); $tries++)
+			{
+				$ball = $candidates[($pick + $tries) % count($candidates)];
+				// A small cut either side of the straight line, as though judging the angle.
+				$to = atan2($ball->y - $cue->y, $ball->x - $cue->x) + .09 * ($random('cut') - .5);
+				if(abs(self::wrapAngle($to - $from)) > deg2rad(8)) break;
+			}
+		}
+		$to = self::wrapAngle($to);
+
+		$strokes = [];
+		$count = [0,1,2,2,3][(int)floor($random('strokes') * 5)];
+		for($stroke = 0; $stroke < $count; $stroke++) $strokes[] = .05 + .08 * $random('depth' . $stroke);
+		$turn = .55 + .45 * abs(self::wrapAngle($to - $from)) / M_PI + .2 * $random('turn');
+		$settle = .25 + .3 * $random('settle');
+		$strokeTime = .85 + .3 * $random('pace');
+		$pause = .5 + .9 * $random('pause');
+
+		return [
+			'from' => $from,'to' => $to,'turn' => $turn,'settle' => $settle,'strokes' => $strokes
+			, 'strokeTime' => $strokeTime,'duration' => $turn + $settle + $count * $strokeTime + $pause
+		];
+	}
+
+	/**
 	 * Return the fixed-step interpolated render pose for the cue stroke.
 	 *
 	 * The pose follows a power-scaled backswing, accelerated contact, and eased follow-through while retaining the
@@ -1318,6 +1456,7 @@ final class Game
 			, 'placement' => ['position' => $this->placement,'valid' => $valid]
 			, 'camera' => $this->camera->state()
 			, 'stroke' => $this->stroke($alpha)
+			, 'considering' => $this->consider
 			, 'muted' => $this->muted
 			, 'status' => $this->statusText()
 			, 'mode' => $this->mode

@@ -1423,4 +1423,67 @@ catch(Throwable $error)
 
 if($failures) exit(1);
 
+
+$test('an opponent\'s cue considers the shot after four idle seconds and never strikes', static function() use ($expect): void {
+	$alice = '@alice:example.org';
+	$bob = '@bob:example.org';
+	$frame = static fn(Game $game, array $browser, float $elapsed = 0) => $game->input(
+		$browser, [], [], [], [0,0], $elapsed, 1280, 720
+	);
+	$waiting = static function(string $next) use ($alice, $bob, $frame): array {
+		$game = new Game;
+		$frame($game, ['network' => [[
+			'type' => 'start'
+			, 'detail' => ['players' => [$alice,$bob],'seed' => str_repeat('4d', 32),'breaker' => $next
+				, 'localPlayer' => $bob,'role' => 'player']
+		]]]);
+		$ready = array_values(array_filter(
+			$game->status(1)['network']['outbox'], static fn(array $message): bool => $message['type'] === 'ready'
+		))[0];
+		$frame($game, [
+			'networkAcks' => [$ready['id']]
+			, 'network' => [['type' => 'confirmed','detail' => [
+				'sequence' => 0,'hash' => $ready['hash'],'nextActor' => $next,'outcome' => null
+			]]]
+		]);
+
+		return [$game,$ready['hash']];
+	};
+
+	[$own] = $waiting($bob);
+	for($tick = 0; $tick < 600; $tick++) $frame($own, [], 1 / 60);
+	$expect($own->controllable() && $own->considering() === null, 'The local player\'s own cue started considering');
+
+	[$game,$hash] = $waiting($alice);
+	$state = $game->simulation->exactHash();
+	$aim = $game->aim;
+	$previous = null;
+	$looks = [];
+	for($tick = 0; $tick < 60 * 40; $tick++)
+	{
+		$frame($game, [], 1 / 60);
+		$pose = $game->considering();
+		if($game->clock < 4 - 1e-9)
+		{
+			$expect($pose === null, 'The opponent\'s cue moved before four seconds of waiting');
+			continue;
+		}
+		$expect($pose !== null, 'The opponent\'s cue stayed still after four seconds of waiting');
+		$expect($pose['offset'] > -.008 + .002 && $pose['offset'] < .2, 'A practice stroke reached the cue ball');
+		if($previous !== null) $expect(abs(Game::wrapAngle($pose['aim'] - $previous['aim'])) < deg2rad(3)
+			&& abs($pose['offset'] - $previous['offset']) < .02, 'The considering cue jumped between frames');
+		$looks[$pose['look']] = $pose['aim'];
+		$previous = $pose;
+	}
+	$expect(count($looks) >= 4 && max($looks) - min($looks) > deg2rad(1), 'The opponent\'s cue never changed its angle');
+	$expect($game->simulation->exactHash() === $state && $game->aim === $aim && !$game->controllable(),
+		'Considering changed the shared state or the local aim');
+
+	$frame($game, ['network' => [['type' => 'action','detail' => [
+		'sequence' => 1,'actor' => $alice,'pre_hash' => $hash
+		, 'action' => ['type' => 'shot','aim_udeg' => 0,'power_bp' => 9000,'top_bp' => 0,'side_bp' => 0]
+	]]]], 1 / 60);
+	$expect($game->considering() === null && $game->stroking(), 'The real shot did not replace the considering cue');
+});
+
 echo count($tests) . " PHP Billiards physics tests passed.\n";

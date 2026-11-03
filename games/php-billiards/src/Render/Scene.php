@@ -189,14 +189,18 @@ final class Scene
 		if(!$cue->active) return;
 
 		$stroke = $game->stroke($alpha);
-		$pose = Camera::cuePose($stroke['x'] ?? $cue->x, $stroke['y'] ?? $cue->y, $stroke['aim'] ?? $game->aim);
-		$offset = $stroke['offset'] ?? $game->cueDraw();
+		$considering = $stroke === null ? $game->considering() : null;
+		$pose = Camera::cuePose(
+			$stroke['x'] ?? $cue->x, $stroke['y'] ?? $cue->y, $stroke['aim'] ?? $considering['aim'] ?? $game->aim
+		);
+		$offset = $stroke['offset'] ?? $considering['offset'] ?? $game->cueDraw();
 		foreach($pose['tip'] as $index => $value) $pose['tip'][$index] = $value - $pose['direction'][$index] * $offset;
 		// The cue mesh is built in metres with its tip at the origin, so it sits at the (drawn-back) tip unscaled; the
 		// tint carries the shooter's accent colour into the veneers, rings, and inlays.
 		$this->draw('cue', $pose['tip'], [1,1,1], $pose['rotation'], self::CUE_ACCENTS[$game->cuePlayer()], self::CUE);
 
-		if($stroke !== null) return;
+		// The guide follows this browser's aim, which an opponent's idle cue no longer points along.
+		if($stroke !== null || $considering !== null) return;
 		$preview = $game->shotPreview();
 		$this->dashes($preview['path'], .03, .018, [1,.96,.86], .62, .0036);
 
