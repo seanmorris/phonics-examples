@@ -187,8 +187,17 @@ final class LineSpecials
 		return false;
 	}
 
-	/** Activate every crossed walk-trigger line in travel order. */
-	public function cross(float $fromX, float $fromY, Transform $actor, PlayerState $player): int
+	/**
+	 * Activate every crossed walk-trigger line in travel order.
+	 *
+	 * @param float $fromX Start of the actor's path.
+	 * @param float $fromY Start of the actor's path.
+	 * @param Transform $actor Actor at the end of its path, moved through any passable wall portal.
+	 * @param PlayerState $player Player doing the crossing.
+	 * @param bool $portalsOnly Only pass through wall portals, as a replayed step does: its triggers already fired.
+	 * @return int Number of lines crossed or triggered.
+	 */
+	public function cross(float $fromX, float $fromY, Transform $actor, PlayerState $player, bool $portalsOnly = false): int
 	{
 		$hits = [];
 
@@ -228,6 +237,8 @@ final class LineSpecials
 				// Remaining fractions belong to the coordinate space before the portal.
 				break;
 			}
+
+			if($portalsOnly) continue;
 
 			if($this->activate($lineId, 'walk', $sector, $player, $actor, $frontCrossing)) $count++;
 		}

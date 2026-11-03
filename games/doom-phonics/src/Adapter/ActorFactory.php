@@ -271,7 +271,13 @@ final class ActorFactory
 		}
 
 		if($definition->hasFlag('MONSTER'))
-		$components[] = new MonsterBrain((bool)($thing['flags']['ambush'] ?? false));
+		{
+			$brain = new MonsterBrain((bool)($thing['flags']['ambush'] ?? false));
+			// Doom's P_SpawnMapThing starts each monster's player search at a random slot, so in a netgame they do not
+			// all look at player 1 first.
+			$brain->lastLook = mt_rand(0, 3);
+			$components[] = $brain;
+		}
 
 		$bounceType = (string)$definition->value('BounceType', '');
 

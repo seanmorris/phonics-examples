@@ -10,7 +10,6 @@ use DoomPhonics\Component\MonsterBrain;
 use DoomPhonics\Component\NetworkPlayer;
 use DoomPhonics\Component\RemoteActor;
 use DoomPhonics\Component\Transform;
-use DoomPhonics\Component\Velocity;
 use DoomPhonics\Component\ViewEffects;
 use DoomPhonics\Definition\ActionDispatcher;
 use DoomPhonics\Game\Collision;
@@ -185,7 +184,7 @@ use Phonics\Network\SimulationTick;
 		, 'guest-side damage leaves health and state to the host'
 	);
 
-	// The host's pushback on the guest reaches the guest, which predicts its own movement.
+	// The host's hit on the guest reaches the guest; network-prediction.php covers the pushback.
 	$player = static function(Registry $world, int $slot): int {
 		foreach($world->query(NetworkPlayer::class) as $entity)
 		if($world->get($entity, NetworkPlayer::class)->slot->value() === $slot) return $entity;
@@ -195,22 +194,10 @@ use Phonics\Network\SimulationTick;
 
 	$hostCopy = $player($host, 2);
 	$self = $player($guest, 2);
-	$resolver = new DamageResolver(null, static fn(int $entity, float $x, float $y) => $sessions['host']->thrust($entity, $x, $y));
-	$hostVelocity = $host->get($hostCopy, Velocity::class);
-	$before = [$hostVelocity->x, $hostVelocity->y];
 	$health = $host->get($hostCopy, HitPoints::class);
 	$healthBefore = $health->current;
-	$resolver->apply($host, new DamageEvent($hostCopy, $player($host, 1), 20, null, true));
-	$pushed = [$hostVelocity->x - $before[0], $hostVelocity->y - $before[1]];
-	$ownVelocity = $guest->get($self, Velocity::class);
-	$ownBefore = [$ownVelocity->x, $ownVelocity->y];
+	(new DamageResolver)->apply($host, new DamageEvent($hostCopy, $player($host, 1), 20, null, true));
 	$step(4);
-
-	verifyWad(
-		hypot(...$pushed) > 1 && abs($ownVelocity->x - $ownBefore[0] - $pushed[0]) < 1e-6
-			&& abs($ownVelocity->y - $ownBefore[1] - $pushed[1]) < 1e-6
-		, 'the guest adds the same pushback the host gave its copy'
-	);
 
 	verifyWad(
 		$guest->get($self, HitPoints::class)->current === $healthBefore - 20 && $health->current === $healthBefore - 20

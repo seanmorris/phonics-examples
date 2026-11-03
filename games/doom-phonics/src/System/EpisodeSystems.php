@@ -14,9 +14,7 @@ use DoomPhonics\Component\PlayerCommand;
 use DoomPhonics\Component\WeaponOverlay;
 use DoomPhonics\Component\WeaponOwner;
 use DoomPhonics\Definition\ActionDispatcher;
-use DoomPhonics\Game\ActorDropper;
 use DoomPhonics\Game\Collision;
-use DoomPhonics\Game\DamageResolver;
 use DoomPhonics\Game\ActorObstacles;
 use DoomPhonics\Game\BloodEffects;
 use DoomPhonics\Game\DoomGravity;
@@ -140,14 +138,6 @@ final class EpisodeSystems implements SystemSet
 
 		$actions = new ActionDispatcher;
 
-		$network = null;
-
-		// The host forwards damage thrust on the guest's player, which the guest moves itself.
-		$damage = new DamageResolver(
-			new ActorDropper($content->level, $factory)
-			, static function(int $entity, float $x, float $y) use (&$network): void { $network?->thrust($entity, $x, $y); }
-		);
-
 		$combat = new CombatSystem(
 			$content->level
 			, $actors
@@ -159,7 +149,7 @@ final class EpisodeSystems implements SystemSet
 			, $sound
 			, $content->sounds
 			, (float)($motion['gravity'] ?? DoomGravity::ACCELERATION)
-			, $damage
+			, null
 			, $content->weapons
 			, $host
 			, $host
@@ -188,8 +178,17 @@ final class EpisodeSystems implements SystemSet
 		$playerEffects = new PlayerEffectSystem;
 		$statusFaces = new StatusFaceSystem($this->controls($scope));
 		$commands = new PlayerCommandSystem($this->controls($scope));
+		// A guest replays its own unacknowledged movement over each host result, so host pushes and blocks reach it.
 		$network = $match
-			? new EpisodeNetworkSystem($scope->registry, $match, $scope->key(), $actors, null, $content->level)
+			? new EpisodeNetworkSystem(
+				$scope->registry
+				, $match
+				, $scope->key()
+				, $actors
+				, null
+				, $content->level
+				, \Closure::fromCallable([$movement,'replay'])
+			)
 			: null;
 
 		if($commands) $scope->system('player-commands', [$commands,'update']);

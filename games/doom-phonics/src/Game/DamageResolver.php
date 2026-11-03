@@ -18,14 +18,7 @@ final class DamageResolver
 	private const TICS_PER_SECOND = 35;
 	private const THRUST_PER_DAMAGE_TIC = 12.5;
 
-	/**
-	 * Create a resolver.
-	 *
-	 * @param ?ActorDropper $drops Spawns death drops.
-	 * @param ?\Closure $thrusted Receives the target and the horizontal velocity each damage thrust added, so a host
-	 * can forward it to the peer that owns the target's movement.
-	 */
-	public function __construct(private ?ActorDropper $drops = null, private ?\Closure $thrusted = null) {}
+	public function __construct(private ?ActorDropper $drops = null) {}
 
 	/** Return true only when this event changed the target. */
 	public function apply(Registry $registry, DamageEvent $event): bool
@@ -183,11 +176,7 @@ final class DamageResolver
 		$mass = max(1.0, (float)$state->definition->value('Mass', 100));
 		$momentum = $damage * self::THRUST_PER_DAMAGE_TIC * self::TICS_PER_SECOND / $mass;
 		$velocity = $registry->get($event->target, Velocity::class);
-		$x = $dx / $distance * $momentum;
-		$y = $dy / $distance * $momentum;
-		$velocity->x += $x;
-		$velocity->y += $y;
-
-		if($this->thrusted) ($this->thrusted)($event->target, $x, $y);
+		$velocity->x += $dx / $distance * $momentum;
+		$velocity->y += $dy / $distance * $momentum;
 	}
 }

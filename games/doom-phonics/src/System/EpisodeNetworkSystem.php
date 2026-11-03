@@ -53,19 +53,39 @@ final class EpisodeNetworkSystem
 	/** Map-spawned actors use network IDs offset by their thing index, so both peers bind them alike. */
 	private const MAP_ACTOR_IDS = 1000;
 
+	/** A corrected pose this far from the predicted one jumps there instead of gliding. */
+	private const SNAP_DISTANCE = 64.0;
+
+	/** One step that moves the player this far went through a teleporter. */
+	private const TELEPORT_DISTANCE = 128.0;
+
+	/** Steps a teleport or respawn may wait for the host to confirm it before corrections resume regardless. */
+	private const DISCONTINUITY_STEPS = 70;
+
 	private NetworkEntityAllocator $entities;
 	private ReplicationSession $session;
 	private ReplicationScope $scope;
 	private ?PortalInterpolation $portalInterpolation;
 	private ?Level $level;
 	private int $respawns = 0;
-	private int $thrustEvents = 0;
-
-	/** @var array<int,array{float,float}> Host thrust on remote-owned players this step, by slot. */
-	private array $thrusts = [];
 
 	/** Guest's own health after the last step, so a host-applied hit can show its local feedback. */
 	private ?int $health = null;
+
+	/** Moves this peer's player through replayed commands without side effects; see PlayerMovementSystem::replay(). */
+	private ?\Closure $replay;
+
+	/** Sequence of the newest local command, the one this step simulates. */
+	private int $sequence = 0;
+
+	/** @var array<int,float> Heading each local command's step moved along, by command sequence. */
+	private array $headings = [];
+
+	/** Local command whose step teleported or respawned this peer's player, until the host has applied it. */
+	private ?int $discontinuity = null;
+
+	/** @var ?array{float,float} This peer's player position before this step's movement. */
+	private ?array $stepStart = null;
 
 	public function __construct(
 		private Registry $world
@@ -74,8 +94,10 @@ final class EpisodeNetworkSystem
 		, ActorCatalog $actors
 		, ?BrowserBridge $bridge = null
 		, ?Level $level = null
+		, ?\Closure $replay = null
 	){
 		$match->replication = $this;
+		$this->replay = $replay;
 		$this->entities = new NetworkEntityAllocator;
 		$this->scope = new ReplicationScope($scope);
 		$this->level = $level;
@@ -93,6 +115,9 @@ final class EpisodeNetworkSystem
 			, new ReplicationCallbacks(
 				fn(PlayerSlot $slot, SimulationTick $tick): array => $this->command($slot)->actions()
 				, function(InputCommand $command): void {
+					if($command->player->equals($this->match->network->localSlot))
+					$this->sequence = $command->sequence->value();
+
 					$entity = $this->player($command->player);
 					$view = $this->world->has($entity, ViewInput::class)
 						? $this->world->get($entity, ViewInput::class)
@@ -118,7 +143,11 @@ final class EpisodeNetworkSystem
 	{
 		$this->session->beforeStep($registry, $dt);
 
-		if(!$this->match->network->host()) $this->present($registry);
+		if(!$this->match->network->host())
+		{
+			$this->present($registry);
+			$this->reconcile($registry, $dt);
+		}
 
 		if(!$this->portalInterpolation) return;
 
@@ -137,11 +166,8 @@ final class EpisodeNetworkSystem
 
 	public function send(Registry $registry, float $dt): void
 	{
-		if($this->match->network->host())
-		{
-			$this->bindEffects();
-			$this->sendThrust();
-		}
+		if($this->match->network->host()) $this->bindEffects();
+		else $this->recordStep($registry);
 
 		$this->session->afterStep($registry, $dt);
 	}
@@ -198,28 +224,6 @@ final class EpisodeNetworkSystem
 				, ['slot' => $slot->value()] + $spot
 			));
 		}
-	}
-
-	/**
-	 * Host: forward damage thrust on a player the other peer owns.
-	 *
-	 * That peer predicts its own movement, so a push the host applies only to its copy would leave the two copies apart.
-	 *
-	 * @param int $entity Thrust target.
-	 * @param float $x Added horizontal velocity along x, in map units per second.
-	 * @param float $y Added horizontal velocity along y, in map units per second.
-	 * @return void
-	 */
-	public function thrust(int $entity, float $x, float $y): void
-	{
-		if(!$this->match->network->host() || !$this->world->has($entity, NetworkPlayer::class)) return;
-
-		$player = $this->world->get($entity, NetworkPlayer::class);
-
-		if($player->local) return;
-
-		[$sumX, $sumY] = $this->thrusts[$player->slot->value()] ?? [0.0, 0.0];
-		$this->thrusts[$player->slot->value()] = [$sumX + $x, $sumY + $y];
 	}
 
 	public function close(): void
@@ -519,13 +523,6 @@ final class EpisodeNetworkSystem
 	{
 		$payload = $event->payload;
 
-		if($event->type === 'doom.thrust')
-		{
-			$this->applyThrust($payload);
-
-			return;
-		}
-
 		if($event->type !== 'doom.respawn') return;
 
 		foreach(['x','y','z','angle'] as $axis)
@@ -547,42 +544,135 @@ final class EpisodeNetworkSystem
 
 		if($this->match->network->host()) return;
 
+		// The host's result reaches the new spot only once it applies a command this peer sends from now on.
+		if($this->world->get($entity, NetworkPlayer::class)->local) $this->discontinuity = $this->sequence + 1;
+
 		// Mirror the host-owned reset until the next snapshot confirms it, so the player is not shown dead meanwhile.
 		$health = $this->world->get($entity, HitPoints::class);
 		$health->current = $health->maximum;
 		$this->world->add($entity, PlayerRespawn::reborn($this->world->get($entity, PlayerState::class)));
 	}
 
-	/** Owner: add the host's damage thrust to this peer's own player. */
-	private function applyThrust(array $payload): void
+	/**
+	 * Guest: rewind this peer's player to the host's latest result and replay the newer local commands over it.
+	 *
+	 * This is Zandronum's client prediction. The guest moves its own player at once from its own commands, and the
+	 * host moves its copy from the same commands when they arrive. Whatever only the host knows, such as damage
+	 * pushback, a monster in the way, or a door, appears in the host's result. Replaying the commands the host had
+	 * not applied yet keeps the guest's lead, so it ends where the host will put it.
+	 *
+	 * A small difference glides over one step; a large one snaps. A teleport or respawn waits until the host has
+	 * applied the command that caused it, since a replay never crosses teleport lines.
+	 */
+	private function reconcile(Registry $registry, float $dt): void
 	{
-		$x = $payload['x'] ?? null;
-		$y = $payload['y'] ?? null;
+		$entity = $this->player($this->match->network->localSlot);
+		$correction = $this->session->correction($entity);
 
-		if(!is_numeric($x) || !is_numeric($y) || !is_finite((float)$x) || !is_finite((float)$y))
-		throw new \UnexpectedValueException('Thrust event has an invalid impulse');
+		if($correction && $this->replay && $this->alive($registry, $entity) && $this->confirmed($correction->acknowledged->value()))
+		{
+			$authority = $correction->component(Transform::class);
+			$motion = $correction->component(Velocity::class);
+			$steps = [];
 
-		$entity = $this->player(new PlayerSlot((int)($payload['slot'] ?? 0)));
+			foreach($correction->commands as $command)
+			{
+				$sequence = $command->sequence->value();
 
-		if(!$this->world->get($entity, NetworkPlayer::class)->local || !$this->world->has($entity, Velocity::class)) return;
+				// This step's own command runs in the movement system after this.
+				if($sequence >= $this->sequence) break;
 
-		$velocity = $this->world->get($entity, Velocity::class);
-		$velocity->x += max(-4096, min(4096, (float)$x));
-		$velocity->y += max(-4096, min(4096, (float)$y));
+				if(!isset($this->headings[$sequence]))
+				{
+					$steps = null;
+					break;
+				}
+
+				$steps[] = ['actions' => $command->actions(), 'angle' => $this->headings[$sequence]];
+			}
+
+			if($authority && $motion && $steps !== null) $this->correct($registry, $entity, $authority, $motion, $steps, $dt);
+		}
+
+		$pose = $registry->get($entity, Transform::class);
+		$this->stepStart = [$pose->x, $pose->y];
 	}
 
-	/** Host: send this step's accumulated thrust, one reliable event per pushed player. */
-	private function sendThrust(): void
-	{
-		foreach($this->thrusts as $slot => [$x, $y])
-		$this->session->emit(new ReliableEvent(
-			'thrust:' . $slot . ':' . ++$this->thrustEvents
-			, $this->session->tick()
-			, 'doom.thrust'
-			, ['slot' => $slot, 'x' => $x, 'y' => $y]
-		));
+	/**
+	 * Move this peer's player to the host's result plus a replay, keeping its own facing.
+	 *
+	 * @param list<array{actions: array<string,mixed>, angle: float}> $steps
+	 */
+	private function correct(
+		Registry $registry
+		, int $entity
+		, Transform $authority
+		, Velocity $motion
+		, array $steps
+		, float $dt
+	): void {
+		$pose = $registry->get($entity, Transform::class);
+		$velocity = $registry->get($entity, Velocity::class);
+		$predicted = [$pose->x, $pose->y, $pose->z];
+		$pose->x = $authority->x;
+		$pose->y = $authority->y;
+		$pose->z = $authority->z;
+		$velocity->x = $motion->x;
+		$velocity->y = $motion->y;
+		$velocity->z = $motion->z;
+		($this->replay)($registry, $entity, $steps, $dt);
+		$corrected = [$pose->x, $pose->y, $pose->z];
+		[$pose->x, $pose->y, $pose->z] = $predicted;
+		$error = hypot(hypot($corrected[0] - $predicted[0], $corrected[1] - $predicted[1]), $corrected[2] - $predicted[2]);
 
-		$this->thrusts = [];
+		if($error < 1 / 64) return;
+
+		if($error <= self::SNAP_DISTANCE)
+		{
+			$pose->reconcile($corrected[0], $corrected[1], $corrected[2], $pose->angle);
+
+			return;
+		}
+
+		[$pose->x, $pose->y, $pose->z] = $corrected;
+		$pose->previousX = $pose->x;
+		$pose->previousY = $pose->y;
+		$pose->previousZ = $pose->z;
+	}
+
+	private function alive(Registry $registry, int $entity): bool
+	{
+		return $registry->has($entity, HitPoints::class) && $registry->get($entity, HitPoints::class)->current > 0
+			&& $registry->has($entity, Velocity::class);
+	}
+
+	/** Whether the host's result includes this peer's latest teleport or respawn. */
+	private function confirmed(int $acknowledged): bool
+	{
+		if($this->discontinuity === null) return true;
+
+		if($acknowledged < $this->discontinuity && $this->sequence - $this->discontinuity < self::DISCONTINUITY_STEPS)
+		return false;
+
+		$this->discontinuity = null;
+
+		return true;
+	}
+
+	/** Guest: remember this step's heading for replays, and notice a teleport. */
+	private function recordStep(Registry $registry): void
+	{
+		$entity = $this->player($this->match->network->localSlot);
+		$pose = $registry->get($entity, Transform::class);
+		$this->headings[$this->sequence] = $pose->angle;
+
+		foreach(array_keys($this->headings) as $sequence)
+		if($sequence <= $this->sequence - 256) unset($this->headings[$sequence]);
+		else break;
+
+		if($this->stepStart
+			&& hypot($pose->x - $this->stepStart[0], $pose->y - $this->stepStart[1]) > self::TELEPORT_DISTANCE
+		) $this->discontinuity = $this->sequence;
 	}
 
 	/**
