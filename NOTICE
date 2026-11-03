@@ -4,3 +4,17 @@ Copyright 2026 Sean Morris
 This product includes the Phonics runtime, distributed under the Apache License 2.0.
 Third-party runtime license and notice files are copied into the generated Pages artifact.
 
+PHP Billiards HUD typography
+The HUD font atlas (games/php-billiards/assets/generated/ui-font.*) is generated from
+Barlow Semi Condensed Medium and Bold, Copyright 2017 The Barlow Project Authors
+(https://github.com/jpt/barlow), licensed under the SIL Open Font License, Version 1.1.
+Extracted glyph outlines and the license are in games/php-billiards/art/typography/; the license
+ships beside the atlas as ui-font-OFL.txt.
+
+PHP Billiards sound effects
+games/php-billiards/assets/audio/ contains recorded billiards samples supplied by the
+project author and cleared for redistribution with this project:
+  clack.mp3        (originally 539854-za-games-billiard-ball-clack.mp3)
+  impact.mp3       (originally billiard-balls-impact.mp3)
+  pocket-drop.mp3  (originally pool-ball-falling-into-pocket.mp3)
+  pocket-sink.mp3  (originally one-snooker-ball-sinking-into-on-of-the-pockets.mp3)

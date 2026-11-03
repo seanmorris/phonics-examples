@@ -2,28 +2,54 @@
 declare(strict_types=1);
 namespace PhpBilliards\Physics;
 
-/** Mutable rigid sphere constrained to the cloth plane. */
+/**
+ * Mutable rigid sphere constrained to the cloth plane.
+ *
+ * A ball carries translational and angular state, activation and pocket state, deterministic texture pose,
+ * and the previous-step values required to interpolate stable rendering between fixed physics updates.
+ */
 final class Ball
 {
 	public const RADIUS = 0.028575;
 
+	/** Cloth-plane X coordinate from the preceding fixed update. */
 	public float $previousX;
+	/** Cloth-plane Y coordinate from the preceding fixed update. */
 	public float $previousY;
+	/** Linear X velocity in metres per second. */
 	public float $vx = 0;
+	/** Linear Y velocity in metres per second. */
 	public float $vy = 0;
+	/** Angular velocity about the world X axis in radians per second. */
 	public float $spinX = 0;
+	/** Angular velocity about the world Y axis in radians per second. */
 	public float $spinY = 0;
+	/** Angular velocity about the world Z axis in radians per second. */
 	public float $spinZ = 0;
+	/** X component of the visible orientation quaternion. */
 	public float $qx = 0;
+	/** Y component of the visible orientation quaternion. */
 	public float $qy = 0;
+	/** Z component of the visible orientation quaternion. */
 	public float $qz = 0;
+	/** Scalar component of the visible orientation quaternion. */
 	public float $qw = 1;
+	/** Pocket index currently containing the ball, or null while on the cloth. */
 	public ?int $pocket = null;
+	/** Current vertical distance below the cloth surface. */
 	public float $drop = 0;
+	/** Pocket drop from the preceding fixed update. */
 	public float $previousDrop = 0;
+	/** Downward pocket velocity in metres per second. */
 	public float $vDrop = 0;
+	/** Whether the ball remains active in play or in a pocket channel. */
 	public bool $active = true;
 
+	/**
+	 * @param int $number Ball number, with zero identifying the cue ball.
+	 * @param float $x Initial cloth-plane X coordinate.
+	 * @param float $y Initial cloth-plane Y coordinate.
+	 */
 	public function __construct(
 		public readonly int $number
 		, public float $x
@@ -41,7 +67,14 @@ final class Ball
 		$this->previousDrop = $this->drop;
 	}
 
-	/** Integrate position and visible sphere orientation. */
+	/**
+	 * Integrate position and visible sphere orientation.
+	 *
+	 * Linear velocity advances the cloth-plane centre while angular velocity is integrated into a normalized
+	 * quaternion, giving rendering a camera-independent material orientation for every ball.
+	 *
+	 * @param float $seconds Integration interval in seconds.
+	 */
 	public function advance(float $seconds): void
 	{
 		$this->x += $this->vx * $seconds;
@@ -64,7 +97,15 @@ final class Ball
 		}
 	}
 
-	/** @return array<string,int|float|bool> Serializable deterministic state. */
+	/**
+	 * Return serializable deterministic state at an interpolated render position.
+	 *
+	 * Fixed-step ownership remains untouched; only position, pocket drop, and the normalized orientation exposed
+	 * to the renderer are blended by the requested frame alpha.
+	 *
+	 * @param float $alpha Interpolation fraction between fixed poses.
+	 * @return array<string,int|float|bool>
+	 */
 	public function state(float $alpha = 1): array
 	{
 		return [
@@ -82,7 +123,9 @@ final class Ball
 		];
 	}
 
-	/** @param array<string,mixed> $state */
+	/**
+	 * @param array<string,mixed> $state Previously captured deterministic ball state.
+	 */
 	public static function restore(array $state): self
 	{
 		$ball = new self((int)$state['number'], (float)$state['x'], (float)$state['y']);

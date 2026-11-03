@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <filter id="compressed-wool" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency=".035 .043" numOctaves="4" seed="41" stitchTiles="stitch"/>
+      <feColorMatrix values=".333 .333 .333 0 0  .333 .333 .333 0 0  .333 .333 .333 0 0  0 0 0 1 0"/>
+      <feComponentTransfer>
+        <feFuncR type="linear" slope=".24" intercept=".38"/>
+        <feFuncG type="linear" slope=".24" intercept=".38"/>
+        <feFuncB type="linear" slope=".24" intercept=".38"/>
+      </feComponentTransfer>
+    </filter>
+  </defs>
+  <rect width="256" height="256" fill="#808080" filter="url(#compressed-wool)"/>
+</svg>

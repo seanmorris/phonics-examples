@@ -6,6 +6,14 @@ require_once dirname(__DIR__) . '/autoload.php';
 use PhpBilliards\Physics\Ball;
 use PhpBilliards\Physics\Simulation;
 use PhpBilliards\Physics\Table;
+use PhpBilliards\Geometry\MeshBuilder;
+use PhpBilliards\Geometry\TableGeometry;
+use PhpBilliards\Game;
+use PhpBilliards\Render\Camera;
+use PhpBilliards\Render\FramePacer;
+use PhpBilliards\Render\Hud;
+use PhpBilliards\Online\BinaryState;
+use PhpBilliards\Online\EightBallMatch;
 
 $tests = [];
 $test = static function(string $name, callable $callback) use (&$tests): void { $tests[$name] = $callback; };
@@ -581,6 +589,632 @@ $test('reset restores the exact pre-shot state', static function() use ($expect)
 	$expect($game->hash() !== $before);
 	$expect($game->resetShot(), 'Reset had no snapshot');
 	$expect($game->hash() === $before, 'Reset did not restore the complete snapshot');
+});
+
+$test('render geometry derives all six pockets and constant-width rails from physics', static function() use ($expect): void {
+	$pockets = TableGeometry::pockets();
+	$rails = TableGeometry::cushionPolygons();
+	$expect(count($pockets) === 6 && count($rails) === 6);
+	$expect(count(TableGeometry::railSights()) === 18);
+
+	foreach($pockets as $index => $pocket)
+	{
+		$expect(abs($pocket['x'] - Table::pockets()[$index][0]) < 1e-12);
+		$expect(abs($pocket['z'] - Table::pockets()[$index][1]) < 1e-12);
+		$expect(abs($pocket['radius'] - Table::THROAT_RADIUS) < 1e-12);
+		$expect(abs($pocket['mouth'] - Table::pocketMouthHalf($index) * 2) < 1e-12);
+		foreach($pocket['faces'] as $face)
+		{
+			$radius = [$face['tangent'][0] - $pocket['x'],$face['tangent'][1] - $pocket['z']];
+			$facing = [$face['tangent'][0] - $face['jaw'][0],$face['tangent'][1] - $face['jaw'][1]];
+			$expect(abs(hypot(...$radius) - Table::THROAT_RADIUS) < 1e-12, 'Facing missed the shared throat');
+			$expect(abs($radius[0] * $facing[0] + $radius[1] * $facing[1]) < 1e-12, 'Facing is not tangent');
+		}
+	}
+
+	foreach($rails as $rail)
+	{
+		$spanX = max(array_column($rail, 0)) - min(array_column($rail, 0));
+		$spanZ = max(array_column($rail, 1)) - min(array_column($rail, 1));
+		$expect(abs(min($spanX, $spanZ) - Table::CUSHION_WIDTH) < 1e-12, 'Cushion width changed at a pocket');
+	}
+});
+
+$test('shared CSG profiles cut identical circular holes through every table material', static function() use ($expect): void {
+	$profiles = TableGeometry::profiles();
+	$outerX = Table::WIDTH / 2 + .17;
+	$outerZ = Table::HEIGHT / 2 + .17;
+	$expect($profiles['apron']($outerX - .01, 0) < 0);
+	$expect($profiles['apron']($outerX, $outerZ) > 0, 'Outer wood corner is not rounded');
+	$expect($profiles['wood'](0, 0) > 0, 'Wood covers the playfield');
+	$expect(abs($profiles['cushion'](Table::WIDTH / 2, .2)) < 1e-12, 'Cushion nose left the physics boundary');
+
+	foreach($profiles['pockets'] as $pocket)
+	{
+		foreach(['apron','bed','wood'] as $material)
+		$expect($profiles[$material]($pocket['x'], $pocket['z']) > 0, "$material did not subtract a pocket");
+
+		for($step = 0; $step < 24; $step++)
+		{
+			$angle = $step / 24 * M_PI * 2;
+			$x = $pocket['x'] + cos($angle) * Table::THROAT_RADIUS;
+			$z = $pocket['z'] + sin($angle) * Table::THROAT_RADIUS;
+			$expect(abs(TableGeometry::circleSdf($x, $z, $pocket['x'], $pocket['z'], Table::THROAT_RADIUS)) < 1e-10);
+		}
+	}
+
+	$expect(abs(TableGeometry::pocketVoidRadius() - Table::LINER_RADIUS) < 1e-12);
+});
+
+$test('adaptive render pacing preserves cadence and yields after expensive frames', static function() use ($expect): void {
+	$pacer = new FramePacer(1 / 60, .5);
+	$expect($pacer->ready(1.0));
+	$pacer->complete(1.0, 1.1);
+	$expect(!$pacer->ready(1.199), 'Expensive frame did not reserve a matching yield period');
+	$expect($pacer->ready(1.2));
+	$pacer->complete(2.0, 2.001);
+	$expect(!$pacer->ready(2.01), 'Fast frame ignored the display cadence');
+	$expect($pacer->ready(2 + 1 / 60));
+	$pacer->complete(3.0, 3.001);
+	$expect(!$pacer->ready(3.2), 'Deferred browser-side raster work did not schedule an adaptive yield');
+	$expect(!$pacer->ready(3.399), 'Observed render cost did not retain its idle share');
+	$expect($pacer->ready(3.4), 'Observed render cost blocked the frame after its idle share');
+	$pacer->complete(4.0, 4.001);
+	$pacer->idle();
+	$expect($pacer->ready(40), 'A static scene delayed the first input-driven frame');
+	$pacer->reset();
+	$expect($pacer->ready(0));
+});
+
+$test('rounded PHP mesh helpers retain smooth unit normals and flush cushion bottoms', static function() use ($expect): void {
+	$bottom = .012;
+	$top = .105;
+	$radius = TableGeometry::WOOD_EDGE_RADIUS;
+	$expect(abs(MeshBuilder::roundedExtrusionSdf(0, ($bottom + $top) / 2, $bottom, $top, $radius)) < 1e-12);
+	$expect(abs(MeshBuilder::roundedExtrusionSdf(-$radius, $top, $bottom, $top, $radius)) < 1e-12);
+	$normal = MeshBuilder::roundedFilletNormal(M_SQRT1_2, M_SQRT1_2, M_PI / 4, .028, .018);
+	$expect(abs(sqrt($normal[0] ** 2 + $normal[1] ** 2 + $normal[2] ** 2) - 1) < 1e-12);
+	$expect($normal[1] > $normal[0]);
+	$expect(TableGeometry::CUSHION_EDGE_RADIUS > 0
+		&& TableGeometry::CUSHION_EDGE_RADIUS < TableGeometry::WOOD_EDGE_RADIUS / 2);
+});
+
+$test('cue cylinder side triangles all face outward', static function() use ($expect): void {
+	$segments = 48;
+	$mesh = MeshBuilder::cylinder(.5, .0125 / .0285 / 2, $segments);
+	$vertices = unpack('g*', $mesh->vertices);
+	$indices = array_values(unpack('V*', substr($mesh->indices, 0, $segments * 6 * 4)));
+	$position = static fn(int $index): array => [
+		$vertices[$index * 8 + 1],$vertices[$index * 8 + 2],$vertices[$index * 8 + 3]
+	];
+
+	for($index = 0; $index < count($indices); $index += 3)
+	{
+		$a = $position($indices[$index]);
+		$b = $position($indices[$index + 1]);
+		$c = $position($indices[$index + 2]);
+		$ab = [$b[0] - $a[0],$b[1] - $a[1],$b[2] - $a[2]];
+		$ac = [$c[0] - $a[0],$c[1] - $a[1],$c[2] - $a[2]];
+		$normal = [
+			$ab[1] * $ac[2] - $ab[2] * $ac[1]
+			, $ab[2] * $ac[0] - $ab[0] * $ac[2]
+			, $ab[0] * $ac[1] - $ab[1] * $ac[0]
+		];
+		$radial = [0,($a[1] + $b[1] + $c[1]) / 3,($a[2] + $b[2] + $c[2]) / 3];
+		$expect($normal[1] * $radial[1] + $normal[2] * $radial[2] > 0, 'Cue cylinder contains an inward-facing side triangle');
+	}
+});
+
+$test('PHP camera projects the target, reverses orbit below it, and clears the cue over rails', static function() use ($expect): void {
+	$camera = new Camera;
+	$expect(abs($camera->yaw - M_PI) < 1e-12 && $camera->pitch === .12 && $camera->distance === 1.5);
+	$camera->beginGameplayView();
+	$camera->animate(.675);
+	$expect($camera->transitioning() && $camera->pitch > .12 && $camera->pitch < .72,
+		'Title camera did not ease through an intermediate pose');
+	$camera->animate(.675);
+	$expect(!$camera->transitioning() && abs($camera->yaw + .42) < 1e-12
+		&& abs($camera->pitch - .72) < 1e-12 && abs($camera->distance - 3.35) < 1e-12,
+		'Title camera did not finish at the gameplay view');
+	$point = $camera->tablePoint(.5, .5, 900, 600, 0);
+	$expect($point !== null && abs($point[0]) < 1e-12 && abs($point[1]) < 1e-12);
+	$yaw = $camera->yaw;
+	$camera->orbit(20, 0, .4);
+	$expect(abs($camera->yaw - ($yaw - .12)) < 1e-12);
+	$camera->orbit(20, 0, .6);
+	$expect(abs($camera->yaw - $yaw) < 1e-12);
+
+	foreach([
+		[-Table::WIDTH * .28,0,0]
+		, [0,0,M_PI / 2]
+		, [Table::WIDTH / 2 - Ball::RADIUS * 1.02,.2,M_PI]
+		// A ball resting on a pocket jaw may lie just outside the nominal rail plane.
+		, [1.2337996517992,.63574091226259,-M_PI / 2]
+	] as [$x,$y,$angle])
+	{
+		$pose = Camera::cuePose($x, $y, $angle);
+		$heightAtRail = $pose['ballCenter'][1] + tan($pose['pitch']) * $pose['railDistance'];
+		$expect($heightAtRail >= $pose['railClearance'] - 1e-12, 'Cue intersects a solid rail');
+		$offset = array_map(static fn(float $value, int $index): float => $value - $pose['ballCenter'][$index],
+			$pose['tip'], array_keys($pose['tip']));
+		$expect(abs(sqrt($offset[0] ** 2 + $offset[1] ** 2 + $offset[2] ** 2) - Ball::RADIUS - .008) < 1e-12);
+	}
+});
+
+$test('title menu selects free or online play before native controls drive the HUD', static function() use ($expect): void {
+	$linked = new Game;
+	$linked->input(['actions' => ['online-play']], [], [], Hud::titleRegions(1280, 720), [0,0], 0, 1280, 720);
+	$expect($linked->titleSelection === 1 && $linked->onlineRequested && $linked->statusText() === 'Online Play',
+		'A linked challenge did not select the Online Play title state');
+
+	$game = new Game;
+	$title = Hud::titleRegions(1280, 720);
+	$expect(!$game->started && count($title) === 2 && isset($title['free-play'], $title['online-play']));
+	$game->input([], [], [[
+		'type' => 'pointer','action' => 'down','button' => 1
+		, 'x' => $title['free-play']['rect'][0] + 1, 'y' => $title['free-play']['rect'][1] + 1
+	]], $title, [0,0], 0, 1280, 720);
+	$expect($game->started && $game->simulation->shots === 0 && $game->camera->transitioning(),
+		'Free Play did not enter play through the title-camera transition');
+	$game->camera->animate(2);
+
+	$regions = Hud::regions(1280, 720);
+	$yaw = $game->camera->yaw;
+	$pitch = $game->camera->pitch;
+	$game->input([], ['right' => .5,'up' => .25,'button7' => .5,'button5' => .25], [], $regions, [.5,-.25], .1, 1280, 720);
+	$expect($game->aim > 0 && $game->power > .58 && $game->top > 0 && $game->side > 0);
+	$expect($game->camera->yaw > $yaw && $game->camera->pitch < $pitch);
+
+	// Point-to-aim: pressing on the cloth points the cue from the cue ball toward that spot.
+	$cue = $game->simulation->cue();
+	$matrix = $game->camera->viewProjection(1280, 720);
+	$target = [$cue->x,.012,$cue->y + .3,1];
+	$clip = [];
+	for($row = 0; $row < 4; $row++)
+	{
+		$clip[$row] = 0;
+		for($column = 0; $column < 4; $column++) $clip[$row] += $matrix[$column * 4 + $row] * $target[$column];
+	}
+	$pointer = [($clip[0] / $clip[3] + 1) * 640,(1 - $clip[1] / $clip[3]) * 360];
+	$game->input([], [], [['type' => 'pointer','action' => 'down','button' => 1,'x' => $pointer[0],'y' => $pointer[1]]]
+		, $regions, [0,0], 0, 1280, 720);
+	$game->input([], [], [['type' => 'pointer','action' => 'up','button' => 1,'x' => $pointer[0],'y' => $pointer[1]]]
+		, $regions, [0,0], 0, 1280, 720);
+	$expect(abs($game->aim - M_PI / 2) < .02, 'Pointing at the cloth did not aim the cue');
+
+	// Holding aim across the back of the table wraps instead of stopping at 180 degrees.
+	$game->aim = 3.13;
+	$game->input([], ['right' => 1], [], $regions, [0,0], .1, 1280, 720);
+	$expect($game->aim < 0 && $game->aim > -3.14, 'Keyboard aim did not wrap past 180 degrees');
+
+	// The spin disc maps a press to the cue-tip offset and clamps it to the ball face.
+	$spin = $regions['spin'];
+	$game->input([], [], [['type' => 'pointer','action' => 'down','button' => 1
+		, 'x' => $spin['center'][0] + $spin['radius'] * 1.4,'y' => $spin['center'][1]]], $regions, [0,0], 0, 1280, 720);
+	$game->input([], [], [['type' => 'pointer','action' => 'up','button' => 1,'x' => 0,'y' => 0]], $regions, [0,0], 0, 1280, 720);
+	$expect(abs($game->side - 1) < 1e-9 && abs($game->top) < 1e-9, 'Spin disc did not set clamped side spin');
+	$game->input([], ['button2' => 1,'button18' => 1,'button17' => 1], [], $regions, [0,0], 0, 1280, 720);
+	$expect($game->top === 0.0 && $game->side === 0.0 && $game->muted && $game->consumeFullscreenRequest());
+});
+
+$test('seeded online racks preserve regulation constraints and replay exactly', static function() use ($expect): void {
+	$seed = str_repeat('ab', 32);
+	$left = new Simulation($seed, 0);
+	$right = new Simulation($seed, 0);
+	$next = new Simulation($seed, 1);
+	$expect($left->exactHash() === $right->exactHash(), 'Identical online rack seeds diverged');
+	$expect($left->exactHash() !== $next->exactHash(), 'Derived rerack index did not change the rack');
+	$expect($left->balls[5]->number === 8, 'Eight ball left the rack center');
+	$rear = [$left->balls[11]->number,$left->balls[15]->number];
+	$expect((min($rear) <= 7 && max($rear) >= 9), 'Rear rack corners do not contain opposite groups');
+});
+
+$test('online input waits for room confirmation and reserves one durable action', static function() use ($expect): void {
+	$game = new Game;
+	$seed = str_repeat('4d', 32);
+	$player = '@alice:example.org';
+	$peer = '@bob:example.org';
+	$frame = static function(Game $game, array $browser): void {
+		$game->input($browser, [], [], [], [0,0], 0, 1280, 720);
+	};
+	$frame($game, ['network' => [[
+		'type' => 'start'
+		, 'detail' => [
+			'players' => [$player,$peer]
+			, 'seed' => $seed
+			, 'breaker' => $player
+			, 'localPlayer' => $player
+			, 'role' => 'player'
+		]
+	]]]);
+	$status = $game->status(1);
+	$ready = array_values(array_filter(
+		$status['network']['outbox'], static fn(array $message): bool => $message['type'] === 'ready'
+	))[0] ?? null;
+	$expect(is_array($ready) && !$game->controllable(), 'Seeded setup unlocked before both room hashes agreed');
+	$initialState = $game->simulation->exactHash();
+	for($tick = 0; $tick < 120; $tick++) $game->step(Simulation::STEP);
+	$expect($game->simulation->exactHash() === $initialState,
+		'Initial online state drifted while waiting for room confirmation');
+
+	$frame($game, ['actions' => ['primary']]);
+	$expect(count($game->status(1)['network']['outbox']) === 1, 'An unconfirmed turn emitted an action');
+	$frame($game, [
+		'networkAcks' => [$ready['id']]
+		, 'network' => [[
+			'type' => 'confirmed'
+			, 'detail' => ['sequence' => 0,'hash' => $ready['hash'],'nextActor' => $player,'outcome' => null]
+		]]
+	]);
+	$expect($game->controllable(), 'Matching initial room confirmation did not unlock the breaker');
+
+	$frame($game, ['actions' => ['primary']]);
+	$frame($game, ['actions' => ['primary']]);
+	$outbox = $game->status(1)['network']['outbox'];
+	$requests = array_values(array_filter(
+		$outbox, static fn(array $message): bool => $message['type'] === 'action-request'
+	));
+	$expect(count($requests) === 1 && !$game->controllable(), 'One turn queued more than one action request');
+
+	$frame($game, [
+		'networkAcks' => [$requests[0]['id']]
+		, 'network' => [[
+			'type' => 'write-rejected'
+			, 'detail' => ['messageType' => 'action-request','message' => 'It is not your turn']
+		]]
+	]);
+	$rejected = $game->status(1);
+	$expect(!$game->controllable() && count($rejected['network']['outbox']) === 0
+		&& $rejected['status'] === 'Online: It is not your turn',
+		'A rejected action remained queued or incorrectly unlocked local input');
+	$frame($game, ['network' => [[
+		'type' => 'confirmed'
+		, 'detail' => ['sequence' => 0,'hash' => $ready['hash'],'nextActor' => $player,'outcome' => null]
+	]]]);
+	$expect($game->controllable(), 'A fresh matching room confirmation did not recover the turn');
+});
+
+$test('online scoreboard restores turn groups and pocketed balls from confirmed state', static function() use ($expect): void {
+	$seed = str_repeat('5e', 32);
+	$alice = '@alice:example.org';
+	$bob = '@bob:example.org';
+	$simulation = new Simulation($seed);
+	foreach($simulation->balls as $ball)
+	if(in_array($ball->number, [2,5,11], true)) $ball->active = false;
+	$match = new EightBallMatch([$alice,$bob], $alice, $seed);
+	$match->groups = [$alice => 'solid',$bob => 'stripe'];
+	$match->actor = $bob;
+	$checkpoint = $match->checkpoint($simulation);
+
+	$game = new Game;
+	$game->input(['network' => [[
+		'type' => 'start'
+		, 'detail' => [
+			'players' => [$alice,$bob], 'seed' => $seed, 'breaker' => $alice
+			, 'localPlayer' => $alice, 'role' => 'player'
+			, 'checkpoint' => $checkpoint, 'hash' => $match->hash($simulation)
+		]
+	]]], [], [], [], [0,0], 0, 1280, 720);
+
+	$score = $game->onlineScoreboard();
+	$expect($score !== null && $score['assigned'] && $score['actor'] === $bob && $score['openDown'] === []);
+	$expect($score['players'][0]['name'] === 'alice' && $score['players'][0]['local']
+		&& !$score['players'][0]['turn'] && $score['players'][0]['group'] === 'solid'
+		&& $score['players'][0]['down'] === [2,5], 'Solid player scoreboard row was incorrect');
+	$expect($score['players'][1]['name'] === 'bob' && !$score['players'][1]['local']
+		&& $score['players'][1]['turn'] && $score['players'][1]['group'] === 'stripe'
+		&& $score['players'][1]['down'] === [11], 'Stripe player scoreboard row was incorrect');
+	$expect($game->status(1)['network']['scoreboard'] === $score,
+		'Browser-facing status did not expose the native OSD scoreboard');
+
+	$free = new Game;
+	$expect($free->onlineScoreboard() === null, 'Free Play unexpectedly produced an online scoreboard');
+});
+
+$test('idle game frames preserve the exact render state', static function() use ($expect): void {
+	$game = new Game;
+	$game->input(['actions' => ['start']], [], [], [], [0,0], 0, 1280, 720);
+	$before = json_encode($game->status(1), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+	for($tick = 0; $tick < 120; $tick++) $game->step(Simulation::STEP);
+	$after = json_encode($game->status(1), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
+	$expect($after === $before, 'Idle fixed steps changed a static frame');
+});
+
+$test('online settlement stays fixed while room confirmation is in flight', static function() use ($expect): void {
+	$game = new Game;
+	$seed = str_repeat('6a', 32);
+	$player = '@alice:example.org';
+	$peer = '@bob:example.org';
+	$frame = static function(Game $game, array $browser): void {
+		$game->input($browser, [], [], [], [0,0], 0, 1280, 720);
+	};
+	$messages = static fn(Game $game, string $type): array => array_values(array_filter(
+		$game->status(1)['network']['outbox'], static fn(array $message): bool => $message['type'] === $type
+	));
+
+	$frame($game, ['network' => [[
+		'type' => 'start'
+		, 'detail' => [
+			'players' => [$player,$peer], 'seed' => $seed, 'breaker' => $player
+			, 'localPlayer' => $player, 'role' => 'player'
+		]
+	]]]);
+	$ready = $messages($game, 'ready')[0];
+	$frame($game, [
+		'networkAcks' => [$ready['id']]
+		, 'network' => [[
+			'type' => 'confirmed'
+			, 'detail' => ['sequence' => 0,'hash' => $ready['hash'],'nextActor' => $player,'outcome' => null]
+		]]
+	]);
+	$frame($game, ['actions' => ['primary']]);
+	$request = $messages($game, 'action-request')[0];
+	$frame($game, [
+		'networkAcks' => [$request['id']]
+		, 'network' => [[
+			'type' => 'action'
+			, 'detail' => [
+				'sequence' => 1, 'actor' => $player, 'pre_hash' => $request['preHash']
+				, 'action' => $request['action']
+			]
+			// A late duplicate of the preceding confirmation must not abort the active shot.
+			, [
+				'type' => 'confirmed'
+				, 'detail' => ['sequence' => 0,'hash' => $ready['hash'],'nextActor' => $player,'outcome' => null]
+			]
+		]]
+	]);
+	$expect(count($messages($game, 'fatal')) === 0, 'A stale confirmation aborted the following action');
+
+	$settled = null;
+	for($tick = 0; $tick < 2400 && $settled === null; $tick++)
+	{
+		$game->step(Simulation::STEP);
+		$settled = $messages($game, 'settled')[0] ?? null;
+	}
+	$expect(is_array($settled), 'Online shot never reported a settlement');
+	$before = $game->simulation->exactHash();
+	for($tick = 0; $tick < 120; $tick++) $game->step(Simulation::STEP);
+	$expect($game->simulation->exactHash() === $before, 'Settled state drifted before room confirmation');
+	$expect(is_string($settled['checkpoint'] ?? null), 'Acting player settlement omitted its checkpoint');
+	$roomState = BinaryState::import($settled['checkpoint']);
+	$expect(is_array($roomState), 'Settlement checkpoint did not decode to match state');
+	$roomState['simulation']['balls'][0]['x'] += .000001;
+	$roomState['simulation']['balls'][0]['previousX'] = $roomState['simulation']['balls'][0]['x'];
+	$roomX = $roomState['simulation']['balls'][0]['x'];
+	$roomHash = BinaryState::hash($roomState);
+	$roomCheckpoint = BinaryState::export($roomState);
+
+	$frame($game, ['network' => [[
+		'type' => 'confirmed'
+		, 'detail' => [
+			'sequence' => $settled['sequence'], 'hash' => $roomHash
+			, 'nextActor' => $settled['nextActor'], 'outcome' => $settled['outcome']
+			, 'checkpoint' => $settled['checkpoint']
+		]
+	]]]);
+	$fatal = $messages($game, 'fatal')[0] ?? null;
+	$expect(($fatal['message'] ?? null) === 'Room confirmation hash differs from the locally reported settlement'
+		&& $game->simulation->exactHash() === $before,
+		'A checkpoint with the wrong hash changed local state or bypassed confirmation validation');
+
+	$frame($game, ['network' => [[
+		'type' => 'confirmed'
+		, 'detail' => [
+			'sequence' => $settled['sequence'], 'hash' => $roomHash
+			, 'nextActor' => $settled['nextActor'], 'outcome' => $settled['outcome']
+			, 'checkpoint' => $roomCheckpoint
+		]
+	]], 'networkAcks' => [$fatal['id']]]);
+	$status = $game->status(1);
+	$expect($status['network']['confirmed'] && $status['network']['problem'] === null
+		&& abs($game->simulation->balls[0]->x - $roomX) < 1e-12
+		&& count(array_filter($status['network']['outbox'], static fn(array $message): bool => $message['type'] === 'fatal')) === 0,
+		'Verified room checkpoint did not recover a differing local settlement');
+});
+
+$test('binary checkpoints round-trip exact floats and casual eight-ball state', static function() use ($expect): void {
+	$value = ['z' => -12,'a' => [1.25,true,null,'µm']];
+	$encoded = BinaryState::encode($value);
+	$expect(BinaryState::decode($encoded) == $value, 'Canonical binary state did not round-trip');
+	$expect(BinaryState::hash($value) === hash('sha256', $encoded));
+
+	$seed = str_repeat('17', 32);
+	$simulation = new Simulation($seed);
+	$match = new EightBallMatch(['@alice:example.org','@bob:example.org'], '@alice:example.org', $seed);
+	$initial = $match->hash($simulation);
+	$match->begin(1, '@alice:example.org', ['type' => 'shot'], $initial);
+	$match->record([['type' => 'pocket','ball' => 9,'pocket' => 0]]);
+	$result = $match->settleShot($simulation);
+	$expect($result['nextActor'] === '@alice:example.org', 'Break pocket should retain the table');
+	$expect($match->groups['@alice:example.org'] === 'stripe'
+		&& $match->groups['@bob:example.org'] === 'solid', 'Legal break pocket did not assign groups');
+	$match->begin(2, '@alice:example.org', ['type' => 'shot'], $result['hash']);
+	$match->record([['type' => 'pocket','ball' => 11,'pocket' => 1]]);
+	$result = $match->settleShot($simulation);
+	$expect($result['nextActor'] === '@alice:example.org', 'Pocketing the assigned group did not retain the turn');
+	$match->begin(3, '@alice:example.org', ['type' => 'shot'], $result['hash']);
+	$match->record([['type' => 'pocket','ball' => 8,'pocket' => 2]]);
+	$result = $match->settleShot($simulation);
+	$expect($result['outcome']['winner'] === '@bob:example.org'
+		&& $result['outcome']['reason'] === 'early-eight', 'Early eight did not lose the game');
+
+	$checkpoint = $match->checkpoint($simulation);
+	$restoredSimulation = new Simulation($seed);
+	$restored = new EightBallMatch(['@alice:example.org','@bob:example.org'], '@alice:example.org', $seed);
+	$state = BinaryState::import($checkpoint);
+	$restored->restore($state, $restoredSimulation);
+	$expect($restored->hash($restoredSimulation) === $match->hash($simulation), 'Checkpoint changed exact state');
+});
+
+$test('a scratched break leaves the table open', static function() use ($expect): void {
+	$seed = str_repeat('2a', 32);
+	$simulation = new Simulation($seed);
+	$alice = '@alice:example.org';
+	$bob = '@bob:example.org';
+	$match = new EightBallMatch([$alice,$bob], $alice, $seed);
+	$match->begin(1, $alice, ['type' => 'shot'], $match->hash($simulation));
+	$match->record([
+		['type' => 'pocket','ball' => 2,'pocket' => 0]
+		, ['type' => 'pocket','ball' => 0,'pocket' => 0]
+	]);
+	$result = $match->settleShot($simulation);
+	$expect($match->groups === [$alice => null,$bob => null] && $result['nextActor'] === $bob,
+		'A scratched break assigned a group or retained the turn');
+});
+
+$test('cue stroke reaches the ball before launching the unchanged deterministic shot', static function() use ($expect): void {
+	$game = new Game;
+	$game->input(['actions' => ['start']], [], [], [], [0,0], 0, 1280, 720);
+	$game->aim = .17;
+	$game->power = .74;
+	$game->top = -.28;
+	$game->side = .36;
+	$game->input(['actions' => ['shoot']], [], [], [], [0,0], 0, 1280, 720);
+	$expect($game->stroking() && $game->simulation->shots === 0 && $game->guide() === []);
+
+	for($step = 0; $step < 7; $step++) $game->step(Simulation::STEP);
+	$backswing = $game->stroke();
+	$expect($backswing !== null && $backswing['offset'] > .14, 'Cue did not draw back with shot power');
+	$expect($game->simulation->shots === 0 && !$game->simulation->moving(), 'Ball moved during the backswing');
+
+	for($step = 7; $step < 11; $step++) $game->step(Simulation::STEP);
+	$expect($game->simulation->shots === 0, 'Shot launched before visual contact');
+	$game->step(Simulation::STEP);
+	$contact = $game->stroke();
+	$expect($contact !== null && $contact['contacted'] && abs($contact['offset'] + .008) < 1e-10,
+		'Cue tip did not coincide with the ball at launch');
+	$expect($game->simulation->shots === 1 && $game->simulation->phase === 'moving');
+
+	$expected = new Simulation;
+	$expected->shoot(.17, .74, -.28, .36);
+	$expect($game->simulation->hash() === $expected->hash(), 'Animation changed deterministic shot physics');
+
+	for($step = 0; $step < 9; $step++) $game->step(Simulation::STEP);
+	$expect(!$game->stroking(), 'Cue remained visible after its follow-through');
+});
+
+$test('placement preview and immediate-contact warning use simulation rules', static function() use ($expect): void {
+	$game = new Simulation;
+	$game->phase = 'placing';
+	$expect($game->canPlaceCue(-.65, 0));
+	$expect(!$game->canPlaceCue(Table::WIDTH / 2, 0));
+	$expect(!$game->canPlaceCue(...Table::pockets()[1]));
+	$game->phase = 'aim';
+	$cue = $game->cue();
+	$target = $game->balls[1];
+	foreach($game->balls as $ball) $ball->active = in_array($ball->number, [0,1], true);
+	$cue->x = $cue->y = 0;
+	$target->x = Ball::RADIUS * 2 + .0005;
+	$target->y = 0;
+	$expect($game->contactWarning(0) === 1);
+	$expect($game->contactWarning(M_PI) === null);
+});
+
+$test('an illegal online placement never reaches the room', static function() use ($expect): void {
+	$game = new Game;
+	$player = '@alice:example.org';
+	$frame = static fn(Game $game, array $browser, array $controls = []) => $game->input($browser, $controls, [], [], [0,0], .1, 1280, 720);
+	$frame($game, ['network' => [['type' => 'start','detail' => [
+		'players' => [$player,'@bob:example.org'],'seed' => str_repeat('6f', 32),'breaker' => $player
+		, 'localPlayer' => $player,'role' => 'player'
+	]]]]);
+	$ready = $game->status(1)['network']['outbox'][0];
+	$frame($game, ['networkAcks' => [$ready['id']],'network' => [['type' => 'confirmed'
+		, 'detail' => ['sequence' => 0,'hash' => $ready['hash'],'nextActor' => $player,'outcome' => null]]]]);
+	$expect($game->controllable(), 'Online setup did not unlock the breaker');
+
+	$game->simulation->phase = 'placing';
+	$game->simulation->cue()->active = false;
+	$blocker = $game->simulation->balls[1];
+	$game->placement = [$blocker->x,$blocker->y];
+	$frame($game, ['actions' => ['primary']]);
+	$requests = static fn(Game $game): array => array_values(array_filter($game->status(1)['network']['outbox']
+		, static fn(array $message): bool => $message['type'] === 'action-request'));
+	$expect($requests($game) === [], 'An occupied placement was sent to the room');
+	$expect(str_starts_with($game->toast()['text'] ?? '', 'Too close to the ' . $blocker->number), 'Rejected placement was not explained');
+
+	// Keyboard movement is clamped to the cloth, so holding a direction can never push the preview off the table.
+	for($index = 0; $index < 80; $index++) $frame($game, [], ['right' => 1]);
+	[$limitX,$limitY] = Simulation::placementLimits();
+	$expect(abs($game->placement[0]) <= $limitX + 1e-12 && abs($game->placement[1]) <= $limitY + 1e-12, 'Placement left the cloth');
+
+	$game->placement = [-.65,0.0];
+	$frame($game, ['actions' => ['primary']]);
+	$expect(count($requests($game)) === 1, 'A legal placement was not requested');
+});
+
+$test('the pause menu captures gameplay input until it closes', static function() use ($expect): void {
+	$game = new Game;
+	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, 1280, 720);
+	$game->camera->animate(2);
+	$aim = $game->aim;
+	$game->input([], ['button9' => 1], [], [], [0,0], .1, 1280, 720);
+	$expect($game->overlay === 'pause' && $game->menuItems()[0][0] === 'resume', 'Escape did not open the pause menu');
+	$game->input([], ['button9' => 0,'right' => 1,'down' => 1], [], [], [0,0], .1, 1280, 720);
+	$expect($game->aim === $aim && !$game->stroking(), 'Gameplay input leaked through the pause menu');
+	$expect($game->menuSelection === 1, 'Menu navigation did not move the selection');
+	$game->input(['actions' => ['shoot']], [], [], [], [0,0], .1, 1280, 720);
+	$expect($game->overlay === 'controls' && !$game->stroking(), 'Confirming Controls did not open the controls sheet');
+	$game->input([], ['button1' => 1], [], [], [0,0], .1, 1280, 720);
+	$expect($game->overlay === 'pause', 'Back did not return from the controls sheet');
+	$game->input([], ['button9' => 1], [], [], [0,0], .1, 1280, 720);
+	$expect($game->overlay === null, 'Escape did not close the pause menu');
+
+	$title = new Game;
+	$title->input([], ['button9' => 1], [], [], [0,0], .1, 1280, 720);
+	$expect($title->overlay === null && !$title->started, 'Escape on the title opened a hidden pause state');
+});
+
+$test('HUD text keeps Matrix names readable and falls back without replacement glyphs', static function() use ($expect): void {
+	$expect(Game::playerName('@sean_morris:matrix.org') === 'sean_morris');
+	$text = Hud::text();
+	$expect($text->characters('é@_☃;') === ['e','@','_','·',';'], 'Unexpected HUD glyph fallback');
+	$expect($text->measure('AV', 20) < $text->measure('A', 20) + $text->measure('V', 20), 'Kerning was not applied');
+	$fitted = $text->fit('an_extremely_long_matrix_localpart', 15, 80);
+	$expect(str_ends_with($fitted, '…') && $text->measure($fitted, 15) <= 80, 'Long names were not ellipsized to width');
+	$expect(count($text->wrap(str_repeat('word ', 60), 15, 200, 2)) === 2, 'Toast text was not capped at two lines');
+});
+
+$test('the aiming preview reports the same first object ball the live shot hits', static function() use ($expect): void {
+	foreach([0.0,.03,-.05] as $angle)
+	{
+		$game = new Simulation;
+		$preview = $game->projectShot($angle, .7);
+		$expect($preview['contact'] !== null, 'A shot into the rack predicted no contact');
+		$game->shoot($angle, .7);
+		$hit = null;
+		for($tick = 0; $tick < 600 && $hit === null; $tick++)
+		{
+			$game->step(Simulation::STEP);
+			foreach($game->balls as $ball) if($ball->number !== 0 && hypot($ball->vx, $ball->vy) > 1e-9) {$hit = $ball->number; break;}
+		}
+		$expect($hit === $preview['contact']['ball'], "Ghost ball at $angle predicted {$preview['contact']['ball']}, shot hit $hit");
+	}
+});
+
+$test('HUD regions stay on screen and never overlap at common canvas sizes', static function() use ($expect): void {
+	foreach([[1280,720,1],[2560,1440,2],[900,540,1],[780,1688,2],[1688,780,2],[3840,2160,1.5]] as [$width,$height,$dpr])
+	{
+		$game = new Game;
+		$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, $width, $height);
+		$regions = array_values(array_filter(Hud::regions($width, $height, $dpr, $game)
+			, static fn(array $region): bool => ($region['type'] ?? '') !== 'panel'));
+		foreach($regions as $index => $region)
+		{
+			[$x,$y,$w,$h] = $region['rect'];
+			$expect($x >= 0 && $y >= 0 && $x + $w <= $width && $y + $h <= $height, "{$region['name']} left a {$width}x{$height} canvas");
+			foreach(array_slice($regions, $index + 1) as $other)
+			{
+				[$ox,$oy,$ow,$oh] = $other['rect'];
+				$expect($x + $w <= $ox || $ox + $ow <= $x || $y + $h <= $oy || $oy + $oh <= $y
+					, "{$region['name']} overlaps {$other['name']} at {$width}x{$height}");
+			}
+		}
+		$title = Hud::titleRegions($width, $height, $dpr);
+		$expect($title['free-play']['rect'][1] + $title['free-play']['rect'][3] <= $title['online-play']['rect'][1]
+			&& $title['online-play']['rect'][1] + $title['online-play']['rect'][3] <= $height, "Title items overflow {$width}x{$height}");
+	}
 });
 
 $failures = 0;

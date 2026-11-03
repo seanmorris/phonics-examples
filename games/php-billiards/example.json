@@ -3,13 +3,36 @@
   "slug": "php-billiards",
   "title": "PHP Billiards",
   "description": "A photorealistic 3D pool practice table with deterministic PHP physics.",
+  "controls": "Drag to aim · Space shoots · right-drag to orbit · wheel to zoom · Esc for the menu · ? for every control",
   "application": "dist/game.phar",
-  "poster": "assets/generated/poster.svg",
+  "poster": "assets/generated/poster.png",
   "canvas": {
     "width": 1280,
     "height": 720
   },
   "aspectRatio": "16/9",
-  "fit": "contain"
+  "fit": "contain",
+  "documentation": {
+    "chapters": [
+      {
+        "slug": "index",
+        "title": "PHP Billiards",
+        "path": "docs/index.md"
+      },
+      {
+        "slug": "online",
+        "title": "Online games and deterministic seeding",
+        "path": "docs/online.md"
+      }
+    ],
+    "api": {
+      "namespace": "PhpBilliards",
+      "description": "Deterministic billiards physics, shared table geometry, native controls, and PHP-owned GLES rendering."
+    },
+    "embed": {
+      "kind": "external",
+      "frame": "https://seanmorris.github.io/phonics-examples/embed/php-billiards/",
+      "full": "https://seanmorris.github.io/phonics-examples/games/php-billiards/"
+    }
+  }
 }
-

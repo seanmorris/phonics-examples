@@ -18,13 +18,14 @@
   "files": [
     "application.php",
     "autoload.php",
-    "browser/",
-    "src/",
-    "assets/generated/",
+		"browser/",
+		"src/",
+		"shaders/",
+		"assets/generated/",
+		"assets/audio/",
     "phonics.json",
     "example.json",
     "README.md",
     "LICENSE"
   ]
 }
-

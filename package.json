@@ -10,14 +10,14 @@
     "games/*"
   ],
   "scripts": {
-    "generate": "node scripts/generate-billiards-textures.mjs",
-    "check:generated": "node scripts/generate-billiards-textures.mjs --check",
+    "generate": "node scripts/generate-billiards-textures.mjs && php scripts/generate-billiards-meshes.php",
+    "check:generated": "node scripts/generate-billiards-textures.mjs --check && php scripts/generate-billiards-meshes.php --check",
     "build:applications": "node scripts/build-applications.mjs",
     "build:site": "node scripts/build-site.mjs",
     "build": "npm run generate && npm run build:applications && npm run build:site",
     "test:php": "php games/php-billiards/tests/run.php",
     "test:node": "node --test tests/*.test.mjs",
-    "test:manifest": "phonics validate games/php-billiards",
+    "test:manifest": "node scripts/validate-games.mjs",
     "test:browser": "playwright test",
     "test": "npm run test:php && npm run test:node && npm run check:generated && npm run test:manifest",
     "serve": "node scripts/serve.mjs"
@@ -28,6 +28,7 @@
   "devDependencies": {
     "@playwright/test": "1.64.1",
     "@resvg/resvg-js": "2.6.2",
+    "opentype.js": "1.3.4",
     "pngjs": "7.0.0"
   },
   "license": "Apache-2.0"

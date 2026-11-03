@@ -2,7 +2,14 @@
 declare(strict_types=1);
 namespace PhpBilliards\Physics;
 
-/** Deterministic grounded billiards simulation with swept contacts and spin-aware cloth friction. */
+use PhpBilliards\Online\BinaryState;
+
+/**
+ * Deterministic grounded billiards simulation with swept contacts and spin-aware cloth friction.
+ *
+ * Fixed-step updates resolve ball contacts, cushions, jaws, pocket shelves, drops, rolling, and sliding while
+ * exposing repeatable shots, projected paths, placement rules, events, and interpolated state to the game shell.
+ */
 final class Simulation
 {
 	public const STEP = 1 / 60;
@@ -22,10 +29,13 @@ final class Simulation
 	private const POCKET_RESTITUTION = .52;
 	private const POCKET_SINK_DEPTH = .115;
 
-	/** @var list<Ball> */
+	/** @var list<Ball> Complete cue and object-ball set in deterministic storage order. */
 	public array $balls = [];
+	/** Current interaction phase: aiming, moving, or scratch placement. */
 	public string $phase = 'aim';
+	/** Whether the latest shot pocketed the cue ball. */
 	public bool $scratched = false;
+	/** Number of accepted cue strikes since the current rack began. */
 	public int $shots = 0;
 	/** @var list<array<string,mixed>> */
 	private array $events = [];
@@ -34,19 +44,47 @@ final class Simulation
 	/** @var list<array{float,float}>|null Exact cue contacts captured by a simulation-backed aim preview. */
 	private ?array $projectionPoints = null;
 	private bool $projectionStop = false;
+	/** @var list<Ball> Balls sorted by number for the swept search, rebuilt when `$balls` changes. */
+	private array $numberOrder = [];
+	/** @var list<Ball> The `$balls` list that `$numberOrder` was sorted from. */
+	private array $numberOrderSource = [];
+	/** @var array<string,mixed>|null First cue/object contact seen while projecting the aiming guide. */
+	private ?array $projectionContact = null;
+	/** Match seed used for the current online rack, or null for the established free-play rack. */
+	private ?string $rackSeed = null;
+	/** Derived rack number used when an eight ball on the break requires a rerack. */
+	private int $rackIndex = 0;
 
-	public function __construct()
+	/**
+	 * Create the established free-play rack or a seed-derived legal online rack.
+	 *
+	 * @param string|null $rackSeed Commit/reveal-derived match seed, or null for free play.
+	 * @param int $rackIndex Nonnegative derived rack number for an eight on the break.
+	 */
+	public function __construct(?string $rackSeed = null, int $rackIndex = 0)
 	{
-		$this->rack();
+		$this->rack($rackSeed, $rackIndex);
 	}
 
-	/** Restore a standard fifteen-ball rack and cue ball. */
-	public function rack(): void
+	/**
+	 * Restore a standard fifteen-ball rack and cue ball.
+	 *
+	 * Regulation spacing receives a seeded sub-millimetre perturbation and stable independent ball orientations,
+	 * preventing symmetric break artifacts without giving repeated runs any nondeterministic input.
+	 *
+	 * @param string|null $rackSeed Commit/reveal-derived match seed, or null for free play.
+	 * @param int $rackIndex Nonnegative derived rack number.
+	 */
+	public function rack(?string $rackSeed = null, int $rackIndex = 0): void
 	{
+		$this->rackSeed = $rackSeed;
+		$this->rackIndex = max(0, $rackIndex);
 		$this->balls = [new Ball(0, -Table::WIDTH * .28, 0)];
 		$spacing = Ball::RADIUS * 2 + self::RACK_GAP;
 		$apex = Table::WIDTH * .23;
-		$numbers = [1,9,2,10,8,3,11,4,12,5,13,6,14,7,15];
+		$numbers = $rackSeed === null
+			? [1,9,2,10,8,3,11,4,12,5,13,6,14,7,15]
+			: self::seededRack($rackSeed, $this->rackIndex);
 		$index = 0;
 
 		for($row = 0; $row < 5; $row++)
@@ -55,8 +93,8 @@ final class Simulation
 			$number = $numbers[$index++];
 			$idealX = $apex + $row * $spacing * .866025403784;
 			$idealY = ($column - $row / 2) * $spacing;
-			$noiseX = self::rackNoise($number, 0);
-			$noiseY = self::rackNoise($number, 1);
+			$noiseX = self::rackNoise($number, 0, $rackSeed, $this->rackIndex, $index - 1);
+			$noiseY = self::rackNoise($number, 1, $rackSeed, $this->rackIndex, $index - 1);
 			$scale = 1.0;
 
 			do
@@ -81,7 +119,7 @@ final class Simulation
 			$this->balls[] = new Ball($number, $x, $y);
 		}
 
-		foreach($this->balls as $ball) self::orientBall($ball);
+		foreach($this->balls as $ball) self::orientBall($ball, $rackSeed, $this->rackIndex);
 
 		$this->phase = 'aim';
 		$this->scratched = false;
@@ -91,17 +129,31 @@ final class Simulation
 	}
 
 	/** Fixed sub-pixel variation prevents a perfectly symmetric break without changing replay. */
-	private static function rackNoise(int $number, int $axis): float
+	private static function rackNoise(
+		int $number, int $axis, ?string $seed = null, int $rackIndex = 0, int $slot = 0
+	): float
 	{
+		if($seed !== null)
+		{
+			$bytes = hash('sha256', "PHP Billiards rack noise v1\0$seed\0$rackIndex\0$slot\0$number\0$axis", true);
+			$value = (ord($bytes[0]) << 16) | (ord($bytes[1]) << 8) | ord($bytes[2]);
+			return (($value + .5) / 16777216 - .5) * .00002;
+		}
 		$hash = (($number + 11) * 48271 + ($axis + 3) * 69621 + 0x35a7bd) % 2147483647;
 
 		return (($hash % 2001) / 2000 - .5) * .00002;
 	}
 
 	/** Give every racked ball a stable independent orientation instead of a camera-visible uniform alignment. */
-	private static function orientBall(Ball $ball): void
+	private static function orientBall(Ball $ball, ?string $seed = null, int $rackIndex = 0): void
 	{
-		$sample = static function(int $salt) use ($ball): float {
+		$sample = static function(int $salt) use ($ball, $seed, $rackIndex): float {
+			if($seed !== null)
+			{
+				$bytes = hash('sha256', "PHP Billiards ball orientation v1\0$seed\0$rackIndex\0{$ball->number}\0$salt", true);
+				$value = (ord($bytes[0]) << 16) | (ord($bytes[1]) << 8) | ord($bytes[2]);
+				return ($value + .5) / 16777216;
+			}
 			// Keep the largest intermediate (1008 * 2,000,003) inside signed 32-bit PHP.
 			$value = (($ball->number + 1) * 97 + ($salt + 1) * 193 + 17) % 1009;
 			$hash = ($value * 2000003) % 2147483629;
@@ -119,6 +171,39 @@ final class Simulation
 		$ball->qw = $upper * cos($u3);
 	}
 
+	/** @return list<int> Regulation rack with a seeded legal permutation. */
+	private static function seededRack(string $seed, int $rackIndex): array
+	{
+		$solids = self::shuffle(range(1, 7), $seed, "rack:$rackIndex:solid");
+		$stripes = self::shuffle(range(9, 15), $seed, "rack:$rackIndex:stripe");
+		$rearSolid = array_pop($solids);
+		$rearStripe = array_pop($stripes);
+		$remaining = self::shuffle([...$solids,...$stripes], $seed, "rack:$rackIndex:remaining");
+		$result = array_fill(0, 15, 0);
+		$result[4] = 8;
+		$result[10] = $rearSolid;
+		$result[14] = $rearStripe;
+		foreach($result as $slot => $number) if($number === 0) $result[$slot] = array_shift($remaining);
+		return $result;
+	}
+
+	/** @param list<int> $values @return list<int> */
+	private static function shuffle(array $values, string $seed, string $domain): array
+	{
+		for($index = count($values) - 1; $index > 0; $index--)
+		{
+			$bytes = hash('sha256', "PHP Billiards shuffle v1\0$seed\0$domain\0$index", true);
+			$sample = ((ord($bytes[0]) & 0x7f) << 24) | (ord($bytes[1]) << 16)
+				| (ord($bytes[2]) << 8) | ord($bytes[3]);
+			$other = $sample % ($index + 1);
+			[$values[$index],$values[$other]] = [$values[$other],$values[$index]];
+		}
+		return $values;
+	}
+
+	/**
+	 * @param float $power Normalized cue-power setting.
+	 */
 	public static function shotSpeed(float $power): float
 	{
 		$power = max(.05, min(1, $power));
@@ -133,7 +218,17 @@ final class Simulation
 		throw new \LogicException('Simulation has no cue ball');
 	}
 
-	/** Strike the cue ball with normalized power and top/back/side spin. */
+	/**
+	 * Strike the cue ball with normalized power and top, back, or side spin.
+	 *
+	 * A valid resting aim state is snapshotted for reset before clamped controls become linear velocity and angular
+	 * velocity, then the simulation enters its moving phase and publishes one shot event.
+	 *
+	 * @param float $angle Cue direction in cloth-plane radians.
+	 * @param float $power Normalized cue-power setting.
+	 * @param float $top Normalized draw or follow offset.
+	 * @param float $side Normalized left or right English offset.
+	 */
 	public function shoot(float $angle, float $power, float $top = 0, float $side = 0): bool
 	{
 		if($this->phase !== 'aim' || $this->moving() || !$this->cue()->active) return false;
@@ -159,9 +254,17 @@ final class Simulation
 	}
 
 	/**
-	 * Predict the visible cue-ball centre path with the same collision solver used
-	 * by a real shot. The source simulation is never mutated.
+	 * Predict the visible cue-ball centre path for an aimed shot.
 	 *
+	 * A private snapshot clone runs the same contact, cushion, jaw, and pocket solver as a real shot, then clips and
+	 * simplifies its travelled path. The source simulation is never mutated.
+	 *
+	 * @param float $angle Cue direction in cloth-plane radians.
+	 * @param float $power Normalized cue-power setting.
+	 * @param float $top Normalized draw or follow offset.
+	 * @param float $side Normalized left or right English offset.
+	 * @param float $length Maximum projected path length.
+	 * @param float $startOffset Distance omitted from the start of the guide.
 	 * @return list<array{float,float}>
 	 */
 	public function projectPath(
@@ -172,7 +275,7 @@ final class Simulation
 			|| !is_finite($angle) || $length <= 0 || !is_finite($length)) return [];
 
 		$preview = new self;
-		$preview->restoreSnapshot($this->snapshot());
+		$preview->restore($this->snapshot());
 		$preview->events = [];
 		$preview->shotSnapshot = null;
 
@@ -202,11 +305,38 @@ final class Simulation
 
 		$path = self::clipPath($preview->projectionPoints, $length);
 		$path = self::trimPathStart($path, max(0, $startOffset));
+		$this->projectionContact = $preview->projectionContact;
 
 		return self::simplifyPath($path, .00005);
 	}
 
-	/** Advance one display-rate tick through four 240 Hz integration slices. */
+	/**
+	 * Predict the cue-ball path together with its first object-ball contact.
+	 *
+	 * The contact carries the ghost-ball centre and the object ball's departure direction along the line of centres,
+	 * which is exact for the instant of contact before throw and spin transfer act.
+	 *
+	 * @return array{path:list<array{float,float}>,contact:array{ball:int,x:float,y:float,objectX:float,objectY:float,direction:array{float,float}}|null}
+	 */
+	public function projectShot(
+		float $angle, float $power = .58, float $top = 0, float $side = 0, float $length = 1.8, float $startOffset = .05
+	): array {
+		$this->projectionContact = null;
+		$path = $this->projectPath($angle, $power, $top, $side, $length, $startOffset);
+		$contact = $this->projectionContact;
+		$this->projectionContact = null;
+
+		return ['path' => $path,'contact' => $contact];
+	}
+
+	/**
+	 * Advance one fixed tick through four 240 Hz integration slices.
+	 *
+	 * Previous poses are retained for rendering before swept contacts, rail and pocket interactions, cloth friction,
+	 * and rest detection advance the phase to aiming or scratch placement.
+	 *
+	 * @param float $seconds Fixed simulation interval in seconds.
+	 */
 	public function step(float $seconds = self::STEP): void
 	{
 		if($seconds <= 0 || !is_finite($seconds)) return;
@@ -240,6 +370,18 @@ final class Simulation
 			{
 				$cue = $this->cue();
 				$this->appendProjectionPoint($cue->x, $cue->y);
+
+				if($collision['type'] === 'ball' && $this->projectionContact === null)
+				{
+					$object = $collision['a']->number === 0 ? $collision['b'] : $collision['a'];
+					$dx = $object->x - $cue->x;
+					$dy = $object->y - $cue->y;
+					$distance = max(1e-12, hypot($dx, $dy));
+					$this->projectionContact = [
+						'ball' => $object->number,'x' => $cue->x,'y' => $cue->y,'objectX' => $object->x,'objectY' => $object->y
+						, 'direction' => [$dx / $distance,$dy / $distance]
+					];
+				}
 			}
 
 			if($collision['type'] === 'ball') $this->resolveContactIsland($collision['a'], $collision['b']);
@@ -476,18 +618,45 @@ final class Simulation
 	private function earliest(float $limit): ?array
 	{
 		$best = null;
-		$balls = array_values(array_filter($this->balls,
-			static fn(Ball $ball): bool => $ball->active && $ball->pocket === null));
-		usort($balls, static fn(Ball $left, Ball $right): int => $left->number <=> $right->number);
+		// The ball list only changes on rack or restore, so sort it by number once rather than on every search.
+		if($this->numberOrderSource !== $this->balls)
+		{
+			$this->numberOrder = $this->balls;
+			usort($this->numberOrder, static fn(Ball $left, Ball $right): int => $left->number <=> $right->number);
+			$this->numberOrderSource = $this->balls;
+		}
+		$balls = [];
+		$resting = [];
+		$reaches = [];
+		foreach($this->numberOrder as $ball) if($ball->active && $ball->pocket === null)
+		{
+			$balls[] = $ball;
+			// applyCloth() stops balls with exact zeros; every velocity-dependent test below rejects such a ball.
+			$resting[] = $ball->vx == 0.0 && $ball->vy == 0.0;
+			// Farthest this ball can travel before the limit, plus a micrometre of slack far beyond rounding error.
+			// A target outside that reach cannot produce an event, so box tests below skip only certain misses.
+			$reaches[] = sqrt($ball->vx ** 2 + $ball->vy ** 2) * $limit + 1e-6;
+		}
 		$count = count($balls);
+		[$pockets,$facings] = self::sweptGeometry();
+		$halfX = Table::WIDTH / 2 - Ball::RADIUS;
+		$halfY = Table::HEIGHT / 2 - Ball::RADIUS;
 
 		for($i = 0; $i < $count; $i++)
 		{
 			$a = $balls[$i];
+			$restingA = $resting[$i];
+			$speedSquared = $a->vx ** 2 + $a->vy ** 2;
+			$reach = $reaches[$i];
 
 			for($j = $i + 1; $j < $count; $j++)
 			{
+				// Two resting balls have zero relative velocity and can never meet.
+				if($restingA && $resting[$j]) continue;
 				$b = $balls[$j];
+				// Contact needs the centres within two radii plus both travel reaches.
+				$gap = Ball::RADIUS * 2 + $reach + $reaches[$j];
+				if(abs($b->x - $a->x) > $gap || abs($b->y - $a->y) > $gap) continue;
 
 				$rx = $b->x - $a->x;
 				$ry = $b->y - $a->y;
@@ -517,12 +686,11 @@ final class Simulation
 			// only after a substep lets a fast ball cross the narrow clearance circle
 			// and reach the back of the table, especially when a contact cluster
 			// redirects it inside the mouth.
-			foreach(Table::pockets() as $index => [$pocketX,$pocketY])
+			foreach($pockets as $index => [$pocketX,$pocketY,$radius])
 			{
+				if(abs($a->x - $pocketX) > $radius + $reach || abs($a->y - $pocketY) > $radius + $reach) continue;
 				$relativeX = $a->x - $pocketX;
 				$relativeY = $a->y - $pocketY;
-				$speedSquared = $a->vx ** 2 + $a->vy ** 2;
-				$radius = Table::pocketRadius($index) - Ball::RADIUS;
 				$separation = $relativeX ** 2 + $relativeY ** 2 - $radius ** 2;
 				$approach = 2 * ($relativeX * $a->vx + $relativeY * $a->vy);
 
@@ -542,12 +710,15 @@ final class Simulation
 				$best = ['type' => 'pocket','time' => max(0, $time),'ball' => $a,'index' => $index];
 			}
 
+			// Only a pocket overlap can involve a resting ball; the backstop, rail, jaw, and facing sweeps all
+			// require motion, so skipping them returns exactly what evaluating them would.
+			if($restingA) continue;
+
 			// A ball whose trajectory misses the drop clearance can still enter the
 			// visible throat. The far half of the round liner must return it through
 			// the mouth instead of allowing it to continue behind the table.
-			foreach(Table::pockets() as $index => [$pocketX,$pocketY])
+			foreach($pockets as $index => [$pocketX,$pocketY,$clearance,$outwardX,$outwardY])
 			{
-				[$outwardX,$outwardY] = Table::pocketOutward($index);
 				$lateralX = -$outwardY;
 				$lateralY = $outwardX;
 				$relativeX = $a->x - $pocketX;
@@ -563,7 +734,6 @@ final class Simulation
 
 				$lateral = ($relativeX + $a->vx * max(0, $time)) * $lateralX
 					+ ($relativeY + $a->vy * max(0, $time)) * $lateralY;
-				$clearance = Table::pocketRadius($index) - Ball::RADIUS;
 
 				if(abs($lateral) < $clearance - 1e-9
 					|| abs($lateral) > Table::THROAT_RADIUS + Ball::RADIUS) continue;
@@ -571,9 +741,6 @@ final class Simulation
 				$best = ['type' => 'backstop','time' => max(0, $time),'ball' => $a,'index' => $index
 					,'x' => $pocketX,'y' => $pocketY,'nx' => -$outwardX,'ny' => -$outwardY];
 			}
-
-			$halfX = Table::WIDTH / 2 - Ball::RADIUS;
-			$halfY = Table::HEIGHT / 2 - Ball::RADIUS;
 
 			foreach([
 				['x',$a->vx > 0 ? $halfX : -$halfX,$a->x,$a->vx,$a->y]
@@ -596,9 +763,9 @@ final class Simulation
 
 			foreach(Table::jaws() as [$jawX,$jawY])
 			{
+				if(abs($a->x - $jawX) > Ball::RADIUS + $reach || abs($a->y - $jawY) > Ball::RADIUS + $reach) continue;
 				$relativeX = $a->x - $jawX;
 				$relativeY = $a->y - $jawY;
-				$speedSquared = $a->vx ** 2 + $a->vy ** 2;
 				$approach = 2 * ($relativeX * $a->vx + $relativeY * $a->vy);
 				$separation = $relativeX ** 2 + $relativeY ** 2 - Ball::RADIUS ** 2;
 
@@ -625,15 +792,10 @@ final class Simulation
 					,'x' => $jawX,'y' => $jawY,'nx' => $contactX / $length,'ny' => $contactY / $length];
 			}
 
-			foreach(Table::facings() as [$startX,$startY,$endX,$endY])
+			foreach($facings as [$startX,$startY,$segmentLength,$tx,$ty,$lineX,$lineY,$minX,$maxX,$minY,$maxY])
 			{
-				$segmentX = $endX - $startX;
-				$segmentY = $endY - $startY;
-				$segmentLength = hypot($segmentX, $segmentY);
-				$tx = $segmentX / $segmentLength;
-				$ty = $segmentY / $segmentLength;
-				$lineX = -$ty;
-				$lineY = $tx;
+				$margin = Ball::RADIUS + $reach;
+				if($a->x < $minX - $margin || $a->x > $maxX + $margin || $a->y < $minY - $margin || $a->y > $maxY + $margin) continue;
 				$distance = ($a->x - $startX) * $lineX + ($a->y - $startY) * $lineY;
 				$normalVelocity = $a->vx * $lineX + $a->vy * $lineY;
 
@@ -661,6 +823,39 @@ final class Simulation
 		}
 
 		return $best;
+	}
+
+	/**
+	 * Per-pocket and per-facing constants for the swept search, derived once with the same arithmetic it used inline.
+	 *
+	 * @return array{list<array{float,float,float,float,float}>,list<list<float>>} Pockets as centre, clearance, and
+	 * outward normal; facings as start, length, tangent, normal, and bounding box.
+	 */
+	private static function sweptGeometry(): array
+	{
+		static $geometry = null;
+		if($geometry !== null) return $geometry;
+
+		$pockets = [];
+		foreach(Table::pockets() as $index => [$pocketX,$pocketY])
+		{
+			[$outwardX,$outwardY] = Table::pocketOutward($index);
+			$pockets[$index] = [$pocketX,$pocketY,Table::pocketRadius($index) - Ball::RADIUS,$outwardX,$outwardY];
+		}
+
+		$facings = [];
+		foreach(Table::facings() as [$startX,$startY,$endX,$endY])
+		{
+			$segmentX = $endX - $startX;
+			$segmentY = $endY - $startY;
+			$segmentLength = hypot($segmentX, $segmentY);
+			$tx = $segmentX / $segmentLength;
+			$ty = $segmentY / $segmentLength;
+			$facings[] = [$startX,$startY,$segmentLength,$tx,$ty,-$ty,$tx
+				, min($startX, $endX),max($startX, $endX),min($startY, $endY),max($startY, $endY)];
+		}
+
+		return $geometry = [$pockets,$facings];
 	}
 
 	/** Resolve every touching ball connected to the first impact as one stable contact island. */
@@ -893,6 +1088,13 @@ final class Simulation
 
 	private function applyCloth(Ball $ball, float $seconds): void
 	{
+		// A ball already at rest always leaves this pass with all five rates reset to zero; skip the friction math.
+		if($ball->vx == 0.0 && $ball->vy == 0.0 && $ball->spinX == 0.0 && $ball->spinY == 0.0 && $ball->spinZ == 0.0)
+		{
+			$ball->vx = $ball->vy = $ball->spinX = $ball->spinY = $ball->spinZ = 0;
+			return;
+		}
+
 		$r = Ball::RADIUS;
 		$slipX = $ball->vx + $r * $ball->spinZ;
 		$slipY = $ball->vy - $r * $ball->spinX;
@@ -939,19 +1141,97 @@ final class Simulation
 		return false;
 	}
 
-	/** Place the cue ball after a scratch, rejecting rails, pockets, and overlaps. */
-	public function placeCue(float $x, float $y): bool
+	/**
+	 * Check scratch placement without mutating the current game.
+	 *
+	 * A candidate must remain inside the playable rail limits, outside every pocket opening, and separated from all
+	 * active object balls by the physical ball diameter plus placement tolerance.
+	 *
+	 * @param float $x Candidate cue-ball X coordinate.
+	 * @param float $y Candidate cue-ball Y coordinate.
+	 */
+	public function canPlaceCue(float $x, float $y): bool
 	{
-		if($this->phase !== 'placing') return false;
+		return $this->phase === 'placing' && $this->placementProblem($x, $y) === null;
+	}
 
-		$limitX = Table::WIDTH / 2 - Ball::RADIUS * 1.2;
-		$limitY = Table::HEIGHT / 2 - Ball::RADIUS * 1.2;
+	/**
+	 * Explain why a cue-ball placement is illegal, independent of the current phase.
+	 *
+	 * @return array{reason:string,ball?:int}|null `cloth`, `pocket`, or `ball` with the blocking ball number.
+	 */
+	public function placementProblem(float $x, float $y): ?array
+	{
+		if(!is_finite($x) || !is_finite($y)) return ['reason' => 'cloth'];
 
-		if(abs($x) > $limitX || abs($y) > $limitY || Table::pocketed($x, $y)) return false;
+		[$limitX,$limitY] = self::placementLimits();
+
+		if(abs($x) > $limitX || abs($y) > $limitY) return ['reason' => 'cloth'];
+		if(Table::pocketed($x, $y)) return ['reason' => 'pocket'];
 
 		foreach($this->balls as $ball)
 		if($ball->number !== 0 && $ball->active && hypot($x - $ball->x, $y - $ball->y) < Ball::RADIUS * 2.05)
-		return false;
+		return ['reason' => 'ball','ball' => $ball->number];
+
+		return null;
+	}
+
+	/** @return array{float,float} Largest legal absolute cue-ball X and Y offsets from the table centre. */
+	public static function placementLimits(): array
+	{
+		return [Table::WIDTH / 2 - Ball::RADIUS * 1.2, Table::HEIGHT / 2 - Ball::RADIUS * 1.2];
+	}
+
+	/**
+	 * Return the nearest object ball which will receive an effectively immediate cue contact.
+	 *
+	 * @param float $angle Cue direction in cloth-plane radians.
+	 * @param float $threshold Maximum forward clearance treated as nearly frozen.
+	 */
+	public function contactWarning(float $angle, float $threshold = .0012): ?int
+	{
+		if($this->phase !== 'aim' || !is_finite($angle) || !is_finite($threshold) || $threshold < 0)
+		return null;
+
+		$cue = $this->cue();
+		$directionX = cos($angle);
+		$directionY = sin($angle);
+		$nearest = null;
+		$nearestGap = INF;
+
+		foreach($this->balls as $ball) if($ball->number !== 0 && $ball->active)
+		{
+			$offsetX = $ball->x - $cue->x;
+			$offsetY = $ball->y - $cue->y;
+			$distance = hypot($offsetX, $offsetY);
+
+			if($distance < 1e-9) continue;
+
+			$gap = $distance - Ball::RADIUS * 2;
+			$alignment = ($offsetX * $directionX + $offsetY * $directionY) / $distance;
+
+			if($gap <= $threshold && $alignment > .7 && $gap < $nearestGap)
+			{
+				$nearest = $ball->number;
+				$nearestGap = $gap;
+			}
+		}
+
+		return $nearest;
+	}
+
+	/**
+	 * Place the cue ball after a scratch, rejecting rails, pockets, and overlaps.
+	 *
+	 * Successful placement resets all cue-ball motion and pocket state, clears the scratch, resumes aiming, and emits
+	 * a placement event from the same rules used by the visual preview.
+	 *
+	 * @param float $x Requested cue-ball X coordinate.
+	 * @param float $y Requested cue-ball Y coordinate.
+	 */
+	public function placeCue(float $x, float $y): bool
+	{
+		if(!$this->canPlaceCue($x, $y)) return false;
 
 		$cue = $this->cue();
 		$cue->x = $cue->previousX = $x;
@@ -971,7 +1251,7 @@ final class Simulation
 	{
 		if(!$this->shotSnapshot) return false;
 
-		$this->restoreSnapshot($this->shotSnapshot);
+		$this->restore($this->shotSnapshot);
 		$this->events[] = ['type' => 'reset'];
 
 		return true;
@@ -994,17 +1274,37 @@ final class Simulation
 			, 'phase' => $this->phase
 			, 'scratched' => $this->scratched
 			, 'shots' => $this->shots
+			, 'rackSeed' => $this->rackSeed
+			, 'rackIndex' => $this->rackIndex
 		];
 	}
 
-	/** @param array<string,mixed> $snapshot */
-	private function restoreSnapshot(array $snapshot): void
+	/**
+	 * Restore the complete deterministic simulation checkpoint.
+	 *
+	 * Ball poses, phase, rack identity, and shot counters are replaced together, while transient events and the
+	 * local free-play undo point are cleared so replay resumes from a clean action boundary.
+	 *
+	 * @param array<string,mixed> $snapshot Canonical simulation state previously returned by snapshot().
+	 */
+	public function restore(array $snapshot): void
 	{
 		$this->balls = array_map(static fn(array $ball): Ball => Ball::restore($ball), $snapshot['balls']);
 		$this->phase = (string)$snapshot['phase'];
 		$this->scratched = (bool)$snapshot['scratched'];
 		$this->shots = (int)$snapshot['shots'];
+		$this->rackSeed = isset($snapshot['rackSeed']) ? (string)$snapshot['rackSeed'] : null;
+		$this->rackIndex = (int)($snapshot['rackIndex'] ?? 0);
+		$this->events = [];
+		$this->shotSnapshot = null;
 	}
+
+	/**
+	 * Compute a stable digest of the exact versioned binary simulation checkpoint.
+	 *
+	 * @return string Lowercase SHA-256 digest.
+	 */
+	public function exactHash(): string { return BinaryState::hash($this->snapshot()); }
 
 	/** Stable digest used by deterministic replay tests. */
 	public function hash(): string
@@ -1020,7 +1320,15 @@ final class Simulation
 		return hash('sha256', json_encode($values, JSON_THROW_ON_ERROR));
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * Return interpolated public simulation state for rendering and diagnostics.
+	 *
+	 * Phase, motion, physical table measurements, and all ball poses are emitted without exposing internal collision
+	 * queues or changing any deterministic state.
+	 *
+	 * @param float $alpha Interpolation fraction for visible ball state.
+	 * @return array<string,mixed>
+	 */
 	public function state(float $alpha = 1): array
 	{
 		return [

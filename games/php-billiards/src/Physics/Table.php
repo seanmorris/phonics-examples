@@ -2,7 +2,12 @@
 declare(strict_types=1);
 namespace PhpBilliards\Physics;
 
-/** Standard nine-foot pool-table playfield and pocket geometry, in metres. */
+/**
+ * Standard nine-foot pool-table playfield and pocket geometry, in metres.
+ *
+ * Regulation ball, mouth, jaw, shelf, and rail measurements live here so simulation and constructive render
+ * geometry query one canonical physical model for all six pockets and every playable boundary.
+ */
 final class Table
 {
 	public const WIDTH = 2.54;
@@ -18,7 +23,14 @@ final class Table
 	public const LINER_RADIUS = self::THROAT_RADIUS - self::POCKET_LIP_INSET;
 	private const CORNER_JAW = 0.08194483710475602;
 
-	/** @return list<array{float,float}> */
+	/**
+	 * Return the six canonical pocket-throat centres.
+	 *
+	 * Corner centres follow the rounded table corners while side centres sit beyond the long rail, giving physics and
+	 * rendering one ordered index for mouths, liners, shelves, drops, and sound events.
+	 *
+	 * @return list<array{float,float}>
+	 */
 	public static function pockets(): array
 	{
 		static $pockets = null;
@@ -33,7 +45,12 @@ final class Table
 			,[-$cornerX,$cornerY],[0,$sideY],[$cornerX,$cornerY]];
 	}
 
-	/** Whether a rail face exists at the supplied along-rail coordinate. */
+	/**
+	 * Whether a rail face exists at the supplied along-rail coordinate.
+	 *
+	 * @param string $axis Cushion axis, either X or Y.
+	 * @param float $coordinate Coordinate along the cushion opening line.
+	 */
 	public static function cushion(string $axis, float $coordinate): bool
 	{
 		if($axis === 'x') return abs($coordinate) < self::HEIGHT / 2 - self::CORNER_JAW;
@@ -42,18 +59,28 @@ final class Table
 			&& abs($coordinate) > self::SIDE_MOUTH / 2;
 	}
 
+	/**
+	 * @param int $index Pocket index in table order.
+	 */
 	public static function pocketRadius(int $index): float
 	{
 		return self::LINER_RADIUS;
 	}
 
-	/** Half of the measured jaw-to-jaw mouth, independent of the liner radius. */
+	/**
+	 * Half of the measured jaw-to-jaw mouth, independent of the liner radius.
+	 *
+	 * @param int $index Pocket index in table order.
+	 */
 	public static function pocketMouthHalf(int $index): float
 	{
 		return ($index === 1 || $index === 4 ? self::SIDE_MOUTH : self::CORNER_MOUTH) / 2;
 	}
 
-	/** @return array{float,float} Direction from the playfield into a pocket. */
+	/**
+	 * @param int $index Pocket index in table order.
+	 * @return array{float,float} Direction from the playfield into a pocket.
+	 */
 	public static function pocketOutward(int $index): array
 	{
 		[$x,$y] = self::pockets()[$index];
@@ -63,7 +90,10 @@ final class Table
 		return [($x <=> 0.0) * M_SQRT1_2,($y <=> 0.0) * M_SQRT1_2];
 	}
 
-	/** @return array{float,float} Centre of the regulation jaw chord. */
+	/**
+	 * @param int $index Pocket index in table order.
+	 * @return array{float,float} Centre of the regulation jaw chord.
+	 */
 	public static function pocketMouthCenter(int $index): array
 	{
 		[$outwardX,$outwardY] = self::pocketOutward($index);
@@ -78,7 +108,15 @@ final class Table
 			, $cornerY - $outwardY * self::CORNER_MOUTH / 2];
 	}
 
-	/** @return array{array{float,float},array{float,float}} */
+	/**
+	 * Return the two tangent jaw endpoints for one regulation pocket mouth.
+	 *
+	 * Candidate tangencies are selected relative to the pocket's outward direction so corner and side mouths share
+	 * one analytic construction and agree with the rendered rubber facings.
+	 *
+	 * @param int $index Pocket index in table order.
+	 * @return array{array{float,float},array{float,float}}
+	 */
 	public static function pocketJaws(int $index): array
 	{
 		[$mouthX,$mouthY] = self::pocketMouthCenter($index);
@@ -114,7 +152,14 @@ final class Table
 			? [$candidates[0][0],$candidates[0][1]] : [$candidates[1][0],$candidates[1][1]];
 	}
 
-	/** Render-matched rubber faces from every jaw to its round throat. @return list<array{float,float,float,float}> */
+	/**
+	 * Return render-matched rubber faces from every jaw to its round throat.
+	 *
+	 * Each segment is a physical collision surface as well as a mesh boundary, preventing balls from crossing a
+	 * visually solid pocket taper or reflecting from geometry the renderer leaves open.
+	 *
+	 * @return list<array{float,float,float,float}>
+	 */
 	public static function facings(): array
 	{
 		static $facings = null;
@@ -148,6 +193,10 @@ final class Table
 		return $jaws;
 	}
 
+	/**
+	 * @param float $x Ball-centre X coordinate.
+	 * @param float $y Ball-centre Y coordinate.
+	 */
 	public static function pocketed(float $x, float $y): bool
 	{
 		foreach(self::pockets() as $index => [$px,$py])
@@ -156,18 +205,30 @@ final class Table
 		return false;
 	}
 
-	/** @return array{index:int,x:float,y:float}|null Pocket liner entered through a jaw or shelf. */
+	/**
+	 * Find the pocket liner entered through a jaw or shelf.
+	 *
+	 * The result requires the ball centre to cross the same mouth chord and circular liner boundary used by the
+	 * rendered opening, allowing energetic glancing entries to rattle or escape instead of being vacuumed inward.
+	 *
+	 * @param float $x Ball-centre X coordinate.
+	 * @param float $y Ball-centre Y coordinate.
+	 * @return array{index:int,x:float,y:float}|null
+	 */
 	public static function pocketEntry(float $x, float $y): ?array
 	{
 		$pockets = self::pockets();
 
 		foreach($pockets as $index => [$px,$py])
 		{
+			$clearance = self::pocketRadius($index) - Ball::RADIUS;
+			// hypot() never falls below the longer leg by more than an ulp, so a clear box miss is a certain miss.
+			if(abs($x - $px) > $clearance + 1e-9 || abs($y - $py) > $clearance + 1e-9) continue;
 			$distance = hypot($x - $px, $y - $py);
 
 			// Crossing a jaw chord leaves the ball on the rendered cloth shelf. It
 			// enters liner physics only when its centre fits inside the circular lip.
-			if($distance <= self::pocketRadius($index) - Ball::RADIUS)
+			if($distance <= $clearance)
 			return ['index' => $index,'x' => $px,'y' => $py];
 		}
 
