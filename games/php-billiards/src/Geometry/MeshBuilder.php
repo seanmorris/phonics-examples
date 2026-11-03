@@ -30,7 +30,7 @@ final class MeshBuilder
 			// The rail reaches down to the apron so no slot under it exposes the open pocket shafts; the join is flush.
 			, 'wood' => self::extrudeRounded(
 				$profiles['wood'], $profiles['bounds'], TableGeometry::COLUMNS, TableGeometry::ROWS
-				, TableGeometry::APRON_TOP, .105, TableGeometry::WOOD_EDGE_RADIUS, 8, 0.0
+				, TableGeometry::APRON_TOP, .105, TableGeometry::WOOD_EDGE_RADIUS, 3, 0.0
 			)
 			, 'cushion' => self::cushions($profiles['cushionRails'], $profiles['bounds'])
 			, 'liners' => self::liners($profiles['pockets'], Ball::RADIUS)
@@ -148,7 +148,8 @@ final class MeshBuilder
 		$stepZ = ($maxZ - $minZ) / $rows;
 		$epsilon = min($stepX, $stepZ) * .7;
 		$segments = [];
-		$key = static fn(array $point): string => sprintf('%.9f:%.9f', $point['x'], $point['z']);
+		// Round before formatting and add zero so points on the table's centre axes never key as "-0.000000000".
+		$key = static fn(array $point): string => sprintf('%.9f:%.9f', round($point['x'], 9) + 0.0, round($point['z'], 9) + 0.0);
 
 		for($row = 0; $row < $rows; $row++) for($column = 0; $column < $columns; $column++)
 		{
@@ -178,22 +179,13 @@ final class MeshBuilder
 		}
 		$used = [];
 		$loops = [];
-		foreach($segments as $start => [$first,$second])
-		{
-			if(isset($used[$start])) continue;
-			$points = [$first,$second];
-			$used[$start] = true;
-			$firstKey = $key($first);
-			$endKey = $key($second);
-			$closed = false;
+		// Follow unused neighbours from one end of a chain; segments arrive in grid order, so a chain must grow in
+		// both directions or every contour running against that order splinters into per-cell fragments.
+		$extend = static function(string $endKey, string $stopKey, array &$used) use ($segments,$adjacent,$key): array {
+			$points = [];
 
-			while(true)
+			while($endKey !== $stopKey)
 			{
-				if($endKey === $firstKey)
-				{
-					$closed = true;
-					break;
-				}
 				$nextSegment = null;
 				foreach($adjacent[$endKey] ?? [] as $candidate) if(!isset($used[$candidate]))
 				{
@@ -208,7 +200,22 @@ final class MeshBuilder
 				$endKey = $key($next);
 			}
 
+			return [$points,$endKey === $stopKey];
+		};
+
+		foreach($segments as $start => [$first,$second])
+		{
+			if(isset($used[$start])) continue;
+			$used[$start] = true;
+			[$forward,$closed] = $extend($key($second), $key($first), $used);
+			$points = [$first,$second,...$forward];
+
 			if($closed) array_pop($points);
+			else
+			{
+				[$backward] = $extend($key($first), $key(end($points)), $used);
+				$points = [...array_reverse($backward),...$points];
+			}
 			$a = $points[0];
 			$b = $points[1];
 			$midpoint = ['x' => ($a['x'] + $b['x']) / 2,'z' => ($a['z'] + $b['z']) / 2];
@@ -347,6 +354,230 @@ final class MeshBuilder
 	}
 
 	/**
+	 * Triangulate the planar region bounded by closed contour loops, holes included.
+	 *
+	 * Each hole is bridged into its enclosing outer loop at a mutually visible vertex pair and the resulting simple
+	 * polygon is ear-clipped. Triangles reuse the contour's own points, so a cap shares its outline exactly with the
+	 * walls or fillet ring built from the same loops instead of re-sampling the field on a dense grid.
+	 *
+	 * @param list<list<array{x:float,z:float}>> $loops Closed loops as produced by `boundaryLoops()`.
+	 * @return list<array{array{x:float,z:float},array{x:float,z:float},array{x:float,z:float}}> Counter-clockwise
+	 * triangles in the X/Z plane.
+	 */
+	public static function triangulateLoops(array $loops): array
+	{
+		$area = static function(array $loop): float {
+			$sum = 0.0;
+			$count = count($loop);
+			for($index = 0; $index < $count; $index++)
+			{
+				$a = $loop[$index];
+				$b = $loop[($index + 1) % $count];
+				$sum += $a['x'] * $b['z'] - $b['x'] * $a['z'];
+			}
+
+			return $sum / 2;
+		};
+		$inside = static function(array $point, array $loop): bool {
+			$inside = false;
+			$count = count($loop);
+			for($index = 0, $previous = $count - 1; $index < $count; $previous = $index++)
+			{
+				$a = $loop[$index];
+				$b = $loop[$previous];
+				if(($a['z'] > $point['z']) !== ($b['z'] > $point['z'])
+					&& $point['x'] < ($b['x'] - $a['x']) * ($point['z'] - $a['z']) / ($b['z'] - $a['z']) + $a['x'])
+				$inside = !$inside;
+			}
+
+			return $inside;
+		};
+
+		$loops = array_values(array_filter($loops, static fn(array $loop): bool => count($loop) >= 3));
+		if(!$loops) return [];
+		$areas = array_map($area, $loops);
+		$largest = 0;
+		foreach($areas as $index => $value) if(abs($value) > abs($areas[$largest])) $largest = $index;
+		// The largest loop is always an outer boundary; every loop wound the same way is one too.
+		$outerSign = $areas[$largest] <=> 0;
+		$outers = $holes = [];
+		foreach($loops as $index => $loop)
+		{
+			// Outer boundaries run counter-clockwise and holes clockwise, whatever orientation the contour used.
+			$isOuter = ($areas[$index] <=> 0) === $outerSign;
+			if(($areas[$index] > 0) !== $isOuter) $loop = array_reverse($loop);
+			if($isOuter) $outers[] = ['loop' => $loop,'area' => abs($areas[$index]),'holes' => []];
+			else $holes[] = $loop;
+		}
+		foreach($holes as $hole)
+		{
+			$owner = null;
+			foreach($outers as $index => $outer) if($inside($hole[0], $outer['loop'])
+				&& ($owner === null || $outer['area'] < $outers[$owner]['area'])) $owner = $index;
+			if($owner !== null) $outers[$owner]['holes'][] = $hole;
+		}
+
+		$triangles = [];
+		foreach($outers as $outer)
+		{
+			$polygon = self::bridgeHoles($outer['loop'], $outer['holes']);
+			array_push($triangles, ...self::earClip($polygon));
+		}
+
+		return $triangles;
+	}
+
+	/**
+	 * Splice holes into a counter-clockwise outer loop through mutually visible vertex bridges.
+	 *
+	 * @param list<array{x:float,z:float}> $outer Counter-clockwise outer loop.
+	 * @param list<list<array{x:float,z:float}>> $holes Clockwise hole loops inside it.
+	 * @return list<array{x:float,z:float}> One weakly simple polygon.
+	 */
+	private static function bridgeHoles(array $outer, array $holes): array
+	{
+		$crosses = static function(array $a, array $b, array $c, array $d): bool {
+			$orient = static fn(array $p, array $q, array $r): float
+				=> ($q['x'] - $p['x']) * ($r['z'] - $p['z']) - ($q['z'] - $p['z']) * ($r['x'] - $p['x']);
+			$same = static fn(array $p, array $q): bool => abs($p['x'] - $q['x']) < 1e-12 && abs($p['z'] - $q['z']) < 1e-12;
+			if($same($a, $c) || $same($a, $d) || $same($b, $c) || $same($b, $d)) return false;
+
+			return ($orient($a, $b, $c) > 0) !== ($orient($a, $b, $d) > 0)
+				&& ($orient($c, $d, $a) > 0) !== ($orient($c, $d, $b) > 0);
+		};
+
+		// Rightmost holes first, so every later bridge can still see an outer or previously spliced vertex.
+		usort($holes, static fn(array $a, array $b): int
+			=> max(array_column($b, 'x')) <=> max(array_column($a, 'x')));
+		$pending = $holes;
+
+		foreach($holes as $holeIndex => $hole)
+		{
+			array_shift($pending);
+			$start = array_keys(array_column($hole, 'x'), max(array_column($hole, 'x')))[0];
+			$from = $hole[$start];
+			$candidates = array_keys($outer);
+			usort($candidates, static fn(int $a, int $b): int
+				=> hypot($outer[$a]['x'] - $from['x'], $outer[$a]['z'] - $from['z'])
+				<=> hypot($outer[$b]['x'] - $from['x'], $outer[$b]['z'] - $from['z']));
+			$edges = [];
+			foreach([$outer,$hole,...$pending] as $loop) for($index = 0, $count = count($loop); $index < $count; $index++)
+			$edges[] = [$loop[$index],$loop[($index + 1) % $count]];
+
+			$bridge = null;
+			foreach($candidates as $candidate)
+			{
+				$to = $outer[$candidate];
+				$blocked = false;
+				foreach($edges as [$a,$b]) if($crosses($from, $to, $a, $b)) {$blocked = true; break;}
+				if(!$blocked) {$bridge = $candidate; break;}
+			}
+			if($bridge === null) throw new \RuntimeException('No visible bridge into a contour hole');
+
+			$rotated = [...array_slice($hole, $start),...array_slice($hole, 0, $start)];
+			$outer = [
+				...array_slice($outer, 0, $bridge + 1)
+				, ...$rotated, $hole[$start]
+				, $outer[$bridge]
+				, ...array_slice($outer, $bridge + 1)
+			];
+		}
+
+		return $outer;
+	}
+
+	/**
+	 * Ear-clip a weakly simple counter-clockwise polygon.
+	 *
+	 * @param list<array{x:float,z:float}> $polygon Polygon whose bridge vertices may repeat.
+	 * @return list<array{array{x:float,z:float},array{x:float,z:float},array{x:float,z:float}}>
+	 */
+	private static function earClip(array $polygon): array
+	{
+		$cross = static fn(array $a, array $b, array $c): float
+			=> ($b['x'] - $a['x']) * ($c['z'] - $a['z']) - ($b['z'] - $a['z']) * ($c['x'] - $a['x']);
+		$count = count($polygon);
+		$next = $previous = [];
+		for($index = 0; $index < $count; $index++)
+		{
+			$next[$index] = ($index + 1) % $count;
+			$previous[$index] = ($index - 1 + $count) % $count;
+		}
+		$triangles = [];
+		$remaining = $count;
+		$current = 0;
+		$stalled = 0;
+
+		while($remaining > 3)
+		{
+			$a = $previous[$current];
+			$c = $next[$current];
+			[$pa,$pb,$pc] = [$polygon[$a],$polygon[$current],$polygon[$c]];
+			$ear = $cross($pa, $pb, $pc) > 1e-14;
+
+			for($probe = $next[$c]; $ear && $probe !== $a; $probe = $next[$probe])
+			{
+				$point = $polygon[$probe];
+				// Bridge duplicates coincide with a corner; they are not inside the candidate ear.
+				if(($point['x'] === $pa['x'] && $point['z'] === $pa['z']) || ($point['x'] === $pb['x'] && $point['z'] === $pb['z'])
+					|| ($point['x'] === $pc['x'] && $point['z'] === $pc['z'])) continue;
+				if($cross($pa, $pb, $point) >= 0 && $cross($pb, $pc, $point) >= 0 && $cross($pc, $pa, $point) >= 0) $ear = false;
+			}
+
+			// A full lap without an ear means only collinear or degenerate corners remain; clip one to make progress.
+			if($ear || $stalled > $remaining)
+			{
+				if($cross($pa, $pb, $pc) > 1e-14) $triangles[] = [$pa,$pb,$pc];
+				$next[$a] = $c;
+				$previous[$c] = $a;
+				$remaining--;
+				$current = $c;
+				$stalled = 0;
+				continue;
+			}
+
+			$current = $c;
+			$stalled++;
+		}
+
+		$a = $previous[$current];
+		$c = $next[$current];
+		if($cross($polygon[$a], $polygon[$current], $polygon[$c]) > 1e-14)
+		$triangles[] = [$polygon[$a],$polygon[$current],$polygon[$c]];
+
+		return $triangles;
+	}
+
+	/**
+	 * Add a planar cap triangulated from closed contour loops, or return false when the contour is not closed.
+	 *
+	 * @param list<array{points:list<array>,closed:bool}> $paths Contour loops for the cap outline.
+	 * @param array{float,float,float,float} $bounds Minimum and maximum X/Z bounds for planar UVs.
+	 * @param float $y Cap height.
+	 * @param int $direction Positive for an upward cap and negative for a downward cap.
+	 */
+	private static function appendLoopCap(array $paths, array $bounds, float $y, int $direction, MeshData $mesh): bool
+	{
+		foreach($paths as $path) if(!$path['closed']) return false;
+		[$minX,$minZ,$maxX,$maxZ] = $bounds;
+		$normal = [0,$direction > 0 ? 1 : -1,0];
+
+		foreach(self::triangulateLoops(array_column($paths, 'points')) as $triangle)
+		{
+			// Counter-clockwise in X/Z faces downward in this right-handed, Y-up space; reverse it for upward caps.
+			if($direction > 0) $triangle = [$triangle[0],$triangle[2],$triangle[1]];
+			$indices = [];
+			foreach($triangle as $point) $indices[] = $mesh->vertex([
+				$point['x'],$y,$point['z'],...$normal
+				, ($point['x'] - $minX) / ($maxX - $minX),($point['z'] - $minZ) / ($maxZ - $minZ)
+			]);
+			$mesh->triangle(...$indices);
+		}
+
+		return true;
+	}
+
+	/**
 	 * Extrude a sampled two-dimensional signed-distance profile into a watertight mesh.
 	 *
 	 * Marching boundary samples become shared top, bottom, and side vertices with consistent winding, normals, UVs,
@@ -367,10 +598,13 @@ final class MeshBuilder
 		$stepZ = ($maxZ - $minZ) / $rows;
 		$epsilon = min($stepX, $stepZ) * .7;
 		$mesh = new MeshData;
+		$loops = self::boundaryLoops($field, $bounds, $columns, $rows);
+		if(!self::appendLoopCap($loops, $bounds, $top, 1, $mesh))
 		self::appendCap($field, $bounds, $columns, $rows, 0, $top, 1, $mesh);
+		if(!self::appendLoopCap($loops, $bounds, $bottom, -1, $mesh))
 		self::appendCap($field, $bounds, $columns, $rows, 0, $bottom, -1, $mesh);
 
-		foreach(self::boundaryLoops($field, $bounds, $columns, $rows) as $path)
+		foreach($loops as $path)
 		{
 			$points = $path['points'];
 			$limit = count($points) - ($path['closed'] ? 0 : 1);
@@ -468,10 +702,16 @@ final class MeshBuilder
 			];
 		};
 
+		$loops = self::boundaryLoops($field, $bounds, $columns, $rows);
+		$inset = static fn(float $distance): array => $distance > 0
+			? self::boundaryLoops(static fn(float $x, float $z): float => $field($x, $z) + $distance, $bounds, $columns, $rows)
+			: $loops;
+		if(!self::appendLoopCap($inset($radius), $bounds, $top, 1, $mesh))
 		self::appendCap($field, $bounds, $columns, $rows, $radius, $top, 1, $mesh);
+		if(!self::appendLoopCap($inset($bottomRadius), $bounds, $bottom, -1, $mesh))
 		self::appendCap($field, $bounds, $columns, $rows, $bottomRadius, $bottom, -1, $mesh);
 
-		foreach(self::boundaryLoops($field, $bounds, $columns, $rows) as $path)
+		foreach($loops as $path)
 		{
 			$points = $path['points'];
 			$limit = count($points) - ($path['closed'] ? 0 : 1);
