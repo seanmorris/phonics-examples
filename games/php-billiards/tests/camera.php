@@ -109,6 +109,53 @@ $test('wheel zoom keeps active follow and preserves an inactive canonical view',
 	$expect($game->camera->yaw !== $before && $game->camera->settling(), 'Wheel zoom suspended active follow');
 });
 
+$test('manual wheel composition eases at every frame rate and returns to idle', static function() use ($expect): void {
+	foreach([false,true] as $held) foreach([[0.0,0.0],[1.1,.5]] as [$x,$z])
+	{
+		$camera = new Camera;
+		if($held) { $camera->behind($x, $z, .4); $camera->orbit(30, 0, .6); }
+		else { $camera->reset(); $camera->follow($x, $z, .4, 0); }
+		$camera->patch(['distance' => 2.0]);
+		$yaw = $camera->yaw;
+		$before = [$camera->target,$camera->viewPose()[1]];
+		$camera->zoom(-120);
+		$expect($before === [$camera->target,$camera->viewPose()[1]] && $camera->settling(), 'Manual wheel composition jumped');
+		$destination = clone $camera;
+		$destination->animate(10);
+		$sample = null;
+		foreach([30,60,144] as $fps)
+		{
+			$animated = clone $camera;
+			for($frame = 0; $frame < $fps / 2; $frame++) $animated->animate(1 / $fps);
+			$pose = [$animated->target,$animated->viewPose()[1]];
+			$expect($pose !== $before && $pose !== [$destination->target,$destination->viewPose()[1]], 'Manual composition did not ease');
+			if($sample !== null) foreach($sample as $part => $vector) foreach($vector as $index => $value)
+			$expect(abs($value - $pose[$part][$index]) < 1e-12, 'Manual composition depends on frame rate');
+			$sample = $pose;
+			for($frame = 0; $frame < $fps * 2; $frame++) $animated->animate(1 / $fps);
+			$expect(!$animated->settling() && $animated->viewPose() === $destination->viewPose(), 'Manual zoom never reached idle');
+			$animated->follow(-$x, -$z, 2, 1);
+			$expect($animated->yaw === $yaw && !$animated->settling(), 'Wheel enabled or released follow');
+		}
+		$camera->animate(.05);
+		$camera->zoom(120);
+		$camera->animate(10);
+		$expect(!$camera->settling() && $camera->target === $before[0] && $camera->viewPose()[1] === $before[1], 'Second wheel event retained an old destination');
+		foreach(['reset','patch','opening','follow'] as $boundary)
+		{
+			$cancelled = clone $camera;
+			$cancelled->zoom(-120);
+			if($boundary === 'patch') $cancelled->patch(['target' => [.4,.1,-.2]]);
+			elseif($boundary === 'opening') { $cancelled->beginGameplayView(); $cancelled->animate(2); }
+			elseif($boundary === 'follow') { $cancelled->resumeFollow(); $cancelled->follow($x, $z, .4, 10); }
+			else $cancelled->reset();
+			$pose = $cancelled->viewPose();
+			$cancelled->animate(1);
+			$expect(!$cancelled->settling() && $cancelled->viewPose() === $pose, "$boundary retained manual zoom motion");
+		}
+	}
+});
+
 $test('zoom and both orbit inputs modify the opening destination without cancelling it', static function() use ($expect): void {
 	$camera = new Camera;
 	$camera->beginGameplayView();
@@ -236,7 +283,9 @@ $test('close orbit and wheel framing preserve follow intent and diagnostic targe
 	$yaw = $camera->yaw;
 	$cue = $game->simulation->cue();
 	$cameraFrame($game, [], [['type' => 'wheel','y' => 100]]);
-	$expect($camera->distance === .85 && $camera->yaw === $yaw && !$camera->settling());
+	$expect($camera->distance === .85 && $camera->yaw === $yaw && $camera->settling());
+	for($frame = 0; $frame < 180; $frame++) $cameraFrame($game);
+	$expect(!$camera->settling());
 	$point = [$cue->x,Ball::RADIUS + .012,$cue->y];
 	[$x,$y] = $project($camera, $point);
 	$expect(abs($x) < 1e-10 && abs($y + .45) < 1e-10, 'Zooming the canonical view did not frame the cue');
@@ -247,6 +296,7 @@ $test('close orbit and wheel framing preserve follow intent and diagnostic targe
 		$expect(abs($x) < 1e-10 && abs($y + .45) < 1e-10, 'Close manual orbit lost the cue pivot');
 	}
 	$camera->zoom(10000);
+	$camera->animate(10);
 	$expect($camera->target === [0.0,0.0,0.0] && $camera->viewPose()[1] === $camera->target);
 	$camera->zoom(-10000);
 	$camera->patch(['target' => [.4,.1,-.2]]);

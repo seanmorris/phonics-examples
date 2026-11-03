@@ -46,6 +46,8 @@ final class Camera
 	private bool $followSuspended = false;
 	/** @var array{yaw:float,target:array,lookTarget:array}|null Latest requested follow pose, including while suspended. */
 	private ?array $desiredFollow = null;
+	/** @var array{target:array,lookTarget:array}|null Composition requested by manual zoom. */
+	private ?array $desiredManual = null;
 	private float $pullback = 0.0;
 	private float $desiredPullback = 0.0;
 
@@ -108,7 +110,7 @@ final class Camera
 		$this->transitionTime = 0.0;
 		$this->transitionYawDelta = self::wrap(self::GAME_YAW - $this->yaw);
 		$this->followEnabled = $this->followHeld = $this->followSuspended = false;
-		$this->desiredFollow = null;
+		$this->desiredFollow = $this->desiredManual = null;
 	}
 
 	/**
@@ -122,7 +124,18 @@ final class Camera
 		$this->desiredPullback = $moving ? .32 : 0.0;
 		$this->pullback = self::ease($this->pullback, $this->desiredPullback,
 			1 - 2 ** (-$seconds / ($moving ? .10 : .16)), .001);
-		if($this->transitionFrom === null) return;
+		if($this->transitionFrom === null)
+		{
+			if($this->desiredManual !== null && !$this->following())
+			{
+				$amount = 1 - exp(-$seconds * 6.5);
+				foreach(['target','lookTarget'] as $name) foreach($this->desiredManual[$name] as $index => $value)
+				$this->{$name}[$index] = self::ease($this->{$name}[$index], $value, $amount, 1e-5);
+				if($this->target === $this->desiredManual['target'] && $this->lookTarget === $this->desiredManual['lookTarget'])
+				$this->desiredManual = null;
+			}
+			return;
+		}
 
 		$this->transitionTime = min(self::TRANSITION_SECONDS, $this->transitionTime + $seconds);
 		$t = $this->transitionTime / self::TRANSITION_SECONDS;
@@ -148,6 +161,7 @@ final class Camera
 	public function settling(): bool
 	{
 		if($this->transitioning() || $this->pullback !== $this->desiredPullback) return true;
+		if($this->desiredManual !== null && !$this->following()) return true;
 		if(!$this->following() || $this->desiredFollow === null) return false;
 		if(abs(self::wrap($this->desiredFollow['yaw'] - $this->yaw)) > 1e-4) return true;
 		foreach(['target','lookTarget'] as $name) foreach($this->desiredFollow[$name] as $index => $value)
@@ -159,7 +173,7 @@ final class Camera
 	public function requestFollow(): void { $this->followEnabled = true; }
 
 	/** A new shot, rack, placement or camera reset releases manual orbit control. */
-	public function resumeFollow(): void { $this->followEnabled = true; $this->followHeld = false; }
+	public function resumeFollow(): void { $this->followEnabled = true; $this->followHeld = false; $this->desiredManual = null; }
 
 	/**
 	 * Gestures and phases can temporarily suspend follow without losing the player's intent.
@@ -185,6 +199,7 @@ final class Camera
 		$this->desiredFollow = ['yaw' => self::wrap($aim + M_PI),'target' => $target,'lookTarget' => $lookTarget];
 		if($this->transitioning()) $this->frameOpening();
 		if($this->transitioning() || !$this->following() || $seconds === 0.0) return;
+		$this->desiredManual = null;
 		$amount = 1 - exp(-$seconds * 6.5);
 		$yawDelta = self::wrap($this->desiredFollow['yaw'] - $this->yaw);
 		$this->yaw = abs($yawDelta * (1 - $amount)) <= 1e-4
@@ -234,7 +249,7 @@ final class Camera
 		$this->pitch = self::GAME_PITCH;
 		$this->distance = self::GAME_DISTANCE;
 		$this->target = $this->lookTarget = $this->farTarget = [0.0,0.0,0.0];
-		$this->transitionFrom = $this->transitionTo = $this->desiredFollow = null;
+		$this->transitionFrom = $this->transitionTo = $this->desiredFollow = $this->desiredManual = null;
 		$this->followEnabled = $this->followHeld = $this->followSuspended = false;
 		$this->pullback = $this->desiredPullback = 0.0;
 	}
@@ -256,7 +271,7 @@ final class Camera
 		else
 		{
 			$this->distance = $distance;
-			if(!$this->following()) $this->frameManualView();
+			if(!$this->following()) $this->frameManualView(true);
 		}
 	}
 
@@ -286,9 +301,19 @@ final class Camera
 	}
 
 	/** Manual orbit and zoom keep their current heading while retaining the cue's close composition. */
-	private function frameManualView(): void
+	private function frameManualView(bool $ease = false): void
 	{
-		[$this->target,$this->lookTarget] = $this->composition($this->farTarget, $this->yaw + M_PI, $this->pitch, $this->distance);
+		[$target,$lookTarget] = $this->composition($this->farTarget, $this->yaw + M_PI, $this->pitch, $this->distance);
+		if($ease || $this->desiredManual !== null)
+		{
+			$this->desiredManual = $target === $this->target && $lookTarget === $this->lookTarget
+				? null : ['target' => $target,'lookTarget' => $lookTarget];
+		}
+		else
+		{
+			$this->target = $target;
+			$this->lookTarget = $lookTarget;
+		}
 	}
 
 	private function frameOpening(): void
@@ -316,7 +341,7 @@ final class Camera
 			$target = array_map('floatval', array_values($patch['target']));
 			if(count(array_filter($target, 'is_finite')) === 3) {$this->target = $this->lookTarget = $this->farTarget = $target; $changed = true;}
 		}
-		if($changed) $this->transitionFrom = $this->transitionTo = $this->desiredFollow = null;
+		if($changed) $this->transitionFrom = $this->transitionTo = $this->desiredFollow = $this->desiredManual = null;
 	}
 
 	/** @return array{yaw:float,pitch:float,distance:float,target:array,transitioning:bool} */
