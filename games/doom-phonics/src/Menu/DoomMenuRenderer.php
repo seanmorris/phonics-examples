@@ -23,6 +23,10 @@ final class DoomMenuRenderer
 	private const COMPACT_VALUE_RIGHT = 292.0;
 	private const COMPACT_MESSAGE_Y = 174.0;
 	private const COMPACT_HINT_Y = 184.0;
+	private const COMPACT_FIELD_X = 126.0;
+	private const COMPACT_FIELD_SCALE = .75;
+	private const READ_THIS_KEYBOARD_RIGHT = 212.0;
+	private const READ_THIS_ROWS_Y = 138.0;
 
 	/** @var list<array<string,mixed>> Output-pixel hit regions consumed by MenuInput. */
 	public array $regions = [];
@@ -56,7 +60,7 @@ final class DoomMenuRenderer
 		elseif(!$atTitle) $renderer->renderMenuPanel(0, 0, 320, 200, .48);
 
 		if($menu->value('read-this-page'))
-		$this->readThisPage($renderer, $menu, $patches, $seconds, $controllerTheme, $hints);
+		$this->readThisPage($renderer, $menu, $patches, $inputTheme, $controllerTheme, $hints);
 		elseif($menu->value('controls-page'))
 		$this->controlsPage($renderer, $menu, $patches, $seconds, $inputTheme, $controllerTheme, $hints);
 		elseif($menu->value('settings-section'))
@@ -69,8 +73,6 @@ final class DoomMenuRenderer
 			case 'New Game': $this->skillPage($renderer, $menu, $patches, $seconds);
 				break;
 			case 'Settings': $this->settingsPage($renderer, $menu, $patches, $seconds, $inputTheme, $hints);
-				break;
-			case 'Networking': $this->networkingPage($renderer, $menu, $patches, $seconds);
 				break;
 			case 'Controls': $this->controlsPage(
 				$renderer
@@ -110,56 +112,6 @@ final class DoomMenuRenderer
 			$this->row($renderer, $menu, $patches, $id, $row, 75, $y, $seconds, 1.5);
 			$y += 24;
 		}
-	}
-
-	/** @param list<WadPatch> $patches */
-	private function networkingPage(
-		GlesMapRenderer $renderer
-		, Menu $menu
-		, array &$patches
-		, float $seconds
-	): void {
-		[$heading] = $this->text($renderer, $patches, 'NETWORKING', 0, 17, 1.5);
-		$this->moveLastText($patches, (320 - $heading) / 2);
-		$rows = $menu->rows();
-
-		foreach(['homeserver' => 43.0,'lobby-channel' => 84.0] as $id => $y)
-		{
-			if(!isset($rows[$id])) continue;
-
-			$row = $rows[$id];
-			$selected = $menu->selected === $id;
-			$this->text($renderer, $patches, (string)$row['label'], 32, $y, 1.0);
-			$renderer->renderMenuPanel(27, $y + 11, 266, 21, $selected ? .72 : .45);
-			$editor = $selected ? $menu->editor : null;
-			$value = $editor?->text ?? (string)($row['value'] ?? '');
-
-			$carets = $this->fieldText(
-				$renderer
-				, $patches
-				, $value
-				, 32
-				, $y + 17
-				, 256
-				, $editor?->caret
-				, $editor !== null && fmod($seconds, 1) < .55
-			);
-
-			$this->fieldRegion($renderer, $id, 27, $y + 11, 266, 21, $carets);
-
-			if($selected) $this->skull($patches, 5, $y + 10, $seconds);
-		}
-
-		if(isset($rows['apply-networking']))
-		$this->row($renderer, $menu, $patches, 'apply-networking', $rows['apply-networking'], 48, 126, $seconds, 1.25);
-
-		if(($message = (string)($menu->value('network-status') ?? '')) !== '')
-		{
-			$this->text($renderer, $patches, $this->fitText($renderer, $message, 264, .75), 28, 153, .75);
-		}
-
-		if(isset($rows['@back']))
-		$this->row($renderer, $menu, $patches, '@back', $rows['@back'], 252, 177, $seconds, 1.0);
 	}
 
 	/** @param list<WadPatch> $patches */
@@ -230,8 +182,14 @@ final class DoomMenuRenderer
 			, $hints
 			, $theme
 			, 'generic'
-			, '✚ MOVE    ← → CHANGE    ❶ BACK'
+			, match(true)
+			{
+				$menu->editor !== null => $theme === 'keyboard' ? 'ENTER DONE    ESC CANCEL' : '⓿ DONE    ❶ CANCEL',
+				$menu->value('settings-section') === 'networking' => '✚ MOVE    ⓿ EDIT    ❶ BACK',
+				default => '✚ MOVE    ← → CHANGE    ❶ BACK',
+			}
 			, $message
+			, $seconds
 		);
 	}
 
@@ -249,23 +207,14 @@ final class DoomMenuRenderer
 		, string $controllerTheme
 		, string $footer
 		, string $message = ''
+		, float $seconds = 0
 	): void {
-		$heading = strtoupper($menu->title);
-
-		$this->menuText(
-			$renderer
-			, $patches
-			, $heading
-			, (320 - $this->menuTextWidth($renderer, $heading, 1.25)) / 2
-			, 8
-			, 1.25
-		);
-
+		$this->compactHeading($renderer, $menu, $patches);
 		$y = self::COMPACT_ROWS_Y;
 
 		foreach($this->compactRows($menu) as $id => $row)
 		{
-			$this->compactRow($renderer, $menu, $patches, $hints, $id, $row, $y, $controllerTheme);
+			$this->compactRow($renderer, $menu, $patches, $hints, $id, $row, $y, $controllerTheme, $seconds);
 			$y += self::COMPACT_ROW_STEP;
 		}
 
@@ -280,6 +229,21 @@ final class DoomMenuRenderer
 		);
 
 		$this->buttonHints($renderer, $hints, $footer, $theme, self::COMPACT_HINT_Y);
+	}
+
+	/** @param list<WadPatch> $patches */
+	private function compactHeading(GlesMapRenderer $renderer, Menu $menu, array &$patches): void
+	{
+		$heading = strtoupper($menu->title);
+
+		$this->menuText(
+			$renderer
+			, $patches
+			, $heading
+			, (320 - $this->menuTextWidth($renderer, $heading, 1.25)) / 2
+			, 8
+			, 1.25
+		);
 	}
 
 	/** @return array<string,array<string,mixed>> */
@@ -310,6 +274,7 @@ final class DoomMenuRenderer
 		, array $row
 		, float $y
 		, string $controllerTheme
+		, float $seconds = 0
 	): void {
 		$selected = $menu->selected === $id;
 		$value = $row['value'] ?? '';
@@ -317,8 +282,11 @@ final class DoomMenuRenderer
 			&& isset($row['min'], $row['max']) && is_numeric($row['min']) && is_numeric($row['max'])
 			&& (float)$row['max'] > (float)$row['min'];
 
+		$field = ($row['input'] ?? '') === 'string';
 		$hasValue = $value !== '' || $range;
-		$labelWidth = $range ? 125.0 : ($hasValue ? 150.0 : 255.0);
+		$labelWidth = $field
+			? self::COMPACT_FIELD_X - self::COMPACT_ROW_TEXT_X - 3
+			: ($range ? 125.0 : ($hasValue ? 150.0 : 255.0));
 
 		if($selected)
 		$renderer->renderMenuPanel(self::COMPACT_ROW_X, $y - 4, self::COMPACT_ROW_WIDTH, self::COMPACT_ROW_HEIGHT, .65);
@@ -331,6 +299,13 @@ final class DoomMenuRenderer
 			, $y
 			, .9
 		);
+
+		if($field)
+		{
+			$this->compactField($renderer, $menu, $patches, $id, $row, $y, $seconds);
+
+			return;
+		}
 
 		$display = $this->compactValue($row);
 
@@ -366,6 +341,48 @@ final class DoomMenuRenderer
 		$this->region($renderer, $id, self::COMPACT_ROW_X, $y - 4, self::COMPACT_ROW_WIDTH, self::COMPACT_ROW_HEIGHT);
 	}
 
+	/**
+	 * Draw an editable text value as an inset field on the right of a compact row, with a caret while editing.
+	 * @param list<WadPatch> $patches @param array<string,mixed> $row
+	 */
+	private function compactField(
+		GlesMapRenderer $renderer
+		, Menu $menu
+		, array &$patches
+		, string $id
+		, array $row
+		, float $y
+		, float $seconds
+	): void {
+		$editor = $menu->selected === $id ? $menu->editor : null;
+		$width = self::COMPACT_ROW_X + self::COMPACT_ROW_WIDTH - 4 - self::COMPACT_FIELD_X;
+		$renderer->renderMenuPanel(self::COMPACT_FIELD_X, $y - 3, $width, 15, $editor ? .85 : .5);
+		$textX = self::COMPACT_FIELD_X + 4;
+
+		$carets = $this->fieldText(
+			$renderer
+			, $patches
+			, $editor?->text ?? (string)($row['value'] ?? '')
+			, $textX
+			, $y + 1
+			, $width - 8
+			, $editor?->caret
+			, $editor !== null && fmod($seconds, 1) < .55
+			, self::COMPACT_FIELD_SCALE
+		);
+
+		$this->fieldRegion(
+			$renderer
+			, $id
+			, self::COMPACT_ROW_X
+			, $y - 4
+			, self::COMPACT_ROW_WIDTH
+			, self::COMPACT_ROW_HEIGHT
+			, $carets
+			, $textX
+		);
+	}
+
 	/** @param array<string,mixed> $row */
 	private function compactValue(array $row): string
 	{
@@ -378,93 +395,61 @@ final class DoomMenuRenderer
 			: (string)$value;
 	}
 
-	/** @param list<WadPatch> $patches @param list<array<string,mixed>> $hints */
+	/**
+	 * Lay out the controls reference in the compact settings style: a heading, a three-column table, and a vertical
+	 * list of choices above the shared footer.
+	 * @param list<WadPatch> $patches @param list<array<string,mixed>> $hints
+	 */
 	private function readThisPage(
 		GlesMapRenderer $renderer
 		, Menu $menu
 		, array &$patches
-		, float $seconds
+		, string $inputTheme
 		, string $controllerTheme
 		, array &$hints
 	): void {
-		$heading = 'READ THIS';
-		$headingWidth = $this->menuTextWidth($renderer, $heading, 1.5);
-		$this->menuText($renderer, $patches, $heading, (320 - $headingWidth) / 2, 8, 1.5);
-		$this->centerText($renderer, $patches, 'ACTION', 56, 29, .65);
-		$this->centerText($renderer, $patches, 'KEYBOARD + MOUSE', 157, 29, .65);
-		$this->centerText($renderer, $patches, 'CONTROLLER', 266, 29, .65);
+		$this->compactHeading($renderer, $menu, $patches);
+		$this->text($renderer, $patches, 'ACTION', self::COMPACT_ROW_TEXT_X, 32, .55);
+		$this->rightText($renderer, $patches, 'KEYBOARD + MOUSE', self::READ_THIS_KEYBOARD_RIGHT, 32, .55);
+		$this->rightText($renderer, $patches, 'CONTROLLER', self::COMPACT_VALUE_RIGHT, 32, .55);
 
 		$lines = [
-			['MOVE + STRAFE', '⬲', '⬲']
-			, ['LOOK', 'MOUSE', '▦']
-			, ['FIRE', 'MOUSE 1', '❼']
-			, ['ALT FIRE', 'MOUSE 2', '❻']
-			, ['USE', 'E', '⓿']
-			, ['WEAPONS', 'WHEEL  0-9', '✚']
+			['Move + strafe', '⬲', '⬲']
+			, ['Look', 'MOUSE', '▦']
+			, ['Fire', 'MOUSE 1', '❼']
+			, ['Alt fire', 'MOUSE 2', '❻']
+			, ['Use', 'E', '⓿']
+			, ['Weapons', 'WHEEL  0-9', '✚']
 		];
 
 		foreach($lines as $index => [$action,$keyboard,$controller])
 		{
-			$y = 43 + $index * 15;
-			$this->text($renderer, $patches, $action, 19, $y + 3, .65);
-			$this->buttonHint($renderer, $hints, $keyboard, 'keyboard', 103, $y, 104, 15, .53);
-			$this->buttonHint($renderer, $hints, $controller, $controllerTheme, 230, $y, 72, 15, .53);
+			$y = 42 + $index * 14;
+			$this->text($renderer, $patches, $action, self::COMPACT_ROW_TEXT_X, $y + 3, .75);
+			$this->buttonHint($renderer, $hints, $keyboard, 'keyboard', 108, $y, self::READ_THIS_KEYBOARD_RIGHT - 108, 15, .53);
+
+			$this->buttonHint(
+				$renderer
+				, $hints
+				, $controller
+				, $controllerTheme
+				, 222
+				, $y
+				, self::COMPACT_VALUE_RIGHT - 222
+				, 15
+				, .53
+			);
 		}
 
-		$rows = $menu->rows();
-		$ids = array_keys($rows);
-		$index = (int)array_search($menu->selected, $ids, true);
-		$visible = 2;
-		$lastScroll = max(0, count($ids) - $visible);
-		$menu->scroll = max(0, min($lastScroll, $menu->scroll));
+		$y = self::READ_THIS_ROWS_Y;
 
-		if($index < $menu->scroll) $menu->scroll = $index;
-
-		if($index >= $menu->scroll + $visible) $menu->scroll = $index - $visible + 1;
-
-		$position = 0;
-
-		foreach(array_slice($rows, $menu->scroll, $visible, true) as $id => $row)
+		foreach($menu->rows() as $id => $row)
 		{
-			if($id === '@back') $row = ['label' => 'Go Back'] + $row;
-
-			$this->readThisChoice($renderer, $menu, $patches, $id, $row, 18 + $position * 150, 137, 134, $seconds);
-			$position++;
+			$this->compactRow($renderer, $menu, $patches, $hints, $id, $row, $y, $controllerTheme);
+			$y += self::COMPACT_ROW_STEP;
 		}
 
-		if($menu->scroll > 0) $this->text($renderer, $patches, '<', 5, 144, .8);
-
-		if($menu->scroll < $lastScroll) $this->text($renderer, $patches, '>', 309, 144, .8);
-
-		$this->buttonHint($renderer, $hints, '← → MOVE  ⓿ SELECT  ❶ BACK', 'keyboard', 8, 169, 145, 23, .5);
-		$this->buttonHint($renderer, $hints, '← → MOVE  ⓿ SELECT  ❶ BACK', $controllerTheme, 167, 169, 145, 23, .5);
-	}
-
-	/** @param list<WadPatch> $patches @param array<string,mixed> $row */
-	private function readThisChoice(
-		GlesMapRenderer $renderer
-		, Menu $menu
-		, array &$patches
-		, string $id
-		, array $row
-		, float $x
-		, float $y
-		, float $width
-		, float $seconds
-	): void {
-		$selected = $menu->selected === $id;
-
-		if($selected) $renderer->renderMenuPanel($x, $y - 3, $width, 24, .65);
-
-		$label = (string)($row['label'] ?? $id);
-		$labelWidth = $this->menuTextWidth($renderer, $label, 1.25);
-		$selectorWidth = 29.0;
-		$labelArea = $width - $selectorWidth - 4;
-		$labelX = $x + $selectorWidth + max(0, ($labelArea - $labelWidth) / 2);
-		$this->menuText($renderer, $patches, $label, $labelX, $y + 2, 1.25);
-		$this->region($renderer, $id, $x, $y - 3, $width, 24);
-
-		if($selected) $this->skull($patches, $x + 3, $y, $seconds);
+		$this->buttonHints($renderer, $hints, '✚ MOVE    ⓿ SELECT    ❶ BACK', $inputTheme, self::COMPACT_HINT_Y);
 	}
 
 	/** @param list<WadPatch> $patches */
@@ -748,12 +733,13 @@ final class DoomMenuRenderer
 		, float $width
 		, ?int $caret
 		, bool $showCaret
+		, float $scale = 1.0
 	): array {
 		$characters = BitmapFont::characters(strtoupper($value));
 		$positions = [0.0];
 
 		foreach($characters as $character)
-		$positions[] = end($positions) + $this->glyphWidth($renderer, $character, 1.0);
+		$positions[] = end($positions) + $this->glyphWidth($renderer, $character, $scale);
 
 		$caret = $caret === null ? null : max(0, min(count($characters), $caret));
 		$total = end($positions) ?: 0.0;
@@ -768,13 +754,13 @@ final class DoomMenuRenderer
 
 			if($right <= 0 || $left >= $width) continue;
 
-			$this->text($renderer, $patches, $character, $x + max(0, $left), $y, 1.0);
+			$this->text($renderer, $patches, $character, $x + max(0, $left), $y, $scale);
 		}
 
 		if($showCaret && $caret !== null)
 		{
 			$caretX = max(0, min($width - 2, $positions[$caret] - $scroll));
-			$this->text($renderer, $patches, '_', $x + $caretX, $y + 5, 1.0);
+			$this->text($renderer, $patches, '_', $x + $caretX, $y + 5 * $scale, $scale);
 		}
 
 		return array_map(static fn(float $position): float => max(0, min($width, $position - $scroll)), $positions);
@@ -860,7 +846,10 @@ final class DoomMenuRenderer
 		];
 	}
 
-	/** @param list<float> $carets Caret offsets from the field's text origin in virtual pixels. */
+	/**
+	 * @param list<float> $carets Caret offsets from the field's text origin in virtual pixels.
+	 * @param float $textX Virtual x of the field's text origin.
+	 */
 	private function fieldRegion(
 		GlesMapRenderer $renderer
 		, string $id
@@ -869,6 +858,7 @@ final class DoomMenuRenderer
 		, float $width
 		, float $height
 		, array $carets
+		, float $textX
 	): void {
 		$this->regions[] = [
 			'id' => $id
@@ -879,7 +869,7 @@ final class DoomMenuRenderer
 				, $height * $renderer->height / 200
 			]
 			, 'carets' => array_map(
-				static fn(float $caret): float => ($x + 5 + $caret) * $renderer->width / 320
+				static fn(float $caret): float => ($textX + $caret) * $renderer->width / 320
 				, $carets
 			)
 		];

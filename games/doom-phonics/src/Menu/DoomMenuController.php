@@ -349,13 +349,7 @@ final class DoomMenuController implements MenuOverlay
 		return [
 			'label' => 'Online Play'
 			, 'hidden' => !$this->onlineEnabled
-			, 'children' => [
-				'enter-lobby' => [
-					'label' => 'Enter Lobby'
-					, 'callback' => function(): void { $this->openOnline(); }
-				]
-				, 'networking' => $this->networkingItem()
-			]
+			, 'callback' => function(): void { $this->openOnline(); }
 		];
 	}
 
@@ -364,9 +358,11 @@ final class DoomMenuController implements MenuOverlay
 	{
 		return [
 			'label' => 'Networking'
+			, 'hidden' => !$this->onlineEnabled
 			, 'disabled' => $this->networkSettings === null
 			, 'children' => [
-				'homeserver' => [
+				'settings-section' => ['hidden' => true, 'value' => 'networking']
+				, 'homeserver' => [
 					'label' => 'Homeserver'
 					, 'input' => 'string'
 					, 'valueAlign' => 'left'
@@ -387,11 +383,8 @@ final class DoomMenuController implements MenuOverlay
 					, 'disabled' => fn(): bool => !($this->networkSettings?->dirty() ?? false)
 					, 'callback' => function(): void { $this->applyNetworkSettings(); }
 				]
-				, 'network-status' => [
-					'label' => 'Status'
-					, 'input' => 'output'
-					, 'disabled' => true
-					, 'hidden' => true
+				, 'settings-message' => [
+					'hidden' => true
 					, 'get' => fn(): string => $this->networkSettings?->message() ?? ''
 				]
 			]
@@ -433,6 +426,7 @@ final class DoomMenuController implements MenuOverlay
 				'input' => $this->controlsMenu->item('Input')
 				, 'sound' => ['label' => 'Sound', 'children' => fn(): array => $this->soundItems()]
 				, 'video' => ['label' => 'Video', 'children' => fn(): array => $this->videoItems()]
+				, 'networking' => $this->networkingItem()
 			]
 		];
 	}
@@ -527,10 +521,9 @@ final class DoomMenuController implements MenuOverlay
 	{
 		return [
 			'label' => 'Read This'
-			, 'orientation' => Menu::HORIZONTAL
 			, 'children' => [
 				'read-this-page' => ['hidden' => true, 'value' => true]
-				, 'rebind' => $this->controlsMenu->item('Rebind')
+				, 'rebind' => $this->controlsMenu->item('Rebind Controls')
 			]
 		];
 	}
@@ -691,14 +684,13 @@ final class DoomMenuController implements MenuOverlay
 			'Disconnected' => 'disconnected',
 			'Paused' => 'pause',
 			'New Game' => 'skill',
-			'Online Play' => 'online',
 			'Networking' => 'networking',
 			'Settings' => 'settings',
 			'Input' => 'input',
 			'Sound' => 'sound',
 			'Video' => 'video',
 			'Read This' => 'read-this',
-			'Rebind' => 'controls',
+			'Rebind Controls' => 'controls',
 			'Controls' => 'controls',
 			default => 'menu',
 		};

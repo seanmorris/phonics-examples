@@ -278,14 +278,14 @@ test('Doom binding capture, conflicts and saved alternatives use physical input'
 	const readThisIndex = await select('read-this');
 
 	await clickTitleRow(readThisIndex);
-	await expect.poll(menu).toMatchObject({screen: 'read-this', selected: 'rebind', orientation: 'horizontal'});
+	await expect.poll(menu).toMatchObject({screen: 'read-this', selected: 'rebind', orientation: 'vertical'});
 
-	await key('ArrowRight');
-	await expect.poll(menu).toMatchObject({screen: 'read-this', selected: '@back'});
 	await key('ArrowDown');
+	await expect.poll(menu).toMatchObject({screen: 'read-this', selected: '@back'});
+	await key('ArrowRight');
 	expect(await menu()).toMatchObject({screen: 'read-this', selected: '@back'});
 
-	await key('ArrowLeft');
+	await key('ArrowUp');
 	await expect.poll(menu).toMatchObject({screen: 'read-this', selected: 'rebind'});
 	await key('Enter');
 	await expect.poll(menu).toMatchObject({screen: 'controls'});
