@@ -1315,9 +1315,12 @@ $test('HUD regions stay on screen and never overlap at common canvas sizes', sta
 			$expect($bx + $bw <= $x || $x + $w <= $bx || $by + $bh <= $y || $y + $h <= $by
 				, "Sink board overlaps {$region['name']} at {$width}x{$height}");
 		}
+		// The title buttons sit in one row above the far rail, where the title camera frames the rack.
 		$title = Hud::titleRegions($width, $height, $dpr);
-		$expect($title['free-play']['rect'][1] + $title['free-play']['rect'][3] <= $title['online-play']['rect'][1]
-			&& $title['online-play']['rect'][1] + $title['online-play']['rect'][3] <= $height, "Title items overflow {$width}x{$height}");
+		[$fx,$fy,$fw,$fh] = $title['free-play']['rect'];
+		[$ox,$oy,$ow,$oh] = $title['online-play']['rect'];
+		$expect($fy === $oy && $fx + $fw <= $ox && $fx >= 0 && $ox + $ow <= $width, "Title buttons are not one row at {$width}x{$height}");
+		$expect($fy + $fh <= $height * .32 + 1e-9, "Title buttons cover the rack at {$width}x{$height}");
 	}
 });
 

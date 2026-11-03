@@ -174,8 +174,13 @@ test('joined-room canvas keeps its aspect ratio in a constrained viewport', asyn
 		// Mirrors Hud::unit() and Hud::titleLayout() for the Free Play item centre.
 		const width=element.width,height=element.height,dpr=Math.min(2,devicePixelRatio||1);
 		const unit=dpr*Math.max(.8,Math.min(1.25,width / dpr / 1280,height / dpr / 720));
-		const wordmark=Math.max(56 * unit,Math.min(height * .22,height - 270 * unit));
-		return [.5,(wordmark + 82 * unit + 30 * unit) / height];
+		const margin=16*unit,top=Math.max(margin,height * .05),limit=height * .32;
+		const display=Math.max(46,Math.min(64,height * .11 / unit));
+		const scale=Math.max(.6,Math.min(1,(limit - top) / ((display * 1.1 + 44) * unit + 56 * unit)));
+		const buttonTop=top + display * scale * unit * 1.1 + 44 * unit * scale;
+		const buttonHeight=Math.max(44,56 * scale) * unit,gap=12 * unit;
+		const buttonWidth=Math.min(260 * unit,(width - 2 * margin - gap) / 2),x=(width - 2 * buttonWidth - gap) / 2;
+		return [(x + buttonWidth / 2) / width,(buttonTop + buttonHeight / 2) / height];
 	});
 	await page.mouse.click(grown.x + grown.width * freePlay[0],grown.y + grown.height * freePlay[1]);
 	await expect.poll(async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).started).toBe(true);
@@ -386,7 +391,7 @@ test('a stationary ball texture landmark follows its fixed world position while 
 	const rotations=async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).balls.map(ball=>ball.rotation);
 	const before=await rotations();
 	await canvas.evaluate(element=>{
-		// Engineering Plot's seven has a strong asymmetric moment, making an atlas reversal obvious.
+		// Lobster's seven has a strong asymmetric moment, making an atlas reversal obvious.
 		const state=element.phpBilliardsDebug.state,ball=state.balls.find(candidate=>candidate.number===7),radius=state.table[2];
 		const [x,y,z,w]=ball.rotation;
 		// The atlas spot at source UV (.25,.5) maps to the sphere's local +Z pole.
@@ -418,7 +423,9 @@ test('a stationary ball texture landmark follows its fixed world position while 
 		{
 			if(Math.hypot(x-center[0],y-center[1])>limit)continue;
 			const index=(y*image.width+x)*4,[red,green,blue]=image.data.subarray(index,index+3);
-			if(Math.min(red,green,blue)>30&&Math.max(red,green,blue)-Math.min(red,green,blue)<20)
+			// The number spot is aged ivory: light and warm but barely saturated, unlike the maroon ball, the dark numeral,
+			// or a pure-white specular highlight.
+			if(red>60&&Math.abs(red-green)<25&&red-blue>8&&red-blue<70)
 			{count++;sumX+=x;sumY+=y;}
 		}
 		return {count,x:sumX/count,y:sumY/count,width:image.width,height:image.height};

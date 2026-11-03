@@ -263,17 +263,30 @@ final class Hud
 	public static function titleLayout(int $width, int $height, float $dpr = 1): array
 	{
 		$u = self::unit($width, $height, $dpr);
-		$buttonWidth = min($width - 48 * $u, 320 * $u);
-		$buttonHeight = 60 * $u;
-		$wordmark = max(56 * $u, min($height * .22, $height - 270 * $u));
-		$first = $wordmark + 82 * $u;
-		$x = ($width - $buttonWidth) / 2;
+		$margin = Theme::MARGIN * $u;
+		// The title camera frames the far rail and the rack about a third of the way down, so the wordmark and the
+		// row of buttons stay above that line, shrinking together on short screens rather than covering the balls.
+		$limit = $height * .32;
+		$top = max($margin, $height * .05);
+		$titleSize = max(Theme::DISPLAY, min(64, $height * .11 / $u));
+		$natural = ($titleSize * 1.1 + 44) * $u + 56 * $u;
+		$scale = max(.6, min(1, ($limit - $top) / $natural));
+		$titleSize *= $scale;
+		$wordmark = $top + $titleSize * $u * .5;
+		$rule = $wordmark + $titleSize * $u * .6;
+		$caption = $rule + 20 * $u * $scale;
+		$buttonTop = $caption + 24 * $u * $scale;
+		$buttonHeight = max(44, 56 * $scale) * $u;
+		$gap = 12 * $u;
+		$buttonWidth = min(260 * $u, ($width - 2 * $margin - $gap) / 2);
+		$x = ($width - 2 * $buttonWidth - $gap) / 2;
 
 		return [
-			'free-play' => ['type' => 'action','name' => 'free-play','rect' => [$x,$first,$buttonWidth,$buttonHeight]]
+			'free-play' => ['type' => 'action','name' => 'free-play','rect' => [$x,$buttonTop,$buttonWidth,$buttonHeight]]
 			, 'online-play' => ['type' => 'action','name' => 'online-play'
-				, 'rect' => [$x,$first + $buttonHeight + 12 * $u,$buttonWidth,$buttonHeight]]
-			, '_metrics' => ['unit' => $u,'wordmark' => $wordmark]
+				, 'rect' => [$x + $buttonWidth + $gap,$buttonTop,$buttonWidth,$buttonHeight]]
+			, '_metrics' => ['unit' => $u,'wordmark' => $wordmark,'titleSize' => $titleSize,'rule' => $rule
+				, 'caption' => $caption,'limit' => $limit]
 		];
 	}
 
@@ -497,13 +510,13 @@ final class Hud
 	{
 		$u = $canvas->unit;
 		$layout = self::titleLayout($width, $height, $dpr);
-		$wordmark = $layout['_metrics']['wordmark'];
-		$canvas->gradient(0, 0, $width, $height * .7, 0, [.004,.008,.006,.72], [.004,.008,.006,0]);
+		$metrics = $layout['_metrics'];
+		$canvas->gradient(0, 0, $width, $metrics['limit'] * 1.4, 0, [.004,.008,.006,.72], [.004,.008,.006,0]);
 		$canvas->gradient(0, $height * .62, $width, $height * .38, 0, [.004,.008,.006,0], [.004,.008,.006,.55]);
-		$canvas->label('PHP Billiards', $width / 2, $wordmark, Theme::DISPLAY, Theme::TEXT, 'bold', 'center', $width - 32 * $u
-			, -.005, true);
-		$canvas->box($width / 2 - 24 * $u, $wordmark + 34 * $u, 48 * $u, 3 * $u, 1.5 * $u, Theme::BRASS);
-		$canvas->label('Eight-ball, simulated in PHP', $width / 2, $wordmark + 54 * $u, Theme::BODY, Theme::TEXT_SECONDARY
+		$canvas->label('PHP Billiards', $width / 2, $metrics['wordmark'], $metrics['titleSize'], Theme::TEXT, 'bold', 'center'
+			, $width - 32 * $u, -.005, true);
+		$canvas->box($width / 2 - 24 * $u, $metrics['rule'], 48 * $u, 3 * $u, 1.5 * $u, Theme::BRASS);
+		$canvas->label('Eight-ball, simulated in PHP', $width / 2, $metrics['caption'], Theme::BODY, Theme::TEXT_SECONDARY
 			, 'body', 'center', $width - 32 * $u, .01, true);
 
 		foreach(['free-play' => ['Free play','Practice table'],'online-play' => ['Online play','Two players over Matrix']]
@@ -515,7 +528,7 @@ final class Hud
 		}
 
 		$pad = $game->inputTheme !== 'keyboard';
-		$this->hintRow($canvas, [[['↑','↓'],'Select'],[[$pad ? 'A' : 'Enter'],'Play']], $width / 2, $height - 34 * $u, 'center'
+		$this->hintRow($canvas, [[['←','→'],'Select'],[[$pad ? 'A' : 'Enter'],'Play']], $width / 2, $height - 34 * $u, 'center'
 			, null, $pad, true);
 	}
 

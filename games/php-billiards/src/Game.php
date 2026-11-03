@@ -158,6 +158,12 @@ final class Game
 		$stepDown = $downward && empty($this->held['nav-down']);
 		$this->held['nav-up'] = $up;
 		$this->held['nav-down'] = $downward;
+		$left = (float)($controls['left'] ?? 0) >= .5;
+		$right = (float)($controls['right'] ?? 0) >= .5;
+		$stepLeft = $left && empty($this->held['nav-left']);
+		$stepRight = $right && empty($this->held['nav-right']);
+		$this->held['nav-left'] = $left;
+		$this->held['nav-right'] = $right;
 
 		foreach($events as $event) if(is_array($event)) $this->pointerEvent($event, $regions, $width, $height, $fine);
 
@@ -173,8 +179,9 @@ final class Game
 
 		if(!$this->started)
 		{
-			if($stepUp) $this->titleSelection = 0;
-			if($stepDown) $this->titleSelection = 1;
+			// The title menu is a row: left and right move along it, and up and down still work.
+			if($stepUp || $stepLeft) $this->titleSelection = 0;
+			if($stepDown || $stepRight) $this->titleSelection = 1;
 		}
 		foreach(array_unique($actions) as $action) $this->action($action);
 		if(isset($browser['debugCamera']) && is_array($browser['debugCamera'])) $this->camera->patch($browser['debugCamera']);
