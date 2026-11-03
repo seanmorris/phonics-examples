@@ -1,0 +1,21 @@
+{
+  "name": "@seanmorris/phonics-matrix",
+  "version": "0.1.0",
+  "description": "Configurable Matrix lobby and signaling provider for Phonics",
+  "type": "module",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "@seanmorris/phonics": "^0.1.0"
+  },
+  "exports": {
+    ".": "./browser/matrix.mjs",
+    "./phonics.json": "./phonics.json"
+  },
+  "files": [
+    "browser/matrix.mjs",
+    "phonics.json",
+    "composer.json",
+    "README.md",
+    "LICENSE"
+  ]
+}

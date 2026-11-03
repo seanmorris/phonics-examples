@@ -1,0 +1,11 @@
+{
+  "name": "seanmorris/phonics-matrix",
+  "version": "0.1.0",
+  "description": "Optional Matrix lobby provider for the Phonics browser runtime",
+  "type": "library",
+  "license": "Apache-2.0",
+  "require": {
+    "php": ">=8.0",
+    "seanmorris/phonics": "^0.1"
+  }
+}

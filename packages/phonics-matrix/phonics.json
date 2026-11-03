@@ -1,0 +1,30 @@
+{
+  "name": "@seanmorris/phonics-matrix",
+  "php": {
+    "autoload": {},
+    "files": []
+  },
+  "exports": {
+    "lobby": {
+      "type": "lobby-provider",
+      "browser": "browser/matrix.mjs"
+    }
+  },
+  "preload": [],
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.0.0"
+  },
+  "dependencies": {},
+  "browser": {
+    "files": [
+      "browser/matrix.mjs"
+    ]
+  },
+  "assets": [],
+  "integrity": {
+    "browser/matrix.mjs": "sha256-eo6V807mc/XPToEZU9f/4y5zfVXi/qVRvyiArt7aYco="
+  }
+}
