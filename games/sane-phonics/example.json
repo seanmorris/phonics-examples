@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "slug": "sane-phonics",
+  "title": "Sane-Phonics",
+  "description": "A streamed platformer with loops, vehicles, water, enemies, and three movement profiles.",
+  "application": "dist/game.phar",
+  "poster": "poster.webp",
+  "canvas": {
+    "width": 960,
+    "height": 540
+  },
+  "aspectRatio": "16/9",
+  "fit": "contain",
+  "documentation": {
+    "chapters": [
+      {
+        "slug": "index",
+        "title": "Sane-Phonics",
+        "path": "docs/index.md"
+      },
+      {
+        "slug": "gameplay",
+        "title": "Gameplay systems",
+        "path": "docs/gameplay.md"
+      },
+      {
+        "slug": "loops",
+        "title": "Loops and collision layers",
+        "path": "docs/loops.md"
+      },
+      {
+        "slug": "menus",
+        "title": "Menus and browser controls",
+        "path": "docs/menus.md"
+      },
+      {
+        "slug": "startup",
+        "title": "Startup flow",
+        "path": "docs/startup.md"
+      }
+    ],
+    "api": {
+      "namespace": "SanePhonics",
+      "description": "Platformer gameplay, physics, rendering, and effects used by Sane-Phonics."
+    },
+    "embed": {
+      "kind": "local"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-application="../engine/packages/doom-phonics/dist/game.phar" data-data-origins='["*"]'><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script>
+try {
+  const savedTheme = localStorage.getItem('phonics-doc-theme');
+  const theme = savedTheme === 'light' || savedTheme === 'dark'
+    ? savedTheme
+    : (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+  if(savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
+  document.documentElement.classList.add(theme);
+} catch {}
+</script><title>Doom-Phonics · Phonics</title><link rel="icon" href="data:,"><link rel="stylesheet" href="../site.css"><link rel="stylesheet" href="../preview/preview.css"><script defer src="../site.js"></script></head>
+<body class="play-page doom-phonics-page"><a class="skip" href="#content">Skip to content</a>
+<header class="masthead">
+<a class="brand" href="../index.html"><span class="brand-mark" aria-hidden="true">p/</span>phonics<span class="brand-label">docs</span></a>
+<div class="masthead-actions">
+<nav aria-label="Primary"><div class="menu menu--flat menu--primary" data-menu="primary"><ul><li class="menu-item menu-item--page"><a href="../index.html"><span>Documentation</span></a></li><li class="menu-item menu-item--page"><a href="../games/" class="active-link" aria-current="page"><span>Games</span></a></li></ul></div><a class="masthead-source" href="https://github.com/seanmorris/php-wasm-engine" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a></nav>
+<button class="theme-toggle" type="button" data-theme-toggle hidden aria-label="Use dark theme" title="Use dark theme">
+<svg data-theme-icon="dark" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+<svg data-theme-icon="light" viewBox="0 0 24 24" aria-hidden="true" hidden><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+</button>
+</div>
+</header>
+<main id="content" tabindex="-1" class="play-main"><p class="section-label">PHONICS / PLAY</p><h1>Doom-Phonics</h1><p class="subtitle">A native WAD adapter, DECORATE-driven ECS, and direct GLES renderer running Episode 1 data.</p>
+<form id="world-form"><label>Application PHAR URL <input id="world-url" type="url" required></label><button>Run application</button></form>
+<div id="game-frame"><canvas width="960" height="540" tabindex="0" aria-label="First-person game canvas"></canvas></div>
+<p id="fullscreen-error" role="alert"></p><p id="status" role="status">Choose an application to begin.</p><button id="stop">Stop</button>
+<section class="play-notes"><h2>Controls</h2><p>W/S move, A/D strafe, arrow keys turn, E or right click uses, and Space or left click fires. Number keys select weapons. Click the arena for mouse look; Escape releases the pointer and P pauses.</p><p>WAD Stack opens the reusable game launcher. All archives share one top-to-bottom load order, later files override earlier files, and the selected map can come from any file in the stack. This allows one complete archive to supply an Episode map while a later archive contributes weapons and other assets. Online Play enters a Matrix chat lobby; Game settings opens the launcher over chat before a player offers or accepts a match. Each player supplies locally owned files; only safe names, profiles, sizes, digests, ordering, and the selected map are exchanged.</p><p>Sign in with Matrix opens the selected homeserver's OAuth page. Doom-Phonics does not request a Matrix password. The repository demo uses the original shareware IWAD only as local reference material. Published Doom-Phonics packages provide the adapter and game systems; worlds provide their own licensed data.</p><p><a href="../games/">More playable examples</a> · <a href="../worlds.html">World composition</a></p></section>
+<footer><a href="../games/">Explore the games</a><span>Built with <a href="../index.html">Phonics</a> · PHP + SDL + WebGL 2</span><a class="sitemap-link" href="../sitemap.xml"><img src="../sitemap-badge.png" width="80" height="15" alt="XML sitemap"></a></footer></main><script type="module" src="../preview/host.mjs"></script></body></html>

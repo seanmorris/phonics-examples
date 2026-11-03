@@ -1,0 +1,5 @@
+[
+  {"name": "blue-base"},
+  {"name": "central-arena", "position": [1888, 3008, -64, 3.141592653589793], "turn": true},
+  {"name": "ramp-walk", "position": [32, 2384, 4, 1.5707963267948966], "move": true}
+]

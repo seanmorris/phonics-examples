@@ -1,0 +1,28 @@
+{
+  "name": "seanmorris/php-noid",
+  "description": "Tiled-authored PHP-Noid game and reusable modules for Phonics",
+  "type": "library",
+  "license": "Apache-2.0",
+  "require": {
+    "php": ">=8.0",
+    "seanmorris/phonics": "^0.1.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "PhpNoid\\": "src/"
+    },
+    "files": [
+      "autoload.php"
+    ]
+  },
+  "archive": {
+    "exclude": [
+      "/tests",
+      "/benchmarks",
+      "/generate-*",
+      "/browser/legacy-host.mjs",
+      "/examples/generate-*"
+    ]
+  },
+  "version": "0.1.0"
+}

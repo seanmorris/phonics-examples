@@ -1,0 +1,1526 @@
+// Extracted from the ZDoom Wiki backup; do not edit by hand.
+// ZDoom Wiki contributors. GFDL 1.2 or later; see accompanying source report.
+// Definitions preserve native/action references; they do not implement engine behavior.
+
+// https://zdoom.org/w/index.php?title=Classes:Arachnotron&oldid=48928
+ACTOR Arachnotron 68
+{
+  Health 500
+  Radius 64
+  Height 64
+  Mass 600
+  Speed 12
+  PainChance 128
+  Monster
+  +FLOORCLIP
+  +BOSSDEATH
+  SeeSound "baby/sight"
+  PainSound "baby/pain"
+  DeathSound "baby/death"
+  ActiveSound "baby/active"
+  Obituary "$OB_BABY"
+  States
+  {
+  Spawn:
+    BSPI AB 10 A_Look
+    Loop
+  See:
+    BSPI A 20
+    BSPI A 3 A_BabyMetal
+    BSPI ABBCC 3 A_Chase
+    BSPI D 3 A_BabyMetal
+    BSPI DEEFF 3 A_Chase
+    Goto See+1
+  Missile:
+    BSPI A 20 Bright A_FaceTarget
+    BSPI G 4 Bright A_BspiAttack
+    BSPI H 4 Bright
+    BSPI H 1 Bright A_SpidRefire
+    Goto Missile+1
+  Pain:
+    BSPI I 3
+    BSPI I 3 A_Pain
+    Goto See+1
+  Death:
+    BSPI J 20 A_Scream
+    BSPI K 7 A_NoBlocking
+    BSPI LMNO 7
+    BSPI P -1 A_BossDeath
+    Stop
+  Raise:
+    BSPI P 5
+    BSPI ONMLKJ 5
+    Goto See+1
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:ArachnotronPlasma&oldid=48910
+ACTOR ArachnotronPlasma
+{
+  Radius 13
+  Height 8
+  Speed 25
+  Damage 5
+  Projectile
+  +RANDOMIZE
+  RenderStyle Add 
+  Alpha 0.75
+  SeeSound "baby/attack"
+  DeathSound "baby/shotx"
+  States
+  {
+  Spawn:
+    APLS AB 5 Bright
+    Loop
+  Death:
+    APBX ABCDE 5 Bright
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:Archvile&oldid=49958
+ACTOR Archvile 64
+{
+  Health 700
+  Radius 20
+  Height 56
+  Mass 500
+  Speed 15
+  PainChance 10
+  Monster
+  MaxTargetRange 896
+  +QUICKTORETALIATE
+  +FLOORCLIP
+  +NOTARGET
+  SeeSound "vile/sight"
+  PainSound "vile/pain"
+  DeathSound "vile/death"
+  ActiveSound "vile/active"
+  MeleeSound "vile/stop"
+  Obituary "$OB_VILE"
+  States
+  {
+  Spawn:
+    VILE AB 10 A_Look
+    Loop
+  See:
+    VILE AABBCCDDEEFF 2 A_VileChase
+    Loop
+  Missile:
+    VILE G 0 Bright A_VileStart
+    VILE G 10 Bright A_FaceTarget
+    VILE H 8 Bright A_VileTarget
+    VILE IJKLMN 8 Bright A_FaceTarget
+    VILE O 8 Bright A_VileAttack
+    VILE P 20 Bright
+    Goto See
+  Heal:
+    VILE "[\]" 10 Bright
+    Goto See
+  Pain:
+    VILE Q 5   
+    VILE Q 5 A_Pain
+    Goto See
+  Death:
+    VILE Q 7
+    VILE R 7 A_Scream
+    VILE S 7 A_NoBlocking
+    VILE TUVWXY 7
+    VILE Z -1
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:ArchvileFire&oldid=48913
+ACTOR ArchvileFire
+{
+  +NOBLOCKMAP
+  +NOGRAVITY
+  RenderStyle Add
+  Alpha 1
+  States
+  {
+  Spawn:
+    FIRE A 2 Bright A_StartFire
+    FIRE BAB 2 Bright A_Fire
+    FIRE C 2 Bright A_FireCrackle
+    FIRE BCBCDCDCDEDED 2 Bright A_Fire
+    FIRE E 2 Bright A_FireCrackle
+    FIRE FEFEFGHGHGH 2 Bright A_Fire
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:ArtiPoisonBag&oldid=53616
+ACTOR ArtiPoisonBag : Inventory native 8000
+{
+  +FLOATBOB
+  Inventory.DefMaxAmount
+  Inventory.PickupFlash "PickupFlash"
+  +INVENTORY.INVBAR
+  +INVENTORY.FANCYPICKUPSOUND
+  Inventory.Icon "ARTIPSBG"
+  Inventory.PickupSound "misc/p_pkup"
+  Inventory.PickupMessage "$TXT_ARTIPOISONBAG" // "FLECHETTE"
+  Tag "$TAG_ARTIPOISONBAG"
+  States
+  {
+  Spawn:
+    PSBG A -1
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:ArtiPoisonBag3&oldid=53619
+ACTOR ArtiPoisonBag3 : ArtiPoisonBag native
+{
+  Inventory.Icon "ARTIPSB3"
+  Tag "$TAG_ARTIPOISONBAG3"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:AxeBlood&oldid=36482
+ACTOR AxeBlood
+{
+  Radius 2
+  Height 4
+  +NOBLOCKMAP
+  +NOGRAVITY
+  +DROPOFF
+  +NOTELEPORT
+  +CANNOTPUSH
+  +ALLOWPARTICLES
+  Mass 5
+  States
+  {
+  Spawn:
+    FAXE FGHIJ 3
+  Death:
+    FAXE K 3
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:BFGExtra&oldid=48898
+ACTOR BFGExtra
+{
+  +NOBLOCKMAP
+  +NOGRAVITY
+  RenderStyle Add
+  Alpha 0.75
+  DamageType "BFGSplash"
+  States
+  {
+  Spawn:
+    BFE2 ABCD 8 Bright
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:Blood&oldid=55407
+ACTOR Blood
+{
+  Mass 5
+  +NOBLOCKMAP
+  +NOTELEPORT
+  +ALLOWPARTICLES
+  States
+  {
+  Spawn:
+    BLUD CBA 8
+    Stop
+  Spray:
+    SPRY ABCDEF 3
+    SPRY G 2
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:BloodSplatter&oldid=53642
+ACTOR BloodSplatter
+{
+  Radius 2
+  Height 4
+  +NOBLOCKMAP
+  +MISSILE
+  +DROPOFF
+  +NOTELEPORT
+  +CANNOTPUSH
+  +ALLOWPARTICLES
+  Mass 5
+  States
+  {
+  Spawn:
+    BLUD CBA 8
+    Stop
+  Death:
+    BLUD A 6
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:BlueArmorForMegasphere&oldid=53613
+ACTOR BlueArmorForMegasphere : BlueArmor
+{
+  Armor.SavePercent 50
+  Armor.SaveAmount 200
+}
+
+// https://zdoom.org/w/index.php?title=Classes:BlueFlag&oldid=28679
+ACTOR BlueFlag : Flag 5130
+{
+  SpawnID 177
+  Radius 20
+  Height 16
+  +INTERHUBSTRIP
+  +NOTDMATCH
+  Inventory.PickupSound "misc/k_pkup"
+  Inventory.PickupMessage "$PICKUP_BLUEFLAG"
+  Inventory.Icon "BFLAB0"
+  States
+  {
+  Spawn:
+    BFLA ABC 3
+    BFLA DEF 3 BRIGHT
+    Loop
+  Carry:
+    BFLS ABCDEF 3
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:BlueSkullST&oldid=28688
+ACTOR BlueSkullST : Skull
+{
+  Radius 20
+  Height 16
+  +INTERHUBSTRIP
+  +NOTDMATCH
+  Inventory.PickupSound "misc/k_pkup"
+  Inventory.PickupMessage "$PICKUP_BLUESKULL_ST"
+  Inventory.Icon "BSKUB0"
+  States
+  {
+  Spawn:
+    BSKU A 10
+    BSKU B 10 BRIGHT
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:BridgeBall&oldid=36485
+ACTOR BridgeBall
+{
+  +NOBLOCKMAP
+  +NOTELEPORT
+  +NOGRAVITY
+
+  action native A_BridgeOrbit();
+
+  States
+  {
+  Spawn:
+    TLGL A 2 Bright 
+    TLGL A 1 Bright A_BridgeOrbit
+    Wait
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:ChaingunGuy&oldid=48926
+ACTOR ChaingunGuy 65
+{
+  Health 70
+  Radius 20
+  Height 56
+  Mass 100
+  Speed 8
+  PainChance 170
+  Monster
+  +FLOORCLIP
+  SeeSound "chainguy/sight"
+  PainSound "chainguy/pain"
+  DeathSound "chainguy/death"
+  ActiveSound "chainguy/active"
+  AttackSound "chainguy/attack"
+  Obituary "$OB_CHAINGUY"
+  Dropitem "Chaingun"
+  States
+  {
+  Spawn:
+    CPOS AB 10 A_Look
+    Loop
+  See:
+    CPOS AABBCCDD 3 A_Chase
+    Loop
+  Missile:
+    CPOS E 10 A_FaceTarget
+    CPOS FE 4 Bright A_CPosAttack
+    CPOS F 1 A_CPosRefire
+    Goto Missile+1
+  Pain:
+    CPOS G 3
+    CPOS G 3 A_Pain
+    Goto See
+  Death:
+    CPOS H 5
+    CPOS I 5 A_Scream
+    CPOS J 5 A_NoBlocking
+    CPOS KLM 5
+    CPOS N -1
+    Stop
+  XDeath:
+    CPOS O 5 
+    CPOS P 5 A_XScream
+    CPOS Q 5 A_NoBlocking
+    CPOS RS 5
+    CPOS T -1
+    Stop
+  Raise:
+    CPOS N 5
+    CPOS MLKJIH 5
+    Goto See
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:CommanderKeen&oldid=40378
+ACTOR CommanderKeen 72
+{
+  Health 100
+  Radius 16
+  Height 72
+  Mass 10000000
+  PainChance 256
+  +SOLID
+  +SPAWNCEILING
+  +NOGRAVITY
+  +SHOOTABLE
+  +COUNTKILL
+  +NOICEDEATH
+  +ISMONSTER
+  PainSound "keen/pain"
+  DeathSound "keen/death"
+  States
+  {
+  Spawn:
+    KEEN A -1
+    Loop
+  Death:
+    KEEN AB 6
+    KEEN C 6 A_Scream
+    KEEN DEFGH	6
+    KEEN I 6
+    KEEN J 6
+    KEEN K 6 A_KeenDie
+    KEEN L -1
+    Stop
+  Pain:
+    KEEN M 4
+    KEEN M 8 A_Pain
+    Goto Spawn
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:CustomBridge&oldid=53623
+ACTOR CustomBridge native 9991
+{
+  +SOLID
+  +NOGRAVITY
+  +NOLIFTDROP
+  +ACTLIKEBRIDGE
+  Radius 32
+  Height 2
+  RenderStyle None
+
+  action native A_BridgeInit(class<Actor> balltype = "BridgeBall");
+
+  States
+  {
+  Spawn:
+    TLGL ABCDE 3 Bright 
+    Loop
+  See:
+    TLGL A 2
+    TLGL A 2 A_BridgeInit
+    TLGL A -1
+    Stop
+  Death:
+    TLGL A 2
+    TLGL A 300
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:DoomUnusedStates&oldid=33965
+ACTOR DoomUnusedStates
+{
+  States
+  {
+  Label1:
+    SMT2 A -1
+    Stop
+  Label2:
+    PLAY N -1
+    Stop
+    PLAY S -1
+    Stop
+  TNT: // MBF compatibility
+    TNT1 A -1
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:EvilSceptre&oldid=39272
+ACTOR EvilSceptre : ScoreItem 2016
+{
+  Inventory.PickupMessage "$BETA_BONUS3"
+  States
+  {
+  Spawn:
+    BON3 A 6
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:FatShot&oldid=48906
+ACTOR FatShot
+{
+  Radius 6
+  Height 8
+  Speed 20
+  Damage 8
+  Projectile 
+  +RANDOMIZE
+  RenderStyle Add
+  Alpha 1
+  SeeSound "fatso/attack"
+  DeathSound "fatso/shotx"
+  States
+  {
+  Spawn:
+    MANF AB 4 Bright
+    Loop
+  Death:
+    MISL B 8 Bright
+    MISL C 6 Bright
+    MISL D 4 Bright
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:Fatso&oldid=48921
+ACTOR Fatso 67
+{
+  Health 600
+  Radius 48
+  Height 64
+  Mass 1000
+  Speed 8
+  PainChance 80
+  Monster
+  +FLOORCLIP
+  +BOSSDEATH
+  SeeSound "fatso/sight"
+  PainSound "fatso/pain"
+  DeathSound "fatso/death"
+  ActiveSound "fatso/active"
+  Obituary "$OB_FATSO"
+  States
+  {
+  Spawn:
+    FATT AB 15 A_Look
+    Loop
+  See:
+    FATT AABBCCDDEEFF 4 A_Chase
+    Loop
+  Missile:
+    FATT G 20 A_FatRaise
+    FATT H 10 Bright A_FatAttack1
+    FATT IG 5 A_FaceTarget
+    FATT H 10 Bright A_FatAttack2
+    FATT IG 5 A_FaceTarget
+    FATT H 10 Bright A_FatAttack3
+    FATT IG 5 A_FaceTarget
+    Goto See
+  Pain:
+    FATT J 3
+    FATT J 3 A_Pain
+    Goto See
+  Death:
+    FATT K 6
+    FATT L 6 A_Scream
+    FATT M 6 A_NoBlocking
+    FATT NOPQRS 6
+    FATT T -1 A_BossDeath
+    Stop
+  Raise:
+    FATT R 5
+    FATT QPONMLK 5
+    Goto See
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:Flag&oldid=28677
+ACTOR Flag : TeamItem native {}
+
+
+// https://zdoom.org/w/index.php?title=Classes:GoldFlag&oldid=28685
+ACTOR GoldFlag : Flag 5134
+{
+  Radius 20
+  Height 16
+  +INTERHUBSTRIP
+  +NOTDMATCH
+  Inventory.PickupSound "misc/k_pkup"
+  Inventory.PickupMessage "$PICKUP_GOLDFLAG"
+  Inventory.Icon "YFLAB0"
+  States
+  {
+  Spawn:
+    YFLA ABC 3
+    YFLA DEF 3 BRIGHT
+    Loop
+  Carry:
+    YFLS ABCDEF 3
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:GoldSkullST&oldid=28691
+ACTOR GoldSkullST : Skull
+{
+  Radius 20
+  Height 16
+  +INTERHUBSTRIP
+  +NOTDMATCH
+  Inventory.PickupSound "misc/k_pkup"
+  Inventory.PickupMessage "$PICKUP_GOLDSKULL_ST"
+  Inventory.Icon "YSKUB0"
+  States
+  {
+  Spawn:
+    YSKU A 10
+    YSKU B 10 BRIGHT
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:GreenFlag&oldid=28683
+ACTOR GreenFlag : Flag 5133
+{
+  Radius 20
+  Height 16
+  +INTERHUBSTRIP
+  +NOTDMATCH
+  Inventory.PickupSound "misc/k_pkup"
+  Inventory.PickupMessage "$PICKUP_GREENFLAG"
+  Inventory.Icon "GFLAB0"
+  States
+  {
+  Spawn:
+    GFLA ABC 3
+    GFLA DEF 3 BRIGHT
+    Loop
+  Carry:
+    GFLS ABCDEF 3
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:GreenSkullST&oldid=28693
+ACTOR GreenSkullST : BlueSkullST
+{
+  Translation "192:207=112:123", "240:247=124:127"
+  Inventory.PickupMessage "$PICKUP_GREENSKULL_ST"
+  Inventory.Icon "GSKLBIG"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:HellKnight&oldid=48918
+ACTOR HellKnight : BaronOfHell 69
+{
+  Health 500
+  -BOSSDEATH
+  SeeSound "knight/sight"
+  ActiveSound "knight/active"
+  PainSound "knight/pain"
+  DeathSound "knight/death"
+  HitObituary "$OB_KNIGHTHIT"
+  Obituary "$OB_KNIGHT"
+  States
+  {
+  Spawn:
+    BOS2 AB 10 A_Look
+    Loop
+  See:
+    BOS2 AABBCCDD 3 A_Chase
+    Loop
+  Melee:
+  Missile:
+    BOS2 EF 8 A_FaceTarget
+    BOS2 G 8 A_BruisAttack
+    Goto See
+  Pain:
+    BOS2 H 2
+    BOS2 H 2 A_Pain
+    Goto See
+  Death:
+    BOS2 I 8
+    BOS2 J 8 A_Scream
+    BOS2 K 8
+    BOS2 L 8 A_NoBlocking
+    BOS2 MN 8
+    BOS2 O -1
+    Stop
+  Raise:
+    BOS2 O 8
+    BOS2 NMLKJI 8
+    Goto See
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineBerserk&oldid=48887
+ACTOR MarineBerserk: ScriptedMarine 9102
+{
+  States
+  {
+  Melee:      
+    Goto Super::Melee.Berserk
+  Missile:
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineBFG&oldid=48879
+ACTOR MarineBFG: ScriptedMarine 9111
+{
+  States
+  {
+  Missile:
+    Goto Super::Missile.BFG
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineChaingun&oldid=48878
+ACTOR MarineChaingun: ScriptedMarine 9107
+{
+  States
+  {
+  Missile:
+    Goto Super::Missile.Chaingun
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineChainsaw&oldid=48883
+ACTOR MarineChainsaw: ScriptedMarine 9103
+{
+  States
+  {
+  Melee:
+    Goto Super::Melee.Chainsaw
+  Missile:
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineFist&oldid=48886
+ACTOR MarineFist: ScriptedMarine 9101
+{
+  States
+  {
+  Melee:      
+    Goto Super::Melee.Fist
+  Missile:
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarinePistol&oldid=48884
+ACTOR MarinePistol: ScriptedMarine 9104
+{
+  States
+  {
+  Missile:
+    Goto Super::Missile.Pistol
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarinePlasma&oldid=48881
+ACTOR MarinePlasma: ScriptedMarine 9109
+{
+  States
+  {
+  Missile:
+    Goto Super::Missile.Plasma
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineRailgun&oldid=48877
+ACTOR MarineRailgun: ScriptedMarine 9110
+{
+  States
+  {
+  Missile:
+    Goto Super::Missile.Railgun
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineRocket&oldid=48880
+ACTOR MarineRocket : MarineFist 9108
+{
+  States
+  {
+  Missile:
+    Goto Super::Missile.Rocket
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineShotgun&oldid=48882
+ACTOR MarineShotgun : ScriptedMarine 9105
+{
+  States
+  {
+  Missile:
+    Goto Super::Missile.Shotgun
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MarineSSG&oldid=48885
+ACTOR MarineSSG : ScriptedMarine 9106
+{
+  States
+  {
+  Missile:
+    Goto Super::Missile.SSG
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:MegasphereHealth&oldid=33859
+ACTOR MegasphereHealth : Health
+{
+  Inventory.Amount 200
+  Inventory.MaxAmount 200
+  +INVENTORY.ALWAYSPICKUP
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PainElemental&oldid=48923
+ACTOR PainElemental 71
+{
+  Health 400
+  Radius 31
+  Height 56
+  Mass 400
+  Speed 8
+  PainChance 128
+  Monster
+  +FLOAT
+  +NOGRAVITY
+  SeeSound "pain/sight"
+  PainSound "pain/pain"
+  DeathSound "pain/death"
+  ActiveSound "pain/active"
+  States
+  {
+  Spawn:
+    PAIN A 10 A_Look
+    Loop
+  See:
+    PAIN AABBCC 3 A_Chase
+    Loop
+  Missile:
+    PAIN D 5 A_FaceTarget
+    PAIN E 5 A_FaceTarget
+    PAIN F 5 Bright A_FaceTarget
+    PAIN F 0 Bright A_PainAttack
+    Goto See
+  Pain:
+    PAIN G 6
+    PAIN G 6 A_Pain
+    Goto See
+  Death:
+    PAIN H 8 Bright
+    PAIN I 8 Bright A_Scream
+    PAIN JK 8 Bright
+    PAIN L 8 Bright A_PainDie
+    PAIN M 8 Bright
+    Stop
+  Raise:
+    PAIN MLKJIH 8
+    Goto See
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PickupFlash&oldid=36996
+ACTOR PickupFlash
+{
+  +NOGRAVITY
+  States
+  {
+  Spawn:
+    ACLO DCDCBCBABA 3
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PlasmaBall1&oldid=49981
+ACTOR PlasmaBall1 : PlasmaBall
+{
+  Damage 4
+  BounceType "Classic"
+  BounceFactor 1.0
+  Obituary "$OB_MPBFG_MBF" // "%o was burned by %k's BFG."
+  States
+  {
+  Spawn:
+    PLS1 AB 6 Bright
+    Loop
+  Death:
+    PLS1 CDEFG 4 Bright
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PlasmaBall2&oldid=50013
+ACTOR PlasmaBall2 : PlasmaBall1
+{
+  States
+  {
+  Spawn:
+    PLS2 AB 6 Bright
+    Loop
+  Death:
+    PLS2 CDE 4 Bright
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerDamage&oldid=53721
+ACTOR PowerDamage : Powerup native
+{
+  Powerup.Duration -25
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerInvisibility&oldid=53733
+ACTOR PowerInvisibility : Powerup native
+{
+  +SHADOW
+  Powerup.Duration -60
+  Powerup.Strength 80
+  Powerup.Mode "Fuzzy"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerInvulnerable&oldid=53736
+ACTOR PowerInvulnerable : Powerup native
+{
+  Powerup.Duration -30
+  Inventory.Icon "SPSHLD0"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerIronFeet&oldid=53738
+ACTOR PowerIronFeet : Powerup native
+{
+  Powerup.Duration -60
+  Powerup.Color 0, 255, 0, 0.125
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerLightAmp&oldid=53740
+ACTOR PowerLightAmp : Powerup native
+{
+  Powerup.Duration -120
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerProtection&oldid=44942
+ACTOR PowerProtection : Powerup native
+{
+  Powerup.Duration -25
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerSpeed&oldid=46965
+ACTOR PowerSpeed : Powerup native
+{
+  Powerup.Duration -45
+  Speed 1.5
+  Inventory.Icon "SPBOOT0"
+  +INVENTORY.NOTELEPORTFREEZE
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerStrength&oldid=53717
+ACTOR PowerStrength : Powerup native
+{
+  Powerup.Duration 1
+  Powerup.Color 255, 0, 0, 0.5
+  +INVENTORY.HUBPOWER
+}
+
+// https://zdoom.org/w/index.php?title=Classes:PowerTimeFreezer&oldid=54144
+ACTOR PowerTimeFreezer : Powerup native
+{
+  Powerup.Duration -12
+}
+
+// https://zdoom.org/w/index.php?title=Classes:Powerup&oldid=53729
+ACTOR Powerup : Inventory native {}
+
+
+// https://zdoom.org/w/index.php?title=Classes:RealGibs&oldid=53643
+ACTOR RealGibs
+{
+  +DROPOFF
+  +CORPSE
+  +NOTELEPORT
+  +DONTGIB
+  States
+  {
+  Spawn:
+    Goto GenericCrush
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:RedFlag&oldid=28680
+ACTOR RedFlag : Flag 5131
+{
+  SpawnID 178
+  Radius 20
+  Height 16
+  +INTERHUBSTRIP
+  +NOTDMATCH
+  Inventory.PickupSound "misc/k_pkup"
+  Inventory.PickupMessage "$PICKUP_REDFLAG"
+  Inventory.Icon "RFLAB0"
+  States
+  {
+  Spawn:
+    RFLA ABC 3
+    RFLA DEF 3 BRIGHT
+    Loop
+  Carry:
+    RFLS ABCDEF 3
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:RedSkullST&oldid=28689
+ACTOR RedSkullST : Skull
+{
+  Radius 20
+  Height 16
+  +INTERHUBSTRIP
+  +NOTDMATCH
+  Inventory.PickupSound "misc/k_pkup"
+  Inventory.PickupMessage "$PICKUP_REDSKULL_ST"
+  Inventory.Icon "RSKUB0"
+  States
+  {
+  Spawn:
+    RSKU A 10
+    RSKU B 10 BRIGHT
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:Revenant&oldid=48929
+ACTOR Revenant 66
+{
+  Health 300
+  Radius 20
+  Height 56
+  Mass 500
+  Speed 10
+  PainChance 100
+  Monster
+  MeleeThreshold 196
+  +MISSILEMORE 
+  +FLOORCLIP
+  SeeSound "skeleton/sight"
+  PainSound "skeleton/pain"
+  DeathSound "skeleton/death"
+  ActiveSound "skeleton/active"
+  MeleeSound "skeleton/melee"
+  HitObituary "$OB_UNDEADHIT" // "%o was punched by a revenant."
+  Obituary "$OB_UNDEAD" // "%o couldn't evade a revenant's fireball."
+  States
+  {
+  Spawn:
+    SKEL AB 10 A_Look
+    Loop
+  See:
+    SKEL AABBCCDDEEFF 2 A_Chase
+    Loop
+  Melee:
+    SKEL G 0 A_FaceTarget
+    SKEL G 6 A_SkelWhoosh
+    SKEL H 6 A_FaceTarget
+    SKEL I 6 A_SkelFist
+    Goto See
+  Missile:
+    SKEL J 0 Bright A_FaceTarget
+    SKEL J 10 Bright A_FaceTarget
+    SKEL K 10 A_SkelMissile
+    SKEL K 10 A_FaceTarget
+    Goto See
+  Pain:
+    SKEL L 5
+    SKEL L 5 A_Pain
+    Goto See
+  Death:
+    SKEL LM 7
+    SKEL N 7 A_Scream
+    SKEL O 7 A_NoBlocking
+    SKEL P 7
+    SKEL Q -1
+    Stop
+  Raise:
+    SKEL Q 5
+    SKEL PONML 5
+    Goto See
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:RevenantTracer&oldid=48912
+ACTOR RevenantTracer
+{
+  Radius 11
+  Height 8
+  Speed 10
+  Damage 10
+  Projectile
+  +SEEKERMISSILE
+  +RANDOMIZE
+  SeeSound "skeleton/attack"
+  DeathSound "skeleton/tracex"
+  RenderStyle Add
+  States
+  {
+  Spawn:
+    FATB AB 2 Bright A_Tracer
+    Loop
+  Death:
+    FBXP A 8 Bright
+    FBXP B 6 Bright
+    FBXP C 4 Bright
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:RevenantTracerSmoke&oldid=48900
+ACTOR RevenantTracerSmoke
+{
+  +NOBLOCKMAP
+  +NOGRAVITY
+  +NOTELEPORT
+  RenderStyle Translucent 
+  Alpha 0.5
+  States
+  {	
+  Spawn:
+    PUFF ABABC 4
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:ScoreItem&oldid=52603
+ACTOR ScoreItem : Inventory native
+{
+  Height 10
+  +COUNTITEM
+  Inventory.Amount 1
+  +INVENTORY.ALWAYSPICKUP
+}
+
+// https://zdoom.org/w/index.php?title=Classes:ScriptedMarine&oldid=48934
+ACTOR ScriptedMarine native 9100
+{
+  Health 100
+  Radius 16
+  Height 56
+  Mass 100
+  Speed 8
+  PainChance 160
+  Monster
+  -COUNTKILL
+  Translation 0
+  Damage 100
+  DeathSound "*death"
+  PainSound "*pain50"
+
+  action native A_M_Refire(bool ignoremissile=false);
+  action native A_M_CheckAttack();
+  action native A_MarineChase();
+  action native A_MarineLook();
+  action native A_MarineNoise();
+  action native A_M_Punch(int force);
+  action native A_M_SawRefire();
+  action native A_M_FirePistol(bool accurate);
+  action native A_M_FireShotgun();
+  action native A_M_FireShotgun2();
+  action native A_M_FireCGun(bool accurate);
+  action native A_M_FireMissile();
+  action native A_M_FirePlasma();
+  action native A_M_FireRailgun();
+  action native A_M_BFGSound();
+  action native A_M_FireBFG();
+
+  States
+  {
+  Spawn:
+    PLAY A 4 A_MarineLook
+    PLAY A 4 A_MarineNoise
+    Loop
+  Idle:
+    PLAY A 4 A_MarineLook
+    PLAY A 4 A_MarineNoise
+    PLAY A 4 A_MarineLook
+    PLAY B 4 A_MarineNoise
+    PLAY B 4 A_MarineLook
+    PLAY B 4 A_MarineNoise
+    Loop
+  See:
+    PLAY ABCD 4 A_MarineChase
+    Loop
+
+  Melee.Fist:
+    PLAY E 4 A_FaceTarget
+    PLAY E 4 A_M_Punch(1)
+    PLAY A 9
+    PLAY A 0 A_M_Refire(1)
+    Loop
+    PLAY A 5 A_FaceTarget
+    Goto See
+  Melee.Berserk:
+    PLAY E 4 A_FaceTarget
+    PLAY E 4 A_M_Punch(10)
+    PLAY A 9
+    PLAY A 0 A_M_Refire(1)
+    Loop
+    PLAY A 5 A_FaceTarget
+    Goto See
+  Melee.Chainsaw:
+    PLAY E 4 A_MarineNoise
+    PLAY E 4 A_M_Saw
+    PLAY E 0 A_M_SawRefire
+    Goto Melee.Chainsaw+1
+    PLAY A 0
+    Goto See
+
+  Missile:
+  Missile.None:
+    PLAY E 12 A_FaceTarget
+    Goto Idle
+    PLAY F 6 Bright
+    Loop
+  Missile.Pistol:
+    PLAY E 4 A_FaceTarget
+    PLAY F 6 Bright A_M_FirePistol(1)
+    PLAY A 4 A_FaceTarget
+    PLAY A 0 A_M_Refire
+    PLAY A 5
+    Goto See
+  Fireloop.Pistol:
+    PLAY F 6 Bright A_M_FirePistol(0)
+    PLAY A 4 A_FaceTarget
+    PLAY A 0 A_M_Refire
+    Goto Fireloop.Pistol
+    PLAY A 5
+    Goto See
+  Missile.Shotgun:
+    PLAY E 3 A_M_CheckAttack
+    PLAY F 7 Bright A_M_FireShotgun
+    Goto See
+  Missile.SSG:
+    PLAY E 3 A_M_CheckAttack
+    PLAY F 7 Bright A_M_FireShotgun2
+    Goto See
+  Missile.Chaingun:
+    PLAY E 4 A_FaceTarget
+    PLAY FF 4 Bright A_M_FireCGun(1)
+    PLAY FF 4 Bright A_M_FireCGun(0)
+    PLAY A 0 A_M_Refire
+    Goto Missile.Chaingun+3
+    PLAY A 0
+    Goto See
+  Missile.Rocket:
+    PLAY E 8
+    PLAY F 6 Bright A_M_FireMissile
+    PLAY E 6
+    PLAY A 0 A_M_Refire
+    Loop
+    PLAY A 0
+    Goto See
+  Missile.Plasma:
+    PLAY E 2 A_FaceTarget
+    PLAY E 0 A_FaceTarget
+    PLAY F 3 Bright A_M_FirePlasma
+    PLAY A 0 A_M_Refire
+    Goto Missile.Plasma+1
+    PLAY A 0
+    Goto See
+  Missile.Railgun:
+    PLAY E 4 A_M_CheckAttack
+    PLAY F 6 Bright A_M_FireRailgun
+    Goto See
+  Missile.BFG:
+    PLAY E 5 A_M_BFGSound
+    PLAY EEEEE 5 A_FaceTarget
+    PLAY F 6 Bright A_M_FireBFG
+    PLAY A 4 A_FaceTarget
+    PLAY A 0 A_M_Refire
+    Loop
+    PLAY A 0
+    Goto See
+
+  SkipAttack:
+    PLAY A 1
+    Goto See
+  Pain:
+    PLAY G 4
+    PLAY G 4 A_Pain
+    Goto Idle
+  Death:
+    PLAY H 10
+    PLAY I 10 A_Scream
+    PLAY J 10 A_NoBlocking
+    PLAY KLM 10
+    PLAY N -1
+    Stop
+  XDeath:
+    PLAY O 5
+    PLAY P 5 A_XScream
+    PLAY Q 5 A_NoBlocking
+    PLAY RSTUV 5
+    PLAY W -1
+    Stop
+  Raise:
+    PLAY MLKJIH 5
+    Goto See
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:Skull&oldid=28687
+ACTOR Skull : TeamItem native {}
+
+
+// https://zdoom.org/w/index.php?title=Classes:Stalagmite&oldid=53634
+ACTOR Stalagmite 5050
+{
+  Radius 16
+  Height 48
+  +SOLID
+  States
+  {
+  Spawn:
+    SMT2 A -1
+    Stop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthArachnotron&oldid=48888
+ACTOR StealthArachnotron : Arachnotron 9050
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHBABY"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthArchvile&oldid=48893
+ACTOR StealthArchvile : Archvile 9051
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHVILE"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthBaron&oldid=48897
+ACTOR StealthBaron : BaronOfHell 9052
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHBARON"
+  HitObituary "$OB_STEALTHBARON"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthCacodemon&oldid=48895
+ACTOR StealthCacodemon : Cacodemon 9053
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHCACO"
+  HitObituary "$OB_STEALTHCACO"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthChaingunGuy&oldid=48889
+ACTOR StealthChaingunGuy : ChaingunGuy 9054
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHCHAINGUY"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthDemon&oldid=48901
+ACTOR StealthDemon : Demon 9055
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHDEMON"
+  HitObituary "$OB_STEALTHDEMON"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthDoomImp&oldid=48896
+ACTOR StealthDoomImp : DoomImp 9057
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHIMP"
+  HitObituary "$OB_STEALTHIMP"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthFatso&oldid=48890
+ACTOR StealthFatso : Fatso 9058
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHFATSO"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthHellKnight&oldid=48899
+ACTOR StealthHellKnight : HellKnight 9056
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHKNIGHT"
+  HitObituary "$OB_STEALTHKNIGHT"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthRevenant&oldid=48894
+ACTOR StealthRevenant : Revenant 9059
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHUNDEAD"
+  HitObituary "$OB_STEALTHUNDEAD"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthShotgunGuy&oldid=48891
+ACTOR StealthShotgunGuy : ShotgunGuy 9060
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHSHOTGUNGUY"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:StealthZombieMan&oldid=48892
+ACTOR StealthZombieMan : ZombieMan 9061
+{
+  +STEALTH
+  RenderStyle Translucent
+  Alpha 0
+  Obituary "$OB_STEALTHZOMBIE"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:TeamItem&oldid=28686
+ACTOR TeamItem : Inventory native
+{
+  +INTERHUBSTRIP
+  Inventory.PickupSound "misc/k_pkup"
+}
+
+// https://zdoom.org/w/index.php?title=Classes:UnholyBible&oldid=39273
+ACTOR UnholyBible : ScoreItem 2017
+{
+  Inventory.PickupMessage "$BETA_BONUS4"
+  States
+  {
+  Spawn:
+    BON4 A 6
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:WhiteFlag&oldid=28681
+ACTOR WhiteFlag : Flag 5132
+{
+  SpawnID 179
+  Radius 20
+  Height 16
+  +NOTDMATCH
+  Inventory.PickupMessage "$PICKUP_WHITEFLAG"
+  Inventory.Icon "WFLAB0"
+  States
+  {
+  Spawn:
+    WFLA ABC 3
+    WFLA DEF 3 BRIGHT
+    Loop
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:WolfensteinSS&oldid=48932
+ACTOR WolfensteinSS 84
+{
+  Health 50
+  Radius 20
+  Height 56
+  Speed 8
+  PainChance 170
+  Monster
+  +FLOORCLIP
+  SeeSound "wolfss/sight"
+  PainSound "wolfss/pain"
+  DeathSound "wolfss/death"
+  ActiveSound "wolfss/active"
+  AttackSound "wolfss/attack"
+  Obituary "$OB_WOLFSS"
+  Dropitem "Clip"
+  States
+  {
+  Spawn:
+    SSWV AB 10 A_Look
+    Loop
+  See:
+    SSWV AABBCCDD 3 A_Chase
+    Loop
+  Missile:
+    SSWV E 10 A_FaceTarget
+    SSWV F 10 A_FaceTarget
+    SSWV G 4 Bright A_CPosAttack
+    SSWV F 6 A_FaceTarget
+    SSWV G 4 Bright A_CPosAttack
+    SSWV F 1 A_CPosRefire
+    Goto Missile+1
+  Pain:
+    SSWV H 3
+    SSWV H 3 A_Pain
+    Goto See
+  Death:
+    SSWV I 5
+    SSWV J 5 A_Scream
+    SSWV K 5 A_NoBlocking
+    SSWV L 5
+    SSWV M -1
+    Stop
+  XDeath:
+    SSWV N 5 
+    SSWV O 5 A_XScream
+    SSWV P 5 A_NoBlocking
+    SSWV QRSTU 5
+    SSWV V -1
+    Stop
+  Raise:
+    SSWV M 5
+    SSWV LKJI 5
+    Goto See 
+  }
+}
+
+// https://zdoom.org/w/index.php?title=Classes:ZBridge&oldid=53629
+ACTOR ZBridge : CustomBridge 118
+{
+  Args 36, 4, 0, 0
+}

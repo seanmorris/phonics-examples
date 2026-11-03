@@ -1,0 +1,41 @@
+{
+  "name": "@seanmorris/php-buster",
+  "version": "0.1.0",
+  "description": "A deterministic PHP and Phonics port of Blockade Buster",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./phonics.json": "./phonics.json"
+  },
+  "peerDependencies": {
+    "@seanmorris/phonics": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@seanmorris/phonics": {
+      "optional": true
+    }
+  },
+  "files": [
+    "autoload.php",
+    "game.php",
+    "application.php",
+    "src/Actor.php",
+    "src/Input/BusterActions.php",
+    "src/Input/InputSettings.php",
+    "src/Random.php",
+    "src/Render/Scene.php",
+    "src/Simulation.php",
+    "browser/game.mjs",
+    "assets/explosion.wav",
+    "assets/sprites.png",
+    "assets/sprites.tsj",
+    "assets/starfield.png",
+    "assets/starfield.tsj",
+    "worlds/buster.tmj",
+    "worlds/buster.world",
+    "phonics.json",
+    "composer.json",
+    "README.md",
+    "LICENSE"
+  ]
+}

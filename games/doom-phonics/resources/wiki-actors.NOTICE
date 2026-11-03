@@ -1,0 +1,22 @@
+ZDoom Wiki actor definitions
+
+This generated collection is adapted from the user's zdoom-wiki.xml MediaWiki
+history export. Each actor's source page, revision, date, contributor history,
+and transformations are recorded in wiki-actors.sources.json. Per-actor source
+URLs are also retained in wiki-actors.dec. Existing project actors are excluded.
+
+The export's ZDoom:Copyrights page (revision 4820) gives these terms:
+
+Permission is granted to copy, distribute and/or modify this document under the
+terms of the GNU Free Documentation License, Version 1.2 or any later version
+published by the Free Software Foundation; with no Invariant Sections, no
+Front-Cover Texts, and no Back-Cover Texts.
+
+The license text is included in wiki-actors.COPYING. This notice applies to the
+extracted wiki material, not to the surrounding Phonics engine source code.
+
+Modifications: wiki markup expanded into DECORATE tokens; missing editor numbers
+restored from the Actor infobox; literal backslash sprite frames unquoted for
+parser compatibility; definitions selected and combined without overwriting
+existing project classes. Native classes and action references remain data;
+their presence does not supply the corresponding native engine implementations.

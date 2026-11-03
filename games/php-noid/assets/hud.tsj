@@ -1,0 +1,15 @@
+{
+    "type": "tileset",
+    "version": "1.10",
+    "tiledversion": "1.12.2",
+    "name": "php-noid-hud",
+    "image": "hud-rail.png",
+    "imagewidth": 230,
+    "imageheight": 480,
+    "tilewidth": 230,
+    "tileheight": 480,
+    "columns": 1,
+    "tilecount": 1,
+    "margin": 0,
+    "spacing": 0
+}

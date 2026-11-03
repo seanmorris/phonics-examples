@@ -1,0 +1,67 @@
+{
+  "type": "phonics-world",
+  "schemaVersion": 1,
+  "imports": {
+    "doom": "../phonics.json"
+  },
+  "sources": {
+    "episode": {
+      "adapter": "@doom/wad",
+      "resources": [
+        {
+          "url": "./local-wads/DOOM2.WAD",
+          "role": "iwad"
+        },
+        {
+          "url": "./local-wads/SKULLTAG.WAD",
+          "role": "pwad"
+        },
+        {
+          "url": "./SKULLTAG_ACTORS.lmp",
+          "role": "decorate",
+          "integrity": "sha256-WTMV/1cDmBFta/mjazYCE68C0/HcrNwwvFVZI5PQJ9A="
+        },
+        {
+          "url": "./SKULLTAG-WEAPONS.DEC",
+          "role": "decorate"
+        }
+      ]
+    }
+  },
+  "bindings": [
+    {
+      "id": "episode-gameplay",
+      "use": "@doom/episode",
+      "on": {
+        "source": "episode",
+        "kind": "map",
+        "tags": [
+          "wad-map"
+        ]
+      },
+      "options": {
+        "skill": 2,
+        "fov": 90,
+        "renderScale": 0.5,
+        "movement": {
+          "maxSpeed": 420,
+          "acceleration": 1531.25,
+          "friction": 0.90625,
+          "gravity": 1225,
+          "maxStep": 24
+        },
+        "playerStartType": 5080,
+        "inspectUnsupportedThings": true
+      }
+    }
+  ],
+  "transitions": [],
+  "start": {
+    "source": "episode",
+    "scope": "D2ST9"
+  },
+  "view": {
+    "width": 960,
+    "height": 540
+  }
+}

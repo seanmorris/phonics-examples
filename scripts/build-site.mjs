@@ -18,7 +18,10 @@ for(const directory of (await fs.readdir(gamesRoot, {withFileTypes: true})).filt
 	if(entries.some(entry => entry.slug === metadata.slug)) throw Error(`Duplicate example slug: ${metadata.slug}`);
 
 	for(const name of [metadata.application,metadata.poster]) await fs.access(path.join(gameRoot, name));
-	entries.push({...metadata, directory: directory.name});
+	const posterExtension = path.extname(metadata.poster);
+
+	if(!posterExtension) throw Error(`${directory.name}: poster must have a file extension`);
+	entries.push({...metadata, directory: directory.name, posterRoute: `posters/${metadata.slug}${posterExtension}`});
 }
 
 entries.sort((a,b) => a.title.localeCompare(b.title));
@@ -61,7 +64,7 @@ const page = ({title,body,className='',application='',embed=false}) => `<!doctyp
 <title>${escape(title)}</title><link rel="stylesheet" href="${application ? '../../' : './'}site.css"></head>
 <body>${body}${application ? `<script type="module" src="../../host.mjs"></script>` : ''}</body></html>`;
 
-const cards = entries.map(entry => `<article class="game-card"><a href="./games/${entry.slug}/"><img src="./posters/${entry.slug}.svg" alt="" width="1280" height="720"><div><h2>${escape(entry.title)}</h2><p>${escape(entry.description)}</p><span>Play full screen →</span></div></a></article>`).join('\n');
+const cards = entries.map(entry => `<article class="game-card"><a href="./games/${entry.slug}/"><img src="./${entry.posterRoute}" alt="" width="1280" height="720"><div><h2>${escape(entry.title)}</h2><p>${escape(entry.description)}</p><span>Play full screen →</span></div></a></article>`).join('\n');
 await fs.writeFile(path.join(destination, 'index.html'), page({
 	title: 'Phonics Examples'
 	, body: `<main class="catalog"><header><p class="eyebrow">PHONICS EXAMPLES</p><h1>Games choose the engine they need.</h1><p>Direct applications, authored worlds, and specialized resource formats can live together without forcing one content model on every game.</p></header><section>${cards}</section></main>`
@@ -72,9 +75,9 @@ for(const entry of entries)
 	const gameRoot = path.join(gamesRoot, entry.directory);
 	await copyTree(path.join(gameRoot, entry.application), path.join(destination, 'applications', entry.slug, 'game.phar'));
 	await copyTree(path.join(gameRoot, entry.application + '.integrity'), path.join(destination, 'applications', entry.slug, 'game.phar.integrity'));
-	await copyTree(path.join(gameRoot, entry.poster), path.join(destination, 'posters', entry.slug + '.svg'));
+	await copyTree(path.join(gameRoot, entry.poster), path.join(destination, entry.posterRoute));
 	const application = `../../applications/${entry.slug}/game.phar`;
-	const gameBody = `<main class="game-page"><nav><a href="../../">← All examples</a><span>${escape(entry.title)}</span></nav><section class="game-host"><div class="loading"><strong>Preparing ${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas"></canvas></section><footer><p>${escape(entry.description)}</p><p>Drag to orbit · wheel to zoom · arrows aim and set power · Space shoots</p></footer></main>`;
+	const gameBody = `<main class="game-page"><nav><a href="../../">← All examples</a><span>${escape(entry.title)}</span></nav><section class="game-host"><div class="loading"><strong>Preparing ${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas"></canvas></section><footer><p>${escape(entry.description)}</p>${entry.controls ? `<p>${escape(entry.controls)}</p>` : ''}</footer></main>`;
 	const embedBody = `<main class="embed-host"><div class="game-host"><div class="loading"><strong>${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas"></canvas></div></main>`;
 	await fs.mkdir(path.join(destination, 'games', entry.slug), {recursive: true});
 	await fs.mkdir(path.join(destination, 'embed', entry.slug), {recursive: true});
@@ -82,10 +85,9 @@ for(const entry of entries)
 	await fs.writeFile(path.join(destination, 'embed', entry.slug, 'index.html'), page({title: entry.title,body: embedBody,className:'embed-page',application,embed:true}));
 }
 
-await fs.writeFile(path.join(destination, 'catalog.json'), JSON.stringify(entries.map(({directory,...entry}) => ({
+await fs.writeFile(path.join(destination, 'catalog.json'), JSON.stringify(entries.map(({directory,posterRoute,...entry}) => ({
 	...entry
 	, routes: {full: `games/${entry.slug}/`,embed: `embed/${entry.slug}/`,application: `applications/${entry.slug}/game.phar`}
 })), null, 2) + '\n');
 await fs.writeFile(path.join(destination, '.nojekyll'), '');
 console.log(`Built ${entries.length} game and ${entries.length} embed in ${destination}`);
-

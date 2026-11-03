@@ -1,0 +1,305 @@
+{
+  "name": "@seanmorris/php-noid",
+  "php": {
+    "autoload": {
+      "PhpNoid\\": "src/"
+    },
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "files": [
+      "autoload.php",
+      "game.php",
+      "application.php",
+      "src/CollisionWorld.php",
+      "src/Component/Ball.php",
+      "src/Component/Brick.php",
+      "src/Component/Capsule.php",
+      "src/Component/Enemy.php",
+      "src/Component/Paddle.php",
+      "src/Component/Pointer.php",
+      "src/Component/Projectile.php",
+      "src/Component/State.php",
+      "src/Module.php",
+      "src/Playfield.php",
+      "src/Render/Hud.php",
+      "src/Render/Scene.php",
+      "src/System/BallSystem.php",
+      "src/System/CapsuleSystem.php",
+      "src/System/EnemySystem.php",
+      "src/System/PaddleSystem.php",
+      "src/System/ProjectileSystem.php",
+      "src/System/StageSystem.php",
+      "src/System/TransitionSystem.php",
+      "modules/factories.php"
+    ]
+  },
+  "exports": {
+    "game": {
+      "type": "game",
+      "php": "game.php",
+      "browser": "browser/game.mjs",
+      "modules": [
+        "#factories"
+      ]
+    },
+    "factories": {
+      "type": "module",
+      "php": "modules/factories.php"
+    },
+    "brick": {
+      "type": "factory",
+      "class": "PhpNoid.Brick",
+      "module": "#factories"
+    },
+    "paddle": {
+      "type": "factory",
+      "class": "PhpNoid.Paddle",
+      "module": "#factories"
+    },
+    "enemy": {
+      "type": "factory",
+      "class": "PhpNoid.Enemy",
+      "module": "#factories"
+    },
+    "campaign": {
+      "type": "asset",
+      "path": "worlds/campaign.world"
+    },
+    "firstStage": {
+      "type": "asset",
+      "path": "worlds/stage-01.tmj"
+    }
+  },
+  "tiled": {
+    "templates": [
+      "templates/brick.tx",
+      "templates/paddle.tx",
+      "templates/enemy.tx"
+    ],
+    "previews": [
+      "assets/preview.svg"
+    ],
+    "classes": [
+      {
+        "name": "PhpNoid.Brick",
+        "color": "#ff33ccbb",
+        "members": [
+          {
+            "name": "hits",
+            "type": "int",
+            "value": 1
+          },
+          {
+            "name": "unbreakable",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "material",
+            "type": "string",
+            "value": "normal"
+          },
+          {
+            "name": "capsule",
+            "type": "string",
+            "value": ""
+          },
+          {
+            "name": "score",
+            "type": "int",
+            "value": 100
+          },
+          {
+            "name": "phonics.entity",
+            "type": "string",
+            "value": "@php-noid/brick"
+          }
+        ]
+      },
+      {
+        "name": "PhpNoid.Paddle",
+        "color": "#ffbbddff",
+        "members": []
+      },
+      {
+        "name": "PhpNoid.Enemy",
+        "color": "#ffcc3366",
+        "members": [
+          {
+            "name": "family",
+            "type": "string",
+            "value": "menacer"
+          },
+          {
+            "name": "effect",
+            "type": "string",
+            "value": "copper"
+          },
+          {
+            "name": "interval",
+            "type": "float",
+            "value": 5
+          },
+          {
+            "name": "hits",
+            "type": "int",
+            "value": 3
+          },
+          {
+            "name": "capsule",
+            "type": "string",
+            "value": "expand"
+          }
+        ]
+      }
+    ]
+  },
+  "preload": [
+    "assets/capsules.json",
+    "assets/font.json",
+    "assets/font.png",
+    "assets/font-sdl.png",
+    "assets/font.tsj",
+    "assets/hud-rail.png",
+    "assets/hud.tsj"
+  ],
+  "application": {
+    "entry": "application.php"
+  },
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.0.0"
+  },
+  "dependencies": {},
+  "browser": {
+    "files": [
+      "browser/game.mjs"
+    ]
+  },
+  "assets": [
+    "worlds/campaign.world",
+    "worlds/stage-01.tmj",
+    "worlds/stage-02.tmj",
+    "worlds/stage-03.tmj",
+    "worlds/stage-04.tmj",
+    "worlds/stage-05.tmj",
+    "worlds/stage-06.tmj",
+    "worlds/stage-07.tmj",
+    "worlds/stage-08.tmj",
+    "worlds/stage-09.tmj",
+    "worlds/stage-10.tmj",
+    "worlds/stage-11.tmj",
+    "worlds/stage-12.tmj",
+    "worlds/stage-13.tmj",
+    "worlds/stage-14.tmj",
+    "worlds/stage-15.tmj",
+    "worlds/stage-16.tmj",
+    "worlds/stage-17.tmj",
+    "worlds/stage-18.tmj",
+    "worlds/stage-19.tmj",
+    "worlds/stage-20.tmj",
+    "worlds/stage-21.tmj",
+    "worlds/stage-22.tmj",
+    "worlds/stage-23.tmj",
+    "worlds/stage-24.tmj",
+    "worlds/stage-25.tmj",
+    "assets/backgrounds/stage-01.png",
+    "assets/backgrounds/stage-02.png",
+    "assets/backgrounds/stage-03.png",
+    "assets/backgrounds/stage-04.png",
+    "assets/backgrounds/stage-05.png",
+    "assets/backgrounds/stage-06.png",
+    "assets/backgrounds/stage-07.png",
+    "assets/backgrounds/stage-08.png",
+    "assets/backgrounds/stage-09.png",
+    "assets/backgrounds/stage-10.png",
+    "assets/capsules.json",
+    "assets/font-sdl.png",
+    "assets/font.json",
+    "assets/font.png",
+    "assets/font.tsj",
+    "assets/hud-rail.png",
+    "assets/hud.tsj",
+    "assets/preview.svg",
+    "templates/brick.tx",
+    "templates/enemy.tx",
+    "templates/paddle.tx"
+  ],
+  "integrity": {
+    "application.php": "sha256-oFPY96XBIPkXE/pCviEik7n5Tn4/gkqymItW1pXTwvA=",
+    "assets/backgrounds/stage-01.png": "sha256-O08ZDnyckZ46BTsQHheJxI2jATfFx+xd0VzTswQKBpo=",
+    "assets/backgrounds/stage-02.png": "sha256-7DTt49DWUypPfSuoPtOQE8lMZeqBZmkdesEWfMwlMac=",
+    "assets/backgrounds/stage-03.png": "sha256-yqA9FoXxSJ3mX5pjEgeV+yTpGic/M9tr0zewHvGhU9U=",
+    "assets/backgrounds/stage-04.png": "sha256-P54YEa+2gbDA7pm3FUIHl9HGkkJ6Dg7M45PS6Zi6HXw=",
+    "assets/backgrounds/stage-05.png": "sha256-0vpmKLEXhrj/YEb+7iXMp/MhiFs+Bsfc9eeIwOOJT40=",
+    "assets/backgrounds/stage-06.png": "sha256-umEXgZBoprL8Hb30MMYZ1AvEabdjLwelHnK+pyj7tCg=",
+    "assets/backgrounds/stage-07.png": "sha256-lQUAUW5ppcuW2ijvD+oLj/4n9qnnKhcro2ZUF20+pXo=",
+    "assets/backgrounds/stage-08.png": "sha256-1kI/15H4/A36gFszOBGOyzrAb8MA8ljJ9tjczmEeFkg=",
+    "assets/backgrounds/stage-09.png": "sha256-l++jqt557OLbW3FdoWRKfYiHg1jxzB6ANg3sfJ9Voz8=",
+    "assets/backgrounds/stage-10.png": "sha256-bYtfgXj2SaJFackz+z+g7EHOd21jjn4RF/5An5N9uww=",
+    "assets/capsules.json": "sha256-sSFY5vw04UtwzC53fp1IjYO8tEAS3nsjwE+GtaKhLnI=",
+    "assets/font-sdl.png": "sha256-3GkrKo6edoOvGSNuaEQCcn22LcWxZNiJ+ESSZXAiKxY=",
+    "assets/font.json": "sha256-1VW1IoU6f2bznVUT3rWi4OVxeShO1Kw0GLjSKd48tTY=",
+    "assets/font.png": "sha256-os2xWngYUUaDrMTyJRvyuUfdwjUq9ZLURIdgvln6dDk=",
+    "assets/font.tsj": "sha256-Ma/ShuOkJw8wJYuro4R6joP2olPHwc/How1uJ2vXrU4=",
+    "assets/hud-rail.png": "sha256-qBcRmbgQDZpJawSywEs4wof0fLgrIoixeZvBTxqpKOA=",
+    "assets/hud.tsj": "sha256-mfFEprgIyT48+B30lV1qlSB1nVvgPjziBx6aTOJoZUg=",
+    "assets/preview.svg": "sha256-+LVWeSCnv0nULdXIh0dwyWSBDeT2VoL2GFJ59/ZCVCE=",
+    "autoload.php": "sha256-rnIEsGQdIwa8lI4MzvCEeJS2AT3XZBdF7GbJZ+m21qI=",
+    "browser/game.mjs": "sha256-zN75CI+BKJiv1I2/CnyVDTnVk7JcywHfQAwrMEDqwd8=",
+    "game.php": "sha256-EtfWfX05I4lcf0FoL7IFyF54yYPZ5H6xRfQ+b8CxeF0=",
+    "modules/factories.php": "sha256-ihl24BeXJ2pOL7KwWaZaU6SFEF30c3R5plWSQqJu3SE=",
+    "src/CollisionWorld.php": "sha256-QkVQlMEu9GbYgjGbSO48/874M1oBYCX0Sk0MNLJw0ok=",
+    "src/Component/Ball.php": "sha256-St7KTZIwqH9XULNm8XUupaYRDZFrTrYlRqfkIqqKY38=",
+    "src/Component/Brick.php": "sha256-b2iJDpGtBQUiDNwCNh2Pqwj8SN+TNyx5Aa+piE8Atbc=",
+    "src/Component/Capsule.php": "sha256-BqQxS8yEUyRGTUAgnsE0po7SZUD2OXLqDqlmt9qnLIk=",
+    "src/Component/Enemy.php": "sha256-w7JMvtKrqm22U4SnUxwxfxEnopVioqIHyRaAN6r7Rhw=",
+    "src/Component/Paddle.php": "sha256-C5dSihOBvqYXDPdj3BrsK3zes8aNl/BwPJ5fJX3/B0I=",
+    "src/Component/Pointer.php": "sha256-b2nhiuDgCL4UDiIo0I8qabnemFyMPfWEW51BsnE2Rag=",
+    "src/Component/Projectile.php": "sha256-Zb2Z+vcTGPGxSsygHqbRYjsMgqxPhBo0KNs6ZcJ9/Rc=",
+    "src/Component/State.php": "sha256-uiAiterAtP2Km2+9Z0x0yRZDZ7T9MJTPFfjj/7vXOiA=",
+    "src/Module.php": "sha256-sBe9WP6prwvwBXNSvEHk+cWWk3hIkYhfv3NqCnDznmw=",
+    "src/Playfield.php": "sha256-ZauPKaCKMxx6obs8+jcXn1Gu5ASMpTnFOKpPA4sr+qc=",
+    "src/Render/Hud.php": "sha256-sO3F03YXp0s6c90DiW3RkaoIdYtykaNs7L5FsFYy8tk=",
+    "src/Render/Scene.php": "sha256-ygAuygYveKHHr+K2RtKULXmrDINVfptjNQPqSEcr8+U=",
+    "src/System/BallSystem.php": "sha256-d2mE+0sa1M2R8w6KwVVnFo6gDr6mE5HNUbNYdRt2Loo=",
+    "src/System/CapsuleSystem.php": "sha256-Mx0pxlhnnkMcvjxvTecbMCadd110vjAL1bB+5bWddkA=",
+    "src/System/EnemySystem.php": "sha256-pSRyAHhSq2W+gDwmYYmc6lglgTimC4o/KPg2blxZhIg=",
+    "src/System/PaddleSystem.php": "sha256-tu0HFJNQQAcmE3LZlq1Rs6Y02ZO//Q7kQSgWXTfO360=",
+    "src/System/ProjectileSystem.php": "sha256-8RKD0U0cpC8rvxzkbH9tQ3JTBYvGmV4FlKKqsUx8IG4=",
+    "src/System/StageSystem.php": "sha256-gOwzfIv/WJHpKUwz4bUN+MEj1BvzxX08u8+5hhb8luo=",
+    "src/System/TransitionSystem.php": "sha256-x5nVfzHS20QmydG4JeMor4+nVg0N3pJ/54MP9lDlf2c=",
+    "templates/brick.tx": "sha256-p5CfejVNyxZcPqwaJ+vbS4BHU2v0x18lS6DQXtL8RJs=",
+    "templates/enemy.tx": "sha256-tt3MmeShMpC7VFZ+dwno8MqLLMUFc2SlLQF8Kq1aEX4=",
+    "templates/paddle.tx": "sha256-X/jHuh6gnoz3nRKJzbAtBgc9R90E5B0P4PItArKWMCI=",
+    "worlds/campaign.world": "sha256-WBYj2psunNd/Yo1HJKT/UUxhhW3j9ME2X3UyAO6paaE=",
+    "worlds/stage-01.tmj": "sha256-5kgKYtKEhox6Ld99rSQsz/IDoMdhWbhah58yUI1esVI=",
+    "worlds/stage-02.tmj": "sha256-jVuFROmmU3lzv9vaAjMNDyGSWRldbldIPwRu7CO3s5E=",
+    "worlds/stage-03.tmj": "sha256-S3YrwhrRDRWrByv/dd5JzmMqwZY6dYEMjeseOSuQkKE=",
+    "worlds/stage-04.tmj": "sha256-t9bztrCMLR0fo+JiCT93FU/MtywI8uJsVeKmUSf6CUM=",
+    "worlds/stage-05.tmj": "sha256-gQz4F36dFmOu34sZRSDvmWW/Tl33O8YWCSRQWJlLpvA=",
+    "worlds/stage-06.tmj": "sha256-XFH8IwiGZUL1CKzx4CUTAC1QxuNvmNFzws/8gMJAmUU=",
+    "worlds/stage-07.tmj": "sha256-oTma0lacstk2deeTl2f0qR2uPfqpPvEdhfAyb8sRYlc=",
+    "worlds/stage-08.tmj": "sha256-dGUOEMz+1atBjZiBJ5JHkHicAEFAeGSfsju2RlLrclM=",
+    "worlds/stage-09.tmj": "sha256-LbPoWjvbXko3vO4BfT/sdMPmoe+oMdfuC98JRWxUa3Y=",
+    "worlds/stage-10.tmj": "sha256-Hd8ReLFzRNOm6Rd5y6F3SZpO08DMPYn7XMcx/k+9uYw=",
+    "worlds/stage-11.tmj": "sha256-2j+flg7FMZ4y4G6Iwd7IY6Mc/+OICEdPwDK6GbcbBDE=",
+    "worlds/stage-12.tmj": "sha256-Eq+fufKQcyyU8MBdgVZQ0sNlmEvklSeG+DdVVYi3OL0=",
+    "worlds/stage-13.tmj": "sha256-dakQu5MQhe/8iV/siDwkR/FszA7iPRoTNCkKy2S8V28=",
+    "worlds/stage-14.tmj": "sha256-XlJQn5XHLQBVn8F8WKCWYc78KEX/R9UZXdu35OWeA4c=",
+    "worlds/stage-15.tmj": "sha256-sl6+n/ZKYS9n9gi5t7UFTKoKfEKV7EaojBAXnV+LbPk=",
+    "worlds/stage-16.tmj": "sha256-6q6GosAezLf30v+RAPcwvJTQHbNUXpOz5h0h/YvhwUY=",
+    "worlds/stage-17.tmj": "sha256-Vh4RY3vowQaWxiVSoH/t0XngzdXd8Ynlx8KFSvmH7IM=",
+    "worlds/stage-18.tmj": "sha256-gWoLdms7dNkxZ7tUakYtrbUXfzp9JARqxWQtXTzjB3g=",
+    "worlds/stage-19.tmj": "sha256-BKra563rWi/zb1N8i5aY5aqiow/n1cy5fs0dv8wrfBc=",
+    "worlds/stage-20.tmj": "sha256-oPNWWwz39luXsMuWCMmgb29Hp1JuiEAZMJ+YCDSp/PE=",
+    "worlds/stage-21.tmj": "sha256-1PrN6cpEzu/L+YS3tQd0CfkZ1L7hyeEUzb8DQaw+H/w=",
+    "worlds/stage-22.tmj": "sha256-js0upMyRr2dzLXpDFRNTX9wkG/Yp3M+fIXCG/MhVQQw=",
+    "worlds/stage-23.tmj": "sha256-YmdFlJMW+ChIOiYMuf5cp6sxeY+OKsWTIc9vOD4AGE8=",
+    "worlds/stage-24.tmj": "sha256-jXmGtYiV1OJjfu+6s/0Z4/EULfgHPSp90CqhgPmCztY=",
+    "worlds/stage-25.tmj": "sha256-A4qDK3oAEe4tvweOOlA/MZkFFHnBaUfS6w2NJuY+X8Y="
+  }
+}

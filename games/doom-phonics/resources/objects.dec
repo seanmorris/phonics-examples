@@ -1,0 +1,650 @@
+// Boilerplate
+
+ACTOR Inventory native
+{
+  Inventory.Amount 1
+  Inventory.MaxAmount 1
+  Inventory.InterHubAmount 1
+  Inventory.UseSound "misc/invuse"
+  Inventory.PickupSound "misc/i_pkup"
+  Inventory.PickupMessage "$TXT_DEFAULTPICKUPMSG"
+
+  States
+  {
+  HideDoomish:
+    TNT1 A 1050
+    TNT1 A 0 A_RestoreSpecialPosition
+    TNT1 A 1 A_RestoreSpecialDoomThing
+    Stop
+  HideSpecial:
+    ACLO E 1400
+    ACLO A 0 A_RestoreSpecialPosition
+    ACLO A 4 A_RestoreSpecialThing1
+    ACLO BABCBCDC 4
+    ACLO D 4 A_RestoreSpecialThing2
+    Stop
+  Held:
+    TNT1 A -1
+    Stop
+  HoldAndDestroy:
+    TNT1 A 1
+    Stop
+  }
+}
+
+ACTOR CustomInventory : Inventory native
+{}
+
+ACTOR PowerupGiver : Inventory native
+{
+  Inventory.DefMaxAmount
+  +INVENTORY.INVBAR
+  +INVENTORY.FANCYPICKUPSOUND
+  Inventory.PickupSound "misc/p_pkup"
+}
+
+// Player
+ACTOR PlayerPawn native
+{
+  Health 100
+  Radius 16
+  Height 56
+  Mass 100
+  Painchance 255
+  Speed 1
+  +SOLID
+  +SHOOTABLE
+  +DROPOFF
+  +PICKUP
+  +NOTDMATCH
+  +FRIENDLY
+  +SLIDESONWALLS
+  +CANPASS
+  +CANPUSHWALLS
+  +FLOORCLIP
+  +WINDTHRUST
+  +TELESTOMP
+  +NOBLOCKMONST
+  Player.AttackZOffset 8
+  Player.JumpZ 8
+  Player.GruntSpeed 12
+  Player.FallingScreamSpeed 35, 40
+  Player.ViewHeight 41
+  Player.UseRange 64
+  Player.ForwardMove 1,1
+  Player.SideMove 1,1
+  Player.ColorRange 0,0
+  Player.SoundClass "player"
+  DeathSound "player/death"
+  Player.DamageScreenColor "ff 00 00"
+  Player.MugShotMaxHealth 0
+  Player.FlechetteType "ArtiPoisonBag3"
+  Player.AirCapacity 1
+  Obituary "$OB_MPDEFAULT"
+}
+
+ACTOR DoomPlayer : PlayerPawn
+{
+  Speed 1
+  Health 100
+  Radius 16
+  Height 56
+  Mass 100
+  PainChance 255
+  Player.DisplayName "Marine"
+  Player.CrouchSprite "PLYC"
+  Player.StartItem "Pistol"
+  Player.StartItem "Fist"
+  Player.StartItem "Clip", 50
+  Player.WeaponSlot 1, Fist, Chainsaw
+  Player.WeaponSlot 2, Pistol
+  Player.WeaponSlot 3, Shotgun, SuperShotgun
+  Player.WeaponSlot 4, Chaingun
+  Player.WeaponSlot 5, RocketLauncher
+  Player.WeaponSlot 6, PlasmaRifle
+  Player.WeaponSlot 7, BFG9000
+  Player.ColorRange 112, 127
+  Player.ColorSet 0, "Green",         0x70, 0x7F,  0x72
+  Player.ColorSet 1, "Gray",          0x60, 0x6F,  0x62 // Called "Indigo" originally so as to have a unique initial
+  Player.ColorSet 2, "Brown",         0x40, 0x4F,  0x42
+  Player.ColorSet 3, "Red",           0x20, 0x2F,  0x22
+  // Doom Legacy additions
+  Player.ColorSet 4, "Light Gray",    0x58, 0x67,  0x5A
+  Player.ColorSet 5, "Light Brown",   0x38, 0x47,  0x3A
+  Player.ColorSet 6, "Light Red",     0xB0, 0xBF,  0xB2
+  Player.ColorSet 7, "Light Blue",    0xC0, 0xCF,  0xC2
+
+  States
+  {
+  Spawn:
+    PLAY A -1
+    Loop
+  See:
+    PLAY ABCD 4
+    Loop
+  Missile:
+    PLAY E 12
+    Goto Spawn
+  Melee:
+    PLAY F 6 BRIGHT
+    Goto Missile
+  Pain:
+    PLAY G 4
+    PLAY G 4 A_Pain
+    Goto Spawn
+  Death:
+    PLAY H 0 A_PlayerSkinCheck("AltSkinDeath")
+  Death1:
+    PLAY H 10
+    PLAY I 10 A_PlayerScream
+    PLAY J 10 A_NoBlocking
+    PLAY KLM 10
+    PLAY N -1
+    Stop
+  XDeath:
+    PLAY O 0 A_PlayerSkinCheck("AltSkinXDeath")
+  XDeath1:
+    PLAY O 5
+    PLAY P 5 A_XScream
+    PLAY Q 5 A_NoBlocking
+    PLAY RSTUV 5
+    PLAY W -1
+    Stop
+  AltSkinDeath:
+    PLAY H 6
+    PLAY I 6 A_PlayerScream
+    PLAY JK 6
+    PLAY L 6 A_NoBlocking
+    PLAY MNO 6
+    PLAY P -1
+    Stop
+  AltSkinXDeath:
+    PLAY Q 5 A_PlayerScream
+    PLAY R 0 A_NoBlocking
+    PLAY R 5 A_SkullPop
+    PLAY STUVWX 5
+    PLAY Y -1
+    Stop
+  }
+}
+
+ACTOR Player1Start : DoomPlayer 1
+{}
+
+ACTOR Player2Start : DoomPlayer 2
+{}
+
+ACTOR Player3Start : DoomPlayer 3
+{}
+
+ACTOR Player4Start : DoomPlayer 4
+{}
+
+ACTOR DeathmathStart : DoomPlayer 11
+{}
+
+ACTOR BlueTeamStart : DoomPlayer 5080
+{}
+
+ACTOR RedTeamStart : DoomPlayer 5081
+{}
+
+ACTOR WhiteTeamStart : DoomPlayer 5082
+{}
+
+ACTOR GreenTeamStart : DoomPlayer 5083
+{}
+
+ACTOR GoldTeamStart : DoomPlayer 5084
+{}
+
+// Armor
+
+ACTOR Armor : Inventory native
+{
+  Inventory.PickupSound "misc/armor_pkup"
+}
+
+ACTOR BasicArmorPickup : Armor native
+{
+  +INVENTORY.AUTOACTIVATE
+  Inventory.MaxAmount 0
+}
+
+ACTOR BasicArmorBonus : Armor native
+{
+  +INVENTORY.AUTOACTIVATE
+  +INVENTORY.ALWAYSPICKUP
+  Inventory.MaxAmount 0
+  Armor.SavePercent 33.335
+}
+
+ACTOR GreenArmor : BasicArmorPickup 2018
+{
+  Radius 20
+  Height 16
+  Inventory.PickupMessage "$GOTARMOR" // "Picked up the armor."
+  Inventory.Icon "ARM1A0"
+  Armor.SavePercent 33.335
+  Armor.SaveAmount 100
+  States
+  {
+  Spawn:
+    ARM1 A 6
+    ARM1 B 7 Bright
+    Loop
+  }
+}
+
+ACTOR BlueArmor : BasicArmorPickup 2019
+{
+  Radius 20
+  Height 16
+  Inventory.PickupMessage "$GOTMEGA" // "Picked up the MegaArmor!"
+  Inventory.Icon "ARM2A0"
+  Armor.SavePercent 50
+  Armor.SaveAmount 200
+  States
+  {
+  Spawn:
+    ARM2 A 6
+    ARM2 B 6 Bright
+    Loop
+  }
+}
+
+ACTOR ArmorBonus : BasicArmorBonus 2015
+{
+  Radius 20
+  Height 16
+  Inventory.PickupMessage "$GOTARMBONUS" // "Picked up an armor bonus."
+  Inventory.Icon "ARM1A0"
+  Armor.SavePercent 33.335
+  Armor.SaveAmount 1
+  Armor.MaxSaveAmount 200
+  +COUNTITEM
+  +INVENTORY.ALWAYSPICKUP
+  States
+  {
+  Spawn:
+    BON2 ABCDCB 6
+    Loop
+  }
+}
+
+// Health
+
+ACTOR Health : Inventory native
+{
+  Inventory.Amount 1
+  Inventory.MaxAmount 0
+  Inventory.PickupSound "misc/health_pkup"
+}
+
+ACTOR Medikit : Health 2012
+{
+  Inventory.Amount 25
+  Inventory.PickupMessage "$GOTMEDIKIT" // "Picked up a medikit."
+  Health.LowMessage 25, "$GOTMEDINEED" // "Picked up a medikit that you REALLY need!"
+  States
+  {
+  Spawn:
+    MEDI A -1
+    Stop
+  }
+}
+
+ACTOR Stimpack : Health 2011
+{
+  Inventory.Amount 10
+  Inventory.PickupMessage "$GOTSTIM" // "Picked up a stimpack."
+  States
+  {
+  Spawn:
+    STIM A -1
+    Stop
+  }
+}
+
+ACTOR HealthBonus : Health 2014
+{
+  +COUNTITEM
+  +INVENTORY.ALWAYSPICKUP
+  Inventory.Amount 1
+  Inventory.MaxAmount 200
+  Inventory.PickupMessage "$GOTHTHBONUS" // "Picked up a health bonus."
+  States
+  {
+  Spawn:
+    BON1 ABCDCB 6
+    Loop
+  }
+}
+
+// Keys
+
+ACTOR Key : Inventory
+{
+  +DONTGIB
+  +INVENTORY.INTERHUBSTRIP
+  Inventory.PickupSound "misc/k_pkup"
+}
+
+ACTOR DoomKey : Key
+{
+  Radius 20
+  Height 16
+  +NOTDMATCH
+}
+
+ACTOR BlueCard : DoomKey 5
+{
+  Inventory.PickupMessage "$GOTBLUECARD"
+  Inventory.Icon "STKEYS0"
+  States
+  {
+  Spawn:
+    BKEY A 10
+    BKEY B 10 Bright
+    Loop
+  }
+}
+
+ACTOR YellowCard : DoomKey 6
+{
+  Inventory.PickupMessage "$GOTYELWCARD"
+  Inventory.Icon "STKEYS1"
+  States
+  {
+  Spawn:
+    YKEY A 10
+    YKEY B 10 Bright
+    Loop
+  }
+}
+
+ACTOR RedCard : DoomKey 13
+{
+  Inventory.PickupMessage "$GOTREDCARD"
+  Inventory.Icon "STKEYS2"
+  States
+  {
+  Spawn:
+    RKEY A 10
+    RKEY B 10 Bright
+    Loop
+  }
+}
+
+ACTOR RedSkull : DoomKey 38
+{
+  Inventory.PickupMessage "$GOTREDSKUL"
+  Inventory.Icon "STKEYS5"
+  States
+  {
+  Spawn:
+    RSKU A 10
+    RSKU B 10 Bright
+    Loop
+  }
+}
+
+ACTOR YellowSkull : DoomKey 39
+{
+  Inventory.PickupMessage "$GOTYELWSKUL"
+  Inventory.Icon "STKEYS4"
+  States
+  {
+  Spawn:
+    YSKU A 10
+    YSKU B 10 Bright
+    Loop
+  }
+}
+
+ACTOR BlueSkull : DoomKey 40
+{
+  Inventory.PickupMessage "$GOTBLUESKUL"
+  Inventory.Icon "STKEYS3"
+  States
+  {
+  Spawn:
+    BSKU A 10
+    BSKU B 10 Bright
+    Loop
+  }
+}
+
+// Powerups
+
+ACTOR BackpackItem : Inventory native
+{}
+
+ACTOR Backpack : BackpackItem 8
+{
+  Height 26
+  Inventory.PickupMessage "$GOTBACKPACK" // "Picked up a backpack full of ammo!"
+  States
+  {
+  Spawn:
+    BPAK A -1
+    Stop
+  }
+}
+
+ACTOR PowerupGiver : Inventory native
+{
+  Inventory.DefMaxAmount
+  +INVENTORY.INVBAR
+  +INVENTORY.FANCYPICKUPSOUND
+  Inventory.PickupSound "misc/p_pkup"
+}
+
+ACTOR RadSuit : PowerupGiver 2025
+{
+  Height 46
+  +INVENTORY.AUTOACTIVATE
+  +INVENTORY.ALWAYSPICKUP
+  Inventory.MaxAmount 0
+  Inventory.PickupMessage "$GOTSUIT" // "Radiation Shielding Suit"
+  Powerup.Type "IronFeet"
+  States
+  {
+  Spawn:
+    SUIT A -1 Bright
+    Stop
+  }
+}
+
+ACTOR MapRevealer : Inventory native
+{}
+
+ACTOR Allmap : MapRevealer 2026
+{
+  +COUNTITEM
+  +INVENTORY.FANCYPICKUPSOUND
+  +INVENTORY.ALWAYSPICKUP
+  Inventory.MaxAmount 0
+  Inventory.PickupSound "misc/p_pkup"
+  Inventory.PickupMessage "$GOTMAP" // "Computer Area Map"
+  States
+  {
+  Spawn:
+    PMAP ABCDCB 6 Bright
+    Loop
+  }
+}
+
+ACTOR Infrared : PowerupGiver 2045
+{
+  +COUNTITEM
+  +INVENTORY.AUTOACTIVATE
+  +INVENTORY.ALWAYSPICKUP
+  Inventory.MaxAmount 0
+  Powerup.Type "LightAmp"
+  Inventory.PickupMessage "$GOTVISOR" // "Light Amplification Visor"
+  States
+  {
+  Spawn:
+    PVIS A 6 Bright
+    PVIS B 6
+    Loop
+  }
+}
+
+// Mega Powerups
+
+ACTOR Soulsphere : Health 2013
+{
+  +COUNTITEM
+  +INVENTORY.AUTOACTIVATE
+  +INVENTORY.ALWAYSPICKUP
+  +INVENTORY.FANCYPICKUPSOUND
+  Inventory.Amount 100
+  Inventory.MaxAmount 200
+  Inventory.PickupMessage "$GOTSUPER" // "Supercharge!"
+  Inventory.PickupSound "misc/p_pkup"
+  States
+  {
+  Spawn:
+    SOUL ABCDCB 6 Bright
+    Loop
+  }
+}
+
+ACTOR InvulnerabilitySphere : PowerupGiver 2022
+{
+  +COUNTITEM
+  +INVENTORY.AUTOACTIVATE
+  +INVENTORY.ALWAYSPICKUP
+  +INVENTORY.BIGPOWERUP
+  Inventory.MaxAmount 0
+  Powerup.Type "Invulnerable"
+  Powerup.Color InverseMap
+  Inventory.PickupMessage "$GOTINVUL" // "Invulnerability!"
+  States
+  {
+  Spawn:
+    PINV ABCD 6 Bright
+    Loop
+  }
+}
+
+ACTOR Berserk : CustomInventory 2023
+{
+  +COUNTITEM
+  +INVENTORY.ALWAYSPICKUP
+  Inventory.PickupMessage "$GOTBERSERK" // "Berserk!"
+  Inventory.PickupSound "misc/p_pkup"
+  States
+  {
+  Spawn:
+    PSTR A -1
+    Stop
+  Pickup:
+    TNT1 A 0 A_GiveInventory("PowerStrength")
+    TNT1 A 0 HealThing(100, 0)
+    TNT1 A 0 A_SelectWeapon("Fist")
+    Stop
+  }
+}
+
+ACTOR BlurSphere : PowerupGiver 2024
+{
+  +COUNTITEM
+  +VISIBILITYPULSE
+  +INVENTORY.AUTOACTIVATE
+  +INVENTORY.ALWAYSPICKUP
+  +INVENTORY.BIGPOWERUP
+  Inventory.MaxAmount 0
+  Powerup.Type "Invisibility"
+  RenderStyle Translucent
+  Inventory.PickupMessage "$GOTINVIS" // "Partial Invisibility"
+  States
+  {
+  Spawn:
+     PINS ABCD 6 Bright
+     Loop
+  }
+}
+
+ACTOR Megasphere : CustomInventory 83
+{
+  +COUNTITEM
+  +INVENTORY.ALWAYSPICKUP
+  Inventory.PickupMessage "$GOTMSPHERE" // "MegaSphere!"
+  Inventory.PickupSound "misc/p_pkup"
+  States
+  {
+  Spawn:
+    MEGA ABCD 6 Bright
+    Loop
+  Pickup:
+    TNT1 A 0 A_GiveInventory("BlueArmorForMegasphere", 1)
+    TNT1 A 0 A_GiveInventory("MegasphereHealth", 1)
+    Stop
+  }
+}
+
+// Icon of Sin Infrastructure
+ACTOR BossEye : Actor 89
+{
+  Height 32
+  +NOBLOCKMAP
+  +NOSECTOR
+  States
+  {
+  Spawn:
+    SSWV A 10 A_Look
+    Loop
+  See:
+    SSWV A 181 A_BrainAwake
+    SSWV A 150 A_BrainSpit  // See SpawnShot
+    Wait
+  }
+}
+
+ACTOR SpecialSpot native
+{}
+
+ACTOR BossTarget : SpecialSpot 87
+{
+  Height 32
+  +NOBLOCKMAP
+  +NOSECTOR
+}
+
+ACTOR SpawnShot
+{
+  Radius 6
+  Height 32
+  Speed 10
+  Damage 3
+  Projectile
+  +NOCLIP
+  -ACTIVATEPCROSS
+  +RANDOMIZE
+  SeeSound "brain/spit"
+  DeathSound "brain/cubeboom"
+  States
+  {
+  Spawn:
+    BOSF A 3 Bright A_SpawnSound
+    BOSF BCD 3 Bright A_SpawnFly // See SpawnFire
+    Loop
+  }
+}
+
+ACTOR SpawnFire
+{
+  Height 78
+  +NOBLOCKMAP
+  +NOGRAVITY
+  RenderStyle Add
+  States
+  {
+  Spawn:
+    FIRE ABCDEFGH 4 Bright A_Fire
+    Stop
+  }
+}

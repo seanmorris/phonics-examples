@@ -1,0 +1,25 @@
+{
+  "type": "world",
+  "onlyShowAdjacentMaps": false,
+  "maps": [
+    {
+      "fileName": "slalom.tmj",
+      "x": 0,
+      "y": 0,
+      "width": 104,
+      "height": 16
+    }
+  ],
+  "properties": [
+    {
+      "name": "phonics.import.php-slalom",
+      "type": "string",
+      "value": "../phonics.json"
+    },
+    {
+      "name": "phonics.start",
+      "type": "string",
+      "value": "slalom.tmj"
+    }
+  ]
+}

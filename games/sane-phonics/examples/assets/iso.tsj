@@ -1,0 +1,10 @@
+{
+    "type": "tileset",
+    "tilewidth": 64,
+    "tileheight": 64,
+    "tilecount": 2,
+    "columns": 2,
+    "image": "iso.png",
+    "imagewidth": 128,
+    "imageheight": 64
+}

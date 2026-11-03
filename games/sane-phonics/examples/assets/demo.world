@@ -1,0 +1,25 @@
+{
+    "type": "world",
+    "maps": [
+        {
+            "fileName": "platformer.tmj",
+            "x": 0,
+            "y": 0,
+            "width": 3072,
+            "height": 640
+        },
+        {
+            "fileName": "infinite.tmj",
+            "x": 4096,
+            "y": 0,
+            "width": 3072,
+            "height": 640,
+            "bounds": {
+                "x": -1024,
+                "y": 0,
+                "width": 3072,
+                "height": 640
+            }
+        }
+    ]
+}

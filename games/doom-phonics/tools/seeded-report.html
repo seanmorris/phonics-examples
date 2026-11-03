@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Seeded layered level — navigation report</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui;background:#131921;color:#e6eef5}body{max-width:1200px;margin:auto;padding:24px}h1{font-size:1.7rem}a{color:#8dccff}button,select{font:inherit;color:inherit;background:#253445;border:1px solid #6e849b;border-radius:4px;padding:8px}label{display:inline-flex;gap:8px;align-items:center;margin:8px 20px 8px 0}.maps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}.map{background:#19232f;padding:16px;border-radius:8px}.map h2{margin:0;font-size:1.1rem}svg{width:100%;height:280px}svg rect,svg polygon{stroke:none;fill:#5796bb}svg path{stroke:#9dc3db;stroke-width:8;fill:none;pointer-events:none}svg .dry-ledge{fill:#c2b184}svg .lowered{fill:#355c70;stroke:#9dc3db;stroke-width:6}svg .unreachable{fill:#934b54}svg .selected{fill:#f4bb4a}svg text{fill:white;font:100px system-ui;text-anchor:middle;pointer-events:none}svg g{cursor:pointer}svg .portal-marker{fill:#ffab54;stroke:#131921;stroke-width:12;pointer-events:none}svg .portal-label{fill:#131921;font:bold 90px system-ui}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:6px 12px;border-bottom:1px solid #3b4c60}#verdict{font-weight:bold;color:#9de9bb}code{overflow-wrap:anywhere}details{margin:20px 0}#route{max-height:360px;overflow:auto}.muted{color:#b7c5d4}
+svg polygon.outdoor{fill:#608f66}svg polygon.outdoor.lowered{fill:#395b42}</style>
+<h1>Seeded layered level</h1>
+<p id="seed"></p>
+<p><a id="play">Play this level</a> · <a href="SEEDED.WAD">Download SEEDED.WAD</a> · <button id="download">Download generation report</button></p>
+<p>Each layer begins with an embedded planar graph. Large anchor nodes establish the layout; smaller surrounding nodes receive decreasing area targets. Rooms combine one to three rectangles with opposing proportions, alongside faceted circular anchors. These footprints, shared walls and entrances conform to the graph. The report records cuts, merges, reserved stairs and clearance repairs. Ordinary stairs occupy wide enclosed connecting hallways; large rooms can have raised ledges with wrapping stairs recessed into their sides. Stairs have 256-unit top landings; passages retain 128 units of width and curved stairs retain 160. Fill the basement pool to reach the raised ledge, then climb the spiral to the upper floor. Recessed doors open with Use. Galleries and shafts provide downward shortcuts with return routes through the layer networks. Solid pillars and lowered centers occupy suitable rooms. The soulsphere marks the exploration goal.</p>
+<label>Water <select id="water"><option>dry</option><option>shallow</option><option>full</option></select></label>
+<label><input id="actions" type="checkbox" checked> Allow pump switches</label>
+<label>Destination <select id="target"></select></label>
+<p id="verdict" role="status"></p>
+<div class="maps" id="maps"></div>
+<h2>Route from the spawn</h2><ol id="route"></ol>
+<details><summary>Layer and room heights</summary><table><thead><tr><th>Room</th><th>Layer elevation</th><th>Local floor</th><th>Architectural floor / ceiling</th></tr></thead><tbody id="heights"></tbody></table></details>
+<details><summary>Internal room connections</summary><p>Paths stay inside each room and use the selected water height. Arrows mark local drops without a reverse crossing; stairs can still provide a return elsewhere.</p><ul id="room-connections"></ul></details>
+<details><summary>Planar graphs, room shapes, anchors and elevation fields</summary><pre id="generation"></pre></details>
+<details open><summary id="repairs-title">Generation repairs</summary><ul id="repairs"></ul></details>
+<p class="muted">Diagonal rooms, conforming clusters and circular halls are subdivided into convex regions for collision checks. Hallways preserve a shared connection height, with longer stairs or dogleg approaches where needed. Checks cover translation portals, standard player dimensions, settled water states, repeatable doors, and repeated lift visits. It is an exploration map, without an exit switch or combat population. Rooms are not treated as single automatically connected nodes: stairs, ledges and passages have their own directed traversal regions.</p>
+<script type="application/json" id="data">__REPORT_DATA__</script>
+<script>
+const report=JSON.parse(document.querySelector('#data').textContent);
+const $=s=>document.querySelector(s);
+$('#seed').textContent=`Seed ${JSON.stringify(report.seed)} · generator v${report.version} · ${report.requestedCandidates} requested candidates · ${report.survivingRooms} surviving logical rooms · ${Object.values(report.layers).filter(l=>l.cluster).length} polygon clusters · ${report.lifts.length} lifts · ${report.doors.length} doors (${report.doorChance}% room chance) · ${report.verticalConnections.length} vertical portal pairs · ${Object.values(report.topology).reduce((n,t)=>n+t.loops,0)} planar loops · ${report.merged.length+Object.values(report.topology).flatMap(t=>t.history??[]).filter(h=>h.kind==='merge'||h.kind==='remnant-merge').length} room merges · ${report.layout} outlines`;
+$('#play').href=new URL(`../../../../games/doom-phonics/?world=${encodeURIComponent(new URL('seeded-level.phonics-world.json',location.href).pathname)}`,location.href);
+const option=(value,label)=>{const o=document.createElement('option');o.value=value;o.textContent=label;return o;};
+for(const name of Object.keys(report.regions).filter(n=>n.endsWith('.core')||/\.room-\d+$/.test(n)||n.endsWith('.arrival')||n.endsWith('.shaft')||n.endsWith('.trench')||n.endsWith('.bowl')||n.endsWith('.gallery-aperture')||/\.garden(?:-\d+)?$/.test(n))) $('#target').append(option(name,name));
+$('#target').value=report.goal;
+const ns='http://www.w3.org/2000/svg';
+const svgNode=(name,attrs={})=>{const n=document.createElementNS(ns,name);for(const [key,v] of Object.entries(attrs))n.setAttribute(key,v);return n;};
+const roomGroups=[];
+for(const plane of ['basement','ground','upper','connector']){
+ const card=document.createElement('section');card.className='map';const title=document.createElement('h2');title.textContent=plane==='connector'?'Spiral staircase':plane;card.append(title);
+ const svg=svgNode('svg');const list=Object.entries(report.layers).filter(([,l])=>l.plane===plane);const boxes=[];
+ for(const [name,layer] of list){
+  const g=svgNode('g');g.setAttribute('aria-label',name);const [x,y,z]=layer.architectural;
+  for(const cell of layer.cells){const rect=cell.polygon?svgNode('polygon',{points:cell.polygon.map(([px,py])=>`${x+px},${-y-py}`).join(' ')}):svgNode('rect',{x:x+cell.x0,y:-(y+cell.y1),width:cell.x1-cell.x0,height:cell.y1-cell.y0});if(/\.ledge(?:-|$)/.test(cell.id))rect.classList.add('dry-ledge');if(cell.outdoor)rect.classList.add('outdoor');if((layer.terrain||cell.outdoor)&&cell.floor<layer.localFloor)rect.classList.add('lowered');g.append(rect);boxes.push([x+cell.x0,-(y+cell.y1),x+cell.x1,-(y+cell.y0)]);}
+  const core=layer.cells[0];const text=svgNode('text',{x:x+(core.x0+core.x1)/2,y:-(y+(core.y0+core.y1)/2)+30});text.textContent=name.split('.').at(-1);g.append(text);
+  g.addEventListener('click',()=>{if(plane!=='connector'){$('#target').value=name+'.core';refresh();}});svg.append(g);roomGroups.push([name,g]);
+  const tr=document.createElement('tr');for(const value of [name,z,layer.localFloor??'0 → '+layer.height,`${z+Math.min(...layer.cells.map(c=>c.floor))} / ${z+Math.max(...layer.cells.map(c=>c.ceiling))}`]){const td=document.createElement('td');td.textContent=value;tr.append(td);}$('#heights').append(tr);
+ }
+ svg.append(svgNode('path',{d:report.outlines[plane].map(([[x,y],[tx,ty]])=>`M${x},${-y}L${tx},${-ty}`).join(' ')}));
+ for(const [index,portal] of report.verticalConnections.entries()) for(const [side,name] of [['floor',portal.from],['ceiling',portal.to]]){
+  const cell=report.cells[report.sectorIds[name]],layer=report.layers[cell.layer];if(layer.plane!==plane)continue;
+  const [cx,cy]=cell.center,stacked=report.verticalConnections.some(p=>p.from===name)&&report.verticalConnections.some(p=>p.to===name);
+  const x=cx-layer.packed[0]+layer.architectural[0]+(stacked?(side==='floor'?100:-100):0),y=cy-layer.packed[1]+layer.architectural[1];
+  const marker=svgNode('g',{'data-portal':index+1,'data-side':side,'aria-label':`${side} portal ${index+1}: ${portal.from} → ${portal.to}`});
+  marker.append(svgNode('circle',{cx:x,cy:-y,r:100,class:'portal-marker'}));const label=svgNode('text',{x,y:-y+30,class:'portal-label'});label.textContent=`${index+1}${side==='floor'?'↓':'↑'}`;marker.append(label);
+  marker.addEventListener('click',()=>{$('#target').value=name;refresh();});svg.append(marker);
+ }
+ const x0=Math.min(...boxes.map(b=>b[0]))-80,y0=Math.min(...boxes.map(b=>b[1]))-80,x1=Math.max(...boxes.map(b=>b[2]))+80,y1=Math.max(...boxes.map(b=>b[3]))+80;
+ svg.setAttribute('viewBox',`${x0} ${y0} ${x1-x0} ${y1-y0}`);card.append(svg);$('#maps').append(card);
+}
+$('#generation').textContent=JSON.stringify(Object.fromEntries(Object.entries(report.topology).map(([name,n])=>[name,{requested:n.requested,surviving:n.surviving,graph:n.graph,anchors:n.anchors,candidates:n.candidates,elevation:n.elevation,history:n.history}])),null,2);
+$('#repairs-title').textContent=`${report.repairs.length} deterministic repairs`;
+for(const repair of report.repairs){const li=document.createElement('li');li.textContent=`${repair.kind}: ${repair.room??repair.rooms?.join(', ')??repair.layer??'layout'} — ${repair.reason}${repair.from!==undefined?` (${repair.from} → ${repair.to})`:''}`;$('#repairs').append(li);}
+function refresh(){
+ const first={region:report.start,water:$('#water').value,parent:null,edge:null};const queue=[first],seen=new Set([first.region+':'+first.water]),reached=new Map();
+ for(let i=0;i<queue.length;i++){const item=queue[i];if(!reached.has(item.region))reached.set(item.region,i);
+  for(const edge of report.edges){if(edge.from!==item.region||(!$('#actions').checked&&Object.keys(edge.effects).length))continue;if(edge.requires.water&&!edge.requires.water.includes(item.water))continue;
+   const water=edge.effects.water??item.water,key=edge.to+':'+water;if(seen.has(key))continue;seen.add(key);queue.push({region:edge.to,water,parent:i,edge});
+  }
+ }
+ $('#room-connections').replaceChildren();
+ for(const [name,nav] of Object.entries(report.roomNavigation)){
+  const drops=nav.oneWay[$('#water').value]??[],paths=nav.routes[$('#water').value]??{};
+  const li=document.createElement('li');const available=Object.values(paths).flatMap(p=>Object.values(p));
+  li.textContent=`${name}: ${Object.keys(nav.entrances).length} entrances, ${available.filter(p=>p!==null).length}/${available.length} directed entrance/exit paths`;
+  if(drops.length)li.append(document.createTextNode(`; one-way crossings: ${drops.map(e=>`${e.from} → ${e.to} (${e.mode})`).join(', ')}`));
+  $('#room-connections').append(li);
+ }
+ $('#verdict').textContent=`${reached.size}/${Object.keys(report.regions).length} regions reachable. ${reached.has($('#target').value)?'Destination reachable.':'Destination currently inaccessible.'}`;
+ const route=[];let cursor=reached.get($('#target').value);while(cursor!==undefined&&queue[cursor].parent!==null){const item=queue[cursor];route.unshift(`${item.edge.mode}: ${item.edge.from} → ${item.region} [${item.water}]`);cursor=item.parent;}
+ $('#route').replaceChildren();for(const step of route){const li=document.createElement('li');li.textContent=step;$('#route').append(li);}
+ for(const [name,g] of roomGroups){const region=name+'.core';g.classList.toggle('unreachable',name!=='spiral'&&!reached.has(region));g.classList.toggle('selected',region===$('#target').value);for(const rect of g.querySelectorAll('rect,polygon')){rect.classList.toggle('unreachable',g.classList.contains('unreachable'));rect.classList.toggle('selected',g.classList.contains('selected'));}}
+}
+for(const id of ['water','actions','target'])$('#'+id).addEventListener('change',refresh);
+$('#download').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='seeded-navigation.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+refresh();
+</script>
+</html>

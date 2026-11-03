@@ -1,0 +1,148 @@
+{
+    "type": "tileset",
+    "version": "1.10",
+    "name": "egg-walker",
+    "tilewidth": 96,
+    "tileheight": 96,
+    "columns": 0,
+    "tilecount": 17,
+    "tiles": [
+        {
+            "id": 0,
+            "image": "egg-walker-standing.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker"
+        },
+        {
+            "id": 1,
+            "image": "egg-walker-standing-front.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-front"
+        },
+        {
+            "id": 2,
+            "image": "egg-walker-walk-a.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-walking",
+            "animation": [
+                {
+                    "tileid": 2,
+                    "duration": 300
+                },
+                {
+                    "tileid": 4,
+                    "duration": 300
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "image": "egg-walker-walk-a-front.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-walking-front",
+            "animation": [
+                {
+                    "tileid": 3,
+                    "duration": 300
+                },
+                {
+                    "tileid": 5,
+                    "duration": 300
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "image": "egg-walker-walk-b.png",
+            "imagewidth": 96,
+            "imageheight": 96
+        },
+        {
+            "id": 5,
+            "image": "egg-walker-walk-b-front.png",
+            "imagewidth": 96,
+            "imageheight": 96
+        },
+        {
+            "id": 6,
+            "image": "egg-walker-crouching.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-crouching"
+        },
+        {
+            "id": 7,
+            "image": "egg-walker-crouching-front.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-crouching-front"
+        },
+        {
+            "id": 8,
+            "image": "egg-walker-falling.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-falling"
+        },
+        {
+            "id": 9,
+            "image": "egg-walker-falling-front.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-falling-front"
+        },
+        {
+            "id": 10,
+            "image": "egg-walker-boosting.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-boosting"
+        },
+        {
+            "id": 11,
+            "image": "egg-walker-boosting-front.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-boosting-front"
+        },
+        {
+            "id": 12,
+            "image": "egg-walker-punch.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-punch"
+        },
+        {
+            "id": 13,
+            "image": "egg-walker-punch-front.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-punch-front"
+        },
+        {
+            "id": 14,
+            "image": "egg-walker-shooting.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-shooting"
+        },
+        {
+            "id": 15,
+            "image": "egg-walker-shooting-front.png",
+            "imagewidth": 96,
+            "imageheight": 96,
+            "class": "egg-walker-shooting-front"
+        },
+        {
+            "id": 16,
+            "class": "egg-walker-shot",
+            "image": "egg-walker-shot.png",
+            "imagewidth": 8,
+            "imageheight": 8
+        }
+    ]
+}

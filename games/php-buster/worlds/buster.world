@@ -1,0 +1,9 @@
+{
+  "type": "world",
+  "onlyShowAdjacentMaps": false,
+  "maps": [{"fileName": "buster.tmj", "x": 0, "y": 0, "width": 64, "height": 72}],
+  "properties": [
+    {"name": "phonics.import.php-buster", "type": "string", "value": "../phonics.json"},
+    {"name": "phonics.start", "type": "string", "value": "buster.tmj"}
+  ]
+}

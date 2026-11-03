@@ -1,0 +1,58 @@
+{
+  "type": "phonics-world",
+  "schemaVersion": 1,
+  "imports": {
+    "doom": "../phonics.json"
+  },
+  "sources": {
+    "pool-3d": {
+      "adapter": "@doom/wad",
+      "resources": [
+        {
+          "url": "./DOOM1.WAD",
+          "role": "iwad",
+          "integrity": "sha256-HX1DvlAeZ9kn5BXguPPinDvzMHXoWXIYFvZSpSbKx3E="
+        },
+        {
+          "url": "./PORTALS.WAD",
+          "role": "pwad",
+          "integrity": "sha256-kZXG0pU72vg8LLZyP7+EUXxYYpy79Hn4s4WPyoCsWS0="
+        }
+      ]
+    }
+  },
+  "bindings": [
+    {
+      "id": "pool-3d-gameplay",
+      "use": "@doom/episode",
+      "on": {
+        "source": "pool-3d",
+        "kind": "map",
+        "tags": [
+          "wad-map"
+        ]
+      },
+      "options": {
+        "skill": 2,
+        "fov": 90,
+        "renderScale": 0.5,
+        "movement": {
+          "maxSpeed": 420,
+          "acceleration": 1531.25,
+          "friction": 0.90625,
+          "gravity": 1225,
+          "maxStep": 24
+        }
+      }
+    }
+  ],
+  "transitions": [],
+  "start": {
+    "source": "pool-3d",
+    "scope": "POOL3D"
+  },
+  "view": {
+    "width": 960,
+    "height": 540
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.12.2",
+  "name": "Jet Slalom craft",
+  "tilewidth": 104,
+  "tileheight": 16,
+  "tilecount": 2,
+  "columns": 0,
+  "grid": {
+    "orientation": "orthogonal",
+    "width": 104,
+    "height": 16
+  },
+  "tiles": [
+    {
+      "id": 0,
+      "image": "jiki.png",
+      "imagewidth": 104,
+      "imageheight": 16
+    },
+    {
+      "id": 1,
+      "image": "jiki2.png",
+      "imagewidth": 104,
+      "imageheight": 16
+    }
+  ]
+}

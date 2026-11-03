@@ -1,0 +1,897 @@
+//
+
+ACTOR Actor native //: Thinker
+{
+  Scale 1
+  Health 1000
+  ReactionTime 8
+  Radius 20
+  Height 16
+  Mass 100
+  RenderStyle Normal
+  Alpha 1
+  MinMissileChance 200
+  MeleeRange 44
+  MaxDropoffHeight 24
+  MaxStepHeight 24
+  BounceFactor 0.7
+  WallBounceFactor 0.75
+  BounceCount -1
+  FloatSpeed 4
+  FloatBobPhase -1 // randomly initialize by default
+  Gravity 1
+  DamageFactor 1.0
+  PushFactor 0.25
+  WeaveIndexXY 0
+  WeaveIndexZ 16
+  DesignatedTeam 255
+  PainType Normal
+  DeathType Normal
+  TeleFogSourceType "TeleportFog"
+  TeleFogDestType "TeleportFog"
+  RipperLevel 0
+  RipLevelMin 0
+  RipLevelMax 0
+  DefThreshold 100
+  BloodType "Blood" "BloodSplatter" "AxeBlood"
+  ExplosionDamage 128
+  MissileHeight 32
+  SpriteAngle 0
+  SpriteRotation 0
+  StencilColor "00 00 00"
+  VisibleAngles 0 0
+  VisiblePitch 0 0
+
+  States
+  {
+  Spawn:
+    TNT1 A -1
+    Stop
+  Null:
+    TNT1 A 1
+    Stop
+  GenericFreezeDeath:
+    // Generic freeze death frames. Woo!
+    "####" "#" 5 A_GenericFreezeDeath
+    "----" A 1 A_FreezeDeathChunks
+    Wait
+  GenericCrush:
+    POL5 A -1
+    Stop
+  }
+}
+
+// Level Decor
+
+ACTOR ExplosiveBarrel : Actor 2035
+{
+  Health 20
+  Radius 10
+  Height 42
+  +SOLID
+  +SHOOTABLE
+  +NOBLOOD
+  +ACTIVATEMCROSS
+  +DONTGIB
+  +NOICEDEATH
+  +OLDRADIUSDMG
+  DeathSound "world/barrelx"
+  Obituary "$OB_BARREL" // "%o went boom."
+  States
+  {
+  Spawn:
+    BAR1 AB 6
+    Loop
+  Death:
+    BEXP A 5 Bright
+    BEXP B 5 Bright A_Scream
+    BEXP C 5 Bright
+    BEXP D 5 Bright A_Explode
+    BEXP E 10 Bright
+    TNT1 A 1050 Bright A_BarrelDestroy
+    TNT1 A 5 A_Respawn
+    Wait
+  }
+}
+
+// Invisible map marker used as a teleport arrival point.
+ACTOR TeleportDestination : Actor 14
+{
+  -SOLID
+  +NOBLOCKMAP
+  States
+  {
+  Spawn:
+    TNT1 A -1
+    Stop
+  }
+}
+
+ACTOR TeleportFog : Actor
+{
+  -SOLID
+  +NOBLOCKMAP
+  +NOGRAVITY
+  States
+  {
+  Spawn:
+    TFOG ABCDEFGHIJ 6 Bright
+    Stop
+  }
+}
+
+// Hitscan impact actor. This mirrors the classic DECORATE state layout so
+// Spawn naturally falls through into the separately addressable Melee frames.
+ACTOR BulletPuff : Actor
+{
+  +NOBLOCKMAP
+  +NOGRAVITY
+  +ALLOWPARTICLES
+  +RANDOMIZE
+  +ZDOOMTRANS
+  RenderStyle Translucent
+  Alpha 0.5
+  VSpeed 1
+  Mass 5
+  States
+  {
+  Spawn:
+    PUFF A 4 Bright
+    PUFF B 4
+  Melee:
+    PUFF CD 4
+    Stop
+  }
+}
+
+// Static pool used by the Episode 1 maps.
+ACTOR PoolOfBloodAndFlesh : Actor 24
+{
+  Radius 20
+  Height 1
+  -SOLID
+  +NOBLOCKMAP
+  +MOVEWITHSECTOR
+  States
+  {
+  Spawn:
+    POL5 A -1
+    Stop
+  }
+}
+
+ACTOR TechLamp : Actor 85
+{
+  Radius 16
+  Height 80
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    TLMP ABCD 4 Bright
+    Loop
+  }
+}
+
+ACTOR TechLamp2 : Actor 86
+{
+  Radius 16
+  Height 60
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    TLP2 ABCD 4 Bright
+    Loop
+  }
+}
+
+ACTOR Column : Actor 2028
+{
+  Radius 16
+  Height 48
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    COLU A -1 Bright
+    Stop
+  }
+}
+
+ACTOR TallGreenColumn : Actor 30
+{
+  Radius 16
+  Height 52
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    COL1 A -1
+    Stop
+  }
+}
+
+ACTOR ShortGreenColumn : Actor 31
+{
+  Radius 16
+  Height 40
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    COL2 A -1
+    Stop
+  }
+}
+
+ACTOR TallRedColumn : Actor 32
+{
+  Radius 16
+  Height 52
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    COL3 A -1
+    Stop
+  }
+}
+
+ACTOR ShortRedColumn : Actor 33
+{
+  Radius 16
+  Height 40
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    COL4 A -1
+    Stop
+  }
+}
+
+ACTOR SkullColumn : Actor 37
+{
+  Radius 16
+  Height 40
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    COL6 A -1
+    Stop
+  }
+}
+
+ACTOR HeartColumn : Actor 36
+{
+  Radius 16
+  Height 40
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    COL5 AB 14
+    Loop
+  }
+}
+
+ACTOR EvilEye : Actor 41
+{
+  Radius 16
+  Height 54
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    CEYE ABCB 6 Bright
+    Loop
+  }
+}
+
+ACTOR FloatingSkull : Actor 42
+{
+  Radius 16
+  Height 26
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    FSKU ABC 6 Bright
+    Loop
+  }
+}
+
+ACTOR TorchTree : Actor 43
+{
+  Radius 16
+  Height 56
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    TRE1 A -1
+    Stop
+  }
+}
+
+ACTOR BlueTorch : Actor 44
+{
+  Radius 16
+  Height 68
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    TBLU ABCD 4 Bright
+    Loop
+  }
+}
+
+ACTOR GreenTorch : Actor 45
+{
+  Radius 16
+  Height 68
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    TGRN ABCD 4 Bright
+    Loop
+  }
+}
+
+ACTOR RedTorch : Actor 46
+{
+  Radius 16
+  Height 68
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    TRED ABCD 4 Bright
+    Loop
+  }
+}
+
+ACTOR ShortBlueTorch : Actor 55
+{
+  Radius 16
+  Height 37
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    SMBT ABCD 4 Bright
+    Loop
+  }
+}
+
+ACTOR ShortGreenTorch : Actor 56
+{
+  Radius 16
+  Height 37
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    SMGT ABCD 4 Bright
+    Loop
+  }
+}
+
+ACTOR ShortRedTorch : Actor 57
+{
+  Radius 16
+  Height 37
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    SMRT ABCD 4 Bright
+    Loop
+  }
+}
+
+ACTOR Stalagtite : Actor 47
+{
+  Radius 16
+  Height 40
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    SMIT A -1
+    Stop
+  }
+}
+
+ACTOR TechPillar : Actor 48
+{
+  Radius 16
+  Height 128
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    ELEC A -1
+    Stop
+  }
+}
+
+ACTOR Candlestick : Actor 34
+{
+  Radius 20
+  Height 14
+  ProjectilePassHeight -16
+  States
+  {
+  Spawn:
+    CAND A -1 Bright
+    Stop
+  }
+}
+
+ACTOR Candelabra : Actor 35
+{
+  Radius 16
+  Height 60
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    CBRA A -1 Bright
+    Stop
+  }
+}
+
+ACTOR BloodyTwitch : 49
+{
+  Radius 16
+  Height 68
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    GOR1 A 10
+    GOR1 B 15
+    GOR1 C 8
+    GOR1 B 6
+    Loop
+  }
+}
+
+ACTOR Meat2 : Actor 50
+{
+  Radius 16
+  Height 84
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    GOR2 A -1
+    Stop
+  }
+}
+
+ACTOR Meat3 : Actor 51
+{
+  Radius 16
+  Height 84
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    GOR3 A -1
+    Stop
+  }
+}
+
+ACTOR Meat4 : Actor 52
+{
+  Radius 16
+  Height 68
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    GOR4 A -1
+    Stop
+  }
+}
+
+ACTOR Meat5 : Actor 53
+{
+  Radius 16
+  Height 52
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    GOR5 A -1
+    Stop
+  }
+}
+
+ACTOR NonsolidMeat2 : Meat2 59
+{
+  -SOLID
+  Radius 20
+}
+
+ACTOR NonsolidMeat4 : Meat4 60
+{
+  -SOLID
+  Radius 20
+}
+
+ACTOR NonsolidMeat3 : Meat3 61
+{
+  -SOLID
+  Radius 20
+}
+
+ACTOR NonsolidMeat5 : Meat5 62
+{
+  -SOLID
+  Radius 20
+}
+
+ACTOR NonsolidTwitch : BloodyTwitch 63
+{
+  -SOLID
+  Radius 20
+}
+
+ACTOR DeadCacodemon : Cacodemon 22
+{
+  Skip_Super
+  States
+  {
+  Spawn:
+    Goto Super::Death+5
+  }
+}
+
+ACTOR DeadMarine : Actor 15
+{
+  States
+  {
+  Spawn:
+    PLAY N -1
+    Stop
+  }
+}
+
+ACTOR DeadZombieMan : ZombieMan 18
+{
+  Skip_Super
+  DropItem None
+  States
+  {
+  Spawn:
+    Goto Super::Death+4
+  }
+}
+
+ACTOR DeadDemon : Demon 21
+{
+  Skip_Super
+  States
+  {
+  Spawn:
+    Goto Super::Death+5
+  }
+}
+
+ACTOR DeadLostSoul : LostSoul 23
+{
+  Skip_Super
+  States
+  {
+  Spawn:
+    Goto Super::Death+5
+  }
+}
+
+ACTOR DeadDoomImp : DoomImp 20
+{
+  Skip_Super
+  States
+  {
+  Spawn:
+    Goto Super::Death+4
+  }
+}
+
+ACTOR DeadShotgunGuy : ShotgunGuy 19
+{
+  Skip_Super
+  DropItem None
+  States
+  {
+  Spawn:
+    Goto Super::Death+4
+  }
+}
+
+ACTOR GibbedMarine : Actor 10
+{
+  States
+  {
+  Spawn:
+    PLAY W -1
+    Stop
+  }
+}
+
+ACTOR GibbedMarineExtra : GibbedMarine 12
+{}
+
+ACTOR HeadsOnAStick : Actor 28
+{
+  Radius 16
+  Height 64
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    POL2 A -1
+    Stop
+  }
+}
+
+ACTOR Gibs : RealGibs
+{
+  ClearFlags
+}
+
+ACTOR HeadOnAStick : Actor 27
+{
+  Radius 16
+  Height 56
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    POL4 A -1
+    Stop
+  }
+}
+
+ACTOR HeadCandles : Actor 29
+{
+  Radius 16
+  Height 42
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    POL3 AB 6 Bright
+    Loop
+  }
+}
+
+ACTOR DeadStick : Actor 25
+{
+  Radius 16
+  Height 64
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    POL1 A -1
+    Stop
+  }
+}
+
+ACTOR LiveStick : Actor 26
+{
+  Radius 16
+  Height 64
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    POL6 A 6
+    POL6 B 8
+    Loop
+  }
+}
+
+ACTOR BigTree : Actor 54
+{
+  Radius 32
+  Height 108
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    TRE2 A -1
+    Stop
+  }
+}
+
+ACTOR BurningBarrel : Actor 70
+{
+  Radius 16
+  Height 32
+  ProjectilePassHeight -16
+  +SOLID
+  States
+  {
+  Spawn:
+    FCAN ABC 4 Bright
+    Loop
+  }
+}
+
+ACTOR HangNoGuts : Actor 73
+{
+  Radius 16
+  Height 88
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    HDB1 A -1
+    Stop
+  }
+}
+
+ACTOR HangBNoBrain : Actor 74
+{
+  Radius 16
+  Height 88
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    HDB2 A -1
+    Stop
+  }
+}
+
+ACTOR HangTLookingDown : Actor 75
+{
+  Radius 16
+  Height 64
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    HDB3 A -1
+    Stop
+  }
+}
+
+ACTOR HangTSkull : Actor 76
+{
+  Radius 16
+  Height 64
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    HDB4 A -1
+    Stop
+  }
+}
+
+ACTOR HangTLookingUp : Actor 77
+{
+  Radius 16
+  Height 64
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    HDB5 A -1
+    Stop
+  }
+}
+
+ACTOR HangTNoBrain : Actor 78
+{
+  Radius 16
+  Height 64
+  +SOLID
+  +NOGRAVITY
+  +SPAWNCEILING
+  States
+  {
+  Spawn:
+    HDB6 A -1
+    Stop
+  }
+}
+
+ACTOR ColonGibs : Actor 79
+{
+  Radius 20
+  Height 4
+  +NOBLOCKMAP
+  +MOVEWITHSECTOR
+  States
+  {
+  Spawn:
+    POB1 A -1
+    Stop
+  }
+}
+
+ACTOR SmallBloodPool : Actor 80
+{
+  Radius 20
+  Height 1
+  +NOBLOCKMAP
+  +MOVEWITHSECTOR
+  States
+  {
+  Spawn:
+    POB2 A -1
+    Stop
+  }
+}
+
+ACTOR BrainStem : Actor 81
+{
+  Radius 20
+  Height 4
+  +NOBLOCKMAP
+  +MOVEWITHSECTOR
+  States
+  {
+  Spawn:
+    BRS1 A -1
+    Stop
+  }
+}

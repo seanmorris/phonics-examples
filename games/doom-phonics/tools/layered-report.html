@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LAYERS — conditional navigation prototype</title>
+<style>
+  :root {color-scheme:dark;background:#10151e;color:#e5eaf2;font:16px/1.5 system-ui,sans-serif}
+  body {max-width:1280px;margin:auto;padding:24px}
+  h1,h2,h3 {line-height:1.2} h1 {font-size:2rem} h2 {font-size:1.35rem}
+  a {color:#a5ccff} label {display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap}
+  select,button {font:inherit;padding:7px 10px;min-height:40px;border:1px solid #718399;border-radius:5px;background:#1d293a;color:inherit}
+  .controls {display:flex;gap:16px;flex-wrap:wrap;position:sticky;top:0;padding:16px 0;background:#10151ef2;z-index:1}
+  .legend {display:flex;gap:20px;flex-wrap:wrap} .legend span::before {content:'';display:inline-block;width:14px;height:14px;background:var(--swatch);margin-right:7px;border:1px solid #8fa1b5}
+  #rooms {display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  article {background:#182230;padding:16px;border-radius:8px;overflow:hidden}
+  article h3 {margin:0 0 8px} article p {font-size:.85rem;color:#b7c4d7;margin:4px 0}
+  svg {display:block;width:100%;height:260px;margin-top:10px}
+  rect {fill:#354355;stroke:#a9b9ce;stroke-width:3;vector-effect:non-scaling-stroke}
+  rect.reachable {fill:#24765f} rect.route {fill:#b66d22}
+  #verdict {padding:12px 16px;border-left:4px solid #64d5af;background:#182230}
+  #route {columns:2;column-width:360px;padding-left:25px} #route li {break-inside:avoid;padding:3px 0}
+  code {font: .9em ui-monospace,monospace} details {margin:20px 0} pre {white-space:pre-wrap;overflow-wrap:anywhere}
+  #scope {color:#bac7d7}
+</style>
+<h1>LAYERS: a flood changes the route</h1>
+<p>A basement and pump connect through the cavern's lower passage. The upper ledge connects a building and courtyard.
+  The cavern, basement and pump flood together through recessed passages. Flooding lets the player swim up; stairs reach the gallery and its exterior balcony. The gallery also has a recessed floor portal back down into the building.</p>
+<p><a href="/games/doom-phonics/?world=/engine/packages/doom-phonics/demo/layered-navigation.phonics-world.json" id="play">Play LAYERS</a>
+  · <button id="download" type="button">Download graph and witnesses</button></p>
+<div class="controls">
+  <label>Start <select id="start"><option value="basement">Basement (lower)</option><option value="courtyard">Courtyard (upper)</option></select></label>
+  <label>Initial water <select id="water"><option value="dry">Dry</option><option value="shallow">Half full</option><option value="full">Full</option></select></label>
+  <label><input id="actions" type="checkbox" checked> Allow reachable pump controls</label>
+</div>
+<p id="verdict" role="status"></p>
+<p class="legend"><span style="--swatch:#24765f">Reachable</span><span style="--swatch:#b66d22">Route to balcony</span><span style="--swatch:#354355">Unreachable</span></p>
+<p>Each panel is a local overhead view (north at the top). Hover a region for its name and floor height.
+  Architectural origins place the storeys together; packed origins keep their WAD geometry apart.</p>
+<div id="rooms"></div>
+<h2>Witness route to the balcony</h2>
+<p id="no-route" hidden>No route exists under these conditions.</p><ol id="route"></ol>
+<h2>Return path check</h2><p id="traps"></p>
+<details><summary>Spatial pins</summary><ul id="pins"></ul></details>
+<h2>Prototype limits</h2><p id="scope"></p>
+<p>Walking and portal edges are checked against emitted map geometry with game collision and gravity.
+  The regression fixture separately walks the complete pump → swim → stairs → balcony route using normal player commands.
+  A route needs actual reachable controls; enabling controls does not fill the water globally.</p>
+<script type="application/json" id="data">__REPORT_DATA__</script>
+<script>
+  const data = JSON.parse(document.querySelector('#data').textContent);
+  const element = id => document.getElementById(id);
+  const ns = 'http://www.w3.org/2000/svg';
+  const regionRects = new Map();
+  for (const [name,layer] of Object.entries(data.layers)) {
+    const card = document.createElement('article');
+    const title = document.createElement('h3'); title.textContent = name; card.append(title);
+    for (const field of ['architectural','packed']) {
+      const caption = document.createElement('p'); caption.textContent = `${field}: (${layer[field].join(', ')})`; card.append(caption);
+    }
+    const svg = document.createElementNS(ns,'svg');
+    const width = Math.max(...layer.cells.map(c=>c.x1));
+    const height = Math.max(...layer.cells.map(c=>c.y1));
+    svg.setAttribute('viewBox',`-8 -8 ${width+16} ${height+16}`);
+    svg.setAttribute('role','img'); svg.setAttribute('aria-label',`${name} traversal regions`);
+    for (const cell of layer.cells) {
+      const rect = document.createElementNS(ns,'rect');
+      for (const [key,value] of Object.entries({x:cell.x0,y:height-cell.y1,width:cell.x1-cell.x0,height:cell.y1-cell.y0})) rect.setAttribute(key,value);
+      const tip = document.createElementNS(ns,'title'); tip.textContent = `${cell.id} · floor ${cell.floor+layer.architectural[2]}`; rect.append(tip);
+      svg.append(rect); regionRects.set(cell.id,rect);
+    }
+    card.append(svg); element('rooms').append(card);
+  }
+  for (const [from,a,to,b] of data.pins) {
+    const item = document.createElement('li'); item.textContent = `${from}.${a} ↔ ${to}.${b}`; element('pins').append(item);
+  }
+  element('scope').textContent = data.scope;
+  function update() {
+    const result = data.cases.find(c=>c.start===element('start').value && c.water===element('water').value && c.actions===element('actions').checked);
+    const route = result.route;
+    const onRoute = new Set(route ? [result.start,...route.map(edge=>edge.to)] : []);
+    for (const [id,rect] of regionRects) rect.setAttribute('class',onRoute.has(id)?'route':result.reachable.includes(id)?'reachable':'');
+    element('verdict').textContent = `${result.reachable.length}/${Object.keys(data.regions).length} regions reachable · ${result.states} region/world states explored · Balcony ${route?'reachable':'unreachable'}.`;
+    element('no-route').hidden = route!==null;
+    element('route').replaceChildren();
+    for (const edge of route || []) {
+      const item = document.createElement('li'); item.textContent = `${edge.mode}: ${edge.from} → ${edge.to} (water: ${edge.state.water})`; element('route').append(item);
+    }
+    element('traps').textContent = result.traps.length
+      ? `${result.traps.length} reachable states have no route back to ${result.start}: ${[...new Set(result.traps.map(t=>t.region))].join(', ')}.`
+      : `Every reachable state has a route back to ${result.start} under these conditions.`;
+  }
+  for (const id of ['start','water','actions']) element(id).addEventListener('change',update);
+  element('download').addEventListener('click',()=>{
+    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+    const link=document.createElement('a'); link.href=url; link.download='layers-navigation.json'; link.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
+  const prefix=location.pathname.split('/engine/')[0];
+  if(location.pathname.includes('/engine/')) element('play').href=`${prefix}/games/doom-phonics/?world=${prefix}/engine/packages/doom-phonics/demo/layered-navigation.phonics-world.json`;
+  update();
+</script>
+</html>

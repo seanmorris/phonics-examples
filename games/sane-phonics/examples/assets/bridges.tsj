@@ -1,0 +1,22 @@
+{
+    "type": "tileset",
+    "version": "1.10",
+    "name": "bridges",
+    "tilewidth": 16,
+    "tileheight": 16,
+    "columns": 2,
+    "tilecount": 2,
+    "image": "bridges.png",
+    "imagewidth": 32,
+    "imageheight": 16,
+    "tiles": [
+        {
+            "id": 0,
+            "class": "bridge-plank"
+        },
+        {
+            "id": 1,
+            "class": "bridge-rail"
+        }
+    ]
+}

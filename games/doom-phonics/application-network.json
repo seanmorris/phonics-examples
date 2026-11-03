@@ -1,0 +1,73 @@
+{
+  "activation": "menu",
+  "players": {
+    "min": 2,
+    "max": 2
+  },
+  "lobby": {
+    "provider": "@matrix/lobby",
+    "title": "Doom-Phonics Online",
+    "options": {
+      "homeserver": "https://matrix.org",
+      "room": "#doom-phonics:matrix.org"
+    }
+  },
+  "transport": "@phonics/webrtc",
+  "match": {
+    "fields": [
+      {
+        "name": "mode",
+        "label": "Mode",
+        "type": "select",
+        "default": "deathmatch",
+        "local": {
+          "default": "singleplayer",
+          "options": [
+            {
+              "value": "singleplayer",
+              "label": "Single Player"
+            },
+            {
+              "value": "cooperative",
+              "label": "Co-op"
+            },
+            {
+              "value": "deathmatch",
+              "label": "Deathmatch"
+            }
+          ]
+        },
+        "options": [
+          {
+            "value": "deathmatch",
+            "label": "Deathmatch"
+          },
+          {
+            "value": "cooperative",
+            "label": "Co-op"
+          }
+        ]
+      },
+      {
+        "name": "skill",
+        "label": "Skill",
+        "type": "select",
+        "default": "2",
+        "options": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4"
+        ]
+      },
+      {
+        "name": "fragLimit",
+        "label": "Frag limit",
+        "local": false,
+        "type": "number",
+        "default": "10"
+      }
+    ]
+  }
+}

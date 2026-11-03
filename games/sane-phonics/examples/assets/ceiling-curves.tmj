@@ -1,0 +1,1022 @@
+{
+    "type": "map",
+    "version": "1.10",
+    "orientation": "orthogonal",
+    "renderorder": "right-down",
+    "width": 72,
+    "height": 96,
+    "tilewidth": 32,
+    "tileheight": 32,
+    "infinite": false,
+    "tilesets": [
+        {
+            "firstgid": 1,
+            "source": "tiles.tsj"
+        }
+    ],
+    "layers": [
+        {
+            "id": 10,
+            "name": "sky",
+            "type": "imagelayer",
+            "image": "sky.png",
+            "imagewidth": 8,
+            "imageheight": 300,
+            "repeatx": true,
+            "parallaxx": 0,
+            "parallaxy": 0,
+            "offsety": 0,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 0
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 11,
+            "name": "clouds",
+            "type": "imagelayer",
+            "image": "clouds.png",
+            "imagewidth": 512,
+            "imageheight": 96,
+            "repeatx": true,
+            "parallaxx": 0.06,
+            "parallaxy": 0,
+            "offsety": 36,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 6
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 12,
+            "name": "mountains-far",
+            "type": "imagelayer",
+            "image": "mountains-far.png",
+            "imagewidth": 512,
+            "imageheight": 180,
+            "repeatx": true,
+            "parallaxx": 0.16,
+            "parallaxy": 0,
+            "offsety": 128,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 0
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 13,
+            "name": "water",
+            "type": "imagelayer",
+            "image": "water.png",
+            "imagewidth": 128,
+            "imageheight": 256,
+            "repeatx": true,
+            "parallaxx": 0.28,
+            "parallaxy": 0,
+            "offsety": 336,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 0
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 14,
+            "name": "mountains-near",
+            "type": "imagelayer",
+            "image": "mountains-near.png",
+            "imagewidth": 512,
+            "imageheight": 140,
+            "repeatx": true,
+            "parallaxx": 0.38,
+            "parallaxy": 0,
+            "offsety": 196,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 0
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 15,
+            "name": "shine-0",
+            "type": "imagelayer",
+            "image": "shine-0.png",
+            "imagewidth": 128,
+            "imageheight": 8,
+            "repeatx": true,
+            "parallaxx": 0.28,
+            "parallaxy": 0,
+            "offsety": 336,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 18
+                },
+                {
+                    "name": "frames",
+                    "type": "string",
+                    "value": "[{\"image\":\"shine-0.png\",\"duration\":180},{\"image\":\"shine-1.png\",\"duration\":180}]"
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 60,
+            "name": "Curved course art",
+            "type": "imagelayer",
+            "image": "ceiling-curves.png",
+            "imagewidth": 2304,
+            "imageheight": 3072,
+            "properties": [
+                {
+                    "name": "collision",
+                    "type": "bool",
+                    "value": false
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 61,
+            "name": "Curved collision paths",
+            "type": "objectgroup",
+            "objects": [
+                {
+                    "id": 500,
+                    "class": "CurvedCeiling",
+                    "x": 0,
+                    "y": 0,
+                    "polyline": [
+                        {
+                            "x": 1896,
+                            "y": 2600
+                        },
+                        {
+                            "x": 1896,
+                            "y": 2400
+                        },
+                        {
+                            "x": 1895.79296875,
+                            "y": 2393.72265625
+                        },
+                        {
+                            "x": 1895.1796875,
+                            "y": 2387.46875
+                        },
+                        {
+                            "x": 1894.15625,
+                            "y": 2381.26953125
+                        },
+                        {
+                            "x": 1892.73046875,
+                            "y": 2375.15234375
+                        },
+                        {
+                            "x": 1890.90625,
+                            "y": 2369.140625
+                        },
+                        {
+                            "x": 1888.69140625,
+                            "y": 2363.26171875
+                        },
+                        {
+                            "x": 1886.1015625,
+                            "y": 2357.5390625
+                        },
+                        {
+                            "x": 1883.13671875,
+                            "y": 2352
+                        },
+                        {
+                            "x": 1879.8203125,
+                            "y": 2346.6640625
+                        },
+                        {
+                            "x": 1876.16015625,
+                            "y": 2341.55859375
+                        },
+                        {
+                            "x": 1872.17578125,
+                            "y": 2336.703125
+                        },
+                        {
+                            "x": 1867.8828125,
+                            "y": 2332.1171875
+                        },
+                        {
+                            "x": 1863.296875,
+                            "y": 2327.82421875
+                        },
+                        {
+                            "x": 1858.44140625,
+                            "y": 2323.83984375
+                        },
+                        {
+                            "x": 1853.3359375,
+                            "y": 2320.1796875
+                        },
+                        {
+                            "x": 1848,
+                            "y": 2316.86328125
+                        },
+                        {
+                            "x": 1842.4609375,
+                            "y": 2313.8984375
+                        },
+                        {
+                            "x": 1836.73828125,
+                            "y": 2311.30859375
+                        },
+                        {
+                            "x": 1830.859375,
+                            "y": 2309.09375
+                        },
+                        {
+                            "x": 1824.84765625,
+                            "y": 2307.26953125
+                        },
+                        {
+                            "x": 1818.73046875,
+                            "y": 2305.84375
+                        },
+                        {
+                            "x": 1812.53125,
+                            "y": 2304.8203125
+                        },
+                        {
+                            "x": 1806.27734375,
+                            "y": 2304.20703125
+                        },
+                        {
+                            "x": 1800,
+                            "y": 2304
+                        },
+                        {
+                            "x": 1580,
+                            "y": 2304
+                        }
+                    ],
+                    "properties": [
+                        {
+                            "name": "solid",
+                            "type": "bool",
+                            "value": true
+                        }
+                    ]
+                },
+                {
+                    "id": 501,
+                    "class": "CurvedCeiling",
+                    "x": 0,
+                    "y": 0,
+                    "polyline": [
+                        {
+                            "x": 432,
+                            "y": 2340
+                        },
+                        {
+                            "x": 632,
+                            "y": 2340
+                        },
+                        {
+                            "x": 638.27734375,
+                            "y": 2339.79296875
+                        },
+                        {
+                            "x": 644.53125,
+                            "y": 2339.1796875
+                        },
+                        {
+                            "x": 650.73046875,
+                            "y": 2338.15625
+                        },
+                        {
+                            "x": 656.84765625,
+                            "y": 2336.73046875
+                        },
+                        {
+                            "x": 662.859375,
+                            "y": 2334.90625
+                        },
+                        {
+                            "x": 668.73828125,
+                            "y": 2332.69140625
+                        },
+                        {
+                            "x": 674.4609375,
+                            "y": 2330.1015625
+                        },
+                        {
+                            "x": 680,
+                            "y": 2327.13671875
+                        },
+                        {
+                            "x": 685.3359375,
+                            "y": 2323.8203125
+                        },
+                        {
+                            "x": 690.44140625,
+                            "y": 2320.16015625
+                        },
+                        {
+                            "x": 695.296875,
+                            "y": 2316.17578125
+                        },
+                        {
+                            "x": 699.8828125,
+                            "y": 2311.8828125
+                        },
+                        {
+                            "x": 704.17578125,
+                            "y": 2307.296875
+                        },
+                        {
+                            "x": 708.16015625,
+                            "y": 2302.44140625
+                        },
+                        {
+                            "x": 711.8203125,
+                            "y": 2297.3359375
+                        },
+                        {
+                            "x": 715.13671875,
+                            "y": 2292
+                        },
+                        {
+                            "x": 718.1015625,
+                            "y": 2286.4609375
+                        },
+                        {
+                            "x": 720.69140625,
+                            "y": 2280.73828125
+                        },
+                        {
+                            "x": 722.90625,
+                            "y": 2274.859375
+                        },
+                        {
+                            "x": 724.73046875,
+                            "y": 2268.84765625
+                        },
+                        {
+                            "x": 726.15625,
+                            "y": 2262.73046875
+                        },
+                        {
+                            "x": 727.1796875,
+                            "y": 2256.53125
+                        },
+                        {
+                            "x": 727.79296875,
+                            "y": 2250.27734375
+                        },
+                        {
+                            "x": 728,
+                            "y": 2244
+                        },
+                        {
+                            "x": 728,
+                            "y": 2024
+                        }
+                    ],
+                    "properties": [
+                        {
+                            "name": "solid",
+                            "type": "bool",
+                            "value": true
+                        }
+                    ]
+                },
+                {
+                    "id": 502,
+                    "class": "CurvedCeiling",
+                    "x": 0,
+                    "y": 0,
+                    "polyline": [
+                        {
+                            "x": 692,
+                            "y": 876
+                        },
+                        {
+                            "x": 692,
+                            "y": 1076
+                        },
+                        {
+                            "x": 692.20703125,
+                            "y": 1082.27734375
+                        },
+                        {
+                            "x": 692.8203125,
+                            "y": 1088.53125
+                        },
+                        {
+                            "x": 693.84375,
+                            "y": 1094.73046875
+                        },
+                        {
+                            "x": 695.26953125,
+                            "y": 1100.84765625
+                        },
+                        {
+                            "x": 697.09375,
+                            "y": 1106.859375
+                        },
+                        {
+                            "x": 699.30859375,
+                            "y": 1112.73828125
+                        },
+                        {
+                            "x": 701.8984375,
+                            "y": 1118.4609375
+                        },
+                        {
+                            "x": 704.86328125,
+                            "y": 1124
+                        },
+                        {
+                            "x": 708.1796875,
+                            "y": 1129.3359375
+                        },
+                        {
+                            "x": 711.83984375,
+                            "y": 1134.44140625
+                        },
+                        {
+                            "x": 715.82421875,
+                            "y": 1139.296875
+                        },
+                        {
+                            "x": 720.1171875,
+                            "y": 1143.8828125
+                        },
+                        {
+                            "x": 724.703125,
+                            "y": 1148.17578125
+                        },
+                        {
+                            "x": 729.55859375,
+                            "y": 1152.16015625
+                        },
+                        {
+                            "x": 734.6640625,
+                            "y": 1155.8203125
+                        },
+                        {
+                            "x": 740,
+                            "y": 1159.13671875
+                        },
+                        {
+                            "x": 745.5390625,
+                            "y": 1162.1015625
+                        },
+                        {
+                            "x": 751.26171875,
+                            "y": 1164.69140625
+                        },
+                        {
+                            "x": 757.140625,
+                            "y": 1166.90625
+                        },
+                        {
+                            "x": 763.15234375,
+                            "y": 1168.73046875
+                        },
+                        {
+                            "x": 769.26953125,
+                            "y": 1170.15625
+                        },
+                        {
+                            "x": 775.46875,
+                            "y": 1171.1796875
+                        },
+                        {
+                            "x": 781.72265625,
+                            "y": 1171.79296875
+                        },
+                        {
+                            "x": 788,
+                            "y": 1172
+                        },
+                        {
+                            "x": 1008,
+                            "y": 1172
+                        }
+                    ],
+                    "properties": [
+                        {
+                            "name": "solid",
+                            "type": "bool",
+                            "value": true
+                        }
+                    ]
+                },
+                {
+                    "id": 503,
+                    "class": "CurvedCeiling",
+                    "x": 0,
+                    "y": 0,
+                    "polyline": [
+                        {
+                            "x": 2156,
+                            "y": 1136
+                        },
+                        {
+                            "x": 1956,
+                            "y": 1136
+                        },
+                        {
+                            "x": 1949.72265625,
+                            "y": 1136.20703125
+                        },
+                        {
+                            "x": 1943.46875,
+                            "y": 1136.8203125
+                        },
+                        {
+                            "x": 1937.26953125,
+                            "y": 1137.84375
+                        },
+                        {
+                            "x": 1931.15234375,
+                            "y": 1139.26953125
+                        },
+                        {
+                            "x": 1925.140625,
+                            "y": 1141.09375
+                        },
+                        {
+                            "x": 1919.26171875,
+                            "y": 1143.30859375
+                        },
+                        {
+                            "x": 1913.5390625,
+                            "y": 1145.8984375
+                        },
+                        {
+                            "x": 1908,
+                            "y": 1148.86328125
+                        },
+                        {
+                            "x": 1902.6640625,
+                            "y": 1152.1796875
+                        },
+                        {
+                            "x": 1897.55859375,
+                            "y": 1155.83984375
+                        },
+                        {
+                            "x": 1892.703125,
+                            "y": 1159.82421875
+                        },
+                        {
+                            "x": 1888.1171875,
+                            "y": 1164.1171875
+                        },
+                        {
+                            "x": 1883.82421875,
+                            "y": 1168.703125
+                        },
+                        {
+                            "x": 1879.83984375,
+                            "y": 1173.55859375
+                        },
+                        {
+                            "x": 1876.1796875,
+                            "y": 1178.6640625
+                        },
+                        {
+                            "x": 1872.86328125,
+                            "y": 1184
+                        },
+                        {
+                            "x": 1869.8984375,
+                            "y": 1189.5390625
+                        },
+                        {
+                            "x": 1867.30859375,
+                            "y": 1195.26171875
+                        },
+                        {
+                            "x": 1865.09375,
+                            "y": 1201.140625
+                        },
+                        {
+                            "x": 1863.26953125,
+                            "y": 1207.15234375
+                        },
+                        {
+                            "x": 1861.84375,
+                            "y": 1213.26953125
+                        },
+                        {
+                            "x": 1860.8203125,
+                            "y": 1219.46875
+                        },
+                        {
+                            "x": 1860.20703125,
+                            "y": 1225.72265625
+                        },
+                        {
+                            "x": 1860,
+                            "y": 1232
+                        },
+                        {
+                            "x": 1860,
+                            "y": 1452
+                        }
+                    ],
+                    "properties": [
+                        {
+                            "name": "solid",
+                            "type": "bool",
+                            "value": true
+                        }
+                    ]
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 62,
+            "name": "Gravity course features",
+            "type": "objectgroup",
+            "objects": [
+                {
+                    "id": 601,
+                    "class": "Spring",
+                    "point": true,
+                    "x": 1877.999,
+                    "y": 2600,
+                    "rotation": 0,
+                    "properties": [
+                        {
+                            "name": "normalX",
+                            "type": "float",
+                            "value": 0
+                        },
+                        {
+                            "name": "normalY",
+                            "type": "float",
+                            "value": -1
+                        },
+                        {
+                            "name": "power",
+                            "type": "float",
+                            "value": 1100
+                        },
+                        {
+                            "name": "length",
+                            "type": "float",
+                            "value": 48
+                        },
+                        {
+                            "name": "spriteGid",
+                            "type": "int",
+                            "value": 1
+                        }
+                    ]
+                },
+                {
+                    "id": 611,
+                    "class": "GravitySwitch",
+                    "point": true,
+                    "x": 1650,
+                    "y": 2304,
+                    "rotation": 0,
+                    "properties": [
+                        {
+                            "name": "normalX",
+                            "type": "float",
+                            "value": 0
+                        },
+                        {
+                            "name": "normalY",
+                            "type": "float",
+                            "value": 1
+                        },
+                        {
+                            "name": "gravity",
+                            "type": "string",
+                            "value": "left"
+                        },
+                        {
+                            "name": "length",
+                            "type": "float",
+                            "value": 64
+                        },
+                        {
+                            "name": "spriteGid",
+                            "type": "int",
+                            "value": 1
+                        }
+                    ]
+                },
+                {
+                    "id": 602,
+                    "class": "Spring",
+                    "point": true,
+                    "x": 432,
+                    "y": 2321.999,
+                    "rotation": 0,
+                    "properties": [
+                        {
+                            "name": "normalX",
+                            "type": "float",
+                            "value": 1
+                        },
+                        {
+                            "name": "normalY",
+                            "type": "float",
+                            "value": 0
+                        },
+                        {
+                            "name": "power",
+                            "type": "float",
+                            "value": 1100
+                        },
+                        {
+                            "name": "length",
+                            "type": "float",
+                            "value": 48
+                        },
+                        {
+                            "name": "spriteGid",
+                            "type": "int",
+                            "value": 1
+                        }
+                    ]
+                },
+                {
+                    "id": 612,
+                    "class": "GravitySwitch",
+                    "point": true,
+                    "x": 728,
+                    "y": 2094,
+                    "rotation": 0,
+                    "properties": [
+                        {
+                            "name": "normalX",
+                            "type": "float",
+                            "value": -1
+                        },
+                        {
+                            "name": "normalY",
+                            "type": "float",
+                            "value": 0
+                        },
+                        {
+                            "name": "gravity",
+                            "type": "string",
+                            "value": "up"
+                        },
+                        {
+                            "name": "length",
+                            "type": "float",
+                            "value": 64
+                        },
+                        {
+                            "name": "spriteGid",
+                            "type": "int",
+                            "value": 1
+                        }
+                    ]
+                },
+                {
+                    "id": 603,
+                    "class": "Spring",
+                    "point": true,
+                    "x": 710.001,
+                    "y": 876,
+                    "rotation": 0,
+                    "properties": [
+                        {
+                            "name": "normalX",
+                            "type": "float",
+                            "value": 0
+                        },
+                        {
+                            "name": "normalY",
+                            "type": "float",
+                            "value": 1
+                        },
+                        {
+                            "name": "power",
+                            "type": "float",
+                            "value": 1100
+                        },
+                        {
+                            "name": "length",
+                            "type": "float",
+                            "value": 48
+                        },
+                        {
+                            "name": "spriteGid",
+                            "type": "int",
+                            "value": 1
+                        }
+                    ]
+                },
+                {
+                    "id": 613,
+                    "class": "GravitySwitch",
+                    "point": true,
+                    "x": 938,
+                    "y": 1172,
+                    "rotation": 0,
+                    "properties": [
+                        {
+                            "name": "normalX",
+                            "type": "float",
+                            "value": 0
+                        },
+                        {
+                            "name": "normalY",
+                            "type": "float",
+                            "value": -1
+                        },
+                        {
+                            "name": "gravity",
+                            "type": "string",
+                            "value": "right"
+                        },
+                        {
+                            "name": "length",
+                            "type": "float",
+                            "value": 64
+                        },
+                        {
+                            "name": "spriteGid",
+                            "type": "int",
+                            "value": 1
+                        }
+                    ]
+                },
+                {
+                    "id": 604,
+                    "class": "Spring",
+                    "point": true,
+                    "x": 2156,
+                    "y": 1154.001,
+                    "rotation": 0,
+                    "properties": [
+                        {
+                            "name": "normalX",
+                            "type": "float",
+                            "value": -1
+                        },
+                        {
+                            "name": "normalY",
+                            "type": "float",
+                            "value": 0
+                        },
+                        {
+                            "name": "power",
+                            "type": "float",
+                            "value": 1100
+                        },
+                        {
+                            "name": "length",
+                            "type": "float",
+                            "value": 48
+                        },
+                        {
+                            "name": "spriteGid",
+                            "type": "int",
+                            "value": 1
+                        }
+                    ]
+                },
+                {
+                    "id": 614,
+                    "class": "GravitySwitch",
+                    "point": true,
+                    "x": 1860,
+                    "y": 1382,
+                    "rotation": 0,
+                    "properties": [
+                        {
+                            "name": "normalX",
+                            "type": "float",
+                            "value": 1
+                        },
+                        {
+                            "name": "normalY",
+                            "type": "float",
+                            "value": 0
+                        },
+                        {
+                            "name": "gravity",
+                            "type": "string",
+                            "value": "down"
+                        },
+                        {
+                            "name": "length",
+                            "type": "float",
+                            "value": 64
+                        },
+                        {
+                            "name": "spriteGid",
+                            "type": "int",
+                            "value": 1
+                        }
+                    ]
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 63,
+            "name": "Spawns",
+            "type": "objectgroup",
+            "objects": [
+                {
+                    "id": 1,
+                    "class": "Player",
+                    "x": 1878,
+                    "y": 2582
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        }
+    ]
+}

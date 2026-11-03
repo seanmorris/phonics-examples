@@ -1,0 +1,42 @@
+{
+  "name": "@seanmorris/php-slalom",
+  "version": "0.1.0",
+  "description": "A deterministic PHP and Phonics port of the rare Jet Slalom Java game",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./phonics.json": "./phonics.json"
+  },
+  "peerDependencies": {
+    "@seanmorris/phonics": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@seanmorris/phonics": {
+      "optional": true
+    }
+  },
+  "files": [
+    "autoload.php",
+    "game.php",
+    "application.php",
+    "src/Input/InputSettings.php",
+    "src/Input/SlalomActions.php",
+    "src/Obstacle.php",
+    "src/Random.php",
+    "src/Render/Scene.php",
+    "src/Replay.php",
+    "src/Simulation.php",
+    "src/Stage.php",
+    "browser/game.mjs",
+    "assets/bomb.wav",
+    "assets/craft.tsj",
+    "assets/jiki.png",
+    "assets/jiki2.png",
+    "worlds/slalom.tmj",
+    "worlds/slalom.world",
+    "phonics.json",
+    "composer.json",
+    "README.md",
+    "LICENSE"
+  ]
+}

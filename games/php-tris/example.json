@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "slug": "php-tris",
+  "title": "PHPTris",
+  "description": "Three solo modes and five progressive falling-block challenge tracks.",
+  "application": "dist/game.phar",
+  "poster": "poster.webp",
+  "canvas": {
+    "width": 960,
+    "height": 540
+  },
+  "aspectRatio": "16/9",
+  "fit": "contain",
+  "documentation": {
+    "chapters": [
+      {
+        "slug": "index",
+        "title": "PHPTris",
+        "path": "docs/index.md"
+      },
+      {
+        "slug": "challenges",
+        "title": "Challenge tracks",
+        "path": "docs/challenges.md"
+      },
+      {
+        "slug": "world-authoring",
+        "title": "World authoring",
+        "path": "docs/world-authoring.md"
+      },
+      {
+        "slug": "architecture",
+        "title": "Architecture",
+        "path": "docs/architecture.md"
+      }
+    ],
+    "api": {
+      "namespace": "PhpTris",
+      "description": "Falling-block game state, challenges, systems, and rendering."
+    },
+    "embed": {
+      "kind": "local"
+    }
+  }
+}

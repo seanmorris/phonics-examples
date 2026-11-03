@@ -1,0 +1,241 @@
+{
+    "type": "tileset",
+    "name": "monitors",
+    "tilewidth": 32,
+    "tileheight": 32,
+    "columns": 24,
+    "tilecount": 24,
+    "image": "monitors.png",
+    "imagewidth": 768,
+    "imageheight": 32,
+    "tiles": [
+        {
+            "id": 0,
+            "class": "monitor-shell",
+            "animation": [
+                {
+                    "tileid": 0,
+                    "duration": 180
+                },
+                {
+                    "tileid": 1,
+                    "duration": 180
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "class": "monitor-broken"
+        },
+        {
+            "id": 3,
+            "class": "monitor-screen-ring",
+            "animation": [
+                {
+                    "tileid": 4,
+                    "duration": 192
+                },
+                {
+                    "tileid": 3,
+                    "duration": 460
+                },
+                {
+                    "tileid": 4,
+                    "duration": 116
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "class": "monitor-screen-triple-ring",
+            "animation": [
+                {
+                    "tileid": 4,
+                    "duration": 192
+                },
+                {
+                    "tileid": 5,
+                    "duration": 460
+                },
+                {
+                    "tileid": 4,
+                    "duration": 116
+                }
+            ]
+        },
+        {
+            "id": 6,
+            "class": "monitor-explosion",
+            "animation": [
+                {
+                    "tileid": 6,
+                    "duration": 80
+                },
+                {
+                    "tileid": 7,
+                    "duration": 80
+                }
+            ]
+        },
+        {
+            "id": 9,
+            "class": "monitor-screen-shield-normal",
+            "animation": [
+                {
+                    "tileid": 4,
+                    "duration": 192
+                },
+                {
+                    "tileid": 9,
+                    "duration": 460
+                },
+                {
+                    "tileid": 4,
+                    "duration": 116
+                }
+            ]
+        },
+        {
+            "id": 10,
+            "class": "monitor-screen-shield-electric",
+            "animation": [
+                {
+                    "tileid": 4,
+                    "duration": 192
+                },
+                {
+                    "tileid": 10,
+                    "duration": 460
+                },
+                {
+                    "tileid": 4,
+                    "duration": 116
+                }
+            ]
+        },
+        {
+            "id": 11,
+            "class": "monitor-screen-shield-fire",
+            "animation": [
+                {
+                    "tileid": 4,
+                    "duration": 192
+                },
+                {
+                    "tileid": 11,
+                    "duration": 460
+                },
+                {
+                    "tileid": 4,
+                    "duration": 116
+                }
+            ]
+        },
+        {
+            "id": 12,
+            "class": "monitor-screen-shield-water",
+            "animation": [
+                {
+                    "tileid": 4,
+                    "duration": 192
+                },
+                {
+                    "tileid": 12,
+                    "duration": 460
+                },
+                {
+                    "tileid": 4,
+                    "duration": 116
+                }
+            ]
+        },
+        {
+            "id": 13,
+            "class": "monitor-screen-shield-star",
+            "animation": [
+                {
+                    "tileid": 4,
+                    "duration": 192
+                },
+                {
+                    "tileid": 13,
+                    "duration": 460
+                },
+                {
+                    "tileid": 4,
+                    "duration": 116
+                }
+            ]
+        },
+        {
+            "id": 14,
+            "class": "shield-aura-normal",
+            "animation": [
+                {
+                    "tileid": 14,
+                    "duration": 120
+                },
+                {
+                    "tileid": 15,
+                    "duration": 120
+                }
+            ]
+        },
+        {
+            "id": 16,
+            "class": "shield-aura-electric",
+            "animation": [
+                {
+                    "tileid": 16,
+                    "duration": 120
+                },
+                {
+                    "tileid": 17,
+                    "duration": 120
+                }
+            ]
+        },
+        {
+            "id": 18,
+            "class": "shield-aura-fire",
+            "animation": [
+                {
+                    "tileid": 18,
+                    "duration": 120
+                },
+                {
+                    "tileid": 19,
+                    "duration": 120
+                }
+            ]
+        },
+        {
+            "id": 20,
+            "class": "shield-aura-water",
+            "animation": [
+                {
+                    "tileid": 20,
+                    "duration": 120
+                },
+                {
+                    "tileid": 21,
+                    "duration": 120
+                }
+            ]
+        },
+        {
+            "id": 22,
+            "class": "shield-aura-star",
+            "animation": [
+                {
+                    "tileid": 22,
+                    "duration": 120
+                },
+                {
+                    "tileid": 23,
+                    "duration": 120
+                }
+            ]
+        }
+    ]
+}

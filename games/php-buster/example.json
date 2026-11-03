@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "slug": "php-buster",
+  "title": "PHP Buster",
+  "description": "A deterministic PHP port of Blockade Buster with original waves, editable input, and local scores.",
+  "application": "dist/game.phar",
+  "poster": "poster.webp",
+  "canvas": {
+    "width": 800,
+    "height": 720
+  },
+  "aspectRatio": "2/3",
+  "fit": "contain",
+  "documentation": {
+    "chapters": [
+      {
+        "slug": "index",
+        "title": "PHP Buster",
+        "path": "docs/index.md"
+      },
+      {
+        "slug": "architecture",
+        "title": "Architecture",
+        "path": "docs/architecture.md"
+      }
+    ],
+    "api": {
+      "namespace": "PhpBuster",
+      "description": "Blockade waves, actors, scoring, input settings, and interpolated rendering."
+    },
+    "embed": {
+      "kind": "local"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+    "type": "tileset",
+    "version": "1.10",
+    "name": "tornado",
+    "tilewidth": 96,
+    "tileheight": 48,
+    "columns": 0,
+    "tilecount": 5,
+    "tiles": [
+        {
+            "id": 0,
+            "class": "tornado",
+            "image": "tornado.png",
+            "imagewidth": 96,
+            "imageheight": 48
+        },
+        {
+            "id": 1,
+            "class": "tornado-flight",
+            "image": "tornado-flight.png",
+            "imagewidth": 96,
+            "imageheight": 48
+        },
+        {
+            "id": 2,
+            "class": "tornado-gear",
+            "image": "tornado-gear.png",
+            "imagewidth": 96,
+            "imageheight": 48
+        },
+        {
+            "id": 3,
+            "class": "tornado-thrust",
+            "image": "tornado-thrust.png",
+            "imagewidth": 96,
+            "imageheight": 48
+        },
+        {
+            "id": 4,
+            "class": "tornado-crashed",
+            "image": "tornado-crashed.png",
+            "imagewidth": 96,
+            "imageheight": 48
+        }
+    ]
+}

@@ -1,0 +1,195 @@
+{
+  "url": "http://127.0.0.1:9130/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+  "loadMs": 19056,
+  "browser": "152.0.7977.75",
+  "software": true,
+  "gl": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "cpuSampling": "latest 10 Hz diagnostic per animation frame",
+  "runs": [
+    {
+      "view": "blue-base",
+      "resolution": "native",
+      "scene": [
+        960,
+        540,
+        1
+      ],
+      "fps": 15.31,
+      "frameP50Ms": 66.7,
+      "frameP95Ms": 83.4,
+      "mapCpuP50Ms": 25.4,
+      "renderCpuP50Ms": 33.4,
+      "simulationCpuP50Ms": 24.8,
+      "positionBefore": [
+        928,
+        -224,
+        0,
+        2.356194490192345
+      ],
+      "positionAfter": [
+        928,
+        -224,
+        0,
+        2.356194490192345
+      ]
+    },
+    {
+      "view": "central-arena",
+      "resolution": "native",
+      "scene": [
+        960,
+        540,
+        1
+      ],
+      "fps": 18.17,
+      "frameP50Ms": 50,
+      "frameP95Ms": 66.7,
+      "mapCpuP50Ms": 25.2,
+      "renderCpuP50Ms": 29.4,
+      "simulationCpuP50Ms": 22.1,
+      "positionBefore": [
+        1888,
+        3008,
+        -64,
+        3.141592653589793
+      ],
+      "positionAfter": [
+        1888,
+        3008,
+        -64,
+        -17.715550203553065
+      ]
+    },
+    {
+      "view": "ramp-walk",
+      "resolution": "native",
+      "scene": [
+        960,
+        540,
+        1
+      ],
+      "fps": 13.29,
+      "frameP50Ms": 66.7,
+      "frameP95Ms": 116.7,
+      "mapCpuP50Ms": 28.2,
+      "renderCpuP50Ms": 34.3,
+      "simulationCpuP50Ms": 36.2,
+      "positionBefore": [
+        32,
+        2384,
+        4,
+        1.5707963267948966
+      ],
+      "positionAfter": [
+        32,
+        2703.99,
+        32,
+        1.5707963267948966
+      ]
+    },
+    {
+      "view": "blue-base",
+      "resolution": "classic",
+      "scene": [
+        480,
+        270,
+        0.5
+      ],
+      "fps": 19.09,
+      "frameP50Ms": 50,
+      "frameP95Ms": 83.3,
+      "mapCpuP50Ms": 17.3,
+      "renderCpuP50Ms": 26.1,
+      "simulationCpuP50Ms": 22.9,
+      "positionBefore": [
+        928,
+        -224,
+        0,
+        2.356194490192345
+      ],
+      "positionAfter": [
+        928,
+        -224,
+        0,
+        2.356194490192345
+      ]
+    },
+    {
+      "view": "central-arena",
+      "resolution": "classic",
+      "scene": [
+        480,
+        270,
+        0.5
+      ],
+      "fps": 21.21,
+      "frameP50Ms": 50,
+      "frameP95Ms": 66.7,
+      "mapCpuP50Ms": 15.8,
+      "renderCpuP50Ms": 21.3,
+      "simulationCpuP50Ms": 22.3,
+      "positionBefore": [
+        1888,
+        3008,
+        -64,
+        3.141592653589793
+      ],
+      "positionAfter": [
+        1888,
+        3008,
+        -64,
+        -17.57269306069592
+      ]
+    },
+    {
+      "view": "ramp-walk",
+      "resolution": "classic",
+      "scene": [
+        480,
+        270,
+        0.5
+      ],
+      "fps": 22.08,
+      "frameP50Ms": 50,
+      "frameP95Ms": 50.1,
+      "mapCpuP50Ms": 16.7,
+      "renderCpuP50Ms": 22.9,
+      "simulationCpuP50Ms": 22.1,
+      "positionBefore": [
+        32,
+        2384,
+        4,
+        1.5707963267948966
+      ],
+      "positionAfter": [
+        32,
+        2703.99,
+        32,
+        1.5707963267948966
+      ]
+    }
+  ],
+  "errors": [],
+  "measuredAt": "2026-10-24",
+  "wad": "Skulltag v0.97d5 over DOOM2.WAD",
+  "sampleSecondsPerView": 8,
+  "map": {
+    "name": "D2ST9",
+    "linedefs": 6995,
+    "sectors": 1123,
+    "subsectors": 4762,
+    "things": 261
+  },
+  "earlierBaseline": {
+    "view": "blue-base",
+    "scene": [
+      960,
+      540,
+      1
+    ],
+    "sampleSeconds": 12,
+    "fps": 4.71,
+    "mapCpuP50Ms": 157.9,
+    "note": "Before material-update optimization and slope support; separate run with the initial load harness."
+  }
+}

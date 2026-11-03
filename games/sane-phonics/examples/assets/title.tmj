@@ -1,0 +1,187 @@
+{
+    "type": "map",
+    "version": "1.10",
+    "orientation": "orthogonal",
+    "renderorder": "right-down",
+    "width": 30,
+    "height": 17,
+    "tilewidth": 32,
+    "tileheight": 32,
+    "infinite": false,
+    "tilesets": [],
+    "layers": [
+        {
+            "id": 10,
+            "name": "sky",
+            "type": "imagelayer",
+            "image": "sky.png",
+            "imagewidth": 8,
+            "imageheight": 300,
+            "repeatx": true,
+            "parallaxx": 0,
+            "parallaxy": 0,
+            "offsety": 0,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 0
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 11,
+            "name": "clouds",
+            "type": "imagelayer",
+            "image": "clouds.png",
+            "imagewidth": 512,
+            "imageheight": 96,
+            "repeatx": true,
+            "parallaxx": 0.06,
+            "parallaxy": 0,
+            "offsety": 36,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 6
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 12,
+            "name": "mountains-far",
+            "type": "imagelayer",
+            "image": "mountains-far.png",
+            "imagewidth": 512,
+            "imageheight": 180,
+            "repeatx": true,
+            "parallaxx": 0.16,
+            "parallaxy": 0,
+            "offsety": 128,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 0
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 13,
+            "name": "water",
+            "type": "imagelayer",
+            "image": "water.png",
+            "imagewidth": 128,
+            "imageheight": 256,
+            "repeatx": true,
+            "parallaxx": 0.28,
+            "parallaxy": 0,
+            "offsety": 336,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 0
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 14,
+            "name": "mountains-near",
+            "type": "imagelayer",
+            "image": "mountains-near.png",
+            "imagewidth": 512,
+            "imageheight": 140,
+            "repeatx": true,
+            "parallaxx": 0.38,
+            "parallaxy": 0,
+            "offsety": 196,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 0
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        },
+        {
+            "id": 15,
+            "name": "shine-0",
+            "type": "imagelayer",
+            "image": "shine-0.png",
+            "imagewidth": 128,
+            "imageheight": 8,
+            "repeatx": true,
+            "parallaxx": 0.28,
+            "parallaxy": 0,
+            "offsety": 336,
+            "properties": [
+                {
+                    "name": "from",
+                    "type": "string",
+                    "value": "bottom"
+                },
+                {
+                    "name": "scrollX",
+                    "type": "float",
+                    "value": 18
+                },
+                {
+                    "name": "frames",
+                    "type": "string",
+                    "value": "[{\"image\":\"shine-0.png\",\"duration\":180},{\"image\":\"shine-1.png\",\"duration\":180}]"
+                }
+            ],
+            "visible": true,
+            "opacity": 1,
+            "x": 0,
+            "y": 0
+        }
+    ]
+}

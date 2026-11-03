@@ -1,0 +1,13 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.12.2",
+  "name": "Blockade Buster sprites",
+  "tilewidth": 64,
+  "tileheight": 72,
+  "tilecount": 50,
+  "columns": 8,
+  "image": "sprites.png",
+  "imagewidth": 512,
+  "imageheight": 504
+}

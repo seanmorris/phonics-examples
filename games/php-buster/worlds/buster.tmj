@@ -1,0 +1,17 @@
+{
+  "type": "map",
+  "version": "1.10",
+  "tiledversion": "1.12.2",
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "infinite": false,
+  "width": 1,
+  "height": 1,
+  "tilewidth": 64,
+  "tileheight": 72,
+  "layers": [],
+  "tilesets": [
+    {"firstgid": 1, "source": "../assets/sprites.tsj"},
+    {"firstgid": 101, "source": "../assets/starfield.tsj"}
+  ]
+}

@@ -1,0 +1,2151 @@
+{
+  "dump": {
+    "name": "zdoom-wiki.xml",
+    "sha256": "5b9b015941f0bd31528e9a35891a3849caaa8b9f3ddc2403b210819ce5dfac2c",
+    "pages": 6857,
+    "classPages": 1447,
+    "revisions": 49491
+  },
+  "license": "GFDL-1.2-or-later; no invariant sections, front-cover texts or back-cover texts (ZDoom:Copyrights revision 4820)",
+  "existingInputs": [
+    {
+      "path": "packages/doom-phonics/resources/decor.dec",
+      "sha256": "a2faa1c6333d8dfb7194d013f87fb9ccbcca074a4172fa020bddac5499250f5c"
+    },
+    {
+      "path": "packages/doom-phonics/resources/objects.dec",
+      "sha256": "476c90e4da2ebe737c08188a6866a70519b5ada026cbd7bddc0f7ff777b590c8"
+    },
+    {
+      "path": "packages/doom-phonics/resources/weaps.dec",
+      "sha256": "3a6873d856cba00cb2504d4cfd066cb9bf369624825ecd5d558daeeaf8ba9fe7"
+    },
+    {
+      "path": "packages/doom-phonics/resources/doom1-enemies.dec",
+      "sha256": "340a2710a2ce1d8930a44cc97e7ad9a3030325e5ced9490d37789afaf7f1cb9b"
+    },
+    {
+      "path": "packages/doom-phonics/demo/SKULLTAG_ACTORS.lmp",
+      "sha256": "593315ff570398116d6bf9a36b360213af02d3f1dcacdc30bc55592393d027d0"
+    },
+    {
+      "path": "packages/doom-phonics/demo/SKULLTAG-WEAPONS.DEC",
+      "sha256": "c8c38c1651aa81c0a70a7e2d6e09f310760ff3c66edc71d9dabc65b4023bd977"
+    }
+  ],
+  "existingActors": 254,
+  "extractedActors": 1203,
+  "runtimeActors": 80,
+  "unresolvedParents": {
+    "CustomMonsterInvasionSpot": [
+      "AbaddonSpot",
+      "AnyMonsterSpot",
+      "BelphegorSpot",
+      "BloodDemonSpot",
+      "CacolanternSpot",
+      "DarkImpSpot",
+      "HectebusSpot",
+      "PowerfulMonsterSpot",
+      "SuperShotgunGuySpot",
+      "VeryPowerfulMonsterSpot",
+      "WeakMonsterSpot"
+    ],
+    "CustomPickupInvasionSpot": [
+      "RedArmorSpot"
+    ],
+    "CustomWeaponInvasionSpot": [
+      "BFG10KSpot",
+      "GrenadeLauncherSpot",
+      "MinigunSpot",
+      "RailgunSpot"
+    ]
+  },
+  "skippedPages": [
+    {
+      "page": "Classes:ActorIterator",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:AltHUD",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ArchVile",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:BaseStatusBar",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Behavior",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:BehaviorIterator",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:BlockLinesIterator",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:BlockThingsIterator",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:BrokenLines",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Canvas",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Ceiling",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Chex Quest",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:CustomMonsterInvasionSpot",
+      "game": "Skulltag",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:CustomPickupInvasionSpot",
+      "game": "Skulltag",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Doom",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Door",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:DynamicValueInterpolator",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Elevator",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:EventHandler",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:FS Mapspot",
+      "game": "GZDoom",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Floor",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:HUDFont",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Heretic",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Hexen",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ID24CalamityBlade",
+      "game": "Doom",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ID24Incinerator",
+      "game": "Doom",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ImageScrollerMenu",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:InventoryBarState",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:IronLich",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:LineTracer",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:LinearValueInterpolator",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ListMenu",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:LoadSaveMenu",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Menu",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Mover",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:MovingCeiling",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:MovingFloor",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Object",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:OptionMenu",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:PSprite",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:PathNode",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Plat",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:PowerReflection",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ScriptUtil",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:SectorEffect",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:SectorSpotLight",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SectorSpotLightAdditive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SectorSpotLightAttenuated",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SectorSpotLightSubtractive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SectorTagIterator",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Shape2D",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Skulltag",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:SpectatorCamera",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:SpotLight",
+      "game": "GZDoom",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:SpotLightAdditive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightAttenuated",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightFlicker",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightFlickerAdditive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightFlickerAttenuated",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightFlickerRandom",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightFlickerRandomAdditive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightFlickerRandomAttenuated",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightFlickerRandomSubtractive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightFlickerSubtractive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightPulse",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightPulseAdditive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightPulseAttenuated",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightPulseSubtractive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:SpotLightSubtractive",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:StateProvider",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:StaticEventHandler",
+      "game": "",
+      "reason": "redirect"
+    },
+    {
+      "page": "Classes:StatusBarCore",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Strife",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:Thinker",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ThinkerIterator",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ViewPosition",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:VisualThinker",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    },
+    {
+      "page": "Classes:ZDoom",
+      "game": "",
+      "reason": "no complete DECORATE definition for this class"
+    }
+  ],
+  "actors": [
+    {
+      "name": "Arachnotron",
+      "parent": null,
+      "editorNumber": 68,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48928,
+      "timestamp": "2021-12-27T11:16:29Z",
+      "page": "Classes:Arachnotron",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Arachnotron&oldid=48928",
+      "contributors": [
+        "Alexanat80",
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Hirogen2",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48928
+    },
+    {
+      "name": "ArachnotronPlasma",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 48910,
+      "timestamp": "2021-12-27T11:13:57Z",
+      "page": "Classes:ArachnotronPlasma",
+      "url": "https://zdoom.org/w/index.php?title=Classes:ArachnotronPlasma&oldid=48910",
+      "contributors": [
+        "Blue Shadow",
+        "Cutman",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48910
+    },
+    {
+      "name": "Archvile",
+      "parent": null,
+      "editorNumber": 64,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 49958,
+      "timestamp": "2022-12-11T14:00:44Z",
+      "page": "Classes:Archvile",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Archvile&oldid=49958",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "HotWax",
+        "Jekyll Grim Payne",
+        "Surreal Doomer"
+      ],
+      "latestRevision": 49958
+    },
+    {
+      "name": "ArchvileFire",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 48913,
+      "timestamp": "2021-12-27T11:14:16Z",
+      "page": "Classes:ArchvileFire",
+      "url": "https://zdoom.org/w/index.php?title=Classes:ArchvileFire&oldid=48913",
+      "contributors": [
+        "Blue Shadow",
+        "Cutman",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48913
+    },
+    {
+      "name": "ArtiPoisonBag",
+      "parent": "Inventory",
+      "editorNumber": 8000,
+      "native": true,
+      "game": "Hexen",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 53616,
+      "timestamp": "2024-11-08T11:50:21Z",
+      "page": "Classes:ArtiPoisonBag",
+      "url": "https://zdoom.org/w/index.php?title=Classes:ArtiPoisonBag&oldid=53616",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne",
+        "Skippy"
+      ],
+      "latestRevision": 53616
+    },
+    {
+      "name": "ArtiPoisonBag3",
+      "parent": "ArtiPoisonBag",
+      "editorNumber": null,
+      "native": true,
+      "game": "Hexen",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53619,
+      "timestamp": "2024-11-08T11:51:44Z",
+      "page": "Classes:ArtiPoisonBag3",
+      "url": "https://zdoom.org/w/index.php?title=Classes:ArtiPoisonBag3&oldid=53619",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne",
+        "Skippy"
+      ],
+      "latestRevision": 53619
+    },
+    {
+      "name": "AxeBlood",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Hexen",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 36482,
+      "timestamp": "2013-05-17T15:10:57Z",
+      "page": "Classes:AxeBlood",
+      "url": "https://zdoom.org/w/index.php?title=Classes:AxeBlood&oldid=36482",
+      "contributors": [
+        "Blue Shadow",
+        "Gez"
+      ],
+      "latestRevision": 36482
+    },
+    {
+      "name": "BFGExtra",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 48898,
+      "timestamp": "2021-12-27T11:12:20Z",
+      "page": "Classes:BFGExtra",
+      "url": "https://zdoom.org/w/index.php?title=Classes:BFGExtra&oldid=48898",
+      "contributors": [
+        "Blue Shadow",
+        "Cutman",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48898
+    },
+    {
+      "name": "Blood",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 55407,
+      "timestamp": "2026-05-26T15:17:26Z",
+      "page": "Classes:Blood",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Blood&oldid=55407",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne",
+        "MG Man",
+        "Marrub",
+        "MartinHowe"
+      ],
+      "latestRevision": 55407
+    },
+    {
+      "name": "BloodSplatter",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53642,
+      "timestamp": "2024-11-08T12:18:02Z",
+      "page": "Classes:BloodSplatter",
+      "url": "https://zdoom.org/w/index.php?title=Classes:BloodSplatter&oldid=53642",
+      "contributors": [
+        "Gez",
+        "Jekyll Grim Payne",
+        "MartinHowe"
+      ],
+      "latestRevision": 53642
+    },
+    {
+      "name": "BlueArmorForMegasphere",
+      "parent": "BlueArmor",
+      "editorNumber": null,
+      "native": false,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53613,
+      "timestamp": "2024-11-08T11:47:00Z",
+      "page": "Classes:BlueArmorForMegasphere",
+      "url": "https://zdoom.org/w/index.php?title=Classes:BlueArmorForMegasphere&oldid=53613",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne",
+        "XaserAcheron"
+      ],
+      "latestRevision": 53613
+    },
+    {
+      "name": "BlueFlag",
+      "parent": "Flag",
+      "editorNumber": 5130,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28679,
+      "timestamp": "2010-11-20T11:04:47Z",
+      "page": "Classes:BlueFlag",
+      "url": "https://zdoom.org/w/index.php?title=Classes:BlueFlag&oldid=28679",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28679
+    },
+    {
+      "name": "BlueSkullST",
+      "parent": "Skull",
+      "editorNumber": null,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28688,
+      "timestamp": "2010-11-20T11:17:57Z",
+      "page": "Classes:BlueSkullST",
+      "url": "https://zdoom.org/w/index.php?title=Classes:BlueSkullST&oldid=28688",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28688
+    },
+    {
+      "name": "BridgeBall",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 36485,
+      "timestamp": "2013-05-17T15:26:12Z",
+      "page": "Classes:BridgeBall",
+      "url": "https://zdoom.org/w/index.php?title=Classes:BridgeBall&oldid=36485",
+      "contributors": [
+        "Blue Shadow",
+        "Gez"
+      ],
+      "latestRevision": 36485
+    },
+    {
+      "name": "ChaingunGuy",
+      "parent": null,
+      "editorNumber": 65,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48926,
+      "timestamp": "2021-12-27T11:16:19Z",
+      "page": "Classes:ChaingunGuy",
+      "url": "https://zdoom.org/w/index.php?title=Classes:ChaingunGuy&oldid=48926",
+      "contributors": [
+        "Blue Shadow",
+        "Deded007",
+        "Gez",
+        "Grubber",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48926
+    },
+    {
+      "name": "CommanderKeen",
+      "parent": null,
+      "editorNumber": 72,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 40378,
+      "timestamp": "2015-09-06T17:30:15Z",
+      "page": "Classes:CommanderKeen",
+      "url": "https://zdoom.org/w/index.php?title=Classes:CommanderKeen&oldid=40378",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber"
+      ],
+      "latestRevision": 40378
+    },
+    {
+      "name": "CustomBridge",
+      "parent": null,
+      "editorNumber": 9991,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 53623,
+      "timestamp": "2024-11-08T11:54:37Z",
+      "page": "Classes:CustomBridge",
+      "url": "https://zdoom.org/w/index.php?title=Classes:CustomBridge&oldid=53623",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 53623
+    },
+    {
+      "name": "DoomUnusedStates",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 33965,
+      "timestamp": "2012-08-18T02:22:39Z",
+      "page": "Classes:DoomUnusedStates",
+      "url": "https://zdoom.org/w/index.php?title=Classes:DoomUnusedStates&oldid=33965",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber"
+      ],
+      "latestRevision": 33965
+    },
+    {
+      "name": "EvilSceptre",
+      "parent": "ScoreItem",
+      "editorNumber": 2016,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 39272,
+      "timestamp": "2015-04-28T20:33:59Z",
+      "page": "Classes:EvilSceptre",
+      "url": "https://zdoom.org/w/index.php?title=Classes:EvilSceptre&oldid=39272",
+      "contributors": [
+        "Blue Shadow",
+        "Gez"
+      ],
+      "latestRevision": 39272
+    },
+    {
+      "name": "FatShot",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 48906,
+      "timestamp": "2021-12-27T11:13:13Z",
+      "page": "Classes:FatShot",
+      "url": "https://zdoom.org/w/index.php?title=Classes:FatShot&oldid=48906",
+      "contributors": [
+        "Blue Shadow",
+        "Cutman",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48906
+    },
+    {
+      "name": "Fatso",
+      "parent": null,
+      "editorNumber": 67,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48921,
+      "timestamp": "2021-12-27T11:15:50Z",
+      "page": "Classes:Fatso",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Fatso&oldid=48921",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48921
+    },
+    {
+      "name": "Flag",
+      "parent": "TeamItem",
+      "editorNumber": null,
+      "native": true,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28677,
+      "timestamp": "2010-11-20T10:54:27Z",
+      "page": "Classes:Flag",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Flag&oldid=28677",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28677
+    },
+    {
+      "name": "GoldFlag",
+      "parent": "Flag",
+      "editorNumber": 5134,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28685,
+      "timestamp": "2010-11-20T11:11:08Z",
+      "page": "Classes:GoldFlag",
+      "url": "https://zdoom.org/w/index.php?title=Classes:GoldFlag&oldid=28685",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28685
+    },
+    {
+      "name": "GoldSkullST",
+      "parent": "Skull",
+      "editorNumber": null,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28691,
+      "timestamp": "2010-11-20T11:20:51Z",
+      "page": "Classes:GoldSkullST",
+      "url": "https://zdoom.org/w/index.php?title=Classes:GoldSkullST&oldid=28691",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28691
+    },
+    {
+      "name": "GreenFlag",
+      "parent": "Flag",
+      "editorNumber": 5133,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28683,
+      "timestamp": "2010-11-20T11:10:05Z",
+      "page": "Classes:GreenFlag",
+      "url": "https://zdoom.org/w/index.php?title=Classes:GreenFlag&oldid=28683",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28683
+    },
+    {
+      "name": "GreenSkullST",
+      "parent": "BlueSkullST",
+      "editorNumber": null,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28693,
+      "timestamp": "2010-11-20T11:22:46Z",
+      "page": "Classes:GreenSkullST",
+      "url": "https://zdoom.org/w/index.php?title=Classes:GreenSkullST&oldid=28693",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28693
+    },
+    {
+      "name": "HellKnight",
+      "parent": "BaronOfHell",
+      "editorNumber": 69,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48918,
+      "timestamp": "2021-12-27T11:15:32Z",
+      "page": "Classes:HellKnight",
+      "url": "https://zdoom.org/w/index.php?title=Classes:HellKnight&oldid=48918",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48918
+    },
+    {
+      "name": "MarineBerserk",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9102,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48887,
+      "timestamp": "2021-12-27T11:10:04Z",
+      "page": "Classes:MarineBerserk",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineBerserk&oldid=48887",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48887
+    },
+    {
+      "name": "MarineBFG",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9111,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48879,
+      "timestamp": "2021-12-27T11:08:30Z",
+      "page": "Classes:MarineBFG",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineBFG&oldid=48879",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48879
+    },
+    {
+      "name": "MarineChaingun",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9107,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48878,
+      "timestamp": "2021-12-27T11:08:21Z",
+      "page": "Classes:MarineChaingun",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineChaingun&oldid=48878",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48878
+    },
+    {
+      "name": "MarineChainsaw",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9103,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48883,
+      "timestamp": "2021-12-27T11:09:28Z",
+      "page": "Classes:MarineChainsaw",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineChainsaw&oldid=48883",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48883
+    },
+    {
+      "name": "MarineFist",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9101,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48886,
+      "timestamp": "2021-12-27T11:09:50Z",
+      "page": "Classes:MarineFist",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineFist&oldid=48886",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne",
+        "Rhinoduck"
+      ],
+      "latestRevision": 48886
+    },
+    {
+      "name": "MarinePistol",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9104,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48884,
+      "timestamp": "2021-12-27T11:09:38Z",
+      "page": "Classes:MarinePistol",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarinePistol&oldid=48884",
+      "contributors": [
+        "Blue Shadow",
+        "Durnurd",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48884
+    },
+    {
+      "name": "MarinePlasma",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9109,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48881,
+      "timestamp": "2021-12-27T11:09:10Z",
+      "page": "Classes:MarinePlasma",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarinePlasma&oldid=48881",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48881
+    },
+    {
+      "name": "MarineRailgun",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9110,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48877,
+      "timestamp": "2021-12-27T11:07:49Z",
+      "page": "Classes:MarineRailgun",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineRailgun&oldid=48877",
+      "contributors": [
+        "Blue Shadow",
+        "Deded007",
+        "Gez",
+        "HotWax",
+        "InsanityBringer",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48877
+    },
+    {
+      "name": "MarineRocket",
+      "parent": "MarineFist",
+      "editorNumber": 9108,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48880,
+      "timestamp": "2021-12-27T11:08:59Z",
+      "page": "Classes:MarineRocket",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineRocket&oldid=48880",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48880
+    },
+    {
+      "name": "MarineShotgun",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9105,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48882,
+      "timestamp": "2021-12-27T11:09:18Z",
+      "page": "Classes:MarineShotgun",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineShotgun&oldid=48882",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48882
+    },
+    {
+      "name": "MarineSSG",
+      "parent": "ScriptedMarine",
+      "editorNumber": 9106,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48885,
+      "timestamp": "2021-12-27T11:09:44Z",
+      "page": "Classes:MarineSSG",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MarineSSG&oldid=48885",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48885
+    },
+    {
+      "name": "MegasphereHealth",
+      "parent": "Health",
+      "editorNumber": null,
+      "native": false,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 33859,
+      "timestamp": "2012-08-16T02:18:00Z",
+      "page": "Classes:MegasphereHealth",
+      "url": "https://zdoom.org/w/index.php?title=Classes:MegasphereHealth&oldid=33859",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "XaserAcheron"
+      ],
+      "latestRevision": 33859
+    },
+    {
+      "name": "PainElemental",
+      "parent": null,
+      "editorNumber": 71,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48923,
+      "timestamp": "2021-12-27T11:16:02Z",
+      "page": "Classes:PainElemental",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PainElemental&oldid=48923",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48923
+    },
+    {
+      "name": "PickupFlash",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Raven",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 36996,
+      "timestamp": "2013-08-20T10:55:49Z",
+      "page": "Classes:PickupFlash",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PickupFlash&oldid=36996",
+      "contributors": [
+        "Blue Shadow",
+        "Gez"
+      ],
+      "latestRevision": 36996
+    },
+    {
+      "name": "PlasmaBall1",
+      "parent": "PlasmaBall",
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 49981,
+      "timestamp": "2022-12-16T21:01:36Z",
+      "page": "Classes:PlasmaBall1",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PlasmaBall1&oldid=49981",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 49981
+    },
+    {
+      "name": "PlasmaBall2",
+      "parent": "PlasmaBall1",
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 50013,
+      "timestamp": "2022-12-30T10:45:28Z",
+      "page": "Classes:PlasmaBall2",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PlasmaBall2&oldid=50013",
+      "contributors": [
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 50013
+    },
+    {
+      "name": "PowerDamage",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53721,
+      "timestamp": "2024-11-13T12:00:36Z",
+      "page": "Classes:PowerDamage",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerDamage&oldid=53721",
+      "contributors": [
+        "Blue Shadow",
+        "Cutman",
+        "Gez",
+        "HotWax",
+        "Jekyll Grim Payne",
+        "Osiris",
+        "TheDarkArchon"
+      ],
+      "latestRevision": 53721
+    },
+    {
+      "name": "PowerInvisibility",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53733,
+      "timestamp": "2024-11-13T12:36:05Z",
+      "page": "Classes:PowerInvisibility",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerInvisibility&oldid=53733",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Graf Zahl",
+        "Jekyll Grim Payne",
+        "Slimeinator"
+      ],
+      "latestRevision": 53733
+    },
+    {
+      "name": "PowerInvulnerable",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53736,
+      "timestamp": "2024-11-13T12:41:06Z",
+      "page": "Classes:PowerInvulnerable",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerInvulnerable&oldid=53736",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Graf Zahl",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 53736
+    },
+    {
+      "name": "PowerIronFeet",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53738,
+      "timestamp": "2024-11-13T12:48:44Z",
+      "page": "Classes:PowerIronFeet",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerIronFeet&oldid=53738",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 53738
+    },
+    {
+      "name": "PowerLightAmp",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53740,
+      "timestamp": "2024-11-13T12:56:34Z",
+      "page": "Classes:PowerLightAmp",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerLightAmp&oldid=53740",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne",
+        "Squishybrick"
+      ],
+      "latestRevision": 53740
+    },
+    {
+      "name": "PowerProtection",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 44942,
+      "timestamp": "2017-04-14T14:26:57Z",
+      "page": "Classes:PowerProtection",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerProtection&oldid=44942",
+      "contributors": [
+        "Blue Shadow",
+        "Cutman",
+        "Gez",
+        "HotWax",
+        "Marisa Heit",
+        "Marrub",
+        "Osiris",
+        "TheDarkArchon"
+      ],
+      "latestRevision": 44942
+    },
+    {
+      "name": "PowerSpeed",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 46965,
+      "timestamp": "2019-10-14T08:58:51Z",
+      "page": "Classes:PowerSpeed",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerSpeed&oldid=46965",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jpalomo",
+        "Rachael"
+      ],
+      "latestRevision": 46965
+    },
+    {
+      "name": "PowerStrength",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53717,
+      "timestamp": "2024-11-13T11:32:56Z",
+      "page": "Classes:PowerStrength",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerStrength&oldid=53717",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Graf Zahl",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 53717
+    },
+    {
+      "name": "PowerTimeFreezer",
+      "parent": "Powerup",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 54144,
+      "timestamp": "2025-01-20T11:07:56Z",
+      "page": "Classes:PowerTimeFreezer",
+      "url": "https://zdoom.org/w/index.php?title=Classes:PowerTimeFreezer&oldid=54144",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne",
+        "ZDG"
+      ],
+      "latestRevision": 54144
+    },
+    {
+      "name": "Powerup",
+      "parent": "Inventory",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53729,
+      "timestamp": "2024-11-13T12:27:08Z",
+      "page": "Classes:Powerup",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Powerup&oldid=53729",
+      "contributors": [
+        "Blue Shadow",
+        "DoomRater",
+        "Gez",
+        "Jekyll Grim Payne",
+        "MartinHowe"
+      ],
+      "latestRevision": 53729
+    },
+    {
+      "name": "RealGibs",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 53643,
+      "timestamp": "2024-11-08T12:18:49Z",
+      "page": "Classes:RealGibs",
+      "url": "https://zdoom.org/w/index.php?title=Classes:RealGibs&oldid=53643",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 53643
+    },
+    {
+      "name": "RedFlag",
+      "parent": "Flag",
+      "editorNumber": 5131,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28680,
+      "timestamp": "2010-11-20T11:06:21Z",
+      "page": "Classes:RedFlag",
+      "url": "https://zdoom.org/w/index.php?title=Classes:RedFlag&oldid=28680",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28680
+    },
+    {
+      "name": "RedSkullST",
+      "parent": "Skull",
+      "editorNumber": null,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28689,
+      "timestamp": "2010-11-20T11:19:30Z",
+      "page": "Classes:RedSkullST",
+      "url": "https://zdoom.org/w/index.php?title=Classes:RedSkullST&oldid=28689",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28689
+    },
+    {
+      "name": "Revenant",
+      "parent": null,
+      "editorNumber": 66,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48929,
+      "timestamp": "2021-12-27T11:16:34Z",
+      "page": "Classes:Revenant",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Revenant&oldid=48929",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48929
+    },
+    {
+      "name": "RevenantTracer",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 48912,
+      "timestamp": "2021-12-27T11:14:10Z",
+      "page": "Classes:RevenantTracer",
+      "url": "https://zdoom.org/w/index.php?title=Classes:RevenantTracer&oldid=48912",
+      "contributors": [
+        "Blue Shadow",
+        "Cutman",
+        "Enjay",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48912
+    },
+    {
+      "name": "RevenantTracerSmoke",
+      "parent": null,
+      "editorNumber": null,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 48900,
+      "timestamp": "2021-12-27T11:12:34Z",
+      "page": "Classes:RevenantTracerSmoke",
+      "url": "https://zdoom.org/w/index.php?title=Classes:RevenantTracerSmoke&oldid=48900",
+      "contributors": [
+        "Blue Shadow",
+        "Cutman",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48900
+    },
+    {
+      "name": "ScoreItem",
+      "parent": "Inventory",
+      "editorNumber": null,
+      "native": true,
+      "game": "",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 52603,
+      "timestamp": "2024-05-06T08:32:22Z",
+      "page": "Classes:ScoreItem",
+      "url": "https://zdoom.org/w/index.php?title=Classes:ScoreItem&oldid=52603",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 52603
+    },
+    {
+      "name": "ScriptedMarine",
+      "parent": null,
+      "editorNumber": 9100,
+      "native": true,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48934,
+      "timestamp": "2021-12-27T11:17:09Z",
+      "page": "Classes:ScriptedMarine",
+      "url": "https://zdoom.org/w/index.php?title=Classes:ScriptedMarine&oldid=48934",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "HotWax",
+        "InsanityBringer",
+        "Jekyll Grim Payne",
+        "Roack16"
+      ],
+      "latestRevision": 48934
+    },
+    {
+      "name": "Skull",
+      "parent": "TeamItem",
+      "editorNumber": null,
+      "native": true,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28687,
+      "timestamp": "2010-11-20T11:14:28Z",
+      "page": "Classes:Skull",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Skull&oldid=28687",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28687
+    },
+    {
+      "name": "Stalagmite",
+      "parent": null,
+      "editorNumber": 5050,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 53634,
+      "timestamp": "2024-11-08T12:03:52Z",
+      "page": "Classes:Stalagmite",
+      "url": "https://zdoom.org/w/index.php?title=Classes:Stalagmite&oldid=53634",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 53634
+    },
+    {
+      "name": "StealthArachnotron",
+      "parent": "Arachnotron",
+      "editorNumber": 9050,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48888,
+      "timestamp": "2021-12-27T11:10:29Z",
+      "page": "Classes:StealthArachnotron",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthArachnotron&oldid=48888",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne",
+        "Solarsnowfall"
+      ],
+      "latestRevision": 48888
+    },
+    {
+      "name": "StealthArchvile",
+      "parent": "Archvile",
+      "editorNumber": 9051,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48893,
+      "timestamp": "2021-12-27T11:11:31Z",
+      "page": "Classes:StealthArchvile",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthArchvile&oldid=48893",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48893
+    },
+    {
+      "name": "StealthBaron",
+      "parent": "BaronOfHell",
+      "editorNumber": 9052,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48897,
+      "timestamp": "2021-12-27T11:12:00Z",
+      "page": "Classes:StealthBaron",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthBaron&oldid=48897",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48897
+    },
+    {
+      "name": "StealthCacodemon",
+      "parent": "Cacodemon",
+      "editorNumber": 9053,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48895,
+      "timestamp": "2021-12-27T11:11:44Z",
+      "page": "Classes:StealthCacodemon",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthCacodemon&oldid=48895",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48895
+    },
+    {
+      "name": "StealthChaingunGuy",
+      "parent": "ChaingunGuy",
+      "editorNumber": 9054,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48889,
+      "timestamp": "2021-12-27T11:10:41Z",
+      "page": "Classes:StealthChaingunGuy",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthChaingunGuy&oldid=48889",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48889
+    },
+    {
+      "name": "StealthDemon",
+      "parent": "Demon",
+      "editorNumber": 9055,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48901,
+      "timestamp": "2021-12-27T11:12:42Z",
+      "page": "Classes:StealthDemon",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthDemon&oldid=48901",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne",
+        "Solarsnowfall"
+      ],
+      "latestRevision": 48901
+    },
+    {
+      "name": "StealthDoomImp",
+      "parent": "DoomImp",
+      "editorNumber": 9057,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48896,
+      "timestamp": "2021-12-27T11:11:53Z",
+      "page": "Classes:StealthDoomImp",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthDoomImp&oldid=48896",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48896
+    },
+    {
+      "name": "StealthFatso",
+      "parent": "Fatso",
+      "editorNumber": 9058,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48890,
+      "timestamp": "2021-12-27T11:10:51Z",
+      "page": "Classes:StealthFatso",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthFatso&oldid=48890",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48890
+    },
+    {
+      "name": "StealthHellKnight",
+      "parent": "HellKnight",
+      "editorNumber": 9056,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48899,
+      "timestamp": "2021-12-27T11:12:27Z",
+      "page": "Classes:StealthHellKnight",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthHellKnight&oldid=48899",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48899
+    },
+    {
+      "name": "StealthRevenant",
+      "parent": "Revenant",
+      "editorNumber": 9059,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48894,
+      "timestamp": "2021-12-27T11:11:37Z",
+      "page": "Classes:StealthRevenant",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthRevenant&oldid=48894",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48894
+    },
+    {
+      "name": "StealthShotgunGuy",
+      "parent": "ShotgunGuy",
+      "editorNumber": 9060,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48891,
+      "timestamp": "2021-12-27T11:11:05Z",
+      "page": "Classes:StealthShotgunGuy",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthShotgunGuy&oldid=48891",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48891
+    },
+    {
+      "name": "StealthZombieMan",
+      "parent": "ZombieMan",
+      "editorNumber": 9061,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48892,
+      "timestamp": "2021-12-27T11:11:23Z",
+      "page": "Classes:StealthZombieMan",
+      "url": "https://zdoom.org/w/index.php?title=Classes:StealthZombieMan&oldid=48892",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48892
+    },
+    {
+      "name": "TeamItem",
+      "parent": "Inventory",
+      "editorNumber": null,
+      "native": true,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28686,
+      "timestamp": "2010-11-20T11:11:45Z",
+      "page": "Classes:TeamItem",
+      "url": "https://zdoom.org/w/index.php?title=Classes:TeamItem&oldid=28686",
+      "contributors": [
+        "Gez",
+        "XutaWoo"
+      ],
+      "latestRevision": 28686
+    },
+    {
+      "name": "UnholyBible",
+      "parent": "ScoreItem",
+      "editorNumber": 2017,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 39273,
+      "timestamp": "2015-04-28T20:34:17Z",
+      "page": "Classes:UnholyBible",
+      "url": "https://zdoom.org/w/index.php?title=Classes:UnholyBible&oldid=39273",
+      "contributors": [
+        "Blue Shadow",
+        "Gez"
+      ],
+      "latestRevision": 39273
+    },
+    {
+      "name": "WhiteFlag",
+      "parent": "Flag",
+      "editorNumber": 5132,
+      "native": false,
+      "game": "Skulltag",
+      "modifications": [
+        "wiki links and templates expanded"
+      ],
+      "revision": 28681,
+      "timestamp": "2010-11-20T11:08:50Z",
+      "page": "Classes:WhiteFlag",
+      "url": "https://zdoom.org/w/index.php?title=Classes:WhiteFlag&oldid=28681",
+      "contributors": [
+        "Gez"
+      ],
+      "latestRevision": 28681
+    },
+    {
+      "name": "WolfensteinSS",
+      "parent": null,
+      "editorNumber": 84,
+      "native": false,
+      "game": "Doom2",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 48932,
+      "timestamp": "2021-12-27T11:16:51Z",
+      "page": "Classes:WolfensteinSS",
+      "url": "https://zdoom.org/w/index.php?title=Classes:WolfensteinSS&oldid=48932",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Grubber",
+        "HotWax",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 48932
+    },
+    {
+      "name": "ZBridge",
+      "parent": "CustomBridge",
+      "editorNumber": 118,
+      "native": false,
+      "game": "Doom",
+      "modifications": [
+        "wiki links and templates expanded",
+        "editor number restored from Actor infobox"
+      ],
+      "revision": 53629,
+      "timestamp": "2024-11-08T12:00:38Z",
+      "page": "Classes:ZBridge",
+      "url": "https://zdoom.org/w/index.php?title=Classes:ZBridge&oldid=53629",
+      "contributors": [
+        "Blue Shadow",
+        "Gez",
+        "Jekyll Grim Payne"
+      ],
+      "latestRevision": 53629
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+    "type": "tileset",
+    "version": "1.10",
+    "name": "grapples",
+    "tilewidth": 28,
+    "tileheight": 16,
+    "columns": 0,
+    "tilecount": 3,
+    "tiles": [
+        {
+            "id": 0,
+            "class": "grapple-handle",
+            "image": "grapple-handle.png",
+            "imagewidth": 28,
+            "imageheight": 16
+        },
+        {
+            "id": 1,
+            "class": "rope-segment",
+            "image": "rope-segment.png",
+            "imagewidth": 6,
+            "imageheight": 8
+        },
+        {
+            "id": 2,
+            "class": "rope-anchor",
+            "image": "rope-anchor.png",
+            "imagewidth": 16,
+            "imageheight": 16
+        }
+    ]
+}

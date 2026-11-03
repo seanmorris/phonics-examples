@@ -1,0 +1,68 @@
+{
+  "type": "world",
+  "maps": [
+    {
+      "fileName": "../examples/assets/stream-0.tmj",
+      "x": -2048,
+      "y": 0,
+      "width": 1024,
+      "height": 640
+    },
+    {
+      "fileName": "../examples/assets/stream-1.tmj",
+      "x": -1024,
+      "y": 0,
+      "width": 1024,
+      "height": 640
+    },
+    {
+      "fileName": "../examples/assets/stream-2.tmj",
+      "x": 0,
+      "y": 0,
+      "width": 1024,
+      "height": 640
+    },
+    {
+      "fileName": "../examples/assets/stream-3.tmj",
+      "x": 1024,
+      "y": 0,
+      "width": 1024,
+      "height": 640
+    },
+    {
+      "fileName": "../examples/assets/stream-4.tmj",
+      "x": 2048,
+      "y": 0,
+      "width": 1024,
+      "height": 640
+    }
+  ],
+  "onlyShowAdjacentMaps": false,
+  "properties": [
+    {
+      "name": "phonics.import.sane",
+      "type": "string",
+      "value": "../phonics.json"
+    },
+    {
+      "name": "phonics.start",
+      "type": "string",
+      "value": "../examples/assets/stream-0.tmj"
+    },
+    {
+      "name": "sane.scene",
+      "type": "string",
+      "value": "world"
+    },
+    {
+      "name": "sane.profile",
+      "type": "string",
+      "value": "runner"
+    },
+    {
+      "name": "sane.intro",
+      "type": "bool",
+      "value": false
+    }
+  ]
+}

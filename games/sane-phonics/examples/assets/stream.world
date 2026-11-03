@@ -1,0 +1,40 @@
+{
+    "type": "world",
+    "maps": [
+        {
+            "fileName": "stream-0.tmj",
+            "x": -2048,
+            "y": 0,
+            "width": 1024,
+            "height": 640
+        },
+        {
+            "fileName": "stream-1.tmj",
+            "x": -1024,
+            "y": 0,
+            "width": 1024,
+            "height": 640
+        },
+        {
+            "fileName": "stream-2.tmj",
+            "x": 0,
+            "y": 0,
+            "width": 1024,
+            "height": 640
+        },
+        {
+            "fileName": "stream-3.tmj",
+            "x": 1024,
+            "y": 0,
+            "width": 1024,
+            "height": 640
+        },
+        {
+            "fileName": "stream-4.tmj",
+            "x": 2048,
+            "y": 0,
+            "width": 1024,
+            "height": 640
+        }
+    ]
+}

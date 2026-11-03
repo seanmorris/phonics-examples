@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "object": {
+    "name": "player",
+    "type": "SanePhonics.Player",
+    "x": 0,
+    "y": 0,
+    "width": 24,
+    "height": 40,
+    "rotation": 0,
+    "visible": true,
+    "properties": [
+      {
+        "name": "profile",
+        "type": "string",
+        "value": "runner"
+      },
+      {
+        "name": "phonics.entity",
+        "type": "string",
+        "value": "../phonics.json#player"
+      }
+    ]
+  }
+}

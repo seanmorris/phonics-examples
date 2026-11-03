@@ -1,0 +1,26 @@
+{
+    "type": "tileset",
+    "version": "1.10",
+    "name": "platforms",
+    "tilewidth": 96,
+    "tileheight": 16,
+    "columns": 3,
+    "tilecount": 3,
+    "image": "platforms.png",
+    "imagewidth": 288,
+    "imageheight": 16,
+    "tiles": [
+        {
+            "id": 0,
+            "class": "floating-platform"
+        },
+        {
+            "id": 1,
+            "class": "moving-platform"
+        },
+        {
+            "id": 2,
+            "class": "path-platform"
+        }
+    ]
+}

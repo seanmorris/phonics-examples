@@ -1,0 +1,40 @@
+{
+  "type": "world",
+  "maps": [
+    {
+      "fileName": "../examples/assets/vehicles.tmj",
+      "x": 0,
+      "y": 0,
+      "width": 960,
+      "height": 540
+    }
+  ],
+  "onlyShowAdjacentMaps": false,
+  "properties": [
+    {
+      "name": "phonics.import.sane",
+      "type": "string",
+      "value": "../phonics.json"
+    },
+    {
+      "name": "phonics.start",
+      "type": "string",
+      "value": "../examples/assets/vehicles.tmj"
+    },
+    {
+      "name": "sane.scene",
+      "type": "string",
+      "value": "vehicles"
+    },
+    {
+      "name": "sane.profile",
+      "type": "string",
+      "value": "runner"
+    },
+    {
+      "name": "sane.intro",
+      "type": "bool",
+      "value": false
+    }
+  ]
+}

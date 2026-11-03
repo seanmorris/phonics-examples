@@ -1,0 +1,193 @@
+{
+  "type": "world",
+  "onlyShowAdjacentMaps": false,
+  "maps": [
+    {
+      "fileName": "stage-01.tmj",
+      "x": 0,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-02.tmj",
+      "x": 680,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-03.tmj",
+      "x": 1360,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-04.tmj",
+      "x": 2040,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-05.tmj",
+      "x": 2720,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-06.tmj",
+      "x": 3400,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-07.tmj",
+      "x": 4080,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-08.tmj",
+      "x": 4760,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-09.tmj",
+      "x": 5440,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-10.tmj",
+      "x": 6120,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-11.tmj",
+      "x": 6800,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-12.tmj",
+      "x": 7480,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-13.tmj",
+      "x": 8160,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-14.tmj",
+      "x": 8840,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-15.tmj",
+      "x": 9520,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-16.tmj",
+      "x": 10200,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-17.tmj",
+      "x": 10880,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-18.tmj",
+      "x": 11560,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-19.tmj",
+      "x": 12240,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-20.tmj",
+      "x": 12920,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-21.tmj",
+      "x": 13600,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-22.tmj",
+      "x": 14280,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-23.tmj",
+      "x": 14960,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-24.tmj",
+      "x": 15640,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    },
+    {
+      "fileName": "stage-25.tmj",
+      "x": 16320,
+      "y": 0,
+      "width": 640,
+      "height": 480
+    }
+  ],
+  "properties": [
+    {
+      "name": "phonics.import.php-noid",
+      "type": "string",
+      "value": "../phonics.json"
+    },
+    {
+      "name": "phonics.start",
+      "type": "string",
+      "value": "stage-01.tmj"
+    }
+  ]
+}

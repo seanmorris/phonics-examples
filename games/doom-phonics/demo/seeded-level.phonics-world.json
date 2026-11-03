@@ -1,0 +1,58 @@
+{
+    "type": "phonics-world",
+    "schemaVersion": 1,
+    "imports": {
+        "doom": "../phonics.json"
+    },
+    "sources": {
+        "seeded-level": {
+            "adapter": "@doom/wad",
+            "resources": [
+                {
+                    "url": "./DOOM1.WAD",
+                    "role": "iwad",
+                    "integrity": "sha256-HX1DvlAeZ9kn5BXguPPinDvzMHXoWXIYFvZSpSbKx3E="
+                },
+                {
+                    "url": "./SEEDED.WAD",
+                    "role": "pwad",
+                    "integrity": "sha256-mOxrt05WsGiUuko0Qh9RgWaceDZeWZ6s3lA/WQQQ3Ew="
+                }
+            ]
+        }
+    },
+    "bindings": [
+        {
+            "id": "seeded-level-gameplay",
+            "use": "@doom/episode",
+            "on": {
+                "source": "seeded-level",
+                "kind": "map",
+                "tags": [
+                    "wad-map"
+                ]
+            },
+            "options": {
+                "skill": 2,
+                "fov": 90,
+                "renderScale": 0.5,
+                "movement": {
+                    "maxSpeed": 420,
+                    "acceleration": 1531.25,
+                    "friction": 0.90625,
+                    "gravity": 1225,
+                    "maxStep": 24
+                }
+            }
+        }
+    ],
+    "transitions": [],
+    "start": {
+        "source": "seeded-level",
+        "scope": "SEEDED"
+    },
+    "view": {
+        "width": 960,
+        "height": 540
+    }
+}

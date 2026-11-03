@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "slug": "doom-phonics",
+  "title": "Doom-Phonics",
+  "description": "A WAD adapter, DECORATE actor runtime, multiplayer simulation, and direct GLES renderer.",
+  "application": "dist/game.phar",
+  "poster": "poster.webp",
+  "canvas": {
+    "width": 960,
+    "height": 540
+  },
+  "aspectRatio": "16/9",
+  "fit": "contain",
+  "documentation": {
+    "chapters": [
+      {
+        "slug": "index",
+        "title": "Doom-Phonics",
+        "path": "docs/index.md"
+      },
+      {
+        "slug": "launcher",
+        "title": "WAD stacks and launcher",
+        "path": "docs/launcher.md"
+      },
+      {
+        "slug": "wad-and-decorate",
+        "title": "WAD and DECORATE",
+        "path": "docs/wad-and-decorate.md"
+      },
+      {
+        "slug": "multiplayer",
+        "title": "Multiplayer and replication",
+        "path": "docs/multiplayer.md"
+      },
+      {
+        "slug": "rendering",
+        "title": "Rendering and performance",
+        "path": "docs/rendering.md"
+      },
+      {
+        "slug": "seeded-levels",
+        "title": "Seeded layered levels",
+        "path": "docs/seeded-levels.md"
+      },
+      {
+        "slug": "procedural-structures",
+        "title": "Parametric room structures",
+        "path": "docs/procedural-structures.md"
+      }
+    ],
+    "api": {
+      "namespace": "DoomPhonics",
+      "description": "WAD adapters, Doom gameplay, input, networking, and direct GLES rendering."
+    },
+    "embed": {
+      "kind": "local"
+    },
+    "dataOrigins": [
+      "*"
+    ]
+  }
+}

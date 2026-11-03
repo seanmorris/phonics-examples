@@ -1,0 +1,13 @@
+{
+  "expand": {"label": "Expand", "symbol": "+", "action": "expand", "group": "size", "duration": 25, "width": 132, "color": [0.3, 0.9, 0.6]},
+  "shrink": {"label": "Shrink", "symbol": "−", "action": "shrink", "group": "size", "duration": 15, "width": 52, "color": [0.8, 0.4, 1]},
+  "catch": {"label": "Catch", "symbol": "C", "action": "catch", "duration": 25, "color": [0.2, 0.8, 0.5]},
+  "split": {"label": "Three balls", "symbol": "3", "action": "split", "duration": 0, "color": [0.3, 0.6, 1]},
+  "laser": {"label": "Twin lasers", "symbol": "L", "action": "laser", "group": "weapon", "duration": 20, "color": [1, 0.3, 0.4]},
+  "missile": {"label": "Column missile", "symbol": "M", "action": "missile", "group": "weapon", "duration": 15, "color": [1, 0.7, 0.2]},
+  "power": {"label": "Power ball", "symbol": "P", "action": "power", "duration": 20, "color": [1, 0.9, 0.3]},
+  "fast": {"label": "Fast ball", "symbol": "F", "action": "fast", "group": "speed", "duration": 15, "speed": 1.35, "color": [1, 0.4, 0.1]},
+  "slow": {"label": "Slow ball", "symbol": "S", "action": "slow", "group": "speed", "duration": 20, "speed": 0.7, "color": [0.4, 0.8, 1]},
+  "extra": {"label": "Extra life", "symbol": "♥", "action": "extra", "duration": 0, "color": [1, 0.5, 0.8]},
+  "exit": {"label": "Stage exit", "symbol": "»", "action": "exit", "duration": 0, "color": [0.7, 1, 1]}
+}

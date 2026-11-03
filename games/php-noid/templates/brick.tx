@@ -1,0 +1,45 @@
+{
+  "type": "template",
+  "object": {
+    "name": "brick",
+    "type": "PhpNoid.Brick",
+    "x": 0,
+    "y": 0,
+    "width": 54,
+    "height": 20,
+    "rotation": 0,
+    "visible": true,
+    "properties": [
+      {
+        "name": "hits",
+        "type": "int",
+        "value": 1
+      },
+      {
+        "name": "unbreakable",
+        "type": "bool",
+        "value": false
+      },
+      {
+        "name": "capsule",
+        "type": "string",
+        "value": ""
+      },
+      {
+        "name": "score",
+        "type": "int",
+        "value": 100
+      },
+      {
+        "name": "phonics.entity",
+        "type": "string",
+        "value": "../phonics.json#brick"
+      },
+      {
+        "name": "material",
+        "type": "string",
+        "value": "normal"
+      }
+    ]
+  }
+}

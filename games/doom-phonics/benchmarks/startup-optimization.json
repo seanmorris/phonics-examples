@@ -1,0 +1,127 @@
+{
+  "date": "2026-10-24",
+  "environment": "Headless Chromium, SwiftShader, PHP 8.4 WASM, local static preview",
+  "measurement": "One fresh browser context per version and map. PHP hrtime markers and decoder counters injected into intercepted sources; no runtime instrumentation shipped. gameMs measures game.php entry through sceneReady; loadMs measures page navigation through Ready. Results are observations, not a hardware-independent guarantee.",
+  "changes": [
+    "Index sprite frame/rotation lookup while preserving WAD precedence and paired mirroring",
+    "Resolve each distinct DECORATE sprite/frame once while constructing the atlas",
+    "Interleave palette/alpha planes in native string operations and pack whole rows"
+  ],
+  "runs": {
+    "default": {
+      "before": {
+        "gameMs": 12208.3,
+        "loadMs": 17492,
+        "atlasSpriteResolutionMs": 7983.9,
+        "atlasPackingMs": 1848.4,
+        "stats": {
+          "PatchDecoder": {
+            "ms": 1189.2000000000007,
+            "count": 741
+          },
+          "Fon2Font": {
+            "ms": 25.3,
+            "count": 1
+          },
+          "atlas": {
+            "width": 2045,
+            "height": 1915,
+            "images": 792
+          }
+        },
+        "errors": []
+      },
+      "after": {
+        "gameMs": 3611.7,
+        "loadMs": 8141,
+        "atlasSpriteResolutionMs": 866.4,
+        "atlasPackingMs": 349.8,
+        "stats": {
+          "PatchDecoder": {
+            "ms": 1195.8000000000004,
+            "count": 741
+          },
+          "Fon2Font": {
+            "ms": 23.2,
+            "count": 1
+          },
+          "atlas": {
+            "width": 2045,
+            "height": 1915,
+            "images": 792
+          }
+        },
+        "errors": []
+      }
+    },
+    "d2st9": {
+      "before": {
+        "gameMs": 31525.1,
+        "loadMs": 34825,
+        "atlasSpriteResolutionMs": 18368.9,
+        "atlasPackingMs": 7437.3,
+        "stats": {
+          "PatchDecoder": {
+            "ms": 4239.1000000000095,
+            "count": 2057
+          },
+          "PngDecoder": {
+            "ms": 1832.1,
+            "count": 185
+          },
+          "atlas": {
+            "width": 2047,
+            "height": 6184,
+            "images": 2219
+          }
+        },
+        "errors": []
+      },
+      "after": {
+        "gameMs": 13894.3,
+        "loadMs": 18558,
+        "atlasSpriteResolutionMs": 5534.4,
+        "atlasPackingMs": 1424.9,
+        "stats": {
+          "PatchDecoder": {
+            "ms": 4313.399999999992,
+            "count": 2057
+          },
+          "PngDecoder": {
+            "ms": 1692.4000000000003,
+            "count": 185
+          },
+          "atlas": {
+            "width": 2047,
+            "height": 6184,
+            "images": 2219
+          }
+        },
+        "errors": []
+      }
+    }
+  },
+  "equivalence": {
+    "default": {
+      "map": "E1M1",
+      "spriteChecks": 8991,
+      "images": 792,
+      "bytes": 7832350,
+      "sha256": "2a0ab6457f82fa78536c449ba280177d170e8182a8f6a4358be9595b75854c77"
+    },
+    "d2st9": {
+      "map": "D2ST9",
+      "spriteChecks": 8991,
+      "images": 2219,
+      "bytes": 25317296,
+      "sha256": "a97393d6edca5fc028e5ec6ad54856e05a4cbd0595cecea81c0e85eeb66ce87d"
+    },
+    "stacked-map04": {
+      "map": "MAP04",
+      "spriteChecks": 8991,
+      "images": 2190,
+      "bytes": 24252856,
+      "sha256": "bac15eb47ce001eee88710391e6f2e7f719ba232fdce82c1f24b0d605c2f0e95"
+    }
+  }
+}

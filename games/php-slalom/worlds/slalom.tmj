@@ -1,0 +1,19 @@
+{
+  "type": "map",
+  "version": "1.10",
+  "tiledversion": "1.12.2",
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "infinite": false,
+  "width": 1,
+  "height": 1,
+  "tilewidth": 104,
+  "tileheight": 16,
+  "layers": [],
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "source": "../assets/craft.tsj"
+    }
+  ]
+}

@@ -1,0 +1,564 @@
+{
+  "type": "world",
+  "onlyShowAdjacentMaps": false,
+  "maps": [
+    {
+      "fileName": "endless-01.tmj",
+      "x": 0,
+      "y": 0,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "race-01.tmj",
+      "x": 0,
+      "y": 520,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "time-01.tmj",
+      "x": 0,
+      "y": 1040,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-01.tmj",
+      "x": 0,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-02.tmj",
+      "x": 280,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-03.tmj",
+      "x": 560,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-04.tmj",
+      "x": 840,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-05.tmj",
+      "x": 1120,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-06.tmj",
+      "x": 1400,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-07.tmj",
+      "x": 1680,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-08.tmj",
+      "x": 1960,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-09.tmj",
+      "x": 2240,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-10.tmj",
+      "x": 2520,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-11.tmj",
+      "x": 2800,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-12.tmj",
+      "x": 3080,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-13.tmj",
+      "x": 3360,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-14.tmj",
+      "x": 3640,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "squares-15.tmj",
+      "x": 3920,
+      "y": 1560,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-01.tmj",
+      "x": 0,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-02.tmj",
+      "x": 280,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-03.tmj",
+      "x": 560,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-04.tmj",
+      "x": 840,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-05.tmj",
+      "x": 1120,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-06.tmj",
+      "x": 1400,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-07.tmj",
+      "x": 1680,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-08.tmj",
+      "x": 1960,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-09.tmj",
+      "x": 2240,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-10.tmj",
+      "x": 2520,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-11.tmj",
+      "x": 2800,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-12.tmj",
+      "x": 3080,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-13.tmj",
+      "x": 3360,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-14.tmj",
+      "x": 3640,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "cascade-15.tmj",
+      "x": 3920,
+      "y": 2080,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-01.tmj",
+      "x": 0,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-02.tmj",
+      "x": 280,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-03.tmj",
+      "x": 560,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-04.tmj",
+      "x": 840,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-05.tmj",
+      "x": 1120,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-06.tmj",
+      "x": 1400,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-07.tmj",
+      "x": 1680,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-08.tmj",
+      "x": 1960,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-09.tmj",
+      "x": 2240,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-10.tmj",
+      "x": 2520,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-11.tmj",
+      "x": 2800,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-12.tmj",
+      "x": 3080,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-13.tmj",
+      "x": 3360,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-14.tmj",
+      "x": 3640,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "targets-15.tmj",
+      "x": 3920,
+      "y": 2600,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-01.tmj",
+      "x": 0,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-02.tmj",
+      "x": 280,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-03.tmj",
+      "x": 560,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-04.tmj",
+      "x": 840,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-05.tmj",
+      "x": 1120,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-06.tmj",
+      "x": 1400,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-07.tmj",
+      "x": 1680,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-08.tmj",
+      "x": 1960,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-09.tmj",
+      "x": 2240,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-10.tmj",
+      "x": 2520,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-11.tmj",
+      "x": 2800,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-12.tmj",
+      "x": 3080,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-13.tmj",
+      "x": 3360,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-14.tmj",
+      "x": 3640,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "bonds-15.tmj",
+      "x": 3920,
+      "y": 3120,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-01.tmj",
+      "x": 0,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-02.tmj",
+      "x": 280,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-03.tmj",
+      "x": 560,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-04.tmj",
+      "x": 840,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-05.tmj",
+      "x": 1120,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-06.tmj",
+      "x": 1400,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-07.tmj",
+      "x": 1680,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-08.tmj",
+      "x": 1960,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-09.tmj",
+      "x": 2240,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-10.tmj",
+      "x": 2520,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-11.tmj",
+      "x": 2800,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-12.tmj",
+      "x": 3080,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-13.tmj",
+      "x": 3360,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-14.tmj",
+      "x": 3640,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    },
+    {
+      "fileName": "reactor-15.tmj",
+      "x": 3920,
+      "y": 3640,
+      "width": 240,
+      "height": 480
+    }
+  ],
+  "properties": [
+    {
+      "name": "phonics.import.php-tris",
+      "type": "string",
+      "value": "../phonics.json"
+    },
+    {
+      "name": "phonics.start",
+      "type": "string",
+      "value": "endless-01.tmj"
+    }
+  ]
+}

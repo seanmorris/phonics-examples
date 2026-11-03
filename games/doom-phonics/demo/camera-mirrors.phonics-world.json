@@ -1,0 +1,51 @@
+{
+  "type": "phonics-world",
+  "schemaVersion": 1,
+  "imports": {
+    "doom": "../phonics.json"
+  },
+  "sources": {
+    "camera-mirrors": {
+      "adapter": "@doom/wad",
+      "resources": [
+        {
+          "url": "./DOOM1.WAD",
+          "role": "iwad",
+          "integrity": "sha256-HX1DvlAeZ9kn5BXguPPinDvzMHXoWXIYFvZSpSbKx3E="
+        },
+        {
+          "url": "./PORTALS.WAD",
+          "role": "pwad",
+          "integrity": "sha256-kZXG0pU72vg8LLZyP7+EUXxYYpy79Hn4s4WPyoCsWS0="
+        }
+      ]
+    }
+  },
+  "bindings": [
+    {
+      "id": "camera-mirrors-gameplay",
+      "use": "@doom/episode",
+      "on": {
+        "source": "camera-mirrors",
+        "kind": "map",
+        "tags": [
+          "wad-map"
+        ]
+      },
+      "options": {
+        "skill": 2,
+        "fov": 90,
+        "renderScale": 0.5
+      }
+    }
+  ],
+  "transitions": [],
+  "start": {
+    "source": "camera-mirrors",
+    "scope": "CAMERAS"
+  },
+  "view": {
+    "width": 960,
+    "height": 540
+  }
+}

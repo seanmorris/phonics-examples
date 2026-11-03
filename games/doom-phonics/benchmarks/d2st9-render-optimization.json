@@ -1,0 +1,454 @@
+{
+  "measuredAt": "2026-10-24",
+  "wad": "Skulltag v0.97d5 over DOOM2.WAD",
+  "map": "D2ST9",
+  "changes": [
+    "Cache pixel-store queries until pixelStorei or context loss/restoration; native queries still validate writes.",
+    "Reuse unchanged plane material names; clamp sector interpolation once per frame."
+  ],
+  "timingNote": "CPU durations include graphics-driver waits and are not GPU execution times. Removing the synchronous state read allows queued drawing to overlap CPU work. Frame intervals measure the actual presentation cadence.",
+  "before": {
+    "url": "http://127.0.0.1:9130/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+    "loadMs": 20929,
+    "browser": "152.0.7977.75",
+    "software": true,
+    "gl": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "cpuSampling": "latest 10 Hz diagnostic per animation frame",
+    "runs": [
+      {
+        "view": "blue-base",
+        "resolution": "native",
+        "scene": [
+          960,
+          540,
+          1
+        ],
+        "fps": 13.88,
+        "frameP50Ms": 66.7,
+        "frameP95Ms": 100,
+        "mapCpuP50Ms": 26.1,
+        "renderCpuP50Ms": 34.5,
+        "simulationCpuP50Ms": 29.2,
+        "positionBefore": [
+          928,
+          -224,
+          0,
+          2.356194490192345
+        ],
+        "positionAfter": [
+          928,
+          -224,
+          0,
+          2.356194490192345
+        ],
+        "mapStagesP50Ms": {
+          "materials": 3.4,
+          "meshUpload": 0.3,
+          "sectors": 2.8,
+          "sectorUpload": 19.0,
+          "sky": 0.1,
+          "draw": 0.0
+        }
+      },
+      {
+        "view": "central-arena",
+        "resolution": "native",
+        "scene": [
+          960,
+          540,
+          1
+        ],
+        "fps": 10.39,
+        "frameP50Ms": 83.4,
+        "frameP95Ms": 150,
+        "mapCpuP50Ms": 29.8,
+        "renderCpuP50Ms": 36.2,
+        "simulationCpuP50Ms": 41.6,
+        "positionBefore": [
+          1888,
+          3008,
+          -64,
+          3.141592653589793
+        ],
+        "positionAfter": [
+          1888,
+          3008,
+          -64,
+          -11.786978774981614
+        ],
+        "mapStagesP50Ms": {
+          "materials": 3.9,
+          "meshUpload": 0.2,
+          "sectors": 3,
+          "sectorUpload": 20.2,
+          "sky": 0.1,
+          "draw": 0
+        }
+      },
+      {
+        "view": "ramp-walk",
+        "resolution": "native",
+        "scene": [
+          960,
+          540,
+          1
+        ],
+        "fps": 10.63,
+        "frameP50Ms": 83.4,
+        "frameP95Ms": 150,
+        "mapCpuP50Ms": 28.7,
+        "renderCpuP50Ms": 37.9,
+        "simulationCpuP50Ms": 47.2,
+        "positionBefore": [
+          32,
+          2384,
+          4,
+          1.5707963267948966
+        ],
+        "positionAfter": [
+          32,
+          2703.99,
+          32,
+          1.5707963267948966
+        ],
+        "mapStagesP50Ms": {
+          "materials": 3.6,
+          "meshUpload": 0.2,
+          "sectors": 3.2,
+          "sectorUpload": 20.5,
+          "sky": 0.1,
+          "draw": 0
+        }
+      },
+      {
+        "view": "blue-base",
+        "resolution": "classic",
+        "scene": [
+          480,
+          270,
+          0.5
+        ],
+        "fps": 14.71,
+        "frameP50Ms": 66.6,
+        "frameP95Ms": 100,
+        "mapCpuP50Ms": 15.6,
+        "renderCpuP50Ms": 23.6,
+        "simulationCpuP50Ms": 32.3,
+        "positionBefore": [
+          928,
+          -224,
+          0,
+          2.356194490192345
+        ],
+        "positionAfter": [
+          928,
+          -224,
+          0,
+          2.356194490192345
+        ],
+        "mapStagesP50Ms": {
+          "materials": 3.6,
+          "meshUpload": 0.2,
+          "sectors": 2.7,
+          "sectorUpload": 5.7,
+          "sky": 0.1,
+          "draw": 0
+        }
+      },
+      {
+        "view": "central-arena",
+        "resolution": "classic",
+        "scene": [
+          480,
+          270,
+          0.5
+        ],
+        "fps": 23.54,
+        "frameP50Ms": 33.4,
+        "frameP95Ms": 50.1,
+        "mapCpuP50Ms": 16.6,
+        "renderCpuP50Ms": 21.5,
+        "simulationCpuP50Ms": 20.9,
+        "positionBefore": [
+          1888,
+          3008,
+          -64,
+          3.141592653589793
+        ],
+        "positionAfter": [
+          1888,
+          3008,
+          -64,
+          -12.572693060695897
+        ],
+        "mapStagesP50Ms": {
+          "materials": 3.5,
+          "meshUpload": 0.2,
+          "sectors": 2.8,
+          "sectorUpload": 10.1,
+          "sky": 0.1,
+          "draw": 0.0
+        }
+      },
+      {
+        "view": "ramp-walk",
+        "resolution": "classic",
+        "scene": [
+          480,
+          270,
+          0.5
+        ],
+        "fps": 18.28,
+        "frameP50Ms": 50,
+        "frameP95Ms": 83.4,
+        "mapCpuP50Ms": 19.3,
+        "renderCpuP50Ms": 27.3,
+        "simulationCpuP50Ms": 24.2,
+        "positionBefore": [
+          32,
+          2384,
+          4,
+          1.5707963267948966
+        ],
+        "positionAfter": [
+          32,
+          2703.99,
+          32,
+          1.5707963267948966
+        ],
+        "mapStagesP50Ms": {
+          "materials": 3.5,
+          "meshUpload": 0.2,
+          "sectors": 2.8,
+          "sectorUpload": 12.3,
+          "sky": 0.1,
+          "draw": 0.0
+        }
+      }
+    ],
+    "errors": [],
+    "sampleSecondsPerView": 6
+  },
+  "after": {
+    "url": "http://127.0.0.1:9130/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+    "loadMs": 21241,
+    "browser": "152.0.7977.75",
+    "software": true,
+    "gl": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "cpuSampling": "latest 10 Hz diagnostic per animation frame",
+    "runs": [
+      {
+        "view": "blue-base",
+        "resolution": "native",
+        "scene": [
+          960,
+          540,
+          1
+        ],
+        "fps": 14.84,
+        "frameP50Ms": 66.7,
+        "frameP95Ms": 83.4,
+        "mapCpuP50Ms": 4,
+        "mapStagesP50Ms": {
+          "materials": 2.2,
+          "meshUpload": 0.2,
+          "sectors": 1.3,
+          "sectorUpload": 0.1,
+          "sky": 0.1,
+          "draw": 0.0
+        },
+        "renderCpuP50Ms": 16.1,
+        "simulationCpuP50Ms": 32.7,
+        "positionBefore": [
+          928,
+          -224,
+          0,
+          2.356194490192345
+        ],
+        "positionAfter": [
+          928,
+          -224,
+          0,
+          2.356194490192345
+        ]
+      },
+      {
+        "view": "central-arena",
+        "resolution": "native",
+        "scene": [
+          960,
+          540,
+          1
+        ],
+        "fps": 15.46,
+        "frameP50Ms": 66.6,
+        "frameP95Ms": 83.4,
+        "mapCpuP50Ms": 3.9,
+        "mapStagesP50Ms": {
+          "materials": 2.1,
+          "meshUpload": 0.2,
+          "sectors": 1.3,
+          "sectorUpload": 0.1,
+          "sky": 0.1,
+          "draw": 0
+        },
+        "renderCpuP50Ms": 12.3,
+        "simulationCpuP50Ms": 34.5,
+        "positionBefore": [
+          1888,
+          3008,
+          -64,
+          3.141592653589793
+        ],
+        "positionAfter": [
+          1888,
+          3008,
+          -64,
+          -12.215550203553041
+        ]
+      },
+      {
+        "view": "ramp-walk",
+        "resolution": "native",
+        "scene": [
+          960,
+          540,
+          1
+        ],
+        "fps": 14.75,
+        "frameP50Ms": 66.7,
+        "frameP95Ms": 100,
+        "mapCpuP50Ms": 4.1,
+        "mapStagesP50Ms": {
+          "materials": 2.2,
+          "meshUpload": 0.2,
+          "sectors": 1.3,
+          "sectorUpload": 0.1,
+          "sky": 0.1,
+          "draw": 0
+        },
+        "renderCpuP50Ms": 13.6,
+        "simulationCpuP50Ms": 32.7,
+        "positionBefore": [
+          32,
+          2384,
+          4,
+          1.5707963267948966
+        ],
+        "positionAfter": [
+          32,
+          2703.99,
+          32,
+          1.5707963267948966
+        ]
+      },
+      {
+        "view": "blue-base",
+        "resolution": "classic",
+        "scene": [
+          480,
+          270,
+          0.5
+        ],
+        "fps": 14.84,
+        "frameP50Ms": 66.7,
+        "frameP95Ms": 100,
+        "mapCpuP50Ms": 4.3,
+        "mapStagesP50Ms": {
+          "materials": 2.2,
+          "meshUpload": 0.2,
+          "sectors": 1.3,
+          "sectorUpload": 0.1,
+          "sky": 0.1,
+          "draw": 0.0
+        },
+        "renderCpuP50Ms": 17.8,
+        "simulationCpuP50Ms": 38.5,
+        "positionBefore": [
+          928,
+          -224,
+          0,
+          2.356194490192345
+        ],
+        "positionAfter": [
+          928,
+          -224,
+          0,
+          2.356194490192345
+        ]
+      },
+      {
+        "view": "central-arena",
+        "resolution": "classic",
+        "scene": [
+          480,
+          270,
+          0.5
+        ],
+        "fps": 22.27,
+        "frameP50Ms": 50,
+        "frameP95Ms": 66.7,
+        "mapCpuP50Ms": 4.2,
+        "mapStagesP50Ms": {
+          "materials": 2.25,
+          "meshUpload": 0.2,
+          "sectors": 1.3,
+          "sectorUpload": 0.1,
+          "sky": 0.1,
+          "draw": 0.0
+        },
+        "renderCpuP50Ms": 12.6,
+        "simulationCpuP50Ms": 24.2,
+        "positionBefore": [
+          1888,
+          3008,
+          -64,
+          3.141592653589793
+        ],
+        "positionAfter": [
+          1888,
+          3008,
+          -64,
+          -12.501264489267326
+        ]
+      },
+      {
+        "view": "ramp-walk",
+        "resolution": "classic",
+        "scene": [
+          480,
+          270,
+          0.5
+        ],
+        "fps": 21.98,
+        "frameP50Ms": 49.9,
+        "frameP95Ms": 66.6,
+        "mapCpuP50Ms": 4,
+        "mapStagesP50Ms": {
+          "materials": 2.1,
+          "meshUpload": 0.2,
+          "sectors": 1.3,
+          "sectorUpload": 0.1,
+          "sky": 0.1,
+          "draw": 0
+        },
+        "renderCpuP50Ms": 13.6,
+        "simulationCpuP50Ms": 24.2,
+        "positionBefore": [
+          32,
+          2384,
+          4,
+          1.5707963267948966
+        ],
+        "positionAfter": [
+          32,
+          2703.99,
+          32,
+          1.5707963267948966
+        ]
+      }
+    ],
+    "errors": [],
+    "sampleSecondsPerView": 6
+  }
+}

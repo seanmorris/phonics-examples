@@ -1,0 +1,178 @@
+{
+  "type": "tileset",
+  "name": "PHPTris cells",
+  "tilewidth": 24,
+  "tileheight": 24,
+  "tilecount": 11,
+  "columns": 11,
+  "image": "blocks.png",
+  "imagewidth": 264,
+  "imageheight": 24,
+  "tiles": [
+    {
+      "id": 0,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#f06b45"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "normal"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#35d6aa"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "normal"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#a85ce8"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "normal"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#459fe0"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "normal"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#dfbd35"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "normal"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#e153a5"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "normal"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#75c936"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "normal"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#45536b"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "garbage"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#83c7ed"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "goal"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#ffbf3f"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "core"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "properties": [
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#a873ff"
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "value": "charge"
+        }
+      ]
+    }
+  ]
+}

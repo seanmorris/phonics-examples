@@ -1,0 +1,78 @@
+{
+  "map": "D2ST9",
+  "measurement": "MutationObserver over the whole document after loading, five seconds per state",
+  "before": [
+    {
+      "label": "title",
+      "elapsedMs": 5029,
+      "stateChanges": 41,
+      "counts": {
+        "CANVAS:attributes:data-doom-phonics": {
+          "mutations": 43,
+          "redundant": 2
+        },
+        "BUTTON.doom-phonics-info-back:attributes:hidden": {
+          "mutations": 43,
+          "redundant": 43
+        },
+        "OUTPUT.doom-phonics-readout:childList:": {
+          "mutations": 43,
+          "redundant": 43
+        }
+      }
+    },
+    {
+      "label": "game",
+      "elapsedMs": 5048.600000023842,
+      "stateChanges": 39,
+      "counts": {
+        "CANVAS:attributes:data-doom-phonics": {
+          "mutations": 39,
+          "redundant": 0
+        },
+        "BUTTON.doom-phonics-info-back:attributes:hidden": {
+          "mutations": 39,
+          "redundant": 39
+        },
+        "OUTPUT.doom-phonics-readout:childList:": {
+          "mutations": 39,
+          "redundant": 39
+        }
+      }
+    }
+  ],
+  "after": [
+    {
+      "label": "title",
+      "elapsedMs": 5002.300000011921,
+      "stateChanges": 40,
+      "counts": {}
+    },
+    {
+      "label": "game",
+      "elapsedMs": 5012.399999976158,
+      "stateChanges": 39,
+      "counts": {}
+    }
+  ],
+  "beforeErrors": [],
+  "afterErrors": [],
+  "staticPreviewAfter": {
+    "url": "http://127.0.0.1:9140/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+    "runs": [
+      {
+        "label": "title",
+        "elapsedMs": 5010,
+        "stateChanges": 43,
+        "counts": {}
+      },
+      {
+        "label": "game",
+        "elapsedMs": 5034.5,
+        "stateChanges": 39,
+        "counts": {}
+      }
+    ],
+    "errors": []
+  }
+}

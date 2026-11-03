@@ -1,0 +1,295 @@
+{
+    "type": "tileset",
+    "name": "demo",
+    "tilewidth": 32,
+    "tileheight": 32,
+    "columns": 37,
+    "tilecount": 37,
+    "image": "tiles.png",
+    "imagewidth": 1184,
+    "imageheight": 32,
+    "tiles": [
+        {
+            "id": 0,
+            "properties": [
+                {
+                    "name": "solid",
+                    "type": "bool",
+                    "value": true
+                }
+            ]
+        },
+        {
+            "id": 1,
+            "objectgroup": {
+                "objects": [
+                    {
+                        "x": 0,
+                        "y": 0,
+                        "polygon": [
+                            {
+                                "x": 0,
+                                "y": 32
+                            },
+                            {
+                                "x": 32,
+                                "y": 0
+                            },
+                            {
+                                "x": 32,
+                                "y": 32
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "id": 2,
+            "objectgroup": {
+                "objects": [
+                    {
+                        "x": 0,
+                        "y": 0,
+                        "polygon": [
+                            {
+                                "x": 0,
+                                "y": 0
+                            },
+                            {
+                                "x": 32,
+                                "y": 32
+                            },
+                            {
+                                "x": 0,
+                                "y": 32
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "id": 3,
+            "properties": [
+                {
+                    "name": "oneWay",
+                    "value": true
+                },
+                {
+                    "name": "grinding",
+                    "type": "bool",
+                    "value": true
+                }
+            ],
+            "objectgroup": {
+                "objects": [
+                    {
+                        "x": 0,
+                        "y": 0,
+                        "width": 32,
+                        "height": 6
+                    }
+                ]
+            }
+        },
+        {
+            "id": 4,
+            "class": "ring",
+            "properties": [
+                {
+                    "name": "ring.radius",
+                    "type": "float",
+                    "value": 12
+                },
+                {
+                    "name": "ring.value",
+                    "type": "int",
+                    "value": 1
+                }
+            ],
+            "animation": [
+                {
+                    "tileid": 4,
+                    "duration": 180
+                },
+                {
+                    "tileid": 5,
+                    "duration": 180
+                }
+            ]
+        },
+        {
+            "id": 6,
+            "class": "runner"
+        },
+        {
+            "id": 7,
+            "class": "glider"
+        },
+        {
+            "id": 8,
+            "class": "flyer"
+        },
+        {
+            "id": 9,
+            "class": "runner-crouching"
+        },
+        {
+            "id": 10,
+            "class": "glider-crouching"
+        },
+        {
+            "id": 11,
+            "class": "flyer-crouching"
+        },
+        {
+            "id": 12,
+            "class": "runner-rolling",
+            "animation": [
+                {
+                    "tileid": 12,
+                    "duration": 80
+                },
+                {
+                    "tileid": 13,
+                    "duration": 80
+                }
+            ]
+        },
+        {
+            "id": 14,
+            "class": "glider-rolling",
+            "animation": [
+                {
+                    "tileid": 14,
+                    "duration": 80
+                },
+                {
+                    "tileid": 15,
+                    "duration": 80
+                }
+            ]
+        },
+        {
+            "id": 16,
+            "class": "flyer-rolling",
+            "animation": [
+                {
+                    "tileid": 16,
+                    "duration": 80
+                },
+                {
+                    "tileid": 17,
+                    "duration": 80
+                }
+            ]
+        },
+        {
+            "id": 18,
+            "class": "crabmeat-standing"
+        },
+        {
+            "id": 19,
+            "class": "crabmeat-walking",
+            "animation": [
+                {
+                    "tileid": 19,
+                    "duration": 120
+                },
+                {
+                    "tileid": 20,
+                    "duration": 120
+                }
+            ]
+        },
+        {
+            "id": 21,
+            "class": "crabmeat-shooting",
+            "animation": [
+                {
+                    "tileid": 21,
+                    "duration": 100
+                },
+                {
+                    "tileid": 22,
+                    "duration": 100
+                }
+            ]
+        },
+        {
+            "id": 23,
+            "class": "badnik-projectile"
+        },
+        {
+            "id": 24,
+            "class": "badnik-explosion",
+            "animation": [
+                {
+                    "tileid": 24,
+                    "duration": 80
+                },
+                {
+                    "tileid": 25,
+                    "duration": 80
+                }
+            ]
+        },
+        {
+            "id": 26,
+            "class": "water-splash",
+            "animation": [
+                {
+                    "tileid": 26,
+                    "duration": 46
+                },
+                {
+                    "tileid": 27,
+                    "duration": 46
+                },
+                {
+                    "tileid": 28,
+                    "duration": 46
+                },
+                {
+                    "tileid": 29,
+                    "duration": 46
+                },
+                {
+                    "tileid": 30,
+                    "duration": 46
+                },
+                {
+                    "tileid": 31,
+                    "duration": 46
+                },
+                {
+                    "tileid": 32,
+                    "duration": 44
+                }
+            ]
+        },
+        {
+            "id": 33,
+            "class": "water-skim",
+            "animation": [
+                {
+                    "tileid": 33,
+                    "duration": 48
+                },
+                {
+                    "tileid": 34,
+                    "duration": 48
+                },
+                {
+                    "tileid": 35,
+                    "duration": 48
+                },
+                {
+                    "tileid": 36,
+                    "duration": 48
+                }
+            ]
+        }
+    ]
+}

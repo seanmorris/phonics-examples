@@ -1,0 +1,89 @@
+{
+  "name": "@seanmorris/php-buster",
+  "php": {
+    "autoload": {
+      "PhpBuster\\": "src/"
+    },
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "files": [
+      "autoload.php",
+      "game.php",
+      "application.php",
+      "src/Actor.php",
+      "src/Input/BusterActions.php",
+      "src/Input/InputSettings.php",
+      "src/Random.php",
+      "src/Render/Scene.php",
+      "src/Simulation.php"
+    ]
+  },
+  "exports": {
+    "game": {
+      "type": "game",
+      "php": "game.php",
+      "browser": "browser/game.mjs",
+      "modules": []
+    },
+    "buster": {
+      "type": "asset",
+      "path": "worlds/buster.world"
+    }
+  },
+  "tiled": {
+    "previews": [
+      "assets/sprites.png"
+    ]
+  },
+  "preload": [
+    "assets/explosion.wav",
+    "assets/sprites.png",
+    "assets/sprites.tsj",
+    "assets/starfield.png",
+    "assets/starfield.tsj"
+  ],
+  "application": {
+    "entry": "application.php"
+  },
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.0.0"
+  },
+  "dependencies": {},
+  "browser": {
+    "files": [
+      "browser/game.mjs"
+    ]
+  },
+  "assets": [
+    "assets/explosion.wav",
+    "assets/sprites.png",
+    "assets/sprites.tsj",
+    "assets/starfield.png",
+    "assets/starfield.tsj",
+    "worlds/buster.tmj",
+    "worlds/buster.world"
+  ],
+  "integrity": {
+    "application.php": "sha256-+EuZC8JJ2kt/6/GqxZ5dH6+L8Phi8tEU0pYQGnbnVJo=",
+    "assets/explosion.wav": "sha256-fsPSL6tXRcZ1UU8DyBIRySagdoXjevOi0yGt1wGWQjI=",
+    "assets/sprites.png": "sha256-x2WDcLFHZNBBJLFwxp6FkizXvVBePuDRZq91RxylX2c=",
+    "assets/sprites.tsj": "sha256-PaevvBs87J3aclx1RbYVPqZRajur681JDhR1aFoO6YM=",
+    "assets/starfield.png": "sha256-vww4roUoUkfMxM2axL2BEjzTRt3s/O+19iMOgMoDN+I=",
+    "assets/starfield.tsj": "sha256-Bbokl3i7SJiorOThQFdtzmDWiqJqpoBaO6ujeWNW8ls=",
+    "autoload.php": "sha256-CnC7WLaRuLfFPie9b0e98pXrZ69gkgjz++xI2FtzNFY=",
+    "browser/game.mjs": "sha256-s5iTaGb5jIs1NKzbcBnbkPknEL6CZJnZip0LetBMsm0=",
+    "game.php": "sha256-/dsWXdwfaeq8FbySV8tPNNPmIWiU29GU8HT2gPCcXEI=",
+    "src/Actor.php": "sha256-JVcvbdYn4bUuOtTDysuMSYvL6gPMoInL0z2yeWAhScw=",
+    "src/Input/BusterActions.php": "sha256-5y32nPyHnWLpWZ676Prz9uTSm89K5ORDy/ptovPLR6w=",
+    "src/Input/InputSettings.php": "sha256-x8ANtOCR4UqqgWvxBOCop0FU9LFE1MgbyO23WoeTLp8=",
+    "src/Random.php": "sha256-YnRD0MaTp48W7t4eF/79aYeS/7HX0OHjzjIneqjHIDU=",
+    "src/Render/Scene.php": "sha256-9qrNa0tlCScRBykVJ/S1KOs7BrVgwl7knXeZkuAxdvg=",
+    "src/Simulation.php": "sha256-ktjHUc2leKdYbiCijcKHwjQG+kwBeJY1Mw6+o86r94Y=",
+    "worlds/buster.tmj": "sha256-ZTaFRkBb1GbpAgrjA5FUW4Cp8Hz3nxadnpTpRqoinOs=",
+    "worlds/buster.world": "sha256-cGy38i4sFf94cjSq+qcX0A5V9ltKJ2nRHRFQ33pM8Y8="
+  }
+}

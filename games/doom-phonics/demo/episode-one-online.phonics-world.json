@@ -1,0 +1,503 @@
+{
+  "type": "phonics-world",
+  "schemaVersion": 1,
+  "imports": {
+    "doom": "../phonics.json",
+    "matrix": "../../phonics-matrix/phonics.json"
+  },
+  "sources": {
+    "episode": {
+      "adapter": "@doom/wad",
+      "resources": [
+        {
+          "slot": "wad-stack",
+          "role": "wad"
+        },
+        {
+          "slot": "music-wad",
+          "role": "pwad"
+        },
+        {
+          "slot": "weapon-wad",
+          "role": "pwad"
+        },
+        {
+          "slot": "actor-decorate",
+          "role": "decorate"
+        },
+        {
+          "slot": "weapon-decorate",
+          "role": "decorate"
+        },
+        {
+          "slot": "weapon-sndinfo",
+          "role": "sndinfo"
+        },
+        {
+          "slot": "menu-font-wad",
+          "role": "pwad"
+        }
+      ]
+    }
+  },
+  "bindings": [
+    {
+      "id": "episode-gameplay",
+      "use": "@doom/episode",
+      "on": {
+        "source": "episode",
+        "kind": "map",
+        "tags": [
+          "wad-map"
+        ]
+      },
+      "options": {
+        "skill": 2,
+        "fov": 90,
+        "renderScale": 0.5,
+        "movement": {
+          "maxSpeed": 420,
+          "acceleration": 1531.25,
+          "friction": 0.90625,
+          "gravity": 1225,
+          "maxStep": 24
+        }
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "e1m1-e1m2",
+      "from": {
+        "source": "episode",
+        "scope": "E1M1"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M2"
+      }
+    },
+    {
+      "id": "e1m2-e1m3",
+      "from": {
+        "source": "episode",
+        "scope": "E1M2"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M3"
+      }
+    },
+    {
+      "id": "e1m3-e1m4",
+      "from": {
+        "source": "episode",
+        "scope": "E1M3"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M4"
+      }
+    },
+    {
+      "id": "e1m3-e1m9",
+      "from": {
+        "source": "episode",
+        "scope": "E1M3",
+        "entry": "secret"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M9"
+      }
+    },
+    {
+      "id": "e1m9-e1m4",
+      "from": {
+        "source": "episode",
+        "scope": "E1M9"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M4"
+      }
+    },
+    {
+      "id": "e1m4-e1m5",
+      "from": {
+        "source": "episode",
+        "scope": "E1M4"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M5"
+      }
+    },
+    {
+      "id": "e1m5-e1m6",
+      "from": {
+        "source": "episode",
+        "scope": "E1M5"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M6"
+      }
+    },
+    {
+      "id": "e1m6-e1m7",
+      "from": {
+        "source": "episode",
+        "scope": "E1M6"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M7"
+      }
+    },
+    {
+      "id": "e1m7-e1m8",
+      "from": {
+        "source": "episode",
+        "scope": "E1M7"
+      },
+      "to": {
+        "source": "episode",
+        "scope": "E1M8"
+      }
+    }
+  ],
+  "start": {
+    "source": "episode",
+    "scope": "E1M1"
+  },
+  "view": {
+    "width": 960,
+    "height": 540
+  },
+  "resourceSlots": {
+    "wad-stack": {
+      "type": "url",
+      "distribution": "local",
+      "label": "WAD load order",
+      "required": true,
+      "authority": "host",
+      "accept": [
+        ".wad",
+        "application/x-doom-wad"
+      ],
+      "maxBytes": 268435456,
+      "defaultUrl": "./DOOM1.WAD",
+      "multiple": true,
+      "stack": {
+        "first": {
+          "id": "doom-base-stack",
+          "label": "Doom-compatible base archive",
+          "names": [
+            "DOOM1.WAD",
+            "DOOM.WAD",
+            "DOOM2.WAD",
+            "freedoom1.wad",
+            "freedoom2.wad"
+          ],
+          "inspector": "@doom/wad-inspector",
+          "equivalence": "profile",
+          "criteria": {
+            "archiveType": "IWAD"
+          },
+          "candidates": [
+            {
+              "id": "doom.ultimate",
+              "label": "Ultimate Doom",
+              "names": [
+                "DOOM.WAD"
+              ],
+              "criteria": {
+                "mustContain": [
+                  "E1M1",
+                  "E2M1",
+                  "E2M2",
+                  "E2M3",
+                  "E2M4",
+                  "E2M5",
+                  "E2M6",
+                  "E2M7",
+                  "E2M8",
+                  "E2M9",
+                  "E3M1",
+                  "E3M2",
+                  "E3M3",
+                  "E3M4",
+                  "E3M5",
+                  "E3M6",
+                  "E3M7",
+                  "E3M8",
+                  "E3M9",
+                  "DPHOOF",
+                  "BFGGA0",
+                  "HEADA1",
+                  "CYBRA1",
+                  "SPIDA1D1",
+                  "E4M2"
+                ],
+                "mustNotContain": [
+                  "FREEDOOM"
+                ]
+              }
+            },
+            {
+              "id": "doom.registered",
+              "label": "Doom Registered",
+              "names": [
+                "DOOM.WAD"
+              ],
+              "criteria": {
+                "mustContain": [
+                  "E1M1",
+                  "E2M1",
+                  "E2M2",
+                  "E2M3",
+                  "E2M4",
+                  "E2M5",
+                  "E2M6",
+                  "E2M7",
+                  "E2M8",
+                  "E2M9",
+                  "E3M1",
+                  "E3M2",
+                  "E3M3",
+                  "E3M4",
+                  "E3M5",
+                  "E3M6",
+                  "E3M7",
+                  "E3M8",
+                  "E3M9",
+                  "DPHOOF",
+                  "BFGGA0",
+                  "HEADA1",
+                  "CYBRA1",
+                  "SPIDA1D1"
+                ],
+                "mustNotContain": [
+                  "E4M2",
+                  "FREEDOOM"
+                ]
+              }
+            },
+            {
+              "id": "freedoom.phase1",
+              "label": "Freedoom: Phase 1",
+              "names": [
+                "freedoom1.wad"
+              ],
+              "criteria": {
+                "mustContain": [
+                  "E1M1",
+                  "E2M1",
+                  "E3M1",
+                  "FREEDOOM"
+                ]
+              }
+            },
+            {
+              "id": "freedoom.phase2",
+              "label": "Freedoom: Phase 2",
+              "names": [
+                "freedoom2.wad"
+              ],
+              "criteria": {
+                "mustContain": [
+                  "MAP01",
+                  "FREEDOOM"
+                ]
+              }
+            },
+            {
+              "id": "doom2",
+              "label": "Doom II compatible",
+              "names": [
+                "DOOM2.WAD"
+              ],
+              "criteria": {
+                "mustContain": [
+                  "MAP01",
+                  "BFGGA0"
+                ],
+                "mustNotContain": [
+                  "FREEDOOM"
+                ]
+              }
+            },
+            {
+              "id": "doom.shareware",
+              "label": "Doom Shareware",
+              "names": [
+                "DOOM1.WAD"
+              ],
+              "criteria": {
+                "mustNotContain": [
+                  "E2M1",
+                  "FREEDOOM"
+                ]
+              }
+            }
+          ]
+        },
+        "following": {
+          "id": "doom-addon-stack",
+          "label": "Additional WAD archive",
+          "names": [
+            "*.wad"
+          ],
+          "inspector": "@doom/wad-inspector",
+          "equivalence": "integrity",
+          "criteria": {
+            "archiveTypes": [
+              "IWAD",
+              "PWAD"
+            ]
+          }
+        }
+      }
+    },
+    "music-wad": {
+      "type": "url",
+      "distribution": "retrievable",
+      "label": "Episode music WAD",
+      "required": true,
+      "authority": "world",
+      "accept": [
+        ".wad",
+        "application/x-doom-wad"
+      ],
+      "maxBytes": 33554432,
+      "defaultUrl": "../DOOM1_OGG.wad",
+      "integrity": "sha256-L5uoVMs1SiWEMb/ut5LB4bUEZSHfl+KxRI7TxpU0jSE=",
+      "bytes": 28096797,
+      "requirement": {
+        "id": "doom-episode-music-pwad",
+        "label": "Episode music WAD",
+        "names": [
+          "DOOM1_OGG.wad"
+        ],
+        "inspector": "@doom/wad-inspector",
+        "equivalence": "integrity",
+        "criteria": {
+          "archiveType": "PWAD",
+          "mustContain": [
+            "D_E1M1",
+            "D_E1M2",
+            "D_E1M3",
+            "D_E1M4",
+            "D_E1M5",
+            "D_E1M6",
+            "D_E1M7",
+            "D_E1M8",
+            "D_E1M9",
+            "D_INTER",
+            "D_INTRO",
+            "D_VICTOR"
+          ]
+        }
+      }
+    },
+    "weapon-wad": {
+      "type": "url",
+      "distribution": "retrievable",
+      "label": "Weapon definitions WAD",
+      "required": true,
+      "authority": "world",
+      "accept": [
+        ".wad",
+        "application/x-doom-wad"
+      ],
+      "maxBytes": 16777216,
+      "defaultUrl": "./SKULLTAG-WEAPONS.WAD",
+      "integrity": "sha256-StHuS4SIzHkgVnmI8jrx5kvg5N5JR6EWEvbu0ld16dQ=",
+      "requirement": {
+        "id": "doom-episode-weapon-pwad",
+        "label": "Weapon definitions WAD",
+        "names": [
+          "SKULLTAG-WEAPONS.WAD"
+        ],
+        "inspector": "@doom/wad-inspector",
+        "equivalence": "integrity",
+        "criteria": {
+          "archiveType": "PWAD"
+        }
+      }
+    },
+    "actor-decorate": {
+      "type": "url",
+      "distribution": "retrievable",
+      "label": "Skulltag actor definitions",
+      "required": true,
+      "authority": "world",
+      "accept": [
+        ".lmp",
+        "text/plain"
+      ],
+      "maxBytes": 1048576,
+      "defaultUrl": "./SKULLTAG_ACTORS.lmp",
+      "integrity": "sha256-WTMV/1cDmBFta/mjazYCE68C0/HcrNwwvFVZI5PQJ9A=",
+      "bytes": 47539
+    },
+    "weapon-decorate": {
+      "type": "url",
+      "distribution": "retrievable",
+      "label": "Weapon DECORATE definitions",
+      "required": true,
+      "authority": "world",
+      "accept": [
+        ".dec",
+        "text/plain"
+      ],
+      "maxBytes": 1048576,
+      "defaultUrl": "./SKULLTAG-WEAPONS.DEC",
+      "integrity": "sha256-yMOMFlGqgcCnCn4tbgnzEHYP88Zu3HHZ2rxltAI72Xc="
+    },
+    "weapon-sndinfo": {
+      "type": "url",
+      "distribution": "retrievable",
+      "label": "Weapon sound definitions",
+      "required": true,
+      "authority": "world",
+      "accept": [
+        ".sndinfo",
+        "text/plain"
+      ],
+      "maxBytes": 1048576,
+      "defaultUrl": "./SKULLTAG-WEAPONS.SNDINFO",
+      "integrity": "sha256-9yvMXGqEfmKfidBf4RUqvyGUwdmE6cF04smx3dqpCCk="
+    },
+    "menu-font-wad": {
+      "type": "url",
+      "distribution": "retrievable",
+      "label": "Menu font WAD",
+      "required": true,
+      "authority": "world",
+      "accept": [
+        ".wad",
+        "application/x-doom-wad"
+      ],
+      "maxBytes": 16777216,
+      "defaultUrl": "./DBIGFONT.WAD",
+      "integrity": "sha256-iTDbj+THX0aXP0LNzCQr+eZpDg6hmoz12EVCMpSIA7Q=",
+      "requirement": {
+        "id": "doom-menu-font-pwad",
+        "label": "Menu font WAD",
+        "names": [
+          "DBIGFONT.WAD"
+        ],
+        "inspector": "@doom/wad-inspector",
+        "equivalence": "integrity",
+        "criteria": {
+          "archiveType": "PWAD",
+          "mustContain": [
+            "DBIGFONT"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "type": "template",
+  "object": {
+    "name": "paddle",
+    "type": "PhpNoid.Paddle",
+    "x": 0,
+    "y": 0,
+    "width": 92,
+    "height": 14,
+    "rotation": 0,
+    "visible": true,
+    "properties": [
+      {
+        "name": "phonics.entity",
+        "type": "string",
+        "value": "../phonics.json#paddle"
+      }
+    ]
+  }
+}

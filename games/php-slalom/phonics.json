@@ -1,0 +1,91 @@
+{
+  "name": "@seanmorris/php-slalom",
+  "php": {
+    "autoload": {
+      "PhpSlalom\\": "src/"
+    },
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "files": [
+      "autoload.php",
+      "game.php",
+      "application.php",
+      "src/Input/InputSettings.php",
+      "src/Input/SlalomActions.php",
+      "src/Obstacle.php",
+      "src/Random.php",
+      "src/Render/Scene.php",
+      "src/Replay.php",
+      "src/Simulation.php",
+      "src/Stage.php"
+    ]
+  },
+  "exports": {
+    "game": {
+      "type": "game",
+      "php": "game.php",
+      "browser": "browser/game.mjs",
+      "modules": []
+    },
+    "slalom": {
+      "type": "asset",
+      "path": "worlds/slalom.world"
+    }
+  },
+  "tiled": {
+    "previews": [
+      "assets/jiki.png",
+      "assets/jiki2.png"
+    ]
+  },
+  "preload": [
+    "assets/bomb.wav",
+    "assets/jiki.png",
+    "assets/jiki2.png",
+    "assets/craft.tsj"
+  ],
+  "application": {
+    "entry": "application.php"
+  },
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.0.0"
+  },
+  "dependencies": {},
+  "browser": {
+    "files": [
+      "browser/game.mjs"
+    ]
+  },
+  "assets": [
+    "assets/bomb.wav",
+    "assets/craft.tsj",
+    "assets/jiki.png",
+    "assets/jiki2.png",
+    "worlds/slalom.tmj",
+    "worlds/slalom.world"
+  ],
+  "integrity": {
+    "application.php": "sha256-y3DLTMEpJFqArO5sA2tXeQI1z9ffknbulyBNTSZyRmw=",
+    "assets/bomb.wav": "sha256-lDYQPcOffzmADeXZ1jPZTNBagCw1FaT25vTmj/0GItU=",
+    "assets/craft.tsj": "sha256-8sb2tIFcrsz77sxa/4YOwmvfpOvxkkOUsREW92yVrDM=",
+    "assets/jiki.png": "sha256-oj6SR5SCW8E6lPlv5DyJ+0+6O4GYOcqc0paB/F+OSXc=",
+    "assets/jiki2.png": "sha256-YApfl46TY72/Ep29PgbULCbiFgcIq6Zzdg3dPX0Y4BQ=",
+    "autoload.php": "sha256-WCCeqV2tThzlj8VebRgNLNugmnW/4FDkpLpC/z1LIig=",
+    "browser/game.mjs": "sha256-9kpRDmL6u/1t0B0dAMUS3QujIBqlvS9Bh0ficVHukA0=",
+    "game.php": "sha256-olZv3mZX5lGWteIrk8U0QUBIhNbXZSYDhrAgNrOZob8=",
+    "src/Input/InputSettings.php": "sha256-H6DitcbH1Qqx+ZfwDttcwWjMlNwIjkUI3jItE/oFcy0=",
+    "src/Input/SlalomActions.php": "sha256-ape8rDcOuwopjk2WwDoLqVoOkb9Lrdp4gp8KUHksBmE=",
+    "src/Obstacle.php": "sha256-anl+o2DplPdBH9NjNbEyrWoIT/JpD88kvP6y9URZqTg=",
+    "src/Random.php": "sha256-CDnMvTdfZqUwptWrdpq2uefj18o0+4jbgQYRnqbSq3g=",
+    "src/Render/Scene.php": "sha256-7VND+DE1n0+ZQWLtcRzVs4DugzrWOG6p72g8R0hjhRc=",
+    "src/Replay.php": "sha256-Bj70WClU3kPF3W2G6EPBecvTL8RmpWV19hpSF37kxNM=",
+    "src/Simulation.php": "sha256-pfKWcIxDPbwBOG6L+fwFtECS1gNP24Zbw5VDPDL2KtQ=",
+    "src/Stage.php": "sha256-IWpS1vHhNTFG4rFv7PrygMxLnpFpf6nuIFPlJzsqIOw=",
+    "worlds/slalom.tmj": "sha256-RiMKm2gPSmdGh7We73g/6qTtUGxLVSOL35DKQO8Mq/w=",
+    "worlds/slalom.world": "sha256-95VmxDrw1IEMeQAP0LzQ1mRyQivghhHWl6zkbmww+7g="
+  }
+}

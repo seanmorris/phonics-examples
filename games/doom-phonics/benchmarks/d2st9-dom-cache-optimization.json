@@ -1,0 +1,1357 @@
+{
+  "measuredAt": "2026-10-24T13:09:39.713844+00:00",
+  "map": "D2ST9",
+  "wad": "Skulltag v0.97d5 over DOOM2.WAD",
+  "browser": "152.0.7977.75",
+  "gl": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+  "url": "http://127.0.0.1:9140/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+  "changes": [
+    "Keep diagnostic snapshots on the session; update DOM only when UI values change.",
+    "Cache resolved ECS component names to avoid repeated reflection."
+  ],
+  "method": {
+    "order": [
+      "current-1",
+      "baseline-1",
+      "baseline-2",
+      "current-2"
+    ],
+    "repetitionsPerVariant": 2,
+    "secondsPerViewPerRepetition": 6,
+    "warmupMillisecondsPerView": 1500,
+    "resolutions": {
+      "native": [
+        960,
+        540
+      ],
+      "classic": [
+        480,
+        270
+      ]
+    },
+    "views": [
+      {
+        "name": "blue-base"
+      },
+      {
+        "name": "central-arena",
+        "position": [
+          1888,
+          3008,
+          -64,
+          3.141592653589793
+        ],
+        "turn": true
+      },
+      {
+        "name": "ramp-walk",
+        "position": [
+          32,
+          2384,
+          4,
+          1.5707963267948966
+        ],
+        "move": true
+      }
+    ],
+    "baseline": "Browser-local resource overrides restore the previous DOM writes and uncached Registry::canonical implementation. The baseline also exposes its parsed diagnostic snapshot on session.doomState so the sampling path is identical. Package integrity hashes are updated only in the intercepted manifests; the served preview is unchanged.",
+    "aggregation": "Frame arrays are pooled across the two repetitions of each view. FPS uses total frames / elapsed animation-frame time; percentiles use the pooled samples. Individual run summaries are retained to expose variation.",
+    "cpuSampling": "Latest 10 Hz diagnostic snapshot per animation frame; repeated snapshots are not independent CPU samples.",
+    "limitations": [
+      "CPU durations include graphics-driver waits, not GPU execution time.",
+      "The status callback runs outside the reported render CPU timer.",
+      "Headless SwiftShader is software rendering; these FPS values are not hardware-GPU predictions.",
+      "Two repetitions per view do not establish statistical significance."
+    ]
+  },
+  "sourceSha256": {
+    "src/Ecs/Registry.php": "9d7e98a65a42431bb7afc2a00eb38deceb5326b1248fde441d5da9de78cb475d",
+    "packages/doom-phonics/browser/game.mjs": "b53806686e2a99413639adc010f443a02d88b35d20a3ea053497f0d7c526aafe",
+    "packages/doom-phonics/src/Render/GlesMapRenderer.php": "23e99ac61e5213df52f31b308aeecebfbf147c3fa4c490584a8f47bed55e501f",
+    "packages/doom-phonics/shaders/sprite.vert": "b2f0f47752d018d3b7d86a774c56b6d90bf0cc6210845843fccf21538f616c5a"
+  },
+  "comparison": [
+    {
+      "resolution": "native",
+      "view": "blue-base",
+      "baseline": {
+        "frames": 199,
+        "elapsedMs": 12049.5,
+        "fps": 16.52,
+        "frameP50Ms": 66.6,
+        "frameP95Ms": 83.3,
+        "renderCpuP50Ms": 15.4,
+        "simulationCpuP50Ms": 25.9,
+        "mapCpuP50Ms": 3.9,
+        "actorCpuP50Ms": 8.8,
+        "overlayCpuP50Ms": 0.8,
+        "simulationPerStepCpuP50Ms": 12.2,
+        "individualRuns": [
+          {
+            "fps": 16.46,
+            "renderCpuP50Ms": 15.3,
+            "simulationCpuP50Ms": 24.9,
+            "frameP95Ms": 83.3
+          },
+          {
+            "fps": 16.58,
+            "renderCpuP50Ms": 15.6,
+            "simulationCpuP50Ms": 26.2,
+            "frameP95Ms": 83.4
+          }
+        ]
+      },
+      "current": {
+        "frames": 186,
+        "elapsedMs": 12099.6,
+        "fps": 15.37,
+        "frameP50Ms": 66.6,
+        "frameP95Ms": 83.4,
+        "renderCpuP50Ms": 15.6,
+        "simulationCpuP50Ms": 26.3,
+        "mapCpuP50Ms": 4.2,
+        "actorCpuP50Ms": 9.1,
+        "overlayCpuP50Ms": 0.9,
+        "simulationPerStepCpuP50Ms": 11.15,
+        "individualRuns": [
+          {
+            "fps": 13.59,
+            "renderCpuP50Ms": 15.6,
+            "simulationCpuP50Ms": 31.4,
+            "frameP95Ms": 100
+          },
+          {
+            "fps": 17.14,
+            "renderCpuP50Ms": 15.4,
+            "simulationCpuP50Ms": 22.5,
+            "frameP95Ms": 66.8
+          }
+        ]
+      },
+      "renderCpuChangePercent": 1.3,
+      "fpsChangePercent": -6.96
+    },
+    {
+      "resolution": "native",
+      "view": "central-arena",
+      "baseline": {
+        "frames": 194,
+        "elapsedMs": 12099.5,
+        "fps": 16.03,
+        "frameP50Ms": 66.6,
+        "frameP95Ms": 83.4,
+        "renderCpuP50Ms": 12.1,
+        "simulationCpuP50Ms": 31.7,
+        "mapCpuP50Ms": 4,
+        "actorCpuP50Ms": 5.8,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 13.45,
+        "individualRuns": [
+          {
+            "fps": 15.87,
+            "renderCpuP50Ms": 12.4,
+            "simulationCpuP50Ms": 33,
+            "frameP95Ms": 100
+          },
+          {
+            "fps": 16.2,
+            "renderCpuP50Ms": 11.5,
+            "simulationCpuP50Ms": 28.7,
+            "frameP95Ms": 83.4
+          }
+        ]
+      },
+      "current": {
+        "frames": 224,
+        "elapsedMs": 12082.8,
+        "fps": 18.54,
+        "frameP50Ms": 50,
+        "frameP95Ms": 83.4,
+        "renderCpuP50Ms": 11.3,
+        "simulationCpuP50Ms": 21,
+        "mapCpuP50Ms": 3.9,
+        "actorCpuP50Ms": 5.5,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 10.5,
+        "individualRuns": [
+          {
+            "fps": 19.01,
+            "renderCpuP50Ms": 11.3,
+            "simulationCpuP50Ms": 20.7,
+            "frameP95Ms": 83.4
+          },
+          {
+            "fps": 18.07,
+            "renderCpuP50Ms": 10.7,
+            "simulationCpuP50Ms": 21,
+            "frameP95Ms": 83.4
+          }
+        ]
+      },
+      "renderCpuChangePercent": -6.61,
+      "fpsChangePercent": 15.66
+    },
+    {
+      "resolution": "native",
+      "view": "ramp-walk",
+      "baseline": {
+        "frames": 180,
+        "elapsedMs": 12066.2,
+        "fps": 14.92,
+        "frameP50Ms": 66.7,
+        "frameP95Ms": 100,
+        "renderCpuP50Ms": 13.3,
+        "simulationCpuP50Ms": 34.2,
+        "mapCpuP50Ms": 4,
+        "actorCpuP50Ms": 7.2,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 13.2,
+        "individualRuns": [
+          {
+            "fps": 15.13,
+            "renderCpuP50Ms": 13.3,
+            "simulationCpuP50Ms": 33.6,
+            "frameP95Ms": 83.4
+          },
+          {
+            "fps": 14.71,
+            "renderCpuP50Ms": 13.6,
+            "simulationCpuP50Ms": 34.2,
+            "frameP95Ms": 100.1
+          }
+        ]
+      },
+      "current": {
+        "frames": 163,
+        "elapsedMs": 12082.8,
+        "fps": 13.49,
+        "frameP50Ms": 66.7,
+        "frameP95Ms": 116.6,
+        "renderCpuP50Ms": 13.5,
+        "simulationCpuP50Ms": 33.1,
+        "mapCpuP50Ms": 4,
+        "actorCpuP50Ms": 7.3,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 12.35,
+        "individualRuns": [
+          {
+            "fps": 14.13,
+            "renderCpuP50Ms": 13.5,
+            "simulationCpuP50Ms": 33.4,
+            "frameP95Ms": 100
+          },
+          {
+            "fps": 12.86,
+            "renderCpuP50Ms": 13.8,
+            "simulationCpuP50Ms": 33.1,
+            "frameP95Ms": 133.3
+          }
+        ]
+      },
+      "renderCpuChangePercent": 1.5,
+      "fpsChangePercent": -9.58
+    },
+    {
+      "resolution": "classic",
+      "view": "blue-base",
+      "baseline": {
+        "frames": 261,
+        "elapsedMs": 12049.5,
+        "fps": 21.66,
+        "frameP50Ms": 50,
+        "frameP95Ms": 66.7,
+        "renderCpuP50Ms": 15.4,
+        "simulationCpuP50Ms": 23.4,
+        "mapCpuP50Ms": 4,
+        "actorCpuP50Ms": 9.1,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 12.7,
+        "individualRuns": [
+          {
+            "fps": 20.72,
+            "renderCpuP50Ms": 15.3,
+            "simulationCpuP50Ms": 24.8,
+            "frameP95Ms": 66.7
+          },
+          {
+            "fps": 22.6,
+            "renderCpuP50Ms": 15.6,
+            "simulationCpuP50Ms": 22.8,
+            "frameP95Ms": 66.7
+          }
+        ]
+      },
+      "current": {
+        "frames": 290,
+        "elapsedMs": 12066.2,
+        "fps": 24.03,
+        "frameP50Ms": 33.4,
+        "frameP95Ms": 66.7,
+        "renderCpuP50Ms": 14.6,
+        "simulationCpuP50Ms": 17.9,
+        "mapCpuP50Ms": 3.7,
+        "actorCpuP50Ms": 8.7,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 10.2,
+        "individualRuns": [
+          {
+            "fps": 19.34,
+            "renderCpuP50Ms": 16.3,
+            "simulationCpuP50Ms": 22.2,
+            "frameP95Ms": 83.3
+          },
+          {
+            "fps": 28.75,
+            "renderCpuP50Ms": 13.7,
+            "simulationCpuP50Ms": 11.9,
+            "frameP95Ms": 50
+          }
+        ]
+      },
+      "renderCpuChangePercent": -5.19,
+      "fpsChangePercent": 10.94
+    },
+    {
+      "resolution": "classic",
+      "view": "central-arena",
+      "baseline": {
+        "frames": 312,
+        "elapsedMs": 12066.0,
+        "fps": 25.86,
+        "frameP50Ms": 33.4,
+        "frameP95Ms": 66.6,
+        "renderCpuP50Ms": 12,
+        "simulationCpuP50Ms": 15,
+        "mapCpuP50Ms": 3.9,
+        "actorCpuP50Ms": 6.4,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 12.4,
+        "individualRuns": [
+          {
+            "fps": 28.09,
+            "renderCpuP50Ms": 11.6,
+            "simulationCpuP50Ms": 12.9,
+            "frameP95Ms": 50
+          },
+          {
+            "fps": 23.64,
+            "renderCpuP50Ms": 13.3,
+            "simulationCpuP50Ms": 18.5,
+            "frameP95Ms": 66.7
+          }
+        ]
+      },
+      "current": {
+        "frames": 313,
+        "elapsedMs": 12049.6,
+        "fps": 25.98,
+        "frameP50Ms": 33.4,
+        "frameP95Ms": 66.7,
+        "renderCpuP50Ms": 11.4,
+        "simulationCpuP50Ms": 13.7,
+        "mapCpuP50Ms": 3.8,
+        "actorCpuP50Ms": 5.7,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 10.65,
+        "individualRuns": [
+          {
+            "fps": 23.6,
+            "renderCpuP50Ms": 12.4,
+            "simulationCpuP50Ms": 21.3,
+            "frameP95Ms": 66.7
+          },
+          {
+            "fps": 28.34,
+            "renderCpuP50Ms": 11.3,
+            "simulationCpuP50Ms": 11.4,
+            "frameP95Ms": 50.1
+          }
+        ]
+      },
+      "renderCpuChangePercent": -5.0,
+      "fpsChangePercent": 0.46
+    },
+    {
+      "resolution": "classic",
+      "view": "ramp-walk",
+      "baseline": {
+        "frames": 270,
+        "elapsedMs": 12066.3,
+        "fps": 22.38,
+        "frameP50Ms": 49.9,
+        "frameP95Ms": 66.7,
+        "renderCpuP50Ms": 13.5,
+        "simulationCpuP50Ms": 23.9,
+        "mapCpuP50Ms": 3.9,
+        "actorCpuP50Ms": 6.9,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 12.9,
+        "individualRuns": [
+          {
+            "fps": 24.03,
+            "renderCpuP50Ms": 13.3,
+            "simulationCpuP50Ms": 23.2,
+            "frameP95Ms": 66.7
+          },
+          {
+            "fps": 20.72,
+            "renderCpuP50Ms": 13.9,
+            "simulationCpuP50Ms": 25.1,
+            "frameP95Ms": 66.8
+          }
+        ]
+      },
+      "current": {
+        "frames": 272,
+        "elapsedMs": 12049.6,
+        "fps": 22.57,
+        "frameP50Ms": 33.4,
+        "frameP95Ms": 83.3,
+        "renderCpuP50Ms": 12.4,
+        "simulationCpuP50Ms": 19.3,
+        "mapCpuP50Ms": 3.8,
+        "actorCpuP50Ms": 6.4,
+        "overlayCpuP50Ms": 1.1,
+        "simulationPerStepCpuP50Ms": 10.85,
+        "individualRuns": [
+          {
+            "fps": 16.24,
+            "renderCpuP50Ms": 14.8,
+            "simulationCpuP50Ms": 29.6,
+            "frameP95Ms": 83.4
+          },
+          {
+            "fps": 28.92,
+            "renderCpuP50Ms": 11.9,
+            "simulationCpuP50Ms": 11.3,
+            "frameP95Ms": 50.1
+          }
+        ]
+      },
+      "renderCpuChangePercent": -8.15,
+      "fpsChangePercent": 0.85
+    }
+  ],
+  "sessions": {
+    "current-1": {
+      "url": "http://127.0.0.1:9140/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+      "loadMs": 19508,
+      "sampleSecondsPerView": 6,
+      "browser": "152.0.7977.75",
+      "software": true,
+      "gl": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "cpuSampling": "latest 10 Hz diagnostic per animation frame",
+      "runs": [
+        {
+          "view": "blue-base",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 13.59,
+          "frameP50Ms": 66.7,
+          "frameP95Ms": 100,
+          "mapCpuP50Ms": 4.3,
+          "mapStagesP50Ms": {
+            "materials": 2.3,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 9.5,
+          "renderCpuP50Ms": 15.6,
+          "simulationCpuP50Ms": 31.4,
+          "positionBefore": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ],
+          "positionAfter": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ]
+        },
+        {
+          "view": "central-arena",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 19.01,
+          "frameP50Ms": 50,
+          "frameP95Ms": 83.4,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 5.5,
+          "renderCpuP50Ms": 11.3,
+          "simulationCpuP50Ms": 20.7,
+          "positionBefore": [
+            1888,
+            3008,
+            -64,
+            3.141592653589793
+          ],
+          "positionAfter": [
+            1888,
+            3008,
+            -64,
+            -12.358407346410184
+          ]
+        },
+        {
+          "view": "ramp-walk",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 14.13,
+          "frameP50Ms": 66.7,
+          "frameP95Ms": 100,
+          "mapCpuP50Ms": 4,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 7,
+          "renderCpuP50Ms": 13.5,
+          "simulationCpuP50Ms": 33.4,
+          "positionBefore": [
+            32,
+            2384,
+            4,
+            1.5707963267948966
+          ],
+          "positionAfter": [
+            32,
+            2703.99,
+            32,
+            1.5707963267948966
+          ]
+        },
+        {
+          "view": "blue-base",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 19.34,
+          "frameP50Ms": 50,
+          "frameP95Ms": 83.3,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 10,
+          "renderCpuP50Ms": 16.3,
+          "simulationCpuP50Ms": 22.2,
+          "positionBefore": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ],
+          "positionAfter": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ]
+        },
+        {
+          "view": "central-arena",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 23.6,
+          "frameP50Ms": 33.5,
+          "frameP95Ms": 66.7,
+          "mapCpuP50Ms": 4.1,
+          "mapStagesP50Ms": {
+            "materials": 2.3,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 5.8,
+          "renderCpuP50Ms": 12.4,
+          "simulationCpuP50Ms": 21.3,
+          "positionBefore": [
+            1888,
+            3008,
+            -64,
+            3.141592653589793
+          ],
+          "positionAfter": [
+            1888,
+            3008,
+            -64,
+            -12.358407346410184
+          ]
+        },
+        {
+          "view": "ramp-walk",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 16.24,
+          "frameP50Ms": 50.1,
+          "frameP95Ms": 83.4,
+          "mapCpuP50Ms": 4.1,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 7.2,
+          "renderCpuP50Ms": 14.8,
+          "simulationCpuP50Ms": 29.6,
+          "positionBefore": [
+            32,
+            2384,
+            4,
+            1.5707963267948966
+          ],
+          "positionAfter": [
+            32,
+            2703.99,
+            32,
+            1.5707963267948966
+          ]
+        }
+      ],
+      "errors": []
+    },
+    "baseline-1": {
+      "url": "http://127.0.0.1:9140/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+      "loadMs": 21736,
+      "sampleSecondsPerView": 6,
+      "browser": "152.0.7977.75",
+      "software": true,
+      "gl": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "cpuSampling": "latest 10 Hz diagnostic per animation frame",
+      "runs": [
+        {
+          "view": "blue-base",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 16.46,
+          "frameP50Ms": 66.6,
+          "frameP95Ms": 83.3,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 8.7,
+          "renderCpuP50Ms": 15.3,
+          "simulationCpuP50Ms": 24.9,
+          "positionBefore": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ],
+          "positionAfter": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ]
+        },
+        {
+          "view": "central-arena",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 15.87,
+          "frameP50Ms": 66.6,
+          "frameP95Ms": 100,
+          "mapCpuP50Ms": 4.1,
+          "mapStagesP50Ms": {
+            "materials": 2.3,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 6,
+          "renderCpuP50Ms": 12.4,
+          "simulationCpuP50Ms": 33,
+          "positionBefore": [
+            1888,
+            3008,
+            -64,
+            3.141592653589793
+          ],
+          "positionAfter": [
+            1888,
+            3008,
+            -64,
+            -12.501264489267326
+          ]
+        },
+        {
+          "view": "ramp-walk",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 15.13,
+          "frameP50Ms": 66.7,
+          "frameP95Ms": 83.4,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 7.2,
+          "renderCpuP50Ms": 13.3,
+          "simulationCpuP50Ms": 33.6,
+          "positionBefore": [
+            32,
+            2384,
+            4,
+            1.5707963267948966
+          ],
+          "positionAfter": [
+            32,
+            2703.99,
+            32,
+            1.5707963267948966
+          ]
+        },
+        {
+          "view": "blue-base",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 20.72,
+          "frameP50Ms": 50,
+          "frameP95Ms": 66.7,
+          "mapCpuP50Ms": 4,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 9.1,
+          "renderCpuP50Ms": 15.3,
+          "simulationCpuP50Ms": 24.8,
+          "positionBefore": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ],
+          "positionAfter": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ]
+        },
+        {
+          "view": "central-arena",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 28.09,
+          "frameP50Ms": 33.4,
+          "frameP95Ms": 50,
+          "mapCpuP50Ms": 3.8,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 6.2,
+          "renderCpuP50Ms": 11.6,
+          "simulationCpuP50Ms": 12.9,
+          "positionBefore": [
+            1888,
+            3008,
+            -64,
+            3.141592653589793
+          ],
+          "positionAfter": [
+            1888,
+            3008,
+            -64,
+            -12.215550203553041
+          ]
+        },
+        {
+          "view": "ramp-walk",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 24.03,
+          "frameP50Ms": 33.4,
+          "frameP95Ms": 66.7,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 6.8,
+          "renderCpuP50Ms": 13.3,
+          "simulationCpuP50Ms": 23.2,
+          "positionBefore": [
+            32,
+            2384,
+            4,
+            1.5707963267948966
+          ],
+          "positionAfter": [
+            32,
+            2703.99,
+            32,
+            1.5707963267948966
+          ]
+        }
+      ],
+      "errors": []
+    },
+    "baseline-2": {
+      "url": "http://127.0.0.1:9140/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+      "loadMs": 20082,
+      "overrideHits": [
+        "/engine/phonics.json",
+        "/engine/packages/doom-phonics/phonics.json",
+        "/engine/src/Ecs/Registry.php",
+        "/engine/packages/doom-phonics/browser/game.mjs"
+      ],
+      "sampleSecondsPerView": 6,
+      "browser": "152.0.7977.75",
+      "software": true,
+      "gl": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "cpuSampling": "latest 10 Hz diagnostic per animation frame",
+      "runs": [
+        {
+          "view": "blue-base",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 16.58,
+          "frameP50Ms": 66.6,
+          "frameP95Ms": 83.4,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 9.2,
+          "renderCpuP50Ms": 15.6,
+          "simulationCpuP50Ms": 26.2,
+          "positionBefore": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ],
+          "positionAfter": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ]
+        },
+        {
+          "view": "central-arena",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 16.2,
+          "frameP50Ms": 66.6,
+          "frameP95Ms": 83.4,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 5.7,
+          "renderCpuP50Ms": 11.5,
+          "simulationCpuP50Ms": 28.7,
+          "positionBefore": [
+            1888,
+            3008,
+            -64,
+            3.141592653589793
+          ],
+          "positionAfter": [
+            1888,
+            3008,
+            -64,
+            -12.14412163212447
+          ]
+        },
+        {
+          "view": "ramp-walk",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 14.71,
+          "frameP50Ms": 66.7,
+          "frameP95Ms": 100.1,
+          "mapCpuP50Ms": 4,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 7.1,
+          "renderCpuP50Ms": 13.6,
+          "simulationCpuP50Ms": 34.2,
+          "positionBefore": [
+            32,
+            2384,
+            4,
+            1.5707963267948966
+          ],
+          "positionAfter": [
+            32,
+            2703.99,
+            32,
+            1.5707963267948966
+          ]
+        },
+        {
+          "view": "blue-base",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 22.6,
+          "frameP50Ms": 50,
+          "frameP95Ms": 66.7,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 9.1,
+          "renderCpuP50Ms": 15.6,
+          "simulationCpuP50Ms": 22.8,
+          "positionBefore": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ],
+          "positionAfter": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ]
+        },
+        {
+          "view": "central-arena",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 23.64,
+          "frameP50Ms": 33.4,
+          "frameP95Ms": 66.7,
+          "mapCpuP50Ms": 4.1,
+          "mapStagesP50Ms": {
+            "materials": 2.3,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 6.6,
+          "renderCpuP50Ms": 13.3,
+          "simulationCpuP50Ms": 18.5,
+          "positionBefore": [
+            1888,
+            3008,
+            -64,
+            3.141592653589793
+          ],
+          "positionAfter": [
+            1888,
+            3008,
+            -64,
+            -12.429835917838755
+          ]
+        },
+        {
+          "view": "ramp-walk",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 20.72,
+          "frameP50Ms": 50,
+          "frameP95Ms": 66.8,
+          "mapCpuP50Ms": 4,
+          "mapStagesP50Ms": {
+            "materials": 2.3,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 7.2,
+          "renderCpuP50Ms": 13.9,
+          "simulationCpuP50Ms": 25.1,
+          "positionBefore": [
+            32,
+            2384,
+            4,
+            1.5707963267948966
+          ],
+          "positionAfter": [
+            32,
+            2703.99,
+            32,
+            1.5707963267948966
+          ]
+        }
+      ],
+      "errors": []
+    },
+    "current-2": {
+      "url": "http://127.0.0.1:9140/doom-phonics/?world=/engine/packages/doom-phonics/demo/skulltag-stress.phonics-world.json",
+      "loadMs": 19428,
+      "overrideHits": [],
+      "sampleSecondsPerView": 6,
+      "browser": "152.0.7977.75",
+      "software": true,
+      "gl": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "cpuSampling": "latest 10 Hz diagnostic per animation frame",
+      "runs": [
+        {
+          "view": "blue-base",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 17.14,
+          "frameP50Ms": 50.1,
+          "frameP95Ms": 66.8,
+          "mapCpuP50Ms": 4.1,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 9,
+          "renderCpuP50Ms": 15.4,
+          "simulationCpuP50Ms": 22.5,
+          "positionBefore": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ],
+          "positionAfter": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ]
+        },
+        {
+          "view": "central-arena",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 18.07,
+          "frameP50Ms": 50,
+          "frameP95Ms": 83.4,
+          "mapCpuP50Ms": 3.8,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 5.5,
+          "renderCpuP50Ms": 10.7,
+          "simulationCpuP50Ms": 21,
+          "positionBefore": [
+            1888,
+            3008,
+            -64,
+            3.141592653589793
+          ],
+          "positionAfter": [
+            1888,
+            3008,
+            -64,
+            -11.858407346410186
+          ]
+        },
+        {
+          "view": "ramp-walk",
+          "resolution": "native",
+          "scene": [
+            960,
+            540,
+            1
+          ],
+          "fps": 12.86,
+          "frameP50Ms": 66.8,
+          "frameP95Ms": 133.3,
+          "mapCpuP50Ms": 3.9,
+          "mapStagesP50Ms": {
+            "materials": 2.2,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 7.3,
+          "renderCpuP50Ms": 13.8,
+          "simulationCpuP50Ms": 33.1,
+          "positionBefore": [
+            32,
+            2384,
+            4,
+            1.5707963267948966
+          ],
+          "positionAfter": [
+            32,
+            2703.99,
+            32,
+            1.5707963267948966
+          ]
+        },
+        {
+          "view": "blue-base",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 28.75,
+          "frameP50Ms": 33.3,
+          "frameP95Ms": 50,
+          "mapCpuP50Ms": 3.7,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 8.1,
+          "renderCpuP50Ms": 13.7,
+          "simulationCpuP50Ms": 11.9,
+          "positionBefore": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ],
+          "positionAfter": [
+            928,
+            -224,
+            0,
+            2.356194490192345
+          ]
+        },
+        {
+          "view": "central-arena",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 28.34,
+          "frameP50Ms": 33.3,
+          "frameP95Ms": 50.1,
+          "mapCpuP50Ms": 3.7,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.2,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 5.3,
+          "renderCpuP50Ms": 11.3,
+          "simulationCpuP50Ms": 11.4,
+          "positionBefore": [
+            1888,
+            3008,
+            -64,
+            3.141592653589793
+          ],
+          "positionAfter": [
+            1888,
+            3008,
+            -64,
+            -12.286978774981613
+          ]
+        },
+        {
+          "view": "ramp-walk",
+          "resolution": "classic",
+          "scene": [
+            480,
+            270,
+            0.5
+          ],
+          "fps": 28.92,
+          "frameP50Ms": 33.3,
+          "frameP95Ms": 50.1,
+          "mapCpuP50Ms": 3.8,
+          "mapStagesP50Ms": {
+            "materials": 2.1,
+            "meshUpload": 0.2,
+            "sectors": 1.3,
+            "sectorUpload": 0.1,
+            "sky": 0.1,
+            "draw": 0
+          },
+          "actorCpuP50Ms": 6.2,
+          "renderCpuP50Ms": 11.9,
+          "simulationCpuP50Ms": 11.3,
+          "positionBefore": [
+            32,
+            2384,
+            4,
+            1.5707963267948966
+          ],
+          "positionAfter": [
+            32,
+            2703.99,
+            32,
+            1.5707963267948966
+          ]
+        }
+      ],
+      "errors": []
+    }
+  },
+  "errors": []
+}
