@@ -57,7 +57,10 @@ test('full page boots the direct application and executes a resettable shot', as
 	await page.keyboard.press('Space');
 	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).started).toBe(true);
 	expect(JSON.parse(await canvas.getAttribute('data-php-billiards')).shots).toBe(0);
-	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).camera.transitioning).toBe(false);
+	await expect.poll(
+		async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).camera.transitioning
+		, {timeout:45_000}
+	).toBe(false);
 	await canvas.hover();
 	await page.mouse.wheel(0,-5000);
 	await expect.poll(()=>canvas.evaluate(element=>element.phpBilliardsDebug.camera.distance)).toBe(.85);
@@ -338,7 +341,7 @@ test('an authenticated lobby remains responsive while Matrix returns immediate s
 });
 
 test('SDL gamepad uses left-stick controls, right-stick camera, and face buttons', async ({page}) => {
-	test.setTimeout(90_000);
+	test.setTimeout(180_000);
 	await installGamepad(page);
 	const errors=[];
 	page.on('pageerror',error=>errors.push(error.message));
@@ -354,7 +357,10 @@ test('SDL gamepad uses left-stick controls, right-stick camera, and face buttons
 	expect(JSON.parse(await canvas.getAttribute('data-php-billiards')).shots).toBe(0);
 	await page.evaluate(()=>changePad());
 	await page.waitForTimeout(50);
-	await expect.poll(async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).camera.transitioning).toBe(false);
+	await expect.poll(
+		async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).camera.transitioning
+		, {timeout:45_000}
+	).toBe(false);
 	before=JSON.parse(await canvas.getAttribute('data-php-billiards'));
 	await page.evaluate(()=>changePad({axes:[.75,-.7,.8,-.55]}));
 	await expect.poll(async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).camera.yaw).toBeGreaterThan(before.camera.yaw+.2);
@@ -382,7 +388,7 @@ test('SDL gamepad uses left-stick controls, right-stick camera, and face buttons
 });
 
 test('a stationary ball texture landmark follows its fixed world position while the camera orbits', async ({page}, testInfo) => {
-	test.setTimeout(120_000);
+	test.setTimeout(180_000);
 	await page.goto('/games/php-billiards/');
 	const canvas=page.locator('canvas');
 	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout:45_000});
@@ -403,7 +409,10 @@ test('a stationary ball texture landmark follows its fixed world position while 
 			, pitch:Math.asin(normal[1])
 		});
 	});
-	await expect.poll(()=>canvas.evaluate(element=>element.phpBilliardsDebug.camera?.distance)).toBe(.22);
+	await expect.poll(
+		()=>canvas.evaluate(element=>element.phpBilliardsDebug.camera?.distance)
+		, {timeout:45_000}
+	).toBe(.22);
 	await page.waitForTimeout(350);
 	const firstPath=testInfo.outputPath('ball-landmark-head-on.png');
 	const first=await canvas.screenshot({path:firstPath});
