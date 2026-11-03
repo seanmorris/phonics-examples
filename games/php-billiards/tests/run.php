@@ -136,9 +136,9 @@ $test('aim projection enters all six pocket openings instead of reflecting from 
 		$expect(count($path) === 2, "Pocket $index projection reflected before its opening");
 		[$lastX,$lastY] = $path[array_key_last($path)];
 		[$pocketX,$pocketY] = Table::pockets()[$index];
-		$clearance = Table::pocketRadius($index) - Ball::RADIUS;
-		$expect(abs(hypot($lastX - $pocketX, $lastY - $pocketY) - $clearance) < 1e-8,
-			"Pocket $index guide did not end at the physical liner entry");
+		// A ball drops as its centre crosses the cloth edge, so the guide ends on the slate cut itself.
+		$expect(abs(hypot($lastX - $pocketX, $lastY - $pocketY) - Table::THROAT_RADIUS) < 1e-8,
+			"Pocket $index guide did not end where the ball drops");
 	}
 });
 
@@ -353,8 +353,18 @@ $test('pocket mouths use regulation American pool dimensions', static function()
 	$expect(abs($cornerX + Table::WIDTH / 2 + Table::CUSHION_WIDTH / 2) < 1e-12
 		&& abs($cornerY + Table::HEIGHT / 2 + Table::CUSHION_WIDTH / 2) < 1e-12,
 		'Logical corner throat moved away from its rendered position');
-	$expect(abs($sideX) < 1e-12 && abs($sideY + Table::HEIGHT / 2 + Table::CUSHION_WIDTH) < 1e-12,
+	$expect(abs($sideX) < 1e-12 && abs($sideY + Table::HEIGHT / 2 + Table::SIDE_SHELF + Table::THROAT_RADIUS) < 1e-12,
 		'Logical side throat moved away from its rendered position');
+	// Shelf: cloth between each mouth chord and the slate cut, where a ball still rests before it drops.
+	foreach([0,1] as $index)
+	{
+		[$mouthX,$mouthY] = Table::pocketMouthCenter($index);
+		[$outwardX,$outwardY] = Table::pocketOutward($index);
+		[$pocketX,$pocketY] = Table::pockets()[$index];
+		$shelf = ($pocketX - $mouthX) * $outwardX + ($pocketY - $mouthY) * $outwardY - Table::THROAT_RADIUS;
+		$expect($index === 1 ? abs($shelf - Table::SIDE_SHELF) < 1e-12 : $shelf >= .0254 && $shelf <= 2.25 * .0254
+			, "Pocket $index shelf is " . round($shelf * 100, 2) . ' cm');
+	}
 	$expect(count(Table::jaws()) === 12, 'Every pocket opening must have two physical jaws');
 	$expect(count(Table::facings()) === 12, 'Every rendered tangent facing must have a physical segment');
 
@@ -366,10 +376,58 @@ $test('pocket mouths use regulation American pool dimensions', static function()
 		$facingX = $tangentX - $jawX;
 		$facingY = $tangentY - $jawY;
 		$expect(abs(hypot($radiusX, $radiusY) - Table::THROAT_RADIUS) < 1e-12,
-			'Physical facing missed the rendered tabletop circle');
+			'Physical facing missed the rendered pocket cut');
 		$expect(abs($radiusX * $facingX + $radiusY * $facingY) < 1e-12,
-			'Physical pocket facing is not tangent to the rendered tabletop circle');
+			'Physical pocket facing is not tangent to the rendered pocket cut');
 	}
+});
+
+$test('the cloth is cut exactly where a ball drops, so nothing rests over a hole', static function() use ($expect): void {
+	$bed = TableGeometry::profiles()['bed'];
+	foreach(Table::pockets() as $index => [$pocketX,$pocketY])
+	{
+		[$mouthX,$mouthY] = Table::pocketMouthCenter($index);
+		for($u = -.09; $u <= .09; $u += .0045) for($v = -.04; $v <= .12; $v += .0045)
+		{
+			[$outwardX,$outwardY] = Table::pocketOutward($index);
+			$x = $mouthX + $outwardX * $v - $outwardY * $u;
+			$y = $mouthY + $outwardY * $v + $outwardX * $u;
+			// Only points the cloth or a pocket cut could occupy: the tabletop and the cuts themselves.
+			$inNotch = Table::pocketed($x, $y);
+			$onTabletop = TableGeometry::roundedRectangleSdf($x, $y, Table::WIDTH / 2 + TableGeometry::TABLETOP_MARGIN
+				, Table::HEIGHT / 2 + TableGeometry::TABLETOP_MARGIN, TableGeometry::TABLETOP_CORNER_RADIUS) < 0;
+			if(!$inNotch && !$onTabletop) continue;
+			$cloth = $bed($x, $y) < 0;
+			$expect($cloth !== Table::pocketed($x, $y) || abs(hypot($x - $pocketX, $y - $pocketY) - Table::THROAT_RADIUS) < 1e-6
+				, sprintf('Pocket %d: cloth and drop rule disagree at %.4f, %.4f', $index, $x, $y));
+		}
+	}
+});
+
+$test('a ball rolled over the shelf edge drops and tips in without jumping', static function() use ($expect): void {
+	$game = new Simulation;
+	foreach($game->balls as $ball) $ball->active = false;
+	$ball = $game->balls[1];
+	$ball->active = true;
+	[$pocketX,$pocketY] = Table::pockets()[1];
+	// Start on the side pocket's shelf, just short of the slate cut, rolling slowly into it.
+	$ball->x = $ball->previousX = $pocketX;
+	$ball->y = $ball->previousY = $pocketY + Table::THROAT_RADIUS + .004;
+	$ball->vy = -.08;
+	$game->phase = 'moving';
+	$entered = false;
+	$largestJump = 0.0;
+	for($tick = 0; $tick < 600 && $ball->active; $tick++)
+	{
+		// A snap shows as movement the ball's own velocity does not explain.
+		[$x,$y,$vx,$vy] = [$ball->x,$ball->y,$ball->vx,$ball->vy];
+		$game->step();
+		if($ball->pocket !== null && $ball->active)
+		$largestJump = max($largestJump, hypot($ball->x - $x - $vx * Simulation::STEP, $ball->y - $y - $vy * Simulation::STEP));
+		foreach($game->consumeEvents() as $event) $entered = $entered || $event['type'] === 'pocket-enter';
+	}
+	$expect($entered && !$ball->active, 'A slow ball crossing the shelf edge did not drop');
+	$expect($largestJump < .002, 'The ball jumped ' . round($largestJump * 1000, 1) . ' mm in one step instead of tipping in');
 });
 
 $test('identical shots replay deterministically', static function() use ($expect): void {
@@ -477,12 +535,12 @@ $test('pocket shelves and jaws reject glancing balls instead of vacuuming them i
 		'Jaw collision did not emit a cushion contact');
 });
 
-$test('crowded pocket entries cannot skip the circular drop boundary', static function() use ($expect): void {
+$test('crowded 6 and 7 ball pocket entries cannot escape through a rail', static function() use ($expect): void {
 	$game = new Simulation;
 	foreach($game->balls as $ball) $ball->active = false;
 	$states = [
-		[0,-.055856477510466,.604425,3.0952740570054,3.7948976588758]
-		, [1,-.0011575308680337,.604425,-.38633643755657,7.0377743110714]
+		[6,-.055856477510466,.604425,3.0952740570054,3.7948976588758]
+		, [7,-.0011575308680337,.604425,-.38633643755657,7.0377743110714]
 		, [9,.058290443913564,.604425,-4.9040369983854,5.7525813341049]
 		, [2,-.05610232213738,.547175,1.9904427082911,6.9387064615708]
 		, [10,.0015375528836332,.547175,.8617267653076,6.2348432039698]
@@ -528,8 +586,10 @@ $test('rendered tangent pocket facings are physical collision surfaces', static 
 	$length = hypot($segmentX, $segmentY);
 	$normalX = -$segmentY / $length;
 	$normalY = $segmentX / $length;
-	$ball->x = $ball->previousX = ($startX + $endX) / 2 + $normalX * (Ball::RADIUS + .004);
-	$ball->y = $ball->previousY = ($startY + $endY) / 2 + $normalY * (Ball::RADIUS + .004);
+	// Near the jaw end, so the ball starts on the cloth rather than over the slate cut where it would simply drop.
+	$ball->x = $ball->previousX = $startX + $segmentX * .2 + $normalX * (Ball::RADIUS + .004);
+	$ball->y = $ball->previousY = $startY + $segmentY * .2 + $normalY * (Ball::RADIUS + .004);
+	$expect(!Table::pocketed($ball->x, $ball->y), 'The facing test ball starts over the slate cut');
 	$ball->vx = -$normalX;
 	$ball->vy = -$normalY;
 	$game->phase = 'moving';
@@ -551,17 +611,18 @@ $test('pocket cone can reject an energetic ball and loses energy deterministical
 	$copy = $replay->balls[1];
 	$ball->active = true;
 	$copy->active = true;
-	$ball->x = $ball->previousX = 0;
-	$copy->x = $copy->previousX = 0;
+	$ball->x = $ball->previousX = -.04;
+	$copy->x = $copy->previousX = -.04;
 	$ball->y = $ball->previousY = Table::HEIGHT / 2 - Ball::RADIUS - .005;
 	$copy->y = $copy->previousY = $ball->y;
-	$ball->vy = 5;
-	$copy->vy = 5;
+	$ball->vx = $copy->vx = -.5;
+	$ball->vy = $copy->vy = 5;
 	$game->phase = 'moving';
 	$replay->phase = 'moving';
 	$game->consumeEvents();
 	$replay->consumeEvents();
 	$rejected = false;
+	$rejectedPocket = null;
 
 	for($tick = 0; $tick < 30 && !$rejected; $tick++)
 	{
@@ -569,12 +630,34 @@ $test('pocket cone can reject an energetic ball and loses energy deterministical
 		$replay->step();
 
 		foreach($game->consumeEvents() as $event)
-		if($event['type'] === 'pocket-reject') $rejected = true;
+		if($event['type'] === 'pocket-reject')
+		{
+			$rejected = true;
+			$rejectedPocket = $event['pocket'];
+		}
 	}
 
 	$expect($rejected, 'Energetic ball could not bounce out of the pocket liner');
 	$expect($ball->active && $ball->pocket === null && $ball->drop === 0.0,
 		'Rejected ball did not return to the cloth');
+	[$mouthX,$mouthY] = Table::pocketMouthCenter($rejectedPocket);
+	[$outwardX,$outwardY] = Table::pocketOutward($rejectedPocket);
+	$expect(($ball->x - $mouthX) * $outwardX + ($ball->y - $mouthY) * $outwardY <= 1e-8,
+		'Rejected ball left pocket physics before crossing the mouth chord');
+	$expect($ball->vx * $outwardX + $ball->vy * $outwardY < 0,
+		'Rejected ball was moving back into the pocket when released');
+	[$pocketX,$pocketY] = Table::pockets()[$rejectedPocket];
+	foreach(array_slice(Table::facings(), $rejectedPocket * 2, 2) as [$startX,$startY,$endX,$endY])
+	{
+		$segmentX = $endX - $startX;
+		$segmentY = $endY - $startY;
+		$length = hypot($segmentX, $segmentY);
+		$nx = -$segmentY / $length;
+		$ny = $segmentX / $length;
+		if(($pocketX - $startX) * $nx + ($pocketY - $startY) * $ny < 0) [$nx,$ny] = [-$nx,-$ny];
+		$expect(($ball->x - $startX) * $nx + ($ball->y - $startY) * $ny >= Ball::RADIUS - 1e-7,
+			'Rejected ball overlapped a solid pocket facing');
+	}
 	$expect(hypot($ball->vx, $ball->vy) < 5, 'Inelastic pocket contacts failed to remove energy');
 	$expect($game->hash() === $replay->hash(), 'Pocket bounce changed between identical simulations');
 });

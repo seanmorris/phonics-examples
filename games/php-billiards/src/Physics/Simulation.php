@@ -546,7 +546,7 @@ final class Simulation
 		}
 	}
 
-	/** Gravity and inelastic cone contacts decide whether a ball rattles out or sinks. */
+	/** Gravity, the rim of the slate cut, and the conical liner decide whether a ball rattles out or sinks. */
 	private function advancePocket(Ball $ball, float $seconds): void
 	{
 		$index = $ball->pocket;
@@ -556,45 +556,96 @@ final class Simulation
 		$relativeX = $ball->x - $pocketX;
 		$relativeY = $ball->y - $pocketY;
 		$radial = hypot($relativeX, $relativeY);
-		$clearance = Table::pocketRadius($index) - Ball::RADIUS;
-		$allowed = max(.001, $clearance - self::POCKET_DRAFT * $ball->drop);
+		[$radialX,$radialY] = $radial < 1e-9 ? [1.0,0.0] : [$relativeX / $radial,$relativeY / $radial];
+		$normal = null;
+		$onRim = $ball->drop < Ball::RADIUS;
+		[$outwardX,$outwardY] = Table::pocketOutward($index);
 
-		if($radial > $allowed)
+		if($onRim && $relativeX * $outwardX + $relativeY * $outwardY > 0 && $radial > Table::THROAT_RADIUS)
 		{
-			if($radial < 1e-9) [$radialX,$radialY] = [1.0,0.0];
-			else [$radialX,$radialY] = [$relativeX / $radial,$relativeY / $radial];
+			// Behind the pocket centre the cut is closed by the rail and the back of the liner: a wall that returns
+			// the ball rather than a rim it could tip over or a cloth it could roll back onto.
+			$radial = Table::THROAT_RADIUS;
+			$normal = [$radialX,$radialY,0.0];
+			$onRim = false;
+		}
+		elseif($onRim)
+		{
+			// Rolling over the rim of the cut: the centre keeps one radius from the rim edge, so pushing back along
+			// the line to that edge lets the ball tip inward and down rather than fall straight through the cloth.
+			$inward = Table::THROAT_RADIUS - $radial;
+			$above = Ball::RADIUS - $ball->drop;
+			$distance = hypot(max(0, $inward), $above);
 
-			$normalLength = hypot(1, self::POCKET_DRAFT);
-			$nx = $radialX / $normalLength;
-			$ny = $radialY / $normalLength;
-			$nz = self::POCKET_DRAFT / $normalLength;
+			if($inward <= 0 && $ball->drop > 0)
+			{
+				$ball->drop = 0;
+				$normal = [0.0,0.0,1.0];
+			}
+			elseif($inward > 0 && $distance < Ball::RADIUS)
+			{
+				$radial = Table::THROAT_RADIUS - $inward * Ball::RADIUS / $distance;
+				$ball->drop = Ball::RADIUS - $above * Ball::RADIUS / $distance;
+				$normal = [$radialX * $inward / $distance,$radialY * $inward / $distance,$above / $distance];
+			}
+		}
+		else
+		{
+			// Below the rim the liner cone narrows at the draft angle from where the rim left off.
+			$allowed = max(.001, Table::THROAT_RADIUS - Ball::RADIUS - self::POCKET_DRAFT * ($ball->drop - Ball::RADIUS));
+
+			if($radial > $allowed)
+			{
+				$radial = $allowed;
+				$normalLength = hypot(1, self::POCKET_DRAFT);
+				$normal = [$radialX / $normalLength,$radialY / $normalLength,self::POCKET_DRAFT / $normalLength];
+			}
+		}
+
+		if($normal !== null)
+		{
+			[$nx,$ny,$nz] = $normal;
+			$ball->x = $pocketX + $radialX * $radial;
+			$ball->y = $pocketY + $radialY * $radial;
 			$normalSpeed = $ball->vx * $nx + $ball->vy * $ny + $ball->vDrop * $nz;
-			$ball->x = $pocketX + $radialX * $allowed;
-			$ball->y = $pocketY + $radialY * $allowed;
 
 			if($normalSpeed > 0)
 			{
-				$impulse = (1 + self::POCKET_RESTITUTION) * $normalSpeed;
+				// Rolling over the rim is a resting contact; only a real strike on it, the wall, or the liner rebounds.
+				$restitution = $onRim && $normalSpeed < .3 ? 0.0 : self::POCKET_RESTITUTION;
+				$impulse = (1 + $restitution) * $normalSpeed;
 				$ball->vx -= $impulse * $nx;
 				$ball->vy -= $impulse * $ny;
 				$ball->vDrop -= $impulse * $nz;
 				$ball->vx *= .985;
 				$ball->vy *= .985;
 				$ball->spinY *= .92;
-				$this->events[] = ['type' => 'pocket-rattle','ball' => $ball->number,'pocket' => $index
+				if($restitution > 0) $this->events[] = ['type' => 'pocket-rattle','ball' => $ball->number,'pocket' => $index
 					,'strength' => min(1, $normalSpeed / self::MAX_SPEED)];
 			}
 		}
 
-		if($ball->drop < 0)
+		// A ball that rises onto the shelf remains owned by pocket physics until its centre passes the actual mouth
+		// chord. While it crosses that shelf, the two tangent facings are solid lateral walls.
+		if($onRim && $ball->drop <= 1e-8 && hypot($ball->x - $pocketX, $ball->y - $pocketY) >= Table::THROAT_RADIUS)
+		$this->clearPocketFacingOverlap($ball, $index);
+		[$mouthX,$mouthY] = Table::pocketMouthCenter($index);
+		$crossedMouth = ($ball->x - $mouthX) * $outwardX + ($ball->y - $mouthY) * $outwardY <= 0;
+		$leaving = $ball->vx * $outwardX + $ball->vy * $outwardY < -1e-6;
+		if((!$crossedMouth || !$leaving) && $ball->drop < 0)
 		{
-			// Return the centre just behind both cushion planes. This prevents an
-			// upward crossing from re-entering the liner in the same integration slice.
-			$limitX = Table::WIDTH / 2 - Ball::RADIUS - 1e-5;
-			$limitY = Table::HEIGHT / 2 - Ball::RADIUS - 1e-5;
-			$ball->x = max(-$limitX, min($limitX, $ball->x));
-			$ball->y = max(-$limitY, min($limitY, $ball->y));
-
+			$ball->drop = 0;
+			$ball->vDrop = max(0, $ball->vDrop);
+		}
+		elseif($crossedMouth && $leaving
+			&& ($ball->drop < 0 || ($onRim && $ball->drop <= 1e-8 && Table::THROAT_RADIUS - $radial <= 0)))
+		{
+			if(!$this->clearPocketFacingOverlap($ball, $index))
+			{
+				$ball->drop = 0;
+				$ball->vDrop = max(0, $ball->vDrop);
+				return;
+			}
 			$ball->drop = $ball->previousDrop = 0;
 			$ball->vDrop = 0;
 			$ball->pocket = null;
@@ -612,6 +663,61 @@ final class Simulation
 
 			if($ball->number === 0) $this->scratched = true;
 		}
+	}
+
+	/**
+	 * Keep a rattling ball on the open side of both tangent pocket facings before returning it to cloth physics.
+	 *
+	 * Pocket integration owns the ball while it is above the cut, so the ordinary facing sweep cannot protect it.
+	 * Projecting a penetration to the ball-centre offset and reflecting the inward velocity supplies that missing
+	 * contact. The ball may leave pocket physics only once it clears both solid facings by one radius.
+	 */
+	private function clearPocketFacingOverlap(Ball $ball, int $index): bool
+	{
+		[$pocketX,$pocketY] = Table::pockets()[$index];
+		$faces = array_slice(Table::facings(), $index * 2, 2);
+
+		for($iteration = 0; $iteration < 3; $iteration++)
+		{
+			$corrected = false;
+			foreach($faces as [$startX,$startY,$endX,$endY])
+			{
+				$segmentX = $endX - $startX;
+				$segmentY = $endY - $startY;
+				$length = hypot($segmentX, $segmentY);
+				$nx = -$segmentY / $length;
+				$ny = $segmentX / $length;
+				if(($pocketX - $startX) * $nx + ($pocketY - $startY) * $ny < 0)
+				[$nx,$ny] = [-$nx,-$ny];
+				$distance = ($ball->x - $startX) * $nx + ($ball->y - $startY) * $ny;
+				if($distance >= Ball::RADIUS) continue;
+
+				$correction = Ball::RADIUS - $distance + 1e-7;
+				$ball->x += $nx * $correction;
+				$ball->y += $ny * $correction;
+				$normalSpeed = $ball->vx * $nx + $ball->vy * $ny;
+				if($normalSpeed < 0)
+				{
+					$impulse = (1 + self::POCKET_RESTITUTION) * $normalSpeed;
+					$ball->vx -= $impulse * $nx;
+					$ball->vy -= $impulse * $ny;
+				}
+				$corrected = true;
+			}
+			if(!$corrected) return true;
+		}
+
+		foreach($faces as [$startX,$startY,$endX,$endY])
+		{
+			$segmentX = $endX - $startX;
+			$segmentY = $endY - $startY;
+			$length = hypot($segmentX, $segmentY);
+			$nx = -$segmentY / $length;
+			$ny = $segmentX / $length;
+			if(($pocketX - $startX) * $nx + ($pocketY - $startY) * $ny < 0) [$nx,$ny] = [-$nx,-$ny];
+			if(($ball->x - $startX) * $nx + ($ball->y - $startY) * $ny < Ball::RADIUS - 1e-8) return false;
+		}
+		return true;
 	}
 
 	/** @return array<string,mixed>|null */
@@ -840,7 +946,8 @@ final class Simulation
 		foreach(Table::pockets() as $index => [$pocketX,$pocketY])
 		{
 			[$outwardX,$outwardY] = Table::pocketOutward($index);
-			$pockets[$index] = [$pocketX,$pocketY,Table::pocketRadius($index) - Ball::RADIUS,$outwardX,$outwardY];
+			// A ball drops once its centre crosses the cloth edge, so the swept drop circle is the slate cut itself.
+			$pockets[$index] = [$pocketX,$pocketY,Table::THROAT_RADIUS,$outwardX,$outwardY];
 		}
 
 		$facings = [];

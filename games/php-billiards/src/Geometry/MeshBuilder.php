@@ -29,7 +29,10 @@ final class MeshBuilder
 
 		return [
 			'apron' => self::extrude($profiles['apron'], $profiles['bounds'], 112, 64, -.25, TableGeometry::APRON_TOP)
-			, 'bed' => self::extrude($profiles['bed'], $profiles['bounds'], 128, 72, -.047, TableGeometry::TABLETOP_TOP)
+			// Sampled as finely as the rail: the shelf around each side cut ends in crescent tips a few millimetres wide.
+			, 'bed' => self::extrude(
+				$profiles['bed'], $profiles['bounds'], TableGeometry::COLUMNS, TableGeometry::ROWS, -.047, TableGeometry::TABLETOP_TOP
+			)
 			// The rail reaches down to the apron so no slot under it exposes the open pocket shafts; the join is flush.
 			, 'wood' => self::extrudeRounded(
 				$profiles['wood'], $profiles['bounds'], TableGeometry::COLUMNS, TableGeometry::ROWS

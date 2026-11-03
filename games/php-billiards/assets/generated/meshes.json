@@ -29,79 +29,79 @@
         },
         "bed": {
             "vertexOffset": 197936,
-            "vertexLength": 84736,
-            "vertexCount": 2648,
-            "indexOffset": 282672,
-            "indexLength": 12720,
-            "indexCount": 3180,
+            "vertexLength": 179456,
+            "vertexCount": 5608,
+            "indexOffset": 377392,
+            "indexLength": 26928,
+            "indexCount": 6732,
             "doubleSided": false
         },
         "wood": {
-            "vertexOffset": 295392,
-            "vertexLength": 1212544,
-            "vertexCount": 37892,
-            "indexOffset": 1507936,
-            "indexLength": 162240,
-            "indexCount": 40560,
+            "vertexOffset": 404320,
+            "vertexLength": 1231488,
+            "vertexCount": 38484,
+            "indexOffset": 1635808,
+            "indexLength": 164832,
+            "indexCount": 41208,
             "doubleSided": false
         },
         "cushion": {
-            "vertexOffset": 1670176,
+            "vertexOffset": 1800640,
             "vertexLength": 9216,
             "vertexCount": 288,
-            "indexOffset": 1679392,
+            "indexOffset": 1809856,
             "indexLength": 4320,
             "indexCount": 1080,
             "doubleSided": false
         },
         "liners": {
-            "vertexOffset": 1683712,
+            "vertexOffset": 1814176,
             "vertexLength": 110592,
             "vertexCount": 3456,
-            "indexOffset": 1794304,
+            "indexOffset": 1924768,
             "indexLength": 41472,
             "indexCount": 10368,
             "doubleSided": true
         },
         "cube": {
-            "vertexOffset": 1835776,
+            "vertexOffset": 1966240,
             "vertexLength": 768,
             "vertexCount": 24,
-            "indexOffset": 1836544,
+            "indexOffset": 1967008,
             "indexLength": 144,
             "indexCount": 36,
             "doubleSided": false
         },
         "cue": {
-            "vertexOffset": 1836688,
+            "vertexOffset": 1967152,
             "vertexLength": 22176,
             "vertexCount": 693,
-            "indexOffset": 1858864,
+            "indexOffset": 1989328,
             "indexLength": 15360,
             "indexCount": 3840,
             "doubleSided": false
         },
         "sphere": {
-            "vertexOffset": 1874224,
+            "vertexOffset": 2004688,
             "vertexLength": 68640,
             "vertexCount": 2145,
-            "indexOffset": 1942864,
+            "indexOffset": 2073328,
             "indexLength": 49152,
             "indexCount": 12288,
             "doubleSided": false
         },
         "disc": {
-            "vertexOffset": 1992016,
+            "vertexOffset": 2122480,
             "vertexLength": 1344,
             "vertexCount": 42,
-            "indexOffset": 1993360,
+            "indexOffset": 2123824,
             "indexLength": 480,
             "indexCount": 120,
             "doubleSided": false
         }
     },
-    "byteLength": 1993840,
-    "sha256": "9e04be5956d078c41c3367e25de3506b0ce1f23e3b5b2c8469179b8084e52cbb",
-    "compressedByteLength": 447491,
-    "compressedSha256": "420a814726eb4e939205ef6a542c1139fce88fe327a9b4831ce043680aac7625"
+    "byteLength": 2124304,
+    "sha256": "fd34d7b9194b2a2e2cc309dab478be12b18905f430dac9b167456fa183d09c9b",
+    "compressedByteLength": 478949,
+    "compressedSha256": "3a26d91c07c4ce310a7578b285633c96e8945c7036bb3036549b3a2a1b879cad"
 }

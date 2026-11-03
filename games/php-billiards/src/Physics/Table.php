@@ -23,10 +23,16 @@ final class Table
 	/** Analytic leather lip inset used by the renderer to hide full-table grid chords. */
 	public const POCKET_LIP_INSET = 0.0025;
 	public const LINER_RADIUS = self::THROAT_RADIUS - self::POCKET_LIP_INSET;
+	/**
+	 * Cloth shelf between a side pocket's mouth and its cut: the WPA maximum of 3/8 inch. The rail behind the notch
+	 * must stay thicker than its two round-overs, which rules out a deeper side shelf. Corner pockets keep the 3.9 cm
+	 * shelf that their throat placement already gives, inside the WPA 1-2 1/4 inch range.
+	 */
+	public const SIDE_SHELF = .009525;
 	private const CORNER_JAW = 0.08194483710475602;
 
 	/**
-	 * Return the six canonical pocket-throat centres.
+	 * Return the six pocket centres: one round cut through the slate and rail, where balls drop and liners hang.
 	 *
 	 * Corner centres follow the rounded table corners while side centres sit beyond the long rail, giving physics and
 	 * rendering one ordered index for mouths, liners, shelves, drops, and sound events.
@@ -41,7 +47,7 @@ final class Table
 
 		$cornerX = self::WIDTH / 2 + self::CUSHION_WIDTH / 2;
 		$cornerY = self::HEIGHT / 2 + self::CUSHION_WIDTH / 2;
-		$sideY = self::HEIGHT / 2 + self::CUSHION_WIDTH;
+		$sideY = self::HEIGHT / 2 + self::SIDE_SHELF + self::THROAT_RADIUS;
 
 		return $pockets = [[-$cornerX,-$cornerY],[0,-$sideY],[$cornerX,-$cornerY]
 			,[-$cornerX,$cornerY],[0,$sideY],[$cornerX,$cornerY]];
@@ -131,7 +137,7 @@ final class Table
 			, [$mouthX + $lateralX * $mouth / 2,$mouthY + $lateralY * $mouth / 2]];
 	}
 
-	/** Tangency from one jaw to the rendered round tabletop hole. @return array{float,float} */
+	/** Tangency from one jaw to the round pocket cut. @return array{float,float} */
 	private static function facingTangent(int $index, array $jaw): array
 	{
 		[$centerX,$centerY] = self::pockets()[$index];
@@ -196,22 +202,24 @@ final class Table
 	}
 
 	/**
+	 * Whether a ball centre is over a slate cut, where the cloth no longer holds it up.
+	 *
 	 * @param float $x Ball-centre X coordinate.
 	 * @param float $y Ball-centre Y coordinate.
 	 */
 	public static function pocketed(float $x, float $y): bool
 	{
-		foreach(self::pockets() as $index => [$px,$py])
-		if(hypot($x - $px, $y - $py) <= self::pocketRadius($index)) return true;
+		foreach(self::pockets() as [$px,$py])
+		if(hypot($x - $px, $y - $py) <= self::THROAT_RADIUS) return true;
 
 		return false;
 	}
 
 	/**
-	 * Find the pocket liner entered through a jaw or shelf.
+	 * Find the slate cut a ball centre has crossed.
 	 *
-	 * The result requires the ball centre to cross the same mouth chord and circular liner boundary used by the
-	 * rendered opening, allowing energetic glancing entries to rattle or escape instead of being vacuumed inward.
+	 * A ball drops as soon as its centre passes the cloth edge, the same circle the renderer cuts from the bed, so
+	 * nothing rests over a visible hole; it then tips over the rim into the liner rather than needing to fit it first.
 	 *
 	 * @param float $x Ball-centre X coordinate.
 	 * @param float $y Ball-centre Y coordinate.
@@ -219,19 +227,11 @@ final class Table
 	 */
 	public static function pocketEntry(float $x, float $y): ?array
 	{
-		$pockets = self::pockets();
-
-		foreach($pockets as $index => [$px,$py])
+		foreach(self::pockets() as $index => [$px,$py])
 		{
-			$clearance = self::pocketRadius($index) - Ball::RADIUS;
 			// hypot() never falls below the longer leg by more than an ulp, so a clear box miss is a certain miss.
-			if(abs($x - $px) > $clearance + 1e-9 || abs($y - $py) > $clearance + 1e-9) continue;
-			$distance = hypot($x - $px, $y - $py);
-
-			// Crossing a jaw chord leaves the ball on the rendered cloth shelf. It
-			// enters liner physics only when its centre fits inside the circular lip.
-			if($distance <= $clearance)
-			return ['index' => $index,'x' => $px,'y' => $py];
+			if(abs($x - $px) > self::THROAT_RADIUS + 1e-9 || abs($y - $py) > self::THROAT_RADIUS + 1e-9) continue;
+			if(hypot($x - $px, $y - $py) <= self::THROAT_RADIUS) return ['index' => $index,'x' => $px,'y' => $py];
 		}
 
 		return null;
