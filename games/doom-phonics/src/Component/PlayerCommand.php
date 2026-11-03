@@ -58,6 +58,17 @@ final class PlayerCommand
 		);
 	}
 
+	/**
+	 * Sample a dead player: nothing moves or fires, and a fresh Use or Fire press becomes the Use pulse that asks the
+	 * host to respawn. A button held through the death is not a press.
+	 */
+	public function sampleRespawn(Controls $controls, ?ViewInput $view = null): void
+	{
+		$this->release();
+		$this->use = $controls->pressed(DoomActions::USE) || $controls->pressed(DoomActions::FIRE)
+			|| ($view?->consumeUse() ?? false);
+	}
+
 	/** @param array<string,bool|int|float|string|null> $actions */
 	public function apply(array $actions, ?ViewInput $view = null, bool $accumulate = false): void
 	{

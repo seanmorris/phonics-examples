@@ -49,10 +49,6 @@ final class EpisodeNetworkSystem
 	private ReplicationScope $scope;
 	private ?PortalInterpolation $portalInterpolation;
 	private ?Level $level;
-
-	/** @var array<int,bool> Whether each slot held Fire last step, so only a fresh press respawns. */
-	private array $firing = [];
-
 	private int $respawns = 0;
 
 	public function __construct(
@@ -128,7 +124,10 @@ final class EpisodeNetworkSystem
 	}
 
 	/**
-	 * Host: respawn dead players who press Use, or press Fire afresh, once the death delay has passed.
+	 * Host: respawn dead players who press Use or Fire once the death delay has passed.
+	 *
+	 * A dead player's peer samples a fresh Use or Fire press as the command's Use pulse, so a held button never
+	 * counts and network jitter cannot fake a press.
 	 *
 	 * The host resets the health and inventory it owns, then announces the spot in a reliable event so that each peer
 	 * places the player, including the peer that owns the player's pose.
@@ -147,17 +146,13 @@ final class EpisodeNetworkSystem
 		{
 			if(!$registry->has($entity, PlayerCommand::class) || !$registry->has($entity, HitPoints::class)) continue;
 
-			$slot = $registry->get($entity, NetworkPlayer::class)->slot;
-			$command = $registry->get($entity, PlayerCommand::class);
-			$pressed = $command->fire && !($this->firing[$slot->value()] ?? false);
-			$this->firing[$slot->value()] = $command->fire;
-
 			if($registry->get($entity, HitPoints::class)->current > 0) continue;
 
 			// A dead player's Use only ever asks to respawn, so an early press cannot linger past the delay.
-			$use = $command->consumeUse();
+			$slot = $registry->get($entity, NetworkPlayer::class)->slot;
+			$use = $registry->get($entity, PlayerCommand::class)->consumeUse();
 
-			if(!$registry->get($entity, PlayerState::class)->canRestart() || (!$use && !$pressed)) continue;
+			if(!$use || !$registry->get($entity, PlayerState::class)->canRestart()) continue;
 
 			$occupied = [];
 

@@ -30,7 +30,12 @@ final class PlayerCommandSystem
 			if($registry->has($entity, HitPoints::class)
 				&& $registry->get($entity, HitPoints::class)->current <= 0
 			){
-				$registry->get($entity, PlayerCommand::class)->release();
+				// Online, the respawn press must reach the host inside the command; single player reads it directly.
+				$registry->get($entity, PlayerCommand::class)->sampleRespawn(
+					$this->controls
+					, $registry->get($entity, ViewInput::class)
+				);
+
 				$registry->get($entity, ViewInput::class)->release();
 
 				continue;

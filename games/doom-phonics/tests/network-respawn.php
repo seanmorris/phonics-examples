@@ -9,12 +9,17 @@ use DoomPhonics\Component\NetworkPlayer;
 use DoomPhonics\Component\PlayerCommand;
 use DoomPhonics\Component\Transform;
 use DoomPhonics\Component\ViewEffects;
+use DoomPhonics\Component\ViewInput;
 use DoomPhonics\Game\DoomMatch;
 use DoomPhonics\Game\Level;
 use DoomPhonics\Game\PlayerRespawn;
 use DoomPhonics\Game\PlayerState;
+use DoomPhonics\Input\DoomActions;
 use DoomPhonics\System\EpisodeNetworkSystem;
+use DoomPhonics\System\PlayerCommandSystem;
+use DoomPhonics\System\PlayerEffectSystem;
 use Phonics\Ecs\Registry;
+use Phonics\Input\Controls;
 use Phonics\Network\BrowserBridge;
 use Phonics\Network\MatchContext;
 use Phonics\Network\Packet;
@@ -83,13 +88,32 @@ use Phonics\Network\SimulationTick;
 		$sessions[$side] = new EpisodeNetworkSystem($world, $match, 'episode', $actors, $bridge, new Level($map));
 	}
 
-	$step = static function(int $count = 1) use ($sessions, $worlds): void {
+	// Each peer runs the production order: sample its own devices, exchange packets, advance death timers, respawn,
+	// then release dead players' commands as CombatSystem does, and send.
+	$controls = ['host' => new Controls, 'guest' => new Controls];
+	$samplers = ['host' => new PlayerCommandSystem($controls['host']), 'guest' => new PlayerCommandSystem($controls['guest'])];
+	$effects = new PlayerEffectSystem;
+
+	foreach($worlds as $world)
+	foreach($world->query(NetworkPlayer::class) as $entity)
+	if(!$world->has($entity, ViewInput::class)) $world->add($entity, new ViewInput);
+
+	$step = static function(int $count = 1, array $held = []) use ($sessions, $worlds, $controls, $samplers, $effects): void {
 		for(; $count > 0; $count--)
 		foreach(['host', 'guest'] as $side)
 		{
-			$sessions[$side]->receive($worlds[$side], 1 / 35);
-			$sessions[$side]->respawn($worlds[$side], 1 / 35);
-			$sessions[$side]->send($worlds[$side], 1 / 35);
+			$world = $worlds[$side];
+			$controls[$side]->set($held[$side] ?? []);
+			$samplers[$side]->update($world, 1 / 35);
+			$sessions[$side]->receive($world, 1 / 35);
+			$effects->update($world, 1 / 35);
+			$sessions[$side]->respawn($world, 1 / 35);
+
+			foreach($world->query(PlayerCommand::class) as $entity)
+			if($world->has($entity, HitPoints::class) && $world->get($entity, HitPoints::class)->current <= 0)
+			$world->get($entity, PlayerCommand::class)->release();
+
+			$sessions[$side]->send($world, 1 / 35);
 		}
 	};
 
@@ -111,8 +135,13 @@ use Phonics\Network\SimulationTick;
 
 	verifyWad(count($deathmatchStarts) > 1, 'E1M1 has deathmatch starts to respawn at');
 
-	// The host kills the guest, as DamageResolver does, after the guest picked up a shotgun and scored.
 	$hostCopy = $player($host, 2);
+	$self = $player($guest, 2);
+	$fire = ['guest' => [DoomActions::FIRE => 1]];
+	$use = ['guest' => [DoomActions::USE => 1]];
+
+	// The guest is firing when the host kills it, as DamageResolver does, after it picked up a shotgun and scored.
+	$step(1, $fire);
 	$dying = $host->get($hostCopy, PlayerState::class);
 	$dying->kills = 3;
 	$dying->weapons['Shotgun'] = true;
@@ -121,13 +150,11 @@ use Phonics\Network\SimulationTick;
 	$host->get($hostCopy, HitPoints::class)->current = 0;
 	$host->get($hostCopy, Body::class)->shootable = false;
 	$dying->beginDeath();
-	$self = $player($guest, 2);
 	// The guest owns its pose: it died a little way from its start, so the respawn has to move it.
 	$guest->get($self, Transform::class)->x += 40;
 	$guest->get($self, ActorState::class)->enter('Death');
-	$guest->get($self, ViewEffects::class)->recordDeath();
 	$corpse = clone $guest->get($self, Transform::class);
-	$step(2);
+	$step(2, $fire);
 
 	verifyWad(
 		$guest->get($self, HitPoints::class)->current === 0 && $guest->get($self, PlayerState::class)->deathTime !== null
@@ -135,21 +162,21 @@ use Phonics\Network\SimulationTick;
 	);
 
 	// Use during the death delay is consumed rather than saved for later.
-	$guestCommand = $guest->get($self, PlayerCommand::class);
-	$guestCommand->apply(['use' => true]);
-	$step();
-	$guestCommand->apply(['use' => false]);
+	$step(1, $use);
 	$step(2);
 	verifyWad($host->get($hostCopy, HitPoints::class)->current === 0, 'Use before the death delay does not respawn');
 
-	$dying->advanceDeath(PlayerState::DEATH_RESTART_DELAY + .1);
-	$step(2);
-	verifyWad($host->get($hostCopy, HitPoints::class)->current === 0, 'an earlier Use press does not respawn later');
+	// Fire held from before the death, through the delay, is not a respawn press.
+	$step(40, $fire);
+	verifyWad(
+		$host->get($hostCopy, PlayerState::class)->canRestart() && $host->get($hostCopy, HitPoints::class)->current === 0
+		, 'Fire held through the death and an earlier Use do not respawn'
+	);
 
-	$guestCommand->apply(['use' => true]);
-	$step();
-	$guestCommand->apply(['use' => false]);
-	$step(3);
+	// Releasing Fire and pressing it again respawns the guest through its own sampled command.
+	$step(1);
+	$step(1, $fire);
+	$step(4);
 
 	$reborn = $host->get($hostCopy, PlayerState::class);
 	$health = $host->get($hostCopy, HitPoints::class);
@@ -159,7 +186,7 @@ use Phonics\Network\SimulationTick;
 			&& $reborn->weapons === ['Fist' => true, 'Pistol' => true] && $reborn->weapon === 'Pistol'
 			&& $reborn->ammo['Clip'] === 50 && $reborn->ammo['Shell'] === 0 && $reborn->armor === 0
 			&& $reborn->kills === 3
-		, 'the host respawns the guest with a fresh loadout, keeping its tally'
+		, 'a fresh Fire press respawns the guest with a fresh loadout, keeping its tally'
 	);
 
 	$pose = $guest->get($self, Transform::class);
@@ -187,32 +214,21 @@ use Phonics\Network\SimulationTick;
 		, 'the host makes the respawned guest solid and shootable at the same start'
 	);
 
-	// A Fire button held through death respawns only after it is released and pressed again.
+	// The host respawns itself from its own Use press once its death delay has passed.
 	$hostSelf = $player($host, 1);
-	$hostCommand = $host->get($hostSelf, PlayerCommand::class);
-	$hostCommand->apply(['fire' => true]);
-	$step();
 	$host->get($hostSelf, HitPoints::class)->current = 0;
-	$host->get($hostSelf, PlayerState::class)->advanceDeath(PlayerState::DEATH_RESTART_DELAY + .1);
-	$step(2);
-	verifyWad($host->get($hostSelf, HitPoints::class)->current === 0, 'Fire held through death does not respawn');
+	$host->get($hostSelf, PlayerState::class)->beginDeath();
+	$step(40);
+	verifyWad($host->get($hostSelf, HitPoints::class)->current === 0, 'a dead host waits for a press');
 
-	$hostCommand->apply(['fire' => false]);
-	$step();
-	$hostCommand->apply(['fire' => true]);
-	$step(3);
+	$step(1, ['host' => [DoomActions::USE => 1]]);
+	$step(4);
+	$remote = $player($guest, 1);
+	$remotePose = $guest->get($remote, Transform::class);
 
 	verifyWad(
-		$host->get($hostSelf, HitPoints::class)->current > 0
-			&& $guest->get($player($guest, 1), HitPoints::class)->current > 0
-			&& in_array(
-				$guest->get($player($guest, 1), Transform::class)->x . ',' . $guest->get(
-					$player($guest, 1)
-					, Transform::class
-				)->y
-				, $deathmatchStarts
-				, true
-			)
-		, 'a fresh Fire press respawns the host, and the guest sees it at a deathmatch start'
+		$host->get($hostSelf, HitPoints::class)->current > 0 && $guest->get($remote, HitPoints::class)->current > 0
+			&& in_array($remotePose->x . ',' . $remotePose->y, $deathmatchStarts, true)
+		, 'a Use press respawns the host, and the guest sees it at a deathmatch start'
 	);
 })();
