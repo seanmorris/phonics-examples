@@ -90,7 +90,7 @@
     "shaders/billiards.vert": "sha256-nLVju+IOeEK4t3gR13nhDiegjfdukCrBQdPYX5gZfDE=",
     "shaders/ui.frag": "sha256-1K8qiJo1AtDSxxbVMKvtxhyRWZk+r42DJ6bMEP2m/4g=",
     "shaders/ui.vert": "sha256-nzz5uhcqbAmgR7A4EtN54AIWTMlMoAwsN4Zow6np5LU=",
-    "src/Game.php": "sha256-noID26l5osCXOF7bQhy/gVH24yBBnu4RtPmH9xcg1d0=",
+    "src/Game.php": "sha256-gXGHbaoyJYh0AGLAu39e/F3wqoP3u/P+k5hK7/zZIj4=",
     "src/Geometry/MeshBuilder.php": "sha256-3LpgRBn8rDpftcsspbAINDZbyQHzDNECe3arsva8V9E=",
     "src/Geometry/MeshData.php": "sha256-DNdvFBLpwNoYsapP2RHKzgQ38NliuzSt9q6F+IEx2WA=",
     "src/Geometry/TableGeometry.php": "sha256-nr225fVpveCudWtdb6xe/kJboS9j/BgjH/xwSe1W1sQ=",

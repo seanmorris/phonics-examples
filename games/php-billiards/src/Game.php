@@ -162,7 +162,17 @@ final class Game
 		$touched = $events !== [] || $actions !== [] || !empty($browser['values'])
 			|| abs((float)($rightStick[0] ?? 0)) > 1e-6 || abs((float)($rightStick[1] ?? 0)) > 1e-6;
 		foreach($controls as $value) $touched = $touched || (is_numeric($value) && abs((float)$value) > 1e-6);
-		if($touched) $this->lastInput = $this->clock;
+		if($touched)
+		{
+			$this->lastInput = $this->clock;
+			// Some actions open an overlay and return before animateIdleCue() runs. Clear the cached local dance here so
+			// every input stops it immediately, including Pause and Controls, and the next dance starts from its opening.
+			if($this->idleKind === 'dawdling')
+			{
+				$this->look = null;
+				$this->idleCue = null;
+			}
+		}
 
 		foreach([
 			'primary' => 0,'reset' => 1,'clear-spin' => 2,'rack' => 3,'pause' => 9

@@ -1407,23 +1407,6 @@ $test('HUD regions stay on screen and never overlap at common canvas sizes', sta
 	}
 });
 
-$failures = 0;
-
-foreach($tests as $name => $callback)
-try
-{
-	$callback();
-	echo "ok - $name\n";
-}
-catch(Throwable $error)
-{
-	$failures++;
-	fwrite(STDERR, "not ok - $name: {$error->getMessage()}\n");
-}
-
-if($failures) exit(1);
-
-
 $test('an opponent\'s cue considers the shot after four idle seconds and never strikes', static function() use ($expect): void {
 	$alice = '@alice:example.org';
 	$bob = '@bob:example.org';
@@ -1464,7 +1447,7 @@ $test('an opponent\'s cue considers the shot after four idle seconds and never s
 	{
 		$frame($game, [], 1 / 60);
 		$pose = $game->idleCue();
-		if($game->clock < 4 - 1e-9)
+		if($game->clock < 4.0)
 		{
 			$expect($pose === null, 'The opponent\'s cue moved before four seconds of waiting');
 			continue;
@@ -1503,7 +1486,7 @@ $test('a dawdling player\'s cue dances about its aim until any input', static fu
 	{
 		$frame($game, [], 1 / 60);
 		$pose = $game->idleCue();
-		if($tick < 60 * 8 - 1)
+		if($game->clock < 8.0)
 		{
 			$expect($pose === null, 'The cue danced before eight idle seconds');
 			continue;
@@ -1521,9 +1504,39 @@ $test('a dawdling player\'s cue dances about its aim until any input', static fu
 		'Dancing changed the table, the aim, or the guide');
 
 	$frame($game, ['values' => ['power' => .4]], 1 / 60);
-	$expect($game->idleCue() === null, 'Input did not stop the dance');
+	$expect($game->idleCue() === null, 'Slider input did not stop the dance');
 	for($tick = 0; $tick < 60 * 7; $tick++) $frame($game, [], 1 / 60);
 	$expect($game->idleCue() === null, 'The dance resumed before another eight idle seconds');
+	for($tick = 0; $tick < 62; $tick++) $frame($game, [], 1 / 60);
+	$expect(($game->idleCue()['kind'] ?? null) === 'dawdling', 'The dance did not resume after another eight idle seconds');
+
+	$frame($game, ['actions' => ['pause']], 1 / 60);
+	$expect($game->overlay === 'pause' && $game->idleCue() === null, 'Pause left the idle dance visible under its overlay');
+	$frame($game, ['actions' => ['resume']], 1 / 60);
+	for($tick = 0; $tick < 60 * 7; $tick++) $frame($game, [], 1 / 60);
+	$expect($game->idleCue() === null, 'The dance resumed too soon after closing Pause');
+	for($tick = 0; $tick < 62; $tick++) $frame($game, [], 1 / 60);
+	$expect(($game->idleCue()['kind'] ?? null) === 'dawdling', 'The dance did not resume after closing Pause');
+
+	$frame($game, ['actions' => ['controls']], 1 / 60);
+	$expect($game->overlay === 'controls' && $game->idleCue() === null,
+		'Controls left the idle dance visible under its overlay');
 });
+
+$failures = 0;
+
+foreach($tests as $name => $callback)
+try
+{
+	$callback();
+	echo "ok - $name\n";
+}
+catch(Throwable $error)
+{
+	$failures++;
+	fwrite(STDERR, "not ok - $name: {$error->getMessage()}\n");
+}
+
+if($failures) exit(1);
 
 echo count($tests) . " PHP Billiards physics tests passed.\n";
