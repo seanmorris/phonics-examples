@@ -61,7 +61,7 @@ const escape = value => String(value).replaceAll('&','&amp;').replaceAll('<','&l
 const page = ({title,body,className='',application='',embed=false}) => `<!doctype html>
 <html lang="en" class="${className}"${application ? ` data-application="${application}"` : ''}${embed ? ' data-game-embed="true"' : ''}>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
-<title>${escape(title)}</title><link rel="stylesheet" href="${application ? '../../' : './'}site.css"></head>
+<title>${escape(title)}</title><link rel="icon" href="data:,"><link rel="stylesheet" href="${application ? '../../' : './'}site.css"></head>
 <body>${body}${application ? `<script type="module" src="../../host.mjs"></script>` : ''}</body></html>`;
 
 const cards = entries.map(entry => `<article class="game-card"><a href="./games/${entry.slug}/"><img src="./${entry.posterRoute}" alt="" width="1280" height="720"><div><h2>${escape(entry.title)}</h2><p>${escape(entry.description)}</p><span>Play full screen →</span></div></a></article>`).join('\n');
