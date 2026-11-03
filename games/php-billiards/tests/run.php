@@ -703,13 +703,13 @@ $test('pocket cone can reject an energetic ball and loses energy deterministical
 	$expect($rejected, 'Energetic ball could not bounce out of the pocket liner');
 	$expect($ball->active && $ball->pocket === null && $ball->drop === 0.0,
 		'Rejected ball did not return to the cloth');
-	[$mouthX,$mouthY] = Table::pocketMouthCenter($rejectedPocket);
 	[$outwardX,$outwardY] = Table::pocketOutward($rejectedPocket);
-	$expect(($ball->x - $mouthX) * $outwardX + ($ball->y - $mouthY) * $outwardY <= 1e-8,
-		'Rejected ball left pocket physics before crossing the mouth chord');
+	[$pocketX,$pocketY] = Table::pockets()[$rejectedPocket];
+	$expect(hypot($ball->x - $pocketX, $ball->y - $pocketY) > Table::THROAT_RADIUS
+		&& ($ball->x - $pocketX) * $outwardX + ($ball->y - $pocketY) * $outwardY <= 0,
+		'Rejected ball left pocket physics before its centre cleared the cut onto the shelf');
 	$expect($ball->vx * $outwardX + $ball->vy * $outwardY < 0,
 		'Rejected ball was moving back into the pocket when released');
-	[$pocketX,$pocketY] = Table::pockets()[$rejectedPocket];
 	foreach(array_slice(Table::facings(), $rejectedPocket * 2, 2) as [$startX,$startY,$endX,$endY])
 	{
 		$segmentX = $endX - $startX;
@@ -723,6 +723,86 @@ $test('pocket cone can reject an energetic ball and loses energy deterministical
 	}
 	$expect(hypot($ball->vx, $ball->vy) < 5, 'Inelastic pocket contacts failed to remove energy');
 	$expect($game->hash() === $replay->hash(), 'Pocket bounce changed between identical simulations');
+});
+
+$test('a pocket ball resting on the shelf returns to the cloth and ends the shot', static function() use ($expect): void {
+	// A state captured from play: the cue ball came to rest on pocket 3's shelf, still owned by the pocket, with its
+	// spin intact. Without cloth friction there it neither rolled nor stopped, and the shot never ended.
+	$game = new Simulation;
+	foreach($game->balls as $ball) $ball->active = false;
+	$cue = $game->cue();
+	$cue->active = true;
+	$cue->x = $cue->previousX = -1.2348533256988685;
+	$cue->y = $cue->previousY = .6359131424910653;
+	$cue->vx = -1.4474509140970829e-33;
+	$cue->vy = -2.741359432418618e-33;
+	[$cue->spinX,$cue->spinY,$cue->spinZ] = [13.009587043025677,0.0,11.942590153167146];
+	$cue->pocket = 3;
+	$cue->drop = $cue->previousDrop = 0.0;
+	$cue->vDrop = 0.0;
+	$game->phase = 'moving';
+	$game->consumeEvents();
+	$start = [$cue->x,$cue->y];
+	$events = [];
+	$farthest = 0.0;
+
+	for($tick = 0; $tick < 120 && $game->phase === 'moving'; $tick++)
+	{
+		$game->step();
+		foreach($game->consumeEvents() as $event) $events[] = $event['type'];
+		$farthest = max($farthest, hypot($cue->x - $start[0], $cue->y - $start[1]));
+	}
+
+	$expect($game->phase !== 'moving', 'A ball resting on the shelf kept the shot running for 2 s');
+	$expect(in_array('pocket-reject', $events, true), 'The resting ball never left pocket ownership');
+	$expect($farthest > .005, 'Cloth friction did not turn the leftover spin into roll');
+	$expect(!$cue->active && $game->scratched, 'The spin did not roll the cue ball back into the pocket');
+
+	// The same spot without spin simply rests on the shelf cloth.
+	$still = new Simulation;
+	foreach($still->balls as $ball) $ball->active = false;
+	$ball = $still->balls[1];
+	$ball->active = true;
+	$ball->x = $ball->previousX = -1.2348533256988685;
+	$ball->y = $ball->previousY = .6359131424910653;
+	$ball->pocket = 3;
+	$still->phase = 'moving';
+	$still->step();
+	$expect($ball->active && $ball->pocket === null && !$still->moving() && $still->phase === 'aim',
+		'A ball at rest on the shelf was not returned to the cloth');
+	$expect(hypot($ball->x + 1.2348533256988685, $ball->y - .6359131424910653) < 1e-9, 'Releasing the resting ball moved it');
+});
+
+$test('a ball sliding along the back of a pocket drops instead of balancing on the rim', static function() use ($expect): void {
+	// Behind the pocket centre the liner is a wall. Pinned exactly over the rim edge, a ball used to balance there
+	// for seconds once it stopped sliding.
+	[$pocketX,$pocketY] = Table::pockets()[0];
+	[$outwardX,$outwardY] = Table::pocketOutward(0);
+	$bearing = atan2(-$outwardY, -$outwardX) + deg2rad(80);
+	[$radialX,$radialY] = [cos($bearing),sin($bearing)];
+	$game = new Simulation;
+	foreach($game->balls as $ball) $ball->active = false;
+	$ball = $game->balls[1];
+	$ball->active = true;
+	$ball->x = $ball->previousX = $pocketX + $radialX * (Table::THROAT_RADIUS + .0005);
+	$ball->y = $ball->previousY = $pocketY + $radialY * (Table::THROAT_RADIUS + .0005);
+	$ball->vx = -$radialX * .08 - $radialY * .4;
+	$ball->vy = -$radialY * .08 + $radialX * .4;
+	$game->phase = 'moving';
+	$game->consumeEvents();
+	$balanced = 0;
+	$sank = false;
+
+	for($tick = 0; $tick < 60 && !$sank; $tick++)
+	{
+		$game->step();
+		foreach($game->consumeEvents() as $event) $sank = $sank || $event['type'] === 'pocket';
+		$behind = ($ball->x - $pocketX) * $outwardX + ($ball->y - $pocketY) * $outwardY > 0;
+		if($ball->pocket !== null && $behind && $ball->drop < .001) $balanced++;
+	}
+
+	$expect($sank, 'The ball was still above the pocket a second after reaching its back wall');
+	$expect($balanced < 15, "The ball sat on the rim behind the pocket centre for $balanced steps");
 });
 
 $test('reset restores the exact pre-shot state', static function() use ($expect): void {

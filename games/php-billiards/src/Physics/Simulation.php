@@ -561,11 +561,13 @@ final class Simulation
 		$onRim = $ball->drop < Ball::RADIUS;
 		[$outwardX,$outwardY] = Table::pocketOutward($index);
 
-		if($onRim && $relativeX * $outwardX + $relativeY * $outwardY > 0 && $radial > Table::THROAT_RADIUS)
+		if($onRim && $relativeX * $outwardX + $relativeY * $outwardY > 0 && $radial > Table::LINER_RADIUS)
 		{
 			// Behind the pocket centre the cut is closed by the rail and the back of the liner: a wall that returns
-			// the ball rather than a rim it could tip over or a cloth it could roll back onto.
-			$radial = Table::THROAT_RADIUS;
+			// the ball rather than a rim it could tip over or a cloth it could roll back onto. The leather hangs at the
+			// lip, inside the cut, so a ball pressed against it is already past the rim edge and tips in rather than
+			// balancing on top of it.
+			$radial = Table::LINER_RADIUS;
 			$normal = [$radialX,$radialY,0.0];
 			$onRim = false;
 		}
@@ -625,22 +627,29 @@ final class Simulation
 			}
 		}
 
-		// A ball that rises onto the shelf remains owned by pocket physics until its centre passes the actual mouth
-		// chord. While it crosses that shelf, the two tangent facings are solid lateral walls.
+		// A ball that rises onto the shelf meets the two tangent facings as solid lateral walls before it goes back to
+		// the cloth.
 		if($onRim && $ball->drop <= 1e-8 && hypot($ball->x - $pocketX, $ball->y - $pocketY) >= Table::THROAT_RADIUS)
 		$this->clearPocketFacingOverlap($ball, $index);
 		[$mouthX,$mouthY] = Table::pocketMouthCenter($index);
 		$crossedMouth = ($ball->x - $mouthX) * $outwardX + ($ball->y - $mouthY) * $outwardY <= 0;
 		$leaving = $ball->vx * $outwardX + $ball->vy * $outwardY < -1e-6;
-		if((!$crossedMouth || !$leaving) && $ball->drop < 0)
+		// Once its centre is past the cut on the table side, the ball rests on the shelf cloth whatever its speed. Only
+		// cloth friction turns its leftover spin into roll or stops it; kept here, a resting ball would never end the shot.
+		$relativeX = $ball->x - $pocketX;
+		$relativeY = $ball->y - $pocketY;
+		$onShelf = $onRim && $ball->drop <= 1e-8 && hypot($relativeX, $relativeY) > Table::THROAT_RADIUS
+			&& $relativeX * $outwardX + $relativeY * $outwardY <= 0;
+		if(!$onShelf && (!$crossedMouth || !$leaving) && $ball->drop < 0)
 		{
 			$ball->drop = 0;
 			$ball->vDrop = max(0, $ball->vDrop);
 		}
-		elseif($crossedMouth && $leaving
-			&& ($ball->drop < 0 || ($onRim && $ball->drop <= 1e-8 && Table::THROAT_RADIUS - $radial <= 0)))
+		elseif($onShelf || ($crossedMouth && $leaving && $ball->drop < 0))
 		{
-			if(!$this->clearPocketFacingOverlap($ball, $index))
+			// The facing correction can push the centre back over the cut; it stays in the pocket until it clears both.
+			if(!$this->clearPocketFacingOverlap($ball, $index)
+				|| hypot($ball->x - $pocketX, $ball->y - $pocketY) <= Table::THROAT_RADIUS)
 			{
 				$ball->drop = 0;
 				$ball->vDrop = max(0, $ball->vDrop);
@@ -1209,7 +1218,10 @@ final class Simulation
 
 		if($slip > .012)
 		{
-			$change = min($slip, self::CLOTH_FRICTION * self::GRAVITY * $seconds);
+			// Each unit of velocity change moves the slip by 3.5: once for the centre and 2.5 for a solid ball's spin.
+			// Kinetic friction stops at pure rolling; overshooting it flipped a small slip back and forth for good, and
+			// a ball caught in that never slowed or ended the shot.
+			$change = min($slip / 3.5, self::CLOTH_FRICTION * self::GRAVITY * $seconds);
 			$dvx = -$slipX / $slip * $change;
 			$dvy = -$slipY / $slip * $change;
 			$ball->vx += $dvx;

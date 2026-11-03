@@ -107,7 +107,7 @@
     "src/Online/BinaryState.php": "sha256-YAN1YQrEKvB01JH0BiQ02bctn91RsOu2WLYHb01LlZQ=",
     "src/Online/EightBallMatch.php": "sha256-qPogDRvoYvvwTMEMnqRDYt7KN3YirOcb1joFjorM2WM=",
     "src/Physics/Ball.php": "sha256-LmAeR+OuckZle54SrHyQV6RfGCy6scMNt/OgaoxBkb4=",
-    "src/Physics/Simulation.php": "sha256-K9RRkTGnjHUaajRp2cdwvGILfH9PxReET7kwJZBk+yo=",
+    "src/Physics/Simulation.php": "sha256-ZIB820KEF2EYazUHYd0F5M9wwatm99t3TGfpNC1tifE=",
     "src/Physics/Table.php": "sha256-XAD/O/IDHFWFO330jXIeIe/Px8eyy0M3vVXHfvvOXGk=",
     "src/Render/Camera.php": "sha256-zjIEAMi7KjLx9CNiFgaTmUswjqG5uvCmhZgH5h6q7YI=",
     "src/Render/FramePacer.php": "sha256-OKjfGRUZg/bbscJ0O0MO+oH7rADR7aKG6pimFnc6FE4=",
