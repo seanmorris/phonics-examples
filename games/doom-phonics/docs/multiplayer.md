@@ -4,7 +4,9 @@ Doom-Phonics uses host-authoritative fixed-step simulation. Peers send compact i
 
 Local camera look updates at display rate while simulation remains at 35 Hz. Pending yaw is consumed exactly once by the next command without changing the displayed orientation. Batched commands accumulate accepted yaw deltas and retain the latest absolute pitch.
 
-Player correction interpolates network-owned remote actors. The local player keeps immediate prediction and reconciles against authoritative state without treating a spawn snapshot as a fresh teleport. Projectile and beam effects use replicated identities so every peer creates and retires the same effect.
+Player correction interpolates network-owned remote actors. The local player keeps immediate prediction and is not corrected against the host's copy, so anything that moves it must reach both peers. Projectile and beam effects use replicated identities so every peer creates and retires the same effect.
+
+The host simulates every monster and shootable thing. Both peers bind the map's actors to the same network IDs by thing index, and the guest shows their replicated pose, health, and animation without running their AI, physics, or attacks. A corpse stops blocking once its replicated health reaches zero. The guest replays the death, pain, sight, and hitscan sounds of each new replicated frame, and hears a fireball when its projectile appears. Only the host resolves damage, including floor damage; a guest's own shot shows blood but leaves the result to the host. The host forwards each damage thrust on the guest's player in a reliable event, and the guest adds it to the movement it predicts. The guest's damage flash, status face, pain, and death follow the health the host sends.
 
 Transport close is a session event. Sending stops, the replication scope is released, and the game returns to its disconnected UI instead of allowing a closed WebRTC bridge to terminate PHP.
 

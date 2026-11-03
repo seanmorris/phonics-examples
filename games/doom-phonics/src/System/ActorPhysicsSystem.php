@@ -7,6 +7,7 @@ use DoomPhonics\Component\ChargeAttack;
 use DoomPhonics\Component\Gravity;
 use DoomPhonics\Component\PlayerStart;
 use DoomPhonics\Component\Projectile;
+use DoomPhonics\Component\RemoteActor;
 use DoomPhonics\Component\Transform;
 use DoomPhonics\Component\Velocity;
 use DoomPhonics\Game\Collision;
@@ -31,7 +32,7 @@ final class ActorPhysicsSystem
 			Transform::class
 			, Velocity::class
 			, Body::class
-			, Query::not(PlayerStart::class, Projectile::class, ChargeAttack::class)
+			, Query::not(PlayerStart::class, Projectile::class, ChargeAttack::class, RemoteActor::class)
 		);
 
 		$this->collision = $collision;

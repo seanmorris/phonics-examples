@@ -27,8 +27,20 @@ final class SectorEffectSystem
 	private array $high = [], $low = [], $timer = [], $phase = [], $glowDirection = [];
 	private LanguageCatalog $language;
 
-	public function __construct(public Level $level, public LineSpecials $specials, ?LanguageCatalog $language = null)
-	{
+	/**
+	 * Create the sector effect system.
+	 *
+	 * @param Level $level Active level.
+	 * @param LineSpecials $specials Line specials, used for exit floors.
+	 * @param ?LanguageCatalog $language Message text.
+	 * @param bool $authority Whether this peer applies floor damage; online guests receive it from the host.
+	 */
+	public function __construct(
+		public Level $level
+		, public LineSpecials $specials
+		, ?LanguageCatalog $language = null
+		, public bool $authority = true
+	){
 		$this->language = $language ?? LanguageCatalog::documents([]);
 
 		foreach($level->sectors as $sector)
@@ -187,6 +199,8 @@ final class SectorEffectSystem
 
 	private function damage(Registry $registry, int $entity, int $damage, bool $exit): void
 	{
+		if(!$this->authority) return;
+
 		$player = $registry->get($entity, PlayerState::class);
 		$hp = $registry->get($entity, HitPoints::class);
 

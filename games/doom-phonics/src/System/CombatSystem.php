@@ -24,6 +24,7 @@ use DoomPhonics\Component\PlayerStart;
 use DoomPhonics\Component\PlayerCommand;
 use DoomPhonics\Component\Projectile;
 use DoomPhonics\Component\ProjectileBounce;
+use DoomPhonics\Component\RemoteActor;
 use DoomPhonics\Component\RemoteProjectile;
 use DoomPhonics\Component\SpawnPoint;
 use DoomPhonics\Component\Transform;
@@ -73,6 +74,12 @@ final class CombatSystem
 	private BloodEffects $blood;
 	private EnemyAwareness $awareness;
 
+	/** Replicated actions a guest replays for remote actors because they only make sound. */
+	private const PRESENTED_ACTIONS = ['a_scream','a_xscream','a_pain','a_playsound','a_playerscream','a_activesound'];
+
+	/** Hitscan attacks whose shot a guest hears from the actor's AttackSound, since only the host fires them. */
+	private const PRESENTED_ATTACKS = ['a_posattack','a_sposattack','a_cposattack'];
+
 	public function __construct(
 		public Level $level
 		, public ActorCatalog $actors
@@ -91,6 +98,7 @@ final class CombatSystem
 		, ?CheatSystem $cheats = null
 		, ?BloodEffects $blood = null
 		, ?EnemyAwareness $awareness = null
+		, public bool $resolveDamage = true
 	){
 		$this->players = Query::all(PlayerStart::class, PlayerState::class, Transform::class, HitPoints::class);
 		$this->projectiles = Query::all(Projectile::class, Transform::class, Velocity::class, ActorState::class);
@@ -109,6 +117,8 @@ final class CombatSystem
 
 	public function update(Registry $registry, float $dt): void
 	{
+		if(!$this->resolveDamage) $this->presentRemoteActors($registry);
+
 		foreach($registry->query($this->players) as $entity)
 		{
 			$player = $registry->get($entity, PlayerState::class);
@@ -2675,10 +2685,11 @@ final class CombatSystem
 		, ?HitscanImpact $impact = null
 		, ?int $attack = null
 	): bool {
-		$changed = $this->damageResolver->apply(
-			$registry
-			, new DamageEvent($target, $source, $damage, $inflictor, $thrust)
-		);
+		// Online, the host resolves health, thrust, and death; a guest only shows the blood of its own hit.
+		$changed = $this->resolveDamage
+			? $this->damageResolver->apply($registry, new DamageEvent($target, $source, $damage, $inflictor, $thrust))
+			: $damage > 0 && $registry->alive($target) && $registry->has($target, HitPoints::class)
+				&& $registry->get($target, HitPoints::class)->current > 0;
 
 		if(!$changed || !$this->blood->bleeds($registry, $target)) return $changed;
 
@@ -2863,6 +2874,37 @@ final class CombatSystem
 	private function unsetFloorClip(int $entity, Registry $registry): void
 	{
 		if($registry->has($entity, FloorClip::class)) $registry->remove($entity, FloorClip::class);
+	}
+
+	/** Guest: play the sounds of each new replicated frame of a host-simulated actor, once. */
+	private function presentRemoteActors(Registry $registry): void
+	{
+		foreach($registry->query(RemoteActor::class) as $entity)
+		{
+			if(!$registry->has($entity, ActorState::class)) continue;
+
+			$remote = $registry->get($entity, RemoteActor::class);
+			$state = $registry->get($entity, ActorState::class);
+			$presented = strtolower($state->label) . ':' . $state->frame;
+
+			if($remote->presented === $presented) continue;
+
+			$previous = $remote->presented;
+			$remote->presented = $presented;
+
+			// The first sight of the actor is its spawn state, not a change worth a sound.
+			if($previous === null) continue;
+
+			if(str_starts_with($previous, 'spawn:') && strcasecmp($state->label, 'See') === 0)
+			$this->actorSound($entity, $registry, 'SeeSound');
+
+			$frame = $state->current();
+			$action = strtolower((string)$frame?->action);
+
+			if(in_array($action, self::PRESENTED_ATTACKS, true)) $this->actorSound($entity, $registry, 'AttackSound');
+			elseif(in_array($action, self::PRESENTED_ACTIONS, true) && $this->actions->handles($action))
+			$this->actions->dispatch($entity, $frame, $registry);
+		}
 	}
 
 	private function actorSound(int $entity, Registry $registry, string $property): void

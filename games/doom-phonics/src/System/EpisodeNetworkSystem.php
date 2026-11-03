@@ -4,19 +4,25 @@ namespace DoomPhonics\System;
 
 use DoomPhonics\Component\ActorState;
 use DoomPhonics\Component\BeamEffect;
+use DoomPhonics\Component\Body;
 use DoomPhonics\Component\HitPoints;
 use DoomPhonics\Component\InventoryPickup;
 use DoomPhonics\Component\MapThing;
+use DoomPhonics\Component\MonsterBrain;
 use DoomPhonics\Component\NetworkPlayer;
 use DoomPhonics\Component\PlayerCommand;
 use DoomPhonics\Component\Projectile;
+use DoomPhonics\Component\RemoteActor;
 use DoomPhonics\Component\RemoteBeam;
 use DoomPhonics\Component\RemoteProjectile;
+use DoomPhonics\Component\StatusFace;
 use DoomPhonics\Component\Transform;
 use DoomPhonics\Component\Velocity;
+use DoomPhonics\Component\ViewEffects;
 use DoomPhonics\Component\ViewInput;
 use DoomPhonics\Definition\ActorCatalog;
 use DoomPhonics\Game\DoomMatch;
+use DoomPhonics\Game\FaceDirection;
 use DoomPhonics\Game\Level;
 use DoomPhonics\Game\PlayerRespawn;
 use DoomPhonics\Game\PlayerState;
@@ -44,12 +50,22 @@ use Phonics\Network\SimulationTick;
 /** Doom-owned codecs and player command mapping over neutral Phonics replication. */
 final class EpisodeNetworkSystem
 {
+	/** Map-spawned actors use network IDs offset by their thing index, so both peers bind them alike. */
+	private const MAP_ACTOR_IDS = 1000;
+
 	private NetworkEntityAllocator $entities;
 	private ReplicationSession $session;
 	private ReplicationScope $scope;
 	private ?PortalInterpolation $portalInterpolation;
 	private ?Level $level;
 	private int $respawns = 0;
+	private int $thrustEvents = 0;
+
+	/** @var array<int,array{float,float}> Host thrust on remote-owned players this step, by slot. */
+	private array $thrusts = [];
+
+	/** Guest's own health after the last step, so a host-applied hit can show its local feedback. */
+	private ?int $health = null;
 
 	public function __construct(
 		private Registry $world
@@ -66,6 +82,7 @@ final class EpisodeNetworkSystem
 		$this->portalInterpolation = $level ? new PortalInterpolation($level) : null;
 		$replication = self::replication($actors);
 		$this->bindPlayers($this->scope);
+		$this->bindActors();
 
 		$this->session = new ReplicationSession(
 			$world
@@ -101,6 +118,8 @@ final class EpisodeNetworkSystem
 	{
 		$this->session->beforeStep($registry, $dt);
 
+		if(!$this->match->network->host()) $this->present($registry);
+
 		if(!$this->portalInterpolation) return;
 
 		foreach($registry->query(RemoteProjectile::class) as $entity)
@@ -118,7 +137,11 @@ final class EpisodeNetworkSystem
 
 	public function send(Registry $registry, float $dt): void
 	{
-		if($this->match->network->host()) $this->bindEffects();
+		if($this->match->network->host())
+		{
+			$this->bindEffects();
+			$this->sendThrust();
+		}
 
 		$this->session->afterStep($registry, $dt);
 	}
@@ -175,6 +198,28 @@ final class EpisodeNetworkSystem
 				, ['slot' => $slot->value()] + $spot
 			));
 		}
+	}
+
+	/**
+	 * Host: forward damage thrust on a player the other peer owns.
+	 *
+	 * That peer predicts its own movement, so a push the host applies only to its copy would leave the two copies apart.
+	 *
+	 * @param int $entity Thrust target.
+	 * @param float $x Added horizontal velocity along x, in map units per second.
+	 * @param float $y Added horizontal velocity along y, in map units per second.
+	 * @return void
+	 */
+	public function thrust(int $entity, float $x, float $y): void
+	{
+		if(!$this->match->network->host() || !$this->world->has($entity, NetworkPlayer::class)) return;
+
+		$player = $this->world->get($entity, NetworkPlayer::class);
+
+		if($player->local) return;
+
+		[$sumX, $sumY] = $this->thrusts[$player->slot->value()] ?? [0.0, 0.0];
+		$this->thrusts[$player->slot->value()] = [$sumX + $x, $sumY + $y];
 	}
 
 	public function close(): void
@@ -357,6 +402,11 @@ final class EpisodeNetworkSystem
 		$result->prefab('doom.pickup', static fn(Registry $registry): int => $registry->create(new MapThing(-1, 0)));
 
 		$result->prefab(
+			'doom.actor'
+			, static fn(Registry $registry): int => $registry->create(new RemoteActor, new MapThing(-1, 0))
+		);
+
+		$result->prefab(
 			'doom.player'
 			, static function(): int {
 				throw new \LogicException('Doom player snapshots require a deterministic map-owned slot binding');
@@ -419,6 +469,9 @@ final class EpisodeNetworkSystem
 			$this->bindEffect($entity, $prefab);
 		}
 
+		// Monsters the host spawns during play, such as a pain elemental's lost souls.
+		foreach($this->world->query(MonsterBrain::class) as $entity) $this->bindEffect($entity, 'doom.actor');
+
 		foreach($this->world->query(InventoryPickup::class) as $entity)
 		{
 			if(!$this->world->has($entity, MapThing::class)
@@ -464,9 +517,16 @@ final class EpisodeNetworkSystem
 	/** Apply a host gameplay event on this peer. */
 	private function event(ReliableEvent $event): void
 	{
-		if($event->type !== 'doom.respawn') return;
-
 		$payload = $event->payload;
+
+		if($event->type === 'doom.thrust')
+		{
+			$this->applyThrust($payload);
+
+			return;
+		}
+
+		if($event->type !== 'doom.respawn') return;
 
 		foreach(['x','y','z','angle'] as $axis)
 		if(!is_numeric($payload[$axis] ?? null) || !is_finite((float)$payload[$axis]))
@@ -491,6 +551,111 @@ final class EpisodeNetworkSystem
 		$health = $this->world->get($entity, HitPoints::class);
 		$health->current = $health->maximum;
 		$this->world->add($entity, PlayerRespawn::reborn($this->world->get($entity, PlayerState::class)));
+	}
+
+	/** Owner: add the host's damage thrust to this peer's own player. */
+	private function applyThrust(array $payload): void
+	{
+		$x = $payload['x'] ?? null;
+		$y = $payload['y'] ?? null;
+
+		if(!is_numeric($x) || !is_numeric($y) || !is_finite((float)$x) || !is_finite((float)$y))
+		throw new \UnexpectedValueException('Thrust event has an invalid impulse');
+
+		$entity = $this->player(new PlayerSlot((int)($payload['slot'] ?? 0)));
+
+		if(!$this->world->get($entity, NetworkPlayer::class)->local || !$this->world->has($entity, Velocity::class)) return;
+
+		$velocity = $this->world->get($entity, Velocity::class);
+		$velocity->x += max(-4096, min(4096, (float)$x));
+		$velocity->y += max(-4096, min(4096, (float)$y));
+	}
+
+	/** Host: send this step's accumulated thrust, one reliable event per pushed player. */
+	private function sendThrust(): void
+	{
+		foreach($this->thrusts as $slot => [$x, $y])
+		$this->session->emit(new ReliableEvent(
+			'thrust:' . $slot . ':' . ++$this->thrustEvents
+			, $this->session->tick()
+			, 'doom.thrust'
+			, ['slot' => $slot, 'x' => $x, 'y' => $y]
+		));
+
+		$this->thrusts = [];
+	}
+
+	/**
+	 * Guest: present host-owned state that arrived this step.
+	 *
+	 * Remote actors take collision from their replicated health, since the host runs their death actions. This peer's
+	 * own player shows the flash, status face, pain, and death of a hit the host resolved.
+	 */
+	private function present(Registry $registry): void
+	{
+		foreach($registry->query(RemoteActor::class) as $entity)
+		{
+			if(!$registry->has($entity, Body::class) || !$registry->has($entity, ActorState::class)) continue;
+
+			$alive = !$registry->has($entity, HitPoints::class) || $registry->get($entity, HitPoints::class)->current > 0;
+			$definition = $registry->get($entity, ActorState::class)->definition;
+			$body = $registry->get($entity, Body::class);
+			$body->solid = $alive && $definition->hasFlag('SOLID');
+			$body->shootable = $alive && $definition->hasFlag('SHOOTABLE');
+		}
+
+		$entity = $this->player($this->match->network->localSlot);
+
+		if(!$registry->has($entity, HitPoints::class)) return;
+
+		$health = $registry->get($entity, HitPoints::class);
+		$before = $this->health;
+		$this->health = $health->current;
+
+		if($before === null || $health->current >= $before || $before <= 0) return;
+
+		$damage = $before - $health->current;
+
+		if($registry->has($entity, ViewEffects::class)) $registry->get($entity, ViewEffects::class)->recordDamage($damage);
+
+		if($registry->has($entity, StatusFace::class))
+		$registry->get($entity, StatusFace::class)->recordDamage($damage, FaceDirection::front());
+
+		if(!$registry->has($entity, ActorState::class)) return;
+
+		// The owner's actor state drives its own pain and death sounds through ActorStateSystem.
+		$state = $registry->get($entity, ActorState::class);
+
+		if($health->current <= 0)
+		{
+			$label = $health->current <= -$health->maximum && $state->definition->state('XDeath') ? 'XDeath' : 'Death';
+
+			if($state->definition->state($label)) $state->enter($label);
+		}
+		elseif($state->definition->state('Pain') && mt_rand(0, 255) < $health->painChance) $state->enter('Pain');
+	}
+
+	/** Bind map-spawned monsters and shootable things alike on both peers; guests only present them. */
+	private function bindActors(): void
+	{
+		$host = $this->match->network->host();
+
+		foreach($this->world->query(MapThing::class) as $entity)
+		{
+			$index = $this->world->get($entity, MapThing::class)->index;
+
+			if($index < 0 || !$this->world->has($entity, ActorState::class)
+				|| $this->world->has($entity, NetworkPlayer::class)
+				|| (!$this->world->has($entity, MonsterBrain::class) && !$this->world->has($entity, HitPoints::class))
+			) continue;
+
+			$id = new NetworkEntityId(self::MAP_ACTOR_IDS + $index);
+			$this->entities->bind($id, $entity);
+			$this->world->add($entity, new NetworkIdentity($id, $this->scope));
+			$this->world->add($entity, new NetworkPrefab('doom.actor'));
+
+			if(!$host) $this->world->add($entity, new RemoteActor);
+		}
 	}
 
 	private function player(PlayerSlot $slot): int

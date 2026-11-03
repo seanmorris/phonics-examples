@@ -14,7 +14,9 @@ use DoomPhonics\Component\PlayerCommand;
 use DoomPhonics\Component\WeaponOverlay;
 use DoomPhonics\Component\WeaponOwner;
 use DoomPhonics\Definition\ActionDispatcher;
+use DoomPhonics\Game\ActorDropper;
 use DoomPhonics\Game\Collision;
+use DoomPhonics\Game\DamageResolver;
 use DoomPhonics\Game\ActorObstacles;
 use DoomPhonics\Game\BloodEffects;
 use DoomPhonics\Game\DoomGravity;
@@ -138,6 +140,14 @@ final class EpisodeSystems implements SystemSet
 
 		$actions = new ActionDispatcher;
 
+		$network = null;
+
+		// The host forwards damage thrust on the guest's player, which the guest moves itself.
+		$damage = new DamageResolver(
+			new ActorDropper($content->level, $factory)
+			, static function(int $entity, float $x, float $y) use (&$network): void { $network?->thrust($entity, $x, $y); }
+		);
+
 		$combat = new CombatSystem(
 			$content->level
 			, $actors
@@ -149,12 +159,14 @@ final class EpisodeSystems implements SystemSet
 			, $sound
 			, $content->sounds
 			, (float)($motion['gravity'] ?? DoomGravity::ACCELERATION)
-			, null
+			, $damage
 			, $content->weapons
 			, $host
 			, $host
 			, $cheats
 			, new BloodEffects($content->level, $actors, $factory, $content->textures->iwadBloodSprite(), $settings)
+			, null
+			, $host
 		);
 
 		$movement = new PlayerMovementSystem(
@@ -172,7 +184,7 @@ final class EpisodeSystems implements SystemSet
 		$states = new ActorStateSystem($actions);
 		$beams = new BeamEffectSystem;
 		$physics = new ActorPhysicsSystem($collision, (float)($motion['gravity'] ?? DoomGravity::ACCELERATION));
-		$effects = new SectorEffectSystem($content->level, $specials, $content->language);
+		$effects = new SectorEffectSystem($content->level, $specials, $content->language, $host);
 		$playerEffects = new PlayerEffectSystem;
 		$statusFaces = new StatusFaceSystem($this->controls($scope));
 		$commands = new PlayerCommandSystem($this->controls($scope));
