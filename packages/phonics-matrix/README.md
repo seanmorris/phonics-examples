@@ -53,7 +53,7 @@ Explicit `policy.iceServers`, `network.transport.iceServers`, or world transport
 
 ### Cleanup and retention
 
-Unused links expire after fifteen minutes. Guest registration/admission has a two-minute budget, resource selection fifteen minutes, negotiation two minutes, and connection recovery thirty seconds. These setup timers do not limit an established match.
+A direct invitation to someone in the lobby lasts ninety seconds. Unused links expire after fifteen minutes. Guest registration/admission has a two-minute budget, resource selection fifteen minutes, negotiation two minutes, and connection recovery thirty seconds. These setup timers do not limit an established match.
 
 On cancellation, expiry, setup failure, or final disconnect, the host closes admission and guest writes, disables guest membership, and redacts the stored invitation and **both peers'** signaling events. Cleanup has an independent ten-second request window, even during application disposal. Only after redaction succeeds does the host leave and forget the room. A journal scoped to the host account and homeserver records room lifecycle and event IDs, without invitation secrets, SDP, or guest credentials. Unfinished work retries while authenticated and on the next host connection. Web Locks protect another live tab's room; without locks, only explicitly pending cleanup is retried automatically.
 

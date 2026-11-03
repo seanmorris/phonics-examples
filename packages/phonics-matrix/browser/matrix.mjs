@@ -273,7 +273,7 @@ export class MatrixLobbyProvider extends EventTarget
 			, syncMinInterval = 2_000
 			, syncEmptyDelay = 2_000
 			, syncEmptyMaxDelay = 60_000
-			, invitationTtl = 30_000
+			, invitationTtl = 90_000
 			, signalBatch = 250
 			, guest = false
 			, locks = globalThis.navigator?.locks
