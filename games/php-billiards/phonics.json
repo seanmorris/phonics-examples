@@ -69,7 +69,7 @@
     ]
   },
   "integrity": {
-    "application.php": "sha256-J7RlAck+ZOir6+DI/5+d37JcgjOnq75Ls1VZcVZdEMQ=",
+    "application.php": "sha256-WmhyLDdiqmb5eOyAEc/dc4fOGDm3dNQFYJzEpPI1BkA=",
     "assets/audio/clack.mp3": "sha256-yu4Q98NQ4WgGgO1T/vlIVYy5B3WsM6HDubOtCYEVeeM=",
     "assets/audio/impact.mp3": "sha256-U/DH6ntKnpbcZJrxv09xyWORy0YZziozna1soubdGA4=",
     "assets/audio/pocket-drop.mp3": "sha256-tn9HsxSGTAAJmkg//mgY3TFHrKPb+yVaActKSekd4hM=",
@@ -90,7 +90,7 @@
     "shaders/billiards.vert": "sha256-nLVju+IOeEK4t3gR13nhDiegjfdukCrBQdPYX5gZfDE=",
     "shaders/ui.frag": "sha256-1K8qiJo1AtDSxxbVMKvtxhyRWZk+r42DJ6bMEP2m/4g=",
     "shaders/ui.vert": "sha256-nzz5uhcqbAmgR7A4EtN54AIWTMlMoAwsN4Zow6np5LU=",
-    "src/Game.php": "sha256-c7QuHs3gp+TU2Jy7uQH3YGRmL1sdDFQ9hzEsCpifD1s=",
+    "src/Game.php": "sha256-noID26l5osCXOF7bQhy/gVH24yBBnu4RtPmH9xcg1d0=",
     "src/Geometry/MeshBuilder.php": "sha256-3LpgRBn8rDpftcsspbAINDZbyQHzDNECe3arsva8V9E=",
     "src/Geometry/MeshData.php": "sha256-DNdvFBLpwNoYsapP2RHKzgQ38NliuzSt9q6F+IEx2WA=",
     "src/Geometry/TableGeometry.php": "sha256-nr225fVpveCudWtdb6xe/kJboS9j/BgjH/xwSe1W1sQ=",
@@ -104,7 +104,7 @@
     "src/Render/GpuMesh.php": "sha256-wjBHi94G6bcjOo5fDgt5A5/w+ro4ggu8OGSR1fEvx/M=",
     "src/Render/Hud.php": "sha256-gAMulGz07g8kLgDmMg/H0mg+iQQznZZj9NoNtl8vyhs=",
     "src/Render/MeshBundle.php": "sha256-B0W4uWiZaPlb4cvQ6xj19bH15ovdTr/bQJBdMm4IFUk=",
-    "src/Render/Scene.php": "sha256-/kZ1VE8kvGPvsmGjnp164uZBycm3MIatq+gRUx3yjkQ=",
+    "src/Render/Scene.php": "sha256-5hAvawdnJZlHsVexvNBwbHVLwX2ZNQQE9LvkAoUuHY4=",
     "src/Render/Text.php": "sha256-GNyoAY77n0OP8QC1aXt0ODrPnRcdXhAHxXjsuQ1ic2M=",
     "src/Render/Texture.php": "sha256-4ER+y4wV3OCj4d3a0b0asHifdYy+45Sv8pcgY3fBWB0=",
     "src/Render/Theme.php": "sha256-jJtT94T7n4p/bCL+pYAhQ7PxwF2Fpvd1k0h8aYDzjYk=",

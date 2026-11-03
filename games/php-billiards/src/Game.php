@@ -20,6 +20,8 @@ final class Game
 	private const STROKE_END = Simulation::STEP * 20;
 	/** Seconds an opponent may take over their shot before their cue starts looking the table over. */
 	private const CONSIDER_DELAY = 4.0;
+	/** Seconds the local player may leave a shot untouched before their cue starts to dance in place. */
+	private const DAWDLE_DELAY = 8.0;
 	/** Closest a practice stroke brings the tip to the cue ball, as a cue offset: 3 mm short of contact at -.008. */
 	private const PRACTICE_REACH = -.005;
 	/** Authoritative deterministic table simulation. */
@@ -113,12 +115,18 @@ final class Game
 	private int $networkMessageId = 0;
 	/** @var array{time:float,previousTime:float,contacted:bool,aim:float,power:float,top:float,side:float,x:float,y:float}|null */
 	private ?array $stroke = null;
-	/** Session time from which the opponent has been free to shoot, or null when the move is not theirs. */
-	private ?float $waitingSince = null;
-	/** @var array{index:int,start:float,plan:array<string,mixed>}|null The opponent's current look at the table. */
+	/** Which idle cue the table could show now, `considering` or `dawdling`, or null while neither applies. */
+	private ?string $idleKind = null;
+	/** Session time from which the current idle kind has applied. */
+	private float $idleReady = 0.0;
+	/** Session time of the latest local input of any kind. */
+	private float $lastInput = 0.0;
+	/** Count of local dawdles so far, so each one dances differently. */
+	private int $dawdles = 0;
+	/** @var array{index:int,start:float,plan:array<string,mixed>}|null The idle cue's current look or dance move. */
 	private ?array $look = null;
-	/** @var array{aim:float,offset:float,look:int}|null Display-only cue pose while the opponent considers a shot. */
-	private ?array $consider = null;
+	/** @var array{kind:string,aim:float,offset:float,look:int}|null Display-only idle cue pose. */
+	private ?array $idleCue = null;
 
 	public function __construct()
 	{
@@ -151,6 +159,10 @@ final class Game
 		$this->networkInput($browser);
 		$actions = array_values(array_filter((array)($browser['actions'] ?? []), 'is_string'));
 		$fine = (float)($controls['button20'] ?? 0) >= .5;
+		$touched = $events !== [] || $actions !== [] || !empty($browser['values'])
+			|| abs((float)($rightStick[0] ?? 0)) > 1e-6 || abs((float)($rightStick[1] ?? 0)) > 1e-6;
+		foreach($controls as $value) $touched = $touched || (is_numeric($value) && abs((float)$value) > 1e-6);
+		if($touched) $this->lastInput = $this->clock;
 
 		foreach([
 			'primary' => 0,'reset' => 1,'clear-spin' => 2,'rack' => 3,'pause' => 9
@@ -254,7 +266,7 @@ final class Game
 		}
 
 		$this->phaseTransition();
-		$this->considerShot();
+		$this->animateIdleCue();
 		$cue = $this->simulation->cue();
 		if($this->follow && $cue->active && $this->drag === null && $this->clock - $this->manualCamera > 1.5
 			&& in_array($this->simulation->phase, ['aim','placing'], true) && $this->stroke === null)
@@ -1205,75 +1217,180 @@ final class Game
 	public function stroking(): bool { return $this->stroke !== null; }
 
 	/**
-	 * Return the opponent's idle cue pose while this browser waits on their shot, or null.
+	 * Return the idle cue pose, or null while the cue rests at its aim.
 	 *
-	 * @return array{aim:float,offset:float,look:int}|null Cue angle, pull-back offset, and look number.
+	 * `considering` is an online opponent looking the table over while this browser waits on their shot; `dawdling` is
+	 * the local player's own cue dancing in place after they leave a shot untouched.
+	 *
+	 * @return array{kind:string,aim:float,offset:float,look:int}|null Kind, cue angle, pull-back offset, and move number.
 	 */
-	public function considering(): ?array { return $this->consider; }
+	public function idleCue(): ?array { return $this->idleCue; }
 
 	/**
-	 * Advance the opponent's idle cue once their move has kept this browser waiting.
+	 * Advance the idle cue once a shot has been left alone long enough.
 	 *
-	 * After CONSIDER_DELAY the cue looks the table over on its own: it backs off and swings to a candidate object
-	 * ball, settles with a slight sway, takes a few practice strokes that stop short of the cue ball, and pauses before
-	 * the next look. The pose is display-only. It never touches aim, the guide, or the deterministic simulation, and
-	 * the real action replaces it as soon as it arrives.
+	 * After CONSIDER_DELAY an opponent's cue looks the table over: it backs off and swings to a candidate object ball,
+	 * settles with a slight sway, takes a few practice strokes that stop short of the cue ball, and pauses before the
+	 * next look. After DAWDLE_DELAY without input the local player's cue dances in place at its aim instead: a waggle,
+	 * practice strokes, and impatient taps, separated by pauses, until any input stops it. Either pose is display-only.
+	 * It never touches aim or the deterministic simulation, and a real stroke replaces it as soon as one begins.
 	 */
-	private function considerShot(): void
+	private function animateIdleCue(): void
 	{
-		$waiting = $this->match !== null && $this->match->outcome === null && $this->match->actor !== $this->localPlayer
-			&& $this->roomConfirmed && $this->activeSequence === null && $this->stroke === null
+		$ready = $this->started && $this->overlay === null && $this->stroke === null
 			&& $this->simulation->phase === 'aim' && $this->simulation->cue()->active;
-		$this->waitingSince = $waiting ? ($this->waitingSince ?? $this->clock) : null;
-		$time = $waiting ? $this->clock - $this->waitingSince - self::CONSIDER_DELAY : -1.0;
+		$considering = $ready && $this->match !== null && $this->match->outcome === null
+			&& $this->match->actor !== $this->localPlayer && $this->roomConfirmed && $this->activeSequence === null;
+		$dawdling = $ready && !$considering && $this->canControl() && $this->drag === null && $this->pull === null;
+		$kind = $considering ? 'considering' : ($dawdling ? 'dawdling' : null);
+		if($kind !== $this->idleKind)
+		{
+			$this->idleKind = $kind;
+			$this->idleReady = $this->clock;
+			$this->look = null;
+		}
+		// The opponent's clock runs from their turn; local input only interrupts the local player's own dance.
+		$time = match($kind) {
+			'considering' => $this->clock - $this->idleReady - self::CONSIDER_DELAY
+			, 'dawdling' => $this->clock - max($this->idleReady, $this->lastInput) - self::DAWDLE_DELAY
+			, default => -1.0
+		};
 		if($time < 0)
 		{
 			$this->look = null;
-			$this->consider = null;
+			$this->idleCue = null;
 			return;
 		}
 
-		$this->look ??= ['index' => 0,'start' => 0.0,'plan' => $this->planLook(0, $this->aim)];
-		while($time >= $this->look['start'] + $this->look['plan']['duration'])
-		$this->look = [
-			'index' => $this->look['index'] + 1
-			, 'start' => $this->look['start'] + $this->look['plan']['duration']
-			, 'plan' => $this->planLook($this->look['index'] + 1, $this->look['plan']['to'])
-		];
-
-		$plan = $this->look['plan'];
-		$time -= $this->look['start'];
-		$ease = static fn(float $amount): float => $amount * $amount * (3 - 2 * $amount);
-		$turn = self::wrapAngle($plan['to'] - $plan['from']);
-		if($time < $plan['turn'])
+		if($this->look === null)
 		{
-			// Walking round to the next angle: the cue backs off the ball while it swings.
-			$amount = $time / $plan['turn'];
-			$this->consider = [
-				'aim' => self::wrapAngle($plan['from'] + $turn * $ease($amount))
-				, 'offset' => .045 * sin(M_PI * $amount)
-				, 'look' => $this->look['index']
-			];
-			return;
+			if($kind === 'dawdling') $this->dawdles++;
+			$this->look = ['index' => 0,'start' => 0.0,'plan' => $kind === 'considering'
+				? $this->planLook(0, $this->aim) : $this->planDance(0, null)];
 		}
+		while($time >= $this->look['start'] + $this->look['plan']['duration'])
+		{
+			$index = $this->look['index'] + 1;
+			$this->look = [
+				'index' => $index
+				, 'start' => $this->look['start'] + $this->look['plan']['duration']
+				, 'plan' => $kind === 'considering'
+					? $this->planLook($index, $this->look['plan']['to']) : $this->planDance($index, $this->look['plan']['move'])
+			];
+		}
+
+		$time -= $this->look['start'];
+		[$aim,$offset] = $kind === 'considering'
+			? self::lookPose($this->look['plan'], $time) : self::dancePose($this->look['plan'], $time, $this->aim);
+		$this->idleCue = ['kind' => $kind,'aim' => self::wrapAngle($aim),'offset' => $offset,'look' => $this->look['index']];
+	}
+
+	/** Smoothstep easing on [0, 1]. */
+	private static function ease(float $amount): float
+	{
+		$amount = max(0, min(1, $amount));
+
+		return $amount * $amount * (3 - 2 * $amount);
+	}
+
+	/**
+	 * Cue offset through one practice stroke: a slow draw back, a push to just short of the ball, and a return to the
+	 * address position.
+	 *
+	 * @param float $amount Progress through the stroke on [0, 1).
+	 * @param float $depth Draw-back distance in metres.
+	 */
+	private static function practiceStroke(float $amount, float $depth): float
+	{
+		if($amount < .45) return $depth * self::ease($amount / .45);
+		if($amount < .75) return $depth + (self::PRACTICE_REACH - $depth) * self::ease(($amount - .45) / .3);
+
+		return self::PRACTICE_REACH * (1 - self::ease(($amount - .75) / .25));
+	}
+
+	/**
+	 * Pose an opponent's look at the table at a time within it.
+	 *
+	 * @param array<string,mixed> $plan Look from planLook().
+	 * @return array{float,float} Cue angle and offset.
+	 */
+	private static function lookPose(array $plan, float $time): array
+	{
+		$turn = self::wrapAngle($plan['to'] - $plan['from']);
+		// Walking round to the next angle: the cue backs off the ball while it swings.
+		if($time < $plan['turn'])
+		return [$plan['from'] + $turn * self::ease($time / $plan['turn']),.045 * sin(M_PI * $time / $plan['turn'])];
 
 		// Down on the shot: a slight sway that dies away before the next turn, and practice strokes after a settle.
 		$down = $time - $plan['turn'];
-		$span = $plan['duration'] - $plan['turn'];
-		$sway = .006 * sin(M_PI * $down / $span) * sin(2 * M_PI * .55 * $down);
-		$offset = 0.0;
+		$sway = .006 * sin(M_PI * $down / ($plan['duration'] - $plan['turn'])) * sin(2 * M_PI * .55 * $down);
 		$stroke = $down - $plan['settle'];
 		$index = $stroke >= 0 ? (int)floor($stroke / $plan['strokeTime']) : -1;
-		if($index >= 0 && $index < count($plan['strokes']))
+		$offset = $index >= 0 && $index < count($plan['strokes'])
+			? self::practiceStroke($stroke / $plan['strokeTime'] - $index, $plan['strokes'][$index]) : 0.0;
+
+		return [$plan['to'] + $sway,$offset];
+	}
+
+	/**
+	 * Pose one move of the local player's dawdle dance around their unchanged aim.
+	 *
+	 * @param array<string,mixed> $plan Move from planDance().
+	 * @return array{float,float} Cue angle and offset.
+	 */
+	private static function dancePose(array $plan, float $time, float $aim): array
+	{
+		if($time >= $plan['busy']) return [$aim,0.0];
+		if($plan['move'] === 'waggle')
 		{
-			$depth = $plan['strokes'][$index];
-			$amount = $stroke / $plan['strokeTime'] - $index;
-			// Draw back slowly, push through to just short of the ball, and ease back to the address.
-			if($amount < .45) $offset = $depth * $ease($amount / .45);
-			elseif($amount < .75) $offset = $depth + (self::PRACTICE_REACH - $depth) * $ease(($amount - .45) / .3);
-			else $offset = self::PRACTICE_REACH * (1 - $ease(($amount - .75) / .25));
+			// Side to side about the aim, easing back a touch while it swings.
+			$amount = $time / $plan['busy'];
+			$envelope = sin(M_PI * $amount);
+
+			return [$aim + $plan['amplitude'] * $envelope * sin(2 * M_PI * $plan['cycles'] * $amount),.012 * $envelope];
 		}
-		$this->consider = ['aim' => self::wrapAngle($plan['to'] + $sway),'offset' => $offset,'look' => $this->look['index']];
+		$index = min(count($plan['strokes']) - 1, (int)floor($time / $plan['strokeTime']));
+
+		return [$aim,self::practiceStroke($time / $plan['strokeTime'] - $index, $plan['strokes'][$index])];
+	}
+
+	/**
+	 * Plan one move of the local player's dawdle dance: a waggle, a few practice strokes, or quick impatient taps.
+	 *
+	 * Each dawdle opens with a waggle and never repeats a move back to back. Moves are seeded by the dawdle count, so
+	 * successive dawdles differ while tests stay reproducible.
+	 *
+	 * @param int $index Move number within the current dawdle.
+	 * @param string|null $previous The previous move, which the next one avoids.
+	 * @return array{move:string,busy:float,duration:float}&array<string,mixed>
+	 */
+	private function planDance(int $index, ?string $previous): array
+	{
+		$seed = 'dawdle:' . $this->dawdles . ':' . $index;
+		$random = static fn(string $salt): float => hexdec(substr(md5($seed . ':' . $salt), 0, 6)) / 0x1000000;
+		$moves = array_values(array_diff(['waggle','strokes','taps'], [$previous]));
+		$move = $index === 0 ? 'waggle' : $moves[(int)floor($random('move') * count($moves))];
+		$plan = ['move' => $move];
+		if($move === 'waggle')
+		{
+			$plan['amplitude'] = deg2rad(1.5 + 1.5 * $random('amplitude'));
+			$plan['cycles'] = 2 + (int)floor($random('cycles') * 2);
+			$plan['busy'] = 1.3 + .7 * $random('busy');
+		}
+		else
+		{
+			$taps = $move === 'taps';
+			$count = $taps ? 3 + (int)floor($random('count') * 3) : 2 + (int)floor($random('count') * 2);
+			$plan['strokes'] = [];
+			// One depth for the move, varied a little stroke to stroke as a hand would.
+			$depth = $taps ? .016 + .014 * $random('depth') : .05 + .07 * $random('depth');
+			for($stroke = 0; $stroke < $count; $stroke++) $plan['strokes'][] = $depth * (.8 + .4 * $random('depth' . $stroke));
+			$plan['strokeTime'] = $taps ? .3 + .06 * $random('pace') : .85 + .3 * $random('pace');
+			$plan['busy'] = $count * $plan['strokeTime'];
+		}
+		$plan['duration'] = $plan['busy'] + 1.0 + 1.4 * $random('pause');
+
+		return $plan;
 	}
 
 	/**
@@ -1289,7 +1406,7 @@ final class Game
 	private function planLook(int $index, float $from): array
 	{
 		$seed = ($this->match?->seed ?? '') . ':' . ($this->match?->sequence ?? 0) . ':' . $index;
-		$random = static fn(string $salt): float => (crc32($seed . ':' . $salt) & 0xffffff) / 0x1000000;
+		$random = static fn(string $salt): float => hexdec(substr(md5($seed . ':' . $salt), 0, 6)) / 0x1000000;
 		$cue = $this->simulation->cue();
 		$group = $this->match?->groups[$this->match->actor] ?? null;
 		$candidates = [];
@@ -1319,7 +1436,8 @@ final class Game
 
 		$strokes = [];
 		$count = [0,1,2,2,3][(int)floor($random('strokes') * 5)];
-		for($stroke = 0; $stroke < $count; $stroke++) $strokes[] = .05 + .08 * $random('depth' . $stroke);
+		$depth = .05 + .07 * $random('depth');
+		for($stroke = 0; $stroke < $count; $stroke++) $strokes[] = $depth * (.85 + .3 * $random('depth' . $stroke));
 		$turn = .55 + .45 * abs(self::wrapAngle($to - $from)) / M_PI + .2 * $random('turn');
 		$settle = .25 + .3 * $random('settle');
 		$strokeTime = .85 + .3 * $random('pace');
@@ -1456,7 +1574,7 @@ final class Game
 			, 'placement' => ['position' => $this->placement,'valid' => $valid]
 			, 'camera' => $this->camera->state()
 			, 'stroke' => $this->stroke($alpha)
-			, 'considering' => $this->consider
+			, 'idleCue' => $this->idleCue
 			, 'muted' => $this->muted
 			, 'status' => $this->statusText()
 			, 'mode' => $this->mode

@@ -114,7 +114,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use ($g
 	}
 	if($browserChanged || !empty($ui['events']) || $controlsActive
 		|| abs($rightStick[0]) > 1e-6 || abs($rightStick[1]) > 1e-6 || $game->camera->transitioning()
-		|| $game->camera->settling() || $hud->animating() || $game->considering() !== null
+		|| $game->camera->settling() || $hud->animating() || $game->idleCue() !== null
 	) $frameDirty = true;
 	$game->inputTheme = $engine->input->inputTheme;
 	$overlayBefore = $game->overlay;

@@ -1452,7 +1452,8 @@ $test('an opponent\'s cue considers the shot after four idle seconds and never s
 
 	[$own] = $waiting($bob);
 	for($tick = 0; $tick < 600; $tick++) $frame($own, [], 1 / 60);
-	$expect($own->controllable() && $own->considering() === null, 'The local player\'s own cue started considering');
+	$expect($own->controllable() && ($own->idleCue()['kind'] ?? null) !== 'considering',
+		'The local player\'s own cue started considering');
 
 	[$game,$hash] = $waiting($alice);
 	$state = $game->simulation->exactHash();
@@ -1462,13 +1463,13 @@ $test('an opponent\'s cue considers the shot after four idle seconds and never s
 	for($tick = 0; $tick < 60 * 40; $tick++)
 	{
 		$frame($game, [], 1 / 60);
-		$pose = $game->considering();
+		$pose = $game->idleCue();
 		if($game->clock < 4 - 1e-9)
 		{
 			$expect($pose === null, 'The opponent\'s cue moved before four seconds of waiting');
 			continue;
 		}
-		$expect($pose !== null, 'The opponent\'s cue stayed still after four seconds of waiting');
+		$expect(($pose['kind'] ?? null) === 'considering', 'The opponent\'s cue stayed still after four seconds of waiting');
 		$expect($pose['offset'] > -.008 + .002 && $pose['offset'] < .2, 'A practice stroke reached the cue ball');
 		if($previous !== null) $expect(abs(Game::wrapAngle($pose['aim'] - $previous['aim'])) < deg2rad(3)
 			&& abs($pose['offset'] - $previous['offset']) < .02, 'The considering cue jumped between frames');
@@ -1483,7 +1484,46 @@ $test('an opponent\'s cue considers the shot after four idle seconds and never s
 		'sequence' => 1,'actor' => $alice,'pre_hash' => $hash
 		, 'action' => ['type' => 'shot','aim_udeg' => 0,'power_bp' => 9000,'top_bp' => 0,'side_bp' => 0]
 	]]]], 1 / 60);
-	$expect($game->considering() === null && $game->stroking(), 'The real shot did not replace the considering cue');
+	$expect($game->idleCue() === null && $game->stroking(), 'The real shot did not replace the considering cue');
+});
+
+$test('a dawdling player\'s cue dances about its aim until any input', static function() use ($expect): void {
+	$game = new Game;
+	$frame = static fn(Game $game, array $browser, float $elapsed = 0) => $game->input(
+		$browser, [], [], [], [0,0], $elapsed, 1280, 720
+	);
+	$frame($game, ['actions' => ['free-play']]);
+	$frame($game, ['values' => ['aim' => 37]]);
+	$state = $game->simulation->exactHash();
+	$aim = $game->aim;
+	$guide = $game->guide();
+	$previous = null;
+	$moves = [];
+	for($tick = 0; $tick < 60 * 30; $tick++)
+	{
+		$frame($game, [], 1 / 60);
+		$pose = $game->idleCue();
+		if($tick < 60 * 8 - 1)
+		{
+			$expect($pose === null, 'The cue danced before eight idle seconds');
+			continue;
+		}
+		$expect(($pose['kind'] ?? null) === 'dawdling', 'An idle player\'s cue never danced');
+		$expect(abs(Game::wrapAngle($pose['aim'] - $aim)) <= deg2rad(3) + 1e-9
+			&& $pose['offset'] > -.008 + .002 && $pose['offset'] < .2, 'The dance strayed from the aim or reached the ball');
+		if($previous !== null) $expect(abs(Game::wrapAngle($pose['aim'] - $previous['aim'])) < deg2rad(1)
+			&& abs($pose['offset'] - $previous['offset']) < .02, 'The dancing cue jumped between frames');
+		$moves[$pose['look']] = true;
+		$previous = $pose;
+	}
+	$expect(count($moves) >= 3, 'The dance never moved on from its first move');
+	$expect($game->simulation->exactHash() === $state && $game->aim === $aim && $game->guide() === $guide,
+		'Dancing changed the table, the aim, or the guide');
+
+	$frame($game, ['values' => ['power' => .4]], 1 / 60);
+	$expect($game->idleCue() === null, 'Input did not stop the dance');
+	for($tick = 0; $tick < 60 * 7; $tick++) $frame($game, [], 1 / 60);
+	$expect($game->idleCue() === null, 'The dance resumed before another eight idle seconds');
 });
 
 echo count($tests) . " PHP Billiards physics tests passed.\n";
