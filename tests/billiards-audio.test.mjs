@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {impactLowpassCutoff,pocketHit} from '../games/php-billiards/browser/game.mjs';
+import {bottomKnocks,impactLowpassCutoff,pocketHit,pocketKnockLevel,queuedDrop} from '../games/php-billiards/browser/game.mjs';
 
 test('soft impact cutoff rises monotonically on the contact curve for both materials', () => {
 	for(const material of ['ball','rail'])
@@ -79,4 +79,80 @@ test('invalid pocket strengths and random values clamp to a recording', () => {
 	for(const strength of [-1,0,NaN,undefined,null,'invalid',-Infinity])assert.equal(pocketHit(strength,()=>.5),'pocket3');
 	for(const strength of [2,Infinity])assert.equal(pocketHit(strength,()=>.5),'pocket1');
 	for(const random of [()=>-5,()=>5,()=>NaN])assert.match(pocketHit(.2,random),/^pocket[123]$/);
+});
+
+test('pocket knocks stay audible down to the finest chatter and peak like a full clack', () => {
+	assert.equal(pocketKnockLevel(0),.3);
+	assert.equal(pocketKnockLevel(.45),1);
+	assert.equal(pocketKnockLevel(1),1);
+	let previous=0;
+	for(let step=0;step<=1000;step++)
+	{
+		const level=pocketKnockLevel(step/1000);
+		assert.ok(level>=previous&&level>=.3&&level<=1);
+		previous=level;
+	}
+	// The chatter of a ball rolling around the edge is far louder than on the ball-ball curve it replaces.
+	assert.ok(pocketKnockLevel(.02)/(.12+.88*.02**.8)>2);
+	for(const strength of [NaN,undefined,null,'invalid',-1])assert.equal(pocketKnockLevel(strength),.3);
+});
+
+test('a landing knocks with hit 1 before the sink, and a lively one bounces once more', () => {
+	for(const energy of [0,.1,.199,NaN,undefined])
+	{
+		const landing=bottomKnocks(energy,()=>.5);
+		assert.deepEqual(landing.knocks,[{hit:'pocket1',level:1,delay:0}]);
+		assert.ok(Math.abs(landing.sinkDelay-.065)<1e-12);
+	}
+	for(const energy of [.2,.44,1])
+	{
+		const landing=bottomKnocks(energy,()=>.5);
+		assert.deepEqual(landing.knocks.map(knock=>knock.hit),['pocket1','pocket2']);
+		assert.ok(landing.knocks[1].level<landing.knocks[0].level);
+		assert.ok(Math.abs(landing.knocks[1].delay-.16)<1e-12&&Math.abs(landing.sinkDelay-.225)<1e-12);
+	}
+});
+
+test('landing gaps vary within their ranges and keep their order', () => {
+	const bounces=new Set,sinks=new Set;
+	for(let step=0;step<=100;step++)
+	{
+		const value=step/100,lively=bottomKnocks(1,()=>value),quiet=bottomKnocks(0,()=>value);
+		const bounce=lively.knocks[1].delay;
+		assert.ok(bounce>=.13-1e-12&&bounce<=.19+1e-12,'the bounce left its window');
+		assert.ok(lively.sinkDelay-bounce>=.05-1e-12&&lively.sinkDelay-bounce<=.08+1e-12,'the sink did not follow the bounce');
+		assert.ok(quiet.sinkDelay>=.05-1e-12&&quiet.sinkDelay<=.08+1e-12,'the sink did not follow the knock');
+		bounces.add(bounce.toFixed(4));sinks.add(quiet.sinkDelay.toFixed(4));
+	}
+	assert.ok(bounces.size>50&&sinks.size>50,'landing timing did not vary');
+	for(const random of [()=>-1,()=>2,()=>NaN])
+	{
+		const landing=bottomKnocks(1,random);
+		assert.ok(landing.knocks[1].delay>=.13&&landing.knocks[1].delay<=.19&&landing.sinkDelay>landing.knocks[1].delay);
+	}
+});
+
+test('balls in the same pocket land one at a time, 200-300 ms apart', () => {
+	// A clear pocket lands at once.
+	assert.equal(queuedDrop(undefined,4,()=>.5),4);
+	assert.equal(queuedDrop(1,4,()=>.5),4);
+	// A second ball waits behind the first, and a third behind the second.
+	const second=queuedDrop(4,4.05,()=>.5),third=queuedDrop(second,4.1,()=>.5);
+	assert.ok(Math.abs(second-4.25)<1e-12&&Math.abs(third-4.5)<1e-12);
+	// A ball arriving partway through the gap waits only for the rest of it.
+	assert.ok(Math.abs(queuedDrop(4,4.2,()=>.5)-4.25)<1e-12);
+	const gaps=new Set;
+	for(let step=0;step<=100;step++)
+	{
+		const gap=queuedDrop(4,4,()=>step/100)-4;
+		assert.ok(gap>=.2-1e-12&&gap<=.3+1e-12,'the gap left its window');
+		gaps.add(gap.toFixed(4));
+	}
+	assert.ok(gaps.size>50,'the gap did not vary');
+	for(const random of [()=>-1,()=>2,()=>NaN])
+	{
+		const gap=queuedDrop(4,4,random)-4;
+		assert.ok(gap>=.2&&gap<=.3);
+	}
+	assert.equal(queuedDrop(NaN,4,()=>.5),4);
 });

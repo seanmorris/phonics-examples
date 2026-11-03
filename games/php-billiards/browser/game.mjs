@@ -23,6 +23,52 @@ export function pocketHit(strength, random=Math.random)
 	return `pocket${Math.max(0,Math.min(2,Math.round(position+jitter)))+1}`;
 }
 
+/**
+ * Loudness of a pocket knock relative to a full-strength ball clack. Pocket strikes are slow beside a break, so the
+ * ball-ball curve left them about 12 dB below the recording they replace. This curve keeps the fine chatter of a ball
+ * rolling around the pocket edge clearly audible and gives the hardest knocks a clack's full peak.
+ */
+export function pocketKnockLevel(strength)
+{
+	strength=Math.max(0,Math.min(1,Number(strength)||0));
+	return .3+.7*Math.min(1,strength/.45)**.7;
+}
+
+/**
+ * Knocks for a ball landing on the pocket bottom, just before the sink recording takes over.
+ * Every landing knocks with hit 1; one that struck the walls hard on the way in also bounces once, a weaker hit 2.
+ * Each gap is drawn afresh, so no two landings share a rhythm.
+ *
+ * @param {number} energy Hardest wall strike this ball made inside the pocket, from 0 to 1.
+ * @param {() => number} random Uniform source in [0, 1).
+ * @returns {{knocks:{hit:string,level:number,delay:number}[],sinkDelay:number}} Delays in seconds.
+ */
+export function bottomKnocks(energy, random=Math.random)
+{
+	const draw=(low,high)=>low+(high-low)*Math.max(0,Math.min(1,Number(random())||0));
+	const knocks=[{hit:'pocket1',level:1,delay:0}];
+	// The bounce lands 130-190 ms after the first knock, and the sink follows the last knock by 50-80 ms.
+	if((Number(energy)||0)>=.2)knocks.push({hit:'pocket2',level:.55,delay:draw(.13,.19)});
+	return {knocks,sinkDelay:knocks.at(-1).delay+draw(.05,.08)};
+}
+
+/**
+ * Start a ball's landing behind any ball still dropping through the same pocket.
+ *
+ * The pocket narrows below the liner to a single ball's width, so two balls in it together reach the bottom one at a
+ * time. A landing starts 200-300 ms after the one ahead of it, or at once when the pocket is clear.
+ *
+ * @param {number|undefined} previous Start time of the last landing in this pocket, or undefined for none.
+ * @param {number} now Current time, in the same seconds as previous.
+ * @param {() => number} random Uniform source in [0, 1).
+ * @returns {number} Start time of this landing, never before now.
+ */
+export function queuedDrop(previous, now, random=Math.random)
+{
+	const gap=.2+.1*Math.max(0,Math.min(1,Number(random())||0));
+	return Number.isFinite(previous)?Math.max(now,previous+gap):now;
+}
+
 /** Canvas lifecycle, diagnostics, sound, and fullscreen bridge for the native PHP/SDL game. */
 export function activate({module, canvas, session})
 {
@@ -82,12 +128,13 @@ export function activate({module, canvas, session})
 		for(const [name,base64] of Object.entries(JSON.parse(json)))if(typeof base64==='string')encoded.set(name,base64);
 		if(audio)void decodeSamples();
 	};
-	const play=(name,{gain=1,rate=1,lowpass=0,lowpassQ=null}={})=>{
+	const play=(name,{gain=1,rate=1,lowpass=0,lowpassQ=null,delay=0,limit=8}={})=>{
 		const buffer=decoded.get(name),context=audio;
-		if(latest?.muted||!buffer||!context||context.state!=='running'||voices>=8||gain<=.005)return;
-		const now=performance.now();
-		if(now-(lastPlayed.get(name)??-Infinity)<12)return;
-		lastPlayed.set(name,now);
+		if(latest?.muted||!buffer||!context||context.state!=='running'||voices>=limit||gain<=.005)return;
+		// The repeat guard compares when sounds will start, so a landing queued behind another is never mistaken for it.
+		const at=performance.now()+Math.max(0,delay)*1000;
+		if(Math.abs(at-(lastPlayed.get(name)??-Infinity))<12)return;
+		lastPlayed.set(name,at);
 		const source=context.createBufferSource(),volume=context.createGain();
 		source.buffer=buffer;source.playbackRate.value=rate*(.96+Math.random()*.08);
 		volume.gain.value=Math.min(1,gain);
@@ -100,8 +147,11 @@ export function activate({module, canvas, session})
 		}
 		source.connect(volume);tail.connect(context.destination);
 		voices++;played++;source.onended=()=>{voices--;source.disconnect();volume.disconnect();if(tail!==volume)tail.disconnect();};
-		source.start();
+		source.start(delay>0?context.currentTime+delay:0);
 	};
+	// Hardest wall strike of each ball currently inside a pocket, which decides how lively its landing sounds, and the
+	// audio-clock start of each pocket's latest landing, which the next ball through it waits behind.
+	const pocketEnergy=new Map,pocketLandings=new Map;
 	const sound=event=>{
 		const strength=Math.max(0,Math.min(1,Number(event.strength??0)||0));
 		if(event.type==='impact')play('clack',{
@@ -115,15 +165,28 @@ export function activate({module, canvas, session})
 			gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get('rail')??1,1e-4)
 			,lowpass:impactLowpassCutoff(strength,audio?.sampleRate,'rail'),lowpassQ:.6
 		});
-		// pocket-drop is split into three knocks against the pocket's walls: each strike on the rim, back wall or liner
-		// plays one on the ball-ball curve, peak-matched like the rail. pocket-sink is the ball reaching the bottom, so a
-		// ball that falls in without touching a wall is heard only there.
+		// pocket-drop is split into three knocks against the pocket's walls. Every strike on the rim, back wall or liner
+		// plays one, peak-matched to the clack, so a ball rolling around the pocket edge chatters audibly. pocket-sink
+		// is the ball reaching the bottom: it lands with hit 1, and a lively ball bounces once more, before the sink.
+		const knock=(hit,level,options={})=>play(hit,{gain:level*(peaks.get('clack')??1)/Math.max(peaks.get(hit)??1,1e-4),...options});
+		if(event.type==='pocket-enter')pocketEnergy.set(event.ball,0);
 		if(event.type==='pocket-rattle')
 		{
-			const hit=pocketHit(strength);
-			play(hit,{gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get(hit)??1,1e-4)});
+			pocketEnergy.set(event.ball,Math.max(pocketEnergy.get(event.ball)??0,strength));
+			// Chatter leaves two voices free so the landing knocks and the sink always sound.
+			knock(pocketHit(strength),pocketKnockLevel(strength),{limit:6});
 		}
-		if(event.type==='pocket')play('sink',{gain:.32,lowpass:3200});
+		if(event.type==='pocket-reject')pocketEnergy.delete(event.ball);
+		if(event.type==='pocket')
+		{
+			const landing=bottomKnocks(pocketEnergy.get(event.ball)??0),now=audio?.currentTime??0;
+			const start=queuedDrop(pocketLandings.get(event.pocket),now),wait=start-now;
+			pocketEnergy.delete(event.ball);
+			// A stopped audio clock would stack every landing behind the last one; nothing sounds then anyway.
+			if(audio?.state==='running')pocketLandings.set(event.pocket,start);
+			for(const {hit,level,delay} of landing.knocks)knock(hit,level,{delay:wait+delay});
+			play('sink',{gain:.32,lowpass:3200,delay:wait+landing.sinkDelay});
+		}
 		if(event.type==='pocket-reject')play('clack',{gain:.22,rate:.85});
 		if(event.type==='place')play('clack',{gain:.12,rate:.6,lowpass:1400});
 		if(event.type==='denied')play('impact',{gain:.18,rate:.55,lowpass:700});
@@ -243,7 +306,7 @@ export function activate({module, canvas, session})
 		, get handshake(){return handshake?structuredClone(handshake):null;}
 		, get camera(){return latest?.camera?structuredClone(latest.camera):null;}
 		, get placement(){return latest?.placement?structuredClone(latest.placement):null;}
-		, get audio(){return {state:audio?.state??'locked',samples:encoded.size,decoded:decoded.size,played,error:audioError};}
+		, get audio(){return {state:audio?.state??'locked',samples:encoded.size,decoded:decoded.size,played,voices,error:audioError};}
 		, setCamera(patch){if(patch&&typeof patch==='object')debugCamera=structuredClone(patch);}
 		, setControls(values){if(values&&typeof values==='object')Object.assign(debugValues,structuredClone(values));}
 		, action(name){if(typeof name==='string')debugActions.push(name);}
