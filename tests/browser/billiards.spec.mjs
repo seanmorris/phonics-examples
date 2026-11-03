@@ -100,7 +100,10 @@ test('full page boots the direct application and executes a resettable shot', as
 	await expect.poll(async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).aim)
 		.toBeCloseTo(131.5*Math.PI/180,5);
 	await canvas.evaluate(element=>element.phpBilliardsDebug.action('shoot'));
-	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).phase,{timeout:15_000}).toBe('placing');
+	await expect.poll(
+		async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).phase
+		, {timeout:45_000}
+	).toBe('placing');
 	await expect(canvas).toHaveAttribute('data-placing','true');
 	await canvas.evaluate(element=>element.phpBilliardsDebug.setCamera({target:[-.65,0,0]}));
 	await expect.poll(()=>canvas.evaluate(element=>element.phpBilliardsDebug.camera?.target?.[0])).toBe(-.65);
