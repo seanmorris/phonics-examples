@@ -58,6 +58,11 @@ float coatSpec(vec3 lightPosition,vec3 N,vec3 V,float rough,float lightSize){rou
 	float nl=max(dot(N,L),0.0),nv=max(dot(N,V),.001),nh=max(dot(N,H),0.0),vh=max(dot(V,H),0.0);
 	float F=.04+.96*pow(1.0-vh,5.0),D=distribution(nh,rough),k=(rough+1.0)*(rough+1.0)/8.0;
 	float G=(nl/(nl*(1.0-k)+k))*(nv/(nv*(1.0-k)+k));return D*G*F*nl/max(.01,4.0*nl*nv);}
+// felt.svg keeps its noise within about 6% of mid-grey so the pocket-scale macro layer never reads as dirt. The
+// micro-grain and loose-fibre layers stretch that range back out, or the fuzz would vanish with the macro contrast.
+float feltDetail(float value){return clamp((value-.5)*8.5+.5,0.0,1.0);}
+vec3 feltLayers(vec2 feltUv){float macro=texture(uFelt,feltUv*.55).r,grain=feltDetail(texture(uFelt,feltUv*7.0+vec2(.17,.43)).r)-.5;
+	float looseFiber=smoothstep(.56,.62,feltDetail(texture(uFelt,feltUv*15.0+vec2(.61,.23)).r));return vec3(macro,grain,looseFiber);}
 void main(){vec4 tint=uInstanced?vTint:uBase;vec3 N=normalize(vNormal),V=normalize(uEye-vPosition),base=tint.rgb;float mode=uMaterial.z;
 	// Unlit overlays for aiming aids: 7 is a flat tint, 8 is an antialiased ring on the unit disc.
 	if(mode>6.5&&mode<7.5){color=vec4(base,tint.a);return;}
@@ -75,13 +80,15 @@ void main(){vec4 tint=uInstanced?vTint:uBase;vec3 N=normalize(vNormal),V=normali
 			float pointFront=.34+.15*(1.0-across);float edge=max(fwidth(vUv.x-pointFront)*1.5,.0015);
 			float dyed=1.0-smoothstep(pointFront-edge,pointFront+edge,vUv.x);
 			vec3 blueDye=base*vec3(.16,.36,.78)+vec3(.012,.045,.14);base=mix(base,blueDye,dyed*.84);}}
-	else if(mode>2.5&&mode<3.5){vec2 feltUv=vPosition.xz*1.6;
-		float macro=texture(uFelt,feltUv*.55).r,grain=texture(uFelt,feltUv*7.0+vec2(.17,.43)).r;
-		float looseFiber=smoothstep(.56,.62,texture(uFelt,feltUv*15.0+vec2(.61,.23)).r);
-		float height=(macro-.5)*.00055+(grain-.5)*.00016+looseFiber*.00007;
+	else if(mode>2.5&&mode<3.5){
+		// The cloth is mapped from above; cushion pads and pocket facings run the texture along their own faces.
+		vec2 along=vec2(-N.z,N.x);along/=max(length(along),.001);float topWeight=smoothstep(.6,.8,abs(N.y));
+		vec3 felt=feltLayers(vPosition.xz*1.6)*topWeight+feltLayers(vec2(dot(vPosition.xz,along),vPosition.y)*1.6)*(1.0-topWeight);
+		float macro=felt.x,grain=felt.y,looseFiber=felt.z;
+		float height=(macro-.5)*.00055+grain*.00021+looseFiber*.00009;
 		N=bumpNormal(vPosition,N,height);float top=smoothstep(.62,.92,N.y);
 		float track=exp(-pow(abs(vPosition.z-.055*sin(vPosition.x*5.0))*18.0,2.0))*top;
-		base*=.92+macro*.13+(grain-.5)*.045+looseFiber*.035;base=mix(base,base*1.04,track*.035);}
+		base*=.92+macro*.13+grain*.08+looseFiber*.05;base=mix(base,base*1.04,track*.035);}
 	float rough=uMaterial.x;if(mode>0.5&&mode<1.5)rough=clamp(rough+(random(floor(vPosition*900.0))-.5)*.012,.01,.05);
 	float ior=uMaterial.y>1.0?uMaterial.y:1.5,f0Value=pow((ior-1.0)/(ior+1.0),2.0),nv=max(dot(N,V),.001);
 	bool metallic=mode>4.5&&mode<5.5;

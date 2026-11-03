@@ -72,6 +72,12 @@ test('generated felt height field is subtle and seamlessly tiled', () => {
 		image.data[x*4+channel]-image.data[((image.height-1)*image.width+x)*4+channel]);
 	assert.ok(leftRight/(image.height*3)<8);assert.ok(topBottom/(image.width*3)<8);
 	assert.ok(maximum-minimum<80,'Felt macro texture regained dirty high-contrast patches');
+	// The shader stretches the compressed noise for grain and loose fibres; the fibres must stay reachable.
+	const shader=fs.readFileSync(new URL('shaders/billiards.frag',root),'utf8');
+	const gain=Number(shader.match(/float feltDetail\(float value\)\{return clamp\(\(value-\.5\)\*([\d.]+)\+\.5/)?.[1]);
+	let low=255,high=0;
+	for(let index=0;index<image.data.length;index+=4){low=Math.min(low,image.data[index]);high=Math.max(high,image.data[index]);}
+	assert.ok((high/255-.5)*gain+.5>.62&&(low/255-.5)*gain+.5<.1,'Felt grain and loose fibres lost their contrast');
 });
 
 test('title poster is a renderer capture at the game canvas resolution', () => {
