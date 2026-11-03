@@ -2,17 +2,35 @@ import {test, expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {impactLowpassCutoff} from '../../games/php-billiards/browser/game.mjs';
 
-test('recorded ball and rail voices filter soft contacts and bypass hard contacts', async ({page}, testInfo) => {
+test('recorded ball, rail and pocket voices follow their contact strength', async ({page}, testInfo) => {
 	const source=await readFile(new URL('../../games/php-billiards/browser/game.mjs',import.meta.url),'utf8');
-	const samples={};
-	for(const [name,file] of Object.entries({clack:'clack',rail:'rail-hit'}))
-	samples[name]=(await readFile(new URL(`../../games/php-billiards/assets/audio/${file}.mp3`,import.meta.url))).toString('base64');
+	const samples={},sizes={};
+	for(const [name,file] of Object.entries({
+		clack:'clack',rail:'rail-hit',pocket1:'pocket-drop-hit-1',pocket2:'pocket-drop-hit-2',pocket3:'pocket-drop-hit-3'
+	}))
+	{
+		const bytes=await readFile(new URL(`../../games/php-billiards/assets/audio/${file}.mp3`,import.meta.url));
+		samples[name]=bytes.toString('base64');
+		sizes[name]=bytes.length;
+	}
 	await page.goto('/');
 	await page.evaluate(async({source,samples})=>{
 		document.body.innerHTML='<div style="width:800px;height:450px"><canvas></canvas></div>';
 		const {activate}=await import(URL.createObjectURL(new Blob([source],{type:'text/javascript'})));
 		const createFilter=AudioContext.prototype.createBiquadFilter,createSource=AudioContext.prototype.createBufferSource;
+		const decode=AudioContext.prototype.decodeAudioData,sources=new Map;
 		globalThis.impactVoices=[];globalThis.impactFilters=[];
+		// Remember which encoded sample each decoded buffer came from, by its byte length.
+		AudioContext.prototype.decodeAudioData=async function(bytes){
+			const size=bytes.byteLength,buffer=await decode.call(this,bytes);
+			sources.set(buffer,size);
+			return buffer;
+		};
+		const peak=buffer=>{
+			let value=0;
+			for(let channel=0;channel<buffer.numberOfChannels;channel++)for(const sample of buffer.getChannelData(channel))value=Math.max(value,Math.abs(sample));
+			return value;
+		};
 		AudioContext.prototype.createBiquadFilter=function(){const filter=createFilter.call(this);impactFilters.push(filter);return filter;};
 		AudioContext.prototype.createBufferSource=function(){
 			const source=createSource.call(this),connect=source.connect,start=source.start;
@@ -21,7 +39,8 @@ test('recorded ball and rail voices filter soft contacts and bypass hard contact
 			source.start=function(...args){
 				const filter=impactFilters.length>filterCount?impactFilters.at(-1):null;
 				impactVoices.push({gain:gain.gain.value,rate:source.playbackRate.value,sampleRate:this.context.sampleRate,
-					filter:filter?{type:filter.type,frequency:filter.frequency.value,q:filter.Q.value}:null});
+					filter:filter?{type:filter.type,frequency:filter.frequency.value,q:filter.Q.value}:null,
+					bytes:sources.get(source.buffer),peak:peak(source.buffer)});
 				return start.apply(this,args);
 			};
 			return source;
@@ -34,7 +53,7 @@ test('recorded ball and rail voices filter soft contacts and bypass hard contact
 		module.billiardsSamples(JSON.stringify(samples));
 	}, {source,samples});
 	await page.keyboard.press('Space');
-	await expect.poll(()=>page.evaluate(()=>document.querySelector('canvas').phpBilliardsDebug.audio.decoded)).toBe(2);
+	await expect.poll(()=>page.evaluate(()=>document.querySelector('canvas').phpBilliardsDebug.audio.decoded)).toBe(5);
 	const voices=[];
 	for(const type of ['impact','cushion']) for(const strength of [.01,.25,.65,1])
 	{
@@ -54,6 +73,25 @@ test('recorded ball and rail voices filter soft contacts and bypass hard contact
 		if(type==='impact')expect(voice.gain).toBeCloseTo(.12+.88*strength**.8,6);
 	}
 	expect(await page.evaluate(()=>impactVoices.length)).toBe(8);
+
+	// Pocket knocks choose a recording by strength, 1 strongest, and peak like a ball clack of the same strength.
+	const clackPeak=voices.find(voice=>voice.type==='impact').peak;
+	for(const [strength,hit] of [[.45,'pocket1'],[.17,'pocket2'],[.05,'pocket3']])
+	{
+		await page.waitForTimeout(30);
+		await page.evaluate(strength=>impactModule.billiardsStatus(JSON.stringify({events:[{type:'pocket-rattle',strength}]})),strength);
+		const voice=await page.evaluate(()=>impactVoices.at(-1));
+		voices.push({type:'pocket-rattle',strength,...voice});
+		expect(voice.bytes).toBe(sizes[hit]);
+		expect(voice.filter).toBeNull();
+		expect(voice.gain*voice.peak).toBeCloseTo((.12+.88*strength**.8)*clackPeak,5);
+	}
+	expect(await page.evaluate(()=>impactVoices.length)).toBe(11);
+
+	// Entering a pocket is silent; only the knocks and the final sink are heard.
+	await page.waitForTimeout(30);
+	await page.evaluate(()=>impactModule.billiardsStatus(JSON.stringify({events:[{type:'pocket-enter',ball:3,pocket:0}]})));
+	expect(await page.evaluate(()=>impactVoices.length)).toBe(11);
 	await testInfo.attach('impact-voices.json',{body:JSON.stringify(voices,null,2),contentType:'application/json'});
 	await page.evaluate(()=>disposeImpact());
 });

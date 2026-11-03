@@ -37,7 +37,10 @@ $app->lobby([
 $app->browser(__DIR__ . '/browser/game.mjs');
 // Browser code cannot read PHAR members, so hand the recorded samples to the bridge once.
 $samples = [];
-foreach(['clack' => 'clack','impact' => 'impact','drop' => 'pocket-drop','sink' => 'pocket-sink','rail' => 'rail-hit'] as $name => $file)
+foreach([
+	'clack' => 'clack','impact' => 'impact','sink' => 'pocket-sink','rail' => 'rail-hit'
+	, 'pocket1' => 'pocket-drop-hit-1','pocket2' => 'pocket-drop-hit-2','pocket3' => 'pocket-drop-hit-3'
+] as $name => $file)
 $samples[$name] = base64_encode((string)file_get_contents(__DIR__ . "/assets/audio/$file.mp3"));
 (vrzno_env('billiardsSamples'))(json_encode($samples, JSON_THROW_ON_ERROR));
 $engine = new Engine(new Device(1280, 720, 'PHP Billiards'));

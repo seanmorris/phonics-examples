@@ -11,6 +11,18 @@ export function impactLowpassCutoff(strength, sampleRate, material)
 	return upper*(Math.max(strength,floorStrength)/.65)**.2;
 }
 
+/**
+ * Pick the recorded pocket knock for one strike inside a pocket: 1 is the strongest hit and 3 the weakest.
+ * The three hits are centred on geometric strengths, and a little jitter lets a strike near a boundary use
+ * either neighbour, so a ball knocking around the liner never repeats one sample mechanically.
+ */
+export function pocketHit(strength, random=Math.random)
+{
+	strength=Math.max(1e-4,Math.min(1,Number(strength)||0));
+	const position=Math.log(.45/strength)/Math.log(.45/.17),jitter=(Math.max(0,Math.min(1,Number(random())||0))-.5)*.6;
+	return `pocket${Math.max(0,Math.min(2,Math.round(position+jitter)))+1}`;
+}
+
 /** Canvas lifecycle, diagnostics, sound, and fullscreen bridge for the native PHP/SDL game. */
 export function activate({module, canvas, session})
 {
@@ -103,9 +115,14 @@ export function activate({module, canvas, session})
 			gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get('rail')??1,1e-4)
 			,lowpass:impactLowpassCutoff(strength,audio?.sampleRate,'rail'),lowpassQ:.6
 		});
-		if(event.type==='pocket-enter')play('drop',{gain:.75});
+		// Each strike on the pocket rim, back wall, or liner plays one of the three recorded knocks on the ball-ball
+		// curve, peak-matched like the rail. A ball that drops in without touching anything is heard only as it sinks.
+		if(event.type==='pocket-rattle')
+		{
+			const hit=pocketHit(strength);
+			play(hit,{gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get(hit)??1,1e-4)});
+		}
 		if(event.type==='pocket')play('sink',{gain:.32,lowpass:3200});
-		if(event.type==='pocket-rattle')play('clack',{gain:.06+.25*strength,rate:.8,lowpass:1800});
 		if(event.type==='pocket-reject')play('clack',{gain:.22,rate:.85});
 		if(event.type==='place')play('clack',{gain:.12,rate:.6,lowpass:1400});
 		if(event.type==='denied')play('impact',{gain:.18,rate:.55,lowpass:700});

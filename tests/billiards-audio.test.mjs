@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {impactLowpassCutoff} from '../games/php-billiards/browser/game.mjs';
+import {impactLowpassCutoff,pocketHit} from '../games/php-billiards/browser/game.mjs';
 
 test('soft impact cutoff rises monotonically on the contact curve for both materials', () => {
 	for(const material of ['ball','rail'])
@@ -44,4 +44,39 @@ test('hard impacts bypass at the threshold and invalid strengths clamp safely', 
 		assert.equal(impactLowpassCutoff(strength,48000,material),impactLowpassCutoff(0,48000,material));
 		assert.equal(impactLowpassCutoff('0.3',48000,material),impactLowpassCutoff(.3,48000,material));
 	}
+});
+
+test('pocket knocks pick the strongest recording for hard strikes and the weakest for soft ones', () => {
+	const steady=()=>.5;
+	assert.equal(pocketHit(.68,steady),'pocket1');
+	assert.equal(pocketHit(.45,steady),'pocket1');
+	assert.equal(pocketHit(.17,steady),'pocket2');
+	assert.equal(pocketHit(.06,steady),'pocket3');
+	assert.equal(pocketHit(.012,steady),'pocket3');
+	for(const random of [()=>0,()=>.999999])
+	{
+		assert.equal(pocketHit(1,random),'pocket1');
+		assert.equal(pocketHit(.01,random),'pocket3');
+	}
+});
+
+test('jitter varies a pocket knock only between neighbouring recordings', () => {
+	const tier=name=>Number(name.slice(-1));
+	let varied=false;
+	for(let step=1;step<=1000;step++)
+	{
+		// Low random values lean toward the stronger recording, high ones toward the weaker.
+		const strength=step/1000,stronger=tier(pocketHit(strength,()=>0)),weaker=tier(pocketHit(strength,()=>.999999));
+		const steady=tier(pocketHit(strength,()=>.5));
+		assert.ok(stronger>=1&&weaker<=3&&stronger<=steady&&steady<=weaker&&weaker-stronger<=1);
+		varied||=stronger!==weaker;
+		if(step>1)assert.ok(steady<=tier(pocketHit((step-1)/1000,()=>.5)),'a harder strike chose a weaker recording');
+	}
+	assert.ok(varied,'no strike could use either neighbouring recording');
+});
+
+test('invalid pocket strengths and random values clamp to a recording', () => {
+	for(const strength of [-1,0,NaN,undefined,null,'invalid',-Infinity])assert.equal(pocketHit(strength,()=>.5),'pocket3');
+	for(const strength of [2,Infinity])assert.equal(pocketHit(strength,()=>.5),'pocket1');
+	for(const random of [()=>-5,()=>5,()=>NaN])assert.match(pocketHit(.2,random),/^pocket[123]$/);
 });
