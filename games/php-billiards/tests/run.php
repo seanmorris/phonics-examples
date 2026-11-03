@@ -2,7 +2,24 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/autoload.php';
-require_once dirname(__DIR__, 3) . '/vendor/seanmorris/phonics/autoload.php';
+
+$phonicsRoot = dirname(__DIR__, 3);
+$phonicsAutoloaders = [
+	$phonicsRoot . '/node_modules/@seanmorris/phonics/autoload.php',
+	$phonicsRoot . '/vendor/seanmorris/phonics/autoload.php',
+];
+
+foreach($phonicsAutoloaders as $phonicsAutoloader)
+{
+	if(!is_file($phonicsAutoloader)) continue;
+	require_once $phonicsAutoloader;
+	break;
+}
+
+if(!class_exists(Phonics\Ecs\Registry::class))
+{
+	throw new RuntimeException('Unable to locate the Phonics framework autoloader.');
+}
 
 use Phonics\Ecs\Registry;
 use PhpBilliards\Ecs\BallIdentity;
