@@ -1,3 +1,16 @@
+/**
+ * Presentation-only contact filtering; zero means bypass, including every hard impact.
+ * Hertz contact duration varies with speed to the -1/5 power. Keep that shallow spectral change above the
+ * material's floor so even the softest collisions retain their recorded character.
+ */
+export function impactLowpassCutoff(strength, sampleRate, material)
+{
+	strength=Math.max(0,Math.min(1,Number(strength)||0));
+	if(strength>=.65||!Number.isFinite(sampleRate)||sampleRate<=0)return 0;
+	const upper=Math.min(18000,sampleRate*.42),floorStrength=material==='rail'?.01:.02;
+	return upper*(Math.max(strength,floorStrength)/.65)**.2;
+}
+
 /** Canvas lifecycle, diagnostics, sound, and fullscreen bridge for the native PHP/SDL game. */
 export function activate({module, canvas, session})
 {
@@ -57,7 +70,7 @@ export function activate({module, canvas, session})
 		for(const [name,base64] of Object.entries(JSON.parse(json)))if(typeof base64==='string')encoded.set(name,base64);
 		if(audio)void decodeSamples();
 	};
-	const play=(name,{gain=1,rate=1,lowpass=0}={})=>{
+	const play=(name,{gain=1,rate=1,lowpass=0,lowpassQ=null}={})=>{
 		const buffer=decoded.get(name),context=audio;
 		if(latest?.muted||!buffer||!context||context.state!=='running'||voices>=8||gain<=.005)return;
 		const now=performance.now();
@@ -67,18 +80,29 @@ export function activate({module, canvas, session})
 		source.buffer=buffer;source.playbackRate.value=rate*(.96+Math.random()*.08);
 		volume.gain.value=Math.min(1,gain);
 		let tail=volume;
-		if(lowpass>0){const filter=context.createBiquadFilter();filter.type='lowpass';filter.frequency.value=lowpass;volume.connect(filter);tail=filter;}
+		if(lowpass>0)
+		{
+			const filter=context.createBiquadFilter();filter.type='lowpass';filter.frequency.value=lowpass;
+			if(lowpassQ!==null)filter.Q.value=lowpassQ;
+			volume.connect(filter);tail=filter;
+		}
 		source.connect(volume);tail.connect(context.destination);
 		voices++;played++;source.onended=()=>{voices--;source.disconnect();volume.disconnect();if(tail!==volume)tail.disconnect();};
 		source.start();
 	};
 	const sound=event=>{
 		const strength=Math.max(0,Math.min(1,Number(event.strength??0)||0));
-		if(event.type==='impact')play('clack',{gain:.12+.88*strength**.8,rate:.94+.12*strength});
+		if(event.type==='impact')play('clack',{
+			gain:.12+.88*strength**.8,rate:.94+.12*strength
+			,lowpass:impactLowpassCutoff(strength,audio?.sampleRate,'ball'),lowpassQ:.6
+		});
 		if(event.type==='shot')play('impact',{gain:.2+.55*Number(event.power??.5),rate:.82,lowpass:2600});
 		// Rails use their own recording on the ball-ball curve: its peak is matched to the clack's, so a full-strength
 		// rail hit peaks exactly as loud as a full-strength ball hit and both scale with impact speed the same way.
-		if(event.type==='cushion')play('rail',{gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get('rail')??1,1e-4)});
+		if(event.type==='cushion')play('rail',{
+			gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get('rail')??1,1e-4)
+			,lowpass:impactLowpassCutoff(strength,audio?.sampleRate,'rail'),lowpassQ:.6
+		});
 		if(event.type==='pocket-enter')play('drop',{gain:.75});
 		if(event.type==='pocket')play('sink',{gain:.32,lowpass:3200});
 		if(event.type==='pocket-rattle')play('clack',{gain:.06+.25*strength,rate:.8,lowpass:1800});
