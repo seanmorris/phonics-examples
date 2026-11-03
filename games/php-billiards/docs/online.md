@@ -8,11 +8,17 @@ Each table starts with that annotated room message as its root event. Join, seat
 
 ## Fair seed exchange
 
-After two users are seated, each browser creates a private 32-byte contribution with Web Crypto. It publishes only a SHA-256 commitment over a length-prefixed domain containing the protocol label, root event ID, session UUID, Matrix user ID, and contribution. When both commitments exist, both contributions are revealed and checked against their commitments.
+After two users are seated, each browser uses Web Crypto to create two independent private 32-byte values: a seed contribution `n` and a commitment nonce `m`. It also chooses uniformly among eight fixed phrase templates, including `that would be {n}+{m}` and `pair {n} with {m}`. Both values use canonical unpadded base64url encoding. The `+` is literal text: the operands are never added, because different pairs can have the same sum.
+
+The browser publishes only a SHA-256 commitment over length-prefixed fields: `Phonics deterministic game seed commitment v2`, the root event ID, session UUID, Matrix user ID, phrase index, and the chosen phrase with both values inserted. The contribution, nonce, and phrase index stay private together in session storage and memory until both commitments exist. The reveal publishes all three; changing either value or the phrase fails verification. A reload reuses the same opening, and a lost or corrupt opening freezes the exchange instead of choosing a replacement.
+
+The nonce supplies independent randomness for hiding the commitment. The public phrase table adds only three bits of selection entropy; it does not increase SHA-256's collision resistance. Both nonce and phrase selection are used only for commitment verification and are excluded from the final seed. Once the seed is established, the private storage entry is removed; the revealed opening remains in the public transcript for verification.
 
 The final seed hashes a second length-prefixed domain containing the root event, runtime fingerprint, application PHAR fingerprint, rule version, and both `(Matrix user ID, contribution)` pairs sorted by user ID. Sorting makes the combination independent of who committed or revealed first. Neither participant can choose a contribution after learning the other participant’s value. A seated user who does not reveal within the 60-second reveal phase forfeits; no external randomness service is involved.
 
 The seed selects the breaker, a legal rack permutation, imperceptible rack offsets, and initial ball orientations. The 8-ball stays in the center and opposite groups stay in the two rear corners. An 8-ball pocketed on the break derives the next rack from the same seed and an incremented rack index, with the same breaker.
+
+This exchange uses room-game envelope version `2` within the existing Matrix event family. Both players must use this version. Version `1` tables are not joined or resumed by the updated client, preventing mixed commitment formats from starting a game.
 
 ## Cross-platform determinism
 
