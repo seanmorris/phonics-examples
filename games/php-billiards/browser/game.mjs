@@ -115,8 +115,9 @@ export function activate({module, canvas, session})
 			gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get('rail')??1,1e-4)
 			,lowpass:impactLowpassCutoff(strength,audio?.sampleRate,'rail'),lowpassQ:.6
 		});
-		// Each strike on the pocket rim, back wall, or liner plays one of the three recorded knocks on the ball-ball
-		// curve, peak-matched like the rail. A ball that drops in without touching anything is heard only as it sinks.
+		// pocket-drop is split into three knocks against the pocket's walls: each strike on the rim, back wall or liner
+		// plays one on the ball-ball curve, peak-matched like the rail. pocket-sink is the ball reaching the bottom, so a
+		// ball that falls in without touching a wall is heard only there.
 		if(event.type==='pocket-rattle')
 		{
 			const hit=pocketHit(strength);
