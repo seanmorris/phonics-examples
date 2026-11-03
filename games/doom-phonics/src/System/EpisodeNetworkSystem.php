@@ -18,6 +18,7 @@ use DoomPhonics\Component\ViewInput;
 use DoomPhonics\Definition\ActorCatalog;
 use DoomPhonics\Game\DoomMatch;
 use DoomPhonics\Game\Level;
+use DoomPhonics\Game\PlayerRespawn;
 use DoomPhonics\Game\PlayerState;
 use DoomPhonics\Game\PortalInterpolation;
 use DoomPhonics\Game\WorldPoint;
@@ -32,6 +33,7 @@ use Phonics\Network\InputCommand;
 use Phonics\Network\NetworkEntityAllocator;
 use Phonics\Network\NetworkEntityId;
 use Phonics\Network\PlayerSlot;
+use Phonics\Network\ReliableEvent;
 use Phonics\Network\ReplicationCallbacks;
 use Phonics\Network\ReplicationPolicy;
 use Phonics\Network\ReplicationRegistry;
@@ -46,6 +48,12 @@ final class EpisodeNetworkSystem
 	private ReplicationSession $session;
 	private ReplicationScope $scope;
 	private ?PortalInterpolation $portalInterpolation;
+	private ?Level $level;
+
+	/** @var array<int,bool> Whether each slot held Fire last step, so only a fresh press respawns. */
+	private array $firing = [];
+
+	private int $respawns = 0;
 
 	public function __construct(
 		private Registry $world
@@ -58,6 +66,7 @@ final class EpisodeNetworkSystem
 		$match->replication = $this;
 		$this->entities = new NetworkEntityAllocator;
 		$this->scope = new ReplicationScope($scope);
+		$this->level = $level;
 		$this->portalInterpolation = $level ? new PortalInterpolation($level) : null;
 		$replication = self::replication($actors);
 		$this->bindPlayers($this->scope);
@@ -82,6 +91,7 @@ final class EpisodeNetworkSystem
 						, !$this->world->get($entity, NetworkPlayer::class)->local
 					);
 				}
+				, fn(ReliableEvent $event) => $this->event($event)
 			)
 			, 2
 			, 70
@@ -115,6 +125,61 @@ final class EpisodeNetworkSystem
 		if($this->match->network->host()) $this->bindEffects();
 
 		$this->session->afterStep($registry, $dt);
+	}
+
+	/**
+	 * Host: respawn dead players who press Use, or press Fire afresh, once the death delay has passed.
+	 *
+	 * The host resets the health and inventory it owns, then announces the spot in a reliable event so that each peer
+	 * places the player, including the peer that owns the player's pose.
+	 *
+	 * @param Registry $registry Network world.
+	 * @param float $dt Fixed step in seconds.
+	 * @return void
+	 */
+	public function respawn(Registry $registry, float $dt): void
+	{
+		if(!$this->match->network->host() || !$this->level) return;
+
+		$players = $registry->query(NetworkPlayer::class);
+
+		foreach($players as $entity)
+		{
+			if(!$registry->has($entity, PlayerCommand::class) || !$registry->has($entity, HitPoints::class)) continue;
+
+			$slot = $registry->get($entity, NetworkPlayer::class)->slot;
+			$command = $registry->get($entity, PlayerCommand::class);
+			$pressed = $command->fire && !($this->firing[$slot->value()] ?? false);
+			$this->firing[$slot->value()] = $command->fire;
+
+			if($registry->get($entity, HitPoints::class)->current > 0) continue;
+
+			// A dead player's Use only ever asks to respawn, so an early press cannot linger past the delay.
+			$use = $command->consumeUse();
+
+			if(!$registry->get($entity, PlayerState::class)->canRestart() || (!$use && !$pressed)) continue;
+
+			$occupied = [];
+
+			foreach($players as $other)
+			if($other !== $entity && $registry->get($other, HitPoints::class)->current > 0)
+			{
+				$pose = $registry->get($other, Transform::class);
+				$occupied[] = [$pose->x, $pose->y];
+			}
+
+			$spot = PlayerRespawn::spot($this->level, $this->match->mode, $slot, $occupied);
+			$health = $registry->get($entity, HitPoints::class);
+			$health->current = $health->maximum;
+			$registry->add($entity, PlayerRespawn::reborn($registry->get($entity, PlayerState::class)));
+
+			$this->session->emit(new ReliableEvent(
+				'respawn:' . $slot->value() . ':' . ++$this->respawns
+				, $this->session->tick()
+				, 'doom.respawn'
+				, ['slot' => $slot->value()] + $spot
+			));
+		}
 	}
 
 	public function close(): void
@@ -399,6 +464,38 @@ final class EpisodeNetworkSystem
 			$this->world->add($entity, new NetworkPrefab('doom.player'));
 			$this->world->add($entity, new NetworkAuthority(AuthorityOwner::peer($player->peer)));
 		}
+	}
+
+	/** Apply a host gameplay event on this peer. */
+	private function event(ReliableEvent $event): void
+	{
+		if($event->type !== 'doom.respawn') return;
+
+		$payload = $event->payload;
+
+		foreach(['x','y','z','angle'] as $axis)
+		if(!is_numeric($payload[$axis] ?? null) || !is_finite((float)$payload[$axis]))
+		throw new \UnexpectedValueException('Respawn event has an invalid spot');
+
+		$entity = $this->player(new PlayerSlot((int)($payload['slot'] ?? 0)));
+
+		PlayerRespawn::place(
+			$this->world
+			, $entity
+			, [
+				'x' => (float)$payload['x']
+				, 'y' => (float)$payload['y']
+				, 'z' => (float)$payload['z']
+				, 'angle' => (float)$payload['angle']
+			]
+		);
+
+		if($this->match->network->host()) return;
+
+		// Mirror the host-owned reset until the next snapshot confirms it, so the player is not shown dead meanwhile.
+		$health = $this->world->get($entity, HitPoints::class);
+		$health->current = $health->maximum;
+		$this->world->add($entity, PlayerRespawn::reborn($this->world->get($entity, PlayerState::class)));
 	}
 
 	private function player(PlayerSlot $slot): int

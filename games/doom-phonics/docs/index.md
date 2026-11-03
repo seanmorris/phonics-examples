@@ -8,7 +8,7 @@ Its launcher stacks an IWAD with later WAD archives, whose DECORATE, KEYCONF, SN
 
 The [seeded layered level generator](seeded-levels.md) provides an exploration map with branching rooms, flood-controlled access, elevators, and a spiral staircase.
 
-The demonstration starts on the shareware `DOOM1.WAD`. Choose **New Game** and one of the five skills to play its starting map, or, in worlds that show **WAD Stack**, replace the base with another IWAD you own, add PWADs, and start Single Player, Co-op, or Deathmatch from the [launcher](launcher.md). Each mode uses its own player starts, and difficulty filters keep unflagged objects while including multiplayer-only objects only in multiplayer. Explore each map, operate switches, collect keys, weapons, ammunition, health, and armor, fight the monsters blocking the route, and reach the exit. The status bar shows health, armor, ammo, keys, face state, arms, and the relevant ammo maximums; pickups and cheats update the same inventory that weapons fire from. After dying, press Fire or Use once the death sequence finishes to restart the map.
+The demonstration starts on the shareware `DOOM1.WAD`. Choose **New Game** and one of the five skills to play its starting map, or, in worlds that show **WAD Stack**, replace the base with another IWAD you own, add PWADs, and start Single Player, Co-op, or Deathmatch from the [launcher](launcher.md). Each mode uses its own player starts, and difficulty filters keep unflagged objects while including multiplayer-only objects only in multiplayer. Explore each map, operate switches, collect keys, weapons, ammunition, health, and armor, fight the monsters blocking the route, and reach the exit. The status bar shows health, armor, ammo, keys, face state, arms, and the relevant ammo maximums; pickups and cheats update the same inventory that weapons fire from. After dying, press Fire or Use once the death sequence finishes to restart the map. In an online match the map keeps running and you respawn instead, as described in [Multiplayer and replication](multiplayer.md#deaths-and-respawns).
 
 The title menu offers **New Game**, **Settings** for Input, Sound, and Video, **Read This**, and **PHP Info**. Worlds that declare a `network` section add **Online Play** and **WAD Stack**, described in [Multiplayer and replication](multiplayer.md#playing-online). The pause menu resumes, starts a new game, opens Settings, restarts the level, or quits to the title. Video settings include a Blood Splatter range from off to 200%; the default 100% produces five droplets per damaging hit.
 
@@ -35,7 +35,7 @@ Reaching an exit opens the WAD's intermission screen, which counts up kill, item
 
 ## Cheats
 
-Type a cheat during active gameplay; it takes effect as soon as the complete code is recognized. The same codes can be supplied through a world manifest's `init.cheats` value, as described in [WAD stacks and launcher](launcher.md).
+Type a cheat during active gameplay; it takes effect as soon as the complete code is recognized. Cheats are disabled in online matches: a typed code shows **CHEATS ARE DISABLED ONLINE**, `init.cheats` is ignored, and a session-wide mode such as `IDOOPSALLGIBS` ends when the match begins. The same codes can be supplied through a world manifest's `init.cheats` value, as described in [WAD stacks and launcher](launcher.md).
 
 | Code | Effect |
 | --- | --- |

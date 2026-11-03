@@ -98,6 +98,13 @@ final class CheatSystem
 		}
 	}
 
+	/** Drop session-wide cheat rules, such as when an online match begins. */
+	public function clearSession(): void
+	{
+		$this->oopsAllGibs = false;
+		$this->oopsLoadout = null;
+	}
+
 	/** The weapon currently replacing gun-bearing monster attacks, if any. */
 	public function monsterWeapon(): ?string { return $this->oopsAllGibs ? 'Railgun' : null; }
 

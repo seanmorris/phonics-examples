@@ -1494,6 +1494,7 @@ verifyWad(
 $replication = EpisodeNetworkSystem::replication();
 require __DIR__ . '/network-projectiles.php';
 require __DIR__ . '/network-beams.php';
+require __DIR__ . '/network-respawn.php';
 $networkDeath = new PlayerState;
 $networkDeath->deathTime = .8;
 $networkDeath->viewHeight = 13;

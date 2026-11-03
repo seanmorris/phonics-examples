@@ -19,6 +19,12 @@ Online play is available in worlds that declare a `network` section, such as the
 
 Closing the connection returns the game to its disconnected screen, as described above.
 
+## Deaths and respawns
+
+A death online never restarts the level. Once the death sequence has played for a second, press Use, or press Fire again, and the host respawns you with a fresh loadout: full health, the fist and pistol, and 50 bullets. You keep your kill, item, and secret tallies. In Deathmatch you appear at a random deathmatch start with no other player within 64 units, or at the start farthest from them when every start is occupied. In Co-op you return to your own start when it is clear. The host owns health and inventory, so it applies the reset and announces the start in a reliable event. Each peer then places the player there; the respawned player's own peer owns that pose. Deathmatch frags and the frag limit are not scored yet.
+
+Cheats are disabled in online matches, because each peer would otherwise alter state the host owns.
+
 ## Invite someone without a Matrix account
 
 1. Sign in to the lobby on a homeserver that permits automatic guest registration. Keep the hosting tab open.

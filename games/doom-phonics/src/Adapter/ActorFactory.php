@@ -146,8 +146,30 @@ final class ActorFactory
 		return ['entities' => $entities, 'missing' => array_keys($missing)];
 	}
 
-	/** Spawn heights must use the same sloped planes as movement and rendering. */
-	private function spawnPlanes(MapData $map, array $thing, ?Level $level): array
+	/**
+	 * List a map's player starts: co-op starts 1 to 4, deathmatch starts, and team starts.
+	 *
+	 * @param MapData $map Parsed map.
+	 * @return list<array<string,mixed>> Start things in map order.
+	 */
+	public static function playerStarts(MapData $map): array
+	{
+		return array_values(array_filter($map->things, static function(array $thing): bool {
+			$type = (int)($thing['type'] ?? 0);
+
+			return ($type >= 1 && $type <= 4) || $type === 11 || in_array($type, [5080,5081,5082], true);
+		}));
+	}
+
+	/**
+	 * Sample the floor and ceiling under a thing, using the same sloped planes as movement and rendering.
+	 *
+	 * @param MapData $map Parsed map.
+	 * @param array<string,mixed> $thing Thing with map-unit `x` and `y`.
+	 * @param ?Level $level Built level, whose sectors carry slopes; null samples flat sector heights.
+	 * @return array{floor: float|int, ceiling: float|int} Plane heights under the thing.
+	 */
+	public static function spawnPlanes(MapData $map, array $thing, ?Level $level): array
 	{
 		if($level)
 		{

@@ -144,7 +144,7 @@ final class EpisodeGame
 
 			$this->restorePlayer();
 
-			if(($entity = $this->player()) !== null)
+			if($this->match === null && ($entity = $this->player()) !== null)
 			$this->cheats->applyActive($this->phonics->entities, $entity);
 
 			$this->beginLevelStatistics();
@@ -177,6 +177,8 @@ final class EpisodeGame
 	/** Apply each configured classic sequence independently after the player exists. */
 	private function applyInitialCheats(): void
 	{
+		if($this->match !== null) return;
+
 		$this->applyingInitialCheats = true;
 
 		try
@@ -211,6 +213,8 @@ final class EpisodeGame
 
 		$this->match = new DoomMatch($network);
 		$this->phonics->runtime->service('doom-match', $this->match);
+		// Online play has no cheats, including a session rule carried over from single player.
+		$this->cheats->clearSession();
 		$this->settings->chooseMode($this->match->mode->value());
 		$skill = (int)($network->settings()['skill'] ?? $this->settings->skill()->index());
 		$this->settings->chooseSkill(SkillLevel::fromIndex($skill));
@@ -327,7 +331,8 @@ final class EpisodeGame
 
 		if($health->current <= 0)
 		{
-			if($player->canRestart() && ($this->engine->controls->pressed(
+			// Online, the host respawns the player; restarting the map here would desynchronize this peer.
+			if($this->match === null && $player->canRestart() && ($this->engine->controls->pressed(
 				DoomActions::FIRE
 			) || $this->engine->controls->pressed(DoomActions::USE)))
 			$this->enter($this->map, false);
@@ -484,6 +489,17 @@ final class EpisodeGame
 		}
 
 		$captured = (bool)$commands || $this->cheatSequence->awaiting();
+
+		// Online play disables cheats. The matcher still runs above, so letters in a code are not read as pause.
+		if($commands && $this->match !== null)
+		{
+			$entity = $this->player();
+
+			if($entity !== null)
+			$this->phonics->entities->get($entity, PlayerState::class)->showMessage('CHEATS ARE DISABLED ONLINE');
+
+			return $captured;
+		}
 
 		foreach($commands as $command)
 		{

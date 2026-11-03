@@ -191,6 +191,9 @@ final class EpisodeSystems implements SystemSet
 		$inputDependencies = $network ? ['network-receive'] : ($commands ? ['player-commands'] : []);
 		$scope->system('player-effects', [$playerEffects,'update'], $inputDependencies);
 
+		// Online, the host respawns dead players in place of single player's level restart.
+		if($network) $scope->system('network-respawn', [$network,'respawn'], ['player-effects']);
+
 		$scope->system(
 			'transform-history'
 			, static function(Registry $registry, float $dt) use (&$interpolated): void {
@@ -205,7 +208,7 @@ final class EpisodeSystems implements SystemSet
 					$registry->get($entity, Transform::class)->beginStep();
 				}
 			}
-			, ['player-effects']
+			, $network ? ['player-effects','network-respawn'] : ['player-effects']
 		);
 
 		$scope->system(

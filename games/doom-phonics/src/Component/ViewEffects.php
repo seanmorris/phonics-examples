@@ -30,6 +30,13 @@ final class ViewEffects
 		$this->damageTics = self::MAX_COUNTER;
 	}
 
+	/** Clear the death tint when a player respawns, so the red page does not persist into the new life. */
+	public function revive(): void
+	{
+		$this->dead = false;
+		$this->damageTics = 0;
+	}
+
 	/** Add the standard pickup flash, allowing rapidly collected items to accumulate. */
 	public function recordPickup(): void
 	{
