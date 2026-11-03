@@ -7,7 +7,7 @@ in a popup, then resumes the running lobby through a same-origin callback. It us
 registration, and refresh tokens. Access tokens are never sent through the popup message, and Phonics never asks for or
 receives a Matrix password.
 
-Matrix carries lobby and WebRTC signaling messages. Gameplay and content bytes travel outside Matrix.
+Matrix carries lobby and WebRTC signaling messages. Gameplay and content bytes travel outside Matrix. Signals to one peer within `signalBatch` milliseconds (250 by default) share one room event, so trickle ICE costs a few sends rather than one per candidate. A send the homeserver rate-limits waits out its `retry_after_ms` and retries with the same transaction for up to 30 seconds, instead of failing the match.
 
 The lobby's **Sign out** action stops the live sync connection, calls Matrix logout, revokes OAuth access and refresh
 tokens when the authorization server supports revocation, and removes the stored browser session. Homeserver and room

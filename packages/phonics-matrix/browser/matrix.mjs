@@ -274,6 +274,7 @@ export class MatrixLobbyProvider extends EventTarget
 			, syncEmptyDelay = 2_000
 			, syncEmptyMaxDelay = 60_000
 			, invitationTtl = 30_000
+			, signalBatch = 250
 			, guest = false
 			, locks = globalThis.navigator?.locks
 			, inviteLifetime = 15 * 60_000
@@ -332,6 +333,8 @@ export class MatrixLobbyProvider extends EventTarget
 		this.syncEmptyDelay = Math.max(this.syncMinInterval, Number(syncEmptyDelay) || 2_000);
 		this.syncEmptyMaxDelay = Math.max(this.syncEmptyDelay, Number(syncEmptyMaxDelay) || 60_000);
 		this.invitationTtl = invitationTtl;
+		this.signalBatch = Math.max(0, Number(signalBatch) || 0);
+		this.signalQueues = new Map;
 		this.externalSignal = signal ?? null;
 		this.resetConnectionSignal();
 		this.roomId = null;
@@ -1234,6 +1237,9 @@ export class MatrixLobbyProvider extends EventTarget
 		}
 		else if(message.kind === 'signal')
 		this.dispatchEvent(event('signal', {from: item.sender, payload: message.payload}));
+		else if(message.kind === 'signals' && Array.isArray(message.payload))
+		for(const payload of message.payload.slice(0, 64))
+		this.dispatchEvent(event('signal', {from: item.sender, payload}));
 		else if(message.kind === 'close')
 		{
 			this.dispatchEvent(event('inviteclosed', {reason: 'Peer left the invitation'}));
@@ -1625,19 +1631,93 @@ export class MatrixLobbyProvider extends EventTarget
 		});
 	}
 
+	/**
+	 * Queue one WebRTC signal for a peer. Signals queued within `signalBatch` milliseconds share one room event, so
+	 * trickle ICE costs a few sends instead of one per candidate, which homeserver message limits allow.
+	 */
 	async signalPeer(peerId, payload)
 	{
 		this.requireConnected();
+		const to = peer(peerId);
+		const key = this.linkState?.peerId === to ? 'private' : to;
+		const queue = this.signalQueues.get(key) ?? {to, items: [], writing: false, timer: null};
+		this.signalQueues.set(key, queue);
 
-		if(this.linkState?.peerId === peerId) return this.privateSend('signal', payload);
+		if(queue.items.length >= 128) throw new MatrixLobbyError('signal_queue', 'Signaling queue is full');
 
-		await this.send(SIGNAL, {
-			id: crypto.randomUUID()
-			, from: this.userId
-			, to: peer(peerId)
-			, payload: structuredClone(payload)
-			, sentAt: Date.now()
-		});
+		const sent = Promise.withResolvers();
+		queue.items.push({payload: structuredClone(payload), sent});
+		queue.timer ??= setTimeout(() => void this.flushSignals(key), this.signalBatch);
+
+		await sent.promise;
+	}
+
+	/** Send a peer's queued signals as one event, one batch at a time so they arrive in order. */
+	async flushSignals(key)
+	{
+		const queue = this.signalQueues.get(key);
+
+		if(!queue) return;
+
+		queue.timer = null;
+
+		if(queue.writing || !queue.items.length) return;
+
+		queue.writing = true;
+		const items = queue.items.splice(0, 64);
+
+		try
+		{
+			await this.writeSignals(key, queue.to, items.map(item => item.payload));
+
+			for(const item of items) item.sent.resolve();
+		}
+		catch(error)
+		{
+			for(const item of items) item.sent.reject(error);
+		}
+		finally
+		{
+			queue.writing = false;
+
+			// Signals that arrived during the write have already waited; send them as the next batch.
+			if(queue.items.length) queue.timer ??= setTimeout(() => void this.flushSignals(key), 0);
+			else if(this.signalQueues.get(key) === queue) this.signalQueues.delete(key);
+		}
+	}
+
+	/** Deliver one batch, retrying rate limits and transient failures with the same transaction for 30 seconds. */
+	async writeSignals(key, to, payloads)
+	{
+		if(key === 'private')
+		return this.privateSend(
+			payloads.length === 1 ? 'signal' : 'signals'
+			, payloads.length === 1 ? payloads[0] : payloads
+		);
+
+		const content = {id: crypto.randomUUID(), from: this.userId, to, sentAt: Date.now()};
+
+		if(payloads.length === 1) content.payload = payloads[0];
+		else content.payloads = payloads;
+
+		const transaction = crypto.randomUUID();
+		const deadline = Date.now() + 30_000;
+
+		for(; ;)
+		{
+			try
+			{
+				return await this.send(SIGNAL, content, transaction);
+			}
+			catch(error)
+			{
+				if(this.closed || this.signal.aborted || Date.now() >= deadline || !this.recoverable(error))
+				throw error;
+
+				this.dispatchEvent(event('signalingstatus', {state: 'retrying', code: error.code}));
+				await pause(Math.min(5000, error.details?.retry_after_ms ?? 1000), this.signal);
+			}
+		}
 	}
 
 	async chat(text)
@@ -2020,7 +2100,10 @@ export class MatrixLobbyProvider extends EventTarget
 		{
 			if(content.from !== item.sender || content.to !== this.userId) return;
 
-			this.dispatchEvent(event('signal', {from: item.sender, payload: structuredClone(content.payload)}));
+			const payloads = Array.isArray(content.payloads) ? content.payloads.slice(0, 64) : [content.payload];
+
+			for(const payload of payloads)
+			this.dispatchEvent(event('signal', {from: item.sender, payload: structuredClone(payload)}));
 		}
 		else if(item.type === CHAT)
 		{
@@ -2356,6 +2439,16 @@ export class MatrixLobbyProvider extends EventTarget
 		this.connected = false;
 		clearInterval(this.cleanupTimer);
 		clearInterval(this.heartbeatTimer);
+
+		for(const queue of this.signalQueues.values())
+		{
+			clearTimeout(queue.timer);
+
+			for(const item of queue.items.splice(0))
+			item.sent.reject(new MatrixLobbyError('lobby_closed', 'Matrix lobby closed'));
+		}
+
+		this.signalQueues.clear();
 		this.controller.abort(new MatrixLobbyError('lobby_closed', 'Matrix lobby closed'));
 		this.peers.clear();
 		this.invitations.clear();
