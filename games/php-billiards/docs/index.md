@@ -4,7 +4,7 @@ PHP Billiards is a pool table for local practice and room-backed two-player eigh
 
 The [PHP API](api/index.html) lists every public type declared by the package.
 
-The game runs directly from its executable PHAR. It does not create a world or import Tiled, Doom, or WAD code. This makes it a compact example of the generic application lifecycle beneath Phonics' optional content systems.
+The game runs directly from its executable PHAR. It does not create a world or import Tiled, Doom, or WAD code. This makes it a compact example of the generic application lifecycle beneath Phonics' optional content systems. The game session and sixteen numbered balls are registered with Phonics' ECS. Ball components reference the exact objects owned by the deterministic simulation, while stable identity components survive rack and checkpoint replacement.
 
 **Free Play** retains shot reset and rack controls. **Online Play** opens the shared Matrix lobby, where you can open a table, challenge a person, join an open table, or spectate an active game. The letterboxed game stays above the room chat after a table starts, and the people list remains in the right rail.
 

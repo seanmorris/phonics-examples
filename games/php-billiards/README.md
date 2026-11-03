@@ -1,6 +1,6 @@
 # PHP Billiards
 
-PHP Billiards is a local practice table and Matrix-backed two-player eight-ball game. PHP owns deterministic fixed-step ball physics, casual eight-ball rules, exact checkpoints, canonical table geometry, camera math, SDL input, the native control HUD, and the GLES 3 renderer. The browser bridge sizes the canvas, supplies fullscreen and sound, and forwards validated Matrix room events. The application runs directly from its PHAR and has no Tiled, world-composition, Doom, or WAD dependency.
+PHP Billiards is a local practice table and Matrix-backed two-player eight-ball game. PHP owns deterministic fixed-step ball physics, casual eight-ball rules, exact checkpoints, canonical table geometry, camera math, SDL input, the native control HUD, and the GLES 3 renderer. The browser bridge sizes the canvas, supplies fullscreen and sound, and forwards validated Matrix room events. The application runs directly from its PHAR and has no Tiled, world-composition, Doom, or WAD dependency. Its session and sixteen balls live in Phonics' ECS, demonstrating that the registry and scheduler work independently of those optional content systems; the ECS references the simulation's authoritative Ball objects without copying or reordering physics state.
 
 The browser bridge claims the shared WebGL2 context with multisample antialiasing before SDL starts, so the PHP scene and native HUD render through the same antialiased framebuffer without supersampling the procedural materials.
 

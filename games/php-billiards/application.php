@@ -5,9 +5,11 @@ require_once 'phar://' . Phar::running(false) . '/core/autoload.php';
 require_once __DIR__ . '/autoload.php';
 
 use Phonics\Application\Context;
+use Phonics\Ecs\Registry;
 use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
+use PhpBilliards\Ecs\BilliardsEntities;
 use PhpBilliards\Game;
 use PhpBilliards\Physics\Simulation;
 use PhpBilliards\Render\FramePacer;
@@ -61,6 +63,7 @@ $engine->input->bindGamepad(20, [SDL_CONTROLLER_BUTTON_LEFTSTICK]);
 $engine->input->bindButton(21, [SDLK_SLASH]);
 $engine->input->bindButton(22, [SDLK_h]);
 $game = new Game;
+$ecs = new BilliardsEntities($engine->entities, $game);
 $scene = new Scene(__DIR__);
 $hud = new Hud(__DIR__);
 $width = 1280;
@@ -70,13 +73,15 @@ $lastFrame = null;
 $frameDirty = true;
 $framePacer = new FramePacer;
 
-$engine->systems->add('php-billiards.simulation', static function($entities, float $seconds) use ($game, &$frameDirty): void {
+$engine->systems->add('php-billiards.simulation', static function(Registry $entities, float $seconds) use ($ecs, &$frameDirty): void {
+	$game = $ecs->game($entities);
 	$animated = $game->stroking() || $game->simulation->moving();
 	$game->step($seconds);
+	$ecs->reconcile($entities, $game->simulation);
 	if($animated || $game->stroking() || $game->simulation->moving()) $frameDirty = true;
 });
 
-$engine->setInputHandler(static function(Engine $engine, float $elapsed) use ($game, $hud, &$width, &$height, &$dpr, &$frameDirty): bool {
+$engine->setInputHandler(static function(Engine $engine, float $elapsed) use ($game, $ecs, $hud, &$width, &$height, &$dpr, &$frameDirty): bool {
 	try
 	{
 		$viewport = json_decode((string)(vrzno_env('billiardsViewport'))(), true, flags: JSON_THROW_ON_ERROR);
@@ -126,6 +131,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use ($g
 		, $rightStick
 		, $elapsed, $width, $height
 	);
+	$ecs->reconcile($engine->entities, $game->simulation);
 	if($game->consumeFullscreenRequest()) (vrzno_env('billiardsFullscreen'))();
 	$engine->userPaused = $game->overlay !== null;
 
@@ -170,8 +176,9 @@ $engine->start(
 		$lastFrame = $signature;
 		(vrzno_env('billiardsStatus'))($json);
 	}
-	, static function() use ($engine, $scene, $hud): void {
+	, static function() use ($engine, $ecs, $scene, $hud): void {
 		$engine->systems->remove('php-billiards.simulation');
+		$ecs->close($engine->entities);
 		$hud->close();
 		$scene->close();
 	}

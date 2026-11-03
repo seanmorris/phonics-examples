@@ -2,7 +2,12 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/autoload.php';
+require_once dirname(__DIR__, 3) . '/vendor/seanmorris/phonics/autoload.php';
 
+use Phonics\Ecs\Registry;
+use PhpBilliards\Ecs\BallIdentity;
+use PhpBilliards\Ecs\BilliardsEntities;
+use PhpBilliards\Ecs\BilliardsSession;
 use PhpBilliards\Physics\Ball;
 use PhpBilliards\Physics\Simulation;
 use PhpBilliards\Physics\Table;
@@ -46,6 +51,47 @@ $test('standard rack is complete and separated', static function() use ($expect)
 	foreach($game->balls as $index => $a)
 	foreach(array_slice($game->balls, $index + 1) as $b)
 	$expect(hypot($a->x - $b->x, $a->y - $b->y) >= Ball::RADIUS * 2 + .000004, 'Rack balls overlap');
+});
+
+$test('ECS keeps stable ball entities around the unchanged simulation', static function() use ($expect): void {
+	$registry = new Registry;
+	$game = new Game;
+	$ecs = new BilliardsEntities($registry, $game);
+	$before = $game->simulation->exactHash();
+	$entities = $registry->query(BallIdentity::class);
+
+	$expect(count($registry->query(BilliardsSession::class)) === 1, 'The game session was not registered');
+	$expect(count($entities) === 16 && count($registry->query(Ball::class)) === 16, 'The complete rack was not registered');
+
+	$ids = [];
+	foreach($game->simulation->balls as $ball)
+	{
+		$entity = $ids[$ball->number] = $ecs->ballEntity($ball->number);
+		$expect($registry->get($entity, Ball::class) === $ball, 'The ECS copied a simulation ball');
+		$expect($registry->get($entity, BallIdentity::class)->number === $ball->number, 'The ball identity changed');
+	}
+	$expect($game->simulation->exactHash() === $before, 'Initial ECS registration changed deterministic state');
+
+	$oldCue = $game->simulation->cue();
+	$game->simulation->rack();
+	$expect($ecs->reconcile($registry, $game->simulation), 'Rack replacement was not reconciled');
+	$expect($game->simulation->cue() !== $oldCue, 'The rack did not replace its physics objects');
+	foreach($game->simulation->balls as $ball)
+	{
+		$expect($ecs->ballEntity($ball->number) === $ids[$ball->number], 'Rack replacement changed an entity ID');
+		$expect($registry->get($ids[$ball->number], Ball::class) === $ball, 'Rack replacement left a stale Ball component');
+	}
+	$expect(!$ecs->reconcile($registry, $game->simulation), 'An unchanged ball list invalidated the ECS');
+
+	$snapshot = $game->simulation->snapshot();
+	$game->simulation->restore($snapshot);
+	$expect($ecs->reconcile($registry, $game->simulation), 'Checkpoint replacement was not reconciled');
+	foreach($game->simulation->balls as $ball)
+	$expect($registry->get($ids[$ball->number], Ball::class) === $ball, 'Checkpoint restore left a stale Ball component');
+
+	$ecs->close($registry);
+	$expect($registry->query(BilliardsSession::class) === [] && $registry->query(Ball::class) === [],
+		'Closing the adapter left billiards entities alive');
 });
 
 $test('rack variation is imperceptible and deterministic', static function() use ($expect): void {

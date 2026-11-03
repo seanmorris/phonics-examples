@@ -96,7 +96,7 @@ test('every Billiards class documents its summary and detailed responsibility', 
 		}
 	}
 
-	assert.equal(classes,20,'The Billiards class-doc audit missed a source class');
+	assert.equal(classes,23,'The Billiards class-doc audit missed a source class');
 });
 
 test('every public Billiards parameter has a short PHPDoc description', async() => {
