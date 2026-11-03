@@ -1586,6 +1586,8 @@ $test('a dawdling player\'s cue dances about its aim until any input', static fu
 		'Controls left the idle dance visible under its overlay');
 });
 
+require __DIR__ . '/camera.php';
+
 $failures = 0;
 
 foreach($tests as $name => $callback)

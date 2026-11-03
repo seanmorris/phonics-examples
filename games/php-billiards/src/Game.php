@@ -84,10 +84,6 @@ final class Game
 	private bool $fullscreenRequest = false;
 	/** Seconds the current keyboard or stick aim input has been held, for acceleration. */
 	private float $aimHold = 0.0;
-	/** Whether the camera should ease behind the cue. */
-	private bool $follow = false;
-	/** Session time of the latest manual orbit or zoom. */
-	private float $manualCamera = -INF;
 	/** @var array{text:string,tone:string,until:float}|null Short-lived feedback for a rejected command. */
 	private ?array $notice = null;
 	/** Authoritative online eight-ball rules, or null during free play. */
@@ -201,6 +197,8 @@ final class Game
 
 		if($this->overlay !== null)
 		{
+			$this->camera->suspendFollow(true);
+			$this->camera->animate($elapsed, $this->simulation->moving());
 			$items = $this->menuItems();
 			if($stepUp) $this->menuSelection = ($this->menuSelection + count($items) - 1) % max(1, count($items));
 			if($stepDown) $this->menuSelection = ($this->menuSelection + 1) % max(1, count($items));
@@ -218,7 +216,11 @@ final class Game
 		foreach(array_unique($actions) as $action) $this->action($action);
 		if(isset($browser['debugCamera']) && is_array($browser['debugCamera'])) $this->camera->patch($browser['debugCamera']);
 
-		if(!$this->started || $this->overlay !== null) return;
+		if(!$this->started || $this->overlay !== null)
+		{
+			$this->camera->suspendFollow(true);
+			return;
+		}
 
 		$values = isset($browser['values']) && is_array($browser['values']) ? $browser['values'] : [];
 		foreach(['aim','power','top','side'] as $name) if($this->canControl()
@@ -226,17 +228,19 @@ final class Game
 		{
 			$value = (float)$values[$name];
 			if(!is_finite($value)) continue;
-			if($name === 'aim') $this->aim = deg2rad(max(-180, min(180, $value)));
+			if($name === 'aim')
+			{
+				$this->aim = deg2rad(max(-180, min(180, $value)));
+				$this->camera->requestFollow();
+			}
 			elseif($name === 'power') $this->power = max(.05, min(1, $value));
 			else $this->{$name} = max(-1, min(1, $value));
 		}
 
-		$this->camera->animate($elapsed);
+		$this->camera->animate($elapsed, $this->simulation->moving());
 		if(abs((float)($rightStick[0] ?? 0)) > 1e-6 || abs((float)($rightStick[1] ?? 0)) > 1e-6)
 		{
 			$this->camera->orbitStick((float)($rightStick[0] ?? 0), (float)($rightStick[1] ?? 0), $elapsed);
-			$this->manualCamera = $this->clock;
-			$this->follow = false;
 		}
 
 		$horizontal = max(-1, min(1, (float)($controls['right'] ?? 0) - (float)($controls['left'] ?? 0)));
@@ -260,7 +264,7 @@ final class Game
 				$ramp = min(1, max(0, ($this->aimHold - .25) / .75));
 				$rate = $fine ? 2.5 : 12 + 78 * $ramp * $ramp;
 				$this->aim = self::wrapAngle($this->aim + $horizontal * abs($horizontal) * deg2rad($rate) * $elapsed);
-				$this->follow = true;
+				$this->camera->requestFollow();
 			}
 			else $this->aimHold = 0.0;
 
@@ -278,8 +282,8 @@ final class Game
 		$this->phaseTransition();
 		$this->animateIdleCue();
 		$cue = $this->simulation->cue();
-		if($this->follow && $cue->active && $this->drag === null && $this->clock - $this->manualCamera > 1.5
-			&& in_array($this->simulation->phase, ['aim','placing'], true) && $this->stroke === null)
+		$this->camera->suspendFollow(!$cue->active || $this->drag !== null
+			|| !in_array($this->simulation->phase, ['aim','placing'], true) || $this->stroke !== null);
 		$this->camera->follow($cue->x, $cue->y, $this->aim, $elapsed);
 	}
 
@@ -378,8 +382,8 @@ final class Game
 				else $this->beginStroke($this->aim, $this->power, $this->top, $this->side);
 			}
 		}
-		elseif($action === 'rack' && !$this->match) {$this->stroke = null; $this->simulation->rack(); $this->follow = true;}
-		elseif($action === 'reset' && !$this->match) {$this->stroke = null; $this->simulation->resetShot(); $this->follow = true;}
+		elseif($action === 'rack' && !$this->match) {$this->stroke = null; $this->simulation->rack(); $this->camera->resumeFollow();}
+		elseif($action === 'reset' && !$this->match) {$this->stroke = null; $this->simulation->resetShot(); $this->camera->resumeFollow();}
 		elseif($action === 'clear-spin' && $this->canControl()) $this->top = $this->side = 0;
 		elseif($action === 'mute') $this->muted = !$this->muted;
 		elseif($action === 'fullscreen') $this->fullscreenRequest = true;
@@ -390,8 +394,7 @@ final class Game
 			$cue = $this->simulation->cue();
 			if($cue->active) $this->camera->behind($cue->x, $cue->y, $this->aim);
 			else $this->camera->reset();
-			$this->follow = true;
-			$this->manualCamera = -INF;
+			$this->camera->resumeFollow();
 		}
 	}
 
@@ -419,7 +422,7 @@ final class Game
 		else
 		{
 			$this->simulation->placeCue(...$this->placement);
-			$this->follow = true;
+			$this->camera->resumeFollow();
 		}
 	}
 
@@ -519,7 +522,6 @@ final class Game
 		$this->mode = 'free';
 		$this->started = true;
 		$this->onlineRequested = false;
-		$this->follow = false;
 		$this->camera->beginGameplayView();
 	}
 
@@ -527,6 +529,7 @@ final class Game
 	{
 		$cue = $this->simulation->cue();
 		if(!$cue->active) return;
+		$this->camera->resumeFollow();
 		$this->stroke = [
 			'time' => 0.0, 'previousTime' => 0.0, 'contacted' => false
 			, 'aim' => $aim, 'power' => $power, 'top' => $top, 'side' => $side
@@ -816,6 +819,7 @@ final class Game
 			$x = max(-2000000, min(2000000, (int)($action['x_um'] ?? 0))) / 1000000;
 			$y = max(-2000000, min(2000000, (int)($action['y_um'] ?? 0))) / 1000000;
 			if(!$this->simulation->placeCue($x, $y)) throw new \UnexpectedValueException('Illegal cue-ball placement');
+			$this->camera->resumeFollow();
 			$this->settleOnline($this->match->settlePlacement($this->simulation));
 		}
 	}
@@ -975,7 +979,6 @@ final class Game
 			if($this->started && $this->overlay === null)
 			{
 				$this->camera->zoom(-(float)($event['y'] ?? 0) * 120);
-				$this->manualCamera = $this->clock;
 			}
 			return;
 		}
@@ -1028,7 +1031,6 @@ final class Game
 				'orbit' => $this->camera->orbit($x - $previous[0], $y - $previous[1], $this->dragStart[1] / max(1, $height)),
 				default => null
 			};
-			if($this->drag === 'orbit') $this->manualCamera = $this->clock;
 			return;
 		}
 
@@ -1080,15 +1082,14 @@ final class Game
 		if($button === 1 && $onCloth && $this->canAdjustShot())
 		{
 			$this->drag = 'aim';
+			$this->camera->requestFollow();
 			$this->dragAngle = null;
-			$this->follow = false;
 			$this->aimAt($x, $y, $width, $height, $fine);
 			return;
 		}
 
 		// Right or middle drag, or any drag that starts off the cloth, orbits the camera.
 		$this->drag = 'orbit';
-		$this->follow = false;
 		$this->camera->hold();
 	}
 
@@ -1507,7 +1508,7 @@ final class Game
 		$phase = $this->simulation->phase;
 		if($phase === 'placing' && $this->previousPhase !== 'placing') $this->placement = $this->clearSpot(-.65, 0.0);
 		// Each new shot starts from a view behind the cue unless the player is holding the camera.
-		if($this->previousPhase === 'moving' && $phase !== 'moving') $this->follow = true;
+		if($this->previousPhase === 'moving' && $phase !== 'moving') $this->camera->resumeFollow();
 		$this->previousPhase = $phase;
 	}
 

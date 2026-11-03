@@ -167,7 +167,9 @@ $engine->start(
 		}
 
 		$json = json_encode($status, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
-		$signature = $width . 'x' . $height . '@' . $dpr . ':' . $json;
+		// Pullback is presentation-only: include the actual view without adding fields to published game state.
+		$signature = $width . 'x' . $height . '@' . $dpr . ':' . $json
+			. ':' . json_encode($game->camera->viewPose(), JSON_THROW_ON_ERROR);
 		if($signature === $lastFrame && !$hud->animating()) return;
 
 		$renderStarted = microtime(true);

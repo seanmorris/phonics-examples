@@ -110,8 +110,8 @@ final class Scene
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		$this->program->use();
 		$simulation = $game->simulation;
-		$eye = $game->camera->eye($simulation->moving());
-		$this->matrix4('uViewProjection', $game->camera->viewProjection($width, $height, $simulation->moving()));
+		$eye = $game->camera->eye();
+		$this->matrix4('uViewProjection', $game->camera->viewProjection($width, $height));
 		glUniform3f($this->program->location('uEye'), ...$eye);
 		glUniform2f($this->program->location('uTableSize'), Table::WIDTH, Table::HEIGHT);
 		glUniform1f($this->program->location('uSpot'), Table::FOOT_SPOT);
