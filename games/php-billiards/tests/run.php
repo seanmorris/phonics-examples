@@ -1470,6 +1470,67 @@ $test('HUD regions stay on screen and never overlap at common canvas sizes', sta
 	}
 });
 
+$test('the help hint stays beside the menu button in every gameplay state', static function() use ($expect): void {
+	$besideMenu = static function(array $regions, int $width, int $height): ?array {
+		$help = $regions['help'] ?? null;
+		if($help === null) return null;
+		[$x,$y,$w,$h] = $help['rect'];
+		[$mx,$my,,$mh] = $regions['menu']['rect'];
+		return $x >= 0 && $x + $w <= $mx && $y >= $my && $y + $h <= $my + $mh && $y + $h <= $height ? $help : null;
+	};
+
+	foreach([[1280,720,1,'Controls'],[780,1688,2,''],[3840,2160,1.5,'Controls']] as [$width,$height,$dpr,$label])
+	{
+		$game = new Game;
+		$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, $width, $height);
+		$help = $besideMenu(Hud::regions($width, $height, $dpr, $game), $width, $height);
+		$expect($help !== null && $help['name'] === 'controls' && $help['legend'] === '?' && $help['label'] === $label
+			, "The ? hint is missing beside the menu button at {$width}x{$height}");
+
+		// Hiding the HUD and muting keep it; muting moves the Muted chip to its left.
+		$game->hudHidden = $game->muted = true;
+		$expect($besideMenu(Hud::regions($width, $height, $dpr, $game), $width, $height) !== null
+			, "Hiding the HUD hid the ? hint at {$width}x{$height}");
+		$game->hudHidden = $game->muted = false;
+
+		$game->inputTheme = 'gamepad';
+		$help = $besideMenu(Hud::regions($width, $height, $dpr, $game), $width, $height);
+		$expect($help !== null && $help['name'] === 'menu' && $help['legend'] === 'Start'
+			, "A controller lost its way to the controls sheet at {$width}x{$height}");
+	}
+
+	// Clicking it opens the controls sheet directly.
+	$game = new Game;
+	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, 1280, 720);
+	$regions = Hud::regionsFor($game, 1280, 720, 1);
+	[$x,$y,$w,$h] = $regions['help']['rect'];
+	$click = ['type' => 'pointer','button' => 1,'action' => 'down','x' => $x + $w / 2,'y' => $y + $h / 2];
+	$game->input([], [], [$click], $regions, [0,0], 1 / 60, 1280, 720);
+	$expect($game->overlay === 'controls', 'Clicking the ? hint did not open the controls sheet');
+
+	// An online scoreboard ends before the hint, even on a phone.
+	$seed = str_repeat('5e', 32);
+	$players = ['@alice:example.org','@bob:example.org'];
+	$match = new EightBallMatch($players, $players[0], $seed);
+	$simulation = new Simulation($seed);
+
+	foreach([[1280,720,1],[780,1688,2]] as [$width,$height,$dpr])
+	{
+		$online = new Game;
+		$online->input(['network' => [[
+			'type' => 'start'
+			, 'detail' => [
+				'players' => $players, 'seed' => $seed, 'breaker' => $players[0], 'localPlayer' => $players[0], 'role' => 'player'
+				, 'checkpoint' => $match->checkpoint($simulation), 'hash' => $match->hash($simulation)
+			]
+		]]], [], [], [], [0,0], 0, $width, $height);
+		$layout = Hud::layout($width, $height, $dpr, $online);
+		[$sx,,$sw] = $layout['_metrics']['scoreboard'];
+		$expect($online->online() && $sx + $sw <= $layout['help']['rect'][0]
+			, "The online scoreboard runs under the ? hint at {$width}x{$height}");
+	}
+});
+
 $test('an opponent\'s cue considers the shot after four idle seconds and never strikes', static function() use ($expect): void {
 	$alice = '@alice:example.org';
 	$bob = '@bob:example.org';

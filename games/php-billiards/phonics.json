@@ -108,7 +108,7 @@
     "src/Render/Camera.php": "sha256-zjIEAMi7KjLx9CNiFgaTmUswjqG5uvCmhZgH5h6q7YI=",
     "src/Render/FramePacer.php": "sha256-OKjfGRUZg/bbscJ0O0MO+oH7rADR7aKG6pimFnc6FE4=",
     "src/Render/GpuMesh.php": "sha256-wjBHi94G6bcjOo5fDgt5A5/w+ro4ggu8OGSR1fEvx/M=",
-    "src/Render/Hud.php": "sha256-gAMulGz07g8kLgDmMg/H0mg+iQQznZZj9NoNtl8vyhs=",
+    "src/Render/Hud.php": "sha256-kMksaakOXfFS+j4CK8SanOV8I0W8p4NNHhrPumNicsc=",
     "src/Render/MeshBundle.php": "sha256-B0W4uWiZaPlb4cvQ6xj19bH15ovdTr/bQJBdMm4IFUk=",
     "src/Render/Scene.php": "sha256-W7x/QXs2Fj7ZARRAtpUbiTI2NzmQwp9o1SDnBevsizE=",
     "src/Render/Text.php": "sha256-GNyoAY77n0OP8QC1aXt0ODrPnRcdXhAHxXjsuQ1ic2M=",

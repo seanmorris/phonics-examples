@@ -134,6 +134,18 @@ final class Hud
 		};
 	}
 
+	/**
+	 * The way into the controls sheet for the current input theme, as [action, legend, label].
+	 *
+	 * A controller has no direct Controls button, so its hint names the Start menu that holds the sheet.
+	 *
+	 * @return array{string,string,string}
+	 */
+	private static function helpHint(?Game $game): array
+	{
+		return ($game?->inputTheme ?? 'keyboard') === 'keyboard' ? ['controls','?','Controls'] : ['menu','Start','Menu'];
+	}
+
 	/** @return list<array{string,string}> Dock buttons as [action, label]. */
 	private static function dockButtons(?Game $game): array
 	{
@@ -160,6 +172,27 @@ final class Hud
 		$metrics = ['unit' => $u,'margin' => $margin,'narrow' => $width / $u < 760];
 
 		$regions['menu'] = ['type' => 'action','name' => 'menu','rect' => [$width - $margin - 40 * $u,$margin,40 * $u,40 * $u]];
+
+		// The help hint never fades: it stays beside the menu button through play, ball motion, narrow layouts and a
+		// hidden HUD. Narrow canvases show only its keycap.
+		[$helpName,$helpLegend,$helpLabel] = self::helpHint($game);
+		$compact = $metrics['narrow'];
+		$helpWidth = 24 * $u + $canvas->keycapWidth($helpLegend, Theme::CAPTION, ($game?->inputTheme ?? 'keyboard') !== 'keyboard')
+			+ ($compact ? 0 : 8 * $u + $canvas->measure($helpLabel, Theme::CAPTION, 'bold'));
+		$helpX = $width - $margin - 48 * $u - $helpWidth;
+		$regions['help'] = [
+			'type' => 'action','name' => $helpName,'legend' => $helpLegend,'label' => $compact ? '' : $helpLabel
+			, 'rect' => [$helpX,$margin + 4 * $u,$helpWidth,32 * $u]
+		];
+		$metrics['topRight'] = $helpX;
+
+		if($game?->muted)
+		{
+			$chip = $canvas->measure('Muted', Theme::CAPTION, 'bold') + 20 * $u;
+			$metrics['muted'] = [$helpX - $chip - 8 * $u,$margin + 8 * $u,$chip,24 * $u];
+			$metrics['topRight'] = $metrics['muted'][0];
+		}
+
 		if($game?->hudHidden)
 		{
 			$regions['_metrics'] = $metrics + ['hidden' => true];
@@ -232,7 +265,7 @@ final class Hud
 		$regions['shot-card'] = ['type' => 'panel','name' => 'shot-card','rect' => $metrics['card']];
 		if($game?->online())
 		{
-			$metrics['scoreboard'] = [$margin,$margin,min(300 * $u,$width - $margin * 3 - 40 * $u),112 * $u];
+			$metrics['scoreboard'] = [$margin,$margin,min(300 * $u,$metrics['topRight'] - $margin * 2),112 * $u];
 			$regions['scoreboard'] = ['type' => 'panel','name' => 'scoreboard','rect' => $metrics['scoreboard']];
 		}
 		$regions['_metrics'] = $metrics;
@@ -441,7 +474,8 @@ final class Hud
 				$this->drawHints($canvas, $game, $width, $height, $metrics, $elapsed);
 				if(isset($metrics['endCard'])) $this->drawEndCard($canvas, $game, $metrics['endCard'], $width, $height);
 			}
-			$this->drawMenuButton($canvas, $game, $layout['menu']['rect'], !empty($metrics['hidden']));
+			$this->drawHelp($canvas, $game, $layout['help'], !empty($metrics['hidden']));
+			$this->drawMenuButton($canvas, $game, $layout['menu']['rect'], !empty($metrics['hidden']), $metrics['muted'] ?? null);
 			if($game->overlay !== null) $this->drawOverlay($canvas, $game, $width, $height);
 		}
 
@@ -601,7 +635,25 @@ final class Hud
 		}
 	}
 
-	private function drawMenuButton(UiCanvas $canvas, Game $game, array $rect, bool $hidden): void
+	/** Draw the always-visible way into the controls sheet, dimmed like the menu button while the HUD is hidden. */
+	private function drawHelp(UiCanvas $canvas, Game $game, array $region, bool $hidden): void
+	{
+		$u = $canvas->unit;
+		[$x,$y,$width,$height] = $region['rect'];
+		$hover = $game->hover === $region['name'];
+		$opacity = $canvas->opacity;
+		if($hidden && !$hover) $canvas->opacity *= .45;
+		$canvas->box($x, $y, $width, $height, $height / 2, $hover ? Theme::PANEL_RAISED : Theme::alpha(Theme::PANEL, .78)
+			, $hover ? Theme::alpha(Theme::BRASS, .6) : Theme::HAIRLINE, max(1, $u));
+		$middle = $y + $height / 2;
+		$cursor = $x + 12 * $u + $canvas->keycap($region['legend'], $x + 12 * $u, $middle, Theme::CAPTION, $game->inputTheme !== 'keyboard');
+		if($region['label'] !== '')
+		$canvas->label($region['label'], $cursor + 8 * $u, $middle, Theme::CAPTION, Theme::alpha(Theme::TEXT, .82), 'bold', 'left');
+		$canvas->opacity = $opacity;
+	}
+
+	/** @param array{float,float,float,float}|null $muted Muted chip rectangle from the layout, when sound is off. */
+	private function drawMenuButton(UiCanvas $canvas, Game $game, array $rect, bool $hidden, ?array $muted = null): void
 	{
 		$u = $canvas->unit;
 		[$x,$y,$width,$height] = $rect;
@@ -613,11 +665,11 @@ final class Hud
 			, $hover ? Theme::alpha(Theme::BRASS, .6) : Theme::HAIRLINE, max(1, $u));
 		for($bar = -1; $bar <= 1; $bar++)
 		$canvas->box($x + 13 * $u, $y + $height / 2 + $bar * 6 * $u - 1 * $u, 14 * $u, 2 * $u, 1 * $u, Theme::TEXT);
-		if($game->muted)
+		if($muted)
 		{
-			$chip = $canvas->measure('Muted', Theme::CAPTION, 'bold') + 20 * $u;
-			$canvas->box($x - $chip - 8 * $u, $y + 8 * $u, $chip, 24 * $u, 12 * $u, Theme::PANEL, Theme::HAIRLINE, max(1, $u));
-			$canvas->label('Muted', $x - $chip / 2 - 8 * $u, $y + 20 * $u, Theme::CAPTION, Theme::TEXT_SECONDARY, 'bold', 'center');
+			[$chipX,$chipY,$chip,$chipHeight] = $muted;
+			$canvas->box($chipX, $chipY, $chip, $chipHeight, 12 * $u, Theme::PANEL, Theme::HAIRLINE, max(1, $u));
+			$canvas->label('Muted', $chipX + $chip / 2, $chipY + $chipHeight / 2, Theme::CAPTION, Theme::TEXT_SECONDARY, 'bold', 'center');
 		}
 		$canvas->opacity = $opacity;
 	}
@@ -814,7 +866,7 @@ final class Hud
 		$tone = $this->toastShown['tone'];
 		$accent = match($tone) {'error' => Theme::DANGER,'warning' => Theme::BRASS,'turn' => Theme::BRASS_BRIGHT,default => Theme::SUCCESS};
 		$left = $this->leftWidth + 12 * $u;
-		$right = $width - $margin - 52 * $u;
+		$right = $metrics['topRight'] - 12 * $u;
 		$maxWidth = min(560 * $u, $width - 2 * $margin);
 		$lines = $canvas->text->wrap($this->toastShown['text'], Theme::BODY * $u, $maxWidth - 50 * $u, 2);
 		$textWidth = max(array_map(fn(string $line): float => $canvas->text->measure($line, Theme::BODY * $u), $lines));
@@ -883,9 +935,9 @@ final class Hud
 		$pad = $game->inputTheme !== 'keyboard';
 		$placing = $game->simulation->phase === 'placing';
 		$hints = $placing
-			? ($pad ? [[['LS'],'Move'],[['A'],'Place'],[['Start'],'Menu']] : [[['Click'],'Place'],[['←','→'],'Move'],[['Esc'],'Menu']])
+			? ($pad ? [[['LS'],'Move'],[['A'],'Place']] : [[['Click'],'Place'],[['←','→'],'Move'],[['Esc'],'Menu']])
 			: ($pad ? [[['LS'],'Aim'],[['L3'],'Fine'],[['A'],'Shoot'],[['RS'],'Camera']]
-				: [[['Drag'],'Aim'],[['Shift'],'Fine'],[['Space'],'Shoot'],[['?'],'Controls']]);
+				: [[['Drag'],'Aim'],[['Shift'],'Fine'],[['Space'],'Shoot']]);
 		$key = $game->inputTheme . ':' . ($placing ? 'placing' : 'aim');
 		$now = microtime(true);
 		if($key !== $this->hintKey) {$this->hintKey = $key; $this->hintFadeAt = $now + 9;}
