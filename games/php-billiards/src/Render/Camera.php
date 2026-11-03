@@ -23,11 +23,17 @@ final class Camera
 	public float $yaw = M_PI;
 	/** Vertical orbit angle in radians. */
 	public float $pitch = .12;
-	/** Distance from the camera eye to its target in world units. */
+	/** Stored orbit distance, excluding animated shot pullback. */
 	public float $distance = 1.5;
 	/** @var array{float,float,float} World-space point around which the camera orbits. */
 	public array $target = [.1,0.0,0.0];
-	/** @var array{yaw:float,pitch:float,distance:float,target:array}|null */
+	/** The view can look ahead of its orbit pivot at close zoom. */
+	private array $lookTarget = [.1,0.0,0.0];
+	/** Unmodified table framing, retained when zooming back out or taking manual control. */
+	private array $farTarget = [.1,0.0,0.0];
+	/** Latest cue centre; tracking it alone never animates a suspended camera. */
+	private ?array $cueFocus = null;
+	/** @var array{yaw:float,pitch:float,distance:float,target:array,lookTarget:array,farTarget:array}|null */
 	private ?array $transitionFrom = null;
 	private ?array $transitionTo = null;
 	private float $transitionTime = 0.0;
@@ -38,7 +44,7 @@ final class Camera
 	private bool $followEnabled = false;
 	private bool $followHeld = false;
 	private bool $followSuspended = false;
-	/** @var array{yaw:float,target:array}|null Latest requested follow pose, including while suspended. */
+	/** @var array{yaw:float,target:array,lookTarget:array}|null Latest requested follow pose, including while suspended. */
 	private ?array $desiredFollow = null;
 	private float $pullback = 0.0;
 	private float $desiredPullback = 0.0;
@@ -78,11 +84,13 @@ final class Camera
 			$this->transitionTo['yaw'] += $yaw;
 			$this->transitionYawDelta += $yaw;
 			$this->transitionTo['pitch'] = max(.28, min(1.18, $this->transitionTo['pitch'] + $pitch));
+			$this->frameOpening();
 		}
 		else
 		{
 			$this->yaw += $yaw;
 			$this->pitch = max(.28, min(1.18, $this->pitch + $pitch));
+			$this->frameManualView();
 		}
 	}
 
@@ -91,9 +99,11 @@ final class Camera
 	{
 		$this->transitionFrom = [
 			'yaw' => $this->yaw,'pitch' => $this->pitch,'distance' => $this->distance,'target' => $this->target
+			, 'lookTarget' => $this->lookTarget,'farTarget' => $this->farTarget
 		];
 		$this->transitionTo = [
-			'yaw' => self::GAME_YAW,'pitch' => self::GAME_PITCH,'distance' => self::GAME_DISTANCE,'target' => [0.0,0.0,0.0]
+			'yaw' => self::GAME_YAW,'pitch' => self::GAME_PITCH,'distance' => self::GAME_DISTANCE
+			, 'target' => [0.0,0.0,0.0],'lookTarget' => [0.0,0.0,0.0],'farTarget' => [0.0,0.0,0.0]
 		];
 		$this->transitionTime = 0.0;
 		$this->transitionYawDelta = self::wrap(self::GAME_YAW - $this->yaw);
@@ -121,13 +131,13 @@ final class Camera
 			+ $this->transitionYawDelta * $eased;
 		foreach(['pitch','distance'] as $name)
 		$this->{$name} = $this->transitionFrom[$name] + ($this->transitionTo[$name] - $this->transitionFrom[$name]) * $eased;
-		foreach($this->target as $index => $_)
-		$this->target[$index] = $this->transitionFrom['target'][$index]
-			+ ($this->transitionTo['target'][$index] - $this->transitionFrom['target'][$index]) * $eased;
+		foreach(['target','lookTarget','farTarget'] as $name) foreach($this->{$name} as $index => $_)
+		$this->{$name}[$index] = $this->transitionFrom[$name][$index]
+			+ ($this->transitionTo[$name][$index] - $this->transitionFrom[$name][$index]) * $eased;
 
 		if($this->transitionTime >= self::TRANSITION_SECONDS)
 		{
-			foreach(['yaw','pitch','distance','target'] as $name) $this->{$name} = $this->transitionTo[$name];
+			foreach(['yaw','pitch','distance','target','lookTarget','farTarget'] as $name) $this->{$name} = $this->transitionTo[$name];
 			$this->transitionFrom = $this->transitionTo = null;
 		}
 	}
@@ -140,8 +150,8 @@ final class Camera
 		if($this->transitioning() || $this->pullback !== $this->desiredPullback) return true;
 		if(!$this->following() || $this->desiredFollow === null) return false;
 		if(abs(self::wrap($this->desiredFollow['yaw'] - $this->yaw)) > 1e-4) return true;
-		foreach($this->desiredFollow['target'] as $index => $value)
-		if(abs($value - $this->target[$index]) > 1e-5) return true;
+		foreach(['target','lookTarget'] as $name) foreach($this->desiredFollow[$name] as $index => $value)
+		if(abs($value - $this->{$name}[$index]) > 1e-5) return true;
 		return false;
 	}
 
@@ -169,16 +179,20 @@ final class Camera
 	public function follow(float $cueX, float $cueY, float $aim, float $seconds): void
 	{
 		if(!is_finite($cueX) || !is_finite($cueY) || !is_finite($aim) || !is_finite($seconds) || $seconds < 0) return;
-		$this->desiredFollow = [
-			'yaw' => self::wrap($aim + M_PI),'target' => [$cueX * self::FOLLOW_TARGET,0.0,$cueY * self::FOLLOW_TARGET]
-		];
+		$this->cueFocus = [$cueX,TableGeometry::TABLETOP_TOP + Ball::RADIUS,$cueY];
+		$farTarget = [$cueX * self::FOLLOW_TARGET,0.0,$cueY * self::FOLLOW_TARGET];
+		[$target,$lookTarget] = $this->composition($farTarget, $aim, $this->pitch, $this->distance);
+		$this->desiredFollow = ['yaw' => self::wrap($aim + M_PI),'target' => $target,'lookTarget' => $lookTarget];
+		if($this->transitioning()) $this->frameOpening();
 		if($this->transitioning() || !$this->following() || $seconds === 0.0) return;
 		$amount = 1 - exp(-$seconds * 6.5);
 		$yawDelta = self::wrap($this->desiredFollow['yaw'] - $this->yaw);
 		$this->yaw = abs($yawDelta * (1 - $amount)) <= 1e-4
 			? $this->desiredFollow['yaw'] : $this->yaw + $yawDelta * $amount;
-		foreach($this->desiredFollow['target'] as $index => $value)
-		$this->target[$index] = self::ease($this->target[$index], $value, $amount, 1e-5);
+		foreach(['target','lookTarget'] as $name) foreach($this->desiredFollow[$name] as $index => $value)
+		$this->{$name}[$index] = self::ease($this->{$name}[$index], $value, $amount, 1e-5);
+		foreach($farTarget as $index => $value)
+		$this->farTarget[$index] = self::ease($this->farTarget[$index], $value, $amount, 1e-5);
 	}
 
 	private static function ease(float $current, float $desired, float $amount, float $epsilon): float
@@ -200,6 +214,8 @@ final class Camera
 		$this->follow($cueX, $cueY, $aim, 0);
 		$this->yaw = $this->desiredFollow['yaw'];
 		$this->target = $this->desiredFollow['target'];
+		$this->lookTarget = $this->desiredFollow['lookTarget'];
+		$this->farTarget = [$cueX * self::FOLLOW_TARGET,0.0,$cueY * self::FOLLOW_TARGET];
 	}
 
 	/** Manual orbit holds follow until the next explicit boundary. */
@@ -217,7 +233,7 @@ final class Camera
 		$this->yaw = self::GAME_YAW;
 		$this->pitch = self::GAME_PITCH;
 		$this->distance = self::GAME_DISTANCE;
-		$this->target = [0.0,0.0,0.0];
+		$this->target = $this->lookTarget = $this->farTarget = [0.0,0.0,0.0];
 		$this->transitionFrom = $this->transitionTo = $this->desiredFollow = null;
 		$this->followEnabled = $this->followHeld = $this->followSuspended = false;
 		$this->pullback = $this->desiredPullback = 0.0;
@@ -232,8 +248,55 @@ final class Camera
 		if(!is_finite($deltaY)) return;
 		$distance = $this->transitionTo['distance'] ?? $this->distance;
 		$distance = max(.85, min(5.2, $distance * exp($deltaY * .001)));
-		if($this->transitionTo !== null) $this->transitionTo['distance'] = $distance;
-		else $this->distance = $distance;
+		if($this->transitionTo !== null)
+		{
+			$this->transitionTo['distance'] = $distance;
+			$this->frameOpening();
+		}
+		else
+		{
+			$this->distance = $distance;
+			if(!$this->following()) $this->frameManualView();
+		}
+	}
+
+	/**
+	 * Blend the established table view into a cue-centred orbit below two metres.
+	 *
+	 * At minimum zoom, with r = distance*cos(pitch), h = distance*sin(pitch) and
+	 * k = .45*tan(FOV/2), projection of the cue gives y = -h*L / ((r*r+h*h+r*L)*tan(FOV/2)).
+	 * Solving y = -.45 gives L = k*(r*r+h*h)/(h-k*r). The smoothstep has zero slope at both
+	 * zoom bounds, so the canonical/far view stays exact and the close view needs no aspect-ratio heuristic.
+	 *
+	 * @return array{array,array} Orbit pivot and look target.
+	 */
+	private function composition(array $farTarget, float $aim, float $pitch, float $distance): array
+	{
+		if($distance >= 2.0 || $this->cueFocus === null) return [$farTarget,$farTarget];
+		$t = max(0.0, min(1.0, (2.0 - $distance) / (2.0 - .85)));
+		$blend = $t * $t * (3 - 2 * $t);
+		$pivot = [];
+		foreach($farTarget as $index => $value) $pivot[] = $value + ($this->cueFocus[$index] - $value) * $blend;
+		$r = cos($pitch) * $distance;
+		$h = max(TableGeometry::RAIL_TOP + .03 - $pivot[1], sin($pitch) * $distance);
+		$k = .45 * tan(self::FOV_Y / 2);
+		// Legal orbit pitches keep this denominator positive; a diagnostic pose may be too low to solve it.
+		$ahead = $h - $k * $r > 1e-6 ? $blend * $k * ($r * $r + $h * $h) / ($h - $k * $r) : 0.0;
+		return [$pivot,[$pivot[0] + cos($aim) * $ahead,$pivot[1],$pivot[2] + sin($aim) * $ahead]];
+	}
+
+	/** Manual orbit and zoom keep their current heading while retaining the cue's close composition. */
+	private function frameManualView(): void
+	{
+		[$this->target,$this->lookTarget] = $this->composition($this->farTarget, $this->yaw + M_PI, $this->pitch, $this->distance);
+	}
+
+	private function frameOpening(): void
+	{
+		if($this->transitionTo === null) return;
+		[$this->transitionTo['target'],$this->transitionTo['lookTarget']] = $this->composition(
+			$this->transitionTo['farTarget'], $this->transitionTo['yaw'] + M_PI, $this->transitionTo['pitch'], $this->transitionTo['distance']
+		);
 	}
 
 	/**
@@ -251,7 +314,7 @@ final class Camera
 		if(isset($patch['target']) && is_array($patch['target']) && count($patch['target']) === 3)
 		{
 			$target = array_map('floatval', array_values($patch['target']));
-			if(count(array_filter($target, 'is_finite')) === 3) {$this->target = $target; $changed = true;}
+			if(count(array_filter($target, 'is_finite')) === 3) {$this->target = $this->lookTarget = $this->farTarget = $target; $changed = true;}
 		}
 		if($changed) $this->transitionFrom = $this->transitionTo = $this->desiredFollow = null;
 	}
@@ -277,7 +340,7 @@ final class Camera
 	}
 
 	/** Presentation pose used by the renderer's frame signature, without changing diagnostic state fields. */
-	public function viewPose(): array { return [$this->eye(),$this->target]; }
+	public function viewPose(): array { return [$this->eye(),$this->lookTarget]; }
 
 	/**
 	 * Build the column-major view-projection matrix for the physical drawing-buffer aspect ratio.
@@ -288,7 +351,7 @@ final class Camera
 	{
 		return self::multiply(
 			self::perspective(self::FOV_Y, $width / max(1, $height), .05, 20)
-			, self::lookAt($this->eye(), $this->target, [0,1,0])
+			, self::lookAt($this->eye(), $this->lookTarget, [0,1,0])
 		);
 	}
 
@@ -311,7 +374,7 @@ final class Camera
 
 		$eye = $this->eye();
 		$forward = self::normalize([
-			$this->target[0] - $eye[0],$this->target[1] - $eye[1],$this->target[2] - $eye[2]
+			$this->lookTarget[0] - $eye[0],$this->lookTarget[1] - $eye[1],$this->lookTarget[2] - $eye[2]
 		]);
 		$right = self::normalize(self::cross($forward, [0,1,0]));
 		$up = self::normalize(self::cross($right, $forward));

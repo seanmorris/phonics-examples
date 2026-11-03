@@ -105,7 +105,7 @@
     "src/Physics/Ball.php": "sha256-LmAeR+OuckZle54SrHyQV6RfGCy6scMNt/OgaoxBkb4=",
     "src/Physics/Simulation.php": "sha256-K9RRkTGnjHUaajRp2cdwvGILfH9PxReET7kwJZBk+yo=",
     "src/Physics/Table.php": "sha256-XAD/O/IDHFWFO330jXIeIe/Px8eyy0M3vVXHfvvOXGk=",
-    "src/Render/Camera.php": "sha256-PSnfDSyz/21Fw6g4D5+cOF4NMlfAB4hSzpAiyn0pkcs=",
+    "src/Render/Camera.php": "sha256-j9VomKPWC5dIRKLOO0llcj6UDldSTaKwfDxdtqkKOVc=",
     "src/Render/FramePacer.php": "sha256-OKjfGRUZg/bbscJ0O0MO+oH7rADR7aKG6pimFnc6FE4=",
     "src/Render/GpuMesh.php": "sha256-wjBHi94G6bcjOo5fDgt5A5/w+ro4ggu8OGSR1fEvx/M=",
     "src/Render/Hud.php": "sha256-gAMulGz07g8kLgDmMg/H0mg+iQQznZZj9NoNtl8vyhs=",
