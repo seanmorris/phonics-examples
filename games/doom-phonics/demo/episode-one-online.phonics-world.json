@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "imports": {
     "doom": "../phonics.json",
-    "matrix": "../../phonics-matrix/phonics.json"
+    "matrix": "../../../packages/phonics-matrix/phonics.json"
   },
   "sources": {
     "episode": {

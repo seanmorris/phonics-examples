@@ -34,6 +34,46 @@ async function copyTree(source, target)
 	await fs.cp(source, target, {recursive: true});
 }
 
+/**
+ * List each packaged world's default resources that live outside the PHAR, with the site path the runtime requests.
+ *
+ * Pack records the application's base relative to the PHAR's place in the game directory, and the runtime resolves
+ * that base, then each world and its resources, against the published PHAR URL. Following the same steps keeps the
+ * published files where the game asks for them.
+ */
+async function worldResources(gameRoot, entry, pharRoute)
+{
+	const manifest = JSON.parse(await fs.readFile(path.join(gameRoot, 'phonics.json')));
+	const packed = new Set([...manifest.php?.files ?? [], ...manifest.browser?.files ?? [], ...manifest.assets ?? []
+		, ...manifest.application?.assets ?? [], ...manifest.preload ?? []]);
+	const site = new URL('https://site.invalid/');
+	const base = path.relative(path.dirname(path.join(gameRoot, entry.application)), gameRoot).split(path.sep).join('/');
+	const applicationRoot = new URL(base ? `${base}/` : './', new URL(pharRoute, site));
+	const resources = [];
+
+	for(const world of [...packed].filter(name => name.endsWith('.phonics-world.json')))
+	{
+		const data = JSON.parse(await fs.readFile(path.join(gameRoot, world)));
+
+		for(const slot of Object.values(data.resourceSlots ?? {}))
+		{
+			const location = slot.defaultUrl;
+
+			if(typeof location !== 'string' || /^[a-z]+:/i.test(location)) continue;
+
+			const file = path.resolve(gameRoot, path.dirname(world), location);
+
+			if(packed.has(path.relative(gameRoot, file).split(path.sep).join('/'))) continue;
+
+			const url = new URL(location, new URL(world, applicationRoot));
+
+			if(url.origin === site.origin) resources.push([file, decodeURIComponent(url.pathname.slice(1))]);
+		}
+	}
+
+	return resources;
+}
+
 await copyTree(path.join(engineRoot, 'browser'), path.join(destination, 'engine/browser'));
 const runtime = await runtimeDirectory();
 const manifest = JSON.parse(await fs.readFile(path.join(runtime, 'php8.4-sdl.manifest.json')));
@@ -70,15 +110,31 @@ await fs.writeFile(path.join(destination, 'index.html'), page({
 	, body: `<main class="catalog"><header><p class="eyebrow">PHONICS EXAMPLES</p><h1>Games choose the engine they need.</h1><p>Direct applications, authored worlds, and specialized resource formats can live together without forcing one content model on every game.</p></header><section>${cards}</section></main>`
 }));
 
+const published = new Map;
+
 for(const entry of entries)
 {
 	const gameRoot = path.join(gamesRoot, entry.directory);
-	await copyTree(path.join(gameRoot, entry.application), path.join(destination, 'applications', entry.slug, 'game.phar'));
+	const pharRoute = `applications/${entry.slug}/game.phar`;
+	await copyTree(path.join(gameRoot, entry.application), path.join(destination, pharRoute));
+
+	for(const [source, route] of await worldResources(gameRoot, entry, pharRoute))
+	{
+		if(published.has(route) && published.get(route) !== source)
+		throw Error(`${entry.slug}: ${route} is already published from ${published.get(route)}`);
+
+		published.set(route, source);
+		await copyTree(source, path.join(destination, route));
+	}
+
 	await copyTree(path.join(gameRoot, entry.application + '.integrity'), path.join(destination, 'applications', entry.slug, 'game.phar.integrity'));
 	await copyTree(path.join(gameRoot, entry.poster), path.join(destination, entry.posterRoute));
 	const application = `../../applications/${entry.slug}/game.phar`;
-	const gameBody = `<main class="game-page"><nav><a href="../../">← All examples</a><span>${escape(entry.title)}</span></nav><section class="game-host"><div class="loading"><strong>Preparing ${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas"></canvas></section><footer><p>${escape(entry.description)}</p>${entry.controls ? `<p>${escape(entry.controls)}</p>` : ''}</footer></main>`;
-	const embedBody = `<main class="embed-host"><div class="game-host"><div class="loading"><strong>${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas"></canvas></div></main>`;
+	// Games read the declared size as their logical resolution before SDL resizes the drawing buffer, and the host
+	// focuses the canvas once loaded, so it must be focusable for keyboard games.
+	const size = entry.canvas ? ` width="${Number(entry.canvas.width)}" height="${Number(entry.canvas.height)}"` : '';
+	const gameBody = `<main class="game-page"><nav><a href="../../">← All examples</a><span>${escape(entry.title)}</span></nav><section class="game-host"><div class="loading"><strong>Preparing ${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas" tabindex="0"${size}></canvas></section><footer><p>${escape(entry.description)}</p>${entry.controls ? `<p>${escape(entry.controls)}</p>` : ''}</footer></main>`;
+	const embedBody = `<main class="embed-host"><div class="game-host"><div class="loading"><strong>${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas" tabindex="0"${size}></canvas></div></main>`;
 	await fs.mkdir(path.join(destination, 'games', entry.slug), {recursive: true});
 	await fs.mkdir(path.join(destination, 'embed', entry.slug), {recursive: true});
 	await fs.writeFile(path.join(destination, 'games', entry.slug, 'index.html'), page({title: entry.title,body: gameBody,className:'full-page',application}));

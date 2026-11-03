@@ -18,3 +18,15 @@ test('built catalog exposes separate full, embed, and application routes', async
 	for(const game of catalog)
 	await Promise.all(Object.values(game.routes).map(route => fs.access(new URL(route.endsWith('/') ? route + 'index.html' : route, dist))));
 });
+
+test('built pages size each canvas and publish Doom’s world resources', async context => {
+	try { await fs.access(new URL('catalog.json', dist)); }
+	catch { context.skip('site has not been built'); return; }
+
+	for(const route of ['games/doom-phonics/index.html', 'embed/doom-phonics/index.html'])
+	assert.match(await fs.readFile(new URL(route, dist), 'utf8'), /<canvas [^>]*tabindex="0" width="960" height="540"/);
+
+	// The packaged online world requests its default WADs relative to the PHAR's application base.
+	for(const file of ['applications/demo/DOOM1.WAD', 'applications/DOOM1_OGG.wad', 'applications/demo/DBIGFONT.WAD'])
+	await fs.access(new URL(file, dist));
+});

@@ -25,6 +25,33 @@ test('catalog metadata owns every migrated game and its documentation', async() 
 	}
 });
 
+test('every packaged world imports package manifests that exist in this repository', async() => {
+	for(const slug of expectedGames)
+	{
+		const directory = new URL(`games/${slug}/`, root);
+		const manifest = JSON.parse(await fs.readFile(new URL('phonics.json', directory)));
+		const worlds = [...manifest.assets ?? [], ...manifest.application?.assets ?? []]
+			.filter(name => name.endsWith('.phonics-world.json'));
+
+		// Imports are resolved from the world file, so a path written for another checkout layout 404s at runtime.
+		for(const name of new Set(worlds))
+		{
+			const world = new URL(name, directory);
+
+			for(const [alias, value] of Object.entries(JSON.parse(await fs.readFile(world)).imports ?? {}))
+			{
+				const location = typeof value === 'string' ? value : value?.url;
+
+				if(!location || /^[a-z]+:|^@/i.test(location)) continue;
+
+				const target = new URL(location.split('#')[0], world);
+				assert.ok(target.pathname.endsWith('/phonics.json'), `${slug}/${name} imports ${alias} from a manifest`);
+				await assert.doesNotReject(fs.access(target), `${slug}/${name} imports ${alias} from ${location}`);
+			}
+		}
+	}
+});
+
 test('billiards metadata declares stable full and embed dimensions', async() => {
 	const data = JSON.parse(await fs.readFile(new URL('example.json', game)));
 	assert.equal(data.schemaVersion, 1);
