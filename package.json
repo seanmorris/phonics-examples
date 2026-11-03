@@ -23,7 +23,7 @@
     "serve": "node scripts/serve.mjs"
   },
   "dependencies": {
-    "@seanmorris/phonics": "https://github.com/seanmorris/php-wasm-engine/archive/a79e6bbb3d9878ce5517a95edab26a2b45402dba.tar.gz"
+    "@seanmorris/phonics": "https://github.com/seanmorris/php-wasm-engine/archive/d44cf5471a0182455a1d28df5fc230b4c0758a5b.tar.gz"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
