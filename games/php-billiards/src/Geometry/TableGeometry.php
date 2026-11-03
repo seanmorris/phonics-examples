@@ -27,6 +27,11 @@ final class TableGeometry
 	/** Inward draft of the upper liner cone in degrees. */
 	public const POCKET_DRAFT_DEGREES = 13.5;
 	public const WOOD_EDGE_RADIUS = .018;
+	/** Height of the wooden rail's top surface. */
+	public const RAIL_TOP = .105;
+	/** How far the wood's inner edge sits beyond the playfield, and that edge's corner radius. */
+	public const TABLETOP_MARGIN = .052;
+	public const TABLETOP_CORNER_RADIUS = .072;
 	public const CUSHION_EDGE_RADIUS = .006;
 	public const RAIL_SIGHT_OFFSET = .0936625;
 	public const RAIL_SIGHT_DIAMETER = .012;
@@ -183,7 +188,8 @@ final class TableGeometry
 		};
 		$outer = static fn(float $x, float $z): float => self::roundedRectangleSdf($x, $z, $outerX, $outerZ, .16);
 		$tabletop = static fn(float $x, float $z): float => self::roundedRectangleSdf(
-			$x, $z, Table::WIDTH / 2 + .052, Table::HEIGHT / 2 + .052, .072
+			$x, $z, Table::WIDTH / 2 + self::TABLETOP_MARGIN, Table::HEIGHT / 2 + self::TABLETOP_MARGIN
+			, self::TABLETOP_CORNER_RADIUS
 		);
 		$cushion = static function(float $x, float $z) use ($cushionRails): float {
 			$distance = INF;

@@ -20,97 +20,88 @@
     "meshes": {
         "apron": {
             "vertexOffset": 0,
-            "vertexLength": 123520,
-            "vertexCount": 3860,
-            "indexOffset": 123520,
-            "indexLength": 18480,
-            "indexCount": 4620,
+            "vertexLength": 172160,
+            "vertexCount": 5380,
+            "indexOffset": 172160,
+            "indexLength": 25776,
+            "indexCount": 6444,
             "doubleSided": false
         },
         "bed": {
-            "vertexOffset": 142000,
-            "vertexLength": 42496,
-            "vertexCount": 1328,
-            "indexOffset": 184496,
-            "indexLength": 6384,
-            "indexCount": 1596,
+            "vertexOffset": 197936,
+            "vertexLength": 84736,
+            "vertexCount": 2648,
+            "indexOffset": 282672,
+            "indexLength": 12720,
+            "indexCount": 3180,
             "doubleSided": false
         },
         "wood": {
-            "vertexOffset": 190880,
-            "vertexLength": 747392,
-            "vertexCount": 23356,
-            "indexOffset": 938272,
-            "indexLength": 127152,
-            "indexCount": 31788,
+            "vertexOffset": 295392,
+            "vertexLength": 1212544,
+            "vertexCount": 37892,
+            "indexOffset": 1507936,
+            "indexLength": 162240,
+            "indexCount": 40560,
             "doubleSided": false
         },
         "cushion": {
-            "vertexOffset": 1065424,
+            "vertexOffset": 1670176,
             "vertexLength": 9216,
             "vertexCount": 288,
-            "indexOffset": 1074640,
+            "indexOffset": 1679392,
             "indexLength": 4320,
             "indexCount": 1080,
             "doubleSided": false
         },
         "liners": {
-            "vertexOffset": 1078960,
+            "vertexOffset": 1683712,
             "vertexLength": 110592,
             "vertexCount": 3456,
-            "indexOffset": 1189552,
+            "indexOffset": 1794304,
             "indexLength": 41472,
             "indexCount": 10368,
             "doubleSided": true
         },
         "cube": {
-            "vertexOffset": 1231024,
+            "vertexOffset": 1835776,
             "vertexLength": 768,
             "vertexCount": 24,
-            "indexOffset": 1231792,
+            "indexOffset": 1836544,
             "indexLength": 144,
             "indexCount": 36,
             "doubleSided": false
         },
-        "cueWood": {
-            "vertexOffset": 1231936,
-            "vertexLength": 6336,
-            "vertexCount": 198,
-            "indexOffset": 1238272,
-            "indexLength": 2304,
-            "indexCount": 576,
-            "doubleSided": false
-        },
-        "cueTrim": {
-            "vertexOffset": 1240576,
-            "vertexLength": 6336,
-            "vertexCount": 198,
-            "indexOffset": 1246912,
-            "indexLength": 2304,
-            "indexCount": 576,
+        "cue": {
+            "vertexOffset": 1836688,
+            "vertexLength": 22176,
+            "vertexCount": 693,
+            "indexOffset": 1858864,
+            "indexLength": 15360,
+            "indexCount": 3840,
             "doubleSided": false
         },
         "sphere": {
-            "vertexOffset": 1249216,
+            "vertexOffset": 1874224,
             "vertexLength": 68640,
             "vertexCount": 2145,
-            "indexOffset": 1317856,
+            "indexOffset": 1942864,
             "indexLength": 49152,
             "indexCount": 12288,
             "doubleSided": false
         },
         "disc": {
-            "vertexOffset": 1367008,
+            "vertexOffset": 1992016,
             "vertexLength": 1344,
             "vertexCount": 42,
-            "indexOffset": 1368352,
+            "indexOffset": 1993360,
             "indexLength": 480,
             "indexCount": 120,
             "doubleSided": false
         }
     },
-    "byteLength": 1368832,
-    "sha256": "a1e93d6de52f21b44719b8d6b1bfe3dcc5f072f4334d7b8933cf0a664acacc76",
-    "compressedByteLength": 313021,
-    "compressedSha256": "3ec95ba089788996078ee48233719ba6f7443eb1044205a110131715c91512ed"
+    "byteLength": 1993840,
+    "sha256": "9e04be5956d078c41c3367e25de3506b0ce1f23e3b5b2c8469179b8084e52cbb",
+    "compressedByteLength": 447491,
+    "compressedSha256": "420a814726eb4e939205ef6a542c1139fce88fe327a9b4831ce043680aac7625"
 }

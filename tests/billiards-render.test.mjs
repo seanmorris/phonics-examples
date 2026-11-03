@@ -14,7 +14,7 @@ test('generated PHP mesh bundle is packed and internally consistent', () => {
 	assert.equal(createHash('sha256').update(binary).digest('hex'),manifest.sha256);
 	assert.equal(createHash('sha256').update(compressed).digest('hex'),manifest.compressedSha256);
 	assert.deepEqual(manifest.geometry.mesher.slice(0,2),[432,240],'Pocket contours lost their high-resolution sampling grid');
-	assert.deepEqual(Object.keys(manifest.meshes),['apron','bed','wood','cushion','liners','cube','cueWood','cueTrim','sphere','disc']);
+	assert.deepEqual(Object.keys(manifest.meshes),['apron','bed','wood','cushion','liners','cube','cue','sphere','disc']);
 	for(const [name,mesh] of Object.entries(manifest.meshes))
 	{
 		assert.equal(mesh.vertexLength,mesh.vertexCount*manifest.vertexStride,`${name} vertex bytes`);
@@ -37,13 +37,19 @@ test('PHP renderer keeps longitudinal ball UVs and axial cue grain', () => {
 		'Ball skins must stay separate texture-array layers with independent mip chains');
 	assert.match(shader,/64\.0\/max\(footprint/,'Ball pole LOD cap changed');
 	assert.match(scene,/atlasTextures\(\$textures\['ballAtlas'\], 4, 4\)/,'Ball skins share one bleeding mip chain');
-	assert.match(shader,/uv\.x\*2\.8,uv\.y\*\.5/,'Cue wood grain axes changed');
-	assert.match(shader,/pointFront=\.34\+\.15\*/,'Cue dye no longer uses one forward-pointing triangle band');
+	assert.match(shader,/vec3 cueSurface\(vec2 uv,vec3 accent,out float rough,out float coat,out bool metal\)/,'The cue lost its anatomy zones');
+	assert.match(shader,/point=\(\(d-\.76\)\/\.225-across\)\*radius\*\.7854,pointAa=max\(fwidth\(point\)/,'The forearm points lost their around-the-cue antialiasing');
+	assert.match(scene,/CUE_ACCENTS\[\$game->cuePlayer\(\)\]/,'The second player no longer gets their own cue colour');
 	assert.match(shader,/float specularAaRoughness\(/,'Glossy materials lost screen-space specular filtering');
 	assert.match(shader,/varnishedWood\|\|metallic/,'Cue collar and varnished wood bypass specular filtering');
 	assert.match(shader,/keyRough=specularAaRoughness\(\.11,N\)/,'Wood clearcoat bypasses specular filtering');
 	assert.match(shader,/texture\(uFelt,feltUv\*15\.0/,'Felt reverted to per-fragment procedural noise');
 	assert.match(wood,/baseFrequency="\.015625 \.125"/,'Wood source grain axis changed');
+	assert.match(shader,/result\+=woodGrain\(top\*scale,topX\*scale,topY\*scale,17\.3\*endBoard\)/,'Rail wood samples the tiling texture directly again');
+	assert.match(shader,/miter=abs\(p\.x\)-abs\(p\.z\)-\(uTableSize\.x-uTableSize\.y\)\*\.5/,'End rails lost their 45-degree miter grain');
+	assert.match(shader,/length\(vec2\(abs\(vPosition\.x\)-uSpot,vPosition\.z\)\)/,'Head and foot spots left the cloth');
+	assert.match(scene,/location\('uSpot'\), Table::FOOT_SPOT\)/,'Cloth spots no longer follow the rack apex');
+	assert.match(shader,/textureGrad\(uWood,uv\+first,dx,dy\)/,'Wood region crossfade lost its seam-free mip selection');
 });
 
 test('generated wood grain tiles without visible edge discontinuities', () => {
@@ -54,6 +60,13 @@ test('generated wood grain tiles without visible edge discontinuities', () => {
 	for(let x=0;x<image.width;x++)for(let channel=0;channel<3;channel++)topBottom+=Math.abs(
 		image.data[x*4+channel]-image.data[((image.height-1)*image.width+x)*4+channel]);
 	assert.ok(leftRight/(image.height*3)<8);assert.ok(topBottom/(image.width*3)<8);
+	// The rails repeat this tile every 37 cm along the grain, so no column step, the wrap included, may stand out
+	// from the ordinary steps inside it (resvg turbulence and the old pore pattern both left visible seams).
+	const columnStep=(a,b)=>{let sum=0;for(let y=0;y<image.height;y++)for(let channel=0;channel<3;channel++)
+		sum+=Math.abs(image.data[(y*image.width+a)*4+channel]-image.data[(y*image.width+b)*4+channel]);return sum/(image.height*3);};
+	const steps=Array.from({length:image.width},(_,x)=>columnStep(x,(x+1)%image.width)).sort((a,b)=>a-b);
+	assert.ok(steps[steps.length-1]<steps[steps.length>>1]*2.5,'Wood tile shows a seam across the grain');
+	assert.ok(columnStep(image.width-1,0)<steps[steps.length>>1]*2,'Wood tile does not wrap seamlessly along the grain');
 });
 
 test('generated felt height field is subtle and seamlessly tiled', () => {
@@ -98,13 +111,15 @@ test('ball skins use high-resolution two-to-one equirectangular cells', () => {
 	for(let y=0;y<cellHeight;y++)for(let x=0;x<cellWidth/2;x++)
 	{
 		const offset=((y*image.width)+(cellWidth+x))*4;
-		if(image.data[offset]>245&&image.data[offset+1]>245&&image.data[offset+2]>245)points.push([x,y]);
+		// The number spots are aged ivory (#efe6ce), like the Bakelite sets they imitate.
+		if(Math.abs(image.data[offset]-239)<8&&Math.abs(image.data[offset+1]-230)<8&&Math.abs(image.data[offset+2]-206)<8)points.push([x,y]);
 	}
 	const xs=points.map(point=>point[0]),ys=points.map(point=>point[1]);
+	assert.ok(points.length>500,'Ball 1 lost its ivory number spot');
 	assert.ok(Math.abs(Math.max(...xs)-Math.min(...xs)-(Math.max(...ys)-Math.min(...ys)))<=2);
 });
 
-test('ball numbers use self-contained Engineering Plot outlines', () => {
+test('ball numbers use self-contained Lobster outlines', () => {
 	const svg=fs.readFileSync(new URL('../games/php-billiards/art/svg/ball-atlas.svg',import.meta.url),'utf8');
 	assert.doesNotMatch(svg,/<text\b|font-family=/,'Ball atlas depends on an installed or bundled font');
 	assert.equal([...svg.matchAll(/<symbol id="n(?:[1-9]|1[0-5])"/g)].length,15);

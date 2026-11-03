@@ -34,11 +34,14 @@ export function activate({module, canvas, session})
 	// The recorded samples live inside the PHAR, so PHP hands their bytes over once through billiardsSamples().
 	// They decode after the first gesture unlocks Web Audio; playback adds slight detune, filtering, and a voice
 	// cap so a break sounds like ivory rather than a machine-gun of identical clicks.
-	const encoded=new Map,decoded=new Map,lastPlayed=new Map;
+	const encoded=new Map,decoded=new Map,peaks=new Map,lastPlayed=new Map;
 	let audio=null,voices=0,played=0,decoding=null,audioError=null;
 	const decodeSamples=()=>decoding??=Promise.all([...encoded].map(async([name,base64])=>{
 		const bytes=Uint8Array.from(atob(base64),character=>character.charCodeAt(0));
-		decoded.set(name,await audio.decodeAudioData(bytes.buffer));
+		const buffer=await audio.decodeAudioData(bytes.buffer);
+		let peak=0;
+		for(let channel=0;channel<buffer.numberOfChannels;channel++)for(const value of buffer.getChannelData(channel))peak=Math.max(peak,Math.abs(value));
+		peaks.set(name,peak);decoded.set(name,buffer);
 	})).catch(error=>{audioError=String(error?.message??error);console.error('Billiards samples failed to decode',error);});
 	const unlockAudio=()=>{
 		if(closed||typeof AudioContext==='undefined')return;
@@ -73,7 +76,9 @@ export function activate({module, canvas, session})
 		const strength=Math.max(0,Math.min(1,Number(event.strength??0)||0));
 		if(event.type==='impact')play('clack',{gain:.12+.88*strength**.8,rate:.94+.12*strength});
 		if(event.type==='shot')play('impact',{gain:.2+.55*Number(event.power??.5),rate:.82,lowpass:2600});
-		if(event.type==='cushion')play('impact',{gain:.08+.5*strength,rate:.7,lowpass:900});
+		// Rails use their own recording on the ball-ball curve: its peak is matched to the clack's, so a full-strength
+		// rail hit peaks exactly as loud as a full-strength ball hit and both scale with impact speed the same way.
+		if(event.type==='cushion')play('rail',{gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get('rail')??1,1e-4)});
 		if(event.type==='pocket-enter')play('drop',{gain:.75});
 		if(event.type==='pocket')play('sink',{gain:.32,lowpass:3200});
 		if(event.type==='pocket-rattle')play('clack',{gain:.06+.25*strength,rate:.8,lowpass:1800});

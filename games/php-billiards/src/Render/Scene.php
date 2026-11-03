@@ -18,14 +18,17 @@ final class Scene
 {
 	private const BALL = [.03,1.56,1,.35];
 	private const WOOD = [.5,1.52,2,1];
-	private const CUE_WOOD = [.42,1.52,6,1];
+	private const CUE = [.42,1.52,6,1];
+	/** Veneer, ring, and inlay colour of each player's cue: blue for free play and the first player, red for the second. */
+	public const CUE_ACCENTS = [[.16,.36,.78,1],[.74,.12,.1,1]];
 	private const FELT = [.9,1.5,3,.85];
 	private const CUSHION_FELT = [.93,1.5,3,1.15];
+	/** Ball colours of a pre-1970 Bakelite set, matching art/svg/ball-atlas.svg; index 0 is the aged-ivory cue ball. */
 	public const BALL_COLORS = [
-		[.953,.933,.878,1],[.906,.733,.129,1],[.122,.384,.710,1],[.741,.157,.188,1]
-		, [.361,.200,.600,1],[.902,.431,.125,1],[.137,.478,.282,1],[.463,.114,.141,1]
-		, [.082,.082,.082,1],[.898,.722,.141,1],[.141,.404,.718,1],[.737,.161,.192,1]
-		, [.396,.231,.612,1],[.898,.459,.137,1],[.157,.486,.306,1],[.482,.125,.157,1]
+		[.945,.918,.839,1],[.914,.627,.098,1],[.114,.227,.620,1],[.784,.078,.227,1]
+		, [.290,.173,.541,1],[.941,.275,.118,1],[.071,.502,.416,1],[.576,.173,.282,1]
+		, [.102,.114,.133,1],[.965,.698,.102,1],[.102,.314,.847,1],[.910,.094,.314,1]
+		, [.345,.220,.659,1],[.961,.416,.251,1],[.059,.431,.333,1],[.478,.125,.204,1]
 	];
 
 	private Program $program;
@@ -111,6 +114,7 @@ final class Scene
 		$this->matrix4('uViewProjection', $game->camera->viewProjection($width, $height, $simulation->moving()));
 		glUniform3f($this->program->location('uEye'), ...$eye);
 		glUniform2f($this->program->location('uTableSize'), Table::WIDTH, Table::HEIGHT);
+		glUniform1f($this->program->location('uSpot'), Table::FOOT_SPOT);
 		glActiveTexture(GL_TEXTURE0);
 		$this->ballSkins->bind();
 		glUniform1i($this->program->location('uBallSkins'), 0);
@@ -188,30 +192,9 @@ final class Scene
 		$pose = Camera::cuePose($stroke['x'] ?? $cue->x, $stroke['y'] ?? $cue->y, $stroke['aim'] ?? $game->aim);
 		$offset = $stroke['offset'] ?? $game->cueDraw();
 		foreach($pose['tip'] as $index => $value) $pose['tip'][$index] = $value - $pose['direction'][$index] * $offset;
-		$length = 1.35;
-		$buttDiameter = .0285;
-		$shaftDiameter = .0125;
-		$tipLength = .007;
-		$collarLength = .025;
-		$segmentPosition = static function(float $from, float $to) use ($pose): array {
-			$position = [];
-			foreach($pose['tip'] as $index => $value)
-			$position[] = $value - $pose['direction'][$index] * ($from + $to) / 2;
-			return $position;
-		};
-		$woodStart = $tipLength + $collarLength;
-		$this->draw(
-			'cueWood', $segmentPosition($woodStart, $length), [$length - $woodStart,$buttDiameter,$buttDiameter]
-			, $pose['rotation'], [.75,.57,.31,1], self::CUE_WOOD
-		);
-		$this->draw(
-			'cueTrim', $segmentPosition($tipLength, $woodStart), [$collarLength,$shaftDiameter * 1.06,$shaftDiameter * 1.06]
-			, $pose['rotation'], [.72,.31,.12,1], [.2,1.5,5,0]
-		);
-		$this->draw(
-			'cueTrim', $segmentPosition(0, $tipLength), [$tipLength,$shaftDiameter,$shaftDiameter]
-			, $pose['rotation'], [.08,.28,.52,1], [.82,1.5,0,0]
-		);
+		// The cue mesh is built in metres with its tip at the origin, so it sits at the (drawn-back) tip unscaled; the
+		// tint carries the shooter's accent colour into the veneers, rings, and inlays.
+		$this->draw('cue', $pose['tip'], [1,1,1], $pose['rotation'], self::CUE_ACCENTS[$game->cuePlayer()], self::CUE);
 
 		if($stroke !== null) return;
 		$preview = $game->shotPreview();

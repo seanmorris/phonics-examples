@@ -11,6 +11,12 @@ Barlow Semi Condensed Medium and Bold, Copyright 2017 The Barlow Project Authors
 Extracted glyph outlines and the license are in games/php-billiards/art/typography/; the license
 ships beside the atlas as ui-font-OFL.txt.
 
+PHP Billiards ball numerals
+The numerals on the billiard balls are digit outlines from Lobster by Pablo Impallari
+(Impallari Type, https://github.com/impallari/The-Lobster-Font), licensed under the SIL Open Font
+License, Version 1.1. The outlines are in games/php-billiards/art/typography/ball-numerals.json and
+the license is in games/php-billiards/art/typography/Lobster-OFL.txt.
+
 PHP Billiards sound effects
 games/php-billiards/assets/audio/ contains recorded billiards samples supplied by the
 project author and cleared for redistribution with this project:
@@ -18,3 +24,6 @@ project author and cleared for redistribution with this project:
   impact.mp3       (originally billiard-balls-impact.mp3)
   pocket-drop.mp3  (originally pool-ball-falling-into-pocket.mp3)
   pocket-sink.mp3  (originally one-snooker-ball-sinking-into-on-of-the-pockets.mp3)
+  rail-hit.mp3     (originally 13902_33634-lq-ball-hits-rail.mp3): the Freesound preview of
+                   "50.wav" by adcbicycle, https://freesound.org/s/13902/, released under
+                   Creative Commons 0 (public domain dedication)

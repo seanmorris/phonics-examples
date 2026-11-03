@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace PhpBilliards\Render;
 
+use PhpBilliards\Geometry\TableGeometry;
 use PhpBilliards\Physics\Ball;
 use PhpBilliards\Physics\Table;
 
@@ -336,7 +337,7 @@ final class Camera
 		// with either plane; use the minimum clearance distance and pitch the cue
 		// over the rail instead of asking min() to reduce an empty list.
 		$railDistance = max(.001, $distances === [] ? .001 : min($distances));
-		$railClearance = .105 + $buttDiameter / 2 + .006;
+		$railClearance = TableGeometry::RAIL_TOP + $buttDiameter / 2 + .006;
 		$pitch = max(deg2rad(8), atan2($railClearance - $ballCenter[1], $railDistance));
 		$sinYaw = sin($angle / 2);
 		$cosYaw = cos($angle / 2);

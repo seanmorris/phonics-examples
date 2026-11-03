@@ -679,6 +679,66 @@ $test('rounded PHP mesh helpers retain smooth unit normals and flush cushion bot
 		&& TableGeometry::CUSHION_EDGE_RADIUS < TableGeometry::WOOD_EDGE_RADIUS / 2);
 });
 
+$test('rail fillets keep exact pocket jaws and never fold', static function() use ($expect): void {
+	$root = dirname(__DIR__) . '/assets/generated/';
+	$wood = json_decode(file_get_contents($root . 'meshes.json'), true)['meshes']['wood'];
+	$bytes = gzdecode(file_get_contents($root . 'meshes.bin.gz'));
+	$vertices = array_values(unpack('g*', substr($bytes, $wood['vertexOffset'], $wood['vertexLength'])));
+	$indices = array_values(unpack('V*', substr($bytes, $wood['indexOffset'], $wood['indexLength'])));
+	$vertex = static fn(int $index): array => array_slice($vertices, $index * 8, 6);
+
+	// Fillet bands offset point by point used to cross at sharp jaws; every face must agree with its vertex normals.
+	$folded = 0;
+	for($index = 0; $index < count($indices); $index += 3)
+	{
+		[$a,$b,$c] = [$vertex($indices[$index]),$vertex($indices[$index + 1]),$vertex($indices[$index + 2])];
+		$ab = [$b[0] - $a[0],$b[1] - $a[1],$b[2] - $a[2]];
+		$ac = [$c[0] - $a[0],$c[1] - $a[1],$c[2] - $a[2]];
+		$face = [$ab[1] * $ac[2] - $ab[2] * $ac[1],$ab[2] * $ac[0] - $ab[0] * $ac[2],$ab[0] * $ac[1] - $ab[1] * $ac[0]];
+		$normal = [$a[3] + $b[3] + $c[3],$a[4] + $b[4] + $c[4],$a[5] + $b[5] + $c[5]];
+		if($face[0] * $normal[0] + $face[1] * $normal[1] + $face[2] * $normal[2] < 0) $folded++;
+	}
+	$expect($folded === 0, "$folded wood faces fold against their normals");
+
+	// The side pocket cuts the cushion line in a sharp corner; the rail wall must reach it exactly below the fillet.
+	$side = TableGeometry::pockets()[1];
+	$edge = Table::HEIGHT / 2 + TableGeometry::TABLETOP_MARGIN;
+	$jaw = sqrt($side['radius'] ** 2 - (abs($side['z']) - $edge) ** 2);
+	foreach([[-1,-1],[1,-1],[-1,1],[1,1]] as [$sx,$sz])
+	{
+		$nearest = INF;
+		for($index = 0; $index < count($vertices); $index += 8)
+		if(abs($vertices[$index + 1] - (TableGeometry::RAIL_TOP - TableGeometry::WOOD_EDGE_RADIUS)) < 1e-6)
+		$nearest = min($nearest, hypot($vertices[$index] - $sx * $jaw, $vertices[$index + 2] - $sz * $edge));
+		$expect($nearest < 1e-4, 'A side-pocket jaw corner is chamfered off the rail');
+	}
+});
+
+$test('the turned cue faces outward, ends at its tip, and clears the rail like the posed cue', static function() use ($expect): void {
+	$mesh = MeshBuilder::cue();
+	$vertices = array_values(unpack('g*', $mesh->vertices));
+	$indices = array_values(unpack('V*', $mesh->indices));
+	$vertex = static fn(int $index): array => array_slice($vertices, $index * 8, 8);
+	$inward = 0;
+	$widest = 0.0;
+	for($index = 0; $index < count($indices); $index += 3)
+	{
+		[$a,$b,$c] = [$vertex($indices[$index]),$vertex($indices[$index + 1]),$vertex($indices[$index + 2])];
+		$ab = [$b[0] - $a[0],$b[1] - $a[1],$b[2] - $a[2]];
+		$ac = [$c[0] - $a[0],$c[1] - $a[1],$c[2] - $a[2]];
+		$face = [$ab[1] * $ac[2] - $ab[2] * $ac[1],$ab[2] * $ac[0] - $ab[0] * $ac[2],$ab[0] * $ac[1] - $ab[1] * $ac[0]];
+		if($face[0] ** 2 + $face[1] ** 2 + $face[2] ** 2 < 1e-28) continue;
+		$normal = [$a[3] + $b[3] + $c[3],$a[4] + $b[4] + $c[4],$a[5] + $b[5] + $c[5]];
+		if($face[0] * $normal[0] + $face[1] * $normal[1] + $face[2] * $normal[2] < 0) $inward++;
+	}
+	for($index = 0; $index < count($vertices); $index += 8) $widest = max($widest, hypot($vertices[$index + 1], $vertices[$index + 2]));
+	$xs = array_map(static fn(int $index): float => $vertices[$index], range(0, count($vertices) - 1, 8));
+	$expect($inward === 0, "$inward cue faces point inward");
+	$expect(abs(max($xs)) < 1e-9 && abs(min($xs) + 1.35) < 1e-6, 'The cue no longer runs from its tip at the origin back 1.35 m');
+	// Camera::cuePose pitches the cue over the rails using a 28.5 mm butt.
+	$expect($widest <= .0285 / 2 + 1e-6, 'The cue is wider than the butt the rail clearance assumes');
+});
+
 $test('cue cylinder side triangles all face outward', static function() use ($expect): void {
 	$segments = 48;
 	$mesh = MeshBuilder::cylinder(.5, .0125 / .0285 / 2, $segments);
@@ -1204,6 +1264,30 @@ $test('the aiming preview reports the same first object ball the live shot hits'
 	}
 });
 
+$test('the free-play sink board lists exactly the numbered balls off the table', static function() use ($expect): void {
+	$game = new Game;
+	$expect($game->pocketedBalls() === [], 'A fresh rack reported pocketed balls');
+	foreach($game->simulation->balls as $ball) if(in_array($ball->number, [0,3,8,12], true)) $ball->active = false;
+	$expect($game->pocketedBalls() === [3,8,12], 'The sink board must list pocketed object balls in order and never the cue ball');
+});
+
+$test('newly sunk balls flash on the sink board for two seconds in half-second steps', static function() use ($expect): void {
+	$game = new Game;
+	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, 1280, 720);
+	foreach($game->simulation->balls as $ball) if($ball->number === 2) $ball->active = false;
+	$hud = (new ReflectionClass(Hud::class))->newInstanceWithoutConstructor();
+	$flashes = new ReflectionMethod(Hud::class, 'sinkFlashes');
+	$expect($flashes->invoke($hud, $game, 0.0) === [], 'A ball already down when the board appeared flashed');
+	foreach($game->simulation->balls as $ball) if($ball->number === 5) $ball->active = false;
+	foreach([[10.0,true],[10.6,false],[11.2,true],[11.7,false]] as [$time,$shown])
+	$expect(($flashes->invoke($hud, $game, $time)[5] ?? null) === $shown, "Ball 5 at {$time}s should be " . ($shown ? 'lit' : 'empty'));
+	$expect($flashes->invoke($hud, $game, 12.1) === [], 'The flash did not settle after two seconds');
+	foreach($game->simulation->balls as $ball) if($ball->number === 5) $ball->active = true;
+	$flashes->invoke($hud, $game, 13.0);
+	foreach($game->simulation->balls as $ball) if($ball->number === 5) $ball->active = false;
+	$expect(($flashes->invoke($hud, $game, 20.0)[5] ?? null) === true, 'A ball sunk again after an undo did not flash');
+});
+
 $test('HUD regions stay on screen and never overlap at common canvas sizes', static function() use ($expect): void {
 	foreach([[1280,720,1],[2560,1440,2],[900,540,1],[780,1688,2],[1688,780,2],[3840,2160,1.5]] as [$width,$height,$dpr])
 	{
@@ -1221,6 +1305,15 @@ $test('HUD regions stay on screen and never overlap at common canvas sizes', sta
 				$expect($x + $w <= $ox || $ox + $ow <= $x || $y + $h <= $oy || $oy + $oh <= $y
 					, "{$region['name']} overlaps {$other['name']} at {$width}x{$height}");
 			}
+		}
+		// The free-play sink board sits on screen and clear of every control.
+		[$bx,$by,$bw,$bh] = Hud::sinkBoardLayout($width, $height, $dpr)['rect'];
+		$expect($bx >= 0 && $by >= 0 && $bx + $bw <= $width && $by + $bh <= $height, "Sink board left a {$width}x{$height} canvas");
+		foreach($regions as $region)
+		{
+			[$x,$y,$w,$h] = $region['rect'];
+			$expect($bx + $bw <= $x || $x + $w <= $bx || $by + $bh <= $y || $y + $h <= $by
+				, "Sink board overlaps {$region['name']} at {$width}x{$height}");
 		}
 		$title = Hud::titleRegions($width, $height, $dpr);
 		$expect($title['free-play']['rect'][1] + $title['free-play']['rect'][3] <= $title['online-play']['rect'][1]

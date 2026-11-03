@@ -81,7 +81,7 @@ final class Simulation
 		$this->rackIndex = max(0, $rackIndex);
 		$this->balls = [new Ball(0, -Table::WIDTH * .28, 0)];
 		$spacing = Ball::RADIUS * 2 + self::RACK_GAP;
-		$apex = Table::WIDTH * .23;
+		$apex = Table::FOOT_SPOT;
 		$numbers = $rackSeed === null
 			? [1,9,2,10,8,3,11,4,12,5,13,6,14,7,15]
 			: self::seededRack($rackSeed, $this->rackIndex);

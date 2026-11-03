@@ -57,6 +57,10 @@ final class Hud
 	private ?UiCanvas $frameCanvas = null;
 	/** Right edge of the top-left chip or scoreboard drawn this frame, which the toast avoids. */
 	private float $leftWidth = 0.0;
+	/** @var array<int,float>|null Wall-clock time each pocketed ball was first seen; null before the first frame. */
+	private ?array $sunkAt = null;
+	/** Wall-clock time at which the last sink-board flash settles. */
+	private float $flashUntil = 0.0;
 
 	/**
 	 * @param string $root Absolute root directory of the Billiards package.
@@ -360,7 +364,8 @@ final class Hud
 	 */
 	public function animating(): bool
 	{
-		return $this->fading || ($this->hintOpacity > .01 && microtime(true) >= $this->hintFadeAt);
+		return $this->fading || ($this->hintOpacity > .01 && microtime(true) >= $this->hintFadeAt)
+			|| microtime(true) < $this->flashUntil;
 	}
 
 	/**
@@ -390,13 +395,14 @@ final class Hud
 		$now = microtime(true);
 		$elapsed = $this->lastRender === null ? 0 : max(0, min(.1, $now - $this->lastRender));
 		$this->lastRender = $now;
+		$flashes = $this->sinkFlashes($game, $now);
 
 		// Moving balls redraw the scene every frame while the HUD usually stays put; rebuild it only on change.
 		$key = serialize([
 			$width,$height,$dpr,$game->started,$game->overlay,$game->hover,$game->pressed,$game->menuSelection
 			, $game->hudHidden,$game->inputTheme,$game->titleSelection,$game->muted,$game->power,$game->top,$game->side
 			, $game->cueDraw(),$game->simulation->phase,$game->simulation->shots,$game->stroking(),$game->controllable()
-			, $game->simulation->moving(),$game->onlineScoreboard(),$game->toast(),$game->endCard()
+			, $game->simulation->moving(),$game->onlineScoreboard(),$game->toast(),$game->endCard(),$game->pocketedBalls(),$flashes
 		]);
 		if($this->frameCanvas && $key === $this->frameKey && !$this->animating()) return $this->frameCanvas;
 		$this->frameKey = $key;
@@ -412,7 +418,12 @@ final class Hud
 			{
 				$this->drawShotCard($canvas, $game, $layout);
 				$this->drawDock($canvas, $game, $layout);
-				$leftBottom = $game->online() ? $this->drawScoreboard($canvas, $game, $metrics) : $this->drawFreeChip($canvas, $game, $metrics);
+				if($game->online()) $leftBottom = $this->drawScoreboard($canvas, $game, $metrics);
+				else
+				{
+					$this->drawFreeChip($canvas, $game, $metrics);
+					$leftBottom = $this->drawSinkBoard($canvas, $game, $width, $height, $dpr, $flashes);
+				}
 				$this->drawToast($canvas, $game, $width, $metrics, $leftBottom, $elapsed);
 				$this->drawHints($canvas, $game, $width, $height, $metrics, $elapsed);
 				if(isset($metrics['endCard'])) $this->drawEndCard($canvas, $game, $metrics['endCard'], $width, $height);
@@ -613,6 +624,92 @@ final class Hud
 		$this->leftWidth = $margin + $width;
 
 		return $margin + 36 * $u;
+	}
+
+	/**
+	 * Free-play sink board geometry: one slot per numbered ball under the Free play chip, solids, the 8, then stripes.
+	 *
+	 * @return array{rect:array{float,float,float,float},slots:array<int,array{float,float}>,radius:float}
+	 */
+	public static function sinkBoardLayout(int $width, int $height, float $dpr = 1): array
+	{
+		$u = self::unit($width, $height, $dpr);
+		$margin = Theme::MARGIN * $u;
+		[$top,$pad,$step,$gap] = [$margin + 44 * $u,14 * $u,17 * $u,5 * $u];
+		$slots = [];
+		$x = $margin + $pad + 6.5 * $u;
+		foreach(range(1, 15) as $number)
+		{
+			$slots[$number] = [$x,$top + 15 * $u];
+			$x += $step + ($number === 7 || $number === 8 ? $gap : 0);
+		}
+
+		return [
+			'rect' => [$margin,$top,$x - $step + 6.5 * $u + $pad - $margin,30 * $u]
+			, 'slots' => $slots,'radius' => 6.5 * $u
+		];
+	}
+
+	/**
+	 * Track when each ball dropped so a newly sunk ball flashes on the sink board: lit and empty in alternating half
+	 * seconds for two seconds, then settled. Balls already down when the board first appears do not flash, and a ball
+	 * returned by a rack or undo flashes again when it next drops.
+	 *
+	 * @return array<int,bool> For each ball still flashing, whether it shows this frame.
+	 */
+	private function sinkFlashes(Game $game, float $now): array
+	{
+		$first = $this->sunkAt === null;
+		$sunk = [];
+		foreach($game->online() ? [] : $game->pocketedBalls() as $number)
+		$sunk[$number] = $first ? -INF : ($this->sunkAt[$number] ?? $now);
+		$this->sunkAt = $sunk;
+		$this->flashUntil = 0.0;
+		$flashes = [];
+		foreach($sunk as $number => $time) if($now - $time < 2.0)
+		{
+			$flashes[$number] = fmod($now - $time, 1.0) < .5;
+			$this->flashUntil = max($this->flashUntil, $time + 2.0);
+		}
+
+		return $flashes;
+	}
+
+	/**
+	 * Show which balls are off the table: pocketed balls in their own colours, balls still in play as faint outlines.
+	 *
+	 * @return float Bottom edge of the board, for toast placement.
+	 */
+	private function drawSinkBoard(UiCanvas $canvas, Game $game, int $width, int $height, float $dpr, array $flashes): float
+	{
+		$board = self::sinkBoardLayout($width, $height, $dpr);
+		[$x,$y,$boardWidth,$boardHeight] = $board['rect'];
+		$u = $canvas->unit;
+		$radius = $board['radius'];
+		$this->panel($canvas, $x, $y, $boardWidth, $boardHeight, 15);
+		$down = array_flip($game->pocketedBalls());
+		foreach($board['slots'] as $number => [$ballX,$ballY])
+		{
+			$color = Scene::BALL_COLORS[$number];
+			if(isset($flashes[$number]) && $flashes[$number])
+			$canvas->circle($ballX, $ballY, $radius + 2.5 * $u, [0,0,0,0], Theme::alpha(Theme::BRASS_BRIGHT, .9), 1.5 * $u);
+			if(!isset($down[$number]) || (isset($flashes[$number]) && !$flashes[$number]))
+			{
+				$canvas->circle($ballX, $ballY, $radius, [0,0,0,0], Theme::alpha(Theme::TEXT_SECONDARY, .3), max(1, $u));
+				continue;
+			}
+			// The 8 gets a faint rim so the black ball does not vanish into the dark glass.
+			if($number <= 8) $canvas->circle($ballX, $ballY, $radius, $color
+				, $number === 8 ? Theme::alpha(Theme::TEXT_SECONDARY, .45) : null, $number === 8 ? max(1, $u) : 0);
+			else
+			{
+				$canvas->circle($ballX, $ballY, $radius, [.93,.91,.85,1]);
+				$canvas->box($ballX - $radius, $ballY - $radius / 2, $radius * 2, $radius, 2 * $u, $color);
+			}
+		}
+		$this->leftWidth = max($this->leftWidth, $x + $boardWidth);
+
+		return $y + $boardHeight;
 	}
 
 	/** @return float Bottom edge of the scoreboard card. */

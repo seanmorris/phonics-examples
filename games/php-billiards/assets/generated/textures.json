@@ -3,13 +3,13 @@
     "file": "ball-atlas.rgba",
     "width": 2048,
     "height": 1024,
-    "sha256": "526241bcbb47283f78509ffddb457eb001f52d908647530df223b2936735e6fc"
+    "sha256": "997ebb03e8bc6f5381df747d9af555fa91afcf50e28e0089c3ffa5060de0771f"
   },
   "wood": {
     "file": "wood.rgba",
     "width": 256,
     "height": 256,
-    "sha256": "f7d85be4e3fb19268474898b7a884f273d55530cf59e05c145124582d794efcd"
+    "sha256": "303803933669590483281e53f9c8c8e7ae323ad861a2ec577c82081d86f3a6b6"
   },
   "felt": {
     "file": "felt.rgba",

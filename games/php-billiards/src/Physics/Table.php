@@ -12,6 +12,8 @@ final class Table
 {
 	public const WIDTH = 2.54;
 	public const HEIGHT = 1.27;
+	/** Distance of the foot spot, where the rack's apex ball sits, from the table centre; the head spot mirrors it. */
+	public const FOOT_SPOT = self::WIDTH * .23;
 	/** Midpoints of the WPA mouth ranges: 4 9/16 and 5 1/16 inches. */
 	public const CORNER_MOUTH = 0.1158875;
 	public const SIDE_MOUTH = 0.1285875;

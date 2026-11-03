@@ -12,6 +12,9 @@ use PhpBilliards\Physics\Ball;
  */
 final class MeshBuilder
 {
+	/** Longest outline edge in metres; long straight runs are split so caps and fillet bands never become needles. */
+	private const LONGEST_EDGE = .05;
+
 	/**
 	 * Build the complete named mesh set consumed by the runtime renderer.
 	 *
@@ -30,13 +33,12 @@ final class MeshBuilder
 			// The rail reaches down to the apron so no slot under it exposes the open pocket shafts; the join is flush.
 			, 'wood' => self::extrudeRounded(
 				$profiles['wood'], $profiles['bounds'], TableGeometry::COLUMNS, TableGeometry::ROWS
-				, TableGeometry::APRON_TOP, .105, TableGeometry::WOOD_EDGE_RADIUS, 3, 0.0
+				, TableGeometry::APRON_TOP, TableGeometry::RAIL_TOP, TableGeometry::WOOD_EDGE_RADIUS, 3, 0.0
 			)
 			, 'cushion' => self::cushions($profiles['cushionRails'], $profiles['bounds'])
 			, 'liners' => self::liners($profiles['pockets'], Ball::RADIUS)
 			, 'cube' => self::cube()
-			, 'cueWood' => self::cylinder(.5, .0125 / .0285 / 2)
-			, 'cueTrim' => self::cylinder()
+			, 'cue' => self::cue()
 			, 'sphere' => self::sphere()
 			, 'disc' => self::disc()
 		];
@@ -221,6 +223,7 @@ final class MeshBuilder
 			$midpoint = ['x' => ($a['x'] + $b['x']) / 2,'z' => ($a['z'] + $b['z']) / 2];
 			[$nx,$nz] = self::gradient($field, $midpoint, $epsilon);
 			if(-($b['z'] - $a['z']) * $nx + ($b['x'] - $a['x']) * $nz < 0) $points = array_reverse($points);
+			$points = self::snapCorners($field, $points, $closed, hypot($stepX, $stepZ));
 			$changed = true;
 			while($changed && count($points) > 3)
 			{
@@ -252,10 +255,98 @@ final class MeshBuilder
 				if(!$closed) $reduced[] = $points[$count - 1];
 				if(count($reduced) >= 3) $points = $reduced; else $changed = false;
 			}
-			$loops[] = ['points' => $points,'closed' => $closed];
+			$loops[] = ['points' => self::subdivide($points, $closed),'closed' => $closed];
 		}
 
 		return $loops;
+	}
+
+	/**
+	 * Split straight outline runs so no edge exceeds `LONGEST_EDGE`.
+	 *
+	 * Merging collinear samples leaves a rail span as one edge, and caps and fillet bands built on it become needles
+	 * the length of the table. Seen from a camera hovering over the rail, such needles reach far off screen and their
+	 * shared edges rasterize with pinhole seams.
+	 *
+	 * @param list<array{x:float,z:float,distance:float}> $points
+	 * @return list<array{x:float,z:float,distance:float}>
+	 */
+	private static function subdivide(array $points, bool $closed): array
+	{
+		$count = count($points);
+		$result = [];
+		for($index = 0; $index < $count; $index++)
+		{
+			$a = $result[] = $points[$index];
+			if(!$closed && $index === $count - 1) break;
+			$b = $points[($index + 1) % $count];
+			$pieces = (int)ceil(hypot($b['x'] - $a['x'], $b['z'] - $a['z']) / self::LONGEST_EDGE);
+			for($piece = 1; $piece < $pieces; $piece++) $result[] = [
+				'x' => $a['x'] + ($b['x'] - $a['x']) * $piece / $pieces,'z' => $a['z'] + ($b['z'] - $a['z']) * $piece / $pieces
+				, 'distance' => 0.0
+			];
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Restore sharp outline corners, such as pocket jaws, that marching cuts off inside a sampling cell.
+	 *
+	 * Where the exact contour normals of two neighbouring vertices turn by more than 25 degrees, their tangent lines
+	 * meet at the corner. The intersection is kept only when it lies on the contour itself and within one cell of both
+	 * vertices, so tessellated curves never sprout spikes.
+	 *
+	 * @param callable(float,float):float $field Signed-distance field the loop follows.
+	 * @param list<array{x:float,z:float,distance:float}> $points Ordered loop vertices.
+	 * @param bool $closed Whether the last vertex joins the first.
+	 * @param float $reach Sampling-cell diagonal.
+	 * @return list<array{x:float,z:float,distance:float}>
+	 */
+	private static function snapCorners(callable $field, array $points, bool $closed, float $reach): array
+	{
+		$count = count($points);
+		$normals = [];
+		$projected = [];
+		foreach($points as $index => $point)
+		{
+			// Chamfer vertices sit off the contour; project each onto its own branch before taking its tangent.
+			$normals[$index] = self::gradient($field, $point, $reach * 1e-5);
+			$offset = $field($point['x'], $point['z']);
+			$projected[$index] = [$point['x'] - $normals[$index][0] * $offset,$point['z'] - $normals[$index][1] * $offset];
+		}
+		$corners = [];
+		for($index = 0; $index < $count - ($closed ? 0 : 1); $index++)
+		{
+			$next = ($index + 1) % $count;
+			[$ax,$az] = $normals[$index];
+			[$bx,$bz] = $normals[$next];
+			$determinant = $ax * $bz - $az * $bx;
+			if(abs($determinant) < sin(deg2rad(25))) continue;
+			$ca = $ax * $projected[$index][0] + $az * $projected[$index][1];
+			$cb = $bx * $projected[$next][0] + $bz * $projected[$next][1];
+			$x = ($ca * $bz - $az * $cb) / $determinant;
+			$z = ($ax * $cb - $ca * $bx) / $determinant;
+			if(hypot($x - $points[$index]['x'], $z - $points[$index]['z']) > $reach
+				|| hypot($x - $points[$next]['x'], $z - $points[$next]['z']) > $reach
+				|| abs($field($x, $z)) > $reach * .02) continue;
+			$corners[$index] = ['x' => $x,'z' => $z,'distance' => 0.0];
+		}
+		if(!$corners) return $points;
+
+		// Drop the chamfer vertices beside each restored corner unless they already lie on the contour.
+		$drop = [];
+		foreach($corners as $index => $corner) foreach([$index,($index + 1) % $count] as $neighbour)
+		if(abs($field($points[$neighbour]['x'], $points[$neighbour]['z'])) > $reach * .01)
+		$drop[$neighbour] = true;
+		$result = [];
+		for($index = 0; $index < $count; $index++)
+		{
+			if(!isset($drop[$index])) $result[] = $points[$index];
+			if(isset($corners[$index])) $result[] = $corners[$index];
+		}
+
+		return $result;
 	}
 
 	/**
@@ -421,10 +512,73 @@ final class MeshBuilder
 		foreach($outers as $outer)
 		{
 			$polygon = self::bridgeHoles($outer['loop'], $outer['holes']);
-			array_push($triangles, ...self::earClip($polygon));
+			array_push($triangles, ...self::delaunayFlip(self::earClip($polygon)));
 		}
 
 		return $triangles;
+	}
+
+	/**
+	 * Flip interior edges of a triangulation until every one is locally Delaunay.
+	 *
+	 * Ear clipping fans a straight rail edge out from one vertex into slivers metres long and microns wide; their
+	 * depth interpolates so unstably that the cushion under the rail wins the depth test along a dashed line. Flipping
+	 * keeps exactly the same covered area and boundary edges while replacing the fans with well-shaped triangles.
+	 *
+	 * @param list<array{array{x:float,z:float},array{x:float,z:float},array{x:float,z:float}}> $triangles CCW triangles.
+	 * @return list<array{array{x:float,z:float},array{x:float,z:float},array{x:float,z:float}}>
+	 */
+	private static function delaunayFlip(array $triangles): array
+	{
+		$points = [];
+		$ids = [];
+		$id = static function(array $point) use (&$points,&$ids): int {
+			$key = sprintf('%.12f:%.12f', $point['x'], $point['z']);
+			if(!isset($ids[$key])) {$ids[$key] = count($points); $points[] = $point;}
+			return $ids[$key];
+		};
+		$faces = array_map(static fn(array $triangle): array => array_map($id, $triangle), $triangles);
+		$orient = static fn(int $a, int $b, int $c): float => ($points[$b]['x'] - $points[$a]['x']) * ($points[$c]['z'] - $points[$a]['z'])
+			- ($points[$b]['z'] - $points[$a]['z']) * ($points[$c]['x'] - $points[$a]['x']);
+		// Positive when d lies inside the circumcircle of the counter-clockwise triangle a, b, c.
+		$inCircle = static function(int $a, int $b, int $c, int $d) use ($points): float {
+			$rows = [];
+			foreach([$a,$b,$c] as $index)
+			{
+				$x = $points[$index]['x'] - $points[$d]['x'];
+				$z = $points[$index]['z'] - $points[$d]['z'];
+				$rows[] = [$x,$z,$x * $x + $z * $z];
+			}
+			[[$ax,$az,$aw],[$bx,$bz,$bw],[$cx,$cz,$cw]] = $rows;
+
+			return $ax * ($bz * $cw - $bw * $cz) - $az * ($bx * $cw - $bw * $cx) + $aw * ($bx * $cz - $bz * $cx);
+		};
+		$edgeKey = static fn(int $a, int $b): string => $a < $b ? "$a:$b" : "$b:$a";
+
+		for($pass = 0; $pass < 4096; $pass++)
+		{
+			$edges = [];
+			foreach($faces as $face => [$a,$b,$c]) foreach([[$a,$b,$c],[$b,$c,$a],[$c,$a,$b]] as [$p,$q,$opposite])
+			$edges[$edgeKey($p, $q)][] = [$face,$p,$q,$opposite];
+			$flipped = false;
+			$touched = [];
+			foreach($edges as $sides)
+			{
+				if(count($sides) !== 2) continue;
+				[[$first,$p,$q,$c],[$second,,,$d]] = $sides;
+				if(isset($touched[$first]) || isset($touched[$second])) continue;
+				// Triangle (p, q, c) is counter-clockwise; flip when d sits inside its circumcircle and both new
+				// triangles stay counter-clockwise, which also proves the quad is convex.
+				if($inCircle($p, $q, $c, $d) <= 1e-18 || $orient($c, $d, $q) <= 0 || $orient($d, $c, $p) <= 0) continue;
+				$faces[$first] = [$c,$d,$q];
+				$faces[$second] = [$d,$c,$p];
+				$touched[$first] = $touched[$second] = true;
+				$flipped = true;
+			}
+			if(!$flipped) break;
+		}
+
+		return array_map(static fn(array $face): array => [$points[$face[0]],$points[$face[1]],$points[$face[2]]], $faces);
 	}
 
 	/**
@@ -629,8 +783,9 @@ final class MeshBuilder
 	/**
 	 * Sweep explicit quarter-round bands around the high-resolution CSG contour.
 	 *
-	 * The sweep retains a flush lower face while adding analytic normals across the upper outer and inner edges,
-	 * avoiding the disconnected caps and jagged pocket seams produced by piecewise rounding.
+	 * Every fillet step is the outline shrunk by that step's inset, contoured from the distance field itself. Shrunken
+	 * contours of a distance field nest and never cross, so where a pocket cut meets the cushion line in a sharp corner
+	 * the round-over keeps a clean miter instead of folding one band into the next, and silhouettes stay round.
 	 *
 	 * @param callable(float,float):float $field Signed-distance field sampled in table space.
 	 * @param array{float,float,float,float} $bounds Minimum and maximum X/Z sampling bounds.
@@ -648,99 +803,197 @@ final class MeshBuilder
 	): MeshData {
 		$bottomRadius ??= $radius;
 		[$minX,$minZ,$maxX,$maxZ] = $bounds;
-		$stepX = ($maxX - $minX) / $columns;
-		$stepZ = ($maxZ - $minZ) / $rows;
-		$epsilon = min($stepX, $stepZ) * .7;
+		$reach = hypot(($maxX - $minX) / $columns, ($maxZ - $minZ) / $rows);
 		$mesh = new MeshData;
-		$insets = [];
-		$quad = static function(array $entries) use ($mesh,$minX,$minZ,$maxX,$maxZ): void {
-			$indices = [];
-			foreach($entries as $entry) $indices[] = $mesh->vertex([
-				$entry['x'],$entry['y'],$entry['z'],...$entry['normal']
-				, ($entry['x'] - $minX) / ($maxX - $minX),($entry['z'] - $minZ) / ($maxZ - $minZ)
-			]);
-			$mesh->quad(...$indices);
-		};
-		$insetDistance = static function(array $entry, float $edgeRadius) use ($field,$epsilon,&$insets): float {
-			if($edgeRadius <= 0) return 0;
-			$key = sprintf('%.12f:%.12f:%.12f', $entry['x'], $entry['z'], $edgeRadius);
-			if(isset($insets[$key])) return $insets[$key];
-			[$nx,$nz] = self::gradient($field, $entry, $epsilon);
-			$target = -$edgeRadius;
-			$low = 0.0;
-			$high = $edgeRadius;
-			$value = $field($entry['x'] - $nx * $high, $entry['z'] - $nz * $high);
-			while($value > $target && $high < $edgeRadius * 6)
+		$emit = static fn(array $point, float $y, array $normal): int => $mesh->vertex([
+			$point['x'],$y,$point['z'],...$normal
+			, ($point['x'] - $minX) / ($maxX - $minX),($point['z'] - $minZ) / ($maxZ - $minZ)
+		]);
+		$contours = static fn(float $inset): array => self::sides($field, self::boundaryLoops(
+			static fn(float $x, float $z): float => $field($x, $z) + $inset, $bounds, $columns, $rows
+		), $reach);
+		$base = $contours(0);
+		$levels = static function(float $edgeRadius) use ($contours,$base,$roundSegments): array {
+			$levels = [];
+			for($step = 0; $step <= $roundSegments; $step++)
 			{
-				$high *= 1.5;
-				$value = $field($entry['x'] - $nx * $high, $entry['z'] - $nz * $high);
+				$angle = $step / $roundSegments * M_PI / 2;
+				$inset = $edgeRadius * (1 - cos($angle));
+				$levels[] = ['angle' => $angle,'inset' => $inset,'loops' => $inset > 0 ? $contours($inset) : $base];
 			}
-			if($value <= $target) for($iteration = 0; $iteration < 12; $iteration++)
-			{
-				$middle = ($low + $high) / 2;
-				$middleValue = $field($entry['x'] - $nx * $middle, $entry['z'] - $nz * $middle);
-				if($middleValue > $target) $low = $middle; else $high = $middle;
-			}
-			else $high = $edgeRadius;
 
-			return $insets[$key] = $high;
-		};
-		$ringPoint = static function(array $entry, float $angle, int $direction) use (
-			$field,$epsilon,$radius,$bottomRadius,$top,$bottom,$insetDistance
-		): array {
-			$edgeRadius = $direction > 0 ? $radius : $bottomRadius;
-			[$nx,$nz] = self::gradient($field, $entry, $epsilon);
-			$horizontalRadius = $insetDistance($entry, $edgeRadius);
-			$inset = $horizontalRadius * (1 - cos($angle));
-
-			return [
-				'x' => $entry['x'] - $nx * $inset
-				, 'z' => $entry['z'] - $nz * $inset
-				, 'y' => $direction > 0 ? $top - $radius + sin($angle) * $radius
-					: $bottom + $bottomRadius - sin($angle) * $bottomRadius
-				, 'normal' => self::roundedFilletNormal($nx, $nz, $angle, $horizontalRadius, $edgeRadius, $direction)
-			];
+			return $levels;
 		};
 
-		$loops = self::boundaryLoops($field, $bounds, $columns, $rows);
-		$inset = static fn(float $distance): array => $distance > 0
-			? self::boundaryLoops(static fn(float $x, float $z): float => $field($x, $z) + $distance, $bounds, $columns, $rows)
-			: $loops;
-		if(!self::appendLoopCap($inset($radius), $bounds, $top, 1, $mesh))
-		self::appendCap($field, $bounds, $columns, $rows, $radius, $top, 1, $mesh);
-		if(!self::appendLoopCap($inset($bottomRadius), $bounds, $bottom, -1, $mesh))
-		self::appendCap($field, $bounds, $columns, $rows, $bottomRadius, $bottom, -1, $mesh);
-
-		foreach($loops as $path)
+		$upper = $radius > 0 ? $levels($radius) : [['angle' => M_PI / 2,'inset' => 0.0,'loops' => $base]];
+		$lower = $bottomRadius > 0 ? $levels($bottomRadius) : [['angle' => M_PI / 2,'inset' => 0.0,'loops' => $base]];
+		$caps = [[end($upper)['loops'],$top,1],[end($lower)['loops'],$bottom,-1]];
+		foreach($caps as [$loops,$y,$direction])
 		{
-			$points = $path['points'];
-			$limit = count($points) - ($path['closed'] ? 0 : 1);
-			for($index = 0; $index < $limit; $index++)
-			{
-				$a = $points[$index];
-				$b = $points[($index + 1) % count($points)];
-				$normalA = self::gradient($field, $a, $epsilon);
-				$normalB = self::gradient($field, $b, $epsilon);
-				$quad([
-					['x' => $a['x'],'y' => $bottom + $bottomRadius,'z' => $a['z'],'normal' => [$normalA[0],0,$normalA[1]]]
-					, ['x' => $b['x'],'y' => $bottom + $bottomRadius,'z' => $b['z'],'normal' => [$normalB[0],0,$normalB[1]]]
-					, ['x' => $b['x'],'y' => $top - $radius,'z' => $b['z'],'normal' => [$normalB[0],0,$normalB[1]]]
-					, ['x' => $a['x'],'y' => $top - $radius,'z' => $a['z'],'normal' => [$normalA[0],0,$normalA[1]]]
-				]);
+			$paths = array_map(static fn(array $loop): array => ['points' => $loop['points'],'closed' => $loop['closed']], $loops);
+			if(!self::appendLoopCap($paths, $bounds, $y, $direction, $mesh))
+			throw new \RuntimeException('Rounded extrusion caps need closed contours');
+		}
 
-				for($segment = 0; $segment < $roundSegments; $segment++)
+		// Straight walls between the two fillets; a snapped corner splits its normal between the faces that meet there.
+		foreach($base as $loop)
+		{
+			$points = $loop['points'];
+			$count = count($points);
+			for($index = 0; $index < $count; $index++)
+			{
+				$next = ($index + 1) % $count;
+				[$ax,$az] = $loop['after'][$index];
+				[$bx,$bz] = $loop['before'][$next];
+				$mesh->quad(
+					$emit($points[$index], $bottom + $bottomRadius, [$ax,0,$az]),$emit($points[$next], $bottom + $bottomRadius, [$bx,0,$bz])
+					, $emit($points[$next], $top - $radius, [$bx,0,$bz]),$emit($points[$index], $top - $radius, [$ax,0,$az])
+				);
+			}
+		}
+
+		foreach([[$upper,$radius,1],[$lower,$bottomRadius,-1]] as [$steps,$edgeRadius,$direction])
+		for($step = 0; $step + 1 < count($steps); $step++)
+		{
+			[$from,$to] = [$steps[$step],$steps[$step + 1]];
+			if(count($from['loops']) !== count($to['loops'])) throw new \RuntimeException('A fillet step changed the outline topology');
+			$height = static fn(float $angle): float => $direction > 0
+				? $top - $edgeRadius + sin($angle) * $edgeRadius
+				: $bottom + $edgeRadius - sin($angle) * $edgeRadius;
+			foreach($from['loops'] as $loop)
+			{
+				$partner = self::nearestLoop($loop, $to['loops']);
+				foreach(self::zipLoops($loop['points'], $partner['points']) as $triangle)
 				{
-					$angle = $segment / $roundSegments * M_PI / 2;
-					$next = ($segment + 1) / $roundSegments * M_PI / 2;
-					$quad([$ringPoint($a, $angle, 1),$ringPoint($b, $angle, 1),$ringPoint($b, $next, 1),$ringPoint($a, $next, 1)]);
-					if($bottomRadius > 0)
-					$quad([$ringPoint($a, $next, -1),$ringPoint($b, $next, -1),$ringPoint($b, $angle, -1),$ringPoint($a, $angle, -1)]);
+					$centroid = [
+						'x' => ($triangle[0][1]['x'] + $triangle[1][1]['x'] + $triangle[2][1]['x']) / 3
+						, 'z' => ($triangle[0][1]['z'] + $triangle[1][1]['z'] + $triangle[2][1]['z']) / 3
+					];
+					$indices = [];
+					foreach($triangle as [$side,$point,$index])
+					{
+						$ring = $side === 0 ? $loop : $partner;
+						$angle = $side === 0 ? $from['angle'] : $to['angle'];
+						[$nx,$nz] = self::sideNormal($ring, $index, $centroid);
+						$indices[] = $emit($point, $height($angle)
+							, self::roundedFilletNormal($nx, $nz, $angle, $edgeRadius, $edgeRadius, $direction));
+					}
+					$direction > 0 ? $mesh->triangle(...$indices) : $mesh->triangle($indices[0],$indices[2],$indices[1]);
 				}
 			}
 		}
 
 		$mesh->validate();
 		return $mesh;
+	}
+
+	/**
+	 * Attach one-sided outline normals to closed contours.
+	 *
+	 * Each vertex keeps the normal just before and just after it along the loop. They match on smooth curves; at a
+	 * snapped corner they are the two faces that meet there, so walls and fillet bands keep a crisp miter.
+	 *
+	 * @param list<array{points:list<array{x:float,z:float}>,closed:bool}> $loops
+	 * @return list<array{points:list<array{x:float,z:float}>,closed:bool,before:list<array{float,float}>,after:list<array{float,float}>}>
+	 */
+	private static function sides(callable $field, array $loops, float $reach): array
+	{
+		foreach($loops as &$loop)
+		{
+			if(!$loop['closed']) throw new \RuntimeException('Rounded extrusion needs closed contours');
+			$points = $loop['points'];
+			$count = count($points);
+			$toward = static function(array $from, array $to) use ($field,$reach): array {
+				$step = .01 * min(1, $reach / max(1e-12, hypot($to['x'] - $from['x'], $to['z'] - $from['z'])));
+				return self::gradient($field, [
+					'x' => $from['x'] + ($to['x'] - $from['x']) * $step,'z' => $from['z'] + ($to['z'] - $from['z']) * $step
+				], $reach * 1e-5);
+			};
+			$loop['before'] = $loop['after'] = [];
+			foreach($points as $index => $point)
+			{
+				$loop['before'][$index] = $toward($point, $points[($index - 1 + $count) % $count]);
+				$loop['after'][$index] = $toward($point, $points[($index + 1) % $count]);
+			}
+		}
+
+		return $loops;
+	}
+
+	/** One-sided normal of a contour vertex for the face lying toward `$centroid`. */
+	private static function sideNormal(array $loop, int $index, array $centroid): array
+	{
+		[$bx,$bz] = $loop['before'][$index];
+		[$ax,$az] = $loop['after'][$index];
+		if($bx * $ax + $bz * $az > cos(deg2rad(10)))
+		{
+			$length = hypot($bx + $ax, $bz + $az) ?: 1;
+			return [($bx + $ax) / $length,($bz + $az) / $length];
+		}
+		$points = $loop['points'];
+		$count = count($points);
+		$previous = $points[($index - 1 + $count) % $count];
+		$next = $points[($index + 1) % $count];
+		$point = $points[$index];
+		$forward = ($centroid['x'] - $point['x']) * ($next['x'] - $previous['x'])
+			+ ($centroid['z'] - $point['z']) * ($next['z'] - $previous['z']);
+
+		return $forward >= 0 ? [$ax,$az] : [$bx,$bz];
+	}
+
+	/** The contour in `$candidates` closest to `$loop`, which is its neighbour one fillet step inward or outward. */
+	private static function nearestLoop(array $loop, array $candidates): array
+	{
+		$best = null;
+		$distance = INF;
+		$probe = $loop['points'][0];
+		foreach($candidates as $candidate) foreach($candidate['points'] as $point)
+		{
+			$gap = hypot($point['x'] - $probe['x'], $point['z'] - $probe['z']);
+			if($gap < $distance) {$distance = $gap; $best = $candidate;}
+		}
+
+		return $best;
+	}
+
+	/**
+	 * Stitch two neighbouring contours into one band, always taking the shorter diagonal.
+	 *
+	 * Both loops run the same way around their shared boundary. Triangles wind like the quad (a, a+1, b+1, b).
+	 *
+	 * @return list<array{array{int,array,int},array{int,array,int},array{int,array,int}}> Vertices as [loop, point, index].
+	 */
+	private static function zipLoops(array $a, array $b): array
+	{
+		$n = count($a);
+		$m = count($b);
+		$start = 0;
+		$closest = INF;
+		foreach($b as $index => $point)
+		{
+			$gap = hypot($point['x'] - $a[0]['x'], $point['z'] - $a[0]['z']);
+			if($gap < $closest) {$closest = $gap; $start = $index;}
+		}
+		$length = static fn(array $p, array $q): float => hypot($p['x'] - $q['x'], $p['z'] - $q['z']);
+		$triangles = [];
+		for($i = 0, $j = 0; $i < $n || $j < $m;)
+		{
+			$a0 = $i % $n; $a1 = ($i + 1) % $n;
+			$b0 = ($start + $j) % $m; $b1 = ($start + $j + 1) % $m;
+			$advanceA = $j >= $m || ($i < $n && $length($a[$a1], $b[$b0]) <= $length($a[$a0], $b[$b1]));
+			if($advanceA)
+			{
+				$triangles[] = [[0,$a[$a0],$a0],[0,$a[$a1],$a1],[1,$b[$b0],$b0]];
+				$i++;
+			}
+			else
+			{
+				$triangles[] = [[0,$a[$a0],$a0],[1,$b[$b1],$b1],[1,$b[$b0],$b0]];
+				$j++;
+			}
+		}
+
+		return $triangles;
 	}
 
 	/**
@@ -1027,6 +1280,60 @@ final class MeshBuilder
 				}
 			}
 		}
+
+		$mesh->validate();
+		return $mesh;
+	}
+
+	/**
+	 * Turn the cue from its anatomy: x runs from the butt (-1.35) to the tip (0), and u is the distance from the tip.
+	 *
+	 * Leather tip and ivory ferrule, a pro-taper maple shaft swelling to 21 mm at the joint, a steel collar, a tapering
+	 * forearm, the wrap, the butt sleeve at 28.5 mm, and a rounded rubber bumper. Zones are painted in billiards.frag.
+	 *
+	 * @param int $segments Facets around the cue.
+	 */
+	public static function cue(int $segments = 32): MeshData
+	{
+		// [distance from the tip, radius] in metres; the ferrule is turned flush with the shaft, and repeated distances
+		// make the steps at the collar and the bumper.
+		$profile = [
+			[0,0],[0,.0045],[.0012,.006],[.007,.0063],[.032,.0063],[.3,.0066],[.655,.0105]
+			, [.655,.0107],[.658,.0107],[.658,.0109],[.683,.0109],[.683,.0107],[.686,.0107],[.686,.0109],[.985,.0128]
+			, [1.235,.0138],[1.335,.01425],[1.343,.0142],[1.349,.0128],[1.35,.008],[1.35,0]
+		];
+		$mesh = new MeshData;
+		$rings = [];
+		$count = count($profile);
+		foreach($profile as $index => [$distance,$radius])
+		{
+			// Each ring takes its normal from the profile slope around it, so caps face along the axis and steps stay
+			// square while the tapers shade smoothly.
+			[$previousDistance,$previousRadius] = $profile[max(0, $index - 1)];
+			[$nextDistance,$nextRadius] = $profile[min($count - 1, $index + 1)];
+			$along = $nextDistance - $previousDistance;
+			$rise = $nextRadius - $previousRadius;
+			if($radius == 0) [$along,$rise] = [0,$index === 0 ? 1 : -1];
+			elseif($nextDistance == $distance && $nextRadius != $radius) [$along,$rise] = [$distance - $previousDistance,$radius - $previousRadius];
+			$length = hypot($along, $rise) ?: 1;
+			$ring = [];
+			for($segment = 0; $segment <= $segments; $segment++)
+			{
+				$turn = $segment / $segments;
+				$c = cos($turn * M_PI * 2);
+				$s = sin($turn * M_PI * 2);
+				// A surface of revolution r(d) with x = -d has the outward normal (dr/dd, cos, sin), before normalising.
+				$normal = [$rise / $length,$c * $along / $length,$s * $along / $length];
+				$normalLength = sqrt($normal[0] ** 2 + $normal[1] ** 2 + $normal[2] ** 2) ?: 1;
+				$ring[] = $mesh->vertex([
+					-$distance,$c * $radius,$s * $radius
+					, $normal[0] / $normalLength,$normal[1] / $normalLength,$normal[2] / $normalLength,$distance,$turn
+				]);
+			}
+			$rings[] = $ring;
+		}
+		for($index = 0; $index + 1 < $count; $index++) for($segment = 0; $segment < $segments; $segment++)
+		$mesh->quad($rings[$index + 1][$segment],$rings[$index + 1][$segment + 1],$rings[$index][$segment + 1],$rings[$index][$segment]);
 
 		$mesh->validate();
 		return $mesh;

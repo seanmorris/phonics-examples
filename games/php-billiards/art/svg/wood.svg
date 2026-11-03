@@ -6,12 +6,13 @@
       <feBlend in="SourceGraphic" in2="tinted" mode="multiply"/>
     </filter>
     <pattern id="pores" width="64" height="32" patternUnits="userSpaceOnUse">
-      <path d="M-8 9 C11 2 27 15 72 5 M-5 25 C17 17 36 34 70 20" fill="none" stroke="#e3a35c" stroke-opacity=".16" stroke-width="1"/>
+      <!-- Each pore curve spans exactly one 64 px period with matching end tangents and is drawn at -64, 0, and 64, so
+           strokes crossing the pattern edge are whole and the tile wraps without a step. -->
+      <path d="M-64 9 C-48 3 -16 15 0 9 C16 3 48 15 64 9 C80 3 112 15 128 9 M-64 24 C-46 17 -18 31 0 24 C18 17 46 31 64 24 C82 17 110 31 128 24" fill="none" stroke="#e3a35c" stroke-opacity=".16" stroke-width="1"/>
       <path d="M8 14 C22 8 33 20 51 11" fill="none" stroke="#281006" stroke-opacity=".35" stroke-width=".8"/>
     </pattern>
   </defs>
   <rect width="256" height="256" fill="#8c5129" filter="url(#grain)"/>
   <rect width="256" height="256" fill="url(#pores)"/>
-  <ellipse cx="178" cy="122" rx="45" ry="18" fill="none" stroke="#291006" stroke-opacity=".3" stroke-width="3"/>
-  <ellipse cx="178" cy="122" rx="29" ry="10" fill="none" stroke="#d38a45" stroke-opacity=".2" stroke-width="2"/>
+  <!-- Knots are drawn per instance in billiards.frag, so their size, placement, and darkness vary instead of repeating with this tile. -->
 </svg>

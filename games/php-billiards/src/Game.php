@@ -515,6 +515,26 @@ final class Game
 	 *
 	 * @return array<string,mixed>|null Online turn and group rows, or null during free play.
 	 */
+	/**
+	 * Numbered balls that are off the table, in number order, for the free-play sink board.
+	 *
+	 * @return list<int>
+	 */
+	public function pocketedBalls(): array
+	{
+		$down = [];
+		foreach($this->simulation->balls as $ball) if(!$ball->active && $ball->number > 0) $down[] = $ball->number;
+		sort($down);
+
+		return $down;
+	}
+
+	/** Which player's cue is in hand: 0 in free play and for the first player online, 1 for the second. */
+	public function cuePlayer(): int
+	{
+		return $this->match !== null && array_search($this->match->actor, $this->match->players, true) === 1 ? 1 : 0;
+	}
+
 	public function onlineScoreboard(): ?array
 	{
 		if($this->match === null) return null;
