@@ -795,6 +795,17 @@ $test('title menu selects free or online play before native controls drive the H
 	$expect(abs($game->side - 1) < 1e-9 && abs($game->top) < 1e-9, 'Spin disc did not set clamped side spin');
 	$game->input([], ['button2' => 1,'button18' => 1,'button17' => 1], [], $regions, [0,0], 0, 1280, 720);
 	$expect($game->top === 0.0 && $game->side === 0.0 && $game->muted && $game->consumeFullscreenRequest());
+
+	// A pull started anywhere on the bottom-docked power meter reaches full power before the canvas edge.
+	[$meterX,$meterY,$meterWidth,$meterHeight] = $regions['power']['rect'];
+	$press = ['x' => $meterX + $meterWidth / 2,'y' => $meterY + $meterHeight / 2];
+	$game->input([], [], [['type' => 'pointer','action' => 'down','button' => 1] + $press], $regions, [0,0], 0, 1280, 720);
+	$game->input([], [], [['type' => 'pointer','action' => 'move','button' => 1,'x' => $press['x'],'y' => 714]]
+		, $regions, [0,0], 0, 1280, 720);
+	$expect($game->power === 1.0, 'Dragging the power meter to the canvas edge stopped short of full power');
+	$game->input([], [], [['type' => 'pointer','action' => 'up','button' => 1,'x' => $press['x'],'y' => 714]]
+		, $regions, [0,0], 0, 1280, 720);
+	$expect($game->stroking() && $game->stroke()['power'] === 1.0, 'A full pull did not shoot at full power');
 });
 
 $test('seeded online racks preserve regulation constraints and replay exactly', static function() use ($expect): void {

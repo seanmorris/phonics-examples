@@ -72,6 +72,8 @@ final class Game
 	private ?float $pull = null;
 	/** Power before a pull-back began, restored when the gesture is cancelled. */
 	private float $pullPrevious = .58;
+	/** Pointer distance that draws a full-power pull, fitted to the canvas space below the press. */
+	private float $pullTravel = 1.0;
 	private array $pointer = [0.0,0.0];
 	private bool $fullscreenRequest = false;
 	/** Seconds the current keyboard or stick aim input has been held, for acceleration. */
@@ -961,7 +963,7 @@ final class Game
 		{
 			match($this->drag) {
 				'spin' => $this->setSpin($x, $y, $regions['spin'] ?? null),
-				'power' => $this->updatePull($y, $regions['power'] ?? null),
+				'power' => $this->updatePull($y),
 				'aim' => $this->aimAt($x, $y, $width, $height, $fine),
 				'orbit' => $this->camera->orbit($x - $previous[0], $y - $previous[1], $this->dragStart[1] / max(1, $height)),
 				default => null
@@ -998,6 +1000,8 @@ final class Game
 				$this->pressed = 'power';
 				$this->pull = 0.0;
 				$this->pullPrevious = $this->power;
+				// SDL stops reporting motion at the canvas edge, so a full pull must fit below the press point.
+				$this->pullTravel = max(1.0, min((float)$hit['travel'], $height - $y - (float)($hit['reserve'] ?? 0)));
 			}
 			return;
 		}
@@ -1063,10 +1067,10 @@ final class Game
 	}
 
 	/** Drawing down from the power meter pulls the cue back; the drawn distance becomes the shot power. */
-	private function updatePull(float $y, ?array $region): void
+	private function updatePull(float $y): void
 	{
-		if($this->pull === null || $region === null || !isset($region['travel'])) return;
-		$this->pull = max(0, min(1, ($y - $this->dragStart[1]) / max(1, (float)$region['travel'])));
+		if($this->pull === null) return;
+		$this->pull = max(0, min(1, ($y - $this->dragStart[1]) / $this->pullTravel));
 		$this->power = max(.05, $this->pull);
 	}
 

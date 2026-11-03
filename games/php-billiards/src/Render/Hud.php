@@ -176,7 +176,7 @@ final class Hud
 		$bar = [$meterX + 17 * $u,$cardY + 14 * $u,14 * $u,112 * $u];
 		$regions['power'] = [
 			'type' => 'power','name' => 'power','rect' => [$meterX,$cardY + 6 * $u,48 * $u,128 * $u]
-			, 'bar' => $bar,'travel' => 170 * $u
+			, 'bar' => $bar,'travel' => 170 * $u,'reserve' => 6 * $u
 		];
 		$metrics['card'] = [$cardX,$cardY,$cardWidth,$cardHeight];
 
