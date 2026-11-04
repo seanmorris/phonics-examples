@@ -8,9 +8,20 @@ test('opening controls preserve the transition and pointer follow returns to idl
 	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout:45_000});
 	await expect(page.locator('.loading')).toHaveClass(/complete/);
 	const state=()=>canvas.evaluate(element=>element.phpBilliardsDebug.state);
-	await canvas.focus(); await page.keyboard.press('Space');
-	await expect.poll(async()=>(await state()).started).toBe(true);
-	expect((await state()).camera.transitioning).toBe(true);
+	await canvas.focus();
+	// Queue setup until PHP consumes it; keyboard startup is covered by billiards.spec.mjs.
+	// Capture the first started frame in-page, before slow test round trips can miss the opening.
+	const opening=await canvas.evaluate(element=>new Promise(resolve=>{
+		const observer=new MutationObserver(()=>{
+			const current=element.phpBilliardsDebug.state;
+			if(!current.started)return;
+			observer.disconnect();resolve(current);
+		});
+		observer.observe(element,{attributes:true,attributeFilter:['data-php-billiards']});
+		element.phpBilliardsDebug.action('start');
+	}));
+	expect(opening.started).toBe(true);
+	expect(opening.camera.transitioning).toBe(true);
 	await page.mouse.move(320,330); await page.mouse.wheel(0,-5000);
 	await page.mouse.down({button:'right'});
 	await expect.poll(async()=>(await state()).ui.drag).toBe('orbit');
