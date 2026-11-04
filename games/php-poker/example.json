@@ -17,6 +17,10 @@
       {"slug": "design", "title": "Table and controls", "path": "docs/design.md"}
     ],
     "api": {"namespace": "PhpPoker", "description": "Five-card draw rules, exact hand evaluation, local opponents, authorized views and saved sessions."},
-    "embed": {"kind": "local"}
+    "embed": {
+      "kind": "external",
+      "frame": "https://seanmorris.github.io/phonics-examples/embed/php-poker/",
+      "full": "https://seanmorris.github.io/phonics-examples/games/php-poker/"
+    }
   }
 }
