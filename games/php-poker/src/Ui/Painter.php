@@ -120,7 +120,7 @@ final class Painter
 			{
 				$outward = $geometry[$seat]['outward'];
 				[$px, $py, $pw] = $geometry[$seat]['plate'];
-				$bx = $outward > 0 ? $px - 40 : $px + $pw + 10;
+				$bx = $outward > 0 ? $px + $pw + 24 : $px - 40;
 				$this->stack($bx, $y - 10, Theme::CHIP_RED, 2, min(6, max(1, intdiv((int)$player['bet'], 4))), 11);
 				$this->text((string)$player['bet'], $bx + 16, $y + 10, Theme::CAPTION, Theme::PLATE, 'center');
 			}
@@ -356,8 +356,8 @@ final class Painter
 		$gray = min(7, max(1, (int)round($amount / 60)));
 		$red = min(7, max(1, (int)round($amount / 90)));
 		$blue = min(7, max(1, (int)round($amount / 120)));
-		$this->stack($x, $y + $radius * 1.3, Theme::CHIP_GRAY, 0, $gray, $radius);
 		$this->stack($x + $radius * 1.7, $y, Theme::CHIP_RED, 2, $red, $radius);
+		$this->stack($x, $y + $radius * 1.3, Theme::CHIP_GRAY, 0, $gray, $radius);
 		$this->stack($x + $radius * 3.4, $y + $radius * 1.3, Theme::CHIP_BLUE, 3, $blue, $radius);
 	}
 

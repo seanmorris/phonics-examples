@@ -17,11 +17,13 @@ final class Layout
 	/** Seats sit on this oval around the field centre, the human at the bottom. */
 	public const OVAL = [470,250];
 	public const CENTRE = [640,378];
-	public const CARD = [58,81];
-	public const CARD_STEP = 26;
-	public const HAND_CARD = [74,104];
-	public const HAND_STEP = 32;
-	public const DIALOG_CARD = [112,157];
+	public const CARD = [68,95];
+	public const CARD_STEP = 30;
+	public const HAND_CARD = [90,126];
+	public const HAND_STEP = 38;
+	public const DIALOG_CARD = [124,174];
+	/** Emblems sit inside the oval, between each seat and the table centre. */
+	public const EMBLEM_INSET = [175,115];
 	public const PLATE_HEIGHT = 24;
 
 	/**
@@ -106,15 +108,16 @@ final class Layout
 		$human = $seat === 0;
 		[$cardWidth,$cardHeight] = $human ? self::HAND_CARD : self::CARD;
 		$step = $human ? self::HAND_STEP : self::CARD_STEP;
-		$plateWidth = $human ? 210 : 184;
-		$plate = [$cx - $plateWidth / 2, $cy - ($human ? 74 : 58), $plateWidth, self::PLATE_HEIGHT];
+		$plateWidth = $human ? 250 : 200;
+		$plate = [$cx - $plateWidth / 2, $cy - ($human ? 90 : 62), $plateWidth, self::PLATE_HEIGHT];
 		$fanLeft = $plate[0] + ($plateWidth - ($cardWidth + 4 * $step)) / 2;
 		$fanTop = $plate[1] + self::PLATE_HEIGHT + 8;
 		$cards = [];
 		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
 		$outward = $ux > .3 ? 1 : -1;
-		$chips = [$outward > 0 ? $plate[0] + $plateWidth - 56 : $plate[0] - 4, $fanTop + $cardHeight + 4];
-		$emblem = [self::CENTRE[0] + $ux * (self::OVAL[0] + 150), self::CENTRE[1] + $uy * (self::OVAL[1] + 72)];
+		// Chips stand in front of the fan's outer corner; the human's stand beside the hand so they stay on screen.
+		$chips = $human ? [$plate[0] - 70, $fanTop + $cardHeight - 44] : [$outward > 0 ? $plate[0] + $plateWidth - 56 : $plate[0] - 4, $fanTop + $cardHeight + 4];
+		$emblem = $human ? [$plate[0] - 46, $plate[1] + 8] : [self::CENTRE[0] + $ux * (self::OVAL[0] - self::EMBLEM_INSET[0]), self::CENTRE[1] + $uy * (self::OVAL[1] - self::EMBLEM_INSET[1])];
 
 		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
 	}
@@ -242,13 +245,13 @@ final class Layout
 	 */
 	public static function discardDialog(): array
 	{
-		$width = 700;
-		$height = 236;
+		$width = 760;
+		$height = 254;
 		$left = self::CENTRE[0] - $width / 2;
 		$top = self::HEIGHT - $height - 10;
 		[$cardWidth,$cardHeight] = self::DIALOG_CARD;
 		$cards = [];
-		for($index = 0; $index < 5; $index++) $cards[] = [$left + 20 + $index * ($cardWidth + 22), $top + 24, $cardWidth, $cardHeight];
+		for($index = 0; $index < 5; $index++) $cards[] = [$left + 20 + $index * ($cardWidth + 22), $top + 22, $cardWidth, $cardHeight];
 		return ['box' => [$left, $top, $width, $height], 'cards' => $cards];
 	}
 
