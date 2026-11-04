@@ -17,14 +17,11 @@ final class Simulation
 	public const MAX_SPEED = 8.75;
 	private const MIN_SHOT_SPEED = .5;
 	private const POWER_EXPONENT = 2.55;
-	private const BALL_RESTITUTION = .94;
 	private const CUSHION_RESTITUTION = .78;
 	private const CLOTH_FRICTION = .19;
 	private const ROLLING_RESISTANCE = .013;
 	private const GRAVITY = 9.80665;
 	private const RACK_GAP = .00004;
-	private const CONTACT_SLOP = .00008;
-	private const CONTACT_ITERATIONS = 24;
 	private const POCKET_DRAFT = .24007875908011603; // tan(13.5 degrees)
 	private const POCKET_RESTITUTION = .52;
 	private const POCKET_SINK_DEPTH = .115;
@@ -39,6 +36,8 @@ final class Simulation
 	public int $shots = 0;
 	/** @var list<array<string,mixed>> */
 	private array $events = [];
+	/** Presentation-only latch: one sound per continuous physical contact, never read by the force model. */
+	private array $impactContacts = [];
 	/** @var array<string,mixed>|null */
 	private ?array $shotSnapshot = null;
 	/** @var list<array{float,float}>|null Exact cue contacts captured by a simulation-backed aim preview. */
@@ -131,6 +130,7 @@ final class Simulation
 
 		foreach($this->balls as $ball) self::orientBall($ball, $rackSeed, $this->rackIndex);
 
+		$this->impactContacts = [];
 		$this->phase = 'aim';
 		$this->scratched = false;
 		$this->shots = 0;
@@ -406,22 +406,46 @@ final class Simulation
 		for($i = 0; $i < self::SUBSTEPS; $i++) $this->substep($slice);
 
 		if($this->phase === 'moving' && !$this->moving())
-		$this->phase = $this->scratched ? 'placing' : 'aim';
+		{
+			$this->clearRestingCompression();
+			foreach($this->balls as $ball) $ball->remember();
+			$this->phase = $this->scratched ? 'placing' : 'aim';
+		}
 	}
 
 	private function substep(float $seconds): void
 	{
 		$remaining = $seconds;
 		$events = 0;
+		$contactPending = false;
 
-		while($remaining > 1e-8 && $events++ < 32)
+		while($remaining > 1e-12)
 		{
+			// Sweep during free flight; resolve compression at material time scales. After many boundary events
+			// use the same bounded microsteps, rather than advancing the unresolved remainder through collisions.
+			if(!$this->cueOnly && ($contactPending || $events >= 32
+				|| ContactModel::elasticEnergy($this->contactBalls()) > ContactModel::SLEEP_ENERGY))
+			{
+				$duration = min($remaining, ContactModel::MAX_STEP);
+				$boundary = $this->earliest($duration, false);
+				if($boundary && $boundary['time'] <= 1e-12)
+				{
+					$this->resolveBoundary($boundary);
+					$events++;
+					$boundary = null;
+				}
+				elseif($boundary) $duration = $boundary['time'];
+				$this->advanceContacts($duration);
+				$remaining -= $duration;
+				if($boundary) {$this->resolveBoundary($boundary); $events++;}
+				$contactPending = false;
+				continue;
+			}
+
 			$collision = $this->earliest($remaining);
 			$advance = $collision ? max(0, $collision['time']) : $remaining;
-
 			$this->advanceActive($advance);
 			$remaining -= $advance;
-
 			if(!$collision) break;
 
 			$cueCollision = $this->projectionPoints !== null && $this->collisionTouchesCue($collision);
@@ -443,24 +467,15 @@ final class Simulation
 				}
 			}
 
-			if($collision['type'] === 'ball') $this->resolveContactIsland($collision['a'], $collision['b']);
-			elseif($collision['type'] === 'pocket') $this->enterPocket($collision['ball'], $collision['index']);
-			elseif($collision['type'] === 'backstop') $this->resolvePocketBackstop($collision['ball'], $collision);
-			elseif($collision['type'] === 'jaw') $this->resolveJaw($collision['ball'], $collision);
-			elseif($collision['type'] === 'facing') $this->resolveFacing($collision['ball'], $collision);
-			else $this->resolveCushion($collision['ball'], $collision['axis']);
-
+			// Preview terminates at the swept cue contact, before evaluating any elastic contact forces.
 			if($cueCollision && ($collision['type'] === 'ball' || $collision['type'] === 'pocket'))
 			{
 				$this->projectionStop = true;
 				return;
 			}
-
-			if($advance < 1e-8) $remaining = max(0, $remaining - 1e-7);
+			if($collision['type'] === 'ball') $contactPending = true;
+			else {$this->resolveBoundary($collision); $events++;}
 		}
-
-		if($remaining > 0)
-		$this->advanceActive($remaining);
 
 		foreach($this->balls as $ball) if($ball->active && $ball->pocket === null && (!$this->cueOnly || $ball->number === 0))
 		{
@@ -791,16 +806,10 @@ final class Simulation
 	}
 
 	/** @return array<string,mixed>|null */
-	private function earliest(float $limit): ?array
+	private function earliest(float $limit, bool $includeBalls = true): ?array
 	{
 		$best = null;
-		// The ball list only changes on rack or restore, so sort it by number once rather than on every search.
-		if($this->numberOrderSource !== $this->balls)
-		{
-			$this->numberOrder = $this->balls;
-			usort($this->numberOrder, static fn(Ball $left, Ball $right): int => $left->number <=> $right->number);
-			$this->numberOrderSource = $this->balls;
-		}
+		$this->orderedBalls();
 		$balls = [];
 		$resting = [];
 		$reaches = [];
@@ -826,7 +835,7 @@ final class Simulation
 			$speedSquared = $a->vx ** 2 + $a->vy ** 2;
 			$reach = $reaches[$i];
 
-			for($j = $i + 1; $j < $count; $j++)
+			for($j = $i + 1; $includeBalls && $j < $count; $j++)
 			{
 				// Two resting balls have zero relative velocity and can never meet.
 				if($restingA && $resting[$j]) continue;
@@ -1036,124 +1045,93 @@ final class Simulation
 		return $geometry = [$pockets,$facings];
 	}
 
-	/** Resolve every touching ball connected to the first impact as one stable contact island. */
-	private function resolveContactIsland(Ball $seedA, Ball $seedB): void
+	/** @return list<Ball> */
+	private function orderedBalls(): array
 	{
-		$balls = array_values(array_filter($this->balls,
-			static fn(Ball $ball): bool => $ball->active && $ball->pocket === null));
-		usort($balls, static fn(Ball $left, Ball $right): int => $left->number <=> $right->number);
-		$candidates = [];
-
-		foreach($balls as $index => $a)
-		foreach(array_slice($balls, $index + 1) as $b)
+		if($this->numberOrderSource !== $this->balls)
 		{
-			$dx = $b->x - $a->x;
-			$dy = $b->y - $a->y;
-			$distance = hypot($dx, $dy);
-
-			if($distance > Ball::RADIUS * 2 + self::CONTACT_SLOP) continue;
-
-			if($distance < 1e-9) [$nx,$ny] = [1.0,0.0];
-			else [$nx,$ny] = [$dx / $distance,$dy / $distance];
-
-			$candidates[] = ['a' => $a,'b' => $b,'nx' => $nx,'ny' => $ny];
+			$this->numberOrder = $this->balls;
+			usort($this->numberOrder, static fn(Ball $a, Ball $b): int => $a->number <=> $b->number);
+			$this->numberOrderSource = $this->balls;
 		}
+		return $this->numberOrder;
+	}
 
-		// Collect the whole touching graph before applying any impulse. Solving one
-		// wave at a time lets a later rack row push an already-resolved row backward.
-		$reached = [spl_object_id($seedA) => true,spl_object_id($seedB) => true];
-		$island = [];
+	/** @return list<Ball> */
+	private function contactBalls(): array
+	{
+		return array_values(array_filter($this->orderedBalls(), static fn(Ball $ball): bool => $ball->active && $ball->pocket === null));
+	}
 
-		for($wave = 0; $wave < count($balls); $wave++)
+	private function advanceContacts(float $seconds): void
+	{
+		$balls = $this->contactBalls();
+		$this->recordImpacts($balls);
+		ContactModel::advance($balls, $seconds);
+		$this->recordImpacts($balls);
+		foreach($this->orderedBalls() as $ball) if($ball->active && $ball->pocket !== null)
 		{
-			$added = false;
+			$ball->advance($seconds);
+			$this->advancePocket($ball, $seconds);
+		}
+	}
 
-			foreach($candidates as $index => $candidate)
+	/** Aggregate simultaneous new contacts; persistent compression does not generate a sound per RK step. */
+	private function recordImpacts(array $balls): void
+	{
+		$touching = [];
+		$strength = 0.0;
+		$count = count($balls);
+		for($i = 0; $i < $count; $i++)
+		for($j = $i + 1; $j < $count; $j++)
+		{
+			$a = $balls[$i]; $b = $balls[$j];
+			$dx = $b->x - $a->x; $dy = $b->y - $a->y; $dz = $b->drop - $a->drop;
+			if(abs($dx) > Ball::RADIUS * 2 || abs($dy) > Ball::RADIUS * 2 || abs($dz) > Ball::RADIUS * 2) continue;
+			$distance = sqrt($dx * $dx + $dy * $dy + $dz * $dz);
+			if($distance > Ball::RADIUS * 2 + 1e-12 || $distance < 1e-15) continue;
+			$key = $a->number . ':' . $b->number;
+			$touching[$key] = true;
+			if(isset($this->impactContacts[$key])) continue;
+			$approach = (($a->vx - $b->vx) * $dx + ($a->vy - $b->vy) * $dy
+				+ ($a->vDrop - $b->vDrop) * $dz) / $distance;
+			$strength = max($strength, $approach / self::MAX_SPEED);
+		}
+		$this->impactContacts = $touching;
+		if($strength > 0) $this->events[] = ['type' => 'impact','strength' => min(1, $strength)];
+	}
+
+	/** Remove only the negligible stored compression left after all motion has gone to sleep. */
+	private function clearRestingCompression(): void
+	{
+		$balls = $this->contactBalls();
+		$count = count($balls);
+		for($pass = 0; $pass < 16; $pass++)
+		{
+			$changed = false;
+			for($i = 0; $i < $count; $i++)
+			for($j = $i + 1; $j < $count; $j++)
 			{
-				if(isset($island[$index])) continue;
-				$a = $candidate['a'];
-				$b = $candidate['b'];
-				if(!isset($reached[spl_object_id($a)]) && !isset($reached[spl_object_id($b)])) continue;
-
-				$island[$index] = $candidate;
-				$reached[spl_object_id($a)] = $reached[spl_object_id($b)] = true;
-				$added = true;
+				$a = $balls[$i]; $b = $balls[$j];
+				$dx = $b->x - $a->x; $dy = $b->y - $a->y;
+				$distance = hypot($dx, $dy);
+				if($distance >= Ball::RADIUS * 2 || $distance < 1e-15) continue;
+				$correction = (Ball::RADIUS * 2 - $distance + 1e-12) / (2 * $distance);
+				$a->x -= $dx * $correction; $a->y -= $dy * $correction;
+				$b->x += $dx * $correction; $b->y += $dy * $correction;
+				$changed = true;
 			}
-
-			if(!$added) break;
+			if(!$changed) break;
 		}
+	}
 
-		$contacts = [];
-
-		foreach($island as $index => $candidate)
-		{
-			$a = $candidate['a'];
-			$b = $candidate['b'];
-			$relative = ($b->vx - $a->vx) * $candidate['nx'] + ($b->vy - $a->vy) * $candidate['ny'];
-			$contacts[] = $candidate + ['index' => $index,'initial' => $relative
-				, 'target' => $relative < -1e-7 ? -self::BALL_RESTITUTION * $relative : 0.0,'impulse' => 0.0];
-		}
-
-		for($iteration = 0; $iteration < self::CONTACT_ITERATIONS; $iteration++)
-		foreach($contacts as &$contact)
-		{
-			$a = $contact['a'];
-			$b = $contact['b'];
-			$nx = $contact['nx'];
-			$ny = $contact['ny'];
-			$relative = ($b->vx - $a->vx) * $nx + ($b->vy - $a->vy) * $ny;
-			$nextImpulse = max(0, $contact['impulse'] + ($contact['target'] - $relative) / 2);
-			$impulse = $nextImpulse - $contact['impulse'];
-			$contact['impulse'] = $nextImpulse;
-
-			$a->vx -= $impulse * $nx;
-			$a->vy -= $impulse * $ny;
-			$b->vx += $impulse * $nx;
-			$b->vy += $impulse * $ny;
-		}
-		unset($contact);
-
-		$impactStrength = 0.0;
-
-		foreach($contacts as $contact) if($contact['impulse'] > 0)
-		{
-			$a = $contact['a'];
-			$b = $contact['b'];
-			$nx = $contact['nx'];
-			$ny = $contact['ny'];
-			$tx = -$ny;
-			$ty = $nx;
-			$slip = ($b->vx - $a->vx) * $tx + ($b->vy - $a->vy) * $ty
-				+ Ball::RADIUS * ($a->spinY + $b->spinY);
-			$tangentImpulse = max(-$contact['impulse'] * .06, min($contact['impulse'] * .06, -$slip / 7));
-			$a->vx -= $tangentImpulse * $tx;
-			$a->vy -= $tangentImpulse * $ty;
-			$b->vx += $tangentImpulse * $tx;
-			$b->vy += $tangentImpulse * $ty;
-			$spinChange = -2.5 * $tangentImpulse / Ball::RADIUS;
-			$a->spinY += $spinChange;
-			$b->spinY += $spinChange;
-			$impactStrength = max($impactStrength, abs($contact['initial']) / self::MAX_SPEED
-				, $contact['impulse'] / self::MAX_SPEED);
-		}
-
-		foreach($island as $contact)
-		{
-			$a = $contact['a'];
-			$b = $contact['b'];
-			$distance = hypot($b->x - $a->x, $b->y - $a->y);
-			$overlap = Ball::RADIUS * 2 - $distance;
-
-			if($overlap <= 0) continue;
-
-			$a->x -= $contact['nx'] * ($overlap / 2 + 1e-8);
-			$a->y -= $contact['ny'] * ($overlap / 2 + 1e-8);
-			$b->x += $contact['nx'] * ($overlap / 2 + 1e-8);
-			$b->y += $contact['ny'] * ($overlap / 2 + 1e-8);
-		}
-
-		if($impactStrength > 0)
-		$this->events[] = ['type' => 'impact','strength' => min(1, $impactStrength)];
+	private function resolveBoundary(array $collision): void
+	{
+		if($collision['type'] === 'pocket') $this->enterPocket($collision['ball'], $collision['index']);
+		elseif($collision['type'] === 'backstop') $this->resolvePocketBackstop($collision['ball'], $collision);
+		elseif($collision['type'] === 'jaw') $this->resolveJaw($collision['ball'], $collision);
+		elseif($collision['type'] === 'facing') $this->resolveFacing($collision['ball'], $collision);
+		else $this->resolveCushion($collision['ball'], $collision['axis']);
 	}
 
 	private function resolveCushion(Ball $ball, string $axis): void
@@ -1319,7 +1297,7 @@ final class Simulation
 		if($ball->active && ($ball->pocket !== null || hypot($ball->vx, $ball->vy) >= .006
 			|| abs($ball->spinY) >= .18)) return true;
 
-		return false;
+		return ContactModel::elasticEnergy($this->contactBalls()) > ContactModel::SLEEP_ENERGY;
 	}
 
 	/**
@@ -1477,6 +1455,7 @@ final class Simulation
 		$this->rackSeed = isset($snapshot['rackSeed']) ? (string)$snapshot['rackSeed'] : null;
 		$this->rackIndex = (int)($snapshot['rackIndex'] ?? 0);
 		$this->events = [];
+		$this->impactContacts = [];
 		$this->shotSnapshot = null;
 	}
 

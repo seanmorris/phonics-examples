@@ -11,6 +11,7 @@ namespace PhpBilliards\Physics;
 final class Ball
 {
 	public const RADIUS = 0.028575;
+	public const MASS = .170;
 
 	/** Cloth-plane X coordinate from the preceding fixed update. */
 	public float $previousX;
@@ -79,7 +80,13 @@ final class Ball
 	{
 		$this->x += $this->vx * $seconds;
 		$this->y += $this->vy * $seconds;
+		$this->advanceRotation($seconds);
+	}
 
+	/** Integrate orientation without advancing a centre already handled by the contact integrator. */
+	public function advanceRotation(float $seconds): void
+	{
+		if($seconds <= 0 || ($this->spinX == 0.0 && $this->spinY == 0.0 && $this->spinZ == 0.0)) return;
 		$half = 0.5 * $seconds;
 		[$x,$y,$z,$w] = [$this->qx,$this->qy,$this->qz,$this->qw];
 		$this->qx += $half * ($this->spinX * $w + $this->spinY * $z - $this->spinZ * $y);

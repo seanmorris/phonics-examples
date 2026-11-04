@@ -330,42 +330,6 @@ $test('rack contacts are independent of ball storage order', static function() u
 	$expect($states($left) === $states($right), 'Rack result depends on array order');
 });
 
-$test('default break resolves the rack as one island without a second cue tap', static function() use ($expect): void {
-	$game = new Simulation;
-	$expect($game->shoot(0, .58, 0, 0), 'Default shot was rejected');
-	$one = null;
-
-	foreach($game->balls as $ball) if($ball->number === 1) $one = $ball;
-
-	$expect($one instanceof Ball, 'Rack has no 1 ball');
-	$rebounded = false;
-	$lastDistance = 0.0;
-	$separatingTicks = 0;
-
-	for($tick = 0; $tick < 180; $tick++)
-	{
-		$game->step();
-		$cue = $game->cue();
-		$distance = hypot($one->x - $cue->x, $one->y - $cue->y);
-
-		if(!$rebounded && $cue->vx < 0)
-		{
-			$rebounded = true;
-			$expect($one->vx > 0, 'Later rack rows pushed the resolved 1 ball back into the cue ball');
-			$lastDistance = $distance;
-			continue;
-		}
-
-		if(!$rebounded || $separatingTicks >= 45) continue;
-
-		$expect($distance >= $lastDistance - 1e-7, 'Cue ball reversed and contacted the 1 ball a second time');
-		$lastDistance = $distance;
-		$separatingTicks++;
-	}
-
-	$expect($rebounded && $separatingTicks === 45, 'Default rack contact was not observed');
-});
-
 $test('three full-power zero-spin shots clear and spread the rack', static function() use ($expect): void {
 	$game = new Simulation;
 	$initial = [];
@@ -1490,10 +1454,22 @@ $test('the aiming preview reports the same first object ball the live shot hits'
 		$expect($preview['contact'] !== null, 'A shot into the rack predicted no contact');
 		$game->shoot($angle, .7);
 		$hit = null;
-		for($tick = 0; $tick < 600 && $hit === null; $tick++)
+		$sweep = new ReflectionMethod(Simulation::class, 'earliest');
+		for($tick = 0; $tick < 2400 && $hit === null; $tick++)
 		{
-			$game->step(Simulation::STEP);
-			foreach($game->balls as $ball) if($ball->number !== 0 && hypot($ball->vx, $ball->vy) > 1e-9) {$hit = $ball->number; break;}
+			$collision = $sweep->invoke($game, Simulation::STEP / Simulation::SUBSTEPS);
+			if(($collision['type'] ?? null) === 'ball')
+			{
+				// Observe the first compression, before its wave reaches other rack rows. Sampling at 60 Hz
+				// reports whichever moving object sorts first after several hundred microseconds of contacts.
+				$game->step($collision['time']);
+				for($micro = 0; $micro < 100 && $hit === null; $micro++)
+				{
+					$game->step(PhpBilliards\Physics\ContactModel::MAX_STEP);
+					foreach($game->balls as $ball) if($ball->number !== 0 && hypot($ball->vx, $ball->vy) > 1e-9) {$hit = $ball->number; break;}
+				}
+			}
+			else $game->step(Simulation::STEP / Simulation::SUBSTEPS);
 		}
 		$expect($hit === $preview['contact']['ball'], "Ghost ball at $angle predicted {$preview['contact']['ball']}, shot hit $hit");
 	}
@@ -1796,6 +1772,7 @@ $test('clearing spin wins over spin still held in the same frame', static functi
 });
 
 require __DIR__ . '/camera.php';
+require __DIR__ . '/contacts.php';
 
 $failures = 0;
 
