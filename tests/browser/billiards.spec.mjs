@@ -91,7 +91,8 @@ test('full page boots the direct application and executes a resettable shot', as
 	expect(strokeTrace.some(state=>state.shots===0&&state.stroke?.offset>.04)).toBe(true);
 	expect(strokeTrace.some(state=>state.shots===1&&state.stroke?.contacted)).toBe(true);
 	// PHP delivers the recorded samples; the key presses above unlock Web Audio and the break must be audible.
-	await expect.poll(()=>canvas.evaluate(element=>element.phpBilliardsDebug.audio.decoded)).toBe(5);
+	// Clack, impact, rail, sink and the three pocket knocks.
+	await expect.poll(()=>canvas.evaluate(element=>element.phpBilliardsDebug.audio.decoded)).toBe(7);
 	await expect.poll(()=>canvas.evaluate(element=>element.phpBilliardsDebug.audio.played)).toBeGreaterThan(0);
 	expect(await canvas.evaluate(element=>element.phpBilliardsDebug.audio.state)).toBe('running');
 	await page.keyboard.press('Backspace');

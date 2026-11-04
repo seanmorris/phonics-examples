@@ -38,11 +38,12 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 			let gain;const filterCount=impactFilters.length;
 			source.connect=function(node){gain=node;return connect.call(this,node);};
 			source.start=function(...args){
-				const when=args[0]??0;
+				// Read the audio clock first: it keeps running while the peak scan below walks a long sample.
+				const when=args[0]??0,now=this.context.currentTime;
 				const filter=impactFilters.length>filterCount?impactFilters.at(-1):null;
 				impactVoices.push({gain:gain.gain.value,rate:source.playbackRate.value,sampleRate:this.context.sampleRate,
 					filter:filter?{type:filter.type,frequency:filter.frequency.value,q:filter.Q.value}:null,
-					bytes:sources.get(source.buffer),peak:peak(source.buffer),delay:when>0?when-this.context.currentTime:0});
+					bytes:sources.get(source.buffer),peak:peak(source.buffer),delay:when>0?when-now:0});
 				return start.apply(this,args);
 			};
 			return source;
