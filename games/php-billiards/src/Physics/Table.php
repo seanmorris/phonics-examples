@@ -53,6 +53,12 @@ final class Table
 			,[-$cornerX,$cornerY],[0,$sideY],[$cornerX,$cornerY]];
 	}
 
+	/** Finite cushion extents, also supplied to the optional contact backend's conservative boundary guard. */
+	public static function cushionLimits(): array
+	{
+		return [self::HEIGHT / 2 - self::CORNER_JAW,self::WIDTH / 2 - self::CORNER_JAW,self::SIDE_MOUTH / 2];
+	}
+
 	/**
 	 * Whether a rail face exists at the supplied along-rail coordinate.
 	 *

@@ -133,9 +133,15 @@ final class Game
 	private ?array $look = null;
 	/** @var array{kind:string,aim:float,offset:float,look:int}|null Display-only idle cue pose. */
 	private ?array $idleCue = null;
+	/** Fresh entropy enters only at a free-play rack boundary; Simulation never calls this factory. */
+	private \Closure $rackSeedFactory;
 
-	public function __construct()
+	/**
+	 * @param callable|null $rackSeedFactory Source of a fresh lowercase 32-byte hex seed at each free-play rack boundary.
+	 */
+	public function __construct(?callable $rackSeedFactory = null)
 	{
+		$this->rackSeedFactory = \Closure::fromCallable($rackSeedFactory ?? static fn(): string => bin2hex(random_bytes(32)));
 		$this->simulation = new Simulation;
 		$this->camera = new Camera;
 	}
@@ -396,7 +402,7 @@ final class Game
 			}
 		}
 		elseif($action === 'rack' && !$this->match)
-		{$this->stroke = $this->shotAim = null; $this->simulation->rack(); $this->camera->resumeFollow();}
+		{$this->newFreePlayRack(); $this->camera->resumeFollow();}
 		elseif($action === 'reset' && !$this->match)
 		{
 			$this->stroke = null;
@@ -546,10 +552,21 @@ final class Game
 
 	private function startFreePlay(): void
 	{
+		$this->newFreePlayRack();
 		$this->mode = 'free';
 		$this->started = true;
 		$this->onlineRequested = false;
 		$this->camera->beginGameplayView();
+	}
+
+	private function newFreePlayRack(): void
+	{
+		$seed = ($this->rackSeedFactory)();
+		if(!is_string($seed) || !preg_match('/\A[0-9a-f]{64}\z/D', $seed))
+		throw new \UnexpectedValueException('A rack seed must contain 32 bytes encoded as lowercase hex.');
+		$this->stroke = $this->shotAim = null;
+		$this->simulation->rack($seed);
+		$this->previousPhase = $this->simulation->phase;
 	}
 
 	private function beginStroke(float $aim, float $power, float $top, float $side): void

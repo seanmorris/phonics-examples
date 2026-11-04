@@ -12,6 +12,7 @@ use Phonics\Render\Device;
 use PhpBilliards\Ecs\BilliardsEntities;
 use PhpBilliards\Game;
 use PhpBilliards\Physics\Simulation;
+use PhpBilliards\Physics\ContactKernel;
 use PhpBilliards\Render\FramePacer;
 use PhpBilliards\Render\Hud;
 use PhpBilliards\Render\Scene;
@@ -34,7 +35,11 @@ $app->lobby([
 		, 'aspectRatio' => '16/9'
 	]
 ]);
+$app->browser(__DIR__ . '/browser/contact-kernel.mjs');
 $app->browser(__DIR__ . '/browser/game.mjs');
+(vrzno_env('billiardsContactGeometry'))(json_encode(PhpBilliards\Physics\PocketModel::geometry(), JSON_THROW_ON_ERROR));
+$contactBackend = vrzno_env('billiardsContactBatch');
+ContactKernel::install(static fn(string $input): string => (string)$contactBackend($input));
 // Browser code cannot read PHAR members, so hand the recorded samples to the bridge once.
 $samples = [];
 foreach([
@@ -65,7 +70,7 @@ $engine->input->bindButton(20, [SDLK_LSHIFT,SDLK_RSHIFT]);
 $engine->input->bindGamepad(20, [SDL_CONTROLLER_BUTTON_LEFTSTICK]);
 $engine->input->bindButton(21, [SDLK_SLASH]);
 $engine->input->bindButton(22, [SDLK_h]);
-$ecs = new BilliardsEntities($engine->entities, new Game);
+$ecs = new BilliardsEntities($engine->entities, new Game(static fn(): string => (string)(vrzno_env('billiardsRackSeed'))()));
 $scene = new Scene(__DIR__);
 $hud = new Hud(__DIR__);
 $width = 1280;

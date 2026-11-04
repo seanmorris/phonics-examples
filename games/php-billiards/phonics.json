@@ -17,6 +17,8 @@
       "autoload.php",
       "src/Physics/Ball.php",
       "src/Physics/ContactModel.php",
+      "src/Physics/ContactKernel.php",
+      "src/Physics/PocketModel.php",
       "src/Physics/Table.php",
       "src/Physics/Simulation.php",
       "src/Online/BinaryState.php",
@@ -43,7 +45,8 @@
   },
   "browser": {
     "files": [
-      "browser/game.mjs"
+      "browser/game.mjs",
+      "browser/contact-kernel.mjs"
     ]
   },
   "application": {
@@ -75,7 +78,7 @@
     ]
   },
   "integrity": {
-    "application.php": "sha256-gPiu4Xo6B6m3hRqaxOpPUmR0KJrpeU/gDVG0ElCiNNw=",
+    "application.php": "sha256-KjJ6c4np+2+s6RWZPTRFLowBjN0LxBqJ+R8M6pS+Ilk=",
     "assets/audio/clack.mp3": "sha256-yu4Q98NQ4WgGgO1T/vlIVYy5B3WsM6HDubOtCYEVeeM=",
     "assets/audio/impact.mp3": "sha256-U/DH6ntKnpbcZJrxv09xyWORy0YZziozna1soubdGA4=",
     "assets/audio/pocket-drop-hit-1.mp3": "sha256-2rqp/1nvQE6eZ+iBCNHf6nHjiJzV3yDK9XV80Fwxsdo=",
@@ -93,7 +96,8 @@
     "assets/generated/ui-font.rgba": "sha256-TWzOAXjyeD4pTPRR+vNoVtSxoqn/buY4e4sNsV9SFnE=",
     "assets/generated/wood.rgba": "sha256-MDgDkzZpWQSDKB5T+cjI564yOthhouxXfIIIHYbzprY=",
     "autoload.php": "sha256-EmJY/5T4hGtkgHDoBwucyEMFN7n3N9BJCi2D0f7IKwE=",
-    "browser/game.mjs": "sha256-4KQE4h7Q5qcDR4O/rHHaatuTULBXqRJFa3A8x9wOQc0=",
+    "browser/contact-kernel.mjs": "sha256-zwYEI3LTplQ4XVu9kCH8i/TuORcwTv/RfaW01Cv+NKM=",
+    "browser/game.mjs": "sha256-RoirVoRSTLWhBc2UQDJxxnCD5bLglpPq3sw7UL2i3A8=",
     "shaders/billiards.frag": "sha256-YizCNNh44Vh4rrXbQzXDxLwyWJMP0O0CA/t6QwrxQZs=",
     "shaders/billiards.vert": "sha256-nLVju+IOeEK4t3gR13nhDiegjfdukCrBQdPYX5gZfDE=",
     "shaders/ui.frag": "sha256-1K8qiJo1AtDSxxbVMKvtxhyRWZk+r42DJ6bMEP2m/4g=",
@@ -101,16 +105,18 @@
     "src/Ecs/BallIdentity.php": "sha256-QaDnfu8fJytsmG18hfxOUgWsotS2OJKsq7gLO/0UD60=",
     "src/Ecs/BilliardsEntities.php": "sha256-Ktw1Q18FxwZzpSPhTRK2UZ9wpP6J57KzltauaI+N9p8=",
     "src/Ecs/BilliardsSession.php": "sha256-EZo8jPwI+MmogZ/Z4zqRU2aiq6rS4JyjmI+I/C7z2lY=",
-    "src/Game.php": "sha256-BLGkRcnJtrK/7rAGNh47NZdAoyccuJv48lcXGUq++vg=",
+    "src/Game.php": "sha256-vjqFRV/5TJjt01Iu9sVsEIY14pp72y5RlRfXck1lYe4=",
     "src/Geometry/MeshBuilder.php": "sha256-3LpgRBn8rDpftcsspbAINDZbyQHzDNECe3arsva8V9E=",
     "src/Geometry/MeshData.php": "sha256-DNdvFBLpwNoYsapP2RHKzgQ38NliuzSt9q6F+IEx2WA=",
     "src/Geometry/TableGeometry.php": "sha256-nr225fVpveCudWtdb6xe/kJboS9j/BgjH/xwSe1W1sQ=",
     "src/Online/BinaryState.php": "sha256-YAN1YQrEKvB01JH0BiQ02bctn91RsOu2WLYHb01LlZQ=",
     "src/Online/EightBallMatch.php": "sha256-qPogDRvoYvvwTMEMnqRDYt7KN3YirOcb1joFjorM2WM=",
-    "src/Physics/Ball.php": "sha256-f9TJg0m1cVhCmsVQrDseosUL924dH0VAYxBYrG5FGc8=",
-    "src/Physics/ContactModel.php": "sha256-N4D9/JGiC8qT5rkCfE27xWQngIxTVV6QC7pO3ac/AqA=",
-    "src/Physics/Simulation.php": "sha256-xmJlJR+GprD/rii5s5TklWzzFx0Ln8uih8CskGhRz+A=",
-    "src/Physics/Table.php": "sha256-XAD/O/IDHFWFO330jXIeIe/Px8eyy0M3vVXHfvvOXGk=",
+    "src/Physics/Ball.php": "sha256-DV6A/c2N1sBc+volNfGGKj26ffj46BuZqi0YMKmRCCo=",
+    "src/Physics/ContactKernel.php": "sha256-SHZJPKRtiAZe9WE3ILE3+IF1Kofk+QWea6nZvWHWsjI=",
+    "src/Physics/ContactModel.php": "sha256-zkTFfC4K1vVe31CrLi/3PqO+um0QYpMxx0jEXM3wSKo=",
+    "src/Physics/PocketModel.php": "sha256-mUpwkSpecDAe66kLx127nAel9sEZ7tbeBwXakz4WR8c=",
+    "src/Physics/Simulation.php": "sha256-wOJtahMM0mPAXJ+bFVgH5xW8YZTyTQlzh/MyyAC231w=",
+    "src/Physics/Table.php": "sha256-FJdDoY5uccTOfBAHTV3hDjyci82yP1oBl2VwKJzyMnA=",
     "src/Render/Camera.php": "sha256-EuU/8UkdhKP0WibY9lD83asnJQ9z2eV3jN3BzNDCZG4=",
     "src/Render/FramePacer.php": "sha256-OKjfGRUZg/bbscJ0O0MO+oH7rADR7aKG6pimFnc6FE4=",
     "src/Render/GpuMesh.php": "sha256-wjBHi94G6bcjOo5fDgt5A5/w+ro4ggu8OGSR1fEvx/M=",

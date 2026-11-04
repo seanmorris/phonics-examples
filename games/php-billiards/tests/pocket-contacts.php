@@ -113,3 +113,17 @@ $test('resting rim contact does not multiply spin loss with integration frequenc
 	}
 	$expect(max($results) - min($results) < 1e-10 && min($results) > 9.9, 'Microsteps multiplied a resting pocket spin loss');
 });
+
+$test('shallow pocket facings prevent a late sideways correction from energizing a crowded mouth', static function() use ($expect, $contactEnergy): void {
+	$game = new Simulation(hash('sha256', 'billiards-break-diagnosis-0'));
+	$game->shoot(deg2rad(.1), 1);
+	$energy = static fn(): float => $contactEnergy($game->balls)
+		+ count(array_filter($game->balls, static fn(Ball $b): bool => $b->active)) * Ball::MASS * ContactModel::GRAVITY * .115;
+	$launch = $energy();
+	for($tick = 0; $tick < 900 && $game->moving(); $tick++)
+	{
+		$game->step(); $game->consumeEvents();
+		$expect($energy() <= $launch * 1.002, "Shallow facing correction injected energy at tick $tick");
+	}
+	$expect(!$game->moving(), 'Crowded-mouth regression failed to settle');
+});

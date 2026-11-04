@@ -22,9 +22,7 @@ final class Simulation
 	private const ROLLING_RESISTANCE = .013;
 	private const GRAVITY = 9.80665;
 	private const RACK_GAP = .00004;
-	private const POCKET_DRAFT = .24007875908011603; // tan(13.5 degrees)
-	private const POCKET_RESTITUTION = .52;
-	private const POCKET_SINK_DEPTH = .115;
+	private const POCKET_SINK_DEPTH = PocketModel::SINK_DEPTH;
 
 	/** @var list<Ball> Complete cue and object-ball set in deterministic storage order. */
 	public array $balls = [];
@@ -59,15 +57,15 @@ final class Simulation
 	private array $numberOrderSource = [];
 	/** @var array<string,mixed>|null First cue/object contact seen while projecting the aiming guide. */
 	private ?array $projectionContact = null;
-	/** Match seed used for the current online rack, or null for the established free-play rack. */
+	/** Recorded seed for the current free-play or online rack; null selects the fixed reference rack. */
 	private ?string $rackSeed = null;
 	/** Derived rack number used when an eight ball on the break requires a rerack. */
 	private int $rackIndex = 0;
 
 	/**
-	 * Create the established free-play rack or a seed-derived legal online rack.
+	 * Create the fixed reference rack or a seed-derived legal rack.
 	 *
-	 * @param string|null $rackSeed Commit/reveal-derived match seed, or null for free play.
+	 * @param string|null $rackSeed Recorded rack seed, or null for the fixed reference rack.
 	 * @param int $rackIndex Nonnegative derived rack number for an eight on the break.
 	 */
 	public function __construct(?string $rackSeed = null, int $rackIndex = 0)
@@ -78,10 +76,10 @@ final class Simulation
 	/**
 	 * Restore a standard fifteen-ball rack and cue ball.
 	 *
-	 * Regulation spacing receives a seeded sub-millimetre perturbation and stable independent ball orientations,
-	 * preventing symmetric break artifacts without giving repeated runs any nondeterministic input.
+	 * Regulation spacing receives seeded micrometre perturbations and independent ball orientations. The complete
+	 * candidate is checked before placement; every perturbation shrinks together if it would create an overlap.
 	 *
-	 * @param string|null $rackSeed Commit/reveal-derived match seed, or null for free play.
+	 * @param string|null $rackSeed Recorded rack seed, or null for the fixed reference rack.
 	 * @param int $rackIndex Nonnegative derived rack number.
 	 */
 	public function rack(?string $rackSeed = null, int $rackIndex = 0): void
@@ -95,6 +93,7 @@ final class Simulation
 			? [1,9,2,10,8,3,11,4,12,5,13,6,14,7,15]
 			: self::seededRack($rackSeed, $this->rackIndex);
 		$index = 0;
+		$layout = [];
 
 		for($row = 0; $row < 5; $row++)
 		for($column = 0; $column <= $row; $column++)
@@ -104,29 +103,10 @@ final class Simulation
 			$idealY = ($column - $row / 2) * $spacing;
 			$noiseX = self::rackNoise($number, 0, $rackSeed, $this->rackIndex, $index - 1);
 			$noiseY = self::rackNoise($number, 1, $rackSeed, $this->rackIndex, $index - 1);
-			$scale = 1.0;
-
-			do
-			{
-				$x = $idealX + $noiseX * $scale;
-				$y = $idealY + $noiseY * $scale;
-				$separated = true;
-
-				foreach($this->balls as $placed) if($placed->number !== 0
-					&& hypot($x - $placed->x, $y - $placed->y) < Ball::RADIUS * 2 + .000005)
-				{
-					$separated = false;
-					break;
-				}
-
-				$scale *= .5;
-			}
-			while(!$separated && $scale >= .03125);
-
-			if(!$separated) [$x,$y] = [$idealX,$idealY];
-
-			$this->balls[] = new Ball($number, $x, $y);
+			$layout[] = [$idealX,$idealY,$noiseX,$noiseY];
 		}
+		foreach(self::rackPositions($layout) as $index => [$x,$y])
+		$this->balls[] = new Ball($numbers[$index], $x, $y);
 
 		foreach($this->balls as $ball) self::orientBall($ball, $rackSeed, $this->rackIndex);
 
@@ -136,6 +116,24 @@ final class Simulation
 		$this->shots = 0;
 		$this->shotSnapshot = null;
 		$this->events[] = ['type' => 'rack'];
+	}
+
+	/** @param list<array{float,float,float,float}> $layout @return list<array{float,float}> */
+	private static function rackPositions(array $layout): array
+	{
+		$scale = 1.0;
+		do
+		{
+			$positions = [];
+			foreach($layout as [$x,$y,$dx,$dy]) $positions[] = [$x + $dx * $scale,$y + $dy * $scale];
+			$separated = true;
+			foreach($positions as $i => [$x,$y])
+			foreach(array_slice($positions, $i + 1) as [$otherX,$otherY])
+			if(hypot($x - $otherX, $y - $otherY) < 2 * Ball::RADIUS + .000005) {$separated = false; break 2;}
+			$scale = $scale < 1e-6 ? 0.0 : $scale / 2;
+		}
+		while(!$separated);
+		return $positions;
 	}
 
 	/** Fixed sub-pixel variation prevents a perfectly symmetric break without changing replay. */
@@ -424,8 +422,13 @@ final class Simulation
 			// Sweep during free flight; resolve compression at material time scales. After many boundary events
 			// use the same bounded microsteps, rather than advancing the unresolved remainder through collisions.
 			if(!$this->cueOnly && ($contactPending || $events >= 32
-				|| ContactModel::elasticEnergy($this->contactBalls()) > ContactModel::SLEEP_ENERGY))
+				|| ContactModel::elasticEnergy($this->contactBalls()) > 0))
 			{
+				if(ContactKernel::available())
+				{
+					$left = $this->advanceContactBatch($remaining, max(2, (int)ceil($remaining / ContactModel::MAX_STEP)));
+					if($left < $remaining) { $remaining = $left; $contactPending = false; continue; }
+				}
 				$duration = min($remaining, ContactModel::MAX_STEP);
 				$boundary = $this->earliest($duration, false);
 				if($boundary && $boundary['time'] <= 1e-12)
@@ -623,197 +626,11 @@ final class Simulation
 			+ ($a->drop - $b->drop) ** 2 > (2 * Ball::RADIUS) ** 2) unset($this->impactContacts[$key]);
 	}
 
-	/** Gravity, the rim of the slate cut, and the conical liner decide whether a ball rattles out or sinks. */
+	/** Apply pocket constraints after an accepted free-flight interval or contact microstep. */
 	private function advancePocket(Ball $ball, float $seconds, bool $gravity = true): void
 	{
-		$index = $ball->pocket;
-		[$pocketX,$pocketY] = Table::pockets()[$index];
-		if($gravity)
-		{
-			$ball->drop += $ball->vDrop * $seconds + .5 * self::GRAVITY * $seconds ** 2;
-			$ball->vDrop += self::GRAVITY * $seconds;
-		}
-		$relativeX = $ball->x - $pocketX;
-		$relativeY = $ball->y - $pocketY;
-		$radial = hypot($relativeX, $relativeY);
-		[$radialX,$radialY] = $radial < 1e-9 ? [1.0,0.0] : [$relativeX / $radial,$relativeY / $radial];
-		$normal = null;
-		$onRim = $ball->drop < Ball::RADIUS;
-		[$outwardX,$outwardY] = Table::pocketOutward($index);
-
-		if($onRim && $relativeX * $outwardX + $relativeY * $outwardY > 0 && $radial > Table::LINER_RADIUS)
-		{
-			// Behind the pocket centre the cut is closed by the rail and the back of the liner: a wall that returns
-			// the ball rather than a rim it could tip over or a cloth it could roll back onto. The leather hangs at the
-			// lip, inside the cut, so a ball pressed against it is already past the rim edge and tips in rather than
-			// balancing on top of it.
-			$radial = Table::LINER_RADIUS;
-			$normal = [$radialX,$radialY,0.0];
-			$onRim = false;
-		}
-		elseif($onRim)
-		{
-			// Rolling over the rim of the cut: the centre keeps one radius from the rim edge, so pushing back along
-			// the line to that edge lets the ball tip inward and down rather than fall straight through the cloth.
-			$inward = Table::THROAT_RADIUS - $radial;
-			$above = Ball::RADIUS - $ball->drop;
-			$distance = hypot(max(0, $inward), $above);
-
-			if($inward <= 0 && $ball->drop > 0)
-			{
-				$ball->drop = 0;
-				$normal = [0.0,0.0,1.0];
-			}
-			elseif($inward > 0 && $distance < Ball::RADIUS)
-			{
-				$radial = Table::THROAT_RADIUS - $inward * Ball::RADIUS / $distance;
-				$ball->drop = Ball::RADIUS - $above * Ball::RADIUS / $distance;
-				$normal = [$radialX * $inward / $distance,$radialY * $inward / $distance,$above / $distance];
-			}
-		}
-		else
-		{
-			// Below the rim the liner cone narrows at the draft angle from where the rim left off.
-			$allowed = max(.001, Table::THROAT_RADIUS - Ball::RADIUS - self::POCKET_DRAFT * ($ball->drop - Ball::RADIUS));
-
-			if($radial > $allowed)
-			{
-				$radial = $allowed;
-				$normalLength = hypot(1, self::POCKET_DRAFT);
-				$normal = [$radialX / $normalLength,$radialY / $normalLength,self::POCKET_DRAFT / $normalLength];
-			}
-		}
-
-		if($normal !== null)
-		{
-			[$nx,$ny,$nz] = $normal;
-			$ball->x = $pocketX + $radialX * $radial;
-			$ball->y = $pocketY + $radialY * $radial;
-			$normalSpeed = $ball->vx * $nx + $ball->vy * $ny + $ball->vDrop * $nz;
-
-			if($normalSpeed > 0)
-			{
-				// The rim supports slow roll; the compliant lining still returns soft pocket knocks.
-				$restitution = $onRim && $normalSpeed < .3 ? 0.0 : self::POCKET_RESTITUTION;
-				$impulse = (1 + $restitution) * $normalSpeed;
-				$ball->vx -= $impulse * $nx;
-				$ball->vy -= $impulse * $ny;
-				$ball->vDrop -= $impulse * $nz;
-				// A supported ball can touch on every microstep. Apply the strike losses only to a rebound,
-				// not repeatedly to resting contact as gravity or another ball presses it into the lining.
-				if($normalSpeed >= .3)
-				{
-					$ball->vx *= .985;
-					$ball->vy *= .985;
-					$ball->spinY *= .92;
-				}
-				// Depth, in ball radii below resting on the cloth, lets the sound tell a ball rolling around the edge
-				// from one dropping out of sight down the liner.
-				if($restitution > 0) $this->events[] = ['type' => 'pocket-rattle','ball' => $ball->number,'pocket' => $index
-					,'strength' => min(1, $normalSpeed / self::MAX_SPEED),'depth' => $ball->drop / Ball::RADIUS];
-			}
-		}
-
-		// A ball that rises onto the shelf meets the two tangent facings as solid lateral walls before it goes back to
-		// the cloth.
-		if($onRim && $ball->drop <= 1e-8 && hypot($ball->x - $pocketX, $ball->y - $pocketY) >= Table::THROAT_RADIUS)
-		$this->clearPocketFacingOverlap($ball, $index);
-		[$mouthX,$mouthY] = Table::pocketMouthCenter($index);
-		$crossedMouth = ($ball->x - $mouthX) * $outwardX + ($ball->y - $mouthY) * $outwardY <= 0;
-		$leaving = $ball->vx * $outwardX + $ball->vy * $outwardY < -1e-6;
-		// Once its centre is past the cut on the table side, the ball rests on the shelf cloth whatever its speed. Only
-		// cloth friction turns its leftover spin into roll or stops it; kept here, a resting ball would never end the shot.
-		$relativeX = $ball->x - $pocketX;
-		$relativeY = $ball->y - $pocketY;
-		$onShelf = $onRim && $ball->drop <= 1e-8 && hypot($relativeX, $relativeY) > Table::THROAT_RADIUS
-			&& $relativeX * $outwardX + $relativeY * $outwardY <= 0;
-		if(!$onShelf && (!$crossedMouth || !$leaving) && $ball->drop < 0)
-		{
-			$ball->drop = 0;
-			$ball->vDrop = max(0, $ball->vDrop);
-		}
-		elseif($onShelf || ($crossedMouth && $leaving && $ball->drop < 0))
-		{
-			// The facing correction can push the centre back over the cut; it stays in the pocket until it clears both.
-			if(!$this->clearPocketFacingOverlap($ball, $index)
-				|| hypot($ball->x - $pocketX, $ball->y - $pocketY) <= Table::THROAT_RADIUS)
-			{
-				$ball->drop = 0;
-				$ball->vDrop = max(0, $ball->vDrop);
-				return;
-			}
-			$ball->drop = $ball->previousDrop = 0;
-			$ball->vDrop = 0;
-			$ball->pocket = null;
-			$this->events[] = ['type' => 'pocket-reject','ball' => $ball->number,'pocket' => $index];
-
-			return;
-		}
-
-		if($ball->drop >= self::POCKET_SINK_DEPTH)
-		{
-			$ball->drop = $ball->previousDrop = self::POCKET_SINK_DEPTH;
-			$ball->active = false;
-			$ball->vx = $ball->vy = $ball->vDrop = $ball->spinX = $ball->spinY = $ball->spinZ = 0;
-			$this->events[] = ['type' => 'pocket','ball' => $ball->number,'pocket' => $index];
-
-			if($ball->number === 0) $this->scratched = true;
-		}
-	}
-
-	/**
-	 * Keep a rattling ball on the open side of both tangent pocket facings before returning it to cloth physics.
-	 *
-	 * Pocket integration owns the ball while it is above the cut, so the ordinary facing sweep cannot protect it.
-	 * Projecting a penetration to the ball-centre offset and reflecting the inward velocity supplies that missing
-	 * contact. The ball may leave pocket physics only once it clears both solid facings by one radius.
-	 */
-	private function clearPocketFacingOverlap(Ball $ball, int $index): bool
-	{
-		[$pocketX,$pocketY] = Table::pockets()[$index];
-		$faces = array_slice(Table::facings(), $index * 2, 2);
-
-		for($iteration = 0; $iteration < 3; $iteration++)
-		{
-			$corrected = false;
-			foreach($faces as [$startX,$startY,$endX,$endY])
-			{
-				$segmentX = $endX - $startX;
-				$segmentY = $endY - $startY;
-				$length = hypot($segmentX, $segmentY);
-				$nx = -$segmentY / $length;
-				$ny = $segmentX / $length;
-				if(($pocketX - $startX) * $nx + ($pocketY - $startY) * $ny < 0)
-				[$nx,$ny] = [-$nx,-$ny];
-				$distance = ($ball->x - $startX) * $nx + ($ball->y - $startY) * $ny;
-				if($distance >= Ball::RADIUS) continue;
-
-				$correction = Ball::RADIUS - $distance + 1e-7;
-				$ball->x += $nx * $correction;
-				$ball->y += $ny * $correction;
-				$normalSpeed = $ball->vx * $nx + $ball->vy * $ny;
-				if($normalSpeed < 0)
-				{
-					$impulse = (1 + self::POCKET_RESTITUTION) * $normalSpeed;
-					$ball->vx -= $impulse * $nx;
-					$ball->vy -= $impulse * $ny;
-				}
-				$corrected = true;
-			}
-			if(!$corrected) return true;
-		}
-
-		foreach($faces as [$startX,$startY,$endX,$endY])
-		{
-			$segmentX = $endX - $startX;
-			$segmentY = $endY - $startY;
-			$length = hypot($segmentX, $segmentY);
-			$nx = -$segmentY / $length;
-			$ny = $segmentX / $length;
-			if(($pocketX - $startX) * $nx + ($pocketY - $startY) * $ny < 0) [$nx,$ny] = [-$nx,-$ny];
-			if(($ball->x - $startX) * $nx + ($ball->y - $startY) * $ny < Ball::RADIUS - 1e-8) return false;
-		}
-		return true;
+		array_push($this->events, ...PocketModel::advance($ball, $seconds, $gravity));
+		if(!$ball->active && $ball->number === 0) $this->scratched = true;
 	}
 
 	/** @return array<string,mixed>|null */
@@ -897,6 +714,9 @@ final class Simulation
 				$best = ['type' => 'sink','time' => $time,'ball' => $a];
 				continue; // Pocket liners own boundaries below the cloth.
 			}
+			// Every cushion, jaw, facing and slate cut lies outside the inner rail rectangle. During a rack
+			// compression almost all centres are far inside it; none can reach a boundary in this interval.
+			if(abs($a->x) + $reach < $halfX && abs($a->y) + $reach < $halfY) continue;
 
 			// Pocket entry is a swept event, just like a rail or ball impact. Checking
 			// only after a substep lets a fast ball cross the narrow clearance circle
@@ -1066,7 +886,7 @@ final class Simulation
 	 * @return array{list<array{float,float,float,float,float}>,list<list<float>>} Pockets as centre, clearance, and
 	 * outward normal; facings as start, length, tangent, normal, and bounding box.
 	 */
-	private static function sweptGeometry(): array
+	public static function sweptGeometry(): array
 	{
 		static $geometry = null;
 		if($geometry !== null) return $geometry;
@@ -1112,8 +932,17 @@ final class Simulation
 		return array_values(array_filter($this->orderedBalls(), static fn(Ball $ball): bool => $ball->active));
 	}
 
+	private function advanceContactBatch(float $seconds, int $maxSteps): float
+	{
+		[$remaining,$this->impactContacts,$events] = ContactKernel::advance($this->contactBalls(), $seconds, $this->impactContacts, $maxSteps);
+		array_push($this->events, ...$events);
+		foreach($events as $event) if($event['type'] === 'pocket' && $event['ball'] === 0) $this->scratched = true;
+		return $remaining;
+	}
+
 	private function advanceContacts(float $seconds): void
 	{
+		if(ContactKernel::available()) { $this->advanceContactBatch($seconds, 1); return; }
 		$balls = $this->contactBalls();
 		$this->recordImpacts($balls);
 		ContactModel::advance($balls, $seconds);
@@ -1143,7 +972,7 @@ final class Simulation
 			$strength = max($strength, $approach / self::MAX_SPEED);
 		}
 		$this->impactContacts = $touching;
-		if($strength > 0) $this->events[] = ['type' => 'impact','strength' => min(1, $strength)];
+		if($strength > 0) $this->events[] = ['type' => 'impact','strength' => (float)min(1, $strength)];
 	}
 
 	/** Remove only the negligible stored compression left after all motion has gone to sleep. */

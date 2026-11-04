@@ -83,7 +83,11 @@ final class Ball
 		$this->advanceRotation($seconds);
 	}
 
-	/** Integrate orientation without advancing a centre already handled by the contact integrator. */
+	/**
+	 * Integrate orientation without advancing a centre already handled by the contact integrator.
+	 *
+	 * @param float $seconds Accepted integration interval in seconds.
+	 */
 	public function advanceRotation(float $seconds): void
 	{
 		if($seconds <= 0 || ($this->spinX == 0.0 && $this->spinY == 0.0 && $this->spinZ == 0.0)) return;
@@ -93,7 +97,7 @@ final class Ball
 		$this->qy += $half * (-$this->spinX * $z + $this->spinY * $w + $this->spinZ * $x);
 		$this->qz += $half * ($this->spinX * $y - $this->spinY * $x + $this->spinZ * $w);
 		$this->qw += $half * (-$this->spinX * $x - $this->spinY * $y - $this->spinZ * $z);
-		$length = sqrt($this->qx ** 2 + $this->qy ** 2 + $this->qz ** 2 + $this->qw ** 2);
+		$length = sqrt($this->qx * $this->qx + $this->qy * $this->qy + $this->qz * $this->qz + $this->qw * $this->qw);
 
 		if($length > 0)
 		{

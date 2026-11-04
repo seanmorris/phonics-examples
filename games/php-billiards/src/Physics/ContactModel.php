@@ -3,8 +3,10 @@ declare(strict_types=1);
 namespace PhpBilliards\Physics;
 
 /**
- * Stateless Hertz contacts for phenolic spheres. Positions, velocities and spin fully determine the force;
- * there is no contact history to lose when restoring a checkpoint midway through compression.
+ * Stateless Hertz contacts for phenolic spheres.
+ *
+ * Positions, velocities and spin fully determine the force; there is no contact history to lose
+ * when restoring a checkpoint midway through compression.
  *
  * The normal law is hertz/material with coeff_restitution damping; tangential damping is linear_nohistory
  * with multiplier one, limited by Coulomb friction. See https://docs.lammps.org/pair_granular.html.
@@ -20,7 +22,7 @@ final class ContactModel
 	public const GRAVITY = 9.80665;
 
 	/** @return array{float,float} Hertz coefficient and restitution damping coefficient. */
-	private static function coefficients(): array
+	public static function coefficients(): array
 	{
 		static $coefficients = null;
 		if($coefficients !== null) return $coefficients;
@@ -31,7 +33,11 @@ final class ContactModel
 		return $coefficients = [$hertz,-2 * sqrt(5 / 6) * $beta * sqrt(1.5 * $hertz * Ball::MASS / 2)];
 	}
 
-	/** @return array{float,float} Repulsive normal force (N), and tangential damping (kg/s). */
+	/**
+	 * @param float $compression Positive centre overlap in metres.
+	 * @param float $approach Relative normal approach speed in metres per second.
+	 * @return array{float,float} Repulsive normal force (N), and tangential damping (kg/s).
+	 */
 	public static function response(float $compression, float $approach): array
 	{
 		if($compression <= 0) return [0.0,0.0];
@@ -41,6 +47,9 @@ final class ContactModel
 		return [max(0.0, $hertz * $compression * $root + $damping * $approach),$damping];
 	}
 
+	/**
+	 * @param list<Ball> $balls Balls whose active pairs contribute stored contact energy in joules.
+	 */
 	public static function elasticEnergy(array $balls): float
 	{
 		[$hertz] = self::coefficients();
@@ -53,7 +62,7 @@ final class ContactModel
 			$dx = $b->x - $a->x; $dy = $b->y - $a->y; $dz = $b->drop - $a->drop;
 			if(abs($dx) >= 2 * Ball::RADIUS || abs($dy) >= 2 * Ball::RADIUS || abs($dz) >= 2 * Ball::RADIUS) continue;
 			$compression = 2 * Ball::RADIUS - sqrt($dx * $dx + $dy * $dy + $dz * $dz);
-			if($compression > 0) $energy += .4 * $hertz * $compression ** 2.5;
+			if($compression > 0) $energy += .4 * $hertz * $compression * $compression * sqrt($compression);
 		}
 		return $energy;
 	}
@@ -61,7 +70,8 @@ final class ContactModel
 	/**
 	 * Integrate one contact microstep. The caller supplies active balls in number order and handles boundaries
 	 * after this accepted step, never during an RK stage. On-cloth centres have no vertical degree of freedom.
-	 * @param list<Ball> $balls
+	 * @param list<Ball> $balls Active balls in ascending number order.
+	 * @param float $seconds Accepted contact microstep duration.
 	 */
 	public static function advance(array $balls, float $seconds): void
 	{
@@ -108,7 +118,7 @@ final class ContactModel
 		$result[] = [$s[3],$free[$i] ? $s[4] : 0.0,$s[5],0.0,$free[$i] ? -self::GRAVITY : 0.0,0.0,0.0,0.0,0.0];
 		$count = count($state);
 		$diameter = Ball::RADIUS * 2;
-		$inertia = .4 * Ball::MASS * Ball::RADIUS ** 2;
+		$inertia = .4 * Ball::MASS * (Ball::RADIUS * Ball::RADIUS);
 		for($i = 0; $i < $count; $i++)
 		for($j = $i + 1; $j < $count; $j++)
 		{

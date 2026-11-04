@@ -32,6 +32,9 @@ PHP Billiards runs inside the same `php-sdl-wasm` WebAssembly artifact on x86, A
 
 The fixed 60 Hz PHP simulation, quantized integer inputs, canonical big-endian checkpoint encoding, and exact SHA-256 state hashes avoid host byte order and JSON-number differences. The same verified WebAssembly and PHAR bytes therefore produce the same transcript on supported host CPUs. This guarantee is for the browser’s verified php-sdl-wasm path; changing the runtime, PHAR, rules, or floating-point implementation creates a different game identity. If a conforming browser still produces a different state, the two acknowledgements expose the divergence immediately and freeze the table with an exportable transcript.
 
+
+The synchronous contact accelerator uses only binary64 addition, subtraction, multiplication, division, and square roots. PHP/WASM calculates material coefficients and table geometry once; packed doubles cross the bridge without JSON conversion. The accelerator yields before possible cloth-boundary events so PHP selects and resolves them. Fractional powers and other host-dependent transcendental functions are excluded from the accelerated arithmetic. Contact fixtures and full-shot state/event transcripts compare the PHP reference and accelerated path, including Chromium and Firefox. The backend is part of the fingerprinted PHAR, so this physics revision cannot join a table running an older solver.
+
 ## Casual eight-ball rules
 
 The first group ball pocketed without a scratch assigns solids or stripes, including on the break; if both groups fall, the first deterministic pocket event assigns the group. Pocketing one of your group keeps the turn. Otherwise the turn changes. A scratch leaves an open table unassigned, changes the turn, and grants table-wide ball in hand. An early or scratched 8-ball loses; a legal 8-ball after clearing your group wins. There are no called pockets, first-contact fouls, rail-after-contact fouls, or shot clock.

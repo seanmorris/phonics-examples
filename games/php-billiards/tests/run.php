@@ -72,7 +72,7 @@ $test('standard rack is complete and separated', static function() use ($expect)
 
 $test('ECS keeps stable ball entities around the unchanged simulation', static function() use ($expect): void {
 	$registry = new Registry;
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$ecs = new BilliardsEntities($registry, $game);
 	$before = $game->simulation->exactHash();
 	$entities = $registry->query(BallIdentity::class);
@@ -1001,12 +1001,12 @@ $test('PHP camera projects the target, reverses orbit below it, and clears the c
 });
 
 $test('title menu selects free or online play before native controls drive the HUD', static function() use ($expect): void {
-	$linked = new Game;
+	$linked = new Game(static fn(): string => str_repeat('42', 32));
 	$linked->input(['actions' => ['online-play']], [], [], Hud::titleRegions(1280, 720), [0,0], 0, 1280, 720);
 	$expect($linked->titleSelection === 1 && $linked->onlineRequested && $linked->statusText() === 'Online Play',
 		'A linked challenge did not select the Online Play title state');
 
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$title = Hud::titleRegions(1280, 720);
 	$expect(!$game->started && count($title) === 2 && isset($title['free-play'], $title['online-play']));
 	$game->input([], [], [[
@@ -1080,7 +1080,7 @@ $test('seeded online racks preserve regulation constraints and replay exactly', 
 });
 
 $test('online input waits for room confirmation and reserves one durable action', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$seed = str_repeat('4d', 32);
 	$player = '@alice:example.org';
 	$peer = '@bob:example.org';
@@ -1156,7 +1156,7 @@ $test('online scoreboard restores turn groups and pocketed balls from confirmed 
 	$match->actor = $bob;
 	$checkpoint = $match->checkpoint($simulation);
 
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$game->input(['network' => [[
 		'type' => 'start'
 		, 'detail' => [
@@ -1177,12 +1177,12 @@ $test('online scoreboard restores turn groups and pocketed balls from confirmed 
 	$expect($game->status(1)['network']['scoreboard'] === $score,
 		'Browser-facing status did not expose the native OSD scoreboard');
 
-	$free = new Game;
+	$free = new Game(static fn(): string => str_repeat('42', 32));
 	$expect($free->onlineScoreboard() === null, 'Free Play unexpectedly produced an online scoreboard');
 });
 
 $test('idle game frames preserve the exact render state', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$game->input(['actions' => ['start']], [], [], [], [0,0], 0, 1280, 720);
 	$before = json_encode($game->status(1), JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
 	for($tick = 0; $tick < 120; $tick++) $game->step(Simulation::STEP);
@@ -1191,7 +1191,7 @@ $test('idle game frames preserve the exact render state', static function() use 
 });
 
 $test('online settlement stays fixed while room confirmation is in flight', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$seed = str_repeat('6a', 32);
 	$player = '@alice:example.org';
 	$peer = '@bob:example.org';
@@ -1334,7 +1334,7 @@ $test('a scratched break leaves the table open', static function() use ($expect)
 });
 
 $test('cue stroke reaches the ball before launching the unchanged deterministic shot', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$game->input(['actions' => ['start']], [], [], [], [0,0], 0, 1280, 720);
 	$game->aim = .17;
 	$game->power = .74;
@@ -1356,7 +1356,7 @@ $test('cue stroke reaches the ball before launching the unchanged deterministic 
 		'Cue tip did not coincide with the ball at launch');
 	$expect($game->simulation->shots === 1 && $game->simulation->phase === 'moving');
 
-	$expected = new Simulation;
+	$expected = new Simulation(str_repeat('42', 32));
 	$expected->shoot(.17, .74, -.28, .36);
 	$expect($game->simulation->hash() === $expected->hash(), 'Animation changed deterministic shot physics');
 
@@ -1382,7 +1382,7 @@ $test('placement preview and immediate-contact warning use simulation rules', st
 });
 
 $test('an illegal online placement never reaches the room', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$player = '@alice:example.org';
 	$frame = static fn(Game $game, array $browser, array $controls = []) => $game->input($browser, $controls, [], [], [0,0], .1, 1280, 720);
 	$frame($game, ['network' => [['type' => 'start','detail' => [
@@ -1415,7 +1415,7 @@ $test('an illegal online placement never reaches the room', static function() us
 });
 
 $test('the pause menu captures gameplay input until it closes', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, 1280, 720);
 	$game->camera->animate(2);
 	$aim = $game->aim;
@@ -1431,7 +1431,7 @@ $test('the pause menu captures gameplay input until it closes', static function(
 	$game->input([], ['button9' => 1], [], [], [0,0], .1, 1280, 720);
 	$expect($game->overlay === null, 'Escape did not close the pause menu');
 
-	$title = new Game;
+	$title = new Game(static fn(): string => str_repeat('42', 32));
 	$title->input([], ['button9' => 1], [], [], [0,0], .1, 1280, 720);
 	$expect($title->overlay === null && !$title->started, 'Escape on the title opened a hidden pause state');
 });
@@ -1476,14 +1476,14 @@ $test('the aiming preview reports the same first object ball the live shot hits'
 });
 
 $test('the free-play sink board lists exactly the numbered balls off the table', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$expect($game->pocketedBalls() === [], 'A fresh rack reported pocketed balls');
 	foreach($game->simulation->balls as $ball) if(in_array($ball->number, [0,3,8,12], true)) $ball->active = false;
 	$expect($game->pocketedBalls() === [3,8,12], 'The sink board must list pocketed object balls in order and never the cue ball');
 });
 
 $test('newly sunk balls flash on the sink board for two seconds in half-second steps', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, 1280, 720);
 	foreach($game->simulation->balls as $ball) if($ball->number === 2) $ball->active = false;
 	$hud = (new ReflectionClass(Hud::class))->newInstanceWithoutConstructor();
@@ -1502,7 +1502,7 @@ $test('newly sunk balls flash on the sink board for two seconds in half-second s
 $test('HUD regions stay on screen and never overlap at common canvas sizes', static function() use ($expect): void {
 	foreach([[1280,720,1],[2560,1440,2],[900,540,1],[780,1688,2],[1688,780,2],[3840,2160,1.5]] as [$width,$height,$dpr])
 	{
-		$game = new Game;
+		$game = new Game(static fn(): string => str_repeat('42', 32));
 		$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, $width, $height);
 		$regions = array_values(array_filter(Hud::regions($width, $height, $dpr, $game)
 			, static fn(array $region): bool => ($region['type'] ?? '') !== 'panel'));
@@ -1546,7 +1546,7 @@ $test('the help hint stays beside the menu button in every gameplay state', stat
 
 	foreach([[1280,720,1,'Controls'],[780,1688,2,''],[3840,2160,1.5,'Controls']] as [$width,$height,$dpr,$label])
 	{
-		$game = new Game;
+		$game = new Game(static fn(): string => str_repeat('42', 32));
 		$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, $width, $height);
 		$help = $besideMenu(Hud::regions($width, $height, $dpr, $game), $width, $height);
 		$expect($help !== null && $help['name'] === 'controls' && $help['legend'] === '?' && $help['label'] === $label
@@ -1565,7 +1565,7 @@ $test('the help hint stays beside the menu button in every gameplay state', stat
 	}
 
 	// Clicking it opens the controls sheet directly.
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, 1280, 720);
 	$regions = Hud::regionsFor($game, 1280, 720, 1);
 	[$x,$y,$w,$h] = $regions['help']['rect'];
@@ -1581,7 +1581,7 @@ $test('the help hint stays beside the menu button in every gameplay state', stat
 
 	foreach([[1280,720,1],[780,1688,2]] as [$width,$height,$dpr])
 	{
-		$online = new Game;
+		$online = new Game(static fn(): string => str_repeat('42', 32));
 		$online->input(['network' => [[
 			'type' => 'start'
 			, 'detail' => [
@@ -1603,7 +1603,7 @@ $test('an opponent\'s cue considers the shot after four idle seconds and never s
 		$browser, [], [], [], [0,0], $elapsed, 1280, 720
 	);
 	$waiting = static function(string $next) use ($alice, $bob, $frame): array {
-		$game = new Game;
+		$game = new Game(static fn(): string => str_repeat('42', 32));
 		$frame($game, ['network' => [[
 			'type' => 'start'
 			, 'detail' => ['players' => [$alice,$bob],'seed' => str_repeat('4d', 32),'breaker' => $next
@@ -1660,7 +1660,7 @@ $test('an opponent\'s cue considers the shot after four idle seconds and never s
 });
 
 $test('a dawdling player\'s cue dances about its aim until any input', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$frame = static fn(Game $game, array $browser, float $elapsed = 0) => $game->input(
 		$browser, [], [], [], [0,0], $elapsed, 1280, 720
 	);
@@ -1735,7 +1735,7 @@ $test('an aim preview stepped a slice at a time ends exactly where the whole pre
 });
 
 $test('sweeping the aim costs a bounded slice per frame and settles on the exact guide', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$frame = static fn(Game $game, array $controls = []) => $game->input([], $controls, [], [], [0,0], 1 / 60, 1280, 720);
 	$frame($game);
 	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 1 / 60, 1280, 720);
@@ -1759,7 +1759,7 @@ $test('sweeping the aim costs a bounded slice per frame and settles on the exact
 });
 
 $test('clearing spin wins over spin still held in the same frame', static function() use ($expect): void {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$frame = static fn(Game $game, array $controls = []) => $game->input([], $controls, [], [], [0,0], 1 / 60, 1280, 720);
 	$frame($game);
 	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 1 / 60, 1280, 720);
@@ -1774,6 +1774,7 @@ $test('clearing spin wins over spin still held in the same frame', static functi
 require __DIR__ . '/camera.php';
 require __DIR__ . '/contacts.php';
 require __DIR__ . '/pocket-contacts.php';
+require __DIR__ . '/rack-seeds.php';
 
 $failures = 0;
 

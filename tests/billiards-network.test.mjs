@@ -47,6 +47,10 @@ test('terminal room action rejection is acknowledged once instead of retried eve
 	try
 	{
 		activate({module,canvas,session});
+		const firstSeed=module.billiardsRackSeed(),secondSeed=module.billiardsRackSeed();
+		assert.match(firstSeed,/^[0-9a-f]{64}$/);
+		assert.match(secondSeed,/^[0-9a-f]{64}$/);
+		assert.notEqual(firstSeed,secondSeed);
 		const state = JSON.stringify({events: [],onlineRequested: false,network: {outbox: [{
 			id: 'action-1'
 			, type: 'action-request'

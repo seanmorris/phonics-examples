@@ -224,6 +224,7 @@ export function activate({module, canvas, session})
 	canvas.addEventListener('contextmenu',contextMenu);
 
 	module.billiardsViewport=()=>viewport;
+	module.billiardsRackSeed=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),byte=>byte.toString(16).padStart(2,'0')).join('');
 	module.billiardsInput=()=>{
 		const result={values:debugValues,actions:debugActions,network,networkAcks};
 		debugValues={};debugActions=[];network=[];networkAcks=[];
@@ -345,6 +346,7 @@ export function activate({module, canvas, session})
 		for(const type of gestures)globalThis.removeEventListener?.(type,gesture,{capture:true});
 		canvas.removeEventListener('contextmenu',contextMenu);
 		delete module.billiardsSamples;
+		delete module.billiardsRackSeed;
 		await audio?.close().catch(()=>{});
 		if(document.fullscreenElement===canvas)await document.exitFullscreen().catch(()=>{});
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);

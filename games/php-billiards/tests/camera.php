@@ -12,7 +12,7 @@ $cameraFrame = static function(Game $game, array $browser = [], array $events = 
 	$game->input($browser, $controls, $events, [], $stick, 1 / 60, 1280, 720);
 };
 $cameraGame = static function() use ($cameraFrame): Game {
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$cameraFrame($game, ['actions' => ['start']]);
 	$game->camera->animate(2);
 	return $game;
@@ -328,7 +328,7 @@ $test('close framing joins the far view smoothly and survives zoom during the op
 	$camera->patch(['distance' => 2.0 - 1e-6]); $camera->follow($cue->x, $cue->y, .4, 10);
 	// The table framing is solved numerically, so continuity holds to well under a micron rather than exactly.
 	foreach($far[1] as $index => $value) $expect(abs($camera->viewPose()[1][$index] - $value) < 1e-6, 'Framing popped at two metres');
-	$game = new Game;
+	$game = new Game(static fn(): string => str_repeat('42', 32));
 	$cameraFrame($game, ['actions' => ['start']]);
 	$cameraFrame($game, [], [['type' => 'wheel','y' => 100]]);
 	$expect($game->camera->transitioning());
