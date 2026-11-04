@@ -1,0 +1,11 @@
+{
+    "phase": "ready",
+    "players": [],
+    "legalActions": [],
+    "revision": 0,
+    "screen": "menu",
+    "canContinue": true,
+    "generation": 0,
+    "error": "",
+    "pace": "normal"
+}

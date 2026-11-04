@@ -1,0 +1,18 @@
+PHP Poker ships the following third-party art and type. Everything else in this package is original work
+under the package LICENSE.
+
+Card faces: art/cards/deck.svg
+  "Public domain complete playing card deck" from Wikimedia Commons. Released into the public domain (CC0).
+  Rasterised in the browser at boot; the SVG is shipped unchanged.
+
+Card backs: art/cards/back-red.svg, art/cards/back-blue.svg
+  "Tiled red/blue broken line rhombus card back" from Wikimedia Commons. Public domain.
+
+Type: art/typography/barlow-semi-condensed.json (extracted outlines)
+  Barlow Semi Condensed by Jeremy Tribby, SIL Open Font License 1.1. See art/typography/OFL.txt.
+  The generated atlas assets/generated/ui-font.* derive from these outlines; the OFL ships beside them.
+
+Type: art/typography/fixedsys-excelsior.json (extracted outlines)
+  Fixedsys Excelsior 3.02 by Darien Valentine, with ligature work by Kirill Pertsev (github.com/kika/fixedsys).
+  Released to the public domain; CC0 where that is not permitted. See art/typography/fixedsys-excelsior-LICENSE.md.
+  Used for the Classic look only.

@@ -1,0 +1,68 @@
+{
+  "uiFont": {
+    "file": "ui-font.rgba",
+    "width": 1024,
+    "height": 768,
+    "sha256": "f4e5076a9fec3aed7a3c6b108866f32b2794ec5b1fa9f0b8e69ef260b2030618",
+    "metrics": "ui-font.json",
+    "metricsSha256": "a04da4ba02143fdf9160d58f6307f0856acd321f5bf0053b1798b7119b926905"
+  },
+  "cards": {
+    "sheet": {
+      "file": "art/cards/deck.svg",
+      "columns": 9,
+      "rows": 6,
+      "sha256": "a9616db42c1caa16e80f1727e966268e271d458c3d58dfeee6bd7362cbc60517"
+    },
+    "backs": {
+      "red": {
+        "file": "art/cards/back-red.svg",
+        "sha256": "1d7e02af253cced337b61234458fbd68c664d140ac3155af24921feaca397336"
+      },
+      "blue": {
+        "file": "art/cards/back-blue.svg",
+        "sha256": "fe43b23b83be5bf273104da993330253d3cbf1d60760d98a10cf7fb018a56225"
+      }
+    },
+    "suitRows": [
+      2,
+      3,
+      1,
+      0
+    ],
+    "aspect": [
+      5,
+      7
+    ],
+    "icons": {
+      "ada": {
+        "file": "art/icons/ada.svg",
+        "sha256": "167da27a4d2aa39a75b0f0ddb9b94c88e180c0f63663fe05b97125a35df85fdc"
+      },
+      "cleo": {
+        "file": "art/icons/cleo.svg",
+        "sha256": "3d9621e85db501b3fb9d4542eb89d94511214bcddba80119aae84a12882006f5"
+      },
+      "felix": {
+        "file": "art/icons/felix.svg",
+        "sha256": "77e81828bde7d70d34c56c4d3547087ebe3ea1bbca6b2d34eecd6756669af651"
+      },
+      "jules": {
+        "file": "art/icons/jules.svg",
+        "sha256": "d5605d595d0c53f064cb582cabe580c5996c8940dd098a3604c70c3b977508f0"
+      },
+      "mara": {
+        "file": "art/icons/mara.svg",
+        "sha256": "f9893bf96b8243d85c644c22ffbdf7f6eaf3f331ff258745ceaf0c5a6f11acb8"
+      },
+      "nora": {
+        "file": "art/icons/nora.svg",
+        "sha256": "fed61a38d7d5f2ea392373c97f697f2b1e0fc116028b4b3f759d09f57ab8cf68"
+      },
+      "otis": {
+        "file": "art/icons/otis.svg",
+        "sha256": "81222260824d59382214833de3c0c0ab9f6f055ecf10d4f2280948b85bb642b6"
+      }
+    }
+  }
+}

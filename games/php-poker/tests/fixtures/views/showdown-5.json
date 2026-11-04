@@ -1,0 +1,172 @@
+{
+    "phase": "showdown",
+    "turn": -1,
+    "dealer": 0,
+    "handNumber": 1,
+    "revision": 11,
+    "players": [
+        {
+            "id": 0,
+            "name": "You",
+            "stack": 496,
+            "debt": 0,
+            "folded": false,
+            "bet": 0,
+            "totalBet": 4,
+            "drawCount": 0,
+            "lastAction": "Checks",
+            "creditUsed": false,
+            "portrait": "you",
+            "isHuman": true,
+            "cards": [
+                42,
+                34,
+                49,
+                37,
+                25
+            ],
+            "handName": "High card",
+            "net": -4
+        },
+        {
+            "id": 1,
+            "name": "Ada",
+            "stack": 497,
+            "debt": 0,
+            "folded": false,
+            "bet": 0,
+            "totalBet": 3,
+            "drawCount": 4,
+            "lastAction": "Checks",
+            "creditUsed": false,
+            "portrait": "ada",
+            "isHuman": false,
+            "cards": [
+                0,
+                17,
+                21,
+                35,
+                38
+            ],
+            "handName": "High card",
+            "net": -3
+        },
+        {
+            "id": 2,
+            "name": "Jules",
+            "stack": 500,
+            "debt": 0,
+            "folded": true,
+            "bet": 0,
+            "totalBet": 0,
+            "drawCount": null,
+            "lastAction": "Folds",
+            "creditUsed": false,
+            "portrait": "jules",
+            "isHuman": false,
+            "cards": [
+                null,
+                null,
+                null,
+                null,
+                null
+            ],
+            "handName": null,
+            "net": 0
+        },
+        {
+            "id": 3,
+            "name": "Mara",
+            "stack": 507,
+            "debt": 0,
+            "folded": false,
+            "bet": 0,
+            "totalBet": 3,
+            "drawCount": 3,
+            "lastAction": "Checks",
+            "creditUsed": false,
+            "portrait": "mara",
+            "isHuman": false,
+            "cards": [
+                18,
+                8,
+                9,
+                22,
+                48
+            ],
+            "handName": "Three of a kind",
+            "net": 7
+        },
+        {
+            "id": 4,
+            "name": "Otis",
+            "stack": 500,
+            "debt": 0,
+            "folded": true,
+            "bet": 0,
+            "totalBet": 0,
+            "drawCount": null,
+            "lastAction": "Folds",
+            "creditUsed": false,
+            "portrait": "otis",
+            "isHuman": false,
+            "cards": [
+                null,
+                null,
+                null,
+                null,
+                null
+            ],
+            "handName": null,
+            "net": 0
+        }
+    ],
+    "pot": 0,
+    "highest": 0,
+    "raises": 0,
+    "opener": 1,
+    "awards": [
+        {
+            "seat": 3,
+            "amount": 10,
+            "handName": "Three of a kind"
+        }
+    ],
+    "reveal": true,
+    "message": "Mara wins 10 chips with three of a kind.",
+    "history": [
+        "Hand 1: You deals.",
+        "Ada: Bets 3.",
+        "Jules: Folds.",
+        "Mara: Calls 3.",
+        "Otis: Folds.",
+        "You: Calls 3.",
+        "Ada: Draws 4.",
+        "Mara: Draws 3.",
+        "You: Stands pat.",
+        "Ada: Checks.",
+        "Mara: Checks.",
+        "You: Checks.",
+        "Mara wins 10 chips with three of a kind."
+    ],
+    "mode": "offline",
+    "profile": {
+        "version": "bicycle-inspired-local-v1",
+        "variant": "anything",
+        "ante": 1,
+        "minimum": 2,
+        "maximum": 20,
+        "raiseLimit": 3
+    },
+    "legalActions": {
+        "next": true,
+        "loan": 0
+    },
+    "stockCount": 20,
+    "discardCount": 7,
+    "screen": "table",
+    "canContinue": true,
+    "generation": 1,
+    "error": "",
+    "pace": "fast"
+}

@@ -1,0 +1,88 @@
+{
+    "phase": "draw",
+    "turn": 0,
+    "dealer": 0,
+    "handNumber": 1,
+    "revision": 3,
+    "players": [
+        {
+            "id": 0,
+            "name": "You",
+            "stack": 496,
+            "debt": 0,
+            "folded": false,
+            "bet": 3,
+            "totalBet": 4,
+            "drawCount": null,
+            "lastAction": "Calls 3",
+            "creditUsed": false,
+            "portrait": "you",
+            "isHuman": true,
+            "cards": [
+                27,
+                4,
+                23,
+                24,
+                25
+            ],
+            "handName": "High card",
+            "net": -4
+        },
+        {
+            "id": 1,
+            "name": "Ada",
+            "stack": 497,
+            "debt": 0,
+            "folded": false,
+            "bet": 3,
+            "totalBet": 3,
+            "drawCount": 4,
+            "lastAction": "Draws 4",
+            "creditUsed": false,
+            "portrait": "ada",
+            "isHuman": false,
+            "cards": [
+                null,
+                null,
+                null,
+                null,
+                null
+            ],
+            "handName": null,
+            "net": -3
+        }
+    ],
+    "pot": 7,
+    "highest": 3,
+    "raises": 0,
+    "opener": 1,
+    "awards": [],
+    "reveal": false,
+    "message": "Choose up to five cards to replace, or stand pat.",
+    "history": [
+        "Hand 1: You deals.",
+        "Ada: Bets 3.",
+        "You: Calls 3.",
+        "Ada: Draws 4."
+    ],
+    "mode": "offline",
+    "profile": {
+        "version": "bicycle-inspired-local-v1",
+        "variant": "anything",
+        "ante": 1,
+        "minimum": 2,
+        "maximum": 20,
+        "raiseLimit": 3
+    },
+    "legalActions": {
+        "draw": true,
+        "maximumDiscards": 5
+    },
+    "stockCount": 38,
+    "discardCount": 4,
+    "screen": "table",
+    "canContinue": true,
+    "generation": 1,
+    "error": "",
+    "pace": "fast"
+}

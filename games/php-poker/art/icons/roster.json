@@ -1,0 +1,74 @@
+{
+  "license": "Apache-2.0",
+  "author": "Codex",
+  "source": "Original whole-pixel vector drawings, 32x32 grid.",
+  "palette": {
+    "i": "#182127",
+    "s": "#2c3344",
+    "g": "#586277",
+    "c": "#fff0cf",
+    "w": "#ffffff",
+    "y": "#ffc75e",
+    "o": "#bf843d",
+    "r": "#e24b4b",
+    "d": "#8a2d48",
+    "b": "#5fb7e8",
+    "n": "#3267a0",
+    "t": "#65cfb4",
+    "v": "#287c75",
+    "p": "#b095db",
+    "a": "#7f5144",
+    "h": "#ffe0a0"
+  },
+  "opponents": [
+    {
+      "key": "ada",
+      "name": "Ada",
+      "object": "Pocket watch",
+      "personality": "Patient and cautious; favors smaller raises.",
+      "file": "ada.svg"
+    },
+    {
+      "key": "jules",
+      "name": "Jules",
+      "object": "Rocket",
+      "personality": "Bold; applies more betting pressure.",
+      "file": "jules.svg"
+    },
+    {
+      "key": "mara",
+      "name": "Mara",
+      "object": "Compass",
+      "personality": "Balanced and steady.",
+      "file": "mara.svg"
+    },
+    {
+      "key": "otis",
+      "name": "Otis",
+      "object": "Umbrella",
+      "personality": "Defensive; favors smaller raises.",
+      "file": "otis.svg"
+    },
+    {
+      "key": "cleo",
+      "name": "Cleo",
+      "object": "Chili pepper",
+      "personality": "The most aggressive opponent.",
+      "file": "cleo.svg"
+    },
+    {
+      "key": "felix",
+      "name": "Felix",
+      "object": "Horseshoe",
+      "personality": "Measured, with a slightly cautious tendency.",
+      "file": "felix.svg"
+    },
+    {
+      "key": "nora",
+      "name": "Nora",
+      "object": "Key",
+      "personality": "Opportunistic; applies above-average pressure.",
+      "file": "nora.svg"
+    }
+  ]
+}
