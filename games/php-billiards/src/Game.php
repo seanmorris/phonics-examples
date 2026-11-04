@@ -22,6 +22,8 @@ final class Game
 	private const CONSIDER_DELAY = 4.0;
 	/** Seconds the local player may leave a shot untouched before their cue starts to dance in place. */
 	private const DAWDLE_DELAY = 8.0;
+	/** Preview substeps per display frame while the aim sweeps: half a second of travel, about 1 ms in native PHP. */
+	private const GUIDE_SLICE = 120;
 	/** Closest a practice stroke brings the tip to the cue ball, as a cue offset: 3 mm short of contact at -.008. */
 	private const PRACTICE_REACH = -.005;
 	/** Authoritative deterministic table simulation. */
@@ -70,6 +72,12 @@ final class Game
 	private array $held = [];
 	private ?string $guideKey = null;
 	private array $guide = ['path' => [],'contact' => null];
+	/** Aim preview still being stepped, a slice per display frame, while the aim sweeps. */
+	private ?Simulation $guidePreview = null;
+	/** Display frames seen by input(), the frame the guide's shot last changed, and the frame it last advanced. */
+	private int $frame = 0;
+	private int $guideChanged = PHP_INT_MIN;
+	private int $guideAdvanced = PHP_INT_MIN;
 	/** Active pointer gesture: aim, orbit, power, or spin. */
 	private ?string $drag = null;
 	/** @var array{float,float} Pointer position where the current gesture began. */
@@ -154,6 +162,7 @@ final class Game
 	{
 		$elapsed = max(0, min(.1, is_finite($elapsed) ? $elapsed : 0));
 		$this->clock += $elapsed;
+		$this->frame++;
 		$this->camera->setAspect($width, $height);
 		$this->networkInput($browser);
 		$actions = array_values(array_filter((array)($browser['actions'] ?? []), 'is_string'));
@@ -272,7 +281,8 @@ final class Game
 			else $this->aimHold = 0.0;
 
 			$this->power = max(.05, min(1, $this->power - $vertical * ($fine ? .15 : .6) * $elapsed));
-			$spinRate = ($fine ? .3 : .9) * $elapsed;
+			// A clear outranks spin still held in the same frame; the buttons' release can arrive a frame after the press.
+			$spinRate = in_array('clear-spin', $actions, true) ? 0.0 : ($fine ? .3 : .9) * $elapsed;
 			$this->top = max(-1, min(1, $this->top + (
 				(float)($controls['button7'] ?? 0) - (float)($controls['button6'] ?? 0)
 			) * $spinRate));
@@ -1576,6 +1586,12 @@ final class Game
 	/**
 	 * Return the cached guide path and its first object-ball contact for the ghost-ball preview.
 	 *
+	 * The guide is a full preview of the shot, so it costs most for a slow ball rolling a long way. A single change of
+	 * aim or power projects it at once. While the aim or power sweeps, changing on consecutive frames, each frame
+	 * steps the new preview by at most GUIDE_SLICE substeps and shows its path so far; once the sweep stops, the last
+	 * preview finishes over the following frames. Holding a key then costs a bounded slice per frame instead of a whole
+	 * preview, and the finished guide is exactly the one projectShot() gives.
+	 *
 	 * @return array{path:list<array{float,float}>,contact:array<string,mixed>|null}
 	 */
 	public function shotPreview(): array
@@ -1585,12 +1601,27 @@ final class Game
 			: null;
 		if($key !== $this->guideKey)
 		{
+			$sweeping = $this->guideChanged === $this->frame - 1;
 			$this->guideKey = $key;
-			$this->guide = $key === null ? ['path' => [],'contact' => null]
-				: $this->simulation->projectShot($this->aim, $this->power, $this->top, $this->side);
+			$this->guideChanged = $this->frame;
+			$this->guide = ['path' => [],'contact' => null];
+			$this->guidePreview = $key === null ? null
+				: $this->simulation->beginProjection($this->aim, $this->power, $this->top, $this->side);
+			$this->advanceGuide($sweeping ? self::GUIDE_SLICE : PHP_INT_MAX);
 		}
+		elseif($this->guidePreview !== null && $this->guideAdvanced !== $this->frame) $this->advanceGuide(self::GUIDE_SLICE);
 
 		return $this->guide;
+	}
+
+	/** Step the guide's preview, at most once per display frame, and publish its path so far. */
+	private function advanceGuide(int $substeps): void
+	{
+		$this->guideAdvanced = $this->frame;
+		if($this->guidePreview === null) return;
+		$done = $this->guidePreview->advanceProjection($substeps);
+		$this->guide = $this->guidePreview->projectionResult();
+		if($done) $this->guidePreview = null;
 	}
 
 	/**

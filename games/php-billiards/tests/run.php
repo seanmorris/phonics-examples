@@ -1736,6 +1736,65 @@ $test('a dawdling player\'s cue dances about its aim until any input', static fu
 		'Controls left the idle dance visible under its overlay');
 });
 
+$test('an aim preview stepped a slice at a time ends exactly where the whole preview does', static function() use ($expect): void {
+	$broken = new Simulation;
+	$broken->shoot(0, 1);
+	for($tick = 0; $tick < 900 && $broken->moving(); $tick++) $broken->step();
+	$mostSlices = 0;
+	foreach([new Simulation,$broken] as $game) if($game->phase === 'aim')
+	foreach([0.0,.3,2.4,M_PI] as $angle) foreach([.15,.58,1.0] as $power) foreach([[0,0],[.6,-.4]] as [$top,$side])
+	{
+		$whole = $game->projectShot($angle, $power, $top, $side);
+		$preview = $game->beginProjection($angle, $power, $top, $side);
+		$expect($preview !== null, 'An aimable table refused a preview');
+		$slices = 0;
+		while(!$preview->advanceProjection(37)) $slices++;
+		$expect($preview->projectionResult() === $whole, "Slicing changed the preview at angle $angle, power $power");
+		$mostSlices = max($mostSlices, $slices);
+	}
+	$expect($mostSlices > 10, 'No preview ran long enough to be sliced');
+	$moving = new Simulation;
+	$moving->shoot(0, .5);
+	$expect($moving->beginProjection(0, .5) === null, 'A moving table offered a preview');
+});
+
+$test('sweeping the aim costs a bounded slice per frame and settles on the exact guide', static function() use ($expect): void {
+	$game = new Game;
+	$frame = static fn(Game $game, array $controls = []) => $game->input([], $controls, [], [], [0,0], 1 / 60, 1280, 720);
+	$frame($game);
+	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 1 / 60, 1280, 720);
+	// A slow shot is the costliest preview: about a thousand substeps until the ball stops.
+	$game->power = .15;
+	$frame($game);
+	$single = $game->shotPreview();
+	$expect($single === $game->simulation->projectShot($game->aim, $game->power), 'A single aim change did not give the whole guide at once');
+	$partial = false;
+	for($step = 0; $step < 30; $step++)
+	{
+		$frame($game, ['right' => 1]);
+		$guide = $game->shotPreview();
+		$partial = $partial || $guide !== $game->simulation->projectShot($game->aim, $game->power);
+	}
+	$expect($partial, 'A sweep still projected whole slow previews every frame');
+	$frames = 0;
+	do {$frame($game); $frames++;} while($game->shotPreview() !== $game->simulation->projectShot($game->aim, $game->power) && $frames < 60);
+	$expect($frames < 20, "The guide took $frames frames to finish after the sweep");
+	$expect($game->shotPreview() === $game->simulation->projectShot($game->aim, $game->power), 'The settled guide differs from the whole preview');
+});
+
+$test('clearing spin wins over spin still held in the same frame', static function() use ($expect): void {
+	$game = new Game;
+	$frame = static fn(Game $game, array $controls = []) => $game->input([], $controls, [], [], [0,0], 1 / 60, 1280, 720);
+	$frame($game);
+	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 1 / 60, 1280, 720);
+	for($step = 0; $step < 20; $step++) $frame($game, ['button7' => 1,'button5' => 1]);
+	$expect($game->top > .1 && $game->side > .1, 'Holding the spin buttons added no spin');
+	// The clear arrives while the spin buttons still read as held; their release comes on the next frame.
+	$frame($game, ['button2' => 1,'button7' => 1,'button5' => 1]);
+	$frame($game);
+	$expect($game->top === 0.0 && $game->side === 0.0, 'Spin held in the clearing frame survived the clear');
+});
+
 require __DIR__ . '/camera.php';
 
 $failures = 0;

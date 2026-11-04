@@ -44,6 +44,16 @@ final class Simulation
 	/** @var list<array{float,float}>|null Exact cue contacts captured by a simulation-backed aim preview. */
 	private ?array $projectionPoints = null;
 	private bool $projectionStop = false;
+	/**
+	 * Whether this is an aim preview, which stops at the cue's first contact with another ball. Until then only the cue
+	 * moves, so the preview steps and searches the cue alone, with exactly the result stepping every ball would give.
+	 */
+	private bool $cueOnly = false;
+	/** Cue travel, step count and limits of an aim preview in progress. */
+	private float $projectionTravel = 0.0;
+	private int $projectionIterations = 0;
+	private float $projectionLength = 0.0;
+	private float $projectionStartOffset = 0.0;
 	/** @var list<Ball> Balls sorted by number for the swept search, rebuilt when `$balls` changes. */
 	private array $numberOrder = [];
 	/** @var list<Ball> The `$balls` list that `$numberOrder` was sorted from. */
@@ -271,43 +281,92 @@ final class Simulation
 		float $angle, float $power = .58, float $top = 0, float $side = 0
 		, float $length = .71, float $startOffset = .05
 	): array {
+		$preview = $this->beginProjection($angle, $power, $top, $side, $length, $startOffset);
+		if($preview === null) return [];
+
+		$preview->advanceProjection(PHP_INT_MAX);
+		$result = $preview->projectionResult();
+		$this->projectionContact = $result['contact'];
+
+		return $result['path'];
+	}
+
+	/**
+	 * Start an aim preview that can be advanced a few substeps at a time.
+	 *
+	 * @param float $angle Cue direction in cloth-plane radians.
+	 * @param float $power Normalized cue power.
+	 * @param float $top Normalized draw or follow offset.
+	 * @param float $side Normalized left or right English offset.
+	 * @param float $length Longest guide length in metres.
+	 * @param float $startOffset Guide length hidden under the cue ball, in metres.
+	 * @return self|null The preview table, or null when no shot can be previewed.
+	 */
+	public function beginProjection(
+		float $angle, float $power = .58, float $top = 0, float $side = 0, float $length = 1.8, float $startOffset = .05
+	): ?self {
 		if($this->phase !== 'aim' || $this->moving() || !$this->cue()->active
-			|| !is_finite($angle) || $length <= 0 || !is_finite($length)) return [];
+			|| !is_finite($angle) || $length <= 0 || !is_finite($length)) return null;
 
 		$preview = new self;
 		$preview->restore($this->snapshot());
 		$preview->events = [];
 		$preview->shotSnapshot = null;
 
-		if(!$preview->shoot($angle, $power, $top, $side)) return [];
+		if(!$preview->shoot($angle, $power, $top, $side)) return null;
 
 		$cue = $preview->cue();
 		$preview->events = [];
 		$preview->projectionPoints = [[$cue->x,$cue->y]];
 		$preview->projectionStop = false;
-		$travel = 0.0;
-		$iterations = 0;
+		$preview->cueOnly = true;
+		$preview->projectionTravel = 0.0;
+		$preview->projectionIterations = 0;
+		$preview->projectionLength = $length;
+		$preview->projectionStartOffset = $startOffset;
 
-		while(!$preview->projectionStop && $preview->moving() && $cue->active && $cue->pocket === null
-			&& $travel < $length && $iterations++ < 2400)
+		return $preview;
+	}
+
+	/**
+	 * Advance an aim preview by at most a number of substeps.
+	 *
+	 * @param int $substeps Most substeps to run now.
+	 * @return bool Whether the preview has finished.
+	 */
+	public function advanceProjection(int $substeps): bool
+	{
+		if($this->projectionPoints === null) return true;
+		$cue = $this->cue();
+
+		for($step = 0; $step < $substeps; $step++)
 		{
-			$before = count($preview->projectionPoints);
-			$preview->substep(1 / 240);
-			$preview->appendProjectionPoint($cue->x, $cue->y);
+			if(!(!$this->projectionStop && $this->moving() && $cue->active && $cue->pocket === null
+				&& $this->projectionTravel < $this->projectionLength && $this->projectionIterations++ < 2400)) return true;
 
-			for($index = max(1, $before); $index < count($preview->projectionPoints); $index++)
+			$before = count($this->projectionPoints);
+			$this->substep(1 / 240);
+			$this->appendProjectionPoint($cue->x, $cue->y);
+
+			for($index = max(1, $before); $index < count($this->projectionPoints); $index++)
 			{
-				[$x1,$y1] = $preview->projectionPoints[$index - 1];
-				[$x2,$y2] = $preview->projectionPoints[$index];
-				$travel += hypot($x2 - $x1, $y2 - $y1);
+				[$x1,$y1] = $this->projectionPoints[$index - 1];
+				[$x2,$y2] = $this->projectionPoints[$index];
+				$this->projectionTravel += hypot($x2 - $x1, $y2 - $y1);
 			}
 		}
 
-		$path = self::clipPath($preview->projectionPoints, $length);
-		$path = self::trimPathStart($path, max(0, $startOffset));
-		$this->projectionContact = $preview->projectionContact;
+		return false;
+	}
 
-		return self::simplifyPath($path, .00005);
+	/** @return array{path:list<array{float,float}>,contact:array<string,mixed>|null} The preview's guide so far. */
+	public function projectionResult(): array
+	{
+		if($this->projectionPoints === null) return ['path' => [],'contact' => null];
+		$path = self::clipPath($this->projectionPoints, $this->projectionLength);
+		$path = self::trimPathStart($path, max(0, $this->projectionStartOffset));
+
+		return ['path' => self::simplifyPath($path, .00005),'contact' => $this->projectionContact];
 	}
 
 	/**
@@ -403,7 +462,7 @@ final class Simulation
 		if($remaining > 0)
 		$this->advanceActive($remaining);
 
-		foreach($this->balls as $ball) if($ball->active && $ball->pocket === null)
+		foreach($this->balls as $ball) if($ball->active && $ball->pocket === null && (!$this->cueOnly || $ball->number === 0))
 		{
 			$pocket = Table::pocketEntry($ball->x, $ball->y);
 
@@ -538,7 +597,7 @@ final class Simulation
 	{
 		if($seconds <= 0) return;
 
-		foreach($this->balls as $ball) if($ball->active)
+		foreach($this->balls as $ball) if($ball->active && (!$this->cueOnly || $ball->number === 0))
 		{
 			$ball->advance($seconds);
 
@@ -759,7 +818,8 @@ final class Simulation
 		$halfX = Table::WIDTH / 2 - Ball::RADIUS;
 		$halfY = Table::HEIGHT / 2 - Ball::RADIUS;
 
-		for($i = 0; $i < $count; $i++)
+		// An aim preview's cue sorts first; the other balls stay at rest, so their own searches find nothing.
+		for($i = 0; $i < ($this->cueOnly ? min(1, $count) : $count); $i++)
 		{
 			$a = $balls[$i];
 			$restingA = $resting[$i];

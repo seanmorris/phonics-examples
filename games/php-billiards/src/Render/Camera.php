@@ -373,7 +373,7 @@ final class Camera
 			else
 			{
 				[$low,$high] = [0.0,1.0];
-				for($step = 0; $step < 24; $step++) {$middle = ($low + $high) / 2; if($inBand($middle)) $low = $middle; else $high = $middle;}
+				for($step = 0; $step < 16; $step++) {$middle = ($low + $high) / 2; if($inBand($middle)) $low = $middle; else $high = $middle;}
 				$reach = $low;
 			}
 		}
@@ -395,7 +395,7 @@ final class Camera
 			$a = $high - ($high - $low) * $ratio;
 			$b = $low + ($high - $low) * $ratio;
 			[$missA,$missB] = [$offCentre($a),$offCentre($b)];
-			for($step = 0; $step < 28; $step++)
+			for($step = 0; $step < 20; $step++)
 			{
 				if($missA <= $missB) {$high = $b; $b = $a; $missB = $missA; $a = $high - ($high - $low) * $ratio; $missA = $offCentre($a);}
 				else {$low = $a; $a = $b; $missA = $missB; $b = $low + ($high - $low) * $ratio; $missB = $offCentre($b);}
