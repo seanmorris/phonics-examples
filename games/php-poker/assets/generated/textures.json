@@ -37,7 +37,7 @@
     "icons": {
       "ada": {
         "file": "art/icons/ada.svg",
-        "sha256": "167da27a4d2aa39a75b0f0ddb9b94c88e180c0f63663fe05b97125a35df85fdc"
+        "sha256": "f65f0c1169af1203d96f5789eb93805b5226602fe334d19e6641f181b2ecc596"
       },
       "cleo": {
         "file": "art/icons/cleo.svg",
@@ -45,11 +45,11 @@
       },
       "felix": {
         "file": "art/icons/felix.svg",
-        "sha256": "77e81828bde7d70d34c56c4d3547087ebe3ea1bbca6b2d34eecd6756669af651"
+        "sha256": "9508b029d86e32ce23942d3ddb7cb2b3a099dcf8939abd1807eb5188bbd884f6"
       },
       "jules": {
         "file": "art/icons/jules.svg",
-        "sha256": "d5605d595d0c53f064cb582cabe580c5996c8940dd098a3604c70c3b977508f0"
+        "sha256": "4c7c7d1aab7b68b434f5095fac65ab9ebf8b15fdd9d2cee32805feaf3e73e846"
       },
       "mara": {
         "file": "art/icons/mara.svg",
@@ -57,11 +57,11 @@
       },
       "nora": {
         "file": "art/icons/nora.svg",
-        "sha256": "fed61a38d7d5f2ea392373c97f697f2b1e0fc116028b4b3f759d09f57ab8cf68"
+        "sha256": "08f360bd4207c459b6af73dfc514c863f90b3253c081f960e2ebd99012b1212e"
       },
       "otis": {
         "file": "art/icons/otis.svg",
-        "sha256": "81222260824d59382214833de3c0c0ab9f6f055ecf10d4f2280948b85bb642b6"
+        "sha256": "bfa32426f6d5349cc66cc1c9066cc9749f3ef142f301ba907557ba95f39f97e8"
       }
     }
   }
