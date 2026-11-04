@@ -30,6 +30,8 @@ final class Game
 	public Camera $camera;
 	/** Cue direction in cloth-plane radians. */
 	public float $aim = 0.0;
+	/** Cue direction the last shot was played along, which undoing the shot restores. */
+	private ?float $shotAim = null;
 	/** Normalized cue-power setting. */
 	public float $power = .58;
 	/** Normalized draw or follow offset. */
@@ -152,6 +154,7 @@ final class Game
 	{
 		$elapsed = max(0, min(.1, is_finite($elapsed) ? $elapsed : 0));
 		$this->clock += $elapsed;
+		$this->camera->setAspect($width, $height);
 		$this->networkInput($browser);
 		$actions = array_values(array_filter((array)($browser['actions'] ?? []), 'is_string'));
 		$fine = (float)($controls['button20'] ?? 0) >= .5;
@@ -240,7 +243,7 @@ final class Game
 		$this->camera->animate($elapsed, $this->simulation->moving());
 		if(abs((float)($rightStick[0] ?? 0)) > 1e-6 || abs((float)($rightStick[1] ?? 0)) > 1e-6)
 		{
-			$this->camera->orbitStick((float)($rightStick[0] ?? 0), (float)($rightStick[1] ?? 0), $elapsed);
+			$this->camera->orbitStick((float)($rightStick[0] ?? 0), (float)($rightStick[1] ?? 0), $elapsed, $this->orbitCentre());
 		}
 
 		$horizontal = max(-1, min(1, (float)($controls['right'] ?? 0) - (float)($controls['left'] ?? 0)));
@@ -382,8 +385,22 @@ final class Game
 				else $this->beginStroke($this->aim, $this->power, $this->top, $this->side);
 			}
 		}
-		elseif($action === 'rack' && !$this->match) {$this->stroke = null; $this->simulation->rack(); $this->camera->resumeFollow();}
-		elseif($action === 'reset' && !$this->match) {$this->stroke = null; $this->simulation->resetShot(); $this->camera->resumeFollow();}
+		elseif($action === 'rack' && !$this->match)
+		{$this->stroke = $this->shotAim = null; $this->simulation->rack(); $this->camera->resumeFollow();}
+		elseif($action === 'reset' && !$this->match)
+		{
+			$this->stroke = null;
+			if($this->simulation->resetShot())
+			{
+				// Undo restarts the shot with the stick on the line it was played along, and leaves the camera exactly
+				// where the player has it until the next shot. Ending the motion this way is not the end of a shot, so the
+				// aim does not take the camera's direction.
+				if($this->shotAim !== null) $this->aim = $this->shotAim;
+				$this->camera->hold();
+				$this->previousPhase = $this->simulation->phase;
+			}
+			else $this->camera->resumeFollow();
+		}
 		elseif($action === 'clear-spin' && $this->canControl()) $this->top = $this->side = 0;
 		elseif($action === 'mute') $this->muted = !$this->muted;
 		elseif($action === 'fullscreen') $this->fullscreenRequest = true;
@@ -978,7 +995,7 @@ final class Game
 		{
 			if($this->started && $this->overlay === null)
 			{
-				$this->camera->zoom(-(float)($event['y'] ?? 0) * 120);
+				$this->camera->zoom(-(float)($event['y'] ?? 0) * 120, $this->orbitCentre());
 			}
 			return;
 		}
@@ -1028,7 +1045,8 @@ final class Game
 				'spin' => $this->setSpin($x, $y, $regions['spin'] ?? null),
 				'power' => $this->updatePull($y),
 				'aim' => $this->aimAt($x, $y, $width, $height, $fine),
-				'orbit' => $this->camera->orbit($x - $previous[0], $y - $previous[1], $this->dragStart[1] / max(1, $height)),
+				'orbit' => $this->camera->orbit($x - $previous[0], $y - $previous[1], $this->dragStart[1] / max(1, $height)
+					, $this->orbitCentre()),
 				default => null
 			};
 			return;
@@ -1091,6 +1109,13 @@ final class Game
 		// Right or middle drag, or any drag that starts off the cloth, orbits the camera.
 		$this->drag = 'orbit';
 		$this->camera->hold();
+	}
+
+	/** @return array{float,float}|null The cue ball's cloth position, which a held view refits around, while it is on the table. */
+	private function orbitCentre(): ?array
+	{
+		$cue = $this->simulation->cue();
+		return $cue->active ? [$cue->x,$cue->y] : null;
 	}
 
 	private function previewPlacement(float $x, float $y, int $width, int $height): void
@@ -1215,7 +1240,8 @@ final class Game
 				$this->stroke['contacted'] = $this->simulation->shoot(
 					$this->stroke['aim'], $this->stroke['power'], $this->stroke['top'], $this->stroke['side']
 				);
-				if(!$this->stroke['contacted']) $this->stroke = null;
+				if($this->stroke['contacted']) $this->shotAim = $this->stroke['aim'];
+				else $this->stroke = null;
 			}
 		}
 		if($this->stroke !== null && $this->stroke['previousTime'] >= self::STROKE_END) $this->stroke = null;
@@ -1507,8 +1533,13 @@ final class Game
 	{
 		$phase = $this->simulation->phase;
 		if($phase === 'placing' && $this->previousPhase !== 'placing') $this->placement = $this->clearSpot(-.65, 0.0);
-		// Each new shot starts from a view behind the cue unless the player is holding the camera.
-		if($this->previousPhase === 'moving' && $phase !== 'moving') $this->camera->resumeFollow();
+		// Each new shot starts from a view behind the cue unless the player is holding the camera. The next aim runs the
+		// way the camera already faces, so following the cue slides the view to the ball instead of swinging it round.
+		if($this->previousPhase === 'moving' && $phase !== 'moving')
+		{
+			$this->aim = self::wrapAngle($this->camera->yaw + M_PI);
+			$this->camera->resumeFollow();
+		}
 		$this->previousPhase = $phase;
 	}
 

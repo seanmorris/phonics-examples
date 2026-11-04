@@ -39,8 +39,20 @@ final class Camera
 	private float $transitionTime = 0.0;
 	/** Keep the opening's chosen arc when an orbit edit moves its destination across the wrap boundary. */
 	private float $transitionYawDelta = 0.0;
-	/** Fraction of the cue-ball offset followed by the established table view. */
-	private const FOLLOW_TARGET = .55;
+	/**
+	 * Where the cue ball may sit on screen while the table view is fitted around it, in normalized device coordinates:
+	 * within 80% of either side and the top, and no lower than halfway down, so the cue behind it stays in sight.
+	 */
+	private const BALL_SIDE = .8;
+	private const BALL_TOP = .8;
+	private const BALL_BOTTOM = -.5;
+	/** Width over height of the drawing buffer the table view is fitted to. */
+	private float $aspect = 16 / 9;
+	/** @var array{string,array{float,float,float}}|null Latest table framing, keyed by everything it depends on. */
+	private ?array $frameCache = null;
+	/** Lowest orbit pitch, which keeps the eye above the rails, and the highest: 80 degrees, short of straight down. */
+	private const MIN_ORBIT_PITCH = .28;
+	private const MAX_ORBIT_PITCH = 1.4;
 	private bool $followEnabled = false;
 	private bool $followHeld = false;
 	private bool $followSuspended = false;
@@ -56,11 +68,12 @@ final class Camera
 	 * @param float $deltaX Horizontal pointer movement in pixels.
 	 * @param float $deltaY Vertical pointer movement in pixels.
 	 * @param float $pointerY Starting pointer height normalized to the canvas.
+	 * @param array{float,float}|null $cue Cue-ball cloth position to refit the table view around, or null to keep it.
 	 */
-	public function orbit(float $deltaX, float $deltaY, float $pointerY): void
+	public function orbit(float $deltaX, float $deltaY, float $pointerY, ?array $cue = null): void
 	{
 		if(!is_finite($deltaX) || !is_finite($deltaY) || !is_finite($pointerY)) return;
-		$this->adjustOrbit($deltaX * .006 * ($pointerY < .5 ? -1 : 1), $deltaY * .005);
+		$this->adjustOrbit($deltaX * .006 * ($pointerY < .5 ? -1 : 1), $deltaY * .005, $cue);
 	}
 
 	/**
@@ -68,31 +81,32 @@ final class Camera
 	 * @param float $x Horizontal right-stick axis.
 	 * @param float $y Vertical right-stick axis.
 	 * @param float $seconds Display-frame duration in seconds.
+	 * @param array{float,float}|null $cue Cue-ball cloth position to refit the table view around, or null to keep it.
 	 */
-	public function orbitStick(float $x, float $y, float $seconds): void
+	public function orbitStick(float $x, float $y, float $seconds, ?array $cue = null): void
 	{
 		if(!is_finite($x) || !is_finite($y) || !is_finite($seconds) || $seconds <= 0) return;
 		$x = max(-1, min(1, $x));
 		$y = max(-1, min(1, $y));
 		if(abs($x) <= 1e-6 && abs($y) <= 1e-6) return;
-		$this->adjustOrbit($x * 1.9 * $seconds, $y * 1.45 * $seconds);
+		$this->adjustOrbit($x * 1.9 * $seconds, $y * 1.45 * $seconds, $cue);
 	}
 
-	private function adjustOrbit(float $yaw, float $pitch): void
+	private function adjustOrbit(float $yaw, float $pitch, ?array $cue = null): void
 	{
 		$this->hold();
 		if($this->transitionTo !== null)
 		{
 			$this->transitionTo['yaw'] += $yaw;
 			$this->transitionYawDelta += $yaw;
-			$this->transitionTo['pitch'] = max(.28, min(1.18, $this->transitionTo['pitch'] + $pitch));
+			$this->transitionTo['pitch'] = max(self::MIN_ORBIT_PITCH, min(self::MAX_ORBIT_PITCH, $this->transitionTo['pitch'] + $pitch));
 			$this->frameOpening();
 		}
 		else
 		{
 			$this->yaw += $yaw;
-			$this->pitch = max(.28, min(1.18, $this->pitch + $pitch));
-			$this->frameManualView();
+			$this->pitch = max(self::MIN_ORBIT_PITCH, min(self::MAX_ORBIT_PITCH, $this->pitch + $pitch));
+			$this->frameManualView(false, $cue);
 		}
 	}
 
@@ -194,7 +208,7 @@ final class Camera
 	{
 		if(!is_finite($cueX) || !is_finite($cueY) || !is_finite($aim) || !is_finite($seconds) || $seconds < 0) return;
 		$this->cueFocus = [$cueX,TableGeometry::TABLETOP_TOP + Ball::RADIUS,$cueY];
-		$farTarget = [$cueX * self::FOLLOW_TARGET,0.0,$cueY * self::FOLLOW_TARGET];
+		$farTarget = $this->tableFrame($cueX, $cueY, $aim, $this->pitch, $this->distance);
 		[$target,$lookTarget] = $this->composition($farTarget, $aim, $this->pitch, $this->distance);
 		$this->desiredFollow = ['yaw' => self::wrap($aim + M_PI),'target' => $target,'lookTarget' => $lookTarget];
 		if($this->transitioning()) $this->frameOpening();
@@ -230,11 +244,12 @@ final class Camera
 		$this->yaw = $this->desiredFollow['yaw'];
 		$this->target = $this->desiredFollow['target'];
 		$this->lookTarget = $this->desiredFollow['lookTarget'];
-		$this->farTarget = [$cueX * self::FOLLOW_TARGET,0.0,$cueY * self::FOLLOW_TARGET];
+		$this->farTarget = $this->tableFrame($cueX, $cueY, $aim, $this->pitch, $this->distance);
 	}
 
 	/** Manual orbit holds follow until the next explicit boundary. */
 	public function hold(): void { $this->followHeld = true; }
+
 
 	private static function wrap(float $angle): float
 	{
@@ -257,8 +272,9 @@ final class Camera
 	/**
 	 * Wheel zoom retains follow intent and adjusts the destination of an unfinished opening.
 	 * @param float $deltaY Signed wheel movement in pixels.
+	 * @param array{float,float}|null $cue Cue-ball cloth position to refit a held view around, or null to keep it.
 	 */
-	public function zoom(float $deltaY): void
+	public function zoom(float $deltaY, ?array $cue = null): void
 	{
 		if(!is_finite($deltaY)) return;
 		$distance = $this->transitionTo['distance'] ?? $this->distance;
@@ -271,8 +287,127 @@ final class Camera
 		else
 		{
 			$this->distance = $distance;
-			if(!$this->following()) $this->frameManualView(true);
+			if(!$this->following()) $this->frameManualView(true, $cue);
 		}
+	}
+
+	/**
+	 * Fit the table view to the drawing buffer it is shown in.
+	 * @param int $width Drawing-buffer width in pixels.
+	 * @param int $height Drawing-buffer height in pixels.
+	 */
+	public function setAspect(int $width, int $height): void
+	{
+		if($width > 0 && $height > 0) $this->aspect = $width / $height;
+	}
+
+	/**
+	 * Frame the table for one heading at a point on the line from the cue ball to the table centre.
+	 *
+	 * A fixed blend between the two framed a corner ball's view on the corner: aiming out over the rails left most of
+	 * the table off screen, while looking at the table centre instead lost a nearby ball off the bottom. The best blend
+	 * depends on the heading, so this finds it. Moving the view centre toward the table centre moves the ball away
+	 * from the middle of the screen; the blend goes as far as the ball's band allows and, within that, picks the point
+	 * that best centres the cloth outline. It is solved on the composed view, so close zoom keeps its cue placement.
+	 *
+	 * @param float $cueX Cue-ball cloth X.
+	 * @param float $cueY Cue-ball cloth Y.
+	 * @param float $heading Direction the view faces across the cloth, in radians.
+	 * @param float $pitch Orbit pitch in radians.
+	 * @param float $distance Orbit distance in metres.
+	 * @return array{float,float,float} The table view's far target.
+	 */
+	private function tableFrame(float $cueX, float $cueY, float $heading, float $pitch, float $distance): array
+	{
+		$key = sprintf('%.17g|%.17g|%.17g|%.17g|%.17g|%.17g', $cueX, $cueY, $heading, $pitch, $distance, $this->aspect);
+		if($this->frameCache !== null && $this->frameCache[0] === $key) return $this->frameCache[1];
+
+		$height = TableGeometry::TABLETOP_TOP;
+		$corners = [[-Table::WIDTH / 2,$height,-Table::HEIGHT / 2],[Table::WIDTH / 2,$height,-Table::HEIGHT / 2]
+			,[Table::WIDTH / 2,$height,Table::HEIGHT / 2],[-Table::WIDTH / 2,$height,Table::HEIGHT / 2]];
+		$ball = [$cueX,$height + Ball::RADIUS,$cueY];
+		$focus = $this->cueFocus;
+		$this->cueFocus = [$cueX,$height + Ball::RADIUS,$cueY];
+		// Close zoom composes around the cue itself. Below two metres the fit fades back to the blend that composition
+		// was solved with, 45% of the way to the centre, and is gone by 1.2 m, so close cue placement is unchanged.
+		$t = max(0.0, min(1.0, (2.0 - $distance) / (2.0 - 1.2)));
+		$close = $t * $t * (3 - 2 * $t);
+		$far = static fn(float $blend): array => [
+			$cueX * (1 - ($blend * (1 - $close) + .45 * $close)),0.0,$cueY * (1 - ($blend * (1 - $close) + .45 * $close))
+		];
+		$matrix = function(float $blend) use ($far, $heading, $pitch, $distance): array {
+			[$pivot,$look] = $this->composition($far($blend), $heading, $pitch, $distance);
+			$yaw = $heading + M_PI;
+			$eye = [
+				$pivot[0] + cos($yaw) * cos($pitch) * $distance
+				, max(TableGeometry::RAIL_TOP + .03, $pivot[1] + sin($pitch) * $distance)
+				, $pivot[2] + sin($yaw) * cos($pitch) * $distance
+			];
+			return self::multiply(self::perspective(self::FOV_Y, $this->aspect, .05, 20), self::lookAt($eye, $look, [0,1,0]));
+		};
+		$project = static function(array $matrix, array $point): ?array {
+			$clip = [0.0,0.0,0.0,0.0];
+			for($row = 0; $row < 4; $row++)
+			$clip[$row] = $matrix[$row] * $point[0] + $matrix[4 + $row] * $point[1] + $matrix[8 + $row] * $point[2] + $matrix[12 + $row];
+			return $clip[3] > .05 ? [$clip[0] / $clip[3],$clip[1] / $clip[3]] : null;
+		};
+		$inBand = function(float $blend) use ($matrix, $project, $ball): bool {
+			$point = $project($matrix($blend), $ball);
+			return $point !== null && abs($point[0]) <= self::BALL_SIDE && $point[1] <= self::BALL_TOP
+				&& $point[1] >= self::BALL_BOTTOM;
+		};
+		// How far the projected cloth outline's centre sits from the middle of the screen.
+		$offCentre = function(float $blend) use ($matrix, $project, $corners): float {
+			$view = $matrix($blend);
+			$xs = $ys = [];
+			foreach($corners as $corner) if($point = $project($view, $corner)) {$xs[] = $point[0]; $ys[] = $point[1];}
+			if(count($xs) < 4) return INF;
+			return ((min($xs) + max($xs)) / 2) ** 2 + ((min($ys) + max($ys)) / 2) ** 2;
+		};
+
+		// The ball leaves the middle of the screen as the view moves inward, so its band allows a range from the ball.
+		$reach = 0.0;
+		if($inBand(0.0))
+		{
+			if($inBand(1.0)) $reach = 1.0;
+			else
+			{
+				[$low,$high] = [0.0,1.0];
+				for($step = 0; $step < 24; $step++) {$middle = ($low + $high) / 2; if($inBand($middle)) $low = $middle; else $high = $middle;}
+				$reach = $low;
+			}
+		}
+
+		// Coarse scan, then a golden-section search around the best sample.
+		$best = 0.0;
+		$bestMiss = $offCentre(0.0);
+		for($sample = 1; $sample <= 8; $sample++)
+		{
+			$blend = $reach * $sample / 8;
+			$miss = $offCentre($blend);
+			if($miss < $bestMiss) [$best,$bestMiss] = [$blend,$miss];
+		}
+		if(is_finite($bestMiss) && $reach > 0)
+		{
+			$low = max(0.0, $best - $reach / 8);
+			$high = min($reach, $best + $reach / 8);
+			$ratio = (sqrt(5) - 1) / 2;
+			$a = $high - ($high - $low) * $ratio;
+			$b = $low + ($high - $low) * $ratio;
+			[$missA,$missB] = [$offCentre($a),$offCentre($b)];
+			for($step = 0; $step < 28; $step++)
+			{
+				if($missA <= $missB) {$high = $b; $b = $a; $missB = $missA; $a = $high - ($high - $low) * $ratio; $missA = $offCentre($a);}
+				else {$low = $a; $a = $b; $missA = $missB; $b = $low + ($high - $low) * $ratio; $missB = $offCentre($b);}
+			}
+			$refined = ($low + $high) / 2;
+			if($offCentre($refined) <= $bestMiss) $best = $refined;
+		}
+
+		$this->cueFocus = $focus;
+		$target = $far($best);
+		$this->frameCache = [$key,$target];
+		return $target;
 	}
 
 	/**
@@ -300,9 +435,19 @@ final class Camera
 		return [$pivot,[$pivot[0] + cos($aim) * $ahead,$pivot[1],$pivot[2] + sin($aim) * $ahead]];
 	}
 
-	/** Manual orbit and zoom keep their current heading while retaining the cue's close composition. */
-	private function frameManualView(bool $ease = false): void
+	/**
+	 * Manual orbit and zoom keep their current heading while retaining the cue's close composition.
+	 * @param array{float,float}|null $cue Cue-ball cloth position to refit the table view around, or null to keep it.
+	 */
+	private function frameManualView(bool $ease = false, ?array $cue = null): void
 	{
+		// The opening's canonical view frames the table centre until the view first takes up the cue.
+		if($cue !== null && $this->followEnabled && is_finite((float)($cue[0] ?? NAN)) && is_finite((float)($cue[1] ?? NAN)))
+		{
+			[$cueX,$cueY] = [(float)$cue[0],(float)$cue[1]];
+			$this->cueFocus = [$cueX,TableGeometry::TABLETOP_TOP + Ball::RADIUS,$cueY];
+			$this->farTarget = $this->tableFrame($cueX, $cueY, $this->yaw + M_PI, $this->pitch, $this->distance);
+		}
 		[$target,$lookTarget] = $this->composition($this->farTarget, $this->yaw + M_PI, $this->pitch, $this->distance);
 		if($ease || $this->desiredManual !== null)
 		{

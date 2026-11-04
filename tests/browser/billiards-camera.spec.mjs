@@ -36,9 +36,16 @@ test('opening controls preserve the transition and pointer follow returns to idl
 	expect((await state()).camera).toEqual(held);
 	await page.mouse.up();
 	await expect.poll(async()=>{
-		const s=await state(),cue=s.balls.find(ball=>ball.number===0);
-		return Math.abs(Math.atan2(Math.sin(s.camera.yaw-s.aim-Math.PI),Math.cos(s.camera.yaw-s.aim-Math.PI)))<1e-8
-			&& s.camera.target[0]===cue.x*.55 && s.camera.target[2]===cue.y*.55;
+		// Settled means no published update for longer than a slow frame; easing can take several frames to finish.
+		const quiet=await canvas.evaluate(element=>new Promise(resolve=>{
+			const observer=new MutationObserver(()=>{observer.disconnect();resolve(false);});
+			observer.observe(element,{attributes:true,attributeFilter:['data-php-billiards']});
+			setTimeout(()=>{observer.disconnect();resolve(true);},1500);
+		}));
+		const s=await state(),cue=s.balls.find(ball=>ball.number===0),[x,,z]=s.camera.target;
+		// Behind the cue, the view frames the table at a point on the line from the cue ball to the table centre.
+		return quiet && Math.abs(Math.atan2(Math.sin(s.camera.yaw-s.aim-Math.PI),Math.cos(s.camera.yaw-s.aim-Math.PI)))<1e-8
+			&& Math.abs(x*cue.y-z*cue.x)<1e-9 && x/cue.x>=-1e-9 && x/cue.x<=1+1e-9;
 	},{timeout:60_000}).toBe(true);
 	const updates=await canvas.evaluate(element=>new Promise(resolve=>{
 		let count=0;const observer=new MutationObserver(records=>count+=records.length);

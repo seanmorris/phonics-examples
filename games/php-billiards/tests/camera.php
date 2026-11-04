@@ -5,6 +5,7 @@ use PhpBilliards\Game;
 use PhpBilliards\Geometry\TableGeometry;
 use PhpBilliards\Physics\Ball;
 use PhpBilliards\Physics\Simulation;
+use PhpBilliards\Physics\Table;
 use PhpBilliards\Render\Camera;
 
 $cameraFrame = static function(Game $game, array $browser = [], array $events = [], array $controls = [], array $stick = [0,0]): void {
@@ -81,11 +82,16 @@ $test('manual orbit survives aim input and wheel zoom until a gameplay boundary'
 		$expect($game->camera->state() === $before && !$game->camera->settling(), 'Aim input released manual orbit');
 		$cameraFrame($game, [], [['type' => 'wheel','y' => 1]]);
 		$expect($game->camera->distance < $before['distance'] && $game->camera->yaw === $before['yaw']);
-		$expect(!$game->camera->settling(), 'Wheel zoom released manual orbit');
+		// Wheel zoom may ease the held view's table framing, but it never hands the camera back to follow.
+		for($frame = 0; $frame < 60; $frame++) $cameraFrame($game, [], [], ['right' => .5]);
+		$expect($game->camera->yaw === $before['yaw'], 'Wheel zoom released manual orbit');
 		if($boundary === 'shot-end')
 		{
+			// The shot's end resumes follow by aiming along the held view, so the camera keeps its angle until aim moves.
 			$game->simulation->phase = 'moving'; $cameraFrame($game);
 			$game->simulation->phase = 'aim'; $cameraFrame($game);
+			$expect($game->camera->yaw === $before['yaw'], 'shot-end swung the held view round');
+			for($frame = 0; $frame < 30; $frame++) $cameraFrame($game, [], [], ['right' => .5]);
 		}
 		elseif($boundary === 'placement')
 		{
@@ -224,8 +230,11 @@ $test('canonical and far camera composition retain their established orbit and d
 		$camera->behind(-1.1, .5, $aim);
 		$camera->patch(['pitch' => $pitch,'distance' => $distance]);
 		$camera->follow(-1.1, .5, $aim, 10);
-		$pivot = [-1.1 * .55,0.0,.5 * .55];
-		$expect($camera->target === $pivot && $camera->viewPose()[1] === $pivot, 'Far framing changed');
+		// The far view frames the table at a point on the line from the cue ball to the table centre.
+		$pivot = $camera->target;
+		$blend = 1 - $pivot[0] / -1.1;
+		$expect($camera->viewPose()[1] === $pivot && $pivot[1] === 0.0 && abs($pivot[2] - .5 * (1 - $blend)) < 1e-12
+			&& $blend >= -1e-12 && $blend <= 1 + 1e-12, 'Far framing left the line from the cue ball to the table centre');
 		$expected = [$pivot[0] + cos($camera->yaw) * cos($pitch) * $distance,sin($pitch) * $distance,
 			$pivot[2] + sin($camera->yaw) * cos($pitch) * $distance];
 		$expect($expected === $camera->eye(), 'Far orbit changed');
@@ -317,7 +326,8 @@ $test('close framing joins the far view smoothly and survives zoom during the op
 	$camera->patch(['distance' => 2.0]); $camera->follow($cue->x, $cue->y, .4, 10);
 	$far = $camera->viewPose();
 	$camera->patch(['distance' => 2.0 - 1e-6]); $camera->follow($cue->x, $cue->y, .4, 10);
-	foreach($far[1] as $index => $value) $expect(abs($camera->viewPose()[1][$index] - $value) < 1e-10, 'Framing popped at two metres');
+	// The table framing is solved numerically, so continuity holds to well under a micron rather than exactly.
+	foreach($far[1] as $index => $value) $expect(abs($camera->viewPose()[1][$index] - $value) < 1e-6, 'Framing popped at two metres');
 	$game = new Game;
 	$cameraFrame($game, ['actions' => ['start']]);
 	$cameraFrame($game, [], [['type' => 'wheel','y' => 100]]);
@@ -327,4 +337,128 @@ $test('close framing joins the far view smoothly and survives zoom during the op
 	$cue = $game->simulation->cue();
 	[$x,$y] = $project($game->camera, [$cue->x,Ball::RADIUS + .012,$cue->y]);
 	$expect(abs($x) < 1e-10 && abs($y + .45) < 1e-10, 'Interrupted opening did not reach its close composition');
+});
+
+$test('the table view stays fitted around a corner ball through a full orbit', static function() use ($expect, $cameraGame, $cameraFrame, $project): void {
+	// A fixed blend between the ball and the table centre framed the corner: facing out over the rails left most of
+	// the cloth off screen. The framing is now fitted to each heading, and orbiting refits it as the view turns.
+	$game = $cameraGame();
+	$cue = $game->simulation->cue();
+	$cue->x = $cue->previousX = -1.15;
+	$cue->y = $cue->previousY = .55;
+	$game->camera->resumeFollow();
+	for($frame = 0; $frame < 240; $frame++) $cameraFrame($game);
+	$onScreen = static fn(array $point): bool => abs($point[0]) <= 1 && abs($point[1]) <= 1;
+	$cloth = [];
+	for($i = 0; $i <= 24; $i++) for($j = 0; $j <= 12; $j++)
+	$cloth[] = [-Table::WIDTH / 2 + Table::WIDTH * $i / 24,TableGeometry::TABLETOP_TOP,-Table::HEIGHT / 2 + Table::HEIGHT * $j / 12];
+	$ball = [$cue->x,TableGeometry::TABLETOP_TOP + Ball::RADIUS,$cue->y];
+	$cameraFrame($game, [], [['type' => 'pointer','button' => 3,'action' => 'down','x' => 400,'y' => 500]]);
+	$worstCloth = 1.0;
+	$inBand = true;
+	$onLine = true;
+	$largestStep = 0.0;
+	$last = $game->camera->target;
+	for($step = 1; $step <= 72; $step++)
+	{
+		// 5 degrees a step: a full turn.
+		$cameraFrame($game, [], [['type' => 'pointer','button' => 3,'action' => 'move','x' => 400 + $step * 5 / .006 * M_PI / 180,'y' => 500]]);
+		$shown = count(array_filter($cloth, static fn(array $point): bool => $onScreen($project($game->camera, $point))));
+		$worstCloth = min($worstCloth, $shown / count($cloth));
+		[$x,$y] = $project($game->camera, $ball);
+		$inBand = $inBand && abs($x) <= .8 + 1e-9 && $y <= .8 + 1e-9 && $y >= -.5 - 1e-9;
+		[$targetX,,$targetZ] = $game->camera->target;
+		$onLine = $onLine && abs($targetX * $cue->y - $targetZ * $cue->x) < 1e-9 && $targetX / $cue->x >= -1e-9 && $targetX / $cue->x <= 1 + 1e-9;
+		$largestStep = max($largestStep, hypot($targetX - $last[0], $targetZ - $last[2]));
+		$last = $game->camera->target;
+	}
+	$cameraFrame($game, [], [['type' => 'pointer','button' => 3,'action' => 'up','x' => 400,'y' => 500]]);
+	$expect($inBand, 'The cue ball left its band on screen during the turn');
+	$expect($onLine, 'The framing left the line from the cue ball to the table centre');
+	$expect($worstCloth >= .9, 'Only ' . round($worstCloth * 100) . '% of the cloth stayed in view during the turn');
+	$expect($largestStep < .2, 'The framing jumped ' . round($largestStep, 3) . ' m in one 5 degree step');
+	// With the cue ball off the table there is nothing to fit around, and the view keeps its own pivot.
+	$cue->active = false;
+	$target = $game->camera->target;
+	$game->camera->orbit(40, 0, .6, null);
+	$expect($game->camera->target === $target, 'An orbit without a cue ball moved the pivot');
+});
+
+$test('orbiting tilts up to a steep view from above, short of straight down', static function() use ($expect, $cameraGame, $cameraFrame): void {
+	$game = $cameraGame();
+	$cameraFrame($game, [], [['type' => 'pointer','button' => 3,'action' => 'down','x' => 640,'y' => 300]]);
+	for($step = 1; $step <= 40; $step++)
+	$cameraFrame($game, [], [['type' => 'pointer','button' => 3,'action' => 'move','x' => 640,'y' => 300 + 10 * $step]]);
+	$expect($game->camera->pitch === 1.4, 'Dragging over did not stop at the 80 degree limit');
+	for($step = 1; $step <= 80; $step++)
+	$cameraFrame($game, [], [['type' => 'pointer','button' => 3,'action' => 'move','x' => 640,'y' => 700 - 10 * $step]]);
+	$expect($game->camera->pitch === .28, 'Dragging back did not stop at the low limit');
+});
+
+$test('when the balls stop, the next aim runs the way the camera faces, so the view does not swing round', static function() use ($expect, $cameraGame): void {
+	$frame = static function(Game $game, array $events = []): void {
+		$game->input([], [], $events, [], [0,0], 1 / 60, 1280, 720);
+		$game->step(1 / 60);
+	};
+	$game = $cameraGame();
+	$game->camera->resumeFollow();
+	for($step = 0; $step < 240; $step++) $frame($game);
+	// Orbit well away from behind the cue, then shoot from that view.
+	$frame($game, [['type' => 'pointer','button' => 3,'action' => 'down','x' => 400,'y' => 500]]);
+	for($step = 1; $step <= 10; $step++) $frame($game, [['type' => 'pointer','button' => 3,'action' => 'move','x' => 400 + 20 * $step,'y' => 500]]);
+	$frame($game, [['type' => 'pointer','button' => 3,'action' => 'up','x' => 600,'y' => 500]]);
+	// Away from the rack, off the head rail: the cue ball comes back to rest on the cloth.
+	$shotAim = M_PI;
+	$expect(abs(Game::wrapAngle($game->camera->yaw + M_PI - $shotAim)) > .5, 'The orbit did not leave the shot line');
+	$game->simulation->shoot($shotAim, .3);
+	for($step = 0; $step < 60 * 30 && $game->simulation->phase === 'moving'; $step++) $frame($game);
+	$expect($game->simulation->phase === 'aim', 'The shot did not come to rest');
+	$yaw = $game->camera->yaw;
+	$state = json_decode(json_encode($game->status(1)), true);
+	$expect(abs(Game::wrapAngle($state['aim'] - $yaw - M_PI)) < 1e-12, 'The next aim did not take the camera direction');
+	$turned = 0.0;
+	for($step = 0; $step < 180; $step++) { $frame($game); $turned = max($turned, abs(Game::wrapAngle($game->camera->yaw - $yaw))); }
+	$expect($turned < 1e-9, 'The camera swung ' . round(rad2deg($turned), 1) . ' degrees after the balls stopped');
+	$cue = $game->simulation->cue();
+	[$x,,$z] = $game->camera->target;
+	$expect(!$game->camera->settling() && abs($x * $cue->y - $z * $cue->x) < 1e-9 && $x / $cue->x >= 0 && $x / $cue->x <= 1,
+		'The view did not settle on the table framing for the cue ball');
+});
+
+$test('undoing a shot restores the stick line it was played along and leaves the camera where it is', static function() use ($expect, $cameraGame): void {
+	$frame = static function(Game $game, array $browser = [], array $events = []): void {
+		$game->input($browser, [], $events, [], [0,0], 1 / 60, 1280, 720);
+		$game->step(1 / 60);
+	};
+	$orbit = static function(Game $game, int $pixels) use ($frame): void {
+		$frame($game, [], [['type' => 'pointer','button' => 3,'action' => 'down','x' => 400,'y' => 500]]);
+		for($step = 1; $step <= 10; $step++) $frame($game, [], [['type' => 'pointer','button' => 3,'action' => 'move','x' => 400 + $pixels * $step / 10,'y' => 500]]);
+		$frame($game, [], [['type' => 'pointer','button' => 3,'action' => 'up','x' => 400 + $pixels,'y' => 500]]);
+	};
+	foreach(['while the balls run' => false,'after they stop' => true] as $when => $atRest)
+	{
+		$game = $cameraGame();
+		// Away from the rack, off the head rail, so the cue ball comes back to rest on the cloth.
+		$frame($game, ['values' => ['aim' => 175,'power' => .3]]);
+		for($step = 0; $step < 120; $step++) $frame($game);
+		$played = $game->aim;
+		$frame($game, ['actions' => ['shoot']]);
+		for($step = 0; $step < 120 && $game->simulation->shots === 0; $step++) $frame($game);
+		$expect($game->simulation->shots === 1, "The stroke never struck the cue ball ($when)");
+		// Turn the camera while the balls run.
+		$orbit($game, 200);
+		if($atRest)
+		{
+			for($step = 0; $step < 60 * 30 && $game->simulation->phase === 'moving'; $step++) $frame($game);
+			$expect(abs(Game::wrapAngle($game->aim - $played)) > .5, 'The shot did not end aiming along the turned view');
+		}
+		else $expect($game->simulation->phase === 'moving', 'The balls had already stopped');
+		$view = $game->camera->state();
+		$frame($game, ['actions' => ['reset']]);
+		for($step = 0; $step < 60; $step++) $frame($game);
+		$expect($game->simulation->shots === 0, "Undo did not restore the shot ($when)");
+		$expect($game->aim === $played, "Undo left the stick off the line it was played along ($when)");
+		$expect($game->camera->yaw === $view['yaw'] && $game->camera->pitch === $view['pitch']
+			&& $game->camera->distance === $view['distance'], "Undo moved the camera ($when)");
+	}
 });
