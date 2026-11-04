@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import {readFile, writeFile} from 'node:fs/promises';
 import {PNG} from 'pngjs';
 
+async function installRackSeed(page,byte)
+{
+	// Test-only entropy for a local rack. Visual landmark fixtures need an above-cloth
+	// number spot; fresh production rack rotations deliberately do not guarantee one.
+	await page.addInitScript(byte=>{
+		const random=crypto.getRandomValues.bind(crypto);
+		crypto.getRandomValues=array=>{
+			if(array instanceof Uint8Array && array.length===32) return array.fill(byte);
+			return random(array);
+		};
+	},byte);
+}
+
 async function installGamepad(page)
 {
 	await page.addInitScript(()=>{
@@ -97,6 +110,16 @@ test('full page boots the direct application and executes a resettable shot', as
 	expect(await canvas.evaluate(element=>element.phpBilliardsDebug.audio.state)).toBe('running');
 	await page.keyboard.press('Backspace');
 	await expect.poll(async() => JSON.parse(await canvas.getAttribute('data-php-billiards')).phase).toBe('aim');
+	expect(errors).toEqual([]);
+});
+
+test('a scratch returns the cue ball to the cloth at the camera target',async({page})=>{
+	test.setTimeout(120_000);
+	await page.goto('/games/php-billiards/');
+	const canvas=page.locator('canvas');
+	await expect(canvas).toHaveAttribute('data-php-billiards',/"phase":"aim"/,{timeout:45_000});
+	await canvas.evaluate(element=>element.phpBilliardsDebug.action('start'));
+	await expect.poll(async()=>(JSON.parse(await canvas.getAttribute('data-php-billiards'))).started).toBe(true);
 	await canvas.evaluate(element=>element.phpBilliardsDebug.setControls({aim:131.5,power:.5}));
 	await expect.poll(async()=>JSON.parse(await canvas.getAttribute('data-php-billiards')).aim)
 		.toBeCloseTo(131.5*Math.PI/180,5);
@@ -114,7 +137,6 @@ test('full page boots the direct application and executes a resettable shot', as
 	const placed=JSON.parse(await canvas.getAttribute('data-php-billiards')).balls.find(ball=>ball.number===0);
 	expect(placed.active).toBe(true);
 	expect(Math.hypot(placed.x+.65,placed.y)).toBeLessThan(.04);
-	expect(errors).toEqual([]);
 });
 
 test('embed route contains only the game host and cleans up its runtime', async ({page}) => {
@@ -393,6 +415,7 @@ test('SDL gamepad uses left-stick controls, right-stick camera, and face buttons
 
 test('a stationary ball texture landmark follows its fixed world position while the camera orbits', async ({page}, testInfo) => {
 	test.setTimeout(180_000);
+	await installRackSeed(page,45);
 	await page.goto('/games/php-billiards/');
 	const canvas=page.locator('canvas');
 	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout:45_000});
@@ -420,9 +443,11 @@ test('a stationary ball texture landmark follows its fixed world position while 
 	await page.waitForTimeout(350);
 	const firstPath=testInfo.outputPath('ball-landmark-head-on.png');
 	const first=await canvas.screenshot({path:firstPath});
-	await canvas.evaluate(element=>{
+	const orbitYaw=await canvas.evaluate(element=>{
 		const {yaw}=element.phpBilliardsDebug.camera;element.phpBilliardsDebug.setCamera({yaw:yaw+.28});
+		return yaw+.28;
 	});
+	await expect.poll(()=>canvas.evaluate(element=>element.phpBilliardsDebug.camera?.yaw)).toBeCloseTo(orbitYaw,6);
 	await page.waitForTimeout(350);
 	const secondPath=testInfo.outputPath('ball-landmark-after-orbit.png');
 	const second=await canvas.screenshot({path:secondPath});
@@ -494,6 +519,7 @@ test('a restored WebGL context restarts the direct application cleanly', async (
 });
 
 test('an energetic off-centre side-pocket shot rattles back onto the table', async ({page}) => {
+	test.setTimeout(120_000);
 	await page.goto('/games/php-billiards/');
 	const canvas = page.locator('canvas');
 	await expect(canvas).toHaveAttribute('data-php-billiards', /"phase":"aim"/, {timeout: 45_000});
@@ -508,18 +534,26 @@ test('an energetic off-centre side-pocket shot rattles back onto the table', asy
 		Object.assign(element.phpBilliardsDebug,{pocketTrace:trace,pocketObserver:observer});
 	});
 	await canvas.evaluate(element=>element.phpBilliardsDebug.action('shoot'));
-	await expect.poll(async() => {
-		return canvas.evaluate(element=>{
+	const escape=()=>canvas.evaluate(element=>{
 			const trace=element.phpBilliardsDebug.pocketTrace;
-			const entered=trace.some(state=>state.events?.some(event=>event.ball===0&&event.type==='pocket-enter'
-				&&[1,4].includes(event.pocket)));
-			const rejected=trace.some(state=>state.events?.some(event=>event.ball===0&&event.type==='pocket-reject'));
-			const cue=trace.at(-1)?.balls.find(ball=>ball.number===0);
-			return entered&&rejected&&cue?.active&&cue.pocket===null&&cue.drop===0
-				&&Math.hypot(cue.x+.635,cue.y)>.25;
-		});
-	},{timeout:30_000}).toBe(true);
-	const state = JSON.parse(await canvas.getAttribute('data-php-billiards'));
+			let entered=false,rejected=false;
+			for(const state of trace)
+			{
+				entered ||= state.events?.some(event=>event.ball===0&&event.type==='pocket-enter'&&[1,4].includes(event.pocket));
+				rejected ||= entered&&state.events?.some(event=>event.ball===0&&event.type==='pocket-reject');
+				const cue=state.balls.find(ball=>ball.number===0);
+				const [width,height,radius]=state.table;
+				if(rejected&&cue?.active&&cue.pocket===null&&cue.drop===0&&Math.hypot(cue.x+.635,cue.y)>.25
+					&&Math.abs(cue.x)<=width/2-radius+1e-6&&Math.abs(cue.y)<=height/2-radius+1e-6)
+					return state;
+			}
+			return null;
+	});
+	// Assert the observed escape itself: the live cue may already have reached another
+	// cushion or pocket by the time a slower software-rendering runner polls again.
+	await expect.poll(escape,{timeout:30_000}).not.toBeNull();
+	const state=await escape();
+	await canvas.evaluate(element=>element.phpBilliardsDebug.pocketObserver.disconnect());
 	const cue = state.balls.find(ball => ball.number === 0);
 	const [width,height,radius]=state.table;
 	expect(Math.abs(cue.x)).toBeLessThanOrEqual(width/2-radius+1e-6);
