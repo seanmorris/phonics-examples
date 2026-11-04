@@ -73,7 +73,7 @@ final class Painter
 
 	private function menuBar(): void
 	{
-		$bar = $this->layout->rect(0, 0, Layout::WIDTH, Layout::MENU_BAR);
+		$bar = $this->layout->rect(0, 0, $this->layout->width(), Layout::MENU_BAR);
 		[$left, $top, $width, $height] = $bar;
 		$this->canvas->box(0, $top, $this->layout->left * 2 + $width, $height, 0, Theme::MENU);
 		$x = $left + 14 * $this->unit;
@@ -89,7 +89,7 @@ final class Painter
 		$phase = $this->view['phase'] ?? 'ready';
 		$showdown = in_array($phase, ['showdown','redeal'], true);
 		$geometry = [];
-		for($seat = 0; $seat < $seats; $seat++) $geometry[$seat] = Layout::seat($seat, $seats);
+		for($seat = 0; $seat < $seats; $seat++) $geometry[$seat] = $this->layout->seat($seat, $seats);
 
 		// Layer 1: plates.
 		foreach($players as $seat => $player)
@@ -115,13 +115,15 @@ final class Painter
 		foreach($players as $seat => $player)
 		{
 			[$x, $y] = $geometry[$seat]['chips'];
-			$this->stacks($x, $y, (int)$player['stack'], $seat === 0 ? 17 : 15);
+			$this->stacks($x, $y, (int)$player['stack'], $this->layout->metric($seat === 0 ? 'handChipRadius' : 'chipRadius'));
+			[$tx, $ty] = $geometry[$seat]['caption'];
+			$this->text(($player['name'] ?? '') . '  ' . (int)$player['stack'], $tx, $ty, Theme::CAPTION, Theme::PLATE, $geometry[$seat]['outward'] > 0 ? 'left' : 'right');
 			if(!empty($player['bet']))
 			{
 				$outward = $geometry[$seat]['outward'];
 				[$px, $py, $pw] = $geometry[$seat]['plate'];
 				$bx = $outward > 0 ? $px + $pw + 24 : $px - 40;
-				$this->stack($bx, $y - 10, Theme::CHIP_RED, 2, min(6, max(1, intdiv((int)$player['bet'], 4))), 11);
+				$this->stack($bx, $y - 10, Theme::CHIP_RED, 2, min(6, max(1, intdiv((int)$player['bet'], 4))), $this->layout->metric('chipRadius') * .75);
 				$this->text((string)$player['bet'], $bx + 16, $y + 10, Theme::CAPTION, Theme::PLATE, 'center');
 			}
 		}
@@ -158,7 +160,7 @@ final class Painter
 	private function centre(): void
 	{
 		if(($this->view['phase'] ?? 'ready') === 'ready') return;
-		$centre = Layout::centre();
+		$centre = $this->layout->centre();
 		$this->plate($centre['pot'], 'Total pot (' . (int)($this->view['pot'] ?? 0) . ')', 'info', false);
 		$this->card($centre['deck'], null, 1.0);
 		$pot = (int)($this->view['pot'] ?? 0);
@@ -174,10 +176,10 @@ final class Painter
 
 	private function actions(): void
 	{
-		foreach(Layout::actions($this->view, $this->state) as $button)
+		foreach($this->layout->actions($this->view, $this->state) as $button)
 		$this->button($button['rect'], $button['label'], $button['key'], $button['style'], $this->state['locked'] && $button['intent'] !== null);
 
-		if($stepper = Layout::stepper($this->view))
+		if($stepper = $this->layout->stepper($this->view))
 		{
 			$this->button($stepper['less'], '−', '', 'default', false);
 			$this->plate($stepper['amount'], (string)$this->state['amount'], 'info', false);
@@ -187,7 +189,8 @@ final class Painter
 		}
 		if($this->state['locked'] && ($this->view['turn'] ?? -1) === 0)
 		{
-			[$x, $y] = $this->layout->point(Layout::CENTRE[0] + 150, Layout::CENTRE[1] + Layout::OVAL[1] + 50);
+			[$ax, $ay] = $this->layout->metric('actions');
+			[$x, $y] = $this->layout->point($ax, $ay + $this->layout->metric('buttonHeight') + 18);
 			$this->canvas->label('WAITING FOR THE TABLE', $x, $y, Theme::CAPTION, Theme::PLATE, $this->face);
 		}
 	}
@@ -198,13 +201,13 @@ final class Painter
 		$message = (string)($this->view['message'] ?? '');
 		$line = $error !== '' ? $error : $message;
 		if($line === '') return;
-		$width = min(760, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40));
-		$this->plate([Layout::WIDTH / 2 - $width / 2, Layout::MENU_BAR + 10, $width, Layout::PLATE_HEIGHT], $line, $error !== '' ? 'fold' : 'info', false);
+		$width = min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40));
+		$this->plate([$this->layout->width() / 2 - $width / 2, Layout::MENU_BAR + 10, $width, Layout::PLATE_HEIGHT], $line, $error !== '' ? 'fold' : 'info', false);
 	}
 
 	private function discardDialog(): void
 	{
-		$dialog = Layout::discardDialog();
+		$dialog = $this->layout->discardDialog();
 		$this->dialog($dialog['box'], 'SELECT DISCARDS');
 		$cards = $this->view['players'][0]['cards'] ?? [];
 		foreach($dialog['cards'] as $index => $rect)
@@ -222,7 +225,8 @@ final class Painter
 
 	private function historyDialog(): void
 	{
-		$box = [Layout::WIDTH / 2 - 320, 60, 640, 230];
+		$w = min(640, $this->layout->width() - 24);
+		$box = [$this->layout->width() / 2 - $w / 2, 60, $w, 230];
 		$this->dialog($box, 'ROUND HISTORY');
 		$lines = array_slice($this->view['history'] ?? [], -8);
 		foreach($lines as $index => $line)
@@ -232,37 +236,39 @@ final class Painter
 
 	private function welcomeDialog(): void
 	{
-		$box = [Layout::WIDTH / 2 - 220, 250, 440, 120];
+		$w = min(440, $this->layout->width() - 24);
+		$box = [$this->layout->width() / 2 - $w / 2, 250, $w, 120];
 		$this->dialog($box, 'DRAW POKER');
 		$variant = ($this->view['profile']['variant'] ?? 'jackpots') === 'anything' ? 'Anything opens' : 'Jacks or better';
-		$this->text('Welcomes you to a game of', Layout::WIDTH / 2, $box[1] + 50, Theme::LABEL, Theme::INK, 'center');
-		$this->text('5-CARD DRAW POKER  (' . strtolower($variant) . ')', Layout::WIDTH / 2, $box[1] + 80, Theme::LABEL, Theme::INK, 'center');
+		$this->text('Welcomes you to a game of', $this->layout->width() / 2, $box[1] + 50, Theme::LABEL, Theme::INK, 'center');
+		$this->text('5-CARD DRAW POKER  (' . strtolower($variant) . ')', $this->layout->width() / 2, $box[1] + 80, Theme::LABEL, Theme::INK, 'center');
 	}
 
 	private function menuScreen(): void
 	{
-		$this->text('DRAW POKER', Layout::WIDTH / 2, 170, Theme::DISPLAY, Theme::PLATE, 'center');
-		$this->text('Five-card draw · jacks or better · 2 to 8 seats', Layout::WIDTH / 2, 215, Theme::LABEL, Theme::PLATE, 'center');
+		$this->text('DRAW POKER', $this->layout->width() / 2, 170, (float)$this->layout->metric('display'), Theme::PLATE, 'center');
+		$this->text('Five-card draw · jacks or better · 2 to 8 seats', $this->layout->width() / 2, 215, Theme::LABEL, Theme::PLATE, 'center');
 		$local = $this->state['local'];
 		if($local === 'setup') { $this->setupDialog(); return; }
 		if($local === 'online')
 		{
-			$box = [Layout::WIDTH / 2 - 220, 280, 440, 120];
+			$w = min(440, $this->layout->width() - 24);
+			$box = [$this->layout->width() / 2 - $w / 2, 280, $w, 120];
 			$this->dialog($box, 'PLAY ONLINE');
-			$this->text('Private tables are coming in a later release.', Layout::WIDTH / 2, $box[1] + 52, Theme::BODY, Theme::INK, 'center');
-			$this->text('Press Escape to go back.', Layout::WIDTH / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
+			$this->text('Private tables are coming in a later release.', $this->layout->width() / 2, $box[1] + 52, Theme::BODY, Theme::INK, 'center');
+			$this->text('Press Escape to go back.', $this->layout->width() / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
 			return;
 		}
-		foreach(Layout::menu(!empty($this->view['canContinue'])) as $index => $item)
+		foreach($this->layout->menu(!empty($this->view['canContinue'])) as $index => $item)
 		$this->button($item['rect'], $item['label'], '', $index === 0 ? 'primary' : 'default', false);
-		$this->text('Enter plays offline · C continues · Escape returns', Layout::WIDTH / 2, 620, Theme::CAPTION, Theme::PLATE, 'center');
+		$this->text('Enter plays offline · C continues · Escape returns', $this->layout->width() / 2, $this->layout->height() - 100, Theme::CAPTION, Theme::PLATE, 'center');
 	}
 
 	private function setupDialog(): void
 	{
 		$players = (int)$this->state['setup']['players'];
 		$variant = (string)$this->state['setup']['variant'];
-		$setup = Layout::setup($players, $variant);
+		$setup = $this->layout->setup($players, $variant);
 		$this->dialog($setup['box'], 'TABLE SETUP');
 		[$x, $y] = $setup['box'];
 		$this->text('Opponents', $x + 24, $y + 64, Theme::LABEL, Theme::INK);
@@ -277,7 +283,8 @@ final class Painter
 
 	private function helpScreen(): void
 	{
-		$box = [Layout::WIDTH / 2 - 360, 70, 720, 580];
+		$w = min(720, $this->layout->width() - 24);
+		$box = [$this->layout->width() / 2 - $w / 2, 70, $w, 580];
 		$this->dialog($box, 'HOW TO PLAY');
 		$lines = [
 			'Five-card draw. The dealer antes, everyone gets five cards face down.',
@@ -292,18 +299,19 @@ final class Painter
 			'1 to 5 select cards · D draw · H round history · Escape menu',
 		];
 		foreach($lines as $index => $line) $this->text($line, $box[0] + 32, $box[1] + 60 + $index * 30, Theme::BODY, Theme::INK, 'left', $box[2] - 64);
-		$this->text('Press Escape to go back.', Layout::WIDTH / 2, $box[1] + $box[3] - 28, Theme::CAPTION, Theme::INK, 'center');
+		$this->text('Press Escape to go back.', $this->layout->width() / 2, $box[1] + $box[3] - 28, Theme::CAPTION, Theme::INK, 'center');
 	}
 
 	private function settingsScreen(): void
 	{
-		$box = [Layout::WIDTH / 2 - 220, 230, 440, 220];
+		$w = min(440, $this->layout->width() - 24);
+		$box = [$this->layout->width() / 2 - $w / 2, 230, $w, 220];
 		$this->dialog($box, 'SETTINGS');
-		$setup = Layout::setup(0, '');
+		$setup = $this->layout->setup(0, '');
 		$this->text('Look', $box[0] + 24, $box[1] + 110, Theme::LABEL, Theme::INK);
 		$this->button($setup['variant'], $this->mode === Theme::CLASSIC ? 'Classic' : 'Modern', 'M', 'default', false);
 		$this->text('Pace: ' . (($this->view['pace'] ?? 'normal') === 'fast' ? 'fast' : 'normal'), $box[0] + 24, $box[1] + 64, Theme::LABEL, Theme::INK);
-		$this->text('Press Escape to go back.', Layout::WIDTH / 2, $box[1] + $box[3] - 28, Theme::CAPTION, Theme::INK, 'center');
+		$this->text('Press Escape to go back.', $this->layout->width() / 2, $box[1] + $box[3] - 28, Theme::CAPTION, Theme::INK, 'center');
 	}
 
 	/** @param array{float,float,float,float} $rect Design-space rectangle. */

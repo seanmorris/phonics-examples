@@ -43,8 +43,8 @@ final class Presenter
 	private bool $cardArtSent = false;
 	/** @var array{float,float}|null Last pointer position in device pixels. */
 	private ?array $pointer = null;
-	private int $width = Layout::WIDTH;
-	private int $height = Layout::HEIGHT;
+	private int $width = 1280;
+	private int $height = 720;
 	private float $dpr = 1.0;
 
 	/**
@@ -107,7 +107,7 @@ final class Presenter
 	/** @return list<array<string,mixed>> */
 	private function click(float $x, float $y): array
 	{
-		$layout = Layout::fit($this->width, $this->height);
+		$layout = $this->layout();
 		$point = $layout->design($x, $y);
 		$this->dirty = true;
 
@@ -115,7 +115,7 @@ final class Presenter
 		{
 			if($this->local === 'setup')
 			{
-				$setup = Layout::setup($this->setupPlayers, $this->setupVariant);
+				$setup = $this->layout()->setup($this->setupPlayers, $this->setupVariant);
 				if(Layout::hit($point, $setup['less'])) $this->setupPlayers = max(2, $this->setupPlayers - 1);
 				elseif(Layout::hit($point, $setup['more'])) $this->setupPlayers = min(8, $this->setupPlayers + 1);
 				elseif(Layout::hit($point, $setup['variant'])) $this->setupVariant = $this->setupVariant === 'jackpots' ? 'anything' : 'jackpots';
@@ -124,7 +124,7 @@ final class Presenter
 				return [];
 			}
 			if($this->local !== 'menu') { $this->local = 'menu'; return []; }
-			foreach(Layout::menu(!empty($this->view['canContinue'])) as $item) if(Layout::hit($point, $item['rect']))
+			foreach($this->layout()->menu(!empty($this->view['canContinue'])) as $item) if(Layout::hit($point, $item['rect']))
 			return $this->activateMenu($item);
 			return [];
 		}
@@ -133,7 +133,7 @@ final class Presenter
 		{
 			if(($this->view['screen'] ?? '') === 'settings')
 			{
-				$toggle = Layout::setup(0, '');
+				$toggle = $this->layout()->setup(0, '');
 				if(Layout::hit($point, $toggle['variant'])) { $this->mode = $this->mode === Theme::CLASSIC ? Theme::MODERN : Theme::CLASSIC; return []; }
 			}
 			return [['type' => $this->view['canContinue'] ? 'resume' : 'menu']];
@@ -143,17 +143,17 @@ final class Presenter
 
 		if(!empty($this->view['legalActions']['draw']) && !$this->locked())
 		{
-			$dialog = Layout::discardDialog();
+			$dialog = $this->layout()->discardDialog();
 			foreach($dialog['cards'] as $index => $rect) if(Layout::hit($point, $rect)) { $this->toggleCard($index); return []; }
 		}
 
-		if($stepper = Layout::stepper($this->view))
+		if($stepper = $this->layout()->stepper($this->view))
 		{
 			if(Layout::hit($point, $stepper['less'])) { $this->step(-1); return []; }
 			if(Layout::hit($point, $stepper['more'])) { $this->step(1); return []; }
 		}
 
-		foreach(Layout::actions($this->view, $this->state()) as $button) if(Layout::hit($point, $button['rect']))
+		foreach($this->layout()->actions($this->view, $this->state()) as $button) if(Layout::hit($point, $button['rect']))
 		return $this->activate($button['id'], $button['intent']);
 
 		// The menu bar's left entries open the menu; the right-hand title does nothing.
@@ -182,7 +182,7 @@ final class Presenter
 				};
 			}
 			if($this->local !== 'menu') { if(in_array($key, ['escape','backspace','enter',' '], true)) $this->local = 'menu'; return []; }
-			$items = Layout::menu(!empty($this->view['canContinue']));
+			$items = $this->layout()->menu(!empty($this->view['canContinue']));
 			return match($key) {
 				'enter', ' ' => $this->activateMenu($items[0]),
 				'c' => !empty($this->view['canContinue']) ? [['type' => 'resume']] : [],
@@ -212,7 +212,7 @@ final class Presenter
 
 		$legend = match($key) {'f' => 'F', 'c' => 'C', 'b' => 'B', 'd' => 'D', 'enter', ' ' => '↵', 'l' => 'L', default => null};
 		if($legend === null) return [];
-		foreach(Layout::actions($this->view, $this->state()) as $button) if($button['key'] === $legend)
+		foreach($this->layout()->actions($this->view, $this->state()) as $button) if($button['key'] === $legend)
 		return $this->activate($button['id'], $button['intent']);
 
 		return [];
@@ -255,6 +255,9 @@ final class Presenter
 		$this->amount = max((int)$legal['minBet'], min((int)$legal['maxBet'], $this->amount + $direction * max(1, (int)($this->view['profile']['minimum'] ?? $increment))));
 	}
 
+	/** Layout of the current canvas; the profile follows its size and pixel ratio. */
+	public function layout(): Layout { return Layout::fit($this->width, $this->height, $this->dpr); }
+
 	/** Whether a game intent is outstanding for the current revision. */
 	public function locked(): bool
 	{
@@ -285,6 +288,7 @@ final class Presenter
 		$state = $this->state();
 		unset($state['pointer']);
 		$state['cardArt'] = $this->cardAtlas !== null;
+		$state['profile'] = $this->layout()->profile;
 		return ['ui' => $state];
 	}
 
@@ -322,7 +326,7 @@ final class Presenter
 	public function paint(int $width, int $height): UiCanvas
 	{
 		[$this->width, $this->height] = [$width, $height];
-		$layout = Layout::fit($width, $height);
+		$layout = $this->layout();
 		$canvas = new UiCanvas($this->text, $layout->scale);
 		(new Painter($canvas, $layout, $this->view, $this->state(), $this->cardAtlas))->paint($width, $height);
 		return $canvas;

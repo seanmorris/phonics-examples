@@ -36,22 +36,22 @@ $test('seats sit on the oval with no two plates overlapping at any seat count', 
 		$plates = [];
 		for($seat = 0; $seat < $seats; $seat++)
 		{
-			$geometry = Layout::seat($seat, $seats);
+			$geometry = Layout::fit(1280, 720)->seat($seat, $seats);
 			$plates[] = $geometry['plate'];
 			$expect($geometry['plate'][1] >= Layout::MENU_BAR + 10, "seat $seat of $seats clears the menu bar");
-			$expect($geometry['plate'][0] >= 0 && $geometry['plate'][0] + $geometry['plate'][2] <= Layout::WIDTH, "seat $seat of $seats stays on the field");
+			$expect($geometry['plate'][0] >= 0 && $geometry['plate'][0] + $geometry['plate'][2] <= Layout::fit(1280, 720)->width(), "seat $seat of $seats stays on the field");
 			$last = $geometry['cards'][4];
-			$expect($last[1] + $last[3] <= Layout::HEIGHT, "seat $seat of $seats fan stays on the field");
+			$expect($last[1] + $last[3] <= Layout::fit(1280, 720)->height(), "seat $seat of $seats fan stays on the field");
 		}
 		foreach($plates as $i => $a) foreach($plates as $j => $b) if($i < $j)
 		$expect(!$overlaps($a, $b), "plates $i and $j do not overlap at $seats seats");
-		$expect(abs(Layout::seat(0, $seats)['plate'][0] + Layout::seat(0, $seats)['plate'][2] / 2 - Layout::WIDTH / 2) < 1e-6, "the human sits at the bottom centre with $seats seats");
+		$expect(abs(Layout::fit(1280, 720)->seat(0, $seats)['plate'][0] + Layout::fit(1280, 720)->seat(0, $seats)['plate'][2] / 2 - Layout::fit(1280, 720)->width() / 2) < 1e-6, "the human sits at the bottom centre with $seats seats");
 	}
 });
 
 $test('the action bar holds exactly the legal actions', static function(callable $expect) use ($fixture): void {
 	$state = ['discards' => [], 'amount' => 8];
-	$ids = static fn(array $view): array => array_map(static fn(array $button): string => $button['id'], Layout::actions($view, $state));
+	$ids = static fn(array $view): array => array_map(static fn(array $button): string => $button['id'], Layout::fit(1280, 720)->actions($view, $state));
 	$expect($ids($fixture('opening-8')) === ['fold','pass','bet'], 'opening: fold, pass, bet');
 	$expect($ids($fixture('facing-raise-5')) === ['fold','call','bet'], 'facing a raise: fold, call, raise');
 	$expect($ids($fixture('draw-2')) === ['clear','draw'], 'draw: keep all, draw');
@@ -63,7 +63,7 @@ $test('the action bar holds exactly the legal actions', static function(callable
 	$waiting = $fixture('opening-8');
 	$waiting['legalActions'] = [];
 	$expect($ids($waiting) === [], 'no buttons while another seat acts');
-	$bet = Layout::actions($fixture('facing-raise-5'), ['discards' => [], 'amount' => 999])[2];
+	$bet = Layout::fit(1280, 720)->actions($fixture('facing-raise-5'), ['discards' => [], 'amount' => 999])[2];
 	$expect($bet['intent']['amount'] === $fixture('facing-raise-5')['legalActions']['maxBet'], 'the raise-to amount is clamped to maxBet');
 });
 
@@ -103,7 +103,7 @@ $test('card selection is presentation state until Draw is pressed', static funct
 	$layout = Layout::fit(1280, 720);
 	$presenter2 = new Presenter($root);
 	$presenter2->update($view);
-	$rect = Layout::discardDialog()['cards'][4];
+	$rect = Layout::fit(1280, 720)->discardDialog()['cards'][4];
 	[$x, $y] = $layout->point($rect[0] + $rect[2] / 2, $rect[1] + $rect[3] / 2);
 	$presenter2->input([], ['x' => $x, 'y' => $y, 'down' => false, 'clicks' => [['x' => $x, 'y' => $y]]], 1 / 60);
 	$expect($presenter2->state()['discards'] === [$view['players'][0]['cards'][4]], 'clicking a dialog card selects it');
@@ -157,19 +157,55 @@ $test('status exposes only presentation state', static function(callable $expect
 
 $test('no opponent sits behind the action bar at any seat count', static function(callable $expect) use ($overlaps, $fixture): void {
 	$view = $fixture('facing-raise-5');
-	$bar = [Layout::CENTRE[0] + 150, Layout::CENTRE[1] + Layout::OVAL[1] - 40, 330, 80];
-	foreach(Layout::actions($view, ['discards' => [], 'amount' => 8]) as $button)
+	$bar = [790, 588, 330, 80];
+	foreach(Layout::fit(1280, 720)->actions($view, ['discards' => [], 'amount' => 8]) as $button)
 	$expect(Layout::hit([$button['rect'][0], $button['rect'][1]], $bar) && Layout::hit([$button['rect'][0] + $button['rect'][2], $button['rect'][1] + $button['rect'][3]], $bar), 'the action bar bounds hold every button');
 	foreach([2,3,4,5,6,7,8] as $seats)
 	for($seat = 1; $seat < $seats; $seat++)
 	{
-		$geometry = Layout::seat($seat, $seats);
+		$geometry = Layout::fit(1280, 720)->seat($seat, $seats);
 		$fan = $geometry['cards'][4];
 		$block = [$geometry['plate'][0], $geometry['plate'][1], $geometry['plate'][2], $fan[1] + $fan[3] + 40 - $geometry['plate'][1]];
 		$expect(!$overlaps($block, $bar), "seat $seat of $seats clears the action bar");
 	}
-	$expect(abs(Layout::seatAngle(1, 5) - (M_PI / 2 + 2 * M_PI / 5)) < 1e-9, 'five seats keep even spacing');
-	$expect(Layout::seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the bar');
+	$expect(abs(Layout::fit(1280, 720)->seatAngle(1, 5) - (M_PI / 2 + 2 * M_PI / 5)) < 1e-9, 'five seats keep even spacing');
+	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the bar');
+});
+
+$test('phones get the tall profile with touch-sized controls and no overlaps', static function(callable $expect) use ($overlaps, $fixture, $root): void {
+	$expect(Layout::fit(390, 844, 1)->profile === 'tall', 'a 390x844 canvas is tall');
+	$expect(Layout::fit(780, 1688, 2)->profile === 'tall', 'a 2x phone is tall');
+	$expect(Layout::fit(1024, 768, 1)->profile === 'wide', 'a tablet in landscape is wide');
+	$expect(Layout::fit(1500, 900, 2)->profile === 'tall', 'a 750 CSS px landscape canvas is tall');
+	$layout = Layout::fit(390, 844, 1);
+	foreach([2,5,8] as $seats)
+	{
+		$blocks = [];
+		for($seat = 0; $seat < $seats; $seat++)
+		{
+			$geometry = $layout->seat($seat, $seats);
+			$fan = $geometry['cards'][4];
+			$blocks[] = [$geometry['plate'][0], $geometry['plate'][1], $geometry['plate'][2], $fan[1] + $fan[3] - $geometry['plate'][1]];
+			$expect($geometry['plate'][0] >= 0 && $geometry['plate'][0] + $geometry['plate'][2] <= $layout->width(), "tall seat $seat of $seats stays on the field");
+		}
+		foreach($blocks as $i => $a) foreach($blocks as $j => $b) if($i < $j) $expect(!$overlaps($a, $b), "tall blocks $i and $j do not overlap at $seats seats");
+	}
+	$view = $fixture('facing-raise-5');
+	$buttons = $layout->actions($view, ['discards' => [], 'amount' => 8]);
+	$last = end($buttons);
+	$expect($last['rect'][0] + $last['rect'][2] <= $layout->width() - 15, 'the action row fits the field width');
+	foreach($buttons as $button) $expect($button['rect'][3] * $layout->scale >= 38, "{$button['id']} is at least 38 device pixels tall on a phone");
+	$stepper = $layout->stepper($view);
+	$expect($stepper !== null && $stepper['more'][0] + $stepper['more'][2] <= $layout->width() - 15, 'the stepper row fits the field width');
+	$dialog = $layout->discardDialog();
+	$expect($dialog['box'][1] + $dialog['box'][3] <= $layout->metric('actions')[1], 'the discard dialog sits above the action row');
+	foreach(['opening-8','draw-2','showdown-5','menu'] as $name)
+	{
+		$presenter = new Presenter($root);
+		$presenter->update($fixture($name));
+		$instances = $presenter->paint(390, 844)->instances();
+		$expect(count($instances) > 20, "$name paints in the tall profile");
+	}
 });
 
 echo "$passed PHP Poker presenter checks passed.\n";
