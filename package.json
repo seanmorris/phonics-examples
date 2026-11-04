@@ -10,20 +10,21 @@
     "games/*"
   ],
   "scripts": {
-    "generate": "node scripts/generate-billiards-textures.mjs && php scripts/generate-billiards-meshes.php",
-    "check:generated": "node scripts/generate-billiards-textures.mjs --check && php scripts/generate-billiards-meshes.php --check",
+    "generate": "node scripts/generate-billiards-textures.mjs && php scripts/generate-billiards-meshes.php && node scripts/generate-poker-textures.mjs",
+    "check:generated": "node scripts/generate-billiards-textures.mjs --check && php scripts/generate-billiards-meshes.php --check && node scripts/generate-poker-textures.mjs --check",
     "build:applications": "node scripts/build-applications.mjs",
     "build:site": "node scripts/build-site.mjs",
     "build": "npm run generate && npm run build:applications && npm run build:site",
-    "test:php": "php games/php-billiards/tests/run.php",
+    "test:php": "php games/php-billiards/tests/run.php && php games/php-poker/tests/run.php && php games/php-poker/tests/presenter.php",
     "test:node": "node --test tests/*.test.mjs",
     "test:manifest": "node scripts/validate-games.mjs",
     "test:browser": "playwright test",
     "test": "npm run test:php && npm run test:node && npm run check:generated && npm run test:manifest",
-    "serve": "node scripts/serve.mjs"
+    "serve": "node scripts/serve.mjs",
+    "test:poker:exhaustive": "php games/php-poker/tests/evaluate-all.php"
   },
   "dependencies": {
-    "@seanmorris/phonics": "https://github.com/seanmorris/php-wasm-engine/archive/d44cf5471a0182455a1d28df5fc230b4c0758a5b.tar.gz"
+    "@seanmorris/phonics": "https://github.com/seanmorris/php-wasm-engine/archive/a83ed053b9edd76c5249f06d750d683cfd58e995.tar.gz"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

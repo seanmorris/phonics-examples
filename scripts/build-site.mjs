@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {runtimeDirectory, engineRoot} from './runtime.mjs';
+import {createHash} from 'node:crypto';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const gamesRoot = path.join(root, 'games'), destination = path.join(root, 'site/dist');
@@ -95,11 +96,12 @@ for(const name of ['php8.4-phar.so','LICENSE','LICENSE-GPL','NOTICE','package.js
 await copyTree(path.join(phar, name), path.join(destination, 'runtime/extensions/phar', name));
 
 await copyTree(path.join(root, 'site/src/host.mjs'), path.join(destination, 'host.mjs'));
+await copyTree(path.join(root, 'site/src/offline.mjs'), path.join(destination, 'offline.mjs'));
 await copyTree(path.join(root, 'site/src/site.css'), path.join(destination, 'site.css'));
 
 const escape = value => String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-const page = ({title,body,className='',application='',embed=false}) => `<!doctype html>
-<html lang="en" class="${className}"${application ? ` data-application="${application}"` : ''}${embed ? ' data-game-embed="true"' : ''}>
+const page = ({title,body,className='',application='',embed=false,offline=false}) => `<!doctype html>
+<html lang="en" class="${className}"${application ? ` data-application="${application}"` : ''}${embed ? ' data-game-embed="true"' : ''}${offline ? ' data-offline-manifest="./offline-manifest.json"' : ''}>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
 <title>${escape(title)}</title><link rel="icon" href="data:,"><link rel="stylesheet" href="${application ? '../../' : './'}site.css"></head>
 <body>${body}${application ? `<script type="module" src="../../host.mjs"></script>` : ''}</body></html>`;
@@ -137,7 +139,7 @@ for(const entry of entries)
 	const embedBody = `<main class="embed-host"><div class="game-host"><div class="loading"><strong>${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas" tabindex="0"${size}></canvas></div></main>`;
 	await fs.mkdir(path.join(destination, 'games', entry.slug), {recursive: true});
 	await fs.mkdir(path.join(destination, 'embed', entry.slug), {recursive: true});
-	await fs.writeFile(path.join(destination, 'games', entry.slug, 'index.html'), page({title: entry.title,body: gameBody,className:'full-page',application}));
+	await fs.writeFile(path.join(destination, 'games', entry.slug, 'index.html'), page({title: entry.title,body: gameBody,className:'full-page',application,offline:entry.slug==='php-poker'}));
 	await fs.writeFile(path.join(destination, 'embed', entry.slug, 'index.html'), page({title: entry.title,body: embedBody,className:'embed-page',application,embed:true}));
 }
 
@@ -146,4 +148,22 @@ await fs.writeFile(path.join(destination, 'catalog.json'), JSON.stringify(entrie
 	, routes: {full: `games/${entry.slug}/`,embed: `embed/${entry.slug}/`,application: `applications/${entry.slug}/game.phar`}
 })), null, 2) + '\n');
 await fs.writeFile(path.join(destination, '.nojekyll'), '');
+if(entries.some(entry=>entry.slug==='php-poker'))
+{
+	const paths=['host.mjs','offline.mjs','site.css','games/php-poker/index.html',
+		'applications/php-poker/game.phar','applications/php-poker/game.phar.integrity'];
+	for(const directory of ['engine/browser','runtime'])
+		for(const name of await fs.readdir(path.join(destination,directory),{recursive:true}))
+			if((await fs.stat(path.join(destination,directory,name))).isFile()) paths.push(directory+'/'+name.split(path.sep).join('/'));
+	const files=[];
+	for(const file of paths.sort())
+	{
+		const bytes=await fs.readFile(path.join(destination,file));
+		files.push({path:file,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});
+	}
+	const build=createHash('sha256').update(JSON.stringify(files)).digest('hex');
+	await fs.writeFile(path.join(destination,'games/php-poker/offline-manifest.json'),JSON.stringify({schema:1,build,files}));
+	const worker=(await fs.readFile(path.join(root,'site/src/poker-offline-worker.js'),'utf8')).replace('__POKER_BUILD__',build);
+	await fs.writeFile(path.join(destination,'games/php-poker/offline-worker.js'),worker);
+}
 console.log(`Built ${entries.length} game and ${entries.length} embed in ${destination}`);

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "name": "@seanmorris/php-poker",
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.1.0"
+  },
+  "php": {
+    "autoload": {
+      "PhpPoker\\": "src/"
+    },
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "files": [
+      "autoload.php",
+      "src/Adaptation.php",
+      "src/Bot.php",
+      "src/Game.php",
+      "src/Hand.php",
+      "src/Profile.php",
+      "src/Render/Text.php",
+      "src/Render/Texture.php",
+      "src/Render/Theme.php",
+      "src/Render/UiCanvas.php",
+      "src/Render/UiRenderer.php",
+      "src/Session.php",
+      "src/Ui/Layout.php",
+      "src/Ui/Painter.php",
+      "src/Ui/Presenter.php"
+    ]
+  },
+  "browser": {
+    "files": [
+      "browser/game.mjs",
+      "browser/persistence.mjs"
+    ]
+  },
+  "application": {
+    "entry": "application.php",
+    "assets": [
+      "LICENSE",
+      "NOTICE",
+      "art/cards/back-blue.svg",
+      "art/cards/back-red.svg",
+      "art/cards/deck.svg",
+      "art/icons/ada.svg",
+      "art/icons/cleo.svg",
+      "art/icons/felix.svg",
+      "art/icons/jules.svg",
+      "art/icons/mara.svg",
+      "art/icons/nora.svg",
+      "art/icons/otis.svg",
+      "art/icons/roster.json",
+      "art/typography/fixedsys-excelsior-LICENSE.md",
+      "assets/generated/textures.json",
+      "assets/generated/ui-font-OFL.txt",
+      "assets/generated/ui-font.json",
+      "assets/generated/ui-font.rgba",
+      "shaders/ui.frag",
+      "shaders/ui.vert"
+    ]
+  },
+  "integrity": {
+    "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
+    "NOTICE": "sha256-BDfp8L2qJiIEbCnXhe/zKq9qNFD708WfRDSkGHI0tRU=",
+    "application.php": "sha256-+nEn3xahu0zn+BB4M6A0iZgDFjT10Uk9lvOfdizivJo=",
+    "art/cards/back-blue.svg": "sha256-/kOyO4O+W/JzEE2pkzMCU9PL8dYHYNmKEM9/sBilYiU=",
+    "art/cards/back-red.svg": "sha256-HX4CryU8ztM3thI0RY+9aMZk0UCsMVWvJJIf6so5czY=",
+    "art/cards/deck.svg": "sha256-qWFttCwcqhboDxcn6WYmjicdRYw9WN/u5r1zYsvGBRc=",
+    "art/icons/ada.svg": "sha256-Fn2iek0qo5p1sPDdublMiOGAwPY2Y/4FuXElo134X9w=",
+    "art/icons/cleo.svg": "sha256-PZYh6F21AbP7nUVC64nZRREhS83bqAEZquhKEoggBvU=",
+    "art/icons/felix.svg": "sha256-d+gYKL3n1w00xWxNNUcIfr4+obvKay007s1nVmaa9lE=",
+    "art/icons/jules.svg": "sha256-1WBdWV0MU/Bky1gsq+WAxZlsiUDdCYo2BMcMO5d1CPA=",
+    "art/icons/mara.svg": "sha256-+Yk7+WuCQ9hcZEwi/7339urz8zH/JYdFzq8MWm8RrLg=",
+    "art/icons/nora.svg": "sha256-/tYaONfV8uo5I3PJf2l/Kx4PwRYCi0s/dZ0J9Xq4z2g=",
+    "art/icons/otis.svg": "sha256-gSIiYIJNWTgiFIM948DAq59vBV7PENTyKAlIuFu2QrY=",
+    "art/icons/roster.json": "sha256-nxQz5eMBPQqqLDQJrRXBPOL0FblkcWV65geNMCD6KJM=",
+    "art/typography/fixedsys-excelsior-LICENSE.md": "sha256-LlVV0JG1bwrV2QQ+s6j6Xr73TQyev21+k4TcIMMH+OU=",
+    "assets/generated/textures.json": "sha256-LUpZQP+CelLPR64DAxrPsA80F5w5InmGS+ykOVtdVJw=",
+    "assets/generated/ui-font-OFL.txt": "sha256-GG11DrSWpMF6djhfgr5q6irBzy3gdKgR1jeGzzdOpz8=",
+    "assets/generated/ui-font.json": "sha256-oE2kugIUP9+RYNWPYwfwhWrNMh9b8AU7F5i3EZuSaQU=",
+    "assets/generated/ui-font.rgba": "sha256-9OUHap/sOu16PGsQiGbzKyeU7FsfqfC45p7yYLIDBhg=",
+    "autoload.php": "sha256-oR7TtuNrvbEy7h35CVKXA4Uew2UtBMR9XVlDQa1ZbBk=",
+    "browser/game.mjs": "sha256-XUZVhg6OIDQ/n0g6BT2XbRBV00evot2GlJ3yafTCw1c=",
+    "browser/persistence.mjs": "sha256-txa/BXXV8tJTJlbXkBNLVGzdtFlQ+2wGYpVtKX9hTfY=",
+    "shaders/ui.frag": "sha256-Tc3yUPRiouakSGUmhLexNnR6Cdr6OLE56NiLTwGcppA=",
+    "shaders/ui.vert": "sha256-nzz5uhcqbAmgR7A4EtN54AIWTMlMoAwsN4Zow6np5LU=",
+    "src/Adaptation.php": "sha256-siS6kA/MHFeD/2g9xccGFHWF2ykmEwAPrtESCaBiUaQ=",
+    "src/Bot.php": "sha256-K40jOXKI0bYxznVplY3thSDbAlN+bfcbIl0d0BGDhMY=",
+    "src/Game.php": "sha256-AlSst2Gs9ELeLy9fOduWojkzDeXEh0hPJGSNm7vetDs=",
+    "src/Hand.php": "sha256-ufbyVvsiFblvZpS4kJB8NTNVpWsSdTLsUC0qf5mfaWg=",
+    "src/Profile.php": "sha256-YA12V+NZLEYY5M8kGTnawnJUZwFbGYCvl9ycUggl/T4=",
+    "src/Render/Text.php": "sha256-Y9gbUpg6AKH33l0kq3YxRr4ln7JEG1/5IRp71Qa8H8E=",
+    "src/Render/Texture.php": "sha256-q8tAALhZ51uMs8WZiiVub84AZTIRxztqWvzg89DQsno=",
+    "src/Render/Theme.php": "sha256-EYaXtb4xTmKaPxx6Rg8i2q4z0crURMXgnk9b+r4FNgU=",
+    "src/Render/UiCanvas.php": "sha256-1FPfxuVPKWifZCpr5Gf0G8pfNXawCLfpqRyH3+4uMeQ=",
+    "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
+    "src/Session.php": "sha256-EgAQs+XJDn7NXqSftb4wPX9UPJssR/SIL/g0zeJPqOA=",
+    "src/Ui/Layout.php": "sha256-zJdkt6He/whQxYhGCOj9xrwP5F6rOP+YHiKZJtEzrnA=",
+    "src/Ui/Painter.php": "sha256-T1fdfJOMX1ypKR7JM8Iowqtktu0zZ3P2hKRsmVleTsY=",
+    "src/Ui/Presenter.php": "sha256-/YzMR6mGy763SvGEd0VIJk5+DFzbCKU5LSBCxe/cK84="
+  }
+}

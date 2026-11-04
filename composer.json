@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "require": {
     "php": ">=8.0",
-    "seanmorris/phonics": "dev-main#d44cf5471a0182455a1d28df5fc230b4c0758a5b"
+    "seanmorris/phonics": "dev-main#a83ed053b9edd76c5249f06d750d683cfd58e995"
   },
   "repositories": [
     {
@@ -15,8 +15,8 @@
   ],
   "autoload": {
     "psr-4": {
-      "PhpBilliards\\": "games/php-billiards/src/"
+      "PhpBilliards\\": "games/php-billiards/src/",
+      "PhpPoker\\": "games/php-poker/src/"
     }
   }
 }
-

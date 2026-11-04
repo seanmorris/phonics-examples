@@ -5,6 +5,7 @@ const loading = document.querySelector('.loading');
 const label = loading?.querySelector('span');
 const controller = new AbortController;
 let session;
+let closeOffline;
 
 const runtimeFingerprint = async url => {
 	const manifest = await fetch(url, {signal: controller.signal}).then(response => {
@@ -45,6 +46,11 @@ try
 
 	loading?.classList.add('complete');
 	canvas.focus({preventScroll: true});
+	if(document.documentElement.dataset.offlineManifest)
+	{
+		const {enableOffline}=await import('./offline.mjs');
+		closeOffline=await enableOffline(document.documentElement.dataset.offlineManifest,document.querySelector('.game-page footer'));
+	}
 }
 catch(error)
 {
@@ -56,4 +62,4 @@ catch(error)
 	}
 }
 
-addEventListener('pagehide', () => { controller.abort(); void session?.dispose(); }, {once: true});
+addEventListener('pagehide', () => { controller.abort(); closeOffline?.(); void session?.dispose(); }, {once: true});

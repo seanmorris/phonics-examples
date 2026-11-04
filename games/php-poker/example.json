@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "slug": "php-poker",
+  "title": "PHP Poker",
+  "description": "Classic five-card draw against a table of local opponents. Save your seat and play offline.",
+  "controls": "Choose cards to discard, then confirm your draw · Follow the action bar to bet · Escape opens the menu",
+  "application": "dist/game.phar",
+  "poster": "assets/generated/poster.png",
+  "canvas": {"width": 1280, "height": 720},
+  "aspectRatio": "16/9",
+  "fit": "contain",
+  "documentation": {
+    "chapters": [
+      {"slug": "index", "title": "PHP Poker", "path": "docs/index.md"},
+      {"slug": "rules", "title": "Rules and provenance", "path": "docs/rules.md"},
+      {"slug": "architecture", "title": "Architecture and offline play", "path": "docs/architecture.md"},
+      {"slug": "design", "title": "Table and controls", "path": "docs/design.md"}
+    ],
+    "api": {"namespace": "PhpPoker", "description": "Five-card draw rules, exact hand evaluation, local opponents, authorized views and saved sessions."},
+    "embed": {"kind": "local"}
+  }
+}

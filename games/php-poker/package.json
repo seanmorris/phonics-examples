@@ -1,0 +1,12 @@
+{
+  "name": "@seanmorris/php-poker",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Bicycle-inspired five-card draw with local opponents and saved offline play",
+  "license": "Apache-2.0",
+  "files": ["src/", "browser/", "art/", "assets/", "shaders/", "application.php", "autoload.php", "phonics.json", "LICENSE", "NOTICE"],
+  "scripts": {
+    "test": "php tests/run.php && php tests/presenter.php",
+    "test:exhaustive": "php tests/evaluate-all.php"
+  }
+}

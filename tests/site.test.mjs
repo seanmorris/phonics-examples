@@ -8,7 +8,7 @@ test('built catalog exposes separate full, embed, and application routes', async
 	try { await fs.access(new URL('catalog.json', dist)); }
 	catch { context.skip('site has not been built'); return; }
 	const catalog = JSON.parse(await fs.readFile(new URL('catalog.json', dist)));
-	assert.equal(catalog.length, 7);
+	assert.equal(catalog.length, 8);
 	const billiards = catalog.find(entry => entry.slug === 'php-billiards');
 	assert.deepEqual(billiards.routes, {
 		full: 'games/php-billiards/'
