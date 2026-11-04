@@ -622,8 +622,10 @@ final class Simulation
 				$ball->vx *= .985;
 				$ball->vy *= .985;
 				$ball->spinY *= .92;
+				// Depth, in ball radii below resting on the cloth, lets the sound tell a ball rolling around the edge
+				// from one dropping out of sight down the liner.
 				if($restitution > 0) $this->events[] = ['type' => 'pocket-rattle','ball' => $ball->number,'pocket' => $index
-					,'strength' => min(1, $normalSpeed / self::MAX_SPEED)];
+					,'strength' => min(1, $normalSpeed / self::MAX_SPEED),'depth' => $ball->drop / Ball::RADIUS];
 			}
 		}
 

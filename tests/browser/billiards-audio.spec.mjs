@@ -128,6 +128,19 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 	expect(pair[1].delay).toBeCloseTo(.065,2);
 	expect(pair[2].delay).toBeCloseTo(.25,2);
 	expect(pair[3].delay).toBeCloseTo(.315,2);
+
+	// Two radii down the ball is out of sight: a strike knocks softly on the ball-ball curve, and the same ball's next
+	// one within 90 ms is not heard. A knock back at the edge keeps the edge level.
+	const before=await page.evaluate(()=>impactVoices.length);
+	await page.evaluate(()=>impactModule.billiardsStatus(JSON.stringify({events:[
+		{type:'pocket-rattle',ball:6,pocket:1,strength:.05,depth:3}
+		,{type:'pocket-rattle',ball:6,pocket:1,strength:.14,depth:3.2}
+		,{type:'pocket-rattle',ball:6,pocket:1,strength:.14,depth:1}
+	]})));
+	const depths=await page.evaluate(count=>impactVoices.slice(count),before);
+	expect(depths.map(voice=>voice.bytes)).toEqual([sizes.pocket3,sizes.pocket2]);
+	expect(depths[0].gain*depths[0].peak).toBeCloseTo((.12+.88*.05**.8)*clackPeak,5);
+	expect(depths[1].gain*depths[1].peak).toBeCloseTo(pocketKnockLevel(.14)*clackPeak,5);
 	await testInfo.attach('impact-voices.json',{body:JSON.stringify(voices,null,2),contentType:'application/json'});
 	await page.evaluate(()=>disposeImpact());
 });

@@ -35,6 +35,27 @@ export function pocketKnockLevel(strength)
 }
 
 /**
+ * The knock, if any, for one strike inside a pocket.
+ *
+ * Until the ball's top drops below the cloth, two radii down, it is rolling around the pocket edge in sight, and every
+ * strike chatters at the edge level. Below that it is falling out of sight down the liner: only a real strike knocks,
+ * on the softer ball-ball curve and at most once every 90 ms for each ball, so a sink is a knock or two and the landing
+ * rather than a rattle.
+ *
+ * @param {{strength?:number,depth?:number}} event A pocket-rattle event; depth is in ball radii below resting on the cloth.
+ * @param {number} sinceDeep Milliseconds since this ball's last knock out of sight.
+ * @param {() => number} random Uniform source in [0, 1).
+ * @returns {{hit:string,level:number,deep:boolean}|null} The knock to play, or null for none.
+ */
+export function pocketKnock(event, sinceDeep=Infinity, random=Math.random)
+{
+	const strength=Math.max(0,Math.min(1,Number(event?.strength)||0));
+	if(!((Number(event?.depth)||0)>=2))return {hit:pocketHit(strength,random),level:pocketKnockLevel(strength),deep:false};
+	if(strength<.01||!(sinceDeep>=90))return null;
+	return {hit:pocketHit(strength,random),level:.12+.88*strength**.8,deep:true};
+}
+
+/**
  * Knocks for a ball landing on the pocket bottom, just before the sink recording takes over.
  * Every landing knocks with hit 1; one that struck the walls hard on the way in also bounces once, a weaker hit 2.
  * Each gap is drawn afresh, so no two landings share a rhythm.
@@ -151,7 +172,7 @@ export function activate({module, canvas, session})
 	};
 	// Hardest wall strike of each ball currently inside a pocket, which decides how lively its landing sounds, and the
 	// audio-clock start of each pocket's latest landing, which the next ball through it waits behind.
-	const pocketEnergy=new Map,pocketLandings=new Map;
+	const pocketEnergy=new Map,pocketLandings=new Map,deepKnocks=new Map;
 	const sound=event=>{
 		const strength=Math.max(0,Math.min(1,Number(event.strength??0)||0));
 		if(event.type==='impact')play('clack',{
@@ -165,17 +186,20 @@ export function activate({module, canvas, session})
 			gain:(.12+.88*strength**.8)*(peaks.get('clack')??1)/Math.max(peaks.get('rail')??1,1e-4)
 			,lowpass:impactLowpassCutoff(strength,audio?.sampleRate,'rail'),lowpassQ:.6
 		});
-		// pocket-drop is split into three knocks against the pocket's walls. Every strike on the rim, back wall or liner
-		// plays one, peak-matched to the clack, so a ball rolling around the pocket edge chatters audibly. pocket-sink
+		// pocket-drop is split into three knocks against the pocket's walls, peak-matched to the clack. A ball rolling
+		// around the pocket edge chatters on them; one falling out of sight knocks only softly and sparsely. pocket-sink
 		// is the ball reaching the bottom: it lands with hit 1, and a lively ball bounces once more, before the sink.
 		const knock=(hit,level,options={})=>play(hit,{gain:level*(peaks.get('clack')??1)/Math.max(peaks.get(hit)??1,1e-4),...options});
 		if(event.type==='pocket-enter')pocketEnergy.set(event.ball,0);
 		if(event.type==='pocket-rattle')
 		{
 			pocketEnergy.set(event.ball,Math.max(pocketEnergy.get(event.ball)??0,strength));
+			const now=performance.now(),sound=pocketKnock(event,now-(deepKnocks.get(event.ball)??-Infinity));
+			if(sound?.deep)deepKnocks.set(event.ball,now);
 			// Chatter leaves two voices free so the landing knocks and the sink always sound.
-			knock(pocketHit(strength),pocketKnockLevel(strength),{limit:6});
+			if(sound)knock(sound.hit,sound.level,{limit:6});
 		}
+		if(event.type==='pocket-reject'||event.type==='pocket')deepKnocks.delete(event.ball);
 		if(event.type==='pocket-reject')pocketEnergy.delete(event.ball);
 		if(event.type==='pocket')
 		{

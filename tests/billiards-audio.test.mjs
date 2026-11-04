@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {bottomKnocks,impactLowpassCutoff,pocketHit,pocketKnockLevel,queuedDrop} from '../games/php-billiards/browser/game.mjs';
+import {bottomKnocks,impactLowpassCutoff,pocketHit,pocketKnock,pocketKnockLevel,queuedDrop} from '../games/php-billiards/browser/game.mjs';
 
 test('soft impact cutoff rises monotonically on the contact curve for both materials', () => {
 	for(const material of ['ball','rail'])
@@ -155,4 +155,25 @@ test('balls in the same pocket land one at a time, 200-300 ms apart', () => {
 		assert.ok(gap>=.2&&gap<=.3);
 	}
 	assert.equal(queuedDrop(NaN,4,()=>.5),4);
+});
+
+test('a ball rolling around the edge chatters, but one falling out of sight knocks softly and sparsely', () => {
+	// Up to two radii down the ball is still in sight at the edge: every strike, however light, chatters at the edge level.
+	for(const depth of [0,.5,1.99,undefined,NaN])for(const strength of [0,.002,.05,.45])
+	{
+		const knock=pocketKnock({strength,depth},0,()=>.5);
+		assert.deepEqual(knock,{hit:pocketHit(strength,()=>.5),level:pocketKnockLevel(strength),deep:false});
+	}
+	// Below that only a real strike knocks, on the quieter ball-ball curve.
+	for(const strength of [0,.005,.0099])assert.equal(pocketKnock({strength,depth:3},Infinity,()=>.5),null);
+	for(const strength of [.01,.05,.14])
+	{
+		const knock=pocketKnock({strength,depth:2},Infinity,()=>.5);
+		assert.ok(knock.deep&&Math.abs(knock.level-(.12+.88*strength**.8))<1e-12);
+		assert.ok(knock.level<pocketKnockLevel(strength),'a knock out of sight was as loud as one at the edge');
+	}
+	// And no more than one every 90 ms for each ball.
+	assert.equal(pocketKnock({strength:.05,depth:3},89.9,()=>.5),null);
+	assert.equal(pocketKnock({strength:.05,depth:3},NaN,()=>.5),null);
+	assert.ok(pocketKnock({strength:.05,depth:3},90,()=>.5));
 });

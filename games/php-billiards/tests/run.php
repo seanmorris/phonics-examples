@@ -792,17 +792,26 @@ $test('a ball sliding along the back of a pocket drops instead of balancing on t
 	$game->consumeEvents();
 	$balanced = 0;
 	$sank = false;
+	$depths = [];
 
 	for($tick = 0; $tick < 60 && !$sank; $tick++)
 	{
 		$game->step();
-		foreach($game->consumeEvents() as $event) $sank = $sank || $event['type'] === 'pocket';
+		foreach($game->consumeEvents() as $event)
+		{
+			$sank = $sank || $event['type'] === 'pocket';
+			if($event['type'] === 'pocket-rattle') $depths[] = $event['depth'];
+		}
 		$behind = ($ball->x - $pocketX) * $outwardX + ($ball->y - $pocketY) * $outwardY > 0;
 		if($ball->pocket !== null && $behind && $ball->drop < .001) $balanced++;
 	}
 
 	$expect($sank, 'The ball was still above the pocket a second after reaching its back wall');
 	$expect($balanced < 15, "The ball sat on the rim behind the pocket centre for $balanced steps");
+	// The sound tells a ball at the edge from one out of sight by how deep each knock is, in ball radii.
+	// The last knock can land a little past the 0.115 m sink depth before the ball is clamped to it.
+	$expect($depths && min($depths) >= 0 && min($depths) < 2 && max($depths) >= 2 && max($depths) < .12 / Ball::RADIUS,
+		'Pocket knocks did not report depths from the edge down to the bottom');
 });
 
 $test('reset restores the exact pre-shot state', static function() use ($expect): void {
