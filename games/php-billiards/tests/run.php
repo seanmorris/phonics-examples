@@ -1773,6 +1773,7 @@ $test('clearing spin wins over spin still held in the same frame', static functi
 
 require __DIR__ . '/camera.php';
 require __DIR__ . '/contacts.php';
+require __DIR__ . '/pocket-contacts.php';
 
 $failures = 0;
 

@@ -612,21 +612,27 @@ final class Simulation
 	{
 		if($seconds <= 0) return;
 
-		foreach($this->balls as $ball) if($ball->active && (!$this->cueOnly || $ball->number === 0))
+		foreach($this->orderedBalls() as $ball) if($ball->active && (!$this->cueOnly || $ball->number === 0))
 		{
 			$ball->advance($seconds);
 
 			if($ball->pocket !== null) $this->advancePocket($ball, $seconds);
 		}
+		foreach($this->impactContacts as $key => [$a,$b])
+		if(!$a->active || !$b->active || ($a->x - $b->x) ** 2 + ($a->y - $b->y) ** 2
+			+ ($a->drop - $b->drop) ** 2 > (2 * Ball::RADIUS) ** 2) unset($this->impactContacts[$key]);
 	}
 
 	/** Gravity, the rim of the slate cut, and the conical liner decide whether a ball rattles out or sinks. */
-	private function advancePocket(Ball $ball, float $seconds): void
+	private function advancePocket(Ball $ball, float $seconds, bool $gravity = true): void
 	{
 		$index = $ball->pocket;
 		[$pocketX,$pocketY] = Table::pockets()[$index];
-		$ball->vDrop += self::GRAVITY * $seconds;
-		$ball->drop += $ball->vDrop * $seconds;
+		if($gravity)
+		{
+			$ball->drop += $ball->vDrop * $seconds + .5 * self::GRAVITY * $seconds ** 2;
+			$ball->vDrop += self::GRAVITY * $seconds;
+		}
 		$relativeX = $ball->x - $pocketX;
 		$relativeY = $ball->y - $pocketY;
 		$radial = hypot($relativeX, $relativeY);
@@ -687,15 +693,20 @@ final class Simulation
 
 			if($normalSpeed > 0)
 			{
-				// Rolling over the rim is a resting contact; only a real strike on it, the wall, or the liner rebounds.
+				// The rim supports slow roll; the compliant lining still returns soft pocket knocks.
 				$restitution = $onRim && $normalSpeed < .3 ? 0.0 : self::POCKET_RESTITUTION;
 				$impulse = (1 + $restitution) * $normalSpeed;
 				$ball->vx -= $impulse * $nx;
 				$ball->vy -= $impulse * $ny;
 				$ball->vDrop -= $impulse * $nz;
-				$ball->vx *= .985;
-				$ball->vy *= .985;
-				$ball->spinY *= .92;
+				// A supported ball can touch on every microstep. Apply the strike losses only to a rebound,
+				// not repeatedly to resting contact as gravity or another ball presses it into the lining.
+				if($normalSpeed >= .3)
+				{
+					$ball->vx *= .985;
+					$ball->vy *= .985;
+					$ball->spinY *= .92;
+				}
 				// Depth, in ball radii below resting on the cloth, lets the sound tell a ball rolling around the edge
 				// from one dropping out of sight down the liner.
 				if($restitution > 0) $this->events[] = ['type' => 'pocket-rattle','ball' => $ball->number,'pocket' => $index
@@ -813,14 +824,15 @@ final class Simulation
 		$balls = [];
 		$resting = [];
 		$reaches = [];
-		foreach($this->numberOrder as $ball) if($ball->active && $ball->pocket === null)
+		foreach($this->numberOrder as $ball) if($ball->active)
 		{
 			$balls[] = $ball;
 			// applyCloth() stops balls with exact zeros; every velocity-dependent test below rejects such a ball.
-			$resting[] = $ball->vx == 0.0 && $ball->vy == 0.0;
+			$resting[] = $ball->vx == 0.0 && $ball->vy == 0.0 && $ball->pocket === null;
 			// Farthest this ball can travel before the limit, plus a micrometre of slack far beyond rounding error.
 			// A target outside that reach cannot produce an event, so box tests below skip only certain misses.
-			$reaches[] = sqrt($ball->vx ** 2 + $ball->vy ** 2) * $limit + 1e-6;
+			$reaches[] = sqrt($ball->vx ** 2 + $ball->vy ** 2 + $ball->vDrop ** 2) * $limit
+				+ ($ball->pocket !== null ? .5 * self::GRAVITY * $limit ** 2 : 0) + 1e-6;
 		}
 		$count = count($balls);
 		[$pockets,$facings] = self::sweptGeometry();
@@ -846,14 +858,22 @@ final class Simulation
 
 				$rx = $b->x - $a->x;
 				$ry = $b->y - $a->y;
+				$rz = $b->drop - $a->drop;
 				$vx = $b->vx - $a->vx;
 				$vy = $b->vy - $a->vy;
+				$vz = $b->vDrop - $a->vDrop;
+				$az = (($b->pocket !== null ? 1 : 0) - ($a->pocket !== null ? 1 : 0)) * self::GRAVITY;
 				$radius = Ball::RADIUS * 2;
-				$c = $rx * $rx + $ry * $ry - $radius * $radius;
-				$bq = 2 * ($rx * $vx + $ry * $vy);
-				$aq = $vx * $vx + $vy * $vy;
+				$c = $rx * $rx + $ry * $ry + $rz * $rz - $radius * $radius;
+				$bq = 2 * ($rx * $vx + $ry * $vy + $rz * $vz);
+				$aq = $vx * $vx + $vy * $vy + $vz * $vz;
 
-				if($c <= 0 && $bq < 0) $time = 0;
+				if($az != 0.0)
+				{
+					$time = self::fallingContactTime($rx, $ry, $rz, $vx, $vy, $vz, $az, $limit);
+					if($time === null) continue;
+				}
+				elseif($c <= 0 && $bq < 0) $time = 0;
 				elseif($aq <= 1e-12 || $bq >= 0) continue;
 				else
 				{
@@ -866,6 +886,16 @@ final class Simulation
 
 				if($time >= -1e-9 && $time <= $limit && ($best === null || $time < $best['time']))
 				$best = ['type' => 'ball','time' => max(0, $time),'a' => $a,'b' => $b];
+			}
+
+			if($a->pocket !== null)
+			{
+				// Split at each sink crossing so sink events from different pockets keep their physical order.
+				$depth = max(0, self::POCKET_SINK_DEPTH - $a->drop);
+				$time = (-$a->vDrop + sqrt($a->vDrop ** 2 + 2 * self::GRAVITY * $depth)) / self::GRAVITY;
+				if($time <= $limit && ($best === null || $time < $best['time']))
+				$best = ['type' => 'sink','time' => $time,'ball' => $a];
+				continue; // Pocket liners own boundaries below the cloth.
 			}
 
 			// Pocket entry is a swept event, just like a rail or ball impact. Checking
@@ -1011,6 +1041,25 @@ final class Simulation
 		return $best;
 	}
 
+	/** Conservative sweep with relative gravity; near a grazing root the bounded contact integrator takes over. */
+	private static function fallingContactTime(float $x, float $y, float $z, float $vx, float $vy, float $vz,
+		float $az, float $limit): ?float
+	{
+		$bound = sqrt($vx * $vx + $vy * $vy + $vz * $vz) + abs($az) * $limit;
+		if($bound <= 0) return null;
+		$time = 0.0;
+		for($i = 0; $i < 40; $i++)
+		{
+			$dx = $x + $vx * $time; $dy = $y + $vy * $time;
+			$dz = $z + $vz * $time + .5 * $az * $time * $time;
+			$gap = sqrt($dx * $dx + $dy * $dy + $dz * $dz) - 2 * Ball::RADIUS;
+			if($gap <= 1e-10) return $time;
+			$time += $gap / $bound;
+			if($time > $limit) return null;
+		}
+		return $time;
+	}
+
 	/**
 	 * Per-pocket and per-facing constants for the swept search, derived once with the same arithmetic it used inline.
 	 *
@@ -1060,7 +1109,7 @@ final class Simulation
 	/** @return list<Ball> */
 	private function contactBalls(): array
 	{
-		return array_values(array_filter($this->orderedBalls(), static fn(Ball $ball): bool => $ball->active && $ball->pocket === null));
+		return array_values(array_filter($this->orderedBalls(), static fn(Ball $ball): bool => $ball->active));
 	}
 
 	private function advanceContacts(float $seconds): void
@@ -1069,11 +1118,7 @@ final class Simulation
 		$this->recordImpacts($balls);
 		ContactModel::advance($balls, $seconds);
 		$this->recordImpacts($balls);
-		foreach($this->orderedBalls() as $ball) if($ball->active && $ball->pocket !== null)
-		{
-			$ball->advance($seconds);
-			$this->advancePocket($ball, $seconds);
-		}
+		foreach($balls as $ball) if($ball->pocket !== null) $this->advancePocket($ball, $seconds, false);
 	}
 
 	/** Aggregate simultaneous new contacts; persistent compression does not generate a sound per RK step. */
@@ -1091,7 +1136,7 @@ final class Simulation
 			$distance = sqrt($dx * $dx + $dy * $dy + $dz * $dz);
 			if($distance > Ball::RADIUS * 2 + 1e-12 || $distance < 1e-15) continue;
 			$key = $a->number . ':' . $b->number;
-			$touching[$key] = true;
+			$touching[$key] = [$a,$b];
 			if(isset($this->impactContacts[$key])) continue;
 			$approach = (($a->vx - $b->vx) * $dx + ($a->vy - $b->vy) * $dy
 				+ ($a->vDrop - $b->vDrop) * $dz) / $distance;
@@ -1104,7 +1149,7 @@ final class Simulation
 	/** Remove only the negligible stored compression left after all motion has gone to sleep. */
 	private function clearRestingCompression(): void
 	{
-		$balls = $this->contactBalls();
+		$balls = array_values(array_filter($this->contactBalls(), static fn(Ball $b): bool => $b->pocket === null));
 		$count = count($balls);
 		for($pass = 0; $pass < 16; $pass++)
 		{
@@ -1127,7 +1172,16 @@ final class Simulation
 
 	private function resolveBoundary(array $collision): void
 	{
-		if($collision['type'] === 'pocket') $this->enterPocket($collision['ball'], $collision['index']);
+		if($collision['type'] === 'sink')
+		{
+			$ball = $collision['ball'];
+			if($ball->active && $ball->drop >= self::POCKET_SINK_DEPTH - 1e-10)
+			{
+				$ball->drop = self::POCKET_SINK_DEPTH;
+				$this->advancePocket($ball, 0, false);
+			}
+		}
+		elseif($collision['type'] === 'pocket') $this->enterPocket($collision['ball'], $collision['index']);
 		elseif($collision['type'] === 'backstop') $this->resolvePocketBackstop($collision['ball'], $collision);
 		elseif($collision['type'] === 'jaw') $this->resolveJaw($collision['ball'], $collision);
 		elseif($collision['type'] === 'facing') $this->resolveFacing($collision['ball'], $collision);
