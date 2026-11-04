@@ -85,6 +85,7 @@ export function activate({module, canvas, session})
 	if(!canvas.getContext('webgl2',{alpha:false,antialias:true,depth:false,stencil:false}))
 		throw new Error('PHP Poker requires WebGL2');
 	const originalStyle=canvas.getAttribute('style'),originalTabIndex=canvas.getAttribute('tabindex'),originalLabel=canvas.getAttribute('aria-label');
+	const originalDescription=canvas.getAttribute('aria-describedby');
 	canvas.style.cssText='display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;touch-action:none;outline:none;background:#1f8f45';
 	canvas.tabIndex=Math.max(0,canvas.tabIndex);
 	canvas.setAttribute('aria-label','PHP Poker. F folds, C checks or calls, B bets, 1 to 5 select cards and D draws. Escape opens the menu.');
@@ -98,7 +99,7 @@ export function activate({module, canvas, session})
 	const resize=new ResizeObserver(measure);resize.observe(canvas);measure();
 
 	// Input queues drain once per PHP frame. Positions are device pixels in the canvas's own framebuffer space.
-	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false};
+	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null;
 	const local=event=>{
 		const box=canvas.getBoundingClientRect(),[width,height]=JSON.parse(viewport);
 		return {x:(event.clientX-box.left)/Math.max(1,box.width)*width,y:(event.clientY-box.top)/Math.max(1,box.height)*height};
@@ -107,21 +108,38 @@ export function activate({module, canvas, session})
 		if(closed||event.ctrlKey||event.metaKey||event.altKey)return;
 		const key=event.key.length===1?event.key.toLowerCase():event.key.toLowerCase();
 		if(!KEYS.has(key))return;
-		keys.push({key});event.preventDefault();
+		event.preventDefault();
+		if(!event.repeat)keys.push({key});
 	};
-	const onMove=event=>{pointer={...local(event),down:pointer.down};};
-	const onDown=event=>{if(event.button!==0)return;canvas.focus({preventScroll:true});pointer={...local(event),down:true};canvas.setPointerCapture?.(event.pointerId);};
+	const releasePointer=()=>{
+		const id=activePointer;activePointer=null;pressedAt=null;pointer.down=false;
+		if(id!==null&&canvas.hasPointerCapture?.(id))canvas.releasePointerCapture(id);
+	};
+	const onMove=event=>{if(activePointer===null||event.pointerId===activePointer)pointer={...local(event),down:pointer.down};};
+	const onDown=event=>{
+		if(event.button!==0||activePointer!==null)return;
+		canvas.focus({preventScroll:true});activePointer=event.pointerId;pressedAt=[event.clientX,event.clientY];
+		pointer={...local(event),down:true};canvas.setPointerCapture?.(event.pointerId);
+	};
 	const onUp=event=>{
-		if(event.button!==0||!pointer.down)return;
+		if(event.button!==0||!pointer.down||event.pointerId!==activePointer)return;
+		const tapped=pressedAt&&Math.hypot(event.clientX-pressedAt[0],event.clientY-pressedAt[1])<=10;
 		const position=local(event);pointer={...position,down:false};
+		releasePointer();
 		const box=canvas.getBoundingClientRect();
-		if(event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom)clicks.push(position);
+		if(tapped&&event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom)clicks.push(position);
 	};
+	const onCancel=event=>{if(event.pointerId===activePointer)releasePointer();};
+	const clearInput=()=>{keys=[];clicks=[];releasePointer();};
+	const onVisibility=()=>{if(document.visibilityState==='hidden')clearInput();};
 	canvas.addEventListener('keydown',onKey);
 	canvas.addEventListener('pointermove',onMove);
 	canvas.addEventListener('pointerdown',onDown);
 	canvas.addEventListener('pointerup',onUp);
-	canvas.addEventListener('pointercancel',onUp);
+	canvas.addEventListener('pointercancel',onCancel);
+	canvas.addEventListener('lostpointercapture',onCancel);
+	canvas.addEventListener('blur',clearInput);
+	document.addEventListener('visibilitychange',onVisibility);
 
 	// Accessible mirror of the authorized status: one live line for the message and turn, nothing private.
 	const live=document.createElement('div');
@@ -129,6 +147,18 @@ export function activate({module, canvas, session})
 	live.style.cssText='position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap';
 	canvas.parentElement?.appendChild(live);
 	let spoken='';
+	const hand=document.createElement('div');
+	hand.id='php-poker-hand-'+crypto.randomUUID();
+	hand.style.cssText=live.style.cssText;
+	hand.setAttribute('aria-live','polite');
+	canvas.parentElement?.appendChild(hand);
+	canvas.setAttribute('aria-describedby',[originalDescription,hand.id].filter(Boolean).join(' '));
+	const cardName=id=>{
+		if(!Number.isInteger(id)||id<0||id>51)return 'hidden card';
+		return ['two','three','four','five','six','seven','eight','nine','ten','jack','queen','king','ace'][id%13]
+			+' of '+['clubs','diamonds','hearts','spades'][Math.floor(id/13)];
+	};
+	let described='';
 
 	// Card art arrives from PHP as SVG text and goes back as one rasterised atlas, once.
 	let atlas=null,delivered=false,rasterising=null;
@@ -154,8 +184,15 @@ export function activate({module, canvas, session})
 	module.pokerStatus=json=>{
 		latest=JSON.parse(json);canvas.dataset.phpPoker=json;
 		const turn=latest.turn===0?'Your turn.':latest.turn>0?`${latest.players?.[latest.turn]?.name??'Opponent'} is thinking.`:'';
-		const line=[latest.error,latest.message,turn].filter(Boolean).join(' ');
+		const selected=latest.ui?.discards??[];
+		const selection=latest.screen==='table'&&latest.legalActions?.draw
+			? selected.length?'Selected for discard: '+selected.map(cardName).join(', ')+'. Press D to draw.':'No cards selected. Press D to stand pat.' : '';
+		const line=[latest.error,latest.message,turn,selection].filter(Boolean).join(' ');
 		if(line!==spoken){spoken=line;live.textContent=line;}
+		// Only the local player's authorized cards enter the accessible hand description.
+		const own=latest.screen==='table'?latest.players?.[0]?.cards:[];
+		const description=own?.length?'Your hand: '+own.map((card,index)=>`${index+1}: ${cardName(card)}`).join('; ')+'.':'';
+		if(description!==described){described=description;hand.textContent=description;}
 	};
 
 	const debug={
@@ -177,13 +214,17 @@ export function activate({module, canvas, session})
 
 	return ()=>{
 		if(closed)return;closed=true;resize.disconnect();
+		clearInput();
 		canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('pointermove',onMove);
-		canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);canvas.removeEventListener('pointercancel',onUp);
-		live.remove();
+		canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);canvas.removeEventListener('pointercancel',onCancel);
+		canvas.removeEventListener('lostpointercapture',onCancel);canvas.removeEventListener('blur',clearInput);
+		document.removeEventListener('visibilitychange',onVisibility);
+		live.remove();hand.remove();
 		for(const name of ['pokerCardArt','pokerCardAtlas','pokerViewport','pokerSeed','pokerInput','pokerCommands','pokerStatus'])delete module[name];
 		delete canvas.dataset.phpPoker;delete canvas.phpPokerDebug;delete session.phpPoker;
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);
 		if(originalTabIndex===null)canvas.removeAttribute('tabindex');else canvas.setAttribute('tabindex',originalTabIndex);
 		if(originalLabel===null)canvas.removeAttribute('aria-label');else canvas.setAttribute('aria-label',originalLabel);
+		if(originalDescription===null)canvas.removeAttribute('aria-describedby');else canvas.setAttribute('aria-describedby',originalDescription);
 	};
 }
