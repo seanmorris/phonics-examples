@@ -430,15 +430,24 @@ final class Painter
 		}
 		$ink = $style === 'danger' ? Theme::DANGER_INK : Theme::INK;
 		if($dim) $ink = Theme::alpha($ink, .45);
-		$shift = $key !== '' && $this->mode === Theme::MODERN ? -7 * $this->unit : 0;
-		$this->canvas->label(strtoupper($label), $x + $w / 2 + $shift, $y + $h / 2 + .5 * $this->unit, Theme::BODY, $ink, $this->face, 'center', $w - 16 * $this->unit);
-		if($key !== '' && $this->mode === Theme::MODERN)
+		$shift = $key !== '' ? -8 * $this->unit : 0;
+		$this->canvas->label(strtoupper($label), $x + $w / 2 + $shift, $y + $h / 2 + ($this->mode === Theme::MODERN ? .5 : 0) * $this->unit, Theme::BODY, $ink, $this->face, 'center', $w - 30 * $this->unit);
+		if($key !== '')
 		{
+			// Key hint: a soft keycap in Modern, an inverse square in Classic as a DOS accelerator would be shown.
 			$kw = 18 * $this->unit;
-			$kx = $x + $w - $kw - 8 * $this->unit;
+			$kx = $x + $w - $kw - 7 * $this->unit;
 			$ky = $y + $h / 2 - 9 * $this->unit;
-			$this->canvas->box($kx, $ky, $kw, 18 * $this->unit, 3 * $this->unit, [0,0,0,.12], [0,0,0,.35], 1 * $this->unit);
-			$this->canvas->label($key, $kx + $kw / 2, $ky + 9 * $this->unit, 11, $ink, 'bold', 'center');
+			if($this->mode === Theme::MODERN)
+			{
+				$this->canvas->box($kx, $ky, $kw, 18 * $this->unit, 3 * $this->unit, [0,0,0,.12], [0,0,0,.35], 1 * $this->unit);
+				$this->canvas->label($key, $kx + $kw / 2, $ky + 9 * $this->unit, 11, $ink, 'bold', 'center');
+			}
+			else
+			{
+				$this->canvas->box($kx, $ky, $kw, 18 * $this->unit, 0, Theme::INK);
+				$this->canvas->label($key, $kx + $kw / 2, $ky + 9 * $this->unit, Theme::BODY, $style === 'primary' ? Theme::BRASS : Theme::PLATE, $this->face, 'center');
+			}
 		}
 	}
 
