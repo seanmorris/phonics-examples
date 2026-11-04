@@ -26,7 +26,16 @@ export function sheetCell(id,suitRows)
 export async function rasteriseCards(art,dpr,{createImage=svg=>loadSvg(svg)}={})
 {
 	const [cellWidth,cellHeight]=cardCell(dpr),columns=art.columns;
-	const sheet=await createImage(art.sheet),red=await createImage(art.backs.red),blue=await createImage(art.backs.blue);
+	// Give the percentage-sized source SVG an intrinsic raster viewport before cropping.
+	// Chrome otherwise interprets drawImage's source rectangles against the SVG viewBox
+	// while reporting a different naturalWidth, spreading one oversized card over the atlas.
+	const sheetDocument=new DOMParser().parseFromString(art.sheet,'image/svg+xml');
+	const sheetRoot=sheetDocument.documentElement;
+	if(sheetRoot.localName!=='svg')throw new Error('Invalid card sheet');
+	sheetRoot.setAttribute('width',String(cellWidth*columns));
+	sheetRoot.setAttribute('height',String(cellHeight*art.rows));
+	const sheet=await createImage(new XMLSerializer().serializeToString(sheetRoot));
+	const red=await createImage(art.backs.red),blue=await createImage(art.backs.blue);
 	// Player emblems are 32 px pixel art; they take the cells after the backs, drawn at 2x with no smoothing.
 	const iconKeys=Object.keys(art.icons??{}),iconSize=64;
 	const cells=art.columns*art.rows+2+iconKeys.length,rows=Math.ceil(cells/columns);
