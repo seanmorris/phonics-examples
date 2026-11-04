@@ -1,0 +1,8 @@
+{
+  "name": "seanmorris/php-poker",
+  "description": "Deterministic local five-card draw with a Phonics 2D table",
+  "type": "library",
+  "license": "Apache-2.0",
+  "require": {"php": ">=8.1", "seanmorris/phonics": "^0.1"},
+  "autoload": {"psr-4": {"PhpPoker\\": "src/"}}
+}
