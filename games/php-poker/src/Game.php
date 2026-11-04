@@ -26,7 +26,7 @@ final class Game
 	public function __construct(string $seed, int $players = 4, private Profile $profile = new Profile)
 	{
 		if($players < 2 || $players > 8) throw new \InvalidArgumentException('Choose 2 to 8 seats');
-		$names = ['You','Ada','Jules','Mara','Otis','Cleo','Felix','Nora'];
+		$names = ['You',...array_column(Bot::OPPONENTS,'name')];
 		$seats = []; $piles = ['stock'=>[['kind'=>'random','cards'=>range(0,51)]], 'discard'=>[], 'holding'=>[]];
 		for($id = 0; $id < $players; $id++)
 		{
@@ -72,7 +72,7 @@ final class Game
 		unset($view['pending'], $view['originalOpenerCards']);
 		foreach($view['players'] as $id => &$player)
 		{
-			$player['portrait'] = strtolower($player['name']);
+			$player['portrait'] = $id === 0 ? 'you' : Bot::OPPONENTS[$id-1]['icon'];
 			$player['isHuman'] = $id === 0;
 			$cards = $this->cards($id);
 			usort($cards, static fn(int $a,int $b): int => (($a%13) <=> ($b%13)) ?: ($a <=> $b));

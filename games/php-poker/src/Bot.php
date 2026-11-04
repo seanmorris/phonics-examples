@@ -12,6 +12,17 @@ use Phonics\Random\RandomStream;
  */
 final class Bot
 {
+	/** Stable local opponent identities, artwork keys and bounded pressure offsets. */
+	public const OPPONENTS = [
+		['name'=>'Ada','icon'=>'ada','object'=>'Pocket watch','pressure'=>-100,'style'=>'Patient'],
+		['name'=>'Jules','icon'=>'jules','object'=>'Rocket','pressure'=>100,'style'=>'Bold'],
+		['name'=>'Mara','icon'=>'mara','object'=>'Compass','pressure'=>20,'style'=>'Balanced'],
+		['name'=>'Otis','icon'=>'otis','object'=>'Umbrella','pressure'=>-50,'style'=>'Defensive'],
+		['name'=>'Cleo','icon'=>'cleo','object'=>'Chili pepper','pressure'=>150,'style'=>'Aggressive'],
+		['name'=>'Felix','icon'=>'felix','object'=>'Horseshoe','pressure'=>-20,'style'=>'Measured'],
+		['name'=>'Nora','icon'=>'nora','object'=>'Key','pressure'=>60,'style'=>'Opportunistic']
+	];
+
 	/**
 	 * Choose one legal action from a redacted seat view.
 	 * @param array $view State visible to the bot, with only its own concealed cards.
@@ -29,7 +40,7 @@ final class Bot
 		$legal=$view['legalActions'];
 		if($legal['draw'] ?? false) return ['type'=>'draw','cards'=>self::discards($cards)];
 		$roll=$random->boundedInt(10000);
-		$personality=[0,-100,100,20,-50,150,-20,60][$seat];
+		$personality=$seat===0 ? 0 : self::OPPONENTS[$seat-1]['pressure'];
 		$strength=[140,410,650,760,840,880,940,980,995][$hand['category']]
 			+ ($hand['ranks'][0]-8)*8;
 		$active=count(array_filter($view['players'],static fn(array $p): bool => !$p['folded']));
