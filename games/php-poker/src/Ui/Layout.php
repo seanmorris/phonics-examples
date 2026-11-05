@@ -20,21 +20,21 @@ final class Layout
 	/** @var array<string,array<string,mixed>> Design metrics per profile. */
 	private const PROFILES = [
 		'wide' => [
-			'width' => 1280, 'height' => 720, 'centre' => [640,378], 'oval' => [470,250], 'upperStretch' => 24, 'emblemInset' => [175,115]
+			'width' => 1280, 'height' => 720, 'centre' => [640,378], 'oval' => [470,250], 'upperStretch' => 24, 'emblemSize' => 64
 			, 'card' => [68,95], 'cardStep' => 30, 'handCard' => [90,126], 'handStep' => 38, 'dialogCard' => [124,174]
 			, 'plateWidth' => 200, 'handPlateWidth' => 250, 'plateLift' => 62, 'handPlateLift' => 90
 			, 'actions' => [790,588], 'actionRows' => false, 'buttonHeight' => 32, 'chipRadius' => 15, 'handChipRadius' => 17
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 760, 'display' => 54
 		]
 		, 'tall' => [
-			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemInset' => [84,78]
+			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemSize' => 40
 			, 'card' => [36,50], 'cardStep' => 16, 'handCard' => [66,92], 'handStep' => 28, 'dialogCard' => [72,101]
 			, 'plateWidth' => 104, 'handPlateWidth' => 190, 'plateLift' => 48, 'handPlateLift' => 70
 			, 'actions' => [16,676], 'actionRows' => true, 'buttonHeight' => 44, 'chipRadius' => 10, 'handChipRadius' => 12
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 418, 'display' => 42
 		]
 		, 'landscape' => [
-			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemInset' => [85,55]
+			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemSize' => 36
 			, 'card' => [38,53], 'cardStep' => 17, 'handCard' => [62,87], 'handStep' => 26, 'dialogCard' => [86,120]
 			, 'plateWidth' => 118, 'handPlateWidth' => 190, 'plateLift' => 44, 'handPlateLift' => 70
 			, 'actions' => [568,250], 'actionRows' => false, 'buttonHeight' => 52, 'chipRadius' => 9, 'handChipRadius' => 11
@@ -193,13 +193,32 @@ final class Layout
 		$chips = $human
 			? [$plate[0] - $chipRadius * 2.2, $fanTop + $cardHeight - $chipRadius * 2.6]
 			: [$outward > 0 ? $plate[0] + $plateWidth - $chipRadius * 3.7 : $plate[0] - 4, $fanTop + $cardHeight + 4];
-		// Opponent captions read under the fan; the human caption sits directly below the chip group.
+		// Opponent captions sit just above the plate, where neither the chips below the fan nor the emblem on the
+		// inside of the oval can reach them; the human caption sits directly below the chip group.
 		$caption = $human
 			? [$chips[0] + $chipRadius, $chips[1] + $chipRadius * 2 + 14]
-			: [$outward > 0 ? $fanLeft : $fanLeft + $cardWidth + 4 * $step, $fanTop + $cardHeight + 14];
-		$emblem = $human
-			? [$plate[0] - 46, $plate[1] + 8]
-			: [$d['centre'][0] + $ux * ($d['oval'][0] - $d['emblemInset'][0]), $d['centre'][1] + $uy * ($verticalRadius - $d['emblemInset'][1])];
+			: [$plate[0], $plate[1] - 9];
+		// The emblem sits on the inside of the oval: pushed from the seat block (caption, plate, fan and chips)
+		// toward the table centre until it just clears the block, so it never lands on anything the seat draws.
+		if($human) $emblem = [$plate[0] - 46, $plate[1] + 8];
+		else
+		{
+			$size = $d['emblemSize'];
+			$left = min($plate[0], $chips[0] - $chipRadius - 2);
+			$right = max($plate[0] + $plateWidth, $chips[0] + $chipRadius * 4.4 + 2);
+			$top = $plate[1] - 16;
+			$bottom = $chips[1] + $chipRadius * 2.2;
+			$blockCentre = [($left + $right) / 2, ($top + $bottom) / 2];
+			$dx = $d['centre'][0] - $blockCentre[0];
+			$dy = $d['centre'][1] - $blockCentre[1];
+			$length = max(1e-6, hypot($dx, $dy));
+			[$dx, $dy] = [$dx / $length, $dy / $length];
+			$reach = min(
+				abs($dx) > 1e-6 ? (($right - $left) / 2 + $size / 2 + 8) / abs($dx) : INF
+				, abs($dy) > 1e-6 ? (($bottom - $top) / 2 + $size / 2 + 8) / abs($dy) : INF
+			);
+			$emblem = [$blockCentre[0] + $dx * $reach, $blockCentre[1] + $dy * $reach];
+		}
 		if($human && $this->profile === 'landscape')
 		{
 			// The adjacent opponent occupies the left side on a short screen. Keep the human bank in the gap

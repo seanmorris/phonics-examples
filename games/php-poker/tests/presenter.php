@@ -291,5 +291,23 @@ $test('actual CSS touch targets clear every discard card and stay on screen', st
 	}
 });
 
+$test('emblems and captions keep clear of each other, the plates and the fans', static function(callable $expect) use ($overlaps): void {
+	foreach([[1280,720,1],[390,844,1],[844,390,1]] as [$width,$height,$dpr])
+	{
+		$layout = Layout::fit($width, $height, $dpr);
+		foreach([2,5,8] as $seats) for($seat = 1; $seat < $seats; $seat++)
+		{
+			$g = $layout->seat($seat, $seats);
+			$size = $layout->metric('emblemSize');
+			$emblem = [$g['emblem'][0] - $size / 2, $g['emblem'][1] - $size / 2, $size, $size];
+			$caption = [$g['caption'][0], $g['caption'][1] - 7, 90, 14];
+			$fan = [$g['cards'][0][0], $g['cards'][0][1], $g['cards'][4][0] + $g['cards'][4][2] - $g['cards'][0][0], $g['cards'][0][3]];
+			$expect(!$overlaps($emblem, $caption), "emblem clears caption for seat $seat of $seats in {$layout->profile}");
+			$expect(!$overlaps($emblem, $g['plate']) && !$overlaps($emblem, $fan), "emblem clears plate and fan for seat $seat of $seats in {$layout->profile}");
+			$expect(!$overlaps($caption, $fan), "caption clears the fan for seat $seat of $seats in {$layout->profile}");
+		}
+	}
+});
+
 echo "$passed PHP Poker presenter checks passed.\n";
 if($failures) { fwrite(STDERR, "$failures presenter checks failed.\n"); exit(1); }

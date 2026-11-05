@@ -126,7 +126,7 @@ final class Painter
 			$this->chipStacks($seat, $bank);
 			[$tx, $ty] = $this->layout->caption($seat, $seats, $bank);
 			$this->text(($seat === 0 ? 'YOU' : ($player['name'] ?? '')) . '  ' . Chips::value($bank), $tx, $ty, Theme::CAPTION, Theme::PLATE,
-				$seat === 0 ? 'center' : ($geometry[$seat]['outward'] > 0 ? 'left' : 'right'));
+				$seat === 0 ? 'center' : 'left');
 			if(!empty($player['bet']))
 			{
 				$outward = $geometry[$seat]['outward'];
@@ -454,14 +454,14 @@ final class Painter
 	{
 		if($seat === 0) return;
 		[$dx, $dy] = $this->layout->point($x, $y);
-		$r = 22 * $this->unit;
+		$r = $this->layout->metric('emblemSize') * .34 * $this->unit;
 		if($this->mode === Theme::MODERN) $this->canvas->circle($dx, $dy, $r * 1.2, [0,0,0,.16]);
 		$icon = $this->atlas['icons'][$portrait] ?? null;
 		if($icon !== null)
 		{
-			// Native 64-pixel emblems: snap their quad to framebuffer pixels without stretching its UVs.
+			// Emblems are 64 texels in the atlas, drawn at the profile's size and snapped to framebuffer pixels.
 			[$ix, $iy, $iw, $ih] = $icon;
-			$size = max(1, round(($this->layout->profile === 'landscape' ? 36 : 64) * $this->unit));
+			$size = max(1, round($this->layout->metric('emblemSize') * $this->unit));
 			$this->canvas->image(round($dx - $size / 2), round($dy - $size / 2), $size, $size, 0
 				, [$ix / $this->atlas['width'], $iy / $this->atlas['height'], ($ix + $iw) / $this->atlas['width'], ($iy + $ih) / $this->atlas['height']]);
 			return;
