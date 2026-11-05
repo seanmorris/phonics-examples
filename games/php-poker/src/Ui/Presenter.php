@@ -201,8 +201,9 @@ final class Presenter
 		foreach($layout->actions($this->view, $this->state()) as $button) if(!$this->locked() || $button['intent'] === null)
 		$targets[] = ['rect' => $button['rect'], 'button' => $button];
 
-		// The menu bar's left entries open the menu; the right-hand title does nothing.
-		$addKey([0, 0, 260, Layout::MENU_BAR], 'escape');
+		// The menu bar's left entries open the menu; the right-hand title does nothing. The bar is drawn on the
+		// canvas's top-left corner, which lies outside the field when the field is centred.
+		$addKey([-$layout->left / $layout->scale, -$layout->top / $layout->scale, 260, Layout::MENU_BAR], 'escape');
 		return $targets;
 	}
 

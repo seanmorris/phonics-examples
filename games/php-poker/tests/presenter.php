@@ -333,6 +333,14 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$expect($g['caption'][1] > $emblem[1] + $emblem[3], "name and total sit below the icon for seat $seat of $seats in {$layout->profile}");
 			$expect(!$overlaps($emblem, $g['plate']) && !$overlaps($emblem, $fan), "icon clears plate and fan for seat $seat of $seats in {$layout->profile}");
 			if($layout->profile === 'landscape') $expect(abs($g['chips'][0] - ($right ? $fan[0] - 8 : $fan[0] + $fan[2] + 8)) < 1e-9, "chip bank stands beside the compact hand for seat $seat of $seats in {$layout->profile}");
+			elseif($layout->profile === 'tall')
+			{
+				// On a phone the bank stands in front of the fan's inner corner, inside the plate's width.
+				$bank = $layout->bankBounds($seat, $seats, [1 => 20, 5 => 4, 25 => 3, 100 => 4]);
+				$expect($bank[0] >= $g['plate'][0] - 1e-9 && $bank[0] + $bank[2] <= $g['plate'][0] + $g['plate'][2] + 1e-9, "chip bank stays within the hand's width for seat $seat of $seats in {$layout->profile}");
+				$identity = [$g['emblem'][0] - Layout::IDENTITY / 2, $g['plate'][1], Layout::IDENTITY, 70];
+				$expect(!$overlaps($bank, $identity), "a full bank clears the name and total for seat $seat of $seats in {$layout->profile}");
+			}
 			else $expect(abs($g['chips'][0] - ($right ? $g['plate'][0] + $g['plate'][2] + 4 : $g['plate'][0] - 4)) < 1e-9, "chip bank starts at the outer card corner for seat $seat of $seats in {$layout->profile}");
 			$one = $layout->chip($seat, $seats, 1, 0);
 			$five = $layout->chip($seat, $seats, 5, 0);
@@ -400,6 +408,15 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 			$expect(!$overlaps($block, $button['rect']), "{$button['id']} clears seat $seat at $seats seats, $width x $height");
 			$stepper = $layout->stepper($view);
 			foreach(['less','amount','more'] as $part) foreach($blocks as $seat => $block) $expect(!$overlaps($block, $stepper[$part]), "the stepper clears seat $seat at $seats seats, $width x $height");
+		}
+		if($layout->profile === 'tall')
+		{
+			// The pot's plates keep clear air beside each column's plates and sit high in the lane.
+			$centre = $layout->centre();
+			$leftPlate = $layout->seat(1, 8)['plate'];
+			$rightPlate = $layout->seat(7, 8)['plate'];
+			$expect($centre['pot'][0] - ($leftPlate[0] + $leftPlate[2]) >= 16 && $rightPlate[0] - ($centre['pot'][0] + $centre['pot'][2]) >= 16, "the pot plates stand apart from both columns at $width x $height");
+			$expect($centre['pot'][1] < $layout->height() * .25, "the pot sits in the upper quarter of the phone field at $width x $height");
 		}
 		// Opponents run clockwise from the human's left: up the left column, then down the right.
 		$tops = [];

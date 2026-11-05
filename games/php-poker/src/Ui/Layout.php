@@ -6,7 +6,7 @@ namespace PhpPoker\Ui;
  * Pure table layout: where every seat, card, chip stack, plate, button and dialog sits for one frame.
  *
  * Three design profiles share one vocabulary. `wide` is the 1280x720 field of the DOS game, with the seats on an
- * oval. `tall` is a 450-wide portrait field for phones and `landscape` a 400-high field with a right-hand control
+ * oval. `tall` is a 470-wide portrait field for phones and `landscape` a 400-high field with a right-hand control
  * panel for short screens; both grow along their free axis to fill the canvas and seat the opponents in a column
  * down each side, with the pot between them and the human's hand at the bottom, because an oval of full seat
  * blocks does not fit there. The field scales uniformly and is centred; results are in device pixels. Rendering
@@ -33,7 +33,7 @@ final class Layout
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 680, 'display' => 54
 		]
 		, 'tall' => [
-			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemSize' => 32
+			'width' => 470, 'height' => 836, 'centre' => [235,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemSize' => 32
 			, 'card' => [36,50], 'cardStep' => 16, 'handCard' => [66,92], 'handStep' => 28, 'dialogCard' => [72,101]
 			, 'plateWidth' => 100, 'handPlateWidth' => 190, 'plateLift' => 48, 'handPlateLift' => 70, 'handBankLift' => 24
 			, 'actions' => [16,676], 'actionRows' => true, 'buttonHeight' => 44, 'chipRadius' => 10, 'handChipRadius' => 12
@@ -306,7 +306,7 @@ final class Layout
 			$count = $onLeft ? $leftCount : $opponents - $leftCount;
 			// Rows count down from the top; the left column fills from the bottom so seat 1 is nearest the human.
 			$row = $onLeft ? $leftCount - $seat : $seat - $leftCount - 1;
-			$blockHeight = self::PLATE_HEIGHT + 8 + $cardHeight + ($compact ? 8 : $radius * 2.2);
+			$blockHeight = self::PLATE_HEIGHT + 8 + $cardHeight + ($compact ? $radius * 1.8 : $radius * 2.2);
 			// Phone columns stop above the human's plate; landscape columns flank the hand down to the bottom edge.
 			$limit = $this->profile === 'tall' ? $this->handTop() - 14 : $this->height() - 12;
 			$span = max(0, $limit - $blockHeight - $top);
@@ -322,8 +322,11 @@ final class Layout
 		$cards = [];
 		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
 		if($human) $chips = [$this->profile === 'landscape' ? $plateLeft + $plateWidth + 4 : $plateLeft - 4, $fanTop + $cardHeight + 4];
-		elseif($compact) $chips = [$outward > 0 ? $fanLeft - 8 : $fanLeft + $fanWidth + 8, $fanTop + $cardHeight - $radius * 1.6];
-		else $chips = [$outward > 0 ? $plateLeft + $plateWidth + 4 : $plateLeft - 4, $fanTop + $cardHeight + 4];
+		// Compact chips stand beside the fan on its baseline, so even a twenty-chip stack stays under the plate.
+		elseif($compact) $chips = [$outward > 0 ? $fanLeft - 8 : $fanLeft + $fanWidth + 8, $fanTop + $cardHeight];
+		// Phone chips stand in front of the fan's inner corner: a tall stack rises over the cards, never over the
+		// name and total in the identity column on the outer side.
+		else $chips = [$outward > 0 ? $plateLeft + $radius * 3.95 : $plateLeft + $plateWidth - $radius * 3.95, $fanTop + $cardHeight + 4];
 		$emblem = [$outward > 0 ? $plateLeft + $plateWidth + self::IDENTITY / 2 : $plateLeft - ($human ? 22 : self::IDENTITY / 2), $plateTop + self::PLATE_HEIGHT / 2];
 		$caption = [$emblem[0], $plateTop + 40];
 		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
@@ -370,11 +373,15 @@ final class Layout
 		{
 			// Between the two columns: no wider than the gap they leave, and centred in the height above the hand.
 			$cx = $this->tableRight() / 2;
-			$inner = self::IDENTITY + max($this->design['card'][0] + 4 * $this->design['cardStep'], $this->design['plateWidth']) + 8;
+			// Eighteen pixels of felt stay between each column's plates and the pot's.
+			$inner = self::IDENTITY + max($this->design['card'][0] + 4 * $this->design['cardStep'], $this->design['plateWidth']) + 18;
 			if($this->profile === 'tall') $plateWidth = min($plateWidth, $this->tableRight() - 2 * $inner);
-			$cluster = $this->profile === 'landscape' ? self::PLATE_HEIGHT + 14 + $cardHeight + 8 + 40 : self::PLATE_HEIGHT + 56 + 67 + 14 + self::PLATE_HEIGHT + 8 + 40;
+			$cluster = $this->profile === 'landscape' ? self::PLATE_HEIGHT + 14 + $cardHeight + 8 + 56 : self::PLATE_HEIGHT + 56 + 67 + 14 + self::PLATE_HEIGHT + 8 + 56;
 			$top = self::MENU_BAR + 10;
 			$clusterTop = $top + max(0, ($this->handTop() - 14 - $top - $cluster) / 2);
+			// On a phone the pot sits high in the lane, just below where a lone opponent sits across the table, rather
+			// than centred: the eye then travels from the pot down to the hand and the controls.
+			if($this->profile === 'tall') $clusterTop = $top + self::PLATE_HEIGHT + 8 + $this->design['card'][1] + $this->design['chipRadius'] * 2.2 + 14;
 			$cy = $clusterTop + $lift + 38;
 		}
 		$centre = [

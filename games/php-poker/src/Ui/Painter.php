@@ -73,9 +73,13 @@ final class Painter
 
 	private function menuBar(): void
 	{
-		$bar = $this->layout->rect(0, 0, $this->layout->width(), Layout::MENU_BAR);
-		[$left, $top, $width, $height] = $bar;
-		$this->canvas->box(0, $top, $this->layout->left * 2 + $width, $height, 0, Theme::MENU);
+		// The bar belongs to the page, not the field: it sits on the canvas's top edge and spans its full width
+		// even when the field is centred inside a canvas of another shape.
+		[, , $fieldWidth, $height] = $this->layout->rect(0, 0, $this->layout->width(), Layout::MENU_BAR);
+		$top = 0;
+		$left = 0;
+		$width = $this->layout->left * 2 + $fieldWidth;
+		$this->canvas->box(0, $top, $width, $height, 0, Theme::MENU);
 		$x = $left + 14 * $this->unit;
 		foreach(['GAME','POKER','DRAW POKER'] as $entry)
 		$x += $this->canvas->label($entry, $x, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face) + 22 * $this->unit;
@@ -256,7 +260,8 @@ final class Painter
 		[$betX, $betY, $betWidth, $betHeight] = $this->layout->centre()['bet'];
 		$width = $this->layout->profile === 'wide'
 			? min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40)) : min(180, $betWidth);
-		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->unit, ($width - 12) * $this->unit, 2, $this->face);
+		// The lane between the columns is narrow, so the message may run to three lines there.
+		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->unit, ($width - 12) * $this->unit, $this->layout->columns() ? 3 : 2, $this->face);
 		$top = $betY + $betHeight + 8;
 		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, Layout::PLATE_HEIGHT + 16 * (count($lines) - 1)], '', $error !== '' ? 'fold' : 'info', false);
 		foreach($lines as $index => $text)
