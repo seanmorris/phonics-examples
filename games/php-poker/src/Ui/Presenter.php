@@ -20,6 +20,9 @@ final class Presenter
 	private const KEY_CARDS = ['1' => 0, '2' => 1, '3' => 2, '4' => 3, '5' => 4];
 
 	/** @var array<string,mixed> */
+	/** Revision and text of the error currently shown, so it can be retired when the table moves on. */
+	private ?int $errorRevision = null;
+	private string $errorText = '';
 	private array $view = ['screen' => 'menu', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => false];
 	/** @var array<string,mixed> */
 	private array $textures;
@@ -93,7 +96,12 @@ final class Presenter
 			$this->lockedRevision = null;
 			$this->amount = (int)($view['legalActions']['minBet'] ?? 0);
 		}
-		if(($view['error'] ?? '') !== '') $this->lockedRevision = null;
+		// A rejected action's message belongs to the revision it was rejected on: once the table has moved on, drop it.
+		$error = (string)($view['error'] ?? '');
+		if($error === '') $this->errorRevision = null;
+		elseif($this->errorRevision === null || $error !== $this->errorText) [$this->errorRevision, $this->errorText] = [$revision, $error];
+		elseif($revision !== $this->errorRevision) $this->view['error'] = '';
+		if(($this->view['error'] ?? '') !== '') $this->lockedRevision = null;
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
 		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','online'], true)) $this->local = 'menu';
 		if(($view['phase'] ?? '') !== 'showdown' && ($view['phase'] ?? '') !== 'redeal') $this->historyOpen = false;

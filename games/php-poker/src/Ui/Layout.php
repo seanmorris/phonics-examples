@@ -5,10 +5,12 @@ namespace PhpPoker\Ui;
 /**
  * Pure table layout: where every seat, card, chip stack, plate, button and dialog sits for one frame.
  *
- * Three design profiles share one vocabulary. `wide` is the 1280x720 field of the DOS game; `tall` is a 450x800
- * portrait field for phones; `landscape` reserves a right-hand control panel on short screens. The chosen
- * field scales uniformly to fit the canvas and is centred, and all results are in device pixels. Rendering and
- * hit testing share this so a region a player can click is exactly the region that is drawn.
+ * Three design profiles share one vocabulary. `wide` is the 1280x720 field of the DOS game, with the seats on an
+ * oval. `tall` is a 450-wide portrait field for phones and `landscape` a 400-high field with a right-hand control
+ * panel for short screens; both grow along their free axis to fill the canvas and seat the opponents in a column
+ * down each side, with the pot between them and the human's hand at the bottom, because an oval of full seat
+ * blocks does not fit there. The field scales uniformly and is centred; results are in device pixels. Rendering
+ * and hit testing share this so a region a player can click is exactly the region that is drawn.
  */
 final class Layout
 {
@@ -16,27 +18,31 @@ final class Layout
 	public const PLATE_HEIGHT = 24;
 	/** Lowest angle below the right-hand horizontal a seat may take before its fan meets the action bar. */
 	public const ACTION_CLEARANCE = .42;
+	/** Width kept for the identity (emblem over name and stack) on the outer side of a column seat. */
+	public const IDENTITY = 40;
+	/** Width of the landscape control panel, including its margins. */
+	private const PANEL = 342;
 
 	/** @var array<string,array<string,mixed>> Design metrics per profile. */
 	private const PROFILES = [
 		'wide' => [
 			'width' => 1280, 'height' => 720, 'centre' => [640,378], 'oval' => [470,250], 'upperStretch' => 24, 'emblemSize' => 32
-			, 'card' => [68,95], 'cardStep' => 30, 'handCard' => [90,126], 'handStep' => 38, 'dialogCard' => [124,174]
+			, 'card' => [68,95], 'cardStep' => 30, 'handCard' => [90,126], 'handStep' => 38, 'dialogCard' => [112,157]
 			, 'plateWidth' => 200, 'handPlateWidth' => 250, 'plateLift' => 62, 'handPlateLift' => 90, 'handBankLift' => 14
 			, 'actions' => [790,588], 'actionRows' => false, 'buttonHeight' => 32, 'chipRadius' => 15, 'handChipRadius' => 17
-			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 760, 'display' => 54
+			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 680, 'display' => 54
 		]
 		, 'tall' => [
 			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemSize' => 32
 			, 'card' => [36,50], 'cardStep' => 16, 'handCard' => [66,92], 'handStep' => 28, 'dialogCard' => [72,101]
-			, 'plateWidth' => 104, 'handPlateWidth' => 190, 'plateLift' => 48, 'handPlateLift' => 70, 'handBankLift' => 24
+			, 'plateWidth' => 100, 'handPlateWidth' => 190, 'plateLift' => 48, 'handPlateLift' => 70, 'handBankLift' => 24
 			, 'actions' => [16,676], 'actionRows' => true, 'buttonHeight' => 44, 'chipRadius' => 10, 'handChipRadius' => 12
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 418, 'display' => 42
 		]
 		, 'landscape' => [
 			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemSize' => 32
-			, 'card' => [38,53], 'cardStep' => 17, 'handCard' => [62,87], 'handStep' => 26, 'dialogCard' => [86,120]
-			, 'plateWidth' => 118, 'handPlateWidth' => 190, 'plateLift' => 44, 'handPlateLift' => 70, 'handBankLift' => 0
+			, 'card' => [24,34], 'cardStep' => 10, 'handCard' => [62,87], 'handStep' => 26, 'dialogCard' => [86,120]
+			, 'plateWidth' => 106, 'handPlateWidth' => 190, 'plateLift' => 44, 'handPlateLift' => 70, 'handBankLift' => 0
 			, 'actions' => [568,250], 'actionRows' => false, 'buttonHeight' => 52, 'chipRadius' => 9, 'handChipRadius' => 11
 			, 'menuItem' => [350,52], 'menuTop' => 150, 'dialogWidth' => 530, 'display' => 42
 		]
@@ -51,9 +57,9 @@ final class Layout
 	 * @param float $left Device x of the field's left edge.
 	 * @param float $top Device y of the field's top edge.
 	 */
-	private function __construct(public readonly string $profile, public readonly float $scale, public readonly float $left, public readonly float $top, public readonly float $dpr)
+	private function __construct(public readonly string $profile, array $design, public readonly float $scale, public readonly float $left, public readonly float $top, public readonly float $dpr)
 	{
-		$this->design = self::PROFILES[$profile];
+		$this->design = $design;
 	}
 
 	/**
@@ -68,8 +74,16 @@ final class Layout
 		$dpr = max(.5, min(4, is_finite($dpr) ? $dpr : 1));
 		$profile = $width >= $height && $height / $dpr < 480 ? 'landscape' : ($width < $height || $width / $dpr < 760 ? 'tall' : 'wide');
 		$design = self::PROFILES[$profile];
+		// The phone and short-landscape fields grow along whichever axis the canvas leaves free, within limits, so
+		// neither is letterboxed while its seats are cramped.
+		if($profile !== 'wide')
+		{
+			$aspect = $width / max(1, $height);
+			if($aspect < $design['width'] / $design['height']) $design['height'] = (int)round(min($profile === 'tall' ? 1100 : 560, $design['width'] / $aspect));
+			else $design['width'] = (int)round(min($profile === 'tall' ? 700 : 1200, $design['height'] * $aspect));
+		}
 		$scale = max(1e-6, min($width / $design['width'], $height / $design['height']));
-		return new self($profile, $scale, ($width - $design['width'] * $scale) / 2, ($height - $design['height'] * $scale) / 2, $dpr);
+		return new self($profile, $design, $scale, ($width - $design['width'] * $scale) / 2, ($height - $design['height'] * $scale) / 2, $dpr);
 	}
 
 	/**
@@ -83,11 +97,36 @@ final class Layout
 	/** Minimum target in design units, measured against CSS pixels rather than the framebuffer. */
 	public function controlSize(): float { return max($this->design['buttonHeight'], 48 * $this->dpr / $this->scale); }
 
-	/** Action rows reserve room for the raise controls beneath them. */
-	private function actionOrigin(): array { return [$this->design['actions'][0], min($this->design['actions'][1], $this->height() - 2 * $this->controlSize() - 20)]; }
+	/** Where the action buttons start: two rows along the bottom of a phone, the right panel in landscape. */
+	private function actionOrigin(): array
+	{
+		$rows = $this->height() - 2 * $this->controlSize() - 20;
+		return match($this->profile) {
+			'tall' => [$this->design['actions'][0], $rows]
+			, 'landscape' => [$this->width() - self::PANEL + 10, min($this->design['actions'][1], $rows)]
+			, default => [$this->design['actions'][0], min($this->design['actions'][1], $rows)]
+		};
+	}
+
+	/** Whether opponents sit in side columns rather than on the oval. */
+	public function columns(): bool { return $this->profile !== 'wide'; }
+
+	/** Right edge of the table area; the landscape control panel lies beyond it. */
+	public function tableRight(): float { return $this->profile === 'landscape' ? $this->width() - self::PANEL : $this->width(); }
+
+	/** Top of the human's plate in a column profile, measured up from the controls or the bottom edge. */
+	private function handTop(): float
+	{
+		// Room is left under the hand for the bank: above the action rows on a phone, above the edge in landscape.
+		$bottom = $this->profile === 'tall' ? $this->actionOrigin()[1] - 34 : $this->height() - 26;
+		return $bottom - $this->design['handCard'][1] - 8 - self::PLATE_HEIGHT;
+	}
 
 	/** Readable control text size in design units. */
 	public function controlText(): float { return max(14, 13 * $this->dpr / $this->scale); }
+
+	/** Caption size in design units, never below eleven CSS pixels however far the field is scaled down. */
+	public function captionText(): float { return max(12, 11 * $this->dpr / $this->scale); }
 
 	/** Design width of the field. */
 	public function width(): int { return $this->design['width']; }
@@ -170,6 +209,7 @@ final class Layout
 	 */
 	public function seat(int $seat, int $seats): array
 	{
+		if($this->columns()) return $this->columnSeat($seat, $seats);
 		$d = $this->design;
 		$angle = $this->seatAngle($seat, $seats);
 		$ux = cos($angle);
@@ -187,8 +227,8 @@ final class Layout
 		if(!$human) $plateTop = max(self::MENU_BAR + 10, $plateTop);
 		$plateLeft = $cx - $plateWidth / 2;
 		// Identity blocks sit on the outer side of the table: left of left seats and right of right seats.
-		$clampPlate = static fn(float $left, int $side): float => max($side > 0 ? 0 : 40,
-			min($d['width'] - $plateWidth - ($side > 0 ? 40 : 0), $left));
+		$clampPlate = static fn(float $left, int $side): float => max($side > 0 ? 0 : self::IDENTITY,
+			min($d['width'] - $plateWidth - ($side > 0 ? self::IDENTITY : 0), $left));
 		if(!$human) $plateLeft = $clampPlate($plateLeft, $outward);
 		// At dense tables, translate both complete side groups inward so only their shared seam gap changes.
 		if(!$human && $seats >= 7)
@@ -201,8 +241,7 @@ final class Layout
 				$rightAngle = $this->seatAngle($firstRight, $seats);
 				$leftBase = $clampPlate($d['centre'][0] + cos($leftAngle) * $d['oval'][0] - $plateWidth / 2, -1);
 				$rightBase = $clampPlate($d['centre'][0] + cos($rightAngle) * $d['oval'][0] - $plateWidth / 2, 1);
-				$targetGap = match($this->profile) {'wide' => 64, 'landscape' => 24, default => 8};
-				$pull = max(0, ($rightBase - ($leftBase + $plateWidth) - $targetGap) / 2);
+				$pull = max(0, ($rightBase - ($leftBase + $plateWidth) - 64) / 2);
 				$plateLeft += $outward > 0 ? -$pull : $pull;
 			}
 		}
@@ -211,17 +250,82 @@ final class Layout
 		$fanTop = $plate[1] + self::PLATE_HEIGHT + 8;
 		$cards = [];
 		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
-		$chipRadius = $human ? $d['handChipRadius'] : $d['chipRadius'];
-		// Chips stand in front of the fan's outer corner. The human bank sits lower beside the hand while
-		// retaining room above the bottom edge and short-screen action panel.
+		// Chips stand in front of the fan's outer corner; the human bank sits beside the hand.
 		$chips = $human
-			? [$this->profile === 'landscape' ? $plate[0] + $plate[2] + 4 : $plate[0] - 4,
-				$fanTop + $cardHeight + 4]
+			? [$plate[0] - 4, $fanTop + $cardHeight + 4]
 			: [$outward > 0 ? $plate[0] + $plateWidth + 4 : $plate[0] - 4, $fanTop + $cardHeight + 4];
 		$emblem = [$outward > 0 && !$human ? $plate[0] + $plate[2] + 20 : $plate[0] - ($human ? 22 : 20),
 			$plate[1] + self::PLATE_HEIGHT / 2];
 		// Every identity caption is centered directly beneath its icon; the YOU disc supplies the human's name.
 		$caption = [$emblem[0], $plate[1] + 40];
+		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
+	}
+
+	/**
+	 * Seat geometry for the tall and landscape profiles: the human at the bottom of the table area, one opponent
+	 * across from them, or the opponents in a column down each side, clockwise from the human's left, so the
+	 * first sits bottom-left, the order runs up the left column and comes back down the right.
+	 *
+	 * @param int $seat Seat id; 0 is the human.
+	 * @param int $seats Number of seats at the table.
+	 * @return array{plate:array{float,float,float,float},cards:list<array{float,float,float,float}>,chips:array{float,float},caption:array{float,float},emblem:array{float,float},angle:float,outward:int}
+	 */
+	private function columnSeat(int $seat, int $seats): array
+	{
+		$d = $this->design;
+		$human = $seat === 0;
+		$right = $this->tableRight();
+		$middle = $right / 2;
+		[$cardWidth,$cardHeight] = $human ? $d['handCard'] : $d['card'];
+		$step = $human ? $d['handStep'] : $d['cardStep'];
+		$fanWidth = $cardWidth + 4 * $step;
+		$plateWidth = $human ? $fanWidth : max($fanWidth, $d['plateWidth']);
+		$radius = $human ? $d['handChipRadius'] : $d['chipRadius'];
+		// A compact fan sits under the outer end of a wider plate, with its chips beside it rather than below.
+		$compact = !$human && $plateWidth > $fanWidth;
+		$opponents = max(1, $seats - 1);
+		$top = self::MENU_BAR + 10;
+		if($human)
+		{
+			$outward = -1;
+			$plateLeft = $middle - $plateWidth / 2;
+			$plateTop = $this->handTop();
+			$angle = M_PI / 2;
+		}
+		elseif($opponents === 1 && $this->profile === 'tall')
+		{
+			$outward = -1;
+			$plateLeft = $middle - $plateWidth / 2;
+			$plateTop = $top;
+			$angle = M_PI * 1.5;
+		}
+		else
+		{
+			$leftCount = intdiv($opponents + 1, 2);
+			$onLeft = $seat <= $leftCount;
+			$count = $onLeft ? $leftCount : $opponents - $leftCount;
+			// Rows count down from the top; the left column fills from the bottom so seat 1 is nearest the human.
+			$row = $onLeft ? $leftCount - $seat : $seat - $leftCount - 1;
+			$blockHeight = self::PLATE_HEIGHT + 8 + $cardHeight + ($compact ? 8 : $radius * 2.2);
+			// Phone columns stop above the human's plate; landscape columns flank the hand down to the bottom edge.
+			$limit = $this->profile === 'tall' ? $this->handTop() - 14 : $this->height() - 12;
+			$span = max(0, $limit - $blockHeight - $top);
+			$pitch = $count > 1 ? min($blockHeight + 36, $span / ($count - 1)) : 0;
+			$outward = $onLeft ? -1 : 1;
+			$plateLeft = $onLeft ? self::IDENTITY : $right - self::IDENTITY - $plateWidth;
+			$plateTop = $top + ($span - $pitch * ($count - 1)) / 2 + $row * $pitch;
+			$angle = $onLeft ? M_PI : 0.0;
+		}
+		$plate = [$plateLeft, $plateTop, $plateWidth, self::PLATE_HEIGHT];
+		$fanLeft = $compact && $outward > 0 ? $plateLeft + $plateWidth - $fanWidth : $plateLeft;
+		$fanTop = $plateTop + self::PLATE_HEIGHT + 8;
+		$cards = [];
+		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
+		if($human) $chips = [$this->profile === 'landscape' ? $plateLeft + $plateWidth + 4 : $plateLeft - 4, $fanTop + $cardHeight + 4];
+		elseif($compact) $chips = [$outward > 0 ? $fanLeft - 8 : $fanLeft + $fanWidth + 8, $fanTop + $cardHeight - $radius * 1.6];
+		else $chips = [$outward > 0 ? $plateLeft + $plateWidth + 4 : $plateLeft - 4, $fanTop + $cardHeight + 4];
+		$emblem = [$outward > 0 ? $plateLeft + $plateWidth + self::IDENTITY / 2 : $plateLeft - ($human ? 22 : self::IDENTITY / 2), $plateTop + self::PLATE_HEIGHT / 2];
+		$caption = [$emblem[0], $plateTop + 40];
 		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
 	}
 
@@ -253,7 +357,7 @@ final class Layout
 	/**
 	 * Design-space geometry of the centre: pot plate, deck, chip anchors and bet plate.
 	 *
-	 * @return array{pot:array{float,float,float,float},deck:array{float,float,float,float},discard:array{float,float,float,float},bet:array{float,float,float,float},chips:list<array{float,float}>}
+	 * @return array{pot:array{float,float,float,float},deck:array{float,float,float,float},discard:array{float,float,float,float},bet:array{float,float,float,float},chips:list<array{float,float}>,pile:array{float,float,float,float}}
 	 */
 	public function centre(): array
 	{
@@ -262,6 +366,17 @@ final class Layout
 		$plateWidth = min(200, $this->design['width'] - 40);
 		if($this->profile === 'landscape') { $cardWidth = 40; $cardHeight = 56; $plateWidth = 150; }
 		$lift = $cardHeight * .57;
+		if($this->columns())
+		{
+			// Between the two columns: no wider than the gap they leave, and centred in the height above the hand.
+			$cx = $this->tableRight() / 2;
+			$inner = self::IDENTITY + max($this->design['card'][0] + 4 * $this->design['cardStep'], $this->design['plateWidth']) + 8;
+			if($this->profile === 'tall') $plateWidth = min($plateWidth, $this->tableRight() - 2 * $inner);
+			$cluster = $this->profile === 'landscape' ? self::PLATE_HEIGHT + 14 + $cardHeight + 8 + 40 : self::PLATE_HEIGHT + 56 + 67 + 14 + self::PLATE_HEIGHT + 8 + 40;
+			$top = self::MENU_BAR + 10;
+			$clusterTop = $top + max(0, ($this->handTop() - 14 - $top - $cluster) / 2);
+			$cy = $clusterTop + $lift + 38;
+		}
 		$centre = [
 			'pot' => [$cx - $plateWidth / 2, $cy - $lift - 38, $plateWidth, self::PLATE_HEIGHT]
 			, 'deck' => [$cx - $cardWidth / 2, $cy - $lift, $cardWidth, $cardHeight]
@@ -269,6 +384,20 @@ final class Layout
 			, 'bet' => [$cx - $plateWidth / 2, $cy + $cardHeight - $lift + 14, $plateWidth, self::PLATE_HEIGHT]
 			, 'chips' => [[$cx - 80, $cy + 10], [$cx - 50, $cy + 30], [$cx + 70, $cy + 18], [$cx + 40, $cy + 36]]
 		];
+		$radius = (float)$this->design['chipRadius'];
+		// The loose pot: centre of the pile and its horizontal and vertical spread.
+		$centre['pile'] = [$centre['deck'][0] - $radius * 2.8, $centre['deck'][1] + $cardHeight / 2, $radius * 1.6, $radius * 2];
+		if($this->profile === 'tall')
+		{
+			// A phone stacks the cluster in the lane between the columns: pot plate, the loose pot, the stock and
+			// discards side by side, then the bet plate, all inside the plate's width.
+			[$deckWidth, $deckHeight] = [48, 67];
+			$top = $centre['pot'][1];
+			$centre['pile'] = [$cx, $top + self::PLATE_HEIGHT + 8 + 20, min(34, $plateWidth / 2 - $radius), 12];
+			$centre['deck'] = [$cx - $deckWidth - 6, $top + self::PLATE_HEIGHT + 56, $deckWidth, $deckHeight];
+			$centre['discard'] = [$cx + 6, $centre['deck'][1], $deckWidth, $deckHeight];
+			$centre['bet'] = [$centre['pot'][0], $centre['deck'][1] + $deckHeight + 14, $plateWidth, self::PLATE_HEIGHT];
+		}
 		if($this->profile === 'landscape')
 		{
 			// Put the stock and discards beside the bet, leaving room for status text below it and above the hand.
@@ -276,6 +405,8 @@ final class Layout
 			$centre['deck'][0] = $cx - $plateWidth / 2 - $cardWidth - 12;
 			$centre['discard'][0] = $cx + $plateWidth / 2 + 12;
 			$centre['chips'][0] = [$cx - $plateWidth / 2 - 33, $centre['deck'][1] - 36];
+			// The loose pot sits above the stock, left of the pot plate, clear of the left column.
+			$centre['pile'] = [$centre['deck'][0] + $cardWidth / 2, $centre['pot'][1] + self::PLATE_HEIGHT / 2 + 2, 12, 7];
 		}
 		return $centre;
 	}
@@ -288,14 +419,12 @@ final class Layout
 		$radius = (float)$this->metric($owner === 0 ? 'handChipRadius' : 'chipRadius');
 		if($owner === 'pot')
 		{
-			[$x,$y,$width,$height] = $this->centre()['deck'];
-			$spread = $this->profile === 'landscape' ? .8 : 1.6;
+			[$x, $y, $spreadX, $spreadY] = $this->centre()['pile'];
 			// A fixed low-discrepancy scatter: adding or removing chips never reshuffles the remaining pile.
 			$id = $index * count(Chips::VALUES) + $slot + 1;
 			$angle = $id * 2.399963229728653;
 			$distance = sqrt(fmod($id * .7548776662466927, 1));
-			return [$x - $radius * ($spread + 1.2) + cos($angle) * $distance * $radius * $spread,
-				$y + $height / 2 + sin($angle) * $distance * $radius * ($this->profile === 'landscape' ? 1.4 : 2), $radius];
+			return [$x + cos($angle) * $distance * $spreadX, $y + sin($angle) * $distance * $spreadY, $radius];
 		}
 		$geometry = $this->seat((int)$owner, $seats);
 		[$x, $y] = $geometry['chips'];
@@ -360,9 +489,25 @@ final class Layout
 		}
 		if(!$entries) return [];
 
+		$gap = 10;
+		if(!empty($legal['draw']) && $phase !== 'ready')
+		{
+			// The draw controls belong to the discard dialog: its bottom row, right-aligned, or the full row on a phone.
+			[$rowX, $rowY, $rowWidth, $rowHeight] = $this->discardDialog()['buttons'];
+			$weights = array_sum(array_column($entries, 'weight'));
+			$unit = min($this->design['actionRows'] ? INF : 120, ($rowWidth - $gap * (count($entries) - 1)) / $weights);
+			$x = $rowX + $rowWidth - $unit * $weights - $gap * (count($entries) - 1);
+			$buttons = [];
+			foreach($entries as $entry)
+			{
+				$buttons[] = ['id' => $entry['id'], 'rect' => [$x, $rowY, $entry['weight'] * $unit, $rowHeight], 'label' => $entry['label'], 'key' => $entry['key'], 'style' => $entry['style'], 'intent' => $entry['intent']];
+				$x += $entry['weight'] * $unit + $gap;
+			}
+			return $buttons;
+		}
+
 		[$x, $y] = $this->actionOrigin();
 		$height = $this->controlSize();
-		$gap = 10;
 		$unit = $this->profile === 'landscape' ? (316 - $gap * (count($entries) - 1)) / array_sum(array_column($entries, 'weight')) : ($this->design['actionRows'] ? ($this->design['width'] - 2 * $x - $gap * (count($entries) - 1)) / array_sum(array_column($entries, 'weight')) : 100);
 		$buttons = [];
 		foreach($entries as $entry)
@@ -379,7 +524,7 @@ final class Layout
 	 * Design-space rectangles of the raise-to stepper, present only when a bet is legal.
 	 *
 	 * @param array<string,mixed> $view Current session view.
-	 * @return array{less:array{float,float,float,float},amount:array{float,float,float,float},more:array{float,float,float,float},label:array{float,float}}|null
+	 * @return array{less:array{float,float,float,float},amount:array{float,float,float,float},more:array{float,float,float,float},label:array{float,float},align:string}|null
 	 */
 	public function stepper(array $view): ?array
 	{
@@ -392,10 +537,10 @@ final class Layout
 			$row = $y + $height + 10;
 			$size = $height;
 			$right = $this->design['width'] - $x;
-			return ['less' => [$right - $size * 2 - 100, $row, $size, $size], 'amount' => [$right - $size - 90, $row, 80, $size], 'more' => [$right - $size, $row, $size, $size], 'label' => [$x, $row + $size / 2]];
+			return ['less' => [$right - $size * 2 - 100, $row, $size, $size], 'amount' => [$right - $size - 90, $row, 80, $size], 'more' => [$right - $size, $row, $size, $size], 'label' => [$x, $row + $size / 2], 'align' => 'left'];
 		}
 		$row = $y + $height + 10;
-		return ['less' => [$x + 80, $row, $height, $height], 'amount' => [$x + 90 + $height, $row, 60, $height], 'more' => [$x + 160 + $height, $row, $height, $height], 'label' => [$x + 70, $row + $height / 2]];
+		return ['less' => [$x + 80, $row, $height, $height], 'amount' => [$x + 90 + $height, $row, 60, $height], 'more' => [$x + 160 + $height, $row, $height, $height], 'label' => [$x + 70, $row + $height / 2], 'align' => 'right'];
 	}
 
 	/**
@@ -403,25 +548,33 @@ final class Layout
 	 *
 	 * @param list<int|null> $cards Cards in hand order.
 	 * @param list<int> $discards Selected card ids; their raised positions also define their hit regions.
-	 * @return array{box:array{float,float,float,float},cards:list<array{float,float,float,float}>}
+	 * @return array{box:array{float,float,float,float},cards:list<array{float,float,float,float}>,numbers:float,buttons:array{float,float,float,float}}
 	 */
 	public function discardDialog(array $cards = [], array $discards = []): array
 	{
 		$width = $this->design['dialogWidth'];
 		[$cardWidth,$cardHeight] = $this->design['dialogCard'];
 		$gap = ($width - 40 - 5 * $cardWidth) / 4;
-		$height = $cardHeight + 80;
+		$control = $this->controlSize();
+		// Title rule, room for a selected card to lift without covering the title, the cards, their numbers, then
+		// the row holding the hint and the draw controls.
+		$lift = 12;
+		$height = 22 + $lift + $cardHeight + 24 + $control + 12;
 		$left = $this->design['width'] / 2 - $width / 2;
-		// Keep the cards above the action row; on a short landscape screen they occupy the left panel.
-		$top = $this->actionOrigin()[1] - $height - 10;
-		if($this->profile === 'landscape') { $left = 20; $top = $this->height() - $height - 12; }
+		// The dialog opens over the human's own hand at the bottom of the field, as the DOS one did.
+		$top = $this->height() - $height - 10;
+		if($this->profile === 'landscape') { $width = min($width, $this->tableRight() - 24); $gap = ($width - 40 - 5 * $cardWidth) / 4; $left = 12; }
 		$rects = [];
 		for($index = 0; $index < 5; $index++)
 		{
-			$lift = isset($cards[$index]) && in_array($cards[$index], $discards, true) ? 12 : 0;
-			$rects[] = [$left + 20 + $index * ($cardWidth + $gap), $top + 22 - $lift, $cardWidth, $cardHeight];
+			$raised = isset($cards[$index]) && in_array($cards[$index], $discards, true) ? $lift : 0;
+			$rects[] = [$left + 20 + $index * ($cardWidth + $gap), $top + 22 + $lift - $raised, $cardWidth, $cardHeight];
 		}
-		return ['box' => [$left, $top, $width, $height], 'cards' => $rects];
+		return [
+			'box' => [$left, $top, $width, $height], 'cards' => $rects
+			, 'numbers' => $top + 22 + $lift + $cardHeight + 12
+			, 'buttons' => [$left + 20, $top + $height - $control - 10, $width - 40, $control]
+		];
 	}
 
 	/**

@@ -128,7 +128,7 @@ final class Painter
 			if($seat === 0)
 			{
 				[$tx, $ty] = $this->layout->caption($seat, $seats, $bank);
-				$this->text((string)$total, $tx, $ty, Theme::CAPTION, Theme::PLATE, 'center');
+				$this->text((string)$total, $tx, $ty, $this->layout->captionText(), Theme::PLATE, 'center');
 			}
 			if(!empty($player['bet']))
 			{
@@ -146,14 +146,15 @@ final class Painter
 						$bx = min($bx, $x - $radius);
 					}
 					$label = 'Bet ' . $player['bet'];
-					$size = (float)Theme::CAPTION;
+					$size = $this->layout->captionText();
 					$hand = $geometry[$seat]['cards'][4];
 					$left = $this->layout->profile === 'landscape' ? $hand[0] + $hand[2] + 6 : 8;
 					$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->unit;
 					$size *= min(1, ($bx - 10 - $left) / $width);
 					$this->text($label, $bx - 10, $geometry[$seat]['chips'][1] + 10, $size, Theme::PLATE, 'right');
 				}
-				else $this->text('Bet ' . $player['bet'], $bx + 16, $geometry[$seat]['chips'][1] + 10, Theme::CAPTION, Theme::PLATE, 'center');
+				// The plate already says what an opponent did; the running bet is spelled out only where the wide field has room.
+				elseif($this->layout->profile === 'wide') $this->text('Bet ' . $player['bet'], $bx + 16, $geometry[$seat]['chips'][1] + 10, $this->layout->captionText(), Theme::PLATE, 'center');
 			}
 		}
 		// Layer 4: seat identities, dealer button and turn marker.
@@ -167,14 +168,18 @@ final class Painter
 				[$tx, $ty] = $geometry[$seat]['caption'];
 				$width = max(1, $geometry[$seat]['plate'][2]);
 				$total = (int)($this->state['motion']['totals'][$seat] ?? Chips::value($bank));
-				$this->text((string)($player['name'] ?? ''), $tx, $ty, Theme::CAPTION, Theme::PLATE, 'center', $width);
-				$this->text((string)$total, $tx, $ty + 14, Theme::CAPTION, Theme::PLATE, 'center', $width);
+				$size = $this->layout->captionText();
+				$this->text((string)($player['name'] ?? ''), $tx, $ty, $size, Theme::PLATE, 'center', $width);
+				$this->text((string)$total, $tx, $ty + $size + 2, $size, Theme::PLATE, 'center', $width);
 			}
 			if(($this->view['dealer'] ?? -1) === $seat && $phase !== 'ready')
 			{
 				[$px, $py, $pw, $ph] = $geometry[$seat]['plate'];
 				$dealerX = $seat !== 0 && $geometry[$seat]['outward'] > 0 ? $px - 14 : $px + $pw + 14;
-				[$dx, $dy] = $this->layout->point($dealerX, $py + $ph / 2);
+				$dealerY = $py + $ph / 2;
+				// Column seats have the pot beside the plate, so the marker rides the emblem's outer corner instead.
+				if($seat !== 0 && $this->layout->columns()) [$dealerX, $dealerY] = [$x + $geometry[$seat]['outward'] * 10, $y - 13];
+				[$dx, $dy] = $this->layout->point($dealerX, $dealerY);
 				$this->canvas->circle($dx, $dy, 9 * $this->unit, Theme::PLATE, Theme::INK, 1 * $this->unit);
 				$this->canvas->label('D', $dx, $dy, Theme::CAPTION, Theme::INK, $this->face, 'center');
 			}
@@ -212,7 +217,8 @@ final class Painter
 		if(($this->state['motion']['discardCount'] ?? $this->view['discardCount'] ?? 0) > 0)
 		{
 			$this->card($centre['discard'], null, .8);
-			$this->text('Discards', $centre['discard'][0] + $centre['discard'][2] / 2, $centre['discard'][1] - 9, Theme::CAPTION, Theme::PLATE, 'center');
+			// On a phone the loose pot sits right above the piles, so the discards go unlabelled there.
+			if($this->layout->profile !== 'tall') $this->text('Discards', $centre['discard'][0] + $centre['discard'][2] / 2, $centre['discard'][1] - 9, $this->layout->captionText(), Theme::PLATE, 'center');
 		}
 		$this->chipStacks('pot', $pot);
 		$highest = 0;
@@ -231,7 +237,7 @@ final class Painter
 			$this->plate($stepper['amount'], (string)$this->state['amount'], 'info', false);
 			$this->button($stepper['more'], '+', '', 'default', false);
 			[$lx, $ly] = $this->layout->point(...$stepper['label']);
-			$this->canvas->label(strtoupper((string)($this->view['legalActions']['betLabel'] ?? 'Bet')), $lx, $ly, Theme::CAPTION, Theme::PLATE, $this->face, 'right');
+			$this->canvas->label(strtoupper((string)($this->view['legalActions']['betLabel'] ?? 'Bet')), $lx, $ly, $this->layout->captionText(), Theme::PLATE, $this->face, $stepper['align']);
 		}
 		if($this->state['locked'] && ($this->view['turn'] ?? -1) === 0)
 		{
@@ -249,7 +255,7 @@ final class Painter
 		if($line === '') return;
 		[$betX, $betY, $betWidth, $betHeight] = $this->layout->centre()['bet'];
 		$width = $this->layout->profile === 'wide'
-			? min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40)) : 180;
+			? min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40)) : min(180, $betWidth);
 		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->unit, ($width - 12) * $this->unit, 2, $this->face);
 		$top = $betY + $betHeight + 8;
 		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, Layout::PLATE_HEIGHT + 16 * (count($lines) - 1)], '', $error !== '' ? 'fold' : 'info', false);
@@ -267,11 +273,13 @@ final class Painter
 			if(!isset($cards[$index])) break;
 			$selected = in_array((int)$cards[$index], $this->state['discards'], true);
 			$this->card($rect, $cards[$index], 1.0, $selected);
-			[$nx, $ny] = $this->layout->point($rect[0] + $rect[2] / 2, $rect[1] + $rect[3] + 12 + ($selected ? 12 : 0));
-			$this->canvas->label((string)($index + 1), $nx, $ny, Theme::CAPTION, Theme::INK, $this->face, 'center');
+			$this->text((string)($index + 1), $rect[0] + $rect[2] / 2, $dialog['numbers'], $this->layout->captionText(), Theme::INK, 'center');
 		}
-		[$x, $y, $w, $h] = $dialog['box'];
-		$this->text('Select cards, then press Draw to replace them.', $x + 20, $y + $h - 20, Theme::CAPTION, Theme::INK, 'left', $w - 40);
+		// The hint shares the bottom row with the draw controls and gives way to them on a narrow dialog.
+		[$rowX, $rowY, $rowWidth, $rowHeight] = $dialog['buttons'];
+		$buttons = $this->layout->actions($this->view, $this->state);
+		$room = ($buttons ? $buttons[0]['rect'][0] : $rowX + $rowWidth) - $rowX - 16;
+		if($room >= 160) $this->text('Select cards, then press Draw.', $rowX, $rowY + $rowHeight / 2, $this->layout->captionText(), Theme::INK, 'left', $room);
 	}
 
 	private function historyDialog(): void
@@ -313,7 +321,8 @@ final class Painter
 		}
 		foreach($this->layout->menu(!empty($this->view['canContinue'])) as $index => $item)
 		$this->button($item['rect'], $item['label'], '', $index === 0 ? 'primary' : 'default', false);
-		$this->text('Enter plays · C continues · H help · M settings', $this->layout->width() / 2, $this->layout->height() - ($this->layout->profile === 'landscape' ? 18 : 100), Theme::CAPTION, Theme::PLATE, 'center');
+		$short = $this->layout->profile === 'landscape';
+		$this->text('Enter plays · C continues · H help · M settings', $short ? 16 : $this->layout->width() / 2, $this->layout->height() - ($short ? 18 : 100), Theme::CAPTION, Theme::PLATE, $short ? 'left' : 'center');
 		// Keep the artists' short credit under the hints, or at the right edge where a short landscape has no room.
 		$landscape = $this->layout->profile === 'landscape';
 		$this->text('Icon art: Clint Bellanger · thekingphoenix · 7Soul', $landscape ? $this->layout->width() - 16 : $this->layout->width() / 2

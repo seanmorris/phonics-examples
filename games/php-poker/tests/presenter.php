@@ -275,8 +275,13 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 	foreach($buttons as $button) $expect($button['rect'][3] * $layout->scale >= 38, "{$button['id']} is at least 38 device pixels tall on a phone");
 	$stepper = $layout->stepper($view);
 	$expect($stepper !== null && $stepper['more'][0] + $stepper['more'][2] <= $layout->width() - 15, 'the stepper row fits the field width');
-	$dialog = $layout->discardDialog();
-	$expect($dialog['box'][1] + $dialog['box'][3] <= $layout->metric('actions')[1], 'the discard dialog sits above the action row');
+	$dialog = $layout->discardDialog([1,2,3,4,5], [2,4]);
+	$expect($dialog['box'][1] >= Layout::MENU_BAR && $dialog['box'][1] + $dialog['box'][3] <= $layout->height(), 'the discard dialog stays on the field');
+	foreach($dialog['cards'] as $card) $expect($card[1] >= $dialog['box'][1] + 22, 'a lifted card stays below the dialog title');
+	[$rowX, $rowY, $rowWidth, $rowHeight] = $dialog['buttons'];
+	$expect($rowY >= $dialog['numbers'] + 6 && $rowY + $rowHeight <= $dialog['box'][1] + $dialog['box'][3], 'the draw controls have their own row inside the dialog');
+	foreach($layout->actions($fixture('draw-2'), ['discards' => [], 'amount' => 0]) as $button)
+	$expect($button['rect'][0] >= $rowX - 1e-9 && $button['rect'][0] + $button['rect'][2] <= $rowX + $rowWidth + 1e-9 && abs($button['rect'][1] - $rowY) < 1e-9, "{$button['id']} sits in the dialog's control row");
 	foreach(['opening-8','draw-2','showdown-5','menu'] as $name)
 	{
 		$presenter = new Presenter($root);
@@ -315,7 +320,9 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$emblem = [$g['emblem'][0] - $size / 2, $g['emblem'][1] - $size / 2, $size, $size];
 			$fan = [$g['cards'][0][0], $g['cards'][0][1], $g['cards'][4][0] + $g['cards'][4][2] - $g['cards'][0][0], $g['cards'][0][3]];
 			$right = $g['outward'] > 0;
-			$expect(abs($g['plate'][0] - $fan[0]) < 1e-9 && abs($g['plate'][2] - $fan[2]) < 1e-9, "indicator matches the hand width for seat $seat of $seats in {$layout->profile}");
+			// Landscape seats are compact: a small fan under the outer end of a plate wide enough for its text.
+			if($layout->profile === 'landscape') $expect($g['plate'][2] >= $fan[2] && abs(($right ? $g['plate'][0] + $g['plate'][2] - $fan[0] - $fan[2] : $g['plate'][0] - $fan[0])) < 1e-9, "compact hand hugs the outer end of its indicator for seat $seat of $seats in {$layout->profile}");
+			else $expect(abs($g['plate'][0] - $fan[0]) < 1e-9 && abs($g['plate'][2] - $fan[2]) < 1e-9, "indicator matches the hand width for seat $seat of $seats in {$layout->profile}");
 			$expect(abs($fan[1] - ($g['plate'][1] + $g['plate'][3] + 8)) < 1e-9, "hand sits 8px below the indicator for seat $seat of $seats in {$layout->profile}");
 			$iconEdge = $right ? $g['plate'][0] + $g['plate'][2] + 4 : $g['plate'][0] - 4;
 			$expect($size === 32 && abs(($right ? $emblem[0] : $emblem[0] + $emblem[2]) - $iconEdge) < 1e-9, "icon is 32px on the outer edge for seat $seat of $seats in {$layout->profile}");
@@ -325,11 +332,13 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$expect(abs($g['caption'][0] - $g['emblem'][0]) < 1e-9, "name and total center on the icon for seat $seat of $seats in {$layout->profile}");
 			$expect($g['caption'][1] > $emblem[1] + $emblem[3], "name and total sit below the icon for seat $seat of $seats in {$layout->profile}");
 			$expect(!$overlaps($emblem, $g['plate']) && !$overlaps($emblem, $fan), "icon clears plate and fan for seat $seat of $seats in {$layout->profile}");
-			$expect(abs($g['chips'][0] - ($right ? $g['plate'][0] + $g['plate'][2] + 4 : $g['plate'][0] - 4)) < 1e-9, "chip bank starts at the outer card corner for seat $seat of $seats in {$layout->profile}");
+			if($layout->profile === 'landscape') $expect(abs($g['chips'][0] - ($right ? $fan[0] - 8 : $fan[0] + $fan[2] + 8)) < 1e-9, "chip bank stands beside the compact hand for seat $seat of $seats in {$layout->profile}");
+			else $expect(abs($g['chips'][0] - ($right ? $g['plate'][0] + $g['plate'][2] + 4 : $g['plate'][0] - 4)) < 1e-9, "chip bank starts at the outer card corner for seat $seat of $seats in {$layout->profile}");
 			$one = $layout->chip($seat, $seats, 1, 0);
 			$five = $layout->chip($seat, $seats, 5, 0);
 			$expect($right ? $five[0] < $one[0] : $five[0] > $one[0], "denomination rows mirror for seat $seat of $seats in {$layout->profile}");
 		}
+		if($layout->columns()) continue;
 		$left = $layout->seat(4, 8);
 		$right = $layout->seat(5, 8);
 		$seam = $right['plate'][0] - ($left['plate'][0] + $left['plate'][2]);
@@ -355,6 +364,73 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$expect(abs($deltas[-1][0] + $deltas[1][0]) < 1e-9, "the two $seats-seat groups translate symmetrically in {$layout->profile}");
 		}
 	}
+});
+
+$test('column profiles seat everyone without overlap and fill the canvas', static function(callable $expect) use ($overlaps, $fixture): void {
+	foreach([[390,844,1],[360,640,1],[1170,2340,3],[1536,1850,2],[844,326,1],[667,375,1],[2532,984,3]] as [$width,$height,$dpr])
+	{
+		$layout = Layout::fit($width, $height, $dpr);
+		$expect($layout->columns(), "$width x $height uses a column profile");
+		// The field takes the canvas's free axis instead of being letterboxed.
+		$expect(abs($layout->width() * $layout->scale - $width) < 1.5 || abs($layout->height() * $layout->scale - $height) < 1.5, "the field touches two canvas edges at $width x $height");
+		$expect($layout->width() * $layout->scale > $width * .93 && $layout->height() * $layout->scale > $height * .8, "the field fills most of the canvas at $width x $height");
+		foreach([2,3,5,8] as $seats)
+		{
+			$size = $layout->metric('emblemSize');
+			$blocks = [];
+			for($seat = 0; $seat < $seats; $seat++)
+			{
+				$g = $layout->seat($seat, $seats);
+				$bank = $layout->bankBounds($seat, $seats, Chips::bank(500));
+				$left = min($g['plate'][0], $g['emblem'][0] - $size / 2, $bank[0]);
+				$right = max($g['plate'][0] + $g['plate'][2], $g['emblem'][0] + $size / 2, $bank[0] + $bank[2]);
+				$bottom = max($g['cards'][0][1] + $g['cards'][0][3], $bank[1] + $bank[3], $g['caption'][1] + ($seat === 0 ? 8 : 22));
+				$blocks[$seat] = [$left, $g['plate'][1], $right - $left, $bottom - $g['plate'][1]];
+				$expect($left >= 0 && $right <= $layout->tableRight() + 1e-9 && $g['plate'][1] >= Layout::MENU_BAR + 4 && $bottom <= $layout->height(), "seat $seat of $seats stays on the table at $width x $height");
+			}
+			foreach($blocks as $i => $a) foreach($blocks as $j => $b) if($i < $j) $expect(!$overlaps($a, $b), "seats $i and $j are apart at $seats seats, $width x $height");
+			$centre = $layout->centre();
+			$chip = $layout->metric('chipRadius');
+			$cluster = [min($centre['pot'][0], $centre['deck'][0], $centre['pile'][0] - $centre['pile'][2] - $chip), $centre['pot'][1], 0, 0];
+			$cluster[2] = max($centre['pot'][0] + $centre['pot'][2], $centre['discard'][0] + $centre['discard'][2], $centre['pile'][0] + $centre['pile'][2] + $chip) - $cluster[0];
+			$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 40 - $cluster[1];
+			foreach($blocks as $seat => $block) $expect(!$overlaps($block, $cluster), "the pot cluster clears seat $seat at $seats seats, $width x $height");
+			$view = $fixture('facing-raise-5');
+			foreach($layout->actions($view, ['discards' => [], 'amount' => 8]) as $button) foreach($blocks as $seat => $block)
+			$expect(!$overlaps($block, $button['rect']), "{$button['id']} clears seat $seat at $seats seats, $width x $height");
+			$stepper = $layout->stepper($view);
+			foreach(['less','amount','more'] as $part) foreach($blocks as $seat => $block) $expect(!$overlaps($block, $stepper[$part]), "the stepper clears seat $seat at $seats seats, $width x $height");
+		}
+		// Opponents run clockwise from the human's left: up the left column, then down the right.
+		$tops = [];
+		for($seat = 1; $seat < 8; $seat++) { $g = $layout->seat($seat, 8); $tops[$seat] = [$g['outward'], $g['plate'][1]]; }
+		$expect($tops[1][0] === -1 && $tops[4][0] === -1 && $tops[5][0] === 1 && $tops[7][0] === 1, "four seats sit left and three right at $width x $height");
+		$expect($tops[1][1] > $tops[2][1] && $tops[2][1] > $tops[3][1] && $tops[3][1] > $tops[4][1], "the left column climbs away from the human at $width x $height");
+		$expect($tops[5][1] < $tops[6][1] && $tops[6][1] < $tops[7][1], "the right column comes back down toward the human at $width x $height");
+	}
+});
+
+$test('a rejected action stops showing once the table moves on', static function(callable $expect) use ($fixture, $root): void {
+	$presenter = new Presenter($root);
+	$view = $fixture('facing-raise-5');
+	$presenter->update($view);
+	$rejected = $view;
+	$rejected['error'] = 'That action is unavailable';
+	$presenter->update($rejected);
+	$shown = static fn(Presenter $p): bool => (function(): string { return (string)($this->view['error'] ?? ''); })->call($p) !== '';
+	$expect($shown($presenter), 'the error shows on the revision it was raised on');
+	$moved = $rejected;
+	$moved['revision']++;
+	$presenter->update($moved);
+	$expect(!$shown($presenter), 'the same error is dropped after the revision advances');
+	$again = $moved;
+	$again['error'] = 'Choose a legal amount';
+	$presenter->update($again);
+	$expect($shown($presenter), 'a new error on the new revision shows');
+	$cleared = $again;
+	$cleared['error'] = '';
+	$presenter->update($cleared);
+	$expect(!$shown($presenter), 'a cleared error stays cleared');
 });
 
 echo "$passed PHP Poker presenter checks passed.\n";
