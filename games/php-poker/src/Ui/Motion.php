@@ -85,12 +85,17 @@ final class Motion
 		foreach($this->stages as $stage) if($this->elapsed < $stage['start'] + $stage['duration'])
 		{
 			$frame['banks'] = $stage['before'];
+			$elapsed = $this->elapsed - $stage['start'];
+			foreach($stage['events'] as $event)
+			{
+				if($elapsed < $event['at']) break;
+				$frame['banks'][$event['owner']] = $event['after'];
+			}
 			foreach($stage['moves'] as $index => $move)
 			{
-				$t = ($this->elapsed - $stage['start'] - $index * self::CHIP_GAP) / self::CHIP_TRAVEL;
-				if($t < 0) continue;
-				$frame['banks'][$move['from']][$move['value']]--;
-				if($t >= 1) { $frame['banks'][$move['to']][$move['value']] = ($frame['banks'][$move['to']][$move['value']] ?? 0) + 1; continue; }
+				$departure = $index * self::CHIP_GAP;
+				if($elapsed < $departure || $elapsed >= $departure + self::CHIP_TRAVEL) continue;
+				$t = ($elapsed - $departure) / self::CHIP_TRAVEL;
 				$from = $layout->chip($move['from'], count($this->next['players']), $move['value'], $move['sourceIndex']);
 				$to = $layout->chip($move['to'], count($this->next['players']), $move['value'], $move['destinationIndex']);
 				$frame['chips'][] = ['position' => self::slide($from, $to, $t), 'value' => $move['value']];

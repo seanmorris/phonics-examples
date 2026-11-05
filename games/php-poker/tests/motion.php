@@ -28,6 +28,7 @@ foreach([0,1,2,4,5,24,25,99,100,499,500,1000,4000,2147483647] as $amount)
 {
 	$expect(Chips::value(Chips::bank($amount)) === $amount, "exact denomination total for $amount");
 	$ordered(Chips::bank($amount));
+	if($amount <= 4000) $expect(max(Chips::bank($amount) ?: [0]) <= Chips::STACK_LIMIT, 'normal table banks fit the stack-height limit');
 }
 $expect(Chips::bank(0) === [], 'an empty stack contains no decorative chips');
 $stage = Chips::transfer([0 => [100 => 5], 'pot' => []], 0, 'pot', 2);
@@ -45,17 +46,29 @@ foreach([[0,'pot'],['pot',0],[0,1]] as [$from,$to])
 	$stage = Chips::transfer([$from => Chips::bank($amount), $to => Chips::bank($recipient)], $from, $to, $payment);
 	$visible = $stage['before'];
 	foreach($visible as $owner => $bank) if($owner !== 'pot') $ordered($bank);
-	foreach($stage['moves'] as $move)
+	$flying = 0;
+	foreach($stage['events'] as $event)
 	{
-		$expect($move['sourceIndex'] === $visible[$from][$move['value']] - 1, 'each departure removes the visible top chip');
-		$expect($move['destinationIndex'] === ($visible[$to][$move['value']] ?? 0), 'each arrival uses the next visible destination slot');
-		$visible[$from][$move['value']]--;
-		$visible[$to][$move['value']] = ($visible[$to][$move['value']] ?? 0) + 1;
-		foreach($visible as $owner => $bank) if($owner !== 'pot') $ordered($bank);
-		$expect($value($visible) === $amount + $recipient, 'making change and moving chips preserve value');
+		$move = $stage['moves'][$event['move']];
+		$depart = $event['kind'] === 'depart';
+		$expect(Chips::value($event['before']) === Chips::value($visible[$event['owner']]), 'pre-flight change preserves the bank value');
+		$expect(($depart ? $move['sourceIndex'] : $move['destinationIndex']) === ($event['before'][$move['value']] ?? 0) - ($depart ? 1 : 0), 'flight endpoints use the actual top chips before any exchange');
+		$visible[$event['owner']] = $event['after'];
+		$flying += $depart ? $move['value'] : -$move['value'];
+		foreach($visible as $owner => $bank)
+		{
+			if($owner !== 'pot') $ordered($bank);
+			$expect(max($bank ?: [0]) <= Chips::STACK_LIMIT, 'departures and pot wins automatically color up tall stacks');
+		}
+		$expect($value($visible) + $flying === $amount + $recipient, 'making change and moving chips preserve value including overlapping flights');
 	}
 	$expect($visible === $stage['after'], 'the landed inventory is the inventory used after animation');
 }
+
+$stage = Chips::transfer(['pot' => [1 => 1], 0 => [1 => 20]], 'pot', 0, 1);
+$expect($stage['before'][0] === [1 => 20] && $stage['after'][0] === [1 => 6, 5 => 3], 'the twenty-first small chip automatically exchanges into larger denominations');
+$stage = Chips::transfer([0 => Chips::bank(4000), 'pot' => []], 0, 'pot', 3999);
+$expect(count($stage['moves']) < 80, 'a large payment does not explode into thousands of small chips to preserve height order');
 
 foreach([.1,.25,.5,.75,.9] as $progress)
 {
@@ -82,6 +95,20 @@ foreach([[1280,720,1],[780,1688,2],[1688,780,2]] as [$w,$h,$dpr])
 	$motion->advance(10);
 	$frame = $motion->frame($layout);
 	$expect($frame['chips'] === [] && $frame['banks'] === $change['after'], 'arriving chips become the destination inventory without a duplicate sprite');
+}
+
+// Exercise both sides of every overlapping departure/arrival, including exchanges during a pot award.
+$award = Chips::transfer(['pot' => [1 => 500], 0 => [1 => 20]], 'pot', 0, 500);
+$timeline = ['stages' => [$award], 'after' => $award['after']];
+$layout = Layout::fit(1280,720);
+foreach($award['events'] as $event) foreach([-1e-9,0,1e-9] as $offset)
+{
+	$motion = new Motion($before, $before, $timeline, []);
+	$motion->advance(max(0, $event['at'] + $offset));
+	$frame = $motion->frame($layout);
+	$expect($value($frame['banks']) + array_sum(array_column($frame['chips'], 'value')) === 520, 'no chip disappears or duplicates at an exchange boundary');
+	$ordered($frame['banks'][0]);
+	$expect(max($frame['banks'][0] ?: [0]) <= Chips::STACK_LIMIT, 'the rendered award bank stays below the height limit');
 }
 
 $seen = [];

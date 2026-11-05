@@ -20,21 +20,21 @@ final class Layout
 	/** @var array<string,array<string,mixed>> Design metrics per profile. */
 	private const PROFILES = [
 		'wide' => [
-			'width' => 1280, 'height' => 720, 'centre' => [640,378], 'oval' => [470,250], 'emblemInset' => [175,115]
+			'width' => 1280, 'height' => 720, 'centre' => [640,378], 'oval' => [470,250], 'upperStretch' => 24, 'emblemInset' => [175,115]
 			, 'card' => [68,95], 'cardStep' => 30, 'handCard' => [90,126], 'handStep' => 38, 'dialogCard' => [124,174]
 			, 'plateWidth' => 200, 'handPlateWidth' => 250, 'plateLift' => 62, 'handPlateLift' => 90
 			, 'actions' => [790,588], 'actionRows' => false, 'buttonHeight' => 32, 'chipRadius' => 15, 'handChipRadius' => 17
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 760, 'display' => 54
 		]
 		, 'tall' => [
-			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'emblemInset' => [84,78]
+			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemInset' => [84,78]
 			, 'card' => [36,50], 'cardStep' => 16, 'handCard' => [66,92], 'handStep' => 28, 'dialogCard' => [72,101]
 			, 'plateWidth' => 104, 'handPlateWidth' => 190, 'plateLift' => 48, 'handPlateLift' => 70
 			, 'actions' => [16,676], 'actionRows' => true, 'buttonHeight' => 44, 'chipRadius' => 10, 'handChipRadius' => 12
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 418, 'display' => 42
 		]
 		, 'landscape' => [
-			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'emblemInset' => [85,55]
+			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemInset' => [85,55]
 			, 'card' => [38,53], 'cardStep' => 17, 'handCard' => [62,87], 'handStep' => 26, 'dialogCard' => [86,120]
 			, 'plateWidth' => 118, 'handPlateWidth' => 190, 'plateLift' => 44, 'handPlateLift' => 70
 			, 'actions' => [568,250], 'actionRows' => false, 'buttonHeight' => 52, 'chipRadius' => 9, 'handChipRadius' => 11
@@ -174,7 +174,9 @@ final class Layout
 		$angle = $this->seatAngle($seat, $seats);
 		$ux = cos($angle);
 		$uy = sin($angle);
-		[$cx,$cy] = [$d['centre'][0] + $ux * $d['oval'][0], $d['centre'][1] + $uy * $d['oval'][1]];
+		// Use the space freed above the opponents by the centered status plate, without lowering the human hand.
+		$verticalRadius = $d['oval'][1] + ($uy < 0 ? $d['upperStretch'] : 0);
+		[$cx,$cy] = [$d['centre'][0] + $ux * $d['oval'][0], $d['centre'][1] + $uy * $verticalRadius];
 		$human = $seat === 0;
 		[$cardWidth,$cardHeight] = $human ? $d['handCard'] : $d['card'];
 		$step = $human ? $d['handStep'] : $d['cardStep'];
@@ -190,24 +192,41 @@ final class Layout
 		$chips = $human
 			? [$plate[0] - $chipRadius * 4.2, $fanTop + $cardHeight - $chipRadius * 2.6]
 			: [$outward > 0 ? $plate[0] + $plateWidth - $chipRadius * 3.7 : $plate[0] - 4, $fanTop + $cardHeight + 4];
-		// Name and stack read under the fan on the side away from the chips.
+		// Opponent captions read under the fan; the human caption sits directly below the chip group.
 		$caption = $human
-			? [$plate[0] - 12, $fanTop + 14]
+			? [$chips[0] + $chipRadius, $chips[1] + $chipRadius * 2 + 14]
 			: [$outward > 0 ? $fanLeft : $fanLeft + $cardWidth + 4 * $step, $fanTop + $cardHeight + 14];
 		$emblem = $human
 			? [$plate[0] - 46, $plate[1] + 8]
-			: [$d['centre'][0] + $ux * ($d['oval'][0] - $d['emblemInset'][0]), $d['centre'][1] + $uy * ($d['oval'][1] - $d['emblemInset'][1])];
+			: [$d['centre'][0] + $ux * ($d['oval'][0] - $d['emblemInset'][0]), $d['centre'][1] + $uy * ($verticalRadius - $d['emblemInset'][1])];
 		if($human && $this->profile === 'landscape')
 		{
 			// The adjacent opponent occupies the left side on a short screen. Keep the human bank in the gap
-			// between the hand and the action panel, with its name below and its marker above.
+			// between the hand and the action panel, with the combined YOU / total label below.
 			$handRight = $fanLeft + $cardWidth + 4 * $step;
 			$chips[0] = $handRight + 32;
-			$caption = [$chips[0] + $chipRadius * 3.2, $fanTop + $cardHeight + 14];
+			$caption = [$chips[0] + $chipRadius, $chips[1] + $chipRadius * 2 + 14];
 			$emblem = [$handRight + 22, $fanTop + 19];
 		}
 
 		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
+	}
+
+	/** Keep the human total below the occupied denominations, including after a color-up. */
+	public function caption(int $seat, int $seats, array $bank): array
+	{
+		$caption = $this->seat($seat, $seats)['caption'];
+		if($seat !== 0 || !array_filter($bank)) return $caption;
+		$left = INF;
+		$right = $bottom = -INF;
+		foreach($bank as $value => $count) if($count > 0)
+		{
+			[$x,$y,$radius] = $this->chip($seat, $seats, (int)$value, 0);
+			$left = min($left, $x - $radius);
+			$right = max($right, $x + $radius);
+			$bottom = max($bottom, $y + $radius * .42);
+		}
+		return [($left + $right) / 2, $bottom + 14];
 	}
 
 	/**

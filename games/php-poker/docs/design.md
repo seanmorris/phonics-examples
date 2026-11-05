@@ -41,14 +41,16 @@ one from the canvas: **wide**, a 1280×720 field, for landscape canvases of 760 
 450×800 portrait field, for portrait or narrower canvases; **landscape**, a 900×400 field with a separate right-hand control panel, for landscape canvases below 480 CSS px high. The field scales uniformly to fit and is centred. Interactive controls are at least 48 CSS pixels high across device-pixel ratios; short-screen menus use two columns.
 
 - Seats sit on an oval (wide 470×250, tall 165×260) with the human at the bottom. Opponents are spaced evenly
-  from the human's left. In the wide profile the action buttons sit to the lower right of the human, so no seat
+  from the human's left. Its upper half stretches upward by 24 design pixels on wide screens, 6 in portrait
+  and 12 in short landscape, opening space around the centre while keeping the human hand in place.
+  In the wide profile the action buttons sit to the lower right of the human, so no seat
   may come lower on that side than .42 rad below the horizontal; from six seats up the opponents spread over
   the arc that stops short of it. In the tall profile the opponents spread over the arc starting sixty degrees
   either side of the human.
 - A seat is a plate (wide 200×24, human 250) over a fan (wide opponent cards 68×95 stepped 30; the human's
   90×126 stepped 38), chip stacks in front of the fan's outer corner (the human's beside the hand), a caption
   with the name and stack under the fan, and the emblem on the inside of the oval between the seat and the
-  centre. The YOU ring sits beside the human's plate.
+  centre. The human's combined YOU and total caption is centered directly below the occupied chip stacks.
 - Plates: white for the last action or "Thinking", rose for Fold, straw for the hand name at showdown; a brass
   edge marks the seat whose turn it is. The dealer gets a small "D" disc beside the plate.
 - Centre: "Total pot (n)" plate, the deck (a back the size of a hand card), the pot's chips in front of it,
@@ -93,8 +95,11 @@ Menu/background pauses hold presentation time. Movement stops drawing frames whe
 `Chips` maintains exact visual inventories, separate from rules and saves. White chips are 1, red 5, green 25,
 black 100, purple 500 and gold 1,000; larger denominations are supported for larger balances. Every visible
 chip is counted and marked with its value. Denominations nest closely, with larger denominations in front.
-Banks make change before transfers so each larger denomination has fewer chips than the occupied stacks
-behind it, including while chips depart and arrive. Pot chips form a loose, mixed cluster with stable positions.
+Banks exchange denominations at chip departures and arrivals so each larger denomination has fewer chips than
+the occupied stacks behind it. Stacks above twenty chips automatically color up into larger denominations;
+for extremely large balances the allocator finds the shortest exact arrangement compatible with that ordering.
+The timeline records each exchange and the actual chip endpoints, preserving overlapping constant-speed flights.
+Pot chips form a loose, mixed cluster whose positions stay fixed between exchanges.
 Payments, antes and awards remove chips from their actual stack positions and
 append them to the destination stacks. In-flight chips are counted in neither stack, so value is conserved
 throughout the movement. Empty banks show no chips. Reloading reconstructs denominations from exact balances.

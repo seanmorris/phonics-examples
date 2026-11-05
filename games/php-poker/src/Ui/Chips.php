@@ -6,10 +6,12 @@ namespace PhpPoker\Ui;
 final class Chips
 {
 	public const VALUES = [1,5,25,100,500,1000,5000,25000,100000,500000,1000000,5000000,25000000,100000000,500000000,1000000000];
+	public const STACK_LIMIT = 20;
 
 	/** @return array<int,int> Denomination => physical chip count, with no decorative filler chips. */
 	public static function bank(int $amount): array
 	{
+		$total = $amount;
 		$result = [];
 		// Keep a small amount of useful change in a new/restored bank instead of a single oversized chip.
 		$change = $amount >= 100 ? 100 : ($amount >= 25 ? 25 : ($amount >= 5 ? 5 : 0));
@@ -28,7 +30,41 @@ final class Chips
 		}
 		ksort($result);
 		while(($value = self::obscured($result)) !== null) self::change($result, $value);
+		if(max($result ?: [0]) > self::STACK_LIMIT)
+		{
+			// Find an exact, ordered color-up. Very large balances can require more than twenty chips:
+			// choose the smallest feasible height rather than losing value or hiding a rear denomination.
+			$misses = [];
+			for($limit = self::STACK_LIMIT; ; $limit++)
+			if(($compact = self::bounded($total, 0, $limit, $misses)) !== null) return $compact;
+		}
 		return $result;
+	}
+
+	/** Exact denomination allocation with strictly decreasing occupied stack heights. */
+	private static function bounded(int $amount, int $slot, int $limit, array &$misses): ?array
+	{
+		if($amount === 0) return [];
+		if($slot === count(self::VALUES) || $limit === 0) return null;
+		$key = "$amount:$slot:$limit";
+		if(isset($misses[$key])) return null;
+		$value = self::VALUES[$slot];
+		for($count = min($limit, intdiv($amount, $value)); $count >= ($slot === 0 ? 1 : 0); $count--)
+		{
+			$remaining = $amount - $count * $value;
+			if(isset(self::VALUES[$slot + 1]) && $remaining % self::VALUES[$slot + 1]) continue;
+			$rest = self::bounded($remaining, $slot + 1, $count ? $count - 1 : $limit, $misses);
+			if($rest !== null) return $count ? [$value => $count] + $rest : $rest;
+		}
+		$misses[$key] = true;
+		return null;
+	}
+
+	/** Exchange only when height or visibility requires it; otherwise leave physical chips in place. */
+	private static function exchange(array $bank, int|string $owner): array
+	{
+		return max($bank ?: [0]) > self::STACK_LIMIT || ($owner !== 'pot' && self::obscured($bank) !== null)
+			? self::bank(self::value($bank)) : $bank;
 	}
 
 	/** First front stack that is not shorter than every occupied stack behind it. */
@@ -70,79 +106,46 @@ final class Chips
 	}
 
 	/**
-	 * Move exact chips, making change before departure when needed. Returned indices are the actual top chips
-	 * removed from the source and appended to the destination; painting and motion use these same indices.
+	 * Move exact chips, exchanging denominations at departures and arrivals when needed. Each event records
+	 * the actual bank and top-chip index, so overlapping flights retain their real source and destination.
 	 */
 	public static function transfer(array $banks, int|string $from, int|string $to, int $amount): array
 	{
 		if($amount < 0 || $amount > self::value($banks[$from])) throw new \InvalidArgumentException('Insufficient chips');
-		// Exchange the banks before a transfer, then keep every chip fixed until it leaves or arrives.
-		foreach([$from,$to] as $owner) if($owner !== 'pot') $banks[$owner] = self::bank(self::value($banks[$owner]));
-		while(true)
-		{
-			$stage = self::payment($banks, $from, $to, $amount);
-			$visible = $stage['before'];
-			$invalid = null;
-			$check = static function() use (&$visible, &$invalid, $from, $to): void {
-				foreach([$from,$to] as $owner) if($owner !== 'pot' && ($value = self::obscured($visible[$owner])) !== null)
-				{ $invalid = [$owner,$value]; return; }
-			};
-			$check();
-			foreach($stage['moves'] as $move)
-			{
-				if($invalid !== null) break;
-				$visible[$from][$move['value']]--;
-				$visible[$to][$move['value']] = ($visible[$to][$move['value']] ?? 0) + 1;
-				$check();
-			}
-			if($invalid === null) return $stage;
-			[$owner,$value] = $invalid;
-			$banks = $stage['before'];
-			// If the offending destination chip is still incoming, break it at the source before it flies.
-			self::change($banks[!empty($banks[$owner][$value]) ? $owner : $from], $value);
-		}
-	}
-
-	/** Plan a payment; `transfer()` makes any additional change needed to keep stacks visible. */
-	private static function payment(array $banks, int|string $from, int|string $to, int $amount): array
-	{
+		if($from === $to) throw new \InvalidArgumentException('Chip transfer needs different owners');
+		foreach([$from,$to] as $owner) $banks[$owner] = self::exchange($banks[$owner], $owner);
+		// A fresh source bank has small change available, including when a saved pot is all large chips.
+		$banks[$from] = self::bank(self::value($banks[$from]));
+		$before = $banks;
 		$remaining = $amount;
 		$source = $banks[$from];
-		$pieces = [];
+		$target = $banks[$to];
+		$moves = $events = [];
 		while($remaining > 0)
 		{
+			$piece = null;
 			foreach(array_reverse(self::VALUES) as $value)
-			{
-				$count = min($source[$value] ?? 0, intdiv($remaining, $value));
-				if(!$count) continue;
-				$source[$value] -= $count;
-				$remaining -= $value * $count;
-				for($i = 0; $i < $count; $i++) $pieces[] = $value;
-			}
-			if(!$remaining) break;
-			foreach(self::VALUES as $index => $value) if($value > $remaining && !empty($source[$value]))
-			{
-				$source[$value]--;
-				// Split one chip into the next smaller denomination (including the 25 -> 5 and 100 -> 25 steps).
-				$smaller = self::VALUES[$index - 1];
-				$source[$smaller] = ($source[$smaller] ?? 0) + intdiv($value, $smaller);
-				break;
-			}
+			if($value <= $remaining && !empty($source[$value])) { $piece = $value; break; }
+			if($piece === null) { $source = self::bank(self::value($source)); continue; }
+			$index = count($moves);
+			$departure = $index * Motion::CHIP_GAP;
+			$arrival = $departure + Motion::CHIP_TRAVEL;
+			$sourceBefore = $source;
+			$targetBefore = $target;
+			$sourceIndex = --$source[$piece];
+			$destinationIndex = $target[$piece] ?? 0;
+			$target[$piece] = $destinationIndex + 1;
+			$source = self::exchange($source, $from);
+			$target = self::exchange($target, $to);
+			$moves[] = ['value' => $piece, 'from' => $from, 'to' => $to, 'sourceIndex' => $sourceIndex, 'destinationIndex' => $destinationIndex];
+			$events[] = ['at' => $departure, 'move' => $index, 'kind' => 'depart', 'owner' => $from, 'before' => $sourceBefore, 'after' => $source];
+			$events[] = ['at' => $arrival, 'move' => $index, 'kind' => 'arrive', 'owner' => $to, 'before' => $targetBefore, 'after' => $target];
+			$remaining -= $piece;
 		}
-		sort($pieces, SORT_NUMERIC);
-		$before = $banks;
-		$before[$from] = $source;
-		foreach($pieces as $value) $before[$from][$value] = ($before[$from][$value] ?? 0) + 1;
-		$after = $before;
-		$moves = [];
-		foreach($pieces as $value)
-		{
-			$sourceIndex = --$after[$from][$value];
-			$destinationIndex = $after[$to][$value] ?? 0;
-			$after[$to][$value] = $destinationIndex + 1;
-			$moves[] = ['value' => $value, 'from' => $from, 'to' => $to, 'sourceIndex' => $sourceIndex, 'destinationIndex' => $destinationIndex];
-		}
-		return ['before' => $before, 'after' => $after, 'moves' => $moves];
+		usort($events, static fn(array $a, array $b): int => $a['at'] <=> $b['at']);
+		$banks[$from] = $source;
+		$banks[$to] = $target;
+		return ['before' => $before, 'after' => $banks, 'moves' => $moves, 'events' => $events];
 	}
 
 	/** Infer public payments, loans and awards without adding anything to saved or deterministic state. */
@@ -163,6 +166,7 @@ final class Chips
 		{
 			$loan = max(0, (int)$player['debt'] - (int)($previous['players'][$seat]['debt'] ?? 0));
 			foreach(self::bank($loan) as $value => $count) $banks[$seat][$value] = ($banks[$seat][$value] ?? 0) + $count;
+			$banks[$seat] = self::exchange($banks[$seat], $seat);
 		}
 		$stages = [];
 		foreach($payments as $seat => $amount) if($amount)

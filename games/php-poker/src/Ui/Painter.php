@@ -124,8 +124,9 @@ final class Painter
 		{
 			$bank = ($this->state['motion']['banks'] ?? $this->state['chips'])[$seat] ?? [];
 			$this->chipStacks($seat, $bank);
-			[$tx, $ty] = $geometry[$seat]['caption'];
-			$this->text(($player['name'] ?? '') . '  ' . Chips::value($bank), $tx, $ty, Theme::CAPTION, Theme::PLATE, $geometry[$seat]['outward'] > 0 ? 'left' : 'right');
+			[$tx, $ty] = $this->layout->caption($seat, $seats, $bank);
+			$this->text(($seat === 0 ? 'YOU' : ($player['name'] ?? '')) . '  ' . Chips::value($bank), $tx, $ty, Theme::CAPTION, Theme::PLATE,
+				$seat === 0 ? 'center' : ($geometry[$seat]['outward'] > 0 ? 'left' : 'right'));
 			if(!empty($player['bet']))
 			{
 				$outward = $geometry[$seat]['outward'];
@@ -428,14 +429,9 @@ final class Painter
 
 	private function emblem(float $x, float $y, int $seat, string $name, string $portrait): void
 	{
+		if($seat === 0) return;
 		[$dx, $dy] = $this->layout->point($x, $y);
 		$r = 22 * $this->unit;
-		if($seat === 0)
-		{
-			$this->canvas->circle($dx, $dy, $r * .72, [0,0,0,0], Theme::PLATE_HAND, 3 * $this->unit);
-			$this->canvas->label('YOU', $dx, $dy + .5 * $this->unit, Theme::CAPTION, Theme::EMBLEM, $this->face, 'center');
-			return;
-		}
 		if($this->mode === Theme::MODERN) $this->canvas->circle($dx, $dy, $r * 1.2, [0,0,0,.16]);
 		$icon = $this->atlas['icons'][$portrait] ?? null;
 		if($icon !== null)
