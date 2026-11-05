@@ -54,8 +54,8 @@ test('the room protocol carries a verified private deal from seating through ten
 	assert.equal(await clients.alice.deal.hash(),await clients.bob.deal.hash());
 	assert.equal(clients.alice.deal.privateHand().length,5);assert.equal(clients.bob.deal.privateHand().length,5);
 	assert.equal(new Set([...clients.alice.deal.privateHand(),...clients.bob.deal.privateHand()]).size,10);
-	assert.ok(clients.alice.protocol.snapshot().tables[0].sequence>20);
+	assert.equal(clients.alice.protocol.snapshot().tables[0].sequence,4);
 	const events=hub.history(clients.alice.provider.room).map(item=>item.content);
-	assert.equal(events.filter(item=>item.kind==='action').length,24);
+	assert.equal(events.filter(item=>item.kind==='action').length,4);
 	assert.equal(events.filter(item=>item.kind==='settled').length,6);
 });

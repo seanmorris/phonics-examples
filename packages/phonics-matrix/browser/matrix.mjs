@@ -275,6 +275,7 @@ export class MatrixLobbyProvider extends EventTarget
 			, syncEmptyMaxDelay = 60_000
 			, invitationTtl = 90_000
 			, signalBatch = 250
+			, sendInterval = 500
 			, guest = false
 			, locks = globalThis.navigator?.locks
 			, inviteLifetime = 15 * 60_000
@@ -335,6 +336,11 @@ export class MatrixLobbyProvider extends EventTarget
 		this.invitationTtl = invitationTtl;
 		this.signalBatch = Math.max(0, Number(signalBatch) || 0);
 		this.signalQueues = new Map;
+		const interval = Number(sendInterval);
+		this.sendInterval = Number.isFinite(interval) ? Math.max(0, interval) : 500;
+		this.sendQueue = [];
+		this.sendWriting = false;
+		this.sendAfter = 0;
 		this.externalSignal = signal ?? null;
 		this.resetConnectionSignal();
 		this.roomId = null;
@@ -1776,6 +1782,76 @@ export class MatrixLobbyProvider extends EventTarget
 		return result;
 	}
 
+	/** Serialize durable room writes, pacing a burst and retaining one transaction across recoverable retries. */
+	queueSend(type, content, transaction)
+	{
+		if(this.sendQueue.length >= 256)
+		throw new MatrixLobbyError('matrix_send_queue', 'Matrix room event queue is full');
+
+		const sent = Promise.withResolvers();
+		this.sendQueue.push({type, content, transaction, sent, deadline: null});
+		void this.flushSends();
+
+		return sent.promise;
+	}
+
+	/** Deliver queued room events in order and honor the homeserver's retry interval for the entire queue. */
+	async flushSends()
+	{
+		if(this.sendWriting) return;
+
+		this.sendWriting = true;
+
+		try
+		{
+			while(this.sendQueue.length)
+			{
+				const item = this.sendQueue[0];
+				item.deadline ??= Date.now() + 60_000;
+
+				try
+				{
+					const delay = this.sendAfter - Date.now();
+
+					if(delay > 0) await pause(delay, this.signal);
+
+					const result = await this.writeRoomEvent(item.type, item.content, item.transaction);
+
+					if(this.sendQueue[0] === item) this.sendQueue.shift();
+					this.sendAfter = Date.now() + this.sendInterval;
+					item.sent.resolve(result);
+				}
+				catch(error)
+				{
+					if(this.closed || this.signal.aborted || Date.now() >= item.deadline || !this.recoverable(error))
+					{
+						if(this.sendQueue[0] === item) this.sendQueue.shift();
+						item.sent.reject(error);
+						continue;
+					}
+
+					const requested = Number(error.details?.retry_after_ms);
+					const retry = Number.isFinite(requested) && requested >= 0 ? requested : 1000;
+					this.sendAfter = Date.now() + Math.max(this.sendInterval, Math.min(30_000, retry));
+					this.dispatchEvent(event('gameeventstatus', {state: 'retrying', code: error.code}));
+					this.dispatchEvent(event('signalingstatus', {state: 'retrying', code: error.code}));
+				}
+			}
+		}
+		finally
+		{
+			this.sendWriting = false;
+
+			if(this.sendQueue.length && !this.closed && !this.signal.aborted) void this.flushSends();
+		}
+	}
+
+	/** Reject queued durable writes when their authenticated Matrix connection ends. */
+	cancelSends(error)
+	{
+		for(const item of this.sendQueue.splice(0)) item.sent.reject(error);
+	}
+
 	/** Read one stored event from the connected public lobby room. */
 	async roomEvent(eventId)
 	{
@@ -2148,6 +2224,11 @@ export class MatrixLobbyProvider extends EventTarget
 
 	async send(type, content, transaction = `${Date.now()}-${++this.transaction}`)
 	{
+		return this.queueSend(type, structuredClone(content), String(transaction));
+	}
+
+	async writeRoomEvent(type, content, transaction)
+	{
 		return this.request(
 			'PUT'
 			, `/_matrix/client/v3/rooms/${encodeURIComponent(
@@ -2369,7 +2450,9 @@ export class MatrixLobbyProvider extends EventTarget
 			]);
 
 			this.connected = false;
-			this.controller.abort(new MatrixLobbyError('matrix_logout', 'Matrix session signed out'));
+			const loggedOut = new MatrixLobbyError('matrix_logout', 'Matrix session signed out');
+			this.cancelSends(loggedOut);
+			this.controller.abort(loggedOut);
 			await Promise.allSettled([this.syncTask]);
 
 			const remote = [];
@@ -2449,7 +2532,9 @@ export class MatrixLobbyProvider extends EventTarget
 		}
 
 		this.signalQueues.clear();
-		this.controller.abort(new MatrixLobbyError('lobby_closed', 'Matrix lobby closed'));
+		const closed = new MatrixLobbyError('lobby_closed', 'Matrix lobby closed');
+		this.cancelSends(closed);
+		this.controller.abort(closed);
 		this.peers.clear();
 		this.invitations.clear();
 

@@ -5,12 +5,9 @@
  * commutative layer key and the five faces it is entitled to decrypt.
  */
 
-export const ONLINE_DEAL_VERSION=1;
-export const ONLINE_RULES='five-card-draw-anything-v1';
-export const ONLINE_ACTION_TYPES=Object.freeze([
-	'deck-shuffle','shuffle-proof-header','shuffle-proof-commitments','shuffle-proof-responses'
-	,'shuffle-proof-tail','card-layer'
-]);
+export const ONLINE_DEAL_VERSION=2;
+export const ONLINE_RULES='five-card-draw-anything-v2';
+export const ONLINE_ACTION_TYPES=Object.freeze(['shuffle-packet','card-layers']);
 
 const encoder=new TextEncoder;
 const stable=value=>JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)
@@ -107,8 +104,22 @@ export class OnlineDeal
 		}
 		const key=this.api.generateLayerKey();
 		const result=this.api.shuffleAndProve(this.state.deck,key,{context:this.shuffleContext(actor),rounds:this.rounds});
-		const chunks=this.api.splitShuffleProof(result.proof);
-		const actions=[{type:'deck-shuffle',deck:result.deck},...chunks.map(({kind,...chunk})=>({type:kind,...chunk}))];
+		const chunks=this.api.splitShuffleProof(result.proof,{roundsPerChunk:16});
+		const header=chunks.find(chunk=>chunk.kind==='shuffle-proof-header');
+		const tail=chunks.find(chunk=>chunk.kind==='shuffle-proof-tail');
+		const commitments=chunks.filter(chunk=>chunk.kind==='shuffle-proof-commitments');
+		const responses=new Map(chunks.filter(chunk=>chunk.kind==='shuffle-proof-responses').map(chunk=>[chunk.offset,chunk]));
+		if(!header||!tail||commitments.length!==responses.size)throw new Error('Shuffle proof did not split into matching packets');
+		const record=({kind,...value})=>({type:kind,...value});
+		const actions=commitments.map((commitment,index)=>({
+			type:'shuffle-packet',records:[
+				...(index===0?[{type:'deck-shuffle',deck:result.deck},record(header)]:[])
+				,record(commitment),record(responses.get(commitment.offset))
+				,...(index===commitments.length-1?[record(tail)]:[])
+			]
+		}));
+		if(actions.some(action=>encoder.encode(JSON.stringify(action)).length>=49152))
+		throw new Error('Shuffle packet exceeds the room action limit');
 		this.saved={...this.saved,key,plan:{shuffleIndex:this.state.shuffleIndex,actor,actions}};this.saveSaved();
 		return this.saved.plan;
 	}
@@ -123,21 +134,28 @@ export class OnlineDeal
 			if(!action)throw new Error('Stored shuffle proof is incomplete');
 			return clone(action);
 		}
-		const index=this.state.allocationIndex,allocation=this.state.allocations[index];
 		const layer=this.state.layers.find(item=>item.player===this.localPlayer)?.descriptor;
 		if(!layer)throw new Error('Local encryption layer is unavailable');
-		const removal=this.api.removeLayer(allocation.value,this.keyForLocal(),layer,{context:this.drawContext(index,this.localPlayer)});
-		return {type:'card-layer',card:index,...removal};
+		const items=[];
+		for(const [index,allocation] of this.state.allocations.entries())
+		if(allocation.recipient!==this.localPlayer&&this.requiredRemover(allocation)===this.localPlayer)
+		items.push({card:index,...this.api.removeLayer(
+			allocation.value,this.keyForLocal(),layer,{context:this.drawContext(index,this.localPlayer)}
+		)});
+		if(!items.length)throw new Error('No private cards await this encryption layer');
+		return {type:'card-layers',items};
 	}
 
 	/** End one durable batch after each verified shuffle and after the complete initial private deal. */
 	settlesAction(action)
 	{
-		if(this.state.stage==='shuffle')return action?.type==='shuffle-proof-tail';
-		if(this.state.stage!=='deal'||action?.type!=='card-layer')return true;
-		const allocation=this.state.allocations[this.state.allocationIndex];
-		const remaining=this.shuffleOrder.filter(player=>player!==allocation?.recipient&&!allocation?.removed.includes(player));
-		return this.state.allocationIndex===this.state.allocations.length-1&&remaining.length===1;
+		if(this.state.stage==='shuffle')return action?.type==='shuffle-packet'
+			&&action.records?.some(record=>record.type==='shuffle-proof-tail');
+		if(this.state.stage!=='deal'||action?.type!=='card-layers')return true;
+		const actor=this.currentActor(),cards=new Set(action.items?.map(item=>item.card));
+		return this.state.allocations.every((allocation,index)=>this.shuffleOrder.every(player=>
+			player===allocation.recipient||allocation.removed.includes(player)||(player===actor&&cards.has(index))
+		));
 	}
 
 	async apply({sequence,actor,pre_hash:preHash,action})
@@ -154,6 +172,13 @@ export class OnlineDeal
 	}
 
 	applyShuffleAction(actor,action)
+	{
+		if(action.type!=='shuffle-packet'||!Array.isArray(action.records)||!action.records.length||action.records.length>5)
+		throw new Error('The shuffle expects a bounded proof packet');
+		for(const record of action.records)this.applyShuffleRecord(actor,record);
+	}
+
+	applyShuffleRecord(actor,action)
 	{
 		if(action.type==='deck-shuffle')
 		{
@@ -195,22 +220,37 @@ export class OnlineDeal
 
 	applyLayerAction(actor,action)
 	{
-		if(action.type!=='card-layer')throw new Error('The deal expects a layer-removal proof');
-		const index=this.state.allocationIndex,allocation=this.state.allocations[index];
-		if(action.card!==index||actor!==this.requiredRemover(allocation))throw new Error('Layer removal targets the wrong card');
+		if(action.type!=='card-layers'||!Array.isArray(action.items)||!action.items.length||action.items.length>52)
+		throw new Error('The deal expects a layer-removal batch');
 		const layer=this.state.layers.find(item=>item.player===actor)?.descriptor;
-		const removal={value:action.value,proof:action.proof};
-		if(!layer||!this.api.verifyLayerRemoval(allocation.value,removal,layer,{context:this.drawContext(index,actor)}))
-		throw new Error('Card layer-removal proof did not verify');
-		allocation.value=action.value;allocation.removed.push(actor);
-		if(this.requiredRemover(allocation)!==allocation.recipient)return;
-		if(allocation.recipient===this.localPlayer)
+		const expected=this.state.allocations.flatMap((allocation,index)=>
+			allocation.recipient!==actor&&this.requiredRemover(allocation)===actor?[index]:[]
+		);
+		if(!layer||action.items.length!==expected.length||action.items.some((item,index)=>item?.card!==expected[index]))
+		throw new Error('Layer removal batch targets the wrong cards');
+		for(const item of action.items)
 		{
-			const card=this.api.readPrivateCard(allocation.value,this.keyForLocal(),this.corpus);
-			if(this.privateCards.some(value=>value.slot===index&&value.id!==card.id))throw new Error('Private card changed during replay');
-			if(!this.privateCards.some(value=>value.slot===index))this.privateCards.push({slot:index,id:card.id});
+			const allocation=this.state.allocations[item.card],removal={value:item.value,proof:item.proof};
+			if(!this.api.verifyLayerRemoval(allocation.value,removal,layer,{context:this.drawContext(item.card,actor)}))
+			throw new Error('Card layer-removal proof did not verify');
 		}
-		this.state.allocationIndex++;
+		for(const item of action.items)
+		{
+			const allocation=this.state.allocations[item.card];
+			allocation.value=item.value;allocation.removed.push(actor);
+			if(this.requiredRemover(allocation)===allocation.recipient&&allocation.recipient===this.localPlayer)
+			{
+				const card=this.api.readPrivateCard(allocation.value,this.keyForLocal(),this.corpus);
+				if(this.privateCards.some(value=>value.slot===item.card&&value.id!==card.id))throw new Error('Private card changed during replay');
+				if(!this.privateCards.some(value=>value.slot===item.card))this.privateCards.push({slot:item.card,id:card.id});
+			}
+		}
+		while(this.state.allocationIndex<this.state.allocations.length)
+		{
+			const allocation=this.state.allocations[this.state.allocationIndex];
+			if(this.requiredRemover(allocation)!==allocation.recipient)break;
+			this.state.allocationIndex++;
+		}
 		if(this.state.allocationIndex===this.state.allocations.length)this.state.stage='ready';
 	}
 

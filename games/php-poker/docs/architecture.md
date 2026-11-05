@@ -11,9 +11,10 @@ An offline snapshot contains every local hand and deck order. It is continuation
 `mental-poker.mjs` supplies the presentation-side cryptographic primitive. It maps the agreed 52-card corpus to
 Ristretto255 points, lets each player apply a secret commutative scalar and permutation, and verifies every shuffle
 with a transcript-bound 64-round cut-and-choose proof. Chaum-Pedersen proofs bind later layer removals to the
-verified shuffle key. Proofs are split into bounded Matrix events. The room batches each complete shuffle and the
-complete ten-card private deal into three settlement handshakes, so proof fragments do not each emit two Matrix
-acknowledgements. Both clients still execute and hash every fragment before the batch boundary can settle. The
+verified shuffle key. Each shuffle packs its proof into four bounded Matrix actions, pairing 16-round commitments
+with their responses. The ten initial removals travel as two five-card layer batches. The room batches each complete
+shuffle and the complete private deal into three settlement handshakes, so packet fragments do not each emit two
+Matrix acknowledgements. Both clients still execute and hash every proof record before the batch boundary can settle. The
 private scalar, unfinished local proof plan and decrypted faces stay in session storage; neither room history nor
 the PHP view receives them.
 

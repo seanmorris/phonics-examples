@@ -83,7 +83,7 @@
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
     "NOTICE": "sha256-VWi1T9DrG2e6BnAfSk5u6MfAz99MRtxtOWjOeWCQSzE=",
-    "application.php": "sha256-Xjp50BBrXPKTQtUcckodxq369xK494ECLr83bROhJOs=",
+    "application.php": "sha256-CkwzLXvKcTBAVFDeI0xppxparDng8JpXes0pj7OB/r8=",
     "art/cards/back-blue.svg": "sha256-/kOyO4O+W/JzEE2pkzMCU9PL8dYHYNmKEM9/sBilYiU=",
     "art/cards/back-red.svg": "sha256-HX4CryU8ztM3thI0RY+9aMZk0UCsMVWvJJIf6so5czY=",
     "art/cards/deck.svg": "sha256-qWFttCwcqhboDxcn6WYmjicdRYw9WN/u5r1zYsvGBRc=",
@@ -114,7 +114,7 @@
     "browser/game.mjs": "sha256-SgdmieGBQC1xWwwh2sJ4QON3xDOexE1mzuS4YU7mceU=",
     "browser/mental-poker.mjs": "sha256-82ACFxvniDKIkwklYlk8+mHCrENQyFDkhSFcYhSA9oY=",
     "browser/mental-poker.mjs.LICENSE.txt": "sha256-H3gEgPb0U8/TQnVf3+xDNxTzrA5ijeB/oqmGCzBaAmU=",
-    "browser/online-deal.mjs": "sha256-VLKC8cfL+aN8MbRR5yziGTBsCpcYKBxRZ8Gv8NrxaWI=",
+    "browser/online-deal.mjs": "sha256-0F+ezEkhh3DSmNkBiNDiVW07jHHc5OgZn65aYlQjr68=",
     "browser/persistence.mjs": "sha256-txa/BXXV8tJTJlbXkBNLVGzdtFlQ+2wGYpVtKX9hTfY=",
     "shaders/ui.frag": "sha256-Tc3yUPRiouakSGUmhLexNnR6Cdr6OLE56NiLTwGcppA=",
     "shaders/ui.vert": "sha256-v6qumyh53sxStBcAUf2YZPFyn122NilzAU9NrSUxdpQ=",
