@@ -84,7 +84,7 @@ final class Painter
 		foreach(['GAME','POKER','DRAW POKER'] as $entry)
 		$x += $this->canvas->label($entry, $x, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face) + 22 * $this->unit;
 		$stage = $this->state['motion']['kind'] ?? '';
-		$phase = match(in_array($stage, ['deal','draw'], true) ? $stage : ($this->view['phase'] ?? '')) {
+		$phase = !empty($this->view['waitingForConfirmation']) ? 'CONFIRMING' : match(in_array($stage, ['deal','draw'], true) ? $stage : ($this->view['phase'] ?? '')) {
 			'deal' => 'DEALING', 'betting' => 'OPENING BETS', 'draw' => 'DRAW', 'final-betting' => 'FINAL BETS',
 			'showdown' => 'HAND OVER', 'redeal' => 'REDEAL', default => 'DRAW POKER'
 		};

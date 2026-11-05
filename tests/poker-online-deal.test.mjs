@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {OnlineDeal,ONLINE_ACTION_TYPES,evaluateHand} from '../games/php-poker/browser/online-deal.mjs';
-import {pokerCommandBatch} from '../games/php-poker/browser/game.mjs';
+import {pendingPokerView,pokerCommandBatch} from '../games/php-poker/browser/game.mjs';
 
 test('PHP input intents cross the browser bridge before online routing',async()=>{
 	const clicked={type:'bet',amount:2,generation:1,revision:12};
@@ -13,6 +13,17 @@ test('PHP input intents cross the browser bridge before online routing',async()=
 	assert.throws(()=>pokerCommandBatch('{}',[]),/commands must be a list/);
 	const application=await readFile(new URL('../games/php-poker/application.php',import.meta.url),'utf8');
 	assert.match(application,/\$commands\(json_encode\(\$intents,/);
+});
+
+test('unconfirmed room actions expose state changes without exposing the next turn',()=>{
+	const confirmed={revision:13,turn:1,pot:5,message:'Any hand may open.',legalActions:{fold:true,call:true,callAmount:2}};
+	const pending=pendingPokerView(confirmed);
+	assert.equal(pending.revision,13);
+	assert.equal(pending.pot,5);
+	assert.deepEqual(pending.legalActions,{});
+	assert.equal(pending.waitingForConfirmation,true);
+	assert.match(pending.message,/both players/);
+	assert.deepEqual(confirmed.legalActions,{fold:true,call:true,callAmount:2});
 });
 
 const storage=()=>{

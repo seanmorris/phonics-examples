@@ -27,6 +27,13 @@ export function pokerCommandBatch(generatedJson,injected=[])
 	return [...generated,...injected];
 }
 
+/** Keep provisional deterministic state visible without offering a turn the room has not confirmed. */
+export function pendingPokerView(view)
+{
+	if(!view)return null;
+	return {...view,legalActions:{},waitingForConfirmation:true,message:'Waiting for both players to confirm the action.'};
+}
+
 /**
  * Rasterise the deck sheet and both backs into one RGBA atlas: 9 columns of cells, sheet order first, then red and
  * blue backs. Returns the descriptor PHP expects, with the pixels as base64.
@@ -100,7 +107,8 @@ export function activate({module, canvas, session})
 
 	let viewport='[1280,720,1]',latest=null,closed=false;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
-	let online=null,onlineView=null,onlineWork=Promise.resolve(),submitting=false,lobbyOpening=false,lobbyVisible=false,lobbyPort=null;
+	let online=null,onlineView=null,onlineWork=Promise.resolve(),submitting=false,awaitingConfirmation=false;
+	let lobbyOpening=false,lobbyVisible=false,lobbyPort=null;
 	const local=event=>{
 		const box=canvas.getBoundingClientRect(),[width,height]=JSON.parse(viewport);
 		return {x:(event.clientX-box.left)/Math.max(1,box.width)*width,y:(event.clientY-box.top)/Math.max(1,box.height)*height};
@@ -224,7 +232,7 @@ export function activate({module, canvas, session})
 			lobbyOpening=true;lobbyVisible=true;
 			session.lobby.open().catch(error=>console.error('Poker lobby failed to open',error)).finally(()=>{lobbyOpening=false;});
 		}
-		const turn=latest.turn===0?'Your turn.':latest.turn>0?`${latest.players?.[latest.turn]?.name??'Opponent'} is thinking.`:'';
+		const turn=latest.waitingForConfirmation?'':latest.turn===0?'Your turn.':latest.turn>0?`${latest.players?.[latest.turn]?.name??'Opponent'} is thinking.`:'';
 		const selected=latest.ui?.discards??[];
 		const selection=latest.screen==='table'&&latest.legalActions?.draw
 			? selected.length?'Selected for discard: '+selected.map(cardName).join(', ')+'. Press D to draw.':'No cards selected. Press D to stand pat.' : '';
@@ -236,7 +244,10 @@ export function activate({module, canvas, session})
 		if(description!==described){described=description;hand.textContent=description;}
 	};
 
-	const updateOnlineView=()=>{onlineView=online?.view()??null;};
+	const updateOnlineView=()=>{
+		const view=online?.view()??null;
+		onlineView=awaitingConfirmation?pendingPokerView(view):view;
+	};
 	const failOnline=error=>{
 		const message=error instanceof Error?error.message:String(error);console.error('Poker online protocol failed',error);
 		if(online){onlineView={...online.view(),error:message,message:'The online Poker action could not be verified.'};}
@@ -275,20 +286,21 @@ export function activate({module, canvas, session})
 			const hash=await controller.replay(detail.history??[]);
 			if(detail.sequence!==controller.publicState().sequence)throw new Error('Room history ended at the wrong sequence');
 			if(detail.sequence>0&&detail.hash!==hash)throw new Error('Room history does not match its confirmed hash');
-			online=controller;submitting=false;updateOnlineView();await roomWrite(()=>lobbyPort.reportReady(hash));
+			online=controller;submitting=false;awaitingConfirmation=false;updateOnlineView();await roomWrite(()=>lobbyPort.reportReady(hash));
 		})
 		,action:detail=>enqueue(async()=>{
 			if(!online)throw new Error('Received a Poker action before the deal started');
 			const settlement=await online.apply(detail);
+			if(detail.batch_end!==false){awaitingConfirmation=true;updateOnlineView();}
 			const waiting=await roomWrite(()=>lobbyPort.reportSettled(settlement));
 			if(waiting)updateOnlineView();
-			else{submitting=false;await drive();}
+			else{awaitingConfirmation=false;submitting=false;await drive();}
 		})
 		,confirmed:detail=>enqueue(async()=>{
 			if(!online)throw new Error('Received a Poker confirmation before the deal started');
 			if(detail.sequence!==online.publicState().sequence||detail.hash!==await online.hash())
 			throw new Error('Room confirmation does not match the private-deal transcript');
-			submitting=false;updateOnlineView();await drive();
+			awaitingConfirmation=false;submitting=false;updateOnlineView();await drive();
 		})
 		,stop:detail=>enqueue(async()=>{
 			if(online)
@@ -296,10 +308,10 @@ export function activate({module, canvas, session})
 				const view=online.view(),completed=detail?.reason==='bankroll';
 				onlineView=completed?view:{...view,error:detail?.reason??'The online table ended.',message:'The online table ended.'};
 			}
-			submitting=false;
+			awaitingConfirmation=false;submitting=false;
 		})
 	});
-	const lobbyClosed=()=>{lobbyVisible=false;online=null;onlineView=null;submitting=false;};
+	const lobbyClosed=()=>{lobbyVisible=false;online=null;onlineView=null;awaitingConfirmation=false;submitting=false;};
 	session.lobby.protocol.addEventListener('closed',lobbyClosed);
 
 	const debug={

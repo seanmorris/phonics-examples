@@ -159,6 +159,13 @@ $test('guidance distinguishes opening bets, another seat drawing, and the human 
 	$presenter->update($view);
 	$presenter->advance(10);
 	$expect($presenter->state()['hint'] === $view['message'], 'the actual draw invites card selection');
+	$view = $fixture('facing-raise-5');
+	$view['legalActions'] = [];
+	$view['waitingForConfirmation'] = true;
+	$view['message'] = 'Waiting for both players to confirm the action.';
+	$presenter->update($view);
+	$presenter->advance(10);
+	$expect($presenter->state()['hint'] === $view['message'], 'an unconfirmed turn explains the settlement wait instead of inviting another bet');
 });
 
 $test('the menu, setup and settings flow send only session intents the session knows', static function(callable $expect) use ($root): void {

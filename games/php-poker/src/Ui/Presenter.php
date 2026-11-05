@@ -506,6 +506,7 @@ final class Presenter
 		if(($this->view['screen'] ?? '') !== 'table') return '';
 		if(($this->view['phase'] ?? '') === 'showdown') return '';
 		if($this->motion) return match($this->motion->status()['kind']) { 'deal' => 'Dealing cards.', 'draw' => 'Discarding and drawing replacements.', default => 'Moving chips.' };
+		if(!empty($this->view['waitingForConfirmation'])) return (string)($this->view['message'] ?? 'Waiting for both players to confirm the action.');
 		$phase = $this->view['phase'] ?? '';
 		$legal = $this->view['legalActions'] ?? [];
 		$human = $this->view['players'][0] ?? [];
