@@ -57,10 +57,19 @@ $manifestPath = $output . '/meshes.json';
 
 if($check)
 {
-	if(!is_file($binaryPath) || !hash_equals(hash('sha256', $compressed), hash_file('sha256', $binaryPath))
+	$stored = is_file($binaryPath) ? file_get_contents($binaryPath) : false;
+	// zlib versions may encode identical mesh bytes differently. Check the generated geometry exactly,
+	// while checking the committed archive against its own compressed size and checksum.
+	if($stored !== false)
+	{
+		$manifest['compressedByteLength'] = strlen($stored);
+		$manifest['compressedSha256'] = hash('sha256', $stored);
+		$json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+	}
+	if($stored === false || @gzdecode($stored) !== $binary
 		|| !is_file($manifestPath) || file_get_contents($manifestPath) !== $json
 	){
-		fwrite(STDERR, "Generated billiards meshes are stale. Run npm run generate.\n");
+		fwrite(STDERR, "Generated billiards meshes are stale. Run npm run generate. Expected geometry SHA256: {$manifest['sha256']}\n");
 		exit(1);
 	}
 
