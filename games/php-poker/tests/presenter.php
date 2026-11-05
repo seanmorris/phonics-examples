@@ -8,6 +8,7 @@ foreach(array_filter([$engineRoot ? $engineRoot . '/autoload.php' : null, __DIR_
 if(is_file($engine)) { require_once $engine; break; }
 
 use PhpPoker\Render\Theme;
+use PhpPoker\Ui\Chips;
 use PhpPoker\Ui\Layout;
 use PhpPoker\Ui\Presenter;
 
@@ -219,6 +220,21 @@ $test('no opponent sits behind the action bar at any seat count', static functio
 	}
 	$expect(abs(Layout::fit(1280, 720)->seatAngle(1, 5) - (M_PI / 2 + 2 * M_PI / 5)) < 1e-9, 'five seats keep even spacing');
 	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the bar');
+});
+
+$test('the human bank and its captions stay with the hand at a full table', static function(callable $expect): void {
+	foreach([[1280,720,1],[390,844,1]] as [$width,$height,$dpr])
+	{
+		$layout = Layout::fit($width, $height, $dpr);
+		$human = $layout->seat(0, 8);
+		$left = $layout->seat(1, 8);
+		$handLeft = $human['cards'][0][0];
+		if($layout->profile === 'wide')
+			$expect($human['chips'][0] > $left['plate'][0] + $left['plate'][2], 'the human bank clears the lower-left player');
+		$expect($handLeft - $human['chips'][0] < $layout->metric('handChipRadius') * 3, 'the human bank sits beside its own cards');
+		$caption = $layout->caption(0, 8, Chips::bank(500));
+		$expect($caption[0] > $human['chips'][0], 'the YOU / total caption follows the shifted denomination group');
+	}
 });
 
 $test('phones get the tall profile with touch-sized controls and no overlaps', static function(callable $expect) use ($overlaps, $fixture, $root): void {

@@ -463,7 +463,9 @@ final class Painter
 		}
 		// Before the atlas arrives, a coloured disc with the player's initial stands in for the emblem.
 		$this->canvas->circle($dx, $dy, $r, self::EMBLEM_COLORS[$seat % 8], [0,0,0,.4], 1 * $this->unit);
-		$this->canvas->label(strtoupper(mb_substr($name !== '' ? $name : $portrait, 0, 1)), $dx, $dy + .5 * $this->unit, Theme::HEADING, Theme::EMBLEM, $this->face, 'center');
+		$label = $name !== '' ? $name : $portrait;
+		$initial = preg_match('/^./us', $label, $match) === 1 ? $match[0] : '?';
+		$this->canvas->label(strtoupper($initial), $dx, $dy + .5 * $this->unit, Theme::HEADING, Theme::EMBLEM, $this->face, 'center');
 	}
 
 	/** @param array{float,float,float,float} $rect Design-space rectangle. */

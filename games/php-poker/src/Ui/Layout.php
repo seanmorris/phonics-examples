@@ -188,9 +188,10 @@ final class Layout
 		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
 		$outward = $ux > .3 ? 1 : -1;
 		$chipRadius = $human ? $d['handChipRadius'] : $d['chipRadius'];
-		// Chips stand in front of the fan's outer corner; the human's stand beside the hand so they stay on screen.
+		// Chips stand in front of the fan's outer corner. Pull the human bank toward its hand so its Bet and
+		// YOU / total labels clear the lower-left seat at a full table.
 		$chips = $human
-			? [$plate[0] - $chipRadius * 4.2, $fanTop + $cardHeight - $chipRadius * 2.6]
+			? [$plate[0] - $chipRadius * 2.2, $fanTop + $cardHeight - $chipRadius * 2.6]
 			: [$outward > 0 ? $plate[0] + $plateWidth - $chipRadius * 3.7 : $plate[0] - 4, $fanTop + $cardHeight + 4];
 		// Opponent captions read under the fan; the human caption sits directly below the chip group.
 		$caption = $human
