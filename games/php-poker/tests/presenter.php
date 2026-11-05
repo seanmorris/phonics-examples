@@ -404,8 +404,8 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 	$expect(Layout::fit(1024, 768, 1)->profile === 'wide', 'a tablet in landscape is wide');
 	$expect(Layout::fit(900, 650, 1)->profile === 'landscape', 'a wide canvas switches before losing most of its height');
 	$expect(Layout::fit(700, 650, 1)->profile === 'tall', 'a nearly square narrow canvas keeps its vertical composition');
-	$expect(Layout::fit(1536, 1850, 2)->profile === 'wide', 'a portrait desktop keeps the oval composition while it has 760 CSS pixels');
-	$expect(Layout::fit(1518, 1850, 2)->profile === 'tall', 'the desktop switches to columns below the 760 CSS pixel floor');
+	$expect(Layout::fit(1536, 1850, 2)->profile === 'tall', 'a deeply portrait desktop uses columns before rigid card faces collide');
+	$expect(Layout::fit(1518, 1850, 2)->profile === 'tall', 'the desktop remains in columns below the 760 CSS pixel floor');
 	$expect(Layout::fit(1280, 1223, 1, 2)->profile === 'wide', 'a nearly square desktop canvas retains the wide composition');
 	$expect(Layout::fit(1280, 720, 1)->profile === 'wide', 'the canonical wide canvas keeps its oval composition');
 	$expect(Layout::fit(1500, 900, 2)->profile === 'landscape', 'a short landscape canvas uses its own profile');
@@ -605,7 +605,7 @@ $test('sparser tall tables spend their free space on larger table objects', stat
 });
 
 $test('wide card fans anchor every player layout and CPU cards use the available vertical room', static function(callable $expect): void {
-	foreach([[1280,720,1],[1617,1222,1],[760,1208,1],[1536,1850,2]] as [$width,$height,$dpr])
+	foreach([[1280,720,1],[1617,1222,1],[1280,1208,1],[1536,1500,2]] as [$width,$height,$dpr])
 	foreach(range(2, 8) as $seats)
 	{
 		$layout = Layout::fit($width, $height, $dpr, $seats);
@@ -654,7 +654,7 @@ $test('wide tables keep vertical sizing independent from horizontal compression'
 	$expect($tall->metric('handChipRadius') * $tall->scale > $base->metric('handChipRadius') * $base->scale, 'vertical room enlarges rendered chips');
 	$transition = Layout::fit(1223, 1223, 1, 2);
 	$expect($transition->profile === 'wide' && Layout::fit(1222, 1223, 1, 2)->profile === 'wide', 'the oval continues through portrait desktop proportions');
-	$expect(Layout::fit(759, 1223, 1, 2)->profile === 'tall', 'the phone composition begins below the desktop width floor');
+	$expect(Layout::fit(1000, 1223, 1, 2)->profile === 'tall', 'columns begin when the oval can no longer fit rigid card faces');
 	foreach(range(2, 4) as $seats)
 	{
 		$full = Layout::fit(1378, 1223, 1, $seats);
@@ -664,11 +664,8 @@ $test('wide tables keep vertical sizing independent from horizontal compression'
 	}
 	foreach(range(2, 3) as $seats)
 	{
-		$full = Layout::fit(1378, 1254, 1, $seats);
 		$portrait = Layout::fit(760, 1254, 1, $seats);
-		$fullCard = $full->metric('handCard')[1] * $full->scale;
-		$portraitCard = $portrait->metric('handCard')[1] * $portrait->scale;
-		$expect($portraitCard <= $fullCard + 1e-9 && $portraitCard >= $fullCard * .95, "$seats-player cards retain their height unless the centre constrains them beside the action column");
+		$expect($portrait->profile === 'tall', "$seats-player portrait switches composition before fixed-size oval cards collide");
 		$bank = $portrait->bankBounds(0, $seats, Chips::bank(500));
 		$expect($bank !== null && $bank[1] + $bank[3] <= $portrait->height() - 4 + 1e-9, "$seats-player chips tuck into the hand corner without clipping");
 	}
@@ -678,7 +675,7 @@ $test('wide tables keep vertical sizing independent from horizontal compression'
 	$expect($compact->metric('handCard')[1] * $compact->scale < $tall->metric('handCard')[1] * $tall->scale, 'actual centre and seat constraints can reduce the rendered size');
 	$view = $fixture('facing-raise-5');
 	$horizontalChrome = [];
-	foreach([[1920,1080,1],[1280,720,1],[1920,1208,1],[1378,1208,1],[1280,1208,1],[1000,1208,1],[760,1208,1],[1536,1850,2]] as [$width,$height,$dpr])
+	foreach([[1920,1080,1],[1280,720,1],[1920,1208,1],[1378,1208,1],[1280,1208,1],[1536,1500,2]] as [$width,$height,$dpr])
 	{
 		$layout = Layout::fit($width, $height, $dpr, 8);
 		$buttons = $layout->actions($view, ['discards' => [], 'amount' => 8]);
@@ -740,22 +737,27 @@ $test('three-to-eight-player boards compress only their horizontal axis', static
 		$referenceButton = $reference->actions($view, ['discards' => [], 'amount' => 8])[0]['rect'];
 		$referenceButtonHeight = $reference->rect(...$referenceButton)[3];
 		$previousHorizontal = INF;
-		foreach([$referenceWidth, 1920, 1617, 1280, 1000, 760] as $width)
+		foreach([$referenceWidth, 1920, 1617, 1280] as $width)
 		{
 			$layout = Layout::fit($width, $height, 1, $seats);
-			$human = $layout->rect(...$layout->seat(0, $seats)['cards'][0]);
+			$humanGeometry = $layout->seat(0, $seats);
+			$human = $layout->rect(...$humanGeometry['cards'][0]);
+			$humanLast = $layout->rect(...$humanGeometry['cards'][4]);
 			$cpu = $layout->rect(...$layout->seat(1, $seats)['cards'][0]);
 			$button = $layout->actions($view, ['discards' => [], 'amount' => 8])[0]['rect'];
 			$expect($layout->profile === 'wide', "$seats-player $width x $height board remains wide");
 			$expect(abs($layout->scale - $reference->scale) < 1e-9, "$seats-player vertical scale stays fixed at width $width");
 			$expect($layout->horizontalScale <= $previousHorizontal + 1e-9, "$seats-player x scale tightens monotonically at width $width");
-			$expect(abs($human[1] - $referenceCard[1]) < 1e-9 && abs($human[3] - $referenceCard[3]) < 1e-9, "$seats-player local hand keeps its vertical pose and height at width $width");
-			$expect(abs($cpu[1] - $referenceCpu[1]) < 1e-9 && abs($cpu[3] - $referenceCpu[3]) < 1e-9, "$seats-player CPU hand keeps its vertical pose and height at width $width");
+			$expect(abs(($human[0] + $humanLast[0] + $humanLast[2]) / 2 - $width / 2) < 1e-6, "$seats-player local fan stays centered while its spacing compresses at width $width");
+			$expect(abs($human[1] - $referenceCard[1]) < 1e-9 && abs($human[2] - $referenceCard[2]) < 1e-9 && abs($human[3] - $referenceCard[3]) < 1e-9, "$seats-player local cards keep their size and aspect at width $width");
+			$expect(abs($cpu[1] - $referenceCpu[1]) < 1e-9 && abs($cpu[2] - $referenceCpu[2]) < 1e-9 && abs($cpu[3] - $referenceCpu[3]) < 1e-9, "$seats-player CPU cards keep their size and aspect at width $width");
 			$expect(abs($layout->rect(...$button)[3] - $referenceButtonHeight) < 1e-9, "$seats-player controls keep their height at width $width");
 			$expect(abs($layout->metric('handChipRadius') * $layout->scale - $reference->metric('handChipRadius') * $reference->scale) < 1e-9, "$seats-player chips keep their size at width $width");
 			$expect(abs($layout->metric('emblemSize') * $layout->scale - $reference->metric('emblemSize') * $reference->scale) < 1e-9, "$seats-player icons keep their size at width $width");
 			$previousHorizontal = $layout->horizontalScale;
 		}
+		foreach([1000, 760] as $width)
+			$expect(Layout::fit($width, $height, 1, $seats)->profile === 'tall', "$seats-player $width x $height board changes composition before rigid cards collide");
 	}
 });
 

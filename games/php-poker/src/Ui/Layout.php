@@ -24,6 +24,8 @@ final class Layout
 	public const IDENTITY = 40;
 	/** Width of the short-landscape vertical control panel, including its margins. */
 	private const PANEL = 240;
+	/** Smallest useful x/y scale ratio for the oval once cards retain their natural aspect ratio. */
+	private const WIDE_HORIZONTAL_FIT = .55;
 
 	/** @var array<string,array<string,mixed>> Design metrics per profile. */
 	private const PROFILES = [
@@ -79,7 +81,11 @@ final class Layout
 		$seats = max(2, min(8, $seats));
 		$aspect = $width / max(1, $height);
 		$short = $height / $dpr < 480 || ($height / $dpr < 720 && $aspect >= 1.3);
-		$profile = $width >= $height && $short ? 'landscape' : ($width / $dpr < 760 ? 'tall' : 'wide');
+		$wideHorizontalFit = ($width / self::PROFILES['wide']['width'])
+			/ max(1e-6, $height / self::PROFILES['wide']['height']);
+		$profile = $width >= $height && $short
+			? 'landscape'
+			: ($width / $dpr < 760 || $wideHorizontalFit < self::WIDE_HORIZONTAL_FIT ? 'tall' : 'wide');
 		$design = self::PROFILES[$profile];
 		if($profile === 'wide')
 		{
@@ -146,6 +152,12 @@ final class Layout
 		{
 			$scale = max(1e-6, $height / $design['height']);
 			$horizontalScale = min($scale, max(1e-6, $width / $design['width']));
+			// The x transform tightens positions and overlap, never the card artwork itself. Counter-scale card
+			// widths in design space so their rendered aspect ratio follows the vertical/object scale. Seat plates are
+			// derived from the resulting fan and therefore remain exactly as wide as the cards they identify.
+			$cardWidthScale = $scale / $horizontalScale;
+			if($cardWidthScale > 1 + 1e-9) foreach(['card','handCard','dialogCard'] as $metric)
+				$design[$metric][0] *= $cardWidthScale;
 		}
 		return new self($profile, $design, $scale, $horizontalScale, ($width - $design['width'] * $horizontalScale) / 2, ($height - $design['height'] * $scale) / 2, $dpr, $seats);
 	}
