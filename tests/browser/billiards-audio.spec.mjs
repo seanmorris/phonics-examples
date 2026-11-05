@@ -19,18 +19,18 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 		document.body.innerHTML='<div style="width:800px;height:450px"><canvas></canvas></div>';
 		const {activate}=await import(URL.createObjectURL(new Blob([source],{type:'text/javascript'})));
 		const createFilter=AudioContext.prototype.createBiquadFilter,createSource=AudioContext.prototype.createBufferSource;
-		const decode=AudioContext.prototype.decodeAudioData,sources=new Map;
+		const decode=AudioContext.prototype.decodeAudioData,sources=new Map,peaks=new WeakMap;
 		globalThis.impactVoices=[];globalThis.impactFilters=[];
-		// Remember which encoded sample each decoded buffer came from, by its byte length.
-		AudioContext.prototype.decodeAudioData=async function(bytes){
-			const size=bytes.byteLength,buffer=await decode.call(this,bytes);
-			sources.set(buffer,size);
-			return buffer;
-		};
 		const peak=buffer=>{
 			let value=0;
 			for(let channel=0;channel<buffer.numberOfChannels;channel++)for(const sample of buffer.getChannelData(channel))value=Math.max(value,Math.abs(sample));
 			return value;
+		};
+		// Remember which encoded sample each decoded buffer came from, by its byte length.
+		AudioContext.prototype.decodeAudioData=async function(bytes){
+			const size=bytes.byteLength,buffer=await decode.call(this,bytes);
+			sources.set(buffer,size);peaks.set(buffer,peak(buffer));
+			return buffer;
 		};
 		AudioContext.prototype.createBiquadFilter=function(){const filter=createFilter.call(this);impactFilters.push(filter);return filter;};
 		AudioContext.prototype.createBufferSource=function(){
@@ -43,7 +43,7 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 				const filter=impactFilters.length>filterCount?impactFilters.at(-1):null;
 				impactVoices.push({gain:gain.gain.value,rate:source.playbackRate.value,sampleRate:this.context.sampleRate,
 					filter:filter?{type:filter.type,frequency:filter.frequency.value,q:filter.Q.value}:null,
-					bytes:sources.get(source.buffer),peak:peak(source.buffer),delay:when>0?when-now:0});
+					bytes:sources.get(source.buffer),peak:peaks.get(source.buffer),delay:when>0?when-now:0,scheduledAt:when>0?when:now});
 				return start.apply(this,args);
 			};
 			return source;
@@ -57,6 +57,9 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 	}, {source,samples});
 	await page.keyboard.press('Space');
 	await expect.poll(()=>page.evaluate(()=>document.querySelector('canvas').phpBilliardsDebug.audio.decoded)).toBe(6);
+	// AudioContext.currentTime advances in render quanta while JavaScript builds consecutive nodes. Compare the
+	// absolute schedules and allow less than 12 ms for that clock quantization, well below the 50 ms audible limit.
+	const expectGap=(later,earlier,seconds)=>expect(Math.abs(later.scheduledAt-earlier.scheduledAt-seconds)).toBeLessThan(.012);
 	const voices=[];
 	for(const type of ['impact','cushion']) for(const strength of [.01,.25,.65,1])
 	{
@@ -105,15 +108,15 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 	expect(quiet.map(voice=>voice.bytes)).toEqual([sizes.pocket1,sizes.sink]);
 	expect(quiet[0].gain*quiet[0].peak).toBeCloseTo(clackPeak,5);
 	expect(quiet[0].delay).toBe(0);
-	expect(quiet[1].delay).toBeCloseTo(.065,2);
+	expectGap(quiet[1],quiet[0],.065);
 
 	// Ball 9 struck the walls at .45 above, so its landing bounces once more on hit 2 before the sink.
 	await page.waitForTimeout(30);
 	await page.evaluate(()=>impactModule.billiardsStatus(JSON.stringify({events:[{type:'pocket',ball:9,pocket:2}]})));
 	const lively=await page.evaluate(()=>impactVoices.slice(13));
 	expect(lively.map(voice=>voice.bytes)).toEqual([sizes.pocket1,sizes.pocket2,sizes.sink]);
-	expect(lively[1].delay).toBeCloseTo(.16,2);
-	expect(lively[2].delay).toBeCloseTo(.225,2);
+	expectGap(lively[1],lively[0],.16);
+	expectGap(lively[2],lively[0],.225);
 	expect(lively[1].gain*lively[1].peak).toBeCloseTo(.55*clackPeak,5);
 
 	// Two balls dropping into one pocket together reach the bottom one at a time, the second 250 ms behind the first.
@@ -125,9 +128,9 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 	const pair=await page.evaluate(()=>impactVoices.slice(16));
 	expect(pair.map(voice=>voice.bytes)).toEqual([sizes.pocket1,sizes.sink,sizes.pocket1,sizes.sink]);
 	expect(pair[0].delay).toBe(0);
-	expect(pair[1].delay).toBeCloseTo(.065,2);
-	expect(pair[2].delay).toBeCloseTo(.25,2);
-	expect(pair[3].delay).toBeCloseTo(.315,2);
+	expectGap(pair[1],pair[0],.065);
+	expectGap(pair[2],pair[0],.25);
+	expectGap(pair[3],pair[2],.065);
 
 	// Two radii down the ball is out of sight: a strike knocks softly on the ball-ball curve, and the same ball's next
 	// one within 90 ms is not heard. A knock back at the edge keeps the edge level.
