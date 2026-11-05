@@ -191,7 +191,9 @@ final class Layout
 			? [$plate[0] - $chipRadius * 4.2, $fanTop + $cardHeight - $chipRadius * 2.6]
 			: [$outward > 0 ? $plate[0] + $plateWidth - $chipRadius * 3.7 : $plate[0] - 4, $fanTop + $cardHeight + 4];
 		// Name and stack read under the fan on the side away from the chips.
-		$caption = [$outward > 0 ? $fanLeft : $fanLeft + $cardWidth + 4 * $step, $fanTop + $cardHeight + 14];
+		$caption = $human
+			? [$plate[0] - 12, $fanTop + 14]
+			: [$outward > 0 ? $fanLeft : $fanLeft + $cardWidth + 4 * $step, $fanTop + $cardHeight + 14];
 		$emblem = $human
 			? [$plate[0] - 46, $plate[1] + 8]
 			: [$d['centre'][0] + $ux * ($d['oval'][0] - $d['emblemInset'][0]), $d['centre'][1] + $uy * ($d['oval'][1] - $d['emblemInset'][1])];
