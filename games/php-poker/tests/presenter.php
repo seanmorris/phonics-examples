@@ -593,6 +593,31 @@ $test('sparser tall tables spend their free space on larger table objects', stat
 	}
 });
 
+$test('wide card fans anchor every player layout and CPU cards use the available vertical room', static function(callable $expect): void {
+	foreach([[1280,720,1],[1617,1222,1],[760,1208,1],[1536,1850,2]] as [$width,$height,$dpr])
+	foreach(range(2, 8) as $seats)
+	{
+		$layout = Layout::fit($width, $height, $dpr, $seats);
+		$expect($layout->profile === 'wide', "$width x $height remains a wide card-fan layout");
+		$expect(abs($layout->metric('handCard')[1] - 1.2 * $layout->metric('card')[1]) < 1e-9, "$seats-player local cards are larger than CPU cards at $width x $height");
+		for($seat = 0; $seat < $seats; $seat++)
+		{
+			$geometry = $layout->seat($seat, $seats);
+			$first = $geometry['cards'][0];
+			$last = $geometry['cards'][4];
+			$fanLeft = $first[0];
+			$fanRight = $last[0] + $last[2];
+			$fanCentre = ($fanLeft + $fanRight) / 2;
+			$expect(abs($geometry['plate'][0] - $fanLeft) < 1e-9 && abs($geometry['plate'][0] + $geometry['plate'][2] - $fanRight) < 1e-9, "seat $seat plate derives from its card fan at $seats players, $width x $height");
+			if($seat === 0 || $seats === 2)
+				$expect(abs($fanCentre - $layout->width() / 2) < 1e-9, "heads-up/human seat $seat is centered at $seats players, $width x $height");
+		}
+	}
+	$canonical = Layout::fit(1280, 720, 1, 8);
+	$expect($canonical->metric('card')[1] > 95 && abs($canonical->metric('card')[1] - 126) < 1e-9, 'a full table grows CPU cards from the old 95-unit face to 126 units');
+	$expect(abs($canonical->metric('handCard')[1] - 151.2) < 1e-9, 'the centered local hand remains visibly larger at 151.2 units');
+});
+
 $test('taller wide tables anchor their top and bottom while expanding the oval', static function(callable $expect) use ($fixture, $overlaps): void {
 	$base = Layout::fit(1280, 720, 1, 2);
 	$tall = Layout::fit(1280, 1223, 1, 2);
@@ -608,9 +633,15 @@ $test('taller wide tables anchor their top and bottom while expanding the oval',
 	$tallCentre = ($tall->centre()['pot'][1] + $tall->centre()['bet'][1] + $tall->centre()['bet'][3]) / 2;
 	$expect(abs(($tallCentre - $baseCentre) - $extra / 2) < 6, 'the centre cluster splits the added vertical room');
 	$expect(abs(($tall->metric('actions')[1] - $base->metric('actions')[1]) - $extra) < 1e-9, 'the action controls remain anchored to the bottom');
-	$baseLast = $base->seat(0, 2)['cards'][4];
-	$tallLast = $tall->seat(0, 2)['cards'][4];
-	$expect(abs(($baseLast[0] + $baseLast[2]) - ($tallLast[0] + $tallLast[2])) < 1e-9, 'the larger hand grows leftward without entering its action controls');
+	foreach([$base, $tall] as $layout)
+	{
+		foreach(range(0, 1) as $seat)
+		{
+			$cards = $layout->seat($seat, 2)['cards'];
+			$fanCentre = ($cards[0][0] + $cards[4][0] + $cards[4][2]) / 2;
+			$expect(abs($fanCentre - $layout->width() / 2) < 1e-9, "heads-up seat $seat anchors its fan on the table center line");
+		}
+	}
 	$expect($tall->metric('handCard')[0] >= $base->metric('handCard')[0] * 1.35, 'a heads-up table uses the empty field for substantially larger cards');
 	$expect($tall->metric('handChipRadius') >= $base->metric('handChipRadius') * 1.35, 'a heads-up table enlarges its chips with its cards');
 	$expect($tall->centre()['pot'][2] > $base->centre()['pot'][2], 'the sparse centre objects grow with the hands');
@@ -635,7 +666,7 @@ $test('taller wide tables anchor their top and bottom while expanding the oval',
 		$expect($bank !== null && $bank[1] + $bank[3] <= $portrait->height() - 4 + 1e-9, "$seats-player chips tuck into the hand corner without clipping");
 	}
 	$canonical = Layout::fit(1280, 720, 1, 2);
-	$expect(abs($canonical->metric('handCard')[1] - 126) < 1e-9 && abs($canonical->metric('handChipRadius') - 17) < 1e-9, 'the constrained canonical composition retains its established object sizes');
+	$expect(abs($canonical->metric('handCard')[1] - 151.2) < 1e-9 && abs($canonical->metric('handChipRadius') - 17) < 1e-9, 'the constrained canonical composition enlarges the local cards while retaining its chip size');
 	$compact = Layout::fit(770, 700, 1, 2);
 	$expect($compact->metric('handCard')[1] * $compact->scale < $tall->metric('handCard')[1] * $tall->scale, 'actual centre and seat constraints can reduce the rendered size');
 	$view = $fixture('facing-raise-5');

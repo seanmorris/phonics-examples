@@ -17,8 +17,8 @@ final class Layout
 {
 	public const MENU_BAR = 28;
 	public const PLATE_HEIGHT = 24;
-	/** Lowest angle below the right-hand horizontal a seat may take before its fan meets the action column. */
-	public const ACTION_CLEARANCE = .04;
+	/** Lower-right angular boundary; a slight upward bias keeps full card faces clear of the action column. */
+	public const ACTION_CLEARANCE = -.06;
 	/** Width kept for the identity (emblem over name and stack) on the outer side of a column seat. */
 	public const IDENTITY = 40;
 	/** Width of the landscape control panel, including its margins. */
@@ -96,9 +96,8 @@ final class Layout
 			// horizontal size also lets the menu, status plates, emblems and type retain one height-derived scale.
 			$design['verticalActions'] = true;
 
-			// Sparse tables use one CSS size throughout the wide profile. Only actual geometry can reduce it: a
-			// candidate may not add overlap beyond the canonical composition. The hand grows leftward so its right
-			// edge remains fixed beside the action controls.
+			// Sparse tables use one CSS size throughout the wide profile. Actual geometry may reduce it before any
+			// seat block gains a new overlap. The human fan remains centered; its surrounding objects follow it.
 			$room = min(1, $extra / 360);
 			$fieldScale = max(1e-6, min($width / $design['width'], $height / $design['height']));
 			// Chrome follows available vertical room only. Horizontal resizing may move or resize table objects, but
@@ -114,7 +113,7 @@ final class Layout
 			{
 				$low = 1.0;
 				$high = $growth;
-				for($iteration = 0; $iteration < 10; $iteration++)
+				for($iteration = 0; $iteration < 12; $iteration++)
 				{
 					$middle = ($low + $high) / 2;
 					if(self::wideGrowthFits($design, $middle, $fieldScale, $dpr, $seats)) $low = $middle;
@@ -123,6 +122,11 @@ final class Layout
 				$growth = $low;
 			}
 			if(abs($growth - 1) > 1e-9) $design = self::scaleWideObjects($design, $growth);
+			// CPU cards use the same seat-anchor rule as the local hand. Bring their readable faces up to the former
+			// human-card height, then make the local faces larger still. Both fans retain their horizontal footprints
+			// through tighter overlap, so the extra size spends vertical room without crowding neighboring seats.
+			$design = self::scaleWideOpponents($design, $design['handCard'][1] / $design['card'][1]);
+			$design = self::scaleWideHuman($design, 1.2);
 		}
 		// The phone and short-landscape fields grow along whichever axis the canvas leaves free, within limits, so
 		// neither is letterboxed while its seats are cramped.
@@ -153,16 +157,33 @@ final class Layout
 	{
 		$oldCardHeight = $design['card'][1];
 		$oldHandHeight = $design['handCard'][1];
-		$oldHandWidth = $design['handCard'][0] + 4 * $design['handStep'];
 		foreach(['card','handCard'] as $metric)
 			$design[$metric] = array_map(static fn(int|float $value): float => $value * $growth, $design[$metric]);
 		foreach(['cardStep','handStep','plateWidth','handPlateWidth','chipRadius','handChipRadius'] as $metric)
 			$design[$metric] *= $growth;
-		$newHandWidth = $design['handCard'][0] + 4 * $design['handStep'];
-		$design['handShift'] = -($newHandWidth - $oldHandWidth) / 2;
 		$design['plateLift'] += ($design['card'][1] - $oldCardHeight) / 2;
 		$design['handPlateLift'] += $design['handCard'][1] - $oldHandHeight;
 		$design['objectScale'] = $growth;
+		return $design;
+	}
+
+	/** Enlarge opponent card faces while keeping the fan centered in its existing horizontal footprint. */
+	private static function scaleWideOpponents(array $design, float $growth): array
+	{
+		$fanWidth = $design['card'][0] + 4 * $design['cardStep'];
+		$design['card'] = array_map(static fn(int|float $value): float => $value * $growth, $design['card']);
+		$design['cardStep'] = max(2, ($fanWidth - $design['card'][0]) / 4);
+		return $design;
+	}
+
+	/** Enlarge the centered local card faces, preserving the fan width and bottom anchor. */
+	private static function scaleWideHuman(array $design, float $growth): array
+	{
+		$fanWidth = $design['handCard'][0] + 4 * $design['handStep'];
+		$oldHeight = $design['handCard'][1];
+		$design['handCard'] = array_map(static fn(int|float $value): float => $value * $growth, $design['handCard']);
+		$design['handStep'] = max(2, ($fanWidth - $design['handCard'][0]) / 4);
+		$design['handPlateLift'] += $design['handCard'][1] - $oldHeight;
 		return $design;
 	}
 
@@ -378,10 +399,9 @@ final class Layout
 		// Use the space freed above the opponents by the centered status plate, without lowering the human hand.
 		$verticalRadius = $d['oval'][1] + ($uy < 0 ? $d['upperStretch'] : 0);
 		[$cx,$cy] = [$d['centre'][0] + $ux * $d['oval'][0], $d['centre'][1] + $uy * $verticalRadius];
-		if($human) $cx += $d['handShift'] ?? 0;
 		// Heads-up sits exactly on the top axis, where cosine rounding used to pick the left treatment. Keep the
 		// hand centred but mirror its identity, bank and denomination rows like every opponent on the right side.
-		$outward = $seats === 2 && !$human ? 1 : ($ux > .25 ? 1 : -1);
+		$outward = $seats === 2 && !$human ? 1 : ($ux > .2 ? 1 : -1);
 		[$cardWidth,$cardHeight] = $human ? $d['handCard'] : $d['card'];
 		$step = $human ? $d['handStep'] : $d['cardStep'];
 		$plateWidth = $cardWidth + 4 * $step;
@@ -392,17 +412,19 @@ final class Layout
 		if($human) $plateTop -= ($plateHeight - self::PLATE_HEIGHT) + ($fanGap - 8);
 		// The icon and its two-line caption sit to the left, so the indicator needs no caption lane below it.
 		if(!$human) $plateTop = max($this->menuHeight() + 10 * $chrome, $plateTop);
+		// The fan is the seat anchor. Plates, identities and chips derive from its bounds; in heads-up neither fan
+		// may be pushed off the shared centre line merely to make room for its surrounding chrome.
 		$plateLeft = $cx - $plateWidth / 2;
 		// Identity blocks sit on the outer side of the table: left of left seats and right of right seats.
 		$identity = self::IDENTITY * $chrome;
 		$clampPlate = static fn(float $left, int $side): float => max($side > 0 ? 0 : $identity,
 			min($d['width'] - $plateWidth - ($side > 0 ? $identity : 0), $left));
-		if(!$human) $plateLeft = $clampPlate($plateLeft, $outward);
+		if(!$human && $seats !== 2) $plateLeft = $clampPlate($plateLeft, $outward);
 		// At dense tables, translate both complete side groups inward so only their shared seam gap changes.
 		if(!$human && $seats >= 7)
 		{
 			$firstRight = 1;
-			while($firstRight < $seats && cos($this->seatAngle($firstRight, $seats)) <= .25) $firstRight++;
+			while($firstRight < $seats && cos($this->seatAngle($firstRight, $seats)) <= .2) $firstRight++;
 			if($firstRight < $seats)
 			{
 				$leftAngle = $this->seatAngle($firstRight - 1, $seats);
