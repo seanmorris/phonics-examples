@@ -470,7 +470,7 @@ final class Layout
 			$entries[] = ['id' => $id, 'weight' => $weight, 'label' => $label, 'key' => $key, 'style' => $style, 'intent' => $intent];
 		};
 
-		if($phase === 'ready') $add('deal', 1.2, 'Deal', '↵', 'primary', ['type' => 'next']);
+		if($phase === 'ready' && !empty($legal['next'])) $add('deal', 1.2, 'Deal', '↵', 'primary', ['type' => 'next']);
 		elseif(!empty($legal['draw']))
 		{
 			$count = count($state['discards']);
