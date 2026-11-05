@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b80711fe35d42d9dc00c5890d56c6a4c",
+    "content-hash": "da2044066778c5751823ef983a6ec9cf",
     "packages": [
         {
             "name": "seanmorris/phonics",
@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/seanmorris/php-wasm-engine.git",
-                "reference": "d44cf5471a0182455a1d28df5fc230b4c0758a5b"
+                "reference": "0daecd2bb280e54468a63c4fb9f56f6363c6b5ad"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/d44cf5471a0182455a1d28df5fc230b4c0758a5b",
-                "reference": "d44cf5471a0182455a1d28df5fc230b4c0758a5b",
+                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/0daecd2bb280e54468a63c4fb9f56f6363c6b5ad",
+                "reference": "0daecd2bb280e54468a63c4fb9f56f6363c6b5ad",
                 "shasum": ""
             },
             "require": {
@@ -75,6 +75,7 @@
                 "test": [
                     "php tests/run.php",
                     "php tests/phpdoc.php",
+                    "php tests/cards-random.php",
                     "php tests/core-phonics.php",
                     "php tests/world-runtime.php",
                     "php tests/network.php",
@@ -111,7 +112,7 @@
                 "source": "https://github.com/seanmorris/php-wasm-engine/tree/main",
                 "issues": "https://github.com/seanmorris/php-wasm-engine/issues"
             },
-            "time": "2026-11-03T22:43:32+00:00"
+            "time": "2026-11-05T15:47:04+00:00"
         }
     ],
     "packages-dev": [],

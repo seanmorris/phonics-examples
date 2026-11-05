@@ -92,6 +92,7 @@ export function activate({module, canvas, session})
 
 	let viewport='[1280,720,1]',latest=null,closed=false;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
+	let online=null,onlineView=null,onlineWork=Promise.resolve(),submitting=false,lobbyOpening=false,lobbyVisible=false,lobbyPort=null;
 	const local=event=>{
 		const box=canvas.getBoundingClientRect(),[width,height]=JSON.parse(viewport);
 		return {x:(event.clientX-box.left)/Math.max(1,box.width)*width,y:(event.clientY-box.top)/Math.max(1,box.height)*height};
@@ -194,10 +195,20 @@ export function activate({module, canvas, session})
 		return JSON.stringify(frame);
 	};
 	let commands=[];
-	module.pokerCommands=()=>{const queued=commands;commands=[];return JSON.stringify(queued);};
+	module.pokerCommands=()=>{
+		const queued=commands;commands=[];
+		if(online&&queued.some(command=>command.type==='menu')){void enqueue(()=>roomWrite(()=>lobbyPort.leave()));return '[]';}
+		return JSON.stringify(queued);
+	};
+	module.pokerOnlineView=()=>onlineView?JSON.stringify(onlineView):'';
 	module.pokerStatus=json=>{
 		latest=JSON.parse(json);canvas.dataset.phpPoker=json;
 		updateCursor();
+		if(latest.ui?.local==='online'&&!lobbyOpening&&!lobbyVisible)
+		{
+			lobbyOpening=true;lobbyVisible=true;
+			session.lobby.open().catch(error=>console.error('Poker lobby failed to open',error)).finally(()=>{lobbyOpening=false;});
+		}
 		const turn=latest.turn===0?'Your turn.':latest.turn>0?`${latest.players?.[latest.turn]?.name??'Opponent'} is thinking.`:'';
 		const selected=latest.ui?.discards??[];
 		const selection=latest.screen==='table'&&latest.legalActions?.draw
@@ -210,8 +221,69 @@ export function activate({module, canvas, session})
 		if(description!==described){described=description;hand.textContent=description;}
 	};
 
+	const updateOnlineView=()=>{onlineView=online?.view()??null;};
+	const failOnline=error=>{
+		const message=error instanceof Error?error.message:String(error);console.error('Poker online protocol failed',error);
+		if(online){onlineView={...online.view(),error:message,message:'The private deal could not be verified.'};}
+		submitting=false;void lobbyPort?.resign(message).catch(()=>{});
+	};
+	const enqueue=task=>{onlineWork=onlineWork.then(task).catch(failOnline);return onlineWork;};
+	const terminalRoomError=message=>[
+		'It is not your turn','Local state differs from the confirmed turn state','The game supplied an invalid quantized action'
+		,'No matching action is settling','This browser is not seated at a table'
+	].includes(message);
+	const roomWrite=async operation=>{
+		for(let attempt=0;;attempt++)
+		{
+			try{return await operation();}
+			catch(error)
+			{
+				const message=error instanceof Error?error.message:String(error);
+				if(terminalRoomError(message)||attempt>=8)throw error;
+				await new Promise(resolve=>setTimeout(resolve,Math.min(30000,500*2**attempt)));
+			}
+		}
+	};
+	const drive=async()=>{
+		if(!online||submitting||online.currentActor()!==online.localPlayer)return;
+		const action=online.nextAction();if(!action)return;
+		const preHash=await online.hash();submitting=true;
+		try{await roomWrite(()=>lobbyPort.submitAction(action,preHash));}
+		catch(error){submitting=false;throw error;}
+	};
+	lobbyPort=session.lobby.attachGame({
+		start:detail=>enqueue(async()=>{
+			const controller=new session.pokerOnline.OnlineDeal({
+				api:session.mentalPoker,root:detail.root,sessionId:detail.sessionId,players:detail.players
+				,localPlayer:detail.localPlayer,breaker:detail.breaker
+			});
+			const hash=await controller.replay(detail.history??[]);
+			if(detail.sequence!==controller.publicState().sequence)throw new Error('Room history ended at the wrong sequence');
+			if(detail.sequence>0&&detail.hash!==hash)throw new Error('Room history does not match its confirmed hash');
+			online=controller;submitting=false;updateOnlineView();await roomWrite(()=>lobbyPort.reportReady(hash));
+		})
+		,action:detail=>enqueue(async()=>{
+			if(!online)throw new Error('Received a Poker action before the deal started');
+			const settlement=await online.apply(detail);updateOnlineView();
+			await roomWrite(()=>lobbyPort.reportSettled(settlement));
+		})
+		,confirmed:detail=>enqueue(async()=>{
+			if(!online)throw new Error('Received a Poker confirmation before the deal started');
+			if(detail.sequence!==online.publicState().sequence||detail.hash!==await online.hash())
+			throw new Error('Room confirmation does not match the private-deal transcript');
+			submitting=false;updateOnlineView();await drive();
+		})
+		,stop:detail=>enqueue(async()=>{
+			if(online){onlineView={...online.view(),error:detail?.reason??'The online table ended.',message:'The online table ended.'};}
+			submitting=false;
+		})
+	});
+	const lobbyClosed=()=>{lobbyVisible=false;online=null;onlineView=null;submitting=false;};
+	session.lobby.protocol.addEventListener('closed',lobbyClosed);
+
 	const debug={
 		get state(){return latest;}
+		, get online(){return online?{public:online.publicState(),hand:online.privateHand()}:null;}
 		// Intents queue for PHP; generation and revision default from the last status when the caller omits them,
 		// and explicitly supplied stale values are kept so tests can prove they are rejected.
 		, command(intent){
@@ -229,6 +301,7 @@ export function activate({module, canvas, session})
 
 	return ()=>{
 		if(closed)return;closed=true;resize.disconnect();
+		session.lobby.protocol.removeEventListener('closed',lobbyClosed);
 		clearInput();
 		canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('pointermove',onMove);
 		canvas.removeEventListener('pointerleave',onLeave);
@@ -237,7 +310,7 @@ export function activate({module, canvas, session})
 		document.removeEventListener('visibilitychange',onVisibility);
 		removeEventListener('blur',clearInput);
 		live.remove();hand.remove();
-		for(const name of ['pokerCardArt','pokerCardAtlas','pokerViewport','pokerSeed','pokerInput','pokerCommands','pokerStatus'])delete module[name];
+		for(const name of ['pokerCardArt','pokerCardAtlas','pokerViewport','pokerSeed','pokerInput','pokerCommands','pokerOnlineView','pokerStatus'])delete module[name];
 		delete canvas.dataset.phpPoker;delete canvas.phpPokerDebug;delete session.phpPoker;
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);
 		if(originalTabIndex===null)canvas.removeAttribute('tabindex');else canvas.setAttribute('tabindex',originalTabIndex);

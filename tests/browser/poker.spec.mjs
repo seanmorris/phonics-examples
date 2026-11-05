@@ -209,6 +209,15 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	expect((await state(canvas)).players).toHaveLength(5);
 });
 
+test('Play Online opens the embedded Matrix table lobby',async({page})=>{
+	const canvas=await boot(page),view=await state(canvas),box=await canvas.boundingBox();
+	const [left,top,width,height]=view.ui.hitRegions[1];
+	await page.mouse.click(box.x+(left+width/2)*box.width,box.y+(top+height/2)*box.height);
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('online');
+	await expect(page.locator('.phonics-room-game')).toBeVisible();
+	await expect(page.locator('.phonics-room-game')).toHaveClass(/is-open/);
+});
+
 test('controller navigates the menu, selects discards, draws, and toggles the game menu',async({page})=>{
 	test.setTimeout(120_000);
 	await installGamepad(page);

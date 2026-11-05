@@ -122,9 +122,9 @@ block the next deal and schedules no further changes after it ends.
 
 ## Screens and dialogs
 
-- Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Online (coming soon; a notice
-  until #2285), How to Play, Settings. Enter plays offline, C continues, H opens help, M opens settings, Escape returns.
-  On a controller, the D-pad or left stick moves, A selects, B returns, and Start resumes a saved table.
+- Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Play Online, How to Play,
+  Settings. Online opens the Matrix table lobby. Enter plays offline, C continues, H opens help, M opens settings,
+  Escape returns. On a controller, the D-pad or left stick moves, A selects, B returns, and Start resumes a saved table.
 - Table setup (local to the presenter): opponents 1–7, Jacks or better / Anything opens, Back, Deal. The
   Deal sends `start{players, variant}`.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY

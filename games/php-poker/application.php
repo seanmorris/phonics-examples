@@ -11,17 +11,31 @@ use PhpPoker\Session;
 use PhpPoker\Ui\Presenter;
 
 $app=new Context;
+$app->lobby([
+	'provider'=>'@matrix/lobby','title'=>'PHP Poker Online'
+	,'options'=>['homeserver'=>'https://matrix.org','room'=>'#php-poker:matrix.org','configurationKey'=>'php-poker']
+	,'game'=>[
+		'id'=>'org.seanmorris.phonics.php-poker.five-card-draw','protocol'=>'1.0.0','rules'=>'five-card-draw-anything-v1'
+		,'players'=>2,'spectators'=>false,'aspectRatio'=>'16/9','checkpointMode'=>'history','maximumActionBytes'=>49152
+		,'actionTypes'=>[
+			'deck-shuffle','shuffle-proof-header','shuffle-proof-commitments','shuffle-proof-responses'
+			,'shuffle-proof-tail','card-layer'
+		]
+	]
+]);
 $app->browser(__DIR__.'/browser/persistence.mjs');
+$app->browser(__DIR__.'/browser/mental-poker.mjs');
+$app->browser(__DIR__.'/browser/online-deal.mjs');
 $app->browser(__DIR__.'/browser/game.mjs');
 $session=Session::restore((string)(vrzno_env('pokerLoad'))());
 $engine=new Engine(new Device(1280,720,'PHP Poker'));
 $presenter=new Presenter(__DIR__);
 $view=$session->view();
 $presenter->update($view);
-$width=1280; $height=720; $dpr=1.0; $resized=true; $published='';
+$width=1280; $height=720; $dpr=1.0; $resized=true; $published=''; $onlinePublished='';
 
 $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
-	$session,$presenter,&$view,&$width,&$height,&$dpr,&$resized
+	$session,$presenter,&$view,&$width,&$height,&$dpr,&$resized,&$onlinePublished
 ): bool {
 	$viewport=json_decode((string)(vrzno_env('pokerViewport'))(),true,16,JSON_THROW_ON_ERROR);
 	if(is_array($viewport)&&count($viewport)>=3)
@@ -52,9 +66,18 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 	}
 	if(!($input['hidden']??false) && !$presenter->animating()) $session->tick($elapsed);
 	if($session->consumeSaveDirty()) (vrzno_env('pokerSave'))($session->save());
-	if($session->consumeDirty())
+	$sessionDirty=$session->consumeDirty();
+	$onlineJson=(string)(vrzno_env('pokerOnlineView'))();
+	if($onlineJson!=='' && $onlineJson!==$onlinePublished)
+	{
+		$onlineView=json_decode($onlineJson,true,64,JSON_THROW_ON_ERROR);
+		if(!is_array($onlineView)) throw new RuntimeException('Invalid online Poker view');
+		$view=$onlineView; $onlinePublished=$onlineJson; $presenter->update($view);
+	}
+	elseif($onlineJson==='' && ($onlinePublished!=='' || $sessionDirty))
 	{
 		$view=$session->view();
+		$onlinePublished='';
 		$storage=json_decode((string)(vrzno_env('pokerStorageStatus'))(),true,8,JSON_THROW_ON_ERROR);
 		if(($storage['error']??'')!=='' && $view['error']==='') $view['error']=$storage['error'];
 		$presenter->update($view);

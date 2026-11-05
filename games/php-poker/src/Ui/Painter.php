@@ -319,7 +319,7 @@ final class Painter
 			$w = min(440, $this->layout->width() - 24);
 			$box = [$this->layout->width() / 2 - $w / 2, $this->layout->profile === 'landscape' ? 165 : 280, $w, 120];
 			$this->dialog($box, 'PLAY ONLINE');
-			$this->text('Private tables are coming in a later release.', $this->layout->width() / 2, $box[1] + 52, Theme::BODY, Theme::INK, 'center');
+			$this->text('Opening the Matrix table lobby…', $this->layout->width() / 2, $box[1] + 52, Theme::BODY, Theme::INK, 'center');
 			$this->text($this->controller() ? 'Press ' . $this->backLegend() . ' to go back.' : 'Press Escape to go back.', $this->layout->width() / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
 			return;
 		}

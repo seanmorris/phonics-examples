@@ -31,3 +31,7 @@ Player emblems: art/icons/*.svg
   The supplied 7Soul PNGs were nearest-neighbor resampled from 34x34 to 32x32. All seven selected PNGs were
   converted to equivalent whole-pixel SVG rectangles by scripts/import-poker-icons.mjs. See art/icons/roster.json
   for the player mapping, art/icons/LICENSE-CC-BY-3.0, and art/icons/LICENSE-CC0-1.0.
+
+Cryptographic group implementation: bundled portions of @noble/curves 2.4.0
+  Copyright (c) 2022 Paul Miller, licensed under the MIT License.
+  See art/third-party/noble-curves-LICENSE-MIT.

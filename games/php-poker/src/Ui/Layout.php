@@ -595,7 +595,7 @@ final class Layout
 	{
 		$items = [['offline', 'Play Offline', ['type' => 'setup']]];
 		if($canContinue) $items[] = ['continue', 'Continue Offline', ['type' => 'resume']];
-		$items[] = ['online', 'Online (coming soon)', null];
+		$items[] = ['online', 'Play Online', null];
 		$items[] = ['help', 'How to Play', ['type' => 'help']];
 		$items[] = ['settings', 'Settings', ['type' => 'settings']];
 		[$width, $height] = $this->design['menuItem'];
