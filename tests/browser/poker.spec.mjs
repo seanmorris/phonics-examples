@@ -218,6 +218,37 @@ test('Play Online opens the embedded Matrix table lobby',async({page})=>{
 	await expect(page.locator('.phonics-room-game')).toHaveClass(/is-open/);
 });
 
+test('online table follows its stage viewport and switches responsive layouts',async({browser})=>{
+	const page=await browser.newPage({viewport:{width:1400,height:900}});
+	const canvas=await boot(page);
+	const room=page.locator('.phonics-room-game'),stage=page.locator('.phonics-room-stage');
+	await room.evaluate(element=>{
+		element.querySelector('.phonics-room-stage').append(document.querySelector('canvas'));
+		element.classList.add('is-open','has-game');
+	});
+	await expect(room).toHaveClass(/has-responsive-game/);
+	await expect.poll(async()=>{
+		const [frame,available]=await Promise.all([canvas.boundingBox(),stage.boundingBox()]);
+		return [Math.round(frame.width),Math.round(frame.height),Math.round(available.width),Math.round(available.height)];
+	}).toEqual(await stage.evaluate(element=>{
+		const frame=element.getBoundingClientRect();
+		return [Math.round(frame.width),Math.round(frame.height),Math.round(frame.width),Math.round(frame.height)];
+	}));
+	await expect.poll(async()=>(await state(canvas)).ui.profile).toBe('wide');
+
+	await page.setViewportSize({width:390,height:844});
+	await expect.poll(async()=>(await state(canvas)).ui.profile).toBe('tall');
+	await expect.poll(async()=>{
+		const [frame,available]=await Promise.all([canvas.boundingBox(),stage.boundingBox()]);
+		return [Math.round(frame.width),Math.round(frame.height)]
+			.join('x') === [Math.round(available.width),Math.round(available.height)].join('x');
+	}).toBe(true);
+
+	await page.setViewportSize({width:1000,height:450});
+	await expect.poll(async()=>(await state(canvas)).ui.profile).toBe('landscape');
+	await page.close();
+});
+
 test('controller navigates the menu, selects discards, draws, and toggles the game menu',async({page})=>{
 	test.setTimeout(120_000);
 	await installGamepad(page);
