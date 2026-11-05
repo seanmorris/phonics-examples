@@ -226,12 +226,13 @@ final class Painter
 	private function historyDialog(): void
 	{
 		$w = min(640, $this->layout->width() - 24);
-		$box = [$this->layout->width() / 2 - $w / 2, 60, $w, 230];
+		$control = $this->layout->controlSize();
+		$box = [$this->layout->width() / 2 - $w / 2, 50, $w, min($this->layout->height() - 62, 260 + $control)];
 		$this->dialog($box, 'ROUND HISTORY');
 		$lines = array_slice($this->view['history'] ?? [], -8);
 		foreach($lines as $index => $line)
 		$this->text((string)$line, $box[0] + 24, $box[1] + 44 + $index * 22, Theme::BODY, Theme::INK, 'left', $box[2] - 48);
-		$this->button([$box[0] + $box[2] / 2 - 50, $box[1] + $box[3] - 36, 100, 28], 'OK', '↵', 'primary', false);
+		$this->button([$box[0] + $box[2] / 2 - 70, $box[1] + $box[3] - $control - 12, 140, $control], 'OK', '↵', 'primary', false);
 	}
 
 	private function welcomeDialog(): void
