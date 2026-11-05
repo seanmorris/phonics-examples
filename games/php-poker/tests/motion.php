@@ -31,6 +31,13 @@ foreach([0,1,2,4,5,24,25,99,100,499,500,1000,4000,2147483647] as $amount)
 	if($amount <= 4000) $expect(max(Chips::bank($amount) ?: [0]) <= Chips::STACK_LIMIT, 'normal table banks fit the stack-height limit');
 }
 $expect(Chips::bank(0) === [], 'an empty stack contains no decorative chips');
+$menu = ['generation'=>0,'mode'=>'offline','players'=>[],'pot'=>0];
+$online = ['generation'=>0,'mode'=>'online','players'=>[
+	['stack'=>499,'debt'=>0,'totalBet'=>1],['stack'=>500,'debt'=>0,'totalBet'=>0]
+],'pot'=>1];
+$entered = Chips::transition($menu,$online,Chips::fromView($menu));
+$expect(Chips::value($entered['after'][0]) === 499 && Chips::value($entered['after'][1]) === 500
+	&& Chips::value($entered['after']['pot']) === 1, 'entering an online table initializes every seat bank at an unchanged hand generation');
 $stage = Chips::transfer([0 => [100 => 5], 'pot' => []], 0, 'pot', 2);
 $expect(Chips::value($stage['before'][0]) === 500 && Chips::value($stage['after'][0]) === 498, 'making change preserves the starting bank and exact payment');
 $expect(array_column($stage['moves'], 'value') === [1,1], 'a two-unit bet moves two physical one-unit chips');

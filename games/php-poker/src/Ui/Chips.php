@@ -151,7 +151,13 @@ final class Chips
 	/** Infer public payments, loans and awards without adding anything to saved or deterministic state. */
 	public static function transition(array $previous, array $next, array $banks): array
 	{
-		$newTable = ($previous['generation'] ?? 0) !== ($next['generation'] ?? 0) || !$banks;
+		$previousPlayers = $previous['players'] ?? [];
+		$nextPlayers = $next['players'] ?? [];
+		$missingBank = !isset($banks['pot']);
+		foreach($nextPlayers as $seat => $_player) if(!isset($banks[$seat])) $missingBank = true;
+		$newTable = ($previous['generation'] ?? 0) !== ($next['generation'] ?? 0)
+			|| ($previous['mode'] ?? null) !== ($next['mode'] ?? null)
+			|| count($previousPlayers) !== count($nextPlayers) || !$banks || $missingBank;
 		$newHand = $newTable || ($previous['handNumber'] ?? 0) !== ($next['handNumber'] ?? 0);
 		$payments = [];
 		foreach($next['players'] ?? [] as $seat => $player)
