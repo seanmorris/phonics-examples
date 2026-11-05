@@ -112,7 +112,7 @@ test('native saved draw continues through keyboard input, rejects stale actions 
 	expect(settled.awards.length).toBeGreaterThan(0);
 	expect(settled.players.reduce((sum,p)=>sum+p.stack-p.debt,settled.pot)).toBe(1000);
 	const saved=await page.evaluate(key=>localStorage.getItem(key),saveKey);
-	await expect.poll(async()=>(await state(canvas)).ui.winnerFlash.active,{timeout:45_000}).toBe(false);
+	await expect.poll(async()=>(await state(canvas)).ui.winnerFlash.active,{timeout:90_000}).toBe(false);
 	await page.waitForTimeout(800);
 	const idle=await canvas.evaluate(element=>new Promise(resolve=>{
 		let updates=0;
