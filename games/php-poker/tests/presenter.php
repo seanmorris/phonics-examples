@@ -232,6 +232,31 @@ $test('online waits drum three reserved dots without changing the authorized mes
 	$expect($shuffle->state()['networkWait']['active'], 'the verified online shuffle gets the same cadence');
 });
 
+$test('online loading status replaces the first-hand welcome card', static function(callable $expect) use ($fixture, $root): void {
+	$view = $fixture('opening-8');
+	$view['mode'] = 'online';
+	$view['phase'] = 'ready';
+	$view['handNumber'] = 1;
+	$view['legalActions'] = [];
+	$view['message'] = 'Jointly shuffling a private deck.';
+	$first = new Presenter($root);
+	$first->update($view);
+	$firstFrame = $first->paint(390, 844)->instances();
+	$view['handNumber'] = 2;
+	$later = new Presenter($root);
+	$later->update($view);
+	$expect($firstFrame === $later->paint(390, 844)->instances(), 'the first-hand welcome does not cover a live online status');
+
+	$view['message'] = '';
+	$view['handNumber'] = 1;
+	$quietFirst = new Presenter($root);
+	$quietFirst->update($view);
+	$view['handNumber'] = 2;
+	$quietLater = new Presenter($root);
+	$quietLater->update($view);
+	$expect(count($quietFirst->paint(390, 844)->instances()) > count($quietLater->paint(390, 844)->instances()), 'a quiet ready table retains its one-time welcome');
+});
+
 $test('the menu, setup and settings flow send only session intents the session knows', static function(callable $expect) use ($root): void {
 	$presenter = new Presenter($root);
 	$presenter->update(['screen' => 'menu', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => true]);
@@ -508,6 +533,21 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 	}
 });
 
+$test('tall table objects grow modestly into responsive field space', static function(callable $expect): void {
+	$base = Layout::fit(360, 640, 1);
+	$portrait = Layout::fit(390, 844, 1);
+	$wide = Layout::fit(644, 600, 1);
+	foreach(['card','handCard'] as $metric)
+	{
+		$expect($portrait->metric($metric)[0] > $base->metric($metric)[0], "$metric uses some extra portrait space");
+		$expect($wide->metric($metric)[0] > $base->metric($metric)[0], "$metric uses some extra horizontal space");
+	}
+	$expect($portrait->metric('emblemSize') === 32 && $wide->metric('emblemSize') === 32, 'responsive growth preserves 32px identity emblems');
+	$expect($portrait->centre()['deck'][2] > $base->centre()['deck'][2], 'the centre cards grow with the portrait field');
+	$expect($wide->centre()['pot'][2] > $base->centre()['pot'][2], 'the centre plates grow with the wider field');
+	$expect($portrait->centre()['pot'][1] > $portrait->height() * .3, 'the portrait centre cluster uses the vertical void');
+});
+
 $test('column profiles seat everyone without overlap and fill the canvas', static function(callable $expect) use ($overlaps, $fixture): void {
 	foreach([[390,844,1],[360,640,1],[1170,2340,3],[1536,1850,2],[844,326,1],[667,375,1],[2532,984,3]] as [$width,$height,$dpr])
 	{
@@ -535,7 +575,7 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 			$chip = $layout->metric('chipRadius');
 			$cluster = [min($centre['pot'][0], $centre['deck'][0], $centre['pile'][0] - $centre['pile'][2] - $chip), $centre['pot'][1], 0, 0];
 			$cluster[2] = max($centre['pot'][0] + $centre['pot'][2], $centre['discard'][0] + $centre['discard'][2], $centre['pile'][0] + $centre['pile'][2] + $chip) - $cluster[0];
-			$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 40 - $cluster[1];
+			$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56 - $cluster[1];
 			foreach($blocks as $seat => $block) $expect(!$overlaps($block, $cluster), "the pot cluster clears seat $seat at $seats seats, $width x $height");
 			// Each of the pot's plates on its own, against each seat's plate, at every table size.
 			foreach(['pot','bet'] as $name) for($seat = 1; $seat < $seats; $seat++)
@@ -548,12 +588,15 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 		}
 		if($layout->profile === 'tall')
 		{
-			// The pot's plates keep clear air beside each column's plates and sit high in the lane.
+			// The pot's plates keep clear air beside each column and use the lane above the human hand.
 			$centre = $layout->centre();
 			$leftPlate = $layout->seat(1, 8)['plate'];
 			$rightPlate = $layout->seat(7, 8)['plate'];
+			$humanPlate = $layout->seat(0, 8)['plate'];
+			$statusBottom = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56;
 			$expect($centre['pot'][0] - ($leftPlate[0] + $leftPlate[2]) >= 16 && $rightPlate[0] - ($centre['pot'][0] + $centre['pot'][2]) >= 16, "the pot plates stand apart from both columns at $width x $height");
-			$expect($centre['pot'][1] < $layout->height() * .25, "the pot sits in the upper quarter of the phone field at $width x $height");
+			$expect($centre['pot'][1] > $layout->height() * .25, "the pot uses the middle of the phone field at $width x $height");
+			$expect($statusBottom <= $humanPlate[1] - 14 + 1e-9, "the complete centre cluster clears the human hand at $width x $height");
 		}
 		// Opponents run clockwise from the human's left: up the left column, then down the right.
 		$tops = [];

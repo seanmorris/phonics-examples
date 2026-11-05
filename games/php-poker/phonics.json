@@ -130,9 +130,9 @@
     "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
     "src/Session.php": "sha256-EgAQs+XJDn7NXqSftb4wPX9UPJssR/SIL/g0zeJPqOA=",
     "src/Ui/Chips.php": "sha256-qD7RyIoRjgORznQes/KLAwKdsgcEz6tZBNOhSljW35E=",
-    "src/Ui/Layout.php": "sha256-3LrV+VrscF/MZQQH1F/z/JR+PjgB28d3eVFrQlMSm5U=",
+    "src/Ui/Layout.php": "sha256-cZpXhFs60aJWouMnjuFcnaAQKg6fbkVsiiGYqm/dg8Q=",
     "src/Ui/Motion.php": "sha256-zLxAzWqth8VaYNNXRvSiZ4cSSM7jLRAWu503j9Kay2s=",
-    "src/Ui/Painter.php": "sha256-uCPDW+XVy9WyE4uiP6L3z5eqNHcrbSj1LyZcJd2aVvc=",
+    "src/Ui/Painter.php": "sha256-mPctQJNRMIHh0zs8Cyee2YhFJA7Er4AUPqtKgWbn0kY=",
     "src/Ui/Presenter.php": "sha256-jdAzD6Q5ecxO0pkJtzh1ICdljll8/NdSHk37MgrriPk="
   }
 }

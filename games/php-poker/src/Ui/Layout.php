@@ -81,6 +81,18 @@ final class Layout
 			$aspect = $width / max(1, $height);
 			if($aspect < $design['width'] / $design['height']) $design['height'] = (int)round(min($profile === 'tall' ? 1100 : 560, $design['width'] / $aspect));
 			else $design['width'] = (int)round(min($profile === 'tall' ? 700 : 1200, $design['height'] * $aspect));
+			if($profile === 'tall')
+			{
+				// When the responsive field gains room, let the cards and chips share a little of it. The identity
+				// emblems remain 32x32, and the modest cap still leaves a useful centre lane at a full table.
+				$widthRoom = min(1, max(0, ($design['width'] - 470) / 230));
+				$heightRoom = min(1, max(0, ($design['height'] - 836) / 264));
+				$growth = 1 + .12 * max($widthRoom, $heightRoom);
+				foreach(['card','handCard'] as $metric)
+					$design[$metric] = array_map(static fn(int|float $value): float => $value * $growth, $design[$metric]);
+				foreach(['cardStep','handStep','plateWidth','handPlateWidth','chipRadius','handChipRadius'] as $metric)
+					$design[$metric] *= $growth;
+			}
 		}
 		$scale = max(1e-6, min($width / $design['width'], $height / $design['height']));
 		return new self($profile, $design, $scale, ($width - $design['width'] * $scale) / 2, ($height - $design['height'] * $scale) / 2, $dpr);
@@ -285,7 +297,7 @@ final class Layout
 		$plateWidth = $human ? $fanWidth : max($fanWidth, $d['plateWidth']);
 		$radius = $human ? $d['handChipRadius'] : $d['chipRadius'];
 		// A compact fan sits under the outer end of a wider plate, with its chips beside it rather than below.
-		$compact = !$human && $plateWidth > $fanWidth;
+		$compact = !$human && $plateWidth > $fanWidth + 1e-6;
 		$opponents = max(1, $seats - 1);
 		$top = self::MENU_BAR + 10;
 		if($human)
@@ -382,7 +394,8 @@ final class Layout
 	{
 		[$cx,$cy] = $this->design['centre'];
 		[$cardWidth,$cardHeight] = $this->design['handCard'];
-		$plateWidth = min(200, $this->design['width'] - 40);
+		$objectScale = $this->profile === 'tall' ? $this->design['card'][0] / 36 : 1;
+		$plateWidth = min(200 * $objectScale, $this->design['width'] - 40);
 		if($this->profile === 'landscape') { $cardWidth = 40; $cardHeight = 56; $plateWidth = 150; }
 		$lift = $cardHeight * .57;
 		if($this->columns())
@@ -392,12 +405,18 @@ final class Layout
 			// Eighteen pixels of felt stay between each column's plates and the pot's.
 			$inner = self::IDENTITY + max($this->design['card'][0] + 4 * $this->design['cardStep'], $this->design['plateWidth']) + 18;
 			if($this->profile === 'tall') $plateWidth = min($plateWidth, $this->tableRight() - 2 * $inner);
-			$cluster = $this->profile === 'landscape' ? self::PLATE_HEIGHT + 14 + $cardHeight + 8 + 56 : self::PLATE_HEIGHT + 56 + 67 + 14 + self::PLATE_HEIGHT + 8 + 56;
+			$cluster = $this->profile === 'landscape'
+				? self::PLATE_HEIGHT + 14 + $cardHeight + 8 + 56
+				: self::PLATE_HEIGHT + 56 * $objectScale + 67 * $objectScale + 14 + self::PLATE_HEIGHT + 8 + 56;
 			$top = self::MENU_BAR + 10;
 			$clusterTop = $top + max(0, ($this->handTop() - 14 - $top - $cluster) / 2);
-			// On a phone the pot sits high in the lane, just below where a lone opponent sits across the table, rather
-			// than centred: the eye then travels from the pot down to the hand and the controls.
-			if($this->profile === 'tall') $clusterTop = $top + self::PLATE_HEIGHT + 8 + $this->design['card'][1] + $this->design['chipRadius'] * 2.2 + 14;
+			// Use the phone's spare vertical lane. A mild downward bias keeps the cluster near the human hand without
+			// crowding its status message or the opponents above it.
+			if($this->profile === 'tall')
+			{
+				$lowest = $this->handTop() - 14 - $cluster;
+				$clusterTop += max(0, $lowest - $clusterTop) * .65;
+			}
 			$cy = $clusterTop + $lift + 38;
 		}
 		$centre = [
@@ -414,11 +433,11 @@ final class Layout
 		{
 			// A phone stacks the cluster in the lane between the columns: pot plate, the loose pot, the stock and
 			// discards side by side, then the bet plate, all inside the plate's width.
-			[$deckWidth, $deckHeight] = [48, 67];
+			[$deckWidth, $deckHeight] = [48 * $objectScale, 67 * $objectScale];
 			$top = $centre['pot'][1];
-			$centre['pile'] = [$cx, $top + self::PLATE_HEIGHT + 8 + 20, min(34, $plateWidth / 2 - $radius), 12];
-			$centre['deck'] = [$cx - $deckWidth - 6, $top + self::PLATE_HEIGHT + 56, $deckWidth, $deckHeight];
-			$centre['discard'] = [$cx + 6, $centre['deck'][1], $deckWidth, $deckHeight];
+			$centre['pile'] = [$cx, $top + self::PLATE_HEIGHT + 8 + 20 * $objectScale, min(34 * $objectScale, $plateWidth / 2 - $radius), 12 * $objectScale];
+			$centre['deck'] = [$cx - $deckWidth - 6 * $objectScale, $top + self::PLATE_HEIGHT + 56 * $objectScale, $deckWidth, $deckHeight];
+			$centre['discard'] = [$cx + 6 * $objectScale, $centre['deck'][1], $deckWidth, $deckHeight];
 			$centre['bet'] = [$centre['pot'][0], $centre['deck'][1] + $deckHeight + 14, $plateWidth, self::PLATE_HEIGHT];
 		}
 		if($this->profile === 'landscape')
