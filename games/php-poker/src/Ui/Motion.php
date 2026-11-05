@@ -9,6 +9,7 @@ final class Motion
 	public const CARD_GAP = .055;
 	public const CHIP_TRAVEL = .25;
 	public const CHIP_GAP = .025;
+	public const TOTAL_TRAVEL = .25;
 	private float $elapsed = 0;
 	private float $duration = 0;
 	private float $cardStart = 0;
@@ -19,6 +20,9 @@ final class Motion
 	private array $kept = [];
 	private array $added = [];
 	private string $kind = 'chips';
+	private float $totalDuration = 0;
+	private array $totalFrom = [];
+	private array $totalTo = [];
 
 	public function __construct(private array $previous, private array $next, private array $chips, private array $selection)
 	{
@@ -29,6 +33,15 @@ final class Motion
 			$this->duration += $stage['duration'];
 			$this->stages[] = $stage;
 		}
+		foreach($next['players'] ?? [] as $seat => $player)
+		{
+			$to = (int)($player['stack'] ?? 0);
+			$from = isset($previous['players'][$seat]) ? (int)($previous['players'][$seat]['stack'] ?? $to) : $to;
+			$this->totalFrom[$seat] = $from;
+			$this->totalTo[$seat] = $to;
+			if($from !== $to) $this->totalDuration = max($this->duration, self::TOTAL_TRAVEL);
+		}
+		$this->duration = max($this->duration, $this->totalDuration);
 		$this->cardStart = $this->duration;
 		$this->deal = ($previous['generation'] ?? 0) !== ($next['generation'] ?? 0)
 			|| ($previous['handNumber'] ?? 0) !== ($next['handNumber'] ?? 0);
@@ -81,7 +94,11 @@ final class Motion
 
 	public function frame(Layout $layout): array
 	{
-		$frame = ['kind' => $this->kind, 'banks' => $this->chips['after'], 'cards' => [], 'chips' => [], 'hiddenSeats' => [], 'discardCount' => (int)($this->next['discardCount'] ?? 0)];
+		$progress = $this->totalDuration > 0 ? min(1, $this->elapsed / $this->totalDuration) : 1;
+		$totals = [];
+		foreach($this->totalTo as $seat => $to)
+		$totals[$seat] = (int)round($this->totalFrom[$seat] + ($to - $this->totalFrom[$seat]) * $progress);
+		$frame = ['kind' => $this->kind, 'banks' => $this->chips['after'], 'totals' => $totals, 'cards' => [], 'chips' => [], 'hiddenSeats' => [], 'discardCount' => (int)($this->next['discardCount'] ?? 0)];
 		foreach($this->stages as $stage) if($this->elapsed < $stage['start'] + $stage['duration'])
 		{
 			$frame['banks'] = $stage['before'];

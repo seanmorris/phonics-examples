@@ -20,23 +20,23 @@ final class Layout
 	/** @var array<string,array<string,mixed>> Design metrics per profile. */
 	private const PROFILES = [
 		'wide' => [
-			'width' => 1280, 'height' => 720, 'centre' => [640,378], 'oval' => [470,250], 'upperStretch' => 24, 'emblemSize' => 64
+			'width' => 1280, 'height' => 720, 'centre' => [640,378], 'oval' => [470,250], 'upperStretch' => 24, 'emblemSize' => 32
 			, 'card' => [68,95], 'cardStep' => 30, 'handCard' => [90,126], 'handStep' => 38, 'dialogCard' => [124,174]
-			, 'plateWidth' => 200, 'handPlateWidth' => 250, 'plateLift' => 62, 'handPlateLift' => 90
+			, 'plateWidth' => 200, 'handPlateWidth' => 250, 'plateLift' => 62, 'handPlateLift' => 90, 'handBankLift' => 14
 			, 'actions' => [790,588], 'actionRows' => false, 'buttonHeight' => 32, 'chipRadius' => 15, 'handChipRadius' => 17
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 760, 'display' => 54
 		]
 		, 'tall' => [
-			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemSize' => 40
+			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemSize' => 32
 			, 'card' => [36,50], 'cardStep' => 16, 'handCard' => [66,92], 'handStep' => 28, 'dialogCard' => [72,101]
-			, 'plateWidth' => 104, 'handPlateWidth' => 190, 'plateLift' => 48, 'handPlateLift' => 70
+			, 'plateWidth' => 104, 'handPlateWidth' => 190, 'plateLift' => 48, 'handPlateLift' => 70, 'handBankLift' => 24
 			, 'actions' => [16,676], 'actionRows' => true, 'buttonHeight' => 44, 'chipRadius' => 10, 'handChipRadius' => 12
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 418, 'display' => 42
 		]
 		, 'landscape' => [
-			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemSize' => 36
+			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemSize' => 32
 			, 'card' => [38,53], 'cardStep' => 17, 'handCard' => [62,87], 'handStep' => 26, 'dialogCard' => [86,120]
-			, 'plateWidth' => 118, 'handPlateWidth' => 190, 'plateLift' => 44, 'handPlateLift' => 70
+			, 'plateWidth' => 118, 'handPlateWidth' => 190, 'plateLift' => 44, 'handPlateLift' => 70, 'handBankLift' => 0
 			, 'actions' => [568,250], 'actionRows' => false, 'buttonHeight' => 52, 'chipRadius' => 9, 'handChipRadius' => 11
 			, 'menuItem' => [350,52], 'menuTop' => 150, 'dialogWidth' => 530, 'display' => 42
 		]
@@ -178,75 +178,76 @@ final class Layout
 		$verticalRadius = $d['oval'][1] + ($uy < 0 ? $d['upperStretch'] : 0);
 		[$cx,$cy] = [$d['centre'][0] + $ux * $d['oval'][0], $d['centre'][1] + $uy * $verticalRadius];
 		$human = $seat === 0;
+		$outward = $ux > .3 ? 1 : -1;
 		[$cardWidth,$cardHeight] = $human ? $d['handCard'] : $d['card'];
 		$step = $human ? $d['handStep'] : $d['cardStep'];
-		$plateWidth = $human ? $d['handPlateWidth'] : $d['plateWidth'];
-		$plate = [$cx - $plateWidth / 2, $cy - ($human ? $d['handPlateLift'] : $d['plateLift']), $plateWidth, self::PLATE_HEIGHT];
-		$fanLeft = $plate[0] + ($plateWidth - ($cardWidth + 4 * $step)) / 2;
+		$plateWidth = $cardWidth + 4 * $step;
+		$plateTop = $cy - ($human ? $d['handPlateLift'] + $d['handBankLift'] : $d['plateLift'] + 28);
+		// The icon and its two-line caption sit to the left, so the indicator needs no caption lane below it.
+		if(!$human) $plateTop = max(self::MENU_BAR + 10, $plateTop);
+		$plateLeft = $cx - $plateWidth / 2;
+		// Identity blocks sit on the outer side of the table: left of left seats and right of right seats.
+		$clampPlate = static fn(float $left, int $side): float => max($side > 0 ? 0 : 40,
+			min($d['width'] - $plateWidth - ($side > 0 ? 40 : 0), $left));
+		if(!$human) $plateLeft = $clampPlate($plateLeft, $outward);
+		// At dense tables, translate both complete side groups inward so only their shared seam gap changes.
+		if(!$human && $seats >= 7)
+		{
+			$firstRight = 1;
+			while($firstRight < $seats && cos($this->seatAngle($firstRight, $seats)) <= .3) $firstRight++;
+			if($firstRight < $seats)
+			{
+				$leftAngle = $this->seatAngle($firstRight - 1, $seats);
+				$rightAngle = $this->seatAngle($firstRight, $seats);
+				$leftBase = $clampPlate($d['centre'][0] + cos($leftAngle) * $d['oval'][0] - $plateWidth / 2, -1);
+				$rightBase = $clampPlate($d['centre'][0] + cos($rightAngle) * $d['oval'][0] - $plateWidth / 2, 1);
+				$targetGap = match($this->profile) {'wide' => 64, 'landscape' => 24, default => 8};
+				$pull = max(0, ($rightBase - ($leftBase + $plateWidth) - $targetGap) / 2);
+				$plateLeft += $outward > 0 ? -$pull : $pull;
+			}
+		}
+		$plate = [$plateLeft, $plateTop, $plateWidth, self::PLATE_HEIGHT];
+		$fanLeft = $plate[0];
 		$fanTop = $plate[1] + self::PLATE_HEIGHT + 8;
 		$cards = [];
 		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
-		$outward = $ux > .3 ? 1 : -1;
 		$chipRadius = $human ? $d['handChipRadius'] : $d['chipRadius'];
-		// Chips stand in front of the fan's outer corner. Pull the human bank toward its hand so its Bet and
-		// YOU / total labels clear the lower-left seat at a full table.
+		// Chips stand in front of the fan's outer corner. The human bank sits lower beside the hand while
+		// retaining room above the bottom edge and short-screen action panel.
 		$chips = $human
-			? [$plate[0] - $chipRadius * 2.2, $fanTop + $cardHeight - $chipRadius * 2.6]
-			: [$outward > 0 ? $plate[0] + $plateWidth - $chipRadius * 3.7 : $plate[0] - 4, $fanTop + $cardHeight + 4];
-		// Opponent captions sit just above the plate, where neither the chips below the fan nor the emblem on the
-		// inside of the oval can reach them; the human caption sits directly below the chip group.
-		$caption = $human
-			? [$chips[0] + $chipRadius, $chips[1] + $chipRadius * 2 + 14]
-			: [$plate[0], $plate[1] - 9];
-		// The emblem sits on the inside of the oval: pushed from the seat block (caption, plate, fan and chips)
-		// toward the table centre until it just clears the block, so it never lands on anything the seat draws.
-		if($human) $emblem = [$plate[0] - 46, $plate[1] + 8];
-		else
-		{
-			$size = $d['emblemSize'];
-			$left = min($plate[0], $chips[0] - $chipRadius - 2);
-			$right = max($plate[0] + $plateWidth, $chips[0] + $chipRadius * 4.4 + 2);
-			$top = $plate[1] - 16;
-			$bottom = $chips[1] + $chipRadius * 2.2;
-			$blockCentre = [($left + $right) / 2, ($top + $bottom) / 2];
-			$dx = $d['centre'][0] - $blockCentre[0];
-			$dy = $d['centre'][1] - $blockCentre[1];
-			$length = max(1e-6, hypot($dx, $dy));
-			[$dx, $dy] = [$dx / $length, $dy / $length];
-			$reach = min(
-				abs($dx) > 1e-6 ? (($right - $left) / 2 + $size / 2 + 8) / abs($dx) : INF
-				, abs($dy) > 1e-6 ? (($bottom - $top) / 2 + $size / 2 + 8) / abs($dy) : INF
-			);
-			$emblem = [$blockCentre[0] + $dx * $reach, $blockCentre[1] + $dy * $reach];
-		}
-		if($human && $this->profile === 'landscape')
-		{
-			// The adjacent opponent occupies the left side on a short screen. Keep the human bank in the gap
-			// between the hand and the action panel, with the combined YOU / total label below.
-			$handRight = $fanLeft + $cardWidth + 4 * $step;
-			$chips[0] = $handRight + 68;
-			$caption = [$chips[0] + $chipRadius, $chips[1] + $chipRadius * 2 + 14];
-			$emblem = [$handRight + 22, $fanTop + 19];
-		}
-
+			? [$this->profile === 'landscape' ? $plate[0] + $plate[2] + 4 : $plate[0] - 4,
+				$fanTop + $cardHeight + 4]
+			: [$outward > 0 ? $plate[0] + $plateWidth + 4 : $plate[0] - 4, $fanTop + $cardHeight + 4];
+		$emblem = [$outward > 0 && !$human ? $plate[0] + $plate[2] + 20 : $plate[0] - ($human ? 22 : 20),
+			$plate[1] + self::PLATE_HEIGHT / 2];
+		// Every identity caption is centered directly beneath its icon; the YOU disc supplies the human's name.
+		$caption = [$emblem[0], $plate[1] + 40];
 		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
 	}
 
-	/** Keep the human total below the occupied denominations, including after a color-up. */
-	public function caption(int $seat, int $seats, array $bank): array
+	/** Bounds of every rendered chip in a bank, in design coordinates. */
+	public function bankBounds(int|string $owner, int $seats, array $bank): ?array
 	{
-		$caption = $this->seat($seat, $seats)['caption'];
-		if($seat !== 0 || !array_filter($bank)) return $caption;
-		$left = INF;
+		$left = $top = INF;
 		$right = $bottom = -INF;
 		foreach($bank as $value => $count) if($count > 0)
 		{
-			[$x,$y,$radius] = $this->chip($seat, $seats, (int)$value, 0);
-			$left = min($left, $x - $radius);
-			$right = max($right, $x + $radius);
-			$bottom = max($bottom, $y + $radius * .42);
+			foreach([0, $count - 1] as $index)
+			{
+				[$x,$y,$radius] = $this->chip($owner, $seats, (int)$value, $index);
+				$left = min($left, $x - $radius);
+				$right = max($right, $x + $radius);
+				$top = min($top, $y - $radius * .42);
+				$bottom = max($bottom, $y + 2.2 + $radius * .42);
+			}
 		}
-		return [($left + $right) / 2, $bottom + 14];
+		return is_finite($left) ? [$left,$top,$right - $left,$bottom - $top] : null;
+	}
+
+	/** Keep the human total centered beneath the YOU icon while its chip bank changes. */
+	public function caption(int $seat, int $seats, array $_bank): array
+	{
+		return $this->seat($seat, $seats)['caption'];
 	}
 
 	/**
@@ -296,11 +297,16 @@ final class Layout
 			return [$x - $radius * ($spread + 1.2) + cos($angle) * $distance * $radius * $spread,
 				$y + $height / 2 + sin($angle) * $distance * $radius * ($this->profile === 'landscape' ? 1.4 : 2), $radius];
 		}
-		[$x, $y] = $this->seat($owner, $seats)['chips'];
+		$geometry = $this->seat((int)$owner, $seats);
+		[$x, $y] = $geometry['chips'];
+		$direction = (((int)$owner !== 0 && $geometry['outward'] > 0)
+			|| ((int)$owner === 0 && $this->profile === 'landscape')) ? -1 : 1;
 		// Small denominations form the tall rear row; larger, shorter stacks nest closely in front.
-		$x = max($radius, min($this->width() - $radius * 4.6, $x));
+		$x = $direction > 0
+			? max($radius, min($this->width() - $radius * 4.6, $x))
+			: max($radius * 4.6, min($this->width() - $radius, $x));
 		$row = intdiv($slot, 2);
-		return [$x + (($slot % 2) * 1.45 + ($row % 2) * .5) * $radius,
+		return [$x + $direction * (($slot % 2) * 1.45 + ($row % 2) * .5) * $radius,
 			$y + ($row * .7 + ($slot % 2) * .18 - $index * .22) * $radius, $radius];
 	}
 

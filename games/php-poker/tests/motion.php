@@ -89,18 +89,32 @@ foreach([[1280,720,1],[780,1688,2],[1688,780,2]] as [$w,$h,$dpr])
 	$move = $change['stages'][0]['moves'][0];
 	$source = $layout->chip(0,5,$move['value'],$move['sourceIndex']);
 	$destination = $layout->chip('pot',5,$move['value'],$move['destinationIndex']);
-	$expect($motion->frame($layout)['chips'][0]['position'] === array_map(floatval(...),$source), 'flight starts on the actual source stack at every layout size');
+	$opening = $motion->frame($layout);
+	$expect($opening['chips'][0]['position'] === array_map(floatval(...),$source), 'flight starts on the actual source stack at every layout size');
+	$expect($opening['totals'][0] === $before['players'][0]['stack'], 'the bankroll count starts at the previous total');
 	$motion->advance(Motion::CHIP_TRAVEL / 2);
-	$expect($motion->frame($layout)['chips'][0]['position'] === Motion::slide($source,$destination,.5), 'half the travel time covers exactly half the path');
+	$middle = $motion->frame($layout);
+	$expect($middle['chips'][0]['position'] === Motion::slide($source,$destination,.5), 'half the travel time covers exactly half the path');
+	$expect($middle['totals'][0] === $before['players'][0]['stack'] - 1, 'the fixed bankroll numerals count through an intermediate whole value');
 	$motion->advance(10);
 	$frame = $motion->frame($layout);
 	$expect($frame['chips'] === [] && $frame['banks'] === $change['after'], 'arriving chips become the destination inventory without a duplicate sprite');
+	$expect($frame['totals'][0] === $after['players'][0]['stack'], 'the bankroll count lands on the authorized total');
 }
 
 // Exercise both sides of every overlapping departure/arrival, including exchanges during a pot award.
 $award = Chips::transfer(['pot' => [1 => 500], 0 => [1 => 20]], 'pot', 0, 500);
 $timeline = ['stages' => [$award], 'after' => $award['after']];
 $layout = Layout::fit(1280,720);
+$countBefore = $before;
+$countBefore['players'][0]['stack'] = 20;
+$countAfter = $countBefore;
+$countAfter['players'][0]['stack'] = 520;
+$count = new Motion($countBefore, $countAfter, $timeline, []);
+$count->advance($count->status()['duration'] / 2);
+$expect($count->frame($layout)['totals'][0] === 270, 'a pot award counts upward in place instead of replacing the total at once');
+$count->advance(100);
+$expect($count->frame($layout)['totals'][0] === 520, 'an upward bankroll count finishes exactly');
 foreach($award['events'] as $event) foreach([-1e-9,0,1e-9] as $offset)
 {
 	$motion = new Motion($before, $before, $timeline, []);
@@ -166,9 +180,10 @@ $handRight = $human['cards'][4][0] + $human['cards'][4][2];
 foreach(Chips::bank(500) as $denomination => $count) for($i = 0; $i < $count; $i++)
 {
 	[$x,$y,$r] = $layout->chip(0,8,$denomination,$i);
-	$expect($x - $r > $handRight && $x + $r < $layout->metric('actions')[0], 'short-screen human chips clear the hand and action panel');
-	$expect($y + $r * .42 < $human['caption'][1] - 6, 'short-screen chip stacks clear the human bankroll caption');
+	$expect($x + $r < $layout->metric('actions')[0], 'short-screen human chips clear the action panel');
+	$expect($y - $r * .42 > $human['caption'][1] + 8, 'short-screen chip stacks clear the human bankroll caption');
 }
+$expect(abs($human['chips'][0] - ($handRight + 4)) < 1e-9, 'short-screen human chips hug the hand corner');
 
 // A finite winner flash changes only the winning seat's label; it never locks the next deal.
 $presenter = new Presenter(dirname(__DIR__));

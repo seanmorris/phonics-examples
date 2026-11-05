@@ -222,18 +222,31 @@ $test('no opponent sits behind the action bar at any seat count', static functio
 	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the bar');
 });
 
-$test('the human bank and its captions stay with the hand at a full table', static function(callable $expect): void {
-	foreach([[1280,720,1],[390,844,1]] as [$width,$height,$dpr])
+$test('the human indicator, YOU disc and centered bankroll stay with the hand at a full table', static function(callable $expect): void {
+	foreach([[1280,720,1],[390,844,1],[844,390,1]] as [$width,$height,$dpr])
 	{
 		$layout = Layout::fit($width, $height, $dpr);
 		$human = $layout->seat(0, 8);
 		$left = $layout->seat(1, 8);
 		$handLeft = $human['cards'][0][0];
+		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
 		if($layout->profile === 'wide')
 			$expect($human['chips'][0] > $left['plate'][0] + $left['plate'][2], 'the human bank clears the lower-left player');
-		$expect($handLeft - $human['chips'][0] < $layout->metric('handChipRadius') * 3, 'the human bank sits beside its own cards');
+		if($layout->profile !== 'landscape')
+			$expect($handLeft - $human['chips'][0] < $layout->metric('handChipRadius') * 3, 'the human bank sits beside its own cards');
+		$expect(abs($human['plate'][0] - $handLeft) < 1e-9 && abs($human['plate'][2] - ($handRight - $handLeft)) < 1e-9, 'the human indicator is exactly as wide as the hand');
+		$size = $layout->metric('emblemSize');
+		$emblem = [$human['emblem'][0] - $size / 2, $human['emblem'][1] - $size / 2, $size, $size];
+		$expect($size === 32 && abs($human['plate'][0] - $human['emblem'][0] - 22) < 1e-9, 'the stroked YOU disc keeps the same visible indicator gap as CPU icons');
+		$expect(abs($human['emblem'][1] - ($human['plate'][1] + $human['plate'][3] / 2)) < 1e-9, 'the YOU disc is vertically centered on the indicator');
 		$caption = $layout->caption(0, 8, Chips::bank(500));
-		$expect($caption[0] > $human['chips'][0], 'the YOU / total caption follows the shifted denomination group');
+		$expect(abs($caption[0] - $human['emblem'][0]) < 1e-9 && $caption[1] > $emblem[1] + $emblem[3], 'the human total is centered below the YOU disc');
+		$corner = $layout->profile === 'landscape' ? $handRight + 4 : $handLeft - 4;
+		$expect(abs($human['chips'][0] - $corner) < 1e-9, 'the human chip bank hugs the available hand corner');
+		$expect(abs($human['chips'][1] - ($human['cards'][0][1] + $human['cards'][0][3] + 4)) < 1e-9, 'the human chip bank uses the same bottom-corner anchor as CPU banks');
+		$bounds = $layout->bankBounds(0, 8, Chips::bank(500));
+		$limit = $layout->profile === 'tall' ? $layout->metric('actions')[1] - 4 : $layout->height() - 4;
+		$expect($bounds !== null && $bounds[1] + $bounds[3] <= $limit + 1e-9, 'the corner bank remains clear of the field edge and phone controls');
 	}
 });
 
@@ -291,7 +304,7 @@ $test('actual CSS touch targets clear every discard card and stay on screen', st
 	}
 });
 
-$test('emblems and captions keep clear of each other, the plates and the fans', static function(callable $expect) use ($overlaps): void {
+$test('seat indicators match their hands and CPU identity blocks sit below their icons', static function(callable $expect) use ($overlaps): void {
 	foreach([[1280,720,1],[390,844,1],[844,390,1]] as [$width,$height,$dpr])
 	{
 		$layout = Layout::fit($width, $height, $dpr);
@@ -300,11 +313,46 @@ $test('emblems and captions keep clear of each other, the plates and the fans', 
 			$g = $layout->seat($seat, $seats);
 			$size = $layout->metric('emblemSize');
 			$emblem = [$g['emblem'][0] - $size / 2, $g['emblem'][1] - $size / 2, $size, $size];
-			$caption = [$g['caption'][0], $g['caption'][1] - 7, 90, 14];
 			$fan = [$g['cards'][0][0], $g['cards'][0][1], $g['cards'][4][0] + $g['cards'][4][2] - $g['cards'][0][0], $g['cards'][0][3]];
-			$expect(!$overlaps($emblem, $caption), "emblem clears caption for seat $seat of $seats in {$layout->profile}");
-			$expect(!$overlaps($emblem, $g['plate']) && !$overlaps($emblem, $fan), "emblem clears plate and fan for seat $seat of $seats in {$layout->profile}");
-			$expect(!$overlaps($caption, $fan), "caption clears the fan for seat $seat of $seats in {$layout->profile}");
+			$right = $g['outward'] > 0;
+			$expect(abs($g['plate'][0] - $fan[0]) < 1e-9 && abs($g['plate'][2] - $fan[2]) < 1e-9, "indicator matches the hand width for seat $seat of $seats in {$layout->profile}");
+			$expect(abs($fan[1] - ($g['plate'][1] + $g['plate'][3] + 8)) < 1e-9, "hand sits 8px below the indicator for seat $seat of $seats in {$layout->profile}");
+			$iconEdge = $right ? $g['plate'][0] + $g['plate'][2] + 4 : $g['plate'][0] - 4;
+			$expect($size === 32 && abs(($right ? $emblem[0] : $emblem[0] + $emblem[2]) - $iconEdge) < 1e-9, "icon is 32px on the outer edge for seat $seat of $seats in {$layout->profile}");
+			$expect(abs($g['emblem'][1] - ($g['plate'][1] + $g['plate'][3] / 2)) < 1e-9, "icon is vertically centered on the indicator for seat $seat of $seats in {$layout->profile}");
+			$expect($emblem[0] >= 4 && $emblem[0] + $emblem[2] <= $layout->width() - 4, "icon clears the field edges for seat $seat of $seats in {$layout->profile}");
+			$expect($emblem[1] >= Layout::MENU_BAR + 4, "icon clears the menu bar for seat $seat of $seats in {$layout->profile}");
+			$expect(abs($g['caption'][0] - $g['emblem'][0]) < 1e-9, "name and total center on the icon for seat $seat of $seats in {$layout->profile}");
+			$expect($g['caption'][1] > $emblem[1] + $emblem[3], "name and total sit below the icon for seat $seat of $seats in {$layout->profile}");
+			$expect(!$overlaps($emblem, $g['plate']) && !$overlaps($emblem, $fan), "icon clears plate and fan for seat $seat of $seats in {$layout->profile}");
+			$expect(abs($g['chips'][0] - ($right ? $g['plate'][0] + $g['plate'][2] + 4 : $g['plate'][0] - 4)) < 1e-9, "chip bank starts at the outer card corner for seat $seat of $seats in {$layout->profile}");
+			$one = $layout->chip($seat, $seats, 1, 0);
+			$five = $layout->chip($seat, $seats, 5, 0);
+			$expect($right ? $five[0] < $one[0] : $five[0] > $one[0], "denomination rows mirror for seat $seat of $seats in {$layout->profile}");
+		}
+		$left = $layout->seat(4, 8);
+		$right = $layout->seat(5, 8);
+		$seam = $right['plate'][0] - ($left['plate'][0] + $left['plate'][2]);
+		$target = match($layout->profile) {'wide' => 64, 'landscape' => 24, default => 8};
+		$expect($seam <= $target + 1e-9, "opposite layouts close up at the eight-seat seam in {$layout->profile}");
+		foreach([7,8] as $seats)
+		{
+			$deltas = [-1 => [], 1 => []];
+			[$cardWidth] = $layout->metric('card');
+			$plateWidth = $cardWidth + 4 * $layout->metric('cardStep');
+			[$centreX] = $layout->metric('centre');
+			[$ovalX] = $layout->metric('oval');
+			for($seat = 1; $seat < $seats; $seat++)
+			{
+				$g = $layout->seat($seat, $seats);
+				$side = $g['outward'];
+				$raw = $centreX + cos($g['angle']) * $ovalX - $plateWidth / 2;
+				$base = max($side > 0 ? 0 : 40, min($layout->width() - $plateWidth - ($side > 0 ? 40 : 0), $raw));
+				$deltas[$side][] = $g['plate'][0] - $base;
+			}
+			foreach($deltas as $side => $group)
+				$expect(max($group) - min($group) < 1e-9, "every seat on side $side receives one group translation at $seats seats in {$layout->profile}");
+			$expect(abs($deltas[-1][0] + $deltas[1][0]) < 1e-9, "the two $seats-seat groups translate symmetrically in {$layout->profile}");
 		}
 	}
 });

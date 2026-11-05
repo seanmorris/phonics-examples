@@ -18,7 +18,16 @@ Type: art/typography/fixedsys-excelsior.json (extracted outlines)
   Used for the Classic look only.
 
 Player emblems: art/icons/*.svg
-  Pixel art icons by Pxlkit (https://pxlkit.xyz), rendered from the @pxlkit/gamification and @pxlkit/feedback
-  pack data at 4x and recoloured per player by scripts/import-pxlkit-icons.mjs. Pxlkit Asset License: free with the
-  visible credit "Icons by Pxlkit" and a link to https://pxlkit.xyz, which the game shows on its menu. See
-  art/icons/LICENSE-ASSETS and art/icons/roster.json for the icon each player uses.
+  Clock, ring, and shamrock from "98 Pixel Art RPG Icons" by 7Soul, licensed CC-BY 3.0:
+  https://opengameart.org/content/98-pixel-art-rpg-icons
+
+  Coffee mug from "Recycle items set" by Clint Bellanger, used under CC-BY 3.0:
+  https://opengameart.org/content/recycle-items-set
+
+  Apple and doughnut from "Icons: Food." and gem from "Minery Icons!" by thekingphoenix, released under CC0:
+  https://opengameart.org/content/icons-food
+  https://opengameart.org/node/77641
+
+  The supplied 7Soul PNGs were nearest-neighbor resampled from 34x34 to 32x32. All seven selected PNGs were
+  converted to equivalent whole-pixel SVG rectangles by scripts/import-poker-icons.mjs. See art/icons/roster.json
+  for the player mapping, art/icons/LICENSE-CC-BY-3.0, and art/icons/LICENSE-CC0-1.0.

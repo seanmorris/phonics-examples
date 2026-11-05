@@ -9,7 +9,7 @@ use PhpPoker\Render\UiCanvas;
  * Draws one frame of the table from the view, the presentation state and the layout.
  *
  * The composition follows the DOS game: the whole canvas is felt, every seat is a status plate over a fan of
- * cards with chip stacks in front, each player has an emblem toward the screen edge, the pot and deck sit in the
+ * cards with chip stacks in front, each opponent has a compact icon/name/total row, the pot and deck sit in the
  * middle, a menu bar runs along the top and dialogs are ruled boxes. The `classic` mode draws it flat; `modern`
  * adds rounded corners, a soft vignette and light shadows.
  */
@@ -124,9 +124,12 @@ final class Painter
 		{
 			$bank = ($this->state['motion']['banks'] ?? $this->state['chips'])[$seat] ?? [];
 			$this->chipStacks($seat, $bank);
-			[$tx, $ty] = $this->layout->caption($seat, $seats, $bank);
-			$this->text(($seat === 0 ? 'YOU' : ($player['name'] ?? '')) . '  ' . Chips::value($bank), $tx, $ty, Theme::CAPTION, Theme::PLATE,
-				$seat === 0 ? 'center' : 'left');
+			$total = (int)($this->state['motion']['totals'][$seat] ?? Chips::value($bank));
+			if($seat === 0)
+			{
+				[$tx, $ty] = $this->layout->caption($seat, $seats, $bank);
+				$this->text((string)$total, $tx, $ty, Theme::CAPTION, Theme::PLATE, 'center');
+			}
 			if(!empty($player['bet']))
 			{
 				$outward = $geometry[$seat]['outward'];
@@ -153,15 +156,25 @@ final class Painter
 				else $this->text('Bet ' . $player['bet'], $bx + 16, $geometry[$seat]['chips'][1] + 10, Theme::CAPTION, Theme::PLATE, 'center');
 			}
 		}
-		// Layer 4: emblems, dealer button and turn marker.
+		// Layer 4: seat identities, dealer button and turn marker.
 		foreach($players as $seat => $player)
 		{
+			$bank = ($this->state['motion']['banks'] ?? $this->state['chips'])[$seat] ?? [];
 			[$x, $y] = $geometry[$seat]['emblem'];
 			$this->emblem($x, $y, $seat, (string)($player['name'] ?? ''), (string)($player['portrait'] ?? ''));
+			if($seat !== 0)
+			{
+				[$tx, $ty] = $geometry[$seat]['caption'];
+				$width = max(1, $geometry[$seat]['plate'][2]);
+				$total = (int)($this->state['motion']['totals'][$seat] ?? Chips::value($bank));
+				$this->text((string)($player['name'] ?? ''), $tx, $ty, Theme::CAPTION, Theme::PLATE, 'center', $width);
+				$this->text((string)$total, $tx, $ty + 14, Theme::CAPTION, Theme::PLATE, 'center', $width);
+			}
 			if(($this->view['dealer'] ?? -1) === $seat && $phase !== 'ready')
 			{
 				[$px, $py, $pw, $ph] = $geometry[$seat]['plate'];
-				[$dx, $dy] = $this->layout->point($px + $pw + 14, $py + $ph / 2);
+				$dealerX = $seat !== 0 && $geometry[$seat]['outward'] > 0 ? $px - 14 : $px + $pw + 14;
+				[$dx, $dy] = $this->layout->point($dealerX, $py + $ph / 2);
 				$this->canvas->circle($dx, $dy, 9 * $this->unit, Theme::PLATE, Theme::INK, 1 * $this->unit);
 				$this->canvas->label('D', $dx, $dy, Theme::CAPTION, Theme::INK, $this->face, 'center');
 			}
@@ -301,10 +314,9 @@ final class Painter
 		foreach($this->layout->menu(!empty($this->view['canContinue'])) as $index => $item)
 		$this->button($item['rect'], $item['label'], '', $index === 0 ? 'primary' : 'default', false);
 		$this->text('Enter plays · C continues · H help · M settings', $this->layout->width() / 2, $this->layout->height() - ($this->layout->profile === 'landscape' ? 18 : 100), Theme::CAPTION, Theme::PLATE, 'center');
-		// The emblems are Pxlkit icons, whose licence asks for a visible credit; it sits under the hints, or at the
-		// right edge where a short landscape leaves no room beneath them.
+		// Keep the artists' short credit under the hints, or at the right edge where a short landscape has no room.
 		$landscape = $this->layout->profile === 'landscape';
-		$this->text('Icons by Pxlkit · pxlkit.xyz', $landscape ? $this->layout->width() - 16 : $this->layout->width() / 2
+		$this->text('Icon art: Clint Bellanger · thekingphoenix · 7Soul', $landscape ? $this->layout->width() - 16 : $this->layout->width() / 2
 			, $this->layout->height() - ($landscape ? 18 : 72), Theme::CAPTION, Theme::alpha(Theme::PLATE, .8), $landscape ? 'right' : 'center');
 	}
 
@@ -452,16 +464,21 @@ final class Painter
 
 	private function emblem(float $x, float $y, int $seat, string $name, string $portrait): void
 	{
-		if($seat === 0) return;
 		[$dx, $dy] = $this->layout->point($x, $y);
-		$r = $this->layout->metric('emblemSize') * .34 * $this->unit;
-		if($this->mode === Theme::MODERN) $this->canvas->circle($dx, $dy, $r * 1.2, [0,0,0,.16]);
+		$size = max(1, round($this->layout->metric('emblemSize') * $this->unit));
+		$r = $size / 2;
+		if($this->mode === Theme::MODERN) $this->canvas->circle($dx, $dy + 2 * $this->unit, $r + 2 * $this->unit, [0,0,0,.16]);
+		if($seat === 0)
+		{
+			$this->canvas->circle($dx, $dy, $r, Theme::PLATE, Theme::BRASS, 3 * $this->unit);
+			$this->canvas->label('YOU', $dx, $dy + .5 * $this->unit, Theme::CAPTION, Theme::INK, $this->face, 'center', $size - 4 * $this->unit);
+			return;
+		}
 		$icon = $this->atlas['icons'][$portrait] ?? null;
 		if($icon !== null)
 		{
-			// Emblems are 64 texels in the atlas, drawn at the profile's size and snapped to framebuffer pixels.
+			// Emblems retain their 32x32 grid and are snapped to framebuffer pixels.
 			[$ix, $iy, $iw, $ih] = $icon;
-			$size = max(1, round($this->layout->metric('emblemSize') * $this->unit));
 			$this->canvas->image(round($dx - $size / 2), round($dy - $size / 2), $size, $size, 0
 				, [$ix / $this->atlas['width'], $iy / $this->atlas['height'], ($ix + $iw) / $this->atlas['width'], ($iy + $ih) / $this->atlas['height']]);
 			return;

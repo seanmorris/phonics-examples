@@ -36,8 +36,8 @@ export async function rasteriseCards(art,dpr,{createImage=svg=>loadSvg(svg)}={})
 	sheetRoot.setAttribute('height',String(cellHeight*art.rows));
 	const sheet=await createImage(new XMLSerializer().serializeToString(sheetRoot));
 	const red=await createImage(art.backs.red),blue=await createImage(art.backs.blue);
-	// Player emblems are native 64 px pixel art; their atlas cells preserve that grid without smoothing.
-	const iconKeys=Object.keys(art.icons??{}),iconSize=64;
+	// Player emblems stay on their native 32 px grid in the atlas.
+	const iconKeys=Object.keys(art.icons??{}),iconSize=32;
 	const cells=art.columns*art.rows+2+iconKeys.length,rows=Math.ceil(cells/columns);
 	const width=cellWidth*columns,height=cellHeight*rows;
 	const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;

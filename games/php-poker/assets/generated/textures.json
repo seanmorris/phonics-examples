@@ -37,31 +37,31 @@
     "icons": {
       "ada": {
         "file": "art/icons/ada.svg",
-        "sha256": "89893a8e953ad5bc0cbc89697e33163a03407dfb06681fc61b971aa9c34772b8"
+        "sha256": "818d3c0bfdf16a2db6c87dc5ee43ea0f1758e53406c5b66efced7a0c55e29123"
       },
       "cleo": {
         "file": "art/icons/cleo.svg",
-        "sha256": "49ad46d0e864ddeea0a8675baf8339ea314aa6c876ec0664a5bc12dcc5fa527d"
+        "sha256": "7a735577ac8709f3a5fd722316e364bf673bee09074ec41a02cf5b22d3218273"
       },
       "felix": {
         "file": "art/icons/felix.svg",
-        "sha256": "08dca4b6aa8b9609a13d4977db2b3a98010dd00f99e1d212d09113018ef1c226"
+        "sha256": "a69821c78e8088a358d95f018e7993e0eeaf22c1502a4781b9e394b17ccb4d6c"
       },
       "jules": {
         "file": "art/icons/jules.svg",
-        "sha256": "6054e9b2b3617d776fcb8e7d693aec91bfea719e7766c69feba5360bf9c4e323"
+        "sha256": "7d02d2837843b33c0819676397e4955265e648a3d7f552b44c896881ca41830f"
       },
       "mara": {
         "file": "art/icons/mara.svg",
-        "sha256": "f77b53fd43df64dde7795c8865d50a267bf8a3f992bb3d67b04c5cdaf8faf485"
+        "sha256": "ae832e0c20c1eda80597aa047b8f6cfe249e6f0da33663d951f6755128ff6e92"
       },
       "nora": {
         "file": "art/icons/nora.svg",
-        "sha256": "eebf2f0bd4832ab2fd1638a4128fd528dafd6220f0580a31fc5156185d981ab8"
+        "sha256": "a9af350f0babea925370cc3ca113e48f8f13dadce65c48a9ee9942206da5a6b8"
       },
       "otis": {
         "file": "art/icons/otis.svg",
-        "sha256": "edfebe35cb88b6e4eb268bfe80c0a8e2709144af5ea543c33881b23594a072bf"
+        "sha256": "c3cb72ae83735cc10a3fe004449dd610da9571c49276d738c5e342acddcc3081"
       }
     }
   }

@@ -47,11 +47,14 @@ one from the canvas: **wide**, a 1280×720 field, for landscape canvases of 760 
   may come lower on that side than .42 rad below the horizontal; from six seats up the opponents spread over
   the arc that stops short of it. In the tall profile the opponents spread over the arc starting sixty degrees
   either side of the human.
-- A seat is a plate (wide 200×24, human 250) over a fan (wide opponent cards 68×95 stepped 30; the human's
-  90×126 stepped 38), chip stacks in front of the fan's outer corner (the human's beside the hand), a caption
-  with the name and stack under the fan, and the emblem on the inside of the oval between the seat and the
-  centre. The human's combined YOU and total caption is centered directly below the occupied chip stacks;
-  their Bet indicator has its own space to the left of the stacks, clear of denomination labels and cards.
+- A seat is a plate exactly as wide as its five-card fan (wide opponent cards 68×95 stepped 30; the human's
+  90×126 stepped 38), with chip stacks in front of the fan's outer corner (the human's beside the hand).
+  A 32×32 object icon sits on the plate's outer edge; the name and total form two centered lines beneath it.
+  the cards. Right-side identities and denomination stacks mirror the left-side layout. Cards begin 8px below the
+  plate. At dense tables each complete side group shifts inward by the same amount, so only the gap where the two
+  layouts meet changes. The human has a 32px YOU disc with a gold ring left of the plate, the numeric total centered
+  beneath it, and a chip bank using the same card-bottom-plus-4px corner anchor as the CPUs. The human hand lifts
+  enough to retain field and phone-control clearance. Their Bet indicator has its own space to the left, clear of denominations and cards.
 - Plates: white for the last action or "Thinking", rose for Fold, straw for the hand name at showdown; a brass
   edge marks the seat whose turn it is. The dealer gets a small "D" disc beside the plate.
 - Centre: "Total pot (n)" plate, the deck (a back the size of a hand card), the pot's chips in front of it,
@@ -91,7 +94,9 @@ Menu and history remain available. Resuming a saved game does not replay an alre
 discards travel to the discard pile before replacements leave the deck. Positions interpolate linearly,
 without easing, fades, bounce or rotation. Card travel takes 0.22 seconds, staggered by 0.055 seconds. Chips
 travel for 0.25 seconds, staggered by 0.025 seconds. Resizing recomputes their endpoints from the same layout.
-Menu/background pauses hold presentation time. Movement stops drawing frames when it finishes.
+When a player's balance changes, its fixed total counts linearly through whole values over the chip timeline;
+the numerals do not slide or roll. Menu/background pauses hold presentation time. Movement stops drawing frames
+when it finishes.
 
 `Chips` maintains exact visual inventories, separate from rules and saves. White chips are 1, red 5, green 25,
 black 100, purple 500 and gold 1,000; larger denominations are supported for larger balances. Every visible

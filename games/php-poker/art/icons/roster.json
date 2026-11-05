@@ -1,58 +1,62 @@
 {
-  "source": "Pxlkit pixel art icons, https://pxlkit.xyz, rendered from @pxlkit pack data at 4x with per-player recolours",
-  "license": "Pxlkit Asset License (free with visible attribution: Icons by Pxlkit, https://pxlkit.xyz); see LICENSE-ASSETS",
-  "grid": 16,
-  "scale": 4,
+  "grid": 32,
+  "conversion": "Supplied PNG pixels converted to run-length SVG rectangles without smoothing; 7Soul source images were nearest-neighbor resampled from 34x34 to 32x32.",
   "players": {
     "ada": {
-      "icon": "@pxlkit/feedback/hourglass",
-      "object": "Hourglass",
+      "file": "rpg-icons-extra/clock.png",
+      "object": "Clock",
       "style": "Patient",
-      "recolour": {
-        "#DAA520": "#8a93a6",
-        "#F4D03F": "#d8dde6",
-        "#FFF8DC": "#f2f5fa",
-        "#B8860B": "#5f6778"
-      }
+      "author": "7Soul",
+      "license": "CC-BY-3.0",
+      "source": "https://opengameart.org/content/98-pixel-art-rpg-icons"
     },
     "jules": {
-      "icon": "@pxlkit/gamification/dice",
-      "object": "Dice",
+      "file": "thekingpheonix/doughnut.png",
+      "object": "Doughnut",
       "style": "Bold",
-      "recolour": {}
+      "author": "thekingphoenix",
+      "license": "CC0-1.0",
+      "source": "https://opengameart.org/content/icons-food"
     },
     "mara": {
-      "icon": "@pxlkit/gamification/quest-compass",
-      "object": "Compass",
+      "file": "thekingpheonix/apple.png",
+      "object": "Apple",
       "style": "Balanced",
-      "recolour": {}
+      "author": "thekingphoenix",
+      "license": "CC0-1.0",
+      "source": "https://opengameart.org/content/icons-food"
     },
     "otis": {
-      "icon": "@pxlkit/gamification/shield",
-      "object": "Shield",
+      "file": "clint-bellanger/coffee.png",
+      "object": "Mug",
       "style": "Defensive",
-      "recolour": {}
+      "author": "Clint Bellanger",
+      "license": "CC-BY-3.0",
+      "source": "https://opengameart.org/content/recycle-items-set"
     },
     "cleo": {
-      "icon": "@pxlkit/gamification/fire",
-      "object": "Fire",
+      "file": "thekingpheonix/gem.png",
+      "object": "Gem",
       "style": "Aggressive",
-      "recolour": {}
+      "author": "thekingphoenix",
+      "license": "CC0-1.0",
+      "source": "https://opengameart.org/node/77641"
     },
     "felix": {
-      "icon": "@pxlkit/gamification/target",
-      "object": "Target",
+      "file": "rpg-icons-extra/ring.png",
+      "object": "Ring",
       "style": "Measured",
-      "recolour": {}
+      "author": "7Soul",
+      "license": "CC-BY-3.0",
+      "source": "https://opengameart.org/content/98-pixel-art-rpg-icons"
     },
     "nora": {
-      "icon": "@pxlkit/gamification/key",
-      "object": "Key",
+      "file": "rpg-icons-extra/shamrock.png",
+      "object": "Shamrock",
       "style": "Opportunistic",
-      "recolour": {
-        "#FFD700": "#b095db",
-        "#B8860B": "#6f55a8"
-      }
+      "author": "7Soul",
+      "license": "CC-BY-3.0",
+      "source": "https://opengameart.org/content/98-pixel-art-rpg-icons"
     }
   }
 }

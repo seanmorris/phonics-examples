@@ -14,13 +14,13 @@ final class Bot
 {
 	/** Stable local opponent identities, artwork keys and bounded pressure offsets. */
 	public const OPPONENTS = [
-		['name'=>'Ada','icon'=>'ada','object'=>'Hourglass','pressure'=>-100,'style'=>'Patient'],
-		['name'=>'Jules','icon'=>'jules','object'=>'Dice','pressure'=>100,'style'=>'Bold'],
-		['name'=>'Mara','icon'=>'mara','object'=>'Compass','pressure'=>20,'style'=>'Balanced'],
-		['name'=>'Otis','icon'=>'otis','object'=>'Shield','pressure'=>-50,'style'=>'Defensive'],
-		['name'=>'Cleo','icon'=>'cleo','object'=>'Fire','pressure'=>150,'style'=>'Aggressive'],
-		['name'=>'Felix','icon'=>'felix','object'=>'Target','pressure'=>-20,'style'=>'Measured'],
-		['name'=>'Nora','icon'=>'nora','object'=>'Key','pressure'=>60,'style'=>'Opportunistic']
+		['name'=>'Ada','icon'=>'ada','object'=>'Clock','pressure'=>-100,'style'=>'Patient'],
+		['name'=>'Jules','icon'=>'jules','object'=>'Doughnut','pressure'=>100,'style'=>'Bold'],
+		['name'=>'Mara','icon'=>'mara','object'=>'Apple','pressure'=>20,'style'=>'Balanced'],
+		['name'=>'Otis','icon'=>'otis','object'=>'Mug','pressure'=>-50,'style'=>'Defensive'],
+		['name'=>'Cleo','icon'=>'cleo','object'=>'Gem','pressure'=>150,'style'=>'Aggressive'],
+		['name'=>'Felix','icon'=>'felix','object'=>'Ring','pressure'=>-20,'style'=>'Measured'],
+		['name'=>'Nora','icon'=>'nora','object'=>'Shamrock','pressure'=>60,'style'=>'Opportunistic']
 	];
 
 	/**
