@@ -248,6 +248,9 @@ export class OnlineDeal
 	{
 		if(this.state.stage==='shuffle')return action?.type==='shuffle-packet'&&action.records?.some(record=>record.type==='shuffle-proof-tail');
 		if(action?.type==='draw-choice')return action.discards?.length===0;
+		// Every opening is verified and hashed as it arrives, but only the last one needs the room's two reports.
+		// Keeping the reveal actions in one batch removes a redundant confirmation between visible hands and payout.
+		if(action?.type==='reveal-cards')return this.state.turnQueue.length<=1;
 		if(action?.type!=='card-layers')return true;
 		const actor=this.currentActor(),cards=new Set(action.items?.map(item=>item.card));
 		return this.relevantAllocations().every(index=>{

@@ -66,5 +66,6 @@ test('the room protocol carries a complete private five-card draw hand',async t=
 	assert.equal(clients.alice.protocol.snapshot().tables[0].sequence,12);
 	const events=hub.history(clients.alice.provider.room).map(item=>item.content);
 	assert.equal(events.filter(item=>item.kind==='action').length,12);
-	assert.equal(events.filter(item=>item.kind==='settled').length,22);
+	assert.deepEqual(events.filter(item=>item.kind==='action'&&item.action.type==='reveal-cards').map(item=>item.batch_end),[false,true]);
+	assert.equal(events.filter(item=>item.kind==='settled').length,20);
 });

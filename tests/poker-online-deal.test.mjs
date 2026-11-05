@@ -127,7 +127,14 @@ test('two peers privately deal, bet, draw, reveal, settle and start the next han
 	peers.bob.command({type:'check',revision:history.length,generation:1});await advance();
 	peers.alice.command({type:'check',revision:history.length,generation:1});await advance();
 	assert.equal(peers.alice.publicState().stage,'reveal');
-	await advance();await advance();
+	const firstRevealer=peers.alice.currentActor(),firstReveal=peers[firstRevealer].nextAction();
+	assert.equal(firstReveal.type,'reveal-cards');
+	assert.equal(peers[firstRevealer].settlesAction(firstReveal),false);
+	await advance(firstReveal);
+	const finalRevealer=peers.alice.currentActor(),finalReveal=peers[finalRevealer].nextAction();
+	assert.equal(finalReveal.type,'reveal-cards');
+	assert.equal(peers[finalRevealer].settlesAction(finalReveal),true);
+	await advance(finalReveal);
 	assert.equal(peers.alice.publicState().stage,'showdown');
 	assert.equal(peers.alice.publicState().pot,0);
 	assert.equal(peers.alice.publicState().awards.reduce((sum,award)=>sum+award.amount,0),5);
