@@ -215,8 +215,14 @@ final class Painter
 		$message = (string)($this->state['hint'] ?? $this->view['message'] ?? '');
 		$line = $error !== '' ? $error : $message;
 		if($line === '') return;
-		$width = min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40));
-		$this->plate([$this->layout->width() / 2 - $width / 2, Layout::MENU_BAR + 10, $width, Layout::PLATE_HEIGHT], $line, $error !== '' ? 'fold' : 'info', false);
+		[$betX, $betY, $betWidth, $betHeight] = $this->layout->centre()['bet'];
+		$width = $this->layout->profile === 'wide'
+			? min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40)) : 180;
+		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->unit, ($width - 12) * $this->unit, 2, $this->face);
+		$top = $betY + $betHeight + 8;
+		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, Layout::PLATE_HEIGHT + 16 * (count($lines) - 1)], '', $error !== '' ? 'fold' : 'info', false);
+		foreach($lines as $index => $text)
+		$this->text($text, $betX + $betWidth / 2, $top + Layout::PLATE_HEIGHT / 2 + $index * 16 + .5, Theme::BODY, Theme::INK, 'center');
 	}
 
 	private function discardDialog(): void

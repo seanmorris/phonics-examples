@@ -109,7 +109,8 @@ block the next deal and schedules no further changes after it ends.
   Deal sends `start{players, variant}`.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY
   (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P). All are ruled boxes.
-- Message: phase-specific guidance (or `error`, in rose) on one plate under the menu bar. Opening bets explain
+- Message: phase-specific guidance (or `error`, in rose) centered below Current bet, wrapping on compact screens.
+  In short landscape layouts, the stock and discard piles flank the bet to leave room for the status and hand. Opening bets explain
   that discarding comes afterward; a hand that cannot open is told that Pass keeps it in. The menu bar names
   the current phase. A player waiting for another seat's draw is not told to select cards yet.
 

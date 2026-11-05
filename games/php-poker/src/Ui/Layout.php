@@ -222,13 +222,22 @@ final class Layout
 		$plateWidth = min(200, $this->design['width'] - 40);
 		if($this->profile === 'landscape') { $cardWidth = 40; $cardHeight = 56; $plateWidth = 150; }
 		$lift = $cardHeight * .57;
-		return [
+		$centre = [
 			'pot' => [$cx - $plateWidth / 2, $cy - $lift - 38, $plateWidth, self::PLATE_HEIGHT]
 			, 'deck' => [$cx - $cardWidth / 2, $cy - $lift, $cardWidth, $cardHeight]
 			, 'discard' => [$cx + $cardWidth / 2 + 16, $cy - $lift, $cardWidth, $cardHeight]
 			, 'bet' => [$cx - $plateWidth / 2, $cy + $cardHeight - $lift + 14, $plateWidth, self::PLATE_HEIGHT]
 			, 'chips' => [[$cx - 80, $cy + 10], [$cx - 50, $cy + 30], [$cx + 70, $cy + 18], [$cx + 40, $cy + 36]]
 		];
+		if($this->profile === 'landscape')
+		{
+			// Put the stock and discards beside the bet, leaving room for status text below it and above the hand.
+			$centre['bet'][1] = $centre['deck'][1];
+			$centre['deck'][0] = $cx - $plateWidth / 2 - $cardWidth - 12;
+			$centre['discard'][0] = $cx + $plateWidth / 2 + 12;
+			$centre['chips'][0] = [$cx - $plateWidth / 2 - 33, $centre['deck'][1] - 36];
+		}
+		return $centre;
 	}
 
 	/** Exact position and radius of one chip in a visible denomination stack. */
