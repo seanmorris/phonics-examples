@@ -352,7 +352,7 @@ $test('status exposes only presentation state', static function(callable $expect
 
 $test('no opponent sits behind the action bar at any seat count', static function(callable $expect) use ($overlaps, $fixture): void {
 	$view = $fixture('facing-raise-5');
-	$bar = [790, 588, 330, 80];
+	$bar = [790, 588, 474, 80];
 	foreach(Layout::fit(1280, 720)->actions($view, ['discards' => [], 'amount' => 8]) as $button)
 	$expect(Layout::hit([$button['rect'][0], $button['rect'][1]], $bar) && Layout::hit([$button['rect'][0] + $button['rect'][2], $button['rect'][1] + $button['rect'][3]], $bar), 'the action bar bounds hold every button');
 	foreach([2,3,4,5,6,7,8] as $seats)
@@ -399,7 +399,14 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 	$expect(Layout::fit(390, 844, 1)->profile === 'tall', 'a 390x844 canvas is tall');
 	$expect(Layout::fit(780, 1688, 2)->profile === 'tall', 'a 2x phone is tall');
 	$expect(Layout::fit(1024, 768, 1)->profile === 'wide', 'a tablet in landscape is wide');
+	$expect(Layout::fit(900, 650, 1)->profile === 'landscape', 'a wide canvas switches before losing most of its height');
+	$expect(Layout::fit(700, 650, 1)->profile === 'tall', 'a nearly square narrow canvas keeps its vertical composition');
+	$expect(Layout::fit(1280, 720, 1)->profile === 'wide', 'the canonical wide canvas keeps its oval composition');
 	$expect(Layout::fit(1500, 900, 2)->profile === 'landscape', 'a short landscape canvas uses its own profile');
+	$transition = Layout::fit(770, 700, 1);
+	$expect($transition->profile === 'wide', 'the final slice before the narrow breakpoint still uses the wide composition');
+	foreach($transition->actions($fixture('facing-raise-5'), ['discards' => [], 'amount' => 8]) as $button)
+		$expect($button['key'] === '' || $transition->keyHintFits($button['rect'][2] * $transition->scale), "{$button['id']} retains its key hint through the wide transition slice");
 	$layout = Layout::fit(390, 844, 1);
 	foreach([2,5,8] as $seats)
 	{
@@ -539,13 +546,45 @@ $test('tall table objects grow modestly into responsive field space', static fun
 	$wide = Layout::fit(644, 600, 1);
 	foreach(['card','handCard'] as $metric)
 	{
-		$expect($portrait->metric($metric)[0] > $base->metric($metric)[0], "$metric uses some extra portrait space");
-		$expect($wide->metric($metric)[0] > $base->metric($metric)[0], "$metric uses some extra horizontal space");
+		$expect($portrait->metric($metric)[0] >= $base->metric($metric)[0] * 1.1, "$metric uses the extra portrait space");
+		$expect($wide->metric($metric)[0] >= $base->metric($metric)[0] * 1.1, "$metric uses the extra horizontal space");
 	}
 	$expect($portrait->metric('emblemSize') === 32 && $wide->metric('emblemSize') === 32, 'responsive growth preserves 32px identity emblems');
 	$expect($portrait->centre()['deck'][2] > $base->centre()['deck'][2], 'the centre cards grow with the portrait field');
 	$expect($wide->centre()['pot'][2] > $base->centre()['pot'][2], 'the centre plates grow with the wider field');
 	$expect($portrait->centre()['pot'][1] > $portrait->height() * .3, 'the portrait centre cluster uses the vertical void');
+});
+
+$test('sparser tall tables spend their free space on larger table objects', static function(callable $expect) use ($overlaps): void {
+	$previous = INF;
+	$fullCentreWidth = Layout::fit(390, 782, 1, 8)->centre()['pot'][2];
+	foreach(range(2, 8) as $seats)
+	{
+		$layout = Layout::fit(390, 782, 1, $seats);
+		$width = $layout->metric('card')[0];
+		$expect($width < $previous, "$seats-player cards follow the density curve");
+		$previous = $width;
+		if($seats < 8) $expect($layout->centre()['pot'][2] > $fullCentreWidth, "$seats-player centre plate grows beyond the full-table plate");
+		$blocks = [];
+		for($seat = 0; $seat < $seats; $seat++)
+		{
+			$g = $layout->seat($seat, $seats);
+			$bank = $layout->bankBounds($seat, $seats, Chips::bank(500));
+			$size = $layout->metric('emblemSize');
+			$left = min($g['plate'][0], $g['emblem'][0] - $size / 2, $bank[0]);
+			$right = max($g['plate'][0] + $g['plate'][2], $g['emblem'][0] + $size / 2, $bank[0] + $bank[2]);
+			$bottom = max($g['cards'][0][1] + $g['cards'][0][3], $bank[1] + $bank[3], $g['caption'][1] + ($seat === 0 ? 8 : 22));
+			$blocks[] = [$left, $g['plate'][1], $right - $left, $bottom - $g['plate'][1]];
+		}
+		foreach($blocks as $i => $a) foreach($blocks as $j => $b) if($i < $j)
+			$expect(!$overlaps($a, $b), "$seats-player responsive seat blocks remain separate");
+		$centre = $layout->centre();
+		$chip = $layout->metric('chipRadius');
+		$cluster = [min($centre['pot'][0], $centre['deck'][0], $centre['pile'][0] - $centre['pile'][2] - $chip), $centre['pot'][1], 0, 0];
+		$cluster[2] = max($centre['pot'][0] + $centre['pot'][2], $centre['discard'][0] + $centre['discard'][2], $centre['pile'][0] + $centre['pile'][2] + $chip) - $cluster[0];
+		$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56 - $cluster[1];
+		foreach($blocks as $seat => $block) $expect(!$overlaps($block, $cluster), "$seats-player centre cluster clears seat $seat");
+	}
 });
 
 $test('column profiles seat everyone without overlap and fill the canvas', static function(callable $expect) use ($overlaps, $fixture): void {

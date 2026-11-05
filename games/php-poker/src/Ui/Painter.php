@@ -569,10 +569,12 @@ final class Painter
 			return;
 		}
 		if($this->controller()) $key = $this->focused($rect) ? $this->confirmLegend() : '';
-		$key = $w >= 96 * $this->layout->dpr ? match($key) {'↵' => 'ENT', '⎋' => 'ESC', default => $key} : '';
+		$key = $this->layout->keyHintFits($w) ? match($key) {'↵' => 'ENT', '⎋' => 'ESC', default => $key} : '';
 		$hintWidth = strlen($key) > 1 ? 28 : 18;
-		$shift = $key !== '' ? -$hintWidth * $this->unit / 2 : 0;
-		$this->canvas->label(strtoupper($label), $x + $w / 2 + $shift, $y + $h / 2 + ($this->mode === Theme::MODERN ? .5 : 0) * $this->unit, $this->layout->controlText(), $ink, $this->face, 'center', $w - ($key !== '' ? $hintWidth + 12 : 8) * $this->unit);
+		$labelLeft = 8 * $this->unit;
+		$labelRight = $key !== '' ? $w - ($hintWidth + 13) * $this->unit : $w - 8 * $this->unit;
+		$labelX = $x + ($labelLeft + $labelRight) / 2;
+		$this->canvas->label(strtoupper($label), $labelX, $y + $h / 2 + ($this->mode === Theme::MODERN ? .5 : 0) * $this->unit, $this->layout->controlText(), $ink, $this->face, 'center', max(1, $labelRight - $labelLeft));
 		if($key !== '')
 		{
 			// Key hint: a soft keycap in Modern, an inverse square in Classic as a DOS accelerator would be shown.

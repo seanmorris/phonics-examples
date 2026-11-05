@@ -57,7 +57,7 @@ final class Layout
 	 * @param float $left Device x of the field's left edge.
 	 * @param float $top Device y of the field's top edge.
 	 */
-	private function __construct(public readonly string $profile, array $design, public readonly float $scale, public readonly float $left, public readonly float $top, public readonly float $dpr)
+	private function __construct(public readonly string $profile, array $design, public readonly float $scale, public readonly float $left, public readonly float $top, public readonly float $dpr, public readonly int $seats)
 	{
 		$this->design = $design;
 	}
@@ -68,17 +68,20 @@ final class Layout
 	 * @param int $width Canvas width in device pixels.
 	 * @param int $height Canvas height in device pixels.
 	 * @param float $dpr Device-pixel ratio; the profile switch happens on CSS pixels.
+	 * @param int $seats Players at the table; sparse tables can spend more of the field on each hand.
 	 */
-	public static function fit(int $width, int $height, float $dpr = 1): self
+	public static function fit(int $width, int $height, float $dpr = 1, int $seats = 8): self
 	{
 		$dpr = max(.5, min(4, is_finite($dpr) ? $dpr : 1));
-		$profile = $width >= $height && $height / $dpr < 480 ? 'landscape' : ($width < $height || $width / $dpr < 760 ? 'tall' : 'wide');
+		$seats = max(2, min(8, $seats));
+		$aspect = $width / max(1, $height);
+		$short = $height / $dpr < 480 || ($height / $dpr < 720 && $aspect >= 1.3);
+		$profile = $width >= $height && $short ? 'landscape' : ($width < $height || $width / $dpr < 760 ? 'tall' : 'wide');
 		$design = self::PROFILES[$profile];
 		// The phone and short-landscape fields grow along whichever axis the canvas leaves free, within limits, so
 		// neither is letterboxed while its seats are cramped.
 		if($profile !== 'wide')
 		{
-			$aspect = $width / max(1, $height);
 			if($aspect < $design['width'] / $design['height']) $design['height'] = (int)round(min($profile === 'tall' ? 1100 : 560, $design['width'] / $aspect));
 			else $design['width'] = (int)round(min($profile === 'tall' ? 700 : 1200, $design['height'] * $aspect));
 			if($profile === 'tall')
@@ -87,7 +90,8 @@ final class Layout
 				// emblems remain 32x32, and the modest cap still leaves a useful centre lane at a full table.
 				$widthRoom = min(1, max(0, ($design['width'] - 470) / 230));
 				$heightRoom = min(1, max(0, ($design['height'] - 836) / 264));
-				$growth = 1 + .12 * max($widthRoom, $heightRoom);
+				$growth = 1 + min(.18, .28 * max($widthRoom, $heightRoom));
+				$growth *= 1 + match($seats) { 2 => .32, 3 => .12, 4 => .09, 5 => .06, 6 => .035, 7 => .015, default => 0 };
 				foreach(['card','handCard'] as $metric)
 					$design[$metric] = array_map(static fn(int|float $value): float => $value * $growth, $design[$metric]);
 				foreach(['cardStep','handStep','plateWidth','handPlateWidth','chipRadius','handChipRadius'] as $metric)
@@ -95,7 +99,7 @@ final class Layout
 			}
 		}
 		$scale = max(1e-6, min($width / $design['width'], $height / $design['height']));
-		return new self($profile, $design, $scale, ($width - $design['width'] * $scale) / 2, ($height - $design['height'] * $scale) / 2, $dpr);
+		return new self($profile, $design, $scale, ($width - $design['width'] * $scale) / 2, ($height - $design['height'] * $scale) / 2, $dpr, $seats);
 	}
 
 	/**
@@ -108,6 +112,9 @@ final class Layout
 
 	/** Minimum target in design units, measured against CSS pixels rather than the framebuffer. */
 	public function controlSize(): float { return max($this->design['buttonHeight'], 48 * $this->dpr / $this->scale); }
+
+	/** A keycap and its label lane both fit at this rendered button width. */
+	public function keyHintFits(float $deviceWidth): bool { return $deviceWidth >= 80 * $this->dpr; }
 
 	/** Where the action buttons start: two rows along the bottom of a phone, the right panel in landscape. */
 	private function actionOrigin(): array
@@ -402,9 +409,11 @@ final class Layout
 		{
 			// Between the two columns: no wider than the gap they leave, and centred in the height above the hand.
 			$cx = $this->tableRight() / 2;
-			// Eighteen pixels of felt stay between each column's plates and the pot's.
-			$inner = self::IDENTITY + max($this->design['card'][0] + 4 * $this->design['cardStep'], $this->design['plateWidth']) + 18;
-			if($this->profile === 'tall') $plateWidth = min($plateWidth, $this->tableRight() - 2 * $inner);
+			// Full tables reserve a broad lane beside both columns. Sparse tables can use those empty row positions
+			// for a wider centre, and heads-up has no side column to constrain it at all.
+			$clearance = match($this->seats) { 3 => 2, 4 => 3, 5 => 4, 6 => 6, 7 => 9, default => 18 };
+			$inner = self::IDENTITY + max($this->design['card'][0] + 4 * $this->design['cardStep'], $this->design['plateWidth']) + $clearance;
+			if($this->profile === 'tall' && $this->seats > 2) $plateWidth = min($plateWidth, $this->tableRight() - 2 * $inner);
 			$cluster = $this->profile === 'landscape'
 				? self::PLATE_HEIGHT + 14 + $cardHeight + 8 + 56
 				: self::PLATE_HEIGHT + 56 * $objectScale + 67 * $objectScale + 14 + self::PLATE_HEIGHT + 8 + 56;
@@ -550,7 +559,12 @@ final class Layout
 
 		[$x, $y] = $this->actionOrigin();
 		$height = $this->controlSize();
-		$unit = $this->profile === 'landscape' ? (316 - $gap * (count($entries) - 1)) / array_sum(array_column($entries, 'weight')) : ($this->design['actionRows'] ? ($this->design['width'] - 2 * $x - $gap * (count($entries) - 1)) / array_sum(array_column($entries, 'weight')) : 100);
+		$weights = array_sum(array_column($entries, 'weight'));
+		$unit = match($this->profile) {
+			'landscape' => (316 - $gap * (count($entries) - 1)) / $weights,
+			'tall' => ($this->design['width'] - 2 * $x - $gap * (count($entries) - 1)) / $weights,
+			default => min(160, ($this->design['width'] - $x - 16 - $gap * (count($entries) - 1)) / $weights)
+		};
 		$buttons = [];
 		foreach($entries as $entry)
 		{

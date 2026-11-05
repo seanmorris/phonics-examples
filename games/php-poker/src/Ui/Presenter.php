@@ -470,7 +470,11 @@ final class Presenter
 	}
 
 	/** Layout of the current canvas; the profile follows its size and pixel ratio. */
-	public function layout(): Layout { return Layout::fit($this->width, $this->height, $this->dpr); }
+	public function layout(): Layout
+	{
+		$seats = count($this->view['players'] ?? []);
+		return Layout::fit($this->width, $this->height, $this->dpr, $seats >= 2 ? $seats : 8);
+	}
 
 	/** Update geometry before consuming input, including the first frame after a resize. */
 	public function resize(int $width, int $height, float $dpr): void

@@ -166,7 +166,7 @@ async function regions(canvas)
 	return JSON.parse(execFileSync('php',['-r',String.raw`
 require $argv[1].'/games/php-poker/autoload.php';
 $input=json_decode(stream_get_contents(STDIN),true,flags:JSON_THROW_ON_ERROR);
-$view=$input['view']; $layout=PhpPoker\Ui\Layout::fit($input['width'],$input['height'],$input['dpr']);
+$view=$input['view']; $layout=PhpPoker\Ui\Layout::fit($input['width'],$input['height'],$input['dpr'],max(2,count($view['players']??[])));
 $result=['menu'=>$layout->menu($view['canContinue']),'actions'=>$layout->actions($view,$view['ui']),
  'cards'=>$layout->discardDialog()['cards']];
 foreach(['menu','actions'] as $key) foreach($result[$key] as &$button) $button['rect']=$layout->rect(...$button['rect']);
@@ -255,7 +255,7 @@ test('controller navigates the menu, selects discards, draws, and toggles the ga
 	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
 	const canvas=await boot(page);
 	await canvas.focus();
-	await padPulse(page,[13]);
+	await padPulse(page,[(await state(canvas)).ui.profile==='landscape'?15:13]);
 	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('menu:continue');
 	await padPulse(page,[0]);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
