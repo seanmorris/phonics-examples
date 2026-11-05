@@ -101,9 +101,9 @@
     "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
     "src/Session.php": "sha256-EgAQs+XJDn7NXqSftb4wPX9UPJssR/SIL/g0zeJPqOA=",
     "src/Ui/Chips.php": "sha256-xxVlL8GXv9QNcz7upK+rsj1gdt4Io+m+9sywNm4mbxs=",
-    "src/Ui/Layout.php": "sha256-KbwjjYyKNTy/IyantGFfEMde+11S43E0h6/WkNSP9RQ=",
+    "src/Ui/Layout.php": "sha256-eJGsD9bLQvFH/mfJ0o+4TFFSC95YSslVdEYTh0ybzKw=",
     "src/Ui/Motion.php": "sha256-6kUJXCgsQkYwhIr7ZearAEgTM8jqr2dNIycy+dCelOE=",
-    "src/Ui/Painter.php": "sha256-4QsYtu+4tzxw0p2M761yWwPhhW6z/DMwrleIe60D1M0=",
+    "src/Ui/Painter.php": "sha256-PVEFXL2XU6uNN7HFpv3hzACtdjt6Zo3jjQRbovhdolc=",
     "src/Ui/Presenter.php": "sha256-8UnTNZ9JCVIPjjPw8LWOpSwmI4VEmiYnN7P93r4vdjI="
   }
 }

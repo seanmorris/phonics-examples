@@ -50,7 +50,8 @@ one from the canvas: **wide**, a 1280×720 field, for landscape canvases of 760 
 - A seat is a plate (wide 200×24, human 250) over a fan (wide opponent cards 68×95 stepped 30; the human's
   90×126 stepped 38), chip stacks in front of the fan's outer corner (the human's beside the hand), a caption
   with the name and stack under the fan, and the emblem on the inside of the oval between the seat and the
-  centre. The human's combined YOU and total caption is centered directly below the occupied chip stacks.
+  centre. The human's combined YOU and total caption is centered directly below the occupied chip stacks;
+  their Bet indicator has its own space to the right of the stacks, clear of denomination labels and cards.
 - Plates: white for the last action or "Thinking", rose for Fold, straw for the hand name at showdown; a brass
   edge marks the seat whose turn it is. The dealer gets a small "D" disc beside the plate.
 - Centre: "Total pot (n)" plate, the deck (a back the size of a hand card), the pot's chips in front of it,

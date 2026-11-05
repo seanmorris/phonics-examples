@@ -132,7 +132,26 @@ final class Painter
 				$outward = $geometry[$seat]['outward'];
 				[$px, $py, $pw] = $geometry[$seat]['plate'];
 				$bx = $outward > 0 ? $px + $pw + 24 : $px - 40;
-				$this->text('Bet ' . $player['bet'], $bx + 16, $geometry[$seat]['chips'][1] + 10, Theme::CAPTION, Theme::PLATE, 'center');
+				if($seat === 0)
+				{
+					// Leave a lane between the human bank and hand; never anchor the bet on a denomination.
+					$bx = $geometry[$seat]['chips'][0];
+					foreach($bank as $value => $count) if($count > 0)
+					{
+						[$x,, $radius] = $this->layout->chip($seat, $seats, (int)$value, 0);
+						$bx = max($bx, $x + $radius);
+					}
+					$label = 'Bet ' . $player['bet'];
+					$size = (float)Theme::CAPTION;
+					if($this->layout->profile !== 'landscape')
+					{
+						$space = $geometry[$seat]['cards'][0][0] - $bx - 12;
+						$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->unit;
+						$size *= min(1, $space / $width);
+					}
+					$this->text($label, $bx + 10, $geometry[$seat]['chips'][1] + 10, $size, Theme::PLATE);
+				}
+				else $this->text('Bet ' . $player['bet'], $bx + 16, $geometry[$seat]['chips'][1] + 10, Theme::CAPTION, Theme::PLATE, 'center');
 			}
 		}
 		// Layer 4: emblems, dealer button and turn marker.
