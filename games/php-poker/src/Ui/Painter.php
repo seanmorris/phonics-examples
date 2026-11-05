@@ -173,7 +173,16 @@ final class Painter
 				$width = max(1, $geometry[$seat]['plate'][2]);
 				$total = (int)($this->state['motion']['totals'][$seat] ?? Chips::value($bank));
 				$size = $this->layout->captionText();
-				$this->text((string)($player['name'] ?? ''), $tx, $ty, $size, Theme::PLATE, 'center', $width);
+				$name = (string)($player['name'] ?? '');
+				$shown = $this->mode === Theme::CLASSIC ? strtoupper($name) : $name;
+				$cards = $geometry[$seat]['cards'];
+				$last = $cards[array_key_last($cards)];
+				$cardRight = $last[0] + $last[2];
+				$available = $geometry[$seat]['outward'] > 0 ? $this->layout->width() - $cardRight - 4 : $cards[0][0] - 4;
+				$nameLimit = min($width, max(1, $available));
+				$nameWidth = min($nameLimit, $this->canvas->measure($shown, $size, $this->face) / $this->unit);
+				$nameX = Layout::identityNameX($geometry[$seat], $nameWidth);
+				$this->text($name, $nameX, $ty, $size, Theme::PLATE, 'center', $nameLimit);
 				$this->text((string)$total, $tx, $ty + $size + 2, $size, Theme::PLATE, 'center', $width);
 			}
 			if(($this->view['dealer'] ?? -1) === $seat && $phase !== 'ready')
@@ -232,7 +241,8 @@ final class Painter
 
 	private function actions(): void
 	{
-		foreach($this->layout->actions($this->view, $this->state) as $button)
+		$buttons = $this->layout->actions($this->view, $this->state);
+		foreach($buttons as $button)
 		$this->button($button['rect'], $button['label'], $button['key'], $button['style'], $this->state['locked'] && $button['intent'] !== null);
 
 		if($stepper = $this->layout->stepper($this->view))
@@ -243,11 +253,13 @@ final class Painter
 			[$lx, $ly] = $this->layout->point(...$stepper['label']);
 			$this->canvas->label(strtoupper((string)($this->view['legalActions']['betLabel'] ?? 'Bet')), $lx, $ly, $this->layout->captionText(), Theme::PLATE, $this->face, $stepper['align']);
 		}
-		if($this->state['locked'] && ($this->view['turn'] ?? -1) === 0)
+		if($buttons && $this->state['locked'] && ($this->view['turn'] ?? -1) === 0)
 		{
-			[$ax, $ay] = $this->layout->metric('actions');
-			[$x, $y] = $this->layout->point($ax, $ay + $this->layout->metric('buttonHeight') + 18);
-			$this->canvas->label('WAITING FOR THE TABLE', $x, $y, Theme::CAPTION, Theme::PLATE, $this->face);
+			$left = min(array_column(array_column($buttons, 'rect'), 0));
+			$right = max(array_map(static fn(array $button): float => $button['rect'][0] + $button['rect'][2], $buttons));
+			$bottom = max(array_map(static fn(array $button): float => $button['rect'][1] + $button['rect'][3], $buttons));
+			[$x, $y] = $this->layout->point(($left + $right) / 2, $bottom + 16);
+			$this->canvas->label('WAITING FOR THE TABLE', $x, $y, Theme::CAPTION, Theme::PLATE, $this->face, 'center');
 		}
 	}
 
@@ -481,14 +493,31 @@ final class Painter
 		[$dx, $dy] = $this->layout->point($x, $y);
 		$size = max(1, round($this->layout->metric('emblemSize') * $this->unit));
 		$r = $size / 2;
+		$online = ($this->view['mode'] ?? 'offline') === 'online';
+		$icon = $this->atlas['icons'][$portrait] ?? null;
 		if($this->mode === Theme::MODERN) $this->canvas->circle($dx, $dy + 2 * $this->unit, $r + 2 * $this->unit, [0,0,0,.16]);
+		if($online && $icon !== null)
+		{
+			[$ix, $iy, $iw, $ih] = $icon;
+			$this->canvas->image(round($dx - $size / 2), round($dy - $size / 2), $size, $size, 0
+				, [$ix / $this->atlas['width'], $iy / $this->atlas['height'], ($ix + $iw) / $this->atlas['width'], ($iy + $ih) / $this->atlas['height']]);
+			$this->canvas->circle($dx, $dy, $r, [0,0,0,0], Theme::BRASS, 2 * $this->unit);
+			return;
+		}
 		if($seat === 0)
 		{
 			$this->canvas->circle($dx, $dy, $r, Theme::PLATE, Theme::BRASS, 3 * $this->unit);
 			$this->canvas->label('YOU', $dx, $dy + .5 * $this->unit, Theme::CAPTION, Theme::INK, $this->face, 'center', $size - 4 * $this->unit);
 			return;
 		}
-		$icon = $this->atlas['icons'][$portrait] ?? null;
+		if($online)
+		{
+			$label = $name !== '' ? $name : $portrait;
+			$initial = preg_match('/^./us', $label, $match) === 1 ? $match[0] : '?';
+			$this->canvas->circle($dx, $dy, $r, Theme::PLATE, Theme::BRASS, 3 * $this->unit);
+			$this->canvas->label(strtoupper($initial), $dx, $dy + .5 * $this->unit, Theme::HEADING, Theme::INK, $this->face, 'center');
+			return;
+		}
 		if($icon !== null)
 		{
 			// Emblems retain their 32x32 grid and are snapped to framebuffer pixels.

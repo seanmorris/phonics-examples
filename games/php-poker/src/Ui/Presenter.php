@@ -575,7 +575,7 @@ final class Presenter
 	/** Whether the next frame must be drawn. */
 	public function dirty(): bool
 	{
-		if($this->cardAtlas === null && $this->pollCardAtlas()) $this->dirty = true;
+		if($this->pollCardAtlas()) $this->dirty = true;
 		return $this->dirty;
 	}
 
@@ -592,7 +592,7 @@ final class Presenter
 		$this->resize($width, $height, $dpr);
 		$this->dirty = false;
 		$this->renderer ??= new UiRenderer($this->root, $this->textures);
-		if($this->cardAtlas === null) $this->pollCardAtlas();
+		$this->pollCardAtlas();
 		$this->frame = $this->paint($width, $height);
 		$this->renderer->render($this->frame, $width, $height);
 	}
@@ -612,7 +612,7 @@ final class Presenter
 		return $canvas;
 	}
 
-	/** Ask the browser bridge for the rasterised card atlas; true once it has arrived. */
+	/** Ask the browser bridge for the latest rasterised card and avatar atlas. */
 	private function pollCardAtlas(): bool
 	{
 		if(!function_exists('vrzno_env')) return false;

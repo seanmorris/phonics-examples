@@ -34,11 +34,32 @@ export function pendingPokerView(view)
 	return {...view,legalActions:{},waitingForConfirmation:true,message:'Waiting for both players to confirm the action.'};
 }
 
+/** Human-readable Matrix name when a profile has no display name. */
+export function matrixPlayerName(id)
+{
+	const value=String(id??'').trim(),match=/^@([^:]+):/.exec(value);
+	return match?.[1]||value||'Player';
+}
+
+/** Add presentation-only Matrix names and avatar atlas keys to the deterministic online view. */
+export function decorateOnlineView(view,{players=[],localPlayer=null,profiles=new Map,avatars=new Map}={})
+{
+	if(!view)return null;
+	const ordered=[localPlayer,...players.filter(player=>player!==localPlayer)];
+	const lookup=(collection,key)=>collection instanceof Map?collection.get(key):collection?.[key];
+	return {...view,players:(view.players??[]).map((player,index)=>{
+		const id=ordered[index]??player.name,profile=lookup(profiles,id),avatar=lookup(avatars,id);
+		const display=typeof profile?.displayName==='string'&&profile.displayName.trim()!==''
+			?profile.displayName.trim():matrixPlayerName(id);
+		return {...player,name:index===0?'You':display,portrait:typeof avatar==='string'?avatar:''};
+	})};
+}
+
 /**
  * Rasterise the deck sheet and both backs into one RGBA atlas: 9 columns of cells, sheet order first, then red and
  * blue backs. Returns the descriptor PHP expects, with the pixels as base64.
  */
-export async function rasteriseCards(art,dpr,{createImage=svg=>loadSvg(svg)}={})
+export async function rasteriseCards(art,dpr,{createImage=source=>loadArt(source)}={})
 {
 	const [cellWidth,cellHeight]=cardCell(dpr),columns=art.columns;
 	// Give the percentage-sized source SVG an intrinsic raster viewport before cropping.
@@ -72,10 +93,18 @@ export async function rasteriseCards(art,dpr,{createImage=svg=>loadSvg(svg)}={})
 	context.imageSmoothingEnabled=false;
 	for(const [index,key] of iconKeys.entries())
 	{
-		const image=await createImage(art.icons[key]);
+		const descriptor=typeof art.icons[key]==='object'?art.icons[key]:{source:art.icons[key]};
+		const image=await createImage(descriptor.source);
 		const cell=art.columns*art.rows+2+index;
 		const x=(cell%columns)*cellWidth+Math.floor((cellWidth-iconSize)/2),y=Math.floor(cell/columns)*cellHeight+Math.floor((cellHeight-iconSize)/2);
-		context.drawImage(image,x,y,iconSize,iconSize);
+		if(descriptor.round)
+		{
+			const sourceWidth=image.naturalWidth||image.width,sourceHeight=image.naturalHeight||image.height;
+			const side=Math.min(sourceWidth,sourceHeight),sx=(sourceWidth-side)/2,sy=(sourceHeight-side)/2;
+			context.save();context.beginPath();context.arc(x+iconSize/2,y+iconSize/2,iconSize/2,0,Math.PI*2);context.clip();
+			context.drawImage(image,sx,sy,side,side,x,y,iconSize,iconSize);context.restore();
+		}
+		else context.drawImage(image,x,y,iconSize,iconSize);
 		icons[key]=[x,y,iconSize,iconSize];
 	}
 	const pixels=context.getImageData(0,0,width,height).data;
@@ -84,14 +113,23 @@ export async function rasteriseCards(art,dpr,{createImage=svg=>loadSvg(svg)}={})
 	return {width,height,cell:[cellWidth,cellHeight],columns,backs:{red:art.columns*art.rows,blue:art.columns*art.rows+1},icons,base64:btoa(binary)};
 }
 
-function loadSvg(svg)
+function loadArt(source)
 {
 	return new Promise((resolve,reject)=>{
-		const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+		const direct=/^(?:blob:|data:)/.test(source),url=direct?source:URL.createObjectURL(new Blob([source],{type:'image/svg+xml'}));
 		const image=new Image;
-		image.onload=()=>{URL.revokeObjectURL(url);resolve(image);};
-		image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('Card art failed to load'));};
+		image.onload=()=>{if(!direct)URL.revokeObjectURL(url);resolve(image);};
+		image.onerror=()=>{if(!direct)URL.revokeObjectURL(url);reject(new Error('Card art failed to load'));};
 		image.src=url;
+	});
+}
+
+function blobDataUrl(blob)
+{
+	return new Promise((resolve,reject)=>{
+		const reader=new FileReader;
+		reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(reader.error??new Error('Avatar failed to load'));
+		reader.readAsDataURL(blob);
 	});
 }
 
@@ -108,6 +146,7 @@ export function activate({module, canvas, session})
 	let viewport='[1280,720,1]',latest=null,closed=false;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
 	let online=null,onlineView=null,onlineWork=Promise.resolve(),submitting=false,awaitingConfirmation=false;
+	let onlinePlayers=[],onlineLocal=null,onlineProfiles=new Map,onlineAvatars=new Map,identityVersion=0;
 	let lobbyOpening=false,lobbyVisible=false,lobbyPort=null;
 	const local=event=>{
 		const box=canvas.getBoundingClientRect(),[width,height]=JSON.parse(viewport);
@@ -191,16 +230,25 @@ export function activate({module, canvas, session})
 	};
 	let described='';
 
-	// Card art arrives from PHP as SVG text and goes back as one rasterised atlas, once.
-	let atlas=null,delivered=false,rasterising=null;
+	// Card art arrives from PHP as SVG text. Matrix avatars can append cells and replace the atlas later.
+	let cardArt=null,atlas=null,rasterising=null,rebuildAtlas=false,dynamicIcons={};
+	const requestAtlas=()=>{
+		if(closed||!cardArt)return;
+		if(rasterising){rebuildAtlas=true;return;}
+		rebuildAtlas=false;
+		const art={...cardArt,icons:{...(cardArt.icons??{}),...dynamicIcons}};
+		rasterising=rasteriseCards(art,JSON.parse(viewport)[2]).then(result=>{atlas=JSON.stringify(result);})
+			.catch(error=>console.error('Poker card art failed',error)).finally(()=>{
+				rasterising=null;if(rebuildAtlas)requestAtlas();
+			});
+	};
 	module.pokerCardArt=json=>{
-		if(closed||rasterising)return;
-		const art=JSON.parse(json);
-		rasterising=rasteriseCards(art,JSON.parse(viewport)[2]).then(result=>{atlas=JSON.stringify(result);}).catch(error=>console.error('Poker card art failed',error));
+		if(closed)return;
+		cardArt=JSON.parse(json);requestAtlas();
 	};
 	module.pokerCardAtlas=()=>{
-		if(!atlas||delivered)return '';
-		delivered=true;const result=atlas;atlas=null;return result;
+		if(!atlas)return '';
+		const result=atlas;atlas=null;return result;
 	};
 
 	module.pokerViewport=()=>viewport;
@@ -244,13 +292,47 @@ export function activate({module, canvas, session})
 		if(description!==described){described=description;hand.textContent=description;}
 	};
 
+	const onlinePresentation=view=>decorateOnlineView(view,{
+			players:onlinePlayers,localPlayer:onlineLocal,profiles:onlineProfiles,avatars:onlineAvatars
+		});
 	const updateOnlineView=()=>{
-		const view=online?.view()??null;
+		const view=onlinePresentation(online?.view()??null);
 		onlineView=awaitingConfirmation?pendingPokerView(view):view;
+	};
+	const clearOnlineIdentities=()=>{
+		identityVersion++;onlinePlayers=[];onlineLocal=null;onlineProfiles=new Map;onlineAvatars=new Map;
+		if(Object.keys(dynamicIcons).length){dynamicIcons={};requestAtlas();}
+	};
+	const loadOnlineIdentities=async detail=>{
+		const version=++identityVersion,provider=session.lobby.protocol.provider;
+		if(Object.keys(dynamicIcons).length){dynamicIcons={};requestAtlas();}
+		onlinePlayers=[...detail.players];onlineLocal=detail.localPlayer;onlineProfiles=new Map;onlineAvatars=new Map;
+		const snapshot=lobbyPort.snapshot(),known=[snapshot.profile,...(Array.isArray(snapshot.peers)?snapshot.peers:[])].filter(Boolean);
+		for(const profile of known)if(detail.players.includes(profile.id))onlineProfiles.set(profile.id,profile);
+		updateOnlineView();
+		await Promise.all(detail.players.map(async id=>{
+			let profile=onlineProfiles.get(id)??{id,displayName:matrixPlayerName(id),avatarUrl:null};
+			if(typeof provider.userProfile==='function')
+			{
+				try{profile=await provider.userProfile(id);}catch{}
+			}
+			if(closed||version!==identityVersion)return;
+			onlineProfiles.set(id,profile);updateOnlineView();
+			if(!profile.avatarUrl||typeof provider.avatarThumbnail!=='function')return;
+			try
+			{
+				const source=await blobDataUrl(await provider.avatarThumbnail(profile.avatarUrl,{size:96}));
+				if(closed||version!==identityVersion)return;
+				const key=id===detail.localPlayer?'matrix-local':'matrix-opponent';
+				dynamicIcons={...dynamicIcons,[key]:{source,round:true}};onlineAvatars.set(id,key);
+				requestAtlas();updateOnlineView();
+			}
+			catch(error){console.warn('Matrix avatar failed to load',error);}
+		}));
 	};
 	const failOnline=error=>{
 		const message=error instanceof Error?error.message:String(error);console.error('Poker online protocol failed',error);
-		if(online){onlineView={...online.view(),error:message,message:'The online Poker action could not be verified.'};}
+		if(online){onlineView={...onlinePresentation(online.view()),error:message,message:'The online Poker action could not be verified.'};}
 		submitting=false;void lobbyPort?.resign(message).catch(()=>{});
 	};
 	const enqueue=task=>{onlineWork=onlineWork.then(task).catch(failOnline);return onlineWork;};
@@ -279,6 +361,7 @@ export function activate({module, canvas, session})
 	};
 	lobbyPort=session.lobby.attachGame({
 		start:detail=>enqueue(async()=>{
+			void loadOnlineIdentities(detail).catch(error=>console.warn('Matrix player identity failed to load',error));
 			const controller=new session.pokerOnline.OnlineDeal({
 				api:session.mentalPoker,root:detail.root,sessionId:detail.sessionId,players:detail.players
 				,localPlayer:detail.localPlayer,breaker:detail.breaker
@@ -305,13 +388,13 @@ export function activate({module, canvas, session})
 		,stop:detail=>enqueue(async()=>{
 			if(online)
 			{
-				const view=online.view(),completed=detail?.reason==='bankroll';
+				const view=onlinePresentation(online.view()),completed=detail?.reason==='bankroll';
 				onlineView=completed?view:{...view,error:detail?.reason??'The online table ended.',message:'The online table ended.'};
 			}
 			awaitingConfirmation=false;submitting=false;
 		})
 	});
-	const lobbyClosed=()=>{lobbyVisible=false;online=null;onlineView=null;awaitingConfirmation=false;submitting=false;};
+	const lobbyClosed=()=>{lobbyVisible=false;online=null;onlineView=null;awaitingConfirmation=false;submitting=false;clearOnlineIdentities();};
 	session.lobby.protocol.addEventListener('closed',lobbyClosed);
 
 	const debug={

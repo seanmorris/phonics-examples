@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {OnlineDeal,ONLINE_ACTION_TYPES,evaluateHand} from '../games/php-poker/browser/online-deal.mjs';
-import {pendingPokerView,pokerCommandBatch} from '../games/php-poker/browser/game.mjs';
+import {decorateOnlineView,matrixPlayerName,pendingPokerView,pokerCommandBatch} from '../games/php-poker/browser/game.mjs';
 
 test('PHP input intents cross the browser bridge before online routing',async()=>{
 	const clicked={type:'bet',amount:2,generation:1,revision:12};
@@ -24,6 +24,23 @@ test('unconfirmed room actions expose state changes without exposing the next tu
 	assert.equal(pending.waitingForConfirmation,true);
 	assert.match(pending.message,/both players/);
 	assert.deepEqual(confirmed.legalActions,{fold:true,call:true,callAmount:2});
+});
+
+test('online player presentation uses Matrix names, avatar keys and neutral fallbacks',()=>{
+	const view={mode:'online',players:[
+		{name:'You',portrait:'you',isHuman:true},{name:'@bob:example.org',portrait:'ada',isHuman:false}
+	]};
+	const decorated=decorateOnlineView(view,{
+		players:['@alice:example.org','@bob:example.org'],localPlayer:'@alice:example.org'
+		,profiles:new Map([['@bob:example.org',{displayName:'Bobby'}]])
+		,avatars:new Map([['@alice:example.org','matrix-local']])
+	});
+	assert.equal(decorated.players[0].name,'You');
+	assert.equal(decorated.players[0].portrait,'matrix-local');
+	assert.equal(decorated.players[1].name,'Bobby');
+	assert.equal(decorated.players[1].portrait,'');
+	assert.equal(view.players[1].portrait,'ada');
+	assert.equal(matrixPlayerName('@carol:example.org'),'carol');
 });
 
 const storage=()=>{

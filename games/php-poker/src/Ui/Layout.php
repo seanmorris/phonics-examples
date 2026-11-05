@@ -359,6 +359,19 @@ final class Layout
 		return $this->seat($seat, $seats)['caption'];
 	}
 
+	/** Keep a wide opponent name outside its card fan; narrow names remain centered under the emblem. */
+	public static function identityNameX(array $geometry, float $width, float $gap = 0): float
+	{
+		$centre = (float)$geometry['caption'][0];
+		$width = max(0, $width);
+		$left = (float)$geometry['cards'][0][0];
+		$last = $geometry['cards'][array_key_last($geometry['cards'])];
+		$right = (float)$last[0] + (float)$last[2];
+		if(($geometry['outward'] ?? -1) > 0)
+		return max($centre, $right + $gap + $width / 2);
+		return min($centre, $left - $gap - $width / 2);
+	}
+
 	/**
 	 * Design-space geometry of the centre: pot plate, deck, chip anchors and bet plate.
 	 *

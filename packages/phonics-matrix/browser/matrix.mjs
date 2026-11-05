@@ -321,6 +321,7 @@ export class MatrixLobbyProvider extends EventTarget
 		this.userId = userId ?? saved.userId ?? null;
 		this.deviceId = deviceId ?? saved.deviceId ?? null;
 		this.displayName = displayName ?? saved.displayName ?? this.userId;
+		this.avatarUrl = saved.avatarUrl ?? null;
 		this.refreshToken = saved.refreshToken ?? null;
 		this.expiresAt = saved.expiresAt ?? 0;
 		this.clientId = saved.clientId ?? null;
@@ -369,10 +370,83 @@ export class MatrixLobbyProvider extends EventTarget
 			{
 				id: this.userId
 				, displayName: this.displayName ?? this.userId
+				, avatarUrl: this.avatarUrl
 				, homeserver: this.homeserver
 				, activity: this.activity
 			}
 		);
+	}
+
+	/** Read a Matrix user's public profile without making it part of game state. */
+	async userProfile(userId = this.userId)
+	{
+		const id = peer(userId);
+		const result = await this.request(
+			'GET'
+			, `/_matrix/client/v3/profile/${encodeURIComponent(id)}`
+			, {auth: false}
+		);
+		const localpart = /^@([^:]+):/.exec(id)?.[1] ?? id;
+		const displayName = typeof result.displayname === 'string' && result.displayname.trim() !== ''
+			? result.displayname.trim() : localpart;
+		const avatarUrl = typeof result.avatar_url === 'string' && /^mxc:\/\/[^/]+\/.+/.test(result.avatar_url)
+			? result.avatar_url : null;
+		const profile = Object.freeze({id, displayName, avatarUrl});
+
+		if(id === this.userId)
+		{
+			this.displayName = displayName;
+			this.avatarUrl = avatarUrl;
+			this.save();
+		}
+
+		return profile;
+	}
+
+	/** Download a small authenticated thumbnail for a Matrix content URI. */
+	async avatarThumbnail(uri, {size = 96, retry = true} = {})
+	{
+		this.requireConnected();
+		const match = /^mxc:\/\/([^/]+)\/(.+)$/.exec(String(uri));
+		if(!match) throw new MatrixLobbyError('matrix_media', 'Matrix avatar URL is invalid');
+		size = Math.max(32, Math.min(256, Math.round(Number(size) || 96)));
+		await this.ensureAccessToken();
+		if(!this.accessToken) throw new MatrixLobbyError('matrix_auth_required', 'Matrix login is required');
+		const query = new URLSearchParams({width: String(size), height: String(size), method: 'crop'});
+		const target = new URL(
+			`/_matrix/client/v1/media/thumbnail/${encodeURIComponent(match[1])}/${encodeURIComponent(match[2])}?${query}`
+			, this.homeserver
+		);
+		let response;
+		try
+		{
+			response = await this.fetch(target, {
+				method: 'GET', headers: {Accept: 'image/*', Authorization: `Bearer ${this.accessToken}`}
+				, signal: this.signal, redirect: 'error'
+			});
+		}
+		catch(error)
+		{
+			throw new MatrixLobbyError('matrix_transport', `Matrix request failed: GET ${target}`, {cause: error});
+		}
+		if(response.status === 401 && retry && this.refreshToken)
+		{
+			await this.refreshAccessToken();
+			return this.avatarThumbnail(uri, {size, retry: false});
+		}
+		if(!response.ok)
+		{
+			let details = {};
+			try { details = await response.json(); } catch {}
+			throw new MatrixLobbyError(
+				details.errcode ?? details.error ?? 'matrix_http'
+				, details.error ?? `Matrix HTTP ${response.status}`
+				, {status: response.status, details}
+			);
+		}
+		const image = await response.blob();
+		if(image.size > 4 * 1024 * 1024) throw new MatrixLobbyError('matrix_media', 'Matrix avatar thumbnail is too large');
+		return image;
 	}
 
 	configuration()
@@ -424,6 +498,7 @@ export class MatrixLobbyProvider extends EventTarget
 		this.userId = saved.userId ?? null;
 		this.deviceId = saved.deviceId ?? null;
 		this.displayName = saved.displayName ?? this.userId;
+		this.avatarUrl = saved.avatarUrl ?? null;
 
 		return this.configuration();
 	}
@@ -1951,6 +2026,7 @@ export class MatrixLobbyProvider extends EventTarget
 		await this.send(PRESENCE, {
 			peer: this.userId
 			, displayName: this.displayName
+			, avatarUrl: this.avatarUrl
 			, expiresAt: Date.now() + this.presenceTtl
 			, protocol: '1.0.0'
 			, activity: this.activity
@@ -2149,6 +2225,8 @@ export class MatrixLobbyProvider extends EventTarget
 			this.peers.set(item.sender, {
 				id: item.sender
 				, displayName: String(content.displayName ?? item.sender)
+				, avatarUrl: typeof content.avatarUrl === 'string' && /^mxc:\/\/[^/]+\/.+/.test(content.avatarUrl)
+					? content.avatarUrl : null
 				, expiresAt: content.expiresAt
 				, activity: content.activity ?? null
 			});
@@ -2370,6 +2448,7 @@ export class MatrixLobbyProvider extends EventTarget
 		this.userId = peer(result.user_id);
 		this.deviceId = result.device_id ?? null;
 		this.displayName ??= this.userId;
+		this.avatarUrl = null;
 		this.save();
 
 		return this.profile();
@@ -2408,6 +2487,7 @@ export class MatrixLobbyProvider extends EventTarget
 				, userId: this.userId
 				, deviceId: this.deviceId
 				, displayName: this.displayName
+				, avatarUrl: this.avatarUrl
 			}));
 		}
 		catch
@@ -2417,7 +2497,7 @@ export class MatrixLobbyProvider extends EventTarget
 
 	logoutLocal()
 	{
-		this.accessToken = this.refreshToken = this.userId = this.deviceId = this.displayName = null;
+		this.accessToken = this.refreshToken = this.userId = this.deviceId = this.displayName = this.avatarUrl = null;
 		this.expiresAt = 0;
 		this.clientId = this.tokenEndpoint = this.revocationEndpoint = null;
 		this.authApi = 'legacy';

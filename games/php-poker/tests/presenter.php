@@ -395,6 +395,12 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$expect($emblem[1] >= Layout::MENU_BAR + 4, "icon clears the menu bar for seat $seat of $seats in {$layout->profile}");
 			$expect(abs($g['caption'][0] - $g['emblem'][0]) < 1e-9, "name and total center on the icon for seat $seat of $seats in {$layout->profile}");
 			$expect($g['caption'][1] > $emblem[1] + $emblem[3], "name and total sit below the icon for seat $seat of $seats in {$layout->profile}");
+			$shortName = Layout::identityNameX($g, 32);
+			$expect(abs($shortName - $g['caption'][0]) < 1e-9, "a short name stays centered below the icon for seat $seat of $seats in {$layout->profile}");
+			$wideName = Layout::identityNameX($g, 64);
+			$innerEdge = $right ? $wideName - 32 : $wideName + 32;
+			$cardEdge = $right ? $fan[0] + $fan[2] : $fan[0];
+			$expect(abs($innerEdge - $cardEdge) < 1e-9, "only a wide name moves outward to clear the cards for seat $seat of $seats in {$layout->profile}");
 			$expect(!$overlaps($emblem, $g['plate']) && !$overlaps($emblem, $fan), "icon clears plate and fan for seat $seat of $seats in {$layout->profile}");
 			if($layout->profile === 'landscape') $expect(abs($g['chips'][0] - ($right ? $fan[0] - 8 : $fan[0] + $fan[2] + 8)) < 1e-9, "chip bank stands beside the compact hand for seat $seat of $seats in {$layout->profile}");
 			elseif($layout->profile === 'tall')

@@ -44,3 +44,24 @@ test('every browser card crop matches an independent SVG rendering at both atlas
 		}
 	}
 });
+
+test('Matrix avatar cells are center-cropped and circular',async({page})=>{
+	const result=await page.evaluate(async({source,art})=>{
+		const avatar=document.createElement('canvas');avatar.width=64;avatar.height=32;
+		const paint=avatar.getContext('2d');paint.fillStyle='#f00';paint.fillRect(0,0,64,32);
+		const url=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
+		try
+		{
+			const atlas=await (await import(url)).rasteriseCards({
+				...art,icons:{matrix:{source:avatar.toDataURL('image/png'),round:true}}
+			},1);
+			const pixels=Uint8Array.from(atob(atlas.base64),character=>character.charCodeAt(0));
+			const [x,y,w,h]=atlas.icons.matrix;
+			const pixel=(px,py)=>[...pixels.slice(((py*atlas.width)+px)*4,((py*atlas.width)+px)*4+4)];
+			return {corner:pixel(x,y),centre:pixel(x+w/2|0,y+h/2|0)};
+		}
+		finally{URL.revokeObjectURL(url);}
+	},{source,art});
+	expect(result.corner[3]).toBe(0);
+	expect(result.centre).toEqual([255,0,0,255]);
+});
