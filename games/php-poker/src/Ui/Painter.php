@@ -75,7 +75,7 @@ final class Painter
 	{
 		// The bar belongs to the page, not the field: it sits on the canvas's top edge and spans its full width
 		// even when the field is centred inside a canvas of another shape.
-		[, , $fieldWidth, $height] = $this->layout->rect(0, 0, $this->layout->width(), Layout::MENU_BAR);
+		[, , $fieldWidth, $height] = $this->layout->rect(0, 0, $this->layout->width(), $this->layout->menuHeight());
 		$top = 0;
 		$left = 0;
 		$width = $this->layout->left * 2 + $fieldWidth;
@@ -278,12 +278,12 @@ final class Painter
 		$width = $this->layout->profile === 'wide'
 			? min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40)) : min(180, $betWidth);
 		// The lane between the columns is narrow, so the message may run to three lines there.
-		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->unit, ($width - 12) * $this->unit, $this->layout->columns() ? 3 : 2, $this->face);
+		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->canvas->unit, ($width - 12) * $this->unit, $this->layout->columns() ? 3 : 2, $this->face);
 		$top = $betY + $betHeight + 8;
-		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, Layout::PLATE_HEIGHT + 16 * (count($lines) - 1)], '', $error !== '' ? 'fold' : 'info', false);
+		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, $this->layout->plateHeight() + 16 * (count($lines) - 1)], '', $error !== '' ? 'fold' : 'info', false);
 		foreach($lines as $index => $text)
 		{
-			$y = $top + Layout::PLATE_HEIGHT / 2 + $index * 16 + .5;
+			$y = $top + $this->layout->plateHeight() / 2 + $index * 16 + .5;
 			if($drumming && $index === array_key_last($lines))
 			$this->drummingText(rtrim($text, '.'), $betX + $betWidth / 2, $y, Theme::BODY, Theme::INK, 'center');
 			else $this->text($text, $betX + $betWidth / 2, $y, Theme::BODY, Theme::INK, 'center');
@@ -323,7 +323,7 @@ final class Painter
 	private function welcomeDialog(): void
 	{
 		$w = min(440, $this->layout->width() - 24);
-		$box = [$this->layout->width() / 2 - $w / 2, 250, $w, 120];
+		$box = [$this->layout->width() / 2 - $w / 2, 250 + $this->layout->verticalShift(), $w, 120];
 		$this->dialog($box, 'DRAW POKER');
 		$variant = ($this->view['profile']['variant'] ?? 'jackpots') === 'anything' ? 'Anything opens' : 'Jacks or better';
 		$this->text('Welcome to a game of', $this->layout->width() / 2, $box[1] + 50, Theme::LABEL, Theme::INK, 'center');
@@ -332,14 +332,15 @@ final class Painter
 
 	private function menuScreen(): void
 	{
-		$this->text('DRAW POKER', $this->layout->width() / 2, $this->layout->profile === 'landscape' ? 65 : 170, (float)$this->layout->metric('display'), Theme::PLATE, 'center');
-		$this->text('Five-card draw · jacks or better · 2 to 8 seats', $this->layout->width() / 2, $this->layout->profile === 'landscape' ? 105 : 215, Theme::LABEL, Theme::PLATE, 'center');
+		$shift = $this->layout->verticalShift();
+		$this->text('DRAW POKER', $this->layout->width() / 2, $this->layout->profile === 'landscape' ? 65 : 170 + $shift, (float)$this->layout->metric('display'), Theme::PLATE, 'center');
+		$this->text('Five-card draw · jacks or better · 2 to 8 seats', $this->layout->width() / 2, $this->layout->profile === 'landscape' ? 105 : 215 + $shift, Theme::LABEL, Theme::PLATE, 'center');
 		$local = $this->state['local'];
 		if($local === 'setup') { $this->setupDialog(); return; }
 		if($local === 'online')
 		{
 			$w = min(440, $this->layout->width() - 24);
-			$box = [$this->layout->width() / 2 - $w / 2, $this->layout->profile === 'landscape' ? 165 : 280, $w, 120];
+			$box = [$this->layout->width() / 2 - $w / 2, $this->layout->profile === 'landscape' ? 165 : 280 + $shift, $w, 120];
 			$this->dialog($box, 'PLAY ONLINE');
 			$this->text('Opening the Matrix table lobby…', $this->layout->width() / 2, $box[1] + 52, Theme::BODY, Theme::INK, 'center');
 			$this->text($this->controller() ? 'Press ' . $this->backLegend() . ' to go back.' : 'Press Escape to go back.', $this->layout->width() / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
@@ -571,15 +572,29 @@ final class Painter
 		if($this->controller()) $key = $this->focused($rect) ? $this->confirmLegend() : '';
 		$key = $this->layout->keyHintFits($w) ? match($key) {'↵' => 'ENT', '⎋' => 'ESC', default => $key} : '';
 		$hintWidth = strlen($key) > 1 ? 28 : 18;
-		$labelLeft = 8 * $this->unit;
-		$labelRight = $key !== '' ? $w - ($hintWidth + 13) * $this->unit : $w - 8 * $this->unit;
-		$labelX = $x + ($labelLeft + $labelRight) / 2;
-		$this->canvas->label(strtoupper($label), $labelX, $y + $h / 2 + ($this->mode === Theme::MODERN ? .5 : 0) * $this->unit, $this->layout->controlText(), $ink, $this->face, 'center', max(1, $labelRight - $labelLeft));
+		$kw = $hintWidth * $this->unit;
+		$kx = $x + $w - $kw - 7 * $this->unit;
+		$labelText = strtoupper($label);
+		$labelSize = $this->layout->controlText();
+		$labelX = $x + $w / 2;
+		$labelMax = max(1, $w - 16 * $this->unit);
+		if($key !== '')
+		{
+			// Keep short labels centred on the whole button. Reserve the keycap's left margin only when the
+			// centred text would actually enter it, then move the label by the minimum distance needed to clear it.
+			$clearRight = $kx - 6 * $this->unit;
+			$measured = min($this->canvas->measure($labelText, $labelSize, $this->face), $labelMax);
+			if($labelX + $measured / 2 > $clearRight)
+			{
+				$labelMax = max(1, $clearRight - ($x + 8 * $this->unit));
+				$measured = min($this->canvas->measure($labelText, $labelSize, $this->face), $labelMax);
+				$labelX = min($labelX, $clearRight - $measured / 2);
+			}
+		}
+		$this->canvas->label($labelText, $labelX, $y + $h / 2 + ($this->mode === Theme::MODERN ? .5 : 0) * $this->unit, $labelSize, $ink, $this->face, 'center', $labelMax);
 		if($key !== '')
 		{
 			// Key hint: a soft keycap in Modern, an inverse square in Classic as a DOS accelerator would be shown.
-			$kw = $hintWidth * $this->unit;
-			$kx = $x + $w - $kw - 7 * $this->unit;
 			$ky = $y + $h / 2 - 9 * $this->unit;
 			if($this->mode === Theme::MODERN)
 			{

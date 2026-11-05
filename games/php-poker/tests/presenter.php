@@ -401,6 +401,9 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 	$expect(Layout::fit(1024, 768, 1)->profile === 'wide', 'a tablet in landscape is wide');
 	$expect(Layout::fit(900, 650, 1)->profile === 'landscape', 'a wide canvas switches before losing most of its height');
 	$expect(Layout::fit(700, 650, 1)->profile === 'tall', 'a nearly square narrow canvas keeps its vertical composition');
+	$expect(Layout::fit(1536, 1850, 2)->profile === 'wide', 'a portrait desktop keeps the oval composition while it has 760 CSS pixels');
+	$expect(Layout::fit(1518, 1850, 2)->profile === 'tall', 'the desktop switches to columns below the 760 CSS pixel floor');
+	$expect(Layout::fit(1280, 1223, 1, 2)->profile === 'wide', 'a nearly square desktop canvas retains the wide composition');
 	$expect(Layout::fit(1280, 720, 1)->profile === 'wide', 'the canonical wide canvas keeps its oval composition');
 	$expect(Layout::fit(1500, 900, 2)->profile === 'landscape', 'a short landscape canvas uses its own profile');
 	$transition = Layout::fit(770, 700, 1);
@@ -587,8 +590,90 @@ $test('sparser tall tables spend their free space on larger table objects', stat
 	}
 });
 
+$test('taller wide tables anchor their top and bottom while expanding the oval', static function(callable $expect) use ($fixture, $overlaps): void {
+	$base = Layout::fit(1280, 720, 1, 2);
+	$tall = Layout::fit(1280, 1223, 1, 2);
+	$extra = $tall->height() - $base->height();
+	$expect($tall->profile === 'wide' && $tall->height() === 1223, 'the wide field grows to the canvas aspect instead of letterboxing');
+	$expect(abs($tall->seat(1, 2)['plate'][1] - $base->seat(1, 2)['plate'][1]) < 1e-9, 'the top opponent remains anchored');
+	$baseHuman = $base->seat(0, 2)['cards'][0];
+	$tallHuman = $tall->seat(0, 2)['cards'][0];
+	$expect(abs(($base->height() - $baseHuman[1] - $baseHuman[3]) - ($tall->height() - $tallHuman[1] - $tallHuman[3])) < 1e-9, 'the human hand remains anchored to the bottom');
+	$baseCentre = ($base->centre()['pot'][1] + $base->centre()['bet'][1] + $base->centre()['bet'][3]) / 2;
+	$tallCentre = ($tall->centre()['pot'][1] + $tall->centre()['bet'][1] + $tall->centre()['bet'][3]) / 2;
+	$expect(abs(($tallCentre - $baseCentre) - $extra / 2) < 6, 'the centre cluster splits the added vertical room');
+	$expect(abs(($tall->metric('actions')[1] - $base->metric('actions')[1]) - $extra) < 1e-9, 'the action controls remain anchored to the bottom');
+	$baseLast = $base->seat(0, 2)['cards'][4];
+	$tallLast = $tall->seat(0, 2)['cards'][4];
+	$expect(abs(($baseLast[0] + $baseLast[2]) - ($tallLast[0] + $tallLast[2])) < 1e-9, 'the larger hand grows leftward without entering its action controls');
+	$expect($tall->metric('handCard')[0] >= $base->metric('handCard')[0] * 1.35, 'a heads-up table uses the empty field for substantially larger cards');
+	$expect($tall->metric('handChipRadius') >= $base->metric('handChipRadius') * 1.35, 'a heads-up table enlarges its chips with its cards');
+	$expect($tall->centre()['pot'][2] > $base->centre()['pot'][2], 'the sparse centre objects grow with the hands');
+	$transition = Layout::fit(1223, 1223, 1, 2);
+	$expect($transition->profile === 'wide' && Layout::fit(1222, 1223, 1, 2)->profile === 'wide', 'the oval continues through portrait desktop proportions');
+	$expect(Layout::fit(759, 1223, 1, 2)->profile === 'tall', 'the phone composition begins below the desktop width floor');
+	foreach(range(2, 4) as $seats)
+	{
+		$full = Layout::fit(1378, 1223, 1, $seats);
+		$lastWide = Layout::fit(1223, 1223, 1, $seats);
+		$expect(abs($full->metric('handCard')[1] * $full->scale - $lastWide->metric('handCard')[1] * $lastWide->scale) < 1e-9, "$seats-player cards retain one rendered height until geometry constrains them");
+		$expect(abs($full->metric('handChipRadius') * $full->scale - $lastWide->metric('handChipRadius') * $lastWide->scale) < 1e-9, "$seats-player chips retain one rendered size until geometry constrains them");
+	}
+	foreach(range(2, 3) as $seats)
+	{
+		$full = Layout::fit(1378, 1254, 1, $seats);
+		$portrait = Layout::fit(760, 1254, 1, $seats);
+		$expect(abs($full->metric('handCard')[1] * $full->scale - $portrait->metric('handCard')[1] * $portrait->scale) < 1e-9, "$seats-player cards retain their rendered height beside the vertical action bar");
+		$bank = $portrait->bankBounds(0, $seats, Chips::bank(500));
+		$expect($bank !== null && $bank[1] + $bank[3] <= $portrait->height() - 4 + 1e-9, "$seats-player chips tuck into the hand corner without clipping");
+	}
+	$canonical = Layout::fit(1280, 720, 1, 2);
+	$expect(abs($canonical->metric('handCard')[1] - 126) < 1e-9 && abs($canonical->metric('handChipRadius') - 17) < 1e-9, 'the constrained canonical composition retains its established object sizes');
+	$compact = Layout::fit(770, 700, 1, 2);
+	$expect($compact->metric('handCard')[1] * $compact->scale < $tall->metric('handCard')[1] * $tall->scale, 'actual centre and seat constraints can reduce the rendered size');
+	$view = $fixture('facing-raise-5');
+	foreach([[1378,1208,1],[1000,1208,1],[760,1208,1],[1536,1850,2]] as [$width,$height,$dpr])
+	{
+		$layout = Layout::fit($width, $height, $dpr, 8);
+		$buttons = $layout->actions($view, ['discards' => [], 'amount' => 8]);
+		$expect($layout->verticalActionBar(), "$width x $height uses the vertical action bar");
+		$expect(abs($layout->metric('emblemSize') * $layout->scale / $dpr - 32) < 1e-9, "$width x $height keeps 32 CSS pixel identity icons");
+		$expect(abs($layout->plateHeight() * $layout->scale / $dpr - Layout::PLATE_HEIGHT) < 1e-9, "$width x $height keeps full-height status plates");
+		$expect(abs($layout->menuHeight() * $layout->scale / $dpr - Layout::MENU_BAR) < 1e-9, "$width x $height keeps the full-height menu bar");
+		$expect(abs($layout->uiScale() / $dpr - 1) < 1e-9, "$width x $height renders type at CSS scale");
+		foreach($buttons as $index => $button)
+		{
+			$expect(abs($button['rect'][0] - $buttons[0]['rect'][0]) < 1e-9 && abs($button['rect'][2] - $buttons[0]['rect'][2]) < 1e-9, "{$button['id']} shares the action column at $width x $height");
+			if($index) $expect($button['rect'][1] > $buttons[$index - 1]['rect'][1] + $buttons[$index - 1]['rect'][3], "{$button['id']} follows the prior action vertically at $width x $height");
+		}
+		$stepper = $layout->stepper($view);
+		$expect($stepper !== null && $buttons[array_key_last($buttons)]['rect'][1] + $buttons[array_key_last($buttons)]['rect'][3] < $stepper['less'][1], "the raise stepper follows the vertical actions at $width x $height");
+		$controls = array_column($buttons, 'rect');
+		foreach(['less','amount','more'] as $part) $controls[] = $stepper[$part];
+		foreach(range(0, 7) as $seat)
+		{
+			$geometry = $layout->seat($seat, 8);
+			$bank = $layout->bankBounds($seat, 8, Chips::bank(500));
+			$size = $layout->metric('emblemSize');
+			$left = min($geometry['plate'][0], $geometry['emblem'][0] - $size / 2, $bank[0]);
+			$right = max($geometry['plate'][0] + $geometry['plate'][2], $geometry['emblem'][0] + $size / 2, $bank[0] + $bank[2]);
+			$bottom = max($geometry['cards'][0][1] + $geometry['cards'][0][3], $bank[1] + $bank[3], $geometry['caption'][1] + ($seat === 0 ? 8 : 22));
+			$block = [$left, min($geometry['plate'][1], $bank[1]), $right - $left, $bottom - min($geometry['plate'][1], $bank[1])];
+			foreach($controls as $control) $expect(!$overlaps($block, $control), "seat $seat clears the vertical controls at $width x $height");
+		}
+	}
+	$expect(!Layout::fit(1280, 720, 1, 8)->verticalActionBar(), 'the canonical wide table retains its horizontal action row');
+	$previous = INF;
+	foreach(range(2, 8) as $seats)
+	{
+		$width = Layout::fit(1280, 1223, 1, $seats)->metric('handCard')[0];
+		$expect($width < $previous, "$seats-player wide cards follow the density curve");
+		$previous = $width;
+	}
+});
+
 $test('column profiles seat everyone without overlap and fill the canvas', static function(callable $expect) use ($overlaps, $fixture): void {
-	foreach([[390,844,1],[360,640,1],[1170,2340,3],[1536,1850,2],[844,326,1],[667,375,1],[2532,984,3]] as [$width,$height,$dpr])
+	foreach([[390,844,1],[360,640,1],[1170,2340,3],[1518,1850,2],[844,326,1],[667,375,1],[2532,984,3]] as [$width,$height,$dpr])
 	{
 		$layout = Layout::fit($width, $height, $dpr);
 		$expect($layout->columns(), "$width x $height uses a column profile");

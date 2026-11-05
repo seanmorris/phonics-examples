@@ -305,7 +305,7 @@ final class Presenter
 
 		// The menu bar's left entries open the menu; the right-hand title does nothing. The bar is drawn on the
 		// canvas's top-left corner, which lies outside the field when the field is centred.
-		$addKey([-$layout->left / $layout->scale, -$layout->top / $layout->scale, 260, Layout::MENU_BAR], 'escape');
+		$addKey([-$layout->left / $layout->scale, -$layout->top / $layout->scale, 260, $layout->menuHeight()], 'escape');
 		return $targets;
 	}
 
@@ -650,7 +650,7 @@ final class Presenter
 	{
 		[$this->width, $this->height] = [$width, $height];
 		$layout = $this->layout();
-		$canvas = new UiCanvas($this->text, $layout->scale);
+		$canvas = new UiCanvas($this->text, $layout->uiScale());
 		(new Painter($canvas, $layout, $this->view, $this->state(), $this->cardAtlas))->paint($width, $height);
 		return $canvas;
 	}
