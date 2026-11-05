@@ -218,7 +218,9 @@ final class Layout
 		$verticalRadius = $d['oval'][1] + ($uy < 0 ? $d['upperStretch'] : 0);
 		[$cx,$cy] = [$d['centre'][0] + $ux * $d['oval'][0], $d['centre'][1] + $uy * $verticalRadius];
 		$human = $seat === 0;
-		$outward = $ux > .3 ? 1 : -1;
+		// Heads-up sits exactly on the top axis, where cosine rounding used to pick the left treatment. Keep the
+		// hand centred but mirror its identity, bank and denomination rows like every opponent on the right side.
+		$outward = $seats === 2 && !$human ? 1 : ($ux > .3 ? 1 : -1);
 		[$cardWidth,$cardHeight] = $human ? $d['handCard'] : $d['card'];
 		$step = $human ? $d['handStep'] : $d['cardStep'];
 		$plateWidth = $cardWidth + 4 * $step;
@@ -294,7 +296,7 @@ final class Layout
 		}
 		elseif($opponents === 1 && $this->profile === 'tall')
 		{
-			$outward = -1;
+			$outward = 1;
 			$plateLeft = $middle - $plateWidth / 2;
 			$plateTop = $top;
 			$angle = M_PI * 1.5;
@@ -302,7 +304,7 @@ final class Layout
 		else
 		{
 			$leftCount = intdiv($opponents + 1, 2);
-			$onLeft = $seat <= $leftCount;
+			$onLeft = $opponents === 1 ? false : $seat <= $leftCount;
 			$count = $onLeft ? $leftCount : $opponents - $leftCount;
 			// Rows count down from the top; the left column fills from the bottom so seat 1 is nearest the human.
 			$row = $onLeft ? $leftCount - $seat : $seat - $leftCount - 1;

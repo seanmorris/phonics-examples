@@ -15,8 +15,8 @@ Accepted actions save automatically in this browser. Return to the menu to pause
 For disconnected play, open the full game page while connected and wait for **Available offline** beneath the table. The downloaded game can then reopen without a connection. Embedded games and the rest of the example catalog are not installed by that download. Browser storage eviction or clearing site data removes saves and downloaded assets.
 
 **Play Online** opens a two-player Matrix table. Both browsers contribute a secret shuffle, verify the other's
-shuffle, and deal five private cards to each seat without publishing either hand. This first online milestone stops
-after the verified deal; online betting, discards and showdown are still being built. Offline play remains the
-complete five-card draw mode.
+shuffle, and deal five private cards to each seat without publishing either hand. The room then carries both betting
+rounds, private discards and replacement draws. Live hands publish verified card openings at showdown; folded hands
+stay private. The dealer can continue into another freshly shuffled hand with the button advanced.
 
 See [Rules and provenance](rules.md) for documentary DOS rules and the explicitly chosen adaptations, and [Architecture and private online dealing](architecture.md) for implementation boundaries.

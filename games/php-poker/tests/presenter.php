@@ -397,6 +397,10 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$five = $layout->chip($seat, $seats, 5, 0);
 			$expect($right ? $five[0] < $one[0] : $five[0] > $one[0], "denomination rows mirror for seat $seat of $seats in {$layout->profile}");
 		}
+		$headsUp = $layout->seat(1, 2);
+		$expect($headsUp['outward'] === 1, "the heads-up opponent uses the right-side identity and stack layout in {$layout->profile}");
+		if($layout->profile === 'wide')
+		$expect(abs($headsUp['chips'][0] - ($headsUp['plate'][0] + $headsUp['plate'][2] + 4)) < 1e-9, 'the heads-up bank stands at the right corner of its hand');
 		if($layout->columns()) continue;
 		$left = $layout->seat(4, 8);
 		$right = $layout->seat(5, 8);

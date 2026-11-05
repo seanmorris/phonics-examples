@@ -12,7 +12,7 @@ const until=async(condition,timeout=30000)=>{
 	throw new Error('Timed out waiting for private room deal');
 };
 
-test('the room protocol carries a verified private deal from seating through ten cards',async t=>{
+test('the room protocol carries a complete private five-card draw hand',async t=>{
 	t.mock.method(console,'log',()=>{});
 	const hub=new InMemoryLobbyHub,game={
 		id:'org.example.private-poker',protocol:'1.0.0',rules:ONLINE_RULES,application:'poker-app',runtime:'poker-runtime'
@@ -27,7 +27,15 @@ test('the room protocol carries a verified private deal from seating through ten
 		const enqueue=task=>{client.work=client.work.then(task).catch(error=>{client.error=error;});};
 		const drive=async()=>{
 			if(!client.deal||client.submitting||client.deal.currentActor()!==id)return;
-			const action=client.deal.nextAction();if(!action)return;
+			let action=client.deal.nextAction();
+			if(!action)
+			{
+				const state=client.deal.publicState(),legal=client.deal.view().legalActions;
+				if(state.stage==='betting')client.deal.command(legal.call?{type:'call'}:{type:'bet',amount:legal.minBet});
+				else if(state.stage==='draw')client.deal.command({type:'draw',cards:[]});
+				else if(state.stage==='final-betting')client.deal.command({type:'check'});
+				action=client.deal.nextAction();if(!action)return;
+			}
 			client.submitting=true;
 			await client.port.submitAction(action,await client.deal.hash(),{settle:client.deal.settlesAction(action)});
 		};
@@ -49,13 +57,14 @@ test('the room protocol carries a verified private deal from seating through ten
 	}
 	t.after(()=>{for(const client of Object.values(clients)){client.protocol.close();client.provider.close();}});
 	const root=await clients.alice.protocol.create();await clients.bob.protocol.join(root);
-	await until(()=>Object.values(clients).every(client=>client.error||client.deal?.publicState().stage==='ready'));
+	await until(()=>Object.values(clients).every(client=>client.error||client.deal?.publicState().stage==='showdown'));
 	for(const client of Object.values(clients))assert.ifError(client.error);
 	assert.equal(await clients.alice.deal.hash(),await clients.bob.deal.hash());
 	assert.equal(clients.alice.deal.privateHand().length,5);assert.equal(clients.bob.deal.privateHand().length,5);
 	assert.equal(new Set([...clients.alice.deal.privateHand(),...clients.bob.deal.privateHand()]).size,10);
-	assert.equal(clients.alice.protocol.snapshot().tables[0].sequence,4);
+	assert.equal(clients.alice.deal.publicState().pot,0);
+	assert.equal(clients.alice.protocol.snapshot().tables[0].sequence,12);
 	const events=hub.history(clients.alice.provider.room).map(item=>item.content);
-	assert.equal(events.filter(item=>item.kind==='action').length,4);
-	assert.equal(events.filter(item=>item.kind==='settled').length,6);
+	assert.equal(events.filter(item=>item.kind==='action').length,12);
+	assert.equal(events.filter(item=>item.kind==='settled').length,22);
 });

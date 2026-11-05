@@ -197,7 +197,14 @@ export function activate({module, canvas, session})
 	let commands=[];
 	module.pokerCommands=()=>{
 		const queued=commands;commands=[];
-		if(online&&queued.some(command=>command.type==='menu')){void enqueue(()=>roomWrite(()=>lobbyPort.leave()));return '[]';}
+		if(online)
+		{
+			if(queued.some(command=>command.type==='menu'))void enqueue(()=>roomWrite(()=>lobbyPort.leave()));
+			else for(const command of queued)void enqueue(async()=>{
+				online.command(command);updateOnlineView();await drive();
+			});
+			return '[]';
+		}
 		return JSON.stringify(queued);
 	};
 	module.pokerOnlineView=()=>onlineView?JSON.stringify(onlineView):'';
@@ -224,7 +231,7 @@ export function activate({module, canvas, session})
 	const updateOnlineView=()=>{onlineView=online?.view()??null;};
 	const failOnline=error=>{
 		const message=error instanceof Error?error.message:String(error);console.error('Poker online protocol failed',error);
-		if(online){onlineView={...online.view(),error:message,message:'The private deal could not be verified.'};}
+		if(online){onlineView={...online.view(),error:message,message:'The online Poker action could not be verified.'};}
 		submitting=false;void lobbyPort?.resign(message).catch(()=>{});
 	};
 	const enqueue=task=>{onlineWork=onlineWork.then(task).catch(failOnline);return onlineWork;};
@@ -264,9 +271,10 @@ export function activate({module, canvas, session})
 		})
 		,action:detail=>enqueue(async()=>{
 			if(!online)throw new Error('Received a Poker action before the deal started');
-			const settlement=await online.apply(detail);updateOnlineView();
+			const settlement=await online.apply(detail);
 			const waiting=await roomWrite(()=>lobbyPort.reportSettled(settlement));
-			if(!waiting){submitting=false;await drive();}
+			if(waiting)updateOnlineView();
+			else{submitting=false;await drive();}
 		})
 		,confirmed:detail=>enqueue(async()=>{
 			if(!online)throw new Error('Received a Poker confirmation before the deal started');
@@ -275,7 +283,11 @@ export function activate({module, canvas, session})
 			submitting=false;updateOnlineView();await drive();
 		})
 		,stop:detail=>enqueue(async()=>{
-			if(online){onlineView={...online.view(),error:detail?.reason??'The online table ended.',message:'The online table ended.'};}
+			if(online)
+			{
+				const view=online.view(),completed=detail?.reason==='bankroll';
+				onlineView=completed?view:{...view,error:detail?.reason??'The online table ended.',message:'The online table ended.'};
+			}
 			submitting=false;
 		})
 	});

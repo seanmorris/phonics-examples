@@ -18,20 +18,28 @@ Matrix acknowledgements. Both clients still execute and hash every proof record 
 private scalar, unfinished local proof plan and decrypted faces stay in session storage; neither room history nor
 the PHP view receives them.
 
-`OnlineDeal` is the public transcript reducer. Two seated players shuffle in the shared starting-gun order, then
-ten cards are assigned round-robin from the encrypted deck. For each card, the non-recipient removes and proves
-their layer. The recipient removes the final layer locally and maps the point to a face. Both peers hash the same
-public state after every event, while each `privateHand()` contains only that browser's five cards. Reload replays
-confirmed room actions and resumes a partially published proof from the saved local plan. Incomplete durable batches
-are replayed after the last confirmed boundary. The room protocol's history checkpoint mode avoids copying a large
-snapshot into each action acknowledgement.
+`OnlineDeal` is the public transcript reducer for the complete two-player flow. The players shuffle in the shared
+starting-gun order, then ten cards are assigned round-robin from the encrypted deck. For each card, the other player
+removes and proves their layer. The recipient removes the final layer locally and maps the point to a face. Both
+peers hash the same public state after every event, while each `privateHand()` contains only that browser's five
+cards.
 
-The first online milestone ends after a verified private deal and deliberately uses **Anything Opens**. Betting,
-discard/draw, showdown openings, disconnect adjudication and multi-hand bankroll settlement remain outside this
-transcript version; the table says so instead of accepting an unverified private-hand claim.
+Betting, folds, checks and calls are deterministic public actions. A draw publishes the encrypted allocation slots
+being discarded, not their faces. Replacement cards come from the next positions of the verified stock and use the
+same proved layer-removal path as the opening deal. At a contested showdown, each remaining player publishes five
+Chaum-Pedersen card-opening proofs; both reducers verify the openings, evaluate the hands and award the pot from the
+same transcript. A fold settles without opening either hand. The dealer can then advance the button and begin a new
+joint shuffle with fresh per-hand keys. Online play deliberately uses **Anything Opens** and a two-player table-stakes
+bankroll; single-player loans and adaptation remain offline rules.
+
+Reload replays confirmed room actions and resumes a partially published proof from the saved per-hand local plan.
+Incomplete durable batches are replayed after the last confirmed boundary. Shuffle packets settle once per complete
+shuffle, the initial ten-card allocation settles once, and a replacement draw settles after all requested cards are
+privately readable. The room protocol's history checkpoint mode avoids copying a large snapshot into each action
+acknowledgement.
 
 The persistence bridge atomically replaces one browser-local document after an accepted action. It retains the old document on a storage failure. Restore checks schema, profile version, all 52 instances, complete five-card hands, turn queue and chip/loan conservation. Corrupt or unsupported saves produce a visible recovery message instead of rerolling a replacement hand. Menus and background tabs stop bot progression.
 
 The full poker page installs a service worker scoped to its own route. Its build manifest pins the page, PHP/WASM runtime, engine browser modules, PHAR and bootstrap by SHA-256 and size. Installation completes only after every asset is verified. Updates wait for old controlled pages to close; an open hand keeps one build. No Matrix response, private save or unrelated game's page enters the asset cache. The offline browser test disables networking, closes the page, reopens it and verifies exact saved-turn continuation.
 
-Run `npm run test:php`, `npm run test:node`, `npm run test:poker:exhaustive`, package validation, the site build and poker browser tests for this milestone. `poker-online-room.test.mjs` drives two in-memory room clients through seating, seed exchange, both proved shuffles and all ten private draws.
+Run `npm run test:php`, `npm run test:node`, `npm run test:poker:exhaustive`, package validation, the site build and poker browser tests for this milestone. `poker-online-room.test.mjs` drives two in-memory room clients through seating, seed exchange, both proved shuffles, the private deal, both betting rounds, draws, verified showdown and settlement.
