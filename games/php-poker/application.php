@@ -35,6 +35,7 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 	$controls=is_array($input['controls']??null)?$input['controls']:[];
 	$pointer=is_array($input['pointer']??null)?$input['pointer']:null;
 	$presenter->resize($width,$height,$dpr);
+	if(!($input['hidden']??false)) $presenter->advance($elapsed);
 	$intents=$presenter->input($controls,$pointer,$elapsed);
 	$commands=vrzno_env('pokerCommands');
 	if($commands)
@@ -48,7 +49,7 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 		$seed=($intent['type']??null)==='start'?(string)(vrzno_env('pokerSeed'))():null;
 		$session->command($intent,$seed);
 	}
-	if(!($input['hidden']??false)) $session->tick($elapsed);
+	if(!($input['hidden']??false) && !$presenter->animating()) $session->tick($elapsed);
 	if($session->consumeSaveDirty()) (vrzno_env('pokerSave'))($session->save());
 	if($session->consumeDirty())
 	{

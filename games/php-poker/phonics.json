@@ -26,7 +26,9 @@
       "src/Render/UiCanvas.php",
       "src/Render/UiRenderer.php",
       "src/Session.php",
+      "src/Ui/Chips.php",
       "src/Ui/Layout.php",
+      "src/Ui/Motion.php",
       "src/Ui/Painter.php",
       "src/Ui/Presenter.php"
     ]
@@ -65,7 +67,7 @@
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
     "NOTICE": "sha256-BDfp8L2qJiIEbCnXhe/zKq9qNFD708WfRDSkGHI0tRU=",
-    "application.php": "sha256-jVD7ZQsDkdlxzxx/b6IOxsKtZK0fvyUmzmWbb5LlzG4=",
+    "application.php": "sha256-9ozgArVnoBIAtR0AIfm+qrjK8Zi9YekAJJYqVRCGOaE=",
     "art/cards/back-blue.svg": "sha256-/kOyO4O+W/JzEE2pkzMCU9PL8dYHYNmKEM9/sBilYiU=",
     "art/cards/back-red.svg": "sha256-HX4CryU8ztM3thI0RY+9aMZk0UCsMVWvJJIf6so5czY=",
     "art/cards/deck.svg": "sha256-qWFttCwcqhboDxcn6WYmjicdRYw9WN/u5r1zYsvGBRc=",
@@ -98,8 +100,10 @@
     "src/Render/UiCanvas.php": "sha256-1FPfxuVPKWifZCpr5Gf0G8pfNXawCLfpqRyH3+4uMeQ=",
     "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
     "src/Session.php": "sha256-EgAQs+XJDn7NXqSftb4wPX9UPJssR/SIL/g0zeJPqOA=",
-    "src/Ui/Layout.php": "sha256-e0naGC9ucoDbvZPvYLzm3AiLH0ccBs49W0xfbxc6FUs=",
-    "src/Ui/Painter.php": "sha256-uO0jVkIuKyhjfahaDq8VCybv2u3UEb+uGSdf2/utGGg=",
-    "src/Ui/Presenter.php": "sha256-TC9QugHXUGSeSRkWzWzMa+qewmUJPbFZ6xuuuS/HMHI="
+    "src/Ui/Chips.php": "sha256-cfebVqlsDV8poyauGvU/n+5R88nv+ihj6EHzgz8rwoo=",
+    "src/Ui/Layout.php": "sha256-HFKJNDz3oDZw/E4uIhHXzM/r5cQVwb1WOZrrr1VHdZc=",
+    "src/Ui/Motion.php": "sha256-3pm6PaEXV72lZ/+x8ZUPYYJbGADgH68i5A6jGrbkluU=",
+    "src/Ui/Painter.php": "sha256-LsHJWBcXAGR3BIj5i88nfufl40L34DtthV3XorajrAs=",
+    "src/Ui/Presenter.php": "sha256-8UnTNZ9JCVIPjjPw8LWOpSwmI4VEmiYnN7P93r4vdjI="
   }
 }

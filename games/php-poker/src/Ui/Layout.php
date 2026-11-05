@@ -197,6 +197,15 @@ final class Layout
 		$emblem = $human
 			? [$plate[0] - 46, $plate[1] + 8]
 			: [$d['centre'][0] + $ux * ($d['oval'][0] - $d['emblemInset'][0]), $d['centre'][1] + $uy * ($d['oval'][1] - $d['emblemInset'][1])];
+		if($human && $this->profile === 'landscape')
+		{
+			// The adjacent opponent occupies the left side on a short screen. Keep the human bank in the gap
+			// between the hand and the action panel, with its name below and its marker above.
+			$handRight = $fanLeft + $cardWidth + 4 * $step;
+			$chips[0] = $handRight + 32;
+			$caption = [$chips[0] + $chipRadius * 3.2, $fanTop + $cardHeight + 14];
+			$emblem = [$handRight + 22, $fanTop + 19];
+		}
 
 		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
 	}
@@ -204,7 +213,7 @@ final class Layout
 	/**
 	 * Design-space geometry of the centre: pot plate, deck, chip anchors and bet plate.
 	 *
-	 * @return array{pot:array{float,float,float,float},deck:array{float,float,float,float},bet:array{float,float,float,float},chips:list<array{float,float}>}
+	 * @return array{pot:array{float,float,float,float},deck:array{float,float,float,float},discard:array{float,float,float,float},bet:array{float,float,float,float},chips:list<array{float,float}>}
 	 */
 	public function centre(): array
 	{
@@ -216,9 +225,22 @@ final class Layout
 		return [
 			'pot' => [$cx - $plateWidth / 2, $cy - $lift - 38, $plateWidth, self::PLATE_HEIGHT]
 			, 'deck' => [$cx - $cardWidth / 2, $cy - $lift, $cardWidth, $cardHeight]
+			, 'discard' => [$cx + $cardWidth / 2 + 16, $cy - $lift, $cardWidth, $cardHeight]
 			, 'bet' => [$cx - $plateWidth / 2, $cy + $cardHeight - $lift + 14, $plateWidth, self::PLATE_HEIGHT]
 			, 'chips' => [[$cx - 80, $cy + 10], [$cx - 50, $cy + 30], [$cx + 70, $cy + 18], [$cx + 40, $cy + 36]]
 		];
+	}
+
+	/** Exact position and radius of one chip in a visible denomination stack. */
+	public function chip(int|string $owner, int $seats, int $value, int $index): array
+	{
+		$slot = array_search($value, Chips::VALUES, true);
+		if($slot === false || $index < 0) throw new \InvalidArgumentException('Invalid chip');
+		$radius = (float)$this->metric($owner === 0 ? 'handChipRadius' : 'chipRadius');
+		[$x, $y] = $owner === 'pot' ? $this->centre()['chips'][0] : $this->seat($owner, $seats)['chips'];
+		// Denomination pairs sit in front of the hand, keeping the upper rows clear of cards and name captions.
+		$x = max($radius, min($this->width() - $radius * 4.6, $x));
+		return [$x + intdiv($slot, 2) * $radius * 1.8, $y + ($slot % 2) * $radius * 1.8 - $index * $radius * .22, $radius];
 	}
 
 	/**

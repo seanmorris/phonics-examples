@@ -99,15 +99,20 @@ test('native saved draw continues through keyboard input, rejects stale actions 
 		}).toBe(true);
 		const s=await state(canvas);
 		if(s.turn===-1) break;
+		await expect.poll(async()=>(await state(canvas)).ui.locked).toBe(false);
 		const type=s.legalActions.call?'call':s.legalActions.check?'check':s.legalActions.pass?'pass':'fold';
 		await command(canvas,{type});
 		await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(s.revision);
 	}
 	await expect.poll(async()=>(await state(canvas)).phase).toBe('showdown');
 	const settled=await state(canvas);
+	expect(settled.ui.hint).toBe('');
+	await expect.poll(async()=>(await state(canvas)).ui.winnerFlash.visible).toBe(false);
+	await expect.poll(async()=>(await state(canvas)).ui.winnerFlash.visible).toBe(true);
 	expect(settled.awards.length).toBeGreaterThan(0);
 	expect(settled.players.reduce((sum,p)=>sum+p.stack-p.debt,settled.pot)).toBe(1000);
 	const saved=await page.evaluate(key=>localStorage.getItem(key),saveKey);
+	await expect.poll(async()=>(await state(canvas)).ui.winnerFlash.active).toBe(false);
 	await page.waitForTimeout(800);
 	const idle=await canvas.evaluate(element=>new Promise(resolve=>{
 		let updates=0;
@@ -287,9 +292,15 @@ test('Fold/Pass explains the opening round and a later bet leads to selectable d
 	expect((await state(canvas)).players[0].folded).toBe(false);
 	const deal=await point(canvas,(await regions(canvas)).actions.find(button=>button.id==='next').rect);
 	await page.mouse.click(deal.x,deal.y);
+	await expect.poll(async()=>(await state(canvas)).ui.animation?.kind).toBe('deal');
+	expect((await state(canvas)).ui.locked).toBe(true);
+	const dealingRevision=(await state(canvas)).revision;
+	await page.keyboard.press('d');
+	expect((await state(canvas)).revision).toBe(dealingRevision);
 	for(let i=0;i<12;i++)
 	{
 		await expect.poll(async()=>(await state(canvas)).turn).toBe(0);
+		await expect.poll(async()=>(await state(canvas)).ui.locked).toBe(false);
 		const s=await state(canvas);
 		if(s.legalActions.draw)break;
 		const actions=(await regions(canvas)).actions;
@@ -297,6 +308,7 @@ test('Fold/Pass explains the opening round and a later bet leads to selectable d
 		expect(button,'betting must finish before discarding').toBeTruthy();
 		const click=await point(canvas,button.rect);await page.mouse.click(click.x,click.y);
 		await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(s.revision);
+		await expect.poll(async()=>(await state(canvas)).ui.animation?.kind).toBe('chips');
 	}
 	await expect.poll(async()=>(await state(canvas)).legalActions.draw).toBe(true);
 	const before=await state(canvas);
@@ -306,6 +318,7 @@ test('Fold/Pass explains the opening round and a later bet leads to selectable d
 	const draw=await point(canvas,(await regions(canvas)).actions.find(button=>button.id==='draw').rect);
 	await page.mouse.click(draw.x,draw.y);
 	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
+	await expect.poll(async()=>(await state(canvas)).ui.animation?.kind).toBe('draw');
 });
 
 for(const viewport of [{width:390,height:844},{width:844,height:390}])

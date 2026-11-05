@@ -46,6 +46,11 @@ final class Presenter
 	private int $width = 1280;
 	private int $height = 720;
 	private float $dpr = 1.0;
+	private bool $receivedView = false;
+	private array $chips = [];
+	private ?Motion $motion = null;
+	private float $winnerElapsed = 4;
+	private bool $winnerVisible = true;
 
 	/**
 	 * @param string $root Absolute root directory of the Poker package.
@@ -66,6 +71,21 @@ final class Presenter
 	{
 		$previous = $this->view;
 		$this->view = $view;
+		if(($view['phase'] ?? '') === 'showdown' && ($previous['phase'] ?? '') !== 'showdown' && $this->receivedView)
+		{ $this->winnerElapsed = 0; $this->winnerVisible = true; }
+		elseif(($view['phase'] ?? '') !== 'showdown') { $this->winnerElapsed = 4; $this->winnerVisible = true; }
+		if(!$this->receivedView)
+		{
+			$this->chips = Chips::fromView($view);
+			$this->receivedView = true;
+		}
+		elseif(($view['revision'] ?? 0) !== ($previous['revision'] ?? 0) || ($view['generation'] ?? 0) !== ($previous['generation'] ?? 0))
+		{
+			$change = Chips::transition($previous, $view, $this->chips);
+			$this->chips = $change['after'];
+			$motion = new Motion($previous, $view, $change, $this->discards);
+			$this->motion = $motion->active() ? $motion : null;
+		}
 		$revision = (int)($view['revision'] ?? 0);
 		if($revision !== (int)($previous['revision'] ?? -1) || ($view['generation'] ?? 0) !== ($previous['generation'] ?? 0))
 		{
@@ -285,16 +305,40 @@ final class Presenter
 		$this->dirty = true;
 	}
 
-	/** Whether a game intent is outstanding for the current revision. */
+	/** Whether an intent is outstanding or a visible card/chip transfer has yet to finish. */
 	public function locked(): bool
 	{
-		return $this->lockedRevision !== null && $this->lockedRevision === (int)($this->view['revision'] ?? 0) && ($this->view['error'] ?? '') === '';
+		return $this->animating() || ($this->lockedRevision !== null && $this->lockedRevision === (int)($this->view['revision'] ?? 0) && ($this->view['error'] ?? '') === '');
+	}
+
+	/** A visible transition holds game input and bot turns until its chips/cards have arrived. */
+	public function animating(): bool { return $this->motion !== null && ($this->view['screen'] ?? '') === 'table'; }
+
+	/** Advance presentation time only while the table is visible. No redraw remains scheduled after completion. */
+	public function advance(float $seconds): void
+	{
+		if(($this->view['screen'] ?? '') !== 'table' || $seconds <= 0) return;
+		if($this->motion)
+		{
+			$this->motion->advance($seconds);
+			if(!$this->motion->active()) $this->motion = null;
+			$this->dirty = true;
+		}
+		if($this->winnerElapsed < 4)
+		{
+			$this->winnerElapsed = min(4, $this->winnerElapsed + $seconds);
+			$visible = $this->winnerElapsed >= 4 || (int)floor($this->winnerElapsed / .3) % 2 === 0;
+			if($visible !== $this->winnerVisible || $this->winnerElapsed === 4) $this->dirty = true;
+			$this->winnerVisible = $visible;
+		}
 	}
 
 	/** Explain the current step without inviting a draw while betting or waiting for another seat. */
 	private function guidance(): string
 	{
 		if(($this->view['screen'] ?? '') !== 'table') return '';
+		if(($this->view['phase'] ?? '') === 'showdown') return '';
+		if($this->motion) return match($this->motion->status()['kind']) { 'deal' => 'Dealing cards.', 'draw' => 'Discarding and drawing replacements.', default => 'Moving chips.' };
 		$phase = $this->view['phase'] ?? '';
 		$legal = $this->view['legalActions'] ?? [];
 		$human = $this->view['players'][0] ?? [];
@@ -309,7 +353,7 @@ final class Presenter
 	/**
 	 * Presentation state that layout and painting depend on.
 	 *
-	 * @return array{discards:list<int>,amount:int,mode:string,local:string,history:bool,locked:bool,hint:string,setup:array{players:int,variant:string},pointer:array{float,float}|null}
+	 * @return array<string,mixed> Selection, controls, chip inventories and the current presentation frame.
 	 */
 	public function state(): array
 	{
@@ -317,6 +361,8 @@ final class Presenter
 			'discards' => $this->discards, 'amount' => $this->amount, 'mode' => $this->mode, 'local' => $this->local
 			, 'history' => $this->historyOpen, 'locked' => $this->locked(), 'hint' => $this->guidance()
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant], 'pointer' => $this->pointer
+			, 'chips' => $this->chips, 'motion' => $this->motion?->frame($this->layout())
+			, 'winnerFlash' => ['active' => $this->winnerElapsed < 4, 'visible' => $this->winnerVisible]
 		];
 	}
 
@@ -328,7 +374,8 @@ final class Presenter
 	public function status(): array
 	{
 		$state = $this->state();
-		unset($state['pointer']);
+		unset($state['pointer'], $state['motion']);
+		$state['animation'] = $this->motion?->status();
 		$state['cardArt'] = $this->cardAtlas !== null;
 		$layout = $this->layout();
 		$state['profile'] = $layout->profile;

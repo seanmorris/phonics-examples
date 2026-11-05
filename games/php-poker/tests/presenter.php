@@ -151,10 +151,12 @@ $test('guidance distinguishes opening bets, another seat drawing, and the human 
 	$view['turn'] = 1;
 	$view['legalActions'] = [];
 	$presenter->update($view);
+	$presenter->advance(10);
 	$expect($presenter->state()['hint'] === 'Waiting for your turn to choose discards.', 'no invitation to select while another seat draws');
 	$view['turn'] = 0;
 	$view['legalActions'] = ['draw' => true];
 	$presenter->update($view);
+	$presenter->advance(10);
 	$expect($presenter->state()['hint'] === $view['message'], 'the actual draw invites card selection');
 });
 

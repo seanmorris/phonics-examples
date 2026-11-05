@@ -15,7 +15,7 @@
     "build:applications": "node scripts/build-applications.mjs",
     "build:site": "node scripts/build-site.mjs",
     "build": "npm run generate && npm run build:applications && npm run build:site",
-    "test:php": "php games/php-billiards/tests/run.php && php games/php-poker/tests/run.php && php games/php-poker/tests/presenter.php",
+    "test:php": "php games/php-billiards/tests/run.php && php games/php-poker/tests/run.php && php games/php-poker/tests/presenter.php && php games/php-poker/tests/motion.php",
     "test:node": "node --test tests/*.test.mjs",
     "test:manifest": "node scripts/validate-games.mjs",
     "test:browser": "playwright test",

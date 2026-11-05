@@ -79,8 +79,9 @@ final class Painter
 		$x = $left + 14 * $this->unit;
 		foreach(['GAME','POKER','DRAW POKER'] as $entry)
 		$x += $this->canvas->label($entry, $x, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face) + 22 * $this->unit;
-		$phase = match($this->view['phase'] ?? '') {
-			'betting' => 'OPENING BETS', 'draw' => 'DRAW', 'final-betting' => 'FINAL BETS',
+		$stage = $this->state['motion']['kind'] ?? '';
+		$phase = match(in_array($stage, ['deal','draw'], true) ? $stage : ($this->view['phase'] ?? '')) {
+			'deal' => 'DEALING', 'betting' => 'OPENING BETS', 'draw' => 'DRAW', 'final-betting' => 'FINAL BETS',
 			'showdown' => 'HAND OVER', 'redeal' => 'REDEAL', default => 'DRAW POKER'
 		};
 		$this->canvas->label($phase, $left + $width - 14 * $this->unit, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face, 'right');
@@ -100,6 +101,8 @@ final class Painter
 		{
 			$label = $this->plateText($player, $seat, $showdown);
 			if($label === '') continue;
+			$winner = in_array($seat, array_column($this->view['awards'] ?? [], 'seat'), true);
+			if($winner && !($this->state['winnerFlash']['visible'] ?? true)) $label = '';
 			$kind = $player['folded'] ? 'fold' : ($showdown && $player['handName'] ? 'hand' : 'info');
 			$this->plate($geometry[$seat]['plate'], $label, $kind, ($this->view['turn'] ?? -1) === $seat);
 		}
@@ -107,6 +110,7 @@ final class Painter
 		foreach($players as $seat => $player)
 		{
 			if($phase === 'ready') continue;
+			if(in_array($seat, $this->state['motion']['hiddenSeats'] ?? [], true)) continue;
 			if($seat === 0 && !empty($this->view['legalActions']['draw']) && !$this->state['locked']) continue;
 			$dim = $player['folded'] ? .55 : 1.0;
 			foreach($geometry[$seat]['cards'] as $index => $rect)
@@ -118,17 +122,16 @@ final class Painter
 		// Layer 3: chips in front of the fans.
 		foreach($players as $seat => $player)
 		{
-			[$x, $y] = $geometry[$seat]['chips'];
-			$this->stacks($x, $y, (int)$player['stack'], $this->layout->metric($seat === 0 ? 'handChipRadius' : 'chipRadius'));
+			$bank = ($this->state['motion']['banks'] ?? $this->state['chips'])[$seat] ?? [];
+			$this->chipStacks($seat, $bank);
 			[$tx, $ty] = $geometry[$seat]['caption'];
-			$this->text(($player['name'] ?? '') . '  ' . (int)$player['stack'], $tx, $ty, Theme::CAPTION, Theme::PLATE, $geometry[$seat]['outward'] > 0 ? 'left' : 'right');
+			$this->text(($player['name'] ?? '') . '  ' . Chips::value($bank), $tx, $ty, Theme::CAPTION, Theme::PLATE, $geometry[$seat]['outward'] > 0 ? 'left' : 'right');
 			if(!empty($player['bet']))
 			{
 				$outward = $geometry[$seat]['outward'];
 				[$px, $py, $pw] = $geometry[$seat]['plate'];
 				$bx = $outward > 0 ? $px + $pw + 24 : $px - 40;
-				$this->stack($bx, $y - 10, Theme::CHIP_RED, 2, min(6, max(1, intdiv((int)$player['bet'], 4))), $this->layout->metric('chipRadius') * .75);
-				$this->text((string)$player['bet'], $bx + 16, $y + 10, Theme::CAPTION, Theme::PLATE, 'center');
+				$this->text('Bet ' . $player['bet'], $bx + 16, $geometry[$seat]['chips'][1] + 10, Theme::CAPTION, Theme::PLATE, 'center');
 			}
 		}
 		// Layer 4: emblems, dealer button and turn marker.
@@ -147,6 +150,8 @@ final class Painter
 		$this->centre();
 		$this->messages();
 		if(!empty($this->view['legalActions']['draw']) && !$this->state['locked']) $this->discardDialog();
+		foreach($this->state['motion']['cards'] ?? [] as $card) $this->card($card['rect'], $card['id'], 1.0);
+		foreach($this->state['motion']['chips'] ?? [] as $chip) $this->chip($chip['position'], $chip['value']);
 		$this->actions();
 		if($this->state['history']) $this->historyDialog();
 		if($phase === 'ready') $this->welcomeDialog();
@@ -155,7 +160,11 @@ final class Painter
 	private function plateText(array $player, int $seat, bool $showdown): string
 	{
 		if($player['folded']) return 'Fold';
-		if($showdown) return $player['handName'] ? (string)$player['handName'] : ($seat === 0 ? 'Your hand' : '');
+		if($showdown)
+		{
+			if(in_array($seat, array_column($this->view['awards'] ?? [], 'seat'), true)) return $player['handName'] ?: 'Winner';
+			return $player['handName'] ? (string)$player['handName'] : ($seat === 0 ? 'Your hand' : '');
+		}
 		if($seat === 0) return ($this->view['turn'] ?? -1) === 0 ? 'Your turn' : ($player['lastAction'] ?: 'You');
 		if(($this->view['turn'] ?? -1) === $seat) return 'Thinking';
 		return (string)($player['lastAction'] ?: '');
@@ -165,14 +174,15 @@ final class Painter
 	{
 		if(($this->view['phase'] ?? 'ready') === 'ready') return;
 		$centre = $this->layout->centre();
-		$this->plate($centre['pot'], 'Total pot (' . (int)($this->view['pot'] ?? 0) . ')', 'info', false);
+		$pot = ($this->state['motion']['banks'] ?? $this->state['chips'])['pot'] ?? [];
+		$this->plate($centre['pot'], 'Total pot (' . Chips::value($pot) . ')', 'info', false);
 		$this->card($centre['deck'], null, 1.0);
-		$pot = (int)($this->view['pot'] ?? 0);
-		if($pot > 0)
+		if(($this->state['motion']['discardCount'] ?? $this->view['discardCount'] ?? 0) > 0)
 		{
-			[$x, $y] = $centre['chips'][0];
-			$this->stacks($x, $y, $pot, 15);
+			$this->card($centre['discard'], null, .8);
+			$this->text('Discards', $centre['discard'][0] + $centre['discard'][2] / 2, $centre['discard'][1] - 9, Theme::CAPTION, Theme::PLATE, 'center');
 		}
+		$this->chipStacks('pot', $pot);
 		$highest = 0;
 		foreach($this->view['players'] ?? [] as $player) $highest = max($highest, (int)($player['bet'] ?? 0));
 		$this->plate($centre['bet'], 'Current bet (' . $highest . ')', 'info', false);
@@ -381,32 +391,30 @@ final class Painter
 		return [$u, $v, $u + $cw / $this->atlas['width'], $v + $ch / $this->atlas['height']];
 	}
 
-	private function stacks(float $x, float $y, int $amount, float $radius): void
+	/** Render every physical chip, using the same indexed positions as the animation endpoints. */
+	private function chipStacks(int|string $owner, array $bank): void
 	{
-		$gray = min(7, max(1, (int)round($amount / 60)));
-		$red = min(7, max(1, (int)round($amount / 90)));
-		$blue = min(7, max(1, (int)round($amount / 120)));
-		$this->stack($x + $radius * 1.7, $y, Theme::CHIP_RED, 2, $red, $radius);
-		$this->stack($x, $y + $radius * 1.3, Theme::CHIP_GRAY, 0, $gray, $radius);
-		$this->stack($x + $radius * 3.4, $y + $radius * 1.3, Theme::CHIP_BLUE, 3, $blue, $radius);
+		ksort($bank);
+		foreach($bank as $value => $count) for($index = 0; $index < $count; $index++)
+		$this->chip($this->layout->chip($owner, count($this->view['players']), (int)$value, $index), (int)$value);
 	}
 
-	private function stack(float $x, float $y, array $color, int $suit, int $count, float $radius): void
+	private function chip(array $position, int $value): void
 	{
+		[$x, $y, $radius] = $position;
+		$color = match($value) {
+			1 => Theme::CHIP_GRAY, 5 => Theme::CHIP_RED, 25 => [.12,.58,.25,1], 100 => [.12,.12,.14,1],
+			500 => [.55,.25,.7,1], 1000 => [.9,.65,.1,1], default => Theme::CHIP_BLUE
+		};
 		[$dx, $dy] = $this->layout->point($x, $y);
 		$r = $radius * $this->unit;
 		$ry = $r * .42;
-		$lift = $r * .3;
-		for($k = 0; $k < $count; $k++)
-		{
-			$cy = $dy - $k * $lift;
-			$this->canvas->ellipse($dx, $cy + 2.2 * $this->unit, $r, $ry, [0,0,0,.45]);
-			$this->canvas->ellipse($dx, $cy, $r, $ry, $color, [0,0,0,.55], .8 * $this->unit);
-		}
-		$top = $dy - ($count - 1) * $lift;
-		$this->canvas->ellipse($dx, $top, $r * .62, $ry * .62, [0,0,0,0], [0,0,0,.35], .8 * $this->unit);
+		$this->canvas->ellipse($dx, $dy + 2.2 * $this->unit, $r, $ry, [0,0,0,.45]);
+		$this->canvas->ellipse($dx, $dy, $r, $ry, $color, [0,0,0,.55], .8 * $this->unit);
+		$this->canvas->ellipse($dx, $dy, $r * .8, $ry * .8, [0,0,0,0], [0,0,0,.35], .8 * $this->unit);
 		$ink = $color === Theme::CHIP_GRAY ? [.13,.13,.13,1] : Theme::CHIP_INK;
-		$this->canvas->label(self::SUITS[$suit], $dx, $top + .5 * $this->unit, $radius * .9, $ink, 'bold', 'center');
+		$label = $value >= 1000000 ? ($value / 1000000) . 'M' : ($value >= 1000 ? ($value / 1000) . 'K' : (string)$value);
+		$this->canvas->label($label, $dx, $dy, $radius * .6, $ink, 'bold', 'center', $r * 1.6);
 	}
 
 	private function emblem(float $x, float $y, int $seat, string $name, string $portrait): void

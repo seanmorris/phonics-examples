@@ -7,7 +7,7 @@ Status: reflects what is built (plan node #2279). Owner: Claude. The rules, cont
 
 The guide is MS-DOS Bicycle Poker (SWFTE, 1991–93). What we keep from it is the composition: the whole screen is
 felt; every seat is a white status plate that says what the player did, over a stepped fan of five cards, with
-three suit-stamped chip stacks in front; each player has a small object emblem; the pot and deck sit in the
+denomination stacks in front; each player has a small object emblem; the pot and deck sit in the
 centre between "Total pot" and "Current bet" plates; a menu bar runs along the top; dialogs are ruled boxes
 with the title set into the top rule. What we do not take is any asset: no Bicycle branding, characters, card
 faces or portraits are reproduced.
@@ -79,7 +79,27 @@ before input on a resized canvas.
 
 Input lock: the presenter sends at most one game intent per `revision`, stamped with the view's generation
 and revision, then dims the bar and ignores game input until a view with a new revision or a non-empty
-`error` arrives. Local controls (history, card selection, settings) keep working while locked.
+`error` arrives. Card and chip transfers also hold game input until arrival; bot delays begin afterward.
+Menu and history remain available. Resuming a saved game does not replay an already committed deal or draw.
+
+## Card and chip motion
+
+`Motion` consumes consecutive authorized views. Deals travel from the deck to seats in round-robin order;
+discards travel to the discard pile before replacements leave the deck. Positions interpolate linearly,
+without easing, fades, bounce or rotation. Card travel takes 0.22 seconds, staggered by 0.055 seconds. Chips
+travel for 0.25 seconds, staggered by 0.025 seconds. Resizing recomputes their endpoints from the same layout.
+Menu/background pauses hold presentation time. Movement stops drawing frames when it finishes.
+
+`Chips` maintains exact visual inventories, separate from rules and saves. White chips are 1, red 5, green 25,
+black 100, purple 500 and gold 1,000; larger denominations are supported for larger balances. Every visible
+chip is counted and marked with its value. New banks include small change, and an oversized chip can be
+exchanged before a payment. Payments, antes and awards remove chips from their actual stack positions and
+append them to the destination stacks. In-flight chips are counted in neither stack, so value is conserved
+throughout the movement. Empty banks show no chips. Reloading reconstructs denominations from exact balances.
+
+The winning hand is displayed beside its owner, without a duplicate announcement at the top. Only winners'
+hand labels blink, alternating every 0.3 seconds for four seconds, then remain visible. The flash does not
+block the next deal and schedules no further changes after it ends.
 
 ## Screens and dialogs
 
@@ -96,15 +116,15 @@ and revision, then dims the bar and ignores game input until a view with a new r
 ## Status and accessibility
 
 `Presenter::status()` returns `['ui' => …]` with the selected discards, raise amount, mode, local screen,
-history flag, lock, setup choices, phase guidance, normalized hit regions, whether the card atlas has arrived and the active profile; the browser
+history flag, lock, setup choices, phase guidance, normalized hit regions, exact chip inventories, animation
+timing, winner-flash status, whether the card atlas has arrived and the active profile; the browser
 publishes it merged with the view on `canvas.dataset.phpPoker`. `browser/game.mjs` also keeps a polite live
 region with the error, message and whose turn it is, and exposes `phpPokerDebug.command()` for tests.
 Keyboard covers play and menus; pointer and touch share one click path. Canceled gestures and drags do not click, repeated keydown events do not toggle a card twice, and the human hand has a private screen-reader description. Graphics restoration preserves the saved hand and replaces its accessible description cleanly.
 
 ## Not built
 
-Animation, audio, gamepad bindings, speech balloons and painted portraits were considered and dropped; the DOS
-game had none of them and the table reads clearly without them. They can return as separate work.
+Audio, gamepad bindings, speech balloons and painted portraits are not implemented.
 
 ## Open rules questions (tracked, not guessed)
 
