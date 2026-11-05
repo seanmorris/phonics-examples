@@ -350,21 +350,24 @@ $test('status exposes only presentation state', static function(callable $expect
 	$expect(!isset($status['ui']['pointer']) && isset($status['ui']['discards'], $status['ui']['mode'], $status['ui']['locked']), 'status carries discards, mode and lock, not the pointer');
 });
 
-$test('no opponent sits behind the action bar at any seat count', static function(callable $expect) use ($overlaps, $fixture): void {
+$test('no opponent sits behind the action column at any seat count', static function(callable $expect) use ($overlaps, $fixture): void {
 	$view = $fixture('facing-raise-5');
-	$bar = [790, 588, 474, 80];
-	foreach(Layout::fit(1280, 720)->actions($view, ['discards' => [], 'amount' => 8]) as $button)
-	$expect(Layout::hit([$button['rect'][0], $button['rect'][1]], $bar) && Layout::hit([$button['rect'][0] + $button['rect'][2], $button['rect'][1] + $button['rect'][3]], $bar), 'the action bar bounds hold every button');
 	foreach([2,3,4,5,6,7,8] as $seats)
-	for($seat = 1; $seat < $seats; $seat++)
 	{
-		$geometry = Layout::fit(1280, 720)->seat($seat, $seats);
-		$fan = $geometry['cards'][4];
-		$block = [$geometry['plate'][0], $geometry['plate'][1], $geometry['plate'][2], $fan[1] + $fan[3] + 40 - $geometry['plate'][1]];
-		$expect(!$overlaps($block, $bar), "seat $seat of $seats clears the action bar");
+		$layout = Layout::fit(1280, 720, 1, $seats);
+		$controls = array_column($layout->actions($view, ['discards' => [], 'amount' => 8]), 'rect');
+		$stepper = $layout->stepper($view);
+		foreach(['less','amount','more'] as $part) $controls[] = $stepper[$part];
+		for($seat = 1; $seat < $seats; $seat++)
+		{
+			$geometry = $layout->seat($seat, $seats);
+			$fan = $geometry['cards'][4];
+			$block = [$geometry['plate'][0], $geometry['plate'][1], $geometry['plate'][2], $fan[1] + $fan[3] + 40 - $geometry['plate'][1]];
+			foreach($controls as $control) $expect(!$overlaps($block, $control), "seat $seat of $seats clears the action column");
+		}
 	}
 	$expect(abs(Layout::fit(1280, 720)->seatAngle(1, 5) - (M_PI / 2 + 2 * M_PI / 5)) < 1e-9, 'five seats keep even spacing');
-	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the bar');
+	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the action column');
 });
 
 $test('the human indicator, YOU disc and centered bankroll stay with the hand at a full table', static function(callable $expect): void {
@@ -595,7 +598,9 @@ $test('taller wide tables anchor their top and bottom while expanding the oval',
 	$tall = Layout::fit(1280, 1223, 1, 2);
 	$extra = $tall->height() - $base->height();
 	$expect($tall->profile === 'wide' && $tall->height() === 1223, 'the wide field grows to the canvas aspect instead of letterboxing');
-	$expect(abs($tall->seat(1, 2)['plate'][1] - $base->seat(1, 2)['plate'][1]) < 1e-9, 'the top opponent remains anchored');
+	$baseTop = $base->seat(1, 2)['plate'][1] * $base->scale / $base->uiScale();
+	$tallTop = $tall->seat(1, 2)['plate'][1] * $tall->scale / $tall->uiScale();
+	$expect(abs($tallTop - $baseTop) < 1e-9, 'the top opponent remains anchored relative to vertically scaled chrome');
 	$baseHuman = $base->seat(0, 2)['cards'][0];
 	$tallHuman = $tall->seat(0, 2)['cards'][0];
 	$expect(abs(($base->height() - $baseHuman[1] - $baseHuman[3]) - ($tall->height() - $tallHuman[1] - $tallHuman[3])) < 1e-9, 'the human hand remains anchored to the bottom');
@@ -623,7 +628,9 @@ $test('taller wide tables anchor their top and bottom while expanding the oval',
 	{
 		$full = Layout::fit(1378, 1254, 1, $seats);
 		$portrait = Layout::fit(760, 1254, 1, $seats);
-		$expect(abs($full->metric('handCard')[1] * $full->scale - $portrait->metric('handCard')[1] * $portrait->scale) < 1e-9, "$seats-player cards retain their rendered height beside the vertical action bar");
+		$fullCard = $full->metric('handCard')[1] * $full->scale;
+		$portraitCard = $portrait->metric('handCard')[1] * $portrait->scale;
+		$expect($portraitCard <= $fullCard + 1e-9 && $portraitCard >= $fullCard * .95, "$seats-player cards retain their height unless the centre constrains them beside the action column");
 		$bank = $portrait->bankBounds(0, $seats, Chips::bank(500));
 		$expect($bank !== null && $bank[1] + $bank[3] <= $portrait->height() - 4 + 1e-9, "$seats-player chips tuck into the hand corner without clipping");
 	}
@@ -632,15 +639,24 @@ $test('taller wide tables anchor their top and bottom while expanding the oval',
 	$compact = Layout::fit(770, 700, 1, 2);
 	$expect($compact->metric('handCard')[1] * $compact->scale < $tall->metric('handCard')[1] * $tall->scale, 'actual centre and seat constraints can reduce the rendered size');
 	$view = $fixture('facing-raise-5');
-	foreach([[1378,1208,1],[1000,1208,1],[760,1208,1],[1536,1850,2]] as [$width,$height,$dpr])
+	$horizontalChrome = [];
+	foreach([[1920,1080,1],[1280,720,1],[1920,1208,1],[1378,1208,1],[1280,1208,1],[1000,1208,1],[760,1208,1],[1536,1850,2]] as [$width,$height,$dpr])
 	{
 		$layout = Layout::fit($width, $height, $dpr, 8);
 		$buttons = $layout->actions($view, ['discards' => [], 'amount' => 8]);
+		$verticalScale = max(1, $height / $dpr / 720);
 		$expect($layout->verticalActionBar(), "$width x $height uses the vertical action bar");
-		$expect(abs($layout->metric('emblemSize') * $layout->scale / $dpr - 32) < 1e-9, "$width x $height keeps 32 CSS pixel identity icons");
-		$expect(abs($layout->plateHeight() * $layout->scale / $dpr - Layout::PLATE_HEIGHT) < 1e-9, "$width x $height keeps full-height status plates");
-		$expect(abs($layout->menuHeight() * $layout->scale / $dpr - Layout::MENU_BAR) < 1e-9, "$width x $height keeps the full-height menu bar");
-		$expect(abs($layout->uiScale() / $dpr - 1) < 1e-9, "$width x $height renders type at CSS scale");
+		$expect(abs($layout->metric('emblemSize') * $layout->scale / $dpr - 32 * $verticalScale) < 1e-9, "$width x $height sizes identity icons from vertical room");
+		$expect(abs($layout->plateHeight() * $layout->scale / $dpr - Layout::PLATE_HEIGHT * $verticalScale) < 1e-9, "$width x $height sizes status plates from vertical room");
+		$expect(abs($layout->menuHeight() * $layout->scale / $dpr - Layout::MENU_BAR * $verticalScale) < 1e-9, "$width x $height sizes the menu bar from vertical room");
+		$expect(abs($layout->uiScale() / $dpr - $verticalScale) < 1e-9, "$width x $height sizes type from vertical room");
+		$expect(abs($buttons[0]['rect'][3] * $layout->scale / $dpr - max(48, 32 * $verticalScale)) < 1e-9, "$width x $height sizes buttons from vertical room");
+		if($height === 1208 && $dpr === 1) $horizontalChrome[] = [
+			$layout->metric('emblemSize') * $layout->scale,
+			$layout->plateHeight() * $layout->scale,
+			$layout->uiScale(),
+			$buttons[0]['rect'][3] * $layout->scale,
+		];
 		foreach($buttons as $index => $button)
 		{
 			$expect(abs($button['rect'][0] - $buttons[0]['rect'][0]) < 1e-9 && abs($button['rect'][2] - $buttons[0]['rect'][2]) < 1e-9, "{$button['id']} shares the action column at $width x $height");
@@ -662,7 +678,12 @@ $test('taller wide tables anchor their top and bottom while expanding the oval',
 			foreach($controls as $control) $expect(!$overlaps($block, $control), "seat $seat clears the vertical controls at $width x $height");
 		}
 	}
-	$expect(!Layout::fit(1280, 720, 1, 8)->verticalActionBar(), 'the canonical wide table retains its horizontal action row');
+	foreach(range(0, 3) as $metric)
+	{
+		$values = array_column($horizontalChrome, $metric);
+		$expect(max($values) - min($values) < 1e-9, "wide chrome metric $metric stays fixed through a purely horizontal resize");
+	}
+	$expect(Layout::fit(1280, 720, 1, 8)->verticalActionBar(), 'the canonical wide table uses the stable vertical action column');
 	$previous = INF;
 	foreach(range(2, 8) as $seats)
 	{

@@ -17,8 +17,8 @@ final class Layout
 {
 	public const MENU_BAR = 28;
 	public const PLATE_HEIGHT = 24;
-	/** Lowest angle below the right-hand horizontal a seat may take before its fan meets the action bar. */
-	public const ACTION_CLEARANCE = .42;
+	/** Lowest angle below the right-hand horizontal a seat may take before its fan meets the action column. */
+	public const ACTION_CLEARANCE = .04;
 	/** Width kept for the identity (emblem over name and stack) on the outer side of a column seat. */
 	public const IDENTITY = 40;
 	/** Width of the landscape control panel, including its margins. */
@@ -92,17 +92,20 @@ final class Layout
 			$design['actions'][1] += $extra;
 			$design['menuTop'] += $extra / 2;
 			$design['verticalShift'] = $extra / 2;
-			// A tall desktop still has room for the oval, but its horizontal action row would squeeze the hand.
-			// Stack that group at the right edge before choosing the phone composition.
-			$design['verticalActions'] = $aspect < 1.45;
+			// Wide tables use one stable right-side action column at every aspect ratio. Keeping this independent of
+			// horizontal size also lets the menu, status plates, emblems and type retain one height-derived scale.
+			$design['verticalActions'] = true;
 
 			// Sparse tables use one CSS size throughout the wide profile. Only actual geometry can reduce it: a
 			// candidate may not add overlap beyond the canonical composition. The hand grows leftward so its right
 			// edge remains fixed beside the action controls.
 			$room = min(1, $extra / 360);
 			$fieldScale = max(1e-6, min($width / $design['width'], $height / $design['height']));
-			$design['chromeScale'] = !empty($design['verticalActions']) ? $dpr / $fieldScale : 1;
-			$design['emblemSize'] *= $design['chromeScale'];
+			// Chrome follows available vertical room only. Horizontal resizing may move or resize table objects, but
+			// cannot make plates, emblems, controls or type jump between vertical sizes.
+			$verticalScale = max($dpr, $height / self::PROFILES['wide']['height']);
+			$design['chromeScale'] = $verticalScale / $fieldScale;
+			if(abs($design['chromeScale'] - 1) > 1e-9) $design['emblemSize'] *= $design['chromeScale'];
 			$preferredDensity = 1 + match($seats) { 2 => .48, 3 => .40, 4 => .32, default => 0 };
 			$growth = $seats <= 4
 				? $preferredDensity * $dpr / $fieldScale
@@ -229,15 +232,19 @@ final class Layout
 	public function metric(string $name): mixed { return match($name) { 'buttonHeight' => $this->controlSize(), 'actions' => $this->actionOrigin(), default => $this->design[$name] }; }
 
 	/** Minimum target in design units, measured against CSS pixels rather than the framebuffer. */
-	public function controlSize(): float { return max($this->design['buttonHeight'], 48 * $this->dpr / $this->scale); }
+	public function controlSize(): float
+	{
+		$height = $this->design['buttonHeight'] * ($this->verticalActionBar() ? ($this->design['chromeScale'] ?? 1) : 1);
+		return max($height, 48 * $this->dpr / $this->scale);
+	}
 
-	/** Canvas scale for type: desktop chrome remains at its CSS size while table positions keep using field scale. */
-	public function uiScale(): float { return $this->verticalActionBar() ? $this->dpr : $this->scale; }
+	/** Canvas scale for type: wide chrome follows vertical room while table positions keep using field scale. */
+	public function uiScale(): float { return $this->verticalActionBar() ? $this->scale * ($this->design['chromeScale'] ?? 1) : $this->scale; }
 
-	/** Status-plate height in design units, fixed in CSS pixels in the vertical desktop layout. */
+	/** Status-plate height in design units, independent of horizontal resizing in the wide layout. */
 	public function plateHeight(): float { return self::PLATE_HEIGHT * ($this->design['chromeScale'] ?? 1); }
 
-	/** Menu-bar height in design units, fixed in CSS pixels in the vertical desktop layout. */
+	/** Menu-bar height in design units, independent of horizontal resizing in the wide layout. */
 	public function menuHeight(): float { return self::MENU_BAR * ($this->design['chromeScale'] ?? 1); }
 
 	/** A keycap and its label lane both fit at this rendered button width. */
@@ -374,7 +381,7 @@ final class Layout
 		if($human) $cx += $d['handShift'] ?? 0;
 		// Heads-up sits exactly on the top axis, where cosine rounding used to pick the left treatment. Keep the
 		// hand centred but mirror its identity, bank and denomination rows like every opponent on the right side.
-		$outward = $seats === 2 && !$human ? 1 : ($ux > .3 ? 1 : -1);
+		$outward = $seats === 2 && !$human ? 1 : ($ux > .25 ? 1 : -1);
 		[$cardWidth,$cardHeight] = $human ? $d['handCard'] : $d['card'];
 		$step = $human ? $d['handStep'] : $d['cardStep'];
 		$plateWidth = $cardWidth + 4 * $step;
@@ -395,7 +402,7 @@ final class Layout
 		if(!$human && $seats >= 7)
 		{
 			$firstRight = 1;
-			while($firstRight < $seats && cos($this->seatAngle($firstRight, $seats)) <= .3) $firstRight++;
+			while($firstRight < $seats && cos($this->seatAngle($firstRight, $seats)) <= .25) $firstRight++;
 			if($firstRight < $seats)
 			{
 				$leftAngle = $this->seatAngle($firstRight - 1, $seats);
