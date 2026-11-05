@@ -540,11 +540,12 @@ final class Layout
 		$height = $this->controlSize();
 		if($this->design['actionRows'])
 		{
-			// Second row across the bottom: label at the left, then minus, amount and plus toward the right edge.
+			// Second row across the bottom, packed against the right edge: the label reads straight into minus, amount and plus.
 			$row = $y + $height + 10;
 			$size = $height;
-			$right = $this->design['width'] - $x;
-			return ['less' => [$right - $size * 2 - 100, $row, $size, $size], 'amount' => [$right - $size - 90, $row, 80, $size], 'more' => [$right - $size, $row, $size, $size], 'label' => [$x, $row + $size / 2], 'align' => 'left'];
+			$right = $this->width() - $x;
+			$less = $right - $size * 2 - 100;
+			return ['less' => [$less, $row, $size, $size], 'amount' => [$right - $size - 90, $row, 80, $size], 'more' => [$right - $size, $row, $size, $size], 'label' => [$less - 10, $row + $size / 2], 'align' => 'right'];
 		}
 		$row = $y + $height + 10;
 		return ['less' => [$x + 80, $row, $height, $height], 'amount' => [$x + 90 + $height, $row, 60, $height], 'more' => [$x + 160 + $height, $row, $height, $height], 'label' => [$x + 70, $row + $height / 2], 'align' => 'right'];

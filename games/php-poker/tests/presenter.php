@@ -275,7 +275,9 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 	foreach($buttons as $button) $expect($button['rect'][3] * $layout->scale >= 38, "{$button['id']} is at least 38 device pixels tall on a phone");
 	$stepper = $layout->stepper($view);
 	$expect($stepper !== null && $stepper['more'][0] + $stepper['more'][2] <= $layout->width() - 15, 'the stepper row fits the field width');
-	$dialog = $layout->discardDialog([1,2,3,4,5], [2,4]);
+	$expect($stepper['align'] === 'right' && $stepper['less'][0] - $stepper['label'][0] <= 12 && $stepper['label'][0] < $stepper['less'][0], 'the stepper label reads straight into the minus button');
+	$expect(abs($stepper['label'][1] - ($stepper['less'][1] + $stepper['less'][3] / 2)) < .01, 'the stepper label is centred on its row');
+	$dialog =$layout->discardDialog([1,2,3,4,5], [2,4]);
 	$expect($dialog['box'][1] >= Layout::MENU_BAR && $dialog['box'][1] + $dialog['box'][3] <= $layout->height(), 'the discard dialog stays on the field');
 	foreach($dialog['cards'] as $card) $expect($card[1] >= $dialog['box'][1] + 22, 'a lifted card stays below the dialog title');
 	[$rowX, $rowY, $rowWidth, $rowHeight] = $dialog['buttons'];
@@ -382,7 +384,7 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 		// The field takes the canvas's free axis instead of being letterboxed.
 		$expect(abs($layout->width() * $layout->scale - $width) < 1.5 || abs($layout->height() * $layout->scale - $height) < 1.5, "the field touches two canvas edges at $width x $height");
 		$expect($layout->width() * $layout->scale > $width * .93 && $layout->height() * $layout->scale > $height * .8, "the field fills most of the canvas at $width x $height");
-		foreach([2,3,5,8] as $seats)
+		foreach([2,3,4,5,6,7,8] as $seats)
 		{
 			$size = $layout->metric('emblemSize');
 			$blocks = [];
@@ -403,6 +405,9 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 			$cluster[2] = max($centre['pot'][0] + $centre['pot'][2], $centre['discard'][0] + $centre['discard'][2], $centre['pile'][0] + $centre['pile'][2] + $chip) - $cluster[0];
 			$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 40 - $cluster[1];
 			foreach($blocks as $seat => $block) $expect(!$overlaps($block, $cluster), "the pot cluster clears seat $seat at $seats seats, $width x $height");
+			// Each of the pot's plates on its own, against each seat's plate, at every table size.
+			foreach(['pot','bet'] as $name) for($seat = 1; $seat < $seats; $seat++)
+			$expect(!$overlaps($centre[$name], $layout->seat($seat, $seats)['plate']), "the $name plate clears seat $seat's plate at $seats seats, $width x $height");
 			$view = $fixture('facing-raise-5');
 			foreach($layout->actions($view, ['discards' => [], 'amount' => 8]) as $button) foreach($blocks as $seat => $block)
 			$expect(!$overlaps($block, $button['rect']), "{$button['id']} clears seat $seat at $seats seats, $width x $height");
