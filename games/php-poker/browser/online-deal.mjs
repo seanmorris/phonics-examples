@@ -129,7 +129,8 @@ export class OnlineDeal
 		if(this.currentActor()!==this.localPlayer||this.state.stage==='ready')return null;
 		if(this.state.stage==='shuffle')
 		{
-			const plan=this.makeShufflePlan(),index=this.state.pending?1+this.state.pending.records.length:0;
+			const plan=this.makeShufflePlan(),index=this.state.pending
+				?this.state.pending.records.filter(record=>record.type==='shuffle-proof-commitments').length:0;
 			const action=plan.actions[index];
 			if(!action)throw new Error('Stored shuffle proof is incomplete');
 			return clone(action);

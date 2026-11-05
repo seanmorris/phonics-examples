@@ -8,7 +8,7 @@ const storage=()=>{
 	return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
 };
 
-test('the default shuffle proof fits four bounded room actions',()=>{
+test('the default shuffle proof fits four bounded room actions and advances packet by packet',async()=>{
 	const deal=new OnlineDeal({
 		api:mentalPoker,root:'$packets',sessionId:'packet-session',players:['alice','bob']
 		,localPlayer:'alice',breaker:'alice',storage:storage()
@@ -24,6 +24,10 @@ test('the default shuffle proof fits four bounded room actions',()=>{
 		assert.equal(action.records.some(record=>record.type==='deck-shuffle'),index===0);
 		assert.equal(action.records.some(record=>record.type==='shuffle-proof-tail'),index===actions.length-1);
 	}
+	const first=deal.nextAction(),preHash=await deal.hash();
+	assert.deepEqual(first,actions[0]);
+	await deal.apply({sequence:1,actor:'alice',pre_hash:preHash,action:first});
+	assert.deepEqual(deal.nextAction(),actions[1]);
 });
 
 test('two peers jointly shuffle and privately deal five unique cards apiece',async()=>{
