@@ -134,22 +134,21 @@ final class Painter
 				$bx = $outward > 0 ? $px + $pw + 24 : $px - 40;
 				if($seat === 0)
 				{
-					// Leave a lane between the human bank and hand; never anchor the bet on a denomination.
-					$bx = $geometry[$seat]['chips'][0];
+					// Right-align beside the bank's left edge, leaving the denomination labels unobstructed.
+					[$x,, $radius] = $this->layout->chip($seat, $seats, 1, 0);
+					$bx = $x - $radius;
 					foreach($bank as $value => $count) if($count > 0)
 					{
 						[$x,, $radius] = $this->layout->chip($seat, $seats, (int)$value, 0);
-						$bx = max($bx, $x + $radius);
+						$bx = min($bx, $x - $radius);
 					}
 					$label = 'Bet ' . $player['bet'];
 					$size = (float)Theme::CAPTION;
-					if($this->layout->profile !== 'landscape')
-					{
-						$space = $geometry[$seat]['cards'][0][0] - $bx - 12;
-						$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->unit;
-						$size *= min(1, $space / $width);
-					}
-					$this->text($label, $bx + 10, $geometry[$seat]['chips'][1] + 10, $size, Theme::PLATE);
+					$hand = $geometry[$seat]['cards'][4];
+					$left = $this->layout->profile === 'landscape' ? $hand[0] + $hand[2] + 6 : 8;
+					$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->unit;
+					$size *= min(1, ($bx - 10 - $left) / $width);
+					$this->text($label, $bx - 10, $geometry[$seat]['chips'][1] + 10, $size, Theme::PLATE, 'right');
 				}
 				else $this->text('Bet ' . $player['bet'], $bx + 16, $geometry[$seat]['chips'][1] + 10, Theme::CAPTION, Theme::PLATE, 'center');
 			}
