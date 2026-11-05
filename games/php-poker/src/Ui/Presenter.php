@@ -105,6 +105,10 @@ final class Presenter
 			$this->lockedRevision = null;
 			$this->amount = (int)($view['legalActions']['minBet'] ?? 0);
 		}
+		// An online action is first shown with its controls suppressed, then confirmed at the same revision. Clamp
+		// when betting becomes visible as well as when the revision changes, so its spinbox never exposes stale zero.
+		if(!empty($view['legalActions']['bet']))
+		$this->amount = max((int)$view['legalActions']['minBet'], min((int)$view['legalActions']['maxBet'], $this->amount));
 		// A rejected action's message belongs to the revision it was rejected on: once the table has moved on, drop it.
 		$error = (string)($view['error'] ?? '');
 		if($error === '') $this->errorRevision = null;

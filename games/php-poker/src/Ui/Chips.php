@@ -159,9 +159,14 @@ final class Chips
 			|| ($previous['mode'] ?? null) !== ($next['mode'] ?? null)
 			|| count($previousPlayers) !== count($nextPlayers) || !$banks || $missingBank;
 		$newHand = $newTable || ($previous['handNumber'] ?? 0) !== ($next['handNumber'] ?? 0);
-		$payments = [];
+		$payments = $refunds = [];
 		foreach($next['players'] ?? [] as $seat => $player)
-		$payments[$seat] = max(0, (int)$player['totalBet'] - ($newHand ? 0 : (int)($previous['players'][$seat]['totalBet'] ?? 0)));
+		{
+			$before = $newHand ? 0 : (int)($previous['players'][$seat]['totalBet'] ?? 0);
+			$after = (int)$player['totalBet'];
+			$payments[$seat] = max(0, $after - $before);
+			$refunds[$seat] = $newHand ? 0 : max(0, $before - $after);
+		}
 		if($newTable)
 		{
 			$banks = self::fromView($next);
@@ -178,6 +183,14 @@ final class Chips
 		foreach($payments as $seat => $amount) if($amount)
 		{
 			$stage = self::transfer($banks, $seat, 'pot', $amount);
+			$stages[] = $stage;
+			$banks = $stage['after'];
+		}
+		// Heads-up online play returns the unmatched part of an all-in raise. It is public money movement just
+		// like a payment, and must leave the visible pot as well as the authorized rules state.
+		foreach($refunds as $seat => $amount) if($amount)
+		{
+			$stage = self::transfer($banks, 'pot', $seat, $amount);
 			$stages[] = $stage;
 			$banks = $stage['after'];
 		}

@@ -74,6 +74,26 @@ $test('the action bar holds exactly the legal actions', static function(callable
 	$expect($bet['intent']['amount'] === $fixture('facing-raise-5')['legalActions']['maxBet'], 'the raise-to amount is clamped to maxBet');
 });
 
+$test('the raise spinbox initializes when online controls appear at an unchanged revision', static function(callable $expect) use ($fixture, $root): void {
+	$presenter = new Presenter($root);
+	$view = $fixture('facing-raise-5');
+	$view['revision'] = $view['generation'] = 0;
+	$presenter->update($view);
+	$expect($presenter->state()['amount'] === $view['legalActions']['minBet'], 'an initial betting view shows its legal minimum instead of zero');
+
+	$pending = $view;
+	$pending['revision']++;
+	$pending['legalActions'] = [];
+	$presenter->update($pending);
+	$expect($presenter->state()['amount'] === 0, 'the provisional online revision has no raise amount');
+	$confirmed = $pending;
+	$confirmed['legalActions'] = $view['legalActions'];
+	$presenter->update($confirmed);
+	$expect($presenter->state()['amount'] === $view['legalActions']['minBet'], 'confirmation restores the legal minimum even at the same revision');
+	$bet = array_values(array_filter($presenter->layout()->actions($confirmed, $presenter->state()), static fn(array $button): bool => $button['id'] === 'bet'))[0];
+	$expect($bet['intent']['amount'] === $view['legalActions']['minBet'], 'the displayed minimum is also the submitted raise-to amount');
+});
+
 $test('a game intent carries generation and revision and locks the bar until the view moves on', static function(callable $expect) use ($fixture, $root): void {
 	$presenter = new Presenter($root);
 	$view = $fixture('facing-raise-5');

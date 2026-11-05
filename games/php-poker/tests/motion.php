@@ -85,10 +85,13 @@ foreach([.1,.25,.5,.75,.9] as $progress)
 
 $before = json_decode(file_get_contents(__DIR__ . '/fixtures/views/facing-raise-5.json'), true, flags: JSON_THROW_ON_ERROR);
 $after = $before;
-$after['players'][0]['stack'] -= 2;
-$after['players'][0]['totalBet'] += 2;
-$after['pot'] += 2;
+$after['players'][0]['stack'] -= 5;
+$after['players'][0]['bet'] = 5;
+$after['players'][0]['totalBet'] += 5;
+$after['pot'] += 5;
 $change = Chips::transition($before, $after, Chips::fromView($before));
+$expect(array_sum(array_column($change['stages'][0]['moves'], 'value')) === 5,
+	'a raise to five from zero puts the call and raise, not only the two-chip raise increment, into the pot');
 foreach([[1280,720,1],[780,1688,2],[1688,780,2]] as [$w,$h,$dpr])
 {
 	$layout = Layout::fit($w,$h,$dpr);
@@ -102,12 +105,33 @@ foreach([[1280,720,1],[780,1688,2],[1688,780,2]] as [$w,$h,$dpr])
 	$motion->advance(Motion::CHIP_TRAVEL / 2);
 	$middle = $motion->frame($layout);
 	$expect($middle['chips'][0]['position'] === Motion::slide($source,$destination,.5), 'half the travel time covers exactly half the path');
-	$expect($middle['totals'][0] === $before['players'][0]['stack'] - 1, 'the fixed bankroll numerals count through an intermediate whole value');
+	$expect($middle['totals'][0] === 497, 'the fixed bankroll numerals count through the five-chip raise at an intermediate whole value');
 	$motion->advance(10);
 	$frame = $motion->frame($layout);
 	$expect($frame['chips'] === [] && $frame['banks'] === $change['after'], 'arriving chips become the destination inventory without a duplicate sprite');
 	$expect($frame['totals'][0] === $after['players'][0]['stack'], 'the bankroll count lands on the authorized total');
 }
+
+// A short online call returns the unmatched part of the raise. Both directions must animate and reconcile to
+// the authorized balances, even though payment and refund arrive in the same confirmed view.
+$refundBefore = [
+	'handNumber'=>1,'generation'=>1,'mode'=>'online','phase'=>'betting','pot'=>21,'players'=>[
+		['stack'=>480,'debt'=>0,'totalBet'=>20],['stack'=>500,'debt'=>0,'totalBet'=>0]
+	]
+];
+$refundAfter = $refundBefore;
+$refundAfter['phase'] = 'draw';
+$refundAfter['pot'] = 11;
+$refundAfter['players'][0]['stack'] = 495;
+$refundAfter['players'][0]['totalBet'] = 5;
+$refundAfter['players'][1]['stack'] = 495;
+$refundAfter['players'][1]['totalBet'] = 5;
+$refund = Chips::transition($refundBefore, $refundAfter, Chips::fromView($refundBefore));
+$expect(count($refund['stages']) === 2, 'a short call animates its payment and the unmatched raise refund');
+$expect(array_sum(array_column($refund['stages'][0]['moves'], 'value')) === 5
+	&& array_sum(array_column($refund['stages'][1]['moves'], 'value')) === 15, 'the payment and refund move their exact values');
+$expect(Chips::value($refund['after']['pot']) === 11 && Chips::value($refund['after'][0]) === 495
+	&& Chips::value($refund['after'][1]) === 495, 'the visual pot and both stacks reconcile after the refund');
 
 // Exercise both sides of every overlapping departure/arrival, including exchanges during a pot award.
 $award = Chips::transfer(['pot' => [1 => 500], 0 => [1 => 20]], 'pot', 0, 500);
