@@ -301,6 +301,11 @@ final class Painter
 		foreach($this->layout->menu(!empty($this->view['canContinue'])) as $index => $item)
 		$this->button($item['rect'], $item['label'], '', $index === 0 ? 'primary' : 'default', false);
 		$this->text('Enter plays · C continues · H help · M settings', $this->layout->width() / 2, $this->layout->height() - ($this->layout->profile === 'landscape' ? 18 : 100), Theme::CAPTION, Theme::PLATE, 'center');
+		// The emblems are Pxlkit icons, whose licence asks for a visible credit; it sits under the hints, or at the
+		// right edge where a short landscape leaves no room beneath them.
+		$landscape = $this->layout->profile === 'landscape';
+		$this->text('Icons by Pxlkit · pxlkit.xyz', $landscape ? $this->layout->width() - 16 : $this->layout->width() / 2
+			, $this->layout->height() - ($landscape ? 18 : 72), Theme::CAPTION, Theme::alpha(Theme::PLATE, .8), $landscape ? 'right' : 'center');
 	}
 
 	private function setupDialog(): void
