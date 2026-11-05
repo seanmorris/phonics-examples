@@ -66,6 +66,8 @@ $test('the action bar holds exactly the legal actions', static function(callable
 	$expect($ids($waiting) === [], 'no buttons while another seat acts');
 	$waiting['phase'] = 'ready';
 	$expect($ids($waiting) === [], 'automatic online shuffle and deal offer no manual Deal action');
+	$waiting['legalActions'] = ['fold' => false, 'pass' => false, 'check' => false, 'call' => false, 'bet' => false];
+	$expect($ids($waiting) === [], 'an all-false online action schema offers no Fold before the initial deal');
 	$waiting['legalActions'] = ['next' => true];
 	$expect($ids($waiting) === ['deal'], 'a ready table offers Deal only when the reducer explicitly authorizes it');
 	$bet = Layout::fit(1280, 720)->actions($fixture('facing-raise-5'), ['discards' => [], 'amount' => 999])[2];

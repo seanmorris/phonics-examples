@@ -304,7 +304,7 @@ final class Painter
 		$box = [$this->layout->width() / 2 - $w / 2, 250, $w, 120];
 		$this->dialog($box, 'DRAW POKER');
 		$variant = ($this->view['profile']['variant'] ?? 'jackpots') === 'anything' ? 'Anything opens' : 'Jacks or better';
-		$this->text('Welcomes you to a game of', $this->layout->width() / 2, $box[1] + 50, Theme::LABEL, Theme::INK, 'center');
+		$this->text('Welcome to a game of', $this->layout->width() / 2, $box[1] + 50, Theme::LABEL, Theme::INK, 'center');
 		$this->text('5-CARD DRAW POKER  (' . strtolower($variant) . ')', $this->layout->width() / 2, $box[1] + 80, Theme::LABEL, Theme::INK, 'center');
 	}
 

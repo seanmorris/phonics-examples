@@ -484,7 +484,7 @@ final class Layout
 			$add('history', 1.1, 'History', 'H', 'default', null);
 			$add('next', $loan > 0 ? 1.9 : 1.2, $loan > 0 ? "Borrow $loan & deal" : 'Deal', '↵', 'primary', ['type' => 'next']);
 		}
-		elseif(array_key_exists('fold', $legal))
+		elseif(!empty($legal['fold']))
 		{
 			$add('fold', 1, 'Fold', 'F', 'danger', ['type' => 'fold']);
 			if(!empty($legal['pass'])) $add('pass', 1, 'Pass', 'C', 'default', ['type' => 'pass']);
