@@ -177,6 +177,55 @@ $test('the menu, setup and settings flow send only session intents the session k
 	$expect($presenter->input([['key' => 'escape']], null, 1 / 60) === [['type' => 'menu']], 'Escape leaves settings for the menu');
 });
 
+$test('controller focus navigates menus, setup, cards and table actions through shared SDL controls', static function(callable $expect) use ($fixture, $root): void {
+	$release = static fn(Presenter $presenter): array => $presenter->input([], null, 1 / 60, [], 'generic');
+	$press = static function(Presenter $presenter, string $button) use ($release): array {
+		$result = $presenter->input([], null, 1 / 60, [$button => 1], 'generic');
+		$release($presenter);
+		return $result;
+	};
+
+	$menu = new Presenter($root);
+	$menu->update($fixture('menu'));
+	$release($menu);
+	$expect(($menu->state()['controllerFocus']['id'] ?? null) === 'menu:offline', 'controller focus starts on Play Offline');
+	$press($menu, 'down');
+	$expect(($menu->state()['controllerFocus']['id'] ?? null) === 'menu:continue', 'Down moves to Continue Offline');
+	$expect($press($menu, 'confirm') === [['type' => 'resume']], 'A activates the focused saved-game entry');
+
+	$setup = new Presenter($root);
+	$view = $fixture('menu');
+	$view['canContinue'] = false;
+	$setup->update($view);
+	$release($setup);
+	$press($setup, 'confirm');
+	$expect($setup->state()['local'] === 'setup' && ($setup->state()['controllerFocus']['id'] ?? null) === 'setup:start', 'A opens setup and focuses Deal');
+	$press($setup, 'back');
+	$expect($setup->state()['local'] === 'menu', 'B backs out of table setup');
+
+	$draw = new Presenter($root);
+	$drawView = $fixture('draw-2');
+	$draw->update($drawView);
+	$release($draw);
+	$expect(($draw->state()['controllerFocus']['id'] ?? null) === 'card:0', 'a draw begins with the first card focused');
+	$press($draw, 'right');
+	$press($draw, 'confirm');
+	$expect($draw->state()['discards'] === [$drawView['players'][0]['cards'][1]], 'A toggles the focused discard card');
+	$press($draw, 'down');
+	$expect(($draw->state()['controllerFocus']['id'] ?? null) === 'action:clear', 'Down leaves the card row for its draw controls');
+	$press($draw, 'right');
+	$intent = $press($draw, 'confirm');
+	$expect(($intent[0]['type'] ?? null) === 'draw' && ($intent[0]['cards'] ?? []) === [$drawView['players'][0]['cards'][1]], 'A draws the selected cards from the focused Draw button');
+
+	$table = new Presenter($root);
+	$table->update($fixture('facing-raise-5'));
+	$release($table);
+	$before = $table->state()['amount'];
+	$press($table, 'pageDown');
+	$expect($table->state()['amount'] > $before, 'right shoulder increases the raise amount');
+	$expect($press($table, 'pause') === [['type' => 'menu']], 'Start opens the game menu from the table');
+});
+
 $test('every fixture paints in both modes at four canvas sizes without a GL context', static function(callable $expect) use ($fixture, $root): void {
 	foreach(['opening-8','facing-raise-5','draw-2','showdown-5','menu'] as $name)
 	foreach([Theme::CLASSIC, Theme::MODERN] as $mode)

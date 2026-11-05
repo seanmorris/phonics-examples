@@ -83,6 +83,12 @@ Raised cards keep their hit regions with their faces. The browser uses the prese
 for the hand cursor, including updates when a control changes beneath a stationary pointer. Geometry updates
 before input on a resized canvas.
 
+Standard controllers use the engine's shared SDL mapping in browser and native builds. The D-pad and left stick
+move a persistent gold focus frame spatially; A / Cross activates the focused card or control, B / Circle goes back, and Start
+opens or resumes the game menu. During a draw focus begins on the first card. The shoulder buttons decrease and
+increase the raise amount. Directional input repeats only after a deliberate hold, while actions fire once per
+press. Keyboard or pointer activity hides the controller focus and restores keyboard legends.
+
 Input lock: the presenter sends at most one game intent per `revision`, stamped with the view's generation
 and revision, then dims the bar and ignores game input until a view with a new revision or a non-empty
 `error` arrives. Card and chip transfers also hold game input until arrival; bot delays begin afterward.
@@ -118,6 +124,7 @@ block the next deal and schedules no further changes after it ends.
 
 - Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Online (coming soon; a notice
   until #2285), How to Play, Settings. Enter plays offline, C continues, H opens help, M opens settings, Escape returns.
+  On a controller, the D-pad or left stick moves, A selects, B returns, and Start resumes a saved table.
 - Table setup (local to the presenter): opponents 1–7, Jacks or better / Anything opens, Back, Deal. The
   Deal sends `start{players, variant}`.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY

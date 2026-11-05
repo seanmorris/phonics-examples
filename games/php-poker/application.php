@@ -34,9 +34,10 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 	$input=json_decode((string)(vrzno_env('pokerInput'))(),true,32,JSON_THROW_ON_ERROR);
 	$controls=is_array($input['controls']??null)?$input['controls']:[];
 	$pointer=is_array($input['pointer']??null)?$input['pointer']:null;
+	$ui=$engine->input->uiFrame();
 	$presenter->resize($width,$height,$dpr);
 	if(!($input['hidden']??false)) $presenter->advance($elapsed);
-	$intents=$presenter->input($controls,$pointer,$elapsed);
+	$intents=$presenter->input($controls,$pointer,$elapsed,$ui['buttons']??[],(string)($ui['theme']??'keyboard'));
 	$commands=vrzno_env('pokerCommands');
 	if($commands)
 	{

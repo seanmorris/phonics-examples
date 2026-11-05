@@ -76,7 +76,7 @@
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
     "NOTICE": "sha256-31dVvSKO/k6YG28ixOfm9dLGKXKEiAw/biq3LVzZobQ=",
-    "application.php": "sha256-9ozgArVnoBIAtR0AIfm+qrjK8Zi9YekAJJYqVRCGOaE=",
+    "application.php": "sha256-80L03TJ35uGwKtky9NcKmFOJ1LWCC7WtVGwOK0gWC5k=",
     "art/cards/back-blue.svg": "sha256-/kOyO4O+W/JzEE2pkzMCU9PL8dYHYNmKEM9/sBilYiU=",
     "art/cards/back-red.svg": "sha256-HX4CryU8ztM3thI0RY+9aMZk0UCsMVWvJJIf6so5czY=",
     "art/cards/deck.svg": "sha256-qWFttCwcqhboDxcn6WYmjicdRYw9WN/u5r1zYsvGBRc=",
@@ -103,7 +103,7 @@
     "assets/generated/ui-font.json": "sha256-oE2kugIUP9+RYNWPYwfwhWrNMh9b8AU7F5i3EZuSaQU=",
     "assets/generated/ui-font.rgba": "sha256-9OUHap/sOu16PGsQiGbzKyeU7FsfqfC45p7yYLIDBhg=",
     "autoload.php": "sha256-oR7TtuNrvbEy7h35CVKXA4Uew2UtBMR9XVlDQa1ZbBk=",
-    "browser/game.mjs": "sha256-+1Ha1MseJV4jR43wyCYy9cw5ckIjLFQy7I215vob3hk=",
+    "browser/game.mjs": "sha256-M/LI2yn4DckKFMZFjv6yLBr8wpCmc0gdevK1MQn3CV4=",
     "browser/persistence.mjs": "sha256-txa/BXXV8tJTJlbXkBNLVGzdtFlQ+2wGYpVtKX9hTfY=",
     "shaders/ui.frag": "sha256-Tc3yUPRiouakSGUmhLexNnR6Cdr6OLE56NiLTwGcppA=",
     "shaders/ui.vert": "sha256-v6qumyh53sxStBcAUf2YZPFyn122NilzAU9NrSUxdpQ=",
@@ -119,9 +119,9 @@
     "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
     "src/Session.php": "sha256-EgAQs+XJDn7NXqSftb4wPX9UPJssR/SIL/g0zeJPqOA=",
     "src/Ui/Chips.php": "sha256-xxVlL8GXv9QNcz7upK+rsj1gdt4Io+m+9sywNm4mbxs=",
-    "src/Ui/Layout.php": "sha256-wjkX77FzM2X3pa607TfwAop9UowJpRILGf+AD/GwcDc=",
+    "src/Ui/Layout.php": "sha256-RGP9i9lvPAUza4siCTOqUqiBXHHIwNC1QvVYmQ2nbL0=",
     "src/Ui/Motion.php": "sha256-zLxAzWqth8VaYNNXRvSiZ4cSSM7jLRAWu503j9Kay2s=",
-    "src/Ui/Painter.php": "sha256-RqmtnVqaCgA7dxnBknn7nxOOCpJpJTgKqhYmHoiivho=",
-    "src/Ui/Presenter.php": "sha256-QN+SpE1Fd8DAd9BtoYuoaSio8lg3qozcnZeUti0RPLU="
+    "src/Ui/Painter.php": "sha256-vH5vLhaV8VaZwGtBZv0l23OHy9mpwtFeFovwsmkadug=",
+    "src/Ui/Presenter.php": "sha256-BalhOlGhYwhwJb8zuaWwi+CFZR55G2c3v8v/hZ30B1E="
   }
 }

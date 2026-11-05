@@ -88,7 +88,7 @@ export function activate({module, canvas, session})
 	const originalDescription=canvas.getAttribute('aria-describedby');
 	canvas.style.cssText='display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;touch-action:none;outline:none;background:#1f8f45;cursor:default';
 	canvas.tabIndex=Math.max(0,canvas.tabIndex);
-	canvas.setAttribute('aria-label','PHP Poker. F folds, C checks or calls, B bets, 1 to 5 select cards and D draws. Escape opens the menu.');
+	canvas.setAttribute('aria-label','PHP Poker. F folds, C checks or calls, B bets, 1 to 5 select cards and D draws. Controller directional controls move focus, confirm selects, back returns, and Start opens the menu.');
 
 	let viewport='[1280,720,1]',latest=null,closed=false;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;

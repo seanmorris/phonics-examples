@@ -649,6 +649,15 @@ final class Layout
 		return ['box' => [$left, $top, $width, $height], 'back' => [$this->width() / 2 - 70, $top + $height - $control - 12, 140, $control]];
 	}
 
+	/** Compact round-history dialog and its explicit OK target. */
+	public function history(): array
+	{
+		$width = min(640, $this->width() - 24);
+		$control = $this->controlSize();
+		$box = [$this->width() / 2 - $width / 2, 50, $width, min($this->height() - 62, 260 + $control)];
+		return ['box' => $box, 'back' => [$box[0] + $box[2] / 2 - 70, $box[1] + $box[3] - $control - 12, 140, $control]];
+	}
+
 	/**
 	 * Whether a design-space point is inside a design-space rectangle.
 	 *

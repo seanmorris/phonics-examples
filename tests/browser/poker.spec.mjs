@@ -48,6 +48,31 @@ async function boot(page)
 const state=canvas=>canvas.evaluate(element=>JSON.parse(element.dataset.phpPoker));
 const command=(canvas,intent)=>canvas.evaluate((element,intent)=>element.phpPokerDebug.command(intent),intent);
 
+async function installGamepad(page)
+{
+	await page.addInitScript(()=>{
+		window.pokerPads=[];
+		const pad={id:'Standard Gamepad',index:0,connected:true,mapping:'standard',timestamp:performance.now(),axes:[0,0,0,0],
+			buttons:Array.from({length:17},()=>({pressed:false,touched:false,value:0}))};
+		pokerPads[0]=pad;
+		window.changePokerPad=({axes=[],buttons=[]}={})=>{
+			pad.axes=[0,0,0,0].map((_,index)=>axes[index]??0);
+			pad.buttons=pad.buttons.map((_,index)=>({pressed:buttons.includes(index),touched:buttons.includes(index),value:buttons.includes(index)?1:0}));
+			pad.timestamp=performance.now();
+		};
+		Object.defineProperty(navigator,'getGamepads',{value:()=>pokerPads});
+		dispatchEvent(Object.assign(new Event('gamepadconnected'),{gamepad:pad}));
+	});
+}
+
+async function padPulse(page,buttons)
+{
+	await page.evaluate(buttons=>changePokerPad({buttons}),buttons);
+	await page.waitForTimeout(80);
+	await page.evaluate(()=>changePokerPad());
+	await page.waitForTimeout(50);
+}
+
 test('native saved draw continues through keyboard input, rejects stale actions and settles idle',async({page})=>{
 	test.setTimeout(120_000);
 	const errors=[];
@@ -182,6 +207,36 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	await page.keyboard.press('Enter');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 	expect((await state(canvas)).players).toHaveLength(5);
+});
+
+test('controller navigates the menu, selects discards, draws, and toggles the game menu',async({page})=>{
+	test.setTimeout(120_000);
+	await installGamepad(page);
+	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
+	const canvas=await boot(page);
+	await canvas.focus();
+	await padPulse(page,[13]);
+	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('menu:continue');
+	await padPulse(page,[0]);
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('card:0');
+
+	await padPulse(page,[9]);
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
+	await padPulse(page,[9]);
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+
+	const before=await state(canvas);
+	await padPulse(page,[15]);
+	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('card:1');
+	await padPulse(page,[0]);
+	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([before.players[0].cards[1]]);
+	await padPulse(page,[13]);
+	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('action:clear');
+	await padPulse(page,[15]);
+	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('action:draw');
+	await padPulse(page,[0]);
+	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
 });
 
 test('graphics restoration retains the saved hand and one set of accessible controls',async({page})=>{

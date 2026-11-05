@@ -54,6 +54,12 @@ final class Presenter
 	private ?Motion $motion = null;
 	private float $winnerElapsed = 4;
 	private bool $winnerVisible = true;
+	/** Latest input family, used to expose controller focus and swap the on-canvas help. */
+	private string $inputTheme = 'keyboard';
+	/** Stable controller target ID. The rectangle is always resolved from current layout state. */
+	private ?string $controllerFocus = null;
+	/** Held controller actions and their next navigation repeat times. */
+	private array $controllerHeld = [], $controllerNext = [];
 
 	/**
 	 * @param string $root Absolute root directory of the Poker package.
@@ -114,11 +120,20 @@ final class Presenter
 	 * @param list<array{key:string}> $controls Key presses since the last frame, lowercase key names.
 	 * @param array{x:float,y:float,down:bool,clicks:list<array{x:float,y:float}>}|null $pointer Pointer state in device pixels.
 	 * @param float $elapsed Seconds since the last frame.
+	 * @param array<string,bool|float> $controller Shared SDL UI buttons: directions, confirm, back, pause and shoulders.
+	 * @param string $inputTheme `keyboard`, `generic`, `xbox`, or `playstation`.
 	 * @return list<array<string,mixed>> Intents for `Session::command()`, in order.
 	 */
-	public function input(array $controls, ?array $pointer, float $elapsed): array
+	public function input(array $controls, ?array $pointer, float $elapsed, array $controller = [], string $inputTheme = 'keyboard'): array
 	{
 		$intents = [];
+		if($inputTheme !== $this->inputTheme)
+		{
+			$this->inputTheme = $inputTheme;
+			$this->dirty = true;
+		}
+		if($inputTheme === 'keyboard') $controller = [];
+		array_push($intents, ...$this->controller($controller, $elapsed));
 		if($pointer && isset($pointer['x'], $pointer['y']))
 		{
 			$position = [(float)$pointer['x'], (float)$pointer['y']];
@@ -132,18 +147,84 @@ final class Presenter
 		return $intents;
 	}
 
+	/**
+	 * Turn shared SDL controller state into focus movement and activations.
+	 *
+	 * Directions repeat after a deliberate hold; activation, Back, Start and shoulders only fire on a new press.
+	 * @param array<string,bool|float> $buttons
+	 * @return list<array<string,mixed>>
+	 */
+	private function controller(array $buttons, float $elapsed): array
+	{
+		$elapsed = is_finite($elapsed) ? max(0, $elapsed) : 0;
+		$names = ['left','right','up','down','confirm','back','pause','pageUp','pageDown'];
+		$pulses = [];
+		foreach($names as $name)
+		{
+			$down = (float)($buttons[$name] ?? 0) >= .5;
+			if(!$down)
+			{
+				unset($this->controllerHeld[$name], $this->controllerNext[$name]);
+				$pulses[$name] = 0;
+				continue;
+			}
+			if(!isset($this->controllerHeld[$name]))
+			{
+				$this->controllerHeld[$name] = 0.0;
+				$this->controllerNext[$name] = .5;
+				$pulses[$name] = 1;
+				continue;
+			}
+			$this->controllerHeld[$name] += $elapsed;
+			$pulses[$name] = 0;
+			if(!in_array($name, ['left','right','up','down'], true)) continue;
+			while($this->controllerHeld[$name] + 1e-9 >= $this->controllerNext[$name])
+			{
+				$pulses[$name]++;
+				$this->controllerNext[$name] += $this->controllerNext[$name] < 1.5 - 1e-9 ? .25 : .05;
+			}
+		}
+
+		if($this->inputTheme === 'keyboard')
+		{
+			$this->controllerHeld = $this->controllerNext = [];
+			return [];
+		}
+
+		$targets = $this->controllerTargets();
+		$this->ensureControllerFocus($targets);
+		if($pulses['pause']) return $this->controllerPause();
+		if($pulses['back']) return $this->controllerBack();
+		if($pulses['pageUp']) { $this->step(-1); $this->dirty = true; }
+		if($pulses['pageDown']) { $this->step(1); $this->dirty = true; }
+		foreach(['left','right','up','down'] as $direction)
+		for($count = $pulses[$direction]; $count > 0; $count--) $this->moveControllerFocus($direction, $targets);
+		if($pulses['confirm'])
+		{
+			$this->ensureControllerFocus($targets);
+			foreach($targets as $target) if($target['id'] === $this->controllerFocus) return $this->activateTarget($target);
+		}
+		return [];
+	}
+
 	/** @return list<array<string,mixed>> */
 	private function click(float $x, float $y): array
 	{
 		$point = $this->layout()->design($x, $y);
 		$this->dirty = true;
 		foreach($this->clickTargets() as $target) if(Layout::hit($point, $target['rect']))
-		{
-			if(isset($target['key'])) return $this->key($target['key']);
-			if(isset($target['menu'])) return $this->activateMenu($target['menu']);
-			if(isset($target['card'])) { $this->toggleCard($target['card']); return []; }
-			return $this->activate($target['button']['id'], $target['button']['intent']);
-		}
+		return $this->activateTarget($target);
+		return [];
+	}
+
+	/** @return list<array<string,mixed>> */
+	private function activateTarget(array $target): array
+	{
+		$this->dirty = true;
+		if(isset($target['key'])) return $this->key($target['key']);
+		if(isset($target['menu'])) return $this->activateMenu($target['menu']);
+		if(isset($target['card'])) { $this->toggleCard($target['card']); return []; }
+		if(isset($target['button'])) return $this->activate($target['button']['id'], $target['button']['intent']);
 		return [];
 	}
 
@@ -152,7 +233,11 @@ final class Presenter
 	{
 		$layout = $this->layout();
 		$targets = [];
-		$addKey = static function(array $rect, string $key) use (&$targets): void { $targets[] = ['rect' => $rect, 'key' => $key]; };
+		$addKey = static function(array $rect, string $key, ?string $id = null) use (&$targets): void {
+			$target = ['rect' => $rect, 'key' => $key];
+			if($id !== null) $target['id'] = $id;
+			$targets[] = $target;
+		};
 		// These informational screens already dismiss on any click; controls take priority over dismissal.
 		$wholeCanvas = [-$layout->left / $layout->scale, -$layout->top / $layout->scale, $this->width / $layout->scale, $this->height / $layout->scale];
 		if(($this->view['screen'] ?? 'menu') === 'menu')
@@ -160,14 +245,15 @@ final class Presenter
 			if($this->local === 'setup')
 			{
 				$setup = $layout->setup($this->setupPlayers, $this->setupVariant);
-				if($this->setupPlayers > 2) $addKey($setup['less'], 'arrowleft');
-				if($this->setupPlayers < 8) $addKey($setup['more'], 'arrowright');
-				$addKey($setup['variant'], 'v');
-				$addKey($setup['back'], 'escape');
-				$addKey($setup['start'], 'enter');
+				if($this->setupPlayers > 2) $addKey($setup['less'], 'arrowleft', 'setup:less');
+				if($this->setupPlayers < 8) $addKey($setup['more'], 'arrowright', 'setup:more');
+				$addKey($setup['variant'], 'v', 'setup:variant');
+				$addKey($setup['back'], 'escape', 'setup:back');
+				$addKey($setup['start'], 'enter', 'setup:start');
 			}
 			elseif($this->local !== 'menu') $addKey($wholeCanvas, 'escape');
-			else foreach($layout->menu(!empty($this->view['canContinue'])) as $item) $targets[] = ['rect' => $item['rect'], 'menu' => $item];
+			else foreach($layout->menu(!empty($this->view['canContinue'])) as $item)
+			$targets[] = ['id' => 'menu:' . $item['id'], 'rect' => $item['rect'], 'menu' => $item];
 			return $targets;
 		}
 
@@ -176,35 +262,107 @@ final class Presenter
 			if(($this->view['screen'] ?? '') === 'settings')
 			{
 				$toggle = $layout->setup(0, '');
-				$addKey($toggle['pace'], 'p');
-				$addKey($toggle['variant'], 'm');
+				$addKey($toggle['pace'], 'p', 'settings:pace');
+				$addKey($toggle['variant'], 'm', 'settings:look');
+				$addKey($toggle['back'], 'escape', 'settings:back');
 			}
+			else $addKey($layout->information()['back'], 'escape', 'help:back');
 			$addKey($wholeCanvas, 'escape');
 			return $targets;
 		}
 
-		if($this->historyOpen) { $addKey($wholeCanvas, 'escape'); return $targets; }
+		if($this->historyOpen)
+		{
+			$addKey($layout->history()['back'], 'enter', 'history:back');
+			$addKey($wholeCanvas, 'escape');
+			return $targets;
+		}
 
 		if(!empty($this->view['legalActions']['draw']) && !$this->locked())
 		{
 			$cards = $this->view['players'][0]['cards'] ?? [];
 			$dialog = $layout->discardDialog($cards, $this->discards);
-			foreach($dialog['cards'] as $index => $rect) if(isset($cards[$index])) $targets[] = ['rect' => $rect, 'card' => $index];
+			foreach($dialog['cards'] as $index => $rect) if(isset($cards[$index]))
+			$targets[] = ['id' => 'card:' . $index, 'rect' => $rect, 'card' => $index];
 		}
 
 		if($stepper = $layout->stepper($this->view))
 		{
-			$addKey($stepper['less'], '-');
-			$addKey($stepper['more'], '+');
+			$addKey($stepper['less'], '-', 'step:less');
+			$addKey($stepper['more'], '+', 'step:more');
 		}
 
-		foreach($layout->actions($this->view, $this->state()) as $button) if(!$this->locked() || $button['intent'] === null)
-		$targets[] = ['rect' => $button['rect'], 'button' => $button];
+		foreach($layout->actions($this->view, $this->controlState()) as $button) if(!$this->locked() || $button['intent'] === null)
+		$targets[] = ['id' => 'action:' . $button['id'], 'rect' => $button['rect'], 'button' => $button];
 
 		// The menu bar's left entries open the menu; the right-hand title does nothing. The bar is drawn on the
 		// canvas's top-left corner, which lies outside the field when the field is centred.
 		$addKey([-$layout->left / $layout->scale, -$layout->top / $layout->scale, 260, Layout::MENU_BAR], 'escape');
 		return $targets;
+	}
+
+	/** Targets which can receive visible controller focus; broad click-to-dismiss regions are deliberately omitted. */
+	private function controllerTargets(): array
+	{
+		return array_values(array_filter($this->clickTargets(), static fn(array $target): bool => isset($target['id'])));
+	}
+
+	/** @param list<array<string,mixed>> $targets */
+	private function ensureControllerFocus(array $targets): void
+	{
+		foreach($targets as $target) if($target['id'] === $this->controllerFocus) return;
+		$preferences = !empty($this->view['legalActions']['draw']) ? ['card:0']
+			: ['action:call','action:check','action:pass','action:draw','action:next','action:deal','setup:start','settings:look'];
+		$next = null;
+		foreach($preferences as $id) foreach($targets as $target) if($target['id'] === $id) { $next = $id; break 2; }
+		$next ??= $targets[0]['id'] ?? null;
+		if($next !== $this->controllerFocus) { $this->controllerFocus = $next; $this->dirty = true; }
+	}
+
+	/** Move focus to the nearest target in one screen-space direction. */
+	private function moveControllerFocus(string $direction, array $targets): void
+	{
+		$this->ensureControllerFocus($targets);
+		$current = null;
+		foreach($targets as $target) if($target['id'] === $this->controllerFocus) { $current = $target; break; }
+		if($current === null) return;
+		[$x, $y, $w, $h] = $current['rect'];
+		$cx = $x + $w / 2; $cy = $y + $h / 2;
+		$best = null; $bestScore = INF;
+		foreach($targets as $target)
+		{
+			if($target['id'] === $this->controllerFocus) continue;
+			[$tx, $ty, $tw, $th] = $target['rect'];
+			$dx = $tx + $tw / 2 - $cx; $dy = $ty + $th / 2 - $cy;
+			[$primary, $cross] = match($direction) {
+				'left' => [-$dx, abs($dy)], 'right' => [$dx, abs($dy)], 'up' => [-$dy, abs($dx)], default => [$dy, abs($dx)]
+			};
+			// Raised discard cards differ slightly in Y. Require meaningful travel on the requested axis so Down
+			// reaches the action row instead of slipping sideways to an unraised neighbour.
+			if($primary <= max(1e-6, $cross * .25)) continue;
+			$score = $primary + 1.75 * $cross + hypot($dx, $dy) * .05;
+			if($score < $bestScore) { $bestScore = $score; $best = $target['id']; }
+		}
+		if($best !== null && $best !== $this->controllerFocus)
+		{ $this->controllerFocus = $best; $this->dirty = true; }
+	}
+
+	/** @return list<array<string,mixed>> */
+	private function controllerBack(): array
+	{
+		if($this->historyOpen) return $this->key('escape');
+		if(($this->view['screen'] ?? 'menu') === 'menu' && $this->local === 'menu') return [];
+		return $this->key('escape');
+	}
+
+	/** @return list<array<string,mixed>> */
+	private function controllerPause(): array
+	{
+		if(($this->view['screen'] ?? 'menu') === 'table') return $this->key('escape');
+		if(!empty($this->view['canContinue'])) return [['type' => 'resume']];
+		if(($this->view['screen'] ?? 'menu') !== 'menu') return [['type' => 'menu']];
+		if($this->local !== 'menu') { $this->local = 'menu'; $this->dirty = true; }
+		return [];
 	}
 
 	/** @return list<array<string,mixed>> */
@@ -260,7 +418,7 @@ final class Presenter
 
 		$legend = match($key) {'f' => 'F', 'c' => 'C', 'b' => 'B', 'd' => 'D', 'enter', ' ' => '↵', 'l' => 'L', default => null};
 		if($legend === null) return [];
-		foreach($this->layout()->actions($this->view, $this->state()) as $button) if($button['key'] === $legend)
+		foreach($this->layout()->actions($this->view, $this->controlState()) as $button) if($button['key'] === $legend)
 		return $this->activate($button['id'], $button['intent']);
 
 		return [];
@@ -359,6 +517,20 @@ final class Presenter
 		return (string)($this->view['message'] ?? '');
 	}
 
+	/** Minimal presentation state needed to derive action labels and intents without recursively resolving focus. */
+	private function controlState(): array { return ['discards' => $this->discards, 'amount' => $this->amount]; }
+
+	/** Current controller target with a live geometry rectangle, or null for keyboard/pointer input. */
+	private function focusedTarget(): ?array
+	{
+		if($this->inputTheme === 'keyboard') return null;
+		$targets = $this->controllerTargets();
+		$this->ensureControllerFocus($targets);
+		foreach($targets as $target) if($target['id'] === $this->controllerFocus)
+		return ['id' => $target['id'], 'rect' => $target['rect']];
+		return null;
+	}
+
 	/**
 	 * Presentation state that layout and painting depend on.
 	 *
@@ -372,6 +544,7 @@ final class Presenter
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant], 'pointer' => $this->pointer
 			, 'chips' => $this->chips, 'motion' => $this->motion?->frame($this->layout())
 			, 'winnerFlash' => ['active' => $this->winnerElapsed < 4, 'visible' => $this->winnerVisible]
+			, 'inputTheme' => $this->inputTheme, 'controllerFocus' => $this->focusedTarget()
 		];
 	}
 

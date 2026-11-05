@@ -48,11 +48,11 @@ final class Painter
 	{
 		$this->field($width, $height);
 		$screen = $this->view['screen'] ?? 'menu';
-		if($screen === 'menu') { $this->menuScreen(); return; }
-		if($screen === 'help') { $this->helpScreen(); return; }
-		if($screen === 'settings') { $this->settingsScreen(); return; }
-		$this->menuBar();
-		$this->table();
+		if($screen === 'menu') $this->menuScreen();
+		elseif($screen === 'help') $this->helpScreen();
+		elseif($screen === 'settings') $this->settingsScreen();
+		else { $this->menuBar(); $this->table(); }
+		$this->controllerFocus();
 	}
 
 	private function field(int $width, int $height): void
@@ -289,14 +289,13 @@ final class Painter
 
 	private function historyDialog(): void
 	{
-		$w = min(640, $this->layout->width() - 24);
-		$control = $this->layout->controlSize();
-		$box = [$this->layout->width() / 2 - $w / 2, 50, $w, min($this->layout->height() - 62, 260 + $control)];
+		$history = $this->layout->history();
+		$box = $history['box'];
 		$this->dialog($box, 'ROUND HISTORY');
 		$lines = array_slice($this->view['history'] ?? [], -8);
 		foreach($lines as $index => $line)
 		$this->text((string)$line, $box[0] + 24, $box[1] + 44 + $index * 22, Theme::BODY, Theme::INK, 'left', $box[2] - 48);
-		$this->button([$box[0] + $box[2] / 2 - 70, $box[1] + $box[3] - $control - 12, 140, $control], 'OK', '↵', 'primary', false);
+		$this->button($history['back'], 'OK', '↵', 'primary', false);
 	}
 
 	private function welcomeDialog(): void
@@ -321,13 +320,14 @@ final class Painter
 			$box = [$this->layout->width() / 2 - $w / 2, $this->layout->profile === 'landscape' ? 165 : 280, $w, 120];
 			$this->dialog($box, 'PLAY ONLINE');
 			$this->text('Private tables are coming in a later release.', $this->layout->width() / 2, $box[1] + 52, Theme::BODY, Theme::INK, 'center');
-			$this->text('Press Escape to go back.', $this->layout->width() / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
+			$this->text($this->controller() ? 'Press ' . $this->backLegend() . ' to go back.' : 'Press Escape to go back.', $this->layout->width() / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
 			return;
 		}
 		foreach($this->layout->menu(!empty($this->view['canContinue'])) as $index => $item)
 		$this->button($item['rect'], $item['label'], '', $index === 0 ? 'primary' : 'default', false);
 		$short = $this->layout->profile === 'landscape';
-		$this->text('Enter plays · C continues · H help · M settings', $short ? 16 : $this->layout->width() / 2, $this->layout->height() - ($short ? 18 : 100), Theme::CAPTION, Theme::PLATE, $short ? 'left' : 'center');
+		$hint = $this->controller() ? 'D-pad moves · ' . $this->confirmLegend() . ' selects · Start resumes' : 'Enter plays · C continues · H help · M settings';
+		$this->text($hint, $short ? 16 : $this->layout->width() / 2, $this->layout->height() - ($short ? 18 : 100), Theme::CAPTION, Theme::PLATE, $short ? 'left' : 'center');
 		// Keep the artists' short credit under the hints, or at the right edge where a short landscape has no room.
 		$landscape = $this->layout->profile === 'landscape';
 		$this->text('Icon art: Clint Bellanger · thekingphoenix · 7Soul', $landscape ? $this->layout->width() - 16 : $this->layout->width() / 2
@@ -363,8 +363,8 @@ final class Painter
 			'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
 			'Final betting starts with the opener. The best remaining hand wins the pot.',
 			'Best to worst: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
-			'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
-			'1 to 5 select cards, D draws, H shows history, Escape opens the menu.'
+			$this->controller() ? 'Controller: use the D-pad or left stick to move focus, then ' . $this->confirmLegend() . ' to select.' : 'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
+			$this->controller() ? $this->backLegend() . ' goes back, Start opens the menu, and the shoulder buttons change the bet.' : '1 to 5 select cards, D draws, H shows history, Escape opens the menu.'
 		];
 		$columns = $this->layout->profile === 'landscape' ? 2 : 1;
 		$columnWidth = ($box[2] - 48 - ($columns - 1) * 24) / $columns;
@@ -529,6 +529,7 @@ final class Painter
 			if($label === '+') $this->canvas->box($x + ($w - $stroke) / 2, $y + ($h - $length) / 2, $stroke, $length, 0, $ink);
 			return;
 		}
+		if($this->controller()) $key = $this->focused($rect) ? $this->confirmLegend() : '';
 		$key = $w >= 96 * $this->layout->dpr ? match($key) {'↵' => 'ENT', '⎋' => 'ESC', default => $key} : '';
 		$hintWidth = strlen($key) > 1 ? 28 : 18;
 		$shift = $key !== '' ? -$hintWidth * $this->unit / 2 : 0;
@@ -550,6 +551,30 @@ final class Painter
 				$this->canvas->label($key, $kx + $kw / 2, $ky + 9 * $this->unit, Theme::BODY, $style === 'primary' ? Theme::BRASS : Theme::PLATE, $this->face, 'center');
 			}
 		}
+	}
+
+	private function controller(): bool { return ($this->state['inputTheme'] ?? 'keyboard') !== 'keyboard'; }
+	private function confirmLegend(): string { return ($this->state['inputTheme'] ?? '') === 'playstation' ? 'X' : 'A'; }
+	private function backLegend(): string { return ($this->state['inputTheme'] ?? '') === 'playstation' ? 'O' : 'B'; }
+
+	/** Whether this design-space rectangle is the live controller focus target. */
+	private function focused(array $rect): bool
+	{
+		$focus = $this->state['controllerFocus']['rect'] ?? null;
+		if(!is_array($focus) || count($focus) !== 4) return false;
+		foreach($rect as $index => $value) if(abs((float)$value - (float)$focus[$index]) > 1e-6) return false;
+		return true;
+	}
+
+	/** Draw one clear focus frame after every screen so cards, steppers and buttons share the same navigation cue. */
+	private function controllerFocus(): void
+	{
+		$rect = $this->state['controllerFocus']['rect'] ?? null;
+		if(!$this->controller() || !is_array($rect) || count($rect) !== 4) return;
+		[$x, $y, $w, $h] = $this->layout->rect($rect[0] - 4, $rect[1] - 4, $rect[2] + 8, $rect[3] + 8);
+		$radius = Theme::radius($this->mode, 6 * $this->unit);
+		$this->canvas->box($x, $y, $w, $h, $radius, [0,0,0,0], [0,0,0,.72], 5 * $this->unit);
+		$this->canvas->box($x, $y, $w, $h, $radius, [0,0,0,0], Theme::BRASS, 3 * $this->unit);
 	}
 
 	/** @param array{float,float,float,float} $rect Design-space rectangle. */
