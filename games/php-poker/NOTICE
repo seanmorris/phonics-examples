@@ -16,3 +16,9 @@ Type: art/typography/fixedsys-excelsior.json (extracted outlines)
   Fixedsys Excelsior 3.02 by Darien Valentine, with ligature work by Kirill Pertsev (github.com/kika/fixedsys).
   Released to the public domain; CC0 where that is not permitted. See art/typography/fixedsys-excelsior-LICENSE.md.
   Used for the Classic look only.
+
+Player emblems: art/icons/*.svg
+  Pixel art icons by Pxlkit (https://pxlkit.xyz), rendered from the @pxlkit/gamification and @pxlkit/feedback
+  pack data at 4x and recoloured per player by scripts/import-pxlkit-icons.mjs. Pxlkit Asset License: free with the
+  visible credit "Icons by Pxlkit" and a link to https://pxlkit.xyz, which the game shows on its menu. See
+  art/icons/LICENSE-ASSETS and art/icons/roster.json for the icon each player uses.

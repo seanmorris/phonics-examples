@@ -1,99 +1,58 @@
 {
-  "license": "Apache-2.0",
-  "author": "Codex",
-  "source": "Original whole-pixel vector drawings, native 64x64 grid; one-pixel contour, dial ticks, rivets, seams and material highlights.",
-  "basePalette": {
-    "i": "#182127",
-    "s": "#2c3344",
-    "g": "#586277",
-    "c": "#fff0cf",
-    "w": "#ffffff",
-    "y": "#ffc75e",
-    "o": "#bf843d",
-    "r": "#e24b4b",
-    "d": "#8a2d48",
-    "b": "#5fb7e8",
-    "n": "#3267a0",
-    "t": "#65cfb4",
-    "v": "#287c75",
-    "p": "#b095db",
-    "a": "#7f5144",
-    "h": "#ffe0a0"
-  },
-  "materials": {
+  "source": "Pxlkit pixel art icons, https://pxlkit.xyz, rendered from @pxlkit pack data at 4x with per-player recolours",
+  "license": "Pxlkit Asset License (free with visible attribution: Icons by Pxlkit, https://pxlkit.xyz); see LICENSE-ASSETS",
+  "grid": 16,
+  "scale": 4,
+  "players": {
     "ada": {
-      "y": "#d8dde6",
-      "o": "#8a93a6",
-      "h": "#f2f5fa"
+      "icon": "@pxlkit/feedback/hourglass",
+      "object": "Hourglass",
+      "style": "Patient",
+      "recolour": {
+        "#DAA520": "#8a93a6",
+        "#F4D03F": "#d8dde6",
+        "#FFF8DC": "#f2f5fa",
+        "#B8860B": "#5f6778"
+      }
     },
-    "jules": {},
-    "mara": {},
+    "jules": {
+      "icon": "@pxlkit/gamification/dice",
+      "object": "Dice",
+      "style": "Bold",
+      "recolour": {}
+    },
+    "mara": {
+      "icon": "@pxlkit/gamification/quest-compass",
+      "object": "Compass",
+      "style": "Balanced",
+      "recolour": {}
+    },
     "otis": {
-      "y": "#a3663d",
-      "o": "#7f5144",
-      "h": "#c98c5a"
+      "icon": "@pxlkit/gamification/shield",
+      "object": "Shield",
+      "style": "Defensive",
+      "recolour": {}
     },
-    "cleo": {},
+    "cleo": {
+      "icon": "@pxlkit/gamification/fire",
+      "object": "Fire",
+      "style": "Aggressive",
+      "recolour": {}
+    },
     "felix": {
-      "y": "#d9895a",
-      "o": "#8f4d2b",
-      "h": "#f0b38a"
+      "icon": "@pxlkit/gamification/target",
+      "object": "Target",
+      "style": "Measured",
+      "recolour": {}
     },
     "nora": {
-      "y": "#b095db",
-      "o": "#6f55a8",
-      "h": "#d9c9f2"
-    }
-  },
-  "opponents": [
-    {
-      "key": "ada",
-      "name": "Ada",
-      "object": "Pocket watch",
-      "personality": "Patient and cautious; favors smaller raises.",
-      "file": "ada.svg"
-    },
-    {
-      "key": "jules",
-      "name": "Jules",
-      "object": "Rocket",
-      "personality": "Bold; applies more betting pressure.",
-      "file": "jules.svg"
-    },
-    {
-      "key": "mara",
-      "name": "Mara",
-      "object": "Compass",
-      "personality": "Balanced and steady.",
-      "file": "mara.svg"
-    },
-    {
-      "key": "otis",
-      "name": "Otis",
-      "object": "Umbrella",
-      "personality": "Defensive; favors smaller raises.",
-      "file": "otis.svg"
-    },
-    {
-      "key": "cleo",
-      "name": "Cleo",
-      "object": "Chili pepper",
-      "personality": "The most aggressive opponent.",
-      "file": "cleo.svg"
-    },
-    {
-      "key": "felix",
-      "name": "Felix",
-      "object": "Horseshoe",
-      "personality": "Measured, with a slightly cautious tendency.",
-      "file": "felix.svg"
-    },
-    {
-      "key": "nora",
-      "name": "Nora",
+      "icon": "@pxlkit/gamification/key",
       "object": "Key",
-      "personality": "Opportunistic; applies above-average pressure.",
-      "file": "nora.svg"
+      "style": "Opportunistic",
+      "recolour": {
+        "#FFD700": "#b095db",
+        "#B8860B": "#6f55a8"
+      }
     }
-  ]
+  }
 }
