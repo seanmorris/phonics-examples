@@ -18,7 +18,7 @@ void main() {
 	vec2 corners[6]=vec2[6](vec2(0,0),vec2(1,0),vec2(0,1),vec2(0,1),vec2(1,0),vec2(1,1));
 	vec2 corner=corners[gl_VertexID];
 	// Soft shadows bleed past their rectangle; grow the quad so the blur is not clipped.
-	float grow=aParams.z==1.?0.:aParams.w*2.+1.;
+	float grow=(aParams.z==1.||aParams.z==4.)?0.:aParams.w*2.+1.;
 	vec2 point=aRect.xy-grow+corner*(aRect.zw+grow*2.);
 	vHalf=aRect.zw*.5;
 	vLocal=point-(aRect.xy+vHalf);

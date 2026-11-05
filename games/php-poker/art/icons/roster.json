@@ -1,8 +1,8 @@
 {
   "license": "Apache-2.0",
   "author": "Codex",
-  "source": "Original whole-pixel vector drawings, 32x32 grid.",
-  "palette": {
+  "source": "Original whole-pixel vector drawings, native 64x64 grid; one-pixel contour, dial ticks, rivets, seams and material highlights.",
+  "basePalette": {
     "i": "#182127",
     "s": "#2c3344",
     "g": "#586277",
@@ -19,6 +19,31 @@
     "p": "#b095db",
     "a": "#7f5144",
     "h": "#ffe0a0"
+  },
+  "materials": {
+    "ada": {
+      "y": "#d8dde6",
+      "o": "#8a93a6",
+      "h": "#f2f5fa"
+    },
+    "jules": {},
+    "mara": {},
+    "otis": {
+      "y": "#a3663d",
+      "o": "#7f5144",
+      "h": "#c98c5a"
+    },
+    "cleo": {},
+    "felix": {
+      "y": "#d9895a",
+      "o": "#8f4d2b",
+      "h": "#f0b38a"
+    },
+    "nora": {
+      "y": "#b095db",
+      "o": "#6f55a8",
+      "h": "#d9c9f2"
+    }
   },
   "opponents": [
     {

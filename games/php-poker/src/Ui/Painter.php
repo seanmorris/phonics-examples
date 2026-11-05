@@ -141,9 +141,9 @@ final class Painter
 			}
 		}
 		$this->centre();
-		$this->actions();
 		$this->messages();
 		if(!empty($this->view['legalActions']['draw']) && !$this->state['locked']) $this->discardDialog();
+		$this->actions();
 		if($this->state['history']) $this->historyDialog();
 		if($phase === 'ready') $this->welcomeDialog();
 	}
@@ -220,7 +220,7 @@ final class Painter
 			$this->canvas->label((string)($index + 1), $nx, $ny, Theme::CAPTION, Theme::INK, $this->face, 'center');
 		}
 		[$x, $y, $w, $h] = $dialog['box'];
-		$this->text('Tap a card to keep or discard it. Nothing leaves your hand until you press Draw.', $x + 20, $y + $h - 20, Theme::CAPTION, Theme::INK, 'left', $w - 40);
+		$this->text('Select cards, then press Draw to replace them.', $x + 20, $y + $h - 20, Theme::CAPTION, Theme::INK, 'left', $w - 40);
 	}
 
 	private function historyDialog(): void
@@ -246,14 +246,14 @@ final class Painter
 
 	private function menuScreen(): void
 	{
-		$this->text('DRAW POKER', $this->layout->width() / 2, 170, (float)$this->layout->metric('display'), Theme::PLATE, 'center');
-		$this->text('Five-card draw · jacks or better · 2 to 8 seats', $this->layout->width() / 2, 215, Theme::LABEL, Theme::PLATE, 'center');
+		$this->text('DRAW POKER', $this->layout->width() / 2, $this->layout->profile === 'landscape' ? 65 : 170, (float)$this->layout->metric('display'), Theme::PLATE, 'center');
+		$this->text('Five-card draw · jacks or better · 2 to 8 seats', $this->layout->width() / 2, $this->layout->profile === 'landscape' ? 105 : 215, Theme::LABEL, Theme::PLATE, 'center');
 		$local = $this->state['local'];
 		if($local === 'setup') { $this->setupDialog(); return; }
 		if($local === 'online')
 		{
 			$w = min(440, $this->layout->width() - 24);
-			$box = [$this->layout->width() / 2 - $w / 2, 280, $w, 120];
+			$box = [$this->layout->width() / 2 - $w / 2, $this->layout->profile === 'landscape' ? 165 : 280, $w, 120];
 			$this->dialog($box, 'PLAY ONLINE');
 			$this->text('Private tables are coming in a later release.', $this->layout->width() / 2, $box[1] + 52, Theme::BODY, Theme::INK, 'center');
 			$this->text('Press Escape to go back.', $this->layout->width() / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
@@ -261,7 +261,7 @@ final class Painter
 		}
 		foreach($this->layout->menu(!empty($this->view['canContinue'])) as $index => $item)
 		$this->button($item['rect'], $item['label'], '', $index === 0 ? 'primary' : 'default', false);
-		$this->text('Enter plays offline · C continues · Escape returns', $this->layout->width() / 2, $this->layout->height() - 100, Theme::CAPTION, Theme::PLATE, 'center');
+		$this->text('Enter plays · C continues · H help · M settings', $this->layout->width() / 2, $this->layout->height() - ($this->layout->profile === 'landscape' ? 18 : 100), Theme::CAPTION, Theme::PLATE, 'center');
 	}
 
 	private function setupDialog(): void
@@ -271,11 +271,11 @@ final class Painter
 		$setup = $this->layout->setup($players, $variant);
 		$this->dialog($setup['box'], 'TABLE SETUP');
 		[$x, $y] = $setup['box'];
-		$this->text('Opponents', $x + 24, $y + 64, Theme::LABEL, Theme::INK);
+		$this->text('Opponents', $x + 24, $setup['less'][1] + $setup['less'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['less'], '−', '', 'default', $players <= 2);
 		$this->plate($setup['count'], (string)($players - 1), 'info', false);
 		$this->button($setup['more'], '+', '', 'default', $players >= 8);
-		$this->text('Opening', $x + 24, $y + 110, Theme::LABEL, Theme::INK);
+		$this->text('Opening', $x + 24, $setup['variant'][1] + $setup['variant'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['variant'], $variant === 'jackpots' ? 'Jacks or better' : 'Anything opens', 'V', 'default', false);
 		$this->button($setup['back'], 'Back', '⎋', 'default', false);
 		$this->button($setup['start'], 'Deal', '↵', 'primary', false);
@@ -283,35 +283,53 @@ final class Painter
 
 	private function helpScreen(): void
 	{
-		$w = min(720, $this->layout->width() - 24);
-		$box = [$this->layout->width() / 2 - $w / 2, 70, $w, 580];
+		$info = $this->layout->information();
+		$box = $info['box'];
 		$this->dialog($box, 'HOW TO PLAY');
-		$lines = [
-			'Five-card draw. The dealer antes, everyone gets five cards face down.',
-			'Opening: with Jacks or better you need a pair of jacks or higher to open; otherwise pass.',
-			'Betting goes round from the dealer\'s left. Fold, check or pass, call, or raise.',
-			'Draw: pick any cards to discard, then press Draw. Stand pat to keep all five.',
-			'Final betting starts with the player who opened. Remaining hands are shown.',
-			'Hands, high to low: royal flush, straight flush, four of a kind, full house,',
-			'flush, straight, three of a kind, two pair, one pair, high card.',
-			'',
-			'Keys: F fold · C check, pass or call · B bet or raise · + and − change the raise',
-			'1 to 5 select cards · D draw · H round history · Escape menu',
+		$paragraphs = [
+			'The dealer antes. Everyone receives five cards face down.',
+			'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
+			'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
+			'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
+			'Final betting starts with the opener. The best remaining hand wins the pot.',
+			'Best to worst: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
+			'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
+			'1 to 5 select cards, D draws, H shows history, Escape opens the menu.'
 		];
-		foreach($lines as $index => $line) $this->text($line, $box[0] + 32, $box[1] + 60 + $index * 30, Theme::BODY, Theme::INK, 'left', $box[2] - 64);
-		$this->text('Press Escape to go back.', $this->layout->width() / 2, $box[1] + $box[3] - 28, Theme::CAPTION, Theme::INK, 'center');
+		$columns = $this->layout->profile === 'landscape' ? 2 : 1;
+		$columnWidth = ($box[2] - 48 - ($columns - 1) * 24) / $columns;
+		$size = $this->layout->controlText();
+		$leading = $size * 1.45;
+		$y = $box[1] + 36;
+		foreach($paragraphs as $index => $paragraph)
+		{
+			$column = $columns === 2 ? intdiv($index, 4) : 0;
+			if($columns === 2 && $index === 4) $y = $box[1] + 36;
+			$x = $box[0] + 24 + $column * ($columnWidth + 24);
+			$line = '';
+			foreach(explode(' ', strtoupper($paragraph)) as $word)
+			{
+				$next = $line === '' ? $word : "$line $word";
+				if($line !== '' && $this->canvas->measure($next, $size, $this->face) > $columnWidth * $this->unit)
+				{ $this->text($line, $x, $y, $size, Theme::INK); $y += $leading; $line = $word; }
+				else $line = $next;
+			}
+			$this->text($line, $x, $y, $size, Theme::INK);
+			$y += $leading + 8;
+		}
+		$this->button($info['back'], 'Back', '⎋', 'primary', false);
 	}
 
 	private function settingsScreen(): void
 	{
-		$w = min(440, $this->layout->width() - 24);
-		$box = [$this->layout->width() / 2 - $w / 2, 230, $w, 220];
-		$this->dialog($box, 'SETTINGS');
 		$setup = $this->layout->setup(0, '');
-		$this->text('Look', $box[0] + 24, $box[1] + 110, Theme::LABEL, Theme::INK);
+		$box = $setup['box'];
+		$this->dialog($box, 'SETTINGS');
+		$this->text('Look', $box[0] + 24, $setup['variant'][1] + $setup['variant'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['variant'], $this->mode === Theme::CLASSIC ? 'Classic' : 'Modern', 'M', 'default', false);
-		$this->text('Pace: ' . (($this->view['pace'] ?? 'normal') === 'fast' ? 'fast' : 'normal'), $box[0] + 24, $box[1] + 64, Theme::LABEL, Theme::INK);
-		$this->text('Press Escape to go back.', $this->layout->width() / 2, $box[1] + $box[3] - 28, Theme::CAPTION, Theme::INK, 'center');
+		$this->text('Pace', $box[0] + 24, $setup['pace'][1] + $setup['pace'][3] / 2, Theme::LABEL, Theme::INK);
+		$this->button($setup['pace'], ($this->view['pace'] ?? 'normal') === 'fast' ? 'Fast' : 'Normal', 'P', 'default', false);
+		$this->button($setup['back'], 'Back', '⎋', 'default', false);
 	}
 
 	/** @param array{float,float,float,float} $rect Design-space rectangle. */
@@ -401,10 +419,10 @@ final class Painter
 		$icon = $this->atlas['icons'][$portrait] ?? null;
 		if($icon !== null)
 		{
-			// Pixel emblems are stored at 2x in the atlas and drawn at 64 design pixels, so they stay 1:1 at the base scale.
+			// Native 64-pixel emblems: snap their quad to framebuffer pixels without stretching its UVs.
 			[$ix, $iy, $iw, $ih] = $icon;
-			$size = 64 * $this->unit;
-			$this->canvas->image($dx - $size / 2, $dy - $size / 2, $size, $size, 0
+			$size = max(1, round(($this->layout->profile === 'landscape' ? 36 : 64) * $this->unit));
+			$this->canvas->image(round($dx - $size / 2), round($dy - $size / 2), $size, $size, 0
 				, [$ix / $this->atlas['width'], $iy / $this->atlas['height'], ($ix + $iw) / $this->atlas['width'], ($iy + $ih) / $this->atlas['height']]);
 			return;
 		}
@@ -430,12 +448,22 @@ final class Painter
 		}
 		$ink = $style === 'danger' ? Theme::DANGER_INK : Theme::INK;
 		if($dim) $ink = Theme::alpha($ink, .45);
-		$shift = $key !== '' ? -8 * $this->unit : 0;
-		$this->canvas->label(strtoupper($label), $x + $w / 2 + $shift, $y + $h / 2 + ($this->mode === Theme::MODERN ? .5 : 0) * $this->unit, Theme::BODY, $ink, $this->face, 'center', $w - 30 * $this->unit);
+		if(in_array($label, ['+', '−', '-'], true))
+		{
+			$length = 12 * $this->layout->dpr;
+			$stroke = 2 * $this->layout->dpr;
+			$this->canvas->box($x + ($w - $length) / 2, $y + ($h - $stroke) / 2, $length, $stroke, 0, $ink);
+			if($label === '+') $this->canvas->box($x + ($w - $stroke) / 2, $y + ($h - $length) / 2, $stroke, $length, 0, $ink);
+			return;
+		}
+		$key = $w >= 96 * $this->layout->dpr ? match($key) {'↵' => 'ENT', '⎋' => 'ESC', default => $key} : '';
+		$hintWidth = strlen($key) > 1 ? 28 : 18;
+		$shift = $key !== '' ? -$hintWidth * $this->unit / 2 : 0;
+		$this->canvas->label(strtoupper($label), $x + $w / 2 + $shift, $y + $h / 2 + ($this->mode === Theme::MODERN ? .5 : 0) * $this->unit, $this->layout->controlText(), $ink, $this->face, 'center', $w - ($key !== '' ? $hintWidth + 12 : 8) * $this->unit);
 		if($key !== '')
 		{
 			// Key hint: a soft keycap in Modern, an inverse square in Classic as a DOS accelerator would be shown.
-			$kw = 18 * $this->unit;
+			$kw = $hintWidth * $this->unit;
 			$kx = $x + $w - $kw - 7 * $this->unit;
 			$ky = $y + $h / 2 - 9 * $this->unit;
 			if($this->mode === Theme::MODERN)

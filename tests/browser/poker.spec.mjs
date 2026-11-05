@@ -143,6 +143,31 @@ async function point(canvas,rect)
 		width:rect[2]*box.width/size[0],height:rect[3]*box.height/size[1]};
 }
 
+test('menu shortcuts, settings and setup remain usable after returning to the menu',async({page})=>{
+	await page.setViewportSize({width:390,height:844});
+	const canvas=await boot(page);
+	await expect.poll(async()=>(await state(canvas)).ui.cardArt).toBe(true);
+	await canvas.focus();await page.keyboard.press('m');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('settings');
+	await page.keyboard.press('m');
+	await expect.poll(async()=>(await state(canvas)).ui.mode).toBe('modern');
+	await page.keyboard.press('p');
+	await expect.poll(async()=>(await state(canvas)).pace).toBe('fast');
+	await page.keyboard.press('Escape');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
+	await page.keyboard.press('h');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('help');
+	await page.keyboard.press('Escape');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
+	await page.keyboard.press('Enter');
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('setup');
+	await page.keyboard.press('ArrowRight');await page.keyboard.press('v');
+	await expect.poll(async()=>(await state(canvas)).ui.setup).toEqual({players:5,variant:'anything'});
+	await page.keyboard.press('Enter');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	expect((await state(canvas)).players).toHaveLength(5);
+});
+
 test('graphics restoration retains the saved hand and one set of accessible controls',async({page})=>{
 	test.setTimeout(90_000);
 	const errors=[];page.on('pageerror',error=>errors.push(error.message));

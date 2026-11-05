@@ -36,7 +36,7 @@ export async function rasteriseCards(art,dpr,{createImage=svg=>loadSvg(svg)}={})
 	sheetRoot.setAttribute('height',String(cellHeight*art.rows));
 	const sheet=await createImage(new XMLSerializer().serializeToString(sheetRoot));
 	const red=await createImage(art.backs.red),blue=await createImage(art.backs.blue);
-	// Player emblems are 32 px pixel art; they take the cells after the backs, drawn at 2x with no smoothing.
+	// Player emblems are native 64 px pixel art; their atlas cells preserve that grid without smoothing.
 	const iconKeys=Object.keys(art.icons??{}),iconSize=64;
 	const cells=art.columns*art.rows+2+iconKeys.length,rows=Math.ceil(cells/columns);
 	const width=cellWidth*columns,height=cellHeight*rows;

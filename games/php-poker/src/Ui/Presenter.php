@@ -75,7 +75,7 @@ final class Presenter
 		}
 		if(($view['error'] ?? '') !== '') $this->lockedRevision = null;
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
-		elseif(!in_array($this->local, ['setup','help','settings'], true)) $this->local = 'menu';
+		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','online'], true)) $this->local = 'menu';
 		if(($view['phase'] ?? '') !== 'showdown' && ($view['phase'] ?? '') !== 'redeal') $this->historyOpen = false;
 		$this->dirty = true;
 	}
@@ -134,6 +134,7 @@ final class Presenter
 			if(($this->view['screen'] ?? '') === 'settings')
 			{
 				$toggle = $this->layout()->setup(0, '');
+				if(Layout::hit($point, $toggle['pace'])) return [['type' => 'pace', 'value' => ($this->view['pace'] ?? 'normal') === 'fast' ? 'normal' : 'fast']];
 				if(Layout::hit($point, $toggle['variant'])) { $this->mode = $this->mode === Theme::CLASSIC ? Theme::MODERN : Theme::CLASSIC; return []; }
 			}
 			return [['type' => $this->view['canContinue'] ? 'resume' : 'menu']];
@@ -187,12 +188,15 @@ final class Presenter
 				'enter', ' ' => $this->activateMenu($items[0]),
 				'c' => !empty($this->view['canContinue']) ? [['type' => 'resume']] : [],
 				'o', 'p' => $this->activateMenu($items[0]),
+				'h' => [['type' => 'help']],
+				'm' => [['type' => 'settings']],
 				default => [],
 			};
 		}
 
 		if(in_array($screen, ['help','settings'], true))
 		{
+			if($screen === 'settings' && $key === 'p') return [['type' => 'pace', 'value' => ($this->view['pace'] ?? 'normal') === 'fast' ? 'normal' : 'fast']];
 			if($screen === 'settings' && in_array($key, ['m','v','enter',' '], true)) { $this->mode = $this->mode === Theme::CLASSIC ? Theme::MODERN : Theme::CLASSIC; return []; }
 			if(in_array($key, ['escape','backspace','enter',' ','q'], true)) return [['type' => $this->view['canContinue'] ? 'resume' : 'menu']];
 			return [];

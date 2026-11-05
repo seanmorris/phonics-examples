@@ -25,9 +25,8 @@ and dialogs, a dark disc behind each emblem, keycaps on the buttons, and sets te
 - Card faces: `art/cards/deck.svg`, the public-domain Wikimedia Commons deck, a 9×6 sheet of 750×1050 cells in
   the order spades, hearts, clubs, diamonds, two jokers. Backs: `art/cards/back-red.svg` (default) and
   `back-blue.svg`, the public-domain broken-line rhombus backs. Emblems: `art/icons/*.svg`, Codex's original
-  32×32 whole-pixel drawings keyed by `players[].portrait`, each recoloured to its own material by
-  `scripts/recolour-poker-icons.mjs`. All of these ship as SVG; at boot PHP hands their text to the browser,
-  which rasterises them into one RGBA atlas (card cells 125×175, or 150×210 above 1.25 dpr; emblems at 2×
+  64×64 whole-pixel drawings keyed by `players[].portrait`, with distinct material palettes and one-pixel contours. All of these ship as SVG; at boot PHP hands their text to the browser,
+  which rasterises them into one RGBA atlas (card cells 125×175, or 150×210 above 1.25 dpr; emblems at their native 64×64 resolution
   with no smoothing) and returns it once. Until it arrives, cards draw as plain faces with their index and
   emblems as discs with an initial.
 - Type: `art/typography/barlow-semi-condensed.json` (OFL) and `fixedsys-excelsior.json` (public domain),
@@ -37,9 +36,9 @@ and dialogs, a dark disc behind each emblem, keycaps on the buttons, and sets te
 
 ## Layout
 
-`src/Ui/Layout.php` is pure and shared by painting and hit-testing. It carries two design profiles and picks
+`src/Ui/Layout.php` is pure and shared by painting and hit-testing. It carries three design profiles and picks
 one from the canvas: **wide**, a 1280×720 field, for landscape canvases of 760 CSS px or more; **tall**, a
-450×800 portrait field, for portrait or narrower canvases. The field scales uniformly to fit and is centred.
+450×800 portrait field, for portrait or narrower canvases; **landscape**, a 900×400 field with a separate right-hand control panel, for landscape canvases below 480 CSS px high. The field scales uniformly to fit and is centred. Interactive controls are at least 48 CSS pixels high across device-pixel ratios; short-screen menus use two columns.
 
 - Seats sit on an oval (wide 470×250, tall 165×260) with the human at the bottom. Opponents are spaced evenly
   from the human's left. In the wide profile the action buttons sit to the lower right of the human, so no seat
@@ -54,7 +53,7 @@ one from the canvas: **wide**, a 1280×720 field, for landscape canvases of 760 
   edge marks the seat whose turn it is. The dealer gets a small "D" disc beside the plate.
 - Centre: "Total pot (n)" plate, the deck (a back the size of a hand card), the pot's chips in front of it,
   and "Current bet (n)".
-- Draw order: plates, cards, chips, emblems and markers, centre, actions, message, dialogs.
+- Draw order: plates, cards, chips, emblems and markers, centre, message, discard dialog, actions, then modal history/welcome dialogs. Discard cards never overlap the Draw target.
 
 ## Actions
 
@@ -81,12 +80,12 @@ and revision, then dims the bar and ignores game input until a view with a new r
 
 ## Screens and dialogs
 
-- Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Play Online (a notice
-  until #2285), How to Play, Settings. Enter plays offline, C continues, Escape returns.
+- Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Online (coming soon; a notice
+  until #2285), How to Play, Settings. Enter plays offline, C continues, H opens help, M opens settings, Escape returns.
 - Table setup (local to the presenter): opponents 1–7, Jacks or better / Anything opens, Back, Deal. The
   Deal sends `start{players, variant}`.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY
-  (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M). All are ruled boxes.
+  (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P). All are ruled boxes.
 - Message: `message` (or `error`, in rose) on one plate under the menu bar; it is the one place the game
   talks to the player.
 
@@ -96,7 +95,7 @@ and revision, then dims the bar and ignores game input until a view with a new r
 history flag, lock, setup choices, whether the card atlas has arrived and the active profile; the browser
 publishes it merged with the view on `canvas.dataset.phpPoker`. `browser/game.mjs` also keeps a polite live
 region with the error, message and whose turn it is, and exposes `phpPokerDebug.command()` for tests.
-Keyboard covers every action; pointer and touch share one click path.
+Keyboard covers play and menus; pointer and touch share one click path. Canceled gestures and drags do not click, repeated keydown events do not toggle a card twice, and the human hand has a private screen-reader description. Graphics restoration preserves the saved hand and replaces its accessible description cleanly.
 
 ## Not built
 
@@ -105,6 +104,5 @@ game had none of them and the table reads clearly without them. They can return 
 
 ## Open rules questions (tracked, not guessed)
 
-Waiting on #2261: what the pot does when everyone passes; whether an opener may discard part of the qualifying
-hand; stock exhaustion and discard recycling at eight seats; ace-low straights. The presentation draws whatever
-the view says.
+Exact DOS parity remains open in #2261: what the pot does when everyone passes; whether an opener may discard part of the qualifying
+hand; stock exhaustion and discard recycling at eight seats; ace-low straights. The presentation draws the explicitly documented `bicycle-inspired-local-v1` profile in `rules.md`; unresolved historical behavior is labeled as an adaptation there.

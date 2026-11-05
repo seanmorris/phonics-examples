@@ -5,8 +5,8 @@ namespace PhpPoker\Ui;
 /**
  * Pure table layout: where every seat, card, chip stack, plate, button and dialog sits for one frame.
  *
- * Two design profiles share one vocabulary. `wide` is the 1280x720 field of the DOS game; `tall` is a 450x800
- * portrait field for phones, with a tighter oval, smaller fans and the action bar across the bottom. The chosen
+ * Three design profiles share one vocabulary. `wide` is the 1280x720 field of the DOS game; `tall` is a 450x800
+ * portrait field for phones; `landscape` reserves a right-hand control panel on short screens. The chosen
  * field scales uniformly to fit the canvas and is centred, and all results are in device pixels. Rendering and
  * hit testing share this so a region a player can click is exactly the region that is drawn.
  */
@@ -24,7 +24,7 @@ final class Layout
 			, 'card' => [68,95], 'cardStep' => 30, 'handCard' => [90,126], 'handStep' => 38, 'dialogCard' => [124,174]
 			, 'plateWidth' => 200, 'handPlateWidth' => 250, 'plateLift' => 62, 'handPlateLift' => 90
 			, 'actions' => [790,588], 'actionRows' => false, 'buttonHeight' => 32, 'chipRadius' => 15, 'handChipRadius' => 17
-			, 'menuItem' => [300,46], 'menuTop' => 300, 'dialogWidth' => 760, 'display' => 54
+			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 760, 'display' => 54
 		]
 		, 'tall' => [
 			'width' => 450, 'height' => 800, 'centre' => [225,352], 'oval' => [165,260], 'emblemInset' => [84,78]
@@ -33,18 +33,25 @@ final class Layout
 			, 'actions' => [16,676], 'actionRows' => true, 'buttonHeight' => 44, 'chipRadius' => 10, 'handChipRadius' => 12
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 418, 'display' => 42
 		]
+		, 'landscape' => [
+			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'emblemInset' => [85,55]
+			, 'card' => [38,53], 'cardStep' => 17, 'handCard' => [62,87], 'handStep' => 26, 'dialogCard' => [86,120]
+			, 'plateWidth' => 118, 'handPlateWidth' => 190, 'plateLift' => 44, 'handPlateLift' => 70
+			, 'actions' => [568,250], 'actionRows' => false, 'buttonHeight' => 52, 'chipRadius' => 9, 'handChipRadius' => 11
+			, 'menuItem' => [350,52], 'menuTop' => 150, 'dialogWidth' => 530, 'display' => 42
+		]
 	];
 
 	/** @var array<string,mixed> */
 	private readonly array $design;
 
 	/**
-	 * @param string $profile `wide` or `tall`.
+	 * @param string $profile `wide`, `tall` or `landscape`.
 	 * @param float $scale Device pixels per design pixel.
 	 * @param float $left Device x of the field's left edge.
 	 * @param float $top Device y of the field's top edge.
 	 */
-	private function __construct(public readonly string $profile, public readonly float $scale, public readonly float $left, public readonly float $top)
+	private function __construct(public readonly string $profile, public readonly float $scale, public readonly float $left, public readonly float $top, public readonly float $dpr)
 	{
 		$this->design = self::PROFILES[$profile];
 	}
@@ -59,10 +66,10 @@ final class Layout
 	public static function fit(int $width, int $height, float $dpr = 1): self
 	{
 		$dpr = max(.5, min(4, is_finite($dpr) ? $dpr : 1));
-		$profile = $width < $height || $width / $dpr < 760 ? 'tall' : 'wide';
+		$profile = $width >= $height && $height / $dpr < 480 ? 'landscape' : ($width < $height || $width / $dpr < 760 ? 'tall' : 'wide');
 		$design = self::PROFILES[$profile];
 		$scale = max(1e-6, min($width / $design['width'], $height / $design['height']));
-		return new self($profile, $scale, ($width - $design['width'] * $scale) / 2, ($height - $design['height'] * $scale) / 2);
+		return new self($profile, $scale, ($width - $design['width'] * $scale) / 2, ($height - $design['height'] * $scale) / 2, $dpr);
 	}
 
 	/**
@@ -71,7 +78,16 @@ final class Layout
 	 * @param string $name Metric name, such as `oval` or `handCard`.
 	 * @return mixed
 	 */
-	public function metric(string $name): mixed { return $this->design[$name]; }
+	public function metric(string $name): mixed { return match($name) { 'buttonHeight' => $this->controlSize(), 'actions' => $this->actionOrigin(), default => $this->design[$name] }; }
+
+	/** Minimum target in design units, measured against CSS pixels rather than the framebuffer. */
+	public function controlSize(): float { return max($this->design['buttonHeight'], 48 * $this->dpr / $this->scale); }
+
+	/** Action rows reserve room for the raise controls beneath them. */
+	private function actionOrigin(): array { return [$this->design['actions'][0], min($this->design['actions'][1], $this->height() - 2 * $this->controlSize() - 20)]; }
+
+	/** Readable control text size in design units. */
+	public function controlText(): float { return max(14, 13 * $this->dpr / $this->scale); }
 
 	/** Design width of the field. */
 	public function width(): int { return $this->design['width']; }
@@ -193,6 +209,7 @@ final class Layout
 		[$cx,$cy] = $this->design['centre'];
 		[$cardWidth,$cardHeight] = $this->design['handCard'];
 		$plateWidth = min(200, $this->design['width'] - 40);
+		if($this->profile === 'landscape') { $cardWidth = 40; $cardHeight = 56; $plateWidth = 150; }
 		$lift = $cardHeight * .57;
 		return [
 			'pot' => [$cx - $plateWidth / 2, $cy - $lift - 38, $plateWidth, self::PLATE_HEIGHT]
@@ -252,10 +269,10 @@ final class Layout
 		}
 		if(!$entries) return [];
 
-		[$x, $y] = $this->design['actions'];
-		$height = $this->design['buttonHeight'];
+		[$x, $y] = $this->actionOrigin();
+		$height = $this->controlSize();
 		$gap = 10;
-		$unit = $this->design['actionRows'] ? ($this->design['width'] - 2 * $x - $gap * (count($entries) - 1)) / array_sum(array_column($entries, 'weight')) : 100;
+		$unit = $this->profile === 'landscape' ? (316 - $gap * (count($entries) - 1)) / array_sum(array_column($entries, 'weight')) : ($this->design['actionRows'] ? ($this->design['width'] - 2 * $x - $gap * (count($entries) - 1)) / array_sum(array_column($entries, 'weight')) : 100);
 		$buttons = [];
 		foreach($entries as $entry)
 		{
@@ -276,18 +293,18 @@ final class Layout
 	public function stepper(array $view): ?array
 	{
 		if(($view['screen'] ?? '') !== 'table' || empty($view['legalActions']['bet'])) return null;
-		[$x, $y] = $this->design['actions'];
-		$height = $this->design['buttonHeight'];
+		[$x, $y] = $this->actionOrigin();
+		$height = $this->controlSize();
 		if($this->design['actionRows'])
 		{
 			// Second row across the bottom: label at the left, then minus, amount and plus toward the right edge.
 			$row = $y + $height + 10;
-			$size = $height - 6;
+			$size = $height;
 			$right = $this->design['width'] - $x;
 			return ['less' => [$right - $size * 2 - 100, $row, $size, $size], 'amount' => [$right - $size - 90, $row, 80, $size], 'more' => [$right - $size, $row, $size, $size], 'label' => [$x, $row + $size / 2]];
 		}
-		$row = $y + 44;
-		return ['less' => [$x + 110, $row, 32, 28], 'amount' => [$x + 150, $row, 60, 28], 'more' => [$x + 218, $row, 32, 28], 'label' => [$x + 100, $row + 14]];
+		$row = $y + $height + 10;
+		return ['less' => [$x + 80, $row, $height, $height], 'amount' => [$x + 90 + $height, $row, 60, $height], 'more' => [$x + 160 + $height, $row, $height, $height], 'label' => [$x + 70, $row + $height / 2]];
 	}
 
 	/**
@@ -302,7 +319,9 @@ final class Layout
 		$gap = ($width - 40 - 5 * $cardWidth) / 4;
 		$height = $cardHeight + 80;
 		$left = $this->design['width'] / 2 - $width / 2;
-		$top = $this->design['actionRows'] ? $this->design['actions'][1] - $height - 10 : $this->design['height'] - $height - 10;
+		// Keep the cards above the action row; on a short landscape screen they occupy the left panel.
+		$top = $this->actionOrigin()[1] - $height - 10;
+		if($this->profile === 'landscape') { $left = 20; $top = $this->height() - $height - 12; }
 		$cards = [];
 		for($index = 0; $index < 5; $index++) $cards[] = [$left + 20 + $index * ($cardWidth + $gap), $top + 22, $cardWidth, $cardHeight];
 		return ['box' => [$left, $top, $width, $height], 'cards' => $cards];
@@ -318,14 +337,20 @@ final class Layout
 	{
 		$items = [['offline', 'Play Offline', ['type' => 'setup']]];
 		if($canContinue) $items[] = ['continue', 'Continue Offline', ['type' => 'resume']];
-		$items[] = ['online', 'Play Online', null];
+		$items[] = ['online', 'Online (coming soon)', null];
 		$items[] = ['help', 'How to Play', ['type' => 'help']];
 		$items[] = ['settings', 'Settings', ['type' => 'settings']];
 		[$width, $height] = $this->design['menuItem'];
 		$width = min($width, $this->design['width'] - 40);
+		$height = max($height, $this->controlSize());
 		$result = [];
 		foreach($items as $index => [$id, $label, $intent])
-		$result[] = ['id' => $id, 'rect' => [$this->design['width'] / 2 - $width / 2, $this->design['menuTop'] + $index * ($height + 10), $width, $height], 'label' => $label, 'intent' => $intent];
+		{
+			$x = $this->width() / 2 - $width / 2;
+			$y = $this->design['menuTop'] + $index * ($height + 10);
+			if($this->profile === 'landscape') { $x = $this->width() / 2 - $width - 10 + ($index % 2) * ($width + 20); $y = $this->design['menuTop'] + intdiv($index, 2) * ($height + 10); }
+			$result[] = ['id' => $id, 'rect' => [$x, $y, $width, $height], 'label' => $label, 'intent' => $intent];
+		}
 
 		return $result;
 	}
@@ -339,17 +364,31 @@ final class Layout
 	 */
 	public function setup(int $players, string $variant): array
 	{
-		$width = min(440, $this->design['width'] - 24);
-		$left = $this->design['width'] / 2 - $width / 2;
-		$top = 230;
-		$control = $this->design['buttonHeight'] - 4;
-		$column = $left + $width - 24 - 200;
+		$width = min(500, $this->width() - 24);
+		$left = ($this->width() - $width) / 2;
+		$control = $this->controlSize();
+		$height = 3 * $control + 70;
+		$top = $this->profile === 'landscape' ? $this->height() - $height - 12 : 230;
+		$column = $left + $width - 24 - max(200, 3 * $control + 20);
+		$row = $top + 28;
 		return [
-			'box' => [$left, $top, $width, 220]
-			, 'less' => [$column, $top + 50, 32, $control], 'count' => [$column + 40, $top + 50, 60, $control], 'more' => [$column + 108, $top + 50, 32, $control]
-			, 'variant' => [$column, $top + 96, 200, $control]
-			, 'back' => [$left + 24, $top + 160, 120, $this->design['buttonHeight']], 'start' => [$left + $width - 24 - 140, $top + 160, 140, $this->design['buttonHeight']]
+			'box' => [$left, $top, $width, $height]
+			, 'less' => [$column, $row, $control, $control], 'count' => [$column + $control + 10, $row, $control, $control], 'more' => [$column + 2 * ($control + 10), $row, $control, $control]
+			, 'pace' => [$column, $row, $width - ($column - $left) - 24, $control]
+			, 'variant' => [$column, $row + $control + 10, $width - ($column - $left) - 24, $control]
+			, 'back' => [$left + 24, $row + 2 * ($control + 10), 120, $control], 'start' => [$left + $width - 24 - 140, $row + 2 * ($control + 10), 140, $control]
 		];
+	}
+
+	/** Dialog bounds and an explicit Back target shared by help and history. */
+	public function information(): array
+	{
+		$width = min(800, $this->width() - 24);
+		$left = ($this->width() - $width) / 2;
+		$top = 50;
+		$height = $this->height() - $top - 12;
+		$control = $this->controlSize();
+		return ['box' => [$left, $top, $width, $height], 'back' => [$this->width() / 2 - 70, $top + $height - $control - 12, 140, $control]];
 	}
 
 	/**

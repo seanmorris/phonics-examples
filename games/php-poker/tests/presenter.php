@@ -176,7 +176,7 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 	$expect(Layout::fit(390, 844, 1)->profile === 'tall', 'a 390x844 canvas is tall');
 	$expect(Layout::fit(780, 1688, 2)->profile === 'tall', 'a 2x phone is tall');
 	$expect(Layout::fit(1024, 768, 1)->profile === 'wide', 'a tablet in landscape is wide');
-	$expect(Layout::fit(1500, 900, 2)->profile === 'tall', 'a 750 CSS px landscape canvas is tall');
+	$expect(Layout::fit(1500, 900, 2)->profile === 'landscape', 'a short landscape canvas uses its own profile');
 	$layout = Layout::fit(390, 844, 1);
 	foreach([2,5,8] as $seats)
 	{
@@ -205,6 +205,24 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 		$presenter->update($fixture($name));
 		$instances = $presenter->paint(390, 844)->instances();
 		$expect(count($instances) > 20, "$name paints in the tall profile");
+	}
+});
+
+$test('actual CSS touch targets clear every discard card and stay on screen', static function(callable $expect) use ($overlaps, $fixture): void {
+	foreach([[320,500,1],[390,780,1],[780,1560,2],[844,326,1],[1688,652,2],[1280,720,1]] as [$width,$height,$dpr])
+	{
+		$layout = Layout::fit($width, $height, $dpr);
+		$draw = $layout->actions($fixture('draw-2'), ['discards' => [], 'amount' => 0]);
+		$setup = $layout->setup(8, 'anything');
+		$targets = array_merge(array_column($layout->menu(true), 'rect'), array_column($draw, 'rect'), [$setup['less'],$setup['more'],$setup['variant'],$setup['start'],$setup['back']]);
+		foreach($targets as $rect)
+		{
+			[$x,$y,$w,$h] = $layout->rect(...$rect);
+			$expect($w / $dpr >= 48 - 1e-6 && $h / $dpr >= 48 - 1e-6, "touch target is 48 CSS pixels at $width x $height / $dpr");
+			$expect($x >= 0 && $y >= 0 && $x + $w <= $width + 1e-6 && $y + $h <= $height + 1e-6, "target stays on screen at $width x $height / $dpr");
+		}
+		foreach($layout->discardDialog()['cards'] as $card) foreach($draw as $button)
+		$expect(!$overlaps($card, $button['rect']), 'discard cards do not cover the Draw action');
 	}
 });
 
