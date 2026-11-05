@@ -174,6 +174,44 @@ $test('guidance distinguishes opening bets, another seat drawing, and the human 
 	$expect($presenter->state()['hint'] === $view['message'], 'an unconfirmed turn explains the settlement wait instead of inviting another bet');
 });
 
+$test('online waits drum three reserved dots without changing the authorized message', static function(callable $expect) use ($fixture, $root): void {
+	$presenter = new Presenter($root);
+	$view = $fixture('opening-8');
+	$view['mode'] = 'online';
+	$view['legalActions'] = [];
+	$view['waitingForConfirmation'] = true;
+	$view['message'] = 'Waiting for both players to confirm the action.';
+	$presenter->update($view);
+	$expect($presenter->state()['networkWait'] === ['active' => true, 'dots' => 0], 'an online confirmation wait begins with three reserved hidden dots');
+	$hidden = $presenter->paint(1280, 720)->instances();
+	foreach([1,2,3,0] as $dots)
+	{
+		$presenter->advance(.3);
+		$expect($presenter->state()['networkWait']['dots'] === $dots, "the wait cadence advances to $dots visible dots");
+	}
+	$expect($presenter->state()['hint'] === $view['message'], 'the cadence does not alter the authorized message');
+	$presenter->advance(.9);
+	$visible = $presenter->paint(1280, 720)->instances();
+	$geometry = static fn(array $instances): array => array_values(array_map(static fn(array $instance): array => array_slice($instance, 0, 4)
+		, array_filter($instances, static fn(array $instance): bool => ($instance[10] ?? 0) !== 1.0)));
+	$expect($geometry($hidden) === $geometry($visible), 'showing the dots does not move or resize any plate');
+	$expect(count($visible) > count($hidden), 'the cadence reveals dot glyphs instead of changing the message box');
+
+	$offline = new Presenter($root);
+	$view['mode'] = 'offline';
+	$offline->update($view);
+	$offline->advance(1);
+	$expect($offline->state()['networkWait'] === ['active' => false, 'dots' => 0], 'an offline message with the same words does not imply network work');
+
+	$shuffle = new Presenter($root);
+	$view['mode'] = 'online';
+	$view['phase'] = 'ready';
+	$view['waitingForConfirmation'] = false;
+	$view['message'] = 'Jointly shuffling a private deck.';
+	$shuffle->update($view);
+	$expect($shuffle->state()['networkWait']['active'], 'the verified online shuffle gets the same cadence');
+});
+
 $test('the menu, setup and settings flow send only session intents the session knows', static function(callable $expect) use ($root): void {
 	$presenter = new Presenter($root);
 	$presenter->update(['screen' => 'menu', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => true]);
@@ -397,10 +435,12 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$expect($g['caption'][1] > $emblem[1] + $emblem[3], "name and total sit below the icon for seat $seat of $seats in {$layout->profile}");
 			$shortName = Layout::identityNameX($g, 32);
 			$expect(abs($shortName - $g['caption'][0]) < 1e-9, "a short name stays centered below the icon for seat $seat of $seats in {$layout->profile}");
+			$edgeName = Layout::identityNameX($g, 40);
+			$expect(abs($edgeName - $g['caption'][0]) < 1e-9, "a name touching but not crossing the cards stays centered for seat $seat of $seats in {$layout->profile}");
 			$wideName = Layout::identityNameX($g, 64);
 			$innerEdge = $right ? $wideName - 32 : $wideName + 32;
 			$cardEdge = $right ? $fan[0] + $fan[2] : $fan[0];
-			$expect(abs($innerEdge - $cardEdge) < 1e-9, "only a wide name moves outward to clear the cards for seat $seat of $seats in {$layout->profile}");
+			$expect(abs(abs($innerEdge - $cardEdge) - 4) < 1e-9, "only a wide name moves outward with clearance from the cards for seat $seat of $seats in {$layout->profile}");
 			$expect(!$overlaps($emblem, $g['plate']) && !$overlaps($emblem, $fan), "icon clears plate and fan for seat $seat of $seats in {$layout->profile}");
 			if($layout->profile === 'landscape') $expect(abs($g['chips'][0] - ($right ? $fan[0] - 8 : $fan[0] + $fan[2] + 8)) < 1e-9, "chip bank stands beside the compact hand for seat $seat of $seats in {$layout->profile}");
 			elseif($layout->profile === 'tall')

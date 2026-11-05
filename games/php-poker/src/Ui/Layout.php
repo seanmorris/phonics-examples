@@ -100,7 +100,8 @@ final class Layout
 	/** Where the action buttons start: two rows along the bottom of a phone, the right panel in landscape. */
 	private function actionOrigin(): array
 	{
-		$rows = $this->height() - 2 * $this->controlSize() - 20;
+		// Phones reserve a caption line below both control rows for online settlement status.
+		$rows = $this->height() - 2 * $this->controlSize() - ($this->profile === 'tall' ? 38 : 20);
 		return match($this->profile) {
 			'tall' => [$this->design['actions'][0], $rows]
 			, 'landscape' => [$this->width() - self::PANEL + 10, min($this->design['actions'][1], $rows)]
@@ -360,7 +361,7 @@ final class Layout
 	}
 
 	/** Keep a wide opponent name outside its card fan; narrow names remain centered under the emblem. */
-	public static function identityNameX(array $geometry, float $width, float $gap = 0): float
+	public static function identityNameX(array $geometry, float $width, float $gap = 4): float
 	{
 		$centre = (float)$geometry['caption'][0];
 		$width = max(0, $width);
@@ -368,8 +369,8 @@ final class Layout
 		$last = $geometry['cards'][array_key_last($geometry['cards'])];
 		$right = (float)$last[0] + (float)$last[2];
 		if(($geometry['outward'] ?? -1) > 0)
-		return max($centre, $right + $gap + $width / 2);
-		return min($centre, $left - $gap - $width / 2);
+		return $centre - $width / 2 < $right - 1e-9 ? $right + $gap + $width / 2 : $centre;
+		return $centre + $width / 2 > $left + 1e-9 ? $left - $gap - $width / 2 : $centre;
 	}
 
 	/**

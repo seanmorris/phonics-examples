@@ -245,7 +245,8 @@ final class Painter
 		foreach($buttons as $button)
 		$this->button($button['rect'], $button['label'], $button['key'], $button['style'], $this->state['locked'] && $button['intent'] !== null);
 
-		if($stepper = $this->layout->stepper($this->view))
+		$stepper = $this->layout->stepper($this->view);
+		if($stepper)
 		{
 			$this->button($stepper['less'], '−', '', 'default', false);
 			$this->plate($stepper['amount'], (string)$this->state['amount'], 'info', false);
@@ -255,11 +256,12 @@ final class Painter
 		}
 		if($buttons && $this->state['locked'] && ($this->view['turn'] ?? -1) === 0)
 		{
-			$left = min(array_column(array_column($buttons, 'rect'), 0));
-			$right = max(array_map(static fn(array $button): float => $button['rect'][0] + $button['rect'][2], $buttons));
-			$bottom = max(array_map(static fn(array $button): float => $button['rect'][1] + $button['rect'][3], $buttons));
-			[$x, $y] = $this->layout->point(($left + $right) / 2, $bottom + 16);
-			$this->canvas->label('WAITING FOR THE TABLE', $x, $y, Theme::CAPTION, Theme::PLATE, $this->face, 'center');
+			$controls = array_column($buttons, 'rect');
+			if($stepper) foreach(['less','amount','more'] as $part) $controls[] = $stepper[$part];
+			$left = min(array_column($controls, 0));
+			$right = max(array_map(static fn(array $rect): float => $rect[0] + $rect[2], $controls));
+			$bottom = max(array_map(static fn(array $rect): float => $rect[1] + $rect[3], $controls));
+			$this->drummingText('WAITING FOR THE TABLE', ($left + $right) / 2, $bottom + 16, Theme::CAPTION, Theme::PLATE, 'center');
 		}
 	}
 
@@ -267,7 +269,8 @@ final class Painter
 	{
 		$error = (string)($this->view['error'] ?? '');
 		$message = (string)($this->state['hint'] ?? $this->view['message'] ?? '');
-		$line = $error !== '' ? $error : $message;
+		$drumming = $error === '' && !empty($this->state['networkWait']['active']);
+		$line = $error !== '' ? $error : ($drumming ? rtrim(rtrim($message), '.') . '...' : $message);
 		if($line === '') return;
 		[$betX, $betY, $betWidth, $betHeight] = $this->layout->centre()['bet'];
 		$width = $this->layout->profile === 'wide'
@@ -277,7 +280,12 @@ final class Painter
 		$top = $betY + $betHeight + 8;
 		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, Layout::PLATE_HEIGHT + 16 * (count($lines) - 1)], '', $error !== '' ? 'fold' : 'info', false);
 		foreach($lines as $index => $text)
-		$this->text($text, $betX + $betWidth / 2, $top + Layout::PLATE_HEIGHT / 2 + $index * 16 + .5, Theme::BODY, Theme::INK, 'center');
+		{
+			$y = $top + Layout::PLATE_HEIGHT / 2 + $index * 16 + .5;
+			if($drumming && $index === array_key_last($lines))
+			$this->drummingText(rtrim($text, '.'), $betX + $betWidth / 2, $y, Theme::BODY, Theme::INK, 'center');
+			else $this->text($text, $betX + $betWidth / 2, $y, Theme::BODY, Theme::INK, 'center');
+		}
 	}
 
 	private function discardDialog(): void
@@ -625,5 +633,19 @@ final class Painter
 	{
 		[$dx, $dy] = $this->layout->point($x, $y);
 		$this->canvas->label($this->mode === Theme::CLASSIC ? strtoupper($text) : $text, $dx, $dy, $size, $color, $this->face, $align, $maxWidth === null ? null : $maxWidth * $this->unit);
+	}
+
+	/** Draw a fixed-width three-dot suffix, revealing only the current presentation cadence. */
+	private function drummingText(string $text, float $x, float $y, float $size, array $color, string $align = 'left'): void
+	{
+		$dots = !empty($this->state['networkWait']['active']) ? (int)($this->state['networkWait']['dots'] ?? 0) : 0;
+		if(empty($this->state['networkWait']['active'])) { $this->text($text, $x, $y, $size, $color, $align); return; }
+		$text = $this->mode === Theme::CLASSIC ? strtoupper($text) : $text;
+		[$dx, $dy] = $this->layout->point($x, $y);
+		$fullWidth = $this->canvas->measure($text . '...', $size, $this->face);
+		$left = match($align) { 'center' => $dx - $fullWidth / 2, 'right' => $dx - $fullWidth, default => $dx };
+		$offset = $this->canvas->label($text, $left, $dy, $size, $color, $this->face);
+		for($index = 0; $index < 3; $index++)
+		$offset += $this->canvas->label('.', $left + $offset, $dy, $size, Theme::alpha($color, $index < $dots ? 1 : 0), $this->face);
 	}
 }

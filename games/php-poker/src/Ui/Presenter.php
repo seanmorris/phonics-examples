@@ -54,6 +54,9 @@ final class Presenter
 	private ?Motion $motion = null;
 	private float $winnerElapsed = 4;
 	private bool $winnerVisible = true;
+	private string $networkWaitKey = '';
+	private float $networkWaitElapsed = 0;
+	private int $networkWaitDots = 0;
 	/** Latest input family, used to expose controller focus and swap the on-canvas help. */
 	private string $inputTheme = 'keyboard';
 	/** Stable controller target ID. The rectangle is always resolved from current layout state. */
@@ -111,6 +114,7 @@ final class Presenter
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
 		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','online'], true)) $this->local = 'menu';
 		if(($view['phase'] ?? '') !== 'showdown' && ($view['phase'] ?? '') !== 'redeal') $this->historyOpen = false;
+		$this->syncNetworkWait();
 		$this->dirty = true;
 	}
 
@@ -498,6 +502,36 @@ final class Presenter
 			if($visible !== $this->winnerVisible || $this->winnerElapsed === 4) $this->dirty = true;
 			$this->winnerVisible = $visible;
 		}
+		$this->syncNetworkWait();
+		if($this->networkWaitKey !== '')
+		{
+			$this->networkWaitElapsed += $seconds;
+			$dots = (int)floor($this->networkWaitElapsed / .3) % 4;
+			if($dots !== $this->networkWaitDots) $this->dirty = true;
+			$this->networkWaitDots = $dots;
+		}
+	}
+
+	/** Reset the visual cadence whenever the table starts or finishes a distinct network wait. */
+	private function syncNetworkWait(): void
+	{
+		$key = $this->networkWaitKey();
+		if($key === $this->networkWaitKey) return;
+		$this->networkWaitKey = $key;
+		$this->networkWaitElapsed = 0;
+		$this->networkWaitDots = 0;
+		$this->dirty = true;
+	}
+
+	/** A presentation-only key for online work or settlement that may take more than one frame. */
+	private function networkWaitKey(): string
+	{
+		if(($this->view['screen'] ?? '') !== 'table' || ($this->view['mode'] ?? 'offline') !== 'online'
+			|| ($this->view['error'] ?? '') !== '' || $this->motion) return '';
+		$line = $this->guidance();
+		if($line === '') return '';
+		if(!empty($this->view['waitingForConfirmation']) || ($this->view['phase'] ?? '') === 'ready') return $line;
+		return preg_match('/\b(?:waiting|shuffl|verif|private cards?)\b/i', $line) === 1 ? $line : '';
 	}
 
 	/** Explain the current step without inviting a draw while betting or waiting for another seat. */
@@ -545,6 +579,7 @@ final class Presenter
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant], 'pointer' => $this->pointer
 			, 'chips' => $this->chips, 'motion' => $this->motion?->frame($this->layout())
 			, 'winnerFlash' => ['active' => $this->winnerElapsed < 4, 'visible' => $this->winnerVisible]
+			, 'networkWait' => ['active' => $this->networkWaitKey !== '', 'dots' => $this->networkWaitDots]
 			, 'inputTheme' => $this->inputTheme, 'controllerFocus' => $this->focusedTarget()
 		];
 	}
