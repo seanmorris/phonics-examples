@@ -22,6 +22,7 @@ final class Painter
 	private readonly string $mode;
 	private readonly string $face;
 	private readonly float $unit;
+	private readonly float $horizontalUnit;
 
 	/**
 	 * @param UiCanvas $canvas Draw list to fill.
@@ -36,6 +37,7 @@ final class Painter
 		$this->mode = $state['mode'] ?? Theme::CLASSIC;
 		$this->face = $this->mode === Theme::CLASSIC && isset($canvas->text->faces()['dos']) ? 'dos' : 'bold';
 		$this->unit = $layout->scale;
+		$this->horizontalUnit = $layout->horizontalScale;
 	}
 
 	/**
@@ -153,7 +155,7 @@ final class Painter
 					$size = $this->layout->captionText();
 					$hand = $geometry[$seat]['cards'][4];
 					$left = $this->layout->profile === 'landscape' ? $hand[0] + $hand[2] + 6 : 8;
-					$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->unit;
+					$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->horizontalUnit;
 					$size *= min(1, ($bx - 10 - $left) / $width);
 					$this->text($label, $bx - 10, $geometry[$seat]['chips'][1] + 10, $size, Theme::PLATE, 'right');
 				}
@@ -180,7 +182,7 @@ final class Painter
 				$cardRight = $last[0] + $last[2];
 				$available = $geometry[$seat]['outward'] > 0 ? $this->layout->width() - $cardRight - 4 : $cards[0][0] - 4;
 				$nameLimit = min($width, max(1, $available));
-				$nameWidth = min($nameLimit, $this->canvas->measure($shown, $size, $this->face) / $this->unit);
+				$nameWidth = min($nameLimit, $this->canvas->measure($shown, $size, $this->face) / $this->horizontalUnit);
 				$nameX = Layout::identityNameX($geometry[$seat], $nameWidth);
 				$this->text($name, $nameX, $ty, $size, Theme::PLATE, 'center', $nameLimit);
 				$this->text((string)$total, $tx, $ty + $size + 2, $size, Theme::PLATE, 'center', $width);
@@ -276,11 +278,17 @@ final class Painter
 		if($line === '') return;
 		[$betX, $betY, $betWidth, $betHeight] = $this->layout->centre()['bet'];
 		$width = $this->layout->profile === 'wide'
-			? min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40)) : min(180, $betWidth);
+			? min($this->layout->width() * .55, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->horizontalUnit + 40)) : min(180, $betWidth);
 		// The lane between the columns is narrow, so the message may run to three lines there.
-		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->canvas->unit, ($width - 12) * $this->unit, $this->layout->columns() ? 3 : 2, $this->face);
+		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->canvas->unit, ($width - 12) * $this->horizontalUnit, $this->layout->columns() ? 3 : 2, $this->face);
+		$messageHeight = $this->layout->plateHeight() + 16 * (count($lines) - 1);
 		$top = $betY + $betHeight + 8;
-		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, $this->layout->plateHeight() + 16 * (count($lines) - 1)], '', $error !== '' ? 'fold' : 'info', false);
+		if($this->layout->profile === 'wide')
+		{
+			$humanTop = $this->layout->seat(0, count($this->view['players'] ?? []))['plate'][1];
+			$top = min($top, $humanTop - $messageHeight - 8);
+		}
+		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, $messageHeight], '', $error !== '' ? 'fold' : 'info', false);
 		foreach($lines as $index => $text)
 		{
 			$y = $top + $this->layout->plateHeight() / 2 + $index * 16 + .5;
@@ -651,7 +659,7 @@ final class Painter
 	private function text(string $text, float $x, float $y, float $size, array $color, string $align = 'left', ?float $maxWidth = null): void
 	{
 		[$dx, $dy] = $this->layout->point($x, $y);
-		$this->canvas->label($this->mode === Theme::CLASSIC ? strtoupper($text) : $text, $dx, $dy, $size, $color, $this->face, $align, $maxWidth === null ? null : $maxWidth * $this->unit);
+		$this->canvas->label($this->mode === Theme::CLASSIC ? strtoupper($text) : $text, $dx, $dy, $size, $color, $this->face, $align, $maxWidth === null ? null : $maxWidth * $this->horizontalUnit);
 	}
 
 	/** Draw a fixed-width three-dot suffix, revealing only the current presentation cadence. */

@@ -10,8 +10,9 @@ namespace PhpPoker\Ui;
  * 400-high field with a right-hand control panel; both grow along their free axis to fill the canvas and seat the
  * opponents in a column
  * down each side, with the pot between them and the human's hand at the bottom, because an oval of full seat
- * blocks does not fit there. The field scales uniformly and is centred; results are in device pixels. Rendering
- * and hit testing share this so a region a player can click is exactly the region that is drawn.
+ * blocks does not fit there. Phone fields scale uniformly. A wide field keeps its vertical scale while its x axis
+ * compresses independently, so horizontal resizing cannot shrink cards, chips or type. Rendering and hit testing
+ * share both axes so a region a player can click is exactly the region that is drawn.
  */
 final class Layout
 {
@@ -21,8 +22,8 @@ final class Layout
 	public const ACTION_CLEARANCE = -.06;
 	/** Width kept for the identity (emblem over name and stack) on the outer side of a column seat. */
 	public const IDENTITY = 40;
-	/** Width of the landscape control panel, including its margins. */
-	private const PANEL = 342;
+	/** Width of the short-landscape vertical control panel, including its margins. */
+	private const PANEL = 240;
 
 	/** @var array<string,array<string,mixed>> Design metrics per profile. */
 	private const PROFILES = [
@@ -42,8 +43,8 @@ final class Layout
 		]
 		, 'landscape' => [
 			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemSize' => 32
-			, 'card' => [24,34], 'cardStep' => 10, 'handCard' => [62,87], 'handStep' => 26, 'dialogCard' => [86,120]
-			, 'plateWidth' => 106, 'handPlateWidth' => 190, 'plateLift' => 44, 'handPlateLift' => 70, 'handBankLift' => 0
+			, 'card' => [28,40], 'cardStep' => 12, 'handCard' => [72,101], 'handStep' => 30, 'dialogCard' => [86,120]
+			, 'plateWidth' => 112, 'handPlateWidth' => 192, 'plateLift' => 44, 'handPlateLift' => 70, 'handBankLift' => 0
 			, 'actions' => [568,250], 'actionRows' => false, 'buttonHeight' => 52, 'chipRadius' => 9, 'handChipRadius' => 11
 			, 'menuItem' => [350,52], 'menuTop' => 150, 'dialogWidth' => 530, 'display' => 42
 		]
@@ -54,11 +55,12 @@ final class Layout
 
 	/**
 	 * @param string $profile `wide`, `tall` or `landscape`.
-	 * @param float $scale Device pixels per design pixel.
+	 * @param float $scale Device pixels per vertical design pixel and per fixed-size object unit.
+	 * @param float $horizontalScale Device pixels per horizontal design pixel.
 	 * @param float $left Device x of the field's left edge.
 	 * @param float $top Device y of the field's top edge.
 	 */
-	private function __construct(public readonly string $profile, array $design, public readonly float $scale, public readonly float $left, public readonly float $top, public readonly float $dpr, public readonly int $seats)
+	private function __construct(public readonly string $profile, array $design, public readonly float $scale, public readonly float $horizontalScale, public readonly float $left, public readonly float $top, public readonly float $dpr, public readonly int $seats)
 	{
 		$this->design = $design;
 	}
@@ -81,34 +83,24 @@ final class Layout
 		$design = self::PROFILES[$profile];
 		if($profile === 'wide')
 		{
-			// A taller desktop canvas expands the oval instead of centring a fixed 720-high field between empty
-			// bands. Preserve the established object scale: the top seat stays fixed, the hand and controls follow
-			// the bottom, and the centre advances by half of the added height.
-			$heightForAspect = (int)round($design['width'] / $aspect);
-			$extra = max(0, $heightForAspect - $design['height']);
-			$design['height'] += $extra;
-			$design['centre'][1] += $extra / 2;
-			$design['oval'][1] += $extra / 2;
-			$design['actions'][1] += $extra;
-			$design['menuTop'] += $extra / 2;
-			$design['verticalShift'] = $extra / 2;
+			// Fill the canvas vertically from the canonical 720-high field. Width gets its own transform below;
+			// changing only the browser width must never feed back into this scale or into any object size.
+			$fieldScale = max(1e-6, $height / $design['height']);
 			// Wide tables use one stable right-side action column at every aspect ratio. Keeping this independent of
 			// horizontal size also lets the menu, status plates, emblems and type retain one height-derived scale.
 			$design['verticalActions'] = true;
 
 			// Sparse tables use one CSS size throughout the wide profile. Actual geometry may reduce it before any
 			// seat block gains a new overlap. The human fan remains centered; its surrounding objects follow it.
-			$room = min(1, $extra / 360);
-			$fieldScale = max(1e-6, min($width / $design['width'], $height / $design['height']));
 			// Chrome follows available vertical room only. Horizontal resizing may move or resize table objects, but
 			// cannot make plates, emblems, controls or type jump between vertical sizes.
-			$verticalScale = max($dpr, $height / self::PROFILES['wide']['height']);
+			$verticalScale = max($dpr, $fieldScale);
 			$design['chromeScale'] = $verticalScale / $fieldScale;
 			if(abs($design['chromeScale'] - 1) > 1e-9) $design['emblemSize'] *= $design['chromeScale'];
 			$preferredDensity = 1 + match($seats) { 2 => .48, 3 => .40, 4 => .32, default => 0 };
 			$growth = $seats <= 4
 				? $preferredDensity * $dpr / $fieldScale
-				: 1 + $room * match($seats) { 5 => .16, 6 => .10, 7 => .05, default => 0 };
+				: 1;
 			if($seats <= 4 && $growth > 1 && !self::wideGrowthFits($design, $growth, $fieldScale, $dpr, $seats))
 			{
 				$low = 1.0;
@@ -149,7 +141,13 @@ final class Layout
 			}
 		}
 		$scale = max(1e-6, min($width / $design['width'], $height / $design['height']));
-		return new self($profile, $design, $scale, ($width - $design['width'] * $scale) / 2, ($height - $design['height'] * $scale) / 2, $dpr, $seats);
+		$horizontalScale = $scale;
+		if($profile === 'wide')
+		{
+			$scale = max(1e-6, $height / $design['height']);
+			$horizontalScale = min($scale, max(1e-6, $width / $design['width']));
+		}
+		return new self($profile, $design, $scale, $horizontalScale, ($width - $design['width'] * $horizontalScale) / 2, ($height - $design['height'] * $scale) / 2, $dpr, $seats);
 	}
 
 	/** Grow a wide table's visible objects while preserving its top, bottom and action-side anchors. */
@@ -193,8 +191,8 @@ final class Layout
 	 */
 	private static function wideGrowthFits(array $base, float $growth, float $scale, float $dpr, int $seats): bool
 	{
-		$baseline = new self('wide', $base, $scale, 0, 0, $dpr, $seats);
-		$candidate = new self('wide', self::scaleWideObjects($base, $growth), $scale, 0, 0, $dpr, $seats);
+		$baseline = new self('wide', $base, $scale, $scale, 0, 0, $dpr, $seats);
+		$candidate = new self('wide', self::scaleWideObjects($base, $growth), $scale, $scale, 0, 0, $dpr, $seats);
 		$baseOverlaps = self::wideOverlaps($baseline, $seats);
 		foreach(self::wideOverlaps($candidate, $seats) as $pair => $area)
 			if($area > ($baseOverlaps[$pair] ?? 0) + 1e-6) return false;
@@ -235,6 +233,12 @@ final class Layout
 		}
 		foreach($blocks as $a => $first) foreach($blocks as $b => $second) if($a < $b)
 			$overlaps["seat:$a:seat:$b"] = self::intersectionArea($first, $second);
+		// Sparse hands may grow only while the permanent action lane remains clear. Reserve the complete vertical
+		// button/stepper envelope so the growth solver cannot trade centre space for a control collision.
+		$control = $layout->controlSize();
+		$actionTop = $layout->height() - 26 - 5 * $control - 4 * 10;
+		$actionLane = [$layout->width() - 266, $actionTop, 250, $layout->height() - 26 - $actionTop];
+		foreach($blocks as $seat => $block) $overlaps["seat:$seat:actions"] = self::intersectionArea($block, $actionLane);
 		return $overlaps;
 	}
 
@@ -286,8 +290,8 @@ final class Layout
 	/** Whether opponents sit in side columns rather than on the oval. */
 	public function columns(): bool { return $this->profile !== 'wide'; }
 
-	/** Whether the wide table stacks its regular actions in the right-side lane. */
-	public function verticalActionBar(): bool { return $this->profile === 'wide' && !empty($this->design['verticalActions']); }
+	/** Whether a desktop table stacks its regular actions in the right-side lane. */
+	public function verticalActionBar(): bool { return $this->profile === 'landscape' || ($this->profile === 'wide' && !empty($this->design['verticalActions'])); }
 
 	/** Right edge of the table area; the landscape control panel lies beyond it. */
 	public function tableRight(): float { return $this->profile === 'landscape' ? $this->width() - self::PANEL : $this->width(); }
@@ -326,7 +330,7 @@ final class Layout
 	 */
 	public function rect(float $x, float $y, float $width, float $height): array
 	{
-		return [$this->left + $x * $this->scale, $this->top + $y * $this->scale, $width * $this->scale, $height * $this->scale];
+		return [$this->left + $x * $this->horizontalScale, $this->top + $y * $this->scale, $width * $this->horizontalScale, $height * $this->scale];
 	}
 
 	/**
@@ -338,7 +342,7 @@ final class Layout
 	 */
 	public function point(float $x, float $y): array
 	{
-		return [$this->left + $x * $this->scale, $this->top + $y * $this->scale];
+		return [$this->left + $x * $this->horizontalScale, $this->top + $y * $this->scale];
 	}
 
 	/**
@@ -350,7 +354,7 @@ final class Layout
 	 */
 	public function design(float $x, float $y): array
 	{
-		return [($x - $this->left) / $this->scale, ($y - $this->top) / $this->scale];
+		return [($x - $this->left) / $this->horizontalScale, ($y - $this->top) / $this->scale];
 	}
 
 	/**
@@ -398,6 +402,9 @@ final class Layout
 		$uy = sin($angle);
 		// Use the space freed above the opponents by the centered status plate, without lowering the human hand.
 		$verticalRadius = $d['oval'][1] + ($uy < 0 ? $d['upperStretch'] : 0);
+		// Larger opponent faces need a wider vertical arc. This spacing is independent of the viewport width, so
+		// compressing x cannot pull diagonal chip banks into the next player's indicator.
+		if(!$human && $seats > 2) $verticalRadius += max(0, $d['card'][1] - self::PROFILES['wide']['card'][1]) * 1.25;
 		[$cx,$cy] = [$d['centre'][0] + $ux * $d['oval'][0], $d['centre'][1] + $uy * $verticalRadius];
 		// Heads-up sits exactly on the top axis, where cosine rounding used to pick the left treatment. Keep the
 		// hand centred but mirror its identity, bank and denomination rows like every opponent on the right side.
@@ -576,6 +583,9 @@ final class Layout
 	public function centre(): array
 	{
 		[$cx,$cy] = $this->design['centre'];
+		// The larger fixed-height wide cards leave the status lane directly above the local hand. Lift the entire
+		// centre cluster together so its current-bet plate and message can occupy that lane without stacking.
+		if($this->profile === 'wide') $cy -= 30;
 		[$cardWidth,$cardHeight] = $this->design['handCard'];
 		$chrome = (float)($this->design['chromeScale'] ?? 1);
 		$plateHeight = $this->plateHeight();
@@ -671,8 +681,8 @@ final class Layout
 	/**
 	 * Design-space rectangles of the action buttons for the legal actions of the human seat.
 	 *
-	 * Only legal actions get a button; Fold is leftmost, the primary action rightmost. In the tall profile the
-	 * buttons fill a row across the bottom with touch-sized heights. Each entry carries the intent it sends, its
+	 * Only legal actions get a button; Fold comes first and the primary action last. On phones the buttons fill a
+	 * row across the bottom; desktop profiles stack them in the right lane. Each entry carries the intent it sends, its
 	 * label and its key legend.
 	 *
 	 * @param array<string,mixed> $view Current session view.
@@ -738,7 +748,7 @@ final class Layout
 		$height = $this->controlSize();
 		if($this->verticalActionBar())
 		{
-			$width = min(250, $this->width() - 32);
+			$width = $this->profile === 'landscape' ? self::PANEL - 32 : min(250, $this->width() - 32);
 			$x = $this->width() - $width - 16;
 			$bottom = $this->height() - 26;
 			if(!empty($legal['bet'])) $bottom -= $height + $gap;

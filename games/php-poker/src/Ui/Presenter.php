@@ -247,7 +247,7 @@ final class Presenter
 			$targets[] = $target;
 		};
 		// These informational screens already dismiss on any click; controls take priority over dismissal.
-		$wholeCanvas = [-$layout->left / $layout->scale, -$layout->top / $layout->scale, $this->width / $layout->scale, $this->height / $layout->scale];
+		$wholeCanvas = [-$layout->left / $layout->horizontalScale, -$layout->top / $layout->scale, $this->width / $layout->horizontalScale, $this->height / $layout->scale];
 		if(($this->view['screen'] ?? 'menu') === 'menu')
 		{
 			if($this->local === 'setup')
@@ -305,7 +305,7 @@ final class Presenter
 
 		// The menu bar's left entries open the menu; the right-hand title does nothing. The bar is drawn on the
 		// canvas's top-left corner, which lies outside the field when the field is centred.
-		$addKey([-$layout->left / $layout->scale, -$layout->top / $layout->scale, 260, $layout->menuHeight()], 'escape');
+		$addKey([-$layout->left / $layout->horizontalScale, -$layout->top / $layout->scale, 260, $layout->menuHeight()], 'escape');
 		return $targets;
 	}
 
