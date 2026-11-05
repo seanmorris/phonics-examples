@@ -62,8 +62,28 @@ const manifest = {
 	, cards: cardArt
 };
 generated.set('textures.json', Buffer.from(JSON.stringify(manifest, null, 2) + '\n'));
-const posterSvg = await fs.readFile(new URL('art/poster.svg', root), 'utf8');
-generated.set('poster.png', Buffer.from(new Resvg(posterSvg, {fitTo: {mode: 'width', value: 1280}}).render().asPng()));
+// Use the bundled Barlow outlines for the poster too. Host font fallback changes the PNG between
+// developer machines and CI, even with identical SVG input and resvg versions.
+const posterSource = await fs.readFile(new URL('art/poster.svg', root), 'utf8');
+const posterSvg = posterSource.replace(/<text\b([^>]*)>([^<]*)<\/text>/g, (_, attributes, text) => {
+	const attrs = Object.fromEntries([...attributes.matchAll(/([\w-]+)="([^"]*)"/g)].map(match => [match[1], match[2]]));
+	const face = outlines.faces.bold;
+	const size = Number(attrs['font-size']);
+	const tracking = Number(attrs['letter-spacing'] ?? 0);
+	let width = 0, previous = '', paths = '';
+	for(const character of text)
+	{
+		const glyph = face.glyphs[character];
+		if(!glyph) throw Error(`Poster uses an unbundled glyph: ${character}`);
+		if(previous) width += (face.kerning[previous + character] ?? 0) * size + tracking;
+		if(glyph.path) paths += `<path transform="translate(${width} 0) scale(${size})" d="${glyph.path}"/>`;
+		width += glyph.advance * size;
+		previous = character;
+	}
+	const shift = attrs['text-anchor'] === 'middle' ? width / 2 : attrs['text-anchor'] === 'end' ? width : 0;
+	return `<g fill="${attrs.fill}" opacity="${attrs.opacity ?? 1}" transform="translate(${Number(attrs.x) - shift} ${Number(attrs.y)})">${paths}</g>`;
+});
+generated.set('poster.png', Buffer.from(new Resvg(posterSvg, {fitTo: {mode: 'width', value: 1280}, font: {loadSystemFonts: false}}).render().asPng()));
 
 if(check)
 {
