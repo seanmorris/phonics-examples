@@ -1,7 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {OnlineDeal,ONLINE_ACTION_TYPES,evaluateHand} from '../games/php-poker/browser/online-deal.mjs';
+import {pokerCommandBatch} from '../games/php-poker/browser/game.mjs';
+
+test('PHP input intents cross the browser bridge before online routing',async()=>{
+	const clicked={type:'bet',amount:2,generation:1,revision:12};
+	const injected={type:'menu'};
+	assert.deepEqual(pokerCommandBatch(JSON.stringify([clicked]),[injected]),[clicked,injected]);
+	assert.deepEqual(pokerCommandBatch('',[]),[]);
+	assert.throws(()=>pokerCommandBatch('{}',[]),/commands must be a list/);
+	const application=await readFile(new URL('../games/php-poker/application.php',import.meta.url),'utf8');
+	assert.match(application,/\$commands\(json_encode\(\$intents,/);
+});
 
 const storage=()=>{
 	const values=new Map;

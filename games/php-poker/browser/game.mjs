@@ -19,6 +19,14 @@ export function sheetCell(id,suitRows)
 	return suitRows[suit]*13+(rank===14?0:rank-1);
 }
 
+/** Combine intents produced by PHP input with commands injected through the browser test/accessibility bridge. */
+export function pokerCommandBatch(generatedJson,injected=[])
+{
+	const generated=generatedJson?JSON.parse(generatedJson):[];
+	if(!Array.isArray(generated)||!Array.isArray(injected))throw new TypeError('Poker commands must be a list');
+	return [...generated,...injected];
+}
+
 /**
  * Rasterise the deck sheet and both backs into one RGBA atlas: 9 columns of cells, sheet order first, then red and
  * blue backs. Returns the descriptor PHP expects, with the pixels as base64.
@@ -195,8 +203,8 @@ export function activate({module, canvas, session})
 		return JSON.stringify(frame);
 	};
 	let commands=[];
-	module.pokerCommands=()=>{
-		const queued=commands;commands=[];
+	module.pokerCommands=(generatedJson='[]')=>{
+		const queued=pokerCommandBatch(generatedJson,commands);commands=[];
 		if(online)
 		{
 			if(queued.some(command=>command.type==='menu'))void enqueue(()=>roomWrite(()=>lobbyPort.leave()));

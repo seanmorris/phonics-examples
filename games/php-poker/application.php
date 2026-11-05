@@ -53,8 +53,10 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 	$commands=vrzno_env('pokerCommands');
 	if($commands)
 	{
-		$queued=json_decode((string)$commands(),true,16,JSON_THROW_ON_ERROR);
-		if(is_array($queued)) $intents=array_merge($intents,array_slice($queued,0,16));
+		// The browser owns online play. Give it real pointer, keyboard and controller intents as well as
+		// commands injected through the accessibility bridge; it returns only work PHP should execute locally.
+		$queued=json_decode((string)$commands(json_encode($intents,JSON_THROW_ON_ERROR)),true,16,JSON_THROW_ON_ERROR);
+		$intents=is_array($queued)?array_slice($queued,0,16):[];
 	}
 	foreach($intents as $intent)
 	{
