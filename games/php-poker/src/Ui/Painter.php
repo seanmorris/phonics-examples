@@ -401,8 +401,11 @@ final class Painter
 	private function chipStacks(int|string $owner, array $bank): void
 	{
 		ksort($bank);
+		$chips = [];
 		foreach($bank as $value => $count) for($index = 0; $index < $count; $index++)
-		$this->chip($this->layout->chip($owner, count($this->view['players']), (int)$value, $index), (int)$value);
+		$chips[] = ['position' => $this->layout->chip($owner, count($this->view['players']), (int)$value, $index), 'value' => (int)$value];
+		if($owner === 'pot') usort($chips, static fn(array $a, array $b): int => $a['position'][1] <=> $b['position'][1]);
+		foreach($chips as $chip) $this->chip($chip['position'], $chip['value']);
 	}
 
 	private function chip(array $position, int $value): void

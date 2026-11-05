@@ -15,14 +15,47 @@ $expect = static function(bool $ok, string $message) use (&$checks): void {
 	$checks++;
 };
 $value = static fn(array $banks): int => array_sum(array_map(Chips::value(...), $banks));
+$ordered = static function(array $bank) use ($expect): void {
+	ksort($bank);
+	$rear = PHP_INT_MAX;
+	foreach($bank as $count) if($count > 0)
+	{
+		$expect($count < $rear, 'larger denominations in front are strictly shorter than occupied rear stacks');
+		$rear = $count;
+	}
+};
 foreach([0,1,2,4,5,24,25,99,100,499,500,1000,4000,2147483647] as $amount)
-$expect(Chips::value(Chips::bank($amount)) === $amount, "exact denomination total for $amount");
+{
+	$expect(Chips::value(Chips::bank($amount)) === $amount, "exact denomination total for $amount");
+	$ordered(Chips::bank($amount));
+}
 $expect(Chips::bank(0) === [], 'an empty stack contains no decorative chips');
 $stage = Chips::transfer([0 => [100 => 5], 'pot' => []], 0, 'pot', 2);
 $expect(Chips::value($stage['before'][0]) === 500 && Chips::value($stage['after'][0]) === 498, 'making change preserves the starting bank and exact payment');
 $expect(array_column($stage['moves'], 'value') === [1,1], 'a two-unit bet moves two physical one-unit chips');
-$expect($stage['moves'][0]['sourceIndex'] === 4 && $stage['moves'][1]['sourceIndex'] === 3, 'chips leave from the actual top of the changed stack');
+$expect($stage['moves'][0]['sourceIndex'] === $stage['before'][0][1] - 1 && $stage['moves'][1]['sourceIndex'] === $stage['before'][0][1] - 2, 'chips leave from the actual top of the changed stack');
 $expect($stage['after']['pot'] === [1 => 2], 'the pot keeps the chips that arrived');
+
+// Check every departure/arrival prefix, including broke recipients and payments that would expose a rear stack.
+foreach([1,2,5,6,24,25,26,99,100,499,500,1000,4000] as $amount)
+foreach(array_unique([1,min(2,$amount),min(20,$amount),max(1,$amount-1),$amount]) as $payment)
+foreach([0,1,5,100,500] as $recipient)
+foreach([[0,'pot'],['pot',0],[0,1]] as [$from,$to])
+{
+	$stage = Chips::transfer([$from => Chips::bank($amount), $to => Chips::bank($recipient)], $from, $to, $payment);
+	$visible = $stage['before'];
+	foreach($visible as $owner => $bank) if($owner !== 'pot') $ordered($bank);
+	foreach($stage['moves'] as $move)
+	{
+		$expect($move['sourceIndex'] === $visible[$from][$move['value']] - 1, 'each departure removes the visible top chip');
+		$expect($move['destinationIndex'] === ($visible[$to][$move['value']] ?? 0), 'each arrival uses the next visible destination slot');
+		$visible[$from][$move['value']]--;
+		$visible[$to][$move['value']] = ($visible[$to][$move['value']] ?? 0) + 1;
+		foreach($visible as $owner => $bank) if($owner !== 'pot') $ordered($bank);
+		$expect($value($visible) === $amount + $recipient, 'making change and moving chips preserve value');
+	}
+	$expect($visible === $stage['after'], 'the landed inventory is the inventory used after animation');
+}
 
 foreach([.1,.25,.5,.75,.9] as $progress)
 {
@@ -64,7 +97,11 @@ foreach([2,4,8] as $seats) foreach(['jackpots','anything'] as $variant)
 		$view = $session->view();
 		$presenter->update($view);
 		$state = $presenter->state();
-		foreach($view['players'] as $seat => $player) $expect(Chips::value($state['chips'][$seat]) === $player['stack'], 'visible bank inventory matches the authorized balance');
+		foreach($view['players'] as $seat => $player)
+		{
+			$expect(Chips::value($state['chips'][$seat]) === $player['stack'], 'visible bank inventory matches the authorized balance');
+			$ordered($state['chips'][$seat]);
+		}
 		$expect(Chips::value($state['chips']['pot']) === $view['pot'], 'pot inventory matches the authorized pot');
 		$animation = $presenter->status()['ui']['animation'];
 		if($animation)
@@ -79,6 +116,7 @@ foreach([2,4,8] as $seats) foreach(['jackpots','anything'] as $variant)
 				$moving = array_sum(array_column($frame['chips'], 'value'));
 				$expect($value($frame['banks']) + $moving === $value($state['chips']), 'every chip is in a stack or in flight, never duplicated or lost');
 				foreach($frame['banks'] as $bank) foreach($bank as $count) $expect($count >= 0, 'no stack has a negative count');
+				foreach($frame['banks'] as $owner => $bank) if($owner !== 'pot') $ordered($bank);
 			}
 			$presenter->advance(100);
 			$expect(!$presenter->animating(), 'every movement has a finite idle endpoint');

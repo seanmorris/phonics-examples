@@ -92,8 +92,10 @@ Menu/background pauses hold presentation time. Movement stops drawing frames whe
 
 `Chips` maintains exact visual inventories, separate from rules and saves. White chips are 1, red 5, green 25,
 black 100, purple 500 and gold 1,000; larger denominations are supported for larger balances. Every visible
-chip is counted and marked with its value. New banks include small change, and an oversized chip can be
-exchanged before a payment. Payments, antes and awards remove chips from their actual stack positions and
+chip is counted and marked with its value. Denominations nest closely, with larger denominations in front.
+Banks make change before transfers so each larger denomination has fewer chips than the occupied stacks
+behind it, including while chips depart and arrive. Pot chips form a loose, mixed cluster with stable positions.
+Payments, antes and awards remove chips from their actual stack positions and
 append them to the destination stacks. In-flight chips are counted in neither stack, so value is conserved
 throughout the movement. Empty banks show no chips. Reloading reconstructs denominations from exact balances.
 

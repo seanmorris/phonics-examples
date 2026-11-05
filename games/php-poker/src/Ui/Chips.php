@@ -27,7 +27,32 @@ final class Chips
 			$change -= $count * $value;
 		}
 		ksort($result);
+		while(($value = self::obscured($result)) !== null) self::change($result, $value);
 		return $result;
+	}
+
+	/** First front stack that is not shorter than every occupied stack behind it. */
+	private static function obscured(array $bank): ?int
+	{
+		ksort($bank);
+		$previous = PHP_INT_MAX;
+		foreach($bank as $value => $count) if($count > 0)
+		{
+			if($count >= $previous) return (int)$value;
+			$previous = $count;
+		}
+		return null;
+	}
+
+	/** Exchange one chip for the same value in the next smaller denomination. */
+	private static function change(array &$bank, int $value): void
+	{
+		$slot = array_search($value, self::VALUES, true);
+		if($slot === false || $slot === 0 || empty($bank[$value])) throw new \LogicException('Cannot make chip change');
+		$smaller = self::VALUES[$slot - 1];
+		$bank[$value]--;
+		$bank[$smaller] = ($bank[$smaller] ?? 0) + intdiv($value, $smaller);
+		ksort($bank);
 	}
 
 	public static function value(array $chips): int
@@ -51,6 +76,36 @@ final class Chips
 	public static function transfer(array $banks, int|string $from, int|string $to, int $amount): array
 	{
 		if($amount < 0 || $amount > self::value($banks[$from])) throw new \InvalidArgumentException('Insufficient chips');
+		// Exchange the banks before a transfer, then keep every chip fixed until it leaves or arrives.
+		foreach([$from,$to] as $owner) if($owner !== 'pot') $banks[$owner] = self::bank(self::value($banks[$owner]));
+		while(true)
+		{
+			$stage = self::payment($banks, $from, $to, $amount);
+			$visible = $stage['before'];
+			$invalid = null;
+			$check = static function() use (&$visible, &$invalid, $from, $to): void {
+				foreach([$from,$to] as $owner) if($owner !== 'pot' && ($value = self::obscured($visible[$owner])) !== null)
+				{ $invalid = [$owner,$value]; return; }
+			};
+			$check();
+			foreach($stage['moves'] as $move)
+			{
+				if($invalid !== null) break;
+				$visible[$from][$move['value']]--;
+				$visible[$to][$move['value']] = ($visible[$to][$move['value']] ?? 0) + 1;
+				$check();
+			}
+			if($invalid === null) return $stage;
+			[$owner,$value] = $invalid;
+			$banks = $stage['before'];
+			// If the offending destination chip is still incoming, break it at the source before it flies.
+			self::change($banks[!empty($banks[$owner][$value]) ? $owner : $from], $value);
+		}
+	}
+
+	/** Plan a payment; `transfer()` makes any additional change needed to keep stacks visible. */
+	private static function payment(array $banks, int|string $from, int|string $to, int $amount): array
+	{
 		$remaining = $amount;
 		$source = $banks[$from];
 		$pieces = [];
@@ -74,6 +129,7 @@ final class Chips
 				break;
 			}
 		}
+		sort($pieces, SORT_NUMERIC);
 		$before = $banks;
 		$before[$from] = $source;
 		foreach($pieces as $value) $before[$from][$value] = ($before[$from][$value] ?? 0) + 1;

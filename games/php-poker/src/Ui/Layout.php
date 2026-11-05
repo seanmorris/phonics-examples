@@ -240,16 +240,29 @@ final class Layout
 		return $centre;
 	}
 
-	/** Exact position and radius of one chip in a visible denomination stack. */
+	/** Stable positions shared by stacks, the loose pot, and every transfer endpoint. */
 	public function chip(int|string $owner, int $seats, int $value, int $index): array
 	{
 		$slot = array_search($value, Chips::VALUES, true);
 		if($slot === false || $index < 0) throw new \InvalidArgumentException('Invalid chip');
 		$radius = (float)$this->metric($owner === 0 ? 'handChipRadius' : 'chipRadius');
-		[$x, $y] = $owner === 'pot' ? $this->centre()['chips'][0] : $this->seat($owner, $seats)['chips'];
-		// Denomination pairs sit in front of the hand, keeping the upper rows clear of cards and name captions.
+		if($owner === 'pot')
+		{
+			[$x,$y,$width,$height] = $this->centre()['deck'];
+			$spread = $this->profile === 'landscape' ? .8 : 1.6;
+			// A fixed low-discrepancy scatter: adding or removing chips never reshuffles the remaining pile.
+			$id = $index * count(Chips::VALUES) + $slot + 1;
+			$angle = $id * 2.399963229728653;
+			$distance = sqrt(fmod($id * .7548776662466927, 1));
+			return [$x - $radius * ($spread + 1.2) + cos($angle) * $distance * $radius * $spread,
+				$y + $height / 2 + sin($angle) * $distance * $radius * ($this->profile === 'landscape' ? 1.4 : 2), $radius];
+		}
+		[$x, $y] = $this->seat($owner, $seats)['chips'];
+		// Small denominations form the tall rear row; larger, shorter stacks nest closely in front.
 		$x = max($radius, min($this->width() - $radius * 4.6, $x));
-		return [$x + intdiv($slot, 2) * $radius * 1.8, $y + ($slot % 2) * $radius * 1.8 - $index * $radius * .22, $radius];
+		$row = intdiv($slot, 2);
+		return [$x + (($slot % 2) * 1.45 + ($row % 2) * .5) * $radius,
+			$y + ($row * .7 + ($slot % 2) * .18 - $index * .22) * $radius, $radius];
 	}
 
 	/**
