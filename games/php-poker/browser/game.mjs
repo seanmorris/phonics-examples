@@ -86,24 +86,35 @@ export function activate({module, canvas, session})
 		throw new Error('PHP Poker requires WebGL2');
 	const originalStyle=canvas.getAttribute('style'),originalTabIndex=canvas.getAttribute('tabindex'),originalLabel=canvas.getAttribute('aria-label');
 	const originalDescription=canvas.getAttribute('aria-describedby');
-	canvas.style.cssText='display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;touch-action:none;outline:none;background:#1f8f45';
+	canvas.style.cssText='display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;touch-action:none;outline:none;background:#1f8f45;cursor:default';
 	canvas.tabIndex=Math.max(0,canvas.tabIndex);
 	canvas.setAttribute('aria-label','PHP Poker. F folds, C checks or calls, B bets, 1 to 5 select cards and D draws. Escape opens the menu.');
 
 	let viewport='[1280,720,1]',latest=null,closed=false;
-	const measure=()=>{
-		const box=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
-		if(box.width<1||box.height<1)return;
-		viewport=JSON.stringify([Math.max(1,Math.round(box.width*dpr)),Math.max(1,Math.round(box.height*dpr)),dpr]);
-	};
-	const resize=new ResizeObserver(measure);resize.observe(canvas);measure();
-
-	// Input queues drain once per PHP frame. Positions are device pixels in the canvas's own framebuffer space.
-	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null;
+	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
 	const local=event=>{
 		const box=canvas.getBoundingClientRect(),[width,height]=JSON.parse(viewport);
 		return {x:(event.clientX-box.left)/Math.max(1,box.width)*width,y:(event.clientY-box.top)/Math.max(1,box.height)*height};
 	};
+	const updateCursor=()=>{
+		const [width,height]=JSON.parse(viewport),x=pointer.x/width,y=pointer.y/height;
+		const hit=x>=0&&x<=1&&y>=0&&y<=1&&(latest?.ui?.hitRegions??[]).some(([left,top,w,h])=>x>=left&&x<=left+w&&y>=top&&y<=top+h);
+		canvas.style.cursor=hit?'pointer':'default';
+	};
+	const movePointer=event=>{
+		pointerClient={clientX:event.clientX,clientY:event.clientY};
+		pointer={...local(event),down:pointer.down};
+		updateCursor();
+	};
+	const measure=()=>{
+		const box=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
+		if(box.width<1||box.height<1)return;
+		viewport=JSON.stringify([Math.max(1,Math.round(box.width*dpr)),Math.max(1,Math.round(box.height*dpr)),dpr]);
+		if(pointerClient)movePointer(pointerClient);
+	};
+	const resize=new ResizeObserver(measure);resize.observe(canvas);measure();
+
+	// Input queues drain once per PHP frame. Positions are device pixels in the canvas's own framebuffer space.
 	const onKey=event=>{
 		if(closed||event.ctrlKey||event.metaKey||event.altKey)return;
 		const key=event.key.length===1?event.key.toLowerCase():event.key.toLowerCase();
@@ -115,25 +126,27 @@ export function activate({module, canvas, session})
 		const id=activePointer;activePointer=null;pressedAt=null;pointer.down=false;
 		if(id!==null&&canvas.hasPointerCapture?.(id))canvas.releasePointerCapture(id);
 	};
-	const onMove=event=>{if(activePointer===null||event.pointerId===activePointer)pointer={...local(event),down:pointer.down};};
+	const onMove=event=>{if(activePointer===null||event.pointerId===activePointer)movePointer(event);};
+	const onLeave=()=>{if(activePointer===null){pointerClient=null;pointer={x:-1,y:-1,down:false};updateCursor();}};
 	const onDown=event=>{
 		if(event.button!==0||activePointer!==null)return;
 		canvas.focus({preventScroll:true});activePointer=event.pointerId;pressedAt=[event.clientX,event.clientY];
-		pointer={...local(event),down:true};canvas.setPointerCapture?.(event.pointerId);
+		pointer.down=true;movePointer(event);canvas.setPointerCapture?.(event.pointerId);
 	};
 	const onUp=event=>{
 		if(event.button!==0||!pointer.down||event.pointerId!==activePointer)return;
 		const tapped=pressedAt&&Math.hypot(event.clientX-pressedAt[0],event.clientY-pressedAt[1])<=10;
-		const position=local(event);pointer={...position,down:false};
+		movePointer(event);const position={x:pointer.x,y:pointer.y};
 		releasePointer();
 		const box=canvas.getBoundingClientRect();
 		if(tapped&&event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom)clicks.push(position);
 	};
 	const onCancel=event=>{if(event.pointerId===activePointer)releasePointer();};
-	const clearInput=()=>{keys=[];clicks=[];releasePointer();};
+	const clearInput=()=>{keys=[];clicks=[];releasePointer();onLeave();};
 	const onVisibility=()=>{if(document.visibilityState==='hidden')clearInput();};
 	canvas.addEventListener('keydown',onKey);
 	canvas.addEventListener('pointermove',onMove);
+	canvas.addEventListener('pointerleave',onLeave);
 	canvas.addEventListener('pointerdown',onDown);
 	canvas.addEventListener('pointerup',onUp);
 	canvas.addEventListener('pointercancel',onCancel);
@@ -184,11 +197,12 @@ export function activate({module, canvas, session})
 	module.pokerCommands=()=>{const queued=commands;commands=[];return JSON.stringify(queued);};
 	module.pokerStatus=json=>{
 		latest=JSON.parse(json);canvas.dataset.phpPoker=json;
+		updateCursor();
 		const turn=latest.turn===0?'Your turn.':latest.turn>0?`${latest.players?.[latest.turn]?.name??'Opponent'} is thinking.`:'';
 		const selected=latest.ui?.discards??[];
 		const selection=latest.screen==='table'&&latest.legalActions?.draw
 			? selected.length?'Selected for discard: '+selected.map(cardName).join(', ')+'. Press D to draw.':'No cards selected. Press D to stand pat.' : '';
-		const line=[latest.error,latest.message,turn,selection].filter(Boolean).join(' ');
+		const line=[latest.error,latest.ui?.hint||latest.message,turn,selection].filter(Boolean).join(' ');
 		if(line!==spoken){spoken=line;live.textContent=line;}
 		// Only the local player's authorized cards enter the accessible hand description.
 		const own=latest.screen==='table'?latest.players?.[0]?.cards:[];
@@ -217,6 +231,7 @@ export function activate({module, canvas, session})
 		if(closed)return;closed=true;resize.disconnect();
 		clearInput();
 		canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('pointermove',onMove);
+		canvas.removeEventListener('pointerleave',onLeave);
 		canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);canvas.removeEventListener('pointercancel',onCancel);
 		canvas.removeEventListener('lostpointercapture',onCancel);canvas.removeEventListener('blur',clearInput);
 		document.removeEventListener('visibilitychange',onVisibility);

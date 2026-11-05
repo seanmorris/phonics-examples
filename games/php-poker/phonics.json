@@ -65,7 +65,7 @@
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
     "NOTICE": "sha256-BDfp8L2qJiIEbCnXhe/zKq9qNFD708WfRDSkGHI0tRU=",
-    "application.php": "sha256-+nEn3xahu0zn+BB4M6A0iZgDFjT10Uk9lvOfdizivJo=",
+    "application.php": "sha256-jVD7ZQsDkdlxzxx/b6IOxsKtZK0fvyUmzmWbb5LlzG4=",
     "art/cards/back-blue.svg": "sha256-/kOyO4O+W/JzEE2pkzMCU9PL8dYHYNmKEM9/sBilYiU=",
     "art/cards/back-red.svg": "sha256-HX4CryU8ztM3thI0RY+9aMZk0UCsMVWvJJIf6so5czY=",
     "art/cards/deck.svg": "sha256-qWFttCwcqhboDxcn6WYmjicdRYw9WN/u5r1zYsvGBRc=",
@@ -83,7 +83,7 @@
     "assets/generated/ui-font.json": "sha256-oE2kugIUP9+RYNWPYwfwhWrNMh9b8AU7F5i3EZuSaQU=",
     "assets/generated/ui-font.rgba": "sha256-9OUHap/sOu16PGsQiGbzKyeU7FsfqfC45p7yYLIDBhg=",
     "autoload.php": "sha256-oR7TtuNrvbEy7h35CVKXA4Uew2UtBMR9XVlDQa1ZbBk=",
-    "browser/game.mjs": "sha256-lUee67JnySSmKv4895VirzMaDyZLLvcx0ptlh69fPxw=",
+    "browser/game.mjs": "sha256-k51sEf+fI7h9iLpuyVvue3/2SafuGj7KPB3rpF6LEP4=",
     "browser/persistence.mjs": "sha256-txa/BXXV8tJTJlbXkBNLVGzdtFlQ+2wGYpVtKX9hTfY=",
     "shaders/ui.frag": "sha256-Tc3yUPRiouakSGUmhLexNnR6Cdr6OLE56NiLTwGcppA=",
     "shaders/ui.vert": "sha256-v6qumyh53sxStBcAUf2YZPFyn122NilzAU9NrSUxdpQ=",
@@ -98,8 +98,8 @@
     "src/Render/UiCanvas.php": "sha256-1FPfxuVPKWifZCpr5Gf0G8pfNXawCLfpqRyH3+4uMeQ=",
     "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
     "src/Session.php": "sha256-EgAQs+XJDn7NXqSftb4wPX9UPJssR/SIL/g0zeJPqOA=",
-    "src/Ui/Layout.php": "sha256-hAADyQfVpgEhDTAmCwJThK3rWb53D8OkYfO0+0TCK24=",
-    "src/Ui/Painter.php": "sha256-NfLgGhZtKQctYXrrLz1nodem7mO4QIujkyrcKhOLrec=",
-    "src/Ui/Presenter.php": "sha256-CkaHuu0BN/gzP2iHZ1lY5Hkr3I3aKTU7R0yWwE7S1So="
+    "src/Ui/Layout.php": "sha256-e0naGC9ucoDbvZPvYLzm3AiLH0ccBs49W0xfbxc6FUs=",
+    "src/Ui/Painter.php": "sha256-uO0jVkIuKyhjfahaDq8VCybv2u3UEb+uGSdf2/utGGg=",
+    "src/Ui/Presenter.php": "sha256-TC9QugHXUGSeSRkWzWzMa+qewmUJPbFZ6xuuuS/HMHI="
   }
 }

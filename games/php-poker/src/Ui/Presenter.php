@@ -107,60 +107,75 @@ final class Presenter
 	/** @return list<array<string,mixed>> */
 	private function click(float $x, float $y): array
 	{
-		$layout = $this->layout();
-		$point = $layout->design($x, $y);
+		$point = $this->layout()->design($x, $y);
 		$this->dirty = true;
+		foreach($this->clickTargets() as $target) if(Layout::hit($point, $target['rect']))
+		{
+			if(isset($target['key'])) return $this->key($target['key']);
+			if(isset($target['menu'])) return $this->activateMenu($target['menu']);
+			if(isset($target['card'])) { $this->toggleCard($target['card']); return []; }
+			return $this->activate($target['button']['id'], $target['button']['intent']);
+		}
+		return [];
+	}
 
+	/** Active targets in hit-test order, shared by clicks and browser cursor feedback. */
+	private function clickTargets(): array
+	{
+		$layout = $this->layout();
+		$targets = [];
+		$addKey = static function(array $rect, string $key) use (&$targets): void { $targets[] = ['rect' => $rect, 'key' => $key]; };
+		// These informational screens already dismiss on any click; controls take priority over dismissal.
+		$wholeCanvas = [-$layout->left / $layout->scale, -$layout->top / $layout->scale, $this->width / $layout->scale, $this->height / $layout->scale];
 		if(($this->view['screen'] ?? 'menu') === 'menu')
 		{
 			if($this->local === 'setup')
 			{
-				$setup = $this->layout()->setup($this->setupPlayers, $this->setupVariant);
-				if(Layout::hit($point, $setup['less'])) $this->setupPlayers = max(2, $this->setupPlayers - 1);
-				elseif(Layout::hit($point, $setup['more'])) $this->setupPlayers = min(8, $this->setupPlayers + 1);
-				elseif(Layout::hit($point, $setup['variant'])) $this->setupVariant = $this->setupVariant === 'jackpots' ? 'anything' : 'jackpots';
-				elseif(Layout::hit($point, $setup['back'])) $this->local = 'menu';
-				elseif(Layout::hit($point, $setup['start'])) return [['type' => 'start', 'players' => $this->setupPlayers, 'variant' => $this->setupVariant]];
-				return [];
+				$setup = $layout->setup($this->setupPlayers, $this->setupVariant);
+				if($this->setupPlayers > 2) $addKey($setup['less'], 'arrowleft');
+				if($this->setupPlayers < 8) $addKey($setup['more'], 'arrowright');
+				$addKey($setup['variant'], 'v');
+				$addKey($setup['back'], 'escape');
+				$addKey($setup['start'], 'enter');
 			}
-			if($this->local !== 'menu') { $this->local = 'menu'; return []; }
-			foreach($this->layout()->menu(!empty($this->view['canContinue'])) as $item) if(Layout::hit($point, $item['rect']))
-			return $this->activateMenu($item);
-			return [];
+			elseif($this->local !== 'menu') $addKey($wholeCanvas, 'escape');
+			else foreach($layout->menu(!empty($this->view['canContinue'])) as $item) $targets[] = ['rect' => $item['rect'], 'menu' => $item];
+			return $targets;
 		}
 
 		if(in_array($this->view['screen'] ?? '', ['help','settings'], true))
 		{
 			if(($this->view['screen'] ?? '') === 'settings')
 			{
-				$toggle = $this->layout()->setup(0, '');
-				if(Layout::hit($point, $toggle['pace'])) return [['type' => 'pace', 'value' => ($this->view['pace'] ?? 'normal') === 'fast' ? 'normal' : 'fast']];
-				if(Layout::hit($point, $toggle['variant'])) { $this->mode = $this->mode === Theme::CLASSIC ? Theme::MODERN : Theme::CLASSIC; return []; }
+				$toggle = $layout->setup(0, '');
+				$addKey($toggle['pace'], 'p');
+				$addKey($toggle['variant'], 'm');
 			}
-			return [['type' => $this->view['canContinue'] ? 'resume' : 'menu']];
+			$addKey($wholeCanvas, 'escape');
+			return $targets;
 		}
 
-		if($this->historyOpen) { $this->historyOpen = false; return []; }
+		if($this->historyOpen) { $addKey($wholeCanvas, 'escape'); return $targets; }
 
 		if(!empty($this->view['legalActions']['draw']) && !$this->locked())
 		{
-			$dialog = $this->layout()->discardDialog();
-			foreach($dialog['cards'] as $index => $rect) if(Layout::hit($point, $rect)) { $this->toggleCard($index); return []; }
+			$cards = $this->view['players'][0]['cards'] ?? [];
+			$dialog = $layout->discardDialog($cards, $this->discards);
+			foreach($dialog['cards'] as $index => $rect) if(isset($cards[$index])) $targets[] = ['rect' => $rect, 'card' => $index];
 		}
 
-		if($stepper = $this->layout()->stepper($this->view))
+		if($stepper = $layout->stepper($this->view))
 		{
-			if(Layout::hit($point, $stepper['less'])) { $this->step(-1); return []; }
-			if(Layout::hit($point, $stepper['more'])) { $this->step(1); return []; }
+			$addKey($stepper['less'], '-');
+			$addKey($stepper['more'], '+');
 		}
 
-		foreach($this->layout()->actions($this->view, $this->state()) as $button) if(Layout::hit($point, $button['rect']))
-		return $this->activate($button['id'], $button['intent']);
+		foreach($layout->actions($this->view, $this->state()) as $button) if(!$this->locked() || $button['intent'] === null)
+		$targets[] = ['rect' => $button['rect'], 'button' => $button];
 
 		// The menu bar's left entries open the menu; the right-hand title does nothing.
-		if($point[1] <= Layout::MENU_BAR && $point[0] < 260) return [['type' => 'menu']];
-
-		return [];
+		$addKey([0, 0, 260, Layout::MENU_BAR], 'escape');
+		return $targets;
 	}
 
 	/** @return list<array<string,mixed>> */
@@ -262,22 +277,45 @@ final class Presenter
 	/** Layout of the current canvas; the profile follows its size and pixel ratio. */
 	public function layout(): Layout { return Layout::fit($this->width, $this->height, $this->dpr); }
 
+	/** Update geometry before consuming input, including the first frame after a resize. */
+	public function resize(int $width, int $height, float $dpr): void
+	{
+		if([$width, $height, $dpr] === [$this->width, $this->height, $this->dpr]) return;
+		[$this->width, $this->height, $this->dpr] = [$width, $height, $dpr];
+		$this->dirty = true;
+	}
+
 	/** Whether a game intent is outstanding for the current revision. */
 	public function locked(): bool
 	{
 		return $this->lockedRevision !== null && $this->lockedRevision === (int)($this->view['revision'] ?? 0) && ($this->view['error'] ?? '') === '';
 	}
 
+	/** Explain the current step without inviting a draw while betting or waiting for another seat. */
+	private function guidance(): string
+	{
+		if(($this->view['screen'] ?? '') !== 'table') return '';
+		$phase = $this->view['phase'] ?? '';
+		$legal = $this->view['legalActions'] ?? [];
+		$human = $this->view['players'][0] ?? [];
+		if(in_array($phase, ['betting','draw','final-betting'], true) && !empty($human['folded'])) return 'You folded. Waiting for the other players.';
+		if($phase === 'betting') return !empty($legal['openingRequired'])
+			? 'Need jacks or better. Pass to stay in.' : 'Betting first; choose discards afterward.';
+		if($phase === 'draw' && empty($legal['draw'])) return isset($human['drawCount'])
+			? 'Your draw is complete. Waiting for the others.' : 'Waiting for your turn to choose discards.';
+		return (string)($this->view['message'] ?? '');
+	}
+
 	/**
 	 * Presentation state that layout and painting depend on.
 	 *
-	 * @return array{discards:list<int>,amount:int,mode:string,local:string,history:bool,locked:bool,setup:array{players:int,variant:string},pointer:array{float,float}|null}
+	 * @return array{discards:list<int>,amount:int,mode:string,local:string,history:bool,locked:bool,hint:string,setup:array{players:int,variant:string},pointer:array{float,float}|null}
 	 */
 	public function state(): array
 	{
 		return [
 			'discards' => $this->discards, 'amount' => $this->amount, 'mode' => $this->mode, 'local' => $this->local
-			, 'history' => $this->historyOpen, 'locked' => $this->locked()
+			, 'history' => $this->historyOpen, 'locked' => $this->locked(), 'hint' => $this->guidance()
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant], 'pointer' => $this->pointer
 		];
 	}
@@ -292,7 +330,15 @@ final class Presenter
 		$state = $this->state();
 		unset($state['pointer']);
 		$state['cardArt'] = $this->cardAtlas !== null;
-		$state['profile'] = $this->layout()->profile;
+		$layout = $this->layout();
+		$state['profile'] = $layout->profile;
+		// Normalized canvas rectangles let browser hover feedback use the same targets without copying layout rules.
+		$state['hitRegions'] = [];
+		foreach($this->clickTargets() as $target)
+		{
+			[$x, $y, $w, $h] = $layout->rect(...$target['rect']);
+			$state['hitRegions'][] = [$x / $this->width, $y / $this->height, $w / $this->width, $h / $this->height];
+		}
 		return ['ui' => $state];
 	}
 
@@ -313,7 +359,7 @@ final class Presenter
 	public function render(int $width, int $height, float $dpr): void
 	{
 		if($this->closed) return;
-		[$this->width, $this->height, $this->dpr] = [$width, $height, $dpr];
+		$this->resize($width, $height, $dpr);
 		$this->dirty = false;
 		$this->renderer ??= new UiRenderer($this->root, $this->textures);
 		if($this->cardAtlas === null) $this->pollCardAtlas();

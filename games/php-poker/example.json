@@ -3,7 +3,7 @@
   "slug": "php-poker",
   "title": "PHP Poker",
   "description": "Classic five-card draw against a table of local opponents. Save your seat and play offline.",
-  "controls": "Choose cards to discard, then confirm your draw · Follow the action bar to bet · Escape opens the menu",
+  "controls": "Bet first, then choose discards when it is your draw · Pass keeps you in; Fold leaves the hand · Escape opens the menu",
   "application": "dist/game.phar",
   "poster": "assets/generated/poster.png",
   "canvas": {"width": 1280, "height": 720},

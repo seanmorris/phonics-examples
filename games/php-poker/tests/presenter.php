@@ -111,6 +111,53 @@ $test('card selection is presentation state until Draw is pressed', static funct
 	$expect($stand === [], 'Enter is not bound to draw, so a stray Enter cannot discard');
 });
 
+$test('card hit regions follow the raised faces and the current viewport before rendering', static function(callable $expect) use ($fixture, $root): void {
+	foreach([[1280,720,1],[780,1688,2],[1688,780,2]] as [$width,$height,$dpr])
+	{
+		$presenter = new Presenter($root);
+		$view = $fixture('draw-2');
+		$presenter->update($view);
+		$presenter->resize($width, $height, $dpr);
+		$layout = $presenter->layout();
+		foreach($layout->discardDialog()['cards'] as $index => $rect)
+		{
+			$click = static function(float $x, float $y) use ($presenter, $layout): array {
+				[$x, $y] = $layout->point($x, $y);
+				return $presenter->input([], ['x' => $x, 'y' => $y, 'down' => false, 'clicks' => [['x' => $x, 'y' => $y]]], 0);
+			};
+			$click($rect[0] + $rect[2] / 2, $rect[1] + $rect[3] / 2);
+			$expect($presenter->state()['discards'] === [$view['players'][0]['cards'][$index]], 'every visible face selects the corresponding card');
+			$click($rect[0] + $rect[2] / 2, $rect[1] + $rect[3] - 2);
+			$expect(count($presenter->state()['discards']) === 1, 'the vacated space beneath a raised card is inactive');
+			[$x, $y] = $layout->point($rect[0] + $rect[2] / 2, $rect[1] - 6);
+			$hover = array_filter($presenter->status()['ui']['hitRegions'], static fn(array $r): bool => Layout::hit([$x / $width, $y / $height], $r));
+			$expect((bool)$hover, 'the raised upper edge advertises the same clickable region');
+			$click($rect[0] + $rect[2] / 2, $rect[1] - 6);
+			$expect($presenter->state()['discards'] === [], 'clicking the raised upper edge deselects');
+		}
+		$presenter->input([['key' => 'd']], null, 0);
+		$expect(count($presenter->status()['ui']['hitRegions']) === 2, 'locked draw offers only Keep all and the menu, with no card or Draw targets');
+	}
+});
+
+$test('guidance distinguishes opening bets, another seat drawing, and the human draw', static function(callable $expect) use ($fixture, $root): void {
+	$presenter = new Presenter($root);
+	$view = $fixture('opening-8');
+	$view['legalActions']['bet'] = false;
+	$view['legalActions']['openingRequired'] = true;
+	$presenter->update($view);
+	$expect($presenter->state()['hint'] === 'Need jacks or better. Pass to stay in.', 'Fold/Pass explains the opening requirement');
+	$view = $fixture('draw-2');
+	$view['turn'] = 1;
+	$view['legalActions'] = [];
+	$presenter->update($view);
+	$expect($presenter->state()['hint'] === 'Waiting for your turn to choose discards.', 'no invitation to select while another seat draws');
+	$view['turn'] = 0;
+	$view['legalActions'] = ['draw' => true];
+	$presenter->update($view);
+	$expect($presenter->state()['hint'] === $view['message'], 'the actual draw invites card selection');
+});
+
 $test('the menu, setup and settings flow send only session intents the session knows', static function(callable $expect) use ($root): void {
 	$presenter = new Presenter($root);
 	$presenter->update(['screen' => 'menu', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => true]);

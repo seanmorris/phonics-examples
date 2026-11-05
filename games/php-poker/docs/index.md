@@ -4,6 +4,8 @@ Play five-card draw at a classic 2D table against one to seven local opponents. 
 
 Choose **Play Offline** to start a table. Each hand deals five cards, runs an opening betting round, lets you replace zero to five cards, and finishes with a final betting round and showdown. Select cards first, then confirm **Draw** or **Stand Pat**. Betting controls show the amount to call and the total you are raising to.
 
+In **Jacks or Better**, you need a pair of jacks or a stronger hand to open the betting. If your only choices are **Fold** and **Pass**, choose **Pass** to stay in the hand and let someone else open. If everyone passes, the pot carries into the next deal. The **Select Discards** panel appears when the opening betting round is finished and it is your turn to draw. Cards are not selectable during betting.
+
 The dealer alone pays the ante. The local bank can lend chips when a player runs out; a player borrowing during a hand can call but cannot raise. Your stack, loans and net result remain part of the saved session.
 
 Accepted actions save automatically in this browser. Return to the menu to pause, and choose **Continue Offline** to resume the same cards and turn. Starting a new table replaces the previous saved game. A save failure is shown in the game; the previous complete save remains intact.

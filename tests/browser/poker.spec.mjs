@@ -25,6 +25,17 @@ for($i=0;$i<200;$i++) {
 throw new RuntimeException('Fixture did not reach a draw');
 `,root],{encoding:'utf8'});
 
+const openingSave=execFileSync('php',['-r',String.raw`
+require $argv[1].'/games/php-poker/autoload.php';
+require $argv[1].'/node_modules/@seanmorris/phonics/autoload.php';
+$s=new PhpPoker\Session;
+$s->command(['type'=>'start','players'=>4,'variant'=>'jackpots'],'opening-fixture-3');
+$s->command(['type'=>'pace','value'=>'fast']);
+for($i=0;$i<100 && $s->view()['turn']>0;$i++) $s->tick(.1);
+if(empty($s->view()['legalActions']['openingRequired'])) throw new RuntimeException('Expected a Fold/Pass opening');
+echo $s->save();
+`,root],{encoding:'utf8'});
+
 async function boot(page)
 {
 	await page.goto('/games/php-poker/');
@@ -214,6 +225,85 @@ test('desktop pointer can confirm discards without the dialog covering its actio
 		expect(a[0]<b[0]+b[2]&&b[0]<a[0]+a[2]&&a[1]<b[1]+b[3]&&b[1]<a[1]+a[3],'Draw button overlaps a card').toBe(false);
 	}
 	const draw=await point(canvas,button.rect);
+	await page.mouse.click(draw.x,draw.y);
+	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
+});
+
+test('the lifted edge of a selected card can deselect it',async({page})=>{
+	await page.setViewportSize({width:1365,height:900});
+	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
+	const canvas=await boot(page);
+	await canvas.focus();await page.keyboard.press('c');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	const layout=await regions(canvas),card=await point(canvas,layout.cards[0]);
+	await page.mouse.click(card.x,card.y);
+	await expect.poll(async()=>(await state(canvas)).ui.discards.length).toBe(1);
+	// Painting raises a selected card by 12 design pixels; its exposed upper edge must remain clickable.
+	const scale=layout.cards[0][3]/174;
+	const edge=await point(canvas,[layout.cards[0][0],layout.cards[0][1]-8*scale,layout.cards[0][2],4*scale]);
+	await page.mouse.click(edge.x,edge.y);
+	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([]);
+});
+
+test('clickable cards and controls show a hand cursor and the table background does not',async({page})=>{
+	await page.setViewportSize({width:1365,height:900});
+	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
+	const canvas=await boot(page);
+	const resume=await point(canvas,(await regions(canvas)).menu.find(button=>button.id==='continue').rect);
+	await page.mouse.move(resume.x,resume.y);
+	await expect(canvas).toHaveCSS('cursor','pointer');
+	await page.mouse.click(resume.x,resume.y);
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	const card=await point(canvas,(await regions(canvas)).cards[0]);
+	await page.mouse.move(card.x,card.y);
+	await expect(canvas).toHaveCSS('cursor','pointer');
+	const rect=(await regions(canvas)).cards[0];
+	const lowerEdge=await point(canvas,[rect[0],rect[1]+rect[3]-4,rect[2],2]);
+	await page.mouse.click(lowerEdge.x,lowerEdge.y);
+	await expect.poll(async()=>(await state(canvas)).ui.discards.length).toBe(1);
+	// Selection moves the card away from this stationary pointer. Keyboard deselection moves it back.
+	await expect(canvas).toHaveCSS('cursor','default');
+	await page.keyboard.press('1');
+	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([]);
+	await expect(canvas).toHaveCSS('cursor','pointer');
+	const draw=await point(canvas,(await regions(canvas)).actions.find(button=>button.id==='draw').rect);
+	await page.mouse.move(draw.x,draw.y);
+	await expect(canvas).toHaveCSS('cursor','pointer');
+	const box=await canvas.boundingBox();
+	await page.mouse.move(box.x+box.width-10,box.y+box.height-10);
+	await expect(canvas).toHaveCSS('cursor','default');
+});
+
+test('Fold/Pass explains the opening round and a later bet leads to selectable discards',async({page})=>{
+	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:openingSave});
+	const canvas=await boot(page);
+	await canvas.focus();await page.keyboard.press('c');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	expect((await regions(canvas)).actions.map(button=>button.id)).toEqual(['fold','pass']);
+	expect((await state(canvas)).ui.hint).toBe('Need jacks or better. Pass to stay in.');
+	const pass=await point(canvas,(await regions(canvas)).actions.find(button=>button.id==='pass').rect);
+	await page.mouse.click(pass.x,pass.y);
+	await expect.poll(async()=>(await state(canvas)).phase).toBe('redeal');
+	expect((await state(canvas)).players[0].folded).toBe(false);
+	const deal=await point(canvas,(await regions(canvas)).actions.find(button=>button.id==='next').rect);
+	await page.mouse.click(deal.x,deal.y);
+	for(let i=0;i<12;i++)
+	{
+		await expect.poll(async()=>(await state(canvas)).turn).toBe(0);
+		const s=await state(canvas);
+		if(s.legalActions.draw)break;
+		const actions=(await regions(canvas)).actions;
+		const button=actions.find(button=>button.id==='call')??actions.find(button=>button.id==='bet');
+		expect(button,'betting must finish before discarding').toBeTruthy();
+		const click=await point(canvas,button.rect);await page.mouse.click(click.x,click.y);
+		await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(s.revision);
+	}
+	await expect.poll(async()=>(await state(canvas)).legalActions.draw).toBe(true);
+	const before=await state(canvas);
+	const card=await point(canvas,(await regions(canvas)).cards[2]);
+	await page.mouse.click(card.x,card.y);
+	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([before.players[0].cards[2]]);
+	const draw=await point(canvas,(await regions(canvas)).actions.find(button=>button.id==='draw').rect);
 	await page.mouse.click(draw.x,draw.y);
 	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
 });

@@ -79,7 +79,11 @@ final class Painter
 		$x = $left + 14 * $this->unit;
 		foreach(['GAME','POKER','DRAW POKER'] as $entry)
 		$x += $this->canvas->label($entry, $x, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face) + 22 * $this->unit;
-		$this->canvas->label('DRAW POKER', $left + $width - 14 * $this->unit, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face, 'right');
+		$phase = match($this->view['phase'] ?? '') {
+			'betting' => 'OPENING BETS', 'draw' => 'DRAW', 'final-betting' => 'FINAL BETS',
+			'showdown' => 'HAND OVER', 'redeal' => 'REDEAL', default => 'DRAW POKER'
+		};
+		$this->canvas->label($phase, $left + $width - 14 * $this->unit, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face, 'right');
 	}
 
 	private function table(): void
@@ -198,7 +202,7 @@ final class Painter
 	private function messages(): void
 	{
 		$error = (string)($this->view['error'] ?? '');
-		$message = (string)($this->view['message'] ?? '');
+		$message = (string)($this->state['hint'] ?? $this->view['message'] ?? '');
 		$line = $error !== '' ? $error : $message;
 		if($line === '') return;
 		$width = min($this->layout->width() - 24, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->unit + 40));
@@ -207,14 +211,13 @@ final class Painter
 
 	private function discardDialog(): void
 	{
-		$dialog = $this->layout->discardDialog();
-		$this->dialog($dialog['box'], 'SELECT DISCARDS');
 		$cards = $this->view['players'][0]['cards'] ?? [];
+		$dialog = $this->layout->discardDialog($cards, $this->state['discards']);
+		$this->dialog($dialog['box'], 'SELECT DISCARDS');
 		foreach($dialog['cards'] as $index => $rect)
 		{
 			if(!isset($cards[$index])) break;
 			$selected = in_array((int)$cards[$index], $this->state['discards'], true);
-			if($selected) $rect[1] -= 12;
 			$this->card($rect, $cards[$index], 1.0, $selected);
 			[$nx, $ny] = $this->layout->point($rect[0] + $rect[2] / 2, $rect[1] + $rect[3] + 12 + ($selected ? 12 : 0));
 			$this->canvas->label((string)($index + 1), $nx, $ny, Theme::CAPTION, Theme::INK, $this->face, 'center');

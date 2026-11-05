@@ -73,6 +73,9 @@ human; tall: a touch-sized row across the bottom with the raise stepper on a sec
 The raise-to amount has − / + steppers (also − / + and the arrow keys) clamped to `minBet`..`maxBet`.
 Discard selection is presentation state: tapping a card in the SELECT DISCARDS dialog or pressing 1–5 lifts it
 with a brass edge; nothing leaves the hand until Draw. Selection clears on a new revision.
+Raised cards keep their hit regions with their faces. The browser uses the presenter's normalized hit regions
+for the hand cursor, including updates when a control changes beneath a stationary pointer. Geometry updates
+before input on a resized canvas.
 
 Input lock: the presenter sends at most one game intent per `revision`, stamped with the view's generation
 and revision, then dims the bar and ignores game input until a view with a new revision or a non-empty
@@ -86,13 +89,14 @@ and revision, then dims the bar and ignores game input until a view with a new r
   Deal sends `start{players, variant}`.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY
   (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P). All are ruled boxes.
-- Message: `message` (or `error`, in rose) on one plate under the menu bar; it is the one place the game
-  talks to the player.
+- Message: phase-specific guidance (or `error`, in rose) on one plate under the menu bar. Opening bets explain
+  that discarding comes afterward; a hand that cannot open is told that Pass keeps it in. The menu bar names
+  the current phase. A player waiting for another seat's draw is not told to select cards yet.
 
 ## Status and accessibility
 
 `Presenter::status()` returns `['ui' => …]` with the selected discards, raise amount, mode, local screen,
-history flag, lock, setup choices, whether the card atlas has arrived and the active profile; the browser
+history flag, lock, setup choices, phase guidance, normalized hit regions, whether the card atlas has arrived and the active profile; the browser
 publishes it merged with the view on `canvas.dataset.phpPoker`. `browser/game.mjs` also keeps a polite live
 region with the error, message and whose turn it is, and exposes `phpPokerDebug.command()` for tests.
 Keyboard covers play and menus; pointer and touch share one click path. Canceled gestures and drags do not click, repeated keydown events do not toggle a card twice, and the human hand has a private screen-reader description. Graphics restoration preserves the saved hand and replaces its accessible description cleanly.

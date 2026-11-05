@@ -312,9 +312,11 @@ final class Layout
 	/**
 	 * Design-space geometry of the discard dialog shown while the human draws.
 	 *
+	 * @param list<int|null> $cards Cards in hand order.
+	 * @param list<int> $discards Selected card ids; their raised positions also define their hit regions.
 	 * @return array{box:array{float,float,float,float},cards:list<array{float,float,float,float}>}
 	 */
-	public function discardDialog(): array
+	public function discardDialog(array $cards = [], array $discards = []): array
 	{
 		$width = $this->design['dialogWidth'];
 		[$cardWidth,$cardHeight] = $this->design['dialogCard'];
@@ -324,9 +326,13 @@ final class Layout
 		// Keep the cards above the action row; on a short landscape screen they occupy the left panel.
 		$top = $this->actionOrigin()[1] - $height - 10;
 		if($this->profile === 'landscape') { $left = 20; $top = $this->height() - $height - 12; }
-		$cards = [];
-		for($index = 0; $index < 5; $index++) $cards[] = [$left + 20 + $index * ($cardWidth + $gap), $top + 22, $cardWidth, $cardHeight];
-		return ['box' => [$left, $top, $width, $height], 'cards' => $cards];
+		$rects = [];
+		for($index = 0; $index < 5; $index++)
+		{
+			$lift = isset($cards[$index]) && in_array($cards[$index], $discards, true) ? 12 : 0;
+			$rects[] = [$left + 20 + $index * ($cardWidth + $gap), $top + 22 - $lift, $cardWidth, $cardHeight];
+		}
+		return ['box' => [$left, $top, $width, $height], 'cards' => $rects];
 	}
 
 	/**
