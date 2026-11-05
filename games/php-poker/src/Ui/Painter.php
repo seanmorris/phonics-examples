@@ -204,7 +204,7 @@ final class Painter
 		foreach($this->state['motion']['chips'] ?? [] as $chip) $this->chip($chip['position'], $chip['value']);
 		$this->actions();
 		if($this->state['history']) $this->historyDialog();
-		if($phase === 'ready') $this->welcomeDialog();
+		if($phase === 'ready' && (int)($this->view['handNumber'] ?? 0) <= 1) $this->welcomeDialog();
 	}
 
 	private function plateText(array $player, int $seat, bool $showdown): string
