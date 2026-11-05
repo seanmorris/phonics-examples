@@ -247,8 +247,8 @@ export function activate({module, canvas, session})
 	const drive=async()=>{
 		if(!online||submitting||online.currentActor()!==online.localPlayer)return;
 		const action=online.nextAction();if(!action)return;
-		const preHash=await online.hash();submitting=true;
-		try{await roomWrite(()=>lobbyPort.submitAction(action,preHash));}
+		const preHash=await online.hash(),settle=online.settlesAction(action);submitting=true;
+		try{await roomWrite(()=>lobbyPort.submitAction(action,preHash,{settle}));}
 		catch(error){submitting=false;throw error;}
 	};
 	lobbyPort=session.lobby.attachGame({
@@ -265,7 +265,8 @@ export function activate({module, canvas, session})
 		,action:detail=>enqueue(async()=>{
 			if(!online)throw new Error('Received a Poker action before the deal started');
 			const settlement=await online.apply(detail);updateOnlineView();
-			await roomWrite(()=>lobbyPort.reportSettled(settlement));
+			const waiting=await roomWrite(()=>lobbyPort.reportSettled(settlement));
+			if(!waiting){submitting=false;await drive();}
 		})
 		,confirmed:detail=>enqueue(async()=>{
 			if(!online)throw new Error('Received a Poker confirmation before the deal started');

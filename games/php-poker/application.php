@@ -16,7 +16,8 @@ $app->lobby([
 	,'options'=>['homeserver'=>'https://matrix.org','room'=>'#php-poker:matrix.org','configurationKey'=>'php-poker']
 	,'game'=>[
 		'id'=>'org.seanmorris.phonics.php-poker.five-card-draw','protocol'=>'1.0.0','rules'=>'five-card-draw-anything-v1'
-		,'players'=>2,'spectators'=>false,'aspectRatio'=>'16/9','checkpointMode'=>'history','maximumActionBytes'=>49152
+		,'players'=>2,'spectators'=>false,'aspectRatio'=>'16/9','checkpointMode'=>'history','actionBatches'=>true
+		,'maximumActionBytes'=>49152
 		,'actionTypes'=>[
 			'deck-shuffle','shuffle-proof-header','shuffle-proof-commitments','shuffle-proof-responses'
 			,'shuffle-proof-tail','card-layer'

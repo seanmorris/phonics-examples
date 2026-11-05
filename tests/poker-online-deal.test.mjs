@@ -17,13 +17,14 @@ test('two peers jointly shuffle and privately deal five unique cards apiece',asy
 		,bob:new OnlineDeal({...options,localPlayer:'bob',storage:stores.bob})
 	};
 	assert.equal(await peers.alice.hash(),await peers.bob.hash());
-	const history=[];
+	const history=[],boundaries=[];
 	while(peers.alice.publicState().stage!=='ready')
 	{
 		const actor=peers.alice.currentActor(),action=peers[actor].nextAction();
 		assert.ok(action,`${actor} supplies the next action`);
 		assert.ok(ONLINE_ACTION_TYPES.includes(action.type));
 		assert.ok(Buffer.byteLength(JSON.stringify(action))<49152,`${action.type} fits one room action`);
+		if(peers[actor].settlesAction(action))boundaries.push({sequence:history.length+1,type:action.type});
 		const envelope={sequence:history.length+1,actor,pre_hash:await peers.alice.hash(),action};
 		const [left,right]=await Promise.all([peers.alice.apply(envelope),peers.bob.apply(envelope)]);
 		assert.deepEqual(left,right);
@@ -33,6 +34,7 @@ test('two peers jointly shuffle and privately deal five unique cards apiece',asy
 	const alice=peers.alice.privateHand(),bob=peers.bob.privateHand();
 	assert.equal(alice.length,5);assert.equal(bob.length,5);
 	assert.equal(new Set([...alice,...bob]).size,10);
+	assert.deepEqual(boundaries.map(value=>value.type),['shuffle-proof-tail','shuffle-proof-tail','card-layer']);
 	assert.deepEqual(peers.alice.view().players.find(player=>player.isHuman).cards,alice);
 	assert.deepEqual(peers.bob.view().players.find(player=>player.isHuman).cards,bob);
 	assert.ok(peers.alice.publicState().allocations.every(card=>!('id' in card)));

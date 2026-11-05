@@ -16,7 +16,7 @@ test('the room protocol carries a verified private deal from seating through ten
 	t.mock.method(console,'log',()=>{});
 	const hub=new InMemoryLobbyHub,game={
 		id:'org.example.private-poker',protocol:'1.0.0',rules:ONLINE_RULES,application:'poker-app',runtime:'poker-runtime'
-		,actionTypes:[...ONLINE_ACTION_TYPES],maximumActionBytes:49152,checkpointMode:'history'
+		,actionTypes:[...ONLINE_ACTION_TYPES],maximumActionBytes:49152,checkpointMode:'history',actionBatches:true
 	};
 	const clients={};
 	for(const id of ['alice','bob'])
@@ -28,14 +28,18 @@ test('the room protocol carries a verified private deal from seating through ten
 		const drive=async()=>{
 			if(!client.deal||client.submitting||client.deal.currentActor()!==id)return;
 			const action=client.deal.nextAction();if(!action)return;
-			client.submitting=true;await client.port.submitAction(action,await client.deal.hash());
+			client.submitting=true;
+			await client.port.submitAction(action,await client.deal.hash(),{settle:client.deal.settlesAction(action)});
 		};
 		client.port=protocol.attachGame({
 			start:detail=>enqueue(async()=>{
 				client.deal=new OnlineDeal({api:mentalPoker,...detail,localPlayer:id,rounds:16,storage:storage()});
 				const hash=await client.deal.replay(detail.history??[]);await client.port.reportReady(hash);
 			})
-			,action:detail=>enqueue(async()=>client.port.reportSettled(await client.deal.apply(detail)))
+			,action:detail=>enqueue(async()=>{
+				const waiting=await client.port.reportSettled(await client.deal.apply(detail));
+				if(!waiting){client.submitting=false;await drive();}
+			})
 			,confirmed:detail=>enqueue(async()=>{
 				assert.equal(detail.hash,await client.deal.hash());client.submitting=false;await drive();
 			})
@@ -51,4 +55,7 @@ test('the room protocol carries a verified private deal from seating through ten
 	assert.equal(clients.alice.deal.privateHand().length,5);assert.equal(clients.bob.deal.privateHand().length,5);
 	assert.equal(new Set([...clients.alice.deal.privateHand(),...clients.bob.deal.privateHand()]).size,10);
 	assert.ok(clients.alice.protocol.snapshot().tables[0].sequence>20);
+	const events=hub.history(clients.alice.provider.room).map(item=>item.content);
+	assert.equal(events.filter(item=>item.kind==='action').length,24);
+	assert.equal(events.filter(item=>item.kind==='settled').length,6);
 });

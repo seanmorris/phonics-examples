@@ -130,6 +130,16 @@ export class OnlineDeal
 		return {type:'card-layer',card:index,...removal};
 	}
 
+	/** End one durable batch after each verified shuffle and after the complete initial private deal. */
+	settlesAction(action)
+	{
+		if(this.state.stage==='shuffle')return action?.type==='shuffle-proof-tail';
+		if(this.state.stage!=='deal'||action?.type!=='card-layer')return true;
+		const allocation=this.state.allocations[this.state.allocationIndex];
+		const remaining=this.shuffleOrder.filter(player=>player!==allocation?.recipient&&!allocation?.removed.includes(player));
+		return this.state.allocationIndex===this.state.allocations.length-1&&remaining.length===1;
+	}
+
 	async apply({sequence,actor,pre_hash:preHash,action})
 	{
 		if(!Number.isSafeInteger(sequence)||sequence!==this.state.sequence+1)throw new Error('Online deal action is out of sequence');
