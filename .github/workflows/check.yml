@@ -6,7 +6,8 @@ on:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Generated meshes depend on the platform math library; use the validated build image.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
