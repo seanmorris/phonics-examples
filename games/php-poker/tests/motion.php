@@ -70,6 +70,7 @@ foreach([2,4,8] as $seats) foreach(['jackpots','anything'] as $variant)
 		if($animation)
 		{
 			$seen[$animation['kind']] = true;
+			$expect($presenter->input([['key' => 'd'],['key' => 'c'],['key' => 'b'],['key' => 'f'],['key' => 'enter']], null, 0) === [], 'game input cannot act during a card or chip transfer');
 			foreach([0,.1,.15,.35,.6,.9] as $dt)
 			{
 				$presenter->advance($dt);

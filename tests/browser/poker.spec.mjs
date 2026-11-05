@@ -281,6 +281,20 @@ test('clickable cards and controls show a hand cursor and the table background d
 
 test('Fold/Pass explains the opening round and a later bet leads to selectable discards',async({page})=>{
 	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:openingSave});
+	// Record short transitions inside the page. A busy build machine may deliver the next test RPC after
+	// a 0.25-second slide has already finished, so separate reads cannot describe one animation frame.
+	await page.addInitScript(()=>{
+		window.pokerMotions=[];
+		new MutationObserver(records=>{
+			for(const record of records)
+			{
+				const s=JSON.parse(record.target.dataset.phpPoker||'null');
+				if(!s?.ui?.animation)continue;
+				const entry={kind:s.ui.animation.kind,locked:s.ui.locked,revision:s.revision};
+				if(JSON.stringify(entry)!==JSON.stringify(window.pokerMotions.at(-1)))window.pokerMotions.push(entry);
+			}
+		}).observe(document,{subtree:true,attributes:true,attributeFilter:['data-php-poker']});
+	});
 	const canvas=await boot(page);
 	await canvas.focus();await page.keyboard.press('c');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
@@ -292,11 +306,7 @@ test('Fold/Pass explains the opening round and a later bet leads to selectable d
 	expect((await state(canvas)).players[0].folded).toBe(false);
 	const deal=await point(canvas,(await regions(canvas)).actions.find(button=>button.id==='next').rect);
 	await page.mouse.click(deal.x,deal.y);
-	await expect.poll(async()=>(await state(canvas)).ui.animation?.kind).toBe('deal');
-	expect((await state(canvas)).ui.locked).toBe(true);
-	const dealingRevision=(await state(canvas)).revision;
-	await page.keyboard.press('d');
-	expect((await state(canvas)).revision).toBe(dealingRevision);
+	await expect.poll(()=>page.evaluate(()=>window.pokerMotions.some(s=>s.kind==='deal'&&s.locked))).toBe(true);
 	for(let i=0;i<12;i++)
 	{
 		await expect.poll(async()=>(await state(canvas)).turn).toBe(0);
@@ -308,7 +318,7 @@ test('Fold/Pass explains the opening round and a later bet leads to selectable d
 		expect(button,'betting must finish before discarding').toBeTruthy();
 		const click=await point(canvas,button.rect);await page.mouse.click(click.x,click.y);
 		await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(s.revision);
-		await expect.poll(async()=>(await state(canvas)).ui.animation?.kind).toBe('chips');
+		await expect.poll(()=>page.evaluate(revision=>window.pokerMotions.some(s=>s.kind==='chips'&&s.locked&&s.revision===revision),s.revision+1)).toBe(true);
 	}
 	await expect.poll(async()=>(await state(canvas)).legalActions.draw).toBe(true);
 	const before=await state(canvas);
@@ -318,7 +328,7 @@ test('Fold/Pass explains the opening round and a later bet leads to selectable d
 	const draw=await point(canvas,(await regions(canvas)).actions.find(button=>button.id==='draw').rect);
 	await page.mouse.click(draw.x,draw.y);
 	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
-	await expect.poll(async()=>(await state(canvas)).ui.animation?.kind).toBe('draw');
+	await expect.poll(()=>page.evaluate(revision=>window.pokerMotions.some(s=>s.kind==='draw'&&s.locked&&s.revision===revision),before.revision+1)).toBe(true);
 });
 
 for(const viewport of [{width:390,height:844},{width:844,height:390}])
