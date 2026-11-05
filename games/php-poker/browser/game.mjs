@@ -139,6 +139,7 @@ export function activate({module, canvas, session})
 	canvas.addEventListener('pointercancel',onCancel);
 	canvas.addEventListener('lostpointercapture',onCancel);
 	canvas.addEventListener('blur',clearInput);
+	addEventListener('blur',clearInput);
 	document.addEventListener('visibilitychange',onVisibility);
 
 	// Accessible mirror of the authorized status: one live line for the message and turn, nothing private.
@@ -219,6 +220,7 @@ export function activate({module, canvas, session})
 		canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);canvas.removeEventListener('pointercancel',onCancel);
 		canvas.removeEventListener('lostpointercapture',onCancel);canvas.removeEventListener('blur',clearInput);
 		document.removeEventListener('visibilitychange',onVisibility);
+		removeEventListener('blur',clearInput);
 		live.remove();hand.remove();
 		for(const name of ['pokerCardArt','pokerCardAtlas','pokerViewport','pokerSeed','pokerInput','pokerCommands','pokerStatus'])delete module[name];
 		delete canvas.dataset.phpPoker;delete canvas.phpPokerDebug;delete session.phpPoker;

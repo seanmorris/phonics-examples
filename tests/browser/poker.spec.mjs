@@ -30,6 +30,7 @@ async function boot(page)
 	await page.goto('/games/php-poker/');
 	const canvas=page.locator('canvas');
 	await expect(canvas).toHaveAttribute('data-php-poker',/"screen":"menu"/,{timeout:45_000});
+	await expect(page.locator('.loading')).toHaveClass(/complete/);
 	return canvas;
 }
 
@@ -141,6 +142,35 @@ async function point(canvas,rect)
 	return {x:box.x+(rect[0]+rect[2]/2)*box.width/size[0],y:box.y+(rect[1]+rect[3]/2)*box.height/size[1],
 		width:rect[2]*box.width/size[0],height:rect[3]*box.height/size[1]};
 }
+
+test('graphics restoration retains the saved hand and one set of accessible controls',async({page})=>{
+	test.setTimeout(90_000);
+	const errors=[];page.on('pageerror',error=>errors.push(error.message));
+	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
+	const canvas=await boot(page);
+	await expect.poll(async()=>(await state(canvas)).ui.cardArt).toBe(true);
+	await canvas.focus();await page.keyboard.press('c');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	await expect.poll(async()=>(await state(canvas)).ui.cardArt).toBe(true);
+	const before=await state(canvas);
+	await canvas.evaluate(element=>new Promise(resolve=>{
+		const extension=element.getContext('webgl2').getExtension('WEBGL_lose_context');
+		element.addEventListener('webglcontextrestored',()=>requestAnimationFrame(()=>resolve()),{once:true});
+		element.addEventListener('webglcontextlost',()=>setTimeout(()=>extension.restoreContext(),100),{once:true});
+		extension.loseContext();
+	}));
+	await expect.poll(async()=>(await state(canvas)).ui.cardArt).toBe(true);
+	const restored=await state(canvas);
+	expect(restored.players).toEqual(before.players);
+	expect(restored.revision).toBe(before.revision);
+	expect(restored.phase).toBe(before.phase);
+	await expect(page.locator('[id^="php-poker-hand-"]')).toHaveCount(1);
+	if(restored.screen==='menu') {await canvas.focus();await page.keyboard.press('c');}
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	await page.keyboard.press('d');
+	await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(before.revision);
+	expect(errors).toEqual([]);
+});
 
 test('desktop pointer can confirm discards without the dialog covering its action buttons',async({page})=>{
 	await page.setViewportSize({width:1365,height:900});
