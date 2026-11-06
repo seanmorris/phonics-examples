@@ -1,5 +1,5 @@
 /** Local-only atomic autosaves and explicit save-file dialogs. No hand is published or sent over a network. */
-export function activate({module, session})
+export function activate({module, session, fileCancelDelay = 1000})
 {
 	const key='php-poker.local.v1',limit=1048576;
 	let error='',writes=0,closed=false,pendingLoad='';
@@ -58,11 +58,18 @@ export function activate({module, session})
 
 	const inputFile=()=>new Promise(resolve=>{
 		const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.hidden=true;
-		let settled=false;
-		const done=value=>{if(settled)return;settled=true;input.remove();resolve(value);};
+		let settled=false,timer=null;
+		// Not every browser fires cancel when the chooser is dismissed, but the page always regains focus. If no file
+		// has arrived shortly after that, the chooser was dismissed and Save and Load must not stay busy.
+		const focused=()=>{timer=setTimeout(()=>{if(!input.files?.length)done(null);},fileCancelDelay);};
+		const done=value=>{
+			if(settled)return;settled=true;clearTimeout(timer);globalThis.removeEventListener?.('focus',focused);
+			input.remove();resolve(value);
+		};
 		input.addEventListener('change',()=>done(input.files?.[0]??null),{once:true});
 		input.addEventListener('cancel',()=>done(null),{once:true});
 		document.body.appendChild(input);input.click();
+		globalThis.addEventListener?.('focus',focused,{once:true});
 	});
 	module.pokerFileLoad=()=>{
 		if(closed||file.busy) return false;

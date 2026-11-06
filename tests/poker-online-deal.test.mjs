@@ -4,8 +4,21 @@ import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {OnlineDeal,ONLINE_ACTION_TYPES,evaluateHand} from '../games/php-poker/browser/online-deal.mjs';
 import {
-	decorateOnlineView,freezeOnlineDispute,matrixPlayerName,pendingPokerView,pokerCommandBatch,sheetCell
+	decorateOnlineView,freezeOnlineDispute,matrixPlayerName,pendingPokerView,pokerCommandBatch,sheetCell,tableMenuShortcut
 } from '../games/php-poker/browser/game.mjs';
+
+test('table-menu shortcuts follow the physical key, including macOS Option combinations',()=>{
+	assert.equal(tableMenuShortcut({altKey:true,code:'KeyG',key:'g'}),'alt+g');
+	assert.equal(tableMenuShortcut({altKey:true,code:'KeyP',key:'p'}),'alt+p');
+	assert.equal(tableMenuShortcut({altKey:true,code:'KeyG',key:'©'}),'alt+g','macOS Option+G');
+	assert.equal(tableMenuShortcut({altKey:true,code:'KeyP',key:'π'}),'alt+p','macOS Option+P');
+	assert.equal(tableMenuShortcut({altKey:true,key:'G'}),'alt+g','events without a code fall back to the key');
+	assert.equal(tableMenuShortcut({altKey:true,code:'KeyU',key:'g'}),'alt+g','a Dvorak G sits where QWERTY has U');
+	assert.equal(tableMenuShortcut({altKey:true,code:'KeyG',key:'i'}),null,'a Dvorak I sits where QWERTY has G');
+	assert.equal(tableMenuShortcut({altKey:false,code:'KeyG',key:'g'}),null);
+	assert.equal(tableMenuShortcut({altKey:true,ctrlKey:true,code:'KeyG',key:'g'}),null,'AltGr types characters');
+	assert.equal(tableMenuShortcut({altKey:true,metaKey:true,code:'KeyP',key:'p'}),null);
+});
 
 test('both physical jokers map to their own card-sheet cells',()=>{
 	assert.equal(sheetCell(52,[2,3,1,0]),52);

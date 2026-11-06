@@ -89,6 +89,41 @@ final class WildCards
 		return count($presets) . ' selections';
 	}
 
+	/**
+	 * Readable description of everything wild, for headings and summaries: preset names, then any custom rank chosen
+	 * in all four suits, then up to four single custom cards by name.
+	 */
+	public static function describe(string|array $presets, array $custom = []): string
+	{
+		$presets = self::selection($presets);
+		if($presets === []) return 'No wild cards';
+		$names = [];
+		foreach($presets as $preset) if($preset !== 'custom') $names[] = $preset === 'joker' ? 'Jokers' : self::label($preset);
+		if(in_array('custom', $presets, true))
+		{
+			$byRank = []; $singles = [];
+			foreach(self::custom($custom) as $card)
+			{
+				if($card >= 52) $singles[] = $card;
+				else $byRank[$card % 13][] = $card;
+			}
+			ksort($byRank);
+			$plurals = ['Twos','Threes','Fours','Fives','Sixes','Sevens','Eights','Nines','Tens','Jacks','Queens','Kings','Aces'];
+			foreach($byRank as $rank => $cards)
+			{
+				if(count($cards) === 4) $names[] = $plurals[$rank];
+				else array_push($singles, ...$cards);
+			}
+			sort($singles, SORT_NUMERIC);
+			if(count($singles) <= 4) foreach($singles as $card) $names[] = self::cardLabel($card);
+			elseif($singles !== []) $names[] = count($singles) . ' chosen cards';
+		}
+		// A custom choice with no cards leaves nothing wild.
+		if($names === []) return 'No wild cards';
+		$last = array_pop($names);
+		return ($names === [] ? $last : implode(', ', $names) . ' and ' . $last) . ' wild';
+	}
+
 	public static function cardLabel(int $card): string
 	{
 		if($card === 52 || $card === 53) return 'Joker ' . ($card - 51);

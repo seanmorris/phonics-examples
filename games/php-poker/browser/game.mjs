@@ -20,6 +20,19 @@ export function sheetCell(id,suitRows)
 	return suitRows[suit]*13+(rank===14?0:rank-1);
 }
 
+/**
+ * Table-menu shortcut for a key event: Alt+G opens Game and Alt+P opens Poker. The typed letter decides, so other
+ * keyboard layouts work. When Alt turns the key into a symbol (macOS Option+G types "©" and Option+P "π"), the
+ * physical key decides instead. AltGr arrives as Ctrl+Alt on Windows and types characters, so it is left alone.
+ */
+export function tableMenuShortcut(event)
+{
+	if(!event?.altKey||event.ctrlKey||event.metaKey)return null;
+	const key=String(event.key??'').toLowerCase();
+	const letter=/^[a-z]$/.test(key)?key:({KeyG:'g',KeyP:'p'})[event.code]??'';
+	return ['g','p'].includes(letter)?'alt+'+letter:null;
+}
+
 /** Combine intents produced by PHP input with commands injected through the browser test/accessibility bridge. */
 export function pokerCommandBatch(generatedJson,injected=[])
 {
@@ -185,8 +198,8 @@ export function activate({module, canvas, session})
 		const key=event.key.length===1?event.key.toLowerCase():event.key.toLowerCase();
 		if(event.altKey)
 		{
-			if(!['g','p'].includes(key))return;
-			event.preventDefault();if(!event.repeat)keys.push({key:'alt+'+key});return;
+			const shortcut=tableMenuShortcut(event);if(!shortcut)return;
+			event.preventDefault();if(!event.repeat)keys.push({key:shortcut});return;
 		}
 		if(!KEYS.has(key))return;
 		event.preventDefault();

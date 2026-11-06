@@ -394,7 +394,7 @@ final class Presenter
 		{
 			$dialog=$layout->confirmationDialog();
 			$targets[]=['id'=>'confirm:cancel','rect'=>$dialog['cancel'],'confirm'=>'cancel'];
-			$targets[]=['id'=>'confirm:quit','rect'=>$dialog['confirm'],'confirm'=>'quit'];
+			$targets[]=['id'=>'confirm:leave','rect'=>$dialog['confirm'],'confirm'=>'leave'];
 			$addKey($wholeCanvas,'escape');
 			return $targets;
 		}
@@ -462,7 +462,7 @@ final class Presenter
 	private function ensureControllerFocus(array $targets): void
 	{
 		foreach($targets as $target) if($target['id'] === $this->controllerFocus) return;
-		$preferences = $this->confirmDialog !== null ? ['confirm:cancel','confirm:quit']
+		$preferences = $this->confirmDialog !== null ? ['confirm:cancel','confirm:leave']
 			: ($this->infoDialog !== null ? ['info:ok','info:more']
 			: ($this->topMenu !== null ? ['top-item:new','top-item:odds']
 			: (!empty($this->view['legalActions']['draw']) ? ['card:0']
@@ -609,8 +609,10 @@ final class Presenter
 
 		if($this->confirmDialog !== null)
 		{
-			if(in_array($key,['enter',' ','y','q'],true)) return $this->activateConfirmation('quit');
-			if(in_array($key,['escape','backspace','n'],true)) return $this->activateConfirmation('cancel');
+			// Forfeiting takes the explicit Y. Enter and Space choose the safe default, as controller focus does, so a
+			// doubled Escape-Enter or Q-Q cannot resign a match.
+			if($key==='y') return $this->activateConfirmation('leave');
+			if(in_array($key,['escape','backspace','n','enter',' '],true)) return $this->activateConfirmation('cancel');
 			return [];
 		}
 
@@ -632,7 +634,7 @@ final class Presenter
 		if($key === 'escape')
 		{
 			if($this->historyOpen) { $this->historyOpen = false; return []; }
-			$this->confirmDialog='quit'; return [];
+			return $this->leaveTable();
 		}
 		if($key === 'h') { $this->historyOpen = !$this->historyOpen; return []; }
 		if($this->historyOpen) { if(in_array($key, ['enter',' '], true)) $this->historyOpen = false; return []; }
@@ -671,7 +673,7 @@ final class Presenter
 		if($action==='new') { $this->setupAfterMenu=true; return [['type'=>'menu']]; }
 		if($action==='save') return [['type'=>'save-game']];
 		if($action==='load') return [['type'=>'load-game']];
-		if($action==='quit') { $this->confirmDialog='quit'; return []; }
+		if($action==='quit') return $this->leaveTable();
 		if(in_array($action,['odds','improving'],true)) { $this->infoDialog=$action; return []; }
 		return [];
 	}
@@ -680,7 +682,7 @@ final class Presenter
 	private function activateConfirmation(string $action): array
 	{
 		if($action==='cancel') { $this->confirmDialog=null; return []; }
-		if($action!=='quit') return [];
+		if($action!=='leave') return [];
 		$this->confirmDialog=null; $this->setupAfterMenu=false;
 		return [['type'=>'menu']];
 	}
@@ -721,18 +723,42 @@ final class Presenter
 			$previous=$hand;
 		}
 		if($drawingRows===[]) $drawingRows[]=['hand'=>'No natural starting hands','target'=>'','odds'=>''];
-		$rules=$selection===[]?'No wild cards':WildCards::selectionLabel($selection).' wild';
+		$rules=WildCards::describe($selection,$custom);
 		return $this->oddsCache[$key]=['odds'=>$dealtRows,'improving'=>$drawingRows,'rules'=>$rules];
 	}
 
+	/**
+	 * Fractional odds against, as printed in odds tables: "20/1" against, "1/1" for evens, and "1/4.2" for a
+	 * favourite (4.2 to 1 on), instead of a hard-to-read "0.24/1".
+	 */
 	private function formatOdds(?float $odds): string
 	{
 		if($odds===null) return 'Never';
-		$rounded=round($odds);
-		$decimals=abs($odds-$rounded)<.005||$odds>=1000?0:($odds>=10?1:2);
-		$value=number_format($odds,$decimals,'.',',');
-		if($decimals>0) $value=rtrim(rtrim($value,'0'),'.');
-		return $value.'/1';
+		if($odds<=0) return 'Certain';
+		if($odds<.995) return '1/'.self::oddsNumber(1/$odds);
+		return self::oddsNumber($odds).'/1';
+	}
+
+	private static function oddsNumber(float $value): string
+	{
+		$rounded=round($value);
+		$decimals=abs($value-$rounded)<.005||$value>=1000?0:($value>=10?1:2);
+		$text=number_format($value,$decimals,'.',',');
+		return $decimals>0?rtrim(rtrim($text,'0'),'.'):$text;
+	}
+
+	/**
+	 * Leave the table. Offline nothing is lost: the table is saved after every action and Continue restores it, so
+	 * the title opens at once. Online, leaving resigns the match, so ask first.
+	 *
+	 * @return list<array<string,mixed>>
+	 */
+	private function leaveTable(): array
+	{
+		$this->topMenu=null; $this->infoDialog=null;
+		if(($this->view['mode']??'offline')==='online') { $this->confirmDialog='forfeit'; return []; }
+		$this->confirmDialog=null; $this->setupAfterMenu=false;
+		return [['type'=>'menu']];
 	}
 
 	/** @return list<array<string,mixed>> */

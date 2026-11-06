@@ -129,6 +129,18 @@ $test('heavy wild rules still form every drawing hand from natural cards',static
 	$expect($ace['hits']===$hits && $hits===89973 && $ace['trials']===178365,"Deuces-wild ace row {$ace['hits']} vs $hits");
 });
 
+$test('odds headings name the wild cards in play',static function() use ($expect): void {
+	foreach([
+		[[],[],'No wild cards'],[['deuces'],[],'Deuces wild'],
+		[['joker','one-eyed-jacks'],[],'Jokers and One-Eyed Jacks wild'],
+		[['custom'],[0,1,2,13,14,15,26,27,28,39,40,41],'Twos, Threes and Fours wild'],
+		[['custom','kings'],[12,25,38,51,5,53],'Kings, Aces, 7♣ and Joker 2 wild'],
+		[['custom'],[3,4,5,6,7,8],'6 chosen cards wild'],
+		[['custom'],[],'No wild cards'],
+	] as [$presets,$custom,$label])
+	$expect(WildCards::describe($presets,$custom)===$label,'Described as '.WildCards::describe($presets,$custom).", expected $label");
+});
+
 $test('invalid decks and draws are rejected',static function() use ($expect): void {
 	foreach([
 		static fn()=>Odds::dealt([0,1,2,3]),

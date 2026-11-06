@@ -441,8 +441,11 @@ $test('controller focus navigates menus, setup, cards and table actions through 
 	$before = $table->state()['amount'];
 	$press($table, 'pageDown');
 	$expect($table->state()['amount'] > $before, 'right shoulder increases the raise amount');
-	$expect($press($table, 'pause') === [] && $table->state()['confirmDialog']==='quit', 'Start asks before leaving the table');
-	$expect($press($table, 'back') === [] && $table->state()['confirmDialog']===null, 'Back cancels the quit confirmation');
+	$expect($press($table, 'pause') === [['type'=>'menu']] && $table->state()['confirmDialog']===null, 'Start leaves a saved offline table at once');
+	$onlineTable = new Presenter($root); $onlineRaise = $fixture('facing-raise-5'); $onlineRaise['mode'] = 'online';
+	$onlineTable->update($onlineRaise); $release($onlineTable);
+	$expect($press($onlineTable, 'pause') === [] && $onlineTable->state()['confirmDialog']==='forfeit', 'Start asks before forfeiting an online match');
+	$expect($press($onlineTable, 'back') === [] && $onlineTable->state()['confirmDialog']===null, 'Back cancels the forfeit confirmation');
 
 	$slow = new Presenter($root); $slow->update($fixture('menu')); $release($slow);
 	$slow->input([],null,1/60,['down'=>1],'generic');
@@ -1169,11 +1172,10 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$save=$presenter->input([['key'=>'s']],null,0);
 	$expect($save===[['type'=>'save-game']] && !$presenter->modal(),'Save Game emits one local command and closes the menu');
 	$presenter->input([['key'=>'alt+g']],null,0);
-	$expect($presenter->input([['key'=>'q']],null,0)===[] && $presenter->state()['confirmDialog']==='quit','Quit always opens a confirmation');
-	$expect($presenter->input([['key'=>'escape']],null,0)===[] && !$presenter->modal(),'Escape cancels the quit confirmation');
-	$presenter->input([['key'=>'escape']],null,0);
-	$expect($presenter->state()['confirmDialog']==='quit','table Escape uses the same quit confirmation');
-	$expect($presenter->input([['key'=>'y']],null,0)===[['type'=>'menu']],'confirmed Quit commits the return to title');
+	// Offline tables are saved after every action and Continue restores them, so leaving needs no confirmation.
+	$expect($presenter->input([['key'=>'q']],null,0)===[['type'=>'menu']] && !$presenter->modal(),'offline Quit returns to the title at once');
+	$escape=new Presenter($root); $escape->update($view);
+	$expect($escape->input([['key'=>'escape']],null,0)===[['type'=>'menu']] && !$escape->modal(),'table Escape leaves an offline table at once');
 
 	$new=new Presenter($root); $new->update($view);
 	$click($new,$new->layout()->topMenus()['game']);
@@ -1186,8 +1188,14 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$online->input([['key'=>'alt+g']],null,0);
 	foreach(['n','s','l'] as $key)
 	$expect($online->input([['key'=>$key]],null,0)===[] && $online->state()['topMenu']==='game',"online $key remains ghosted");
-	$expect($online->input([['key'=>'q']],null,0)===[] && $online->state()['confirmDialog']==='quit','online Quit remains available behind confirmation');
-	$expect($online->input([['key'=>'enter']],null,0)===[['type'=>'menu']],'online Quit leaves only after confirmation');
+	$expect($online->input([['key'=>'q']],null,0)===[] && $online->state()['confirmDialog']==='forfeit','online Quit asks before forfeiting the match');
+	$expect($online->input([['key'=>'n']],null,0)===[] && !$online->modal(),'N keeps the player at the online table');
+	$expect($online->input([['key'=>'escape']],null,0)===[] && $online->state()['confirmDialog']==='forfeit','online Escape asks the same question');
+	$expect(($online->status()['ui']['controllerFocus']['id']??'confirm:cancel')!=='confirm:leave','the forfeit confirmation never starts on Forfeit');
+	$expect($online->input([['key'=>'enter']],null,0)===[] && !$online->modal(),'Enter chooses Stay, the safe default');
+	$online->input([['key'=>'escape']],null,0);
+	$expect($online->input([['key'=>'q']],null,0)===[] && $online->modal(),'a second Q cannot forfeit');
+	$expect($online->input([['key'=>'y']],null,0)===[['type'=>'menu']],'online Quit leaves only after an explicit Y');
 
 	$poker=new Presenter($root); $poker->update($view);
 	$poker->input([['key'=>'alt+p']],null,0);
@@ -1195,6 +1203,14 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$expect($poker->input([['key'=>'o']],null,0)===[] && $poker->state()['infoDialog']==='odds','Odds opens the exact dealt-hand table');
 	$odds=$poker->state()['oddsTables'];
 	$expect($odds['rules']==='No wild cards' && count($odds['odds'])===10,'the standard table includes every possible exact category');
+	$wildView=$view; $wildView['profile']['wild']=['custom']; $wildView['profile']['customWild']=[0,1,2,13,14,15,26,27,28,39,40,41];
+	$heavy=new Presenter($root); $heavy->update($wildView);
+	$heavy->input([['key'=>'alt+p']],null,0); $heavy->input([['key'=>'i']],null,0);
+	$heavyOdds=$heavy->state()['oddsTables'];
+	$expect($heavyOdds['rules']==='Twos, Threes and Fours wild','the odds heading names the wild cards: '.$heavyOdds['rules']);
+	$improving=array_column($heavyOdds['improving'],'odds');
+	$expect(count($improving)===11 && in_array('1/4.21',$improving,true),'a favourite reads as 1/4.21 (34,236 to 144,129 against) rather than 0.24/1: '.json_encode($improving));
+	$expect(array_filter([...$improving,...array_column($heavyOdds['odds'],'odds')],static fn(string $odds): bool => str_starts_with($odds,'0'))===[],'no odds start with 0.');
 	$expect(count($poker->paint(1280,720)->instances())>100,'the first odds table paints over a live table');
 	$click($poker,$poker->layout()->oddsDialog('odds',count($odds['odds']))['more']);
 	$expect($poker->state()['infoDialog']==='improving','More advances to odds against improving');

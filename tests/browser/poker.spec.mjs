@@ -298,10 +298,10 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 	expect((await state(canvas)).players).toHaveLength(5);
 	expect((await state(canvas)).profile).toMatchObject({ante:2,minimum:2,maximum:20,finalMinimum:3,finalMaximum:20,raiseLimit:4,playerRaiseLimit:2,wild:['joker','custom'],customWild:[0,52,53]});
+	// The offline table is saved, so Escape returns to the title at once.
 	await page.keyboard.press('Escape');
-	await expect.poll(async()=>(await state(canvas)).ui.confirmDialog).toBe('quit');
-	await page.keyboard.press('y');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
+	expect((await state(canvas)).ui.confirmDialog).toBeNull();
 	await page.keyboard.press('h');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('help');
 	const savedHelpBack=await point(canvas,(await regions(canvas)).information.back);
@@ -361,12 +361,8 @@ test('controller navigates the menu, selects discards, draws, and toggles the ga
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('card:0');
 
+	// An offline table is saved, so Start returns to the title without a confirmation.
 	await padPulse(page,[9]);
-	await expect.poll(async()=>(await state(canvas)).ui.confirmDialog).toBe('quit');
-	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('confirm:cancel');
-	await padPulse(page,[15]);
-	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('confirm:quit');
-	await padPulse(page,[0]);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
 	await padPulse(page,[9]);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');

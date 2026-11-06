@@ -113,11 +113,11 @@
     "assets/generated/ui-font.json": "sha256-a46sDIr89b5PFsyB4htau8Rsam/NBV2nj5sDKcS7I/U=",
     "assets/generated/ui-font.rgba": "sha256-BXnfwo+Tm34kksgvkP6i/Yof2mJS5EtVzQzIcF4KuUM=",
     "autoload.php": "sha256-oR7TtuNrvbEy7h35CVKXA4Uew2UtBMR9XVlDQa1ZbBk=",
-    "browser/game.mjs": "sha256-49FVRKhC9ZLh2LFnd32hvt4mHKFhJlprv19k4A80tdg=",
+    "browser/game.mjs": "sha256-YI08FMkios8noG9teL/X7+fpD3e1XvDuFt1T/qZL5mI=",
     "browser/mental-poker.mjs": "sha256-NyUXE3/CMvDEmVfKBQlUqdonsi6RiKISntns4HZpTLY=",
     "browser/mental-poker.mjs.LICENSE.txt": "sha256-H3gEgPb0U8/TQnVf3+xDNxTzrA5ijeB/oqmGCzBaAmU=",
     "browser/online-deal.mjs": "sha256-RtWcw76xAL7Rkpz69mfd1Q2NJdd0xVjEG5QlfF48K48=",
-    "browser/persistence.mjs": "sha256-RlRcxlabkzI15jXPGCBocDBf5gIPnuXauBdg7LAuxAU=",
+    "browser/persistence.mjs": "sha256-ouPvGick+2DK+VX/d3SP5lOiMRivxYGZ8k2uTZvUySA=",
     "shaders/ui.frag": "sha256-Tc3yUPRiouakSGUmhLexNnR6Cdr6OLE56NiLTwGcppA=",
     "shaders/ui.vert": "sha256-v6qumyh53sxStBcAUf2YZPFyn122NilzAU9NrSUxdpQ=",
     "src/Adaptation.php": "sha256-siS6kA/MHFeD/2g9xccGFHWF2ykmEwAPrtESCaBiUaQ=",
@@ -135,8 +135,8 @@
     "src/Ui/Chips.php": "sha256-qD7RyIoRjgORznQes/KLAwKdsgcEz6tZBNOhSljW35E=",
     "src/Ui/Layout.php": "sha256-7dSUxQP5xSwa4HlRuRVQqdc4bev3SwPWtReKAnSTum0=",
     "src/Ui/Motion.php": "sha256-Qf+Y94XAkdkD6KzlLNBMh0jVHdE3sCR8pWsilraI+u4=",
-    "src/Ui/Painter.php": "sha256-jraMPJmRGAFRHG5WDsGRWd/u0X6a9bKjvkgld0x3uLY=",
-    "src/Ui/Presenter.php": "sha256-alU7S07XGfi7BSJCMll5LSgQ4KMkpeN4uvdo4HEzGYg=",
-    "src/WildCards.php": "sha256-er7fhwby4V4bsAAOMF4SYM0DXVbdf9qOi1Gp98Y9djk="
+    "src/Ui/Painter.php": "sha256-rmUqgBuwUuV1SVSzdZwdu4gl/Mgx+SgzS5QtaoPRtBQ=",
+    "src/Ui/Presenter.php": "sha256-o2cl7Mk3w/bD8AqS5LfgioTVm0V458Q9CwWi59V0ncs=",
+    "src/WildCards.php": "sha256-xr3nuIPic3i+qXdKbOwdma7zRMSFMKLFpOJXwmqFkr8="
   }
 }

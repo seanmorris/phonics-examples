@@ -26,6 +26,42 @@ test('atomic local saves retain the last complete turn after quota failure',()=>
 	finally { if(old===undefined) delete globalThis.localStorage; else globalThis.localStorage=old; }
 });
 
+test('a dismissed fallback file chooser releases Save and Load even without a cancel event',async()=>{
+	const saved={document:globalThis.document,add:globalThis.addEventListener,remove:globalThis.removeEventListener,open:globalThis.showOpenFilePicker};
+	const windowListeners=new Map,inputs=[];
+	globalThis.document={body:{appendChild(){}},createElement(){
+		const listeners=new Map,input={files:null,listeners,addEventListener:(type,fn)=>listeners.set(type,fn),remove(){input.removed=true;},click(){}};
+		inputs.push(input);return input;
+	}};
+	globalThis.addEventListener=(type,fn)=>windowListeners.set(type,fn);
+	globalThis.removeEventListener=type=>windowListeners.delete(type);
+	delete globalThis.showOpenFilePicker;
+	const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+	try
+	{
+		const module={},session={},close=activate({module,session,fileCancelDelay:10});
+		assert.equal(module.pokerFileLoad(),true);await wait(0);
+		assert.equal(JSON.parse(module.pokerFileStatus()).busy,true);
+		// The chooser closes without a file: focus returns and no change or cancel event follows.
+		windowListeners.get('focus')();await wait(30);
+		const status=JSON.parse(module.pokerFileStatus());
+		assert.equal(status.busy,false);assert.equal(status.error,'');assert.equal(inputs[0].removed,true);
+		// A later chooser still works, and a chosen file wins over the focus fallback.
+		assert.equal(module.pokerFileLoad(),true);await wait(0);
+		windowListeners.get('focus')();
+		inputs[1].files=[new Blob(['{"chosen":1}'],{type:'application/json'})];
+		inputs[1].listeners.get('change')();await wait(30);
+		assert.equal(module.pokerFileTakeLoad(),'{"chosen":1}');
+		assert.equal(windowListeners.has('focus'),false,'the focus fallback is removed once the chooser settles');
+		close();
+	}
+	finally
+	{
+		for(const [name,value] of [['document',saved.document],['addEventListener',saved.add],['removeEventListener',saved.remove],['showOpenFilePicker',saved.open]])
+		if(value===undefined) delete globalThis[name]; else globalThis[name]=value;
+	}
+});
+
 test('explicit Poker save and load use native file pickers',async()=>{
 	const old=globalThis.localStorage,oldSave=globalThis.showSaveFilePicker,oldOpen=globalThis.showOpenFilePicker,values=new Map;
 	globalThis.localStorage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};

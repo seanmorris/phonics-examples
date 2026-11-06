@@ -167,12 +167,13 @@ final class Painter
 
 	private function confirmationDialog(): void
 	{
+		// Only an online table asks: leaving resigns the match. Offline tables are saved and leave at once.
 		$geometry=$this->layout->confirmationDialog();
-		$this->dialog($geometry['box'],'QUIT TO TITLE');
-		$this->text('Are you sure?',$geometry['box'][0]+$geometry['box'][2]/2,$geometry['box'][1]+58,
+		$this->dialog($geometry['box'],'LEAVE MATCH');
+		$this->text('Leaving forfeits this match.',$geometry['box'][0]+$geometry['box'][2]/2,$geometry['box'][1]+58,
 			$this->layout->controlText(),Theme::INK,'center',$geometry['box'][2]-32);
-		$this->button($geometry['cancel'],'CANCEL','N','default',false);
-		$this->button($geometry['confirm'],'QUIT','Y','danger',false);
+		$this->button($geometry['cancel'],'STAY','N','default',false);
+		$this->button($geometry['confirm'],'FORFEIT','Y','danger',false);
 	}
 
 	private function table(): void
