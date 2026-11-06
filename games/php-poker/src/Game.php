@@ -37,7 +37,7 @@ final class Game
 		}
 		$this->piles = new PileSet($deck, $piles, new RandomStream($seed, 'php-poker/deck/v1'));
 		$this->state = ['phase'=>'ready','turn'=>-1,'dealer'=>$players-1,'handNumber'=>0,'revision'=>0,
-			'players'=>$seats,'pot'=>0,'highest'=>0,'raises'=>0,'opener'=>null,'originalOpenerCards'=>[],
+			'players'=>$seats,'pot'=>0,'highest'=>0,'raises'=>0,'raiseCounts'=>array_fill(0,$players,0),'opener'=>null,'originalOpenerCards'=>[],
 			'pending'=>[],'awards'=>[],'reveal'=>false,'message'=>'','history'=>[]];
 		$this->deal();
 		$this->validate();
@@ -106,12 +106,16 @@ final class Game
 		$due = $this->state['highest'] - $p['bet'];
 		$opening = $this->state['phase'] === 'betting' && $this->state['opener'] === null;
 		$qualifies = !$opening || $this->profile->variant === 'anything' || Hand::canOpen($this->cards($seat), $this->profile->wildCards());
-		$minimum = $this->state['highest'] + $this->profile->minimum;
-		$maximum = min($p['bet'] + $p['stack'], $this->state['highest'] + $this->profile->maximum);
+		$increment = $this->state['phase'] === 'final-betting' ? $this->profile->finalMinimum : $this->profile->minimum;
+		$maximumIncrement = $this->state['phase'] === 'final-betting' ? $this->profile->finalMaximum : $this->profile->maximum;
+		$minimum = $this->state['highest'] + $increment;
+		$maximum = min($p['bet'] + $p['stack'], $this->state['highest'] + $maximumIncrement);
 		$canRaise = $qualifies && !$p['creditUsed'] && $maximum >= $minimum
-			&& ($this->state['highest'] === 0 || $this->state['raises'] < $this->profile->raiseLimit);
+			&& ($this->state['highest'] === 0 || ($this->state['raises'] < $this->profile->raiseLimit
+				&& $this->state['raiseCounts'][$seat] < $this->profile->playerRaiseLimit));
 		return ['fold'=>true,'pass'=>$opening && $due === 0,'check'=>!$opening && $due === 0,
 			'call'=>$due > 0,'callAmount'=>$due,'bet'=>$canRaise,'minBet'=>$minimum,'maxBet'=>$maximum,
+			'betIncrement'=>$increment,
 			'betLabel'=>$this->state['highest'] > 0 ? 'Raise to' : ($opening ? 'Open for' : 'Bet'),
 			'openingRequired'=>$opening && !$qualifies];
 	}
@@ -139,7 +143,7 @@ final class Game
 			|| !is_array($snapshot['profile'] ?? null)) throw new \InvalidArgumentException('Unsupported poker save');
 		// Early v3 saves used only the first joker. Preserve the hand and exact existing card order, placing the
 		// newly enabled second joker at the bottom of the stock rather than rejecting the continuation.
-		if(($snapshot['profile']['version'] ?? null) === Profile::VERSION
+		if(in_array($snapshot['profile']['version'] ?? null, ['bicycle-inspired-local-v3', Profile::VERSION], true)
 			&& is_array($snapshot['profile']['wild'] ?? null) && in_array('joker', $snapshot['profile']['wild'], true)
 			&& ($snapshot['piles']['inventory'] ?? null) === range(0,52)
 			&& is_array($snapshot['piles']['piles']['stock'] ?? null))
@@ -150,16 +154,43 @@ final class Game
 		$instance = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
 		$instance->profile = Profile::restore($snapshot['profile']);
 		$instance->state = $snapshot['state'];
+		if(!array_key_exists('raiseCounts', $instance->state) && is_array($instance->state['players'] ?? null))
+			$instance->state['raiseCounts'] = self::restoreRaiseCounts($instance->state);
 		$instance->piles = PileSet::restore($snapshot['piles']);
 		$instance->validate();
 		return $instance;
+	}
+
+	/** Reconstruct the small current-round counter added after the original local save format shipped. */
+	private static function restoreRaiseCounts(array $state): array
+	{
+		$players = $state['players'];
+		$counts = array_fill(0, count($players), 0);
+		$history = is_array($state['history'] ?? null) ? $state['history'] : [];
+		$start = 0;
+		foreach($history as $index => $line) if(is_string($line))
+		{
+			if(in_array($state['phase'] ?? '', ['final-betting','showdown'], true)
+				&& preg_match('/: (?:Draws [0-5]|Stands pat)\.$/', $line)) $start = $index + 1;
+			elseif(!in_array($state['phase'] ?? '', ['final-betting','showdown'], true)
+				&& str_starts_with($line, 'Hand ')) $start = $index + 1;
+		}
+		foreach(array_slice($history, $start) as $line) foreach($players as $seat => $player)
+			if(is_string($line) && preg_match('/^'.preg_quote((string)($player['name'] ?? ''),'/').': Raises to [0-9]+\.$/', $line)) $counts[$seat]++;
+		$raises = is_int($state['raises'] ?? null) ? $state['raises'] : 0;
+		if(array_sum($counts) !== $raises)
+		{
+			$counts = array_fill(0, count($players), 0);
+			for($raise=0; $raise<$raises; $raise++) $counts[$raise % count($players)]++;
+		}
+		return $counts;
 	}
 
 	/** @return void Verifies the complete local state before saving or accepting input. */
 	public function validate(): void
 	{
 		$s = $this->state;
-		$fields = ['phase','turn','dealer','handNumber','revision','players','pot','highest','raises','opener',
+		$fields = ['phase','turn','dealer','handNumber','revision','players','pot','highest','raises','raiseCounts','opener',
 			'originalOpenerCards','pending','awards','reveal','message','history'];
 		if(count($s) !== count($fields) || array_diff($fields,array_keys($s)))
 			throw new \InvalidArgumentException('Incomplete poker state');
@@ -168,6 +199,11 @@ final class Game
 			|| count($s['players']) < 2 || count($s['players']) > 8)
 			throw new \InvalidArgumentException('Invalid poker state');
 		$n = count($s['players']);
+		if(!is_array($s['raiseCounts'] ?? null) || !array_is_list($s['raiseCounts']) || count($s['raiseCounts']) !== $n)
+			throw new \InvalidArgumentException('Invalid raise counts');
+		foreach($s['raiseCounts'] as $count)
+			if(!is_int($count) || $count < 0 || $count > 2147483647) throw new \InvalidArgumentException('Invalid raise count');
+		if(array_sum($s['raiseCounts']) !== $s['raises']) throw new \InvalidArgumentException('Inconsistent raise counts');
 		foreach(['turn','dealer','handNumber','revision','pot','highest','raises'] as $field)
 			if(!is_int($s[$field] ?? null) || $s[$field] < ($field === 'turn' ? -1 : 0) || $s[$field] > 2147483647)
 				throw new \InvalidArgumentException('Invalid poker counter');
@@ -269,7 +305,7 @@ final class Game
 			$this->pay($seat, $amount - $this->state['players'][$seat]['bet']);
 			$this->state['players'][$seat]['bet'] = $amount;
 			$this->state['highest'] = $amount;
-			if($raising) $this->state['raises']++;
+			if($raising) { $this->state['raises']++; $this->state['raiseCounts'][$seat]++; }
 			if($this->state['phase'] === 'betting' && $this->state['opener'] === null)
 			{
 				$this->state['opener'] = $seat;
@@ -324,6 +360,7 @@ final class Game
 		}
 		unset($p);
 		$this->state['highest'] = $this->state['raises'] = 0;
+		$this->state['raiseCounts'] = array_fill(0, $n, 0);
 		$this->state['opener'] = null; $this->state['originalOpenerCards'] = [];
 		$this->state['reveal'] = false; $this->state['awards'] = [];
 		$this->state['phase'] = 'betting';
@@ -339,6 +376,7 @@ final class Game
 	{
 		$this->state['phase'] = 'final-betting';
 		$this->state['highest'] = $this->state['raises'] = 0;
+		$this->state['raiseCounts'] = array_fill(0, count($this->state['players']), 0);
 		foreach($this->state['players'] as &$p) $p['bet'] = 0;
 		unset($p);
 		$opener = $this->state['opener'];

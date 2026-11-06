@@ -54,6 +54,12 @@ $test('wild presets, custom cards, joker deck and five of a kind are exact',stat
 	$expect(Profile::restore($legacy)->wild===[]);
 	$single=['version'=>'bicycle-inspired-local-v2','variant'=>'anything','ante'=>1,'minimum'=>2,'maximum'=>20,'raiseLimit'=>3,'wild'=>'deuces','customWild'=>[]];
 	$expect(Profile::restore($single)->wild===['deuces']);
+	$multi=['version'=>'bicycle-inspired-local-v3','variant'=>'anything','ante'=>2,'minimum'=>3,'maximum'=>9,'raiseLimit'=>4,'wild'=>['deuces'],'customWild'=>[]];
+	$migratedProfile=Profile::restore($multi);
+	$expect($migratedProfile->finalMinimum===3&&$migratedProfile->finalMaximum===9&&$migratedProfile->playerRaiseLimit===4);
+	$configured=new Profile('anything',2,1,5,4,[],[],3,9,2);
+	$expect(Profile::restore($configured->snapshot())->snapshot()===$configured->snapshot());
+	$reject(static fn()=>new Profile(finalMinimum:8,finalMaximum:4));
 	$game=$rig(new Game('joker-deck',2,$profile),[[8,9,10,11,52],[0,13,26,39,1]]);
 	$expect($game->snapshot()['piles']['inventory']===range(0,53));
 	$expect($game->view(0)['players'][0]['handName']==='Royal flush');
@@ -68,6 +74,29 @@ $test('wild presets, custom cards, joker deck and five of a kind are exact',stat
 	$botView=['turn'=>1,'players'=>[['folded'=>false],['folded'=>false,'cards'=>[11,24,37,50,52]]],
 		'profile'=>['wildCards'=>[52]],'legalActions'=>['check'=>true],'opener'=>0,'pot'=>10];
 	$expect(Bot::choose($botView,1,new RandomStream('five-kind-bot'))===['type'=>'check']);
+});
+$test('betting rounds and total and per-player raise caps use their configured limits',static function() use ($expect,$act): void {
+	$rounds=new Game('round-limits',2,new Profile('anything',minimum:2,maximum:4,raiseLimit:0,finalMinimum:5,finalMaximum:7,playerRaiseLimit:0));
+	$opening=$rounds->view(1)['legalActions'];
+	$expect($opening['minBet']===2&&$opening['maxBet']===4&&$opening['betIncrement']===2);
+	$act($rounds,['type'=>'bet','amount'=>2]); $act($rounds,['type'=>'call']);
+	$act($rounds,['type'=>'draw','cards'=>[]]); $act($rounds,['type'=>'draw','cards'=>[]]);
+	$final=$rounds->view(1)['legalActions'];
+	$expect($rounds->view(-1)['phase']==='final-betting'&&$final['minBet']===5&&$final['maxBet']===7&&$final['betIncrement']===5);
+
+	$caps=new Game('raise-caps',4,new Profile('anything',minimum:2,maximum:2,raiseLimit:3,playerRaiseLimit:1));
+	$act($caps,['type'=>'bet','amount'=>2]);
+	$act($caps,['type'=>'bet','amount'=>4]);
+	$act($caps,['type'=>'call']); $act($caps,['type'=>'call']);
+	$act($caps,['type'=>'bet','amount'=>6]);
+	$seatTwo=$caps->view(2)['legalActions'];
+	$expect($caps->view(-1)['raises']===2&&$seatTwo['call']&&!$seatTwo['bet'],'a player raised twice despite its per-round cap');
+	$total=new Game('total-raise-cap',4,new Profile('anything',minimum:2,maximum:2,raiseLimit:1,playerRaiseLimit:3));
+	$act($total,['type'=>'bet','amount'=>2]); $act($total,['type'=>'bet','amount'=>4]);
+	$expect($total->view(3)['legalActions']['call']&&!$total->view(3)['legalActions']['bet'],'the table exceeded its total raise cap');
+	$save=$caps->snapshot(); unset($save['state']['raiseCounts']);
+	$restored=Game::restore($save);
+	$expect(array_sum($restored->snapshot()['state']['raiseCounts'])===2,'an old save did not reconstruct raise counters');
 });
 $test('passing returns to the betting queue after an opener and stale actions are atomic',static function() use ($expect,$act,$reject): void {
 	$g=new Game('pass',4,new Profile('anything')); $act($g,['type'=>'pass']); $act($g,['type'=>'bet','amount'=>4]);

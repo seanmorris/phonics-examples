@@ -40,6 +40,15 @@ final class Presenter
 	private int $amount = 0;
 	private int $setupPlayers = 4;
 	private string $setupVariant = 'jackpots';
+	private int $setupAnte = 1;
+	private int $setupMinimum = 2;
+	private int $setupMaximum = 20;
+	private int $setupFinalMinimum = 2;
+	private int $setupFinalMaximum = 20;
+	private int $setupRaiseLimit = 3;
+	private int $setupPlayerRaiseLimit = 3;
+	/** @var array<string,int> Editable copy used by the combined betting and raising dialog. */
+	private array $limitDraft = [];
 	/** @var list<string> */
 	private array $setupWild = [];
 	/** @var list<int> */
@@ -128,7 +137,7 @@ final class Presenter
 		elseif($revision !== $this->errorRevision) $this->view['error'] = '';
 		if(($this->view['error'] ?? '') !== '') $this->lockedRevision = null;
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
-		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
+		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','limits','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
 		if(($view['screen'] ?? '') === 'help' && ($previous['screen'] ?? '') !== 'help') $this->helpScroll = 0;
 		if(($view['phase'] ?? '') !== 'showdown' && ($view['phase'] ?? '') !== 'redeal') $this->historyOpen = false;
 		$this->syncNetworkWait();
@@ -258,6 +267,7 @@ final class Presenter
 		if(isset($target['wildPreset'])) { $this->toggleWildPreset($target['wildPreset']); return []; }
 		if(isset($target['customWild'])) { $this->toggleCustomWild((int)$target['customWild']); return []; }
 		if(isset($target['customPage'])) { $this->customWildPage=max(0,min(4,$this->customWildPage+(int)$target['customPage'])); return []; }
+		if(isset($target['limit'])) { $this->adjustLimit((string)$target['limit'], (int)($target['delta'] ?? 0)); return []; }
 		if(isset($target['card'])) { $this->toggleCard($target['card']); return []; }
 		if(isset($target['button'])) return $this->activate($target['button']['id'], $target['button']['intent']);
 		return [];
@@ -284,8 +294,22 @@ final class Presenter
 				if($this->setupPlayers < 8) $addKey($setup['more'], 'arrowright', 'setup:more');
 				$addKey($setup['variant'], 'v', 'setup:variant');
 				$addKey($setup['wild'], 'w', 'setup:wild');
+				$addKey($setup['limits'], 'l', 'setup:limits');
 				$addKey($setup['back'], 'escape', 'setup:back');
 				$addKey($setup['start'], 'enter', 'setup:start');
+			}
+			elseif($this->local === 'limits')
+			{
+				$limits = $layout->limits();
+				foreach($limits['fields'] as $field => $stepper)
+				{
+					[$low,$high]=$this->limitBounds($field);
+					$value=$this->limitDraft[$field]??$low;
+					$targets[]=['id'=>'limit:'.$field.':less','rect'=>$stepper['less'],'limit'=>$field,'delta'=>-1,'disabled'=>$value<=$low];
+					$targets[]=['id'=>'limit:'.$field.':more','rect'=>$stepper['more'],'limit'=>$field,'delta'=>1,'disabled'=>$value>=$high];
+				}
+				$addKey($limits['back'], 'escape', 'limit:back');
+				$addKey($limits['apply'], 'enter', 'limit:apply');
 			}
 			elseif($this->local === 'wildcards')
 			{
@@ -440,11 +464,21 @@ final class Presenter
 					'arrowright', '+', '=' => (function(): array { $this->setupPlayers = min(8, $this->setupPlayers + 1); return []; })(),
 					'arrowup', 'arrowdown', 'v' => (function(): array { $this->setupVariant = $this->setupVariant === 'jackpots' ? 'anything' : 'jackpots'; return []; })(),
 					'w' => (function(): array { $this->wildDraft=$this->setupWild; $this->customWildDraft=$this->setupCustomWild; $this->local='wildcards'; return []; })(),
+					'l' => (function(): array { $this->openLimits(); return []; })(),
 					'escape', 'backspace' => (function(): array { $this->local = 'menu'; return []; })(),
 					'enter', ' ' => [['type' => 'start', 'players' => $this->setupPlayers, 'variant' => $this->setupVariant,
+						'ante'=>$this->setupAnte,'minimum'=>$this->setupMinimum,'maximum'=>$this->setupMaximum,
+						'finalMinimum'=>$this->setupFinalMinimum,'finalMaximum'=>$this->setupFinalMaximum,
+						'raiseLimit'=>$this->setupRaiseLimit,'playerRaiseLimit'=>$this->setupPlayerRaiseLimit,
 						'wild'=>$this->setupWild,'customWild'=>$this->setupCustomWild]],
 					default => [],
 				};
+			}
+			if($this->local === 'limits')
+			{
+				if(in_array($key, ['escape','backspace'], true)) { $this->local='setup'; $this->limitDraft=[]; return []; }
+				if(in_array($key, ['enter',' '], true)) { $this->applyLimits(); return []; }
+				return [];
 			}
 			if($this->local === 'wildcards')
 			{
@@ -534,6 +568,49 @@ final class Presenter
 		return [$intent + ['generation' => $this->view['generation'] ?? 0, 'revision' => $this->view['revision'] ?? 0]];
 	}
 
+	private function openLimits(): void
+	{
+		$this->limitDraft = [
+			'ante'=>$this->setupAnte,'minimum'=>$this->setupMinimum,'maximum'=>$this->setupMaximum,
+			'finalMinimum'=>$this->setupFinalMinimum,'finalMaximum'=>$this->setupFinalMaximum,
+			'raiseLimit'=>$this->setupRaiseLimit,'playerRaiseLimit'=>$this->setupPlayerRaiseLimit
+		];
+		$this->local = 'limits';
+	}
+
+	private function applyLimits(): void
+	{
+		if(!$this->limitDraft) return;
+		$this->setupAnte=$this->limitDraft['ante'];
+		$this->setupMinimum=$this->limitDraft['minimum'];
+		$this->setupMaximum=$this->limitDraft['maximum'];
+		$this->setupFinalMinimum=$this->limitDraft['finalMinimum'];
+		$this->setupFinalMaximum=$this->limitDraft['finalMaximum'];
+		$this->setupRaiseLimit=$this->limitDraft['raiseLimit'];
+		$this->setupPlayerRaiseLimit=$this->limitDraft['playerRaiseLimit'];
+		$this->limitDraft=[];
+		$this->local='setup';
+	}
+
+	private function adjustLimit(string $field, int $delta): void
+	{
+		if(!$this->limitDraft || !array_key_exists($field, $this->limitDraft) || !in_array($delta, [-1,1], true)) return;
+		[$low,$high] = $this->limitBounds($field);
+		$this->limitDraft[$field]=max($low,min($high,$this->limitDraft[$field]+$delta));
+	}
+
+	/** @return array{int,int} */
+	private function limitBounds(string $field): array
+	{
+		return match($field) {
+			'ante' => [0,100], 'minimum' => [1,$this->limitDraft['maximum']],
+			'maximum' => [$this->limitDraft['minimum'],100],
+			'finalMinimum' => [1,$this->limitDraft['finalMaximum']],
+			'finalMaximum' => [$this->limitDraft['finalMinimum'],100],
+			default => [0,10]
+		};
+	}
+
 	private function toggleCard(int $index): void
 	{
 		$cards = $this->view['players'][0]['cards'] ?? [];
@@ -571,7 +648,7 @@ final class Presenter
 		$legal = $this->view['legalActions'] ?? [];
 		if(empty($legal['bet'])) return;
 		$increment = max(1, (int)($legal['minBet'] ?? 1) - (int)($this->view['highest'] ?? 0));
-		$this->amount = max((int)$legal['minBet'], min((int)$legal['maxBet'], $this->amount + $direction * max(1, (int)($this->view['profile']['minimum'] ?? $increment))));
+		$this->amount = max((int)$legal['minBet'], min((int)$legal['maxBet'], $this->amount + $direction * max(1, (int)($legal['betIncrement'] ?? $this->view['profile']['minimum'] ?? $increment))));
 	}
 
 	/** Scroll the rules by one paragraph, keeping every stop meaningful at every viewport size. */
@@ -750,6 +827,10 @@ final class Presenter
 			'discards' => $this->discards, 'amount' => $this->amount, 'mode' => $this->mode, 'local' => $this->local
 			, 'history' => $this->historyOpen, 'locked' => $this->locked(), 'hint' => $this->guidance()
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant,
+				'ante'=>$this->setupAnte,'minimum'=>$this->setupMinimum,'maximum'=>$this->setupMaximum,
+				'finalMinimum'=>$this->setupFinalMinimum,'finalMaximum'=>$this->setupFinalMaximum,
+				'raiseLimit'=>$this->setupRaiseLimit,'playerRaiseLimit'=>$this->setupPlayerRaiseLimit,
+				'limitDraft'=>$this->limitDraft,
 				'wild'=>$this->setupWild,'customWild'=>$this->setupCustomWild,'wildDraft'=>$this->wildDraft,
 				'customWildDraft'=>$this->customWildDraft,'customWildPage'=>$this->customWildPage], 'pointer' => $this->pointer
 			, 'chips' => $this->chips, 'motion' => $this->motion?->frame($this->layout())

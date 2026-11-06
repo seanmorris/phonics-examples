@@ -167,9 +167,9 @@ async function regions(canvas)
 require $argv[1].'/games/php-poker/autoload.php';
 $input=json_decode(stream_get_contents(STDIN),true,flags:JSON_THROW_ON_ERROR);
 $view=$input['view']; $layout=PhpPoker\Ui\Layout::fit($input['width'],$input['height'],$input['dpr'],max(2,count($view['players']??[])));
-$wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui']['setup']['customWildPage']??0));
+$wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui']['setup']['customWildPage']??0)); $limits=$layout->limits();
 	$result=['menu'=>$layout->menu($view['canContinue']),'actions'=>$layout->actions($view,$view['ui']),
-	 'cards'=>$layout->discardDialog()['cards'],'information'=>$layout->information(),'wild'=>$wild,'customWild'=>$custom];
+	 'cards'=>$layout->discardDialog()['cards'],'information'=>$layout->information(),'wild'=>$wild,'customWild'=>$custom,'limits'=>$limits];
 	foreach(['menu','actions'] as $key) foreach($result[$key] as &$button) $button['rect']=$layout->rect(...$button['rect']);
 	unset($button);
 	foreach($result['cards'] as &$rect) $rect=$layout->rect(...$rect);
@@ -182,6 +182,9 @@ $wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui'
 	foreach($result['customWild']['cards'] as &$rect) $rect=$layout->rect(...$rect);
 	unset($rect);
 	foreach(['box','previous','next','back','done'] as $key) $result['customWild'][$key]=$layout->rect(...$result['customWild'][$key]);
+	foreach($result['limits']['fields'] as &$field) foreach(['label','less','count','more'] as $key) $field[$key]=$layout->rect(...$field[$key]);
+	unset($field);
+	foreach(['box','back','apply'] as $key) $result['limits'][$key]=$layout->rect(...$result['limits'][$key]);
 	unset($rect);
 echo json_encode($result,JSON_THROW_ON_ERROR);
 `,root],{encoding:'utf8',input:JSON.stringify(input)}));
@@ -235,6 +238,7 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	let custom=await regions(canvas),customCard=await point(canvas,custom.customWild.cards[0]);
 	await page.mouse.click(customCard.x,customCard.y);
 	for(let pageIndex=0;pageIndex<4;pageIndex++)await page.keyboard.press('ArrowRight');
+	await expect.poll(async()=>(await state(canvas)).ui.setup.customWildPage).toBe(4);
 	custom=await regions(canvas);customCard=await point(canvas,custom.customWild.cards[52]);
 	await page.mouse.click(customCard.x,customCard.y);
 	customCard=await point(canvas,custom.customWild.cards[53]);
@@ -242,10 +246,19 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	const customDone=await point(canvas,custom.customWild.done);
 	await page.mouse.click(customDone.x,customDone.y);
 	await expect.poll(async()=>(await state(canvas)).ui.setup).toMatchObject({wild:['joker','custom'],customWild:[0,52,53]});
+	await page.keyboard.press('l');
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('limits');
+	let limitRegions=await regions(canvas);
+	for(const field of ['ante','finalMinimum','raiseLimit']){
+		const plus=await point(canvas,limitRegions.limits.fields[field].more);await page.mouse.click(plus.x,plus.y);
+	}
+	const playerLess=await point(canvas,limitRegions.limits.fields.playerRaiseLimit.less);await page.mouse.click(playerLess.x,playerLess.y);
+	const limitsApply=await point(canvas,limitRegions.limits.apply);await page.mouse.click(limitsApply.x,limitsApply.y);
+	await expect.poll(async()=>(await state(canvas)).ui.setup).toMatchObject({ante:2,minimum:2,maximum:20,finalMinimum:3,finalMaximum:20,raiseLimit:4,playerRaiseLimit:2});
 	await page.keyboard.press('Enter');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 	expect((await state(canvas)).players).toHaveLength(5);
-	expect((await state(canvas)).profile).toMatchObject({wild:['joker','custom'],customWild:[0,52,53]});
+	expect((await state(canvas)).profile).toMatchObject({ante:2,minimum:2,maximum:20,finalMinimum:3,finalMaximum:20,raiseLimit:4,playerRaiseLimit:2,wild:['joker','custom'],customWild:[0,52,53]});
 	await page.keyboard.press('Escape');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
 	await page.keyboard.press('h');

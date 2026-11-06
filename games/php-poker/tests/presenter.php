@@ -311,8 +311,25 @@ $test('the menu, setup and settings flow send only session intents the session k
 	$expect($presenter->state()['local'] === 'wildcards', 'W opens the wild-card preset window');
 	$presenter->input([['key' => '1'], ['key' => '0'], ['key' => '1'], ['key' => '2'], ['key' => 'enter']], null, 1 / 60);
 	$expect($presenter->state()['local'] === 'setup' && $presenter->state()['setup']['wild'] === ['joker','deuces'], 'independent wild-card checkboxes return to setup');
+	$presenter->input([['key' => 'l']], null, 1 / 60);
+	$expect($presenter->state()['local'] === 'limits', 'L opens one combined betting and raising dialog');
+	$click = static function(Presenter $presenter, array $rect): void {
+		[$x,$y,$width,$height]=$presenter->layout()->rect(...$rect);
+		$point=['x'=>$x+$width/2,'y'=>$y+$height/2];
+		$presenter->input([], ['x'=>$point['x'],'y'=>$point['y'],'down'=>false,'clicks'=>[$point]], 0);
+	};
+	$limits=$presenter->layout()->limits();
+	$click($presenter,$limits['fields']['ante']['more']);
+	$click($presenter,$limits['fields']['minimum']['less']);
+	$click($presenter,$limits['fields']['finalMinimum']['more']);
+	$click($presenter,$limits['fields']['raiseLimit']['more']);
+	$click($presenter,$limits['fields']['playerRaiseLimit']['less']);
+	$presenter->input([['key' => 'enter']], null, 1 / 60);
+	$expect($presenter->state()['local'] === 'setup' && $presenter->state()['setup']['ante'] === 2, 'the combined limits dialog applies its draft to setup');
 	$start = $presenter->input([['key' => 'enter']], null, 1 / 60);
-	$expect($start === [['type' => 'start', 'players' => 6, 'variant' => 'anything', 'wild'=>['joker','deuces'], 'customWild'=>[]]], 'Deal starts with the chosen seats, variant and wild cards');
+	$expect($start === [['type' => 'start', 'players' => 6, 'variant' => 'anything',
+		'ante'=>2,'minimum'=>1,'maximum'=>20,'finalMinimum'=>3,'finalMaximum'=>20,'raiseLimit'=>4,'playerRaiseLimit'=>2,
+		'wild'=>['joker','deuces'], 'customWild'=>[]]], 'Deal starts with the chosen seats, variant, wild cards and limits');
 	$presenter->input([['key' => 'escape']], null, 1 / 60);
 	$expect($presenter->input([['key' => 'c']], null, 1 / 60) === [['type' => 'resume']], 'C continues a saved game');
 	$presenter->update(['screen' => 'settings', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => false, 'pace' => 'normal']);
@@ -394,6 +411,13 @@ $test('controller focus navigates menus, setup, cards and table actions through 
 	$release($setup);
 	$press($setup, 'confirm');
 	$expect($setup->state()['local'] === 'setup' && ($setup->state()['controllerFocus']['id'] ?? null) === 'setup:start', 'A opens setup and focuses Deal');
+	$setup->input([['key'=>'l']], null, 1 / 60, [], 'generic');
+	$release($setup);
+	$expect(($setup->state()['controllerFocus']['id'] ?? null) === 'limit:ante:less', 'the combined limits dialog exposes its steppers to controller focus');
+	$press($setup, 'confirm');
+	$expect($setup->state()['setup']['limitDraft']['ante'] === 0, 'A adjusts a focused betting limit');
+	$press($setup, 'back');
+	$expect($setup->state()['local'] === 'setup', 'B cancels the limits draft back to setup');
 	$press($setup, 'back');
 	$expect($setup->state()['local'] === 'menu', 'B backs out of table setup');
 
@@ -579,6 +603,7 @@ $test('actual CSS touch targets clear every discard card and stay on screen', st
 		$layout = Layout::fit($width, $height, $dpr);
 		$draw = $layout->actions($fixture('draw-2'), ['discards' => [], 'amount' => 0]);
 		$setup = $layout->setup(8, 'anything');
+		$limits = $layout->limits();
 		$wild = $layout->wildcardMenu();
 		$customTargets = [];
 		foreach(range(0,4) as $page)
@@ -590,7 +615,9 @@ $test('actual CSS touch targets clear every discard card and stay on screen', st
 		$custom = $layout->customWildcards();
 		$expect($layout->profile !== 'wide' || count($custom['cards']) === 54, "wide custom dialog exposes the complete deck at $width x $height / $dpr");
 		$targets = array_merge(array_column($layout->menu(true), 'rect'), array_column($draw, 'rect'),
-			[$setup['less'],$setup['more'],$setup['variant'],$setup['wild'],$setup['start'],$setup['back']],
+			[$setup['less'],$setup['more'],$setup['variant'],$setup['wild'],$setup['limits'],$setup['start'],$setup['back']],
+			array_merge(...array_map(static fn(array $field): array=>[$field['less'],$field['more']],array_values($limits['fields']))),
+			[$limits['back'],$limits['apply']],
 			array_values($wild['items']),[$wild['back'],$wild['apply']],$customTargets,[$custom['back'],$custom['done']]);
 		foreach($targets as $rect)
 		{
@@ -1093,7 +1120,7 @@ $test('dialogs keep their CSS size and whole labels on a compressed desktop', st
 			$expect($a[2] >= min($b[2], $width - 72) - 1 && abs($a[3] - $b[3]) < 1e-6, "the $name control keeps its CSS size at $width x $height");
 			$expect($a[0] >= 0 && $a[0] + $a[2] <= $width, "the $name control stays on a $width x $height canvas");
 		}
-		foreach([$narrow->menuBox(true), $narrow->setup(4, 'jackpots')['box'], $narrow->wildcardMenu()['box'], $narrow->customWildcards()['box'], $narrow->information()['box'], $narrow->history()['box'], $narrow->discardDialog()['box'], $narrow->panel(440, 250, 120)] as $index => $box)
+		foreach([$narrow->menuBox(true), $narrow->setup(4, 'jackpots')['box'], $narrow->limits()['box'], $narrow->wildcardMenu()['box'], $narrow->customWildcards()['box'], $narrow->information()['box'], $narrow->history()['box'], $narrow->discardDialog()['box'], $narrow->panel(440, 250, 120)] as $index => $box)
 		{
 			[$left, , $boxWidth] = $narrow->rect(...$box);
 			$expect($left >= 0 && $left + $boxWidth <= $width, "dialog $index stays on a $width x $height canvas");

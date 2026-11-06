@@ -45,7 +45,11 @@ final class Session
 				if(!is_int($players)) throw new \InvalidArgumentException('Choose a player count');
 				$wild=$intent['wild']??[]; $customWild=$intent['customWild']??[];
 				if(!is_array($wild) || !is_array($customWild)) throw new \InvalidArgumentException('Choose valid wild cards');
-				$profile=new Profile($intent['variant']??'jackpots', wild:$wild, customWild:$customWild);
+				$profile=new Profile($intent['variant']??'jackpots',
+					ante:$intent['ante']??1, minimum:$intent['minimum']??2, maximum:$intent['maximum']??20,
+					raiseLimit:$intent['raiseLimit']??3, wild:$wild, customWild:$customWild,
+					finalMinimum:$intent['finalMinimum']??null, finalMaximum:$intent['finalMaximum']??null,
+					playerRaiseLimit:$intent['playerRaiseLimit']??null);
 				$this->game=new Game($newSeed,$players,$profile);
 				$this->bots=[];
 				for($id=1;$id<$players;$id++) $this->bots[$id]=new RandomStream($newSeed,'php-poker/bot/'.$id.'/v1');

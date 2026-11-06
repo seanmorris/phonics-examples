@@ -11,9 +11,10 @@ namespace PhpPoker;
  */
 final class Profile
 {
-	public const VERSION = 'bicycle-inspired-local-v3';
+	public const VERSION = 'bicycle-inspired-local-v4';
 	private const LEGACY_VERSION = 'bicycle-inspired-local-v1';
 	private const SINGLE_WILD_VERSION = 'bicycle-inspired-local-v2';
+	private const MULTI_WILD_VERSION = 'bicycle-inspired-local-v3';
 	/** @var list<string> Checked wild-card rules; empty means none. */
 	public readonly array $wild;
 
@@ -23,16 +24,25 @@ final class Profile
 	 * @param int $ante Dealer-only contribution per deal.
 	 * @param int $minimum Smallest opening bet or raise increment.
 	 * @param int $maximum Largest bet increment.
-	 * @param int $raiseLimit Number of raises after the first bet in each round.
+	 * @param int $raiseLimit Total number of raises after the first bet in each round.
+	 * @param int|null $finalMinimum Smallest post-draw bet or raise increment; defaults to the first-round minimum.
+	 * @param int|null $finalMaximum Largest post-draw bet increment; defaults to the first-round maximum.
+	 * @param int|null $playerRaiseLimit Number of raises each player may make per round; defaults to the total cap.
 	 */
 	public function __construct(
 		public readonly string $variant = 'jackpots', public readonly int $ante = 1,
 		public readonly int $minimum = 2, public readonly int $maximum = 20, public readonly int $raiseLimit = 3,
-		string|array $wild = [], public readonly array $customWild = []
+		string|array $wild = [], public readonly array $customWild = [],
+		?int $finalMinimum = null, ?int $finalMaximum = null, ?int $playerRaiseLimit = null
 	)
 	{
+		$this->finalMinimum = $finalMinimum ?? $minimum;
+		$this->finalMaximum = $finalMaximum ?? $maximum;
+		$this->playerRaiseLimit = $playerRaiseLimit ?? $raiseLimit;
 		if(!in_array($variant, ['jackpots','anything'], true) || $ante < 0 || $ante > 100
-			|| $minimum < 1 || $minimum > $maximum || $maximum > 100 || $raiseLimit < 0 || $raiseLimit > 10)
+			|| $minimum < 1 || $minimum > $maximum || $maximum > 100
+			|| $this->finalMinimum < 1 || $this->finalMinimum > $this->finalMaximum || $this->finalMaximum > 100
+			|| $raiseLimit < 0 || $raiseLimit > 10 || $this->playerRaiseLimit < 0 || $this->playerRaiseLimit > 10)
 			throw new \InvalidArgumentException('Invalid poker settings');
 		$this->wild = WildCards::selection($wild);
 		WildCards::ids($this->wild, $customWild);
@@ -40,11 +50,17 @@ final class Profile
 			throw new \InvalidArgumentException('Custom wild cards must be sorted and unique');
 	}
 
+	public readonly int $finalMinimum;
+	public readonly int $finalMaximum;
+	public readonly int $playerRaiseLimit;
+
 	/** @return array Versioned local-only settings, without a rubber-banding switch. */
 	public function snapshot(): array
 	{
 		return ['version'=>self::VERSION,'variant'=>$this->variant,'ante'=>$this->ante,
-			'minimum'=>$this->minimum,'maximum'=>$this->maximum,'raiseLimit'=>$this->raiseLimit,
+			'minimum'=>$this->minimum,'maximum'=>$this->maximum,
+			'finalMinimum'=>$this->finalMinimum,'finalMaximum'=>$this->finalMaximum,
+			'raiseLimit'=>$this->raiseLimit,'playerRaiseLimit'=>$this->playerRaiseLimit,
 			'wild'=>$this->wild,'customWild'=>$this->customWild];
 	}
 
@@ -63,11 +79,15 @@ final class Profile
 		$version = $state['version'] ?? null;
 		$legacy = $version === self::LEGACY_VERSION;
 		$singleWild = $version === self::SINGLE_WILD_VERSION;
+		$multiWild = $version === self::MULTI_WILD_VERSION;
 		$fields = $legacy ? ['version','variant','ante','minimum','maximum','raiseLimit']
-			: ['version','variant','ante','minimum','maximum','raiseLimit','wild','customWild'];
-		if(($version !== self::VERSION && !$legacy && !$singleWild) || array_keys($state) !== $fields)
+			: (($singleWild || $multiWild) ? ['version','variant','ante','minimum','maximum','raiseLimit','wild','customWild']
+				: ['version','variant','ante','minimum','maximum','finalMinimum','finalMaximum','raiseLimit','playerRaiseLimit','wild','customWild']);
+		if(($version !== self::VERSION && !$legacy && !$singleWild && !$multiWild) || array_keys($state) !== $fields)
 			throw new \InvalidArgumentException('Unsupported poker profile');
-		foreach(['ante','minimum','maximum','raiseLimit'] as $key)
+		$amounts = ['ante','minimum','maximum','raiseLimit'];
+		if($version === self::VERSION) array_push($amounts, 'finalMinimum', 'finalMaximum', 'playerRaiseLimit');
+		foreach($amounts as $key)
 			if(!is_int($state[$key] ?? null)) throw new \InvalidArgumentException('Invalid profile amount');
 		if(!is_string($state['variant'] ?? null)) throw new \InvalidArgumentException('Invalid profile variant');
 		if(!$legacy && (!is_array($state['customWild'] ?? null)
@@ -76,6 +96,8 @@ final class Profile
 		if(!$legacy && !$singleWild && WildCards::selection($state['wild']) !== $state['wild'])
 			throw new \InvalidArgumentException('Wild-card profile is not canonical');
 		return new self($state['variant'],$state['ante'],$state['minimum'],$state['maximum'],$state['raiseLimit'],
-			$legacy ? [] : $state['wild'], $legacy ? [] : $state['customWild']);
+			$legacy ? [] : $state['wild'], $legacy ? [] : $state['customWild'],
+			$state['finalMinimum'] ?? $state['minimum'], $state['finalMaximum'] ?? $state['maximum'],
+			$state['playerRaiseLimit'] ?? $state['raiseLimit']);
 	}
 }

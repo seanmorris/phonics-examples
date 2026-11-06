@@ -385,6 +385,7 @@ final class Painter
 		$shift = $this->layout->verticalShift();
 		$local = $this->state['local'];
 		if($local === 'setup') { $this->setupDialog(); return; }
+		if($local === 'limits') { $this->limitsDialog(); return; }
 		if($local === 'wildcards') { $this->wildcardDialog(); return; }
 		if($local === 'custom-wildcards') { $this->customWildcardDialog(); return; }
 		if($local === 'online')
@@ -422,8 +423,41 @@ final class Painter
 		$wild = (array)($this->state['setup']['wild'] ?? []);
 		$this->text('Wild cards', $x + 24, $setup['wild'][1] + $setup['wild'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['wild'], WildCards::selectionLabel($wild), 'W', 'default', false);
+		$state = $this->state['setup'];
+		$summary = $state['ante'].' · '.$state['minimum'].'–'.$state['maximum'].' / '.$state['finalMinimum'].'–'.$state['finalMaximum']
+			.' · '.$state['raiseLimit'].'/'.$state['playerRaiseLimit'];
+		$this->text('Limits', $x + 24, $setup['limits'][1] + $setup['limits'][3] / 2, Theme::LABEL, Theme::INK);
+		$this->button($setup['limits'], $summary, 'L', 'default', false);
 		$this->button($setup['back'], 'Back', '⎋', 'default', false);
 		$this->button($setup['start'], 'Deal', '↵', 'primary', false);
+	}
+
+	private function limitsDialog(): void
+	{
+		$limits = $this->layout->limits();
+		$draft = (array)($this->state['setup']['limitDraft'] ?? []);
+		$labels = [
+			'ante'=>'Ante','minimum'=>'Before min','maximum'=>'Before max',
+			'finalMinimum'=>'After min','finalMaximum'=>'After max',
+			'raiseLimit'=>'Total raises','playerRaiseLimit'=>'Raises/player'
+		];
+		$this->dialog($limits['box'], 'BETTING & RAISING LIMITS');
+		foreach($limits['fields'] as $field => $stepper)
+		{
+			$value = (int)($draft[$field] ?? 0);
+			[$minimum,$maximum] = match($field) {
+				'ante'=>[0,100], 'minimum'=>[1,(int)($draft['maximum']??1)],
+				'maximum'=>[(int)($draft['minimum']??1),100],
+				'finalMinimum'=>[1,(int)($draft['finalMaximum']??1)],
+				'finalMaximum'=>[(int)($draft['finalMinimum']??1),100], default=>[0,10]
+			};
+			$this->text($labels[$field], $stepper['label'][0], $stepper['label'][1] + $stepper['label'][3] / 2, Theme::LABEL, Theme::INK, 'left', $stepper['label'][2]);
+			$this->button($stepper['less'], '−', '', 'default', $value <= $minimum);
+			$this->plate($stepper['count'], (string)$value, 'info', false);
+			$this->button($stepper['more'], '+', '', 'default', $value >= $maximum);
+		}
+		$this->button($limits['back'], 'Cancel', '⎋', 'default', false);
+		$this->button($limits['apply'], 'OK', '↵', 'primary', false);
 	}
 
 	private function wildcardDialog(): void

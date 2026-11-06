@@ -1201,11 +1201,11 @@ final class Layout
 	}
 
 	/**
-	 * Design-space geometry of the table setup card: opponents, opening rule, wild cards and Start.
+	 * Design-space geometry of the table setup card: opponents, opening rule, wild cards, limits and Start.
 	 *
 	 * @param int $players Current seat count including the human.
 	 * @param string $variant `jackpots` or `anything`.
-	 * @return array{box:array{float,float,float,float},less:array{float,float,float,float},more:array{float,float,float,float},count:array{float,float,float,float},variant:array{float,float,float,float},wild:array{float,float,float,float},start:array{float,float,float,float},back:array{float,float,float,float}}
+	 * @return array<string,array{float,float,float,float}>
 	 */
 	public function setup(int $players, string $variant): array
 	{
@@ -1213,18 +1213,59 @@ final class Layout
 		$width = min(500, $this->width() - 24);
 		$left = ($this->width() - $width) / 2;
 		$control = $this->controlSize();
-		$height = 4 * $control + 80;
-		$top = $this->profile === 'landscape' ? $this->height() - $height - 12 : 230 + $this->verticalShift();
+		$rows = $players >= 2 ? 5 : 4;
+		$height = $rows * $control + ($rows - 1) * 10 + 40;
+		$top = max(12, ($this->height() - $height) / 2);
 		$column = $left + $width - 24 - max(200, 3 * $control + 20);
 		$row = $top + 28;
+		$footerRow = $players >= 2 ? 4 : 3;
 		return [
 			'box' => [$left, $top, $width, $height]
 			, 'less' => [$column, $row, $control, $control], 'count' => [$column + $control + 10, $row, $control, $control], 'more' => [$column + 2 * ($control + 10), $row, $control, $control]
 			, 'pace' => [$column, $row, $width - ($column - $left) - 24, $control]
 			, 'variant' => [$column, $row + $control + 10, $width - ($column - $left) - 24, $control]
 			, 'wild' => [$column, $row + 2 * ($control + 10), $width - ($column - $left) - 24, $control]
-			, 'back' => [$left + 24, $row + 3 * ($control + 10), 120, $control], 'start' => [$left + $width - 24 - 140, $row + 3 * ($control + 10), 140, $control]
+			, 'limits' => [$column, $row + 3 * ($control + 10), $width - ($column - $left) - 24, $control]
+			, 'back' => [$left + 24, $row + $footerRow * ($control + 10), 120, $control], 'start' => [$left + $width - 24 - 140, $row + $footerRow * ($control + 10), 140, $control]
 		];
+	}
+
+	/** One combined dialog for ante, both betting rounds, and both raise caps. */
+	public function limits(): array
+	{
+		if($square = $this->square()) return $this->fromSquare($square->limits());
+		$control = $this->controlSize();
+		$columns = $this->profile === 'landscape' ? 2 : 1;
+		$order = $columns === 2
+			? ['ante','minimum','maximum','raiseLimit','finalMinimum','finalMaximum','playerRaiseLimit']
+			: ['ante','minimum','maximum','finalMinimum','finalMaximum','raiseLimit','playerRaiseLimit'];
+		$rows = (int)ceil(count($order) / $columns);
+		$width = min($columns === 2 ? 820 : 580, $this->width() - 24);
+		$height = 34 + $rows * $control + ($rows - 1) * 8 + 14 + $control + 12;
+		$left = ($this->width() - $width) / 2;
+		$top = max(12, ($this->height() - $height) / 2);
+		$inside = $width - 48;
+		$columnGap = $columns === 2 ? 18 : 0;
+		$columnWidth = ($inside - $columnGap * ($columns - 1)) / $columns;
+		$stepWidth = 3 * $control + 16;
+		$fields = [];
+		foreach($order as $index => $field)
+		{
+			$column = $columns === 1 ? 0 : intdiv($index, $rows);
+			$row = $columns === 1 ? $index : $index % $rows;
+			$x = $left + 24 + $column * ($columnWidth + $columnGap);
+			$y = $top + 28 + $row * ($control + 8);
+			$step = $x + $columnWidth - $stepWidth;
+			$fields[$field] = [
+				'label'=>[$x,$y,$columnWidth-$stepWidth-8,$control],
+				'less'=>[$step,$y,$control,$control],
+				'count'=>[$step+$control+8,$y,$control,$control],
+				'more'=>[$step+2*($control+8),$y,$control,$control]
+			];
+		}
+		$footer = $top + $height - $control - 12;
+		return ['box'=>[$left,$top,$width,$height],'fields'=>$fields,
+			'back'=>[$left+24,$footer,130,$control],'apply'=>[$left+$width-164,$footer,140,$control]];
 	}
 
 	/** Preset selector matching the original game's Wild Cards window. */
