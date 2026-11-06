@@ -449,7 +449,7 @@ final class Presenter
 			if($this->local === 'wildcards')
 			{
 				$options = array_keys(WildCards::OPTIONS);
-				if(in_array($key, ['1','2','3','4','5','6','7','8'], true)) { $this->toggleWildPreset($options[(int)$key-1]); return []; }
+				if(in_array($key, ['0','1','2','3','4','5','6','7'], true)) { $this->toggleWildPreset($options[(int)$key]); return []; }
 				if(in_array($key, ['escape','backspace'], true)) { $this->local='setup'; return []; }
 				if(in_array($key, ['enter',' '], true))
 				{

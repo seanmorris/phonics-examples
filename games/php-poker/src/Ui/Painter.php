@@ -396,7 +396,7 @@ final class Painter
 		{
 			$index = array_search($id, array_keys(WildCards::OPTIONS), true);
 			$checked = $id === 'none' ? $selected === [] : in_array($id, $selected, true);
-			$this->checkbox($rect, WildCards::label($id), (string)($index + 1), $checked);
+			$this->checkbox($rect, WildCards::label($id), (string)$index, $checked);
 		}
 		$this->button($menu['back'], 'Cancel', '⎋', 'default', false);
 		$this->button($menu['apply'], 'OK', '↵', 'primary', false);
@@ -679,7 +679,7 @@ final class Painter
 		{
 			$inset = ($compact ? 4 : 6) * $this->unit;
 			$this->canvas->box($cx + $inset, $cy + $inset, $size - 2 * $inset, $size - 2 * $inset,
-				Theme::radius($this->mode, $this->unit), Theme::BRASS);
+				Theme::radius($this->mode, $this->unit), Theme::INK);
 		}
 		$labelX = $cx + $size + ($compact ? 3 : 10) * $this->unit;
 		$right = $x + $w - ($compact ? 1 : 10) * $this->unit;

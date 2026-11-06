@@ -295,7 +295,7 @@ $test('the menu, setup and settings flow send only session intents the session k
 	$presenter->input([['key' => 'arrowright'], ['key' => 'arrowright'], ['key' => 'v']], null, 1 / 60);
 	$presenter->input([['key' => 'w']], null, 1 / 60);
 	$expect($presenter->state()['local'] === 'wildcards', 'W opens the wild-card preset window');
-	$presenter->input([['key' => '2'], ['key' => '3'], ['key' => 'enter']], null, 1 / 60);
+	$presenter->input([['key' => '1'], ['key' => '0'], ['key' => '1'], ['key' => '2'], ['key' => 'enter']], null, 1 / 60);
 	$expect($presenter->state()['local'] === 'setup' && $presenter->state()['setup']['wild'] === ['joker','deuces'], 'independent wild-card checkboxes return to setup');
 	$start = $presenter->input([['key' => 'enter']], null, 1 / 60);
 	$expect($start === [['type' => 'start', 'players' => 6, 'variant' => 'anything', 'wild'=>['joker','deuces'], 'customWild'=>[]]], 'Deal starts with the chosen seats, variant and wild cards');

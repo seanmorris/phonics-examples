@@ -230,7 +230,7 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	await expect.poll(async()=>(await state(canvas)).ui.setup).toMatchObject({players:5,variant:'anything',wild:[],customWild:[]});
 	await page.keyboard.press('w');
 	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('wildcards');
-	await page.keyboard.press('2');await page.keyboard.press('8');
+	await page.keyboard.press('1');await page.keyboard.press('7');
 	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('custom-wildcards');
 	let custom=await regions(canvas),customCard=await point(canvas,custom.customWild.cards[0]);
 	await page.mouse.click(customCard.x,customCard.y);
