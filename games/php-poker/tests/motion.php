@@ -266,4 +266,19 @@ $expect($presenter->state()['winnerFlash']['visible'], 'winner label blinks on a
 $presenter->advance(3.399);
 $expect($presenter->state()['winnerFlash'] === ['active' => false, 'visible' => true] && !$presenter->locked(), 'four seconds ends the flash with a visible, unlocked label');
 
+// The page republishes its status only when a frame is drawn. A slow frame that jumps from a lit phase straight
+// past four seconds changes nothing visible, so the end of the flash itself must ask for that final frame.
+foreach([[3.7, .35], [3.8, .5], [3.65, 1.0]] as [$lit, $frame])
+{
+	$slow = new Presenter(dirname(__DIR__));
+	$slow->update($before); $slow->update($after);
+	$slow->advance($lit);
+	(new ReflectionProperty(Presenter::class, 'motion'))->setValue($slow, null);
+	$expect($slow->state()['winnerFlash'] === ['active' => true, 'visible' => true], "the flash is lit {$lit} seconds in");
+	(new ReflectionProperty(Presenter::class, 'dirty'))->setValue($slow, false);
+	$slow->advance($frame);
+	$expect($slow->state()['winnerFlash'] === ['active' => false, 'visible' => true] && $slow->dirty(),
+		"a {$frame}-second frame from {$lit} seconds ends the flash and asks for the final redraw");
+}
+
 echo "$checks PHP Poker motion and chip checks passed.\n";

@@ -993,7 +993,9 @@ final class Presenter
 		{
 			$this->winnerElapsed = min(4, $this->winnerElapsed + $seconds);
 			$visible = $this->winnerElapsed >= 4 || (int)floor($this->winnerElapsed / .3) % 2 === 0;
-			if($visible !== $this->winnerVisible || $this->winnerElapsed === 4) $this->dirty = true;
+			// min() returns the integer 4, stored as 4.0, so compare with >=. Reaching the end must redraw even when a
+			// slow frame jumps from a lit phase straight past it and visibility does not change.
+			if($visible !== $this->winnerVisible || $this->winnerElapsed >= 4.0) $this->dirty = true;
 			$this->winnerVisible = $visible;
 		}
 		$this->syncNetworkWait();
