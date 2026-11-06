@@ -184,6 +184,42 @@ test('folding settles uncontested without publishing either hand',async()=>{
 	assert.ok(peers.alice.view().players[1].cards.every(card=>card===null));
 });
 
+test('all-in seats leave betting queues while unmatched raises are refunded',()=>{
+	for(const stage of ['betting','final-betting'])
+	{
+		const deal=new OnlineDeal({
+			api:mentalPoker,root:`$all-in-${stage}`,sessionId:`all-in-${stage}`
+			,players:['alice','bob'],localPlayer:'alice',breaker:'alice',rounds:16,storage:storage()
+		});
+		const state=deal.state;state.stage=stage;state.opener='alice';state.highest=4;state.raises=1;state.pot=6;
+		state.turnQueue=['alice'];
+		Object.assign(deal.bankroll('alice'),{stack:498,bet:2,totalBet:2,folded:false});
+		Object.assign(deal.bankroll('bob'),{stack:0,bet:4,totalBet:4,folded:false});
+
+		deal.applyPokerAction('alice',{type:'poker-action',move:'bet',amount:6});
+
+		assert.equal(deal.bankroll('alice').bet,4);
+		assert.equal(deal.bankroll('alice').stack,496);
+		assert.equal(state.pot,8);
+		assert.equal(deal.bankroll('bob').folded,false);
+		assert.equal(state.stage,stage==='betting'?'draw':'reveal');
+		assert.ok(state.turnQueue.includes('bob'),`${stage} keeps the all-in hand in later phases`);
+	}
+});
+
+test('a heads-up all-in skips betting but still draws and reveals',()=>{
+	const deal=new OnlineDeal({
+		api:mentalPoker,root:'$all-in-rounds',sessionId:'all-in-rounds'
+		,players:['alice','bob'],localPlayer:'alice',breaker:'alice',rounds:16,storage:storage()
+	});
+	deal.bankroll('alice').stack=0;deal.state.opener='bob';deal.beginBetting();
+	assert.equal(deal.state.stage,'draw');
+	assert.ok(deal.state.turnQueue.includes('alice'));
+	deal.beginFinalBetting();
+	assert.equal(deal.state.stage,'reveal');
+	assert.ok(deal.state.turnQueue.includes('alice'));
+});
+
 test('the public reducer rejects wrong actors, parents and altered layer proofs',async()=>{
 	const options={api:mentalPoker,root:'$reject',sessionId:'reject-session',players:['alice','bob'],breaker:'alice',rounds:16};
 	const alice=new OnlineDeal({...options,localPlayer:'alice',storage:storage()});

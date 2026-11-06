@@ -412,7 +412,8 @@ export class OnlineDeal
 			this.pay(actor,action.amount-player.bet);player.bet=action.amount;this.state.highest=action.amount;
 			if(raising)this.state.raises++;
 			if(this.state.stage==='betting'&&this.state.opener===null)this.state.opener=actor;
-			this.state.turnQueue=this.ordered(actor,false).filter(player=>!this.bankroll(player).folded);
+			this.state.turnQueue=this.ordered(actor,false)
+				.filter(player=>!this.bankroll(player).folded&&this.bankroll(player).stack>0);
 			this.record(actor,(raising?'Raises to ':'Bets ')+action.amount);
 		}
 		else
@@ -458,7 +459,10 @@ export class OnlineDeal
 
 	beginBetting()
 	{
-		this.state.stage='betting';this.state.turnQueue=this.ordered(this.players[this.state.dealer],true);
+		const funded=this.activePlayers().filter(player=>this.bankroll(player).stack>0);
+		if(funded.length<2){this.beginDraw();return;}
+		this.state.stage='betting';this.state.turnQueue=this.ordered(this.players[this.state.dealer],true)
+			.filter(player=>funded.includes(player));
 		this.state.message='Any hand may open.';
 	}
 
@@ -472,9 +476,10 @@ export class OnlineDeal
 	{
 		this.state.stage='final-betting';this.state.highest=0;this.state.raises=0;
 		for(const player of this.state.bankrolls)player.bet=0;
-		const active=this.activePlayers(),opener=this.state.opener;
-		this.state.turnQueue=this.bankroll(opener).folded?this.ordered(opener,false).filter(player=>active.includes(player))
-			:[opener,...this.ordered(opener,false).filter(player=>active.includes(player))];
+		const active=this.activePlayers(),funded=active.filter(player=>this.bankroll(player).stack>0),opener=this.state.opener;
+		if(funded.length<2){this.beginReveal();return;}
+		this.state.turnQueue=this.bankroll(opener).folded?this.ordered(opener,false).filter(player=>funded.includes(player))
+			:[opener,...this.ordered(opener,false).filter(player=>funded.includes(player))];
 		this.state.message='Final betting round.';
 	}
 
