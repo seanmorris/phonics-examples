@@ -1315,32 +1315,37 @@ final class Layout
 			? ['ante','minimum','maximum','raiseLimit','finalMinimum','finalMaximum','playerRaiseLimit']
 			: ['ante','minimum','maximum','finalMinimum','finalMaximum','raiseLimit','playerRaiseLimit'];
 		$rows = (int)ceil(count($order) / $columns);
-		$width = min($columns === 2 ? 820 : 580, $this->width() - 24);
+		// These rows are deliberately compact: the controls and their captions should read as one setting,
+		// without a vacant band between the copy and the stepper. Short landscape still needs two columns.
+		$width = min($columns === 2 ? 720 : 420, $this->width() - 24);
 		$height = 34 + $rows * $control + ($rows - 1) * 8 + 14 + $control + 12;
 		$left = ($this->width() - $width) / 2;
 		$top = max(12, ($this->height() - $height) / 2);
-		$inside = $width - 48;
-		$columnGap = $columns === 2 ? 18 : 0;
+		$padding = $columns === 2 ? 18 : 24;
+		$inside = $width - 2 * $padding;
+		$columnGap = $columns === 2 ? 12 : 0;
 		$columnWidth = ($inside - $columnGap * ($columns - 1)) / $columns;
-		$stepWidth = 3 * $control + 16;
+		$controlGap = $columns === 2 ? 6 : 8;
+		$labelGap = $columns === 2 ? 6 : 8;
+		$stepWidth = 3 * $control + 2 * $controlGap;
 		$fields = [];
 		foreach($order as $index => $field)
 		{
 			$column = $columns === 1 ? 0 : intdiv($index, $rows);
 			$row = $columns === 1 ? $index : $index % $rows;
-			$x = $left + 24 + $column * ($columnWidth + $columnGap);
+			$x = $left + $padding + $column * ($columnWidth + $columnGap);
 			$y = $top + 28 + $row * ($control + 8);
 			$step = $x + $columnWidth - $stepWidth;
 			$fields[$field] = [
-				'label'=>[$x,$y,$columnWidth-$stepWidth-8,$control],
+				'label'=>[$x,$y,$columnWidth-$stepWidth-$labelGap,$control],
 				'less'=>[$step,$y,$control,$control],
-				'count'=>[$step+$control+8,$y,$control,$control],
-				'more'=>[$step+2*($control+8),$y,$control,$control]
+				'count'=>[$step+$control+$controlGap,$y,$control,$control],
+				'more'=>[$step+2*($control+$controlGap),$y,$control,$control]
 			];
 		}
 		$footer = $top + $height - $control - 12;
 		return ['box'=>[$left,$top,$width,$height],'fields'=>$fields,
-			'back'=>[$left+24,$footer,130,$control],'apply'=>[$left+$width-164,$footer,140,$control]];
+			'back'=>[$left+$padding,$footer,130,$control],'apply'=>[$left+$width-$padding-140,$footer,140,$control]];
 	}
 
 	/** Preset selector matching the original game's Wild Cards window. */
@@ -1352,7 +1357,10 @@ final class Layout
 		$rows = (int)ceil(count($ids) / $columns);
 		$control = $this->controlSize();
 		$gap = 4;
-		$width = min($columns === 2 ? 760 : 580, $this->width() - 24);
+		// Keep each checkbox, label and accelerator visually together. The tall profile retains a little extra
+		// room for touch-sized controls; desktop and short landscape can use denser DOS-style windows.
+		$preferredWidth = $columns === 2 ? 560 : ($this->profile === 'tall' ? 420 : 380);
+		$width = min($preferredWidth, $this->width() - 24);
 		$height = 34 + $rows * $control + ($rows - 1) * $gap + 12 + $control + 12;
 		$left = ($this->width() - $width) / 2;
 		$top = max(12, ($this->height() - $height) / 2);

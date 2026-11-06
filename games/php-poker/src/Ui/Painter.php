@@ -524,13 +524,13 @@ final class Painter
 			'raiseLimit'=>'Total raises','playerRaiseLimit'=>'Raises/player'
 		];
 		$captions = [
-			'ante'=>'Dealer pays into pot',
-			'minimum'=>'Min bet/raise pre-draw',
-			'maximum'=>'Max bet/raise pre-draw',
-			'finalMinimum'=>'Min bet/raise post-draw',
-			'finalMaximum'=>'Max bet/raise post-draw',
-			'raiseLimit'=>'Table raise cap/round',
-			'playerRaiseLimit'=>'Player raise cap/round'
+			'ante'=>'Dealer pays pot',
+			'minimum'=>'Minimum bet/raise',
+			'maximum'=>'Maximum bet/raise',
+			'finalMinimum'=>'Minimum bet/raise',
+			'finalMaximum'=>'Maximum bet/raise',
+			'raiseLimit'=>'Whole-table cap',
+			'playerRaiseLimit'=>"Each player's cap"
 		];
 		$this->dialog($limits['box'], 'BETTING & RAISING LIMITS');
 		foreach($limits['fields'] as $field => $stepper)
