@@ -12,7 +12,7 @@ let directory,server,origin,expected;
 
 test.beforeAll(async()=>{
 	directory=await fs.mkdtemp(path.join(os.tmpdir(),'poker-runtime-'));
-	const files=['autoload.php',...['Game','Hand','Profile','Session','Bot','Adaptation'].map(name=>'src/'+name+'.php'),'tests/replay.php'];
+	const files=['autoload.php',...['Game','Hand','Profile','Session','Bot','Adaptation','WildCards'].map(name=>'src/'+name+'.php'),'tests/replay.php'];
 	for(const name of files)
 	{
 		await fs.mkdir(path.dirname(path.join(directory,name)),{recursive:true});

@@ -27,14 +27,15 @@ final class Game
 	{
 		if($players < 2 || $players > 8) throw new \InvalidArgumentException('Choose 2 to 8 seats');
 		$names = ['You',...array_column(Bot::OPPONENTS,'name')];
-		$seats = []; $piles = ['stock'=>[['kind'=>'random','cards'=>range(0,51)]], 'discard'=>[], 'holding'=>[]];
+		$deck = $profile->deck();
+		$seats = []; $piles = ['stock'=>[['kind'=>'random','cards'=>$deck]], 'discard'=>[], 'holding'=>[]];
 		for($id = 0; $id < $players; $id++)
 		{
 			$seats[] = ['id'=>$id,'name'=>$names[$id],'stack'=>500,'debt'=>0,'folded'=>false,
 				'bet'=>0,'totalBet'=>0,'drawCount'=>null,'lastAction'=>'','creditUsed'=>false];
 			$piles['hand'.$id] = [];
 		}
-		$this->piles = new PileSet(range(0,51), $piles, new RandomStream($seed, 'php-poker/deck/v1'));
+		$this->piles = new PileSet($deck, $piles, new RandomStream($seed, 'php-poker/deck/v1'));
 		$this->state = ['phase'=>'ready','turn'=>-1,'dealer'=>$players-1,'handNumber'=>0,'revision'=>0,
 			'players'=>$seats,'pot'=>0,'highest'=>0,'raises'=>0,'opener'=>null,'originalOpenerCards'=>[],
 			'pending'=>[],'awards'=>[],'reveal'=>false,'message'=>'','history'=>[]];
@@ -78,7 +79,7 @@ final class Game
 			usort($cards, static fn(int $a,int $b): int => (($a%13) <=> ($b%13)) ?: ($a <=> $b));
 			$visible = $id === $seat || ($this->state['reveal'] && !$player['folded']);
 			$player['cards'] = $visible ? $cards : array_fill(0,count($cards),null);
-			$player['handName'] = $visible && count($cards) === 5 ? Hand::evaluate($cards)['name'] : null;
+			$player['handName'] = $visible && count($cards) === 5 ? Hand::evaluate($cards, $this->profile->wildCards())['name'] : null;
 			$player['net'] = $player['stack'] - $player['debt'] - 500;
 		}
 		unset($player);
@@ -104,7 +105,7 @@ final class Game
 		$p = $this->state['players'][$seat];
 		$due = $this->state['highest'] - $p['bet'];
 		$opening = $this->state['phase'] === 'betting' && $this->state['opener'] === null;
-		$qualifies = !$opening || $this->profile->variant === 'anything' || Hand::canOpen($this->cards($seat));
+		$qualifies = !$opening || $this->profile->variant === 'anything' || Hand::canOpen($this->cards($seat), $this->profile->wildCards());
 		$minimum = $this->state['highest'] + $this->profile->minimum;
 		$maximum = min($p['bet'] + $p['stack'], $this->state['highest'] + $this->profile->maximum);
 		$canRaise = $qualifies && !$p['creditUsed'] && $maximum >= $minimum
@@ -191,7 +192,7 @@ final class Game
 				|| (!is_null($p['drawCount']) && (!is_int($p['drawCount']) || $p['drawCount'] < 0 || $p['drawCount'] > 5)))
 				throw new \InvalidArgumentException('Invalid contribution or draw');
 			$money += $p['stack'] - $p['debt'];
-			Hand::evaluate($this->cards($id));
+			Hand::evaluate($this->cards($id), $this->profile->wildCards());
 		}
 		if($money !== $n * 500) throw new \InvalidArgumentException('Chips and loans are not conserved');
 		foreach($s['pending'] as $id)
@@ -206,10 +207,10 @@ final class Game
 		if(!is_array($s['originalOpenerCards']) || ($s['opener'] !== null && count($s['originalOpenerCards']) !== 5)
 			|| ($s['opener'] === null && $s['originalOpenerCards'] !== []))
 			throw new \InvalidArgumentException('Invalid opening snapshot');
-		if($s['opener'] !== null) Hand::evaluate($s['originalOpenerCards']);
+		if($s['opener'] !== null) Hand::evaluate($s['originalOpenerCards'], $this->profile->wildCards());
 		$piles = $this->piles->snapshot();
 		$names = ['stock','discard','holding',...array_map(static fn(int $id): string=>'hand'.$id,range(0,$n-1))];
-		if($piles['inventory'] !== range(0,51) || count($piles['piles']) !== $n + 3
+		if($piles['inventory'] !== $this->profile->deck() || count($piles['piles']) !== $n + 3
 			|| array_diff($names,array_keys($piles['piles'])) || $this->piles->count('holding') !== 0)
 			throw new \InvalidArgumentException('Invalid poker inventory');
 		$this->piles->validate();
@@ -343,7 +344,7 @@ final class Game
 		$best = -1; $winners = [];
 		foreach($active as $id)
 		{
-			$score = Hand::evaluate($this->cards($id))['score'];
+			$score = Hand::evaluate($this->cards($id), $this->profile->wildCards())['score'];
 			if($score > $best) { $best = $score; $winners = [$id]; }
 			elseif($score === $best) $winners[] = $id;
 		}
@@ -354,11 +355,11 @@ final class Game
 		{
 			$amount = $each + ($i < $odd ? 1 : 0);
 			$this->state['players'][$id]['stack'] += $amount;
-			$this->state['awards'][] = ['seat'=>$id,'amount'=>$amount,'handName'=>$reveal ? Hand::evaluate($this->cards($id))['name'] : null];
+			$this->state['awards'][] = ['seat'=>$id,'amount'=>$amount,'handName'=>$reveal ? Hand::evaluate($this->cards($id), $this->profile->wildCards())['name'] : null];
 		}
 		$names = array_map(fn(int $id): string => $this->state['players'][$id]['name'], $winners);
 		$this->state['message'] = implode(' and ', $names).(count($winners)>1 ? ' split ' : ' wins ').$this->state['pot'].' chips'
-			. ($reveal ? ' with '.strtolower(Hand::evaluate($this->cards($winners[0]))['name']) : ' uncontested').'.';
+			. ($reveal ? ' with '.strtolower(Hand::evaluate($this->cards($winners[0]), $this->profile->wildCards())['name']) : ' uncontested').'.';
 		$this->state['pot'] = 0;
 		$this->state['phase'] = 'showdown'; $this->state['turn'] = -1;
 		$this->state['pending'] = []; $this->state['reveal'] = $reveal;

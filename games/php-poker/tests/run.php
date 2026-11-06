@@ -4,7 +4,7 @@ require dirname(__DIR__).'/autoload.php';
 $root=getenv('PHONICS_ENGINE_ROOT') ?: dirname(__DIR__,3).'/node_modules/@seanmorris/phonics';
 require $root.'/autoload.php';
 
-use PhpPoker\{Game,Hand,Profile,Bot,Adaptation,Session};
+use PhpPoker\{Game,Hand,Profile,Bot,Adaptation,Session,WildCards};
 use Phonics\Random\RandomStream;
 
 $tests=[];
@@ -18,7 +18,7 @@ $act=static function(Game $g,array $intent): void { $v=$g->view(-1); $g->act($v[
 $rig=static function(Game $game,array $hands): Game {
 	$s=$game->snapshot(); $used=[];
 	foreach($hands as $id=>$cards) { $s['piles']['piles']['hand'.$id]=[['kind'=>'ordered','cards'=>$cards]]; $used=array_merge($used,$cards); }
-	$s['piles']['piles']['stock']=[['kind'=>'ordered','cards'=>array_values(array_diff(range(0,51),$used))]];
+	$s['piles']['piles']['stock']=[['kind'=>'ordered','cards'=>array_values(array_diff($s['piles']['inventory'],$used))]];
 	return Game::restore($s);
 };
 $test('hand categories, wheel, kickers and concealed opening predicate',static function() use ($expect,$reject): void {
@@ -31,6 +31,32 @@ $test('hand categories, wheel, kickers and concealed opening predicate',static f
 	$expect(Hand::canOpen([9,22,0,16,30])); $expect(!Hand::canOpen([8,21,0,16,30]));
 	$expect(Hand::canOpen([0,13,1,14,30]));
 	$reject(static fn()=>Hand::evaluate([0,0,1,2,3]));
+});
+$test('wild presets, custom cards, joker deck and five of a kind are exact',static function() use ($expect,$reject,$rig): void {
+	$expect(WildCards::ids('one-eyed-jacks')===[35,48]);
+	$expect(WildCards::ids('mustached-kings')===[11,24,50]);
+	$expect(WildCards::ids('kings')===[11,24,37,50]);
+	$expect(WildCards::ids('deuces-treys')===[0,1,13,14,26,27,39,40]);
+	$expect(WildCards::ids(['joker','one-eyed-jacks'])===[35,48,52]);
+	$expect(Hand::evaluate([9,22,35,48,0],[0])['name']==='Five of a kind');
+	$expect(Hand::evaluate([8,9,10,11,52],[52])['name']==='Royal flush');
+	$expect(Hand::evaluate([35,48,11,24,37],WildCards::ids('one-eyed-jacks'))['ranks']===[13]);
+	$expect(Hand::evaluate([11,24,50,12,25],WildCards::ids('mustached-kings'))['ranks']===[14]);
+	$expect(Hand::label(52)==='Joker'&&WildCards::cardLabel(52)==='Joker');
+	$reject(static fn()=>new Profile(wild:['custom'],customWild:[2,1]));
+	$profile=new Profile('anything',wild:['joker']);
+	$expect($profile->deck()===range(0,52)&&Profile::restore($profile->snapshot())->snapshot()===$profile->snapshot());
+	$legacy=['version'=>'bicycle-inspired-local-v1','variant'=>'anything','ante'=>1,'minimum'=>2,'maximum'=>20,'raiseLimit'=>3];
+	$expect(Profile::restore($legacy)->wild===[]);
+	$single=['version'=>'bicycle-inspired-local-v2','variant'=>'anything','ante'=>1,'minimum'=>2,'maximum'=>20,'raiseLimit'=>3,'wild'=>'deuces','customWild'=>[]];
+	$expect(Profile::restore($single)->wild===['deuces']);
+	$game=$rig(new Game('joker-deck',2,$profile),[[8,9,10,11,52],[0,13,26,39,1]]);
+	$expect($game->snapshot()['piles']['inventory']===range(0,52));
+	$expect($game->view(0)['players'][0]['handName']==='Royal flush');
+	$expect(!in_array(52,Bot::discards([52,9,22,0,16],[52]),true),'a bot discarded its wild joker');
+	$botView=['turn'=>1,'players'=>[['folded'=>false],['folded'=>false,'cards'=>[11,24,37,50,52]]],
+		'profile'=>['wildCards'=>[52]],'legalActions'=>['check'=>true],'opener'=>0,'pot'=>10];
+	$expect(Bot::choose($botView,1,new RandomStream('five-kind-bot'))===['type'=>'check']);
 });
 $test('passing returns to the betting queue after an opener and stale actions are atomic',static function() use ($expect,$act,$reject): void {
 	$g=new Game('pass',4,new Profile('anything')); $act($g,['type'=>'pass']); $act($g,['type'=>'bet','amount'=>4]);

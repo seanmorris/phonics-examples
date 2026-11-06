@@ -916,18 +916,18 @@ final class Layout
 	}
 
 	/**
-	 * Design-space geometry of the table setup card: opponent count stepper, variant toggle and Start.
+	 * Design-space geometry of the table setup card: opponents, opening rule, wild cards and Start.
 	 *
 	 * @param int $players Current seat count including the human.
 	 * @param string $variant `jackpots` or `anything`.
-	 * @return array{box:array{float,float,float,float},less:array{float,float,float,float},more:array{float,float,float,float},count:array{float,float,float,float},variant:array{float,float,float,float},start:array{float,float,float,float},back:array{float,float,float,float}}
+	 * @return array{box:array{float,float,float,float},less:array{float,float,float,float},more:array{float,float,float,float},count:array{float,float,float,float},variant:array{float,float,float,float},wild:array{float,float,float,float},start:array{float,float,float,float},back:array{float,float,float,float}}
 	 */
 	public function setup(int $players, string $variant): array
 	{
 		$width = min(500, $this->width() - 24);
 		$left = ($this->width() - $width) / 2;
 		$control = $this->controlSize();
-		$height = 3 * $control + 70;
+		$height = 4 * $control + 80;
 		$top = $this->profile === 'landscape' ? $this->height() - $height - 12 : 230 + $this->verticalShift();
 		$column = $left + $width - 24 - max(200, 3 * $control + 20);
 		$row = $top + 28;
@@ -936,8 +936,91 @@ final class Layout
 			, 'less' => [$column, $row, $control, $control], 'count' => [$column + $control + 10, $row, $control, $control], 'more' => [$column + 2 * ($control + 10), $row, $control, $control]
 			, 'pace' => [$column, $row, $width - ($column - $left) - 24, $control]
 			, 'variant' => [$column, $row + $control + 10, $width - ($column - $left) - 24, $control]
-			, 'back' => [$left + 24, $row + 2 * ($control + 10), 120, $control], 'start' => [$left + $width - 24 - 140, $row + 2 * ($control + 10), 140, $control]
+			, 'wild' => [$column, $row + 2 * ($control + 10), $width - ($column - $left) - 24, $control]
+			, 'back' => [$left + 24, $row + 3 * ($control + 10), 120, $control], 'start' => [$left + $width - 24 - 140, $row + 3 * ($control + 10), 140, $control]
 		];
+	}
+
+	/** Preset selector matching the original game's Wild Cards window. */
+	public function wildcardMenu(): array
+	{
+		$ids = ['none','joker','deuces','one-eyed-jacks','mustached-kings','deuces-treys','kings','custom'];
+		$columns = $this->profile === 'landscape' ? 2 : 1;
+		$rows = (int)ceil(count($ids) / $columns);
+		$control = $this->controlSize();
+		$gap = 4;
+		$width = min($columns === 2 ? 760 : 580, $this->width() - 24);
+		$height = 34 + $rows * $control + ($rows - 1) * $gap + 12 + $control + 12;
+		$left = ($this->width() - $width) / 2;
+		$top = max(12, ($this->height() - $height) / 2);
+		$inner = $width - 48;
+		$itemWidth = ($inner - ($columns - 1) * 8) / $columns;
+		$items = [];
+		foreach($ids as $index => $id)
+		{
+			$column = $index % $columns; $row = intdiv($index, $columns);
+			$items[$id] = [$left + 24 + $column * ($itemWidth + 8), $top + 28 + $row * ($control + $gap), $itemWidth, $control];
+		}
+		$footer = $top + $height - $control - 12;
+		return ['box'=>[$left,$top,$width,$height],'items'=>$items,
+			'back'=>[$left+24,$footer,130,$control],'apply'=>[$left+$width-164,$footer,140,$control]];
+	}
+
+	/** Full desktop matrix or one responsive suit page, preserving 48 CSS px targets on smaller viewports. */
+	public function customWildcards(int $page = 0): array
+	{
+		$page = max(0, min(4, $page));
+		$control = $this->controlSize();
+		$fullHeight = 34 + 24 + 5 * $control + 4 * 4 + 12 + $control + 12;
+		if($this->profile !== 'tall' && $fullHeight <= $this->height() - 24)
+		{
+			$gap = 4;
+			$width = min(1120, $this->width() - 24);
+			$labelWidth = 58;
+			$cellWidth = ($width - 48 - $labelWidth - 8 - 12 * $gap) / 13;
+			$height = $fullHeight;
+			$left = ($this->width() - $width) / 2;
+			$top = max(12, ($this->height() - $height) / 2);
+			$gridLeft = $left + 24 + $labelWidth + 8;
+			$cards = [];
+			$labels = [];
+			$columnLabels = [];
+			foreach(['A','2','3','4','5','6','7','8','9','10','J','Q','K'] as $column => $label)
+			$columnLabels[] = ['text'=>$label,'point'=>[$gridLeft + $column * ($cellWidth + $gap) + $cellWidth / 2, $top + 40]];
+			foreach(['C','D','H','S','Joker'] as $row => $label)
+			{
+				$y = $top + 54 + $row * ($control + $gap);
+				$labels[] = ['text'=>$label,'point'=>[$left + 24 + $labelWidth / 2, $y + $control / 2]];
+				$ids = $row < 4 ? [$row * 13 + 12, ...range($row * 13, $row * 13 + 11)] : [52];
+				foreach($ids as $column => $id)
+				$cards[$id] = [$gridLeft + $column * ($cellWidth + $gap), $y, $cellWidth, $control];
+			}
+			$footer = $top + $height - $control - 12;
+			return ['box'=>[$left,$top,$width,$height],'cards'=>$cards,'page'=>0,'paged'=>false,'rowLabels'=>$labels,'columnLabels'=>$columnLabels,
+				'previous'=>[0,0,0,0],'next'=>[0,0,0,0],'pageLabel'=>[$left+$width/2,$top+28+$control/2],
+				'back'=>[$left+24,$footer,130,$control],'done'=>[$left+$width-164,$footer,140,$control]];
+		}
+		$ids = $page < 4 ? range($page * 13, $page * 13 + 12) : [52];
+		$columns = $this->profile === 'tall' ? 3 : 7;
+		$rows = (int)ceil(13 / $columns);
+		$gap = 4;
+		$control = $this->controlSize();
+		$width = min($this->profile === 'tall' ? 620 : 760, $this->width() - 24);
+		$cellWidth = ($width - 48 - ($columns - 1) * $gap) / $columns;
+		$height = 34 + $control + 8 + $rows * $control + ($rows - 1) * $gap + 12 + $control + 12;
+		$left = ($this->width() - $width) / 2;
+		$top = max(12, ($this->height() - $height) / 2);
+		$cards = [];
+		foreach($ids as $index => $id)
+		{
+			$column = $index % $columns; $row = intdiv($index, $columns);
+			$cards[$id] = [$left + 24 + $column * ($cellWidth + $gap), $top + 36 + $control + $row * ($control + $gap), $cellWidth, $control];
+		}
+		$footer = $top + $height - $control - 12;
+		return ['box'=>[$left,$top,$width,$height],'cards'=>$cards,'page'=>$page,'paged'=>true,'rowLabels'=>[],'columnLabels'=>[],
+			'previous'=>[$left+24,$top+28,$control,$control],'next'=>[$left+$width-24-$control,$top+28,$control,$control],
+			'pageLabel'=>[$left+$width/2,$top+28+$control/2],
+			'back'=>[$left+24,$footer,130,$control],'done'=>[$left+$width-164,$footer,140,$control]];
 	}
 
 	/** Help dialog bounds with a fixed scroll row beneath its wrapped copy. */

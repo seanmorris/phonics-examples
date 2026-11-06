@@ -136,7 +136,7 @@ const arrowPath = points => {
  * @param {Record<string,string>} faces Face name to TrueType path.
  * @returns {Promise<object>} Self-contained outline document for `buildFontAtlas()`.
  */
-export async function extractFontOutlines(faces)
+export async function extractFontOutlines(faces, extraCharacters = '')
 {
 	const {default: opentype} = await import('opentype.js');
 	const document = {faces: {}};
@@ -154,7 +154,8 @@ export async function extractFontOutlines(faces)
 			, kerning: {}
 		};
 
-		for(const character of [...CHARACTERS, ...Object.keys(ARROWS)])
+		const characters = [...CHARACTERS, ...extraCharacters];
+		for(const character of [...characters, ...Object.keys(ARROWS)])
 		{
 			if(ARROWS[character])
 			{
@@ -175,7 +176,7 @@ export async function extractFontOutlines(faces)
 			face.glyphs[character] = entry;
 		}
 
-		for(const left of CHARACTERS) for(const right of CHARACTERS)
+		for(const left of characters) for(const right of characters)
 		{
 			const value = font.getKerningValue(font.charToGlyph(left), font.charToGlyph(right)) / units;
 			if(Math.abs(value) >= .001) face.kerning[left + right] = round(value);

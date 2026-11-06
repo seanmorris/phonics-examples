@@ -4,7 +4,7 @@
  */
 
 /** Keys the table handles; everything else reaches the page untouched. */
-const KEYS=new Set(['f','c','b','d','h','l','m','v','o','p','q','1','2','3','4','5','+','-','=','enter',' ','escape','backspace','arrowleft','arrowright','arrowup','arrowdown']);
+const KEYS=new Set(['f','c','b','d','h','l','m','v','w','o','p','q','1','2','3','4','5','6','7','8','+','-','=','enter',' ','escape','backspace','arrowleft','arrowright','arrowup','arrowdown']);
 
 /** Cell size for the rasterised cards, capped so the atlas crossing into PHP stays under ~8 MB. */
 export function cardCell(dpr)
@@ -15,6 +15,7 @@ export function cardCell(dpr)
 /** Map a card id (suit*13 + rank-2, suits clubs, diamonds, hearts, spades) to its cell on the deck sheet. */
 export function sheetCell(id,suitRows)
 {
+	if(id===52)return 52;
 	const suit=Math.floor(id/13),rank=id%13+2;
 	return suitRows[suit]*13+(rank===14?0:rank-1);
 }
@@ -229,6 +230,7 @@ export function activate({module, canvas, session})
 	canvas.parentElement?.appendChild(hand);
 	canvas.setAttribute('aria-describedby',[originalDescription,hand.id].filter(Boolean).join(' '));
 	const cardName=id=>{
+		if(id===52)return 'joker';
 		if(!Number.isInteger(id)||id<0||id>51)return 'hidden card';
 		return ['two','three','four','five','six','seven','eight','nine','ten','jack','queen','king','ace'][id%13]
 			+' of '+['clubs','diamonds','hearts','spades'][Math.floor(id/13)];

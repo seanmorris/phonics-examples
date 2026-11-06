@@ -36,12 +36,14 @@ final class Bot
 		if(($view['turn'] ?? null) !== $seat || $assistance < 0 || $assistance > 600)
 			throw new \InvalidArgumentException('Invalid bot turn');
 		$cards=$view['players'][$seat]['cards'];
-		$hand=Hand::evaluate($cards);
+		$wildCards=is_array($view['profile']['wildCards']??null) ? $view['profile']['wildCards']
+			: WildCards::ids((array)($view['profile']['wild']??[]), (array)($view['profile']['customWild']??[]));
+		$hand=Hand::evaluate($cards,$wildCards);
 		$legal=$view['legalActions'];
-		if($legal['draw'] ?? false) return ['type'=>'draw','cards'=>self::discards($cards)];
+		if($legal['draw'] ?? false) return ['type'=>'draw','cards'=>self::discards($cards,$wildCards)];
 		$roll=$random->boundedInt(10000);
 		$personality=$seat===0 ? 0 : self::OPPONENTS[$seat-1]['pressure'];
-		$strength=[140,410,650,760,840,880,940,980,995][$hand['category']]
+		$strength=[140,410,650,760,840,880,940,980,995,1000][$hand['category']]
 			+ ($hand['ranks'][0]-8)*8;
 		$active=count(array_filter($view['players'],static fn(array $p): bool => !$p['folded']));
 		$confidence=$strength+$personality-intdiv($assistance,2)-max(0,$active-2)*15;
@@ -72,25 +74,35 @@ final class Bot
 	 * @param array $cards Own five cards.
 	 * @return array IDs to discard, preserving made hands and useful draws.
 	 */
-	public static function discards(array $cards): array
+	public static function discards(array $cards, array $wildCards = []): array
 	{
-		$hand=Hand::evaluate($cards);
-		if(in_array($hand['category'],[4,5,6,8],true)) return [];
-		$counts=array_count_values(array_map(static fn(int $c): int => $c%13+2,$cards));
-		if($hand['category'] > 0)
-			return array_values(array_filter($cards,static fn(int $c): bool => $counts[$c%13+2] === 1));
+		$hand=Hand::evaluate($cards,$wildCards);
+		$wild=array_fill_keys($wildCards,true);
+		if(in_array($hand['category'],[4,5,6,8,9],true)) return [];
+		$natural=array_values(array_filter($cards,static fn(int $card): bool=>!isset($wild[$card])));
+		$wildHeld=array_values(array_filter($cards,static fn(int $card): bool=>isset($wild[$card])));
+		if(in_array($hand['category'],[1,3,7],true))
+		{
+			$rank=$hand['ranks'][0];
+			return array_values(array_filter($natural,static fn(int $card): bool=>$card%13+2!==$rank));
+		}
+		if($hand['category']===2)
+		{
+			$ranks=array_slice($hand['ranks'],0,2);
+			return array_values(array_filter($natural,static fn(int $card): bool=>!in_array($card%13+2,$ranks,true)));
+		}
 		foreach(range(0,3) as $suit)
 		{
-			$keep=array_filter($cards,static fn(int $c): bool => intdiv($c,13)===$suit);
-			if(count($keep)===4) return array_values(array_diff($cards,$keep));
+			$keep=array_filter($natural,static fn(int $c): bool => intdiv($c,13)===$suit);
+			if(count($keep)+count($wildHeld)>=4) return array_values(array_diff($natural,$keep));
 		}
 		for($high=14;$high>=5;$high--)
 		{
 			$ranks=$high===5 ? [14,2,3,4,5] : range($high-4,$high);
-			$keep=array_filter($cards,static fn(int $c): bool => in_array($c%13+2,$ranks,true));
-			if(count($keep)===4) return array_values(array_diff($cards,$keep));
+			$keep=array_filter($natural,static fn(int $c): bool => in_array($c%13+2,$ranks,true));
+			if(count($keep)+count($wildHeld)>=4) return array_values(array_diff($natural,$keep));
 		}
-		$sorted=$cards;
+		$sorted=$natural;
 		usort($sorted,static fn(int $a,int $b): int => ($b%13) <=> ($a%13));
 		$keep=array_slice(array_filter($sorted,static fn(int $c): bool => $c%13+2>=11),0,2);
 		return array_values(array_diff($cards,$keep));

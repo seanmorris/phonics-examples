@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace PhpPoker\Ui;
 
+use PhpPoker\WildCards;
 use PhpPoker\Render\Text;
 use PhpPoker\Render\Theme;
 use PhpPoker\Render\UiCanvas;
@@ -39,6 +40,15 @@ final class Presenter
 	private int $amount = 0;
 	private int $setupPlayers = 4;
 	private string $setupVariant = 'jackpots';
+	/** @var list<string> */
+	private array $setupWild = [];
+	/** @var list<int> */
+	private array $setupCustomWild = [];
+	/** @var list<string> */
+	private array $wildDraft = [];
+	/** @var list<int> */
+	private array $customWildDraft = [];
+	private int $customWildPage = 0;
 	private bool $historyOpen = false;
 	/** View revision a game intent was sent for; input is locked until the view moves past it. */
 	private ?int $lockedRevision = null;
@@ -118,7 +128,7 @@ final class Presenter
 		elseif($revision !== $this->errorRevision) $this->view['error'] = '';
 		if(($this->view['error'] ?? '') !== '') $this->lockedRevision = null;
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
-		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','online'], true)) $this->local = 'menu';
+		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
 		if(($view['screen'] ?? '') === 'help' && ($previous['screen'] ?? '') !== 'help') $this->helpScroll = 0;
 		if(($view['phase'] ?? '') !== 'showdown' && ($view['phase'] ?? '') !== 'redeal') $this->historyOpen = false;
 		$this->syncNetworkWait();
@@ -245,6 +255,9 @@ final class Presenter
 		if(!empty($target['disabled'])) return [];
 		if(isset($target['key'])) return $this->key($target['key']);
 		if(isset($target['menu'])) return $this->activateMenu($target['menu']);
+		if(isset($target['wildPreset'])) { $this->toggleWildPreset($target['wildPreset']); return []; }
+		if(isset($target['customWild'])) { $this->toggleCustomWild((int)$target['customWild']); return []; }
+		if(isset($target['customPage'])) { $this->customWildPage=max(0,min(4,$this->customWildPage+(int)$target['customPage'])); return []; }
 		if(isset($target['card'])) { $this->toggleCard($target['card']); return []; }
 		if(isset($target['button'])) return $this->activate($target['button']['id'], $target['button']['intent']);
 		return [];
@@ -270,8 +283,25 @@ final class Presenter
 				if($this->setupPlayers > 2) $addKey($setup['less'], 'arrowleft', 'setup:less');
 				if($this->setupPlayers < 8) $addKey($setup['more'], 'arrowright', 'setup:more');
 				$addKey($setup['variant'], 'v', 'setup:variant');
+				$addKey($setup['wild'], 'w', 'setup:wild');
 				$addKey($setup['back'], 'escape', 'setup:back');
 				$addKey($setup['start'], 'enter', 'setup:start');
+			}
+			elseif($this->local === 'wildcards')
+			{
+				$menu = $layout->wildcardMenu();
+				foreach($menu['items'] as $id => $rect) $targets[] = ['id'=>'wild:'.$id,'rect'=>$rect,'wildPreset'=>$id];
+				$addKey($menu['back'], 'escape', 'wild:back');
+				$addKey($menu['apply'], 'enter', 'wild:apply');
+			}
+			elseif($this->local === 'custom-wildcards')
+			{
+				$custom = $layout->customWildcards($this->customWildPage);
+				foreach($custom['cards'] as $id => $rect) $targets[] = ['id'=>'custom-wild:'.$id,'rect'=>$rect,'customWild'=>$id];
+				if($custom['paged'] && $this->customWildPage > 0) $targets[]=['id'=>'custom-wild:previous','rect'=>$custom['previous'],'customPage'=>-1];
+				if($custom['paged'] && $this->customWildPage < 4) $targets[]=['id'=>'custom-wild:next','rect'=>$custom['next'],'customPage'=>1];
+				$addKey($custom['back'], 'escape', 'custom-wild:back');
+				$addKey($custom['done'], 'enter', 'custom-wild:done');
 			}
 			elseif($this->local !== 'menu') $addKey($wholeCanvas, 'escape');
 			else foreach($layout->menu(!empty($this->view['canContinue'])) as $item)
@@ -342,7 +372,7 @@ final class Presenter
 	{
 		foreach($targets as $target) if($target['id'] === $this->controllerFocus) return;
 		$preferences = !empty($this->view['legalActions']['draw']) ? ['card:0']
-			: ['action:call','action:check','action:pass','action:draw','action:next','action:deal','setup:start','settings:look'];
+			: ['action:call','action:check','action:pass','action:draw','action:next','action:deal','setup:start','wild:none','custom-wild:0','settings:look'];
 		$next = null;
 		foreach($preferences as $id) foreach($targets as $target) if($target['id'] === $id) { $next = $id; break 2; }
 		$next ??= $targets[0]['id'] ?? null;
@@ -409,10 +439,36 @@ final class Presenter
 					'arrowleft', '-' => (function(): array { $this->setupPlayers = max(2, $this->setupPlayers - 1); return []; })(),
 					'arrowright', '+', '=' => (function(): array { $this->setupPlayers = min(8, $this->setupPlayers + 1); return []; })(),
 					'arrowup', 'arrowdown', 'v' => (function(): array { $this->setupVariant = $this->setupVariant === 'jackpots' ? 'anything' : 'jackpots'; return []; })(),
+					'w' => (function(): array { $this->wildDraft=$this->setupWild; $this->customWildDraft=$this->setupCustomWild; $this->local='wildcards'; return []; })(),
 					'escape', 'backspace' => (function(): array { $this->local = 'menu'; return []; })(),
-					'enter', ' ' => [['type' => 'start', 'players' => $this->setupPlayers, 'variant' => $this->setupVariant]],
+					'enter', ' ' => [['type' => 'start', 'players' => $this->setupPlayers, 'variant' => $this->setupVariant,
+						'wild'=>$this->setupWild,'customWild'=>$this->setupCustomWild]],
 					default => [],
 				};
+			}
+			if($this->local === 'wildcards')
+			{
+				$options = array_keys(WildCards::OPTIONS);
+				if(in_array($key, ['1','2','3','4','5','6','7','8'], true)) { $this->toggleWildPreset($options[(int)$key-1]); return []; }
+				if(in_array($key, ['escape','backspace'], true)) { $this->local='setup'; return []; }
+				if(in_array($key, ['enter',' '], true))
+				{
+					$this->setupWild=$this->wildDraft;
+					$this->setupCustomWild=in_array('custom', $this->wildDraft, true) ? $this->customWildDraft : [];
+					$this->local='setup';
+					return [];
+				}
+				return [];
+			}
+			if($this->local === 'custom-wildcards')
+			{
+				$paged = $this->layout()->customWildcards($this->customWildPage)['paged'];
+				if($paged && $key === 'arrowleft') { $this->customWildPage=max(0,$this->customWildPage-1); return []; }
+				if($paged && $key === 'arrowright') { $this->customWildPage=min(4,$this->customWildPage+1); return []; }
+				if(in_array($key, ['escape','backspace'], true)) { $this->local='wildcards'; return []; }
+				if(in_array($key, ['enter',' '], true))
+				{ $this->setupWild=$this->wildDraft; $this->setupCustomWild=$this->customWildDraft; $this->local='setup'; return []; }
+				return [];
 			}
 			if($this->local !== 'menu') { if(in_array($key, ['escape','backspace','enter',' '], true)) $this->local = 'menu'; return []; }
 			$items = $this->layout()->menu(!empty($this->view['canContinue']));
@@ -489,6 +545,27 @@ final class Presenter
 		sort($this->discards);
 	}
 
+	private function toggleCustomWild(int $card): void
+	{
+		$position = array_search($card, $this->customWildDraft, true);
+		if($position === false) $this->customWildDraft[] = $card;
+		else array_splice($this->customWildDraft, (int)$position, 1);
+		sort($this->customWildDraft, SORT_NUMERIC);
+	}
+
+	private function toggleWildPreset(string $preset): void
+	{
+		if($preset === 'none') { $this->wildDraft=[]; return; }
+		$position = array_search($preset, $this->wildDraft, true);
+		if($position === false)
+		{
+			$this->wildDraft[] = $preset;
+			if($preset === 'custom') { $this->customWildPage=0; $this->local='custom-wildcards'; }
+		}
+		else array_splice($this->wildDraft, (int)$position, 1);
+		$this->wildDraft = WildCards::selection($this->wildDraft);
+	}
+
 	private function step(int $direction): void
 	{
 		$legal = $this->view['legalActions'] ?? [];
@@ -510,10 +587,11 @@ final class Presenter
 		return [
 			'The dealer antes. Everyone receives five cards face down.',
 			'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
+			'Each checked wild-card rule may be combined with the others. Wild cards may stand for any missing rank and suit. A joker adds one card to the deck; other choices designate cards already in the 52-card deck.',
 			'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
 			'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
 			'After the draw, final betting starts with the opener. With no bet to call, check or bet; otherwise call, raise, or fold.',
-			'Best to worst: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
+			'Best to worst: five of a kind, straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
 			$controller ? 'Controller: use the D-pad or left stick to move focus, then the confirm button to select.' : 'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
 			$controller ? 'The back button goes back, Start opens the menu, and the shoulder buttons change the bet.' : '1 to 5 select cards, D draws, H shows history, Escape opens the menu.'
 		];
@@ -671,7 +749,9 @@ final class Presenter
 		return [
 			'discards' => $this->discards, 'amount' => $this->amount, 'mode' => $this->mode, 'local' => $this->local
 			, 'history' => $this->historyOpen, 'locked' => $this->locked(), 'hint' => $this->guidance()
-			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant], 'pointer' => $this->pointer
+			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant,
+				'wild'=>$this->setupWild,'customWild'=>$this->setupCustomWild,'wildDraft'=>$this->wildDraft,
+				'customWildDraft'=>$this->customWildDraft,'customWildPage'=>$this->customWildPage], 'pointer' => $this->pointer
 			, 'chips' => $this->chips, 'motion' => $this->motion?->frame($this->layout())
 			, 'winnerFlash' => ['active' => $this->winnerElapsed < 4, 'visible' => $this->winnerVisible]
 			, 'networkWait' => ['active' => $this->networkWaitKey !== '', 'dots' => $this->networkWaitDots]

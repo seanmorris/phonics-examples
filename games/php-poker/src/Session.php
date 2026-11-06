@@ -43,7 +43,9 @@ final class Session
 				if($newSeed===null) throw new \InvalidArgumentException('A fresh local seed is required');
 				$players=$intent['players']??4;
 				if(!is_int($players)) throw new \InvalidArgumentException('Choose a player count');
-				$profile=new Profile($intent['variant']??'jackpots');
+				$wild=$intent['wild']??[]; $customWild=$intent['customWild']??[];
+				if(!is_array($wild) || !is_array($customWild)) throw new \InvalidArgumentException('Choose valid wild cards');
+				$profile=new Profile($intent['variant']??'jackpots', wild:$wild, customWild:$customWild);
 				$this->game=new Game($newSeed,$players,$profile);
 				$this->bots=[];
 				for($id=1;$id<$players;$id++) $this->bots[$id]=new RandomStream($newSeed,'php-poker/bot/'.$id.'/v1');

@@ -2,10 +2,10 @@
   "uiFont": {
     "file": "ui-font.rgba",
     "width": 1024,
-    "height": 768,
-    "sha256": "f4e5076a9fec3aed7a3c6b108866f32b2794ec5b1fa9f0b8e69ef260b2030618",
+    "height": 804,
+    "sha256": "0579dfc28f939b7e2492c82f90fea2fd8a1fda6252e44b55cd0cc8705e0ab943",
     "metrics": "ui-font.json",
-    "metricsSha256": "a04da4ba02143fdf9160d58f6307f0856acd321f5bf0053b1798b7119b926905"
+    "metricsSha256": "6b8eac0c8afcf5be4f16cc81e21b5abbc46c6a6fcd055da78f9b0329c4bb23f5"
   },
   "cards": {
     "sheet": {

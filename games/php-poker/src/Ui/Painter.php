@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace PhpPoker\Ui;
 
+use PhpPoker\WildCards;
 use PhpPoker\Render\Theme;
 use PhpPoker\Render\UiCanvas;
 
@@ -335,7 +336,9 @@ final class Painter
 		$this->dialog($box, 'DRAW POKER');
 		$variant = ($this->view['profile']['variant'] ?? 'jackpots') === 'anything' ? 'Anything opens' : 'Jacks or better';
 		$this->text('Welcome to a game of', $this->layout->width() / 2, $box[1] + 50, Theme::LABEL, Theme::INK, 'center');
-		$this->text('5-CARD DRAW POKER  (' . strtolower($variant) . ')', $this->layout->width() / 2, $box[1] + 80, Theme::LABEL, Theme::INK, 'center');
+		$wild = (array)($this->view['profile']['wild'] ?? []);
+		$rules = strtolower($variant . ($wild === [] ? '' : ' · ' . WildCards::selectionLabel($wild) . ' wild'));
+		$this->text('5-CARD DRAW POKER  (' . $rules . ')', $this->layout->width() / 2, $box[1] + 80, Theme::LABEL, Theme::INK, 'center', $box[2] - 24);
 	}
 
 	private function menuScreen(): void
@@ -343,6 +346,8 @@ final class Painter
 		$shift = $this->layout->verticalShift();
 		$local = $this->state['local'];
 		if($local === 'setup') { $this->setupDialog(); return; }
+		if($local === 'wildcards') { $this->wildcardDialog(); return; }
+		if($local === 'custom-wildcards') { $this->customWildcardDialog(); return; }
 		if($local === 'online')
 		{
 			$w = min(440, $this->layout->width() - 24);
@@ -375,8 +380,55 @@ final class Painter
 		$this->button($setup['more'], '+', '', 'default', $players >= 8);
 		$this->text('Opening', $x + 24, $setup['variant'][1] + $setup['variant'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['variant'], $variant === 'jackpots' ? 'Jacks or better' : 'Anything opens', 'V', 'default', false);
+		$wild = (array)($this->state['setup']['wild'] ?? []);
+		$this->text('Wild cards', $x + 24, $setup['wild'][1] + $setup['wild'][3] / 2, Theme::LABEL, Theme::INK);
+		$this->button($setup['wild'], WildCards::selectionLabel($wild), 'W', 'default', false);
 		$this->button($setup['back'], 'Back', '⎋', 'default', false);
 		$this->button($setup['start'], 'Deal', '↵', 'primary', false);
+	}
+
+	private function wildcardDialog(): void
+	{
+		$menu = $this->layout->wildcardMenu();
+		$selected = (array)($this->state['setup']['wildDraft'] ?? []);
+		$this->dialog($menu['box'], 'WILD CARDS');
+		foreach($menu['items'] as $id => $rect)
+		{
+			$index = array_search($id, array_keys(WildCards::OPTIONS), true);
+			$checked = $id === 'none' ? $selected === [] : in_array($id, $selected, true);
+			$this->checkbox($rect, WildCards::label($id), (string)($index + 1), $checked);
+		}
+		$this->button($menu['back'], 'Cancel', '⎋', 'default', false);
+		$this->button($menu['apply'], 'OK', '↵', 'primary', false);
+	}
+
+	private function customWildcardDialog(): void
+	{
+		$page = (int)($this->state['setup']['customWildPage'] ?? 0);
+		$custom = $this->layout->customWildcards($page);
+		$selected = array_fill_keys($this->state['setup']['customWildDraft'] ?? [], true);
+		$this->dialog($custom['box'], 'CUSTOM WILD CARDS');
+		if($custom['paged'])
+		{
+			$pages = ['Clubs','Diamonds','Hearts','Spades','Joker'];
+			$this->button($custom['previous'], '−', '', 'default', $page === 0);
+			$this->text($pages[$page], $custom['pageLabel'][0], $custom['pageLabel'][1], Theme::LABEL, Theme::INK, 'center');
+			$this->button($custom['next'], '+', '', 'default', $page === 4);
+		}
+		else foreach($custom['rowLabels'] as $label)
+		$this->text($label['text'], $label['point'][0], $label['point'][1], Theme::LABEL, Theme::INK, 'center');
+		if(!$custom['paged']) foreach($custom['columnLabels'] as $label)
+		$this->text($label['text'], $label['point'][0], $label['point'][1], Theme::LABEL, Theme::INK, 'center');
+		foreach($custom['cards'] as $id => $rect)
+		{
+			$suit = $id === 52 ? -1 : intdiv($id, 13);
+			$this->checkbox($rect, $id === 52 ? '' : WildCards::cardLabel($id), '', isset($selected[$id]),
+				in_array($suit, [1,2], true) ? Theme::DANGER_INK : Theme::INK, true);
+		}
+		$this->text(count($selected) . ' selected', $custom['back'][0] + $custom['back'][2] + 18,
+			$custom['back'][1] + $custom['back'][3] / 2, Theme::CAPTION, Theme::INK);
+		$this->button($custom['back'], 'Back', '⎋', 'default', false);
+		$this->button($custom['done'], 'Use selection', '↵', 'primary', false);
 	}
 
 	private function helpScreen(): void
@@ -448,9 +500,10 @@ final class Painter
 			$this->canvas->box($x, $y, $w, $h, $radius, $id === null ? [.725,.141,.176,1] : [1,1,1,$dim]);
 			if($id !== null)
 			{
-				$suit = intdiv($id, 13);
+				$suit = $id === 52 ? -1 : intdiv($id, 13);
 				$ink = $suit === 1 || $suit === 2 ? [.62,.12,.15,1] : Theme::INK;
-				$this->canvas->label((self::RANKS[$id % 13 + 2] ?? '?') . self::SUITS[$suit], $x + 6 * $this->unit, $y + 12 * $this->unit, Theme::BODY, $ink, 'bold');
+				$label = $id === 52 ? 'JOKER' : (self::RANKS[$id % 13 + 2] ?? '?') . self::SUITS[$suit];
+				$this->canvas->label($label, $x + 6 * $this->unit, $y + 12 * $this->unit, Theme::BODY, $ink, 'bold');
 			}
 		}
 		$this->canvas->box($x, $y, $w, $h, $radius, [0,0,0,0], $selected ? Theme::BRASS : [0,0,0,.45], ($selected ? 2.5 : 1) * $this->unit);
@@ -460,7 +513,8 @@ final class Painter
 	private function cardUv(?int $id): ?array
 	{
 		if($this->atlas === null) return null;
-		$cell = $id === null ? (int)$this->atlas['backs']['red'] : [2,3,1,0][intdiv($id, 13)] * 13 + ($id % 13 + 2 === 14 ? 0 : $id % 13 + 1);
+		$cell = $id === null ? (int)$this->atlas['backs']['red'] : ($id === 52 ? 52
+			: [2,3,1,0][intdiv($id, 13)] * 13 + ($id % 13 + 2 === 14 ? 0 : $id % 13 + 1));
 		[$cw, $ch] = $this->atlas['cell'];
 		$columns = (int)$this->atlas['columns'];
 		$u = ($cell % $columns) * $cw / $this->atlas['width'];
@@ -605,6 +659,44 @@ final class Painter
 				$this->canvas->label($key, $kx + $kw / 2, $ky + 9 * $this->unit, Theme::BODY, $style === 'primary' ? Theme::BRASS : Theme::PLATE, $this->face, 'center');
 			}
 		}
+	}
+
+	/** Checkbox row with one left-aligned field; the complete row remains the shared menu hit target. */
+	private function checkbox(array $rect, string $label, string $key, bool $checked, array $ink = Theme::INK, bool $compact = false): void
+	{
+		[$x, $y, $w, $h] = $this->layout->rect(...$rect);
+		$size = min($h - ($compact ? 18 : 10) * $this->unit, ($compact ? 19 : 28) * $this->unit);
+		$cx = $x + ($compact ? 2 : 10) * $this->unit;
+		$cy = $y + ($h - $size) / 2;
+		$radius = Theme::radius($this->mode, 2 * $this->unit);
+		$this->canvas->box($cx, $cy, $size, $size, $radius, Theme::BUTTON, Theme::INK, 1 * $this->unit);
+		if($this->mode === Theme::CLASSIC)
+		{
+			$this->canvas->box($cx + $this->unit, $cy + $this->unit, $size - 2 * $this->unit, $this->unit, 0, [1,1,1,1]);
+			$this->canvas->box($cx + $this->unit, $cy + $this->unit, $this->unit, $size - 2 * $this->unit, 0, [1,1,1,1]);
+		}
+		if($checked)
+		{
+			$inset = ($compact ? 4 : 6) * $this->unit;
+			$this->canvas->box($cx + $inset, $cy + $inset, $size - 2 * $inset, $size - 2 * $inset,
+				Theme::radius($this->mode, $this->unit), Theme::BRASS);
+		}
+		$labelX = $cx + $size + ($compact ? 3 : 10) * $this->unit;
+		$right = $x + $w - ($compact ? 1 : 10) * $this->unit;
+		if($this->controller()) $key = $this->focused($rect) ? $this->confirmLegend() : '';
+		$key = $this->layout->keyHintFits($w) ? $key : '';
+		if($key !== '')
+		{
+			$key = match($key) {'↵' => 'ENT', '⎋' => 'ESC', default => $key};
+			$kw = (strlen($key) > 1 ? 28 : 18) * $this->unit;
+			$kx = $right - $kw;
+			$ky = $y + $h / 2 - 9 * $this->unit;
+			$this->canvas->box($kx, $ky, $kw, 18 * $this->unit, Theme::radius($this->mode, 3 * $this->unit), Theme::INK);
+			$this->canvas->label($key, $kx + $kw / 2, $ky + 9 * $this->unit, Theme::BODY, Theme::DIALOG, $this->face, 'center');
+			$right = $kx - 8 * $this->unit;
+		}
+		if($label !== '') $this->canvas->label($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $labelX, $y + $h / 2,
+			$this->layout->controlText(), $ink, $this->face, 'left', max(1, $right - $labelX));
 	}
 
 	private function controller(): bool { return ($this->state['inputTheme'] ?? 'keyboard') !== 'keyboard'; }

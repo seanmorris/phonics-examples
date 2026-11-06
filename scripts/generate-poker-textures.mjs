@@ -22,6 +22,10 @@ try
 {
 	const dos = JSON.parse(await fs.readFile(new URL('fixedsys-excelsior.json', typography), 'utf8'));
 	outlines.faces.dos = dos.faces.dos ?? dos.faces.body;
+	// Fixedsys supplies the DOS card-suit glyphs. Reuse those exact outlines in the modern faces too so the
+	// wildcard matrix never falls back to a replacement mark when the visual mode changes.
+	for(const character of '♠♥♦♣') for(const face of Object.values(outlines.faces))
+		face.glyphs[character] = outlines.faces.dos.glyphs[character];
 }
 catch(error)
 {

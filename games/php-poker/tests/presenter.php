@@ -293,8 +293,12 @@ $test('the menu, setup and settings flow send only session intents the session k
 	$presenter->update(['screen' => 'menu', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => true]);
 	$expect($presenter->input([['key' => 'enter']], null, 1 / 60) === [] && $presenter->state()['local'] === 'setup', 'Play Offline opens the local setup card');
 	$presenter->input([['key' => 'arrowright'], ['key' => 'arrowright'], ['key' => 'v']], null, 1 / 60);
+	$presenter->input([['key' => 'w']], null, 1 / 60);
+	$expect($presenter->state()['local'] === 'wildcards', 'W opens the wild-card preset window');
+	$presenter->input([['key' => '2'], ['key' => '3'], ['key' => 'enter']], null, 1 / 60);
+	$expect($presenter->state()['local'] === 'setup' && $presenter->state()['setup']['wild'] === ['joker','deuces'], 'independent wild-card checkboxes return to setup');
 	$start = $presenter->input([['key' => 'enter']], null, 1 / 60);
-	$expect($start === [['type' => 'start', 'players' => 6, 'variant' => 'anything']], 'Deal starts with the chosen seats and variant');
+	$expect($start === [['type' => 'start', 'players' => 6, 'variant' => 'anything', 'wild'=>['joker','deuces'], 'customWild'=>[]]], 'Deal starts with the chosen seats, variant and wild cards');
 	$presenter->input([['key' => 'escape']], null, 1 / 60);
 	$expect($presenter->input([['key' => 'c']], null, 1 / 60) === [['type' => 'resume']], 'C continues a saved game');
 	$presenter->update(['screen' => 'settings', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => false, 'pace' => 'normal']);
@@ -553,7 +557,19 @@ $test('actual CSS touch targets clear every discard card and stay on screen', st
 		$layout = Layout::fit($width, $height, $dpr);
 		$draw = $layout->actions($fixture('draw-2'), ['discards' => [], 'amount' => 0]);
 		$setup = $layout->setup(8, 'anything');
-		$targets = array_merge(array_column($layout->menu(true), 'rect'), array_column($draw, 'rect'), [$setup['less'],$setup['more'],$setup['variant'],$setup['start'],$setup['back']]);
+		$wild = $layout->wildcardMenu();
+		$customTargets = [];
+		foreach(range(0,4) as $page)
+		{
+			$custom = $layout->customWildcards($page);
+			$customTargets=array_merge($customTargets,array_values($custom['cards']));
+			if($custom['paged']) $customTargets=array_merge($customTargets,[$custom['previous'],$custom['next']]);
+		}
+		$custom = $layout->customWildcards();
+		$expect($layout->profile !== 'wide' || count($custom['cards']) === 53, "wide custom dialog exposes the complete deck at $width x $height / $dpr");
+		$targets = array_merge(array_column($layout->menu(true), 'rect'), array_column($draw, 'rect'),
+			[$setup['less'],$setup['more'],$setup['variant'],$setup['wild'],$setup['start'],$setup['back']],
+			array_values($wild['items']),[$wild['back'],$wild['apply']],$customTargets,[$custom['back'],$custom['done']]);
 		foreach($targets as $rect)
 		{
 			[$x,$y,$w,$h] = $layout->rect(...$rect);
