@@ -425,7 +425,7 @@ final class Presenter
 
 		if($this->historyOpen)
 		{
-			$addKey($layout->history()['back'], 'enter', 'history:back');
+			$addKey($layout->history(count($this->view['players']??[]),min(8,count($this->view['history']??[])))['back'], 'enter', 'history:back');
 			$addKey($wholeCanvas, 'escape');
 			return $targets;
 		}

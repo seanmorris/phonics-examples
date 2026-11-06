@@ -489,12 +489,39 @@ final class Painter
 
 	private function historyDialog(): void
 	{
-		$history = $this->layout->history();
+		$players=array_slice($this->view['players']??[],0,8);
+		$lines = array_slice($this->view['history'] ?? [], -8);
+		$history = $this->layout->history(count($players),count($lines));
 		$box = $history['box'];
 		$this->dialog($box, 'ROUND HISTORY');
-		$lines = array_slice($this->view['history'] ?? [], -8);
+		if($history['summary'])
+		{
+			[$hx,$hy,$hw,$hh]=$this->layout->rect(...$history['header']);
+			$this->canvas->box($hx,$hy,$hw,$hh,0,Theme::felt($this->mode),Theme::INK,1*$this->unit);
+			foreach($players as $seat=>$player)
+			{
+				[$x,$y]=$history['emblems'][$seat];
+				$this->emblem($x,$y,$seat,(string)($player['name']??''),(string)($player['portrait']??''));
+				$rect=$history['actions'][$seat];
+				$action=(string)($player['lastAction']??'');
+				$lower=strtolower($action);
+				$fill=$action===''?Theme::HISTORY_BLUE:(str_contains($lower,'fold')?Theme::PLATE_FOLD
+					:(str_contains($lower,'call')||str_contains($lower,'check')||str_contains($lower,'pass')?Theme::PLATE_HAND
+					:(str_contains($lower,'bet')||str_contains($lower,'raise')||str_contains($lower,'open')
+						?Theme::mix(Theme::felt($this->mode),Theme::PLATE_HAND,.42):Theme::BUTTON)));
+				[$rx,$ry,$rw,$rh]=$this->layout->rect(...$rect);
+				$this->canvas->box($rx,$ry,$rw,$rh,0,$fill,Theme::INK,1*$this->unit);
+				if($action!=='') $this->text($action,$rect[0]+$rect[2]/2,$rect[1]+$rect[3]/2,$this->layout->captionText(),Theme::INK,'center',$rect[2]-6);
+			}
+		}
 		foreach($lines as $index => $line)
-		$this->text((string)$line, $box[0] + 24 * $this->layout->stretch(), $box[1] + 44 + $index * 22, Theme::BODY, Theme::INK, 'left', $box[2] - 48 * $this->layout->stretch());
+		{
+			$rect=$history['rows'][$index];
+			[$rx,$ry,$rw,$rh]=$this->layout->rect(...$rect);
+			if($history['summary']) $this->canvas->box($rx,$ry,$rw,$rh,0,$index%2===0?Theme::alpha(Theme::BUTTON,.54):Theme::DIALOG,
+				Theme::alpha(Theme::INK,.18),1*$this->unit);
+			$this->text((string)$line,$rect[0]+8*$this->layout->stretch(),$rect[1]+$rect[3]/2,Theme::BODY,Theme::INK,'left',$rect[2]-16*$this->layout->stretch());
+		}
 		$this->button($history['back'], 'OK', '↵', 'primary', false);
 	}
 

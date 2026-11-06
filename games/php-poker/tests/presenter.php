@@ -1201,8 +1201,17 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$poker->input([['key'=>'alt+p']],null,0);
 	$expect($poker->state()['topMenu']==='poker','Poker opens its information menu');
 	$expect($poker->input([['key'=>'h']],null,0)===[] && $poker->state()['history'] && $poker->modal(),'History opens from the Poker menu as a modal dialog');
+	$history=$poker->layout()->history(count($view['players']));
+	$expect($history['summary'] && count($history['emblems'])===8 && count($history['actions'])===8 && count($history['rows'])===8,
+		'the wide History dialog has one portrait and action cell per player plus all eight existing transcript rows');
+	$expect($history['actions'][0][1]+$history['actions'][0][3]<=$history['rows'][0][1]
+		&& $history['rows'][7][1]+$history['rows'][7][3]<=$history['back'][1],'the action summary, transcript, and OK control do not overlap');
+	$shortHistory=$poker->layout()->history(count($view['players']),1);
+	$expect(count($shortHistory['rows'])===1 && $shortHistory['box'][3]<$history['box'][3],
+		'a short transcript keeps the compact height of the reference dialog instead of reserving seven blank rows');
 	$poker->update($view);
 	$expect($poker->state()['history'],'the History dialog remains open when the table view refreshes');
+	$expect(count($poker->paint(1280,720)->instances())>100,'the portrait history and complete transcript paint over the live table');
 	$poker->input([['key'=>'enter']],null,0);
 	$poker->input([['key'=>'alt+p']],null,0);
 	$expect($poker->input([['key'=>'g']],null,0)===[] && $poker->state()['infoDialog']==='game-settings','Game Settings opens the active table profile');

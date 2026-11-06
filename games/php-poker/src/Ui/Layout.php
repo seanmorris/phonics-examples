@@ -1487,14 +1487,47 @@ final class Layout
 			, 'back' => $back, 'down' => [$back[0] + $back[2] + 10, $row, 56, $control]];
 	}
 
-	/** Compact round-history dialog and its explicit OK target. */
-	public function history(): array
+	/**
+	 * Round-history dialog. Wide tables gain the DOS player/action header while every layout retains the same eight
+	 * transcript rows; short or narrow canvases use the transcript-only form rather than crushing its text.
+	 *
+	 * @return array{box:array{float,float,float,float},back:array{float,float,float,float},summary:bool,
+	 *   header:?array{float,float,float,float},emblems:list<array{float,float}>,actions:list<array{float,float,float,float}>,
+	 *   rows:list<array{float,float,float,float}>}
+	 */
+	public function history(?int $playerCount = null, int $lineCount = 8): array
 	{
-		if($square = $this->square()) return $this->fromSquare($square->history());
-		$width = min(640, $this->width() - 24);
+		$players=max(0,min(8,$playerCount??$this->seats));
+		$lines=max(1,min(8,$lineCount));
+		if($square = $this->square()) return $this->fromSquare($square->history($players,$lines));
+		$availableHeight=$this->height()-62;
 		$control = $this->controlSize();
-		$box = [$this->width() / 2 - $width / 2, 50, $width, min($this->height() - 62, 260 + $control)];
-		return ['box' => $box, 'back' => [$box[0] + $box[2] / 2 - 70, $box[1] + $box[3] - $control - 12, 140, $control]];
+		$summaryHeight=136+22*$lines+$control;
+		$summary=$players>0 && $this->width()>=520 && $availableHeight>=$summaryHeight;
+		$preferredWidth=$summary?max(520,$players*88+16):640;
+		$width = min($preferredWidth, $this->width() - 24);
+		$height=min($availableHeight,$summary?$summaryHeight:54+22*$lines+$control);
+		$box = [$this->width() / 2 - $width / 2, 50, $width, $height];
+		$back=[$box[0]+$box[2]/2-70,$box[1]+$box[3]-$control-12,140,$control];
+		$header=null; $emblems=[]; $actions=[];
+		if($summary)
+		{
+			$gridWidth=min($box[2]-16,max(240,$players*88));
+			$gridLeft=$box[0]+($box[2]-$gridWidth)/2;
+			$column=$gridWidth/$players;
+			$header=[$gridLeft,$box[1]+18,$gridWidth,90];
+			for($seat=0;$seat<$players;$seat++)
+			{
+				$emblems[]=[$gridLeft+($seat+.5)*$column,$box[1]+48];
+				$actions[]=[$gridLeft+$seat*$column,$box[1]+76,$column,28];
+			}
+		}
+		$rowTop=$summary?$box[1]+116:$box[1]+34;
+		$rowBottom=$back[1]-8;
+		$rowHeight=max(1,($rowBottom-$rowTop)/$lines);
+		$rows=[];
+		for($index=0;$index<$lines;$index++) $rows[]=[$box[0]+12,$rowTop+$index*$rowHeight,$box[2]-24,$rowHeight];
+		return ['box'=>$box,'back'=>$back,'summary'=>$summary,'header'=>$header,'emblems'=>$emblems,'actions'=>$actions,'rows'=>$rows];
 	}
 
 	/**
