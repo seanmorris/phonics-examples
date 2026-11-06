@@ -43,8 +43,14 @@ final class Motion
 		}
 		$this->duration = max($this->duration, $this->totalDuration);
 		$this->cardStart = $this->duration;
-		$this->deal = ($previous['generation'] ?? 0) !== ($next['generation'] ?? 0)
+		$changedHand = ($previous['generation'] ?? 0) !== ($next['generation'] ?? 0)
 			|| ($previous['handNumber'] ?? 0) !== ($next['handNumber'] ?? 0);
+		// Online play advances the public hand number before its joint shuffle. That ready view has no allocated
+		// cards yet, so it may animate the dealer's ante but must not invent a deal that disappears during crypto.
+		$hasDealtHands = ($next['phase'] ?? 'ready') !== 'ready' && !empty($next['players']);
+		foreach($next['players'] ?? [] as $player)
+			$hasDealtHands = $hasDealtHands && count($player['cards'] ?? []) === 5;
+		$this->deal = $changedHand && $hasDealtHands;
 		if($this->deal)
 		{
 			$this->kind = 'deal';

@@ -167,11 +167,13 @@ async function regions(canvas)
 require $argv[1].'/games/php-poker/autoload.php';
 $input=json_decode(stream_get_contents(STDIN),true,flags:JSON_THROW_ON_ERROR);
 $view=$input['view']; $layout=PhpPoker\Ui\Layout::fit($input['width'],$input['height'],$input['dpr'],max(2,count($view['players']??[])));
-$result=['menu'=>$layout->menu($view['canContinue']),'actions'=>$layout->actions($view,$view['ui']),
- 'cards'=>$layout->discardDialog()['cards']];
-foreach(['menu','actions'] as $key) foreach($result[$key] as &$button) $button['rect']=$layout->rect(...$button['rect']);
-unset($button);
-foreach($result['cards'] as &$rect) $rect=$layout->rect(...$rect);
+	$result=['menu'=>$layout->menu($view['canContinue']),'actions'=>$layout->actions($view,$view['ui']),
+	 'cards'=>$layout->discardDialog()['cards'],'information'=>$layout->information()];
+	foreach(['menu','actions'] as $key) foreach($result[$key] as &$button) $button['rect']=$layout->rect(...$button['rect']);
+	unset($button);
+	foreach($result['cards'] as &$rect) $rect=$layout->rect(...$rect);
+	foreach($result['information'] as $key=>&$rect) $rect=$layout->rect(...$rect);
+	unset($rect);
 echo json_encode($result,JSON_THROW_ON_ERROR);
 `,root],{encoding:'utf8',input:JSON.stringify(input)}));
 }
@@ -196,10 +198,21 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	await expect.poll(async()=>(await state(canvas)).pace).toBe('fast');
 	await page.keyboard.press('Escape');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
+	await page.setViewportSize({width:844,height:390});
 	await page.keyboard.press('h');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('help');
-	await page.keyboard.press('Escape');
+	await expect.poll(async()=>(await state(canvas)).ui.helpScrollMax).toBeGreaterThan(0);
+	const canvasBox=await canvas.boundingBox(),hostScroll=await page.evaluate(()=>scrollY);
+	await page.mouse.move(canvasBox.x+canvasBox.width/2,canvasBox.y+canvasBox.height/2);
+	await page.mouse.wheel(0,200);
+	await expect.poll(async()=>(await state(canvas)).ui.helpScroll).toBe(1);
+	expect(await page.evaluate(()=>scrollY)).toBe(hostScroll);
+	await page.keyboard.press('ArrowUp');
+	await expect.poll(async()=>(await state(canvas)).ui.helpScroll).toBe(0);
+	const helpBack=await point(canvas,(await regions(canvas)).information.back);
+	await page.mouse.click(helpBack.x,helpBack.y);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
+	await page.setViewportSize({width:390,height:844});
 	await page.keyboard.press('Enter');
 	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('setup');
 	await page.keyboard.press('ArrowRight');await page.keyboard.press('v');
@@ -207,6 +220,13 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	await page.keyboard.press('Enter');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 	expect((await state(canvas)).players).toHaveLength(5);
+	await page.keyboard.press('Escape');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
+	await page.keyboard.press('h');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('help');
+	const savedHelpBack=await point(canvas,(await regions(canvas)).information.back);
+	await page.mouse.click(savedHelpBack.x,savedHelpBack.y);
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
 });
 
 test('Play Online opens the embedded Matrix table lobby',async({page})=>{
@@ -255,7 +275,7 @@ test('controller navigates the menu, selects discards, draws, and toggles the ga
 	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
 	const canvas=await boot(page);
 	await canvas.focus();
-	await padPulse(page,[(await state(canvas)).ui.profile==='landscape'?15:13]);
+	await padPulse(page,[13]);
 	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('menu:continue');
 	await padPulse(page,[0]);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
@@ -327,6 +347,19 @@ test('desktop pointer can confirm discards without the dialog covering its actio
 	const draw=await point(canvas,button.rect);
 	await page.mouse.click(draw.x,draw.y);
 	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
+});
+
+test('overlapping discard cards activate the face painted on top',async({page})=>{
+	await page.setViewportSize({width:1280,height:1285});
+	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
+	const canvas=await boot(page);
+	await canvas.focus();await page.keyboard.press('c');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	const before=await state(canvas),layout=await regions(canvas),[first,second]=layout.cards;
+	expect(first[0]+first[2]).toBeGreaterThan(second[0]);
+	const overlap=await point(canvas,[second[0]+2,Math.max(first[1],second[1])+20,2,2]);
+	await page.mouse.click(overlap.x,overlap.y);
+	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([before.players[0].cards[1]]);
 });
 
 test('the lifted edge of a selected card can deselect it',async({page})=>{

@@ -341,8 +341,6 @@ final class Painter
 	private function menuScreen(): void
 	{
 		$shift = $this->layout->verticalShift();
-		$this->text('DRAW POKER', $this->layout->width() / 2, $this->layout->profile === 'landscape' ? 65 : 170 + $shift, (float)$this->layout->metric('display'), Theme::PLATE, 'center');
-		$this->text('Five-card draw · jacks or better · 2 to 8 seats', $this->layout->width() / 2, $this->layout->profile === 'landscape' ? 105 : 215 + $shift, Theme::LABEL, Theme::PLATE, 'center');
 		$local = $this->state['local'];
 		if($local === 'setup') { $this->setupDialog(); return; }
 		if($local === 'online')
@@ -354,15 +352,14 @@ final class Painter
 			$this->text($this->controller() ? 'Press ' . $this->backLegend() . ' to go back.' : 'Press Escape to go back.', $this->layout->width() / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
 			return;
 		}
-		foreach($this->layout->menu(!empty($this->view['canContinue'])) as $index => $item)
-		$this->button($item['rect'], $item['label'], '', $index === 0 ? 'primary' : 'default', false);
-		$short = $this->layout->profile === 'landscape';
-		$hint = $this->controller() ? 'D-pad moves · ' . $this->confirmLegend() . ' selects · Start resumes' : 'Enter plays · C continues · H help · M settings';
-		$this->text($hint, $short ? 16 : $this->layout->width() / 2, $this->layout->height() - ($short ? 18 : 100), Theme::CAPTION, Theme::PLATE, $short ? 'left' : 'center');
-		// Keep the artists' short credit under the hints, or at the right edge where a short landscape has no room.
-		$landscape = $this->layout->profile === 'landscape';
-		$this->text('Icon art: Clint Bellanger · thekingphoenix · 7Soul', $landscape ? $this->layout->width() - 16 : $this->layout->width() / 2
-			, $this->layout->height() - ($landscape ? 18 : 72), Theme::CAPTION, Theme::alpha(Theme::PLATE, .8), $landscape ? 'right' : 'center');
+		$canContinue = !empty($this->view['canContinue']);
+		$box = $this->layout->menuBox($canContinue);
+		$this->dialog($box, 'DRAW POKER');
+		$this->text('Five-card draw · jacks or better · 2 to 8 seats', $this->layout->width() / 2, $box[1] + 24, Theme::CAPTION, Theme::INK, 'center', $box[2] - 32);
+		foreach($this->layout->menu($canContinue) as $index => $item)
+		$this->button($item['rect'], $item['label'], $this->controller() ? $this->confirmLegend() : $item['key'], $index === 0 ? 'primary' : 'default', false);
+		$this->text('Icon art: Clint Bellanger · thekingphoenix · 7Soul', $this->layout->width() / 2, $box[1] + $box[3] - 8
+			, Theme::CAPTION, Theme::alpha(Theme::INK, .75), 'center', $box[2] - 24);
 	}
 
 	private function setupDialog(): void
@@ -387,38 +384,31 @@ final class Painter
 		$info = $this->layout->information();
 		$box = $info['box'];
 		$this->dialog($box, 'HOW TO PLAY');
-		$paragraphs = [
-			'The dealer antes. Everyone receives five cards face down.',
-			'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
-			'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
-			'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
-			'Final betting starts with the opener. The best remaining hand wins the pot.',
-			'Best to worst: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
-			$this->controller() ? 'Controller: use the D-pad or left stick to move focus, then ' . $this->confirmLegend() . ' to select.' : 'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
-			$this->controller() ? $this->backLegend() . ' goes back, Start opens the menu, and the shoulder buttons change the bet.' : '1 to 5 select cards, D draws, H shows history, Escape opens the menu.'
-		];
-		$columns = $this->layout->profile === 'landscape' ? 2 : 1;
-		$columnWidth = ($box[2] - 48 - ($columns - 1) * 24) / $columns;
+		$paragraphs = Presenter::helpParagraphs($this->controller());
+		$columnWidth = $box[2] - 48;
 		$size = $this->layout->controlText();
 		$leading = $size * 1.45;
 		$y = $box[1] + 36;
-		foreach($paragraphs as $index => $paragraph)
+		$bottom = $info['back'][1] - 14;
+		$maximum = max(0, min(count($paragraphs) - 1, (int)($this->state['helpScrollMax'] ?? 0)));
+		$scroll = max(0, min($maximum, (int)($this->state['helpScroll'] ?? 0)));
+		foreach(array_slice($paragraphs, $scroll) as $paragraph)
 		{
-			$column = $columns === 2 ? intdiv($index, 4) : 0;
-			if($columns === 2 && $index === 4) $y = $box[1] + 36;
-			$x = $box[0] + 24 + $column * ($columnWidth + 24);
-			$line = '';
-			foreach(explode(' ', strtoupper($paragraph)) as $word)
+			$x = $box[0] + 24;
+			$shown = $this->mode === Theme::CLASSIC ? strtoupper($paragraph) : $paragraph;
+			$lines = $this->canvas->text->wrap($shown, $size * $this->unit, $columnWidth * $this->horizontalUnit, 20, $this->face);
+			foreach($lines as $line)
 			{
-				$next = $line === '' ? $word : "$line $word";
-				if($line !== '' && $this->canvas->measure($next, $size, $this->face) > $columnWidth * $this->unit)
-				{ $this->text($line, $x, $y, $size, Theme::INK); $y += $leading; $line = $word; }
-				else $line = $next;
+				if($y + $leading / 2 > $bottom) break 2;
+				$this->text($line, $x, $y, $size, Theme::INK);
+				$y += $leading;
 			}
-			$this->text($line, $x, $y, $size, Theme::INK);
-			$y += $leading + 8;
+			$y += 8;
 		}
+		$this->button($info['up'], '↑', '', 'default', $scroll === 0);
 		$this->button($info['back'], 'Back', '⎋', 'primary', false);
+		$this->button($info['down'], '↓', '', 'default', $scroll === $maximum);
+		if($maximum > 0) $this->text(($scroll + 1) . '/' . ($maximum + 1), $box[0] + $box[2] - 18, $info['back'][1] + $info['back'][3] / 2, Theme::CAPTION, Theme::INK, 'right');
 	}
 
 	private function settingsScreen(): void

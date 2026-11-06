@@ -624,7 +624,9 @@ final class Layout
 			if($this->profile === 'tall')
 			{
 				$lowest = $this->handTop() - 14 - $cluster;
-				$clusterTop += max(0, $lowest - $clusterTop) * .65;
+				// Heads-up has no side rows in the centre lane. Use its full height so the cluster clears the remote
+				// cards and finishes directly above the local plate; denser tables retain the gentler shared bias.
+				$clusterTop += max(0, $lowest - $clusterTop) * ($this->seats === 2 ? 1 : .65);
 			}
 			$cy = $clusterTop + $lift + 38;
 		}
@@ -864,28 +866,40 @@ final class Layout
 	 * Design-space geometry of the main menu items.
 	 *
 	 * @param bool $canContinue Whether a saved game can be continued.
-	 * @return list<array{id:string,rect:array{float,float,float,float},label:string,intent:array<string,mixed>|null}>
+	 * @return list<array{id:string,rect:array{float,float,float,float},label:string,key:string,intent:array<string,mixed>|null}>
 	 */
 	public function menu(bool $canContinue): array
 	{
-		$items = [['offline', 'Play Offline', ['type' => 'setup']]];
-		if($canContinue) $items[] = ['continue', 'Continue Offline', ['type' => 'resume']];
-		$items[] = ['online', 'Play Online', null];
-		$items[] = ['help', 'How to Play', ['type' => 'help']];
-		$items[] = ['settings', 'Settings', ['type' => 'settings']];
-		[$width, $height] = $this->design['menuItem'];
-		$width = min($width, $this->design['width'] - 40);
-		$height = max($height, $this->controlSize());
+		$items = [['offline', 'Play Offline', 'O', ['type' => 'setup']]];
+		if($canContinue) $items[] = ['continue', 'Continue Offline', 'C', ['type' => 'resume']];
+		$items[] = ['online', 'Play Online', 'P', null];
+		$items[] = ['help', 'How to Play', 'H', ['type' => 'help']];
+		$items[] = ['settings', 'Settings', 'M', ['type' => 'settings']];
+		$box = $this->menuBox($canContinue);
+		[$width, $preferredHeight] = $this->design['menuItem'];
+		$width = min($width, $box[2] - 48);
+		$gap = 4;
+		$minimumTouchHeight = 48 * $this->dpr / $this->scale;
+		$height = min(max($preferredHeight, $this->controlSize(), $minimumTouchHeight), ($box[3] - 56 - (count($items) - 1) * $gap) / count($items));
 		$result = [];
-		foreach($items as $index => [$id, $label, $intent])
+		foreach($items as $index => [$id, $label, $key, $intent])
 		{
 			$x = $this->width() / 2 - $width / 2;
-			$y = $this->design['menuTop'] + $index * ($height + 10);
-			if($this->profile === 'landscape') { $x = $this->width() / 2 - $width - 10 + ($index % 2) * ($width + 20); $y = $this->design['menuTop'] + intdiv($index, 2) * ($height + 10); }
-			$result[] = ['id' => $id, 'rect' => [$x, $y, $width, $height], 'label' => $label, 'intent' => $intent];
+			$y = $box[1] + 36 + $index * ($height + $gap);
+			$result[] = ['id' => $id, 'rect' => [$x, $y, $width, $height], 'label' => $label, 'key' => $key, 'intent' => $intent];
 		}
 
 		return $result;
+	}
+
+	/** Ruled window containing the title, vertical menu controls and compact art credit. */
+	public function menuBox(bool $canContinue): array
+	{
+		$count = $canContinue ? 5 : 4;
+		$preferredHeight = max($this->design['menuItem'][1], $this->controlSize(), 48 * $this->dpr / $this->scale);
+		$height = min($this->height() - 24, 56 + $count * $preferredHeight + ($count - 1) * 4);
+		$width = min(500, $this->width() - 24);
+		return [$this->width() / 2 - $width / 2, max(12, ($this->height() - $height) / 2), $width, $height];
 	}
 
 	/**
@@ -913,7 +927,7 @@ final class Layout
 		];
 	}
 
-	/** Dialog bounds and an explicit Back target shared by help and history. */
+	/** Help dialog bounds with a fixed scroll row beneath its wrapped copy. */
 	public function information(): array
 	{
 		$width = min(800, $this->width() - 24);
@@ -921,7 +935,11 @@ final class Layout
 		$top = 50;
 		$height = $this->height() - $top - 12;
 		$control = $this->controlSize();
-		return ['box' => [$left, $top, $width, $height], 'back' => [$this->width() / 2 - 70, $top + $height - $control - 12, 140, $control]];
+		$row = $top + $height - $control - 12;
+		$backWidth = min(140, $width - 152);
+		$back = [$this->width() / 2 - $backWidth / 2, $row, $backWidth, $control];
+		return ['box' => [$left, $top, $width, $height], 'up' => [$back[0] - 66, $row, 56, $control]
+			, 'back' => $back, 'down' => [$back[0] + $back[2] + 10, $row, 56, $control]];
 	}
 
 	/** Compact round-history dialog and its explicit OK target. */

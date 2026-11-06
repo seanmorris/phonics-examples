@@ -165,6 +165,16 @@ $test('card hit regions follow the raised faces and the current viewport before 
 		$presenter->input([['key' => 'd']], null, 0);
 		$expect(count($presenter->status()['ui']['hitRegions']) === 2, 'locked draw offers only Keep all and the menu, with no card or Draw targets');
 	}
+	$presenter = new Presenter($root);
+	$view = $fixture('draw-2');
+	$presenter->update($view);
+	$presenter->resize(1280, 1207, 1);
+	$layout = $presenter->layout();
+	$cards = $layout->discardDialog()['cards'];
+	$expect($cards[0][0] + $cards[0][2] > $cards[1][0], 'compressed desktop discard cards overlap');
+	[$x, $y] = $layout->point($cards[1][0] + 2, max($cards[0][1], $cards[1][1]) + 20);
+	$presenter->input([], ['x' => $x, 'y' => $y, 'down' => false, 'clicks' => [['x' => $x, 'y' => $y]]], 0);
+	$expect($presenter->state()['discards'] === [$view['players'][0]['cards'][1]], 'an overlap selects the later card painted on top');
 });
 
 $test('guidance distinguishes opening bets, another seat drawing, and the human draw', static function(callable $expect) use ($fixture, $root): void {
@@ -271,6 +281,55 @@ $test('the menu, setup and settings flow send only session intents the session k
 	$presenter->input([['key' => 'm']], null, 1 / 60);
 	$expect($presenter->state()['mode'] !== $before, 'M toggles the visual mode');
 	$expect($presenter->input([['key' => 'escape']], null, 1 / 60) === [['type' => 'menu']], 'Escape leaves settings for the menu');
+});
+
+$test('the title menu stays vertical inside one ruled window and help scrolls wrapped copy', static function(callable $expect) use ($root): void {
+	foreach([[1280,720,1],[390,844,1],[844,326,1]] as [$width,$height,$dpr])
+	{
+		$layout = Layout::fit($width, $height, $dpr);
+		$box = $layout->menuBox(true);
+		$items = $layout->menu(true);
+		$expect(array_column($items, 'key') === ['O','C','P','H','M'], "menu buttons carry their own shortcuts at {$width}x{$height}");
+		foreach($items as $index => $item)
+		{
+			$expect(abs($item['rect'][0] - $items[0]['rect'][0]) < 1e-9, "menu remains one vertical column at {$width}x{$height}");
+			$expect($item['rect'][0] >= $box[0] && $item['rect'][0] + $item['rect'][2] <= $box[0] + $box[2]
+				&& $item['rect'][1] >= $box[1] && $item['rect'][1] + $item['rect'][3] <= $box[1] + $box[3], "menu item $index stays inside its window at {$width}x{$height}");
+			if($index) $expect($item['rect'][1] > $items[$index - 1]['rect'][1] + $items[$index - 1]['rect'][3], "menu item $index follows vertically at {$width}x{$height}");
+		}
+	}
+	$presenter = new Presenter($root);
+	$view = ['screen' => 'help', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => false];
+	$presenter->resize(320, 500, 1);
+	$presenter->update($view);
+	$expect($presenter->state()['helpScroll'] === 0, 'help opens at its first paragraph');
+	$expect($presenter->state()['helpScrollMax'] > 0, 'small help window reports measured overflow');
+	$point = static function(Presenter $presenter, array $rect): array {
+		[$x,$y,$width,$height] = $presenter->layout()->rect(...$rect);
+		return ['x' => $x + $width / 2, 'y' => $y + $height / 2];
+	};
+	$copy = $point($presenter, [$presenter->layout()->information()['box'][0] + 30, $presenter->layout()->information()['box'][1] + 45, 2, 2]);
+	$expect($presenter->input([], ['x' => $copy['x'], 'y' => $copy['y'], 'down' => false, 'clicks' => [$copy]], 0) === [], 'clicking help copy does not dismiss its dialog');
+	$up = $point($presenter, $presenter->layout()->information()['up']);
+	$expect($presenter->input([], ['x' => $up['x'], 'y' => $up['y'], 'down' => false, 'clicks' => [$up]], 0) === [], 'disabled help scroll controls do not dismiss its dialog');
+	$before = $presenter->paint(320, 500)->instances();
+	$presenter->input([['key' => 'arrowdown']], null, 0);
+	$expect($presenter->state()['helpScroll'] === 1, 'Down scrolls help by one wrapped paragraph');
+	$after = $presenter->paint(320, 500)->instances();
+	$expect($before !== $after, 'scrolling changes the visible help copy on a small viewport');
+	$information = $presenter->layout()->information();
+	$controlTop = $presenter->layout()->rect(...$information['back'])[1];
+	foreach($after as $instance) if(abs($instance[10] - 1) < 1e-9 && $instance[1] < $controlTop)
+	$expect($instance[1] + $instance[3] <= $controlTop + 1e-6, 'wrapped help glyphs stop above the fixed scroll controls');
+
+	$wide = new Presenter($root);
+	$wide->resize(1280, 720, 1);
+	$wide->update($view);
+	$expect($wide->state()['helpScrollMax'] === 0, 'help disables scrolling when all wrapped copy fits');
+	$view['canContinue'] = true;
+	$wide->update($view);
+	$back = $point($wide, $wide->layout()->information()['back']);
+	$expect($wide->input([], ['x' => $back['x'], 'y' => $back['y'], 'down' => false, 'clicks' => [$back]], 0) === [['type' => 'menu']], 'Help Back returns to the title even when a game can continue');
 });
 
 $test('controller focus navigates menus, setup, cards and table actions through shared SDL controls', static function(callable $expect) use ($fixture, $root): void {
@@ -602,6 +661,14 @@ $test('sparser tall tables spend their free space on larger table objects', stat
 		$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56 - $cluster[1];
 		foreach($blocks as $seat => $block) $expect(!$overlaps($block, $cluster), "$seats-player centre cluster clears seat $seat");
 	}
+	$headsUp = Layout::fit(973, 1222, 1, 2);
+	$remote = $headsUp->seat(1, 2);
+	$human = $headsUp->seat(0, 2);
+	$centre = $headsUp->centre();
+	$remoteBottom = $remote['cards'][0][1] + $remote['cards'][0][3];
+	$statusBottom = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56;
+	$expect($centre['pot'][1] >= $remoteBottom + 14, 'the tall heads-up pot clears the remote cards');
+	$expect(abs($human['plate'][1] - 14 - $statusBottom) < 1e-9, 'the tall heads-up centre cluster uses the lane down to the local plate');
 });
 
 $test('wide card fans anchor every player layout and CPU cards use the available vertical room', static function(callable $expect): void {

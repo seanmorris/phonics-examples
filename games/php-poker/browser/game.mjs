@@ -198,6 +198,10 @@ export function activate({module, canvas, session})
 		if(tapped&&event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom)clicks.push(position);
 	};
 	const onCancel=event=>{if(event.pointerId===activePointer)releasePointer();};
+	const onWheel=event=>{
+		if(closed||latest?.screen!=='help'||event.deltaY===0)return;
+		event.preventDefault();keys.push({key:event.deltaY>0?'arrowdown':'arrowup'});
+	};
 	const clearInput=()=>{keys=[];clicks=[];releasePointer();onLeave();};
 	const onVisibility=()=>{if(document.visibilityState==='hidden')clearInput();};
 	canvas.addEventListener('keydown',onKey);
@@ -206,6 +210,7 @@ export function activate({module, canvas, session})
 	canvas.addEventListener('pointerdown',onDown);
 	canvas.addEventListener('pointerup',onUp);
 	canvas.addEventListener('pointercancel',onCancel);
+	canvas.addEventListener('wheel',onWheel,{passive:false});
 	canvas.addEventListener('lostpointercapture',onCancel);
 	canvas.addEventListener('blur',clearInput);
 	addEventListener('blur',clearInput);
@@ -422,6 +427,7 @@ export function activate({module, canvas, session})
 		canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('pointermove',onMove);
 		canvas.removeEventListener('pointerleave',onLeave);
 		canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);canvas.removeEventListener('pointercancel',onCancel);
+		canvas.removeEventListener('wheel',onWheel);
 		canvas.removeEventListener('lostpointercapture',onCancel);canvas.removeEventListener('blur',clearInput);
 		document.removeEventListener('visibilitychange',onVisibility);
 		removeEventListener('blur',clearInput);

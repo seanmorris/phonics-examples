@@ -133,6 +133,37 @@ $expect(array_sum(array_column($refund['stages'][0]['moves'], 'value')) === 5
 $expect(Chips::value($refund['after']['pot']) === 11 && Chips::value($refund['after'][0]) === 495
 	&& Chips::value($refund['after'][1]) === 495, 'the visual pot and both stacks reconcile after the refund');
 
+// A new online hand publishes its number and dealer ante before the joint shuffle has allocated any cards. The
+// ante may move immediately, but card backs wait for the first view containing the verified five-card hands.
+$onlineShowdown = [
+	'handNumber'=>1,'generation'=>1,'mode'=>'online','phase'=>'showdown','dealer'=>0,'pot'=>0,'players'=>[
+		['stack'=>501,'debt'=>0,'totalBet'=>0,'cards'=>[1,2,3,4,5]],
+		['stack'=>499,'debt'=>0,'totalBet'=>0,'cards'=>[null,null,null,null,null]],
+	]
+];
+$onlineShuffle = $onlineShowdown;
+$onlineShuffle['handNumber'] = 2;
+$onlineShuffle['phase'] = 'ready';
+$onlineShuffle['dealer'] = 1;
+$onlineShuffle['pot'] = 1;
+$onlineShuffle['players'][1]['stack']--;
+$onlineShuffle['players'][1]['totalBet'] = 1;
+$onlineShuffle['players'][0]['cards'] = [];
+$onlineShuffle['players'][1]['cards'] = [];
+$shuffleChange = Chips::transition($onlineShowdown, $onlineShuffle, Chips::fromView($onlineShowdown));
+$shuffleMotion = new Motion($onlineShowdown, $onlineShuffle, $shuffleChange, []);
+$expect($shuffleMotion->status()['kind'] === 'chips' && $shuffleMotion->frame(Layout::fit(1280,720))['cards'] === [],
+	'the pre-allocation online shuffle animates its ante without dealing provisional cards');
+$onlineDeal = $onlineShuffle;
+$onlineDeal['generation'] = 2;
+$onlineDeal['phase'] = 'betting';
+$onlineDeal['players'][0]['cards'] = [6,7,8,9,10];
+$onlineDeal['players'][1]['cards'] = [null,null,null,null,null];
+$dealChange = Chips::transition($onlineShuffle, $onlineDeal, $shuffleChange['after']);
+$verifiedDeal = new Motion($onlineShuffle, $onlineDeal, $dealChange, []);
+$expect($verifiedDeal->status()['kind'] === 'deal' && $verifiedDeal->active(),
+	'the deal animation begins when the verified online hands become presentable');
+
 // Exercise both sides of every overlapping departure/arrival, including exchanges during a pot award.
 $award = Chips::transfer(['pot' => [1 => 500], 0 => [1 => 20]], 'pot', 0, 500);
 $timeline = ['stages' => [$award], 'after' => $award['after']];

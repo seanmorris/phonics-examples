@@ -57,6 +57,8 @@ final class Presenter
 	private string $networkWaitKey = '';
 	private float $networkWaitElapsed = 0;
 	private int $networkWaitDots = 0;
+	/** First help paragraph shown in the measured scroll viewport. */
+	private int $helpScroll = 0;
 	/** Latest input family, used to expose controller focus and swap the on-canvas help. */
 	private string $inputTheme = 'keyboard';
 	/** Stable controller target ID. The rectangle is always resolved from current layout state. */
@@ -117,6 +119,7 @@ final class Presenter
 		if(($this->view['error'] ?? '') !== '') $this->lockedRevision = null;
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
 		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','online'], true)) $this->local = 'menu';
+		if(($view['screen'] ?? '') === 'help' && ($previous['screen'] ?? '') !== 'help') $this->helpScroll = 0;
 		if(($view['phase'] ?? '') !== 'showdown' && ($view['phase'] ?? '') !== 'redeal') $this->historyOpen = false;
 		$this->syncNetworkWait();
 		$this->dirty = true;
@@ -203,8 +206,18 @@ final class Presenter
 		$this->ensureControllerFocus($targets);
 		if($pulses['pause']) return $this->controllerPause();
 		if($pulses['back']) return $this->controllerBack();
-		if($pulses['pageUp']) { $this->step(-1); $this->dirty = true; }
-		if($pulses['pageDown']) { $this->step(1); $this->dirty = true; }
+		$help = ($this->view['screen'] ?? '') === 'help';
+		if($help)
+		{
+			if($pulses['pageUp'] || $pulses['up']) $this->scrollHelp(-1);
+			if($pulses['pageDown'] || $pulses['down']) $this->scrollHelp(1);
+			$pulses['up'] = $pulses['down'] = 0;
+		}
+		else
+		{
+			if($pulses['pageUp']) { $this->step(-1); $this->dirty = true; }
+			if($pulses['pageDown']) { $this->step(1); $this->dirty = true; }
+		}
 		foreach(['left','right','up','down'] as $direction)
 		for($count = $pulses[$direction]; $count > 0; $count--) $this->moveControllerFocus($direction, $targets);
 		if($pulses['confirm'])
@@ -229,6 +242,7 @@ final class Presenter
 	private function activateTarget(array $target): array
 	{
 		$this->dirty = true;
+		if(!empty($target['disabled'])) return [];
 		if(isset($target['key'])) return $this->key($target['key']);
 		if(isset($target['menu'])) return $this->activateMenu($target['menu']);
 		if(isset($target['card'])) { $this->toggleCard($target['card']); return []; }
@@ -241,12 +255,12 @@ final class Presenter
 	{
 		$layout = $this->layout();
 		$targets = [];
-		$addKey = static function(array $rect, string $key, ?string $id = null) use (&$targets): void {
+		$addKey = static function(array $rect, string $key, ?string $id = null, bool $disabled = false) use (&$targets): void {
 			$target = ['rect' => $rect, 'key' => $key];
 			if($id !== null) $target['id'] = $id;
+			if($disabled) $target['disabled'] = true;
 			$targets[] = $target;
 		};
-		// These informational screens already dismiss on any click; controls take priority over dismissal.
 		$wholeCanvas = [-$layout->left / $layout->horizontalScale, -$layout->top / $layout->scale, $this->width / $layout->horizontalScale, $this->height / $layout->scale];
 		if(($this->view['screen'] ?? 'menu') === 'menu')
 		{
@@ -274,8 +288,14 @@ final class Presenter
 				$addKey($toggle['variant'], 'm', 'settings:look');
 				$addKey($toggle['back'], 'escape', 'settings:back');
 			}
-			else $addKey($layout->information()['back'], 'escape', 'help:back');
-			$addKey($wholeCanvas, 'escape');
+			else
+			{
+				$information = $layout->information();
+				$maximum = $this->helpMaximumScroll();
+				$addKey($information['up'], 'arrowup', 'help:up', $this->helpScroll === 0);
+				$addKey($information['back'], 'escape', 'help:back');
+				$addKey($information['down'], 'arrowdown', 'help:down', $this->helpScroll === $maximum);
+			}
 			return $targets;
 		}
 
@@ -290,7 +310,9 @@ final class Presenter
 		{
 			$cards = $this->view['players'][0]['cards'] ?? [];
 			$dialog = $layout->discardDialog($cards, $this->discards);
-			foreach($dialog['cards'] as $index => $rect) if(isset($cards[$index]))
+			// Cards paint from left to right, so a later card is visually above an earlier one where their fans
+			// overlap. Hit-test in reverse paint order while preserving each card's raised visible edge.
+			foreach(array_reverse($dialog['cards'], true) as $index => $rect) if(isset($cards[$index]))
 			$targets[] = ['id' => 'card:' . $index, 'rect' => $rect, 'card' => $index];
 		}
 
@@ -312,7 +334,7 @@ final class Presenter
 	/** Targets which can receive visible controller focus; broad click-to-dismiss regions are deliberately omitted. */
 	private function controllerTargets(): array
 	{
-		return array_values(array_filter($this->clickTargets(), static fn(array $target): bool => isset($target['id'])));
+		return array_values(array_filter($this->clickTargets(), static fn(array $target): bool => isset($target['id']) && empty($target['disabled'])));
 	}
 
 	/** @param list<array<string,mixed>> $targets */
@@ -394,21 +416,27 @@ final class Presenter
 			}
 			if($this->local !== 'menu') { if(in_array($key, ['escape','backspace','enter',' '], true)) $this->local = 'menu'; return []; }
 			$items = $this->layout()->menu(!empty($this->view['canContinue']));
+			$shortcut = ['o' => 'offline', 'c' => 'continue', 'p' => 'online', 'h' => 'help', 'm' => 'settings'][$key] ?? null;
+			if($shortcut !== null) foreach($items as $item) if($item['id'] === $shortcut) return $this->activateMenu($item);
 			return match($key) {
 				'enter', ' ' => $this->activateMenu($items[0]),
-				'c' => !empty($this->view['canContinue']) ? [['type' => 'resume']] : [],
-				'o', 'p' => $this->activateMenu($items[0]),
-				'h' => [['type' => 'help']],
-				'm' => [['type' => 'settings']],
 				default => [],
 			};
 		}
 
-		if(in_array($screen, ['help','settings'], true))
+		if($screen === 'help')
 		{
-			if($screen === 'settings' && $key === 'p') return [['type' => 'pace', 'value' => ($this->view['pace'] ?? 'normal') === 'fast' ? 'normal' : 'fast']];
-			if($screen === 'settings' && in_array($key, ['m','v','enter',' '], true)) { $this->mode = $this->mode === Theme::CLASSIC ? Theme::MODERN : Theme::CLASSIC; return []; }
-			if(in_array($key, ['escape','backspace','enter',' ','q'], true)) return [['type' => $this->view['canContinue'] ? 'resume' : 'menu']];
+			if(in_array($key, ['arrowup','pageup'], true)) { $this->scrollHelp(-1); return []; }
+			if(in_array($key, ['arrowdown','pagedown'], true)) { $this->scrollHelp(1); return []; }
+			if(in_array($key, ['escape','backspace','enter',' ','q'], true)) return [['type' => 'menu']];
+			return [];
+		}
+
+		if($screen === 'settings')
+		{
+			if($key === 'p') return [['type' => 'pace', 'value' => ($this->view['pace'] ?? 'normal') === 'fast' ? 'normal' : 'fast']];
+			if(in_array($key, ['m','v','enter',' '], true)) { $this->mode = $this->mode === Theme::CLASSIC ? Theme::MODERN : Theme::CLASSIC; return []; }
+			if(in_array($key, ['escape','backspace','enter',' ','q'], true)) return [['type' => 'menu']];
 			return [];
 		}
 
@@ -467,6 +495,59 @@ final class Presenter
 		if(empty($legal['bet'])) return;
 		$increment = max(1, (int)($legal['minBet'] ?? 1) - (int)($this->view['highest'] ?? 0));
 		$this->amount = max((int)$legal['minBet'], min((int)$legal['maxBet'], $this->amount + $direction * max(1, (int)($this->view['profile']['minimum'] ?? $increment))));
+	}
+
+	/** Scroll the rules by one paragraph, keeping every stop meaningful at every viewport size. */
+	private function scrollHelp(int $direction): void
+	{
+		$next = max(0, min($this->helpMaximumScroll(), $this->helpScroll + ($direction <=> 0)));
+		if($next !== $this->helpScroll) { $this->helpScroll = $next; $this->dirty = true; }
+	}
+
+	/** Copy shared with the painter so wrapping, overflow and scroll stops are measured from the same text. */
+	public static function helpParagraphs(bool $controller): array
+	{
+		return [
+			'The dealer antes. Everyone receives five cards face down.',
+			'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
+			'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
+			'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
+			'Final betting starts with the opener. The best remaining hand wins the pot.',
+			'Best to worst: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
+			$controller ? 'Controller: use the D-pad or left stick to move focus, then the confirm button to select.' : 'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
+			$controller ? 'The back button goes back, Start opens the menu, and the shoulder buttons change the bet.' : '1 to 5 select cards, D draws, H shows history, Escape opens the menu.'
+		];
+	}
+
+	/** Last useful paragraph scroll stop after measuring the wrapped copy in the current help window. */
+	private function helpMaximumScroll(): int
+	{
+		$layout = $this->layout();
+		$information = $layout->information();
+		$box = $information['box'];
+		$paragraphs = self::helpParagraphs($this->inputTheme !== 'keyboard');
+		$size = $layout->controlText();
+		$leading = $size * 1.45;
+		$start = $box[1] + 36;
+		$bottom = $information['back'][1] - 14;
+		$face = $this->mode === Theme::CLASSIC && isset($this->text->faces()['dos']) ? 'dos' : 'bold';
+		$fits = function(int $first) use ($paragraphs, $size, $leading, $start, $bottom, $box, $layout, $face): bool {
+			$y = $start;
+			foreach(array_slice($paragraphs, $first) as $paragraph)
+			{
+				$shown = $this->mode === Theme::CLASSIC ? strtoupper($paragraph) : $paragraph;
+				$lines = $this->text->wrap($shown, $size * $layout->scale, ($box[2] - 48) * $layout->horizontalScale, 20, $face);
+				foreach($lines as $_)
+				{
+					if($y + $leading / 2 > $bottom) return false;
+					$y += $leading;
+				}
+				$y += 8;
+			}
+			return true;
+		};
+		for($first = 0; $first < count($paragraphs); $first++) if($fits($first)) return $first;
+		return count($paragraphs) - 1;
 	}
 
 	/** Layout of the current canvas; the profile follows its size and pixel ratio. */
@@ -581,6 +662,8 @@ final class Presenter
 	 */
 	public function state(): array
 	{
+		$helpMaximum = ($this->view['screen'] ?? '') === 'help' ? $this->helpMaximumScroll() : 0;
+		$this->helpScroll = min($this->helpScroll, $helpMaximum);
 		return [
 			'discards' => $this->discards, 'amount' => $this->amount, 'mode' => $this->mode, 'local' => $this->local
 			, 'history' => $this->historyOpen, 'locked' => $this->locked(), 'hint' => $this->guidance()
@@ -588,6 +671,7 @@ final class Presenter
 			, 'chips' => $this->chips, 'motion' => $this->motion?->frame($this->layout())
 			, 'winnerFlash' => ['active' => $this->winnerElapsed < 4, 'visible' => $this->winnerVisible]
 			, 'networkWait' => ['active' => $this->networkWaitKey !== '', 'dots' => $this->networkWaitDots]
+			, 'helpScroll' => $this->helpScroll, 'helpScrollMax' => $helpMaximum
 			, 'inputTheme' => $this->inputTheme, 'controllerFocus' => $this->focusedTarget()
 		];
 	}
@@ -609,6 +693,7 @@ final class Presenter
 		$state['hitRegions'] = [];
 		foreach($this->clickTargets() as $target)
 		{
+			if(!empty($target['disabled'])) continue;
 			[$x, $y, $w, $h] = $layout->rect(...$target['rect']);
 			$state['hitRegions'][] = [$x / $this->width, $y / $this->height, $w / $this->width, $h / $this->height];
 		}
