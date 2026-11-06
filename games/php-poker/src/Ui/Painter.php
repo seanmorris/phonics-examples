@@ -190,13 +190,9 @@ final class Painter
 			}
 			if(($this->view['dealer'] ?? -1) === $seat && $phase !== 'ready')
 			{
-				[$px, $py, $pw, $ph] = $geometry[$seat]['plate'];
-				$dealerX = $seat !== 0 && $geometry[$seat]['outward'] > 0 ? $px - 14 : $px + $pw + 14;
-				$dealerY = $py + $ph / 2;
-				// Column seats have the pot beside the plate, so the marker rides the emblem's outer corner instead.
-				if($seat !== 0 && $this->layout->columns()) [$dealerX, $dealerY] = [$x + $geometry[$seat]['outward'] * 10, $y - 13];
+				[$dealerX, $dealerY, $dealerRadius] = $this->layout->dealerMarker($seat, $seats);
 				[$dx, $dy] = $this->layout->point($dealerX, $dealerY);
-				$this->canvas->circle($dx, $dy, 9 * $this->unit, Theme::PLATE, Theme::INK, 1 * $this->unit);
+				$this->canvas->circle($dx, $dy, $dealerRadius * $this->unit, Theme::PLATE, Theme::INK, 1 * $this->unit);
 				$this->canvas->label('D', $dx, $dy, Theme::CAPTION, Theme::INK, $this->face, 'center');
 			}
 		}

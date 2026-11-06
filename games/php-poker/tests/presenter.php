@@ -442,7 +442,12 @@ $test('no opponent sits behind the action column at any seat count', static func
 		$controls = array_column($layout->actions($view, ['discards' => [], 'amount' => 8]), 'rect');
 		$human = $layout->seat(0, $seats);
 		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
-		$expect(abs($controls[0][0] - ($handRight + 16)) < 1e-9, "$seats-player action column sits beside the local hand");
+		$expect(abs($controls[0][0] - ($handRight + Layout::ACTION_GUTTER * $layout->stretch())) < 1e-9, "$seats-player action column sits beside the local hand");
+		// The dealer button stands in that gutter: clear of the plate and of every control.
+		[$markerX, $markerY, $markerRadius] = $layout->dealerMarker(0, $seats);
+		$disc = [$markerX - $markerRadius * $layout->stretch(), $markerY - $markerRadius, 2 * $markerRadius * $layout->stretch(), 2 * $markerRadius];
+		$expect($disc[0] >= $human['plate'][0] + $human['plate'][2], "$seats-player dealer button stands outside the local plate");
+		foreach($controls as $index => $control) $expect(!$overlaps($disc, $control), "$seats-player dealer button is not covered by control $index");
 		$stepper = $layout->stepper($view);
 		foreach(['less','amount','more'] as $part) $controls[] = $stepper[$part];
 		$buttonRight = $controls[0][0] + $controls[0][2];
@@ -491,7 +496,10 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 	$expect(Layout::fit(390, 844, 1)->profile === 'tall', 'a 390x844 canvas is tall');
 	$expect(Layout::fit(780, 1688, 2)->profile === 'tall', 'a 2x phone is tall');
 	$expect(Layout::fit(1024, 768, 1)->profile === 'wide', 'a tablet in landscape is wide');
-	$expect(Layout::fit(900, 650, 1)->profile === 'landscape', 'a wide canvas switches before losing most of its height');
+	// The oval is kept on laptop-height canvases while its seats fit; columns take over only when they cannot.
+	foreach([[900, 650], [1280, 627], [1366, 675], [1440, 697]] as [$laptopWidth, $laptopHeight]) foreach([2, 5, 8] as $laptopSeats)
+	$expect(Layout::fit($laptopWidth, $laptopHeight, 1, $laptopSeats)->profile === 'wide', "a $laptopWidth x $laptopHeight canvas keeps the oval at $laptopSeats seats");
+	$expect(Layout::fit(1000, 435, 1)->profile === 'landscape', 'a canvas too short for the oval and its controls uses the landscape columns');
 	$expect(Layout::fit(700, 650, 1)->profile === 'tall', 'a nearly square narrow canvas keeps its vertical composition');
 	$expect(Layout::fit(1536, 1850, 2)->profile === 'tall', 'a deeply portrait desktop uses columns before rigid card faces collide');
 	$expect(Layout::fit(1518, 1850, 2)->profile === 'tall', 'the desktop remains in columns below the 760 CSS pixel floor');
@@ -810,7 +818,7 @@ $test('wide tables keep vertical sizing independent from horizontal compression'
 		$expect($stepper !== null && $buttons[array_key_last($buttons)]['rect'][1] + $buttons[array_key_last($buttons)]['rect'][3] < $stepper['less'][1], "the raise stepper follows the vertical actions at $width x $height");
 		$human = $layout->seat(0, 8);
 		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
-		$expect(abs($buttons[0]['rect'][0] - ($handRight + 16)) < 1e-9, "the action column follows the local hand at $width x $height");
+		$expect(abs($buttons[0]['rect'][0] - ($handRight + Layout::ACTION_GUTTER * $layout->stretch())) < 1e-9, "the action column follows the local hand at $width x $height");
 		$expect(abs($stepper['more'][0] + $stepper['more'][2] - ($buttons[0]['rect'][0] + $buttons[0]['rect'][2])) < 1e-9, "the stepper aligns with the action column at $width x $height");
 		$controls = array_column($buttons, 'rect');
 		foreach(['less','amount','more'] as $part) $controls[] = $stepper[$part];
@@ -837,7 +845,7 @@ $test('wide tables keep vertical sizing independent from horizontal compression'
 	$expect(Layout::fit(1280, 720, 1, $seats)->metric('handCard')[0] >= $fullWidth, "$seats-player sparse table never uses smaller cards than a full table");
 });
 
-$test('three-to-eight-player boards compress only their horizontal axis', static function(callable $expect) use ($fixture): void {
+$test('three-to-eight-player boards compress only their horizontal axis', static function(callable $expect) use ($fixture, $overlaps): void {
 	$height = 1222;
 	$referenceWidth = (int)ceil(1280 * $height / 720);
 	$view = $fixture('facing-raise-5');
@@ -862,10 +870,24 @@ $test('three-to-eight-player boards compress only their horizontal axis', static
 			$expect(abs($layout->scale - $reference->scale) < 1e-9, "$seats-player vertical scale stays fixed at width $width");
 			$expect($layout->horizontalScale <= $previousHorizontal + 1e-9, "$seats-player x scale tightens monotonically at width $width");
 			$expect(abs(($human[0] + $humanLast[0] + $humanLast[2]) / 2 - $width / 2) < 1e-6, "$seats-player local fan stays centered while its spacing compresses at width $width");
-			$expect(abs($human[1] - $referenceCard[1]) < 1e-9 && abs($human[2] - $referenceCard[2]) < 1e-9 && abs($human[3] - $referenceCard[3]) < 1e-9, "$seats-player local cards keep their size and aspect at width $width");
-			$expect(abs($cpu[1] - $referenceCpu[1]) < 1e-9 && abs($cpu[2] - $referenceCpu[2]) < 1e-9 && abs($cpu[3] - $referenceCpu[3]) < 1e-9, "$seats-player CPU cards keep their size and aspect at width $width");
+			// Cards and chips keep their size while the seats still fit. A full table in a narrow window would put
+			// fans on top of each other, so there, and only there, they are given the largest size that fits; their
+			// aspect ratio never changes and the board never has two seats overlapping.
+			$objects = $human[3] / $referenceCard[3];
+			$expect($objects <= 1 + 1e-9 && ($seats < 8 || $width >= $referenceWidth ? abs($objects - 1) < 1e-9 : $objects >= .6), "$seats-player cards keep their size at width $width unless a full table would collide");
+			$expect(abs($human[1] + $human[3] - $referenceCard[1] - $referenceCard[3]) < 1e-6 && abs($human[2] / $human[3] - $referenceCard[2] / $referenceCard[3]) < 1e-9, "$seats-player local cards keep their baseline and aspect at width $width");
+			$expect(abs($cpu[3] / $referenceCpu[3] - $objects) < 1e-9 && abs($cpu[2] / $cpu[3] - $referenceCpu[2] / $referenceCpu[3]) < 1e-9, "$seats-player CPU cards keep their aspect and share the local scale at width $width");
 			$expect(abs($layout->rect(...$button)[3] - $referenceButtonHeight) < 1e-9, "$seats-player controls keep their height at width $width");
-			$expect(abs($layout->metric('handChipRadius') * $layout->scale - $reference->metric('handChipRadius') * $reference->scale) < 1e-9, "$seats-player chips keep their size at width $width");
+			$expect(abs($layout->metric('handChipRadius') * $layout->scale - $objects * $reference->metric('handChipRadius') * $reference->scale) < 1e-9, "$seats-player chips share the card scale at width $width");
+			$boardBlocks = [];
+			for($boardSeat = 0; $boardSeat < $seats; $boardSeat++)
+			{
+				$boardGeometry = $layout->seat($boardSeat, $seats);
+				$boardLast = $boardGeometry['cards'][4];
+				$boardBlocks[$boardSeat] = [$boardGeometry['plate'], [$boardGeometry['cards'][0][0], $boardGeometry['cards'][0][1], $boardLast[0] + $boardLast[2] - $boardGeometry['cards'][0][0], $boardLast[3]]];
+			}
+			foreach($boardBlocks as $first => $firstBlocks) foreach($boardBlocks as $second => $secondBlocks) if($first < $second)
+			foreach($firstBlocks as $one) foreach($secondBlocks as $other) $expect(!$overlaps($one, $other), "$seats-player seats $first and $second stand apart at width $width");
 			$expect(abs($layout->metric('emblemSize') * $layout->scale - $reference->metric('emblemSize') * $reference->scale) < 1e-9, "$seats-player icons keep their size at width $width");
 			$previousHorizontal = $layout->horizontalScale;
 		}
