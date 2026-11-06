@@ -460,8 +460,9 @@ final class Painter
 		$this->text($label['text'], $label['point'][0], $label['point'][1], Theme::LABEL, Theme::INK, 'center');
 		foreach($custom['cards'] as $id => $rect)
 		{
-			$suit = $id === 52 ? -1 : intdiv($id, 13);
-			$this->checkbox($rect, $id === 52 ? '' : WildCards::cardLabel($id), '', isset($selected[$id]),
+			$suit = $id >= 52 ? -1 : intdiv($id, 13);
+			$label = $id >= 52 ? WildCards::rankLabel($id) : WildCards::cardLabel($id);
+			$this->checkbox($rect, $label, '', isset($selected[$id]),
 				in_array($suit, [1,2], true) ? Theme::DANGER_INK : Theme::INK, true);
 		}
 		$countLeft = $custom['back'][0] + $custom['back'][2] + 14 * $this->layout->stretch();
@@ -543,9 +544,9 @@ final class Painter
 			$this->canvas->box($x, $y, $w, $h, $radius, $id === null ? [.725,.141,.176,1] : [1,1,1,$dim]);
 			if($id !== null)
 			{
-				$suit = $id === 52 ? -1 : intdiv($id, 13);
+				$suit = $id >= 52 ? -1 : intdiv($id, 13);
 				$ink = $suit === 1 || $suit === 2 ? [.62,.12,.15,1] : Theme::INK;
-				$label = $id === 52 ? 'JOKER' : (self::RANKS[$id % 13 + 2] ?? '?') . self::SUITS[$suit];
+				$label = $id >= 52 ? 'JOKER ' . ($id - 51) : (self::RANKS[$id % 13 + 2] ?? '?') . self::SUITS[$suit];
 				$this->canvas->label($label, $x + 6 * $this->unit, $y + 12 * $this->unit, Theme::BODY, $ink, 'bold');
 			}
 		}
@@ -556,7 +557,7 @@ final class Painter
 	private function cardUv(?int $id): ?array
 	{
 		if($this->atlas === null) return null;
-		$cell = $id === null ? (int)$this->atlas['backs']['red'] : ($id === 52 ? 52
+		$cell = $id === null ? (int)$this->atlas['backs']['red'] : ($id >= 52 ? $id
 			: [2,3,1,0][intdiv($id, 13)] * 13 + ($id % 13 + 2 === 14 ? 0 : $id % 13 + 1));
 		[$cw, $ch] = $this->atlas['cell'];
 		$columns = (int)$this->atlas['columns'];

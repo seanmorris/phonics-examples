@@ -38,7 +38,7 @@ shuffle, the initial ten-card allocation settles once, and a replacement draw se
 privately readable. The room protocol's history checkpoint mode avoids copying a large snapshot into each action
 acknowledgement.
 
-The persistence bridge atomically replaces one browser-local document after an accepted action. It retains the old document on a storage failure. Restore checks schema, profile version, all 52 instances, complete five-card hands, turn queue and chip/loan conservation. Corrupt or unsupported saves produce a visible recovery message instead of rerolling a replacement hand. Menus and background tabs stop bot progression.
+The persistence bridge atomically replaces one browser-local document after an accepted action. It retains the old document on a storage failure. Restore checks schema, profile version, the complete profile-specific card inventory, complete five-card hands, turn queue and chip/loan conservation. Corrupt or unsupported saves produce a visible recovery message instead of rerolling a replacement hand. Menus and background tabs stop bot progression.
 
 The full poker page installs a service worker scoped to its own route. Its build manifest pins the page, PHP/WASM runtime, engine browser modules, PHAR and bootstrap by SHA-256 and size. Installation completes only after every asset is verified. Updates wait for old controlled pages to close; an open hand keeps one build. No Matrix response, private save or unrelated game's page enters the asset cache. The offline browser test disables networking, closes the page, reopens it and verifies exact saved-turn continuation.
 

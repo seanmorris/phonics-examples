@@ -1280,7 +1280,7 @@ final class Layout
 			{
 				$y = $top + 54 + $row * ($control + $gap);
 				$labels[] = ['text'=>$label,'point'=>[$left + 24 + $labelWidth / 2, $y + $control / 2]];
-				$ids = $row < 4 ? [$row * 13 + 12, ...range($row * 13, $row * 13 + 11)] : [52];
+				$ids = $row < 4 ? [$row * 13 + 12, ...range($row * 13, $row * 13 + 11)] : [52,53];
 				foreach($ids as $column => $id)
 				$cards[$id] = [$gridLeft + $column * ($cellWidth + $gap), $y, $cellWidth, $control];
 			}
@@ -1291,7 +1291,7 @@ final class Layout
 				'back'=>[$left+24,$footer,130,$control],'done'=>[$left+$width-24-$doneWidth,$footer,$doneWidth,$control]];
 		}
 		// Ace first, as in the matrix.
-		$ids = $page < 4 ? [$page * 13 + 12, ...range($page * 13, $page * 13 + 11)] : [52];
+		$ids = $page < 4 ? [$page * 13 + 12, ...range($page * 13, $page * 13 + 11)] : [52,53];
 		$columns = $this->profile === 'tall' ? 3 : 7;
 		$rows = (int)ceil(13 / $columns);
 		$gap = 4;

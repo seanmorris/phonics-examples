@@ -587,7 +587,7 @@ final class Presenter
 		return [
 			'The dealer antes. Everyone receives five cards face down.',
 			'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
-			'Each checked wild-card rule may be combined with the others. Wild cards may stand for any missing rank and suit. A joker adds one card to the deck; other choices designate cards already in the 52-card deck.',
+			'Each checked wild-card rule may be combined with the others. Wild cards may stand for any missing rank and suit. Joker adds both jokers to the deck; Custom may add either one. Other choices designate cards already in the 52-card deck.',
 			'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
 			'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
 			'After the draw, final betting starts with the opener. With no bet to call, check or bet; otherwise call, raise, or fold.',

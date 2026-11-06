@@ -588,7 +588,7 @@ $test('actual CSS touch targets clear every discard card and stay on screen', st
 			if($custom['paged']) $customTargets=array_merge($customTargets,[$custom['previous'],$custom['next']]);
 		}
 		$custom = $layout->customWildcards();
-		$expect($layout->profile !== 'wide' || count($custom['cards']) === 53, "wide custom dialog exposes the complete deck at $width x $height / $dpr");
+		$expect($layout->profile !== 'wide' || count($custom['cards']) === 54, "wide custom dialog exposes the complete deck at $width x $height / $dpr");
 		$targets = array_merge(array_column($layout->menu(true), 'rect'), array_column($draw, 'rect'),
 			[$setup['less'],$setup['more'],$setup['variant'],$setup['wild'],$setup['start'],$setup['back']],
 			array_values($wild['items']),[$wild['back'],$wild['apply']],$customTargets,[$custom['back'],$custom['done']]);
@@ -1103,7 +1103,7 @@ $test('dialogs keep their CSS size and whole labels on a compressed desktop', st
 	}
 	// The card matrix is offered only where a cell holds a checkbox and a label; otherwise the dialog pages by suit.
 	$matrix = $full->customWildcards();
-	$expect(!$matrix['paged'] && count($matrix['cards']) === 53, 'a full desktop shows the whole matrix');
+	$expect(!$matrix['paged'] && count($matrix['cards']) === 54, 'a full desktop shows the whole matrix');
 	$expect($full->rect(...$matrix['done'])[2] >= 200, 'the matrix Done button is wide enough for Use selection');
 	$expect($matrix['done'][0] + $matrix['done'][2] <= $matrix['box'][0] + $matrix['box'][2] - 23 && $matrix['back'][0] + $matrix['back'][2] < $matrix['done'][0], 'the matrix footer buttons stay apart inside the dialog');
 	foreach([[800, 807, 1, 8], [390, 782, 1, 8], [320, 500, 1, 8], [844, 328, 1, 8]] as [$width, $height, $dpr, $seats])

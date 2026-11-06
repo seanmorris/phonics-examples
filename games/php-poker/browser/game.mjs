@@ -15,7 +15,7 @@ export function cardCell(dpr)
 /** Map a card id (suit*13 + rank-2, suits clubs, diamonds, hearts, spades) to its cell on the deck sheet. */
 export function sheetCell(id,suitRows)
 {
-	if(id===52)return 52;
+	if(id===52||id===53)return id;
 	const suit=Math.floor(id/13),rank=id%13+2;
 	return suitRows[suit]*13+(rank===14?0:rank-1);
 }
@@ -230,7 +230,7 @@ export function activate({module, canvas, session})
 	canvas.parentElement?.appendChild(hand);
 	canvas.setAttribute('aria-describedby',[originalDescription,hand.id].filter(Boolean).join(' '));
 	const cardName=id=>{
-		if(id===52)return 'joker';
+		if(id===52||id===53)return `joker ${id-51}`;
 		if(!Number.isInteger(id)||id<0||id>51)return 'hidden card';
 		return ['two','three','four','five','six','seven','eight','nine','ten','jack','queen','king','ace'][id%13]
 			+' of '+['clubs','diamonds','hearts','spades'][Math.floor(id/13)];

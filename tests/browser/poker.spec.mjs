@@ -237,13 +237,15 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	for(let pageIndex=0;pageIndex<4;pageIndex++)await page.keyboard.press('ArrowRight');
 	custom=await regions(canvas);customCard=await point(canvas,custom.customWild.cards[52]);
 	await page.mouse.click(customCard.x,customCard.y);
+	customCard=await point(canvas,custom.customWild.cards[53]);
+	await page.mouse.click(customCard.x,customCard.y);
 	const customDone=await point(canvas,custom.customWild.done);
 	await page.mouse.click(customDone.x,customDone.y);
-	await expect.poll(async()=>(await state(canvas)).ui.setup).toMatchObject({wild:['joker','custom'],customWild:[0,52]});
+	await expect.poll(async()=>(await state(canvas)).ui.setup).toMatchObject({wild:['joker','custom'],customWild:[0,52,53]});
 	await page.keyboard.press('Enter');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 	expect((await state(canvas)).players).toHaveLength(5);
-	expect((await state(canvas)).profile).toMatchObject({wild:['joker','custom'],customWild:[0,52]});
+	expect((await state(canvas)).profile).toMatchObject({wild:['joker','custom'],customWild:[0,52,53]});
 	await page.keyboard.press('Escape');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
 	await page.keyboard.press('h');

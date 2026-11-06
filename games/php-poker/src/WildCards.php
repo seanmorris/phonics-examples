@@ -27,7 +27,7 @@ final class WildCards
 		return array_values(array_filter(array_keys(self::OPTIONS), static fn(string $id): bool => $id !== 'none' && isset($selected[$id])));
 	}
 
-	/** @return list<int> Physical card IDs treated as wild; 52 is the single joker. */
+	/** @return list<int> Physical card IDs treated as wild; 52 and 53 are the two jokers. */
 	public static function ids(string|array $presets, array $custom = []): array
 	{
 		$presets = self::selection($presets);
@@ -46,7 +46,7 @@ final class WildCards
 		return match($preset) {
 			'custom' => [],
 			'none' => [],
-			'joker' => [52],
+			'joker' => [52,53],
 			'deuces' => [0,13,26,39],
 			'one-eyed-jacks' => [35,48], // J♥, J♠
 			'mustached-kings' => [11,24,50], // K♣, K♦, K♠; K♥ is the only king without a mustache.
@@ -59,9 +59,9 @@ final class WildCards
 	/** @return list<int> Sorted, unique custom physical card IDs. */
 	public static function custom(array $cards): array
 	{
-		if(!array_is_list($cards) || count($cards) > 53) throw new \InvalidArgumentException('Invalid custom wild cards');
+		if(!array_is_list($cards) || count($cards) > 54) throw new \InvalidArgumentException('Invalid custom wild cards');
 		foreach($cards as $card)
-			if(!is_int($card) || $card < 0 || $card > 52) throw new \InvalidArgumentException('Invalid custom wild card');
+			if(!is_int($card) || $card < 0 || $card > 53) throw new \InvalidArgumentException('Invalid custom wild card');
 		$cards = array_values(array_unique($cards));
 		sort($cards, SORT_NUMERIC);
 		return $cards;
@@ -71,7 +71,9 @@ final class WildCards
 	public static function deck(string|array $presets, array $custom = []): array
 	{
 		$wild = self::ids($presets, $custom);
-		return in_array(52, $wild, true) ? range(0,52) : range(0,51);
+		$deck = range(0,51);
+		foreach([52,53] as $joker) if(in_array($joker, $wild, true)) $deck[] = $joker;
+		return $deck;
 	}
 
 	public static function label(string $preset): string
@@ -89,7 +91,7 @@ final class WildCards
 
 	public static function cardLabel(int $card): string
 	{
-		if($card === 52) return 'Joker';
+		if($card === 52 || $card === 53) return 'Joker ' . ($card - 51);
 		if($card < 0 || $card > 51) throw new \InvalidArgumentException('Invalid card');
 		return self::rankLabel($card) . ['♣','♦','♥','♠'][intdiv($card,13)];
 	}
@@ -97,7 +99,7 @@ final class WildCards
 	/** Rank-only label for a card shown beneath an explicit suit heading. */
 	public static function rankLabel(int $card): string
 	{
-		if($card === 52) return 'Joker';
+		if($card === 52 || $card === 53) return 'J' . ($card - 51);
 		if($card < 0 || $card > 51) throw new \InvalidArgumentException('Invalid card');
 		return ['2','3','4','5','6','7','8','9','10','J','Q','K','A'][$card % 13];
 	}

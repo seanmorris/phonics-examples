@@ -137,6 +137,16 @@ final class Game
 		if(($snapshot['version'] ?? null) !== 1 || ($snapshot['mode'] ?? null) !== 'offline'
 			|| !is_array($snapshot['state'] ?? null) || !is_array($snapshot['piles'] ?? null)
 			|| !is_array($snapshot['profile'] ?? null)) throw new \InvalidArgumentException('Unsupported poker save');
+		// Early v3 saves used only the first joker. Preserve the hand and exact existing card order, placing the
+		// newly enabled second joker at the bottom of the stock rather than rejecting the continuation.
+		if(($snapshot['profile']['version'] ?? null) === Profile::VERSION
+			&& is_array($snapshot['profile']['wild'] ?? null) && in_array('joker', $snapshot['profile']['wild'], true)
+			&& ($snapshot['piles']['inventory'] ?? null) === range(0,52)
+			&& is_array($snapshot['piles']['piles']['stock'] ?? null))
+		{
+			$snapshot['piles']['inventory'][] = 53;
+			$snapshot['piles']['piles']['stock'][] = ['kind'=>'ordered','cards'=>[53]];
+		}
 		$instance = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
 		$instance->profile = Profile::restore($snapshot['profile']);
 		$instance->state = $snapshot['state'];

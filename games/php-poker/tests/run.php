@@ -37,23 +37,34 @@ $test('wild presets, custom cards, joker deck and five of a kind are exact',stat
 	$expect(WildCards::ids('mustached-kings')===[11,24,50]);
 	$expect(WildCards::ids('kings')===[11,24,37,50]);
 	$expect(WildCards::ids('deuces-treys')===[0,1,13,14,26,27,39,40]);
-	$expect(WildCards::ids(['joker','one-eyed-jacks'])===[35,48,52]);
+	$expect(WildCards::ids(['joker','one-eyed-jacks'])===[35,48,52,53]);
 	$expect(Hand::evaluate([9,22,35,48,0],[0])['name']==='Five of a kind');
 	$expect(Hand::evaluate([8,9,10,11,52],[52])['name']==='Royal flush');
+	$expect(Hand::evaluate([9,22,35,52,53],[52,53])['name']==='Five of a kind');
 	$expect(Hand::evaluate([35,48,11,24,37],WildCards::ids('one-eyed-jacks'))['ranks']===[13]);
 	$expect(Hand::evaluate([11,24,50,12,25],WildCards::ids('mustached-kings'))['ranks']===[14]);
-	$expect(Hand::label(52)==='Joker'&&WildCards::cardLabel(52)==='Joker');
+	$expect(Hand::label(52)==='Joker 1'&&Hand::label(53)==='Joker 2'
+		&&WildCards::cardLabel(52)==='Joker 1'&&WildCards::cardLabel(53)==='Joker 2');
 	$reject(static fn()=>new Profile(wild:['custom'],customWild:[2,1]));
 	$profile=new Profile('anything',wild:['joker']);
-	$expect($profile->deck()===range(0,52)&&Profile::restore($profile->snapshot())->snapshot()===$profile->snapshot());
+	$expect($profile->deck()===range(0,53)&&Profile::restore($profile->snapshot())->snapshot()===$profile->snapshot());
+	$oneJoker=new Profile('anything',wild:['custom'],customWild:[53]);
+	$expect($oneJoker->deck()===[...range(0,51),53]&&$oneJoker->wildCards()===[53]);
 	$legacy=['version'=>'bicycle-inspired-local-v1','variant'=>'anything','ante'=>1,'minimum'=>2,'maximum'=>20,'raiseLimit'=>3];
 	$expect(Profile::restore($legacy)->wild===[]);
 	$single=['version'=>'bicycle-inspired-local-v2','variant'=>'anything','ante'=>1,'minimum'=>2,'maximum'=>20,'raiseLimit'=>3,'wild'=>'deuces','customWild'=>[]];
 	$expect(Profile::restore($single)->wild===['deuces']);
 	$game=$rig(new Game('joker-deck',2,$profile),[[8,9,10,11,52],[0,13,26,39,1]]);
-	$expect($game->snapshot()['piles']['inventory']===range(0,52));
+	$expect($game->snapshot()['piles']['inventory']===range(0,53));
 	$expect($game->view(0)['players'][0]['handName']==='Royal flush');
-	$expect(!in_array(52,Bot::discards([52,9,22,0,16],[52]),true),'a bot discarded its wild joker');
+	$old=(new Game('single-joker-save',2,new Profile('anything')))->snapshot();
+	$old['profile']=$profile->snapshot(); $old['piles']['inventory'][]=52;
+	$old['piles']['piles']['stock'][]=['kind'=>'ordered','cards'=>[52]];
+	$migrated=Game::restore($old)->snapshot();
+	$expect($migrated['piles']['inventory']===range(0,53)
+		&& end($migrated['piles']['piles']['stock'])===['kind'=>'ordered','cards'=>[53]]);
+	$expect(!in_array(52,Bot::discards([52,9,22,0,16],[52]),true),'a bot discarded its first wild joker');
+	$expect(!in_array(53,Bot::discards([53,9,22,0,16],[53]),true),'a bot discarded its second wild joker');
 	$botView=['turn'=>1,'players'=>[['folded'=>false],['folded'=>false,'cards'=>[11,24,37,50,52]]],
 		'profile'=>['wildCards'=>[52]],'legalActions'=>['check'=>true],'opener'=>0,'pot'=>10];
 	$expect(Bot::choose($botView,1,new RandomStream('five-kind-bot'))===['type'=>'check']);

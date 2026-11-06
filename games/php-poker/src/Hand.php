@@ -14,7 +14,7 @@ final class Hand
 
 	/**
 	 * Rank exactly five distinct cards.
-	 * @param array $cards Five distinct physical card IDs; 52 is the joker.
+	 * @param array $cards Five distinct physical card IDs; 52 and 53 are the jokers.
 	 * @param array $wildCards Physical IDs that may represent any missing rank and suit.
 	 * @return array Category, descending tiebreak ranks, sortable score and friendly name.
 	 */
@@ -27,7 +27,7 @@ final class Hand
 		$ranks = []; $suits = []; $wild = 0;
 		foreach($cards as $card)
 		{
-			if(!is_int($card) || $card < 0 || $card > 52 || ($card === 52 && !isset($wildLookup[52])))
+			if(!is_int($card) || $card < 0 || $card > 53 || ($card >= 52 && !isset($wildLookup[$card])))
 				throw new \InvalidArgumentException('Invalid card');
 			if(isset($wildLookup[$card])) { $wild++; continue; }
 			$ranks[] = $card % 13 + 2;
@@ -100,7 +100,7 @@ final class Hand
 	 */
 	public static function label(int $card): string
 	{
-		if($card === 52) return 'Joker';
+		if($card === 52 || $card === 53) return 'Joker ' . ($card - 51);
 		if($card < 0 || $card > 51) throw new \InvalidArgumentException('Invalid card');
 		$rank = $card % 13 + 2;
 		return ([11=>'Jack',12=>'Queen',13=>'King',14=>'Ace'][$rank] ?? (string)$rank)
