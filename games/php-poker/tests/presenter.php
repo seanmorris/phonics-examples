@@ -50,7 +50,7 @@ $test('seats sit on the oval with no two plates overlapping at any seat count', 
 	}
 });
 
-$test('the action bar holds exactly the legal actions', static function(callable $expect) use ($fixture): void {
+$test('the action bar holds exactly the legal actions', static function(callable $expect) use ($fixture, $root): void {
 	$state = ['discards' => [], 'amount' => 8];
 	$ids = static fn(array $view): array => array_map(static fn(array $button): string => $button['id'], Layout::fit(1280, 720)->actions($view, $state));
 	$expect($ids($fixture('opening-8')) === ['fold','pass','bet'], 'opening: fold, pass, bet');
@@ -70,6 +70,15 @@ $test('the action bar holds exactly the legal actions', static function(callable
 	$expect($ids($waiting) === [], 'an all-false online action schema offers no Fold before the initial deal');
 	$waiting['legalActions'] = ['next' => true];
 	$expect($ids($waiting) === ['deal'], 'a ready table offers Deal only when the reducer explicitly authorizes it');
+	$final = $fixture('facing-raise-5');
+	$final['phase'] = 'final-betting';
+	$final['highest'] = 0;
+	$final['legalActions'] = ['fold' => true, 'pass' => false, 'check' => true, 'call' => false, 'callAmount' => 0
+		, 'bet' => true, 'minBet' => 2, 'maxBet' => 20, 'betLabel' => 'Bet', 'openingRequired' => false];
+	$expect($ids($final) === ['fold','check','bet'], 'after the draw, final betting explicitly offers both Check and Bet');
+	$presenter = new Presenter($root);
+	$presenter->update($final);
+	$expect($presenter->state()['hint'] === 'Check or bet after the draw.', 'post-draw status names the Check/Bet decision');
 	$bet = Layout::fit(1280, 720)->actions($fixture('facing-raise-5'), ['discards' => [], 'amount' => 999])[2];
 	$expect($bet['intent']['amount'] === $fixture('facing-raise-5')['legalActions']['maxBet'], 'the raise-to amount is clamped to maxBet');
 });

@@ -512,7 +512,7 @@ final class Presenter
 			'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
 			'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
 			'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
-			'Final betting starts with the opener. The best remaining hand wins the pot.',
+			'After the draw, final betting starts with the opener. With no bet to call, check or bet; otherwise call, raise, or fold.',
 			'Best to worst: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
 			$controller ? 'Controller: use the D-pad or left stick to move focus, then the confirm button to select.' : 'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
 			$controller ? 'The back button goes back, Start opens the menu, and the shoulder buttons change the bet.' : '1 to 5 select cards, D draws, H shows history, Escape opens the menu.'
@@ -638,6 +638,8 @@ final class Presenter
 			? 'Need jacks or better. Pass to stay in.' : 'Betting first; choose discards afterward.';
 		if($phase === 'draw' && empty($legal['draw'])) return isset($human['drawCount'])
 			? 'Your draw is complete. Waiting for the others.' : 'Waiting for your turn to choose discards.';
+		if($phase === 'final-betting' && !empty($legal['check']) && !empty($legal['bet'])) return 'Check or bet after the draw.';
+		if($phase === 'final-betting' && !empty($legal['call'])) return 'Final betting: call, raise, or fold.';
 		return (string)($this->view['message'] ?? '');
 	}
 
