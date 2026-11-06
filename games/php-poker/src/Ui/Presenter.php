@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace PhpPoker\Ui;
 
+use PhpPoker\Odds;
 use PhpPoker\WildCards;
 use PhpPoker\Render\Text;
 use PhpPoker\Render\Theme;
@@ -83,10 +84,15 @@ final class Presenter
 	/** Open table-bar menu and modal odds table. */
 	private ?string $topMenu = null;
 	private ?string $infoDialog = null;
+	private ?string $confirmDialog = null;
 	/** New Game leaves an online room or paused local table before opening setup. */
 	private bool $setupAfterMenu = false;
-	/** A manual load replaces presentation state instead of animating between unrelated snapshots. */
-	private bool $loadingGame = false;
+	/** Exact dealt/drawing tables, cached by the active wild-card rules. */
+	private array $oddsCache = [];
+	/** Short feedback from an explicit file save or load. */
+	private int $fileRevision = -1;
+	private string $fileNotice = '';
+	private float $fileNoticeElapsed = 0;
 	/** Stable controller target ID. The rectangle is always resolved from current layout state. */
 	private ?string $controllerFocus = null;
 	/** Held controller actions and their next navigation repeat times. */
@@ -111,6 +117,13 @@ final class Presenter
 	{
 		$previous = $this->view;
 		$this->view = $view;
+		$fileRevision=(int)($view['fileRevision']??-1);
+		if($fileRevision!==$this->fileRevision)
+		{
+			$this->fileRevision=$fileRevision;
+			$this->fileNotice=(string)($view['fileNotice']??'');
+			$this->fileNoticeElapsed=$this->fileNotice===''?0:3;
+		}
 		if(($view['phase'] ?? '') === 'showdown' && ($previous['phase'] ?? '') !== 'showdown' && $this->receivedView)
 		{ $this->winnerElapsed = 0; $this->winnerVisible = true; }
 		elseif(($view['phase'] ?? '') !== 'showdown') { $this->winnerElapsed = 4; $this->winnerVisible = true; }
@@ -119,11 +132,10 @@ final class Presenter
 			$this->chips = Chips::fromView($view);
 			$this->receivedView = true;
 		}
-		elseif($this->loadingGame && ($view['screen'] ?? '') === 'table')
+		elseif(!empty($view['fileLoaded']) && ($view['screen'] ?? '') === 'table')
 		{
 			$this->chips = Chips::fromView($view);
 			$this->motion = null;
-			$this->loadingGame = false;
 		}
 		elseif(($view['revision'] ?? 0) !== ($previous['revision'] ?? 0) || ($view['generation'] ?? 0) !== ($previous['generation'] ?? 0))
 		{
@@ -152,7 +164,7 @@ final class Presenter
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
 		elseif($this->setupAfterMenu) { $this->local = 'setup'; $this->setupAfterMenu = false; }
 		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','limits','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
-		if(($view['screen'] ?? '') !== 'table') { $this->topMenu = null; $this->infoDialog = null; }
+		if(($view['screen'] ?? '') !== 'table') { $this->topMenu = null; $this->infoDialog = null; $this->confirmDialog=null; }
 		if(($view['screen'] ?? '') === 'help' && ($previous['screen'] ?? '') !== 'help') $this->helpScroll = 0;
 		if(($view['phase'] ?? '') !== 'showdown' && ($view['phase'] ?? '') !== 'redeal') $this->historyOpen = false;
 		$this->syncNetworkWait();
@@ -220,12 +232,14 @@ final class Presenter
 				$pulses[$name] = 1;
 				continue;
 			}
-			$this->controllerHeld[$name] += $elapsed;
+			// A slow browser frame must not replay every missed navigation interval at once. Cap the amount of
+			// hold time one frame may contribute and emit at most one repeat on that frame.
+			$this->controllerHeld[$name] += min(.1,$elapsed);
 			$pulses[$name] = 0;
 			if(!in_array($name, ['left','right','up','down'], true)) continue;
-			while($this->controllerHeld[$name] + 1e-9 >= $this->controllerNext[$name])
+			if($this->controllerHeld[$name] + 1e-9 >= $this->controllerNext[$name])
 			{
-				$pulses[$name]++;
+				$pulses[$name]=1;
 				$this->controllerNext[$name] += $this->controllerNext[$name] < 1.5 - 1e-9 ? .25 : .05;
 			}
 		}
@@ -278,6 +292,7 @@ final class Presenter
 		$this->dirty = true;
 		if(!empty($target['disabled'])) return [];
 		if(isset($target['key'])) return $this->key($target['key']);
+		if(isset($target['confirm'])) return $this->activateConfirmation((string)$target['confirm']);
 		if(isset($target['topMenu'])) { $menu=(string)$target['topMenu']; $this->topMenu=$this->topMenu===$menu?null:$menu; return []; }
 		if(isset($target['topAction'])) return $this->activateTopAction((string)$target['topAction']);
 		if(isset($target['info']))
@@ -375,9 +390,18 @@ final class Presenter
 			return $targets;
 		}
 
+		if($this->confirmDialog !== null)
+		{
+			$dialog=$layout->confirmationDialog();
+			$targets[]=['id'=>'confirm:cancel','rect'=>$dialog['cancel'],'confirm'=>'cancel'];
+			$targets[]=['id'=>'confirm:quit','rect'=>$dialog['confirm'],'confirm'=>'quit'];
+			$addKey($wholeCanvas,'escape');
+			return $targets;
+		}
+
 		if($this->infoDialog !== null)
 		{
-			$dialog=$layout->oddsDialog($this->infoDialog);
+			$dialog=$layout->oddsDialog($this->infoDialog,count($this->oddsTables()[$this->infoDialog]));
 			if($this->infoDialog==='odds') $targets[]=['id'=>'info:more','rect'=>$dialog['more'],'info'=>'improving'];
 			$targets[]=['id'=>'info:ok','rect'=>$dialog['ok'],'info'=>'close'];
 			$addKey($wholeCanvas,'escape');
@@ -389,9 +413,8 @@ final class Presenter
 			foreach($layout->topMenus() as $menu=>$rect) $targets[]=['id'=>'top:'.$menu,'rect'=>$rect,'topMenu'=>$menu];
 			foreach($layout->topDropdown($this->topMenu)['items'] as $item)
 			{
-				$disabled=($this->view['mode']??'offline')==='online' && in_array($item['id'],['save','load'],true);
-				$disabled=$disabled || ($item['id']==='save' && empty($this->view['canContinue']))
-					|| ($item['id']==='load' && empty($this->view['manualSaveAvailable']));
+				$disabled=($this->view['mode']??'offline')==='online' && in_array($item['id'],['new','save','load'],true);
+				$disabled=$disabled || ($item['id']==='save' && empty($this->view['canContinue']));
 				$targets[]=['id'=>'top-item:'.$item['id'],'rect'=>$item['rect'],'topAction'=>$item['id'],'disabled'=>$disabled];
 			}
 			$addKey($wholeCanvas,'escape');
@@ -439,10 +462,11 @@ final class Presenter
 	private function ensureControllerFocus(array $targets): void
 	{
 		foreach($targets as $target) if($target['id'] === $this->controllerFocus) return;
-		$preferences = $this->infoDialog !== null ? ['info:ok','info:more']
+		$preferences = $this->confirmDialog !== null ? ['confirm:cancel','confirm:quit']
+			: ($this->infoDialog !== null ? ['info:ok','info:more']
 			: ($this->topMenu !== null ? ['top-item:new','top-item:odds']
 			: (!empty($this->view['legalActions']['draw']) ? ['card:0']
-			: ['action:call','action:check','action:pass','action:draw','action:next','action:deal','setup:start','wild:none','custom-wild:0','settings:look']));
+			: ['action:call','action:check','action:pass','action:draw','action:next','action:deal','setup:start','wild:none','custom-wild:0','settings:look'])));
 		$next = null;
 		foreach($preferences as $id) foreach($targets as $target) if($target['id'] === $id) { $next = $id; break 2; }
 		$next ??= $targets[0]['id'] ?? null;
@@ -500,6 +524,13 @@ final class Presenter
 	{
 		$this->dirty = true;
 		$screen = $this->view['screen'] ?? 'menu';
+		if($screen==='table' && in_array($key,['alt+g','alt+p'],true))
+		{
+			$menu=$key==='alt+g'?'game':'poker';
+			$this->infoDialog=null; $this->confirmDialog=null;
+			$this->topMenu=$this->topMenu===$menu?null:$menu;
+			return [];
+		}
 
 		if($screen === 'menu')
 		{
@@ -576,6 +607,13 @@ final class Presenter
 			return [];
 		}
 
+		if($this->confirmDialog !== null)
+		{
+			if(in_array($key,['enter',' ','y','q'],true)) return $this->activateConfirmation('quit');
+			if(in_array($key,['escape','backspace','n'],true)) return $this->activateConfirmation('cancel');
+			return [];
+		}
+
 		if($this->infoDialog !== null)
 		{
 			if($this->infoDialog==='odds' && $key==='m') $this->infoDialog='improving';
@@ -591,7 +629,11 @@ final class Presenter
 			return $action===null?[]:$this->activateTopAction($action);
 		}
 
-		if($key === 'escape') { if($this->historyOpen) { $this->historyOpen = false; return []; } return [['type' => 'menu']]; }
+		if($key === 'escape')
+		{
+			if($this->historyOpen) { $this->historyOpen = false; return []; }
+			$this->confirmDialog='quit'; return [];
+		}
 		if($key === 'h') { $this->historyOpen = !$this->historyOpen; return []; }
 		if($this->historyOpen) { if(in_array($key, ['enter',' '], true)) $this->historyOpen = false; return []; }
 
@@ -623,15 +665,74 @@ final class Presenter
 	private function activateTopAction(string $action): array
 	{
 		$online=($this->view['mode']??'offline')==='online';
-		if(($action==='save' && ($online || empty($this->view['canContinue'])))
-			|| ($action==='load' && ($online || empty($this->view['manualSaveAvailable'])))) return [];
+		if(($online && in_array($action,['new','save','load'],true))
+			|| ($action==='save' && empty($this->view['canContinue']))) return [];
 		$this->topMenu=null;
 		if($action==='new') { $this->setupAfterMenu=true; return [['type'=>'menu']]; }
 		if($action==='save') return [['type'=>'save-game']];
-		if($action==='load') { $this->loadingGame=true; return [['type'=>'load-game']]; }
-		if($action==='quit') { $this->setupAfterMenu=false; return [['type'=>'menu']]; }
+		if($action==='load') return [['type'=>'load-game']];
+		if($action==='quit') { $this->confirmDialog='quit'; return []; }
 		if(in_array($action,['odds','improving'],true)) { $this->infoDialog=$action; return []; }
 		return [];
+	}
+
+	/** @return list<array<string,mixed>> */
+	private function activateConfirmation(string $action): array
+	{
+		if($action==='cancel') { $this->confirmDialog=null; return []; }
+		if($action!=='quit') return [];
+		$this->confirmDialog=null; $this->setupAfterMenu=false;
+		return [['type'=>'menu']];
+	}
+
+	/** Exact dialog rows for the active deck, reused until its wild-card rules change. */
+	private function oddsTables(): array
+	{
+		$profile=is_array($this->view['profile']??null)?$this->view['profile']:[];
+		$selection=$profile['wild']??[];
+		$custom=is_array($profile['customWild']??null)?$profile['customWild']:[];
+		try
+		{
+			$selection=WildCards::selection(is_string($selection)||is_array($selection)?$selection:[]);
+			$wild=WildCards::ids($selection,$custom);
+			$deck=WildCards::deck($selection,$custom);
+		}
+		catch(\InvalidArgumentException)
+		{
+			$selection=[]; $custom=[]; $wild=[]; $deck=range(0,51);
+		}
+		$key=json_encode([$selection,$custom],JSON_THROW_ON_ERROR);
+		if(isset($this->oddsCache[$key])) return $this->oddsCache[$key];
+
+		$dealt=Odds::dealt($deck,$wild);
+		$dealtRows=[];
+		foreach(Odds::DEALT_ROWS as $hand)
+		{
+			$hits=(int)($dealt['counts'][$hand]??0);
+			if($hits===0) continue;
+			$dealtRows[]=['hand'=>$hand,'odds'=>$this->formatOdds(Odds::against($hits,$dealt['total']))];
+		}
+		$drawingRows=[]; $previous='';
+		foreach(Odds::drawing($deck,$wild) as $row)
+		{
+			$hand=(string)$row['hand'];
+			$drawingRows[]=['hand'=>$hand===$previous?'...':$hand,'target'=>(string)$row['target'],
+				'odds'=>$this->formatOdds(Odds::against((int)$row['hits'],(int)$row['trials']))];
+			$previous=$hand;
+		}
+		if($drawingRows===[]) $drawingRows[]=['hand'=>'No natural starting hands','target'=>'','odds'=>''];
+		$rules=$selection===[]?'No wild cards':WildCards::selectionLabel($selection).' wild';
+		return $this->oddsCache[$key]=['odds'=>$dealtRows,'improving'=>$drawingRows,'rules'=>$rules];
+	}
+
+	private function formatOdds(?float $odds): string
+	{
+		if($odds===null) return 'Never';
+		$rounded=round($odds);
+		$decimals=abs($odds-$rounded)<.005||$odds>=1000?0:($odds>=10?1:2);
+		$value=number_format($odds,$decimals,'.',',');
+		if($decimals>0) $value=rtrim(rtrim($value,'0'),'.');
+		return $value.'/1';
 	}
 
 	/** @return list<array<string,mixed>> */
@@ -746,7 +847,7 @@ final class Presenter
 			'After the draw, final betting starts with the opener. With no bet to call, check or bet; otherwise call, raise, or fold.',
 			'Best to worst: five of a kind, straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
 			$controller ? 'Controller: use the D-pad or left stick to move focus, then the confirm button to select.' : 'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
-			$controller ? 'The back button goes back, Start opens the menu, and the shoulder buttons change the bet.' : '1 to 5 select cards, D draws, H shows history, Escape opens the menu.'
+			$controller ? 'The back button goes back, Start asks before leaving the table, and the shoulder buttons change the bet.' : '1 to 5 select cards, D draws, H shows history, Alt+G and Alt+P open the table menus, and Escape asks before leaving.'
 		];
 	}
 
@@ -805,8 +906,8 @@ final class Presenter
 	/** A visible transition holds game input and bot turns until its chips/cards have arrived. */
 	public function animating(): bool { return $this->motion !== null && ($this->view['screen'] ?? '') === 'table'; }
 
-	/** Table-bar menus and information dialogs pause local bot decisions while the player reads or saves. */
-	public function modal(): bool { return $this->topMenu !== null || $this->infoDialog !== null; }
+	/** Table-bar menus and dialogs pause local bot decisions while the player reads or saves. */
+	public function modal(): bool { return $this->topMenu !== null || $this->infoDialog !== null || $this->confirmDialog !== null; }
 
 	/** Advance presentation time only while the table is visible. No redraw remains scheduled after completion. */
 	public function advance(float $seconds): void
@@ -832,6 +933,12 @@ final class Presenter
 			$dots = (int)floor($this->networkWaitElapsed / .3) % 4;
 			if($dots !== $this->networkWaitDots) $this->dirty = true;
 			$this->networkWaitDots = $dots;
+		}
+		if($this->fileNoticeElapsed>0)
+		{
+			$before=$this->fileNoticeElapsed;
+			$this->fileNoticeElapsed=max(0,$before-$seconds);
+			if($before>0 && $this->fileNoticeElapsed===0) $this->dirty=true;
 		}
 	}
 
@@ -861,6 +968,7 @@ final class Presenter
 	private function guidance(): string
 	{
 		if(($this->view['screen'] ?? '') !== 'table') return '';
+		if($this->fileNoticeElapsed>0 && $this->fileNotice!=='') return $this->fileNotice;
 		if(($this->view['phase'] ?? '') === 'showdown') return '';
 		if($this->motion) return match($this->motion->status()['kind']) { 'deal' => 'Dealing cards.', 'draw' => 'Discarding and drawing replacements.', default => 'Moving chips.' };
 		if(!empty($this->view['waitingForConfirmation'])) return (string)($this->view['message'] ?? 'Waiting for both players to confirm the action.');
@@ -905,6 +1013,8 @@ final class Presenter
 		return [
 			'discards' => $this->discards, 'amount' => $this->amount, 'mode' => $this->mode, 'local' => $this->local
 			, 'history' => $this->historyOpen, 'topMenu'=>$this->topMenu, 'infoDialog'=>$this->infoDialog
+			, 'confirmDialog'=>$this->confirmDialog
+			, 'oddsTables'=>$this->infoDialog===null?null:$this->oddsTables()
 			, 'locked' => $this->locked(), 'hint' => $this->guidance()
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant,
 				'ante'=>$this->setupAnte,'minimum'=>$this->setupMinimum,'maximum'=>$this->setupMaximum,

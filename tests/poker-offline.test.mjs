@@ -26,23 +26,39 @@ test('atomic local saves retain the last complete turn after quota failure',()=>
 	finally { if(old===undefined) delete globalThis.localStorage; else globalThis.localStorage=old; }
 });
 
-test('manual Poker saves use a separate atomic slot',()=>{
-	const old=globalThis.localStorage,values=new Map;
+test('explicit Poker save and load use native file pickers',async()=>{
+	const old=globalThis.localStorage,oldSave=globalThis.showSaveFilePicker,oldOpen=globalThis.showOpenFilePicker,values=new Map;
 	globalThis.localStorage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
+	let saved='';
+	globalThis.showSaveFilePicker=async options=>{
+		assert.equal(options.suggestedName,'php-poker-save.json');
+		return {createWritable:async()=>({write:async value=>{saved=value;},close:async()=>{}})};
+	};
+	globalThis.showOpenFilePicker=async()=>[{getFile:async()=>new Blob([saved],{type:'application/json'})}];
+	const settled=async module=>{for(let attempt=0;attempt<20;attempt++){if(!JSON.parse(module.pokerFileStatus()).busy)return;await new Promise(resolve=>setTimeout(resolve,0));}assert.fail('file picker did not settle');};
 	try
 	{
 		const module={},session={},close=activate({module,session});
-		assert.deepEqual(session.phpPokerStorage.status,{error:'',writes:0,manual:false});
+		assert.equal(session.phpPokerStorage.status.file.busy,false);
 		assert.equal(module.pokerSave('{"auto":1}'),true);
-		assert.equal(module.pokerManualLoad(),'');
-		assert.equal(module.pokerManualSave('{"manual":2}'),true);
+		assert.equal(module.pokerFileSave('{"manual":2}'),true);await settled(module);
+		assert.equal(saved,'{"manual":2}');
 		assert.equal(module.pokerLoad(),'{"auto":1}');
-		assert.equal(module.pokerManualLoad(),'{"manual":2}');
-		assert.deepEqual(session.phpPokerStorage.status,{error:'',writes:2,manual:true});
+		assert.equal(module.pokerFileLoad(),true);await settled(module);
+		assert.equal(module.pokerFileTakeLoad(),'{"manual":2}');
+		assert.equal(module.pokerFileTakeLoad(),'');
+		assert.equal(JSON.parse(module.pokerFileStatus()).notice,'Checking saved game.');
+		module.pokerFileCompleteLoad(true);
+		assert.equal(JSON.parse(module.pokerFileStatus()).notice,'Game loaded.');
 		close();
-		assert.equal(module.pokerManualLoad,undefined);
+		assert.equal(module.pokerFileLoad,undefined);
 	}
-	finally { if(old===undefined) delete globalThis.localStorage; else globalThis.localStorage=old; }
+	finally
+	{
+		if(old===undefined) delete globalThis.localStorage; else globalThis.localStorage=old;
+		if(oldSave===undefined) delete globalThis.showSaveFilePicker; else globalThis.showSaveFilePicker=oldSave;
+		if(oldOpen===undefined) delete globalThis.showOpenFilePicker; else globalThis.showOpenFilePicker=oldOpen;
+	}
 });
 
 async function workerHarness({corrupt=false}={})

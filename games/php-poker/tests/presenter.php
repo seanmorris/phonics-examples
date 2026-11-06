@@ -441,7 +441,14 @@ $test('controller focus navigates menus, setup, cards and table actions through 
 	$before = $table->state()['amount'];
 	$press($table, 'pageDown');
 	$expect($table->state()['amount'] > $before, 'right shoulder increases the raise amount');
-	$expect($press($table, 'pause') === [['type' => 'menu']], 'Start opens the game menu from the table');
+	$expect($press($table, 'pause') === [] && $table->state()['confirmDialog']==='quit', 'Start asks before leaving the table');
+	$expect($press($table, 'back') === [] && $table->state()['confirmDialog']===null, 'Back cancels the quit confirmation');
+
+	$slow = new Presenter($root); $slow->update($fixture('menu')); $release($slow);
+	$slow->input([],null,1/60,['down'=>1],'generic');
+	$expect(($slow->state()['controllerFocus']['id']??null)==='menu:continue','the first held direction moves one target');
+	$slow->input([],null,5,['down'=>1],'generic');
+	$expect(($slow->state()['controllerFocus']['id']??null)==='menu:continue','one slow frame cannot burst through controller targets');
 });
 
 $test('every fixture paints in both modes at four canvas sizes without a GL context', static function(callable $expect) use ($fixture, $root): void {
@@ -1154,16 +1161,19 @@ $test('the table bar opens command menus and both odds dialogs', static function
 		return $presenter->input([],['x'=>$point['x'],'y'=>$point['y'],'down'=>false,'clicks'=>[$point]],0);
 	};
 	$view=$fixture('opening-8');
-	$view['manualSaveAvailable']=false;
 	$presenter=new Presenter($root); $presenter->update($view);
-	$click($presenter,$presenter->layout()->topMenus()['game']);
+	$presenter->input([['key'=>'alt+g']],null,0);
 	$expect($presenter->modal() && $presenter->state()['topMenu']==='game','Game opens as a modal table-bar menu');
-	$expect($presenter->input([['key'=>'l']],null,0)===[] && $presenter->state()['topMenu']==='game','Load stays disabled without a manual save');
+	$expect($presenter->input([['key'=>'l']],null,0)===[['type'=>'load-game']] && !$presenter->modal(),'Load Game opens a file chooser without requiring a browser slot');
+	$click($presenter,$presenter->layout()->topMenus()['game']);
 	$save=$presenter->input([['key'=>'s']],null,0);
 	$expect($save===[['type'=>'save-game']] && !$presenter->modal(),'Save Game emits one local command and closes the menu');
-	$view['manualSaveAvailable']=true; $presenter->update($view);
-	$click($presenter,$presenter->layout()->topMenus()['game']);
-	$expect($presenter->input([['key'=>'l']],null,0)===[['type'=>'load-game']],'Load Game emits one local restore command');
+	$presenter->input([['key'=>'alt+g']],null,0);
+	$expect($presenter->input([['key'=>'q']],null,0)===[] && $presenter->state()['confirmDialog']==='quit','Quit always opens a confirmation');
+	$expect($presenter->input([['key'=>'escape']],null,0)===[] && !$presenter->modal(),'Escape cancels the quit confirmation');
+	$presenter->input([['key'=>'escape']],null,0);
+	$expect($presenter->state()['confirmDialog']==='quit','table Escape uses the same quit confirmation');
+	$expect($presenter->input([['key'=>'y']],null,0)===[['type'=>'menu']],'confirmed Quit commits the return to title');
 
 	$new=new Presenter($root); $new->update($view);
 	$click($new,$new->layout()->topMenus()['game']);
@@ -1172,15 +1182,28 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$new->update($menu);
 	$expect($new->state()['local']==='setup','New Game opens setup after reaching the title state');
 
+	$online=new Presenter($root); $onlineView=$view; $onlineView['mode']='online'; $online->update($onlineView);
+	$online->input([['key'=>'alt+g']],null,0);
+	foreach(['n','s','l'] as $key)
+	$expect($online->input([['key'=>$key]],null,0)===[] && $online->state()['topMenu']==='game',"online $key remains ghosted");
+	$expect($online->input([['key'=>'q']],null,0)===[] && $online->state()['confirmDialog']==='quit','online Quit remains available behind confirmation');
+	$expect($online->input([['key'=>'enter']],null,0)===[['type'=>'menu']],'online Quit leaves only after confirmation');
+
 	$poker=new Presenter($root); $poker->update($view);
-	$click($poker,$poker->layout()->topMenus()['poker']);
+	$poker->input([['key'=>'alt+p']],null,0);
 	$expect($poker->state()['topMenu']==='poker','Poker opens its information menu');
-	$expect($poker->input([['key'=>'o']],null,0)===[] && $poker->state()['infoDialog']==='odds','Odds opens the 100-hands table');
+	$expect($poker->input([['key'=>'o']],null,0)===[] && $poker->state()['infoDialog']==='odds','Odds opens the exact dealt-hand table');
+	$odds=$poker->state()['oddsTables'];
+	$expect($odds['rules']==='No wild cards' && count($odds['odds'])===10,'the standard table includes every possible exact category');
 	$expect(count($poker->paint(1280,720)->instances())>100,'the first odds table paints over a live table');
-	$click($poker,$poker->layout()->oddsDialog('odds')['more']);
+	$click($poker,$poker->layout()->oddsDialog('odds',count($odds['odds']))['more']);
 	$expect($poker->state()['infoDialog']==='improving','More advances to odds against improving');
-	$click($poker,$poker->layout()->oddsDialog('improving')['ok']);
+	$click($poker,$poker->layout()->oddsDialog('improving',count($odds['improving']))['ok']);
 	$expect(!$poker->modal(),'OK closes the information table');
+	$wild=$view; $wild['profile']['wild']=['deuces']; $wild['profile']['customWild']=[];
+	$wildOdds=new Presenter($root); $wildOdds->update($wild); $wildOdds->input([['key'=>'alt+p'],['key'=>'o']],null,0);
+	$wildTable=$wildOdds->state()['oddsTables'];
+	$expect($wildTable['rules']==='Deuces wild' && end($wildTable['odds'])['hand']==='Five of a kind','odds adapt to the active wild-card deck');
 
 	foreach([[320,500,1],[390,844,1],[844,328,1],[1280,720,1],[800,807,1]] as [$width,$height,$dpr])
 	{
@@ -1195,8 +1218,12 @@ $test('the table bar opens command menus and both odds dialogs', static function
 		{
 			$dialog=$layout->oddsDialog($name); [$left,$top,$boxWidth,$boxHeight]=$layout->rect(...$dialog['box']);
 			$expect($left>=-.01 && $top>=-.01 && $left+$boxWidth<=$width+.01 && $top+$boxHeight<=$height+.01,"the $name table stays on $width x $height");
+			$menuBottom=$layout->rect(0,0,1,$layout->menuHeight())[3];
+			$expect($top>=$menuBottom-.01,"the $name table clears the top menu bar on $width x $height");
 			$expect($layout->rect(...$dialog['ok'])[3]/$dpr>=48-.01,"the $name OK button is touch sized on $width x $height");
 		}
+		$confirmation=$layout->confirmationDialog(); [$left,$top,$boxWidth,$boxHeight]=$layout->rect(...$confirmation['box']);
+		$expect($left>=-.01 && $top>=-.01 && $left+$boxWidth<=$width+.01 && $top+$boxHeight<=$height+.01,"the quit confirmation stays on $width x $height");
 	}
 });
 

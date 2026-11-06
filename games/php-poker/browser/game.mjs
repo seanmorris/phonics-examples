@@ -4,7 +4,7 @@
  */
 
 /** Keys the table handles; everything else reaches the page untouched. */
-const KEYS=new Set(['f','c','b','d','h','i','l','m','n','s','v','w','o','p','q','0','1','2','3','4','5','6','7','8','+','-','=','enter',' ','escape','backspace','arrowleft','arrowright','arrowup','arrowdown']);
+const KEYS=new Set(['f','c','b','d','h','i','l','m','n','s','v','w','o','p','q','y','0','1','2','3','4','5','6','7','8','+','-','=','enter',' ','escape','backspace','arrowleft','arrowright','arrowup','arrowdown']);
 
 /** Cell size for the rasterised cards, capped so the atlas crossing into PHP stays under ~8 MB. */
 export function cardCell(dpr)
@@ -150,7 +150,7 @@ export function activate({module, canvas, session})
 	const originalDescription=canvas.getAttribute('aria-describedby');
 	canvas.style.cssText='display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;touch-action:none;outline:none;background:#1f8f45;cursor:default';
 	canvas.tabIndex=Math.max(0,canvas.tabIndex);
-	canvas.setAttribute('aria-label','PHP Poker. F folds, C checks or calls, B bets, 1 to 5 select cards and D draws. Controller directional controls move focus, confirm selects, back returns, and Start opens the menu.');
+	canvas.setAttribute('aria-label','PHP Poker. F folds, C checks or calls, B bets, 1 to 5 select cards and D draws. Alt G opens Game and Alt P opens Poker. Controller directional controls move focus, confirm selects, back returns, and Start asks before leaving the table.');
 
 	let viewport='[1280,720,1]',latest=null,closed=false;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
@@ -181,8 +181,13 @@ export function activate({module, canvas, session})
 
 	// Input queues drain once per PHP frame. Positions are device pixels in the canvas's own framebuffer space.
 	const onKey=event=>{
-		if(closed||event.ctrlKey||event.metaKey||event.altKey)return;
+		if(closed||event.ctrlKey||event.metaKey)return;
 		const key=event.key.length===1?event.key.toLowerCase():event.key.toLowerCase();
+		if(event.altKey)
+		{
+			if(!['g','p'].includes(key))return;
+			event.preventDefault();if(!event.repeat)keys.push({key:'alt+'+key});return;
+		}
 		if(!KEYS.has(key))return;
 		event.preventDefault();
 		if(!event.repeat)keys.push({key});

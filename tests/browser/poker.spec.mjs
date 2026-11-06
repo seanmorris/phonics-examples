@@ -4,7 +4,6 @@ import {fileURLToPath} from 'node:url';
 
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const saveKey='php-poker.local.v1';
-const manualSaveKey='php-poker.manual.v1';
 
 // A real native rules session reaches a human draw without patching its state. The browser
 // must restore and continue the same versioned package snapshot through its normal save path.
@@ -206,6 +205,11 @@ async function point(canvas,rect)
 }
 
 test('table-bar menus save, load and show both Poker odds tables',async({page})=>{
+	await page.addInitScript(()=>{
+		window.savedPokerFile='';
+		window.showSaveFilePicker=async()=>({createWritable:async()=>({write:async value=>{savedPokerFile=value;},close:async()=>{}})});
+		window.showOpenFilePicker=async()=>[{getFile:async()=>new File([savedPokerFile],'php-poker-save.json',{type:'application/json'})}];
+	});
 	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:openingSave});
 	const canvas=await boot(page);
 	await command(canvas,{type:'resume'});
@@ -214,14 +218,17 @@ test('table-bar menus save, load and show both Poker odds tables',async({page})=
 	let target=await point(canvas,geometry.topMenus.game); await page.mouse.click(target.x,target.y);
 	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('game');
 	target=await point(canvas,geometry.topGame.items.find(item=>item.id==='save').rect); await page.mouse.click(target.x,target.y);
-	await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key)!==null,manualSaveKey)).toBe(true);
+	await expect.poll(()=>page.evaluate(()=>savedPokerFile.length)).toBeGreaterThan(100);
 	const generation=(await state(canvas)).generation;
-	geometry=await regions(canvas); target=await point(canvas,geometry.topMenus.game); await page.mouse.click(target.x,target.y);
+	await canvas.focus();await page.keyboard.press('Alt+g');
+	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('game');
+	geometry=await regions(canvas);
 	target=await point(canvas,geometry.topGame.items.find(item=>item.id==='load').rect); await page.mouse.click(target.x,target.y);
 	await expect.poll(async()=>(await state(canvas)).generation).toBeGreaterThan(generation);
 
-	geometry=await regions(canvas); target=await point(canvas,geometry.topMenus.poker); await page.mouse.click(target.x,target.y);
+	await canvas.focus();await page.keyboard.press('Alt+p');
 	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('poker');
+	geometry=await regions(canvas);
 	target=await point(canvas,geometry.topPoker.items.find(item=>item.id==='odds').rect); await page.mouse.click(target.x,target.y);
 	await expect.poll(async()=>(await state(canvas)).ui.infoDialog).toBe('odds');
 	target=await point(canvas,geometry.odds.more); await page.mouse.click(target.x,target.y);
@@ -292,6 +299,8 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	expect((await state(canvas)).players).toHaveLength(5);
 	expect((await state(canvas)).profile).toMatchObject({ante:2,minimum:2,maximum:20,finalMinimum:3,finalMaximum:20,raiseLimit:4,playerRaiseLimit:2,wild:['joker','custom'],customWild:[0,52,53]});
 	await page.keyboard.press('Escape');
+	await expect.poll(async()=>(await state(canvas)).ui.confirmDialog).toBe('quit');
+	await page.keyboard.press('y');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
 	await page.keyboard.press('h');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('help');
@@ -353,6 +362,11 @@ test('controller navigates the menu, selects discards, draws, and toggles the ga
 	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('card:0');
 
 	await padPulse(page,[9]);
+	await expect.poll(async()=>(await state(canvas)).ui.confirmDialog).toBe('quit');
+	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('confirm:cancel');
+	await padPulse(page,[15]);
+	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('confirm:quit');
+	await padPulse(page,[0]);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
 	await padPulse(page,[9]);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');

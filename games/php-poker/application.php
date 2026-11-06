@@ -30,12 +30,17 @@ $engine=new Engine(new Device(1280,720,'PHP Poker'));
 $presenter=new Presenter(__DIR__);
 $view=$session->view();
 $storage=json_decode((string)(vrzno_env('pokerStorageStatus'))(),true,8,JSON_THROW_ON_ERROR);
-$view['manualSaveAvailable']=!empty($storage['manual']);
+$filePublished=(string)(vrzno_env('pokerFileStatus'))();
+$file=json_decode($filePublished,true,8,JSON_THROW_ON_ERROR);
+if(($storage['error']??'')!=='' && $view['error']==='') $view['error']=$storage['error'];
+if(($file['error']??'')!=='' && $view['error']==='') $view['error']=$file['error'];
+$view['fileNotice']=(string)($file['notice']??'');
+$view['fileRevision']=(int)($file['revision']??0);
 $presenter->update($view);
 $width=1280; $height=720; $dpr=1.0; $resized=true; $published=''; $onlinePublished='';
 
 $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
-	&$session,$presenter,&$view,&$width,&$height,&$dpr,&$resized,&$onlinePublished
+	&$session,$presenter,&$view,&$width,&$height,&$dpr,&$resized,&$onlinePublished,&$filePublished
 ): bool {
 	$viewport=json_decode((string)(vrzno_env('pokerViewport'))(),true,16,JSON_THROW_ON_ERROR);
 	if(is_array($viewport)&&count($viewport)>=3)
@@ -65,42 +70,55 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 		if(!is_array($intent)) continue;
 		if(($intent['type']??null)==='save-game')
 		{
-			(vrzno_env('pokerManualSave'))($session->save());
+			(vrzno_env('pokerFileSave'))($session->save());
 			$session->command(['type'=>'save-game']);
 			continue;
 		}
 		if(($intent['type']??null)==='load-game')
 		{
-			$json=(string)(vrzno_env('pokerManualLoad'))();
-			$candidate=$json===''?null:Session::restore($json);
-			if($candidate?->hasGame())
-			{
-				$candidate->resumeLoaded((int)($session->view()['generation']??0)+1);
-				$session=$candidate;
-			}
-			else $session->command(['type'=>'load-failed']);
+			(vrzno_env('pokerFileLoad'))();
 			continue;
 		}
 		$seed=($intent['type']??null)==='start'?(string)(vrzno_env('pokerSeed'))():null;
 		$session->command($intent,$seed);
 	}
+	$fileLoaded=false;
+	$selected=(string)(vrzno_env('pokerFileTakeLoad'))();
+	if($selected!=='')
+	{
+		$candidate=Session::restore($selected);
+		if($candidate->hasGame())
+		{
+			$candidate->resumeLoaded((int)($session->view()['generation']??0)+1);
+			$session=$candidate; $fileLoaded=true;
+		}
+		else $session->command(['type'=>'load-failed']);
+		(vrzno_env('pokerFileCompleteLoad'))($fileLoaded);
+	}
 	if(!($input['hidden']??false) && !$presenter->animating() && !$presenter->modal()) $session->tick($elapsed);
 	if($session->consumeSaveDirty()) (vrzno_env('pokerSave'))($session->save());
 	$sessionDirty=$session->consumeDirty();
+	$fileJson=(string)(vrzno_env('pokerFileStatus'))();
+	$fileChanged=$fileJson!==$filePublished;
+	if($fileChanged) $filePublished=$fileJson;
+	$file=json_decode($fileJson,true,8,JSON_THROW_ON_ERROR);
 	$onlineJson=(string)(vrzno_env('pokerOnlineView'))();
 	if($onlineJson!=='' && $onlineJson!==$onlinePublished)
 	{
 		$onlineView=json_decode($onlineJson,true,64,JSON_THROW_ON_ERROR);
 		if(!is_array($onlineView)) throw new RuntimeException('Invalid online Poker view');
-		$view=$onlineView; $view['manualSaveAvailable']=false; $onlinePublished=$onlineJson; $presenter->update($view);
+		$view=$onlineView; $onlinePublished=$onlineJson; $presenter->update($view);
 	}
-	elseif($onlineJson==='' && ($onlinePublished!=='' || $sessionDirty))
+	elseif($onlineJson==='' && ($onlinePublished!=='' || $sessionDirty || $fileChanged || $fileLoaded))
 	{
 		$view=$session->view();
 		$onlinePublished='';
 		$storage=json_decode((string)(vrzno_env('pokerStorageStatus'))(),true,8,JSON_THROW_ON_ERROR);
 		if(($storage['error']??'')!=='' && $view['error']==='') $view['error']=$storage['error'];
-		$view['manualSaveAvailable']=!empty($storage['manual']);
+		if(($file['error']??'')!=='' && $view['error']==='') $view['error']=$file['error'];
+		$view['fileNotice']=(string)($file['notice']??'');
+		$view['fileRevision']=(int)($file['revision']??0);
+		$view['fileLoaded']=$fileLoaded;
 		$presenter->update($view);
 	}
 	// The game has its own menu and pause policy; do not toggle the engine's generic pause panel.

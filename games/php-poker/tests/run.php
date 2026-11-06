@@ -226,7 +226,7 @@ $test('manual snapshots resume as a fresh presentation generation',static functi
 	$expect($after['screen']==='table' && $after['generation']===$before['generation']+5,'a manual load resumes the table at the requested fresh generation');
 	$expect($after['revision']===$before['revision'] && $after['players']===$before['players'],'loading preserves the exact game state');
 	$empty=new Session; $empty->command(['type'=>'load-failed']);
-	$expect(str_contains($empty->view()['error'],'No manually saved game'),'an empty manual slot reports a readable error');
+	$expect(str_contains($empty->view()['error'],'selected saved game'),'an invalid selected file reports a readable error');
 });
 $test('long seeded bot sessions complete at every seat count and both variants',static function() use ($expect,$act): void {
 	foreach(['jackpots','anything'] as $variant) foreach(range(2,8) as $n)

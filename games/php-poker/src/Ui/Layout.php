@@ -460,7 +460,7 @@ final class Layout
 		$height=$this->controlSize();
 		$definitions=$menu==='game'
 			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['quit','Quit to title','Q']]
-			: [['odds','Odds (100 Hands)','O'],['improving','Odds Against Improving','I']];
+			: [['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
 		$items=[];
 		$x=$headings[$menu][0]; $y=$headings[$menu][1]+$headings[$menu][3];
 		foreach($definitions as $index=>[$id,$label,$key])
@@ -469,25 +469,44 @@ final class Layout
 	}
 
 	/** Geometry for the two tabular odds dialogs reproduced from the DOS reference. */
-	public function oddsDialog(string $table): array
+	public function oddsDialog(string $table, ?int $rowCount = null): array
 	{
 		if(!in_array($table,['odds','improving'],true)) throw new \InvalidArgumentException('Unknown odds table');
-		if($square=$this->square()) return $this->fromSquare($square->oddsDialog($table));
-		$count=$table==='odds'?9:11;
+		if($square=$this->square()) return $this->fromSquare($square->oddsDialog($table, $rowCount));
+		$count=$rowCount ?? ($table==='odds'?10:11);
+		$count=max(1,min(16,$count));
 		$width=min($table==='odds'?520:680,$this->width()-24);
 		$control=$this->controlSize();
+		$header=40;
 		$rowHeight=max(22,min(30,$control*.52));
-		$rowHeight=min($rowHeight,max(16,($this->height()-24-28-12-$control-12)/$count));
-		$height=28+$count*$rowHeight+12+$control+12;
+		$minimumTop=$this->menuHeight()+8;
+		$rowHeight=min($rowHeight,max(14,($this->height()-$minimumTop-12-$header-12-$control-12)/$count));
+		$height=$header+$count*$rowHeight+12+$control+12;
 		$left=($this->width()-$width)/2;
-		$top=max(12,($this->height()-$height)/2);
+		$top=max($minimumTop,($this->height()-$height)/2);
 		$rows=[];
-		for($index=0;$index<$count;$index++) $rows[]=[$left+8,$top+22+$index*$rowHeight,$width-16,$rowHeight];
+		for($index=0;$index<$count;$index++) $rows[]=[$left+8,$top+34+$index*$rowHeight,$width-16,$rowHeight];
 		$footer=$top+$height-$control-12;
 		$buttonWidth=min(140,($width-64)/2);
 		return ['box'=>[$left,$top,$width,$height],'rows'=>$rows,
 			'more'=>[$left+16,$footer,$buttonWidth,$control],
 			'ok'=>[$left+$width-16-$buttonWidth,$footer,$buttonWidth,$control]];
+	}
+
+	/** A small blocking confirmation window used before leaving a table. */
+	public function confirmationDialog(): array
+	{
+		if($square=$this->square()) return $this->fromSquare($square->confirmationDialog());
+		$width=min(430,$this->width()-24);
+		$control=$this->controlSize();
+		$height=28+58+12+$control+12;
+		$left=($this->width()-$width)/2;
+		$top=max($this->menuHeight()+8,($this->height()-$height)/2);
+		$buttonWidth=min(150,($width-48)/2);
+		$footer=$top+$height-$control-12;
+		return ['box'=>[$left,$top,$width,$height],
+			'cancel'=>[$left+16,$footer,$buttonWidth,$control],
+			'confirm'=>[$left+$width-16-$buttonWidth,$footer,$buttonWidth,$control]];
 	}
 
 	/** A keycap and its label lane both fit at this rendered button width. */

@@ -59,7 +59,7 @@ final class Session
 			elseif($type==='menu') $this->screen='menu';
 			elseif($type==='resume' && $this->game) $this->screen='table';
 			elseif($type==='save-game' && $this->game) {}
-			elseif($type==='load-failed') throw new \InvalidArgumentException('No manually saved game is available');
+			elseif($type==='load-failed') throw new \InvalidArgumentException('The selected saved game could not be loaded');
 			elseif($type==='help') $this->screen='help';
 			elseif($type==='settings') $this->screen='settings';
 			elseif($type==='pace')

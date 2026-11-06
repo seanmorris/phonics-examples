@@ -89,7 +89,11 @@ final class Painter
 			[$hx,$hy,$hw,$hh]=$this->layout->rect(...$headings[$id]);
 			$active=($this->state['topMenu']??null)===$id;
 			if($active) $this->canvas->box($hx,$hy,$hw,$hh,0,Theme::DIALOG);
-			$this->canvas->label($label,$hx+$hw/2,$hy+$hh/2,Theme::LABEL,$active?Theme::INK:Theme::MENU_TEXT,$this->face,'center');
+			$ink=$active?Theme::INK:Theme::MENU_TEXT;
+			$full=$this->canvas->measure($label,Theme::LABEL,$this->face);
+			$first=$this->canvas->measure($label[0],Theme::LABEL,$this->face);
+			$this->canvas->label($label,$hx+$hw/2,$hy+$hh/2,Theme::LABEL,$ink,$this->face,'center');
+			$this->canvas->box($hx+($hw-$full)/2,$hy+$hh*.76,max(2*$this->unit,$first*.82),max(1,$this->unit),0,$ink);
 		}
 		[,,$pokerWidth]=$this->layout->rect(...$headings['poker']);
 		[$pokerX]=$this->layout->point($headings['poker'][0],0);
@@ -105,6 +109,7 @@ final class Painter
 	/** Draw table-bar dropdowns and information windows above every table object. */
 	private function tableOverlay(): void
 	{
+		if(($this->state['confirmDialog']??null)!==null) { $this->confirmationDialog(); return; }
 		if(($this->state['infoDialog']??null)!==null) { $this->oddsDialog((string)$this->state['infoDialog']); return; }
 		if(($this->state['topMenu']??null)!==null) $this->dropdownMenu((string)$this->state['topMenu']);
 	}
@@ -118,9 +123,8 @@ final class Painter
 		$this->canvas->box($x,$y,$w,$h,0,Theme::DIALOG,Theme::INK,1*$this->unit);
 		foreach($dropdown['items'] as $index=>$item)
 		{
-			$disabled=($this->view['mode']??'offline')==='online' && in_array($item['id'],['save','load'],true);
-			$disabled=$disabled || ($item['id']==='save' && empty($this->view['canContinue']))
-				|| ($item['id']==='load' && empty($this->view['manualSaveAvailable']));
+			$disabled=($this->view['mode']??'offline')==='online' && in_array($item['id'],['new','save','load'],true);
+			$disabled=$disabled || ($item['id']==='save' && empty($this->view['canContinue']));
 			[$rx,$ry,$rw,$rh]=$this->layout->rect(...$item['rect']);
 			if($index>0) $this->canvas->box($rx+5*$this->unit,$ry,$rw-10*$this->unit,1*$this->unit,0,Theme::alpha(Theme::INK,.18));
 			$ink=$disabled?Theme::alpha(Theme::INK,.38):Theme::INK;
@@ -129,42 +133,46 @@ final class Painter
 		}
 	}
 
-	/** The two odds reference tables from the original DOS presentation. */
+	/** Exact odds tables for the deck and wild-card rules currently in play. */
 	private function oddsDialog(string $table): void
 	{
-		$first=[
-			['Bust','2/1'],['One pair','2/1'],['Two pair','12/1'],['Three of a kind','50/1'],['Flush','100/1'],
-			['Straight','----/1'],['Full house','----/1'],['Four of a kind','----/1'],['Straight flush','----/1']
-		];
-		$improving=[
-			['One ace','Pair of aces','3/1'],['One pair','Two pair','5/1'],['...','Three of a kind','8/1'],
-			['...','Full house','97/1'],['...','Four of a kind','359/1'],['Two pairs','Full house','11/1'],
-			['Three of a kind','Full house','15.5/1'],['...','Four of a kind','15.5/1'],['Four flush','Flush','4.5/1'],
-			['Outside straight','Straight','5/1'],['Inside straight','Straight','11/1']
-		];
-		$geometry=$this->layout->oddsDialog($table);
-		$this->dialog($geometry['box'],$table==='odds'?'ODDS AGAINST (100 HANDS)':'ODDS AGAINST IMPROVING');
-		$rows=$table==='odds'?$first:$improving;
+		$tables=is_array($this->state['oddsTables']??null)?$this->state['oddsTables']:[];
+		$rows=is_array($tables[$table]??null)?$tables[$table]:[];
+		$geometry=$this->layout->oddsDialog($table,count($rows));
+		$this->dialog($geometry['box'],$table==='odds'?'ODDS AGAINST BEING DEALT':'ODDS AGAINST IMPROVING');
+		$this->text((string)($tables['rules']??'No wild cards'),$geometry['box'][0]+$geometry['box'][2]/2,$geometry['box'][1]+24,
+			$this->layout->captionText(),Theme::INK,'center',$geometry['box'][2]-24);
 		foreach($geometry['rows'] as $index=>$rect)
 		{
+			if(!isset($rows[$index])) continue;
 			[$x,$y,$w,$h]=$this->layout->rect(...$rect);
 			$fill=$index%2===0?Theme::alpha(Theme::BUTTON,.72):Theme::DIALOG;
 			$this->canvas->box($x,$y,$w,$h,0,$fill,Theme::alpha(Theme::INK,.24),1*$this->unit);
 			$middle=$rect[1]+$rect[3]/2;
 			if($table==='odds')
 			{
-				$this->text($rows[$index][0],$rect[0]+10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.72);
-				$this->text($rows[$index][1],$rect[0]+$rect[2]-10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'right');
+				$this->text((string)$rows[$index]['hand'],$rect[0]+10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.72);
+				$this->text((string)$rows[$index]['odds'],$rect[0]+$rect[2]-10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'right');
 			}
 			else
 			{
-				$this->text($rows[$index][0],$rect[0]+10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.38);
-				$this->text($rows[$index][1],$rect[0]+$rect[2]*.43,$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.4);
-				$this->text($rows[$index][2],$rect[0]+$rect[2]-10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'right');
+				$this->text((string)$rows[$index]['hand'],$rect[0]+10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.38);
+				$this->text((string)$rows[$index]['target'],$rect[0]+$rect[2]*.43,$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.4);
+				$this->text((string)$rows[$index]['odds'],$rect[0]+$rect[2]-10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'right');
 			}
 		}
 		if($table==='odds') $this->button($geometry['more'],'MORE...','M','default',false);
 		$this->button($geometry['ok'],'OK','↵','primary',false);
+	}
+
+	private function confirmationDialog(): void
+	{
+		$geometry=$this->layout->confirmationDialog();
+		$this->dialog($geometry['box'],'QUIT TO TITLE');
+		$this->text('Are you sure?',$geometry['box'][0]+$geometry['box'][2]/2,$geometry['box'][1]+58,
+			$this->layout->controlText(),Theme::INK,'center',$geometry['box'][2]-32);
+		$this->button($geometry['cancel'],'CANCEL','N','default',false);
+		$this->button($geometry['confirm'],'QUIT','Y','danger',false);
 	}
 
 	private function table(): void
