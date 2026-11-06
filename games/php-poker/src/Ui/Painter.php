@@ -163,16 +163,32 @@ final class Painter
 				// The plate already says what an opponent did; the running bet is spelled out only where the wide field has room.
 				elseif($this->layout->profile === 'wide')
 				{
-					// Beside the bank on its outer side; under it when that would leave the field.
+					// Beside the bank on its outer side, or under it: the first spot that stays on the field and off
+					// every other seat. The plate already names the action, so with no clear spot the label is left out.
 					$label = 'Bet ' . $player['bet'];
 					$size = $this->layout->captionText();
 					$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->horizontalUnit;
 					$bounds = $this->layout->bankBounds($seat, $seats, $bank) ?? [$geometry[$seat]['chips'][0], $geometry[$seat]['chips'][1], 0, 0];
 					$gap = 6 * $this->layout->stretch();
 					$labelY = $geometry[$seat]['chips'][1] + 10;
-					if($outward > 0 && $bounds[0] + $bounds[2] + $gap + $width <= $this->layout->width() - 2) $this->text($label, $bounds[0] + $bounds[2] + $gap, $labelY, $size, Theme::PLATE, 'left');
-					elseif($outward < 0 && $bounds[0] - $gap - $width >= 2) $this->text($label, $bounds[0] - $gap, $labelY, $size, Theme::PLATE, 'right');
-					else $this->text($label, max($width / 2 + 2, min($this->layout->width() - $width / 2 - 2, $bounds[0] + $bounds[2] / 2)), $bounds[1] + $bounds[3] + $size * .7, $size, Theme::PLATE, 'center');
+					$spots = [
+						$outward > 0 ? [$bounds[0] + $bounds[2] + $gap, $labelY] : [$bounds[0] - $gap - $width, $labelY]
+						, [$bounds[0] + $bounds[2] / 2 - $width / 2, $bounds[1] + $bounds[3] + $size * .7]
+					];
+					foreach($spots as [$left, $middle])
+					{
+						$box = [$left - 2, $middle - $size * .6, $width + 4, $size * 1.2];
+						$clear = $box[0] >= 0 && $box[0] + $box[2] <= $this->layout->width() && $box[1] + $box[3] <= $this->layout->height();
+						foreach($geometry as $other => $near) if($clear && $other !== $seat)
+						{
+							$last = $near['cards'][4];
+							foreach([$near['plate'], [$near['cards'][0][0], $near['cards'][0][1], $last[0] + $last[2] - $near['cards'][0][0], $last[3]]] as $block)
+							if($box[0] < $block[0] + $block[2] && $block[0] < $box[0] + $box[2] && $box[1] < $block[1] + $block[3] && $block[1] < $box[1] + $box[3]) $clear = false;
+						}
+						if(!$clear) continue;
+						$this->text($label, $left, $middle, $size, Theme::PLATE, 'left');
+						break;
+					}
 				}
 			}
 		}
@@ -300,7 +316,7 @@ final class Painter
 		if($line === '') return;
 		[$betX, $betY, $betWidth, $betHeight] = $this->layout->centre()['bet'];
 		$width = $this->layout->profile === 'wide'
-			? min($this->layout->width() * .55, max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->horizontalUnit + 40)) : min(180, $betWidth);
+			? min($this->layout->statusLane()['width'], max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->horizontalUnit + 40)) : min(180, $betWidth);
 		// The lane between the columns is narrow, so the message may run to three lines there.
 		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->canvas->unit, ($width - 12) * $this->horizontalUnit, $this->layout->columns() ? 3 : 2, $this->face);
 		$messageHeight = $this->layout->plateHeight() + 16 * (count($lines) - 1);

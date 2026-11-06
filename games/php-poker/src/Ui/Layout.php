@@ -255,8 +255,8 @@ final class Layout
 		$centre = $this->centre();
 		foreach(['pot','deck','bet'] as $name) foreach($parts as $blocks) foreach($blocks as $block)
 			if($hit($centre[$name], $block)) return true;
-		// The status message needs one plate's height between the bet plate and the human's plate.
-		if($parts[0][0][1] - ($centre['bet'][1] + $centre['bet'][3]) < $this->plateHeight() + 16 - .01) return true;
+		// The status message needs its lines between the bet plate and the human's plate.
+		if($parts[0][0][1] - ($centre['bet'][1] + $centre['bet'][3]) < $this->plateHeight() + 16 * $this->statusLane()['lines'] - .01) return true;
 		// The full action lane: three buttons over the raise stepper.
 		$control = $this->controlSize();
 		[$laneLeft, $laneWidth] = $this->actionColumn();
@@ -459,6 +459,26 @@ final class Layout
 		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
 		$x = $handRight + self::ACTION_GUTTER * $this->stretch();
 		return [$x, min($width, $this->width() - $x - 16)];
+	}
+
+	/**
+	 * Room for the status message above the human's plate: the widest plate it may use and the lines to reserve.
+	 *
+	 * The message is centred over the hand. On a short oval the action lane rises beside that row, so the plate may
+	 * only be as wide as leaves the lane clear, and when that is too narrow for a sentence on one line a second
+	 * line is reserved for it.
+	 *
+	 * @return array{width:float,lines:int}
+	 */
+	public function statusLane(): array
+	{
+		$width = $this->width() * .55;
+		if($this->profile !== 'wide') return ['width' => $width, 'lines' => 1];
+		$control = $this->controlSize();
+		$laneTop = $this->height() - 26 - 4 * $control - 3 * 10;
+		[$laneLeft] = $this->actionColumn();
+		if($laneTop < $this->seat(0, $this->seats)['plate'][1]) $width = min($width, 2 * ($laneLeft - 8 * $this->stretch() - $this->design['centre'][0]));
+		return ['width' => $width, 'lines' => $width < 400 * $this->dpr / $this->horizontalScale ? 2 : 1];
 	}
 
 	/** Gap between the local hand and the oval's action lane: room for the dealer button to stand beside the plate. */
@@ -819,7 +839,8 @@ final class Layout
 			$room = $this->handTop() - 14 - 8 - 56 - $under - 2 * self::PLATE_HEIGHT - 14;
 			$objectScale = min($objectScale, max(.6, $room / 123));
 		}
-		$plateWidth = min(200 * $objectScale, $this->design['width'] - 40);
+		// The plates carry text of fixed CSS size, so a compressed oval measures their width across its x axis.
+		$plateWidth = min(200 * $objectScale * $this->stretch(), $this->design['width'] - 40);
 		if($this->profile === 'landscape') { $cardWidth = 40; $cardHeight = 56; $plateWidth = 150; }
 		$lift = $cardHeight * .57;
 		if($this->columns())
@@ -908,8 +929,8 @@ final class Layout
 			if($blockRight <= $left || $blockLeft >= $right || ($geometry['plate'][1] + $blockBottom) / 2 >= $middle) continue;
 			$above = max($above, $blockBottom);
 		}
-		// One line of status sits between the bet plate and the human's plate.
-		$below = $this->seat(0, $this->seats)['plate'][1] - 8 - $plateHeight - 8;
+		// The status message sits between the bet plate and the human's plate.
+		$below = $this->seat(0, $this->seats)['plate'][1] - 8 - $plateHeight - 16 * ($this->statusLane()['lines'] - 1) - 8;
 		if($centre['pot'][1] >= $above && $centre['bet'][1] + $centre['bet'][3] <= $below) return $centre;
 
 		$gap = $centre['deck'][1] - $centre['pot'][1] - $plateHeight;

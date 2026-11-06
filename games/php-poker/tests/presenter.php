@@ -1023,7 +1023,13 @@ $test('the oval keeps its seats, centre plates and controls apart on laptop, des
 		$expect(!$overlaps($inset($centre[$name]), $block), "the $name clears seat $seat's $part $at");
 		$expect($centre['pot'][1] + $centre['pot'][3] <= $centre['deck'][1] && $centre['deck'][1] + $centre['deck'][3] <= $centre['bet'][1], "the centre cluster keeps its order $at");
 		$expect($centre['deck'][3] >= 40 && abs($centre['deck'][2] / $centre['deck'][3] - $centre['discard'][2] / $centre['discard'][3]) < 1e-9, "the stock stays a readable card $at");
-		$expect($parts[0]['plate'][1] - ($centre['bet'][1] + $centre['bet'][3]) >= $layout->plateHeight() + 16 - .01, "the status line fits between the bet plate and the local plate $at");
+		$status = $layout->statusLane();
+		$expect($parts[0]['plate'][1] - ($centre['bet'][1] + $centre['bet'][3]) >= $layout->plateHeight() + 16 * $status['lines'] - .01, "the status message fits between the bet plate and the local plate $at");
+		// The message is centred on the hand; beside the action lane it is never wide enough to run under a button.
+		$messageRight = $centre['bet'][0] + $centre['bet'][2] / 2 + $status['width'] / 2;
+		$messageTop = $parts[0]['plate'][1] - 8 - $layout->plateHeight() - 16 * ($status['lines'] - 1);
+		$statusBox = [$messageRight - $status['width'], $messageTop, $status['width'], $parts[0]['plate'][1] - 8 - $messageTop];
+		$expect($status['width'] >= 240 || $status['lines'] === 2, "the status message has a useful width $at");
 		$controls = array_column($layout->actions($view, ['discards' => [], 'amount' => 8]), 'rect');
 		foreach(['less', 'amount', 'more'] as $part) $controls[] = $layout->stepper($view)[$part];
 		foreach($controls as $index => $control)
@@ -1031,6 +1037,7 @@ $test('the oval keeps its seats, centre plates and controls apart on laptop, des
 			$expect($control[0] >= 0 && $control[0] + $control[2] <= $layout->width() + .01 && $control[1] + $control[3] <= $layout->height(), "control $index stays on the field $at");
 			foreach($parts as $seat => $blocks) if($seat !== 0) foreach($blocks as $part => $block)
 			$expect(!$overlaps($inset($control), $block), "control $index clears seat $seat's $part $at");
+			$expect(!$overlaps($inset($statusBox), $control), "the status message stays out from under control $index $at");
 		}
 		for($seat = 0; $seat < $seats; $seat++)
 		{
