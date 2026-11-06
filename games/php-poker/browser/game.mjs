@@ -4,7 +4,7 @@
  */
 
 /** Keys the table handles; everything else reaches the page untouched. */
-const KEYS=new Set(['f','c','b','d','h','i','l','m','n','s','v','w','o','p','q','y','0','1','2','3','4','5','6','7','8','+','-','=','enter',' ','escape','backspace','arrowleft','arrowright','arrowup','arrowdown']);
+const KEYS=new Set(['f','c','b','d','g','h','i','l','m','n','s','v','w','o','p','q','y','0','1','2','3','4','5','6','7','8','+','-','=','enter',' ','escape','backspace','arrowleft','arrowright','arrowup','arrowdown']);
 
 /** Cell size for the rasterised cards, capped so the atlas crossing into PHP stays under ~8 MB. */
 export function cardCell(dpr)

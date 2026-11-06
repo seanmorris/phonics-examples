@@ -171,7 +171,7 @@ $wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui'
 	$result=['menu'=>$layout->menu($view['canContinue']),'actions'=>$layout->actions($view,$view['ui']),
 	 'cards'=>$layout->discardDialog()['cards'],'information'=>$layout->information(),'wild'=>$wild,'customWild'=>$custom,'limits'=>$limits,
 	 'topMenus'=>$layout->topMenus(),'topGame'=>$layout->topDropdown('game'),'topPoker'=>$layout->topDropdown('poker'),
-	 'odds'=>$layout->oddsDialog('odds'),'improving'=>$layout->oddsDialog('improving')];
+	 'gameSettings'=>$layout->gameSettingsDialog((int)($view['ui']['gameSettingsWildLines']??1)),'odds'=>$layout->oddsDialog('odds'),'improving'=>$layout->oddsDialog('improving')];
 	foreach(['menu','actions'] as $key) foreach($result[$key] as &$button) $button['rect']=$layout->rect(...$button['rect']);
 	unset($button);
 	foreach($result['cards'] as &$rect) $rect=$layout->rect(...$rect);
@@ -190,6 +190,9 @@ $wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui'
 	foreach($result['topMenus'] as &$rect) $rect=$layout->rect(...$rect);
 	unset($rect);
 	foreach(['topGame','topPoker'] as $name) { $result[$name]['box']=$layout->rect(...$result[$name]['box']); foreach($result[$name]['items'] as &$item) $item['rect']=$layout->rect(...$item['rect']); unset($item); }
+	$result['gameSettings']['box']=$layout->rect(...$result['gameSettings']['box']); $result['gameSettings']['ok']=$layout->rect(...$result['gameSettings']['ok']);
+	foreach($result['gameSettings']['rows'] as &$rect) $rect=$layout->rect(...$rect);
+	unset($rect);
 	foreach(['odds','improving'] as $name) { foreach(['box','more','ok'] as $key) $result[$name][$key]=$layout->rect(...$result[$name][$key]); foreach($result[$name]['rows'] as &$rect) $rect=$layout->rect(...$rect); unset($rect); }
 	unset($rect);
 echo json_encode($result,JSON_THROW_ON_ERROR);
@@ -204,7 +207,7 @@ async function point(canvas,rect)
 		width:rect[2]*box.width/size[0],height:rect[3]*box.height/size[1]};
 }
 
-test('table-bar menus save, load and show both Poker odds tables',async({page})=>{
+test('table-bar menus save, load and show the settings and odds tables',async({page})=>{
 	await page.addInitScript(()=>{
 		window.savedPokerFile='';
 		window.showSaveFilePicker=async()=>({createWritable:async()=>({write:async value=>{savedPokerFile=value;},close:async()=>{}})});
@@ -226,6 +229,14 @@ test('table-bar menus save, load and show both Poker odds tables',async({page})=
 	target=await point(canvas,geometry.topGame.items.find(item=>item.id==='load').rect); await page.mouse.click(target.x,target.y);
 	await expect.poll(async()=>(await state(canvas)).generation).toBeGreaterThan(generation);
 
+	await canvas.focus();await page.keyboard.press('Alt+p');
+	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('poker');
+	geometry=await regions(canvas);
+	target=await point(canvas,geometry.topPoker.items.find(item=>item.id==='game-settings').rect); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).ui.infoDialog).toBe('game-settings');
+	expect((await state(canvas)).ui.gameSettings).toMatchObject({table:'4 players · Offline',opening:'Jacks or better',wild:'No wild cards'});
+	target=await point(canvas,geometry.gameSettings.ok); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).ui.infoDialog).toBe(null);
 	await canvas.focus();await page.keyboard.press('Alt+p');
 	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('poker');
 	geometry=await regions(canvas);

@@ -401,7 +401,8 @@ final class Presenter
 
 		if($this->infoDialog !== null)
 		{
-			$dialog=$layout->oddsDialog($this->infoDialog,count($this->oddsTables()[$this->infoDialog]));
+			if($this->infoDialog==='game-settings') $dialog=$layout->gameSettingsDialog($this->gameSettingsWildLines($this->gameSettings()));
+			else $dialog=$layout->oddsDialog($this->infoDialog,count($this->oddsTables()[$this->infoDialog]));
 			if($this->infoDialog==='odds') $targets[]=['id'=>'info:more','rect'=>$dialog['more'],'info'=>'improving'];
 			$targets[]=['id'=>'info:ok','rect'=>$dialog['ok'],'info'=>'close'];
 			$addKey($wholeCanvas,'escape');
@@ -464,7 +465,7 @@ final class Presenter
 		foreach($targets as $target) if($target['id'] === $this->controllerFocus) return;
 		$preferences = $this->confirmDialog !== null ? ['confirm:cancel','confirm:leave']
 			: ($this->infoDialog !== null ? ['info:ok','info:more']
-			: ($this->topMenu !== null ? ['top-item:new','top-item:odds']
+			: ($this->topMenu !== null ? ['top-item:new','top-item:game-settings','top-item:odds']
 			: (!empty($this->view['legalActions']['draw']) ? ['card:0']
 			: ['action:call','action:check','action:pass','action:draw','action:next','action:deal','setup:start','wild:none','custom-wild:0','settings:look'])));
 		$next = null;
@@ -627,7 +628,7 @@ final class Presenter
 			if(in_array($key,['escape','backspace'],true)) { $this->topMenu=null; return []; }
 			$action=($this->topMenu==='game'
 				? ['n'=>'new','s'=>'save','l'=>'load','q'=>'quit']
-				: ['o'=>'odds','i'=>'improving'])[$key]??null;
+				: ['g'=>'game-settings','o'=>'odds','i'=>'improving'])[$key]??null;
 			return $action===null?[]:$this->activateTopAction($action);
 		}
 
@@ -674,7 +675,7 @@ final class Presenter
 		if($action==='save') return [['type'=>'save-game']];
 		if($action==='load') return [['type'=>'load-game']];
 		if($action==='quit') return $this->leaveTable();
-		if(in_array($action,['odds','improving'],true)) { $this->infoDialog=$action; return []; }
+		if(in_array($action,['game-settings','odds','improving'],true)) { $this->infoDialog=$action; return []; }
 		return [];
 	}
 
@@ -685,6 +686,49 @@ final class Presenter
 		if($action!=='leave') return [];
 		$this->confirmDialog=null; $this->setupAfterMenu=false;
 		return [['type'=>'menu']];
+	}
+
+	/** Values shown by Poker > Game Settings, derived from the authoritative profile in the current view. */
+	private function gameSettings(): array
+	{
+		$profile=is_array($this->view['profile']??null)?$this->view['profile']:[];
+		$minimum=(int)($profile['minimum']??2);
+		$maximum=(int)($profile['maximum']??20);
+		$finalMinimum=(int)($profile['finalMinimum']??$minimum);
+		$finalMaximum=(int)($profile['finalMaximum']??$maximum);
+		$raiseLimit=(int)($profile['raiseLimit']??3);
+		$playerRaiseLimit=(int)($profile['playerRaiseLimit']??$raiseLimit);
+		$selection=$profile['wild']??[];
+		$custom=is_array($profile['customWild']??null)?$profile['customWild']:[];
+		try { $wild=WildCards::describe(is_string($selection)||is_array($selection)?$selection:[],$custom); }
+		catch(\InvalidArgumentException) { $wild='No wild cards'; }
+		$players=max(2,count($this->view['players']??[]));
+		$mode=($this->view['mode']??'offline')==='online'?'Online':'Offline';
+		$ante=(int)($profile['ante']??1);
+		return [
+			'table'=>$players.' players · '.$mode,
+			'opening'=>($profile['variant']??'jackpots')==='anything'?'Anything opens':'Jacks or better',
+			'wild'=>$wild,
+			'ante'=>$ante.' '.($ante===1?'chip':'chips'),
+			'before'=>$minimum.'–'.$maximum.' chips',
+			'after'=>$finalMinimum.'–'.$finalMaximum.' chips',
+			'raises'=>(string)$raiseLimit,
+			'playerRaises'=>(string)$playerRaiseLimit
+		];
+	}
+
+	/** Exact number of lines needed by the active wild-card description in the current settings window. */
+	private function gameSettingsWildLines(array $settings): int
+	{
+		$layout=$this->layout();
+		$rect=$layout->gameSettingsDialog(1)['rows']['wild'];
+		$labelWidth=min(132*$layout->stretch(),$rect[2]*.36);
+		$valueWidth=$rect[2]-$labelWidth-10*$layout->stretch();
+		$text=(string)($settings['wild']??'No wild cards');
+		if($this->mode===Theme::CLASSIC) $text=strtoupper($text);
+		$face=$this->mode===Theme::CLASSIC&&isset($this->text->faces()['dos'])?'dos':'bold';
+		$lines=$this->text->wrap($text,$layout->controlText()*$layout->scale,$valueWidth*$layout->horizontalScale,3,$face);
+		return max(1,min(3,count($lines)));
 	}
 
 	/** Exact dialog rows for the active deck, reused until its wild-card rules change. */
@@ -1036,11 +1080,14 @@ final class Presenter
 	{
 		$helpMaximum = ($this->view['screen'] ?? '') === 'help' ? $this->helpMaximumScroll() : 0;
 		$this->helpScroll = min($this->helpScroll, $helpMaximum);
+		$gameSettings=$this->infoDialog==='game-settings'?$this->gameSettings():null;
 		return [
 			'discards' => $this->discards, 'amount' => $this->amount, 'mode' => $this->mode, 'local' => $this->local
 			, 'history' => $this->historyOpen, 'topMenu'=>$this->topMenu, 'infoDialog'=>$this->infoDialog
 			, 'confirmDialog'=>$this->confirmDialog
-			, 'oddsTables'=>$this->infoDialog===null?null:$this->oddsTables()
+			, 'oddsTables'=>in_array($this->infoDialog,['odds','improving'],true)?$this->oddsTables():null
+			, 'gameSettings'=>$gameSettings
+			, 'gameSettingsWildLines'=>$gameSettings===null?1:$this->gameSettingsWildLines($gameSettings)
 			, 'locked' => $this->locked(), 'hint' => $this->guidance()
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant,
 				'ante'=>$this->setupAnte,'minimum'=>$this->setupMinimum,'maximum'=>$this->setupMaximum,

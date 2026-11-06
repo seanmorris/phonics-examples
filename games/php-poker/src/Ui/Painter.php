@@ -110,7 +110,12 @@ final class Painter
 	private function tableOverlay(): void
 	{
 		if(($this->state['confirmDialog']??null)!==null) { $this->confirmationDialog(); return; }
-		if(($this->state['infoDialog']??null)!==null) { $this->oddsDialog((string)$this->state['infoDialog']); return; }
+		if(($this->state['infoDialog']??null)!==null)
+		{
+			if($this->state['infoDialog']==='game-settings') $this->gameSettingsDialog();
+			else $this->oddsDialog((string)$this->state['infoDialog']);
+			return;
+		}
 		if(($this->state['topMenu']??null)!==null) $this->dropdownMenu((string)$this->state['topMenu']);
 	}
 
@@ -162,6 +167,47 @@ final class Painter
 			}
 		}
 		if($table==='odds') $this->button($geometry['more'],'MORE...','M','default',false);
+		$this->button($geometry['ok'],'OK','↵','primary',false);
+	}
+
+	/** Read-only summary of the active table profile. */
+	private function gameSettingsDialog(): void
+	{
+		$geometry=$this->layout->gameSettingsDialog((int)($this->state['gameSettingsWildLines']??1));
+		$settings=is_array($this->state['gameSettings']??null)?$this->state['gameSettings']:[];
+		$labels=[
+			'table'=>'Table','opening'=>'Opening','wild'=>'Wild cards','ante'=>'Dealer ante',
+			'before'=>'Before draw','after'=>'After draw','raises'=>'Raises / round','playerRaises'=>'Raises / player'
+		];
+		$this->dialog($geometry['box'],'CURRENT GAME SETTINGS');
+		foreach($geometry['rows'] as $index=>$rect)
+		{
+			[$x,$y,$w,$h]=$this->layout->rect(...$rect);
+			$position=array_search($index,array_keys($geometry['rows']),true);
+			$fill=((int)$position%2===0)?Theme::alpha(Theme::BUTTON,.72):Theme::DIALOG;
+			$this->canvas->box($x,$y,$w,$h,0,$fill,Theme::alpha(Theme::INK,.2),1*$this->unit);
+			$labelWidth=min(132*$this->layout->stretch(),$rect[2]*.36);
+			$this->text($labels[$index],$rect[0]+10*$this->layout->stretch(),$rect[1]+min($rect[3],30)/2,
+				$this->layout->captionText(),Theme::alpha(Theme::INK,.72),'left',$labelWidth-14*$this->layout->stretch());
+			$value=(string)($settings[$index]??'');
+			$valueX=$rect[0]+$labelWidth;
+			$valueWidth=$rect[2]-$labelWidth-10*$this->layout->stretch();
+			if($index!=='wild')
+			{
+				$this->text($value,$valueX,$rect[1]+$rect[3]/2,$this->layout->controlText(),Theme::INK,'left',$valueWidth);
+				continue;
+			}
+			$shown=$this->mode===Theme::CLASSIC?strtoupper($value):$value;
+			$size=$this->layout->controlText();
+			$lines=$this->canvas->text->wrap($shown,$size*$this->unit,$valueWidth*$this->horizontalUnit,3,$this->face);
+			$leading=$size*1.25;
+			$lineY=$rect[1]+$leading/2+2;
+			foreach(array_slice($lines,0,3) as $line)
+			{
+				$this->text($line,$valueX,$lineY,$size,Theme::INK,'left',$valueWidth);
+				$lineY+=$leading;
+			}
+		}
 		$this->button($geometry['ok'],'OK','↵','primary',false);
 	}
 

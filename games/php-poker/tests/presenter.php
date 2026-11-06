@@ -1200,6 +1200,19 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$poker=new Presenter($root); $poker->update($view);
 	$poker->input([['key'=>'alt+p']],null,0);
 	$expect($poker->state()['topMenu']==='poker','Poker opens its information menu');
+	$expect($poker->input([['key'=>'g']],null,0)===[] && $poker->state()['infoDialog']==='game-settings','Game Settings opens the active table profile');
+	$settings=$poker->state()['gameSettings'];
+	$expect($settings===['table'=>'8 players · Offline','opening'=>'Jacks or better','wild'=>'No wild cards','ante'=>'1 chip',
+		'before'=>'2–20 chips','after'=>'2–20 chips','raises'=>'3','playerRaises'=>'3'],'the settings screen reports every active setup choice');
+	$expect($poker->state()['oddsTables']===null && count($poker->paint(1280,720)->instances())>100,'the settings screen paints without calculating odds');
+	$click($poker,$poker->layout()->gameSettingsDialog()['ok']);
+	$manyWild=$view;
+	$manyWild['profile']['wild']=['joker','deuces','one-eyed-jacks','mustached-kings','deuces-treys','kings','custom'];
+	$manyWild['profile']['customWild']=[12,25,38,51,52,53];
+	$many=new Presenter($root); $many->update($manyWild); $many->input([['key'=>'alt+p'],['key'=>'g']],null,0);
+	$expect($many->state()['gameSettingsWildLines']===3 && str_contains($many->state()['gameSettings']['wild'],'Joker 2 wild'),
+		'a combined wildcard profile expands to show its complete description');
+	$poker->input([['key'=>'alt+p']],null,0);
 	$expect($poker->input([['key'=>'o']],null,0)===[] && $poker->state()['infoDialog']==='odds','Odds opens the exact dealt-hand table');
 	$odds=$poker->state()['oddsTables'];
 	$expect($odds['rules']==='No wild cards' && count($odds['odds'])===10,'the standard table includes every possible exact category');
@@ -1238,6 +1251,9 @@ $test('the table bar opens command menus and both odds dialogs', static function
 			$expect($top>=$menuBottom-.01,"the $name table clears the top menu bar on $width x $height");
 			$expect($layout->rect(...$dialog['ok'])[3]/$dpr>=48-.01,"the $name OK button is touch sized on $width x $height");
 		}
+		$settings=$layout->gameSettingsDialog(3); [$left,$top,$boxWidth,$boxHeight]=$layout->rect(...$settings['box']);
+		$expect($left>=-.01 && $top>=-.01 && $left+$boxWidth<=$width+.01 && $top+$boxHeight<=$height+.01,"the settings table stays on $width x $height");
+		$expect($layout->rect(...$settings['ok'])[3]/$dpr>=48-.01,"the settings OK button is touch sized on $width x $height");
 		$confirmation=$layout->confirmationDialog(); [$left,$top,$boxWidth,$boxHeight]=$layout->rect(...$confirmation['box']);
 		$expect($left>=-.01 && $top>=-.01 && $left+$boxWidth<=$width+.01 && $top+$boxHeight<=$height+.01,"the quit confirmation stays on $width x $height");
 	}

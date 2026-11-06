@@ -460,7 +460,7 @@ final class Layout
 		$height=$this->controlSize();
 		$definitions=$menu==='game'
 			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['quit','Quit to title','Q']]
-			: [['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
+			: [['game-settings','Game Settings','G'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
 		$items=[];
 		$x=$headings[$menu][0]; $y=$headings[$menu][1]+$headings[$menu][3];
 		foreach($definitions as $index=>[$id,$label,$key])
@@ -490,6 +490,35 @@ final class Layout
 		$buttonWidth=min(140,($width-64)/2);
 		return ['box'=>[$left,$top,$width,$height],'rows'=>$rows,
 			'more'=>[$left+16,$footer,$buttonWidth,$control],
+			'ok'=>[$left+$width-16-$buttonWidth,$footer,$buttonWidth,$control]];
+	}
+
+	/** Compact read-only table of the rules currently governing this hand. */
+	public function gameSettingsDialog(int $wildLines = 1): array
+	{
+		$wildLines=max(1,min(3,$wildLines));
+		if($square=$this->square()) return $this->fromSquare($square->gameSettingsDialog($wildLines));
+		$width=min(460,$this->width()-24);
+		$control=$this->controlSize();
+		$header=34;
+		$minimumTop=$this->menuHeight()+8;
+		// Wild-card descriptions grow only when their active rules actually wrap; every other value stays on one line.
+		$units=['table'=>1,'opening'=>1,'wild'=>$wildLines,'ante'=>1,'before'=>1,'after'=>1,'raises'=>1,'playerRaises'=>1];
+		$totalUnits=array_sum($units);
+		$available=$this->height()-$minimumTop-12-$header-12-$control-12;
+		$rowHeight=max(18,min(30,$available/$totalUnits));
+		$height=$header+$totalUnits*$rowHeight+12+$control+12;
+		$left=($this->width()-$width)/2;
+		$top=max($minimumTop,($this->height()-$height)/2);
+		$rows=[]; $y=$top+$header;
+		foreach($units as $id=>$lines)
+		{
+			$rows[$id]=[$left+8,$y,$width-16,$rowHeight*$lines];
+			$y+=$rowHeight*$lines;
+		}
+		$footer=$top+$height-$control-12;
+		$buttonWidth=min(140,$width-32);
+		return ['box'=>[$left,$top,$width,$height],'rows'=>$rows,
 			'ok'=>[$left+$width-16-$buttonWidth,$footer,$buttonWidth,$control]];
 	}
 
