@@ -35,6 +35,14 @@ export function pendingPokerView(view)
 	return {...view,legalActions:{},waitingForConfirmation:true,message:'Waiting for both players to confirm the action.'};
 }
 
+/** Freeze a transcript the Poker verifier rejects without conceding the match to its sender. */
+export function freezeOnlineDispute(lobbyPort,error)
+{
+	const message=error instanceof Error?error.message:String(error);
+	try{lobbyPort?.dispute(message);}catch{}
+	return message;
+}
+
 /** Human-readable Matrix name when a profile has no display name. */
 export function matrixPlayerName(id)
 {
@@ -338,9 +346,9 @@ export function activate({module, canvas, session})
 		}));
 	};
 	const failOnline=error=>{
-		const message=error instanceof Error?error.message:String(error);console.error('Poker online protocol failed',error);
+		const message=freezeOnlineDispute(lobbyPort,error);console.error('Poker online protocol failed',error);
 		if(online){onlineView={...onlinePresentation(online.view()),error:message,message:'The online Poker action could not be verified.'};}
-		submitting=false;void lobbyPort?.resign(message).catch(()=>{});
+		submitting=false;
 	};
 	const enqueue=task=>{onlineWork=onlineWork.then(task).catch(failOnline);return onlineWork;};
 	const terminalRoomError=message=>[

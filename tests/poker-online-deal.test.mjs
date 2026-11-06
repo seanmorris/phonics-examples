@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {OnlineDeal,ONLINE_ACTION_TYPES,evaluateHand} from '../games/php-poker/browser/online-deal.mjs';
-import {decorateOnlineView,matrixPlayerName,pendingPokerView,pokerCommandBatch,sheetCell} from '../games/php-poker/browser/game.mjs';
+import {
+	decorateOnlineView,freezeOnlineDispute,matrixPlayerName,pendingPokerView,pokerCommandBatch,sheetCell
+} from '../games/php-poker/browser/game.mjs';
 
 test('both physical jokers map to their own card-sheet cells',()=>{
 	assert.equal(sheetCell(52,[2,3,1,0]),52);
@@ -29,6 +31,16 @@ test('unconfirmed room actions expose state changes without exposing the next tu
 	assert.equal(pending.waitingForConfirmation,true);
 	assert.match(pending.message,/both players/);
 	assert.deepEqual(confirmed.legalActions,{fold:true,call:true,callAmount:2});
+});
+
+test('a rejected online transcript freezes locally without resigning',()=>{
+	const calls=[];
+	const lobby={
+		dispute:reason=>calls.push(['dispute',reason])
+		, resign:reason=>calls.push(['resign',reason])
+	};
+	assert.equal(freezeOnlineDispute(lobby,new Error('Bad shuffle proof')),'Bad shuffle proof');
+	assert.deepEqual(calls,[['dispute','Bad shuffle proof']]);
 });
 
 test('online player presentation uses Matrix names, avatar keys and neutral fallbacks',()=>{
