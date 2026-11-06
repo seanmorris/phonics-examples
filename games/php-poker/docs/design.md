@@ -36,17 +36,43 @@ and dialogs, a dark disc behind each emblem, keycaps on the buttons, and sets te
 
 ## Layout
 
-`src/Ui/Layout.php` is pure and shared by painting and hit-testing. It carries three design profiles and picks
-one from the canvas: **wide**, a 1280×720 field, for landscape canvases of 760 CSS px or more; **tall**, a
-450×800 portrait field, for portrait or narrower canvases; **landscape**, a 900×400 field with a separate right-hand control panel, for landscape canvases below 480 CSS px high. The field scales uniformly to fit and is centred. Interactive controls are at least 48 CSS pixels high across device-pixel ratios; short-screen menus use two columns.
+`src/Ui/Layout.php` is pure and shared by painting and hit-testing. It carries three design profiles:
+**wide**, the 1280×720 oval of the DOS game; **tall**, a 470×836 portrait field with the opponents in a column
+down each side; and **landscape**, a 900×400 field with side columns and a right-hand control panel. Interactive
+controls are at least 48 CSS pixels high across device-pixel ratios; short-screen menus use two columns.
 
-- Seats sit on an oval (wide 470×250, tall 165×260) with the human at the bottom. Opponents are spaced evenly
-  from the human's left. Its upper half stretches upward by 24 design pixels on wide screens, 6 in portrait
-  and 12 in short landscape, opening space around the centre while keeping the human hand in place.
-  In the wide profile the action buttons sit to the lower right of the human, so no seat
-  may come lower on that side than .42 rad below the horizontal; from six seats up the opponents spread over
-  the arc that stops short of it. In the tall profile the opponents spread over the arc starting sixty degrees
-  either side of the human.
+- **Choosing a profile.** The oval is the table's own composition, so it is tried first on every canvas that is
+  at least 760 CSS px wide, at least 480 CSS px high and not narrower than 55% of the field's aspect. It is kept
+  when nothing on it collides: no seat block (plate, fan, emblem with its caption, chip bank) with another, with
+  the centre plates and stock, with the action lane or with the field edge, and with one status line free between
+  the bet plate and the human's plate. Cards and chips are first tried at their preferred size and otherwise given
+  the largest size at which nothing collides, down to 60%; plates, emblems, controls and type keep their CSS size
+  throughout. Only when the oval cannot fit does a landscape canvas under 720 CSS px high use **landscape** and
+  any other canvas **tall**. Canvases under 480 CSS px high go straight to **landscape**; portrait and narrow ones
+  to **tall**. A 1280×720 or 1366×768 browser window therefore plays on the oval.
+- **Scaling.** The wide field always fills the canvas height; its x axis compresses independently on narrower
+  canvases (`Layout::stretch()` is the ratio). Card, emblem and chip artwork are counter-scaled so they never
+  distort, and emblem lanes, chip spacing and the dealer button are measured across the compressed axis. Sparse
+  tables (two to four seats) grow their cards while no named pair of blocks gains an overlap. The tall and
+  landscape fields scale uniformly and grow along whichever axis the canvas leaves free.
+- **Dialogs.** Menus, setup, wild cards, help, history and the discard dialog hold text and controls of fixed CSS
+  size, so on a compressed field they are laid out on a square twin of the layout and mapped back; they are never
+  squeezed with the table. The discard dialog shrinks its five cards rather than overlapping them when the canvas
+  is narrower than the dialog. The custom wild-card matrix is shown only where each cell holds a checkbox and a
+  label such as 10♣; otherwise the dialog pages by suit, ace first as in the matrix. A button label that cannot
+  share its button with the key legend keeps the label and drops the legend.
+- Seats sit on an oval (wide 470×250) with the human at the bottom. Opponents are spaced evenly from the
+  human's left. Its upper half stretches upward by 24 design pixels, opening space around the centre while
+  keeping the human hand in place. The action buttons stand in a lane to the right of the human's hand, so no
+  seat may come lower on that side than `ACTION_CLEARANCE`; from six seats up the opponents spread over the arc
+  that stops short of it.
+- The centre cluster (pot plate, loose pot, stock and discards, bet plate) keeps its canonical place when it fits
+  between the opponent standing over it and the status line above the human's plate. Otherwise it moves, and the
+  stock and discards shrink, until the pot plate clears the cards and chips above it; heads-up on a phone the
+  loose pot and piles shrink the same way.
+- The dealer button stands at the inner end of a seat's plate. The human's stands in a 34-px gutter between the
+  plate and the action lane, and an opponent's moves to the emblem's corner when a neighbour's cards or chips
+  are in the way.
 - A seat is a plate exactly as wide as its five-card fan (wide opponent cards 68×95 stepped 30; the human's
   90×126 stepped 38), with chip stacks in front of the fan's outer corner (the human's beside the hand).
   A 32×32 object icon sits on the plate's outer edge; the name and total form two centered lines beneath it.
@@ -63,8 +89,10 @@ one from the canvas: **wide**, a 1280×720 field, for landscape canvases of 760 
 
 ## Actions
 
-Built only from `legalActions`, so an illegal move never has a button. Wide: a row to the lower right of the
-human; tall: a touch-sized row across the bottom with the raise stepper on a second row.
+Built only from `legalActions`, so an illegal move never has a button. Wide and landscape: a vertical lane to
+the right of the human's hand, with the raise stepper beneath it; tall: a touch-sized row across the bottom with
+the raise stepper on a second row. While the discard dialog is open it carries the instruction, so a centre plate
+it would cut through is not drawn.
 
 | State | Buttons | Keys |
 | --- | --- | --- |

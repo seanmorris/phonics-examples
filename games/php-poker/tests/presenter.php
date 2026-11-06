@@ -192,10 +192,24 @@ $test('card hit regions follow the raised faces and the current viewport before 
 	$presenter->resize(1280, 1207, 1);
 	$layout = $presenter->layout();
 	$cards = $layout->discardDialog()['cards'];
-	$expect($cards[0][0] + $cards[0][2] > $cards[1][0], 'compressed desktop discard cards overlap');
+	// A compressed desktop lays the dialog out at its CSS size, so its five cards stand apart at their natural aspect.
+	foreach(range(1, 4) as $index) $expect($cards[$index - 1][0] + $cards[$index - 1][2] < $cards[$index][0], "compressed desktop discard card $index stands clear of the one before it");
+	$first = $layout->rect(...$cards[0]);
+	$expect(abs($first[2] / $first[3] - 112 / 157) < 1e-6, 'compressed desktop discard cards keep their aspect');
 	[$x, $y] = $layout->point($cards[1][0] + 2, max($cards[0][1], $cards[1][1]) + 20);
 	$presenter->input([], ['x' => $x, 'y' => $y, 'down' => false, 'clicks' => [['x' => $x, 'y' => $y]]], 0);
-	$expect($presenter->state()['discards'] === [$view['players'][0]['cards'][1]], 'an overlap selects the later card painted on top');
+	$expect($presenter->state()['discards'] === [$view['players'][0]['cards'][1]], 'a click at a discard card\'s edge selects that card');
+	// Narrower still, the dialog shrinks its cards rather than overlapping them or leaving the field.
+	foreach([[800, 807], [760, 1100], [1000, 807]] as [$width, $height])
+	{
+		$narrow = Layout::fit($width, $height, 1, 8);
+		$dialog = $narrow->discardDialog();
+		[$boxLeft, , $boxWidth] = $narrow->rect(...$dialog['box']);
+		$expect($boxLeft >= 0 && $boxLeft + $boxWidth <= $width, "the discard dialog stays inside a $width x $height canvas");
+		foreach(range(1, 4) as $index) $expect($dialog['cards'][$index - 1][0] + $dialog['cards'][$index - 1][2] < $dialog['cards'][$index][0], "discard card $index stands clear at $width x $height");
+		$card = $narrow->rect(...$dialog['cards'][0]);
+		$expect(abs($card[2] / $card[3] - 112 / 157) < 2e-3, "discard cards keep their aspect at $width x $height");
+	}
 });
 
 $test('guidance distinguishes opening bets, another seat drawing, and the human draw', static function(callable $expect) use ($fixture, $root): void {
@@ -976,6 +990,127 @@ $test('a rejected action stops showing once the table moves on', static function
 	$cleared['error'] = '';
 	$presenter->update($cleared);
 	$expect(!$shown($presenter), 'a cleared error stays cleared');
+});
+
+$test('the oval keeps its seats, centre plates and controls apart on laptop, desktop and narrow canvases', static function(callable $expect) use ($overlaps, $fixture): void {
+	$view = $fixture('facing-raise-5');
+	foreach([[1280, 627], [1366, 675], [1440, 697], [1365, 807], [1536, 771], [1920, 987], [2560, 987], [1100, 700], [1000, 807], [900, 807], [800, 807]] as [$width, $height]) foreach(range(2, 8) as $seats)
+	{
+		$layout = Layout::fit($width, $height, 1, $seats);
+		$at = "at $seats seats, $width x $height";
+		$expect($layout->profile === 'wide', "the oval is kept $at");
+		$across = $layout->stretch();
+		$size = $layout->metric('emblemSize');
+		$parts = [];
+		for($seat = 0; $seat < $seats; $seat++)
+		{
+			$geometry = $layout->seat($seat, $seats);
+			$last = $geometry['cards'][4];
+			$parts[$seat] = [
+				'plate' => $geometry['plate']
+				, 'fan' => [$geometry['cards'][0][0], $geometry['cards'][0][1], $last[0] + $last[2] - $geometry['cards'][0][0], $last[3]]
+				, 'emblem' => [$geometry['emblem'][0] - $size * $across / 2, $geometry['emblem'][1] - $size / 2, $size * $across, $size]
+				, 'bank' => $layout->bankBounds($seat, $seats, Chips::bank(500))
+			];
+			$expect($parts[$seat]['emblem'][0] >= -1.5 && $parts[$seat]['emblem'][0] + $parts[$seat]['emblem'][2] <= $layout->width() + 1.5, "seat $seat's emblem stays on the field $at");
+		}
+		$inset = static fn(array $rect): array => [$rect[0] + 1.5, $rect[1] + 1.5, $rect[2] - 3, $rect[3] - 3];
+		foreach($parts as $first => $one) foreach($parts as $second => $other) if($first < $second)
+		foreach($one as $firstName => $a) foreach($other as $secondName => $b)
+		$expect(!$overlaps($inset($a), $b), "seat $first's $firstName clears seat $second's $secondName $at");
+		$centre = $layout->centre();
+		foreach(['pot', 'deck', 'bet'] as $name) foreach($parts as $seat => $blocks) foreach($blocks as $part => $block)
+		$expect(!$overlaps($inset($centre[$name]), $block), "the $name clears seat $seat's $part $at");
+		$expect($centre['pot'][1] + $centre['pot'][3] <= $centre['deck'][1] && $centre['deck'][1] + $centre['deck'][3] <= $centre['bet'][1], "the centre cluster keeps its order $at");
+		$expect($centre['deck'][3] >= 40 && abs($centre['deck'][2] / $centre['deck'][3] - $centre['discard'][2] / $centre['discard'][3]) < 1e-9, "the stock stays a readable card $at");
+		$expect($parts[0]['plate'][1] - ($centre['bet'][1] + $centre['bet'][3]) >= $layout->plateHeight() + 16 - .01, "the status line fits between the bet plate and the local plate $at");
+		$controls = array_column($layout->actions($view, ['discards' => [], 'amount' => 8]), 'rect');
+		foreach(['less', 'amount', 'more'] as $part) $controls[] = $layout->stepper($view)[$part];
+		foreach($controls as $index => $control)
+		{
+			$expect($control[0] >= 0 && $control[0] + $control[2] <= $layout->width() + .01 && $control[1] + $control[3] <= $layout->height(), "control $index stays on the field $at");
+			foreach($parts as $seat => $blocks) if($seat !== 0) foreach($blocks as $part => $block)
+			$expect(!$overlaps($inset($control), $block), "control $index clears seat $seat's $part $at");
+		}
+		for($seat = 0; $seat < $seats; $seat++)
+		{
+			[$markerX, $markerY, $markerRadius] = $layout->dealerMarker($seat, $seats);
+			$disc = [$markerX - $markerRadius * $across, $markerY - $markerRadius, 2 * $markerRadius * $across, 2 * $markerRadius];
+			foreach($controls as $index => $control) $expect(!$overlaps($disc, $control), "seat $seat's dealer button is not under control $index $at");
+			foreach($parts as $other => $blocks) foreach($blocks as $part => $block) if($other !== $seat)
+			$expect(!$overlaps($inset($disc), $block), "seat $seat's dealer button clears seat $other's $part $at");
+			$expect($disc[0] >= -.01 && $disc[0] + $disc[2] <= $layout->width() + .01, "seat $seat's dealer button stays on the field $at");
+		}
+		// Shrinking is a last resort and bounded: cards and chips never fall below 60% of their preferred size.
+		$preferred = Layout::fit((int)ceil(1280 * $height / 720), $height, 1, $seats <= 4 ? $seats : 5);
+		$expect($layout->seat(0, $seats)['cards'][0][3] >= .6 * $preferred->seat(0, $seats <= 4 ? $seats : 5)['cards'][0][3] - 1e-6, "the local cards stay at least 60% of their preferred size $at");
+	}
+	// Standard desktop sizes keep every object at its preferred size.
+	foreach([[1440, 807], [1920, 987], [2560, 987]] as [$width, $height]) foreach(range(5, 8) as $seats)
+	$expect(abs(Layout::fit($width, $height, 1, $seats)->seat(0, $seats)['cards'][0][3] - Layout::fit($width, $height, 1, 5)->seat(0, 5)['cards'][0][3]) < 1e-9, "a $seats-seat table keeps its preferred card size at $width x $height");
+});
+
+$test('heads-up on a phone keeps the pot plate off the opponent', static function(callable $expect) use ($overlaps): void {
+	foreach([[390, 782, 1], [1170, 2346, 3], [768, 916, 1], [973, 1177, 1], [360, 640, 1]] as [$width, $height, $dpr])
+	{
+		$layout = Layout::fit($width, $height, $dpr, 2);
+		$expect($layout->profile === 'tall', "$width x $height is a tall table");
+		$centre = $layout->centre();
+		$opponent = $layout->seat(1, 2);
+		$bank = $layout->bankBounds(1, 2, Chips::bank(500));
+		$expect($centre['pot'][1] >= max($opponent['cards'][0][1] + $opponent['cards'][0][3], $bank[1] + $bank[3]), "the pot plate starts below the opponent's cards and chips at $width x $height");
+		$expect($centre['bet'][1] + $centre['bet'][3] <= $layout->seat(0, 2)['plate'][1], "the bet plate ends above the local plate at $width x $height");
+	}
+});
+
+$test('dialogs keep their CSS size and whole labels on a compressed desktop', static function(callable $expect) use ($overlaps): void {
+	$full = Layout::fit(1440, 807, 1, 8);
+	foreach([[1000, 807], [800, 807], [900, 807]] as [$width, $height])
+	{
+		$narrow = Layout::fit($width, $height, 1, 8);
+		$reference = Layout::fit((int)ceil(1280 * $height / 720), $height, 1, 8);
+		$expect($narrow->profile === 'wide' && $narrow->stretch() > 1.1, "$width x $height is a compressed oval");
+		$pairs = [
+			'setup variant' => [$narrow->setup(4, 'jackpots')['variant'], $reference->setup(4, 'jackpots')['variant']]
+			, 'setup deal' => [$narrow->setup(4, 'jackpots')['start'], $reference->setup(4, 'jackpots')['start']]
+			, 'wild cards cancel' => [$narrow->wildcardMenu()['back'], $reference->wildcardMenu()['back']]
+			, 'wild cards row' => [$narrow->wildcardMenu()['items']['one-eyed-jacks'], $reference->wildcardMenu()['items']['one-eyed-jacks']]
+			, 'help back' => [$narrow->information()['back'], $reference->information()['back']]
+			, 'history ok' => [$narrow->history()['back'], $reference->history()['back']]
+			, 'menu item' => [$narrow->menu(false)[0]['rect'], $reference->menu(false)[0]['rect']]
+		];
+		foreach($pairs as $name => [$squeezed, $natural])
+		{
+			$a = $narrow->rect(...$squeezed);
+			$b = $reference->rect(...$natural);
+			$expect($a[2] >= min($b[2], $width - 72) - 1 && abs($a[3] - $b[3]) < 1e-6, "the $name control keeps its CSS size at $width x $height");
+			$expect($a[0] >= 0 && $a[0] + $a[2] <= $width, "the $name control stays on a $width x $height canvas");
+		}
+		foreach([$narrow->menuBox(true), $narrow->setup(4, 'jackpots')['box'], $narrow->wildcardMenu()['box'], $narrow->customWildcards()['box'], $narrow->information()['box'], $narrow->history()['box'], $narrow->discardDialog()['box'], $narrow->panel(440, 250, 120)] as $index => $box)
+		{
+			[$left, , $boxWidth] = $narrow->rect(...$box);
+			$expect($left >= 0 && $left + $boxWidth <= $width, "dialog $index stays on a $width x $height canvas");
+		}
+		$draw = $narrow->actions(['screen' => 'table', 'phase' => 'draw', 'legalActions' => ['draw' => true]], ['discards' => [], 'amount' => 0]);
+		foreach($draw as $button) $expect($narrow->rect(...$button['rect'])[2] >= 119, "{$button['id']} keeps its CSS width in the discard dialog at $width x $height");
+	}
+	// The card matrix is offered only where a cell holds a checkbox and a label; otherwise the dialog pages by suit.
+	$matrix = $full->customWildcards();
+	$expect(!$matrix['paged'] && count($matrix['cards']) === 53, 'a full desktop shows the whole matrix');
+	$expect($full->rect(...$matrix['done'])[2] >= 200, 'the matrix Done button is wide enough for Use selection');
+	$expect($matrix['done'][0] + $matrix['done'][2] <= $matrix['box'][0] + $matrix['box'][2] - 23 && $matrix['back'][0] + $matrix['back'][2] < $matrix['done'][0], 'the matrix footer buttons stay apart inside the dialog');
+	foreach([[800, 807, 1, 8], [390, 782, 1, 8], [320, 500, 1, 8], [844, 328, 1, 8]] as [$width, $height, $dpr, $seats])
+	{
+		$layout = Layout::fit($width, $height, $dpr, $seats);
+		$paged = $layout->customWildcards(1);
+		$expect($paged['paged'], "a $width x $height canvas pages the custom wild cards by suit");
+		$expect(array_key_first($paged['cards']) === 25 && count($paged['cards']) === 13, "a suit page starts with its ace at $width x $height");
+		$back = $layout->rect(...$paged['back']);
+		$done = $layout->rect(...$paged['done']);
+		$box = $layout->rect(...$paged['box']);
+		$expect($back[0] + $back[2] < $done[0] && $done[0] + $done[2] <= $box[0] + $box[2] && $back[0] >= $box[0], "the paged footer buttons stay apart inside the dialog at $width x $height");
+		$expect($back[2] / $dpr >= 48 - 1e-6 && $done[2] / $dpr >= min(200, ($box[2] / $dpr - 48) * .5), "the paged footer buttons keep useful widths at $width x $height");
+	}
 });
 
 echo "$passed PHP Poker presenter checks passed.\n";

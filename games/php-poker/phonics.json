@@ -131,9 +131,9 @@
     "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
     "src/Session.php": "sha256-HOxkWh3WLFaAmdCNzlkwo1O5Bnt4HPhOwrKVu4aBlQ8=",
     "src/Ui/Chips.php": "sha256-qD7RyIoRjgORznQes/KLAwKdsgcEz6tZBNOhSljW35E=",
-    "src/Ui/Layout.php": "sha256-SUvuVs0g/SYhIPx5UOcgWT9g/lDQU0pFb4hgNyNqahA=",
+    "src/Ui/Layout.php": "sha256-o88SLNqr14kIAk0eQSaneBhkCfMn2TyXjNHQdRwX2RU=",
     "src/Ui/Motion.php": "sha256-Qf+Y94XAkdkD6KzlLNBMh0jVHdE3sCR8pWsilraI+u4=",
-    "src/Ui/Painter.php": "sha256-9+QzlCXIHwLXzixWVvW+a1Mvvl6GMjS1a+8Muc/Agx8=",
+    "src/Ui/Painter.php": "sha256-jmk/APE4pY1YRzahnKR64qo2ORAKZoLPa8WTqV0umLs=",
     "src/Ui/Presenter.php": "sha256-maDRlfvb7Uln/DcLrWYencIYEod00UpsWrvYfjxJu6s=",
     "src/WildCards.php": "sha256-hdd/6kPaJEolXlpPKIfJ05dQvJoN88S6T6ellMO5mp4="
   }

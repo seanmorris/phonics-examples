@@ -194,7 +194,7 @@ final class Layout
 		if($build(self::WIDE_SMALLEST_OBJECTS)->collides()) return null;
 		$low = self::WIDE_SMALLEST_OBJECTS;
 		$high = 1.0;
-		for($iteration = 0; $iteration < 10; $iteration++)
+		for($iteration = 0; $iteration < 7; $iteration++)
 		{
 			$middle = ($low + $high) / 2;
 			if($build($middle)->collides()) $high = $middle;
@@ -269,6 +269,47 @@ final class Layout
 
 	/** Horizontal design units that render as wide as one vertical design unit is tall. */
 	public function stretch(): float { return $this->scale / $this->horizontalScale; }
+
+	/**
+	 * The same layout on a field whose x axis is not compressed, or null when this one already is square.
+	 *
+	 * Dialogs hold text and controls of fixed CSS size, so a compressed field cannot simply squeeze them: they are
+	 * laid out on this twin, where a design unit is as wide as it is tall, and mapped back with `fromSquare()`.
+	 */
+	private function square(): ?self
+	{
+		$across = $this->stretch();
+		if($across <= 1 + 1e-9) return null;
+		$design = $this->design;
+		$design['width'] = (int)round($design['width'] / $across);
+		foreach(['card','handCard','dialogCard'] as $metric) $design[$metric][0] /= $across;
+		return new self($this->profile, $design, $this->scale, $this->scale, $this->left, $this->top, $this->dpr, $this->seats);
+	}
+
+	/** Map rectangles and points laid out on the square twin back onto this field; other values pass through. */
+	private function fromSquare(mixed $value): mixed
+	{
+		if(!is_array($value)) return $value;
+		if($value !== [] && array_is_list($value) && array_filter($value, static fn(mixed $item): bool => !is_int($item) && !is_float($item)) === [])
+		{
+			if(count($value) === 2 || count($value) === 4) $value[0] *= $this->stretch();
+			if(count($value) === 4) $value[2] *= $this->stretch();
+			return $value;
+		}
+		return array_map(fn(mixed $item): mixed => $this->fromSquare($item), $value);
+	}
+
+	/**
+	 * A centred panel of fixed CSS width for notices painted outside the dialog geometry.
+	 *
+	 * @return array{float,float,float,float}
+	 */
+	public function panel(float $width, float $top, float $height): array
+	{
+		$across = $this->stretch();
+		$width = min($width * $across, $this->width() - 24 * $across);
+		return [$this->width() / 2 - $width / 2, $top, $width, $height];
+	}
 
 	/** Grow a wide table's visible objects while preserving its top, bottom and action-side anchors. */
 	private static function scaleWideObjects(array $design, float $growth): array
@@ -976,7 +1017,8 @@ final class Layout
 			// The draw controls belong to the discard dialog: its bottom row, right-aligned, or the full row on a phone.
 			[$rowX, $rowY, $rowWidth, $rowHeight] = $this->discardDialog()['buttons'];
 			$weights = array_sum(array_column($entries, 'weight'));
-			$unit = min($this->design['actionRows'] ? INF : 120, ($rowWidth - $gap * (count($entries) - 1)) / $weights);
+			$gap *= $this->stretch();
+			$unit = min($this->design['actionRows'] ? INF : 120 * $this->stretch(), ($rowWidth - $gap * (count($entries) - 1)) / $weights);
 			$x = $rowX + $rowWidth - $unit * $weights - $gap * (count($entries) - 1);
 			$buttons = [];
 			foreach($entries as $entry)
@@ -1065,8 +1107,13 @@ final class Layout
 	 */
 	public function discardDialog(array $cards = [], array $discards = []): array
 	{
-		$width = $this->design['dialogWidth'];
+		if($square = $this->square()) return $this->fromSquare($square->discardDialog($cards, $discards));
+		$width = min($this->design['dialogWidth'], $this->width() - 24);
+		if($this->profile === 'landscape') $width = min($width, $this->tableRight() - 24);
 		[$cardWidth,$cardHeight] = $this->design['dialogCard'];
+		// Five whole cards with air between them: a narrow dialog shows smaller cards, never overlapping ones.
+		$fit = min(1, ($width - 40 - 4 * 8) / (5 * $cardWidth));
+		[$cardWidth,$cardHeight] = [$cardWidth * $fit, $cardHeight * $fit];
 		$gap = ($width - 40 - 5 * $cardWidth) / 4;
 		$control = $this->controlSize();
 		// Title rule, room for a selected card to lift without covering the title, the cards, their numbers, then
@@ -1076,7 +1123,7 @@ final class Layout
 		$left = $this->design['width'] / 2 - $width / 2;
 		// The dialog opens over the human's own hand at the bottom of the field, as the DOS one did.
 		$top = $this->height() - $height - 10;
-		if($this->profile === 'landscape') { $width = min($width, $this->tableRight() - 24); $gap = ($width - 40 - 5 * $cardWidth) / 4; $left = 12; }
+		if($this->profile === 'landscape') $left = 12;
 		$rects = [];
 		for($index = 0; $index < 5; $index++)
 		{
@@ -1098,6 +1145,7 @@ final class Layout
 	 */
 	public function menu(bool $canContinue): array
 	{
+		if($square = $this->square()) return $this->fromSquare($square->menu($canContinue));
 		$items = [['offline', 'Play Offline', 'O', ['type' => 'setup']]];
 		if($canContinue) $items[] = ['continue', 'Continue Offline', 'C', ['type' => 'resume']];
 		$items[] = ['online', 'Play Online', 'P', null];
@@ -1123,6 +1171,7 @@ final class Layout
 	/** Ruled window containing the title, vertical menu controls and compact art credit. */
 	public function menuBox(bool $canContinue): array
 	{
+		if($square = $this->square()) return $this->fromSquare($square->menuBox($canContinue));
 		$count = $canContinue ? 5 : 4;
 		$preferredHeight = max($this->design['menuItem'][1], $this->controlSize(), 48 * $this->dpr / $this->scale);
 		$height = min($this->height() - 24, 56 + $count * $preferredHeight + ($count - 1) * 4);
@@ -1139,6 +1188,7 @@ final class Layout
 	 */
 	public function setup(int $players, string $variant): array
 	{
+		if($square = $this->square()) return $this->fromSquare($square->setup($players, $variant));
 		$width = min(500, $this->width() - 24);
 		$left = ($this->width() - $width) / 2;
 		$control = $this->controlSize();
@@ -1159,6 +1209,7 @@ final class Layout
 	/** Preset selector matching the original game's Wild Cards window. */
 	public function wildcardMenu(): array
 	{
+		if($square = $this->square()) return $this->fromSquare($square->wildcardMenu());
 		$ids = ['none','joker','deuces','one-eyed-jacks','mustached-kings','deuces-treys','kings','custom'];
 		$columns = $this->profile === 'landscape' ? 2 : 1;
 		$rows = (int)ceil(count($ids) / $columns);
@@ -1184,15 +1235,17 @@ final class Layout
 	/** Full desktop matrix or one responsive suit page, preserving 48 CSS px targets on smaller viewports. */
 	public function customWildcards(int $page = 0): array
 	{
+		if($square = $this->square()) return $this->fromSquare($square->customWildcards($page));
 		$page = max(0, min(4, $page));
 		$control = $this->controlSize();
 		$fullHeight = 34 + 24 + 5 * $control + 4 * 4 + 12 + $control + 12;
-		if($this->profile !== 'tall' && $fullHeight <= $this->height() - 24)
+		$gap = 4;
+		$width = min(1120, $this->width() - 24);
+		$labelWidth = 58;
+		$cellWidth = ($width - 48 - $labelWidth - 8 - 12 * $gap) / 13;
+		// The matrix needs a cell wide enough for a checkbox and a label such as 10♣; narrower windows page by suit.
+		if($this->profile !== 'tall' && $fullHeight <= $this->height() - 24 && $cellWidth >= 60 * $this->dpr / $this->scale)
 		{
-			$gap = 4;
-			$width = min(1120, $this->width() - 24);
-			$labelWidth = 58;
-			$cellWidth = ($width - 48 - $labelWidth - 8 - 12 * $gap) / 13;
 			$height = $fullHeight;
 			$left = ($this->width() - $width) / 2;
 			$top = max(12, ($this->height() - $height) / 2);
@@ -1211,11 +1264,13 @@ final class Layout
 				$cards[$id] = [$gridLeft + $column * ($cellWidth + $gap), $y, $cellWidth, $control];
 			}
 			$footer = $top + $height - $control - 12;
+			$doneWidth = 210 * $this->dpr / $this->scale;
 			return ['box'=>[$left,$top,$width,$height],'cards'=>$cards,'page'=>0,'paged'=>false,'rowLabels'=>$labels,'columnLabels'=>$columnLabels,
 				'previous'=>[0,0,0,0],'next'=>[0,0,0,0],'pageLabel'=>[$left+$width/2,$top+28+$control/2],
-				'back'=>[$left+24,$footer,130,$control],'done'=>[$left+$width-164,$footer,140,$control]];
+				'back'=>[$left+24,$footer,130,$control],'done'=>[$left+$width-24-$doneWidth,$footer,$doneWidth,$control]];
 		}
-		$ids = $page < 4 ? range($page * 13, $page * 13 + 12) : [52];
+		// Ace first, as in the matrix.
+		$ids = $page < 4 ? [$page * 13 + 12, ...range($page * 13, $page * 13 + 11)] : [52];
 		$columns = $this->profile === 'tall' ? 3 : 7;
 		$rows = (int)ceil(13 / $columns);
 		$gap = 4;
@@ -1232,15 +1287,21 @@ final class Layout
 			$cards[$id] = [$left + 24 + $column * ($cellWidth + $gap), $top + 36 + $control + $row * ($control + $gap), $cellWidth, $control];
 		}
 		$footer = $top + $height - $control - 12;
+		// The footer shares its row between Back, the running count and the Done button; Done gets the room its
+		// label needs first.
+		$minimum = 48 * $this->dpr / $this->scale;
+		$doneWidth = min(210 * $this->dpr / $this->scale, $width - 48 - $minimum - 8);
+		$backWidth = max($minimum, min(130, $width - 48 - $doneWidth - 8 - 96 * $this->dpr / $this->scale));
 		return ['box'=>[$left,$top,$width,$height],'cards'=>$cards,'page'=>$page,'paged'=>true,'rowLabels'=>[],'columnLabels'=>[],
 			'previous'=>[$left+24,$top+28,$control,$control],'next'=>[$left+$width-24-$control,$top+28,$control,$control],
 			'pageLabel'=>[$left+$width/2,$top+28+$control/2],
-			'back'=>[$left+24,$footer,130,$control],'done'=>[$left+$width-164,$footer,140,$control]];
+			'back'=>[$left+24,$footer,$backWidth,$control],'done'=>[$left+$width-24-$doneWidth,$footer,$doneWidth,$control]];
 	}
 
 	/** Help dialog bounds with a fixed scroll row beneath its wrapped copy. */
 	public function information(): array
 	{
+		if($square = $this->square()) return $this->fromSquare($square->information());
 		$width = min(800, $this->width() - 24);
 		$left = ($this->width() - $width) / 2;
 		$top = 50;
@@ -1256,6 +1317,7 @@ final class Layout
 	/** Compact round-history dialog and its explicit OK target. */
 	public function history(): array
 	{
+		if($square = $this->square()) return $this->fromSquare($square->history());
 		$width = min(640, $this->width() - 24);
 		$control = $this->controlSize();
 		$box = [$this->width() / 2 - $width / 2, 50, $width, min($this->height() - 62, 260 + $control)];

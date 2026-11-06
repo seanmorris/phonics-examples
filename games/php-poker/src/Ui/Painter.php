@@ -161,7 +161,19 @@ final class Painter
 					$this->text($label, $bx - 10, $geometry[$seat]['chips'][1] + 10, $size, Theme::PLATE, 'right');
 				}
 				// The plate already says what an opponent did; the running bet is spelled out only where the wide field has room.
-				elseif($this->layout->profile === 'wide') $this->text('Bet ' . $player['bet'], $bx + 16, $geometry[$seat]['chips'][1] + 10, $this->layout->captionText(), Theme::PLATE, 'center');
+				elseif($this->layout->profile === 'wide')
+				{
+					// Beside the bank on its outer side; under it when that would leave the field.
+					$label = 'Bet ' . $player['bet'];
+					$size = $this->layout->captionText();
+					$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->horizontalUnit;
+					$bounds = $this->layout->bankBounds($seat, $seats, $bank) ?? [$geometry[$seat]['chips'][0], $geometry[$seat]['chips'][1], 0, 0];
+					$gap = 6 * $this->layout->stretch();
+					$labelY = $geometry[$seat]['chips'][1] + 10;
+					if($outward > 0 && $bounds[0] + $bounds[2] + $gap + $width <= $this->layout->width() - 2) $this->text($label, $bounds[0] + $bounds[2] + $gap, $labelY, $size, Theme::PLATE, 'left');
+					elseif($outward < 0 && $bounds[0] - $gap - $width >= 2) $this->text($label, $bounds[0] - $gap, $labelY, $size, Theme::PLATE, 'right');
+					else $this->text($label, max($width / 2 + 2, min($this->layout->width() - $width / 2 - 2, $bounds[0] + $bounds[2] / 2)), $bounds[1] + $bounds[3] + $size * .7, $size, Theme::PLATE, 'center');
+				}
 			}
 		}
 		// Layer 4: seat identities, dealer button and turn marker.
@@ -237,7 +249,15 @@ final class Painter
 		$this->chipStacks('pot', $pot);
 		$highest = 0;
 		foreach($this->view['players'] ?? [] as $player) $highest = max($highest, (int)($player['bet'] ?? 0));
-		$this->plate($centre['bet'], 'Current bet (' . $highest . ')', 'info', false);
+		if(!$this->underDialog($centre['bet'])) $this->plate($centre['bet'], 'Current bet (' . $highest . ')', 'info', false);
+	}
+
+	/** Whether the open discard dialog covers any part of a design-space rectangle. */
+	private function underDialog(array $rect): bool
+	{
+		if(empty($this->view['legalActions']['draw']) || $this->state['locked']) return false;
+		$box = $this->layout->discardDialog()['box'];
+		return $rect[0] < $box[0] + $box[2] && $box[0] < $rect[0] + $rect[2] && $rect[1] < $box[1] + $box[3] && $box[1] < $rect[1] + $rect[3];
 	}
 
 	private function actions(): void
@@ -253,7 +273,12 @@ final class Painter
 			$this->plate($stepper['amount'], (string)$this->state['amount'], 'info', false);
 			$this->button($stepper['more'], '+', '', 'default', false);
 			[$lx, $ly] = $this->layout->point(...$stepper['label']);
-			$this->canvas->label(strtoupper((string)($this->view['legalActions']['betLabel'] ?? 'Bet')), $lx, $ly, $this->layout->captionText(), Theme::PLATE, $this->face, $stepper['align']);
+			$stepperLabel = strtoupper((string)($this->view['legalActions']['betLabel'] ?? 'Bet'));
+			// The primary button already names the bet. In the landscape panel the label would run back over the
+			// last seat's name, so it is shown only where it stays inside the panel.
+			$labelRoom = $this->layout->profile === 'landscape' ? $lx - ($this->layout->point($this->layout->tableRight(), 0)[0] + 4 * $this->unit) : INF;
+			if($this->canvas->measure($stepperLabel, $this->layout->captionText(), $this->face) <= $labelRoom)
+			$this->canvas->label($stepperLabel, $lx, $ly, $this->layout->captionText(), Theme::PLATE, $this->face, $stepper['align']);
 		}
 		if($buttons && $this->state['locked'] && ($this->view['turn'] ?? -1) === 0)
 		{
@@ -285,6 +310,7 @@ final class Painter
 			$humanTop = $this->layout->seat(0, count($this->view['players'] ?? []))['plate'][1];
 			$top = min($top, $humanTop - $messageHeight - 8);
 		}
+		if($error === '' && $this->underDialog([$betX + ($betWidth - $width) / 2, $top, $width, $messageHeight])) return;
 		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, $messageHeight], '', $error !== '' ? 'fold' : 'info', false);
 		foreach($lines as $index => $text)
 		{
@@ -311,7 +337,9 @@ final class Painter
 		[$rowX, $rowY, $rowWidth, $rowHeight] = $dialog['buttons'];
 		$buttons = $this->layout->actions($this->view, $this->state);
 		$room = ($buttons ? $buttons[0]['rect'][0] : $rowX + $rowWidth) - $rowX - 16;
-		if($room >= 160) $this->text('Select cards, then press Draw.', $rowX, $rowY + $rowHeight / 2, $this->layout->captionText(), Theme::INK, 'left', $room);
+		$hint = 'Select cards, then press Draw.';
+		$hintWidth = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($hint) : $hint, $this->layout->captionText(), $this->face) / $this->horizontalUnit;
+		if($room >= $hintWidth) $this->text($hint, $rowX, $rowY + $rowHeight / 2, $this->layout->captionText(), Theme::INK, 'left', $room);
 	}
 
 	private function historyDialog(): void
@@ -321,14 +349,13 @@ final class Painter
 		$this->dialog($box, 'ROUND HISTORY');
 		$lines = array_slice($this->view['history'] ?? [], -8);
 		foreach($lines as $index => $line)
-		$this->text((string)$line, $box[0] + 24, $box[1] + 44 + $index * 22, Theme::BODY, Theme::INK, 'left', $box[2] - 48);
+		$this->text((string)$line, $box[0] + 24 * $this->layout->stretch(), $box[1] + 44 + $index * 22, Theme::BODY, Theme::INK, 'left', $box[2] - 48 * $this->layout->stretch());
 		$this->button($history['back'], 'OK', '↵', 'primary', false);
 	}
 
 	private function welcomeDialog(): void
 	{
-		$w = min(440, $this->layout->width() - 24);
-		$box = [$this->layout->width() / 2 - $w / 2, 250 + $this->layout->verticalShift(), $w, 120];
+		$box = $this->layout->panel(440, 250 + $this->layout->verticalShift(), 120);
 		$this->dialog($box, 'DRAW POKER');
 		$variant = ($this->view['profile']['variant'] ?? 'jackpots') === 'anything' ? 'Anything opens' : 'Jacks or better';
 		$this->text('Welcome to a game of', $this->layout->width() / 2, $box[1] + 50, Theme::LABEL, Theme::INK, 'center');
@@ -346,8 +373,7 @@ final class Painter
 		if($local === 'custom-wildcards') { $this->customWildcardDialog(); return; }
 		if($local === 'online')
 		{
-			$w = min(440, $this->layout->width() - 24);
-			$box = [$this->layout->width() / 2 - $w / 2, $this->layout->profile === 'landscape' ? 165 : 280 + $shift, $w, 120];
+			$box = $this->layout->panel(440, $this->layout->profile === 'landscape' ? 165 : 280 + $shift, 120);
 			$this->dialog($box, 'PLAY ONLINE');
 			$this->text('Opening the Matrix table lobby…', $this->layout->width() / 2, $box[1] + 52, Theme::BODY, Theme::INK, 'center');
 			$this->text($this->controller() ? 'Press ' . $this->backLegend() . ' to go back.' : 'Press Escape to go back.', $this->layout->width() / 2, $box[1] + 82, Theme::BODY, Theme::INK, 'center');
@@ -370,6 +396,7 @@ final class Painter
 		$setup = $this->layout->setup($players, $variant);
 		$this->dialog($setup['box'], 'TABLE SETUP');
 		[$x, $y] = $setup['box'];
+		$x += 24 * $this->layout->stretch() - 24;
 		$this->text('Opponents', $x + 24, $setup['less'][1] + $setup['less'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['less'], '−', '', 'default', $players <= 2);
 		$this->plate($setup['count'], (string)($players - 1), 'info', false);
@@ -421,8 +448,11 @@ final class Painter
 			$this->checkbox($rect, $id === 52 ? '' : WildCards::cardLabel($id), '', isset($selected[$id]),
 				in_array($suit, [1,2], true) ? Theme::DANGER_INK : Theme::INK, true);
 		}
-		$this->text(count($selected) . ' selected', $custom['back'][0] + $custom['back'][2] + 18,
-			$custom['back'][1] + $custom['back'][3] / 2, Theme::CAPTION, Theme::INK);
+		$countLeft = $custom['back'][0] + $custom['back'][2] + 14 * $this->layout->stretch();
+		$count = count($selected) . ' selected';
+		// The running count sits between Back and the Done button where the footer has room for it whole.
+		if($this->canvas->measure(strtoupper($count), Theme::CAPTION, $this->face) / $this->horizontalUnit <= $custom['done'][0] - 8 * $this->layout->stretch() - $countLeft)
+		$this->text($count, $countLeft, $custom['back'][1] + $custom['back'][3] / 2, Theme::CAPTION, Theme::INK);
 		$this->button($custom['back'], 'Back', '⎋', 'default', false);
 		$this->button($custom['done'], 'Use selection', '↵', 'primary', false);
 	}
@@ -433,7 +463,7 @@ final class Painter
 		$box = $info['box'];
 		$this->dialog($box, 'HOW TO PLAY');
 		$paragraphs = Presenter::helpParagraphs($this->controller());
-		$columnWidth = $box[2] - 48;
+		$columnWidth = $box[2] - 48 * $this->layout->stretch();
 		$size = $this->layout->controlText();
 		$leading = $size * 1.45;
 		$y = $box[1] + 36;
@@ -442,7 +472,7 @@ final class Painter
 		$scroll = max(0, min($maximum, (int)($this->state['helpScroll'] ?? 0)));
 		foreach(array_slice($paragraphs, $scroll) as $paragraph)
 		{
-			$x = $box[0] + 24;
+			$x = $box[0] + 24 * $this->layout->stretch();
 			$shown = $this->mode === Theme::CLASSIC ? strtoupper($paragraph) : $paragraph;
 			$lines = $this->canvas->text->wrap($shown, $size * $this->unit, $columnWidth * $this->horizontalUnit, 20, $this->face);
 			foreach($lines as $line)
@@ -453,9 +483,9 @@ final class Painter
 			}
 			$y += 8;
 		}
-		$this->button($info['up'], '↑', '', 'default', $scroll === 0);
+		if($maximum > 0) $this->button($info['up'], '↑', '', 'default', $scroll === 0);
 		$this->button($info['back'], 'Back', '⎋', 'primary', false);
-		$this->button($info['down'], '↓', '', 'default', $scroll === $maximum);
+		if($maximum > 0) $this->button($info['down'], '↓', '', 'default', $scroll === $maximum);
 		if($maximum > 0) $this->text(($scroll + 1) . '/' . ($maximum + 1), $box[0] + $box[2] - 18, $info['back'][1] + $info['back'][3] / 2, Theme::CAPTION, Theme::INK, 'right');
 	}
 
@@ -464,6 +494,7 @@ final class Painter
 		$setup = $this->layout->setup(0, '');
 		$box = $setup['box'];
 		$this->dialog($box, 'SETTINGS');
+		$box[0] += 24 * $this->layout->stretch() - 24;
 		$this->text('Look', $box[0] + 24, $setup['variant'][1] + $setup['variant'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['variant'], $this->mode === Theme::CLASSIC ? 'Classic' : 'Modern', 'M', 'default', false);
 		$this->text('Pace', $box[0] + 24, $setup['pace'][1] + $setup['pace'][3] / 2, Theme::LABEL, Theme::INK);
@@ -626,6 +657,8 @@ final class Painter
 		$labelSize = $this->layout->controlText();
 		$labelX = $x + $w / 2;
 		$labelMax = max(1, $w - 16 * $this->unit);
+		// The label is the control; its key legend is a courtesy. Where both cannot be shown whole, the legend goes.
+		if($key !== '' && $this->canvas->measure($labelText, $labelSize, $this->face) > $kx - 6 * $this->unit - ($x + 8 * $this->unit)) $key = '';
 		if($key !== '')
 		{
 			// Keep short labels centred on the whole button. Reserve the keycap's left margin only when the
