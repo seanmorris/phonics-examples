@@ -248,14 +248,16 @@ export function proveShuffle(input,output,key,order,{context,rounds=DEFAULT_SHUF
 }
 
 /** Verify a shuffle proof. A false return means the transcript is well formed but cryptographically invalid. */
-export function verifyShuffle(input,output,proof,{context}={})
+export function verifyShuffle(input,output,proof,{context,rounds}={})
 {
 	try
 	{
 		context=validateContext(context);
 		const before=decodeDeck(input),after=decodeDeck(output);
+		if(rounds!==undefined&&(!Number.isSafeInteger(rounds)||rounds<16||rounds>MAX_SHUFFLE_ROUNDS))return false;
 		if(before.length!==after.length||!proof||proof.v!==MENTAL_POKER_VERSION||proof.group!==MENTAL_POKER_GROUP
 			||!Number.isSafeInteger(proof.rounds)||proof.rounds<16||proof.rounds>MAX_SHUFFLE_ROUNDS
+			||(rounds!==undefined&&proof.rounds!==rounds)
 			||!Array.isArray(proof.commitments)||proof.commitments.length!==proof.rounds
 			||!Array.isArray(proof.responses)||proof.responses.length!==proof.rounds||!proof.base)return false;
 		const commitments=proof.commitments.map(deck=>decodeDeck(deck,{minimum:before.length}));
@@ -396,7 +398,13 @@ export function splitShuffleProof(proof,{roundsPerChunk=DEFAULT_PROOF_CHUNK_ROUN
 /** Bounded, conflict-detecting reconstruction for durable proof chunks received in any order. */
 export class ShuffleProofAssembler
 {
-	constructor(){this.id=null;this.rounds=null;this.baseCommitment=null;this.baseResponse=null;this.commitments=[];this.responses=[];this.records=new Map;}
+	constructor({rounds=null}={})
+	{
+		if(rounds!==null&&(!Number.isSafeInteger(rounds)||rounds<16||rounds>MAX_SHUFFLE_ROUNDS))
+		throw new RangeError('Expected proof rounds need 16 to 128 rounds');
+		this.expectedRounds=rounds;this.id=null;this.rounds=null;this.baseCommitment=null;this.baseResponse=null;
+		this.commitments=[];this.responses=[];this.records=new Map;
+	}
 	add(chunk)
 	{
 		if(!chunk||chunk.v!==MENTAL_POKER_VERSION||typeof chunk.kind!=='string'||typeof chunk.id!=='string'||!/^[0-9a-f]{64}$/.test(chunk.id))throw new TypeError('Invalid proof chunk');
@@ -409,6 +417,7 @@ export class ShuffleProofAssembler
 		if(chunk.kind==='shuffle-proof-header')
 		{
 			if(!Number.isSafeInteger(chunk.rounds)||chunk.rounds<16||chunk.rounds>MAX_SHUFFLE_ROUNDS)throw new TypeError('Invalid proof header');
+			if(this.expectedRounds!==null&&chunk.rounds!==this.expectedRounds)throw new Error('Shuffle proof uses the wrong round count');
 			decodePoint(chunk.baseCommitment);this.rounds=chunk.rounds;this.baseCommitment=chunk.baseCommitment;
 		}
 		else if(chunk.kind==='shuffle-proof-tail'){decodeScalar(chunk.baseResponse);this.baseResponse=chunk.baseResponse;}

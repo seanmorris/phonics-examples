@@ -83,11 +83,31 @@ test('the default shuffle proof fits four bounded room actions and advances pack
 	}
 	const first=deal.nextAction(),preHash=await deal.hash();
 	assert.deepEqual(first,actions[0]);
+	const verifier=new OnlineDeal({...options,localPlayer:'bob',storage:storage()});
+	const before=verifier.publicState(),malformed=structuredClone(first);
+	malformed.records.push({type:'unknown-proof-record',v:1,id:'0'.repeat(64)});
+	await assert.rejects(verifier.apply({sequence:1,actor:'alice',pre_hash:preHash,action:malformed}),/proof|chunk/i);
+	assert.deepEqual(verifier.publicState(),before,'a rejected packet leaves no partial deck or proof state');
+	const downgraded=structuredClone(first);
+	downgraded.records.find(record=>record.type==='shuffle-proof-header').rounds=16;
+	await assert.rejects(verifier.apply({sequence:1,actor:'alice',pre_hash:preHash,action:downgraded}),/round count/);
+	assert.deepEqual(verifier.publicState(),before);
 	const envelope={sequence:1,actor:'alice',pre_hash:preHash,action:first};
 	await deal.apply(envelope);
 	assert.deepEqual(deal.nextAction(),actions[1]);
 	const restored=new OnlineDeal(options);await restored.replay([envelope]);
 	assert.deepEqual(restored.nextAction(),actions[1]);
+});
+
+test('replay keeps a saved shuffle plan for the future hand',()=>{
+	const memory=storage(),options={
+		api:mentalPoker,root:'$future-plan',sessionId:'future-plan',players:['alice','bob']
+		,localPlayer:'alice',breaker:'alice',rounds:16,storage:memory
+	};
+	const first=new OnlineDeal(options),plan={hand:2,shuffleIndex:0,actor:'alice',actions:[{type:'shuffle-packet',records:[]}]};
+	first.saved.plan=plan;first.saveSaved();
+	const restored=new OnlineDeal(options);
+	assert.deepEqual(restored.saved.plan,plan);
 });
 
 test('the browser evaluator matches high-poker category and wheel rules',()=>{
@@ -225,6 +245,7 @@ test('the public reducer rejects wrong actors, parents and altered layer proofs'
 	const alice=new OnlineDeal({...options,localPlayer:'alice',storage:storage()});
 	const action=alice.nextAction(),hash=await alice.hash();
 	await assert.rejects(alice.apply({sequence:1,actor:'bob',pre_hash:hash,action}),/wrong player/);
+	await assert.rejects(alice.apply({sequence:1,actor:'alice',action}),/parent hash/);
 	await assert.rejects(alice.apply({sequence:1,actor:'alice',pre_hash:'wrong',action}),/parent hash/);
 	const altered=structuredClone(action),deck=altered.records.find(record=>record.type==='deck-shuffle').deck;
 	deck[1]=deck[2];

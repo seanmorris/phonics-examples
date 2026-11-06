@@ -264,12 +264,29 @@ export class OnlineDeal
 		if(!Number.isSafeInteger(sequence)||sequence!==this.state.sequence+1)throw new Error('Online Poker action is out of sequence');
 		if(actor!==this.currentActor())throw new Error('Online Poker action came from the wrong player');
 		if(!action||!ONLINE_ACTION_TYPES.includes(action.type))throw new Error('Unknown online Poker action');
-		if(preHash!==undefined&&preHash!==await this.hash())throw new Error('Online Poker action has the wrong parent hash');
-		if(this.state.stage==='shuffle')this.applyShuffleAction(actor,action);
-		else if(this.state.stage==='deal'||(this.state.stage==='draw'&&this.state.drawAllocations.length))this.applyLayerAction(actor,action);
-		else if(this.state.stage==='draw')this.applyDrawChoice(actor,action);
-		else if(this.state.stage==='reveal')this.applyRevealAction(actor,action);
-		else this.applyPokerAction(actor,action);
+		if(typeof preHash!=='string'||preHash!==await this.hash())throw new Error('Online Poker action has the wrong parent hash');
+		const before={state:clone(this.state),privateCards:clone(this.privateCards),intent:clone(this.intent),saved:clone(this.saved)};
+		let stored;
+		try{stored=this.storage?.getItem(this.keyName)??null;}catch{stored=undefined;}
+		try
+		{
+			if(this.state.stage==='shuffle')this.applyShuffleAction(actor,action);
+			else if(this.state.stage==='deal'||(this.state.stage==='draw'&&this.state.drawAllocations.length))this.applyLayerAction(actor,action);
+			else if(this.state.stage==='draw')this.applyDrawChoice(actor,action);
+			else if(this.state.stage==='reveal')this.applyRevealAction(actor,action);
+			else this.applyPokerAction(actor,action);
+		}
+		catch(error)
+		{
+			this.state=before.state;this.privateCards=before.privateCards;this.intent=before.intent;
+			this.saved=before.saved;this.assembler=null;
+			if(stored!==undefined)try
+			{
+				if(stored===null)this.storage?.removeItem(this.keyName);else this.storage?.setItem(this.keyName,stored);
+			}
+			catch{}
+			throw error;
+		}
 		this.state.sequence=sequence;if(actor===this.localPlayer)this.intent=null;
 		return {sequence,hash:await this.hash(),nextActor:this.currentActor(),outcome:clone(this.state.outcome)};
 	}
@@ -287,13 +304,14 @@ export class OnlineDeal
 		{
 			if(this.state.pending)throw new Error('A shuffle proof is already in progress');
 			this.api.layerDescriptor(this.state.deck,action.deck);
-			this.state.pending={actor,output:clone(action.deck),records:[]};this.assembler=new this.api.ShuffleProofAssembler;return;
+			this.state.pending={actor,output:clone(action.deck),records:[]};
+			this.assembler=new this.api.ShuffleProofAssembler({rounds:this.rounds});return;
 		}
 		if(!this.state.pending||this.state.pending.actor!==actor)throw new Error('Shuffle proof has no candidate deck');
 		const {type,...record}=action,chunk={kind:type,...record};this.state.pending.records.push(clone(action));
 		if(!this.assembler)
 		{
-			this.assembler=new this.api.ShuffleProofAssembler;
+			this.assembler=new this.api.ShuffleProofAssembler({rounds:this.rounds});
 			for(const saved of this.state.pending.records.slice(0,-1))
 			{
 				const {type:savedType,...savedRecord}=saved;this.assembler.add({kind:savedType,...savedRecord});
@@ -301,10 +319,14 @@ export class OnlineDeal
 		}
 		const proof=this.assembler.add(chunk);if(!proof)return;
 		const input=this.state.deck,output=this.state.pending.output;
-		if(!this.api.verifyShuffle(input,output,proof,{context:this.shuffleContext(actor)}))throw new Error('Shuffle proof did not verify');
+		if(!this.api.verifyShuffle(input,output,proof,{context:this.shuffleContext(actor),rounds:this.rounds}))
+		throw new Error('Shuffle proof did not verify');
+		const completed={hand:this.state.handNumber,shuffleIndex:this.state.shuffleIndex,actor};
 		this.state.layers.push({player:actor,descriptor:this.api.layerDescriptor(input,output)});
 		this.state.deck=output;this.state.pending=null;this.assembler=null;this.state.shuffleIndex++;
-		if(actor===this.localPlayer){delete this.saved.plan;this.saveSaved();}
+		const plan=this.saved.plan;
+		if(actor===this.localPlayer&&plan?.hand===completed.hand&&plan.shuffleIndex===completed.shuffleIndex
+			&&plan.actor===completed.actor){delete this.saved.plan;this.saveSaved();}
 		if(this.state.shuffleIndex===this.shuffleOrder.length)this.beginDeal();
 	}
 
@@ -453,7 +475,7 @@ export class OnlineDeal
 		{player.folded=false;player.bet=0;player.totalBet=0;player.drawCount=null;player.lastAction='';}
 		const dealer=this.players[this.state.dealer],ante=Math.min(1,this.bankroll(dealer).stack);if(ante)this.pay(dealer,ante);
 		this.state.message='Jointly shuffling a private deck.';this.history(`Hand ${this.state.handNumber}: ${this.name(dealer)} deals.`);
-		if(this.saved.plan?.hand!==this.state.handNumber)delete this.saved.plan;
+		if(this.saved.plan?.hand<this.state.handNumber)delete this.saved.plan;
 		this.saveSaved();
 	}
 

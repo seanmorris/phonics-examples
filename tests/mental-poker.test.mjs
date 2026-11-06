@@ -43,6 +43,7 @@ test('agreed card definitions produce a canonical 52-card group corpus',()=>{
 
 test('each player proves a private commutative shuffle without exposing its permutation',()=>{
 	assert.equal(verifyShuffle(plain,aliceShuffle.deck,aliceShuffle.proof,{context:'match:test-1:shuffle:alice'}),true);
+	assert.equal(verifyShuffle(plain,aliceShuffle.deck,aliceShuffle.proof,{context:'match:test-1:shuffle:alice',rounds:64}),false);
 	assert.equal(verifyShuffle(aliceShuffle.deck,bobShuffle.deck,bobShuffle.proof,{context:'match:test-1:shuffle:bob'}),true);
 	assert.equal(verifyShuffle(plain,aliceShuffle.deck,aliceShuffle.proof,{context:'another-match'}),false);
 	assert.equal(aliceShuffle.proof.rounds,16);
@@ -87,6 +88,8 @@ test('decrypting the complete shuffled deck preserves every card exactly once',(
 test('shuffle proof chunks reconstruct in any order and reject overlap or digest changes',()=>{
 	const chunks=splitShuffleProof(aliceShuffle.proof,{roundsPerChunk:3});
 	assert.ok(Math.max(...chunks.map(value=>JSON.stringify(value).length))<32*1024);
+	const pinned=new ShuffleProofAssembler({rounds:64});
+	assert.throws(()=>pinned.add(chunks.find(value=>value.kind==='shuffle-proof-header')),/wrong round count/);
 	const assembler=new ShuffleProofAssembler;
 	let assembled=null;
 	for(const chunk of [...chunks].reverse())assembled=assembler.add(chunk)??assembled;
