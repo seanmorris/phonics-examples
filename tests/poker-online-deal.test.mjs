@@ -177,6 +177,13 @@ test('two peers privately deal, bet, draw, reveal, settle and start the next han
 	assert.equal(peers.alice.publicState().awards.reduce((sum,award)=>sum+award.amount,0),5);
 	assert.equal(peers.alice.view().players[1].cards.length,5);
 	assert.doesNotThrow(()=>evaluateHand(peers.alice.view().players[1].cards));
+	assert.equal(peers.alice.saved.keys?.[1],undefined);
+	assert.equal(peers.bob.saved.keys?.[1],undefined);
+	assert.equal(Object.keys(peers.alice.saved.cards?.[1]??{}).length,5);
+	assert.equal(Object.keys(peers.bob.saved.cards?.[1]??{}).length,7);
+	const showdownRestore=new OnlineDeal({...options,localPlayer:'alice',storage:stores.alice});
+	assert.equal(await showdownRestore.replay(history),await peers.alice.hash());
+	assert.deepEqual(showdownRestore.privateHand(),peers.alice.privateHand());
 
 	peers.alice.command({type:'next',revision:history.length,generation:1});await advance();
 	assert.equal(peers.alice.publicState().stage,'shuffle');

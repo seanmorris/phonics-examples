@@ -106,6 +106,41 @@ export class OnlineDeal
 	bankroll(player){return this.state.bankrolls[this.seat(player)];}
 	handAllocations(player){return this.state.hands[this.seat(player)];}
 	privateEntry(allocation){return this.privateCards.find(card=>card.allocation===allocation);}
+	storedPrivateId(allocation)
+	{
+		const hand=this.state.allocations[allocation]?.hand,value=this.saved.cards?.[hand]?.[allocation];
+		return Number.isSafeInteger(value)&&value>=0&&value<52?value:null;
+	}
+	rememberPrivateId(allocation,id)
+	{
+		const hand=this.state.allocations[allocation]?.hand,existing=this.storedPrivateId(allocation);
+		if(!Number.isSafeInteger(hand)||!Number.isSafeInteger(id)||id<0||id>=52)throw new Error('Invalid private card mapping');
+		if(existing!==null&&existing!==id)throw new Error('Private card changed during replay');
+		if(existing===id)return;
+		this.saved={...this.saved,cards:{...(this.saved.cards??{}),[hand]:{...(this.saved.cards?.[hand]??{}),[allocation]:id}}};
+		this.saveSaved();
+	}
+	readLocalAllocation(allocation)
+	{
+		const record=this.state.allocations[allocation],stored=this.storedPrivateId(allocation);
+		const key=this.keyForLocal({required:false,hand:record.hand});
+		if(!key)
+		{
+			if(stored===null)throw new Error('This browser lost its private card mapping');
+			return stored;
+		}
+		const id=this.api.readPrivateCard(record.value,key,this.corpus).id;
+		if(stored!==null&&stored!==id)throw new Error('Private card changed during replay');
+		this.rememberPrivateId(allocation,id);return id;
+	}
+	retireLocalKey(hand)
+	{
+		if(!Number.isSafeInteger(hand)||!Object.hasOwn(this.saved.keys??{},hand))return;
+		const allocations=this.state.allocations
+			.map((card,index)=>({card,index})).filter(({card})=>card.hand===hand&&card.recipient===this.localPlayer);
+		if(!allocations.length||allocations.some(({index})=>this.storedPrivateId(index)===null))return;
+		const keys={...this.saved.keys};delete keys[hand];this.saved={...this.saved,keys};this.saveSaved();
+	}
 	privateHand()
 	{
 		return this.handAllocations(this.localPlayer).map(allocation=>this.privateEntry(allocation)?.id)
@@ -363,9 +398,9 @@ export class OnlineDeal
 			const allocation=this.state.allocations[item.card];allocation.value=item.value;allocation.removed.push(actor);
 			if(this.allocationComplete(allocation)&&allocation.recipient===this.localPlayer)
 			{
-				const card=this.api.readPrivateCard(allocation.value,this.keyForLocal(),this.corpus),existing=this.privateEntry(item.card);
-				if(existing&&existing.id!==card.id)throw new Error('Private card changed during replay');
-				if(!existing)this.privateCards.push({allocation:item.card,id:card.id});
+				const id=this.readLocalAllocation(item.card),existing=this.privateEntry(item.card);
+				if(existing&&existing.id!==id)throw new Error('Private card changed during replay');
+				if(!existing)this.privateCards.push({allocation:item.card,id});
 			}
 		}
 		this.state.allocationIndex=this.relevantAllocations().filter(index=>this.allocationComplete(this.state.allocations[index])).length;
@@ -465,7 +500,7 @@ export class OnlineDeal
 
 	beginHand(advance)
 	{
-		if(advance)this.state.dealer=(this.state.dealer+1)%this.players.length;
+		if(advance){this.retireLocalKey(this.state.handNumber);this.state.dealer=(this.state.dealer+1)%this.players.length;}
 		this.state.handNumber++;this.state.stage='shuffle';this.state.shuffleIndex=0;this.state.deck=this.api.corpusDeck(this.corpus);
 		this.state.layers=[];this.state.pending=null;this.state.allocations=[];this.state.allocationIndex=0;this.state.nextDeckIndex=1;
 		this.state.hands=this.players.map(()=>[]);this.state.discards=[];this.state.drawAllocations=[];this.state.drawRecipient=null;
@@ -534,6 +569,7 @@ export class OnlineDeal
 		this.state.message=names.join(' and ')+(winners.length>1?' split ':' wins ')+this.state.pot+' chips'
 			+(reveal?' with '+evaluateHand(this.state.revealed[this.seat(orderedWinners[0])]).name.toLowerCase():' uncontested')+'.';
 		this.state.pot=0;this.state.stage='showdown';this.state.turnQueue=[];this.state.reveal=reveal;this.history(this.state.message);
+		this.retireLocalKey(this.state.handNumber);
 		const solvent=this.players.filter(player=>this.bankroll(player).stack>0);
 		if(solvent.length===1)
 		{
