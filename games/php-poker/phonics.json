@@ -124,7 +124,7 @@
     "src/Bot.php": "sha256-ZXzRRchzQL5Y843BbvzKNns9Z6E6KW7eFmAvW9ll6ZI=",
     "src/Game.php": "sha256-lEbDK4q50Lak0Hqkc03fBVuBV86C7psJPXRuZ7I7aUM=",
     "src/Hand.php": "sha256-5ClvYfFpr1JaASnoZtWe0tdPS1fpeQ7cQTUW5OMyoLc=",
-    "src/Odds.php": "sha256-5H465kU93AnqB9LJNQJ29WXfPs6vFGhzGB8x22k1RTA=",
+    "src/Odds.php": "sha256-M1sorB1zWjqH4cs36k7yFGj0mULz6hYP1qAYslyeObY=",
     "src/Profile.php": "sha256-/SgMjpH0bzQCib7TdlmScqex+LaHLu52c5yqBu+flMY=",
     "src/Render/Text.php": "sha256-Y9gbUpg6AKH33l0kq3YxRr4ln7JEG1/5IRp71Qa8H8E=",
     "src/Render/Texture.php": "sha256-q8tAALhZ51uMs8WZiiVub84AZTIRxztqWvzg89DQsno=",

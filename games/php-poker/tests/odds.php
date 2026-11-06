@@ -98,6 +98,37 @@ $test('drawing odds follow the wild cards in play and drop hands that cannot sta
 	$expect(Odds::drawing(range(0,51))===Odds::drawing(range(0,51)),'Results are stable and cached');
 });
 
+$test('every preset keeps the counts of the per-pattern evaluation',static function() use ($expect): void {
+	// Recorded before evaluations were shared between equal hand shapes; full-deck values for three more rules.
+	$expected=[
+		'joker'=>[1302540,1437936,123552,232968,34704,11388,9360,9360,540,84,78],
+		'one-eyed-jacks'=>[1052130,1188652,102960,199758,28938,9476,8112,8328,480,54,72],
+		'deuces-treys'=>[464100,1113696,71280,610080,144564,24668,18480,129656,10760,3524,8152],
+	];
+	foreach($expected as $preset=>$counts)
+	{
+		$dealt=Odds::dealt(WildCards::deck($preset),WildCards::ids($preset));
+		$expect(array_values($dealt['counts'])===$counts,"$preset counts: ".json_encode(array_values($dealt['counts'])));
+	}
+});
+
+$test('heavy wild rules still form every drawing hand from natural cards',static function() use ($expect,$combinations): void {
+	$custom=[0,1,2,13,14,15,26,27,28,39,40,41];
+	$rows=Odds::drawing(WildCards::deck(['custom'],$custom),WildCards::ids(['custom'],$custom));
+	$expect(count($rows)===11,'Twos, threes and fours wild still leave every starting hand');
+	// The ace row reads the pair's rank, so check it against every draw with deuces wild.
+	$wild=WildCards::ids('deuces');
+	$ace=Odds::drawing(range(0,51),$wild)[0];
+	$held=[51]; $unseen=array_values(array_diff(range(0,51),$held,[11,20,30,1]));
+	$hits=0;
+	foreach($combinations($unseen,4) as $cards)
+	{
+		$hand=Hand::evaluate([...$held,...$cards],$wild);
+		if($hand['category']>1 || ($hand['category']===1 && $hand['ranks'][0]===14)) $hits++;
+	}
+	$expect($ace['hits']===$hits && $hits===89973 && $ace['trials']===178365,"Deuces-wild ace row {$ace['hits']} vs $hits");
+});
+
 $test('invalid decks and draws are rejected',static function() use ($expect): void {
 	foreach([
 		static fn()=>Odds::dealt([0,1,2,3]),
