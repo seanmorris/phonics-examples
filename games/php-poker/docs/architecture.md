@@ -16,8 +16,9 @@ with their responses. The ten initial removals travel as two five-card layer bat
 shuffle and the complete private deal into three settlement handshakes, so packet fragments do not each emit two
 Matrix acknowledgements. Both clients still execute and hash every proof record before the batch boundary can settle.
 The current hand's private scalar and unfinished local proof plan stay in session storage. Once a hand finishes, the
-browser retains only its allocation-to-face mappings and erases that hand's scalar. Neither room history nor the PHP
-view receives concealed faces or private keys.
+browser retains only its allocation-to-face mappings and erases that hand's scalar. Neither room history nor the
+public state hash receives concealed faces or private keys. The PHP presenter receives the current local card ids so
+it can draw that player's hand, but it never receives a scalar or proof plan.
 
 `OnlineDeal` is the public transcript reducer for the complete two-player flow. The players shuffle in the shared
 starting-gun order, then ten cards are assigned round-robin from the encrypted deck. For each card, the other player
