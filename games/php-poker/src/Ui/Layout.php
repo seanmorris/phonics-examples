@@ -460,7 +460,7 @@ final class Layout
 		$height=$this->controlSize();
 		$definitions=$menu==='game'
 			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['quit','Quit to title','Q']]
-			: [['game-settings','Game Settings','G'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
+			: [['game-settings','Game Settings','G'],['history','History','H'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
 		$items=[];
 		$x=$headings[$menu][0]; $y=$headings[$menu][1]+$headings[$menu][3];
 		foreach($definitions as $index=>[$id,$label,$key])
@@ -1119,7 +1119,6 @@ final class Layout
 		{
 			// The terminal action deals the next hand; when the human is broke it also borrows the house's loan first.
 			$loan = (int)($legal['loan'] ?? 0);
-			$add('history', 1.1, 'History', 'H', 'default', null);
 			$add('next', $loan > 0 ? 1.9 : 1.2, $loan > 0 ? "Borrow $loan & deal" : 'Deal', '↵', 'primary', ['type' => 'next']);
 		}
 		elseif(!empty($legal['fold']))

@@ -240,6 +240,13 @@ test('table-bar menus save, load and show the settings and odds tables',async({p
 	await canvas.focus();await page.keyboard.press('Alt+p');
 	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('poker');
 	geometry=await regions(canvas);
+	target=await point(canvas,geometry.topPoker.items.find(item=>item.id==='history').rect); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).ui.history).toBe(true);
+	await canvas.focus();await page.keyboard.press('Enter');
+	await expect.poll(async()=>(await state(canvas)).ui.history).toBe(false);
+	await page.keyboard.press('Alt+p');
+	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('poker');
+	geometry=await regions(canvas);
 	target=await point(canvas,geometry.topPoker.items.find(item=>item.id==='odds').rect); await page.mouse.click(target.x,target.y);
 	await expect.poll(async()=>(await state(canvas)).ui.infoDialog).toBe('odds');
 	target=await point(canvas,geometry.odds.more); await page.mouse.click(target.x,target.y);

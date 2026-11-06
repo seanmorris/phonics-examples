@@ -56,7 +56,7 @@ $test('the action bar holds exactly the legal actions', static function(callable
 	$expect($ids($fixture('opening-8')) === ['fold','pass','bet'], 'opening: fold, pass, bet');
 	$expect($ids($fixture('facing-raise-5')) === ['fold','call','bet'], 'facing a raise: fold, call, raise');
 	$expect($ids($fixture('draw-2')) === ['clear','draw'], 'draw: keep all, draw');
-	$expect($ids($fixture('showdown-5')) === ['history','next'], 'showdown: history, next');
+	$expect($ids($fixture('showdown-5')) === ['next'], 'showdown: the next-deal control stands alone because History is in the Poker menu');
 	$opening = $fixture('opening-8');
 	$opening['legalActions']['bet'] = false;
 	$opening['legalActions']['openingRequired'] = true;
@@ -1200,6 +1200,11 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$poker=new Presenter($root); $poker->update($view);
 	$poker->input([['key'=>'alt+p']],null,0);
 	$expect($poker->state()['topMenu']==='poker','Poker opens its information menu');
+	$expect($poker->input([['key'=>'h']],null,0)===[] && $poker->state()['history'] && $poker->modal(),'History opens from the Poker menu as a modal dialog');
+	$poker->update($view);
+	$expect($poker->state()['history'],'the History dialog remains open when the table view refreshes');
+	$poker->input([['key'=>'enter']],null,0);
+	$poker->input([['key'=>'alt+p']],null,0);
 	$expect($poker->input([['key'=>'g']],null,0)===[] && $poker->state()['infoDialog']==='game-settings','Game Settings opens the active table profile');
 	$settings=$poker->state()['gameSettings'];
 	$expect($settings===['table'=>'8 players · Offline','opening'=>'Jacks or better','wild'=>'No wild cards','ante'=>'1 chip',

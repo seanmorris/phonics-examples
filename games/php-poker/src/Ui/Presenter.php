@@ -164,9 +164,8 @@ final class Presenter
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
 		elseif($this->setupAfterMenu) { $this->local = 'setup'; $this->setupAfterMenu = false; }
 		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','limits','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
-		if(($view['screen'] ?? '') !== 'table') { $this->topMenu = null; $this->infoDialog = null; $this->confirmDialog=null; }
+		if(($view['screen'] ?? '') !== 'table') { $this->topMenu = null; $this->infoDialog = null; $this->confirmDialog=null; $this->historyOpen=false; }
 		if(($view['screen'] ?? '') === 'help' && ($previous['screen'] ?? '') !== 'help') $this->helpScroll = 0;
-		if(($view['phase'] ?? '') !== 'showdown' && ($view['phase'] ?? '') !== 'redeal') $this->historyOpen = false;
 		$this->syncNetworkWait();
 		$this->dirty = true;
 	}
@@ -293,7 +292,7 @@ final class Presenter
 		if(!empty($target['disabled'])) return [];
 		if(isset($target['key'])) return $this->key($target['key']);
 		if(isset($target['confirm'])) return $this->activateConfirmation((string)$target['confirm']);
-		if(isset($target['topMenu'])) { $menu=(string)$target['topMenu']; $this->topMenu=$this->topMenu===$menu?null:$menu; return []; }
+		if(isset($target['topMenu'])) { $menu=(string)$target['topMenu']; $this->historyOpen=false; $this->topMenu=$this->topMenu===$menu?null:$menu; return []; }
 		if(isset($target['topAction'])) return $this->activateTopAction((string)$target['topAction']);
 		if(isset($target['info']))
 		{
@@ -528,7 +527,7 @@ final class Presenter
 		if($screen==='table' && in_array($key,['alt+g','alt+p'],true))
 		{
 			$menu=$key==='alt+g'?'game':'poker';
-			$this->infoDialog=null; $this->confirmDialog=null;
+			$this->infoDialog=null; $this->confirmDialog=null; $this->historyOpen=false;
 			$this->topMenu=$this->topMenu===$menu?null:$menu;
 			return [];
 		}
@@ -628,7 +627,7 @@ final class Presenter
 			if(in_array($key,['escape','backspace'],true)) { $this->topMenu=null; return []; }
 			$action=($this->topMenu==='game'
 				? ['n'=>'new','s'=>'save','l'=>'load','q'=>'quit']
-				: ['g'=>'game-settings','o'=>'odds','i'=>'improving'])[$key]??null;
+				: ['g'=>'game-settings','h'=>'history','o'=>'odds','i'=>'improving'])[$key]??null;
 			return $action===null?[]:$this->activateTopAction($action);
 		}
 
@@ -675,6 +674,7 @@ final class Presenter
 		if($action==='save') return [['type'=>'save-game']];
 		if($action==='load') return [['type'=>'load-game']];
 		if($action==='quit') return $this->leaveTable();
+		if($action==='history') { $this->historyOpen=true; return []; }
 		if(in_array($action,['game-settings','odds','improving'],true)) { $this->infoDialog=$action; return []; }
 		return [];
 	}
@@ -799,7 +799,7 @@ final class Presenter
 	 */
 	private function leaveTable(): array
 	{
-		$this->topMenu=null; $this->infoDialog=null;
+		$this->topMenu=null; $this->infoDialog=null; $this->historyOpen=false;
 		if(($this->view['mode']??'offline')==='online') { $this->confirmDialog='forfeit'; return []; }
 		$this->confirmDialog=null; $this->setupAfterMenu=false;
 		return [['type'=>'menu']];
@@ -977,7 +977,7 @@ final class Presenter
 	public function animating(): bool { return $this->motion !== null && ($this->view['screen'] ?? '') === 'table'; }
 
 	/** Table-bar menus and dialogs pause local bot decisions while the player reads or saves. */
-	public function modal(): bool { return $this->topMenu !== null || $this->infoDialog !== null || $this->confirmDialog !== null; }
+	public function modal(): bool { return $this->topMenu !== null || $this->infoDialog !== null || $this->confirmDialog !== null || $this->historyOpen; }
 
 	/** Advance presentation time only while the table is visible. No redraw remains scheduled after completion. */
 	public function advance(float $seconds): void

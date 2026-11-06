@@ -201,8 +201,9 @@ final class Painter
 			$size=$this->layout->controlText();
 			$lines=$this->canvas->text->wrap($shown,$size*$this->unit,$valueWidth*$this->horizontalUnit,3,$this->face);
 			$leading=$size*1.25;
-			$lineY=$rect[1]+$leading/2+2;
-			foreach(array_slice($lines,0,3) as $line)
+			$lines=array_slice($lines,0,3);
+			$lineY=$rect[1]+$rect[3]/2-(count($lines)-1)*$leading/2;
+			foreach($lines as $line)
 			{
 				$this->text($line,$valueX,$lineY,$size,Theme::INK,'left',$valueWidth);
 				$lineY+=$leading;
