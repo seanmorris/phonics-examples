@@ -523,6 +523,15 @@ final class Painter
 			'finalMinimum'=>'After min','finalMaximum'=>'After max',
 			'raiseLimit'=>'Total raises','playerRaiseLimit'=>'Raises/player'
 		];
+		$captions = [
+			'ante'=>'Dealer pays into pot',
+			'minimum'=>'Min bet/raise pre-draw',
+			'maximum'=>'Max bet/raise pre-draw',
+			'finalMinimum'=>'Min bet/raise post-draw',
+			'finalMaximum'=>'Max bet/raise post-draw',
+			'raiseLimit'=>'Table raise cap/round',
+			'playerRaiseLimit'=>'Player raise cap/round'
+		];
 		$this->dialog($limits['box'], 'BETTING & RAISING LIMITS');
 		foreach($limits['fields'] as $field => $stepper)
 		{
@@ -533,7 +542,10 @@ final class Painter
 				'finalMinimum'=>[1,(int)($draft['finalMaximum']??1)],
 				'finalMaximum'=>[(int)($draft['finalMinimum']??1),100], default=>[0,10]
 			};
-			$this->text($labels[$field], $stepper['label'][0], $stepper['label'][1] + $stepper['label'][3] / 2, Theme::LABEL, Theme::INK, 'left', $stepper['label'][2]);
+			$this->text($labels[$field], $stepper['label'][0], $stepper['label'][1] + $stepper['label'][3] * .31,
+				Theme::LABEL, Theme::INK, 'left', $stepper['label'][2]);
+			$this->text($captions[$field], $stepper['label'][0], $stepper['label'][1] + $stepper['label'][3] * .72,
+				$this->layout->captionText(), Theme::alpha(Theme::INK, .72), 'left', $stepper['label'][2]);
 			$this->button($stepper['less'], '−', '', 'default', $value <= $minimum);
 			$this->plate($stepper['count'], (string)$value, 'info', false);
 			$this->button($stepper['more'], '+', '', 'default', $value >= $maximum);
