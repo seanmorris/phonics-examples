@@ -29,11 +29,13 @@ $session=Session::restore((string)(vrzno_env('pokerLoad'))());
 $engine=new Engine(new Device(1280,720,'PHP Poker'));
 $presenter=new Presenter(__DIR__);
 $view=$session->view();
+$storage=json_decode((string)(vrzno_env('pokerStorageStatus'))(),true,8,JSON_THROW_ON_ERROR);
+$view['manualSaveAvailable']=!empty($storage['manual']);
 $presenter->update($view);
 $width=1280; $height=720; $dpr=1.0; $resized=true; $published=''; $onlinePublished='';
 
 $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
-	$session,$presenter,&$view,&$width,&$height,&$dpr,&$resized,&$onlinePublished
+	&$session,$presenter,&$view,&$width,&$height,&$dpr,&$resized,&$onlinePublished
 ): bool {
 	$viewport=json_decode((string)(vrzno_env('pokerViewport'))(),true,16,JSON_THROW_ON_ERROR);
 	if(is_array($viewport)&&count($viewport)>=3)
@@ -61,10 +63,28 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 	foreach($intents as $intent)
 	{
 		if(!is_array($intent)) continue;
+		if(($intent['type']??null)==='save-game')
+		{
+			(vrzno_env('pokerManualSave'))($session->save());
+			$session->command(['type'=>'save-game']);
+			continue;
+		}
+		if(($intent['type']??null)==='load-game')
+		{
+			$json=(string)(vrzno_env('pokerManualLoad'))();
+			$candidate=$json===''?null:Session::restore($json);
+			if($candidate?->hasGame())
+			{
+				$candidate->resumeLoaded((int)($session->view()['generation']??0)+1);
+				$session=$candidate;
+			}
+			else $session->command(['type'=>'load-failed']);
+			continue;
+		}
 		$seed=($intent['type']??null)==='start'?(string)(vrzno_env('pokerSeed'))():null;
 		$session->command($intent,$seed);
 	}
-	if(!($input['hidden']??false) && !$presenter->animating()) $session->tick($elapsed);
+	if(!($input['hidden']??false) && !$presenter->animating() && !$presenter->modal()) $session->tick($elapsed);
 	if($session->consumeSaveDirty()) (vrzno_env('pokerSave'))($session->save());
 	$sessionDirty=$session->consumeDirty();
 	$onlineJson=(string)(vrzno_env('pokerOnlineView'))();
@@ -72,7 +92,7 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 	{
 		$onlineView=json_decode($onlineJson,true,64,JSON_THROW_ON_ERROR);
 		if(!is_array($onlineView)) throw new RuntimeException('Invalid online Poker view');
-		$view=$onlineView; $onlinePublished=$onlineJson; $presenter->update($view);
+		$view=$onlineView; $view['manualSaveAvailable']=false; $onlinePublished=$onlineJson; $presenter->update($view);
 	}
 	elseif($onlineJson==='' && ($onlinePublished!=='' || $sessionDirty))
 	{
@@ -80,6 +100,7 @@ $engine->setInputHandler(static function(Engine $engine,float $elapsed) use (
 		$onlinePublished='';
 		$storage=json_decode((string)(vrzno_env('pokerStorageStatus'))(),true,8,JSON_THROW_ON_ERROR);
 		if(($storage['error']??'')!=='' && $view['error']==='') $view['error']=$storage['error'];
+		$view['manualSaveAvailable']=!empty($storage['manual']);
 		$presenter->update($view);
 	}
 	// The game has its own menu and pause policy; do not toggle the engine's generic pause panel.

@@ -58,6 +58,8 @@ final class Session
 			}
 			elseif($type==='menu') $this->screen='menu';
 			elseif($type==='resume' && $this->game) $this->screen='table';
+			elseif($type==='save-game' && $this->game) {}
+			elseif($type==='load-failed') throw new \InvalidArgumentException('No manually saved game is available');
 			elseif($type==='help') $this->screen='help';
 			elseif($type==='settings') $this->screen='settings';
 			elseif($type==='pace')
@@ -110,6 +112,16 @@ final class Session
 	public function consumeDirty(): bool { $dirty=$this->dirty; $this->dirty=false; return $dirty; }
 	/** @return bool Whether an accepted local action needs atomic persistence. */
 	public function consumeSaveDirty(): bool { $dirty=$this->saveDirty; $this->saveDirty=false; return $dirty; }
+	/** @return bool Whether a local game exists for explicit save/load menu commands. */
+	public function hasGame(): bool { return $this->game !== null; }
+
+	/** Resume a manually loaded snapshot as a new UI generation without changing its cards or rules. */
+	public function resumeLoaded(int $minimumGeneration): void
+	{
+		if(!$this->game) throw new \InvalidArgumentException('The saved game is empty');
+		$this->generation=max($this->generation + 1, $minimumGeneration);
+		$this->screen='table'; $this->delay=0; $this->dirty=true; $this->saveDirty=true; $this->error='';
+	}
 
 	/** @return string Complete local save; contains hidden hands and is never a public replay. */
 	public function save(): string

@@ -213,6 +213,21 @@ $test('save restores a bot turn exactly and menu pauses progression',static func
 		$expect(!$restored['canContinue']&&$restored['error']!=='','Corrupt save was silently accepted');
 	}
 });
+$test('manual snapshots resume as a fresh presentation generation',static function() use ($expect): void {
+	$session=new Session;
+	$expect(!$session->hasGame());
+	$session->command(['type'=>'start','players'=>2,'variant'=>'anything'],'manual-slot');
+	$before=$session->view(); $snapshot=$session->save();
+	$session->command(['type'=>'save-game']);
+	$expect($session->view()['error']==='' && $session->hasGame(),'Save Game is accepted only for a live local table');
+	$loaded=Session::restore($snapshot);
+	$loaded->resumeLoaded($before['generation']+5);
+	$after=$loaded->view();
+	$expect($after['screen']==='table' && $after['generation']===$before['generation']+5,'a manual load resumes the table at the requested fresh generation');
+	$expect($after['revision']===$before['revision'] && $after['players']===$before['players'],'loading preserves the exact game state');
+	$empty=new Session; $empty->command(['type'=>'load-failed']);
+	$expect(str_contains($empty->view()['error'],'No manually saved game'),'an empty manual slot reports a readable error');
+});
 $test('long seeded bot sessions complete at every seat count and both variants',static function() use ($expect,$act): void {
 	foreach(['jackpots','anything'] as $variant) foreach(range(2,8) as $n)
 	{

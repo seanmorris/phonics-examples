@@ -54,7 +54,7 @@ final class Painter
 		if($screen === 'menu') $this->menuScreen();
 		elseif($screen === 'help') $this->helpScreen();
 		elseif($screen === 'settings') $this->settingsScreen();
-		else { $this->menuBar(); $this->table(); }
+		else { $this->menuBar(); $this->table(); $this->tableOverlay(); }
 		$this->controllerFocus();
 	}
 
@@ -83,15 +83,88 @@ final class Painter
 		$left = 0;
 		$width = $this->layout->left * 2 + $fieldWidth;
 		$this->canvas->box(0, $top, $width, $height, 0, Theme::MENU);
-		$x = $left + 14 * $this->unit;
-		foreach(['GAME','POKER','DRAW POKER'] as $entry)
-		$x += $this->canvas->label($entry, $x, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face) + 22 * $this->unit;
+		$headings=$this->layout->topMenus();
+		foreach(['game'=>'GAME','poker'=>'POKER'] as $id=>$label)
+		{
+			[$hx,$hy,$hw,$hh]=$this->layout->rect(...$headings[$id]);
+			$active=($this->state['topMenu']??null)===$id;
+			if($active) $this->canvas->box($hx,$hy,$hw,$hh,0,Theme::DIALOG);
+			$this->canvas->label($label,$hx+$hw/2,$hy+$hh/2,Theme::LABEL,$active?Theme::INK:Theme::MENU_TEXT,$this->face,'center');
+		}
+		[,,$pokerWidth]=$this->layout->rect(...$headings['poker']);
+		[$pokerX]=$this->layout->point($headings['poker'][0],0);
+		$this->canvas->label('DRAW POKER',$pokerX+$pokerWidth+16*$this->unit,$top+$height/2,Theme::LABEL,Theme::MENU_TEXT,$this->face);
 		$stage = $this->state['motion']['kind'] ?? '';
 		$phase = !empty($this->view['waitingForConfirmation']) ? 'CONFIRMING' : match(in_array($stage, ['deal','draw'], true) ? $stage : ($this->view['phase'] ?? '')) {
 			'deal' => 'DEALING', 'betting' => 'OPENING BETS', 'draw' => 'DRAW', 'final-betting' => 'FINAL BETS',
 			'showdown' => 'HAND OVER', 'redeal' => 'REDEAL', default => 'DRAW POKER'
 		};
 		$this->canvas->label($phase, $left + $width - 14 * $this->unit, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face, 'right');
+	}
+
+	/** Draw table-bar dropdowns and information windows above every table object. */
+	private function tableOverlay(): void
+	{
+		if(($this->state['infoDialog']??null)!==null) { $this->oddsDialog((string)$this->state['infoDialog']); return; }
+		if(($this->state['topMenu']??null)!==null) $this->dropdownMenu((string)$this->state['topMenu']);
+	}
+
+	/** A compact desktop-style command menu attached to the black table bar. */
+	private function dropdownMenu(string $menu): void
+	{
+		$dropdown=$this->layout->topDropdown($menu);
+		[$x,$y,$w,$h]=$this->layout->rect(...$dropdown['box']);
+		if($this->mode===Theme::MODERN) $this->canvas->shadow($x,$y,$w,$h,2*$this->unit,8*$this->unit);
+		$this->canvas->box($x,$y,$w,$h,0,Theme::DIALOG,Theme::INK,1*$this->unit);
+		foreach($dropdown['items'] as $index=>$item)
+		{
+			$disabled=($this->view['mode']??'offline')==='online' && in_array($item['id'],['save','load'],true);
+			$disabled=$disabled || ($item['id']==='save' && empty($this->view['canContinue']))
+				|| ($item['id']==='load' && empty($this->view['manualSaveAvailable']));
+			[$rx,$ry,$rw,$rh]=$this->layout->rect(...$item['rect']);
+			if($index>0) $this->canvas->box($rx+5*$this->unit,$ry,$rw-10*$this->unit,1*$this->unit,0,Theme::alpha(Theme::INK,.18));
+			$ink=$disabled?Theme::alpha(Theme::INK,.38):Theme::INK;
+			$this->text($item['label'],$item['rect'][0]+14*$this->layout->stretch(),$item['rect'][1]+$item['rect'][3]/2,$this->layout->controlText(),$ink,'left',$item['rect'][2]-58*$this->layout->stretch());
+			$this->text($item['key'],$item['rect'][0]+$item['rect'][2]-14*$this->layout->stretch(),$item['rect'][1]+$item['rect'][3]/2,$this->layout->captionText(),$ink,'right');
+		}
+	}
+
+	/** The two odds reference tables from the original DOS presentation. */
+	private function oddsDialog(string $table): void
+	{
+		$first=[
+			['Bust','2/1'],['One pair','2/1'],['Two pair','12/1'],['Three of a kind','50/1'],['Flush','100/1'],
+			['Straight','----/1'],['Full house','----/1'],['Four of a kind','----/1'],['Straight flush','----/1']
+		];
+		$improving=[
+			['One ace','Pair of aces','3/1'],['One pair','Two pair','5/1'],['...','Three of a kind','8/1'],
+			['...','Full house','97/1'],['...','Four of a kind','359/1'],['Two pairs','Full house','11/1'],
+			['Three of a kind','Full house','15.5/1'],['...','Four of a kind','15.5/1'],['Four flush','Flush','4.5/1'],
+			['Outside straight','Straight','5/1'],['Inside straight','Straight','11/1']
+		];
+		$geometry=$this->layout->oddsDialog($table);
+		$this->dialog($geometry['box'],$table==='odds'?'ODDS AGAINST (100 HANDS)':'ODDS AGAINST IMPROVING');
+		$rows=$table==='odds'?$first:$improving;
+		foreach($geometry['rows'] as $index=>$rect)
+		{
+			[$x,$y,$w,$h]=$this->layout->rect(...$rect);
+			$fill=$index%2===0?Theme::alpha(Theme::BUTTON,.72):Theme::DIALOG;
+			$this->canvas->box($x,$y,$w,$h,0,$fill,Theme::alpha(Theme::INK,.24),1*$this->unit);
+			$middle=$rect[1]+$rect[3]/2;
+			if($table==='odds')
+			{
+				$this->text($rows[$index][0],$rect[0]+10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.72);
+				$this->text($rows[$index][1],$rect[0]+$rect[2]-10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'right');
+			}
+			else
+			{
+				$this->text($rows[$index][0],$rect[0]+10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.38);
+				$this->text($rows[$index][1],$rect[0]+$rect[2]*.43,$middle,$this->layout->captionText(),Theme::INK,'left',$rect[2]*.4);
+				$this->text($rows[$index][2],$rect[0]+$rect[2]-10*$this->layout->stretch(),$middle,$this->layout->captionText(),Theme::INK,'right');
+			}
+		}
+		if($table==='odds') $this->button($geometry['more'],'MORE...','M','default',false);
+		$this->button($geometry['ok'],'OK','↵','primary',false);
 	}
 
 	private function table(): void

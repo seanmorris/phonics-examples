@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const saveKey='php-poker.local.v1';
+const manualSaveKey='php-poker.manual.v1';
 
 // A real native rules session reaches a human draw without patching its state. The browser
 // must restore and continue the same versioned package snapshot through its normal save path.
@@ -169,7 +170,9 @@ $input=json_decode(stream_get_contents(STDIN),true,flags:JSON_THROW_ON_ERROR);
 $view=$input['view']; $layout=PhpPoker\Ui\Layout::fit($input['width'],$input['height'],$input['dpr'],max(2,count($view['players']??[])));
 $wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui']['setup']['customWildPage']??0)); $limits=$layout->limits();
 	$result=['menu'=>$layout->menu($view['canContinue']),'actions'=>$layout->actions($view,$view['ui']),
-	 'cards'=>$layout->discardDialog()['cards'],'information'=>$layout->information(),'wild'=>$wild,'customWild'=>$custom,'limits'=>$limits];
+	 'cards'=>$layout->discardDialog()['cards'],'information'=>$layout->information(),'wild'=>$wild,'customWild'=>$custom,'limits'=>$limits,
+	 'topMenus'=>$layout->topMenus(),'topGame'=>$layout->topDropdown('game'),'topPoker'=>$layout->topDropdown('poker'),
+	 'odds'=>$layout->oddsDialog('odds'),'improving'=>$layout->oddsDialog('improving')];
 	foreach(['menu','actions'] as $key) foreach($result[$key] as &$button) $button['rect']=$layout->rect(...$button['rect']);
 	unset($button);
 	foreach($result['cards'] as &$rect) $rect=$layout->rect(...$rect);
@@ -185,6 +188,10 @@ $wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui'
 	foreach($result['limits']['fields'] as &$field) foreach(['label','less','count','more'] as $key) $field[$key]=$layout->rect(...$field[$key]);
 	unset($field);
 	foreach(['box','back','apply'] as $key) $result['limits'][$key]=$layout->rect(...$result['limits'][$key]);
+	foreach($result['topMenus'] as &$rect) $rect=$layout->rect(...$rect);
+	unset($rect);
+	foreach(['topGame','topPoker'] as $name) { $result[$name]['box']=$layout->rect(...$result[$name]['box']); foreach($result[$name]['items'] as &$item) $item['rect']=$layout->rect(...$item['rect']); unset($item); }
+	foreach(['odds','improving'] as $name) { foreach(['box','more','ok'] as $key) $result[$name][$key]=$layout->rect(...$result[$name][$key]); foreach($result[$name]['rows'] as &$rect) $rect=$layout->rect(...$rect); unset($rect); }
 	unset($rect);
 echo json_encode($result,JSON_THROW_ON_ERROR);
 `,root],{encoding:'utf8',input:JSON.stringify(input)}));
@@ -197,6 +204,31 @@ async function point(canvas,rect)
 	return {x:box.x+(rect[0]+rect[2]/2)*box.width/size[0],y:box.y+(rect[1]+rect[3]/2)*box.height/size[1],
 		width:rect[2]*box.width/size[0],height:rect[3]*box.height/size[1]};
 }
+
+test('table-bar menus save, load and show both Poker odds tables',async({page})=>{
+	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:openingSave});
+	const canvas=await boot(page);
+	await command(canvas,{type:'resume'});
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	let geometry=await regions(canvas);
+	let target=await point(canvas,geometry.topMenus.game); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('game');
+	target=await point(canvas,geometry.topGame.items.find(item=>item.id==='save').rect); await page.mouse.click(target.x,target.y);
+	await expect.poll(()=>page.evaluate(key=>localStorage.getItem(key)!==null,manualSaveKey)).toBe(true);
+	const generation=(await state(canvas)).generation;
+	geometry=await regions(canvas); target=await point(canvas,geometry.topMenus.game); await page.mouse.click(target.x,target.y);
+	target=await point(canvas,geometry.topGame.items.find(item=>item.id==='load').rect); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).generation).toBeGreaterThan(generation);
+
+	geometry=await regions(canvas); target=await point(canvas,geometry.topMenus.poker); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('poker');
+	target=await point(canvas,geometry.topPoker.items.find(item=>item.id==='odds').rect); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).ui.infoDialog).toBe('odds');
+	target=await point(canvas,geometry.odds.more); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).ui.infoDialog).toBe('improving');
+	target=await point(canvas,geometry.improving.ok); await page.mouse.click(target.x,target.y);
+	await expect.poll(async()=>(await state(canvas)).ui.infoDialog).toBe(null);
+});
 
 test('menu shortcuts, settings and setup remain usable after returning to the menu',async({page})=>{
 	await page.setViewportSize({width:390,height:844});

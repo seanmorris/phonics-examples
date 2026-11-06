@@ -26,6 +26,25 @@ test('atomic local saves retain the last complete turn after quota failure',()=>
 	finally { if(old===undefined) delete globalThis.localStorage; else globalThis.localStorage=old; }
 });
 
+test('manual Poker saves use a separate atomic slot',()=>{
+	const old=globalThis.localStorage,values=new Map;
+	globalThis.localStorage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
+	try
+	{
+		const module={},session={},close=activate({module,session});
+		assert.deepEqual(session.phpPokerStorage.status,{error:'',writes:0,manual:false});
+		assert.equal(module.pokerSave('{"auto":1}'),true);
+		assert.equal(module.pokerManualLoad(),'');
+		assert.equal(module.pokerManualSave('{"manual":2}'),true);
+		assert.equal(module.pokerLoad(),'{"auto":1}');
+		assert.equal(module.pokerManualLoad(),'{"manual":2}');
+		assert.deepEqual(session.phpPokerStorage.status,{error:'',writes:2,manual:true});
+		close();
+		assert.equal(module.pokerManualLoad,undefined);
+	}
+	finally { if(old===undefined) delete globalThis.localStorage; else globalThis.localStorage=old; }
+});
+
 async function workerHarness({corrupt=false}={})
 {
 	const root='https://example.test/preview/',scope=root+'games/php-poker/';

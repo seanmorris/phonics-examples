@@ -184,7 +184,7 @@ $test('card hit regions follow the raised faces and the current viewport before 
 			$expect($presenter->state()['discards'] === [], 'clicking the raised upper edge deselects');
 		}
 		$presenter->input([['key' => 'd']], null, 0);
-		$expect(count($presenter->status()['ui']['hitRegions']) === 2, 'locked draw offers only Keep all and the menu, with no card or Draw targets');
+		$expect(count($presenter->status()['ui']['hitRegions']) === 3, 'locked draw offers only Keep all and the two table menus, with no card or Draw targets');
 	}
 	$presenter = new Presenter($root);
 	$view = $fixture('draw-2');
@@ -1144,6 +1144,59 @@ $test('dialogs keep their CSS size and whole labels on a compressed desktop', st
 		$box = $layout->rect(...$paged['box']);
 		$expect($back[0] + $back[2] < $done[0] && $done[0] + $done[2] <= $box[0] + $box[2] && $back[0] >= $box[0], "the paged footer buttons stay apart inside the dialog at $width x $height");
 		$expect($back[2] / $dpr >= 48 - 1e-6 && $done[2] / $dpr >= min(200, ($box[2] / $dpr - 48) * .5), "the paged footer buttons keep useful widths at $width x $height");
+	}
+});
+
+$test('the table bar opens command menus and both odds dialogs', static function(callable $expect) use ($fixture, $root): void {
+	$click=static function(Presenter $presenter,array $rect): array {
+		[$x,$y,$width,$height]=$presenter->layout()->rect(...$rect);
+		$point=['x'=>$x+$width/2,'y'=>$y+$height/2];
+		return $presenter->input([],['x'=>$point['x'],'y'=>$point['y'],'down'=>false,'clicks'=>[$point]],0);
+	};
+	$view=$fixture('opening-8');
+	$view['manualSaveAvailable']=false;
+	$presenter=new Presenter($root); $presenter->update($view);
+	$click($presenter,$presenter->layout()->topMenus()['game']);
+	$expect($presenter->modal() && $presenter->state()['topMenu']==='game','Game opens as a modal table-bar menu');
+	$expect($presenter->input([['key'=>'l']],null,0)===[] && $presenter->state()['topMenu']==='game','Load stays disabled without a manual save');
+	$save=$presenter->input([['key'=>'s']],null,0);
+	$expect($save===[['type'=>'save-game']] && !$presenter->modal(),'Save Game emits one local command and closes the menu');
+	$view['manualSaveAvailable']=true; $presenter->update($view);
+	$click($presenter,$presenter->layout()->topMenus()['game']);
+	$expect($presenter->input([['key'=>'l']],null,0)===[['type'=>'load-game']],'Load Game emits one local restore command');
+
+	$new=new Presenter($root); $new->update($view);
+	$click($new,$new->layout()->topMenus()['game']);
+	$expect($new->input([['key'=>'n']],null,0)===[['type'=>'menu']],'New Game leaves the current table first');
+	$menu=['screen'=>'menu','phase'=>'ready','players'=>[],'legalActions'=>[],'revision'=>0,'generation'=>1,'error'=>'','canContinue'=>true];
+	$new->update($menu);
+	$expect($new->state()['local']==='setup','New Game opens setup after reaching the title state');
+
+	$poker=new Presenter($root); $poker->update($view);
+	$click($poker,$poker->layout()->topMenus()['poker']);
+	$expect($poker->state()['topMenu']==='poker','Poker opens its information menu');
+	$expect($poker->input([['key'=>'o']],null,0)===[] && $poker->state()['infoDialog']==='odds','Odds opens the 100-hands table');
+	$expect(count($poker->paint(1280,720)->instances())>100,'the first odds table paints over a live table');
+	$click($poker,$poker->layout()->oddsDialog('odds')['more']);
+	$expect($poker->state()['infoDialog']==='improving','More advances to odds against improving');
+	$click($poker,$poker->layout()->oddsDialog('improving')['ok']);
+	$expect(!$poker->modal(),'OK closes the information table');
+
+	foreach([[320,500,1],[390,844,1],[844,328,1],[1280,720,1],[800,807,1]] as [$width,$height,$dpr])
+	{
+		$layout=Layout::fit($width,$height,$dpr,8);
+		foreach([$layout->topDropdown('game'),$layout->topDropdown('poker')] as $dropdown)
+		{
+			[$left,$top,$boxWidth,$boxHeight]=$layout->rect(...$dropdown['box']);
+			$expect($left>=-.01 && $top>=-.01 && $left+$boxWidth<=$width+.01 && $top+$boxHeight<=$height+.01,"a table menu stays on $width x $height");
+			foreach($dropdown['items'] as $item) $expect($layout->rect(...$item['rect'])[3]/$dpr>=48-.01,"a table menu item is touch sized on $width x $height");
+		}
+		foreach(['odds','improving'] as $name)
+		{
+			$dialog=$layout->oddsDialog($name); [$left,$top,$boxWidth,$boxHeight]=$layout->rect(...$dialog['box']);
+			$expect($left>=-.01 && $top>=-.01 && $left+$boxWidth<=$width+.01 && $top+$boxHeight<=$height+.01,"the $name table stays on $width x $height");
+			$expect($layout->rect(...$dialog['ok'])[3]/$dpr>=48-.01,"the $name OK button is touch sized on $width x $height");
+		}
 	}
 });
 

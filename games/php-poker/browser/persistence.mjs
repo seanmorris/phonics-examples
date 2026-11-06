@@ -2,7 +2,9 @@
 export function activate({module, session})
 {
 	const key='php-poker.local.v1';
-	let error='',writes=0,closed=false;
+	const manualKey='php-poker.manual.v1';
+	let error='',writes=0,manual=false,closed=false;
+	try{manual=localStorage.getItem(manualKey)!==null;}catch{}
 	module.pokerLoad=()=>{
 		try { return localStorage.getItem(key) ?? ''; }
 		catch { error='Saved games are unavailable in this browser session.'; return ''; }
@@ -17,11 +19,24 @@ export function activate({module, session})
 		}
 		catch { error='This game could not be saved. Free some browser storage to save your next turn.'; return false; }
 	};
-	module.pokerStorageStatus=()=>JSON.stringify({error,writes});
-	session.phpPokerStorage={get status(){return {error,writes};}};
+	module.pokerManualSave=value=>{
+		if(closed)return false;
+		try
+		{
+			if(typeof value!=='string'||value.length>1048576)throw Error('Invalid save size');
+			localStorage.setItem(manualKey,value);manual=true;error='';writes++;return true;
+		}
+		catch{error='This game could not be saved. Free some browser storage and try again.';return false;}
+	};
+	module.pokerManualLoad=()=>{
+		try{return localStorage.getItem(manualKey)??'';}
+		catch{error='Saved games are unavailable in this browser session.';return '';}
+	};
+	module.pokerStorageStatus=()=>JSON.stringify({error,writes,manual});
+	session.phpPokerStorage={get status(){return {error,writes,manual};}};
 	return ()=>{
 		closed=true;
-		for(const name of ['pokerLoad','pokerSave','pokerStorageStatus']) delete module[name];
+		for(const name of ['pokerLoad','pokerSave','pokerManualSave','pokerManualLoad','pokerStorageStatus']) delete module[name];
 		delete session.phpPokerStorage;
 	};
 }

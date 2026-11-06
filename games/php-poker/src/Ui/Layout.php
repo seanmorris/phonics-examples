@@ -434,6 +434,62 @@ final class Layout
 	/** Menu-bar height in design units, independent of horizontal resizing in the wide layout. */
 	public function menuHeight(): float { return self::MENU_BAR * ($this->design['chromeScale'] ?? 1); }
 
+	/** Game and Poker menu headings positioned against the actual canvas top-left corner. */
+	public function topMenus(): array
+	{
+		$canvasLeft=-$this->left/$this->horizontalScale;
+		$canvasTop=-$this->top/$this->scale;
+		$unit=$this->uiScale()/$this->horizontalScale;
+		$x=$canvasLeft+4*$unit;
+		$height=$this->menuHeight();
+		$game=[$x,$canvasTop,72*$unit,$height];
+		$poker=[$x+72*$unit,$canvasTop,82*$unit,$height];
+		return ['game'=>$game,'poker'=>$poker];
+	}
+
+	/** Notepad-style menu dropped below one top-bar heading. */
+	public function topDropdown(string $menu): array
+	{
+		if(!in_array($menu,['game','poker'],true)) throw new \InvalidArgumentException('Unknown Poker menu');
+		$headings=$this->topMenus();
+		$unit=$this->uiScale()/$this->horizontalScale;
+		// The fitted field is centred, so the canvas extends by the same gutter on both sides.
+		$canvasRight=$this->width()+$this->left/$this->horizontalScale;
+		$preferred=($menu==='game'?238:292)*$unit;
+		$width=min($preferred,$canvasRight-$headings[$menu][0]-8*$unit);
+		$height=$this->controlSize();
+		$definitions=$menu==='game'
+			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['quit','Quit to title','Q']]
+			: [['odds','Odds (100 Hands)','O'],['improving','Odds Against Improving','I']];
+		$items=[];
+		$x=$headings[$menu][0]; $y=$headings[$menu][1]+$headings[$menu][3];
+		foreach($definitions as $index=>[$id,$label,$key])
+		$items[]=['id'=>$id,'label'=>$label,'key'=>$key,'rect'=>[$x,$y+$index*$height,$width,$height]];
+		return ['box'=>[$x,$y,$width,count($items)*$height],'items'=>$items];
+	}
+
+	/** Geometry for the two tabular odds dialogs reproduced from the DOS reference. */
+	public function oddsDialog(string $table): array
+	{
+		if(!in_array($table,['odds','improving'],true)) throw new \InvalidArgumentException('Unknown odds table');
+		if($square=$this->square()) return $this->fromSquare($square->oddsDialog($table));
+		$count=$table==='odds'?9:11;
+		$width=min($table==='odds'?520:680,$this->width()-24);
+		$control=$this->controlSize();
+		$rowHeight=max(22,min(30,$control*.52));
+		$rowHeight=min($rowHeight,max(16,($this->height()-24-28-12-$control-12)/$count));
+		$height=28+$count*$rowHeight+12+$control+12;
+		$left=($this->width()-$width)/2;
+		$top=max(12,($this->height()-$height)/2);
+		$rows=[];
+		for($index=0;$index<$count;$index++) $rows[]=[$left+8,$top+22+$index*$rowHeight,$width-16,$rowHeight];
+		$footer=$top+$height-$control-12;
+		$buttonWidth=min(140,($width-64)/2);
+		return ['box'=>[$left,$top,$width,$height],'rows'=>$rows,
+			'more'=>[$left+16,$footer,$buttonWidth,$control],
+			'ok'=>[$left+$width-16-$buttonWidth,$footer,$buttonWidth,$control]];
+	}
+
 	/** A keycap and its label lane both fit at this rendered button width. */
 	public function keyHintFits(float $deviceWidth): bool { return $deviceWidth >= 80 * $this->dpr; }
 
