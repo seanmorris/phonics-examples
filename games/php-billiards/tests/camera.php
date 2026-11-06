@@ -462,3 +462,47 @@ $test('undoing a shot restores the stick line it was played along and leaves the
 			&& $game->camera->distance === $view['distance'], "Undo moved the camera ($when)");
 	}
 });
+
+$test('a slow software frame finishes camera easing in real time while held controls keep their per-frame bound', static function() use ($expect): void {
+	$started = static function(): Game {
+		$game = new Game(static fn(): string => str_repeat('42', 32));
+		$game->input(['actions' => ['start']], [], [], [], [0,0], 1 / 60, 1280, 720);
+		return $game;
+	};
+	// Two-second frames are what a software-rendered table produces on a busy machine. The 1.35 s opening and the
+	// follow ease that settles behind the cue complete within a few such frames instead of a dozen.
+	$slow = $started();
+	$expect($slow->camera->transitioning(), 'Free Play did not open with the title-camera transition');
+	$frames = 0;
+	while(($slow->camera->transitioning() || $slow->camera->settling()) && $frames < 10)
+	{
+		$slow->input([], [], [], [], [0,0], 2.0, 1280, 720);
+		$frames++;
+	}
+	$expect($frames <= 4, "Camera easing took $frames two-second frames");
+	$capped = $started();
+	for($frame = 0; $frame < 4; $frame++) $capped->input([], [], [], [], [0,0], .1, 1280, 720);
+	$expect($capped->camera->transitioning(), 'Four tenth-second frames should still be inside the 1.35 s opening');
+	for($frame = 4; $frame < 600 && ($capped->camera->transitioning() || $capped->camera->settling()); $frame++)
+	$capped->input([], [], [], [], [0,0], .1, 1280, 720);
+	foreach(['yaw','pitch','distance'] as $name)
+	$expect(abs($slow->camera->{$name} - $capped->camera->{$name}) < 1e-9, "Slow frames settled on a different $name");
+
+	// Held aim and power still move by at most a tenth of a second of travel however long the frame took.
+	foreach([.1,2.0,30.0] as $seconds)
+	{
+		$game = $started();
+		$game->camera->animate(2);
+		$game->input([], ['right' => 1,'up' => 1], [], [], [0,0], $seconds, 1280, 720);
+		$reference ??= [$game->aim,$game->power];
+		$expect([$game->aim,$game->power] === $reference, "A $seconds s frame moved held controls past the input bound");
+	}
+	// Wheel zoom lands on its distance at once; the following ease reaches it in a slow frame or two.
+	$game = $started();
+	$game->camera->animate(2);
+	$game->input([], [], [], [], [0,0], 1 / 60, 1280, 720);
+	$game->input([], [], [['type' => 'wheel','y' => 42]], [], [0,0], 2.0, 1280, 720);
+	$expect($game->camera->distance === .85, 'Wheel zoom did not reach the closest distance');
+	for($frame = 0; $frame < 2 && $game->camera->settling(); $frame++) $game->input([], [], [], [], [0,0], 2.0, 1280, 720);
+	$expect(!$game->camera->settling(), 'The camera was still easing after the wheel and two slow frames');
+});

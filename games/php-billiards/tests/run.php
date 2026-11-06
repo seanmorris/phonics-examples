@@ -1499,6 +1499,40 @@ $test('newly sunk balls flash on the sink board for two seconds in half-second s
 	$expect(($flashes->invoke($hud, $game, 20.0)[5] ?? null) === true, 'A ball sunk again after an undo did not flash');
 });
 
+$test('a running HUD fade finishes in a slow frame or two without skipping its first step after idle', static function() use ($expect): void {
+	$game = new Game(static fn(): string => str_repeat('42', 32));
+	$game->input(['actions' => ['free-play']], [], [], [], [0,0], 0, 1280, 720);
+	$game->camera->animate(2);
+	$hud = (new ReflectionClass(Hud::class))->newInstanceWithoutConstructor();
+	$property = static fn(string $name) => new ReflectionProperty(Hud::class, $name);
+	$hud->frame($game, 1280, 720);
+	$expect($property('hintOpacity')->getValue($hud) === 0.0, 'The hint strip should start hidden and fade in');
+	// The strip fades in, holds, then fades out. Backdate each previous frame to model software WebGL at two seconds
+	// a frame; within a fade the strip moves by real time, so it takes a few frames rather than ten.
+	$slowFrames = static function() use ($hud, $game, $property): int {
+		for($frames = 0; $frames < 20 && $hud->animating(); $frames++)
+		{
+			$property('lastRender')->setValue($hud, microtime(true) - 2.0);
+			$hud->frame($game, 1280, 720);
+		}
+		return $frames;
+	};
+	$hud->frame($game, 1280, 720);
+	$frames = $slowFrames();
+	$expect($property('hintOpacity')->getValue($hud) === 1.0 && $frames <= 3, "The fade-in took $frames two-second frames");
+
+	// The hold ends after the table sat idle for half a minute. That fade's first frame takes the same short step it
+	// takes at full frame rate, so the strip still fades rather than vanishing.
+	$property('lastRender')->setValue($hud, microtime(true) - 30.0);
+	$property('hintFadeAt')->setValue($hud, microtime(true) - 1);
+	$expect($hud->animating(), 'The end of the hint hold did not request a frame');
+	$hud->frame($game, 1280, 720);
+	$opacity = $property('hintOpacity')->getValue($hud);
+	$expect(abs($opacity - exp(-.5)) < 1e-9, "A fade's first frame after idle moved the strip to $opacity");
+	$frames = $slowFrames();
+	$expect($property('hintOpacity')->getValue($hud) === 0.0 && $frames <= 3, "The fade-out took $frames two-second frames");
+});
+
 $test('HUD regions stay on screen and never overlap at common canvas sizes', static function() use ($expect): void {
 	foreach([[1280,720,1],[2560,1440,2],[900,540,1],[780,1688,2],[1688,780,2],[3840,2160,1.5]] as [$width,$height,$dpr])
 	{

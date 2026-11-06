@@ -39,6 +39,14 @@ final class Hud
 		, ['Controls',['?'],[]]
 	];
 
+	/** Longest step a fade's first frame takes: the previous HUD frame may be from long before, while the table sat idle. */
+	private const FADE_START_LIMIT = .1;
+	/**
+	 * Longest step a fade already in progress takes. Software WebGL can take a second or more per frame, and holding a
+	 * running fade to the first-frame bound would stretch a half-second fade across ten of those frames.
+	 */
+	private const FADE_FRAME_LIMIT = 1.0;
+
 	private static ?Text $sharedText = null;
 	private UiRenderer $renderer;
 	private bool $closed = false;
@@ -429,7 +437,8 @@ final class Hud
 	}
 
 	/**
-	 * Build this frame's HUD draw list without touching GL, advancing fades by the time since the last frame.
+	 * Build this frame's HUD draw list without touching GL, advancing fades by the time since the last frame: at most
+	 * FADE_START_LIMIT when a fade begins, and up to FADE_FRAME_LIMIT while one continues.
 	 *
 	 * @param Game $game Current game and simulation state.
 	 * @param int $width Canvas width in pixels.
@@ -439,7 +448,8 @@ final class Hud
 	public function frame(Game $game, int $width, int $height, float $dpr = 1): UiCanvas
 	{
 		$now = microtime(true);
-		$elapsed = $this->lastRender === null ? 0 : max(0, min(.1, $now - $this->lastRender));
+		$limit = $this->fading ? self::FADE_FRAME_LIMIT : self::FADE_START_LIMIT;
+		$elapsed = $this->lastRender === null ? 0 : max(0, min($limit, $now - $this->lastRender));
 		$this->lastRender = $now;
 		$flashes = $this->sinkFlashes($game, $now);
 

@@ -26,6 +26,13 @@ final class Game
 	private const GUIDE_SLICE = 120;
 	/** Closest a practice stroke brings the tip to the cue ball, as a cue offset: 3 mm short of contact at -.008. */
 	private const PRACTICE_REACH = -.005;
+	/** Held controls and the game clock advance by at most this many seconds per display frame. */
+	private const INPUT_FRAME_LIMIT = .1;
+	/**
+	 * Longest display frame the camera eases through in one step. Software WebGL can take a second or more per frame,
+	 * and holding the camera to the input bound would stretch its 1.35 s opening across a dozen such frames.
+	 */
+	private const CAMERA_FRAME_LIMIT = 1.0;
 	/** Authoritative deterministic table simulation. */
 	public Simulation $simulation;
 	/** View camera used for rendering, picking, and player orbit controls. */
@@ -157,7 +164,8 @@ final class Game
 	 * @param list<array<string,mixed>> $events Pointer and wheel events received since the last frame.
 	 * @param array<string,array<string,mixed>> $regions Interactive HUD regions keyed by control name.
 	 * @param array{float,float} $rightStick Horizontal and vertical camera-stick axes.
-	 * @param float $elapsed Display-frame duration in seconds.
+	 * @param float $elapsed Display-frame duration in seconds. Held controls and the game clock use at most
+	 * INPUT_FRAME_LIMIT of it; camera easing, which is presentation only, uses up to CAMERA_FRAME_LIMIT.
 	 * @param int $width Canvas width in pixels.
 	 * @param int $height Canvas height in pixels.
 	 */
@@ -166,7 +174,9 @@ final class Game
 		, float $elapsed, int $width, int $height
 	): void
 	{
-		$elapsed = max(0, min(.1, is_finite($elapsed) ? $elapsed : 0));
+		$frame = is_finite($elapsed) ? max(0, $elapsed) : 0.0;
+		$elapsed = min(self::INPUT_FRAME_LIMIT, $frame);
+		$easing = min(self::CAMERA_FRAME_LIMIT, $frame);
 		$this->clock += $elapsed;
 		$this->frame++;
 		$this->camera->setAspect($width, $height);
@@ -216,7 +226,7 @@ final class Game
 		if($this->overlay !== null)
 		{
 			$this->camera->suspendFollow(true);
-			$this->camera->animate($elapsed, $this->simulation->moving());
+			$this->camera->animate($easing, $this->simulation->moving());
 			$items = $this->menuItems();
 			if($stepUp) $this->menuSelection = ($this->menuSelection + count($items) - 1) % max(1, count($items));
 			if($stepDown) $this->menuSelection = ($this->menuSelection + 1) % max(1, count($items));
@@ -255,7 +265,7 @@ final class Game
 			else $this->{$name} = max(-1, min(1, $value));
 		}
 
-		$this->camera->animate($elapsed, $this->simulation->moving());
+		$this->camera->animate($easing, $this->simulation->moving());
 		if(abs((float)($rightStick[0] ?? 0)) > 1e-6 || abs((float)($rightStick[1] ?? 0)) > 1e-6)
 		{
 			$this->camera->orbitStick((float)($rightStick[0] ?? 0), (float)($rightStick[1] ?? 0), $elapsed, $this->orbitCentre());
@@ -303,7 +313,7 @@ final class Game
 		$cue = $this->simulation->cue();
 		$this->camera->suspendFollow(!$cue->active || $this->drag !== null
 			|| !in_array($this->simulation->phase, ['aim','placing'], true) || $this->stroke !== null);
-		$this->camera->follow($cue->x, $cue->y, $this->aim, $elapsed);
+		$this->camera->follow($cue->x, $cue->y, $this->aim, $easing);
 	}
 
 	/**
