@@ -638,8 +638,10 @@ final class Presenter
 			? 'Need jacks or better. Pass to stay in.' : 'Betting first; choose discards afterward.';
 		if($phase === 'draw' && empty($legal['draw'])) return isset($human['drawCount'])
 			? 'Your draw is complete. Waiting for the others.' : 'Waiting for your turn to choose discards.';
-		if($phase === 'final-betting' && !empty($legal['check']) && !empty($legal['bet'])) return 'Check or bet after the draw.';
-		if($phase === 'final-betting' && !empty($legal['call'])) return 'Final betting: call, raise, or fold.';
+		if($phase === 'final-betting' && !empty($legal['check'])) return !empty($legal['bet'])
+			? 'Check or bet after the draw.' : 'Check after the draw.';
+		if($phase === 'final-betting' && !empty($legal['call'])) return !empty($legal['bet'])
+			? 'Final betting: call, raise, or fold.' : 'Final betting: call or fold.';
 		return (string)($this->view['message'] ?? '');
 	}
 

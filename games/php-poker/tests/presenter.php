@@ -79,6 +79,18 @@ $test('the action bar holds exactly the legal actions', static function(callable
 	$presenter = new Presenter($root);
 	$presenter->update($final);
 	$expect($presenter->state()['hint'] === 'Check or bet after the draw.', 'post-draw status names the Check/Bet decision');
+	$facing = $fixture('facing-raise-5');
+	$facing['phase'] = 'final-betting';
+	$facing['legalActions']['bet'] = false;
+	$expect($ids($facing) === ['fold','call'], 'a capped final bet offers no Raise button');
+	$presenter = new Presenter($root);
+	$presenter->update($facing);
+	$expect($presenter->state()['hint'] === 'Final betting: call or fold.', 'a capped final bet does not advertise an unavailable Raise');
+	$checkOnly = $final;
+	$checkOnly['legalActions']['bet'] = false;
+	$presenter = new Presenter($root);
+	$presenter->update($checkOnly);
+	$expect($presenter->state()['hint'] === 'Check after the draw.', 'an unavailable Bet is omitted from post-draw guidance');
 	$bet = Layout::fit(1280, 720)->actions($fixture('facing-raise-5'), ['discards' => [], 'amount' => 999])[2];
 	$expect($bet['intent']['amount'] === $fixture('facing-raise-5')['legalActions']['maxBet'], 'the raise-to amount is clamped to maxBet');
 });
