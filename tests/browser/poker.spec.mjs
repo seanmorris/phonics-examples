@@ -375,17 +375,22 @@ test('desktop pointer can confirm discards without the dialog covering its actio
 	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
 });
 
-test('overlapping discard cards activate the face painted on top',async({page})=>{
+test('discard cards stand apart in a compressed window and each edge activates its own face',async({page})=>{
 	await page.setViewportSize({width:1280,height:1285});
 	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
 	const canvas=await boot(page);
 	await canvas.focus();await page.keyboard.press('c');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 	const before=await state(canvas),layout=await regions(canvas),[first,second]=layout.cards;
-	expect(first[0]+first[2]).toBeGreaterThan(second[0]);
-	const overlap=await point(canvas,[second[0]+2,Math.max(first[1],second[1])+20,2,2]);
-	await page.mouse.click(overlap.x,overlap.y);
+	// The dialog keeps its CSS size on a compressed oval, so neighbouring faces never cover one another.
+	expect(first[0]+first[2]).toBeLessThanOrEqual(second[0]);
+	const leading=await point(canvas,[second[0]+2,Math.max(first[1],second[1])+20,2,2]);
+	await page.mouse.click(leading.x,leading.y);
 	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([before.players[0].cards[1]]);
+	const trailing=await point(canvas,[first[0]+first[2]-4,Math.max(first[1],second[1])+20,2,2]);
+	await page.mouse.click(trailing.x,trailing.y);
+	await expect.poll(async()=>(await state(canvas)).ui.discards)
+		.toEqual([before.players[0].cards[0],before.players[0].cards[1]].sort((a,b)=>a-b));
 });
 
 test('the lifted edge of a selected card can deselect it',async({page})=>{
