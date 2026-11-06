@@ -249,7 +249,8 @@ final class Layout
 		// button/stepper envelope so the growth solver cannot trade centre space for a control collision.
 		$control = $layout->controlSize();
 		$actionTop = $layout->height() - 26 - 5 * $control - 4 * 10;
-		$actionLane = [$layout->width() - 266, $actionTop, 250, $layout->height() - 26 - $actionTop];
+		[$actionLeft, $actionWidth] = $layout->actionColumn();
+		$actionLane = [$actionLeft, $actionTop, $actionWidth, $layout->height() - 26 - $actionTop];
 		foreach($blocks as $seat => $block) $overlaps["seat:$seat:actions"] = self::intersectionArea($block, $actionLane);
 		return $overlaps;
 	}
@@ -297,6 +298,18 @@ final class Layout
 			, 'landscape' => [$this->width() - self::PANEL + 10, min($this->design['actions'][1], $rows)]
 			, default => [$this->design['actions'][0], min($this->design['actions'][1], $rows)]
 		};
+	}
+
+	/** Left edge and width of the vertical action lane. Wide tables place it beside the local card fan. */
+	private function actionColumn(): array
+	{
+		$width = $this->profile === 'landscape' ? self::PANEL - 32 : min(250, $this->width() - 32);
+		if($this->profile !== 'wide') return [$this->width() - $width - 16, $width];
+
+		$human = $this->seat(0, $this->seats);
+		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
+		$x = $handRight + 16;
+		return [$x, min($width, $this->width() - $x - 16)];
 	}
 
 	/** Whether opponents sit in side columns rather than on the oval. */
@@ -762,8 +775,7 @@ final class Layout
 		$height = $this->controlSize();
 		if($this->verticalActionBar())
 		{
-			$width = $this->profile === 'landscape' ? self::PANEL - 32 : min(250, $this->width() - 32);
-			$x = $this->width() - $width - 16;
+			[$x, $width] = $this->actionColumn();
 			$bottom = $this->height() - 26;
 			if(!empty($legal['bet'])) $bottom -= $height + $gap;
 			$y = $bottom - count($entries) * $height - (count($entries) - 1) * $gap;
@@ -808,7 +820,8 @@ final class Layout
 		if($this->verticalActionBar())
 		{
 			$gap = 10;
-			$right = $this->width() - 16;
+			[$columnX, $columnWidth] = $this->actionColumn();
+			$right = $columnX + $columnWidth;
 			$row = $this->height() - 26 - $height;
 			$more = $right - $height;
 			$amount = $more - $gap - 70;

@@ -436,8 +436,13 @@ $test('no opponent sits behind the action column at any seat count', static func
 	{
 		$layout = Layout::fit(1280, 720, 1, $seats);
 		$controls = array_column($layout->actions($view, ['discards' => [], 'amount' => 8]), 'rect');
+		$human = $layout->seat(0, $seats);
+		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
+		$expect(abs($controls[0][0] - ($handRight + 16)) < 1e-9, "$seats-player action column sits beside the local hand");
 		$stepper = $layout->stepper($view);
 		foreach(['less','amount','more'] as $part) $controls[] = $stepper[$part];
+		$buttonRight = $controls[0][0] + $controls[0][2];
+		$expect(abs($stepper['more'][0] + $stepper['more'][2] - $buttonRight) < 1e-9, "$seats-player stepper shares the action column's right edge");
 		for($seat = 1; $seat < $seats; $seat++)
 		{
 			$geometry = $layout->seat($seat, $seats);
@@ -787,6 +792,10 @@ $test('wide tables keep vertical sizing independent from horizontal compression'
 		}
 		$stepper = $layout->stepper($view);
 		$expect($stepper !== null && $buttons[array_key_last($buttons)]['rect'][1] + $buttons[array_key_last($buttons)]['rect'][3] < $stepper['less'][1], "the raise stepper follows the vertical actions at $width x $height");
+		$human = $layout->seat(0, 8);
+		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
+		$expect(abs($buttons[0]['rect'][0] - ($handRight + 16)) < 1e-9, "the action column follows the local hand at $width x $height");
+		$expect(abs($stepper['more'][0] + $stepper['more'][2] - ($buttons[0]['rect'][0] + $buttons[0]['rect'][2])) < 1e-9, "the stepper aligns with the action column at $width x $height");
 		$controls = array_column($buttons, 'rect');
 		foreach(['less','amount','more'] as $part) $controls[] = $stepper[$part];
 		foreach(range(0, 7) as $seat)
