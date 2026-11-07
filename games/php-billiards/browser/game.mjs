@@ -91,7 +91,7 @@ export function queuedDrop(previous, now, random=Math.random)
 }
 
 /** Canvas lifecycle, diagnostics, sound, and fullscreen bridge for the native PHP/SDL game. */
-export function activate({module, canvas, session})
+export function activate({module, canvas, session, services})
 {
 	// The browser module runs before PHP creates its SDL window. Claim the shared context with
 	// antialiasing enabled so Emscripten/SDL reuses a multisampled default framebuffer.
@@ -122,6 +122,26 @@ export function activate({module, canvas, session})
 		viewport=JSON.stringify([Math.max(1,Math.round(box.width*dpr)),Math.max(1,Math.round(box.height*dpr)),dpr]);
 	};
 	const resize=new ResizeObserver(measure);resize.observe(canvas);measure();
+
+	// The engine's corner shortcuts drive the same mute action and fullscreen request as the PHP menu. Fullscreen
+	// takes the canvas's frame, so the shortcuts stay on screen; engines without the service keep canvas fullscreen.
+	const frame=services?.QuickControls?canvas.closest?.('#game-frame')??parent:null;
+	const quick=frame?new services.QuickControls(parent,frame):null;
+	const fullscreenTarget=frame??canvas;
+	let fullscreenBusy=false,fullscreenError='';
+	const updateFullscreen=()=>quick?.setFullscreen(document.fullscreenElement===fullscreenTarget
+		,Boolean(document.fullscreenEnabled&&fullscreenTarget.requestFullscreen),fullscreenBusy,fullscreenError);
+	const toggleFullscreen=async()=>{
+		if(fullscreenBusy)return;
+		fullscreenBusy=true;fullscreenError='';updateFullscreen();
+		try{await(document.fullscreenElement===fullscreenTarget?document.exitFullscreen():fullscreenTarget.requestFullscreen());}
+		catch(error){fullscreenError=closed?'':error.message;}
+		finally{fullscreenBusy=false;if(!closed){updateFullscreen();canvas.focus({preventScroll:true});}}
+	};
+	quick?.muteButton.addEventListener('click',()=>{debugActions.push('mute');canvas.focus({preventScroll:true});});
+	quick?.fullscreenButton.addEventListener('click',()=>{void toggleFullscreen();});
+	if(quick)document.addEventListener('fullscreenchange',updateFullscreen);
+	updateFullscreen();
 
 	// The recorded samples live inside the PHAR, so PHP hands their bytes over once through billiardsSamples().
 	// They decode after the first gesture unlocks Web Audio; playback adds slight detune, filtering, and a voice
@@ -235,6 +255,7 @@ export function activate({module, canvas, session})
 		const muted=latest?.muted;
 		latest=JSON.parse(json);canvas.dataset.phpBilliards=json;
 		if(muted!==undefined&&muted!==latest.muted)try{localStorage.setItem(muteKey,latest.muted?'1':'0');}catch{}
+		if(muted!==latest.muted)quick?.setMuted(Boolean(latest.muted));
 		const ui=latest.ui??{},aiming=latest.started&&!latest.overlay&&latest.phase!=='moving';
 		const nextCursor=ui.drag==='orbit'?'grabbing':ui.hover?'pointer':ui.drag==='aim'||aiming?'crosshair':'default';
 		if(nextCursor!==cursor){cursor=nextCursor;canvas.style.cursor=cursor;}
@@ -247,10 +268,7 @@ export function activate({module, canvas, session})
 		}
 		for(const message of latest.network?.outbox??[])queueNetworkWrite(message);
 	};
-	module.billiardsFullscreen=()=>{
-		const active=document.fullscreenElement===canvas;
-		(active?document.exitFullscreen():canvas.requestFullscreen()).catch(()=>{});
-	};
+	module.billiardsFullscreen=()=>{void toggleFullscreen();};
 
 	const lobbyPort=session.lobby.attachGame({
 		start:detail=>{
@@ -348,7 +366,9 @@ export function activate({module, canvas, session})
 		delete module.billiardsSamples;
 		delete module.billiardsRackSeed;
 		await audio?.close().catch(()=>{});
-		if(document.fullscreenElement===canvas)await document.exitFullscreen().catch(()=>{});
+		if(quick)document.removeEventListener('fullscreenchange',updateFullscreen);
+		if(globalThis.document?.fullscreenElement===fullscreenTarget)await document.exitFullscreen().catch(()=>{});
+		quick?.close();
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);
 		if(originalTabIndex===null)canvas.removeAttribute('tabindex');else canvas.setAttribute('tabindex',originalTabIndex);
 		if(originalLabel===null)canvas.removeAttribute('aria-label');else canvas.setAttribute('aria-label',originalLabel);

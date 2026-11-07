@@ -28,10 +28,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	status.className = 'php-buster-sr';
 	status.setAttribute('aria-live', 'polite');
 	style.textContent = `
-		.php-buster-ui{position:relative;display:flex;align-items:center;justify-content:center;width:100%;max-width:none;
-			margin:auto;background:#000;color:#fff}
-		.php-buster-screen{position:relative;width:min(100%,66.6667vh);max-height:100vh;aspect-ratio:2/3;
-			isolation:isolate;overflow:hidden;background:#000}
+		.php-buster-ui{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;
+			max-width:none;margin:auto;background:#000;color:#fff}
+		.php-buster-screen{position:relative;width:100%;height:100%;isolation:isolate;overflow:hidden;background:#000}
 		.php-buster-screen>canvas{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;
 			max-height:none;margin:0;border:0;border-radius:0;image-rendering:pixelated;touch-action:none}
 		.php-buster-targets{position:absolute;inset:0;pointer-events:none}
@@ -50,9 +49,6 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		.php-buster-screen .quick-controls{right:6px;top:auto;bottom:4px;z-index:4;padding:0;opacity:.8}
 		.php-buster-screen .quick-controls button{width:30px;height:30px;padding:4px}
 		.php-buster-ui:fullscreen{display:flex;align-items:center;justify-content:center;width:100%;height:100%;max-width:none}
-		.php-buster-ui:fullscreen .php-buster-screen{height:100vh;width:min(100vw,66.6667vh)}
-		[data-game-embed="true"] .php-buster-ui{height:100%}
-		[data-game-embed="true"] .php-buster-screen{width:min(100%,66.6667vh)}
 		@media(pointer:coarse){.php-buster-screen .quick-controls button{width:44px;height:44px}}
 	`;
 

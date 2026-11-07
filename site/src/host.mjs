@@ -49,7 +49,7 @@ try
 	if(document.documentElement.dataset.offlineManifest)
 	{
 		const {enableOffline}=await import('./offline.mjs');
-		closeOffline=await enableOffline(document.documentElement.dataset.offlineManifest,document.querySelector('.game-page footer'));
+		closeOffline=await enableOffline(document.documentElement.dataset.offlineManifest,document.querySelector('.game-page nav'));
 	}
 }
 catch(error)

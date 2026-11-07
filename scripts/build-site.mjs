@@ -135,7 +135,7 @@ for(const entry of entries)
 	// Games read the declared size as their logical resolution before SDL resizes the drawing buffer, and the host
 	// focuses the canvas once loaded, so it must be focusable for keyboard games.
 	const size = entry.canvas ? ` width="${Number(entry.canvas.width)}" height="${Number(entry.canvas.height)}"` : '';
-	const gameBody = `<main class="game-page"><nav><a href="../../">← All examples</a><span>${escape(entry.title)}</span></nav><section class="game-host"><div class="loading"><strong>Preparing ${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas" tabindex="0"${size}></canvas></section><footer><p>${escape(entry.description)}</p>${entry.controls ? `<p>${escape(entry.controls)}</p>` : ''}</footer></main>`;
+	const gameBody = `<main class="game-page"><nav><a href="../../">← All examples</a><span>${escape(entry.title)}</span></nav><section class="game-host"><div class="loading"><strong>Preparing ${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas" tabindex="0"${size}></canvas></section></main>`;
 	const embedBody = `<main class="embed-host"><div class="game-host"><div class="loading"><strong>${escape(entry.title)}</strong><span>Loading application…</span></div><canvas aria-label="${escape(entry.title)} game canvas" tabindex="0"${size}></canvas></div></main>`;
 	await fs.mkdir(path.join(destination, 'games', entry.slug), {recursive: true});
 	await fs.mkdir(path.join(destination, 'embed', entry.slug), {recursive: true});

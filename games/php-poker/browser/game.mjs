@@ -257,7 +257,7 @@ function blobDataUrl(blob)
 	});
 }
 
-export function activate({module, canvas, session})
+export function activate({module, canvas, session, services})
 {
 	if(!canvas.getContext('webgl2',{alpha:false,antialias:true,depth:false,stencil:false}))
 		throw new Error('PHP Poker requires WebGL2');
@@ -300,6 +300,25 @@ export function activate({module, canvas, session})
 		if(pointerClient)movePointer(pointerClient);
 	};
 	const resize=new ResizeObserver(measure);resize.observe(canvas);measure();
+
+	// The engine's corner shortcut toggles fullscreen for the canvas's frame, so it stays on screen with the lobby.
+	// Poker has no sound, so its mute button stays hidden.
+	const frame=services?.QuickControls?canvas.closest?.('#game-frame')??canvas.parentElement:null;
+	const quick=frame?new services.QuickControls(frame,frame):null;
+	let fullscreenBusy=false,fullscreenError='';
+	const updateFullscreen=()=>quick?.setFullscreen(document.fullscreenElement===frame
+		,Boolean(document.fullscreenEnabled&&frame.requestFullscreen),fullscreenBusy,fullscreenError);
+	const toggleFullscreen=async()=>{
+		if(fullscreenBusy)return;
+		fullscreenBusy=true;fullscreenError='';updateFullscreen();
+		try{await(document.fullscreenElement===frame?document.exitFullscreen():frame.requestFullscreen());}
+		catch(error){fullscreenError=closed?'':error.message;}
+		finally{fullscreenBusy=false;if(!closed){updateFullscreen();canvas.focus({preventScroll:true});}}
+	};
+	if(quick)quick.muteButton.hidden=true;
+	quick?.fullscreenButton.addEventListener('click',()=>{void toggleFullscreen();});
+	if(quick)document.addEventListener('fullscreenchange',updateFullscreen);
+	updateFullscreen();
 
 	// Input queues drain once per PHP frame. Positions are device pixels in the canvas's own framebuffer space.
 	const onKey=event=>{
@@ -606,6 +625,11 @@ export function activate({module, canvas, session})
 
 	return ()=>{
 		if(closed)return;closed=true;resize.disconnect();
+		if(quick)
+		{
+			document.removeEventListener('fullscreenchange',updateFullscreen);quick.close();
+			if(document.fullscreenElement===frame)void document.exitFullscreen().catch(()=>{});
+		}
 		watching=false;seatRun++;houseRules=null;
 		session.lobby.protocol.removeEventListener('closed',lobbyClosed);
 		clearInput();

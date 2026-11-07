@@ -31,8 +31,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	file.accept = '.pslr,application/vnd.phonics.slalom-replay';
 	file.className = 'php-slalom-file';
 	style.textContent = `
-		.php-slalom-ui{position:relative;width:100%;max-width:none;margin:auto;background:#000;color:#fff}
-		.php-slalom-screen{position:relative;width:100%;aspect-ratio:8/5;isolation:isolate;overflow:hidden;background:#000}
+		.php-slalom-ui{position:relative;width:100%;height:100%;max-width:none;margin:auto;background:#000;color:#fff}
+		.php-slalom-screen{position:relative;width:100%;height:100%;isolation:isolate;overflow:hidden;background:#000}
 		.php-slalom-screen>canvas{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;
 			max-height:none;margin:0;border:0;border-radius:0;image-rendering:pixelated;touch-action:none}
 		.php-slalom-targets{position:absolute;inset:0;pointer-events:none}
@@ -51,10 +51,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 			white-space:nowrap!important;border:0!important}
 		.php-slalom-screen .quick-controls{right:6px;bottom:4px;z-index:4;padding:0;opacity:.8}
 		.php-slalom-screen .quick-controls button{width:30px;height:30px;padding:4px}
-		.php-slalom-ui:fullscreen{display:flex;align-items:center;justify-content:center;width:100%;height:100%;max-width:none}
-		.php-slalom-ui:fullscreen .php-slalom-screen{width:min(100vw,160vh)}
-		[data-game-embed="true"] .php-slalom-ui{display:flex;align-items:center;justify-content:center;height:100%}
-		[data-game-embed="true"] .php-slalom-screen{width:min(100vw,160vh)}
+		.php-slalom-ui:fullscreen{width:100%;height:100%;max-width:none}
 		@media(pointer:coarse){.php-slalom-screen .quick-controls button{width:44px;height:44px}}
 	`;
 

@@ -225,15 +225,15 @@ export function activate({module, canvas, services, session})
 	let viewport = JSON.stringify([logicalWidth, logicalHeight, 1, logicalWidth, logicalHeight]);
 	let measuredDpr = 0;
 
-	/** Keep CSS layout stable while SDL owns the physical drawing-buffer attributes. */
+	/**
+	 * Keep CSS layout stable while SDL owns the physical drawing-buffer attributes. On the page and in fullscreen the
+	 * view fills its frame at the logical aspect ratio, and the frame's background letterboxes the rest.
+	 */
 	const measureViewport = () => {
 		const dpr = window.devicePixelRatio || 1;
-		const fullscreen = document.fullscreenElement === frame;
 		const availableWidth = Math.max(1, frame.clientWidth || logicalWidth);
 		const availableHeight = Math.max(1, frame.clientHeight || logicalHeight);
-		const cssWidth = fullscreen
-			? Math.min(availableWidth, availableHeight * aspect)
-			: Math.min(logicalWidth, availableWidth);
+		const cssWidth = Math.min(availableWidth, availableHeight * aspect);
 
 		const cssHeight = cssWidth / aspect;
 		let width = Math.max(1, Math.round(cssWidth * dpr));

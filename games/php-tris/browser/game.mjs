@@ -65,16 +65,15 @@ export async function activate({module,canvas,world,assets,loadData,services,ses
 	status.setAttribute('aria-live', 'polite');
 	const style = document.createElement('style');
 	style.textContent = `
- .php-tris-ui{position:relative;width:100%;max-width:1100px;margin:auto;background:#090813;color:#eef}
- .php-tris-screen{position:relative;width:100%;aspect-ratio:16/9;isolation:isolate}
+ .php-tris-ui{position:relative;width:100%;height:100%;margin:auto;background:#090813;color:#eef}
+ .php-tris-screen{position:relative;width:100%;height:100%;isolation:isolate}
  .php-tris-screen>canvas{position:absolute;display:block;margin:0;border:0;border-radius:0;max-width:none;max-height:none;image-rendering:pixelated;touch-action:none}
  .php-tris-targets{position:absolute;inset:0;pointer-events:none}
  .php-tris-ui .php-tris-targets button{position:absolute;pointer-events:auto;touch-action:none;background:transparent;color:transparent;border:0;padding:0;border-radius:0;box-shadow:none}
  .php-tris-ui .php-tris-targets button:is(:hover,:focus,:active){background:transparent;color:transparent;box-shadow:none}
  .php-tris-ui .php-tris-targets button:focus-visible{outline:2px solid #e4bd7c;outline-offset:1px}
  .php-tris-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
- .php-tris-ui:fullscreen{max-width:none;display:flex;align-items:center;justify-content:center;height:100%;width:100%}
- @media(max-width:600px) and (orientation:portrait){.php-tris-screen{aspect-ratio:9/17}}
+ .php-tris-ui:fullscreen{height:100%;width:100%}
  .php-tris-screen .quick-controls{right:8px;bottom:2px;padding:0;opacity:.85}
  .php-tris-screen .quick-controls button{width:28px;height:28px;padding:3px}
  @media(pointer:coarse){.php-tris-screen .quick-controls button{width:44px;height:44px}}
@@ -103,17 +102,10 @@ export async function activate({module,canvas,world,assets,loadData,services,ses
 		records = {};
 	}
 
+	// The screen fills its frame on the page and in fullscreen; the scene lays itself out for the shape it gets,
+	// switching to the portrait board when the frame is taller than wide.
 	function measure()
 	{
-		const portrait = innerWidth<600 && innerHeight>innerWidth;
-
-		if(document.fullscreenElement===ui)
-		{
-			const ratio = portrait ? 9/17 : 16/9;
-			screen.style.width = Math.min(innerWidth, innerHeight*ratio) + 'px';
-		}
-		else screen.style.width = '100%';
-
 		const box = screen.getBoundingClientRect(), dpr = devicePixelRatio||1;
 		const w = Math.max(1, Math.round(box.width*dpr)),h = Math.max(1, Math.round(box.height*dpr));
 		canvas.style.width = w/dpr + 'px';

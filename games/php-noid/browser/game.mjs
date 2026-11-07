@@ -65,7 +65,7 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 		</details><details class="php-noid-scores"><summary>Top 10 · this world</summary><ol></ol></details></div>`;
 
 	const style = document.createElement('style');
-	style.textContent = `.php-noid-ui{--php-noid-font:url("${fontUrl}");font:14px/1.6 system-ui,sans-serif;width:100%;max-width:854px;margin:auto}
+	style.textContent = `.php-noid-ui{--php-noid-font:url("${fontUrl}");font:14px/1.6 system-ui,sans-serif;width:100%;height:100%;margin:auto}
 		.php-noid-screen{position:relative;display:block;aspect-ratio:427/240;container-type:inline-size;
 			background:#070b1b;isolation:isolate}
 		.php-noid-screen>canvas{display:block;width:100%;height:100%;min-width:0;min-height:0;max-width:none;
@@ -159,13 +159,14 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 		.php-noid-legend{display:flex;flex-wrap:wrap;gap:.5rem 1rem}.php-noid-legend span{white-space:nowrap}
 		.php-noid-legend b{display:inline-block;color:#071120;min-width:1.6em;text-align:center;margin-right:.4rem}
 		.php-noid-ui details{margin:.65rem 0}.php-noid-scores ol{padding-left:2rem}
-		.php-noid-frame:fullscreen{display:grid;grid-template: minmax(0,1fr) / minmax(0,1fr);
-			align-items:center;justify-items:center;width:100vw;height:100vh;max-width:none;margin:0;padding:0;
+		.php-noid-frame{display:grid;grid-template: minmax(0,1fr) / minmax(0,1fr);
+			align-items:center;justify-items:center;width:100%;height:100%;max-width:none;margin:0;padding:0;
 			box-sizing:border-box;overflow:hidden;background:#080d21}
-		.php-noid-frame:fullscreen .php-noid-ui{grid-area:1/1;min-width:0;max-width:none;margin:0;
-			width:var(--php-noid-fullscreen-width)}
-		.php-noid-frame:fullscreen .php-noid-guide{display:none}
-		.php-noid-ui.php-noid-frame:fullscreen .php-noid-screen{width:var(--php-noid-fullscreen-width)}
+		.php-noid-frame:fullscreen{width:100vw;height:100vh}
+		.php-noid-frame .php-noid-ui{grid-area:1/1;min-width:0;max-width:none;margin:0;
+			width:var(--php-noid-fit-width)}
+		.php-noid-frame .php-noid-guide{display:none}
+		.php-noid-ui.php-noid-frame .php-noid-screen{grid-area:1/1;width:var(--php-noid-fit-width)}
 		.php-noid-hud{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;
 			margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;
 			white-space:nowrap!important;border:0!important}
@@ -352,11 +353,11 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 
 	frame.classList.add('php-noid-frame');
 
-	const fitFullscreen = () => {
-		if(document.fullscreenElement !== frame) return;
-
+	// The frame fills its host on the page and in fullscreen; the 427:240 screen is the largest that fits, and the
+	// frame's background letterboxes the rest.
+	const fitFrame = () => {
 		const width = Math.max(0, Math.min(frame.clientWidth, frame.clientHeight * 427 / 240));
-		ui.style.setProperty('--php-noid-fullscreen-width', `${width}px`);
+		ui.style.setProperty('--php-noid-fit-width', `${width}px`);
 	};
 
 	const updateFullscreen = () => {
@@ -393,21 +394,21 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 	window.addEventListener('scroll', measureTitle, {signal, capture: true});
 
 	const resize = new ResizeObserver(() => {
-		fitFullscreen();
+		fitFrame();
 		measureTitle();
 	});
 
 	resize.observe(frame);
 	resize.observe(ui);
 
-	const dimensions = new MutationObserver(fitFullscreen);
+	const dimensions = new MutationObserver(fitFrame);
 	dimensions.observe(canvas, {attributes: true, attributeFilter: ['width', 'height']});
 	updateFullscreen();
 
 	document.addEventListener('fullscreenchange', () => {
 		const active = document.fullscreenElement === frame;
 		updateFullscreen();
-		fitFullscreen();
+		fitFrame();
 
 		if(active || wasFullscreen) canvas.focus({preventScroll: true});
 
@@ -439,7 +440,7 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 			if(!signal.aborted)
 			{
 				updateFullscreen();
-				fitFullscreen();
+				fitFrame();
 				canvas.focus({preventScroll: true});
 			}
 		}
@@ -649,7 +650,7 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 		finally
 		{
 			frame.classList.remove('php-noid-frame');
-			canvas.style.removeProperty('--php-noid-fullscreen-width');
+			ui.style.removeProperty('--php-noid-fit-width');
 			canvas.style.removeProperty('--php-noid-fullscreen-height');
 			updateFullscreen();
 			shortcuts.close();
