@@ -279,18 +279,20 @@ export class OnlineDeal
 	/**
 	 * @param storage Private per-table record: this browser's layer key for the live hand, any unfinished shuffle
 	 * proof, and the player's own card ids for every hand, kept as hand history. Local storage keeps it across tabs
-	 * and restarts; game.mjs lets only one tab play a table.
+	 * and restarts; the room lobby lets only one tab play a seat, and game.mjs stops a tab's writes once it loses it.
 	 * @param legacyStorage Where earlier builds kept the record; it is moved on first load.
+	 * @param follow Another tab plays this seat and keeps the record: read it again before every step, so this tab can
+	 * show the player's cards from keys that tab stores after this one started.
 	 */
 	constructor({api,root,sessionId,players,localPlayer,breaker,settings=DEFAULT_ONLINE_SETTINGS,rounds=64,storage=globalThis.localStorage
-		,legacyStorage=globalThis.sessionStorage,now=()=>Date.now()})
+		,legacyStorage=globalThis.sessionStorage,now=()=>Date.now(),follow=false})
 	{
 		if(!api||typeof api.prepareCorpus!=='function')throw new TypeError('Mental-poker API is unavailable');
 		if(typeof root!=='string'||!root||typeof sessionId!=='string'||!sessionId)throw new TypeError('Online game needs a room identity');
 		validatePlayers(players,localPlayer,breaker);
 		if(!Number.isSafeInteger(rounds)||rounds<16||rounds>128)throw new RangeError('Shuffle proof needs 16 to 128 rounds');
 		this.api=api;this.root=root;this.sessionId=sessionId;this.players=[...players];this.localPlayer=localPlayer;
-		this.breaker=breaker;this.rounds=rounds;this.storage=storage;this.legacyStorage=legacyStorage;this.now=now;
+		this.breaker=breaker;this.rounds=rounds;this.storage=storage;this.legacyStorage=legacyStorage;this.now=now;this.follow=Boolean(follow);
 		this.keyName=storageKey(root,localPlayer);
 		// The table's settings are part of every proof context, the corpus and the hashed state, so two browsers that
 		// disagree about them fail at the initial ready handshake instead of mid-hand.
@@ -585,6 +587,7 @@ export class OnlineDeal
 		if(actor!==this.currentActor())throw new Error('Online Poker action came from the wrong player');
 		if(!action||!ONLINE_ACTION_TYPES.includes(action.type))throw new Error('Unknown online Poker action');
 		if(typeof preHash!=='string'||preHash!==await this.hash())throw new Error('Online Poker action has the wrong parent hash');
+		if(this.follow)this.saved=this.loadSaved();
 		const before={state:clone(this.state),privateCards:clone(this.privateCards),intent:clone(this.intent),saved:clone(this.saved)};
 		let stored;
 		try{stored=this.storage?.getItem(this.keyName)??null;}catch{stored=undefined;}

@@ -33,24 +33,17 @@ export function tableMenuShortcut(event)
 	return ['g','p'].includes(letter)?'alt+'+letter:null;
 }
 
-/** Web Lock name for one player's seat at one table. */
-export function tableLockName(root,player){return `php-poker:table:${root}:${player}`;}
-
 /**
- * Claim one player's seat at one table for this tab. The table's private record lives in local storage, shared by
- * every tab, so a second tab playing the same seat would publish different proofs for the same turn and its stale
- * writes could erase the first tab's keys. Resolves to a release function, or null while another tab holds the seat.
- * Without Web Locks, the tab plays as before.
+ * Local storage for one run of a table in this tab: reads always pass, writes only while `playing()` holds. The
+ * table's private record is shared by every tab, and the engine lets one tab play a seat at a time. When another tab
+ * takes the seat over, this run stops writing at once, so its late work cannot erase the keys the new tab keeps.
  */
-export function acquireTableLock(name,locks=globalThis.navigator?.locks)
+export function seatStorage(storage,playing)
 {
-	if(typeof locks?.request!=='function')return Promise.resolve(()=>{});
-	return new Promise(resolve=>{
-		let release=null;
-		locks.request(name,{ifAvailable:true},lock=>{
-			if(!lock){resolve(null);return undefined;}
-			return new Promise(done=>{release=done;resolve(()=>done());});
-		}).catch(()=>{if(!release)resolve(()=>{});});
+	return Object.freeze({
+		getItem:key=>storage?.getItem(key)??null
+		,setItem:(key,value)=>{if(playing())storage?.setItem(key,value);}
+		,removeItem:key=>{if(playing())storage?.removeItem(key);}
 	});
 }
 
@@ -279,10 +272,11 @@ export function activate({module, canvas, session})
 	let online=null,onlineView=null,onlineWork=Promise.resolve(),submitting=false,awaitingConfirmation=false;
 	// A room write is retrying after a dropped connection; tableEnded stops those retries once the room ends the table.
 	let reconnecting=false,tableEnded=false;
-	// A watching tab mirrors a table another tab is playing: it applies actions for display, but never writes the
-	// table's record, submits, reports or resigns.
-	let watching=false,releaseTable=null;
-	const watchingNotice='This table is open in another tab. Play continues there; close that tab and reload this one to play here.';
+	// A watching tab mirrors a seat another tab is playing: it applies actions for display, but never writes the
+	// table's record, submits, reports or resigns. The lobby's dialog and sidebar offer to play here instead. Each start
+	// begins a new run; work from an earlier run stops writing and its errors are dropped.
+	let watching=false,seatRun=0;
+	const watchingNotice='Watching: this seat is being played in another tab.';
 	let onlinePlayers=[],onlineLocal=null,onlineProfiles=new Map,onlineAvatars=new Map,identityVersion=0;
 	let lobbyOpening=false,lobbyVisible=false,lobbyPort=null;
 	const local=event=>{
@@ -455,7 +449,7 @@ export function activate({module, canvas, session})
 	const updateOnlineView=()=>{
 		let view=onlinePresentation(online?.view()??null);
 		if(view&&houseRules)view={...view,houseRules};
-		if(view&&watching){onlineView={...view,legalActions:{},error:watchingNotice};return;}
+		if(view&&watching){onlineView={...view,legalActions:{},message:watchingNotice};return;}
 		onlineView=awaitingConfirmation?pendingPokerView(view):view;
 		if(onlineView&&reconnecting)onlineView={...onlineView,legalActions:{},message:'Connection lost. Reconnecting to the table…'};
 	};
@@ -495,11 +489,20 @@ export function activate({module, canvas, session})
 		if(online){onlineView={...onlinePresentation(online.view()),error:message,message:'The online Poker action could not be verified.'};}
 		submitting=false;
 	};
-	const enqueue=task=>{onlineWork=onlineWork.then(task).catch(failOnline);return onlineWork;};
-	const roomWrite=operation=>retryRoomWrite(operation,{
-		live:()=>Boolean(online)&&!tableEnded
-		,reconnecting:value=>{if(reconnecting!==value){reconnecting=value;updateOnlineView();}}
-	});
+	// Work queued before the latest start belongs to a retired run: a tab that lost its seat expects its writes to fail.
+	const enqueue=task=>{
+		const run=seatRun;
+		onlineWork=onlineWork.then(task).catch(error=>{if(run===seatRun)failOnline(error);});
+		return onlineWork;
+	};
+	// A retry stops once the table ends or a newer start retires this run, so it never holds up that start.
+	const roomWrite=operation=>{
+		const run=seatRun;
+		return retryRoomWrite(operation,{
+			live:()=>Boolean(online)&&!tableEnded&&run===seatRun
+			,reconnecting:value=>{if(reconnecting!==value){reconnecting=value;updateOnlineView();}}
+		});
+	};
 	const drive=async()=>{
 		if(!online||watching||submitting||tableEnded||online.currentActor()!==online.localPlayer)return;
 		const action=online.nextAction();if(!action)return;
@@ -508,24 +511,31 @@ export function activate({module, canvas, session})
 		catch(error){submitting=false;throw error;}
 	};
 	lobbyPort=session.lobby.attachGame({
-		start:detail=>enqueue(async()=>{
-			void loadOnlineIdentities(detail).catch(error=>console.warn('Matrix player identity failed to load',error));
-			releaseTable?.();releaseTable=null;tableEnded=false;reconnecting=false;
-			const release=await acquireTableLock(tableLockName(detail.root,detail.localPlayer));
-			watching=release===null;releaseTable=release;
-			const storage=globalThis.localStorage;
-			const controller=new session.pokerOnline.OnlineDeal({
-				api:session.mentalPoker,root:detail.root,sessionId:detail.sessionId,players:detail.players
-				,localPlayer:detail.localPlayer,breaker:detail.breaker,settings:detail.settings??undefined
-				,...(watching?{storage:session.pokerOnline.readOnlyStorage(storage),legacyStorage:null}:{})
+		// A standby start (another tab plays this seat) shows the seat's own cards read-only. The engine starts again
+		// when the seat moves between tabs.
+		start:detail=>{
+			const run=++seatRun,standby=Boolean(detail.standby),seat=standby?detail.seat:detail.localPlayer;
+			return enqueue(async()=>{
+				void loadOnlineIdentities({...detail,localPlayer:seat})
+					.catch(error=>console.warn('Matrix player identity failed to load',error));
+				tableEnded=false;reconnecting=false;watching=standby;
+				const storage=globalThis.localStorage;
+				const controller=new session.pokerOnline.OnlineDeal({
+					api:session.mentalPoker,root:detail.root,sessionId:detail.sessionId,players:detail.players
+					,localPlayer:seat,breaker:detail.breaker,settings:detail.settings??undefined
+					,...(standby
+						?{storage:session.pokerOnline.readOnlyStorage(storage),legacyStorage:null,follow:true}
+						:{storage:seatStorage(storage,()=>run===seatRun)})
+				});
+				const hash=await controller.replay(detail.history??[]);
+				if(detail.sequence!==controller.publicState().sequence)throw new Error('Room history ended at the wrong sequence');
+				if(detail.sequence>0&&detail.hash!==hash)throw new Error('Room history does not match its confirmed hash');
+				const first=firstHouseRules(detail.root,storage,session.pokerOnline.KEPT_TABLES);
+				houseRules=first||houseRules===detail.root?detail.root:null;
+				online=controller;submitting=false;awaitingConfirmation=false;updateOnlineView();
+				if(!standby)await roomWrite(()=>lobbyPort.reportReady(hash));
 			});
-			const hash=await controller.replay(detail.history??[]);
-			if(detail.sequence!==controller.publicState().sequence)throw new Error('Room history ended at the wrong sequence');
-			if(detail.sequence>0&&detail.hash!==hash)throw new Error('Room history does not match its confirmed hash');
-			houseRules=firstHouseRules(detail.root,storage,session.pokerOnline.KEPT_TABLES)?detail.root:null;
-			online=controller;submitting=false;awaitingConfirmation=false;updateOnlineView();
-			if(!watching)await roomWrite(()=>lobbyPort.reportReady(hash));
-		})
+		}
 		,action:detail=>enqueue(async()=>{
 			if(!online)throw new Error('Received a Poker action before the deal started');
 			const settlement=await online.apply(detail);
@@ -572,7 +582,7 @@ export function activate({module, canvas, session})
 	const lobbyClosed=()=>{
 		lobbyVisible=false;online=null;onlineView=null;awaitingConfirmation=false;submitting=false;clearOnlineIdentities();
 		reconnecting=false;tableEnded=true;
-		watching=false;releaseTable?.();releaseTable=null;houseRules=null;
+		watching=false;seatRun++;houseRules=null;
 	};
 	session.lobby.protocol.addEventListener('closed',lobbyClosed);
 
@@ -596,7 +606,7 @@ export function activate({module, canvas, session})
 
 	return ()=>{
 		if(closed)return;closed=true;resize.disconnect();
-		watching=false;releaseTable?.();releaseTable=null;houseRules=null;
+		watching=false;seatRun++;houseRules=null;
 		session.lobby.protocol.removeEventListener('closed',lobbyClosed);
 		clearInput();
 		canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('pointermove',onMove);

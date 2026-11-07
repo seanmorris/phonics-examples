@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "require": {
     "php": ">=8.0",
-    "seanmorris/phonics": "dev-main#b90409ff709aa2f65e32d89ecf25c2dfaae1381b"
+    "seanmorris/phonics": "dev-main#fd601bf71be254159625beaee4202e68c6532767"
   },
   "repositories": [
     {

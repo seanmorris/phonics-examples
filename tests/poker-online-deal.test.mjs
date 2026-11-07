@@ -4,8 +4,8 @@ import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {OnlineDeal,ONLINE_ACTION_TYPES,KEPT_TABLES,evaluateHand,readOnlyStorage} from '../games/php-poker/browser/online-deal.mjs';
 import {
-	TERMINAL_ROOM_ERRORS,acquireTableLock,applyOnlineCommand,decorateOnlineView,firstHouseRules,freezeOnlineDispute
-	,houseRulesSeenKey,matrixPlayerName,pendingPokerView,pokerCommandBatch,retryRoomWrite,sheetCell,tableLockName
+	TERMINAL_ROOM_ERRORS,applyOnlineCommand,decorateOnlineView,firstHouseRules,freezeOnlineDispute
+	,houseRulesSeenKey,matrixPlayerName,pendingPokerView,pokerCommandBatch,retryRoomWrite,seatStorage,sheetCell
 	,tableMenuShortcut
 } from '../games/php-poker/browser/game.mjs';
 
@@ -386,21 +386,16 @@ test('a tab watching a table reads its record but never writes it',async()=>{
 	assert.deepEqual(new Map(store.values),before,'nothing the watcher does changes local storage');
 });
 
-test('one tab holds a table seat at a time',async()=>{
-	const held=new Set,waiting=[];
-	const locks={request(name,options,callback){
-		if(held.has(name)){assert.equal(options.ifAvailable,true);return Promise.resolve(callback(null));}
-		held.add(name);
-		return Promise.resolve(callback({name})).then(()=>held.delete(name));
-	}};
-	const name=tableLockName('$root','@alice:example.org');
-	assert.equal(name,'php-poker:table:$root:@alice:example.org');
-	const release=await acquireTableLock(name,locks);
-	assert.equal(typeof release,'function','the first tab plays');
-	assert.equal(await acquireTableLock(name,locks),null,'a second tab only watches');
-	assert.equal(typeof await acquireTableLock(tableLockName('$other','@alice:example.org'),locks),'function','other tables are separate');
-	release();await new Promise(resolve=>setTimeout(resolve,0));
-	assert.equal(typeof await acquireTableLock(name,locks),'function','the seat frees when the playing tab lets go');
-	assert.equal(typeof await acquireTableLock(name,undefined),'function','without Web Locks a tab plays as before');
+test('a run of a table stops writing its record once another tab takes the seat',()=>{
+	const store=webStorage();let current=1;
+	const first=seatStorage(store,()=>current===1);
+	first.setItem('record','first');
+	assert.equal(store.getItem('record'),'first','the playing run writes');
+	current=2;
+	first.setItem('record','stale');first.removeItem('record');
+	assert.equal(first.getItem('record'),'first','a retired run still reads but its writes are dropped');
+	const second=seatStorage(store,()=>current===2);
+	second.setItem('record','second');
+	assert.equal(store.getItem('record'),'second','the new run writes');
 });
 
