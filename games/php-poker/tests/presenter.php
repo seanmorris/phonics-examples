@@ -370,7 +370,7 @@ $test('online loading status replaces the first-hand welcome card', static funct
 	$expect(count($quietFirst->paint(390, 844)->instances()) > count($quietLater->paint(390, 844)->instances()), 'a quiet ready table retains its one-time welcome');
 });
 
-$test('online plates read Shuffling, Dealing, Revealing or Verifying, and YOU moves under a profile picture', static function(callable $expect) use ($fixture, $root): void {
+$test('online plates show only the seat shuffling, dealing or revealing, and no idle YOU plate', static function(callable $expect) use ($fixture, $root): void {
 	$view = $fixture('draw-2');
 	$view['mode'] = 'online';
 	$view['phase'] = 'ready';
@@ -392,7 +392,7 @@ $test('online plates read Shuffling, Dealing, Revealing or Verifying, and YOU mo
 		$view['activity'] = ['seat' => 1, 'stage' => $stage];
 		$shown = $painter($view);
 		$expect($plate($shown, $view, 1) === $word, "the working opponent's plate reads $word");
-		$expect($plate($shown, $view, 0) === 'Verifying', "the other seat reads Verifying while the opponent is $word");
+		$expect($plate($shown, $view, 0) === '', "the other seat has no plate while the opponent is $word");
 		$view['activity'] = ['seat' => 0, 'stage' => $stage];
 		$expect($plate($painter($view), $view, 0) === $word, "the human's plate reads $word, not that it is their turn");
 	}
@@ -401,9 +401,11 @@ $test('online plates read Shuffling, Dealing, Revealing or Verifying, and YOU mo
 	$view['players'][1]['folded'] = false;
 	$view['activity'] = null;
 	$view['players'][0]['portrait'] = 'matrix-local';
-	$expect($plate($painter($view), $view, 0) === 'You', 'without a picture the idle plate still says YOU');
+	$expect($plate($painter($view), $view, 0) === '', 'online, the idle YOU plate is gone without a picture');
 	$pictured = $painter($view, ['icons' => ['matrix-local' => [0, 0, 32, 32]], 'width' => 64, 'height' => 64]);
-	$expect($plate($pictured, $view, 0) === '', 'with a profile picture the idle YOU plate is gone');
+	$expect($plate($pictured, $view, 0) === '', 'online, the idle YOU plate is gone with a profile picture');
+	$offline = ['mode' => 'offline'] + $view;
+	$expect($plate($painter($offline), $offline, 0) === 'You', 'offline keeps the idle YOU plate');
 	$view['players'][0]['lastAction'] = 'Calls 2';
 	$expect($plate($pictured, $view, 0) === 'Calls 2', 'with a profile picture the plate still reports actions');
 });
@@ -795,6 +797,18 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 		$expect($headsUp['outward'] === 1, "the heads-up opponent uses the right-side identity and stack layout in {$layout->profile}");
 		if($layout->profile === 'wide')
 		$expect(abs($headsUp['chips'][0] - ($headsUp['plate'][0] + $headsUp['plate'][2] + 4)) < 1e-9, 'the heads-up bank stands at the right corner of its hand');
+		if($layout->profile === 'tall')
+		{
+			// On a tall screen the lone opponent's bank hugs the right corner of its fan, under the icon, and no real
+			// bank reaches the pot plate.
+			$fanRight = $headsUp['cards'][4][0] + $headsUp['cards'][4][2];
+			$bank = $layout->bankBounds(1, 2, Chips::bank(500));
+			$expect(abs($bank[0] + $bank[2] - $fanRight) < 1e-6, "the heads-up bank is flush with the right corner of its hand in {$layout->width()}x{$layout->height()}");
+			$pot = $layout->centre()['pot'];
+			$clear = true;
+			for($value = 0; $value <= 1000; $value += 7) if(($bounds = $layout->bankBounds(1, 2, Chips::bank($value))) && $overlaps($bounds, $pot)) $clear = false;
+			$expect($clear, "no heads-up bank reaches the pot plate in {$layout->width()}x{$layout->height()}");
+		}
 		if($layout->columns()) continue;
 		$left = $layout->seat(4, 8);
 		$right = $layout->seat(5, 8);

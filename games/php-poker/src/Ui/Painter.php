@@ -376,22 +376,21 @@ final class Painter
 	private function plateText(array $player, int $seat, bool $showdown): string
 	{
 		if($player['folded']) return 'Fold';
-		// While the browsers shuffle, deal or reveal between themselves, the working seat says what it is doing and
-		// every other seat checks its proofs; the centre status explains the step.
+		// While the browsers shuffle, deal or reveal between themselves, only the working seat has a plate, saying
+		// what it is doing; the centre status explains the step.
 		$activity = $this->view['activity'] ?? null;
 		if(is_array($activity))
-		{
-			if(($activity['seat'] ?? -1) !== $seat) return 'Verifying';
-			return match($activity['stage'] ?? '') {'shuffle' => 'Shuffling', 'reveal' => 'Revealing', default => 'Dealing'};
-		}
+		return ($activity['seat'] ?? -1) !== $seat ? ''
+			: match($activity['stage'] ?? '') {'shuffle' => 'Shuffling', 'reveal' => 'Revealing', default => 'Dealing'};
 		if($showdown)
 		{
 			if(in_array($seat, array_column($this->view['awards'] ?? [], 'seat'), true)) return $player['handName'] ?: 'Winner';
 			return $player['handName'] ? (string)$player['handName'] : ($seat === 0 ? 'Your hand' : '');
 		}
-		// With a profile picture, YOU is written under the picture instead of on an idle plate.
+		// Online, the YOU disc or the YOU under a profile picture already names the seat, so an idle plate is
+		// left out; offline keeps it.
 		if($seat === 0) return ($this->view['turn'] ?? -1) === 0 ? 'Your turn'
-			: ($player['lastAction'] ?: ($this->pictured($player) ? '' : 'You'));
+			: ($player['lastAction'] ?: (($this->view['mode'] ?? 'offline') === 'online' ? '' : 'You'));
 		if(($this->view['turn'] ?? -1) === $seat) return 'Thinking';
 		return (string)($player['lastAction'] ?: '');
 	}

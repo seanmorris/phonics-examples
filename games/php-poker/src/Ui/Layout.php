@@ -866,6 +866,10 @@ final class Layout
 		$cards = [];
 		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
 		if($human) $chips = [$this->profile === 'landscape' ? $plateLeft + $plateWidth + 4 : $plateLeft - 4, $fanTop + $cardHeight + 4];
+		// A lone opponent on a tall screen follows the oval's right-side seats: its bank stands at the fan's outer
+		// corner, beneath the icon, and grows inward. Its edge stays flush with the fan, because here the name and
+		// total sit close enough to that corner that a tall stack beside it would rise into them.
+		elseif($opponents === 1 && $this->profile === 'tall') $chips = [$fanLeft + $fanWidth - $radius, $fanTop + $cardHeight + 4];
 		// Compact chips stand beside the fan on its baseline, so even a twenty-chip stack stays under the plate.
 		elseif($compact) $chips = [$outward > 0 ? $fanLeft - 8 : $fanLeft + $fanWidth + 8, $fanTop + $cardHeight];
 		// Phone chips stand in front of the fan's inner corner: a tall stack rises over the cards, never over the
@@ -940,7 +944,8 @@ final class Layout
 			// it less than its natural height, the loose pot and piles shrink so the pot plate clears the
 			// opponent's chips rather than covering them.
 			$opponent = $this->seat(1, 2);
-			$bank = $this->bankBounds(1, 2, Chips::bank(500));
+			// Every denomination present gives the deepest bank: larger chips stand in rows nearer the centre.
+			$bank = $this->bankBounds(1, 2, array_fill_keys(Chips::VALUES, 1));
 			$under = max($opponent['cards'][0][1] + $opponent['cards'][0][3], $bank[1] + $bank[3]) + 6;
 			$room = $this->handTop() - 14 - 8 - 56 - $under - 2 * self::PLATE_HEIGHT - 14;
 			$objectScale = min($objectScale, max(.6, $room / 123));
