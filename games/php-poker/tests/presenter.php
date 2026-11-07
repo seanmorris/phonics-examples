@@ -289,9 +289,9 @@ $test('a new online match opens its house rules once, over the table', static fu
 	$presenter->update($view);
 	$expect($presenter->state()['infoDialog'] === null, 'later views of the same table do not reopen them');
 	$presenter->input([['key'=>'alt+p']], null, 0);
-	$presenter->input([['key'=>'g']], null, 0);
+	$presenter->input([['key'=>'r']], null, 0);
 	$expect($presenter->state()['infoDialog'] === 'game-settings' && $presenter->state()['gameSettingsTitle'] === 'HOUSE RULES',
-		'Poker > Game Settings shows the same house rules online');
+		'Poker > House Rules shows the same rules online');
 	$presenter->input([['key'=>'escape']], null, 0);
 	$view['houseRules'] = '$table-two';
 	$presenter->update($view);
@@ -302,7 +302,7 @@ $test('a new online match opens its house rules once, over the table', static fu
 	$offlineView['screen'] = 'menu';
 	$offline->update($offlineView);
 	$expect($offline->state()['infoDialog'] === null, 'a marker on a non-table view opens nothing');
-	$expect($offline->state()['gameSettingsTitle'] === 'CURRENT GAME SETTINGS', 'offline tables keep the settings title');
+	$expect($offline->state()['gameSettingsTitle'] === 'HOUSE RULES', 'offline tables use the House Rules title too');
 });
 
 $test('online waits drum three reserved dots without changing the authorized message', static function(callable $expect) use ($fixture, $root): void {
@@ -1266,6 +1266,8 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$poker=new Presenter($root); $poker->update($view);
 	$poker->input([['key'=>'alt+p']],null,0);
 	$expect($poker->state()['topMenu']==='poker','Poker opens its information menu');
+	$rules=array_values(array_filter($poker->layout()->topDropdown('poker')['items'],static fn(array $item): bool=>$item['id']==='game-settings'))[0];
+	$expect($rules['label']==='House Rules' && $rules['key']==='R','the read-only rules menu is named House Rules and uses R');
 	$expect($poker->input([['key'=>'h']],null,0)===[] && $poker->state()['history'] && $poker->modal(),'History opens from the Poker menu as a modal dialog');
 	$history=$poker->layout()->history(count($view['players']));
 	$expect($history['summary'] && count($history['emblems'])===8 && count($history['rows'])===8,
@@ -1280,16 +1282,16 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$expect(count($poker->paint(1280,720)->instances())>100,'the portrait history and complete transcript paint over the live table');
 	$poker->input([['key'=>'enter']],null,0);
 	$poker->input([['key'=>'alt+p']],null,0);
-	$expect($poker->input([['key'=>'g']],null,0)===[] && $poker->state()['infoDialog']==='game-settings','Game Settings opens the active table profile');
+	$expect($poker->input([['key'=>'r']],null,0)===[] && $poker->state()['infoDialog']==='game-settings','House Rules opens the active table profile');
 	$settings=$poker->state()['gameSettings'];
 	$expect($settings===['table'=>'8 players · Offline','opening'=>'Jacks or better','wild'=>'No wild cards','ante'=>'1 chip',
-		'before'=>'2–20 chips','after'=>'2–20 chips','raises'=>'3','playerRaises'=>'3'],'the settings screen reports every active setup choice');
-	$expect($poker->state()['oddsTables']===null && count($poker->paint(1280,720)->instances())>100,'the settings screen paints without calculating odds');
+		'before'=>'2–20 chips','after'=>'2–20 chips','raises'=>'3','playerRaises'=>'3'],'House Rules reports every active setup choice');
+	$expect($poker->state()['oddsTables']===null && count($poker->paint(1280,720)->instances())>100,'House Rules paints without calculating odds');
 	$click($poker,$poker->layout()->gameSettingsDialog()['ok']);
 	$manyWild=$view;
 	$manyWild['profile']['wild']=['joker','deuces','one-eyed-jacks','mustached-kings','deuces-treys','kings','custom'];
 	$manyWild['profile']['customWild']=[12,25,38,51,52,53];
-	$many=new Presenter($root); $many->update($manyWild); $many->input([['key'=>'alt+p'],['key'=>'g']],null,0);
+	$many=new Presenter($root); $many->update($manyWild); $many->input([['key'=>'alt+p'],['key'=>'r']],null,0);
 	$expect($many->state()['gameSettingsWildLines']===3 && str_contains($many->state()['gameSettings']['wild'],'Joker 2 wild'),
 		'a combined wildcard profile expands to show its complete description');
 	$poker->input([['key'=>'alt+p']],null,0);

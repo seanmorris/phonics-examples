@@ -134,10 +134,10 @@
     "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
     "src/Session.php": "sha256-MTod/s8QoyNQjq0PQfWwHmNvPhcjMqIJEBt5//AVC5o=",
     "src/Ui/Chips.php": "sha256-qD7RyIoRjgORznQes/KLAwKdsgcEz6tZBNOhSljW35E=",
-    "src/Ui/Layout.php": "sha256-NJNDjrV5zfjASQOPwL9tcACSg6/Jo/T1D8ijzs4Gkh8=",
+    "src/Ui/Layout.php": "sha256-SEVrPH//F7U+EiXqM3mqvjUxnEbymWbK9EesIqb2Kxg=",
     "src/Ui/Motion.php": "sha256-Qf+Y94XAkdkD6KzlLNBMh0jVHdE3sCR8pWsilraI+u4=",
-    "src/Ui/Painter.php": "sha256-S4FJmI29BF/hWind7Rap1n2E/1o5dcEG065I5wAPSiY=",
-    "src/Ui/Presenter.php": "sha256-Ckhejw09SZ3zfuEhz6LelCEKTxM2FhwgTOYS60Nbf20=",
+    "src/Ui/Painter.php": "sha256-SS+dCHn73/cwFMhgVDHJDJAwjriDprMM2Yd0sQrrmHM=",
+    "src/Ui/Presenter.php": "sha256-ZMzDO9Yg7jtE7E2ozixRwwsk1o3+qOWAIv2hBD7gaYY=",
     "src/Ui/RoundHistory.php": "sha256-jx7NY8otLquaWLWt95AGepSGvEtn9nHZsjGdrGXZ6uQ=",
     "src/WildCards.php": "sha256-xr3nuIPic3i+qXdKbOwdma7zRMSFMKLFpOJXwmqFkr8="
   }

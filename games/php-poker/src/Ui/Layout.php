@@ -460,7 +460,7 @@ final class Layout
 		$height=$this->controlSize();
 		$definitions=$menu==='game'
 			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['quit','Quit to title','Q']]
-			: [['game-settings','Game Settings','G'],['history','History','H'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
+			: [['game-settings','House Rules','R'],['history','History','H'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
 		$items=[];
 		$x=$headings[$menu][0]; $y=$headings[$menu][1]+$headings[$menu][3];
 		foreach($definitions as $index=>[$id,$label,$key])

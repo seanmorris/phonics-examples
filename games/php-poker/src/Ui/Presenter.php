@@ -640,7 +640,7 @@ final class Presenter
 			if(in_array($key,['escape','backspace'],true)) { $this->topMenu=null; return []; }
 			$action=($this->topMenu==='game'
 				? ['n'=>'new','s'=>'save','l'=>'load','q'=>'quit']
-				: ['g'=>'game-settings','h'=>'history','o'=>'odds','i'=>'improving'])[$key]??null;
+				: ['r'=>'game-settings','h'=>'history','o'=>'odds','i'=>'improving'])[$key]??null;
 			return $action===null?[]:$this->activateTopAction($action);
 		}
 
@@ -701,7 +701,7 @@ final class Presenter
 		return [['type'=>'menu']];
 	}
 
-	/** Values shown by Poker > Game Settings, derived from the authoritative profile in the current view. */
+	/** Values shown by Poker > House Rules, derived from the authoritative profile in the current view. */
 	private function gameSettings(): array
 	{
 		$profile=is_array($this->view['profile']??null)?$this->view['profile']:[];
@@ -1102,7 +1102,7 @@ final class Presenter
 			, 'confirmDialog'=>$this->confirmDialog
 			, 'oddsTables'=>in_array($this->infoDialog,['odds','improving'],true)?$this->oddsTables():null
 			, 'gameSettings'=>$gameSettings
-			, 'gameSettingsTitle'=>($this->view['mode'] ?? 'offline') === 'online' ? 'HOUSE RULES' : 'CURRENT GAME SETTINGS'
+			, 'gameSettingsTitle'=>'HOUSE RULES'
 			, 'gameSettingsWildLines'=>$gameSettings===null?1:$this->gameSettingsWildLines($gameSettings)
 			, 'locked' => $this->locked(), 'hint' => $this->guidance()
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant,
