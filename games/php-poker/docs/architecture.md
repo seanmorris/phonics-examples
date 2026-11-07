@@ -38,11 +38,13 @@ joint shuffle with fresh per-hand keys. Online play is heads-up with a table-sta
 Opens**: a Jackpots opener's cards stay private, so nobody could check the openers. The host chooses every other offline
 setting when opening a table or a challenge: ante, bet ranges before and after the draw, the total and per-player
 raise caps, and wild cards, jokers included. The engine lobby asks for them in its House rules dialog, from the form
-`onlineSettingsForm()` describes, and remembers the host's last choice in local storage. The settings travel in the
+`onlineSettingsForm()` describes. Its folded sections follow the offline TABLE SETUP rows (Opponents, fixed at one;
+Wild cards; Limits) with the same row summaries and limit captions; there is no Opening row, because online tables
+always play Anything opens. The host's last choice is kept in local storage. The settings travel in the
 table offer, so the lobby labels the table with them and a joiner sees them before accepting; a build that cannot play
 them lists the table but cannot join it. They are bound into the proof contexts, the card corpus and the hashed state,
-so browsers that disagree fail at the first handshake. When a browser first seats or watches a table, Poker > Game
-Settings opens by itself, titled HOUSE RULES. The browser evaluator ports `Hand::evaluate`, wild cards included, and
+so browsers that disagree fail at the first handshake. When a browser first seats or watches a table, Poker > House
+Rules (R) opens by itself. The browser evaluator ports `Hand::evaluate`, wild cards included, and
 tests compare it with PHP. Single-player loans and adaptation remain offline rules.
 
 Each step a player owes has a five-minute deadline: a betting or draw decision, the next deal, and the automatic

@@ -4,8 +4,8 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {
-	DEFAULT_ONLINE_SETTINGS,OnlineDeal,cardLabel,describeOnlineSettings,evaluateHand,onlineDeck,onlineSettingsForm,onlineWildCards
-	,validateOnlineSettings
+	DEFAULT_ONLINE_SETTINGS,OnlineDeal,cardLabel,describeOnlineSettings,evaluateHand,limitsLabel,onlineDeck,onlineSettingsForm
+	,onlineWildCards,validateOnlineSettings,wildSelectionLabel
 } from '../games/php-poker/browser/online-deal.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -162,13 +162,12 @@ test('browsers that disagree on table settings fail at the first handshake',asyn
 test('the House rules form covers every online setting in the offline names, bounds and card labels',()=>{
 	const form=onlineSettingsForm();
 	const fields=form.groups.flatMap(group=>group.fields),byName=Object.fromEntries(fields.map(field=>[field.name,field]));
-	assert.deepEqual(fields.map(field=>field.name).sort(),Object.keys(DEFAULT_ONLINE_SETTINGS).sort(),'one field per setting');
+	assert.deepEqual(fields.map(field=>field.name).sort(),Object.keys(DEFAULT_ONLINE_SETTINGS).filter(key=>key!=='variant').sort()
+		,'one field per setting except the opening, which is always Anything opens online');
+	assert.equal(form.values.variant,'anything','the variant still travels with the chosen settings');
 	assert.deepEqual(form.values,{...DEFAULT_ONLINE_SETTINGS,wild:[],customWild:[]});
 	assert.deepEqual(form.defaults,form.values);
 	assert.ok(!Object.isFrozen(form.values.wild),'the dialog receives plain copies');
-	assert.deepEqual(byName.variant.options,[
-		{value:'anything',label:'Anything opens'},{value:'jackpots',label:'Jacks or better (offline only)',disabled:true}
-	]);
 	for(const field of fields.filter(field=>field.type==='number'))
 	{
 		const low={...DEFAULT_ONLINE_SETTINGS,[field.name]:field.min-1},high={...DEFAULT_ONLINE_SETTINGS,[field.name]:field.max+1};
@@ -189,4 +188,26 @@ test('the House rules form covers every online setting in the offline names, bou
 	const remembered=onlineSettingsForm({ante:4,raiseLimit:2,wild:['custom'],customWild:[0,53]});
 	assert.deepEqual([remembered.values.ante,remembered.values.raiseLimit,remembered.values.customWild],[4,2,[0,53]]);
 	assert.deepEqual(onlineSettingsForm({ante:-1}).values,form.values,'stored settings this build rejects fall back to the defaults');
+});
+
+test('House rules follow the offline TABLE SETUP rows, labels, captions and row summaries',()=>{
+	const form=onlineSettingsForm({ante:3,maximum:30,finalMinimum:4,finalMaximum:40,raiseLimit:2,playerRaiseLimit:1,wild:['joker']});
+	assert.deepEqual(form.groups.map(group=>group.legend),['Opponents','Wild cards','Limits']);
+	const [opponents,wild,limits]=form.groups;
+	assert.deepEqual(opponents.fields,[],'online tables are heads-up, so the row is fixed');
+	assert.equal(opponents.summary(form.values),'1 · heads-up');
+	assert.equal(wild.summary(form.values),'Joker');
+	assert.equal(wild.fields[0].label,'','the presets sit directly under the Wild cards row, like the offline dialog');
+	assert.equal(limits.summary(form.values),'3 · 2–30 / 4–40 · 2/1');
+	assert.equal(limitsLabel(DEFAULT_ONLINE_SETTINGS),'1 · 2–20 / 2–20 · 3/3');
+	assert.equal(limitsLabel({...DEFAULT_ONLINE_SETTINGS,maximum:null}),'1 · 2–? / 2–20 · 3/3','a half-typed number reads as a gap');
+	// BETTING & RAISING LIMITS in Painter::limitsDialog, in Layout::limits() wide order.
+	assert.deepEqual(limits.fields.map(field=>[field.name,field.label,field.help]),[
+		['ante','Ante','Dealer pays pot'],['minimum','Before min','Minimum bet/raise'],['maximum','Before max','Maximum bet/raise']
+		,['finalMinimum','After min','Minimum bet/raise'],['finalMaximum','After max','Maximum bet/raise']
+		,['raiseLimit','Total raises','Whole-table cap'],['playerRaiseLimit','Raises/player','Each player\'s cap']
+	]);
+	const selections=[[],['joker'],['kings'],['custom'],['joker','deuces'],['deuces','kings','custom']];
+	const expected=php(`echo json_encode(array_map(static fn(array $presets): string => PhpPoker\\WildCards::selectionLabel($presets),$input));`,selections);
+	assert.deepEqual(selections.map(wildSelectionLabel),expected,'the Wild cards row reads like WildCards::selectionLabel');
 });

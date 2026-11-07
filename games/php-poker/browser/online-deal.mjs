@@ -148,9 +148,27 @@ export function describeOnlineSettings(settings)
 	return parts.join(' · ');
 }
 
+/** The offline setup's Wild cards row: None, the one chosen preset, or how many are checked (WildCards::selectionLabel). */
+export function wildSelectionLabel(presets)
+{
+	const chosen=Object.keys(WILD_PRESETS).filter(preset=>Array.isArray(presets)&&presets.includes(preset));
+	if(!chosen.length)return 'None';
+	return chosen.length===1?WILD_OPTION_NAMES[chosen[0]]:`${chosen.length} selections`;
+}
+
+/** The offline setup's Limits row: ante · before-draw range / after-draw range · total/per-player raises. */
+export function limitsLabel(settings)
+{
+	const value=key=>Number.isSafeInteger(settings?.[key])?settings[key]:'?';
+	return `${value('ante')} · ${value('minimum')}–${value('maximum')} / ${value('finalMinimum')}–${value('finalMaximum')}`
+		+` · ${value('raiseLimit')}/${value('playerRaiseLimit')}`;
+}
+
 /**
- * The House rules form the room lobby shows when this player opens a table or challenges someone, in the offline
- * setup's words and bounds. Jacks or better stays in the list, disabled, so the host sees why it is missing.
+ * The House rules form the room lobby shows when this player opens a table or challenges someone. It follows the
+ * offline TABLE SETUP screen: Opponents (fixed, online tables are heads-up), Wild cards with the custom card list, and
+ * Limits with the BETTING & RAISING LIMITS labels and captions. Each folded row shows the same summary the offline row
+ * does. Online tables always play Anything opens, so the Opening row is left out and the variant keeps its value.
  * @param settings Starting values, usually the host's last online table; invalid values fall back to the defaults.
  */
 export function onlineSettingsForm(settings=DEFAULT_ONLINE_SETTINGS)
@@ -159,37 +177,34 @@ export function onlineSettingsForm(settings=DEFAULT_ONLINE_SETTINGS)
 	try{values=validateOnlineSettings(settings);}
 	catch{values=DEFAULT_ONLINE_SETTINGS;}
 	const copy=value=>({...value,wild:[...value.wild],customWild:[...value.customWild]});
-	const number=(name,low,high)=>({name,label:SETTING_NAMES[name].replace(/ (before|after) the draw$/,''),type:'number',min:low,max:high
-		,default:DEFAULT_ONLINE_SETTINGS[name]});
+	const limit=(name,label,help,low,high)=>({name,label,help,type:'number',min:low,max:high,default:DEFAULT_ONLINE_SETTINGS[name]});
 	return {
 		title:'House rules'
 		,intro:'Both players see these rules before the first deal. Your choice is kept for your next table.'
 		,values:copy(values)
 		,defaults:copy(DEFAULT_ONLINE_SETTINGS)
 		,groups:[
-			{
-				legend:'Game'
-				,fields:[
-					{name:'variant',label:'Opening',type:'select',default:'anything',options:[
-						{value:'anything',label:'Anything opens'}
-						,{value:'jackpots',label:'Jacks or better (offline only)',disabled:true}
-					]}
-					,{...number('ante',0,100),label:SETTING_NAMES.ante}
-				]
-				,help:'Online tables use Anything opens. A Jacks or better opener’s cards stay private, so nobody could check them.'
-			}
-			,{legend:'Before the draw',fields:[number('minimum',1,100),number('maximum',1,100)]}
-			,{legend:'After the draw',fields:[number('finalMinimum',1,100),number('finalMaximum',1,100)]}
-			,{legend:'Raises',fields:[
-				{...number('raiseLimit',0,10),label:'Per round'},{...number('playerRaiseLimit',0,10),label:'Per player'}
-			]}
+			{legend:'Opponents',fields:[],summary:()=>'1 · heads-up'}
 			,{
 				legend:'Wild cards'
+				,summary:value=>wildSelectionLabel(value.wild)
 				,fields:[
-					{name:'wild',label:'Make wild',type:'checkboxes'
-						,options:Object.keys(WILD_PRESETS).map(id=>({value:id,label:WILD_OPTION_NAMES[id]}))}
+					{name:'wild',label:'',type:'checkboxes',columns:8,options:Object.keys(WILD_PRESETS).map(id=>({value:id,label:WILD_OPTION_NAMES[id]}))}
 					,{name:'customWild',label:'Custom wild cards',type:'checkboxes',columns:4.5,visibleWhen:{field:'wild',includes:'custom'}
 						,options:Array.from({length:54},(_,card)=>({value:card,label:cardLabel(card),group:SUIT_NAMES[Math.floor(card/13)]??'Jokers'}))}
+				]
+			}
+			,{
+				legend:'Limits'
+				,summary:limitsLabel
+				,fields:[
+					limit('ante','Ante','Dealer pays pot',0,100)
+					,limit('minimum','Before min','Minimum bet/raise',1,100)
+					,limit('maximum','Before max','Maximum bet/raise',1,100)
+					,limit('finalMinimum','After min','Minimum bet/raise',1,100)
+					,limit('finalMaximum','After max','Maximum bet/raise',1,100)
+					,limit('raiseLimit','Total raises','Whole-table cap',0,10)
+					,limit('playerRaiseLimit','Raises/player','Each player\'s cap',0,10)
 				]
 			}
 		]
@@ -943,8 +958,8 @@ export class OnlineDeal
 export function activate({session})
 {
 	const api=Object.freeze({OnlineDeal,ONLINE_ACTION_TYPES,ONLINE_DEAL_VERSION,ONLINE_RULES,KEPT_TABLES,DEFAULT_ONLINE_SETTINGS
-		,cardLabel,describeOnlineSettings,evaluateHand,onlineDeck,onlineSettingsForm,onlineWildCards,readOnlyStorage
-		,validateOnlineSettings});
+		,cardLabel,describeOnlineSettings,evaluateHand,limitsLabel,onlineDeck,onlineSettingsForm,onlineWildCards,readOnlyStorage
+		,validateOnlineSettings,wildSelectionLabel});
 	session.pokerOnline=api;
 	return()=>{if(session.pokerOnline===api)delete session.pokerOnline;};
 }
