@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
-import {OnlineDeal,ONLINE_ACTION_TYPES,evaluateHand} from '../games/php-poker/browser/online-deal.mjs';
+import {OnlineDeal,ONLINE_ACTION_TYPES,KEPT_TABLES,evaluateHand,readOnlyStorage} from '../games/php-poker/browser/online-deal.mjs';
 import {
-	decorateOnlineView,freezeOnlineDispute,matrixPlayerName,pendingPokerView,pokerCommandBatch,sheetCell,tableMenuShortcut
+	acquireTableLock,decorateOnlineView,freezeOnlineDispute,matrixPlayerName,pendingPokerView,pokerCommandBatch,sheetCell
+	,tableLockName,tableMenuShortcut
 } from '../games/php-poker/browser/game.mjs';
 
 test('table-menu shortcuts follow the physical key, including macOS Option combinations',()=>{
@@ -271,3 +272,79 @@ test('the public reducer rejects wrong actors, parents and altered layer proofs'
 	deck[1]=deck[2];
 	await assert.rejects(alice.apply({sequence:1,actor:'alice',pre_hash:hash,action:altered}),/duplicate|invalid|card/i);
 });
+
+/** A Storage-like map with key() and length, as local storage provides. */
+const webStorage=({failAfter=Infinity}={})=>{
+	const values=new Map;let writes=0;
+	return {values,getItem:key=>values.get(key)??null,removeItem:key=>values.delete(key),key:index=>[...values.keys()][index]??null,
+		get length(){return values.size;},setItem(key,value){if(++writes>failAfter)throw new Error('QuotaExceededError');values.set(key,String(value));}};
+};
+const tableOptions=(root,store,extra={})=>({api:mentalPoker,root,sessionId:root+'-session',players:['alice','bob']
+	,localPlayer:'alice',breaker:'alice',rounds:16,storage:store,legacyStorage:null,...extra});
+
+test('the online record moves from session storage to local storage on first load',()=>{
+	const local=webStorage(),legacy=webStorage();
+	const first=new OnlineDeal(tableOptions('$moved',legacy));
+	first.makeShufflePlan();
+	const key=first.keyName,record=legacy.getItem(key);
+	assert.ok(record,'an earlier build wrote the record to session storage');
+	const reopened=new OnlineDeal(tableOptions('$moved',local,{legacyStorage:legacy}));
+	assert.equal(local.getItem(key),record,'the record now lives in local storage');
+	assert.equal(legacy.getItem(key),null,'and leaves session storage');
+	assert.deepEqual(reopened.saved.keys,first.saved.keys,'the live hand keeps its layer key');
+	assert.deepEqual(reopened.makeShufflePlan(),first.saved.plan,'and resumes the same unfinished proof');
+	// A full local storage keeps reading the old copy instead of losing the keys.
+	const full=webStorage({failAfter:0}),kept=webStorage();
+	const old=new OnlineDeal(tableOptions('$full',kept));old.makeShufflePlan();
+	const stuck=new OnlineDeal(tableOptions('$full',full,{legacyStorage:kept}));
+	assert.deepEqual(stuck.saved.keys,old.saved.keys);
+	assert.ok(kept.getItem(stuck.keyName),'the session copy stays until local storage accepts it');
+});
+
+test('local storage keeps the newest tables and never prunes the table in play',()=>{
+	const store=webStorage();let clock=0;
+	const tables=[];
+	for(let index=0;index<KEPT_TABLES+3;index++)
+	{
+		const table=new OnlineDeal(tableOptions(`$table-${index}`,store,{now:()=>++clock}));
+		table.makeShufflePlan();tables.push(table);
+	}
+	const kept=tables.filter(table=>store.getItem(table.keyName)!==null);
+	assert.equal(kept.length,KEPT_TABLES,'twenty tables keep their records');
+	assert.deepEqual(kept.map(table=>table.root),tables.slice(-KEPT_TABLES).map(table=>table.root),'the oldest go first');
+	// Reopening an old table refreshes it, so the next prune drops a different one.
+	const revisit=tables.at(-KEPT_TABLES);
+	new OnlineDeal(tableOptions(revisit.root,store,{now:()=>++clock})).saveSaved();
+	new OnlineDeal(tableOptions('$newest',store,{now:()=>++clock})).saveSaved();
+	assert.ok(store.getItem(revisit.keyName),'a table used again is kept');
+	assert.equal(store.getItem(tables.at(-KEPT_TABLES+1).keyName),null,'the next oldest is pruned instead');
+});
+
+test('a tab watching a table reads its record but never writes it',async()=>{
+	const store=webStorage(),player=new OnlineDeal(tableOptions('$watched',store));
+	player.makeShufflePlan();
+	const before=new Map(store.values),watcher=new OnlineDeal(tableOptions('$watched',readOnlyStorage(store)));
+	assert.deepEqual(watcher.saved.keys,player.saved.keys,'the watcher sees the stored record');
+	const action=player.nextAction(),envelope={sequence:1,actor:'alice',pre_hash:await player.hash(),action};
+	await watcher.apply(envelope);watcher.saveSaved();
+	assert.deepEqual(new Map(store.values),before,'nothing the watcher does changes local storage');
+});
+
+test('one tab holds a table seat at a time',async()=>{
+	const held=new Set,waiting=[];
+	const locks={request(name,options,callback){
+		if(held.has(name)){assert.equal(options.ifAvailable,true);return Promise.resolve(callback(null));}
+		held.add(name);
+		return Promise.resolve(callback({name})).then(()=>held.delete(name));
+	}};
+	const name=tableLockName('$root','@alice:example.org');
+	assert.equal(name,'php-poker:table:$root:@alice:example.org');
+	const release=await acquireTableLock(name,locks);
+	assert.equal(typeof release,'function','the first tab plays');
+	assert.equal(await acquireTableLock(name,locks),null,'a second tab only watches');
+	assert.equal(typeof await acquireTableLock(tableLockName('$other','@alice:example.org'),locks),'function','other tables are separate');
+	release();await new Promise(resolve=>setTimeout(resolve,0));
+	assert.equal(typeof await acquireTableLock(name,locks),'function','the seat frees when the playing tab lets go');
+	assert.equal(typeof await acquireTableLock(name,undefined),'function','without Web Locks a tab plays as before');
+});
+

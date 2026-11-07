@@ -15,10 +15,13 @@ verified shuffle key. Each shuffle packs its proof into four bounded Matrix acti
 with their responses. The ten initial removals travel as two five-card layer batches. The room batches each complete
 shuffle and the complete private deal into three settlement handshakes, so packet fragments do not each emit two
 Matrix acknowledgements. Both clients still execute and hash every proof record before the batch boundary can settle.
-The current hand's private scalar and unfinished local proof plan stay in session storage. Once a hand finishes, the
-browser retains only its allocation-to-face mappings and erases that hand's scalar. Neither room history nor the
-public state hash receives concealed faces or private keys. The PHP presenter receives the current local card ids so
-it can draw that player's hand, but it never receives a scalar or proof plan.
+The current hand's private scalar and unfinished local proof plan stay in local storage, with the player's own card
+ids for every finished hand as hand history; the scalar is erased once its hand finishes. The newest 20 tables keep
+their records, and a record written by an earlier build to session storage moves on first load. Only one tab plays a
+seat: a Web Lock per table and player admits the first tab, and any other tab watches read-only, never writing the
+record, submitting, reporting or resigning. Neither room history nor the public state hash receives concealed faces
+or private keys. The PHP presenter receives the current local card ids so it can draw that player's hand, but it never
+receives a scalar or proof plan.
 
 `OnlineDeal` is the public transcript reducer for the complete two-player flow. The players shuffle in the shared
 starting-gun order, then ten cards are assigned round-robin from the encrypted deck. For each card, the other player

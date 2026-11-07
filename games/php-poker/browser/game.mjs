@@ -33,6 +33,27 @@ export function tableMenuShortcut(event)
 	return ['g','p'].includes(letter)?'alt+'+letter:null;
 }
 
+/** Web Lock name for one player's seat at one table. */
+export function tableLockName(root,player){return `php-poker:table:${root}:${player}`;}
+
+/**
+ * Claim one player's seat at one table for this tab. The table's private record lives in local storage, shared by
+ * every tab, so a second tab playing the same seat would publish different proofs for the same turn and its stale
+ * writes could erase the first tab's keys. Resolves to a release function, or null while another tab holds the seat.
+ * Without Web Locks, the tab plays as before.
+ */
+export function acquireTableLock(name,locks=globalThis.navigator?.locks)
+{
+	if(typeof locks?.request!=='function')return Promise.resolve(()=>{});
+	return new Promise(resolve=>{
+		let release=null;
+		locks.request(name,{ifAvailable:true},lock=>{
+			if(!lock){resolve(null);return undefined;}
+			return new Promise(done=>{release=done;resolve(()=>done());});
+		}).catch(()=>{if(!release)resolve(()=>{});});
+	});
+}
+
 /** Combine intents produced by PHP input with commands injected through the browser test/accessibility bridge. */
 export function pokerCommandBatch(generatedJson,injected=[])
 {
@@ -168,6 +189,10 @@ export function activate({module, canvas, session})
 	let viewport='[1280,720,1]',latest=null,closed=false;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
 	let online=null,onlineView=null,onlineWork=Promise.resolve(),submitting=false,awaitingConfirmation=false;
+	// A watching tab mirrors a table another tab is playing: it applies actions for display, but never writes the
+	// table's record, submits, reports or resigns.
+	let watching=false,releaseTable=null;
+	const watchingNotice='This table is open in another tab. Play continues there; close that tab and reload this one to play here.';
 	let onlinePlayers=[],onlineLocal=null,onlineProfiles=new Map,onlineAvatars=new Map,identityVersion=0;
 	let lobbyOpening=false,lobbyVisible=false,lobbyPort=null;
 	const local=event=>{
@@ -294,6 +319,7 @@ export function activate({module, canvas, session})
 	let commands=[];
 	module.pokerCommands=(generatedJson='[]')=>{
 		const queued=pokerCommandBatch(generatedJson,commands);commands=[];
+		if(online&&watching)return '[]';
 		if(online)
 		{
 			if(queued.some(command=>command.type==='menu'))void enqueue(()=>roomWrite(()=>lobbyPort.leave()));
@@ -330,6 +356,7 @@ export function activate({module, canvas, session})
 		});
 	const updateOnlineView=()=>{
 		const view=onlinePresentation(online?.view()??null);
+		if(view&&watching){onlineView={...view,legalActions:{},error:watchingNotice};return;}
 		onlineView=awaitingConfirmation?pendingPokerView(view):view;
 	};
 	const clearOnlineIdentities=()=>{
@@ -386,7 +413,7 @@ export function activate({module, canvas, session})
 		}
 	};
 	const drive=async()=>{
-		if(!online||submitting||online.currentActor()!==online.localPlayer)return;
+		if(!online||watching||submitting||online.currentActor()!==online.localPlayer)return;
 		const action=online.nextAction();if(!action)return;
 		const preHash=await online.hash(),settle=online.settlesAction(action);submitting=true;
 		try{await roomWrite(()=>lobbyPort.submitAction(action,preHash,{settle}));}
@@ -395,18 +422,25 @@ export function activate({module, canvas, session})
 	lobbyPort=session.lobby.attachGame({
 		start:detail=>enqueue(async()=>{
 			void loadOnlineIdentities(detail).catch(error=>console.warn('Matrix player identity failed to load',error));
+			releaseTable?.();releaseTable=null;
+			const release=await acquireTableLock(tableLockName(detail.root,detail.localPlayer));
+			watching=release===null;releaseTable=release;
+			const storage=globalThis.localStorage;
 			const controller=new session.pokerOnline.OnlineDeal({
 				api:session.mentalPoker,root:detail.root,sessionId:detail.sessionId,players:detail.players
 				,localPlayer:detail.localPlayer,breaker:detail.breaker
+				,...(watching?{storage:session.pokerOnline.readOnlyStorage(storage),legacyStorage:null}:{})
 			});
 			const hash=await controller.replay(detail.history??[]);
 			if(detail.sequence!==controller.publicState().sequence)throw new Error('Room history ended at the wrong sequence');
 			if(detail.sequence>0&&detail.hash!==hash)throw new Error('Room history does not match its confirmed hash');
-			online=controller;submitting=false;awaitingConfirmation=false;updateOnlineView();await roomWrite(()=>lobbyPort.reportReady(hash));
+			online=controller;submitting=false;awaitingConfirmation=false;updateOnlineView();
+			if(!watching)await roomWrite(()=>lobbyPort.reportReady(hash));
 		})
 		,action:detail=>enqueue(async()=>{
 			if(!online)throw new Error('Received a Poker action before the deal started');
 			const settlement=await online.apply(detail);
+			if(watching){updateOnlineView();return;}
 			if(detail.batch_end!==false){awaitingConfirmation=true;updateOnlineView();}
 			const waiting=await roomWrite(()=>lobbyPort.reportSettled(settlement));
 			if(waiting)updateOnlineView();
@@ -427,7 +461,10 @@ export function activate({module, canvas, session})
 			awaitingConfirmation=false;submitting=false;
 		})
 	});
-	const lobbyClosed=()=>{lobbyVisible=false;online=null;onlineView=null;awaitingConfirmation=false;submitting=false;clearOnlineIdentities();};
+	const lobbyClosed=()=>{
+		lobbyVisible=false;online=null;onlineView=null;awaitingConfirmation=false;submitting=false;clearOnlineIdentities();
+		watching=false;releaseTable?.();releaseTable=null;
+	};
 	session.lobby.protocol.addEventListener('closed',lobbyClosed);
 
 	const debug={
@@ -450,6 +487,7 @@ export function activate({module, canvas, session})
 
 	return ()=>{
 		if(closed)return;closed=true;resize.disconnect();
+		watching=false;releaseTable?.();releaseTable=null;
 		session.lobby.protocol.removeEventListener('closed',lobbyClosed);
 		clearInput();
 		canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('pointermove',onMove);

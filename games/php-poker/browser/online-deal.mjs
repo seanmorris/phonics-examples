@@ -27,6 +27,16 @@ const validatePlayers=(players,localPlayer,breaker)=>{
 };
 
 const storageKey=(root,player)=>`php-poker:mental-game:v${ONLINE_DEAL_VERSION}:${root}:${player}`;
+/** Last-use time of every table record, so old tables can be pruned without parsing their records. */
+const storageIndex=`php-poker:mental-game:v${ONLINE_DEAL_VERSION}:index`;
+/** Tables whose private records (keys, proof plans and the player's own card history) stay on this device. */
+export const KEPT_TABLES=20;
+
+/** Storage that reads through and ignores writes, for a tab watching a table another tab is playing. */
+export function readOnlyStorage(storage)
+{
+	return Object.freeze({getItem:key=>storage?.getItem(key)??null,setItem(){},removeItem(){}});
+}
 
 /** Exact high-poker evaluator shared by both public reducers. */
 export function evaluateHand(cards)
@@ -61,18 +71,27 @@ export function evaluateHand(cards)
 
 export class OnlineDeal
 {
-	constructor({api,root,sessionId,players,localPlayer,breaker,rounds=64,storage=globalThis.sessionStorage})
+	/**
+	 * @param storage Private per-table record: this browser's layer key for the live hand, any unfinished shuffle
+	 * proof, and the player's own card ids for every hand, kept as hand history. Local storage keeps it across tabs
+	 * and restarts; game.mjs lets only one tab play a table.
+	 * @param legacyStorage Where earlier builds kept the record; it is moved on first load.
+	 */
+	constructor({api,root,sessionId,players,localPlayer,breaker,rounds=64,storage=globalThis.localStorage
+		,legacyStorage=globalThis.sessionStorage,now=()=>Date.now()})
 	{
 		if(!api||typeof api.prepareCorpus!=='function')throw new TypeError('Mental-poker API is unavailable');
 		if(typeof root!=='string'||!root||typeof sessionId!=='string'||!sessionId)throw new TypeError('Online game needs a room identity');
 		validatePlayers(players,localPlayer,breaker);
 		if(!Number.isSafeInteger(rounds)||rounds<16||rounds>128)throw new RangeError('Shuffle proof needs 16 to 128 rounds');
 		this.api=api;this.root=root;this.sessionId=sessionId;this.players=[...players];this.localPlayer=localPlayer;
-		this.breaker=breaker;this.rounds=rounds;this.storage=storage;this.keyName=storageKey(root,localPlayer);
+		this.breaker=breaker;this.rounds=rounds;this.storage=storage;this.legacyStorage=legacyStorage;this.now=now;
+		this.keyName=storageKey(root,localPlayer);
 		this.context=`php-poker:${ONLINE_DEAL_VERSION}:${ONLINE_RULES}:${root}:${sessionId}`;
 		this.corpus=api.prepareCorpus(Array.from({length:52},(_,id)=>id),{context:`${this.context}:corpus`});
 		this.shuffleOrder=rotate(this.players,this.players.indexOf(breaker));
 		this.saved=this.loadSaved();this.assembler=null;this.privateCards=[];this.intent=null;this.localError='';
+		this.pruneTables();
 		this.state={
 			v:ONLINE_DEAL_VERSION,rules:ONLINE_RULES,context:this.context,players:[...this.players],breaker,sequence:0
 			,handNumber:0,dealer:this.players.indexOf(breaker),stage:'ready',shuffleIndex:0,deck:[],layers:[],pending:null
@@ -88,7 +107,20 @@ export class OnlineDeal
 	{
 		try
 		{
-			const value=this.storage?.getItem(this.keyName);if(!value)return {};
+			let value=this.storage?.getItem(this.keyName);
+			// Earlier builds kept the record in session storage. Move it so a table open during the upgrade keeps its
+			// keys; if local storage refuses it, keep reading the old copy rather than lose them.
+			if(!value&&this.legacyStorage&&this.legacyStorage!==this.storage)
+			{
+				const legacy=this.legacyStorage.getItem(this.keyName);
+				if(legacy)
+				{
+					value=legacy;
+					try{this.storage?.setItem(this.keyName,legacy);this.legacyStorage.removeItem(this.keyName);this.touch();}
+					catch{this.storage=this.legacyStorage;}
+				}
+			}
+			if(!value)return {};
 			const saved=JSON.parse(value);
 			return saved&&saved.v===ONLINE_DEAL_VERSION&&saved.context===this.context?saved:{};
 		}
@@ -97,8 +129,52 @@ export class OnlineDeal
 
 	saveSaved()
 	{
-		try{this.storage?.setItem(this.keyName,JSON.stringify({...this.saved,v:ONLINE_DEAL_VERSION,context:this.context}));}
-		catch{}
+		const value=JSON.stringify({...this.saved,v:ONLINE_DEAL_VERSION,context:this.context});
+		try{this.storage?.setItem(this.keyName,value);this.touch();}
+		catch
+		{
+			// Full storage: make room from the oldest other tables once, then retry.
+			try{this.pruneTables(Math.max(1,this.tableKeys().length-1));this.storage?.setItem(this.keyName,value);this.touch();}
+			catch{}
+		}
+	}
+
+	/** @return array<string,number> Table record keys and their last-use times. */
+	readIndex()
+	{
+		try
+		{
+			const index=JSON.parse(this.storage?.getItem(storageIndex)??'{}');
+			return index&&typeof index==='object'&&!Array.isArray(index)?index:{};
+		}
+		catch{return {};}
+	}
+
+	/** Record that this table was just used. */
+	touch()
+	{
+		const index=this.readIndex();index[this.keyName]=this.now();
+		try{this.storage?.setItem(storageIndex,JSON.stringify(index));}catch{}
+	}
+
+	/** @return list<string> Indexed table keys, newest first. */
+	tableKeys()
+	{
+		const index=this.readIndex();
+		return Object.keys(index).sort((a,b)=>(Number(index[b])||0)-(Number(index[a])||0));
+	}
+
+	/** Keep the newest tables' records, never this one, and forget the rest. */
+	pruneTables(keep=KEPT_TABLES)
+	{
+		const index=this.readIndex(),keys=this.tableKeys().filter(key=>key!==this.keyName);
+		if(keys.length<keep)return;
+		for(const key of keys.slice(Math.max(0,keep-1)))
+		{
+			try{this.storage?.removeItem(key);}catch{}
+			delete index[key];
+		}
+		try{this.storage?.setItem(storageIndex,JSON.stringify(index));}catch{}
 	}
 
 	publicState(){return clone(this.state);}
@@ -669,7 +745,7 @@ export class OnlineDeal
 /** Install the protocol constructor after the mental-poker primitive and before the browser bridge. */
 export function activate({session})
 {
-	const api=Object.freeze({OnlineDeal,ONLINE_ACTION_TYPES,ONLINE_DEAL_VERSION,ONLINE_RULES,evaluateHand});
+	const api=Object.freeze({OnlineDeal,ONLINE_ACTION_TYPES,ONLINE_DEAL_VERSION,ONLINE_RULES,KEPT_TABLES,evaluateHand,readOnlyStorage});
 	session.pokerOnline=api;
 	return()=>{if(session.pokerOnline===api)delete session.pokerOnline;};
 }
