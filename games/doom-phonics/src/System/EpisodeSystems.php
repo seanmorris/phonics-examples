@@ -177,7 +177,7 @@ final class EpisodeSystems implements SystemSet
 		$effects = new SectorEffectSystem($content->level, $specials, $content->language, $host);
 		$playerEffects = new PlayerEffectSystem;
 		$statusFaces = new StatusFaceSystem($this->controls($scope));
-		$commands = new PlayerCommandSystem($this->controls($scope));
+		$commands = new PlayerCommandSystem($this->controls($scope), $settings);
 		// A guest replays its own unacknowledged movement over each host result, so host pushes and blocks reach it.
 		$network = $match
 			? new EpisodeNetworkSystem(

@@ -240,12 +240,16 @@ final class ProjectileTracer
 
 			if($fraction < $from) continue;
 
+			$portal = $this->level->portal($hit['line']);
+			$back = null;
+
+			// As in traceStraight, a missed crossing at the origin must not end the walk early.
+			if($portal) [$current, $back] = $this->crossingSides($hit['line'], $portal, $dx, $dy);
+
 			$plane = $this->planeCameraPortalInSector($x, $y, $z, $body, $dx, $dy, $dz, $current, $from, $fraction);
 
 			if($plane !== null) return $plane;
 
-			$portal = $this->level->portal($hit['line']);
-			$back = $portal?->opposite($current);
 			$bottom = $z + $dz * $fraction;
 
 			$surface = $this->lineSurface(
@@ -255,8 +259,6 @@ final class ProjectileTracer
 				, $x + $dx * $fraction
 				, $y + $dy * $fraction
 			);
-
-			if($portal && $back === null) $surface = ProjectileImpact::WALL;
 
 			if($surface !== null || $back === null) break;
 
@@ -354,13 +356,20 @@ final class ProjectileTracer
 
 			if($fraction < $from) continue;
 
+			// Doom tests each two-sided line's own opening (PTR_ShootTraverse) and never tracks a current sector.
+			// Take both sides from the crossing direction instead of the sector reached so far: a crossing within
+			// the cast's skin of the origin, such as a body parked against a sector border, is not reported, and
+			// must not turn the next open line into a wall.
+			$portal = $this->level->portal($hit['line']);
+			$back = null;
+
+			if($portal) [$current, $back] = $this->crossingSides($hit['line'], $portal, $dx, $dy);
+
 			$plane = $this->plane($pose, $body, $dx, $dy, $dz, $current, $from, $fraction);
 
 			if($plane) return $plane;
 
 			$z = $pose->z + $dz * $fraction;
-			$portal = $this->level->portal($hit['line']);
-			$back = $portal?->opposite($current);
 
 			$surface = $this->lineSurface(
 				$hit['line']
@@ -369,8 +378,6 @@ final class ProjectileTracer
 				, $pose->x + $dx * $fraction
 				, $pose->y + $dy * $fraction
 			);
-
-			if($portal && $back === null) $surface = ProjectileImpact::WALL;
 
 			if($surface !== null)
 			return new ProjectileImpact(
@@ -450,6 +457,23 @@ final class ProjectileTracer
 		}
 
 		return $nearest;
+	}
+
+	/**
+	 * The right (front) side of a linedef lies clockwise of its direction, so a ray heading that way enters it.
+	 *
+	 * @return array{0:int,1:int} The sector the ray leaves and the sector it enters.
+	 */
+	private function crossingSides(int $lineId, LinePortal $portal, float $dx, float $dy): array
+	{
+		$line = $this->level->map->linedefs[$lineId];
+		$from = $this->level->map->vertices[$line['from']];
+		$to = $this->level->map->vertices[$line['to']];
+		$entersRight = ($to['x'] - $from['x']) * $dy - ($to['y'] - $from['y']) * $dx < 0;
+
+		return $entersRight
+			? [$portal->leftSector, $portal->rightSector]
+			: [$portal->rightSector, $portal->leftSector];
 	}
 
 	/** Return the physical response for crossing a linedef at this vertical interval. */

@@ -687,6 +687,7 @@ verifyWad(
 		&& $settings->renderResolution() === RenderResolution::Native
 		&& $settings->pitchMode() === PitchMode::Perspective
 		&& $settings->reticle()
+		&& !$settings->autoAim()
 		&& $settings->bloodSplatter() === 1.0
 	, 'game settings use campaign defaults'
 );
@@ -697,6 +698,7 @@ $settings->setInvertVerticalLook(true);
 $settings->setRenderResolution(RenderResolution::Classic);
 $settings->setPitchMode(PitchMode::ClassicShear);
 $settings->setReticle(false);
+$settings->setAutoAim(true);
 $settings->setBloodSplatter(1.75);
 
 verifyWad(
@@ -704,6 +706,7 @@ verifyWad(
 		&& $settings->renderResolution() === RenderResolution::Classic
 		&& $settings->pitchMode() === PitchMode::ClassicShear
 		&& !$settings->reticle()
+		&& $settings->autoAim()
 		&& $settings->bloodSplatter() === 1.75
 	, 'menu settings retain typed choices'
 );
@@ -1499,6 +1502,7 @@ require __DIR__ . '/network-beams.php';
 require __DIR__ . '/network-respawn.php';
 require __DIR__ . '/network-actors.php';
 require __DIR__ . '/network-prediction.php';
+require __DIR__ . '/network-autoaim.php';
 $networkDeath = new PlayerState;
 $networkDeath->deathTime = .8;
 $networkDeath->viewHeight = 13;
@@ -3787,6 +3791,7 @@ verifyWad(
 );
 
 require __DIR__ . '/line-specials.php';
+require __DIR__ . '/aiming.php';
 require __DIR__ . '/sector-volumes.php';
 require __DIR__ . '/layered-navigation.php';
 require __DIR__ . '/seeded-generation.php';

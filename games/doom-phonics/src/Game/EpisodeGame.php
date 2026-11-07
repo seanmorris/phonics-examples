@@ -576,6 +576,7 @@ final class EpisodeGame
 			, 'renderResolution' => $this->settings->renderResolution()->value
 			, 'pitchMode' => $this->settings->pitchMode()->value
 			, 'reticle' => $this->settings->reticle()
+			, 'autoAim' => $this->settings->autoAim()
 			, 'bloodSplatter' => $this->settings->bloodSplatter()
 		];
 
@@ -625,6 +626,7 @@ final class EpisodeGame
 			, 'renderResolution' => $this->settings->renderResolution()->value
 			, 'pitchMode' => $this->settings->pitchMode()->value
 			, 'reticle' => $this->settings->reticle()
+			, 'autoAim' => $this->settings->autoAim()
 			, 'bloodSplatter' => $this->settings->bloodSplatter()
 			, 'position' => [$pose->x,$pose->y,$pose->z,$pose->angle]
 			, 'previousPosition' => [$pose->previousX,$pose->previousY,$pose->previousZ]

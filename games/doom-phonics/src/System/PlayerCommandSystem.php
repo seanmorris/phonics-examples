@@ -6,6 +6,7 @@ use DoomPhonics\Component\HitPoints;
 use DoomPhonics\Component\NetworkPlayer;
 use DoomPhonics\Component\PlayerCommand;
 use DoomPhonics\Component\ViewInput;
+use DoomPhonics\Game\GameSettings;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
 use Phonics\Input\Controls;
@@ -15,7 +16,8 @@ final class PlayerCommandSystem
 {
 	private Query $players;
 
-	public function __construct(private Controls $controls)
+	/** @param ?GameSettings $settings Supplies this browser's Vertical Autoaim choice for its own player. */
+	public function __construct(private Controls $controls, private ?GameSettings $settings = null)
 	{
 		$this->players = Query::all(PlayerCommand::class, ViewInput::class);
 	}
@@ -44,6 +46,7 @@ final class PlayerCommandSystem
 			$registry->get($entity, PlayerCommand::class)->sample(
 				$this->controls
 				, $registry->get($entity, ViewInput::class)
+				, $this->settings?->autoAim() ?? false
 			);
 		}
 	}

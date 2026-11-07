@@ -276,6 +276,7 @@ export function activate({module, canvas, services, session})
 		, renderResolution: 'native'
 		, pitchMode: 'perspective'
 		, reticle: true
+		, autoAim: false
 		, bloodSplatter: 1
 	};
 
@@ -301,6 +302,8 @@ export function activate({module, canvas, services, session})
 			if(['perspective', 'classic'].includes(saved.pitchMode)) options.pitchMode = saved.pitchMode;
 
 			if(typeof saved.reticle === 'boolean') options.reticle = saved.reticle;
+
+			if(typeof saved.autoAim === 'boolean') options.autoAim = saved.autoAim;
 
 			if(typeof saved.bloodSplatter === 'number' && Number.isFinite(saved.bloodSplatter)
 				&& saved.bloodSplatter >= 0 && saved.bloodSplatter <= 2
@@ -382,6 +385,7 @@ export function activate({module, canvas, services, session})
 		, renderResolution: options.renderResolution
 		, pitchMode: options.pitchMode
 		, reticle: options.reticle
+		, autoAim: options.autoAim
 		, bloodSplatter: options.bloodSplatter
 	});
 
@@ -466,6 +470,12 @@ export function activate({module, canvas, services, session})
 		if(typeof patch?.reticle === 'boolean')
 		{
 			options.reticle = patch.reticle;
+			persist = true;
+		}
+
+		if(typeof patch?.autoAim === 'boolean')
+		{
+			options.autoAim = patch.autoAim;
 			persist = true;
 		}
 

@@ -12,6 +12,11 @@ final class PlayerCommand
 	private ?int $weaponSlot = null;
 	private int $weaponSteps = 0;
 	private float $yaw = 0;
+	/**
+	 * The player's own Vertical Autoaim option. It is a preference rather than an action, so release() keeps it,
+	 * and it rides in every command so the host aims each peer's attacks by that peer's choice.
+	 */
+	public bool $autoAim = false;
 
 	public function __construct(
 		public float $forward = 0
@@ -24,8 +29,9 @@ final class PlayerCommand
 	}
 
 	/** Sample local SDL/browser state without exposing device button numbers on the wire. */
-	public function sample(Controls $controls, ViewInput $view): void
+	public function sample(Controls $controls, ViewInput $view, bool $autoAim = false): void
 	{
+		$this->autoAim = $autoAim;
 		$this->forward = $this->axis($controls->value(DoomActions::FORWARD));
 		$this->strafe = $this->axis($controls->value(DoomActions::STRAFE));
 		$this->turn = 0; // Local rates have already been integrated at display rate.
@@ -79,6 +85,7 @@ final class PlayerCommand
 		$this->pitch = max(-.75, min(.75, (float)($actions['pitch'] ?? 0)));
 		$this->fire = (bool)($actions['fire'] ?? false);
 		$this->altFire = (bool)($actions['altFire'] ?? false);
+		$this->autoAim = (bool)($actions['autoAim'] ?? false);
 		$this->use = ($accumulate && $this->use) || (bool)($actions['use'] ?? false);
 		$slot = $actions['weaponSlot'] ?? null;
 		$this->weaponSlot = is_int($slot) && $slot >= 0 && $slot <= 9
@@ -107,6 +114,7 @@ final class PlayerCommand
 			, 'use' => $this->use
 			, 'weaponSlot' => $this->weaponSlot
 			, 'weaponSteps' => $this->weaponSteps
+			, 'autoAim' => $this->autoAim
 		];
 	}
 

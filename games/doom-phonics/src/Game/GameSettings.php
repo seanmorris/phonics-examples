@@ -14,6 +14,7 @@ final class GameSettings
 	private RenderResolution $renderResolution = RenderResolution::Native;
 	private PitchMode $pitchMode = PitchMode::Perspective;
 	private bool $reticle = true;
+	private bool $autoAim = false;
 	private float $bloodSplatter = 1.0;
 
 	public function __construct(?SkillLevel $skill = null)
@@ -63,6 +64,11 @@ final class GameSettings
 	public function reticle(): bool { return $this->reticle; }
 
 	public function setReticle(bool $visible): void { $this->reticle = $visible; }
+
+	/** Doom's vertical autoaim for this player's attacks; freelook alone aims when it is off. */
+	public function autoAim(): bool { return $this->autoAim; }
+
+	public function setAutoAim(bool $enabled): void { $this->autoAim = $enabled; }
 
 	public function bloodSplatter(): float { return $this->bloodSplatter; }
 

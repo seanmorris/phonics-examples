@@ -356,6 +356,7 @@ $browserOptions = [
 	, 'renderResolution' => 'classic'
 	, 'pitchMode' => 'invalid'
 	, 'reticle' => false
+	, 'autoAim' => true
 	, 'bloodSplatter' => 'invalid'
 	, 'fullscreen' => false
 	, 'fullscreenAvailable' => true
@@ -384,6 +385,7 @@ verifyWad(
 		&& $optionSettings->renderResolution() === RenderResolution::Classic
 		&& $optionSettings->pitchMode() === PitchMode::Perspective
 		&& !$optionSettings->reticle()
+		&& $optionSettings->autoAim()
 		&& $optionSettings->bloodSplatter() === 1.0
 	, 'browser options restore valid fields without accepting invalid neighbors'
 );
@@ -394,13 +396,15 @@ $options->setMuted(false);
 $options->setRenderResolution(RenderResolution::Native);
 $options->setPitchMode(PitchMode::ClassicShear);
 $options->setReticle(true);
+$options->setAutoAim(false);
 $options->setBloodSplatter(.5);
 $options->setFullscreen(true);
 
 verifyWad(
 	$options->effectsVolume() === .6 && $options->musicVolume() === .7 && !$options->muted()
-		&& $options->fullscreen() && $optionSettings->reticle()
-		&& $optionSettings->bloodSplatter() === .5 && count($optionWrites) === 8
+		&& $options->fullscreen() && $optionSettings->reticle() && !$optionSettings->autoAim()
+		&& $browserOptions['autoAim'] === false
+		&& $optionSettings->bloodSplatter() === .5 && count($optionWrites) === 9
 	, 'sound and video menu changes cross the browser options bridge'
 );
 

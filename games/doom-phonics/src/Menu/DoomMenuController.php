@@ -281,6 +281,7 @@ final class DoomMenuController implements MenuOverlay
 			, 'renderResolution' => $this->settings->renderResolution()->value
 			, 'pitchMode' => $this->settings->pitchMode()->value
 			, 'reticle' => $this->settings->reticle()
+			, 'autoAim' => $this->settings->autoAim()
 			, 'bloodSplatter' => $this->settings->bloodSplatter()
 			, 'options' => $this->options->state()
 			, 'font' => $this->renderer->font()
@@ -501,6 +502,12 @@ final class DoomMenuController implements MenuOverlay
 				, 'get' => fn(): bool => $this->settings->reticle()
 				, 'set' => function(bool $value): void { $this->changeReticle($value); }
 			]
+			, 'autoaim' => [
+				'label' => 'Vertical Autoaim'
+				, 'input' => 'boolean'
+				, 'get' => fn(): bool => $this->settings->autoAim()
+				, 'set' => function(bool $value): void { $this->changeAutoAim($value); }
+			]
 			, 'blood-splatter' => [
 				'label' => 'Blood Splatter'
 				, 'input' => 'number'
@@ -659,6 +666,12 @@ final class DoomMenuController implements MenuOverlay
 	private function changeReticle(bool $value): void
 	{
 		$this->options->setReticle($value);
+		$this->actionSound(SoundCue::menuMove());
+	}
+
+	private function changeAutoAim(bool $value): void
+	{
+		$this->options->setAutoAim($value);
 		$this->actionSound(SoundCue::menuMove());
 	}
 

@@ -40,6 +40,7 @@ use DoomPhonics\Definition\ActorDefinition;
 use DoomPhonics\Definition\StateFrame;
 use DoomPhonics\Definition\WeaponAmmo;
 use DoomPhonics\Definition\WeaponSlots;
+use DoomPhonics\Game\AutoAim;
 use DoomPhonics\Game\Collision;
 use DoomPhonics\Game\DamageEvent;
 use DoomPhonics\Game\ActorDropper;
@@ -68,6 +69,7 @@ final class CombatSystem
 	private SoundEmitter $sound;
 	private SoundCatalog $sounds;
 	private ProjectileTracer $projectileTracer;
+	private AutoAim $autoAim;
 	private DamageResolver $damageResolver;
 	private WeaponSlots $weaponSlots;
 	private CheatSystem $cheats;
@@ -107,6 +109,7 @@ final class CombatSystem
 		$this->sound = $sound ?? new NullSoundEmitter;
 		$this->sounds = $sounds ?? new SoundCatalog;
 		$this->projectileTracer = new ProjectileTracer($level);
+		$this->autoAim = new AutoAim($level);
 		$this->damageResolver = $damageResolver ?? new DamageResolver(new ActorDropper($level, $factory));
 		$this->weaponSlots = $weaponSlots ?? WeaponSlots::fromCatalog($actors);
 		$this->cheats = $cheats ?? new CheatSystem($this->weaponSlots, $actors);
@@ -1205,9 +1208,8 @@ final class CombatSystem
 		if($sound !== null) $this->playLogicalSound($weapon, $registry, $sound);
 
 		$pose = $registry->get($owner, Transform::class);
-		$aimSlope = $registry->has($owner, ViewInput::class)
-			? $registry->get($owner, ViewInput::class)->aimSlope()
-			: 0.0;
+		// Like the reference, every pellet shares one autoaimed slope; spread is added per pellet.
+		$aimSlope = $this->playerAim($registry, $owner, $pose->z + 41, $pose->angle, $range)['slope'];
 
 		for($i = 0; $i < $pellets; $i++)
 		{
@@ -1287,12 +1289,9 @@ final class CombatSystem
 		if(!$this->simulateBeams) return;
 
 		$pose = $registry->get($owner, Transform::class);
-		$slope = $registry->has($owner, ViewInput::class)
-			? $registry->get($owner, ViewInput::class)->aimSlope()
-			: 0.0;
-
 		$range = 6400.0;
 		$originZ = $pose->z + 41;
+		$slope = $this->playerAim($registry, $owner, $originZ, $pose->angle, $range)['slope'];
 		$trace = $this->hitscanTrace($pose->x, $pose->y, $originZ, $pose->angle, $range, $slope);
 		$end = $trace['surface'];
 		$targets = $this->hitscanActorImpacts($registry, $owner, $trace['path']['segments'], $range, $end->distance);
@@ -1356,11 +1355,10 @@ final class CombatSystem
 		if($flashOffset !== null) $this->gunFlash($weapon, $registry, 'Flash', $flashOffset);
 
 		$pose = $registry->get($owner, Transform::class);
-		$aimPitch = $registry->has($owner, ViewInput::class)
-			? $registry->get($owner, ViewInput::class)->pitch
-			: 0.0;
-
-		$angle = $pose->angle + deg2rad($angleOffset);
+		$originZ = $pose->z + 32 + $heightOffset;
+		// P_SpawnPlayerMissile turns the missile toward a target found by the sideways search, too.
+		$aim = $this->playerAim($registry, $owner, $originZ, $pose->angle, AutoAim::RANGE);
+		$angle = $aim['angle'] + deg2rad($angleOffset);
 		$sideAngle = $pose->angle - M_PI / 2;
 
 		$this->spawnProjectile(
@@ -1369,11 +1367,53 @@ final class CombatSystem
 			, $projectile
 			, $pose->x + cos($sideAngle) * $sideOffset
 			, $pose->y + sin($sideAngle) * $sideOffset
-			, $pose->z + 32 + $heightOffset
+			, $originZ
 			, $angle
 			, null
-			, tan($aimPitch + deg2rad($pitchOffset))
+			, tan(atan($aim['slope']) + deg2rad($pitchOffset))
 		);
+	}
+
+	/**
+	 * The freelook slope, or with the shooter's Vertical Autoaim option Doom's `P_BulletSlope`: autoaim along the attack, then
+	 * 5.625 degrees to either side for ranged attacks. A target that a ledge or lintel leaves partly reachable is
+	 * aimed at through its reachable part. Without one in reach, the freelook pitch supplies the slope and the attack
+	 * keeps its own angle.
+	 *
+	 * @return array{slope:float,angle:float} The slope and the direction its target was found in.
+	 */
+	private function playerAim(Registry $registry, int $owner, float $z, float $angle, float $range): array
+	{
+		$pitch = $registry->has($owner, ViewInput::class) ? $registry->get($owner, ViewInput::class)->pitch : 0.0;
+
+		// The option travels in each player's command, so the host aims a guest's attacks by the guest's own choice.
+		if(!$registry->has($owner, PlayerCommand::class) || !$registry->get($owner, PlayerCommand::class)->autoAim)
+		return ['slope' => tan($pitch),'angle' => $angle];
+
+		$pose = $registry->get($owner, Transform::class);
+		$targets = [];
+
+		foreach($registry->query($this->damageable) as $entity)
+		{
+			if($entity === $owner) continue;
+
+			$body = $registry->get($entity, Body::class);
+
+			if($body->shootable) $targets[$entity] = [$registry->get($entity, Transform::class), $body];
+		}
+
+		// Melee (the reference MELEERANGE of 64) aims straight ahead only, like P_AimLineAttack in A_Punch and A_Saw.
+		$directions = $range > 64 ? [0, 1, -1] : [0];
+
+		foreach($directions as $side)
+		{
+			$direction = $angle + $side * AutoAim::SIDE_SEARCH;
+			$aim = $this->autoAim->aim($pose->x, $pose->y, $z, $direction, min($range, AutoAim::RANGE), $pitch, $targets);
+
+			if($aim !== null) return ['slope' => $aim['slope'],'angle' => $direction];
+		}
+
+		return ['slope' => tan($pitch),'angle' => $angle];
 	}
 
 	private function playerPunch(int $weapon, Registry $registry): void

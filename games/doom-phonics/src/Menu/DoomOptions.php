@@ -102,6 +102,12 @@ final class DoomOptions
 		$this->write(['reticle' => $value]);
 	}
 
+	public function setAutoAim(bool $value): void
+	{
+		$this->settings->setAutoAim($value);
+		$this->write(['autoAim' => $value]);
+	}
+
 	public function setBloodSplatter(float $value): void
 	{
 		$this->settings->setBloodSplatter($value);
@@ -128,6 +134,7 @@ final class DoomOptions
 			, 'fullscreenError' => $this->fullscreenError
 			, 'sessionOnly' => $this->sessionOnly
 			, 'reticle' => $this->settings->reticle()
+			, 'autoAim' => $this->settings->autoAim()
 			, 'bloodSplatter' => $this->settings->bloodSplatter()
 		];
 	}
@@ -180,6 +187,8 @@ final class DoomOptions
 		$this->settings->setPitchMode($mode);
 
 		if(is_bool($data['reticle'] ?? null)) $this->settings->setReticle($data['reticle']);
+
+		if(is_bool($data['autoAim'] ?? null)) $this->settings->setAutoAim($data['autoAim']);
 
 		$blood = $data['bloodSplatter'] ?? null;
 

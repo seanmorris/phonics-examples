@@ -90,6 +90,7 @@
     "src/Definition/WeaponSlots.php",
     "src/Game/ActorDropper.php",
     "src/Game/ActorObstacles.php",
+    "src/Game/AutoAim.php",
     "src/Game/BloodEffects.php",
     "src/Game/CameraPortalLink.php",
     "src/Game/CameraPortalSurface.php",

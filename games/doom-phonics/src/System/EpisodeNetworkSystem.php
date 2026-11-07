@@ -239,7 +239,7 @@ final class EpisodeNetworkSystem
 		foreach($this->world->query(PlayerCommand::class) as $entity)
 		{
 			$command = $this->world->get($entity, PlayerCommand::class);
-			$command->apply(['pitch' => $command->pitch]);
+			$command->apply(['pitch' => $command->pitch,'autoAim' => $command->autoAim]);
 			if($this->world->has($entity, ViewInput::class)) $this->world->get($entity, ViewInput::class)->release();
 		}
 		$complete = $this->session->recover($connected);
@@ -250,7 +250,7 @@ final class EpisodeNetworkSystem
 
 	public function validCommand(InputCommand $command): bool
 	{
-		$allowed = ['forward','strafe','turn','yaw','pitch','fire','altFire','use','weaponSlot','weaponSteps'];
+		$allowed = ['forward','strafe','turn','yaw','pitch','fire','altFire','use','weaponSlot','weaponSteps','autoAim'];
 
 		if(array_diff(array_keys($command->actions()), $allowed)) return false;
 
