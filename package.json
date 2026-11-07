@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "@noble/curves": "2.4.0",
-    "@seanmorris/phonics": "https://github.com/seanmorris/php-wasm-engine/archive/fd601bf71be254159625beaee4202e68c6532767.tar.gz"
+    "@seanmorris/phonics": "https://github.com/seanmorris/php-wasm-engine/archive/4f39c0ca34f17009ea9e1ff0e151118a3459495b.tar.gz"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
