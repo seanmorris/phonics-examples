@@ -187,7 +187,8 @@ final class Painter
 			$fill=((int)$position%2===0)?Theme::alpha(Theme::BUTTON,.72):Theme::DIALOG;
 			$this->canvas->box($x,$y,$w,$h,0,$fill,Theme::alpha(Theme::INK,.2),1*$this->unit);
 			$labelWidth=min(132*$this->layout->stretch(),$rect[2]*.36);
-			$this->text($labels[$index],$rect[0]+10*$this->layout->stretch(),$rect[1]+min($rect[3],30)/2,
+			$firstLineY=$rect[1]+min($rect[3],30)/2;
+			$this->text($labels[$index],$rect[0]+10*$this->layout->stretch(),$firstLineY,
 				$this->layout->captionText(),Theme::alpha(Theme::INK,.72),'left',$labelWidth-14*$this->layout->stretch());
 			$value=(string)($settings[$index]??'');
 			$valueX=$rect[0]+$labelWidth;
@@ -202,7 +203,7 @@ final class Painter
 			$lines=$this->canvas->text->wrap($shown,$size*$this->unit,$valueWidth*$this->horizontalUnit,3,$this->face);
 			$leading=$size*1.25;
 			$lines=array_slice($lines,0,3);
-			$lineY=$rect[1]+$rect[3]/2-(count($lines)-1)*$leading/2;
+			$lineY=$firstLineY;
 			foreach($lines as $line)
 			{
 				$this->text($line,$valueX,$lineY,$size,Theme::INK,'left',$valueWidth);
