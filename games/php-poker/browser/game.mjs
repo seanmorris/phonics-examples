@@ -77,6 +77,59 @@ export function firstHouseRules(root,storage=globalThis.localStorage,kept=20)
 	return true;
 }
 
+/** Room rejections that retrying cannot fix: the table moved on, or this browser's state no longer matches it. */
+export const TERMINAL_ROOM_ERRORS=Object.freeze([
+	'It is not your turn','Local state differs from the confirmed turn state','The game supplied an invalid quantized action'
+	,'No matching action is settling','This browser is not seated at a table'
+]);
+
+/**
+ * Publish one room write, retrying while the connection is down. A dropped connection is not a dispute: the table
+ * waits, says it is reconnecting from the third failure on, and continues when the room accepts the write. Retries
+ * back off to 30 s and stop only when live() turns false (the table ended or the lobby closed), returning undefined.
+ * Room rejections that retrying cannot fix still throw at once.
+ */
+export async function retryRoomWrite(operation,{live=()=>true,reconnecting=()=>{},sleep=delay=>new Promise(resolve=>setTimeout(resolve,delay))}={})
+{
+	for(let attempt=0;;attempt++)
+	{
+		try
+		{
+			const result=await operation();
+			if(attempt)reconnecting(false);
+			return result;
+		}
+		catch(error)
+		{
+			const message=error instanceof Error?error.message:String(error);
+			if(TERMINAL_ROOM_ERRORS.includes(message))throw error;
+			if(!live())return undefined;
+			if(attempt>=2)reconnecting(true);
+			await sleep(Math.min(30000,500*2**attempt));
+			if(!live())return undefined;
+		}
+	}
+}
+
+/**
+ * Apply one player intent to the private deal. A rejected intent (a stale turn, an unavailable move, a bad
+ * discard) is this player's mistake, not the peer's, so it becomes the table's error line instead of freezing it.
+ * @return {boolean} Whether the intent was accepted.
+ */
+export function applyOnlineCommand(online,command)
+{
+	try
+	{
+		online.command(command);
+		return true;
+	}
+	catch(error)
+	{
+		online.localError=error instanceof Error?error.message:String(error);
+		return false;
+	}
+}
+
 /** Combine intents produced by PHP input with commands injected through the browser test/accessibility bridge. */
 export function pokerCommandBatch(generatedJson,injected=[])
 {
@@ -224,6 +277,8 @@ export function activate({module, canvas, session})
 	let viewport='[1280,720,1]',latest=null,closed=false;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
 	let online=null,onlineView=null,onlineWork=Promise.resolve(),submitting=false,awaitingConfirmation=false;
+	// A room write is retrying after a dropped connection; tableEnded stops those retries once the room ends the table.
+	let reconnecting=false,tableEnded=false;
 	// A watching tab mirrors a table another tab is playing: it applies actions for display, but never writes the
 	// table's record, submits, reports or resigns.
 	let watching=false,releaseTable=null;
@@ -366,7 +421,8 @@ export function activate({module, canvas, session})
 		{
 			if(queued.some(command=>command.type==='menu'))void enqueue(()=>roomWrite(()=>lobbyPort.leave()));
 			else for(const command of queued)void enqueue(async()=>{
-				online.command(command);updateOnlineView();await drive();
+				const accepted=applyOnlineCommand(online,command);updateOnlineView();
+				if(accepted)await drive();
 			});
 			return '[]';
 		}
@@ -401,6 +457,7 @@ export function activate({module, canvas, session})
 		if(view&&houseRules)view={...view,houseRules};
 		if(view&&watching){onlineView={...view,legalActions:{},error:watchingNotice};return;}
 		onlineView=awaitingConfirmation?pendingPokerView(view):view;
+		if(onlineView&&reconnecting)onlineView={...onlineView,legalActions:{},message:'Connection lost. Reconnecting to the table…'};
 	};
 	const clearOnlineIdentities=()=>{
 		identityVersion++;onlinePlayers=[];onlineLocal=null;onlineProfiles=new Map;onlineAvatars=new Map;
@@ -439,24 +496,12 @@ export function activate({module, canvas, session})
 		submitting=false;
 	};
 	const enqueue=task=>{onlineWork=onlineWork.then(task).catch(failOnline);return onlineWork;};
-	const terminalRoomError=message=>[
-		'It is not your turn','Local state differs from the confirmed turn state','The game supplied an invalid quantized action'
-		,'No matching action is settling','This browser is not seated at a table'
-	].includes(message);
-	const roomWrite=async operation=>{
-		for(let attempt=0;;attempt++)
-		{
-			try{return await operation();}
-			catch(error)
-			{
-				const message=error instanceof Error?error.message:String(error);
-				if(terminalRoomError(message)||attempt>=8)throw error;
-				await new Promise(resolve=>setTimeout(resolve,Math.min(30000,500*2**attempt)));
-			}
-		}
-	};
+	const roomWrite=operation=>retryRoomWrite(operation,{
+		live:()=>Boolean(online)&&!tableEnded
+		,reconnecting:value=>{if(reconnecting!==value){reconnecting=value;updateOnlineView();}}
+	});
 	const drive=async()=>{
-		if(!online||watching||submitting||online.currentActor()!==online.localPlayer)return;
+		if(!online||watching||submitting||tableEnded||online.currentActor()!==online.localPlayer)return;
 		const action=online.nextAction();if(!action)return;
 		const preHash=await online.hash(),settle=online.settlesAction(action);submitting=true;
 		try{await roomWrite(()=>lobbyPort.submitAction(action,preHash,{settle}));}
@@ -465,7 +510,7 @@ export function activate({module, canvas, session})
 	lobbyPort=session.lobby.attachGame({
 		start:detail=>enqueue(async()=>{
 			void loadOnlineIdentities(detail).catch(error=>console.warn('Matrix player identity failed to load',error));
-			releaseTable?.();releaseTable=null;
+			releaseTable?.();releaseTable=null;tableEnded=false;reconnecting=false;
 			const release=await acquireTableLock(tableLockName(detail.root,detail.localPlayer));
 			watching=release===null;releaseTable=release;
 			const storage=globalThis.localStorage;
@@ -511,7 +556,8 @@ export function activate({module, canvas, session})
 			try{localStorage.setItem(onlineSettingsKey,JSON.stringify(session.pokerOnline.validateOnlineSettings(settings)));}
 			catch{}
 		}
-		,stop:detail=>enqueue(async()=>{
+		,stop:detail=>{tableEnded=true;return enqueue(async()=>{
+			reconnecting=false;
 			if(online)
 			{
 				const view=onlinePresentation(online.view()),completed=detail?.reason==='bankroll';
@@ -521,10 +567,11 @@ export function activate({module, canvas, session})
 					:{...view,error:detail?.reason??'The online table ended.',message:'The online table ended.'};
 			}
 			awaitingConfirmation=false;submitting=false;
-		})
+		});}
 	});
 	const lobbyClosed=()=>{
 		lobbyVisible=false;online=null;onlineView=null;awaitingConfirmation=false;submitting=false;clearOnlineIdentities();
+		reconnecting=false;tableEnded=true;
 		watching=false;releaseTable?.();releaseTable=null;houseRules=null;
 	};
 	session.lobby.protocol.addEventListener('closed',lobbyClosed);

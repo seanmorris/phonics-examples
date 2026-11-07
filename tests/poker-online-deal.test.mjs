@@ -4,9 +4,51 @@ import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {OnlineDeal,ONLINE_ACTION_TYPES,KEPT_TABLES,evaluateHand,readOnlyStorage} from '../games/php-poker/browser/online-deal.mjs';
 import {
-	acquireTableLock,decorateOnlineView,firstHouseRules,freezeOnlineDispute,houseRulesSeenKey,matrixPlayerName,pendingPokerView
-	,pokerCommandBatch,sheetCell,tableLockName,tableMenuShortcut
+	TERMINAL_ROOM_ERRORS,acquireTableLock,applyOnlineCommand,decorateOnlineView,firstHouseRules,freezeOnlineDispute
+	,houseRulesSeenKey,matrixPlayerName,pendingPokerView,pokerCommandBatch,retryRoomWrite,sheetCell,tableLockName
+	,tableMenuShortcut
 } from '../games/php-poker/browser/game.mjs';
+
+test('a dropped connection retries the room write instead of freezing the table',async()=>{
+	const sleeps=[],states=[];let calls=0;
+	const flaky=async()=>{if(++calls<12)throw new TypeError('Failed to fetch');return 'published';};
+	const result=await retryRoomWrite(flaky,{sleep:async delay=>{sleeps.push(delay);},reconnecting:value=>states.push(value)});
+	assert.equal(result,'published');
+	assert.equal(calls,12,'it keeps trying well past the old nine-attempt limit');
+	assert.deepEqual(sleeps.slice(0,7),[500,1000,2000,4000,8000,16000,30000]);
+	assert.ok(sleeps.slice(6).every(delay=>delay===30000),'the backoff stops growing at 30 s');
+	assert.equal(states[0],true,'the table says it is reconnecting');
+	assert.equal(states.at(-1),false,'and clears it once the write lands');
+	assert.ok(states.indexOf(true)===0&&sleeps.length>=3);
+
+	// A first-try success never shows the reconnecting state.
+	const quiet=[];
+	assert.equal(await retryRoomWrite(async()=>1,{reconnecting:value=>quiet.push(value)}),1);
+	assert.deepEqual(quiet,[]);
+});
+
+test('room rejections still throw at once, and retries stop when the table ends',async()=>{
+	for(const message of TERMINAL_ROOM_ERRORS)
+	{
+		let calls=0;
+		await assert.rejects(retryRoomWrite(async()=>{calls++;throw new Error(message);},{sleep:async()=>{}}),new RegExp(message));
+		assert.equal(calls,1,`${message} is not retried`);
+	}
+
+	let live=true,calls=0;
+	const ended=retryRoomWrite(async()=>{calls++;if(calls===3)live=false;throw new TypeError('Failed to fetch');}
+		,{live:()=>live,sleep:async()=>{}});
+	assert.equal(await ended,undefined,'an ended table abandons the write quietly');
+	assert.equal(calls,3);
+});
+
+test('a rejected player intent becomes the table error line instead of a dispute',()=>{
+	const online={localError:'',command(intent){if(intent.type!=='call')throw new Error('That action is unavailable');this.called=intent;}};
+	assert.equal(applyOnlineCommand(online,{type:'bet',amount:99}),false);
+	assert.equal(online.localError,'That action is unavailable');
+	assert.equal(applyOnlineCommand(online,{type:'call'}),true);
+	assert.deepEqual(online.called,{type:'call'});
+});
 
 test('house rules open once per table in this browser and the list keeps only recent tables',()=>{
 	const values=new Map,storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
