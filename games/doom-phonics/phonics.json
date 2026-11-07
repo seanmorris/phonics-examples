@@ -534,7 +534,7 @@
     "src/System/PlayerEffectSystem.php": "sha256-P+h9znYbDkkCAQ+EhtQsQF1+3bfRUi79gXLTqj045VY=",
     "src/System/PlayerMovementSystem.php": "sha256-UOmimzr7LOn0LEErLps2VrWKJgQHv3XSVtZbvuy+kx0=",
     "src/System/SectorEffectSystem.php": "sha256-bs7OTYMey44/aQgs1Q6RrNMAsY/dovixk4F9SC7ZB1U=",
-    "src/System/SectorMotionSystem.php": "sha256-K+rdoFJ6eQjlA+gR0RzgNsWusBuVMNd/0oEyEkl9N2A=",
+    "src/System/SectorMotionSystem.php": "sha256-SrFO13vwcYPBA4xHYivd4k3yEo0Y7KY/2Pye4tPD2oc=",
     "src/System/StatusFaceSystem.php": "sha256-0LyltGASyxK4HyNaMMgb/7Sxue2ylUEx1SdJbt9jgGA="
   }
 }
