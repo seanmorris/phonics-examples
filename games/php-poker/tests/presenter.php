@@ -1298,6 +1298,9 @@ $test('the table bar opens command menus and both odds dialogs', static function
 		$settings=$layout->gameSettingsDialog(3); [$left,$top,$boxWidth,$boxHeight]=$layout->rect(...$settings['box']);
 		$expect($left>=-.01 && $top>=-.01 && $left+$boxWidth<=$width+.01 && $top+$boxHeight<=$height+.01,"the settings table stays on $width x $height");
 		$expect($layout->rect(...$settings['ok'])[3]/$dpr>=48-.01,"the settings OK button is touch sized on $width x $height");
+		$wildExtra=2*$layout->controlText()*1.25;
+		$expect(abs($settings['rows']['wild'][3]-$settings['rows']['opening'][3]-$wildExtra)<.01,
+			"three wildcard lines reserve text leading rather than three full rows on $width x $height");
 		$confirmation=$layout->confirmationDialog(); [$left,$top,$boxWidth,$boxHeight]=$layout->rect(...$confirmation['box']);
 		$expect($left>=-.01 && $top>=-.01 && $left+$boxWidth<=$width+.01 && $top+$boxHeight<=$height+.01,"the quit confirmation stays on $width x $height");
 	}

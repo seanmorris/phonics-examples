@@ -502,19 +502,21 @@ final class Layout
 		$control=$this->controlSize();
 		$header=34;
 		$minimumTop=$this->menuHeight()+8;
-		// Wild-card descriptions grow only when their active rules actually wrap; every other value stays on one line.
-		$units=['table'=>1,'opening'=>1,'wild'=>$wildLines,'ante'=>1,'before'=>1,'after'=>1,'raises'=>1,'playerRaises'=>1];
-		$totalUnits=array_sum($units);
+		// A wrapped wild-card value needs only one normal row plus the text leading for each additional line.
+		// Reserving a complete table row per line leaves a large blank strip beneath the value.
+		$ids=['table','opening','wild','ante','before','after','raises','playerRaises'];
+		$wildExtra=($wildLines-1)*$this->controlText()*1.25;
 		$available=$this->height()-$minimumTop-12-$header-12-$control-12;
-		$rowHeight=max(18,min(30,$available/$totalUnits));
-		$height=$header+$totalUnits*$rowHeight+12+$control+12;
+		$rowHeight=max(18,min(30,($available-$wildExtra)/count($ids)));
+		$height=$header+count($ids)*$rowHeight+$wildExtra+12+$control+12;
 		$left=($this->width()-$width)/2;
 		$top=max($minimumTop,($this->height()-$height)/2);
 		$rows=[]; $y=$top+$header;
-		foreach($units as $id=>$lines)
+		foreach($ids as $id)
 		{
-			$rows[$id]=[$left+8,$y,$width-16,$rowHeight*$lines];
-			$y+=$rowHeight*$lines;
+			$row=$rowHeight+($id==='wild'?$wildExtra:0);
+			$rows[$id]=[$left+8,$y,$width-16,$row];
+			$y+=$row;
 		}
 		$footer=$top+$height-$control-12;
 		$buttonWidth=min(140,$width-32);
