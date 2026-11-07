@@ -7,17 +7,132 @@ use DoomPhonics\Component\Transform;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
 
-/** Dynamic square actor bounds used by Doom-style Minkowski movement sweeps. */
+/**
+ * Dynamic square actor bounds used by Doom-style Minkowski movement sweeps.
+ *
+ * Without a grid every sweep tests every body in the registry, so moving N actors costs N^2 tests per tic. With
+ * `$grid`, bodies are binned by centre in 128-unit cells, the size of Doom's blockmap blocks, and a sweep tests only
+ * the cells its path covers, widened by the largest binned radius. The grid's owner must call beginStep() at the start
+ * of each simulation step and moved() after changing a body's position within the step; Collision does the latter
+ * for every move it makes.
+ */
 final class ActorObstacles
 {
+	private const CELL = 128.0;
+	/**
+	 * Cells are clamped to +/-16384 per axis, about two million map units, so packed keys stay below 2^31. The browser
+	 * runs 32-bit PHP (wasm32), where a larger key becomes a float and the int return type throws.
+	 */
+	private const CELL_LIMIT = 16384;
 	private Query $solids;
 	/** @var array<int,array{x:float,y:float,sector:int}> */
 	private array $sectors = [];
+	/** @var array<int,array<int,true>> Body entities by cell key. */
+	private array $cells = [];
+	/** @var array<int,int> Cell key each binned entity occupies. */
+	private array $placed = [];
+	/** Largest radius among binned bodies; queries widen by it because bodies are binned by centre. */
+	private float $reach = 0;
+	/** @var list<int>|null Registry snapshot the grid was built from, or null when it must be rebuilt. */
+	private ?array $snapshot = null;
 
-	public function __construct(public Registry $registry, public ?Level $level = null)
+	public function __construct(public Registry $registry, public ?Level $level = null, public bool $grid = false)
 	{
 		$this->solids = Query::all(Transform::class, Body::class);
 	}
+
+	/** Rebuild the grid from the current positions before the step's first query. */
+	public function beginStep(): void { $this->snapshot = null; }
+
+	/** Re-bin one body after its position changed within the step. */
+	public function moved(int $entity, Transform $pose): void
+	{
+		if(!$this->grid || $this->snapshot === null || !isset($this->placed[$entity])) return;
+
+		$key = self::key($pose->x, $pose->y);
+		$old = $this->placed[$entity];
+
+		if($key === $old) return;
+
+		unset($this->cells[$old][$entity]);
+		$this->cells[$key][$entity] = true;
+		$this->placed[$entity] = $key;
+	}
+
+	/**
+	 * Bodies that may touch a box, in entity order. Every body, solid or not, is binned, so a corpse raised during the
+	 * step is found without a rebuild; callers still apply their own solid and overlap tests.
+	 *
+	 * @return list<int>
+	 */
+	private function near(float $minX, float $minY, float $maxX, float $maxY): array
+	{
+		if(!$this->grid) return $this->registry->query($this->solids);
+
+		$solids = $this->registry->query($this->solids);
+
+		if($this->snapshot === null || $solids !== $this->snapshot) $this->index($solids);
+
+		$reach = $this->reach;
+		$fromX = self::cell($minX - $reach);
+		$fromY = self::cell($minY - $reach);
+		$toX = self::cell($maxX + $reach);
+		$toY = self::cell($maxY + $reach);
+		$found = [];
+
+		// A box spanning more cells than there are bodies is cheaper to answer from the bodies themselves.
+		if(($toX - $fromX + 1) * ($toY - $fromY + 1) > count($this->placed))
+		{
+			$found = array_keys($this->placed);
+			sort($found);
+
+			return $found;
+		}
+
+		for($x = $fromX; $x <= $toX; $x++)
+		for($y = $fromY; $y <= $toY; $y++)
+		foreach($this->cells[self::pack($x, $y)] ?? [] as $entity => $unused) $found[] = $entity;
+
+		sort($found);
+
+		return $found;
+	}
+
+	/** @param list<int> $solids */
+	private function index(array $solids): void
+	{
+		$this->cells = $this->placed = [];
+		$this->reach = 0;
+
+		foreach($solids as $entity)
+		{
+			$pose = $this->registry->get($entity, Transform::class);
+			$key = self::key($pose->x, $pose->y);
+			$this->cells[$key][$entity] = true;
+			$this->placed[$entity] = $key;
+			$this->reach = max($this->reach, $this->registry->get($entity, Body::class)->radius);
+		}
+
+		$this->snapshot = $solids;
+	}
+
+	/** Positions beyond the clamped range share its edge cells; a non-finite position uses the origin cell. */
+	private static function cell(float $coordinate): int
+	{
+		$cell = floor($coordinate / self::CELL);
+
+		if(is_nan($cell)) return 0;
+
+		return (int)max(-self::CELL_LIMIT, min(self::CELL_LIMIT - 1, $cell));
+	}
+
+	/** Distinct keys for every clamped cell, at most 2^30 - 1, so they stay integers in 32-bit PHP. */
+	private static function pack(int $x, int $y): int
+	{
+		return ($x + self::CELL_LIMIT) * 2 * self::CELL_LIMIT + $y + self::CELL_LIMIT;
+	}
+
+	private static function key(float $x, float $y): int { return self::pack(self::cell($x), self::cell($y)); }
 
 	public function sweep(
 		int $mover
@@ -31,7 +146,12 @@ final class ActorObstacles
 		$nearest = null;
 		$connected = $this->connectedSectors($mover, $pose);
 
-		foreach($this->registry->query($this->solids) as $entity)
+		foreach($this->near(
+			min($pose->x, $pose->x + $dx) - $body->radius
+			, min($pose->y, $pose->y + $dy) - $body->radius
+			, max($pose->x, $pose->x + $dx) + $body->radius
+			, max($pose->y, $pose->y + $dy) + $body->radius
+		) as $entity)
 		{
 			if($entity === $mover) continue;
 
@@ -74,7 +194,7 @@ final class ActorObstacles
 		{
 			$changed = false;
 
-			foreach($this->registry->query($this->solids) as $entity)
+			foreach($this->near($x - $body->radius, $y - $body->radius, $x + $body->radius, $y + $body->radius) as $entity)
 			{
 				if($entity === $mover) continue;
 

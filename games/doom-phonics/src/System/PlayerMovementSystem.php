@@ -233,7 +233,12 @@ final class PlayerMovementSystem
 
 		// Resolve wall portals before sampling support/headroom: the horizontal
 		// endpoint can lie outside the source room until it enters destination space.
-		if(!$dead) $this->specials->cross($fromX, $fromY, $pose, $player, $replaying);
+		if(!$dead)
+		{
+			$this->specials->cross($fromX, $fromY, $pose, $player, $replaying);
+			// A portal or teleport line can move the player again after Collision binned it.
+			$this->collision->actors?->moved($entity, $pose);
+		}
 
 		$this->verticalPhysics->step($pose, $velocity, $body, $dt, $gravityScale, $player->viewHeight);
 	}

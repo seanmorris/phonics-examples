@@ -113,10 +113,13 @@ final class EpisodeSystems implements SystemSet
 
 		$motion = is_array($options['movement'] ?? null) ? $options['movement'] : [];
 
+		// The grid rebuilds at the start of each step (transform-history below) and Collision re-bins what it moves.
+		$obstacles = new ActorObstacles($scope->registry, $content->level, true);
+
 		$collision = new Collision(
 			$content->level
 			, (float)($motion['maxStep'] ?? 24)
-			, new ActorObstacles($scope->registry, $content->level)
+			, $obstacles
 		);
 
 		$sound = $scope->service('doom-sound', new \DoomPhonics\Audio\NullSoundEmitter);
@@ -207,7 +210,9 @@ final class EpisodeSystems implements SystemSet
 
 		$scope->system(
 			'transform-history'
-			, static function(Registry $registry, float $dt) use (&$interpolated): void {
+			, static function(Registry $registry, float $dt) use (&$interpolated, $obstacles): void {
+				$obstacles->beginStep();
+
 				foreach(array_keys($interpolated) as $entity)
 				{
 					if(!$registry->alive($entity) || !$registry->has($entity, Transform::class))

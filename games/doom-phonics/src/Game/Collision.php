@@ -63,6 +63,8 @@ final class Collision
 		$swept = $this->sweep($transform, $body, $dx, $dy, $normals, $actors, $entity);
 		$collided = $overlap || $swept;
 
+		if($entity !== null) $this->actors?->moved($entity, $transform);
+
 		return [
 			'collided' => $collided
 			, 'dx' => $transform->x - $startX

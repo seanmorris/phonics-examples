@@ -2866,6 +2866,7 @@ final class CombatSystem
 		$pose->y = $pose->previousY = $origin->y;
 		$pose->z = $pose->previousZ = $origin->z;
 		$pose->angle = $origin->angle;
+		$this->collision->actors?->moved($entity, $pose);
 		$state = $registry->get($entity, ActorState::class);
 
 		if($registry->has($entity, HitPoints::class))
