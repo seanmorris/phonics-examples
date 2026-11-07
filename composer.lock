@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0650b0173e182745015412710abd2547",
+    "content-hash": "f594b51ec6294f9384853e9bc71cc38c",
     "packages": [
         {
             "name": "seanmorris/phonics",
@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/seanmorris/php-wasm-engine.git",
-                "reference": "57f1ca40dca6f5cb9fabcbbabfbe02ec6106d574"
+                "reference": "b90409ff709aa2f65e32d89ecf25c2dfaae1381b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/57f1ca40dca6f5cb9fabcbbabfbe02ec6106d574",
-                "reference": "57f1ca40dca6f5cb9fabcbbabfbe02ec6106d574",
+                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/b90409ff709aa2f65e32d89ecf25c2dfaae1381b",
+                "reference": "b90409ff709aa2f65e32d89ecf25c2dfaae1381b",
                 "shasum": ""
             },
             "require": {
@@ -112,7 +112,7 @@
                 "source": "https://github.com/seanmorris/php-wasm-engine/tree/main",
                 "issues": "https://github.com/seanmorris/php-wasm-engine/issues"
             },
-            "time": "2026-11-07T04:41:45+00:00"
+            "time": "2026-11-07T13:06:02+00:00"
         }
     ],
     "packages-dev": [],
