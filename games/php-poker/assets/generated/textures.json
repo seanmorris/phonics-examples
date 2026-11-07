@@ -36,32 +36,32 @@
     ],
     "icons": {
       "ada": {
-        "file": "art/icons/ada.svg",
-        "sha256": "818d3c0bfdf16a2db6c87dc5ee43ea0f1758e53406c5b66efced7a0c55e29123"
+        "file": "art/icons/rpg-icons-extra/clock.png",
+        "sha256": "59241fe793e02a64bb6ea3aeca278bbe54b16d40de48a28265323f04eb111f38"
       },
       "cleo": {
-        "file": "art/icons/cleo.svg",
-        "sha256": "7a735577ac8709f3a5fd722316e364bf673bee09074ec41a02cf5b22d3218273"
+        "file": "art/icons/thekingpheonix/gem.png",
+        "sha256": "b82aa9c994e3b36c1dab7a41ebd2c50ecd4cd977881bae68f76da1c8ac21d029"
       },
       "felix": {
-        "file": "art/icons/felix.svg",
-        "sha256": "a69821c78e8088a358d95f018e7993e0eeaf22c1502a4781b9e394b17ccb4d6c"
+        "file": "art/icons/rpg-icons-extra/ring.png",
+        "sha256": "a3547af3b1ef6c4b3519991ea644d51a70baf12fd5a3472a03d84cd1a6b2a08e"
       },
       "jules": {
-        "file": "art/icons/jules.svg",
-        "sha256": "7d02d2837843b33c0819676397e4955265e648a3d7f552b44c896881ca41830f"
+        "file": "art/icons/thekingpheonix/doughnut.png",
+        "sha256": "80a9fbfe9fde88c2a7a8684f458a6c6fb7aea3366045df7671c8c219e3f3ab41"
       },
       "mara": {
-        "file": "art/icons/mara.svg",
-        "sha256": "ae832e0c20c1eda80597aa047b8f6cfe249e6f0da33663d951f6755128ff6e92"
+        "file": "art/icons/thekingpheonix/apple.png",
+        "sha256": "6df0583e07d2ce41de95513b76a46a866998a68ff40a8289e4a7dc51ba5ef800"
       },
       "nora": {
-        "file": "art/icons/nora.svg",
-        "sha256": "a9af350f0babea925370cc3ca113e48f8f13dadce65c48a9ee9942206da5a6b8"
+        "file": "art/icons/rpg-icons-extra/shamrock.png",
+        "sha256": "bbdd4e7f2528fec854df65d5e14711b3e4eb3f0878034e5dc3056008f430bfcf"
       },
       "otis": {
-        "file": "art/icons/otis.svg",
-        "sha256": "c3cb72ae83735cc10a3fe004449dd610da9571c49276d738c5e342acddcc3081"
+        "file": "art/icons/clint-bellanger/coffee.png",
+        "sha256": "2e4df2ff1abc4b4229a90817446ac3592926efe88c53c76adb3aaa57ccf85d45"
       }
     }
   }

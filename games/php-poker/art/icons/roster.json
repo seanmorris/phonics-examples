@@ -1,6 +1,6 @@
 {
   "grid": 32,
-  "conversion": "Supplied PNG pixels converted to run-length SVG rectangles without smoothing; 7Soul source images were nearest-neighbor resampled from 34x34 to 32x32.",
+  "conversion": "Supplied PNG pixels are drawn as they are, without colour-management chunks so browsers keep the exact palette; 7Soul source images were nearest-neighbor resampled from 34x34 to 32x32.",
   "players": {
     "ada": {
       "file": "rpg-icons-extra/clock.png",

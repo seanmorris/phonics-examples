@@ -1194,7 +1194,12 @@ final class Presenter
 			$art = $this->textures['cards'];
 			$send = vrzno_env('pokerCardArt');
 			$icons = [];
-			foreach($art['icons'] ?? [] as $key => $icon) $icons[$key] = (string)file_get_contents($this->root . '/' . $icon['file']);
+			// Emblems are small PNGs: they travel as data URLs, which the browser draws without another conversion.
+			foreach($art['icons'] ?? [] as $key => $icon)
+			{
+				$bytes = (string)file_get_contents($this->root . '/' . $icon['file']);
+				$icons[$key] = str_ends_with($icon['file'], '.png') ? 'data:image/png;base64,' . base64_encode($bytes) : $bytes;
+			}
 			if($send) $send(json_encode([
 				'sheet' => (string)file_get_contents($this->root . '/' . $art['sheet']['file']), 'columns' => $art['sheet']['columns'], 'rows' => $art['sheet']['rows']
 				, 'backs' => ['red' => (string)file_get_contents($this->root . '/' . $art['backs']['red']['file']), 'blue' => (string)file_get_contents($this->root . '/' . $art['backs']['blue']['file'])]

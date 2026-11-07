@@ -52,11 +52,12 @@ const cardArt = {
 	, aspect: [5,7]
 	, icons: {}
 };
-// Player emblems: whole-pixel SVGs keyed by players[].portrait, rasterised beside the cards at boot.
-for(const entry of (await fs.readdir(new URL('art/icons/', root))).filter(name => name.endsWith('.svg')).sort())
+// Player emblems: the roster's 32x32 PNGs keyed by players[].portrait, drawn into the atlas beside the cards at boot.
+const roster = JSON.parse(await fs.readFile(new URL('art/icons/roster.json', root), 'utf8'));
+for(const [key, entry] of Object.entries(roster.players).sort(([left], [right]) => left.localeCompare(right)))
 {
-	const key = entry.slice(0, -4);
-	cardArt.icons[key] = {file: `art/icons/${entry}`, sha256: hash(await fs.readFile(new URL(`art/icons/${entry}`, root)))};
+	const file = `art/icons/${entry.file}`;
+	cardArt.icons[key] = {file, sha256: hash(await fs.readFile(new URL(file, root)))};
 }
 const manifest = {
 	uiFont: {
