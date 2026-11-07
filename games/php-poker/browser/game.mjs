@@ -107,6 +107,18 @@ export function matrixPlayerName(id)
 	return match?.[1]||value||'Player';
 }
 
+/**
+ * Words for a match the room ended on time: the waiting player's claim after the other missed a step deadline.
+ * Returns the status message and, for the player who ran out of time, an error notice; null for other endings.
+ */
+export function onlineTimeoutNotice(detail,localPlayer,name=matrixPlayerName)
+{
+	if(!detail?.timeout)return null;
+	if(detail.winner===localPlayer)return {message:`${name(detail.loser)} ran out of time. You win the match.`,error:''};
+	if(detail.loser===localPlayer)return {message:'You ran out of time.',error:`You ran out of time. ${name(detail.winner)} wins the match.`};
+	return {message:`${name(detail.loser)} ran out of time. ${name(detail.winner)} wins the match.`,error:''};
+}
+
 /** Add presentation-only Matrix names and avatar atlas keys to the deterministic online view. */
 export function decorateOnlineView(view,{players=[],localPlayer=null,profiles=new Map,avatars=new Map}={})
 {
@@ -503,7 +515,10 @@ export function activate({module, canvas, session})
 			if(online)
 			{
 				const view=onlinePresentation(online.view()),completed=detail?.reason==='bankroll';
-				onlineView=completed?view:{...view,error:detail?.reason??'The online table ended.',message:'The online table ended.'};
+				const name=id=>onlineProfiles.get(id)?.displayName?.trim()||matrixPlayerName(id);
+				const timedOut=onlineTimeoutNotice(detail,onlineLocal,name);
+				onlineView=completed?view:timedOut?{...view,legalActions:{},...timedOut}
+					:{...view,error:detail?.reason??'The online table ended.',message:'The online table ended.'};
 			}
 			awaitingConfirmation=false;submitting=false;
 		})

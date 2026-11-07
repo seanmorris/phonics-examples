@@ -45,6 +45,13 @@ so browsers that disagree fail at the first handshake. When a browser first seat
 Settings opens by itself, titled HOUSE RULES. The browser evaluator ports `Hand::evaluate`, wild cards included, and
 tests compare it with PHP. Single-player loans and adaptation remain offline rules.
 
+Each step a player owes has a five-minute deadline: a betting or draw decision, the next deal, and the automatic
+shuffle, layer and settlement steps. The engine room protocol (`actionTimeoutMs`) runs it from the Matrix server
+timestamp of the last step that moved the match forward and ignores steps stamped after it. Five seconds past the
+deadline, the waiting player's browser claims the match, which ends as a win on time. Inside a batch, the engine asks
+the local `OnlineDeal` who acts next; it reports that with every fragment. If both players owe a step, the table
+expires without a winner. The in-game sidebar counts down a step's last minute.
+
 Reload replays confirmed room actions and resumes a partially published proof from the saved per-hand local plan.
 Incomplete durable batches are replayed after the last confirmed boundary. Shuffle packets settle once per complete
 shuffle, the initial ten-card allocation settles once, and a replacement draw settles after all requested cards are

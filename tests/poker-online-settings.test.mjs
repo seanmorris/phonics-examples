@@ -119,7 +119,7 @@ test('online betting follows the table ante, increments and both raise caps',asy
 	assert.equal(peers.alice.publicState().stage,'final-betting');
 	const opener=peers.alice.currentActor();legal=peers[opener].legalActionsFor(opener);
 	assert.deepEqual([legal.minBet,legal.maxBet,legal.betIncrement],[10,30,10],'after the draw bets run 10 to 30');
-	assert.deepEqual(peers.alice.view().profile,{version:'five-card-draw-anything-v4',...validateOnlineSettings(settings)},'the view reports the table rules');
+	assert.deepEqual(peers.alice.view().profile,{version:'five-card-draw-anything-v5',...validateOnlineSettings(settings)},'the view reports the table rules');
 });
 
 test('a wild-card table deals jokers, reads private wild hands and scores the showdown with them',async()=>{

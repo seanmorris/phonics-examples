@@ -7,7 +7,7 @@
  */
 
 export const ONLINE_DEAL_VERSION=4;
-export const ONLINE_RULES='five-card-draw-anything-v4';
+export const ONLINE_RULES='five-card-draw-anything-v5';
 export const ONLINE_ACTION_TYPES=Object.freeze(['shuffle-packet','card-layers','poker-action','draw-choice','reveal-cards']);
 
 const encoder=new TextEncoder;

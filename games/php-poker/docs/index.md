@@ -19,6 +19,7 @@ offline game's choices (ante, betting limits, raise caps and wild cards), and on
 Both players see the house rules when the match starts. Both browsers contribute a secret shuffle, verify the other's
 shuffle, and deal five private cards to each seat without publishing either hand. The room then carries both betting
 rounds, private discards and replacement draws. Live hands publish verified card openings at showdown; folded hands
-stay private. The dealer can continue into another freshly shuffled hand with the button advanced.
+stay private. The dealer can continue into another freshly shuffled hand with the button advanced. Each turn has a
+five-minute limit, long enough for a short break: a player who lets it run out loses the match on time.
 
 See [Rules and provenance](rules.md) for documentary DOS rules and the explicitly chosen adaptations, and [Architecture and private online dealing](architecture.md) for implementation boundaries.
