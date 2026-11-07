@@ -264,8 +264,15 @@ final class Painter
 			$total = (int)($this->state['motion']['totals'][$seat] ?? Chips::value($bank));
 			if($seat === 0)
 			{
+				// The default disc already says YOU; a profile picture gets YOU beneath it, above the total.
 				[$tx, $ty] = $this->layout->caption($seat, $seats, $bank);
-				$this->text((string)$total, $tx, $ty, $this->layout->captionText(), Theme::PLATE, 'center');
+				$size = $this->layout->captionText();
+				if($this->pictured($player))
+				{
+					$this->text('You', $tx, $ty, $size, Theme::PLATE, 'center');
+					$ty += $size + 2;
+				}
+				$this->text((string)$total, $tx, $ty, $size, Theme::PLATE, 'center');
 			}
 			if(!empty($player['bet']))
 			{
@@ -369,12 +376,22 @@ final class Painter
 	private function plateText(array $player, int $seat, bool $showdown): string
 	{
 		if($player['folded']) return 'Fold';
+		// While the browsers shuffle, deal or reveal between themselves, the working seat says what it is doing and
+		// every other seat checks its proofs; the centre status explains the step.
+		$activity = $this->view['activity'] ?? null;
+		if(is_array($activity))
+		{
+			if(($activity['seat'] ?? -1) !== $seat) return 'Verifying';
+			return match($activity['stage'] ?? '') {'shuffle' => 'Shuffling', 'reveal' => 'Revealing', default => 'Dealing'};
+		}
 		if($showdown)
 		{
 			if(in_array($seat, array_column($this->view['awards'] ?? [], 'seat'), true)) return $player['handName'] ?: 'Winner';
 			return $player['handName'] ? (string)$player['handName'] : ($seat === 0 ? 'Your hand' : '');
 		}
-		if($seat === 0) return ($this->view['turn'] ?? -1) === 0 ? 'Your turn' : ($player['lastAction'] ?: 'You');
+		// With a profile picture, YOU is written under the picture instead of on an idle plate.
+		if($seat === 0) return ($this->view['turn'] ?? -1) === 0 ? 'Your turn'
+			: ($player['lastAction'] ?: ($this->pictured($player) ? '' : 'You'));
 		if(($this->view['turn'] ?? -1) === $seat) return 'Thinking';
 		return (string)($player['lastAction'] ?: '');
 	}
@@ -813,6 +830,13 @@ final class Painter
 		$ink = $color === Theme::CHIP_GRAY ? [.13,.13,.13,1] : Theme::CHIP_INK;
 		$label = $value >= 1000000 ? ($value / 1000000) . 'M' : ($value >= 1000 ? ($value / 1000) . 'K' : (string)$value);
 		$this->canvas->label($label, $dx, $dy, $radius * .6, $ink, 'bold', 'center', $r * 1.6);
+	}
+
+	/** Whether an online seat shows its player's profile picture rather than a stand-in disc. */
+	private function pictured(array $player): bool
+	{
+		return ($this->view['mode'] ?? 'offline') === 'online'
+			&& isset($this->atlas['icons'][(string)($player['portrait'] ?? '')]);
 	}
 
 	private function emblem(float $x, float $y, int $seat, string $name, string $portrait): void

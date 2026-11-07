@@ -797,7 +797,7 @@ export class OnlineDeal
 		for(const player of this.state.bankrolls)
 		{player.folded=false;player.bet=0;player.totalBet=0;player.drawCount=null;player.lastAction='';}
 		const dealer=this.players[this.state.dealer],ante=Math.min(this.settings.ante,this.bankroll(dealer).stack);if(ante)this.pay(dealer,ante);
-		this.state.message='Jointly shuffling a private deck.';this.history(`Hand ${this.state.handNumber}: ${this.name(dealer)} deals.`);
+		this.state.message='Cryptographically shuffling deck.';this.history(`Hand ${this.state.handNumber}: ${this.name(dealer)} deals.`);
 		if(this.saved.plan?.hand<this.state.handNumber)delete this.saved.plan;
 		this.saveSaved();
 	}
@@ -928,6 +928,10 @@ export class OnlineDeal
 			,showdown:'showdown','match-over':'showdown',redeal:'redeal'
 		})[this.state.stage]??'ready';
 		const viewPlayers=[this.localPlayer,...this.players.filter(player=>player!==this.localPlayer)],turn=this.currentActor();
+		// The shuffle, every private deal and the showdown reveal run between the browsers by themselves, so nobody
+		// has a turn to take; the activity names whose browser is working, and what it is doing, for the plates.
+		const stage=this.state.stage,automatic=!ready||(stage==='draw'&&this.state.drawAllocations.length>0)||stage==='reveal';
+		const activity=automatic?{seat:viewPlayers.indexOf(turn),stage:stage==='shuffle'||stage==='reveal'?stage:'deal'}:null;
 		const players=viewPlayers.map((player,index)=>{
 			const source=this.bankroll(player),allocations=this.handAllocations(player),revealed=this.state.revealed[this.seat(player)];
 			const cards=player===this.localPlayer?allocations.map(allocation=>this.privateEntry(allocation)?.id??null)
@@ -939,7 +943,7 @@ export class OnlineDeal
 		});
 		const awards=this.state.awards.map(award=>({seat:viewPlayers.indexOf(award.player),amount:award.amount,handName:award.handName}));
 		return {
-			phase,turn:viewPlayers.indexOf(turn),dealer:viewPlayers.indexOf(this.players[this.state.dealer]),handNumber:this.state.handNumber
+			phase,turn:automatic?-1:viewPlayers.indexOf(turn),activity,dealer:viewPlayers.indexOf(this.players[this.state.dealer]),handNumber:this.state.handNumber
 			,revision:this.state.sequence,players,pot:this.state.pot,highest:this.state.highest,raises:this.state.raises
 			,opener:this.state.opener===null?null:viewPlayers.indexOf(this.state.opener),awards,reveal:this.state.reveal
 			,message:this.state.message,history:[...this.state.history],mode:'online'

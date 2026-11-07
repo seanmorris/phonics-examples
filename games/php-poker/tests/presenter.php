@@ -8,8 +8,10 @@ foreach(array_filter([$engineRoot ? $engineRoot . '/autoload.php' : null, __DIR_
 if(is_file($engine)) { require_once $engine; break; }
 
 use PhpPoker\Render\Theme;
+use PhpPoker\Render\UiCanvas;
 use PhpPoker\Ui\Chips;
 use PhpPoker\Ui\Layout;
+use PhpPoker\Ui\Painter;
 use PhpPoker\Ui\Presenter;
 use PhpPoker\Ui\RoundHistory;
 
@@ -338,7 +340,7 @@ $test('online waits drum three reserved dots without changing the authorized mes
 	$view['mode'] = 'online';
 	$view['phase'] = 'ready';
 	$view['waitingForConfirmation'] = false;
-	$view['message'] = 'Jointly shuffling a private deck.';
+	$view['message'] = 'Cryptographically shuffling deck.';
 	$shuffle->update($view);
 	$expect($shuffle->state()['networkWait']['active'], 'the verified online shuffle gets the same cadence');
 });
@@ -349,7 +351,7 @@ $test('online loading status replaces the first-hand welcome card', static funct
 	$view['phase'] = 'ready';
 	$view['handNumber'] = 1;
 	$view['legalActions'] = [];
-	$view['message'] = 'Jointly shuffling a private deck.';
+	$view['message'] = 'Cryptographically shuffling deck.';
 	$first = new Presenter($root);
 	$first->update($view);
 	$firstFrame = $first->paint(390, 844)->instances();
@@ -366,6 +368,44 @@ $test('online loading status replaces the first-hand welcome card', static funct
 	$quietLater = new Presenter($root);
 	$quietLater->update($view);
 	$expect(count($quietFirst->paint(390, 844)->instances()) > count($quietLater->paint(390, 844)->instances()), 'a quiet ready table retains its one-time welcome');
+});
+
+$test('online plates read Shuffling, Dealing, Revealing or Verifying, and YOU moves under a profile picture', static function(callable $expect) use ($fixture, $root): void {
+	$view = $fixture('draw-2');
+	$view['mode'] = 'online';
+	$view['phase'] = 'ready';
+	$view['turn'] = -1;
+	$view['legalActions'] = [];
+	$view['players'][0]['lastAction'] = $view['players'][1]['lastAction'] = '';
+	$presenter = new Presenter($root);
+	$presenter->update($view);
+	$presenter->paint(1280, 720);
+	$painter = static function(array $view, ?array $atlas = null) use ($presenter): Painter {
+		[$text, $layout] = (fn(): array => [$this->text, $this->layout()])->call($presenter);
+		return new Painter(new UiCanvas($text, $layout->uiScale()), $layout, $view, $presenter->state(), $atlas);
+	};
+	$plate = static fn(Painter $painter, array $view, int $seat): string => (fn(): string => $this->plateText(
+		$view['players'][$seat], $seat, false
+	))->call($painter);
+	foreach(['shuffle' => 'Shuffling', 'deal' => 'Dealing', 'reveal' => 'Revealing'] as $stage => $word)
+	{
+		$view['activity'] = ['seat' => 1, 'stage' => $stage];
+		$shown = $painter($view);
+		$expect($plate($shown, $view, 1) === $word, "the working opponent's plate reads $word");
+		$expect($plate($shown, $view, 0) === 'Verifying', "the other seat reads Verifying while the opponent is $word");
+		$view['activity'] = ['seat' => 0, 'stage' => $stage];
+		$expect($plate($painter($view), $view, 0) === $word, "the human's plate reads $word, not that it is their turn");
+	}
+	$view['players'][1]['folded'] = true;
+	$expect($plate($painter($view), $view, 1) === 'Fold', 'a folded seat keeps its Fold plate while the others reveal');
+	$view['players'][1]['folded'] = false;
+	$view['activity'] = null;
+	$view['players'][0]['portrait'] = 'matrix-local';
+	$expect($plate($painter($view), $view, 0) === 'You', 'without a picture the idle plate still says YOU');
+	$pictured = $painter($view, ['icons' => ['matrix-local' => [0, 0, 32, 32]], 'width' => 64, 'height' => 64]);
+	$expect($plate($pictured, $view, 0) === '', 'with a profile picture the idle YOU plate is gone');
+	$view['players'][0]['lastAction'] = 'Calls 2';
+	$expect($plate($pictured, $view, 0) === 'Calls 2', 'with a profile picture the plate still reports actions');
 });
 
 $test('the menu, setup and settings flow send only session intents the session knows', static function(callable $expect) use ($root): void {

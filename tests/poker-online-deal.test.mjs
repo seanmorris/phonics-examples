@@ -376,6 +376,14 @@ test('local storage keeps the newest tables and never prunes the table in play',
 	assert.equal(store.getItem(tables.at(-KEPT_TABLES+1).keyName),null,'the next oldest is pruned instead');
 });
 
+test('nobody has a turn while the browsers shuffle, and the status says it is cryptographic',()=>{
+	const deal=new OnlineDeal(tableOptions('$shuffling',webStorage())),view=deal.view();
+	assert.equal(deal.publicState().stage,'shuffle');
+	assert.equal(view.turn,-1,'no YOUR TURN or THINKING plate during the shuffle');
+	assert.deepEqual(view.activity,{seat:deal.currentActor()===deal.localPlayer?0:1,stage:'shuffle'});
+	assert.equal(view.message,'Cryptographically shuffling deck.');
+});
+
 test('a tab watching a table reads its record but never writes it',async()=>{
 	const store=webStorage(),player=new OnlineDeal(tableOptions('$watched',store));
 	player.makeShufflePlan();

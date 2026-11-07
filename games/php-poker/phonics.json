@@ -117,7 +117,7 @@
     "browser/game.mjs": "sha256-F4+KEg9s42C1R80osKexdB+4GPrVDJgoObnlfpkpMtI=",
     "browser/mental-poker.mjs": "sha256-NyUXE3/CMvDEmVfKBQlUqdonsi6RiKISntns4HZpTLY=",
     "browser/mental-poker.mjs.LICENSE.txt": "sha256-H3gEgPb0U8/TQnVf3+xDNxTzrA5ijeB/oqmGCzBaAmU=",
-    "browser/online-deal.mjs": "sha256-IQE84WxslU7jnfg9aC436CEqglMvIbAJkBTTctA99OQ=",
+    "browser/online-deal.mjs": "sha256-jZSlQp2utrUGAiAz0tv8pyaIm0bcKD70MG2qVJkXWhA=",
     "browser/persistence.mjs": "sha256-ouPvGick+2DK+VX/d3SP5lOiMRivxYGZ8k2uTZvUySA=",
     "shaders/ui.frag": "sha256-Tc3yUPRiouakSGUmhLexNnR6Cdr6OLE56NiLTwGcppA=",
     "shaders/ui.vert": "sha256-v6qumyh53sxStBcAUf2YZPFyn122NilzAU9NrSUxdpQ=",
@@ -136,7 +136,7 @@
     "src/Ui/Chips.php": "sha256-qD7RyIoRjgORznQes/KLAwKdsgcEz6tZBNOhSljW35E=",
     "src/Ui/Layout.php": "sha256-SEVrPH//F7U+EiXqM3mqvjUxnEbymWbK9EesIqb2Kxg=",
     "src/Ui/Motion.php": "sha256-Qf+Y94XAkdkD6KzlLNBMh0jVHdE3sCR8pWsilraI+u4=",
-    "src/Ui/Painter.php": "sha256-SS+dCHn73/cwFMhgVDHJDJAwjriDprMM2Yd0sQrrmHM=",
+    "src/Ui/Painter.php": "sha256-r8vqLD8QunKetNLVD2YY/Gd4/dehrnVEL9p0w3ano+U=",
     "src/Ui/Presenter.php": "sha256-ZMzDO9Yg7jtE7E2ozixRwwsk1o3+qOWAIv2hBD7gaYY=",
     "src/Ui/RoundHistory.php": "sha256-jx7NY8otLquaWLWt95AGepSGvEtn9nHZsjGdrGXZ6uQ=",
     "src/WildCards.php": "sha256-xr3nuIPic3i+qXdKbOwdma7zRMSFMKLFpOJXwmqFkr8="
