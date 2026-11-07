@@ -54,6 +54,29 @@ export function acquireTableLock(name,locks=globalThis.navigator?.locks)
 	});
 }
 
+/** Local storage key for the host's last online house rules, which pre-fill the next House rules dialog. */
+export const onlineSettingsKey='php-poker.online-settings.v1';
+/** Local storage key listing the tables whose house rules this browser has already shown. */
+export const houseRulesSeenKey='php-poker.house-rules-seen.v1';
+
+/**
+ * Whether a table's house rules should open by themselves: true the first time this browser seats or watches it,
+ * false after a reload or in a second tab. The list keeps only the most recent tables. Without storage, the rules
+ * show every time rather than never.
+ */
+export function firstHouseRules(root,storage=globalThis.localStorage,kept=20)
+{
+	try
+	{
+		const saved=JSON.parse(storage?.getItem(houseRulesSeenKey)??'[]');
+		const seen=Array.isArray(saved)?saved.filter(item=>typeof item==='string'):[];
+		if(seen.includes(root))return false;
+		storage?.setItem(houseRulesSeenKey,JSON.stringify([...seen,root].slice(-kept)));
+	}
+	catch{}
+	return true;
+}
+
 /** Combine intents produced by PHP input with commands injected through the browser test/accessibility bridge. */
 export function pokerCommandBatch(generatedJson,injected=[])
 {
@@ -317,6 +340,13 @@ export function activate({module, canvas, session})
 		return JSON.stringify(frame);
 	};
 	let commands=[];
+	// The host picks online house rules in the lobby's House rules dialog; the last choice pre-fills the next table.
+	const lastOnlineSettings=()=>{
+		try{return session.pokerOnline.validateOnlineSettings(JSON.parse(localStorage.getItem(onlineSettingsKey)??'null')??undefined);}
+		catch{return session.pokerOnline.DEFAULT_ONLINE_SETTINGS;}
+	};
+	// A table's house rules open by themselves once, the first time this browser seats or watches it.
+	let houseRules=null;
 	module.pokerCommands=(generatedJson='[]')=>{
 		const queued=pokerCommandBatch(generatedJson,commands);commands=[];
 		if(online&&watching)return '[]';
@@ -355,7 +385,8 @@ export function activate({module, canvas, session})
 			players:onlinePlayers,localPlayer:onlineLocal,profiles:onlineProfiles,avatars:onlineAvatars
 		});
 	const updateOnlineView=()=>{
-		const view=onlinePresentation(online?.view()??null);
+		let view=onlinePresentation(online?.view()??null);
+		if(view&&houseRules)view={...view,houseRules};
 		if(view&&watching){onlineView={...view,legalActions:{},error:watchingNotice};return;}
 		onlineView=awaitingConfirmation?pendingPokerView(view):view;
 	};
@@ -428,12 +459,13 @@ export function activate({module, canvas, session})
 			const storage=globalThis.localStorage;
 			const controller=new session.pokerOnline.OnlineDeal({
 				api:session.mentalPoker,root:detail.root,sessionId:detail.sessionId,players:detail.players
-				,localPlayer:detail.localPlayer,breaker:detail.breaker
+				,localPlayer:detail.localPlayer,breaker:detail.breaker,settings:detail.settings??undefined
 				,...(watching?{storage:session.pokerOnline.readOnlyStorage(storage),legacyStorage:null}:{})
 			});
 			const hash=await controller.replay(detail.history??[]);
 			if(detail.sequence!==controller.publicState().sequence)throw new Error('Room history ended at the wrong sequence');
 			if(detail.sequence>0&&detail.hash!==hash)throw new Error('Room history does not match its confirmed hash');
+			houseRules=firstHouseRules(detail.root,storage,session.pokerOnline.KEPT_TABLES)?detail.root:null;
 			online=controller;submitting=false;awaitingConfirmation=false;updateOnlineView();
 			if(!watching)await roomWrite(()=>lobbyPort.reportReady(hash));
 		})
@@ -452,6 +484,21 @@ export function activate({module, canvas, session})
 			throw new Error('Room confirmation does not match the private-deal transcript');
 			awaitingConfirmation=false;submitting=false;updateOnlineView();await drive();
 		})
+		// Open table and Challenge show this form in the lobby's House rules dialog, starting from the last choice.
+		,settingsForm:()=>session.pokerOnline.onlineSettingsForm(lastOnlineSettings())
+		// The lobby labels each table with its rules and only seats players at tables this build can play.
+		,describeSettings:settings=>{
+			try{return session.pokerOnline.describeOnlineSettings(settings??undefined);}
+			catch{return 'Table settings this version cannot play';}
+		}
+		,validSettings:settings=>{
+			try{session.pokerOnline.validateOnlineSettings(settings??undefined);return true;}
+			catch(error){return error?.message||'This table uses settings this version cannot play';}
+		}
+		,settingsChosen:settings=>{
+			try{localStorage.setItem(onlineSettingsKey,JSON.stringify(session.pokerOnline.validateOnlineSettings(settings)));}
+			catch{}
+		}
 		,stop:detail=>enqueue(async()=>{
 			if(online)
 			{
@@ -463,7 +510,7 @@ export function activate({module, canvas, session})
 	});
 	const lobbyClosed=()=>{
 		lobbyVisible=false;online=null;onlineView=null;awaitingConfirmation=false;submitting=false;clearOnlineIdentities();
-		watching=false;releaseTable?.();releaseTable=null;
+		watching=false;releaseTable?.();releaseTable=null;houseRules=null;
 	};
 	session.lobby.protocol.addEventListener('closed',lobbyClosed);
 
@@ -487,7 +534,7 @@ export function activate({module, canvas, session})
 
 	return ()=>{
 		if(closed)return;closed=true;resize.disconnect();
-		watching=false;releaseTable?.();releaseTable=null;
+		watching=false;releaseTable?.();releaseTable=null;houseRules=null;
 		session.lobby.protocol.removeEventListener('closed',lobbyClosed);
 		clearInput();
 		canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('pointermove',onMove);

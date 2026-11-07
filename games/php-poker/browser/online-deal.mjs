@@ -6,8 +6,8 @@
  * face enters the transcript only when its owner proves it at a contested showdown.
  */
 
-export const ONLINE_DEAL_VERSION=3;
-export const ONLINE_RULES='five-card-draw-anything-v3';
+export const ONLINE_DEAL_VERSION=4;
+export const ONLINE_RULES='five-card-draw-anything-v4';
 export const ONLINE_ACTION_TYPES=Object.freeze(['shuffle-packet','card-layers','poker-action','draw-choice','reveal-cards']);
 
 const encoder=new TextEncoder;
@@ -38,24 +38,183 @@ export function readOnlyStorage(storage)
 	return Object.freeze({getItem:key=>storage?.getItem(key)??null,setItem(){},removeItem(){}});
 }
 
-/** Exact high-poker evaluator shared by both public reducers. */
-export function evaluateHand(cards)
+/** Wild-card presets in offline order, with the physical cards each makes wild (WildCards.php). */
+const WILD_PRESETS=Object.freeze({
+	joker:[52,53],deuces:[0,13,26,39],'one-eyed-jacks':[35,48],'mustached-kings':[11,24,50]
+	,'deuces-treys':[0,1,13,14,26,27,39,40],kings:[11,24,37,50],custom:[]
+});
+const WILD_NAMES=Object.freeze({joker:'Jokers',deuces:'Deuces','one-eyed-jacks':'One-Eyed Jacks','mustached-kings':'Mustached Kings'
+	,'deuces-treys':'Deuces and Treys',kings:'Kings'});
+const SETTING_KEYS=Object.freeze(['variant','ante','minimum','maximum','finalMinimum','finalMaximum','raiseLimit','playerRaiseLimit','wild','customWild']);
+/** Checkbox names, as the offline wild-card menu shows them (WildCards::OPTIONS). */
+const WILD_OPTION_NAMES=Object.freeze({joker:'Joker',deuces:'Deuces','one-eyed-jacks':'One-Eyed Jacks','mustached-kings':'Mustached Kings'
+	,'deuces-treys':'Deuces and Treys',kings:'Kings',custom:'Custom'});
+/** Names for the numeric settings, used in the house-rules form and in its error messages. */
+const SETTING_NAMES=Object.freeze({ante:'Dealer ante',minimum:'Minimum bet before the draw',maximum:'Maximum bet before the draw'
+	,finalMinimum:'Minimum bet after the draw',finalMaximum:'Maximum bet after the draw',raiseLimit:'Raises per round'
+	,playerRaiseLimit:'Raises per player'});
+const SUIT_NAMES=Object.freeze(['Clubs','Diamonds','Hearts','Spades']);
+
+/** A card's name, as WildCards::cardLabel writes it: "10♣", "Q♥" or "Joker 1". */
+export function cardLabel(card)
 {
-	if(!Array.isArray(cards)||cards.length!==5||new Set(cards).size!==5
-		||!cards.every(card=>Number.isSafeInteger(card)&&card>=0&&card<=51)
-	)throw new TypeError('A poker hand requires five distinct cards');
-	const ranks=cards.map(card=>card%13+2).sort((a,b)=>b-a),suits=cards.map(card=>Math.floor(card/13));
+	return card>=52?`Joker ${card-51}`:['2','3','4','5','6','7','8','9','10','J','Q','K','A'][card%13]+['♣','♦','♥','♠'][Math.floor(card/13)];
+}
+
+/** Table settings when the host changes nothing: the rules every online table used before settings existed. */
+export const DEFAULT_ONLINE_SETTINGS=Object.freeze({variant:'anything',ante:1,minimum:2,maximum:20,finalMinimum:2,finalMaximum:20
+	,raiseLimit:3,playerRaiseLimit:3,wild:Object.freeze([]),customWild:Object.freeze([])});
+
+/**
+ * Canonical online table settings, with the offline Profile's bounds. Online tables are Anything Opens: a Jackpots
+ * opener's cards stay private, so nobody could check the openers. Omitted fields default as Profile does.
+ */
+export function validateOnlineSettings(settings=DEFAULT_ONLINE_SETTINGS)
+{
+	if(!settings||typeof settings!=='object'||Array.isArray(settings))throw new TypeError('Online table settings must be an object');
+	if(Object.keys(settings).some(key=>!SETTING_KEYS.includes(key)))throw new TypeError('Unknown online table setting');
+	if((settings.variant??'anything')!=='anything')throw new RangeError('Online tables use Anything Opens');
+	const integer=(key,low,high,fallback)=>{
+		const value=settings[key]??fallback;
+		if(!Number.isSafeInteger(value)||value<low||value>high)
+		throw new RangeError(`${SETTING_NAMES[key]} must be a whole number from ${low} to ${high}`);
+		return value;
+	};
+	const ante=integer('ante',0,100,1),minimum=integer('minimum',1,100,2),maximum=integer('maximum',minimum,100,20);
+	const finalMinimum=integer('finalMinimum',1,100,minimum),finalMaximum=integer('finalMaximum',finalMinimum,100,maximum);
+	const raiseLimit=integer('raiseLimit',0,10,3),playerRaiseLimit=integer('playerRaiseLimit',0,10,raiseLimit);
+	let presets=settings.wild??[];
+	if(typeof presets==='string')presets=presets==='none'?[]:[presets];
+	if(!Array.isArray(presets)||!presets.every(preset=>preset==='none'||Object.hasOwn(WILD_PRESETS,preset)))
+	throw new RangeError('Invalid wild-card option');
+	if(presets.includes('none')&&presets.length!==1)throw new RangeError('None cannot be combined with wild cards');
+	const wild=Object.keys(WILD_PRESETS).filter(preset=>presets.includes(preset));
+	const custom=settings.customWild??[];
+	if(!Array.isArray(custom)||!custom.every(card=>Number.isSafeInteger(card)&&card>=0&&card<=53)
+		||custom.some((card,index)=>index>0&&card<=custom[index-1])
+	)throw new RangeError('Custom wild cards must be sorted, unique card ids');
+	if(custom.length&&!wild.includes('custom'))throw new RangeError('Custom wild cards require the Custom option');
+	return Object.freeze({variant:'anything',ante,minimum,maximum,finalMinimum,finalMaximum,raiseLimit,playerRaiseLimit
+		,wild:Object.freeze(wild),customWild:Object.freeze([...custom])});
+}
+
+/** @return list<int> Physical card ids that are wild under these settings. */
+export function onlineWildCards(settings)
+{
+	settings=validateOnlineSettings(settings);
+	const cards=new Set(settings.wild.includes('custom')?settings.customWild:[]);
+	for(const preset of settings.wild)for(const card of WILD_PRESETS[preset])cards.add(card);
+	return [...cards].sort((a,b)=>a-b);
+}
+
+/** @return list<int> The table's deck: 52 cards, plus each joker that is wild. */
+export function onlineDeck(settings)
+{
+	const wild=onlineWildCards(settings);
+	return [...Array.from({length:52},(_,card)=>card),...[52,53].filter(card=>wild.includes(card))];
+}
+
+/** One line for lobby rows and challenge notices, e.g. "Anything opens · Ante 1 · Bets 2–20 · 3 raises · Deuces wild". */
+export function describeOnlineSettings(settings)
+{
+	settings=validateOnlineSettings(settings);
+	const parts=['Anything opens',settings.ante?`Ante ${settings.ante}`:'No ante'];
+	const range=(low,high)=>low===high?`${low}`:`${low}–${high}`;
+	const before=range(settings.minimum,settings.maximum),after=range(settings.finalMinimum,settings.finalMaximum);
+	parts.push(before===after?`Bets ${before}`:`Bets ${before}, ${after} after the draw`);
+	parts.push(settings.raiseLimit===0?'No raises'
+		:`${settings.raiseLimit} raise${settings.raiseLimit===1?'':'s'}`
+			+(settings.playerRaiseLimit<settings.raiseLimit?`, ${settings.playerRaiseLimit} each`:''));
+	const names=settings.wild.filter(preset=>preset!=='custom').map(preset=>WILD_NAMES[preset]);
+	if(settings.wild.includes('custom'))
+	{
+		const plurals=['Twos','Threes','Fours','Fives','Sixes','Sevens','Eights','Nines','Tens','Jacks','Queens','Kings','Aces'];
+		const byRank=new Map,singles=[];
+		for(const card of settings.customWild)
+		{
+			if(card>=52)singles.push(card);
+			else byRank.set(card%13,[...(byRank.get(card%13)??[]),card]);
+		}
+		for(const [rank,cards] of [...byRank].sort(([a],[b])=>a-b))
+		{
+			if(cards.length===4)names.push(plurals[rank]);
+			else singles.push(...cards);
+		}
+		singles.sort((a,b)=>a-b);
+		if(singles.length&&singles.length<=4)names.push(...singles.map(cardLabel));
+		else if(singles.length)names.push(`${singles.length} chosen cards`);
+	}
+	if(names.length)parts.push((names.length===1?names[0]:names.slice(0,-1).join(', ')+' and '+names.at(-1))+' wild');
+	return parts.join(' · ');
+}
+
+/**
+ * The House rules form the room lobby shows when this player opens a table or challenges someone, in the offline
+ * setup's words and bounds. Jacks or better stays in the list, disabled, so the host sees why it is missing.
+ * @param settings Starting values, usually the host's last online table; invalid values fall back to the defaults.
+ */
+export function onlineSettingsForm(settings=DEFAULT_ONLINE_SETTINGS)
+{
+	let values;
+	try{values=validateOnlineSettings(settings);}
+	catch{values=DEFAULT_ONLINE_SETTINGS;}
+	const copy=value=>({...value,wild:[...value.wild],customWild:[...value.customWild]});
+	const number=(name,low,high)=>({name,label:SETTING_NAMES[name].replace(/ (before|after) the draw$/,''),type:'number',min:low,max:high
+		,default:DEFAULT_ONLINE_SETTINGS[name]});
+	return {
+		title:'House rules'
+		,intro:'Both players see these rules before the first deal. Your choice is kept for your next table.'
+		,values:copy(values)
+		,defaults:copy(DEFAULT_ONLINE_SETTINGS)
+		,groups:[
+			{
+				legend:'Game'
+				,fields:[
+					{name:'variant',label:'Opening',type:'select',default:'anything',options:[
+						{value:'anything',label:'Anything opens'}
+						,{value:'jackpots',label:'Jacks or better (offline only)',disabled:true}
+					]}
+					,{...number('ante',0,100),label:SETTING_NAMES.ante}
+				]
+				,help:'Online tables use Anything opens. A Jacks or better opener’s cards stay private, so nobody could check them.'
+			}
+			,{legend:'Before the draw',fields:[number('minimum',1,100),number('maximum',1,100)]}
+			,{legend:'After the draw',fields:[number('finalMinimum',1,100),number('finalMaximum',1,100)]}
+			,{legend:'Raises',fields:[
+				{...number('raiseLimit',0,10),label:'Per round'},{...number('playerRaiseLimit',0,10),label:'Per player'}
+			]}
+			,{
+				legend:'Wild cards'
+				,fields:[
+					{name:'wild',label:'Make wild',type:'checkboxes'
+						,options:Object.keys(WILD_PRESETS).map(id=>({value:id,label:WILD_OPTION_NAMES[id]}))}
+					,{name:'customWild',label:'Custom wild cards',type:'checkboxes',columns:4.5,visibleWhen:{field:'wild',includes:'custom'}
+						,options:Array.from({length:54},(_,card)=>({value:card,label:cardLabel(card),group:SUIT_NAMES[Math.floor(card/13)]??'Jokers'}))}
+				]
+			}
+		]
+	};
+}
+
+const HAND_LABELS=Object.freeze(['High card','One pair','Two pair','Three of a kind','Straight','Flush','Full house','Four of a kind'
+	,'Straight flush','Five of a kind']);
+
+/** One complete five-rank interpretation, exactly as Hand::evaluateRanks scores it. */
+function evaluateRanks(ranks,flushPossible,wild)
+{
+	ranks=[...ranks].sort((a,b)=>b-a);
 	const counts=new Map;for(const rank of ranks)counts.set(rank,(counts.get(rank)??0)+1);
 	const groups=[...counts.keys()].sort((a,b)=>counts.get(b)-counts.get(a)||b-a);
-	const flush=new Set(suits).size===1;
+	const flush=flushPossible&&counts.size===5;
 	let straight=0;
 	if(counts.size===5)
 	{
 		if(ranks[0]-ranks[4]===4)straight=ranks[0];
 		else if(stable(ranks)===stable([14,5,4,3,2]))straight=5;
 	}
-	const first=counts.get(groups[0]),second=counts.get(groups[1]);let category,kickers;
-	if(straight&&flush){category=8;kickers=[straight];}
+	const first=counts.get(groups[0]),second=groups.length>1?counts.get(groups[1]):0;let category,kickers;
+	if(first===5&&wild>0){category=9;kickers=[groups[0]];}
+	else if(straight&&flush){category=8;kickers=[straight];}
 	else if(first===4){category=7;kickers=groups;}
 	else if(first===3&&second===2){category=6;kickers=groups;}
 	else if(flush){category=5;kickers=ranks;}
@@ -65,8 +224,39 @@ export function evaluateHand(cards)
 	else if(first===2){category=1;kickers=groups;}
 	else{category=0;kickers=ranks;}
 	let score=category;for(const rank of [...kickers,0,0,0,0,0].slice(0,5))score=score*15+rank;
-	const labels=['High card','One pair','Two pair','Three of a kind','Straight','Flush','Full house','Four of a kind','Straight flush'];
-	return {category,ranks:kickers,score,name:category===8&&straight===14?'Royal flush':labels[category]};
+	return {category,ranks:kickers,score,name:category===8&&straight===14?'Royal flush':HAND_LABELS[category]};
+}
+
+/**
+ * Exact high-poker evaluator shared by both public reducers, a port of Hand::evaluate. Wild cards (52 and 53 are
+ * the jokers) may stand for any rank and suit; every assignment of ranks to them is scored and the best kept.
+ */
+export function evaluateHand(cards,wildCards=[])
+{
+	const wild=new Set(wildCards);
+	if(!Array.isArray(cards)||cards.length!==5||new Set(cards).size!==5
+		||!cards.every(card=>Number.isSafeInteger(card)&&card>=0&&card<=53&&(card<52||wild.has(card)))
+	)throw new TypeError('A poker hand requires five distinct cards');
+	const ranks=[],suits=[];let wilds=0;
+	for(const card of cards)
+	{
+		if(wild.has(card)){wilds++;continue;}
+		ranks.push(card%13+2);suits.push(Math.floor(card/13));
+	}
+	const flushPossible=new Set(suits).size<=1;
+	let best=null;
+	// Combinations with repetition rather than every substitution, as in PHP.
+	const allocate=(remaining,minimum,assigned)=>{
+		if(remaining===0)
+		{
+			const candidate=evaluateRanks([...ranks,...assigned],flushPossible,wilds);
+			if(!best||candidate.score>best.score)best=candidate;
+			return;
+		}
+		for(let rank=minimum;rank<=14;rank++)allocate(remaining-1,rank,[...assigned,rank]);
+	};
+	allocate(wilds,2,[]);
+	return best;
 }
 
 export class OnlineDeal
@@ -77,7 +267,7 @@ export class OnlineDeal
 	 * and restarts; game.mjs lets only one tab play a table.
 	 * @param legacyStorage Where earlier builds kept the record; it is moved on first load.
 	 */
-	constructor({api,root,sessionId,players,localPlayer,breaker,rounds=64,storage=globalThis.localStorage
+	constructor({api,root,sessionId,players,localPlayer,breaker,settings=DEFAULT_ONLINE_SETTINGS,rounds=64,storage=globalThis.localStorage
 		,legacyStorage=globalThis.sessionStorage,now=()=>Date.now()})
 	{
 		if(!api||typeof api.prepareCorpus!=='function')throw new TypeError('Mental-poker API is unavailable');
@@ -87,8 +277,11 @@ export class OnlineDeal
 		this.api=api;this.root=root;this.sessionId=sessionId;this.players=[...players];this.localPlayer=localPlayer;
 		this.breaker=breaker;this.rounds=rounds;this.storage=storage;this.legacyStorage=legacyStorage;this.now=now;
 		this.keyName=storageKey(root,localPlayer);
-		this.context=`php-poker:${ONLINE_DEAL_VERSION}:${ONLINE_RULES}:${root}:${sessionId}`;
-		this.corpus=api.prepareCorpus(Array.from({length:52},(_,id)=>id),{context:`${this.context}:corpus`});
+		// The table's settings are part of every proof context, the corpus and the hashed state, so two browsers that
+		// disagree about them fail at the initial ready handshake instead of mid-hand.
+		this.settings=validateOnlineSettings(settings);this.wild=onlineWildCards(this.settings);this.deckIds=onlineDeck(this.settings);
+		this.context=`php-poker:${ONLINE_DEAL_VERSION}:${ONLINE_RULES}:${root}:${sessionId}:${stable(this.settings)}`;
+		this.corpus=api.prepareCorpus(this.deckIds,{context:`${this.context}:corpus`});
 		this.shuffleOrder=rotate(this.players,this.players.indexOf(breaker));
 		this.saved=this.loadSaved();this.assembler=null;this.privateCards=[];this.intent=null;this.localError='';
 		this.pruneTables();
@@ -97,7 +290,7 @@ export class OnlineDeal
 			,handNumber:0,dealer:this.players.indexOf(breaker),stage:'ready',shuffleIndex:0,deck:[],layers:[],pending:null
 			,allocations:[],allocationIndex:0,nextDeckIndex:1,hands:this.players.map(()=>[]),discards:[],drawAllocations:[]
 			,drawRecipient:null,bankrolls:this.players.map((player,id)=>({id,player,stack:500,folded:false,bet:0,totalBet:0,drawCount:null,lastAction:''}))
-			,pot:0,highest:0,raises:0,opener:null,turnQueue:[],awards:[],reveal:false,revealed:this.players.map(()=>null)
+			,pot:0,highest:0,raises:0,raiseCounts:this.players.map(()=>0),opener:null,turnQueue:[],awards:[],reveal:false,revealed:this.players.map(()=>null)
 			,message:'',history:[],outcome:null
 		};
 		this.beginHand(false);
@@ -185,12 +378,12 @@ export class OnlineDeal
 	storedPrivateId(allocation)
 	{
 		const hand=this.state.allocations[allocation]?.hand,value=this.saved.cards?.[hand]?.[allocation];
-		return Number.isSafeInteger(value)&&value>=0&&value<52?value:null;
+		return Number.isSafeInteger(value)&&this.deckIds.includes(value)?value:null;
 	}
 	rememberPrivateId(allocation,id)
 	{
 		const hand=this.state.allocations[allocation]?.hand,existing=this.storedPrivateId(allocation);
-		if(!Number.isSafeInteger(hand)||!Number.isSafeInteger(id)||id<0||id>=52)throw new Error('Invalid private card mapping');
+		if(!Number.isSafeInteger(hand)||!Number.isSafeInteger(id)||!this.deckIds.includes(id))throw new Error('Invalid private card mapping');
 		if(existing!==null&&existing!==id)throw new Error('Private card changed during replay');
 		if(existing===id)return;
 		this.saved={...this.saved,cards:{...(this.saved.cards??{}),[hand]:{...(this.saved.cards?.[hand]??{}),[allocation]:id}}};
@@ -205,7 +398,7 @@ export class OnlineDeal
 			if(stored===null)throw new Error('This browser lost its private card mapping');
 			return stored;
 		}
-		const id=this.api.readPrivateCard(record.value,key,this.corpus).id;
+		const id=this.api.readPrivateCard(record.value,key,this.corpus).definition;
 		if(stored!==null&&stored!==id)throw new Error('Private card changed during replay');
 		this.rememberPrivateId(allocation,id);return id;
 	}
@@ -322,7 +515,7 @@ export class OnlineDeal
 		if(!layer)throw new Error('Local encryption layer is unavailable');
 		const items=this.handAllocations(this.localPlayer).map(allocation=>{
 			const card=this.privateEntry(allocation)?.id;if(!Number.isSafeInteger(card))throw new Error('A private showdown card is unavailable');
-			return {allocation,...this.api.openCard(this.state.allocations[allocation].value,card,this.keyForLocal(),layer,this.corpus,
+			return {allocation,...this.api.openCard(this.state.allocations[allocation].value,this.corpus.definitions.indexOf(card),this.keyForLocal(),layer,this.corpus,
 				{context:this.openContext(allocation,this.localPlayer)})};
 		});
 		return {type:'reveal-cards',items};
@@ -523,7 +716,7 @@ export class OnlineDeal
 		for(const item of action.items)
 		if(!this.api.verifyCardOpening(this.state.allocations[item.allocation].value,item,layer,this.corpus,
 			{context:this.openContext(item.allocation,actor)}))throw new Error('Showdown card opening did not verify');
-		const cards=action.items.map(item=>item.card);evaluateHand(cards);this.state.revealed[this.seat(actor)]=cards;
+		const cards=action.items.map(item=>this.corpus.definitions[item.card]);evaluateHand(cards,this.wild);this.state.revealed[this.seat(actor)]=cards;
 		this.state.turnQueue.shift();
 		if(!this.state.turnQueue.length)this.settle(true);else this.state.message='Opening the remaining hand.';
 	}
@@ -543,7 +736,7 @@ export class OnlineDeal
 			throw new Error('Bet is outside the legal range');
 			const player=this.bankroll(actor),raising=this.state.highest>0;
 			this.pay(actor,action.amount-player.bet);player.bet=action.amount;this.state.highest=action.amount;
-			if(raising)this.state.raises++;
+			if(raising){this.state.raises++;this.state.raiseCounts[this.seat(actor)]++;}
 			if(this.state.stage==='betting'&&this.state.opener===null)this.state.opener=actor;
 			this.state.turnQueue=this.ordered(actor,false)
 				.filter(player=>!this.bankroll(player).folded&&this.bankroll(player).stack>0);
@@ -580,11 +773,11 @@ export class OnlineDeal
 		this.state.handNumber++;this.state.stage='shuffle';this.state.shuffleIndex=0;this.state.deck=this.api.corpusDeck(this.corpus);
 		this.state.layers=[];this.state.pending=null;this.state.allocations=[];this.state.allocationIndex=0;this.state.nextDeckIndex=1;
 		this.state.hands=this.players.map(()=>[]);this.state.discards=[];this.state.drawAllocations=[];this.state.drawRecipient=null;
-		this.state.highest=0;this.state.raises=0;this.state.opener=null;this.state.turnQueue=[];this.state.awards=[];
+		this.state.highest=0;this.state.raises=0;this.state.raiseCounts=this.players.map(()=>0);this.state.opener=null;this.state.turnQueue=[];this.state.awards=[];
 		this.state.reveal=false;this.state.revealed=this.players.map(()=>null);this.state.outcome=null;this.privateCards=[];this.intent=null;
 		for(const player of this.state.bankrolls)
 		{player.folded=false;player.bet=0;player.totalBet=0;player.drawCount=null;player.lastAction='';}
-		const dealer=this.players[this.state.dealer],ante=Math.min(1,this.bankroll(dealer).stack);if(ante)this.pay(dealer,ante);
+		const dealer=this.players[this.state.dealer],ante=Math.min(this.settings.ante,this.bankroll(dealer).stack);if(ante)this.pay(dealer,ante);
 		this.state.message='Jointly shuffling a private deck.';this.history(`Hand ${this.state.handNumber}: ${this.name(dealer)} deals.`);
 		if(this.saved.plan?.hand<this.state.handNumber)delete this.saved.plan;
 		this.saveSaved();
@@ -607,7 +800,7 @@ export class OnlineDeal
 
 	beginFinalBetting()
 	{
-		this.state.stage='final-betting';this.state.highest=0;this.state.raises=0;
+		this.state.stage='final-betting';this.state.highest=0;this.state.raises=0;this.state.raiseCounts=this.players.map(()=>0);
 		for(const player of this.state.bankrolls)player.bet=0;
 		const active=this.activePlayers(),funded=active.filter(player=>this.bankroll(player).stack>0),opener=this.state.opener;
 		if(funded.length<2){this.beginReveal();return;}
@@ -630,7 +823,7 @@ export class OnlineDeal
 			winners=[];
 			for(const player of active)
 			{
-				const score=evaluateHand(this.state.revealed[this.seat(player)]).score;
+				const score=evaluateHand(this.state.revealed[this.seat(player)],this.wild).score;
 				if(score>best){best=score;winners=[player];}else if(score===best)winners.push(player);
 			}
 		}
@@ -638,12 +831,12 @@ export class OnlineDeal
 		const each=Math.floor(this.state.pot/winners.length),odd=this.state.pot%winners.length;this.state.awards=[];
 		for(const [index,player] of orderedWinners.entries())
 		{
-			const amount=each+(index<odd?1:0),handName=reveal?evaluateHand(this.state.revealed[this.seat(player)]).name:null;
+			const amount=each+(index<odd?1:0),handName=reveal?evaluateHand(this.state.revealed[this.seat(player)],this.wild).name:null;
 			this.bankroll(player).stack+=amount;this.state.awards.push({player,amount,handName});
 		}
 		const names=orderedWinners.map(player=>this.name(player));
 		this.state.message=names.join(' and ')+(winners.length>1?' split ':' wins ')+this.state.pot+' chips'
-			+(reveal?' with '+evaluateHand(this.state.revealed[this.seat(orderedWinners[0])]).name.toLowerCase():' uncontested')+'.';
+			+(reveal?' with '+evaluateHand(this.state.revealed[this.seat(orderedWinners[0])],this.wild).name.toLowerCase():' uncontested')+'.';
 		this.state.pot=0;this.state.stage='showdown';this.state.turnQueue=[];this.state.reveal=reveal;this.history(this.state.message);
 		this.retireLocalKey(this.state.handNumber);
 		const solvent=this.players.filter(player=>this.bankroll(player).stack>0);
@@ -661,10 +854,13 @@ export class OnlineDeal
 		if(this.state.stage==='draw'&&!this.state.drawAllocations.length)return {...clone(EMPTY_LEGAL),draw:true,maximumDiscards:5};
 		if(!['betting','final-betting'].includes(this.state.stage))return clone(EMPTY_LEGAL);
 		const seat=this.bankroll(player),due=this.state.highest-seat.bet,opening=this.state.stage==='betting'&&this.state.opener===null;
-		const minimum=this.state.highest+2,maximum=Math.min(seat.bet+seat.stack,this.state.highest+20);
-		const canRaise=seat.stack>due&&maximum>=minimum&&(this.state.highest===0||this.state.raises<3);
+		const final=this.state.stage==='final-betting';
+		const increment=final?this.settings.finalMinimum:this.settings.minimum,largest=final?this.settings.finalMaximum:this.settings.maximum;
+		const minimum=this.state.highest+increment,maximum=Math.min(seat.bet+seat.stack,this.state.highest+largest);
+		const canRaise=seat.stack>due&&maximum>=minimum&&(this.state.highest===0||(this.state.raises<this.settings.raiseLimit
+			&&this.state.raiseCounts[this.seat(player)]<this.settings.playerRaiseLimit));
 		return {fold:true,pass:opening&&due===0,check:!opening&&due===0,call:due>0&&seat.stack>0
-			,callAmount:Math.min(due,seat.stack),bet:canRaise,minBet:minimum,maxBet:maximum
+			,callAmount:Math.min(due,seat.stack),bet:canRaise,minBet:minimum,maxBet:maximum,betIncrement:increment
 			,betLabel:this.state.highest>0?'Raise to':opening?'Open for':'Bet',openingRequired:false};
 	}
 
@@ -720,7 +916,7 @@ export class OnlineDeal
 			const visible=cards.length===5&&cards.every(Number.isSafeInteger);
 			return {id:index,name:player===this.localPlayer?'You':player,stack:source.stack,debt:0,folded:source.folded,bet:source.bet
 				,totalBet:source.totalBet,drawCount:source.drawCount,lastAction:source.lastAction,creditUsed:false
-				,portrait:index===0?'you':'ada',isHuman:index===0,cards,handName:visible?evaluateHand(cards).name:null,net:source.stack-500};
+				,portrait:index===0?'you':'ada',isHuman:index===0,cards,handName:visible?evaluateHand(cards,this.wild).name:null,net:source.stack-500};
 		});
 		const awards=this.state.awards.map(award=>({seat:viewPlayers.indexOf(award.player),amount:award.amount,handName:award.handName}));
 		return {
@@ -728,7 +924,7 @@ export class OnlineDeal
 			,revision:this.state.sequence,players,pot:this.state.pot,highest:this.state.highest,raises:this.state.raises
 			,opener:this.state.opener===null?null:viewPlayers.indexOf(this.state.opener),awards,reveal:this.state.reveal
 			,message:this.state.message,history:[...this.state.history],mode:'online'
-			,profile:{version:ONLINE_RULES,variant:'anything',ante:1,minimum:2,maximum:20,raiseLimit:3}
+			,profile:{version:ONLINE_RULES,...clone(this.settings)}
 			,legalActions:ready?this.legalActionsFor(this.localPlayer):clone(EMPTY_LEGAL)
 			,stockCount:Math.max(0,this.state.deck.length-this.state.nextDeckIndex),discardCount:this.state.discards.length
 			,screen:'table',canContinue:false,generation:ready?this.state.handNumber:Math.max(0,this.state.handNumber-1),error:this.localError,pace:'normal'
@@ -745,7 +941,9 @@ export class OnlineDeal
 /** Install the protocol constructor after the mental-poker primitive and before the browser bridge. */
 export function activate({session})
 {
-	const api=Object.freeze({OnlineDeal,ONLINE_ACTION_TYPES,ONLINE_DEAL_VERSION,ONLINE_RULES,KEPT_TABLES,evaluateHand,readOnlyStorage});
+	const api=Object.freeze({OnlineDeal,ONLINE_ACTION_TYPES,ONLINE_DEAL_VERSION,ONLINE_RULES,KEPT_TABLES,DEFAULT_ONLINE_SETTINGS
+		,cardLabel,describeOnlineSettings,evaluateHand,onlineDeck,onlineSettingsForm,onlineWildCards,readOnlyStorage
+		,validateOnlineSettings});
 	session.pokerOnline=api;
 	return()=>{if(session.pokerOnline===api)delete session.pokerOnline;};
 }

@@ -4,9 +4,23 @@ import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {OnlineDeal,ONLINE_ACTION_TYPES,KEPT_TABLES,evaluateHand,readOnlyStorage} from '../games/php-poker/browser/online-deal.mjs';
 import {
-	acquireTableLock,decorateOnlineView,freezeOnlineDispute,matrixPlayerName,pendingPokerView,pokerCommandBatch,sheetCell
-	,tableLockName,tableMenuShortcut
+	acquireTableLock,decorateOnlineView,firstHouseRules,freezeOnlineDispute,houseRulesSeenKey,matrixPlayerName,pendingPokerView
+	,pokerCommandBatch,sheetCell,tableLockName,tableMenuShortcut
 } from '../games/php-poker/browser/game.mjs';
+
+test('house rules open once per table in this browser and the list keeps only recent tables',()=>{
+	const values=new Map,storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};
+	assert.equal(firstHouseRules('$a',storage,3),true,'a new table shows its rules');
+	assert.equal(firstHouseRules('$a',storage,3),false,'a reload or second tab does not show them again');
+	for(const root of ['$b','$c','$d'])assert.equal(firstHouseRules(root,storage,3),true);
+	assert.deepEqual(JSON.parse(values.get(houseRulesSeenKey)),['$b','$c','$d']);
+	assert.equal(firstHouseRules('$a',storage,3),true,'a forgotten table shows its rules again');
+	values.set(houseRulesSeenKey,'{corrupt');
+	assert.equal(firstHouseRules('$e',storage,3),true,'corrupt storage shows the rules');
+	const blocked={getItem(){throw new Error('denied');},setItem(){throw new Error('denied');}};
+	assert.equal(firstHouseRules('$f',blocked),true,'blocked storage shows the rules rather than hiding them');
+	assert.equal(firstHouseRules('$g',null),true);
+});
 
 test('table-menu shortcuts follow the physical key, including macOS Option combinations',()=>{
 	assert.equal(tableMenuShortcut({altKey:true,code:'KeyG',key:'g'}),'alt+g');

@@ -179,7 +179,7 @@ final class Painter
 			'table'=>'Table','opening'=>'Opening','wild'=>'Wild cards','ante'=>'Dealer ante',
 			'before'=>'Before draw','after'=>'After draw','raises'=>'Raises / round','playerRaises'=>'Raises / player'
 		];
-		$this->dialog($geometry['box'],'CURRENT GAME SETTINGS');
+		$this->dialog($geometry['box'],(string)($this->state['gameSettingsTitle']??'CURRENT GAME SETTINGS'));
 		foreach($geometry['rows'] as $index=>$rect)
 		{
 			[$x,$y,$w,$h]=$this->layout->rect(...$rect);

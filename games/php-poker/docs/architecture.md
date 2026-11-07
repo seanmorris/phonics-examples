@@ -34,8 +34,16 @@ being discarded, not their faces. Replacement cards come from the next positions
 same proved layer-removal path as the opening deal. At a contested showdown, each remaining player publishes five
 Chaum-Pedersen card-opening proofs; both reducers verify the openings, evaluate the hands and award the pot from the
 same transcript. A fold settles without opening either hand. The dealer can then advance the button and begin a new
-joint shuffle with fresh per-hand keys. Online play deliberately uses **Anything Opens** and a two-player table-stakes
-bankroll; single-player loans and adaptation remain offline rules.
+joint shuffle with fresh per-hand keys. Online play is heads-up with a table-stakes bankroll, always **Anything
+Opens**: a Jackpots opener's cards stay private, so nobody could check the openers. The host chooses every other offline
+setting when opening a table or a challenge: ante, bet ranges before and after the draw, the total and per-player
+raise caps, and wild cards, jokers included. The engine lobby asks for them in its House rules dialog, from the form
+`onlineSettingsForm()` describes, and remembers the host's last choice in local storage. The settings travel in the
+table offer, so the lobby labels the table with them and a joiner sees them before accepting; a build that cannot play
+them lists the table but cannot join it. They are bound into the proof contexts, the card corpus and the hashed state,
+so browsers that disagree fail at the first handshake. When a browser first seats or watches a table, Poker > Game
+Settings opens by itself, titled HOUSE RULES. The browser evaluator ports `Hand::evaluate`, wild cards included, and
+tests compare it with PHP. Single-player loans and adaptation remain offline rules.
 
 Reload replays confirmed room actions and resumes a partially published proof from the saved per-hand local plan.
 Incomplete durable batches are replayed after the last confirmed boundary. Shuffle packets settle once per complete

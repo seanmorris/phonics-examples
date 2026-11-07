@@ -86,7 +86,7 @@
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
     "NOTICE": "sha256-VWi1T9DrG2e6BnAfSk5u6MfAz99MRtxtOWjOeWCQSzE=",
-    "application.php": "sha256-lvhU0GPHC9H/Ce9ppTiXnE0rmEQaacb+rdk/RcC+Nso=",
+    "application.php": "sha256-XhixGGdVEvRD4Ahnbtmer4tSPEIvaQRi/p+wgjPh0wU=",
     "art/cards/back-blue.svg": "sha256-/kOyO4O+W/JzEE2pkzMCU9PL8dYHYNmKEM9/sBilYiU=",
     "art/cards/back-red.svg": "sha256-HX4CryU8ztM3thI0RY+9aMZk0UCsMVWvJJIf6so5czY=",
     "art/cards/deck.svg": "sha256-qWFttCwcqhboDxcn6WYmjicdRYw9WN/u5r1zYsvGBRc=",
@@ -114,10 +114,10 @@
     "assets/generated/ui-font.json": "sha256-a46sDIr89b5PFsyB4htau8Rsam/NBV2nj5sDKcS7I/U=",
     "assets/generated/ui-font.rgba": "sha256-BXnfwo+Tm34kksgvkP6i/Yof2mJS5EtVzQzIcF4KuUM=",
     "autoload.php": "sha256-oR7TtuNrvbEy7h35CVKXA4Uew2UtBMR9XVlDQa1ZbBk=",
-    "browser/game.mjs": "sha256-LS3BLVCrvq/iU0yd/vdnggVF3S4sD4juD33RuNjtY8o=",
+    "browser/game.mjs": "sha256-iTAs/71aLCByPJYSxlC9QPphEp/X1rNCO6AnThtd8RE=",
     "browser/mental-poker.mjs": "sha256-NyUXE3/CMvDEmVfKBQlUqdonsi6RiKISntns4HZpTLY=",
     "browser/mental-poker.mjs.LICENSE.txt": "sha256-H3gEgPb0U8/TQnVf3+xDNxTzrA5ijeB/oqmGCzBaAmU=",
-    "browser/online-deal.mjs": "sha256-kC4q3S6hFUG9aMcw/QR+eg3hdgAu2yvgzi4JoohffdI=",
+    "browser/online-deal.mjs": "sha256-ifoLcczIFMvOeUNfyS4DfKhOscOWaFvRUY7cSsKWgfw=",
     "browser/persistence.mjs": "sha256-ouPvGick+2DK+VX/d3SP5lOiMRivxYGZ8k2uTZvUySA=",
     "shaders/ui.frag": "sha256-Tc3yUPRiouakSGUmhLexNnR6Cdr6OLE56NiLTwGcppA=",
     "shaders/ui.vert": "sha256-v6qumyh53sxStBcAUf2YZPFyn122NilzAU9NrSUxdpQ=",
@@ -136,8 +136,8 @@
     "src/Ui/Chips.php": "sha256-qD7RyIoRjgORznQes/KLAwKdsgcEz6tZBNOhSljW35E=",
     "src/Ui/Layout.php": "sha256-NJNDjrV5zfjASQOPwL9tcACSg6/Jo/T1D8ijzs4Gkh8=",
     "src/Ui/Motion.php": "sha256-Qf+Y94XAkdkD6KzlLNBMh0jVHdE3sCR8pWsilraI+u4=",
-    "src/Ui/Painter.php": "sha256-L1n+c8TNbn7j0emxPVbmKUYb7cUORQ3sV4XW4PM1MRA=",
-    "src/Ui/Presenter.php": "sha256-jDHxyFdXL1jRVKyqJ0d1RVW/JpgJCh8igvQgALBQgs8=",
+    "src/Ui/Painter.php": "sha256-S4FJmI29BF/hWind7Rap1n2E/1o5dcEG065I5wAPSiY=",
+    "src/Ui/Presenter.php": "sha256-Ckhejw09SZ3zfuEhz6LelCEKTxM2FhwgTOYS60Nbf20=",
     "src/Ui/RoundHistory.php": "sha256-jx7NY8otLquaWLWt95AGepSGvEtn9nHZsjGdrGXZ6uQ=",
     "src/WildCards.php": "sha256-xr3nuIPic3i+qXdKbOwdma7zRMSFMKLFpOJXwmqFkr8="
   }

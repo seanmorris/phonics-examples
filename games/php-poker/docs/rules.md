@@ -20,7 +20,7 @@ The documentary baseline is the v2.40 `DP.WHF` help from [the archived DOS distr
 | Exhausted stock recycles earlier discards; the current player's new discards are withheld until replacements finish | Explicit local adaptation, tested at eight seats drawing five each |
 | A qualifying opener may discard part of the qualifier; the original hand snapshot remains valid for opening | Explicit local interpretation pending executable parity evidence |
 | Ace-low straight is five-high; suits do not break ties; odd chips go clockwise from dealer's left | Explicit high-poker/tie conventions |
-| Online play is heads-up, Anything Opens and table stakes; concealed draw choices identify encrypted allocations, and only live showdown cards are opened | Explicit decentralized-play profile |
+| Online play is heads-up, Anything Opens and table stakes, with the host's ante, limits, raise caps and wild cards; concealed draw choices identify encrypted allocations, and only live showdown cards are opened | Explicit decentralized-play profile |
 
 The evaluator exhaustively checks all 2,598,960 five-card combinations against the standard category counts. Money conservation includes loan liabilities: total stacks plus pot minus total debt equals the initial chips. The local loan profile has no side pots; an online table-stakes profile requires its separate all-in/side-pot implementation and reviewed settlement policy.
 

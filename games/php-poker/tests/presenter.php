@@ -269,6 +269,42 @@ $test('guidance distinguishes opening bets, another seat drawing, and the human 
 	$expect($presenter->state()['hint'] === $view['message'], 'an unconfirmed turn explains the settlement wait instead of inviting another bet');
 });
 
+$test('a new online match opens its house rules once, over the table', static function(callable $expect) use ($fixture, $root): void {
+	$view = $fixture('opening-8');
+	$view['mode'] = 'online';
+	$view['profile'] = ['variant'=>'anything','ante'=>3,'minimum'=>2,'maximum'=>10,'raiseLimit'=>2,'wild'=>['deuces'],'customWild'=>[]];
+	$presenter = new Presenter($root);
+	$presenter->update($view);
+	$expect($presenter->state()['infoDialog'] === null, 'a view without a new table opens nothing');
+	$view['houseRules'] = '$table-one';
+	$presenter->update($view);
+	$state = $presenter->state();
+	$expect($state['infoDialog'] === 'game-settings' && $state['gameSettingsTitle'] === 'HOUSE RULES', 'the first view of a new table opens HOUSE RULES');
+	$expect($state['gameSettings']['opening'] === 'Anything opens' && $state['gameSettings']['ante'] === '3 chips'
+		&& $state['gameSettings']['wild'] === 'Deuces wild', 'the house rules show the table profile');
+	$expect(count($presenter->paint(1280, 720)->instances()) > 100, 'the house rules paint over the live table');
+	$presenter->input([['key'=>'enter']], null, 0);
+	$expect($presenter->state()['infoDialog'] === null, 'Enter closes the house rules');
+	$view['revision'] = ($view['revision'] ?? 0) + 1;
+	$presenter->update($view);
+	$expect($presenter->state()['infoDialog'] === null, 'later views of the same table do not reopen them');
+	$presenter->input([['key'=>'alt+p']], null, 0);
+	$presenter->input([['key'=>'g']], null, 0);
+	$expect($presenter->state()['infoDialog'] === 'game-settings' && $presenter->state()['gameSettingsTitle'] === 'HOUSE RULES',
+		'Poker > Game Settings shows the same house rules online');
+	$presenter->input([['key'=>'escape']], null, 0);
+	$view['houseRules'] = '$table-two';
+	$presenter->update($view);
+	$expect($presenter->state()['infoDialog'] === 'game-settings', 'the next table opens its own house rules');
+	$offline = new Presenter($root);
+	$offlineView = $fixture('opening-8');
+	$offlineView['houseRules'] = '$ignored-offline-marker';
+	$offlineView['screen'] = 'menu';
+	$offline->update($offlineView);
+	$expect($offline->state()['infoDialog'] === null, 'a marker on a non-table view opens nothing');
+	$expect($offline->state()['gameSettingsTitle'] === 'CURRENT GAME SETTINGS', 'offline tables keep the settings title');
+});
+
 $test('online waits drum three reserved dots without changing the authorized message', static function(callable $expect) use ($fixture, $root): void {
 	$presenter = new Presenter($root);
 	$view = $fixture('opening-8');

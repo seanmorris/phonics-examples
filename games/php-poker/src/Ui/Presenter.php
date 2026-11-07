@@ -85,6 +85,8 @@ final class Presenter
 	private ?string $topMenu = null;
 	private ?string $infoDialog = null;
 	private ?string $confirmDialog = null;
+	/** Online table whose house rules already opened by themselves; the browser names a table only on first sight. */
+	private ?string $houseRulesShown = null;
 	/** New Game leaves an online room or paused local table before opening setup. */
 	private bool $setupAfterMenu = false;
 	/** Exact dealt/drawing tables, cached by the active wild-card rules. */
@@ -165,6 +167,15 @@ final class Presenter
 		elseif($this->setupAfterMenu) { $this->local = 'setup'; $this->setupAfterMenu = false; }
 		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','limits','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
 		if(($view['screen'] ?? '') !== 'table') { $this->topMenu = null; $this->infoDialog = null; $this->confirmDialog=null; $this->historyOpen=false; }
+		$houseRules = is_string($view['houseRules'] ?? null) && $view['houseRules'] !== '' ? $view['houseRules'] : null;
+		if($houseRules !== null && $houseRules !== $this->houseRulesShown && ($view['screen'] ?? '') === 'table')
+		{
+			// A new online match opens its house rules once, over the table, before anyone acts.
+			$this->houseRulesShown = $houseRules;
+			$this->topMenu = null;
+			$this->infoDialog = 'game-settings';
+			$this->dirty = true;
+		}
 		if(($view['screen'] ?? '') === 'help' && ($previous['screen'] ?? '') !== 'help') $this->helpScroll = 0;
 		$this->syncNetworkWait();
 		$this->dirty = true;
@@ -1091,6 +1102,7 @@ final class Presenter
 			, 'confirmDialog'=>$this->confirmDialog
 			, 'oddsTables'=>in_array($this->infoDialog,['odds','improving'],true)?$this->oddsTables():null
 			, 'gameSettings'=>$gameSettings
+			, 'gameSettingsTitle'=>($this->view['mode'] ?? 'offline') === 'online' ? 'HOUSE RULES' : 'CURRENT GAME SETTINGS'
 			, 'gameSettingsWildLines'=>$gameSettings===null?1:$this->gameSettingsWildLines($gameSettings)
 			, 'locked' => $this->locked(), 'hint' => $this->guidance()
 			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant,

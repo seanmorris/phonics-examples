@@ -14,7 +14,9 @@ Accepted actions save automatically in this browser. Return to the menu to pause
 
 For disconnected play, open the full game page while connected and wait for **Available offline** beneath the table. The downloaded game can then reopen without a connection. Embedded games and the rest of the example catalog are not installed by that download. Browser storage eviction or clearing site data removes saves and downloaded assets.
 
-**Play Online** opens a two-player Matrix table. Both browsers contribute a secret shuffle, verify the other's
+**Play Online** opens a two-player Matrix table. Opening a table or a challenge shows a House rules dialog with the
+offline game's choices (ante, betting limits, raise caps and wild cards), and online tables always play Anything Opens.
+Both players see the house rules when the match starts. Both browsers contribute a secret shuffle, verify the other's
 shuffle, and deal five private cards to each seat without publishing either hand. The room then carries both betting
 rounds, private discards and replacement draws. Live hands publish verified card openings at showdown; folded hands
 stay private. The dealer can continue into another freshly shuffled hand with the button advanced.
