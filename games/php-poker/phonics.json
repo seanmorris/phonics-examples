@@ -32,7 +32,8 @@
       "src/Ui/Layout.php",
       "src/Ui/Motion.php",
       "src/Ui/Painter.php",
-      "src/Ui/Presenter.php"
+      "src/Ui/Presenter.php",
+      "src/Ui/RoundHistory.php"
     ]
   },
   "browser": {
@@ -133,10 +134,11 @@
     "src/Render/UiRenderer.php": "sha256-N9Ko+fbWL3PGARKZl33aMtU3vJjj+k9JuCvm/THFDIk=",
     "src/Session.php": "sha256-MTod/s8QoyNQjq0PQfWwHmNvPhcjMqIJEBt5//AVC5o=",
     "src/Ui/Chips.php": "sha256-qD7RyIoRjgORznQes/KLAwKdsgcEz6tZBNOhSljW35E=",
-    "src/Ui/Layout.php": "sha256-nuVAFgg3o+/yMm/fbQAYgiFO/S1j6OUFuWJCWaYTNI8=",
+    "src/Ui/Layout.php": "sha256-gxyrCIMW5QBsEFix3Ltjq2L8OytMv7mdAhji9IW15Xs=",
     "src/Ui/Motion.php": "sha256-Qf+Y94XAkdkD6KzlLNBMh0jVHdE3sCR8pWsilraI+u4=",
-    "src/Ui/Painter.php": "sha256-Q4VhlOlxQWcVUpK3+kYaySGpIzWY3zzstozv05pgah4=",
-    "src/Ui/Presenter.php": "sha256-tvvA9oKo4wdakUNHe0bsPv3WqZP3y5GJVO93V013S7s=",
+    "src/Ui/Painter.php": "sha256-9sOjsNx2L0YWZgN0Fm00ng3ySL7JnJV61NnSsq/iHBE=",
+    "src/Ui/Presenter.php": "sha256-jDHxyFdXL1jRVKyqJ0d1RVW/JpgJCh8igvQgALBQgs8=",
+    "src/Ui/RoundHistory.php": "sha256-jx7NY8otLquaWLWt95AGepSGvEtn9nHZsjGdrGXZ6uQ=",
     "src/WildCards.php": "sha256-xr3nuIPic3i+qXdKbOwdma7zRMSFMKLFpOJXwmqFkr8="
   }
 }

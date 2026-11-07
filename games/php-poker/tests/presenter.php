@@ -11,6 +11,7 @@ use PhpPoker\Render\Theme;
 use PhpPoker\Ui\Chips;
 use PhpPoker\Ui\Layout;
 use PhpPoker\Ui\Presenter;
+use PhpPoker\Ui\RoundHistory;
 
 $root = dirname(__DIR__);
 $failures = 0;
@@ -93,6 +94,35 @@ $test('the action bar holds exactly the legal actions', static function(callable
 	$expect($presenter->state()['hint'] === 'Check after the draw.', 'an unavailable Bet is omitted from post-draw guidance');
 	$bet = Layout::fit(1280, 720)->actions($fixture('facing-raise-5'), ['discards' => [], 'amount' => 999])[2];
 	$expect($bet['intent']['amount'] === $fixture('facing-raise-5')['legalActions']['maxBet'], 'the raise-to amount is clamped to maxBet');
+});
+
+$test('round history maps the complete hand into player columns without losing the former transcript', static function(callable $expect) use ($fixture): void {
+	$view=$fixture('showdown-5');
+	$history=RoundHistory::build($view['players'],$view['history']);
+	$rows=$history['rows'];
+	$expect(count($rows)===6 && $rows[0]['kind']==='system' && $rows[0]['text']==='Hand 1: You deals.','the dealer line remains a full-width row');
+	$expect(($rows[1]['cells'][1]['text']??'')==='OPEN 3','the opening bet starts its own row and retains its amount');
+	$expect(($rows[2]['cells'][0]['text']??'')==='CALL 3' && ($rows[2]['cells'][2]['text']??'')==='FOLD'
+		&& ($rows[2]['cells'][3]['text']??'')==='CALL 3','responses share their player columns even when turn order wraps past seat zero');
+	$expect(($rows[3]['cells'][0]['text']??'')==='D(0)' && ($rows[3]['cells'][1]['text']??'')==='D(4)'
+		&& ($rows[3]['cells'][3]['text']??'')==='D(3)','draws share one row and distinguish standing pat');
+	$expect(($rows[4]['cells'][0]['text']??'')==='CHECK' && ($rows[4]['cells'][1]['text']??'')==='CHECK'
+		&& ($rows[4]['cells'][3]['text']??'')==='CHECK','final checks share the next betting row');
+	$expect($rows[5]['kind']==='system' && str_contains($rows[5]['text'],'wins 10 chips with three of a kind'),
+		'the winner, pot, and hand name remain visible verbatim');
+	$expect($history['lines']===array_slice($view['history'],-8),'the compact fallback retains exactly the former eight transcript entries');
+
+	$players=array_map(static fn(int $seat): array=>['name'=>'P'.$seat],range(0,7));
+	$sequence=['Hand 2: P7 deals.','P0: Bets 2.','P1: Calls 2.','P2: Calls 2.','P3: Folds.','P4: Folds.',
+		'P5: Calls 2.','P6: Calls 2.','P7: Calls 2.','P0: Draws 1.','P1: Draws 3.','P2: Draws 3.','P5: Draws 3.',
+		'P6: Stands pat.','P7: Draws 3.','P1: Checks.','P2: Bets 3.','P5: Raises to 8.','P6: Calls 8.',
+		'P7: Raises to 12.','P0: Calls 10.','P1: Folds.','P2: Calls 9.'];
+	$matrix=RoundHistory::build($players,$sequence)['rows'];
+	$expect(($matrix[4]['cells'][1]['text']??'')==='CHECK' && ($matrix[4]['cells'][2]['text']??'')==='BET 3'
+		&& ($matrix[5]['cells'][5]['text']??'')==='RAISE TO 8'
+		&& ($matrix[6]['cells'][6]['text']??'')==='CALL 8' && ($matrix[6]['cells'][7]['text']??'')==='RAISE TO 12'
+		&& ($matrix[7]['cells'][0]['text']??'')==='CALL 10' && ($matrix[7]['cells'][1]['text']??'')==='FOLD'
+		&& ($matrix[7]['cells'][2]['text']??'')==='CALL 9','each bet or raise begins the next response row shown in the updated reference');
 });
 
 $test('the raise spinbox initializes when online controls appear at an unchanged revision', static function(callable $expect) use ($fixture, $root): void {
@@ -1202,9 +1232,9 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$expect($poker->state()['topMenu']==='poker','Poker opens its information menu');
 	$expect($poker->input([['key'=>'h']],null,0)===[] && $poker->state()['history'] && $poker->modal(),'History opens from the Poker menu as a modal dialog');
 	$history=$poker->layout()->history(count($view['players']));
-	$expect($history['summary'] && count($history['emblems'])===8 && count($history['actions'])===8 && count($history['rows'])===8,
-		'the wide History dialog has one portrait and action cell per player plus all eight existing transcript rows');
-	$expect($history['actions'][0][1]+$history['actions'][0][3]<=$history['rows'][0][1]
+	$expect($history['summary'] && count($history['emblems'])===8 && count($history['rows'])===8,
+		'the wide History dialog has one portrait per player and eight matrix rows');
+	$expect($history['header'][1]+$history['header'][3]<=$history['rows'][0][1]
 		&& $history['rows'][7][1]+$history['rows'][7][3]<=$history['back'][1],'the action summary, transcript, and OK control do not overlap');
 	$shortHistory=$poker->layout()->history(count($view['players']),1);
 	$expect(count($shortHistory['rows'])===1 && $shortHistory['box'][3]<$history['box'][3],

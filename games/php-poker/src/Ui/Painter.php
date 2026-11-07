@@ -490,8 +490,8 @@ final class Painter
 	private function historyDialog(): void
 	{
 		$players=array_slice($this->view['players']??[],0,8);
-		$lines = array_slice($this->view['history'] ?? [], -8);
-		$history = $this->layout->history(count($players),count($lines));
+		$content=RoundHistory::build($players,$this->view['history']??[]);
+		$history = $this->layout->history(count($players),count($content['rows']),count($content['lines']));
 		$box = $history['box'];
 		$this->dialog($box, 'ROUND HISTORY');
 		if($history['summary'])
@@ -502,25 +502,42 @@ final class Painter
 			{
 				[$x,$y]=$history['emblems'][$seat];
 				$this->emblem($x,$y,$seat,(string)($player['name']??''),(string)($player['portrait']??''));
-				$rect=$history['actions'][$seat];
-				$action=(string)($player['lastAction']??'');
-				$lower=strtolower($action);
-				$fill=$action===''?Theme::HISTORY_BLUE:(str_contains($lower,'fold')?Theme::PLATE_FOLD
-					:(str_contains($lower,'call')||str_contains($lower,'check')||str_contains($lower,'pass')?Theme::PLATE_HAND
-					:(str_contains($lower,'bet')||str_contains($lower,'raise')||str_contains($lower,'open')
-						?Theme::mix(Theme::felt($this->mode),Theme::PLATE_HAND,.42):Theme::BUTTON)));
+			}
+			foreach($content['rows'] as $index=>$row)
+			{
+				$rect=$history['rows'][$index];
 				[$rx,$ry,$rw,$rh]=$this->layout->rect(...$rect);
-				$this->canvas->box($rx,$ry,$rw,$rh,0,$fill,Theme::INK,1*$this->unit);
-				if($action!=='') $this->text($action,$rect[0]+$rect[2]/2,$rect[1]+$rect[3]/2,$this->layout->captionText(),Theme::INK,'center',$rect[2]-6);
+				if($row['kind']==='system')
+				{
+					$this->canvas->box($rx,$ry,$rw,$rh,0,Theme::BUTTON,Theme::INK,1*$this->unit);
+					$this->text((string)$row['text'],$rect[0]+8*$this->layout->stretch(),$rect[1]+$rect[3]/2,
+						$this->layout->captionText(),Theme::INK,'left',$rect[2]-16*$this->layout->stretch());
+					continue;
+				}
+				$column=$rect[2]/max(1,count($players));
+				for($seat=0;$seat<count($players);$seat++)
+				{
+					$cell=[$rect[0]+$seat*$column,$rect[1],$column,$rect[3]];
+					$action=$row['cells'][$seat]??null;
+					$style=(string)($action['style']??'');
+					$fill=match($style) {
+						'fold'=>Theme::PLATE_FOLD,
+						'call','check','pass'=>Theme::PLATE_HAND,
+						'open','bet','raise'=>Theme::mix(Theme::felt($this->mode),Theme::PLATE_HAND,.42),
+						'draw','other'=>Theme::BUTTON,
+						default=>Theme::HISTORY_BLUE
+					};
+					[$cx,$cy,$cw,$ch]=$this->layout->rect(...$cell);
+					$this->canvas->box($cx,$cy,$cw,$ch,0,$fill,Theme::INK,1*$this->unit);
+					if($action!==null) $this->text((string)$action['text'],$cell[0]+$cell[2]/2,$cell[1]+$cell[3]/2,
+						$this->layout->captionText(),Theme::INK,'center',$cell[2]-6);
+				}
 			}
 		}
-		foreach($lines as $index => $line)
+		else foreach($content['lines'] as $index => $line)
 		{
 			$rect=$history['rows'][$index];
-			[$rx,$ry,$rw,$rh]=$this->layout->rect(...$rect);
-			if($history['summary']) $this->canvas->box($rx,$ry,$rw,$rh,0,$index%2===0?Theme::alpha(Theme::BUTTON,.54):Theme::DIALOG,
-				Theme::alpha(Theme::INK,.18),1*$this->unit);
-			$this->text((string)$line,$rect[0]+8*$this->layout->stretch(),$rect[1]+$rect[3]/2,Theme::BODY,Theme::INK,'left',$rect[2]-16*$this->layout->stretch());
+			$this->text($line,$rect[0]+8*$this->layout->stretch(),$rect[1]+$rect[3]/2,Theme::BODY,Theme::INK,'left',$rect[2]-16*$this->layout->stretch());
 		}
 		$this->button($history['back'], 'OK', '↵', 'primary', false);
 	}
