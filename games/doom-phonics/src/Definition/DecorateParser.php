@@ -5,6 +5,12 @@ namespace DoomPhonics\Definition;
 /** Small, data-preserving parser for the classic DECORATE actor syntax used by the game data. */
 final class DecorateParser
 {
+	/**
+	 * ZDoom reads an actor or class name as one unquoted script token rather than an identifier, so names may start
+	 * with a digit or contain periods (`2704Ball`, `40mmGrenadeLauncher`, `Doom2.5SSG`). A colon still separates
+	 * `Name:Parent` written without spaces.
+	 */
+	public const ACTOR_NAME = '[^\s:{}()"=,;]+';
 
 	/** Parse one or more DECORATE documents into a shared inheritance catalog. */
 	public static function catalog(array $documents): ActorCatalog
@@ -44,7 +50,7 @@ final class DecorateParser
 
 	private static function actorHeader(string $header, ?string $source): ActorDefinition
 	{
-		if(!preg_match('/^([A-Za-z_][A-Za-z0-9_]*)\s*(.*)$/s', $header, $m))
+		if(!preg_match('/^(' . self::ACTOR_NAME . ')\s*(.*)$/s', $header, $m))
 		throw new \UnexpectedValueException(self::where($source) . "invalid ACTOR header: $header");
 
 		$name = $m[1];
@@ -58,7 +64,7 @@ final class DecorateParser
 		{
 			$tail = trim(substr($tail, 1));
 
-			if(preg_match('/^([A-Za-z_][A-Za-z0-9_]*)\b(.*)$/s', $tail, $m))
+			if(preg_match('/^(' . self::ACTOR_NAME . ')(.*)$/s', $tail, $m))
 			{
 				$parent = $m[1];
 				$tail = trim($m[2]);

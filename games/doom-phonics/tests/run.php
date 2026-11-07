@@ -1051,6 +1051,8 @@ verifyWad(
 	, 'layered KEYCONF documents cannot assign one weapon name more than once'
 );
 
+require __DIR__ . '/decorate-names.php';
+
 $demo = dirname(__DIR__) . '/demo/';
 $keyconfFixtureLumps = [
 	'DECORATE' => "ACTOR KeyConfFixtureGun : Pistol\n{\n}\n"

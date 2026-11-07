@@ -41,7 +41,7 @@ final class KeyConfParser
 				$weapons = [];
 
 				foreach($arguments as $weapon)
-				if(preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $weapon)) $weapons[] = $weapon;
+				if(preg_match('/^' . DecorateParser::ACTOR_NAME . '$/', $weapon)) $weapons[] = $weapon;
 
 				$result[] = ['command' => $command,'slot' => (int)$slot,'weapons' => $weapons];
 			}
