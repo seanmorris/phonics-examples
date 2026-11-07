@@ -279,7 +279,8 @@ export class OnlineDeal
 		this.keyName=storageKey(root,localPlayer);
 		// The table's settings are part of every proof context, the corpus and the hashed state, so two browsers that
 		// disagree about them fail at the initial ready handshake instead of mid-hand.
-		this.settings=validateOnlineSettings(settings);this.wild=onlineWildCards(this.settings);this.deckIds=onlineDeck(this.settings);
+		// The room lobby reports a table without settings as null; it plays the defaults, like an omitted value.
+		this.settings=validateOnlineSettings(settings??DEFAULT_ONLINE_SETTINGS);this.wild=onlineWildCards(this.settings);this.deckIds=onlineDeck(this.settings);
 		this.context=`php-poker:${ONLINE_DEAL_VERSION}:${ONLINE_RULES}:${root}:${sessionId}:${stable(this.settings)}`;
 		this.corpus=api.prepareCorpus(this.deckIds,{context:`${this.context}:corpus`});
 		this.shuffleOrder=rotate(this.players,this.players.indexOf(breaker));
