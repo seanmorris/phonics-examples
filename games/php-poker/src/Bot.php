@@ -14,7 +14,7 @@ final class Bot
 {
 	/** Stable local opponent identities, artwork keys and bounded pressure offsets. */
 	public const OPPONENTS = [
-		['name'=>'Ada','icon'=>'ada','object'=>'Clock','pressure'=>-100,'style'=>'Patient'],
+		['name'=>'Ada','icon'=>'ada','object'=>'Pineapple','pressure'=>-100,'style'=>'Patient'],
 		['name'=>'Jules','icon'=>'jules','object'=>'Doughnut','pressure'=>100,'style'=>'Bold'],
 		['name'=>'Mara','icon'=>'mara','object'=>'Apple','pressure'=>20,'style'=>'Balanced'],
 		['name'=>'Otis','icon'=>'otis','object'=>'Mug','pressure'=>-50,'style'=>'Defensive'],

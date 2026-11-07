@@ -7,7 +7,7 @@ import {PNG} from 'pngjs';
 
 const icons = new URL('../games/php-poker/art/icons/', import.meta.url);
 const roster = {
-	ada: {file: 'rpg-icons-extra/clock.png', object: 'Clock', style: 'Patient', author: '7Soul', license: 'CC-BY-3.0', source: 'https://opengameart.org/content/98-pixel-art-rpg-icons'},
+	ada: {file: 'thekingpheonix/pineapple.png', object: 'Pineapple', style: 'Patient', author: 'thekingphoenix', license: 'CC0-1.0', source: 'https://opengameart.org/content/icons-food'},
 	jules: {file: 'thekingpheonix/doughnut.png', object: 'Doughnut', style: 'Bold', author: 'thekingphoenix', license: 'CC0-1.0', source: 'https://opengameart.org/content/icons-food'},
 	mara: {file: 'thekingpheonix/apple.png', object: 'Apple', style: 'Balanced', author: 'thekingphoenix', license: 'CC0-1.0', source: 'https://opengameart.org/content/icons-food'},
 	otis: {file: 'clint-bellanger/coffee.png', object: 'Mug', style: 'Defensive', author: 'Clint Bellanger', license: 'CC-BY-3.0', source: 'https://opengameart.org/content/recycle-items-set'},

@@ -3,12 +3,12 @@
   "conversion": "Supplied PNG pixels are drawn as they are, without colour-management chunks so browsers keep the exact palette; 7Soul source images were nearest-neighbor resampled from 34x34 to 32x32.",
   "players": {
     "ada": {
-      "file": "rpg-icons-extra/clock.png",
-      "object": "Clock",
+      "file": "thekingpheonix/pineapple.png",
+      "object": "Pineapple",
       "style": "Patient",
-      "author": "7Soul",
-      "license": "CC-BY-3.0",
-      "source": "https://opengameart.org/content/98-pixel-art-rpg-icons"
+      "author": "thekingphoenix",
+      "license": "CC0-1.0",
+      "source": "https://opengameart.org/content/icons-food"
     },
     "jules": {
       "file": "thekingpheonix/doughnut.png",
