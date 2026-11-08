@@ -180,6 +180,7 @@
     "src/Render/SkyOcclusionMesh.php",
     "src/Render/ViewProjection.php",
     "src/Render/ViewWeaponPlacement.php",
+    "src/Render/VisibleSectors.php",
     "src/Render/VolumeDrawList.php",
     "src/Render/VolumeMeshBuilder.php",
     "src/Render/VolumePortalFaces.php",

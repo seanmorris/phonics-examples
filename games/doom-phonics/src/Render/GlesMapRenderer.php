@@ -62,6 +62,28 @@ final class GlesMapRenderer
 	private Query $actorQuery;
 	private Query $beamQuery;
 	private int $spriteCapacity = 0;
+	/** Floats per sprite instance: centre, edge offsets and heights, UV edges, texture, light, opacity. */
+	private const SPRITE_FLOATS = 13;
+	/** @var array<string,array{0:\DoomPhonics\Graphics\IndexedImage,1:int,2:bool}|false> Sprite image, atlas texture, and flip by frame and rotation. */
+	private array $spriteLooks = [];
+	/** @var array<string,array{0:float,1:bool}> Opacity and ceiling placement by actor definition. */
+	private array $actorStyles = [];
+	private VisibleSectors $visibleSectors;
+	/** Whether the map's geometry lets Doom's BSP walk decide which sectors a view reaches; decided on first use. */
+	private ?bool $classicView = null;
+	/**
+	 * @var array<int,array{float,float,int,?int,?int}|null> Heights, light, and light sources each sector was packed
+	 * with; null marks a sector that must be repacked every frame. Slopes are fixed at map setup.
+	 */
+	private array $sectorKeys = [];
+	/** @var list<float> */
+	private array $sectorValues = [], $sectorFloors = [], $sectorCeilings = [];
+	private int $sectorRegion = -1;
+	private string $sectorPacked = '';
+	/** @var array<int,true> Sectors the level reported changed since the last pack. */
+	private array $dirtySectors = [];
+	/** @var array<int,true> Sectors between heights at the last pack; they repack every frame until they settle. */
+	private array $movingSectors = [];
 	private int $overlayCapacity = 0;
 	private int $beamCapacity = 0;
 	/** @var array<int,CameraPortalTarget> */
@@ -129,6 +151,8 @@ final class GlesMapRenderer
 		foreach($level->sectors as $sector)
 		$this->sectorComponents[$sector->index] = $level->map->sectorComponent($sector->index);
 		$this->atlas = IndexedAtlas::forLevel($level, $catalog, 2048, $actors, $palette);
+		$this->visibleSectors = new VisibleSectors($level);
+		$level->planeListeners[] = function(int $index): void { $this->dirtySectors[$index] = true; };
 		$this->mesh = (new MapMeshBuilder($level, $this->atlas))->build();
 
 		$this->program = new Program(
@@ -262,13 +286,7 @@ final class GlesMapRenderer
 		glBindVertexArray(0);
 		glBindVertexArray($this->vao[1]);
 		glBindBuffer(GL_ARRAY_BUFFER, $this->buffers[1]);
-
-		foreach([[0,3,0],[1,2,12],[2,1,20],[3,1,24],[4,1,28]] as [$location,$size,$offset])
-		{
-			glVertexAttribPointer($location, $size, GL_FLOAT, false, 32, $offset);
-			glEnableVertexAttribArray($location);
-		}
-
+		$this->spriteInstances(0);
 		glBindVertexArray(0);
 		glBindVertexArray($this->vao[3]);
 		glBindBuffer(GL_ARRAY_BUFFER, $this->buffers[3]);
@@ -571,6 +589,12 @@ final class GlesMapRenderer
 		$forwardY = sin($angle);
 		$cameraSector ??= $this->level->map->sectorAt($cameraX, $cameraY);
 		$connectedSectors = $this->level->map->connectedSectors($cameraSector);
+		// On classic geometry, draw actors only from the sectors Doom's BSP walk reaches from this view. Elsewhere
+		// keep the coarser filter: the connected component and the REJECT table.
+		$this->classicView ??= $this->visibleSectors->available() && (new \DoomPhonics\Game\SightCheck($this->level))->classic();
+		$reachable = $this->classicView
+			? $this->visibleSectors->from($cameraX, $cameraY, $angle, $this->projection->horizontalFov)
+			: null;
 		$halfWidth = tan(deg2rad($this->fov / 2));
 		$opaque = [];
 		$translucent = [];
@@ -618,8 +642,9 @@ final class GlesMapRenderer
 
 			$actorSector = $cached['sector'];
 
-			if(!isset($connectedSectors[$actorSector])
-				|| $this->level->map->rejects($cameraSector, $actorSector)
+			if($reachable !== null
+				? !isset($reachable[$actorSector])
+				: (!isset($connectedSectors[$actorSector]) || $this->level->map->rejects($cameraSector, $actorSector))
 			){
 				$stats['rejected']++;
 				continue;
@@ -652,61 +677,54 @@ final class GlesMapRenderer
 			);
 
 			$rotation = 1 + ((int)floor($relative / (2 * M_PI) * 8) % 8);
+			$look = $this->spriteLooks[$frame->sprite . $frame->frame . $rotation]
+				??= $this->spriteLook($frame->sprite, $frame->frame, $rotation);
 
-			$sprite = $this->catalog->sprite($frame->sprite, $frame->frame, $rotation) ?? $this->catalog->sprite(
-				$frame->sprite
-				, $frame->frame
-				, 0
-			);
+			if($look === false) continue;
 
-			if(!$sprite || ($texture = $this->atlas->id('sprite', $sprite['name'])) < 0) continue;
-
-			$image = $sprite['image'];
+			[$image, $texture, $flipped] = $look;
 			$left = -$image->leftOffset;
 			$right = $left + $image->width;
 			$floor = $this->level->sectors[$actorSector]->floorZ($renderX, $renderY, $alpha);
+			$definition = $state->definition;
+			$style = $this->actorStyles[$definition->name] ??= [
+				$definition->hasFlag('SHADOW')
+					? min(max(0.0, min(1.0, (float)$definition->value('Alpha', 1))), .32)
+					: max(0.0, min(1.0, (float)$definition->value('Alpha', 1)))
+				, $definition->hasFlag('SPAWNCEILING')
+			];
+
+			$cached['projectile'] ??= $registry->has($entity, Projectile::class)
+				|| $registry->has($entity, RemoteProjectile::class);
+
 			// A grounded actor's transform is its physical floor contact. Doom patch
 			// origins often extend 2–5 units below it and relied on software floor
 			// clipping. Clamp only that submerged part; preserve deliberate positive
 			// offsets (keys and spheres), ceiling actors, and airborne projectiles.
-			$supported = !$registry->has($entity, Projectile::class)
-				&& !$registry->has($entity, RemoteProjectile::class)
-				&& !$state->definition->hasFlag('SPAWNCEILING')
-				&& $renderZ <= $floor + .01;
-
+			$supported = !$cached['projectile'] && !$style[1] && $renderZ <= $floor + .01;
 			$vertical = $image->verticalBounds($renderZ, $supported ? $floor : null);
 			$clip = $registry->has($entity, FloorClip::class)
 				? $registry->get($entity, FloorClip::class)->amount
 				: 0.0;
 
-			$bottom = $vertical['bottom'] - $clip;
-			$top = $vertical['top'] - $clip;
-			$light = $frame->bright ? 255 : $this->level->sectors[$actorSector]->light;
-			$opacity = max(0.0, min(1.0, (float)$state->definition->value('Alpha', 1)));
-
-			if($state->definition->hasFlag('SHADOW')) $opacity = min($opacity, .32);
-
-			$u0 = $sprite['flipped'] ? $image->width - 1 : 0;
-			$u1 = $sprite['flipped'] ? 0 : $image->width - 1;
-			$lx = $renderX + $rightX * $left;
-			$ly = $renderY + $rightY * $left;
-			$rx = $renderX + $rightX * $right;
-			$ry = $renderY + $rightY * $right;
-			$record = [
-				$distance
-				, [
-					[$lx,$ly,$bottom,$u0,$image->height - 1]
-					, [$rx,$ry,$bottom,$u1,$image->height - 1]
-					, [$rx,$ry,$top,$u1,0]
-					, [$lx,$ly,$bottom,$u0,$image->height - 1]
-					, [$rx,$ry,$top,$u1,0]
-					, [$lx,$ly,$top,$u0,0]
-				]
-				, $texture,$light,$opacity
+			$instance = [
+				$renderX
+				, $renderY
+				, (float)$left
+				, (float)$right
+				, $vertical['bottom'] - $clip
+				, $vertical['top'] - $clip
+				, (float)($flipped ? $image->width - 1 : 0)
+				, (float)($flipped ? 0 : $image->width - 1)
+				, (float)($image->height - 1)
+				, 0.0
+				, (float)$texture
+				, (float)($frame->bright ? 255 : $this->level->sectors[$actorSector]->light)
+				, $style[0]
 			];
 
-			if($opacity < 1) $translucent[] = $record;
-			else $opaque[] = $record;
+			if($style[0] < 1) $translucent[] = [$distance, $instance];
+			else array_push($opaque, ...$instance);
 
 			$stats['visible']++;
 		}
@@ -716,13 +734,13 @@ final class GlesMapRenderer
 
 		// Masked sprites use the depth buffer and need no CPU sort. Only translucent actors do.
 		usort($translucent, static fn(array $a, array $b): int => $b[0] <=> $a[0]);
-		$sprites = [...$opaque, ...$translucent];
-		$values = [];
+		$values = $opaque;
 
-		foreach($sprites as [, $vertices, $texture, $light, $opacity])
-		foreach($vertices as [$x,$y,$z,$u,$v])
-		array_push($values, $x, $y, $z, $u, $v, (float)$texture, (float)$light, $opacity);
-		$stats['vertices'] = intdiv(count($values), 8);
+		foreach($translucent as [, $instance]) array_push($values, ...$instance);
+
+		$opaqueCount = intdiv(count($opaque), self::SPRITE_FLOATS);
+		$translucentCount = count($translucent);
+		$stats['vertices'] = ($opaqueCount + $translucentCount) * 6;
 		$this->spriteStats = $stats;
 
 		if(!$values)
@@ -763,21 +781,47 @@ final class GlesMapRenderer
 		}
 
 		glBufferSubData(GL_ARRAY_BUFFER, 0, $length, $bytes);
-		$opaqueVertices = count($opaque) * 6;
 
-		if($opaqueVertices) glDrawArrays(GL_TRIANGLES, 0, $opaqueVertices);
+		if($opaqueCount)
+		{
+			$this->spriteInstances(0);
+			glDrawArraysInstanced(GL_TRIANGLES, 0, 6, $opaqueCount);
+		}
 
-		$translucentVertices = count($translucent) * 6;
-
-		if($translucentVertices)
+		// WebGL2 has no base instance, so the translucent run starts its attributes after the opaque instances.
+		if($translucentCount)
 		{
 			glDepthMask(false);
-			glDrawArrays(GL_TRIANGLES, $opaqueVertices, $translucentVertices);
+			$this->spriteInstances($opaqueCount);
+			glDrawArraysInstanced(GL_TRIANGLES, 0, 6, $translucentCount);
 			glDepthMask(true);
 		}
 
 		glBindVertexArray(0);
 		$this->actorCpuMs = (hrtime(true) - $started) / 1e6;
+	}
+
+	/** Point the sprite attributes at instances from `$first` on, one record per sprite. */
+	private function spriteInstances(int $first): void
+	{
+		$stride = self::SPRITE_FLOATS * 4;
+
+		foreach([[0,2,0],[1,4,8],[2,4,24],[3,3,40]] as [$location,$size,$offset])
+		{
+			glVertexAttribPointer($location, $size, GL_FLOAT, false, $stride, $first * $stride + $offset);
+			glEnableVertexAttribArray($location);
+			glVertexAttribDivisor($location, 1);
+		}
+	}
+
+	/** @return array{0:\DoomPhonics\Graphics\IndexedImage,1:int,2:bool}|false Image, atlas texture, and flip for a frame. */
+	private function spriteLook(string $sprite, string $frame, int $rotation): array|false
+	{
+		$found = $this->catalog->sprite($sprite, $frame, $rotation) ?? $this->catalog->sprite($sprite, $frame, 0);
+
+		if(!$found || ($texture = $this->atlas->id('sprite', $found['name'])) < 0) return false;
+
+		return [$found['image'], $texture, (bool)$found['flipped']];
 	}
 
 	/** Draw transient world-space beams with stable pixel width and map depth testing. */
@@ -2159,26 +2203,78 @@ final class GlesMapRenderer
 		}
 	}
 
-	/** Pack rendered planes separately from physical sector heights for each camera view. */
+	/**
+	 * Pack rendered planes separately from physical sector heights for each camera view.
+	 *
+	 * Nearly every sector stands still nearly every frame, so each sector's twelve floats are kept and repacked only
+	 * when its heights, light, or light sources change. A sector between its previous and current heights, or one
+	 * with a height transfer, whose view follows other sectors, is repacked every frame. Nothing changed means the
+	 * previous bytes are returned without packing.
+	 */
 	private function sectorData(float $alpha = 1, int $region = 0): string
 	{
-		$values = $floors = $ceilings = [];
+		if(!$this->level->sectors) return pack('f*', 0,128,255,0,0,0,0,0,0,0,0,0);
+
 		$alpha = max(0, min(1, $alpha));
-		foreach($this->level->sectors as $sector)
+		$changed = $this->sectorRegion !== $region || $this->sectorPacked === '';
+
+		// Only sectors the level reported changed, or still between heights, can need repacking. A new region, or
+		// the first pack, visits every sector.
+		if($changed)
 		{
+			$this->sectorKeys = [];
+			$candidates = array_keys($this->level->sectors);
+		}
+		else $candidates = array_keys($this->dirtySectors + $this->movingSectors);
+
+		$this->dirtySectors = [];
+
+		if(!$candidates) return $this->sectorPacked;
+
+		foreach($candidates as $index)
+		{
+			$sector = $this->level->sectors[$index];
+			$moving = $sector->floor !== $sector->previousFloor || $sector->ceiling !== $sector->previousCeiling
+				|| $sector->heightTransfer !== null;
+
+			if($moving) $this->movingSectors[$index] = true;
+			else unset($this->movingSectors[$index]);
+
+			// Compare scalars against the stored key, so an unchanged candidate costs no repack.
+			if(!$moving && ($key = $this->sectorKeys[$index] ?? null) !== null
+				&& $key[0] === $sector->floor && $key[1] === $sector->ceiling && $key[2] === $sector->light
+				&& $key[3] === $sector->floorLightSource && $key[4] === $sector->ceilingLightSource
+			) continue;
+
+			$this->sectorKeys[$index] = $moving
+				? null
+				: [$sector->floor, $sector->ceiling, $sector->light, $sector->floorLightSource, $sector->ceilingLightSource];
+
+			$changed = true;
 			$view = $sector->heightTransfer?->view($sector, $region);
 			$floor = $view && !($sector->heightTransfer->flags & 4) ? $view['floor'] : [$sector,0];
 			$ceiling = $view && !($sector->heightTransfer->flags & 4) ? $view['ceiling'] : [$sector,1];
-			$values[] = $floor[1] ? $floor[0]->ceilingAt($alpha) : $floor[0]->floorAt($alpha);
-			$values[] = $ceiling[1] ? $ceiling[0]->ceilingAt($alpha) : $ceiling[0]->floorAt($alpha);
-			$values[] = (float)($view['light'] ?? $sector->light);
-			$values[] = (float)($this->sectorComponents[$sector->index] ?? $sector->index);
-			array_push($floors, ...$floor[0]->{$floor[1] ? 'ceilingSlope' : 'floorSlope'});
-			$floors[] = (float)($sector->floorLightSource ?? $sector->index);
-			array_push($ceilings, ...$ceiling[0]->{$ceiling[1] ? 'ceilingSlope' : 'floorSlope'});
-			$ceilings[] = (float)($sector->ceilingLightSource ?? $sector->index);
+			$offset = $index * 4;
+			$this->sectorValues[$offset] = $floor[1] ? $floor[0]->ceilingAt($alpha) : $floor[0]->floorAt($alpha);
+			$this->sectorValues[$offset + 1] = $ceiling[1] ? $ceiling[0]->ceilingAt($alpha) : $ceiling[0]->floorAt($alpha);
+			$this->sectorValues[$offset + 2] = (float)($view['light'] ?? $sector->light);
+			$this->sectorValues[$offset + 3] = (float)($this->sectorComponents[$sector->index] ?? $sector->index);
+			[$this->sectorFloors[$offset], $this->sectorFloors[$offset + 1], $this->sectorFloors[$offset + 2]]
+				= $floor[0]->{$floor[1] ? 'ceilingSlope' : 'floorSlope'};
+			$this->sectorFloors[$offset + 3] = (float)($sector->floorLightSource ?? $sector->index);
+			[$this->sectorCeilings[$offset], $this->sectorCeilings[$offset + 1], $this->sectorCeilings[$offset + 2]]
+				= $ceiling[0]->{$ceiling[1] ? 'ceilingSlope' : 'floorSlope'};
+			$this->sectorCeilings[$offset + 3] = (float)($sector->ceilingLightSource ?? $sector->index);
 		}
-		return $values ? pack('f*', ...$values,...$floors,...$ceilings) : pack('f*', 0,128,255,0,0,0,0,0,0,0,0,0);
+
+		if(!$changed) return $this->sectorPacked;
+
+		$this->sectorRegion = $region;
+		ksort($this->sectorValues);
+		ksort($this->sectorFloors);
+		ksort($this->sectorCeilings);
+
+		return $this->sectorPacked = pack('f*', ...$this->sectorValues, ...$this->sectorFloors, ...$this->sectorCeilings);
 	}
 
 	/** Composite translucent water after world actors, in the currently configured view. */

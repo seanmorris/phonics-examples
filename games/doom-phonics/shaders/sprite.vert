@@ -1,10 +1,14 @@
 #version 300 es
 precision highp float;
-layout(location=0) in vec3 aPosition;
-layout(location=1) in vec2 aUv;
-layout(location=2) in float aTexture;
-layout(location=3) in float aLight;
-layout(location=4) in float aOpacity;
+// One instance per sprite. The quad's six corners are expanded here along the camera's right vector, so the CPU
+// uploads 13 floats per sprite instead of six full vertices.
+layout(location=0) in vec2 aCenter;
+// Left and right edges along the camera's right vector, then bottom and top heights.
+layout(location=1) in vec4 aExtent;
+// U at the left and right edges, V at the bottom and top.
+layout(location=2) in vec4 aUv;
+// Atlas texture, light level, and opacity.
+layout(location=3) in vec3 aStyle;
 
 uniform vec3 camera;
 uniform vec2 forward;
@@ -21,12 +25,17 @@ flat out float opacity;
 
 void main()
 {
-	vec2 relative = aPosition.xy - camera.xy;
+	// Corners in triangle order: left-bottom, right-bottom, right-top, left-bottom, right-top, left-top.
+	int corner = gl_VertexID % 6;
+	bool isRight = corner == 1 || corner == 2 || corner == 4;
+	bool isTop = corner == 2 || corner == 4 || corner == 5;
 	// Match the map projection: screen-right is clockwise in WAD space.
 	vec2 right = vec2(forward.y, -forward.x);
+	vec3 position = vec3(aCenter + right * (isRight ? aExtent.y : aExtent.x), isTop ? aExtent.w : aExtent.z);
+	vec2 relative = position.xy - camera.xy;
 	float horizontalDepth = dot(relative, forward);
 	float side = dot(relative, right);
-	float height = aPosition.z - camera.z;
+	float height = position.z - camera.z;
 	float pitchCos = cos(cameraPitch);
 	float pitchSin = sin(cameraPitch);
 	bool classicPitch = pitchMode == 1;
@@ -38,9 +47,9 @@ void main()
 	float clipZ = ((farPlane + nearPlane) / (farPlane - nearPlane)) * depth
 		- (2.0 * farPlane * nearPlane / (farPlane - nearPlane));
 	gl_Position = vec4(side * projection.x, vertical * projection.y, clipZ, depth);
-	textureUv = aUv;
+	textureUv = vec2(isRight ? aUv.y : aUv.x, isTop ? aUv.w : aUv.z);
 	viewDepth = depth;
-	textureId = int(round(aTexture));
-	lightLevel = int(round(aLight));
-	opacity = aOpacity;
+	textureId = int(round(aStyle.x));
+	lightLevel = int(round(aStyle.y));
+	opacity = aStyle.z;
 }
