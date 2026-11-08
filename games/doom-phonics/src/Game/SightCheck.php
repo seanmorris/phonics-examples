@@ -11,16 +11,68 @@ namespace DoomPhonics\Game;
  *
  * Only classic geometry is described here: flat planes, no 3D floors, height transfers, or camera portals. Callers keep
  * their own trace for other maps.
+ *
+ * The map is flattened once: nodes to numeric lists and each subsector to its segs' endpoints and sectors, so a check
+ * reads plain arrays and does no lookups through linedefs, vertices, or sidedefs. Idle monsters run this seven or so
+ * times a tic on E1M3, and the browser's PHP is slow enough that each lookup counted.
  */
 final class SightCheck
 {
+	/** @var list<array{0:float,1:float,2:float,3:float,4:int,5:int}> Node x, y, dx, dy, right child, left child. */
+	private array $nodes = [];
+	/**
+	 * @var list<list<array{0:int,1:float,2:float,3:float,4:float,5:int,6:int}>> Per subsector: each seg's line, start
+	 * x and y, end x and y, front sector, and back sector or -1 for a one-sided line.
+	 */
+	private array $segs = [];
+	/** @var array<int,SectorState> */
+	private array $sectors;
 	/** @var array<int,int> Lines already tested in the current check, by stamp: P_CrossSubsector's validcount. */
 	private array $visited = [];
 	private int $stamp = 0;
 	private float $startX = 0, $startY = 0, $deltaX = 0, $deltaY = 0, $endX = 0, $endY = 0;
 	private float $eyeZ = 0, $topSlope = 0, $bottomSlope = 0;
 
-	public function __construct(private Level $level) {}
+	public function __construct(private Level $level)
+	{
+		$map = $level->map;
+		$this->sectors = $level->sectors;
+
+		foreach($map->nodes as $node)
+		$this->nodes[] = [(float)$node['x'], (float)$node['y'], (float)$node['dx'], (float)$node['dy'], $node['right'], $node['left']];
+
+		foreach($map->subsectors as $index => $subsector)
+		{
+			$segs = [];
+
+			for($i = 0; $i < $subsector['count']; $i++)
+			{
+				$seg = $map->segs[$subsector['first'] + $i] ?? null;
+
+				if($seg === null || $seg['linedef'] === 0xffff) continue;
+
+				$line = $map->linedefs[$seg['linedef']];
+				$frontSide = $seg['direction'] ? $line['left'] : $line['right'];
+				$backSide = $seg['direction'] ? $line['right'] : $line['left'];
+
+				if($frontSide < 0) continue;
+
+				$a = $map->vertices[$line['from']];
+				$b = $map->vertices[$line['to']];
+				$segs[] = [
+					$seg['linedef']
+					, (float)$a['x']
+					, (float)$a['y']
+					, (float)$b['x']
+					, (float)$b['y']
+					, (int)$map->sidedefs[$frontSide]['sector']
+					, ($line['flags'] & 4) && $backSide >= 0 ? (int)$map->sidedefs[$backSide]['sector'] : -1
+				];
+			}
+
+			$this->segs[$index] = $segs;
+		}
+	}
 
 	/** Whether Doom's sight rules can describe this level: flat planes, no 3D floors, height transfers, or portals. */
 	public function classic(): bool
@@ -51,17 +103,9 @@ final class SightCheck
 		$this->eyeZ = $eyeZ;
 		$this->topSlope = $topZ - $eyeZ;
 		$this->bottomSlope = $bottomZ - $eyeZ;
-		$nodes = count($this->level->map->nodes);
+		$count = count($this->nodes);
 
-		return $nodes ? $this->crossNode($nodes - 1) : $this->crossSubsector(0);
-	}
-
-	/** P_DivlineSide: 0 in front of the directed line, 1 behind, 2 on it. */
-	private static function side(float $x, float $y, float $lineX, float $lineY, float $lineDX, float $lineDY): int
-	{
-		$cross = ($x - $lineX) * $lineDY - ($y - $lineY) * $lineDX;
-
-		return $cross > 0 ? 0 : ($cross < 0 ? 1 : 2);
+		return $count ? $this->crossNode($count - 1) : $this->crossSubsector(0);
 	}
 
 	/** P_CrossBSPNode: cross the start point's side, then the other side if the sight line reaches it. */
@@ -69,85 +113,85 @@ final class SightCheck
 	{
 		if($child & 0x8000) return $this->crossSubsector($child & 0x7fff);
 
-		$node = $this->level->map->nodes[$child];
-		$side = self::side($this->startX, $this->startY, (float)$node['x'], (float)$node['y'], (float)$node['dx'], (float)$node['dy']);
+		[$x, $y, $dx, $dy, $right, $left] = $this->nodes[$child];
+		// P_DivlineSide for the start: in front (0) or behind (1); a start on the line crosses both sides.
+		$startBehind = ($this->startX - $x) * $dy - ($this->startY - $y) * $dx < 0;
 
-		// An "on" start should cross both sides.
-		if($side === 2) $side = 0;
+		if(!$this->crossNode($startBehind ? $left : $right)) return false;
 
-		if(!$this->crossNode($side === 0 ? $node['right'] : $node['left'])) return false;
+		$endCross = ($this->endX - $x) * $dy - ($this->endY - $y) * $dx;
 
-		if($side === self::side($this->endX, $this->endY, (float)$node['x'], (float)$node['y'], (float)$node['dx'], (float)$node['dy']))
-		return true;
+		if(($endCross < 0) === $startBehind && $endCross != 0) return true;
 
-		return $this->crossNode($side === 0 ? $node['left'] : $node['right']);
+		if($endCross == 0 && !$startBehind) return true;
+
+		return $this->crossNode($startBehind ? $right : $left);
 	}
 
 	/** P_CrossSubsector: test each line of the subsector once; true when sight passes it. */
 	private function crossSubsector(int $index): bool
 	{
-		$map = $this->level->map;
-		$subsector = $map->subsectors[$index] ?? null;
+		$segs = $this->segs[$index] ?? [];
 
-		if($subsector === null) return true;
+		if(!$segs) return true;
 
-		for($i = 0; $i < $subsector['count']; $i++)
+		$stamp = $this->stamp;
+		$sx = $this->startX;
+		$sy = $this->startY;
+		$ex = $this->endX;
+		$ey = $this->endY;
+		$ddx = $this->deltaX;
+		$ddy = $this->deltaY;
+
+		foreach($segs as [$lineId, $ax, $ay, $bx, $by, $frontSector, $backSector])
 		{
-			$seg = $map->segs[$subsector['first'] + $i] ?? null;
+			if(($this->visited[$lineId] ?? 0) === $stamp) continue;
 
-			if($seg === null || $seg['linedef'] === 0xffff) continue;
-
-			$lineId = $seg['linedef'];
-
-			if(($this->visited[$lineId] ?? 0) === $this->stamp) continue;
-
-			$this->visited[$lineId] = $this->stamp;
-			$line = $map->linedefs[$lineId];
-			$a = $map->vertices[$line['from']];
-			$b = $map->vertices[$line['to']];
-			$ax = (float)$a['x'];
-			$ay = (float)$a['y'];
-			$lineDX = (float)$b['x'] - $ax;
-			$lineDY = (float)$b['y'] - $ay;
+			$this->visited[$lineId] = $stamp;
 
 			// The sight line must separate the line's vertices, and the line its endpoints.
-			if(self::side($ax, $ay, $this->startX, $this->startY, $this->deltaX, $this->deltaY)
-				=== self::side((float)$b['x'], (float)$b['y'], $this->startX, $this->startY, $this->deltaX, $this->deltaY)
-			) continue;
+			$crossA = ($ax - $sx) * $ddy - ($ay - $sy) * $ddx;
+			$crossB = ($bx - $sx) * $ddy - ($by - $sy) * $ddx;
 
-			if(self::side($this->startX, $this->startY, $ax, $ay, $lineDX, $lineDY)
-				=== self::side($this->endX, $this->endY, $ax, $ay, $lineDX, $lineDY)
-			) continue;
+			if(($crossA > 0) === ($crossB > 0) && ($crossA < 0) === ($crossB < 0)) continue;
 
-			// A line without the two-sided flag, or without a back, always blocks sight.
-			if(!($line['flags'] & 4) || $line['right'] < 0 || $line['left'] < 0) return false;
+			$lineDX = $bx - $ax;
+			$lineDY = $by - $ay;
+			$crossS = ($sx - $ax) * $lineDY - ($sy - $ay) * $lineDX;
+			$crossE = ($ex - $ax) * $lineDY - ($ey - $ay) * $lineDX;
 
-			$frontSide = $seg['direction'] ? $line['left'] : $line['right'];
-			$backSide = $seg['direction'] ? $line['right'] : $line['left'];
-			$front = $this->level->sectors[(int)$map->sidedefs[$frontSide]['sector']];
-			$back = $this->level->sectors[(int)$map->sidedefs[$backSide]['sector']];
+			if(($crossS > 0) === ($crossE > 0) && ($crossS < 0) === ($crossE < 0)) continue;
 
-			if($front->floor === $back->floor && $front->ceiling === $back->ceiling) continue;
+			// A one-sided line always blocks sight.
+			if($backSector < 0) return false;
 
-			$openTop = min($front->ceiling, $back->ceiling);
-			$openBottom = max($front->floor, $back->floor);
+			$front = $this->sectors[$frontSector];
+			$back = $this->sectors[$backSector];
+			$frontFloor = $front->floor;
+			$backFloor = $back->floor;
+			$frontCeiling = $front->ceiling;
+			$backCeiling = $back->ceiling;
+
+			if($frontFloor === $backFloor && $frontCeiling === $backCeiling) continue;
+
+			$openTop = $frontCeiling < $backCeiling ? $frontCeiling : $backCeiling;
+			$openBottom = $frontFloor > $backFloor ? $frontFloor : $backFloor;
 
 			// Closed doors.
 			if($openBottom >= $openTop) return false;
 
 			// P_InterceptVector2: fraction along the sight line where it crosses this line.
-			$denominator = $lineDY * $this->deltaX - $lineDX * $this->deltaY;
-			$fraction = $denominator == 0 ? 0.0
-				: (($ax - $this->startX) * $lineDY + ($this->startY - $ay) * $lineDX) / $denominator;
+			$denominator = $lineDY * $ddx - $lineDX * $ddy;
+			$fraction = $denominator == 0 ? 0.0 : (($ax - $sx) * $lineDY + ($sy - $ay) * $lineDX) / $denominator;
 
-			if($front->floor !== $back->floor)
+			if($frontFloor !== $backFloor)
 			{
 				$slope = $fraction > 0 ? ($openBottom - $this->eyeZ) / $fraction : ($openBottom - $this->eyeZ >= 0 ? INF : -INF);
 
 				if($slope > $this->bottomSlope) $this->bottomSlope = $slope;
 			}
 
-			if($front->ceiling !== $back->ceiling)
+			if($frontCeiling !== $backCeiling)
 			{
 				$slope = $fraction > 0 ? ($openTop - $this->eyeZ) / $fraction : ($openTop - $this->eyeZ >= 0 ? INF : -INF);
 

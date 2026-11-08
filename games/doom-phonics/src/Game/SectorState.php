@@ -19,7 +19,7 @@ final class SectorState
 	public ?int $floorMover = null;
 	public ?int $ceilingMover = null;
 	public int $appearanceRevision = 0;
-	/** Called with this sector after a height or light change made through this class; Level counts them. */
+	/** Called with this sector, and whether heights changed, after a change made through this class. */
 	public ?\Closure $changed = null;
 	/** @var array{float,float,float} Plane offsets: dx*x + dy*y + constant. */
 	public array $floorSlope = [0.0,0.0,0.0], $ceilingSlope = [0.0,0.0,0.0];
@@ -143,7 +143,7 @@ final class SectorState
 		$this->floor = self::approach($this->floor, $this->targetFloor, $this->floorSpeed * $dt);
 		$this->ceiling = self::approach($this->ceiling, $this->targetCeiling, $this->ceilingSpeed * $dt);
 
-		if(($this->floor !== $floor || $this->ceiling !== $ceiling) && $this->changed) ($this->changed)($this);
+		if(($this->floor !== $floor || $this->ceiling !== $ceiling) && $this->changed) ($this->changed)($this, true);
 
 		if($this->floor === $this->targetFloor && $this->floorReturn !== null)
 		{
@@ -217,7 +217,7 @@ final class SectorState
 		$this->source['light'] = $light;
 		$this->appearanceRevision++;
 
-		if($this->changed) ($this->changed)($this);
+		if($this->changed) ($this->changed)($this, false);
 	}
 
 	public function setSpecial(int $special): void

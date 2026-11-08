@@ -21,7 +21,7 @@ final class Level
 	public int $planeRevision = 0;
 	/** @var array<int,true> Sectors changed since the last step began; only these need their previous heights reset. */
 	public array $unsettled = [];
-	/** @var list<\Closure(int):void> Told the index of each sector whose heights or light changed. */
+	/** @var list<\Closure(int,bool):void> Told each changed sector's index and whether its heights changed. */
 	public array $planeListeners = [];
 	public SpatialIndex $spatial;
 	/** @var array<int,LinePortal|null> */
@@ -58,7 +58,7 @@ final class Level
 		foreach($map->sectors as $sector)
 		{
 			$state = new SectorState($sector['index'], $sector);
-			$state->changed = function(SectorState $changed): void { $this->planeChanged($changed->index); };
+			$state->changed = function(SectorState $changed, bool $heights): void { $this->planeChanged($changed->index, $heights); };
 			$this->sectors[] = $state;
 
 			if($sector['tag']) $this->tags[$sector['tag']][] = $sector['index'];
@@ -400,13 +400,17 @@ final class Level
 		foreach($this->cameras as $camera) $camera->update($dt, $this);
 	}
 
-	/** Record a change to a sector's heights or light for the step and for anyone listening, such as a renderer. */
-	public function planeChanged(int $index): void
+	/**
+	 * Record a change to a sector's heights or light for anyone listening, such as a renderer. Only a height change
+	 * needs the sector's previous heights reset at the next step, or can move the bodies standing on it.
+	 */
+	public function planeChanged(int $index, bool $heights = true): void
 	{
 		$this->planeRevision++;
-		$this->unsettled[$index] = true;
 
-		foreach($this->planeListeners as $listener) $listener($index);
+		if($heights) $this->unsettled[$index] = true;
+
+		foreach($this->planeListeners as $listener) $listener($index, $heights);
 	}
 
 	/**

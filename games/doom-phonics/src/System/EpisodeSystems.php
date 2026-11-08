@@ -15,6 +15,8 @@ use DoomPhonics\Component\WeaponOverlay;
 use DoomPhonics\Component\WeaponOwner;
 use DoomPhonics\Definition\ActionDispatcher;
 use DoomPhonics\Game\Collision;
+use DoomPhonics\Game\ActorDropper;
+use DoomPhonics\Game\DamageResolver;
 use DoomPhonics\Game\ActorObstacles;
 use DoomPhonics\Game\BloodEffects;
 use DoomPhonics\Game\DoomGravity;
@@ -141,6 +143,14 @@ final class EpisodeSystems implements SystemSet
 
 		$actions = new ActionDispatcher;
 
+		$physics = null;
+
+		// Damage thrust gives a body velocity; a sleeping body's physics must hear of it.
+		$damage = new DamageResolver(
+			new ActorDropper($content->level, $factory)
+			, static function(int $entity) use (&$physics): void { $physics?->wake($entity); }
+		);
+
 		$combat = new CombatSystem(
 			$content->level
 			, $actors
@@ -152,7 +162,7 @@ final class EpisodeSystems implements SystemSet
 			, $sound
 			, $content->sounds
 			, (float)($motion['gravity'] ?? DoomGravity::ACCELERATION)
-			, null
+			, $damage
 			, $content->weapons
 			, $host
 			, $host
@@ -177,6 +187,10 @@ final class EpisodeSystems implements SystemSet
 		$states = new ActorStateSystem($actions);
 		$beams = new BeamEffectSystem;
 		$physics = new ActorPhysicsSystem($collision, (float)($motion['gravity'] ?? DoomGravity::ACCELERATION));
+		$obstacles->movedListeners[] = static function(int $entity) use ($physics): void { $physics->wake($entity); };
+		$content->level->planeListeners[] = static function(int $sector, bool $heights) use ($physics): void {
+			if($heights) $physics->wakeSector($sector);
+		};
 		$effects = new SectorEffectSystem($content->level, $specials, $content->language, $host);
 		$playerEffects = new PlayerEffectSystem;
 		$statusFaces = new StatusFaceSystem($this->controls($scope));

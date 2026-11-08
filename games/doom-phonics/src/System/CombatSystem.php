@@ -74,6 +74,14 @@ final class CombatSystem
 	private SightCheck $sight;
 	/** Whether the map's geometry is classic enough for P_CheckSight; decided at the first sight check. */
 	private ?bool $classicSight = null;
+	/** @var \WeakMap<Transform,array{float,float,int}> Each pose's sector at the position it was last looked up. */
+	private \WeakMap $sectorOf;
+	/** @var list<int>|null Players sorted by number, and the registry snapshot they were sorted from. */
+	private ?array $sortedPlayers = null, $playersSnapshot = null;
+	/** @var array<int,float> Body height by entity; bodies keep their height, so one lookup serves every sight check. */
+	private array $heightOf = [];
+	/** @var list<int>|null The players as read at the start of this tic's update, for the looks that follow it. */
+	private ?array $tickPlayers = null;
 	private DamageResolver $damageResolver;
 	private WeaponSlots $weaponSlots;
 	private CheatSystem $cheats;
@@ -115,6 +123,7 @@ final class CombatSystem
 		$this->projectileTracer = new ProjectileTracer($level);
 		$this->autoAim = new AutoAim($level);
 		$this->sight = new SightCheck($level);
+		$this->sectorOf = new \WeakMap;
 		$this->damageResolver = $damageResolver ?? new DamageResolver(new ActorDropper($level, $factory));
 		$this->weaponSlots = $weaponSlots ?? WeaponSlots::fromCatalog($actors);
 		$this->cheats = $cheats ?? new CheatSystem($this->weaponSlots, $actors);
@@ -127,7 +136,9 @@ final class CombatSystem
 	{
 		if(!$this->resolveDamage) $this->presentRemoteActors($registry);
 
-		foreach($registry->query($this->players) as $entity)
+		$this->tickPlayers = $registry->query($this->players);
+
+		foreach($this->tickPlayers as $entity)
 		{
 			$player = $registry->get($entity, PlayerState::class);
 
@@ -1435,16 +1446,26 @@ final class CombatSystem
 	{
 		if(!$registry->has($entity, MonsterBrain::class) || !$registry->has($entity, Transform::class)) return null;
 
-		$players = $registry->query($this->players);
+		$players = $this->tickPlayers ?? $registry->query($this->players);
 
-		usort(
-			$players
-			, static fn(int $a, int $b): int => $registry->get($a, PlayerStart::class)->number <=> $registry->get(
-				$b
-				, PlayerStart::class
-			)->number
-		);
+		// Every idle monster asks for the same list each tic; sort it once per registry snapshot.
+		if($players !== $this->playersSnapshot)
+		{
+			$this->playersSnapshot = $players;
 
+			if(count($players) > 1)
+			usort(
+				$players
+				, static fn(int $a, int $b): int => $registry->get($a, PlayerStart::class)->number <=> $registry->get(
+					$b
+					, PlayerStart::class
+				)->number
+			);
+
+			$this->sortedPlayers = $players;
+		}
+
+		$players = $this->sortedPlayers;
 		$count = count($players);
 
 		if($count === 0) return null;
@@ -1510,7 +1531,7 @@ final class CombatSystem
 		$pose = $registry->get($entity, Transform::class);
 		$brain = $registry->get($entity, MonsterBrain::class);
 		$brain->threshold = 0;
-		$heard = $this->awareness->target($this->level->sectorAt($pose->x, $pose->y)->index);
+		$heard = $this->awareness->target($this->sectorOf($pose));
 
 		if($heard !== null && $this->validTarget($registry, $heard))
 		{
@@ -2700,18 +2721,27 @@ final class CombatSystem
 		return [$range,null];
 	}
 
+	/** A pose's sector, looked up again only after it moves; idle monsters ask every look. */
+	private function sectorOf(Transform $pose): int
+	{
+		$cached = $this->sectorOf[$pose] ?? null;
+
+		if($cached !== null && $cached[0] === $pose->x && $cached[1] === $pose->y) return $cached[2];
+
+		$sector = $this->level->map->sectorAt($pose->x, $pose->y);
+		$this->sectorOf[$pose] = [$pose->x, $pose->y, $sector];
+
+		return $sector;
+	}
+
 	/** P_CheckSight between two actors, with their own heights. */
 	private function sees(Registry $registry, int $looker, int $target): bool
 	{
-		$height = static fn(int $entity): ?float => $registry->has($entity, Body::class)
-			? $registry->get($entity, Body::class)->height
-			: null;
-
 		return $this->visible(
 			$registry->get($looker, Transform::class)
 			, $registry->get($target, Transform::class)
-			, $height($looker)
-			, $height($target)
+			, $this->heightOf[$looker] ??= $registry->has($looker, Body::class) ? $registry->get($looker, Body::class)->height : 56.0
+			, $this->heightOf[$target] ??= $registry->has($target, Body::class) ? $registry->get($target, Body::class)->height : 56.0
 		);
 	}
 
@@ -2731,7 +2761,7 @@ final class CombatSystem
 		// P_CheckSight's trivial rejection: the WAD's REJECT table marks sector pairs that cannot see each other. Node
 		// builders know nothing of camera portals, so maps with them always trace.
 		if(!$this->level->cameraPortalSurfaces()
-			&& $this->level->map->rejects($this->level->map->sectorAt($a->x, $a->y), $this->level->map->sectorAt($b->x, $b->y))
+			&& $this->level->map->rejects($this->sectorOf($a), $this->sectorOf($b))
 		) return false;
 
 		if($this->classicSight ??= $this->sight->classic())

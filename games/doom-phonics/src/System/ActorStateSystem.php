@@ -42,17 +42,19 @@ final class ActorStateSystem
 	private array $remote = [];
 	/** @var list<int>|null Registry snapshot the schedule was built from. */
 	private ?array $known = null;
-	/** Pending due times, earliest first; entries whose time no longer matches $due are stale. */
-	private \SplPriorityQueue $queue;
+	/**
+	 * @var array<int,list<int>> Actors by the whole tic their due time rounds up to. An entry whose actor was since
+	 * rescheduled is stale and skipped when its tic is drained.
+	 */
+	private array $buckets = [];
+	/** First tic whose bucket may still hold entries. */
+	private int $cursor = 0;
 	/** Actors to step in the update in progress, lowest entity first. */
 	private ?\SplMinHeap $batch = null;
 	/** @var array<int,true> Actors already stepped in the update in progress. */
 	private array $stepped = [];
 
-	public function __construct(public ActionDispatcher $actions, private bool $scheduled = true)
-	{
-		$this->queue = new \SplPriorityQueue;
-	}
+	public function __construct(public ActionDispatcher $actions, private bool $scheduled = true) {}
 
 	public function update(Registry $registry, float $dt): void
 	{
@@ -67,22 +69,33 @@ final class ActorStateSystem
 
 		$this->sync($registry);
 		$this->start = $this->now;
-		$this->end = $this->now + $ticks;
+		// Keep due times on a microsecond grid so a long run cannot drift a frame end across a tic boundary.
+		$this->end = round($this->now + $ticks, 6);
 		$this->stepped = [];
 		$this->batch = new \SplMinHeap;
 
 		foreach(array_keys($this->moving) as $entity) $this->move($entity, $registry, $dt);
 
-		while(!$this->queue->isEmpty())
+		$last = (int)floor($this->end + 1e-9);
+
+		for($tic = $this->cursor; $tic <= $last; $tic++)
 		{
-			[$entity, $due] = $this->queue->top();
+			if(!isset($this->buckets[$tic])) continue;
 
-			if($due > $this->end + 1e-9) break;
+			$entries = $this->buckets[$tic];
+			unset($this->buckets[$tic]);
 
-			$this->queue->extract();
+			foreach($entries as $entity)
+			{
+				$due = $this->due[$entity] ?? INF;
 
-			if(($this->due[$entity] ?? null) === $due) $this->batch->insert($entity);
+				if($due === INF || (int)ceil($due - 1e-9) !== $tic) continue;
+
+				$this->batch->insert($entity);
+			}
 		}
+
+		$this->cursor = $last + 1;
 
 		while(!$this->batch->isEmpty())
 		{
@@ -132,15 +145,6 @@ final class ActorStateSystem
 		if(!$registry->alive($entity) || !$registry->has($entity, ActorState::class))
 		{
 			$this->forget($entity);
-
-			return;
-		}
-
-		// Replication can mark an actor as a replica after it was first scheduled; only the host steps replicas.
-		if($registry->has($entity, RemoteProjectile::class) || $registry->has($entity, RemoteActor::class))
-		{
-			$this->forget($entity);
-			$this->remote[$entity] = true;
 
 			return;
 		}
@@ -199,6 +203,14 @@ final class ActorStateSystem
 
 		$this->known = $all;
 		$present = [];
+
+		// Replication can mark a scheduled actor as a replica; that adds a component, which lands here.
+		foreach(array_keys($this->cache) as $entity)
+		if($registry->has($entity, RemoteProjectile::class) || $registry->has($entity, RemoteActor::class))
+		{
+			$this->forget($entity);
+			$this->remote[$entity] = true;
+		}
 
 		foreach($all as $entity)
 		{
@@ -262,7 +274,12 @@ final class ActorStateSystem
 	{
 		$this->due[$entity] = $due;
 
-		if($due !== INF) $this->queue->insert([$entity, $due], [-$due, -$entity]);
+		if($due === INF) return;
+
+		$tic = (int)ceil($due - 1e-9);
+		$this->buckets[$tic][] = $entity;
+
+		if($tic < $this->cursor) $this->cursor = $tic;
 	}
 
 	private function forget(int $entity): void
@@ -318,8 +335,8 @@ final class ActorStateSystem
 	{
 		for($guard = 0; $guard < 64 && !$state->stopped; $guard++)
 		{
-			$sequence = $state->definition->state($state->label);
-			$frame = $state->current();
+			$sequence = $state->sequence();
+			$frame = $sequence?->frames[$state->frame] ?? null;
 
 			if(!$sequence || !$frame)
 			{

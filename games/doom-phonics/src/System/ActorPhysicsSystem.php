@@ -26,6 +26,18 @@ final class ActorPhysicsSystem
 	private ?array $known = null;
 	/** @var array<int,array{Transform,Velocity,Body,?Gravity}> Components per actor; a structural change rebuilds it. */
 	private array $cache = [];
+	/**
+	 * Bodies the step still visits. A body the step leaves at rest on a plain floor with no velocity sleeps: it is
+	 * dropped from this set until something that can move it reports in. Damage thrust, a Collision move, and a plane
+	 * change in its sector each wake it; new bodies start awake. Nearly every body sleeps nearly every tic.
+	 *
+	 * @var array<int,true>
+	 */
+	private array $awake = [];
+	/** @var array<int,int> Sleeping bodies' sectors, so a plane change wakes the bodies standing in that sector. */
+	private array $restingSector = [];
+	/** @var array<int,array<int,true>> Sleeping bodies by sector. */
+	private array $sleepers = [];
 
 	public function __construct(
 		Collision $collision
@@ -52,17 +64,28 @@ final class ActorPhysicsSystem
 			$this->known = $entities;
 			$this->cache = [];
 
+			$previous = $this->cache;
+			$this->cache = [];
+
 			foreach($entities as $entity)
-			$this->cache[$entity] = [
-				$registry->get($entity, Transform::class)
-				, $registry->get($entity, Velocity::class)
-				, $registry->get($entity, Body::class)
-				, $registry->has($entity, Gravity::class) ? $registry->get($entity, Gravity::class) : null
-			];
+			{
+				$this->cache[$entity] = $previous[$entity] ?? [
+					$registry->get($entity, Transform::class)
+					, $registry->get($entity, Velocity::class)
+					, $registry->get($entity, Body::class)
+					, $registry->has($entity, Gravity::class) ? $registry->get($entity, Gravity::class) : null
+				];
+
+				if(!isset($previous[$entity])) $this->awake[$entity] = true;
+			}
+
+			foreach(array_keys($previous) as $entity) if(!isset($this->cache[$entity])) $this->forget($entity);
 		}
 
-		foreach($this->cache as $entity => [$pose, $velocity, $body, $gravity])
+		foreach(array_keys($this->awake) as $entity)
 		{
+			[$pose, $velocity, $body, $gravity] = $this->cache[$entity];
+
 			if(hypot($velocity->x, $velocity->y) > .01)
 			{
 				$motion = $this->collision->moveAndSlide(
@@ -95,6 +118,48 @@ final class ActorPhysicsSystem
 			}
 
 			if($gravity !== null) $this->physics->step($pose, $velocity, $body, $dt, $gravity->scale);
+
+			// A body left at rest on a plain floor sleeps until something that can move it reports in.
+			if($velocity->z == 0 && $body->grounded && $velocity->x == 0 && $velocity->y == 0)
+			{
+				$sector = $this->collision->level->sectorAt($pose->x, $pose->y);
+
+				if($pose->z === $sector->floor && !$sector->volumes && $sector->heightTransfer === null
+					&& $sector->floorSlope === [0.0,0.0,0.0] && $sector->ceilingSlope === [0.0,0.0,0.0]
+					&& !$this->collision->level->cameraPortalSurfaces()
+				)
+				{
+					unset($this->awake[$entity]);
+					$this->restingSector[$entity] = $sector->index;
+					$this->sleepers[$sector->index][$entity] = true;
+				}
+			}
 		}
+	}
+
+	/** Bring a sleeping body back into the step: its velocity or position may have changed. */
+	public function wake(int $entity): void
+	{
+		if(!isset($this->cache[$entity]) || isset($this->awake[$entity])) return;
+
+		$this->awake[$entity] = true;
+		$sector = $this->restingSector[$entity] ?? null;
+
+		if($sector !== null) unset($this->sleepers[$sector][$entity], $this->restingSector[$entity]);
+	}
+
+	/** A sector's planes changed: every body sleeping on its floor must be stepped again. */
+	public function wakeSector(int $sector): void
+	{
+		foreach(array_keys($this->sleepers[$sector] ?? []) as $entity) $this->wake($entity);
+	}
+
+	private function forget(int $entity): void
+	{
+		$sector = $this->restingSector[$entity] ?? null;
+
+		if($sector !== null) unset($this->sleepers[$sector][$entity]);
+
+		unset($this->awake[$entity], $this->restingSector[$entity]);
 	}
 }

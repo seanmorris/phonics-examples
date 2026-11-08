@@ -18,7 +18,8 @@ final class DamageResolver
 	private const TICS_PER_SECOND = 35;
 	private const THRUST_PER_DAMAGE_TIC = 12.5;
 
-	public function __construct(private ?ActorDropper $drops = null) {}
+	/** @param ?\Closure(int):void $thrust Told each entity thrust gives velocity, so sleeping physics can wake it. */
+	public function __construct(private ?ActorDropper $drops = null, private ?\Closure $thrust = null) {}
 
 	/** Return true only when this event changed the target. */
 	public function apply(Registry $registry, DamageEvent $event): bool
@@ -178,5 +179,7 @@ final class DamageResolver
 		$velocity = $registry->get($event->target, Velocity::class);
 		$velocity->x += $dx / $distance * $momentum;
 		$velocity->y += $dy / $distance * $momentum;
+
+		if($this->thrust) ($this->thrust)($event->target);
 	}
 }

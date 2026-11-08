@@ -4,6 +4,7 @@ namespace DoomPhonics\Component;
 
 use DoomPhonics\Definition\ActorDefinition;
 use DoomPhonics\Definition\StateFrame;
+use DoomPhonics\Definition\StateSequence;
 
 /** Live cursor through one immutable DECORATE actor definition. */
 final class ActorState
@@ -18,6 +19,9 @@ final class ActorState
 	 * system is not stepping an actor, its `ticks` reflect its last step rather than this tic.
 	 */
 	public ?\Closure $changed = null;
+	private ?StateSequence $sequence = null;
+	private ?string $sequenceLabel = null;
+	private ?ActorDefinition $sequenceOf = null;
 
 	public function __construct(public ActorDefinition $definition, public string $label = 'Spawn') {}
 
@@ -50,8 +54,21 @@ final class ActorState
 		if($this->changed) ($this->changed)();
 	}
 
+	/** The sequence the label names, looked up again only when the label or definition changes. */
+	public function sequence(): ?StateSequence
+	{
+		if($this->sequenceLabel !== $this->label || $this->sequenceOf !== $this->definition)
+		{
+			$this->sequenceLabel = $this->label;
+			$this->sequenceOf = $this->definition;
+			$this->sequence = $this->definition->state($this->label);
+		}
+
+		return $this->sequence;
+	}
+
 	public function current(): ?StateFrame
 	{
-		return $this->definition->state($this->label)?->frames[$this->frame] ?? null;
+		return $this->sequence()?->frames[$this->frame] ?? null;
 	}
 }
