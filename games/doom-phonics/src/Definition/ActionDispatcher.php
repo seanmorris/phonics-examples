@@ -26,6 +26,9 @@ final class ActionDispatcher
 
 		$key = strtolower($frame->action);
 
+		// Arguments such as random(-3,3) are computed afresh for every call, as ZDoom computes them.
+		if($frame->dynamic) $frame = $frame->evaluated();
+
 		if(isset($this->actions[$key])) ($this->actions[$key])($entity, $frame, $registry);
 		else $this->unhandled[$frame->action] = ($this->unhandled[$frame->action] ?? 0) + 1;
 	}

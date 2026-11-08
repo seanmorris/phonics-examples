@@ -432,6 +432,10 @@ final class CombatSystem
 			}
 		);
 
+		$register('A_SpawnItem', fn(int $entity, StateFrame $frame, Registry $registry) => $this->spawnItem($entity, $frame, $registry));
+		$register('A_SpawnItemEx', fn(int $entity, StateFrame $frame, Registry $registry) => $this->spawnItemEx($entity, $frame, $registry));
+		$register('A_CustomMissile', fn(int $entity, StateFrame $frame, Registry $registry) => $this->customMissile($entity, $frame, $registry));
+
 		$register(
 			'A_FireRailgun'
 			, fn(int $entity, StateFrame $frame, Registry $registry) => $this->fireRailgun($entity, $registry)
@@ -1952,6 +1956,214 @@ final class CombatSystem
 		$registry->get($entity, ActorState::class)->enter('See');
 	}
 
+	/** @var array<string,ActorDefinition|false> The trail class of each FastProjectile definition, by name. */
+	private array $fastTrails = [];
+
+	/**
+	 * The actor a FastProjectile leaves at each step of its movement (its MissileType), or null for any other
+	 * projectile. A beam such as the Omega pack's Channeler has no sprite of its own: the trail is what is seen.
+	 */
+	private function fastTrail(ActorDefinition $definition): ?ActorDefinition
+	{
+		$trail = $this->fastTrails[$definition->name] ??= (
+			$this->actors->isA($definition, 'FastProjectile') && (string)$definition->value('MissileType', '') !== ''
+				? ($this->actors->named((string)$definition->value('MissileType')) ?? false)
+				: false
+		);
+
+		return $trail ?: null;
+	}
+
+	/**
+	 * AFastProjectile::Tick and Effect(): the tic's movement is taken in steps no longer than the radius, at least
+	 * eight of them, and the trail actor is spawned after each, 8 units below the projectile but never under the
+	 * floor, raised by MissileHeight, facing the projectile's way. The flight here is one swept trace, so the trail is
+	 * laid along the path it took, up to where it ended.
+	 */
+	private function layTrail(
+		Registry $registry
+		, ActorDefinition $trail
+		, ActorDefinition $definition
+		, float $fromX
+		, float $fromY
+		, float $fromZ
+		, Transform $pose
+		, float $radius
+		, float $dx
+		, float $dy
+	): void {
+		$count = 8;
+
+		if($radius > 0)
+		while($count < 256 && (abs($dx) / $count > $radius || abs($dy) / $count > $radius)) $count *= 2;
+
+		$toX = $pose->x;
+		$toY = $pose->y;
+		$toZ = $pose->z;
+		$lift = (float)$definition->value('MissileHeight', 0);
+
+		for($step = 1; $step <= $count; $step++)
+		{
+			$fraction = $step / $count;
+			$x = $fromX + ($toX - $fromX) * $fraction;
+			$y = $fromY + ($toY - $fromY) * $fraction;
+			$z = max($fromZ + ($toZ - $fromZ) * $fraction - 8, $this->level->sectorAt($x, $y)->floor) + $lift;
+			$this->spawnActor($registry, $trail, $x, $y, $z, $pose->angle, true);
+		}
+	}
+
+	/**
+	 * Spawn an actor of a definition at a point, facing an angle, with its interpolation starting there. An effect
+	 * (`$effect`) with no body is marked transient, as puffs and blood are, so it drifts by its velocity and retires
+	 * when its states end.
+	 */
+	private function spawnActor(Registry $registry, ActorDefinition $definition, float $x, float $y, float $z, float $angle, bool $effect = false): int
+	{
+		$sector = $this->level->sectorAt($x, $y);
+		$entity = $this->factory->spawn(
+			$registry
+			, $definition
+			, ['x' => $x, 'y' => $y, 'z' => 0, 'angle' => rad2deg($angle), 'type' => 0, 'index' => -1, 'flags' => []]
+			, ['floor' => $sector->floor, 'ceiling' => $sector->ceiling]
+		);
+		$pose = $registry->get($entity, Transform::class);
+		$pose->x = $x;
+		$pose->y = $y;
+		$pose->z = $z;
+		$pose->angle = $angle;
+		$pose->beginStep();
+
+		if($effect && !$registry->has($entity, Body::class)) $registry->add($entity, new TransientEffect);
+
+		return $entity;
+	}
+
+	/** The actor an action acts from: the entity itself, or the player behind a weapon or flash overlay. */
+	private function actionActor(int $entity, Registry $registry): ?int
+	{
+		if($registry->has($entity, Transform::class)) return $entity;
+
+		$owner = $this->actionOwner($entity, $registry);
+
+		return $owner !== null && $registry->has($owner, Transform::class) ? $owner : null;
+	}
+
+	/** The entity credited with what an actor spawns: a projectile's shooter, otherwise the actor. */
+	private function spawnOwner(int $actor, Registry $registry): int
+	{
+		return $registry->has($actor, Projectile::class) ? $registry->get($actor, Projectile::class)->owner : $actor;
+	}
+
+	/** A_SpawnItem(type, distance, zheight, useammo, transfer_translation): an actor ahead of the caller. */
+	private function spawnItem(int $entity, StateFrame $frame, Registry $registry): void
+	{
+		$actor = $this->actionActor($entity, $registry);
+		$definition = $this->actors->named((string)($frame->arguments[0] ?? ''));
+
+		if($actor === null || $definition === null) return;
+
+		$pose = $registry->get($actor, Transform::class);
+		$distance = (float)($frame->arguments[1] ?? 0);
+		$spawned = $this->spawnActor(
+			$registry
+			, $definition
+			, $pose->x + cos($pose->angle) * $distance
+			, $pose->y + sin($pose->angle) * $distance
+			, $pose->z + (float)($frame->arguments[2] ?? 0)
+			, $pose->angle
+			, true
+		);
+
+		if($definition->hasFlag('MISSILE'))
+		$registry->add($spawned, new Projectile($this->spawnOwner($actor, $registry), (int)$definition->value('Damage', 3), 12, true));
+	}
+
+	/**
+	 * A_SpawnItemEx(type, xofs, yofs, zofs, xvel, yvel, zvel, angle, flags, chance, tid): an actor offset from the
+	 * caller in its own frame, forward and to the right, given a velocity in that frame, unless the flags make the
+	 * position (SXF_ABSOLUTEPOSITION), velocity (SXF_ABSOLUTEVELOCITY), or angle (SXF_ABSOLUTEANGLE) absolute.
+	 * `chance` is the chance in 256 that nothing is spawned, as in ZDoom.
+	 */
+	private function spawnItemEx(int $entity, StateFrame $frame, Registry $registry): void
+	{
+		$actor = $this->actionActor($entity, $registry);
+		$definition = $this->actors->named((string)($frame->arguments[0] ?? ''));
+		$chance = (int)($frame->arguments[9] ?? 0);
+
+		if($actor === null || $definition === null || ($chance > 0 && mt_rand(0, 255) < $chance)) return;
+
+		$pose = $registry->get($actor, Transform::class);
+		$flags = (int)($frame->arguments[8] ?? 0);
+		$forward = (float)($frame->arguments[1] ?? 0);
+		$right = (float)($frame->arguments[2] ?? 0);
+		$velocityForward = (float)($frame->arguments[4] ?? 0);
+		$velocityRight = (float)($frame->arguments[5] ?? 0);
+		$sin = sin($pose->angle);
+		$cos = cos($pose->angle);
+		$angle = deg2rad((float)($frame->arguments[7] ?? 0)) + (($flags & 8) ? 0 : $pose->angle);
+		[$x, $y] = ($flags & 4)
+			? [$pose->x + $forward, $pose->y + $right]
+			: [$pose->x + $forward * $cos + $right * $sin, $pose->y + $forward * $sin - $right * $cos];
+		[$velocityX, $velocityY] = ($flags & 2)
+			? [$velocityForward, $velocityRight]
+			: [$velocityForward * $cos + $velocityRight * $sin, $velocityForward * $sin - $velocityRight * $cos];
+		$spawned = $this->spawnActor($registry, $definition, $x, $y, $pose->z + (float)($frame->arguments[3] ?? 0), $angle, true);
+		$velocity = $registry->get($spawned, Velocity::class);
+		// ZDoom's velocities are per tic.
+		$velocity->x = $velocityX * 35;
+		$velocity->y = $velocityY * 35;
+		$velocity->z = (float)($frame->arguments[6] ?? 0) * 35;
+
+		if($definition->hasFlag('MISSILE'))
+		$registry->add($spawned, new Projectile($this->spawnOwner($actor, $registry), (int)$definition->value('Damage', 3), 12, true));
+	}
+
+	/**
+	 * A_CustomMissile(type, spawnheight, spawnofs_xy, angle, flags, pitch): a missile from the caller. With
+	 * CMF_AIMDIRECTION it flies along the caller's facing turned by `angle`, at `pitch`; otherwise it is aimed at the
+	 * caller's target, a monster's quarry or, for a missile, its shooter, turned by `angle`, and nothing is fired
+	 * without one. A missile fired by a missile is credited to the original shooter unless CMF_TRACKOWNER keeps it
+	 * with the firing missile, so its volatile fragments can strike the shooter, as ZDoom's do.
+	 */
+	private function customMissile(int $entity, StateFrame $frame, Registry $registry): void
+	{
+		$actor = $this->actionActor($entity, $registry);
+		$name = (string)($frame->arguments[0] ?? '');
+
+		if($actor === null || $name === '' || $this->actors->named($name) === null) return;
+
+		$pose = $registry->get($actor, Transform::class);
+		$height = (float)($frame->arguments[1] ?? 32);
+		$side = (float)($frame->arguments[2] ?? 0);
+		$turn = deg2rad((float)($frame->arguments[3] ?? 0));
+		$flags = (int)($frame->arguments[4] ?? 0);
+		$pitch = deg2rad((float)($frame->arguments[5] ?? 0));
+		$x = $pose->x + cos($pose->angle - M_PI / 2) * $side;
+		$y = $pose->y + sin($pose->angle - M_PI / 2) * $side;
+		$z = $pose->z + $height;
+		$missile = $registry->has($actor, Projectile::class);
+		$owner = $missile && !($flags & 4) ? $registry->get($actor, Projectile::class)->owner : $actor;
+
+		if($flags & 2)
+		{
+			$angle = ($flags & 128) ? $turn : $pose->angle + $turn;
+			$this->spawnProjectile($registry, $owner, $name, $x, $y, $z, $angle, null, -tan($pitch));
+
+			return;
+		}
+
+		$target = null;
+
+		if($registry->has($actor, MonsterBrain::class)) $target = $registry->get($actor, MonsterBrain::class)->target;
+		elseif($missile) $target = $registry->get($actor, Projectile::class)->owner;
+
+		if($target === null || !$registry->alive($target) || !$registry->has($target, Transform::class)) return;
+
+		$aim = $registry->get($target, Transform::class);
+		$angle = atan2($aim->y - $y, $aim->x - $x) + $turn;
+		$this->spawnProjectile($registry, $owner, $name, $x, $y, $z, $angle, $aim, 0.0);
+	}
+
 	private function spawnProjectile(
 		Registry $registry
 		, int $owner
@@ -1969,14 +2181,7 @@ final class CombatSystem
 
 		if(!$definition) return null;
 
-		$sector = $this->level->sectorAt($x, $y);
-
-		$entity = $this->factory->spawn(
-			$registry
-			, $definition
-			, ['x' => $x, 'y' => $y, 'z' => 0, 'angle' => rad2deg($angle), 'type' => 0, 'index' => -1, 'flags' => []]
-			, ['floor' => $sector->floor, 'ceiling' => $sector->ceiling]
-		);
+		$entity = $this->spawnActor($registry, $definition, $x, $y, $z, $angle);
 
 		// A class fired as a missile without the missile flags, such as a plain actor a pack launches with
 		// A_CustomMissile, is still flown by its velocity in ZDoom; here it needs a body to move and strike with.
@@ -1984,11 +2189,6 @@ final class CombatSystem
 		$registry->add($entity, new Body((float)$definition->value('Radius', 20), (float)$definition->value('Height', 16), false, false, true));
 
 		$pose = $registry->get($entity, Transform::class);
-		$pose->x = $x;
-		$pose->y = $y;
-		$pose->z = $z;
-		$pose->angle = $angle;
-		$pose->beginStep();
 		$speed = (float)$definition->value('Speed', 10) * 35;
 		$verticalSpeed = $aimSlope * $speed;
 
@@ -2081,7 +2281,37 @@ final class CombatSystem
 		$dy = $velocity->y * $dt;
 		$dz = $velocity->z * $dt;
 		$body = $registry->get($entity, Body::class);
+		$trail = $this->fastTrail($state->definition);
 
+		if($trail === null)
+		{
+			$this->flyProjectile($registry, $entity, $projectile, $state, $pose, $velocity, $bounce, $body, $dx, $dy, $dz, $dt);
+
+			return;
+		}
+
+		$fromX = $pose->x;
+		$fromY = $pose->y;
+		$fromZ = $pose->z;
+		$this->flyProjectile($registry, $entity, $projectile, $state, $pose, $velocity, $bounce, $body, $dx, $dy, $dz, $dt);
+		$this->layTrail($registry, $trail, $state->definition, $fromX, $fromY, $fromZ, $pose, $body->radius, $dx, $dy);
+	}
+
+	/** One tic of a projectile's flight: trace it, strike what it meets, bounce, or arrive. */
+	private function flyProjectile(
+		Registry $registry
+		, int $entity
+		, Projectile $projectile
+		, ActorState $state
+		, Transform $pose
+		, Velocity $velocity
+		, ?ProjectileBounce $bounce
+		, Body $body
+		, float $dx
+		, float $dy
+		, float $dz
+		, float $dt
+	): void {
 		if($projectile->escapedSky)
 		{
 			$this->placeProjectile($pose, $dx, $dy, $dz, 1.0);

@@ -213,7 +213,7 @@ final class DecorateParser
 			if($tail !== '' && preg_match('/^([A-Za-z_][A-Za-z0-9_]*)(?:\s*\((.*)\))?/', $tail, $actionMatch))
 			{
 				$action = $actionMatch[1];
-				$arguments = isset($actionMatch[2]) ? self::values($actionMatch[2]) : [];
+				$arguments = isset($actionMatch[2]) ? self::arguments($actionMatch[2]) : [];
 			}
 
 			foreach(str_split($frames) as $frame)
@@ -222,6 +222,54 @@ final class DecorateParser
 	}
 
 	/** @return list<string|int|float> */
+	/**
+	 * Action arguments: split at the commas outside parentheses and quotes, each a literal number, a quoted string,
+	 * a bare name such as a class or a flag, or, when it holds operators or a call, an Expression computed per call.
+	 *
+	 * @return list<string|int|float|Expression>
+	 */
+	private static function arguments(string $text): array
+	{
+		$result = [];
+		$depth = 0;
+		$quoted = $escaped = false;
+		$start = 0;
+		$length = strlen($text);
+
+		for($i = 0; $i <= $length; $i++)
+		{
+			$character = $i < $length ? $text[$i] : ',';
+
+			if($quoted)
+			{
+				if($escaped) $escaped = false;
+				elseif($character === '\\') $escaped = true;
+				elseif($character === '"') $quoted = false;
+
+				continue;
+			}
+
+			if($character === '"') $quoted = true;
+			elseif($character === '(') $depth++;
+			elseif($character === ')') $depth = max(0, $depth - 1);
+			elseif($character === ',' && $depth === 0)
+			{
+				$argument = trim(substr($text, $start, $i - $start));
+				$start = $i + 1;
+
+				if($argument === '' && $i === $length && !$result) break;
+
+				if(strlen($argument) >= 2 && $argument[0] === '"' && $argument[-1] === '"') $result[] = stripcslashes(substr($argument, 1, -1));
+				elseif(preg_match('/^[+-]?\d+$/', $argument)) $result[] = (int)$argument;
+				elseif(is_numeric($argument)) $result[] = (float)$argument;
+				elseif(Expression::looksLike($argument)) $result[] = new Expression($argument);
+				else $result[] = $argument;
+			}
+		}
+
+		return $result;
+	}
+
 	private static function values(string $text): array
 	{
 		if($text === '') return [];

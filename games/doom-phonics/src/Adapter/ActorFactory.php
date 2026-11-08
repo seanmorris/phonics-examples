@@ -316,11 +316,15 @@ final class ActorFactory
 		$state = $registry->get($entity, ActorState::class);
 		$frame = $state->current();
 
-		if($frame && $frame->ticks > 1)
+		$placed = (int)($thing['index'] ?? -1) >= 0;
+
+		// Doom offsets initial actor tics. Keep map populations from executing every DECORATE action on the same
+		// fixed update while retaining deterministic replays. An actor spawned in play keeps its first frame whole
+		// unless it asks for the offset with +RANDOMIZE, as in ZDoom; with the map thing's index of -1 the seed was
+		// always zero, and every puff, trail, and missile lost all but one tic of its first frame.
+		if($frame && $frame->ticks > 1 && ($placed || $definition->hasFlag('RANDOMIZE')))
 		{
-			// Doom offsets initial actor tics. Keep map populations from executing every DECORATE
-			// action on the same fixed update while retaining deterministic replays.
-			$seed = ((int)($thing['index'] ?? $entity) + 1) * 1103
+			$seed = (($placed ? (int)$thing['index'] : $entity) + 1) * 1103
 				+ (int)($thing['type'] ?? $definition->editorNumber ?? 0) * 97;
 
 			$state->entered = true;

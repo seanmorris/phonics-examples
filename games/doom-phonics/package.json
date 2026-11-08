@@ -81,6 +81,7 @@
     "src/Definition/ActorCatalog.php",
     "src/Definition/ActorDefinition.php",
     "src/Definition/DecorateParser.php",
+    "src/Definition/Expression.php",
     "src/Definition/KeyConfParser.php",
     "src/Definition/LanguageCatalog.php",
     "src/Definition/LineAction.php",
