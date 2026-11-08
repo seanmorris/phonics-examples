@@ -49,6 +49,7 @@
     "src/Audio/SoundListener.php",
     "src/Audio/SoundSample.php",
     "src/Audio/SoundSource.php",
+    "src/Component/ActorFade.php",
     "src/Component/ActorState.php",
     "src/Component/BeamEffect.php",
     "src/Component/Body.php",

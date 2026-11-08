@@ -11,6 +11,7 @@ use DoomPhonics\Audio\SoundEmitter;
 use DoomPhonics\Audio\SoundEvent;
 use DoomPhonics\Audio\SoundListener;
 use DoomPhonics\Audio\SoundSource;
+use DoomPhonics\Component\ActorFade;
 use DoomPhonics\Component\ActorState;
 use DoomPhonics\Component\BeamEffect;
 use DoomPhonics\Component\Body;
@@ -435,6 +436,8 @@ final class CombatSystem
 		$register('A_SpawnItem', fn(int $entity, StateFrame $frame, Registry $registry) => $this->spawnItem($entity, $frame, $registry));
 		$register('A_SpawnItemEx', fn(int $entity, StateFrame $frame, Registry $registry) => $this->spawnItemEx($entity, $frame, $registry));
 		$register('A_CustomMissile', fn(int $entity, StateFrame $frame, Registry $registry) => $this->customMissile($entity, $frame, $registry));
+		$register('A_FadeOut', fn(int $entity, StateFrame $frame, Registry $registry) => $this->fade($entity, $frame, $registry, -1));
+		$register('A_FadeIn', fn(int $entity, StateFrame $frame, Registry $registry) => $this->fade($entity, $frame, $registry, 1));
 
 		$register(
 			'A_FireRailgun'
@@ -2036,6 +2039,32 @@ final class CombatSystem
 		if($effect && !$registry->has($entity, Body::class)) $registry->add($entity, new TransientEffect);
 
 		return $entity;
+	}
+
+	/**
+	 * A_FadeOut(amount, flags) and A_FadeIn(amount, flags): move the actor's alpha by `amount` (default 0.1) from its
+	 * definition's Alpha; A_FadeOut removes the actor once it reaches zero unless the flags clear FTF_REMOVE (1).
+	 */
+	private function fade(int $entity, StateFrame $frame, Registry $registry, int $direction): void
+	{
+		$actor = $this->actionActor($entity, $registry);
+
+		if($actor === null) return;
+
+		$amount = (float)($frame->arguments[0] ?? 0.1) * $direction;
+		$remove = $direction < 0 && ((int)($frame->arguments[1] ?? 1) & 1);
+
+		if(!$registry->has($actor, ActorFade::class))
+		{
+			$definition = $registry->has($actor, ActorState::class) ? $registry->get($actor, ActorState::class)->definition : null;
+			$registry->add($actor, new ActorFade(max(0.0, min(1.0, (float)($definition?->value('Alpha', 1) ?? 1)))));
+		}
+
+		$fade = $registry->get($actor, ActorFade::class);
+		$fade->alpha = max(0.0, min(1.0, $fade->alpha + $amount));
+
+		if($remove && $fade->alpha <= 0.0)
+		$registry->defer(static function(Registry $registry) use ($actor): void { if($registry->alive($actor)) $registry->destroy($actor); });
 	}
 
 	/** The actor an action acts from: the entity itself, or the player behind a weapon or flash overlay. */

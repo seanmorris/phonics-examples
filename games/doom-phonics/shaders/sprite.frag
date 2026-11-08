@@ -18,6 +18,8 @@ in float viewDepth;
 flat in int textureId;
 flat in int lightLevel;
 flat in float opacity;
+flat in int styleMode;
+flat in vec3 stencil;
 out vec4 color;
 uniform vec4 viewBlend;
 
@@ -37,6 +39,16 @@ void main()
 	int lightMap = clamp(int(round(float(255 - effectiveLight) / 8.0)) + distanceShade, 0, lightRows - 1);
 	int colorMap = fixedLightMap >= 0 ? fixedLightMap : lightMap;
 	color = texelFetch(paletteMap, ivec2(sourceIndex, palettePage * paletteRows + colorMap), 0);
-	color.a *= opacity * pixelAlpha;
+
+	if(styleMode == 3)
+	{
+		// Shaded: the picture's own brightness, unlit, is the alpha; the stencil colour, lit as the sector lights it,
+		// is the colour. A greyscale smoke puff reads as a soft cloud instead of a grey square.
+		vec4 unlit = texelFetch(paletteMap, ivec2(sourceIndex, palettePage * paletteRows), 0);
+		float luminance = dot(unlit.rgb, vec3(.299, .587, .114));
+		float lit = float(lightRows - colorMap) / float(lightRows);
+		color = vec4(stencil * lit, luminance * opacity * pixelAlpha);
+	}
+	else color.a *= opacity * pixelAlpha;
 	color.rgb = mix(color.rgb, viewBlend.rgb, viewBlend.a);
 }

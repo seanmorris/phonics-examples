@@ -12,6 +12,7 @@ use DoomPhonics\Graphics\TextureCatalog;
 use DoomPhonics\Graphics\ViewColorState;
 use DoomPhonics\Definition\ActorCatalog;
 use DoomPhonics\Definition\WeaponAmmo;
+use DoomPhonics\Component\ActorFade;
 use DoomPhonics\Component\ActorState;
 use DoomPhonics\Component\BeamEffect;
 use DoomPhonics\Component\FloorClip;
@@ -64,7 +65,7 @@ final class GlesMapRenderer
 	private Query $beamQuery;
 	private int $spriteCapacity = 0;
 	/** Floats per sprite instance: centre, edge offsets and heights, UV edges, texture, light, opacity. */
-	private const SPRITE_FLOATS = 13;
+	private const SPRITE_FLOATS = 15;
 	/** @var array<string,array{0:\DoomPhonics\Graphics\IndexedImage,1:int,2:bool}|false> Sprite image, atlas texture, and flip by frame and rotation. */
 	private array $spriteLooks = [];
 	/** @var array<string,array{0:float,1:bool}> Opacity and ceiling placement by actor definition. */
@@ -693,6 +694,12 @@ final class GlesMapRenderer
 
 			if($style[2] === self::STYLE_HIDDEN) continue;
 
+			// A_FadeOut changes an actor's alpha as it runs; a normal style ignores alpha, as in ZDoom.
+			$opacity = $style[0];
+
+			if($style[2] !== self::STYLE_NORMAL && $registry->has($entity, ActorFade::class))
+			$opacity *= max(0.0, min(1.0, $registry->get($entity, ActorFade::class)->alpha));
+
 			$cached['projectile'] ??= $registry->has($entity, Projectile::class)
 				|| $registry->has($entity, RemoteProjectile::class);
 
@@ -719,11 +726,13 @@ final class GlesMapRenderer
 				, 0.0
 				, (float)$texture
 				, (float)($frame->bright ? 255 : $this->level->sectors[$actorSector]->light)
-				, $style[0]
+				, $opacity
+				, (float)$style[2]
+				, (float)$style[3]
 			];
 
 			if($style[2] === self::STYLE_ADDITIVE) array_push($additive, ...$instance);
-			elseif($style[0] < 1) $translucent[] = [$distance, $instance];
+			elseif($style[2] === self::STYLE_SHADED || $opacity < 1) $translucent[] = [$distance, $instance];
 			else array_push($opaque, ...$instance);
 
 			$stats['visible']++;
@@ -821,14 +830,15 @@ final class GlesMapRenderer
 		$this->actorCpuMs = (hrtime(true) - $started) / 1e6;
 	}
 
-	public const STYLE_NORMAL = 0, STYLE_ADDITIVE = 1, STYLE_HIDDEN = 2;
+	public const STYLE_NORMAL = 0, STYLE_ADDITIVE = 1, STYLE_HIDDEN = 2, STYLE_SHADED = 3;
 
 	/**
-	 * How an actor's sprites blend, from its RenderStyle and Alpha: opacity, whether it hangs from the ceiling, and
-	 * the blend mode. Additive styles add their light and need their black left out, as the Omega pack's beam trails
-	 * do; `None` draws nothing; fuzzy actors (SHADOW) are capped at Doom's fuzz darkness.
+	 * How an actor's sprites blend, from its RenderStyle and Alpha: opacity, whether it hangs from the ceiling, the
+	 * blend mode, and the stencil colour packed as r * 65536 + g * 256 + b. Additive styles add their light and need
+	 * their black left out, as the Omega pack's beam trails do; `Shaded` paints the picture's brightness in the
+	 * stencil colour, as its smoke is; `None` draws nothing; fuzzy actors (SHADOW) are capped at Doom's fuzz darkness.
 	 *
-	 * @return array{float,bool,int}
+	 * @return array{float,bool,int,int}
 	 */
 	public static function actorStyle(ActorDefinition $definition): array
 	{
@@ -840,13 +850,31 @@ final class GlesMapRenderer
 		$mode = match($renderStyle)
 		{
 			'add', 'addstencil', 'addshaded', 'subtract' => self::STYLE_ADDITIVE,
+			'shaded' => self::STYLE_SHADED,
 			'none' => self::STYLE_HIDDEN,
 			default => self::STYLE_NORMAL,
 		};
 
 		if($renderStyle === 'normal' && !$definition->hasFlag('SHADOW')) $alpha = 1.0;
 
-		return [$alpha, $definition->hasFlag('SPAWNCEILING'), $mode];
+		return [$alpha, $definition->hasFlag('SPAWNCEILING'), $mode, self::stencilColor($definition->value('StencilColor'))];
+	}
+
+	private const COLOR_NAMES = [
+		'black' => 0x000000, 'white' => 0xffffff, 'red' => 0xff0000, 'green' => 0x00ff00, 'blue' => 0x0000ff
+		, 'yellow' => 0xffff00, 'cyan' => 0x00ffff, 'magenta' => 0xff00ff, 'gray' => 0x808080, 'grey' => 0x808080
+		, 'orange' => 0xff8000, 'purple' => 0x800080, 'brown' => 0x804000
+	];
+
+	/** A DECORATE colour, `"RR GG BB"`, `"RRGGBB"`, or a common name, packed; ZDoom's default is black. */
+	public static function stencilColor(mixed $value): int
+	{
+		$text = strtolower(trim((string)($value ?? ''), "\" "));
+
+		if(preg_match('/^([0-9a-f]{2})\s*([0-9a-f]{2})\s*([0-9a-f]{2})$/', $text, $m))
+		return (hexdec($m[1]) << 16) | (hexdec($m[2]) << 8) | hexdec($m[3]);
+
+		return self::COLOR_NAMES[$text] ?? 0;
 	}
 
 	/** Point the sprite attributes at instances from `$first` on, one record per sprite. */
@@ -854,7 +882,7 @@ final class GlesMapRenderer
 	{
 		$stride = self::SPRITE_FLOATS * 4;
 
-		foreach([[0,2,0],[1,4,8],[2,4,24],[3,3,40]] as [$location,$size,$offset])
+		foreach([[0,2,0],[1,4,8],[2,4,24],[3,4,40],[4,1,56]] as [$location,$size,$offset])
 		{
 			glVertexAttribPointer($location, $size, GL_FLOAT, false, $stride, $first * $stride + $offset);
 			glEnableVertexAttribArray($location);

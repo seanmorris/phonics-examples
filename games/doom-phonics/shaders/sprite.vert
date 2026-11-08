@@ -7,8 +7,9 @@ layout(location=0) in vec2 aCenter;
 layout(location=1) in vec4 aExtent;
 // U at the left and right edges, V at the bottom and top.
 layout(location=2) in vec4 aUv;
-// Atlas texture, light level, and opacity.
-layout(location=3) in vec3 aStyle;
+// Atlas texture, light level, opacity, and style mode (0 normal, 1 additive, 3 shaded).
+layout(location=4) in float aStencil;
+layout(location=3) in vec4 aStyle;
 
 uniform vec3 camera;
 uniform vec2 forward;
@@ -22,6 +23,8 @@ out float viewDepth;
 flat out int textureId;
 flat out int lightLevel;
 flat out float opacity;
+flat out int styleMode;
+flat out vec3 stencil;
 
 void main()
 {
@@ -52,4 +55,7 @@ void main()
 	textureId = int(round(aStyle.x));
 	lightLevel = int(round(aStyle.y));
 	opacity = aStyle.z;
+	styleMode = int(round(aStyle.w));
+	// The stencil colour arrives packed as r * 65536 + g * 256 + b, exact in a float.
+	stencil = vec3(floor(aStencil / 65536.0), floor(mod(aStencil, 65536.0) / 256.0), mod(aStencil, 256.0)) / 255.0;
 }
