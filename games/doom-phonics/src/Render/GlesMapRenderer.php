@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace DoomPhonics\Render;
 
+use DoomPhonics\Definition\ActorDefinition;
 use DoomPhonics\Game\Level;
 use DoomPhonics\Game\PitchMode;
 use DoomPhonics\Graphics\IndexedAtlas;
@@ -598,6 +599,7 @@ final class GlesMapRenderer
 		$halfWidth = tan(deg2rad($this->fov / 2));
 		$opaque = [];
 		$translucent = [];
+		$additive = [];
 		$stats = ['considered' => 0,'visible' => 0,'rejected' => 0,'frustum' => 0,'vertices' => 0];
 		$entities = $registry->query($this->actorQuery);
 		$seen = [];
@@ -687,12 +689,9 @@ final class GlesMapRenderer
 			$right = $left + $image->width;
 			$floor = $this->level->sectors[$actorSector]->floorZ($renderX, $renderY, $alpha);
 			$definition = $state->definition;
-			$style = $this->actorStyles[$definition->name] ??= [
-				$definition->hasFlag('SHADOW')
-					? min(max(0.0, min(1.0, (float)$definition->value('Alpha', 1))), .32)
-					: max(0.0, min(1.0, (float)$definition->value('Alpha', 1)))
-				, $definition->hasFlag('SPAWNCEILING')
-			];
+			$style = $this->actorStyles[$definition->name] ??= self::actorStyle($definition);
+
+			if($style[2] === self::STYLE_HIDDEN) continue;
 
 			$cached['projectile'] ??= $registry->has($entity, Projectile::class)
 				|| $registry->has($entity, RemoteProjectile::class);
@@ -723,7 +722,8 @@ final class GlesMapRenderer
 				, $style[0]
 			];
 
-			if($style[0] < 1) $translucent[] = [$distance, $instance];
+			if($style[2] === self::STYLE_ADDITIVE) array_push($additive, ...$instance);
+			elseif($style[0] < 1) $translucent[] = [$distance, $instance];
 			else array_push($opaque, ...$instance);
 
 			$stats['visible']++;
@@ -738,9 +738,12 @@ final class GlesMapRenderer
 
 		foreach($translucent as [, $instance]) array_push($values, ...$instance);
 
+		// Additive sprites add light in any order, so they need no sort and follow the translucent run.
+		array_push($values, ...$additive);
 		$opaqueCount = intdiv(count($opaque), self::SPRITE_FLOATS);
 		$translucentCount = count($translucent);
-		$stats['vertices'] = ($opaqueCount + $translucentCount) * 6;
+		$additiveCount = intdiv(count($additive), self::SPRITE_FLOATS);
+		$stats['vertices'] = ($opaqueCount + $translucentCount + $additiveCount) * 6;
 		$this->spriteStats = $stats;
 
 		if(!$values)
@@ -782,23 +785,68 @@ final class GlesMapRenderer
 
 		glBufferSubData(GL_ARRAY_BUFFER, 0, $length, $bytes);
 
+		$cutout = $program->location('cutout');
+
 		if($opaqueCount)
 		{
+			glUniform1i($cutout, 1);
 			$this->spriteInstances(0);
 			glDrawArraysInstanced(GL_TRIANGLES, 0, 6, $opaqueCount);
 		}
 
-		// WebGL2 has no base instance, so the translucent run starts its attributes after the opaque instances.
-		if($translucentCount)
+		// WebGL2 has no base instance, so each blended run starts its attributes after the instances before it.
+		if($translucentCount || $additiveCount)
 		{
+			glUniform1i($cutout, 0);
 			glDepthMask(false);
-			$this->spriteInstances($opaqueCount);
-			glDrawArraysInstanced(GL_TRIANGLES, 0, 6, $translucentCount);
+
+			if($translucentCount)
+			{
+				$this->spriteInstances($opaqueCount);
+				glDrawArraysInstanced(GL_TRIANGLES, 0, 6, $translucentCount);
+			}
+
+			if($additiveCount)
+			{
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+				$this->spriteInstances($opaqueCount + $translucentCount);
+				glDrawArraysInstanced(GL_TRIANGLES, 0, 6, $additiveCount);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			}
+
 			glDepthMask(true);
 		}
 
 		glBindVertexArray(0);
 		$this->actorCpuMs = (hrtime(true) - $started) / 1e6;
+	}
+
+	public const STYLE_NORMAL = 0, STYLE_ADDITIVE = 1, STYLE_HIDDEN = 2;
+
+	/**
+	 * How an actor's sprites blend, from its RenderStyle and Alpha: opacity, whether it hangs from the ceiling, and
+	 * the blend mode. Additive styles add their light and need their black left out, as the Omega pack's beam trails
+	 * do; `None` draws nothing; fuzzy actors (SHADOW) are capped at Doom's fuzz darkness.
+	 *
+	 * @return array{float,bool,int}
+	 */
+	public static function actorStyle(ActorDefinition $definition): array
+	{
+		$renderStyle = strtolower(trim((string)$definition->value('RenderStyle', 'Normal'), '"'));
+		$alpha = max(0.0, min(1.0, (float)$definition->value('Alpha', 1)));
+
+		if($definition->hasFlag('SHADOW')) $alpha = min($alpha, .32);
+
+		$mode = match($renderStyle)
+		{
+			'add', 'addstencil', 'addshaded', 'subtract' => self::STYLE_ADDITIVE,
+			'none' => self::STYLE_HIDDEN,
+			default => self::STYLE_NORMAL,
+		};
+
+		if($renderStyle === 'normal' && !$definition->hasFlag('SHADOW')) $alpha = 1.0;
+
+		return [$alpha, $definition->hasFlag('SPAWNCEILING'), $mode];
 	}
 
 	/** Point the sprite attributes at instances from `$first` on, one record per sprite. */
