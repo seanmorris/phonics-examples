@@ -208,21 +208,34 @@ final class EpisodeSystems implements SystemSet
 		// Online, the host respawns dead players in place of single player's level restart.
 		if($network) $scope->system('network-respawn', [$network,'respawn'], ['player-effects']);
 
+		$poses = [];
+		$posesFor = null;
+
 		$scope->system(
 			'transform-history'
-			, static function(Registry $registry, float $dt) use (&$interpolated, $obstacles): void {
+			, static function(Registry $registry, float $dt) use (&$interpolated, &$poses, &$posesFor, $obstacles): void {
 				$obstacles->beginStep();
+				$all = $registry->query(Transform::class);
 
-				foreach(array_keys($interpolated) as $entity)
+				// Hold the interpolated transforms; a new or destroyed entity, or a new map thing, rebuilds the list.
+				if($all !== $posesFor || count($poses) !== count($interpolated))
 				{
-					if(!$registry->alive($entity) || !$registry->has($entity, Transform::class))
-					{
-						unset($interpolated[$entity]);
-						continue;
-					}
+					$posesFor = $all;
+					$poses = [];
 
-					$registry->get($entity, Transform::class)->beginStep();
+					foreach(array_keys($interpolated) as $entity)
+					{
+						if(!$registry->alive($entity) || !$registry->has($entity, Transform::class))
+						{
+							unset($interpolated[$entity]);
+							continue;
+						}
+
+						$poses[$entity] = $registry->get($entity, Transform::class);
+					}
 				}
+
+				foreach($poses as $pose) $pose->beginStep();
 			}
 			, $network ? ['player-effects','network-respawn'] : ['player-effects']
 		);

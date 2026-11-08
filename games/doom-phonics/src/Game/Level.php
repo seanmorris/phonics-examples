@@ -17,6 +17,12 @@ final class Level
 	/** @var array<int,float> Live texture-column offsets for automatic scrolling lines. */
 	public array $wallScroll = [];
 	public int $appearanceRevision = 0;
+	/** Counts every change to a sector's heights or light, so a renderer can skip repacking unchanged sectors. */
+	public int $planeRevision = 0;
+	/** @var array<int,true> Sectors changed since the last step began; only these need their previous heights reset. */
+	public array $unsettled = [];
+	/** @var list<\Closure(int):void> Told the index of each sector whose heights or light changed. */
+	public array $planeListeners = [];
 	public SpatialIndex $spatial;
 	/** @var array<int,LinePortal|null> */
 	private array $portals = [];
@@ -51,7 +57,9 @@ final class Level
 	{
 		foreach($map->sectors as $sector)
 		{
-			$this->sectors[] = new SectorState($sector['index'], $sector);
+			$state = new SectorState($sector['index'], $sector);
+			$state->changed = function(SectorState $changed): void { $this->planeChanged($changed->index); };
+			$this->sectors[] = $state;
 
 			if($sector['tag']) $this->tags[$sector['tag']][] = $sector['index'];
 		}
@@ -392,8 +400,25 @@ final class Level
 		foreach($this->cameras as $camera) $camera->update($dt, $this);
 	}
 
-	/** Snapshot mutable planes once before the fixed-step geometry systems advance them. */
-	public function beginStep(): void { foreach($this->sectors as $sector) $sector->beginStep(); }
+	/** Record a change to a sector's heights or light for the step and for anyone listening, such as a renderer. */
+	public function planeChanged(int $index): void
+	{
+		$this->planeRevision++;
+		$this->unsettled[$index] = true;
+
+		foreach($this->planeListeners as $listener) $listener($index);
+	}
+
+	/**
+	 * Snapshot mutable planes once before the fixed-step geometry systems advance them. A sector whose heights did not
+	 * change since the last step already has its previous heights equal to its current ones.
+	 */
+	public function beginStep(): void
+	{
+		foreach($this->unsettled as $index => $unused) $this->sectors[$index]->beginStep();
+
+		$this->unsettled = [];
+	}
 
 	public function setSideTexture(int $side, string $slot, string $texture): void
 	{

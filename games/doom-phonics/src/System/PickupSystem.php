@@ -22,6 +22,11 @@ use Phonics\Network\Component\NetworkIdentity;
 final class PickupSystem
 {
 	private Query $players;
+	private Query $pickups;
+	/** @var list<int>|null Registry snapshot the pickup cache was built from. */
+	private ?array $known = null;
+	/** @var array<int,array{Transform,float}> Each pickup's pose and reach radius, so a tic tests distance first. */
+	private array $cache = [];
 	private LanguageCatalog $language;
 
 	public function __construct(
@@ -30,12 +35,26 @@ final class PickupSystem
 		, ?LanguageCatalog $language = null
 	){
 		$this->players = Query::all(PlayerStart::class, PlayerState::class, Transform::class, HitPoints::class);
+		$this->pickups = Query::all(InventoryPickup::class, Transform::class);
 		$this->language = $language ?? LanguageCatalog::documents([]);
 	}
 
 	public function update(Registry $registry, float $dt): void
 	{
-		$pickups = $registry->query(Query::all(InventoryPickup::class, Transform::class));
+		$pickups = $registry->query($this->pickups);
+
+		// Most pickups are far from every player every tic; keep their poses so that test costs no registry calls.
+		if($pickups !== $this->known)
+		{
+			$this->known = $pickups;
+			$this->cache = [];
+
+			foreach($pickups as $entity)
+			$this->cache[$entity] = [
+				$registry->get($entity, Transform::class)
+				, (float)($registry->has($entity, Body::class) ? $registry->get($entity, Body::class)->radius : 20)
+			];
+		}
 
 		foreach($registry->query($this->players) as $playerEntity)
 		{
@@ -43,21 +62,18 @@ final class PickupSystem
 			$player = $registry->get($playerEntity, PlayerState::class);
 			$health = $registry->get($playerEntity, HitPoints::class);
 
-			foreach($pickups as $entity)
+			foreach($this->cache as $entity => [$pickupPose, $radius])
 			{
+				$reach = $radius + 16;
+				$dx = $pose->x - $pickupPose->x;
+				$dy = $pose->y - $pickupPose->y;
+
+				if($dx * $dx + $dy * $dy > $reach * $reach || abs($pose->z - $pickupPose->z) > 56) continue;
+
 				if(!$registry->alive($entity) || $entity === $playerEntity
 					|| !$registry->has($entity, InventoryPickup::class)
 					|| (!$this->authoritative && $registry->has($entity, NetworkIdentity::class))
 				) continue;
-
-				$pickupPose = $registry->get($entity, Transform::class);
-				$radius = $registry->has($entity, Body::class) ? $registry->get($entity, Body::class)->radius : 20;
-
-				if(hypot($pose->x - $pickupPose->x, $pose->y - $pickupPose->y) > $radius + 16 || abs(
-					$pose->z - $pickupPose->z
-				) > 56
-				)
-				continue;
 
 				$pickup = $registry->get($entity, InventoryPickup::class);
 				$definition = $this->actors->named($pickup->actorName);

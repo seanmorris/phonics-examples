@@ -79,6 +79,9 @@ final class SectorEffectSystem
 	{
 		foreach($this->level->sectors as $sector)
 		{
+			// Most sectors have no special; special 0 maps to no light effect in both map formats.
+			if($sector->special === 0) continue;
+
 			$id = $sector->index;
 			$special = $this->special($sector->special);
 

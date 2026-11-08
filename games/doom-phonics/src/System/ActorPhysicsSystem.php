@@ -22,6 +22,10 @@ final class ActorPhysicsSystem
 	private Query $actors;
 	private VerticalPhysics $physics;
 	private Collision $collision;
+	/** @var list<int>|null Registry snapshot the component cache was built from. */
+	private ?array $known = null;
+	/** @var array<int,array{Transform,Velocity,Body,?Gravity}> Components per actor; a structural change rebuilds it. */
+	private array $cache = [];
 
 	public function __construct(
 		Collision $collision
@@ -41,12 +45,24 @@ final class ActorPhysicsSystem
 
 	public function update(Registry $registry, float $dt): void
 	{
-		foreach($registry->query($this->actors) as $entity)
-		{
-			$pose = $registry->get($entity, Transform::class);
-			$velocity = $registry->get($entity, Velocity::class);
-			$body = $registry->get($entity, Body::class);
+		$entities = $registry->query($this->actors);
 
+		if($entities !== $this->known)
+		{
+			$this->known = $entities;
+			$this->cache = [];
+
+			foreach($entities as $entity)
+			$this->cache[$entity] = [
+				$registry->get($entity, Transform::class)
+				, $registry->get($entity, Velocity::class)
+				, $registry->get($entity, Body::class)
+				, $registry->has($entity, Gravity::class) ? $registry->get($entity, Gravity::class) : null
+			];
+		}
+
+		foreach($this->cache as $entity => [$pose, $velocity, $body, $gravity])
+		{
 			if(hypot($velocity->x, $velocity->y) > .01)
 			{
 				$motion = $this->collision->moveAndSlide(
@@ -78,8 +94,7 @@ final class ActorPhysicsSystem
 				if(hypot($velocity->x, $velocity->y) < .01) $velocity->x = $velocity->y = 0;
 			}
 
-			if($registry->has($entity, Gravity::class))
-			$this->physics->step($pose, $velocity, $body, $dt, $registry->get($entity, Gravity::class)->scale);
+			if($gravity !== null) $this->physics->step($pose, $velocity, $body, $dt, $gravity->scale);
 		}
 	}
 }

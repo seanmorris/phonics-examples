@@ -246,6 +246,8 @@ final class SectorMotionSystem
 		if($mover->movesFloor()) $sector->floor = $to;
 		else $sector->ceiling = $to;
 
+		$this->level->planeChanged($mover->sector);
+
 		return true;
 	}
 
