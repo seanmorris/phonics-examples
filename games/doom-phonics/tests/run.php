@@ -2838,6 +2838,10 @@ verifyWad(
 );
 
 verifyWad(SoundSample::wav($stack->lump('DSDOROPN')) === $doorWav, 'sound dispatcher converts native DMX');
+// Add-on packs ship most effects as Ogg Vorbis and some as FLAC; both decode in Web Audio and SDL_mixer as they are.
+$ogg = 'OggS' . str_repeat("\0", 60);
+$flac = 'fLaC' . str_repeat("\0", 60);
+verifyWad(SoundSample::wav($ogg, 'ogg effect') === $ogg && SoundSample::wav($flac, 'flac effect') === $flac, 'Ogg and FLAC effects pass through to the decoders untouched');
 $railWave = $weaponStack->lump('RAILGF1');
 
 verifyWad(

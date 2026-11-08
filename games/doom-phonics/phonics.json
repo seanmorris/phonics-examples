@@ -389,7 +389,7 @@
     "src/Audio/SoundEmitter.php": "sha256-v3ki638PWDCn7tsTzqcKaXOe2SHRuJvf5hiTWXU8fwA=",
     "src/Audio/SoundEvent.php": "sha256-rbi4+UunBAFKdnd2e9x4lp/6lBGGvs87ltcO/7idf7o=",
     "src/Audio/SoundListener.php": "sha256-E8IlQ4AuTZv3L5G0mXi74ABShTnMVzinvzN9ms9vwt0=",
-    "src/Audio/SoundSample.php": "sha256-dUjHdMO4ZRj0k61Jf3OVLebWNwOURVqCIfAKntSgU5A=",
+    "src/Audio/SoundSample.php": "sha256-ysQKwBXs3E4TKf1kLSk3hegBn4/yz3nT1yyccYqdwsY=",
     "src/Audio/SoundSource.php": "sha256-5YgeFYu8nxSBzRWXW22hc22V7vHWMLJlGSvIoOg1ssI=",
     "src/Component/ActorFade.php": "sha256-hb2ZNJVVVZ3cKmvsOjAVkrUHU66QDOGf/zlRFp1M+8M=",
     "src/Component/ActorState.php": "sha256-toQloiX/6qoc5dgEand7t1HRfwPRotcnXdODJzQqcjg=",
