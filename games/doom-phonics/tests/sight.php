@@ -91,6 +91,57 @@ use DoomPhonics\Game\ProjectileTracer;
 
 	verifyWad($false === 0, 'the wall side test never skips a line the capsule touches');
 
+	// P_CheckSight port: a BSP walk from the looker's eyes to any part of the target, reading live sector heights.
+	$level = new Level($stack->map('E1M3'));
+	$sight = new DoomPhonics\Game\SightCheck($level);
+	verifyWad($sight->classic(), 'E1M3 has the classic geometry P_CheckSight describes');
+
+	// The E1M3 alcove (floor 104) looks through door 116 (floor 136) into room 32 (floor 64).
+	$looks = static fn(): bool => $sight->sees(-1760.0, -1864.0, 104 + 42, -1450.0, -1864.0, 64, 120);
+	$level->sectors[116]->ceiling = 136.0;
+	verifyWad(!$looks(), 'a closed door blocks sight');
+	$level->sectors[116]->ceiling = 172.0;
+	verifyWad($looks(), 'the open door passes sight over its ledge to the top of a target below');
+	verifyWad(
+		!$sight->sees(-1760.0, -1864.0, 104 + 42, -1700.0, -1864.0, 64, 120)
+		, 'a target wholly below the ledge from the looker is hidden'
+	);
+
+	// Whenever the tracer finds a clear line from the eyes to part of the target, the port must see it too.
+	mt_srand(666);
+	$tracer = new ProjectileTracer($level, true);
+	$things = array_values(array_filter($level->map->things, static fn(array $thing): bool => in_array((int)$thing['type'], [1, 9, 3001, 3002, 3004, 2035], true)));
+	$missed = $compared = $clearCount = 0;
+
+	foreach(range(1, 1500) as $probe)
+	{
+		$a = $things[mt_rand(0, count($things) - 1)];
+		$b = $things[mt_rand(0, count($things) - 1)];
+
+		if($a === $b) continue;
+
+		$az = $level->sectorAt((float)$a['x'], (float)$a['y'])->floor;
+		$bz = $level->sectorAt((float)$b['x'], (float)$b['y'])->floor;
+		$eye = $az + 42;
+		$clear = false;
+
+		foreach([.05, .5, .95] as $part)
+		{
+			$hit = $tracer->trace(new Transform((float)$a['x'], (float)$a['y'], $eye), new Body(0, 0), $b['x'] - $a['x'], $b['y'] - $a['y'], $bz + 56 * $part - $eye);
+			$clear = $clear || $hit === null || $hit->fraction >= .999;
+		}
+
+		$compared++;
+		$clearCount += (int)$clear;
+
+		if($clear && !$sight->sees((float)$a['x'], (float)$a['y'], $eye, (float)$b['x'], (float)$b['y'], $bz, $bz + 56)) $missed++;
+	}
+
+	verifyWad(
+		$compared > 1200 && $clearCount >= 40 && $missed === 0
+		, "P_CheckSight sees every line the tracer finds clear ($clearCount clear of $compared pairs)"
+	);
+
 	// E1M3 ships a full REJECT table. P_CheckSight trusts its bits before tracing; a map without one, or with one too
 	// short for its sectors, never hides anything.
 	$map = $stack->map('E1M3');

@@ -135,6 +135,7 @@
     "src/Game/SectorState.php",
     "src/Game/SectorVolume.php",
     "src/Game/SectorVolumeSetup.php",
+    "src/Game/SightCheck.php",
     "src/Game/SkillLevel.php",
     "src/Game/VerticalPhysics.php",
     "src/Game/WorldPoint.php",

@@ -54,6 +54,7 @@ use DoomPhonics\Game\LineSpecials;
 use DoomPhonics\Game\PlayerState;
 use DoomPhonics\Game\ProjectileTracer;
 use DoomPhonics\Game\ProjectileImpact;
+use DoomPhonics\Game\SightCheck;
 use DoomPhonics\Game\WorldPoint;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
@@ -70,6 +71,9 @@ final class CombatSystem
 	private SoundCatalog $sounds;
 	private ProjectileTracer $projectileTracer;
 	private AutoAim $autoAim;
+	private SightCheck $sight;
+	/** Whether the map's geometry is classic enough for P_CheckSight; decided at the first sight check. */
+	private ?bool $classicSight = null;
 	private DamageResolver $damageResolver;
 	private WeaponSlots $weaponSlots;
 	private CheatSystem $cheats;
@@ -110,6 +114,7 @@ final class CombatSystem
 		$this->sounds = $sounds ?? new SoundCatalog;
 		$this->projectileTracer = new ProjectileTracer($level);
 		$this->autoAim = new AutoAim($level);
+		$this->sight = new SightCheck($level);
 		$this->damageResolver = $damageResolver ?? new DamageResolver(new ActorDropper($level, $factory));
 		$this->weaponSlots = $weaponSlots ?? WeaponSlots::fromCatalog($actors);
 		$this->cheats = $cheats ?? new CheatSystem($this->weaponSlots, $actors);
@@ -1468,7 +1473,7 @@ final class CombatSystem
 				if(abs($delta) > M_PI / 2 && $distance > 64) continue;
 			}
 
-			if(!$this->visible($source, $target)) continue;
+			if(!$this->sees($registry, $entity, $player)) continue;
 
 			return $player;
 		}
@@ -1511,7 +1516,7 @@ final class CombatSystem
 		{
 			$brain->target = $heard;
 
-			if(!$brain->ambush || $this->visible($pose, $registry->get($heard, Transform::class)))
+			if(!$brain->ambush || $this->sees($registry, $entity, $heard))
 			{
 				$this->wake($entity, $heard, $registry, true);
 
@@ -1563,7 +1568,9 @@ final class CombatSystem
 		// Like A_Chase, trace sight only for an attack in range. The trace draws no random numbers, so tracing later
 		// and only when needed leaves every outcome and the random sequence unchanged.
 		$visible = null;
-		$sees = function() use (&$visible, $pose, $target): bool { return $visible ??= $this->visible($pose, $target); };
+		$sees = function() use (&$visible, $registry, $entity, $brain): bool {
+			return $visible ??= $this->sees($registry, $entity, $brain->target);
+		};
 
 		if(mt_rand(0, 255) < 3) $this->actorSound($entity, $registry, 'ActiveSound');
 
@@ -1877,7 +1884,7 @@ final class CombatSystem
 		$source = $registry->get($entity, Transform::class);
 		$target = $registry->get($brain->target, Transform::class);
 
-		if(mt_rand(0, 255) < 10 || !$this->visible($source, $target))
+		if(mt_rand(0, 255) < 10 || !$this->sees($registry, $entity, $brain->target))
 		$registry->get($entity, ActorState::class)->enter('See');
 	}
 
@@ -2693,7 +2700,27 @@ final class CombatSystem
 		return [$range,null];
 	}
 
-	private function visible(Transform $a, Transform $b): bool
+	/** P_CheckSight between two actors, with their own heights. */
+	private function sees(Registry $registry, int $looker, int $target): bool
+	{
+		$height = static fn(int $entity): ?float => $registry->has($entity, Body::class)
+			? $registry->get($entity, Body::class)->height
+			: null;
+
+		return $this->visible(
+			$registry->get($looker, Transform::class)
+			, $registry->get($target, Transform::class)
+			, $height($looker)
+			, $height($target)
+		);
+	}
+
+	/**
+	 * Whether `$a` can see `$b`. On classic maps this is Doom's P_CheckSight: REJECT first, then a BSP walk from the
+	 * looker's eyes, three quarters up its height, to any part of the target. Maps with camera portals, 3D floors,
+	 * slopes, or height transfers trace one line 32 units above each actor's feet.
+	 */
+	private function visible(Transform $a, Transform $b, ?float $aHeight = null, ?float $bHeight = null): bool
 	{
 		$dx = $b->x - $a->x;
 		$dy = $b->y - $a->y;
@@ -2706,6 +2733,22 @@ final class CombatSystem
 		if(!$this->level->cameraPortalSurfaces()
 			&& $this->level->map->rejects($this->level->map->sectorAt($a->x, $a->y), $this->level->map->sectorAt($b->x, $b->y))
 		) return false;
+
+		if($this->classicSight ??= $this->sight->classic())
+		{
+			$lookerHeight = $aHeight ?? 56.0;
+			$targetHeight = $bHeight ?? 56.0;
+
+			return $this->sight->sees(
+				$a->x
+				, $a->y
+				, $a->z + $lookerHeight - $lookerHeight / 4
+				, $b->x
+				, $b->y
+				, $b->z
+				, $b->z + $targetHeight
+			);
+		}
 
 		$hit = (new ProjectileTracer($this->level, true))->trace(
 			new Transform($a->x, $a->y, $a->z + 32), new Body(0, 0), $dx, $dy, $b->z - $a->z
@@ -2829,7 +2872,8 @@ final class CombatSystem
 			$distance = max(0, hypot($dx, $dy) - $body->radius);
 			$damage = (int)ceil($radius - $distance);
 
-			if($damage <= 0 || !$this->visible($pose, $targetPose)) continue;
+			// P_RadiusAttack asks whether the damaged thing can see the explosion.
+			if($damage <= 0 || !$this->sees($registry, $target, $entity)) continue;
 
 			$this->damage($registry, $target, $source, $damage, $entity, false);
 
