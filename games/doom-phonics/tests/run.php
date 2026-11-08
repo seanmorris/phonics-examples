@@ -3808,6 +3808,7 @@ require __DIR__ . '/decorate-expressions.php';
 require __DIR__ . '/fast-projectiles.php';
 require __DIR__ . '/sprite-styles.php';
 require __DIR__ . '/actor-fade.php';
+require __DIR__ . '/stereo.php';
 require __DIR__ . '/sector-volumes.php';
 require __DIR__ . '/layered-navigation.php';
 require __DIR__ . '/seeded-generation.php';

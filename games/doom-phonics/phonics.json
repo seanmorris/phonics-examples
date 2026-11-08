@@ -383,7 +383,7 @@
     "src/Audio/MusScore.php": "sha256-1sNoK5oNDkn03bvP8jndEdnsl6/0RjaZXFIxeYeKfQU=",
     "src/Audio/MusicCue.php": "sha256-HPqmJ7Ti6yFW6Qvy1wMsQMqJ05XjlzRyFOUvrdlK0DM=",
     "src/Audio/NullSoundEmitter.php": "sha256-MkS5ugcjJpWbTs12QbMHekN5FNN6COOBI17HPLraQKo=",
-    "src/Audio/SdlSoundEmitter.php": "sha256-jILb3warTIGvuY0NDoMl+bDZT1p7JdE6BJtGfzhIUAM=",
+    "src/Audio/SdlSoundEmitter.php": "sha256-as3EwFljlT7S24t63E/wINBSU5ru+I3Pjtpd3tPnMds=",
     "src/Audio/SoundCatalog.php": "sha256-Blk5qbbxRz4FzeabbSO7CWH8RWB7CBVaW8HuKSNB8GY=",
     "src/Audio/SoundCue.php": "sha256-CUZEMUEq+A56EUDlx1YlYuMtuuxR7Hj9xEuWx/hA3w4=",
     "src/Audio/SoundEmitter.php": "sha256-v3ki638PWDCn7tsTzqcKaXOe2SHRuJvf5hiTWXU8fwA=",

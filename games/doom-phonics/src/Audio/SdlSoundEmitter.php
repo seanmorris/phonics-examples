@@ -286,6 +286,26 @@ final class SdlSoundEmitter implements SoundEmitter
 		}
 	}
 
+	/**
+	 * Doom's S_AdjustSoundParams for a listener facing `$facing`: full volume within 160 units, silence beyond
+	 * 1200, linear between; and a pan of up to 0.75 toward the side the source is on, as Doom's separation swings
+	 * 96 of 128 and never hard-pans. Doom's angles run counter-clockwise, so a source on the right has a negative
+	 * bearing; a pan of +1 is the right channel.
+	 *
+	 * @return array{float,float} Gain and pan.
+	 */
+	public static function stereo(float $dx, float $dy, float $facing): array
+	{
+		$distance = hypot($dx, $dy);
+		$gain = $distance <= 160 ? 1.0 : ($distance >= 1200 ? 0.0 : 1 - ($distance - 160) / 1040);
+
+		if($distance < 1e-6) return [$gain, 0.0];
+
+		$pan = -.75 * sin(atan2($dy, $dx) - $facing);
+
+		return [$gain, max(-1.0, min(1.0, $pan))];
+	}
+
 	private function playInBrowser(SoundEvent $event, \DoomPhonics\Archive\Lump $source): bool
 	{
 		if(!function_exists('vrzno_env'))return false;
@@ -307,14 +327,11 @@ final class SdlSoundEmitter implements SoundEmitter
 			}
 
 			if($event->listener !== null)
-			{
-				$dx = $event->source->x - $event->listener->x;
-				$dy = $event->source->y - $event->listener->y;
-				$distance = hypot($dx, $dy);
-				$payload['gain'] = $distance <= 160?1.0:($distance >= 1200?0.0:1 - ($distance - 160) / 1040);
-				$bearing = atan2($dy, $dx) - $event->listener->angle;
-				$payload['pan'] = max(-1.0, min(1.0, sin($bearing)));
-			}
+			[$payload['gain'], $payload['pan']] = self::stereo(
+				$event->source->x - $event->listener->x
+				, $event->source->y - $event->listener->y
+				, $event->listener->angle
+			);
 
 			$play(json_encode($payload, JSON_THROW_ON_ERROR));
 
