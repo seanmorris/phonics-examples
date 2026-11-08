@@ -5,7 +5,11 @@ namespace DoomPhonics\Graphics;
 use DoomPhonics\Archive\Binary;
 use DoomPhonics\Archive\Lump;
 
-/** Non-interlaced 8-bit PNG pictures, including ZDoom's signed grAb sprite origin. */
+/**
+ * Non-interlaced PNG pictures, including ZDoom's signed grAb sprite origin: palette images at 1, 2, 4, or 8 bits,
+ * and greyscale, greyscale with alpha, truecolour, and truecolour with alpha at 8 or 16 bits. Colours map to the
+ * nearest PLAYPAL entry; a 16-bit sample keeps its high byte.
+ */
 final class PngDecoder
 {
 	public const SIGNATURE = "\x89PNG\r\n\x1a\n";
@@ -23,7 +27,7 @@ final class PngDecoder
 
 		$offset = 8;
 		$data = $colors = $transparency = '';
-		$width = $height = $channels = $type = 0;
+		$width = $height = $channels = $type = $depth = 0;
 		$left = $top = 0;
 		$ended = false;
 
@@ -35,7 +39,9 @@ final class PngDecoder
 			$chunk = Binary::slice($bytes, $offset + 8, $size, $source);
 			$crc = Binary::slice($bytes, $offset + 8 + $size, 4, $source);
 
-			if(hash('crc32b', $name . $chunk, true) !== $crc)
+			// A bad CRC condemns a critical chunk. An ancillary one is read anyway, as ZDoom reads every chunk: the
+			// Omega Weapon Pack's shotgun frames carry grAb chunks whose CRC was taken over the data alone.
+			if(hash('crc32b', $name . $chunk, true) !== $crc && ctype_upper($name[0]))
 			throw new \UnexpectedValueException("$source: corrupt PNG $name chunk");
 
 			$offset += $size + 12;
@@ -48,10 +54,12 @@ final class PngDecoder
 				$width = $h['width'];
 				$height = $h['height'];
 				$type = $h['type'];
-				$channels = match($type) { 2 => 3, 3 => 1, 6 => 4, default => 0 };
+				$depth = $h['depth'];
+				$channels = match($type) { 0 => 1, 2 => 3, 3 => 1, 4 => 2, 6 => 4, default => 0 };
+				$depths = $type === 3 ? [1, 2, 4, 8] : [8, 16];
 
 				if($width < 1 || $height < 1 || $width > 4096 || $height > 4096 || !$channels
-					|| $h['depth'] !== 8 || $h['compression'] || $h['filter'] || $h['interlace']
+					|| !in_array($depth, $depths, true) || $h['compression'] || $h['filter'] || $h['interlace']
 				)
 				throw new \UnexpectedValueException("$source: unsupported PNG dimensions or encoding");
 			}
@@ -76,7 +84,9 @@ final class PngDecoder
 		)
 		throw new \UnexpectedValueException("$source: incomplete PNG");
 
-		$stride = $width * $channels;
+		// Bytes per row and, for the filters, per pixel; a sub-byte pixel still filters by whole bytes.
+		$stride = intdiv($width * $channels * $depth + 7, 8);
+		$step = max(1, intdiv($channels * $depth, 8));
 		$raw = @gzuncompress($data, ($stride + 1) * $height);
 
 		if(!is_string($raw) || strlen($raw) !== ($stride + 1) * $height)
@@ -88,6 +98,8 @@ final class PngDecoder
 		$indices[] = chr($palette->closestIndex(ord($colors[$i]), ord($colors[$i + 1]), ord($colors[$i + 2])));
 		$pixels = $alpha = '';
 		$previous = str_repeat("\0", $stride);
+		$mask = (1 << $depth) - 1;
+		$wide = $depth === 16;
 
 		for($y = 0; $y < $height; $y++)
 		{
@@ -97,24 +109,26 @@ final class PngDecoder
 
 			$row = substr($raw, $y * ($stride + 1) + 1, $stride);
 
+			if($filter)
 			for($x = 0; $x < $stride; $x++)
 			{
-				$a = $x >= $channels ? ord($row[$x - $channels]) : 0;
+				$a = $x >= $step ? ord($row[$x - $step]) : 0;
 				$b = ord($previous[$x]);
-				$c = $x >= $channels ? ord($previous[$x - $channels]) : 0;
+				$c = $x >= $step ? ord($previous[$x - $step]) : 0;
 				$predict = match($filter)
 				{
-					0 => 0, 1 => $a, 2 => $b, 3 => intdiv($a + $b, 2), 4 => self::paeth($a, $b, $c)
+					1 => $a, 2 => $b, 3 => intdiv($a + $b, 2), 4 => self::paeth($a, $b, $c)
 				};
 
 				$row[$x] = chr((ord($row[$x]) + $predict) & 255);
 			}
 
-			for($x = 0; $x < $stride; $x += $channels)
+			if($type === 3)
 			{
-				if($type === 3)
+				for($x = 0; $x < $width; $x++)
 				{
-					$index = ord($row[$x]);
+					$bit = $x * $depth;
+					$index = (ord($row[$bit >> 3]) >> (8 - $depth - ($bit & 7))) & $mask;
 
 					if(!isset($indices[$index]))
 					throw new \UnexpectedValueException("$source: invalid PNG palette index");
@@ -122,13 +136,34 @@ final class PngDecoder
 					$pixels .= $indices[$index];
 					$alpha .= $transparency[$index] ?? "\xff";
 				}
-				else
+			}
+			else
+			{
+				for($x = 0; $x < $stride; $x += $step)
 				{
-					$r = ord($row[$x]);
-					$g = ord($row[$x + 1]);
-					$b = ord($row[$x + 2]);
-					$pixels .= chr($palette->closestIndex($r, $g, $b));
-					$alpha .= $type === 6 ? $row[$x + 3] : ($transparency === pack('n3', $r, $g, $b) ? "\0" : "\xff");
+					// Full-precision samples for the colour key, their high bytes for the palette.
+					$samples = [];
+
+					for($i = 0; $i < $channels; $i++)
+					$samples[] = $wide ? (ord($row[$x + 2 * $i]) << 8) | ord($row[$x + 2 * $i + 1]) : ord($row[$x + $i]);
+
+					$shift = $wide ? 8 : 0;
+
+					if($type === 0 || $type === 4)
+					{
+						$grey = $samples[0] >> $shift;
+						$pixels .= chr($palette->closestIndex($grey, $grey, $grey));
+						$alpha .= $type === 4
+							? chr($samples[1] >> $shift)
+							: ($transparency === pack('n', $samples[0]) ? "\0" : "\xff");
+					}
+					else
+					{
+						$pixels .= chr($palette->closestIndex($samples[0] >> $shift, $samples[1] >> $shift, $samples[2] >> $shift));
+						$alpha .= $type === 6
+							? chr($samples[3] >> $shift)
+							: ($transparency === pack('n3', $samples[0], $samples[1], $samples[2]) ? "\0" : "\xff");
+					}
 				}
 			}
 

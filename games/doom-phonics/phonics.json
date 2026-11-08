@@ -489,7 +489,7 @@
     "src/Graphics/IndexedImage.php": "sha256-icwvlt4rGIiK/X8G7lD8I5BanHKCz6+3zyXLoFzXzmE=",
     "src/Graphics/Palette.php": "sha256-yn4QS0zf0LPLDnhgQKmh1/q4PQm74pEwp1vjRGwEAKI=",
     "src/Graphics/PatchDecoder.php": "sha256-XD8DbuuI7Tu3XE/QkGKmmARGtPJ8H/EBflPAEdXdp8w=",
-    "src/Graphics/PngDecoder.php": "sha256-2EnRui3omnHt7a8c0VZSDwaNWwAmo35c1fDFfCuLZbQ=",
+    "src/Graphics/PngDecoder.php": "sha256-KyGm/SPsL0vNxgfhcz8eM8zKxM5OJ5xj++jgffeqLQk=",
     "src/Graphics/TextureCatalog.php": "sha256-lDCw0O42Qc/NdwfXtfJihu1KV9SM7s9uQBEe/UQtNX4=",
     "src/Graphics/ViewColorState.php": "sha256-rH4Tcog4jysfEArgGOzRCj4sqTYU/4fXLDS/7PZAbTs=",
     "src/Input/DoomActions.php": "sha256-DFJqISbaLHY64/O54grGpdFnddzgA5OcKdQhSKmN8J4=",
