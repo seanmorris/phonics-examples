@@ -322,13 +322,17 @@ final class MapData
 
 	/**
 	 * Test the WAD's conservative sector pair visibility bit.
-	 * A missing or truncated matrix never hides content.
+	 * Only maps built with a REJECT carry one, and many builders write it empty or zeroed. A missing matrix, or one
+	 * shorter than this map's sector count needs, never hides content: like ZDoom, a short matrix is ignored entirely,
+	 * because it was built for different sectors.
 	 */
 	public function rejects(int $from, int $to): bool
 	{
 		$count = count($this->sectors);
 
 		if($from < 0 || $to < 0 || $from >= $count || $to >= $count) return false;
+
+		if(strlen($this->reject) < intdiv($count * $count + 7, 8)) return false;
 
 		$bit = $from * $count + $to;
 		$byte = intdiv($bit, 8);

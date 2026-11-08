@@ -27,6 +27,68 @@ final class SpatialIndex
 		}
 	}
 
+	/**
+	 * Unique linedefs, in ascending order, registered in the cells along a segment widened by `$radius`. Lines are
+	 * registered in every cell their bounds overlap, and a circle of that radius sweeping the segment can touch only
+	 * these lines, so callers test a number of lines proportional to the segment's length instead of its bounding
+	 * box's area. Where the segment passes exactly through a cell corner, both neighbouring cells are included.
+	 *
+	 * @return list<int>
+	 */
+	public function swept(float $x, float $y, float $dx, float $dy, float $radius): array
+	{
+		$reach = (int)ceil(max(0, $radius) / $this->cellSize);
+		$cells = [];
+		$cx = $this->cell($x);
+		$cy = $this->cell($y);
+		$endX = $this->cell($x + $dx);
+		$endY = $this->cell($y + $dy);
+		$stepX = $dx < 0 ? -1 : 1;
+		$stepY = $dy < 0 ? -1 : 1;
+		$tMaxX = abs($dx) < 1e-12 ? INF : ((($stepX > 0 ? $cx + 1 : $cx) * $this->cellSize) - $x) / $dx;
+		$tMaxY = abs($dy) < 1e-12 ? INF : ((($stepY > 0 ? $cy + 1 : $cy) * $this->cellSize) - $y) / $dy;
+		$tDeltaX = abs($dx) < 1e-12 ? INF : abs($this->cellSize / $dx);
+		$tDeltaY = abs($dy) < 1e-12 ? INF : abs($this->cellSize / $dy);
+
+		// Walk the cells the segment passes through, with t measured in segment lengths.
+		for($guard = 0; $guard < 65536; $guard++)
+		{
+			$cells[$cx][$cy] = true;
+
+			if(($cx === $endX && $cy === $endY) || min($tMaxX, $tMaxY) > 1) break;
+
+			if(abs($tMaxX - $tMaxY) < 1e-9)
+			{
+				$cells[$cx + $stepX][$cy] = true;
+				$cells[$cx][$cy + $stepY] = true;
+			}
+
+			if($tMaxX < $tMaxY)
+			{
+				$cx += $stepX;
+				$tMaxX += $tDeltaX;
+			}
+			else
+			{
+				$cy += $stepY;
+				$tMaxY += $tDeltaY;
+			}
+		}
+
+		$result = [];
+
+		foreach($cells as $cellX => $column)
+		foreach(array_keys($column) as $cellY)
+		for($oy = -$reach; $oy <= $reach; $oy++)
+		for($ox = -$reach; $ox <= $reach; $ox++)
+		foreach($this->cells[($cellX + $ox) . ':' . ($cellY + $oy)] ?? [] as $line) $result[$line] = true;
+
+		$lines = array_keys($result);
+		sort($lines);
+
+		return $lines;
+	}
+
 	/** @return list<int> Unique linedefs intersecting an axis-aligned region. */
 	public function near(float $minX, float $minY, float $maxX, float $maxY): array
 	{

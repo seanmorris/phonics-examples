@@ -152,6 +152,9 @@ final class ProjectileTracer
 		, float $dz
 		, float $limit
 	): ?array {
+		// Most maps have no camera portals; skip the two extra walks along the ray that could only find none.
+		if(!$this->level->cameraPortalSurfaces()) return null;
+
 		$line = $this->lineCameraPortalHit($x, $y, $z, $body, $dx, $dy, $dz, $limit);
 		$plane = $this->planeCameraPortalHit($x, $y, $z, $body, $dx, $dy, $dz, $limit);
 
@@ -410,18 +413,31 @@ final class ProjectileTracer
 
 		$nearest = null;
 
-		$lines = $this->level->spatial->near(
-			min($pose->x, $pose->x + $dx) - $body->radius
-			, min($pose->y, $pose->y + $dy) - $body->radius
-			, max($pose->x, $pose->x + $dx) + $body->radius
-			, max($pose->y, $pose->y + $dy) + $body->radius
-		);
+		// Only lines near the path can touch the capsule. The path's bounding box held about three times as many on
+		// E1M3's long diagonal sight lines, which made this pass most of each monster's A_Look.
+		$length = hypot($dx, $dy);
+		$unitX = $dx / $length;
+		$unitY = $dy / $length;
+		$margin = $body->radius + .001;
 
-		foreach($lines as $lineId)
+		foreach($this->level->spatial->swept($pose->x, $pose->y, $dx, $dy, $body->radius) as $lineId)
 		{
 			$line = $this->level->map->linedefs[$lineId];
 			$a = $this->level->map->vertices[$line['from']];
 			$b = $this->level->map->vertices[$line['to']];
+			$ax = $a['x'] - $pose->x;
+			$ay = $a['y'] - $pose->y;
+			$bx = $b['x'] - $pose->x;
+			$by = $b['y'] - $pose->y;
+			$sideA = $ax * $unitY - $ay * $unitX;
+			$sideB = $bx * $unitY - $by * $unitX;
+			$alongA = $ax * $unitX + $ay * $unitY;
+			$alongB = $bx * $unitX + $by * $unitY;
+
+			// A line wholly beyond the capsule on one side, or wholly before or past the path, cannot touch it.
+			if(($sideA > $margin && $sideB > $margin) || ($sideA < -$margin && $sideB < -$margin)
+				|| ($alongA < -$margin && $alongB < -$margin) || ($alongA > $length + $margin && $alongB > $length + $margin)
+			) continue;
 
 			$hit = $this->capsuleHit(
 				$pose->x

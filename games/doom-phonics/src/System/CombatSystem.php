@@ -1462,8 +1462,7 @@ final class CombatSystem
 
 			$target = $registry->get($player, Transform::class);
 
-			if(!$this->visible($source, $target)) continue;
-
+			// Doom tests sight before the facing; both are pure, so the cheap facing test goes first.
 			if(!$allAround)
 			{
 				$angle = atan2($target->y - $source->y, $target->x - $source->x);
@@ -1472,6 +1471,8 @@ final class CombatSystem
 
 				if(abs($delta) > M_PI / 2 && $distance > 64) continue;
 			}
+
+			if(!$this->visible($source, $target)) continue;
 
 			return $player;
 		}
@@ -1563,18 +1564,21 @@ final class CombatSystem
 		$pose->angle = atan2($dy, $dx);
 		$state = $registry->get($entity, ActorState::class);
 		$melee = (float)$state->definition->value('MeleeRange', 44) + 20;
-		$visible = $this->visible($pose, $target);
+		// Like A_Chase, trace sight only for an attack in range. The trace draws no random numbers, so tracing later
+		// and only when needed leaves every outcome and the random sequence unchanged.
+		$visible = null;
+		$sees = function() use (&$visible, $pose, $target): bool { return $visible ??= $this->visible($pose, $target); };
 
 		if(mt_rand(0, 255) < 3) $this->actorSound($entity, $registry, 'ActiveSound');
 
-		if($distance < $melee && $visible && $state->definition->state('Melee'))
+		if($distance < $melee && $sees() && $state->definition->state('Melee'))
 		{
 			$state->enter('Melee');
 
 			return;
 		}
 
-		if($distance < 768 && $visible && mt_rand(0, 7) === 0 && $state->definition->state('Missile'))
+		if($distance < 768 && $sees() && mt_rand(0, 7) === 0 && $state->definition->state('Missile'))
 		{
 			$state->enter('Missile');
 
@@ -2700,6 +2704,13 @@ final class CombatSystem
 		$distance = hypot($dx, $dy);
 
 		if($distance < .001)return true;
+
+		// P_CheckSight's trivial rejection: the WAD's REJECT table marks sector pairs that cannot see each other. Node
+		// builders know nothing of camera portals, so maps with them always trace.
+		if(!$this->level->cameraPortalSurfaces()
+			&& $this->level->map->rejects($this->level->map->sectorAt($a->x, $a->y), $this->level->map->sectorAt($b->x, $b->y))
+		) return false;
+
 		$hit = (new ProjectileTracer($this->level, true))->trace(
 			new Transform($a->x, $a->y, $a->z + 32), new Body(0, 0), $dx, $dy, $b->z - $a->z
 		);
