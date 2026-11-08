@@ -151,12 +151,10 @@ final class ActorStateSystem
 			$state->frame++;
 			$state->entered = false;
 
-			if(isset($sequence->frames[$state->frame]))
-			{
-				if($ticks <= 0 && $sequence->frames[$state->frame]->ticks !== 0) return;
-
-				continue;
-			}
+			// Like P_SetMobjState from P_MobjThinker, the next frame starts and runs its action in the tic the previous
+			// one ran out, as Loop and Goto already did. Deferring it a tic made each frame after the first in a state
+			// run a tic late and short: idle monsters looked 9 then 11 tics apart, and their looks bunched up.
+			if(isset($sequence->frames[$state->frame])) continue;
 
 			if($sequence->flow === 'wait') $state->frame = max(0, count($sequence->frames) - 1);
 

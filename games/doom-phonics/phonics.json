@@ -523,7 +523,7 @@
     "src/Render/VolumePortalFaces.php": "sha256-Juk4G79ONyhyXulSGV7zEwZvcQPM/T6C24UOTObDBxc=",
     "src/Render/WadPatch.php": "sha256-O1Emlgv9o0eQSTGQXZKOZLPIKNxfXFCOW7qJxng3zfs=",
     "src/System/ActorPhysicsSystem.php": "sha256-NUkh/05ZlOyOoxFj8toaxYKlQnsY/sIMQknP7rI8fHU=",
-    "src/System/ActorStateSystem.php": "sha256-dhppG/qYwtE8b4VnNhdn7i8CHfAmmXuSSXw8sa+fupk=",
+    "src/System/ActorStateSystem.php": "sha256-aTyQYegmcUusblbLAoOqCcbHSs7a4Dl3DtHNf8pyldI=",
     "src/System/BeamEffectSystem.php": "sha256-mjpkmMd6m7yD3pUzdOuWaUAZ/rBXXIrwEvL0VXkIK5M=",
     "src/System/CheatSystem.php": "sha256-AU3OdL74QaPDa6Rags4Dq7LlyOBRnj7XsHB3sEn/WV4=",
     "src/System/CombatSystem.php": "sha256-bSdKCuE/zebq8dW23hnLYGnlvPU2LLKRRIg7Zpq8quQ=",
