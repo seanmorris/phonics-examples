@@ -429,7 +429,7 @@
     "src/Definition/WeaponAmmo.php": "sha256-VQSWsU1CNFgG49JEuX8czBHN3vX2NvQYEfvXnSQt0vE=",
     "src/Definition/WeaponSlots.php": "sha256-9FgzaHzx1MAvysVUS276LHw3t8kzJxrjZCIRrP5syDQ=",
     "src/Game/ActorDropper.php": "sha256-0YqHmS2IWpcqRLqtU/NwKtkpvwK21O6xVA2zZ64arhc=",
-    "src/Game/ActorObstacles.php": "sha256-dWByBjmX5a42pj4h0CR8PEIRvQ/Zdgycd+5hIatwshU=",
+    "src/Game/ActorObstacles.php": "sha256-cxRVGShaO0JNa7V4i88DdvK98lwJkbwURzBPV7ncwGs=",
     "src/Game/AutoAim.php": "sha256-W4einQKf0OFqYgZynN2f+xXicIYFplXtsF0L6LI8EYU=",
     "src/Game/BloodEffects.php": "sha256-qx1Cm7hgSRQwDAMUxqCRGDfqGJIFwOziyNiveSuRpAY=",
     "src/Game/CameraPortalLink.php": "sha256-q1G3g3QODvvL+z3y++InXTbE8QrLxH2ZG0Jw1j5Pqq0=",

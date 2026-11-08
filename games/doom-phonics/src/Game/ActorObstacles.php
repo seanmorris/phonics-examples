@@ -40,6 +40,8 @@ final class ActorObstacles
 	private float $reach = 0;
 	/** @var list<int>|null Registry snapshot the grid was built from, or null when it must be rebuilt. */
 	private ?array $snapshot = null;
+	/** @var list<\Closure(int):void> Told each body Collision moves, so sleeping physics can wake it. */
+	public array $movedListeners = [];
 
 	public function __construct(public Registry $registry, public ?Level $level = null, public bool $grid = false)
 	{
@@ -52,6 +54,8 @@ final class ActorObstacles
 	/** Re-bin one body after its position changed within the step. */
 	public function moved(int $entity, Transform $pose): void
 	{
+		foreach($this->movedListeners as $listener) $listener($entity);
+
 		if(!$this->grid || $this->snapshot === null || !isset($this->placed[$entity])) return;
 
 		$key = self::key($pose->x, $pose->y);
