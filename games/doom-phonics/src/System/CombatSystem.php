@@ -54,6 +54,7 @@ use DoomPhonics\Game\LineSpecials;
 use DoomPhonics\Game\PlayerState;
 use DoomPhonics\Game\ProjectileTracer;
 use DoomPhonics\Game\ProjectileImpact;
+use DoomPhonics\Game\MonsterMove;
 use DoomPhonics\Game\SightCheck;
 use DoomPhonics\Game\WorldPoint;
 use Phonics\Ecs\Query;
@@ -71,6 +72,9 @@ final class CombatSystem
 	private SoundCatalog $sounds;
 	private ProjectileTracer $projectileTracer;
 	private AutoAim $autoAim;
+	/** Doom's monster movement, built on first use for levels it can describe; others keep the swept chase. */
+	private ?MonsterMove $monsterMove = null;
+	private bool $monsterMoveChecked = false;
 	private SightCheck $sight;
 	/** Whether the map's geometry is classic enough for P_CheckSight; decided at the first sight check. */
 	private ?bool $classicSight = null;
@@ -1583,7 +1587,12 @@ final class CombatSystem
 		$dx = $target->x - $pose->x;
 		$dy = $target->y - $pose->y;
 		$distance = hypot($dx, $dy);
-		$pose->angle = atan2($dy, $dx);
+		$mover = $this->monsterMove();
+
+		// A_Chase turns the monster toward its movement direction an eighth of a turn at a time.
+		if($mover) $mover->face($brain, $pose);
+		else $pose->angle = atan2($dy, $dx);
+
 		$state = $registry->get($entity, ActorState::class);
 		$melee = (float)$state->definition->value('MeleeRange', 44) + 20;
 		// Like A_Chase, trace sight only for an attack in range. The trace draws no random numbers, so tracing later
@@ -1611,6 +1620,22 @@ final class CombatSystem
 
 		$speed = (float)$state->definition->value('Speed', 8);
 
+		if($mover)
+		{
+			$mover->chase(
+				$entity
+				, $pose
+				, $registry->get($entity, Body::class)
+				, $brain
+				, $target
+				, $speed
+				, $state->definition->hasFlag('FLOAT')
+				, $state->definition->hasFlag('DROPOFF')
+			);
+
+			return;
+		}
+
 		if($distance > 0)
 		$this->collision->move(
 			$pose
@@ -1619,6 +1644,24 @@ final class CombatSystem
 			, $dy / $distance * $speed
 			, $entity
 		);
+	}
+
+	/** Doom's monster movement when the level is classic geometry; null where only the swept chase applies. */
+	private function monsterMove(): ?MonsterMove
+	{
+		if($this->monsterMoveChecked) return $this->monsterMove;
+
+		$this->monsterMoveChecked = true;
+		$mover = new MonsterMove(
+			$this->level
+			, $this->collision->actors
+			, $this->specials ? fn(int $lineId, int $sector, Transform $pose): bool => $this->specials->monsterUse($lineId, $sector, $pose) : null
+			, $this->collision->maxStep
+		);
+
+		if($mover->available()) $this->monsterMove = $mover;
+
+		return $this->monsterMove;
 	}
 
 	private function faceTarget(int $entity, Registry $registry): void

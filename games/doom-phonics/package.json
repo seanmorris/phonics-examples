@@ -124,6 +124,7 @@
     "src/Game/LinePortal.php",
     "src/Game/LineSpecials.php",
     "src/Game/MirrorView.php",
+    "src/Game/MonsterMove.php",
     "src/Game/MovementContact.php",
     "src/Game/MultiplayerMode.php",
     "src/Game/PitchMode.php",

@@ -153,6 +153,34 @@ final class LineSpecials
 		$this->buttons = array_values($this->buttons);
 	}
 
+	/**
+	 * P_UseSpecialLine for a monster that bumped a line: only a plain manual door opens for it. Doom also lets a
+	 * monster try the locked manual doors, which then refuse anything without a player, and never a secret line.
+	 */
+	public function monsterUse(int $lineId, int $sector, Transform $actor): bool
+	{
+		$line = $this->level->map->linedefs[$lineId] ?? null;
+
+		if($line === null || $this->level->map->format === 'HEXEN' || ($line['flags'] & 32) || (int)$line['action'] !== 1) return false;
+
+		$action = $this->actions[1] ?? null;
+		$back = $this->level->sides($lineId)['back'];
+
+		if($action === null || $action->trigger !== LineAction::USE || $back === null) return false;
+
+		// EV_VerticalDoor: a monster reverses a closing door and may not touch one that is opening or waiting open.
+		$sector = $this->level->sectors[$back];
+
+		if($sector->ceilingMover !== null && $this->registry->alive($sector->ceilingMover))
+		{
+			$mover = $this->registry->get($sector->ceilingMover, SectorMover::class);
+
+			if(!$mover->isDoor() || $mover->isWaiting() || $mover->target > $sector->ceiling) return false;
+		}
+
+		return $this->doors([$back], (string)$action->mode, true);
+	}
+
 	/** Activate the first usable line within Doom's 64-unit use range. */
 	public function use(Transform $actor, PlayerState $player): bool
 	{

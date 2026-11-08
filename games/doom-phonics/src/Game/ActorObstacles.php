@@ -34,6 +34,8 @@ final class ActorObstacles
 	private array $placed = [];
 	/** @var array<int,Transform> Each binned entity's pose, re-read at each step to catch moves made without moved(). */
 	private array $poses = [];
+	/** @var array<int,Body> Each binned entity's body, so a test reads it without a registry lookup. */
+	private array $bodies = [];
 	/** Whether a step began since the last query, so bodies moved without moved() must be re-binned. */
 	private bool $stepped = false;
 	/** Largest radius among binned bodies; queries widen by it because bodies are binned by centre. */
@@ -51,10 +53,16 @@ final class ActorObstacles
 	/** Mark a new step: the next query re-bins bodies whose cell changed since the last one. */
 	public function beginStep(): void { $this->stepped = true; }
 
-	/** Re-bin one body after its position changed within the step. */
-	public function moved(int $entity, Transform $pose): void
+	/**
+	 * Re-bin one body after its position changed within the step. A caller that already knows the body's new sector
+	 * passes it, saving the BSP walk the next sharing test would make. The listeners hear of the move unless the
+	 * caller says a flat step in the same sector left the body nothing to settle (`$wake` false).
+	 */
+	public function moved(int $entity, Transform $pose, ?int $sector = null, bool $wake = true): void
 	{
-		foreach($this->movedListeners as $listener) $listener($entity);
+		if($wake) foreach($this->movedListeners as $listener) $listener($entity);
+
+		if($sector !== null) $this->sectors[$entity] = ['x' => $pose->x, 'y' => $pose->y, 'sector' => $sector];
 
 		if(!$this->grid || $this->snapshot === null || !isset($this->placed[$entity])) return;
 
@@ -78,7 +86,9 @@ final class ActorObstacles
 	{
 		if(!$this->grid) return $this->registry->query($this->solids);
 
-		$solids = $this->registry->query($this->solids);
+		// Every body has a transform, so the one-type query, which the registry answers without serialising a Query,
+		// names the same entities; the snapshot is the registry's own array, so an unchanged set compares at once.
+		$solids = $this->registry->query(Body::class);
 
 		if($this->snapshot === null || $solids !== $this->snapshot) $this->index($solids);
 		elseif($this->stepped) $this->refresh();
@@ -86,11 +96,26 @@ final class ActorObstacles
 		$this->stepped = false;
 
 		$reach = $this->reach;
-		$fromX = self::cell($minX - $reach);
-		$fromY = self::cell($minY - $reach);
-		$toX = self::cell($maxX + $reach);
-		$toY = self::cell($maxY + $reach);
+		$limit = self::CELL_LIMIT;
+		$fromX = (int)max(-$limit, min($limit - 1, floor(($minX - $reach) / self::CELL)));
+		$fromY = (int)max(-$limit, min($limit - 1, floor(($minY - $reach) / self::CELL)));
+		$toX = (int)max(-$limit, min($limit - 1, floor(($maxX + $reach) / self::CELL)));
+		$toY = (int)max(-$limit, min($limit - 1, floor(($maxY + $reach) / self::CELL)));
 		$found = [];
+
+		// The common case: one cell, read without the loop.
+		if($fromX === $toX && $fromY === $toY)
+		{
+			$cell = $this->cells[self::pack($fromX, $fromY)] ?? null;
+
+			if($cell === null) return [];
+
+			$found = array_keys($cell);
+
+			if(count($found) > 1) sort($found);
+
+			return $found;
+		}
 
 		// A box spanning more cells than there are bodies is cheaper to answer from the bodies themselves.
 		if(($toX - $fromX + 1) * ($toY - $fromY + 1) > count($this->placed))
@@ -105,7 +130,7 @@ final class ActorObstacles
 		for($y = $fromY; $y <= $toY; $y++)
 		foreach($this->cells[self::pack($x, $y)] ?? [] as $entity => $unused) $found[] = $entity;
 
-		sort($found);
+		if(count($found) > 1) sort($found);
 
 		return $found;
 	}
@@ -113,17 +138,21 @@ final class ActorObstacles
 	/** @param list<int> $solids */
 	private function index(array $solids): void
 	{
-		$this->cells = $this->placed = $this->poses = [];
+		$this->cells = $this->placed = $this->poses = $this->bodies = [];
 		$this->reach = 0;
 
 		foreach($solids as $entity)
 		{
+			if(!$this->registry->has($entity, Transform::class)) continue;
+
 			$pose = $this->registry->get($entity, Transform::class);
+			$body = $this->registry->get($entity, Body::class);
 			$key = self::key($pose->x, $pose->y);
 			$this->cells[$key][$entity] = true;
 			$this->placed[$entity] = $key;
 			$this->poses[$entity] = $pose;
-			$this->reach = max($this->reach, $this->registry->get($entity, Body::class)->radius);
+			$this->bodies[$entity] = $body;
+			$this->reach = max($this->reach, $body->radius);
 		}
 
 		$this->snapshot = $solids;
@@ -211,6 +240,39 @@ final class ActorObstacles
 		return $nearest;
 	}
 
+	/**
+	 * PIT_CheckThing's test for a monster step: whether a solid body the mover shares space with occupies the
+	 * destination, its square meeting the mover's. The mover's own body and bodies above or below it do not count.
+	 */
+	public function blockedAt(int $mover, Transform $pose, Body $body, float $x, float $y): bool
+	{
+		if(!$body->solid) return false;
+
+		$connected = $this->connectedSectors($mover, $pose);
+		$radius = $body->radius;
+
+		foreach($this->near($x - $radius, $y - $radius, $x + $radius, $y + $radius) as $entity)
+		{
+			if($entity === $mover) continue;
+
+			// With the grid, near() has just indexed every body, so its references are current.
+			$otherBody = $this->bodies[$entity] ?? $this->registry->get($entity, Body::class);
+
+			if(!$otherBody->solid) continue;
+
+			$other = $this->poses[$entity] ?? $this->registry->get($entity, Transform::class);
+			$extent = $radius + $otherBody->radius;
+
+			if(abs($x - $other->x) >= $extent || abs($y - $other->y) >= $extent) continue;
+
+			if(!$this->sharesSpace($entity, $other, $connected)) continue;
+
+			if($this->verticalOverlap($pose, $body, $other, $otherBody)) return true;
+		}
+
+		return false;
+	}
+
 	/** @return array{float,float,bool} */
 	public function resolve(int $mover, Transform $pose, Body $body, float $x, float $y): array
 	{
@@ -274,6 +336,9 @@ final class ActorObstacles
 
 		return isset($connected[$this->sector($entity, $other)]);
 	}
+
+	/** The sector a body stands in, remembered by position so an unmoved body costs no BSP walk. */
+	public function sectorOf(int $entity, Transform $pose): int { return $this->sector($entity, $pose); }
 
 	private function sector(int $entity, Transform $pose): int
 	{

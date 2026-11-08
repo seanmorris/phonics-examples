@@ -13,6 +13,10 @@ final class MonsterBrain
 	public int $lastLook = 0;
 	public float $reaction = 0;
 	public float $attackCooldown = 0;
+	/** Doom's movedir: 0 is east, counting counter-clockwise in eighths of a turn; 8 is no direction. */
+	public int $moveDir = 0;
+	/** Doom's movecount: steps left before the monster chooses a direction again. */
+	public int $moveCount = 0;
 
 	public function __construct(public bool $ambush = false) {}
 }
