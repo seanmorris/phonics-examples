@@ -24,18 +24,43 @@ final class SectorMotionSystem
 	private float $ticRemainder = 0;
 	private Query $actors;
 	/**
-	 * Actors by the sector they stand in, and by the model sector of any 3D floor in that sector. Built at most once
-	 * per update: thinkers move only plane heights and actor z, never an actor's map position. Without it each
-	 * moving plane located every actor in the map once per tic, which a ten-step staircase turns into thousands of
-	 * BSP walks per tic.
+	 * Per moving sector, the actors standing in it and, when it is the model of 3D floors, the actors standing in the
+	 * sectors those floors fill, with the sector each stands in. Built on demand and kept for one update: thinkers
+	 * move only plane heights and actor z, never an actor's map position. Only actors inside the sectors' bounds are
+	 * located with a BSP walk; the rest are dismissed by four comparisons. Without the bounds each moving plane
+	 * located every actor in the map once per tic, which a rising staircase turned into hundreds of BSP walks per
+	 * tic.
 	 *
-	 * @var array{sector:array<int,list<int>>,model:array<int,list<array{int,int}>>}|null
+	 * @var array<int,array{sector:list<int>,model:list<array{int,int}>}>
 	 */
-	private ?array $occupants = null;
+	private array $occupants = [];
+	/** @var array<int,array{float,float,float,float}> Each sector's bounds as min x, min y, max x, max y. */
+	private array $sectorBounds = [];
+	/** @var array<int,list<int>>|null Sectors holding a 3D floor of each model sector; built on first use. */
+	private ?array $modelSectors = null;
 
 	public function __construct(public Level $level, public SoundEmitter $sound)
 	{
 		$this->actors = Query::all(Transform::class, ActorState::class);
+		$map = $level->map;
+
+		foreach($map->linedefs as $line)
+		{
+			$a = $map->vertices[$line['from']];
+			$b = $map->vertices[$line['to']];
+
+			foreach([$line['right'], $line['left']] as $side)
+			{
+				if($side < 0) continue;
+
+				$sector = (int)$map->sidedefs[$side]['sector'];
+				$bounds = $this->sectorBounds[$sector] ?? [INF, INF, -INF, -INF];
+				$this->sectorBounds[$sector] = [
+					min($bounds[0], $a['x'], $b['x']), min($bounds[1], $a['y'], $b['y'])
+					, max($bounds[2], $a['x'], $b['x']), max($bounds[3], $a['y'], $b['y'])
+				];
+			}
+		}
 	}
 
 	public function update(Registry $registry, float $dt): void
@@ -46,44 +71,96 @@ final class SectorMotionSystem
 		if($tics < 1) return;
 
 		$this->ticRemainder -= $tics;
-		$this->occupants = null;
+		$this->occupants = [];
 
 		for($tic = 0; $tic < $tics; $tic++)
-		foreach($registry->query(SectorMover::class) as $entity)
 		{
-			if(!$registry->alive($entity)) continue;
+			$movers = $registry->query(SectorMover::class);
+			$sectors = [];
 
-			$this->tick($registry, $entity, $registry->get($entity, SectorMover::class));
-		}
+			foreach($movers as $entity)
+			if($registry->alive($entity)) $sectors[] = $registry->get($entity, SectorMover::class)->sector;
 
-		$this->occupants = null;
-	}
+			// One pass over the actors serves every mover this tic; a mover started mid-tic scans for itself.
+			if($sectors) $this->scan($registry, array_unique($sectors));
 
-	/** @return array{sector:array<int,list<int>>,model:array<int,list<array{int,int}>>} */
-	private function occupants(Registry $registry): array
-	{
-		if($this->occupants !== null) return $this->occupants;
-
-		$sectors = $models = [];
-
-		foreach($registry->query($this->actors) as $entity)
-		{
-			if(!$registry->alive($entity)) continue;
-
-			$pose = $registry->get($entity, Transform::class);
-			$occupied = $this->level->sectorAt($pose->x, $pose->y);
-			$sectors[$occupied->index][] = $entity;
-			$seen = [];
-
-			foreach($occupied->volumes as $volume)
-			if(!isset($seen[$volume->model->index]))
+			foreach($movers as $entity)
 			{
-				$seen[$volume->model->index] = true;
-				$models[$volume->model->index][] = [$entity,$occupied->index];
+				if(!$registry->alive($entity)) continue;
+
+				$this->tick($registry, $entity, $registry->get($entity, SectorMover::class));
 			}
 		}
 
-		return $this->occupants = ['sector' => $sectors,'model' => $models];
+		$this->occupants = [];
+	}
+
+	/** @return array{sector:list<int>,model:list<array{int,int}>} */
+	private function occupants(Registry $registry, int $sector): array
+	{
+		if(!isset($this->occupants[$sector])) $this->scan($registry, [$sector]);
+
+		return $this->occupants[$sector];
+	}
+
+	/**
+	 * Locate the actors the given moving sectors act on, in one pass over the actors. Each sector wants the actors
+	 * standing in it and, as the model of 3D floors, those standing in the sectors its floors fill.
+	 *
+	 * @param list<int> $sectors
+	 */
+	private function scan(Registry $registry, array $sectors): void
+	{
+		if($this->modelSectors === null)
+		{
+			$this->modelSectors = [];
+
+			foreach($this->level->sectors as $index => $state)
+			foreach($state->volumes as $volume)
+			$this->modelSectors[$volume->model->index][$index] = $index;
+		}
+
+		/** @var array<int,list<int>> $wanted The moving sectors interested in each sector an actor may stand in. */
+		$wanted = [];
+		$minX = $minY = INF;
+		$maxX = $maxY = -INF;
+
+		foreach($sectors as $sector)
+		{
+			if(isset($this->occupants[$sector])) continue;
+
+			$this->occupants[$sector] = ['sector' => [], 'model' => []];
+			$wanted[$sector][] = $sector;
+
+			foreach($this->modelSectors[$sector] ?? [] as $filled) $wanted[$filled][] = $sector;
+		}
+
+		// One box round every wanted sector dismisses most actors before any is located.
+		foreach(array_keys($wanted) as $index)
+		{
+			[$a, $b, $c, $d] = $this->sectorBounds[$index] ?? [-INF, -INF, INF, INF];
+			$minX = min($minX, $a);
+			$minY = min($minY, $b);
+			$maxX = max($maxX, $c);
+			$maxY = max($maxY, $d);
+		}
+
+		if(!$wanted) return;
+
+		foreach($registry->query($this->actors) as $entity)
+		{
+			$pose = $registry->get($entity, Transform::class);
+
+			if($pose->x < $minX || $pose->x > $maxX || $pose->y < $minY || $pose->y > $maxY) continue;
+
+			$occupied = $this->level->map->sectorAt($pose->x, $pose->y);
+
+			foreach($wanted[$occupied] ?? [] as $sector)
+			{
+				if($occupied === $sector) $this->occupants[$sector]['sector'][] = $entity;
+				else $this->occupants[$sector]['model'][] = [$entity, $occupied];
+			}
+		}
 	}
 
 	private function tick(Registry $registry, int $entity, SectorMover $mover): void
@@ -166,9 +243,9 @@ final class SectorMotionSystem
 		$sector = $this->level->sectors[$mover->sector];
 		$delta = $to - $from;
 		$carried = [];
-		$occupants = $this->occupants($registry);
+		$occupants = $this->occupants($registry, $mover->sector);
 
-		foreach($occupants['model'][$mover->sector] ?? [] as [$entity, $occupiedIndex])
+		foreach($occupants['model'] as [$entity, $occupiedIndex])
 		{
 			if(!$registry->alive($entity) || $occupiedIndex === $mover->sector) continue;
 
@@ -206,7 +283,7 @@ final class SectorMotionSystem
 			}
 		}
 
-		foreach($occupants['sector'][$mover->sector] ?? [] as $entity)
+		foreach($occupants['sector'] as $entity)
 		{
 			if(!$registry->alive($entity)) continue;
 
