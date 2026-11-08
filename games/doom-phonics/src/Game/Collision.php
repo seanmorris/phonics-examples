@@ -91,6 +91,9 @@ final class Collision
 
 		$current = $this->level->sectorAt($transform->x, $transform->y)->index;
 		$nearest = null;
+		$unitX = $dx / $distance;
+		$unitY = $dy / $distance;
+		$margin = $body->radius + .001;
 
 		foreach($this->level->spatial->near(
 			min($transform->x, $transform->x + $dx) - $body->radius
@@ -99,6 +102,24 @@ final class Collision
 			, max($transform->y, $transform->y + $dy) + $body->radius
 		) as $lineId
 		){
+			$line = $this->level->map->linedefs[$lineId];
+			$a = $this->level->map->vertices[$line['from']];
+			$b = $this->level->map->vertices[$line['to']];
+			$ax = $a['x'] - $transform->x;
+			$ay = $a['y'] - $transform->y;
+			$bx = $b['x'] - $transform->x;
+			$by = $b['y'] - $transform->y;
+			$sideA = $ax * $unitY - $ay * $unitX;
+			$sideB = $bx * $unitY - $by * $unitX;
+			$alongA = $ax * $unitX + $ay * $unitY;
+			$alongB = $bx * $unitX + $by * $unitY;
+
+			// Skip lines the swept circle cannot touch before testing their openings, which costs far more.
+			if(($sideA > $margin && $sideB > $margin) || ($sideA < -$margin && $sideB < -$margin)
+				|| ($alongA < -$margin && $alongB < -$margin)
+				|| ($alongA > $distance + $margin && $alongB > $distance + $margin)
+			) continue;
+
 			if(!$this->blocked(
 				$lineId
 				, $current
@@ -108,10 +129,6 @@ final class Collision
 				, $transform->y + $dy
 			))
 			continue;
-
-			$line = $this->level->map->linedefs[$lineId];
-			$a = $this->level->map->vertices[$line['from']];
-			$b = $this->level->map->vertices[$line['to']];
 
 			$hit = $this->capsuleHit(
 				$transform->x
@@ -319,14 +336,14 @@ final class Collision
 
 				$nearestX = $a['x'] + $vx * $t;
 				$nearestY = $a['y'] + $vy * $t;
-
-				if(!$this->blocked($lineId, $current, $from->z, $body->height, $nearestX, $nearestY)) continue;
-
 				$nx = $x - $nearestX;
 				$ny = $y - $nearestY;
 				$distance = hypot($nx, $ny);
 
+				// Only a line inside the body can push it; test that before the opening, which costs far more.
 				if($distance >= $body->radius) continue;
+
+				if(!$this->blocked($lineId, $current, $from->z, $body->height, $nearestX, $nearestY)) continue;
 
 				if($distance < 1e-6)
 				{

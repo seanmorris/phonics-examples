@@ -11,14 +11,28 @@ final class VerticalPhysics
 {
 	/** Keep a freshly warped eye beyond the destination portal plane. */
 	private const PORTAL_EXIT_INSET = .02;
+	/**
+	 * Bodies their last step left standing on a plain sector floor: position, sector, its floor and ceiling heights,
+	 * and the body's height. Keyed weakly by pose, so entries leave with their entities.
+	 *
+	 * @var \WeakMap<Transform,array{float,float,float,SectorState,float,float,float}>
+	 */
+	private \WeakMap $resting;
 
 	public function __construct(
 		public Level $level
 		, public float $maxStep = 24
 		, public float $acceleration = DoomGravity::ACCELERATION
 	){
+		$this->resting = new \WeakMap;
 	}
 
+	/**
+	 * Integrate one body's vertical motion for one step.
+	 *
+	 * Most of a map's things stand still on their floors every step. While such a body, its sector's planes, and its
+	 * height are unchanged, the step cannot change anything, so it returns before locating the sector.
+	 */
 	public function step(
 		Transform $pose
 		, Velocity $velocity
@@ -26,6 +40,25 @@ final class VerticalPhysics
 		, float $dt
 		, float $gravityScale = 1
 		, ?float $portalAnchorHeight = null
+	): void {
+		$rest = $this->resting[$pose] ?? null;
+
+		if($rest !== null && $velocity->z == 0 && $body->grounded
+			&& $rest[0] === $pose->x && $rest[1] === $pose->y && $rest[2] === $pose->z
+			&& $rest[3]->floor === $rest[4] && $rest[3]->ceiling === $rest[5] && $rest[6] === $body->height
+		) return;
+
+		unset($this->resting[$pose]);
+		$this->integrate($pose, $velocity, $body, $dt, $gravityScale, $portalAnchorHeight);
+	}
+
+	private function integrate(
+		Transform $pose
+		, Velocity $velocity
+		, Body $body
+		, float $dt
+		, float $gravityScale
+		, ?float $portalAnchorHeight
 	): void {
 		$portalAnchorHeight = max(0.0, min($body->height, $portalAnchorHeight ?? $body->height * .5));
 		$sector = $this->level->sectorAt($pose->x, $pose->y);
@@ -136,6 +169,13 @@ final class VerticalPhysics
 
 			if($velocity->z > 0) $velocity->z = 0;
 		}
+
+		// Remember a body left at rest on a plain floor: flat planes, no 3D floors, height transfer, liquid, or portals.
+		if($body->grounded && $velocity->z == 0 && $pose->z === $floor && $water === null
+			&& !$sector->volumes && $sector->heightTransfer === null && !$this->level->cameraPortalSurfaces()
+			&& $sector->floorSlope === [0.0,0.0,0.0] && $sector->ceilingSlope === [0.0,0.0,0.0]
+		)
+		$this->resting[$pose] = [$pose->x, $pose->y, $pose->z, $sector, $sector->floor, $sector->ceiling, $body->height];
 	}
 
 	/** @return list<SectorState> Sectors beneath the corners of the square body. */
