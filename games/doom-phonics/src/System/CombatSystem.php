@@ -1010,9 +1010,7 @@ final class CombatSystem
 		return;
 
 		$state = $registry->get($entity, ActorState::class);
-		$state->frame = max(0, $state->frame + $offset);
-		$state->ticks = 0;
-		$state->entered = false;
+		$state->jump($offset);
 	}
 
 	private function jumpIfNoAmmo(int $entity, StateFrame $frame, Registry $registry): void
@@ -1034,9 +1032,7 @@ final class CombatSystem
 			, $this->ammoChannel($entity, $registry)
 		)) return;
 
-		$state->frame = max(0, $state->frame + $offset);
-		$state->ticks = 0;
-		$state->entered = false;
+		$state->jump($offset);
 	}
 
 	private function changeInventory(int $entity, StateFrame $frame, Registry $registry, int $direction): void
@@ -1146,7 +1142,7 @@ final class CombatSystem
 			$overlay = $registry->get($entity, WeaponOverlay::class);
 
 			if($overlay->weaponEntity === $weapon)
-			$registry->get($entity, ActorState::class)->stopped = true;
+			$registry->get($entity, ActorState::class)->stop();
 		}
 
 		$flash = new ActorState($weaponState->definition, $label);

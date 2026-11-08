@@ -3795,6 +3795,7 @@ require __DIR__ . '/aiming.php';
 require __DIR__ . '/actor-grid.php';
 require __DIR__ . '/sight.php';
 require __DIR__ . '/state-timing.php';
+require __DIR__ . '/state-schedule.php';
 require __DIR__ . '/sector-volumes.php';
 require __DIR__ . '/layered-navigation.php';
 require __DIR__ . '/seeded-generation.php';
