@@ -508,7 +508,7 @@
     "src/Render/DoomIntermissionRenderer.php": "sha256-/CON7UaI+DK3fm3zyDy7Eb4YI1IICG+Rj90tAH5bxU0=",
     "src/Render/DoomRenderPass.php": "sha256-kV+z//oO3D9hu9MAGM8f5qYTXfOdyOww4r3mbt3WLjI=",
     "src/Render/FrameBuffer.php": "sha256-caWRbNiSLljlN0YAp+6Vm/8KJ6aPeC7q159QkI3o2ls=",
-    "src/Render/GlesMapRenderer.php": "sha256-BU2skkkD2ReBq13bNl4UFwz7ukdQmySFIL5lp/zh3IQ=",
+    "src/Render/GlesMapRenderer.php": "sha256-1UBgqvI/HgooQh+TKFlQNN+sgAdrfMehQcHKAxp7gao=",
     "src/Render/MapMesh.php": "sha256-DDPN5TlGcdXelRqh/1KquZh2APk8Rz6k4sE2CSPa8gI=",
     "src/Render/MapMeshBuilder.php": "sha256-7BZmxoyrbJowNwbSoYdxBmDN0eC5jX22o2IXrFu1toE=",
     "src/Render/MeltColumns.php": "sha256-nadX0uDndgUjd0NDZA2GmAtieWRJXBWX25Tlxr+Od6Y=",

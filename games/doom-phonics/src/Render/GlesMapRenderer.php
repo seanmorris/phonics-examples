@@ -152,7 +152,7 @@ final class GlesMapRenderer
 		$this->sectorComponents[$sector->index] = $level->map->sectorComponent($sector->index);
 		$this->atlas = IndexedAtlas::forLevel($level, $catalog, 2048, $actors, $palette);
 		$this->visibleSectors = new VisibleSectors($level);
-		$level->planeListeners[] = function(int $index): void { $this->dirtySectors[$index] = true; };
+		$level->planeListeners[] = function(int $index, bool $heights): void { $this->dirtySectors[$index] = true; };
 		$this->mesh = (new MapMeshBuilder($level, $this->atlas))->build();
 
 		$this->program = new Program(
