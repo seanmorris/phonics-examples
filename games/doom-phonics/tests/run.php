@@ -3799,6 +3799,7 @@ require __DIR__ . '/state-schedule.php';
 require __DIR__ . '/visible-sectors.php';
 require __DIR__ . '/physics-sleep.php';
 require __DIR__ . '/monster-move.php';
+require __DIR__ . '/projectile-bases.php';
 require __DIR__ . '/sector-volumes.php';
 require __DIR__ . '/layered-navigation.php';
 require __DIR__ . '/seeded-generation.php';

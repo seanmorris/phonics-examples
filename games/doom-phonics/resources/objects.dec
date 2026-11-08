@@ -648,3 +648,10 @@ ACTOR SpawnFire
     Stop
   }
 }
+
+// ZDoom's FastProjectile: a projectile whose movement is stepped so a fast missile cannot skip a thin wall. Every
+// missile here is swept, so the class needs only the projectile defaults; add-ons derive their beams and shots from it.
+ACTOR FastProjectile native
+{
+  Projectile
+}

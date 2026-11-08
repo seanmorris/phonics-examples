@@ -1978,6 +1978,11 @@ final class CombatSystem
 			, ['floor' => $sector->floor, 'ceiling' => $sector->ceiling]
 		);
 
+		// A class fired as a missile without the missile flags, such as a plain actor a pack launches with
+		// A_CustomMissile, is still flown by its velocity in ZDoom; here it needs a body to move and strike with.
+		if(!$registry->has($entity, Body::class))
+		$registry->add($entity, new Body((float)$definition->value('Radius', 20), (float)$definition->value('Height', 16), false, false, true));
+
 		$pose = $registry->get($entity, Transform::class);
 		$pose->x = $x;
 		$pose->y = $y;

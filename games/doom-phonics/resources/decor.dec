@@ -467,7 +467,7 @@ ACTOR Candelabra : Actor 35
   }
 }
 
-ACTOR BloodyTwitch : 49
+ACTOR BloodyTwitch 49
 {
   Radius 16
   Height 68

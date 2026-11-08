@@ -280,7 +280,8 @@ DEC
 
 	foreach($actors->resolved() as $definition)
 	{
-		if(!$definition->hasFlag('MISSILE')) continue;
+		// Every missile the catalog can spawn: bases such as FastProjectile carry the flags but no states.
+		if(!$definition->hasFlag('MISSILE') || !$definition->state('Spawn')) continue;
 
 		$names[] = $name = $definition->name;
 		$height = min(32, $floor->ceiling - $floor->floor - (float)$definition->value('Height', 16) - 1);
