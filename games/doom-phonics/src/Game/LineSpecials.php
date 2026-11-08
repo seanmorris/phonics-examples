@@ -227,6 +227,9 @@ final class LineSpecials
 	 */
 	public function cross(float $fromX, float $fromY, Transform $actor, PlayerState $player, bool $portalsOnly = false): int
 	{
+		// A path with no length crosses nothing.
+		if($fromX === $actor->x && $fromY === $actor->y) return 0;
+
 		$hits = [];
 
 		foreach($this->level->spatial->near(

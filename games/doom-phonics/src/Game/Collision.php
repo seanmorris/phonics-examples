@@ -9,6 +9,14 @@ use DoomPhonics\Component\Transform;
 final class Collision
 {
 
+	/**
+	 * @var array<int,array{float,float}> Where each body last stood after a push-out found nothing to push. A body
+	 * still there that is not moving cannot have come to overlap anything: monsters refuse steps onto it, sweeps stop
+	 * short of it, and planes move only heights. Teleports and portals move a body without this class, so the
+	 * position check catches them.
+	 */
+	private array $settled = [];
+
 	public function __construct(
 		public Level $level
 		, public float $maxStep = 24
@@ -49,14 +57,21 @@ final class Collision
 	): array {
 		$startX = $transform->x;
 		$startY = $transform->y;
+		$still = $dx == 0 && $dy == 0 && $entity !== null && ($this->settled[$entity] ?? null) === [$startX, $startY];
+		$overlap = false;
 
-		[$transform->x,$transform->y,$overlap] = $this->resolve(
-			$transform
-			, $body
-			, $transform->x
-			, $transform->y
-			, $entity
-		);
+		if(!$still)
+		{
+			[$transform->x,$transform->y,$overlap] = $this->resolve(
+				$transform
+				, $body
+				, $transform->x
+				, $transform->y
+				, $entity
+			);
+
+			if($entity !== null && !$overlap && $dx == 0 && $dy == 0) $this->settled[$entity] = [$transform->x, $transform->y];
+		}
 
 		$normals = [];
 		$actors = [];

@@ -5,8 +5,13 @@ namespace DoomPhonics\Map;
 /** Uniform-grid acceleration for map collision, use traces, hitscan, and ray rendering. */
 final class SpatialIndex
 {
-	/** @var array<string,list<int>> */
+	/** @var array<int,list<int>> Lines by packed cell key. */
 	private array $cells = [];
+	/**
+	 * Cells are clamped to +/-16384 per axis so packed keys stay below 2^31: the browser runs 32-bit PHP, where a
+	 * larger key becomes a float. A ray far outside the map shares the edge cells, whose lines its caller rejects.
+	 */
+	private const CELL_LIMIT = 16384;
 
 	public function __construct(public MapData $map, public int $cellSize = 128)
 	{
@@ -23,7 +28,7 @@ final class SpatialIndex
 
 			for($y = $minY; $y <= $maxY; $y++)
 			for($x = $minX; $x <= $maxX; $x++)
-			$this->cells["$x:$y"][] = $line['index'];
+			$this->cells[self::pack($x, $y)][] = $line['index'];
 		}
 	}
 
@@ -81,7 +86,7 @@ final class SpatialIndex
 		foreach(array_keys($column) as $cellY)
 		for($oy = -$reach; $oy <= $reach; $oy++)
 		for($ox = -$reach; $ox <= $reach; $ox++)
-		foreach($this->cells[($cellX + $ox) . ':' . ($cellY + $oy)] ?? [] as $line) $result[$line] = true;
+		foreach($this->cells[self::pack($cellX + $ox, $cellY + $oy)] ?? [] as $line) $result[$line] = true;
 
 		$lines = array_keys($result);
 		sort($lines);
@@ -93,10 +98,13 @@ final class SpatialIndex
 	public function near(float $minX, float $minY, float $maxX, float $maxY): array
 	{
 		$result = [];
+		$fromX = $this->cell($minX);
+		$toX = $this->cell($maxX);
+		$toY = $this->cell($maxY);
 
-		for($y = $this->cell($minY); $y <= $this->cell($maxY); $y++)
-		for($x = $this->cell($minX); $x <= $this->cell($maxX); $x++)
-		foreach($this->cells["$x:$y"] ?? [] as $line) $result[$line] = true;
+		for($y = $this->cell($minY); $y <= $toY; $y++)
+		for($x = $fromX; $x <= $toX; $x++)
+		foreach($this->cells[self::pack($x, $y)] ?? [] as $line) $result[$line] = true;
 
 		return array_keys($result);
 	}
@@ -127,7 +135,7 @@ final class SpatialIndex
 
 		for($travel = 0, $guard = 0; $travel <= $distance && $guard++ < 65536;)
 		{
-			foreach($this->cells["$cx:$cy"] ?? [] as $line) $candidates[$line] = true;
+			foreach($this->cells[self::pack($cx, $cy)] ?? [] as $line) $candidates[$line] = true;
 
 			if($tMaxX < $tMaxY)
 			{
@@ -172,4 +180,13 @@ final class SpatialIndex
 	}
 
 	private function cell(float $coordinate): int { return (int)floor($coordinate / $this->cellSize); }
+
+	/** Distinct keys for every clamped cell, at most 2^30 - 1, so they stay integers in 32-bit PHP. */
+	private static function pack(int $x, int $y): int
+	{
+		$x = max(-self::CELL_LIMIT, min(self::CELL_LIMIT - 1, $x));
+		$y = max(-self::CELL_LIMIT, min(self::CELL_LIMIT - 1, $y));
+
+		return ($x + self::CELL_LIMIT) * 2 * self::CELL_LIMIT + $y + self::CELL_LIMIT;
+	}
 }
