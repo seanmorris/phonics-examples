@@ -12,9 +12,10 @@ use Phonics\Ecs\Registry;
  *
  * Without a grid every sweep tests every body in the registry, so moving N actors costs N^2 tests per tic. With
  * `$grid`, bodies are binned by centre in 128-unit cells, the size of Doom's blockmap blocks, and a sweep tests only
- * the cells its path covers, widened by the largest binned radius. The grid's owner must call beginStep() at the start
- * of each simulation step and moved() after changing a body's position within the step; Collision does the latter
- * for every move it makes.
+ * the cells its path covers, widened by the largest binned radius. The grid persists between steps: the owner calls
+ * beginStep() at the start of each simulation step, after which the first query re-bins the bodies whose cell changed
+ * since the last step, and moved() after changing a body's position within the step, which Collision does for every
+ * move it makes. A change to the set of bodies rebuilds the grid.
  */
 final class ActorObstacles
 {
@@ -31,6 +32,10 @@ final class ActorObstacles
 	private array $cells = [];
 	/** @var array<int,int> Cell key each binned entity occupies. */
 	private array $placed = [];
+	/** @var array<int,Transform> Each binned entity's pose, re-read at each step to catch moves made without moved(). */
+	private array $poses = [];
+	/** Whether a step began since the last query, so bodies moved without moved() must be re-binned. */
+	private bool $stepped = false;
 	/** Largest radius among binned bodies; queries widen by it because bodies are binned by centre. */
 	private float $reach = 0;
 	/** @var list<int>|null Registry snapshot the grid was built from, or null when it must be rebuilt. */
@@ -41,8 +46,8 @@ final class ActorObstacles
 		$this->solids = Query::all(Transform::class, Body::class);
 	}
 
-	/** Rebuild the grid from the current positions before the step's first query. */
-	public function beginStep(): void { $this->snapshot = null; }
+	/** Mark a new step: the next query re-bins bodies whose cell changed since the last one. */
+	public function beginStep(): void { $this->stepped = true; }
 
 	/** Re-bin one body after its position changed within the step. */
 	public function moved(int $entity, Transform $pose): void
@@ -72,6 +77,9 @@ final class ActorObstacles
 		$solids = $this->registry->query($this->solids);
 
 		if($this->snapshot === null || $solids !== $this->snapshot) $this->index($solids);
+		elseif($this->stepped) $this->refresh();
+
+		$this->stepped = false;
 
 		$reach = $this->reach;
 		$fromX = self::cell($minX - $reach);
@@ -101,7 +109,7 @@ final class ActorObstacles
 	/** @param list<int> $solids */
 	private function index(array $solids): void
 	{
-		$this->cells = $this->placed = [];
+		$this->cells = $this->placed = $this->poses = [];
 		$this->reach = 0;
 
 		foreach($solids as $entity)
@@ -110,10 +118,27 @@ final class ActorObstacles
 			$key = self::key($pose->x, $pose->y);
 			$this->cells[$key][$entity] = true;
 			$this->placed[$entity] = $key;
+			$this->poses[$entity] = $pose;
 			$this->reach = max($this->reach, $this->registry->get($entity, Body::class)->radius);
 		}
 
 		$this->snapshot = $solids;
+	}
+
+	/** Re-bin bodies that moved between cells since the last step without reporting it, such as replicas. */
+	private function refresh(): void
+	{
+		foreach($this->poses as $entity => $pose)
+		{
+			$key = self::key($pose->x, $pose->y);
+			$old = $this->placed[$entity];
+
+			if($key === $old) continue;
+
+			unset($this->cells[$old][$entity]);
+			$this->cells[$key][$entity] = true;
+			$this->placed[$entity] = $key;
+		}
 	}
 
 	/** Positions beyond the clamped range share its edge cells; a non-finite position uses the origin cell. */
