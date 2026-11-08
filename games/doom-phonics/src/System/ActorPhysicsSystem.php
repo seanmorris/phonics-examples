@@ -62,8 +62,6 @@ final class ActorPhysicsSystem
 		if($entities !== $this->known)
 		{
 			$this->known = $entities;
-			$this->cache = [];
-
 			$previous = $this->cache;
 			$this->cache = [];
 
@@ -84,6 +82,12 @@ final class ActorPhysicsSystem
 
 		foreach(array_keys($this->awake) as $entity)
 		{
+			if(!isset($this->cache[$entity]))
+			{
+				unset($this->awake[$entity]);
+				continue;
+			}
+
 			[$pose, $velocity, $body, $gravity] = $this->cache[$entity];
 
 			if(hypot($velocity->x, $velocity->y) > .01)

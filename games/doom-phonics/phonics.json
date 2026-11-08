@@ -526,7 +526,7 @@
     "src/Render/VolumeMeshBuilder.php": "sha256-SBxZioWPWT4FKU2ZH3OD+JUiv8Cb8iTCgT88AtkjPNo=",
     "src/Render/VolumePortalFaces.php": "sha256-Juk4G79ONyhyXulSGV7zEwZvcQPM/T6C24UOTObDBxc=",
     "src/Render/WadPatch.php": "sha256-O1Emlgv9o0eQSTGQXZKOZLPIKNxfXFCOW7qJxng3zfs=",
-    "src/System/ActorPhysicsSystem.php": "sha256-v44tIKthSrSXlArpOL4hIVIMp8BGeXvWt2S5nFHJKWs=",
+    "src/System/ActorPhysicsSystem.php": "sha256-KmxUX8I1aKik/LGB2np9pPVaK/Z8kKDW3GhUW0TdESo=",
     "src/System/ActorStateSystem.php": "sha256-XPDASycIdCneHX1Vv9mh2PZxLPSKVFw7i3KUNaazrug=",
     "src/System/BeamEffectSystem.php": "sha256-mjpkmMd6m7yD3pUzdOuWaUAZ/rBXXIrwEvL0VXkIK5M=",
     "src/System/CheatSystem.php": "sha256-AU3OdL74QaPDa6Rags4Dq7LlyOBRnj7XsHB3sEn/WV4=",

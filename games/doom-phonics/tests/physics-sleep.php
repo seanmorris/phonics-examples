@@ -81,4 +81,42 @@ use Phonics\World\ScopeContext;
 	$registry->get($monsters[3], Velocity::class)->z = 40;
 	$tick(1);
 	verifyWad($pose->z > $pose->previousZ, 'a Collision move wakes the monster, so a velocity set in the same tic takes effect');
+
+	// A sleeping body that is destroyed must leave the sleep index: a later plane change in its sector used to wake
+	// the dead id and the next step read a missing cache entry. A spawn elsewhere must not wake the sleepers either.
+	$physics = null;
+
+	foreach((new ReflectionProperty($scheduler, 'systems'))->getValue($scheduler) as [$callable])
+	if(is_array($callable) && $callable[0] instanceof DoomPhonics\System\ActorPhysicsSystem) $physics = $callable[0];
+
+	$awake = new ReflectionProperty($physics, 'awake');
+	$tick(20);
+	$sleepersBefore = count($registry->query(Body::class)) - count($awake->getValue($physics));
+	$spawned = $registry->create(new Transform(-1472.0, -3344.0, 64.0), new Velocity, new Body(16, 20));
+	$tick(1);
+	verifyWad(
+		count($awake->getValue($physics)) <= 2 && $sleepersBefore > 50
+		, 'spawning a body elsewhere does not wake the sleeping ones'
+	);
+
+	$doomed = $monsters[4];
+	$doomedPose = $registry->get($doomed, Transform::class);
+	$doomedSector = $level->sectorAt($doomedPose->x, $doomedPose->y);
+	$registry->destroy($doomed);
+	$tick(1);
+	$doomedSector->floor += 8;
+	$level->planeChanged($doomedSector->index);
+	$tick(2);
+	verifyWad(!isset($awake->getValue($physics)[$doomed]), 'a destroyed sleeper is forgotten, so a later plane change cannot wake it');
+	$doomedSector->floor -= 8;
+
+	// Blood retires mid-fall: a body destroyed while awake must leave the awake set before the next step reads it.
+	$falling = $monsters[5];
+	$registry->get($falling, Velocity::class)->z = 60;
+	$physics->wake($falling);
+	$tick(1);
+	verifyWad(isset($awake->getValue($physics)[$falling]), 'a body given upward velocity is awake');
+	$registry->destroy($falling);
+	$tick(2);
+	verifyWad(!isset($awake->getValue($physics)[$falling]), 'a body destroyed while awake is forgotten before the next step');
 })();
