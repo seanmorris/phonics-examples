@@ -151,8 +151,12 @@ final class PickupSystem
 
 		if($this->actors->isA($definition, 'Weapon'))
 		{
-			$new = empty($player->weapons[$definition->name]);
-			$player->weapons[$definition->name] = true;
+			// A player locked to one gun by a ruleset takes a found weapon's ammo but not the weapon.
+			$locked = $player->weaponLock !== null && strcasecmp($definition->name, $player->weaponLock) !== 0;
+			$new = !$locked && empty($player->weapons[$definition->name]);
+
+			if(!$locked) $player->weapons[$definition->name] = true;
+
 			$ammo = false;
 
 			foreach([1,2] as $channel)

@@ -65,10 +65,16 @@ final class PlayerState
 		if($this->messageTics === 0) $this->message = '';
 	}
 
+	/** The one weapon the player may hold while a ruleset such as IDOOPSALLGIBS is on; null for free choice. */
+	public ?string $weaponLock = null;
+
 	/** Queue a first-person lowering transition without changing the active weapon early. */
 	public function requestWeapon(string $weapon): void
 	{
 		if($weapon === '') return;
+
+		// A locked player keeps the one gun through pickups, slot keys, and weapon cycling alike.
+		if($this->weaponLock !== null && strcasecmp($weapon, $this->weaponLock) !== 0) return;
 
 		$this->pendingWeapon = strcasecmp($weapon, $this->weapon) === 0 ? null : $weapon;
 	}

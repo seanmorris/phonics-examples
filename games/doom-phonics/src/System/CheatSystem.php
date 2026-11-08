@@ -234,6 +234,8 @@ final class CheatSystem
 			$loadout = $this->oopsLoadout;
 			$this->oopsLoadout = null;
 
+			$player->weaponLock = null;
+
 			if($loadout !== null)
 			{
 				$player->weapons = $loadout['weapons'];
@@ -273,6 +275,7 @@ final class CheatSystem
 	private function equipOopsAllGibs(PlayerState $player, string $railgun): void
 	{
 		$player->weapons = [$railgun => true];
+		$player->weaponLock = $railgun;
 		$player->requestWeapon($railgun);
 		$player->infiniteAmmo = ['Cell' => true];
 		$player->ammo['Cell'] = $player->ammoMaximum['Cell'] ?? PHP_INT_MAX;

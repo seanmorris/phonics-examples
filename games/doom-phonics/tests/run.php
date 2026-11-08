@@ -988,6 +988,22 @@ verifyWad(
 	, 'IDOOPSALLGIBS replaces player guns and activates infinite-cell runtime rail attacks'
 );
 
+// While the ruleset is on, nothing moves the player off the Railgun: not a slot key, and not a found weapon,
+// which gives only its ammo and does not join the arms panel.
+$stackCheatPlayer->requestWeapon('Shotgun');
+verifyWad($stackCheatPlayer->weaponLock === 'Railgun' && $stackCheatPlayer->pendingWeapon === 'Railgun', 'IDOOPSALLGIBS refuses a weapon switch request');
+$lockedPickups = new PickupSystem($addonDefinitions->actors);
+$lockedApply = new ReflectionMethod($lockedPickups, 'apply');
+$stackCheatPlayer->ammoMaximum['Shell'] = 50;
+$stackCheatPlayer->ammo['Shell'] = 10;
+$shellsBefore = 10;
+$lockedTaken = $lockedApply->invoke($lockedPickups, $addonDefinitions->actors->named('Shotgun'), new DoomPhonics\Component\InventoryPickup('Shotgun'), $stackCheatPlayer, new HitPoints(100, 100));
+verifyWad(
+	$lockedTaken && empty($stackCheatPlayer->weapons['Shotgun']) && $stackCheatPlayer->pendingWeapon === 'Railgun'
+		&& ($stackCheatPlayer->ammo['Shell'] ?? 0) > $shellsBefore
+	, 'under IDOOPSALLGIBS a found shotgun gives its shells but neither joins the loadout nor switches'
+);
+
 $respawnCheatEntity = $stackCheatRegistry->create(new PlayerState, new HitPoints(100, 100));
 $stackCheatSystem->applyActive($stackCheatRegistry, $respawnCheatEntity);
 $respawnCheatPlayer = $stackCheatRegistry->get($respawnCheatEntity, PlayerState::class);
@@ -1008,6 +1024,8 @@ verifyWad(
 		&& $respawnCheatPlayer->message === 'OOPS! ALL GIBS OFF'
 	, 'entering IDOOPSALLGIBS a second time restores the saved loadout and disables the ruleset'
 );
+$respawnCheatPlayer->requestWeapon('Shotgun');
+verifyWad($respawnCheatPlayer->weaponLock === null && $respawnCheatPlayer->pendingWeapon === 'Shotgun', 'turning the ruleset off releases the weapon lock');
 
 $slotPrecedence = DecorateParser::catalog([
 	'slots.dec' => <<<'DECORATE'
