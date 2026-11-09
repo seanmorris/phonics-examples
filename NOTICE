@@ -30,3 +30,9 @@ project author and cleared for redistribution with this project:
   rail-hit.mp3     (originally 13902_33634-lq-ball-hits-rail.mp3): the Freesound preview of
                    "50.wav" by adcbicycle, https://freesound.org/s/13902/, released under
                    Creative Commons 0 (public domain dedication)
+
+Phlappy Phant elePHPant sprite (games/phlappy-phant)
+  The PHP mascot by Vincent Pontier, vector by Webysther (Wikimedia Commons, "Webysther 20160423 - Elephpant.svg",
+  2016-04-23), GNU General Public License v2.0 or later. games/phlappy-phant/art/elephpant.svg, the sprite frames in
+  games/phlappy-phant/assets/sprites.png and games/phlappy-phant/poster.png are derivatives under that licence; see
+  games/phlappy-phant/art/ELEPHPANT-LICENSE.md.

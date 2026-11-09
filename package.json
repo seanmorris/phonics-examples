@@ -10,12 +10,12 @@
     "games/*"
   ],
   "scripts": {
-    "generate": "node scripts/generate-billiards-textures.mjs && php scripts/generate-billiards-meshes.php && node scripts/generate-poker-textures.mjs && node scripts/build-mental-poker.mjs",
-    "check:generated": "node scripts/generate-billiards-textures.mjs --check && php scripts/generate-billiards-meshes.php --check && node scripts/generate-poker-textures.mjs --check && node scripts/build-mental-poker.mjs --check",
+    "generate": "node scripts/generate-billiards-textures.mjs && php scripts/generate-billiards-meshes.php && node scripts/generate-poker-textures.mjs && node scripts/build-mental-poker.mjs && node scripts/generate-phant-sprites.mjs",
+    "check:generated": "node scripts/generate-billiards-textures.mjs --check && php scripts/generate-billiards-meshes.php --check && node scripts/generate-poker-textures.mjs --check && node scripts/build-mental-poker.mjs --check && node scripts/generate-phant-sprites.mjs --check",
     "build:applications": "node scripts/build-applications.mjs",
     "build:site": "node scripts/build-site.mjs",
     "build": "npm run generate && npm run build:applications && npm run build:site",
-    "test:php": "php games/php-billiards/tests/run.php && php games/php-poker/tests/run.php && php games/php-poker/tests/odds.php && php games/php-poker/tests/presenter.php && php -n games/php-poker/tests/presenter.php && php games/php-poker/tests/motion.php",
+    "test:php": "php games/php-billiards/tests/run.php && php games/php-poker/tests/run.php && php games/php-poker/tests/odds.php && php games/php-poker/tests/presenter.php && php -n games/php-poker/tests/presenter.php && php games/php-poker/tests/motion.php && php games/phlappy-phant/tests/run.php",
     "test:node": "node --test tests/*.test.mjs",
     "test:manifest": "node scripts/validate-games.mjs",
     "test:browser": "playwright test",
