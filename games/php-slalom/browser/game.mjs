@@ -1,14 +1,14 @@
 /** Browser shell for PHP Slalom: storage, replay files, sound, touch, and accessible hit targets. */
 export async function activate({module, canvas, assets, packageUrl, services, session, onClose})
 {
-	if(!canvas.getContext('webgl2', {antialias: false})) throw Error('PHP Slalom requires WebGL2');
+	const shell = new services.GameShell({module, canvas, session, title: 'PHP Slalom'});
+	shell.context({antialias: false});
+	const {signal} = shell;
 
 	const controlsKey = 'php-slalom.controls.v1';
 	const profileKey = 'php-slalom.profile.v1';
 	const optionsKey = 'php-slalom.options.v1';
 	const storage = new services.SafeStorage;
-	const parent = canvas.parentNode, next = canvas.nextSibling, originalStyle = canvas.getAttribute('style');
-	const abort = new AbortController(), {signal} = abort;
 	const ui = document.createElement('section');
 	const screen = document.createElement('div');
 	const targets = document.createElement('div');
@@ -21,10 +21,6 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	screen.className = 'php-slalom-screen';
 	targets.className = 'php-slalom-targets';
 	touch.className = 'php-slalom-touch';
-	touch.hidden = true;
-	touch.innerHTML = `<button type="button" data-direction="left" aria-label="Steer left">LEFT</button>
-		<button type="button" data-direction="right" aria-label="Steer right">RIGHT</button>`;
-
 	status.className = 'php-slalom-sr';
 	status.setAttribute('aria-live', 'polite');
 	file.type = 'file';
@@ -55,16 +51,12 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		@media(pointer:coarse){.php-slalom-screen .quick-controls button{width:44px;height:44px}}
 	`;
 
-	parent.insertBefore(ui, canvas);
+	shell.mount(ui, {screen});
 	ui.append(style, screen, status, file);
-	screen.append(canvas, targets, touch);
-	canvas.tabIndex = Math.max(0, canvas.tabIndex);
+	screen.append(targets, touch);
 	const quick = new services.QuickControls(screen, ui);
-	const buttons = new Map(), pointers = new Map();
 	const held = {left: false, right: false};
-	let viewport = '[960,600,1,false]', action = '', imported = '', state = null, signature = '';
-	let fullscreenBusy = false, fullscreenTask = null, closed = false;
-	let crashSounded = false, savedRun = '';
+	let imported = '', crashSounded = false, savedRun = '';
 
 	const safeJson = (value, fallback) => {
 		try
@@ -93,12 +85,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		, lastReplay: typeof rawProfile?.lastReplay === 'string' ? rawProfile.lastReplay : ''
 	};
 
-	const rawOptions = safeJson(storage.get(optionsKey) ?? '{}', {});
-	const options = {version: 1, muted: rawOptions?.version === 1 && rawOptions.muted === true};
-
 	const saveProfile = () => storage.set(profileKey, JSON.stringify(profile));
-
-	const saveOptions = () => storage.set(optionsKey, JSON.stringify(options));
 
 	const bytesToBase64 = bytes => {
 		let binary = '';
@@ -117,22 +104,32 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		return bytes;
 	};
 
-	function measure()
-	{
-		const box = screen.getBoundingClientRect(), dpr = devicePixelRatio || 1;
-		const width = Math.max(1, Math.round(box.width * dpr));
-		const height = Math.max(1, Math.round(box.height * dpr));
-		const coarse = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
-		viewport = JSON.stringify([width, height, dpr, coarse]);
-		canvas.style.width = box.width + 'px';
-		canvas.style.height = box.height + 'px';
-	}
+	const view = shell.measure({
+		observe: screen
+		, cssSize: true
+		, initial: '[960,600,1,false]'
+		, format: (width, height, dpr, box, coarse) => JSON.stringify([width, height, dpr, coarse])
+	});
 
-	const resize = new ResizeObserver(measure);
-	resize.observe(screen);
-	measure();
+	let samples = null;
 
-	const samples = new services.SamplePlayer(module, assets, packageUrl, {muted: options.muted});
+	const mute = shell.mute({
+		key: optionsKey
+		, parse: value => {
+			const options = safeJson(value, {});
+
+			return options?.version === 1 && options.muted === true;
+		}
+		, serialize: muted => JSON.stringify({version: 1, muted})
+		, quick
+		, onChange: muted => {
+			samples?.setMuted(muted);
+
+			if(samples && !muted) void unlock();
+		}
+	});
+
+	samples = new services.SamplePlayer(module, assets, packageUrl, {muted: mute.muted});
 
 	async function unlock()
 	{
@@ -144,85 +141,18 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		void unlock().then(() => samples.play('impact', {gain: .6}));
 	}
 
-	quick.setMuted(options.muted);
-
-	quick.muteButton.addEventListener('click', () => {
-		options.muted = !options.muted;
-		saveOptions();
-		quick.setMuted(options.muted);
-		samples.setMuted(options.muted);
-
-		if(!options.muted) void unlock();
-
-		canvas.focus({preventScroll: true});
-	}, {signal});
-
-	function updateFullscreen(error = '')
-	{
-		quick.setFullscreen(
-			document.fullscreenElement === ui
-			, Boolean(document.fullscreenEnabled && ui.requestFullscreen)
-			, fullscreenBusy
-			, error
-		);
-
-		measure();
-	}
-
-	quick.fullscreenButton.addEventListener('click', async() => {
-		if(fullscreenBusy) return;
-
-		fullscreenBusy = true;
-		updateFullscreen();
-
-		try
-		{
-			fullscreenTask = document.fullscreenElement === ui ? document.exitFullscreen() : ui.requestFullscreen();
-			await fullscreenTask;
-		}
-		catch(error)
-		{
-			if(!closed) updateFullscreen(error.message);
-		}
-
-		fullscreenBusy = false;
-
-		if(!closed)
-		{
-			updateFullscreen();
-			canvas.focus({preventScroll: true});
-		}
-	}, {signal});
-
-	document.addEventListener('fullscreenchange', updateFullscreen, {signal});
-	updateFullscreen();
+	shell.fullscreen({target: ui, quick, onChange: () => view.measure()});
 
 	canvas.addEventListener('pointerdown', () => { canvas.focus({preventScroll: true}); void unlock(); }, {signal});
 	canvas.addEventListener('keydown', () => { void unlock(); }, {signal});
-	canvas.addEventListener('contextmenu', event => event.preventDefault(), {signal});
+	shell.suppressContextMenu();
 
-	for(const button of touch.querySelectorAll('button'))
-	{
-		const direction = button.dataset.direction;
+	const focus = () => { canvas.focus({preventScroll: true}); void unlock(); };
 
-		const release = event => {
-			pointers.delete(event.pointerId);
-			held[direction] = [...pointers.values()].includes(direction);
-		};
-
-		button.addEventListener('pointerdown', event => {
-			event.preventDefault();
-			void unlock();
-			button.setPointerCapture(event.pointerId);
-			pointers.set(event.pointerId, direction);
-			held[direction] = true;
-			canvas.focus({preventScroll: true});
-		}, {signal});
-
-		button.addEventListener('pointerup', release, {signal});
-		button.addEventListener('pointercancel', release, {signal});
-		button.addEventListener('lostpointercapture', release, {signal});
-	}
+	const pad = new services.TouchPad(touch, [
+		{id: 'left', label: 'Steer left', text: 'LEFT'}
+		, {id: 'right', label: 'Steer right', text: 'RIGHT'}
+	], {signal, focus, onChange: ids => { held.left = ids.has('left'); held.right = ids.has('right'); }});
 
 	file.addEventListener('change', async() => {
 		const selected = file.files?.[0];
@@ -247,32 +177,20 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		}
 	}, {signal});
 
-	module.slalomViewport = () => viewport;
+	const action = shell.action('slalomAction');
+	const buttons = new services.RegionButtons(targets, {signal, focus, onPress: id => action.act(id)});
 
-	module.slalomAction = () => { const value = action; action = ''; return value; };
+	shell.bridge('slalomViewport', () => view.viewport());
+	shell.bridge('slalomTouch', () => JSON.stringify(held));
+	shell.bridge('slalomStorageRead', () => storage.get(controlsKey) ?? '');
+	shell.bridge('slalomStorageWrite', value => storage.set(controlsKey, String(value)));
+	shell.bridge('slalomSeed', () => shell.seed31());
+	shell.bridge('slalomScores', () => JSON.stringify({fresh: profile.fresh, continued: profile.continued}));
+	shell.bridge('slalomLastReplay', () => profile.lastReplay);
+	shell.bridge('slalomRequestReplayImport', () => file.click());
+	shell.bridge('slalomReplayImport', () => { const value = imported; imported = ''; return value; });
 
-	module.slalomTouch = () => JSON.stringify(held);
-
-	module.slalomStorageRead = () => storage.get(controlsKey) ?? '';
-
-	module.slalomStorageWrite = value => storage.set(controlsKey, String(value));
-
-	module.slalomSeed = () => {
-		const seed = new Uint32Array(1);
-		globalThis.crypto.getRandomValues(seed);
-
-		return (seed[0] & 0x7fffffff) || 1;
-	};
-
-	module.slalomScores = () => JSON.stringify({fresh: profile.fresh, continued: profile.continued});
-
-	module.slalomLastReplay = () => profile.lastReplay;
-
-	module.slalomRequestReplayImport = () => file.click();
-
-	module.slalomReplayImport = () => { const value = imported; imported = ''; return value; };
-
-	module.slalomExportLast = () => {
+	shell.bridge('slalomExportLast', () => {
 		if(!profile.lastReplay)
 		{
 			status.textContent = 'There is no local replay to export yet.';
@@ -297,124 +215,55 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 			return false;
 		}
-	};
+	});
 
-	module.slalomStatus = json => {
-		const nextState = JSON.parse(json);
-		state = nextState;
-		canvas.dataset.phpSlalom = json;
-		const coarse = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
-		touch.hidden = nextState.page !== 'play' || !coarse || nextState.replay;
+	const state = shell.status('slalomStatus', {
+		dataset: 'phpSlalom'
+		, handler: nextState => {
+			const coarse = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
+			pad.visible = nextState.page === 'play' && coarse && !nextState.replay;
 
-		if(nextState.crashed && !crashSounded) impact();
+			if(nextState.crashed && !crashSounded) impact();
 
-		crashSounded = nextState.crashed;
-		const regions = Array.isArray(nextState.regions) ? nextState.regions : [];
-		const key = JSON.stringify([nextState.width, nextState.height, regions]);
+			crashSounded = nextState.crashed;
+			buttons.sync(nextState.width, nextState.height, nextState.regions);
 
-		if(key !== signature)
-		{
-			signature = key;
-			const wanted = new Set(regions.map(region => String(region.id)));
+			const summary = `${nextState.page}. Score ${nextState.score}. Stage ${nextState.stage}${nextState
+				.replay
+				? '. Replay.'
+				: '.'}`;
 
-			for(const [id,button] of buttons)
-			if(!wanted.has(id))
+			if(status.textContent !== summary) status.textContent = summary;
+
+			if(nextState.result && !nextState.replay && savedRun !== String(nextState.result.runId))
 			{
-				button.remove();
-				buttons.delete(id);
-			}
+				savedRun = String(nextState.result.runId);
+				const table = nextState.result.continued ? profile.continued : profile.fresh;
+				table.push(nextState.result.score);
+				table.sort((a, b) => b - a);
+				table.length = Math.min(10, table.length);
+				profile.lastReplay = nextState.result.replay;
 
-			for(const region of regions)
-			{
-				const id = String(region.id);
-				let button = buttons.get(id);
+				const best = profile.bestFresh;
 
-				if(!button)
-				{
-					button = document.createElement('button');
-					button.type = 'button';
-					button.dataset.action = id;
+				if(!nextState.result.continued && (!best || nextState.result.score > best.score))
+				profile.bestFresh = {score: nextState.result.score, replay: nextState.result.replay};
 
-					button.addEventListener(
-						'click'
-						, () => { action = id; canvas.focus({preventScroll: true}); void unlock(); }
-						, {signal}
-					);
-
-					buttons.set(id, button);
-					targets.append(button);
-				}
-
-				button.setAttribute('aria-label', region.label || id);
-				button.disabled = Boolean(region.disabled);
-				const [x,y,width,height] = region.rect;
-
-				Object.assign(button.style, {
-					left: 100 * x / nextState.width + '%'
-					, top: 100 * y / nextState.height + '%'
-					, width: 100 * width / nextState.width + '%'
-					, height: 100 * height / nextState.height + '%'
-				});
+				saveProfile();
 			}
 		}
+	});
 
-		const summary = `${nextState.page}. Score ${nextState.score}. Stage ${nextState.stage}${nextState
-			.replay
-			? '. Replay.'
-			: '.'}`;
-
-		if(status.textContent !== summary) status.textContent = summary;
-
-		if(nextState.result && !nextState.replay && savedRun !== String(nextState.result.runId))
-		{
-			savedRun = String(nextState.result.runId);
-			const table = nextState.result.continued ? profile.continued : profile.fresh;
-			table.push(nextState.result.score);
-			table.sort((a, b) => b - a);
-			table.length = Math.min(10, table.length);
-			profile.lastReplay = nextState.result.replay;
-
-			if(!nextState.result.continued && (!profile.bestFresh || nextState.result.score > profile.bestFresh.score))
-			profile.bestFresh = {score: nextState.result.score, replay: nextState.result.replay};
-
-			saveProfile();
-		}
+	session.phpSlalom = {
+		get state() { return state.state; }
+		, get profile() { return structuredClone(profile); }
 	};
 
-	session.phpSlalom = {get state(){ return state; }, get profile(){ return structuredClone(profile); }};
-
-	onClose(async() => {
-		closed = true;
-		abort.abort();
-		resize.disconnect();
+	shell.onClose(async() => {
 		quick.close();
-
-		await fullscreenTask?.catch(() => {});
-
-		if(document.fullscreenElement === ui) await document.exitFullscreen().catch(() => {});
-
 		await samples.close();
-
-		if(next?.parentNode === parent) parent.insertBefore(canvas, next); else parent.append(canvas);
-
-		if(originalStyle === null) canvas.removeAttribute('style'); else canvas.setAttribute('style', originalStyle);
-
-		delete canvas.dataset.phpSlalom;
-		ui.remove();
-
-		for(const key of ['slalomViewport'
-			, 'slalomAction'
-			, 'slalomTouch'
-			, 'slalomStorageRead'
-			, 'slalomStorageWrite'
-			, 'slalomSeed'
-			, 'slalomScores'
-			, 'slalomLastReplay'
-			, 'slalomRequestReplayImport'
-			, 'slalomReplayImport'
-			, 'slalomExportLast','slalomStatus'
-		]) delete module[key];
-
 		delete session.phpSlalom;
 	});
+
+	onClose(() => shell.close());
 }
