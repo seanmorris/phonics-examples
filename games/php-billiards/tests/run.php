@@ -1810,6 +1810,49 @@ require __DIR__ . '/contacts.php';
 require __DIR__ . '/pocket-contacts.php';
 require __DIR__ . '/rack-seeds.php';
 
+$test('Confirm on the Rack cleared card racks again instead of shooting at the empty table', static function() use ($expect): void {
+	$game = new Game(static fn(): string => str_repeat('42', 32));
+	$frame = static function(array $browser) use ($game): void {
+		$game->input($browser, [], [], [], [0,0], 0, 1280, 720);
+	};
+	$frame(['actions' => ['free-play']]);
+	foreach($game->simulation->balls as $ball) if($ball->number !== 0) $ball->active = false;
+	$frame([]);
+	$card = $game->endCard();
+	$expect($card !== null && $card['actions'][0][0] === 'rack', 'The cleared table did not offer a new rack');
+
+	$frame(['actions' => ['primary']]);
+	$expect(!$game->stroking() && $game->simulation->phase === 'aim', 'Confirm shot the cue at an empty table');
+	$expect(count(array_filter($game->simulation->balls, static fn(Ball $ball): bool => $ball->active)) === 16,
+		'Confirm on the end card did not rack a new game');
+	$expect($game->endCard() === null, 'The end card stayed up after racking');
+});
+
+$test('the aiming guide hides while the opponent is taking an online turn', static function() use ($expect): void {
+	$seed = str_repeat('42', 32);
+	$alice = '@alice:example.org';
+	$bob = '@bob:example.org';
+	$simulation = new Simulation($seed);
+	$match = new EightBallMatch([$alice,$bob], $alice, $seed);
+	$match->actor = $bob;
+
+	$game = new Game(static fn(): string => str_repeat('42', 32));
+	$game->input(['network' => [[
+		'type' => 'start'
+		, 'detail' => [
+			'players' => [$alice,$bob], 'seed' => $seed, 'breaker' => $alice
+			, 'localPlayer' => $alice, 'role' => 'player'
+			, 'checkpoint' => $match->checkpoint($simulation), 'hash' => $match->hash($simulation)
+		]
+	]]], [], [], [], [0,0], 0, 1280, 720);
+	$expect($game->online() && !$game->controllable(), 'The opponent-turn fixture let the local player act');
+	$expect(!$game->showsGuide(), 'The aiming guide was offered during the opponent\'s turn');
+
+	$free = new Game(static fn(): string => str_repeat('42', 32));
+	$free->input(['actions' => ['free-play']], [], [], [], [0,0], 0, 1280, 720);
+	$expect($free->showsGuide(), 'Free play lost its aiming guide');
+});
+
 $failures = 0;
 
 foreach($tests as $name => $callback)

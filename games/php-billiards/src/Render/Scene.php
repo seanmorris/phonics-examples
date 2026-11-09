@@ -199,8 +199,9 @@ final class Scene
 		// tint carries the shooter's accent colour into the veneers, rings, and inlays.
 		$this->draw('cue', $pose['tip'], [1,1,1], $pose['rotation'], self::CUE_ACCENTS[$game->cuePlayer()], self::CUE);
 
-		// The guide follows this browser's aim. A dawdling cue dances about it; an opponent's considering cue does not.
-		if($stroke !== null || ($idle['kind'] ?? null) === 'considering') return;
+		// The guide follows this browser's aim. A dawdling cue dances about it; an opponent's considering cue does not,
+		// and nothing hints at a shot while the opponent is taking their turn.
+		if($stroke !== null || ($idle['kind'] ?? null) === 'considering' || !$game->showsGuide()) return;
 		$preview = $game->shotPreview();
 		$this->dashes($preview['path'], .03, .018, [1,.96,.86], .62, .0036);
 

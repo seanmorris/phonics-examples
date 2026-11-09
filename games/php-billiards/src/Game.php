@@ -395,6 +395,12 @@ final class Game
 			return;
 		}
 
+		// A visible end card owns Confirm: pressing A on "Rack cleared" racks instead of shooting at an empty table.
+		if(in_array($action, ['shoot','primary','start'], true) && ($card = $this->endCard()) !== null)
+		{
+			$action = $card['actions'][0][0];
+		}
+
 		if($action === 'shoot' || $action === 'primary')
 		{
 			if(!$this->canControl()) return;
@@ -603,6 +609,9 @@ final class Game
 
 	/** Whether this browser may alter the current shot or placement. */
 	public function controllable(): bool { return $this->canControl(); }
+
+	/** Whether the aiming guide belongs on screen: always in free play, online only while this browser may act. */
+	public function showsGuide(): bool { return $this->match === null || $this->canControl(); }
 
 	/**
 	 * Build the compact authoritative player and table progress used by the online OSD.
