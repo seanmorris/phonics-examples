@@ -4,6 +4,8 @@ namespace DoomPhonics\Render;
 
 use Phonics\Render\Atlas;
 use Phonics\Render\Program;
+use Phonics\Render\RenderTarget;
+use Phonics\Render\RenderTargetPair;
 
 /** Ping-pong full-frame compositor for classic staggered-column screen melts. */
 final class ScreenWipe
@@ -11,11 +13,12 @@ final class ScreenWipe
 	private Program $program;
 	private MeltColumns $columns;
 	/** @var list<int> */
-	private array $textures = [], $framebuffers = [], $depthBuffers = [], $vao = [];
+	private RenderTargetPair $frames;
+	private int $columnsTexture = 0;
+	private array $vao = [];
 	private int $front = -1;
 	private int $drawing = -1;
 	private int $source = -1;
-	private int $parentFramebuffer = 0;
 	private int $uploadedRevision = -1;
 	private int $seed = 1;
 	private int $transitions = 0;
@@ -48,41 +51,30 @@ final class ScreenWipe
 
 		if($this->capturing) throw new \LogicException('Screen wipe cannot resize while capturing');
 
-		$parentFramebuffer = glGetIntegerv(GL_FRAMEBUFFER_BINDING);
-		$oldTextures = $this->textures;
-		$oldFramebuffers = $this->framebuffers;
-		$oldDepthBuffers = $this->depthBuffers;
-		$oldVao = $this->vao;
 		$front = $this->front;
 		$source = $this->source;
 		$transitioning = $this->transitioning;
-		$this->textures = $this->framebuffers = $this->depthBuffers = $this->vao = [];
+		$slots = $transitioning && $source >= 0 ? [$source,1 - $source] : ($front >= 0 ? [$front] : []);
 		$this->width = $width;
 		$this->height = $height;
 		$this->drawing = -1;
 		$this->uploadedRevision = -1;
-		$this->create();
 
-		$slots = $transitioning && $source >= 0 ? [$source,1 - $source] : ($front >= 0 ? [$front] : []);
+		$this->frames->resize($width, $height, function(int $slot, int $old, RenderTarget $target) use ($slots): void {
+			if(!in_array($slot, $slots, true)) return;
 
-		foreach(array_unique($slots) as $slot)
-		{
-			if(!isset($oldTextures[$slot], $this->framebuffers[$slot])) continue;
-
-			glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffers[$slot]);
-			glViewport(0, 0, $width, $height);
+			$target->bind();
 			glDisable(GL_DEPTH_TEST);
 			glDepthMask(false);
 			glDisable(GL_BLEND);
-			$this->draw($oldTextures[$slot], false);
-		}
+			$this->draw($old, false);
+			$target->unbind();
+		});
 
-		glBindFramebuffer(GL_FRAMEBUFFER, $parentFramebuffer);
 		glViewport(0, 0, $width, $height);
 		glBindVertexArray(0);
 		glActiveTexture(GL_TEXTURE0);
 		glDepthMask(true);
-		$this->deleteResources($oldTextures, $oldFramebuffers, $oldDepthBuffers, $oldVao);
 		$this->front = $front;
 		$this->source = $source;
 		$this->transitioning = $transitioning;
@@ -131,15 +123,9 @@ final class ScreenWipe
 		if($this->closed || $this->capturing)
 		throw new \LogicException('Screen wipe cannot begin a frame');
 
-		$this->parentFramebuffer = glGetIntegerv(GL_FRAMEBUFFER_BINDING);
 		$this->drawing = $this->transitioning ? 1 - $this->source : ($this->front < 0 ? 0 : 1 - $this->front);
 		$this->capturing = true;
-		glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffers[$this->drawing]);
-		glViewport(0, 0, $this->width, $this->height);
-		glClearColor(0, 0, 0, 1);
-		glClearDepth(1);
-		glDepthMask(true);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		$this->frames->target($this->drawing)->bind([0, 0, 0, 1]);
 	}
 
 	/** Present the incoming frame and overlay the retained outgoing columns while melting. */
@@ -148,17 +134,16 @@ final class ScreenWipe
 		if(!$this->capturing) throw new \LogicException('Screen wipe has no frame to present');
 
 		$this->capturing = false;
-		glBindFramebuffer(GL_FRAMEBUFFER, $this->parentFramebuffer);
-		glViewport(0, 0, $this->width, $this->height);
+		$this->frames->target($this->drawing)->unbind($this->width, $this->height);
 		glDisable(GL_DEPTH_TEST);
 		glDepthMask(false);
 		glDisable(GL_BLEND);
-		$this->draw($this->textures[$this->drawing], false);
+		$this->draw($this->frames->texture($this->drawing), false);
 
 		if($this->transitioning && !$this->columns->complete())
 		{
 			$this->uploadColumns();
-			$this->draw($this->textures[$this->source], true);
+			$this->draw($this->frames->texture($this->source), true);
 		}
 
 		if(!$this->transitioning || $this->columns->complete())
@@ -199,14 +184,8 @@ final class ScreenWipe
 	private function create(): void
 	{
 		glActiveTexture(GL_TEXTURE0);
-
-		for($slot = 0; $slot < 2; $slot++)
-		{
-			$this->textures[] = Atlas::texture(GL_TEXTURE_2D);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, $this->width, $this->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
-		}
-
-		$this->textures[] = Atlas::texture(GL_TEXTURE_2D);
+		$this->frames = new RenderTargetPair($this->width, $this->height, GL_NEAREST, true, 'Doom-Phonics screen-wipe');
+		$this->columnsTexture = Atlas::texture(GL_TEXTURE_2D);
 
 		glTexImage2D(
 			GL_TEXTURE_2D
@@ -220,24 +199,6 @@ final class ScreenWipe
 			, str_repeat("\0", $this->columns->columns * 4)
 		);
 
-		glGenFramebuffers(2, $this->framebuffers);
-		glGenRenderbuffers(2, $this->depthBuffers);
-
-		for($slot = 0; $slot < 2; $slot++)
-		{
-			glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffers[$slot]);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, $this->textures[$slot], 0);
-
-			glBindRenderbuffer(GL_RENDERBUFFER, $this->depthBuffers[$slot]);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, $this->width, $this->height);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, $this->depthBuffers[$slot]);
-
-			if(glCheckFramebufferStatus(GL_FRAMEBUFFER) !== GL_FRAMEBUFFER_COMPLETE)
-			throw new \RuntimeException('Doom-Phonics screen-wipe framebuffer is incomplete');
-		}
-
-		glBindRenderbuffer(GL_RENDERBUFFER, 0);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glGenVertexArrays(1, $this->vao);
 		$this->program->use();
 		glUniform1i($this->program->location('frameTexture'), 6);
@@ -250,7 +211,7 @@ final class ScreenWipe
 		if($this->uploadedRevision === $this->columns->revision()) return;
 
 		glActiveTexture(GL_TEXTURE0 + 7);
-		glBindTexture(GL_TEXTURE_2D, $this->textures[2]);
+		glBindTexture(GL_TEXTURE_2D, $this->columnsTexture);
 
 		glTexSubImage2D(
 			GL_TEXTURE_2D
@@ -274,32 +235,20 @@ final class ScreenWipe
 		glActiveTexture(GL_TEXTURE0 + 6);
 		glBindTexture(GL_TEXTURE_2D, $texture);
 		glActiveTexture(GL_TEXTURE0 + 7);
-		glBindTexture(GL_TEXTURE_2D, $this->textures[2]);
+		glBindTexture(GL_TEXTURE_2D, $this->columnsTexture);
 		glBindVertexArray($this->vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 	}
 
 	private function release(): void
 	{
-		$this->deleteResources($this->textures, $this->framebuffers, $this->depthBuffers, $this->vao);
+		if(isset($this->frames)) $this->frames->close();
 
-		$this->textures = $this->framebuffers = $this->depthBuffers = $this->vao = [];
-	}
+		if($this->columnsTexture) glDeleteTextures(1, [$this->columnsTexture]);
 
-	/**
-	 * @param list<int> $textures
-	 * @param list<int> $framebuffers
-	 * @param list<int> $depthBuffers
-	 * @param list<int> $vao
-	 */
-	private function deleteResources(array $textures, array $framebuffers, array $depthBuffers, array $vao): void
-	{
-		if($textures) glDeleteTextures(count($textures), $textures);
+		if($this->vao) glDeleteVertexArrays(1, $this->vao);
 
-		if($framebuffers) glDeleteFramebuffers(count($framebuffers), $framebuffers);
-
-		if($depthBuffers) glDeleteRenderbuffers(count($depthBuffers), $depthBuffers);
-
-		if($vao) glDeleteVertexArrays(count($vao), $vao);
+		$this->columnsTexture = 0;
+		$this->vao = [];
 	}
 }
