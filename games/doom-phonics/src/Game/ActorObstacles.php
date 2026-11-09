@@ -6,6 +6,7 @@ use DoomPhonics\Component\Body;
 use DoomPhonics\Component\Transform;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
+use Phonics\Physics\Sweep;
 
 /**
  * Dynamic square actor bounds used by Doom-style Minkowski movement sweeps.
@@ -369,43 +370,10 @@ final class ActorObstacles
 		, float $extent
 		, int $entity
 	): ?MovementContact {
-		$entryX = -INF;
-		$exitX = INF;
-		$entryY = -INF;
-		$exitY = INF;
+		$contact = Sweep::box($x, $y, $dx, $dy, $centerX, $centerY, $extent, $extent, 1e-12, closed: false);
 
-		if(abs($dx) < 1e-12)
-		{
-			if($x <= $centerX - $extent || $x >= $centerX + $extent) return null;
-		}
-		else
-		{
-			$a = ($centerX - $extent - $x) / $dx;
-			$b = ($centerX + $extent - $x) / $dx;
-			$entryX = min($a, $b);
-			$exitX = max($a, $b);
-		}
+		if(!$contact || $contact->exit < 0 || $contact->entry < -1e-7 || $contact->entry > 1.0000001) return null;
 
-		if(abs($dy) < 1e-12)
-		{
-			if($y <= $centerY - $extent || $y >= $centerY + $extent) return null;
-		}
-		else
-		{
-			$a = ($centerY - $extent - $y) / $dy;
-			$b = ($centerY + $extent - $y) / $dy;
-			$entryY = min($a, $b);
-			$exitY = max($a, $b);
-		}
-
-		$entry = max($entryX, $entryY);
-		$exit = min($exitX, $exitY);
-
-		if($entry > $exit || $exit < 0 || $entry < -1e-7 || $entry > 1.0000001) return null;
-
-		if($entryX > $entryY)
-		return new MovementContact(max(0, $entry), $dx > 0 ? -1 : 1, 0, $entity);
-
-		return new MovementContact(max(0, $entry), 0, $dy > 0 ? -1 : 1, $entity);
+		return new MovementContact(max(0, $contact->entry), $contact->normalX, $contact->normalY, $entity);
 	}
 }
