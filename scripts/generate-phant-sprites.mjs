@@ -1,8 +1,7 @@
-// Generates games/phlappy-phant's pixel art and sounds: the elePHPant sprite frames rasterised from the GPL
-// vector in art/elephpant.svg (see art/ELEPHPANT-LICENSE.md), the procedural DB-silo barrel, ground and cloud
-// tiles, the tileset description, three synthesised PCM sounds and the catalog poster. Every byte is
-// deterministic so `--check` can verify the committed output; `--preview DIR` also writes 8x nearest-neighbour
-// enlargements for eyeballing the sheet.
+// Generates games/phlappy-phant's pixel art and sounds: the elePHPant frames rasterised from the GPL vector in
+// art/elephpant.svg (see art/ELEPHPANT-LICENSE.md), the procedural DB-silo barrel, ground and cloud tiles, the
+// two tileset descriptions, three synthesised PCM sounds and the catalog poster. Every byte is deterministic so
+// `--check` can verify the committed output; `--preview DIR` also writes nearest-neighbour enlargements.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {Resvg} from '@resvg/resvg-js';
@@ -30,17 +29,29 @@ const palette = {
 	, tan: [0xc9, 0xa9, 0x6a]
 };
 
-const TILE_W = 56, TILE_H = 32, COLUMNS = 4, TILES = 8;
-const SHEET_W = TILE_W * COLUMNS, SHEET_H = TILE_H * Math.ceil(TILES / COLUMNS);
-const PHANT_W = 40, PHANT_H = 28, PHANT_OFFSET = [8, 2];
+// Barrels, ground and clouds share one 56x32 grid; the elephant frames have their own 64x48 cells.
+const TILE_W = 56, TILE_H = 32, TILE_COLUMNS = 5, TILE_COUNT = 5;
+const PHANT_W = 64, PHANT_H = 44, CELL_W = 64, CELL_H = 48, PHANT_FRAMES = 3;
 const SUPERSAMPLE = 8;
-// Ear region of the right-facing 40x28 sprite, in sprite pixels; the flap frames shift it by two rows.
-const EAR = {x: 11, y: 1, w: 12, h: 14};
-// Flank region that carried the "php" lettering, and the eye pixels painted after cleanup (sprite pixels).
-const TEXT = {x: 8, y: 6, w: 23, h: 12};
-const SHADE_Y = 21;
-const EYE = [[34, 7, 'ink'], [35, 7, 'ink'], [34, 8, 'ink'], [35, 8, 'white']];
+// Ear region of the right-facing sprite, in sprite pixels; the flap frames shift it by three rows.
+const EAR = {x: 20, y: 1, w: 17, h: 16};
+// Flank region where the vector's own lettering lands; it is painted out and the pixel wordmark stamped instead.
+const TEXT = {x: 12, y: 10, w: 36, h: 20};
+const SHADE_Y = 33;
 const same = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+const inText = (x, y) => x >= TEXT.x && x < TEXT.x + TEXT.w && y >= TEXT.y && y < TEXT.y + TEXT.h;
+
+// The "php" wordmark as bold, rounded, slanted pixel letters in the spirit of the PHP logo: white fills with an ink
+// outline. Each glyph is six columns; `rise` is how many rows its top sits above the x-height.
+const WORDMARK = {
+	baseline: 22
+	, x: 20
+	, letters: [
+		{rise: 0, rows: ['.XXXX.', 'XX..XX', 'XX..XX', 'XX..XX', 'XX..XX', '.XXXX.', 'XX....', 'XX....', 'XX....']}
+		, {rise: 3, rows: ['XX....', 'XX....', 'XX....', 'XXXXX.', 'XX..XX', 'XX..XX', 'XX..XX', 'XX..XX', 'XX..XX']}
+		, {rise: 0, rows: ['.XXXX.', 'XX..XX', 'XX..XX', 'XX..XX', 'XX..XX', '.XXXX.', 'XX....', 'XX....', 'XX....']}
+	]
+};
 
 /** A simple RGBA raster with out-of-range writes ignored. */
 class Raster
@@ -129,20 +140,25 @@ class Raster
 	}
 }
 
-const nearest = (rgb, colours) => {
-	let best = colours[0], bestDistance = Infinity;
+/** Ink every opaque pixel that touches transparency. */
+function outline(raster)
+{
+	const inked = new Raster(raster.width, raster.height);
 
-	for(const colour of colours)
+	for(let y = 0; y < raster.height; y++) for(let x = 0; x < raster.width; x++)
 	{
-		const distance = (rgb[0] - colour[0]) ** 2 + (rgb[1] - colour[1]) ** 2 + (rgb[2] - colour[2]) ** 2;
+		const pixel = raster.get(x, y);
 
-		if(distance < bestDistance) [best, bestDistance] = [colour, distance];
+		if(pixel[3] < 128) continue;
+
+		const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => raster.get(x + dx, y + dy)[3] < 128);
+		inked.put(x, y, edge ? palette.ink : pixel);
 	}
 
-	return best;
-};
+	return inked;
+}
 
-/** Rasterise the elePHPant, shrink it with a box filter, snap it to the sprite palette and ink its outline. */
+/** Rasterise the elePHPant, shrink it with a box filter, band it to the palette and ink its outline. */
 async function phant()
 {
 	const svg = await fs.readFile(new URL('art/elephpant.svg', root));
@@ -174,12 +190,21 @@ async function phant()
 
 		const rgb = [r / a, g / a, b / a];
 		const luminance = (.299 * rgb[0] + .587 * rgb[1] + .114 * rgb[2]) / 255;
-		// Keep only the vector's ink strokes (ear edge, trunk, legs) and its white glint; flatten every gradient
-		// to the body tone, and add the sprite's own two-band shading afterwards.
-		sprite.put(x, y, luminance < .40 ? palette.ink : luminance > .95 ? palette.white : palette.body);
+		// Inside the wordmark keep the logo's own ink strokes and white letter fills on the body tone; elsewhere
+		// band the vector's gradients into shade, body and light. The sprite is mirrored later, so test the
+		// mirrored column.
+		const sx = PHANT_W - 1 - x;
+		let tone;
+
+		if(inText(sx, y)) tone = luminance < .42 ? palette.ink : palette.body;
+		else tone = luminance < .40 ? palette.ink : luminance < .76 ? palette.body : luminance < .92 ? palette.light
+			: palette.white;
+
+		sprite.put(x, y, tone);
 	}
 
-	// Gradients quantise to speckle: let each interior pixel take the majority tone of its neighbourhood, twice.
+	// Gradients band into speckle: let each interior pixel outside the wordmark take the majority tone of its
+	// neighbourhood, twice.
 	for(let pass = 0; pass < 2; pass++)
 	{
 		const smoothed = new Raster(PHANT_W, PHANT_H);
@@ -189,7 +214,7 @@ async function phant()
 		{
 			const pixel = sprite.get(x, y);
 
-			if(pixel[3] < 128 || same(pixel, palette.ink)) continue;
+			if(pixel[3] < 128 || same(pixel, palette.ink) || inText(PHANT_W - 1 - x, y)) continue;
 
 			const votes = new Map;
 
@@ -215,34 +240,63 @@ async function phant()
 	// The vector faces left; the game scrolls to the right.
 	const facing = outline(sprite).mirrored();
 
-	// Flat shading: a lighter back, a darker belly and legs.
-	for(let y = 0; y < PHANT_H; y++) for(let x = 0; x < PHANT_W; x++)
-	{
-		if(!same(facing.get(x, y), palette.body)) continue;
-
-		if(y <= 3) facing.put(x, y, palette.light);
-		else if(y >= SHADE_Y) facing.put(x, y, palette.shade);
-	}
-
-	// The "php" lettering on the flank turns to speckle at this size: paint it out with the surrounding body
-	// tones so the flank reads as one shape, leaving the outline, eye and trunk alone.
+	// The vector's lettering is unreadable at this size: clear its strokes from the flank, keeping the outline.
 	for(let y = TEXT.y; y < TEXT.y + TEXT.h; y++) for(let x = TEXT.x; x < TEXT.x + TEXT.w; x++)
 	{
 		const pixel = facing.get(x, y);
 
-		if(pixel[3] < 128 || !(same(pixel, palette.ink) || same(pixel, palette.white))) continue;
+		if(pixel[3] < 128 || !same(pixel, palette.ink)) continue;
 
 		const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => facing.get(x + dx, y + dy)[3] < 128);
 
 		if(!edge) facing.put(x, y, palette.body);
 	}
 
-	for(const [x, y, colour] of EYE) facing.put(x, y, palette[colour]);
+	// Flat shading: a lighter back, a darker belly and legs.
+	for(let y = 0; y < PHANT_H; y++) for(let x = 0; x < PHANT_W; x++)
+	{
+		if(!same(facing.get(x, y), palette.body)) continue;
+
+		if(y <= 4) facing.put(x, y, palette.light);
+		else if(y >= SHADE_Y) facing.put(x, y, palette.shade);
+	}
 
 	return facing;
 }
 
-/** Lift or drop the ear by two rows over a body-coloured patch. */
+/** Stamp the slanted white "php" with an ink outline onto the flank of a copy of the frame. */
+function stampWordmark(source)
+{
+	const raster = new Raster(source.width, source.height);
+	raster.data.set(source.data);
+	const filled = [];
+	let cursor = WORDMARK.x;
+
+	for(const letter of WORDMARK.letters)
+	{
+		letter.rows.forEach((row, index) => {
+			const y = WORDMARK.baseline - 6 - letter.rise + index;
+			const slant = Math.max(0, Math.floor((WORDMARK.baseline + 2 - y) / 4));
+
+			[...row].forEach((cell, column) => { if(cell === 'X') filled.push([cursor + column + slant, y]); });
+		});
+
+		cursor += 8;
+	}
+
+	for(const [x, y] of filled) raster.put(x, y, palette.white);
+
+	for(const [x, y] of filled) for(const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]])
+	{
+		const pixel = raster.get(x + dx, y + dy);
+
+		if(pixel[3] >= 128 && !same(pixel, palette.white)) raster.put(x + dx, y + dy, palette.ink);
+	}
+
+	return raster;
+}
+
+/** Lift or drop the ear by a few rows over a body-coloured patch, then re-ink the outline. */
 function earFrame(base, dy)
 {
 	const frame = new Raster(base.width, base.height);
@@ -254,24 +308,6 @@ function earFrame(base, dy)
 	frame.blit(base, EAR.x, EAR.y + dy, 1, null, [EAR.x, EAR.y, EAR.w, EAR.h]);
 
 	return outline(frame);
-}
-
-/** Ink every opaque pixel that touches transparency. */
-function outline(raster)
-{
-	const inked = new Raster(raster.width, raster.height);
-
-	for(let y = 0; y < raster.height; y++) for(let x = 0; x < raster.width; x++)
-	{
-		const pixel = raster.get(x, y);
-
-		if(pixel[3] < 128) continue;
-
-		const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => raster.get(x + dx, y + dy)[3] < 128);
-		inked.put(x, y, edge ? palette.ink : pixel);
-	}
-
-	return inked;
 }
 
 /** Colour of one row of the stacked barrel ring; the cap reuses rows 16 to 31 so stacks join seamlessly. */
@@ -416,7 +452,7 @@ const bonkSound = () => wav(.22, (t, random) => {
 	return body + burst;
 });
 
-/** Blit a string from the engine's bitmap font in ink at a pixel scale. */
+/** Blit a string from the engine's bitmap font in ink at a pixel scale; a null target only measures. */
 async function title(target, text, x, y, scale)
 {
 	const font = JSON.parse(await fs.readFile(new URL('font.tsj', engine), 'utf8'));
@@ -452,29 +488,30 @@ async function title(target, text, x, y, scale)
 }
 
 const base = await phant();
-const frames = [base, earFrame(base, -2), earFrame(base, 2)];
+const frames = [base, earFrame(base, -3), earFrame(base, 3)].map(stampWordmark);
 const cap = barrelCap(), ring = barrelRing(), bottom = cap.flippedVertically(), soil = ground(), puff = cloud();
-const sheet = new Raster(SHEET_W, SHEET_H);
-const tiles = [...frames.map(frame => ({raster: frame, offset: PHANT_OFFSET})), cap, ring, bottom, soil, puff]
-	.map(tile => tile.raster ? tile : {raster: tile, offset: [0, 0]});
+const phantSheet = new Raster(CELL_W * PHANT_FRAMES, CELL_H);
+frames.forEach((frame, index) => phantSheet.blit(frame, index * CELL_W, 2));
+const tileSheet = new Raster(TILE_W * TILE_COLUMNS, TILE_H);
+[cap, ring, bottom, soil, puff].forEach((tile, index) => tileSheet.blit(tile, index * TILE_W, 0));
 
-tiles.forEach(({raster, offset}, index) => {
-	sheet.blit(raster, (index % COLUMNS) * TILE_W + offset[0], Math.floor(index / COLUMNS) * TILE_H + offset[1]);
-});
-
-generated.set('assets/sprites.png', sheet.png());
-generated.set('assets/sprites.tsj', Buffer.from(JSON.stringify({
+const tileset = (name, image, width, height, columns, count, sheet) => Buffer.from(JSON.stringify({
 	type: 'tileset'
 	, version: '1.10'
-	, name: 'Phlappy Phant sprites'
-	, tilewidth: TILE_W
-	, tileheight: TILE_H
-	, tilecount: TILES
-	, columns: COLUMNS
-	, image: 'sprites.png'
-	, imagewidth: SHEET_W
-	, imageheight: SHEET_H
-}, null, 2) + '\n'));
+	, name
+	, tilewidth: width
+	, tileheight: height
+	, tilecount: count
+	, columns
+	, image
+	, imagewidth: sheet.width
+	, imageheight: sheet.height
+}, null, 2) + '\n');
+
+generated.set('assets/phant.png', phantSheet.png());
+generated.set('assets/phant.tsj', tileset('Phlappy Phant elephant', 'phant.png', CELL_W, CELL_H, PHANT_FRAMES, PHANT_FRAMES, phantSheet));
+generated.set('assets/tiles.png', tileSheet.png());
+generated.set('assets/tiles.tsj', tileset('Phlappy Phant tiles', 'tiles.png', TILE_W, TILE_H, TILE_COLUMNS, TILE_COUNT, tileSheet));
 generated.set('assets/flap.wav', flapSound());
 generated.set('assets/ding.wav', dingSound());
 generated.set('assets/bonk.wav', bonkSound());
@@ -487,10 +524,10 @@ poster.fill(0, 560, 1280, 32, palette.cream);
 for(let x = 0; x < 1280; x += TILE_W * 4) poster.blit(soil, x, 592, 4);
 for(const [x, gapTop, gap] of [[700, 150, 190], [1000, 260, 180]])
 {
-	for(let y = gapTop - TILE_H * 4; y > -TILE_H * 4; y -= TILE_H * 4) poster.blit(y === gapTop - TILE_H * 4 ? cap : ring, x, y, 4);
-	for(let y = gapTop + gap; y < 592; y += TILE_H * 4) poster.blit(y === gapTop + gap ? bottom : ring, x, y, 4);
+	for(let y = gapTop - TILE_H * 4; y > -TILE_H * 4; y -= TILE_H * 4) poster.blit(y === gapTop - TILE_H * 4 ? bottom : ring, x, y, 4);
+	for(let y = gapTop + gap; y < 592; y += TILE_H * 4) poster.blit(y === gapTop + gap ? cap : ring, x, y, 4);
 }
-poster.blit(frames[1], 240, 300, 8);
+poster.blit(frames[1], 220, 290, 6);
 const width = await title(null, 'PHLAPPY PHANT', 0, 48, 6);
 await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2), 48, 6);
 generated.set('poster.png', poster.png());
@@ -498,14 +535,14 @@ generated.set('poster.png', poster.png());
 if(previewDirectory)
 {
 	await fs.mkdir(previewDirectory, {recursive: true});
-	const big = new Raster(SHEET_W * 8, SHEET_H * 8);
+	const big = new Raster(tileSheet.width * 8, tileSheet.height * 8);
 	big.fill(0, 0, big.width, big.height, [0xff, 0xdd, 0xee]);
-	big.blit(sheet, 0, 0, 8);
-	await fs.writeFile(path.join(previewDirectory, 'sheet-8x.png'), big.png());
-	const closeup = new Raster(PHANT_W * 16 * 3 + 32, PHANT_H * 16);
+	big.blit(tileSheet, 0, 0, 8);
+	await fs.writeFile(path.join(previewDirectory, 'tiles-8x.png'), big.png());
+	const closeup = new Raster(PHANT_W * 12 * 3 + 32, PHANT_H * 12);
 	closeup.fill(0, 0, closeup.width, closeup.height, [0xcf, 0xe6, 0xf5]);
-	frames.forEach((frame, index) => closeup.blit(frame, index * (PHANT_W * 16 + 16), 0, 16));
-	await fs.writeFile(path.join(previewDirectory, 'phant-16x.png'), closeup.png());
+	frames.forEach((frame, index) => closeup.blit(frame, index * (PHANT_W * 12 + 16), 0, 12));
+	await fs.writeFile(path.join(previewDirectory, 'phant-12x.png'), closeup.png());
 	await fs.writeFile(path.join(previewDirectory, 'poster.png'), poster.png());
 }
 

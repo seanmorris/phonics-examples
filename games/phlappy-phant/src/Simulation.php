@@ -13,11 +13,11 @@ final class Simulation
 	public const HEIGHT = 480;
 	public const STEP = 1 / 60;
 	public const GROUND_Y = 416;
-	public const PHANT_W = 40;
-	public const PHANT_H = 28;
+	public const PHANT_W = 64;
+	public const PHANT_H = 44;
 	public const PHANT_START_Y = 200;
-	public const HITBOX_INSET_X = 6;
-	public const HITBOX_INSET_Y = 4;
+	public const HITBOX_INSET_X = 8;
+	public const HITBOX_INSET_Y = 7;
 	public const GRAVITY = 1400;
 	public const FLAP_VY = -380;
 	public const MAX_FALL = 640;

@@ -11,6 +11,13 @@
   "tileheight": 32,
   "layers": [],
   "tilesets": [
-    {"firstgid": 1, "source": "../assets/sprites.tsj"}
+    {
+      "firstgid": 1,
+      "source": "../assets/phant.tsj"
+    },
+    {
+      "firstgid": 4,
+      "source": "../assets/tiles.tsj"
+    }
   ]
 }

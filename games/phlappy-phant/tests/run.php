@@ -95,7 +95,7 @@ $through->step(true);
 $through->barrels = [new Barrel(0, $top - 40, $height + 80)];
 $through->step();
 check($through->phase === 'playing', 'a gap around the hitbox lets the phant through');
-check($through->hitbox()[2] === 28.0 && $through->hitbox()[3] === 20.0, 'the hitbox is inset from the sprite');
+check($through->hitbox()[2] === 48.0 && $through->hitbox()[3] === 30.0, 'the hitbox is inset from the sprite');
 
 $settings = new InputSettings;
 $flap = $settings->bindings->sources(PhantActions::FLAP);

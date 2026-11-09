@@ -30,6 +30,9 @@ final class Scene
 	public const DAY_SKY = [.81, .90, .96];
 	public const NIGHT_SKY = [.11, .14, .25];
 	public const NIGHT_TINT = [.55, .60, .85];
+	public const INK = [.21, .20, .33];
+	public const CREAM = [.95, .89, .75];
+	public const PLAQUE = [.95, .89, .75, .97];
 
 	/** Accessible hit regions published by the menu renderer. */
 	public array $regions = [];
@@ -62,10 +65,14 @@ final class Scene
 		$this->text = new SpriteRenderer($this->fontAtlas);
 		$this->rects = new RectRenderer;
 		$this->menus = new MenuRenderer($font);
-		$this->menus->style['width'] = 420;
-		$this->menus->style['panel'] = [.12, .27, .28, .94];
+		$this->menus->style['width'] = 660;
+		$this->menus->style['padding'] = 10;
+		$this->menus->style['panel'] = self::PLAQUE;
+		$this->menus->style['foreground'] = [...self::INK, 1.0];
+		$this->menus->style['selected'] = [1, 1, 1, 1];
 		$this->menus->style['highlight'] = [.18, .43, .45, 1];
-		$this->menus->style['selected'] = [.94, .89, .75, 1];
+		$this->menus->style['selection'] = [.12, .27, .28, 1];
+		$this->menus->style['disabled'] = [.31, .37, .61, 1];
 	}
 
 	/**
@@ -169,7 +176,6 @@ final class Scene
 			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, (Simulation::GROUND_Y + self::TILE_H) * $scale, $scale, $tint);
 		}
 
-		if($page === 'play')
 		{
 			$y = $game->previousY + ($game->y - $game->previousY) * $alpha;
 			$phant = new Sprite(
@@ -218,9 +224,57 @@ final class Scene
 			}
 		}
 
+		if($page === 'title')
+		{
+			// The wordmark fills up to the frame's width minus a margin, so phones get a smaller logo, not a clipped one.
+			$logo = min($textScale * 2.4, ($width - 24 * $scale) / max(1, $this->measure('PHLAPPY PHANT')));
+			$this->label($labels, 'PHLAPPY PHANT', $width / 2 + 3 * $scale, $height * .11 + 3 * $scale, $logo, 'center', self::INK);
+			$this->label($labels, 'PHLAPPY PHANT', $width / 2, $height * .11, $logo, 'center', self::CREAM);
+		}
+
 		$this->text->render($labels, $camera);
+
+		if($menu->isOpen)
+		{
+			// The control hints need a wide plaque; narrow frames drop them rather than clip them.
+			$this->menus->showHints = $width >= 520;
+			$this->menus->style['dimmer'] = $page === 'title' ? [0, 0, 0, 0] : [...self::INK, .35];
+			[$px, $py, $pw, $ph] = $this->plaque($menu, $width, $height);
+			$edge = max(2, round(2 * $scale));
+			$drop = max(3, round(4 * $scale));
+			$this->rects->render([
+				[$px - $edge + $drop, $py - $edge + $drop, $pw + 2 * $edge, $ph + 2 * $edge, self::INK[0], self::INK[1], self::INK[2], .45]
+				, [$px - $edge, $py - $edge, $pw + 2 * $edge, $ph + 2 * $edge, self::INK[0], self::INK[1], self::INK[2], 1]
+			], $width, $height);
+		}
+
 		$this->menus->render($menu, $width, $height, $seconds);
 		$this->regions = $this->menus->regions;
+	}
+
+	/**
+	 * The panel rectangle the shared menu renderer will use, so a border can be drawn beneath it.
+	 *
+	 * @param Menu $menu Open menu.
+	 * @param int $width Output width in pixels.
+	 * @param int $height Output height in pixels.
+	 * @return array{float,float,float,float} Left, top, width, and height in output pixels.
+	 */
+	private function plaque(Menu $menu, int $width, int $height): array
+	{
+		$style = $this->menus->style;
+		$s = max(.5, min((float)$style['scale'], $width / 320, $height / 180));
+		$pad = $style['padding'] * $s;
+		$w = max(1, min($style['width'], $width - 16));
+		$rowHeight = 20 * $s;
+		$header = 24 * $s;
+		$footer = ($this->menus->showHints ? 38 : 20) * $s;
+		$rows = count($menu->rows());
+		$visible = max(1, (int)floor(($height - 16 - 2 * $pad - $header - $footer) / $rowHeight));
+		$count = min($visible, max(1, $rows));
+		$h = $pad * 2 + $header + $footer + $count * $rowHeight;
+
+		return [floor(($width - $w) / 2), floor(($height - $h) / 2), (float)$w, (float)$h];
 	}
 
 	/**
@@ -252,14 +306,22 @@ final class Scene
 	 * @param float $y Vertical output position.
 	 * @param float $scale Bitmap-font scale.
 	 * @param string $align Horizontal alignment name.
+	 * @param array{float,float,float} $colour Glyph tint.
 	 * @return void Cloned glyph sprites are appended to the batch.
 	 */
-	private function label(array &$batch, string $text, float $x, float $y, float $scale, string $align = 'left'): void
-	{
-		$key = json_encode([$text, $scale, $this->font->theme, $align]);
+	private function label(
+		array &$batch
+		, string $text
+		, float $x
+		, float $y
+		, float $scale
+		, string $align = 'left'
+		, array $colour = [1, 1, 1]
+	): void {
+		$key = json_encode([$text, $scale, $this->font->theme, $align, $colour]);
 
 		if(!isset($this->cache[$key]))
-		$this->cache[$key] = $this->font->layout($text, $scale, INF, [1, 1, 1, 1]);
+		$this->cache[$key] = $this->font->layout($text, $scale, INF, [...$colour, 1.0]);
 
 		if($align === 'right') $x -= $this->cache[$key]['width'];
 		elseif($align === 'center') $x -= $this->cache[$key]['width'] / 2;
@@ -271,6 +333,21 @@ final class Scene
 			$sprite->y += $y;
 			$batch[] = $sprite;
 		}
+	}
+
+	/**
+	 * Width of a label at font scale one, from the cached layout.
+	 *
+	 * @param string $text Label contents.
+	 * @return float Width in output pixels at scale one.
+	 */
+	private function measure(string $text): float
+	{
+		$key = json_encode([$text, 1.0, $this->font->theme, 'measure']);
+
+		if(!isset($this->cache[$key])) $this->cache[$key] = $this->font->layout($text, 1.0, INF, [1, 1, 1, 1]);
+
+		return (float)$this->cache[$key]['width'];
 	}
 
 	/**

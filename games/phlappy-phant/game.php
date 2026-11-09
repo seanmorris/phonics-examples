@@ -108,7 +108,7 @@ $setPage = static function(string $next) use (
 	{
 		'pause' => 'PAUSED'
 		, 'gameover' => 'BONK'
-		, default => 'PHLAPPY PHANT'
+		, default => 'DODGE THE BARRELS'
 	};
 
 	if($next === 'title') $items = $titleItems();
@@ -136,13 +136,7 @@ $setPage = static function(string $next) use (
 	{
 		$record = $best();
 		$items = [
-			'score' => ['label' => 'Score', 'value' => (string)$game->score, 'disabled' => true]
-			, 'best' => [
-				'label' => $game->score >= $record && $game->score > 0 ? 'New best' : 'Best'
-				, 'value' => (string)max($record, $game->score)
-				, 'disabled' => true
-			]
-			, 'again' => [
+			'again' => [
 				'label' => 'Play again'
 				, 'callback' => static function() use (&$startGame): void { $startGame(); }
 			]
@@ -150,20 +144,26 @@ $setPage = static function(string $next) use (
 				'label' => 'Return to title'
 				, 'callback' => static function() use (&$setPage): void { $setPage('title'); }
 			]
+			, 'score' => ['label' => 'Score  ' . $game->score, 'disabled' => true]
+			, 'best' => [
+				'label' => ($game->score >= $record && $game->score > 0 ? 'New best  ' : 'Best  ') . max($record, $game->score)
+				, 'disabled' => true
+			]
 		];
 	}
 
 	$menu->setItems($items);
 	$menu->open();
-	$engine->userPaused = true;
+	// The world keeps moving behind the title and the result card; only Pause freezes it.
+	$engine->userPaused = $next === 'pause';
 	$engine->input->suppressHeldUi();
 };
 
 $setPage('title');
 
-$engine->systems->add('phlappy-phant.simulation', static function() use ($engine, &$game, &$counts, &$seenTaps): void {
+$engine->systems->add('phlappy-phant.simulation', static function() use ($engine, &$game, &$page, &$counts, &$seenTaps): void {
 	$taps = (int)(vrzno_env('phantTaps'))();
-	$flap = $engine->controls->pressed(PhantActions::FLAP) || $taps > $seenTaps;
+	$flap = $page === 'play' && ($engine->controls->pressed(PhantActions::FLAP) || $taps > $seenTaps);
 	$seenTaps = $taps;
 	$game->step($flap);
 
@@ -241,7 +241,7 @@ $engine->setInputHandler(static function(
 		$setPage('title');
 	}
 
-	$engine->userPaused = true;
+	$engine->userPaused = $page === 'pause';
 
 	return true;
 });

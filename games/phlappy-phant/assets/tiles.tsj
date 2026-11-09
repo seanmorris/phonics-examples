@@ -1,0 +1,12 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "name": "Phlappy Phant tiles",
+  "tilewidth": 56,
+  "tileheight": 32,
+  "tilecount": 5,
+  "columns": 5,
+  "image": "tiles.png",
+  "imagewidth": 280,
+  "imageheight": 32
+}

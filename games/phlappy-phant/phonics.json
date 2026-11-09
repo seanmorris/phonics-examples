@@ -33,15 +33,18 @@
   },
   "tiled": {
     "previews": [
-      "assets/sprites.png"
+      "assets/phant.png",
+      "assets/tiles.png"
     ]
   },
   "preload": [
     "assets/bonk.wav",
     "assets/ding.wav",
     "assets/flap.wav",
-    "assets/sprites.png",
-    "assets/sprites.tsj"
+    "assets/phant.png",
+    "assets/phant.tsj",
+    "assets/tiles.png",
+    "assets/tiles.tsj"
   ],
   "application": {
     "entry": "application.php"
@@ -66,8 +69,10 @@
     "assets/bonk.wav",
     "assets/ding.wav",
     "assets/flap.wav",
-    "assets/sprites.png",
-    "assets/sprites.tsj",
+    "assets/phant.png",
+    "assets/phant.tsj",
+    "assets/tiles.png",
+    "assets/tiles.tsj",
     "worlds/phant.tmj",
     "worlds/phant.world"
   ],
@@ -76,18 +81,20 @@
     "assets/bonk.wav": "sha256-8ZJIgRwXeUPmj8G4q87TBLyTJ0eI0sIsJSsrNmV42xk=",
     "assets/ding.wav": "sha256-QZcYdJ57hlWDmV3iewckrV6/a0Mhm1LDdmWpcAL1RD4=",
     "assets/flap.wav": "sha256-7tqPIJ1StAIfT/iYT2WEjaFYWIjPZM/OdJJjmkibEuE=",
-    "assets/sprites.png": "sha256-sYf0FaGgtE6l8bAbMxeWfQwpssachuo8Ks8497ou/tE=",
-    "assets/sprites.tsj": "sha256-UKr6OqpnpYzB3qqFea043eNS+azxIULw9StMZdeeKDU=",
+    "assets/phant.png": "sha256-eR4Ly3TM9KPdZP/dVvhokT+zS+HnOpXZfkhh9xn+Sr0=",
+    "assets/phant.tsj": "sha256-xIfy07H2mv3B9dyS4J4cJY05Y4xfYM+6oDKDNtJ6RYQ=",
+    "assets/tiles.png": "sha256-/H8MYJo0NsKkXOfjczyJ4nOa4epqvBeO5dYWHgH2zrg=",
+    "assets/tiles.tsj": "sha256-WHAM5CDjbJjwsw16jMuaMSpy3zyTAvKcg9oUIn3sXxM=",
     "autoload.php": "sha256-nI1YY9Kfwe086pFq06a8/3u5BaxBJmM/Hu2URHSSrlY=",
     "browser/game.mjs": "sha256-jY9mcvbuT8WcmSP7M4fPcloiTkUeWSdjWMhagJgw7A0=",
-    "game.php": "sha256-dqqsvfX6N84DHa4NzySBRTyfL+6GQiO+dAx7sSmQ7iE=",
+    "game.php": "sha256-WnqRkn/edJ3mrij2ETCG4RbAE+Oar2Yfi+BCOLycxms=",
     "src/Barrel.php": "sha256-pZphRORDVyjkIFp21ixv9AVgyN3loHAODd9T34xxGYo=",
     "src/Input/InputSettings.php": "sha256-t+gFObzP4DD9hGQy6pgNTn6OmvGjPTacHQQFlhmTqPw=",
     "src/Input/PhantActions.php": "sha256-bW+3S4rcQjQglbFM/SFmhbEkE3pt/eukxZy+qH5NFU8=",
     "src/Random.php": "sha256-K7C+O1PIMGau+sBBTtbtYY3jWj3mhtILARVJb+ClSFI=",
-    "src/Render/Scene.php": "sha256-92q2W4e+7CTKXXcQDjDYSk5aJOC32UwCElDw2zb9uNM=",
-    "src/Simulation.php": "sha256-w3zaW+yFKQQ290Gjafl9TzjDscYU0S1BwovhWbeei18=",
-    "worlds/phant.tmj": "sha256-lQynqMDcz2QTlPu48jdwFCSNVeHB6BMct5la/EsJ8aM=",
+    "src/Render/Scene.php": "sha256-peafNo8UmPb/rYzPMiEubLNvTnVXCLhIFrwn9tMfCKw=",
+    "src/Simulation.php": "sha256-GkUKMBQynqyRPfiXEyI+FKqqyFssfbzO+CjOJSIw7Us=",
+    "worlds/phant.tmj": "sha256-59mqgtRhvdFN1fKX1QvhSTwlZlv4lbhnI0FjOegWneo=",
     "worlds/phant.world": "sha256-GT3SuMsmPogieQR7k9iG95I6QZMH+R3c4AweR3TjNjs="
   }
 }
