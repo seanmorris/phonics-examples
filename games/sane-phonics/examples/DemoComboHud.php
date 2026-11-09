@@ -15,6 +15,7 @@ final class DemoComboHud
 	private ?SpriteRenderer $sprites = null;
 	private bool $ownsAtlas, $closed = false;
 	private array $cache = [], $nextCache = [];
+	private string $batchKey = '';
 
 	/**
 	 * Prepare a combo HUD with the menu's annotated bitmap font and optional shared atlas.
@@ -96,6 +97,7 @@ final class DemoComboHud
 		$y = 6 * $scale;
 		$boxWidth = 160 * $scale;
 		$batch = $this->nextCache = [];
+		$this->batchKey = '';
 
 		foreach($view['labels'] as $label)
 		{
@@ -134,7 +136,7 @@ final class DemoComboHud
 
 		$this->atlas ??= new Atlas($this->font->map);
 		$this->sprites ??= new SpriteRenderer($this->atlas);
-		$this->sprites->render($batch, new Camera(0, 0, $width, $height));
+		$this->sprites->render($batch, new Camera(0, 0, $width, $height), key: $this->batchKey);
 		$this->snapshot['draws'] = $this->sprites->draws;
 		$this->cache = $this->nextCache;
 	}
@@ -173,6 +175,7 @@ final class DemoComboHud
 		}
 
 		$this->nextCache[$key] = $glyphs;
+		$this->batchKey .= $key;
 
 		return $glyphs;
 	}

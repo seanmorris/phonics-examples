@@ -15,6 +15,7 @@ final class DemoPlayerHud
 	private ?SpriteRenderer $sprites = null;
 	private bool $ownsAtlas, $closed = false;
 	private array $cache = [], $nextCache = [];
+	private string $batchKey = '';
 
 	/**
 	 * Prepare a player HUD using the menu's annotated bitmap font and optional shared atlas.
@@ -97,6 +98,7 @@ final class DemoPlayerHud
 		$valueWidth = 48 * $scale;
 		$shadow = $scale;
 		$batch = $this->nextCache = [];
+		$this->batchKey = '';
 
 		foreach($rows as $label => $value)
 		{
@@ -124,7 +126,7 @@ final class DemoPlayerHud
 
 		$this->atlas ??= new Atlas($this->font->map);
 		$this->sprites ??= new SpriteRenderer($this->atlas);
-		$this->sprites->render($batch, new Camera(0, 0, $width, $height));
+		$this->sprites->render($batch, new Camera(0, 0, $width, $height), key: $this->batchKey);
 		$this->snapshot['draws'] = $this->sprites->draws;
 		$this->cache = $this->nextCache;
 	}
@@ -165,6 +167,7 @@ final class DemoPlayerHud
 		}
 
 		$this->nextCache[$key] = $glyphs;
+		$this->batchKey .= $key;
 
 		return $glyphs;
 	}
