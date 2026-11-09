@@ -4,6 +4,7 @@ namespace SanePhonics\Render;
 use Phonics\Render\Program;
 use Phonics\Render\Camera;
 use Phonics\Render\Atlas;
+use Phonics\Render\RenderTarget;
 use SanePhonics\Physics\WaterRegion;
 use SanePhonics\Physics\WaterRegions;
 
@@ -11,9 +12,10 @@ use SanePhonics\Physics\WaterRegions;
 final class WaterRenderer
 {
 	private Program $program;
-	private array $vao = [],$framebuffer = [],$depthBuffer = [];
-	private int $sceneTexture = 0,$displacementTexture = 0;
-	private bool $closed = false,$capturing = false;
+	private ?RenderTarget $scene = null;
+	private array $vao = [];
+	private int $displacementTexture = 0;
+	private bool $closed = false;
 	public int $draws = 0;
 
 	/**
@@ -48,32 +50,14 @@ final class WaterRenderer
 		try
 		{
 			glGenVertexArrays(1, $this->vao);
-			$this->sceneTexture = Atlas::texture(GL_TEXTURE_2D);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, $this->width, $this->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
-
-			glGenFramebuffers(1, $this->framebuffer);
-			glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffer[0]);
-			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, $this->sceneTexture, 0);
-			glGenRenderbuffers(1, $this->depthBuffer);
-			glBindRenderbuffer(GL_RENDERBUFFER, $this->depthBuffer[0]);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, $this->width, $this->height);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, $this->depthBuffer[0]);
-
-			if(glCheckFramebufferStatus(GL_FRAMEBUFFER) !== GL_FRAMEBUFFER_COMPLETE)
-			{
-				throw new \RuntimeException('Water scene framebuffer is incomplete');
-			}
-
+			$this->scene = new RenderTarget($this->width, $this->height, GL_NEAREST, true, 'Water scene');
 			$this->displacementTexture = Atlas::texture(GL_TEXTURE_2D);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 64, 64, 0, GL_RGBA, GL_UNSIGNED_BYTE, $this->map());
-			glBindRenderbuffer(GL_RENDERBUFFER, 0);
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		}
 		catch(\Throwable $error)
 		{
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			$this->release();
 
 			throw $error;
@@ -111,19 +95,13 @@ final class WaterRenderer
 	 */
 	public function begin(array $color = [.055,.075,.12,1]): void
 	{
-		if($this->closed || $this->capturing)
+		if($this->closed || $this->scene === null || $this->scene->bound())
 		{
 			throw new \LogicException('Water renderer cannot begin this capture');
 		}
 
-		$this->capturing = true;
 		$this->draws = 0;
-		glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffer[0]);
-		glViewport(0, 0, $this->width, $this->height);
-		glClearColor(...$color);
-		glClearDepth(1);
-		glDepthMask(true);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		$this->scene->bind($color);
 	}
 
 	/**
@@ -137,20 +115,18 @@ final class WaterRenderer
 	 */
 	public function compose(WaterRegions|array $waters, Camera $camera, float $milliseconds = 0): void
 	{
-		if(!$this->capturing)
+		if($this->scene === null || !$this->scene->bound())
 		{
 			throw new \LogicException('Water renderer must capture before composing');
 		}
 
-		$this->capturing = false;
 		$regions = $waters instanceof WaterRegions?$waters->regions:$waters;
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glViewport(0, 0, $this->width, $this->height);
+		$this->scene->unbind($this->width, $this->height);
 		$p = $this->program;
 		$p->use();
 		glBindVertexArray($this->vao[0]);
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, $this->sceneTexture);
+		glBindTexture(GL_TEXTURE_2D, $this->scene->texture());
 		glUniform1i($p->location('scene'), 0);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D, $this->displacementTexture);
@@ -207,7 +183,6 @@ final class WaterRenderer
 			return;
 		}
 
-		$this->capturing = false;
 		$this->release();
 		$this->program->restore();
 		$this->create();
@@ -226,7 +201,6 @@ final class WaterRenderer
 		}
 
 		$this->closed = true;
-		$this->capturing = false;
 		$this->release();
 		$this->program->close();
 	}
@@ -238,21 +212,11 @@ final class WaterRenderer
 	 */
 	private function release(): void
 	{
-		$textures = array_values(array_filter([$this->sceneTexture,$this->displacementTexture]));
+		$this->scene?->close();
 
-		if($textures)
+		if($this->displacementTexture)
 		{
-			glDeleteTextures(count($textures), $textures);
-		}
-
-		if($this->framebuffer)
-		{
-			glDeleteFramebuffers(1, $this->framebuffer);
-		}
-
-		if($this->depthBuffer)
-		{
-			glDeleteRenderbuffers(1, $this->depthBuffer);
+			glDeleteTextures(1, [$this->displacementTexture]);
 		}
 
 		if($this->vao)
@@ -260,7 +224,8 @@ final class WaterRenderer
 			glDeleteVertexArrays(1, $this->vao);
 		}
 
-		$this->sceneTexture = $this->displacementTexture = 0;
-		$this->framebuffer = $this->depthBuffer = $this->vao = [];
+		$this->scene = null;
+		$this->displacementTexture = 0;
+		$this->vao = [];
 	}
 }

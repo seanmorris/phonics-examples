@@ -468,7 +468,7 @@
     "src/Physics/WaterLevel.php": "sha256-a/BzzoDSqTIUnEDfDZJsIlJxM1lpyt6ic1F42eYfEnU=",
     "src/Physics/WaterRegion.php": "sha256-+0rp2gAu6NpVyWrDbnFUPYxAEYMeAWDqgPEgDeJHL/U=",
     "src/Physics/WaterRegions.php": "sha256-EoaMs6xKJlJe44hJDaMCUi/Qpy7efPj/+9rMHVy0F1k=",
-    "src/Render/WaterRenderer.php": "sha256-usF4z2wOVwZc6QboCxovN3S6LST26ncSE0RWoY4t5/I=",
+    "src/Render/WaterRenderer.php": "sha256-SjdMGDgh7nKvbMXo5e2Jiz07V3b7FyWA24rdffizcV4=",
     "templates/player.tx": "sha256-HXtDViX06jVArADA2Z2L4c+LaRYiQ5LHcP8+mgO7YKM=",
     "worlds/badniks.world": "sha256-gNIcy34RMSNQb5aS8SgxmIFxmviVYQavloyhaKOIBKI=",
     "worlds/breakables.world": "sha256-B9Uf4xxxNQU9L/GKZPr35oWNlRYK0kg9QJ/GZvC/S0o=",
