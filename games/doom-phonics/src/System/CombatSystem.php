@@ -2064,7 +2064,7 @@ final class CombatSystem
 		$fade->alpha = max(0.0, min(1.0, $fade->alpha + $amount));
 
 		if($remove && $fade->alpha <= 0.0)
-		$registry->defer(static function(Registry $registry) use ($actor): void { if($registry->alive($actor)) $registry->destroy($actor); });
+		$registry->destroyLater($actor);
 	}
 
 	/** The actor an action acts from: the entity itself, or the player behind a weapon or flash overlay. */
@@ -2583,9 +2583,7 @@ final class CombatSystem
 
 	private function retireProjectile(Registry $registry, int $entity): void
 	{
-		$registry->defer(static function(Registry $registry) use ($entity): void {
-			if($registry->alive($entity)) $registry->destroy($entity);
-		});
+		$registry->destroyLater($entity);
 	}
 
 	private function placeProjectile(

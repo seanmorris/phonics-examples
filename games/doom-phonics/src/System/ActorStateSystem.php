@@ -297,9 +297,7 @@ final class ActorStateSystem
 
 		$effect->retiring = true;
 
-		$registry->defer(static function(Registry $registry) use ($entity): void {
-			if($registry->alive($entity)) $registry->destroy($entity);
-		});
+		$registry->destroyLater($entity);
 	}
 
 	private function retireOverlay(int $entity, Registry $registry): void
@@ -326,9 +324,7 @@ final class ActorStateSystem
 		)
 		$registry->get($overlay->playerEntity, ViewLighting::class)->clearWeaponFlash();
 
-		$registry->defer(static function(Registry $registry) use ($entity): void {
-			if($registry->alive($entity)) $registry->destroy($entity);
-		});
+		$registry->destroyLater($entity);
 	}
 
 	private function advance(int $entity, ActorState $state, Registry $registry, float $ticks): void

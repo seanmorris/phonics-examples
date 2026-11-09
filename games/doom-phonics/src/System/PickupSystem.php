@@ -97,9 +97,7 @@ final class PickupSystem
 				if($registry->has($playerEntity, ViewEffects::class))
 				$registry->get($playerEntity, ViewEffects::class)->recordPickup();
 
-				$registry->defer(static function(Registry $r) use ($entity): void {
-					if($r->alive($entity)) $r->destroy($entity);
-				});
+				$registry->destroyLater($entity);
 			}
 		}
 	}

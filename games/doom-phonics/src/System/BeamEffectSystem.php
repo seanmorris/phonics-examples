@@ -18,9 +18,7 @@ final class BeamEffectSystem
 			$effect->advance($dt);
 
 			if($effect->expired() && !$registry->has($entity, RemoteBeam::class))
-			$registry->defer(static function(Registry $registry) use ($entity): void {
-				if($registry->alive($entity)) $registry->destroy($entity);
-			});
+			$registry->destroyLater($entity);
 		}
 	}
 }
