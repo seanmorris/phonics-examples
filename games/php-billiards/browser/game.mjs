@@ -93,55 +93,39 @@ export function queuedDrop(previous, now, random=Math.random)
 /** Canvas lifecycle, diagnostics, sound, and fullscreen bridge for the native PHP/SDL game. */
 export function activate({module, canvas, session, services})
 {
+	const shell=new services.GameShell({module,canvas,session,title:'PHP Billiards'});
 	// The browser module runs before PHP creates its SDL window. Claim the shared context with
 	// antialiasing enabled so Emscripten/SDL reuses a multisampled default framebuffer.
-	if(!canvas.getContext('webgl2',{alpha:false,antialias:true,depth:true,stencil:false}))
-		throw new Error('PHP Billiards requires WebGL2');
+	shell.context({alpha:false,antialias:true,depth:true,stencil:false});
+	const {signal}=shell;
 	const originalStyle=canvas.getAttribute('style'),originalTabIndex=canvas.getAttribute('tabindex');
 	const originalLabel=canvas.getAttribute('aria-label'),parent=canvas.parentElement;
 	const linkedGame=new URLSearchParams(location.hash.slice(1)).has('phonics-game');
-	let viewport='[1280,720,1]',latest=null,debugCamera=null,debugValues={};
+	let latest=null,debugCamera=null,debugValues={};
 	let debugActions=linkedGame?['online-play']:[];
 	let network=[],networkAcks=[],lobbyOpening=false,lobbyVisible=false,networkWrites=Promise.resolve(),handshake=null;
-	let closed=false,cursor='';
-	// Direct applications receive no shared services, so mute persists through guarded localStorage.
-	const muteKey='php-billiards.muted.v1';
-	try{if(localStorage.getItem(muteKey)==='1')debugActions.push('mute');}catch{}
+	let cursor='';
+	// PHP owns the mute state and reports it in every status; the shell only persists what PHP decided, so the
+	// saved value can ask PHP to start muted on the next run.
+	const mute=shell.mute({key:'php-billiards.muted.v1',controlled:true,parse:value=>value==='1',serialize:muted=>muted?'1':'0'});
+	if(mute.muted)debugActions.push('mute');
 	canvas.style.cssText='display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;touch-action:none;outline:none;background:#020403';
 	canvas.tabIndex=Math.max(0,canvas.tabIndex);
 	canvas.setAttribute('aria-label','PHP Billiards. Drag on the table to aim, Space to shoot, Escape for the menu, question mark for all controls.');
 
-	const measure=()=>{
-		// The lobby moves and letterboxes the canvas. Measure the displayed canvas
-		// itself so PHP rendering, SDL pointer coordinates, and the native HUD all
-		// share the same local pixel space after responsive layout changes.
-		const box=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
-		// Opening the lobby briefly parks the canvas in a hidden stage. Retain the
-		// last valid framebuffer until a joined table makes that stage measurable.
-		if(box.width < 1 || box.height < 1)return;
-		viewport=JSON.stringify([Math.max(1,Math.round(box.width*dpr)),Math.max(1,Math.round(box.height*dpr)),dpr]);
-	};
-	const resize=new ResizeObserver(measure);resize.observe(canvas);measure();
+	// The lobby moves and letterboxes the canvas. Measure the displayed canvas itself so PHP rendering, SDL pointer
+	// coordinates, and the native HUD all share the same local pixel space after responsive layout changes. Opening
+	// the lobby briefly parks the canvas in a hidden stage; the last valid framebuffer is kept until a joined table
+	// makes that stage measurable.
+	const view=shell.measure({observe:canvas,dprCap:2,skipEmpty:true,initial:'[1280,720,1]'});
 
 	// The engine's corner shortcuts drive the same mute action and fullscreen request as the PHP menu. Fullscreen
-	// takes the canvas's frame, so the shortcuts stay on screen; engines without the service keep canvas fullscreen.
-	const frame=services?.QuickControls?canvas.closest?.('#game-frame')??parent:null;
-	const quick=frame?new services.QuickControls(parent,frame):null;
-	const fullscreenTarget=frame??canvas;
-	let fullscreenBusy=false,fullscreenError='';
-	const updateFullscreen=()=>quick?.setFullscreen(document.fullscreenElement===fullscreenTarget
-		,Boolean(document.fullscreenEnabled&&fullscreenTarget.requestFullscreen),fullscreenBusy,fullscreenError);
-	const toggleFullscreen=async()=>{
-		if(fullscreenBusy)return;
-		fullscreenBusy=true;fullscreenError='';updateFullscreen();
-		try{await(document.fullscreenElement===fullscreenTarget?document.exitFullscreen():fullscreenTarget.requestFullscreen());}
-		catch(error){fullscreenError=closed?'':error.message;}
-		finally{fullscreenBusy=false;if(!closed){updateFullscreen();canvas.focus({preventScroll:true});}}
-	};
-	quick?.muteButton.addEventListener('click',()=>{debugActions.push('mute');canvas.focus({preventScroll:true});});
-	quick?.fullscreenButton.addEventListener('click',()=>{void toggleFullscreen();});
-	if(quick)document.addEventListener('fullscreenchange',updateFullscreen);
-	updateFullscreen();
+	// takes the canvas's frame, so the shortcuts stay on screen. The mute button only asks PHP, which reports the
+	// new state through billiardsStatus.
+	const frame=canvas.closest?.('#game-frame')??parent;
+	const quick=new services.QuickControls(parent,frame);
+	const fullscreen=shell.fullscreen({target:frame,quick});
+	quick.muteButton.addEventListener('click',()=>{debugActions.push('mute');canvas.focus({preventScroll:true});},{signal});
 
 	// The recorded samples live inside the PHAR, so PHP hands their bytes over once through billiardsSamples().
 	// They decode after the first gesture unlocks Web Audio; playback adds slight detune, filtering, and a voice
@@ -156,7 +140,7 @@ export function activate({module, canvas, session, services})
 		peaks.set(name,peak);decoded.set(name,buffer);
 	})).catch(error=>{audioError=String(error?.message??error);console.error('Billiards samples failed to decode',error);});
 	const unlockAudio=()=>{
-		if(closed||typeof AudioContext==='undefined')return;
+		if(shell.closed||typeof AudioContext==='undefined')return;
 		try
 		{
 			audio??=new AudioContext;
@@ -165,10 +149,10 @@ export function activate({module, canvas, session, services})
 		}
 		catch(error){audioError=String(error?.message??error);}
 	};
-	module.billiardsSamples=json=>{
+	shell.bridge('billiardsSamples',json=>{
 		for(const [name,base64] of Object.entries(JSON.parse(json)))if(typeof base64==='string')encoded.set(name,base64);
 		if(audio)void decodeSamples();
-	};
+	});
 	const play=(name,{gain=1,rate=1,lowpass=0,lowpassQ=null,delay=0,limit=8}={})=>{
 		const buffer=decoded.get(name),context=audio;
 		if(latest?.muted||!buffer||!context||context.state!=='running'||voices>=limit||gain<=.005)return;
@@ -238,24 +222,23 @@ export function activate({module, canvas, session, services})
 	// Listen in the capture phase on the window so SDL's own canvas handlers cannot swallow the unlocking gesture.
 	const gesture=()=>unlockAudio();
 	const gestures=['pointerdown','keydown','touchend'];
-	for(const type of gestures)globalThis.addEventListener?.(type,gesture,{capture:true});
+	for(const type of gestures)globalThis.addEventListener?.(type,gesture,{capture:true,signal});
 	// Right-drag orbits the camera, so the browser menu must not open over the table.
-	const contextMenu=event=>event.preventDefault();
-	canvas.addEventListener('contextmenu',contextMenu);
+	shell.suppressContextMenu();
 
-	module.billiardsViewport=()=>viewport;
-	module.billiardsRackSeed=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),byte=>byte.toString(16).padStart(2,'0')).join('');
-	module.billiardsInput=()=>{
+	shell.bridge('billiardsViewport',()=>view.viewport());
+	shell.bridge('billiardsRackSeed',()=>shell.seedHex(32));
+	shell.bridge('billiardsInput',()=>{
 		const result={values:debugValues,actions:debugActions,network,networkAcks};
 		debugValues={};debugActions=[];network=[];networkAcks=[];
 		if(debugCamera){result.debugCamera=debugCamera;debugCamera=null;}
 		return JSON.stringify(result);
-	};
-	module.billiardsStatus=json=>{
+	});
+	shell.status('billiardsStatus',{dataset:'phpBilliards',handler:state=>{
 		const muted=latest?.muted;
-		latest=JSON.parse(json);canvas.dataset.phpBilliards=json;
-		if(muted!==undefined&&muted!==latest.muted)try{localStorage.setItem(muteKey,latest.muted?'1':'0');}catch{}
-		if(muted!==latest.muted)quick?.setMuted(Boolean(latest.muted));
+		latest=state;
+		if(muted!==latest.muted)mute.set(latest.muted,{persist:muted!==undefined});
+		if(muted!==latest.muted)quick.setMuted(Boolean(latest.muted));
 		const ui=latest.ui??{},aiming=latest.started&&!latest.overlay&&latest.phase!=='moving';
 		const nextCursor=ui.drag==='orbit'?'grabbing':ui.hover?'pointer':ui.drag==='aim'||aiming?'crosshair':'default';
 		if(nextCursor!==cursor){cursor=nextCursor;canvas.style.cursor=cursor;}
@@ -267,8 +250,8 @@ export function activate({module, canvas, session, services})
 			session.lobby.open().catch(()=>{}).finally(()=>{lobbyOpening=false;});
 		}
 		for(const message of latest.network?.outbox??[])queueNetworkWrite(message);
-	};
-	module.billiardsFullscreen=()=>{void toggleFullscreen();};
+	}});
+	shell.bridge('billiardsFullscreen',()=>{void fullscreen.toggle();});
 
 	const lobbyPort=session.lobby.attachGame({
 		start:detail=>{
@@ -358,20 +341,16 @@ export function activate({module, canvas, session, services})
 	Object.defineProperty(canvas,'phpBilliardsDebug',{configurable:true,value:debug});
 	canvas.focus({preventScroll:true});
 
-	return async()=>{
-		if(closed)return;closed=true;resize.disconnect();session.lobby.protocol.removeEventListener('closed',lobbyClosed);
+	shell.onClose(async()=>{
+		session.lobby.protocol.removeEventListener('closed',lobbyClosed);
 		for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();
-		for(const type of gestures)globalThis.removeEventListener?.(type,gesture,{capture:true});
-		canvas.removeEventListener('contextmenu',contextMenu);
-		delete module.billiardsSamples;
-		delete module.billiardsRackSeed;
 		await audio?.close().catch(()=>{});
-		if(quick)document.removeEventListener('fullscreenchange',updateFullscreen);
-		if(globalThis.document?.fullscreenElement===fullscreenTarget)await document.exitFullscreen().catch(()=>{});
-		quick?.close();
+		quick.close();
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);
 		if(originalTabIndex===null)canvas.removeAttribute('tabindex');else canvas.setAttribute('tabindex',originalTabIndex);
 		if(originalLabel===null)canvas.removeAttribute('aria-label');else canvas.setAttribute('aria-label',originalLabel);
-		delete canvas.dataset.phpBilliards;delete canvas.dataset.placing;delete canvas.phpBilliardsDebug;
-	};
+		delete canvas.dataset.placing;delete canvas.phpBilliardsDebug;delete session.phpBilliards;
+	});
+
+	return ()=>shell.close();
 }

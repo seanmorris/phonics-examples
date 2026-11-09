@@ -1,12 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {activate} from '../games/php-billiards/browser/game.mjs';
+import {GameShell} from '../node_modules/@seanmorris/phonics/browser/GameShell.mjs';
+
+/** The corner controls without a DOM: the host only wires listeners and reports state to them. */
+class QuickControls
+{
+	muteButton = {addEventListener: () => {}, hidden: false};
+	fullscreenButton = {addEventListener: () => {}};
+	setMuted() {}
+	setFullscreen() {}
+	close() {}
+}
 
 test('terminal room action rejection is acknowledged once instead of retried every frame', async () => {
 	const previous = {
 		location: globalThis.location
 		, devicePixelRatio: globalThis.devicePixelRatio
 		, ResizeObserver: globalThis.ResizeObserver
+		, document: globalThis.document
 	};
 	let submissions = 0, errors = 0;
 	const protocol = new EventTarget;
@@ -42,11 +54,12 @@ test('terminal room action rejection is acknowledged once instead of retried eve
 	globalThis.location = {hash: ''};
 	globalThis.devicePixelRatio = 1;
 	globalThis.ResizeObserver = class { constructor() { return observer; } };
+	globalThis.document = {fullscreenElement: null, fullscreenEnabled: false, addEventListener: () => {}};
 	console.error = () => { errors++; };
 
 	try
 	{
-		activate({module,canvas,session});
+		activate({module,canvas,session,services: {GameShell, QuickControls}});
 		const firstSeed=module.billiardsRackSeed(),secondSeed=module.billiardsRackSeed();
 		assert.match(firstSeed,/^[0-9a-f]{64}$/);
 		assert.match(secondSeed,/^[0-9a-f]{64}$/);
