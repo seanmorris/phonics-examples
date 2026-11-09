@@ -87,6 +87,13 @@ final class WaterRenderer
 	}
 
 	/**
+	 * The offscreen target the scene is captured into.
+	 *
+	 * @return RenderTarget|null The target, or null before creation or after release.
+	 */
+	public function target(): ?RenderTarget { return $this->scene; }
+
+	/**
 	 * Redirect subsequent map and sprite draws to the offscreen scene texture.
 	 *
 	 * @param array{0:float|int,1:float|int,2:float|int,3:float|int} $color Scene clear color as
