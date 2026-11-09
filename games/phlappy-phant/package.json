@@ -1,0 +1,44 @@
+{
+  "name": "@seanmorris/phlappy-phant",
+  "version": "0.1.0",
+  "description": "A pixel-art Flappy Bird homage starring the elePHPant, built with Phonics",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./phonics.json": "./phonics.json"
+  },
+  "peerDependencies": {
+    "@seanmorris/phonics": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@seanmorris/phonics": {
+      "optional": true
+    }
+  },
+  "files": [
+    "autoload.php",
+    "game.php",
+    "application.php",
+    "src/Barrel.php",
+    "src/Input/InputSettings.php",
+    "src/Input/PhantActions.php",
+    "src/Random.php",
+    "src/Render/Scene.php",
+    "src/Simulation.php",
+    "browser/game.mjs",
+    "assets/bonk.wav",
+    "assets/ding.wav",
+    "assets/flap.wav",
+    "assets/sprites.png",
+    "assets/sprites.tsj",
+    "worlds/phant.tmj",
+    "worlds/phant.world",
+    "art/elephpant.svg",
+    "art/ELEPHPANT-LICENSE.md",
+    "phonics.json",
+    "composer.json",
+    "README.md",
+    "NOTICE",
+    "LICENSE"
+  ]
+}

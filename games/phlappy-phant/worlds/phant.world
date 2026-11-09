@@ -1,0 +1,9 @@
+{
+  "type": "world",
+  "onlyShowAdjacentMaps": false,
+  "maps": [{"fileName": "phant.tmj", "x": 0, "y": 0, "width": 56, "height": 32}],
+  "properties": [
+    {"name": "phonics.import.phlappy-phant", "type": "string", "value": "../phonics.json"},
+    {"name": "phonics.start", "type": "string", "value": "phant.tmj"}
+  ]
+}

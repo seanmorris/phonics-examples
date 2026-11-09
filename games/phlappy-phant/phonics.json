@@ -1,0 +1,93 @@
+{
+  "name": "@seanmorris/phlappy-phant",
+  "php": {
+    "files": [
+      "autoload.php",
+      "game.php",
+      "application.php",
+      "src/Barrel.php",
+      "src/Input/InputSettings.php",
+      "src/Input/PhantActions.php",
+      "src/Random.php",
+      "src/Render/Scene.php",
+      "src/Simulation.php"
+    ],
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "autoload": {
+      "PhlappyPhant\\": "src/"
+    }
+  },
+  "exports": {
+    "game": {
+      "type": "game",
+      "php": "game.php",
+      "browser": "browser/game.mjs",
+      "modules": []
+    },
+    "phant": {
+      "type": "asset",
+      "path": "worlds/phant.world"
+    }
+  },
+  "tiled": {
+    "previews": [
+      "assets/sprites.png"
+    ]
+  },
+  "preload": [
+    "assets/bonk.wav",
+    "assets/ding.wav",
+    "assets/flap.wav",
+    "assets/sprites.png",
+    "assets/sprites.tsj"
+  ],
+  "application": {
+    "entry": "application.php"
+  },
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.0.0",
+    "extensions": [
+      "sdl",
+      "vrzno"
+    ]
+  },
+  "dependencies": {},
+  "browser": {
+    "files": [
+      "browser/game.mjs"
+    ]
+  },
+  "assets": [
+    "assets/bonk.wav",
+    "assets/ding.wav",
+    "assets/flap.wav",
+    "assets/sprites.png",
+    "assets/sprites.tsj",
+    "worlds/phant.tmj",
+    "worlds/phant.world"
+  ],
+  "integrity": {
+    "application.php": "sha256-9xTYgiQ0/yC0YCdj53wOf/cFQry8U0tpvmBg3DR18oo=",
+    "assets/bonk.wav": "sha256-8ZJIgRwXeUPmj8G4q87TBLyTJ0eI0sIsJSsrNmV42xk=",
+    "assets/ding.wav": "sha256-QZcYdJ57hlWDmV3iewckrV6/a0Mhm1LDdmWpcAL1RD4=",
+    "assets/flap.wav": "sha256-7tqPIJ1StAIfT/iYT2WEjaFYWIjPZM/OdJJjmkibEuE=",
+    "assets/sprites.png": "sha256-sYf0FaGgtE6l8bAbMxeWfQwpssachuo8Ks8497ou/tE=",
+    "assets/sprites.tsj": "sha256-UKr6OqpnpYzB3qqFea043eNS+azxIULw9StMZdeeKDU=",
+    "autoload.php": "sha256-nI1YY9Kfwe086pFq06a8/3u5BaxBJmM/Hu2URHSSrlY=",
+    "browser/game.mjs": "sha256-jY9mcvbuT8WcmSP7M4fPcloiTkUeWSdjWMhagJgw7A0=",
+    "game.php": "sha256-dqqsvfX6N84DHa4NzySBRTyfL+6GQiO+dAx7sSmQ7iE=",
+    "src/Barrel.php": "sha256-pZphRORDVyjkIFp21ixv9AVgyN3loHAODd9T34xxGYo=",
+    "src/Input/InputSettings.php": "sha256-t+gFObzP4DD9hGQy6pgNTn6OmvGjPTacHQQFlhmTqPw=",
+    "src/Input/PhantActions.php": "sha256-bW+3S4rcQjQglbFM/SFmhbEkE3pt/eukxZy+qH5NFU8=",
+    "src/Random.php": "sha256-K7C+O1PIMGau+sBBTtbtYY3jWj3mhtILARVJb+ClSFI=",
+    "src/Render/Scene.php": "sha256-92q2W4e+7CTKXXcQDjDYSk5aJOC32UwCElDw2zb9uNM=",
+    "src/Simulation.php": "sha256-w3zaW+yFKQQ290Gjafl9TzjDscYU0S1BwovhWbeei18=",
+    "worlds/phant.tmj": "sha256-lQynqMDcz2QTlPu48jdwFCSNVeHB6BMct5la/EsJ8aM=",
+    "worlds/phant.world": "sha256-GT3SuMsmPogieQR7k9iG95I6QZMH+R3c4AweR3TjNjs="
+  }
+}
