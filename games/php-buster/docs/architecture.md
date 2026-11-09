@@ -10,13 +10,14 @@ The port deliberately excludes replay and network code. Local runs use a portabl
 
 `Render\Scene` draws the scrolling starfield, centered SpriteLib cells, actors, HUD, intermission text, and shared menus. It contains the original 320×480 canvas inside any output size and uses the same transform for input. Actor poses interpolate between fixed steps.
 
-The browser entry owns resize observation, mouse and touch pointers, accessible menu buttons, lazy sound decode and playback, safe local storage, mute/fullscreen controls, and cleanup. Menu DOM only changes when the region signature changes. Closing the package aborts listeners, disconnects observers, closes audio, restores the canvas, clears bridge functions, and releases PHP/GPU state.
+The browser entry builds on the engine's shell services: `GameShell` claims the context, mounts the frame, measures the screen into the viewport string with the coarse-pointer flag, runs the fullscreen machine, persists the mute in the game's options record and holds the status, action and bridge functions; `RegionButtons` mirrors the menu hit regions and only touches the DOM when the region signature changes; `TouchPad` provides the FIRE button. The entry keeps the paddle's mouse and touch pointer handling, lazy sound decode and playback, the score table and the status summary. Closing the package closes the shell, which aborts listeners, disconnects observers, leaves fullscreen, restores the canvas, clears bridge functions, and lets the game release audio and PHP/GPU state.
 
 ## Reusable engine work
 
-Two general mechanisms were promoted to Phonics during the port:
+General mechanisms promoted to Phonics during the port and the later primitives pass:
 
 - `Phonics\Render\LogicalViewport` provides aspect-preserving containment, point containment, coordinate conversion, and renderer-ready rectangles for fixed logical canvases.
 - `SamplePlayer` provides lazy, cached, failure-tolerant playback of package-local effects through Web Audio.
+- `GameShell`, `RegionButtons` and `TouchPad` hold the browser host chores Buster, Slalom and Tris had each written: context, frame, viewport, fullscreen, mute, bridges, accessible hit regions and held touch buttons.
 
 PHP Slalom now uses both utilities as well. Buster keeps its wave rules, actors, scoring, package assets, and browser profile in `packages/php-buster`.

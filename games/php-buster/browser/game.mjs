@@ -1,19 +1,18 @@
 /** Browser shell for PHP Buster: storage, sound, pointer/touch motion, and accessible menus. */
 export async function activate({module, canvas, assets, packageUrl, services, session, onClose})
 {
-	if(!canvas.getContext('webgl2', {antialias: false})) throw Error('PHP Buster requires WebGL2');
+	const shell = new services.GameShell({module, canvas, session, title: 'PHP Buster'});
+	shell.context({antialias: false});
+	const {signal} = shell;
 
 	const controlsKey = 'php-buster.controls.v1';
 	const profileKey = 'php-buster.profile.v1';
 	const optionsKey = 'php-buster.options.v1';
 	const storage = new services.SafeStorage;
-	const parent = canvas.parentNode, next = canvas.nextSibling, originalStyle = canvas.getAttribute('style');
-	const abort = new AbortController(), {signal} = abort;
 	const ui = document.createElement('section');
 	const screen = document.createElement('div');
 	const targets = document.createElement('div');
 	const touch = document.createElement('div');
-	const fire = document.createElement('button');
 	const status = document.createElement('p');
 	const style = document.createElement('style');
 	ui.className = 'php-buster-ui';
@@ -21,10 +20,6 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	screen.className = 'php-buster-screen';
 	targets.className = 'php-buster-targets';
 	touch.className = 'php-buster-touch';
-	touch.hidden = true;
-	fire.type = 'button';
-	fire.textContent = 'FIRE';
-	fire.setAttribute('aria-label', 'Fire');
 	status.className = 'php-buster-sr';
 	status.setAttribute('aria-live', 'polite');
 	style.textContent = `
@@ -52,19 +47,14 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		@media(pointer:coarse){.php-buster-screen .quick-controls button{width:44px;height:44px}}
 	`;
 
-	parent.insertBefore(ui, canvas);
+	shell.mount(ui, {screen});
 	ui.append(style, screen, status);
-	screen.append(canvas, targets, touch);
-	touch.append(fire);
-	canvas.tabIndex = Math.max(0, canvas.tabIndex);
+	screen.append(targets, touch);
 	const quick = new services.QuickControls(screen, ui);
-	const buttons = new Map;
 	const pointer = {active: false, x: 160, y: 400, fire: false};
 	const drags = new Map;
 	const firePointers = new Set;
-	let viewport = '[800,720,1,false]', action = '', state = null, signature = '';
-	let fullscreenBusy = false, fullscreenTask = null, closed = false, soundedExplosion = 0;
-	let mouseInside = false;
+	let state = null, soundedExplosion = 0, mouseInside = false;
 
 	const safeJson = (value, fallback) => {
 		try { return JSON.parse(value); } catch { return fallback; }
@@ -83,23 +73,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	const rawProfile = safeJson(storage.get(profileKey) ?? '{}', {});
 	const profile = {version: 1, scores: cleanScores(rawProfile?.scores)};
-	const rawOptions = safeJson(storage.get(optionsKey) ?? '{}', {});
-	const options = {version: 1, muted: rawOptions?.version === 1 && rawOptions.muted === true};
 
 	const saveProfile = () => storage.set(profileKey, JSON.stringify(profile));
-
-	const saveOptions = () => storage.set(optionsKey, JSON.stringify(options));
-
-	function measure()
-	{
-		const box = screen.getBoundingClientRect(), dpr = devicePixelRatio || 1;
-		const width = Math.max(1, Math.round(box.width * dpr));
-		const height = Math.max(1, Math.round(box.height * dpr));
-		const coarse = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
-		viewport = JSON.stringify([width, height, dpr, coarse]);
-		canvas.style.width = box.width + 'px';
-		canvas.style.height = box.height + 'px';
-	}
 
 	function logical(clientX, clientY)
 	{
@@ -114,10 +89,32 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		];
 	}
 
-	const resize = new ResizeObserver(measure);
-	resize.observe(screen);
-	measure();
-	const samples = new services.SamplePlayer(module, assets, packageUrl, {muted: options.muted});
+	const view = shell.measure({
+		observe: screen
+		, cssSize: true
+		, initial: '[800,720,1,false]'
+		, format: (width, height, dpr, box, coarse) => JSON.stringify([width, height, dpr, coarse])
+	});
+
+	let samples = null;
+
+	const mute = shell.mute({
+		key: optionsKey
+		, parse: value => {
+			const options = safeJson(value, {});
+
+			return options?.version === 1 && options.muted === true;
+		}
+		, serialize: muted => JSON.stringify({version: 1, muted})
+		, quick
+		, onChange: muted => {
+			samples?.setMuted(muted);
+
+			if(samples && !muted) void unlock();
+		}
+	});
+
+	samples = new services.SamplePlayer(module, assets, packageUrl, {muted: mute.muted});
 
 	async function unlock()
 	{
@@ -129,59 +126,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		void unlock().then(() => samples.play('explosion', {gain: .55}));
 	}
 
-	quick.setMuted(options.muted);
-
-	quick.muteButton.addEventListener('click', () => {
-		options.muted = !options.muted;
-		saveOptions();
-		quick.setMuted(options.muted);
-		samples.setMuted(options.muted);
-
-		if(!options.muted) void unlock();
-
-		canvas.focus({preventScroll: true});
-	}, {signal});
-
-	function updateFullscreen(error = '')
-	{
-		quick.setFullscreen(
-			document.fullscreenElement === ui
-			, Boolean(document.fullscreenEnabled && ui.requestFullscreen)
-			, fullscreenBusy
-			, error
-		);
-
-		measure();
-	}
-
-	quick.fullscreenButton.addEventListener('click', async() => {
-		if(fullscreenBusy) return;
-
-		fullscreenBusy = true;
-		updateFullscreen();
-
-		try
-		{
-			fullscreenTask = document.fullscreenElement === ui ? document.exitFullscreen() : ui.requestFullscreen();
-			await fullscreenTask;
-		}
-		catch(error)
-		{
-			if(!closed) updateFullscreen(error.message);
-		}
-
-		fullscreenBusy = false;
-
-		if(!closed)
-		{
-			updateFullscreen();
-			canvas.focus({preventScroll: true});
-		}
-	}, {signal});
-
-	document.addEventListener('fullscreenchange', updateFullscreen, {signal});
-	updateFullscreen();
-	canvas.addEventListener('contextmenu', event => event.preventDefault(), {signal});
+	shell.fullscreen({target: ui, quick, onChange: () => view.measure()});
+	shell.suppressContextMenu();
 
 	canvas.addEventListener('focus', () => {
 		if(document.fullscreenElement === ui) return;
@@ -266,6 +212,14 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		}
 	}, {signal});
 
+	const focus = () => { canvas.focus({preventScroll: true}); void unlock(); };
+
+	const pad = new services.TouchPad(touch, [{id: 'fire', label: 'Fire', text: 'FIRE'}], {
+		signal
+		, focus
+		, onChange: held => { pointer.fire = held.has('fire') || firePointers.size > 0; }
+	});
+
 	const releasePointer = event => {
 		if(event.pointerType === 'touch')
 		{
@@ -275,7 +229,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		else
 		{
 			firePointers.delete(event.pointerId);
-			pointer.fire = firePointers.size > 0;
+			pointer.fire = firePointers.size > 0 || pad.held.has('fire');
 			pointer.active = mouseInside;
 		}
 	};
@@ -293,44 +247,17 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		}
 	}, {signal});
 
-	const releaseFire = event => {
-		firePointers.delete(event.pointerId);
-		pointer.fire = firePointers.size > 0;
-	};
+	const action = shell.action('busterAction');
+	const buttons = new services.RegionButtons(targets, {signal, focus, onPress: id => action.act(id)});
 
-	fire.addEventListener('pointerdown', event => {
-		event.preventDefault();
-		void unlock();
-		fire.setPointerCapture(event.pointerId);
-		firePointers.add(event.pointerId);
-		pointer.fire = true;
-		canvas.focus({preventScroll: true});
-	}, {signal});
+	shell.bridge('busterViewport', () => view.viewport());
+	shell.bridge('busterPointer', () => JSON.stringify(pointer));
+	shell.bridge('busterStorageRead', () => storage.get(controlsKey) ?? '');
+	shell.bridge('busterStorageWrite', value => storage.set(controlsKey, String(value)));
+	shell.bridge('busterSeed', () => shell.seed31());
+	shell.bridge('busterScores', () => JSON.stringify(profile.scores));
 
-	fire.addEventListener('pointerup', releaseFire, {signal});
-	fire.addEventListener('pointercancel', releaseFire, {signal});
-	fire.addEventListener('lostpointercapture', releaseFire, {signal});
-
-	module.busterViewport = () => viewport;
-
-	module.busterAction = () => { const value = action; action = ''; return value; };
-
-	module.busterPointer = () => JSON.stringify(pointer);
-
-	module.busterStorageRead = () => storage.get(controlsKey) ?? '';
-
-	module.busterStorageWrite = value => storage.set(controlsKey, String(value));
-
-	module.busterSeed = () => {
-		const seed = new Uint32Array(1);
-		globalThis.crypto.getRandomValues(seed);
-
-		return (seed[0] & 0x7fffffff) || 1;
-	};
-
-	module.busterScores = () => JSON.stringify(profile.scores);
-
-	module.busterSubmitScore = (initials, score) => {
+	shell.bridge('busterSubmitScore', (initials, score) => {
 		initials = String(initials).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3).padEnd(3, 'A');
 		score = Math.max(0, Math.trunc(Number(score) || 0));
 		profile.scores.push({initials, score});
@@ -338,111 +265,44 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		profile.scores.length = Math.min(10, profile.scores.length);
 
 		return saveProfile();
-	};
+	});
 
-	module.busterStatus = json => {
-		const nextState = JSON.parse(json);
-		const previousRun = state?.runId;
-		state = nextState;
-		canvas.dataset.phpBuster = json;
-		const coarse = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
-		touch.hidden = nextState.page !== 'play' || !coarse;
+	shell.status('busterStatus', {
+		dataset: 'phpBuster'
+		, handler: nextState => {
+			const previousRun = state?.runId;
+			state = nextState;
+			const coarse = globalThis.matchMedia?.('(pointer: coarse)').matches ?? false;
+			pad.visible = nextState.page === 'play' && coarse;
 
-		if(nextState.runId !== previousRun) soundedExplosion = 0;
+			if(nextState.runId !== previousRun) soundedExplosion = 0;
 
-		while(soundedExplosion < nextState.explosions)
-		{
-			soundedExplosion++;
-
-			if(nextState.explosions - soundedExplosion < 4) explosion();
-		}
-
-		const regions = Array.isArray(nextState.regions) ? nextState.regions : [];
-		const key = JSON.stringify([nextState.width, nextState.height, regions]);
-
-		if(key !== signature)
-		{
-			signature = key;
-			const wanted = new Set(regions.map(region => String(region.id)));
-
-			for(const [id,button] of buttons)
-			if(!wanted.has(id))
+			while(soundedExplosion < nextState.explosions)
 			{
-				button.remove();
-				buttons.delete(id);
+				soundedExplosion++;
+
+				if(nextState.explosions - soundedExplosion < 4) explosion();
 			}
 
-			for(const region of regions)
-			{
-				const id = String(region.id);
-				let button = buttons.get(id);
+			buttons.sync(nextState.width, nextState.height, nextState.regions);
 
-				if(!button)
-				{
-					button = document.createElement('button');
-					button.type = 'button';
-					button.dataset.action = id;
+			const summary = `${nextState.page}. Score ${nextState.score}. Level ${nextState.level}, stage ${nextState
+				.stage}. ${nextState.shields} shields.`;
 
-					button.addEventListener('click', () => {
-						action = id;
-						canvas.focus({preventScroll: true});
-						void unlock();
-					}, {signal});
-
-					buttons.set(id, button);
-					targets.append(button);
-				}
-
-				button.setAttribute('aria-label', region.label || id);
-				button.disabled = Boolean(region.disabled);
-				const [x,y,width,height] = region.rect;
-
-				Object.assign(button.style, {
-					left: 100 * x / nextState.width + '%'
-					, top: 100 * y / nextState.height + '%'
-					, width: 100 * width / nextState.width + '%'
-					, height: 100 * height / nextState.height + '%'
-				});
-			}
+			if(status.textContent !== summary) status.textContent = summary;
 		}
+	});
 
-		const summary = `${nextState.page}. Score ${nextState.score}. Level ${nextState.level}, stage ${nextState
-			.stage}. ${nextState.shields} shields.`;
-
-		if(status.textContent !== summary) status.textContent = summary;
+	session.phpBuster = {
+		get state() { return state; }
+		, get profile() { return structuredClone(profile); }
 	};
 
-	session.phpBuster = {get state(){ return state; }, get profile(){ return structuredClone(profile); }};
-
-	onClose(async() => {
-		closed = true;
-		abort.abort();
-		resize.disconnect();
+	shell.onClose(async() => {
 		quick.close();
-		await fullscreenTask?.catch(() => {});
-
-		if(document.fullscreenElement === ui) await document.exitFullscreen().catch(() => {});
-
 		await samples.close();
-
-		if(next?.parentNode === parent) parent.insertBefore(canvas, next); else parent.append(canvas);
-
-		if(originalStyle === null) canvas.removeAttribute('style'); else canvas.setAttribute('style', originalStyle);
-
-		delete canvas.dataset.phpBuster;
-		ui.remove();
-
-		for(const key of ['busterViewport'
-			, 'busterAction'
-			, 'busterPointer'
-			, 'busterStorageRead'
-			, 'busterStorageWrite'
-			, 'busterSeed'
-			, 'busterScores'
-			, 'busterSubmitScore'
-			, 'busterStatus'
-		]) delete module[key];
-
 		delete session.phpBuster;
 	});
+
+	onClose(() => shell.close());
 }
