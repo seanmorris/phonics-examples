@@ -326,7 +326,7 @@
     "application-network.json": "sha256-beV5jPBML3eSO+vgt8ccLDb3uu3li60XySzvcP7pmBk=",
     "application.php": "sha256-u07itKK4iX2A0eqpetLhu3VzRpJ1SR/sOm7oMqNhUkk=",
     "autoload.php": "sha256-NyvXd52uYyyH6sk5vfNRlgw43OfF4aN3fcqkW2bx1u8=",
-    "browser/game.mjs": "sha256-Nw65zNo3Khbi33nVNoTHgSDQpjTeJnzz2ErpxtGeAUo=",
+    "browser/game.mjs": "sha256-0mGg509rSK+u5ARCfOZvx9L58b5HhWNCZ6mNR/WvoFE=",
     "browser/wad-inspector.mjs": "sha256-GkmWsgbngo7nKdpAbrDTx2fq9ktdoBesnwNHp8CzPiU=",
     "demo/camera-mirrors.phonics-world.json": "sha256-r8BW9arm0HG2NaSurMBOgNOCXfnh9CFP2rWUCJTbrDs=",
     "demo/episode-one-online.phonics-world.json": "sha256-HTXKMPMIf6fBbuCdu2EF0qQ7w4AVCOsGmk5bLGCmpN0=",

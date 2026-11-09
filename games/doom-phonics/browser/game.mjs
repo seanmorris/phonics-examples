@@ -192,18 +192,15 @@ export class WadMusic
 /** Pointer-lock input, shared mute/fullscreen controls, and accessible live status. */
 export function activate({module, canvas, services, session})
 {
-	const gl = canvas.getContext('webgl2', {antialias: false});
-
-	if(!gl) throw Error('Doom-Phonics requires WebGL2');
-
+	const shell = new services.GameShell({module, canvas, session, title: 'Doom-Phonics'});
+	const gl = shell.context({antialias: false});
+	const {signal} = shell;
 	services.cacheProgramValidation(gl, canvas);
 	services.cachePixelStoreQueries(gl, canvas);
 
 	const frame = canvas.closest('#game-frame') ?? canvas.parentElement;
-	const abort = new AbortController();
 	const quick = new services.QuickControls(frame, frame);
-
-	let fullscreenBusy = false, fullscreenError = '', menuOpen = true;
+	let menuOpen = true;
 	let cheats = '', pause = 0, pointerX = 0, pointerY = 0;
 
 	const logicalWidth = canvas.width, logicalHeight = canvas.height;
@@ -256,15 +253,15 @@ export function activate({module, canvas, services, session})
 
 	const viewportObserver = new ResizeObserver(measureViewport);
 	viewportObserver.observe(frame);
-	window.addEventListener('resize', measureViewport, {signal: abort.signal});
-	window.visualViewport?.addEventListener('resize', measureViewport, {signal: abort.signal});
+	window.addEventListener('resize', measureViewport, {signal});
+	window.visualViewport?.addEventListener('resize', measureViewport, {signal});
 	measureViewport();
 
-	module.doomViewport = () => {
+	shell.bridge('doomViewport', () => {
 		if(measuredDpr !== (window.devicePixelRatio || 1)) measureViewport();
 
 		return viewport;
-	};
+	});
 
 	const optionsKey = 'doom-phonics.options.v1';
 	const storage = new services.SafeStorage;
@@ -335,12 +332,12 @@ export function activate({module, canvas, services, session})
 		wadMusic.unlock().catch(() => {});
 	};
 
-	window.addEventListener('keydown', unlockAudio, {signal: abort.signal});
-	window.addEventListener('pointerdown', unlockAudio, {signal: abort.signal});
+	window.addEventListener('keydown', unlockAudio, {signal});
+	window.addEventListener('pointerdown', unlockAudio, {signal});
 
-	module.doomSound = value => { wadAudio.play(value).catch(() => {}); };
+	shell.bridge('doomSound', value => { wadAudio.play(value).catch(() => {}); });
 
-	module.doomMusic = value => { wadMusic.play(value).catch(() => {}); };
+	shell.bridge('doomMusic', value => { wadMusic.play(value).catch(() => {}); });
 
 	const infoBack = document.createElement('button');
 	infoBack.type = 'button';
@@ -366,16 +363,13 @@ export function activate({module, canvas, services, session})
 
 	document.head.append(style);
 
-	const updateControls = () => {
-		quick.setMuted(options.muted);
+	const updateControls = () => { quick.setMuted(options.muted); };
 
-		quick.setFullscreen(
-			document.fullscreenElement === frame
-			, Boolean(document.fullscreenEnabled && frame.requestFullscreen)
-			, fullscreenBusy
-			, fullscreenError
-		);
-	};
+	const fullscreen = shell.fullscreen({
+		target: frame
+		, quick
+		, describeError: () => 'Fullscreen could not be changed. Try the corner fullscreen button.'
+	});
 
 	const persistentOptions = () => ({
 		version: 1
@@ -398,10 +392,10 @@ export function activate({module, canvas, services, session})
 
 	const optionState = () => ({
 		...persistentOptions()
-		, fullscreen: document.fullscreenElement === frame
+		, fullscreen: fullscreen.active
 		, fullscreenAvailable: Boolean(document.fullscreenEnabled && frame.requestFullscreen)
-		, fullscreenBusy
-		, fullscreenError
+		, fullscreenBusy: fullscreen.busy
+		, fullscreenError: fullscreen.error
 		, sessionOnly: optionsSessionOnly
 	});
 
@@ -414,29 +408,10 @@ export function activate({module, canvas, services, session})
 	};
 
 	const requestFullscreen = async enabled => {
-		if(fullscreenBusy || !document.fullscreenEnabled || !frame.requestFullscreen
-			|| Boolean(document.fullscreenElement === frame) === enabled
-		) return;
+		if(fullscreen.busy || !document.fullscreenEnabled || !frame.requestFullscreen || fullscreen.active === enabled)
+		return;
 
-		fullscreenBusy = true;
-		fullscreenError = '';
-		updateControls();
-
-		try
-		{
-			if(enabled) await frame.requestFullscreen();
-			else await document.exitFullscreen();
-		}
-		catch
-		{
-			fullscreenError = 'Fullscreen could not be changed. Try the corner fullscreen button.';
-		}
-		finally
-		{
-			fullscreenBusy = false;
-			updateControls();
-			canvas.focus({preventScroll: true});
-		}
+		await fullscreen.toggle();
 	};
 
 	const applyOptions = patch => {
@@ -497,29 +472,22 @@ export function activate({module, canvas, services, session})
 		return optionState();
 	};
 
-	module.doomReadOptions = () => JSON.stringify(optionState());
+	shell.bridge('doomReadOptions', () => JSON.stringify(optionState()));
 
-	module.doomWriteOptions = value => {
+	shell.bridge('doomWriteOptions', value => {
 		let patch = value;
 
 		try { if(typeof value === 'string') patch = JSON.parse(value); } catch { patch = null; }
 
 		return JSON.stringify(applyOptions(patch && typeof patch === 'object' ? patch : {}));
-	};
+	});
 
 	quick.muteButton.addEventListener('click', () => {
 		applyOptions({muted: !options.muted});
 		canvas.focus({preventScroll: true});
-	}, {signal: abort.signal});
+	}, {signal});
 
-	quick.fullscreenButton.addEventListener('click', () => {
-		requestFullscreen(document.fullscreenElement !== frame);
-	}, {signal: abort.signal});
-
-	document.addEventListener('fullscreenchange', () => {
-		measureViewport();
-		updateControls();
-	}, {signal: abort.signal});
+	document.addEventListener('fullscreenchange', measureViewport, {signal});
 
 	const actions = [];
 	let phpInfoState = null, networkInstalled = false, onlineRequest = 0, networkReady = 0, contentRequest = 0;
@@ -535,12 +503,12 @@ export function activate({module, canvas, services, session})
 
 		session.network.addEventListener('resourcesmounted', ({detail}) => {
 			enqueue(detail.role === 'local' ? 'content-load' : 'network-load');
-		}, {signal: abort.signal});
+		}, {signal});
 
 		session.network.addEventListener('start', () => {
 			session.lobby?.close();
 			enqueue('network-start');
-		}, {signal: abort.signal});
+		}, {signal});
 
 		session.network.addEventListener('disconnect', ({detail}) => {
 			// An abandoned load/start must never reopen a match after its transport closed.
@@ -549,15 +517,15 @@ export function activate({module, canvas, services, session})
 
 			session.lobby?.close();
 			enqueue(detail.local ? 'network-leave' : 'network-end');
-		}, {signal: abort.signal});
+		}, {signal});
 
 		session.network.addEventListener('recovery', ({detail}) => {
 			readout.textContent = detail.state === 'playing' ? 'Connected' : 'Reconnecting…';
-		}, {signal: abort.signal});
+		}, {signal});
 
 		session.network.addEventListener('error', ({detail}) => {
 			readout.textContent = detail?.message ?? 'Online match failed';
-		}, {signal: abort.signal});
+		}, {signal});
 	};
 
 	const infoBackLayout = {};
@@ -600,38 +568,38 @@ export function activate({module, canvas, services, session})
 		].join('  ');
 	};
 
-	document.addEventListener('fullscreenchange', positionInfoBack, {signal: abort.signal});
-	window.addEventListener('resize', positionInfoBack, {signal: abort.signal});
+	document.addEventListener('fullscreenchange', positionInfoBack, {signal});
+	window.addEventListener('resize', positionInfoBack, {signal});
 
 	infoBack.addEventListener('click', () => {
 		enqueue('close-info');
 		canvas.focus({preventScroll: true});
-	}, {signal: abort.signal});
+	}, {signal});
 
 	canvas.addEventListener('pointerdown', () => {
 		canvas.focus({preventScroll: true});
-	}, {signal: abort.signal});
+	}, {signal});
 
 	canvas.addEventListener('click', () => {
 		canvas.focus({preventScroll: true});
 
 		if(!menuOpen && document.pointerLockElement !== canvas) canvas.requestPointerLock?.();
-	}, {signal: abort.signal});
+	}, {signal});
 
-	canvas.addEventListener('contextmenu', event => event.preventDefault(), {signal: abort.signal});
+	shell.suppressContextMenu();
 
 	canvas.addEventListener('wheel', event => {
 		if(menuOpen || event.deltaY === 0) return;
 
 		event.preventDefault();
-	}, {signal: abort.signal, passive: false});
+	}, {signal, passive: false});
 
 	document.addEventListener('pointerlockchange', () => {
 		const locked = document.pointerLockElement === canvas;
 		canvas.classList.toggle('doom-phonics-pointer', locked);
 
 		if(!locked) pointerX = pointerY = 0;
-	}, {signal: abort.signal});
+	}, {signal});
 
 	// The browser SDL build does not currently forward relative mouse motion to
 	// PHP. Carry only the raw physical displacement across the bridge; PHP feeds
@@ -641,7 +609,7 @@ export function activate({module, canvas, services, session})
 
 		pointerX += event.movementX;
 		pointerY += event.movementY;
-	}, {signal: abort.signal});
+	}, {signal});
 
 	window.addEventListener('keydown', event => {
 		if(event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -658,38 +626,38 @@ export function activate({module, canvas, services, session})
 		if(!/^[a-z0-9]$/i.test(event.key)) return;
 
 		cheats = (cheats + event.key.toLowerCase()).slice(-32);
-	}, {signal: abort.signal});
+	}, {signal});
 
 	const controlsKey = 'doom-phonics.controls.v1';
 
-	module.doomReadControls = () => {
+	shell.bridge('doomReadControls', () => {
 		return storage.get(controlsKey) ?? '';
-	};
+	});
 
-	module.doomWriteControls = value => {
+	shell.bridge('doomWriteControls', value => {
 		return storage.set(controlsKey, value);
-	};
+	});
 
-	module.doomInput = () => {
+	shell.bridge('doomInput', () => {
 		const value = JSON.stringify({cheats, pause});
 		cheats = '';
 		pause = 0;
 
 		return value;
-	};
+	});
 
-	module.doomPointerInput = () => {
+	shell.bridge('doomPointerInput', () => {
 		const value = JSON.stringify([pointerX, pointerY]);
 		pointerX = pointerY = 0;
 
 		return value;
-	};
+	});
 
-	module.doomAction = () => {
+	shell.bridge('doomAction', () => {
 		return actions.shift() ?? '';
-	};
+	});
 
-	module.doomStatus = value => {
+	shell.bridge('doomStatus', value => {
 		const state = JSON.parse(value);
 		// Diagnostics belong to the session; publishing them as an attribute mutates
 		// the DOM on every sample, even when the accessible UI has not changed.
@@ -737,12 +705,11 @@ export function activate({module, canvas, services, session})
 		const text = statusText(state);
 
 		if(readout.textContent !== text) readout.textContent = text;
-	};
+	});
 
 	updateControls();
 
-	return () => {
-		abort.abort();
+	shell.onClose(() => {
 		viewportObserver.disconnect();
 
 		if(document.pointerLockElement === canvas) document.exitPointerLock?.();
@@ -755,18 +722,8 @@ export function activate({module, canvas, services, session})
 		infoBack.remove();
 		readout.remove();
 		style.remove();
-
-		delete module.doomInput;
-		delete module.doomPointerInput;
-		delete module.doomReadControls;
-		delete module.doomWriteControls;
-		delete module.doomReadOptions;
-		delete module.doomWriteOptions;
-		delete module.doomSound;
-		delete module.doomMusic;
-		delete module.doomAction;
-		delete module.doomStatus;
-		delete module.doomViewport;
 		delete session.doomState;
-	};
+	});
+
+	return () => shell.close();
 }
