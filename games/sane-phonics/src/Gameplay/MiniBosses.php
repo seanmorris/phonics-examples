@@ -4,6 +4,7 @@ namespace SanePhonics\Gameplay;
 
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
+use Phonics\Physics\Sweep;
 use SanePhonics\Effects\Rumble;
 use SanePhonics\Physics\Body;
 use SanePhonics\Physics\Terrain;
@@ -1014,7 +1015,8 @@ final class MiniBosses
 	 * @param array{float,float} $bTo Second center after the update.
 	 * @param float $halfWidth Positive combined horizontal half extent.
 	 * @param float $halfHeight Positive combined vertical half extent.
-	 * @return bool True when relative motion enters the rectangle during the normalized interval.
+	 * @return bool True when relative motion enters the rectangle during the normalized interval, as `Sweep::box`
+	 * decides it with the rectangle centred on the second body.
 	 */
 	private function swept(
 		array $aFrom
@@ -1030,42 +1032,7 @@ final class MiniBosses
 			, ($aTo[1] - $aFrom[1]) - ($bTo[1] - $bFrom[1])
 		];
 
-		$entry = 0.0;
-		$exit = 1.0;
-
-		foreach([[$origin[0], $movement[0], $halfWidth], [$origin[1], $movement[1], $halfHeight]] as [
-			$position
-			, $delta
-			, $extent
-		]){
-			if(abs($delta) < 1e-9)
-			{
-				if(abs($position) > $extent)
-				{
-					return false;
-				}
-
-				continue;
-			}
-
-			$near = (-$extent - $position) / $delta;
-			$far = ($extent - $position) / $delta;
-
-			if($near > $far)
-			{
-				[$near, $far] = [$far, $near];
-			}
-
-			$entry = max($entry, $near);
-			$exit = min($exit, $far);
-
-			if($entry > $exit)
-			{
-				return false;
-			}
-		}
-
-		return $exit >= 0 && $entry <= 1;
+		return Sweep::overlaps(Sweep::box($origin[0], $origin[1], $movement[0], $movement[1], 0, 0, $halfWidth, $halfHeight));
 	}
 
 	/**

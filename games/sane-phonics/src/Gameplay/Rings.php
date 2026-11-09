@@ -4,6 +4,7 @@ namespace SanePhonics\Gameplay;
 
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
+use Phonics\Physics\Sweep;
 use SanePhonics\Physics\Body;
 use SanePhonics\Physics\Terrain;
 use Phonics\Render\Sprite;
@@ -313,42 +314,7 @@ final class Rings
 		];
 
 		$origin = [$from[0] - $ringFrom[0], $from[1] - $ringFrom[1]];
-		$entry = 0.0;
-		$exit = 1.0;
-
-		foreach([[$origin[0], $delta[0], $halfWidth], [$origin[1], $delta[1], $halfHeight]] as [
-			$position
-			, $movement
-			, $extent
-		]){
-			if(abs($movement) < 1e-9)
-			{
-				if(abs($position) > $extent)
-				{
-					return false;
-				}
-
-				continue;
-			}
-
-			$near = (-$extent - $position) / $movement;
-			$far = ($extent - $position) / $movement;
-
-			if($near > $far)
-			{
-				[$near, $far] = [$far, $near];
-			}
-
-			$entry = max($entry, $near);
-			$exit = min($exit, $far);
-
-			if($entry > $exit)
-			{
-				return false;
-			}
-		}
-
-		return true;
+		return Sweep::overlaps(Sweep::box($origin[0], $origin[1], $delta[0], $delta[1], 0, 0, $halfWidth, $halfHeight));
 	}
 
 	/**
