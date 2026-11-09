@@ -2,6 +2,7 @@
 declare(strict_types=1);
 namespace SanePhonics\Gameplay;
 
+use Phonics\Ecs\OwnedEntities;
 use Phonics\Ecs\Registry;
 use Phonics\Input\Controls;
 use SanePhonics\Physics\Body;
@@ -11,8 +12,8 @@ use Phonics\Render\Sprite;
 /** Generic ECS melee timers, projectile emitters, and continuous projectile terrain movement. */
 final class VehicleWeapons
 {
-	/** @var array<int,bool> Projectile entity IDs owned by this weapon system. */
-	private array $projectiles = [];
+	/** Projectile entities owned by this weapon system. */
+	private OwnedEntities $projectiles;
 	private bool $closed = false;
 
 	/**
@@ -24,6 +25,7 @@ final class VehicleWeapons
 	 */
 	public function __construct(private Registry $registry, private Terrain $terrain)
 	{
+		$this->projectiles = new OwnedEntities($registry);
 		$registry->on('removed', [$this, 'removed']);
 	}
 
@@ -75,11 +77,11 @@ final class VehicleWeapons
 	 */
 	public function update(float $dt): void
 	{
-		foreach(array_keys($this->projectiles) as $id)
+		foreach($this->projectiles->ids() as $id)
 		{
 			if(!$this->registry->has($id, VehicleProjectile::class))
 			{
-				unset($this->projectiles[$id]);
+				$this->projectiles->disown($id);
 				continue;
 			}
 
@@ -126,7 +128,7 @@ final class VehicleWeapons
 	 */
 	public function removed(Registry $registry, int $entity, object $component): void
 	{
-		if($component instanceof VehicleProjectile) unset($this->projectiles[$entity]);
+		if($component instanceof VehicleProjectile) $this->projectiles->disown($entity);
 	}
 
 	/**
@@ -140,10 +142,7 @@ final class VehicleWeapons
 
 		$this->closed = true;
 
-		foreach(array_keys($this->projectiles) as $id)
-		if($this->registry->alive($id))
-		$this->registry->destroy($id);
-		$this->projectiles = [];
+		$this->projectiles->close();
 		$this->registry->off('removed', [$this, 'removed']);
 	}
 
@@ -185,6 +184,6 @@ final class VehicleWeapons
 			? $this->registry->create($projectile)
 			: $this->registry->create($projectile, new Sprite($emitter->spriteGid, $x, $y, .5, .5));
 
-		$this->projectiles[$id] = true;
+		$this->projectiles->own($id);
 	}
 }

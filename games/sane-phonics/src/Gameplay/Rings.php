@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace SanePhonics\Gameplay;
 
 use Phonics\Ecs\Query;
+use Phonics\Ecs\OwnedEntities;
 use Phonics\Ecs\Registry;
 use Phonics\Physics\Sweep;
 use SanePhonics\Physics\Body;
@@ -13,7 +14,9 @@ use Phonics\Tiled\TileMap;
 /** Tiled ring promotion, swept player pickup detection, and owned entity cleanup. */
 final class Rings
 {
-	private array $entities = [], $previous = [], $ringPrevious = [];
+	/** Rings this map owns, collected or not. */
+	private OwnedEntities $entities;
+	private array $previous = [], $ringPrevious = [];
 	private ?int $ringGid = null;
 	private bool $closed = false;
 	private ?\Closure $onCollect;
@@ -36,6 +39,7 @@ final class Rings
 		, private ?Terrain $terrain = null
 		, ?callable $onCollect = null
 	){
+		$this->entities = new OwnedEntities($registry);
 		$this->onCollect = $onCollect === null ? null : \Closure::fromCallable($onCollect);
 
 		if($tileClass === '')
@@ -113,7 +117,7 @@ final class Rings
 						}
 
 						$entity = $registry->create($ring, $sprite);
-						$this->entities[] = $entity;
+						$this->entities->own($entity);
 						$this->ringPrevious[$entity] = [$ring->x, $ring->y];
 						$layer->set($column, $row, 0);
 					}
@@ -263,7 +267,7 @@ final class Rings
 
 			$sprite = new Sprite($this->ringGid, $x, $y, .5, .5);
 			$entity = $this->registry->create($ring, $motion, $sprite);
-			$this->entities[] = $result[] = $entity;
+			$result[] = $this->entities->own($entity);
 			$this->ringPrevious[$entity] = [$x, $y];
 		}
 
@@ -424,14 +428,7 @@ final class Rings
 		$this->closed = true;
 		$this->onCollect = null;
 
-		foreach($this->entities as $entity)
-		{
-			if($this->registry->alive($entity))
-			{
-				$this->registry->destroy($entity);
-			}
-		}
-
-		$this->entities = $this->previous = $this->ringPrevious = [];
+		$this->entities->close();
+		$this->previous = $this->ringPrevious = [];
 	}
 }

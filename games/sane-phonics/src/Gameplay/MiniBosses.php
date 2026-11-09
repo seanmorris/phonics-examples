@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace SanePhonics\Gameplay;
 
 use Phonics\Ecs\Query;
+use Phonics\Ecs\OwnedEntities;
 use Phonics\Ecs\Registry;
 use Phonics\Physics\Sweep;
 use SanePhonics\Effects\Rumble;
@@ -20,8 +21,8 @@ final class MiniBosses
 	private array $gids;
 	/** @var array<int,int> Spawned boss entity IDs keyed by source Tiled object ID. */
 	private array $sources = [];
-	/** @var array<int,bool> Bosses, bombs, fragments, and effects owned by this manager. */
-	private array $owned = [];
+	/** Bosses, bombs, fragments, and effects owned by this manager. */
+	private OwnedEntities $owned;
 	/** @var array<int,array{float,float}> Previous player centers for continuous contacts. */
 	private array $players = [];
 	/** @var array<int,array{float,float}> Previous boss centers for relative continuous contacts. */
@@ -51,6 +52,7 @@ final class MiniBosses
 		, string $objectClass = 'MiniBoss'
 		, private bool $advanceCombat = true
 	){
+		$this->owned = new OwnedEntities($registry);
 		if($objectClass === '')
 		{
 			throw new \InvalidArgumentException('Mini-boss object class cannot be empty');
@@ -132,7 +134,7 @@ final class MiniBosses
 
 				$behavior->opacity = $layer->opacity;
 				$entity = $registry->create($boss, $behavior, $sprite);
-				$this->owned[$entity] = true;
+				$this->owned->own($entity);
 				$this->bosses[$entity] = [$boss->x, $boss->y - $boss->height / 2];
 
 				if(isset($object['id']))
@@ -437,7 +439,7 @@ final class MiniBosses
 
 		$sprite = new Sprite($this->gids['spike-bomb'], $x, $y, .5, .5);
 		$id = $this->registry->create($projectile, $sprite);
-		$this->owned[$id] = true;
+		$this->owned->own($id);
 		$behavior->bombs++;
 	}
 
@@ -523,7 +525,7 @@ final class MiniBosses
 		$y = $boss->y + $boss->height * $offsetY;
 		$sprite = new Sprite($this->gids['boss-explosion'], $x, $y, .5, .5);
 		$id = $this->registry->create(new BossExplosion, $sprite);
-		$this->owned[$id] = true;
+		$this->owned->own($id);
 		$behavior->explosions++;
 	}
 
@@ -850,7 +852,7 @@ final class MiniBosses
 
 			$sprite = new Sprite($this->gids['spike-fragment'], $bomb->x, $bomb->y, .5, .5);
 			$id = $this->registry->create($fragment, $sprite);
-			$this->owned[$id] = true;
+			$this->owned->own($id);
 		}
 	}
 
@@ -1202,7 +1204,8 @@ final class MiniBosses
 			$this->registry->destroy($entity);
 		}
 
-		unset($this->owned[$entity], $this->bosses[$entity]);
+		$this->owned->disown($entity);
+		unset($this->bosses[$entity]);
 	}
 
 	/**
@@ -1219,11 +1222,7 @@ final class MiniBosses
 
 		$this->closed = true;
 
-		foreach(array_keys($this->owned) as $entity)
-		{
-			$this->retire($entity);
-		}
-
+		$this->owned->close();
 		$this->sources = $this->players = $this->bosses = [];
 	}
 }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace SanePhonics\Gameplay;
 
 use Phonics\Ecs\Query;
+use Phonics\Ecs\OwnedEntities;
 use Phonics\Ecs\Registry;
 use Phonics\Physics\Sweep;
 use SanePhonics\Effects\Rumble;
@@ -13,8 +14,8 @@ use Phonics\Render\Sprite;
 /** Reusable badnik contacts, player damage, score rewards, projectiles, and pop cleanup. */
 final class Badniks
 {
-	/** @var array<int,bool> Entity IDs owned by this level's badnik system. */
-	private array $owned = [];
+	/** Entities owned by this level's badnik system. */
+	private OwnedEntities $owned;
 	/** @var array<int,array{float,float}> Previous player centers for continuous contact tests. */
 	private array $players = [];
 	/** @var array<int,array{float,float}> Previous badnik centers for relative continuous tests. */
@@ -34,6 +35,7 @@ final class Badniks
 		, private Terrain $terrain
 		, private ?Rings $rings = null
 	){
+		$this->owned = new OwnedEntities($registry);
 	}
 
 	/**
@@ -52,7 +54,7 @@ final class Badniks
 		}
 
 		$id = $this->registry->create($badnik, $behavior, $sprite);
-		$this->owned[$id] = true;
+		$this->owned->own($id);
 		$this->badniks[$id] = [$badnik->x, $badnik->y - $badnik->height / 2];
 
 		return $id;
@@ -75,7 +77,7 @@ final class Badniks
 		$sprite->x = $projectile->x;
 		$sprite->y = $projectile->y;
 		$id = $this->registry->create($projectile, $sprite);
-		$this->owned[$id] = true;
+		$this->owned->own($id);
 
 		return $id;
 	}
@@ -242,7 +244,7 @@ final class Badniks
 		else
 		{
 			$this->registry->destroy($entity);
-			unset($this->owned[$entity]);
+			$this->owned->disown($entity);
 		}
 
 		return true;
@@ -644,7 +646,8 @@ final class Badniks
 			$this->registry->destroy($id);
 		}
 
-		unset($this->owned[$id], $this->badniks[$id]);
+		$this->owned->disown($id);
+		unset($this->badniks[$id]);
 	}
 
 	/**
@@ -661,11 +664,7 @@ final class Badniks
 
 		$this->closed = true;
 
-		foreach(array_keys($this->owned) as $id)
-		{
-			$this->retire($id);
-		}
-
+		$this->owned->close();
 		$this->players = $this->badniks = [];
 	}
 }
