@@ -7,6 +7,7 @@ use Phonics\Effects\Lifetime;
 /** Short-lived visual emitted throughout a defeated boss's explosion sequence. */
 final class BossExplosion extends Lifetime
 {
+
 	/**
 	 * Start the explosion.
 	 *

@@ -7,6 +7,7 @@ use Phonics\Effects\Lifetime;
 /** Short-lived visual left on a badnik entity after its gameplay components are removed. */
 final class BadnikExplosion extends Lifetime
 {
+
 	/**
 	 * Start the explosion.
 	 *

@@ -18,6 +18,7 @@ use SanePhonics\Gameplay\VehicleLoader;
  */
 final class TerrainCompiler
 {
+
 	/**
 	 * Convert Tiled collision shapes and directional gates into shared world-space terrain.
 	 *
@@ -32,7 +33,8 @@ final class TerrainCompiler
 			'surface' => self::grinding(...)
 			, 'skip' => self::skip(...)
 			, 'object' => self::object(...)
-		], ...$maps);
+		], ...$maps
+		);
 
 		return $terrain;
 	}
@@ -66,7 +68,8 @@ final class TerrainCompiler
 			|| BendableBridges::matches($object)
 			|| in_array(strtolower(($object['class'] ?? '') ?: ($object['type'] ?? '')), [
 				'grapple-point', 'grapplepoint', 'rope-anchor', 'ropeanchor'
-			], true);
+			], true
+			);
 	}
 
 	/**
@@ -79,8 +82,13 @@ final class TerrainCompiler
 	 * @param callable $project Maps object-space points to world space.
 	 * @return bool Always true: Sane decides every object itself.
 	 */
-	private static function object(Terrain $terrain, array $object, Layer $layer, int $collisionLayer, callable $project): bool
-	{
+	private static function object(
+		Terrain $terrain
+		, array $object
+		, Layer $layer
+		, int $collisionLayer
+		, callable $project
+	): bool {
 		$layerGrinding = (bool)($layer->properties['grinding'] ?? $layer->properties['grind'] ?? false);
 		$props = Loader::properties($object['properties'] ?? []);
 		$class = ($object['class'] ?? '')?:($object['type'] ?? '');

@@ -7,6 +7,7 @@ use Phonics\Effects\Lifetime;
 /** Short-lived explosion rendered when an intact monitor breaks. */
 final class MonitorExplosion extends Lifetime
 {
+
 	/**
 	 * Start the explosion.
 	 *

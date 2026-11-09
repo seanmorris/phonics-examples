@@ -7,6 +7,7 @@ use Phonics\Effects\Lifetime;
 /** Timed screen icon released upward from a broken monitor. */
 final class MonitorPopup extends Lifetime
 {
+
 	/**
 	 * Start a popup at the monitor's screen.
 	 *

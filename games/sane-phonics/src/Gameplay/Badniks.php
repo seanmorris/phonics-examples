@@ -630,7 +630,9 @@ final class Badniks
 			, ($aTo[1] - $aFrom[1]) - ($bTo[1] - $bFrom[1])
 		];
 
-		return Sweep::overlaps(Sweep::box($origin[0], $origin[1], $movement[0], $movement[1], 0, 0, $halfWidth, $halfHeight));
+		return Sweep::overlaps(
+			Sweep::box($origin[0], $origin[1], $movement[0], $movement[1], 0, 0, $halfWidth, $halfHeight)
+		);
 	}
 
 	/**

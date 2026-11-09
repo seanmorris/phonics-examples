@@ -7,6 +7,7 @@ use Phonics\Effects\Lifetime;
 /** Ballistic state, recovery delay, and expiry for one ring scattered by player damage. */
 final class ScatteredRing extends Lifetime
 {
+
 	/**
 	 * Configure one recoverable or decorative ring in a damage burst.
 	 *

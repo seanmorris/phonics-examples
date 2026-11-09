@@ -7,6 +7,7 @@ use Phonics\Effects\Lifetime;
 /** Small owner-tagged projectile with delayed launch, gravity, and a bounded lifetime. */
 final class BadnikProjectile extends Lifetime
 {
+
 	/**
 	 * Create one projectile in world space.
 	 *
