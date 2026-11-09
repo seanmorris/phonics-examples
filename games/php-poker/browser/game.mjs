@@ -259,15 +259,16 @@ function blobDataUrl(blob)
 
 export function activate({module, canvas, session, services})
 {
-	if(!canvas.getContext('webgl2',{alpha:false,antialias:true,depth:false,stencil:false}))
-		throw new Error('PHP Poker requires WebGL2');
+	const shell=new services.GameShell({module,canvas,session,title:'PHP Poker'});
+	shell.context({alpha:false,antialias:true,depth:false,stencil:false});
+	const {signal}=shell;
 	const originalStyle=canvas.getAttribute('style'),originalTabIndex=canvas.getAttribute('tabindex'),originalLabel=canvas.getAttribute('aria-label');
 	const originalDescription=canvas.getAttribute('aria-describedby');
 	canvas.style.cssText='display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;touch-action:none;outline:none;background:#1f8f45;cursor:default';
 	canvas.tabIndex=Math.max(0,canvas.tabIndex);
 	canvas.setAttribute('aria-label','PHP Poker. F folds, C checks or calls, B bets, 1 to 5 select cards and D draws. Alt G opens Game and Alt P opens Poker. Controller directional controls move focus, confirm selects, back returns, and Start asks before leaving the table.');
 
-	let viewport='[1280,720,1]',latest=null,closed=false;
+	let viewport='[1280,720,1]',latest=null;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
 	let online=null,onlineView=null,onlineWork=Promise.resolve(),submitting=false,awaitingConfirmation=false;
 	// A room write is retrying after a dropped connection; tableEnded stops those retries once the room ends the table.
@@ -293,36 +294,23 @@ export function activate({module, canvas, session, services})
 		pointer={...local(event),down:pointer.down};
 		updateCursor();
 	};
-	const measure=()=>{
-		const box=canvas.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);
-		if(box.width<1||box.height<1)return;
-		viewport=JSON.stringify([Math.max(1,Math.round(box.width*dpr)),Math.max(1,Math.round(box.height*dpr)),dpr]);
+	// The pointer is re-projected into the new framebuffer space as soon as the canvas is measured again.
+	shell.measure({observe:canvas,dprCap:2,skipEmpty:true,initial:viewport,format:(width,height,dpr)=>{
+		viewport=JSON.stringify([width,height,dpr]);
 		if(pointerClient)movePointer(pointerClient);
-	};
-	const resize=new ResizeObserver(measure);resize.observe(canvas);measure();
+		return viewport;
+	}});
 
 	// The engine's corner shortcut toggles fullscreen for the canvas's frame, so it stays on screen with the lobby.
 	// Poker has no sound, so its mute button stays hidden.
-	const frame=services?.QuickControls?canvas.closest?.('#game-frame')??canvas.parentElement:null;
-	const quick=frame?new services.QuickControls(frame,frame):null;
-	let fullscreenBusy=false,fullscreenError='';
-	const updateFullscreen=()=>quick?.setFullscreen(document.fullscreenElement===frame
-		,Boolean(document.fullscreenEnabled&&frame.requestFullscreen),fullscreenBusy,fullscreenError);
-	const toggleFullscreen=async()=>{
-		if(fullscreenBusy)return;
-		fullscreenBusy=true;fullscreenError='';updateFullscreen();
-		try{await(document.fullscreenElement===frame?document.exitFullscreen():frame.requestFullscreen());}
-		catch(error){fullscreenError=closed?'':error.message;}
-		finally{fullscreenBusy=false;if(!closed){updateFullscreen();canvas.focus({preventScroll:true});}}
-	};
-	if(quick)quick.muteButton.hidden=true;
-	quick?.fullscreenButton.addEventListener('click',()=>{void toggleFullscreen();});
-	if(quick)document.addEventListener('fullscreenchange',updateFullscreen);
-	updateFullscreen();
+	const frame=canvas.closest?.('#game-frame')??canvas.parentElement;
+	const quick=new services.QuickControls(frame,frame);
+	quick.muteButton.hidden=true;
+	shell.fullscreen({target:frame,quick});
 
 	// Input queues drain once per PHP frame. Positions are device pixels in the canvas's own framebuffer space.
 	const onKey=event=>{
-		if(closed||event.ctrlKey||event.metaKey)return;
+		if(shell.closed||event.ctrlKey||event.metaKey)return;
 		const key=event.key.length===1?event.key.toLowerCase():event.key.toLowerCase();
 		if(event.altKey)
 		{
@@ -354,22 +342,22 @@ export function activate({module, canvas, session, services})
 	};
 	const onCancel=event=>{if(event.pointerId===activePointer)releasePointer();};
 	const onWheel=event=>{
-		if(closed||latest?.screen!=='help'||event.deltaY===0)return;
+		if(shell.closed||latest?.screen!=='help'||event.deltaY===0)return;
 		event.preventDefault();keys.push({key:event.deltaY>0?'arrowdown':'arrowup'});
 	};
 	const clearInput=()=>{keys=[];clicks=[];releasePointer();onLeave();};
 	const onVisibility=()=>{if(document.visibilityState==='hidden')clearInput();};
-	canvas.addEventListener('keydown',onKey);
-	canvas.addEventListener('pointermove',onMove);
-	canvas.addEventListener('pointerleave',onLeave);
-	canvas.addEventListener('pointerdown',onDown);
-	canvas.addEventListener('pointerup',onUp);
-	canvas.addEventListener('pointercancel',onCancel);
-	canvas.addEventListener('wheel',onWheel,{passive:false});
-	canvas.addEventListener('lostpointercapture',onCancel);
-	canvas.addEventListener('blur',clearInput);
-	addEventListener('blur',clearInput);
-	document.addEventListener('visibilitychange',onVisibility);
+	canvas.addEventListener('keydown',onKey,{signal});
+	canvas.addEventListener('pointermove',onMove,{signal});
+	canvas.addEventListener('pointerleave',onLeave,{signal});
+	canvas.addEventListener('pointerdown',onDown,{signal});
+	canvas.addEventListener('pointerup',onUp,{signal});
+	canvas.addEventListener('pointercancel',onCancel,{signal});
+	canvas.addEventListener('wheel',onWheel,{passive:false,signal});
+	canvas.addEventListener('lostpointercapture',onCancel,{signal});
+	canvas.addEventListener('blur',clearInput,{signal});
+	addEventListener('blur',clearInput,{signal});
+	document.addEventListener('visibilitychange',onVisibility,{signal});
 
 	// Accessible mirror of the authorized status: one live line for the message and turn, nothing private.
 	const live=document.createElement('div');
@@ -394,7 +382,7 @@ export function activate({module, canvas, session, services})
 	// Card art arrives from PHP as SVG text. Matrix avatars can append cells and replace the atlas later.
 	let cardArt=null,atlas=null,rasterising=null,rebuildAtlas=false,dynamicIcons={};
 	const requestAtlas=()=>{
-		if(closed||!cardArt)return;
+		if(shell.closed||!cardArt)return;
 		if(rasterising){rebuildAtlas=true;return;}
 		rebuildAtlas=false;
 		const art={...cardArt,icons:{...(cardArt.icons??{}),...dynamicIcons}};
@@ -403,22 +391,22 @@ export function activate({module, canvas, session, services})
 				rasterising=null;if(rebuildAtlas)requestAtlas();
 			});
 	};
-	module.pokerCardArt=json=>{
-		if(closed)return;
+	shell.bridge('pokerCardArt',json=>{
+		if(shell.closed)return;
 		cardArt=JSON.parse(json);requestAtlas();
-	};
-	module.pokerCardAtlas=()=>{
+	});
+	shell.bridge('pokerCardAtlas',()=>{
 		if(!atlas)return '';
 		const result=atlas;atlas=null;return result;
-	};
+	});
 
-	module.pokerViewport=()=>viewport;
-	module.pokerSeed=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),byte=>byte.toString(16).padStart(2,'0')).join('');
-	module.pokerInput=()=>{
+	shell.bridge('pokerViewport',()=>viewport);
+	shell.bridge('pokerSeed',()=>shell.seedHex(32));
+	shell.bridge('pokerInput',()=>{
 		const frame={controls:keys,pointer:{...pointer,clicks},hidden:document.visibilityState==='hidden'};
 		keys=[];clicks=[];
 		return JSON.stringify(frame);
-	};
+	});
 	let commands=[];
 	// The host picks online house rules in the lobby's House rules dialog; the last choice pre-fills the next table.
 	const lastOnlineSettings=()=>{
@@ -427,7 +415,7 @@ export function activate({module, canvas, session, services})
 	};
 	// A table's house rules open by themselves once, the first time this browser seats or watches it.
 	let houseRules=null;
-	module.pokerCommands=(generatedJson='[]')=>{
+	shell.bridge('pokerCommands',(generatedJson='[]')=>{
 		const queued=pokerCommandBatch(generatedJson,commands);commands=[];
 		if(online&&watching)return '[]';
 		if(online)
@@ -440,10 +428,10 @@ export function activate({module, canvas, session, services})
 			return '[]';
 		}
 		return JSON.stringify(queued);
-	};
-	module.pokerOnlineView=()=>onlineView?JSON.stringify(onlineView):'';
-	module.pokerStatus=json=>{
-		latest=JSON.parse(json);canvas.dataset.phpPoker=json;
+	});
+	shell.bridge('pokerOnlineView',()=>onlineView?JSON.stringify(onlineView):'');
+	shell.status('pokerStatus',{dataset:'phpPoker',handler:state=>{
+		latest=state;
 		updateCursor();
 		if(latest.ui?.local==='online'&&!lobbyOpening&&!lobbyVisible)
 		{
@@ -460,7 +448,7 @@ export function activate({module, canvas, session, services})
 		const own=latest.screen==='table'?latest.players?.[0]?.cards:[];
 		const description=own?.length?'Your hand: '+own.map((card,index)=>`${index+1}: ${cardName(card)}`).join('; ')+'.':'';
 		if(description!==described){described=description;hand.textContent=description;}
-	};
+	}});
 
 	const onlinePresentation=view=>decorateOnlineView(view,{
 			players:onlinePlayers,localPlayer:onlineLocal,profiles:onlineProfiles,avatars:onlineAvatars
@@ -489,13 +477,13 @@ export function activate({module, canvas, session, services})
 			{
 				try{profile=await provider.userProfile(id);}catch{}
 			}
-			if(closed||version!==identityVersion)return;
+			if(shell.closed||version!==identityVersion)return;
 			onlineProfiles.set(id,profile);updateOnlineView();
 			if(!profile.avatarUrl||typeof provider.avatarThumbnail!=='function')return;
 			try
 			{
 				const source=await blobDataUrl(await provider.avatarThumbnail(profile.avatarUrl,{size:96}));
-				if(closed||version!==identityVersion)return;
+				if(shell.closed||version!==identityVersion)return;
 				const key=id===detail.localPlayer?'matrix-local':'matrix-opponent';
 				dynamicIcons={...dynamicIcons,[key]:{source,round:true}};onlineAvatars.set(id,key);
 				requestAtlas();updateOnlineView();
@@ -611,7 +599,7 @@ export function activate({module, canvas, session, services})
 		// Intents queue for PHP; generation and revision default from the last status when the caller omits them,
 		// and explicitly supplied stale values are kept so tests can prove they are rejected.
 		, command(intent){
-			if(closed||!intent||typeof intent!=='object')return false;
+			if(shell.closed||!intent||typeof intent!=='object')return false;
 			const queued={...intent};
 			if(latest&&!['start','menu','resume','help','settings','pace','save-game','load-game'].includes(queued.type))
 			{
@@ -623,29 +611,18 @@ export function activate({module, canvas, session, services})
 	canvas.phpPokerDebug=debug;
 	session.phpPoker=debug;
 
-	return ()=>{
-		if(closed)return;closed=true;resize.disconnect();
-		if(quick)
-		{
-			document.removeEventListener('fullscreenchange',updateFullscreen);quick.close();
-			if(document.fullscreenElement===frame)void document.exitFullscreen().catch(()=>{});
-		}
+	shell.onClose(()=>{
+		quick.close();
 		watching=false;seatRun++;houseRules=null;
 		session.lobby.protocol.removeEventListener('closed',lobbyClosed);
 		clearInput();
-		canvas.removeEventListener('keydown',onKey);canvas.removeEventListener('pointermove',onMove);
-		canvas.removeEventListener('pointerleave',onLeave);
-		canvas.removeEventListener('pointerdown',onDown);canvas.removeEventListener('pointerup',onUp);canvas.removeEventListener('pointercancel',onCancel);
-		canvas.removeEventListener('wheel',onWheel);
-		canvas.removeEventListener('lostpointercapture',onCancel);canvas.removeEventListener('blur',clearInput);
-		document.removeEventListener('visibilitychange',onVisibility);
-		removeEventListener('blur',clearInput);
 		live.remove();hand.remove();
-		for(const name of ['pokerCardArt','pokerCardAtlas','pokerViewport','pokerSeed','pokerInput','pokerCommands','pokerOnlineView','pokerStatus'])delete module[name];
-		delete canvas.dataset.phpPoker;delete canvas.phpPokerDebug;delete session.phpPoker;
+		delete canvas.phpPokerDebug;delete session.phpPoker;
 		if(originalStyle===null)canvas.removeAttribute('style');else canvas.setAttribute('style',originalStyle);
 		if(originalTabIndex===null)canvas.removeAttribute('tabindex');else canvas.setAttribute('tabindex',originalTabIndex);
 		if(originalLabel===null)canvas.removeAttribute('aria-label');else canvas.setAttribute('aria-label',originalLabel);
 		if(originalDescription===null)canvas.removeAttribute('aria-describedby');else canvas.setAttribute('aria-describedby',originalDescription);
-	};
+	});
+
+	return ()=>shell.close();
 }
