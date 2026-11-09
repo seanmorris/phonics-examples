@@ -18,6 +18,8 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 	await page.evaluate(async({source,samples})=>{
 		document.body.innerHTML='<div style="width:800px;height:450px"><canvas></canvas></div>';
 		const {activate}=await import(URL.createObjectURL(new Blob([source],{type:'text/javascript'})));
+		// The host expects the engine services that Phonics.run would hand it; take them from the served engine.
+		const [{GameShell},{QuickControls}]=await Promise.all([import('/engine/browser/GameShell.mjs'),import('/engine/browser/QuickControls.mjs')]);
 		const createFilter=AudioContext.prototype.createBiquadFilter,createSource=AudioContext.prototype.createBufferSource;
 		const decode=AudioContext.prototype.decodeAudioData,sources=new Map,peaks=new WeakMap;
 		globalThis.impactVoices=[];globalThis.impactFilters=[];
@@ -52,7 +54,7 @@ test('recorded ball, rail and pocket voices follow their contact strength', asyn
 		const module={};globalThis.impactModule=module;
 		globalThis.disposeImpact=activate({module,canvas:document.querySelector('canvas'),session:{lobby:{
 			protocol:new EventTarget,attachGame:()=>({}),open:async()=>{}
-		}}});
+		}},services:{GameShell,QuickControls}});
 		module.billiardsSamples(JSON.stringify(samples));
 	}, {source,samples});
 	await page.keyboard.press('Space');
