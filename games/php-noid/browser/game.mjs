@@ -1,8 +1,9 @@
 /** Accessible game UI, local scores, and original synthesized sound effects. */
 export function activate({module, canvas, onClose, session, services, assets, packageUrl})
 {
+	const shell = new services.GameShell({module, canvas, session, title: 'PHP-Noid'});
 	// Pixel artwork owns the first context request; multisampling would soften moving edges.
-	if(!canvas.getContext('webgl2', {antialias: false})) throw Error('PHP-Noid requires WebGL2');
+	shell.context({antialias: false});
 
 	const objectUrls = [];
 
@@ -226,38 +227,28 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 	};
 
 	for(const element of ui.querySelectorAll('.php-noid-pixel')) setPixelText(element, element.textContent);
-	// Restore the caller's exact canvas position when this session closes.
-	const slot = document.createComment('PHP-Noid canvas');
-	canvas.before(slot, ui);
+	// The shell restores the caller's exact canvas position when this session closes.
 	const screen = ui.querySelector('.php-noid-screen');
-	screen.append(canvas);
+	shell.mount(ui, {screen});
 	screen.classList.add('php-noid-title-active');
 	const notice = ui.querySelector('.php-noid-notice');
 	const transition = ui.querySelector('.php-noid-transition');
 	const title = ui.querySelector('.php-noid-title');
 	const titleButtons = [...ui.querySelectorAll('.php-noid-title-menu button')];
 	const infoBack = ui.querySelector('.php-noid-info-back');
-	const controller = new AbortController();
-	const {signal} = controller;
-	let titleAction = '';
-
-	module.phpNoidAction = () => {
-		const action = titleAction;
-		titleAction = '';
-
-		return action;
-	};
+	const {signal} = shell;
+	const action = shell.action('phpNoidAction');
 
 	for(const button of titleButtons)
 	{
 		button.addEventListener('click', () => {
-			titleAction = button.dataset.action;
+			action.act(button.dataset.action);
 			canvas.focus({preventScroll: true});
 		}, {signal});
 	}
 
 	infoBack.addEventListener('click', () => {
-		titleAction = 'close-info';
+		action.act('close-info');
 		canvas.focus({preventScroll: true});
 	}, {signal});
 
@@ -329,46 +320,23 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 
 	showScores();
 
-	module.phpNoidBest = () => scores[0]?.score ?? 0;
+	shell.bridge('phpNoidBest', () => scores[0]?.score ?? 0);
 	let audio, recordedRun, legendReady = false;
-	let muted = read('phonics.muted') === 'true';
 	const frame = canvas.closest('#game-frame') ?? ui;
 	const shortcuts = new services.QuickControls(ui.querySelector('.php-noid-screen'), frame);
-	const mute = shortcuts.muteButton, fullscreen = shortcuts.fullscreenButton;
+	const mute = shell.mute({key: 'phonics.muted', quick: shortcuts});
 
-	const updateMute = () => shortcuts.setMuted(muted);
-
-	updateMute();
-
-	mute?.addEventListener('click', () => {
-		muted = !muted;
-		write('phonics.muted', String(muted));
-		updateMute();
-		canvas.focus({preventScroll: true});
-	}, {signal});
-
-	let fullscreenBusy = false, fullscreenOperation = Promise.resolve();
-	let fullscreenError = '';
-	let wasFullscreen = document.fullscreenElement === frame;
+	let wasFullscreen = document.fullscreenElement === frame, laidOut = false;
 
 	frame.classList.add('php-noid-frame');
 
-	// The frame fills its host on the page and in fullscreen; the 427:240 screen is the largest that fits, and the
-	// frame's background letterboxes the rest.
+	/**
+	 * The frame fills its host on the page and in fullscreen; the 427:240 screen is the largest that fits, and the
+	 * frame's background letterboxes the rest.
+	 */
 	const fitFrame = () => {
 		const width = Math.max(0, Math.min(frame.clientWidth, frame.clientHeight * 427 / 240));
 		ui.style.setProperty('--php-noid-fit-width', `${width}px`);
-	};
-
-	const updateFullscreen = () => {
-		const active = document.fullscreenElement === frame;
-
-		shortcuts.setFullscreen(
-			active
-			, document.fullscreenEnabled && frame.requestFullscreen
-			, fullscreenBusy
-			, fullscreenError
-		);
 	};
 
 	let titleSize;
@@ -389,11 +357,12 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 
 	measureTitle();
 
-	module.phpNoidTitleSize = () => titleSize;
+	shell.bridge('phpNoidTitleSize', () => titleSize);
 	window.addEventListener('resize', measureTitle, {signal});
 	window.addEventListener('scroll', measureTitle, {signal, capture: true});
 
 	const resize = new ResizeObserver(() => {
+		laidOut = true;
 		fitFrame();
 		measureTitle();
 	});
@@ -403,50 +372,16 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 
 	const dimensions = new MutationObserver(fitFrame);
 	dimensions.observe(canvas, {attributes: true, attributeFilter: ['width', 'height']});
-	updateFullscreen();
+	// The frame is fitted once it has a layout; fitting it before the first resize observation collapses it.
+	shell.fullscreen({target: frame, quick: shortcuts, onChange: () => { if(laidOut) fitFrame(); }});
 
 	document.addEventListener('fullscreenchange', () => {
 		const active = document.fullscreenElement === frame;
-		updateFullscreen();
-		fitFrame();
 
 		if(active || wasFullscreen) canvas.focus({preventScroll: true});
 
 		wasFullscreen = active;
 	}, {signal});
-
-	const toggleFullscreen = async () => {
-		if(fullscreenBusy) return;
-
-		fullscreenBusy = true;
-
-		fullscreenError = '';
-
-		updateFullscreen();
-
-		try
-		{
-			if(document.fullscreenElement === frame) await document.exitFullscreen();
-			else await frame.requestFullscreen();
-		}
-		catch(error)
-		{
-			if(!signal.aborted) fullscreenError = error.message;
-		}
-		finally
-		{
-			fullscreenBusy = false;
-
-			if(!signal.aborted)
-			{
-				updateFullscreen();
-				fitFrame();
-				canvas.focus({preventScroll: true});
-			}
-		}
-	};
-
-	fullscreen?.addEventListener('click', () => { fullscreenOperation = toggleFullscreen(); }, {signal});
 
 	const unlock = () => { audio ??= new AudioContext(); audio.resume(); };
 
@@ -460,211 +395,196 @@ export function activate({module, canvas, onClose, session, services, assets, pa
 	}, {signal});
 
 	canvas.addEventListener('keydown', unlock, {signal});
-	canvas.addEventListener('contextmenu', event => event.preventDefault(), {signal});
+	shell.suppressContextMenu();
 	const sounds = {hit: [520, .04], power: [880, .16], loss: [110, .3], stage: [1040, .25], shoot: [220, .06]};
 
-	module.phpNoidStatus = json => {
-		const state = JSON.parse(json);
-		canvas.dataset.phpNoid = json;
-		screen.classList.toggle('php-noid-title-active', Boolean(state.title));
-		title.hidden = !state.title || Boolean(state.phpInfo?.open);
-		infoBack.hidden = !state.phpInfo?.open || !state.phpInfo?.backHint;
+	shell.status('phpNoidStatus', {
+		dataset: 'phpNoid'
+		, handler: state => {
+			screen.classList.toggle('php-noid-title-active', Boolean(state.title));
+			title.hidden = !state.title || Boolean(state.phpInfo?.open);
+			infoBack.hidden = !state.phpInfo?.open || !state.phpInfo?.backHint;
 
-		if(!infoBack.hidden)
-		{
-			const [x, y, width, height] = state.phpInfo.backHint;
-			infoBack.style.left = `${100 * x / canvas.width}%`;
-			infoBack.style.top = `${100 * y / canvas.height}%`;
-			infoBack.style.width = `${100 * width / canvas.width}%`;
-			infoBack.style.height = `${100 * height / canvas.height}%`;
-		}
-
-		for(const button of titleButtons)
-		button.classList.toggle('is-selected', button.dataset.action === state.titleSelection);
-
-		const prompt = state.paused
-			? 'Paused · P / right click to resume'
-			: state.phase === 'gameover'
-				? 'Game over · Fire to continue · R to restart'
-				: state.phase === 'complete'
-					? 'Campaign complete · Fire to play again'
-					: state.phase === 'clearing'
-						? 'Level clear'
-						: state.phase === 'loading'
-							? 'Loading stage…'
-							: state.phase === 'entering' ? 'Get ready' : 'Click / Space to launch & fire';
-
-		const compactPrompt = state.paused
-			? 'Paused'
-			: state.phase === 'gameover'
-				? 'Game over'
-				: state.phase === 'complete'
-					? 'Complete'
-					: state.phase === 'clearing'
-						? 'Level clear'
-						: state.phase === 'loading'
-							? 'Loading…'
-							: state.phase === 'entering' ? 'Get ready' : 'Launch / Fire';
-
-		const transitioning = ['clearing', 'loading', 'entering', 'complete'].includes(state.phase);
-
-		if(transition.hidden === transitioning) transition.hidden = !transitioning;
-
-		if(transitioning)
-		{
-			const label = state.phase === 'complete'
-				? 'CAMPAIGN CLEAR'
-				: `LEVEL ${String(
-					(state.phase === 'loading' ? state.nextStage ?? state.stage : state.stage) + 1
-				).padStart(
-					2
-					, '0'
-				)}`;
-
-			const title = state.phase === 'clearing'
-				? 'Level clear'
-				: state.phase === 'loading'
-					? 'Loading…'
-					: state.phase === 'complete' ? 'All levels cleared' : state.name;
-
-			setText(instruments['transition-label'], label);
-			setText(instruments['transition-title'], title);
-			const opacity = String(state.fade);
-
-			if(transition.style.opacity !== opacity) transition.style.opacity = opacity;
-		}
-
-		setText(instruments.score, String(state.score).padStart(6, '0'));
-		setText(instruments.best, String(Math.max(state.score, scores[0]?.score ?? 0)).padStart(6, '0'));
-		setText(instruments.level, `${String(state.stage + 1).padStart(2, '0')} / ${state.stageCount}`);
-		setText(instruments['stage-name'], state.name);
-		setText(instruments.lives, state.infiniteLives ? '× Infinite' : `× ${state.lives}`);
-		setText(instruments.prompt, screen.clientWidth <= 480 ? compactPrompt : prompt);
-		setText(notice, state.error || (state.banner > 0 ? state.notice || state.name : ''));
-
-		if(state.lives !== lastLives)
-		{
-			lastLives = state.lives;
-			lifeIcons.forEach((icon, index) => { icon.hidden = index >= state.lives; });
-		}
-
-		for(const [kind, row] of powerRows)
-		{
-			if(state.powers[kind] > 0) continue;
-
-			row.element.remove();
-			powerRows.delete(kind);
-		}
-
-		for(const [kind, seconds] of Object.entries(state.powers))
-		{
-			const power = state.capsules[kind];
-			let row = powerRows.get(kind);
-
-			if(!row)
+			if(!infoBack.hidden)
 			{
-				const element = document.createElement('div');
-				element.className = 'php-noid-power-row';
-				element.dataset.power = kind;
-
-				element.style.setProperty(
-					'--power-color'
-					, `rgb(${power.color.map(value => Math.round(value * 255)).join(' ')})`
-				);
-
-				element.innerHTML = '<b class="php-noid-power-symbol" aria-hidden="true"></b>'
-					+ '<strong class="php-noid-power php-noid-pixel"></strong><small class="php-noid-power-time php-noid-pixel"></small>'
-					+ '<progress class="php-noid-power-meter"></progress>';
-
-				element.querySelector('b').textContent = power.symbol;
-				setPixelText(element.querySelector('strong'), power.label);
-				row = {element, time: element.querySelector('small'), meter: element.querySelector('progress')};
-				row.meter.max = power.duration;
-				row.meter.setAttribute('aria-label', `${power.label} time remaining`);
-				powerRows.set(kind, row);
-				instruments.powers.append(element);
+				const [x, y, width, height] = state.phpInfo.backHint;
+				infoBack.style.left = `${100 * x / canvas.width}%`;
+				infoBack.style.top = `${100 * y / canvas.height}%`;
+				infoBack.style.width = `${100 * width / canvas.width}%`;
+				infoBack.style.height = `${100 * height / canvas.height}%`;
 			}
 
-			const time = Math.max(0, Math.ceil(seconds));
-			setText(row.time, `${time}s`);
-			// Match HTML progress clamping so extended powers don't repaint every frame.
-			const remaining = Math.min(time, row.meter.max);
+			for(const button of titleButtons)
+			button.classList.toggle('is-selected', button.dataset.action === state.titleSelection);
 
-			if(row.meter.value !== remaining) row.meter.value = remaining;
-		}
+			const prompt = state.paused
+				? 'Paused · P / right click to resume'
+				: state.phase === 'gameover'
+					? 'Game over · Fire to continue · R to restart'
+					: state.phase === 'complete'
+						? 'Campaign complete · Fire to play again'
+						: state.phase === 'clearing'
+							? 'Level clear'
+							: state.phase === 'loading'
+								? 'Loading stage…'
+								: state.phase === 'entering' ? 'Get ready' : 'Click / Space to launch & fire';
 
-		if(instruments.standard.hidden !== Boolean(powerRows.size))
-		instruments.standard.hidden = Boolean(powerRows.size);
+			const compactPrompt = state.paused
+				? 'Paused'
+				: state.phase === 'gameover'
+					? 'Game over'
+					: state.phase === 'complete'
+						? 'Complete'
+						: state.phase === 'clearing'
+							? 'Level clear'
+							: state.phase === 'loading'
+								? 'Loading…'
+								: state.phase === 'entering' ? 'Get ready' : 'Launch / Fire';
 
-		if(!legendReady)
-		{
-			legendReady = true;
+			const transitioning = ['clearing', 'loading', 'entering', 'complete'].includes(state.phase);
 
-			for(const capsule of Object.values(state.capsules))
+			if(transition.hidden === transitioning) transition.hidden = !transitioning;
+
+			if(transitioning)
 			{
-				const entry = document.createElement('span'), symbol = document.createElement('b');
-				symbol.textContent = capsule.symbol;
-				symbol.style.backgroundColor = `rgb(${capsule.color.map(value => Math.round(value * 255)).join(' ')})`;
-				entry.append(symbol, capsule.label);
-				ui.querySelector('.php-noid-legend').append(entry);
+				const label = state.phase === 'complete'
+					? 'CAMPAIGN CLEAR'
+					: `LEVEL ${String(
+						(state.phase === 'loading' ? state.nextStage ?? state.stage : state.stage) + 1
+					).padStart(
+						2
+						, '0'
+					)}`;
+
+				const title = state.phase === 'clearing'
+					? 'Level clear'
+					: state.phase === 'loading'
+						? 'Loading…'
+						: state.phase === 'complete' ? 'All levels cleared' : state.name;
+
+				setText(instruments['transition-label'], label);
+				setText(instruments['transition-title'], title);
+				const opacity = String(state.fade);
+
+				if(transition.style.opacity !== opacity) transition.style.opacity = opacity;
 			}
-		}
 
-		if(['gameover', 'complete'].includes(state.phase) && recordedRun !== state.run)
-		{
-			recordedRun = state.run;
-			scores.push({score: state.score, stage: state.stage + 1, complete: state.phase === 'complete'});
-			scores.sort((a, b) => b.score - a.score || b.stage - a.stage);
-			scores = scores.slice(0, 10);
-			write(scoreKey, JSON.stringify(scores));
-			showScores();
-		}
+			setText(instruments.score, String(state.score).padStart(6, '0'));
+			setText(instruments.best, String(Math.max(state.score, scores[0]?.score ?? 0)).padStart(6, '0'));
+			setText(instruments.level, `${String(state.stage + 1).padStart(2, '0')} / ${state.stageCount}`);
+			setText(instruments['stage-name'], state.name);
+			setText(instruments.lives, state.infiniteLives ? '× Infinite' : `× ${state.lives}`);
+			setText(instruments.prompt, screen.clientWidth <= 480 ? compactPrompt : prompt);
+			setText(notice, state.error || (state.banner > 0 ? state.notice || state.name : ''));
 
-		for(const event of state.events)
-		{
-			if(muted || !sounds[event] || audio?.state !== 'running') continue;
+			if(state.lives !== lastLives)
+			{
+				lastLives = state.lives;
+				lifeIcons.forEach((icon, index) => { icon.hidden = index >= state.lives; });
+			}
 
-			const [frequency, duration] = sounds[event];
-			const oscillator = audio.createOscillator(), gain = audio.createGain();
-			oscillator.type = 'triangle';
-			oscillator.frequency.setValueAtTime(frequency, audio.currentTime);
-			gain.gain.setValueAtTime(.04, audio.currentTime);
-			gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + duration);
-			oscillator.connect(gain).connect(audio.destination);
-			oscillator.start();
-			oscillator.stop(audio.currentTime + duration);
-		}
-	};
+			for(const [kind, row] of powerRows)
+			{
+				if(state.powers[kind] > 0) continue;
 
-	onClose(async () => {
-		controller.abort();
-		resize.disconnect();
-		dimensions.disconnect();
+				row.element.remove();
+				powerRows.delete(kind);
+			}
 
-		try
-		{
-			await fullscreenOperation;
+			for(const [kind, seconds] of Object.entries(state.powers))
+			{
+				const power = state.capsules[kind];
+				let row = powerRows.get(kind);
 
-			if(document.fullscreenElement === frame) await document.exitFullscreen();
-		}
-		finally
-		{
-			frame.classList.remove('php-noid-frame');
-			ui.style.removeProperty('--php-noid-fit-width');
-			canvas.style.removeProperty('--php-noid-fullscreen-height');
-			updateFullscreen();
-			shortcuts.close();
-			slot.replaceWith(canvas);
-			ui.remove();
-			audio?.close();
-			canvas.style.touchAction = oldTouchAction;
-			delete canvas.dataset.phpNoid;
-			delete module.phpNoidStatus;
-			delete module.phpNoidAction;
-			delete module.phpNoidTitleSize;
-			delete module.phpNoidBest;
+				if(!row)
+				{
+					const element = document.createElement('div');
+					element.className = 'php-noid-power-row';
+					element.dataset.power = kind;
 
-			for(const url of objectUrls) URL.revokeObjectURL(url);
+					element.style.setProperty(
+						'--power-color'
+						, `rgb(${power.color.map(value => Math.round(value * 255)).join(' ')})`
+					);
+
+					element.innerHTML = '<b class="php-noid-power-symbol" aria-hidden="true"></b>'
+						+ '<strong class="php-noid-power php-noid-pixel"></strong><small class="php-noid-power-time php-noid-pixel"></small>'
+						+ '<progress class="php-noid-power-meter"></progress>';
+
+					element.querySelector('b').textContent = power.symbol;
+					setPixelText(element.querySelector('strong'), power.label);
+					row = {element, time: element.querySelector('small'), meter: element.querySelector('progress')};
+					row.meter.max = power.duration;
+					row.meter.setAttribute('aria-label', `${power.label} time remaining`);
+					powerRows.set(kind, row);
+					instruments.powers.append(element);
+				}
+
+				const time = Math.max(0, Math.ceil(seconds));
+				setText(row.time, `${time}s`);
+				// Match HTML progress clamping so extended powers don't repaint every frame.
+				const remaining = Math.min(time, row.meter.max);
+
+				if(row.meter.value !== remaining) row.meter.value = remaining;
+			}
+
+			if(instruments.standard.hidden !== Boolean(powerRows.size))
+			instruments.standard.hidden = Boolean(powerRows.size);
+
+			if(!legendReady)
+			{
+				legendReady = true;
+
+				for(const capsule of Object.values(state.capsules))
+				{
+					const entry = document.createElement('span'), symbol = document.createElement('b');
+					symbol.textContent = capsule.symbol;
+					const rgb = capsule.color.map(value => Math.round(value * 255)).join(' ');
+					symbol.style.backgroundColor = `rgb(${rgb})`;
+					entry.append(symbol, capsule.label);
+					ui.querySelector('.php-noid-legend').append(entry);
+				}
+			}
+
+			if(['gameover', 'complete'].includes(state.phase) && recordedRun !== state.run)
+			{
+				recordedRun = state.run;
+				scores.push({score: state.score, stage: state.stage + 1, complete: state.phase === 'complete'});
+				scores.sort((a, b) => b.score - a.score || b.stage - a.stage);
+				scores = scores.slice(0, 10);
+				write(scoreKey, JSON.stringify(scores));
+				showScores();
+			}
+
+			for(const event of state.events)
+			{
+				if(mute.muted || !sounds[event] || audio?.state !== 'running') continue;
+
+				const [frequency, duration] = sounds[event];
+				const oscillator = audio.createOscillator(), gain = audio.createGain();
+				oscillator.type = 'triangle';
+				oscillator.frequency.setValueAtTime(frequency, audio.currentTime);
+				gain.gain.setValueAtTime(.04, audio.currentTime);
+				gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + duration);
+				oscillator.connect(gain).connect(audio.destination);
+				oscillator.start();
+				oscillator.stop(audio.currentTime + duration);
+			}
 		}
 	});
+
+	shell.onClose(() => {
+		resize.disconnect();
+		dimensions.disconnect();
+		frame.classList.remove('php-noid-frame');
+		ui.style.removeProperty('--php-noid-fit-width');
+		canvas.style.removeProperty('--php-noid-fullscreen-height');
+		shortcuts.close();
+		audio?.close();
+		canvas.style.touchAction = oldTouchAction;
+
+		for(const url of objectUrls) URL.revokeObjectURL(url);
+	});
+
+	onClose(() => shell.close());
 }

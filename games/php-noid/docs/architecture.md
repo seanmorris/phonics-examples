@@ -14,4 +14,4 @@ Each playfield owns a persistent `CollisionWorld`. Registry additions and remova
 
 The scene mixes `ImageRenderer` for the current Tiled background with one batched `RectRenderer` pass for gameplay. The HUD uses integer-scaled bitmap text and maintains a hidden accessibility mirror only when visible values change. Context restoration rebuilds both passes.
 
-Stopping a session removes the HUD, browser listeners, audio, object URLs, collision listeners, and scoped resources. Stage transitions keep the game session alive while retiring only the previous stage scope.
+The browser host mounts its console frame around the canvas and runs the persisted mute, the fullscreen machine and the status, action and best-score bridges through the engine's `GameShell`. Stopping a session closes the shell, which removes the HUD, browser listeners, audio, object URLs and bridge functions, while collision listeners and scoped resources retire with the session. Stage transitions keep the game session alive while retiring only the previous stage scope.
