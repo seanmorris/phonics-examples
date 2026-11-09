@@ -22,7 +22,7 @@ use SanePhonics\Gameplay\WaterFeatures;
 use SanePhonics\Gameplay\WaterParticles;
 use SanePhonics\Physics\Body;
 use Phonics\Physics\Hit;
-use SanePhonics\Physics\MapTerrain;
+use SanePhonics\Physics\TerrainCompiler;
 use SanePhonics\Physics\Platformer;
 use SanePhonics\Physics\Terrain;
 use SanePhonics\Physics\WaterRegions;
@@ -235,7 +235,7 @@ final class DemoLevel
 			];
 		}
 
-		$this->terrain = MapTerrain::build($map);
+		$this->terrain = TerrainCompiler::build($map);
 		$this->waters = WaterRegions::fromMaps($map);
 		$this->lightDashes = new LightDashes($engine->entities);
 

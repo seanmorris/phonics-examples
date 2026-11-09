@@ -81,7 +81,7 @@ return [
 	, 'PhpWasmEngine\\Physics\\Body' => 'SanePhonics\\Physics\\Body'
 	, 'PhpWasmEngine\\Physics\\Platformer' => 'SanePhonics\\Physics\\Platformer'
 	, 'PhpWasmEngine\\Physics\\LayerSwitch' => 'SanePhonics\\Physics\\LayerSwitch'
-	, 'PhpWasmEngine\\Physics\\MapTerrain' => 'SanePhonics\\Physics\\MapTerrain'
+	, 'PhpWasmEngine\\Physics\\MapTerrain' => 'SanePhonics\\Physics\\TerrainCompiler'
 	, 'PhpWasmEngine\\Render\\WaterRenderer' => 'SanePhonics\\Render\\WaterRenderer'
 	, 'PhpWasmEngine\\Effects\\Rumble' => 'SanePhonics\\Effects\\Rumble'
 ];

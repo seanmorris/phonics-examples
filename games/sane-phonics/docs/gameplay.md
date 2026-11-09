@@ -479,10 +479,10 @@ a moving-boxes-2 compatibility alias. `WaterRegions::fromMaps()` applies map and
 offsets, including Tiled's bottom anchor for tile objects.
 
 ~~~php
-use SanePhonics\Physics\{Body,MapTerrain,Platformer,WaterRegions};
+use SanePhonics\Physics\{Body,Platformer,TerrainCompiler,WaterRegions};
 use SanePhonics\Render\WaterRenderer;
 
-$terrain = MapTerrain::build($map);
+$terrain = TerrainCompiler::build($map);
 $waters = WaterRegions::fromMaps($map);
 $movement = new Platformer($terrain, waters: $waters);
 $body = new Body(80, 100);
@@ -546,8 +546,9 @@ $engine->systems->add('water-features', [$features, 'update'], after: ['movement
 $engine->systems->add('water-particles', [$particles, 'update'], after: ['water-features']);
 ~~~
 
-`WaterRenderer` owns one scene framebuffer and one procedural RG displacement texture. It copies
-the scene once, then submits one clipped quad per visible region. Displacement phase uses world
+`WaterRenderer` captures the scene into a framework `RenderTarget` (colour texture, depth buffer
+and framebuffer) and owns one procedural RG displacement texture. It copies the scene once, then
+submits one clipped quad per visible region. Displacement phase uses world
 coordinates, so neighboring regions do not restart their waves. Call `restore()` after the map and
 sprite resources on WebGL recovery, and call `close()` before closing the device.
 
@@ -942,7 +943,7 @@ require 'autoload.php'; // Or Composer's vendor/autoload.php.
 
 use Phonics\Engine;
 use Phonics\Tiled\Loader;
-use SanePhonics\Physics\{Body,MapTerrain,Platformer};
+use SanePhonics\Physics\{Body,Platformer,TerrainCompiler};
 use Phonics\Render\{Camera,Device,MapRenderer};
 
 $map = (new Loader)->map('/assets/level.tmj');
@@ -950,7 +951,7 @@ $device = new Device(960,540);
 $engine = new Engine($device);
 $camera = new Camera(0,0,960,540);
 $renderer = new MapRenderer($map);
-$movement = new Platformer(MapTerrain::build($map));
+$movement = new Platformer(TerrainCompiler::build($map));
 $player = new Body(80,100,'runner');
 $entity = $engine->entities->create($player);
 
@@ -1294,7 +1295,8 @@ Terrain is spatially indexed and matching internal tile edges cancel. The platfo
 
 Select **Loop-de-loop** and hold Right to run the loop, then Left to return through it. [`examples/assets/loop.tmj`](../examples/assets/loop.tmj) splits an 8×8 circular tileset into a shared crown/floor and two selectable lower halves. `layer-switch` objects outside the entrances select the far wall. A `back=true` gate at the crown changes halves so the character can descend and exit. The rule follows ground speed around the surface, including the ceiling.
 
-`Body::$collisionLayer` defaults to 1. `MapTerrain::build` reads the integer `collisionLayer` property, or names such as `Collision 0`, `Collision 1`, and `Collision 2`. Zero is common terrain, always included. Set `collision=false` on decorative layers that reuse collision tiles. Rendering remains independent of collision selection. `Terrain::add($points, $oneWay, $collisionLayer)` supports the same planes for geometry created in PHP; `raycast(..., collisionLayer: $body->collisionLayer)` selects the plane for custom probes, and `castBody` reads it from the body.
+`Body::$collisionLayer` defaults to 1. `TerrainCompiler::build` (the framework's `MapTerrain::compile` with
+Sane's grinding, skip and object hooks) reads the integer `collisionLayer` property, or names such as `Collision 0`, `Collision 1`, and `Collision 2`. Zero is common terrain, always included. Set `collision=false` on decorative layers that reuse collision tiles. Rendering remains independent of collision selection. `Terrain::add($points, $oneWay, $collisionLayer)` supports the same planes for geometry created in PHP; `raycast(..., collisionLayer: $body->collisionLayer)` selects the plane for custom probes, and `castBody` reads it from the body.
 
 Gate crossings are swept over the full displacement and processed before later terrain impacts. After each switch, the remaining movement is recast against the destination. Blocked switches retry while overlapping; neither thin gates nor newly solid obstacles are skipped at high speed. The [layout and authoring guide](loops.md) includes the reference map analysis, a diagram, and all switch properties.
 

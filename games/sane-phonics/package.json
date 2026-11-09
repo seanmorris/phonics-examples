@@ -83,7 +83,7 @@
     "src/Gameplay/WaterSwitch.php",
     "src/Physics/Body.php",
     "src/Physics/LayerSwitch.php",
-    "src/Physics/MapTerrain.php",
+    "src/Physics/TerrainCompiler.php",
     "src/Physics/Platformer.php",
     "src/Physics/Terrain.php",
     "src/Physics/WaterLevel.php",

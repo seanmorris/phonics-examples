@@ -2,7 +2,7 @@
 declare(strict_types=1);
 use Phonics\Package\Context;
 use SanePhonics\Physics\Body;
-use SanePhonics\Physics\MapTerrain;
+use SanePhonics\Physics\TerrainCompiler;
 use SanePhonics\Physics\Platformer;
 use Phonics\Input\Controls;
 
@@ -26,7 +26,7 @@ static function(Context $context): void {
 	);
 
 	$map = $context->loader->map($context->world['start']);
-	$terrain = MapTerrain::build($map);
+	$terrain = TerrainCompiler::build($map);
 	$movement = new Platformer($terrain);
 
 	$context->system('sane.platformer', /**
