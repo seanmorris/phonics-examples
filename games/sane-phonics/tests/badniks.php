@@ -145,7 +145,7 @@ test('projectiles use continuous terrain casts and become harmless when their ow
 	);
 
 	$fast = $badniks->projectile(
-		new BadnikProjectile($owner, 0, 0, 6000, 0, gravity: 0, delay: 0, lifetime: 1)
+		new BadnikProjectile($owner, 0, 0, 6000, 0, gravity: 0, delay: 0, duration: 1)
 		, new Sprite(2)
 	);
 
@@ -159,7 +159,7 @@ test('projectiles use continuous terrain casts and become harmless when their ow
 	$badniks->sync($player, $body);
 
 	$stale = $badniks->projectile(
-		new BadnikProjectile($owner, 0, 0, 0, 0, gravity: 0, delay: 0, lifetime: 1)
+		new BadnikProjectile($owner, 0, 0, 0, 0, gravity: 0, delay: 0, duration: 1)
 		, new Sprite(2)
 	);
 

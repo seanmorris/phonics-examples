@@ -2,11 +2,11 @@
 declare(strict_types=1);
 namespace SanePhonics\Gameplay;
 
-/** Ballistic state, recovery delay, and expiry for one ring scattered by player damage. */
-final class ScatteredRing
-{
-	public float $age = 0;
+use Phonics\Effects\Lifetime;
 
+/** Ballistic state, recovery delay, and expiry for one ring scattered by player damage. */
+final class ScatteredRing extends Lifetime
+{
 	/**
 	 * Configure one recoverable or decorative ring in a damage burst.
 	 *
@@ -16,7 +16,7 @@ final class ScatteredRing
 	 * @param float $gravity Nonnegative downward acceleration in pixels per second squared.
 	 * @param float $launchDelay Nonnegative delay before ballistic motion begins in seconds.
 	 * @param float $pickupDelay Nonnegative delay before a collector may recover the ring.
-	 * @param float $lifetime Positive total lifetime including launch delay in seconds.
+	 * @param float $duration Positive total lifetime including launch delay in seconds.
 	 * @param float $restitution Collision-normal speed retained after a terrain bounce, from zero
 	 * to one.
 	 * @param int $collisionLayer Nonnegative terrain plane combined with shared collision geometry.
@@ -30,12 +30,12 @@ final class ScatteredRing
 		, public float $gravity = 1440
 		, public float $launchDelay = .1
 		, public float $pickupDelay = .8
-		, public float $lifetime = 6
+		, float $duration = 6
 		, public float $restitution = .75
 		, public int $collisionLayer = 1
 		, public bool $collectible = true
 	){
-		foreach([$vx, $vy, $gravity, $launchDelay, $pickupDelay, $lifetime, $restitution] as $value)
+		foreach([$vx, $vy, $gravity, $launchDelay, $pickupDelay, $duration, $restitution] as $value)
 		{
 			if(!is_finite($value))
 			{
@@ -43,10 +43,12 @@ final class ScatteredRing
 			}
 		}
 
-		if($owner < 1 || $gravity < 0 || $launchDelay < 0 || $pickupDelay < 0 || $lifetime <= 0
+		if($owner < 1 || $gravity < 0 || $launchDelay < 0 || $pickupDelay < 0 || $duration <= 0
 			|| $restitution < 0 || $restitution > 1 || $collisionLayer < 0
 		){
 			throw new \InvalidArgumentException('Scattered ring ownership, timing, or collision is invalid');
 		}
+
+		parent::__construct($duration);
 	}
 }

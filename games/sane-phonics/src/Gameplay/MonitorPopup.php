@@ -2,31 +2,31 @@
 declare(strict_types=1);
 namespace SanePhonics\Gameplay;
 
-/** Timed screen icon released upward from a broken monitor. */
-final class MonitorPopup
-{
-	public float $age = 0;
+use Phonics\Effects\Lifetime;
 
+/** Timed screen icon released upward from a broken monitor. */
+final class MonitorPopup extends Lifetime
+{
 	/**
-	 * Configure the screen icon's rise, fade, and lifetime.
+	 * Start a popup at the monitor's screen.
 	 *
-	 * @param float $x Initial world X coordinate in pixels.
-	 * @param float $y Initial world Y coordinate in pixels.
-	 * @param float $rise Positive upward travel in world pixels.
-	 * @param float $riseDuration Positive duration of the initial rise in seconds.
-	 * @param float $fadeStart Nonnegative age at which opacity begins decreasing.
-	 * @param float $lifetime Positive retirement age greater than the fade start.
-	 * @return void Initializes the popup at age zero.
+	 * @param float $x Horizontal centre in world pixels.
+	 * @param float $y Starting vertical centre in world pixels.
+	 * @param float $rise Pixels the popup climbs over its rise.
+	 * @param float $riseDuration Seconds the eased climb takes.
+	 * @param float $fadeStart Seconds before the fade to transparent begins.
+	 * @param float $duration Seconds the popup lasts in total.
+	 * @return void Rejects non-finite values, a non-positive rise or climb, or a fade that starts at or after the end.
 	 */
 	public function __construct(
 		public float $x
 		, public float $y
 		, public float $rise = 32
 		, public float $riseDuration = .25
-		, public float $fadeStart = .75
-		, public float $lifetime = 1
+		, float $fadeStart = .75
+		, float $duration = 1
 	){
-		foreach([$x, $y, $rise, $riseDuration, $fadeStart, $lifetime] as $value)
+		foreach([$x, $y, $rise, $riseDuration, $fadeStart, $duration] as $value)
 		{
 			if(!is_finite($value))
 			{
@@ -34,9 +34,11 @@ final class MonitorPopup
 			}
 		}
 
-		if($rise <= 0 || $riseDuration <= 0 || $fadeStart < 0 || $lifetime <= $fadeStart)
+		if($rise <= 0 || $riseDuration <= 0 || $fadeStart < 0 || $duration <= $fadeStart)
 		{
 			throw new \InvalidArgumentException('Monitor popup timing and travel are invalid');
 		}
+
+		parent::__construct($duration, $fadeStart);
 	}
 }

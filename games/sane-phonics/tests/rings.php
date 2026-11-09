@@ -162,7 +162,7 @@ test('damage rings scatter in bounded arcs, bounce continuously, delay pickup, a
 
 	$expiring = $scattered[2];
 	$expiry = $registry->get($expiring, ScatteredRing::class);
-	$expiry->age = $expiry->lifetime - .01;
+	$expiry->age = $expiry->duration - .01;
 	$rings->update($registry, .02);
 	check(!$registry->alive($expiring));
 	$rings->close();

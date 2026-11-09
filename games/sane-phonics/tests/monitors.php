@@ -159,6 +159,6 @@ test('monitor components reject invalid bounds, rewards, timing, and collision',
 	rejects(fn() => new Monitor(0, 0, points: -1));
 	rejects(fn() => new RingMonitorEffect(0));
 	rejects(fn() => new MonitorPopup(0, 0, rise: 0));
-	rejects(fn() => new MonitorPopup(0, 0, fadeStart: 1, lifetime: 1));
+	rejects(fn() => new MonitorPopup(0, 0, fadeStart: 1, duration: 1));
 	rejects(fn() => new MonitorExplosion(0));
 });

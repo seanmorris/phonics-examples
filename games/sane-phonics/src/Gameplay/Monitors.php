@@ -357,9 +357,9 @@ final class Monitors
 			}
 
 			$popup = $registry->get($id, MonitorPopup::class);
-			$popup->age = min($popup->lifetime, $popup->age + $dt);
+			$popup->advance($dt);
 
-			if($popup->age >= $popup->lifetime)
+			if($popup->expired())
 			{
 				$this->retire($id);
 
@@ -371,9 +371,7 @@ final class Monitors
 			$sprite = $registry->get($id, Sprite::class);
 			$sprite->x = $popup->x;
 			$sprite->y = $popup->y - $popup->rise * $progress;
-			$sprite->opacity = $popup->age <= $popup->fadeStart
-				? 1
-				: 1 - ($popup->age - $popup->fadeStart) / ($popup->lifetime - $popup->fadeStart);
+			$sprite->opacity = $popup->opacity();
 		}
 
 		foreach($registry->query(Query::all(MonitorExplosion::class, Sprite::class)) as $id)
@@ -384,16 +382,16 @@ final class Monitors
 			}
 
 			$explosion = $registry->get($id, MonitorExplosion::class);
-			$explosion->age = min($explosion->lifetime, $explosion->age + $dt);
+			$explosion->advance($dt);
 
-			if($explosion->age >= $explosion->lifetime)
+			if($explosion->expired())
 			{
 				$this->retire($id);
 
 				continue;
 			}
 
-			$registry->get($id, Sprite::class)->opacity = 1 - $explosion->age / $explosion->lifetime;
+			$registry->get($id, Sprite::class)->opacity = $explosion->opacity();
 		}
 	}
 

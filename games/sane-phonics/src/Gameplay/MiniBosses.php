@@ -865,16 +865,16 @@ final class MiniBosses
 		foreach($this->registry->query(BossExplosion::class) as $entity)
 		{
 			$effect = $this->registry->get($entity, BossExplosion::class);
-			$effect->age = min($effect->lifetime, $effect->age + $dt);
+			$effect->advance($dt);
 
-			if($effect->age >= $effect->lifetime)
+			if($effect->expired())
 			{
 				$this->retire($entity);
 
 				continue;
 			}
 
-			$this->registry->get($entity, Sprite::class)->opacity = 1 - $effect->age / $effect->lifetime;
+			$this->registry->get($entity, Sprite::class)->opacity = $effect->opacity();
 		}
 	}
 

@@ -2,20 +2,21 @@
 declare(strict_types=1);
 namespace SanePhonics\Gameplay;
 
+use Phonics\Effects\Lifetime;
+
 /** Identifies one finite splash or body-bound skim animation in the ECS. */
-final class WaterParticle
+final class WaterParticle extends Lifetime
 {
 	public const SPLASH = 'splash';
 	public const SKIM = 'skim';
-	public float $age = 0;
 
 	/**
-	 * Describe one water effect without coupling its lifecycle to the renderer.
+	 * Describe a particle.
 	 *
-	 * @param string $kind Splash or skim particle kind.
-	 * @param float $lifetime Positive lifetime in seconds, or zero for a state-bound particle.
-	 * @param int|null $body Optional source body entity retained for diagnostics.
-	 * @return void Initializes a fresh effect at age zero.
+	 * @param string $kind SPLASH or SKIM.
+	 * @param float $lifetime Seconds before it retires, or zero to live until its owner removes it.
+	 * @param int|null $body Entity the particle follows, when any.
+	 * @return void Rejects an unknown kind, a negative or non-finite lifetime, or an invalid body id.
 	 */
 	public function __construct(
 		public string $kind
@@ -27,13 +28,15 @@ final class WaterParticle
 		){
 			throw new \InvalidArgumentException('Invalid water particle');
 		}
+
+		parent::__construct($lifetime > 0 ? $lifetime : INF, clamp: false);
 	}
 
 	/**
-	 * Advance the particle lifetime.
+	 * Age the particle by one update.
 	 *
-	 * @param float $dt Finite nonnegative elapsed seconds.
-	 * @return bool True when a finite particle has reached its lifetime.
+	 * @param float $dt Seconds elapsed.
+	 * @return bool True once a finite lifetime has run out.
 	 */
 	public function step(float $dt): bool
 	{
@@ -42,8 +45,8 @@ final class WaterParticle
 			throw new \InvalidArgumentException('Water particle delta must be finite and nonnegative');
 		}
 
-		$this->age += $dt;
+		$this->advance($dt);
 
-		return $this->lifetime > 0 && $this->age >= $this->lifetime;
+		return $this->expired();
 	}
 }

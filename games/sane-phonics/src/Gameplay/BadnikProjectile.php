@@ -2,11 +2,11 @@
 declare(strict_types=1);
 namespace SanePhonics\Gameplay;
 
-/** Small owner-tagged projectile with delayed launch, gravity, and a bounded lifetime. */
-final class BadnikProjectile
-{
-	public float $age = 0;
+use Phonics\Effects\Lifetime;
 
+/** Small owner-tagged projectile with delayed launch, gravity, and a bounded lifetime. */
+final class BadnikProjectile extends Lifetime
+{
 	/**
 	 * Create one projectile in world space.
 	 *
@@ -17,7 +17,7 @@ final class BadnikProjectile
 	 * @param float $vy Vertical launch velocity in pixels per second.
 	 * @param float $gravity Nonnegative downward acceleration in pixels per second squared.
 	 * @param float $delay Nonnegative time before velocity and gravity begin in seconds.
-	 * @param float $lifetime Positive total lifetime including launch delay in seconds.
+	 * @param float $duration Positive total lifetime including launch delay in seconds.
 	 * @param float $radius Positive circular contact extent in world pixels.
 	 * @param int $collisionLayer Nonnegative terrain plane combined with shared collision geometry.
 	 * @param string $damageType Nonempty damage category used by shield immunity rules.
@@ -31,12 +31,12 @@ final class BadnikProjectile
 		, public float $vy
 		, public float $gravity = 540
 		, public float $delay = .05
-		, public float $lifetime = 200 / 60
+		, float $duration = 200 / 60
 		, public float $radius = 4
 		, public int $collisionLayer = 1
 		, public string $damageType = 'projectile'
 	){
-		foreach([$x, $y, $vx, $vy, $gravity, $delay, $lifetime, $radius] as $value)
+		foreach([$x, $y, $vx, $vy, $gravity, $delay, $duration, $radius] as $value)
 		{
 			if(!is_finite($value))
 			{
@@ -44,10 +44,12 @@ final class BadnikProjectile
 			}
 		}
 
-		if($owner < 1 || $gravity < 0 || $delay < 0 || $lifetime <= 0 || $radius <= 0
+		if($owner < 1 || $gravity < 0 || $delay < 0 || $duration <= 0 || $radius <= 0
 			|| $collisionLayer < 0 || $damageType === ''
 		){
 			throw new \InvalidArgumentException('Projectile ownership, bounds, and timing are invalid');
 		}
+
+		parent::__construct($duration);
 	}
 }

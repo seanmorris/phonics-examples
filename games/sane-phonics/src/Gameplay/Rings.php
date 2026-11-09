@@ -256,7 +256,7 @@ final class Rings
 				$owner
 				, -$cos * 180
 				, -$sin * 180 - ($circle + 1) * 45
-				, lifetime: $lifetime
+				, duration: $lifetime
 				, collisionLayer: $body->collisionLayer
 				, collectible: $collectible
 			);
@@ -314,6 +314,7 @@ final class Rings
 		];
 
 		$origin = [$from[0] - $ringFrom[0], $from[1] - $ringFrom[1]];
+
 		return Sweep::overlaps(Sweep::box($origin[0], $origin[1], $delta[0], $delta[1], 0, 0, $halfWidth, $halfHeight));
 	}
 
@@ -329,9 +330,8 @@ final class Rings
 		{
 			$ring = $this->registry->get($entity, Ring::class);
 			$motion = $this->registry->get($entity, ScatteredRing::class);
-			$start = $motion->age;
-			$motion->age = min($motion->lifetime, $motion->age + $dt);
-			$active = max(0, $motion->age - max($start, $motion->launchDelay));
+			$motion->advance($dt);
+			$active = max(0, $motion->age - max($motion->previousAge, $motion->launchDelay));
 			$this->ringPrevious[$entity] = [$ring->x, $ring->y];
 
 			if($active > 0)
@@ -339,7 +339,7 @@ final class Rings
 				$this->moveScatteredRing($ring, $motion, $active);
 			}
 
-			if($motion->age >= $motion->lifetime)
+			if($motion->expired())
 			{
 				$this->registry->destroy($entity);
 				unset($this->ringPrevious[$entity]);

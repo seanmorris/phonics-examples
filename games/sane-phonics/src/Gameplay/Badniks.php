@@ -261,9 +261,8 @@ final class Badniks
 		{
 			$projectile = $this->registry->get($id, BadnikProjectile::class);
 			$from = [$projectile->x, $projectile->y];
-			$start = $projectile->age;
-			$projectile->age = min($projectile->lifetime, $projectile->age + $dt);
-			$active = max(0, $projectile->age - max($start, $projectile->delay));
+			$projectile->advance($dt);
+			$active = max(0, $projectile->age - max($projectile->previousAge, $projectile->delay));
 
 			if($active > 0)
 			{
@@ -319,7 +318,7 @@ final class Badniks
 				continue 2;
 			}
 
-			if($projectile->age >= $projectile->lifetime)
+			if($projectile->expired())
 			{
 				$this->retire($id);
 			}
@@ -523,16 +522,16 @@ final class Badniks
 		foreach($this->registry->query(BadnikExplosion::class) as $id)
 		{
 			$explosion = $this->registry->get($id, BadnikExplosion::class);
-			$explosion->age = min($explosion->lifetime, $explosion->age + $dt);
+			$explosion->advance($dt);
 
-			if($explosion->age >= $explosion->lifetime)
+			if($explosion->expired())
 			{
 				$this->retire($id);
 
 				continue;
 			}
 
-			$this->registry->get($id, Sprite::class)->opacity = 1 - $explosion->age / $explosion->lifetime;
+			$this->registry->get($id, Sprite::class)->opacity = $explosion->opacity();
 		}
 	}
 
