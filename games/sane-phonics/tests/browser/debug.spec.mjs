@@ -252,7 +252,7 @@ test(
 		await activate(page, 'debug', true);
 		await activate(page, 'fps', true);
 		await expect.poll(async () => (await state(page)).enabled).toBe(true);
-		expect((await state(page)).showFps).toBe(false);
+		await expect.poll(async () => (await state(page)).showFps).toBe(false);
 		expect((await state(page)).draws).toBe(0);
 		await run(page, '$game->startup->play();');
 		await expect.poll(async () => (await state(page)).visible).toBe(true);
