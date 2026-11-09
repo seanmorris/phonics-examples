@@ -21,8 +21,10 @@ export class DemoControls
 		this.fullscreenBusy = false;
 		this.fullscreenError = '';
 		this.canvas = canvas;
-		this.frame = canvas.closest('#game-frame') ?? canvas;
+		// Fullscreen takes the canvas's frame, so the corner shortcuts stay visible and the frame letterboxes the view.
+		this.frame = canvas.closest('#game-frame') ?? canvas.parentElement ?? canvas;
 		this.shortcuts = new shortcutsClass(this.frame === canvas ? canvas.parentElement : this.frame, this.frame);
+		this.originalStyle = canvas.getAttribute('style');
 		this.muteButton = this.shortcuts.muteButton;
 		this.fullscreenButton = this.shortcuts.fullscreenButton;
 		this.error = this.shortcuts.error;
@@ -42,10 +44,42 @@ export class DemoControls
 
 		document.addEventListener('fullscreenchange', () => {
 			this.update();
+			this.fit();
 			this.canvas.focus({preventScroll: true});
 		}, {signal: this.abort.signal});
 
+		this.resize = new ResizeObserver(() => this.fit());
+		this.resize.observe(this.frame);
+		this.fit();
 		this.update();
+	}
+
+	/**
+	 * Keep the 16:9 view letterboxed inside the frame: the largest 16:9 box that fits, which the frame centres.
+	 * @returns {void} Sizes the canvas's CSS box; the drawing buffer keeps the game's logical size.
+	 */
+	fit()
+	{
+		if(this.frame === this.canvas) return;
+
+		const width = Math.max(0, Math.min(this.frame.clientWidth, this.frame.clientHeight * 16 / 9));
+		const height = width * 9 / 16;
+
+		if(this.canvas.style.width !== `${width}px`) this.canvas.style.width = `${width}px`;
+
+		if(this.canvas.style.height !== `${height}px`) this.canvas.style.height = `${height}px`;
+	}
+
+	/**
+	 * Stop fitting the view and give the canvas its original inline style back.
+	 * @returns {void} Leaves the frame as the page had it.
+	 */
+	release()
+	{
+		this.resize?.disconnect();
+
+		if(this.originalStyle === null) this.canvas.removeAttribute('style');
+		else this.canvas.setAttribute('style', this.originalStyle);
 	}
 
 	/** @returns {boolean} Whether this browser permits requesting fullscreen. */
@@ -170,6 +204,7 @@ export function activate(context)
 		if(!shared)
 		{
 			controls.abort.abort();
+			controls.release();
 			controls.shortcuts.close();
 		}
 

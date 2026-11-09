@@ -52,7 +52,9 @@ loading primitives remain `WorldStream` and the host `AssetLoader`.
 at the bottom-right of the game. The buttons have keyboard focus, accessible
 labels, and pressed states. Fullscreen includes only the game frame, canvas, and
 corner controls. The page text stays outside it. Menu text editing
-also stays inside the fullscreen frame, including the SDL textarea fallback.
+also stays inside the fullscreen frame, including the SDL textarea fallback. The view keeps
+its 16:9 shape on the page and in fullscreen: the host sizes the canvas to the largest 16:9
+box inside whatever frame the page gives it, and the frame letterboxes the rest.
 
 Fullscreen state follows the browser, including exits through Escape. If a
 browser rejects a gamepad-triggered request, click the corner fullscreen button.

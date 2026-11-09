@@ -283,7 +283,7 @@
   "integrity": {
     "application.php": "sha256-iviY+tKgwM4FxBs1qD7h6paXvVAvrBn7ui2kjX0Isck=",
     "autoload.php": "sha256-vmxWysNHasLeZZgr5hVR5S85BHLsOK430ASnicB/RA8=",
-    "browser/game.mjs": "sha256-tMwD+XMk6ecJtsHwISArSR6sIAZjYyTZPLtGfnfwFBk=",
+    "browser/game.mjs": "sha256-b2dMkUcYoZ9g70J0C57ENa3vpeOEPfgrepfgawmo3Xs=",
     "examples/DemoBackdrop.php": "sha256-jJcbVLXC8/oqBAO71YA5/Sw7sjZ051TOI5Bfo1T6Ru0=",
     "examples/DemoComboHud.php": "sha256-P6YAkJbac+4VdznSr/GROU47vnzH/88JW6SVdugy4dU=",
     "examples/DemoDebugOverlay.php": "sha256-5AvwxciraF/mXi3VKtTGSur7sKVq7yi8BNbozq3HrZM=",
