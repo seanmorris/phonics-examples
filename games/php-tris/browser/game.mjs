@@ -1,7 +1,9 @@
 /** Browser ownership, accessible hit targets, touch actions, and original synthesized audio. */
 export async function activate({module,canvas,world,assets,loadData,services,session,onClose,start})
 {
-	if(!canvas.getContext('webgl2', {antialias: false})) throw Error('PHPTris requires WebGL2');
+	const shell = new services.GameShell({module, canvas, session, title: 'PHPTris'});
+	shell.context({antialias: false});
+	const {signal} = shell;
 
 	const source = JSON.parse(module.phonicsWorld).sourceUrl;
 	const catalog = {}, names = new Set(['endless','race','time','squares','cascade','targets','bonds','reactor']);
@@ -37,8 +39,8 @@ export async function activate({module,canvas,world,assets,loadData,services,ses
 
 		if(url===start)
 		{
-			module.phpTrisStart = p.mode;
-			module.phpTrisStartRank = p.rank;
+			shell.bridge('phpTrisStart', p.mode);
+			shell.bridge('phpTrisStartRank', p.rank);
 		}
 	}
 
@@ -51,8 +53,7 @@ export async function activate({module,canvas,world,assets,loadData,services,ses
 
 	if(!Object.keys(catalog).length) throw Error(`${source}: no PHPTris boards`);
 
-	module.phpTrisCatalog = JSON.stringify(catalog);
-	const parent = canvas.parentNode, next = canvas.nextSibling, originalStyle = canvas.getAttribute('style');
+	shell.bridge('phpTrisCatalog', JSON.stringify(catalog));
 	const ui = document.createElement('section');
 	ui.className = 'php-tris-ui';
 	ui.setAttribute('aria-label', 'PHPTris');
@@ -79,14 +80,10 @@ export async function activate({module,canvas,world,assets,loadData,services,ses
  @media(pointer:coarse){.php-tris-screen .quick-controls button{width:44px;height:44px}}
  `;
 
-	parent.insertBefore(ui, canvas);
+	shell.mount(ui, {screen});
 	ui.append(style, screen, status);
-	screen.append(canvas, targets);
-	const abort = new AbortController(), {signal} = abort;
-	let viewport = '[960,540,1,false]', frameState = null, action = '', pulses = {}, held = {}, muted = false, audio
-		= null;
-
-	const pointers = new Map(), buttons = new Map();
+	screen.append(targets);
+	let frameState = null, pulses = {}, held = {}, muted = false, audio = null;
 	let records = {};
 	const recordKey = 'phptris:v1:' + source;
 	const storage = new services.SafeStorage;
@@ -103,25 +100,24 @@ export async function activate({module,canvas,world,assets,loadData,services,ses
 	}
 
 	// The screen fills its frame on the page and in fullscreen; the scene lays itself out for the shape it gets,
-	// switching to the portrait board when the frame is taller than wide.
-	function measure()
-	{
-		const box = screen.getBoundingClientRect(), dpr = devicePixelRatio||1;
-		const w = Math.max(1, Math.round(box.width*dpr)),h = Math.max(1, Math.round(box.height*dpr));
-		canvas.style.width = w/dpr + 'px';
-		canvas.style.height = h/dpr + 'px';
-		canvas.style.left = (Math.round(box.left*dpr)/dpr-box.left) + 'px';
-		canvas.style.top = (Math.round(box.top*dpr)/dpr-box.top) + 'px';
-		viewport = JSON.stringify([w,h,dpr,matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints>0]);
-	}
+	// switching to the portrait board when the frame is taller than wide. The canvas snaps to device pixels.
+	const view = shell.measure({
+		observe: screen
+		, initial: '[960,540,1,false]'
+		, windowEvents: ['resize']
+		, format: (w, h, dpr, box) => {
+			canvas.style.width = w/dpr + 'px';
+			canvas.style.height = h/dpr + 'px';
+			canvas.style.left = (Math.round(box.left*dpr)/dpr-box.left) + 'px';
+			canvas.style.top = (Math.round(box.top*dpr)/dpr-box.top) + 'px';
 
-	const resize = new ResizeObserver(measure);
-	resize.observe(screen);
-	window.addEventListener('resize', measure, {signal});
-	window.addEventListener('scroll', measure, {signal,capture: true});
-	measure();
+			return JSON.stringify([w,h,dpr,matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints>0]);
+		}
+	});
 
-	function reset() { held = {}; pulses = {}; pointers.clear(); }
+	window.addEventListener('scroll', view.measure, {signal,capture: true});
+
+	function reset() { held = {}; pulses = {}; }
 
 	window.addEventListener('blur', reset, {signal});
 	canvas.addEventListener('blur', reset, {signal});
@@ -176,208 +172,89 @@ export async function activate({module,canvas,world,assets,loadData,services,ses
 
 	const quick = new services.QuickControls(screen, ui);
 	quick.muteButton.addEventListener('click', () => {muted = !muted;quick.setMuted(muted);canvas.focus();}, {signal});
-	let fullscreenBusy = false, fullscreenTask = null, closed = false;
+	shell.fullscreen({target: ui, quick, onChange: () => view.measure()});
+	document.addEventListener('fullscreenchange', reset, {signal});
+	let lastPage = '', savedRun = '';
 
-	function fullscreen(error = '')
-	{
-		quick.setFullscreen(document.fullscreenElement===ui, !!document.fullscreenEnabled, fullscreenBusy, error);
-		measure();
-	}
+	const action = shell.action('phpTrisAction');
 
-	quick.fullscreenButton.addEventListener('click', async() => {
-		if(fullscreenBusy) return;
-
-		fullscreenBusy = true;
-		fullscreen();
-
-		try
-		{
-			fullscreenTask = document.fullscreenElement===ui ? document.exitFullscreen() : ui.requestFullscreen();
-			await fullscreenTask;
-
-			if(closed) return;
+	const buttons = new services.RegionButtons(targets, {
+		signal
+		, focus: () => canvas.focus()
+		, onPress: id => action.act(id)
+		, onHold: (id, down) => {
+			if(down)
+			{
+				held[id] = true;
+				pulses[id] = true;
+			}
+			else delete held[id];
 		}
-		catch(error)
-		{
-			fullscreenBusy = false;
+	});
 
-			if(!closed) fullscreen(error.message);
+	shell.bridge('phpTrisViewport', () => view.viewport());
+	shell.bridge('phpTrisTouch', () => {const result = JSON.stringify({...held,...pulses});pulses = {};return result;});
 
-			return;
-		}
-
-		fullscreenBusy = false;
-		fullscreen();
-		canvas.focus();
-	}, {signal}
-	);
-
-	document.addEventListener('fullscreenchange', () => {reset();fullscreen();}, {signal});
-	fullscreen();
-	let signature = '', lastPage = '', savedRun = '';
-
-	module.phpTrisViewport = () => viewport;
-
-	module.phpTrisAction = () => {const value = action;action = '';return value;};
-
-	module.phpTrisTouch = () => {const result = JSON.stringify({...held,...pulses});pulses = {};return result;};
-
-	module.phpTrisBest = mode => {
+	shell.bridge('phpTrisBest', mode => {
 		const r = records[mode];
 
 		return r ? (mode==='race' ? 'BEST ' + Number(r.elapsed).toFixed(2) + ' S' : 'BEST ' + r.score) : 'BEST --';
-	};
+	});
 
-	module.phpTrisStatus = json => {
-		const s = JSON.parse(json);
-		frameState = s;
+	shell.status('phpTrisStatus', {
+		dataset: 'phpTris'
+		, handler: s => {
+			frameState = s;
 
-		if(s.page!==lastPage)
-		{
-			reset();
-			lastPage = s.page;
-		}
-
-		const regions = s.info?.open && s.info?.backHint
-			? [{id: 'close-info',label: 'Back to title screen',rect: s.info.backHint}]
-			: (s.info?.open ? [] : s.regions);
-
-		const key = JSON.stringify([s.width,s.height,regions]);
-
-		if(key!==signature)
-		{
-			signature = key;
-			const wanted = new Set(regions.map(r => r.id));
-
-			for(const [id,button] of buttons)
+			if(s.page!==lastPage)
 			{
-				if(!wanted.has(id))
-				{
-					button.remove();
-					buttons.delete(id);
-				}
+				reset();
+				lastPage = s.page;
 			}
 
-			for(const region of regions)
+			const regions = s.info?.open && s.info?.backHint
+				? [{id: 'close-info',label: 'Back to title screen',rect: s.info.backHint}]
+				: (s.info?.open ? [] : s.regions);
+
+			buttons.sync(s.width, s.height, regions);
+
+			const summary = `${s.mode}. ${s.page}. Score ${s.score}. Lines ${s.lines}. Rank ${s.level}. Goal ${s
+				.goal}.`;
+
+			if(status.textContent!==summary) status.textContent = summary;
+
+			for(const event of s.events) sound(event);
+
+			if(s.page==='results' && savedRun!==String(s.runId))
 			{
-				let button = buttons.get(region.id);
-
-				if(!button)
-				{
-					button = document.createElement('button');
-					button.type = 'button';
-					button.dataset.action = region.id;
-
-					button.addEventListener('pointerdown', event => {
-						if(!button.holdAction) return;
-
-						event.preventDefault();
-						canvas.focus();
-						button.setPointerCapture(event.pointerId);
-						pointers.set(event.pointerId, region.id);
-						held[region.id] = true;
-						pulses[region.id] = true;
-					}, {signal}
-					);
-
-					const release = event => {
-						const id = pointers.get(event.pointerId);
-						pointers.delete(event.pointerId);
-
-						if(id && ![...pointers.values()].includes(id)) delete held[id];
-					};
-
-					button.addEventListener('pointerup', release, {signal});
-					button.addEventListener('pointercancel', release, {signal});
-					button.addEventListener('lostpointercapture', release, {signal});
-
-					button.addEventListener(
-						'click'
-						, () => {if(!button.holdAction) action = region.id;canvas.focus();}
-						, {signal}
-					);
-
-					buttons.set(region.id, button);
-					targets.append(button);
-				}
-
-				button.holdAction = region.hold;
-				button.setAttribute('aria-label', region.label);
-				const [x,y,w,h] = region.rect;
-
-				Object.assign(
-					button.style
-					, {
-						left: 100*x/s.width + '%'
-						, top: 100*y/s.height + '%'
-						, width: 100*w/s.width + '%'
-						, height: 100*h/s.height + '%'
-					}
+				savedRun = String(s.runId);
+				const old = records[s.mode];
+				const eligible = s.mode!=='race'||s.phase==='complete';
+				const challenge = !['endless','race','time'].includes(s.mode);
+				const better = !old || (s.mode==='race'
+					? s.elapsed<old.elapsed
+					: challenge && s.level!==old.level ? s.level>old.level : s.score>old.score
 				);
+
+				if(eligible&&better)
+				{
+					records[s.mode] = {score: s.score,elapsed: s.elapsed,level: s.level};
+
+					storage.set(recordKey, JSON.stringify(records));
+				}
 			}
 		}
-
-		const summary = `${s.mode}. ${s.page}. Score ${s.score}. Lines ${s.lines}. Rank ${s.level}. Goal ${s.goal}.`;
-
-		if(status.textContent!==summary) status.textContent = summary;
-
-		canvas.dataset.phpTris = json;
-
-		for(const event of s.events) sound(event);
-
-		if(s.page==='results' && savedRun!==String(s.runId))
-		{
-			savedRun = String(s.runId);
-			const old = records[s.mode];
-			const eligible = s.mode!=='race'||s.phase==='complete';
-			const challenge = !['endless','race','time'].includes(s.mode);
-			const better = !old || (s.mode==='race'
-				? s.elapsed<old.elapsed
-				: challenge && s.level!==old.level ? s.level>old.level : s.score>old.score
-			);
-
-			if(eligible&&better)
-			{
-				records[s.mode] = {score: s.score,elapsed: s.elapsed,level: s.level};
-
-				storage.set(recordKey, JSON.stringify(records));
-			}
-		}
-	};
+	});
 
 	// Read-only diagnostics are useful to consumers and browser acceptance tests.
 	session.phpTris = {get state(){return frameState;}};
 
-	onClose(async() => {
-		closed = true;
-		abort.abort();
-		resize.disconnect();
+	shell.onClose(async() => {
 		reset();
 		quick.close();
-
-		await fullscreenTask?.catch(() => {});
-
-		if(document.fullscreenElement===ui) await document.exitFullscreen().catch(() => {});
-
 		await audio?.close();
-
-		if(next?.parentNode===parent) parent.insertBefore(canvas, next);else parent.append(canvas);
-
-		if(originalStyle===null) canvas.removeAttribute('style');else canvas.setAttribute('style', originalStyle);
-
-		delete canvas.dataset.phpTris;
-		ui.remove();
-
-		for(const key of ['phpTrisViewport'
-			, 'phpTrisAction'
-			, 'phpTrisTouch'
-			, 'phpTrisBest'
-			, 'phpTrisStatus'
-			, 'phpTrisCatalog'
-			, 'phpTrisStart'
-			, 'phpTrisStartRank'
-		])
-  delete module[key];
 		delete session.phpTris;
 	});
+
+	onClose(() => shell.close());
 }
