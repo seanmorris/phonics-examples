@@ -65,7 +65,6 @@ final class Scene
 		$this->text = new SpriteRenderer($this->fontAtlas);
 		$this->rects = new RectRenderer;
 		$this->menus = new MenuRenderer($font);
-		$this->menus->style['width'] = 660;
 		$this->menus->style['padding'] = 10;
 		$this->menus->style['panel'] = self::PLAQUE;
 		$this->menus->style['foreground'] = [...self::INK, 1.0];
@@ -108,8 +107,12 @@ final class Scene
 		, float $seconds
 		, int $best
 	): void {
-		$scale = $height / Simulation::HEIGHT;
+		// Pixel art wants whole pixels: the world draws at the largest integer scale that keeps at least the playable
+		// 440 units in view, anchored to the ground, so a taller frame shows more sky and the tiles are never resampled.
+		$k = max(1, (int)floor($height / (Simulation::HEIGHT - Simulation::GAP_MARGIN)));
+		$scale = (float)$k;
 		$visible = $width / $scale;
+		$offsetY = $height / $scale - Simulation::HEIGHT;
 		$phantX = max(60.0, min(200.0, .28 * $visible));
 		$this->viewport = [$width, $height, $scale, $phantX * $scale];
 		$camera = new Camera(0, 0, $width, $height);
@@ -122,13 +125,14 @@ final class Scene
 
 		$horizon = self::lerp([.95, .90, .75], [.25, .27, .42], $this->blend);
 		$this->rects->render([[
-			0, (Simulation::GROUND_Y - 48) * $scale, $width, 48 * $scale, $horizon[0], $horizon[1], $horizon[2], 1
+			0, (Simulation::GROUND_Y - 48 + $offsetY) * $scale, $width, 48 * $scale, $horizon[0], $horizon[1], $horizon[2], 1
 		]], $width, $height);
 
 		$sprites = [];
 		$parallax = $game->scroll * .3;
 		$period = 230.0;
 		$count = (int)ceil($visible / $period) + 2;
+		$skyBand = max(60, (int)(Simulation::GROUND_Y + $offsetY - 120));
 
 		for($i = 0; $i < $count; $i++)
 		{
@@ -138,7 +142,7 @@ final class Scene
 			if($x < -self::TILE_W) $x += $count * $period;
 			if($x > $visible + self::TILE_W) continue;
 
-			$sprites[] = $this->tile(self::GID_CLOUD, $x * $scale, (30 + ($i * 53) % 180) * $scale, $scale, $tint);
+			$sprites[] = $this->tile(self::GID_CLOUD, $x * $scale, (20 + ($i * 53) % $skyBand) * $scale, $scale, $tint);
 		}
 
 		foreach($game->barrels as $barrel)
@@ -149,11 +153,11 @@ final class Scene
 			if($screenX > $width || $screenX + self::TILE_W * $scale < 0) continue;
 
 			// The stack hanging from the ceiling ends in a downward lid; the one on the ground starts with an upward lid.
-			for($y = $barrel->gapTop - self::TILE_H; $y > -self::TILE_H; $y -= self::TILE_H)
+			for($y = $barrel->gapTop - self::TILE_H; $y + $offsetY > -self::TILE_H; $y -= self::TILE_H)
 			$sprites[] = $this->tile(
 				$y === $barrel->gapTop - self::TILE_H ? self::GID_BOTTOM : self::GID_RING
 				, $screenX
-				, $y * $scale
+				, ($y + $offsetY) * $scale
 				, $scale
 				, $tint
 			);
@@ -162,7 +166,7 @@ final class Scene
 			$sprites[] = $this->tile(
 				$y === $barrel->gapTop + $barrel->gap ? self::GID_CAP : self::GID_RING
 				, $screenX
-				, $y * $scale
+				, ($y + $offsetY) * $scale
 				, $scale
 				, $tint
 			);
@@ -172,8 +176,8 @@ final class Scene
 
 		for($x = -$groundShift; $x < $visible; $x += self::TILE_W)
 		{
-			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, Simulation::GROUND_Y * $scale, $scale, $tint);
-			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, (Simulation::GROUND_Y + self::TILE_H) * $scale, $scale, $tint);
+			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, (Simulation::GROUND_Y + $offsetY) * $scale, $scale, $tint);
+			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, (Simulation::GROUND_Y + self::TILE_H + $offsetY) * $scale, $scale, $tint);
 		}
 
 		{
@@ -181,7 +185,7 @@ final class Scene
 			$phant = new Sprite(
 				self::GID_PHANT + $game->frame
 				, ($phantX + Simulation::PHANT_W / 2) * $scale
-				, ($y + Simulation::PHANT_H / 2) * $scale
+				, ($y + Simulation::PHANT_H / 2 + $offsetY) * $scale
 				, .5
 				, .5
 			);
@@ -207,28 +211,30 @@ final class Scene
 		$this->sprites->render($sprites, $camera);
 
 		$labels = [];
-		$textScale = max(1.0, $scale * 1.1);
+		// Text scales are whole numbers too, so glyph strokes stay even.
+		$textScale = (float)$k;
 
 		if($page === 'play')
 		{
-			$this->label($labels, (string)$game->score, $width / 2, $height * .07, $textScale * 1.6, 'center');
+			$this->label($labels, (string)$game->score, $width / 2, $height * .07, $textScale * 2, 'center');
 
 			if($game->phase === 'ready')
 			{
 				$this->label($labels, 'TAP TO FLAP', $width / 2, $height * .62, $textScale, 'center');
-				$this->label($labels, 'BEST ' . $best, $width / 2, $height * .69, $textScale * .9, 'center');
+				$this->label($labels, 'BEST ' . $best, $width / 2, $height * .69, $textScale, 'center');
 			}
 			elseif($game->phase === 'dead')
 			{
-				$this->label($labels, 'BONK', $width / 2, $height * .45, $textScale * 1.5, 'center');
+				$this->label($labels, 'BONK', $width / 2, $height * .45, $textScale * 2, 'center');
 			}
 		}
 
 		if($page === 'title')
 		{
-			// The wordmark fills up to the frame's width minus a margin, so phones get a smaller logo, not a clipped one.
-			$logo = min($textScale * 2.4, ($width - 24 * $scale) / max(1, $this->measure('PHLAPPY PHANT')));
-			$this->label($labels, 'PHLAPPY PHANT', $width / 2 + 3 * $scale, $height * .11 + 3 * $scale, $logo, 'center', self::INK);
+			// The wordmark fills up to the frame's width minus a margin at a whole-number scale, so phones get a
+			// smaller logo rather than a clipped or resampled one.
+			$logo = (float)max(1, min(3 * $k, (int)floor(($width - 24 * $scale) / max(1, $this->measure('PHLAPPY PHANT')))));
+			$this->label($labels, 'PHLAPPY PHANT', $width / 2 + $logo, $height * .11 + $logo, $logo, 'center', self::INK);
 			$this->label($labels, 'PHLAPPY PHANT', $width / 2, $height * .11, $logo, 'center', self::CREAM);
 		}
 
@@ -236,8 +242,13 @@ final class Scene
 
 		if($menu->isOpen)
 		{
-			// The control hints need a wide plaque; narrow frames drop them rather than clip them.
-			$this->menus->showHints = $width >= 520;
+			// The shared menu renderer scales by min(style scale, width / 320, height / 180); handing it the whole number
+			// below that keeps its glyphs crisp, and the plaque width follows so the hint row fits.
+			$m = max(1, min($k + 1, 3, (int)floor(min($width / 320, $height / 180))));
+			$this->menus->style['scale'] = $m;
+			$this->menus->style['width'] = 330 * $m;
+			// The control hints need a wide plaque and a readable size; small frames drop them rather than clip them.
+			$this->menus->showHints = $m >= 2 && $width >= 330 * $m - 10;
 			$this->menus->style['dimmer'] = $page === 'title' ? [0, 0, 0, 0] : [...self::INK, .35];
 			[$px, $py, $pw, $ph] = $this->plaque($menu, $width, $height);
 			$edge = max(2, round(2 * $scale));

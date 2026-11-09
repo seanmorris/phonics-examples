@@ -25,7 +25,7 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	// Wide frame: the phant sits near 28 % of the visible width, scaled from the 480-unit world.
 	const wide = await status(page);
 	expect(wide.height).toBeGreaterThan(0);
-	const scale = wide.height / 480;
+	const scale = Math.max(1, Math.round(wide.height / 480));
 	expect(wide.viewport[2]).toBeCloseTo(scale, 5);
 	expect(wide.viewport[3]).toBeCloseTo(Math.max(60, Math.min(200, .28 * wide.width / scale)) * scale, 3);
 
@@ -52,7 +52,7 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await page.setViewportSize({width: 390, height: 844});
 	await expect.poll(async() => (await status(page)).width, {timeout: 10_000}).toBeLessThan(wide.width);
 	const tall = await status(page);
-	const tallScale = tall.height / 480;
+	const tallScale = Math.max(1, Math.round(tall.height / 480));
 	expect(tall.viewport[2]).toBeCloseTo(tallScale, 5);
 	expect(tall.viewport[3]).toBeCloseTo(Math.max(60, Math.min(200, .28 * tall.width / tallScale)) * tallScale, 3);
 

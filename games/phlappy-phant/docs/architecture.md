@@ -8,7 +8,7 @@ Native PHP tests cover the generator, the idle bob, the first flap, gravity and 
 
 ## Viewport-filling rendering
 
-`Render\Scene` scales the 480-unit world to the output height and derives the visible width from the frame, placing the phant at about 28 % of that width (clamped). It draws the horizon band, parallax clouds, each barrel pair as stacked cap and ring tiles, the scrolling ground and the phant, whose rotation follows its vertical velocity and which tumbles when dead. Day and night blend the device clear colour and a tint over the world. The HUD uses the engine bitmap font through a cached glyph layout, and menus come from the shared `MenuRenderer`, whose hit regions the browser mirrors as accessible buttons.
+`Render\Scene` draws the 480-unit world at the largest whole-number scale that keeps the playable 440 units in view, anchored to the ground (a taller frame shows more sky), and derives the visible width from the frame, placing the phant at about 28 % of that width (clamped). Labels, the title wordmark and the shared menu renderer use whole-number scales too, so the bitmap glyphs and tiles are never resampled. It draws the horizon band, parallax clouds, each barrel pair as stacked cap and ring tiles, the scrolling ground and the phant, whose rotation follows its vertical velocity and which tumbles when dead. Day and night blend the device clear colour and a tint over the world. The HUD uses the engine bitmap font through a cached glyph layout, and menus come from the shared `MenuRenderer`, whose hit regions the browser mirrors as accessible buttons.
 
 ## Browser boundary
 
