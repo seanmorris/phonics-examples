@@ -10,7 +10,8 @@ namespace PhpPoker\Ui;
  * 400-high field with a right-hand control panel; both grow along their free axis to fill the canvas and seat the
  * opponents in a column
  * down each side, with the pot between them and the human's hand at the bottom, because an oval of full seat
- * blocks does not fit there. Phone fields scale uniformly. A wide field keeps its vertical scale while its x axis
+ * blocks does not fit there. A landscape field with height to spare, such as an embedded 16:9 frame, seats them in
+ * one row along the top instead, with the pot between the row and the hand. Phone fields scale uniformly. A wide field keeps its vertical scale while its x axis
  * compresses independently, so horizontal resizing cannot shrink cards, chips or type. Rendering and hit testing
  * share both axes so a region a player can click is exactly the region that is drawn.
  */
@@ -22,6 +23,8 @@ final class Layout
 	public const ACTION_CLEARANCE = -.06;
 	/** Width kept for the identity (emblem over name and stack) on the outer side of a column seat. */
 	public const IDENTITY = 40;
+	/** Margin at each end of the short-landscape row of opponents. */
+	private const ROW_MARGIN = 6;
 	/** Width of the short-landscape vertical control panel, including its margins. */
 	private const PANEL = 240;
 	/** Smallest useful x/y scale ratio for the oval once cards retain their natural aspect ratio. */
@@ -633,6 +636,24 @@ final class Layout
 	/** Right edge of the table area; the landscape control panel lies beyond it. */
 	public function tableRight(): float { return $this->profile === 'landscape' ? $this->width() - self::PANEL : $this->width(); }
 
+	/**
+	 * Whether short landscape seats its opponents in one row along the top instead of a column down each side.
+	 *
+	 * The row needs the height for itself, the pot cluster with its status lines, and the hand. A phone on its side
+	 * is too short for that and keeps the columns, which flank the hand instead of standing above it.
+	 */
+	public function row(): bool
+	{
+		return $this->profile === 'landscape'
+			&& $this->rowBottom() + 6 + self::PLATE_HEIGHT + 14 + 56 + 8 + 56 + 14 <= $this->handTop();
+	}
+
+	/** Bottom of the short-landscape row of opponents: plate, fan, and the chips standing on the fan's baseline. */
+	private function rowBottom(): float
+	{
+		return self::MENU_BAR + 10 + self::PLATE_HEIGHT + 8 + $this->design['card'][1] + $this->design['chipRadius'];
+	}
+
 	/** Top of the human's plate in a column profile, measured up from the controls or the bottom edge. */
 	private function handTop(): float
 	{
@@ -809,6 +830,7 @@ final class Layout
 	 * Seat geometry for the tall and landscape profiles: the human at the bottom of the table area, one opponent
 	 * across from them, or the opponents in a column down each side, clockwise from the human's left, so the
 	 * first sits bottom-left, the order runs up the left column and comes back down the right.
+	 * Where `row()` holds they share one row along the top instead, left to right in the same order.
 	 *
 	 * @param int $seat Seat id; 0 is the human.
 	 * @param int $seats Number of seats at the table.
@@ -840,6 +862,21 @@ final class Layout
 		{
 			$outward = 1;
 			$plateLeft = $middle - $plateWidth / 2;
+			$plateTop = $top;
+			$angle = M_PI * 1.5;
+		}
+		elseif($this->row())
+		{
+			// A short frame has no height for columns beside the hand, so the opponents share one row along the top,
+			// left to right in turn order. The row runs the full width: the control panel only needs the space below.
+			$slot = ($this->width() - 2 * self::ROW_MARGIN) / $opponents;
+			$plateWidth = min($d['plateWidth'], $slot - self::IDENTITY - 6);
+			// A crowded row closes its fans so each still fits under its own plate.
+			$step = min($step, max(5, ($plateWidth - $cardWidth) / 4));
+			$fanWidth = $cardWidth + 4 * $step;
+			$compact = $plateWidth > $fanWidth + 2 * $radius;
+			$outward = -1;
+			$plateLeft = self::ROW_MARGIN + ($seat - 1) * $slot + ($slot - self::IDENTITY - $plateWidth) / 2 + self::IDENTITY;
 			$plateTop = $top;
 			$angle = M_PI * 1.5;
 		}
@@ -967,6 +1004,12 @@ final class Layout
 				? self::PLATE_HEIGHT + 14 + $cardHeight + 8 + 56
 				: self::PLATE_HEIGHT + 56 * $objectScale + 67 * $objectScale + 14 + self::PLATE_HEIGHT + 8 + 56;
 			$top = self::MENU_BAR + 10;
+			// Short landscape seats its opponents in a row above the cluster, whose plates sit beside the piles.
+			if($this->row())
+			{
+				$top = $this->rowBottom() + 6;
+				$cluster = self::PLATE_HEIGHT + 14 + $cardHeight;
+			}
 			$clusterTop = $top + max(0, ($this->handTop() - 14 - $top - $cluster) / 2);
 			// Use the phone's spare vertical lane. A mild downward bias keeps the cluster near the human hand without
 			// crowding its status message or the opponents above it.

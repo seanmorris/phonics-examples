@@ -38,7 +38,7 @@ and dialogs, a dark disc behind each emblem, keycaps on the buttons, and sets te
 
 `src/Ui/Layout.php` is pure and shared by painting and hit-testing. It carries three design profiles:
 **wide**, the 1280×720 oval of the DOS game; **tall**, a 470×836 portrait field with the opponents in a column
-down each side; and **landscape**, a 900×400 field with side columns and a right-hand control panel. Interactive
+down each side; and **landscape**, a 900×400 field with side columns and a right-hand control panel. A landscape field with height to spare, such as a 16:9 frame embedded in a page, seats the opponents in one row along the top instead, with the pot between the row and the hand; a phone on its side is too short for that and keeps the columns. Interactive
 controls are at least 48 CSS pixels high across device-pixel ratios; short-screen menus use two columns.
 
 - **Choosing a profile.** The oval is the table's own composition, so it is tried first on every canvas that is

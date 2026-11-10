@@ -1106,7 +1106,7 @@ $test('three-to-eight-player boards compress only their horizontal axis', static
 });
 
 $test('column profiles seat everyone without overlap and fill the canvas', static function(callable $expect) use ($overlaps, $fixture): void {
-	foreach([[390,844,1],[360,640,1],[1170,2340,3],[1518,1850,2],[844,326,1],[667,375,1],[2532,984,3]] as [$width,$height,$dpr])
+	foreach([[390,844,1],[360,640,1],[1170,2340,3],[1518,1850,2],[844,326,1],[667,375,1],[654,368,1],[2532,984,3]] as [$width,$height,$dpr])
 	{
 		$layout = Layout::fit($width, $height, $dpr);
 		$expect($layout->columns(), "$width x $height uses a column profile");
@@ -1125,7 +1125,9 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 				$right = max($g['plate'][0] + $g['plate'][2], $g['emblem'][0] + $size / 2, $bank[0] + $bank[2]);
 				$bottom = max($g['cards'][0][1] + $g['cards'][0][3], $bank[1] + $bank[3], $g['caption'][1] + ($seat === 0 ? 8 : 22));
 				$blocks[$seat] = [$left, $g['plate'][1], $right - $left, $bottom - $g['plate'][1]];
-				$expect($left >= 0 && $right <= $layout->tableRight() + 1e-9 && $g['plate'][1] >= Layout::MENU_BAR + 4 && $bottom <= $layout->height(), "seat $seat of $seats stays on the table at $width x $height");
+				// A row of opponents may run over the control panel, whose buttons are checked against every seat below.
+				$edge = $layout->row() && $seat !== 0 ? $layout->width() : $layout->tableRight();
+				$expect($left >= 0 && $right <= $edge + 1e-9 && $g['plate'][1] >= Layout::MENU_BAR + 4 && $bottom <= $layout->height(), "seat $seat of $seats stays on the table at $width x $height");
 			}
 			foreach($blocks as $i => $a) foreach($blocks as $j => $b) if($i < $j) $expect(!$overlaps($a, $b), "seats $i and $j are apart at $seats seats, $width x $height");
 			$centre = $layout->centre();
@@ -1158,6 +1160,18 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 		// Opponents run clockwise from the human's left: up the left column, then down the right.
 		$tops = [];
 		for($seat = 1; $seat < 8; $seat++) { $g = $layout->seat($seat, 8); $tops[$seat] = [$g['outward'], $g['plate'][1]]; }
+		if($layout->row())
+		{
+			// A short frame with room above the pot seats them in one row instead, left to right in turn order.
+			$lefts = [];
+			for($seat = 1; $seat < 8; $seat++) $lefts[] = $layout->seat($seat, 8)['plate'][0];
+			$sorted = $lefts;
+			sort($sorted);
+			$expect($lefts === $sorted && count(array_unique($lefts)) === 7, "the row runs left to right in turn order at $width x $height");
+			$expect(count(array_unique(array_column($tops, 1))) === 1, "the row keeps every opponent on one line at $width x $height");
+			$expect($layout->centre()['pot'][1] > $layout->seat(1, 8)['cards'][0][1] + $layout->seat(1, 8)['cards'][0][3], "the pot sits below the row at $width x $height");
+			continue;
+		}
 		$expect($tops[1][0] === -1 && $tops[4][0] === -1 && $tops[5][0] === 1 && $tops[7][0] === 1, "four seats sit left and three right at $width x $height");
 		$expect($tops[1][1] > $tops[2][1] && $tops[2][1] > $tops[3][1] && $tops[3][1] > $tops[4][1], "the left column climbs away from the human at $width x $height");
 		$expect($tops[5][1] < $tops[6][1] && $tops[6][1] < $tops[7][1], "the right column comes back down toward the human at $width x $height");
