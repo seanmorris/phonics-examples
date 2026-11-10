@@ -21,6 +21,53 @@ $rig=static function(Game $game,array $hands): Game {
 	$s['piles']['piles']['stock']=[['kind'=>'ordered','cards'=>array_values(array_diff($s['piles']['inventory'],$used))]];
 	return Game::restore($s);
 };
+$test('best five of seven matches an exhaustive subset search and names board plays',static function() use ($expect,$reject): void {
+	// Cards: id % 13 + 2 is the rank, intdiv(id, 13) the suit (clubs, diamonds, hearts, spades).
+	$flush=Hand::best([0,2,5,8,11,13,26]);
+	$expect($flush['category']===5&&$flush['cards']===[0,2,5,8,11],'Flush over the pair of twos');
+	$expect(Hand::best([8,9,10,11,12,25,38])['name']==='Royal flush');
+	$expect(Hand::best([12,25,38,11,24,0,1])['category']===6,'Aces full');
+	$expect(Hand::best([12,13,27,41,3,20,34])['ranks']===[5],'Wheel found among seven');
+	$expect(Hand::best([0,14,29,44,11])['score']===Hand::evaluate([0,14,29,44,11])['score'],'Five cards pass through');
+	$expect(Hand::best([9,22,35,48,0,1,52],[52])['name']==='Five of a kind');
+	$combine=static function(array $cards,int $size) use (&$combine): array {
+		if($size===0) return [[]];
+		$out=[];
+		foreach($cards as $i=>$card) foreach($combine(array_slice($cards,$i+1),$size-1) as $rest) $out[]=[$card,...$rest];
+		return $out;
+	};
+	$random=new RandomStream('best-of-seven','php-poker/tests/v1');
+	for($trial=0;$trial<300;$trial++)
+	{
+		$deck=range(0,51); $cards=[];
+		for($i=0;$i<7;$i++) { $at=$random->boundedInt(count($deck)); $cards[]=$deck[$at]; array_splice($deck,$at,1); }
+		$size=$trial%3+5; $cards=array_slice($cards,0,$size);
+		$wild=$trial%5===0?[$cards[0]]:[];
+		$top=0;
+		foreach($combine($cards,5) as $subset) $top=max($top,Hand::evaluate($subset,$wild)['score']);
+		$best=Hand::best($cards,$wild);
+		$expect($best['score']===$top,'Best of '.$size.' disagrees with exhaustive search');
+		$expect(Hand::evaluate($best['cards'],$wild)['score']===$top&&count(array_intersect($best['cards'],$cards))===5);
+	}
+	$reject(static fn()=>Hand::best([0,1,2,3]));
+	$reject(static fn()=>Hand::best([0,1,2,3,4,5,6,7]));
+	$reject(static fn()=>Hand::best([0,0,1,2,3,4]));
+});
+$test('stud showing hands order pairs above high cards and never count straights or flushes',static function() use ($expect,$reject): void {
+	$score=static fn(array $cards,array $wild=[]): int=>Hand::showing($cards,$wild)['score'];
+	$expect($score([12])>$score([11]),'Ace above king');
+	$expect($score([0,13])>$score([12,24]),'Pair of twos above ace-king');
+	$expect($score([12,24,10])>$score([12,24,9]),'Third kicker breaks the tie');
+	$expect($score([0,13,26])>$score([12,25,11]),'Trips above a pair');
+	$expect($score([0,13,1,14])>$score([12,25,11,10]),'Two pair above one pair');
+	$expect($score([0,13,26,39])>$score([12,25,38,11]),'Quads above trips');
+	$expect(Hand::showing([8,9,10,11])['category']===0,'Four to a straight flush shows as high card');
+	$expect($score([12])===$score([25]),'Suits do not rank');
+	$expect(Hand::showing([52,5],[52])['category']===1&&Hand::showing([52],[52])['ranks']===[14],'Wild cards pair up or stand as aces');
+	$reject(static fn()=>Hand::showing([]));
+	$reject(static fn()=>Hand::showing([0,1,2,3,4]));
+	$reject(static fn()=>Hand::showing([52]));
+});
 $test('hand categories, wheel, kickers and concealed opening predicate',static function() use ($expect,$reject): void {
 	$hands=[[0,14,29,44,11],[9,22,0,16,30],[9,22,8,21,0],[9,22,35,0,15],[0,14,28,42,4],
 		[0,2,5,8,11],[9,22,35,0,13],[9,22,35,48,0],[8,9,10,11,12]];
