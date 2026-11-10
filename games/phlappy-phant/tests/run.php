@@ -36,6 +36,9 @@ $idle->step(true);
 check($idle->phase === 'playing', 'the first flap starts the run');
 check(abs($idle->vy - (Simulation::FLAP_VY + Simulation::GRAVITY * Simulation::STEP)) < 1e-9, 'a flap sets the rise before gravity applies');
 check($idle->consumeEvents() === ['flap'], 'the first flap is reported once');
+check($idle->frame === 1, 'the wing drops on a flap');
+for($i = 0; $i < 12; $i++) $idle->step();
+check($idle->frame === 0, 'the wing lifts again shortly after');
 check($idle->consumeEvents() === [], 'events are cleared once consumed');
 
 $falling = new Simulation(1);
@@ -95,7 +98,7 @@ $through->step(true);
 $through->barrels = [new Barrel(0, $top - 40, $height + 80)];
 $through->step();
 check($through->phase === 'playing', 'a gap around the hitbox lets the phant through');
-check($through->hitbox()[2] === 48.0 && $through->hitbox()[3] === 30.0, 'the hitbox is inset from the sprite');
+check($through->hitbox()[2] === 48.0 && $through->hitbox()[3] === 36.0, 'the hitbox is inset from the sprite');
 
 $settings = new InputSettings;
 $flap = $settings->bindings->sources(PhantActions::FLAP);

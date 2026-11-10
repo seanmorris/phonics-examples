@@ -14,10 +14,10 @@ final class Simulation
 	public const STEP = 1 / 60;
 	public const GROUND_Y = 416;
 	public const PHANT_W = 64;
-	public const PHANT_H = 44;
+	public const PHANT_H = 52;
 	public const PHANT_START_Y = 200;
 	public const HITBOX_INSET_X = 8;
-	public const HITBOX_INSET_Y = 7;
+	public const HITBOX_INSET_Y = 8;
 	public const GRAVITY = 1400;
 	public const FLAP_VY = -380;
 	public const MAX_FALL = 640;
@@ -35,7 +35,7 @@ final class Simulation
 	public const GAP_MARGIN = 40;
 	public const NIGHT_EVERY = 10;
 	public const DEAD_SETTLE = .6;
-	public const EAR_FPS = 12;
+	public const WING_DOWN = .14;
 
 	/** One of ready, playing, or dead. */
 	public string $phase = 'ready';
@@ -46,7 +46,7 @@ final class Simulation
 	public float $scroll = 0;
 	/** Seconds since the run began, for the idle bob and ear animation. */
 	public float $age = 0;
-	/** Ear frame: zero mid, one up, two down. */
+	/** Wing frame: zero up, one down for a moment after each flap. */
 	public int $frame = 0;
 	public int $score = 0;
 	/** Zero for day, one for night. */
@@ -60,6 +60,7 @@ final class Simulation
 
 	private Random $random;
 	private float $deadTimer = 0;
+	private float $flappedAt = -1;
 
 	/**
 	 * Start a reproducible run with its first barrels already placed.
@@ -140,7 +141,7 @@ final class Simulation
 		{
 			$this->y = self::PHANT_START_Y + 6 * sin($this->age * 4);
 			$this->scroll += self::SPEED_BASE * self::STEP;
-			$this->frame = (int)floor($this->age * self::EAR_FPS / 2) % 3;
+			$this->frame = (int)floor($this->age * 2) % 2;
 
 			if(!$flap) return;
 
@@ -153,12 +154,13 @@ final class Simulation
 			if($flap)
 			{
 				$this->vy = self::FLAP_VY;
+				$this->flappedAt = $this->age;
 				$this->events[] = 'flap';
 			}
 
 			$this->vy = min(self::MAX_FALL, $this->vy + self::GRAVITY * self::STEP);
 			$this->y = max(0, $this->y + $this->vy * self::STEP);
-			$this->frame = (int)floor($this->age * self::EAR_FPS) % 3;
+			$this->frame = $this->age - $this->flappedAt < self::WING_DOWN ? 1 : 0;
 			$speed = self::speedFor($this->score);
 
 			foreach($this->barrels as $barrel) $barrel->x -= $speed * self::STEP;

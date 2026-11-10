@@ -6,8 +6,8 @@ Unlike the letterboxed games, Phlappy Phant fills whatever frame it is given: th
 
 ## Credits
 
-The elePHPant is the PHP mascot by **Vincent Pontier**; the sprite is a rasterised, reduced-palette derivative of the vector drawing uploaded to Wikimedia Commons by **Webysther** (*Webysther 20160423 - Elephpant.svg*, 2016-04-23), which Commons lists under the GNU General Public License v2.0 or later. `art/elephpant.svg`, the sprite frames in `assets/phant.png` and `poster.png` are distributed under that licence; see `art/ELEPHPANT-LICENSE.md` and `NOTICE`. The code, the barrel, ground and cloud tiles and the sounds are Apache-2.0 like the other example games. The credits are also in the in-game About menu.
+The elePHPant is the PHP mascot by **Vincent Pontier**; the sprite is pixel art traced from the vector drawing uploaded to Wikimedia Commons by **Webysther** (*Webysther 20160423 - Elephpant.svg*, 2016-04-23), which Commons lists under the GNU General Public License v2.0 or later. `art/elephpant.svg`, the traced sheet `art/elephpant.png`, the frames in `assets/phant.png` and `poster.png` are distributed under that licence; see `art/ELEPHPANT-LICENSE.md` and `NOTICE`. The code, the barrel, ground and cloud tiles and the sounds are Apache-2.0 like the other example games. The credits are also in the in-game About menu.
 
 ## Regenerating the art
 
-`node scripts/generate-phant-sprites.mjs` (from the repository root) rebuilds the sprite sheet, the tileset description, the three synthesised sounds and the poster deterministically; `--check` verifies the committed files and `--preview DIR` writes enlargements for inspection.
+`node scripts/generate-phant-sprites.mjs` (from the repository root) copies the traced elephant frames and draws the tiles, the tileset descriptions, the three synthesised sounds and the poster deterministically; `--check` verifies the committed files and `--preview DIR` writes enlargements for inspection.

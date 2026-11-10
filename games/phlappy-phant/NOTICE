@@ -1,7 +1,7 @@
 Phlappy Phant ships one piece of third-party art. Everything else in this package is original work under the
 package LICENSE (Apache-2.0).
 
-elePHPant: art/elephpant.svg, assets/phant.png and poster.png
+elePHPant: art/elephpant.svg, art/elephpant.png, assets/phant.png and poster.png
   The PHP mascot by Vincent Pontier, vector by Webysther (Wikimedia Commons, "Webysther 20160423 -
-  Elephpant.svg", 2016-04-23), GNU General Public License v2.0 or later. The sprite and poster are rasterised,
-  reduced-palette derivatives of the vector. See art/ELEPHPANT-LICENSE.md.
+  Elephpant.svg", 2016-04-23), GNU General Public License v2.0 or later. The sprite sheet is pixel art traced from
+  the vector; the frames and poster derive from it. See art/ELEPHPANT-LICENSE.md.

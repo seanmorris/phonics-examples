@@ -91,7 +91,7 @@ $titleItems = static function() use (&$startGame, $bindings): array {
 				'title' => ['label' => 'PHLAPPY PHANT', 'disabled' => true]
 				, 'built' => ['label' => 'Built with Phonics', 'disabled' => true]
 				, 'elephpant' => ['label' => 'elePHPant by Vincent Pontier', 'disabled' => true]
-				, 'vector' => ['label' => "Sprite derived from Webysther's SVG", 'disabled' => true]
+				, 'vector' => ['label' => "Pixel art traced from Webysther's SVG", 'disabled' => true]
 				, 'art-licence' => ['label' => 'Sprite licence: GPL-2.0-or-later', 'disabled' => true]
 				, 'code-licence' => ['label' => 'Code licence: Apache-2.0', 'disabled' => true]
 			]

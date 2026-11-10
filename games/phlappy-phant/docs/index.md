@@ -19,7 +19,7 @@ Taps and clicks anywhere on the canvas flap, as do Space, Up, W and the controll
 
 ## Credits and licences
 
-The elePHPant is by Vincent Pontier; the sprite is a rasterised, reduced-palette derivative of the vector uploaded to Wikimedia Commons by Webysther, licensed GPL-2.0-or-later, and the sprite, source vector and poster are distributed under that licence (`art/ELEPHPANT-LICENSE.md`). The game code, the barrel, ground and cloud tiles and the sounds are Apache-2.0.
+The elePHPant is by Vincent Pontier; the sprite is pixel art traced from the vector uploaded to Wikimedia Commons by Webysther, licensed GPL-2.0-or-later, and the sprite sheet, source vector and poster are distributed under that licence (`art/ELEPHPANT-LICENSE.md`). The game code, the barrel, ground and cloud tiles and the sounds are Apache-2.0.
 
 ## What to study
 

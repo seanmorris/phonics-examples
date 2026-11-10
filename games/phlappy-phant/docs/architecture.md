@@ -16,4 +16,4 @@ The browser entry builds on the engine's shell services: `GameShell` claims the 
 
 ## Licence boundary
 
-The elePHPant sprite and the poster are rasterised, reduced-palette derivatives of Vincent Pontier's mascot as drawn by Webysther, so they ship under GPL-2.0-or-later beside the source vector (`art/ELEPHPANT-LICENSE.md`). `scripts/generate-phant-sprites.mjs` is the only thing that touches that vector; the barrel, ground and cloud tiles, the sounds and all code are original and Apache-2.0.
+The elePHPant sheet is pixel art traced from Vincent Pontier's mascot as drawn by Webysther, so it, the frames and the poster ship under GPL-2.0-or-later beside the source vector (`art/ELEPHPANT-LICENSE.md`); `scripts/generate-phant-sprites.mjs` only copies its frames; the barrel, ground and cloud tiles, the sounds and all code are original and Apache-2.0.
