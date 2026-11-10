@@ -1094,7 +1094,166 @@ final class Layout
 			// The loose pot sits above the stock, left of the pot plate, clear of the left column.
 			$centre['pile'] = [$centre['deck'][0] + $cardWidth / 2, $centre['pot'][1] + self::PLATE_HEIGHT / 2 + 2, 12, 7];
 		}
-		return $this->profile === 'wide' ? $this->fitWideCentre($centre) : $centre;
+		if($this->profile === 'wide') $centre = $this->fitWideCentre($centre);
+		$centre['board'] = [];
+		return $this->boardCards > 0 ? $this->placeBoard($centre) : $centre + ['message' => self::underPlate($centre['bet'])];
+	}
+
+	/**
+	 * Lay the shared board out between the pot and bet plates, as large as the lane the seats leave free allows.
+	 *
+	 * The seats were composed for draw, so the board never moves them: its cards grow or shrink to the room between
+	 * the opponents. The five cards are centred under the pot, with the stock to their right and, on the oval, the
+	 * loose pot to their left. On the oval the row may sit anywhere between the two plates, so it can drop below
+	 * opponents' chips that reach into the stock's row. Landscape keeps the stock's row, and moves its bet plate up
+	 * beside the pot plate, because that row used to hold it. On a phone, where one row would make the cards too
+	 * small to read, they stand three over two with the stock in the sixth place, and the bet plate moves down.
+	 */
+	private function placeBoard(array $centre): array
+	{
+		$across = $this->stretch();
+		$radius = (float)$this->design['chipRadius'];
+		[, $deckY, $deckWidth, $deckHeight] = $centre['deck'];
+		$aspect = $deckHeight / $deckWidth;
+		$cx = $centre['pot'][0] + $centre['pot'][2] / 2;
+		$margin = ($this->profile === 'wide' ? 8 : 4) * $across;
+		$blocks = $this->opponentBlocks();
+		$count = $this->boardCards;
+		// In card widths: a narrow gap between board cards and a wider one before the stock.
+		$board = $count + ($count - 1) * .12;
+		$stock = .3 + 1;
+		$pileWidth = 2 * ($centre['pile'][2] + $radius * $across);
+		$leftZone = $this->profile === 'wide' ? $pileWidth + 6 * $across : 0;
+		$rightZone = $this->profile === 'landscape' ? 8 * $across + $pileWidth : 0;
+		$fits = function(float $top, float $height) use ($blocks, $cx, $margin): array {
+			[$left, $right] = $this->laneBetween($blocks, $top, $top + $height, $cx);
+			return [$left + $margin, $right - $margin];
+		};
+		if($this->profile === 'tall')
+		{
+			[$left, $right] = $fits($deckY, $deckHeight);
+			$room = max(0, $right - $left);
+			$single = min($deckWidth, $room / ($board + $stock));
+			if($single < .75 * $deckWidth)
+			{
+				$humanTop = $this->seat(0, $this->seats)['plate'][1];
+				// The status message keeps its three lines between the bet plate and the human's plate.
+				$tallest = $humanTop - 14 - 64 - $this->plateHeight() - 14 - $deckY;
+				$width = max(1, min($deckWidth, $room / 3.24, $tallest / 2.1 / $aspect));
+				$height = $width * $aspect;
+				$block = 3.24 * $width;
+				$x = max($left, min($right - $block, $cx - $block / 2));
+				$cells = [];
+				for($index = 0; $index < 6; $index++)
+					$cells[] = [$x + ($index % 3) * 1.12 * $width, $deckY + intdiv($index, 3) * 1.1 * $height, $width, $height];
+				$centre['deck'] = $centre['discard'] = array_pop($cells);
+				$centre['board'] = array_slice($cells, 0, $count);
+				$centre['bet'][1] += 2.1 * $height - $deckHeight;
+				return $centre + ['message' => self::underPlate($centre['bet'])];
+			}
+			$placement = [$single, $deckY + ($deckHeight - $single * $aspect) / 2, $left, $right];
+		}
+		else
+		{
+			// The largest card width whose row fits somewhere in the band, preferring the stock's own row.
+			$preferred = $deckY + $deckHeight / 2;
+			[$top, $bottom] = $this->profile === 'wide'
+				? [$centre['pot'][1] + $centre['pot'][3] + 6, $centre['bet'][1] - 6]
+				: [$deckY, $deckY + $deckHeight];
+			$placement = null;
+			for($step = 0; $step <= 40 && $placement === null; $step++)
+			{
+				$width = $deckWidth * (1 - $step * .0175);
+				$height = $width * $aspect;
+				if($height > $bottom - $top + 1e-9) continue;
+				$offsets = [];
+				for($y = $top; $y <= $bottom - $height + 1e-9; $y += max(1, $height / 8)) $offsets[] = $y;
+				$offsets[] = max($top, min($bottom - $height, $preferred - $height / 2));
+				usort($offsets, static fn(float $a, float $b): int => abs($a + $height / 2 - $preferred) <=> abs($b + $height / 2 - $preferred));
+				foreach($offsets as $y)
+				{
+					[$left, $right] = $fits($y, $height);
+					if($right - $left >= $leftZone + $rightZone + ($board + $stock) * $width - 1e-9) { $placement = [$width, $y, $left, $right]; break; }
+				}
+			}
+			$placement ??= [$deckWidth * .3, $preferred - $deckWidth * .15 * $aspect, ...$fits($deckY, $deckHeight)];
+		}
+		[$width, $y, $left, $right] = $placement;
+		$height = $width * $aspect;
+		$x = $cx - $board * $width / 2;
+		$x = max($left + $leftZone, min($right - $rightZone - $stock * $width - $board * $width, $x));
+		for($index = 0; $index < $count; $index++) $centre['board'][] = [$x + $index * 1.12 * $width, $y, $width, $height];
+		$centre['deck'] = $centre['discard'] = [$x + ($board + .3) * $width, $y, $width, $height];
+		if($this->profile === 'wide')
+		{
+			$centre['pile'][0] = $x - 6 * $across - $pileWidth / 2;
+			$centre['pile'][1] = $y + $height / 2;
+			$centre['pile'][3] = min($centre['pile'][3], max($radius * .5, $height / 2 - $radius));
+		}
+		if($this->profile === 'landscape')
+		{
+			$centre['pile'][0] = $centre['deck'][0] + $width + 8 * $across + $pileWidth / 2;
+			$centre['pile'][1] = $y + $height / 2;
+			// The pot and bet plates share the top line, each as wide as the lane there allows.
+			[$plateTop, $plateBottom] = [$centre['pot'][1], $centre['pot'][1] + $centre['pot'][3]];
+			[$lineLeft, $lineRight] = $this->laneBetween($blocks, $plateTop, $plateBottom, $cx);
+			$plate = min($centre['pot'][2], ($lineRight - $lineLeft - 2 * $margin - 10 * $across) / 2);
+			$centre['pot'] = [$cx - 5 * $across - $plate, $plateTop, $plate, $centre['pot'][3]];
+			$centre['bet'] = [$cx + 5 * $across, $plateTop, $plate, $centre['bet'][3]];
+			// The message stands under the board, centred like the cluster.
+			return $centre + ['message' => [$cx, $y + $height + 8, 2 * $plate + 10 * $across]];
+		}
+		return $centre + ['message' => self::underPlate($centre['bet'])];
+	}
+
+	/** @return array{float,float,float} Centre x, top and width of the status message beneath a plate. */
+	private static function underPlate(array $plate): array
+	{
+		return [$plate[0] + $plate[2] / 2, $plate[1] + $plate[3] + 8, $plate[2]];
+	}
+
+	/** @return list<array{float,float,float,float}> What a board must stay clear of: each opponent's whole block, and the oval's action lane. */
+	private function opponentBlocks(): array
+	{
+		$size = (float)$this->design['emblemSize'] * $this->stretch();
+		$blocks = [];
+		for($seat = 1; $seat < $this->seats; $seat++)
+		{
+			$geometry = $this->seat($seat, $this->seats);
+			$last = $geometry['slots'][4];
+			$bank = $this->bankBounds($seat, $this->seats, Chips::bank(500));
+			$blockLeft = min($geometry['plate'][0], $geometry['slots'][0][0], $bank[0], $geometry['emblem'][0] - $size / 2);
+			$blockRight = max($geometry['plate'][0] + $geometry['plate'][2], $last[0] + $last[2], $bank[0] + $bank[2], $geometry['emblem'][0] + $size / 2);
+			$blockTop = min($geometry['plate'][1], $bank[1]);
+			$blockBottom = max($last[1] + $last[3], $bank[1] + $bank[3], $geometry['caption'][1] + 22);
+			$blocks[] = [$blockLeft, $blockTop, $blockRight - $blockLeft, $blockBottom - $blockTop];
+		}
+		if($this->profile === 'wide')
+		{
+			$control = $this->controlSize();
+			$actionTop = $this->height() - 26 - 5 * $control - 4 * 10;
+			[$actionLeft, $actionWidth] = $this->actionColumn();
+			$blocks[] = [$actionLeft, $actionTop, $actionWidth, $this->height() - $actionTop];
+		}
+		return $blocks;
+	}
+
+	/**
+	 * The horizontal span free of the given blocks across a band of the table, around a point.
+	 *
+	 * @return array{float,float} Left and right edges of the span.
+	 */
+	private function laneBetween(array $blocks, float $top, float $bottom, float $x): array
+	{
+		$left = 0.0; $right = (float)$this->tableRight();
+		foreach($blocks as [$blockLeft, $blockTop, $blockWidth, $blockHeight])
+		{
+			if($blockTop + $blockHeight <= $top || $blockTop >= $bottom) continue;
+			if($blockLeft + $blockWidth <= $x) $left = max($left, $blockLeft + $blockWidth);
+			elseif($blockLeft >= $x) $right = min($right, $blockLeft);
+			else return [$x, $x];
+		}
+		return [$left, max($left, $right)];
 	}
 
 	/**

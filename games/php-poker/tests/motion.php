@@ -312,4 +312,48 @@ foreach([[3.7, .35], [3.8, .5], [3.65, 1.0]] as [$lit, $frame])
 		"a {$frame}-second frame from {$lit} seconds ends the flash and asks for the final redraw");
 }
 
+// Street games deal from the stock card by card: every seat's new cards round the table from the dealer's left,
+// then the board. Each card stays off the table until it lands, and lands showing only what its view allows.
+$within = static function(array $rect, array $targets): bool {
+	foreach($targets as $target) if(max(array_map(static fn(float $a, float $b): float => abs($a - $b), $rect, $target)) < 1e-9) return true;
+	return false;
+};
+foreach([['holdem', 4, 2, 5], ['stud5', 3, 5, 0], ['stud7', 7, 7, 0]] as [$game, $seats, $handSize, $boardSize])
+{
+	$table = new PhpPoker\Game("motion-$game", $seats, new PhpPoker\Profile('anything', game: $game));
+	$layout = Layout::fit(1280, 720, 1, $seats, $handSize, $boardSize);
+	$empty = ['generation' => 1, 'handNumber' => 0, 'phase' => 'ready', 'players' => [], 'pot' => 0, 'game' => $game];
+	$view = $table->view(0) + ['generation' => 1];
+	$deal = new Motion($empty, $view, ['stages' => [], 'after' => Chips::fromView($view)], []);
+	$first = array_sum(array_map(static fn(array $player): int => count($player['cards']), $view['players']));
+	$cues = array_values(array_filter($deal->status()['sounds'], static fn(array $sound): bool => $sound['cue'] === 'card'));
+	$expect($deal->status()['kind'] === 'deal' && count($cues) === $first, "$game: one card cue for each of the $first cards of the first street");
+	$expect(abs($deal->status()['duration'] - (($first - 1) * Motion::CARD_GAP + Motion::CARD_TRAVEL)) < 1e-9, "$game: the deal lasts one card flight plus the gaps");
+	$frame = $deal->frame($layout);
+	$expect(count($frame['cards']) === 1 && $frame['cards'][0]['id'] === null, "$game: the first card leaves the stock face down");
+	$expect(array_sum(array_map('count', $frame['hiddenCards'])) === $first && $frame['hiddenSeats'] === [], "$game: dealt cards hide one by one, not by seat");
+	$firstSeat = ($view['dealer'] + 1) % $seats;
+	$expect(isset($frame['hiddenCards'][$firstSeat]) && $frame['hiddenCards'][$firstSeat][0] === 0, "$game: the dealer's left is served first");
+	$deal->advance(10);
+	$landed = $deal->frame($layout);
+	foreach($landed['cards'] as $card) $expect($within($card['rect'], array_merge(...array_map(static fn(int $seat): array => $layout->seat($seat, $seats)['cards'], range(0, $seats - 1)))), "$game: every card lands on a seat slot");
+	$landedIds = array_column($landed['cards'], 'id');
+	$expect(count(array_filter($landedIds, 'is_int')) === count(array_filter(array_merge(...array_column($view['players'], 'cards')), 'is_int')), "$game: landed cards show exactly the faces the view allows");
+	// Calling round to the next street deals only its new cards.
+	$before = $view;
+	while($table->view(-1)['streetIndex'] === 0) { $legal = $table->view($table->actor())['legalActions']; $table->act($table->actor(), ['type' => $legal['call'] ? 'call' : 'check'], $table->view(-1)['revision']); }
+	$next = $table->view(0) + ['generation' => 1];
+	$street = new Motion($before, $next, Chips::transition($before, $next, Chips::fromView($before)), []);
+	$added = $boardSize ? 3 : $seats;
+	$streetCues = array_filter($street->status()['sounds'], static fn(array $sound): bool => $sound['cue'] === 'card');
+	$expect($street->status()['kind'] === 'deal' && count($streetCues) === $added, "$game: the second street deals $added cards");
+	$streetFrame = $street->frame($layout);
+	if($boardSize) $expect($streetFrame['hiddenBoard'] === [0, 1, 2] && $streetFrame['hiddenCards'] === [], 'holdem: the flop hides three board cards and no seat cards');
+	else $expect((static function(array $hidden): array { ksort($hidden); return $hidden; })($streetFrame['hiddenCards']) === array_fill_keys(range(0, $seats - 1), [count($before['players'][0]['cards'])]), "$game: each seat waits for one new card");
+	$street->advance(10);
+	$targets = $boardSize ? $layout->centre()['board'] : array_merge(...array_map(static fn(int $seat): array => $layout->seat($seat, $seats)['cards'], range(0, $seats - 1)));
+	foreach($street->frame($layout)['cards'] as $card) $expect($within($card['rect'], $targets), "$game: second-street cards land in place");
+	if($boardSize) $expect(array_column($street->frame($layout)['cards'], 'id') === array_slice($next['board'], 0, 3), 'holdem: the flop lands face up');
+}
+
 echo "$checks PHP Poker motion and chip checks passed.\n";
