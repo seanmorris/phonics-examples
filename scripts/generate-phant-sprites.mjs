@@ -45,9 +45,11 @@ const RIVER_FRAME_MS = 400;
 // foreground from the parallax copy; the other two are whole sheets. Between each pair the generator grades
 // STEPS - 1 in-between palettes, so each terrain tileset stacks 2 * STEPS + 1 palettes top to bottom.
 const KEYFRAMES = ['day', 'duskdawn', 'night'], STEPS = 3;
-// A pixel whose hue swings further than this between keyframes travels through the warm side of the wheel (pinks
-// and reds) instead of the shorter way through cyan and green, so the sky blushes on its way to dusk and night.
-const WARM_HUE = 20, WIDE_SWING = 90;
+// A pixel whose hue swings further than WIDE_SWING between keyframes, with one end a warm colour (within WARM_SPREAD of
+// WARM_HUE, the reds through golds), travels through the warm side of the wheel instead of the shorter way through
+// cyan and green, so the sky blushes on its way to dusk and night. Other swings, such as foliage turning from green to
+// night navy, take the short way through teal.
+const WARM_HUE = 20, WARM_SPREAD = 80, WIDE_SWING = 90;
 
 /** A simple RGBA raster with out-of-range writes ignored. */
 class Raster
@@ -209,7 +211,10 @@ function grade(from, to, t)
 	const rising = (end - start + 360) % 360;
 	let swing = rising <= 180 ? rising : rising - 360;
 
-	if(Math.abs(swing) > WIDE_SWING) swing = (WARM_HUE - start + 360) % 360 <= rising ? rising : rising - 360;
+	const warm = hue => Math.min((hue - WARM_HUE + 360) % 360, (WARM_HUE - hue + 360) % 360) <= WARM_SPREAD;
+
+	if(Math.abs(swing) > WIDE_SWING && (warm(start) || warm(end)))
+		swing = (WARM_HUE - start + 360) % 360 <= rising ? rising : rising - 360;
 
 	const colour = srgb([l1 + (l2 - l1) * t, c1 + (c2 - c1) * t, start + swing * t]);
 	graded.set(key, colour);
