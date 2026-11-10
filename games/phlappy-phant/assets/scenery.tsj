@@ -4,11 +4,11 @@
   "name": "Phlappy Phant scenery",
   "tilewidth": 48,
   "tileheight": 32,
-  "tilecount": 3,
+  "tilecount": 21,
   "columns": 3,
   "image": "scenery.png",
   "imagewidth": 144,
-  "imageheight": 32,
+  "imageheight": 224,
   "properties": [
     {
       "name": "phlappy.widths",

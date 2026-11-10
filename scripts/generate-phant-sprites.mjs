@@ -1,7 +1,8 @@
 // Generates games/phlappy-phant's pixel art and sounds: the elePHPant frames copied from the hand-pixelled sheet
 // art/elephpant.png (see art/ELEPHPANT-LICENSE.md); the backdrop, tower, ground and scenery tilesets cut from
 // GrafxKid's CC0 terrain sheet (art/terrain.png, with the parallax band mask and touched-up scenery in
-// art/terrain-parallax.png; see art/TERRAIN-LICENSE.md); the tileset descriptions; three synthesised PCM sounds and the
+// art/terrain-parallax.png, and hand-graded dusk/dawn and night copies; see art/TERRAIN-LICENSE.md); the tileset
+// descriptions; three synthesised PCM sounds and the
 // catalog poster. Every byte is deterministic so `--check` can verify the committed output; `--preview DIR` also
 // writes nearest-neighbour enlargements.
 import fs from 'node:fs/promises';
@@ -40,6 +41,13 @@ const SCENERY_W = 48, SCENERY_H = 32;
 // Farther bands drift slower; the ground and towers move at the full scroll speed.
 const PARALLAX = [.08, .16, .24, .45, .7];
 const RIVER_FRAME_MS = 400;
+// Three hand-graded keyframes: day, dusk (also dawn), and night. Day takes its backdrop from art/terrain.png and its
+// foreground from the parallax copy; the other two are whole sheets. Between each pair the generator grades
+// STEPS - 1 in-between palettes, so each terrain tileset stacks 2 * STEPS + 1 palettes top to bottom.
+const KEYFRAMES = ['day', 'duskdawn', 'night'], STEPS = 3;
+// A pixel whose hue swings further than this between keyframes travels through the warm side of the wheel (pinks
+// and reds) instead of the shorter way through cyan and green, so the sky blushes on its way to dusk and night.
+const WARM_HUE = 20, WIDE_SWING = 90;
 
 /** A simple RGBA raster with out-of-range writes ignored. */
 class Raster
@@ -155,6 +163,60 @@ function copy(source, [sx, sy, width, height], target, dx, dy)
 	}
 }
 
+const toLinear = channel => { channel /= 255; return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4; };
+const toSrgb = channel => Math.round(255 * Math.min(1, Math.max(0, channel <= .0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - .055)));
+
+/** Convert an sRGB triple to OKLCH: perceptual lightness, chroma and hue in degrees. */
+function oklch(rgb)
+{
+	const [r, g, b] = rgb.map(toLinear);
+	const l = Math.cbrt(.4122214708 * r + .5363325363 * g + .0514459929 * b);
+	const m = Math.cbrt(.2119034982 * r + .6806995451 * g + .1073969566 * b);
+	const s = Math.cbrt(.0883024619 * r + .2817188376 * g + .6299787005 * b);
+	const a = 1.9779984951 * l - 2.4285922050 * m + .4505937099 * s;
+	const bb = .0259040371 * l + .7827717662 * m - .8086757660 * s;
+
+	return [.2104542553 * l + .7936177850 * m - .0040720468 * s, Math.hypot(a, bb), (Math.atan2(bb, a) * 180 / Math.PI + 360) % 360];
+}
+
+/** Convert OKLCH back to an sRGB triple, clipping out-of-gamut channels. */
+function srgb([lightness, chroma, hue])
+{
+	const a = chroma * Math.cos(hue * Math.PI / 180), b = chroma * Math.sin(hue * Math.PI / 180);
+	const l = (lightness + .3963377774 * a + .2158037573 * b) ** 3;
+	const m = (lightness - .1055613458 * a - .0638541728 * b) ** 3;
+	const s = (lightness - .0894841775 * a - 1.2914855480 * b) ** 3;
+
+	return [
+		4.0767416621 * l - 3.3077115913 * m + .2309699292 * s
+		, -1.2684380046 * l + 2.6097574011 * m - .3413193965 * s
+		, -.0041960863 * l - .7034186147 * m + 1.7076147010 * s
+	].map(toSrgb);
+}
+
+const graded = new Map;
+
+/** Grade one colour part of the way to another in OKLCH, taking wide hue swings through the warm side. */
+function grade(from, to, t)
+{
+	const key = `${from}|${to}|${t}`;
+
+	if(graded.has(key)) return graded.get(key);
+
+	const [l1, c1, h1] = oklch(from), [l2, c2, h2] = oklch(to);
+	// A nearly grey end has no meaningful hue; borrow the other end's so only lightness and chroma move.
+	const start = c1 < .02 ? h2 : h1, end = c2 < .02 ? h1 : h2;
+	const rising = (end - start + 360) % 360;
+	let swing = rising <= 180 ? rising : rising - 360;
+
+	if(Math.abs(swing) > WIDE_SWING) swing = (WARM_HUE - start + 360) % 360 <= rising ? rising : rising - 360;
+
+	const colour = srgb([l1 + (l2 - l1) * t, c1 + (c2 - c1) * t, start + swing * t]);
+	graded.set(key, colour);
+
+	return colour;
+}
+
 /** Read the band edges from the mask: each band is a run of rows painted one flat colour. */
 function bands(mask)
 {
@@ -265,29 +327,71 @@ async function title(target, text, x, y, scale, colour = palette.ink)
 
 const frames = await phantFrames();
 const terrain = await sheet('terrain.png'), mask = await sheet('terrain-parallax.png');
+// Day is assembled from the two day sheets: the backdrop and its river frames from terrain.png, the foreground column
+// from the parallax copy.
+const day = new Raster(SHEET, SHEET);
+copy(terrain, [0, 0, FG_X, SHEET], day, 0, 0);
+copy(mask, [FG_X, 0, SHEET - FG_X, SHEET], day, FG_X, 0);
+const keyframes = [day, await sheet('terrain-duskdawn.png'), await sheet('terrain-night.png')];
+
+// The graded sheets must keep the day shapes exactly, or a crossfade would show two outlines at once.
+keyframes.slice(1).forEach((keyframe, index) => {
+	for(let y = 0; y < SHEET; y++) for(let x = 0; x < SHEET; x++) if((keyframe.get(x, y)[3] >= 128) !== (day.get(x, y)[3] >= 128))
+		throw Error(`art/terrain-${KEYFRAMES[index + 1]}.png differs in shape from the day sheets at ${x},${y}`);
+});
+
+// Every palette is one whole sheet: the keyframes, with the graded in-betweens between each pair.
+const palettes = [];
+
+for(let index = 0; index < KEYFRAMES.length - 1; index++) for(let step = 0; step < STEPS; step++)
+{
+	if(step === 0) { palettes.push(keyframes[index]); continue; }
+
+	const sheetFrom = keyframes[index], sheetTo = keyframes[index + 1], between = new Raster(SHEET, SHEET);
+
+	for(let y = 0; y < SHEET; y++) for(let x = 0; x < SHEET; x++)
+	{
+		const [r, g, b, a] = sheetFrom.get(x, y);
+
+		if(a < 128) continue;
+
+		between.put(x, y, grade([r, g, b], sheetTo.get(x, y).slice(0, 3), step / STEPS), a);
+	}
+
+	palettes.push(between);
+}
+
+palettes.push(keyframes[keyframes.length - 1]);
+
 const phantSheet = new Raster(PHANT_W * PHANT_FRAMES, PHANT_H * PHANT_ROWS);
 frames.forEach((frame, index) => phantSheet.blit(frame, (index % PHANT_FRAMES) * PHANT_W, Math.floor(index / PHANT_FRAMES) * PHANT_H));
 
-// Backdrop: two copies of the 160x160 block, each with one river frame laid over the fourth row; the tile animation
-// swaps them and the renderer crops one band at a time.
+const backdrop = new Raster(BACKDROP, BACKDROP * 2 * palettes.length);
+const towerSheet = new Raster(FG_W, SLICE_H * 4 * palettes.length);
+const groundSheet = new Raster(GROUND_TILE * 2, GROUND_TILE * palettes.length);
+const scenerySheet = new Raster(SCENERY_W * SCENERY.length, SCENERY_H * palettes.length);
+
+palettes.forEach((back, palette) => {
+	const front = back;
+
+	// Backdrop: two copies of the 160x160 block per palette, each with one river frame laid over the fourth row;
+	// the tile animation swaps them and the renderer crops one band at a time.
+	for(const frame of [0, 1])
+	{
+		const top = (palette * 2 + frame) * BACKDROP;
+		copy(back, [0, 0, BACKDROP, BACKDROP], backdrop, 0, top);
+		copy(back, [0, BACKDROP + frame * OVERLAY_H, BACKDROP, OVERLAY_H], backdrop, 0, top + OVERLAY_ROW);
+	}
+
+	// Towers: 64x8 slices of the foreground column (the tower is 56 wide with 4 clear pixels each side).
+	Object.values(TOWER_SLICES).forEach((y, index) => copy(front, [FG_X, y, FG_W, SLICE_H], towerSheet, 0, (palette * 4 + index) * SLICE_H));
+	Object.values(GROUND).forEach(([x, y], index) => copy(front, [x, y, GROUND_TILE, GROUND_TILE], groundSheet, index * GROUND_TILE, palette * GROUND_TILE));
+	SCENERY.forEach(([, x, y, width, height], index) => copy(front, [x, y, width, height], scenerySheet, index * SCENERY_W, (palette + 1) * SCENERY_H - height));
+});
+
 const edges = bands(mask);
-const backdrop = new Raster(BACKDROP, BACKDROP * 2);
-
-for(const frame of [0, 1])
-{
-	copy(terrain, [0, 0, BACKDROP, BACKDROP], backdrop, 0, frame * BACKDROP);
-	copy(terrain, [0, BACKDROP + frame * OVERLAY_H, BACKDROP, OVERLAY_H], backdrop, 0, frame * BACKDROP + OVERLAY_ROW);
-}
-
-// Towers: 64x8 slices of the foreground column (the tower is 56 wide with 4 clear pixels each side).
-const towerSheet = new Raster(FG_W, SLICE_H * 4);
-Object.values(TOWER_SLICES).forEach((y, index) => copy(mask, [FG_X, y, FG_W, SLICE_H], towerSheet, 0, index * SLICE_H));
-
-const groundSheet = new Raster(GROUND_TILE * 2, GROUND_TILE);
-Object.values(GROUND).forEach(([x, y], index) => copy(mask, [x, y, GROUND_TILE, GROUND_TILE], groundSheet, index * GROUND_TILE, 0));
-
-const scenerySheet = new Raster(SCENERY_W * SCENERY.length, SCENERY_H);
-SCENERY.forEach(([, x, y, width, height], index) => copy(mask, [x, y, width, height], scenerySheet, index * SCENERY_W, SCENERY_H - height));
+// The sky above the backdrop continues each palette's top row.
+const skies = palettes.map(back => '#' + back.get(0, 0).slice(0, 3).map(channel => channel.toString(16).padStart(2, '0')).join(''));
 
 const tileset = (name, image, width, height, columns, count, sheet, extra = {}) => Buffer.from(JSON.stringify({
 	type: 'tileset'
@@ -306,19 +410,25 @@ const tileset = (name, image, width, height, columns, count, sheet, extra = {}) 
 generated.set('assets/phant.png', phantSheet.png());
 generated.set('assets/phant.tsj', tileset('Phlappy Phant elephant', 'phant.png', PHANT_W, PHANT_H, PHANT_FRAMES, PHANT_FRAMES * PHANT_ROWS, phantSheet));
 generated.set('assets/backdrop.png', backdrop.png());
-generated.set('assets/backdrop.tsj', tileset('Phlappy Phant backdrop', 'backdrop.png', BACKDROP, BACKDROP, 1, 2, backdrop, {
+generated.set('assets/backdrop.tsj', tileset('Phlappy Phant backdrop', 'backdrop.png', BACKDROP, BACKDROP, 1, 2 * palettes.length, backdrop, {
 	properties: [
 		{name: 'phlappy.bands', type: 'string', value: edges.join(',')}
 		, {name: 'phlappy.parallax', type: 'string', value: PARALLAX.join(',')}
+		, {name: 'phlappy.keyframes', type: 'string', value: KEYFRAMES.join(',')}
+		, {name: 'phlappy.steps', type: 'string', value: String(STEPS)}
+		, {name: 'phlappy.skies', type: 'string', value: skies.join(',')}
 	]
-	, tiles: [{id: 0, animation: [{tileid: 0, duration: RIVER_FRAME_MS}, {tileid: 1, duration: RIVER_FRAME_MS}]}]
+	, tiles: palettes.map((_, palette) => ({id: palette * 2, animation: [
+		{tileid: palette * 2, duration: RIVER_FRAME_MS}
+		, {tileid: palette * 2 + 1, duration: RIVER_FRAME_MS}
+	]}))
 }));
 generated.set('assets/tower.png', towerSheet.png());
-generated.set('assets/tower.tsj', tileset('Phlappy Phant tower', 'tower.png', FG_W, SLICE_H, 1, 4, towerSheet));
+generated.set('assets/tower.tsj', tileset('Phlappy Phant tower', 'tower.png', FG_W, SLICE_H, 1, 4 * palettes.length, towerSheet));
 generated.set('assets/ground.png', groundSheet.png());
-generated.set('assets/ground.tsj', tileset('Phlappy Phant ground', 'ground.png', GROUND_TILE, GROUND_TILE, 2, 2, groundSheet));
+generated.set('assets/ground.tsj', tileset('Phlappy Phant ground', 'ground.png', GROUND_TILE, GROUND_TILE, 2, 2 * palettes.length, groundSheet));
 generated.set('assets/scenery.png', scenerySheet.png());
-generated.set('assets/scenery.tsj', tileset('Phlappy Phant scenery', 'scenery.png', SCENERY_W, SCENERY_H, SCENERY.length, SCENERY.length, scenerySheet, {
+generated.set('assets/scenery.tsj', tileset('Phlappy Phant scenery', 'scenery.png', SCENERY_W, SCENERY_H, SCENERY.length, SCENERY.length * palettes.length, scenerySheet, {
 	properties: [{name: 'phlappy.widths', type: 'string', value: SCENERY.map(([, , , width]) => width).join(',')}]
 }));
 generated.set('assets/flap.wav', flapSound());

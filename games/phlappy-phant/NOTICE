@@ -6,6 +6,7 @@ elePHPant: art/elephpant.svg, art/elephpant.png, assets/phant.png and poster.png
   Elephpant.svg", 2016-04-23), GNU General Public License v2.0 or later. The sprite sheet is pixel art traced from
   the vector; the frames and poster derive from it. See art/ELEPHPANT-LICENSE.md.
 
-Terrain: art/terrain.png, art/terrain-parallax.png, assets/backdrop.png, assets/tower.png, assets/ground.png,
+Terrain: art/terrain.png, art/terrain-parallax.png, art/terrain-duskdawn.png, art/terrain-night.png,
+assets/backdrop.png, assets/tower.png, assets/ground.png,
 assets/scenery.png and the scenery on poster.png
   "Seasonal Platformer Tiles" by GrafxKid (OpenGameArt), CC0 1.0. See art/TERRAIN-LICENSE.md.

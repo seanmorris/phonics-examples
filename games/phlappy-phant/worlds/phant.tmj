@@ -20,15 +20,15 @@
       "source": "../assets/backdrop.tsj"
     },
     {
-      "firstgid": 7,
+      "firstgid": 19,
       "source": "../assets/tower.tsj"
     },
     {
-      "firstgid": 11,
+      "firstgid": 47,
       "source": "../assets/ground.tsj"
     },
     {
-      "firstgid": 13,
+      "firstgid": 61,
       "source": "../assets/scenery.tsj"
     }
   ]

@@ -6,7 +6,7 @@ The game fills any frame rather than letterboxing a fixed canvas: the world is 3
 
 ## How to play
 
-Press Play, then flap to start. Gravity pulls the phant down; each flap gives it the same upward kick, and the towers scroll toward it at a speed that climbs slowly with the score. Passing a pair scores one; touching a tower or the ground ends the run with a bonk. Gaps shrink a step every eight points, and every ten towers the sky swaps between day and night. The best score is kept locally in the browser and shown on the ready screen and the result card.
+Press Play, then flap to start. Gravity pulls the phant down; each flap gives it the same upward kick, and the towers scroll toward it at a speed that climbs slowly with the score. Passing a pair scores one; touching a tower or the ground ends the run with a bonk. Gaps shrink a step every eight points, and every ten towers the sky warms through dusk into night, then back through dawn. The best score is kept locally in the browser and shown on the ready screen and the result card.
 
 Taps and clicks anywhere on the canvas flap, as do Space, Up, W and the controller's A or RB. **Input settings** edits the keyboard and controller bindings separately, keeps Pause fixed, and stores valid changes locally when the browser allows it.
 

@@ -4,11 +4,11 @@
   "name": "Phlappy Phant backdrop",
   "tilewidth": 160,
   "tileheight": 160,
-  "tilecount": 2,
+  "tilecount": 14,
   "columns": 1,
   "image": "backdrop.png",
   "imagewidth": 160,
-  "imageheight": 320,
+  "imageheight": 2240,
   "properties": [
     {
       "name": "phlappy.bands",
@@ -19,6 +19,21 @@
       "name": "phlappy.parallax",
       "type": "string",
       "value": "0.08,0.16,0.24,0.45,0.7"
+    },
+    {
+      "name": "phlappy.keyframes",
+      "type": "string",
+      "value": "day,duskdawn,night"
+    },
+    {
+      "name": "phlappy.steps",
+      "type": "string",
+      "value": "3"
+    },
+    {
+      "name": "phlappy.skies",
+      "type": "string",
+      "value": "#4866c5,#a95da2,#c97260,#b09e56,#a4634d,#723c5d,#2d2655"
     }
   ],
   "tiles": [
@@ -31,6 +46,84 @@
         },
         {
           "tileid": 1,
+          "duration": 400
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "animation": [
+        {
+          "tileid": 2,
+          "duration": 400
+        },
+        {
+          "tileid": 3,
+          "duration": 400
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "animation": [
+        {
+          "tileid": 4,
+          "duration": 400
+        },
+        {
+          "tileid": 5,
+          "duration": 400
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "animation": [
+        {
+          "tileid": 6,
+          "duration": 400
+        },
+        {
+          "tileid": 7,
+          "duration": 400
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "animation": [
+        {
+          "tileid": 8,
+          "duration": 400
+        },
+        {
+          "tileid": 9,
+          "duration": 400
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "animation": [
+        {
+          "tileid": 10,
+          "duration": 400
+        },
+        {
+          "tileid": 11,
+          "duration": 400
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "animation": [
+        {
+          "tileid": 12,
+          "duration": 400
+        },
+        {
+          "tileid": 13,
           "duration": 400
         }
       ]

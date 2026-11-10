@@ -4,9 +4,9 @@
   "name": "Phlappy Phant ground",
   "tilewidth": 32,
   "tileheight": 32,
-  "tilecount": 2,
+  "tilecount": 14,
   "columns": 2,
   "image": "ground.png",
   "imagewidth": 64,
-  "imageheight": 32
+  "imageheight": 224
 }

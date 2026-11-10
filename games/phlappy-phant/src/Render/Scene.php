@@ -21,13 +21,20 @@ final class Scene
 {
 	public const GID_PHANT = 1;
 	public const GID_PHANT_LEFT = 3;
+	/** Day-palette tiles; each terrain tileset stacks its graded palettes after them, one stride apart. */
 	public const GID_BACKDROP = 5;
-	public const GID_TOWER_CAP = 7;
-	public const GID_TOWER_BODY = 8;
-	public const GID_TOWER_BASE = 10;
-	public const GID_GRASS = 11;
-	public const GID_DIRT = 12;
-	public const GID_SCENERY = 13;
+	public const GID_TOWER_CAP = 19;
+	public const GID_TOWER_BODY = 20;
+	public const GID_TOWER_BASE = 22;
+	public const GID_GRASS = 47;
+	public const GID_DIRT = 48;
+	public const GID_SCENERY = 61;
+	public const STRIDE_BACKDROP = 2;
+	public const STRIDE_TOWER = 4;
+	public const STRIDE_GROUND = 2;
+	public const STRIDE_SCENERY = 3;
+	/** Seconds for each leg of the cycle: day to dusk, then dusk to night (and back the same way at dawn). */
+	public const LEG_SECONDS = 1.4;
 	/** The backdrop block, its tile size, and the ground tile size, in world units. */
 	public const BACKDROP = 160;
 	/** The backdrop draws at twice the world's pixel size, so its 160-pixel block spans 320 world units. */
@@ -37,9 +44,8 @@ final class Scene
 	public const SLICE_W = 64;
 	public const SLICE_H = 8;
 	/** The backdrop's top row, continued up into the sky of tall frames; night multiplies it like every tile. */
-	public const DAY_SKY = [.282, .4, .773];
-	public const NIGHT_TINT = [.55, .60, .85];
-	public const NIGHT_SKY = [.155, .24, .657];
+	/** The elephant is not in the terrain sheets, so it takes a light tint to sit in each keyframe's light. */
+	public const PHANT_TINTS = [[1, 1, 1], [1, .88, .8], [.72, .74, .95]];
 	/** Scenery between each pair of towers, as [scenery index, offset from the tower's right edge], picked per pair. */
 	public const SCENERY_LAYOUTS = [[], [[0, 24]], [[1, 16], [0, 56]], [[2, 32]], [[1, 40]], [[0, 8], [2, 48]]];
 	public const INK = [.21, .20, .33];
@@ -60,8 +66,15 @@ final class Scene
 	private RectRenderer $rects;
 	private MenuRenderer $menus;
 	private array $cache = [];
-	/** Zero for day, one for night, eased toward the simulation's palette. */
+	/** Position in the day cycle: zero is day, one is dusk (or dawn), two is night. */
 	private float $blend = 0;
+	/** The palette every world sprite draws in this frame, and how far the next one is faded over it. */
+	private int $palette = 0;
+	private float $fade = 0;
+	/** Palettes per leg of the cycle: the keyframe and the in-betweens graded towards the next. */
+	private int $steps = 1;
+	/** @var list<array{float,float,float}> Sky colour above the backdrop for each palette. */
+	private array $skies = [];
 	private float $blendClock = 0;
 	private float $deathSpin = 0;
 	/** @var list<array{int,int,float}> Backdrop bands as [top, height, parallax rate], read from the backdrop tileset. */
@@ -108,6 +121,11 @@ final class Scene
 		foreach($rates as $index => $rate) $this->bands[] = [$edges[$index], $edges[$index + 1] - $edges[$index], $rate];
 
 		$this->sceneryWidths = array_map('intval', explode(',', $property($map, 'phlappy.widths')));
+		$this->steps = max(1, (int)$property($map, 'phlappy.steps'));
+		$this->skies = array_map(
+			static fn(string $hex): array => array_map(static fn(string $pair): float => hexdec($pair) / 255, str_split(ltrim($hex, '#'), 2))
+			, explode(',', $property($map, 'phlappy.skies'))
+		);
 	}
 
 	/**
@@ -117,7 +135,10 @@ final class Scene
 	 */
 	public function skyColor(): array
 	{
-		return [...self::lerp(self::DAY_SKY, self::NIGHT_SKY, $this->blend), 1.0];
+		$from = $this->skies[$this->palette];
+		$to = $this->skies[min(count($this->skies) - 1, $this->palette + 1)];
+
+		return [...self::lerp($from, $to, $this->fade), 1.0];
 	}
 
 	/**
@@ -155,9 +176,22 @@ final class Scene
 
 		$elapsed = max(0, min(.25, $seconds - $this->blendClock));
 		$this->blendClock = $seconds;
-		$target = (float)$game->palette;
-		$this->blend += max(-$elapsed, min($elapsed, $target - $this->blend));
-		$tint = [...self::lerp([1, 1, 1], self::NIGHT_TINT, $this->blend), 1.0];
+		// Night is two legs away: the sky warms to dusk before it darkens, and morning runs the same path back through
+		// dawn. Each leg eases in and out, so the light lingers at dusk on the way.
+		$target = 2.0 * $game->palette;
+		$step = $elapsed / self::LEG_SECONDS;
+		$this->blend += max(-$step, min($step, $target - $this->blend));
+		// The generator graded in-between palettes along each leg; the eased leg position picks the pair to fade.
+		$legIndex = min(1, (int)floor($this->blend));
+		$leg = $this->blend - $legIndex;
+		$position = $this->steps * ($legIndex + $leg * $leg * (3 - 2 * $leg));
+		$last = count($this->skies) - 1;
+		$this->palette = min($last, (int)floor($position));
+		$this->fade = $this->palette === $last ? 0.0 : $position - $this->palette;
+		$keyframe = $position / $this->steps;
+		$phantKey = min(1, (int)floor($keyframe));
+
+		$tint = [1, 1, 1, 1];
 
 		$sprites = [];
 		$y = static fn(float $worldY): float => ($worldY + $offsetY) * $scale;
@@ -180,14 +214,18 @@ final class Scene
 				);
 				$band->crop = [0, $top, self::BACKDROP, $bandHeight];
 				$band->animated = true;
-				$sprites[] = $band;
+				$this->graded($sprites, $band, self::STRIDE_BACKDROP);
 			}
 		}
 
 		for($x = -fmod($game->scroll, self::GROUND_TILE); $x < $visible; $x += self::GROUND_TILE)
 		{
-			$sprites[] = $this->tile(self::GID_GRASS, $x * $scale, $y(Simulation::GROUND_Y), $scale, $tint);
-			$sprites[] = $this->tile(self::GID_DIRT, $x * $scale, $y(Simulation::GROUND_Y + self::GROUND_TILE), $scale, $tint);
+			$this->graded($sprites, $this->tile(self::GID_GRASS, $x * $scale, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_GROUND);
+			$this->graded(
+				$sprites
+				, $this->tile(self::GID_DIRT, $x * $scale, $y(Simulation::GROUND_Y + self::GROUND_TILE), $scale, $tint)
+				, self::STRIDE_GROUND
+			);
 		}
 
 		$towers = [];
@@ -205,7 +243,7 @@ final class Scene
 
 				$scenery = $this->tile(self::GID_SCENERY + $piece, $sx * $scale, $y(Simulation::GROUND_Y), $scale, $tint);
 				$scenery->originY = 1;
-				$sprites[] = $scenery;
+				$this->graded($sprites, $scenery, self::STRIDE_SCENERY);
 			}
 
 			$left = $wx - (self::SLICE_W - Simulation::TOWER_W) / 2;
@@ -227,18 +265,18 @@ final class Scene
 				return $slice;
 			};
 
-			$sprites[] = $hanging(self::GID_TOWER_CAP, $tower->gapTop - self::SLICE_H);
+			$this->graded($sprites, $hanging(self::GID_TOWER_CAP, $tower->gapTop - self::SLICE_H), self::STRIDE_TOWER);
 
 			for($wy = $tower->gapTop - 2 * self::SLICE_H, $n = 0; $wy + $offsetY > -self::SLICE_H; $wy -= self::SLICE_H, $n++)
-			$sprites[] = $hanging(self::GID_TOWER_BODY + $n % 2, $wy);
+			$this->graded($sprites, $hanging(self::GID_TOWER_BODY + $n % 2, $wy), self::STRIDE_TOWER);
 
 			$top = $tower->gapTop + $tower->gap;
-			$sprites[] = $this->tile(self::GID_TOWER_CAP, $sx, $y($top), $scale, $tint);
+			$this->graded($sprites, $this->tile(self::GID_TOWER_CAP, $sx, $y($top), $scale, $tint), self::STRIDE_TOWER);
 
 			for($wy = $top + self::SLICE_H, $n = 0; $wy < Simulation::GROUND_Y; $wy += self::SLICE_H, $n++)
-			$sprites[] = $this->tile(self::GID_TOWER_BODY + $n % 2, $sx, $y($wy), $scale, $tint);
+			$this->graded($sprites, $this->tile(self::GID_TOWER_BODY + $n % 2, $sx, $y($wy), $scale, $tint), self::STRIDE_TOWER);
 
-			$sprites[] = $this->tile(self::GID_TOWER_BASE, $sx, $y(Simulation::GROUND_Y), $scale, $tint);
+			$this->graded($sprites, $this->tile(self::GID_TOWER_BASE, $sx, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_TOWER);
 		}
 
 		// The title page belongs to the wordmark and the menu; the phant appears on the ready screen.
@@ -255,7 +293,7 @@ final class Scene
 			);
 			$phant->scaleX = $phant->scaleY = $scale;
 			$phant->animated = $phant->outline = $phant->smooth = false;
-			$phant->tint = [...self::lerp([1, 1, 1], [.8, .8, .95], $this->blend), 1.0];
+			$phant->tint = [...self::lerp(self::PHANT_TINTS[$phantKey], self::PHANT_TINTS[$phantKey + 1], $keyframe - $phantKey), 1.0];
 
 			if($game->phase === 'dead')
 			{
@@ -523,6 +561,30 @@ final class Scene
 	 * @param array{float,float,float,float} $tint Palette tint.
 	 * @return Sprite Configured sprite.
 	 */
+	/**
+	 * Append a terrain sprite in this frame's keyframe palette, with the next palette faded over it mid-transition.
+	 *
+	 * Every terrain sheet keeps the same shapes, so drawing the next palette over the current one at the eased
+	 * fraction interpolates each pixel between the two hand-graded colours.
+	 *
+	 * @param list<Sprite> $sprites Batch to append to, in painter's order.
+	 * @param Sprite $sprite Sprite built with its day-palette GID.
+	 * @param int $stride Tiles per palette in the sprite's tileset.
+	 * @return void Appends one sprite, or two while a transition is under way.
+	 */
+	private function graded(array &$sprites, Sprite $sprite, int $stride): void
+	{
+		$sprite->gid += $stride * $this->palette;
+		$sprites[] = $sprite;
+
+		if($this->fade <= 0) return;
+
+		$next = clone $sprite;
+		$next->gid += $stride;
+		$next->opacity = $this->fade;
+		$sprites[] = $next;
+	}
+
 	private function tile(int $gid, float $x, float $y, float $scale, array $tint): Sprite
 	{
 		$sprite = new Sprite($gid, $x, $y, 0, 0);

@@ -39,5 +39,6 @@ Phlappy Phant elePHPant sprite (games/phlappy-phant)
 
 Phlappy Phant terrain (games/phlappy-phant)
   "Seasonal Platformer Tiles" by GrafxKid (https://opengameart.org/content/seasonal-platformer-tiles), CC0 1.0.
-  games/phlappy-phant/art/terrain.png, art/terrain-parallax.png and the backdrop, tower, ground and scenery tiles
+  games/phlappy-phant/art/terrain.png, art/terrain-parallax.png, the dusk/dawn and night grades, and the backdrop,
+  tower, ground and scenery tiles
   cut from them; see games/phlappy-phant/art/TERRAIN-LICENSE.md.

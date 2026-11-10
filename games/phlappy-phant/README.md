@@ -1,6 +1,6 @@
 # Phlappy Phant
 
-A pixel-art Flappy Bird homage built with Phonics. The elePHPant flaps between grass towers; every ten towers the sky turns from day to night. A deterministic fixed-step PHP simulation owns the flight, the seeded tower gaps, collisions and the score; the browser module supplies taps, sounds, fullscreen, the local best score and accessible menu hit targets.
+A pixel-art Flappy Bird homage built with Phonics. The elePHPant flaps between grass towers; every ten towers the sky warms through dusk into night, then comes back through dawn. A deterministic fixed-step PHP simulation owns the flight, the seeded tower gaps, collisions and the score; the browser module supplies taps, sounds, fullscreen, the local best score and accessible menu hit targets.
 
 Unlike the letterboxed games, Phlappy Phant fills whatever frame it is given: the world is 352 logical units tall and as wide as the frame's aspect allows, so a phone in portrait and a widescreen desktop both play the same game and only see different amounts of the road ahead.
 
