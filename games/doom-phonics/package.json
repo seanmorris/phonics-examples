@@ -90,6 +90,7 @@
     "src/Definition/StateSequence.php",
     "src/Definition/WeaponAmmo.php",
     "src/Definition/WeaponSlots.php",
+    "src/Effects/Rumble.php",
     "src/Game/ActorDropper.php",
     "src/Game/ActorObstacles.php",
     "src/Game/AutoAim.php",

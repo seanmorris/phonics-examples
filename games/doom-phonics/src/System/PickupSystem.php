@@ -5,6 +5,7 @@ namespace DoomPhonics\System;
 use DoomPhonics\Component\Body;
 use DoomPhonics\Component\HitPoints;
 use DoomPhonics\Component\InventoryPickup;
+use DoomPhonics\Component\NetworkPlayer;
 use DoomPhonics\Component\PlayerStart;
 use DoomPhonics\Component\StatusFace;
 use DoomPhonics\Component\Transform;
@@ -14,6 +15,7 @@ use DoomPhonics\Definition\ActorDefinition;
 use DoomPhonics\Definition\WeaponAmmo;
 use DoomPhonics\Definition\LanguageCatalog;
 use DoomPhonics\Game\PlayerState;
+use DoomPhonics\Effects\Rumble;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
 use Phonics\Network\Component\NetworkIdentity;
@@ -33,6 +35,7 @@ final class PickupSystem
 		public ActorCatalog $actors
 		, public bool $authoritative = true
 		, ?LanguageCatalog $language = null
+		, private ?Rumble $rumble = null
 	){
 		$this->players = Query::all(PlayerStart::class, PlayerState::class, Transform::class, HitPoints::class);
 		$this->pickups = Query::all(InventoryPickup::class, Transform::class);
@@ -96,6 +99,10 @@ final class PickupSystem
 
 				if($registry->has($playerEntity, ViewEffects::class))
 				$registry->get($playerEntity, ViewEffects::class)->recordPickup();
+
+				if(!$registry->has($playerEntity, NetworkPlayer::class)
+					|| $registry->get($playerEntity, NetworkPlayer::class)->local
+				) $this->rumble?->pickup($newWeapon);
 
 				$registry->destroyLater($entity);
 			}

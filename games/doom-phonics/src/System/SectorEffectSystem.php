@@ -6,6 +6,7 @@ use DoomPhonics\Component\ActorState;
 use DoomPhonics\Component\Body;
 use DoomPhonics\Component\StatusFace;
 use DoomPhonics\Component\HitPoints;
+use DoomPhonics\Component\NetworkPlayer;
 use DoomPhonics\Component\PlayerStart;
 use DoomPhonics\Component\Transform;
 use DoomPhonics\Component\ViewEffects;
@@ -14,6 +15,7 @@ use DoomPhonics\Game\LineSpecials;
 use DoomPhonics\Game\PlayerState;
 use DoomPhonics\Game\FaceDirection;
 use DoomPhonics\Definition\LanguageCatalog;
+use DoomPhonics\Effects\Rumble;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
 
@@ -40,6 +42,7 @@ final class SectorEffectSystem
 		, public LineSpecials $specials
 		, ?LanguageCatalog $language = null
 		, public bool $authority = true
+		, private ?Rumble $rumble = null
 	){
 		$this->language = $language ?? LanguageCatalog::documents([]);
 
@@ -217,6 +220,10 @@ final class SectorEffectSystem
 		$player->armor -= $absorb;
 		$inflicted = $damage - $absorb;
 		$hp->current -= $inflicted;
+
+		if($inflicted > 0 && (!$registry->has($entity, NetworkPlayer::class)
+			|| $registry->get($entity, NetworkPlayer::class)->local
+		)) $this->rumble?->damage(0, $hp->current <= 0);
 
 		if($inflicted > 0 && $registry->has($entity, ViewEffects::class))
 		$registry->get($entity, ViewEffects::class)->recordDamage($inflicted);

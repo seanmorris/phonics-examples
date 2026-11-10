@@ -270,6 +270,7 @@ export function activate({module, canvas, services, session})
 		, muted: false
 		, effectsVolume: 1
 		, musicVolume: 1
+		, rumbleIntensity: 1
 		, renderResolution: 'native'
 		, pitchMode: 'perspective'
 		, reticle: true
@@ -289,7 +290,7 @@ export function activate({module, canvas, services, session})
 		{
 			if(typeof saved.muted === 'boolean') options.muted = saved.muted;
 
-			for(const name of ['effectsVolume', 'musicVolume'])
+			for(const name of ['effectsVolume', 'musicVolume', 'rumbleIntensity'])
 			if(typeof saved[name] === 'number' && Number.isFinite(saved[name]) && saved[name] >= 0 && saved[name] <= 1)
 			options[name] = saved[name];
 
@@ -376,6 +377,7 @@ export function activate({module, canvas, services, session})
 		, muted: options.muted
 		, effectsVolume: options.effectsVolume
 		, musicVolume: options.musicVolume
+		, rumbleIntensity: options.rumbleIntensity
 		, renderResolution: options.renderResolution
 		, pitchMode: options.pitchMode
 		, reticle: options.reticle
@@ -423,7 +425,7 @@ export function activate({module, canvas, services, session})
 			persist = true;
 		}
 
-		for(const name of ['effectsVolume', 'musicVolume'])
+		for(const name of ['effectsVolume', 'musicVolume', 'rumbleIntensity'])
 		if(typeof patch?.[name] === 'number' && Number.isFinite(patch[name]) && patch[name] >= 0 && patch[name] <= 1)
 		{
 			options[name] = patch[name];

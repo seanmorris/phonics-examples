@@ -689,6 +689,7 @@ verifyWad(
 		&& $settings->reticle()
 		&& !$settings->autoAim()
 		&& $settings->bloodSplatter() === 1.0
+		&& $settings->rumbleIntensity() === 1.0
 	, 'game settings use campaign defaults'
 );
 
@@ -700,6 +701,7 @@ $settings->setPitchMode(PitchMode::ClassicShear);
 $settings->setReticle(false);
 $settings->setAutoAim(true);
 $settings->setBloodSplatter(1.75);
+$settings->setRumbleIntensity(.6);
 
 verifyWad(
 	$settings->skill()->index() === 4 && $settings->lookSensitivity() === 1.5 && $settings->invertVerticalLook()
@@ -708,6 +710,7 @@ verifyWad(
 		&& !$settings->reticle()
 		&& $settings->autoAim()
 		&& $settings->bloodSplatter() === 1.75
+		&& $settings->rumbleIntensity() === .6
 	, 'menu settings retain typed choices'
 );
 
@@ -729,6 +732,16 @@ try
 catch(OutOfRangeException $error)
 {
 	verifyWad(true, 'invalid blood splatter amount rejected');
+}
+
+try
+{
+	$settings->setRumbleIntensity(1.1);
+	verifyWad(false, 'invalid rumble intensity rejected');
+}
+catch(OutOfRangeException $error)
+{
+	verifyWad(true, 'invalid rumble intensity rejected');
 }
 
 $melt = new MeltColumns(160, 200);
@@ -3537,7 +3550,8 @@ verifyWad(
 // Light and damaging-sector thinkers use live sector state consumed by the renderer.
 $effectLevel = new Level($stack->map('E1M1'));
 $effectSpecials = new LineSpecials($effectLevel);
-$effects = new SectorEffectSystem($effectLevel, $effectSpecials);
+$floorRumble = new \DoomPhonics\Effects\Rumble;
+$effects = new SectorEffectSystem($effectLevel, $effectSpecials, null, true, $floorRumble);
 $high = $effectLevel->sectors[44]->light;
 $effects->update(new Registry, 1 / 35);
 verifyWad($effectLevel->sectors[44]->light === $high - 8, 'glowing sector changes live light by eight per tic');
@@ -3567,6 +3581,11 @@ verifyWad(
 verifyWad(
 	$damageRegistry->get($damageEntity, ViewEffects::class)->damageTics() === 5
 	, 'damaging floors feed the same player view effect as combat damage'
+);
+
+verifyWad(
+	$floorRumble->update(0) === [['duration' => 65,'strong' => .2,'weak' => .35]]
+	, 'thrustless floor damage uses the bounded minimum damage feedback'
 );
 
 [$secretX,$secretY] = $effectLevel->sectorCenter(68);
@@ -3831,6 +3850,7 @@ require __DIR__ . '/sector-volumes.php';
 require __DIR__ . '/layered-navigation.php';
 require __DIR__ . '/seeded-generation.php';
 require __DIR__ . '/game-modes.php';
+require __DIR__ . '/rumble.php';
 require __DIR__ . '/input.php';
 require __DIR__ . '/graphics-atlas.php';
 

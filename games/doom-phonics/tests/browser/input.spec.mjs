@@ -6,12 +6,21 @@ test('Doom controller bindings separate movement, turning, use, fire and weapon 
 	page.on('console', message => {if(/PHP Fatal|Uncaught/.test(message.text())) errors.push(message.text());});
 
 	await page.addInitScript(() => {
+		window.doomRumbleEffects = [];
 		const pad = {
 			id: 'Xbox 360 Controller'
 			, index: 0
 			, connected: true
 			, mapping: 'standard'
 			, timestamp: performance.now()
+			, vibrationActuator: {
+				effects: ['dual-rumble']
+				, playEffect: (effect, parameters) => {
+					doomRumbleEffects.push({effect, parameters});
+
+					return Promise.resolve('complete');
+				}
+			}
 			, axes: [0, 0, 0, 0]
 			, buttons: Array.from({length: 17}, () => ({pressed: false, touched: false, value: 0}))
 		};
@@ -159,12 +168,35 @@ test('Doom controller bindings separate movement, turning, use, fire and weapon 
 	expect(await frame()).toMatchObject({fire: false, ammo: baselineAmmo});
 	await pad({});
 	await page.waitForTimeout(80);
+	const rumbleSupported = await page.evaluate(async() => {
+		const module = await previewSession.php.binary;
+		module.doomRumbleSupport = value => window.doomRumbleSupported = Boolean(value);
+		await previewSession.php.run(String.raw`<?php
+			(vrzno_env('doomRumbleSupport'))(function_exists('SDL_GameControllerHasRumble')
+				&& function_exists('SDL_GameControllerRumble'));
+			$settings->setRumbleIntensity(.5);
+		`);
+		doomRumbleEffects = [];
+
+		return doomRumbleSupported;
+	});
 
 	await clear();
 	await pad({buttons: [7]});
 	await expect.poll(async() => (await frame()).ammo).toBeLessThan(baselineAmmo);
 	expect(await frame()).toMatchObject({fire: true, altFire: false, use: false});
 	expect(await page.evaluate(() => doomInputFrames.some(frame => frame.use))).toBe(false);
+
+	if(rumbleSupported)
+	{
+		await expect.poll(() => page.evaluate(() => doomRumbleEffects.length)).toBeGreaterThan(0);
+		const pistol = await page.evaluate(() => doomRumbleEffects.findLast(
+			effect => effect.parameters.weakMagnitude > effect.parameters.strongMagnitude
+		));
+		expect(pistol.parameters.strongMagnitude).toBeCloseTo(.09, 3);
+		expect(pistol.parameters.weakMagnitude).toBeCloseTo(.36, 3);
+	}
+
 	await pad({});
 	await expect.poll(async() => (await frame()).fire).toBe(false);
 
@@ -313,6 +345,9 @@ test('Doom binding capture, conflicts and saved alternatives use physical input'
 	await select('music-volume');
 	await key('ArrowLeft');
 	await expect.poll(async() => (await menu()).options.musicVolume).toBe(.9);
+	await select('rumble-intensity');
+	await key('ArrowLeft');
+	await expect.poll(async() => (await menu()).options.rumbleIntensity).toBe(.9);
 	await enter('mute-all');
 	await expect.poll(async() => (await menu()).options.muted).toBe(true);
 
@@ -321,6 +356,7 @@ test('Doom binding capture, conflicts and saved alternatives use physical input'
 		, muted: true
 		, effectsVolume: .9
 		, musicVolume: .9
+		, rumbleIntensity: .9
 	});
 
 	await key('Escape');

@@ -16,6 +16,7 @@ final class GameSettings
 	private bool $reticle = true;
 	private bool $autoAim = false;
 	private float $bloodSplatter = 1.0;
+	private float $rumbleIntensity = 1.0;
 
 	public function __construct(?SkillLevel $skill = null)
 	{
@@ -78,5 +79,15 @@ final class GameSettings
 		throw new \OutOfRangeException('Blood splatter must be between zero and two');
 
 		$this->bloodSplatter = (float)sprintf('%.2f', $amount);
+	}
+
+	public function rumbleIntensity(): float { return $this->rumbleIntensity; }
+
+	public function setRumbleIntensity(float $intensity): void
+	{
+		if(!is_finite($intensity) || $intensity < 0 || $intensity > 1)
+		throw new \OutOfRangeException('Rumble intensity must be between zero and one');
+
+		$this->rumbleIntensity = (float)sprintf('%.1f', $intensity);
 	}
 }

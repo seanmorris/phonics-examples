@@ -27,6 +27,7 @@ use DoomPhonics\Audio\SoundSource;
 use DoomPhonics\Adapter\WadLevel;
 use DoomPhonics\System\CheatSystem;
 use DoomPhonics\Render\ScreenWipe;
+use DoomPhonics\Effects\Rumble;
 
 /** Owns one active map lease and preserves single-player state across Episode 1 transitions. */
 final class EpisodeGame
@@ -46,6 +47,7 @@ final class EpisodeGame
 	private ?ViewInput $viewOwner = null;
 	private ?string $networkRecoveryId = null;
 	private ?LevelIntermission $intermission = null;
+	private Rumble $rumble;
 	private float $levelStartedAt = 0;
 	private int $levelBaseKills = 0, $levelBaseItems = 0, $levelBaseSecrets = 0;
 	private int $levelTotalKills = 0, $levelTotalItems = 0, $levelTotalSecrets = 0;
@@ -101,10 +103,12 @@ final class EpisodeGame
 		$phonics->runtime->service('controls', $engine->controls);
 		$phonics->runtime->service('doom-settings', $this->settings);
 		$this->sound = new SdlSoundEmitter;
+		$this->rumble = new Rumble;
 		$this->cheatSequence = new CheatSequence;
 		$this->cheats = new CheatSystem;
 		$phonics->runtime->service('doom-cheats', $this->cheats);
 		$phonics->runtime->service('doom-sound', $this->sound);
+		$phonics->runtime->service('doom-rumble', $this->rumble);
 
 		if($wipe) $phonics->runtime->service('doom-wipe', $wipe);
 	}
@@ -143,6 +147,7 @@ final class EpisodeGame
 			$this->cheats->configure($content->weapons, $content->actors, $content->language);
 
 			$this->restorePlayer();
+			$this->rumble->stop($this->engine->input->gamepads);
 
 			if($this->match === null && ($entity = $this->player()) !== null)
 			$this->cheats->applyActive($this->phonics->entities, $entity);
@@ -286,6 +291,7 @@ final class EpisodeGame
 	/** Freeze the active map beneath the title screen and clear one-shot input. */
 	public function returnToTitle(): void
 	{
+		$this->rumble->stop($this->engine->input->gamepads);
 		$this->beginTransition();
 		$this->intermission = null;
 
@@ -428,6 +434,8 @@ final class EpisodeGame
 	/** Sample local look after UI gating, including frames without a simulation update. */
 	public function frameInput(Engine $engine, float $elapsed): void
 	{
+		$this->rumble->dispatch($engine->input->gamepads, $elapsed, $this->settings->rumbleIntensity());
+
 		if($this->intermission !== null) return;
 
 		// Browser pointer lock is active even though this PHP/Wasm SDL build does
@@ -555,6 +563,9 @@ final class EpisodeGame
 		$this->sound->playMusic(MusicCue::level($this->map));
 	}
 
+	/** Preview the current strength with a short high/low pair when its menu knob changes. */
+	public function previewRumble(): void { $this->rumble->preview(); }
+
 	public function beginTransition(): bool { return $this->wipe?->begin() ?? false; }
 
 	public function advanceTransition(float $elapsed): void { $this->wipe?->advance($elapsed); }
@@ -578,6 +589,7 @@ final class EpisodeGame
 			, 'reticle' => $this->settings->reticle()
 			, 'autoAim' => $this->settings->autoAim()
 			, 'bloodSplatter' => $this->settings->bloodSplatter()
+			, 'rumbleIntensity' => $this->settings->rumbleIntensity()
 		];
 
 		$player = $this->phonics->entities->get($entity, PlayerState::class);
@@ -628,6 +640,7 @@ final class EpisodeGame
 			, 'reticle' => $this->settings->reticle()
 			, 'autoAim' => $this->settings->autoAim()
 			, 'bloodSplatter' => $this->settings->bloodSplatter()
+			, 'rumbleIntensity' => $this->settings->rumbleIntensity()
 			, 'position' => [$pose->x,$pose->y,$pose->z,$pose->angle]
 			, 'previousPosition' => [$pose->previousX,$pose->previousY,$pose->previousZ]
 			, 'render' => $content instanceof \DoomPhonics\Adapter\WadLevel ? $content->renderer?->metrics() : null
@@ -647,6 +660,7 @@ final class EpisodeGame
 
 	public function close(): void
 	{
+		$this->rumble->stop($this->engine->input->gamepads);
 		$this->lease?->release();
 		$this->lease = null;
 		$this->sound->close();

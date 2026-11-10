@@ -20,6 +20,7 @@ use DoomPhonics\Game\DamageResolver;
 use DoomPhonics\Game\ActorObstacles;
 use DoomPhonics\Game\BloodEffects;
 use DoomPhonics\Game\DoomGravity;
+use DoomPhonics\Effects\Rumble;
 use DoomPhonics\Game\DoomMatch;
 use DoomPhonics\Game\GameSettings;
 use DoomPhonics\Game\LineSpecials;
@@ -129,6 +130,11 @@ final class EpisodeSystems implements SystemSet
 		if(!$sound instanceof \DoomPhonics\Audio\SoundEmitter)
 		throw new \LogicException('doom-sound service must implement SoundEmitter');
 
+		$rumble = $scope->service('doom-rumble');
+
+		if($rumble !== null && !$rumble instanceof Rumble)
+		throw new \LogicException('doom-rumble service must be a DoomPhonics haptic queue');
+
 		$sound->beginScope($content->wad);
 		$scope->onClose([$sound,'stopScope']);
 
@@ -170,6 +176,7 @@ final class EpisodeSystems implements SystemSet
 			, new BloodEffects($content->level, $actors, $factory, $content->textures->iwadBloodSprite(), $settings)
 			, null
 			, $host
+			, $rumble
 		);
 
 		$movement = new PlayerMovementSystem(
@@ -183,7 +190,7 @@ final class EpisodeSystems implements SystemSet
 			, $host
 		);
 
-		$pickups = new PickupSystem($actors, $host, $content->language);
+		$pickups = new PickupSystem($actors, $host, $content->language, $rumble);
 		$states = new ActorStateSystem($actions);
 		$beams = new BeamEffectSystem;
 		$physics = new ActorPhysicsSystem($collision, (float)($motion['gravity'] ?? DoomGravity::ACCELERATION));
@@ -191,7 +198,7 @@ final class EpisodeSystems implements SystemSet
 		$content->level->planeListeners[] = static function(int $sector, bool $heights) use ($physics): void {
 			if($heights) $physics->wakeSector($sector);
 		};
-		$effects = new SectorEffectSystem($content->level, $specials, $content->language, $host);
+		$effects = new SectorEffectSystem($content->level, $specials, $content->language, $host, $rumble);
 		$playerEffects = new PlayerEffectSystem;
 		$statusFaces = new StatusFaceSystem($this->controls($scope));
 		$commands = new PlayerCommandSystem($this->controls($scope), $settings);
@@ -205,6 +212,7 @@ final class EpisodeSystems implements SystemSet
 				, null
 				, $content->level
 				, \Closure::fromCallable([$movement,'replay'])
+				, $rumble
 			)
 			: null;
 

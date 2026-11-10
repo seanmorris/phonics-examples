@@ -37,6 +37,8 @@ final class DoomOptions
 
 	public function musicVolume(): float { return $this->musicVolume; }
 
+	public function rumbleIntensity(): float { return $this->settings->rumbleIntensity(); }
+
 	public function fullscreen(): bool { return $this->fullscreen; }
 
 	public function fullscreenAvailable(): bool { return $this->fullscreenAvailable; }
@@ -74,6 +76,12 @@ final class DoomOptions
 	{
 		$this->musicVolume = $this->volume($value);
 		$this->write(['musicVolume' => $this->musicVolume]);
+	}
+
+	public function setRumbleIntensity(float $value): void
+	{
+		$this->settings->setRumbleIntensity($value);
+		$this->write(['rumbleIntensity' => $this->settings->rumbleIntensity()]);
 	}
 
 	public function setFullscreen(bool $value): void
@@ -128,6 +136,7 @@ final class DoomOptions
 			'muted' => $this->muted
 			, 'effectsVolume' => $this->effectsVolume
 			, 'musicVolume' => $this->musicVolume
+			, 'rumbleIntensity' => $this->settings->rumbleIntensity()
 			, 'fullscreen' => $this->fullscreen
 			, 'fullscreenAvailable' => $this->fullscreenAvailable
 			, 'fullscreenBusy' => $this->fullscreenBusy
@@ -194,6 +203,12 @@ final class DoomOptions
 
 		if((is_int($blood) || is_float($blood)) && is_finite((float)$blood) && $blood >= 0 && $blood <= 2)
 		$this->settings->setBloodSplatter((float)$blood);
+
+		$rumble = $data['rumbleIntensity'] ?? null;
+
+		if((is_int($rumble) || is_float($rumble)) && is_finite((float)$rumble)
+			&& $rumble >= 0 && $rumble <= 1
+		) $this->settings->setRumbleIntensity((float)$rumble);
 
 		foreach(['fullscreen','fullscreenAvailable','fullscreenBusy','sessionOnly'] as $name)
 		if(is_bool($data[$name] ?? null)) $this->$name = $data[$name];

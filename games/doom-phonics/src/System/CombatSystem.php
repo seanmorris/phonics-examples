@@ -58,6 +58,7 @@ use DoomPhonics\Game\ProjectileImpact;
 use DoomPhonics\Game\MonsterMove;
 use DoomPhonics\Game\SightCheck;
 use DoomPhonics\Game\WorldPoint;
+use DoomPhonics\Effects\Rumble;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
 use Phonics\Input\Controls;
@@ -92,6 +93,7 @@ final class CombatSystem
 	private CheatSystem $cheats;
 	private BloodEffects $blood;
 	private EnemyAwareness $awareness;
+	private ?Rumble $rumble;
 
 	/** Replicated actions a guest replays for remote actors because they only make sound. */
 	private const PRESENTED_ACTIONS = ['a_scream','a_xscream','a_pain','a_playsound','a_playerscream','a_activesound'];
@@ -118,6 +120,7 @@ final class CombatSystem
 		, ?BloodEffects $blood = null
 		, ?EnemyAwareness $awareness = null
 		, public bool $resolveDamage = true
+		, ?Rumble $rumble = null
 	){
 		$this->players = Query::all(PlayerStart::class, PlayerState::class, Transform::class, HitPoints::class);
 		$this->projectiles = Query::all(Projectile::class, Transform::class, Velocity::class, ActorState::class);
@@ -134,6 +137,7 @@ final class CombatSystem
 		$this->cheats = $cheats ?? new CheatSystem($this->weaponSlots, $actors);
 		$this->blood = $blood ?? new BloodEffects($level, $actors, $factory);
 		$this->awareness = $awareness ?? new EnemyAwareness($level);
+		$this->rumble = $rumble;
 		$this->registerActions();
 	}
 
@@ -984,6 +988,7 @@ final class CombatSystem
 				|| $this->hasAmmo($registry->get($owner, PlayerState::class), $state->definition, 2)
 			){
 				$this->awareness->alert($registry, $owner, $owner);
+				if($this->localPlayer($registry, $owner)) $this->rumble?->weapon($state->definition->name, true);
 				$state->enter('AltFire');
 			}
 
@@ -996,8 +1001,18 @@ final class CombatSystem
 			|| $this->hasAmmo($registry->get($owner, PlayerState::class), $state->definition)
 		){
 			$this->awareness->alert($registry, $owner, $owner);
+			if($this->localPlayer($registry, $owner)) $this->rumble?->weapon($state->definition->name);
 			$state->enter('Fire');
 		}
+	}
+
+	/** Feedback belongs only to this peer's player; remote commands still animate and make sound. */
+	private function localPlayer(Registry $registry, int $entity): bool
+	{
+		return $registry->has($entity, PlayerState::class)
+			&& (!$registry->has($entity, NetworkPlayer::class)
+				|| $registry->get($entity, NetworkPlayer::class)->local
+			);
 	}
 
 	private function hasAmmo(PlayerState $player, ActorDefinition $weapon, int $channel = 1): bool
@@ -3110,11 +3125,37 @@ final class CombatSystem
 		, ?HitscanImpact $impact = null
 		, ?int $attack = null
 	): bool {
+		$beforeVelocity = $registry->has($target, Velocity::class)
+			? clone $registry->get($target, Velocity::class)
+			: null;
+
 		// Online, the host resolves health, thrust, and death; a guest only shows the blood of its own hit.
 		$changed = $this->resolveDamage
 			? $this->damageResolver->apply($registry, new DamageEvent($target, $source, $damage, $inflictor, $thrust))
 			: $damage > 0 && $registry->alive($target) && $registry->has($target, HitPoints::class)
 				&& $registry->get($target, HitPoints::class)->current > 0;
+
+		if($changed && $this->resolveDamage && $this->localPlayer($registry, $target))
+		{
+			$afterVelocity = $registry->has($target, Velocity::class)
+				? $registry->get($target, Velocity::class)
+				: null;
+
+			$knockback = $beforeVelocity && $afterVelocity
+				? hypot(
+					hypot(
+						$afterVelocity->x - $beforeVelocity->x
+						, $afterVelocity->y - $beforeVelocity->y
+					)
+					, $afterVelocity->z - $beforeVelocity->z
+				)
+				: 0.0;
+
+			$fatal = $registry->has($target, HitPoints::class)
+				&& $registry->get($target, HitPoints::class)->current <= 0;
+
+			$this->rumble?->damage($knockback, $fatal);
+		}
 
 		if(!$changed || !$this->blood->bleeds($registry, $target)) return $changed;
 

@@ -283,6 +283,7 @@ final class DoomMenuController implements MenuOverlay
 			, 'reticle' => $this->settings->reticle()
 			, 'autoAim' => $this->settings->autoAim()
 			, 'bloodSplatter' => $this->settings->bloodSplatter()
+			, 'rumbleIntensity' => $this->settings->rumbleIntensity()
 			, 'options' => $this->options->state()
 			, 'font' => $this->renderer->font()
 			, 'inputTheme' => $this->engine->input->inputTheme
@@ -458,6 +459,17 @@ final class DoomMenuController implements MenuOverlay
 				, 'format' => 'percent'
 				, 'get' => fn(): float => $this->options->musicVolume()
 				, 'set' => function(float $value): void { $this->changeMusicVolume($value); }
+			]
+			, 'rumble-intensity' => [
+				'label' => 'Controller Rumble'
+				, 'input' => 'number'
+				, 'subType' => 'range'
+				, 'min' => 0
+				, 'max' => 1
+				, 'step' => .1
+				, 'format' => 'percent'
+				, 'get' => fn(): float => $this->options->rumbleIntensity()
+				, 'set' => function(float $value): void { $this->changeRumbleIntensity($value); }
 			]
 			, 'mute-all' => [
 				'label' => 'Mute All'
@@ -640,6 +652,13 @@ final class DoomMenuController implements MenuOverlay
 	private function changeMusicVolume(float $value): void
 	{
 		$this->options->setMusicVolume($value);
+		$this->actionSound(SoundCue::menuMove());
+	}
+
+	private function changeRumbleIntensity(float $value): void
+	{
+		$this->options->setRumbleIntensity($value);
+		$this->game->previewRumble();
 		$this->actionSound(SoundCue::menuMove());
 	}
 

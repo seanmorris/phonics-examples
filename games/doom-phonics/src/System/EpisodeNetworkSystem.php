@@ -28,6 +28,7 @@ use DoomPhonics\Game\PlayerRespawn;
 use DoomPhonics\Game\PlayerState;
 use DoomPhonics\Game\PortalInterpolation;
 use DoomPhonics\Game\WorldPoint;
+use DoomPhonics\Effects\Rumble;
 use Phonics\Ecs\Registry;
 use Phonics\Network\AuthorityOwner;
 use Phonics\Network\BrowserBridge;
@@ -86,6 +87,7 @@ final class EpisodeNetworkSystem
 
 	/** @var ?array{float,float} This peer's player position before this step's movement. */
 	private ?array $stepStart = null;
+	private ?Rumble $rumble;
 
 	public function __construct(
 		private Registry $world
@@ -95,6 +97,7 @@ final class EpisodeNetworkSystem
 		, ?BrowserBridge $bridge = null
 		, ?Level $level = null
 		, ?\Closure $replay = null
+		, ?Rumble $rumble = null
 	){
 		$match->replication = $this;
 		$this->replay = $replay;
@@ -102,6 +105,7 @@ final class EpisodeNetworkSystem
 		$this->scope = new ReplicationScope($scope);
 		$this->level = $level;
 		$this->portalInterpolation = $level ? new PortalInterpolation($level) : null;
+		$this->rumble = $rumble;
 		$replication = self::replication($actors);
 		$this->bindPlayers($this->scope);
 		$this->bindActors();
@@ -141,11 +145,20 @@ final class EpisodeNetworkSystem
 
 	public function receive(Registry $registry, float $dt): void
 	{
+		$beforeVelocity = null;
+
+		if(!$this->match->network->host())
+		{
+			$local = $this->player($this->match->network->localSlot);
+
+			if($registry->has($local, Velocity::class)) $beforeVelocity = clone $registry->get($local, Velocity::class);
+		}
+
 		$this->session->beforeStep($registry, $dt);
 
 		if(!$this->match->network->host())
 		{
-			$this->present($registry);
+			$this->present($registry, $beforeVelocity);
 			$this->reconcile($registry, $dt);
 		}
 
@@ -681,7 +694,7 @@ final class EpisodeNetworkSystem
 	 * Remote actors take collision from their replicated health, since the host runs their death actions. This peer's
 	 * own player shows the flash, status face, pain, and death of a hit the host resolved.
 	 */
-	private function present(Registry $registry): void
+	private function present(Registry $registry, ?Velocity $beforeVelocity = null): void
 	{
 		foreach($registry->query(RemoteActor::class) as $entity)
 		{
@@ -705,6 +718,17 @@ final class EpisodeNetworkSystem
 		if($before === null || $health->current >= $before || $before <= 0) return;
 
 		$damage = $before - $health->current;
+		$velocity = $registry->has($entity, Velocity::class) ? $registry->get($entity, Velocity::class) : null;
+		$knockback = $beforeVelocity && $velocity
+			? hypot(
+				hypot(
+					$velocity->x - $beforeVelocity->x
+					, $velocity->y - $beforeVelocity->y
+				)
+				, $velocity->z - $beforeVelocity->z
+			)
+			: 0.0;
+		$this->rumble?->damage($knockback, $health->current <= 0);
 
 		if($registry->has($entity, ViewEffects::class)) $registry->get($entity, ViewEffects::class)->recordDamage($damage);
 

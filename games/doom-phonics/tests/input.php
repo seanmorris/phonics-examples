@@ -353,6 +353,7 @@ $browserOptions = [
 	'muted' => true
 	, 'effectsVolume' => 'invalid'
 	, 'musicVolume' => .4
+	, 'rumbleIntensity' => .8
 	, 'renderResolution' => 'classic'
 	, 'pitchMode' => 'invalid'
 	, 'reticle' => false
@@ -382,6 +383,7 @@ $options = new DoomOptions(
 
 verifyWad(
 	$options->muted() && $options->effectsVolume() === 1.0 && $options->musicVolume() === .4
+		&& $options->rumbleIntensity() === .8
 		&& $optionSettings->renderResolution() === RenderResolution::Classic
 		&& $optionSettings->pitchMode() === PitchMode::Perspective
 		&& !$optionSettings->reticle()
@@ -392,6 +394,7 @@ verifyWad(
 
 $options->setEffectsVolume(.6);
 $options->setMusicVolume(.7);
+$options->setRumbleIntensity(.5);
 $options->setMuted(false);
 $options->setRenderResolution(RenderResolution::Native);
 $options->setPitchMode(PitchMode::ClassicShear);
@@ -401,10 +404,11 @@ $options->setBloodSplatter(.5);
 $options->setFullscreen(true);
 
 verifyWad(
-	$options->effectsVolume() === .6 && $options->musicVolume() === .7 && !$options->muted()
+	$options->effectsVolume() === .6 && $options->musicVolume() === .7
+		&& $options->rumbleIntensity() === .5 && !$options->muted()
 		&& $options->fullscreen() && $optionSettings->reticle() && !$optionSettings->autoAim()
 		&& $browserOptions['autoAim'] === false
-		&& $optionSettings->bloodSplatter() === .5 && count($optionWrites) === 9
+		&& $optionSettings->bloodSplatter() === .5 && count($optionWrites) === 10
 	, 'sound and video menu changes cross the browser options bridge'
 );
 
