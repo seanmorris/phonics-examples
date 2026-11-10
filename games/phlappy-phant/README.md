@@ -6,7 +6,7 @@ Unlike the letterboxed games, Phlappy Phant fills whatever frame it is given: th
 
 ## Secrets
 
-With no points on the board, the Konami code (Up, Up, Down, Down, Left, Right, Left, Right, B, A on a controller; the arrows then B and A on a keyboard) hands the run to a tool-assisted player that never misses a gap but only taps at human speed: never more than five flaps a second. It builds the set of positions from which survival is still possible over the next two and a half seconds, backward from the horizon over the velocity lattice with that tapping limit baked in, and flaps only when coasting would leave that set; because it survives every seeded course under that limit, it doubles as the proof that the course is fair. The HUD says **TAS**, and the run never counts toward the best score.
+With no points on the board, the Konami code (Up, Up, Down, Down, Left, Right, Left, Right, B, A on a controller; the arrows then B and A on a keyboard) hands the run to a tool-assisted player that never misses a gap but only taps at human speed: never more than five flaps a second. It builds the set of positions from which survival is still possible over the next two and a half seconds, backward from the horizon over the velocity lattice with that tapping limit baked in, and flaps only when coasting would leave that set; because it survives every seeded course under that limit, it doubles as the proof that the course is fair. The only tell is a single pixel in the top-left corner that winks lighter every couple of seconds, and the run never counts toward the best score.
 
 ## Credits
 

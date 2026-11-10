@@ -222,7 +222,8 @@ final class Scene
 		{
 			$this->shadowed($labels, (string)$game->score, $width / 2, $height * .07, $textScale * 2, 'center');
 
-			if($game->autopilot) $this->shadowed($labels, 'TAS', $width / 2, $height * .07 + 34 * $textScale, $textScale, 'center');
+			// The only tell that the perfect player is flying: one world pixel in the corner winks lighter now and then.
+			if($game->autopilot && fmod($seconds, 2.5) < .1) $this->rects->render([[$k, $k, $k, $k, 1, 1, 1, 1]], $width, $height);
 
 			if($game->phase === 'ready')
 			{
