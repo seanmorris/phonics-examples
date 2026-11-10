@@ -23,14 +23,14 @@ final class Scene
 	public const GID_PHANT_LEFT = 3;
 	/** Day-palette tiles; each terrain tileset stacks its graded palettes after them, one stride apart. */
 	public const GID_BACKDROP = 5;
-	public const GID_TOWER_CAP = 19;
-	public const GID_TOWER_BODY = 20;
-	public const GID_TOWER_BASE = 22;
+	public const GID_PILLAR_CAP = 19;
+	public const GID_PILLAR_BODY = 20;
+	public const GID_PILLAR_BASE = 22;
 	public const GID_GRASS = 47;
 	public const GID_DIRT = 48;
 	public const GID_SCENERY = 61;
 	public const STRIDE_BACKDROP = 2;
-	public const STRIDE_TOWER = 4;
+	public const STRIDE_PILLAR = 4;
 	public const STRIDE_GROUND = 2;
 	public const STRIDE_SCENERY = 3;
 	/** Seconds for each leg of the cycle: day to dusk, then dusk to night (and back the same way at dawn). */
@@ -40,13 +40,13 @@ final class Scene
 	/** The backdrop draws at twice the world's pixel size, so its 160-pixel block spans 320 world units. */
 	public const BACKDROP_SCALE = 2;
 	public const GROUND_TILE = 32;
-	/** Tower slices are 64 wide with the 56-unit tower centred, and 8 tall so any grid height can be built. */
+	/** Pillar slices are 64 wide with the 56-unit pillar centred, and 8 tall so any grid height can be built. */
 	public const SLICE_W = 64;
 	public const SLICE_H = 8;
 	/** The backdrop's top row, continued up into the sky of tall frames; night multiplies it like every tile. */
 	/** The elephant is not in the terrain sheets, so it takes a light tint to sit in each keyframe's light. */
 	public const PHANT_TINTS = [[1, 1, 1], [1, .88, .8], [.72, .74, .95]];
-	/** Scenery between each pair of towers, as [scenery index, offset from the tower's right edge], picked per pair. */
+	/** Scenery between each pair of pillars, as [scenery index, offset from the pillar's right edge], picked per pair. */
 	public const SCENERY_LAYOUTS = [[], [[0, 24]], [[1, 16], [0, 56]], [[2, 32]], [[1, 40]], [[0, 8], [2, 48]]];
 	public const INK = [.21, .20, .33];
 	public const CREAM = [.95, .89, .75];
@@ -231,16 +231,16 @@ final class Scene
 			);
 		}
 
-		$towers = [];
+		$pillars = [];
 
-		foreach($game->towers as $tower)
+		foreach($game->pillars as $pillar)
 		{
-			$wx = $phantX + $tower->previousX + ($tower->x - $tower->previousX) * $alpha;
+			$wx = $phantX + $pillar->previousX + ($pillar->x - $pillar->previousX) * $alpha;
 
 			// Scenery stands on the ground between this pair and the next, on the 8-unit grid.
-			foreach(self::SCENERY_LAYOUTS[($tower->index * 5 + intdiv($tower->index, 3)) % count(self::SCENERY_LAYOUTS)] as [$piece, $offset])
+			foreach(self::SCENERY_LAYOUTS[($pillar->index * 5 + intdiv($pillar->index, 3)) % count(self::SCENERY_LAYOUTS)] as [$piece, $offset])
 			{
-				$sx = $wx + Simulation::TOWER_W + $offset;
+				$sx = $wx + Simulation::PILLAR_W + $offset;
 
 				if($sx > $visible || $sx + $this->sceneryWidths[$piece] < 0) continue;
 
@@ -249,16 +249,16 @@ final class Scene
 				$this->graded($terrain, $scenery, self::STRIDE_SCENERY);
 			}
 
-			$left = $wx - (self::SLICE_W - Simulation::TOWER_W) / 2;
+			$left = $wx - (self::SLICE_W - Simulation::PILLAR_W) / 2;
 
 			if($left > $visible || $left + self::SLICE_W < 0) continue;
 
-			$towers[] = [$left, $tower];
+			$pillars[] = [$left, $pillar];
 		}
 
-		// Each pair is the same tower twice: one standing on the ground, and one hanging from the sky with its grass
+		// Each pair is the same pillar twice: one standing on the ground, and one hanging from the sky with its grass
 		// cap turned to face the gap. Wall slices alternate so the 16-row dirt pattern runs on from the cap.
-		foreach($towers as [$left, $tower])
+		foreach($pillars as [$left, $pillar])
 		{
 			$sx = $left * $scale;
 			$hanging = function(int $gid, float $worldY) use ($sx, $y, $scale, $tint): Sprite {
@@ -268,18 +268,18 @@ final class Scene
 				return $slice;
 			};
 
-			$this->graded($terrain, $hanging(self::GID_TOWER_CAP, $tower->gapTop - self::SLICE_H), self::STRIDE_TOWER);
+			$this->graded($terrain, $hanging(self::GID_PILLAR_CAP, $pillar->gapTop - self::SLICE_H), self::STRIDE_PILLAR);
 
-			for($wy = $tower->gapTop - 2 * self::SLICE_H, $n = 0; $wy + $offsetY > -self::SLICE_H; $wy -= self::SLICE_H, $n++)
-			$this->graded($terrain, $hanging(self::GID_TOWER_BODY + $n % 2, $wy), self::STRIDE_TOWER);
+			for($wy = $pillar->gapTop - 2 * self::SLICE_H, $n = 0; $wy + $offsetY > -self::SLICE_H; $wy -= self::SLICE_H, $n++)
+			$this->graded($terrain, $hanging(self::GID_PILLAR_BODY + $n % 2, $wy), self::STRIDE_PILLAR);
 
-			$top = $tower->gapTop + $tower->gap;
-			$this->graded($terrain, $this->tile(self::GID_TOWER_CAP, $sx, $y($top), $scale, $tint), self::STRIDE_TOWER);
+			$top = $pillar->gapTop + $pillar->gap;
+			$this->graded($terrain, $this->tile(self::GID_PILLAR_CAP, $sx, $y($top), $scale, $tint), self::STRIDE_PILLAR);
 
 			for($wy = $top + self::SLICE_H, $n = 0; $wy < Simulation::GROUND_Y; $wy += self::SLICE_H, $n++)
-			$this->graded($terrain, $this->tile(self::GID_TOWER_BODY + $n % 2, $sx, $y($wy), $scale, $tint), self::STRIDE_TOWER);
+			$this->graded($terrain, $this->tile(self::GID_PILLAR_BODY + $n % 2, $sx, $y($wy), $scale, $tint), self::STRIDE_PILLAR);
 
-			$this->graded($terrain, $this->tile(self::GID_TOWER_BASE, $sx, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_TOWER);
+			$this->graded($terrain, $this->tile(self::GID_PILLAR_BASE, $sx, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_PILLAR);
 		}
 
 		// The title page belongs to the wordmark and the menu; the phant appears on the ready screen.

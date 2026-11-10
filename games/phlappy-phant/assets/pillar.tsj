@@ -1,12 +1,12 @@
 {
   "type": "tileset",
   "version": "1.10",
-  "name": "Phlappy Phant tower",
+  "name": "Phlappy Phant pillar",
   "tilewidth": 64,
   "tileheight": 8,
   "tilecount": 28,
   "columns": 1,
-  "image": "tower.png",
+  "image": "pillar.png",
   "imagewidth": 64,
   "imageheight": 224
 }

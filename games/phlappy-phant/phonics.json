@@ -11,7 +11,7 @@
       "src/Render/Scene.php",
       "src/Render/TerrainRenderer.php",
       "src/Simulation.php",
-      "src/Tower.php"
+      "src/Pillar.php"
     ],
     "bootstrap": [
       "autoload.php"
@@ -37,7 +37,7 @@
       "assets/backdrop.png",
       "assets/phant.png",
       "assets/scenery.png",
-      "assets/tower.png"
+      "assets/pillar.png"
     ]
   },
   "preload": [
@@ -52,8 +52,8 @@
     "assets/phant.tsj",
     "assets/scenery.png",
     "assets/scenery.tsj",
-    "assets/tower.png",
-    "assets/tower.tsj",
+    "assets/pillar.png",
+    "assets/pillar.tsj",
     "shaders/terrain.frag",
     "shaders/terrain.vert"
   ],
@@ -92,8 +92,8 @@
     "assets/phant.tsj",
     "assets/scenery.png",
     "assets/scenery.tsj",
-    "assets/tower.png",
-    "assets/tower.tsj",
+    "assets/pillar.png",
+    "assets/pillar.tsj",
     "shaders/terrain.frag",
     "shaders/terrain.vert",
     "worlds/phant.tmj",
@@ -110,23 +110,23 @@
     "assets/ground.tsj": "sha256-OaLWVfa2jNOx0JSVBdKn/51yobDqmBssvaaGD5gCxNk=",
     "assets/phant.png": "sha256-EqIe+stU5/KE+kiq+8RXiCltB6XK6ugopm07z+F0jng=",
     "assets/phant.tsj": "sha256-aBLuw5GEH4/JNrpdMUDMj/A/oh60v4lEbzb5tjPCQww=",
+    "assets/pillar.png": "sha256-l/hbqFeIa/KXflLiKjjoWFLbpB/Fskm0nhYK0nTIYAQ=",
+    "assets/pillar.tsj": "sha256-KvdeyxVcH9dyWYcD3iR3DZLQgygE0WgNqDXZ4z0NF5k=",
     "assets/scenery.png": "sha256-csu2YH2weeF3BMKsGvxwxv5gzDc/islxIx4fIZhWM4I=",
     "assets/scenery.tsj": "sha256-8DEu/JKimPo60/w29kwPnZI2AvI0p6aY10dtmCX/s+k=",
-    "assets/tower.png": "sha256-l/hbqFeIa/KXflLiKjjoWFLbpB/Fskm0nhYK0nTIYAQ=",
-    "assets/tower.tsj": "sha256-Pn4WLH2SjvhcPzzkvL1Oia0NoBOwUBHvyuHlKTdrQTs=",
     "autoload.php": "sha256-nI1YY9Kfwe086pFq06a8/3u5BaxBJmM/Hu2URHSSrlY=",
     "browser/game.mjs": "sha256-MBnn6YjIjf2jx8OpUUm6KN7PBvoN//3znDH/o9NXAHw=",
-    "game.php": "sha256-1cBaTDnE+sHdHRcBnX16xSPSrhKL7WJ5UNyzErxfclU=",
+    "game.php": "sha256-jx9MWbY1BeAO2MmKkpjGyi8wPYPoQPKrHfp8Glsw52A=",
     "shaders/terrain.frag": "sha256-bdh4WY5ZWnyK1uNgvsC+7eMD02jGnNSWdAqpPfv6ZMA=",
     "shaders/terrain.vert": "sha256-u3STbtoI397IZ4MRdwaY+mLec+C+MjBfQPCnBwgkNvE=",
     "src/Input/InputSettings.php": "sha256-t+gFObzP4DD9hGQy6pgNTn6OmvGjPTacHQQFlhmTqPw=",
     "src/Input/PhantActions.php": "sha256-bW+3S4rcQjQglbFM/SFmhbEkE3pt/eukxZy+qH5NFU8=",
-    "src/Random.php": "sha256-lfmC1hmTGMRnMnsbFGTyHOPdsZchUfrn0sJaCbgXZJM=",
-    "src/Render/Scene.php": "sha256-gygam0CNj0vLq6mKFgHeoh7E43sTGyAB+yVmhZaBgNs=",
+    "src/Pillar.php": "sha256-UnGQ5H/xkxP/Ija8VOBt8lEKLuOoXbvfIPWHz4bBFcI=",
+    "src/Random.php": "sha256-tlN8YCn7SdPhSBQ6H0B6M4Aj5fCLdb0tZVvKPXE7P8s=",
+    "src/Render/Scene.php": "sha256-kT4yceQsVNjeYrdqRcWSeQzd47+3WgzEpOpI0KTkstc=",
     "src/Render/TerrainRenderer.php": "sha256-/EGaAeUBHJE37fkEh4xRbeN0d0gfjnHi10OS3p2QZes=",
-    "src/Simulation.php": "sha256-gqEShyNuKD9MiSTysbOMWBjLNC7SyFiUoosoobPJQPI=",
-    "src/Tower.php": "sha256-MhFFbLs6B4JkKZbb7zf3CvetjBB7MR65PTGMA5If//8=",
-    "worlds/phant.tmj": "sha256-Apkd5k4MylDiUuxSDdqBODk0dAUILnfdX5aarNAfC64=",
+    "src/Simulation.php": "sha256-ev/vYwUdB9M3Tz2+ZSKXR1zims3oW0++JQ0Zysxstzs=",
+    "worlds/phant.tmj": "sha256-1RP9eq+JUL6leYTXe5gBvbnZu3vMkCIS01dMQz7z0NA=",
     "worlds/phant.world": "sha256-GT3SuMsmPogieQR7k9iG95I6QZMH+R3c4AweR3TjNjs="
   }
 }

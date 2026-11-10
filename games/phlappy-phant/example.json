@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "slug": "phlappy-phant",
   "title": "Phlappy Phant",
-  "description": "A pixel-art Flappy Bird homage: flap the elePHPant between grass towers, with editable input, sounds and a local best score.",
+  "description": "A pixel-art Flappy Bird homage: flap the elePHPant between grass pillars, with editable input, sounds and a local best score.",
   "application": "dist/game.phar",
   "poster": "poster.png",
   "canvas": {

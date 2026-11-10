@@ -90,8 +90,8 @@ $titleItems = static function() use (&$startGame, $bindings): array {
 			'label' => 'How to play'
 			, 'children' => [
 				'flap' => ['label' => 'Tap / click / Space / A to flap.', 'disabled' => true]
-				, 'dodge' => ['label' => 'Slip between the towers.', 'disabled' => true]
-				, 'night' => ['label' => 'Every ten towers day turns to night.', 'disabled' => true]
+				, 'dodge' => ['label' => 'Slip between the pillars.', 'disabled' => true]
+				, 'night' => ['label' => 'Every ten pillars day turns to night.', 'disabled' => true]
 				, 'pause' => ['label' => 'Escape / P / Start pauses.', 'disabled' => true]
 			]
 		]
@@ -119,7 +119,7 @@ $setPage = static function(string $next) use (
 	{
 		'pause' => 'PAUSED'
 		, 'gameover' => 'BONK'
-		, default => 'DODGE THE TOWERS'
+		, default => 'DODGE THE PILLARS'
 	};
 
 	if($next === 'title') $items = $titleItems();
@@ -289,7 +289,7 @@ $engine->start(static function(
 	$font->theme = $engine->input->inputTheme;
 	$record = $best();
 	$scene->render($game, $menu, $page, $width, $height, $alpha, $uiTime, $record);
-	$next = $game->nextTower();
+	$next = $game->nextPillar();
 
 	(vrzno_env('phantStatus'))(json_encode([
 		'page' => $page
@@ -302,7 +302,7 @@ $engine->start(static function(
 		, 'palette' => $game->palette
 		, 'y' => $game->y
 		, 'vy' => $game->vy
-		, 'towers' => count($game->towers)
+		, 'pillars' => count($game->pillars)
 		, 'nextGap' => $next ? [$next->x, $next->gapTop, $next->gap] : null
 		, 'scroll' => $game->scroll
 		, 'runId' => $runId

@@ -1,5 +1,5 @@
 // Generates games/phlappy-phant's pixel art and sounds: the elePHPant frames copied from the hand-pixelled sheet
-// art/elephpant.png (see art/ELEPHPANT-LICENSE.md); the backdrop, tower, ground and scenery tilesets cut from
+// art/elephpant.png (see art/ELEPHPANT-LICENSE.md); the backdrop, pillar, ground and scenery tilesets cut from
 // GrafxKid's CC0 terrain sheet (art/terrain.png, with the parallax band mask and touched-up scenery in
 // art/terrain-parallax.png, and hand-graded dusk/dawn and night copies; see art/TERRAIN-LICENSE.md); the tileset
 // descriptions; three synthesised PCM sounds and the
@@ -28,17 +28,17 @@ const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2, PHANT_ROWS = 2;
 
 // The terrain sheets are 224 pixels square on a 32-pixel grid. The left five columns and five rows are the backdrop;
 // the two rows under it are animation frames for the backdrop's fourth row (the river). The right two columns hold
-// the foreground: a tree, a shrub and a fence, then the tower (cap row, then walls repeating every 16 rows), the row
-// where a tower meets the ground, and the ground with its grass top beside plain dirt. The parallax copy paints each
+// the foreground: a tree, a shrub and a fence, then the pillar (cap row, then walls repeating every 16 rows), the row
+// where a pillar meets the ground, and the ground with its grass top beside plain dirt. The parallax copy paints each
 // backdrop band in a flat colour and carries the latest scenery, whose bottoms sit on the 8-pixel grid.
 const SHEET = 224, BACKDROP = 160, OVERLAY_ROW = 96, OVERLAY_H = 32, FG_X = 160, FG_W = 64;
-const TOWER_SLICES = {cap: 120, body0: 128, body1: 136, base: 160}, SLICE_H = 8;
+const PILLAR_SLICES = {cap: 120, body0: 128, body1: 136, base: 160}, SLICE_H = 8;
 const GROUND = {grass: [160, 192], dirt: [192, 192]}, GROUND_TILE = 32;
-// Scenery boxes are on the 8-pixel grid so a piece can stand on the ground or a tower top; each ships bottom-left
+// Scenery boxes are on the 8-pixel grid so a piece can stand on the ground or a pillar top; each ships bottom-left
 // aligned in a 48x32 cell.
 const SCENERY = [['tree', 160, 24, 32, 32], ['shrub', 200, 40, 24, 16], ['fence', 168, 80, 48, 8]];
 const SCENERY_W = 48, SCENERY_H = 32;
-// Farther bands drift slower; the ground and towers move at the full scroll speed.
+// Farther bands drift slower; the ground and pillars move at the full scroll speed.
 const PARALLAX = [.08, .16, .24, .45, .7];
 const RIVER_FRAME_MS = 400;
 // Three hand-graded keyframes: day, dusk (also dawn), and night. Day takes its backdrop from art/terrain.png and its
@@ -372,7 +372,7 @@ const phantSheet = new Raster(PHANT_W * PHANT_FRAMES, PHANT_H * PHANT_ROWS);
 frames.forEach((frame, index) => phantSheet.blit(frame, (index % PHANT_FRAMES) * PHANT_W, Math.floor(index / PHANT_FRAMES) * PHANT_H));
 
 const backdrop = new Raster(BACKDROP, BACKDROP * 2 * palettes.length);
-const towerSheet = new Raster(FG_W, SLICE_H * 4 * palettes.length);
+const pillarSheet = new Raster(FG_W, SLICE_H * 4 * palettes.length);
 const groundSheet = new Raster(GROUND_TILE * 2, GROUND_TILE * palettes.length);
 const scenerySheet = new Raster(SCENERY_W * SCENERY.length, SCENERY_H * palettes.length);
 
@@ -388,8 +388,8 @@ palettes.forEach((back, palette) => {
 		copy(back, [0, BACKDROP + frame * OVERLAY_H, BACKDROP, OVERLAY_H], backdrop, 0, top + OVERLAY_ROW);
 	}
 
-	// Towers: 64x8 slices of the foreground column (the tower is 56 wide with 4 clear pixels each side).
-	Object.values(TOWER_SLICES).forEach((y, index) => copy(front, [FG_X, y, FG_W, SLICE_H], towerSheet, 0, (palette * 4 + index) * SLICE_H));
+	// Pillars: 64x8 slices of the foreground column (the pillar is 56 wide with 4 clear pixels each side).
+	Object.values(PILLAR_SLICES).forEach((y, index) => copy(front, [FG_X, y, FG_W, SLICE_H], pillarSheet, 0, (palette * 4 + index) * SLICE_H));
 	Object.values(GROUND).forEach(([x, y], index) => copy(front, [x, y, GROUND_TILE, GROUND_TILE], groundSheet, index * GROUND_TILE, palette * GROUND_TILE));
 	SCENERY.forEach(([, x, y, width, height], index) => copy(front, [x, y, width, height], scenerySheet, index * SCENERY_W, (palette + 1) * SCENERY_H - height));
 });
@@ -428,8 +428,8 @@ generated.set('assets/backdrop.tsj', tileset('Phlappy Phant backdrop', 'backdrop
 		, {tileid: palette * 2 + 1, duration: RIVER_FRAME_MS}
 	]}))
 }));
-generated.set('assets/tower.png', towerSheet.png());
-generated.set('assets/tower.tsj', tileset('Phlappy Phant tower', 'tower.png', FG_W, SLICE_H, 1, 4 * palettes.length, towerSheet));
+generated.set('assets/pillar.png', pillarSheet.png());
+generated.set('assets/pillar.tsj', tileset('Phlappy Phant pillar', 'pillar.png', FG_W, SLICE_H, 1, 4 * palettes.length, pillarSheet));
 generated.set('assets/ground.png', groundSheet.png());
 generated.set('assets/ground.tsj', tileset('Phlappy Phant ground', 'ground.png', GROUND_TILE, GROUND_TILE, 2, 2 * palettes.length, groundSheet));
 generated.set('assets/scenery.png', scenerySheet.png());
@@ -456,23 +456,23 @@ const slice = (source, region, wx, wy, flip = false) => {
 };
 for(let x = 0; x < 320; x += BACKDROP) slice(backdrop, [0, 0, BACKDROP, BACKDROP], x, groundY - BACKDROP);
 for(let x = 0; x < 320; x += GROUND_TILE) slice(groundSheet, [0, 0, GROUND_TILE, GROUND_TILE], x, groundY);
-const tower = (x, gapTop, gap) => {
-	const at = name => [0, Object.keys(TOWER_SLICES).indexOf(name) * SLICE_H, FG_W, SLICE_H];
+const pillar = (x, gapTop, gap) => {
+	const at = name => [0, Object.keys(PILLAR_SLICES).indexOf(name) * SLICE_H, FG_W, SLICE_H];
 
 	if(gapTop !== null)
 	{
-		slice(towerSheet, at('cap'), x - 4, gapTop - SLICE_H, true);
-		for(let y = gapTop - 2 * SLICE_H, n = 0; y > -SLICE_H; y -= SLICE_H, n++) slice(towerSheet, at(n % 2 ? 'body1' : 'body0'), x - 4, y, true);
+		slice(pillarSheet, at('cap'), x - 4, gapTop - SLICE_H, true);
+		for(let y = gapTop - 2 * SLICE_H, n = 0; y > -SLICE_H; y -= SLICE_H, n++) slice(pillarSheet, at(n % 2 ? 'body1' : 'body0'), x - 4, y, true);
 	}
 
 	const top = (gapTop ?? 0) + gap;
-	slice(towerSheet, at('cap'), x - 4, top);
-	for(let y = top + SLICE_H, n = 0; y < groundY; y += SLICE_H, n++) slice(towerSheet, at(n % 2 ? 'body1' : 'body0'), x - 4, y);
-	slice(towerSheet, at('base'), x - 4, groundY);
+	slice(pillarSheet, at('cap'), x - 4, top);
+	for(let y = top + SLICE_H, n = 0; y < groundY; y += SLICE_H, n++) slice(pillarSheet, at(n % 2 ? 'body1' : 'body0'), x - 4, y);
+	slice(pillarSheet, at('base'), x - 4, groundY);
 };
-// A full pair at the right, a ground tower mid-frame, and scenery between them; the sky stays clear for the title.
-tower(248, 56, 64);
-tower(132, null, 104);
+// A full pair at the right, a ground pillar mid-frame, and scenery between them; the sky stays clear for the title.
+pillar(248, 56, 64);
+pillar(132, null, 104);
 slice(scenerySheet, [0, 0, SCENERY_W, SCENERY_H], 200, groundY - SCENERY_H);
 slice(scenerySheet, [SCENERY_W, 0, SCENERY_W, SCENERY_H], 92, groundY - SCENERY_H);
 poster.blit(frames[1], 40, 240, 6);
@@ -486,7 +486,7 @@ if(previewDirectory)
 {
 	await fs.mkdir(previewDirectory, {recursive: true});
 
-	for(const [name, raster] of [['backdrop', backdrop], ['tower', towerSheet], ['ground', groundSheet], ['scenery', scenerySheet]])
+	for(const [name, raster] of [['backdrop', backdrop], ['pillar', pillarSheet], ['ground', groundSheet], ['scenery', scenerySheet]])
 	{
 		const big = new Raster(raster.width * 4, raster.height * 4);
 		big.fill(0, 0, big.width, big.height, [0xff, 0xdd, 0xee]);

@@ -5,7 +5,7 @@ namespace PhlappyPhant;
 /**
  * Deterministic 60 Hz flap-and-dodge simulation in world space.
  *
- * The phant never moves horizontally: it sits at world x zero while towers scroll toward it, so the simulation
+ * The phant never moves horizontally: it sits at world x zero while pillars scroll toward it, so the simulation
  * depends on the logical height alone and any viewport width only changes how far ahead a player can see. The world
  * is 352 units tall (ground at 288 plus two ground rows), small enough that even a 1x desktop frame draws it at 2x.
  */
@@ -22,16 +22,16 @@ final class Simulation
 	public const GRAVITY = 1300;
 	public const FLAP_VY = -330;
 	public const MAX_FALL = 600;
-	/** Tower width including its outline, matching the terrain sheet's 56-pixel tower. */
-	public const TOWER_W = 56;
-	public const TOWER_SPACING = 170;
-	public const FIRST_TOWER_X = 420;
+	/** Pillar width including its outline, matching the terrain sheet's 56-pixel pillar. */
+	public const PILLAR_W = 56;
+	public const PILLAR_SPACING = 170;
+	public const FIRST_PILLAR_X = 420;
 	public const LOOKAHEAD = 1200;
 	public const DESPAWN_X = -320;
 	public const SPEED_BASE = 120;
 	public const SPEED_PER_SCORE = 4;
 	public const SPEED_MAX = 200;
-	/** The terrain tiles are cut on an 8-unit grid, so every gap edge and tower height lands on it. */
+	/** The terrain tiles are cut on an 8-unit grid, so every gap edge and pillar height lands on it. */
 	public const GRID = 8;
 	public const GAP_BASE = 136;
 	/** The gap narrows one grid step every this many points. */
@@ -66,8 +66,8 @@ final class Simulation
 	public int $palette = 0;
 	/** Whether the dead phant has settled and the run may end. */
 	public bool $finished = false;
-	/** @var list<Tower> */
-	public array $towers = [];
+	/** @var list<Pillar> */
+	public array $pillars = [];
 	/** @var list<string> Events raised by the latest step: flap, score, bonk, or night. */
 	public array $events = [];
 	/** Whether the built-in tool-assisted player decides every flap; it never misses a gap. */
@@ -76,13 +76,13 @@ final class Simulation
 	private Random $random;
 	private float $deadTimer = 0;
 	private float $flappedAt = -1;
-	/** Tower pairs placed so far, numbering each for deterministic scenery. */
+	/** Pillar pairs placed so far, numbering each for deterministic scenery. */
 	private int $spawned = 0;
 	/** @var list<array<int,list<array{float,float}>>> Safe sets for the next few steps of the tool-assisted player. */
 	private array $plan = [];
 
 	/**
-	 * Start a reproducible run with its first towers already placed.
+	 * Start a reproducible run with its first pillars already placed.
 	 *
 	 * @param int $seed Positive deterministic random seed.
 	 * @return void Equal seeds give equal gap positions.
@@ -96,7 +96,7 @@ final class Simulation
 	/**
 	 * Scroll speed for a score.
 	 *
-	 * @param int $score Towers passed so far.
+	 * @param int $score Pillars passed so far.
 	 * @return float Logical units per second.
 	 */
 	public static function speedFor(int $score): float
@@ -107,7 +107,7 @@ final class Simulation
 	/**
 	 * Gap height for a score.
 	 *
-	 * @param int $score Towers passed so far.
+	 * @param int $score Pillars passed so far.
 	 * @return float Logical units between the two stacks.
 	 */
 	public static function gapFor(int $score): float
@@ -116,9 +116,9 @@ final class Simulation
 	}
 
 	/**
-	 * Palette for a score: day and night alternate every ten towers.
+	 * Palette for a score: day and night alternate every ten pillars.
 	 *
-	 * @param int $score Towers passed so far.
+	 * @param int $score Pillars passed so far.
 	 * @return int Zero for day, one for night.
 	 */
 	public static function paletteFor(int $score): int
@@ -145,7 +145,7 @@ final class Simulation
 	 * Advance one fixed step.
 	 *
 	 * @param bool $flap Whether a flap was pressed since the previous step.
-	 * @return void Updates poses, towers, score, phase, and the step's events.
+	 * @return void Updates poses, pillars, score, phase, and the step's events.
 	 */
 	public function step(bool $flap = false): void
 	{
@@ -154,7 +154,7 @@ final class Simulation
 
 		if($this->autopilot && $this->phase !== 'dead') $flap = $this->plannedFlap();
 
-		foreach($this->towers as $tower) $tower->previousX = $tower->x;
+		foreach($this->pillars as $pillar) $pillar->previousX = $pillar->x;
 
 		$this->age += self::STEP;
 
@@ -186,20 +186,20 @@ final class Simulation
 				? 1 : 0;
 			$speed = self::speedFor($this->score);
 
-			foreach($this->towers as $tower) $tower->x -= $speed * self::STEP;
+			foreach($this->pillars as $pillar) $pillar->x -= $speed * self::STEP;
 
 			$this->scroll += $speed * self::STEP;
 			$this->spawn();
-			$this->towers = array_values(array_filter(
-				$this->towers
-				, static fn(Tower $tower): bool => $tower->x + self::TOWER_W >= self::DESPAWN_X
+			$this->pillars = array_values(array_filter(
+				$this->pillars
+				, static fn(Pillar $pillar): bool => $pillar->x + self::PILLAR_W >= self::DESPAWN_X
 			));
 
-			foreach($this->towers as $tower)
+			foreach($this->pillars as $pillar)
 			{
-				if($tower->scored || $tower->x + self::TOWER_W >= 0) continue;
+				if($pillar->scored || $pillar->x + self::PILLAR_W >= 0) continue;
 
-				$tower->scored = true;
+				$pillar->scored = true;
 				$this->score++;
 				$this->events[] = 'score';
 				$palette = self::paletteFor($this->score);
@@ -241,7 +241,7 @@ final class Simulation
 	 * keeps the hitbox inside every gap and off the ground for the next two and a half seconds, with flaps no closer
 	 * together than a human could tap. That set is built backward from
 	 * the horizon over the velocity lattice (a flap always resets the velocity, so the velocity is just the number of
-	 * steps since the last flap), with the towers advanced exactly as the run will advance them. Flapping as late as
+	 * steps since the last flap), with the pillars advanced exactly as the run will advance them. Flapping as late as
 	 * possible keeps the flight low and smooth; the horizon always covers the entry into the next gap.
 	 *
 	 * @return bool True to flap this step.
@@ -271,7 +271,7 @@ final class Simulation
 	/**
 	 * Build the safe sets for the next few steps from a full backward pass over the horizon.
 	 *
-	 * The towers only ever scroll, so rows near the present stay valid as the run advances; the planner keeps the
+	 * The pillars only ever scroll, so rows near the present stay valid as the run advances; the planner keeps the
 	 * first few rows and rebuilds when they run out, which spreads the cost of the pass over several steps.
 	 *
 	 * @return list<array<int,list<array{float,float}>>> One row per upcoming step, each indexed by steps since a flap.
@@ -291,10 +291,10 @@ final class Simulation
 		$xs = [];
 		$scored = [];
 
-		foreach($this->towers as $j => $tower)
+		foreach($this->pillars as $j => $pillar)
 		{
-			$xs[$j] = $tower->x;
-			$scored[$j] = $tower->scored;
+			$xs[$j] = $pillar->x;
+			$scored[$j] = $pillar->scored;
 		}
 
 		$score = $this->score;
@@ -307,20 +307,20 @@ final class Simulation
 			$low = self::HITBOX_INSET_Y + 1.0;
 			$high = self::GROUND_Y - $boxHeight - 1.0;
 
-			foreach($this->towers as $j => $tower)
+			foreach($this->pillars as $j => $pillar)
 			{
 				$xs[$j] -= $speed;
 
-				if(!$scored[$j] && $xs[$j] + self::TOWER_W < 0)
+				if(!$scored[$j] && $xs[$j] + self::PILLAR_W < 0)
 				{
 					$scored[$j] = true;
 					$score++;
 				}
 
-				if($xs[$j] >= $left + $boxWidth || $xs[$j] + self::TOWER_W <= $left) continue;
+				if($xs[$j] >= $left + $boxWidth || $xs[$j] + self::PILLAR_W <= $left) continue;
 
-				$low = max($low, $tower->gapTop + 1.0);
-				$high = min($high, $tower->gapTop + $tower->gap - $boxHeight - 1.0);
+				$low = max($low, $pillar->gapTop + 1.0);
+				$high = min($high, $pillar->gapTop + $pillar->gap - $boxHeight - 1.0);
 			}
 
 			$allowed[$t] = $low <= $high ? [[$low, $high]] : [];
@@ -418,26 +418,26 @@ final class Simulation
 	/**
 	 * The next pair the phant has not passed, for status reporting.
 	 *
-	 * @return Tower|null The nearest unscored tower.
+	 * @return Pillar|null The nearest unscored pillar.
 	 */
-	public function nextTower(): ?Tower
+	public function nextPillar(): ?Pillar
 	{
-		foreach($this->towers as $tower) if(!$tower->scored) return $tower;
+		foreach($this->pillars as $pillar) if(!$pillar->scored) return $pillar;
 
 		return null;
 	}
 
-	/** Place towers until the lookahead distance is covered, each gap drawn from the seeded sequence. */
+	/** Place pillars until the lookahead distance is covered, each gap drawn from the seeded sequence. */
 	private function spawn(): void
 	{
-		$last = $this->towers ? end($this->towers)->x : self::FIRST_TOWER_X - self::TOWER_SPACING;
+		$last = $this->pillars ? end($this->pillars)->x : self::FIRST_PILLAR_X - self::PILLAR_SPACING;
 
-		while($last + self::TOWER_SPACING <= self::LOOKAHEAD)
+		while($last + self::PILLAR_SPACING <= self::LOOKAHEAD)
 		{
-			$last += self::TOWER_SPACING;
+			$last += self::PILLAR_SPACING;
 			$gap = self::gapFor($this->score);
 			$steps = intdiv((int)(self::GROUND_Y - $gap - 2 * self::GAP_MARGIN), self::GRID);
-			$this->towers[] = new Tower(
+			$this->pillars[] = new Pillar(
 				$last
 				, self::GAP_MARGIN + self::GRID * $this->random->int($steps + 1)
 				, $gap
@@ -453,10 +453,10 @@ final class Simulation
 
 		if($top + $height >= self::GROUND_Y) return true;
 
-		foreach($this->towers as $tower)
+		foreach($this->pillars as $pillar)
 		{
-			if($tower->x >= $left + $width || $tower->x + self::TOWER_W <= $left) continue;
-			if($top < $tower->gapTop || $top + $height > $tower->gapTop + $tower->gap) return true;
+			if($pillar->x >= $left + $width || $pillar->x + self::PILLAR_W <= $left) continue;
+			if($top < $pillar->gapTop || $top + $height > $pillar->gapTop + $pillar->gap) return true;
 		}
 
 		return false;

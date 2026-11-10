@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace PhlappyPhant;
 
-/** Portable Park-Miller generator so a seed places the same tower gaps on every runtime, including wasm32. */
+/** Portable Park-Miller generator so a seed places the same pillar gaps on every runtime, including wasm32. */
 final class Random
 {
 	private int $state;
