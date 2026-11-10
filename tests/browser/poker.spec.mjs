@@ -313,7 +313,7 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	await canvas.focus();
 	await page.keyboard.press('Enter');
 	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('setup');
-	await page.keyboard.press('ArrowRight');await page.keyboard.press('v');
+	await page.keyboard.press('ArrowRight');await page.keyboard.press('v');await page.keyboard.press('2');
 	await expect.poll(async()=>(await state(canvas)).ui.setup).toMatchObject({players:5,variant:'anything',wild:[],customWild:[]});
 	await page.keyboard.press('w');
 	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('wildcards');
@@ -639,12 +639,16 @@ test(`touch selection and cancellation use readable controls at ${viewport.width
 
 // The street games are chosen on the setup card and played from the keyboard and the pointer. Seeds are fresh in
 // the page, so these follow whatever is dealt and assert the shape of each street rather than particular cards.
-async function startGame(page,canvas,presses,{seatsRight=0}={})
+async function startGame(page,canvas,choice,{seatsRight=0}={})
 {
 	await canvas.focus();await page.keyboard.press('Enter');
 	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('setup');
 	for(let i=0;i<seatsRight;i++) await page.keyboard.press('ArrowRight');
-	for(let i=0;i<presses;i++) await page.keyboard.press('v');
+	// V opens the game selector, a column of buttons; each has a number key.
+	await page.keyboard.press('v');
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('games');
+	await page.keyboard.press(String(choice));
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('setup');
 	const setup=(await state(canvas)).ui.setup;
 	await page.keyboard.press('Enter');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
@@ -672,7 +676,7 @@ test('hold\'em is chosen at setup, deals a board street by street and names each
 		}).observe(document,{subtree:true,attributes:true,attributeFilter:['data-php-poker']});
 	});
 	const canvas=await boot(page);
-	const setup=await startGame(page,canvas,2);
+	const setup=await startGame(page,canvas,3);
 	expect(setup).toMatchObject({game:'holdem',players:4});
 	let view=await settled(canvas);
 	expect(view).toMatchObject({game:'holdem',street:'preflop',board:[],phase:'betting'});
@@ -730,7 +734,7 @@ test('hold\'em is chosen at setup, deals a board street by street and names each
 
 test('seven-card stud seats seven, shows exposed cards and keeps hole cards private',async({page})=>{
 	const canvas=await boot(page);
-	const setup=await startGame(page,canvas,4,{seatsRight:4});
+	const setup=await startGame(page,canvas,5,{seatsRight:4});
 	expect(setup).toMatchObject({game:'stud7',players:7});
 	let view=await settled(canvas);
 	expect(view).toMatchObject({game:'stud7',street:'third',phase:'betting'});

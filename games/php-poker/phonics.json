@@ -123,10 +123,10 @@
     "src/Session.php": "sha256-y7vbktrdqw7qVVl61uJrovH85+HCf7TZ4/b8/6HmYl8=",
     "src/Ui/Chips.php": "sha256-qD7RyIoRjgORznQes/KLAwKdsgcEz6tZBNOhSljW35E=",
     "src/Ui/GameText.php": "sha256-d3l+zPQBS596q67ECYMw2wv2Y8GXz1MwBvc9CKgEwZs=",
-    "src/Ui/Layout.php": "sha256-4E6NxHvI4feqdhFr+Kzd8ieBBzPbyv85wKUXZofnHU4=",
+    "src/Ui/Layout.php": "sha256-WcjXO3BbxTprfkG/Lyt/oRr4TL0nLDz9wXJYTAlgJDI=",
     "src/Ui/Motion.php": "sha256-qqFCwO3I05ZaBQ8VY0eRV9+eRpi8mMPATtHbgaNBDxI=",
-    "src/Ui/Painter.php": "sha256-QT7FjJo6Ow5zGlZfqUVddwVngIYBiqjXDDlfar3ijaQ=",
-    "src/Ui/Presenter.php": "sha256-OTgUFQC96OWyhPEoWDx4WK3aZmqGKjJlp8Z/w+/V1T8=",
+    "src/Ui/Painter.php": "sha256-awuQtHK8d0kkdFDUq4uNbKALwGmMdILs3xnMGOxjZoY=",
+    "src/Ui/Presenter.php": "sha256-E4t2dunBOoh5X0kW25fyCV5n04oAnijDuQc1Y85grdI=",
     "src/Ui/RoundHistory.php": "sha256-jx7NY8otLquaWLWt95AGepSGvEtn9nHZsjGdrGXZ6uQ=",
     "src/Variant.php": "sha256-OYqHbIp/WzJUDDs7MPyIKE38jZsTyjPaFtYDe3RqH8k=",
     "src/WildCards.php": "sha256-xr3nuIPic3i+qXdKbOwdma7zRMSFMKLFpOJXwmqFkr8="
