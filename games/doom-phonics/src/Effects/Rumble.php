@@ -84,12 +84,11 @@ final class Rumble extends \Phonics\Effects\Rumble
 		if($weapon) $this->pulse(75, .35, .2, 35);
 	}
 
-	/** Give the settings range a representative two-motor preview. */
+	/** Represent the settings range literally with an even pulse scaled by the selected level. */
 	public function preview(): void
 	{
 		$this->reset();
-		$this->pulse(55, .25, .7);
-		$this->pulse(70, .55, .25, 70);
+		$this->pulse(120, 1, 1);
 	}
 
 	/** Advance the queue and send every ready pulse at the configured intensity. */

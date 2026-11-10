@@ -73,9 +73,9 @@ verifyWad(
 
 $rumble->preview();
 verifyWad(
-	$rumble->pending() === 2
-		&& $rumble->update(0) === [['duration' => 55,'strong' => .25,'weak' => .7]]
-	, 'settings preview replaces delayed gameplay feedback with a representative pair'
+	$rumble->pending() === 1
+		&& $rumble->update(0) === [['duration' => 120,'strong' => 1.0,'weak' => 1.0]]
+	, 'settings preview replaces delayed gameplay feedback with the literal slider level'
 );
 
 foreach([-1, INF, NAN] as $invalid)

@@ -264,22 +264,66 @@ test('Doom binding capture, conflicts and saved alternatives use physical input'
 	page.on('console', message => {if(/PHP Fatal|Uncaught/.test(message.text())) errors.push(message.text());});
 
 	await page.addInitScript(() => {
+		window.doomRumbleEffects = [];
 		const pad = {
 			id: 'Xbox 360 Controller'
 			, index: 0
 			, connected: true
 			, mapping: 'standard'
 			, timestamp: performance.now()
+			, vibrationActuator: {
+				effects: ['dual-rumble']
+				, playEffect: (effect, parameters) => {
+					doomRumbleEffects.push({effect, parameters});
+
+					return Promise.resolve('complete');
+				}
+			}
 			, axes: [0, 0, 0, 0]
 			, buttons: Array.from({length: 17}, () => ({pressed: false, touched: false, value: 0}))
 		};
 
 		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+		window.doomMenuPad = pad;
 	});
 
 	await page.goto('/doom-phonics/');
 	await page.waitForFunction(() => window.previewSession?.doomState?.menu?.screen === 'title');
 	await page.locator('canvas').focus();
+	await page.evaluate(() => {
+		doomMenuPad.buttons[13] = {pressed: true, touched: true, value: 1};
+		doomMenuPad.timestamp = performance.now();
+	});
+	await page.waitForTimeout(80);
+	await page.evaluate(() => {
+		doomMenuPad.buttons[13] = {pressed: false, touched: false, value: 0};
+		doomMenuPad.timestamp = performance.now();
+	});
+	await page.waitForTimeout(80);
+	await page.evaluate(() => {
+		doomMenuPad.buttons[12] = {pressed: true, touched: true, value: 1};
+		doomMenuPad.timestamp = performance.now();
+	});
+	await page.waitForTimeout(80);
+	await page.evaluate(() => {
+		doomMenuPad.buttons[12] = {pressed: false, touched: false, value: 0};
+		doomMenuPad.timestamp = performance.now();
+		doomRumbleEffects = [];
+	});
+	await page.waitForTimeout(80);
+	const rumbleSupported = await page.evaluate(async() => {
+		const module = await previewSession.php.binary;
+		module.doomMenuRumbleSupport = value => window.doomMenuRumbleSupported = Boolean(value);
+		await previewSession.php.run(String.raw`<?php
+			(vrzno_env('doomMenuRumbleSupport'))(
+				function_exists('SDL_GameControllerHasRumble')
+				&& function_exists('SDL_GameControllerRumble')
+				&& $engine->input->gamepads->rumbleStatus() === 'Ready'
+			);
+		`);
+
+		return doomMenuRumbleSupported;
+	});
 
 	const menu = () => page.evaluate(() => previewSession.doomState.menu);
 
@@ -348,6 +392,15 @@ test('Doom binding capture, conflicts and saved alternatives use physical input'
 	await select('rumble-intensity');
 	await key('ArrowLeft');
 	await expect.poll(async() => (await menu()).options.rumbleIntensity).toBe(.9);
+
+	if(rumbleSupported)
+	{
+		await expect.poll(() => page.evaluate(() => doomRumbleEffects.length)).toBeGreaterThan(0);
+		const sliderRumble = await page.evaluate(() => doomRumbleEffects.at(-1).parameters);
+		expect(sliderRumble.strongMagnitude).toBeCloseTo(.9, 3);
+		expect(sliderRumble.weakMagnitude).toBeCloseTo(.9, 3);
+	}
+
 	await enter('mute-all');
 	await expect.poll(async() => (await menu()).options.muted).toBe(true);
 
