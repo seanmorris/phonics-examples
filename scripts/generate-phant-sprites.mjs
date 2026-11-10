@@ -354,7 +354,7 @@ generated.set('assets/bonk.wav', bonkSound());
 
 // Poster: a daytime scene at four times pixel scale with the title set in the engine font.
 const poster = new Raster(1280, 720);
-poster.fill(0, 0, 1280, 720, [0xcf, 0xe6, 0xf5]);
+poster.fill(0, 0, 1280, 720, [0x87, 0xc7, 0xeb]);
 for(const [x, y] of [[90, 90], [420, 150], [760, 70], [1080, 170], [300, 260]]) poster.blit(puff, x, y, 4);
 poster.fill(0, 560, 1280, 32, palette.cream);
 for(let x = 0; x < 1280; x += TILE_W * 4) poster.blit(soil, x, 592, 4);
@@ -379,7 +379,7 @@ if(previewDirectory)
 	big.blit(tileSheet, 0, 0, 8);
 	await fs.writeFile(path.join(previewDirectory, 'tiles-8x.png'), big.png());
 	const closeup = new Raster(PHANT_W * 12 * PHANT_FRAMES + 16, PHANT_H * 12 * PHANT_ROWS + 16);
-	closeup.fill(0, 0, closeup.width, closeup.height, [0xcf, 0xe6, 0xf5]);
+	closeup.fill(0, 0, closeup.width, closeup.height, [0x87, 0xc7, 0xeb]);
 	frames.forEach((frame, index) => closeup.blit(frame, (index % PHANT_FRAMES) * (PHANT_W * 12 + 16), Math.floor(index / PHANT_FRAMES) * (PHANT_H * 12 + 16), 12));
 	await fs.writeFile(path.join(previewDirectory, 'phant-12x.png'), closeup.png());
 	await fs.writeFile(path.join(previewDirectory, 'poster.png'), poster.png());

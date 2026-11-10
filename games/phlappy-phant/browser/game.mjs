@@ -22,8 +22,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	status.setAttribute('aria-live', 'polite');
 	style.textContent = `
 		.phlappy-phant-ui{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;
-			max-width:none;margin:auto;background:#cfe6f5;color:#363254}
-		.phlappy-phant-screen{position:relative;width:100%;height:100%;isolation:isolate;overflow:hidden;background:#cfe6f5}
+			max-width:none;margin:auto;background:#87c7eb;color:#363254}
+		.phlappy-phant-screen{position:relative;width:100%;height:100%;isolation:isolate;overflow:hidden;background:#87c7eb}
 		.phlappy-phant-screen>canvas{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;
 			max-height:none;margin:0;border:0;border-radius:0;image-rendering:pixelated;touch-action:none;cursor:pointer}
 		.phlappy-phant-targets{position:absolute;inset:0;pointer-events:none}
@@ -44,7 +44,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	screen.append(targets);
 	const quick = new services.QuickControls(screen, ui);
 	let state = null, taps = 0;
-	const sounded = {flap: 0, score: 0, bonk: 0};
+	const sounded = {flap: 0, score: 0, bonk: 0, tas: 0};
 
 	const safeJson = (value, fallback) => {
 		try { return JSON.parse(value); } catch { return fallback; }
@@ -148,7 +148,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 			if(nextState.runId !== previousRun) for(const name of Object.keys(sounded)) sounded[name] = 0;
 
-			for(const [name, gain] of [['flap', .5], ['score', .6], ['bonk', .7]])
+			// The Konami code's acceptance rings the score bell.
+			for(const [name, gain, sample] of [['flap', .5], ['score', .6], ['bonk', .7], ['tas', .8, 'score']])
 			{
 				const count = nextState.counts?.[name] ?? 0;
 
@@ -158,13 +159,13 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 				while(sounded[name] < count)
 				{
 					sounded[name]++;
-					play(name, gain);
+					play(sample ?? name, gain);
 				}
 			}
 
 			buttons.sync(nextState.width, nextState.height, nextState.regions);
 
-			const summary = `${nextState.page}. Score ${nextState.score}. Best ${nextState.best}.`;
+			const summary = `${nextState.page}. Score ${nextState.score}. Best ${nextState.best}.${nextState.autopilot ? ' Tool-assisted.' : ''}`;
 
 			if(status.textContent !== summary) status.textContent = summary;
 		}

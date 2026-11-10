@@ -5,6 +5,7 @@ use Phonics\Asset\Resource;
 use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\BitmapFont;
+use Phonics\Input\Sequences;
 use Phonics\Render\Device;
 use Phonics\Ui\BindingMenu;
 use Phonics\Ui\Menu;
@@ -25,6 +26,15 @@ $settings = new InputSettings(
 );
 
 $engine->input->useBindings($settings->bindings);
+
+// The Konami code on the standard button lattice: arrows or the D-pad, then B and A (the controller's face buttons;
+// on a keyboard B and A themselves, beside the engine's X/Z and Space defaults). It is only watched while the
+// score is zero, and it hands the run to the tool-assisted player.
+$engine->input->bindButton(0, [SDLK_SPACE, SDLK_z, SDLK_RETURN, SDLK_KP_ENTER, ord('a')]);
+$engine->input->bindButton(1, [SDLK_x, SDLK_LSHIFT, SDLK_LCTRL, SDLK_RCTRL, ord('b')]);
+$engine->input->bindButton(14, [SDLK_LEFT]);
+$konami = new Sequences;
+$konami->add('konami', ['up', 'up', 'down', 'down', 'left', 'right', 'left', 'right', 1, 0], 1.5, strict: false);
 
 $font = new BitmapFont(
 	$phonics->loader
@@ -51,7 +61,7 @@ $uiTime = 0.0;
 $runId = 0;
 $seenTaps = 0;
 $submitted = true;
-$counts = ['flap' => 0, 'score' => 0, 'bonk' => 0, 'night' => 0];
+$counts = ['flap' => 0, 'score' => 0, 'bonk' => 0, 'night' => 0, 'tas' => 0];
 $setPage = null;
 
 $best = static fn(): int => max(0, (int)(vrzno_env('phantBest'))());
@@ -59,7 +69,7 @@ $best = static fn(): int => max(0, (int)(vrzno_env('phantBest'))());
 $startGame = static function() use (&$game, &$page, &$runId, &$counts, &$submitted, &$seenTaps, $menu, $engine): void {
 	$game = new Simulation((int)(vrzno_env('phantSeed'))());
 	$runId++;
-	$counts = ['flap' => 0, 'score' => 0, 'bonk' => 0, 'night' => 0];
+	$counts = ['flap' => 0, 'score' => 0, 'bonk' => 0, 'night' => 0, 'tas' => 0];
 	$submitted = false;
 	$seenTaps = (int)(vrzno_env('phantTaps'))();
 	$page = 'play';
@@ -79,10 +89,10 @@ $titleItems = static function() use (&$startGame, $bindings): array {
 		, 'help' => [
 			'label' => 'How to play'
 			, 'children' => [
-				'flap' => ['label' => 'Tap, click, Space or A to flap.', 'disabled' => true]
+				'flap' => ['label' => 'Tap / click / Space / A to flap.', 'disabled' => true]
 				, 'dodge' => ['label' => 'Slip between the DB silo barrels.', 'disabled' => true]
-				, 'night' => ['label' => 'Every ten barrels, day turns to night.', 'disabled' => true]
-				, 'pause' => ['label' => 'Escape, P or Start pauses.', 'disabled' => true]
+				, 'night' => ['label' => 'Every ten barrels day turns to night.', 'disabled' => true]
+				, 'pause' => ['label' => 'Escape / P / Start pauses.', 'disabled' => true]
 			]
 		]
 		, 'about' => [
@@ -161,9 +171,12 @@ $setPage = static function(string $next) use (
 
 $setPage('title');
 
-$engine->systems->add('phlappy-phant.simulation', static function() use ($engine, &$game, &$page, &$counts, &$seenTaps): void {
+$engine->systems->add('phlappy-phant.simulation', static function() use ($engine, &$game, &$page, &$counts, &$seenTaps, $konami): void {
 	$taps = (int)(vrzno_env('phantTaps'))();
-	$flap = $page === 'play' && ($engine->controls->pressed(PhantActions::FLAP) || $taps > $seenTaps);
+	// Up is both a flap and the first step of the Konami code, so a code in progress on the ready screen waits
+	// there instead of starting the run; the code's timeout restores the flap.
+	$flap = $page === 'play' && ($engine->controls->pressed(PhantActions::FLAP) || $taps > $seenTaps)
+		&& !($game->phase === 'ready' && $konami->progress('konami') > 0);
 	$seenTaps = $taps;
 	$game->step($flap);
 
@@ -174,14 +187,28 @@ $engine->setInputHandler(static function(
 	Engine $engine
 	, float $elapsed
 ) use (
-	&$game, &$page, &$uiTime, &$setPage, &$submitted, $menu, $navigation, $bindings, $scene
+	&$game, &$page, &$uiTime, &$setPage, &$submitted, &$counts, $menu, $navigation, $bindings, $scene, $konami
 ): bool {
 	$uiTime += min(.25, max(0, $elapsed));
 	$action = (string)(vrzno_env('phantAction'))();
 
+	if($page === 'play' && $game->score === 0 && !$game->autopilot)
+	{
+		$konami->update($engine->input->snapshot(), $uiTime);
+
+		foreach($konami->drain() as $match)
+		{
+			if($match['name'] !== 'konami') continue;
+
+			$game->autopilot = true;
+			$counts['tas']++;
+		}
+	}
+
 	if($page === 'play' && $game->finished)
 	{
-		if(!$submitted)
+		// A tool-assisted run is not the player's: it never touches the best score.
+		if(!$submitted && !$game->autopilot)
 		{
 			(vrzno_env('phantSubmitScore'))($game->score);
 			$submitted = true;
@@ -269,6 +296,7 @@ $engine->start(static function(
 		, 'score' => $game->score
 		, 'best' => $record
 		, 'finished' => $game->finished
+		, 'autopilot' => $game->autopilot
 		, 'palette' => $game->palette
 		, 'y' => $game->y
 		, 'vy' => $game->vy
