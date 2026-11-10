@@ -9,6 +9,7 @@ if(is_file($engine)) { require_once $engine; break; }
 
 use PhpPoker\Render\Theme;
 use PhpPoker\Render\UiCanvas;
+use PhpPoker\Ui\GameText;
 use PhpPoker\Ui\Chips;
 use PhpPoker\Ui\Layout;
 use PhpPoker\Ui\Painter;
@@ -435,7 +436,7 @@ $test('the menu, setup and settings flow send only session intents the session k
 	$presenter->input([['key' => 'enter']], null, 1 / 60);
 	$expect($presenter->state()['local'] === 'setup' && $presenter->state()['setup']['ante'] === 2, 'the combined limits dialog applies its draft to setup');
 	$start = $presenter->input([['key' => 'enter']], null, 1 / 60);
-	$expect($start === [['type' => 'start', 'players' => 6, 'variant' => 'anything',
+	$expect($start === [['type' => 'start', 'players' => 6, 'variant' => 'anything', 'game' => 'draw',
 		'ante'=>2,'minimum'=>1,'maximum'=>20,'finalMinimum'=>3,'finalMaximum'=>20,'raiseLimit'=>4,'playerRaiseLimit'=>2,
 		'wild'=>['joker','deuces'], 'customWild'=>[]]], 'Deal starts with the chosen seats, variant, wild cards and limits');
 	$presenter->input([['key' => 'escape']], null, 1 / 60);
@@ -1532,6 +1533,56 @@ $test('the hold\'em board stands in the free lane on every table without crowdin
 		foreach($layout->actions($view, ['discards' => [], 'amount' => 4]) as $button) foreach($board as $index => $card)
 			$expect(!$overlaps($inset($card), $button['rect']), "board card $index clears {$button['id']} at $at");
 	}
+});
+
+$test('the Game row cycles draw, hold\'em and both studs, and the table names and explains the game it deals', static function(callable $expect) use ($root): void {
+	$presenter = new Presenter($root);
+	$menu = ['screen' => 'menu', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => false];
+	$presenter->update($menu);
+	$presenter->input([['key' => 'enter']], null, 1 / 60);
+	$presenter->input(array_fill(0, 6, ['key' => 'arrowright']), null, 1 / 60);
+	$expect($presenter->state()['setup']['players'] === 8 && $presenter->state()['setup']['game'] === 'draw', 'setup starts on draw and allows eight seats');
+	$seen = [];
+	for($step = 0; $step < 5; $step++)
+	{
+		$presenter->input([['key' => 'v']], null, 1 / 60);
+		$setup = $presenter->state()['setup'];
+		$seen[] = [$setup['game'], $setup['variant'], $setup['players']];
+	}
+	$expect($seen === [['draw','anything',8],['holdem','anything',8],['stud5','anything',8],['stud7','anything',7],['draw','jackpots',7]], 'V cycles every game once, and seven-card stud seats at most seven');
+	$presenter->input([['key' => 'arrowup'], ['key' => 'arrowup']], null, 1 / 60);
+	$expect($presenter->state()['setup']['game'] === 'stud5' && $presenter->state()['setup']['variant'] === 'jackpots', 'Up steps back and keeps draw\'s last opening rule');
+	$presenter->input([['key' => 'arrowup']], null, 1 / 60);
+	$start = $presenter->input([['key' => 'enter']], null, 1 / 60);
+	$expect(($start[0]['game'] ?? null) === 'holdem' && $start[0]['players'] === 7, 'Deal starts the chosen game');
+	$session = new PhpPoker\Session;
+	$session->command($start[0], 'game-row');
+	$view = $session->view();
+	$expect($view['error'] === '' && $view['game'] === 'holdem' && $view['street'] === 'preflop', 'the session deals hold\'em from that intent');
+	$table = new Presenter($root);
+	$table->update($menu);
+	$table->update($view);
+	$state = $table->status()['ui'];
+	$expect(str_starts_with((string)$state['hint'], 'Dealing') || str_starts_with((string)$state['hint'], 'Moving'), 'the first deal is announced while it moves');
+	$table->advance(30);
+	$table->update($view);
+	$hint = (string)$table->state()['hint'];
+	$expect($view['turn'] === 0 ? str_starts_with($hint, 'Pre-flop: ') : $hint === $view['message'], 'a hold\'em turn names its street');
+	$poker = array_column($table->layout()->topDropdown('poker', 'holdem')['items'], 'id');
+	$expect($poker === ['game-settings','history'], 'hold\'em offers no five-card odds tables');
+	$expect(array_column($table->layout()->topDropdown('poker', 'stud5')['items'], 'id') === ['game-settings','history','odds'], 'five-card stud keeps the dealt odds');
+	$expect(array_column($table->layout()->topDropdown('poker')['items'], 'id') === ['game-settings','history','odds','improving'], 'draw keeps both odds tables');
+	$expect(GameText::title('holdem') === "TEXAS HOLD'EM" && GameText::phase('holdem', 'flop', 'betting', '') === 'FLOP' && GameText::phase('stud7', 'seventh', 'betting', '') === '7TH STREET', 'the menu bar names the game and street');
+	$expect(GameText::phase('draw', 'opening', 'betting', '') === 'OPENING BETS' && GameText::phase('holdem', 'river', 'showdown', '') === 'HAND OVER' && GameText::phase('stud5', 'third', 'betting', 'deal') === 'DEALING', 'draw labels and shared labels are unchanged');
+	$expect(Presenter::helpParagraphs(false) === GameText::help('draw', false) && count(Presenter::helpParagraphs(false)) === 9, 'draw help is unchanged');
+	foreach(['holdem','stud5','stud7'] as $game)
+	{
+		$help = implode(' ', GameText::help($game, false));
+		$expect(!str_contains($help, '1 to 5') && !str_contains($help, 'Stand pat'), "$game help does not mention drawing");
+		$expect(GameText::houseRuleLabels($game)['opening'] === 'Game' && !str_contains(implode(' ', GameText::houseRuleLabels($game)), 'draw'), "$game house rules do not mention the draw");
+		$expect(!str_contains(implode(' ', array_merge(...array_values(GameText::limits($game)))), 'Before'), "$game limits name streets, not the draw");
+	}
+	$expect(GameText::houseRuleValues(['game'=>'holdem','ante'=>1,'minimum'=>2])['ante'] === '1 and 2 chips' && GameText::welcome(['game'=>'stud7','ante'=>1,'minimum'=>2,'wild'=>[]]) === 'SEVEN-CARD STUD  (ante 1, bring-in 2)', 'blinds, antes and the welcome line come from the profile');
 });
 
 echo "$passed PHP Poker presenter checks passed.\n";

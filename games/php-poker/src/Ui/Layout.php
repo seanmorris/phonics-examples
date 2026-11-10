@@ -490,7 +490,7 @@ final class Layout
 	}
 
 	/** Notepad-style menu dropped below one top-bar heading. */
-	public function topDropdown(string $menu): array
+	public function topDropdown(string $menu, string $game = 'draw'): array
 	{
 		if(!in_array($menu,['game','poker'],true)) throw new \InvalidArgumentException('Unknown Poker menu');
 		$headings=$this->topMenus();
@@ -503,6 +503,10 @@ final class Layout
 		$definitions=$menu==='game'
 			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['quit','Quit to title','Q']]
 			: [['game-settings','House Rules','R'],['history','History','H'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
+		// The odds tables count five-card deals and draws: five-card stud is dealt five cards but never draws, and the
+		// other games make their hands from more than five.
+		if($menu === 'poker' && $game !== 'draw')
+			$definitions = array_values(array_filter($definitions, static fn(array $item): bool => $game === 'stud5' ? $item[0] !== 'improving' : !in_array($item[0], ['odds','improving'], true)));
 		$items=[];
 		$x=$headings[$menu][0]; $y=$headings[$menu][1]+$headings[$menu][3];
 		foreach($definitions as $index=>[$id,$label,$key])

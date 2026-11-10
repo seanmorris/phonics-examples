@@ -56,8 +56,8 @@ $test('profiles carry the game and older profiles restore as five-card draw',sta
 	$session=new Session;
 	$session->command(['type'=>'start','players'=>8,'game'=>'stud7'],'seat-cap');
 	$expect(str_contains($session->view()['error']??'','seats at most 7'),'Seven-card stud caps at seven seats');
-	$session->command(['type'=>'start','players'=>4,'game'=>'holdem'],'not-yet');
-	$expect(str_contains($session->view()['error']??'','not available yet'));
+	$session->command(['type'=>'start','players'=>4,'game'=>'holdem'],'holdem-start');
+	$expect(($session->view()['error']??'')===''&&$session->view()['game']==='holdem'&&count($session->view()['players'][0]['cards'])===2);
 	$session->command(['type'=>'start','players'=>4],'draw-default');
 	$expect(($session->view()['error']??'')===''&&$session->view()['profile']['game']==='draw');
 });

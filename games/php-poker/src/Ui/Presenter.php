@@ -42,6 +42,8 @@ final class Presenter
 	private int $amount = 0;
 	private int $setupPlayers = 4;
 	private string $setupVariant = 'jackpots';
+	/** Game the next table deals; the Game row cycles it with draw's opening rule. */
+	private string $setupGame = 'draw';
 	private int $setupAnte = 1;
 	private int $setupMinimum = 2;
 	private int $setupMaximum = 20;
@@ -341,7 +343,7 @@ final class Presenter
 			{
 				$setup = $layout->setup($this->setupPlayers, $this->setupVariant);
 				if($this->setupPlayers > 2) $addKey($setup['less'], 'arrowleft', 'setup:less');
-				if($this->setupPlayers < 8) $addKey($setup['more'], 'arrowright', 'setup:more');
+				if($this->setupPlayers < GameText::seats($this->setupGame)) $addKey($setup['more'], 'arrowright', 'setup:more');
 				$addKey($setup['variant'], 'v', 'setup:variant');
 				$addKey($setup['wild'], 'w', 'setup:wild');
 				$addKey($setup['limits'], 'l', 'setup:limits');
@@ -425,7 +427,7 @@ final class Presenter
 		if($this->topMenu !== null)
 		{
 			foreach($layout->topMenus() as $menu=>$rect) $targets[]=['id'=>'top:'.$menu,'rect'=>$rect,'topMenu'=>$menu];
-			foreach($layout->topDropdown($this->topMenu)['items'] as $item)
+			foreach($layout->topDropdown($this->topMenu, (string)($this->view['game'] ?? 'draw'))['items'] as $item)
 			{
 				$disabled=($this->view['mode']??'offline')==='online' && in_array($item['id'],['new','save','load'],true);
 				$disabled=$disabled || ($item['id']==='save' && empty($this->view['canContinue']));
@@ -581,12 +583,12 @@ final class Presenter
 			{
 				return match($key) {
 					'arrowleft', '-' => (function(): array { $this->setupPlayers = max(2, $this->setupPlayers - 1); return []; })(),
-					'arrowright', '+', '=' => (function(): array { $this->setupPlayers = min(8, $this->setupPlayers + 1); return []; })(),
-					'arrowup', 'arrowdown', 'v' => (function(): array { $this->setupVariant = $this->setupVariant === 'jackpots' ? 'anything' : 'jackpots'; return []; })(),
+					'arrowright', '+', '=' => (function(): array { $this->setupPlayers = min(GameText::seats($this->setupGame), $this->setupPlayers + 1); return []; })(),
+					'arrowup', 'arrowdown', 'v' => (function() use ($key): array { $this->cycleGame($key === 'arrowup' ? -1 : 1); return []; })(),
 					'w' => (function(): array { $this->wildDraft=$this->setupWild; $this->customWildDraft=$this->setupCustomWild; $this->local='wildcards'; return []; })(),
 					'l' => (function(): array { $this->openLimits(); return []; })(),
 					'escape', 'backspace' => (function(): array { $this->local = 'menu'; return []; })(),
-					'enter', ' ' => [['type' => 'start', 'players' => $this->setupPlayers, 'variant' => $this->setupVariant,
+					'enter', ' ' => [['type' => 'start', 'players' => $this->setupPlayers, 'variant' => $this->setupVariant, 'game' => $this->setupGame,
 						'ante'=>$this->setupAnte,'minimum'=>$this->setupMinimum,'maximum'=>$this->setupMaximum,
 						'finalMinimum'=>$this->setupFinalMinimum,'finalMaximum'=>$this->setupFinalMaximum,
 						'raiseLimit'=>$this->setupRaiseLimit,'playerRaiseLimit'=>$this->setupPlayerRaiseLimit,
@@ -671,7 +673,8 @@ final class Presenter
 			$action=($this->topMenu==='game'
 				? ['n'=>'new','s'=>'save','l'=>'load','q'=>'quit']
 				: ['r'=>'game-settings','h'=>'history','o'=>'odds','i'=>'improving'])[$key]??null;
-			return $action===null?[]:$this->activateTopAction($action);
+			$offered=array_column($this->layout()->topDropdown($this->topMenu,(string)($this->view['game']??'draw'))['items'],'id');
+			return $action===null||!in_array($action,$offered,true)?[]:$this->activateTopAction($action);
 		}
 
 		if($key === 'escape')
@@ -750,9 +753,9 @@ final class Presenter
 		$ante=(int)($profile['ante']??1);
 		return [
 			'table'=>$players.' players · '.$mode,
-			'opening'=>($profile['variant']??'jackpots')==='anything'?'Anything opens':'Jacks or better',
+			'opening'=>GameText::houseRuleValues($profile)['opening'],
 			'wild'=>$wild,
-			'ante'=>$ante.' '.($ante===1?'chip':'chips'),
+			'ante'=>GameText::houseRuleValues($profile)['ante'],
 			'before'=>$minimum.'–'.$maximum.' chips',
 			'after'=>$finalMinimum.'–'.$finalMaximum.' chips',
 			'raises'=>(string)$raiseLimit,
@@ -948,20 +951,20 @@ final class Presenter
 		if($next !== $this->helpScroll) { $this->helpScroll = $next; $this->dirty = true; }
 	}
 
-	/** Copy shared with the painter so wrapping, overflow and scroll stops are measured from the same text. */
-	public static function helpParagraphs(bool $controller): array
+	/** Step the setup's Game row, keeping draw's opening rule and the seat count within the new game's limit. */
+	private function cycleGame(int $direction): void
 	{
-		return [
-			'The dealer antes. Everyone receives five cards face down.',
-			'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
-			'Each checked wild-card rule may be combined with the others. Wild cards may stand for any missing rank and suit. Joker adds both jokers to the deck; Custom may add either one. Other choices designate cards already in the 52-card deck.',
-			'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
-			'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
-			'After the draw, final betting starts with the opener. With no bet to call, check or bet; otherwise call, raise, or fold.',
-			'Best to worst: five of a kind, straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.',
-			$controller ? 'Controller: use the D-pad or left stick to move focus, then the confirm button to select.' : 'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.',
-			$controller ? 'The back button goes back, Start asks before leaving the table, and the shoulder buttons change the bet.' : '1 to 5 select cards, D draws, H shows history, Alt+G and Alt+P open the table menus, and Escape asks before leaving.'
-		];
+		$count = count(GameText::CHOICES);
+		$index = (GameText::choice($this->setupGame, $this->setupVariant) + $direction + $count) % $count;
+		[$this->setupGame, $variant] = GameText::CHOICES[$index];
+		if($this->setupGame === 'draw') $this->setupVariant = $variant;
+		$this->setupPlayers = min($this->setupPlayers, GameText::seats($this->setupGame));
+	}
+
+	/** Copy shared with the painter so wrapping, overflow and scroll stops are measured from the same text. */
+	public static function helpParagraphs(bool $controller, string $game = 'draw'): array
+	{
+		return GameText::help($game, $controller);
 	}
 
 	/** Last useful paragraph scroll stop after measuring the wrapped copy in the current help window. */
@@ -970,7 +973,7 @@ final class Presenter
 		$layout = $this->layout();
 		$information = $layout->information();
 		$box = $information['box'];
-		$paragraphs = self::helpParagraphs($this->inputTheme !== 'keyboard');
+		$paragraphs = self::helpParagraphs($this->inputTheme !== 'keyboard', (string)($this->view['game'] ?? 'draw'));
 		$size = $layout->controlText();
 		$leading = $size * 1.45;
 		$start = $box[1] + 36;
@@ -1093,6 +1096,11 @@ final class Presenter
 		$legal = $this->view['legalActions'] ?? [];
 		$human = $this->view['players'][0] ?? [];
 		if(in_array($phase, ['betting','draw','final-betting'], true) && !empty($human['folded'])) return 'You folded. Waiting for the other players.';
+		if(($this->view['game'] ?? 'draw') !== 'draw')
+		{
+			$line = GameText::streetGuidance((string)($this->view['street'] ?? ''), $legal);
+			return $line !== '' ? $line : (string)($this->view['message'] ?? '');
+		}
 		if($phase === 'betting') return !empty($legal['openingRequired'])
 			? 'Need jacks or better. Pass to stay in.' : 'Betting first; choose discards afterward.';
 		if($phase === 'draw' && empty($legal['draw'])) return isset($human['drawCount'])
@@ -1137,7 +1145,7 @@ final class Presenter
 			, 'gameSettingsTitle'=>'HOUSE RULES'
 			, 'gameSettingsWildLines'=>$gameSettings===null?1:$this->gameSettingsWildLines($gameSettings)
 			, 'locked' => $this->locked(), 'hint' => $this->guidance()
-			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant,
+			, 'setup' => ['players' => $this->setupPlayers, 'variant' => $this->setupVariant, 'game' => $this->setupGame,
 				'ante'=>$this->setupAnte,'minimum'=>$this->setupMinimum,'maximum'=>$this->setupMaximum,
 				'finalMinimum'=>$this->setupFinalMinimum,'finalMaximum'=>$this->setupFinalMaximum,
 				'raiseLimit'=>$this->setupRaiseLimit,'playerRaiseLimit'=>$this->setupPlayerRaiseLimit,

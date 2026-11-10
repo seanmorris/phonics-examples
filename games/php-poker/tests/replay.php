@@ -7,10 +7,15 @@ declare(strict_types=1);
 function pokerReplayFixture(): array
 {
 	$results=[];
-	foreach(['jackpots','anything'] as $variant) foreach([2,5,8] as $seats)
+	$tables=[];
+	foreach(['jackpots','anything'] as $variant) foreach([2,5,8] as $seats) $tables[]=['draw',$variant,$seats];
+	// The street games run the board, the exposed cards and best-of-seven evaluation through the same comparison.
+	foreach([['holdem',2],['holdem',8],['stud5',5],['stud7',7]] as [$game,$seats]) $tables[]=[$game,'anything',$seats];
+	foreach($tables as [$game,$variant,$seats])
 	{
 		$s=new PhpPoker\Session;
-		$s->command(['type'=>'start','players'=>$seats,'variant'=>$variant],'wasm-replay-'.$seats.'-'.$variant);
+		$name=$game==='draw'?$seats.'-'.$variant:$game.'-'.$seats;
+		$s->command(['type'=>'start','players'=>$seats,'variant'=>$variant,'game'=>$game],'wasm-replay-'.$name);
 		$s->command(['type'=>'pace','value'=>'fast']);
 		$human=new Phonics\Random\RandomStream('human-fixture');
 		$checks=[];
@@ -33,7 +38,7 @@ function pokerReplayFixture(): array
 				$s->command(['type'=>'resume']);
 			}
 		}
-		$results[$variant.'-'.$seats]=['hand'=>$s->view()['handNumber'],'revision'=>$s->view()['revision'],'checks'=>$checks];
+		$results[$game==='draw'?$variant.'-'.$seats:$game.'-'.$seats]=['hand'=>$s->view()['handNumber'],'revision'=>$s->view()['revision'],'checks'=>$checks];
 	}
 	return $results;
 }

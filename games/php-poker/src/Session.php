@@ -52,8 +52,6 @@ final class Session
 					playerRaiseLimit:$intent['playerRaiseLimit']??null, game:$intent['game']??Variant::DEFAULT);
 				if($players>$profile->rules()->seats())
 					throw new \InvalidArgumentException($profile->rules()->label().' seats at most '.$profile->rules()->seats());
-				// The table still deals five-card draw only; the other games arrive with the street engine.
-				if($profile->game!==Variant::DEFAULT) throw new \InvalidArgumentException($profile->rules()->label().' is not available yet');
 				$this->game=new Game($newSeed,$players,$profile);
 				$this->bots=[];
 				for($id=1;$id<$players;$id++) $this->bots[$id]=new RandomStream($newSeed,'php-poker/bot/'.$id.'/v1');
