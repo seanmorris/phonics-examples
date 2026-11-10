@@ -42,12 +42,17 @@ final class Simulation
 	public const DEAD_SETTLE = .6;
 	public const WING_BEATS = 3;
 	public const WING_BEAT = .09;
-	/** Steps the tool-assisted player plans ahead: two and a half seconds, two gaps beyond the current one at the
+	/** Steps the tool-assisted player plans ahead: three seconds, more than two gaps beyond the current one at the
 	 * speed cap, so a position that looks safe never turns out to be a corner once the following gap comes into view. */
-	public const TAS_HORIZON = 150;
-	/** Steps of each plan the tool-assisted player keeps before rebuilding the safe sets. */
-	public const TAS_REPLAN = 10;
-	/** Fewest steps between two of the tool-assisted player's flaps: 150 ms, a fast but human tapping rate. */
+	public const TAS_HORIZON = 180;
+	/** Steps of each plan the tool-assisted player keeps before rebuilding the safe sets. The retained final row still
+	 * has two seconds and more than two pillar spacings of proven flight in front of it at maximum speed. */
+	public const TAS_REPLAN = 60;
+	/** Backward rows filled per simulation step while the next plan is prepared. */
+	private const TAS_BUILD_CHUNK = 12;
+	/** Remaining active rows at which the next incremental backward pass begins. */
+	private const TAS_BUILD_LEAD = 18;
+	/** Fewest steps between two of the tool-assisted player's flaps: 200 ms, a fast but human tapping rate. */
 	public const TAS_FLAP_GAP = 12;
 
 	/** One of ready, playing, or dead. */
@@ -80,6 +85,10 @@ final class Simulation
 	private int $spawned = 0;
 	/** @var list<array<int,list<array{float,float}>>> Safe sets for the next few steps of the tool-assisted player. */
 	private array $plan = [];
+	/** @var array<string,mixed>|null In-progress backward safe-set pass. */
+	private ?array $planBuild = null;
+	/** Steps advanced by the live simulation since the in-progress pass took its pillar snapshot. */
+	private int $planBuildElapsed = 0;
 
 	/**
 	 * Start a reproducible run with its first pillars already placed.
@@ -238,11 +247,12 @@ final class Simulation
 	 * Decide the tool-assisted player's flap for the coming step.
 	 *
 	 * The player flaps only when coasting would leave the safe set: the positions from which some sequence of flaps
-	 * keeps the hitbox inside every gap and off the ground for the next two and a half seconds, with flaps no closer
+	 * keeps the hitbox inside every gap and off the ground for the next three seconds, with flaps no closer
 	 * together than a human could tap. That set is built backward from
 	 * the horizon over the velocity lattice (a flap always resets the velocity, so the velocity is just the number of
-	 * steps since the last flap), with the pillars advanced exactly as the run will advance them. Flapping as late as
-	 * possible keeps the flight low and smooth; the horizon always covers the entry into the next gap.
+	 * steps since the last flap), with the pillars advanced exactly as the run will advance them. It may flap before
+	 * coasting becomes unsafe to keep its hitbox near the next gap's centre, but only when the same safe set proves that
+	 * flap can still complete the course ahead.
 	 *
 	 * @return bool True to flap this step.
 	 */
@@ -250,7 +260,21 @@ final class Simulation
 	{
 		if($this->phase === 'ready') return true;
 
+		if($this->planBuild !== null)
+		{
+			$this->planBuildElapsed++;
+			$built = $this->advancePlan(self::TAS_BUILD_CHUNK);
+
+			if($built !== null) $this->plan = $built;
+		}
+
 		if(!$this->plan) $this->plan = $this->planRows();
+
+		if($this->planBuild === null && count($this->plan) <= self::TAS_BUILD_LEAD)
+		{
+			$this->startPlan();
+			$this->advancePlan(self::TAS_BUILD_CHUNK);
+		}
 
 		$row = array_shift($this->plan);
 		$gravity = self::GRAVITY * self::STEP;
@@ -262,10 +286,50 @@ final class Simulation
 		$coasted = min($lattice, $k + 1);
 		$top = $this->y + self::HITBOX_INSET_Y + min(self::MAX_FALL, $flapVy + $coasted * $gravity) * self::STEP;
 
-		foreach($row[$coasted] as [$a, $b]) if($top >= $a && $top <= $b) return false;
+		$canCoast = false;
 
-		// The table never relies on a flap sooner than a human could tap; if coasting is unsafe here, a flap is due.
-		return $k + 1 >= self::TAS_FLAP_GAP;
+		foreach($row[$coasted] as [$a, $b])
+		{
+			if($top < $a || $top > $b) continue;
+
+			$canCoast = true;
+			break;
+		}
+
+		$canFlap = $k + 1 >= self::TAS_FLAP_GAP;
+		$flapTop = $this->y + self::HITBOX_INSET_Y + $flapVy * self::STEP;
+
+		if($canFlap)
+		{
+			$canFlap = false;
+
+			foreach($row[0] as [$a, $b])
+			{
+				if($flapTop < $a || $flapTop > $b) continue;
+
+				$canFlap = true;
+				break;
+			}
+		}
+
+		if(!$canCoast) return $canFlap;
+		if(!$canFlap) return false;
+
+		$pillar = $this->nextPillar();
+
+		if(!$pillar) return false;
+
+		$boxHeight = self::PHANT_H - 2 * self::HITBOX_INSET_Y;
+		$centre = $this->y + self::HITBOX_INSET_Y + $boxHeight / 2;
+		$target = $pillar->gapTop + $pillar->gap / 2;
+		$rising = min(0.0, $this->vy);
+		$apex = $centre - $rising * $rising / (2 * self::GRAVITY);
+
+		// One flap rises about 42 units. Starting it 24 units below centre makes the resulting arc straddle the
+		// centre instead of waiting beside the lower pillar until safety forces a flap.
+		if($apex > $target + 24.0) return true;
+
+		return false;
 	}
 
 	/**
@@ -277,6 +341,19 @@ final class Simulation
 	 * @return list<array<int,list<array{float,float}>>> One row per upcoming step, each indexed by steps since a flap.
 	 */
 	private function planRows(): array
+	{
+		$this->startPlan();
+		$rows = $this->advancePlan(self::TAS_HORIZON);
+
+		return $rows ?? [];
+	}
+
+	/**
+	 * Snapshot the scrolling course and initialise a backward safe-set pass.
+	 *
+	 * @return void The inexpensive forward bands are ready for incremental backward work.
+	 */
+	private function startPlan(): void
 	{
 		$steps = self::TAS_HORIZON;
 		$gravity = self::GRAVITY * self::STEP;
@@ -334,35 +411,61 @@ final class Simulation
 
 		for($k = 0; $k <= $lattice; $k++) $coastBy[$k] = -$velocity[min($lattice, $k + 1)] * self::STEP;
 
-		$flapBy = -$velocity[0] * self::STEP;
-		$rows = [];
+		$this->planBuild = [
+			'allowed' => $allowed
+			, 'safe' => $safe
+			, 'coastBy' => $coastBy
+			, 'flapBy' => -$velocity[0] * self::STEP
+			, 'lattice' => $lattice
+			, 't' => $steps - 1
+			, 'rows' => []
+		];
+		$this->planBuildElapsed = 0;
+	}
 
-		for($t = $steps - 1; $t >= 1; $t--)
+	/**
+	 * Fill part of the current backward pass and publish it once complete.
+	 *
+	 * @param int $passes Maximum horizon rows to fill during this simulation step.
+	 * @return list<array<int,list<array{float,float}>>>|null A fresh live plan, or null while work remains.
+	 */
+	private function advancePlan(int $passes): ?array
+	{
+		if($this->planBuild === null) return null;
+
+		$build =& $this->planBuild;
+		$lattice = $build['lattice'];
+		$keep = self::TAS_REPLAN + self::TAS_BUILD_LEAD;
+
+		for($worked = 0; $worked < $passes && $build['t'] >= 1; $worked++, $build['t']--)
 		{
-			if(!$allowed[$t])
-			{
-				$safe = array_fill(0, $lattice + 1, []);
+			$t = $build['t'];
 
-				if($t <= self::TAS_REPLAN) $rows[$t] = $safe;
+			if(!$build['allowed'][$t])
+			{
+				$build['safe'] = array_fill(0, $lattice + 1, []);
+
+				if($t <= $keep) $build['rows'][$t] = $build['safe'];
 
 				continue;
 			}
 
-			[$low, $high] = $allowed[$t][0];
-			$next = $safe;
+			[$low, $high] = $build['allowed'][$t][0];
+			$next = $build['safe'];
+			$safe = $next;
 			$flapped = [];
 
 			foreach($next[0] as [$a, $b])
 			{
-				$a = max($a + $flapBy, $low);
-				$b = min($b + $flapBy, $high);
+				$a = max($a + $build['flapBy'], $low);
+				$b = min($b + $build['flapBy'], $high);
 
 				if($a <= $b) $flapped[] = [$a, $b];
 			}
 
 			for($k = 0; $k <= $lattice; $k++)
 			{
-				$by = $coastBy[$k];
+				$by = $build['coastBy'][$k];
 				// A flap is only an option once the human-speed interval since the last one has passed.
 				$set = $k + 1 >= self::TAS_FLAP_GAP ? $flapped : [];
 
@@ -374,7 +477,14 @@ final class Simulation
 					if($a <= $b) $set[] = [$a, $b];
 				}
 
-				if(count($set) > 1)
+				if(count($set) === 2)
+				{
+					if($set[1][0] < $set[0][0]) [$set[0], $set[1]] = [$set[1], $set[0]];
+
+					if($set[1][0] <= $set[0][1] + 1e-6)
+					$set = [[$set[0][0], max($set[0][1], $set[1][1])]];
+				}
+				elseif(count($set) > 2)
 				{
 					usort($set, static fn(array $p, array $q): int => $p[0] <=> $q[0]);
 					$merged = [];
@@ -394,12 +504,20 @@ final class Simulation
 				$safe[$k] = $set;
 			}
 
-			if($t <= self::TAS_REPLAN) $rows[$t] = $safe;
+			$build['safe'] = $safe;
+
+			if($t <= $keep) $build['rows'][$t] = $safe;
 		}
 
-		ksort($rows);
+		if($build['t'] >= 1) return null;
 
-		return array_values($rows);
+		$rows = $build['rows'];
+		ksort($rows);
+		$rows = array_slice(array_values($rows), $this->planBuildElapsed, self::TAS_REPLAN);
+		$this->planBuild = null;
+		$this->planBuildElapsed = 0;
+
+		return $rows;
 	}
 
 	/**
