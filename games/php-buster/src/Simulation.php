@@ -103,6 +103,7 @@ final class Simulation
 		$this->enemyAi();
 		$this->moveActors();
 		$this->collide();
+		$this->keepBossInField();
 		$this->animateEffects();
 		$this->prune();
 
@@ -368,9 +369,36 @@ final class Simulation
 
 			$actor->frame = $frames > 1 ? (int)floor($actor->age / self::LEGACY_TICK) % $frames : 0;
 
+			// The heavy fighter is never retired for leaving the field; keepBossInField() holds it there.
+			if($actor->type === 'maxi') continue;
+
 			if($actor->x + $actor->width < 0 || $actor->x > self::WIDTH
 				|| $actor->y + $actor->height < 0 || $actor->y > self::HEIGHT
 			) $actor->alive = false;
+		}
+	}
+
+	/**
+	 * Hold the heavy fighter inside the playfield.
+	 *
+	 * Only destroying it starts the next stage, so a heavy fighter that climbed out of the top after its dive, or
+	 * was pushed past a side edge while hostiles separated, left a stage that could never end.
+	 *
+	 * @return void The heavy fighter turns back at the top and is clamped to the side edges.
+	 */
+	private function keepBossInField(): void
+	{
+		foreach($this->actors as $actor)
+		{
+			if(!$actor->alive || $actor->type !== 'maxi') continue;
+
+			if($actor->vy < 0 && $actor->y <= 0)
+			{
+				$actor->y = 0;
+				$actor->vy = -$actor->vy;
+			}
+
+			$actor->x = max(0.0, min(self::WIDTH - $actor->width, $actor->x));
 		}
 	}
 
@@ -485,10 +513,11 @@ final class Simulation
 
 		if($actor->type === 'maxi')
 		{
+			// The upgrade appears inside the field even when the fighter was hit while still entering it.
 			$this->actors[] = $this->actor(
 				'ruby'
-				, $actor->x + 18
-				, $actor->y + 17
+				, max(0.0, min(self::WIDTH - 26, $actor->x + 18))
+				, max(0.0, min(self::HEIGHT - 20, $actor->y + 17))
 				, 26
 				, 20
 				, 0

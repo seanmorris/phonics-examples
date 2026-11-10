@@ -88,4 +88,33 @@ check(
 	, 'game actions are above the engine-reserved range'
 );
 
+// The heavy fighter ends the stage, so it must stay in the field for as long as the player leaves it alone.
+foreach([1, 2, 3, 7] as $seed)
+{
+	$siege = new Simulation($seed);
+	$boss = null;
+
+	for($i = 0; $i < 20000 && !$boss; $i++)
+	{
+		$siege->shields = 99;
+		$siege->step();
+
+		foreach($siege->actors as $actor) if($actor->type === 'maxi') $boss = $actor;
+	}
+
+	check($boss !== null, "the heavy fighter arrives on seed $seed");
+	$inside = true;
+
+	for($i = 0; $i < 6000; $i++)
+	{
+		$siege->shields = 99;
+		$siege->step();
+		$inside = $inside && $boss->alive && $boss->x >= 0 && $boss->x + $boss->width <= Simulation::WIDTH
+			&& $boss->y + $boss->height > 0 && $boss->y < Simulation::HEIGHT;
+	}
+
+	check($inside, "an ignored heavy fighter stays in the field on seed $seed");
+	check($siege->phase === 'playing', "the stage is still winnable on seed $seed");
+}
+
 echo "PHP Buster: $checks checks passed.\n";
