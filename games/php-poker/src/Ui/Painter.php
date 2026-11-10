@@ -16,6 +16,9 @@ use PhpPoker\Render\UiCanvas;
  */
 final class Painter
 {
+	/** Brightness of your own face-down stud cards, between a live card and a folded one. */
+	private const HOLE_SHADE = .76;
+
 	private const SUITS = ['♣','♦','♥','♠'];
 	private const RANKS = [2 => '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 	private const EMBLEM_COLORS = [[.42,.33,.5,1],[.18,.37,.48,1],[.48,.29,.17,1],[.25,.42,.25,1],[.54,.35,.12,1],[.29,.29,.48,1],[.48,.18,.22,1],[.2,.42,.36,1]];
@@ -251,10 +254,11 @@ final class Painter
 			{
 				if(!array_key_exists($index, $player['cards'] ?? [])) break;
 				if(in_array($index, $hidden, true)) continue;
-				$this->card($rect, $player['cards'][$index], $dim);
-				// In stud your face-down cards are yours alone, beside up-cards everyone sees: a dark band marks them.
-				if($seat === 0 && str_starts_with((string)($this->view['game'] ?? 'draw'), 'stud')
-					&& ($player['faces'][$index] ?? 'up') === 'down' && $player['cards'][$index] !== null) $this->holeMarker($rect);
+				// In stud your face-down cards are yours alone, beside up-cards everyone sees, so they are shaded. The
+				// shade covers the whole face because a fan shows only each card's index strip.
+				$hole = $seat === 0 && !$player['folded'] && str_starts_with((string)($this->view['game'] ?? 'draw'), 'stud')
+					&& ($player['faces'][$index] ?? 'up') === 'down' && $player['cards'][$index] !== null && empty($this->view['reveal']);
+				$this->card($rect, $player['cards'][$index], $hole ? self::HOLE_SHADE : $dim);
 			}
 		}
 		// Layer 3: chips in front of the fans.
@@ -402,6 +406,9 @@ final class Painter
 		$centre = $this->layout->centre();
 		$pot = ($this->state['motion']['banks'] ?? $this->state['chips'])['pot'] ?? [];
 		$this->plate($centre['pot'], 'Total pot (' . Chips::value($pot) . ')', 'info', false);
+		// Beside a board the stock could pass for one more card, so it is drawn as a squared-up pile.
+		if(!empty($centre['board'])) foreach([3, 1.5] as $offset)
+			$this->card([$centre['deck'][0] + $offset * $this->layout->stretch(), $centre['deck'][1] + $offset, $centre['deck'][2], $centre['deck'][3]], null, .7);
 		$this->card($centre['deck'], null, 1.0);
 		$hiddenBoard = $this->state['motion']['hiddenBoard'] ?? [];
 		foreach($this->view['board'] ?? [] as $index => $card)
@@ -779,14 +786,6 @@ final class Painter
 			}
 		}
 		$this->canvas->box($x, $y, $w, $h, $radius, [0,0,0,0], $selected ? Theme::BRASS : [0,0,0,.45], ($selected ? 2.5 : 1) * $this->unit);
-	}
-
-	/** Shade the foot of a face-down card that only its owner sees, across the strip a fan leaves visible. */
-	private function holeMarker(array $rect): void
-	{
-		[$x, $y, $w, $h] = $this->layout->rect(...$rect);
-		$radius = Theme::radius($this->mode, $w * .07);
-		$this->canvas->box($x, $y + $h * .84, $w, $h * .16, $radius, [Theme::INK[0], Theme::INK[1], Theme::INK[2], .55]);
 	}
 
 	/** @return array{float,float,float,float}|null */
