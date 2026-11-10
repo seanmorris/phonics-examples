@@ -585,6 +585,7 @@ final class Painter
 		$local = $this->state['local'];
 		if($local === 'setup') { $this->setupDialog(); return; }
 		if($local === 'limits') { $this->limitsDialog(); return; }
+		if($local === 'games') { $this->gameDialog(); return; }
 		if($local === 'wildcards') { $this->wildcardDialog(); return; }
 		if($local === 'custom-wildcards') { $this->customWildcardDialog(); return; }
 		if($local === 'online')
@@ -659,6 +660,18 @@ final class Painter
 		}
 		$this->button($limits['back'], 'Cancel', '⎋', 'default', false);
 		$this->button($limits['apply'], 'OK', '↵', 'primary', false);
+	}
+
+	/** The game selector: a column of buttons, the current choice highlighted. */
+	private function gameDialog(): void
+	{
+		$setup = $this->state['setup'];
+		$current = GameText::choice((string)($setup['game'] ?? 'draw'), (string)$setup['variant']);
+		$menu = $this->layout->gameMenu(count(GameText::CHOICES));
+		$this->dialog($menu['box'], 'GAME');
+		foreach($menu['items'] as $index => $rect)
+			$this->button($rect, GameText::choiceLabel(...GameText::CHOICES[$index]), (string)($index + 1), $index === $current ? 'primary' : 'default', false);
+		$this->button($menu['back'], 'Back', '⎋', 'default', false);
 	}
 
 	private function wildcardDialog(): void

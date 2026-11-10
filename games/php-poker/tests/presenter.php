@@ -416,6 +416,8 @@ $test('the menu, setup and settings flow send only session intents the session k
 	$presenter->update(['screen' => 'menu', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => true]);
 	$expect($presenter->input([['key' => 'enter']], null, 1 / 60) === [] && $presenter->state()['local'] === 'setup', 'Play Offline opens the local setup card');
 	$presenter->input([['key' => 'arrowright'], ['key' => 'arrowright'], ['key' => 'v']], null, 1 / 60);
+	$expect($presenter->state()['local'] === 'games', 'V opens the game selector');
+	$presenter->input([['key' => '2']], null, 1 / 60);
 	$presenter->input([['key' => 'w']], null, 1 / 60);
 	$expect($presenter->state()['local'] === 'wildcards', 'W opens the wild-card preset window');
 	$presenter->input([['key' => '1'], ['key' => '0'], ['key' => '1'], ['key' => '2'], ['key' => 'enter']], null, 1 / 60);
@@ -1543,16 +1545,26 @@ $test('the Game row cycles draw, hold\'em and both studs, and the table names an
 	$presenter->input(array_fill(0, 6, ['key' => 'arrowright']), null, 1 / 60);
 	$expect($presenter->state()['setup']['players'] === 8 && $presenter->state()['setup']['game'] === 'draw', 'setup starts on draw and allows eight seats');
 	$seen = [];
-	for($step = 0; $step < 5; $step++)
+	foreach(['2','3','4','5','1'] as $digit)
 	{
 		$presenter->input([['key' => 'v']], null, 1 / 60);
+		$expect($presenter->state()['local'] === 'games', 'V opens the game selector');
+		$menu = $presenter->layout()->gameMenu(5);
+		$expect(count($presenter->status()['ui']['hitRegions']) === 6 && count($menu['items']) === 5, 'the selector offers one button per game and Back');
+		foreach($menu['items'] as $index => $rect)
+		{
+			$expect($rect[0] === $menu['items'][0][0] && $rect[2] === $menu['items'][0][2] && ($index === 0 || $rect[1] >= $menu['items'][$index - 1][1] + $menu['items'][$index - 1][3]), "game button $index stands in one column");
+			$expect($rect[1] >= $menu['box'][1] && $rect[1] + $rect[3] <= $menu['back'][1] && $menu['back'][1] + $menu['back'][3] <= $menu['box'][1] + $menu['box'][3], "game button $index stays inside the window above Back");
+		}
+		$presenter->input([['key' => $digit]], null, 1 / 60);
 		$setup = $presenter->state()['setup'];
+		$expect($presenter->state()['local'] === 'setup', 'choosing a game returns to the setup card');
 		$seen[] = [$setup['game'], $setup['variant'], $setup['players']];
 	}
-	$expect($seen === [['draw','anything',8],['holdem','anything',8],['stud5','anything',8],['stud7','anything',7],['draw','jackpots',7]], 'V cycles every game once, and seven-card stud seats at most seven');
-	$presenter->input([['key' => 'arrowup'], ['key' => 'arrowup']], null, 1 / 60);
-	$expect($presenter->state()['setup']['game'] === 'stud5' && $presenter->state()['setup']['variant'] === 'jackpots', 'Up steps back and keeps draw\'s last opening rule');
-	$presenter->input([['key' => 'arrowup']], null, 1 / 60);
+	$expect($seen === [['draw','anything',8],['holdem','anything',8],['stud5','anything',8],['stud7','anything',7],['draw','jackpots',7]], 'each button chooses its game, and seven-card stud seats at most seven');
+	$presenter->input([['key' => 'v'], ['key' => 'escape']], null, 1 / 60);
+	$expect($presenter->state()['local'] === 'setup' && $presenter->state()['setup']['game'] === 'draw', 'Back leaves the choice alone');
+	$presenter->input([['key' => 'v'], ['key' => '3']], null, 1 / 60);
 	$start = $presenter->input([['key' => 'enter']], null, 1 / 60);
 	$expect(($start[0]['game'] ?? null) === 'holdem' && $start[0]['players'] === 7, 'Deal starts the chosen game');
 	$session = new PhpPoker\Session;

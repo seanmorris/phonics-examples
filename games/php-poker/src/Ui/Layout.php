@@ -1660,6 +1660,25 @@ final class Layout
 			'back'=>[$left+24,$footer,130,$control],'apply'=>[$left+$width-164,$footer,140,$control]];
 	}
 
+	/**
+	 * The game selector opened from the setup card: one column of buttons, one per choice, over a Back button.
+	 * @param int $count Number of choices.
+	 */
+	public function gameMenu(int $count): array
+	{
+		if($square = $this->square()) return $this->fromSquare($square->gameMenu($count));
+		$control = $this->controlSize();
+		$gap = $this->profile === 'landscape' ? 4 : 8;
+		$width = min(360, $this->width() - 24);
+		$height = 34 + ($count + 1) * $control + $count * $gap + 16;
+		$left = ($this->width() - $width) / 2;
+		$top = max(4, ($this->height() - $height) / 2);
+		$items = [];
+		for($index = 0; $index < $count; $index++) $items[] = [$left + 24, $top + 28 + $index * ($control + $gap), $width - 48, $control];
+		return ['box'=>[$left,$top,$width,$height],'items'=>$items,
+			'back'=>[$left + 24, $top + 28 + $count * ($control + $gap) + 4, 130, $control]];
+	}
+
 	/** Full desktop matrix or one responsive suit page, preserving 48 CSS px targets on smaller viewports. */
 	public function customWildcards(int $page = 0): array
 	{

@@ -170,7 +170,7 @@ final class Presenter
 		if(($this->view['error'] ?? '') !== '') $this->lockedRevision = null;
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
 		elseif($this->setupAfterMenu) { $this->local = 'setup'; $this->setupAfterMenu = false; }
-		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','limits','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
+		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','games','limits','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
 		if(($view['screen'] ?? '') !== 'table') { $this->topMenu = null; $this->infoDialog = null; $this->confirmDialog=null; $this->historyOpen=false; }
 		$houseRules = is_string($view['houseRules'] ?? null) && $view['houseRules'] !== '' ? $view['houseRules'] : null;
 		if($houseRules !== null && $houseRules !== $this->houseRulesShown && ($view['screen'] ?? '') === 'table')
@@ -363,6 +363,12 @@ final class Presenter
 				$addKey($limits['back'], 'escape', 'limit:back');
 				$addKey($limits['apply'], 'enter', 'limit:apply');
 			}
+			elseif($this->local === 'games')
+			{
+				$menu = $layout->gameMenu(count(GameText::CHOICES));
+				foreach($menu['items'] as $index => $rect) $addKey($rect, (string)($index + 1), 'game:'.$index);
+				$addKey($menu['back'], 'escape', 'game:back');
+			}
 			elseif($this->local === 'wildcards')
 			{
 				$menu = $layout->wildcardMenu();
@@ -511,7 +517,7 @@ final class Presenter
 			: ($this->infoDialog !== null ? ['info:ok','info:more']
 			: ($this->topMenu !== null ? ['top-item:new','top-item:game-settings','top-item:odds']
 			: ['table:waiting','action:check','action:call','action:pass','action:draw','action:next','action:deal',
-				'action:bet','action:fold','setup:start','wild:none','custom-wild:0','settings:look']));
+				'action:bet','action:fold','setup:start','game:'.GameText::choice($this->setupGame, $this->setupVariant),'wild:none','custom-wild:0','settings:look']));
 		$next = null;
 		foreach($preferences as $id) foreach($targets as $target) if($target['id'] === $id) { $next = $id; break 2; }
 		$next ??= $targets[0]['id'] ?? null;
@@ -584,7 +590,7 @@ final class Presenter
 				return match($key) {
 					'arrowleft', '-' => (function(): array { $this->setupPlayers = max(2, $this->setupPlayers - 1); return []; })(),
 					'arrowright', '+', '=' => (function(): array { $this->setupPlayers = min(GameText::seats($this->setupGame), $this->setupPlayers + 1); return []; })(),
-					'arrowup', 'arrowdown', 'v' => (function() use ($key): array { $this->cycleGame($key === 'arrowup' ? -1 : 1); return []; })(),
+					'v' => (function(): array { $this->local = 'games'; return []; })(),
 					'w' => (function(): array { $this->wildDraft=$this->setupWild; $this->customWildDraft=$this->setupCustomWild; $this->local='wildcards'; return []; })(),
 					'l' => (function(): array { $this->openLimits(); return []; })(),
 					'escape', 'backspace' => (function(): array { $this->local = 'menu'; return []; })(),
@@ -600,6 +606,12 @@ final class Presenter
 			{
 				if(in_array($key, ['escape','backspace'], true)) { $this->local='setup'; $this->limitDraft=[]; return []; }
 				if(in_array($key, ['enter',' '], true)) { $this->applyLimits(); return []; }
+				return [];
+			}
+			if($this->local === 'games')
+			{
+				if(in_array($key, ['1','2','3','4','5','6','7','8','9'], true) && isset(GameText::CHOICES[(int)$key - 1])) { $this->chooseGame((int)$key - 1); $this->local = 'setup'; }
+				elseif(in_array($key, ['escape','backspace','v'], true)) $this->local = 'setup';
 				return [];
 			}
 			if($this->local === 'wildcards')
@@ -951,11 +963,9 @@ final class Presenter
 		if($next !== $this->helpScroll) { $this->helpScroll = $next; $this->dirty = true; }
 	}
 
-	/** Step the setup's Game row, keeping draw's opening rule and the seat count within the new game's limit. */
-	private function cycleGame(int $direction): void
+	/** Take one of the game selector's choices, keeping the seat count within the new game's limit. */
+	private function chooseGame(int $index): void
 	{
-		$count = count(GameText::CHOICES);
-		$index = (GameText::choice($this->setupGame, $this->setupVariant) + $direction + $count) % $count;
 		[$this->setupGame, $variant] = GameText::CHOICES[$index];
 		if($this->setupGame === 'draw') $this->setupVariant = $variant;
 		$this->setupPlayers = min($this->setupPlayers, GameText::seats($this->setupGame));
