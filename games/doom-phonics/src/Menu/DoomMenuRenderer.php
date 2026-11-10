@@ -25,6 +25,9 @@ final class DoomMenuRenderer
 	private const COMPACT_HINT_Y = 184.0;
 	private const COMPACT_FIELD_X = 126.0;
 	private const COMPACT_FIELD_SCALE = .75;
+	private const THERMOMETER_HEAD_START = 8.0;
+	// M_THERMO's negative left offset moves its pixels right; this travel ends them at the right cap.
+	private const THERMOMETER_HEAD_TRAVEL = 73.0;
 	private const READ_THIS_KEYBOARD_RIGHT = 212.0;
 	private const READ_THIS_ROWS_Y = 138.0;
 
@@ -321,8 +324,8 @@ final class DoomMenuRenderer
 				, $y - 4
 				, self::COMPACT_ROW_WIDTH
 				, self::COMPACT_ROW_HEIGHT
-				, 168
-				, 80
+				, 160 + self::THERMOMETER_HEAD_START
+				, self::THERMOMETER_HEAD_TRAVEL
 			);
 
 			return;
@@ -627,7 +630,11 @@ final class DoomMenuRenderer
 		for($index = 0; $index < 10; $index++) $patches[] = new WadPatch('M_THERMM', $x + 8 + $index * 8, $y);
 		$patches[] = new WadPatch('M_THERMR', $x + 88, $y);
 		$fraction = max(0, min(1, ($value - $min) / max(1e-9, $max - $min)));
-		$patches[] = new WadPatch('M_THERMO', $x + 8 + round($fraction * 10) * 8, $y);
+		$patches[] = new WadPatch(
+			'M_THERMO'
+			, $x + self::THERMOMETER_HEAD_START + round($fraction * self::THERMOMETER_HEAD_TRAVEL)
+			, $y
+		);
 	}
 
 	/** @param list<WadPatch> $patches */

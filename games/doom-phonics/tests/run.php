@@ -3584,7 +3584,7 @@ verifyWad(
 );
 
 verifyWad(
-	$floorRumble->update(0) === [['duration' => 65,'strong' => .2,'weak' => .35]]
+	$floorRumble->update(0) === [['duration' => 85,'strong' => .45,'weak' => .65]]
 	, 'thrustless floor damage uses the bounded minimum damage feedback'
 );
 

@@ -30,25 +30,43 @@ $minimum = new Rumble;
 $minimum->damage(0);
 $minimumDamage = $minimum->update(0)[0];
 $maximum = new Rumble;
-$maximum->damage(220);
+$maximum->damage(160);
 $maximumDamage = $maximum->update(0)[0];
 $middle = new Rumble;
-$middle->damage(110);
+$middle->damage(80);
 $middleDamage = $middle->update(0)[0];
 $clamped = new Rumble;
 $clamped->damage(880);
 $clampedDamage = $clamped->update(0)[0];
 
 verifyWad(
-	$minimumDamage === ['duration' => 65,'strong' => .2,'weak' => .35]
-		&& $middleDamage === ['duration' => 123,'strong' => .575,'weak' => .625]
-		&& $maximumDamage === ['duration' => 180,'strong' => .95,'weak' => .9]
+	$minimumDamage === ['duration' => 85,'strong' => .45,'weak' => .65]
+		&& $middleDamage['duration'] === 138
+		&& abs($middleDamage['strong'] - .715) < 1e-12
+		&& $middleDamage['weak'] === .8
+		&& $maximumDamage === ['duration' => 190,'strong' => .98,'weak' => .95]
 		&& $clampedDamage === $maximumDamage
 	, 'damage feedback scales with knockback between perceptible and bounded motor limits'
 );
 
+$bullet = new Rumble;
+$bullet->damage(13.125);
+$bulletDamage = $bullet->update(0)[0];
+$blast = new Rumble;
+$blast->damage(120);
+$blastDamage = $blast->update(0)[0];
+$blastTail = $blast->update(.15);
+verifyWad(
+	$bulletDamage['duration'] >= 90
+		&& $bulletDamage['strong'] >= .49
+		&& $bulletDamage['weak'] >= .67
+		&& $blastDamage['strong'] > $bulletDamage['strong']
+		&& $blastTail === [['duration' => 90,'strong' => .65,'weak' => .2]]
+	, 'zombieman bullets register clearly and explosion knockback adds a heavy aftershock'
+);
+
 $fatal = new Rumble;
-$fatal->damage(55, true);
+$fatal->damage(40, true);
 $fatalStart = $fatal->update(0);
 $fatalTail = $fatal->update(.18);
 verifyWad(

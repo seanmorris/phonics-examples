@@ -63,17 +63,17 @@ final class Rumble extends \Phonics\Effects\Rumble
 		if(!is_finite($knockback) || $knockback < 0)
 		throw new \InvalidArgumentException('Invalid damage knockback');
 
-		// About 220 map units/second is already a forceful player shove. Keep tiny or
-		// thrustless hazards perceptible without letting large explosions pin both motors.
-		$weight = min(1, $knockback / 220);
+		// A 160-map-unit/second shove is already forceful for the player. Start damage
+		// above the motors' easily missed low range, then scale to a bounded blast.
+		$weight = min(1, $knockback / 160);
 		$this->pulse(
-			65 + (int)round(115 * $weight)
-			, .2 + .75 * $weight
-			, .35 + .55 * $weight
+			85 + (int)round(105 * $weight)
+			, .45 + .53 * $weight
+			, .65 + .3 * $weight
 		);
 
 		if($fatal) $this->pulse(220, .45 + .35 * $weight, .2, 180);
-		elseif($weight >= .7) $this->pulse(80, .25 + .3 * $weight, .15, 145);
+		elseif($weight >= .65) $this->pulse(90, .35 + .4 * $weight, .2, 150);
 	}
 
 	/** Queue a restrained confirmation, with a second low-motor catch for a newly acquired weapon. */
