@@ -1484,5 +1484,55 @@ $test('hands of two to seven cards stay inside the five-card fan and never move 
 	}
 });
 
+$test('the hold\'em board stands in the free lane on every table without crowding the seats or the message', static function(callable $expect) use ($overlaps): void {
+	$inset = static fn(array $r, float $by = .75): array => [$r[0] + $by, $r[1] + $by, $r[2] - 2 * $by, $r[3] - 2 * $by];
+	foreach([[1280,720,1],[1920,1080,1],[1366,768,1],[1024,768,1],[1440,900,2],[390,844,1],[430,932,1],[360,640,1],[780,1688,2],[844,390,1],[900,400,1],[740,360,1],[1688,780,2],[1180,820,1]] as [$width, $height, $dpr])
+	foreach([2,3,4,5,6,7,8] as $seats)
+	{
+		$at = "$seats seats, $width x $height";
+		$draw = Layout::fit($width, $height, $dpr, $seats);
+		$layout = Layout::fit($width, $height, $dpr, $seats, 2, 5);
+		$centre = $layout->centre();
+		$board = $centre['board'];
+		$expect(count($board) === 5 && $draw->centre()['board'] === [], "five board places only for a board game at $at");
+		$size = $layout->metric('emblemSize') * $layout->stretch();
+		$blocks = [];
+		for($seat = 0; $seat < $seats; $seat++)
+		{
+			$g = $layout->seat($seat, $seats);
+			$last = $g['slots'][4];
+			$bank = $layout->bankBounds($seat, $seats, Chips::bank(500));
+			$blocks[$seat] = [$g['plate'], [$g['slots'][0][0], $g['slots'][0][1], $last[0] + $last[2] - $g['slots'][0][0], $last[3]],
+				[$g['emblem'][0] - $size / 2, $g['emblem'][1] - $size / 2, $size, $size + 28], $bank];
+		}
+		$pile = $centre['pile']; $chip = $layout->metric('chipRadius') * $layout->stretch();
+		$pileBox = [$pile[0] - $pile[2] - $chip, $pile[1] - $pile[3] - $chip, 2 * ($pile[2] + $chip), 2 * ($pile[3] + $chip)];
+		foreach($board as $index => $card)
+		{
+			$expect($card[0] >= 0 && $card[0] + $card[2] <= $layout->tableRight() + 1e-9 && $card[1] >= $layout->menuHeight() && $card[1] + $card[3] <= $layout->height(), "board card $index stays on the table at $at");
+			// The board is read by everyone, so its cards are never much smaller than the opponents' own.
+			$opponent = $layout->seat(1, $seats)['cards'][0][2];
+			$expect($card[2] >= .6 * $opponent, "board card $index is at least 60% of an opponent's card at $at");
+			$expect($card[2] * $layout->horizontalScale / $dpr >= 30 || $card[2] >= .9 * $opponent, "board card $index is 30 CSS px wide, or nearly an opponent's card, at $at");
+			foreach($blocks as $seat => $parts) foreach($parts as $part) $expect(!$overlaps($inset($card), $part), "board card $index clears seat $seat at $at");
+			foreach(['pot','bet','deck'] as $name) $expect(!$overlaps($inset($card), $centre[$name]), "board card $index clears the $name at $at");
+			$expect(!$overlaps($inset($card), $pileBox), "board card $index clears the loose pot at $at");
+			if($index > 0) $expect($card[0] >= $board[$index - 1][0] + $board[$index - 1][2] || $card[1] >= $board[$index - 1][1] + $board[$index - 1][3], "board cards $index and " . ($index - 1) . " do not overlap at $at");
+		}
+		foreach(['pot','bet'] as $name) for($seat = 1; $seat < $seats; $seat++) foreach($blocks[$seat] as $part)
+			$expect(!$overlaps($inset($centre[$name]), $part), "the $name plate clears seat $seat at $at");
+		[$messageX, $messageTop] = $centre['message'];
+		$lowest = max(array_map(static fn(array $r): float => $r[1] + $r[3], [...$board, $centre['bet'], $centre['deck']]));
+		$expect($messageTop >= $lowest + 8 - 1e-9 || $layout->profile === 'wide', "the message starts below the board and plates at $at");
+		$humanTop = $layout->seat(0, $seats)['plate'][1];
+		if($layout->profile === 'wide')
+			$expect($humanTop - ($centre['bet'][1] + $centre['bet'][3]) >= $layout->plateHeight() + 16 * $layout->statusLane()['lines'] - .01, "the message fits above the hand at $at");
+		else $expect($messageTop + 56 <= $humanTop - 14 + 1e-9, "a three-line message fits above the hand at $at");
+		$view = ['players' => array_fill(0, $seats, []), 'legalActions' => ['fold' => true, 'call' => true, 'callAmount' => 2, 'bet' => true, 'minBet' => 4, 'maxBet' => 8, 'betIncrement' => 2, 'betLabel' => 'Raise to'], 'phase' => 'betting', 'turn' => 0];
+		foreach($layout->actions($view, ['discards' => [], 'amount' => 4]) as $button) foreach($board as $index => $card)
+			$expect(!$overlaps($inset($card), $button['rect']), "board card $index clears {$button['id']} at $at");
+	}
+});
+
 echo "$passed PHP Poker presenter checks passed.\n";
 if($failures) { fwrite(STDERR, "$failures presenter checks failed.\n"); exit(1); }

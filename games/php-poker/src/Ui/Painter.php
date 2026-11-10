@@ -250,10 +250,15 @@ final class Painter
 			if(in_array($seat, $this->state['motion']['hiddenSeats'] ?? [], true)) continue;
 			if($seat === 0 && !empty($this->view['legalActions']['draw']) && !$this->state['locked']) continue;
 			$dim = $player['folded'] ? .55 : 1.0;
+			$hidden = $this->state['motion']['hiddenCards'][$seat] ?? [];
 			foreach($geometry[$seat]['cards'] as $index => $rect)
 			{
 				if(!array_key_exists($index, $player['cards'] ?? [])) break;
+				if(in_array($index, $hidden, true)) continue;
 				$this->card($rect, $player['cards'][$index], $dim);
+				// In stud your face-down cards are yours alone, beside up-cards everyone sees: a dark band marks them.
+				if($seat === 0 && str_starts_with((string)($this->view['game'] ?? 'draw'), 'stud')
+					&& ($player['faces'][$index] ?? 'up') === 'down' && $player['cards'][$index] !== null) $this->holeMarker($rect);
 			}
 		}
 		// Layer 3: chips in front of the fans.
@@ -402,6 +407,9 @@ final class Painter
 		$pot = ($this->state['motion']['banks'] ?? $this->state['chips'])['pot'] ?? [];
 		$this->plate($centre['pot'], 'Total pot (' . Chips::value($pot) . ')', 'info', false);
 		$this->card($centre['deck'], null, 1.0);
+		$hiddenBoard = $this->state['motion']['hiddenBoard'] ?? [];
+		foreach($this->view['board'] ?? [] as $index => $card)
+			if(isset($centre['board'][$index]) && !in_array($index, $hiddenBoard, true)) $this->card($centre['board'][$index], $card, 1.0);
 		if(($this->state['motion']['discardCount'] ?? $this->view['discardCount'] ?? 0) > 0)
 		{
 			$this->card($centre['discard'], null, .8);
@@ -460,26 +468,26 @@ final class Painter
 		$drumming = $error === '' && !empty($this->state['networkWait']['active']);
 		$line = $error !== '' ? $error : ($drumming ? rtrim(rtrim($message), '.') . '...' : $message);
 		if($line === '') return;
-		[$betX, $betY, $betWidth, $betHeight] = $this->layout->centre()['bet'];
+		// The layout names where the message stands: under the bet plate, or under the board where that plate has moved.
+		[$messageX, $top, $anchorWidth] = $this->layout->centre()['message'];
 		$width = $this->layout->profile === 'wide'
-			? min($this->layout->statusLane()['width'], max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->horizontalUnit + 40)) : min(180, $betWidth);
+			? min($this->layout->statusLane()['width'], max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->horizontalUnit + 40)) : min(180, $anchorWidth);
 		// The lane between the columns is narrow, so the message may run to three lines there.
 		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->canvas->unit, ($width - 12) * $this->horizontalUnit, $this->layout->columns() ? 3 : 2, $this->face);
 		$messageHeight = $this->layout->plateHeight() + 16 * (count($lines) - 1);
-		$top = $betY + $betHeight + 8;
 		if($this->layout->profile === 'wide')
 		{
 			$humanTop = $this->layout->seat(0, count($this->view['players'] ?? []))['plate'][1];
 			$top = min($top, $humanTop - $messageHeight - 8);
 		}
-		if($error === '' && $this->underDialog([$betX + ($betWidth - $width) / 2, $top, $width, $messageHeight])) return;
-		$this->plate([$betX + ($betWidth - $width) / 2, $top, $width, $messageHeight], '', $error !== '' ? 'fold' : 'info', false);
+		if($error === '' && $this->underDialog([$messageX - $width / 2, $top, $width, $messageHeight])) return;
+		$this->plate([$messageX - $width / 2, $top, $width, $messageHeight], '', $error !== '' ? 'fold' : 'info', false);
 		foreach($lines as $index => $text)
 		{
 			$y = $top + $this->layout->plateHeight() / 2 + $index * 16 + .5;
 			if($drumming && $index === array_key_last($lines))
-			$this->drummingText(rtrim($text, '.'), $betX + $betWidth / 2, $y, Theme::BODY, Theme::INK, 'center');
-			else $this->text($text, $betX + $betWidth / 2, $y, Theme::BODY, Theme::INK, 'center');
+			$this->drummingText(rtrim($text, '.'), $messageX, $y, Theme::BODY, Theme::INK, 'center');
+			else $this->text($text, $messageX, $y, Theme::BODY, Theme::INK, 'center');
 		}
 	}
 
@@ -787,6 +795,14 @@ final class Painter
 			}
 		}
 		$this->canvas->box($x, $y, $w, $h, $radius, [0,0,0,0], $selected ? Theme::BRASS : [0,0,0,.45], ($selected ? 2.5 : 1) * $this->unit);
+	}
+
+	/** Shade the foot of a face-down card that only its owner sees, across the strip a fan leaves visible. */
+	private function holeMarker(array $rect): void
+	{
+		[$x, $y, $w, $h] = $this->layout->rect(...$rect);
+		$radius = Theme::radius($this->mode, $w * .07);
+		$this->canvas->box($x, $y + $h * .84, $w, $h * .16, $radius, [Theme::INK[0], Theme::INK[1], Theme::INK[2], .55]);
 	}
 
 	/** @return array{float,float,float,float}|null */

@@ -25,6 +25,8 @@ final class Motion
 	private array $totalTo = [];
 	/** @var list<array{at:float,cue:string}> Browser PC-speaker cues on this presentation timeline. */
 	private array $sounds = [];
+	/** @var list<array{seat:int|null,index:int}> Cards dealt this step in a street game, in dealing order; a null seat is the board. */
+	private array $arrivals = [];
 
 	public function __construct(private array $previous, private array $next, private array $chips, private array $selection)
 	{
@@ -53,6 +55,11 @@ final class Motion
 		$this->cardStart = $this->duration;
 		$changedHand = ($previous['generation'] ?? 0) !== ($next['generation'] ?? 0)
 			|| ($previous['handNumber'] ?? 0) !== ($next['handNumber'] ?? 0);
+		if(($next['game'] ?? 'draw') !== 'draw')
+		{
+			$this->street($changedHand);
+			return;
+		}
 		// Online play advances the public hand number before its joint shuffle. That ready view has no allocated
 		// cards yet, so it may animate the dealer's ante but must not invent a deal that disappears during crypto.
 		$hasDealtHands = ($next['phase'] ?? 'ready') !== 'ready' && !empty($next['players']);
@@ -102,6 +109,36 @@ final class Motion
 		}
 	}
 
+	/**
+	 * Plan the cards a street game dealt between two views: each seat's new cards round the table from the dealer's
+	 * left, first card first, and then any new board cards. A new hand counts every card as new.
+	 */
+	private function street(bool $changedHand): void
+	{
+		if(($this->next['phase'] ?? 'ready') === 'ready' || empty($this->next['players'])) return;
+		$seats = count($this->next['players']);
+		$fresh = [];
+		$rounds = 0;
+		foreach($this->next['players'] as $seat => $player)
+		{
+			$before = $changedHand ? 0 : count($this->previous['players'][$seat]['cards'] ?? []);
+			$fresh[$seat] = range($before, count($player['cards'] ?? []) - 1);
+			if(count($player['cards'] ?? []) <= $before) $fresh[$seat] = [];
+			$rounds = max($rounds, count($fresh[$seat]));
+		}
+		for($round = 0; $round < $rounds; $round++) for($offset = 1; $offset <= $seats; $offset++)
+		{
+			$seat = ((int)($this->next['dealer'] ?? 0) + $offset) % $seats;
+			if(isset($fresh[$seat][$round])) $this->arrivals[] = ['seat' => $seat, 'index' => $fresh[$seat][$round]];
+		}
+		$board = $changedHand ? 0 : count($this->previous['board'] ?? []);
+		for($index = $board; $index < count($this->next['board'] ?? []); $index++) $this->arrivals[] = ['seat' => null, 'index' => $index];
+		if(!$this->arrivals) return;
+		$this->kind = 'deal';
+		foreach($this->arrivals as $order => $_) $this->sounds[] = ['at' => $this->cardStart + $order * self::CARD_GAP, 'cue' => 'card'];
+		$this->duration += (count($this->arrivals) - 1) * self::CARD_GAP + self::CARD_TRAVEL;
+	}
+
 	public function active(): bool { return $this->elapsed < $this->duration; }
 	public function advance(float $seconds): void { $this->elapsed = min($this->duration, $this->elapsed + max(0, $seconds)); }
 	public function status(): array
@@ -122,7 +159,8 @@ final class Motion
 		$totals = [];
 		foreach($this->totalTo as $seat => $to)
 		$totals[$seat] = (int)round($this->totalFrom[$seat] + ($to - $this->totalFrom[$seat]) * $progress);
-		$frame = ['kind' => $this->kind, 'banks' => $this->chips['after'], 'totals' => $totals, 'cards' => [], 'chips' => [], 'hiddenSeats' => [], 'discardCount' => (int)($this->next['discardCount'] ?? 0)];
+		$frame = ['kind' => $this->kind, 'banks' => $this->chips['after'], 'totals' => $totals, 'cards' => [], 'chips' => [], 'hiddenSeats' => [],
+			'hiddenCards' => [], 'hiddenBoard' => [], 'discardCount' => (int)($this->next['discardCount'] ?? 0)];
 		foreach($this->stages as $stage) if($this->elapsed < $stage['start'] + $stage['duration'])
 		{
 			$frame['banks'] = $stage['before'];
@@ -144,7 +182,26 @@ final class Motion
 			break;
 		}
 		$centre = $layout->centre();
-		if($this->deal)
+		if($this->arrivals)
+		{
+			// Every card dealt this step stays off the table until it lands; until then it flies face down.
+			$seats = count($this->next['players']);
+			foreach($this->arrivals as $order => ['seat' => $seat, 'index' => $index])
+			{
+				if($seat === null) $frame['hiddenBoard'][] = $index;
+				else $frame['hiddenCards'][$seat][] = $index;
+				$t = ($this->elapsed - $this->cardStart - $order * self::CARD_GAP) / self::CARD_TRAVEL;
+				if($t < 0) continue;
+				$to = $seat === null ? $centre['board'][$index] ?? null : $layout->seat($seat, $seats)['cards'][$index] ?? null;
+				if($to === null) continue;
+				$from = [$centre['deck'][0] + ($centre['deck'][2] - $to[2]) / 2, $centre['deck'][1] + ($centre['deck'][3] - $to[3]) / 2, $to[2], $to[3]];
+				$id = $seat === null ? $this->next['board'][$index] : $this->next['players'][$seat]['cards'][$index];
+				// The last card's progress can fall a rounding error short of one when the timeline ends.
+				$landed = $t >= 1 - 1e-9 || $this->elapsed >= $this->duration;
+				$frame['cards'][] = ['rect' => $landed ? $to : self::slide($from, $to, $t), 'id' => $landed ? $id : null];
+			}
+		}
+		elseif($this->deal)
 		{
 			$seats = count($this->next['players']);
 			$frame['hiddenSeats'] = range(0, $seats - 1);
