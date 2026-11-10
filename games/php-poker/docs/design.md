@@ -31,7 +31,7 @@ and dialogs, a dark disc behind each emblem, keycaps on the buttons, and sets te
   emblems as discs with an initial.
 - Type: `art/typography/barlow-semi-condensed.json` (OFL) and `fixedsys-excelsior.json` (public domain),
   baked by `scripts/generate-poker-textures.mjs` into one signed-distance atlas with faces `body`, `bold`
-  and `dos`. The poster is rendered from `art/poster.svg`.
+  and `dos`. The poster is `art/poster.png`, a capture of the table in classic graphics.
 - Palette and sizes live in `src/Render/Theme.php`.
 
 ## Layout
