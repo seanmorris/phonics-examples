@@ -38,6 +38,10 @@ final class Simulation
 	public const DEAD_SETTLE = .6;
 	public const WING_BEATS = 3;
 	public const WING_BEAT = .09;
+	/** Steps the tool-assisted player plans ahead: a second and a half reaches the next gap's entry at any speed. */
+	public const TAS_HORIZON = 90;
+	/** Steps of each plan the tool-assisted player keeps before rebuilding the safe sets. */
+	public const TAS_REPLAN = 10;
 
 	/** One of ready, playing, or dead. */
 	public string $phase = 'ready';
@@ -59,10 +63,14 @@ final class Simulation
 	public array $barrels = [];
 	/** @var list<string> Events raised by the latest step: flap, score, bonk, or night. */
 	public array $events = [];
+	/** Whether the built-in tool-assisted player decides every flap; it never misses a gap. */
+	public bool $autopilot = false;
 
 	private Random $random;
 	private float $deadTimer = 0;
 	private float $flappedAt = -1;
+	/** @var list<array<int,list<array{float,float}>>> Safe sets for the next few steps of the tool-assisted player. */
+	private array $plan = [];
 
 	/**
 	 * Start a reproducible run with its first barrels already placed.
@@ -134,6 +142,8 @@ final class Simulation
 	{
 		$this->events = [];
 		$this->previousY = $this->y;
+
+		if($this->autopilot && $this->phase !== 'dead') $flap = $this->plannedFlap();
 
 		foreach($this->barrels as $barrel) $barrel->previousX = $barrel->x;
 
@@ -213,6 +223,170 @@ final class Simulation
 		$this->vy = 0;
 		$this->deadTimer += self::STEP;
 		$this->finished = $this->deadTimer >= self::DEAD_SETTLE;
+	}
+
+	/**
+	 * Decide the tool-assisted player's flap for the coming step.
+	 *
+	 * The player flaps only when coasting would leave the safe set: the positions from which some sequence of flaps
+	 * keeps the hitbox inside every gap and off the ground for the next second and a half. That set is built backward from
+	 * the horizon over the velocity lattice (a flap always resets the velocity, so the velocity is just the number of
+	 * steps since the last flap), with the barrels advanced exactly as the run will advance them. Flapping as late as
+	 * possible keeps the flight low and smooth; the horizon always covers the entry into the next gap.
+	 *
+	 * @return bool True to flap this step.
+	 */
+	public function plannedFlap(): bool
+	{
+		if($this->phase === 'ready') return true;
+
+		if(!$this->plan) $this->plan = $this->planRows();
+
+		$row = array_shift($this->plan);
+		$gravity = self::GRAVITY * self::STEP;
+		$flapVy = self::FLAP_VY + $gravity;
+		$lattice = count($row) - 1;
+		$k = $this->vy >= self::MAX_FALL
+			? $lattice
+			: max(0, min($lattice, (int)round(($this->vy - $flapVy) / $gravity)));
+		$coasted = min($lattice, $k + 1);
+		$top = $this->y + self::HITBOX_INSET_Y + min(self::MAX_FALL, $flapVy + $coasted * $gravity) * self::STEP;
+
+		foreach($row[$coasted] as [$a, $b]) if($top >= $a && $top <= $b) return false;
+
+		return true;
+	}
+
+	/**
+	 * Build the safe sets for the next few steps from a full backward pass over the horizon.
+	 *
+	 * The barrels only ever scroll, so rows near the present stay valid as the run advances; the planner keeps the
+	 * first few rows and rebuilds when they run out, which spreads the cost of the pass over several steps.
+	 *
+	 * @return list<array<int,list<array{float,float}>>> One row per upcoming step, each indexed by steps since a flap.
+	 */
+	private function planRows(): array
+	{
+		$steps = self::TAS_HORIZON;
+		$gravity = self::GRAVITY * self::STEP;
+		$flapVy = self::FLAP_VY + $gravity;
+		$lattice = (int)ceil((self::MAX_FALL - $flapVy) / $gravity);
+		$velocity = [];
+
+		for($k = 0; $k <= $lattice; $k++) $velocity[$k] = min(self::MAX_FALL, $flapVy + $k * $gravity);
+
+		// Allowed hitbox-top band per future step, shrunk by a unit so float drift never counts as safe.
+		[$left, , $boxWidth, $boxHeight] = $this->hitbox();
+		$xs = [];
+		$scored = [];
+
+		foreach($this->barrels as $j => $barrel)
+		{
+			$xs[$j] = $barrel->x;
+			$scored[$j] = $barrel->scored;
+		}
+
+		$score = $this->score;
+		$allowed = [];
+
+		for($t = 1; $t <= $steps; $t++)
+		{
+			$speed = self::speedFor($score) * self::STEP;
+			$low = 1.0;
+			$high = self::GROUND_Y - $boxHeight - 1.0;
+
+			foreach($this->barrels as $j => $barrel)
+			{
+				$xs[$j] -= $speed;
+
+				if(!$scored[$j] && $xs[$j] + self::BARREL_W < 0)
+				{
+					$scored[$j] = true;
+					$score++;
+				}
+
+				if($xs[$j] >= $left + $boxWidth || $xs[$j] + self::BARREL_W <= $left) continue;
+
+				$low = max($low, $barrel->gapTop + 1.0);
+				$high = min($high, $barrel->gapTop + $barrel->gap - $boxHeight - 1.0);
+			}
+
+			$allowed[$t] = $low <= $high ? [[$low, $high]] : [];
+		}
+
+		// safe[k]: hitbox-top intervals, with k steps since the last flap, from which survival is possible at the step
+		// being filled; each pass moves one step closer to now. Sets stay tiny, so they are flat sorted lists of
+		// [low, high] pairs merged inline rather than through helpers.
+		$safe = array_fill(0, $lattice + 1, $allowed[$steps]);
+		$coastBy = [];
+
+		for($k = 0; $k <= $lattice; $k++) $coastBy[$k] = -$velocity[min($lattice, $k + 1)] * self::STEP;
+
+		$flapBy = -$velocity[0] * self::STEP;
+		$rows = [];
+
+		for($t = $steps - 1; $t >= 1; $t--)
+		{
+			if(!$allowed[$t])
+			{
+				$safe = array_fill(0, $lattice + 1, []);
+
+				if($t <= self::TAS_REPLAN) $rows[$t] = $safe;
+
+				continue;
+			}
+
+			[$low, $high] = $allowed[$t][0];
+			$next = $safe;
+			$flapped = [];
+
+			foreach($next[0] as [$a, $b])
+			{
+				$a = max($a + $flapBy, $low);
+				$b = min($b + $flapBy, $high);
+
+				if($a <= $b) $flapped[] = [$a, $b];
+			}
+
+			for($k = 0; $k <= $lattice; $k++)
+			{
+				$by = $coastBy[$k];
+				$set = $flapped;
+
+				foreach($next[min($lattice, $k + 1)] as [$a, $b])
+				{
+					$a = max($a + $by, $low);
+					$b = min($b + $by, $high);
+
+					if($a <= $b) $set[] = [$a, $b];
+				}
+
+				if(count($set) > 1)
+				{
+					usort($set, static fn(array $p, array $q): int => $p[0] <=> $q[0]);
+					$merged = [];
+
+					foreach($set as $interval)
+					{
+						$last = count($merged) - 1;
+
+						if($last >= 0 && $interval[0] <= $merged[$last][1] + 1e-6)
+						$merged[$last][1] = max($merged[$last][1], $interval[1]);
+						else $merged[] = $interval;
+					}
+
+					$set = $merged;
+				}
+
+				$safe[$k] = $set;
+			}
+
+			if($t <= self::TAS_REPLAN) $rows[$t] = $safe;
+		}
+
+		ksort($rows);
+
+		return array_values($rows);
 	}
 
 	/**

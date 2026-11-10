@@ -10,6 +10,10 @@ Press Play, then flap to start. Gravity pulls the phant down; each flap gives it
 
 Taps and clicks anywhere on the canvas flap, as do Space, Up, W and the controller's A or RB. **Input settings** edits the keyboard and controller bindings separately, keeps Pause fixed, and stores valid changes locally when the browser allows it.
 
+## Secrets
+
+With no points on the board, the Konami code (Up, Up, Down, Down, Left, Right, Left, Right, B, A; the arrows then B and A on a keyboard) hands the run to a tool-assisted player that never misses a gap. The HUD says **TAS** and the run never counts toward the best score.
+
 ## Controls
 
 | Action | Xbox | PlayStation | Keyboard and mouse |

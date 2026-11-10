@@ -58,3 +58,40 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 
 	expect(errors).toEqual([]);
 });
+
+test('the Konami code with no points hands the run to a perfect player that never records a best', async({page}) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await page.setViewportSize({width: 1280, height: 720});
+	const canvas = await boot(page);
+	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play', exact: true}).click();
+	await expect.poll(async() => (await status(page)).phase).toBe('ready');
+	await canvas.focus();
+
+	// The Up presses are also flaps, but a code in progress holds the ready screen until the code resolves.
+	for(const key of ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'])
+	{
+		await page.keyboard.press(key);
+		await page.waitForTimeout(150);
+	}
+
+	await expect.poll(async() => (await status(page)).autopilot).toBe(true);
+	expect((await status(page)).counts.tas).toBe(1);
+	await expect.poll(async() => (await status(page)).score, {timeout: 30_000}).toBeGreaterThanOrEqual(3);
+	const flying = await status(page);
+	expect(flying.phase).toBe('playing');
+	expect(flying.page).toBe('play');
+	expect(flying.best).toBe(0);
+
+	// Pausing out of the run leaves nothing behind: the best is untouched and the next run is the player's again.
+	await page.keyboard.press('Escape');
+	await expect.poll(async() => (await status(page)).page).toBe('pause');
+	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Return to title'}).click();
+	await expect.poll(async() => (await status(page)).page).toBe('title');
+	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play', exact: true}).click();
+	await expect.poll(async() => (await status(page)).phase).toBe('ready');
+	expect((await status(page)).autopilot).toBe(false);
+	const profile = await page.evaluate(() => JSON.parse(localStorage.getItem('phlappy-phant.profile.v1') ?? 'null'));
+	expect(profile?.best ?? 0).toBe(0);
+	expect(errors).toEqual([]);
+});

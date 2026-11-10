@@ -118,4 +118,28 @@ check(is_string($saved) && json_decode($saved, true)['version'] === 1, 'saving w
 $restored = new InputSettings(static fn(): string => $saved);
 check(!$restored->sessionOnly && count($restored->bindings->sources(PhantActions::FLAP)) === 5, 'a saved profile restores');
 
+// The tool-assisted player: it must start the run, then never die, through the speed cap and the narrowest gaps.
+$tas = new Simulation(14);
+$tas->autopilot = true;
+$tas->step();
+check($tas->phase === 'playing' && in_array('flap', $tas->events, true), 'the autopilot starts the run with a flap');
+$flaps = 0;
+
+for($i = 0; $i < 3600 && $tas->phase === 'playing'; $i++)
+{
+	$tas->step();
+	$flaps += (int)in_array('flap', $tas->events, true);
+}
+
+check($tas->phase === 'playing', 'the autopilot survives a minute at the speed cap and minimum gap');
+check($tas->score >= 60 && Simulation::gapFor($tas->score) === (float)Simulation::GAP_MIN, 'the autopilot scores through the narrowest gaps');
+check($flaps > 120 && $flaps < 900, 'the autopilot flaps on fewer than a quarter of the steps');
+
+$manual = new Simulation(14);
+$manual->step(true);
+
+for($i = 0; $i < 600 && $manual->phase === 'playing'; $i++) $manual->step($i % 24 === 0);
+
+check($manual->phase === 'dead' && !$manual->autopilot, 'a metronome player still dies');
+
 echo "Phlappy Phant: $checks checks passed.\n";
