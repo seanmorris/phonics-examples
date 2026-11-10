@@ -26,9 +26,11 @@ const palette = {
 	, tan: [0xc9, 0xa9, 0x6a]
 };
 
-// Barrels, ground and clouds share one 56x32 grid; the elephant sheet holds two 64x52 frames: wing up, wing down.
+// Barrels, ground and clouds share one 56x32 grid. The elephant sheet holds two rows of two 64x52 frames (wing
+// folded, wing spread): the top row faces right, the bottom row faces left. The game flies leftward and uses the
+// bottom row.
 const TILE_W = 56, TILE_H = 32, TILE_COLUMNS = 5, TILE_COUNT = 5;
-const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2;
+const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2, PHANT_ROWS = 2, PHANT_ROW = 1;
 
 /** A simple RGBA raster with out-of-range writes ignored. */
 class Raster
@@ -122,8 +124,8 @@ async function phantFrames()
 {
 	const image = PNG.sync.read(await fs.readFile(new URL('art/elephpant.png', root)));
 
-	if(image.width !== PHANT_W * PHANT_FRAMES || image.height !== PHANT_H)
-		throw Error(`art/elephpant.png must be ${PHANT_W * PHANT_FRAMES}x${PHANT_H}, found ${image.width}x${image.height}`);
+	if(image.width !== PHANT_W * PHANT_FRAMES || image.height !== PHANT_H * PHANT_ROWS)
+		throw Error(`art/elephpant.png must be ${PHANT_W * PHANT_FRAMES}x${PHANT_H * PHANT_ROWS}, found ${image.width}x${image.height}`);
 
 	const sheet = new Raster(image.width, image.height);
 	sheet.data.set(image.data);
@@ -133,7 +135,7 @@ async function phantFrames()
 
 		for(let y = 0; y < PHANT_H; y++) for(let x = 0; x < PHANT_W; x++)
 		{
-			const [r, g, b, a] = sheet.get(index * PHANT_W + x, y);
+			const [r, g, b, a] = sheet.get(index * PHANT_W + x, PHANT_ROW * PHANT_H + y);
 			frame.put(x, y, [r, g, b], a);
 		}
 
@@ -284,7 +286,7 @@ const bonkSound = () => wav(.22, (t, random) => {
 });
 
 /** Blit a string from the engine's bitmap font in ink at a pixel scale; a null target only measures. */
-async function title(target, text, x, y, scale)
+async function title(target, text, x, y, scale, colour = palette.ink)
 {
 	const font = JSON.parse(await fs.readFile(new URL('font.tsj', engine), 'utf8'));
 	const image = PNG.sync.read(await fs.readFile(new URL('font.png', engine)));
@@ -308,7 +310,7 @@ async function title(target, text, x, y, scale)
 
 		const column = glyph.id % font.columns, row = Math.floor(glyph.id / font.columns);
 
-		if(target) target.blit(glyphs, cursor, y, scale, palette.ink, [
+		if(target) target.blit(glyphs, cursor, y, scale, colour, [
 			column * font.tilewidth, row * font.tileheight, glyph['glyph.width'], glyph['glyph.height']
 		]);
 
@@ -352,14 +354,17 @@ poster.fill(0, 0, 1280, 720, [0xcf, 0xe6, 0xf5]);
 for(const [x, y] of [[90, 90], [420, 150], [760, 70], [1080, 170], [300, 260]]) poster.blit(puff, x, y, 4);
 poster.fill(0, 560, 1280, 32, palette.cream);
 for(let x = 0; x < 1280; x += TILE_W * 4) poster.blit(soil, x, 592, 4);
-for(const [x, gapTop, gap] of [[700, 150, 190], [1000, 260, 180]])
+// One full pair at the left edge and a ground-only stack mid-frame leave the sky clear for the title.
+for(const [x, gapTop, gap] of [[20, 260, 180], [470, -40, 300]])
 {
 	for(let y = gapTop - TILE_H * 4; y > -TILE_H * 4; y -= TILE_H * 4) poster.blit(y === gapTop - TILE_H * 4 ? bottom : ring, x, y, 4);
 	for(let y = gapTop + gap; y < 592; y += TILE_H * 4) poster.blit(y === gapTop + gap ? cap : ring, x, y, 4);
 }
-poster.blit(frames[0], 1040 - 64 * 6, 250, 6);
+poster.blit(frames[1], 860, 250, 6);
+// The wordmark gets the in-game treatment: an ink shadow under a cream fill, so it reads over the barrels.
 const width = await title(null, 'PHLAPPY PHANT', 0, 48, 6);
-await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2), 48, 6);
+await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2) + 6, 54, 6, palette.ink);
+await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2), 48, 6, palette.cream);
 generated.set('poster.png', poster.png());
 
 if(previewDirectory)

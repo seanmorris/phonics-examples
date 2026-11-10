@@ -35,7 +35,8 @@ final class Simulation
 	public const GAP_MARGIN = 40;
 	public const NIGHT_EVERY = 10;
 	public const DEAD_SETTLE = .6;
-	public const WING_DOWN = .14;
+	public const WING_BEATS = 3;
+	public const WING_BEAT = .09;
 
 	/** One of ready, playing, or dead. */
 	public string $phase = 'ready';
@@ -46,7 +47,7 @@ final class Simulation
 	public float $scroll = 0;
 	/** Seconds since the run began, for the idle bob and ear animation. */
 	public float $age = 0;
-	/** Wing frame: zero up, one down for a moment after each flap. */
+	/** Wing frame: zero folded, one spread; the wing beats a few times after each flap, then rests folded. */
 	public int $frame = 0;
 	public int $score = 0;
 	/** Zero for day, one for night. */
@@ -160,7 +161,9 @@ final class Simulation
 
 			$this->vy = min(self::MAX_FALL, $this->vy + self::GRAVITY * self::STEP);
 			$this->y = max(0, $this->y + $this->vy * self::STEP);
-			$this->frame = $this->age - $this->flappedAt < self::WING_DOWN ? 1 : 0;
+			$since = $this->age - $this->flappedAt;
+			$this->frame = $since < self::WING_BEATS * self::WING_BEAT && (int)floor($since / (self::WING_BEAT / 2)) % 2 === 0
+				? 1 : 0;
 			$speed = self::speedFor($this->score);
 
 			foreach($this->barrels as $barrel) $barrel->x -= $speed * self::STEP;

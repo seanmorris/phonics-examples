@@ -36,9 +36,12 @@ $idle->step(true);
 check($idle->phase === 'playing', 'the first flap starts the run');
 check(abs($idle->vy - (Simulation::FLAP_VY + Simulation::GRAVITY * Simulation::STEP)) < 1e-9, 'a flap sets the rise before gravity applies');
 check($idle->consumeEvents() === ['flap'], 'the first flap is reported once');
-check($idle->frame === 1, 'the wing drops on a flap');
-for($i = 0; $i < 12; $i++) $idle->step();
-check($idle->frame === 0, 'the wing lifts again shortly after');
+check($idle->frame === 1, 'the wing spreads on a flap');
+$beats = 0;
+$previous = $idle->frame;
+for($i = 0; $i < 30; $i++) { $idle->step(); if($idle->frame !== $previous) $beats++; $previous = $idle->frame; }
+check($beats >= 4 && $beats <= 6, 'the wing beats a few times after a flap');
+check($idle->frame === 0, 'the wing rests folded afterwards');
 check($idle->consumeEvents() === [], 'events are cleared once consumed');
 
 $falling = new Simulation(1);

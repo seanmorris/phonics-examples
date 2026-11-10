@@ -81,7 +81,7 @@
     "assets/bonk.wav": "sha256-8ZJIgRwXeUPmj8G4q87TBLyTJ0eI0sIsJSsrNmV42xk=",
     "assets/ding.wav": "sha256-QZcYdJ57hlWDmV3iewckrV6/a0Mhm1LDdmWpcAL1RD4=",
     "assets/flap.wav": "sha256-7tqPIJ1StAIfT/iYT2WEjaFYWIjPZM/OdJJjmkibEuE=",
-    "assets/phant.png": "sha256-6nHJDk2fOJDfRsZeOwovnBXIQnS9lmJLkyNog91ICWE=",
+    "assets/phant.png": "sha256-fxVXRmLIsE1DSZ7YAn59AytLJ4qEv5v48X8W1IgQ08A=",
     "assets/phant.tsj": "sha256-OOB9Z+DdpJ/rxoch+PkFAGV7eEXxBqxPFAtbg2eta9g=",
     "assets/tiles.png": "sha256-/H8MYJo0NsKkXOfjczyJ4nOa4epqvBeO5dYWHgH2zrg=",
     "assets/tiles.tsj": "sha256-WHAM5CDjbJjwsw16jMuaMSpy3zyTAvKcg9oUIn3sXxM=",
@@ -92,8 +92,8 @@
     "src/Input/InputSettings.php": "sha256-t+gFObzP4DD9hGQy6pgNTn6OmvGjPTacHQQFlhmTqPw=",
     "src/Input/PhantActions.php": "sha256-bW+3S4rcQjQglbFM/SFmhbEkE3pt/eukxZy+qH5NFU8=",
     "src/Random.php": "sha256-K7C+O1PIMGau+sBBTtbtYY3jWj3mhtILARVJb+ClSFI=",
-    "src/Render/Scene.php": "sha256-9EJ3FI7rDlwoPAtx6tfHkloGr+oJpRDMU662Yd66faE=",
-    "src/Simulation.php": "sha256-VNCFOGiD+urZBaFJqSHXjdQR4ziAcUmELLE6b67rXTg=",
+    "src/Render/Scene.php": "sha256-8VhfDu/yDnheWmNW2/wuCTHV4TRTf0x3sscLxNq+aYw=",
+    "src/Simulation.php": "sha256-xlV5Aehle7MRPZJwUlmSQBZsBWUq3GczcYCTGN5LtXU=",
     "worlds/phant.tmj": "sha256-59mqgtRhvdFN1fKX1QvhSTwlZlv4lbhnI0FjOegWneo=",
     "worlds/phant.world": "sha256-GT3SuMsmPogieQR7k9iG95I6QZMH+R3c4AweR3TjNjs="
   }
