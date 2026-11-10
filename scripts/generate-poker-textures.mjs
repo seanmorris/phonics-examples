@@ -25,6 +25,18 @@ try
 	// wildcard matrix never falls back to a replacement mark when the visual mode changes.
 	for(const character of '♠♥♦♣') for(const face of Object.values(outlines.faces))
 		face.glyphs[character] = outlines.faces.dos.glyphs[character];
+	// Fixedsys draws its hyphen and dashes one pixel tall, half the weight of its stems. Alone on a button at
+	// caption size that bar is thinner than a screen pixel and all but disappears, so the DOS face gets our own
+	// two-pixel bars on the same pixel grid, level with its middle dot.
+	for(const [character, left, right] of [['-', .0625, .4375], ['–', .0625, .4375], ['—', 0, .5]])
+	{
+		const glyph = outlines.faces.dos.glyphs[character];
+
+		if(!glyph) continue;
+
+		glyph.path = `M${left}-0.375L${right}-0.375L${right}-0.25L${left}-0.25Z`;
+		glyph.bounds = [left, right, -.375, -.25];
+	}
 }
 catch(error)
 {

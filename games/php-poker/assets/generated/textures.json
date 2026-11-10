@@ -3,9 +3,9 @@
     "file": "ui-font.rgba",
     "width": 1024,
     "height": 804,
-    "sha256": "0579dfc28f939b7e2492c82f90fea2fd8a1fda6252e44b55cd0cc8705e0ab943",
+    "sha256": "049dcded858329113258f2ffb523d8a7edd32afb9eff35899a5a77e9e8472e68",
     "metrics": "ui-font.json",
-    "metricsSha256": "6b8eac0c8afcf5be4f16cc81e21b5abbc46c6a6fcd055da78f9b0329c4bb23f5"
+    "metricsSha256": "42f6c50a11ae4dc65deb0d8f031db49d66e0c76d4152297b7d683b4b5d0fd268"
   },
   "cards": {
     "sheet": {
