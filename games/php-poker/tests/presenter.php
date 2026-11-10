@@ -1450,5 +1450,39 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	}
 });
 
+$test('hands of two to seven cards stay inside the five-card fan and never move the seat', static function(callable $expect): void {
+	foreach([[1280,720,1],[1920,1080,1],[390,844,1],[780,1688,2],[844,390,1],[900,400,1],[1366,768,1]] as [$width, $height, $dpr])
+	foreach([2,5,7,8] as $seats)
+	{
+		$draw = Layout::fit($width, $height, $dpr, $seats);
+		foreach([[2,5],[5,0],[7,0],[1,0],[6,3]] as [$count, $board])
+		{
+			$layout = Layout::fit($width, $height, $dpr, $seats, $count, $board);
+			$expect($layout->profile === $draw->profile && $layout->scale === $draw->scale, "$count-card table keeps the profile on $width x $height");
+			for($seat = 0; $seat < $seats; $seat++)
+			{
+				$base = $draw->seat($seat, $seats); $geometry = $layout->seat($seat, $seats);
+				$where = "$count cards, seat $seat of $seats on $width x $height";
+				$expect($geometry['slots'] === $base['cards'] && $base['slots'] === $base['cards'], "$where: the composed slots are the draw fan");
+				foreach(['plate','chips','caption','emblem','angle','outward'] as $part) $expect($geometry[$part] === $base[$part], "$where: $part does not move");
+				$expect(count($geometry['cards']) === $count, "$where: one rectangle per card");
+				$first = $geometry['cards'][0]; $last = $geometry['cards'][$count - 1];
+				$fanLeft = $base['cards'][0][0]; $fanRight = $base['cards'][4][0] + $base['cards'][4][2];
+				$expect($first[0] >= $fanLeft - 1e-9 && $last[0] + $last[2] <= $fanRight + 1e-9, "$where: cards stay inside the fan");
+				$expect(abs(($first[0] - $fanLeft) - ($fanRight - $last[0] - $last[2])) < 1e-9 || $count > 5, "$where: a short hand is centred");
+				$expect($count < 5 || (abs($first[0] - $fanLeft) < 1e-9 && abs($last[0] + $last[2] - $fanRight) < 1e-9), "$where: a long hand spans the fan");
+				for($index = 1; $index < $count; $index++)
+				{
+					$step = $geometry['cards'][$index][0] - $geometry['cards'][$index - 1][0];
+					// Each card keeps a strip clear of the next one. Seven cards on the oval leave 18% of a card, which is the
+					// tightest case and still has to be judged on screen when stud gets its table.
+					$expect($step >= $first[2] * .17 && $geometry['cards'][$index][1] === $first[1] && $geometry['cards'][$index][2] === $first[2], "$where: card $index shows its index");
+				}
+			}
+			if($count === 5) $expect($layout->seat(0, $seats)['cards'] === $draw->seat(0, $seats)['cards'], "five cards are the draw fan on $width x $height");
+		}
+	}
+});
+
 echo "$passed PHP Poker presenter checks passed.\n";
 if($failures) { fwrite(STDERR, "$failures presenter checks failed.\n"); exit(1); }
