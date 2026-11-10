@@ -22,8 +22,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	status.setAttribute('aria-live', 'polite');
 	style.textContent = `
 		.phlappy-phant-ui{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;
-			max-width:none;margin:auto;background:#87c7eb;color:#363254}
-		.phlappy-phant-screen{position:relative;width:100%;height:100%;isolation:isolate;overflow:hidden;background:#87c7eb}
+			max-width:none;margin:auto;background:#4866c5;color:#363254}
+		.phlappy-phant-screen{position:relative;width:100%;height:100%;isolation:isolate;overflow:hidden;background:#4866c5}
 		.phlappy-phant-screen>canvas{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;
 			max-height:none;margin:0;border:0;border-radius:0;image-rendering:pixelated;touch-action:none;cursor:pointer}
 		.phlappy-phant-targets{position:absolute;inset:0;pointer-events:none}

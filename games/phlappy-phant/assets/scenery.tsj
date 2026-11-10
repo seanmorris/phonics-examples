@@ -1,0 +1,19 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "name": "Phlappy Phant scenery",
+  "tilewidth": 48,
+  "tileheight": 32,
+  "tilecount": 3,
+  "columns": 3,
+  "image": "scenery.png",
+  "imagewidth": 144,
+  "imageheight": 32,
+  "properties": [
+    {
+      "name": "phlappy.widths",
+      "type": "string",
+      "value": "32,24,48"
+    }
+  ]
+}

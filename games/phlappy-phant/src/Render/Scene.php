@@ -21,20 +21,31 @@ final class Scene
 {
 	public const GID_PHANT = 1;
 	public const GID_PHANT_LEFT = 3;
-	public const GID_CAP = 5;
-	public const GID_RING = 6;
-	public const GID_BOTTOM = 7;
-	public const GID_GROUND = 8;
-	public const GID_CLOUD = 9;
-	public const TILE_W = 56;
-	public const TILE_H = 32;
-	public const DAY_SKY = [.53, .78, .92];
-	public const NIGHT_SKY = [.11, .14, .25];
+	public const GID_BACKDROP = 5;
+	public const GID_TOWER_CAP = 7;
+	public const GID_TOWER_BODY = 8;
+	public const GID_TOWER_BASE = 10;
+	public const GID_GRASS = 11;
+	public const GID_DIRT = 12;
+	public const GID_SCENERY = 13;
+	/** The backdrop block, its tile size, and the ground tile size, in world units. */
+	public const BACKDROP = 160;
+	public const GROUND_TILE = 32;
+	/** Tower slices are 64 wide with the 56-unit tower centred, and 8 tall so any grid height can be built. */
+	public const SLICE_W = 64;
+	public const SLICE_H = 8;
+	/** The backdrop's top row, continued up into the sky of tall frames; night multiplies it like every tile. */
+	public const DAY_SKY = [.282, .4, .773];
 	public const NIGHT_TINT = [.55, .60, .85];
+	public const NIGHT_SKY = [.155, .24, .657];
+	/** Scenery between each pair of towers, as [scenery index, offset from the tower's right edge], picked per pair. */
+	public const SCENERY_LAYOUTS = [[], [[0, 24]], [[1, 16], [0, 56]], [[2, 32]], [[1, 40]], [[0, 8], [2, 48]]];
 	public const INK = [.21, .20, .33];
 	public const CREAM = [.95, .89, .75];
 	public const PLAQUE = [.95, .89, .75, .97];
 	public const TEAL = [.18, .43, .45];
+	/** The backdrop's pale water teal, for subtitles and information rows over the deep sky. */
+	public const MIST = [.5, .835, .804];
 
 	/** Accessible hit regions published by the menu renderer. */
 	public array $regions = [];
@@ -51,6 +62,10 @@ final class Scene
 	private float $blend = 0;
 	private float $blendClock = 0;
 	private float $deathSpin = 0;
+	/** @var list<array{int,int,float}> Backdrop bands as [top, height, parallax rate], read from the backdrop tileset. */
+	private array $bands = [];
+	/** @var list<int> Width of each scenery piece, read from the scenery tileset. */
+	private array $sceneryWidths = [];
 
 	/**
 	 * Prepare sprite, text, rectangle, and menu renderers for the Phlappy Phant atlas.
@@ -74,6 +89,23 @@ final class Scene
 		$this->menus->style['highlight'] = [.18, .43, .45, 1];
 		$this->menus->style['selection'] = [.12, .27, .28, 1];
 		$this->menus->style['disabled'] = [.18, .43, .45, 1];
+
+		// The generator writes the parallax mask's band edges, the chosen rates and the scenery widths into the
+		// tilesets, so the art and its layout data travel together.
+		$property = static function(TileMap $map, string $name): string {
+			foreach($map->tilesets as $set) foreach($set['properties'] ?? [] as $entry)
+			if($entry['name'] === $name) return (string)$entry['value'];
+
+			throw new \UnexpectedValueException("The Phlappy Phant tilesets do not define $name");
+		};
+		$edges = array_map('intval', explode(',', $property($map, 'phlappy.bands')));
+		$rates = array_map('floatval', explode(',', $property($map, 'phlappy.parallax')));
+
+		if(count($edges) !== count($rates) + 1) throw new \UnexpectedValueException('Backdrop bands and rates disagree');
+
+		foreach($rates as $index => $rate) $this->bands[] = [$edges[$index], $edges[$index + 1] - $edges[$index], $rate];
+
+		$this->sceneryWidths = array_map('intval', explode(',', $property($map, 'phlappy.widths')));
 	}
 
 	/**
@@ -125,72 +157,90 @@ final class Scene
 		$this->blend += max(-$elapsed, min($elapsed, $target - $this->blend));
 		$tint = [...self::lerp([1, 1, 1], self::NIGHT_TINT, $this->blend), 1.0];
 
-		$horizon = self::lerp([.95, .90, .75], [.25, .27, .42], $this->blend);
-		$this->rects->render([[
-			0, (Simulation::GROUND_Y - 48 + $offsetY) * $scale, $width, 48 * $scale, $horizon[0], $horizon[1], $horizon[2], 1
-		]], $width, $height);
-
 		$sprites = [];
-		$parallax = $game->scroll * .3;
-		$period = 230.0;
-		$count = (int)ceil($visible / $period) + 2;
-		$skyBand = max(40, (int)(Simulation::GROUND_Y + $offsetY - 100));
+		$y = static fn(float $worldY): float => ($worldY + $offsetY) * $scale;
 
-		for($i = 0; $i < $count; $i++)
+		// The backdrop sits on the ground line; each band of the parallax mask drifts at its own rate, and the tile's
+		// animation swaps the river frames.
+		$backdropTop = Simulation::GROUND_Y - self::BACKDROP;
+
+		foreach($this->bands as [$top, $bandHeight, $rate])
 		{
-			$wx = $i * $period + ($i * 97) % 140;
-			$x = fmod($wx - $parallax, $count * $period);
-
-			if($x < -self::TILE_W) $x += $count * $period;
-			if($x > $visible + self::TILE_W) continue;
-
-			$sprites[] = $this->tile(self::GID_CLOUD, $x * $scale, (20 + ($i * 53) % $skyBand) * $scale, $scale, $tint);
+			for($x = -fmod($game->scroll * $rate, self::BACKDROP); $x < $visible; $x += self::BACKDROP)
+			{
+				$band = $this->tile(self::GID_BACKDROP, $x * $scale, $y($backdropTop + $top), $scale, $tint);
+				$band->crop = [0, $top, self::BACKDROP, $bandHeight];
+				$band->animated = true;
+				$sprites[] = $band;
+			}
 		}
 
-		foreach($game->barrels as $barrel)
+		for($x = -fmod($game->scroll, self::GROUND_TILE); $x < $visible; $x += self::GROUND_TILE)
 		{
-			$bx = $barrel->previousX + ($barrel->x - $barrel->previousX) * $alpha;
-			$screenX = ($phantX + $bx) * $scale;
-
-			if($screenX > $width || $screenX + self::TILE_W * $scale < 0) continue;
-
-			// The stack hanging from the ceiling ends in a downward lid; the one on the ground starts with an upward lid.
-			for($y = $barrel->gapTop - self::TILE_H; $y + $offsetY > -self::TILE_H; $y -= self::TILE_H)
-			$sprites[] = $this->tile(
-				$y === $barrel->gapTop - self::TILE_H ? self::GID_BOTTOM : self::GID_RING
-				, $screenX
-				, ($y + $offsetY) * $scale
-				, $scale
-				, $tint
-			);
-
-			for($y = $barrel->gapTop + $barrel->gap; $y < Simulation::GROUND_Y; $y += self::TILE_H)
-			$sprites[] = $this->tile(
-				$y === $barrel->gapTop + $barrel->gap ? self::GID_CAP : self::GID_RING
-				, $screenX
-				, ($y + $offsetY) * $scale
-				, $scale
-				, $tint
-			);
+			$sprites[] = $this->tile(self::GID_GRASS, $x * $scale, $y(Simulation::GROUND_Y), $scale, $tint);
+			$sprites[] = $this->tile(self::GID_DIRT, $x * $scale, $y(Simulation::GROUND_Y + self::GROUND_TILE), $scale, $tint);
 		}
 
-		$groundShift = fmod($game->scroll, self::TILE_W);
+		$towers = [];
 
-		for($x = -$groundShift; $x < $visible; $x += self::TILE_W)
+		foreach($game->towers as $tower)
 		{
-			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, (Simulation::GROUND_Y + $offsetY) * $scale, $scale, $tint);
-			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, (Simulation::GROUND_Y + self::TILE_H + $offsetY) * $scale, $scale, $tint);
+			$wx = $phantX + $tower->previousX + ($tower->x - $tower->previousX) * $alpha;
+
+			// Scenery stands on the ground between this pair and the next, on the 8-unit grid.
+			foreach(self::SCENERY_LAYOUTS[($tower->index * 5 + intdiv($tower->index, 3)) % count(self::SCENERY_LAYOUTS)] as [$piece, $offset])
+			{
+				$sx = $wx + Simulation::TOWER_W + $offset;
+
+				if($sx > $visible || $sx + $this->sceneryWidths[$piece] < 0) continue;
+
+				$scenery = $this->tile(self::GID_SCENERY + $piece, $sx * $scale, $y(Simulation::GROUND_Y), $scale, $tint);
+				$scenery->originY = 1;
+				$sprites[] = $scenery;
+			}
+
+			$left = $wx - (self::SLICE_W - Simulation::TOWER_W) / 2;
+
+			if($left > $visible || $left + self::SLICE_W < 0) continue;
+
+			$towers[] = [$left, $tower];
+		}
+
+		// Each pair is the same tower twice: one standing on the ground, and one hanging from the sky with its grass
+		// cap turned to face the gap. Wall slices alternate so the 16-row dirt pattern runs on from the cap.
+		foreach($towers as [$left, $tower])
+		{
+			$sx = $left * $scale;
+			$hanging = function(int $gid, float $worldY) use ($sx, $y, $scale, $tint): Sprite {
+				$slice = $this->tile($gid, $sx, $y($worldY), $scale, $tint);
+				$slice->flipY = true;
+
+				return $slice;
+			};
+
+			$sprites[] = $hanging(self::GID_TOWER_CAP, $tower->gapTop - self::SLICE_H);
+
+			for($wy = $tower->gapTop - 2 * self::SLICE_H, $n = 0; $wy + $offsetY > -self::SLICE_H; $wy -= self::SLICE_H, $n++)
+			$sprites[] = $hanging(self::GID_TOWER_BODY + $n % 2, $wy);
+
+			$top = $tower->gapTop + $tower->gap;
+			$sprites[] = $this->tile(self::GID_TOWER_CAP, $sx, $y($top), $scale, $tint);
+
+			for($wy = $top + self::SLICE_H, $n = 0; $wy < Simulation::GROUND_Y; $wy += self::SLICE_H, $n++)
+			$sprites[] = $this->tile(self::GID_TOWER_BODY + $n % 2, $sx, $y($wy), $scale, $tint);
+
+			$sprites[] = $this->tile(self::GID_TOWER_BASE, $sx, $y(Simulation::GROUND_Y), $scale, $tint);
 		}
 
 		// The title page belongs to the wordmark and the menu; the phant appears on the ready screen.
 		if($page !== 'title')
 		{
-			$y = $game->previousY + ($game->y - $game->previousY) * $alpha;
+			$py = $game->previousY + ($game->y - $game->previousY) * $alpha;
 			// The tumble uses the left-facing frames rather than a flip, so the lettering never mirrors.
 			$phant = new Sprite(
 				($game->phase === 'dead' ? self::GID_PHANT_LEFT : self::GID_PHANT) + $game->frame
 				, ($phantX + Simulation::PHANT_W / 2) * $scale
-				, ($y + Simulation::PHANT_H / 2 + $offsetY) * $scale
+				, ($py + Simulation::PHANT_H / 2 + $offsetY) * $scale
 				, .5
 				, .5
 			);
@@ -212,7 +262,7 @@ final class Scene
 			$sprites[] = $phant;
 		}
 
-		$this->sprites->render($sprites, $camera);
+		$this->sprites->render($sprites, $camera, $seconds * 1000);
 
 		$labels = [];
 		// Text scales are whole numbers too, so glyph strokes stay even.
@@ -319,10 +369,13 @@ final class Scene
 		$chevron = $this->measure('> ');
 		$title = (string)$menu->title;
 		$front = $page === 'title' && $menu->depth() === 0;
-		// The sky ends at the horizon band; the undimmed title pages keep every row above it so cream text never
-		// lands on cream ground.
-		$sky = $page === 'title' ? (int)floor(($height / $k - Simulation::HEIGHT + Simulation::GROUND_Y - 48) * $k) : $height;
+		// The undimmed title pages keep every row above the backdrop's treeline, where the busy field would swallow
+		// the text; the front page also starts under the wordmark.
+		$sky = $page === 'title' ? (int)floor(($height / $k - Simulation::HEIGHT + Simulation::GROUND_Y - self::BACKDROP + $this->bands[3][0]) * $k) : $height;
 		$avail = $width - 24 * $k;
+		$logo = max(1, min(2 * $k + 1, (int)floor($avail / max(1, $this->measure('PHLAPPY PHANT')))));
+		$underLogo = $front ? (int)floor($height * .11 + 16 * $logo + 16 * $k) : 0;
+		$room = $front ? $sky - $underLogo - 4 * $k : $sky - 16 * $k;
 
 		// Pick the largest whole scale at which the rows, wrapped to the width, still fit in the sky; long
 		// informational lines wrap rather than shrinking every row to the width of the longest one.
@@ -349,7 +402,7 @@ final class Scene
 			$blockHeight = $titleHeight + (count($rows) * 18 + ($lineCount - count($rows)) * 13) * $r;
 
 			// Informational rows may wrap; a choice stays on one line unless nothing else fits.
-			if($r === 1 || (!$actionWraps && $blockHeight <= $sky - 16 * $k && ($widest + $chevron) * $r <= $avail)) break;
+			if($r === 1 || (!$actionWraps && $blockHeight <= $room && ($widest + $chevron) * $r <= $avail)) break;
 		}
 
 		$blockWidth = ($widest + $chevron) * $r;
@@ -357,9 +410,8 @@ final class Scene
 
 		if($front)
 		{
-			// Hang below the wordmark rather than floating mid-sky, as long as the rows stay above the horizon.
-			$logo = max(1, min(2 * $k + 1, (int)floor($avail / max(1, $this->measure('PHLAPPY PHANT')))));
-			$top = min(max($top, (int)floor($height * .11 + 16 * $logo + 24 * $k)), max(0, $sky - $blockHeight - 8 * $k));
+			// Hang just below the wordmark, never climbing into it.
+			$top = max($underLogo, min($top, $sky - $blockHeight - 4 * $k));
 		}
 
 		$x = (int)floor(($width - $blockWidth) / 2);
@@ -370,8 +422,7 @@ final class Scene
 		$labels = [];
 		$shadow = (float)$r;
 
-		if($front) $this->label($labels, $title, $width / 2, (float)$top, (float)$titleScale, 'center', self::INK);
-		else $this->shadowed($labels, $title, $width / 2, (float)$top, (float)$titleScale, 'center');
+		$this->shadowed($labels, $title, $width / 2, (float)$top, (float)$titleScale, 'center', $front ? self::MIST : self::CREAM);
 
 		$y = $top + $titleHeight;
 		$pad = 6 * $r;
@@ -392,15 +443,14 @@ final class Scene
 				if($blink) $this->label($labels, '>', (float)$x, (float)$y, (float)$r, 'left', self::CREAM);
 			}
 
-			$colour = $item['disabled'] ? self::TEAL : ($selected ? [1, 1, 1] : self::CREAM);
+			$colour = $item['disabled'] ? self::MIST : ($selected ? [1, 1, 1] : self::CREAM);
 			$textX = (float)($x + $chevron * $r);
 
 			foreach($lines as $n => $line)
 			{
 				$lineY = (float)($y + 13 * $n * $r);
 
-				if($item['disabled'] && $page === 'title') $this->label($labels, $line, $textX, $lineY, (float)$r, 'left', self::INK);
-				else $this->shadowed($labels, $line, $textX, $lineY, (float)$r, 'left', $colour);
+				$this->shadowed($labels, $line, $textX, $lineY, (float)$r, 'left', $colour);
 			}
 
 			$this->regions[] = [

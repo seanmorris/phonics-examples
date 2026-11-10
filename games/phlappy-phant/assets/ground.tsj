@@ -1,0 +1,12 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "name": "Phlappy Phant ground",
+  "tilewidth": 32,
+  "tileheight": 32,
+  "tilecount": 2,
+  "columns": 2,
+  "image": "ground.png",
+  "imagewidth": 64,
+  "imageheight": 32
+}

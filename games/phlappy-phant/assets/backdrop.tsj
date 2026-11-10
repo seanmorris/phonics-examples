@@ -1,0 +1,39 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "name": "Phlappy Phant backdrop",
+  "tilewidth": 160,
+  "tileheight": 160,
+  "tilecount": 2,
+  "columns": 1,
+  "image": "backdrop.png",
+  "imagewidth": 160,
+  "imageheight": 320,
+  "properties": [
+    {
+      "name": "phlappy.bands",
+      "type": "string",
+      "value": "0,72,80,88,130,160"
+    },
+    {
+      "name": "phlappy.parallax",
+      "type": "string",
+      "value": "0.08,0.16,0.24,0.45,0.7"
+    }
+  ],
+  "tiles": [
+    {
+      "id": 0,
+      "animation": [
+        {
+          "tileid": 0,
+          "duration": 400
+        },
+        {
+          "tileid": 1,
+          "duration": 400
+        }
+      ]
+    }
+  ]
+}

@@ -17,7 +17,19 @@
     },
     {
       "firstgid": 5,
-      "source": "../assets/tiles.tsj"
+      "source": "../assets/backdrop.tsj"
+    },
+    {
+      "firstgid": 7,
+      "source": "../assets/tower.tsj"
+    },
+    {
+      "firstgid": 11,
+      "source": "../assets/ground.tsj"
+    },
+    {
+      "firstgid": 13,
+      "source": "../assets/scenery.tsj"
     }
   ]
 }

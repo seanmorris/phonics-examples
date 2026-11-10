@@ -2,15 +2,15 @@
   "name": "@seanmorris/phlappy-phant",
   "php": {
     "files": [
+      "application.php",
       "autoload.php",
       "game.php",
-      "application.php",
-      "src/Barrel.php",
       "src/Input/InputSettings.php",
       "src/Input/PhantActions.php",
       "src/Random.php",
       "src/Render/Scene.php",
-      "src/Simulation.php"
+      "src/Simulation.php",
+      "src/Tower.php"
     ],
     "bootstrap": [
       "autoload.php"
@@ -33,18 +33,26 @@
   },
   "tiled": {
     "previews": [
+      "assets/backdrop.png",
       "assets/phant.png",
-      "assets/tiles.png"
+      "assets/scenery.png",
+      "assets/tower.png"
     ]
   },
   "preload": [
+    "assets/backdrop.png",
+    "assets/backdrop.tsj",
     "assets/bonk.wav",
     "assets/ding.wav",
     "assets/flap.wav",
+    "assets/ground.png",
+    "assets/ground.tsj",
     "assets/phant.png",
     "assets/phant.tsj",
-    "assets/tiles.png",
-    "assets/tiles.tsj"
+    "assets/scenery.png",
+    "assets/scenery.tsj",
+    "assets/tower.png",
+    "assets/tower.tsj"
   ],
   "application": {
     "entry": "application.php"
@@ -66,35 +74,47 @@
     ]
   },
   "assets": [
+    "assets/backdrop.png",
+    "assets/backdrop.tsj",
     "assets/bonk.wav",
     "assets/ding.wav",
     "assets/flap.wav",
+    "assets/ground.png",
+    "assets/ground.tsj",
     "assets/phant.png",
     "assets/phant.tsj",
-    "assets/tiles.png",
-    "assets/tiles.tsj",
+    "assets/scenery.png",
+    "assets/scenery.tsj",
+    "assets/tower.png",
+    "assets/tower.tsj",
     "worlds/phant.tmj",
     "worlds/phant.world"
   ],
   "integrity": {
     "application.php": "sha256-9xTYgiQ0/yC0YCdj53wOf/cFQry8U0tpvmBg3DR18oo=",
+    "assets/backdrop.png": "sha256-xNBzNMr+q3cKc76ItnG1+AhESRTQ0hREsqq5m+Zfrg0=",
+    "assets/backdrop.tsj": "sha256-mD6NT7n0ZcBcF/7h7/po/0wxGOF7r0JRGZFFbmHrR2Q=",
     "assets/bonk.wav": "sha256-8ZJIgRwXeUPmj8G4q87TBLyTJ0eI0sIsJSsrNmV42xk=",
     "assets/ding.wav": "sha256-QZcYdJ57hlWDmV3iewckrV6/a0Mhm1LDdmWpcAL1RD4=",
     "assets/flap.wav": "sha256-7tqPIJ1StAIfT/iYT2WEjaFYWIjPZM/OdJJjmkibEuE=",
+    "assets/ground.png": "sha256-pSdaKdVTX3zC2IBRAkTeUWcHdTAWAkCMFcQnffB7264=",
+    "assets/ground.tsj": "sha256-hlW93SrHWv1kef9gnm16H2ANxQV4EvaHZ9oyYElzKc8=",
     "assets/phant.png": "sha256-b11cQEvqzce8IwXZDcmBcjkfcPmGyEqUVvprC4DloCo=",
     "assets/phant.tsj": "sha256-aBLuw5GEH4/JNrpdMUDMj/A/oh60v4lEbzb5tjPCQww=",
-    "assets/tiles.png": "sha256-/H8MYJo0NsKkXOfjczyJ4nOa4epqvBeO5dYWHgH2zrg=",
-    "assets/tiles.tsj": "sha256-WHAM5CDjbJjwsw16jMuaMSpy3zyTAvKcg9oUIn3sXxM=",
+    "assets/scenery.png": "sha256-TRX5y68KVY1BIZ/6z8CPHBrKDjW9WRt6q91vCczZti4=",
+    "assets/scenery.tsj": "sha256-0GgQOWhSbzS7an4MyYGQPD0NZlHtxp+ZmN60VfQh7vU=",
+    "assets/tower.png": "sha256-W6POv6pxUlO1GTSfGAXErAAmzuW6s9Huis2v131mXww=",
+    "assets/tower.tsj": "sha256-nbuFfAFY6MAktz4aRVn1VG/qxl1SQ7RUtGeKbMEUeD4=",
     "autoload.php": "sha256-nI1YY9Kfwe086pFq06a8/3u5BaxBJmM/Hu2URHSSrlY=",
-    "browser/game.mjs": "sha256-K4wBCiEmcnqqas9X35XgdElb5T8i4RUif01HCImtpiw=",
-    "game.php": "sha256-MX4jjk6W59Q6jYY9xuMGo57szDkJmY9RE7yCmz2bXEw=",
-    "src/Barrel.php": "sha256-pZphRORDVyjkIFp21ixv9AVgyN3loHAODd9T34xxGYo=",
+    "browser/game.mjs": "sha256-t0d/oXeyPFzmanjw7S/7wK4wIvFMdn4ItmQyqYOxp9w=",
+    "game.php": "sha256-1cBaTDnE+sHdHRcBnX16xSPSrhKL7WJ5UNyzErxfclU=",
     "src/Input/InputSettings.php": "sha256-t+gFObzP4DD9hGQy6pgNTn6OmvGjPTacHQQFlhmTqPw=",
     "src/Input/PhantActions.php": "sha256-bW+3S4rcQjQglbFM/SFmhbEkE3pt/eukxZy+qH5NFU8=",
-    "src/Random.php": "sha256-K7C+O1PIMGau+sBBTtbtYY3jWj3mhtILARVJb+ClSFI=",
-    "src/Render/Scene.php": "sha256-oTnQsO/gDWBWSFY9ABPi406lNhQ3vdL+zcbpMFUd4yQ=",
-    "src/Simulation.php": "sha256-EjL3K1AU2mLU5ryv9LOZ55E0LO/LIN6EEqSXDGl5jSw=",
-    "worlds/phant.tmj": "sha256-26/Laqz0ftUzz0WEBaU0AbolO9RfWgGyDjNXxA3Kp8Y=",
+    "src/Random.php": "sha256-lfmC1hmTGMRnMnsbFGTyHOPdsZchUfrn0sJaCbgXZJM=",
+    "src/Render/Scene.php": "sha256-8GyyXWK/DRE1BjM5gKFKTjOxknBiIo4OFpA4MdVPvuU=",
+    "src/Simulation.php": "sha256-gqEShyNuKD9MiSTysbOMWBjLNC7SyFiUoosoobPJQPI=",
+    "src/Tower.php": "sha256-MhFFbLs6B4JkKZbb7zf3CvetjBB7MR65PTGMA5If//8=",
+    "worlds/phant.tmj": "sha256-3Dy5zXwVOPYMF5Hva+bLgP2puJOle7I6gO2adxl5CLY=",
     "worlds/phant.world": "sha256-GT3SuMsmPogieQR7k9iG95I6QZMH+R3c4AweR3TjNjs="
   }
 }

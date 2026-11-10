@@ -90,8 +90,8 @@ $titleItems = static function() use (&$startGame, $bindings): array {
 			'label' => 'How to play'
 			, 'children' => [
 				'flap' => ['label' => 'Tap / click / Space / A to flap.', 'disabled' => true]
-				, 'dodge' => ['label' => 'Slip between the DB silo barrels.', 'disabled' => true]
-				, 'night' => ['label' => 'Every ten barrels day turns to night.', 'disabled' => true]
+				, 'dodge' => ['label' => 'Slip between the towers.', 'disabled' => true]
+				, 'night' => ['label' => 'Every ten towers day turns to night.', 'disabled' => true]
 				, 'pause' => ['label' => 'Escape / P / Start pauses.', 'disabled' => true]
 			]
 		]
@@ -103,6 +103,7 @@ $titleItems = static function() use (&$startGame, $bindings): array {
 				, 'elephpant' => ['label' => 'elePHPant by Vincent Pontier', 'disabled' => true]
 				, 'vector' => ['label' => "Pixel art traced from Webysther's SVG", 'disabled' => true]
 				, 'art-licence' => ['label' => 'Sprite licence: GPL-2.0-or-later', 'disabled' => true]
+				, 'terrain' => ['label' => 'Terrain by GrafxKid (CC0)', 'disabled' => true]
 				, 'code-licence' => ['label' => 'Code licence: Apache-2.0', 'disabled' => true]
 			]
 		]
@@ -118,7 +119,7 @@ $setPage = static function(string $next) use (
 	{
 		'pause' => 'PAUSED'
 		, 'gameover' => 'BONK'
-		, default => 'DODGE THE BARRELS'
+		, default => 'DODGE THE TOWERS'
 	};
 
 	if($next === 'title') $items = $titleItems();
@@ -288,7 +289,7 @@ $engine->start(static function(
 	$font->theme = $engine->input->inputTheme;
 	$record = $best();
 	$scene->render($game, $menu, $page, $width, $height, $alpha, $uiTime, $record);
-	$next = $game->nextBarrel();
+	$next = $game->nextTower();
 
 	(vrzno_env('phantStatus'))(json_encode([
 		'page' => $page
@@ -301,7 +302,7 @@ $engine->start(static function(
 		, 'palette' => $game->palette
 		, 'y' => $game->y
 		, 'vy' => $game->vy
-		, 'barrels' => count($game->barrels)
+		, 'towers' => count($game->towers)
 		, 'nextGap' => $next ? [$next->x, $next->gapTop, $next->gap] : null
 		, 'scroll' => $game->scroll
 		, 'runId' => $runId

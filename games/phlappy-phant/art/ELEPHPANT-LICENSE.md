@@ -7,9 +7,9 @@ GNU General Public License, version 2 or (at your option) any later version.
 
 `art/elephpant.png` is pixel art traced from that vector; the frames in `assets/phant.png` and the elephant on
 `poster.png` are copied from it by `scripts/generate-phant-sprites.mjs`. They are
-distributed under the same GNU General Public License, version 2 or later, reproduced below. The rest of this
-package (code, the barrel, ground and cloud tiles, and the sounds) is original work under the package `LICENSE`
-(Apache-2.0).
+distributed under the same GNU General Public License, version 2 or later, reproduced below. The terrain art is
+GrafxKid's CC0 tiles (see `art/TERRAIN-LICENSE.md`); the rest of this package (code and sounds) is original work under
+the package `LICENSE` (Apache-2.0).
 
 ---
 

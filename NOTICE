@@ -36,3 +36,8 @@ Phlappy Phant elePHPant sprite (games/phlappy-phant)
   2016-04-23), GNU General Public License v2.0 or later. games/phlappy-phant/art/elephpant.svg, the sprite frames in
   games/phlappy-phant/assets/phant.png and games/phlappy-phant/poster.png are traced pixel art and its copies under that licence; see
   games/phlappy-phant/art/ELEPHPANT-LICENSE.md.
+
+Phlappy Phant terrain (games/phlappy-phant)
+  "Seasonal Platformer Tiles" by GrafxKid (https://opengameart.org/content/seasonal-platformer-tiles), CC0 1.0.
+  games/phlappy-phant/art/terrain.png, art/terrain-parallax.png and the backdrop, tower, ground and scenery tiles
+  cut from them; see games/phlappy-phant/art/TERRAIN-LICENSE.md.

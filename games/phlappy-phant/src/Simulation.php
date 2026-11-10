@@ -5,7 +5,7 @@ namespace PhlappyPhant;
 /**
  * Deterministic 60 Hz flap-and-dodge simulation in world space.
  *
- * The phant never moves horizontally: it sits at world x zero while barrels scroll toward it, so the simulation
+ * The phant never moves horizontally: it sits at world x zero while towers scroll toward it, so the simulation
  * depends on the logical height alone and any viewport width only changes how far ahead a player can see. The world
  * is 352 units tall (ground at 288 plus two ground rows), small enough that even a 1x desktop frame draws it at 2x.
  */
@@ -22,17 +22,21 @@ final class Simulation
 	public const GRAVITY = 1300;
 	public const FLAP_VY = -330;
 	public const MAX_FALL = 600;
-	public const BARREL_W = 52;
-	public const BARREL_SPACING = 170;
-	public const FIRST_BARREL_X = 420;
+	/** Tower width including its outline, matching the terrain sheet's 56-pixel tower. */
+	public const TOWER_W = 56;
+	public const TOWER_SPACING = 170;
+	public const FIRST_TOWER_X = 420;
 	public const LOOKAHEAD = 1200;
 	public const DESPAWN_X = -320;
 	public const SPEED_BASE = 120;
 	public const SPEED_PER_SCORE = 4;
 	public const SPEED_MAX = 200;
-	public const GAP_BASE = 132;
-	public const GAP_PER_SCORE = 1;
-	public const GAP_MIN = 100;
+	/** The terrain tiles are cut on an 8-unit grid, so every gap edge and tower height lands on it. */
+	public const GRID = 8;
+	public const GAP_BASE = 136;
+	/** The gap narrows one grid step every this many points. */
+	public const GAP_NARROW_EVERY = 8;
+	public const GAP_MIN = 104;
 	public const GAP_MARGIN = 32;
 	public const NIGHT_EVERY = 10;
 	public const DEAD_SETTLE = .6;
@@ -62,8 +66,8 @@ final class Simulation
 	public int $palette = 0;
 	/** Whether the dead phant has settled and the run may end. */
 	public bool $finished = false;
-	/** @var list<Barrel> */
-	public array $barrels = [];
+	/** @var list<Tower> */
+	public array $towers = [];
 	/** @var list<string> Events raised by the latest step: flap, score, bonk, or night. */
 	public array $events = [];
 	/** Whether the built-in tool-assisted player decides every flap; it never misses a gap. */
@@ -72,11 +76,13 @@ final class Simulation
 	private Random $random;
 	private float $deadTimer = 0;
 	private float $flappedAt = -1;
+	/** Tower pairs placed so far, numbering each for deterministic scenery. */
+	private int $spawned = 0;
 	/** @var list<array<int,list<array{float,float}>>> Safe sets for the next few steps of the tool-assisted player. */
 	private array $plan = [];
 
 	/**
-	 * Start a reproducible run with its first barrels already placed.
+	 * Start a reproducible run with its first towers already placed.
 	 *
 	 * @param int $seed Positive deterministic random seed.
 	 * @return void Equal seeds give equal gap positions.
@@ -90,7 +96,7 @@ final class Simulation
 	/**
 	 * Scroll speed for a score.
 	 *
-	 * @param int $score Barrels passed so far.
+	 * @param int $score Towers passed so far.
 	 * @return float Logical units per second.
 	 */
 	public static function speedFor(int $score): float
@@ -101,18 +107,18 @@ final class Simulation
 	/**
 	 * Gap height for a score.
 	 *
-	 * @param int $score Barrels passed so far.
+	 * @param int $score Towers passed so far.
 	 * @return float Logical units between the two stacks.
 	 */
 	public static function gapFor(int $score): float
 	{
-		return (float)max(self::GAP_MIN, self::GAP_BASE - self::GAP_PER_SCORE * $score);
+		return (float)max(self::GAP_MIN, self::GAP_BASE - self::GRID * intdiv($score, self::GAP_NARROW_EVERY));
 	}
 
 	/**
-	 * Palette for a score: day and night alternate every ten barrels.
+	 * Palette for a score: day and night alternate every ten towers.
 	 *
-	 * @param int $score Barrels passed so far.
+	 * @param int $score Towers passed so far.
 	 * @return int Zero for day, one for night.
 	 */
 	public static function paletteFor(int $score): int
@@ -139,7 +145,7 @@ final class Simulation
 	 * Advance one fixed step.
 	 *
 	 * @param bool $flap Whether a flap was pressed since the previous step.
-	 * @return void Updates poses, barrels, score, phase, and the step's events.
+	 * @return void Updates poses, towers, score, phase, and the step's events.
 	 */
 	public function step(bool $flap = false): void
 	{
@@ -148,7 +154,7 @@ final class Simulation
 
 		if($this->autopilot && $this->phase !== 'dead') $flap = $this->plannedFlap();
 
-		foreach($this->barrels as $barrel) $barrel->previousX = $barrel->x;
+		foreach($this->towers as $tower) $tower->previousX = $tower->x;
 
 		$this->age += self::STEP;
 
@@ -180,20 +186,20 @@ final class Simulation
 				? 1 : 0;
 			$speed = self::speedFor($this->score);
 
-			foreach($this->barrels as $barrel) $barrel->x -= $speed * self::STEP;
+			foreach($this->towers as $tower) $tower->x -= $speed * self::STEP;
 
 			$this->scroll += $speed * self::STEP;
 			$this->spawn();
-			$this->barrels = array_values(array_filter(
-				$this->barrels
-				, static fn(Barrel $barrel): bool => $barrel->x + self::BARREL_W >= self::DESPAWN_X
+			$this->towers = array_values(array_filter(
+				$this->towers
+				, static fn(Tower $tower): bool => $tower->x + self::TOWER_W >= self::DESPAWN_X
 			));
 
-			foreach($this->barrels as $barrel)
+			foreach($this->towers as $tower)
 			{
-				if($barrel->scored || $barrel->x + self::BARREL_W >= 0) continue;
+				if($tower->scored || $tower->x + self::TOWER_W >= 0) continue;
 
-				$barrel->scored = true;
+				$tower->scored = true;
 				$this->score++;
 				$this->events[] = 'score';
 				$palette = self::paletteFor($this->score);
@@ -235,7 +241,7 @@ final class Simulation
 	 * keeps the hitbox inside every gap and off the ground for the next two and a half seconds, with flaps no closer
 	 * together than a human could tap. That set is built backward from
 	 * the horizon over the velocity lattice (a flap always resets the velocity, so the velocity is just the number of
-	 * steps since the last flap), with the barrels advanced exactly as the run will advance them. Flapping as late as
+	 * steps since the last flap), with the towers advanced exactly as the run will advance them. Flapping as late as
 	 * possible keeps the flight low and smooth; the horizon always covers the entry into the next gap.
 	 *
 	 * @return bool True to flap this step.
@@ -265,7 +271,7 @@ final class Simulation
 	/**
 	 * Build the safe sets for the next few steps from a full backward pass over the horizon.
 	 *
-	 * The barrels only ever scroll, so rows near the present stay valid as the run advances; the planner keeps the
+	 * The towers only ever scroll, so rows near the present stay valid as the run advances; the planner keeps the
 	 * first few rows and rebuilds when they run out, which spreads the cost of the pass over several steps.
 	 *
 	 * @return list<array<int,list<array{float,float}>>> One row per upcoming step, each indexed by steps since a flap.
@@ -285,10 +291,10 @@ final class Simulation
 		$xs = [];
 		$scored = [];
 
-		foreach($this->barrels as $j => $barrel)
+		foreach($this->towers as $j => $tower)
 		{
-			$xs[$j] = $barrel->x;
-			$scored[$j] = $barrel->scored;
+			$xs[$j] = $tower->x;
+			$scored[$j] = $tower->scored;
 		}
 
 		$score = $this->score;
@@ -301,20 +307,20 @@ final class Simulation
 			$low = self::HITBOX_INSET_Y + 1.0;
 			$high = self::GROUND_Y - $boxHeight - 1.0;
 
-			foreach($this->barrels as $j => $barrel)
+			foreach($this->towers as $j => $tower)
 			{
 				$xs[$j] -= $speed;
 
-				if(!$scored[$j] && $xs[$j] + self::BARREL_W < 0)
+				if(!$scored[$j] && $xs[$j] + self::TOWER_W < 0)
 				{
 					$scored[$j] = true;
 					$score++;
 				}
 
-				if($xs[$j] >= $left + $boxWidth || $xs[$j] + self::BARREL_W <= $left) continue;
+				if($xs[$j] >= $left + $boxWidth || $xs[$j] + self::TOWER_W <= $left) continue;
 
-				$low = max($low, $barrel->gapTop + 1.0);
-				$high = min($high, $barrel->gapTop + $barrel->gap - $boxHeight - 1.0);
+				$low = max($low, $tower->gapTop + 1.0);
+				$high = min($high, $tower->gapTop + $tower->gap - $boxHeight - 1.0);
 			}
 
 			$allowed[$t] = $low <= $high ? [[$low, $high]] : [];
@@ -412,26 +418,31 @@ final class Simulation
 	/**
 	 * The next pair the phant has not passed, for status reporting.
 	 *
-	 * @return Barrel|null The nearest unscored barrel.
+	 * @return Tower|null The nearest unscored tower.
 	 */
-	public function nextBarrel(): ?Barrel
+	public function nextTower(): ?Tower
 	{
-		foreach($this->barrels as $barrel) if(!$barrel->scored) return $barrel;
+		foreach($this->towers as $tower) if(!$tower->scored) return $tower;
 
 		return null;
 	}
 
-	/** Place barrels until the lookahead distance is covered, each gap drawn from the seeded sequence. */
+	/** Place towers until the lookahead distance is covered, each gap drawn from the seeded sequence. */
 	private function spawn(): void
 	{
-		$last = $this->barrels ? end($this->barrels)->x : self::FIRST_BARREL_X - self::BARREL_SPACING;
+		$last = $this->towers ? end($this->towers)->x : self::FIRST_TOWER_X - self::TOWER_SPACING;
 
-		while($last + self::BARREL_SPACING <= self::LOOKAHEAD)
+		while($last + self::TOWER_SPACING <= self::LOOKAHEAD)
 		{
-			$last += self::BARREL_SPACING;
+			$last += self::TOWER_SPACING;
 			$gap = self::gapFor($this->score);
-			$range = (int)(self::GROUND_Y - $gap - 2 * self::GAP_MARGIN);
-			$this->barrels[] = new Barrel($last, self::GAP_MARGIN + $this->random->int($range + 1), $gap);
+			$steps = intdiv((int)(self::GROUND_Y - $gap - 2 * self::GAP_MARGIN), self::GRID);
+			$this->towers[] = new Tower(
+				$last
+				, self::GAP_MARGIN + self::GRID * $this->random->int($steps + 1)
+				, $gap
+				, $this->spawned++
+			);
 		}
 	}
 
@@ -442,10 +453,10 @@ final class Simulation
 
 		if($top + $height >= self::GROUND_Y) return true;
 
-		foreach($this->barrels as $barrel)
+		foreach($this->towers as $tower)
 		{
-			if($barrel->x >= $left + $width || $barrel->x + self::BARREL_W <= $left) continue;
-			if($top < $barrel->gapTop || $top + $height > $barrel->gapTop + $barrel->gap) return true;
+			if($tower->x >= $left + $width || $tower->x + self::TOWER_W <= $left) continue;
+			if($top < $tower->gapTop || $top + $height > $tower->gapTop + $tower->gap) return true;
 		}
 
 		return false;

@@ -1,7 +1,9 @@
 // Generates games/phlappy-phant's pixel art and sounds: the elePHPant frames copied from the hand-pixelled sheet
-// art/elephpant.png (see art/ELEPHPANT-LICENSE.md), the procedural DB-silo barrel, ground and cloud tiles, the two
-// tileset descriptions, three synthesised PCM sounds and the catalog poster. Every byte is deterministic so
-// `--check` can verify the committed output; `--preview DIR` also writes nearest-neighbour enlargements.
+// art/elephpant.png (see art/ELEPHPANT-LICENSE.md); the backdrop, tower, ground and scenery tilesets cut from
+// GrafxKid's CC0 terrain sheet (art/terrain.png, with the parallax band mask and touched-up scenery in
+// art/terrain-parallax.png; see art/TERRAIN-LICENSE.md); the tileset descriptions; three synthesised PCM sounds and the
+// catalog poster. Every byte is deterministic so `--check` can verify the committed output; `--preview DIR` also
+// writes nearest-neighbour enlargements.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {PNG} from 'pngjs';
@@ -13,24 +15,31 @@ const previewIndex = process.argv.indexOf('--preview');
 const previewDirectory = previewIndex > 0 ? process.argv[previewIndex + 1] : null;
 const generated = new Map;
 
-// The tiles use these colours: steel teal barrels with pale rims over a cream-and-tan ground, with the elephant's own
-// ink and blues for outlines and clouds.
+// The title shares the elephant's ink and the menus' cream.
 const palette = {
 	ink: [0x36, 0x32, 0x54]
-	, light: [0xa6, 0xbd, 0xe6]
-	, white: [0xff, 0xff, 0xff]
-	, teal: [0x2f, 0x6f, 0x73]
-	, tealShade: [0x1f, 0x4f, 0x54]
-	, rim: [0xbf, 0xe3, 0xdf]
 	, cream: [0xf1, 0xe4, 0xbf]
-	, tan: [0xc9, 0xa9, 0x6a]
 };
 
-// Barrels, ground and clouds share one 56x32 grid. The elephant sheet holds two rows of two 64x52 frames (wing
-// folded, wing spread): the top row faces right for flight, the bottom row faces left for poses that would otherwise
-// mirror the sprite and its lettering. Both rows ship as tiles 1 to 4.
-const TILE_W = 56, TILE_H = 32, TILE_COLUMNS = 5, TILE_COUNT = 5;
+// The elephant sheet holds two rows of two 64x52 frames (wing folded, wing spread): the top row faces right for
+// flight, the bottom row faces left for poses that would otherwise mirror the sprite and its lettering.
 const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2, PHANT_ROWS = 2;
+
+// The terrain sheets are 224 pixels square on a 32-pixel grid. The left five columns and five rows are the backdrop;
+// the two rows under it are animation frames for the backdrop's fourth row (the river). The right two columns hold
+// the foreground: a tree, a shrub and a fence, then the tower (cap row, then walls repeating every 16 rows), the row
+// where a tower meets the ground, and the ground with its grass top beside plain dirt. The parallax copy paints each
+// backdrop band in a flat colour and carries the latest scenery, whose bottoms sit on the 8-pixel grid.
+const SHEET = 224, BACKDROP = 160, OVERLAY_ROW = 96, OVERLAY_H = 32, FG_X = 160, FG_W = 64;
+const TOWER_SLICES = {cap: 120, body0: 128, body1: 136, base: 160}, SLICE_H = 8;
+const GROUND = {grass: [160, 192], dirt: [192, 192]}, GROUND_TILE = 32;
+// Scenery boxes are on the 8-pixel grid so a piece can stand on the ground or a tower top; each ships bottom-left
+// aligned in a 48x32 cell.
+const SCENERY = [['tree', 160, 24, 32, 32], ['shrub', 200, 40, 24, 16], ['fence', 168, 80, 48, 8]];
+const SCENERY_W = 48, SCENERY_H = 32;
+// Farther bands drift slower; the ground and towers move at the full scroll speed.
+const PARALLAX = [.08, .16, .24, .45, .7];
+const RIVER_FRAME_MS = 400;
 
 /** A simple RGBA raster with out-of-range writes ignored. */
 class Raster
@@ -84,32 +93,6 @@ class Raster
 		}
 	}
 
-	mirrored()
-	{
-		const copy = new Raster(this.width, this.height);
-
-		for(let y = 0; y < this.height; y++) for(let x = 0; x < this.width; x++)
-		{
-			const [r, g, b, a] = this.get(x, y);
-			copy.put(this.width - 1 - x, y, [r, g, b], a);
-		}
-
-		return copy;
-	}
-
-	flippedVertically()
-	{
-		const copy = new Raster(this.width, this.height);
-
-		for(let y = 0; y < this.height; y++) for(let x = 0; x < this.width; x++)
-		{
-			const [r, g, b, a] = this.get(x, y);
-			copy.put(x, this.height - 1 - y, [r, g, b], a);
-		}
-
-		return copy;
-	}
-
 	png()
 	{
 		const image = new PNG({width: this.width, height: this.height});
@@ -147,96 +130,52 @@ async function phantFrames()
 	return frames;
 }
 
-/** Colour of one row of the stacked barrel ring; the cap reuses rows 16 to 31 so stacks join seamlessly. */
-function ringPixel(x, y)
+/** Read a terrain sheet and check its size. */
+async function sheet(name)
 {
-	if(x < 2 || x > 53) return null;
-	if(x === 2 || x === 53) return palette.ink;
-	if(y < 2) return palette.rim;
-	if(y > 28) return palette.tealShade;
-	if(x >= 6 && x <= 7) return palette.rim;
-	if(x >= 47 && x <= 50) return palette.tealShade;
+	const image = PNG.sync.read(await fs.readFile(new URL(`art/${name}`, root)));
 
-	return palette.teal;
+	if(image.width !== SHEET || image.height !== SHEET)
+		throw Error(`art/${name} must be ${SHEET}x${SHEET}, found ${image.width}x${image.height}`);
+
+	const raster = new Raster(image.width, image.height);
+	raster.data.set(image.data);
+
+	return raster;
 }
 
-function barrelCap()
+/** Copy a rectangle of one raster into another at a destination corner, alpha included. */
+function copy(source, [sx, sy, width, height], target, dx, dy)
 {
-	const tile = new Raster(TILE_W, TILE_H);
-	const inset = [6, 3, 1, 0];
-
-	for(let y = 0; y < 16; y++)
+	for(let y = 0; y < height; y++) for(let x = 0; x < width; x++)
 	{
-		const left = inset[Math.min(y, 3)], right = TILE_W - 1 - left;
+		const [r, g, b, a] = source.get(sx + x, sy + y);
 
-		for(let x = left; x <= right; x++)
-		{
-			let colour = palette.teal;
-
-			if(y === 0 || x === left || x === right || y >= 14) colour = palette.ink;
-			else if(y <= 5) colour = palette.rim;
-			else if(x >= 6 && x <= 8) colour = palette.rim;
-			else if(x >= 46 && x <= 50) colour = palette.tealShade;
-
-			tile.put(x, y, colour);
-		}
+		if(a) target.put(dx + x, dy + y, [r, g, b], a);
 	}
-
-	for(let y = 16; y < TILE_H; y++) for(let x = 0; x < TILE_W; x++)
-	{
-		const colour = ringPixel(x, y);
-
-		if(colour) tile.put(x, y, colour);
-	}
-
-	return tile;
 }
 
-function barrelRing()
+/** Read the band edges from the mask: each band is a run of rows painted one flat colour. */
+function bands(mask)
 {
-	const tile = new Raster(TILE_W, TILE_H);
+	const key = y => {
+		const first = mask.get(0, y).join();
 
-	for(let y = 0; y < TILE_H; y++) for(let x = 0; x < TILE_W; x++)
-	{
-		const colour = ringPixel(x, y);
+		for(let x = 1; x < BACKDROP; x++) if(mask.get(x, y).join() !== first)
+			throw Error(`art/terrain-parallax.png backdrop row ${y} is not one flat colour`);
 
-		if(colour) tile.put(x, y, colour);
-	}
+		return first;
+	};
+	const edges = [0];
 
-	return tile;
-}
+	for(let y = 1; y < BACKDROP; y++) if(key(y) !== key(y - 1)) edges.push(y);
 
-function ground()
-{
-	const tile = new Raster(TILE_W, TILE_H);
+	edges.push(BACKDROP);
 
-	for(let y = 0; y < TILE_H; y++) for(let x = 0; x < TILE_W; x++)
-	{
-		let colour = palette.tan;
+	if(edges.length - 1 !== PARALLAX.length)
+		throw Error(`The parallax mask has ${edges.length - 1} bands but ${PARALLAX.length} rates are set`);
 
-		if(y < 2) colour = palette.ink;
-		else if(y < 8) colour = y === 5 && x % 14 < 6 ? palette.tan : palette.cream;
-		else if((x * 7 + y * 3) % 23 === 0) colour = palette.tealShade;
-
-		tile.put(x, y, colour);
-	}
-
-	return tile;
-}
-
-function cloud()
-{
-	const tile = new Raster(TILE_W, TILE_H);
-	const lobes = [[16, 18, 10], [30, 13, 12], [43, 19, 9], [28, 22, 8]];
-
-	for(let y = 0; y < TILE_H; y++) for(let x = 0; x < TILE_W; x++)
-	{
-		const inside = lobes.some(([cx, cy, radius]) => (x - cx) ** 2 + ((y - cy) * 1.3) ** 2 <= radius ** 2);
-
-		if(inside) tile.put(x, y, y >= 22 ? palette.light : palette.white);
-	}
-
-	return tile;
+	return edges;
 }
 
 /** Deterministic 16-bit mono PCM at 22050 Hz from a sample function of seconds. */
@@ -325,13 +264,32 @@ async function title(target, text, x, y, scale, colour = palette.ink)
 }
 
 const frames = await phantFrames();
-const cap = barrelCap(), ring = barrelRing(), bottom = cap.flippedVertically(), soil = ground(), puff = cloud();
+const terrain = await sheet('terrain.png'), mask = await sheet('terrain-parallax.png');
 const phantSheet = new Raster(PHANT_W * PHANT_FRAMES, PHANT_H * PHANT_ROWS);
 frames.forEach((frame, index) => phantSheet.blit(frame, (index % PHANT_FRAMES) * PHANT_W, Math.floor(index / PHANT_FRAMES) * PHANT_H));
-const tileSheet = new Raster(TILE_W * TILE_COLUMNS, TILE_H);
-[cap, ring, bottom, soil, puff].forEach((tile, index) => tileSheet.blit(tile, index * TILE_W, 0));
 
-const tileset = (name, image, width, height, columns, count, sheet) => Buffer.from(JSON.stringify({
+// Backdrop: two copies of the 160x160 block, each with one river frame laid over the fourth row; the tile animation
+// swaps them and the renderer crops one band at a time.
+const edges = bands(mask);
+const backdrop = new Raster(BACKDROP, BACKDROP * 2);
+
+for(const frame of [0, 1])
+{
+	copy(terrain, [0, 0, BACKDROP, BACKDROP], backdrop, 0, frame * BACKDROP);
+	copy(terrain, [0, BACKDROP + frame * OVERLAY_H, BACKDROP, OVERLAY_H], backdrop, 0, frame * BACKDROP + OVERLAY_ROW);
+}
+
+// Towers: 64x8 slices of the foreground column (the tower is 56 wide with 4 clear pixels each side).
+const towerSheet = new Raster(FG_W, SLICE_H * 4);
+Object.values(TOWER_SLICES).forEach((y, index) => copy(mask, [FG_X, y, FG_W, SLICE_H], towerSheet, 0, index * SLICE_H));
+
+const groundSheet = new Raster(GROUND_TILE * 2, GROUND_TILE);
+Object.values(GROUND).forEach(([x, y], index) => copy(mask, [x, y, GROUND_TILE, GROUND_TILE], groundSheet, index * GROUND_TILE, 0));
+
+const scenerySheet = new Raster(SCENERY_W * SCENERY.length, SCENERY_H);
+SCENERY.forEach(([, x, y, width, height], index) => copy(mask, [x, y, width, height], scenerySheet, index * SCENERY_W, SCENERY_H - height));
+
+const tileset = (name, image, width, height, columns, count, sheet, extra = {}) => Buffer.from(JSON.stringify({
 	type: 'tileset'
 	, version: '1.10'
 	, name
@@ -342,30 +300,68 @@ const tileset = (name, image, width, height, columns, count, sheet) => Buffer.fr
 	, image
 	, imagewidth: sheet.width
 	, imageheight: sheet.height
+	, ...extra
 }, null, 2) + '\n');
 
 generated.set('assets/phant.png', phantSheet.png());
 generated.set('assets/phant.tsj', tileset('Phlappy Phant elephant', 'phant.png', PHANT_W, PHANT_H, PHANT_FRAMES, PHANT_FRAMES * PHANT_ROWS, phantSheet));
-generated.set('assets/tiles.png', tileSheet.png());
-generated.set('assets/tiles.tsj', tileset('Phlappy Phant tiles', 'tiles.png', TILE_W, TILE_H, TILE_COLUMNS, TILE_COUNT, tileSheet));
+generated.set('assets/backdrop.png', backdrop.png());
+generated.set('assets/backdrop.tsj', tileset('Phlappy Phant backdrop', 'backdrop.png', BACKDROP, BACKDROP, 1, 2, backdrop, {
+	properties: [
+		{name: 'phlappy.bands', type: 'string', value: edges.join(',')}
+		, {name: 'phlappy.parallax', type: 'string', value: PARALLAX.join(',')}
+	]
+	, tiles: [{id: 0, animation: [{tileid: 0, duration: RIVER_FRAME_MS}, {tileid: 1, duration: RIVER_FRAME_MS}]}]
+}));
+generated.set('assets/tower.png', towerSheet.png());
+generated.set('assets/tower.tsj', tileset('Phlappy Phant tower', 'tower.png', FG_W, SLICE_H, 1, 4, towerSheet));
+generated.set('assets/ground.png', groundSheet.png());
+generated.set('assets/ground.tsj', tileset('Phlappy Phant ground', 'ground.png', GROUND_TILE, GROUND_TILE, 2, 2, groundSheet));
+generated.set('assets/scenery.png', scenerySheet.png());
+generated.set('assets/scenery.tsj', tileset('Phlappy Phant scenery', 'scenery.png', SCENERY_W, SCENERY_H, SCENERY.length, SCENERY.length, scenerySheet, {
+	properties: [{name: 'phlappy.widths', type: 'string', value: SCENERY.map(([, , , width]) => width).join(',')}]
+}));
 generated.set('assets/flap.wav', flapSound());
 generated.set('assets/ding.wav', dingSound());
 generated.set('assets/bonk.wav', bonkSound());
 
-// Poster: a daytime scene at four times pixel scale with the title set in the engine font.
+// Poster: a daytime scene at four times pixel scale, world rows 0 to 180, ground at 150, title in the engine font.
+const P = 4, groundY = 150;
 const poster = new Raster(1280, 720);
-poster.fill(0, 0, 1280, 720, [0x87, 0xc7, 0xeb]);
-for(const [x, y] of [[90, 90], [420, 150], [760, 70], [1080, 170], [300, 260]]) poster.blit(puff, x, y, 4);
-poster.fill(0, 560, 1280, 32, palette.cream);
-for(let x = 0; x < 1280; x += TILE_W * 4) poster.blit(soil, x, 592, 4);
-// One full pair at the right edge and a ground-only stack mid-frame leave the sky clear for the title.
-for(const [x, gapTop, gap] of [[1036, 260, 180], [586, -40, 300]])
-{
-	for(let y = gapTop - TILE_H * 4; y > -TILE_H * 4; y -= TILE_H * 4) poster.blit(y === gapTop - TILE_H * 4 ? bottom : ring, x, y, 4);
-	for(let y = gapTop + gap; y < 592; y += TILE_H * 4) poster.blit(y === gapTop + gap ? cap : ring, x, y, 4);
-}
-poster.blit(frames[1], 60, 250, 6);
-// The wordmark gets the in-game treatment: an ink shadow under a cream fill, so it reads over the barrels.
+poster.fill(0, 0, 1280, 720, [0x48, 0x66, 0xc5]);
+const slice = (source, region, wx, wy, flip = false) => {
+	const [sx, sy, width, height] = region;
+
+	for(let y = 0; y < height; y++) for(let x = 0; x < width; x++)
+	{
+		const [r, g, b, a] = source.get(sx + x, sy + (flip ? height - 1 - y : y));
+
+		if(a >= 128) poster.fill((wx + x) * P, (wy + y) * P, P, P, [r, g, b]);
+	}
+};
+for(let x = 0; x < 320; x += BACKDROP) slice(backdrop, [0, 0, BACKDROP, BACKDROP], x, groundY - BACKDROP);
+for(let x = 0; x < 320; x += GROUND_TILE) slice(groundSheet, [0, 0, GROUND_TILE, GROUND_TILE], x, groundY);
+const tower = (x, gapTop, gap) => {
+	const at = name => [0, Object.keys(TOWER_SLICES).indexOf(name) * SLICE_H, FG_W, SLICE_H];
+
+	if(gapTop !== null)
+	{
+		slice(towerSheet, at('cap'), x - 4, gapTop - SLICE_H, true);
+		for(let y = gapTop - 2 * SLICE_H, n = 0; y > -SLICE_H; y -= SLICE_H, n++) slice(towerSheet, at(n % 2 ? 'body1' : 'body0'), x - 4, y, true);
+	}
+
+	const top = (gapTop ?? 0) + gap;
+	slice(towerSheet, at('cap'), x - 4, top);
+	for(let y = top + SLICE_H, n = 0; y < groundY; y += SLICE_H, n++) slice(towerSheet, at(n % 2 ? 'body1' : 'body0'), x - 4, y);
+	slice(towerSheet, at('base'), x - 4, groundY);
+};
+// A full pair at the right, a ground tower mid-frame, and scenery between them; the sky stays clear for the title.
+tower(248, 56, 64);
+tower(132, null, 104);
+slice(scenerySheet, [0, 0, SCENERY_W, SCENERY_H], 200, groundY - SCENERY_H);
+slice(scenerySheet, [SCENERY_W, 0, SCENERY_W, SCENERY_H], 92, groundY - SCENERY_H);
+poster.blit(frames[1], 40, 240, 6);
+// The wordmark gets the in-game treatment: an ink shadow under a cream fill.
 const width = await title(null, 'PHLAPPY PHANT', 0, 48, 6);
 await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2) + 6, 54, 6, palette.ink);
 await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2), 48, 6, palette.cream);
@@ -374,12 +370,17 @@ generated.set('poster.png', poster.png());
 if(previewDirectory)
 {
 	await fs.mkdir(previewDirectory, {recursive: true});
-	const big = new Raster(tileSheet.width * 8, tileSheet.height * 8);
-	big.fill(0, 0, big.width, big.height, [0xff, 0xdd, 0xee]);
-	big.blit(tileSheet, 0, 0, 8);
-	await fs.writeFile(path.join(previewDirectory, 'tiles-8x.png'), big.png());
+
+	for(const [name, raster] of [['backdrop', backdrop], ['tower', towerSheet], ['ground', groundSheet], ['scenery', scenerySheet]])
+	{
+		const big = new Raster(raster.width * 4, raster.height * 4);
+		big.fill(0, 0, big.width, big.height, [0xff, 0xdd, 0xee]);
+		big.blit(raster, 0, 0, 4);
+		await fs.writeFile(path.join(previewDirectory, `${name}-4x.png`), big.png());
+	}
+
 	const closeup = new Raster(PHANT_W * 12 * PHANT_FRAMES + 16, PHANT_H * 12 * PHANT_ROWS + 16);
-	closeup.fill(0, 0, closeup.width, closeup.height, [0x87, 0xc7, 0xeb]);
+	closeup.fill(0, 0, closeup.width, closeup.height, [0x48, 0x66, 0xc5]);
 	frames.forEach((frame, index) => closeup.blit(frame, (index % PHANT_FRAMES) * (PHANT_W * 12 + 16), Math.floor(index / PHANT_FRAMES) * (PHANT_H * 12 + 16), 12));
 	await fs.writeFile(path.join(previewDirectory, 'phant-12x.png'), closeup.png());
 	await fs.writeFile(path.join(previewDirectory, 'poster.png'), poster.png());

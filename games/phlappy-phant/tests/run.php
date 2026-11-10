@@ -4,7 +4,7 @@ require dirname(__DIR__, 3) . '/autoload.php';
 require dirname(__DIR__) . '/autoload.php';
 
 use Phonics\Input\Source;
-use PhlappyPhant\Barrel;
+use PhlappyPhant\Tower;
 use PhlappyPhant\Input\InputSettings;
 use PhlappyPhant\Input\PhantActions;
 use PhlappyPhant\Random;
@@ -30,7 +30,7 @@ for($i = 0; $i < 120; $i++) $idle->step();
 check($idle->phase === 'ready', 'the phant waits for the first flap');
 check(abs($idle->y - Simulation::PHANT_START_Y) <= 6.0001, 'the idle bob stays within six units of the start');
 check($idle->scroll > 0, 'the ground scrolls while waiting');
-check($idle->score === 0 && $idle->barrels[0]->x === (float)Simulation::FIRST_BARREL_X, 'barrels wait too');
+check($idle->score === 0 && $idle->towers[0]->x === (float)Simulation::FIRST_TOWER_X, 'towers wait too');
 
 $idle->step(true);
 check($idle->phase === 'playing', 'the first flap starts the run');
@@ -65,40 +65,43 @@ check($clamp->vy <= Simulation::MAX_FALL, 'falling speed is clamped');
 $a = new Simulation(7);
 $b = new Simulation(7);
 $c = new Simulation(8);
-$gaps = static fn(Simulation $game): array => array_map(static fn(Barrel $barrel): float => $barrel->gapTop, $game->barrels);
+$gaps = static fn(Simulation $game): array => array_map(static fn(Tower $tower): float => $tower->gapTop, $game->towers);
 check($gaps($a) === $gaps($b), 'equal seeds place equal gaps');
 check($gaps($a) !== $gaps($c), 'different seeds place different gaps');
-check(count($a->barrels) >= 4, 'barrels are placed up to the lookahead');
+check(count($a->towers) >= 4, 'towers are placed up to the lookahead');
 
-foreach($a->barrels as $barrel)
+foreach($a->towers as $tower)
 {
-	check($barrel->gapTop >= Simulation::GAP_MARGIN, 'gap keeps clear of the ceiling');
-	check($barrel->gapTop + $barrel->gap <= Simulation::GROUND_Y - Simulation::GAP_MARGIN, 'gap keeps clear of the ground');
+	check($tower->gapTop >= Simulation::GAP_MARGIN, 'gap keeps clear of the ceiling');
+	check($tower->gapTop + $tower->gap <= Simulation::GROUND_Y - Simulation::GAP_MARGIN, 'gap keeps clear of the ground');
+	check(fmod($tower->gapTop, Simulation::GRID) === 0.0 && fmod($tower->gap, Simulation::GRID) === 0.0, 'gap edges sit on the tile grid');
 }
+
+check(array_map(static fn(Tower $tower): int => $tower->index, $a->towers) === range(0, count($a->towers) - 1), 'tower pairs are numbered in order');
 
 $scoring = new Simulation(3);
 $scoring->step(true);
-$scoring->barrels[0]->x = -Simulation::BARREL_W + 1;
-$scoring->barrels[0]->gapTop = 0;
-$scoring->barrels[0]->gap = Simulation::GROUND_Y;
+$scoring->towers[0]->x = -Simulation::TOWER_W + 1;
+$scoring->towers[0]->gapTop = 0;
+$scoring->towers[0]->gap = Simulation::GROUND_Y;
 $scoring->step();
-check($scoring->score === 1 && in_array('score', $scoring->events, true), 'passing a barrel scores once');
+check($scoring->score === 1 && in_array('score', $scoring->events, true), 'passing a tower scores once');
 $scoring->step();
-check($scoring->score === 1, 'a passed barrel does not score again');
-check(Simulation::paletteFor(9) === 0 && Simulation::paletteFor(10) === 1 && Simulation::paletteFor(20) === 0, 'day and night alternate every ten barrels');
+check($scoring->score === 1, 'a passed tower does not score again');
+check(Simulation::paletteFor(9) === 0 && Simulation::paletteFor(10) === 1 && Simulation::paletteFor(20) === 0, 'day and night alternate every ten towers');
 check(Simulation::speedFor(0) === 120.0 && Simulation::speedFor(100) === 200.0, 'speed ramps to its cap');
-check(Simulation::gapFor(0) === 132.0 && Simulation::gapFor(50) === 100.0, 'gaps shrink to their floor');
+check(Simulation::gapFor(0) === 136.0 && Simulation::gapFor(8) === 128.0 && Simulation::gapFor(50) === 104.0, 'gaps shrink a grid step at a time to their floor');
 
 $wall = new Simulation(4);
 $wall->step(true);
-$wall->barrels = [new Barrel(0, 0, 10)];
+$wall->towers = [new Tower(0, 0, 10)];
 $wall->step();
 check($wall->phase === 'dead', 'a stack across the phant kills it');
 
 $through = new Simulation(4);
 $through->step(true);
 [$left, $top, $width, $height] = $through->hitbox();
-$through->barrels = [new Barrel(0, $top - 40, $height + 80)];
+$through->towers = [new Tower(0, $top - 40, $height + 80)];
 $through->step();
 check($through->phase === 'playing', 'a gap around the hitbox lets the phant through');
 check($through->hitbox()[2] === 48.0 && $through->hitbox()[3] === 36.0, 'the hitbox is inset from the sprite');
