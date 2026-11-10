@@ -404,7 +404,7 @@ test('controller navigates the menu, selects discards, draws, and toggles the ga
 	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('menu:continue');
 	await padPulse(page,[0]);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
-	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('card:0');
+	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('action:draw');
 
 	// An offline table is saved, so Start returns to the title without a confirmation.
 	await padPulse(page,[9]);
@@ -413,15 +413,19 @@ test('controller navigates the menu, selects discards, draws, and toggles the ga
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
 
 	const before=await state(canvas);
-	await padPulse(page,[15]);
-	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('card:1');
+	await padPulse(page,[12]);
+	await expect.poll(async()=>/^card:\d$/.test((await state(canvas)).ui.controllerFocus?.id??'')).toBe(true);
+	const cardIndex=Number((await state(canvas)).ui.controllerFocus.id.slice(5));
 	await padPulse(page,[0]);
-	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([before.players[0].cards[1]]);
+	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([before.players[0].cards[cardIndex]]);
 	await padPulse(page,[13]);
-	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('action:clear');
-	await padPulse(page,[15]);
+	if((await state(canvas)).ui.controllerFocus?.id==='action:clear')await padPulse(page,[15]);
 	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('action:draw');
 	await padPulse(page,[0]);
+	await expect.poll(async()=>{
+		const focus=(await state(canvas)).ui.controllerFocus;
+		return focus?.id==='table:waiting'&&focus.rect===undefined;
+	}).toBe(true);
 	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
 });
 

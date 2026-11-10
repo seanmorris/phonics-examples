@@ -123,7 +123,7 @@
     "src/Ui/Layout.php": "sha256-TNpW1T6VoZV6Uzbu8CHYf+D366gA13BSqz+7Bff3vDE=",
     "src/Ui/Motion.php": "sha256-1G2+P1ZTqa/SQaay3iRt/o6pzNxuys/BjOrrk5rC2uM=",
     "src/Ui/Painter.php": "sha256-zl3doMlxak2FZgjfEJgMXin+KnnopxO0+NDxzJ+nXNA=",
-    "src/Ui/Presenter.php": "sha256-qasIZN+XRKV2U2z6SXTyZb89xxkjUppysGiTIWj1ClM=",
+    "src/Ui/Presenter.php": "sha256-TatnUkiOX3TVwFjyvIujsdy2zwyj1xzYuLQvwi/CF+I=",
     "src/Ui/RoundHistory.php": "sha256-jx7NY8otLquaWLWt95AGepSGvEtn9nHZsjGdrGXZ6uQ=",
     "src/WildCards.php": "sha256-xr3nuIPic3i+qXdKbOwdma7zRMSFMKLFpOJXwmqFkr8="
   }

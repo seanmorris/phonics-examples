@@ -95,8 +95,10 @@ final class Presenter
 	private int $fileRevision = -1;
 	private string $fileNotice = '';
 	private float $fileNoticeElapsed = 0;
-	/** Stable controller target ID. The rectangle is always resolved from current layout state. */
+	/** Stable controller target ID; visible targets resolve their rectangle from current layout state. */
 	private ?string $controllerFocus = null;
+	/** A neutral table focus was active while no local action could be taken. */
+	private bool $controllerAwaitingTurn = false;
 	/** Held controller actions and their next navigation repeat times. */
 	private array $controllerHeld = [], $controllerNext = [];
 
@@ -465,21 +467,48 @@ final class Presenter
 		return $targets;
 	}
 
-	/** Targets which can receive visible controller focus; broad click-to-dismiss regions are deliberately omitted. */
+	/** Whether table focus should rest neutrally while no local game action can be taken. */
+	private function controllerWaiting(): bool
+	{
+		if(($this->view['screen'] ?? '') !== 'table' || $this->modal()) return false;
+		if($this->locked()) return true;
+		foreach($this->layout()->actions($this->view, $this->controlState()) as $button)
+		if($button['intent'] !== null) return false;
+		return true;
+	}
+
+	/** Controller targets; broad click-to-dismiss regions are deliberately omitted. */
 	private function controllerTargets(): array
 	{
-		return array_values(array_filter($this->clickTargets(), static fn(array $target): bool => isset($target['id']) && empty($target['disabled'])));
+		$targets = array_values(array_filter($this->clickTargets(), static fn(array $target): bool => isset($target['id']) && empty($target['disabled'])));
+		if(!$this->controllerWaiting()) return $targets;
+		// Keep the menu reachable by moving Up, but do not let an old action, draw control or bet stepper retain focus
+		// after its turn. The zero-size centre target is navigation geometry only and never paints or accepts clicks.
+		$targets = array_values(array_filter($targets, static fn(array $target): bool => str_starts_with($target['id'], 'top:')));
+		$layout = $this->layout();
+		$targets[] = ['id'=>'table:waiting', 'rect'=>[$layout->width()/2,$layout->height()/2,0,0], 'hidden'=>true];
+		return $targets;
 	}
 
 	/** @param list<array<string,mixed>> $targets */
 	private function ensureControllerFocus(array $targets): void
 	{
+		$waiting = false;
+		foreach($targets as $target) if($target['id'] === 'table:waiting') { $waiting = true; break; }
+		if($waiting) $this->controllerAwaitingTurn = true;
+		elseif($this->controllerAwaitingTurn && ($this->view['screen'] ?? '') === 'table' && !$this->modal())
+		{
+			// A turn began while the neutral target (or a menu heading reached from it) held focus. Choose this
+			// turn's affirmative action once; subsequent navigation within the turn remains undisturbed.
+			$this->controllerFocus = null;
+			$this->controllerAwaitingTurn = false;
+		}
 		foreach($targets as $target) if($target['id'] === $this->controllerFocus) return;
 		$preferences = $this->confirmDialog !== null ? ['confirm:cancel','confirm:leave']
 			: ($this->infoDialog !== null ? ['info:ok','info:more']
 			: ($this->topMenu !== null ? ['top-item:new','top-item:game-settings','top-item:odds']
-			: (!empty($this->view['legalActions']['draw']) ? ['card:0']
-			: ['action:call','action:check','action:pass','action:draw','action:next','action:deal','setup:start','wild:none','custom-wild:0','settings:look'])));
+			: ['table:waiting','action:check','action:call','action:pass','action:draw','action:next','action:deal',
+				'action:bet','action:fold','setup:start','wild:none','custom-wild:0','settings:look']));
 		$next = null;
 		foreach($preferences as $id) foreach($targets as $target) if($target['id'] === $id) { $next = $id; break 2; }
 		$next ??= $targets[0]['id'] ?? null;
@@ -1082,7 +1111,7 @@ final class Presenter
 		$targets = $this->controllerTargets();
 		$this->ensureControllerFocus($targets);
 		foreach($targets as $target) if($target['id'] === $this->controllerFocus)
-		return ['id' => $target['id'], 'rect' => $target['rect']];
+		return !empty($target['hidden']) ? ['id' => $target['id']] : ['id' => $target['id'], 'rect' => $target['rect']];
 		return null;
 	}
 
