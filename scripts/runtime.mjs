@@ -8,6 +8,18 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const engineEntry = fileURLToPath(import.meta.resolve('@seanmorris/phonics'));
 export const engineRoot = path.dirname(path.dirname(engineEntry));
 
+/** Reject SDL packages built before the browser controller-rumble port landed. */
+async function requireControllerRumble(directory)
+{
+	const manifest = JSON.parse(await fs.readFile(path.join(directory, 'php8.4-sdl.manifest.json')));
+	const runtime = await fs.readFile(path.join(directory, manifest.runtime), 'utf8');
+
+	if(!runtime.includes('vibrationActuator') || !runtime.includes('dual-rumble') || !runtime.includes('playEffect'))
+	throw Error('php-sdl-wasm runtime lacks browser controller rumble');
+
+	return directory;
+}
+
 export async function runtimeDirectory()
 {
 	const candidates = [process.env.PHP_SDL_ROOT, path.join(root, '.cache/runtime'), path.join(root, 'node_modules/php-sdl-wasm')]
@@ -16,9 +28,7 @@ export async function runtimeDirectory()
 	for(const directory of candidates)
 	try
 	{
-		await fs.access(path.join(directory, 'php8.4-sdl.manifest.json'));
-
-		return directory;
+		return await requireControllerRumble(directory);
 	}
 	catch { /* Try the next source. */ }
 
@@ -58,6 +68,5 @@ export async function runtimeDirectory()
 	await fs.rename(staging, destination);
 	await fs.rm(archive, {force: true});
 
-	return destination;
+	return requireControllerRumble(destination);
 }
-

@@ -180,6 +180,7 @@ test('Doom controller bindings separate movement, turning, use, fire and weapon 
 
 		return doomRumbleSupported;
 	});
+	expect(rumbleSupported).toBe(true);
 
 	await clear();
 	await pad({buttons: [7]});
@@ -187,15 +188,12 @@ test('Doom controller bindings separate movement, turning, use, fire and weapon 
 	expect(await frame()).toMatchObject({fire: true, altFire: false, use: false});
 	expect(await page.evaluate(() => doomInputFrames.some(frame => frame.use))).toBe(false);
 
-	if(rumbleSupported)
-	{
-		await expect.poll(() => page.evaluate(() => doomRumbleEffects.length)).toBeGreaterThan(0);
-		const pistol = await page.evaluate(() => doomRumbleEffects.findLast(
-			effect => effect.parameters.weakMagnitude > effect.parameters.strongMagnitude
-		));
-		expect(pistol.parameters.strongMagnitude).toBeCloseTo(.09, 3);
-		expect(pistol.parameters.weakMagnitude).toBeCloseTo(.36, 3);
-	}
+	await expect.poll(() => page.evaluate(() => doomRumbleEffects.length)).toBeGreaterThan(0);
+	const pistol = await page.evaluate(() => doomRumbleEffects.findLast(
+		effect => effect.parameters.weakMagnitude > effect.parameters.strongMagnitude
+	));
+	expect(pistol.parameters.strongMagnitude).toBeCloseTo(.09, 3);
+	expect(pistol.parameters.weakMagnitude).toBeCloseTo(.36, 3);
 
 	await pad({});
 	await expect.poll(async() => (await frame()).fire).toBe(false);
@@ -324,6 +322,7 @@ test('Doom binding capture, conflicts and saved alternatives use physical input'
 
 		return doomMenuRumbleSupported;
 	});
+	expect(rumbleSupported).toBe(true);
 
 	const menu = () => page.evaluate(() => previewSession.doomState.menu);
 
@@ -393,13 +392,14 @@ test('Doom binding capture, conflicts and saved alternatives use physical input'
 	await key('ArrowLeft');
 	await expect.poll(async() => (await menu()).options.rumbleIntensity).toBe(.9);
 
-	if(rumbleSupported)
-	{
-		await expect.poll(() => page.evaluate(() => doomRumbleEffects.length)).toBeGreaterThan(0);
-		const sliderRumble = await page.evaluate(() => doomRumbleEffects.at(-1).parameters);
-		expect(sliderRumble.strongMagnitude).toBeCloseTo(.9, 3);
-		expect(sliderRumble.weakMagnitude).toBeCloseTo(.9, 3);
-	}
+	await expect.poll(() => page.evaluate(() => doomRumbleEffects.length)).toBeGreaterThan(0);
+	const sliderRumble = await page.evaluate(() => doomRumbleEffects.findLast(effect =>
+		Math.abs(effect.parameters.strongMagnitude - .9) < .001
+			&& Math.abs(effect.parameters.weakMagnitude - .9) < .001
+	)?.parameters);
+	expect(sliderRumble).toBeDefined();
+	expect(sliderRumble.strongMagnitude).toBeCloseTo(.9, 3);
+	expect(sliderRumble.weakMagnitude).toBeCloseTo(.9, 3);
 
 	await enter('mute-all');
 	await expect.poll(async() => (await menu()).options.muted).toBe(true);

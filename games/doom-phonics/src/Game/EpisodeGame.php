@@ -563,8 +563,16 @@ final class EpisodeGame
 		$this->sound->playMusic(MusicCue::level($this->map));
 	}
 
-	/** Preview the current strength with a short high/low pair when its menu knob changes. */
-	public function previewRumble(): void { $this->rumble->preview(); }
+	/** Preview the current strength immediately; settings menus pause normal frame-input dispatch. */
+	public function previewRumble(): void
+	{
+		$this->rumble->preview();
+		$this->rumble->dispatch(
+			$this->engine->input->gamepads
+			, 0
+			, $this->settings->rumbleIntensity()
+		);
+	}
 
 	public function beginTransition(): bool { return $this->wipe?->begin() ?? false; }
 

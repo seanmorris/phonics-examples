@@ -457,7 +457,7 @@
     "src/Game/DoomInitialization.php": "sha256-b3th76Uxh7A/D75bTbTwzE0Wh0+uQbygZtDvNcjMD10=",
     "src/Game/DoomMatch.php": "sha256-cIXHTMDUpDSsWzEtZcTSudlrNd//3r2zR+lQJnYFkO4=",
     "src/Game/EnemyAwareness.php": "sha256-M5B+mFdHNiNTRSGA2hiCiEKu9ZB2FaksVV5Tc6Jt0fA=",
-    "src/Game/EpisodeGame.php": "sha256-uL2x3hkHw7m2EKJzgpXuRLebNvgTx4lAvQMosQBJp8I=",
+    "src/Game/EpisodeGame.php": "sha256-ioLhTe4rSTeRVz+28O4/o+olQSxLdVnvQw+Z8bOoe9c=",
     "src/Game/FaceDirection.php": "sha256-zwfJjywQSQ27Dprl+QEta5FTHSVgl/SsZ2/seiGY4G0=",
     "src/Game/GameSettings.php": "sha256-TlXyJb76KxnfXUV9oWtzamcI0NpYGAs/cdM5DJZTelo=",
     "src/Game/HeightTransfer.php": "sha256-RdiRmTSyf8G2EFBh2TmYVrAsLBhqKRgXSH1c35STevQ=",

@@ -30,3 +30,12 @@ test('built pages size each canvas and publish Doom’s world resources', async 
 	for(const file of ['applications/demo/DOOM1.WAD', 'applications/DOOM1_OGG.wad', 'applications/demo/DBIGFONT.WAD'])
 	await fs.access(new URL(file, dist));
 });
+
+test('built SDL runtime includes browser controller rumble', async context => {
+	try { await fs.access(new URL('runtime/php8.4-sdl.manifest.json', dist)); }
+	catch { context.skip('site has not been built'); return; }
+	const runtime = await fs.readFile(new URL('runtime/php8.4-sdl-runtime.mjs', dist), 'utf8');
+
+	for(const token of ['vibrationActuator', 'dual-rumble', 'playEffect'])
+	assert.ok(runtime.includes(token), `SDL runtime is missing ${token}`);
+});
