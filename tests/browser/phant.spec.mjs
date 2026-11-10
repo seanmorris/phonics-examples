@@ -17,10 +17,21 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 1280, height: 720});
 	const canvas = await boot(page);
+	const title = await status(page);
+
+	// The title is a live waiting preview: the phant bobs while the terrain scrolls behind the open menu.
+	await expect.poll(async() => (await status(page)).scroll).toBeGreaterThan(title.scroll + 10);
+	await expect.poll(async() => (await status(page)).y).not.toBe(title.y);
 
 	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play', exact: true}).click();
 	await expect.poll(async() => (await status(page)).page).toBe('play');
 	await expect.poll(async() => (await status(page)).phase).toBe('ready');
+	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.loaded)).toBe(true);
+	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.playing)).toBe(true);
+	expect(await canvas.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
+		loop: true, muted: false, volume: .75, baseVolume: .75, duckVolume: .3
+	});
+	expect(await canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .5, music: .75, duck: .3});
 
 	// Wide frame: the phant sits near 28 % of the visible width, at the largest whole scale that keeps the course in view.
 	const wide = await status(page);
@@ -43,6 +54,10 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await page.keyboard.press('Space');
 	await expect.poll(async() => (await status(page)).phase).toBe('playing');
 	await expect.poll(async() => (await status(page)).counts.flap).toBeGreaterThanOrEqual(1);
+	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.volume), {
+		intervals: [10, 10, 10, 10, 10, 10, 20]
+	}).toBe(.3);
+	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.volume)).toBe(.75);
 
 	// A click on the canvas is a flap too.
 	const before = (await status(page)).counts.flap;

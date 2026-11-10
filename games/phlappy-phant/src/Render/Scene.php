@@ -282,35 +282,32 @@ final class Scene
 			$this->graded($terrain, $this->tile(self::GID_PILLAR_BASE, $sx, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_PILLAR);
 		}
 
-		// The title page belongs to the wordmark and the menu; the phant appears on the ready screen.
-		if($page !== 'title')
+		// The title uses the same waiting phant as the ready screen, bobbing over the scrolling preview.
+		$py = $game->previousY + ($game->y - $game->previousY) * $alpha;
+		// The tumble uses the left-facing frames rather than a flip, so the lettering never mirrors.
+		$phant = new Sprite(
+			($game->phase === 'dead' ? self::GID_PHANT_LEFT : self::GID_PHANT) + $game->frame
+			, ($phantX + Simulation::PHANT_W / 2) * $scale
+			, ($py + Simulation::PHANT_H / 2 + $offsetY) * $scale
+			, .5
+			, .5
+		);
+		$phant->scaleX = $phant->scaleY = $scale;
+		$phant->animated = $phant->outline = $phant->smooth = false;
+		$phant->tint = [...self::lerp(self::PHANT_TINTS[$phantKey], self::PHANT_TINTS[$phantKey + 1], $keyframe - $phantKey), 1.0];
+
+		if($game->phase === 'dead')
 		{
-			$py = $game->previousY + ($game->y - $game->previousY) * $alpha;
-			// The tumble uses the left-facing frames rather than a flip, so the lettering never mirrors.
-			$phant = new Sprite(
-				($game->phase === 'dead' ? self::GID_PHANT_LEFT : self::GID_PHANT) + $game->frame
-				, ($phantX + Simulation::PHANT_W / 2) * $scale
-				, ($py + Simulation::PHANT_H / 2 + $offsetY) * $scale
-				, .5
-				, .5
-			);
-			$phant->scaleX = $phant->scaleY = $scale;
-			$phant->animated = $phant->outline = $phant->smooth = false;
-			$phant->tint = [...self::lerp(self::PHANT_TINTS[$phantKey], self::PHANT_TINTS[$phantKey + 1], $keyframe - $phantKey), 1.0];
-
-			if($game->phase === 'dead')
-			{
-				$this->deathSpin = min(1.0, $this->deathSpin + $elapsed * 3);
-				$phant->rotation = -M_PI / 2 * $this->deathSpin;
-			}
-			else
-			{
-				$this->deathSpin = 0;
-				$phant->rotation = $game->phase === 'playing' ? max(-.45, min(1.2, $game->vy / 600)) : 0.0;
-			}
-
-			$sprites[] = $phant;
+			$this->deathSpin = min(1.0, $this->deathSpin + $elapsed * 3);
+			$phant->rotation = -M_PI / 2 * $this->deathSpin;
 		}
+		else
+		{
+			$this->deathSpin = 0;
+			$phant->rotation = $game->phase === 'playing' ? max(-.45, min(1.2, $game->vy / 600)) : 0.0;
+		}
+
+		$sprites[] = $phant;
 
 		$this->terrain->render($terrain, $width, $height, $seconds * 1000, $this->fade);
 		$this->sprites->render($sprites, $camera, $seconds * 1000);

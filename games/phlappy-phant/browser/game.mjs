@@ -1,4 +1,181 @@
-/** Browser shell for Phlappy Phant: taps, sounds, the local best score, and accessible menus in any viewport. */
+const MIX = Object.freeze({
+	effects: .5
+	, music: .75
+	, duck: .3
+	, release: .18
+	, length: Object.freeze({flap: .090023, score: .16, bonk: .22})
+});
+
+/** Stream a package-local music track without decoding the whole song into Web Audio memory. */
+class BackgroundTrack
+{
+	constructor(module, assets, packageUrl, {
+		muted = false
+		, volume = MIX.music
+		, duckVolume = MIX.duck
+		, release = MIX.release
+	} = {})
+	{
+		this.module = module;
+		this.assets = assets;
+		this.packageUrl = packageUrl;
+		this.muted = Boolean(muted);
+		this.element = typeof Audio === 'undefined' ? null : new Audio;
+		this.pending = null;
+		this.url = null;
+		this.closed = false;
+		this.volume = Math.max(0, Math.min(1, Number(volume)));
+		this.duckVolume = Math.max(0, Math.min(this.volume, Number(duckVolume)));
+		this.release = Math.max(0, Number(release)) * 1000;
+		this.duckUntil = 0;
+		this.releaseAt = 0;
+		this.raf = null;
+
+		if(this.element)
+		{
+			this.element.loop = true;
+			this.element.preload = 'auto';
+			this.element.muted = this.muted;
+			this.element.volume = this.volume;
+		}
+	}
+
+	async load()
+	{
+		if(this.closed || !this.element) return false;
+
+		this.pending ??= (async() => {
+			try
+			{
+				const source = new URL('assets/funktify.mp3', this.packageUrl).href;
+				const bytes = this.module.FS.readFile(this.assets.path(source));
+
+				if(this.closed) return false;
+
+				this.url = URL.createObjectURL(new Blob([bytes], {type: 'audio/mpeg'}));
+				this.element.src = this.url;
+				this.element.load();
+
+				return true;
+			}
+			catch
+			{
+				return false;
+			}
+		})();
+
+		return this.pending;
+	}
+
+	async unlock()
+	{
+		if(this.closed || this.muted || !this.element || !await this.load()) return false;
+
+		try
+		{
+			if(this.element.paused) await this.element.play();
+
+			return !this.element.paused;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	setMuted(muted)
+	{
+		this.muted = Boolean(muted);
+
+		if(!this.element) return;
+
+		this.element.muted = this.muted;
+
+		if(!this.muted) void this.unlock();
+	}
+
+	duck(seconds)
+	{
+		if(this.closed || !this.element) return;
+
+		const now = performance.now();
+		this.duckUntil = Math.max(this.duckUntil, now + Math.max(0, Number(seconds)) * 1000);
+		this.releaseAt = 0;
+		this.element.volume = this.duckVolume;
+
+		if(this.raf !== null) return;
+
+		const update = time => {
+			if(this.closed || !this.element)
+			{
+				this.raf = null;
+
+				return;
+			}
+
+			if(time < this.duckUntil)
+			{
+				this.element.volume = this.duckVolume;
+				this.raf = requestAnimationFrame(update);
+
+				return;
+			}
+
+			this.releaseAt ||= time;
+			const position = this.release === 0 ? 1 : Math.min(1, (time - this.releaseAt) / this.release);
+			const eased = 1 - (1 - position) * (1 - position);
+			this.element.volume = this.duckVolume + (this.volume - this.duckVolume) * eased;
+
+			if(position < 1)
+			{
+				this.raf = requestAnimationFrame(update);
+
+				return;
+			}
+
+			this.element.volume = this.volume;
+			this.duckUntil = this.releaseAt = 0;
+			this.raf = null;
+		};
+
+		this.raf = requestAnimationFrame(update);
+	}
+
+	get state()
+	{
+		return {
+			loaded: Boolean(this.url)
+			, playing: Boolean(this.element && !this.element.paused)
+			, loop: Boolean(this.element?.loop)
+			, muted: this.muted
+			, volume: this.element?.volume ?? 0
+			, baseVolume: this.volume
+			, duckVolume: this.duckVolume
+		};
+	}
+
+	close()
+	{
+		if(this.closed) return;
+
+		this.closed = true;
+
+		if(this.raf !== null) cancelAnimationFrame(this.raf);
+
+		this.raf = null;
+		this.element?.pause();
+		this.element?.removeAttribute('src');
+		this.element?.load();
+
+		if(this.url) URL.revokeObjectURL(this.url);
+
+		this.url = null;
+		this.pending = null;
+		this.element = null;
+	}
+}
+
+/** Browser shell for Phlappy Phant: taps, music, sounds, the local best score, and accessible menus in any viewport. */
 export async function activate({module, canvas, assets, packageUrl, services, session, onClose})
 {
 	const shell = new services.GameShell({module, canvas, session, title: 'Phlappy Phant'});
@@ -76,7 +253,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		}
 	});
 
-	let samples = null;
+	let samples = null, music = null;
 
 	const mute = shell.mute({
 		key: optionsKey
@@ -89,16 +266,20 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		, quick
 		, onChange: muted => {
 			samples?.setMuted(muted);
+			music?.setMuted(muted);
 
 			if(samples && !muted) void unlock();
 		}
 	});
 
 	samples = new services.SamplePlayer(module, assets, packageUrl, {muted: mute.muted});
+	music = new BackgroundTrack(module, assets, packageUrl, {muted: mute.muted});
 
 	async function unlock()
 	{
-		if(!await samples.unlock()) return;
+		const [effectsReady] = await Promise.all([samples.unlock(), music.unlock()]);
+
+		if(!effectsReady) return;
 
 		await Promise.all([
 			samples.load('flap', 'assets/flap.wav')
@@ -109,7 +290,11 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	function play(name, gain)
 	{
-		void unlock().then(() => samples.play(name, {gain}));
+		void unlock().then(async() => {
+			if(!await samples.play(name, {gain: gain * MIX.effects})) return;
+
+			music.duck(MIX.length[name] ?? .16);
+		});
 	}
 
 	shell.fullscreen({target: ui, quick, onChange: () => view.measure()});
@@ -182,14 +367,20 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		}
 	});
 
-	session.phlappyPhant = {
+	const debug = {
 		get state() { return state; }
 		, get profile() { return structuredClone(profile); }
+		, get music() { return music.state; }
+		, get mix() { return {effects: MIX.effects, music: MIX.music, duck: MIX.duck}; }
 	};
+	session.phlappyPhant = debug;
+	Object.defineProperty(canvas, 'phpPhantDebug', {configurable: true, value: debug});
 
 	shell.onClose(async() => {
 		quick.close();
+		music.close();
 		await samples.close();
+		delete canvas.phpPhantDebug;
 		delete session.phlappyPhant;
 	});
 

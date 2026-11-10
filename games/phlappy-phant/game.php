@@ -104,6 +104,8 @@ $titleItems = static function() use (&$startGame, $bindings): array {
 				, 'vector' => ['label' => "Pixel art traced from Webysther's SVG", 'disabled' => true]
 				, 'art-licence' => ['label' => 'Sprite licence: GPL-2.0-or-later', 'disabled' => true]
 				, 'terrain' => ['label' => 'Terrain by GrafxKid (CC0)', 'disabled' => true]
+				, 'music' => ['label' => 'Funktify by Mr. Spastic', 'disabled' => true]
+				, 'music-licence' => ['label' => 'Music licence: CC BY-NC-ND 3.0', 'disabled' => true]
 				, 'code-licence' => ['label' => 'Code licence: Apache-2.0', 'disabled' => true]
 			]
 		]
@@ -114,6 +116,10 @@ $setPage = static function(string $next) use (
 	&$setPage, &$startGame, &$page, &$game, $titleItems, $menu, $engine, $best
 ): void {
 	$page = $next;
+
+	// Returning from a run gets a fresh waiting preview instead of leaving the crashed phant on the title screen.
+	if($next === 'title' && $game->phase !== 'ready') $game = new Simulation(1);
+
 	$menu->close();
 	$menu->title = match($next)
 	{
@@ -271,7 +277,9 @@ $engine->setInputHandler(static function(
 
 	$engine->userPaused = $page === 'pause';
 
-	return true;
+	// Captured frames deliberately receive no simulation time. Title and result menus still animate their world;
+	// the explicit pause page is the only menu that freezes it.
+	return $page === 'pause';
 });
 
 (vrzno_env('sceneReady'))(null);

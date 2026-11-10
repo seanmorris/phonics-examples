@@ -1,5 +1,5 @@
-Phlappy Phant ships two pieces of third-party art. Everything else in this package is original work under the
-package LICENSE (Apache-2.0).
+Phlappy Phant ships third-party art and music. Except for the material listed below, this package is original work
+under the package LICENSE (Apache-2.0).
 
 elePHPant: art/elephpant.svg, art/elephpant.png, assets/phant.png and poster.png
   The PHP mascot by Vincent Pontier, vector by Webysther (Wikimedia Commons, "Webysther 20160423 -
@@ -10,3 +10,8 @@ Terrain: art/terrain.png, art/terrain-parallax.png, art/terrain-duskdawn.png, ar
 assets/backdrop.png, assets/pillar.png, assets/ground.png,
 assets/scenery.png and the scenery on poster.png
   "Seasonal Platformer Tiles" by GrafxKid (OpenGameArt), CC0 1.0. See art/TERRAIN-LICENSE.md.
+
+Music: assets/funktify.mp3
+  "Funktify" by Mr. Spastic (Nathan McCoy), from "Claps and Leads" (8bitpeoples, catalogue 8BP096), 2009.
+  Creative Commons Attribution-NonCommercial-NoDerivatives 3.0 Unported. The recording is included unchanged.
+  See art/FUNKTIFY-LICENSE.md.
