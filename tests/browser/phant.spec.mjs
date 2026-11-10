@@ -22,12 +22,12 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await expect.poll(async() => (await status(page)).page).toBe('play');
 	await expect.poll(async() => (await status(page)).phase).toBe('ready');
 
-	// Wide frame: the phant's right edge sits 28 % of the visible width in from the right, at the largest whole scale.
+	// Wide frame: the phant sits near 28 % of the visible width, at the largest whole scale that keeps the course in view.
 	const wide = await status(page);
 	expect(wide.height).toBeGreaterThan(0);
 	const scale = Math.max(1, Math.floor(wide.height / 440));
 	expect(wide.viewport[2]).toBeCloseTo(scale, 5);
-	expect(wide.viewport[3]).toBeCloseTo(wide.width - Math.max(60, Math.min(200, .28 * wide.width / scale)) * scale, 3);
+	expect(wide.viewport[3]).toBeCloseTo(Math.max(60, Math.min(200, .28 * wide.width / scale)) * scale, 3);
 
 	await canvas.focus();
 	await page.keyboard.press('Space');
@@ -54,7 +54,7 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	const tall = await status(page);
 	const tallScale = Math.max(1, Math.floor(tall.height / 440));
 	expect(tall.viewport[2]).toBeCloseTo(tallScale, 5);
-	expect(tall.viewport[3]).toBeCloseTo(tall.width - Math.max(60, Math.min(200, .28 * tall.width / tallScale)) * tallScale, 3);
+	expect(tall.viewport[3]).toBeCloseTo(Math.max(60, Math.min(200, .28 * tall.width / tallScale)) * tallScale, 3);
 
 	expect(errors).toEqual([]);
 });

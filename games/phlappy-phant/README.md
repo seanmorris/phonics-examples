@@ -2,7 +2,7 @@
 
 A pixel-art Flappy Bird homage built with Phonics. The elePHPant flaps between stacks of DB silo barrels; every ten barrels the sky turns from day to night. A deterministic fixed-step PHP simulation owns the flight, the seeded barrel gaps, collisions and the score; the browser module supplies taps, sounds, fullscreen, the local best score and accessible menu hit targets.
 
-The phant flies leftward, the way the art faces. Unlike the letterboxed games, Phlappy Phant fills whatever frame it is given: the world is 480 logical units tall and as wide as the frame's aspect allows, so a phone in portrait and a widescreen desktop both play the same game and only see different amounts of the road ahead.
+Unlike the letterboxed games, Phlappy Phant fills whatever frame it is given: the world is 480 logical units tall and as wide as the frame's aspect allows, so a phone in portrait and a widescreen desktop both play the same game and only see different amounts of the road ahead.
 
 ## Credits
 

@@ -36,7 +36,7 @@ final class Scene
 
 	/** Accessible hit regions published by the menu renderer. */
 	public array $regions = [];
-	/** Output width and height, logical scale, and the screen x of the phant's right edge. */
+	/** Output width and height, logical scale, and the phant's screen x. */
 	public array $viewport = [0, 0, 1, 0];
 	private Atlas $atlas;
 	private Atlas $fontAtlas;
@@ -113,11 +113,8 @@ final class Scene
 		$scale = (float)$k;
 		$visible = $width / $scale;
 		$offsetY = $height / $scale - Simulation::HEIGHT;
-		// The phant faces left and flies leftward: world x grows toward the left edge of the screen, and the phant's
-		// right edge sits about 28 % of the visible width in from the right.
 		$phantX = max(60.0, min(200.0, .28 * $visible));
-		$right = $width - $phantX * $scale;
-		$this->viewport = [$width, $height, $scale, $right];
+		$this->viewport = [$width, $height, $scale, $phantX * $scale];
 		$camera = new Camera(0, 0, $width, $height);
 
 		$elapsed = max(0, min(.25, $seconds - $this->blendClock));
@@ -145,15 +142,13 @@ final class Scene
 			if($x < -self::TILE_W) $x += $count * $period;
 			if($x > $visible + self::TILE_W) continue;
 
-			$sprites[] = $this->tile(
-				self::GID_CLOUD, $width - ($x + self::TILE_W) * $scale, (20 + ($i * 53) % $skyBand) * $scale, $scale, $tint
-			);
+			$sprites[] = $this->tile(self::GID_CLOUD, $x * $scale, (20 + ($i * 53) % $skyBand) * $scale, $scale, $tint);
 		}
 
 		foreach($game->barrels as $barrel)
 		{
 			$bx = $barrel->previousX + ($barrel->x - $barrel->previousX) * $alpha;
-			$screenX = $right - ($bx + self::TILE_W) * $scale;
+			$screenX = ($phantX + $bx) * $scale;
 
 			if($screenX > $width || $screenX + self::TILE_W * $scale < 0) continue;
 
@@ -181,16 +176,15 @@ final class Scene
 
 		for($x = -$groundShift; $x < $visible; $x += self::TILE_W)
 		{
-			$screenX = $width - ($x + self::TILE_W) * $scale;
-			$sprites[] = $this->tile(self::GID_GROUND, $screenX, (Simulation::GROUND_Y + $offsetY) * $scale, $scale, $tint);
-			$sprites[] = $this->tile(self::GID_GROUND, $screenX, (Simulation::GROUND_Y + self::TILE_H + $offsetY) * $scale, $scale, $tint);
+			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, (Simulation::GROUND_Y + $offsetY) * $scale, $scale, $tint);
+			$sprites[] = $this->tile(self::GID_GROUND, $x * $scale, (Simulation::GROUND_Y + self::TILE_H + $offsetY) * $scale, $scale, $tint);
 		}
 
 		{
 			$y = $game->previousY + ($game->y - $game->previousY) * $alpha;
 			$phant = new Sprite(
 				self::GID_PHANT + $game->frame
-				, $right - Simulation::PHANT_W / 2 * $scale
+				, ($phantX + Simulation::PHANT_W / 2) * $scale
 				, ($y + Simulation::PHANT_H / 2 + $offsetY) * $scale
 				, .5
 				, .5
@@ -202,13 +196,13 @@ final class Scene
 			if($game->phase === 'dead')
 			{
 				$this->deathSpin = min(1.0, $this->deathSpin + $elapsed * 3);
-				$phant->rotation = -M_PI / 2 * $this->deathSpin;
+				$phant->rotation = M_PI / 2 * $this->deathSpin;
 				$phant->flipY = $this->deathSpin >= 1;
 			}
 			else
 			{
 				$this->deathSpin = 0;
-				$phant->rotation = $game->phase === 'playing' ? -max(-.45, min(1.2, $game->vy / 600)) : 0.0;
+				$phant->rotation = $game->phase === 'playing' ? max(-.45, min(1.2, $game->vy / 600)) : 0.0;
 			}
 
 			$sprites[] = $phant;

@@ -27,10 +27,10 @@ const palette = {
 };
 
 // Barrels, ground and clouds share one 56x32 grid. The elephant sheet holds two rows of two 64x52 frames (wing
-// folded, wing spread): the top row faces right, the bottom row faces left. The game flies leftward and uses the
-// bottom row.
+// folded, wing spread): the top row faces right, the bottom row faces left. The game flies rightward and uses the
+// top row.
 const TILE_W = 56, TILE_H = 32, TILE_COLUMNS = 5, TILE_COUNT = 5;
-const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2, PHANT_ROWS = 2, PHANT_ROW = 1;
+const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2, PHANT_ROWS = 2, PHANT_ROW = 0;
 
 /** A simple RGBA raster with out-of-range writes ignored. */
 class Raster
@@ -354,13 +354,13 @@ poster.fill(0, 0, 1280, 720, [0xcf, 0xe6, 0xf5]);
 for(const [x, y] of [[90, 90], [420, 150], [760, 70], [1080, 170], [300, 260]]) poster.blit(puff, x, y, 4);
 poster.fill(0, 560, 1280, 32, palette.cream);
 for(let x = 0; x < 1280; x += TILE_W * 4) poster.blit(soil, x, 592, 4);
-// One full pair at the left edge and a ground-only stack mid-frame leave the sky clear for the title.
-for(const [x, gapTop, gap] of [[20, 260, 180], [470, -40, 300]])
+// One full pair at the right edge and a ground-only stack mid-frame leave the sky clear for the title.
+for(const [x, gapTop, gap] of [[1036, 260, 180], [586, -40, 300]])
 {
 	for(let y = gapTop - TILE_H * 4; y > -TILE_H * 4; y -= TILE_H * 4) poster.blit(y === gapTop - TILE_H * 4 ? bottom : ring, x, y, 4);
 	for(let y = gapTop + gap; y < 592; y += TILE_H * 4) poster.blit(y === gapTop + gap ? cap : ring, x, y, 4);
 }
-poster.blit(frames[1], 860, 250, 6);
+poster.blit(frames[1], 60, 250, 6);
 // The wordmark gets the in-game treatment: an ink shadow under a cream fill, so it reads over the barrels.
 const width = await title(null, 'PHLAPPY PHANT', 0, 48, 6);
 await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2) + 6, 54, 6, palette.ink);
