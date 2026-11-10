@@ -490,7 +490,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	canvas.addEventListener('focus', () => {
 		if(document.fullscreenElement === ui) return;
 
-		globalThis.scrollTo({top: globalThis.scrollY + screen.getBoundingClientRect().top, behavior: 'auto'});
+		// Centering honors the page's scroll padding, so a sticky header never covers the top of the game.
+		screen.scrollIntoView({block: 'center', inline: 'nearest', behavior: 'auto'});
 	}, {signal});
 
 	canvas.addEventListener('keydown', () => { void unlock(); }, {signal});
