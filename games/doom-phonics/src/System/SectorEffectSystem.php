@@ -223,7 +223,7 @@ final class SectorEffectSystem
 
 		if($inflicted > 0 && (!$registry->has($entity, NetworkPlayer::class)
 			|| $registry->get($entity, NetworkPlayer::class)->local
-		)) $this->rumble?->damage(0, $hp->current <= 0);
+		)) $this->rumble?->hazard($hp->current <= 0);
 
 		if($inflicted > 0 && $registry->has($entity, ViewEffects::class))
 		$registry->get($entity, ViewEffects::class)->recordDamage($inflicted);

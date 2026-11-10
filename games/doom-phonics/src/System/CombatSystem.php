@@ -3124,6 +3124,7 @@ final class CombatSystem
 		, bool $thrust = true
 		, ?HitscanImpact $impact = null
 		, ?int $attack = null
+		, bool $feedback = true
 	): bool {
 		$beforeVelocity = $registry->has($target, Velocity::class)
 			? clone $registry->get($target, Velocity::class)
@@ -3135,7 +3136,7 @@ final class CombatSystem
 			: $damage > 0 && $registry->alive($target) && $registry->has($target, HitPoints::class)
 				&& $registry->get($target, HitPoints::class)->current > 0;
 
-		if($changed && $this->resolveDamage && $this->localPlayer($registry, $target))
+		if($feedback && $changed && $this->resolveDamage && $this->localPlayer($registry, $target))
 		{
 			$afterVelocity = $registry->has($target, Velocity::class)
 				? $registry->get($target, Velocity::class)
@@ -3251,14 +3252,33 @@ final class CombatSystem
 			// P_RadiusAttack asks whether the damaged thing can see the explosion.
 			if($damage <= 0 || !$this->sees($registry, $target, $entity)) continue;
 
-			$this->damage($registry, $target, $source, $damage, $entity, false);
+			$changed = $this->damage(
+				$registry
+				, $target
+				, $source
+				, $damage
+				, $entity
+				, false
+				, feedback: false
+			);
+
+			$blastKnockback = 0.0;
 
 			if($registry->has($target, Velocity::class) && $distance > .001)
 			{
 				$velocity = $registry->get($target, Velocity::class);
+				$beforeX = $velocity->x;
+				$beforeY = $velocity->y;
 				$impulse = 140 * (1 - min(1, $distance / $radius));
 				$velocity->x += $dx / $distance * $impulse;
 				$velocity->y += $dy / $distance * $impulse;
+				$blastKnockback = hypot($velocity->x - $beforeX, $velocity->y - $beforeY);
+			}
+
+			if($changed && $this->resolveDamage && $this->localPlayer($registry, $target))
+			{
+				$fatal = $registry->get($target, HitPoints::class)->current <= 0;
+				$this->rumble?->blast($blastKnockback, $fatal);
 			}
 		}
 	}

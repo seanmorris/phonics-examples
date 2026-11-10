@@ -60,20 +60,63 @@ final class Rumble extends \Phonics\Effects\Rumble
 	/** Queue a damage impulse from the velocity actually imparted by damage thrust. */
 	public function damage(float $knockback, bool $fatal = false): void
 	{
-		if(!is_finite($knockback) || $knockback < 0)
-		throw new \InvalidArgumentException('Invalid damage knockback');
+		$this->validateKnockback($knockback);
 
-		// A 160-map-unit/second shove is already forceful for the player. Start damage
-		// above the motors' easily missed low range, then scale to a bounded blast.
-		$weight = min(1, $knockback / 160);
+		// Even the maximum zombieman bullet stays below 70 map units/second. Keep that
+		// whole range sharp while letting replicated high-knockback hits retain a blast tail.
+		if($knockback >= 70)
+		{
+			$this->blast($knockback, $fatal);
+
+			return;
+		}
+
+		$weight = min(1, $knockback / 70);
 		$this->pulse(
-			85 + (int)round(105 * $weight)
-			, .45 + .53 * $weight
-			, .65 + .3 * $weight
+			60 + (int)round(30 * $weight)
+			, .58 + .32 * $weight
+			, .76 + .22 * $weight
 		);
 
-		if($fatal) $this->pulse(220, .45 + .35 * $weight, .2, 180);
-		elseif($weight >= .65) $this->pulse(90, .35 + .4 * $weight, .2, 150);
+		if($fatal) $this->pulse(220, .45 + .35 * $weight, .2, 100);
+	}
+
+	/** Queue the slower low-frequency envelope of an explosion or equivalent shove. */
+	public function blast(float $knockback, bool $fatal = false): void
+	{
+		$this->validateKnockback($knockback);
+		$weight = min(1, $knockback / 140);
+		$this->pulse(
+			130 + (int)round(80 * $weight)
+			, .62 + .38 * $weight
+			, .7 + .28 * $weight
+		);
+
+		if($fatal)
+		{
+			$this->pulse(260, .65 + .2 * $weight, .25, 210);
+			$this->pulse(160, .25 + .15 * $weight, .1, 470);
+		}
+		else
+		{
+			$this->pulse(180, .35 + .5 * $weight, .25 + .1 * $weight, 210);
+			$this->pulse(150, .15 + .3 * $weight, .08, 390);
+		}
+	}
+
+	/** Queue the paired low-frequency beat of periodic environmental damage. */
+	public function hazard(bool $fatal = false): void
+	{
+		$this->pulse(80, .72, .12);
+		$this->pulse(105, .5, .08, 140);
+
+		if($fatal) $this->pulse(240, .65, .16, 280);
+	}
+
+	private function validateKnockback(float $knockback): void
+	{
+		if(!is_finite($knockback) || $knockback < 0)
+		throw new \InvalidArgumentException('Invalid damage knockback');
 	}
 
 	/** Queue a restrained confirmation, with a second low-motor catch for a newly acquired weapon. */

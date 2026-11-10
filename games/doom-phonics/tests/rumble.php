@@ -29,50 +29,67 @@ verifyWad(
 $minimum = new Rumble;
 $minimum->damage(0);
 $minimumDamage = $minimum->update(0)[0];
-$maximum = new Rumble;
-$maximum->damage(160);
-$maximumDamage = $maximum->update(0)[0];
-$middle = new Rumble;
-$middle->damage(80);
-$middleDamage = $middle->update(0)[0];
+$bullet = new Rumble;
+$bullet->damage(13.125);
+$bulletDamage = $bullet->update(0)[0];
+$maximumBullet = new Rumble;
+$maximumBullet->damage(65.625);
+$maximumBulletDamage = $maximumBullet->update(0)[0];
+$replicatedBlast = new Rumble;
+$replicatedBlast->damage(70);
+$replicatedBlastDamage = $replicatedBlast->update(0)[0];
 $clamped = new Rumble;
 $clamped->damage(880);
 $clampedDamage = $clamped->update(0)[0];
 
 verifyWad(
-	$minimumDamage === ['duration' => 85,'strong' => .45,'weak' => .65]
-		&& $middleDamage['duration'] === 138
-		&& abs($middleDamage['strong'] - .715) < 1e-12
-		&& $middleDamage['weak'] === .8
-		&& $maximumDamage === ['duration' => 190,'strong' => .98,'weak' => .95]
-		&& $clampedDamage === $maximumDamage
-	, 'damage feedback scales with knockback between perceptible and bounded motor limits'
+	$minimumDamage === ['duration' => 60,'strong' => .58,'weak' => .76]
+		&& $bulletDamage['duration'] === 66
+		&& $bulletDamage['strong'] >= .63
+		&& $bulletDamage['weak'] >= .8
+		&& $maximumBulletDamage['duration'] === 88
+		&& $maximumBulletDamage['strong'] > $bulletDamage['strong']
+		&& $maximumBulletDamage['weak'] > $bulletDamage['weak']
+		&& $replicatedBlastDamage['duration'] === 170
+		&& $clampedDamage === ['duration' => 210,'strong' => 1.0,'weak' => .98]
+	, 'bullet damage stays sharp and bounded while replicated explosion knockback selects the blast envelope'
 );
 
-$bullet = new Rumble;
-$bullet->damage(13.125);
-$bulletDamage = $bullet->update(0)[0];
 $blast = new Rumble;
-$blast->damage(120);
+$blast->blast(140);
 $blastDamage = $blast->update(0)[0];
-$blastTail = $blast->update(.15);
+$blastBeforeTail = $blast->update(.209);
+$blastTail = $blast->update(.001);
+$blastFade = $blast->update(.18);
 verifyWad(
-	$bulletDamage['duration'] >= 90
-		&& $bulletDamage['strong'] >= .49
-		&& $bulletDamage['weak'] >= .67
-		&& $blastDamage['strong'] > $bulletDamage['strong']
-		&& $blastTail === [['duration' => 90,'strong' => .65,'weak' => .2]]
-	, 'zombieman bullets register clearly and explosion knockback adds a heavy aftershock'
+	$blastDamage === ['duration' => 210,'strong' => 1.0,'weak' => .98]
+		&& $blastBeforeTail === []
+		&& $blastTail[0]['duration'] === 180
+		&& abs($blastTail[0]['strong'] - .85) < 1e-12
+		&& $blastTail[0]['weak'] === .35
+		&& $blastFade[0]['duration'] === 150
+		&& abs($blastFade[0]['strong'] - .45) < 1e-12
+		&& $blastFade[0]['weak'] === .08
+	, 'explosion knockback decays through a long two-stage aftershock'
 );
 
 $fatal = new Rumble;
-$fatal->damage(40, true);
+$fatal->damage(17.5, true);
 $fatalStart = $fatal->update(0);
-$fatalTail = $fatal->update(.18);
+$fatalTail = $fatal->update(.1);
 verifyWad(
 	count($fatalStart) === 1 && $fatalStart[0]['strong'] > .2
 		&& $fatalTail === [['duration' => 220,'strong' => .5375,'weak' => .2]]
 	, 'fatal damage adds a low-frequency collapse after the impact'
+);
+
+$hazard = new Rumble;
+$hazard->hazard();
+verifyWad(
+	$hazard->update(0) === [['duration' => 80,'strong' => .72,'weak' => .12]]
+		&& $hazard->update(.139) === []
+		&& $hazard->update(.001) === [['duration' => 105,'strong' => .5,'weak' => .08]]
+	, 'environmental damage beats twice like a heart'
 );
 
 $pickup = new Rumble;

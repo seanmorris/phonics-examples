@@ -3584,8 +3584,9 @@ verifyWad(
 );
 
 verifyWad(
-	$floorRumble->update(0) === [['duration' => 85,'strong' => .45,'weak' => .65]]
-	, 'thrustless floor damage uses the bounded minimum damage feedback'
+	$floorRumble->update(0) === [['duration' => 80,'strong' => .72,'weak' => .12]]
+		&& $floorRumble->update(.14) === [['duration' => 105,'strong' => .5,'weak' => .08]]
+	, 'damaging floors use a paired low-frequency heartbeat'
 );
 
 [$secretX,$secretY] = $effectLevel->sectorCenter(68);
