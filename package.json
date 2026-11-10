@@ -21,7 +21,8 @@
     "test:browser": "playwright test",
     "test": "npm run test:php && npm run test:node && npm run check:generated && npm run test:manifest",
     "serve": "node scripts/serve.mjs",
-    "test:poker:exhaustive": "php games/php-poker/tests/evaluate-all.php"
+    "test:poker:exhaustive": "php games/php-poker/tests/evaluate-all.php",
+    "test:phant:fairness": "php games/phlappy-phant/tests/fairness.php"
   },
   "dependencies": {
     "@noble/curves": "2.4.0",

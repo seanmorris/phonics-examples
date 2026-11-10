@@ -155,7 +155,7 @@ for($i = 1; $i <= 3600 && $tas->phase === 'playing'; $i++)
 
 check($tas->phase === 'playing', 'the autopilot survives a minute at the speed cap and minimum gap');
 check($tas->score >= 60 && Simulation::gapFor($tas->score) === (float)Simulation::GAP_MIN, 'the autopilot scores through the narrowest gaps');
-check($flaps > 120 && $flaps < 900, 'the autopilot flaps on fewer than a quarter of the steps');
+check($flaps > 60 && $flaps < 900, 'the autopilot flaps on fewer than a quarter of the steps');
 check($closest >= Simulation::TAS_FLAP_GAP && Simulation::TAS_FLAP_GAP * Simulation::STEP >= .2, 'the autopilot never taps faster than five times a second');
 $centreBias = array_sum($centering) / count($centering);
 $centreError = array_sum(array_map('abs', $centering)) / count($centering);

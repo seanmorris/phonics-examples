@@ -19,6 +19,16 @@
         "path": "docs/index.md"
       },
       {
+        "slug": "art",
+        "title": "Art and the day cycle",
+        "path": "docs/art.md"
+      },
+      {
+        "slug": "autopilot",
+        "title": "The perfect player",
+        "path": "docs/autopilot.md"
+      },
+      {
         "slug": "architecture",
         "title": "Architecture",
         "path": "docs/architecture.md"
@@ -26,7 +36,7 @@
     ],
     "api": {
       "namespace": "PhlappyPhant",
-      "description": "Deterministic world-space flap simulation, viewport-filling rendering, and input settings."
+      "description": "Deterministic world-space flight, the built-in player's planner, palette-blending terrain rendering, and input settings."
     },
     "embed": {
       "kind": "local"

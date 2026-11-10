@@ -60,9 +60,9 @@ final class Simulation
 	public float $y = self::PHANT_START_Y;
 	public float $previousY = self::PHANT_START_Y;
 	public float $vy = 0;
-	/** Distance the world has scrolled, for ground and cloud parallax. */
+	/** Distance the world has scrolled, for the ground and the backdrop's parallax bands. */
 	public float $scroll = 0;
-	/** Seconds since the run began, for the idle bob and ear animation. */
+	/** Seconds since the run began, for the idle bob and the wing animation. */
 	public float $age = 0;
 	/** Wing frame: zero folded, one spread; the wing beats a few times after each flap, then rests folded. */
 	public int $frame = 0;
@@ -117,7 +117,7 @@ final class Simulation
 	 * Gap height for a score.
 	 *
 	 * @param int $score Pillars passed so far.
-	 * @return float Logical units between the two stacks.
+	 * @return float Logical units between the two pillars of a pair.
 	 */
 	public static function gapFor(int $score): float
 	{
@@ -564,7 +564,7 @@ final class Simulation
 		}
 	}
 
-	/** Whether the hitbox overlaps a stack or rests on the ground. */
+	/** Whether the hitbox overlaps a pillar or rests on the ground. */
 	private function collides(): bool
 	{
 		[$left, $top, $width, $height] = $this->hitbox();

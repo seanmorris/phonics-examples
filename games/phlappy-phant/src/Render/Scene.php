@@ -43,7 +43,6 @@ final class Scene
 	/** Pillar slices are 64 wide with the 56-unit pillar centred, and 8 tall so any grid height can be built. */
 	public const SLICE_W = 64;
 	public const SLICE_H = 8;
-	/** The backdrop's top row, continued up into the sky of tall frames; night multiplies it like every tile. */
 	/** The elephant is not in the terrain sheets, so it takes a light tint to sit in each keyframe's light. */
 	public const PHANT_TINTS = [[1, 1, 1], [1, .88, .8], [.72, .74, .95]];
 	/** Scenery between each pair of pillars, as [scenery index, offset from the pillar's right edge], picked per pair. */

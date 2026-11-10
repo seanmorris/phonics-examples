@@ -2,8 +2,8 @@
 // art/elephpant.png (see art/ELEPHPANT-LICENSE.md); the backdrop, pillar, ground and scenery tilesets cut from
 // GrafxKid's CC0 terrain sheet (art/terrain.png, with the parallax band mask and touched-up scenery in
 // art/terrain-parallax.png, and hand-graded dusk/dawn and night copies; see art/TERRAIN-LICENSE.md); the tileset
-// descriptions; three synthesised PCM sounds and the
-// catalog poster. Every byte is deterministic so `--check` can verify the committed output; `--preview DIR` also
+// descriptions; three synthesised PCM sounds, the catalog poster and the two figures in docs/. Every byte is
+// deterministic so `--check` can verify the committed output; `--preview DIR` also
 // writes nearest-neighbour enlargements.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -482,6 +482,76 @@ await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2) + 6, 54, 6, 
 await title(poster, 'PHLAPPY PHANT', Math.round((1280 - width) / 2), 48, 6, palette.cream);
 generated.set('poster.png', poster.png());
 
+// Figures for the documentation chapters, drawn from the same sheets so they follow every art change.
+// The first shows the day sheet at three times its size with its regions outlined and numbered.
+const FIGURE_SCALE = 3;
+const regions = [
+	[0, 0, BACKDROP, BACKDROP]
+	, [0, BACKDROP, BACKDROP, OVERLAY_H * 2]
+	, [FG_X, 0, FG_W, 96]
+	, [FG_X, PILLAR_SLICES.cap - SLICE_H, FG_W, PILLAR_SLICES.base - PILLAR_SLICES.cap + SLICE_H]
+	, [FG_X, PILLAR_SLICES.base, FG_W, GROUND.grass[1] - PILLAR_SLICES.base]
+	, [FG_X, GROUND.grass[1], FG_W, GROUND_TILE]
+];
+const sheetFigure = new Raster(SHEET * FIGURE_SCALE, SHEET * FIGURE_SCALE);
+
+// A pale checker stands in for the sheet's transparent pixels.
+for(let y = 0; y < SHEET; y += 8) for(let x = 0; x < SHEET; x += 8)
+	sheetFigure.fill(x * FIGURE_SCALE, y * FIGURE_SCALE, 8 * FIGURE_SCALE, 8 * FIGURE_SCALE, (x + y) % 16 ? [0xe6, 0xe3, 0xee] : [0xf4, 0xf2, 0xf8]);
+
+sheetFigure.blit(day, 0, 0, FIGURE_SCALE);
+
+for(const [index, [x, y, width, height]] of regions.entries())
+{
+	const [left, top, right, bottom] = [x, y, x + width, y + height].map(value => value * FIGURE_SCALE);
+
+	sheetFigure.fill(left, top, right - left, 2, palette.ink);
+	sheetFigure.fill(left, bottom - 2, right - left, 2, palette.ink);
+	sheetFigure.fill(left, top, 2, bottom - top, palette.ink);
+	sheetFigure.fill(right - 2, top, 2, bottom - top, palette.ink);
+
+	const digit = String(index + 1), digitWidth = await title(null, digit, 0, 0, 2);
+
+	sheetFigure.fill(left, top, digitWidth + 10, 38, palette.ink);
+	await title(sheetFigure, digit, left + 5, top + 3, 2, palette.cream);
+}
+
+generated.set('docs/terrain-sheet.png', sheetFigure.png());
+
+// The second sets the same slice of the world side by side in all seven palettes, with the hand-graded ones named.
+const PANEL_W = 96, PANEL_H = 256, PANEL_TOP = 64, CAPTION_H = 22;
+const cycleFigure = new Raster(PANEL_W * palettes.length, PANEL_H + CAPTION_H);
+cycleFigure.fill(0, 0, cycleFigure.width, cycleFigure.height, palette.ink);
+
+for(const [index, graded] of palettes.entries())
+{
+	const panel = new Raster(PANEL_W, PANEL_H);
+	const worldY = y => y - PANEL_TOP;
+	const backdropTop = worldY(288 - BACKDROP * 2);
+
+	panel.fill(0, 0, PANEL_W, PANEL_H, graded.get(0, 0).slice(0, 3));
+	panel.blit(graded, -60, backdropTop, 2, null, [0, 0, BACKDROP, BACKDROP]);
+	panel.blit(graded, -60, backdropTop + OVERLAY_ROW * 2, 2, null, [0, BACKDROP, BACKDROP, OVERLAY_H]);
+
+	for(let x = 0; x < PANEL_W; x += GROUND_TILE) panel.blit(graded, x, worldY(288), 1, null, [GROUND.grass[0], GROUND.grass[1], GROUND_TILE, GROUND_TILE]);
+
+	panel.blit(graded, 16, worldY(200), 1, null, [FG_X, PILLAR_SLICES.cap, FG_W, SLICE_H]);
+
+	for(let y = 208, n = 0; y < 288; y += SLICE_H, n++)
+		panel.blit(graded, 16, worldY(y), 1, null, [FG_X, n % 2 ? PILLAR_SLICES.body1 : PILLAR_SLICES.body0, FG_W, SLICE_H]);
+
+	panel.blit(graded, 16, worldY(288), 1, null, [FG_X, PILLAR_SLICES.base, FG_W, SLICE_H]);
+	cycleFigure.blit(panel, index * PANEL_W, 0);
+
+	if(index % STEPS) continue;
+
+	const caption = ['DAY', 'DUSK', 'NIGHT'][index / STEPS], captionWidth = await title(null, caption, 0, 0, 1);
+
+	await title(cycleFigure, caption, index * PANEL_W + Math.round((PANEL_W - captionWidth) / 2), PANEL_H + 3, 1, palette.cream);
+}
+
+generated.set('docs/day-cycle.png', cycleFigure.png());
+
 if(previewDirectory)
 {
 	await fs.mkdir(previewDirectory, {recursive: true});
@@ -518,9 +588,11 @@ if(check)
 }
 else
 {
-	await fs.mkdir(new URL('assets/', root), {recursive: true});
-
-	for(const [name, bytes] of generated) await fs.writeFile(new URL(name, root), bytes);
+	for(const [name, bytes] of generated)
+	{
+		await fs.mkdir(new URL('.', new URL(name, root)), {recursive: true});
+		await fs.writeFile(new URL(name, root), bytes);
+	}
 
 	console.log(`Generated ${generated.size} Phlappy Phant assets in games/phlappy-phant`);
 }
