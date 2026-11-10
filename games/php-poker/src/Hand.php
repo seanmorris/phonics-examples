@@ -83,6 +83,90 @@ final class Hand
 	}
 
 	/**
+	 * Rank the best five-card hand that can be made from five or more cards.
+	 *
+	 * Seven-card games score every five-card subset with the exact evaluator, so the result is directly comparable
+	 * with a five-card hand. Results are memoized because a view asks for the same hand many times per street.
+	 *
+	 * @param array $cards Five to seven distinct physical card IDs.
+	 * @param array $wildCards Physical IDs that may represent any missing rank and suit.
+	 * @return array The winning subset's category, tiebreak ranks, score and name, plus its `cards`.
+	 */
+	public static function best(array $cards, array $wildCards = []): array
+	{
+		$count = count($cards);
+		if($count < 5 || $count > 7 || count(array_unique($cards, SORT_REGULAR)) !== $count)
+			throw new \InvalidArgumentException('A best hand requires five to seven distinct cards');
+		$cards = array_values($cards);
+		$sorted = $cards;
+		sort($sorted, SORT_NUMERIC);
+		static $memo = [];
+		$key = implode(',', $sorted) . '|' . implode(',', WildCards::custom($wildCards));
+		if(isset($memo[$key])) return $memo[$key];
+		if(count($memo) > 4096) $memo = [];
+		$best = null;
+		for($a = 0; $a < $count - 4; $a++)
+		for($b = $a + 1; $b < $count - 3; $b++)
+		for($c = $b + 1; $c < $count - 2; $c++)
+		for($d = $c + 1; $d < $count - 1; $d++)
+		for($e = $d + 1; $e < $count; $e++)
+		{
+			$subset = [$sorted[$a], $sorted[$b], $sorted[$c], $sorted[$d], $sorted[$e]];
+			$candidate = self::evaluate($subset, $wildCards);
+			if($best === null || $candidate['score'] > $best['score']) $best = $candidate + ['cards' => $subset];
+		}
+		return $memo[$key] = $best;
+	}
+
+	/**
+	 * Rank the cards a stud player is showing, to decide who acts first on a street.
+	 *
+	 * Only matched ranks and high cards count: one to four exposed cards never make a straight or a flush for this
+	 * purpose. Wild cards join the largest natural group, or stand as aces when nothing else shows.
+	 *
+	 * @param array $cards One to four distinct exposed physical card IDs.
+	 * @param array $wildCards Physical IDs that are wild.
+	 * @return array Category on the evaluator's scale, tiebreak ranks, and a score comparable between showings.
+	 */
+	public static function showing(array $cards, array $wildCards = []): array
+	{
+		$count = count($cards);
+		if($count < 1 || $count > 4 || count(array_unique($cards, SORT_REGULAR)) !== $count)
+			throw new \InvalidArgumentException('A showing hand has one to four distinct cards');
+		$wildLookup = array_fill_keys(WildCards::custom($wildCards), true);
+		$ranks = []; $wild = 0;
+		foreach($cards as $card)
+		{
+			if(!is_int($card) || $card < 0 || $card > 53 || ($card >= 52 && !isset($wildLookup[$card])))
+				throw new \InvalidArgumentException('Invalid card');
+			if(isset($wildLookup[$card])) $wild++;
+			else $ranks[] = $card % 13 + 2;
+		}
+		$counts = array_count_values($ranks);
+		$groups = array_keys($counts);
+		usort($groups, static fn(int $a, int $b): int => ($counts[$b] <=> $counts[$a]) ?: ($b <=> $a));
+		if($wild > 0)
+		{
+			$target = $groups[0] ?? 14;
+			$counts[$target] = ($counts[$target] ?? 0) + $wild;
+			$groups = array_keys($counts);
+			usort($groups, static fn(int $a, int $b): int => ($counts[$b] <=> $counts[$a]) ?: ($b <=> $a));
+		}
+		$first = $counts[$groups[0]];
+		$second = isset($groups[1]) ? $counts[$groups[1]] : 0;
+		$category = match(true) {
+			$first === 4 => 7
+			, $first === 3 => 3
+			, $first === 2 && $second === 2 => 2
+			, $first === 2 => 1
+			, default => 0
+		};
+		$score = $category;
+		foreach(array_pad($groups, 5, 0) as $rank) $score = $score * 15 + $rank;
+		return ['category' => $category, 'ranks' => $groups, 'score' => $score, 'name' => self::LABELS[$category]];
+	}
+
+	/**
 	 * Test the pre-draw Jackpots opening condition.
 	 * @param array $cards Exact current five-card hand.
 	 * @return bool Whether this hand is a pair of jacks or better.
