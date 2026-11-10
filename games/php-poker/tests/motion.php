@@ -92,6 +92,18 @@ $after['pot'] += 5;
 $change = Chips::transition($before, $after, Chips::fromView($before));
 $expect(array_sum(array_column($change['stages'][0]['moves'], 'value')) === 5,
 	'a raise to five from zero puts the call and raise, not only the two-chip raise increment, into the pot');
+$raiseSounds = (new Motion($before,$after,$change,[]))->status()['sounds'];
+$expect(count($raiseSounds) === (int)ceil(count($change['stages'][0]['moves']) / 2)
+	&& array_unique(array_column($raiseSounds,'cue')) === ['chips'], 'alternating flying chips receive a Bicycle chip cue');
+foreach($raiseSounds as $index => $sound)
+$expect(abs($sound['at'] - $index * 2 * Motion::CHIP_GAP) < 1e-9,
+	'chip cues follow every other constant-spaced departure');
+$fourChipStage = Chips::transfer([0=>[1=>10], 'pot'=>[]],0,'pot',4);
+$fourChipSounds = (new Motion($before,$before,['stages'=>[$fourChipStage], 'after'=>$fourChipStage['after']],[]))->status()['sounds'];
+$expect(count($fourChipStage['moves']) === 4 && count($fourChipSounds) === 2,
+	'a four-chip transfer plays exactly half of its former four cues');
+$expect(abs($fourChipSounds[0]['at']) < 1e-9 && abs($fourChipSounds[1]['at'] - 2 * Motion::CHIP_GAP) < 1e-9,
+	'the half-rate chip cue remains evenly spaced on alternating departures');
 foreach([[1280,720,1],[780,1688,2],[1688,780,2]] as [$w,$h,$dpr])
 {
 	$layout = Layout::fit($w,$h,$dpr);
@@ -163,6 +175,25 @@ $dealChange = Chips::transition($onlineShuffle, $onlineDeal, $shuffleChange['aft
 $verifiedDeal = new Motion($onlineShuffle, $onlineDeal, $dealChange, []);
 $expect($verifiedDeal->status()['kind'] === 'deal' && $verifiedDeal->active(),
 	'the deal animation begins when the verified online hands become presentable');
+$dealSounds = $verifiedDeal->status()['sounds'];
+$dealCardSounds = array_values(array_filter($dealSounds, static fn(array $sound): bool => $sound['cue'] === 'card'));
+$expect(count($dealCardSounds) === 10,
+	'a verified two-player deal publishes one Bicycle card tick for every card');
+$expect(abs($dealCardSounds[0]['at'] - Motion::CHIP_TRAVEL) < 1e-9
+	&& abs($dealCardSounds[9]['at'] - (Motion::CHIP_TRAVEL + 9 * Motion::CARD_GAP)) < 1e-9,
+	'deal sounds use the card animation cadence');
+
+$drawAfter = $onlineDeal;
+$drawAfter['phase'] = 'final-betting';
+$drawAfter['players'][0]['drawCount'] = 2;
+$drawAfter['players'][0]['cards'] = [6,7,11,12,10];
+$drawMotion = new Motion($onlineDeal, $drawAfter, ['stages'=>[], 'after'=>[]], [8,9]);
+$drawSounds = $drawMotion->status()['sounds'];
+$expect(count($drawSounds) === 4 && array_unique(array_column($drawSounds,'cue')) === ['card'],
+	'a two-card draw sounds both discarded and replacement cards without exposing another hand');
+$expect(abs($drawSounds[0]['at']) < 1e-9 && abs($drawSounds[1]['at'] - Motion::CARD_GAP) < 1e-9
+	&& abs($drawSounds[2]['at'] - (Motion::CARD_TRAVEL + Motion::CARD_GAP)) < 1e-9,
+	'draw cues follow the discard and replacement halves of the motion');
 
 // Exercise both sides of every overlapping departure/arrival, including exchanges during a pot award.
 $award = Chips::transfer(['pot' => [1 => 500], 0 => [1 => 20]], 'pot', 0, 500);

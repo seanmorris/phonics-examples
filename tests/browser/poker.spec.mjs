@@ -73,6 +73,33 @@ async function padPulse(page,buttons)
 	await page.waitForTimeout(50);
 }
 
+test('Bicycle PC-speaker cues reach Web Audio and the shared mute control',async({page})=>{
+	await page.addInitScript(()=>{
+		window.pokerOscillators=[];
+		class Param{setValueAtTime(value,at){this.value=value;this.at=at;}linearRampToValueAtTime(){}}
+		window.AudioContext=class{
+			constructor(){this.currentTime=1;this.state='running';this.destination={};}
+			createOscillator(){const source={frequency:new Param,type:'',starts:[],stops:[],connect:node=>node,
+				start(at){this.starts.push(at);},stop(at){this.stops.push(at);}};pokerOscillators.push(source);return source;}
+			createGain(){return {gain:new Param,connect:node=>node};}
+			resume(){return Promise.resolve();}close(){return Promise.resolve();}
+		};
+	});
+	const canvas=await boot(page),mute=page.locator('.quick-controls #mute');
+	await expect(mute).toBeVisible();
+	await canvas.focus();await page.keyboard.press('Enter');
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('setup');
+	await page.keyboard.press('Enter');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	await expect.poll(()=>canvas.evaluate(element=>element.phpPokerDebug.audio.played)).toBeGreaterThan(0);
+	const frequencies=await page.evaluate(()=>[...new Set(pokerOscillators.map(source=>source.frequency.value))].sort((a,b)=>a-b));
+	expect(frequencies).toEqual([200,500,900]);
+	await mute.click();
+	await expect(mute).toHaveAttribute('aria-pressed','true');
+	expect(await canvas.evaluate(element=>element.phpPokerDebug.audio.muted)).toBe(true);
+	expect(await page.evaluate(()=>localStorage.getItem('php-poker.muted.v1'))).toBe('1');
+});
+
 test('native saved draw continues through keyboard input, rejects stale actions and settles idle',async({page})=>{
 	test.setTimeout(120_000);
 	const errors=[];

@@ -23,13 +23,21 @@ final class Motion
 	private float $totalDuration = 0;
 	private array $totalFrom = [];
 	private array $totalTo = [];
+	/** @var list<array{at:float,cue:string}> Browser PC-speaker cues on this presentation timeline. */
+	private array $sounds = [];
 
 	public function __construct(private array $previous, private array $next, private array $chips, private array $selection)
 	{
+		$chipSoundIndex = 0;
 		foreach($chips['stages'] as $stage)
 		{
 			$stage['start'] = $this->duration;
 			$stage['duration'] = self::CHIP_TRAVEL + max(0, count($stage['moves']) - 1) * self::CHIP_GAP;
+			foreach($stage['moves'] as $index => $_)
+			{
+				if($chipSoundIndex++ % 2 === 0)
+				$this->sounds[] = ['at' => $stage['start'] + $index * self::CHIP_GAP, 'cue' => 'chips'];
+			}
 			$this->duration += $stage['duration'];
 			$this->stages[] = $stage;
 		}
@@ -54,6 +62,8 @@ final class Motion
 		if($this->deal)
 		{
 			$this->kind = 'deal';
+			for($index = 0, $cards = count($next['players']) * 5; $index < $cards; $index++)
+			$this->sounds[] = ['at' => $this->cardStart + $index * self::CARD_GAP, 'cue' => 'card'];
 			$this->duration += max(0, count($next['players']) * 5 - 1) * self::CARD_GAP + self::CARD_TRAVEL;
 			return;
 		}
@@ -82,6 +92,11 @@ final class Motion
 				if($i < $player['drawCount']) { $this->removed[] = $i; $this->added[] = $i; }
 				else $this->kept[$i] = $i;
 			}
+			foreach($this->removed as $order => $_)
+			$this->sounds[] = ['at' => $this->cardStart + $order * self::CARD_GAP, 'cue' => 'card'];
+			$drawStart = $this->cardStart + self::CARD_TRAVEL + (count($this->removed) - 1) * self::CARD_GAP;
+			foreach($this->added as $order => $_)
+			$this->sounds[] = ['at' => $drawStart + $order * self::CARD_GAP, 'cue' => 'card'];
 			$this->duration += 2 * (self::CARD_TRAVEL + (count($this->removed) - 1) * self::CARD_GAP);
 			break;
 		}
@@ -89,7 +104,10 @@ final class Motion
 
 	public function active(): bool { return $this->elapsed < $this->duration; }
 	public function advance(float $seconds): void { $this->elapsed = min($this->duration, $this->elapsed + max(0, $seconds)); }
-	public function status(): array { return ['kind' => $this->kind, 'elapsed' => $this->elapsed, 'duration' => $this->duration]; }
+	public function status(): array
+	{
+		return ['kind' => $this->kind, 'elapsed' => $this->elapsed, 'duration' => $this->duration, 'sounds' => $this->sounds];
+	}
 
 	/** Straight interpolation only: no easing, acceleration, rotation or bounce. */
 	public static function slide(array $from, array $to, float $progress): array

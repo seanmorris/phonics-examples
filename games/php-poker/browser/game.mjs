@@ -52,6 +52,102 @@ export const onlineSettingsKey='php-poker.online-settings.v1';
 /** Local storage key listing the tables whose house rules this browser has already shown. */
 export const houseRulesSeenKey='php-poker.house-rules-seen.v1';
 
+/** Bicycle Poker 2.15's two PC-speaker effects, recovered from its Sound/Delay/NoSound call sites. */
+export const BICYCLE_POKER_CUES=Object.freeze({
+	card:Object.freeze([{at:0,frequency:200,duration:.001}])
+	,chips:Object.freeze([{at:0,frequency:900,duration:.010},{at:.020,frequency:500,duration:.015}])
+});
+
+/** Expand one named PC-speaker cue into absolute oscillator notes. */
+export function bicyclePokerTones(cue,at=0)
+{
+	if(!Number.isFinite(at))return [];
+	return (BICYCLE_POKER_CUES[cue]??[]).map(note=>({...note,at:at+note.at}));
+}
+
+/**
+ * Presentation-only Web Audio reproduction of Bicycle Poker's PIT channel-2 square waves. Motion replacement
+ * cancels notes that belonged to the old frame, while a late status update may still recover a cue up to 50 ms old.
+ */
+export class BicyclePokerBuzzer
+{
+	constructor({muted=false,createContext=null}={})
+	{
+		this.muted=Boolean(muted);this.createContext=createContext;this.context=null;this.motionKey='';
+		this.sources=new Set;this.played=0;this.lastCue='';this.error='';
+	}
+
+	unlock()
+	{
+		if(this.muted)return false;
+		try
+		{
+			if(!this.context)
+			{
+				const Context=globalThis.AudioContext??globalThis.webkitAudioContext;
+				this.context=this.createContext?.()??(Context?new Context:null);
+			}
+			if(!this.context)return false;
+			if(this.context.state==='suspended')
+			{
+				const resuming=this.context.resume?.();
+				if(resuming?.catch)void resuming.catch(()=>{});
+			}
+			return true;
+		}
+		catch(error){this.error=String(error?.message??error);return false;}
+	}
+
+	setMuted(muted)
+	{
+		this.muted=Boolean(muted);
+		if(this.muted)this.cancel();
+		else this.unlock();
+	}
+
+	motion(animation,key)
+	{
+		key=animation?String(key):'';
+		if(key===this.motionKey)return;
+		this.motionKey=key;this.cancel();
+		if(!animation||this.muted||!this.context)return;
+		const elapsed=Number.isFinite(animation.elapsed)?Math.max(0,animation.elapsed):0;
+		for(const event of Array.isArray(animation.sounds)?animation.sounds:[])
+		{
+			const at=Number(event?.at),cue=String(event?.cue??'');
+			if(!Number.isFinite(at)||at<elapsed-.05||!BICYCLE_POKER_CUES[cue])continue;
+			this.play(cue,Math.max(0,at-elapsed));
+		}
+	}
+
+	play(cue,delay=0)
+	{
+		if(this.muted||!this.context)return;
+		const now=this.context.currentTime,start=now+Math.max(0,delay);
+		for(const note of bicyclePokerTones(cue,start))
+		{
+			const source=this.context.createOscillator(),gain=this.context.createGain(),end=note.at+note.duration;
+			source.type='square';source.frequency.setValueAtTime(note.frequency,note.at);
+			gain.gain.setValueAtTime(.035,note.at);
+			gain.gain.setValueAtTime(.035,Math.max(note.at,end-.0002));
+			gain.gain.linearRampToValueAtTime(0,end);
+			source.connect(gain);gain.connect(this.context.destination);
+			this.sources.add(source);source.onended=()=>this.sources.delete(source);
+			source.start(note.at);source.stop(end+.001);
+		}
+		this.played++;this.lastCue=cue;
+	}
+
+	cancel()
+	{
+		for(const source of this.sources){try{source.stop();}catch{}}
+		this.sources.clear();
+	}
+
+	status(){return {muted:this.muted,ready:Boolean(this.context),played:this.played,lastCue:this.lastCue,error:this.error};}
+	close(){this.cancel();void this.context?.close?.();this.context=null;}
+}
+
 /**
  * Whether a table's house rules should open by themselves: true the first time this browser seats or watches it,
  * false after a reload or in a second tab. The list keeps only the most recent tables. Without storage, the rules
@@ -301,16 +397,26 @@ export function activate({module, canvas, session, services})
 		return viewport;
 	}});
 
-	// The engine's corner shortcut toggles fullscreen for the canvas's frame, so it stays on screen with the lobby.
-	// Poker has no sound, so its mute button stays hidden.
+	// The engine's corner shortcuts control the game frame and the reconstructed Bicycle PC-speaker effects.
 	const frame=canvas.closest?.('#game-frame')??canvas.parentElement;
 	const quick=new services.QuickControls(frame,frame);
-	quick.muteButton.hidden=true;
+	let buzzer=null;
+	const mute=shell.mute({
+		key:'php-poker.muted.v1',quick,parse:value=>value==='1',serialize:muted=>muted?'1':'0'
+		,onChange:muted=>buzzer?.setMuted(muted)
+	});
+	buzzer=new BicyclePokerBuzzer({muted:mute.muted});
+	const unlockBuzzer=()=>buzzer.unlock();
+	document.addEventListener('pointerdown',unlockBuzzer,{capture:true,signal});
+	document.addEventListener('keydown',unlockBuzzer,{capture:true,signal});
+	quick.muteButton.addEventListener('click',()=>{if(!mute.muted)buzzer.unlock();canvas.focus({preventScroll:true});},{signal});
 	shell.fullscreen({target:frame,quick});
 
 	// Input queues drain once per PHP frame. Positions are device pixels in the canvas's own framebuffer space.
 	const onKey=event=>{
-		if(shell.closed||event.ctrlKey||event.metaKey)return;
+		if(shell.closed)return;
+		buzzer.unlock();
+		if(event.ctrlKey||event.metaKey)return;
 		const key=event.key.length===1?event.key.toLowerCase():event.key.toLowerCase();
 		if(event.altKey)
 		{
@@ -329,6 +435,7 @@ export function activate({module, canvas, session, services})
 	const onLeave=()=>{if(activePointer===null){pointerClient=null;pointer={x:-1,y:-1,down:false};updateCursor();}};
 	const onDown=event=>{
 		if(event.button!==0||activePointer!==null)return;
+		buzzer.unlock();
 		canvas.focus({preventScroll:true});activePointer=event.pointerId;pressedAt=[event.clientX,event.clientY];
 		pointer.down=true;movePointer(event);canvas.setPointerCapture?.(event.pointerId);
 	};
@@ -432,6 +539,8 @@ export function activate({module, canvas, session, services})
 	shell.bridge('pokerOnlineView',()=>onlineView?JSON.stringify(onlineView):'');
 	shell.status('pokerStatus',{dataset:'phpPoker',handler:state=>{
 		latest=state;
+		const animation=latest.ui?.animation;
+		buzzer.motion(animation,animation?`${latest.generation??''}:${latest.revision??''}:${latest.handNumber??''}:${animation.kind}:${animation.duration}`:'');
 		updateCursor();
 		if(latest.ui?.local==='online'&&!lobbyOpening&&!lobbyVisible)
 		{
@@ -595,6 +704,7 @@ export function activate({module, canvas, session, services})
 
 	const debug={
 		get state(){return latest;}
+		, get audio(){return buzzer.status();}
 		, get online(){return online?{public:online.publicState(),hand:online.privateHand()}:null;}
 		// Intents queue for PHP; generation and revision default from the last status when the caller omits them,
 		// and explicitly supplied stale values are kept so tests can prove they are rejected.
@@ -612,6 +722,7 @@ export function activate({module, canvas, session, services})
 	session.phpPoker=debug;
 
 	shell.onClose(()=>{
+		buzzer.close();
 		quick.close();
 		watching=false;seatRun++;houseRules=null;
 		session.lobby.protocol.removeEventListener('closed',lobbyClosed);
