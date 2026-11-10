@@ -97,12 +97,11 @@ final class Painter
 		}
 		[,,$pokerWidth]=$this->layout->rect(...$headings['poker']);
 		[$pokerX]=$this->layout->point($headings['poker'][0],0);
-		$this->canvas->label('DRAW POKER',$pokerX+$pokerWidth+16*$this->unit,$top+$height/2,Theme::LABEL,Theme::MENU_TEXT,$this->face);
+		$game = (string)($this->view['game'] ?? 'draw');
+		$this->canvas->label(GameText::title($game),$pokerX+$pokerWidth+16*$this->unit,$top+$height/2,Theme::LABEL,Theme::MENU_TEXT,$this->face);
 		$stage = $this->state['motion']['kind'] ?? '';
-		$phase = !empty($this->view['waitingForConfirmation']) ? 'CONFIRMING' : match(in_array($stage, ['deal','draw'], true) ? $stage : ($this->view['phase'] ?? '')) {
-			'deal' => 'DEALING', 'betting' => 'OPENING BETS', 'draw' => 'DRAW', 'final-betting' => 'FINAL BETS',
-			'showdown' => 'HAND OVER', 'redeal' => 'REDEAL', default => 'DRAW POKER'
-		};
+		$phase = !empty($this->view['waitingForConfirmation']) ? 'CONFIRMING'
+			: GameText::phase($game, (string)($this->view['street'] ?? ''), (string)($this->view['phase'] ?? ''), (string)$stage);
 		$this->canvas->label($phase, $left + $width - 14 * $this->unit, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face, 'right');
 	}
 
@@ -122,7 +121,7 @@ final class Painter
 	/** A compact desktop-style command menu attached to the black table bar. */
 	private function dropdownMenu(string $menu): void
 	{
-		$dropdown=$this->layout->topDropdown($menu);
+		$dropdown=$this->layout->topDropdown($menu, (string)($this->view['game'] ?? 'draw'));
 		[$x,$y,$w,$h]=$this->layout->rect(...$dropdown['box']);
 		if($this->mode===Theme::MODERN) $this->canvas->shadow($x,$y,$w,$h,2*$this->unit,8*$this->unit);
 		$this->canvas->box($x,$y,$w,$h,0,Theme::DIALOG,Theme::INK,1*$this->unit);
@@ -175,10 +174,7 @@ final class Painter
 	{
 		$geometry=$this->layout->gameSettingsDialog((int)($this->state['gameSettingsWildLines']??1));
 		$settings=is_array($this->state['gameSettings']??null)?$this->state['gameSettings']:[];
-		$labels=[
-			'table'=>'Table','opening'=>'Opening','wild'=>'Wild cards','ante'=>'Dealer ante',
-			'before'=>'Before draw','after'=>'After draw','raises'=>'Raises / round','playerRaises'=>'Raises / player'
-		];
+		$labels=GameText::houseRuleLabels((string)($this->view['game'] ?? 'draw'));
 		$this->dialog($geometry['box'],(string)($this->state['gameSettingsTitle']??'HOUSE RULES'));
 		foreach($geometry['rows'] as $index=>$rect)
 		{
@@ -570,12 +566,10 @@ final class Painter
 	private function welcomeDialog(): void
 	{
 		$box = $this->layout->panel(440, 250 + $this->layout->verticalShift(), 120);
-		$this->dialog($box, 'DRAW POKER');
-		$variant = ($this->view['profile']['variant'] ?? 'jackpots') === 'anything' ? 'Anything opens' : 'Jacks or better';
+		$profile = (array)($this->view['profile'] ?? []);
+		$this->dialog($box, GameText::title((string)($profile['game'] ?? 'draw')));
 		$this->text('Welcome to a game of', $this->layout->width() / 2, $box[1] + 50, Theme::LABEL, Theme::INK, 'center');
-		$wild = (array)($this->view['profile']['wild'] ?? []);
-		$rules = strtolower($variant . ($wild === [] ? '' : ' · ' . WildCards::selectionLabel($wild) . ' wild'));
-		$this->text('5-CARD DRAW POKER  (' . $rules . ')', $this->layout->width() / 2, $box[1] + 80, Theme::LABEL, Theme::INK, 'center', $box[2] - 24);
+		$this->text(GameText::welcome($profile), $this->layout->width() / 2, $box[1] + 80, Theme::LABEL, Theme::INK, 'center', $box[2] - 24);
 	}
 
 	private function menuScreen(): void
@@ -596,8 +590,8 @@ final class Painter
 		}
 		$canContinue = !empty($this->view['canContinue']);
 		$box = $this->layout->menuBox($canContinue);
-		$this->dialog($box, 'DRAW POKER');
-		$this->text('Five-card draw · jacks or better · 2 to 8 seats', $this->layout->width() / 2, $box[1] + 24, Theme::CAPTION, Theme::INK, 'center', $box[2] - 32);
+		$this->dialog($box, 'POKER');
+		$this->text("Draw · Texas Hold'em · five- and seven-card stud", $this->layout->width() / 2, $box[1] + 24, Theme::CAPTION, Theme::INK, 'center', $box[2] - 32);
 		foreach($this->layout->menu($canContinue) as $index => $item)
 		$this->button($item['rect'], $item['label'], $this->controller() ? $this->confirmLegend() : $item['key'], $index === 0 ? 'primary' : 'default', false);
 		$this->text('Icon art: Clint Bellanger · thekingphoenix · 7Soul', $this->layout->width() / 2, $box[1] + $box[3] - 8
@@ -608,6 +602,7 @@ final class Painter
 	{
 		$players = (int)$this->state['setup']['players'];
 		$variant = (string)$this->state['setup']['variant'];
+		$game = (string)($this->state['setup']['game'] ?? 'draw');
 		$setup = $this->layout->setup($players, $variant);
 		$this->dialog($setup['box'], 'TABLE SETUP');
 		[$x, $y] = $setup['box'];
@@ -615,9 +610,9 @@ final class Painter
 		$this->text('Opponents', $x + 24, $setup['less'][1] + $setup['less'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['less'], '−', '', 'default', $players <= 2);
 		$this->plate($setup['count'], (string)($players - 1), 'info', false);
-		$this->button($setup['more'], '+', '', 'default', $players >= 8);
-		$this->text('Opening', $x + 24, $setup['variant'][1] + $setup['variant'][3] / 2, Theme::LABEL, Theme::INK);
-		$this->button($setup['variant'], $variant === 'jackpots' ? 'Jacks or better' : 'Anything opens', 'V', 'default', false);
+		$this->button($setup['more'], '+', '', 'default', $players >= GameText::seats($game));
+		$this->text('Game', $x + 24, $setup['variant'][1] + $setup['variant'][3] / 2, Theme::LABEL, Theme::INK);
+		$this->button($setup['variant'], GameText::choiceLabel($game, $variant), 'V', 'default', false);
 		$wild = (array)($this->state['setup']['wild'] ?? []);
 		$this->text('Wild cards', $x + 24, $setup['wild'][1] + $setup['wild'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['wild'], WildCards::selectionLabel($wild), 'W', 'default', false);
@@ -634,20 +629,9 @@ final class Painter
 	{
 		$limits = $this->layout->limits();
 		$draft = (array)($this->state['setup']['limitDraft'] ?? []);
-		$labels = [
-			'ante'=>'Ante','minimum'=>'Before min','maximum'=>'Before max',
-			'finalMinimum'=>'After min','finalMaximum'=>'After max',
-			'raiseLimit'=>'Total raises','playerRaiseLimit'=>'Raises/player'
-		];
-		$captions = [
-			'ante'=>'Dealer pays pot',
-			'minimum'=>'Minimum bet/raise',
-			'maximum'=>'Maximum bet/raise',
-			'finalMinimum'=>'Minimum bet/raise',
-			'finalMaximum'=>'Maximum bet/raise',
-			'raiseLimit'=>'Whole-table cap',
-			'playerRaiseLimit'=>"Each player's cap"
-		];
+		$text = GameText::limits((string)($this->state['setup']['game'] ?? 'draw'));
+		$labels = array_map(static fn(array $pair): string => $pair[0], $text);
+		$captions = array_map(static fn(array $pair): string => $pair[1], $text);
 		$this->dialog($limits['box'], 'BETTING & RAISING LIMITS');
 		foreach($limits['fields'] as $field => $stepper)
 		{
@@ -723,7 +707,7 @@ final class Painter
 		$info = $this->layout->information();
 		$box = $info['box'];
 		$this->dialog($box, 'HOW TO PLAY');
-		$paragraphs = Presenter::helpParagraphs($this->controller());
+		$paragraphs = Presenter::helpParagraphs($this->controller(), (string)($this->view['game'] ?? 'draw'));
 		$columnWidth = $box[2] - 48 * $this->layout->stretch();
 		$size = $this->layout->controlText();
 		$leading = $size * 1.45;

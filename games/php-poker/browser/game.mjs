@@ -362,7 +362,7 @@ export function activate({module, canvas, session, services})
 	const originalDescription=canvas.getAttribute('aria-describedby');
 	canvas.style.cssText='display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;border:0;border-radius:0;touch-action:none;outline:none;background:#1f8f45;cursor:default';
 	canvas.tabIndex=Math.max(0,canvas.tabIndex);
-	canvas.setAttribute('aria-label','PHP Poker. F folds, C checks or calls, B bets, 1 to 5 select cards and D draws. Alt G opens Game and Alt P opens Poker. Controller directional controls move focus, confirm selects, back returns, and Start asks before leaving the table.');
+	canvas.setAttribute('aria-label','PHP Poker: draw, hold\'em and stud. F folds, C checks or calls, B bets, and in draw 1 to 5 select cards and D draws. Alt G opens Game and Alt P opens Poker. Controller directional controls move focus, confirm selects, back returns, and Start asks before leaving the table.');
 
 	let viewport='[1280,720,1]',latest=null;
 	let keys=[],clicks=[],pointer={x:-1,y:-1,down:false},activePointer=null,pressedAt=null,pointerClient=null;
@@ -553,9 +553,19 @@ export function activate({module, canvas, session, services})
 			? selected.length?'Selected for discard: '+selected.map(cardName).join(', ')+'. Press D to draw.':'No cards selected. Press D to stand pat.' : '';
 		const line=[latest.error,latest.ui?.hint||latest.message,turn,selection].filter(Boolean).join(' ');
 		if(line!==spoken){spoken=line;live.textContent=line;}
-		// Only the local player's authorized cards enter the accessible hand description.
+		// Only the local player's authorized cards, the board and other seats' exposed cards enter the description.
 		const own=latest.screen==='table'?latest.players?.[0]?.cards:[];
-		const description=own?.length?'Your hand: '+own.map((card,index)=>`${index+1}: ${cardName(card)}`).join('; ')+'.':'';
+		const game=latest.game??'draw';
+		let description=own?.length?'Your hand: '+own.map((card,index)=>`${index+1}: ${cardName(card)}`).join('; ')+'.':'';
+		if(own?.length&&game!=='draw')
+		{
+			const faces=latest.players[0].faces??[];
+			description='Your cards: '+own.map((card,index)=>cardName(card)+(game.startsWith('stud')?` (${faces[index]==='up'?'up':'down'})`:'')).join(', ')+'.';
+			if(latest.board?.length) description+=' Board: '+latest.board.map(cardName).join(', ')+'.';
+			const showing=(latest.players??[]).slice(1).filter(player=>!player.folded&&player.cards?.some(card=>card!==null))
+				.map(player=>`${player.name}: ${player.cards.filter(card=>card!==null).map(cardName).join(', ')}`);
+			if(showing.length) description+=' Showing: '+showing.join('; ')+'.';
+		}
 		if(description!==described){described=description;hand.textContent=description;}
 	}});
 
