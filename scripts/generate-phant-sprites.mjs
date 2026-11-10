@@ -27,10 +27,10 @@ const palette = {
 };
 
 // Barrels, ground and clouds share one 56x32 grid. The elephant sheet holds two rows of two 64x52 frames (wing
-// folded, wing spread): the top row faces right, the bottom row faces left. The game flies rightward and uses the
-// top row.
+// folded, wing spread): the top row faces right for flight, the bottom row faces left for poses that would otherwise
+// mirror the sprite and its lettering. Both rows ship as tiles 1 to 4.
 const TILE_W = 56, TILE_H = 32, TILE_COLUMNS = 5, TILE_COUNT = 5;
-const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2, PHANT_ROWS = 2, PHANT_ROW = 0;
+const PHANT_W = 64, PHANT_H = 52, PHANT_FRAMES = 2, PHANT_ROWS = 2;
 
 /** A simple RGBA raster with out-of-range writes ignored. */
 class Raster
@@ -119,7 +119,7 @@ class Raster
 	}
 }
 
-/** Copy the elephant frames from the hand-pixelled sheet, checking its layout. */
+/** Copy the elephant frames from the hand-pixelled sheet, checking its layout: row-major, right-facing row first. */
 async function phantFrames()
 {
 	const image = PNG.sync.read(await fs.readFile(new URL('art/elephpant.png', root)));
@@ -129,18 +129,22 @@ async function phantFrames()
 
 	const sheet = new Raster(image.width, image.height);
 	sheet.data.set(image.data);
+	const frames = [];
 
-	return Array.from({length: PHANT_FRAMES}, (_, index) => {
+	for(let row = 0; row < PHANT_ROWS; row++) for(let index = 0; index < PHANT_FRAMES; index++)
+	{
 		const frame = new Raster(PHANT_W, PHANT_H);
 
 		for(let y = 0; y < PHANT_H; y++) for(let x = 0; x < PHANT_W; x++)
 		{
-			const [r, g, b, a] = sheet.get(index * PHANT_W + x, PHANT_ROW * PHANT_H + y);
+			const [r, g, b, a] = sheet.get(index * PHANT_W + x, row * PHANT_H + y);
 			frame.put(x, y, [r, g, b], a);
 		}
 
-		return frame;
-	});
+		frames.push(frame);
+	}
+
+	return frames;
 }
 
 /** Colour of one row of the stacked barrel ring; the cap reuses rows 16 to 31 so stacks join seamlessly. */
@@ -322,8 +326,8 @@ async function title(target, text, x, y, scale, colour = palette.ink)
 
 const frames = await phantFrames();
 const cap = barrelCap(), ring = barrelRing(), bottom = cap.flippedVertically(), soil = ground(), puff = cloud();
-const phantSheet = new Raster(PHANT_W * PHANT_FRAMES, PHANT_H);
-frames.forEach((frame, index) => phantSheet.blit(frame, index * PHANT_W, 0));
+const phantSheet = new Raster(PHANT_W * PHANT_FRAMES, PHANT_H * PHANT_ROWS);
+frames.forEach((frame, index) => phantSheet.blit(frame, (index % PHANT_FRAMES) * PHANT_W, Math.floor(index / PHANT_FRAMES) * PHANT_H));
 const tileSheet = new Raster(TILE_W * TILE_COLUMNS, TILE_H);
 [cap, ring, bottom, soil, puff].forEach((tile, index) => tileSheet.blit(tile, index * TILE_W, 0));
 
@@ -341,7 +345,7 @@ const tileset = (name, image, width, height, columns, count, sheet) => Buffer.fr
 }, null, 2) + '\n');
 
 generated.set('assets/phant.png', phantSheet.png());
-generated.set('assets/phant.tsj', tileset('Phlappy Phant elephant', 'phant.png', PHANT_W, PHANT_H, PHANT_FRAMES, PHANT_FRAMES, phantSheet));
+generated.set('assets/phant.tsj', tileset('Phlappy Phant elephant', 'phant.png', PHANT_W, PHANT_H, PHANT_FRAMES, PHANT_FRAMES * PHANT_ROWS, phantSheet));
 generated.set('assets/tiles.png', tileSheet.png());
 generated.set('assets/tiles.tsj', tileset('Phlappy Phant tiles', 'tiles.png', TILE_W, TILE_H, TILE_COLUMNS, TILE_COUNT, tileSheet));
 generated.set('assets/flap.wav', flapSound());
@@ -374,9 +378,9 @@ if(previewDirectory)
 	big.fill(0, 0, big.width, big.height, [0xff, 0xdd, 0xee]);
 	big.blit(tileSheet, 0, 0, 8);
 	await fs.writeFile(path.join(previewDirectory, 'tiles-8x.png'), big.png());
-	const closeup = new Raster(PHANT_W * 12 * PHANT_FRAMES + 16, PHANT_H * 12);
+	const closeup = new Raster(PHANT_W * 12 * PHANT_FRAMES + 16, PHANT_H * 12 * PHANT_ROWS + 16);
 	closeup.fill(0, 0, closeup.width, closeup.height, [0xcf, 0xe6, 0xf5]);
-	frames.forEach((frame, index) => closeup.blit(frame, index * (PHANT_W * 12 + 16), 0, 12));
+	frames.forEach((frame, index) => closeup.blit(frame, (index % PHANT_FRAMES) * (PHANT_W * 12 + 16), Math.floor(index / PHANT_FRAMES) * (PHANT_H * 12 + 16), 12));
 	await fs.writeFile(path.join(previewDirectory, 'phant-12x.png'), closeup.png());
 	await fs.writeFile(path.join(previewDirectory, 'poster.png'), poster.png());
 }

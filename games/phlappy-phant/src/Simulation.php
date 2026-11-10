@@ -6,33 +6,34 @@ namespace PhlappyPhant;
  * Deterministic 60 Hz flap-and-dodge simulation in world space.
  *
  * The phant never moves horizontally: it sits at world x zero while barrels scroll toward it, so the simulation
- * depends on the logical height alone and any viewport width only changes how far ahead a player can see.
+ * depends on the logical height alone and any viewport width only changes how far ahead a player can see. The world
+ * is 352 units tall (ground at 288 plus two ground rows), small enough that even a 1x desktop frame draws it at 2x.
  */
 final class Simulation
 {
-	public const HEIGHT = 480;
+	public const HEIGHT = 352;
 	public const STEP = 1 / 60;
-	public const GROUND_Y = 416;
+	public const GROUND_Y = 288;
 	public const PHANT_W = 64;
 	public const PHANT_H = 52;
-	public const PHANT_START_Y = 200;
+	public const PHANT_START_Y = 130;
 	public const HITBOX_INSET_X = 8;
 	public const HITBOX_INSET_Y = 8;
-	public const GRAVITY = 1400;
-	public const FLAP_VY = -380;
-	public const MAX_FALL = 640;
+	public const GRAVITY = 1300;
+	public const FLAP_VY = -330;
+	public const MAX_FALL = 600;
 	public const BARREL_W = 52;
-	public const BARREL_SPACING = 180;
+	public const BARREL_SPACING = 170;
 	public const FIRST_BARREL_X = 420;
 	public const LOOKAHEAD = 1200;
 	public const DESPAWN_X = -320;
 	public const SPEED_BASE = 120;
 	public const SPEED_PER_SCORE = 4;
 	public const SPEED_MAX = 200;
-	public const GAP_BASE = 140;
-	public const GAP_PER_SCORE = 2;
-	public const GAP_MIN = 100;
-	public const GAP_MARGIN = 40;
+	public const GAP_BASE = 110;
+	public const GAP_PER_SCORE = 1;
+	public const GAP_MIN = 80;
+	public const GAP_MARGIN = 32;
 	public const NIGHT_EVERY = 10;
 	public const DEAD_SETTLE = .6;
 	public const WING_BEATS = 3;

@@ -55,8 +55,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	const saveProfile = () => storage.set(profileKey, JSON.stringify(profile));
 
-	// The game fills whatever frame it is given: PHP reads the measured size every frame and scales its 480-unit
-	// world to the height, so wider screens simply see further ahead.
+	// The game fills whatever frame it is given: PHP reads the measured size every frame and scales its world to
+	// the height in whole pixels, so wider screens simply see further ahead.
 	const view = shell.measure({
 		observe: screen
 		, cssSize: true

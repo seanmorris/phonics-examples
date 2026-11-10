@@ -2,7 +2,7 @@
 
 Phlappy Phant is a pixel-art homage to Flappy Bird starring the **elePHPant**, the PHP mascot by Vincent Pontier. Instead of pipes, the phant slips between stacks of DB silo barrels. A deterministic fixed-step PHP simulation runs the flight, the seeded barrel gaps, collisions, scoring and the day/night cycle; the browser module supplies taps, sounds, fullscreen, the local best score and accessible menu hit targets.
 
-The game fills any frame rather than letterboxing a fixed canvas: the world is 480 logical units tall and the visible width follows the frame's aspect, so a portrait phone and a widescreen desktop play the same simulation and only see different amounts of the road ahead.
+The game fills any frame rather than letterboxing a fixed canvas: the world is 352 logical units tall and the visible width follows the frame's aspect, so a portrait phone and a widescreen desktop play the same simulation and only see different amounts of the road ahead.
 
 ## How to play
 

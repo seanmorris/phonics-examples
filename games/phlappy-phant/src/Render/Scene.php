@@ -20,11 +20,12 @@ use PhlappyPhant\Simulation;
 final class Scene
 {
 	public const GID_PHANT = 1;
-	public const GID_CAP = 4;
-	public const GID_RING = 5;
-	public const GID_BOTTOM = 6;
-	public const GID_GROUND = 7;
-	public const GID_CLOUD = 8;
+	public const GID_PHANT_LEFT = 3;
+	public const GID_CAP = 5;
+	public const GID_RING = 6;
+	public const GID_BOTTOM = 7;
+	public const GID_GROUND = 8;
+	public const GID_CLOUD = 9;
 	public const TILE_W = 56;
 	public const TILE_H = 32;
 	public const DAY_SKY = [.81, .90, .96];
@@ -71,7 +72,7 @@ final class Scene
 		$this->menus->style['selected'] = [1, 1, 1, 1];
 		$this->menus->style['highlight'] = [.18, .43, .45, 1];
 		$this->menus->style['selection'] = [.12, .27, .28, 1];
-		$this->menus->style['disabled'] = [.31, .37, .61, 1];
+		$this->menus->style['disabled'] = [.18, .43, .45, 1];
 	}
 
 	/**
@@ -107,8 +108,8 @@ final class Scene
 		, float $seconds
 		, int $best
 	): void {
-		// Pixel art wants whole pixels: the world draws at the largest integer scale that keeps at least the playable
-		// 440 units in view, anchored to the ground, so a taller frame shows more sky and the tiles are never resampled.
+		// Pixel art wants whole pixels: the world draws at the largest integer scale that keeps the playable height in
+		// view, anchored to the ground, so a taller frame shows more sky and the tiles are never resampled.
 		$k = max(1, (int)floor($height / (Simulation::HEIGHT - Simulation::GAP_MARGIN)));
 		$scale = (float)$k;
 		$visible = $width / $scale;
@@ -132,7 +133,7 @@ final class Scene
 		$parallax = $game->scroll * .3;
 		$period = 230.0;
 		$count = (int)ceil($visible / $period) + 2;
-		$skyBand = max(60, (int)(Simulation::GROUND_Y + $offsetY - 120));
+		$skyBand = max(40, (int)(Simulation::GROUND_Y + $offsetY - 100));
 
 		for($i = 0; $i < $count; $i++)
 		{
@@ -182,8 +183,9 @@ final class Scene
 
 		{
 			$y = $game->previousY + ($game->y - $game->previousY) * $alpha;
+			// The tumble uses the left-facing frames rather than a flip, so the lettering never mirrors.
 			$phant = new Sprite(
-				self::GID_PHANT + $game->frame
+				($game->phase === 'dead' ? self::GID_PHANT_LEFT : self::GID_PHANT) + $game->frame
 				, ($phantX + Simulation::PHANT_W / 2) * $scale
 				, ($y + Simulation::PHANT_H / 2 + $offsetY) * $scale
 				, .5
@@ -196,8 +198,7 @@ final class Scene
 			if($game->phase === 'dead')
 			{
 				$this->deathSpin = min(1.0, $this->deathSpin + $elapsed * 3);
-				$phant->rotation = M_PI / 2 * $this->deathSpin;
-				$phant->flipY = $this->deathSpin >= 1;
+				$phant->rotation = -M_PI / 2 * $this->deathSpin;
 			}
 			else
 			{
@@ -233,7 +234,7 @@ final class Scene
 		{
 			// The wordmark fills up to the frame's width minus a margin at a whole-number scale, so phones get a
 			// smaller logo rather than a clipped or resampled one.
-			$logo = (float)max(1, min(3 * $k, (int)floor(($width - 24 * $scale) / max(1, $this->measure('PHLAPPY PHANT')))));
+			$logo = (float)max(1, min(2 * $k + 1, (int)floor(($width - 24 * $scale) / max(1, $this->measure('PHLAPPY PHANT')))));
 			$this->label($labels, 'PHLAPPY PHANT', $width / 2 + $logo, $height * .11 + $logo, $logo, 'center', self::INK);
 			$this->label($labels, 'PHLAPPY PHANT', $width / 2, $height * .11, $logo, 'center', self::CREAM);
 		}
@@ -244,7 +245,7 @@ final class Scene
 		{
 			// The shared menu renderer scales by min(style scale, width / 320, height / 180); handing it the whole number
 			// below that keeps its glyphs crisp, and the plaque width follows so the hint row fits.
-			$m = max(1, min($k + 1, 3, (int)floor(min($width / 320, $height / 180))));
+			$m = max(1, min($k, 3, (int)floor(min($width / 320, $height / 180))));
 			$this->menus->style['scale'] = $m;
 			$this->menus->style['width'] = 330 * $m;
 			// The control hints need a wide plaque and a readable size; small frames drop them rather than clip them.

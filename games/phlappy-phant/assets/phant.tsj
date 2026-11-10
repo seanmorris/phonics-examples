@@ -4,9 +4,9 @@
   "name": "Phlappy Phant elephant",
   "tilewidth": 64,
   "tileheight": 52,
-  "tilecount": 2,
+  "tilecount": 4,
   "columns": 2,
   "image": "phant.png",
   "imagewidth": 128,
-  "imageheight": 52
+  "imageheight": 104
 }
