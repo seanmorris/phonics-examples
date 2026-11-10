@@ -87,7 +87,7 @@ $scoring->step();
 check($scoring->score === 1, 'a passed barrel does not score again');
 check(Simulation::paletteFor(9) === 0 && Simulation::paletteFor(10) === 1 && Simulation::paletteFor(20) === 0, 'day and night alternate every ten barrels');
 check(Simulation::speedFor(0) === 120.0 && Simulation::speedFor(100) === 200.0, 'speed ramps to its cap');
-check(Simulation::gapFor(0) === 110.0 && Simulation::gapFor(50) === 80.0, 'gaps shrink to their floor');
+check(Simulation::gapFor(0) === 132.0 && Simulation::gapFor(50) === 100.0, 'gaps shrink to their floor');
 
 $wall = new Simulation(4);
 $wall->step(true);

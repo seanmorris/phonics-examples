@@ -30,9 +30,9 @@ final class Simulation
 	public const SPEED_BASE = 120;
 	public const SPEED_PER_SCORE = 4;
 	public const SPEED_MAX = 200;
-	public const GAP_BASE = 110;
+	public const GAP_BASE = 132;
 	public const GAP_PER_SCORE = 1;
-	public const GAP_MIN = 80;
+	public const GAP_MIN = 100;
 	public const GAP_MARGIN = 32;
 	public const NIGHT_EVERY = 10;
 	public const DEAD_SETTLE = .6;
