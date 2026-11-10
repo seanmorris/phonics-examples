@@ -30,6 +30,10 @@
     {
       "firstgid": 61,
       "source": "../assets/scenery.tsj"
+    },
+    {
+      "firstgid": 82,
+      "source": "../assets/cardinal.tsj"
     }
   ]
 }

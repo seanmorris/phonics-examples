@@ -1,0 +1,35 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "name": "Phlappy Phant cardinal",
+  "tilewidth": 32,
+  "tileheight": 32,
+  "tilecount": 3,
+  "columns": 3,
+  "image": "cardinal.png",
+  "imagewidth": 96,
+  "imageheight": 32,
+  "tiles": [
+    {
+      "id": 0,
+      "animation": [
+        {
+          "tileid": 0,
+          "duration": 110
+        },
+        {
+          "tileid": 1,
+          "duration": 110
+        },
+        {
+          "tileid": 2,
+          "duration": 110
+        },
+        {
+          "tileid": 1,
+          "duration": 110
+        }
+      ]
+    }
+  ]
+}

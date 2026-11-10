@@ -57,12 +57,13 @@ A frame is drawn back to front:
 
 1. The device is cleared to the current sky color.
 2. The backdrop is drawn at twice the size of the other tiles, resting on the ground line. Each band of the parallax mask is a separate strip that drifts at its own fraction of the scroll, and the river is a two-frame tile animation.
-3. The ground is two rows of 32-unit tiles that scroll at full speed.
-4. Scenery stands on the ground to the right of each pair. One of six arrangements of tree, shrub, and fence, one of them empty, is chosen from the pair's number.
-5. Each pair is built from 8-unit slices: a cap, wall slices that alternate so the dirt pattern continues, and a base that closes the outline into the grass. The hanging pillar is the same stack with every slice flipped.
-6. The phant is drawn last, tilted by its vertical speed. After a bonk it switches to its left-facing frames and tips over as it falls.
+3. A cardinal crosses the sky now and then, slowly, from right to left. It sets out only in full daylight, fades with the light if dusk catches it, and is timed from its own random stream so it never touches the seeded course.
+4. The ground is two rows of 32-unit tiles that scroll at full speed.
+5. Scenery stands on the ground to the right of each pair. One of six arrangements of tree, shrub, and fence, one of them empty, is chosen from the pair's number.
+6. Each pair is built from 8-unit slices: a cap, wall slices that alternate so the dirt pattern continues, and a base that closes the outline into the grass. The hanging pillar is the same stack with every slice flipped.
+7. The phant is drawn last, tilted by its vertical speed. After a bonk it switches to its left-facing frames and tips over as it falls.
 
-Steps 2 to 5 are the terrain, and all of it changes color during the day cycle. The engine's sprite renderer would express a fade as two overlapping sprites, which doubles the work exactly when the backdrop fills the frame. `TerrainRenderer` instead sends every terrain piece as one instance with a destination rectangle and two atlas rectangles, one in the current palette and one in the next. Its fragment shader samples both and mixes them, so a fade costs one pass. [Art and the day cycle](art.md) describes the palettes.
+Steps 2 and 4 to 6 are the terrain, and all of it changes color during the day cycle. The engine's sprite renderer would express a fade as two overlapping sprites, which doubles the work exactly when the backdrop fills the frame. `TerrainRenderer` instead sends every terrain piece as one instance with a destination rectangle and two atlas rectangles, one in the current palette and one in the next. Its fragment shader samples both and mixes them, so a fade costs one pass. [Art and the day cycle](art.md) describes the palettes.
 
 ## HUD and menus
 

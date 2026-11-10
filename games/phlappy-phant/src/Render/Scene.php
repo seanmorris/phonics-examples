@@ -11,6 +11,7 @@ use Phonics\Render\SpriteRenderer;
 use Phonics\Tiled\TileMap;
 use Phonics\Ui\Menu;
 use Phonics\Ui\MenuRenderer;
+use PhlappyPhant\Random;
 use PhlappyPhant\Simulation;
 
 /**
@@ -29,6 +30,10 @@ final class Scene
 	public const GID_GRASS = 47;
 	public const GID_DIRT = 48;
 	public const GID_SCENERY = 61;
+	public const GID_CARDINAL = 82;
+	/** The cardinal's speed across the frame, and the shortest and longest quiet spell between visits, in seconds. */
+	public const CARDINAL_SPEED = 34;
+	public const CARDINAL_WAIT = [14, 40];
 	public const STRIDE_BACKDROP = 2;
 	public const STRIDE_PILLAR = 4;
 	public const STRIDE_GROUND = 2;
@@ -83,6 +88,11 @@ final class Scene
 	private array $skies = [];
 	private float $blendClock = 0;
 	private float $deathSpin = 0;
+	/** The cardinal's frame-relative position in world units while it is crossing, or null while the sky is empty. */
+	private ?array $cardinal = null;
+	private float $cardinalWait = 6;
+	/** Scenery only: its own stream, so a visit never touches the seeded course. */
+	private Random $cardinalRandom;
 	/** @var list<array{int,int,float}> Backdrop bands as [top, height, parallax rate], read from the backdrop tileset. */
 	private array $bands = [];
 	/** @var list<int> Width of each scenery piece, read from the scenery tileset. */
@@ -101,6 +111,7 @@ final class Scene
 		$this->fontAtlas = new Atlas($font->map);
 		$this->sprites = new SpriteRenderer($this->atlas);
 		$this->terrain = new TerrainRenderer($this->atlas);
+		$this->cardinalRandom = new Random(2161);
 		$this->text = new SpriteRenderer($this->fontAtlas);
 		$this->rects = new RectRenderer;
 		$this->menus = new MenuRenderer($font);
@@ -224,6 +235,47 @@ final class Scene
 				$band->animated = true;
 				$this->graded($terrain, $band, self::STRIDE_BACKDROP);
 			}
+		}
+
+		// A cardinal crosses the sky now and then, slowly, right to left, and only by day: it sets out only in full
+		// daylight and fades with the light if dusk catches it. It flies behind the ground, scenery and pillars, so the
+		// backdrop is drawn first and the rest of the terrain after it.
+		$this->terrain->render($terrain, $width, $height, $seconds * 1000, $this->fade);
+		$terrain = [];
+		$daylight = max(0.0, 1 - $this->blend);
+
+		if($this->cardinal === null)
+		{
+			$this->cardinalWait -= $elapsed;
+
+			if($this->cardinalWait <= 0 && $game->palette === 0 && $this->blend <= 0)
+			$this->cardinal = [$visible + 8.0, 12.0 + $this->cardinalRandom->int(88)];
+		}
+		else
+		{
+			$this->cardinal[0] -= self::CARDINAL_SPEED * $elapsed;
+
+			if($this->cardinal[0] < -40 || $daylight <= 0)
+			{
+				$this->cardinal = null;
+				$this->cardinalWait = self::CARDINAL_WAIT[0]
+					+ $this->cardinalRandom->int(self::CARDINAL_WAIT[1] - self::CARDINAL_WAIT[0] + 1);
+			}
+		}
+
+		if($this->cardinal !== null)
+		{
+			// A gentle bob keeps the glide from looking like a slide.
+			$bird = $this->tile(
+				self::GID_CARDINAL
+				, round($this->cardinal[0]) * $scale
+				, $y($this->cardinal[1] + round(3 * sin($seconds * 2.2)))
+				, $scale
+				, $tint
+			);
+			$bird->animated = true;
+			$bird->opacity = $daylight;
+			$this->sprites->render([$bird], $camera, $seconds * 1000);
 		}
 
 		for($x = -fmod($game->scroll, self::GROUND_TILE); $x < $visible; $x += self::GROUND_TILE)

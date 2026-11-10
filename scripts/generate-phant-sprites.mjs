@@ -436,6 +436,18 @@ generated.set('assets/scenery.png', scenerySheet.png());
 generated.set('assets/scenery.tsj', tileset('Phlappy Phant scenery', 'scenery.png', SCENERY_W, SCENERY_H, SCENERY.length, SCENERY.length * palettes.length, scenerySheet, {
 	properties: [{name: 'phlappy.widths', type: 'string', value: SCENERY.map(([, , , width]) => width).join(',')}]
 }));
+// The cardinal that crosses the daytime sky: three 32x32 flight frames facing left, played down, level, up, level.
+const cardinalImage = PNG.sync.read(await fs.readFile(new URL('art/cardinal.png', root)));
+
+if(cardinalImage.width !== 96 || cardinalImage.height !== 32)
+	throw Error(`art/cardinal.png must be 96x32, found ${cardinalImage.width}x${cardinalImage.height}`);
+
+const cardinalSheet = new Raster(96, 32);
+cardinalSheet.data.set(cardinalImage.data);
+generated.set('assets/cardinal.png', cardinalSheet.png());
+generated.set('assets/cardinal.tsj', tileset('Phlappy Phant cardinal', 'cardinal.png', 32, 32, 3, 3, cardinalSheet, {
+	tiles: [{id: 0, animation: [0, 1, 2, 1].map(tileid => ({tileid, duration: 110}))}]
+}));
 generated.set('assets/flap.wav', flapSound());
 generated.set('assets/ding.wav', dingSound());
 generated.set('assets/bonk.wav', bonkSound());
