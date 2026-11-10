@@ -55,14 +55,25 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	const saveProfile = () => storage.set(profileKey, JSON.stringify(profile));
 
-	// The game fills whatever frame it is given: PHP reads the measured size every frame and scales its world to
-	// the height in whole pixels, so wider screens simply see further ahead.
+	// The game fills whatever frame it is given, but its artwork already scales in whole pixel blocks. Render one
+	// physical pixel per block and let the pixelated canvas enlarge it: drawing every repeated device pixel through
+	// the sprite shader wastes most of a core on large and high-DPI frames without adding any image information.
 	const view = shell.measure({
 		observe: screen
-		, cssSize: true
+		, cssSize: false
 		, dprCap: 2
 		, initial: '[640,960,1,false]'
-		, format: (width, height, dpr, box, coarse) => JSON.stringify([width, height, dpr, coarse])
+		, format: (width, height, dpr, box, coarse) => {
+			const block = Math.max(1, Math.floor(height / 320));
+			const renderWidth = Math.ceil(width / block);
+			const renderHeight = Math.ceil(height / block);
+			canvas.style.width = `${renderWidth * block / dpr}px`;
+			canvas.style.height = `${renderHeight * block / dpr}px`;
+			canvas.style.top = 'auto';
+			canvas.style.bottom = '0';
+
+			return JSON.stringify([renderWidth, renderHeight, dpr, coarse]);
+		}
 	});
 
 	let samples = null;

@@ -62,6 +62,7 @@ final class Scene
 	private Atlas $atlas;
 	private Atlas $fontAtlas;
 	private SpriteRenderer $sprites;
+	private TerrainRenderer $terrain;
 	private SpriteRenderer $text;
 	private RectRenderer $rects;
 	private MenuRenderer $menus;
@@ -94,6 +95,7 @@ final class Scene
 		$this->atlas = new Atlas($map);
 		$this->fontAtlas = new Atlas($font->map);
 		$this->sprites = new SpriteRenderer($this->atlas);
+		$this->terrain = new TerrainRenderer($this->atlas);
 		$this->text = new SpriteRenderer($this->fontAtlas);
 		$this->rects = new RectRenderer;
 		$this->menus = new MenuRenderer($font);
@@ -193,6 +195,7 @@ final class Scene
 
 		$tint = [1, 1, 1, 1];
 
+		$terrain = [];
 		$sprites = [];
 		$y = static fn(float $worldY): float => ($worldY + $offsetY) * $scale;
 
@@ -214,15 +217,15 @@ final class Scene
 				);
 				$band->crop = [0, $top, self::BACKDROP, $bandHeight];
 				$band->animated = true;
-				$this->graded($sprites, $band, self::STRIDE_BACKDROP);
+				$this->graded($terrain, $band, self::STRIDE_BACKDROP);
 			}
 		}
 
 		for($x = -fmod($game->scroll, self::GROUND_TILE); $x < $visible; $x += self::GROUND_TILE)
 		{
-			$this->graded($sprites, $this->tile(self::GID_GRASS, $x * $scale, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_GROUND);
+			$this->graded($terrain, $this->tile(self::GID_GRASS, $x * $scale, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_GROUND);
 			$this->graded(
-				$sprites
+				$terrain
 				, $this->tile(self::GID_DIRT, $x * $scale, $y(Simulation::GROUND_Y + self::GROUND_TILE), $scale, $tint)
 				, self::STRIDE_GROUND
 			);
@@ -243,7 +246,7 @@ final class Scene
 
 				$scenery = $this->tile(self::GID_SCENERY + $piece, $sx * $scale, $y(Simulation::GROUND_Y), $scale, $tint);
 				$scenery->originY = 1;
-				$this->graded($sprites, $scenery, self::STRIDE_SCENERY);
+				$this->graded($terrain, $scenery, self::STRIDE_SCENERY);
 			}
 
 			$left = $wx - (self::SLICE_W - Simulation::TOWER_W) / 2;
@@ -265,18 +268,18 @@ final class Scene
 				return $slice;
 			};
 
-			$this->graded($sprites, $hanging(self::GID_TOWER_CAP, $tower->gapTop - self::SLICE_H), self::STRIDE_TOWER);
+			$this->graded($terrain, $hanging(self::GID_TOWER_CAP, $tower->gapTop - self::SLICE_H), self::STRIDE_TOWER);
 
 			for($wy = $tower->gapTop - 2 * self::SLICE_H, $n = 0; $wy + $offsetY > -self::SLICE_H; $wy -= self::SLICE_H, $n++)
-			$this->graded($sprites, $hanging(self::GID_TOWER_BODY + $n % 2, $wy), self::STRIDE_TOWER);
+			$this->graded($terrain, $hanging(self::GID_TOWER_BODY + $n % 2, $wy), self::STRIDE_TOWER);
 
 			$top = $tower->gapTop + $tower->gap;
-			$this->graded($sprites, $this->tile(self::GID_TOWER_CAP, $sx, $y($top), $scale, $tint), self::STRIDE_TOWER);
+			$this->graded($terrain, $this->tile(self::GID_TOWER_CAP, $sx, $y($top), $scale, $tint), self::STRIDE_TOWER);
 
 			for($wy = $top + self::SLICE_H, $n = 0; $wy < Simulation::GROUND_Y; $wy += self::SLICE_H, $n++)
-			$this->graded($sprites, $this->tile(self::GID_TOWER_BODY + $n % 2, $sx, $y($wy), $scale, $tint), self::STRIDE_TOWER);
+			$this->graded($terrain, $this->tile(self::GID_TOWER_BODY + $n % 2, $sx, $y($wy), $scale, $tint), self::STRIDE_TOWER);
 
-			$this->graded($sprites, $this->tile(self::GID_TOWER_BASE, $sx, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_TOWER);
+			$this->graded($terrain, $this->tile(self::GID_TOWER_BASE, $sx, $y(Simulation::GROUND_Y), $scale, $tint), self::STRIDE_TOWER);
 		}
 
 		// The title page belongs to the wordmark and the menu; the phant appears on the ready screen.
@@ -309,6 +312,7 @@ final class Scene
 			$sprites[] = $phant;
 		}
 
+		$this->terrain->render($terrain, $width, $height, $seconds * 1000, $this->fade);
 		$this->sprites->render($sprites, $camera, $seconds * 1000);
 
 		$labels = [];
@@ -567,22 +571,15 @@ final class Scene
 	 * Every terrain sheet keeps the same shapes, so drawing the next palette over the current one at the eased
 	 * fraction interpolates each pixel between the two hand-graded colours.
 	 *
-	 * @param list<Sprite> $sprites Batch to append to, in painter's order.
+	 * @param list<array{Sprite,int}> $terrain Batch to append to, in painter's order.
 	 * @param Sprite $sprite Sprite built with its day-palette GID.
 	 * @param int $stride Tiles per palette in the sprite's tileset.
-	 * @return void Appends one sprite, or two while a transition is under way.
+	 * @return void Appends one sprite and its palette stride for the one-pass terrain shader.
 	 */
-	private function graded(array &$sprites, Sprite $sprite, int $stride): void
+	private function graded(array &$terrain, Sprite $sprite, int $stride): void
 	{
 		$sprite->gid += $stride * $this->palette;
-		$sprites[] = $sprite;
-
-		if($this->fade <= 0) return;
-
-		$next = clone $sprite;
-		$next->gid += $stride;
-		$next->opacity = $this->fade;
-		$sprites[] = $next;
+		$terrain[] = [$sprite, $stride];
 	}
 
 	private function tile(int $gid, float $x, float $y, float $scale, array $tint): Sprite
@@ -712,6 +709,7 @@ final class Scene
 	{
 		$this->atlas->restore();
 		$this->sprites->restore();
+		$this->terrain->restore();
 		$this->fontAtlas->restore();
 		$this->text->restore();
 		$this->rects->restore();
@@ -730,6 +728,7 @@ final class Scene
 		$this->text->close();
 		$this->fontAtlas->close();
 		$this->sprites->close();
+		$this->terrain->close();
 		$this->atlas->close();
 	}
 }

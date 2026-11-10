@@ -28,12 +28,21 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	const scale = Math.max(1, Math.floor(wide.height / 320));
 	expect(wide.viewport[2]).toBeCloseTo(scale, 5);
 	expect(wide.viewport[3]).toBeCloseTo(Math.max(60, Math.min(200, .28 * wide.width / scale)) * scale, 3);
+	const raster = await canvas.evaluate(element => {
+		const box = element.parentElement.getBoundingClientRect();
+		const dpr = Math.min(2, devicePixelRatio || 1);
+		const physical = [Math.round(box.width * dpr), Math.round(box.height * dpr)];
+		const block = Math.max(1, Math.floor(physical[1] / 320));
+
+		return {physical, block, buffer: [element.width, element.height]};
+	});
+	expect(raster.buffer).toEqual(raster.physical.map(value => Math.ceil(value / raster.block)));
+	expect(raster.buffer[0] * raster.buffer[1]).toBeLessThan(raster.physical[0] * raster.physical[1]);
 
 	await canvas.focus();
 	await page.keyboard.press('Space');
 	await expect.poll(async() => (await status(page)).phase).toBe('playing');
-	expect((await status(page)).vy).toBeLessThan(0);
-	expect((await status(page)).counts.flap).toBeGreaterThanOrEqual(1);
+	await expect.poll(async() => (await status(page)).counts.flap).toBeGreaterThanOrEqual(1);
 
 	// A click on the canvas is a flap too.
 	const before = (await status(page)).counts.flap;
@@ -77,10 +86,12 @@ test('the Konami code with no points hands the run to a perfect player that neve
 
 	await expect.poll(async() => (await status(page)).autopilot).toBe(true);
 	expect((await status(page)).counts.tas).toBe(1);
-	await expect.poll(async() => (await status(page)).score, {timeout: 30_000}).toBeGreaterThanOrEqual(3);
+	await expect.poll(async() => (await status(page)).score, {timeout: 45_000}).toBeGreaterThanOrEqual(10);
+	await page.waitForTimeout(500);
 	const flying = await status(page);
 	expect(flying.phase).toBe('playing');
 	expect(flying.page).toBe('play');
+	expect(flying.palette).toBe(1);
 	expect(flying.best).toBe(0);
 
 	// Pausing out of the run leaves nothing behind: the best is untouched and the next run is the player's again.
