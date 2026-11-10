@@ -1,20 +1,12 @@
 const MIX = Object.freeze({
 	effects: .5
 	, music: .75
-	, duck: .3
-	, release: .18
-	, length: Object.freeze({flap: .090023, score: .16, bonk: .22})
 });
 
 /** Stream a package-local music track without decoding the whole song into Web Audio memory. */
 class BackgroundTrack
 {
-	constructor(module, assets, packageUrl, {
-		muted = false
-		, volume = MIX.music
-		, duckVolume = MIX.duck
-		, release = MIX.release
-	} = {})
+	constructor(module, assets, packageUrl, {muted = false, volume = MIX.music} = {})
 	{
 		this.module = module;
 		this.assets = assets;
@@ -25,11 +17,6 @@ class BackgroundTrack
 		this.url = null;
 		this.closed = false;
 		this.volume = Math.max(0, Math.min(1, Number(volume)));
-		this.duckVolume = Math.max(0, Math.min(this.volume, Number(duckVolume)));
-		this.release = Math.max(0, Number(release)) * 1000;
-		this.duckUntil = 0;
-		this.releaseAt = 0;
-		this.raf = null;
 
 		if(this.element)
 		{
@@ -94,53 +81,6 @@ class BackgroundTrack
 		if(!this.muted) void this.unlock();
 	}
 
-	duck(seconds)
-	{
-		if(this.closed || !this.element) return;
-
-		const now = performance.now();
-		this.duckUntil = Math.max(this.duckUntil, now + Math.max(0, Number(seconds)) * 1000);
-		this.releaseAt = 0;
-		this.element.volume = this.duckVolume;
-
-		if(this.raf !== null) return;
-
-		const update = time => {
-			if(this.closed || !this.element)
-			{
-				this.raf = null;
-
-				return;
-			}
-
-			if(time < this.duckUntil)
-			{
-				this.element.volume = this.duckVolume;
-				this.raf = requestAnimationFrame(update);
-
-				return;
-			}
-
-			this.releaseAt ||= time;
-			const position = this.release === 0 ? 1 : Math.min(1, (time - this.releaseAt) / this.release);
-			const eased = 1 - (1 - position) * (1 - position);
-			this.element.volume = this.duckVolume + (this.volume - this.duckVolume) * eased;
-
-			if(position < 1)
-			{
-				this.raf = requestAnimationFrame(update);
-
-				return;
-			}
-
-			this.element.volume = this.volume;
-			this.duckUntil = this.releaseAt = 0;
-			this.raf = null;
-		};
-
-		this.raf = requestAnimationFrame(update);
-	}
-
 	get state()
 	{
 		return {
@@ -150,7 +90,6 @@ class BackgroundTrack
 			, muted: this.muted
 			, volume: this.element?.volume ?? 0
 			, baseVolume: this.volume
-			, duckVolume: this.duckVolume
 		};
 	}
 
@@ -159,10 +98,6 @@ class BackgroundTrack
 		if(this.closed) return;
 
 		this.closed = true;
-
-		if(this.raf !== null) cancelAnimationFrame(this.raf);
-
-		this.raf = null;
 		this.element?.pause();
 		this.element?.removeAttribute('src');
 		this.element?.load();
@@ -290,11 +225,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	function play(name, gain)
 	{
-		void unlock().then(async() => {
-			if(!await samples.play(name, {gain: gain * MIX.effects})) return;
-
-			music.duck(MIX.length[name] ?? .16);
-		});
+		void unlock().then(() => samples.play(name, {gain: gain * MIX.effects}));
 	}
 
 	shell.fullscreen({target: ui, quick, onChange: () => view.measure()});
@@ -371,7 +302,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		get state() { return state; }
 		, get profile() { return structuredClone(profile); }
 		, get music() { return music.state; }
-		, get mix() { return {effects: MIX.effects, music: MIX.music, duck: MIX.duck}; }
+		, get mix() { return {effects: MIX.effects, music: MIX.music}; }
 	};
 	session.phlappyPhant = debug;
 	Object.defineProperty(canvas, 'phpPhantDebug', {configurable: true, value: debug});

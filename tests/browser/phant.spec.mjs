@@ -29,9 +29,9 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.loaded)).toBe(true);
 	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.playing)).toBe(true);
 	expect(await canvas.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
-		loop: true, muted: false, volume: .75, baseVolume: .75, duckVolume: .3
+		loop: true, muted: false, volume: .75, baseVolume: .75
 	});
-	expect(await canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .5, music: .75, duck: .3});
+	expect(await canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .5, music: .75});
 
 	// Wide frame: the phant sits near 28 % of the visible width, at the largest whole scale that keeps the course in view.
 	const wide = await status(page);
@@ -54,10 +54,7 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await page.keyboard.press('Space');
 	await expect.poll(async() => (await status(page)).phase).toBe('playing');
 	await expect.poll(async() => (await status(page)).counts.flap).toBeGreaterThanOrEqual(1);
-	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.volume), {
-		intervals: [10, 10, 10, 10, 10, 10, 20]
-	}).toBe(.3);
-	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.volume)).toBe(.75);
+	expect(await canvas.evaluate(element => element.phpPhantDebug.music.volume)).toBe(.75);
 
 	// A click on the canvas is a flap too.
 	const before = (await status(page)).counts.flap;
