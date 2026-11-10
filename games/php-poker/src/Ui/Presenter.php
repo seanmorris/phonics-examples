@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace PhpPoker\Ui;
 
 use PhpPoker\Odds;
+use PhpPoker\Variant;
 use PhpPoker\WildCards;
 use PhpPoker\Render\Text;
 use PhpPoker\Render\Theme;
@@ -998,7 +999,9 @@ final class Presenter
 	public function layout(): Layout
 	{
 		$seats = count($this->view['players'] ?? []);
-		return Layout::fit($this->width, $this->height, $this->dpr, $seats >= 2 ? $seats : 8);
+		$game = $this->view['game'] ?? Variant::DEFAULT;
+		$rules = Variant::of(in_array($game, Variant::ids(), true) ? $game : Variant::DEFAULT);
+		return Layout::fit($this->width, $this->height, $this->dpr, $seats >= 2 ? $seats : 8, $rules->handSize(), $rules->boardSize());
 	}
 
 	/** Update geometry before consuming input, including the first frame after a resize. */

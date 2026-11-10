@@ -291,7 +291,7 @@ final class Painter
 					}
 					$label = 'Bet ' . $player['bet'];
 					$size = $this->layout->captionText();
-					$hand = $geometry[$seat]['cards'][4];
+					$hand = $geometry[$seat]['slots'][4];
 					$left = $this->layout->profile === 'landscape' ? $hand[0] + $hand[2] + 6 : 8;
 					$width = $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($label) : $label, $size, $this->face) / $this->horizontalUnit;
 					$size *= min(1, ($bx - 10 - $left) / $width);
@@ -318,8 +318,8 @@ final class Painter
 						$clear = $box[0] >= 0 && $box[0] + $box[2] <= $this->layout->width() && $box[1] + $box[3] <= $this->layout->height();
 						foreach($geometry as $other => $near) if($clear && $other !== $seat)
 						{
-							$last = $near['cards'][4];
-							foreach([$near['plate'], [$near['cards'][0][0], $near['cards'][0][1], $last[0] + $last[2] - $near['cards'][0][0], $last[3]]] as $block)
+							$last = $near['slots'][4];
+							foreach([$near['plate'], [$near['slots'][0][0], $near['slots'][0][1], $last[0] + $last[2] - $near['slots'][0][0], $last[3]]] as $block)
 							if($box[0] < $block[0] + $block[2] && $block[0] < $box[0] + $box[2] && $box[1] < $block[1] + $block[3] && $block[1] < $box[1] + $box[3]) $clear = false;
 						}
 						if(!$clear) continue;

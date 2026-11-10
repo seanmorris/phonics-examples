@@ -77,16 +77,55 @@ final class Layout
 	 * @param int $height Canvas height in device pixels.
 	 * @param float $dpr Device-pixel ratio; the profile switch happens on CSS pixels.
 	 * @param int $seats Players at the table; sparse tables can spend more of the field on each hand.
+	 * @param int $cards Cards in a full hand of the game being dealt, from two to seven.
+	 * @param int $board Shared board cards the game deals, up to five.
 	 */
-	public static function fit(int $width, int $height, float $dpr = 1, int $seats = 8): self
+	public static function fit(int $width, int $height, float $dpr = 1, int $seats = 8, int $cards = 5, int $board = 0): self
 	{
 		$dpr = max(.5, min(4, is_finite($dpr) ? $dpr : 1));
 		$seats = max(2, min(8, $seats));
+		$cards = max(1, min(7, $cards));
+		$board = max(0, min(5, $board));
 		// The presenter asks for the layout many times a frame, and fitting the oval is a small search.
-		$key = "$width:$height:$dpr:$seats";
+		$key = "$width:$height:$dpr:$seats:$cards:$board";
 		if(isset(self::$fitted[$key])) return self::$fitted[$key];
 		if(count(self::$fitted) > 16) self::$fitted = [];
-		return self::$fitted[$key] = self::choose($width, $height, $dpr, $seats);
+		// The table is always composed for five-card fans. Other games place their cards inside the same fan, so
+		// seats, plates and chips never move when the game changes.
+		$layout = self::choose($width, $height, $dpr, $seats);
+		if($cards !== 5 || $board !== 0)
+		{
+			$layout = clone $layout;
+			$layout->handCards = $cards; $layout->boardCards = $board; $layout->centreMemo = null;
+		}
+		return self::$fitted[$key] = $layout;
+	}
+
+	/** Cards in a full hand of the game on this table. */
+	private int $handCards = 5;
+	/** Shared board cards the game on this table deals. */
+	private int $boardCards = 0;
+
+	/**
+	 * Place a hand of the table's size inside the five slots a seat was composed for.
+	 *
+	 * Five cards fill the slots exactly. Fewer keep the slot spacing and are centred in the fan; more share the
+	 * fan's width with a tighter overlap, so a seven-card stud hand is no wider than a draw hand.
+	 *
+	 * @param list<array{float,float,float,float}> $slots The five composed card rectangles.
+	 * @return list<array{float,float,float,float}> One rectangle per card of a full hand, in dealing order.
+	 */
+	private function fan(array $slots): array
+	{
+		$count = $this->handCards;
+		if($count === 5) return $slots;
+		[$left, $top, $width, $height] = $slots[0];
+		$span = $slots[4][0] - $left;
+		$step = $count > 5 ? $span / ($count - 1) : $span / 4;
+		$start = $count > 5 ? $left : $left + ($span - $step * ($count - 1)) / 2;
+		$cards = [];
+		for($index = 0; $index < $count; $index++) $cards[] = [$start + $index * $step, $top, $width, $height];
+		return $cards;
 	}
 
 	/** @var array<string,self> Recently fitted layouts by canvas and table size. */
@@ -236,10 +275,10 @@ final class Layout
 		for($seat = 0; $seat < $seats; $seat++)
 		{
 			$geometry = $this->seat($seat, $seats);
-			$last = $geometry['cards'][4];
+			$last = $geometry['slots'][4];
 			$parts[$seat] = [
 				$geometry['plate']
-				, [$geometry['cards'][0][0], $geometry['cards'][0][1], $last[0] + $last[2] - $geometry['cards'][0][0], $last[3]]
+				, [$geometry['slots'][0][0], $geometry['slots'][0][1], $last[0] + $last[2] - $geometry['slots'][0][0], $last[3]]
 				// The emblem with the name and total beneath it.
 				, [$geometry['emblem'][0] - $size * $across / 2, $geometry['emblem'][1] - $size / 2, $size * $across, $size + ($seat === 0 ? 14 : 28) * ($this->design['chromeScale'] ?? 1)]
 				, $this->bankBounds($seat, $seats, Chips::bank(500))
@@ -375,7 +414,7 @@ final class Layout
 			$left = min($geometry['plate'][0], $geometry['emblem'][0] - $size / 2, $bank[0]);
 			$right = max($geometry['plate'][0] + $geometry['plate'][2], $geometry['emblem'][0] + $size / 2, $bank[0] + $bank[2]);
 			$top = min($geometry['plate'][1], $bank[1]);
-			$bottom = max($geometry['cards'][0][1] + $geometry['cards'][0][3], $bank[1] + $bank[3], $geometry['caption'][1] + ($seat === 0 ? 8 : 22));
+			$bottom = max($geometry['slots'][0][1] + $geometry['slots'][0][3], $bank[1] + $bank[3], $geometry['caption'][1] + ($seat === 0 ? 8 : 22));
 			$blocks[$seat] = [$left, $top, $right - $left, $bottom - $top];
 		}
 		$centre = $layout->centre();
@@ -565,7 +604,7 @@ final class Layout
 		if($this->profile !== 'wide') return [$this->width() - $width - 16, $width];
 
 		$human = $this->seat(0, $this->seats);
-		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
+		$handRight = $human['slots'][4][0] + $human['slots'][4][2];
 		$x = $handRight + self::ACTION_GUTTER * $this->stretch();
 		return [$x, min($width, $this->width() - $x - 16)];
 	}
@@ -617,8 +656,8 @@ final class Layout
 		for($other = 0; $other < $seats; $other++) if($other !== $seat)
 		{
 			$near = $this->seat($other, $seats);
-			$last = $near['cards'][4];
-			$blocks = [$near['plate'], [$near['cards'][0][0], $near['cards'][0][1], $last[0] + $last[2] - $near['cards'][0][0], $last[3]]
+			$last = $near['slots'][4];
+			$blocks = [$near['plate'], [$near['slots'][0][0], $near['slots'][0][1], $last[0] + $last[2] - $near['slots'][0][0], $last[3]]
 				, [$near['emblem'][0] - $size * $across / 2, $near['emblem'][1] - $size / 2, $size * $across, $size]
 				, $this->bankBounds($other, $seats, Chips::bank(500))];
 			foreach($blocks as $block)
@@ -823,7 +862,7 @@ final class Layout
 			$plate[1] + $plateHeight / 2];
 		// Every identity caption is centered directly beneath its icon; the YOU disc supplies the human's name.
 		$caption = [$emblem[0], $plate[1] + 40 * $chrome];
-		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
+		return ['plate' => $plate, 'cards' => $this->fan($cards), 'slots' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
 	}
 
 	/**
@@ -914,7 +953,7 @@ final class Layout
 		else $chips = [$outward > 0 ? $plateLeft + $radius * 3.95 : $plateLeft + $plateWidth - $radius * 3.95, $fanTop + $cardHeight + 4];
 		$emblem = [$outward > 0 ? $plateLeft + $plateWidth + self::IDENTITY / 2 : $plateLeft - ($human ? 22 : self::IDENTITY / 2), $plateTop + self::PLATE_HEIGHT / 2];
 		$caption = [$emblem[0], $plateTop + 40];
-		return ['plate' => $plate, 'cards' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
+		return ['plate' => $plate, 'cards' => $this->fan($cards), 'slots' => $cards, 'chips' => $chips, 'caption' => $caption, 'emblem' => $emblem, 'angle' => $angle, 'outward' => $outward];
 	}
 
 	/** Bounds of every rendered chip in a bank, in design coordinates. */
@@ -947,8 +986,10 @@ final class Layout
 	{
 		$centre = (float)$geometry['caption'][0];
 		$width = max(0, $width);
-		$left = (float)$geometry['cards'][0][0];
-		$last = $geometry['cards'][array_key_last($geometry['cards'])];
+		// The name clears the whole composed fan, not only the cards of a shorter hand.
+		$fan = $geometry['slots'] ?? $geometry['cards'];
+		$left = (float)$fan[0][0];
+		$last = $fan[array_key_last($fan)];
 		$right = (float)$last[0] + (float)$last[2];
 		if(($geometry['outward'] ?? -1) > 0)
 		return $centre - $width / 2 < $right - 1e-9 ? $right + $gap + $width / 2 : $centre;
@@ -983,7 +1024,7 @@ final class Layout
 			$opponent = $this->seat(1, 2);
 			// Every denomination present gives the deepest bank: larger chips stand in rows nearer the centre.
 			$bank = $this->bankBounds(1, 2, array_fill_keys(Chips::VALUES, 1));
-			$under = max($opponent['cards'][0][1] + $opponent['cards'][0][3], $bank[1] + $bank[3]) + 6;
+			$under = max($opponent['slots'][0][1] + $opponent['slots'][0][3], $bank[1] + $bank[3]) + 6;
 			$room = $this->handTop() - 14 - 8 - 56 - $under - 2 * self::PLATE_HEIGHT - 14;
 			$objectScale = min($objectScale, max(.6, $room / 123));
 		}
@@ -1075,7 +1116,7 @@ final class Layout
 		for($seat = 1; $seat < $this->seats; $seat++)
 		{
 			$geometry = $this->seat($seat, $this->seats);
-			$last = $geometry['cards'][4];
+			$last = $geometry['slots'][4];
 			$bank = $this->bankBounds($seat, $this->seats, Chips::bank(500));
 			$blockLeft = min($geometry['plate'][0], $bank[0]);
 			$blockRight = max($last[0] + $last[2], $bank[0] + $bank[2]);
