@@ -143,7 +143,7 @@ final class Game
 			|| !is_array($snapshot['profile'] ?? null)) throw new \InvalidArgumentException('Unsupported poker save');
 		// Early v3 saves used only the first joker. Preserve the hand and exact existing card order, placing the
 		// newly enabled second joker at the bottom of the stock rather than rejecting the continuation.
-		if(in_array($snapshot['profile']['version'] ?? null, ['bicycle-inspired-local-v3', Profile::VERSION], true)
+		if(in_array($snapshot['profile']['version'] ?? null, ['bicycle-inspired-local-v3', Profile::DRAW_ONLY_VERSION, Profile::VERSION], true)
 			&& is_array($snapshot['profile']['wild'] ?? null) && in_array('joker', $snapshot['profile']['wild'], true)
 			&& ($snapshot['piles']['inventory'] ?? null) === range(0,52)
 			&& is_array($snapshot['piles']['piles']['stock'] ?? null))

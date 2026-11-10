@@ -4,7 +4,7 @@ require dirname(__DIR__).'/autoload.php';
 $root=getenv('PHONICS_ENGINE_ROOT') ?: dirname(__DIR__,3).'/node_modules/@seanmorris/phonics';
 require $root.'/autoload.php';
 
-use PhpPoker\{Game,Hand,Profile,Bot,Adaptation,Session,WildCards};
+use PhpPoker\{Game,Hand,Profile,Bot,Adaptation,Session,Variant,WildCards};
 use Phonics\Random\RandomStream;
 
 $tests=[];
@@ -21,6 +21,46 @@ $rig=static function(Game $game,array $hands): Game {
 	$s['piles']['piles']['stock']=[['kind'=>'ordered','cards'=>array_values(array_diff($s['piles']['inventory'],$used))]];
 	return Game::restore($s);
 };
+$test('the variant table matches variants.json and describes each game',static function() use ($expect,$reject): void {
+	$published=json_decode(file_get_contents(dirname(__DIR__).'/variants.json'),true,flags:JSON_THROW_ON_ERROR);
+	$expect($published===['version'=>1,'games'=>Variant::GAMES],'variants.json and Variant::GAMES differ');
+	$expect(Variant::ids()===['draw','holdem','stud5','stud7']&&Variant::DEFAULT==='draw');
+	$shape=[];
+	foreach(Variant::ids() as $id)
+	{
+		$rules=Variant::of($id);
+		$shape[$id]=[$rules->handSize(),$rules->boardSize(),$rules->seats(),count($rules->streets()),$rules->bestOfMany()];
+		// A full table never needs more cards than the smallest deck holds.
+		$expect($rules->handSize()*$rules->seats()+$rules->boardSize()<=52||$id==='draw',$id.' can outrun the deck');
+		foreach($rules->streets() as $street)
+			$expect(in_array($street['limits'],['early','late'],true)&&array_keys($street['deal'])===['down','up','board']);
+	}
+	$expect($shape===['draw'=>[5,0,8,2,false],'holdem'=>[2,5,8,4,true],'stud5'=>[5,0,8,4,false],'stud7'=>[7,0,7,5,true]]);
+	$expect(Variant::of('holdem')->dealt(1)===['down'=>2,'up'=>0,'board'=>3]&&Variant::of('stud7')->dealt(3)===['down'=>2,'up'=>4,'board'=>0]);
+	$expect(Variant::of('draw')->street(1)['draw']===true&&Variant::of('stud5')->forced()==='ante-bring-in');
+	$reject(static fn()=>Variant::of('omaha'));
+	$reject(static fn()=>Variant::of('draw')->street(2));
+});
+$test('profiles carry the game and older profiles restore as five-card draw',static function() use ($expect,$reject): void {
+	$expect((new Profile)->game==='draw'&&(new Profile)->snapshot()['version']==='bicycle-inspired-local-v5');
+	$holdem=new Profile('anything',game:'holdem');
+	$expect(Profile::restore($holdem->snapshot())->snapshot()===$holdem->snapshot()&&$holdem->rules()->label()==="Texas Hold'em");
+	$v4=['version'=>'bicycle-inspired-local-v4','variant'=>'anything','ante'=>1,'minimum'=>2,'maximum'=>20,
+		'finalMinimum'=>3,'finalMaximum'=>9,'raiseLimit'=>3,'playerRaiseLimit'=>2,'wild'=>[],'customWild'=>[]];
+	$old=Profile::restore($v4);
+	$expect($old->game==='draw'&&$old->finalMaximum===9&&$old->playerRaiseLimit===2);
+	$reject(static fn()=>new Profile(game:'omaha'));
+	$reject(static fn()=>Profile::restore(['game'=>'draw']+$v4));
+	$bad=$holdem->snapshot(); $bad['game']=7;
+	$reject(static fn()=>Profile::restore($bad));
+	$session=new Session;
+	$session->command(['type'=>'start','players'=>8,'game'=>'stud7'],'seat-cap');
+	$expect(str_contains($session->view()['error']??'','seats at most 7'),'Seven-card stud caps at seven seats');
+	$session->command(['type'=>'start','players'=>4,'game'=>'holdem'],'not-yet');
+	$expect(str_contains($session->view()['error']??'','not available yet'));
+	$session->command(['type'=>'start','players'=>4],'draw-default');
+	$expect(($session->view()['error']??'')===''&&$session->view()['profile']['game']==='draw');
+});
 $test('best five of seven matches an exhaustive subset search and names board plays',static function() use ($expect,$reject): void {
 	// Cards: id % 13 + 2 is the rank, intdiv(id, 13) the suit (clubs, diamonds, hearts, spades).
 	$flush=Hand::best([0,2,5,8,11,13,26]);
