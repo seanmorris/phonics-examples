@@ -90,7 +90,8 @@ $scoring->step();
 check($scoring->score === 1, 'a passed pillar does not score again');
 check(Simulation::paletteFor(9) === 0 && Simulation::paletteFor(10) === 1 && Simulation::paletteFor(20) === 0, 'day and night alternate every ten pillars');
 check(Simulation::speedFor(0) === 120.0 && Simulation::speedFor(100) === 200.0, 'speed ramps to its cap');
-check(Simulation::gapFor(0) === 136.0 && Simulation::gapFor(8) === 128.0 && Simulation::gapFor(50) === 104.0, 'gaps shrink a grid step at a time to their floor');
+check(Simulation::GRAVITY === 1250, 'gravity keeps the flap arc gently forgiving');
+check(Simulation::gapFor(0) === 144.0 && Simulation::gapFor(8) === 136.0 && Simulation::gapFor(50) === 112.0, 'gaps shrink a grid step at a time to their floor');
 
 $wall = new Simulation(4);
 $wall->step(true);

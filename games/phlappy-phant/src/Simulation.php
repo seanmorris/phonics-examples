@@ -19,7 +19,7 @@ final class Simulation
 	public const PHANT_START_Y = 130;
 	public const HITBOX_INSET_X = 8;
 	public const HITBOX_INSET_Y = 8;
-	public const GRAVITY = 1300;
+	public const GRAVITY = 1250;
 	public const FLAP_VY = -330;
 	public const MAX_FALL = 600;
 	/** Pillar width including its outline, matching the terrain sheet's 56-pixel pillar. */
@@ -33,10 +33,10 @@ final class Simulation
 	public const SPEED_MAX = 200;
 	/** The terrain tiles are cut on an 8-unit grid, so every gap edge and pillar height lands on it. */
 	public const GRID = 8;
-	public const GAP_BASE = 136;
+	public const GAP_BASE = 144;
 	/** The gap narrows one grid step every this many points. */
 	public const GAP_NARROW_EVERY = 8;
-	public const GAP_MIN = 104;
+	public const GAP_MIN = 112;
 	public const GAP_MARGIN = 32;
 	public const NIGHT_EVERY = 10;
 	public const DEAD_SETTLE = .6;
@@ -325,7 +325,7 @@ final class Simulation
 		$rising = min(0.0, $this->vy);
 		$apex = $centre - $rising * $rising / (2 * self::GRAVITY);
 
-		// One flap rises about 42 units. Starting it 24 units below centre makes the resulting arc straddle the
+		// One flap rises about 44 units. Starting it 24 units below centre makes the resulting arc straddle the
 		// centre instead of waiting beside the lower pillar until safety forces a flap.
 		if($apex > $target + 24.0) return true;
 
