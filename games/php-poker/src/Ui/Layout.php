@@ -109,8 +109,9 @@ final class Layout
 	/**
 	 * Place a hand of the table's size inside the five slots a seat was composed for.
 	 *
-	 * Five cards fill the slots exactly. Fewer keep the slot spacing and are centred in the fan; more share the
-	 * fan's width with a tighter overlap, so a seven-card stud hand is no wider than a draw hand.
+	 * Five cards fill the slots exactly. Fewer spread apart, up to a small gap between whole cards, and are centred
+	 * in the fan, so both hold'em cards show in full; more share the fan's width with a tighter overlap, so a
+	 * seven-card stud hand is no wider than a draw hand.
 	 *
 	 * @param list<array{float,float,float,float}> $slots The five composed card rectangles.
 	 * @return list<array{float,float,float,float}> One rectangle per card of a full hand, in dealing order.
@@ -121,7 +122,7 @@ final class Layout
 		if($count === 5) return $slots;
 		[$left, $top, $width, $height] = $slots[0];
 		$span = $slots[4][0] - $left;
-		$step = $count > 5 ? $span / ($count - 1) : $span / 4;
+		$step = $count > 5 ? $span / ($count - 1) : ($count > 1 ? min($width * 1.08, $span / ($count - 1)) : 0);
 		$start = $count > 5 ? $left : $left + ($span - $step * ($count - 1)) / 2;
 		$cards = [];
 		for($index = 0; $index < $count; $index++) $cards[] = [$start + $index * $step, $top, $width, $height];

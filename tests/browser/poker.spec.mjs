@@ -637,6 +637,144 @@ test(`touch selection and cancellation use readable controls at ${viewport.width
 	finally { await context.close(); }
 });
 
+// The street games are chosen on the setup card and played from the keyboard and the pointer. Seeds are fresh in
+// the page, so these follow whatever is dealt and assert the shape of each street rather than particular cards.
+async function startGame(page,canvas,presses,{seatsRight=0}={})
+{
+	await canvas.focus();await page.keyboard.press('Enter');
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('setup');
+	for(let i=0;i<seatsRight;i++) await page.keyboard.press('ArrowRight');
+	for(let i=0;i<presses;i++) await page.keyboard.press('v');
+	const setup=(await state(canvas)).ui.setup;
+	await page.keyboard.press('Enter');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	return setup;
+}
+
+async function settled(canvas)
+{
+	await expect.poll(async()=>{
+		const s=await state(canvas);
+		return !s.ui.animation||s.ui.animation.elapsed>=s.ui.animation.duration;
+	},{timeout:20_000}).toBe(true);
+	return state(canvas);
+}
+
+test('hold\'em is chosen at setup, deals a board street by street and names each street',async({page})=>{
+	await page.addInitScript(()=>{
+		window.pokerDeals=[];
+		new MutationObserver(records=>{
+			for(const record of records)
+			{
+				const s=JSON.parse(record.target.dataset.phpPoker||'null');
+				if(s?.ui?.animation?.kind==='deal'&&!window.pokerDeals.includes(s.street))window.pokerDeals.push(s.street);
+			}
+		}).observe(document,{subtree:true,attributes:true,attributeFilter:['data-php-poker']});
+	});
+	const canvas=await boot(page);
+	const setup=await startGame(page,canvas,2);
+	expect(setup).toMatchObject({game:'holdem',players:4});
+	let view=await settled(canvas);
+	expect(view).toMatchObject({game:'holdem',street:'preflop',board:[],phase:'betting'});
+	expect(view.players[0].cards).toHaveLength(2);
+	expect(view.players[0].cards.every(Number.isInteger)).toBe(true);
+	expect(view.players.slice(1).every(player=>player.cards.length===2&&player.cards.every(card=>card===null))).toBe(true);
+	expect(view.players.filter(player=>player.lastAction.startsWith('Small blind')||player.lastAction.startsWith('Big blind')||player.bet>0).length).toBeGreaterThanOrEqual(2);
+	const seen=new Set();
+	let showdown=null,clicked=false;
+	for(let step=0;step<160&&!(showdown&&seen.has('river'));step++)
+	{
+		view=await settled(canvas);
+		if(view.phase==='showdown')
+		{
+			if(view.reveal&&view.board.length===5)showdown=view;
+			else await page.keyboard.press('Enter');
+			await page.waitForTimeout(120);
+			continue;
+		}
+		seen.add(view.street);
+		expect(view.board).toHaveLength({preflop:0,flop:3,turn:4,river:5}[view.street]);
+		if(view.turn!==0){await page.waitForTimeout(120);continue;}
+		expect(view.ui.hint).toMatch(new RegExp('^'+{preflop:'Pre-flop',flop:'Flop',turn:'Turn',river:'River'}[view.street]+': '));
+		const actions=(await regions(canvas)).actions;
+		expect(actions.map(button=>button.id)).toEqual(expect.arrayContaining(['fold']));
+		expect(actions.some(button=>['draw','pass','clear'].includes(button.id))).toBe(false);
+		const stay=actions.find(button=>button.id==='check'||button.id==='call');
+		if(!clicked&&view.street!=='preflop')
+		{
+			// One decision goes through the pointer: the board must not cover the action column.
+			const target=await point(canvas,stay.rect);
+			await page.mouse.click(target.x,target.y);clicked=true;
+		}
+		else await page.keyboard.press('c');
+		await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(view.revision);
+	}
+	expect([...seen]).toEqual(expect.arrayContaining(['preflop','flop','turn','river']));
+	expect(clicked).toBe(true);
+	expect(showdown.board).toHaveLength(5);
+	expect(showdown.players[0].handName).toBeTruthy();
+	expect(showdown.awards.reduce((sum,award)=>sum+award.amount,0)).toBeGreaterThan(0);
+	expect(await page.evaluate(()=>window.pokerDeals)).toEqual(expect.arrayContaining(['preflop','flop','turn','river']));
+	await expect(page.locator('[id^="poker-hand"],[aria-live="polite"]').filter({hasText:'Board:'}).first()).toContainText(/Your cards: .+\. Board: .+, .+, .+/);
+	// The Poker menu drops the five-card odds tables for this game, and House Rules names the blinds.
+	await page.keyboard.press('Enter');
+	await settled(canvas);
+	await page.keyboard.press('Alt+p');
+	await expect.poll(async()=>(await state(canvas)).ui.topMenu).toBe('poker');
+	await page.keyboard.press('o');
+	expect((await state(canvas)).ui.infoDialog??null).toBeNull();
+	await page.keyboard.press('r');
+	await expect.poll(async()=>(await state(canvas)).ui.infoDialog).toBe('game-settings');
+	expect((await state(canvas)).ui.gameSettings).toMatchObject({table:'4 players · Offline',opening:"Texas Hold'em",ante:'1 and 2 chips'});
+});
+
+test('seven-card stud seats seven, shows exposed cards and keeps hole cards private',async({page})=>{
+	const canvas=await boot(page);
+	const setup=await startGame(page,canvas,4,{seatsRight:4});
+	expect(setup).toMatchObject({game:'stud7',players:7});
+	let view=await settled(canvas);
+	expect(view).toMatchObject({game:'stud7',street:'third',phase:'betting'});
+	expect(view.players).toHaveLength(7);
+	expect(view.players[0].faces).toEqual(['down','down','up']);
+	expect(view.players[0].cards.every(Number.isInteger)).toBe(true);
+	for(const player of view.players.slice(1))
+	{
+		expect(player.cards.slice(0,2)).toEqual([null,null]);
+		expect(Number.isInteger(player.cards[2])).toBe(true);
+	}
+	expect(view.players.filter(player=>player.lastAction.startsWith('Brings in'))).toHaveLength(1);
+	expect(view.players.every(player=>player.totalBet>=1)).toBe(true);
+	const counts={third:3,fourth:4,fifth:5,sixth:6,seventh:7};
+	const seen=new Set();
+	let showdown=null;
+	for(let step=0;step<240&&!showdown;step++)
+	{
+		view=await settled(canvas);
+		if(view.phase==='showdown')
+		{
+			if(view.reveal&&view.street==='seventh')showdown=view;
+			else await page.keyboard.press('Enter');
+			await page.waitForTimeout(120);
+			continue;
+		}
+		seen.add(view.street);
+		expect(view.players[0].cards).toHaveLength(counts[view.street]);
+		for(const player of view.players.slice(1).filter(player=>!player.folded))
+			expect(player.cards.map((card,index)=>card===null?'down':'up')).toEqual(player.faces);
+		for(const player of view.players.filter(player=>player.folded))
+			expect(player.cards.every(card=>card===null)||player.id===0).toBe(true);
+		if(view.turn!==0){await page.waitForTimeout(120);continue;}
+		expect(view.ui.hint).toMatch(/^\dth street: |^3rd street: /i);
+		await page.keyboard.press('c');
+		await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(view.revision);
+	}
+	expect([...seen]).toEqual(expect.arrayContaining(['third','fourth','fifth','sixth','seventh']));
+	expect(showdown.players[0].faces).toEqual(['down','down','up','up','up','up','down']);
+	const live=showdown.players.filter(player=>!player.folded);
+	expect(live.every(player=>player.cards.length===7&&player.cards.every(Number.isInteger)&&player.handName)).toBe(true);
+	await expect(page.locator('[aria-live="polite"]').filter({hasText:'Your cards:'}).first()).toContainText(/\(down\).+\(up\)/);
+});
+
 test('verified offline package reopens with the same saved cards after the network disconnects',async({page,context})=>{
 	test.setTimeout(180_000);
 	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
