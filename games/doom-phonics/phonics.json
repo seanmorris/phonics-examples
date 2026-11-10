@@ -434,7 +434,7 @@
     "src/Definition/StateSequence.php": "sha256-HCC4I2YMKGC3OXhPEXAZ7pjw5Ap7eaGwAWuIU6XzvCA=",
     "src/Definition/WeaponAmmo.php": "sha256-VQSWsU1CNFgG49JEuX8czBHN3vX2NvQYEfvXnSQt0vE=",
     "src/Definition/WeaponSlots.php": "sha256-9FgzaHzx1MAvysVUS276LHw3t8kzJxrjZCIRrP5syDQ=",
-    "src/Effects/Rumble.php": "sha256-D/J8KOt0SABeBVIiQaa4L8lw53C24a6tC4ZCQ/qMqUQ=",
+    "src/Effects/Rumble.php": "sha256-WGhjvG271rc7kY8gY2H+G/z1QkV4w5z6YtmBCwJrWEU=",
     "src/Game/ActorDropper.php": "sha256-0YqHmS2IWpcqRLqtU/NwKtkpvwK21O6xVA2zZ64arhc=",
     "src/Game/ActorObstacles.php": "sha256-t7SxYP2HA2qS+ZW9v8C0bu5ZIPzRGtxOSlMY9n0wlH0=",
     "src/Game/AutoAim.php": "sha256-W4einQKf0OFqYgZynN2f+xXicIYFplXtsF0L6LI8EYU=",

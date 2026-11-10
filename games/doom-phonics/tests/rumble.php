@@ -43,11 +43,11 @@ $clamped->damage(880);
 $clampedDamage = $clamped->update(0)[0];
 
 verifyWad(
-	$minimumDamage === ['duration' => 60,'strong' => .58,'weak' => .76]
-		&& $bulletDamage['duration'] === 66
-		&& $bulletDamage['strong'] >= .63
-		&& $bulletDamage['weak'] >= .8
-		&& $maximumBulletDamage['duration'] === 88
+	$minimumDamage === ['duration' => 90,'strong' => .65,'weak' => .7]
+		&& $bulletDamage['duration'] === 96
+		&& $bulletDamage['strong'] >= .7
+		&& $bulletDamage['weak'] >= .75
+		&& $maximumBulletDamage['duration'] === 118
 		&& $maximumBulletDamage['strong'] > $bulletDamage['strong']
 		&& $maximumBulletDamage['weak'] > $bulletDamage['weak']
 		&& $replicatedBlastDamage['duration'] === 170
@@ -115,14 +115,15 @@ verifyWad(
 $pickup = new Rumble;
 $pickup->pickup();
 verifyWad(
-	$pickup->update(0) === [['duration' => 35,'strong' => 0.0,'weak' => .35]]
-	, 'ordinary pickups use a restrained high-frequency tick'
+	$pickup->update(0) === [['duration' => 90,'strong' => .3,'weak' => .55]]
+	, 'ordinary pickups crossfeed both motors long enough for legacy controllers'
 );
 
 $pickup->pickup(true);
 verifyWad(
-	$pickup->update(0) === [['duration' => 35,'strong' => 0.0,'weak' => .65]]
-		&& $pickup->update(.035) === [['duration' => 75,'strong' => .42,'weak' => .25]]
+	$pickup->update(0) === [['duration' => 90,'strong' => .3,'weak' => .72]]
+		&& $pickup->update(.099) === []
+		&& $pickup->update(.001) === [['duration' => 105,'strong' => .52,'weak' => .32]]
 	, 'weapon pickups add a low-frequency catch after the item tick'
 );
 

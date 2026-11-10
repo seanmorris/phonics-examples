@@ -73,9 +73,9 @@ final class Rumble extends \Phonics\Effects\Rumble
 
 		$weight = min(1, $knockback / 70);
 		$this->pulse(
-			60 + (int)round(30 * $weight)
-			, .58 + .32 * $weight
-			, .76 + .22 * $weight
+			90 + (int)round(30 * $weight)
+			, .65 + .3 * $weight
+			, .7 + .28 * $weight
 		);
 
 		if($fatal) $this->pulse(220, .45 + .35 * $weight, .2, 100);
@@ -136,9 +136,9 @@ final class Rumble extends \Phonics\Effects\Rumble
 	/** Queue a restrained confirmation, with a second low-motor catch for a newly acquired weapon. */
 	public function pickup(bool $weapon = false): void
 	{
-		$this->pulse(35, 0, $weapon ? .65 : .35);
+		$this->pulse(90, .3, $weapon ? .72 : .55);
 
-		if($weapon) $this->pulse(75, .42, .25, 35);
+		if($weapon) $this->pulse(105, .52, .32, 100);
 	}
 
 	/** Represent the settings range literally with an even pulse scaled by the selected level. */
