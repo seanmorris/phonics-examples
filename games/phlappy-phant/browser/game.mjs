@@ -276,7 +276,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 			if(nextState.runId !== previousRun) for(const name of Object.keys(sounded)) sounded[name] = 0;
 
 			// The Konami code's acceptance rings the score bell.
-			for(const [name, gain, sample] of [['flap', .5], ['score', .6], ['bonk', .7], ['tas', .8, 'score']])
+			for(const [name, gain, sample] of [['flap', .5], ['score', .45], ['bonk', .7], ['tas', .8, 'score']])
 			{
 				const count = nextState.counts?.[name] ?? 0;
 
