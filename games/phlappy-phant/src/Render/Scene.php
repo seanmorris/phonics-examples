@@ -32,7 +32,7 @@ final class Scene
 	public const GID_SCENERY = 61;
 	public const GID_CARDINAL = 82;
 	/** The cardinal's speed across the frame, and the shortest and longest quiet spell between visits, in seconds. */
-	public const CARDINAL_SPEED = 34;
+	public const CARDINAL_SPEED = 52;
 	public const CARDINAL_WAIT = [14, 40];
 	public const STRIDE_BACKDROP = 2;
 	public const STRIDE_PILLAR = 4;
@@ -237,12 +237,11 @@ final class Scene
 			}
 		}
 
-		// A cardinal crosses the sky now and then, slowly, right to left, and only by day: it sets out only in full
-		// daylight and fades with the light if dusk catches it. It flies behind the ground, scenery and pillars, so the
+		// A cardinal crosses the sky now and then, right to left. It sets out only in full daylight; one already in the
+		// air when dusk falls simply finishes its crossing. It flies behind the ground, scenery and pillars, so the
 		// backdrop is drawn first and the rest of the terrain after it.
 		$this->terrain->render($terrain, $width, $height, $seconds * 1000, $this->fade);
 		$terrain = [];
-		$daylight = max(0.0, 1 - $this->blend);
 
 		if($this->cardinal === null)
 		{
@@ -255,7 +254,7 @@ final class Scene
 		{
 			$this->cardinal[0] -= self::CARDINAL_SPEED * $elapsed;
 
-			if($this->cardinal[0] < -40 || $daylight <= 0)
+			if($this->cardinal[0] < -40)
 			{
 				$this->cardinal = null;
 				$this->cardinalWait = self::CARDINAL_WAIT[0]
@@ -274,7 +273,6 @@ final class Scene
 				, $tint
 			);
 			$bird->animated = true;
-			$bird->opacity = $daylight;
 			$this->sprites->render([$bird], $camera, $seconds * 1000);
 		}
 
