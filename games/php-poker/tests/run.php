@@ -108,6 +108,162 @@ $test('stud showing hands order pairs above high cards and never count straights
 	$reject(static fn()=>Hand::showing([0,1,2,3,4]));
 	$reject(static fn()=>Hand::showing([52]));
 });
+$deal=static function(Game $game,array $hands,array $stock=[]): Game {
+	// Rig a freshly dealt table of a street game: each seat's cards as [id, face] pairs in dealing order, and the
+	// cards that will come off the stock next. Forced bets already posted are kept.
+	$s=$game->snapshot(); $used=$stock;
+	foreach($hands as $id=>$faces)
+	{
+		$cards=array_column($faces,0);
+		$s['piles']['piles']['hand'.$id]=[['kind'=>'ordered','cards'=>$cards]];
+		$s['state']['faces'][$id]=$faces; $used=array_merge($used,$cards);
+	}
+	$s['piles']['piles']['stock']=[['kind'=>'ordered','cards'=>[...$stock,...array_values(array_diff($s['piles']['inventory'],$used))]]];
+	return Game::restore($s);
+};
+$test('saves from before the street engine continue as five-card draw',static function() use ($expect,$act): void {
+	$saves=json_decode(file_get_contents(__DIR__.'/fixtures/pre-street-saves.json'),true,flags:JSON_THROW_ON_ERROR);
+	$expect(array_keys($saves)===['betting','draw','final-betting','showdown']);
+	foreach($saves as $phase=>$save)
+	{
+		$expect(!isset($save['state']['street'])&&!isset($save['piles']['piles']['board'])&&$save['profile']['version']==='bicycle-inspired-local-v4');
+		$game=Game::restore($save); $view=$game->view(0);
+		$expect($view['phase']===$phase&&$view['game']==='draw'&&$view['board']===[],'Old '.$phase.' save');
+		$drawn=(bool)array_filter(array_column($save['state']['players'],'drawCount'),'is_int');
+		$expect($view['street']===($phase==='final-betting'||($phase==='showdown'&&$drawn)?'final':'opening'),'Street of old '.$phase.' save');
+		$expect($view['players'][0]['faces']===array_fill(0,5,'down')&&count(array_filter($view['players'][1]['cards'],'is_int'))===($view['reveal']&&!$view['players'][1]['folded']?5:0));
+		$again=Game::restore($game->snapshot());
+		$expect($again->snapshot()===$game->snapshot()&&$game->snapshot()['profile']['version']==='bicycle-inspired-local-v5');
+		for($step=0;$step<12;$step++)
+		{
+			$turn=$game->view(-1)['turn']; $legal=$game->view(max(0,$turn))['legalActions'];
+			$act($game,match(true){ $turn<0=>['type'=>'next'], !empty($legal['draw'])=>['type'=>'draw','cards'=>[]],
+				$legal['call']=>['type'=>'call'], $legal['check']=>['type'=>'check'], default=>['type'=>'pass'] });
+		}
+	}
+});
+$test('hold\'em posts blinds, orders each street and gives the big blind its option',static function() use ($expect,$reject,$act): void {
+	$g=new Game('holdem-ring',4,new Profile('anything',ante:1,minimum:2,maximum:6,finalMinimum:4,finalMaximum:12,game:'holdem'));
+	$v=$g->view(0);
+	$expect($v['dealer']===0&&$v['game']==='holdem'&&$v['street']==='preflop'&&$v['board']===[]);
+	$expect($v['players'][1]['bet']===1&&$v['players'][1]['lastAction']==='Small blind 1'&&$v['players'][2]['bet']===2&&$v['pot']===3);
+	$expect($v['turn']===3&&$v['highest']===2,'Left of the big blind acts first');
+	$expect(count($v['players'][0]['cards'])===2&&is_int($v['players'][0]['cards'][0])&&$v['players'][3]['cards']===[null,null]&&$v['players'][0]['handName']===null);
+	$legal=$g->view(3)['legalActions'];
+	$expect($legal['call']&&$legal['callAmount']===2&&!$legal['pass']&&!$legal['check']&&$legal['minBet']===4&&$legal['maxBet']===8&&$legal['betLabel']==='Raise to'&&!$legal['openingRequired']);
+	$act($g,['type'=>'call']); $act($g,['type'=>'call']); $act($g,['type'=>'call']);
+	$option=$g->view(2);
+	$expect($option['turn']===2&&$option['street']==='preflop'&&$option['legalActions']['check']&&$option['legalActions']['bet'],'The big blind may check or raise');
+	$reject(static fn()=>$g->act(2,['type'=>'draw','cards'=>[]],$option['revision']));
+	$act($g,['type'=>'check']);
+	$flop=$g->view(0);
+	$expect($flop['street']==='flop'&&count($flop['board'])===3&&$flop['turn']===1&&$flop['highest']===0&&$flop['pot']===8,'Flop opens left of the dealer');
+	$expect($flop['players'][0]['handName']!==null&&$flop['players'][1]['handName']===null&&str_starts_with($flop['history'][count($flop['history'])-1],'Flop: '));
+	$expect($g->view(1)['legalActions']['minBet']===2&&$g->view(1)['legalActions']['betLabel']==='Bet');
+	foreach(range(1,4) as $_) $act($g,['type'=>'check']);
+	$turn=$g->view(1);
+	$expect($turn['street']==='turn'&&count($turn['board'])===4&&array_slice($turn['board'],0,3)===$flop['board'],'The turn is added after the flop');
+	$expect($turn['legalActions']['minBet']===4&&$turn['legalActions']['maxBet']===12,'Late streets use the late limits');
+	$act($g,['type'=>'bet','amount'=>4]); $act($g,['type'=>'fold']); $act($g,['type'=>'call']); $act($g,['type'=>'call']);
+	$river=$g->view(0);
+	$expect($river['street']==='river'&&count($river['board'])===5&&$river['turn']===1&&$river['players'][2]['folded']&&count($g->view(-1)['players'][2]['cards'])===2);
+	$restored=Game::restore(json_decode(json_encode($g->snapshot()),true));
+	$expect($restored->snapshot()===$g->snapshot());
+	foreach(range(1,3) as $_) $act($g,['type'=>'check']);
+	$end=$g->view(0);
+	$expect($end['phase']==='showdown'&&$end['reveal']&&$end['pot']===0&&array_sum(array_column($end['awards'],'amount'))===20);
+	$expect($end['players'][1]['handName']!==null&&$end['players'][2]['cards']===[null,null],'Folded hands stay hidden at showdown');
+	$act($g,['type'=>'next']);
+	$expect($g->view(0)['dealer']===1&&$g->view(0)['board']===[]&&$g->view(0)['street']==='preflop');
+	$heads=new Game('holdem-heads-up',2,new Profile('anything',game:'holdem'));
+	$h=$heads->view(0);
+	$expect($h['dealer']===0&&$h['players'][0]['bet']===1&&$h['players'][1]['bet']===2&&$h['turn']===0,'Heads-up the dealer is the small blind and acts first');
+	$act($heads,['type'=>'call']); $act($heads,['type'=>'check']);
+	$expect($heads->view(0)['street']==='flop'&&$heads->view(0)['turn']===1,'After the flop the dealer acts last');
+	$act($heads,['type'=>'bet','amount'=>2]); $act($heads,['type'=>'fold']);
+	$expect($heads->view(0)['phase']==='showdown'&&!$heads->view(0)['reveal']&&$heads->view(0)['awards'][0]===['seat'=>1,'amount'=>6,'handName'=>null]);
+	$reject(static fn()=>new Game('too-many',9,new Profile(game:'holdem')));
+});
+$test('hold\'em showdowns use the best five of seven and split when the board plays',static function() use ($expect,$act,$deal): void {
+	$check=static function(Game $g) use ($act): void { while($g->view(-1)['phase']!=='showdown') { $legal=$g->view($g->actor())['legalActions']; $act($g,['type'=>$legal['call']?'call':'check']); } };
+	// Seat 0 holds two aces, seat 1 king-queen of hearts; the board brings three more hearts.
+	$g=$deal(new Game('holdem-flush',2,new Profile('anything',game:'holdem')),
+		[0=>[[12,'down'],[25,'down']],1=>[[37,'down'],[36,'down']]],[26,28,30,0,14]);
+	$check($g); $v=$g->view(0);
+	$expect($v['board']===[26,28,30,0,14]&&$v['awards']===[['seat'=>1,'amount'=>4,'handName'=>'Flush']],'Flush beats aces up');
+	$expect($v['players'][0]['handName']==='Two pair'&&$v['players'][1]['cards']===[37,36]);
+	// A royal flush on the board plays for both seats.
+	$g=$deal(new Game('holdem-board',2,new Profile('anything',game:'holdem')),
+		[0=>[[0,'down'],[14,'down']],1=>[[1,'down'],[15,'down']]],[8,9,10,11,12]);
+	$check($g); $v=$g->view(0);
+	$expect(array_column($v['awards'],'amount')===[2,2]&&$v['awards'][0]['handName']==='Royal flush'&&str_contains($v['message'],'split'));
+	// A kicker in the hole decides between two pairs of aces.
+	$g=$deal(new Game('holdem-kicker',2,new Profile('anything',game:'holdem')),
+		[0=>[[12,'down'],[11,'down']],1=>[[25,'down'],[23,'down']]],[38,2,17,32,47]);
+	$check($g);
+	$expect($g->view(0)['awards']===[['seat'=>0,'amount'=>4,'handName'=>'One pair']]);
+});
+$test('stud deals exposed cards, forces a bring-in and lets the best showing hand act first',static function() use ($expect,$reject,$act,$deal): void {
+	$fresh=new Game('stud-five',3,new Profile('anything',ante:1,minimum:2,maximum:6,finalMinimum:4,finalMaximum:12,game:'stud5'));
+	$expect($fresh->view(0)['pot']===5&&array_sum(array_column($fresh->view(0)['players'],'totalBet'))===5,'Every seat antes and one brings in');
+	// Cards are dealt from the dealer's left, so seat 0, the dealer, is served last on every street.
+	// Up-cards: seat 0 the two of diamonds, seat 1 the two of clubs, seat 2 a king. Clubs is the lowest suit.
+	$g=$deal(new Game('stud-five',3,new Profile('anything',ante:1,minimum:2,maximum:6,finalMinimum:4,finalMaximum:12,game:'stud5')),
+		[0=>[[12,'down'],[13,'up']],1=>[[25,'down'],[0,'up']],2=>[[38,'down'],[11,'up']]],[24,5,26, 3,39, 2,1]);
+	// The rigged table keeps the bring-in posted by the original deal; rebuild it for the rigged up-cards.
+	$s=$g->snapshot();
+	foreach($s['state']['players'] as $id=>&$p) { $p['stack']=499; $p['bet']=0; $p['totalBet']=1; $p['lastAction']=''; }
+	unset($p);
+	$s['state']['players'][1]=['stack'=>497,'bet'=>2,'totalBet'=>3,'lastAction'=>'Brings in 2']+$s['state']['players'][1];
+	$s['state']['pending']=[2,0]; $s['state']['turn']=2; $s['state']['highest']=2; $s['state']['pot']=5;
+	$g=Game::restore($s); $v=$g->view(0);
+	$expect($v['street']==='second'&&$v['players'][0]['cards']===[12,13]&&$v['players'][0]['faces']===['down','up']);
+	$expect($v['players'][1]['cards']===[null,0]&&$v['players'][2]['cards']===[null,11],'Only exposed cards are public');
+	$expect($g->view(-1)['players'][0]['cards']===[null,13]);
+	$act($g,['type'=>'call']); $act($g,['type'=>'call']);
+	$third=$g->view(0);
+	$expect($third['street']==='third'&&$third['players'][0]['cards']===[12,13,26]&&$third['players'][1]['cards']===[null,0,24]&&$third['players'][2]['cards']===[null,11,5]);
+	$expect($third['turn']===0&&str_contains($third['message'],'You show the best hand'),'A pair of twos showing acts first');
+	$expect($third['history'][count($third['history'])-1]==='Third street.'&&$g->view(0)['legalActions']['check']&&$g->view(0)['legalActions']['minBet']===2);
+	$act($g,['type'=>'bet','amount'=>2]); $act($g,['type'=>'call']); $act($g,['type'=>'fold']);
+	$fourth=$g->view(0);
+	$expect($fourth['street']==='fourth'&&$fourth['players'][2]['folded']&&$fourth['players'][2]['cards']===[null,null,null],'A folded hand is turned face down');
+	$expect($fourth['players'][0]['cards']===[12,13,26,39]&&$fourth['players'][1]['cards']===[null,0,24,3]&&count($g->view(2)['players'][2]['cards'])===3);
+	$expect($fourth['turn']===0&&$g->view(0)['legalActions']['minBet']===4,'Trip twos showing; late limits from fourth street');
+	$act($g,['type'=>'check']); $act($g,['type'=>'check']);
+	$fifth=$g->view(0);
+	$expect($fifth['street']==='fifth'&&$fifth['players'][0]['cards']===[12,13,26,39,1]&&$fifth['players'][0]['handName']==='Three of a kind');
+	$act($g,['type'=>'check']); $act($g,['type'=>'check']);
+	$end=$g->view(0);
+	$expect($end['phase']==='showdown'&&$end['awards'][0]['seat']===0&&$end['awards'][0]['amount']===13&&$end['players'][1]['cards']===[25,0,24,3,2]);
+	$seven=new Game('stud-seven',7,new Profile('anything',game:'stud7'));
+	$expect($seven->view(0)['players'][0]['faces']===['down','down','up']&&$seven->view(0)['street']==='third');
+	while($seven->view(-1)['phase']!=='showdown') { $legal=$seven->view($seven->actor())['legalActions']; $act($seven,['type'=>$legal['call']?'call':'check']); }
+	$last=$seven->view(0);
+	$expect($last['street']==='seventh'&&$last['players'][3]['faces']===['down','down','up','up','up','up','down']&&$last['stockCount']===3);
+	$expect(count(array_filter($last['players'][3]['cards'],'is_int'))===7&&$last['players'][3]['handName']!==null);
+	$reject(static fn()=>new Game('stud-seven',8,new Profile(game:'stud7')));
+	$bad=$seven->snapshot(); $bad['state']['faces'][0][0][1]='up';
+	$reject(static fn()=>Game::restore($bad));
+});
+$test('street games survive long random sessions with chips conserved at every seat count',static function() use ($expect): void {
+	foreach(['holdem','stud5','stud7'] as $id) foreach(range(2,Variant::of($id)->seats()) as $players)
+	{
+		$game=new Game("session-$id-$players",$players,new Profile('anything',wild:$players===3?['deuces']:[],game:$id));
+		$random=new RandomStream("session-$id-$players",'php-poker/tests/v1'); $hands=0;
+		for($step=0;$step<500;$step++)
+		{
+			$actor=$game->actor(); $view=$game->view(max(0,$actor));
+			if($actor<0) { $hands++; $game->act(0,['type'=>'next'],$view['revision']); continue; }
+			$legal=$view['legalActions']; $roll=$random->boundedInt(10);
+			$intent=$legal['bet']&&$roll<3?['type'=>'bet','amount'=>$roll===0?$legal['maxBet']:$legal['minBet']]
+				:($legal['call']?['type'=>$roll===9?'fold':'call']:['type'=>'check']);
+			$game->act($actor,$intent,$view['revision']);
+			if($step%29===0) $game=Game::restore(json_decode(json_encode($game->snapshot()),true));
+		}
+		$expect($hands>5,"$id with $players seats played only $hands hands");
+	}
+});
 $test('hand categories, wheel, kickers and concealed opening predicate',static function() use ($expect,$reject): void {
 	$hands=[[0,14,29,44,11],[9,22,0,16,30],[9,22,8,21,0],[9,22,35,0,15],[0,14,28,42,4],
 		[0,2,5,8,11],[9,22,35,0,13],[9,22,35,48,0],[8,9,10,11,12]];
