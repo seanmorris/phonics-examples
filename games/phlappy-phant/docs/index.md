@@ -12,7 +12,7 @@ Taps and clicks anywhere on the canvas flap, as do Space, Up, W and the controll
 
 ## Secrets
 
-With no points on the board, the Konami code (Up, Up, Down, Down, Left, Right, Left, Right, B, A; the arrows then B and A on a keyboard) hands the run to a tool-assisted player that never misses a gap. The HUD says **TAS** and the run never counts toward the best score.
+With no points on the board, the Konami code (Up, Up, Down, Down, Left, Right, Left, Right, B, A; the arrows then B and A on a keyboard) hands the run to a tool-assisted player that never misses a gap yet never taps faster than five times a second. The HUD says **TAS** and the run never counts toward the best score.
 
 ## Controls
 

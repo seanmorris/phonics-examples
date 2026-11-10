@@ -87,13 +87,13 @@
     "assets/tiles.tsj": "sha256-WHAM5CDjbJjwsw16jMuaMSpy3zyTAvKcg9oUIn3sXxM=",
     "autoload.php": "sha256-nI1YY9Kfwe086pFq06a8/3u5BaxBJmM/Hu2URHSSrlY=",
     "browser/game.mjs": "sha256-K4wBCiEmcnqqas9X35XgdElb5T8i4RUif01HCImtpiw=",
-    "game.php": "sha256-QFlK1XU9LMQs4y/JYb28XbXm6b1DTLRMGquCHXq7XHQ=",
+    "game.php": "sha256-MX4jjk6W59Q6jYY9xuMGo57szDkJmY9RE7yCmz2bXEw=",
     "src/Barrel.php": "sha256-pZphRORDVyjkIFp21ixv9AVgyN3loHAODd9T34xxGYo=",
     "src/Input/InputSettings.php": "sha256-t+gFObzP4DD9hGQy6pgNTn6OmvGjPTacHQQFlhmTqPw=",
     "src/Input/PhantActions.php": "sha256-bW+3S4rcQjQglbFM/SFmhbEkE3pt/eukxZy+qH5NFU8=",
     "src/Random.php": "sha256-K7C+O1PIMGau+sBBTtbtYY3jWj3mhtILARVJb+ClSFI=",
     "src/Render/Scene.php": "sha256-q/P4AN5FLmfkc8+9RwwaDXlBXyIJ1uBDK1FmjJWD7DI=",
-    "src/Simulation.php": "sha256-Vnt2KJhu+N45nH24WH9mwzKbmTK8Bzdq+vR3QKL8JPU=",
+    "src/Simulation.php": "sha256-EjL3K1AU2mLU5ryv9LOZ55E0LO/LIN6EEqSXDGl5jSw=",
     "worlds/phant.tmj": "sha256-26/Laqz0ftUzz0WEBaU0AbolO9RfWgGyDjNXxA3Kp8Y=",
     "worlds/phant.world": "sha256-GT3SuMsmPogieQR7k9iG95I6QZMH+R3c4AweR3TjNjs="
   }

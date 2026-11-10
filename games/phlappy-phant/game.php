@@ -279,7 +279,7 @@ $engine->start(static function(
 	Engine $engine
 	, float $alpha
 ) use (
-	&$game, &$page, &$uiTime, &$runId, &$counts, &$seenTaps, $scene, $font, $menu, $best
+	&$game, &$page, &$uiTime, &$runId, &$counts, &$seenTaps, $scene, $font, $menu, $best, $konami
 ): void {
 	[$width, $height] = json_decode((string)(vrzno_env('phantViewport'))(), true);
 	$engine->device->resize($width, $height);
@@ -297,6 +297,7 @@ $engine->start(static function(
 		, 'best' => $record
 		, 'finished' => $game->finished
 		, 'autopilot' => $game->autopilot
+		, 'konami' => $konami->progress('konami')
 		, 'palette' => $game->palette
 		, 'y' => $game->y
 		, 'vy' => $game->vy

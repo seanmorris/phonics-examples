@@ -38,10 +38,13 @@ final class Simulation
 	public const DEAD_SETTLE = .6;
 	public const WING_BEATS = 3;
 	public const WING_BEAT = .09;
-	/** Steps the tool-assisted player plans ahead: a second and a half reaches the next gap's entry at any speed. */
-	public const TAS_HORIZON = 90;
+	/** Steps the tool-assisted player plans ahead: two and a half seconds, two gaps beyond the current one at the
+	 * speed cap, so a position that looks safe never turns out to be a corner once the following gap comes into view. */
+	public const TAS_HORIZON = 150;
 	/** Steps of each plan the tool-assisted player keeps before rebuilding the safe sets. */
 	public const TAS_REPLAN = 10;
+	/** Fewest steps between two of the tool-assisted player's flaps: 150 ms, a fast but human tapping rate. */
+	public const TAS_FLAP_GAP = 12;
 
 	/** One of ready, playing, or dead. */
 	public string $phase = 'ready';
@@ -229,7 +232,8 @@ final class Simulation
 	 * Decide the tool-assisted player's flap for the coming step.
 	 *
 	 * The player flaps only when coasting would leave the safe set: the positions from which some sequence of flaps
-	 * keeps the hitbox inside every gap and off the ground for the next second and a half. That set is built backward from
+	 * keeps the hitbox inside every gap and off the ground for the next two and a half seconds, with flaps no closer
+	 * together than a human could tap. That set is built backward from
 	 * the horizon over the velocity lattice (a flap always resets the velocity, so the velocity is just the number of
 	 * steps since the last flap), with the barrels advanced exactly as the run will advance them. Flapping as late as
 	 * possible keeps the flight low and smooth; the horizon always covers the entry into the next gap.
@@ -254,7 +258,8 @@ final class Simulation
 
 		foreach($row[$coasted] as [$a, $b]) if($top >= $a && $top <= $b) return false;
 
-		return true;
+		// The table never relies on a flap sooner than a human could tap; if coasting is unsafe here, a flap is due.
+		return $k + 1 >= self::TAS_FLAP_GAP;
 	}
 
 	/**
@@ -292,7 +297,8 @@ final class Simulation
 		for($t = 1; $t <= $steps; $t++)
 		{
 			$speed = self::speedFor($score) * self::STEP;
-			$low = 1.0;
+			// The run clamps the sprite at the ceiling, so the hitbox top never rises above its inset.
+			$low = self::HITBOX_INSET_Y + 1.0;
 			$high = self::GROUND_Y - $boxHeight - 1.0;
 
 			foreach($this->barrels as $j => $barrel)
@@ -351,7 +357,8 @@ final class Simulation
 			for($k = 0; $k <= $lattice; $k++)
 			{
 				$by = $coastBy[$k];
-				$set = $flapped;
+				// A flap is only an option once the human-speed interval since the last one has passed.
+				$set = $k + 1 >= self::TAS_FLAP_GAP ? $flapped : [];
 
 				foreach($next[min($lattice, $k + 1)] as [$a, $b])
 				{

@@ -124,16 +124,24 @@ $tas->autopilot = true;
 $tas->step();
 check($tas->phase === 'playing' && in_array('flap', $tas->events, true), 'the autopilot starts the run with a flap');
 $flaps = 0;
+$lastFlap = 0;
+$closest = PHP_INT_MAX;
 
-for($i = 0; $i < 3600 && $tas->phase === 'playing'; $i++)
+for($i = 1; $i <= 3600 && $tas->phase === 'playing'; $i++)
 {
 	$tas->step();
-	$flaps += (int)in_array('flap', $tas->events, true);
+
+	if(!in_array('flap', $tas->events, true)) continue;
+
+	$flaps++;
+	$closest = min($closest, $i - $lastFlap);
+	$lastFlap = $i;
 }
 
 check($tas->phase === 'playing', 'the autopilot survives a minute at the speed cap and minimum gap');
 check($tas->score >= 60 && Simulation::gapFor($tas->score) === (float)Simulation::GAP_MIN, 'the autopilot scores through the narrowest gaps');
 check($flaps > 120 && $flaps < 900, 'the autopilot flaps on fewer than a quarter of the steps');
+check($closest >= Simulation::TAS_FLAP_GAP && Simulation::TAS_FLAP_GAP * Simulation::STEP >= .2, 'the autopilot never taps faster than five times a second');
 
 $manual = new Simulation(14);
 $manual->step(true);
