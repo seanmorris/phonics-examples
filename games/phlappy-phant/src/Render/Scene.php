@@ -30,6 +30,8 @@ final class Scene
 	public const GID_SCENERY = 13;
 	/** The backdrop block, its tile size, and the ground tile size, in world units. */
 	public const BACKDROP = 160;
+	/** The backdrop draws at twice the world's pixel size, so its 160-pixel block spans 320 world units. */
+	public const BACKDROP_SCALE = 2;
 	public const GROUND_TILE = 32;
 	/** Tower slices are 64 wide with the 56-unit tower centred, and 8 tall so any grid height can be built. */
 	public const SLICE_W = 64;
@@ -162,13 +164,20 @@ final class Scene
 
 		// The backdrop sits on the ground line; each band of the parallax mask drifts at its own rate, and the tile's
 		// animation swaps the river frames.
-		$backdropTop = Simulation::GROUND_Y - self::BACKDROP;
+		$backdropSpan = self::BACKDROP * self::BACKDROP_SCALE;
+		$backdropTop = Simulation::GROUND_Y - $backdropSpan;
 
 		foreach($this->bands as [$top, $bandHeight, $rate])
 		{
-			for($x = -fmod($game->scroll * $rate, self::BACKDROP); $x < $visible; $x += self::BACKDROP)
+			for($x = -fmod($game->scroll * $rate, $backdropSpan); $x < $visible; $x += $backdropSpan)
 			{
-				$band = $this->tile(self::GID_BACKDROP, $x * $scale, $y($backdropTop + $top), $scale, $tint);
+				$band = $this->tile(
+					self::GID_BACKDROP
+					, $x * $scale
+					, $y($backdropTop + $top * self::BACKDROP_SCALE)
+					, $scale * self::BACKDROP_SCALE
+					, $tint
+				);
 				$band->crop = [0, $top, self::BACKDROP, $bandHeight];
 				$band->animated = true;
 				$sprites[] = $band;
@@ -369,9 +378,9 @@ final class Scene
 		$chevron = $this->measure('> ');
 		$title = (string)$menu->title;
 		$front = $page === 'title' && $menu->depth() === 0;
-		// The undimmed title pages keep every row above the backdrop's treeline, where the busy field would swallow
-		// the text; the front page also starts under the wordmark.
-		$sky = $page === 'title' ? (int)floor(($height / $k - Simulation::HEIGHT + Simulation::GROUND_Y - self::BACKDROP + $this->bands[3][0]) * $k) : $height;
+		// The undimmed title pages keep every row above the backdrop's dark strip, over the sky, clouds and field where
+		// the ink shadows carry the text; the front page also starts under the wordmark.
+		$sky = $page === 'title' ? (int)floor(($height / $k - Simulation::HEIGHT + Simulation::GROUND_Y - self::BACKDROP_SCALE * (self::BACKDROP - $this->bands[4][0])) * $k) : $height;
 		$avail = $width - 24 * $k;
 		$logo = max(1, min(2 * $k + 1, (int)floor($avail / max(1, $this->measure('PHLAPPY PHANT')))));
 		$underLogo = $front ? (int)floor($height * .11 + 16 * $logo + 16 * $k) : 0;
@@ -417,7 +426,8 @@ final class Scene
 		$x = (int)floor(($width - $blockWidth) / 2);
 		$rects = [];
 
-		if($page !== 'title') $rects[] = [0, 0, $width, $height, self::INK[0], self::INK[1], self::INK[2], .4];
+		// Only the front page shows the world undimmed; every other page sits its text on the dimmed backdrop.
+		if(!$front) $rects[] = [0, 0, $width, $height, self::INK[0], self::INK[1], self::INK[2], .4];
 
 		$labels = [];
 		$shadow = (float)$r;

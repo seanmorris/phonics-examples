@@ -111,7 +111,7 @@
     "src/Input/InputSettings.php": "sha256-t+gFObzP4DD9hGQy6pgNTn6OmvGjPTacHQQFlhmTqPw=",
     "src/Input/PhantActions.php": "sha256-bW+3S4rcQjQglbFM/SFmhbEkE3pt/eukxZy+qH5NFU8=",
     "src/Random.php": "sha256-lfmC1hmTGMRnMnsbFGTyHOPdsZchUfrn0sJaCbgXZJM=",
-    "src/Render/Scene.php": "sha256-8GyyXWK/DRE1BjM5gKFKTjOxknBiIo4OFpA4MdVPvuU=",
+    "src/Render/Scene.php": "sha256-NC6KkdZCuCx2Ckcm4XxO03isxfZA07HicLEQEyGmdpE=",
     "src/Simulation.php": "sha256-gqEShyNuKD9MiSTysbOMWBjLNC7SyFiUoosoobPJQPI=",
     "src/Tower.php": "sha256-MhFFbLs6B4JkKZbb7zf3CvetjBB7MR65PTGMA5If//8=",
     "worlds/phant.tmj": "sha256-3Dy5zXwVOPYMF5Hva+bLgP2puJOle7I6gO2adxl5CLY=",
