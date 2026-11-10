@@ -318,6 +318,8 @@ $engine->start(static function(
 		, 'counts' => $counts
 		, 'viewport' => $scene->viewport
 		, 'regions' => $scene->regions
+		, 'hint' => $scene->hint
+		, 'inputTheme' => $engine->input->inputTheme
 		, 'width' => $width
 		, 'height' => $height
 	]));

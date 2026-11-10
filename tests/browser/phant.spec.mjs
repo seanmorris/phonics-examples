@@ -1,11 +1,12 @@
 import {test, expect} from '@playwright/test';
 
-const status = page => page.locator('canvas').evaluate(canvas => JSON.parse(canvas.dataset.phpPhant ?? 'null'));
+const gameCanvas = page => page.locator('.phlappy-phant-screen > canvas:not(.phlappy-phant-hints)');
+const status = page => gameCanvas(page).evaluate(canvas => JSON.parse(canvas.dataset.phpPhant ?? 'null'));
 
 async function boot(page)
 {
 	await page.goto('/games/phlappy-phant/');
-	const canvas = page.locator('canvas');
+	const canvas = gameCanvas(page);
 	await expect(canvas).toHaveAttribute('data-php-phant', /"page":"title"/, {timeout: 45_000});
 	await expect(page.locator('.loading')).toHaveClass(/complete/);
 
@@ -18,14 +19,45 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await page.setViewportSize({width: 1280, height: 720});
 	const canvas = await boot(page);
 	const title = await status(page);
+	const hint = page.locator('.phlappy-phant-hints');
+	await expect(hint).toBeVisible();
+	expect(title.hint).toMatchObject({back: false, scale: 1});
+	expect(title.inputTheme).toBe('keyboard');
+	const hintDensity = await page.evaluate(() => {
+		const world = document.querySelector('.phlappy-phant-screen > canvas:not(.phlappy-phant-hints)');
+		const hints = document.querySelector('.phlappy-phant-hints');
+		const pixels = hints.getContext('2d').getImageData(0, 0, hints.width, hints.height).data;
+		const colours = new Set;
+
+		for(let offset = 0; offset < pixels.length; offset += 4)
+		if(pixels[offset + 3] === 255) colours.add(`${pixels[offset]},${pixels[offset + 1]},${pixels[offset + 2]}`);
+
+		return {
+			world: world.width / world.getBoundingClientRect().width
+			, hints: hints.width / hints.getBoundingClientRect().width
+			, face: colours.has('242,224,191')
+			, inset: colours.has('69,64,83')
+		};
+	});
+	expect(hintDensity.hints).toBeGreaterThan(hintDensity.world);
+	expect(hintDensity).toMatchObject({face: true, inset: true});
 
 	// The title is a live waiting preview: the phant bobs while the terrain scrolls behind the open menu.
 	await expect.poll(async() => (await status(page)).scroll).toBeGreaterThan(title.scroll + 10);
 	await expect.poll(async() => (await status(page)).y).not.toBe(title.y);
 
+	// A very wide title uses the spare field below the wordmark to enlarge its choices at an integer scale.
+	await page.setViewportSize({width: 2560, height: 1222});
+	await expect.poll(async() => (await status(page)).width).toBeGreaterThan(720);
+	const largeTitle = await status(page);
+	expect(largeTitle.regions[0].rect[3]).toBeGreaterThan(title.regions[0].rect[3]);
+	await page.setViewportSize({width: 1280, height: 720});
+	await expect.poll(async() => (await status(page)).width).toBeLessThan(720);
+
 	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play', exact: true}).click();
 	await expect.poll(async() => (await status(page)).page).toBe('play');
 	await expect.poll(async() => (await status(page)).phase).toBe('ready');
+	await expect(hint).toBeHidden();
 	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.loaded)).toBe(true);
 	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.playing)).toBe(true);
 	expect(await canvas.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
@@ -64,6 +96,7 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	// Stop flapping: gravity ends the run and the result card opens with the best kept locally.
 	await expect.poll(async() => (await status(page)).phase, {timeout: 15_000}).toBe('dead');
 	await expect.poll(async() => (await status(page)).page, {timeout: 15_000}).toBe('gameover');
+	await expect(hint).toBeVisible();
 	await expect(page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play again'})).toBeAttached();
 	const profile = await page.evaluate(() => JSON.parse(localStorage.getItem('phlappy-phant.profile.v1') ?? 'null'));
 	expect(profile?.version).toBe(1);

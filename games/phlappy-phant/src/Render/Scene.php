@@ -57,6 +57,8 @@ final class Scene
 
 	/** Accessible hit regions published by the menu renderer. */
 	public array $regions = [];
+	/** Native-resolution browser hint metadata for open-sky menu pages. */
+	public ?array $hint = null;
 	/** Output width and height, logical scale, and the phant's screen x. */
 	public array $viewport = [0, 0, 1, 0];
 	private Atlas $atlas;
@@ -325,8 +327,13 @@ final class Scene
 
 			if($game->phase === 'ready')
 			{
-				$this->shadowed($labels, 'TAP TO FLAP', $width / 2, $height * .62, $textScale, 'center');
-				$this->shadowed($labels, 'BEST ' . $best, $width / 2, $height * .69, $textScale, 'center');
+				$bestLabel = 'BEST ' . $best;
+				$readyScale = (float)max($k, min(2 * $k, (int)floor(
+					($width - 8 * $k) / max($this->measure('TAP TO FLAP'), $this->measure($bestLabel))
+				)));
+				$readyY = $height * .59;
+				$this->shadowed($labels, 'TAP TO FLAP', $width / 2, $readyY, $readyScale, 'center');
+				$this->shadowed($labels, $bestLabel, $width / 2, $readyY + 20 * $readyScale, $readyScale, 'center');
 			}
 			elseif($game->phase === 'dead')
 			{
@@ -345,6 +352,7 @@ final class Scene
 		$this->text->render($labels, $camera);
 
 		$this->regions = [];
+		$this->hint = null;
 
 		if($menu->isOpen)
 		{
@@ -423,7 +431,10 @@ final class Scene
 		$avail = $width - 24 * $k;
 		$logo = max(1, min(2 * $k + 1, (int)floor($avail / max(1, $this->measure('PHLAPPY PHANT')))));
 		$underLogo = $front ? (int)floor($height * .11 + 16 * $logo + 16 * $k) : 0;
-		$room = $front ? $sky - $underLogo - 4 * $k : $sky - 16 * $k;
+		// A wide front page may use the open field below the sky band too. This gives the title choices enough vertical
+		// room to step up by a whole pixel scale without introducing fractional, blurry glyphs.
+		$menuBottom = $front ? $height - 54 * $k : $sky;
+		$room = $front ? $menuBottom - $underLogo : $sky - 16 * $k;
 
 		// Pick the largest whole scale at which the rows, wrapped to the width, still fit in the sky; long
 		// informational lines wrap rather than shrinking every row to the width of the longest one.
@@ -454,12 +465,12 @@ final class Scene
 		}
 
 		$blockWidth = ($widest + $chevron) * $r;
-		$top = (int)floor(($sky - $blockHeight) / 2);
+		$top = (int)floor(($menuBottom - $blockHeight) / 2);
 
 		if($front)
 		{
 			// Hang just below the wordmark, never climbing into it.
-			$top = max($underLogo, min($top, $sky - $blockHeight - 4 * $k));
+			$top = max($underLogo, min($top, $menuBottom - $blockHeight));
 		}
 
 		$x = (int)floor(($width - $blockWidth) / 2);
@@ -512,10 +523,15 @@ final class Scene
 			$y += $rowHeight;
 		}
 
-		// Above the host's quick controls, which sit in the bottom corner, and never wider than the frame.
+		// The browser draws this small mixed-density line at display resolution. Rendering the four-times-denser key
+		// art into the reduced world buffer first would discard detail before the host enlarges the pixel-art canvas.
 		$hint = $menu->depth() > 0 ? '✚ MOVE  ⓿ SELECT  ❶ BACK' : '✚ MOVE  ⓿ SELECT';
 		$hintScale = max(1, min($k, (int)floor(($width - 16) / max(1, $this->measure($hint)))));
-		$this->shadowed($labels, $hint, $width / 2, (float)($height - 34 * $k), (float)$hintScale, 'center');
+		$this->hint = [
+			'back' => $menu->depth() > 0
+			, 'scale' => $hintScale
+			, 'y' => $height - 34 * $k
+		];
 
 		$this->rects->render($rects, $width, $height);
 		$this->text->render($labels, $camera);

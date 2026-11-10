@@ -110,6 +110,258 @@ class BackgroundTrack
 	}
 }
 
+/** Draw the mixed bitmap-font and high-density input hint after the reduced world buffer has been enlarged. */
+class HintOverlay
+{
+	constructor(module, assets, screen)
+	{
+		this.module = module;
+		this.assets = assets;
+		this.screen = screen;
+		this.scope = assets.scope();
+		this.canvas = document.createElement('canvas');
+		this.canvas.className = 'phlappy-phant-hints';
+		this.canvas.setAttribute('aria-hidden', 'true');
+		this.canvas.hidden = true;
+		this.state = null;
+		this.key = '';
+		this.urls = [];
+		this.buttons = new Map;
+		this.glyphs = new Map;
+		this.screen.append(this.canvas);
+		this.ready = this.load().then(() => this.draw()).catch(() => {});
+	}
+
+	properties(entries = [])
+	{
+		return Object.fromEntries(entries.map(entry => [entry.name, entry.value]));
+	}
+
+	async image(url)
+	{
+		const bytes = this.module.FS.readFile(this.assets.path(url));
+		const objectUrl = URL.createObjectURL(new Blob([bytes], {type: 'image/png'}));
+		const image = new Image;
+		this.urls.push(objectUrl);
+		image.src = objectUrl;
+		await image.decode();
+
+		return image;
+	}
+
+	async load()
+	{
+		const core = this.assets.packages.find(record => record.data?.name === '@seanmorris/phonics');
+
+		if(!core) throw new Error('Phonics core package is unavailable');
+
+		const references = Object.fromEntries(['buttons.tsj', 'buttons.png', 'font.tsj', 'font.png'].map(name => [
+			name, new URL('resources/' + name, core.url).href
+		]));
+		await Promise.all(Object.values(references).map(reference => this.scope.load(reference)));
+		const read = name => this.module.FS.readFile(this.assets.path(references[name]));
+		const decode = name => JSON.parse(new TextDecoder().decode(read(name)));
+		this.buttonSet = decode('buttons.tsj');
+		this.fontSet = decode('font.tsj');
+		[this.buttonImage, this.fontImage] = await Promise.all([
+			this.image(references['buttons.png']), this.image(references['font.png'])
+		]);
+
+		for(const tile of this.buttonSet.tiles ?? [])
+		{
+			const properties = this.properties(tile.properties);
+			const character = properties['glyph.char'], theme = properties['glyph.theme'];
+
+			if(character && theme) this.buttons.set(`${theme}:${character}`, {id: tile.id, ...properties});
+		}
+
+		for(const tile of this.fontSet.tiles ?? [])
+		{
+			const properties = this.properties(tile.properties);
+			const character = properties['glyph.char'];
+
+			if(character) this.glyphs.set(character, {id: tile.id, ...properties});
+		}
+
+		const fontProperties = this.properties(this.fontSet.properties);
+		this.spaceAdvance = Number(fontProperties['font.spaceAdvance'] ?? this.fontSet.tilewidth);
+		this.fontFace = this.tint(this.fontImage, [.95, .89, .75]);
+		this.fontShadow = this.tint(this.fontImage, [.21, .20, .33]);
+	}
+
+	tint(image, colour)
+	{
+		const canvas = document.createElement('canvas');
+		canvas.width = image.naturalWidth;
+		canvas.height = image.naturalHeight;
+		const context = canvas.getContext('2d');
+		context.drawImage(image, 0, 0);
+		const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+
+		// The font sheet has a light face and a dark inset. Multiply both by the requested tint just as the sprite
+		// shader does; replacing every non-transparent pixel with one flat colour destroys the letter forms.
+		for(let offset = 0; offset < pixels.data.length; offset += 4)
+		{
+			pixels.data[offset] = Math.round(pixels.data[offset] * colour[0]);
+			pixels.data[offset + 1] = Math.round(pixels.data[offset + 1] * colour[1]);
+			pixels.data[offset + 2] = Math.round(pixels.data[offset + 2] * colour[2]);
+		}
+
+		context.putImageData(pixels, 0, 0);
+
+		return canvas;
+	}
+
+	button(character, theme)
+	{
+		return this.buttons.get(`${theme}:${character}`)
+			?? this.buttons.get(`generic:${character}`)
+			?? this.buttons.get(`keyboard:${character}`);
+	}
+
+	layout(hint, theme)
+	{
+		const items = [];
+		const appendText = text => {
+			for(const character of text)
+			{
+				if(character === ' ')
+				{
+					items.push({advance: this.spaceAdvance});
+					continue;
+				}
+
+				const glyph = this.glyphs.get(character.toUpperCase()) ?? this.glyphs.get('?');
+				items.push({font: glyph, advance: Number(glyph['glyph.advance'])});
+			}
+		};
+		const appendButton = character => {
+			const button = this.button(character, theme);
+			items.push({button, advance: Number(button['glyph.advance'])});
+		};
+
+		appendButton('✚');
+		appendText(' MOVE  ');
+		appendButton('⓿');
+		appendText(' SELECT');
+
+		if(hint.back)
+		{
+			appendText('  ');
+			appendButton('❶');
+			appendText(' BACK');
+		}
+
+		return items;
+	}
+
+	drawFont(context, atlas, glyph, x, y, scale)
+	{
+		const id = Number(glyph.id);
+		const sourceX = id % this.fontSet.columns * this.fontSet.tilewidth;
+		const sourceY = Math.floor(id / this.fontSet.columns) * this.fontSet.tileheight;
+		const width = Number(glyph['glyph.width'] ?? this.fontSet.tilewidth);
+		const height = Number(glyph['glyph.height'] ?? this.fontSet.tileheight);
+		const offsetY = Number(glyph['glyph.offsetY'] ?? 0);
+		context.imageSmoothingEnabled = false;
+		context.drawImage(atlas, sourceX, sourceY, width, height, x, y + offsetY * scale, width * scale, height * scale);
+	}
+
+	drawButton(context, glyph, x, y, scale)
+	{
+		const id = Number(glyph.id);
+		const sourceX = id % this.buttonSet.columns * this.buttonSet.tilewidth;
+		const sourceY = Math.floor(id / this.buttonSet.columns) * this.buttonSet.tileheight;
+		const width = Number(glyph['glyph.width'] ?? this.buttonSet.tilewidth);
+		const height = Number(glyph['glyph.height'] ?? this.buttonSet.tileheight);
+		const ratio = Number(glyph['glyph.pixelRatio'] ?? 1);
+		const offsetY = Number(glyph['glyph.offsetY'] ?? 0);
+		context.imageSmoothingEnabled = glyph['glyph.smooth'] !== false;
+		context.drawImage(
+			this.buttonImage, sourceX, sourceY, width, height, x, y + offsetY * scale
+			, width / ratio * scale, height / ratio * scale
+		);
+	}
+
+	sync(state)
+	{
+		this.state = state;
+		this.draw();
+	}
+
+	draw()
+	{
+		const hint = this.state?.hint;
+
+		if(!hint || !this.buttonImage || !this.fontImage)
+		{
+			this.canvas.hidden = true;
+			this.key = '';
+			return;
+		}
+
+		const box = this.screen.getBoundingClientRect();
+		const theme = String(this.state.inputTheme || 'keyboard');
+		const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
+		const key = JSON.stringify([
+			hint, theme, this.state.width, this.state.height
+			, Math.round(box.width * 100), Math.round(box.height * 100), dpr
+		]);
+
+		// Status arrives every rendered frame; the hint changes only on navigation, input-theme changes, or resize.
+		if(this.key === key) return;
+
+		this.key = key;
+		const scale = Number(hint.scale) * Math.min(box.width / this.state.width, box.height / this.state.height);
+		const items = this.layout(hint, theme);
+		const logicalWidth = items.reduce((width, item) => width + item.advance, 0);
+		const padding = 2 * scale;
+		const width = logicalWidth * scale + 2 * padding;
+		const height = 20 * scale;
+		const top = (Number(hint.y) - 2 * Number(hint.scale)) * box.height / this.state.height;
+
+		this.canvas.hidden = false;
+		this.canvas.style.width = `${width}px`;
+		this.canvas.style.height = `${height}px`;
+		this.canvas.style.left = `${(box.width - width) / 2}px`;
+		this.canvas.style.top = `${top}px`;
+
+		this.canvas.width = Math.max(1, Math.ceil(width * dpr));
+		this.canvas.height = Math.max(1, Math.ceil(height * dpr));
+		const context = this.canvas.getContext('2d');
+		context.setTransform(dpr, 0, 0, dpr, 0, 0);
+		context.clearRect(0, 0, width, height);
+
+		let x = padding, y = 2 * scale;
+
+		// The pixel font keeps its one-pixel ink shadow. The already shaded control art draws once at source density.
+		for(const item of items)
+		{
+			if(item.font) this.drawFont(context, this.fontShadow, item.font, x + scale, y + scale, scale);
+			x += item.advance * scale;
+		}
+
+		x = padding;
+
+		for(const item of items)
+		{
+			if(item.font) this.drawFont(context, this.fontFace, item.font, x, y, scale);
+			else if(item.button) this.drawButton(context, item.button, x, y, scale);
+			x += item.advance * scale;
+		}
+	}
+
+	close()
+	{
+		this.scope.close();
+		this.canvas.remove();
+
+		for(const url of this.urls) URL.revokeObjectURL(url);
+
+		this.urls = [];
+	}
+}
+
 /** Browser shell for Phlappy Phant: taps, music, sounds, the local best score, and accessible menus in any viewport. */
 export async function activate({module, canvas, assets, packageUrl, services, session, onClose})
 {
@@ -138,6 +390,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		.phlappy-phant-screen{position:relative;width:100%;height:100%;isolation:isolate;overflow:hidden;background:#4866c5}
 		.phlappy-phant-screen>canvas{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;
 			max-height:none;margin:0;border:0;border-radius:0;image-rendering:pixelated;touch-action:none;cursor:pointer}
+		.phlappy-phant-screen>canvas.phlappy-phant-hints{inset:auto;display:block;max-width:none;max-height:none;
+			margin:0;border:0;image-rendering:auto;pointer-events:none;cursor:default;z-index:3}
+		.phlappy-phant-screen>canvas.phlappy-phant-hints[hidden]{display:none}
 		.phlappy-phant-targets{position:absolute;inset:0;pointer-events:none}
 		.phlappy-phant-targets button{position:absolute;pointer-events:auto;padding:0;border:0;border-radius:0;
 			background:transparent;color:transparent;box-shadow:none;touch-action:manipulation}
@@ -155,6 +410,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	ui.append(style, screen, status);
 	screen.append(targets);
 	const quick = new services.QuickControls(screen, ui);
+	const hints = new HintOverlay(module, assets, screen);
 	let state = null, taps = 0;
 	const sounded = {flap: 0, score: 0, bonk: 0, tas: 0};
 
@@ -291,6 +547,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 			}
 
 			buttons.sync(nextState.width, nextState.height, nextState.regions);
+			hints.sync(nextState);
 
 			const summary = `${nextState.page}. Score ${nextState.score}. Best ${nextState.best}.${nextState.autopilot ? ' Tool-assisted.' : ''}`;
 
@@ -309,6 +566,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	shell.onClose(async() => {
 		quick.close();
+		hints.close();
 		music.close();
 		await samples.close();
 		delete canvas.phpPhantDebug;
