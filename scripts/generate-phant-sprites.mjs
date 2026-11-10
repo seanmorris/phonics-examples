@@ -96,7 +96,8 @@ class Raster
 
 			if(pixel[3] < 128) continue;
 
-			const rgb = tint ?? pixel;
+			// A tint multiplies the source, as the engine's sprite shader does, so a glyph keeps its own light and shade.
+			const rgb = tint ? tint.map((channel, index) => Math.round(channel * pixel[index] / 255)) : pixel;
 
 			for(let oy = 0; oy < scale; oy++) for(let ox = 0; ox < scale; ox++)
 				this.put(dx + x * scale + ox, dy + y * scale + oy, rgb);
