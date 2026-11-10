@@ -264,6 +264,45 @@ $test('street games survive long random sessions with chips conserved at every s
 		$expect($hands>5,"$id with $players seats played only $hands hands");
 	}
 });
+$test('street-game bots finish long sessions from their own views and value hands sensibly',static function() use ($expect): void {
+	foreach(['holdem','stud5','stud7'] as $id) foreach([2,4,Variant::of($id)->seats()] as $players)
+	{
+		$game=new Game("bot-session-$id-$players",$players,new Profile('anything',wild:$players===4?['deuces']:[],game:$id));
+		$streams=[]; for($seat=0;$seat<$players;$seat++) $streams[$seat]=new RandomStream("bot-session-$id-$players",'php-poker/bot/'.$seat.'/v1');
+		$hands=0; $showdowns=0; $types=[];
+		for($step=0;$step<700;$step++)
+		{
+			$actor=$game->actor();
+			if($actor<0) { $hands++; if($game->view(0)['reveal']) $showdowns++; $game->act(0,['type'=>'next'],$game->view(0)['revision']); continue; }
+			$view=$game->view($actor);
+			$intent=Bot::choose($view,$actor,$streams[$actor],$actor===1?300:0);
+			$types[$intent['type']]=true;
+			$game->act($actor,$intent,$view['revision']);
+			if($step%53===0) $game=Game::restore(json_decode(json_encode($game->snapshot()),true));
+		}
+		$expect($hands>=10&&$showdowns>0&&$showdowns<$hands,"$id with $players seats: $hands hands, $showdowns showdowns");
+		$expect(isset($types['fold'],$types['call'],$types['check'],$types['bet']),"$id with $players seats uses every kind of action");
+	}
+	// Strength reads only what the seat can see, and orders hands the way a player would.
+	$g=new Game('bot-strength',3,new Profile('anything',game:'holdem'));
+	$view=$g->view(1); $view['players'][1]['cards']=[12,25]; $aces=Bot::streetStrength($view,1);
+	$view['players'][1]['cards']=[5,13]; $trash=Bot::streetStrength($view,1);
+	$view['players'][1]['cards']=[11,10]; $suited=Bot::streetStrength($view,1);
+	$expect($aces>$suited&&$suited>$trash,'Aces beat king-queen suited, which beats seven-two');
+	$view['board']=[38,0,1]; $view['streetIndex']=1;
+	$view['players'][1]['cards']=[12,25]; $overpair=Bot::streetStrength($view,1);
+	$view['players'][1]['cards']=[2,3]; $flushDraw=Bot::streetStrength($view,1);
+	$view['players'][1]['cards']=[18,33]; $nothing=Bot::streetStrength($view,1);
+	$expect($overpair>$nothing&&$flushDraw>$nothing,'A pair or a draw beats nothing after the flop');
+	$view['board']=[12,25,38,51,0]; $view['streetIndex']=3; $view['players'][1]['cards']=[14,29];
+	$expect(Bot::streetStrength($view,1)<760,'Four aces on the board are everyone\'s, so a seat that only plays the board is not strong');
+	$s=new Game('bot-stud',3,new Profile('anything',game:'stud5'));
+	$view=$s->view(1); $view['players'][1]['cards']=[1,14]; $view['players'][1]['faces']=['down','up'];
+	$view['players'][2]['cards']=[null,12]; $view['players'][2]['faces']=['down','up'];
+	$pair=Bot::streetStrength($view,1);
+	$view['players'][2]['cards']=[null,12,25]; $view['players'][2]['faces']=['down','up','up'];
+	$expect(Bot::streetStrength($view,1)<$pair,'Aces showing across the table weaken a pair of threes');
+});
 $test('hand categories, wheel, kickers and concealed opening predicate',static function() use ($expect,$reject): void {
 	$hands=[[0,14,29,44,11],[9,22,0,16,30],[9,22,8,21,0],[9,22,35,0,15],[0,14,28,42,4],
 		[0,2,5,8,11],[9,22,35,0,13],[9,22,35,48,0],[8,9,10,11,12]];
