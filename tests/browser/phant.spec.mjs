@@ -151,3 +151,61 @@ test('the Konami code with no points hands the run to a perfect player that neve
 	expect(profile?.best ?? 0).toBe(0);
 	expect(errors).toEqual([]);
 });
+
+test('menu pages stand on their plate, skip text rows and stay inside a narrow phone frame', async({browser}) => {
+	const context = await browser.newContext({viewport: {width: 390, height: 844}, deviceScaleFactor: 2});
+	const page = await context.newPage();
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	const canvas = await boot(page);
+	await canvas.focus();
+
+	// Presses of one key inside a single slow frame merge, so each one is given time to land.
+	const press = async key => {
+		await page.keyboard.press(key);
+		await page.waitForTimeout(160);
+	};
+
+	const fits = async name => {
+		const state = await status(page);
+		const menu = state.menu;
+		expect(menu.left, `${name} left`).toBeGreaterThanOrEqual(0);
+		expect(menu.top, `${name} top`).toBeGreaterThanOrEqual(0);
+		expect(menu.right, `${name} right`).toBeLessThanOrEqual(menu.width);
+		expect(menu.bottom, `${name} clears the hint line`).toBeLessThanOrEqual(state.hint.y);
+
+		// The hint line itself is drawn by the browser and must not be cut off at the frame's edges.
+		const overhang = await page.evaluate(() => {
+			const hint = document.querySelector('.phlappy-phant-hints').getBoundingClientRect();
+			const frame = document.querySelector('.phlappy-phant-screen').getBoundingClientRect();
+
+			return Math.max(frame.left - hint.left, hint.right - frame.right);
+		});
+		expect(overhang, `${name} hint`).toBeLessThanOrEqual(0);
+
+		return state;
+	};
+
+	await fits('title');
+
+	for(const [steps, name] of [[2, 'How to play'], [3, 'About']])
+	{
+		for(let step = 0; step < steps; step++) await press('ArrowDown');
+
+		await press('Enter');
+		await expect.poll(async() => (await status(page)).regions.map(region => region.label)).toEqual(['Back']);
+
+		// Information rows are text: they publish no button, and moving the selection never lands on one.
+		await press('ArrowDown');
+		await press('ArrowUp');
+		await page.waitForTimeout(200);
+		await fits(name);
+		await press('Enter');
+		await expect.poll(async() => (await status(page)).regions.length).toBe(4);
+
+		for(let step = 0; step < steps; step++) await press('ArrowUp');
+	}
+
+	expect(errors).toEqual([]);
+	await context.close();
+});

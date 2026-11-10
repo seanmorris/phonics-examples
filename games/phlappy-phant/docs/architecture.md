@@ -68,7 +68,7 @@ Steps 2 to 5 are the terrain, and all of it changes color during the day cycle. 
 
 The score, the prompts, and the wordmark use the engine's bitmap font. Every label is drawn twice, cream over an ink copy offset by one pixel, so it reads over day and night skies alike. Glyph layouts are cached by text and scale.
 
-Menus are drawn over the world, not on a panel. The front page leaves the world undimmed under the wordmark; every other page dims it. The selected row sits on a teal band behind a blinking chevron, informational rows are pale teal, and rows that are too long wrap at the largest whole scale that fits. `Scene` publishes one rectangle per row, and the browser mirrors those as real buttons so the menus work with a pointer and with assistive technology. The bindings editor needs value columns and text entry, so it alone uses the engine's `MenuRenderer`, restyled to match.
+Menus are drawn over the world on a near-solid ink plate, so the text's contrast never depends on the sky, cloud, or field behind it: cream on the plate is at least 7:1 and the pale teal of information rows at least 5:1. The front page leaves the rest of the world undimmed under the wordmark; every other page dims it. The selected row sits on a teal band behind a blinking chevron. Information rows are text, not controls: the selection steps over them and they publish no button. They wrap, pack more tightly than choices, and break long words at a hyphen, and the page picks the largest whole scale at which everything fits between the top of the frame and the hint line. `Scene` publishes one rectangle per choice, which the browser mirrors as real buttons so the menus work with a pointer and with assistive technology, and it publishes the text block's bounds so a browser test can check that no page is cropped on a narrow phone. The bindings editor needs value columns and text entry, so it alone uses the engine's `MenuRenderer`, restyled to match.
 
 ## Browser boundary
 
@@ -94,7 +94,7 @@ The status is also written to the canvas as `data-php-phant`, which is what the 
 
 - `php games/phlappy-phant/tests/run.php` runs 62 native checks: the generator's first values, the idle bob, the flap and its wing beats, gravity and the fall cap, the bonk and the settle time, seed determinism, gap bounds and the tile grid, scoring, the day flag, the speed and gap ramps, collisions, the bindings and their saved profile, and the built-in player.
 - `php games/phlappy-phant/tests/fairness.php` flies the built-in player over forty seeded courses. [The perfect player](autopilot.md) explains what it shows.
-- `tests/browser/phant.spec.mjs` at the repository root plays in Chromium. One test flaps by key and by click, lets the run end, checks the stored best score, and checks the drawing buffer and layout in a wide and a tall frame. The other enters the Konami code and follows the built-in player into the night.
+- `tests/browser/phant.spec.mjs` at the repository root plays in Chromium. One test flaps by key and by click, lets the run end, checks the stored best score, and checks the drawing buffer and layout in a wide and a tall frame. Another enters the Konami code and follows the built-in player into the night. A third opens every text page on a narrow phone and checks that nothing is cropped and that text rows are never selected.
 - `node scripts/generate-phant-sprites.mjs --check` fails when a committed asset no longer matches the sheets in `art/`.
 
 ## License boundary

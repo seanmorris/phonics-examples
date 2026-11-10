@@ -96,17 +96,16 @@ $titleItems = static function() use (&$startGame, $bindings): array {
 			]
 		]
 		, 'about' => [
-			'label' => 'About Phlappy Phant'
+			'label' => 'About'
 			, 'children' => [
-				'title' => ['label' => 'PHLAPPY PHANT', 'disabled' => true]
-				, 'built' => ['label' => 'Built with Phonics', 'disabled' => true]
-				, 'elephpant' => ['label' => 'elePHPant by Vincent Pontier', 'disabled' => true]
-				, 'vector' => ['label' => "Pixel art traced from Webysther's SVG", 'disabled' => true]
-				, 'art-licence' => ['label' => 'Sprite licence: GPL-2.0-or-later', 'disabled' => true]
-				, 'terrain' => ['label' => 'Terrain by GrafxKid (CC0)', 'disabled' => true]
-				, 'music' => ['label' => 'Funktify by Mr. Spastic', 'disabled' => true]
-				, 'music-licence' => ['label' => 'Music licence: CC BY-NC-ND 3.0', 'disabled' => true]
-				, 'code-licence' => ['label' => 'Code licence: Apache-2.0', 'disabled' => true]
+				'built' => ['label' => 'Built with Phonics', 'disabled' => true]
+				, 'elephpant' => ['label' => 'elePHPant: Vincent Pontier', 'disabled' => true]
+				, 'vector' => ['label' => "Traced from Webysther's SVG", 'disabled' => true]
+				, 'art-licence' => ['label' => 'Sprite: GPL-2.0-or-later', 'disabled' => true]
+				, 'terrain' => ['label' => 'Terrain: GrafxKid (CC0)', 'disabled' => true]
+				, 'music' => ['label' => 'Music: Funktify by Mr. Spastic', 'disabled' => true]
+				, 'music-licence' => ['label' => 'Music: CC BY-NC-ND 3.0', 'disabled' => true]
+				, 'code-licence' => ['label' => 'Code: Apache-2.0', 'disabled' => true]
 			]
 		]
 	];
@@ -254,6 +253,26 @@ $engine->setInputHandler(static function(
 	if(!$bindingCaptured)
 	$navigation->update($menu, $frame['buttons'], min(.25, max(0, $elapsed)), $frame['events'], $scene->regions);
 
+	// Information rows are text to read, not controls: the selection steps over them in the direction of travel.
+	$rows = $menu->rows();
+
+	if($menu->isOpen && $menu->editor === null && ($rows[$menu->selected]['disabled'] ?? false))
+	{
+		$ids = array_keys($rows);
+		$from = (int)array_search($menu->selected, $ids, true);
+		$direction = ($frame['buttons']['up'] ?? 0) >= .5 ? -1 : 1;
+
+		for($offset = 1; $offset < count($ids); $offset++)
+		{
+			$id = $ids[((($from + $direction * $offset) % count($ids)) + count($ids)) % count($ids)];
+
+			if($rows[$id]['disabled']) continue;
+
+			$menu->select((string)$id);
+			break;
+		}
+	}
+
 	if($page === 'play')
 	{
 		$engine->userPaused = false;
@@ -318,6 +337,7 @@ $engine->start(static function(
 		, 'counts' => $counts
 		, 'viewport' => $scene->viewport
 		, 'regions' => $scene->regions
+		, 'menu' => $scene->menuBounds
 		, 'hint' => $scene->hint
 		, 'inputTheme' => $engine->input->inputTheme
 		, 'width' => $width

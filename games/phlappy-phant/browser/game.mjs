@@ -312,9 +312,13 @@ class HintOverlay
 		if(this.key === key) return;
 
 		this.key = key;
-		const scale = Number(hint.scale) * Math.min(box.width / this.state.width, box.height / this.state.height);
 		const items = this.layout(hint, theme);
 		const logicalWidth = items.reduce((width, item) => width + item.advance, 0);
+		// A narrow frame shrinks the whole line to fit instead of cutting it off at both edges.
+		const scale = Math.min(
+			Number(hint.scale) * Math.min(box.width / this.state.width, box.height / this.state.height)
+			, (box.width - 8) / (logicalWidth + 4)
+		);
 		const padding = 2 * scale;
 		const width = logicalWidth * scale + 2 * padding;
 		const height = 20 * scale;

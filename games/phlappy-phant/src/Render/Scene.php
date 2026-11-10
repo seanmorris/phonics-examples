@@ -51,11 +51,15 @@ final class Scene
 	public const CREAM = [.95, .89, .75];
 	public const PLAQUE = [.95, .89, .75, .97];
 	public const TEAL = [.18, .43, .45];
+	/** Opacity of the ink plate under a menu's text. */
+	public const PLATE_ALPHA = .92;
 	/** The backdrop's pale water teal, for subtitles and information rows over the deep sky. */
 	public const MIST = [.5, .835, .804];
 
 	/** Accessible hit regions published by the menu renderer. */
 	public array $regions = [];
+	/** @var array<string,int|float> The open sky page's text block against the frame; empty when no such page is open. */
+	public array $menuBounds = [];
 	/** Native-resolution browser hint metadata for open-sky menu pages. */
 	public ?array $hint = null;
 	/** Output width and height, logical scale, and the phant's screen x. */
@@ -352,6 +356,7 @@ final class Scene
 
 		$this->regions = [];
 		$this->hint = null;
+		$this->menuBounds = [];
 
 		if($menu->isOpen)
 		{
@@ -424,59 +429,69 @@ final class Scene
 		$chevron = $this->measure('> ');
 		$title = (string)$menu->title;
 		$front = $page === 'title' && $menu->depth() === 0;
-		// The undimmed title pages keep every row above the backdrop's dark strip, over the sky, clouds and field where
-		// the ink shadows carry the text; the front page also starts under the wordmark.
-		$sky = $page === 'title' ? (int)floor(($height / $k - Simulation::HEIGHT + Simulation::GROUND_Y - self::BACKDROP_SCALE * (self::BACKDROP - $this->bands[4][0])) * $k) : $height;
 		$avail = $width - 24 * $k;
 		$logo = max(1, min(2 * $k + 1, (int)floor($avail / max(1, $this->measure('PHLAPPY PHANT')))));
-		$underLogo = $front ? (int)floor($height * .11 + 16 * $logo + 16 * $k) : 0;
-		// A wide front page may use the open field below the sky band too. This gives the title choices enough vertical
-		// room to step up by a whole pixel scale without introducing fractional, blurry glyphs.
-		$menuBottom = $front ? $height - 54 * $k : $sky;
-		$room = $front ? $menuBottom - $underLogo : $sky - 16 * $k;
+		// The front page hangs its choices under the wordmark; every other page has the frame from a small top margin
+		// down to the hint line.
+		$menuTop = $front ? (int)floor($height * .11 + 16 * $logo + 16 * $k) : 8 * $k;
+		$menuBottom = $height - ($front ? 54 : 44) * $k;
+		$room = $menuBottom - $menuTop;
 
-		// Pick the largest whole scale at which the rows, wrapped to the width, still fit in the sky; long
-		// informational lines wrap rather than shrinking every row to the width of the longest one.
-		for($r = $k + 1; $r >= 1; $r--)
+		// Pick the largest whole scale at which the rows, wrapped to the width, fit that room. Information rows wrap
+		// and pack more tightly than choices, which keep a touch-sized row; the tightest pitch is the last resort.
+		foreach([[$k + 1, 13], [$k, 13], [1, 13], [1, 11]] as [$r, $pitch])
 		{
-			$wrapped = [];
-			$widest = 1.0;
-			$lineCount = 0;
+			if($r < 1) continue;
 
+			$wrapped = [];
+			$heights = [];
+			$widest = 1.0;
 			$actionWraps = false;
 
 			foreach($rows as $id => $item)
 			{
 				$lines = $this->wrap((string)$item['label'], $avail / $r - $chevron);
 				$wrapped[$id] = $lines;
-				$lineCount += count($lines);
+				$heights[$id] = ($item['disabled'] ? $pitch * count($lines) + 3 : 18 + $pitch * (count($lines) - 1)) * $r;
 				$actionWraps = $actionWraps || (count($lines) > 1 && !$item['disabled']);
 
 				foreach($lines as $line) $widest = max($widest, $this->measure($line));
 			}
 
-			$titleScale = $front ? $r : max(1, min(2 * $r, (int)floor($avail / max(1, $this->measure($title)))));
-			$titleHeight = 16 * $titleScale + 10 * $r;
-			$blockHeight = $titleHeight + (count($rows) * 18 + ($lineCount - count($rows)) * 13) * $r;
+			$titleLimit = $front || $pitch < 13 ? $r : 2 * $r;
+			$titleScale = max(1, min($titleLimit, (int)floor($avail / max(1, $this->measure($title)))));
+			$titleHeight = 16 * $titleScale + ($pitch < 13 ? 4 : 10) * $r;
+			$blockHeight = $titleHeight + array_sum($heights);
 
-			// Informational rows may wrap; a choice stays on one line unless nothing else fits.
-			if($r === 1 || (!$actionWraps && $blockHeight <= $room && ($widest + $chevron) * $r <= $avail)) break;
+			// A choice stays on one line unless nothing else fits.
+			if(!$actionWraps && $blockHeight <= $room && ($widest + $chevron) * $r <= $avail) break;
 		}
 
 		$blockWidth = ($widest + $chevron) * $r;
-		$top = (int)floor(($menuBottom - $blockHeight) / 2);
+		// Centered in its room, and never above it: a page that is still too tall keeps its title on screen.
+		$top = max($menuTop, min((int)floor(($menuTop + $menuBottom - $blockHeight) / 2), $menuBottom - $blockHeight));
 
-		if($front)
-		{
-			// Hang just below the wordmark, never climbing into it.
-			$top = max($underLogo, min($top, $menuBottom - $blockHeight));
-		}
+		if($front) $top = max($menuTop, min($top, $menuBottom - $blockHeight));
 
 		$x = (int)floor(($width - $blockWidth) / 2);
 		$rects = [];
 
-		// Only the front page shows the world undimmed; every other page sits its text on the dimmed backdrop.
+		// Only the front page shows the world undimmed; every other page dims it.
 		if(!$front) $rects[] = [0, 0, $width, $height, self::INK[0], self::INK[1], self::INK[2], .4];
+
+		// The text stands on a near-solid ink plate, so its contrast never depends on the sky, cloud or field that
+		// happens to be behind it: cream on the plate is at least 7:1 and the information color at least 5:1.
+		$margin = 8 * $r;
+		$plate = [max(0, $x - 6 * $r - $margin), max(0, $top - $margin), $blockWidth + 12 * $r + 2 * $margin, $blockHeight + 2 * $margin];
+		$plate[2] = min($plate[2], $width - $plate[0]);
+		$plate[3] = min($plate[3], $height - $plate[1]);
+		$rects[] = [$plate[0] + $r, $plate[1] + $r, $plate[2], $plate[3], self::INK[0], self::INK[1], self::INK[2], .5];
+		$rects[] = [$plate[0], $plate[1], $plate[2], $plate[3], self::INK[0], self::INK[1], self::INK[2], self::PLATE_ALPHA];
+		// What the menu needs against what the frame offers, for tests that audit every page for cropped text.
+		$this->menuBounds = [
+			'left' => $x - 6 * $r, 'top' => $top, 'right' => $x + $blockWidth + 6 * $r, 'bottom' => $top + $blockHeight
+			, 'width' => $width, 'height' => $height, 'scale' => $r
+		];
 
 		$labels = [];
 		$shadow = (float)$r;
@@ -489,9 +504,9 @@ final class Scene
 
 		foreach($rows as $id => $item)
 		{
-			$selected = $menu->selected === $id;
+			$selected = $menu->selected === $id && !$item['disabled'];
 			$lines = $wrapped[$id];
-			$rowHeight = (18 + 13 * (count($lines) - 1)) * $r;
+			$rowHeight = $heights[$id];
 			$rect = [$x - $pad, $y - 2 * $r, $blockWidth + 2 * $pad, $rowHeight];
 
 			if($selected)
@@ -507,15 +522,16 @@ final class Scene
 
 			foreach($lines as $n => $line)
 			{
-				$lineY = (float)($y + 13 * $n * $r);
+				$lineY = (float)($y + $pitch * $n * $r);
 
 				$this->shadowed($labels, $line, $textX, $lineY, (float)$r, 'left', $colour);
 			}
 
-			$this->regions[] = [
+			// Information rows are text, not controls: they take no selection and publish no button.
+			if(!$item['disabled']) $this->regions[] = [
 				'id' => (string)$id
 				, 'label' => (string)$item['label']
-				, 'disabled' => (bool)$item['disabled']
+				, 'disabled' => false
 				, 'rect' => $rect
 			];
 
@@ -541,7 +557,7 @@ final class Scene
 	 *
 	 * @param string $text Label contents.
 	 * @param float $limit Maximum line width in scale-one pixels.
-	 * @return list<string> At least one line; a single word longer than the limit stays whole.
+	 * @return list<string> At least one line; a word longer than the limit is split across lines.
 	 */
 	private function wrap(string $text, float $limit): array
 	{
@@ -550,7 +566,30 @@ final class Scene
 		$lines = [];
 		$line = '';
 
+		$words = [];
+
+		// A single word wider than the limit is split, so nothing can run past the frame.
 		foreach(explode(' ', $text) as $word)
+		{
+			while($this->measure($word) > $limit && strlen($word) > 1)
+			{
+				$cut = strlen($word) - 1;
+
+				while($cut > 1 && $this->measure(substr($word, 0, $cut)) > $limit) $cut--;
+
+				// Prefer to break after a hyphen, as in a license identifier.
+				$hyphen = strrpos(substr($word, 0, $cut), '-');
+
+				if($hyphen !== false && $hyphen > 0) $cut = $hyphen + 1;
+
+				$words[] = substr($word, 0, $cut);
+				$word = substr($word, $cut);
+			}
+
+			$words[] = $word;
+		}
+
+		foreach($words as $word)
 		{
 			$candidate = $line === '' ? $word : $line . ' ' . $word;
 
