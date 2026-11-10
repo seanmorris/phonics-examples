@@ -18,6 +18,7 @@ use DoomPhonics\Game\DoomGravity;
 use DoomPhonics\Game\LineSpecials;
 use DoomPhonics\Game\VerticalPhysics;
 use DoomPhonics\Game\PlayerState;
+use DoomPhonics\Effects\Rumble;
 use Phonics\Ecs\Query;
 use Phonics\Ecs\Registry;
 use Phonics\Input\Controls;
@@ -37,6 +38,7 @@ final class PlayerMovementSystem
 		, public float $friction = .90625
 		, public float $gravity = DoomGravity::ACCELERATION
 		, public bool $simulateRemotePlayers = true
+		, private ?Rumble $rumble = null
 	){
 		$this->players = Query::all(
 			PlayerStart::class
@@ -240,7 +242,15 @@ final class PlayerMovementSystem
 			$this->collision->actors?->moved($entity, $pose);
 		}
 
+		$airborne = !$body->grounded;
+		$landingSpeed = max(0, -$velocity->z);
 		$this->verticalPhysics->step($pose, $velocity, $body, $dt, $gravityScale, $player->viewHeight);
+
+		if(!$replaying && !$dead && $airborne && $body->grounded && $landingSpeed > 0
+			&& (!$registry->has($entity, NetworkPlayer::class)
+				|| $registry->get($entity, NetworkPlayer::class)->local
+			)
+		) $this->rumble?->landing($landingSpeed);
 	}
 
 	/** Select the third-person idle/walk states without interrupting attacks, pain, or death. */

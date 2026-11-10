@@ -113,6 +113,20 @@ final class Rumble extends \Phonics\Effects\Rumble
 		if($fatal) $this->pulse(240, .65, .16, 280);
 	}
 
+	/** Queue a bounded landing thud proportional to downward impact speed. */
+	public function landing(float $verticalSpeed): void
+	{
+		if(!is_finite($verticalSpeed) || $verticalSpeed < 0)
+		throw new \InvalidArgumentException('Invalid landing speed');
+
+		$weight = min(1, $verticalSpeed / 560);
+		$this->pulse(
+			45 + (int)round(85 * $weight)
+			, .2 + .75 * $weight
+			, .15 + .45 * $weight
+		);
+	}
+
 	private function validateKnockback(float $knockback): void
 	{
 		if(!is_finite($knockback) || $knockback < 0)
@@ -122,9 +136,9 @@ final class Rumble extends \Phonics\Effects\Rumble
 	/** Queue a restrained confirmation, with a second low-motor catch for a newly acquired weapon. */
 	public function pickup(bool $weapon = false): void
 	{
-		$this->pulse(35, 0, $weapon ? .55 : .25);
+		$this->pulse(35, 0, $weapon ? .65 : .35);
 
-		if($weapon) $this->pulse(75, .35, .2, 35);
+		if($weapon) $this->pulse(75, .42, .25, 35);
 	}
 
 	/** Represent the settings range literally with an even pulse scaled by the selected level. */

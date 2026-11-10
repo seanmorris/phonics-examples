@@ -92,17 +92,37 @@ verifyWad(
 	, 'environmental damage beats twice like a heart'
 );
 
+$shortFall = new Rumble;
+$shortFall->landing(70);
+$shortLanding = $shortFall->update(0)[0];
+$mediumFall = new Rumble;
+$mediumFall->landing(280);
+$mediumLanding = $mediumFall->update(0)[0];
+$longFall = new Rumble;
+$longFall->landing(1120);
+$longLanding = $longFall->update(0)[0];
+verifyWad(
+	$shortLanding['duration'] === 56
+		&& $mediumLanding['duration'] === 88
+		&& $longLanding === ['duration' => 130,'strong' => .95,'weak' => .6]
+		&& $shortLanding['strong'] < $mediumLanding['strong']
+		&& $mediumLanding['strong'] < $longLanding['strong']
+		&& $shortLanding['weak'] < $mediumLanding['weak']
+		&& $mediumLanding['weak'] < $longLanding['weak']
+	, 'landing feedback scales with downward speed and clamps severe falls'
+);
+
 $pickup = new Rumble;
 $pickup->pickup();
 verifyWad(
-	$pickup->update(0) === [['duration' => 35,'strong' => 0.0,'weak' => .25]]
+	$pickup->update(0) === [['duration' => 35,'strong' => 0.0,'weak' => .35]]
 	, 'ordinary pickups use a restrained high-frequency tick'
 );
 
 $pickup->pickup(true);
 verifyWad(
-	$pickup->update(0) === [['duration' => 35,'strong' => 0.0,'weak' => .55]]
-		&& $pickup->update(.035) === [['duration' => 75,'strong' => .35,'weak' => .2]]
+	$pickup->update(0) === [['duration' => 35,'strong' => 0.0,'weak' => .65]]
+		&& $pickup->update(.035) === [['duration' => 75,'strong' => .42,'weak' => .25]]
 	, 'weapon pickups add a low-frequency catch after the item tick'
 );
 

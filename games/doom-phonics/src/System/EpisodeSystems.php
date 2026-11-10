@@ -188,6 +188,7 @@ final class EpisodeSystems implements SystemSet
 			, (float)($motion['friction'] ?? .90625)
 			, (float)($motion['gravity'] ?? DoomGravity::ACCELERATION)
 			, $host
+			, $rumble
 		);
 
 		$pickups = new PickupSystem($actors, $host, $content->language, $rumble);

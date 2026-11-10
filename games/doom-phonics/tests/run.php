@@ -1643,11 +1643,13 @@ $beforeY = $pose->y;
 $movementLevel = new Level($stack->map('E1M1'));
 $movementControls = new Controls;
 $movementControls->set([\DoomPhonics\Input\DoomActions::STRAFE => 1]);
+$landingRumble = new \DoomPhonics\Effects\Rumble;
 
 $movement = new PlayerMovementSystem(
 	new Collision($movementLevel)
 	, new LineSpecials($movementLevel)
 	, $movementControls
+	, rumble: $landingRumble
 );
 
 $movement->update($registry, 1 / 35);
@@ -1784,9 +1786,11 @@ $registry->get($playerEntity, Body::class)->grounded = true;
 $movementControls->set([\DoomPhonics\Input\DoomActions::FORWARD => 1]);
 $crossedLedge = $fell = $landed = false;
 $ledgeTick = $landingTick = null;
+$impactSpeed = 0.0;
 
 for($tick = 0; $tick < 100; $tick++)
 {
+	$verticalBefore = $velocity->z;
 	$movement->update($registry, 1 / 35);
 	$sector = $movementLevel->sectorAt($pose->x, $pose->y);
 
@@ -1803,6 +1807,7 @@ for($tick = 0; $tick < 100; $tick++)
 	{
 		$landed = true;
 		$landingTick = $tick;
+		$impactSpeed = max(0, -$verticalBefore);
 		break;
 	}
 }
@@ -1817,6 +1822,15 @@ verifyWad(
 verifyWad(
 	$landingTick - $ledgeTick >= 12 && $landingTick - $ledgeTick <= 16
 	, 'ledge fall matches the vanilla one-unit-per-tic gravity cadence'
+);
+
+$landingEffect = $landingRumble->update(0);
+verifyWad(
+	$impactSpeed > 0 && count($landingEffect) === 1
+		&& $landingEffect[0]['duration'] > 45
+		&& $landingEffect[0]['strong'] > .2
+		&& $landingEffect[0]['weak'] > .15
+	, 'local ledge landing queues one impact scaled from downward speed'
 );
 
 $thing8Entity = null;
