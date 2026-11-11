@@ -118,7 +118,9 @@ final class Scene
 		$this->menus = new MenuRenderer($font);
 		$this->menus->style['padding'] = 10;
 		$this->menus->style['panel'] = self::PLAQUE;
-		$this->menus->style['foreground'] = [...self::INK, 1.0];
+		// The bitmap font contains a pale face and a dark inset. A full ink tint crushed both into nearly the same
+		// shade; this lighter violet preserves dark-on-cream readability while separating the two source tones.
+		$this->menus->style['foreground'] = [.40, .35, .44, 1.0];
 		$this->menus->style['selected'] = [1, 1, 1, 1];
 		$this->menus->style['highlight'] = [.18, .43, .45, 1];
 		$this->menus->style['selection'] = [.12, .27, .28, 1];
