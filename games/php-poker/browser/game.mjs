@@ -6,6 +6,9 @@
 /** Keys the table handles; everything else reaches the page untouched. */
 const KEYS=new Set(['f','c','b','d','g','h','i','l','m','n','s','v','w','o','p','q','r','y','0','1','2','3','4','5','6','7','8','+','-','=','enter',' ','escape','backspace','arrowleft','arrowright','arrowup','arrowdown']);
 
+/** Keys that scroll the How to Play rules. They repeat while held, and only there are the paging keys kept from the page. */
+const SCROLL_KEYS=new Set(['arrowup','arrowdown','pageup','pagedown','home','end']);
+
 /** Cell size for the rasterised cards, capped so the atlas crossing into PHP stays under ~8 MB. */
 export function cardCell(dpr)
 {
@@ -423,9 +426,10 @@ export function activate({module, canvas, session, services})
 			const shortcut=tableMenuShortcut(event);if(!shortcut)return;
 			event.preventDefault();if(!event.repeat)keys.push({key:shortcut});return;
 		}
-		if(!KEYS.has(key))return;
+		const scrolling=SCROLL_KEYS.has(key)&&latest?.screen==='help';
+		if(!KEYS.has(key)&&!scrolling)return;
 		event.preventDefault();
-		if(!event.repeat)keys.push({key});
+		if(!event.repeat||scrolling)keys.push({key});
 	};
 	const releasePointer=()=>{
 		const id=activePointer;activePointer=null;pressedAt=null;pointer.down=false;
@@ -448,9 +452,16 @@ export function activate({module, canvas, session, services})
 		if(tapped&&event.clientX>=box.left&&event.clientX<=box.right&&event.clientY>=box.top&&event.clientY<=box.bottom)clicks.push(position);
 	};
 	const onCancel=event=>{if(event.pointerId===activePointer)releasePointer();};
+	// The wheel scrolls the rules three rows for a mouse's notch of 100 px; a trackpad's small steps add up to the same.
+	let wheelRun=0;
 	const onWheel=event=>{
 		if(shell.closed||latest?.screen!=='help'||event.deltaY===0)return;
-		event.preventDefault();keys.push({key:event.deltaY>0?'arrowdown':'arrowup'});
+		event.preventDefault();
+		const pixels=event.deltaY*(event.deltaMode===1?100/3:event.deltaMode===2?400:1);
+		wheelRun=Math.sign(pixels)===Math.sign(wheelRun)?wheelRun+pixels:pixels;
+		const rows=Math.min(12,Math.trunc(Math.abs(wheelRun)*3/100));
+		wheelRun-=Math.sign(wheelRun)*rows*100/3;
+		for(let row=0;row<rows;row++)keys.push({key:pixels>0?'arrowdown':'arrowup'});
 	};
 	const clearInput=()=>{keys=[];clicks=[];releasePointer();onLeave();};
 	const onVisibility=()=>{if(document.visibilityState==='hidden')clearInput();};

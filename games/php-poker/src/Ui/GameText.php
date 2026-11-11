@@ -16,6 +16,15 @@ final class GameText
 	public const CHOICES = [['draw','jackpots'],['draw','anything'],['holdem','anything'],['stud5','anything'],['stud7','anything']];
 	/** Rules pages shown by How to Play. Draw's two opening rules share one page. */
 	public const HELP_GAMES = ['draw','holdem','stud5','stud7'];
+	/** Hands from best to worst, as every rules page lists them. */
+	public const HAND_RANKS = ['Five of a kind', 'Straight flush', 'Four of a kind', 'Full house', 'Flush',
+		'Straight', 'Three of a kind', 'Two pair', 'Pair', 'High card'];
+
+	/** Shown under the list of hands: the one hand a plain deck cannot make. */
+	public const HAND_RANKS_NOTE = 'Five of a kind needs a wild card.';
+
+	/** How the wild-card choices on the setup screen work; the same in every game. */
+	public const HELP_WILD = 'A wild card stands for any rank and suit. The rules you check combine. Joker adds both jokers to the deck and Custom may add either one; the other rules name cards already in the deck.';
 
 	/** Street names as the menu bar shows them while that street is bet. */
 	private const STREETS = [
@@ -116,42 +125,111 @@ final class GameText
 			'ante'=>$ante.' '.($ante === 1 ? 'chip' : 'chips')];
 	}
 
-	/** @return list<string> Help paragraphs for the game, shared by the help window and its scroll stops. */
-	public static function help(string $game, bool $controller): array
+	/** @return string One line that tells a game from the others, on the How to Play index and at the head of its rules: its cards and how they lie. */
+	public static function helpSummary(string $game): string
 	{
-		$ranking = 'Best to worst: five of a kind, straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.';
-		$wild = 'Each checked wild-card rule may be combined with the others. Wild cards may stand for any missing rank and suit. Joker adds both jokers to the deck; Custom may add either one. Other choices designate cards already in the 52-card deck.';
-		$controls = $controller ? 'Controller: use the D-pad or left stick to move focus, then the confirm button to select.' : 'Keys: F fold, C call/check/pass, B bet/raise, + and - change the amount.';
-		$more = $controller ? 'The back button goes back, Start asks before leaving the table, and the shoulder buttons change the bet.'
-			: ($game === 'draw' ? '1 to 5 select cards, D draws, H shows history, Alt+G and Alt+P open the table menus, and Escape asks before leaving.'
-				: 'H shows history, Alt+G and Alt+P open the table menus, and Escape asks before leaving.');
+		return match($game) {
+			'holdem' => 'Two down · five shared', 'stud5' => 'One down · four up',
+			'stud7' => 'Two down · four up · one down', default => 'Five down · one draw'
+		};
+	}
+
+	/**
+	 * A finished hand as its row of the How to Play index draws it, in dealing order.
+	 * @return list<list<?int>> Groups of card ids; null is a card dealt face down.
+	 */
+	public static function helpCards(string $game): array
+	{
+		// Ten of spades, jack of clubs, queen of diamonds, king of hearts, ace of spades.
+		return match($game) {
+			'holdem' => [[null, null], [47, 9, 23], [37], [51]],
+			'stud5' => [[null], [9, 23, 37, 51]],
+			'stud7' => [[null, null], [9, 23, 37, 51], [null]],
+			default => [[null, null, null, null, null]],
+		};
+	}
+
+	/**
+	 * The hand a game's Showdown section sets out: the same full house in every game, dealt the way that game deals it.
+	 *
+	 * @return array{groups:list<array{string,list<int>}>,plays:list<int>,caption:string} Card ids in dealing order under
+	 *   the label of each group, the five of them that make the hand, and what to notice about it.
+	 */
+	public static function helpExample(string $game): array
+	{
+		// King of spades, hearts and diamonds; seven of clubs and spades; two of hearts; nine of diamonds.
+		[$kingSpades, $kingHearts, $kingDiamonds, $sevenClubs, $sevenSpades, $two, $nine] = [50, 37, 24, 5, 44, 26, 20];
+		$plays = [$kingSpades, $kingHearts, $kingDiamonds, $sevenClubs, $sevenSpades];
+		$hand = 'Example: a full house, kings over sevens.';
+		return match($game) {
+			'holdem' => ['groups' => [['Yours', [$kingSpades, $kingHearts]], ['The board', [$kingDiamonds, $sevenClubs, $sevenSpades, $two, $nine]]],
+				'plays' => $plays, 'caption' => $hand . ' Both of your cards play with three from the board; the two dimmed cards do not.'],
+			'stud5' => ['groups' => [['Down', [$kingSpades]], ['Up', [$kingHearts, $sevenClubs, $kingDiamonds, $sevenSpades]]],
+				'plays' => $plays, 'caption' => $hand . ' The table sees two pair until your down card is shown.'],
+			'stud7' => ['groups' => [['Down', [$kingSpades, $kingHearts]], ['Up', [$sevenClubs, $two, $kingDiamonds, $nine]], ['Down', [$sevenSpades]]],
+				'plays' => $plays, 'caption' => $hand . ' It is the best five of your seven cards; the two dimmed cards do not play.'],
+			default => ['groups' => [['Your hand', $plays]],
+				'plays' => $plays, 'caption' => $hand . ' Three cards of one rank and two of another.'],
+		};
+	}
+
+	/** @return list<array{string,string}> A hand from the deal to the showdown: each step's heading and its copy. */
+	public static function helpSteps(string $game): array
+	{
+		$streets = 'Fold, check, call, or raise.';
 		return match($game) {
 			'holdem' => [
-				'The two seats after the dealer post the small and big blinds. Everyone receives two cards face down.',
-				'Betting starts left of the big blind, who may still raise when everyone only calls. Fold, check, call, or raise.',
-				'Three shared cards follow (the flop), then a fourth (the turn) and a fifth (the river), each with a round of betting that starts left of the dealer.',
-				'Your hand is the best five of your two cards and the five on the board. If the board itself is best, everyone left splits the pot.',
-				$wild, $ranking, $controls, $more
+				['Blinds', 'The two seats after the dealer post the small and big blinds.'],
+				['Pre-flop', 'Everyone receives two cards face down. Betting starts left of the big blind, who may still raise when everyone only calls.'],
+				['Flop, turn, river', 'Three shared cards follow (the flop), then a fourth (the turn) and a fifth (the river), each with a round of betting that starts left of the dealer.'],
+				['Betting', $streets . ' Before and on the flop the early limits apply; on the turn and river, the late ones.'],
+				['Showdown', 'Your hand is the best five of your two cards and the five on the board. If the board itself is best, everyone left splits the pot.'],
 			],
 			'stud5', 'stud7' => [
-				$game === 'stud5'
-					? 'Everyone antes and receives one card face down and one face up, then three more face up, one per street.'
-					: 'Everyone antes and receives two cards face down and one face up, then three more face up and a last one face down.',
-				'The lowest card showing brings in for the minimum bet. On later streets the best hand showing acts first.',
-				'Fold, check, call, or raise. The first two streets use the early limits and the rest use the late ones.',
-				$game === 'stud5' ? 'At the showdown the best five-card hand wins.' : 'At the showdown your hand is the best five of your seven cards.',
-				$wild, $ranking, $controls, $more
+				['The deal', $game === 'stud5'
+					? 'Everyone antes and receives one card face down and one face up.'
+					: 'Everyone antes and receives two cards face down and one face up.'],
+				['Bring-in', 'The lowest card showing brings in for the minimum bet.'],
+				['Later streets', ($game === 'stud5'
+					? 'Three more cards follow face up, one per street.'
+					: 'Three more cards follow face up and a last one face down, one per street.')
+					. ' Each brings a round of betting, and the best hand showing acts first.'],
+				['Betting', $streets . ' The first two streets use the early limits and the rest use the late ones.'],
+				['Showdown', $game === 'stud5' ? 'The best five-card hand wins.' : 'Your hand is the best five of your seven cards.'],
 			],
 			default => [
-				'The dealer antes. Everyone receives five cards face down.',
-				'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
-				$wild,
-				'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
-				'Draw: tap cards to select discards. Press Draw to replace them, or Keep all to stand pat.',
-				'After the draw, final betting starts with the opener. With no bet to call, check or bet; otherwise call, raise, or fold.',
-				$ranking, $controls, $more
+				['The deal', 'The dealer antes. Everyone receives five cards face down.'],
+				['Opening', 'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.'],
+				['First bets', 'Betting starts left of the dealer. Fold, pass or check, call, or raise.'],
+				['The draw', 'Tap cards to select discards. Press Draw to replace them, or Keep all to stand pat.'],
+				['Final bets', 'Final betting starts with the opener. With no bet to call, check or bet; otherwise call, raise, or fold.'],
+				['Showdown', 'The best hand still in wins the pot.'],
 			],
 		};
+	}
+
+	/**
+	 * What each key or controller button does at the table.
+	 * @param string $theme Input family: `keyboard`, `generic`, `xbox` or `playstation`.
+	 * @return list<array{list<string>,string}> Key caps and what they do, most used first.
+	 */
+	public static function helpControls(string $game, string $theme): array
+	{
+		if($theme !== 'keyboard')
+		{
+			$sony = $theme === 'playstation';
+			return [
+				[['D-pad'], 'Move focus'], [[$sony ? 'X' : 'A'], 'Select'], [[$sony ? 'O' : 'B'], 'Go back'],
+				[$sony ? ['L1', 'R1'] : ['LB', 'RB'], 'Change the bet'], [['Start'], 'Leave the table'],
+			];
+		}
+		$draw = $game === 'draw';
+		return [
+			[['F'], 'Fold'], [['C'], $draw ? 'Call, check or pass' : 'Call or check'], [['B'], 'Bet or raise'],
+			[['+', '-'], 'Change the amount'],
+			...($draw ? [[['1-5'], 'Select cards'], [['D'], 'Draw']] : []),
+			[['H'], 'Round history'], [['Alt+G'], 'Game menu'], [['Alt+P'], 'Poker menu'], [['Esc'], 'Leave the table'],
+		];
 	}
 
 	/** @return string What to do on a street game's turn, or an empty string when the view's message says it best. */

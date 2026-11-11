@@ -473,7 +473,8 @@ $test('the title menu stays vertical inside one ruled window and help scrolls wr
 	$presenter->resize(320, 500, 1);
 	$presenter->update($view);
 	$expect($presenter->state()['helpGame'] === null && $presenter->state()['helpScrollMax'] === 0, 'How to Play opens on its game index');
-	$menu = $presenter->layout()->gameMenu(count(GameText::HELP_GAMES));
+	$expect($presenter->state()['helpChoice'] === 'draw', 'the index marks the game the table is set up for');
+	$menu = $presenter->layout()->helpIndex(count(GameText::HELP_GAMES));
 	$expect(count($menu['items']) === 4, 'the help index offers draw, hold\'em and both stud games');
 	foreach(GameText::HELP_GAMES as $index => $game)
 	{
@@ -481,38 +482,291 @@ $test('the title menu stays vertical inside one ruled window and help scrolls wr
 		$expect($presenter->state()['helpGame'] === $game, GameText::title($game) . ' opens its own rules page');
 		$expect($presenter->input([['key' => 'escape']], null, 0) === [] && $presenter->state()['helpGame'] === null, 'rules Back returns to the help index');
 	}
-	$presenter->input([['key' => '1']], null, 0);
-	$expect($presenter->state()['helpScroll'] === 0, 'help opens at its first paragraph');
-	$expect($presenter->state()['helpScrollMax'] > 0, 'small help window reports measured overflow');
+	$expect($presenter->input([['key' => 'arrowdown']], null, 0) === [] && $presenter->state()['helpGame'] === null, 'the wheel and the arrows leave the index where it is');
+	$presenter->input([['key' => 'enter']], null, 0);
+	$expect($presenter->state()['helpGame'] === 'draw', 'Enter opens the marked game from the index');
+	$expect($presenter->state()['helpScroll'] === 0, 'rules open at their top');
+	$last = $presenter->state()['helpScrollMax'];
+	$expect($last > 3, 'the rules are longer than a small window and scroll');
 	$point = static function(Presenter $presenter, array $rect): array {
 		[$x,$y,$width,$height] = $presenter->layout()->rect(...$rect);
 		return ['x' => $x + $width / 2, 'y' => $y + $height / 2];
 	};
-	$copy = $point($presenter, [$presenter->layout()->information()['box'][0] + 30, $presenter->layout()->information()['box'][1] + 45, 2, 2]);
-	$expect($presenter->input([], ['x' => $copy['x'], 'y' => $copy['y'], 'down' => false, 'clicks' => [$copy]], 0) === [], 'clicking help copy does not dismiss its dialog');
-	$up = $point($presenter, $presenter->layout()->information()['up']);
-	$expect($presenter->input([], ['x' => $up['x'], 'y' => $up['y'], 'down' => false, 'clicks' => [$up]], 0) === [], 'disabled help scroll controls do not dismiss its dialog');
+	$help = static fn(Presenter $presenter): object => (fn(): object => $this->helpPage())->call($presenter);
+	$click = static fn(Presenter $presenter, array $at): array => $presenter->input([], ['x' => $at['x'], 'y' => $at['y'], 'down' => false, 'clicks' => [$at]], 0);
+	$row = static fn(Presenter $presenter): string => $presenter->state()['helpGame'] . ' ' . $presenter->state()['helpScroll'];
+	$frame = $help($presenter)->frame;
+	$expect($click($presenter, $point($presenter, [$frame['view'][0] + 6, $frame['view'][1] + 6, 2, 2])) === [] && $row($presenter) === 'draw 0', 'clicking help copy does not dismiss its dialog');
+	$expect($click($presenter, $point($presenter, $frame['previous'])) === [] && $row($presenter) === 'draw 0', 'Previous is spent on the first game');
 	$before = $presenter->paint(320, 500)->instances();
 	$presenter->input([['key' => 'arrowdown']], null, 0);
-	$expect($presenter->state()['helpScroll'] === 1, 'Down scrolls help by one wrapped paragraph');
-	$after = $presenter->paint(320, 500)->instances();
-	$expect($before !== $after, 'scrolling changes the visible help copy on a small viewport');
-	$information = $presenter->layout()->information();
-	$controlTop = $presenter->layout()->rect(...$information['back'])[1];
-	foreach($after as $instance) if(abs($instance[10] - 1) < 1e-9 && $instance[1] < $controlTop)
-	$expect($instance[1] + $instance[3] <= $controlTop + 1e-6, 'wrapped help glyphs stop above the fixed scroll controls');
+	$expect($row($presenter) === 'draw 1', 'Down scrolls the rules by one row');
+	$expect($before !== $presenter->paint(320, 500)->instances(), 'scrolling changes the copy in view');
+	$presenter->input([['key' => 'arrowdown'], ['key' => 'arrowdown'], ['key' => 'arrowup']], null, 0);
+	$expect($row($presenter) === 'draw 2', 'a held key or a turn of the wheel moves a row for each press it sends');
+	$presenter->input([['key' => 'pagedown']], null, 0);
+	$paged = $presenter->state()['helpScroll'];
+	$expect($paged === $help($presenter)->after(2) && $paged > 3, 'Page Down starts the view on the first row that was not whole');
+	$presenter->input([['key' => 'pageup']], null, 0);
+	$expect($presenter->state()['helpScroll'] === $help($presenter)->before($paged) && $presenter->state()['helpScroll'] < $paged, 'Page Up turns back a viewful');
+	$presenter->input([['key' => 'end']], null, 0);
+	$expect($row($presenter) === "draw $last", 'End shows the end of the rules');
+	$presenter->input([['key' => 'arrowdown'], ['key' => 'pagedown']], null, 0);
+	$expect($row($presenter) === "draw $last", 'scrolling stops at the end and never opens the next game');
+	$presenter->input([['key' => 'home']], null, 0);
+	$expect($row($presenter) === 'draw 0', 'Home returns to the top');
+
+	// The scrollbar: its arrows move a row, its track pages toward a click, and its thumb follows a press held on it.
+	$click($presenter, $point($presenter, $frame['reach']['down']));
+	$expect($row($presenter) === 'draw 1', 'the scrollbar\'s down arrow scrolls a row');
+	$click($presenter, $point($presenter, $frame['reach']['up']));
+	$expect($row($presenter) === 'draw 0', 'the scrollbar\'s up arrow scrolls back');
+	$track = $frame['bar']['track'];
+	$click($presenter, $point($presenter, [$track[0], $track[1] + $track[3] * .6, $track[2], 2]));
+	$expect($row($presenter) === 'draw ' . $help($presenter)->after(0), 'a click on the track below the thumb pages down');
+	$click($presenter, $point($presenter, $help($presenter)->thumb($presenter->state()['helpScroll'])));
+	$expect($row($presenter) === 'draw ' . $help($presenter)->after(0), 'a click on the thumb itself moves nothing');
+	$presenter->input([['key' => 'home']], null, 0);
+	$hold = static fn(Presenter $presenter, array $at, bool $down): array => $presenter->input([], ['x' => $at['x'], 'y' => $at['y'], 'down' => $down, 'clicks' => []], 0);
+	$grip = $point($presenter, $help($presenter)->thumb(0));
+	$travel = $presenter->layout()->rect(...$track)[3];
+	$hold($presenter, $grip, true);
+	$hold($presenter, ['x' => $grip['x'], 'y' => $grip['y'] + $travel / 2], true);
+	$half = $presenter->state()['helpScroll'];
+	$expect($half > 0 && $half < $last, 'dragging the thumb half way down its track scrolls about half way');
+	$hold($presenter, ['x' => $grip['x'] - 400, 'y' => $grip['y'] + 4 * $travel], true);
+	$expect($row($presenter) === "draw $last", 'the thumb stops at the end of its track, wherever the pointer strays');
+	$hold($presenter, ['x' => $grip['x'], 'y' => $grip['y']], false);
+	$expect($row($presenter) === "draw $last", 'letting go leaves the rules where the thumb was');
+	// The copy itself: a press that travels pushes it like a page under a finger; a tap that wobbles does not.
+	$copy = $point($presenter, $frame['view']);
+	$hold($presenter, $copy, true);
+	$hold($presenter, ['x' => $copy['x'], 'y' => $copy['y'] + 4], true);
+	$expect($row($presenter) === "draw $last", 'a press that wobbles a few pixels leaves the copy still');
+	$hold($presenter, ['x' => $copy['x'], 'y' => $copy['y'] + 150], true);
+	$pushed = $presenter->state()['helpScroll'];
+	$expect($pushed < $last, 'pushing the copy down brings earlier rows into view');
+	$hold($presenter, $copy, false);
+	$hold($presenter, ['x' => $copy['x'], 'y' => $copy['y'] - 150], false);
+	$expect($presenter->state()['helpScroll'] === $pushed, 'a pointer that moves without being pressed scrolls nothing');
+	$outside = $point($presenter, $frame['back']);
+	$hold($presenter, $outside, true);
+	$hold($presenter, ['x' => $copy['x'], 'y' => $copy['y'] - 150], true);
+	$hold($presenter, $copy, false);
+	$expect($presenter->state()['helpScroll'] === $pushed, 'a press that began on a button never turns into a drag of the copy');
+
+	$click($presenter, $point($presenter, $frame['next']));
+	$expect($row($presenter) === 'holdem 0', 'Next opens the game after, from its top');
+	$presenter->input([['key' => 'end'], ['key' => 'arrowleft']], null, 0);
+	$expect($row($presenter) === 'draw 0', 'Left opens the game before, from its top');
+	$presenter->input([['key' => '4']], null, 0);
+	$expect($row($presenter) === 'stud7 0', 'a digit opens that game from another game\'s rules');
+	$presenter->input([['key' => 'arrowright']], null, 0);
+	$expect($row($presenter) === 'stud7 0', 'Right is spent on the last game');
+	$expect($presenter->input([['key' => 'enter']], null, 0) === [] && $presenter->state()['helpGame'] === null, 'Enter returns from the rules to the index');
 
 	$wide = new Presenter($root);
 	$wide->resize(1280, 720, 1);
 	$wide->update($view);
-	$wide->input([['key' => '1']], null, 0);
-	$expect($wide->state()['helpScrollMax'] === 0, 'help disables scrolling when all wrapped copy fits');
+	$wide->input([['key' => '1'], ['key' => 'arrowright']], null, 0);
+	$expect($row($wide) === 'holdem 0', 'Right turns to the next game');
 	$view['canContinue'] = true;
+	$view['game'] = 'stud5';
 	$wide->update($view);
-	$back = $point($wide, $wide->layout()->information()['back']);
-	$expect($wide->input([], ['x' => $back['x'], 'y' => $back['y'], 'down' => false, 'clicks' => [$back]], 0) === [] && $wide->state()['helpGame'] === null, 'rules Back returns to the index even when a game can continue');
-	$menuBack = $point($wide, $wide->layout()->gameMenu(count(GameText::HELP_GAMES))['back']);
-	$expect($wide->input([], ['x' => $menuBack['x'], 'y' => $menuBack['y'], 'down' => false, 'clicks' => [$menuBack]], 0) === [['type' => 'menu']], 'the help index Back returns to the title');
+	$expect($wide->state()['helpChoice'] === 'stud5', 'the index marks the game of a table that can be continued');
+	$expect($click($wide, $point($wide, $help($wide)->frame['back'])) === [] && $wide->state()['helpGame'] === null, 'rules Back returns to the index even when a game can continue');
+	$expect($click($wide, $point($wide, $wide->layout()->helpIndex(count(GameText::HELP_GAMES))['back'])) === [['type' => 'menu']], 'the help index Back returns to the title');
+
+	// A controller: focus starts on the marked game, Up and Down scroll, the shoulder buttons change game, and Back
+	// returns to the row just read.
+	$press = static function(Presenter $presenter, string $button): array {
+		$result = $presenter->input([], null, 1 / 60, [$button => 1], 'generic');
+		$presenter->input([], null, 1 / 60, [], 'generic');
+		return $result;
+	};
+	$focus = static fn(Presenter $presenter): ?string => $presenter->state()['controllerFocus']['id'] ?? null;
+	$pad = new Presenter($root);
+	$pad->resize(1280, 720, 1);
+	$pad->update($view);
+	$pad->input([], null, 1 / 60, [], 'generic');
+	$expect($focus($pad) === 'help-game:stud5', 'controller focus starts on the marked game of the index');
+	$press($pad, 'confirm');
+	$expect($row($pad) === 'stud5 0' && $focus($pad) === 'help:back', 'A opens the focused game with focus on Back');
+	$press($pad, 'down');
+	$press($pad, 'down');
+	$press($pad, 'up');
+	$expect($row($pad) === 'stud5 1' && $focus($pad) === 'help:back', 'Down and Up scroll the rules and leave focus where it was');
+	$press($pad, 'pageDown');
+	$expect($row($pad) === 'stud7 0', 'the right shoulder button opens the next game');
+	$press($pad, 'pageUp');
+	$press($pad, 'pageUp');
+	$expect($row($pad) === 'holdem 0', 'the left shoulder button opens the game before');
+	$press($pad, 'right');
+	$expect($focus($pad) === 'help:next', 'Right moves focus along the pager, past the scrollbar');
+	$press($pad, 'confirm');
+	$expect($row($pad) === 'stud5 0' && $focus($pad) === 'help:next', 'A on Next opens the next game and keeps its focus');
+	$expect($press($pad, 'back') === [] && $pad->state()['helpGame'] === null && $focus($pad) === 'help-game:stud5', 'B returns to the index with focus on the game just read');
+	$expect($press($pad, 'back') === [['type' => 'menu']], 'B on the index returns to the title');
+});
+
+$test('How to Play sets every game whole, on every canvas, look and input family', static function(callable $expect) use ($root, $overlaps): void {
+	$view = ['screen' => 'help', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => false];
+	$inside = static fn(array $inner, array $outer): bool => $inner[0] >= $outer[0] - 1e-6 && $inner[1] >= $outer[1] - 1e-6
+		&& $inner[0] + $inner[2] <= $outer[0] + $outer[2] + 1e-6 && $inner[1] + $inner[3] <= $outer[1] + $outer[3] + 1e-6;
+	foreach([[1280,720,1],[1920,1080,1],[1024,768,1],[900,900,1],[1366,600,1],[780,1688,2],[1170,2532,3],[320,568,1],[768,1024,1],[1800,800,2],[844,390,1],[844,326,1],[1136,640,2]] as [$width,$height,$dpr])
+	foreach([Theme::CLASSIC, Theme::MODERN] as $mode) foreach(['keyboard','xbox'] as $theme)
+	{
+		$at = "{$width}x{$height}@{$dpr} $mode $theme";
+		$presenter = new Presenter($root);
+		$presenter->resize($width, $height, $dpr);
+		$presenter->update($view);
+		if($mode === Theme::MODERN) (function(): void { $this->mode = Theme::MODERN; })->call($presenter);
+		$controller = $theme === 'keyboard' ? [] : ['connected' => true];
+		$presenter->input([], null, 0, $controller, $theme);
+		$layout = $presenter->layout();
+		$canvas = [0, 0, $width, $height];
+		$corner = [$width - 94 * $dpr, $height - 52 * $dpr, 94 * $dpr, 52 * $dpr];
+		$target = 48 * $dpr - 1e-6;
+
+		// The index: whole rows of at least 48 CSS pixels inside the window, clear of the corner buttons.
+		$index = $layout->helpIndex(count(GameText::HELP_GAMES));
+		$window = $layout->rect(...$index['box']);
+		$expect($inside($window, $canvas), "the help index stays on the canvas at $at");
+		foreach([...$index['items'], $index['back']] as $row => $rect)
+		{
+			$device = $layout->rect(...$rect);
+			$expect($device[3] >= $target && $device[2] >= $target, "help index target $row is at least 48 CSS px at $at");
+			$expect($inside($device, $window), "help index target $row stays inside its window at $at");
+			$expect(!$overlaps($device, $corner), "help index target $row is clear of the corner buttons at $at");
+		}
+		foreach($presenter->paint($width, $height)->instances() as $instance) if(abs($instance[10] - 1) < 1e-9 && $instance[1] > $window[1] + 16 * $layout->scale)
+			$expect($instance[0] >= $window[0] && $instance[0] + $instance[2] <= $window[0] + $window[2] + 1e-6, "help index copy stays inside its window at $at");
+
+		$frames = [];
+		$shown = static fn(string $copy): string => $mode === Theme::CLASSIC ? strtoupper($copy) : $copy;
+		foreach(GameText::HELP_GAMES as $position => $game)
+		{
+			$presenter->input([['key' => (string)($position + 1)]], null, 0, $controller, $theme);
+			$help = (fn(): object => $this->helpPage())->call($presenter);
+			$frames[] = $help->frame;
+			$box = $layout->rect(...$help->frame['box']);
+			$expect($inside($box, $canvas), "the $game rules stay on the canvas at $at");
+			$pager = array_map(static fn(string $name): array => $layout->rect(...$help->frame[$name]), ['previous','back','next']);
+			foreach($pager as $slot => $device)
+			{
+				$expect($device[3] >= $target && $device[2] >= $target, "pager button $slot is at least 48 CSS px at $at");
+				$expect($inside($device, $box), "pager button $slot stays inside the rules window at $at");
+				$expect(!$overlaps($device, $corner), "pager button $slot is clear of the corner buttons at $at");
+				if($slot) $expect($pager[$slot - 1][0] + $pager[$slot - 1][2] <= $device[0] + 1e-6, "pager buttons do not overlap at $at");
+			}
+			// The view sits above the pager with the scrollbar at its right, drawn a character wide and reached
+			// through full-sized targets, all clear of the corner buttons.
+			$port = $layout->rect(...$help->frame['view']);
+			$expect($inside($port, $box) && $port[1] + $port[3] <= $pager[0][1] + 1e-6, "the $game view sits inside its window above the pager at $at");
+			foreach(['up','track','down'] as $part)
+			{
+				$drawn = $layout->rect(...$help->frame['bar'][$part]);
+				$reach = $layout->rect(...$help->frame['reach'][$part]);
+				$expect($inside($drawn, $box) && $drawn[0] >= $port[0] + $port[2] && $drawn[1] >= $port[1] - 1e-6 && $drawn[1] + $drawn[3] <= $port[1] + $port[3] + 1e-6, "the scrollbar's $part stands beside the view at $at");
+				$expect($inside($reach, $box) && $reach[2] >= $target && ($part === 'track' || $reach[3] >= $target), "the scrollbar's $part answers a 48 CSS px touch at $at");
+				$expect($reach[0] <= $drawn[0] + 1e-6 && $reach[0] + $reach[2] >= $drawn[0] + $drawn[2] - 1e-6, "the scrollbar's $part is reached where it is drawn at $at");
+				$expect(!$overlaps($reach, $corner), "the scrollbar's $part is clear of the corner buttons at $at");
+			}
+
+			// Every heading, hand and key is set exactly once, in four sizes that follow the outline.
+			$sizes = [];
+			$texts = [];
+			$caps = 0;
+			$cards = [];
+			foreach($help->rows as $number => $row) foreach($row['items'] as $item)
+			{
+				if($item['kind'] === 'key') $caps++;
+				if($item['kind'] === 'card') $cards[$number][] = $item;
+				if($item['kind'] !== 'text') continue;
+				$texts[] = $item['text'];
+				$sizes[$item['text']] = $item['size'];
+				$expect($item['x'] >= -1e-6 && $item['y'] <= $row['ink'] + 1e-6, "the $game copy is placed inside its own row at $at");
+			}
+			$counts = array_count_values($texts);
+			$steps = array_column(GameText::helpSteps($game), 0);
+			$legend = $theme === 'keyboard' ? 'Keys' : 'Controller';
+			foreach(['Playing a hand', 'In every game', ...$steps, 'Hands, best first', 'Wild cards', $legend, ...GameText::HAND_RANKS, GameText::HAND_RANKS_NOTE,
+				...array_column(GameText::helpControls($game, $theme), 1), ...array_column(GameText::helpExample($game)['groups'], 0)] as $wanted)
+				$expect(($counts[$shown($wanted)] ?? 0) === count(array_keys(array_column(GameText::helpExample($game)['groups'], 0), $wanted)) + (in_array($wanted, array_column(GameText::helpExample($game)['groups'], 0), true) ? 0 : 1),
+					"the $game rules set \"$wanted\" once at $at");
+			$expect($caps === array_sum(array_map('count', array_column(GameText::helpControls($game, $theme), 0))), "the $game rules draw every key cap once at $at");
+			$expect($sizes[$shown('Playing a hand')] === $sizes[$shown('In every game')] && $sizes[$shown('Playing a hand')] > $sizes[$shown($steps[0])]
+				&& $sizes[$shown($steps[0])] === $sizes[$shown('Wild cards')] && $sizes[$shown($steps[0])] > $sizes[$shown(GameText::HAND_RANKS[0])]
+				&& $sizes[$shown(GameText::HAND_RANKS[0])] > $sizes[$shown(GameText::HAND_RANKS_NOTE)], "the $game rules set parts, sections, copy and notes in four falling sizes at $at");
+
+			// The example hand stands in one row of the Showdown section, with the cards that do not play dimmed.
+			$example = GameText::helpExample($game);
+			$dealt = array_merge(...array_column($example['groups'], 1));
+			$expect(count($cards) === 1 && array_column(array_values($cards)[0], 'id') === $dealt, "the $game example is one row of its cards in dealing order at $at");
+			$exampleRow = array_key_first($cards);
+			$headed = static function(string $title) use ($help, $shown): int {
+				foreach($help->rows as $number => $row) foreach($row['items'] as $item) if($item['kind'] === 'text' && $item['text'] === $shown($title)) return $number;
+				return -1;
+			};
+			$expect($exampleRow > $headed('Showdown') && $exampleRow < $headed('In every game'), "the $game example belongs to its Showdown section at $at");
+			foreach(array_values($cards)[0] as $card)
+				$expect(($card['dim'] === 1.0) === in_array($card['id'], $example['plays'], true), "the $game example dims exactly the cards that do not play at $at");
+
+			// What is painted lies inside the view, wherever it is scrolled to: no glyph crosses its edge, runs under
+			// the scrollbar or reaches the pager's row. The scrollbar's own arrows are the only glyphs beside it.
+			// A glyph's quad carries a little padding past its pen position, so the edges allow a sliver of an em.
+			$sliver = .15 * $layout->controlText() * $layout->uiScale();
+			$rail = $layout->rect(...$help->frame['bar']['track']);
+			$expect($help->last > 0 && $help->thumb(0) !== null, "the $game rules scroll at $at");
+			foreach(array_unique([0, intdiv($help->last, 3), intdiv($help->last, 2), $help->last]) as $first)
+			{
+				(function() use ($first): void { $this->helpScroll = $first; })->call($presenter);
+				$outside = 0;
+				foreach($presenter->paint($width, $height)->instances() as $instance)
+				{
+					if(abs($instance[10] - 1) > 1e-9 || $instance[1] < $port[1] - $sliver || $instance[1] >= $pager[0][1]) continue;
+					$held = $instance[0] >= $port[0] - $sliver && $instance[0] + $instance[2] <= $port[0] + $port[2] + $sliver && $instance[1] + $instance[3] <= $port[1] + $port[3] + $sliver;
+					$arrow = $instance[0] >= $rail[0] - $sliver && $instance[0] + $instance[2] <= $rail[0] + $rail[2] + $sliver;
+					if(!$held && !$arrow) $outside++;
+				}
+				$expect($outside === 0, "the $game rules scrolled to row $first keep their copy inside the view at $at ($outside glyphs out)");
+			}
+
+			// Scrolling: every row from the top to the last stop can start the view; from the last stop the end of
+			// the copy is in view and from the one before it is not; paging never skips a row; the thumb runs the
+			// whole track and a drag to where it stands returns the same row.
+			$final = count($help->rows) - 1;
+			$tail = static fn(int $first): bool => $help->top($final) + $help->rows[$final]['ink'] - $help->top($first) <= $help->frame['view'][3] + 1e-6;
+			$expect($tail($help->last) && !$tail($help->last - 1), "the last stop of the $game rules is the first from which their end is in view at $at");
+			$track = $help->frame['bar']['track'];
+			$expect(abs($help->thumb(0)[1] - $track[1]) < 1e-6 && abs($help->thumb($help->last)[1] + $help->thumb($help->last)[3] - $track[1] - $track[3]) < 1e-6, "the $game thumb runs from the top of its track to the bottom at $at");
+			$sound = true;
+			for($first = 0; $first <= $help->last; $first++)
+			{
+				$next = $help->after($first);
+				$sound = $sound && $help->dragged($help->thumb($first)[1]) === $first
+					&& ($first === $help->last ? $next === $first : $next > $first && ($next === $first + 1 || $help->top($next - 1) + $help->rows[$next - 1]['ink'] - $help->top($first) <= $help->frame['view'][3] + 1e-6))
+					&& ($first === 0 ? $help->before($first) === 0 : $help->before($first) < $first && $help->top($first) - $help->top($help->before($first)) <= $help->frame['view'][3] + 1e-6);
+			}
+			$expect($sound, "paging and the thumb agree with the rows of the $game rules at $at");
+			$expect($mode === Theme::CLASSIC ? abs($help->thumb(0)[3] - $help->frame['bar']['up'][3]) < 1e-6 : $help->thumb(0)[3] > $help->frame['bar']['up'][3], "the $game thumb is a one-cell block in Classic and a proportional bar in Modern at $at");
+			$presenter->input([['key' => 'escape']], null, 0, $controller, $theme);
+		}
+		$expect(count(array_unique(array_map('json_encode', $frames))) === 1, "every game shares one rules window at $at");
+	}
+	foreach(GameText::HELP_GAMES as $game)
+	{
+		$example = GameText::helpExample($game);
+		$best = \PhpPoker\Hand::best(array_merge(...array_column($example['groups'], 1)), []);
+		$played = $best['cards'];
+		sort($played);
+		$named = $example['plays'];
+		sort($named);
+		$expect($best['name'] === 'Full house' && $played === $named, "the $game example is the full house the evaluator finds in its cards");
+	}
+	$full = Layout::fit(1280, 720, 1);
+	$expect(abs($full->help()['view'][2] - 38 * 14) < 1e-6, 'copy is set in one column of 76 characters on a desktop');
+	$expect($full->help(200)['box'][3] < $full->help()['box'][3] && abs($full->help(200)['box'][1] + $full->help(200)['box'][3] / 2 - 360) < 1e-6, 'a rules window shrinks to copy that fits and stays centred');
 });
 
 $test('controller focus navigates menus, setup, cards and table actions through shared SDL controls', static function(callable $expect) use ($fixture, $root): void {
@@ -1310,7 +1564,8 @@ $test('dialogs keep their CSS size and whole labels on a compressed desktop', st
 			, 'setup deal' => [$narrow->setup(4, 'jackpots')['start'], $reference->setup(4, 'jackpots')['start']]
 			, 'wild cards cancel' => [$narrow->wildcardMenu()['back'], $reference->wildcardMenu()['back']]
 			, 'wild cards row' => [$narrow->wildcardMenu()['items']['one-eyed-jacks'], $reference->wildcardMenu()['items']['one-eyed-jacks']]
-			, 'help back' => [$narrow->information()['back'], $reference->information()['back']]
+			, 'help back' => [$narrow->help()['back'], $reference->help()['back']]
+			, 'help index row' => [$narrow->helpIndex(4)['items'][0], $reference->helpIndex(4)['items'][0]]
 			, 'history ok' => [$narrow->history()['back'], $reference->history()['back']]
 			, 'menu item' => [$narrow->menu(false)[0]['rect'], $reference->menu(false)[0]['rect']]
 		];
@@ -1321,7 +1576,7 @@ $test('dialogs keep their CSS size and whole labels on a compressed desktop', st
 			$expect($a[2] >= min($b[2], $width - 72) - 1 && abs($a[3] - $b[3]) < 1e-6, "the $name control keeps its CSS size at $width x $height");
 			$expect($a[0] >= 0 && $a[0] + $a[2] <= $width, "the $name control stays on a $width x $height canvas");
 		}
-		foreach([$narrow->menuBox(true), $narrow->setup(4, 'jackpots')['box'], $narrow->limits()['box'], $narrow->wildcardMenu()['box'], $narrow->customWildcards()['box'], $narrow->information()['box'], $narrow->history()['box'], $narrow->discardDialog()['box'], $narrow->panel(440, 250, 120)] as $index => $box)
+		foreach([$narrow->menuBox(true), $narrow->setup(4, 'jackpots')['box'], $narrow->limits()['box'], $narrow->wildcardMenu()['box'], $narrow->customWildcards()['box'], $narrow->help()['box'], $narrow->helpIndex(4)['box'], $narrow->history()['box'], $narrow->discardDialog()['box'], $narrow->panel(440, 250, 120)] as $index => $box)
 		{
 			[$left, , $boxWidth] = $narrow->rect(...$box);
 			$expect($left >= 0 && $left + $boxWidth <= $width, "dialog $index stays on a $width x $height canvas");
@@ -1602,11 +1857,14 @@ $test('the Game row cycles draw, hold\'em and both studs, and the table names an
 	$expect(array_column($table->layout()->topDropdown('poker')['items'], 'id') === ['game-settings','history','odds','improving'], 'draw keeps both odds tables');
 	$expect(GameText::title('holdem') === "TEXAS HOLD'EM" && GameText::phase('holdem', 'flop', 'betting', '') === 'FLOP' && GameText::phase('stud7', 'seventh', 'betting', '') === '7TH STREET', 'the menu bar names the game and street');
 	$expect(GameText::phase('draw', 'opening', 'betting', '') === 'OPENING BETS' && GameText::phase('holdem', 'river', 'showdown', '') === 'HAND OVER' && GameText::phase('stud5', 'third', 'betting', 'deal') === 'DEALING', 'draw labels and shared labels are unchanged');
-	$expect(Presenter::helpParagraphs(false) === GameText::help('draw', false) && count(Presenter::helpParagraphs(false)) === 9, 'draw help is unchanged');
+	$expect(array_column(GameText::helpSteps('draw'), 0) === ['The deal','Opening','First bets','The draw','Final bets','Showdown'], 'draw help walks a hand from the deal to the showdown');
+	$expect(in_array([['1-5'], 'Select cards'], GameText::helpControls('draw', 'keyboard'), true) && in_array([['D'], 'Draw'], GameText::helpControls('draw', 'keyboard'), true), 'draw help lists the keys of the draw');
+	$expect(array_column(GameText::helpControls('draw', 'playstation'), 0)[1] === ['X'] && array_column(GameText::helpControls('draw', 'xbox'), 0)[1] === ['A'], 'the controller legend names the pad in use');
 	foreach(['holdem','stud5','stud7'] as $game)
 	{
-		$help = implode(' ', GameText::help($game, false));
-		$expect(!str_contains($help, '1 to 5') && !str_contains($help, 'Stand pat'), "$game help does not mention drawing");
+		$help = strtolower(implode(' ', array_merge(array_merge(...GameText::helpSteps($game)), array_column(GameText::helpControls($game, 'keyboard'), 1), array_merge(...array_column(GameText::helpControls($game, 'keyboard'), 0)))));
+		$expect(!str_contains($help, '1-5') && !str_contains($help, 'stand pat') && !str_contains($help, 'draw') && !str_contains($help, 'pass'), "$game help does not mention drawing or passing");
+		$expect(count(array_merge(...GameText::helpCards($game))) === ['holdem'=>7,'stud5'=>5,'stud7'=>7][$game], "$game help pictures a whole hand");
 		$expect(GameText::houseRuleLabels($game)['opening'] === 'Game' && !str_contains(implode(' ', GameText::houseRuleLabels($game)), 'draw'), "$game house rules do not mention the draw");
 		$expect(!str_contains(implode(' ', array_merge(...array_values(GameText::limits($game)))), 'Before'), "$game limits name streets, not the draw");
 	}

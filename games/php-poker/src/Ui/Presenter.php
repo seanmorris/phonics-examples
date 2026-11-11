@@ -80,9 +80,15 @@ final class Presenter
 	private string $networkWaitKey = '';
 	private float $networkWaitElapsed = 0;
 	private int $networkWaitDots = 0;
-	/** First help paragraph shown in the measured scroll viewport. */
+	/** Row of the open rules that the view starts on. */
 	private int $helpScroll = 0;
-	/** Selected How to Play rules page, or null while its game index is open. */
+	/**
+	 * A press that is still down on the rules: `thumb` drags the scrollbar, `copy` pushes the copy as a finger pushes
+	 * a page, `none` began somewhere that does neither.
+	 * @var array{kind:string,y:float,top:float,moved:bool}|null
+	 */
+	private ?array $helpDrag = null;
+	/** Game whose How to Play rules are open, or null while the index of games is. */
 	private ?string $helpGame = null;
 	/** Latest input family, used to expose controller focus and swap the on-canvas help. */
 	private string $inputTheme = 'keyboard';
@@ -217,6 +223,7 @@ final class Presenter
 			$position = [(float)$pointer['x'], (float)$pointer['y']];
 			if($this->pointer === null || abs($this->pointer[0] - $position[0]) > .5 || abs($this->pointer[1] - $position[1]) > .5) $this->dirty = true;
 			$this->pointer = $position;
+			$this->dragHelp($position, !empty($pointer['down']));
 			foreach($pointer['clicks'] ?? [] as $click) if(isset($click['x'], $click['y']))
 			array_push($intents, ...$this->click((float)$click['x'], (float)$click['y']));
 		}
@@ -278,8 +285,10 @@ final class Presenter
 		$help = ($this->view['screen'] ?? '') === 'help' && $this->helpGame !== null;
 		if($help)
 		{
-			if($pulses['pageUp'] || $pulses['up']) $this->scrollHelp(-1);
-			if($pulses['pageDown'] || $pulses['down']) $this->scrollHelp(1);
+			// Up and Down scroll the open rules a row at a time; the shoulder buttons turn to the game beside it.
+			$this->scrollHelp($this->helpScroll + $pulses['down'] - $pulses['up']);
+			if($pulses['pageUp']) $this->turnHelp(-1);
+			if($pulses['pageDown']) $this->turnHelp(1);
 			$pulses['up'] = $pulses['down'] = 0;
 		}
 		else
@@ -303,7 +312,15 @@ final class Presenter
 		$point = $this->layout()->design($x, $y);
 		$this->dirty = true;
 		foreach($this->clickTargets() as $target) if(Layout::hit($point, $target['rect']))
-		return $this->activateTarget($target);
+		{
+			if(empty($target['helpTrack'])) return $this->activateTarget($target);
+			// A click on the track pages toward it; a click on the thumb itself is a drag that did not move.
+			$help = $this->helpPage();
+			$thumb = $help->thumb($this->helpScroll);
+			if($thumb !== null && $point[1] < $thumb[1]) $this->scrollHelp($help->before($this->helpScroll));
+			if($thumb !== null && $point[1] > $thumb[1] + $thumb[3]) $this->scrollHelp($help->after($this->helpScroll));
+			return [];
+		}
 		return [];
 	}
 
@@ -410,18 +427,29 @@ final class Presenter
 			{
 				if($this->helpGame === null)
 				{
-					$menu = $layout->gameMenu(count(GameText::HELP_GAMES));
+					$menu = $layout->helpIndex(count(GameText::HELP_GAMES));
 					foreach($menu['items'] as $index => $rect)
 					$addKey($rect, (string)($index + 1), 'help-game:' . GameText::HELP_GAMES[$index]);
 					$addKey($menu['back'], 'escape', 'help:back');
 				}
 				else
 				{
-					$information = $layout->information();
-					$maximum = $this->helpMaximumScroll();
-					$addKey($information['up'], 'arrowup', 'help:up', $this->helpScroll === 0);
-					$addKey($information['back'], 'escape', 'help:back');
-					$addKey($information['down'], 'arrowdown', 'help:down', $this->helpScroll === $maximum);
+					$help = $this->helpPage();
+					$frame = $help->frame;
+					$position = array_search($this->helpGame, GameText::HELP_GAMES, true);
+					// The scrollbar is for a pointer: it carries no id, so a controller's focus passes it by.
+					// The thumb comes first: at either end of its track it lies inside an arrow's wider target, and a
+					// press on it must stay a drag.
+					if($help->last > 0)
+					{
+						$targets[] = ['rect' => $this->helpThumbReach($help), 'helpTrack' => true];
+						$addKey($frame['reach']['up'], 'arrowup', null, $this->helpScroll === 0);
+						$addKey($frame['reach']['down'], 'arrowdown', null, $this->helpScroll === $help->last);
+						$targets[] = ['rect' => $frame['reach']['track'], 'helpTrack' => true];
+					}
+					$addKey($frame['previous'], 'arrowleft', 'help:previous', $position === 0);
+					$addKey($frame['back'], 'escape', 'help:back');
+					$addKey($frame['next'], 'arrowright', 'help:next', $position === count(GameText::HELP_GAMES) - 1);
 				}
 			}
 			return $targets;
@@ -533,7 +561,8 @@ final class Presenter
 			: ($this->infoDialog !== null ? ['info:ok','info:more']
 			: ($this->topMenu !== null ? ['top-item:new','top-item:game-settings','top-item:odds']
 			: ['table:waiting','action:check','action:call','action:pass','action:draw','action:next','action:deal',
-				'action:bet','action:fold','setup:start','game:'.GameText::choice($this->setupGame, $this->setupVariant),'wild:none','custom-wild:0','settings:look']));
+				'action:bet','action:fold','setup:start','game:'.GameText::choice($this->setupGame, $this->setupVariant),'wild:none','custom-wild:0','settings:look',
+				'help-game:'.$this->helpChoice(),'help:back']));
 		$next = null;
 		foreach($preferences as $id) foreach($targets as $target) if($target['id'] === $id) { $next = $id; break 2; }
 		$next ??= $targets[0]['id'] ?? null;
@@ -666,25 +695,33 @@ final class Presenter
 
 		if($screen === 'help')
 		{
-			if($this->helpGame === null)
+			// A digit opens that game's rules from the index and from any other rules page.
+			$chosen = in_array($key, ['enter',' '], true) && $this->helpGame === null ? $this->helpChoice()
+				: (in_array($key, ['1','2','3','4','5','6','7','8','9'], true) ? GameText::HELP_GAMES[(int)$key - 1] ?? null : null);
+			if($chosen !== null)
 			{
-				if(in_array($key, ['1','2','3','4'], true) && isset(GameText::HELP_GAMES[(int)$key - 1]))
-				{
-					$this->helpGame = GameText::HELP_GAMES[(int)$key - 1];
-					$this->helpScroll = 0;
-					$this->controllerFocus = null;
-					return [];
-				}
-				if(in_array($key, ['escape','backspace','q'], true)) return [['type' => 'menu']];
-				return [];
-			}
-			if(in_array($key, ['arrowup','pageup'], true)) { $this->scrollHelp(-1); return []; }
-			if(in_array($key, ['arrowdown','pagedown'], true)) { $this->scrollHelp(1); return []; }
-			if(in_array($key, ['escape','backspace','enter',' ','q'], true))
-			{
-				$this->helpGame = null;
+				$this->helpGame = $chosen;
 				$this->helpScroll = 0;
 				$this->controllerFocus = null;
+				return [];
+			}
+			if($this->helpGame === null) return in_array($key, ['escape','backspace','q'], true) ? [['type' => 'menu']] : [];
+			// Up and Down scroll a row, as the wheel does; Page Up and Page Down a viewful; Left and Right change game.
+			$help = $this->helpPage();
+			$row = match($key) {
+				'arrowup' => $this->helpScroll - 1, 'arrowdown' => $this->helpScroll + 1,
+				'pageup' => $help->before($this->helpScroll), 'pagedown' => $help->after($this->helpScroll),
+				'home' => 0, 'end' => $help->last, default => null
+			};
+			if($row !== null) { $this->scrollHelp($row); return []; }
+			if($key === 'arrowleft') { $this->turnHelp(-1); return []; }
+			if($key === 'arrowright') { $this->turnHelp(1); return []; }
+			if(in_array($key, ['escape','backspace','enter',' ','q'], true))
+			{
+				// Back on the index, a controller's focus rests on the game just read.
+				$this->controllerFocus = 'help-game:' . $this->helpGame;
+				$this->helpGame = null;
+				$this->helpScroll = 0;
 			}
 			return [];
 		}
@@ -989,11 +1026,78 @@ final class Presenter
 		$this->amount = max((int)$legal['minBet'], min((int)$legal['maxBet'], $this->amount + $direction * max(1, (int)($legal['betIncrement'] ?? $this->view['profile']['minimum'] ?? $increment))));
 	}
 
-	/** Scroll the rules by one paragraph, keeping every stop meaningful at every viewport size. */
-	private function scrollHelp(int $direction): void
+	/** Start the view of the open rules on a row, kept within the copy. */
+	private function scrollHelp(int $row): void
 	{
-		$next = max(0, min($this->helpMaximumScroll(), $this->helpScroll + ($direction <=> 0)));
-		if($next !== $this->helpScroll) { $this->helpScroll = $next; $this->dirty = true; }
+		if($this->helpGame === null) return;
+		$row = max(0, min($this->helpPage()->last, $row));
+		if($row !== $this->helpScroll) { $this->helpScroll = $row; $this->dirty = true; }
+	}
+
+	/**
+	 * Open the rules of the game before or after the open one, from their top.
+	 *
+	 * @param int $direction Negative for the game before, positive for the game after.
+	 */
+	private function turnHelp(int $direction): void
+	{
+		if($this->helpGame === null) return;
+		$neighbour = GameText::HELP_GAMES[array_search($this->helpGame, GameText::HELP_GAMES, true) + ($direction <=> 0)] ?? null;
+		if($neighbour === null) return;
+		$this->helpGame = $neighbour;
+		$this->helpScroll = 0;
+		$this->dirty = true;
+	}
+
+	/**
+	 * Follow a press held on the open rules. Held on the scrollbar's thumb it drags the thumb along its track; held
+	 * on the copy it pushes the copy, as a finger pushes a page.
+	 *
+	 * @param array{float,float} $position Pointer in device pixels.
+	 * @param bool $down Whether the pointer is pressed.
+	 */
+	private function dragHelp(array $position, bool $down): void
+	{
+		if(!$down || ($this->view['screen'] ?? '') !== 'help' || $this->helpGame === null) { $this->helpDrag = null; return; }
+		$layout = $this->layout();
+		$help = $this->helpPage();
+		$point = $layout->design(...$position);
+		if($this->helpDrag === null)
+		{
+			// What a press does is settled where it lands; one that began elsewhere never turns into a drag.
+			$thumb = $help->thumb($this->helpScroll);
+			$reach = $help->frame['reach'];
+			$kind = $thumb === null ? 'none' : (Layout::hit($point, $this->helpThumbReach($help)) ? 'thumb'
+				: (Layout::hit($point, $help->frame['view']) && $point[0] < $reach['track'][0] ? 'copy' : 'none'));
+			$this->helpDrag = ['kind' => $kind, 'y' => $point[1], 'top' => $kind === 'thumb' ? $thumb[1] : $help->top($this->helpScroll), 'moved' => false];
+			return;
+		}
+		$moved = $point[1] - $this->helpDrag['y'];
+		if($this->helpDrag['kind'] === 'thumb') $this->scrollHelp($help->dragged($this->helpDrag['top'] + $moved));
+		if($this->helpDrag['kind'] !== 'copy') return;
+		// A tap may wander a few pixels; the copy follows only a press that has travelled further than that.
+		if(abs($moved) > 8 * $layout->dpr / $layout->scale) $this->helpDrag['moved'] = true;
+		if($this->helpDrag['moved']) $this->scrollHelp($help->at($this->helpDrag['top'] - $moved));
+	}
+
+	/** @return array{float,float,float,float} The scrollbar's thumb where it stands, as wide as the bar's targets. */
+	private function helpThumbReach(HelpPage $help): array
+	{
+		$thumb = $help->thumb($this->helpScroll) ?? [0, 0, 0, 0];
+		return [$help->frame['reach']['track'][0], $thumb[1], $help->frame['reach']['track'][2], $thumb[3]];
+	}
+
+	/** The game whose rules Enter opens from the index: the one being played, or the one the table is set up for. */
+	private function helpChoice(): string
+	{
+		$game = !empty($this->view['canContinue']) && isset($this->view['game']) ? (string)$this->view['game'] : $this->setupGame;
+		return in_array($game, GameText::HELP_GAMES, true) ? $game : GameText::HELP_GAMES[0];
+	}
+
+	/** The open rules as set for this canvas, look and input family. */
+	private function helpPage(): HelpPage
+	{
+		return HelpPage::of($this->layout(), $this->text, $this->mode, $this->inputTheme, $this->helpGame ?? GameText::HELP_GAMES[0]);
 	}
 
 	/** Take one of the game selector's choices, keeping the seat count within the new game's limit. */
@@ -1004,42 +1108,10 @@ final class Presenter
 		$this->setupPlayers = min($this->setupPlayers, GameText::seats($this->setupGame));
 	}
 
-	/** Copy shared with the painter so wrapping, overflow and scroll stops are measured from the same text. */
-	public static function helpParagraphs(bool $controller, string $game = 'draw'): array
-	{
-		return GameText::help($game, $controller);
-	}
-
-	/** Last useful paragraph scroll stop after measuring the wrapped copy in the current help window. */
+	/** Last row the view of the open rules can start on. */
 	private function helpMaximumScroll(): int
 	{
-		$layout = $this->layout();
-		$information = $layout->information();
-		$box = $information['box'];
-		if($this->helpGame === null) return 0;
-		$paragraphs = self::helpParagraphs($this->inputTheme !== 'keyboard', $this->helpGame);
-		$size = $layout->controlText();
-		$leading = $size * 1.45;
-		$start = $box[1] + 36;
-		$bottom = $information['back'][1] - 14;
-		$face = $this->mode === Theme::CLASSIC && isset($this->text->faces()['dos']) ? 'dos' : 'bold';
-		$fits = function(int $first) use ($paragraphs, $size, $leading, $start, $bottom, $box, $layout, $face): bool {
-			$y = $start;
-			foreach(array_slice($paragraphs, $first) as $paragraph)
-			{
-				$shown = $this->mode === Theme::CLASSIC ? strtoupper($paragraph) : $paragraph;
-				$lines = $this->text->wrap($shown, $size * $layout->scale, ($box[2] - 48) * $layout->horizontalScale, 20, $face);
-				foreach($lines as $_)
-				{
-					if($y + $leading / 2 > $bottom) return false;
-					$y += $leading;
-				}
-				$y += 8;
-			}
-			return true;
-		};
-		for($first = 0; $first < count($paragraphs); $first++) if($fits($first)) return $first;
-		return count($paragraphs) - 1;
+		return $this->helpGame === null ? 0 : $this->helpPage()->last;
 	}
 
 	/** Layout of the current canvas; the profile follows its size and pixel ratio. */
@@ -1199,7 +1271,7 @@ final class Presenter
 			, 'chips' => $this->chips, 'motion' => $this->motion?->frame($this->layout())
 			, 'winnerFlash' => ['active' => $this->winnerElapsed < 4, 'visible' => $this->winnerVisible]
 			, 'networkWait' => ['active' => $this->networkWaitKey !== '', 'dots' => $this->networkWaitDots]
-			, 'helpGame' => $this->helpGame, 'helpScroll' => $this->helpScroll, 'helpScrollMax' => $helpMaximum
+			, 'helpGame' => $this->helpGame, 'helpChoice' => $this->helpChoice(), 'helpScroll' => $this->helpScroll, 'helpScrollMax' => $helpMaximum
 			, 'inputTheme' => $this->inputTheme, 'controllerFocus' => $this->focusedTarget()
 		];
 	}

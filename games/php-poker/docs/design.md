@@ -163,9 +163,31 @@ block the next deal and schedules no further changes after it ends.
   anything opens, Texas Hold'em, five-card stud and seven-card stud. Seven-card stud allows six opponents at most.
   Deal sends `start{players, game, variant, …}`.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY
-  (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P). How to Play
-  first lists Draw Poker, Texas Hold'em, Five-Card Stud and Seven-Card Stud, then opens that game's scrollable rules.
-  Back returns from a rules page to this index before returning to the title. All are ruled boxes.
+  (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P).
+  All are ruled boxes.
+- How to Play opens on an index of Draw Poker, Texas Hold'em, Five-Card Stud and Seven-Card Stud. Each row shows
+  the game's hand as a small fan where the row has room, its name and a one-line summary. Keys 1 to 4 open a game;
+  Enter opens the one the table is set up for, which is the brass row. Back returns to the title.
+- A rules page is one column of copy, as a text-mode help screen sets it, in four sizes that follow its outline:
+  the two parts ("Playing a hand", "In every game") largest over a heavy rule, each section's heading a size
+  smaller with a hairline running on from it, then the copy, then notes. The first part walks a hand step by step.
+  Its Showdown section sets out an example, the same full house in every game dealt the way that game deals it,
+  each group of cards over its label ("Yours", "The board", "Down", "Up"), the cards that do not play dimmed and
+  a note on what to see. The second part lists the hands from best to worst in two numbered columns, the wild-card
+  rule and a legend of key caps (the controller's buttons when one is in use).
+- The copy scrolls a whole row at a time, so nothing is drawn half inside the window. The scrollbar at the window's
+  right edge is a DOS one in Classic: an arrow at each end, a track in the light shade and a one-cell block for the
+  thumb; Modern draws a rounded track and a thumb as long as the share of the copy in view. Arrows scroll a row, a
+  click on the track pages toward it and the thumb can be dragged. Up and Down scroll a row and repeat while held,
+  Page Up and Page Down a viewful, Home and End the whole way; the wheel scrolls three rows a notch without moving
+  the page behind the game; a press that travels on the copy pushes it like a page under a finger. The bar is drawn
+  a character wide and answers a touch across 48 CSS pixels.
+- Under the copy are Previous, Back and Next. Previous and Next open the game on either side from its top and name
+  it where the names fit; elsewhere they are arrows. Left and Right do the same, a digit opens that game, and a
+  controller's shoulder buttons change game while Up and Down scroll. Back, Escape or Enter returns to the index.
+  The three buttons stay clear of the frame's sound and fullscreen buttons: they are kept narrower than the space
+  between those and the opposite edge, or, on an upright phone, the window ends above them. Every game shares one
+  window, so they do not move as the game changes.
 - Message: phase-specific guidance (or `error`, in rose) centered below Current bet, wrapping on compact screens.
   In short landscape layouts, the stock and discard piles flank the bet to leave room for the status and hand. Opening bets explain
   that discarding comes afterward; a hand that cannot open is told that Pass keeps it in. The menu bar names

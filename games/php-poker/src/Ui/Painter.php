@@ -725,43 +725,116 @@ final class Painter
 	private function helpScreen(): void
 	{
 		$game = $this->state['helpGame'] ?? null;
+		$games = GameText::HELP_GAMES;
 		if($game === null)
 		{
-			$menu = $this->layout->gameMenu(count(GameText::HELP_GAMES));
+			$menu = $this->layout->helpIndex(count($games));
 			$this->dialog($menu['box'], 'HOW TO PLAY');
+			$title = $this->layout->controlText();
+			$caption = $this->layout->captionText();
+			$em = $this->layout->typeScale();
+			$across = $this->layout->stretch();
+			$grow = $title * $em / 14;
+			// Each row leads with its game's hand as a small fan, wherever the row is wide enough to keep its copy whole.
+			$fan = (20 + 6 * 13 + 3 * 6) * $grow * $across;
+			$copy = 0.0;
+			foreach($games as $each) foreach([[GameText::title($each), $title], [GameText::helpSummary($each), $caption]] as [$line, $size])
+				$copy = max($copy, $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($line) : $line, $size, $this->face) / $this->horizontalUnit);
+			$fanned = 14 * $across + $fan + 12 * $across + $copy <= $menu['items'][0][2] - 40 * $across;
 			foreach($menu['items'] as $index => $rect)
-			$this->button($rect, GameText::title(GameText::HELP_GAMES[$index]), $this->controller() ? $this->confirmLegend() : (string)($index + 1), 'default', false);
+			{
+				// Enter opens the game the table is set up for, so that row is the primary one.
+				$this->button($rect, '', (string)($index + 1), $games[$index] === ($this->state['helpChoice'] ?? null) ? 'primary' : 'default', false);
+				$left = $rect[0] + 14 * $across;
+				if($fanned)
+				{
+					$x = $left;
+					foreach(GameText::helpCards($games[$index]) as $group)
+					{
+						foreach($group as $id)
+						{
+							$this->card([$x, $rect[1] + ($rect[3] - 28 * $grow) / 2, 20 * $grow * $across, 28 * $grow], $id, 1);
+							$x += 13 * $grow * $across;
+						}
+						$x += 6 * $grow * $across;
+					}
+					$left += $fan + 12 * $across;
+				}
+				$room = $rect[0] + $rect[2] - 40 * $across - $left;
+				$top = $rect[1] + ($rect[3] - ($title + $caption) * $em - 5) / 2;
+				$this->text(GameText::title($games[$index]), $left, $top + $title * $em / 2, $title, Theme::INK, 'left', $room);
+				$this->text(GameText::helpSummary($games[$index]), $left, $top + $title * $em + 5 + $caption * $em / 2, $caption, Theme::alpha(Theme::INK, .78), 'left', $room);
+			}
 			$this->button($menu['back'], 'Back', '⎋', 'default', false);
 			return;
 		}
-		$info = $this->layout->information();
-		$box = $info['box'];
-		$this->dialog($box, 'HOW TO PLAY · ' . GameText::title((string)$game));
-		$paragraphs = Presenter::helpParagraphs($this->controller(), (string)$game);
-		$columnWidth = $box[2] - 48 * $this->layout->stretch();
-		$size = $this->layout->controlText();
-		$leading = $size * 1.45;
-		$y = $box[1] + 36;
-		$bottom = $info['back'][1] - 14;
-		$maximum = max(0, min(count($paragraphs) - 1, (int)($this->state['helpScrollMax'] ?? 0)));
-		$scroll = max(0, min($maximum, (int)($this->state['helpScroll'] ?? 0)));
-		foreach(array_slice($paragraphs, $scroll) as $paragraph)
+		$help = HelpPage::of($this->layout, $this->canvas->text, $this->mode, (string)($this->state['inputTheme'] ?? 'keyboard'), (string)$game);
+		$first = max(0, min($help->last, (int)($this->state['helpScroll'] ?? 0)));
+		$this->dialog($help->frame['box'], 'HOW TO PLAY · ' . GameText::title((string)$game));
+		foreach($help->shown($first) as $item)
 		{
-			$x = $box[0] + 24 * $this->layout->stretch();
-			$shown = $this->mode === Theme::CLASSIC ? strtoupper($paragraph) : $paragraph;
-			$lines = $this->canvas->text->wrap($shown, $size * $this->unit, $columnWidth * $this->horizontalUnit, 20, $this->face);
-			foreach($lines as $line)
+			if($item['kind'] === 'card') { $this->card([$item['x'], $item['y'], $item['width'], $item['height']], $item['id'], $item['dim']); continue; }
+			if($item['kind'] === 'text')
 			{
-				if($y + $leading / 2 > $bottom) break 2;
-				$this->text($line, $x, $y, $size, Theme::INK);
-				$y += $leading;
+				[$x, $y] = $this->layout->point($item['x'], $item['y']);
+				$this->canvas->label($item['text'], $x, $y, $item['size'], Theme::INK, $item['face'], $item['align']);
+				continue;
 			}
-			$y += 8;
+			[$x, $y, $w, $h] = $this->layout->rect($item['x'], $item['y'], $item['width'], $item['height']);
+			// A rule is whole device pixels thick, however far the field is scaled down.
+			if($item['kind'] === 'rule') { $this->canvas->box($x, round($y), $w, max(1, round($h)), 0, Theme::INK); continue; }
+			// A key cap, drawn as the buttons draw theirs: an inverse square in Classic, a soft cap in Modern.
+			if($this->mode === Theme::MODERN) $this->canvas->box($x, $y, $w, $h, 3 * $this->unit, [0,0,0,.12], [0,0,0,.35], 1 * $this->unit);
+			else $this->canvas->box($x, $y, $w, $h, 0, Theme::INK);
+			$this->canvas->label($item['text'], $x + $w / 2, $y + $h / 2, $item['size'], $this->mode === Theme::MODERN ? Theme::INK : Theme::PLATE, $this->face, 'center');
 		}
-		if($maximum > 0) $this->button($info['up'], '↑', '', 'default', $scroll === 0);
-		$this->button($info['back'], 'Back', '⎋', 'primary', false);
-		if($maximum > 0) $this->button($info['down'], '↓', '', 'default', $scroll === $maximum);
-		if($maximum > 0) $this->text(($scroll + 1) . '/' . ($maximum + 1), $box[0] + $box[2] - 18, $info['back'][1] + $info['back'][3] / 2, Theme::CAPTION, Theme::INK, 'right');
+		$this->helpScrollbar($help, $first);
+		// Previous and Next turn to the game on either side, and name it where they are wide enough.
+		$position = array_search($game, $games, true);
+		$named = static fn(int $index, string $arrow, bool $leads): string => !isset($games[$index]) || !$help->frame['named'] ? $arrow
+			: ($leads ? $arrow . ' ' . GameText::title($games[$index]) : GameText::title($games[$index]) . ' ' . $arrow);
+		$this->button($help->frame['previous'], $named($position - 1, '←', true), '', 'default', $position === 0);
+		$this->button($help->frame['back'], 'Back', '⎋', 'primary', false);
+		$this->button($help->frame['next'], $named($position + 1, '→', false), '', 'default', $position === count($games) - 1);
+	}
+
+	/**
+	 * The scrollbar beside the rules, as a text-mode window draws one: an arrow at each end, a shaded track between
+	 * them and a solid thumb. Nothing is drawn when all the copy is in view.
+	 */
+	private function helpScrollbar(HelpPage $help, int $first): void
+	{
+		$thumb = $help->thumb($first);
+		if($thumb === null) return;
+		$classic = $this->mode === Theme::CLASSIC;
+		$bar = $help->frame['bar'];
+		[$x, $y, $w, $h] = array_map('round', $this->layout->rect(...$bar['track']));
+		[, $thumbTop, , $thumbHeight] = array_map('round', $this->layout->rect(...$thumb));
+		if($classic)
+		{
+			$this->canvas->box($x, $y, $w, $h, 0, Theme::BUTTON, Theme::INK, 1 * $this->unit);
+			// The light shade of a DOS scrollbar: one cell in four inked, six cells across, each row stepped from the last.
+			$cell = max(1, round($w / 6));
+			$left = $x + ($w - 6 * $cell) / 2;
+			for($row = 0; $row * $cell + $cell <= $h; $row++)
+			{
+				$top = $y + $row * $cell;
+				if($top + $cell > $thumbTop && $top < $thumbTop + $thumbHeight) continue;
+				for($column = $row % 2 * 2; $column < 6; $column += 4) $this->canvas->box($left + $column * $cell, $top, $cell, $cell, 0, Theme::INK);
+			}
+			$this->canvas->box($x, $thumbTop, $w, $thumbHeight, 0, Theme::INK);
+		}
+		else
+		{
+			$this->canvas->box($x, $y, $w, $h, $w / 2, [0,0,0,.1]);
+			$this->canvas->box($x + 2 * $this->unit, $thumbTop, $w - 4 * $this->unit, $thumbHeight, $w / 2, [0,0,0,.5]);
+		}
+		foreach(['up' => ['↑', $first === 0], 'down' => ['↓', $first === $help->last]] as $end => [$arrow, $spent])
+		{
+			[$ax, $ay, $aw, $ah] = array_map('round', $this->layout->rect(...$bar[$end]));
+			if($classic) $this->canvas->box($ax, $ay, $aw, $ah, 0, Theme::BUTTON, Theme::INK, 1 * $this->unit);
+			$this->canvas->label($arrow, $ax + $aw / 2, $ay + $ah / 2, $this->layout->controlText(), Theme::alpha(Theme::INK, $spent ? .35 : 1), $this->face, 'center');
+		}
 	}
 
 	private function settingsScreen(): void

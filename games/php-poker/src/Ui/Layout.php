@@ -709,6 +709,9 @@ final class Layout
 	/** Readable control text size in design units. */
 	public function controlText(): float { return max(14, 13 * $this->dpr / $this->uiScale()); }
 
+	/** Field units one unit of type size is drawn at: type follows the chrome's scale, heights the field's. */
+	public function typeScale(): float { return $this->uiScale() / $this->scale; }
+
 	/** Caption size in design units, never below eleven CSS pixels however far the field is scaled down. */
 	public function captionText(): float { return max(12, 11 * $this->dpr / $this->uiScale()); }
 
@@ -1745,20 +1748,96 @@ final class Layout
 			'back'=>[$left+24,$footer,$backWidth,$control],'done'=>[$left+$width-24-$doneWidth,$footer,$doneWidth,$control]];
 	}
 
-	/** Help dialog bounds with a fixed scroll row beneath its wrapped copy. */
-	public function information(): array
+	/** CSS pixels at the frame's lower right that the engine's sound and fullscreen buttons cover, margin included. */
+	private const QUICK_CONTROLS = [94, 52];
+
+	/**
+	 * The How to Play index: one row per game, each tall enough for its name over a one-line summary, above Back.
+	 * @param int $count Number of games.
+	 */
+	public function helpIndex(int $count): array
 	{
-		if($square = $this->square()) return $this->fromSquare($square->information());
-		$width = min(800, $this->width() - 24);
-		$left = ($this->width() - $width) / 2;
-		$top = 50;
-		$height = $this->height() - $top - 12;
+		if($square = $this->square()) return $this->fromSquare($square->helpIndex($count));
 		$control = $this->controlSize();
-		$row = $top + $height - $control - 12;
-		$backWidth = min(140, $width - 152);
+		$em = $this->typeScale();
+		// A row holds two lines of type and never falls below the smallest target.
+		$row = max($control, ($this->controlText() + $this->captionText()) * $em + 22);
+		$gap = $this->profile === 'landscape' ? 4 : 8;
+		$width = min(34 * $this->controlText() * $em, $this->width() - 24);
+		$height = 34 + $count * ($row + $gap) + 4 + $control + 16;
+		$left = ($this->width() - $width) / 2;
+		$top = max(4, ($this->height() - $height) / 2);
+		$items = [];
+		for($index = 0; $index < $count; $index++) $items[] = [$left + 24, $top + 28 + $index * ($row + $gap), $width - 48, $row];
+		$backWidth = min(140, $width - 48);
+		return ['box'=>[$left,$top,$width,$height],'items'=>$items,
+			'back'=>[$this->width() / 2 - $backWidth / 2, $top + 28 + $count * ($row + $gap) + 4, $backWidth, $control]];
+	}
+
+	/**
+	 * A How to Play rules page: its window, the view its copy scrolls in, the scrollbar beside that and the pager
+	 * beneath.
+	 *
+	 * Copy is set in one column no wider than reads well, as a text-mode help screen sets it. Called without a height
+	 * this is the tallest window the canvas allows; called with the height the copy needs, it is that window shrunk
+	 * to fit and centred, for a canvas tall enough to show everything.
+	 *
+	 * @param float|null $content Height the copy needs, or null for all the canvas allows.
+	 * @return array{box:array{float,float,float,float},view:array{float,float,float,float},
+	 *   bar:array{up:array{float,float,float,float},track:array{float,float,float,float},down:array{float,float,float,float}},
+	 *   reach:array{up:array{float,float,float,float},track:array{float,float,float,float},down:array{float,float,float,float}},
+	 *   previous:array{float,float,float,float},back:array{float,float,float,float},next:array{float,float,float,float},
+	 *   named:bool} `bar` is the scrollbar as drawn, one character wide; `reach` is the same three parts as targets, at
+	 *   least 48 CSS pixels across. `named` is whether Previous and Next are wide enough to name the game they open.
+	 */
+	public function help(?float $content = null): array
+	{
+		if($square = $this->square()) return $this->fromSquare($square->help($content));
+		$text = $this->controlText() * $this->typeScale();
+		$control = $this->controlSize();
+		$bar = max(16, 1.2 * $text);
+		$width = min($this->width() - 24, 24 + 38 * $text + 12 + $bar + 8);
+		$left = ($this->width() - $width) / 2;
+		// The pager is centred, so it clears the corner buttons while it is no wider than the canvas less twice their
+		// width. Previous and Next name the game they open wherever both names fit beside Back; otherwise they are
+		// arrows. A phone held upright has height to spare, so there the window stops above the corner instead.
+		$corner = [self::QUICK_CONTROLS[0] * $this->dpr / $this->scale, self::QUICK_CONTROLS[1] * $this->dpr / $this->scale];
+		$inner = $width - 48;
+		$clear = min($inner, $this->width() - 2 * $corner[0]);
+		$least = max($control, 5 * $text);
+		// Back keeps its usual width where the names fit beside it, and gives some up before they are dropped.
+		$named = static function(float $room) use ($text, $least): ?array {
+			foreach([140.0, $least] as $back)
+			{
+				$arrow = min(14 * $text, ($room - 16 - $back) / 2);
+				if($arrow >= 9.5 * $text) return [$arrow, max($least, min(140, $room - 2 * $arrow - 16))];
+			}
+			return null;
+		};
+		$fitted = $named($clear) ?? ($this->profile === 'tall' ? $named($inner) : null);
+		[$arrow, $backWidth] = $fitted
+			?? [$control, max($least, min(140, (2 * $control + 16 + $least <= $clear ? $clear : $inner) - 2 * $control - 16))];
+		$pager = 2 * $arrow + $backWidth + 16;
+		$floor = $this->height() - ($pager > $this->width() - 2 * $corner[0] + 1e-6 ? $corner[1] + 4 : 8);
+		$chrome = 28 + 16 + $control + 10;
+		$available = $floor - 8 - $chrome;
+		$body = $content === null ? $available : min($available, $content);
+		$height = $body + $chrome;
+		$top = 8 + ($floor - 8 - $height) / 2;
+		$view = [$left + 24, $top + 28, $width - 24 - 12 - $bar - 8, $body];
+		// The scrollbar stands at the window's right edge. Its arrows and track are drawn a character wide and
+		// answer a touch across a full-sized target that reaches back over the margin beside them.
+		$edge = $left + $width - 8 - $bar;
+		$parts = static fn(float $x, float $across, float $end): array => ['up' => [$x, $view[1], $across, $end]
+			, 'track' => [$x, $view[1] + $end, $across, $body - 2 * $end], 'down' => [$x, $view[1] + $body - $end, $across, $end]];
+		$touch = max($bar, 48 * $this->dpr / $this->scale);
+		$row = $top + $height - $control - 10;
 		$back = [$this->width() / 2 - $backWidth / 2, $row, $backWidth, $control];
-		return ['box' => [$left, $top, $width, $height], 'up' => [$back[0] - 66, $row, 56, $control]
-			, 'back' => $back, 'down' => [$back[0] + $back[2] + 10, $row, 56, $control]];
+		return ['box' => [$left, $top, $width, $height], 'view' => $view
+			, 'bar' => $parts($edge, $bar, min($bar, $body / 3))
+			, 'reach' => $parts(max($left, $left + $width - 4 - $touch), min($touch, $width), min($touch, $body / 3))
+			, 'previous' => [$back[0] - 8 - $arrow, $row, $arrow, $control], 'back' => $back
+			, 'next' => [$back[0] + $backWidth + 8, $row, $arrow, $control], 'named' => $fitted !== null];
 	}
 
 	/**
