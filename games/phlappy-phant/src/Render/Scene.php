@@ -63,6 +63,8 @@ final class Scene
 	public const MENU_TEXT = [.98, .973, .941];
 	public const MENU_HIGHLIGHT = [.145, .31, .349];
 	public const MENU_DISABLED = [.545, .549, .502];
+	/** Width of every compact menu plaque at scale one: Audio, the bindings pages and the text submenus alike. */
+	public const COMPACT_WIDTH = 344;
 
 	/** Accessible hit regions published by the menu renderer. */
 	public array $regions = [];
@@ -427,7 +429,7 @@ final class Scene
 
 		if($menu->isOpen)
 		{
-			if($this->needsPlaque($menu)) $this->plaquePage($menu, $width, $height, $seconds);
+			if($this->needsPlaque($menu)) $this->plaquePage($menu, $width, $height, $seconds, $k);
 			else $this->skyPage($menu, $page, $width, $height, $seconds, $k, $camera);
 		}
 	}
@@ -454,26 +456,69 @@ final class Scene
 	 * @param int $width Output width in pixels.
 	 * @param int $height Output height in pixels.
 	 * @param float $seconds Elapsed UI time.
+	 * @param int $k World pixel scale.
 	 * @return void Publishes the plaque's hit regions.
 	 */
-	private function plaquePage(Menu $menu, int $width, int $height, float $seconds): void
+	private function plaquePage(Menu $menu, int $width, int $height, float $seconds, int $k): void
 	{
-		// The shared menu renderer scales by min(style scale, width / 320, height / 180); handing it the whole number
-		// below that keeps its glyphs crisp, and the plaque width follows so the hint row fits.
-		$m = max(1, min($k, 3, (int)floor(min($width / 320, $height / 180))));
+		$m = self::compactScale($k, $width, $height);
 		$this->menus->style['scale'] = $m;
-		$this->menus->style['width'] = 330 * $m;
-		$this->menus->showHints = $m >= 2 && $width >= 330 * $m - 10;
+		$this->menus->style['width'] = self::COMPACT_WIDTH * $m;
+		$this->menus->showHints = $m >= 2 && $width >= self::COMPACT_WIDTH * $m - 10;
 		$this->menus->style['dimmer'] = [...self::INK, .35];
 		[$px, $py, $pw, $ph] = $this->plaque($menu, $width, $height);
 		$this->rects->render($this->plaqueFrame([$px, $py, $pw, $ph], $m), $width, $height);
 		$this->menus->render($menu, $width, $height, $seconds);
 		$this->regions = $this->menus->regions;
+
+		// At this scale the shared renderer draws no key hints of its own, so the page gets the same hint line as
+		// every other menu, unless a binding is being captured or the plaque reaches down to where the line stands.
+		$hint = $this->hintLine($menu, $width, $height, $k);
+
+		if(!$this->menus->showHints && $menu->editor === null && $py + $ph + 4 * $m <= $hint['y']) $this->hint = $hint;
 	}
 
 	/**
-	 * Draw a page in the open sky: big cream pixel text with the wordmark's ink shadow, the selected item on a teal
-	 * band behind a blinking chevron, informational rows in teal, and a themed hint line along the bottom.
+	 * The whole-number text scale of a compact menu page: the Audio and bindings plaque, and every other submenu.
+	 *
+	 * The shared menu renderer scales by min(style scale, width / 320, height / 180); the whole number below that
+	 * keeps glyphs crisp. Submenus drawn by this scene use the same number, so every page under a menu reads alike.
+	 *
+	 * @param int $k World pixel scale.
+	 * @param int $width Output width in pixels.
+	 * @param int $height Output height in pixels.
+	 * @return int At least one.
+	 */
+	private static function compactScale(int $k, int $width, int $height): int
+	{
+		return max(1, min($k, 3, (int)floor(min($width / 320, $height / 180))));
+	}
+
+	/**
+	 * Where the browser draws the key-hint line, and at what scale.
+	 *
+	 * The browser draws this small mixed-density line at display resolution. Rendering the four-times-denser key art
+	 * into the reduced world buffer first would discard detail before the host enlarges the pixel-art canvas.
+	 *
+	 * @return array{back:bool,scale:int,y:int} Whether Back is offered, the font scale, and the line's top.
+	 */
+	private function hintLine(Menu $menu, int $width, int $height, int $k): array
+	{
+		$hint = $menu->depth() > 0 ? '✚ MOVE  ⓿ SELECT  ❶ BACK' : '✚ MOVE  ⓿ SELECT';
+
+		return [
+			'back' => $menu->depth() > 0
+			, 'scale' => max(1, min($k, (int)floor(($width - 16) / max(1, $this->measure($hint)))))
+			, 'y' => $height - 34 * $k
+		];
+	}
+
+	/**
+	 * Draw a text page on the shared plaque, in one of two sizes.
+	 *
+	 * The title, pause and result menus are the large ones: the biggest whole scale that fits, every row centred.
+	 * Every page beneath them is compact: the same scale and plaque width as the Audio page, rows from the left under
+	 * a small title, so all submenus read alike. The selected row sits on a band behind a blinking chevron.
 	 *
 	 * @param Menu $menu Open menu.
 	 * @param string $page Current application page.
@@ -490,6 +535,8 @@ final class Scene
 		$chevron = $this->measure('> ');
 		$title = (string)$menu->title;
 		$front = $page === 'title' && $menu->depth() === 0;
+		$large = $menu->depth() === 0;
+		$compact = self::compactScale($k, $width, $height);
 		$avail = $width - 24 * $k;
 		$logo = max(1, min(2 * $k + 1, (int)floor($avail / max(1, $this->measure('PHLAPPY PHANT')))));
 		// The front page hangs its choices under the wordmark; every other page has the frame from a small top margin
@@ -498,9 +545,15 @@ final class Scene
 		$menuBottom = $height - ($front ? 54 : 44) * $k;
 		$room = $menuBottom - $menuTop;
 
-		// Pick the largest whole scale at which the rows, wrapped to the width, fit that room. Information rows wrap
-		// and pack more tightly than choices, which keep a touch-sized row; the tightest pitch is the last resort.
-		foreach([[$k + 1, 13], [$k, 13], [1, 13], [1, 11]] as [$r, $pitch])
+		// A large page takes the biggest whole scale at which its rows fit that room; the front page gives up its
+		// subtitle before it gives up that size, because the wordmark above already names the game. A compact page
+		// starts at the Audio page's scale and never goes above it. Information rows wrap and pack more tightly than
+		// choices, which keep a touch-sized row; the tightest pitch is the last resort.
+		$candidates = $large
+			? [[$k + 1, 13, true], ...($front ? [[$k + 1, 13, false]] : []), [$k, 13, true], [1, 13, true], [1, 11, true]]
+			: [[$compact, 13, true], [1, 13, true], [1, 11, true]];
+
+		foreach($candidates as [$r, $pitch, $titled])
 		{
 			if($r < 1) continue;
 
@@ -519,20 +572,26 @@ final class Scene
 				foreach($lines as $line) $widest = max($widest, $this->measure($line));
 			}
 
-			$titleLimit = $front || $pitch < 13 ? $r : 2 * $r;
+			// A large page other than the front one has a title twice the size of its rows; a compact page's title
+			// is the size of its rows, like the Audio page's.
+			$titleLimit = !$large || $front || $pitch < 13 ? $r : 2 * $r;
 			$titleScale = max(1, min($titleLimit, (int)floor($avail / max(1, $this->measure($title)))));
-			$titleHeight = 16 * $titleScale + ($pitch < 13 ? 4 : 10) * $r;
+			$titleHeight = !$titled ? 0 : 16 * $titleScale + ($large ? ($pitch < 13 ? 4 : 10) : 8) * $r;
 			$blockHeight = $titleHeight + array_sum($heights);
+			$margin = 8 * $r;
+			$blockWidth = ($widest + $chevron) * $r;
+
+			// A compact page is as wide as the Audio plaque wherever the frame allows, whatever its text needs.
+			if(!$large) $blockWidth = max($blockWidth, min(min(self::COMPACT_WIDTH * $r, $width - 16) - 12 * $r - 2 * $margin, $avail));
 
 			// A choice stays on one line unless nothing else fits.
 			if(!$actionWraps && $blockHeight <= $room && ($widest + $chevron) * $r <= $avail) break;
 		}
 
-		$blockWidth = ($widest + $chevron) * $r;
-		// Centered in its room, and never above it: a page that is still too tall keeps its title on screen.
-		$top = max($menuTop, min((int)floor(($menuTop + $menuBottom - $blockHeight) / 2), $menuBottom - $blockHeight));
-
-		if($front) $top = max($menuTop, min($top, $menuBottom - $blockHeight));
+		// Centered in its room, and never above it: a page that is still too tall keeps its title on screen. A
+		// compact page centers on the whole frame, where the Audio plaque stands, when that keeps it in its room.
+		$middle = $large ? ($menuTop + $menuBottom - $blockHeight) / 2 : ($height - $blockHeight) / 2;
+		$top = max($menuTop, min((int)floor($middle), $menuBottom - $blockHeight));
 
 		$x = (int)floor(($width - $blockWidth) / 2);
 		$rects = [];
@@ -542,8 +601,9 @@ final class Scene
 
 		// The text stands on the shared near-solid plaque, so its contrast never depends on the sky, cloud or field
 		// behind it. The border and lower-right shadow use the same scale-dependent frame as Audio and bindings.
-		$margin = 8 * $r;
-		$plate = [max(0, $x - 6 * $r - $margin), max(0, $top - $margin), $blockWidth + 12 * $r + 2 * $margin, $blockHeight + 2 * $margin];
+		// Without its subtitle the front page's plaque starts and ends closer to its rows, clear of the wordmark above.
+		$marginY = $titled ? $margin : 4 * $r;
+		$plate = [max(0, $x - 6 * $r - $margin), max(0, $top - $marginY), $blockWidth + 12 * $r + 2 * $margin, $blockHeight + 2 * $marginY];
 		$plate[2] = min($plate[2], $width - $plate[0]);
 		$plate[3] = min($plate[3], $height - $plate[1]);
 		array_push($rects, ...$this->plaqueFrame($plate, $r));
@@ -551,17 +611,19 @@ final class Scene
 		// What the menu needs against what the frame offers, for tests that audit every page for cropped text.
 		$this->menuBounds = [
 			'left' => $x - 6 * $r, 'top' => $top, 'right' => $x + $blockWidth + 6 * $r, 'bottom' => $top + $blockHeight
-			, 'width' => $width, 'height' => $height, 'scale' => $r
+			, 'width' => $width, 'height' => $height, 'scale' => $r, 'large' => $large
 		];
 
 		$labels = [];
 		$shadow = (float)$r;
 
-		$this->shadowed($labels, $title, $width / 2, (float)$top, (float)$titleScale, 'center', self::MENU_TEXT);
+		if($titled && $large) $this->shadowed($labels, $title, $width / 2, (float)$top, (float)$titleScale, 'center', self::MENU_TEXT);
+		elseif($titled) $this->shadowed($labels, $title, (float)$x, (float)$top, (float)$titleScale, 'left', self::MENU_TEXT);
 
 		$y = $top + $titleHeight;
 		$pad = 6 * $r;
 		$blink = fmod($seconds, .9) < .6;
+		$centre = $x + $blockWidth / 2;
 
 		foreach($rows as $id => $item)
 		{
@@ -570,22 +632,28 @@ final class Scene
 			$rowHeight = $heights[$id];
 			$rect = [$x - $pad, $y - 2 * $r, $blockWidth + 2 * $pad, $rowHeight];
 
+			// A large page centres every line on the plaque; a compact page starts them all after the chevron column.
+			$starts = array_map(
+				fn(string $line): float => $large ? floor($centre - $this->measure($line) * $r / 2) : (float)($x + $chevron * $r)
+				, $lines
+			);
+
 			if($selected)
 			{
 				$rects[] = [$rect[0] + $shadow, $rect[1] + $shadow, $rect[2], $rect[3], self::INK[0], self::INK[1], self::INK[2], .6];
 				$rects[] = [...$rect, ...self::MENU_HIGHLIGHT, 1.0];
 
-				if($blink) $this->label($labels, '>', (float)$x, (float)$y, (float)$r, 'left', self::MIST);
+				// The chevron stands just left of the label, and stays on the band when the label fills it.
+				if($blink) $this->label($labels, '>', max($rect[0] + $r, $starts[0] - $chevron * $r), (float)$y, (float)$r, 'left', self::MIST);
 			}
 
 			$colour = $selected ? self::MIST : self::MENU_TEXT;
-			$textX = (float)($x + $chevron * $r);
 
 			foreach($lines as $n => $line)
 			{
 				$lineY = (float)($y + $pitch * $n * $r);
 
-				$this->shadowed($labels, $line, $textX, $lineY, (float)$r, 'left', $colour);
+				$this->shadowed($labels, $line, $starts[$n], $lineY, (float)$r, 'left', $colour);
 			}
 
 			// Information rows are text, not controls: they take no selection and publish no button.
@@ -599,15 +667,7 @@ final class Scene
 			$y += $rowHeight;
 		}
 
-		// The browser draws this small mixed-density line at display resolution. Rendering the four-times-denser key
-		// art into the reduced world buffer first would discard detail before the host enlarges the pixel-art canvas.
-		$hint = $menu->depth() > 0 ? '✚ MOVE  ⓿ SELECT  ❶ BACK' : '✚ MOVE  ⓿ SELECT';
-		$hintScale = max(1, min($k, (int)floor(($width - 16) / max(1, $this->measure($hint)))));
-		$this->hint = [
-			'back' => $menu->depth() > 0
-			, 'scale' => $hintScale
-			, 'y' => $height - 34 * $k
-		];
+		$this->hint = $this->hintLine($menu, $width, $height, $k);
 
 		$this->rects->render($rects, $width, $height);
 		$this->text->render($labels, $camera);

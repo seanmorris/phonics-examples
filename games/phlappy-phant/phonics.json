@@ -142,7 +142,7 @@
     "src/Input/PhantActions.php": "sha256-bW+3S4rcQjQglbFM/SFmhbEkE3pt/eukxZy+qH5NFU8=",
     "src/Pillar.php": "sha256-UnGQ5H/xkxP/Ija8VOBt8lEKLuOoXbvfIPWHz4bBFcI=",
     "src/Random.php": "sha256-tlN8YCn7SdPhSBQ6H0B6M4Aj5fCLdb0tZVvKPXE7P8s=",
-    "src/Render/Scene.php": "sha256-R1NWuSwtFKQVg6UKJkwC7m0WhMYuubCXpnwY+1Lf0Wg=",
+    "src/Render/Scene.php": "sha256-pm7E8NFq5nyXZRE3zrqYevnWYHcTMtWXYLMnDRWqe88=",
     "src/Render/TerrainRenderer.php": "sha256-/EGaAeUBHJE37fkEh4xRbeN0d0gfjnHi10OS3p2QZes=",
     "src/Simulation.php": "sha256-Tj2bzAPMx0SjQwe/dEeimrKzqa8MrYUPC5qkCV4iTkU=",
     "worlds/phant.tmj": "sha256-bBtdwp+NVmFcG14eqAJBg8PKr9jXPttAEv4iEeAFU+I=",
