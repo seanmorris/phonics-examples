@@ -28,6 +28,8 @@ final class Playfield
 	public array $capsules;
 	public $loadStage;
 	private array $stageEntities = [];
+	/** Current stage owns transient gameplay entities; campaign state belongs to the game. */
+	public ?\Phonics\World\ScopeContext $scope = null;
 
 	/**
 	 * Initialize Playfield state and its owned services.
@@ -53,6 +55,20 @@ final class Playfield
 	 */
 	public function registry(): Registry { return $this->context->entities; }
 
+	/** Create a transient entity under the active stage's ownership. */
+	public function entity(object ...$components): int
+	{
+		return $this->scope ? $this->scope->entity(...$components) : $this->registry()->create(...$components);
+	}
+
+	/** Query this stage, excluding other prepared or retained maps. */
+	public function query(string $type): array
+	{
+		$ids = $this->registry()->query($type);
+
+		return $this->scope ? array_values(array_intersect($ids, $this->scope->entities())) : $ids;
+	}
+
 	/**
 	 * Replace stage entities with the supplied authored map.
 	 *
@@ -60,21 +76,37 @@ final class Playfield
 	 * @param int $index Zero-based stage index.
 	 * @return void Completes the operation.
 	 */
-	public function stage(TileMap $map, int $index): void
+	public function stage(TileMap $map, int $index, ?\Phonics\World\ScopeContext $scope = null): void
 	{
 		$entering = $this->state->phase === 'loading' && $this->state->nextStage === $index;
 
-		foreach($this->stageEntities as $id)
-		if($this->registry()->alive($id)) $this->registry()->destroy($id);
+		if($scope === null)
+		{
+			foreach($this->stageEntities as $id)
+			if($this->registry()->alive($id)) $this->registry()->destroy($id);
 
-		foreach([Ball::class, Brick::class, Capsule::class, Enemy::class, Projectile::class, Paddle::class] as $type)
-		foreach($this->registry()->query($type) as $id) $this->registry()->destroy($id);
+			foreach([
+				Ball::class
+				, Brick::class
+				, Capsule::class
+				, Enemy::class
+				, Projectile::class
+				, Paddle::class
+			] as $type)
+			foreach($this->query($type) as $id) $this->registry()->destroy($id);
+		}
+
+		$this->scope = $scope;
 		$this->map = $map;
+
+		// Campaign maps are separate stages, irrespective of their editor arrangement.
+		if($scope) $map->x = $map->y = 0;
+
 		$this->state->width = $map->data['width'] * $map->projection->tileWidth;
 		$this->state->height = $map->data['height'] * $map->projection->tileHeight;
-		$this->stageEntities = $this->context->factories->spawn($map, $this->registry());
-		$this->paddle = $this->registry()->query(Paddle::class)[0]
-			?? $this->registry()->create(new Paddle($this->state->width / 2, $this->state->height - 30));
+		$this->stageEntities = $scope ? [] : $this->context->factories->spawn($map, $this->registry());
+		$this->paddle = $this->query(Paddle::class)[0]
+			?? $this->entity(new Paddle($this->state->width / 2, $this->state->height - 30));
 
 		$this->state->stage = $index;
 		$this->state->phase = $entering ? 'entering' : 'playing';
@@ -105,7 +137,7 @@ final class Playfield
 	public function serve(): void
 	{
 		$paddle = $this->resetPaddle();
-		$this->registry()->create(new Ball($paddle->x, $paddle->y - 13));
+		$this->entity(new Ball($paddle->x, $paddle->y - 13));
 	}
 
 	/**
@@ -133,7 +165,7 @@ final class Playfield
 		if($this->state->phase !== 'playing') return;
 
 		foreach([Ball::class, Capsule::class, Projectile::class] as $type)
-		foreach($this->registry()->query($type) as $id) $this->registry()->destroy($id);
+		foreach($this->query($type) as $id) $this->registry()->destroy($id);
 
 		if(!$this->state->infiniteLives) $this->state->lives--;
 
@@ -181,9 +213,7 @@ final class Playfield
 			$this->state->score += $brick->score;
 
 			if($brick->capsule !== '')
-			$this->registry()->create(
-				new Capsule($brick->x + $brick->width / 2, $brick->y + $brick->height / 2, $brick->capsule)
-			);
+			$this->entity(new Capsule($brick->x + $brick->width / 2, $brick->y + $brick->height / 2, $brick->capsule));
 		}
 
 		$this->registry()->destroy($id);
@@ -253,7 +283,7 @@ final class Playfield
 
 		if($definition['action'] === 'split')
 		{
-			foreach($this->registry()->query(Ball::class) as $id)
+			foreach($this->query(Ball::class) as $id)
 			{
 				$ball = $this->registry()->get($id, Ball::class);
 
@@ -268,7 +298,7 @@ final class Playfield
 					$copy->attached = false;
 					$copy->vx = $ball->vx * cos($angle) - $ball->vy * sin($angle);
 					$copy->vy = -abs($ball->vx * sin($angle) + $ball->vy * cos($angle));
-					$this->registry()->create($copy);
+					$this->entity($copy);
 				}
 
 				break;

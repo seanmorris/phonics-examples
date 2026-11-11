@@ -31,7 +31,7 @@ final class CapsuleSystem
 
 		$paddle = $registry->get($this->field->paddle, Paddle::class);
 
-		foreach($registry->query(Capsule::class) as $id)
+		foreach($this->field->query(Capsule::class) as $id)
 		{
 			$capsule = $registry->get($id, Capsule::class);
 			$oldY = $capsule->y;

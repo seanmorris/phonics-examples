@@ -18,6 +18,7 @@ use Phonics\Tiled\TileMap;
  * @param Terrain $terrain Terrain shared by the player and stationary blocks.
  * @param TileMap $map Demo map containing editable breakable tile objects.
  * @param string $prefix Unique prefix for systems owned by this level instance.
+ * @param \Phonics\World\ScopeContext|null $scope Optional map owner for systems and cleanup.
  * @return BreakableBlocks Block owner to close when the scene stops.
  */
 function configureBreakables(
@@ -25,6 +26,7 @@ function configureBreakables(
 	, Terrain $terrain
 	, TileMap $map
 	, string $prefix = ''
+	, ?\Phonics\World\ScopeContext $scope = null
 ): BreakableBlocks {
 	$blocks = new BreakableBlocks($engine->entities, $terrain, $map);
 	$ids = [];
@@ -111,8 +113,16 @@ function configureBreakables(
 		}
 	};
 
-	$engine->systems->add($prefix . 'breakables', $breakableSystem, after: ['movement']);
-	$engine->systems->add($prefix . 'particles', [new ParticleSystem, 'update'], after: [$prefix . 'breakables']);
+	if($scope)
+	{
+		$scope->system('breakables', $breakableSystem, after: ['@movement']);
+		$scope->system('particles', [new ParticleSystem, 'update'], after: ['breakables']);
+	}
+	else
+	{
+		$engine->systems->add($prefix . 'breakables', $breakableSystem, after: ['movement']);
+		$engine->systems->add($prefix . 'particles', [new ParticleSystem, 'update'], after: [$prefix . 'breakables']);
+	}
 
 	return $blocks;
 }

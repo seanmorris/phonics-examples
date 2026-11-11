@@ -36,5 +36,12 @@
             "width": 1024,
             "height": 640
         }
+    ],
+    "properties": [
+        {
+            "name": "phonics.systems",
+            "type": "string",
+            "value": "[\"@sane/spatial-maps\"]"
+        }
     ]
 }

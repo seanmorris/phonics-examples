@@ -127,3 +127,38 @@ require __DIR__ . '/transitions.php';
 require __DIR__ . '/collisions.php';
 require __DIR__ . '/assets.php';
 echo "$checks PHP-Noid checks passed\n";
+
+// The maintained game uses authored components and scope-owned stage systems.
+$context = new Context;
+Module::components($context);
+
+foreach(['Brick', 'Paddle', 'Enemy'] as $name)
+$context->components->alias('@php-noid/' . strtolower($name) . '-component', 'PhpNoid.' . $name);
+$field = new Playfield($context);
+$context->runtime->service('php-noid.field', $field);
+$context->runtime->systemSet('@php-noid/stage', new \PhpNoid\StageSystems);
+$context->runtime->adapter('tiled', new \Phonics\Tiled\Adapter);
+
+$context->runtime->source(new \Phonics\World\SourceDefinition('campaign', 'tiled', [
+	['url' => dirname(__DIR__) . '/worlds/campaign.world']
+], ['lifecycle' => 'reset']));
+
+$root = $context->runtime->activate('campaign', 'world');
+$scopes = $context->runtime->catalog('campaign');
+$first = $context->runtime->activate('campaign', $scopes[1]->id);
+expect(count($field->query(Brick::class)) > 0, 'authored stage creates brick components');
+$oldEntities = $first->context->entities();
+$field->state->score = 1234;
+$field->entity(new Projectile(10, 10));
+$first->release();
+expect($context->entities->query(Projectile::class) === [], 'stage unload retires dynamically created projectiles');
+$context->runtime->service('php-noid.stageIndex', 1);
+$second = $context->runtime->activate('campaign', $scopes[2]->id);
+expect($field->state->score === 1234 && $field->state->stage === 1, 'campaign state survives stage replacement');
+expect($field->map->x === 0.0 && $field->map->y === 0.0, 'campaign ignores map editor placement');
+expect(!array_intersect($oldEntities, $second->context->entities()), 'new stage has independent entity identities');
+$context->systems->update(1 / 60);
+$root->release();
+expect($context->entities->query(\Phonics\Ecs\Query::all()) === [], 'world release retires stage descendants');
+$context->close();
+echo "PHP-Noid composition checks passed\n";

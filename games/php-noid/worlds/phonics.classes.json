@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "classes": [
+    {
+      "name": "PhpNoid.Brick",
+      "color": "#ff33ccbb",
+      "members": [
+        {
+          "name": "hits",
+          "type": "int",
+          "value": 1
+        },
+        {
+          "name": "unbreakable",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "material",
+          "type": "string",
+          "value": "normal"
+        },
+        {
+          "name": "capsule",
+          "type": "string",
+          "value": ""
+        },
+        {
+          "name": "score",
+          "type": "int",
+          "value": 100
+        },
+        {
+          "name": "phonics.entity",
+          "type": "string",
+          "value": "@php-noid/brick"
+        }
+      ]
+    },
+    {
+      "name": "PhpNoid.Paddle",
+      "color": "#ffbbddff",
+      "members": []
+    },
+    {
+      "name": "PhpNoid.Enemy",
+      "color": "#ffcc3366",
+      "members": [
+        {
+          "name": "family",
+          "type": "string",
+          "value": "menacer"
+        },
+        {
+          "name": "effect",
+          "type": "string",
+          "value": "copper"
+        },
+        {
+          "name": "interval",
+          "type": "float",
+          "value": 5
+        },
+        {
+          "name": "hits",
+          "type": "int",
+          "value": 3
+        },
+        {
+          "name": "capsule",
+          "type": "string",
+          "value": "expand"
+        }
+      ]
+    }
+  ],
+  "bindings": {
+    "PhpNoid.Brick": "@php-noid/brick-component",
+    "PhpNoid.Paddle": "@php-noid/paddle-component",
+    "PhpNoid.Enemy": "@php-noid/enemy-component"
+  }
+}

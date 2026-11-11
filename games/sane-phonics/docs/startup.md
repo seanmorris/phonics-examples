@@ -185,3 +185,9 @@ are application features and are not included in this example.
 
 See [menus and font annotations](menus.md) for item definitions, editable fields,
 controller themes, and input behavior.
+
+## Scoped Tiled content
+
+Each prepared scene forks an independent content runtime sharing already loaded code and engine services. Maps declare the demo map system set; the streaming world declares its spatial selection system. Prepared scopes stay inactive until the scene commits. The previous scene keeps running if preparation fails, and closing a scene releases its map systems and entities before its world scope.
+
+The world is an inspectable asset. Spatial selection is a Sane system; Phonics does not require worlds to use editor coordinates for activation. Map and layer targets expose their authored data for custom systems, including image and group layers. Spawn-point components provide destinations for the persistent player. The portable class catalog preserves project defaults; external worlds can provide their own catalog and systems from packages loaded at launch.

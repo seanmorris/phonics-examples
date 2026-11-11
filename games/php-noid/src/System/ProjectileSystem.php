@@ -35,7 +35,7 @@ final class ProjectileSystem
 		$collisions = $this->field->collisions;
 		$collisions->sync($this->field->state->width, $this->field->state->height, $paddle);
 
-		foreach($registry->query(Projectile::class) as $id)
+		foreach($this->field->query(Projectile::class) as $id)
 		{
 			$shot = $registry->get($id, Projectile::class);
 
@@ -78,7 +78,7 @@ final class ProjectileSystem
 
 				if($shot->kind === 'missile')
 				{
-					foreach($registry->query(Brick::class) as $brickId)
+					foreach($this->field->query(Brick::class) as $brickId)
 					{
 						$brick = $registry->get($brickId, Brick::class);
 
@@ -86,7 +86,7 @@ final class ProjectileSystem
 						$this->field->damage($brickId, $brick->hits);
 					}
 
-					foreach($registry->query(Enemy::class) as $enemyId)
+					foreach($this->field->query(Enemy::class) as $enemyId)
 					{
 						$enemy = $registry->get($enemyId, Enemy::class);
 

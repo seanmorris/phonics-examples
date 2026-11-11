@@ -54,7 +54,7 @@ test('sustained multiball and lasers keep rendering and fixed updates responsive
 				$brick->unbreakable=true; $brick->capsule='';
 			}
 			// Sustain the collision workload without losing balls or clearing the stage.
-			$r->create(new \PhpNoid\Component\Brick(20,30,8,8,100000));
+			$field->entity(new \PhpNoid\Component\Brick(20,30,8,8,100000));
 			$p=$r->get($field->paddle,\PhpNoid\Component\Paddle::class);
 			$p->baseWidth=620;
 			$field->power('split'); $field->power('laser'); $p->powers['laser']=120;
@@ -62,7 +62,7 @@ test('sustained multiball and lasers keep rendering and fixed updates responsive
 			// cannot lose its six-shot workload to a ship crossing the muzzle.
 			for($i=0;$i<3;$i++) {
 				$ship=new \PhpNoid\Component\Enemy(80+$i*220,240,'floater','copper',1000,100000);
-				$ship->direction=0; $r->create($ship);
+				$ship->direction=0; $field->entity($ship);
 			}
 		`
 		);

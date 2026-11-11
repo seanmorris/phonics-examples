@@ -29,7 +29,21 @@ $engine->input->bindButton(18, [SDLK_a]);
 $konami = ['up', 'up', 'down', 'down', 'left', 'right', 'left', 'right'];
 $engine->input->sequences->add('php-noid.konami.keyboard', [...$konami, 17, 18], 2);
 $engine->input->sequences->add('php-noid.konami.pad', [...$konami, 1, 0], 2);
-Module::systems($field);
+$phonics->runtime->service('php-noid.field', $field);
+$phonics->runtime->adapter('noid-tiled', new \Phonics\Tiled\Adapter);
+
+$phonics->runtime->source(new \Phonics\World\SourceDefinition('campaign', 'noid-tiled', [
+	['url' => $phonics->world['sourceUrl']]
+], [
+	'lifecycle' => 'reset'
+] + (isset(\Phonics\Tiled\Loader::properties($phonics->world['properties'] ?? [])['phonics.classes'])
+	? []
+	: ['classes' => Resource::source(__DIR__ . '/worlds/phonics.classes.json')]
+)));
+
+$source = $phonics->runtime->load('campaign');
+$campaignLease = $phonics->runtime->activate('campaign', 'world');
+$stageLease = null;
 $rects = new RectRenderer;
 $camera = new Camera(Hud::PLAYFIELD_LEFT, 0, Hud::PLAYFIELD_WIDTH, Hud::HEIGHT);
 $hud = new Hud(new BitmapFont($phonics->loader, __DIR__ . '/assets/font.tsj', [__DIR__ . '/assets/hud.tsj']));
@@ -74,12 +88,14 @@ $titleMenu = new Menu([
 $titleMenu->open();
 
 $stream = new WorldStream(
-	$phonics->loader->world($phonics->world['sourceUrl'])
+	$source->world
 	, static fn(string $path, bool $retry) => $assets->request($path, $retry)
 	, static fn(string $path) => $assets->release($path)
 	, 0
 	, 0
 );
+
+$stream->classes = $source->classes;
 
 $pendingStage = null;
 $field->loadStage = static function(int $index) use (&$pendingStage, $field): void {
@@ -114,6 +130,7 @@ $engine->setInputHandler(
 		, $field
 		, $phonics
 		, $stream
+		, &$stageLease
 	): bool {
 		$pointer = $field->pointer;
 		$captured = false;
@@ -203,7 +220,7 @@ $engine->setInputHandler(
 		if($pendingStage === null) return $captured;
 
 		$entry = $phonics->world['maps'][$pendingStage];
-		$stream->update((float)$entry['x'], (float)$entry['y'], (float)$entry['width'], (float)$entry['height']);
+		$stream->select([$pendingStage => $entry]);
 
 		if($stream->errors)
 		{
@@ -219,9 +236,18 @@ $engine->setInputHandler(
 
 		if(!isset($maps[$key])) return true;
 
-		$map = clone $maps[$key];
-		$map->x = $map->y = 0;
-		$field->stage($map, $pendingStage);
+		$map = $maps[$key];
+		$stageLease?->release();
+		$phonics->runtime->service('php-noid.stageIndex', $pendingStage);
+
+		if(!isset(\Phonics\Tiled\Loader::properties($map->data['properties'] ?? [])['phonics.systems']))
+		$map->data['properties'][] = [
+			'name' => 'phonics.systems'
+			, 'type' => 'string'
+			, 'value' => json_encode([Resource::source(__DIR__ . '/phonics.json') . '#stage'])
+		];
+
+		$stageLease = $phonics->runtime->activate('campaign', $key);
 		$pendingStage = null;
 
 		if(!$ready)
@@ -299,10 +325,14 @@ $engine->start(static function() use (
 	, $hintRenderer
 	, $phonics
 	, $stream
+	, $campaignLease
+	, &$stageLease
 	, $phpInfo
 	, $titleMenu
 	, &$background
 ): void {
+	$stageLease?->release();
+	$campaignLease->release();
 	$stream->close();
 	$assets->close();
 	$phpInfo->close();

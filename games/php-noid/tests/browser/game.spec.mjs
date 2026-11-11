@@ -99,7 +99,7 @@ test('PHP-Noid mouse control, capsules, firing, pause, lethal attacks and cleanu
 
 	await run(page, String.raw`
 		$p=$field->registry()->get($field->paddle, \PhpNoid\Component\Paddle::class);
-		$field->registry()->create(new \PhpNoid\Component\Capsule($p->x, $p->y-25, 'expand', 500));
+		$field->entity(new \PhpNoid\Component\Capsule($p->x, $p->y-25, 'expand', 500));
 	`
 	);
 
@@ -114,7 +114,7 @@ test('PHP-Noid mouse control, capsules, firing, pause, lethal attacks and cleanu
 		$field->power('split'); $field->power('catch');
 		$p=$field->registry()->get($field->paddle, \PhpNoid\Component\Paddle::class);
 		$shot=new \PhpNoid\Component\Projectile($p->x, $p->y-35, 'killer', 1500, 'enemy');
-		$field->registry()->create($shot);
+		$field->entity($shot);
 	`
 	);
 
@@ -418,7 +418,7 @@ test('Level 5 escapes a diagonal corner-to-gold cycle at unchanged speed', async
 		foreach($r->query(\PhpNoid\Component\Brick::class) as $id)
 			if(!$r->get($id, \PhpNoid\Component\Brick::class)->unbreakable) $r->destroy($id);
 		foreach($r->query(\PhpNoid\Component\Enemy::class) as $id) $r->destroy($id);
-		$r->create(new \PhpNoid\Component\Brick(280,350,80,20,100));
+		$field->entity(new \PhpNoid\Component\Brick(280,350,80,20,100));
 		$b=$r->get($r->query(\PhpNoid\Component\Ball::class)[0], \PhpNoid\Component\Ball::class);
 		$b->x=523; $b->y=173-1/256; $b->vx=-400; $b->vy=-400*160/614; $b->attached=false;
 	`

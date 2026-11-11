@@ -74,7 +74,13 @@ final class DemoLevel
 	public ?array $resetBounds = null;
 	private string $systemPrefix;
 	private bool $closed = false;
-	private array $packageEntities = [];
+	private ?\Phonics\World\WorldRuntime $runtime = null;
+	private ?\Phonics\World\ScopeContext $mapScope = null;
+	private array $leases = [], $prepared = [];
+	private bool $active = false;
+	/** Whether map selection is supplied by declared world systems. */
+	public bool $worldSystems = false;
+	private string $sourceId;
 
 	/**
 	 * Create a staging level without touching the active scene or engine.
@@ -85,7 +91,8 @@ final class DemoLevel
 	 */
 	public function __construct(public string $id, private object $assets)
 	{
-		$this->systemPrefix = 'level:' . spl_object_id($this) . ':';
+		$this->sourceId = 'sane-level-' . spl_object_id($this);
+		$this->systemPrefix = $this->sourceId . ':';
 	}
 
 	/**
@@ -112,7 +119,8 @@ final class DemoLevel
 				if($this->id !== 'world')
 				{
 					$world = new World($loader, $config['sourceUrl'], [
-						'maps' => [
+						'properties' => $world->data['properties'] ?? []
+						, 'maps' => [
 							[
 								'fileName' => $config['start']
 								, 'x' => 0
@@ -160,6 +168,35 @@ final class DemoLevel
 				);
 			}
 
+			if(!isset(Loader::properties($world->data['properties'] ?? [])['phonics.classes']))
+			$world->data['properties'][] = [
+				'name' => 'phonics.classes'
+				, 'type' => 'file'
+				, 'value' => \Phonics\Asset\Resource::source(__DIR__ . '/../worlds/phonics.classes.json')
+			];
+
+			global $phonics;
+			$this->runtime = $phonics->runtime->fork();
+			$this->runtime->service('sane.level', $this);
+			$this->runtime->service('sane.engine', $engine);
+			$this->runtime->service('sane.camera', $camera);
+
+			$this->runtime->adapter('sane-world', new class($world) implements \Phonics\World\ContentAdapter {
+
+				public function __construct(private World $world) {}
+
+				public function open(
+					\Phonics\World\SourceDefinition $definition
+					, \Phonics\World\AdapterContext $context
+				): \Phonics\World\ContentSource {
+					return new \Phonics\Tiled\Source($this->world);
+				}
+			});
+
+			$this->runtime->source(new \Phonics\World\SourceDefinition($this->sourceId, 'sane-world', [], [
+				'lifecycle' => 'reset'
+			]));
+
 			$this->stream = new WorldStream(
 				$world
 				, /**
@@ -180,6 +217,14 @@ final class DemoLevel
 			);
 		}
 
+		$this->runtime->service('sane.stream', $this->stream);
+		$this->runtime->prepare($this->sourceId, 'world');
+
+		$this->worldSystems = !empty(\Phonics\Tiled\Loader::properties(
+			$this->stream->world->data['properties'] ?? []
+		)['phonics.systems']);
+
+		$this->stream->classes = $this->runtime->load($this->sourceId)->classes;
 		$view = clone $camera;
 		[$view->x, $view->y] = $this->origin();
 
@@ -219,7 +264,21 @@ final class DemoLevel
 			return true;
 		}
 
-		$map = reset($maps);
+		return true;
+	}
+
+	/** Assemble the demo-specific map systems selected by the map's phonics.systems property. */
+	public function composeMap(\Phonics\World\ScopeContext $scope): void
+	{
+		if($this->id === 'world') return;
+
+		$this->mapScope = $scope;
+		$this->systemPrefix = $scope->key() . '/';
+		$scope->onClose(fn() => $this->releaseMapFeatures());
+		$engine = $scope->service('sane.engine');
+		$view = clone $scope->service('sane.camera');
+		[$view->x, $view->y] = $this->origin();
+		$map = $scope->content();
 		$this->spawn = $this->playerSpawn($map);
 
 		if(in_array($this->id, ['ceiling-curves', 'tornado'], true))
@@ -254,8 +313,8 @@ final class DemoLevel
 		$this->bridges = new BendableBridges($engine->entities, $this->terrain, $map);
 		$this->gravityFeatures = new GravityFeatures($engine->entities, $this->terrain, $map);
 
-		$engine->systems->add($this->systemPrefix . 'platforms', [$this->platforms, 'update'], after: ['movement']);
-		$engine->systems->add($this->systemPrefix . 'bridges', [$this->bridges, 'update'], after: ['movement']);
+		$this->system($this->systemPrefix . 'platforms', [$this->platforms, 'update'], after: ['movement']);
+		$this->system($this->systemPrefix . 'bridges', [$this->bridges, 'update'], after: ['movement']);
 
 		if($this->gravityFeatures->isEmpty())
 		{
@@ -264,7 +323,7 @@ final class DemoLevel
 		}
 		else
 		{
-			$engine->systems->add(
+			$this->system(
 				$this->systemPrefix . 'gravity-features'
 				, [$this->gravityFeatures, 'update']
 				, after: ['movement']
@@ -283,7 +342,7 @@ final class DemoLevel
 		}
 		else
 		{
-			$engine->systems->add(
+			$this->system(
 				$this->systemPrefix . 'water-features'
 				, [$this->waterFeatures, 'update']
 				, after: ['movement']
@@ -320,7 +379,7 @@ final class DemoLevel
 			$after[] = $this->systemPrefix . 'water-features';
 		}
 
-		$engine->systems->add($this->systemPrefix . 'grapples', [$this->grapples, 'update'], after: $after);
+		$this->system($this->systemPrefix . 'grapples', [$this->grapples, 'update'], after: $after);
 
 		if($this->waters->regions)
 		{
@@ -333,7 +392,7 @@ final class DemoLevel
 				, milliseconds: $engine->time * 1000
 			);
 
-			$engine->systems->add(
+			$this->system(
 				$this->systemPrefix . 'water-particles'
 				, [$this->waterParticles, 'update']
 				, after: [
@@ -346,7 +405,7 @@ final class DemoLevel
 
 		$this->renderer->render($view, $engine->time * 1000);
 
-		$engine->systems->add(
+		$this->system(
 			$this->systemPrefix . 'rings'
 			, [$this->rings, 'update']
 			, after: [$this->systemPrefix . 'vehicle-seats']
@@ -356,9 +415,9 @@ final class DemoLevel
 		{
 			$this->badniks = new Badniks($engine->entities, $this->terrain, $this->rings);
 			$this->crabs = new CrabMeats($engine->entities, $this->terrain, $map, $this->badniks);
-			$engine->systems->add($this->systemPrefix . 'crabs', [$this->crabs, 'update'], after: ['movement']);
+			$this->system($this->systemPrefix . 'crabs', [$this->crabs, 'update'], after: ['movement']);
 
-			$engine->systems->add(
+			$this->system(
 				$this->systemPrefix . 'badniks'
 				, [$this->badniks, 'update']
 				, after: [$this->systemPrefix . 'crabs']
@@ -378,15 +437,15 @@ final class DemoLevel
 
 			$this->shields = new Shields($engine->entities, $map);
 			$this->monitors = new Monitors($engine->entities, $this->terrain, $map, shields: $this->shields);
-			$engine->systems->add($this->systemPrefix . 'monitors', [$this->monitors, 'update'], after: ['movement']);
+			$this->system($this->systemPrefix . 'monitors', [$this->monitors, 'update'], after: ['movement']);
 
-			$engine->systems->add(
+			$this->system(
 				$this->systemPrefix . 'mini-bosses'
 				, [$this->miniBosses, 'update']
 				, after: [$this->systemPrefix . 'badniks']
 			);
 
-			$engine->systems->add(
+			$this->system(
 				$this->systemPrefix . 'shields'
 				, [$this->shields, 'update']
 				, after: [$this->systemPrefix . 'mini-bosses']
@@ -395,7 +454,7 @@ final class DemoLevel
 
 		if($this->id === 'breakables')
 		{
-			$this->blocks = configureBreakables($engine, $this->terrain, $map, $this->systemPrefix);
+			$this->blocks = configureBreakables($engine, $this->terrain, $map, $this->systemPrefix, $scope);
 		}
 
 		$bossRegions = BossRegions::fromMaps(
@@ -438,13 +497,12 @@ final class DemoLevel
 		$this->movement = new Platformer($this->terrain, $impact, $this->waters);
 		$this->vehicles = new Vehicles($engine->entities, $this->terrain, $this->movement, $map);
 
-		$engine->systems->add(
+		$this->system(
 			$this->systemPrefix . 'vehicle-seats'
 			, [$this->vehicles, 'carry']
 			, after: [$this->systemPrefix . 'grapples']
 		);
 
-		return true;
 	}
 
 	/**
@@ -455,6 +513,22 @@ final class DemoLevel
 	 */
 	private function playerSpawn(\Phonics\Tiled\TileMap $map): array
 	{
+		foreach($this->mapScope?->entities() ?? [] as $id)
+		{
+			$registry = $this->mapScope->registry;
+
+			if(!$registry->has($id, \SanePhonics\Gameplay\SpawnPoint::class)) continue;
+
+			$point = $registry->get($id, \SanePhonics\Gameplay\SpawnPoint::class);
+			$target = $registry->get($id, \Phonics\Tiled\Target::class);
+
+			return [
+				$point->x + $map->x + ($target->layer?->offsetX ?? 0)
+				, $point->y + $map->y + ($target->layer?->offsetY ?? 0
+				)
+			];
+		}
+
 		foreach($map->layers as $layer)
 		{
 			foreach($layer->objects as $object)
@@ -544,26 +618,33 @@ final class DemoLevel
 	 */
 	public function syncFactories(Engine $engine): void
 	{
-		global $phonics;
-
-		if(!isset($phonics)) return;
+		if(!$this->runtime) return;
 
 		$maps = $this->stream->loaded();
 
-		foreach($this->packageEntities as $key => $entities)
+		foreach($this->prepared as $key => $_)
 		{
 			if(isset($maps[$key])) continue;
 
-			foreach($entities as $id)
-			if($engine->entities->alive($id)) $engine->entities->destroy($id);
-			unset($this->packageEntities[$key]);
+			$this->runtime->unloadScope($this->sourceId, $key);
+			unset($this->leases[$key], $this->prepared[$key]);
 		}
 
 		foreach($maps as $key => $map)
 		{
-			if(isset($this->packageEntities[$key])) continue;
+			if(isset($this->prepared[$key])) continue;
 
-			$this->packageEntities[$key] = $phonics->factories->spawn($map, $engine->entities);
+			if(!isset(Loader::properties($map->data['properties'] ?? [])['phonics.systems']))
+			$map->data['properties'][] = [
+				'name' => 'phonics.systems'
+				, 'type' => 'string'
+				, 'value' => json_encode([\Phonics\Asset\Resource::source(__DIR__ . '/../phonics.json') . '#demo-map'])
+			];
+
+			$this->runtime->prepare($this->sourceId, $key);
+			$this->prepared[$key] = true;
+
+			if($this->active) $this->leases[$key] = $this->runtime->activate($this->sourceId, $key);
 		}
 	}
 
@@ -582,25 +663,39 @@ final class DemoLevel
 
 		$this->closed = true;
 
-		foreach($this->packageEntities as $entities)
-		foreach($entities as $id)
-		if($engine->entities->alive($id)) $engine->entities->destroy($id);
-		$this->packageEntities = [];
-		$engine->systems->remove($this->systemPrefix . 'particles');
-		$engine->systems->remove($this->systemPrefix . 'breakables');
-		$engine->systems->remove($this->systemPrefix . 'rings');
-		$engine->systems->remove($this->systemPrefix . 'badniks');
-		$engine->systems->remove($this->systemPrefix . 'crabs');
-		$engine->systems->remove($this->systemPrefix . 'mini-bosses');
-		$engine->systems->remove($this->systemPrefix . 'monitors');
-		$engine->systems->remove($this->systemPrefix . 'shields');
-		$engine->systems->remove($this->systemPrefix . 'water-features');
-		$engine->systems->remove($this->systemPrefix . 'platforms');
-		$engine->systems->remove($this->systemPrefix . 'bridges');
-		$engine->systems->remove($this->systemPrefix . 'gravity-features');
-		$engine->systems->remove($this->systemPrefix . 'grapples');
-		$engine->systems->remove($this->systemPrefix . 'vehicle-seats');
-		$engine->systems->remove($this->systemPrefix . 'water-particles');
+		$this->runtime?->close();
+
+		if($this->id === 'world') $this->renderer?->close();
+
+		$this->leases = $this->prepared = [];
+		$this->motionBlurRenderer?->close();
+		$this->stream?->close();
+		$this->assets->close();
+	}
+
+	/** Enable prepared scopes only once the scene switch commits. */
+	public function activate(): void
+	{
+		$this->leases['world'] = $this->runtime->activate($this->sourceId, 'world');
+
+		foreach(array_keys($this->prepared) as $key)
+		$this->leases[$key] = $this->runtime->activate($this->sourceId, $key);
+		$this->active = true;
+	}
+
+	/** Register a game system under map ownership, preserving its explicit dependencies. */
+	private function system(string $name, callable $system, array $after = []): void
+	{
+		$this->mapScope->system(
+			substr($name, strlen($this->systemPrefix))
+			, $system
+			, array_map(fn($dependency) => $dependency === 'movement' ? '@movement' : $dependency, $after)
+		);
+	}
+
+	/** Release the map's game-specific managers and graphics, including a failed preparation. */
+	private function releaseMapFeatures(): void
+	{
 		$this->vehicles?->close();
 		$this->grapples?->close();
 		$this->blocks?->close();
@@ -617,10 +712,7 @@ final class DemoLevel
 		$this->textActors?->close();
 		$this->waterRenderer?->close();
 		$this->backdropTwist?->close();
-		$this->motionBlurRenderer?->close();
 		$this->sprites?->close();
 		$this->renderer?->close();
-		$this->stream?->close();
-		$this->assets->close();
 	}
 }

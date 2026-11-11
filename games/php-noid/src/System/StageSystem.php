@@ -71,7 +71,7 @@ final class StageSystem
 
 		$remaining = $green = false;
 
-		foreach($registry->query(Brick::class) as $id)
+		foreach($this->field->query(Brick::class) as $id)
 		{
 			$brick = $registry->get($id, Brick::class);
 
@@ -103,10 +103,10 @@ final class StageSystem
 	 */
 	private function recoverRedBall(Registry $registry): void
 	{
-		foreach($registry->query(Ball::class) as $id)
+		foreach($this->field->query(Ball::class) as $id)
 		if($registry->get($id, Ball::class)->effect === 'red') return;
 
-		foreach($registry->query(Enemy::class) as $id)
+		foreach($this->field->query(Enemy::class) as $id)
 		{
 			$enemy = $registry->get($id, Enemy::class);
 
@@ -116,7 +116,7 @@ final class StageSystem
 		$paddle = $registry->get($this->field->paddle, Paddle::class);
 		$ball = new Ball($paddle->x, $paddle->y - 14, 'enemy', 'red');
 		$ball->offset = -12;
-		$registry->create($ball);
+		$this->field->entity($ball);
 		$this->field->state->notice = 'Red rescue ball ready — fire to clear green bricks';
 		$this->field->state->banner = 4;
 	}

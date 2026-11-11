@@ -35,6 +35,11 @@
       "name": "sane.intro",
       "type": "bool",
       "value": true
+    },
+    {
+      "name": "phonics.classes",
+      "type": "file",
+      "value": "phonics.classes.json"
     }
   ]
 }

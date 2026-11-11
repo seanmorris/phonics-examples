@@ -193,7 +193,7 @@ export function activate(context)
 		, motionBlur: context.config['sane.motionBlur'] !== false
 		, saneWorld: JSON.stringify({
 			...context.world
-			, sourceUrl: context.session.url
+			, sourceUrl: context.world.sourceUrl
 			, start: context.start
 			, scene: controls.scene
 		})
