@@ -38,6 +38,8 @@ final class CrabMeats
 		, private Badniks $badniks
 		, string $objectClass = 'CrabMeat'
 	){
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		if($objectClass === '')
 		{
 			throw new \InvalidArgumentException('CrabMeat object class cannot be empty');
@@ -59,6 +61,9 @@ final class CrabMeats
 				$y = (float)($object['y'] ?? 0) + $map->y + $layer->offsetY;
 				$width = (float)($object['width'] ?? 0) ?: (float)($properties['width'] ?? 32);
 				$height = (float)($object['height'] ?? 0) ?: (float)($properties['height'] ?? 32);
+
+				if(isset($object['gid'])) $x += $width / 2;
+
 				$direction = (int)($properties['direction'] ?? 1);
 				$collisionLayer = (int)($properties['collisionLayer'] ?? 1);
 

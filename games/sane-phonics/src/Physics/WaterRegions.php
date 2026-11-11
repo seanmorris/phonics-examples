@@ -36,6 +36,8 @@ final class WaterRegions
 
 		foreach($maps as $map)
 		{
+			\SanePhonics\Tiled\Authoring::prepare($map);
+
 			foreach($map->layers as $layer)
 			{
 				foreach($layer->objects as $object)

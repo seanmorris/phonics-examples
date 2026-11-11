@@ -183,8 +183,17 @@ final class DemoLevel
 
 			$this->runtime->adapter('sane-world', new class($world) implements \Phonics\World\ContentAdapter {
 
+				/** Retain the already loaded world for this scene.
+				 * @param World $world Parsed world owned by the level.
+				 * @return void Stores the content reference.
+				 */
 				public function __construct(private World $world) {}
 
+				/** Adapt this scene's world to the content runtime.
+				 * @param \Phonics\World\SourceDefinition $definition Source registration.
+				 * @param \Phonics\World\AdapterContext $context Runtime services.
+				 * @return \Phonics\World\ContentSource Tiled content source for this scene.
+				 */
 				public function open(
 					\Phonics\World\SourceDefinition $definition
 					, \Phonics\World\AdapterContext $context
@@ -267,14 +276,22 @@ final class DemoLevel
 		return true;
 	}
 
-	/** Assemble the demo-specific map systems selected by the map's phonics.systems property. */
+	/** Assemble the systems selected by the map's phonics.systems property.
+	 * @param \Phonics\World\ScopeContext $scope Owner of this map's entities and systems.
+	 * @return void Prepares map features and their cleanup callbacks.
+	 */
 	public function composeMap(\Phonics\World\ScopeContext $scope): void
 	{
 		if($this->id === 'world') return;
 
 		$this->mapScope = $scope;
 		$this->systemPrefix = $scope->key() . '/';
-		$scope->onClose(fn() => $this->releaseMapFeatures());
+
+		$scope->onClose(/** Release this map's gameplay managers.
+		 * @return void Cleans up entities and graphics.
+		 */ fn() => $this->releaseMapFeatures()
+		);
+
 		$engine = $scope->service('sane.engine');
 		$view = clone $scope->service('sane.camera');
 		[$view->x, $view->y] = $this->origin();
@@ -411,7 +428,13 @@ final class DemoLevel
 			, after: [$this->systemPrefix . 'vehicle-seats']
 		);
 
-		if(in_array($this->id, ['badniks', 'egg-walker'], true))
+		$features = [];
+
+		foreach($map->layers as $layer)
+		foreach($layer->objects as $object)
+		$features[$object['class'] ?? $object['type'] ?? ''] = true;
+
+		if(isset($features['CrabMeat']))
 		{
 			$this->badniks = new Badniks($engine->entities, $this->terrain, $this->rings);
 			$this->crabs = new CrabMeats($engine->entities, $this->terrain, $map, $this->badniks);
@@ -424,35 +447,34 @@ final class DemoLevel
 			);
 		}
 
-		if($this->id === 'badniks')
-		{
+		$combatAfter = $this->badniks ? $this->systemPrefix . 'badniks' : 'movement';
 
+		if(isset($features['MiniBoss']) || isset($features['mini-boss']))
+		{
 			$this->miniBosses = new MiniBosses(
 				$engine->entities
 				, $this->terrain
 				, $map
 				, $this->rings
-				, advanceCombat: false
+				, advanceCombat: $this->badniks === null
 			);
+
+			$this->system($this->systemPrefix . 'mini-bosses', [$this->miniBosses, 'update'], after: [$combatAfter]);
+			$combatAfter = $this->systemPrefix . 'mini-bosses';
+		}
+
+		foreach(array_keys($features) as $feature)
+		{
+			if(!str_ends_with($feature, 'Monitor')) continue;
 
 			$this->shields = new Shields($engine->entities, $map);
 			$this->monitors = new Monitors($engine->entities, $this->terrain, $map, shields: $this->shields);
 			$this->system($this->systemPrefix . 'monitors', [$this->monitors, 'update'], after: ['movement']);
-
-			$this->system(
-				$this->systemPrefix . 'mini-bosses'
-				, [$this->miniBosses, 'update']
-				, after: [$this->systemPrefix . 'badniks']
-			);
-
-			$this->system(
-				$this->systemPrefix . 'shields'
-				, [$this->shields, 'update']
-				, after: [$this->systemPrefix . 'mini-bosses']
-			);
+			$this->system($this->systemPrefix . 'shields', [$this->shields, 'update'], after: [$combatAfter]);
+			break;
 		}
 
-		if($this->id === 'breakables')
+		if(isset($features['breakable']))
 		{
 			$this->blocks = configureBreakables($engine, $this->terrain, $map, $this->systemPrefix, $scope);
 		}
@@ -638,7 +660,12 @@ final class DemoLevel
 			$map->data['properties'][] = [
 				'name' => 'phonics.systems'
 				, 'type' => 'list'
-				, 'value' => [['type' => 'string', 'value' => \Phonics\Asset\Resource::source(__DIR__ . '/../phonics.json') . '#demo-map']]
+				, 'value' => [
+					[
+						'type' => 'string'
+						, 'value' => \Phonics\Asset\Resource::source(__DIR__ . '/../phonics.json') . '#demo-map'
+					]
+				]
 			];
 
 			$this->runtime->prepare($this->sourceId, $key);
@@ -673,7 +700,9 @@ final class DemoLevel
 		$this->assets->close();
 	}
 
-	/** Enable prepared scopes only once the scene switch commits. */
+	/** Enable prepared scopes only once the scene switch commits.
+	 * @return void Acquires the world and prepared map leases.
+	 */
 	public function activate(): void
 	{
 		$this->leases['world'] = $this->runtime->activate($this->sourceId, 'world');
@@ -683,17 +712,30 @@ final class DemoLevel
 		$this->active = true;
 	}
 
-	/** Register a game system under map ownership, preserving its explicit dependencies. */
+	/** Register a game system under map ownership, preserving its explicit dependencies.
+	 * @param string $name Qualified system name.
+	 * @param callable $system Scheduled callback.
+	 * @param array $after Names of prerequisite systems.
+	 * @return void Registers this system with its map scope.
+	 */
 	private function system(string $name, callable $system, array $after = []): void
 	{
 		$this->mapScope->system(
 			substr($name, strlen($this->systemPrefix))
 			, $system
-			, array_map(fn($dependency) => $dependency === 'movement' ? '@movement' : $dependency, $after)
+			, array_map(
+				/** Resolve the shared movement system dependency.
+			 * @param string $dependency Authored dependency name.
+			 * @return string Scoped or shared scheduler name.
+			 */ fn($dependency) => $dependency === 'movement' ? '@movement' : $dependency
+				, $after
+			)
 		);
 	}
 
-	/** Release the map's game-specific managers and graphics, including a failed preparation. */
+	/** Release map managers and graphics, including a failed preparation.
+	 * @return void Closes each owned gameplay and rendering service.
+	 */
 	private function releaseMapFeatures(): void
 	{
 		$this->vehicles?->close();

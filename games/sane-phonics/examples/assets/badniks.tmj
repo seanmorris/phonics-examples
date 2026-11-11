@@ -4094,61 +4094,43 @@
             "objects": [
                 {
                     "id": 2,
-                    "class": "CrabMeat",
                     "point": true,
                     "x": 480,
                     "y": 448,
                     "properties": [
                         {
-                            "name": "direction",
-                            "type": "int",
-                            "value": -1
-                        },
-                        {
-                            "name": "patrolBeat",
-                            "type": "float",
-                            "value": 90
-                        },
-                        {
-                            "name": "patrolPause",
-                            "type": "float",
-                            "value": 25
-                        },
-                        {
-                            "name": "patrolSpeed",
-                            "type": "float",
-                            "value": 0.25
-                        },
-                        {
-                            "name": "shotTelegraph",
-                            "type": "float",
-                            "value": 65
+                            "name": "CrabMeat",
+                            "type": "class",
+                            "propertytype": "SanePhonics.CrabMeat",
+                            "value": {
+                                "direction": -1,
+                                "patrolBeat": 90,
+                                "patrolPause": 25,
+                                "patrolSpeed": 0.25,
+                                "shotTelegraph": 65
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.CrabMeat"
                 },
                 {
                     "id": 3,
-                    "class": "MiniBoss",
                     "point": true,
                     "x": 1728,
                     "y": 352,
                     "properties": [
                         {
-                            "name": "hitPoints",
-                            "type": "int",
-                            "value": 8
-                        },
-                        {
-                            "name": "points",
-                            "type": "int",
-                            "value": 1000
-                        },
-                        {
-                            "name": "bombInterval",
-                            "type": "float",
-                            "value": 60
+                            "name": "MiniBoss",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MiniBoss",
+                            "value": {
+                                "hitPoints": 8,
+                                "points": 1000,
+                                "bombInterval": 60
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.MiniBoss"
                 }
             ],
             "visible": true,
@@ -4163,52 +4145,150 @@
             "objects": [
                 {
                     "id": 4,
-                    "class": "RingMonitor",
                     "point": true,
                     "x": 288,
-                    "y": 448
+                    "y": 448,
+                    "type": "SanePhonics.Entity.RingMonitor",
+                    "properties": [
+                        {
+                            "name": "Monitor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Monitor",
+                            "value": {}
+                        },
+                        {
+                            "name": "RingMonitorEffect",
+                            "type": "class",
+                            "propertytype": "SanePhonics.RingMonitorEffect",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 5,
-                    "class": "TripleRingMonitor",
                     "point": true,
                     "x": 800,
-                    "y": 288
+                    "y": 288,
+                    "type": "SanePhonics.Entity.TripleRingMonitor",
+                    "properties": [
+                        {
+                            "name": "Monitor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Monitor",
+                            "value": {}
+                        },
+                        {
+                            "name": "RingMonitorEffect",
+                            "type": "class",
+                            "propertytype": "SanePhonics.RingMonitorEffect",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 6,
-                    "class": "NormalShieldMonitor",
                     "point": true,
                     "x": 1056,
-                    "y": 288
+                    "y": 288,
+                    "type": "SanePhonics.Entity.NormalShieldMonitor",
+                    "properties": [
+                        {
+                            "name": "Monitor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Monitor",
+                            "value": {}
+                        },
+                        {
+                            "name": "ShieldMonitorEffect",
+                            "type": "class",
+                            "propertytype": "SanePhonics.ShieldMonitorEffect",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 7,
-                    "class": "ElectricShieldMonitor",
                     "point": true,
                     "x": 1312,
-                    "y": 448
+                    "y": 448,
+                    "type": "SanePhonics.Entity.ElectricShieldMonitor",
+                    "properties": [
+                        {
+                            "name": "Monitor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Monitor",
+                            "value": {}
+                        },
+                        {
+                            "name": "ShieldMonitorEffect",
+                            "type": "class",
+                            "propertytype": "SanePhonics.ShieldMonitorEffect",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 8,
-                    "class": "FireShieldMonitor",
                     "point": true,
                     "x": 1632,
-                    "y": 448
+                    "y": 448,
+                    "type": "SanePhonics.Entity.FireShieldMonitor",
+                    "properties": [
+                        {
+                            "name": "Monitor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Monitor",
+                            "value": {}
+                        },
+                        {
+                            "name": "ShieldMonitorEffect",
+                            "type": "class",
+                            "propertytype": "SanePhonics.ShieldMonitorEffect",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 9,
-                    "class": "WaterShieldMonitor",
                     "point": true,
                     "x": 1936,
-                    "y": 448
+                    "y": 448,
+                    "type": "SanePhonics.Entity.WaterShieldMonitor",
+                    "properties": [
+                        {
+                            "name": "Monitor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Monitor",
+                            "value": {}
+                        },
+                        {
+                            "name": "ShieldMonitorEffect",
+                            "type": "class",
+                            "propertytype": "SanePhonics.ShieldMonitorEffect",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 10,
-                    "class": "StarShieldMonitor",
                     "point": true,
                     "x": 2080,
-                    "y": 448
+                    "y": 448,
+                    "type": "SanePhonics.Entity.StarShieldMonitor",
+                    "properties": [
+                        {
+                            "name": "Monitor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Monitor",
+                            "value": {}
+                        },
+                        {
+                            "name": "ShieldMonitorEffect",
+                            "type": "class",
+                            "propertytype": "SanePhonics.ShieldMonitorEffect",
+                            "value": {}
+                        }
+                    ]
                 }
             ],
             "visible": true,
@@ -4224,23 +4304,22 @@
                 {
                     "id": 11,
                     "name": "boss-region",
-                    "class": "BossRegion",
                     "x": 960,
                     "y": 0,
                     "width": 1280,
                     "height": 448,
                     "properties": [
                         {
-                            "name": "boss",
-                            "type": "object",
-                            "value": 3
-                        },
-                        {
-                            "name": "cameraAnchorY",
-                            "type": "float",
-                            "value": 0.72
+                            "name": "BossRegion",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BossRegion",
+                            "value": {
+                                "boss": 3,
+                                "cameraAnchorY": 0.72
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.BossRegion"
                 }
             ],
             "visible": true,

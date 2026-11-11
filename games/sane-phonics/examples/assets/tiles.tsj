@@ -95,17 +95,15 @@
         },
         {
             "id": 4,
-            "class": "ring",
             "properties": [
                 {
-                    "name": "ring.radius",
-                    "type": "float",
-                    "value": 12
-                },
-                {
-                    "name": "ring.value",
-                    "type": "int",
-                    "value": 1
+                    "name": "Ring",
+                    "type": "class",
+                    "propertytype": "SanePhonics.Ring",
+                    "value": {
+                        "radius": 12,
+                        "value": 1
+                    }
                 }
             ],
             "animation": [
@@ -117,7 +115,8 @@
                     "tileid": 5,
                     "duration": 180
                 }
-            ]
+            ],
+            "type": "SanePhonics.Entity.ring"
         },
         {
             "id": 6,

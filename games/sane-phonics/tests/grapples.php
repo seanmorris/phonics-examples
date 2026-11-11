@@ -252,6 +252,7 @@ test('rope segments follow geometry and retain authored visibility and tint', fu
 
 test('grapple demo resolves static, squine, and path anchors with map offsets and Tiled flips', function() {
 	$map = (new Loader)->map(__DIR__ . '/../examples/assets/grapples.tmj');
+	\SanePhonics\Tiled\Authoring::prepare($map);
 	$map->x = 500;
 	$map->y = -200;
 	$layer = $map->layer('Ropes and suspensions');

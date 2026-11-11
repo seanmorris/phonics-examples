@@ -42,6 +42,8 @@ final class GravityFeatures
 		, private Terrain $terrain
 		, TileMap $map
 	){
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		try
 		{
 			foreach($map->layers as $layer)

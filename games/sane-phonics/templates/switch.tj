@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/tiles.tsj"
+  },
+  "object": {
+    "name": "Switch",
+    "gid": 4,
+    "x": 0,
+    "y": 0,
+    "width": 32,
+    "height": 8,
+    "type": "SanePhonics.Entity.Switch",
+    "properties": [
+      {
+        "name": "WaterSwitch",
+        "type": "class",
+        "propertytype": "SanePhonics.WaterSwitch",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

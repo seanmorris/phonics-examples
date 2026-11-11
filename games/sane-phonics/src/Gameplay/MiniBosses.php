@@ -52,6 +52,8 @@ final class MiniBosses
 		, string $objectClass = 'MiniBoss'
 		, private bool $advanceCombat = true
 	){
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		$this->owned = new OwnedEntities($registry);
 
 		if($objectClass === '')

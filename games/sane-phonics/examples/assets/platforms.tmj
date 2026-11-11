@@ -1637,7 +1637,6 @@
                 {
                     "id": 100,
                     "name": "Floating support: settles under a rider",
-                    "class": "FloatingPlatform",
                     "x": 32,
                     "y": 368,
                     "width": 96,
@@ -1647,16 +1646,19 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "settle",
-                            "type": "float",
-                            "value": 8
+                            "name": "MovingPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MovingPlatform",
+                            "value": {
+                                "settle": 8
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.FloatingPlatform"
                 },
                 {
                     "id": 101,
                     "name": "Squine horizontal shuttle",
-                    "class": "MovingPlatform",
                     "x": 480,
                     "y": 320,
                     "width": 96,
@@ -1666,16 +1668,25 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "oscillateX",
-                            "type": "float",
-                            "value": 160
+                            "name": "MovingPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MovingPlatform",
+                            "value": {}
+                        },
+                        {
+                            "name": "PlatformOscillation",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PlatformOscillation",
+                            "value": {
+                                "oscillateX": 160
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.MovingPlatform"
                 },
                 {
                     "id": 102,
                     "name": "Squine elevator",
-                    "class": "MovingPlatform",
                     "x": 640,
                     "y": 416,
                     "width": 96,
@@ -1685,16 +1696,25 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "oscillateY",
-                            "type": "float",
-                            "value": 128
+                            "name": "MovingPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MovingPlatform",
+                            "value": {}
+                        },
+                        {
+                            "name": "PlatformOscillation",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PlatformOscillation",
+                            "value": {
+                                "oscillateY": 128
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.MovingPlatform"
                 },
                 {
                     "id": 103,
                     "name": "Elliptical float",
-                    "class": "MovingPlatform",
                     "x": 920,
                     "y": 304,
                     "width": 96,
@@ -1704,31 +1724,28 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "oscillateX",
-                            "type": "float",
-                            "value": 64
+                            "name": "MovingPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MovingPlatform",
+                            "value": {}
                         },
                         {
-                            "name": "oscillateY",
-                            "type": "float",
-                            "value": 48
-                        },
-                        {
-                            "name": "timeX",
-                            "type": "float",
-                            "value": 120
-                        },
-                        {
-                            "name": "timeY",
-                            "type": "float",
-                            "value": 120
+                            "name": "PlatformOscillation",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PlatformOscillation",
+                            "value": {
+                                "oscillateX": 64,
+                                "oscillateY": 48,
+                                "timeX": 120,
+                                "timeY": 120
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.MovingPlatform"
                 },
                 {
                     "id": 104,
                     "name": "Linked path: four corners",
-                    "class": "PathPlatform",
                     "x": 1200,
                     "y": 352,
                     "width": 96,
@@ -1738,21 +1755,26 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "path",
-                            "type": "object",
-                            "value": 200
+                            "name": "MovingPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MovingPlatform",
+                            "value": {}
                         },
                         {
-                            "name": "pathSpeed",
-                            "type": "float",
-                            "value": 2
+                            "name": "PlatformPath",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PlatformPath",
+                            "value": {
+                                "path": 200,
+                                "pathSpeed": 2
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathPlatform"
                 },
                 {
                     "id": 105,
                     "name": "Ride to activate",
-                    "class": "PathPlatform",
                     "x": 1712,
                     "y": 400,
                     "width": 96,
@@ -1762,149 +1784,176 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "ridePath",
-                            "type": "object",
-                            "value": 204
+                            "name": "MovingPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MovingPlatform",
+                            "value": {
+                                "settle": 4
+                            }
                         },
                         {
-                            "name": "pathSpeed",
-                            "type": "float",
-                            "value": 2
-                        },
-                        {
-                            "name": "settle",
-                            "type": "float",
-                            "value": 4
+                            "name": "PlatformPath",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PlatformPath",
+                            "value": {
+                                "ridePath": 204,
+                                "pathSpeed": 2
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathPlatform"
                 },
                 {
                     "id": 200,
                     "name": "Route node 200",
-                    "class": "PathNode",
                     "x": 1248,
                     "y": 352,
                     "point": true,
                     "visible": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 201
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 201
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 201,
                     "name": "Route node 201",
-                    "class": "PathNode",
                     "x": 1504,
                     "y": 352,
                     "point": true,
                     "visible": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 202
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 202
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 202,
                     "name": "Route node 202",
-                    "class": "PathNode",
                     "x": 1504,
                     "y": 224,
                     "point": true,
                     "visible": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 203
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 203
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 203,
                     "name": "Route node 203",
-                    "class": "PathNode",
                     "x": 1248,
                     "y": 224,
                     "point": true,
                     "visible": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 200
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 200
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 204,
                     "name": "Route node 204",
-                    "class": "PathNode",
                     "x": 1760,
                     "y": 400,
                     "point": true,
                     "visible": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 205
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 205
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 205,
                     "name": "Route node 205",
-                    "class": "PathNode",
                     "x": 1760,
                     "y": 240,
                     "point": true,
                     "visible": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 206
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 206
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 206,
                     "name": "Route node 206",
-                    "class": "PathNode",
                     "x": 1952,
                     "y": 240,
                     "point": true,
                     "visible": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 207
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 207
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 207,
                     "name": "Route node 207",
-                    "class": "PathNode",
                     "x": 1952,
                     "y": 400,
                     "point": true,
                     "visible": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 204
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 204
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 }
             ],
             "visible": true,

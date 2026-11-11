@@ -4100,50 +4100,59 @@
                 {
                     "id": 1,
                     "name": "Left entrance",
-                    "class": "layer-switch",
                     "x": 704,
                     "y": 176,
                     "width": 32,
                     "height": 288,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": false
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 },
                 {
                     "id": 2,
                     "name": "Crown",
-                    "class": "layer-switch",
                     "x": 880,
                     "y": 168,
                     "width": 32,
                     "height": 64,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": true
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 },
                 {
                     "id": 3,
                     "name": "Right entrance",
-                    "class": "layer-switch",
                     "x": 1056,
                     "y": 176,
                     "width": 32,
                     "height": 288,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": false
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 }
             ],
             "visible": true,

@@ -22,7 +22,10 @@ foreach($vehicleMap['layers'] as &$layer)
 		{
 			$object['name'] = 'Boarding ground';
 			$object['class'] = '';
-			$object['properties'][] = ['name' => 'solid', 'type' => 'bool', 'value' => true];
+			$object['properties'] = [
+				['name' => 'oneWay', 'type' => 'bool', 'value' => false]
+				, ['name' => 'solid', 'type' => 'bool', 'value' => true]
+			];
 		}
 
 		$layer['objects'][$key] = $object;

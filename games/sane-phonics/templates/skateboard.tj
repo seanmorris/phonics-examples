@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/vehicles.tsj"
+  },
+  "object": {
+    "name": "Skateboard",
+    "x": 0,
+    "y": 0,
+    "width": 64,
+    "height": 12,
+    "gid": 1,
+    "type": "SanePhonics.Entity.Skateboard",
+    "properties": [
+      {
+        "name": "Skateboard",
+        "type": "class",
+        "propertytype": "SanePhonics.Skateboard",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

@@ -61687,7 +61687,6 @@
                 },
                 {
                     "id": 2,
-                    "class": "Tornado",
                     "name": "Tornado flight trainer",
                     "x": 128,
                     "y": 2688,
@@ -61696,21 +61695,17 @@
                     "gid": 38,
                     "properties": [
                         {
-                            "name": "lockedIn",
-                            "type": "bool",
-                            "value": true
-                        },
-                        {
-                            "name": "seatHeight",
-                            "type": "float",
-                            "value": 14
-                        },
-                        {
-                            "name": "seatForward",
-                            "type": "float",
-                            "value": 0
+                            "name": "Tornado",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Tornado",
+                            "value": {
+                                "seatHeight": 14,
+                                "seatForward": 0,
+                                "lockedIn": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Tornado"
                 }
             ],
             "opacity": 1,

@@ -3433,7 +3433,6 @@
                 {
                     "id": 1,
                     "name": "Entry rail",
-                    "class": "Grinding",
                     "x": 0,
                     "y": 0,
                     "polygon": [
@@ -3456,11 +3455,15 @@
                     ],
                     "properties": [
                         {
-                            "name": "oneWay",
-                            "type": "bool",
-                            "value": false
+                            "name": "Terrain",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Terrain",
+                            "value": {
+                                "oneWay": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Grinding"
                 },
                 {
                     "id": 2,
@@ -3501,7 +3504,6 @@
                 {
                     "id": 3,
                     "name": "Four quarter bends",
-                    "class": "Grinding",
                     "x": 0,
                     "y": 0,
                     "polygon": [
@@ -3788,11 +3790,15 @@
                     ],
                     "properties": [
                         {
-                            "name": "oneWay",
-                            "type": "bool",
-                            "value": false
+                            "name": "Terrain",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Terrain",
+                            "value": {
+                                "oneWay": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Grinding"
                 }
             ],
             "visible": true,
@@ -8683,50 +8689,59 @@
                 {
                     "id": 1,
                     "name": "Left entrance",
-                    "class": "layer-switch",
                     "x": 1472,
                     "y": 176,
                     "width": 32,
                     "height": 288,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": false
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 },
                 {
                     "id": 2,
                     "name": "Crown",
-                    "class": "layer-switch",
                     "x": 1648,
                     "y": 168,
                     "width": 32,
                     "height": 64,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": true
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 },
                 {
                     "id": 3,
                     "name": "Right entrance",
-                    "class": "layer-switch",
                     "x": 1824,
                     "y": 176,
                     "width": 32,
                     "height": 288,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": false
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 }
             ],
             "visible": true,

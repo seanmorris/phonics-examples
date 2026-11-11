@@ -3510,7 +3510,6 @@
                 {
                     "id": 3,
                     "name": "Four quarter bends",
-                    "class": "Grinding",
                     "x": 0,
                     "y": 0,
                     "polygon": [
@@ -3797,11 +3796,15 @@
                     ],
                     "properties": [
                         {
-                            "name": "oneWay",
-                            "type": "bool",
-                            "value": false
+                            "name": "Terrain",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Terrain",
+                            "value": {
+                                "oneWay": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Grinding"
                 }
             ],
             "visible": true,
@@ -8692,50 +8695,59 @@
                 {
                     "id": 4,
                     "name": "Left entrance",
-                    "class": "layer-switch",
                     "x": 1472,
                     "y": 176,
                     "width": 32,
                     "height": 288,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": false
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 },
                 {
                     "id": 5,
                     "name": "Crown",
-                    "class": "layer-switch",
                     "x": 1648,
                     "y": 168,
                     "width": 32,
                     "height": 64,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": true
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 },
                 {
                     "id": 6,
                     "name": "Right entrance",
-                    "class": "layer-switch",
                     "x": 1824,
                     "y": 176,
                     "width": 32,
                     "height": 288,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": false
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 }
             ],
             "visible": true,
@@ -8765,33 +8777,57 @@
                 },
                 {
                     "id": 8,
-                    "class": "Skateboard",
                     "name": "Jump onto the board to ride",
                     "x": 48,
                     "y": 448,
                     "width": 64,
                     "height": 12,
-                    "gid": 102
+                    "gid": 102,
+                    "type": "SanePhonics.Entity.Skateboard",
+                    "properties": [
+                        {
+                            "name": "Skateboard",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Skateboard",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 9,
-                    "class": "Skateboard",
                     "name": "Jump onto the board to ride",
                     "x": 248,
                     "y": 448,
                     "width": 64,
                     "height": 12,
-                    "gid": 102
+                    "gid": 102,
+                    "type": "SanePhonics.Entity.Skateboard",
+                    "properties": [
+                        {
+                            "name": "Skateboard",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Skateboard",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 10,
-                    "class": "Skateboard",
                     "name": "Jump onto the board to ride",
                     "x": 2068,
                     "y": 448,
                     "width": 64,
                     "height": 12,
-                    "gid": 102
+                    "gid": 102,
+                    "type": "SanePhonics.Entity.Skateboard",
+                    "properties": [
+                        {
+                            "name": "Skateboard",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Skateboard",
+                            "value": {}
+                        }
+                    ]
                 }
             ],
             "opacity": 1,

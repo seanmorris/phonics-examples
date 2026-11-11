@@ -1,0 +1,31 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/platforms.tsj"
+  },
+  "object": {
+    "name": "PathPlatform",
+    "x": 0,
+    "y": 0,
+    "width": 96,
+    "height": 16,
+    "gid": 3,
+    "type": "SanePhonics.Entity.PathPlatform",
+    "properties": [
+      {
+        "name": "MovingPlatform",
+        "type": "class",
+        "propertytype": "SanePhonics.MovingPlatform",
+        "value": {}
+      },
+      {
+        "name": "PlatformPath",
+        "type": "class",
+        "propertytype": "SanePhonics.PlatformPath",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

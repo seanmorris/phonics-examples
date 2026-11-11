@@ -1,0 +1,20 @@
+{
+  "type": "template",
+  "object": {
+    "name": "layer-switch",
+    "x": 0,
+    "y": 0,
+    "width": 32,
+    "height": 288,
+    "type": "SanePhonics.Entity.layer-switch",
+    "properties": [
+      {
+        "name": "LayerSwitch",
+        "type": "class",
+        "propertytype": "SanePhonics.LayerSwitch",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

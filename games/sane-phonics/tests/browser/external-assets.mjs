@@ -9,6 +9,10 @@ const externalize = `
 $archive = new Phar($argv[1]);
 $descriptor = json_decode($archive['application.json']->getContent(), true, flags: JSON_THROW_ON_ERROR);
 $archive->startBuffering();
+$manifest = json_decode($archive['application/phonics.json']->getContent(), true, flags: JSON_THROW_ON_ERROR);
+foreach(json_decode(file_get_contents($argv[2]), true, flags: JSON_THROW_ON_ERROR) as $path => $body)
+$manifest['integrity'][$path] = 'sha256-' . base64_encode(hash('sha256', $body, true));
+$archive['application/phonics.json'] = json_encode($manifest, JSON_THROW_ON_ERROR);
 foreach($descriptor['members'] as $index => $member) {
     if(!str_starts_with($member, 'application/examples/assets/')) continue;
     unset($archive[$member], $descriptor['members'][$index]);
@@ -21,7 +25,7 @@ $archive->stopBuffering();
 
 
 /** Exercise HTTP streaming and failure recovery with the same executable and external game assets. */
-export async function externalAssets(page)
+export async function externalAssets(page, overrides = {})
 {
 	await page.route('**/engine/packages/sane-phonics/dist/game.phar', async route => {
 		const response = await route.fetch();
@@ -32,7 +36,13 @@ export async function externalAssets(page)
 		{
 			await fs.writeFile(archive, await response.body());
 
-			await execute('php', ['-d', 'phar.readonly=0', '-r', externalize, archive]);
+			await fs.writeFile(path.join(directory, 'overrides.json'), JSON.stringify(overrides));
+
+			await execute(
+				'php'
+				, ['-d', 'phar.readonly=0', '-r', externalize, archive, path.join(directory, 'overrides.json')]
+			);
+
 			await route.fulfill({response, body: await fs.readFile(archive)});
 		}
 		finally

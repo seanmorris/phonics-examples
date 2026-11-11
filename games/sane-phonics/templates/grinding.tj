@@ -1,0 +1,49 @@
+{
+  "type": "template",
+  "object": {
+    "name": "Grinding",
+    "x": 0,
+    "y": 0,
+    "polygon": [
+      {
+        "x": 0,
+        "y": 448
+      },
+      {
+        "x": 192,
+        "y": 448
+      },
+      {
+        "x": 192,
+        "y": 640
+      },
+      {
+        "x": 0,
+        "y": 640
+      }
+    ],
+    "type": "SanePhonics.Entity.Grinding",
+    "properties": [
+      {
+        "name": "Terrain",
+        "type": "class",
+        "propertytype": "SanePhonics.Terrain",
+        "value": {
+          "solid": false,
+          "oneWay": true
+        }
+      }
+    ],
+    "visible": true,
+    "polyline": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 192,
+        "y": 0
+      }
+    ]
+  }
+}

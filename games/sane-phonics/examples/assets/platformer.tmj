@@ -4076,54 +4076,44 @@
                 {
                     "id": 2,
                     "name": "Movement hint",
-                    "class": "TextActor",
                     "x": 24,
                     "y": 24,
                     "width": 360,
                     "height": 32,
                     "properties": [
                         {
-                            "name": "content",
-                            "type": "string",
-                            "value": "ARROWS / WASD TO MOVE"
-                        },
-                        {
-                            "name": "color",
-                            "type": "color",
-                            "value": "#FFE066"
-                        },
-                        {
-                            "name": "scale",
-                            "type": "float",
-                            "value": 1.25
+                            "name": "TextActor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.TextActor",
+                            "value": {
+                                "content": "ARROWS / WASD TO MOVE",
+                                "color": "#ffffe066",
+                                "scale": 1.25
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.TextActor"
                 },
                 {
                     "id": 3,
                     "name": "Jump hint",
-                    "class": "text-actor",
                     "x": 24,
                     "y": 48,
                     "width": 360,
                     "height": 32,
                     "properties": [
                         {
-                            "name": "content",
-                            "type": "string",
-                            "value": "SPACE / ⓿ TO JUMP"
-                        },
-                        {
-                            "name": "color",
-                            "type": "color",
-                            "value": "#BDE7FF"
-                        },
-                        {
-                            "name": "scale",
-                            "type": "float",
-                            "value": 1.25
+                            "name": "TextActor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.TextActor",
+                            "value": {
+                                "content": "SPACE / \u24ff TO JUMP",
+                                "color": "#ffbde7ff",
+                                "scale": 1.25
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.TextActor"
                 }
             ],
             "visible": true,

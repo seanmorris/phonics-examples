@@ -1637,7 +1637,6 @@
                 {
                     "id": 100,
                     "name": "Long bridge: several loads add",
-                    "class": "BendableBridge",
                     "x": 256,
                     "y": 464,
                     "width": 384,
@@ -1647,26 +1646,21 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "droop",
-                            "type": "int",
-                            "value": 48
-                        },
-                        {
-                            "name": "segmentWidth",
-                            "type": "int",
-                            "value": 16
-                        },
-                        {
-                            "name": "maxLoads",
-                            "type": "int",
-                            "value": 4
+                            "name": "BendableBridge",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BendableBridge",
+                            "value": {
+                                "droop": 48,
+                                "segmentWidth": 16,
+                                "maxLoads": 4
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.BendableBridge"
                 },
                 {
                     "id": 101,
                     "name": "Short stiff bridge",
-                    "class": "BendableBridge",
                     "x": 768,
                     "y": 464,
                     "width": 320,
@@ -1676,26 +1670,21 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "droop",
-                            "type": "int",
-                            "value": 24
-                        },
-                        {
-                            "name": "segmentWidth",
-                            "type": "int",
-                            "value": 16
-                        },
-                        {
-                            "name": "maxLoads",
-                            "type": "int",
-                            "value": 4
+                            "name": "BendableBridge",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BendableBridge",
+                            "value": {
+                                "droop": 24,
+                                "segmentWidth": 16,
+                                "maxLoads": 4
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.BendableBridge"
                 },
                 {
                     "id": 102,
                     "name": "Bendable grinding rail",
-                    "class": "BendableRail",
                     "x": 1216,
                     "y": 464,
                     "width": 384,
@@ -1705,21 +1694,17 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "droop",
-                            "type": "int",
-                            "value": 36
-                        },
-                        {
-                            "name": "segmentWidth",
-                            "type": "int",
-                            "value": 16
-                        },
-                        {
-                            "name": "maxLoads",
-                            "type": "int",
-                            "value": 4
+                            "name": "BendableBridge",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BendableBridge",
+                            "value": {
+                                "droop": 36,
+                                "segmentWidth": 16,
+                                "maxLoads": 4
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.BendableRail"
                 }
             ],
             "visible": true,

@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/tiles.tsj"
+  },
+  "object": {
+    "x": 0,
+    "y": 0,
+    "type": "SanePhonics.Entity.CrabMeat",
+    "properties": [
+      {
+        "name": "CrabMeat",
+        "type": "class",
+        "propertytype": "SanePhonics.CrabMeat",
+        "value": {}
+      }
+    ],
+    "name": "CrabMeat",
+    "visible": true,
+    "gid": 20,
+    "width": 32,
+    "height": 32
+  }
+}

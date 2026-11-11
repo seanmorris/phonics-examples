@@ -7927,7 +7927,6 @@
                 },
                 {
                     "id": 2,
-                    "class": "EggWalker",
                     "name": "EggWalker trainer",
                     "x": 96,
                     "y": 640,
@@ -7936,52 +7935,50 @@
                     "gid": 38,
                     "properties": [
                         {
-                            "name": "seatHeight",
-                            "type": "float",
-                            "value": 48
-                        },
-                        {
-                            "name": "seatForward",
-                            "type": "float",
-                            "value": 0
+                            "name": "EggWalker",
+                            "type": "class",
+                            "propertytype": "SanePhonics.EggWalker",
+                            "value": {
+                                "seatHeight": 48,
+                                "seatForward": 0
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.EggWalker"
                 },
                 {
                     "id": 3,
-                    "class": "CrabMeat",
                     "x": 3360,
                     "y": 576,
                     "properties": [
                         {
-                            "name": "direction",
-                            "type": "int",
-                            "value": -1
-                        },
-                        {
-                            "name": "patrolBeat",
-                            "type": "float",
-                            "value": 90
-                        },
-                        {
-                            "name": "patrolPause",
-                            "type": "float",
-                            "value": 25
+                            "name": "CrabMeat",
+                            "type": "class",
+                            "propertytype": "SanePhonics.CrabMeat",
+                            "value": {
+                                "direction": -1,
+                                "patrolBeat": 90,
+                                "patrolPause": 25
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.CrabMeat"
                 },
                 {
                     "id": 4,
-                    "class": "CrabMeat",
                     "x": 4000,
                     "y": 512,
                     "properties": [
                         {
-                            "name": "direction",
-                            "type": "int",
-                            "value": -1
+                            "name": "CrabMeat",
+                            "type": "class",
+                            "propertytype": "SanePhonics.CrabMeat",
+                            "value": {
+                                "direction": -1
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.CrabMeat"
                 }
             ],
             "opacity": 1,

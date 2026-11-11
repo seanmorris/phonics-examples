@@ -14,6 +14,7 @@ require_once dirname(__DIR__, 3) . '/examples/DemoPlayerHud.php';
 
 test('annotated Tiled ring cells become owned animated sprite entities', function() {
 	$map = (new Loader)->map(dirname(__DIR__, 3) . '/examples/assets/platformer.tmj');
+	\SanePhonics\Tiled\Authoring::prepare($map);
 	$layer = $map->layer('Markers');
 	$expected = 0;
 

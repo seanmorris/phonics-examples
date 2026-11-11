@@ -1,0 +1,26 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/platforms.tsj"
+  },
+  "object": {
+    "name": "FloatingPlatform",
+    "x": 0,
+    "y": 0,
+    "width": 96,
+    "height": 16,
+    "gid": 1,
+    "rotation": 0,
+    "visible": true,
+    "type": "SanePhonics.Entity.FloatingPlatform",
+    "properties": [
+      {
+        "name": "MovingPlatform",
+        "type": "class",
+        "propertytype": "SanePhonics.MovingPlatform",
+        "value": {}
+      }
+    ]
+  }
+}

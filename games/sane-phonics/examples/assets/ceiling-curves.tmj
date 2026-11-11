@@ -214,7 +214,6 @@
             "objects": [
                 {
                     "id": 500,
-                    "class": "CurvedCeiling",
                     "x": 0,
                     "y": 0,
                     "polyline": [
@@ -329,15 +328,18 @@
                     ],
                     "properties": [
                         {
-                            "name": "solid",
-                            "type": "bool",
-                            "value": true
+                            "name": "Terrain",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Terrain",
+                            "value": {
+                                "solid": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.CurvedCeiling"
                 },
                 {
                     "id": 501,
-                    "class": "CurvedCeiling",
                     "x": 0,
                     "y": 0,
                     "polyline": [
@@ -452,15 +454,18 @@
                     ],
                     "properties": [
                         {
-                            "name": "solid",
-                            "type": "bool",
-                            "value": true
+                            "name": "Terrain",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Terrain",
+                            "value": {
+                                "solid": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.CurvedCeiling"
                 },
                 {
                     "id": 502,
-                    "class": "CurvedCeiling",
                     "x": 0,
                     "y": 0,
                     "polyline": [
@@ -575,15 +580,18 @@
                     ],
                     "properties": [
                         {
-                            "name": "solid",
-                            "type": "bool",
-                            "value": true
+                            "name": "Terrain",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Terrain",
+                            "value": {
+                                "solid": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.CurvedCeiling"
                 },
                 {
                     "id": 503,
-                    "class": "CurvedCeiling",
                     "x": 0,
                     "y": 0,
                     "polyline": [
@@ -698,11 +706,15 @@
                     ],
                     "properties": [
                         {
-                            "name": "solid",
-                            "type": "bool",
-                            "value": true
+                            "name": "Terrain",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Terrain",
+                            "value": {
+                                "solid": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.CurvedCeiling"
                 }
             ],
             "visible": true,
@@ -717,283 +729,179 @@
             "objects": [
                 {
                     "id": 601,
-                    "class": "Spring",
                     "point": true,
                     "x": 1877.999,
                     "y": 2600,
                     "rotation": 0,
                     "properties": [
                         {
-                            "name": "normalX",
-                            "type": "float",
-                            "value": 0
-                        },
-                        {
-                            "name": "normalY",
-                            "type": "float",
-                            "value": -1
-                        },
-                        {
-                            "name": "power",
-                            "type": "float",
-                            "value": 1100
-                        },
-                        {
-                            "name": "length",
-                            "type": "float",
-                            "value": 48
-                        },
-                        {
-                            "name": "spriteGid",
-                            "type": "int",
-                            "value": 1
+                            "name": "Spring",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Spring",
+                            "value": {
+                                "length": 48,
+                                "normalX": 0,
+                                "normalY": -1,
+                                "spriteGid": 1,
+                                "power": 1100
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Spring"
                 },
                 {
                     "id": 611,
-                    "class": "GravitySwitch",
                     "point": true,
                     "x": 1650,
                     "y": 2304,
                     "rotation": 0,
                     "properties": [
                         {
-                            "name": "normalX",
-                            "type": "float",
-                            "value": 0
-                        },
-                        {
-                            "name": "normalY",
-                            "type": "float",
-                            "value": 1
-                        },
-                        {
-                            "name": "gravity",
-                            "type": "string",
-                            "value": "left"
-                        },
-                        {
-                            "name": "length",
-                            "type": "float",
-                            "value": 64
-                        },
-                        {
-                            "name": "spriteGid",
-                            "type": "int",
-                            "value": 1
+                            "name": "GravitySwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.GravitySwitch",
+                            "value": {
+                                "length": 64,
+                                "normalX": 0,
+                                "normalY": 1,
+                                "spriteGid": 1,
+                                "gravity": "left"
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.GravitySwitch"
                 },
                 {
                     "id": 602,
-                    "class": "Spring",
                     "point": true,
                     "x": 432,
                     "y": 2321.999,
                     "rotation": 0,
                     "properties": [
                         {
-                            "name": "normalX",
-                            "type": "float",
-                            "value": 1
-                        },
-                        {
-                            "name": "normalY",
-                            "type": "float",
-                            "value": 0
-                        },
-                        {
-                            "name": "power",
-                            "type": "float",
-                            "value": 1100
-                        },
-                        {
-                            "name": "length",
-                            "type": "float",
-                            "value": 48
-                        },
-                        {
-                            "name": "spriteGid",
-                            "type": "int",
-                            "value": 1
+                            "name": "Spring",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Spring",
+                            "value": {
+                                "length": 48,
+                                "normalX": 1,
+                                "normalY": 0,
+                                "spriteGid": 1,
+                                "power": 1100
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Spring"
                 },
                 {
                     "id": 612,
-                    "class": "GravitySwitch",
                     "point": true,
                     "x": 728,
                     "y": 2094,
                     "rotation": 0,
                     "properties": [
                         {
-                            "name": "normalX",
-                            "type": "float",
-                            "value": -1
-                        },
-                        {
-                            "name": "normalY",
-                            "type": "float",
-                            "value": 0
-                        },
-                        {
-                            "name": "gravity",
-                            "type": "string",
-                            "value": "up"
-                        },
-                        {
-                            "name": "length",
-                            "type": "float",
-                            "value": 64
-                        },
-                        {
-                            "name": "spriteGid",
-                            "type": "int",
-                            "value": 1
+                            "name": "GravitySwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.GravitySwitch",
+                            "value": {
+                                "length": 64,
+                                "normalX": -1,
+                                "normalY": 0,
+                                "spriteGid": 1,
+                                "gravity": "up"
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.GravitySwitch"
                 },
                 {
                     "id": 603,
-                    "class": "Spring",
                     "point": true,
                     "x": 710.001,
                     "y": 876,
                     "rotation": 0,
                     "properties": [
                         {
-                            "name": "normalX",
-                            "type": "float",
-                            "value": 0
-                        },
-                        {
-                            "name": "normalY",
-                            "type": "float",
-                            "value": 1
-                        },
-                        {
-                            "name": "power",
-                            "type": "float",
-                            "value": 1100
-                        },
-                        {
-                            "name": "length",
-                            "type": "float",
-                            "value": 48
-                        },
-                        {
-                            "name": "spriteGid",
-                            "type": "int",
-                            "value": 1
+                            "name": "Spring",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Spring",
+                            "value": {
+                                "length": 48,
+                                "normalX": 0,
+                                "normalY": 1,
+                                "spriteGid": 1,
+                                "power": 1100
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Spring"
                 },
                 {
                     "id": 613,
-                    "class": "GravitySwitch",
                     "point": true,
                     "x": 938,
                     "y": 1172,
                     "rotation": 0,
                     "properties": [
                         {
-                            "name": "normalX",
-                            "type": "float",
-                            "value": 0
-                        },
-                        {
-                            "name": "normalY",
-                            "type": "float",
-                            "value": -1
-                        },
-                        {
-                            "name": "gravity",
-                            "type": "string",
-                            "value": "right"
-                        },
-                        {
-                            "name": "length",
-                            "type": "float",
-                            "value": 64
-                        },
-                        {
-                            "name": "spriteGid",
-                            "type": "int",
-                            "value": 1
+                            "name": "GravitySwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.GravitySwitch",
+                            "value": {
+                                "length": 64,
+                                "normalX": 0,
+                                "normalY": -1,
+                                "spriteGid": 1,
+                                "gravity": "right"
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.GravitySwitch"
                 },
                 {
                     "id": 604,
-                    "class": "Spring",
                     "point": true,
                     "x": 2156,
                     "y": 1154.001,
                     "rotation": 0,
                     "properties": [
                         {
-                            "name": "normalX",
-                            "type": "float",
-                            "value": -1
-                        },
-                        {
-                            "name": "normalY",
-                            "type": "float",
-                            "value": 0
-                        },
-                        {
-                            "name": "power",
-                            "type": "float",
-                            "value": 1100
-                        },
-                        {
-                            "name": "length",
-                            "type": "float",
-                            "value": 48
-                        },
-                        {
-                            "name": "spriteGid",
-                            "type": "int",
-                            "value": 1
+                            "name": "Spring",
+                            "type": "class",
+                            "propertytype": "SanePhonics.Spring",
+                            "value": {
+                                "length": 48,
+                                "normalX": -1,
+                                "normalY": 0,
+                                "spriteGid": 1,
+                                "power": 1100
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Spring"
                 },
                 {
                     "id": 614,
-                    "class": "GravitySwitch",
                     "point": true,
                     "x": 1860,
                     "y": 1382,
                     "rotation": 0,
                     "properties": [
                         {
-                            "name": "normalX",
-                            "type": "float",
-                            "value": 1
-                        },
-                        {
-                            "name": "normalY",
-                            "type": "float",
-                            "value": 0
-                        },
-                        {
-                            "name": "gravity",
-                            "type": "string",
-                            "value": "down"
-                        },
-                        {
-                            "name": "length",
-                            "type": "float",
-                            "value": 64
-                        },
-                        {
-                            "name": "spriteGid",
-                            "type": "int",
-                            "value": 1
+                            "name": "GravitySwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.GravitySwitch",
+                            "value": {
+                                "length": 64,
+                                "normalX": 1,
+                                "normalY": 0,
+                                "spriteGid": 1,
+                                "gravity": "down"
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.GravitySwitch"
                 }
             ],
             "visible": true,

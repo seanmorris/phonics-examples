@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/tornado.tsj"
+  },
+  "object": {
+    "name": "Tornado",
+    "x": 0,
+    "y": 0,
+    "width": 96,
+    "height": 48,
+    "gid": 1,
+    "type": "SanePhonics.Entity.Tornado",
+    "properties": [
+      {
+        "name": "Tornado",
+        "type": "class",
+        "propertytype": "SanePhonics.Tornado",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}
