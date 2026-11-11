@@ -172,19 +172,26 @@ block the next deal and schedules no further changes after it ends.
 
 ## Screens and dialogs
 
-- Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Play Online, How to Play,
-  Settings. Online opens the Matrix table lobby. Enter plays offline, C continues, H opens help, M opens settings,
+- Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Play Online, How to Play, and
+  Settings and PHP Info sharing the last row. Online opens the Matrix table lobby. Enter plays offline, C
+  continues, H opens help, M opens settings, I opens PHP Info,
   Escape returns. On a controller, the D-pad or left stick moves, A selects, B returns, and Start resumes a saved table.
 - Table setup (local to the presenter): opponents 1–7, Game, Wild cards, Limits, Back, Deal. Game (V) opens a
   window with one button per game in a single column, numbered 1 to 5: draw with jacks or better, draw with
   anything opens, Texas Hold'em, five-card stud and seven-card stud. Seven-card stud allows six opponents at most.
   Deal sends `start{players, game, variant, …}`.
-- Table menus: Game (Alt+G) holds New Game, Save Game, Load Game and Quit to title. Poker (Alt+P) holds House
+- Table menus: Game (Alt+G) holds New Game, Save Game, Load Game, PHP Info (I) and Quit to title. Poker (Alt+P) holds House
   Rules, History, the odds tables where the game has them, How to Play (?) and Settings (M). How to Play opens the
   rules of the game being played at their top, over the table and beneath the menu bar; ? also opens them straight
   from the table. Settings is the title's Settings window, over the table; at an online table, where no seat is a
   house player, Pace is shown spent. Back, Escape or a controller's B returns from either to the table. The house's
   players wait while either is open.
+- PHP Info is the How to Play window with PHP's own `phpinfo()` report in it, opened from the title menu or over
+  the table from the Game menu, with the same scrollbar, keys, wheel and drag. The report's version heads it over a
+  heavy rule with the server API beside it; each section follows under a ruled heading, a name on the left of each
+  row and its value wrapped beside it, a directive's master value shown where it differs from its local one. The
+  browser runtime prints the report as HTML and the command line as text; both read into the same sections. Back
+  returns to wherever it was opened from.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY
   (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P).
   All are ruled boxes.

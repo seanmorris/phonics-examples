@@ -602,6 +602,7 @@ final class Painter
 		if($local === 'games') { $this->gameDialog(); return; }
 		if($local === 'wildcards') { $this->wildcardDialog(); return; }
 		if($local === 'custom-wildcards') { $this->customWildcardDialog(); return; }
+		if($local === 'phpinfo') { $this->helpScreen(); return; }
 		if($local === 'online')
 		{
 			$box = $this->layout->panel(440, $this->layout->profile === 'landscape' ? 165 : 280 + $shift, 120);
@@ -786,7 +787,8 @@ final class Painter
 		}
 		$help = HelpPage::of($this->layout, $this->canvas->text, $this->mode, (string)($this->state['inputTheme'] ?? 'keyboard'), (string)$game, ($this->state['infoDialog'] ?? null) === 'help');
 		$first = max(0, min($help->last, (int)($this->state['helpScroll'] ?? 0)));
-		$this->dialog($help->frame['box'], 'HOW TO PLAY · ' . GameText::title((string)$game));
+		$info = $game === GameText::PHP_INFO;
+		$this->dialog($help->frame['box'], $info ? 'PHP INFO' : 'HOW TO PLAY · ' . GameText::title((string)$game));
 		foreach($help->shown($first) as $item)
 		{
 			if($item['kind'] === 'card') { $this->card([$item['x'], $item['y'], $item['width'], $item['height']], $item['id'], $item['dim']); continue; }
@@ -806,6 +808,7 @@ final class Painter
 			$this->canvas->label($item['text'], $x + $w / 2, $y + $h / 2, $item['size'], $this->mode === Theme::MODERN ? Theme::INK : Theme::PLATE, $this->face, 'center');
 		}
 		$this->helpScrollbar($help, $first);
+		if($info) { $this->button($help->frame['back'], 'Back', '⎋', 'primary', false); return; }
 		// Previous and Next turn to the game on either side, and name it where they are wide enough.
 		$position = array_search($game, $games, true);
 		$named = static fn(int $index, string $arrow, bool $leads): string => !isset($games[$index]) || !$help->frame['named'] ? $arrow

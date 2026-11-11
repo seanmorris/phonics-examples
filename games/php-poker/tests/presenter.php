@@ -459,12 +459,19 @@ $test('the title menu stays vertical inside one ruled window and help scrolls wr
 		$layout = Layout::fit($width, $height, $dpr);
 		$box = $layout->menuBox(true);
 		$items = $layout->menu(true);
-		$expect(array_column($items, 'key') === ['O','C','P','H','M'], "menu buttons carry their own shortcuts at {$width}x{$height}");
+		$expect(array_column($items, 'key') === ['O','C','P','H','M','I'], "menu buttons carry their own shortcuts at {$width}x{$height}");
 		foreach($items as $index => $item)
 		{
-			$expect(abs($item['rect'][0] - $items[0]['rect'][0]) < 1e-9, "menu remains one vertical column at {$width}x{$height}");
 			$expect($item['rect'][0] >= $box[0] && $item['rect'][0] + $item['rect'][2] <= $box[0] + $box[2]
 				&& $item['rect'][1] >= $box[1] && $item['rect'][1] + $item['rect'][3] <= $box[1] + $box[3], "menu item $index stays inside its window at {$width}x{$height}");
+			// One column, but for Settings and PHP Info, which share its last row.
+			if($index === count($items) - 1)
+			{
+				$settings = $items[$index - 1]['rect'];
+				$expect(abs($item['rect'][1] - $settings[1]) < 1e-9 && $item['rect'][0] >= $settings[0] + $settings[2] && abs($item['rect'][0] + $item['rect'][2] - ($items[0]['rect'][0] + $items[0]['rect'][2])) < 1e-9, "PHP Info shares the last row with Settings at {$width}x{$height}");
+				continue;
+			}
+			$expect(abs($item['rect'][0] - $items[0]['rect'][0]) < 1e-9, "menu remains one vertical column at {$width}x{$height}");
 			if($index) $expect($item['rect'][1] > $items[$index - 1]['rect'][1] + $items[$index - 1]['rect'][3], "menu item $index follows vertically at {$width}x{$height}");
 		}
 	}
@@ -976,6 +983,105 @@ $test('no opponent sits behind the action column at any seat count', static func
 	}
 	$expect(abs(Layout::fit(1280, 720)->seatAngle(1, 5) - (M_PI / 2 + 2 * M_PI / 5)) < 1e-9, 'five seats keep even spacing');
 	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the action column');
+});
+
+$test('PHP Info opens from the title menu and the Game menu and scrolls like How to Play', static function(callable $expect) use ($fixture, $root, $overlaps): void {
+	// Both forms PHP prints its report in read into the same sections.
+	$html = '<html><head><style>body {}</style></head><body><div class="center"><table><tr class="h"><td><a href="x"><img src="y" /></a>'
+		. '<h1 class="p">PHP Version 8.3.0</h1></td></tr></table><table><tr><td class="e">System </td><td class="v">Emscripten wasm32 </td></tr>'
+		. '<tr><td class="e">Server API </td><td class="v">Embedded &amp; more </td></tr></table><h2>Configuration</h2><h2><a name="module_core">Core</a></h2>'
+		. '<table><tr class="h"><th>Directive</th><th>Local Value</th><th>Master Value</th></tr><tr><td class="e">display_errors</td><td class="v">On</td><td class="v">Off</td></tr>'
+		. '<tr><td class="e">memory_limit</td><td class="v">128M</td><td class="v">128M</td></tr></table><h2>PHP License</h2><table><tr class="v"><td><p>This program is free software.</p></td></tr></table></div></body></html>';
+	$text = "phpinfo()\nPHP Version => 8.3.0\n\nSystem => Linux\nServer API => Command Line Interface\n\nThis program makes use of the Zend Scripting Language Engine:\nZend Engine v4.3.0\n_______________________________________________________________________\n\nConfiguration\n\nCore\n\nDirective => Local Value => Master Value\ndisplay_errors => On => Off\nmemory_limit => 128M => 128M\n\nPHP License\nThis program is free software.\n";
+	$fromHtml = \PhpPoker\Ui\PhpInfo::parse($html);
+	$fromText = \PhpPoker\Ui\PhpInfo::parse($text);
+	$expect($fromHtml[0]['title'] === 'PHP Version 8.3.0' && $fromText[0]['title'] === 'PHP Version 8.3.0', 'both forms open with the PHP version');
+	$expect(in_array(['Server API', 'Embedded & more'], $fromHtml[0]['rows'], true) && in_array(['Server API', 'Command Line Interface'], $fromText[0]['rows'], true), 'names and values are read, with entities decoded');
+	$core = static fn(array $sections): array => array_values(array_filter($sections, static fn(array $section): bool => $section['title'] === 'Core'))[0]['rows'] ?? [];
+	$expect($core($fromHtml) === [['display_errors', 'On (master: Off)'], ['memory_limit', '128M']] && $core($fromText) === $core($fromHtml), 'a directive shows its master value only where it differs, and column headings are dropped');
+	$expect(array_column($fromHtml, 'title') === ['PHP Version 8.3.0', 'Configuration', 'Core', 'PHP License'] && in_array('PHP License', array_column($fromText, 'title'), true), 'sections keep their titles and order');
+	$expect(!in_array('This program makes use of the Zend Scripting Language Engine:', array_column($fromText, 'title'), true), 'a sentence in the text form is prose, not a section');
+	$live = \PhpPoker\Ui\PhpInfo::sections();
+	$expect(count($live) > 5 && str_starts_with($live[0]['title'], 'PHP Version ' . PHP_MAJOR_VERSION . '.'), 'the report of the running PHP reads');
+
+	// From the title: the I key or the PHP Info button opens it; Back returns to the title menu.
+	$menuView = $fixture('menu');
+	$title = new Presenter($root);
+	$title->resize(1280, 720, 1);
+	$title->update($menuView);
+	$state = static fn(Presenter $presenter): array => $presenter->state();
+	$title->input([['key' => 'i']], null, 0);
+	$expect($state($title)['local'] === 'phpinfo' && $state($title)['helpGame'] === GameText::PHP_INFO && $state($title)['helpScroll'] === 0, 'I on the title opens PHP Info at its top');
+	$help = (fn(): object => $this->helpPage())->call($title);
+	$expect($help->last > 20 && $help->thumb(0) !== null, 'the report runs long and has a scrollbar');
+	$expect(array_column((fn(): array => $this->clickTargets())->call($title), 'id') === [null, null, null, 'help:back'] || count(array_filter(array_column((fn(): array => $this->clickTargets())->call($title), 'id'))) === 1, 'PHP Info has Back and no Previous or Next');
+	$title->input([['key' => 'arrowdown'], ['key' => 'arrowdown'], ['key' => 'pagedown']], null, 0);
+	$expect($state($title)['helpScroll'] === $help->after(2), 'it scrolls by row and by page');
+	$title->input([['key' => 'arrowright'], ['key' => '2']], null, 0);
+	$expect($state($title)['helpGame'] === GameText::PHP_INFO, 'Left, Right and the digits do not turn it into a game\'s rules');
+	$title->input([['key' => 'end']], null, 0);
+	$expect($state($title)['helpScroll'] === $help->last, 'End shows the end of the report');
+	$painted = $title->paint(1280, 720)->instances();
+	$expect(count($painted) > 300, 'the report paints');
+	$expect($title->input([['key' => 'escape']], null, 0) === [] && $state($title)['local'] === 'menu' && $state($title)['helpGame'] === null, 'Back returns to the title menu');
+	$button = array_values(array_filter($title->layout()->menu(!empty($menuView['canContinue'])), static fn(array $item): bool => $item['id'] === 'phpinfo'))[0]['rect'];
+	[$x, $y, $w, $h] = $title->layout()->rect(...$button);
+	$at = ['x' => $x + $w / 2, 'y' => $y + $h / 2];
+	$expect($title->input([], ['x' => $at['x'], 'y' => $at['y'], 'down' => false, 'clicks' => [$at]], 0) === [] && $state($title)['local'] === 'phpinfo', 'the PHP Info button opens it');
+	$title->update(['revision' => 1] + $menuView);
+	$expect($state($title)['local'] === 'phpinfo', 'a new view of the title leaves it open');
+
+	// From the Game menu: it opens over the table, beneath the menu bar, and Back returns to the table.
+	foreach(['offline', 'online'] as $mode)
+	{
+		$table = new Presenter($root);
+		$table->resize(1280, 720, 1);
+		$table->update(['mode' => $mode] + $fixture('opening-8'));
+		$table->input([['key' => 'alt+g']], null, 0);
+		$offered = array_column($table->layout()->topDropdown('game')['items'], 'id');
+		$expect($offered === ['new', 'save', 'load', 'phpinfo', 'quit'], "the Game menu lists PHP Info before Quit at an $mode table");
+		$expect($table->input([['key' => 'i']], null, 0) === [] && $state($table)['infoDialog'] === 'help' && $state($table)['helpGame'] === GameText::PHP_INFO, "I in the Game menu opens PHP Info at an $mode table");
+		$frame = (fn(): array => $this->helpPage()->frame)->call($table);
+		$expect($frame['box'][1] >= $table->layout()->menuHeight() && $table->modal(), "over an $mode table PHP Info starts beneath the menu bar and holds the table still");
+		$table->input([], null, 1 / 60, ['down' => 1], 'generic');
+		$table->input([], null, 1 / 60, [], 'generic');
+		$expect($state($table)['helpScroll'] === 1, "a controller's Down scrolls it at an $mode table");
+		$table->input([], null, 1 / 60, ['back' => 1], 'generic');
+		$expect($state($table)['infoDialog'] === null && $state($table)['helpGame'] === null, "a controller's B returns to the $mode table");
+	}
+
+	// It stays on every canvas, with its scrollbar and Back clear of the corner buttons.
+	foreach([[1280,720,1],[1366,600,1],[780,1688,2],[1688,780,2],[320,568,1]] as [$width,$height,$dpr]) foreach([Theme::CLASSIC, Theme::MODERN] as $look)
+	{
+		$where = "{$width}x{$height}@{$dpr} $look";
+		$info = new Presenter($root);
+		$info->resize($width, $height, $dpr);
+		$info->update($menuView);
+		if($look === Theme::MODERN) (function(): void { $this->mode = Theme::MODERN; })->call($info);
+		$info->input([['key' => 'i']], null, 0);
+		$page = (fn(): object => $this->helpPage())->call($info);
+		$layout = $info->layout();
+		$box = $layout->rect(...$page->frame['box']);
+		$back = $layout->rect(...$page->frame['back']);
+		$corner = [$width - 94 * $dpr, $height - 52 * $dpr, 94 * $dpr, 52 * $dpr];
+		$expect($box[0] >= 0 && $box[1] >= 0 && $box[0] + $box[2] <= $width + 1e-6 && $box[1] + $box[3] <= $height + 1e-6, "PHP Info stays on the canvas at $where");
+		$expect(!$overlaps($back, $corner) && !$overlaps($layout->rect(...$page->frame['reach']['down']), $corner), "PHP Info's Back and scrollbar are clear of the corner buttons at $where");
+		$port = $layout->rect(...$page->frame['view']);
+		foreach([0, intdiv($page->last, 2), $page->last] as $first)
+		{
+			(function() use ($first): void { $this->helpScroll = $first; })->call($info);
+			$out = 0;
+			foreach($info->paint($width, $height)->instances() as $instance)
+			{
+				$pad = max(.16 * 16 * max(1, $dpr), .16 * $instance[3]);
+				if(abs($instance[10] - 1) > 1e-9 || $instance[1] < $port[1] - $pad || $instance[1] >= $back[1]) continue;
+				$inside = $instance[0] >= $port[0] - $pad && $instance[0] + $instance[2] <= $port[0] + $port[2] + $pad && $instance[1] + $instance[3] <= $port[1] + $port[3] + $pad;
+				$rail = $layout->rect(...$page->frame['bar']['track']);
+				if(!$inside && !($instance[0] >= $rail[0] - $pad && $instance[0] + $instance[2] <= $rail[0] + $rail[2] + $pad)) $out++;
+			}
+			$expect($out === 0, "PHP Info scrolled to row $first keeps its copy inside the view at $where ($out glyphs out)");
+		}
+	}
 });
 
 $test('Classic\'s bitmap face is never drawn under its own size, starts on whole pixels and is crisp at whole multiples', static function(callable $expect) use ($fixture, $root): void {

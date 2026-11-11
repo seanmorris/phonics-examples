@@ -515,7 +515,7 @@ final class Layout
 		$width=min($preferred,$canvasRight-$headings[$menu][0]-8*$unit);
 		$height=$this->controlSize();
 		$definitions=$menu==='game'
-			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['quit','Quit to title','Q']]
+			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['phpinfo','PHP Info','I'],['quit','Quit to title','Q']]
 			: [['game-settings','House Rules','R'],['history','History','H'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I'],
 				['help','How to Play','?'],['settings','Settings','M']];
 		// The odds tables count five-card deals and draws: five-card stud is dealt five cards but never draws, and the
@@ -1571,18 +1571,24 @@ final class Layout
 		$items[] = ['online', 'Play Online', 'P', null];
 		$items[] = ['help', 'How to Play', 'H', ['type' => 'help']];
 		$items[] = ['settings', 'Settings', 'M', ['type' => 'settings']];
+		$items[] = ['phpinfo', 'PHP Info', 'I', null];
 		$box = $this->menuBox($canContinue);
 		[$width, $preferredHeight] = $this->design['menuItem'];
 		$width = min($width, $box[2] - 48);
 		$gap = 4;
+		// The two quieter items, Settings and PHP Info, share the last row, so the menu is no taller for having both.
+		$rows = count($items) - 1;
 		$minimumTouchHeight = 48 * $this->dpr / $this->scale;
-		$height = min(max($preferredHeight, $this->controlSize(), $minimumTouchHeight), ($box[3] - 56 - (count($items) - 1) * $gap) / count($items));
+		$height = min(max($preferredHeight, $this->controlSize(), $minimumTouchHeight), ($box[3] - 56 - ($rows - 1) * $gap) / $rows);
+		$left = $this->width() / 2 - $width / 2;
+		$half = ($width - 2 * $gap) / 2;
 		$result = [];
 		foreach($items as $index => [$id, $label, $key, $intent])
 		{
-			$x = $this->width() / 2 - $width / 2;
-			$y = $box[1] + 36 + $index * ($height + $gap);
-			$result[] = ['id' => $id, 'rect' => [$x, $y, $width, $height], 'label' => $label, 'key' => $key, 'intent' => $intent];
+			$row = min($index, $rows - 1);
+			$y = $box[1] + 36 + $row * ($height + $gap);
+			$rect = $index < $rows - 1 ? [$left, $y, $width, $height] : [$index === $rows - 1 ? $left : $left + $half + 2 * $gap, $y, $half, $height];
+			$result[] = ['id' => $id, 'rect' => $rect, 'label' => $label, 'key' => $key, 'intent' => $intent];
 		}
 
 		return $result;

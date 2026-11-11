@@ -178,7 +178,7 @@ final class Presenter
 		if(($this->view['error'] ?? '') !== '') $this->lockedRevision = null;
 		if(($view['screen'] ?? 'menu') !== 'menu') $this->local = (string)$view['screen'];
 		elseif($this->setupAfterMenu) { $this->local = 'setup'; $this->setupAfterMenu = false; }
-		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','games','limits','wildcards','custom-wildcards','online'], true)) $this->local = 'menu';
+		elseif(($previous['screen'] ?? 'menu') !== 'menu' || !in_array($this->local, ['setup','games','limits','wildcards','custom-wildcards','online','phpinfo'], true)) $this->local = 'menu';
 		if(($view['screen'] ?? '') !== 'table') { $this->topMenu = null; $this->infoDialog = null; $this->confirmDialog=null; $this->historyOpen=false; }
 		$houseRules = is_string($view['houseRules'] ?? null) && $view['houseRules'] !== '' ? $view['houseRules'] : null;
 		if($houseRules !== null && $houseRules !== $this->houseRulesShown && ($view['screen'] ?? '') === 'table')
@@ -408,6 +408,7 @@ final class Presenter
 				$addKey($custom['back'], 'escape', 'custom-wild:back');
 				$addKey($custom['done'], 'enter', 'custom-wild:done');
 			}
+			elseif($this->local === 'phpinfo') return $this->helpTargets();
 			elseif($this->local !== 'menu') $addKey($wholeCanvas, 'escape');
 			else foreach($layout->menu(!empty($this->view['canContinue'])) as $item)
 			$targets[] = ['id' => 'menu:' . $item['id'], 'rect' => $item['rect'], 'menu' => $item];
@@ -656,9 +657,10 @@ final class Presenter
 				{ $this->setupWild=$this->wildDraft; $this->setupCustomWild=$this->customWildDraft; $this->local='setup'; return []; }
 				return [];
 			}
+			if($this->local === 'phpinfo') return $this->helpKey($key);
 			if($this->local !== 'menu') { if(in_array($key, ['escape','backspace','enter',' '], true)) $this->local = 'menu'; return []; }
 			$items = $this->layout()->menu(!empty($this->view['canContinue']));
-			$shortcut = ['o' => 'offline', 'c' => 'continue', 'p' => 'online', 'h' => 'help', 'm' => 'settings'][$key] ?? null;
+			$shortcut = ['o' => 'offline', 'c' => 'continue', 'p' => 'online', 'h' => 'help', 'm' => 'settings', 'i' => 'phpinfo'][$key] ?? null;
 			if($shortcut !== null) foreach($items as $item) if($item['id'] === $shortcut) return $this->activateMenu($item);
 			return match($key) {
 				'enter', ' ' => $this->activateMenu($items[0]),
@@ -690,7 +692,7 @@ final class Presenter
 		{
 			if(in_array($key,['escape','backspace'],true)) { $this->topMenu=null; return []; }
 			$action=($this->topMenu==='game'
-				? ['n'=>'new','s'=>'save','l'=>'load','q'=>'quit']
+				? ['n'=>'new','s'=>'save','l'=>'load','i'=>'phpinfo','q'=>'quit']
 				: ['r'=>'game-settings','h'=>'history','o'=>'odds','i'=>'improving','?'=>'help','m'=>'settings'])[$key]??null;
 			$offered=array_column($this->layout()->topDropdown($this->topMenu,(string)($this->view['game']??'draw'))['items'],'id');
 			return $action===null||!in_array($action,$offered,true)?[]:$this->activateTopAction($action);
@@ -726,6 +728,7 @@ final class Presenter
 	private function activateMenu(array $item): array
 	{
 		if($item['id'] === 'offline') { $this->local = 'setup'; return []; }
+		if($item['id'] === 'phpinfo') { $this->openPhpInfo(); return []; }
 		if($item['intent'] === null) { $this->local = 'online'; return []; }
 		return [$item['intent']];
 	}
@@ -744,7 +747,22 @@ final class Presenter
 		if($action==='history') { $this->historyOpen=true; return []; }
 		if(in_array($action,['game-settings','odds','improving','settings'],true)) { $this->infoDialog=$action; return []; }
 		if($action==='help') $this->openTableHelp();
+		if($action==='phpinfo') $this->openPhpInfo();
 		return [];
+	}
+
+	/**
+	 * Open the PHP Info window: over the table from the Game menu, or from the title menu in its place. It is the How
+	 * to Play window with PHP's report in it, so it scrolls the same way.
+	 */
+	private function openPhpInfo(): void
+	{
+		if(($this->view['screen'] ?? 'menu') === 'table') { $this->topMenu = null; $this->historyOpen = false; $this->infoDialog = 'help'; }
+		else $this->local = 'phpinfo';
+		$this->helpGame = GameText::PHP_INFO;
+		$this->helpScroll = 0;
+		$this->controllerFocus = null;
+		$this->dirty = true;
 	}
 
 	/** Open the rules of the game being played over the table, from their top. */
@@ -763,7 +781,8 @@ final class Presenter
 	/** Whether the rules are open: as the title's How to Play screen, or over the table from the Poker menu. */
 	private function helpOpen(): bool
 	{
-		return ($this->view['screen'] ?? '') === 'help' || (($this->view['screen'] ?? '') === 'table' && $this->infoDialog === 'help');
+		$screen = $this->view['screen'] ?? 'menu';
+		return $screen === 'help' || ($screen === 'table' && $this->infoDialog === 'help') || ($screen === 'menu' && $this->local === 'phpinfo');
 	}
 
 	/**
@@ -773,9 +792,10 @@ final class Presenter
 	private function helpKey(string $key): array
 	{
 		$table = $this->infoDialog === 'help';
-		// A digit opens that game's rules from the index and from any other rules page.
-		$chosen = in_array($key, ['enter',' '], true) && $this->helpGame === null ? $this->helpChoice()
-			: (in_array($key, ['1','2','3','4','5','6','7','8','9'], true) ? GameText::HELP_GAMES[(int)$key - 1] ?? null : null);
+		$info = $this->helpGame === GameText::PHP_INFO;
+		// A digit opens that game's rules from the index and from any other rules page; PHP Info has no games.
+		$chosen = $info ? null : (in_array($key, ['enter',' '], true) && $this->helpGame === null ? $this->helpChoice()
+			: (in_array($key, ['1','2','3','4','5','6','7','8','9'], true) ? GameText::HELP_GAMES[(int)$key - 1] ?? null : null));
 		if($chosen !== null)
 		{
 			$this->helpGame = $chosen;
@@ -794,10 +814,11 @@ final class Presenter
 		if($row !== null) { $this->scrollHelp($row); return []; }
 		if($key === 'arrowleft') { $this->turnHelp(-1); return []; }
 		if($key === 'arrowright') { $this->turnHelp(1); return []; }
-		if(!in_array($key, ['escape','backspace','enter',' ','q','?'], true)) return [];
-		// Back leads where the rules were opened from: the table, or the index, where a controller's focus rests
-		// on the game just read.
+		if(!in_array($key, ['escape','backspace','enter',' ','q','?','i'], true)) return [];
+		// Back leads where the window was opened from: the table; the title menu, for PHP Info; or the index, where
+		// a controller's focus rests on the game just read.
 		if($table) $this->infoDialog = null;
+		elseif($info) { $this->local = 'menu'; $this->controllerFocus = 'menu:phpinfo'; }
 		else $this->controllerFocus = 'help-game:' . $this->helpGame;
 		$this->helpGame = null;
 		$this->helpScroll = 0;
@@ -835,6 +856,8 @@ final class Presenter
 			$targets[] = ['rect' => $frame['reach']['down'], 'key' => 'arrowdown'] + ($this->helpScroll === $help->last ? ['disabled' => true] : []);
 			$targets[] = ['rect' => $frame['reach']['track'], 'helpTrack' => true];
 		}
+		// PHP Info has one page, so its window has Back alone.
+		if($this->helpGame === GameText::PHP_INFO) { $targets[] = ['rect' => $frame['back'], 'key' => 'escape', 'id' => 'help:back']; return $targets; }
 		$targets[] = ['rect' => $frame['previous'], 'key' => 'arrowleft', 'id' => 'help:previous'] + ($position === 0 ? ['disabled' => true] : []);
 		$targets[] = ['rect' => $frame['back'], 'key' => 'escape', 'id' => 'help:back'];
 		$targets[] = ['rect' => $frame['next'], 'key' => 'arrowright', 'id' => 'help:next'] + ($position === count(GameText::HELP_GAMES) - 1 ? ['disabled' => true] : []);
@@ -1090,7 +1113,7 @@ final class Presenter
 	 */
 	private function turnHelp(int $direction): void
 	{
-		if($this->helpGame === null) return;
+		if($this->helpGame === null || $this->helpGame === GameText::PHP_INFO) return;
 		$neighbour = GameText::HELP_GAMES[array_search($this->helpGame, GameText::HELP_GAMES, true) + ($direction <=> 0)] ?? null;
 		if($neighbour === null) return;
 		$this->helpGame = $neighbour;

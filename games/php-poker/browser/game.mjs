@@ -9,8 +9,8 @@ const KEYS=new Set(['f','c','b','d','g','h','i','l','m','n','s','v','w','o','p',
 /** Keys that scroll the How to Play rules. They repeat while held, and only there are the paging keys kept from the page. */
 const SCROLL_KEYS=new Set(['arrowup','arrowdown','pageup','pagedown','home','end']);
 
-/** Whether How to Play is open: as the title's screen, or over the table from the Poker menu. */
-const rulesOpen=state=>state?.screen==='help'||(state?.screen==='table'&&state?.ui?.infoDialog==='help');
+/** Whether the scrolling How to Play window is open: as the title's screen, over the table, or as PHP Info. */
+const rulesOpen=state=>state?.screen==='help'||(state?.screen==='table'&&state?.ui?.infoDialog==='help')||(state?.screen==='menu'&&state?.ui?.local==='phpinfo');
 
 /** Cell size for the rasterised cards, capped so the atlas crossing into PHP stays under ~8 MB. */
 export function cardCell(dpr)

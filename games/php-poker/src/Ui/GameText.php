@@ -16,6 +16,8 @@ final class GameText
 	public const CHOICES = [['draw','jackpots'],['draw','anything'],['holdem','anything'],['stud5','anything'],['stud7','anything']];
 	/** Rules pages shown by How to Play. Draw's two opening rules share one page. */
 	public const HELP_GAMES = ['draw','holdem','stud5','stud7'];
+	/** The page that the PHP Info window sets in the How to Play window, in place of a game's rules. */
+	public const PHP_INFO = 'phpinfo';
 	/** Hands from best to worst, as every rules page lists them. */
 	public const HAND_RANKS = ['Five of a kind', 'Straight flush', 'Four of a kind', 'Full house', 'Flush',
 		'Straight', 'Three of a kind', 'Two pair', 'Pair', 'High card'];

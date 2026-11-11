@@ -176,13 +176,22 @@ final class Text
 	public function fit(string $text, float $size, float $maxWidth, string $face = 'body', float $tracking = 0, bool $exact = false): string
 	{
 		if($this->measure($text, $size, $face, $tracking, $exact) <= $maxWidth) return $text;
+		// The longest start of the text that, less any spaces it ends on, fits with an ellipsis after it. Widths of
+		// every start are summed once, so a long unbroken value costs one pass rather than one per character.
 		$characters = $this->characters($text, $face);
+		$metrics = $this->metrics['faces'][$face];
+		$scale = $this->size($face, $size, $exact);
+		$ellipsis = $this->characters('…', $face)[0] ?? self::FALLBACK;
+		$starts = [0.0];
+		foreach($characters as $index => $character)
+			$starts[] = $starts[$index] + ($index ? ($metrics['kerning'][$characters[$index - 1] . $character] ?? 0) + $tracking : 0) + $metrics['glyphs'][$character]['advance'];
 
-		while($characters)
+		for($kept = count($characters) - 1; $kept >= 0; $kept--)
 		{
-			array_pop($characters);
-			$candidate = rtrim(implode('', $characters)) . '…';
-			if($this->measure($candidate, $size, $face, $tracking, $exact) <= $maxWidth) return $candidate;
+			$end = $kept;
+			while($end > 0 && $characters[$end - 1] === ' ') $end--;
+			$width = $starts[$end] + ($end ? ($metrics['kerning'][$characters[$end - 1] . $ellipsis] ?? 0) + $tracking : 0) + $metrics['glyphs'][$ellipsis]['advance'];
+			if($width * $scale <= $maxWidth) return implode('', array_slice($characters, 0, $end)) . $ellipsis;
 		}
 
 		return '';
@@ -203,19 +212,36 @@ final class Text
 		$words = preg_split('/\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 		$lines = [];
 		$line = '';
+		// A line's width is its words' widths, a space's, and the kerning where they meet, so each word is measured
+		// once rather than the whole line again for every word added to it.
+		$metrics = $this->metrics['faces'][$face];
+		$scale = $this->size($face, $size, $exact);
+		$space = ($this->characters(' ', $face)[0] ?? ' ');
+		$advance = static fn(string $character): float => (float)($metrics['glyphs'][$character]['advance'] ?? 0);
+		$kern = static fn(?string $left, ?string $right): float => $left === null || $right === null ? 0.0 : (float)($metrics['kerning'][$left . $right] ?? 0);
+		$span = 0.0;
+		$last = null;
 
 		foreach($words as $index => $word)
 		{
-			$candidate = $line === '' ? $word : $line . ' ' . $word;
+			$characters = $this->characters($word, $face);
+			$width = 0.0;
+			$previous = null;
+			foreach($characters as $character) { $width += $kern($previous, $character) + $advance($character); $previous = $character; }
+			$candidate = $line === '' ? $width : $span + $kern($last, $space) + $advance($space) + $kern($space, $characters[0] ?? null) + $width;
 
-			if($line === '' || $this->measure($candidate, $size, $face, 0, $exact) <= $maxWidth)
+			if($line === '' || $candidate * $scale <= $maxWidth)
 			{
-				$line = $candidate;
+				$line = $line === '' ? $word : $line . ' ' . $word;
+				$span = $candidate;
+				$last = $previous ?? $last;
 				continue;
 			}
 
 			$lines[] = $line;
 			$line = $word;
+			$span = $width;
+			$last = $previous;
 
 			if(count($lines) === $maxLines - 1)
 			{

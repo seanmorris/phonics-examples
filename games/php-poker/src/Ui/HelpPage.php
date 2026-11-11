@@ -62,6 +62,12 @@ final class HelpPage
 		$canvas = implode(':', [$layout->profile, $layout->width(), $layout->height(), $layout->scale, $layout->horizontalScale, $layout->dpr, $mode, $theme, (int)$bar]);
 		if(isset(self::$built["$canvas:$game"])) return self::$built["$canvas:$game"];
 		if(count(self::$built) > 32) self::$built = [];
+		// The PHP Info window is this window with PHP's own report in it, as tall as the canvas allows.
+		if($game === GameText::PHP_INFO)
+		{
+			$rows = self::info($layout, $text, $mode, PhpInfo::sections(), $layout->help(null, $bar)['view'][2]);
+			return self::$built["$canvas:$game"] = new self($layout->help(array_sum(array_column($rows, 'height')), $bar), $rows, $mode === Theme::CLASSIC);
+		}
 		$width = $layout->help(null, $bar)['view'][2];
 		$copies = [];
 		$needed = 0.0;
@@ -166,12 +172,12 @@ final class HelpPage
 	}
 
 	/**
-	 * Set one game's copy in rows of the given width.
+	 * The type a page of help is set in on this canvas: its faces and sizes, and the rows each kind of line makes.
 	 *
 	 * @param float $width Width of the view, in design units.
-	 * @return list<array{height:float,ink:float,items:list<array<string,mixed>>}>
+	 * @return array<string,mixed> Values and closures by name; see the names `rows()` takes from it.
 	 */
-	private static function rows(Layout $layout, Text $text, string $mode, string $theme, string $game, float $width): array
+	private static function type(Layout $layout, Text $text, string $mode, float $width): array
 	{
 		$classic = $mode === Theme::CLASSIC;
 		$dos = $classic && isset($text->faces()['dos']);
@@ -210,14 +216,16 @@ final class HelpPage
 		$wrapped = static fn(string $copy, float $size): array => array_map(static fn(string $each): array => $line($each, $size),
 			$text->wrap($shown($copy), $size * $layout->uiScale(), ($width - $inset) * $layout->horizontalScale, 40, $faces['body']));
 		// A part opens with the largest type over a heavy rule, with a note set against the far edge where it fits.
-		$opens = static function(string $title, string $aside = '') use ($shown, $headed, $measure, $label, $row, $leading, $part, $note, $em, $width, $across, $faces, $text): array {
+		$opens = static function(string $title, string $aside = '') use ($shown, $headed, $measure, $label, $row, $leading, $part, $section, $note, $em, $width, $across, $faces, $text): array {
 			$title = $headed($title);
-			$height = $leading($part);
-			$items = [$label($title, 0, $height / 2, $part, 'head')];
+			// A title too long for the view at a part's size, on a narrow phone, takes a section's.
+			$size = $measure($title, $part, $faces['head']) <= $width ? $part : $section;
+			$height = $leading($size);
+			$items = [$label($title, 0, $height / 2, $size, 'head')];
 			$aside = $shown($aside);
 			// The note shares the title's baseline: capitals are centred on a label's middle, so the smaller sits lower.
-			if($aside !== '' && $measure($title, $part, $faces['head']) + 16 * $across + $measure($aside, $note, $faces['body']) <= $width)
-				$items[] = $label($aside, $width, $height / 2 + $text->capHeight($faces['head']) * ($part - $note) * $em / 2, $note, 'body', 'right');
+			if($aside !== '' && $measure($title, $size, $faces['head']) + 16 * $across + $measure($aside, $note, $faces['body']) <= $width)
+				$items[] = $label($aside, $width, $height / 2 + $text->capHeight($faces['head']) * ($size - $note) * $em / 2, $note, 'body', 'right');
 			$items[] = ['kind' => 'rule', 'x' => 0, 'y' => $height, 'width' => $width, 'height' => 2];
 			return $row($height + 8, $items);
 		};
@@ -229,6 +237,63 @@ final class HelpPage
 			return $row($height + 2, [$label($title, 0, $height / 2, $section, 'head'),
 				['kind' => 'rule', 'x' => $ruled, 'y' => $height / 2 - .5, 'width' => max(0, $width - $ruled), 'height' => 1]]);
 		};
+
+		return compact('classic', 'dos', 'faces', 'shown', 'headed', 'across', 'body', 'note', 'part', 'section', 'em', 'leading', 'inset', 'measure', 'whole', 'row', 'label', 'line', 'wrapped', 'opens', 'heads');
+	}
+
+	/**
+	 * Set PHP's report in rows of the given width: its version over a heavy rule, then each section under its heading,
+	 * a name on the left of each row and its value wrapped beside it, as a text-mode viewer sets a table.
+	 *
+	 * @param list<array{title:string,rows:list<array{string,string}>}> $sections From `PhpInfo::sections()`.
+	 * @param float $width Width of the view, in design units.
+	 * @return list<array{height:float,ink:float,items:list<array<string,mixed>>}>
+	 */
+	public static function info(Layout $layout, Text $text, string $mode, array $sections, float $width): array
+	{
+		['faces' => $faces, 'across' => $across, 'body' => $body, 'note' => $note, 'em' => $em, 'leading' => $leading, 'inset' => $inset,
+			'measure' => $measure, 'whole' => $whole, 'row' => $row, 'label' => $label, 'opens' => $opens, 'heads' => $heads] = self::type($layout, $text, $mode, $width);
+		$fold = static fn(string $copy, float $room, int $lines): array => $text->wrap($copy, $body * $layout->uiScale(), max(1, $room) * $layout->horizontalScale, $lines, $faces['body']);
+		// Names take the room the longest of them needs, up to two fifths of the row; values have the rest.
+		$names = [];
+		foreach($sections as $section) foreach($section['rows'] as [$name]) if($name !== '') $names[] = $measure($name, $body, $faces['body']);
+		$gap = 16 * $across;
+		$nameWidth = min(($width - $inset) * .4, $names === [] ? 0 : max($names));
+		$valueLeft = $inset + $nameWidth + $gap;
+		$step = $leading($body);
+
+		$first = $sections[0] ?? ['title' => 'PHP', 'rows' => []];
+		$rows = [$opens($first['title'] !== '' ? $first['title'] : 'PHP', (string)(PhpInfo::value($first['rows'], 'Server API') ?? ''))];
+		foreach($sections as $index => $section)
+		{
+			$entries = [];
+			if($index > 0 && $section['title'] !== '') $entries[] = $heads($section['title']);
+			foreach($section['rows'] as [$name, $value])
+			{
+				// A row with no name is a line of prose across the whole row.
+				$named = $name === '' ? [] : $fold($name, $nameWidth, 3);
+				$values = $fold($value === '' ? ' ' : $value, $name === '' ? $width - $inset : $width - $valueLeft, 12);
+				$items = [];
+				foreach($named as $line => $each) $items[] = $label($each, $inset, ($line + .5) * $step, $body, 'body');
+				foreach($values as $line => $each) $items[] = $label($each, $name === '' ? $inset : $valueLeft, ($line + .5) * $step, $body, 'body');
+				$entries[] = $row(max(count($named), count($values)) * $step + 4, $items);
+			}
+			if($entries === []) continue;
+			if($index < count($sections) - 1) $entries[count($entries) - 1]['height'] += $whole($body * $em * .8);
+			array_push($rows, ...$entries);
+		}
+		return $rows;
+	}
+
+	/**
+	 * Set one game's copy in rows of the given width.
+	 *
+	 * @param float $width Width of the view, in design units.
+	 * @return list<array{height:float,ink:float,items:list<array<string,mixed>>}>
+	 */
+	private static function rows(Layout $layout, Text $text, string $mode, string $theme, string $game, float $width): array
+	{
+		['classic' => $classic, 'dos' => $dos, 'faces' => $faces, 'shown' => $shown, 'headed' => $headed, 'across' => $across, 'body' => $body, 'note' => $note, 'part' => $part, 'section' => $section, 'em' => $em, 'leading' => $leading, 'inset' => $inset, 'measure' => $measure, 'whole' => $whole, 'row' => $row, 'label' => $label, 'line' => $line, 'wrapped' => $wrapped, 'opens' => $opens, 'heads' => $heads] = self::type($layout, $text, $mode, $width);
 
 		$blocks = [];
 		$steps = GameText::helpSteps($game);

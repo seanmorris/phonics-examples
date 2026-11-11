@@ -375,6 +375,14 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	const helpMenuBack=await point(canvas,(await regions(canvas)).helpIndex.back);
 	await page.mouse.click(helpMenuBack.x,helpMenuBack.y);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
+	// PHP Info sets the browser runtime's own HTML report in the same scrolling window.
+	await page.keyboard.press('i');
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('phpinfo');
+	await expect.poll(async()=>(await state(canvas)).ui.helpScrollMax).toBeGreaterThan(20);
+	await page.keyboard.press('End');
+	await expect.poll(async()=>{const {helpScroll,helpScrollMax}=(await state(canvas)).ui;return helpScroll===helpScrollMax;}).toBe(true);
+	await page.keyboard.press('Escape');
+	await expect.poll(async()=>(await state(canvas)).ui.local).toBe('menu');
 	await page.setViewportSize({width:390,height:844});
 	await canvas.focus();
 	await page.keyboard.press('Enter');
