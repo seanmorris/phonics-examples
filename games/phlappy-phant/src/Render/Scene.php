@@ -121,8 +121,8 @@ final class Scene
 		$this->menus->style['panel'] = self::PLAQUE;
 		// Plaque colors come straight from the terrain palettes: pale haze and cloud text over night grass, with the
 		// day treeline and field for selection. Even the font's dark inset remains lighter than the panel beneath it.
-		$this->menus->style['foreground'] = [...self::MIST, 1.0];
-		$this->menus->style['selected'] = [.98, .973, .941, 1.0];
+		$this->menus->style['foreground'] = [.98, .973, .941, 1.0];
+		$this->menus->style['selected'] = [...self::MIST, 1.0];
 		$this->menus->style['highlight'] = [.145, .31, .349, 1.0];
 		$this->menus->style['selection'] = [.184, .42, .353, 1.0];
 		$this->menus->style['disabled'] = [.545, .549, .502, 1.0];
