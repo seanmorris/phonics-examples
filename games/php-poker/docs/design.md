@@ -173,7 +173,8 @@ block the next deal and schedules no further changes after it ends.
 ## Screens and dialogs
 
 - Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Play Online, How to Play, and
-  Settings and PHP Info sharing the last row. Online opens the Matrix table lobby. Enter plays offline, C
+  Settings and PHP Info sharing the last row. Online opens the Matrix table lobby. The brass button is Continue Offline where there is a saved game
+  and Play Offline otherwise; Enter and a controller's first focus take it. O plays offline, C
   continues, H opens help, M opens settings, I opens PHP Info,
   Escape returns. On a controller, the D-pad or left stick moves, A selects, B returns, and Start resumes a saved table.
 - Table setup (local to the presenter): opponents 1–7, Game, Wild cards, Limits, Back, Deal. Game (V) opens a
@@ -207,11 +208,12 @@ block the next deal and schedules no further changes after it ends.
   each group of cards over its label ("Yours", "The board", "Down", "Up"), the cards that do not play dimmed and
   a note on what to see.
 - The second part is the same in every game and runs in this order: a legend of key caps (the controller's
-  buttons when one is in use); the hands from best to worst in two numbered columns; the wild-card rule; then an
-  example of each hand, its five cards beside its number, its name and a line on what makes it that hand. The
-  cards that make the hand stand together and the ones that only fill out the five stand apart. The first example
-  holds a joker, since five of a kind needs a wild card. Where the view is too narrow for two lines beside the
-  cards, the name goes above them and the explanation below.
+  buttons when one is in use); the hands from best to worst in two numbered columns; the wild-card rule; then
+  Poker hands, an example of each hand: its number and name, its five cards evenly spaced, and a line on what
+  makes it that hand. The cards that only fill out the five are shaded as the table shades a folded hand. The
+  first example holds a joker, since five of a kind needs a wild card. The example cards on a rules page are
+  48×67 at 1×, large enough to read their faces, and smaller only where a hand would not fit the view. Where
+  three lines fit beside the cards, the name and explanation stand there; otherwise above and below them.
 - The copy scrolls a whole row at a time, so nothing is drawn half inside the window. The scrollbar at the window's
   right edge is a DOS one in Classic: an arrow at each end, a track in the light shade and a one-cell block for the
   thumb; Modern draws a rounded track and a thumb as long as the share of the copy in view. Arrows scroll a row, a

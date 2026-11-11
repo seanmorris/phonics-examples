@@ -21,6 +21,8 @@ final class Theme
 	public const MENU_TEXT = [.957,.945,.91,1];
 	public const BUTTON = [.812,.812,.812,1];
 	public const BRASS = [.851,.643,.255,1];
+	/** Brightness of a card that does not count: a folded hand's, or one that only fills out an example hand. */
+	public const OUT_OF_PLAY = .55;
 	public const DANGER_INK = [.553,.114,.114,1];
 	public const CHIP_GRAY = [.812,.812,.812,1];
 	public const CHIP_RED = [.847,.251,.239,1];

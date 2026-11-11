@@ -417,7 +417,8 @@ $test('online plates show only the seat shuffling, dealing or revealing, and no 
 $test('the menu, setup and settings flow send only session intents the session knows', static function(callable $expect) use ($root): void {
 	$presenter = new Presenter($root);
 	$presenter->update(['screen' => 'menu', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => true]);
-	$expect($presenter->input([['key' => 'enter']], null, 1 / 60) === [] && $presenter->state()['local'] === 'setup', 'Play Offline opens the local setup card');
+	$expect($presenter->input([['key' => 'enter']], null, 1 / 60) === [['type' => 'resume']], 'Enter takes the brass button: Continue Offline, where there is a game to continue');
+	$expect($presenter->input([['key' => 'o']], null, 1 / 60) === [] && $presenter->state()['local'] === 'setup', 'Play Offline opens the local setup card');
 	$presenter->input([['key' => 'arrowright'], ['key' => 'arrowright'], ['key' => 'v']], null, 1 / 60);
 	$expect($presenter->state()['local'] === 'games', 'V opens the game selector');
 	$presenter->input([['key' => '2']], null, 1 / 60);
@@ -708,7 +709,7 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 			$steps = array_column(GameText::helpSteps($game), 0);
 			$legend = $theme === 'keyboard' ? 'Keys' : 'Controller';
 			$example = GameText::helpExample($game);
-			$headings = ['Playing a hand', 'In every game', ...$steps, $legend, 'Hands, best first', 'Wild cards', 'An example of each hand'];
+			$headings = ['Playing a hand', 'In every game', ...$steps, $legend, 'Hands, best first', 'Wild cards', 'Poker hands'];
 			foreach($headings as $wanted) $expect(($counts[$headed($wanted)] ?? 0) === 1, "the $game rules set the heading \"$wanted\" once at $at");
 			// A hand's name stands once in the list and once over its example; the two differ only by Classic's capitals.
 			foreach(GameText::HAND_RANKS as $wanted)
@@ -732,7 +733,7 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 			$shouting = array_filter($texts, static fn(string $copy): bool => !in_array($copy, $capitals, true) && $copy === strtoupper($copy) && preg_match('/[a-z]/i', $copy) === 1 && strlen($copy) > 2);
 			$expect($shouting === [], "the $game rules keep their copy out of capitals at $at (" . implode(' | ', array_slice($shouting, 0, 3)) . ')');
 			// The shared part runs: keys, the list of hands, wild cards, then an example of each hand.
-			$order = array_map(static fn(string $wanted): int => $where[$headed($wanted)] ?? -1, ['Showdown', 'In every game', $legend, 'Hands, best first', 'Wild cards', 'An example of each hand']);
+			$order = array_map(static fn(string $wanted): int => $where[$headed($wanted)] ?? -1, ['Showdown', 'In every game', $legend, 'Hands, best first', 'Wild cards', 'Poker hands']);
 			$sorted = $order;
 			sort($sorted);
 			$expect($order === $sorted && $order[0] >= 0 && count(array_unique($order)) >= 5, "the $game rules run from the showdown to keys, hands, wild cards and examples at $at");
@@ -743,16 +744,21 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 			$expect(count($cards) === 1 + count(GameText::HAND_EXAMPLES) && array_column($cards[$fanned[0]], 'id') === $dealt, "the $game example is one row of its cards in dealing order at $at");
 			$expect($fanned[0] > $where[$headed('Showdown')] && $fanned[0] < $where[$headed('In every game')], "the $game example belongs to its Showdown section at $at");
 			foreach($cards[$fanned[0]] as $card)
-				$expect(($card['dim'] === 1.0) === in_array($card['id'], $example['plays'], true), "the $game example dims exactly the cards that do not play at $at");
-			// After wild cards each hand has a row of its own five cards, in order from the best, with its name on that row.
-			foreach(GameText::HAND_EXAMPLES as $rank => [$groups])
+				$expect($card['dim'] === (in_array($card['id'], $example['plays'], true) ? 1.0 : Theme::OUT_OF_PLAY), "the $game example shades exactly the cards that do not play, as the table shades a folded hand, at $at");
+			// After wild cards each hand has a row of its own five cards, in order from the best, with its name on that
+			// row: evenly spaced, the cards that make the hand at full brightness, the rest shaded as the table shades
+			// a folded hand.
+			foreach(GameText::HAND_EXAMPLES as $rank => [$dealt, $plays])
 			{
 				$fan = $cards[$fanned[$rank + 1]];
 				$named = array_column(array_filter($help->rows[$fanned[$rank + 1]]['items'], static fn(array $item): bool => $item['kind'] === 'text'), 'text');
-				$expect($fanned[$rank + 1] > $where[$headed('An example of each hand')] && array_column($fan, 'id') === array_merge(...$groups)
-					&& array_unique(array_column($fan, 'dim')) === [1.0] && in_array($headed(GameText::HAND_RANKS[$rank]), $named, true) && in_array((string)($rank + 1), $named, true),
+				$expect($fanned[$rank + 1] > $where[$headed('Poker hands')] && array_column($fan, 'id') === $dealt
+					&& in_array($headed(GameText::HAND_RANKS[$rank]), $named, true) && in_array((string)($rank + 1), $named, true),
 					"the $game rules show hand " . ($rank + 1) . " with its own cards and name at $at");
-				for($index = 1; $index < count($fan); $index++) $expect($fan[$index]['x'] >= $fan[$index - 1]['x'] + $fan[$index - 1]['width'] - 1e-6, "the cards of hand " . ($rank + 1) . " stand side by side in the $game rules at $at");
+				foreach($fan as $card) $expect($card['dim'] === (in_array($card['id'], $plays, true) ? 1.0 : Theme::OUT_OF_PLAY), "hand " . ($rank + 1) . " shades only the cards that do not make it in the $game rules at $at");
+				$steps = [];
+				for($index = 1; $index < count($fan); $index++) $steps[] = round($fan[$index]['x'] - $fan[$index - 1]['x'], 6);
+				$expect(count(array_unique($steps)) === 1 && $steps[0] >= $fan[0]['width'], "the cards of hand " . ($rank + 1) . " are evenly spaced, side by side, in the $game rules at $at");
 				$expect($fan[4]['x'] + $fan[4]['width'] <= $help->frame['view'][2] + 1e-6, "the cards of hand " . ($rank + 1) . " fit the view in the $game rules at $at");
 			}
 
@@ -803,9 +809,12 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 	}
 	// Each example of a hand is that hand to the evaluator, with the jokers wild as the first one needs.
 	$expect(count(GameText::HAND_EXAMPLES) === count(GameText::HAND_RANKS), 'every hand in the list has an example');
-	foreach(GameText::HAND_EXAMPLES as $rank => [$groups, $meaning])
+	foreach(GameText::HAND_EXAMPLES as $rank => [$dealt, $plays, $meaning])
 	{
-		$found = \PhpPoker\Hand::evaluate(array_merge(...$groups), [52, 53])['name'];
+		$expect(count($dealt) === 5 && $plays !== [] && array_diff($plays, $dealt) === [], 'the example of ' . GameText::HAND_RANKS[$rank] . ' marks some of its own five cards as the ones that make it');
+		// Where every card counts, every card is marked: five of a kind, straights, flushes and the full house.
+		if(in_array(GameText::HAND_RANKS[$rank], ['Five of a kind', 'Straight flush', 'Full house', 'Flush', 'Straight'], true)) $expect($plays === $dealt, GameText::HAND_RANKS[$rank] . ' marks all five cards');
+		$found = \PhpPoker\Hand::evaluate($dealt, [52, 53])['name'];
 		$expect($found === (GameText::HAND_RANKS[$rank] === 'Pair' ? 'One pair' : GameText::HAND_RANKS[$rank]) && $meaning !== '', 'the example of ' . GameText::HAND_RANKS[$rank] . " is one to the evaluator, which calls it $found");
 	}
 	foreach(GameText::HELP_GAMES as $game)
@@ -834,9 +843,10 @@ $test('controller focus navigates menus, setup, cards and table actions through 
 	$menu = new Presenter($root);
 	$menu->update($fixture('menu'));
 	$release($menu);
-	$expect(($menu->state()['controllerFocus']['id'] ?? null) === 'menu:offline', 'controller focus starts on Play Offline');
+	$expect(($menu->state()['controllerFocus']['id'] ?? null) === 'menu:continue', 'controller focus starts on Continue Offline, the brass button, where there is a game to continue');
+	$press($menu, 'up');
+	$expect(($menu->state()['controllerFocus']['id'] ?? null) === 'menu:offline', 'Up moves to Play Offline');
 	$press($menu, 'down');
-	$expect(($menu->state()['controllerFocus']['id'] ?? null) === 'menu:continue', 'Down moves to Continue Offline');
 	$expect($press($menu, 'confirm') === [['type' => 'resume']], 'A activates the focused saved-game entry');
 
 	$setup = new Presenter($root);
@@ -922,9 +932,9 @@ $test('controller focus navigates menus, setup, cards and table actions through 
 
 	$slow = new Presenter($root); $slow->update($fixture('menu')); $release($slow);
 	$slow->input([],null,1/60,['down'=>1],'generic');
-	$expect(($slow->state()['controllerFocus']['id']??null)==='menu:continue','the first held direction moves one target');
+	$expect(($slow->state()['controllerFocus']['id']??null)==='menu:online','the first held direction moves one target');
 	$slow->input([],null,5,['down'=>1],'generic');
-	$expect(($slow->state()['controllerFocus']['id']??null)==='menu:continue','one slow frame cannot burst through controller targets');
+	$expect(($slow->state()['controllerFocus']['id']??null)==='menu:online','one slow frame cannot burst through controller targets');
 });
 
 $test('every fixture paints in both modes at four canvas sizes without a GL context', static function(callable $expect) use ($fixture, $root): void {
@@ -985,6 +995,28 @@ $test('no opponent sits behind the action column at any seat count', static func
 	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the action column');
 });
 
+$test('the title menu\'s brass button is Continue Offline where there is a game to continue, and Play Offline otherwise', static function(callable $expect) use ($fixture, $root): void {
+	foreach([true, false] as $saved)
+	{
+		$view = ['canContinue' => $saved] + $fixture('menu');
+		$presenter = new Presenter($root);
+		$presenter->resize(1280, 720, 1);
+		$presenter->update($view);
+		$items = $presenter->layout()->menu($saved);
+		$expect(in_array('continue', array_column($items, 'id'), true) === $saved, $saved ? 'Continue Offline is offered with a saved game' : 'Continue Offline is not offered without one');
+		// The brass fill is the only button drawn in brass: find which item's rectangle carries it.
+		$brass = array_filter($presenter->paint(1280, 720)->instances(), static fn(array $instance): bool => abs($instance[4] - Theme::BRASS[0]) < 1e-6 && abs($instance[5] - Theme::BRASS[1]) < 1e-6 && abs($instance[10]) < 1e-9);
+		$lit = [];
+		foreach($items as $item)
+		{
+			$rect = $presenter->layout()->rect(...$item['rect']);
+			foreach($brass as $instance) if(abs($instance[0] - $rect[0]) < 1e-6 && abs($instance[1] - $rect[1]) < 1e-6) $lit[] = $item['id'];
+		}
+		$expect(array_values(array_unique($lit)) === [$saved ? 'continue' : 'offline'], ($saved ? 'Continue Offline' : 'Play Offline') . ' alone is drawn in brass');
+		$expect($presenter->input([['key' => 'enter']], null, 0) === ($saved ? [['type' => 'resume']] : []) && ($saved || $presenter->state()['local'] === 'setup'), 'Enter takes the brass button');
+	}
+});
+
 $test('PHP Info opens from the title menu and the Game menu and scrolls like How to Play', static function(callable $expect) use ($fixture, $root, $overlaps): void {
 	// Both forms PHP prints its report in read into the same sections.
 	$html = '<html><head><style>body {}</style></head><body><div class="center"><table><tr class="h"><td><a href="x"><img src="y" /></a>'
@@ -1021,6 +1053,14 @@ $test('PHP Info opens from the title menu and the Game menu and scrolls like How
 	$expect($state($title)['helpGame'] === GameText::PHP_INFO, 'Left, Right and the digits do not turn it into a game\'s rules');
 	$title->input([['key' => 'end']], null, 0);
 	$expect($state($title)['helpScroll'] === $help->last, 'End shows the end of the report');
+	// Every row is one line tall, so a long value scrolls in and out a line at a time, never all at once.
+	$tallest = max(array_column($help->rows, 'height'));
+	$headed = array_filter($help->rows, static fn(array $row): bool => array_filter($row['items'], static fn(array $item): bool => $item['kind'] === 'rule') !== []);
+	$lines = array_diff_key($help->rows, $headed, [0 => true]);
+	$expect(max(array_column($lines, 'height')) <= $title->layout()->controlText() * $title->layout()->typeScale() * 1.45 + 4 + $title->layout()->controlText() + 1e-6, 'every row of names and values in PHP Info is one line tall');
+	$multi = 0;
+	foreach($lines as $row) $multi += count(array_filter($row['items'], static fn(array $item): bool => $item['kind'] === 'text')) > 2 ? 1 : 0;
+	$expect($multi === 0, 'no row of PHP Info holds more than one line of a name and its value');
 	$painted = $title->paint(1280, 720)->instances();
 	$expect(count($painted) > 300, 'the report paints');
 	$expect($title->input([['key' => 'escape']], null, 0) === [] && $state($title)['local'] === 'menu' && $state($title)['helpGame'] === null, 'Back returns to the title menu');

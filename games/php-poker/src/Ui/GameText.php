@@ -23,35 +23,35 @@ final class GameText
 		'Straight', 'Three of a kind', 'Two pair', 'Pair', 'High card'];
 
 	/**
-	 * An example of each hand in `HAND_RANKS` order, and what makes it that hand. The cards that make it stand in
-	 * groups, with the cards that only fill out the five in a group of their own.
+	 * An example of each hand in `HAND_RANKS` order: its five cards, which of them make it that hand (the rest only
+	 * fill out the five), and what makes it that hand.
 	 *
 	 * Card ids are suit times thirteen plus rank less two, suits being clubs, diamonds, hearts and spades; 52 is a
 	 * joker, which the first example needs: no plain deck holds five cards of one rank.
 	 *
-	 * @var list<array{list<list<int>>,string}>
+	 * @var list<array{list<int>,list<int>,string}>
 	 */
 	public const HAND_EXAMPLES = [
 		// Ace of spades, hearts, diamonds and clubs, and a joker.
-		[[[51, 38, 25, 12, 52]], 'Four of one rank, and a wild card as the fifth.'],
+		[[51, 38, 25, 12, 52], [51, 38, 25, 12, 52], 'Four of one rank, and a wild card as the fifth.'],
 		// Nine to five of hearts.
-		[[[33, 32, 31, 30, 29]], 'Five cards in a row, all of one suit. Ten to ace is a royal flush.'],
+		[[33, 32, 31, 30, 29], [33, 32, 31, 30, 29], 'Five cards in a row, all of one suit. Ten to ace is a royal flush.'],
 		// Four queens and the four of diamonds.
-		[[[49, 36, 23, 10], [15]], 'Four cards of one rank.'],
+		[[49, 36, 23, 10, 15], [49, 36, 23, 10], 'Four cards of one rank.'],
 		// Three kings and two sevens, as in the Showdown example.
-		[[[50, 37, 24], [5, 44]], 'Three cards of one rank and two of another.'],
+		[[50, 37, 24, 5, 44], [50, 37, 24, 5, 44], 'Three cards of one rank and two of another.'],
 		// Ace, jack, eight, six and two of diamonds.
-		[[[25, 22, 19, 17, 13]], 'Five cards of one suit that are not in a row.'],
+		[[25, 22, 19, 17, 13], [25, 22, 19, 17, 13], 'Five cards of one suit that are not in a row.'],
 		// Ten of spades, nine of diamonds, eight of hearts, seven of clubs, six of spades.
-		[[[47, 20, 32, 5, 43]], 'Five cards in a row, in more than one suit. An ace counts high or low.'],
+		[[47, 20, 32, 5, 43], [47, 20, 32, 5, 43], 'Five cards in a row, in more than one suit. An ace counts high or low.'],
 		// Three eights, the king of clubs and the three of diamonds.
-		[[[45, 32, 19], [11, 14]], 'Three cards of one rank.'],
+		[[45, 32, 19, 11, 14], [45, 32, 19], 'Three cards of one rank.'],
 		// Two jacks, two fives and the nine of spades.
-		[[[48, 22], [29, 3], [46]], 'Two cards of one rank and two of another.'],
+		[[48, 22, 29, 3, 46], [48, 22, 29, 3], 'Two cards of one rank and two of another.'],
 		// Two tens, the ace of spades, the seven of diamonds and the four of clubs.
-		[[[34, 8], [51, 18, 2]], 'Two cards of one rank.'],
-		// Ace of hearts, jack of clubs, eight of spades, six of diamonds, three of clubs.
-		[[[38, 9, 45, 17, 1]], 'None of the above. The highest card decides, then the next.'],
+		[[34, 8, 51, 18, 2], [34, 8], 'Two cards of one rank.'],
+		// Ace of hearts, jack of clubs, eight of spades, six of diamonds, three of clubs: the ace leads.
+		[[38, 9, 45, 17, 1], [38], 'None of the above; the highest card in the hand determines its rank. The next highest card decides a draw.'],
 	];
 
 	/** Shown under the list of hands: the one hand a plain deck cannot make. */

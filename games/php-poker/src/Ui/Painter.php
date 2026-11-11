@@ -254,7 +254,7 @@ final class Painter
 			if($phase === 'ready') continue;
 			if(in_array($seat, $this->state['motion']['hiddenSeats'] ?? [], true)) continue;
 			if($seat === 0 && !empty($this->view['legalActions']['draw']) && !$this->state['locked']) continue;
-			$dim = $player['folded'] ? .55 : 1.0;
+			$dim = $player['folded'] ? Theme::OUT_OF_PLAY : 1.0;
 			$hidden = $this->state['motion']['hiddenCards'][$seat] ?? [];
 			foreach($geometry[$seat]['cards'] as $index => $rect)
 			{
@@ -615,8 +615,10 @@ final class Painter
 		$box = $this->layout->menuBox($canContinue);
 		$this->dialog($box, 'POKER');
 		$this->text("Draw · Texas Hold'em · five- and seven-card stud", $this->layout->width() / 2, $box[1] + 24, Theme::CAPTION, Theme::INK, 'center', $box[2] - 32);
-		foreach($this->layout->menu($canContinue) as $index => $item)
-		$this->button($item['rect'], $item['label'], $this->controller() ? $this->confirmLegend() : $item['key'], $index === 0 ? 'primary' : 'default', false);
+		// The brass button is the one Enter takes: Continue Offline where there is a game to continue, otherwise Play Offline.
+		$primary = $canContinue ? 'continue' : 'offline';
+		foreach($this->layout->menu($canContinue) as $item)
+		$this->button($item['rect'], $item['label'], $this->controller() ? $this->confirmLegend() : $item['key'], $item['id'] === $primary ? 'primary' : 'default', false);
 		$this->text('Icon art: Clint Bellanger · thekingphoenix · 7Soul', $this->layout->width() / 2, $box[1] + $box[3] - 8
 			, Theme::CAPTION, Theme::alpha(Theme::INK, .75), 'center', $box[2] - 24);
 	}

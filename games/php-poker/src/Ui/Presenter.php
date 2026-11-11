@@ -536,7 +536,7 @@ final class Presenter
 			: ($this->topMenu !== null ? ['top-item:new','top-item:game-settings','top-item:odds']
 			: ['table:waiting','action:check','action:call','action:pass','action:draw','action:next','action:deal',
 				'action:bet','action:fold','setup:start','game:'.GameText::choice($this->setupGame, $this->setupVariant),'wild:none','custom-wild:0','settings:look',
-				'help-game:'.$this->helpChoice(),'help:back']));
+				'help-game:'.$this->helpChoice(),'help:back','menu:continue']));
 		$next = null;
 		foreach($preferences as $id) foreach($targets as $target) if($target['id'] === $id) { $next = $id; break 2; }
 		$next ??= $targets[0]['id'] ?? null;
@@ -662,10 +662,10 @@ final class Presenter
 			$items = $this->layout()->menu(!empty($this->view['canContinue']));
 			$shortcut = ['o' => 'offline', 'c' => 'continue', 'p' => 'online', 'h' => 'help', 'm' => 'settings', 'i' => 'phpinfo'][$key] ?? null;
 			if($shortcut !== null) foreach($items as $item) if($item['id'] === $shortcut) return $this->activateMenu($item);
-			return match($key) {
-				'enter', ' ' => $this->activateMenu($items[0]),
-				default => [],
-			};
+			// Enter takes the brass button: Continue Offline where there is a game to continue, otherwise Play Offline.
+			$primary = !empty($this->view['canContinue']) ? 'continue' : 'offline';
+			if(in_array($key, ['enter', ' '], true)) foreach($items as $item) if($item['id'] === $primary) return $this->activateMenu($item);
+			return [];
 		}
 
 		if($screen === 'help') return $this->helpKey($key);

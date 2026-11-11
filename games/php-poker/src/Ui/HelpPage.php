@@ -273,10 +273,16 @@ final class HelpPage
 				// A row with no name is a line of prose across the whole row.
 				$named = $name === '' ? [] : $fold($name, $nameWidth, 3);
 				$values = $fold($value === '' ? ' ' : $value, $name === '' ? $width - $inset : $width - $valueLeft, 12);
-				$items = [];
-				foreach($named as $line => $each) $items[] = $label($each, $inset, ($line + .5) * $step, $body, 'body');
-				foreach($values as $line => $each) $items[] = $label($each, $name === '' ? $inset : $valueLeft, ($line + .5) * $step, $body, 'body');
-				$entries[] = $row(max(count($named), count($values)) * $step + 4, $items);
+				// Each line is a row of its own, so a long value scrolls into view and out of it line by line rather
+				// than waiting until it fits whole and leaving all at once.
+				$lines = max(count($named), count($values));
+				for($line = 0; $line < $lines; $line++)
+				{
+					$items = [];
+					if(isset($named[$line])) $items[] = $label($named[$line], $inset, $step / 2, $body, 'body');
+					if(isset($values[$line])) $items[] = $label($values[$line], $name === '' ? $inset : $valueLeft, $step / 2, $body, 'body');
+					$entries[] = $row($step + ($line === $lines - 1 ? 4 : 0), $items);
+				}
 			}
 			if($entries === []) continue;
 			if($index < count($sections) - 1) $entries[count($entries) - 1]['height'] += $whole($body * $em * .8);
@@ -305,8 +311,11 @@ final class HelpPage
 			if($index === count($steps) - 1)
 			{
 				$example = GameText::helpExample($game);
-				$grow = $body * $em / 14;
-				$card = [28 * $grow * $across, 40 * $grow];
+				// Cards large enough to read their faces, smaller only where the whole hand would not fit the view.
+				$dealt = count(array_merge(...array_column($example['groups'], 1)));
+				$natural = ($dealt * 48 + ($dealt - 1) * 3 + (count($example['groups']) - 1) * 9) * $body * $em / 14 * $across;
+				$grow = $body * $em / 14 * min(1, ($width - $inset) / $natural);
+				$card = [48 * $grow * $across, 67 * $grow];
 				$items = [];
 				$x = $inset;
 				foreach($example['groups'] as [$name, $cards])
@@ -314,7 +323,7 @@ final class HelpPage
 					$start = $x;
 					foreach($cards as $id)
 					{
-						$items[] = ['kind' => 'card', 'x' => $x, 'y' => 4, 'width' => $card[0], 'height' => $card[1], 'id' => $id, 'dim' => in_array($id, $example['plays'], true) ? 1.0 : .5];
+						$items[] = ['kind' => 'card', 'x' => $x, 'y' => 4, 'width' => $card[0], 'height' => $card[1], 'id' => $id, 'dim' => in_array($id, $example['plays'], true) ? 1.0 : Theme::OUT_OF_PLAY];
 						$x += $card[0] + 3 * $grow * $across;
 					}
 					$items[] = $label($shown($name), $start, 4 + $card[1] + 3 + $leading($note) / 2, $note, 'body');
@@ -386,38 +395,36 @@ final class HelpPage
 
 		$blocks[] = [$heads('Wild cards'), ...$wrapped(GameText::HELP_WILD, $body)];
 
-		// Each hand again with an example: its five cards, the ones that make it grouped apart from the ones that
-		// only fill it out, beside its number, its name and what makes it that hand. Where the view is too narrow
-		// to say that in two lines beside the cards, the name goes above them and the explanation below.
-		$grow = $body * $em / 14;
-		$card = [28 * $grow * $across, 40 * $grow];
+		// Each hand again with an example: its five cards evenly spaced, large enough to read, the ones that only fill
+		// out the five shaded as the table shades cards out of play, beside its number, its name and what makes it
+		// that hand. Where the view is too narrow to say that in three lines beside the cards, the name goes above
+		// them and the explanation below.
+		$grow = $body * $em / 14 * min(1, ($width - $inset) / ((5 * 48 + 4 * 4) * $body * $em / 14 * $across));
+		$card = [48 * $grow * $across, 67 * $grow];
 		$fans = [];
 		$reach = 0.0;
-		foreach(GameText::HAND_EXAMPLES as [$groups])
+		foreach(GameText::HAND_EXAMPLES as [$cards, $plays])
 		{
 			$fan = [];
 			$x = $inset;
-			foreach($groups as $index => $cards)
+			foreach($cards as $id)
 			{
-				if($index) $x += 7 * $grow * $across;
-				foreach($cards as $id)
-				{
-					$fan[] = ['kind' => 'card', 'x' => $x, 'y' => 0, 'width' => $card[0], 'height' => $card[1], 'id' => $id, 'dim' => 1.0];
-					$x += $card[0] + 3 * $grow * $across;
-				}
+				$fan[] = ['kind' => 'card', 'x' => $x, 'y' => 0, 'width' => $card[0], 'height' => $card[1], 'id' => $id,
+					'dim' => in_array($id, $plays, true) ? 1.0 : Theme::OUT_OF_PLAY];
+				$x += $card[0] + 4 * $grow * $across;
 			}
 			$fans[] = $fan;
-			$reach = max($reach, $x - 3 * $grow * $across);
+			$reach = max($reach, $x - 4 * $grow * $across);
 		}
 		// The explanation starts under the name, which stands a number's width in from the cards.
 		$indent = $number + 8 * $across;
 		$beside = $reach + 14 * $across;
 		$folded = static fn(string $copy, float $room): array => $text->wrap($shown($copy), $body * $layout->uiScale(), $room * $layout->horizontalScale, 40, $faces['body']);
 		$abreast = true;
-		foreach(GameText::HAND_EXAMPLES as [, $meaning])
-			$abreast = $abreast && $width - $beside - $indent >= 16 * $body * $em * $across && count($folded($meaning, $width - $beside - $indent)) <= 2;
-		$rows = [$heads('An example of each hand')];
-		foreach(GameText::HAND_EXAMPLES as $rank => [, $meaning])
+		foreach(GameText::HAND_EXAMPLES as [, , $meaning])
+			$abreast = $abreast && $width - $beside - $indent >= 16 * $body * $em * $across && count($folded($meaning, $width - $beside - $indent)) <= 3;
+		$rows = [$heads('Poker hands')];
+		foreach(GameText::HAND_EXAMPLES as $rank => [, , $meaning])
 		{
 			$left = $abreast ? $beside : $inset;
 			// A hand's name heads its entry, so Classic sets it in capitals like the headings above it.
