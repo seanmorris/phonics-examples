@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__, 3) . '/autoload.php';
+// The engine comes from the installed npm package, as in the other packaged tests, so a fresh `npm ci` is enough.
+require (getenv('PHONICS_ENGINE_ROOT') ?: dirname(__DIR__, 3) . '/node_modules/@seanmorris/phonics') . '/autoload.php';
 require dirname(__DIR__) . '/autoload.php';
 
 use Phonics\Input\Source;
