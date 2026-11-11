@@ -347,6 +347,7 @@ $engine->start(static function(
 	$engine->device->begin($scene->skyColor());
 	glViewport(0, 0, $width, $height);
 	$font->theme = $engine->input->inputTheme;
+	$scene->controllerTheme = $engine->input->controllerTheme();
 	$record = $best();
 	$scene->render($game, $menu, $page, $width, $height, $alpha, $uiTime, $record);
 	$next = $game->nextPillar();

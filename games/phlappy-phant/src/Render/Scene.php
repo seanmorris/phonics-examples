@@ -10,6 +10,7 @@ use Phonics\Render\Sprite;
 use Phonics\Render\SpriteRenderer;
 use Phonics\Tiled\TileMap;
 use Phonics\Ui\Menu;
+use Phonics\Input\Source;
 use Phonics\Ui\MenuRenderer;
 use PhlappyPhant\Random;
 use PhlappyPhant\Simulation;
@@ -81,6 +82,10 @@ final class Scene
 	private SpriteRenderer $text;
 	private RectRenderer $rects;
 	private MenuRenderer $menus;
+	/** Draws the controller button beside each binding row; a renderer of its own, so the menu keeps its glyph cache. */
+	private MenuRenderer $bindingGlyphs;
+	/** Theme of the controller in use, so a controller binding shows that controller's button whatever was pressed last. */
+	public string $controllerTheme = 'generic';
 	private array $cache = [];
 	/** Position in the day cycle: zero is day, one is dusk (or dawn), two is night. */
 	private float $blend = 0;
@@ -120,6 +125,7 @@ final class Scene
 		$this->text = new SpriteRenderer($this->fontAtlas);
 		$this->rects = new RectRenderer;
 		$this->menus = new MenuRenderer($font);
+		$this->bindingGlyphs = new MenuRenderer($font);
 		$this->menus->style['padding'] = 10;
 		$this->menus->style['panel'] = self::PLAQUE;
 		// Plaque colors come straight from the terrain palettes: pale haze and cloud text over night grass, with the
@@ -470,12 +476,46 @@ final class Scene
 		$this->rects->render($this->plaqueFrame([$px, $py, $pw, $ph], $m), $width, $height);
 		$this->menus->render($menu, $width, $height, $seconds);
 		$this->regions = $this->menus->regions;
+		$this->bindingButtons($menu, $width, $height, $m, 4 * $m, 4 * $m);
 
 		// At this scale the shared renderer draws no key hints of its own, so the page gets the same hint line as
 		// every other menu, unless a binding is being captured or the plaque reaches down to where the line stands.
 		$hint = $this->hintLine($menu, $width, $height, $k);
 
 		if(!$this->menus->showHints && $menu->editor === null && $py + $ph + 4 * $m <= $hint['y']) $this->hint = $hint;
+	}
+
+	/**
+	 * Draw the controller button each binding row stands for at the right of that row.
+	 *
+	 * A controller action's page lists one Remove row per button bound to it, labelled only "Remove" and carrying the
+	 * button as its value; the shared menu renderer draws values only for rows that edit something, so without this
+	 * every row would read the same. The buttons use the controller's theme, whatever was pressed last.
+	 *
+	 * @param Menu $menu Open menu, whose rows match the regions just published.
+	 * @param int $width Output width in pixels.
+	 * @param int $height Output height in pixels.
+	 * @param int $scale The page's whole-number text scale.
+	 * @param float $top How far below a row's region its text stands.
+	 * @param float $inset How far in from the region's right edge the button stands.
+	 * @return void Draws nothing on pages without such rows.
+	 */
+	private function bindingButtons(Menu $menu, int $width, int $height, int $scale, float $top, float $inset): void
+	{
+		$rows = $menu->rows();
+		$hints = [];
+		foreach($this->regions as $region)
+		{
+			$row = $rows[$region['id']] ?? null;
+			if(!is_array($row) || ($row['bindingDevice'] ?? null) !== Source::CONTROLLER || ($row['input'] ?? '') !== '') continue;
+			$button = (string)($row['value'] ?? '');
+			if($button === '') continue;
+			// The right half of the row, level with its label, as the renderer sets an editable row's value.
+			[$x, $y, $w, $h] = $region['rect'];
+			$hints[] = ['text' => $button, 'rect' => [$x + $w * .5, $y + $top, $w * .5 - $inset, max(1, $h - $top)],
+				'scale' => $scale, 'theme' => $this->controllerTheme];
+		}
+		if($hints !== []) $this->bindingGlyphs->renderHints($hints, $width, $height, $this->menus->style['foreground']);
 	}
 
 	/**
@@ -671,6 +711,7 @@ final class Scene
 
 		$this->rects->render($rects, $width, $height);
 		$this->text->render($labels, $camera);
+		$this->bindingButtons($menu, $width, $height, $r, 2 * $r, $pad);
 	}
 
 	/**
@@ -915,6 +956,7 @@ final class Scene
 	public function close(): void
 	{
 		$this->menus->close();
+		$this->bindingGlyphs->close();
 		$this->rects->close();
 		$this->text->close();
 		$this->fontAtlas->close();

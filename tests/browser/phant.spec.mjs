@@ -412,3 +412,43 @@ test('menu pages stand on their plate, skip text rows and stay inside a narrow p
 	expect(errors).toEqual([]);
 	await context.close();
 });
+
+test('a controller action page names each binding it can remove by its button', async({page}) => {
+	const canvas = await boot(page);
+	await canvas.focus();
+	const labels = async() => JSON.stringify((await status(page)).regions.map(region => region.label));
+	const open = async label => {
+		const state = await status(page);
+		const region = state.regions.find(item => item.label === label);
+		const box = await canvas.boundingBox();
+		const [x, y, width, height] = region.rect;
+		const before = await labels();
+
+		await page.mouse.click(box.x + (x + width / 2) * box.width / state.width, box.y + (y + height / 2) * box.height / state.height);
+		await expect.poll(labels).not.toBe(before);
+		await frames(page, 3);
+	};
+
+	for(const label of ['Input settings', 'Controller', 'Flap']) await open(label);
+
+	// Each Remove row is labelled only "Remove"; the button it removes stands in the right half of the row.
+	const state = await status(page);
+	const removes = state.regions.filter(region => region.label === 'Remove');
+	expect(removes.length).toBeGreaterThan(0);
+	const box = await canvas.boundingBox();
+	const unit = box.width / state.width;
+
+	for(const region of removes)
+	{
+		const [x, y, width, height] = region.rect;
+		const clip = {x: box.x + (x + width / 2) * unit, y: box.y + y * unit, width: width / 2 * unit, height: height * unit};
+		const image = PNG.sync.read(await page.screenshot({clip}));
+		const ground = [image.data[0], image.data[1], image.data[2]];
+		let inked = 0;
+
+		for(let offset = 0; offset < image.data.length; offset += 4)
+			if(Math.max(...[0, 1, 2].map(channel => Math.abs(image.data[offset + channel] - ground[channel]))) > 60) inked++;
+
+		expect(inked, `the button beside Remove row ${region.id}`).toBeGreaterThan(20);
+	}
+});
