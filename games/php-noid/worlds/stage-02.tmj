@@ -52,1819 +52,885 @@
         {
           "id": 1,
           "name": "Paddle",
-          "type": "PhpNoid.Paddle",
+          "type": "",
           "point": true,
           "x": 320,
           "y": 450,
           "properties": [
             {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/paddle"
+              "name": "Paddle",
+              "type": "class",
+              "propertytype": "PhpNoid.Paddle",
+              "value": {}
             }
           ]
         },
         {
           "id": 2,
           "name": "Brick 1:1",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 24,
           "y": 70,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "fast"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200,
+                "capsule": "fast"
+              }
             }
           ]
         },
         {
           "id": 3,
           "name": "Brick 1:2",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 83,
           "y": 70,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 4,
           "name": "Brick 1:9",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 496,
           "y": 70,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 5,
           "name": "Brick 1:10",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 555,
           "y": 70,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 6,
           "name": "Brick 2:1",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 24,
           "y": 97,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 7,
           "name": "Brick 2:2",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 83,
           "y": 97,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 8,
           "name": "Brick 2:3",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 142,
           "y": 97,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "shrink"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "capsule": "shrink"
+              }
             }
           ]
         },
         {
           "id": 9,
           "name": "Brick 2:8",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 437,
           "y": 97,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 10,
           "name": "Brick 2:9",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 496,
           "y": 97,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 11,
           "name": "Brick 2:10",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 555,
           "y": 97,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 12,
           "name": "Brick 3:2",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 83,
           "y": 124,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "slow"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200,
+                "capsule": "slow"
+              }
             }
           ]
         },
         {
           "id": 13,
           "name": "Brick 3:3",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 142,
           "y": 124,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 14,
           "name": "Brick 3:4",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 201,
           "y": 124,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 15,
           "name": "Brick 3:7",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 378,
           "y": 124,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 16,
           "name": "Brick 3:8",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 437,
           "y": 124,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "expand"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200,
+                "capsule": "expand"
+              }
             }
           ]
         },
         {
           "id": 17,
           "name": "Brick 3:9",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 496,
           "y": 124,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 18,
           "name": "Brick 4:3",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 142,
           "y": 151,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 19,
           "name": "Brick 4:4",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 201,
           "y": 151,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 20,
           "name": "Brick 4:5",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 260,
           "y": 151,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "fast"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "capsule": "fast"
+              }
             }
           ]
         },
         {
           "id": 21,
           "name": "Brick 4:6",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 319,
           "y": 151,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 22,
           "name": "Brick 4:7",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 378,
           "y": 151,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 23,
           "name": "Brick 4:8",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 437,
           "y": 151,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 24,
           "name": "Brick 5:4",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 201,
           "y": 178,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 25,
           "name": "Brick 5:5",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 260,
           "y": 178,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 26,
           "name": "Brick 5:6",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 319,
           "y": 178,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "shrink"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200,
+                "capsule": "shrink"
+              }
             }
           ]
         },
         {
           "id": 27,
           "name": "Brick 5:7",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 378,
           "y": 178,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 28,
           "name": "Brick 6:3",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 142,
           "y": 205,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "slow"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "capsule": "slow"
+              }
             }
           ]
         },
         {
           "id": 29,
           "name": "Brick 6:4",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 201,
           "y": 205,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 30,
           "name": "Brick 6:5",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 260,
           "y": 205,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 31,
           "name": "Brick 6:6",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 319,
           "y": 205,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 32,
           "name": "Brick 6:7",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 378,
           "y": 205,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "expand"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "capsule": "expand"
+              }
             }
           ]
         },
         {
           "id": 33,
           "name": "Brick 6:8",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 437,
           "y": 205,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 34,
           "name": "Brick 7:2",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 83,
           "y": 232,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 35,
           "name": "Brick 7:3",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 142,
           "y": 232,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 36,
           "name": "Brick 7:4",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 201,
           "y": 232,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "fast"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200,
+                "capsule": "fast"
+              }
             }
           ]
         },
         {
           "id": 37,
           "name": "Brick 7:7",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 378,
           "y": 232,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 38,
           "name": "Brick 7:8",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 437,
           "y": 232,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 39,
           "name": "Brick 7:9",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 496,
           "y": 232,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 40,
           "name": "Brick 8:1",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 24,
           "y": 259,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "expand"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "capsule": "expand"
+              }
             }
           ]
         },
         {
           "id": 41,
           "name": "Brick 8:2",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 83,
           "y": 259,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         },
         {
           "id": 42,
           "name": "Brick 8:3",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 142,
           "y": 259,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 43,
           "name": "Brick 8:8",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 437,
           "y": 259,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 2
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "copper"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 200
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "hits": 2,
+                "material": "copper",
+                "score": 200
+              }
             }
           ]
         },
         {
           "id": 44,
           "name": "Brick 8:9",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 496,
           "y": 259,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": "shrink"
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {
+                "capsule": "shrink"
+              }
             }
           ]
         },
         {
           "id": 45,
           "name": "Brick 8:10",
-          "type": "PhpNoid.Brick",
+          "type": "",
           "x": 555,
           "y": 259,
           "width": 54,
           "height": 20,
           "properties": [
             {
-              "name": "hits",
-              "type": "int",
-              "value": 1
-            },
-            {
-              "name": "unbreakable",
-              "type": "bool",
-              "value": false
-            },
-            {
-              "name": "material",
-              "type": "string",
-              "value": "normal"
-            },
-            {
-              "name": "capsule",
-              "type": "string",
-              "value": ""
-            },
-            {
-              "name": "score",
-              "type": "int",
-              "value": 100
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-noid/brick"
+              "name": "Brick",
+              "type": "class",
+              "propertytype": "PhpNoid.Brick",
+              "value": {}
             }
           ]
         }

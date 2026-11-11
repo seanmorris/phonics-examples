@@ -22,7 +22,7 @@ foreach([0.0, .01] as $drift)
 		? [new Brick(280, 180, 80, 20, 1, true), new Brick(280, 300, 80, 20, 1, true)]
 		: [new Brick(200, 200, 20, 80, 1, true), new Brick(420, 200, 20, 80, 1, true)];
 
-	foreach($bricks as $brick) $r->create($brick);
+	foreach($bricks as $brick) $f->entity($brick);
 	$b->x = 320;
 	$b->y = 250;
 	$b->vx = $vertical ? $drift : 400;
@@ -75,13 +75,13 @@ expect(
 );
 
 [$f, $r, $p, $b] = arena();
-$r->create(new Brick(200, 200, 20, 80, 1, true));
-$r->create(new Brick(420, 200, 20, 80, 1, true));
+$f->entity(new Brick(200, 200, 20, 80, 1, true));
+$f->entity(new Brick(420, 200, 20, 80, 1, true));
 $enemyBall = new Ball(320, 250, 'enemy', 'pewter');
 $enemyBall->attached = false;
 $enemyBall->vx = 400;
 $enemyBall->vy = 0;
-$r->create($enemyBall);
+$f->entity($enemyBall);
 $system = new BallSystem($f);
 
 for($step = 0; $step < 180; $step++) $system->update($r, 1 / 60);
@@ -154,13 +154,13 @@ function collisionIndexes(CollisionWorld $world): array
 }
 
 [$f, $r, $p, $b] = arena();
-$r->create(new Brick(280, 180, 80, 20, 20));
+$f->entity(new Brick(280, 180, 80, 20, 20));
 $f->power('split');
 $shots = [];
 
 for($i = 0; $i < 6; $i++) $shots[] = new Projectile(280 + $i * 12, 400);
 
-foreach($shots as $shot) $r->create($shot);
+foreach($shots as $shot) $f->entity($shot);
 $ballSystem = new BallSystem($f);
 $shotSystem = new ProjectileSystem($f);
 $ballSystem->update($r, 0);
@@ -186,7 +186,7 @@ expect(collisionIndexes($f->collisions) === $before, 'multiball and six lasers r
 // Mutable bounds need no special setter or scheduler invocation; damage needs no reindexing.
 [$f, $r, $p, $b] = arena();
 $brick = new Brick(280, 200, 80, 20, 3);
-$id = $r->create($brick);
+$id = $f->entity($brick);
 $f->collisions->sync(640, 480, $p);
 $hit = $f->collisions->projectile(new Pose(320, 300, 3, 4), 0, -200, false);
 expect($hit->metadata['entity'] === $id, 'new targets are immediately available to weapon casts');
@@ -235,8 +235,8 @@ expect(
 foreach(['balls', 'lasers', 'missile'] as $mode)
 {
 	[$f, $r, $p, $b] = arena();
-	$near = $r->create(new Brick(280, 270, 80, 10));
-	$far = $r->create(new Brick(280, 220, 80, 10));
+	$near = $f->entity(new Brick(280, 270, 80, 10));
+	$far = $f->entity(new Brick(280, 220, 80, 10));
 
 	if($mode === 'balls')
 	{
@@ -248,15 +248,15 @@ foreach(['balls', 'lasers', 'missile'] as $mode)
 			$ball->vy = -1200;
 			$ball->attached = false;
 
-			if($index) $r->create($ball);
+			if($index) $f->entity($ball);
 		}
 
 		(new BallSystem($f))->update($r, .1);
 	}
 	else
 	{
-		$r->create(new Projectile(320, 320, $mode === 'missile' ? 'missile' : 'laser', 1200));
-		$second = $r->create(new Projectile(320, 320, 'laser', 1200));
+		$f->entity(new Projectile(320, 320, $mode === 'missile' ? 'missile' : 'laser', 1200));
+		$second = $f->entity(new Projectile(320, 320, 'laser', 1200));
 		(new ProjectileSystem($f))->update($r, .1);
 
 		if($mode === 'missile')
@@ -271,8 +271,8 @@ foreach(['balls', 'lasers', 'missile'] as $mode)
 
 [$f, $r, $p, $b] = arena();
 $ship = new Enemy(320, 260, 'floater');
-$shipId = $r->create($ship);
-$brickId = $r->create(new Brick(280, 180, 80, 20));
+$shipId = $f->entity($ship);
+$brickId = $f->entity(new Brick(280, 180, 80, 20));
 $f->collisions->sync(640, 480, $p);
 
 expect(
@@ -308,9 +308,9 @@ expect(
 // A collected capsule changes hostile-shot bounds after the ball system has already run.
 [$f, $r, $p, $b] = arena();
 (new BallSystem($f))->update($r, 1 / 60);
-$r->create(new \PhpNoid\Component\Capsule($p->x, $p->y - 15, 'expand', 500));
+$f->entity(new \PhpNoid\Component\Capsule($p->x, $p->y - 15, 'expand', 500));
 (new CapsuleSystem($f))->update($r, .02);
-$r->create(new Projectile($p->x + 60, $p->y - 30, 'killer', 500, 'enemy'));
+$f->entity(new Projectile($p->x + 60, $p->y - 30, 'killer', 500, 'enemy'));
 (new ProjectileSystem($f))->update($r, .1);
 expect($f->state->lives === 2, 'hostile shots see paddle expansion collected between collision systems');
 $f->collisions->sync(640, 480, $p);
@@ -327,8 +327,8 @@ expect(
 
 // Removing either side of a touching pair exposes the surviving shared edge.
 [$f, $r, $p, $b] = arena();
-$left = $r->create(new Brick(280, 200, 40, 20));
-$right = $r->create(new Brick(320, 200, 40, 20));
+$left = $f->entity(new Brick(280, 200, 40, 20));
+$right = $f->entity(new Brick(320, 200, 40, 20));
 $f->collisions->sync(640, 480, $p);
 
 expect(
@@ -357,8 +357,8 @@ for($i = 0; $i < 10; $i++)
 
 // Stage replacement must release old targets and resize walls without retaining old paddle bounds.
 [$f, $r, $p, $b] = arena();
-$wallBrick = $r->create(new Brick(0, 200, 8, 80));
-$paddleBrick = $r->create(new Brick(280, $p->y - 7, 80, 20));
+$wallBrick = $f->entity(new Brick(0, 200, 8, 80));
+$paddleBrick = $f->entity(new Brick(280, $p->y - 7, 80, 20));
 $f->collisions->sync(640, 480, $p);
 
 expect(
@@ -372,7 +372,7 @@ expect(
 );
 
 [$f, $r, $p, $b] = arena();
-$old = $r->create(new Brick(280, 300, 80, 20));
+$old = $f->entity(new Brick(280, 300, 80, 20));
 $oldPaddle = WeakReference::create($p);
 $oldBrick = WeakReference::create($r->get($old, Brick::class));
 ($f->loadStage)(1);

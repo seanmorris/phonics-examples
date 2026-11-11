@@ -21,24 +21,12 @@ use PhpNoid\System\TransitionSystem;
 /** Isolate physics checks from campaign loading, keeping an unreachable required brick. */
 function arena(): array
 {
-	$context = new Context;
-	Module::factories($context);
-	$field = new Playfield($context);
-	Module::systems($field);
-
-	$field->loadStage = static function(int $index) use ($field): void {
-		$field->stage(
-			(new Loader)->map(dirname(__DIR__) . '/worlds/stage-' . sprintf('%02d', $index + 1) . '.tmj')
-			, $index
-		);
-	};
-
-	($field->loadStage)(0);
+	$field = campaign();
 	$r = $field->registry();
 
 	foreach([Brick::class, Enemy::class] as $type)
 	foreach($r->query($type) as $id) $r->destroy($id);
-	$r->create(new Brick(20, 60, 10, 10, 100));
+	$field->entity(new Brick(20, 60, 10, 10, 100));
 
 	return [$field, $r, $r->get($field->paddle, Paddle::class), $r->get($r->query(Ball::class)[0], Ball::class)];
 }
@@ -135,7 +123,7 @@ expect($f->state->lives === 3, 'one surviving player ball preserves a life');
 $r->destroy($ids[2]);
 $decoy = new Ball(400, 300, 'enemy', 'pewter');
 $decoy->attached = false;
-$r->create($decoy);
+$f->entity($decoy);
 (new BallSystem($f))->update($r, .01);
 expect($f->state->lives === 2 && count($r->query(Ball::class)) === 1, 'enemy balls cannot sustain a player life');
 
@@ -152,7 +140,7 @@ $enemyBall = new Ball(400, 350, 'enemy', 'pewter');
 $enemyBall->attached = false;
 $enemyBall->vx = 100;
 $enemyBall->vy = 0;
-$r->create($enemyBall);
+$f->entity($enemyBall);
 (new BallSystem($f))->update($r, .05);
 expect(abs($b->x - 326.75) < .001, 'fast pellet changes displacement without corrupting base velocity');
 expect(abs($enemyBall->x - 405) < .001, 'stacked player speed powers leave enemy balls unchanged');
@@ -190,10 +178,10 @@ expect(!$b->attached && $b->vy < 0, 'mouse tap releases a caught ball');
 expect(!$f->pointer->tap, 'mouse tap is consumed once per fixed simulation step');
 
 [$f, $r, $p, $b] = arena();
-$r->create(new Capsule($p->x + 60, 390, 'expand', 1000));
+$f->entity(new Capsule($p->x + 60, 390, 'expand', 1000));
 (new CapsuleSystem($f))->update($r, .1);
 expect($p->width === 84.0, 'a capsule outside the paddle is not collected');
-$r->create(new Capsule($p->x, 390, 'expand', 1000));
+$f->entity(new Capsule($p->x, 390, 'expand', 1000));
 (new CapsuleSystem($f))->update($r, .1);
 expect($p->width === 132.0, 'falling capsules use swept paddle collection');
 $f->pointer->x = 400;
@@ -206,12 +194,12 @@ expect($p->x === 348.0 && $f->pointer->x === null, 'keyboard movement takes over
 foreach(['copper' => 2, 'silver' => 3, 'green' => 1, 'pewter' => 1] as $effect => $hits)
 {
 	[$f, $r, $p, $b] = arena();
-	$id = $r->create(new Brick(280, 200, 80, 20, 1, false, 'laser'));
+	$id = $f->entity(new Brick(280, 200, 80, 20, 1, false, 'laser'));
 	$energy = new Ball(320, 300, 'enemy', $effect);
 	$energy->attached = false;
 	$energy->vx = 0;
 	$energy->vy = -500;
-	$r->create($energy);
+	$f->entity($energy);
 	(new BallSystem($f))->update($r, .2);
 	$brick = $r->get($id, Brick::class);
 	expect($brick->hits === $hits && $f->state->score === 0, "$effect energy changes bricks without player scoring");
@@ -223,7 +211,7 @@ $energy = new Ball($p->x, 420, 'enemy', 'cyan');
 $energy->attached = false;
 $energy->vx = 0;
 $energy->vy = 400;
-$r->create($energy);
+$f->entity($energy);
 (new BallSystem($f))->update($r, .08);
 
 expect(
@@ -235,17 +223,17 @@ expect(
 expect($p->invisible === 0.0, 'paddle visibility recovers');
 
 [$f, $r, $p, $b] = arena();
-$green = $r->create(new Brick(280, 200, 80, 20, 1, false, '', 100, 'green'));
+$green = $f->entity(new Brick(280, 200, 80, 20, 1, false, '', 100, 'green'));
 $f->damage($green, 1000);
 expect($r->alive($green), 'green metal resists ordinary ball and weapon damage');
 $energy = new Ball(320, 300, 'enemy', 'red');
 $energy->attached = false;
 $energy->vx = 0;
 $energy->vy = -500;
-$r->create($energy);
+$f->entity($energy);
 (new BallSystem($f))->update($r, .2);
 expect(!$r->alive($green) && $f->state->score === 0, 'red energy destroys green bricks without points');
-$plain = $r->create(new Brick(280, 200, 80, 20));
+$plain = $f->entity(new Brick(280, 200, 80, 20));
 $energy->y = 300;
 $energy->vy = -500;
 (new BallSystem($f))->update($r, .2);
@@ -255,9 +243,9 @@ expect($r->alive($plain), 'red energy leaves ordinary bricks intact');
 $f->power('power');
 
 foreach(['expand', 'catch', 'laser'] as $kind) $f->power($kind);
-$first = $r->create(new Brick(280, 250, 80, 10, 3));
-$second = $r->create(new Brick(280, 200, 80, 10, 2));
-$ship = $r->create(new Enemy(320, 150));
+$first = $f->entity(new Brick(280, 250, 80, 10, 3));
+$second = $f->entity(new Brick(280, 200, 80, 10, 2));
+$ship = $f->entity(new Enemy(320, 150));
 $b->attached = false;
 $b->x = 320;
 $b->y = 350;
@@ -270,14 +258,14 @@ expect(
 	, 'power ball pierces tough bricks and ships in one sweep'
 );
 
-$gold = $r->create(new Brick(280, 40, 80, 10, 1, true));
+$gold = $f->entity(new Brick(280, 40, 80, 10, 1, true));
 (new BallSystem($f))->update($r, .08);
 expect($r->alive($gold) && $b->vy > 0, 'power ball reflects from gold obstacles');
 
 foreach(['cyan', 'red', 'green', 'copper', 'silver', 'pewter'] as $effect)
 {
 	[$f, $r, $p, $b] = arena();
-	$r->create(new Enemy(160, 40, 'menacer', $effect, .25));
+	$f->entity(new Enemy(160, 40, 'menacer', $effect, .25));
 	(new EnemySystem($f))->update($r, .3);
 	$energy = $r->get($r->query(Ball::class)[1], Ball::class);
 
@@ -288,7 +276,7 @@ foreach(['cyan', 'red', 'green', 'copper', 'silver', 'pewter'] as $effect)
 }
 
 [$f, $r, $p, $b] = arena();
-$enemyId = $r->create(new Enemy(160, 40, 'destroyer', '', .25));
+$enemyId = $f->entity(new Enemy(160, 40, 'destroyer', '', .25));
 (new EnemySystem($f))->update($r, .3);
 $shot = $r->get($r->query(Projectile::class)[0], Projectile::class);
 
@@ -318,24 +306,24 @@ expect(
 expect($r->query(Projectile::class) === [], 'life loss removes all hostile and player projectiles');
 
 $protected = new Projectile($p->x, 390, 'killer', 2000, 'enemy');
-$protectedId = $r->create($protected);
+$protectedId = $f->entity($protected);
 (new ProjectileSystem($f))->update($r, .05);
 
 expect($f->state->lives === 2 && !$r->alive($protectedId), 'respawn protection absorbs a following lethal projectile');
 
 (new PaddleSystem($f))->update($r, 2.1);
-$exposed = $r->create(new Projectile($p->x, 390, 'killer', 2000, 'enemy'));
+$exposed = $f->entity(new Projectile($p->x, 390, 'killer', 2000, 'enemy'));
 (new ProjectileSystem($f))->update($r, .05);
 
 expect($f->state->lives === 1 && !$r->alive($exposed), 'lethal projectiles resume after respawn protection expires');
 
 [$f, $r, $p, $b] = arena();
-$brickId = $r->create(new Brick(280, 200, 80, 20, 3));
-$ship = $r->create(new Enemy(320, 270));
+$brickId = $f->entity(new Brick(280, 200, 80, 20, 3));
+$ship = $f->entity(new Enemy(320, 270));
 
 for($i = 0; $i < 3; $i++)
 {
-	$r->create(new Projectile(320, 350, 'laser', 3000));
+	$f->entity(new Projectile(320, 350, 'laser', 3000));
 	(new ProjectileSystem($f))->update($r, .06);
 
 	if($i < 2) expect($r->alive($ship), 'ships survive fewer than three laser hits');
@@ -343,8 +331,8 @@ for($i = 0; $i < 3; $i++)
 
 expect(!$r->alive($ship) && $f->state->score === 250, 'third laser hit destroys and scores a Menacer');
 expect($r->get($brickId, Brick::class)->hits === 3, 'swept weapons hit a nearer ship before a farther brick');
-$ship = $r->create(new Enemy(320, 270, 'destroyer'));
-$r->create(new Projectile(320, 350, 'missile', 3000));
+$ship = $f->entity(new Enemy(320, 270, 'destroyer'));
+$f->entity(new Projectile(320, 350, 'missile', 3000));
 (new ProjectileSystem($f))->update($r, .06);
 
 expect(
@@ -353,16 +341,16 @@ expect(
 );
 
 [$f, $r, $p, $b] = arena();
-$ship = $r->create(new Enemy(320, 270, 'destroyer', '', 5, 9));
-$r->create(new Projectile(320, 350, 'missile', 3000));
+$ship = $f->entity(new Enemy(320, 270, 'destroyer', '', 5, 9));
+$f->entity(new Projectile(320, 350, 'missile', 3000));
 (new ProjectileSystem($f))->update($r, .06);
 expect($r->get($ship, Enemy::class)->hits === 6, 'missiles deal three laser units to authored heavy ships');
 
 [$f, $r, $p, $b] = arena();
-$green = $r->create(new Brick(280, 200, 80, 20, 1, false, '', 100, 'green'));
-$gold = $r->create(new Brick(280, 150, 80, 20, 1, true));
-$adjacent = $r->create(new Brick(400, 240, 40, 20));
-$r->create(new Projectile(320, 350, 'missile', 3000));
+$green = $f->entity(new Brick(280, 200, 80, 20, 1, false, '', 100, 'green'));
+$gold = $f->entity(new Brick(280, 150, 80, 20, 1, true));
+$adjacent = $f->entity(new Brick(400, 240, 40, 20));
+$f->entity(new Projectile(320, 350, 'missile', 3000));
 (new ProjectileSystem($f))->update($r, .06);
 
 expect(
@@ -373,7 +361,7 @@ expect(
 [$f, $r, $p, $b] = arena();
 $p->x = 500;
 $homing = new Projectile(320, 300, 'homing', 230, 'enemy');
-$r->create($homing);
+$f->entity($homing);
 (new ProjectileSystem($f))->update($r, .05);
 
 expect(
@@ -381,8 +369,8 @@ expect(
 	, 'Annihilator shots steer while keeping bounded speed'
 );
 
-$r->create(new Enemy(160, 40, 'sympathizer', '', .25, 3, 'laser'));
-$r->create(new Enemy(400, 40, 'floater', '', .25));
+$f->entity(new Enemy(160, 40, 'sympathizer', '', .25, 3, 'laser'));
+$f->entity(new Enemy(400, 40, 'floater', '', .25));
 (new EnemySystem($f))->update($r, .3);
 
 expect(
@@ -396,8 +384,8 @@ expect(
 );
 
 [$f, $r, $p, $b] = arena();
-$r->create(new Brick(280, 200, 80, 20, 1, false, '', 100, 'green'));
-$redShip = $r->create(new Enemy(320, 40, 'menacer', 'red'));
+$f->entity(new Brick(280, 200, 80, 20, 1, false, '', 100, 'green'));
+$redShip = $f->entity(new Enemy(320, 40, 'menacer', 'red'));
 (new StageSystem($f))->update($r, .01);
 expect(count($r->query(Ball::class)) === 1, 'a living Red Menacer provides the required red source');
 $r->destroy($redShip);
@@ -444,8 +432,7 @@ $silhouettes = [];
 
 for($index = 0; $index < 25; $index++)
 {
-	$map = (new Loader)->map(dirname(__DIR__) . '/worlds/stage-' . sprintf('%02d', $index + 1) . '.tmj');
-	$f->stage($map, $index);
+	($f->loadStage)($index);
 	$shape = $stageCapsules = $openingDrops = [];
 	$lowest = max(array_map(fn($id) => $r->get($id, Brick::class)->y, $r->query(Brick::class)));
 

@@ -10,7 +10,7 @@ use PhpNoid\System\StageSystem;
 
 [$f, $r, $p, $b] = arena();
 $ship = new Enemy(100, 50);
-$r->create($ship);
+$f->entity($ship);
 $f->power('expand');
 $f->power('laser');
 $f->power('exit');
@@ -19,6 +19,7 @@ expect($f->state->phase === 'clearing' && $f->state->stage === 0, 'clearing reta
 $powers = $p->powers;
 $position = [$b->x, $b->y, $ship->x, $ship->y, $p->x];
 $requested = [];
+$loadStage = $f->loadStage;
 $f->loadStage = static function(int $index) use (&$requested): void { $requested[] = $index; };
 
 $f->input->set(['right' => true, 0 => true]);
@@ -47,7 +48,8 @@ expect(
 	, 'delayed load holds the covered old map'
 );
 
-$f->stage((new Loader)->map(dirname(__DIR__) . '/worlds/stage-02.tmj'), 1);
+$f->loadStage = $loadStage;
+($f->loadStage)(1);
 $p = $r->get($f->paddle, Paddle::class);
 $b = $r->get($r->query(Ball::class)[0], Ball::class);
 

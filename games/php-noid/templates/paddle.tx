@@ -2,7 +2,7 @@
   "type": "template",
   "object": {
     "name": "paddle",
-    "type": "PhpNoid.Paddle",
+    "type": "",
     "x": 0,
     "y": 0,
     "width": 92,
@@ -11,9 +11,10 @@
     "visible": true,
     "properties": [
       {
-        "name": "phonics.entity",
-        "type": "string",
-        "value": "../phonics.json#paddle"
+        "name": "Paddle",
+        "type": "class",
+        "propertytype": "PhpNoid.Paddle",
+        "value": {}
       }
     ]
   }
