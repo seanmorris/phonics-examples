@@ -29,11 +29,6 @@
           "name": "score",
           "type": "int",
           "value": 100
-        },
-        {
-          "name": "phonics.entity",
-          "type": "string",
-          "value": "@php-noid/brick"
         }
       ]
     },

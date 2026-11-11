@@ -2,7 +2,7 @@
   "type": "template",
   "object": {
     "name": "enemy",
-    "type": "PhpNoid.Enemy",
+    "type": "",
     "x": 0,
     "y": 0,
     "width": 28,
@@ -11,34 +11,10 @@
     "visible": true,
     "properties": [
       {
-        "name": "family",
-        "type": "string",
-        "value": "menacer"
-      },
-      {
-        "name": "effect",
-        "type": "string",
-        "value": "copper"
-      },
-      {
-        "name": "interval",
-        "type": "float",
-        "value": 5
-      },
-      {
-        "name": "phonics.entity",
-        "type": "string",
-        "value": "../phonics.json#enemy"
-      },
-      {
-        "name": "hits",
-        "type": "int",
-        "value": 3
-      },
-      {
-        "name": "capsule",
-        "type": "string",
-        "value": "expand"
+        "name": "Enemy",
+        "type": "class",
+        "propertytype": "PhpNoid.Enemy",
+        "value": {}
       }
     ]
   }

@@ -1,5 +1,25 @@
 import fs from 'node:fs/promises';
 const root = new URL('./', import.meta.url);
+const manifest = JSON.parse(await fs.readFile(new URL('phonics.json', root), 'utf8'));
+const classes = manifest.tiled.classes;
+
+// Use the same class-valued properties as Tiled's Attach Components action.
+// Omitted fields inherit the defaults exported with the campaign's project.
+
+const component = (name, values = {}) => {
+	const propertytype = 'PhpNoid.' + name;
+
+	const defaults = Object.fromEntries(
+		classes.find(type => type.name === propertytype).members.map(member => [member.name, member.value])
+	);
+
+	return {
+		name
+		, type: 'class'
+		, propertytype
+		, value: Object.fromEntries(Object.entries(values).filter(([key, value]) => value !== defaults[key]))
+	};
+};
 
 const property = (name, value) => ({
 	name
@@ -103,11 +123,11 @@ for(let stage = 1; stage <= names.length; stage++)
 	const objects = [{
 		id: 1
 		, name: 'Paddle'
-		, type: 'PhpNoid.Paddle'
+		, type: ''
 		, point: true
 		, x: 320
 		, y: 450
-		, properties: [property('phonics.entity', '@php-noid/paddle')]
+		, properties: [component('Paddle')]
 	}];
 
 	const layout = layouts[stage - 1];
@@ -127,18 +147,12 @@ for(let stage = 1; stage <= names.length; stage++)
 			const brick = {
 				id: objects.length + 1
 				, name: `Brick ${row + 1}:${column + 1}`
-				, type: 'PhpNoid.Brick'
+				, type: ''
 				, x: 24 + column * 59
 				, y: 70 + row * 27
 				, width: 54
 				, height: 20
-				, properties: [property('hits', hits)
-					, property('unbreakable', unbreakable)
-					, property('material', material)
-					, property('capsule', '')
-					, property('score', 100 * hits)
-					, property('phonics.entity', '@php-noid/brick')
-				]
+				, properties: [component('Brick', {hits, unbreakable, material, score: 100 * hits})]
 			};
 
 			objects.push(brick);
@@ -157,7 +171,7 @@ for(let stage = 1; stage <= names.length; stage++)
 	{
 		if(stage === 1 ? index >= 4 && index % 6 !== 0 : index % 4 !== 0) continue;
 
-		brick.properties.find(value => value.name === 'capsule').value = powers[drop++ % powers.length];
+		brick.properties[0].value.capsule = powers[drop++ % powers.length];
 	}
 
 	const ships = [[]
@@ -191,17 +205,17 @@ for(let stage = 1; stage <= names.length; stage++)
 	objects.push({
 		id: objects.length + 1
 		, name: `${family} ${effect}`.trim()
-		, type: 'PhpNoid.Enemy'
+		, type: ''
 		, x: 70 + ship * 110
 		, y: 32
 		, width: 28
 		, height: 16
-		, properties: [property('family', family)
-			, property('effect', effect)
-			, property('interval', family === 'menacer' ? 7 : 9)
-			, property('hits', 3), property('capsule', stage === 5 ? 'laser' : 'extra')
-			, property('phonics.entity', '@php-noid/enemy')
-		]
+		, properties: [component('Enemy', {
+			family
+			, effect
+			, interval: family === 'menacer' ? 7 : 9
+			, capsule: stage === 5 ? 'laser' : 'extra'
+		})]
 	});
 
 	const map = {
@@ -218,7 +232,10 @@ for(let stage = 1; stage <= names.length; stage++)
 		, nextobjectid: objects.length + 1
 		, nextlayerid: 3
 		, tilesets: []
-		, properties: [property('name', names[stage - 1]), property('phonics.systems', JSON.stringify(['@php-noid/stage'])), property('phonics.lifecycle', 'reset')]
+		, properties: [property('name', names[stage - 1])
+			, property('phonics.systems', JSON.stringify(['@php-noid/stage']))
+			, property('phonics.lifecycle', 'reset')
+		]
 		, layers: [{
 			id: 1
 			, name: 'Background'
@@ -258,3 +275,19 @@ const world = {
 };
 
 await fs.writeFile(new URL('worlds/campaign.world', root), JSON.stringify(world, null, 2) + '\n');
+
+const project = {
+	folders: ['.']
+	, propertyTypes: classes.map((type, index) => ({...type, type: 'class', id: index + 1}))
+};
+
+const components = Object.entries(manifest.exports).filter(([, entry]) => entry.type === 'component');
+
+const catalog = {
+	schemaVersion: 1
+	, classes
+	, bindings: Object.fromEntries(components.map(([name, entry]) => [entry.class, '@php-noid/' + name]))
+};
+
+await fs.writeFile(new URL('worlds/campaign.tiled-project', root), JSON.stringify(project, null, 2) + '\n');
+await fs.writeFile(new URL('worlds/phonics.classes.json', root), JSON.stringify(catalog, null, 2) + '\n');
