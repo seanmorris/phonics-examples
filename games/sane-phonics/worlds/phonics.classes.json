@@ -8,6 +8,1244 @@
     {
       "name": "SanePhonics.SpawnPoint",
       "members": []
+    },
+    {
+      "name": "SanePhonics.Player",
+      "members": [
+        {
+          "name": "profile",
+          "type": "string",
+          "value": "runner"
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Ring",
+      "members": [
+        {
+          "name": "radius",
+          "type": "float",
+          "value": 12
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "value": 1
+        },
+        {
+          "name": "points",
+          "type": "int",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Monitor",
+      "members": [
+        {
+          "name": "points",
+          "type": "int",
+          "value": 10
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.RingMonitorEffect",
+      "members": [
+        {
+          "name": "amount",
+          "type": "int",
+          "value": 10
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.ShieldMonitorEffect",
+      "members": [
+        {
+          "name": "starDuration",
+          "type": "float",
+          "value": 26
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.CrabMeat",
+      "members": [
+        {
+          "name": "direction",
+          "type": "int",
+          "value": 1
+        },
+        {
+          "name": "patrolBeat",
+          "type": "float",
+          "value": 90
+        },
+        {
+          "name": "patrolPause",
+          "type": "float",
+          "value": 25
+        },
+        {
+          "name": "patrolSpeed",
+          "type": "float",
+          "value": 0.25
+        },
+        {
+          "name": "patrolOffset",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "shotTelegraph",
+          "type": "float",
+          "value": 65
+        },
+        {
+          "name": "shotDelay",
+          "type": "float",
+          "value": 3
+        },
+        {
+          "name": "projectileSpeed",
+          "type": "float",
+          "value": 1.5
+        },
+        {
+          "name": "projectileLift",
+          "type": "float",
+          "value": 3
+        },
+        {
+          "name": "projectileGravity",
+          "type": "float",
+          "value": 0.15
+        },
+        {
+          "name": "projectileLifetime",
+          "type": "float",
+          "value": 200
+        },
+        {
+          "name": "points",
+          "type": "int",
+          "value": 100
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.MiniBoss",
+      "members": [
+        {
+          "name": "hitPoints",
+          "type": "int",
+          "value": 8
+        },
+        {
+          "name": "points",
+          "type": "int",
+          "value": 1000
+        },
+        {
+          "name": "stalkSpeed",
+          "type": "float",
+          "value": 4.5
+        },
+        {
+          "name": "bombInterval",
+          "type": "float",
+          "value": 60
+        },
+        {
+          "name": "hitCooldown",
+          "type": "float",
+          "value": 45
+        },
+        {
+          "name": "recovery",
+          "type": "float",
+          "value": 20
+        },
+        {
+          "name": "deathDelay",
+          "type": "float",
+          "value": 6
+        },
+        {
+          "name": "explosionDuration",
+          "type": "float",
+          "value": 90
+        },
+        {
+          "name": "explosionInterval",
+          "type": "float",
+          "value": 3
+        },
+        {
+          "name": "escapeSpeed",
+          "type": "float",
+          "value": 14
+        },
+        {
+          "name": "escapeDuration",
+          "type": "float",
+          "value": 60
+        },
+        {
+          "name": "gravity",
+          "type": "float",
+          "value": 0.2
+        },
+        {
+          "name": "bombGravity",
+          "type": "float",
+          "value": 0.25
+        },
+        {
+          "name": "bombLifetime",
+          "type": "float",
+          "value": 240
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.BossRegion",
+      "members": [
+        {
+          "name": "boss",
+          "type": "object",
+          "value": 0
+        },
+        {
+          "name": "cameraAnchorY",
+          "type": "float",
+          "value": 0.72
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.MovingPlatform",
+      "members": [
+        {
+          "name": "oneWay",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "settle",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        },
+        {
+          "name": "outline",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.PlatformOscillation",
+      "members": [
+        {
+          "name": "oscillateX",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "oscillateY",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "squinePeriod",
+          "type": "float",
+          "value": 4.71238898038469
+        },
+        {
+          "name": "timeX",
+          "type": "float",
+          "value": 90
+        },
+        {
+          "name": "timeY",
+          "type": "float",
+          "value": 90
+        },
+        {
+          "name": "offset",
+          "type": "float",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.PlatformPath",
+      "members": [
+        {
+          "name": "path",
+          "type": "object",
+          "value": 0
+        },
+        {
+          "name": "ridePath",
+          "type": "object",
+          "value": 0
+        },
+        {
+          "name": "pathSpeed",
+          "type": "float",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.PathNode",
+      "members": [
+        {
+          "name": "next",
+          "type": "object",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.BendableBridge",
+      "members": [
+        {
+          "name": "droop",
+          "type": "float",
+          "value": 32
+        },
+        {
+          "name": "segmentWidth",
+          "type": "float",
+          "value": 16
+        },
+        {
+          "name": "response",
+          "type": "float",
+          "value": 14
+        },
+        {
+          "name": "maxLoads",
+          "type": "int",
+          "value": 4
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.BuoyantPlatform",
+      "members": [
+        {
+          "name": "water",
+          "type": "object",
+          "value": 0
+        },
+        {
+          "name": "density",
+          "type": "float",
+          "value": 0.5
+        },
+        {
+          "name": "hLock",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "oneWay",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "spring",
+          "type": "float",
+          "value": 36
+        },
+        {
+          "name": "damping",
+          "type": "float",
+          "value": 12
+        },
+        {
+          "name": "maxSpeed",
+          "type": "float",
+          "value": 720
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.WaterRegion",
+      "members": [
+        {
+          "name": "gravity",
+          "type": "float",
+          "value": 0.4
+        },
+        {
+          "name": "drag",
+          "type": "float",
+          "value": 0.85
+        },
+        {
+          "name": "density",
+          "type": "float",
+          "value": 1
+        },
+        {
+          "name": "skimSpeed",
+          "type": "float",
+          "value": 900
+        },
+        {
+          "name": "currentX",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "currentY",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#4d147ab8"
+        },
+        {
+          "name": "displacement",
+          "type": "float",
+          "value": 4
+        },
+        {
+          "name": "displacementScale",
+          "type": "float",
+          "value": 64
+        },
+        {
+          "name": "displacementSpeed",
+          "type": "float",
+          "value": 42.6666667
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.WaterSwitch",
+      "members": [
+        {
+          "name": "water",
+          "type": "object",
+          "value": 0
+        },
+        {
+          "name": "setPoint",
+          "type": "object",
+          "value": 0
+        },
+        {
+          "name": "fillSpeed",
+          "type": "float",
+          "value": 240
+        },
+        {
+          "name": "drainSpeed",
+          "type": "float",
+          "value": 480
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.GrapplePoint",
+      "members": [
+        {
+          "name": "tiedTo",
+          "type": "object",
+          "value": 0
+        },
+        {
+          "name": "ropeLength",
+          "type": "float",
+          "value": 64
+        },
+        {
+          "name": "noSwing",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.RopeAnchor",
+      "members": [
+        {
+          "name": "ropeLength",
+          "type": "float",
+          "value": 64
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Spring",
+      "members": [
+        {
+          "name": "length",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "normalX",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "normalY",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        },
+        {
+          "name": "spriteGid",
+          "type": "int",
+          "value": 4
+        },
+        {
+          "name": "power",
+          "type": "float",
+          "value": 960
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.GravitySwitch",
+      "members": [
+        {
+          "name": "length",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "normalX",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "normalY",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        },
+        {
+          "name": "spriteGid",
+          "type": "int",
+          "value": 4
+        },
+        {
+          "name": "gravity",
+          "type": "string",
+          "value": "down"
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Skateboard",
+      "members": [
+        {
+          "name": "seatHeight",
+          "type": "float",
+          "value": 12
+        },
+        {
+          "name": "seatForward",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "seatAngle",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "lockedIn",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "quickDrop",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "direction",
+          "type": "int",
+          "value": 1
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Tornado",
+      "members": [
+        {
+          "name": "seatHeight",
+          "type": "float",
+          "value": 14
+        },
+        {
+          "name": "seatForward",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "seatAngle",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "lockedIn",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "quickDrop",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "direction",
+          "type": "int",
+          "value": 1
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.EggWalker",
+      "members": [
+        {
+          "name": "seatHeight",
+          "type": "float",
+          "value": 48
+        },
+        {
+          "name": "seatForward",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "seatAngle",
+          "type": "float",
+          "value": 0
+        },
+        {
+          "name": "lockedIn",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "quickDrop",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "direction",
+          "type": "int",
+          "value": 1
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.VehicleRegion",
+      "members": [
+        {
+          "name": "restricted",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Terrain",
+      "members": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "oneWay",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "collisionLayer",
+          "type": "int",
+          "value": -1
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.LayerSwitch",
+      "members": [
+        {
+          "name": "fromLayer",
+          "type": "int",
+          "value": 1
+        },
+        {
+          "name": "toLayer",
+          "type": "int",
+          "value": 2
+        },
+        {
+          "name": "back",
+          "type": "bool",
+          "value": false
+        },
+        {
+          "name": "roll",
+          "type": "bool",
+          "value": false
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.BreakableBlock",
+      "members": [
+        {
+          "name": "columns",
+          "type": "int",
+          "value": 4
+        },
+        {
+          "name": "rows",
+          "type": "int",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.TextActor",
+      "members": [
+        {
+          "name": "content",
+          "type": "string",
+          "value": ""
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "value": "#ffffffff"
+        },
+        {
+          "name": "scale",
+          "type": "float",
+          "value": 1
+        },
+        {
+          "name": "align",
+          "type": "string",
+          "value": "left"
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.ring",
+      "members": [
+        {
+          "name": "Ring",
+          "type": "class",
+          "propertyType": "SanePhonics.Ring",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.CrabMeat",
+      "members": [
+        {
+          "name": "CrabMeat",
+          "type": "class",
+          "propertyType": "SanePhonics.CrabMeat",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.MiniBoss",
+      "members": [
+        {
+          "name": "MiniBoss",
+          "type": "class",
+          "propertyType": "SanePhonics.MiniBoss",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.BossRegion",
+      "members": [
+        {
+          "name": "BossRegion",
+          "type": "class",
+          "propertyType": "SanePhonics.BossRegion",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.RingMonitor",
+      "members": [
+        {
+          "name": "Monitor",
+          "type": "class",
+          "propertyType": "SanePhonics.Monitor",
+          "value": {}
+        },
+        {
+          "name": "RingMonitorEffect",
+          "type": "class",
+          "propertyType": "SanePhonics.RingMonitorEffect",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.TripleRingMonitor",
+      "members": [
+        {
+          "name": "Monitor",
+          "type": "class",
+          "propertyType": "SanePhonics.Monitor",
+          "value": {}
+        },
+        {
+          "name": "RingMonitorEffect",
+          "type": "class",
+          "propertyType": "SanePhonics.RingMonitorEffect",
+          "value": {
+            "amount": 30
+          }
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.NormalShieldMonitor",
+      "members": [
+        {
+          "name": "Monitor",
+          "type": "class",
+          "propertyType": "SanePhonics.Monitor",
+          "value": {}
+        },
+        {
+          "name": "ShieldMonitorEffect",
+          "type": "class",
+          "propertyType": "SanePhonics.ShieldMonitorEffect",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.ElectricShieldMonitor",
+      "members": [
+        {
+          "name": "Monitor",
+          "type": "class",
+          "propertyType": "SanePhonics.Monitor",
+          "value": {}
+        },
+        {
+          "name": "ShieldMonitorEffect",
+          "type": "class",
+          "propertyType": "SanePhonics.ShieldMonitorEffect",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.FireShieldMonitor",
+      "members": [
+        {
+          "name": "Monitor",
+          "type": "class",
+          "propertyType": "SanePhonics.Monitor",
+          "value": {}
+        },
+        {
+          "name": "ShieldMonitorEffect",
+          "type": "class",
+          "propertyType": "SanePhonics.ShieldMonitorEffect",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.WaterShieldMonitor",
+      "members": [
+        {
+          "name": "Monitor",
+          "type": "class",
+          "propertyType": "SanePhonics.Monitor",
+          "value": {}
+        },
+        {
+          "name": "ShieldMonitorEffect",
+          "type": "class",
+          "propertyType": "SanePhonics.ShieldMonitorEffect",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.StarShieldMonitor",
+      "members": [
+        {
+          "name": "Monitor",
+          "type": "class",
+          "propertyType": "SanePhonics.Monitor",
+          "value": {}
+        },
+        {
+          "name": "ShieldMonitorEffect",
+          "type": "class",
+          "propertyType": "SanePhonics.ShieldMonitorEffect",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.FloatingPlatform",
+      "members": [
+        {
+          "name": "MovingPlatform",
+          "type": "class",
+          "propertyType": "SanePhonics.MovingPlatform",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.MovingPlatform",
+      "members": [
+        {
+          "name": "MovingPlatform",
+          "type": "class",
+          "propertyType": "SanePhonics.MovingPlatform",
+          "value": {}
+        },
+        {
+          "name": "PlatformOscillation",
+          "type": "class",
+          "propertyType": "SanePhonics.PlatformOscillation",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.PathPlatform",
+      "members": [
+        {
+          "name": "MovingPlatform",
+          "type": "class",
+          "propertyType": "SanePhonics.MovingPlatform",
+          "value": {}
+        },
+        {
+          "name": "PlatformPath",
+          "type": "class",
+          "propertyType": "SanePhonics.PlatformPath",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.PathNode",
+      "members": [
+        {
+          "name": "PathNode",
+          "type": "class",
+          "propertyType": "SanePhonics.PathNode",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.BendableBridge",
+      "members": [
+        {
+          "name": "BendableBridge",
+          "type": "class",
+          "propertyType": "SanePhonics.BendableBridge",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.BendableRail",
+      "members": [
+        {
+          "name": "BendableBridge",
+          "type": "class",
+          "propertyType": "SanePhonics.BendableBridge",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.Block",
+      "members": [
+        {
+          "name": "BuoyantPlatform",
+          "type": "class",
+          "propertyType": "SanePhonics.BuoyantPlatform",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.WaterRegion",
+      "members": [
+        {
+          "name": "WaterRegion",
+          "type": "class",
+          "propertyType": "SanePhonics.WaterRegion",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.Switch",
+      "members": [
+        {
+          "name": "WaterSwitch",
+          "type": "class",
+          "propertyType": "SanePhonics.WaterSwitch",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.GrapplePoint",
+      "members": [
+        {
+          "name": "GrapplePoint",
+          "type": "class",
+          "propertyType": "SanePhonics.GrapplePoint",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.RopeAnchor",
+      "members": [
+        {
+          "name": "RopeAnchor",
+          "type": "class",
+          "propertyType": "SanePhonics.RopeAnchor",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.Spring",
+      "members": [
+        {
+          "name": "Spring",
+          "type": "class",
+          "propertyType": "SanePhonics.Spring",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.GravitySwitch",
+      "members": [
+        {
+          "name": "GravitySwitch",
+          "type": "class",
+          "propertyType": "SanePhonics.GravitySwitch",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.Skateboard",
+      "members": [
+        {
+          "name": "Skateboard",
+          "type": "class",
+          "propertyType": "SanePhonics.Skateboard",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.Tornado",
+      "members": [
+        {
+          "name": "Tornado",
+          "type": "class",
+          "propertyType": "SanePhonics.Tornado",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.EggWalker",
+      "members": [
+        {
+          "name": "EggWalker",
+          "type": "class",
+          "propertyType": "SanePhonics.EggWalker",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.VehicleRegion",
+      "members": [
+        {
+          "name": "VehicleRegion",
+          "type": "class",
+          "propertyType": "SanePhonics.VehicleRegion",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.DropVehicleRegion",
+      "members": [
+        {
+          "name": "VehicleRegion",
+          "type": "class",
+          "propertyType": "SanePhonics.VehicleRegion",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.CurvedCeiling",
+      "members": [
+        {
+          "name": "Terrain",
+          "type": "class",
+          "propertyType": "SanePhonics.Terrain",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.Grinding",
+      "members": [
+        {
+          "name": "Terrain",
+          "type": "class",
+          "propertyType": "SanePhonics.Terrain",
+          "value": {
+            "solid": false,
+            "oneWay": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.layer-switch",
+      "members": [
+        {
+          "name": "LayerSwitch",
+          "type": "class",
+          "propertyType": "SanePhonics.LayerSwitch",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.breakable",
+      "members": [
+        {
+          "name": "BreakableBlock",
+          "type": "class",
+          "propertyType": "SanePhonics.BreakableBlock",
+          "value": {}
+        }
+      ]
+    },
+    {
+      "name": "SanePhonics.Entity.TextActor",
+      "members": [
+        {
+          "name": "TextActor",
+          "type": "class",
+          "propertyType": "SanePhonics.TextActor",
+          "value": {}
+        }
+      ]
     }
   ],
   "bindings": {

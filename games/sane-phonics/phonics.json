@@ -95,6 +95,7 @@
       "src/Physics/WaterRegion.php",
       "src/Physics/WaterRegions.php",
       "src/Render/WaterRenderer.php",
+      "src/Tiled/Authoring.php",
       "modules/demo-map.php",
       "modules/movement.php",
       "modules/platformer.php",
@@ -163,9 +164,51 @@
   "tiled": {
     "templates": [
       "templates/player.tx",
-      "templates/spawn.tx"
+      "templates/spawn.tx",
+      "templates/ring.tj",
+      "templates/crab-meat.tj",
+      "templates/mini-boss.tj",
+      "templates/boss-region.tj",
+      "templates/ring-monitor.tj",
+      "templates/triple-ring-monitor.tj",
+      "templates/normal-shield-monitor.tj",
+      "templates/electric-shield-monitor.tj",
+      "templates/fire-shield-monitor.tj",
+      "templates/water-shield-monitor.tj",
+      "templates/star-shield-monitor.tj",
+      "templates/floating-platform.tj",
+      "templates/moving-platform.tj",
+      "templates/path-platform.tj",
+      "templates/path-node.tj",
+      "templates/bendable-bridge.tj",
+      "templates/bendable-rail.tj",
+      "templates/block.tj",
+      "templates/water-region.tj",
+      "templates/switch.tj",
+      "templates/grapple-point.tj",
+      "templates/rope-anchor.tj",
+      "templates/spring.tj",
+      "templates/gravity-switch.tj",
+      "templates/skateboard.tj",
+      "templates/tornado.tj",
+      "templates/egg-walker.tj",
+      "templates/vehicle-region.tj",
+      "templates/drop-vehicle-region.tj",
+      "templates/curved-ceiling.tj",
+      "templates/grinding.tj",
+      "templates/layer-switch.tj",
+      "templates/breakable.tj",
+      "templates/text-actor.tj"
     ],
     "classes": [
+      {
+        "name": "Player",
+        "members": []
+      },
+      {
+        "name": "SanePhonics.SpawnPoint",
+        "members": []
+      },
       {
         "name": "SanePhonics.Player",
         "members": [
@@ -177,8 +220,1232 @@
         ]
       },
       {
-        "name": "SanePhonics.SpawnPoint",
-        "members": []
+        "name": "SanePhonics.Ring",
+        "members": [
+          {
+            "name": "radius",
+            "type": "float",
+            "value": 12
+          },
+          {
+            "name": "value",
+            "type": "int",
+            "value": 1
+          },
+          {
+            "name": "points",
+            "type": "int",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Monitor",
+        "members": [
+          {
+            "name": "points",
+            "type": "int",
+            "value": 10
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.RingMonitorEffect",
+        "members": [
+          {
+            "name": "amount",
+            "type": "int",
+            "value": 10
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.ShieldMonitorEffect",
+        "members": [
+          {
+            "name": "starDuration",
+            "type": "float",
+            "value": 26
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.CrabMeat",
+        "members": [
+          {
+            "name": "direction",
+            "type": "int",
+            "value": 1
+          },
+          {
+            "name": "patrolBeat",
+            "type": "float",
+            "value": 90
+          },
+          {
+            "name": "patrolPause",
+            "type": "float",
+            "value": 25
+          },
+          {
+            "name": "patrolSpeed",
+            "type": "float",
+            "value": 0.25
+          },
+          {
+            "name": "patrolOffset",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "shotTelegraph",
+            "type": "float",
+            "value": 65
+          },
+          {
+            "name": "shotDelay",
+            "type": "float",
+            "value": 3
+          },
+          {
+            "name": "projectileSpeed",
+            "type": "float",
+            "value": 1.5
+          },
+          {
+            "name": "projectileLift",
+            "type": "float",
+            "value": 3
+          },
+          {
+            "name": "projectileGravity",
+            "type": "float",
+            "value": 0.15
+          },
+          {
+            "name": "projectileLifetime",
+            "type": "float",
+            "value": 200
+          },
+          {
+            "name": "points",
+            "type": "int",
+            "value": 100
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.MiniBoss",
+        "members": [
+          {
+            "name": "hitPoints",
+            "type": "int",
+            "value": 8
+          },
+          {
+            "name": "points",
+            "type": "int",
+            "value": 1000
+          },
+          {
+            "name": "stalkSpeed",
+            "type": "float",
+            "value": 4.5
+          },
+          {
+            "name": "bombInterval",
+            "type": "float",
+            "value": 60
+          },
+          {
+            "name": "hitCooldown",
+            "type": "float",
+            "value": 45
+          },
+          {
+            "name": "recovery",
+            "type": "float",
+            "value": 20
+          },
+          {
+            "name": "deathDelay",
+            "type": "float",
+            "value": 6
+          },
+          {
+            "name": "explosionDuration",
+            "type": "float",
+            "value": 90
+          },
+          {
+            "name": "explosionInterval",
+            "type": "float",
+            "value": 3
+          },
+          {
+            "name": "escapeSpeed",
+            "type": "float",
+            "value": 14
+          },
+          {
+            "name": "escapeDuration",
+            "type": "float",
+            "value": 60
+          },
+          {
+            "name": "gravity",
+            "type": "float",
+            "value": 0.2
+          },
+          {
+            "name": "bombGravity",
+            "type": "float",
+            "value": 0.25
+          },
+          {
+            "name": "bombLifetime",
+            "type": "float",
+            "value": 240
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.BossRegion",
+        "members": [
+          {
+            "name": "boss",
+            "type": "object",
+            "value": 0
+          },
+          {
+            "name": "cameraAnchorY",
+            "type": "float",
+            "value": 0.72
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.MovingPlatform",
+        "members": [
+          {
+            "name": "oneWay",
+            "type": "bool",
+            "value": true
+          },
+          {
+            "name": "settle",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          },
+          {
+            "name": "outline",
+            "type": "bool",
+            "value": true
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.PlatformOscillation",
+        "members": [
+          {
+            "name": "oscillateX",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "oscillateY",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "squinePeriod",
+            "type": "float",
+            "value": 4.71238898038469
+          },
+          {
+            "name": "timeX",
+            "type": "float",
+            "value": 90
+          },
+          {
+            "name": "timeY",
+            "type": "float",
+            "value": 90
+          },
+          {
+            "name": "offset",
+            "type": "float",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.PlatformPath",
+        "members": [
+          {
+            "name": "path",
+            "type": "object",
+            "value": 0
+          },
+          {
+            "name": "ridePath",
+            "type": "object",
+            "value": 0
+          },
+          {
+            "name": "pathSpeed",
+            "type": "float",
+            "value": 8
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.PathNode",
+        "members": [
+          {
+            "name": "next",
+            "type": "object",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.BendableBridge",
+        "members": [
+          {
+            "name": "droop",
+            "type": "float",
+            "value": 32
+          },
+          {
+            "name": "segmentWidth",
+            "type": "float",
+            "value": 16
+          },
+          {
+            "name": "response",
+            "type": "float",
+            "value": 14
+          },
+          {
+            "name": "maxLoads",
+            "type": "int",
+            "value": 4
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.BuoyantPlatform",
+        "members": [
+          {
+            "name": "water",
+            "type": "object",
+            "value": 0
+          },
+          {
+            "name": "density",
+            "type": "float",
+            "value": 0.5
+          },
+          {
+            "name": "hLock",
+            "type": "bool",
+            "value": true
+          },
+          {
+            "name": "oneWay",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "spring",
+            "type": "float",
+            "value": 36
+          },
+          {
+            "name": "damping",
+            "type": "float",
+            "value": 12
+          },
+          {
+            "name": "maxSpeed",
+            "type": "float",
+            "value": 720
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.WaterRegion",
+        "members": [
+          {
+            "name": "gravity",
+            "type": "float",
+            "value": 0.4
+          },
+          {
+            "name": "drag",
+            "type": "float",
+            "value": 0.85
+          },
+          {
+            "name": "density",
+            "type": "float",
+            "value": 1
+          },
+          {
+            "name": "skimSpeed",
+            "type": "float",
+            "value": 900
+          },
+          {
+            "name": "currentX",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "currentY",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "color",
+            "type": "color",
+            "value": "#4d147ab8"
+          },
+          {
+            "name": "displacement",
+            "type": "float",
+            "value": 4
+          },
+          {
+            "name": "displacementScale",
+            "type": "float",
+            "value": 64
+          },
+          {
+            "name": "displacementSpeed",
+            "type": "float",
+            "value": 42.6666667
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.WaterSwitch",
+        "members": [
+          {
+            "name": "water",
+            "type": "object",
+            "value": 0
+          },
+          {
+            "name": "setPoint",
+            "type": "object",
+            "value": 0
+          },
+          {
+            "name": "fillSpeed",
+            "type": "float",
+            "value": 240
+          },
+          {
+            "name": "drainSpeed",
+            "type": "float",
+            "value": 480
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.GrapplePoint",
+        "members": [
+          {
+            "name": "tiedTo",
+            "type": "object",
+            "value": 0
+          },
+          {
+            "name": "ropeLength",
+            "type": "float",
+            "value": 64
+          },
+          {
+            "name": "noSwing",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.RopeAnchor",
+        "members": [
+          {
+            "name": "ropeLength",
+            "type": "float",
+            "value": 64
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Spring",
+        "members": [
+          {
+            "name": "length",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "normalX",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "normalY",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          },
+          {
+            "name": "spriteGid",
+            "type": "int",
+            "value": 4
+          },
+          {
+            "name": "power",
+            "type": "float",
+            "value": 960
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.GravitySwitch",
+        "members": [
+          {
+            "name": "length",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "normalX",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "normalY",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          },
+          {
+            "name": "spriteGid",
+            "type": "int",
+            "value": 4
+          },
+          {
+            "name": "gravity",
+            "type": "string",
+            "value": "down"
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Skateboard",
+        "members": [
+          {
+            "name": "seatHeight",
+            "type": "float",
+            "value": 12
+          },
+          {
+            "name": "seatForward",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "seatAngle",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "lockedIn",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "quickDrop",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "direction",
+            "type": "int",
+            "value": 1
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Tornado",
+        "members": [
+          {
+            "name": "seatHeight",
+            "type": "float",
+            "value": 14
+          },
+          {
+            "name": "seatForward",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "seatAngle",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "lockedIn",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "quickDrop",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "direction",
+            "type": "int",
+            "value": 1
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.EggWalker",
+        "members": [
+          {
+            "name": "seatHeight",
+            "type": "float",
+            "value": 48
+          },
+          {
+            "name": "seatForward",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "seatAngle",
+            "type": "float",
+            "value": 0
+          },
+          {
+            "name": "lockedIn",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "quickDrop",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "direction",
+            "type": "int",
+            "value": 1
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.VehicleRegion",
+        "members": [
+          {
+            "name": "restricted",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Terrain",
+        "members": [
+          {
+            "name": "solid",
+            "type": "bool",
+            "value": true
+          },
+          {
+            "name": "oneWay",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "collisionLayer",
+            "type": "int",
+            "value": -1
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.LayerSwitch",
+        "members": [
+          {
+            "name": "fromLayer",
+            "type": "int",
+            "value": 1
+          },
+          {
+            "name": "toLayer",
+            "type": "int",
+            "value": 2
+          },
+          {
+            "name": "back",
+            "type": "bool",
+            "value": false
+          },
+          {
+            "name": "roll",
+            "type": "bool",
+            "value": false
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.BreakableBlock",
+        "members": [
+          {
+            "name": "columns",
+            "type": "int",
+            "value": 4
+          },
+          {
+            "name": "rows",
+            "type": "int",
+            "value": 3
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.TextActor",
+        "members": [
+          {
+            "name": "content",
+            "type": "string",
+            "value": ""
+          },
+          {
+            "name": "color",
+            "type": "color",
+            "value": "#ffffffff"
+          },
+          {
+            "name": "scale",
+            "type": "float",
+            "value": 1
+          },
+          {
+            "name": "align",
+            "type": "string",
+            "value": "left"
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.ring",
+        "members": [
+          {
+            "name": "Ring",
+            "type": "class",
+            "propertyType": "SanePhonics.Ring",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.CrabMeat",
+        "members": [
+          {
+            "name": "CrabMeat",
+            "type": "class",
+            "propertyType": "SanePhonics.CrabMeat",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.MiniBoss",
+        "members": [
+          {
+            "name": "MiniBoss",
+            "type": "class",
+            "propertyType": "SanePhonics.MiniBoss",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.BossRegion",
+        "members": [
+          {
+            "name": "BossRegion",
+            "type": "class",
+            "propertyType": "SanePhonics.BossRegion",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.RingMonitor",
+        "members": [
+          {
+            "name": "Monitor",
+            "type": "class",
+            "propertyType": "SanePhonics.Monitor",
+            "value": {}
+          },
+          {
+            "name": "RingMonitorEffect",
+            "type": "class",
+            "propertyType": "SanePhonics.RingMonitorEffect",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.TripleRingMonitor",
+        "members": [
+          {
+            "name": "Monitor",
+            "type": "class",
+            "propertyType": "SanePhonics.Monitor",
+            "value": {}
+          },
+          {
+            "name": "RingMonitorEffect",
+            "type": "class",
+            "propertyType": "SanePhonics.RingMonitorEffect",
+            "value": {
+              "amount": 30
+            }
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.NormalShieldMonitor",
+        "members": [
+          {
+            "name": "Monitor",
+            "type": "class",
+            "propertyType": "SanePhonics.Monitor",
+            "value": {}
+          },
+          {
+            "name": "ShieldMonitorEffect",
+            "type": "class",
+            "propertyType": "SanePhonics.ShieldMonitorEffect",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.ElectricShieldMonitor",
+        "members": [
+          {
+            "name": "Monitor",
+            "type": "class",
+            "propertyType": "SanePhonics.Monitor",
+            "value": {}
+          },
+          {
+            "name": "ShieldMonitorEffect",
+            "type": "class",
+            "propertyType": "SanePhonics.ShieldMonitorEffect",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.FireShieldMonitor",
+        "members": [
+          {
+            "name": "Monitor",
+            "type": "class",
+            "propertyType": "SanePhonics.Monitor",
+            "value": {}
+          },
+          {
+            "name": "ShieldMonitorEffect",
+            "type": "class",
+            "propertyType": "SanePhonics.ShieldMonitorEffect",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.WaterShieldMonitor",
+        "members": [
+          {
+            "name": "Monitor",
+            "type": "class",
+            "propertyType": "SanePhonics.Monitor",
+            "value": {}
+          },
+          {
+            "name": "ShieldMonitorEffect",
+            "type": "class",
+            "propertyType": "SanePhonics.ShieldMonitorEffect",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.StarShieldMonitor",
+        "members": [
+          {
+            "name": "Monitor",
+            "type": "class",
+            "propertyType": "SanePhonics.Monitor",
+            "value": {}
+          },
+          {
+            "name": "ShieldMonitorEffect",
+            "type": "class",
+            "propertyType": "SanePhonics.ShieldMonitorEffect",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.FloatingPlatform",
+        "members": [
+          {
+            "name": "MovingPlatform",
+            "type": "class",
+            "propertyType": "SanePhonics.MovingPlatform",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.MovingPlatform",
+        "members": [
+          {
+            "name": "MovingPlatform",
+            "type": "class",
+            "propertyType": "SanePhonics.MovingPlatform",
+            "value": {}
+          },
+          {
+            "name": "PlatformOscillation",
+            "type": "class",
+            "propertyType": "SanePhonics.PlatformOscillation",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.PathPlatform",
+        "members": [
+          {
+            "name": "MovingPlatform",
+            "type": "class",
+            "propertyType": "SanePhonics.MovingPlatform",
+            "value": {}
+          },
+          {
+            "name": "PlatformPath",
+            "type": "class",
+            "propertyType": "SanePhonics.PlatformPath",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.PathNode",
+        "members": [
+          {
+            "name": "PathNode",
+            "type": "class",
+            "propertyType": "SanePhonics.PathNode",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.BendableBridge",
+        "members": [
+          {
+            "name": "BendableBridge",
+            "type": "class",
+            "propertyType": "SanePhonics.BendableBridge",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.BendableRail",
+        "members": [
+          {
+            "name": "BendableBridge",
+            "type": "class",
+            "propertyType": "SanePhonics.BendableBridge",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.Block",
+        "members": [
+          {
+            "name": "BuoyantPlatform",
+            "type": "class",
+            "propertyType": "SanePhonics.BuoyantPlatform",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.WaterRegion",
+        "members": [
+          {
+            "name": "WaterRegion",
+            "type": "class",
+            "propertyType": "SanePhonics.WaterRegion",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.Switch",
+        "members": [
+          {
+            "name": "WaterSwitch",
+            "type": "class",
+            "propertyType": "SanePhonics.WaterSwitch",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.GrapplePoint",
+        "members": [
+          {
+            "name": "GrapplePoint",
+            "type": "class",
+            "propertyType": "SanePhonics.GrapplePoint",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.RopeAnchor",
+        "members": [
+          {
+            "name": "RopeAnchor",
+            "type": "class",
+            "propertyType": "SanePhonics.RopeAnchor",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.Spring",
+        "members": [
+          {
+            "name": "Spring",
+            "type": "class",
+            "propertyType": "SanePhonics.Spring",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.GravitySwitch",
+        "members": [
+          {
+            "name": "GravitySwitch",
+            "type": "class",
+            "propertyType": "SanePhonics.GravitySwitch",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.Skateboard",
+        "members": [
+          {
+            "name": "Skateboard",
+            "type": "class",
+            "propertyType": "SanePhonics.Skateboard",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.Tornado",
+        "members": [
+          {
+            "name": "Tornado",
+            "type": "class",
+            "propertyType": "SanePhonics.Tornado",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.EggWalker",
+        "members": [
+          {
+            "name": "EggWalker",
+            "type": "class",
+            "propertyType": "SanePhonics.EggWalker",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.VehicleRegion",
+        "members": [
+          {
+            "name": "VehicleRegion",
+            "type": "class",
+            "propertyType": "SanePhonics.VehicleRegion",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.DropVehicleRegion",
+        "members": [
+          {
+            "name": "VehicleRegion",
+            "type": "class",
+            "propertyType": "SanePhonics.VehicleRegion",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.CurvedCeiling",
+        "members": [
+          {
+            "name": "Terrain",
+            "type": "class",
+            "propertyType": "SanePhonics.Terrain",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.Grinding",
+        "members": [
+          {
+            "name": "Terrain",
+            "type": "class",
+            "propertyType": "SanePhonics.Terrain",
+            "value": {
+              "solid": false,
+              "oneWay": true
+            }
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.layer-switch",
+        "members": [
+          {
+            "name": "LayerSwitch",
+            "type": "class",
+            "propertyType": "SanePhonics.LayerSwitch",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.breakable",
+        "members": [
+          {
+            "name": "BreakableBlock",
+            "type": "class",
+            "propertyType": "SanePhonics.BreakableBlock",
+            "value": {}
+          }
+        ]
+      },
+      {
+        "name": "SanePhonics.Entity.TextActor",
+        "members": [
+          {
+            "name": "TextActor",
+            "type": "class",
+            "propertyType": "SanePhonics.TextActor",
+            "value": {}
+          }
+        ]
       }
     ]
   },
@@ -313,8 +1580,42 @@
     "worlds/water-skim-rail.world",
     "worlds/water.world",
     "worlds/world.world",
+    "templates/bendable-bridge.tj",
+    "templates/bendable-rail.tj",
+    "templates/block.tj",
+    "templates/boss-region.tj",
+    "templates/breakable.tj",
+    "templates/crab-meat.tj",
+    "templates/curved-ceiling.tj",
+    "templates/drop-vehicle-region.tj",
+    "templates/egg-walker.tj",
+    "templates/electric-shield-monitor.tj",
+    "templates/fire-shield-monitor.tj",
+    "templates/floating-platform.tj",
+    "templates/grapple-point.tj",
+    "templates/gravity-switch.tj",
+    "templates/grinding.tj",
+    "templates/layer-switch.tj",
+    "templates/mini-boss.tj",
+    "templates/moving-platform.tj",
+    "templates/normal-shield-monitor.tj",
+    "templates/path-node.tj",
+    "templates/path-platform.tj",
     "templates/player.tx",
-    "templates/spawn.tx"
+    "templates/ring-monitor.tj",
+    "templates/ring.tj",
+    "templates/rope-anchor.tj",
+    "templates/skateboard.tj",
+    "templates/spawn.tx",
+    "templates/spring.tj",
+    "templates/star-shield-monitor.tj",
+    "templates/switch.tj",
+    "templates/text-actor.tj",
+    "templates/tornado.tj",
+    "templates/triple-ring-monitor.tj",
+    "templates/vehicle-region.tj",
+    "templates/water-region.tj",
+    "templates/water-shield-monitor.tj"
   ],
   "integrity": {
     "application.php": "sha256-iviY+tKgwM4FxBs1qD7h6paXvVAvrBn7ui2kjX0Isck=",
@@ -324,18 +1625,18 @@
     "examples/DemoComboHud.php": "sha256-BMy5LSck4cjR6GwgAwE29onogd8hlqEJxEawILqpY9Y=",
     "examples/DemoDebugOverlay.php": "sha256-5AvwxciraF/mXi3VKtTGSur7sKVq7yi8BNbozq3HrZM=",
     "examples/DemoGame.php": "sha256-mm4yOJHj1lfKL1LpVTdlwmZ+0FHnKOIesSO6mOcT8/8=",
-    "examples/DemoLevel.php": "sha256-xC7cg3Exoy8hR1Sqoo6LuynGishMoh8XmnZ5jH/oz8o=",
+    "examples/DemoLevel.php": "sha256-ETC+GeQPpJ+BugYFoalqKIuu8pQ1hWQHdsHvVxibGo0=",
     "examples/DemoPlayerHud.php": "sha256-AaPczxbdoq/FJ/1jLpRYfSUXBRRHgD4B2c6NbA3quoU=",
     "examples/DemoStartup.php": "sha256-X8V41p5DZ3TAtZ6zGGbollmfyjM67zLcUpaOnYumSMk=",
-    "examples/assets/badniks.tmj": "sha256-MRYWeUpL8MuERJjEIqjNJdP+OXQSTQl97lBtBpFklow=",
+    "examples/assets/badniks.tmj": "sha256-Ntism/QVBaOcUqhzgnxgQJ1i8BS/yZemizXNRwyPyUM=",
     "examples/assets/bosses.png": "sha256-+B9ende/wbt/C/o6gkZQ7LYSO8GDU9nYnL+z/vuPCLE=",
     "examples/assets/bosses.tsj": "sha256-jWjvoIK48MyUTWlhRyijieOdSq1QvUjEhyICUR8UZ14=",
-    "examples/assets/breakables.tmj": "sha256-SGVPQBzT1Lz9cydNhIXo7BL9LMN36U4KpcAYZHGlYOA=",
+    "examples/assets/breakables.tmj": "sha256-R1OWAH7U7RBbr/alwmEnItxjcSxJapILJ8gGouA40OY=",
     "examples/assets/bridges.png": "sha256-geQaH7lU9yNynCTLM/gZK1xrmFeGW5OG2wsrZgcHOXY=",
-    "examples/assets/bridges.tmj": "sha256-nIH8KyMt5WLV0o9qhJfMkTQDvgZFinjZq/ENZgF+ySM=",
+    "examples/assets/bridges.tmj": "sha256-GuUk3bTMqhe7aJivz4p1VoxPnc/MHuUINGrwzxD4br8=",
     "examples/assets/bridges.tsj": "sha256-RhSqzNXl7dkTMmrdQPdKHgoy2D5fDj3pZrnW2tRe/Ic=",
     "examples/assets/ceiling-curves.png": "sha256-29mBER1oE78wOCBs9+MHZfCU7r/mIyUq9MfaIgnfhoU=",
-    "examples/assets/ceiling-curves.tmj": "sha256-l25MeaEPelx9zbrm/7JHZJEVSBYBkpEYnRVP79uLs4M=",
+    "examples/assets/ceiling-curves.tmj": "sha256-C4oEVw2aEAxdk123vmg1UE1/N74vNw+oPDZrgOXhFWE=",
     "examples/assets/clouds.png": "sha256-M35HdL3ygoz6e3TD3X980bDvvSYrs0WLlvRLjwfr0qs=",
     "examples/assets/demo.world": "sha256-6JkYDi/XCQDRlinQkpj/HFP18AHHgWPVl2gcbZvDbwU=",
     "examples/assets/egg-walker-boosting-front.png": "sha256-ZEKTNF64H/yoyVYT52ZOFoqXpvKQfQ/PzC1jv0WCUeE=",
@@ -355,14 +1656,14 @@
     "examples/assets/egg-walker-walk-a.png": "sha256-j0fKCFFvnMpuXiXSm3EOgadseOolb/V4hzxVmXnWzfA=",
     "examples/assets/egg-walker-walk-b-front.png": "sha256-0e5u+PliqfPlPKlq2avcC9kR/b2Mht8lJzponDzhbgc=",
     "examples/assets/egg-walker-walk-b.png": "sha256-Gi+vfqa9pUtoa9bFGYnKo4afkgke38CeCqTz4xsm4gs=",
-    "examples/assets/egg-walker.tmj": "sha256-G3Nxf0wjGwRSetS1UgnnOVtI2/umUluG3epPTNkZab8=",
+    "examples/assets/egg-walker.tmj": "sha256-tcpGXev3gUJlXFjW3teGOIpAdZLn7+F86r1lKe/sutk=",
     "examples/assets/egg-walker.tsj": "sha256-NRBkknGkdCGfokwhqQaJT640KX6fbqqhLude/A6LiRc=",
     "examples/assets/grapple-handle.png": "sha256-NvsP5P17GfW6vbKTdxsRh1gKTbUtIEMHvJPejXzjKI8=",
-    "examples/assets/grapples.tmj": "sha256-kRuDMFR3Wr+ylWhzqEJ1sAzeOeowTCt4jEMk4jY6ej8=",
+    "examples/assets/grapples.tmj": "sha256-qPBA7pa7yDeuGN8KLotpa/mn679fal7ctHRCEbigEis=",
     "examples/assets/grapples.tsj": "sha256-cnO9KxibMbQZzmfP8OiMNkdP9zciFVZjepklddXvF/A=",
-    "examples/assets/gravity.tmj": "sha256-gUTOkLD03aCG5lIfX5HjqEN3NWRz5IDcb6SH4T/Vv1c=",
+    "examples/assets/gravity.tmj": "sha256-82sPXzL3IV7JggkYx/j6989Nkc1DIcBdLKy3jSzJa9A=",
     "examples/assets/grinding.png": "sha256-jKvEnYjuNq+pTxKQrZOLBQoQoDKHGh88JAvfrTcka80=",
-    "examples/assets/grinding.tmj": "sha256-N9OoTcoH84VQxb7guQTv1ZPzvkDnPREyB7leiNZDzAw=",
+    "examples/assets/grinding.tmj": "sha256-wZhhwWFa1CqN2i1ytsx86HNb9Af+uEYIOFfm3M3ROhk=",
     "examples/assets/grinding.tsj": "sha256-pKctJ7TWZlm0u3Vl4Gih4gXXp5hVQ/sn0DwiiZE5sec=",
     "examples/assets/infinite.tmj": "sha256-Um/KcIbtTvuPWhIRZ8NJTrcK4Xs5Y85EVudAuQRpi+A=",
     "examples/assets/iso.png": "sha256-sgBMryh2zCKkBbIBxj1YV9WYRBI+xJYAioyiWhWp5mg=",
@@ -370,15 +1671,15 @@
     "examples/assets/isometric.tmj": "sha256-b8IZg28sk/IqlaF4h1g5GtlsfxaIRtbQscsmcPkcE7o=",
     "examples/assets/light-dash.tmj": "sha256-v1QE2I8oQHMW6LKhZHemPciDAUMIsrbsA4Gw+Q1NZfQ=",
     "examples/assets/loop.png": "sha256-MDq7+rTHTQUXxkPzo4qdxXDX9dX0knysB+QTvEzwCB0=",
-    "examples/assets/loop.tmj": "sha256-amJ5wbjbk98LK1+dB/N4wqrrhfZsWjbI4pB68B74X5A=",
+    "examples/assets/loop.tmj": "sha256-0R1sNy/LmRsKj2mBNxC3+EeWlYw73TeY6aZ7Ryv8ur0=",
     "examples/assets/loop.tsj": "sha256-sYAJ8hy6jMjPr54eVq9/iqQGqWJ3DSjX32c3AYwwik8=",
     "examples/assets/monitors.png": "sha256-rc4EPgm0iC/psElMDcQv4gVdAjT85CO1kRkcaXSgeb0=",
     "examples/assets/monitors.tsj": "sha256-2M1LpiluhujDXL5uSNSs0tPUqk/Kb5kVx9Q+4TOKeRo=",
     "examples/assets/mountains-far.png": "sha256-z2acdPs8/mG8uSTq02wBqzS0kzF4UwHuQeieeKaaANc=",
     "examples/assets/mountains-near.png": "sha256-rzP63Iqeif0foGuu4aVg2nipb1CDRuCUCRmijPQ8K/w=",
-    "examples/assets/platformer.tmj": "sha256-HUZScXzWf1pupvM3n/41NFqLzY2NvjWGxQHyAsCh880=",
+    "examples/assets/platformer.tmj": "sha256-AM244xIXDpAUtksB5dboSRj7xS0ld7kFJVHyy6qx0pU=",
     "examples/assets/platforms.png": "sha256-Z7j7G7qMuDJrefMHxkUw+hC/edHPwRl//jsD3VUhH9I=",
-    "examples/assets/platforms.tmj": "sha256-31pt+0O31oLmPuyz/THSzuDQY2cT0BG5VIYf9aieVow=",
+    "examples/assets/platforms.tmj": "sha256-ErT4SE59Fm/Axd6iU/hyk+YuuGRU/+21fkIJTSGCLsk=",
     "examples/assets/platforms.tsj": "sha256-KFX07Zo5GoSMHxGlMYirzRSooI8iLSKVIi+ATKvikr0=",
     "examples/assets/rope-anchor.png": "sha256-x8mfBtJAAvphAo4EcJVDH4y6uLTzjEJqR7IckSu0evA=",
     "examples/assets/rope-segment.png": "sha256-ygedZ0Bqcboh9gZEo4Ln+9LcH73Bn9t7kPRELG/u3RY=",
@@ -395,22 +1696,22 @@
     "examples/assets/test-parallax.png": "sha256-lDmn6BpDnKwgfHrlECMGxiYZU5zmkkINxWj2duIB+TA=",
     "examples/assets/test.png": "sha256-4BbJI9F2l/lknq2fzx89RpIMAcKoiWrLHkB3BQGz6/4=",
     "examples/assets/tiles.png": "sha256-6Lad9t1Z6XoChQKDYByKNms02rvqwD2HwmjEuVqHxmU=",
-    "examples/assets/tiles.tsj": "sha256-j1GeFXP+8Pz9Kx5m5k2pywsU1FiV6fB4gmQklKONnT0=",
+    "examples/assets/tiles.tsj": "sha256-2Cf18Awt01r8V6EWeDOxvjWJs9ddcxc8ZoyvtqL10Lo=",
     "examples/assets/title.tmj": "sha256-Nb47bZfsmo1IRJ4cCtkboa40PHxFm1hQ42VFhD82Tg0=",
     "examples/assets/tornado-crashed.png": "sha256-QuUljK8Aa8JDOZISIEB7fmitkYncr0cX20oUFcpOJsI=",
     "examples/assets/tornado-flight.png": "sha256-vEPV/+rcYVDqaBGww9ewxvkkFQM/EDXD3nFR6fipxro=",
     "examples/assets/tornado-gear.png": "sha256-rJbU97+wifTwricoo9kSw7AptOmtgnFyVf5ylmuBJjI=",
     "examples/assets/tornado-thrust.png": "sha256-YyJDig9+uAUbTVgJdlnIeviM+G9GkGrZ5XoR75zSziE=",
     "examples/assets/tornado.png": "sha256-rJbU97+wifTwricoo9kSw7AptOmtgnFyVf5ylmuBJjI=",
-    "examples/assets/tornado.tmj": "sha256-0vERgHoumpg3lHvuVZ24Ep29E2ltimFqDM8azvgZ0qU=",
+    "examples/assets/tornado.tmj": "sha256-p7MMjW/dlt/+LbRYRKX9rmslRS1C5LiUqlS1Cy9F4hM=",
     "examples/assets/tornado.tsj": "sha256-xPjG5OR12eODExrHvi44CNwNEAG8XQs5F5/omFRE9mg=",
-    "examples/assets/vehicles.tmj": "sha256-pWChSQXGdgE+Rv5SRjBV3q4NYGE6GxnTxGOV8iDYMQw=",
+    "examples/assets/vehicles.tmj": "sha256-63nQt9BTZOjnbfjYjszzOtR4pQbbP1e4WStP/9q4yeA=",
     "examples/assets/vehicles.tsj": "sha256-o/7An6hkMalGOIbR+uomOf5xh+Xj2PRr3GHlAB/B9g0=",
-    "examples/assets/water-loop.tmj": "sha256-rR5OzePmG91xL1eB+ZkRSHpn/sEQzQYUXgKa1J1bmHk=",
-    "examples/assets/water-rail.tmj": "sha256-x0ohappONQisvYw3z9L2lbdQhrSWwwEDZLc28If9Qy8=",
-    "examples/assets/water-skim-rail.tmj": "sha256-9OWPbXzO/JyfjtNeexKP26OZISykHP6yTKWCkZepV6c=",
+    "examples/assets/water-loop.tmj": "sha256-QzN1yp2Ro73Rz9z6sDGSrCWXl2nHih9JmlaaNow9wug=",
+    "examples/assets/water-rail.tmj": "sha256-ZXODkj1Bh4U0cy7BavQUeQvC3+gxTJXtzi9TB7p55UI=",
+    "examples/assets/water-skim-rail.tmj": "sha256-qZ8PmCjD+yAuZy5MMrkd2ynq5wlzi4YenVe3YhbJAxA=",
     "examples/assets/water.png": "sha256-I0RTThrpBdywHUjSiHj+sq9T7cWA/nTcHC70KxMbAEI=",
-    "examples/assets/water.tmj": "sha256-TPpYIVfkHUk796VN5gK57b+xH9fw3rZ4xXCWWv+q+0k=",
+    "examples/assets/water.tmj": "sha256-zp5D6QWEPkXbwJD6KegqJ+0ldbwVsbFKy2rbZep7VqQ=",
     "examples/breakables.php": "sha256-xMRC2E3WCFTGzAYKRhbw+/l7ivVp7U3FMkauRXjfhUk=",
     "examples/cards.php": "sha256-QkxZ307xLz6YgzM6iW+jUWBhPoJLMiyItm3ec48Svz0=",
     "examples/game.php": "sha256-Jzkvju92Ne8KmVWeu2ZBcjNcOccpgVTK/O01eovBLaE=",
@@ -433,46 +1734,46 @@
     "src/Gameplay/BadnikProjectile.php": "sha256-uJMoGjEJnzvjSox4r5UAckP0lybmhXO5sLSzJ5lRZkI=",
     "src/Gameplay/Badniks.php": "sha256-CjBMg8tfQW7t6j+GKS76Ko0OLXL/5nxh/b0FkEm+7J4=",
     "src/Gameplay/BendableBridge.php": "sha256-1VSpwLN6vX4RkQdoiwW31cXVxrkOpHhnJAvc1TS9ir0=",
-    "src/Gameplay/BendableBridges.php": "sha256-u684PqWBUHCIN0TbN4MsMMRkOX8vrHaJ3p4dgwkGQqE=",
+    "src/Gameplay/BendableBridges.php": "sha256-NL3w0l+d2+rbohqS9lF8QtN8bMjjhzfPNRDSQRQeaz8=",
     "src/Gameplay/Boss.php": "sha256-U7+dkmGixdjMK1KGdDWKkHfFmkxy291wxXGpoYujBv8=",
     "src/Gameplay/BossExplosion.php": "sha256-ZrYRjpwPRObSyWEHR8Opo/JFqHURYHL8sdrOx65s4Fc=",
     "src/Gameplay/BossRegion.php": "sha256-dDcMidJFBWKw94+xgbBxL/BRZZSIWTpGM8PlckL2eQU=",
-    "src/Gameplay/BossRegions.php": "sha256-AjVYEeXlC08zNedHb1OubY+MePeNUuu5XGopbq3h+EA=",
+    "src/Gameplay/BossRegions.php": "sha256-twpayP1LysefQrD/c5Ljv2HFod2WCCCOWskGFj8k8c0=",
     "src/Gameplay/BreakableBlock.php": "sha256-pri4CVfH7dfPZ6EmSkdibw/HefNjc7KOnkpcaV4hkCE=",
     "src/Gameplay/BreakableBlocks.php": "sha256-tYNthKkh+965ETRJGRPv01M6vpFCFATnIhKlSQzmFeg=",
     "src/Gameplay/BuoyantPlatform.php": "sha256-qf5MNXIU5ZU1eR6TV3JOU4CgIdrkyUYfIdJDBVHUtEY=",
     "src/Gameplay/Combo.php": "sha256-TMfwR2qjA1Wl4AZL9cltYHFa7uTzDlX052fMhu0e9OM=",
     "src/Gameplay/ComboReward.php": "sha256-CGyKhbjKiLUUdB6EI/x1cQ9oxuGf0R4uhV6V4TBAcFQ=",
     "src/Gameplay/CrabMeat.php": "sha256-nmSTHVCk6QxZZtdw+gY6AG136rQmlfycAxl5yupw7ZQ=",
-    "src/Gameplay/CrabMeats.php": "sha256-QHhwXPExTr4eSOHWCJeiC5cd0Km1qrvtX1kgVcYxS3o=",
+    "src/Gameplay/CrabMeats.php": "sha256-TmJwsTs2Q8MPHCxjs9R1r6U9h9zCHkf9fLU4AjAHz0A=",
     "src/Gameplay/EggWalker.php": "sha256-nBsZIvr6QsWd1lY0BNxfMxNqck1VZMDa3rV2LGWALxI=",
     "src/Gameplay/GrappleGrip.php": "sha256-zmIUrCbPZayBS9vNIMnR3sTPcCMgeyCQxqMCqdoRnwY=",
-    "src/Gameplay/GrappleLoader.php": "sha256-PehiUj8jPVxn9UfXNtvJ1o5y9x9DGhkQLjNkEAJN6a8=",
+    "src/Gameplay/GrappleLoader.php": "sha256-02BGZqCblAZYrDKdluhwkGojk3xHMy21Dyr2HTQHouQ=",
     "src/Gameplay/GrapplePoint.php": "sha256-/OweFPV3XyDFVj/jYSHOG4hZZY77/akNLlcGsIKC470=",
     "src/Gameplay/Grapples.php": "sha256-Jp8zKZnKf3ETp6iRXGoisSeaOUdgdaIpK4ut7v4L6O8=",
-    "src/Gameplay/GravityFeatures.php": "sha256-nZYadPnp6aWyPcymNAVtWUV5oCaTIRywWWqJ9HkJctM=",
+    "src/Gameplay/GravityFeatures.php": "sha256-kEDSCY5VW+CGNxpgAlfiuWT+Al8ZEf4HsJCoQmNNsYQ=",
     "src/Gameplay/GravitySwitch.php": "sha256-qHZa6M1hPXJBNQaTGx89Bv/vZTIN3Ej8LzHXsjoFZ9I=",
     "src/Gameplay/LightDash.php": "sha256-mPhs43+GPmji2jqs7GN5i6SPL15tvXp94EYNE936TPE=",
     "src/Gameplay/LightDashes.php": "sha256-njvbsIwi1fcvSDWZ1/T9wZEDc6y0xPp6TK9PC7jwlMo=",
     "src/Gameplay/MiniBoss.php": "sha256-nh9JK5aMz3xRn2+4e0/rX3I8OdZ+DArgCtJq8wLxc+s=",
-    "src/Gameplay/MiniBosses.php": "sha256-IOm/YTpkUK/+cYMOGpQYLEDaSGch4AmBKqXs1lhPDsg=",
+    "src/Gameplay/MiniBosses.php": "sha256-0f3Ccsr1v4QqFCKJZ82rrAEZKHc9iqYWk6p2sNaNmU4=",
     "src/Gameplay/Monitor.php": "sha256-xE4hoDyVuKg+8EAw7KW4kETR5bEnom8+Sm95JkdINu8=",
     "src/Gameplay/MonitorEffect.php": "sha256-sT0VozNYvrfwb4E95wdQUt2KqOS4H99N6gRE3fkFKDM=",
     "src/Gameplay/MonitorExplosion.php": "sha256-jFYmQgJWBYzWP3HUq9se0i0CU7kX78xX0tFWtoHoc5g=",
     "src/Gameplay/MonitorPopup.php": "sha256-aCEi/v7WwXlJRdHNkGZwHxmf4DXeafx2wcYYTx7kDsA=",
-    "src/Gameplay/Monitors.php": "sha256-jrWSmf0xd82ZyVF9wVZgDfp94+kKLN7PaSrJOv7LhW4=",
+    "src/Gameplay/Monitors.php": "sha256-Ua0NgMyWiM4buYxA223iYEn5STh9hxd0AevO1+0g5uY=",
     "src/Gameplay/MovingPlatform.php": "sha256-4C+FDkJCHb5jArH4pwpriZb724LCZSLGl8xxWvwfqDo=",
     "src/Gameplay/PlatformCamera.php": "sha256-3xLjMGavZus701QtqgY9yE0w6ZrBgywQPBJL1WlHW94=",
     "src/Gameplay/PlatformOscillation.php": "sha256-v92MpOpKNnOeXVNOU0E+GbqW5PcEeBRFwN/pBJIe9cs=",
     "src/Gameplay/PlatformPath.php": "sha256-HPw/YpQea4R1K1imZ50UCNoOORefnfUcPTNs2Of3rTo=",
     "src/Gameplay/PlatformTransport.php": "sha256-1nhv8WnnOBfTcxsz0q9HQNwYJ3izn0Xd5LgHwdGYDpg=",
-    "src/Gameplay/Platforms.php": "sha256-S9PrJT6h3a6y91qikOJOarEGfwPcfgXkifyM3hOl+zI=",
+    "src/Gameplay/Platforms.php": "sha256-Jb7B+jBnUckfvRs/sKHs6+n+9IkDdlE5q0JvW8XayzE=",
     "src/Gameplay/PlayerCombat.php": "sha256-gSuvHi9M7j2pjEj5pRke/kWWM1TtDmNNDPkYxf4tOzo=",
     "src/Gameplay/Rider.php": "sha256-wvxU2TQiuxABbo99+JNZlidJUD8RhPuKboxntccMmG0=",
     "src/Gameplay/Ring.php": "sha256-vmN7UP48PsO7Zd28Oa7IRASmeqfBj4VNs85k34faVTs=",
     "src/Gameplay/RingCounter.php": "sha256-v3bub30YTwCJdLbQ1dkE3oFS5+Mb3eMiUWV012uPQLY=",
     "src/Gameplay/RingMonitorEffect.php": "sha256-lQ0OIOpkSs1YoODX8AoR+AvoOHXI3hQovo7GCjOqdn8=",
-    "src/Gameplay/Rings.php": "sha256-IaW1UfXF60giw9X1ds4cNgngboq4Ms+WP2L6ontAjE8=",
+    "src/Gameplay/Rings.php": "sha256-brIZ+dN+lQ2xrcVfPbb+4aVK21pNPHRCixu++XmVKEo=",
     "src/Gameplay/Rope.php": "sha256-M9tUsiogqTb5qiU4Lpz8lZdhuqkSE9DT65gDMEp+y6I=",
     "src/Gameplay/RopeAnchor.php": "sha256-M+hA2V5UDc+JY1m47jHAu670hLgX0vWejnu2euSaESE=",
     "src/Gameplay/ScatteredRing.php": "sha256-XNhSrNDTWtclfzLyD6gpJiZIf7BLOwNaoqCMsQarcgQ=",
@@ -490,14 +1791,14 @@
     "src/Gameplay/VehicleComponents.php": "sha256-SGjzU58X0KyDgzN20jjvJAsTIObA5c3VF5jdFnXPvwg=",
     "src/Gameplay/VehicleDiagnostics.php": "sha256-h8JHPyQnNLWYBYUui4Boa6yDfBWlO1E0BHH2JmqQ1zU=",
     "src/Gameplay/VehicleEmitter.php": "sha256-f9jeJg3AUVB0UNEYZDs4iq4PvkIomJvMJLhfZaU1gtE=",
-    "src/Gameplay/VehicleLoader.php": "sha256-njCyKpROyAQwlzuIEi8lZuD0tahzyWy66dWkcpjB5dQ=",
+    "src/Gameplay/VehicleLoader.php": "sha256-JETsdLTeJOF4pIqv4dtRASNUR3TzNNi7P8qo/jh0uEU=",
     "src/Gameplay/VehicleMelee.php": "sha256-0H21RYZzt5ucIJe3ZmD/lebM88qi5ceF/40xblVCU7w=",
     "src/Gameplay/VehicleProjectile.php": "sha256-WXW5lkosuIPjfVNvyL+FNyPgFsnfFW2FQccD+x+wUno=",
     "src/Gameplay/VehicleRegion.php": "sha256-o1QlIVg+E2No7dAxWB7hWxgEQWvrrRnPCBJq/HxtLw4=",
     "src/Gameplay/VehicleTerrainAware.php": "sha256-Je6Tq/XydUhr5cWz7eL4J24TeWXe7PtC6ujVn1tFNEk=",
     "src/Gameplay/VehicleWeapons.php": "sha256-Jyd/XGY+uHXjL2nYBesEh6mvyUTRxYXlh2xggf6lyCY=",
     "src/Gameplay/Vehicles.php": "sha256-5fCmu8BL1ckH+Gcz6buohNCcIFUmlND5LYCf04e0jug=",
-    "src/Gameplay/WaterFeatures.php": "sha256-4lE0iVg6oso695bXP+w+2XtCjDhIX3mSzPoRUrO0RqU=",
+    "src/Gameplay/WaterFeatures.php": "sha256-ttBYqyzKpnutL3WIGPKiNqCXeQXB6SHaHM4yLBprA4g=",
     "src/Gameplay/WaterParticle.php": "sha256-L9tJkuZeXFhRJok27VLkteVmo1L0Oz9AwlEhdI42q7c=",
     "src/Gameplay/WaterParticles.php": "sha256-RVi5Wmk2lR8fhveO5fleBOhtYoAEHaM4fGKjBH5lYl4=",
     "src/Gameplay/WaterSwitch.php": "sha256-dplHJ8+H+S02J7ETXzM0+P0gmstgloVeTOEiqCKoVZE=",
@@ -505,10 +1806,10 @@
     "src/Physics/LayerSwitch.php": "sha256-j1s7UWdAuvMPJrIVn0Vf4u1VPsI34slEb2oz8LU5GtI=",
     "src/Physics/Platformer.php": "sha256-aCCSbBonACk2M8TNlCBdXHQwjqns27zWJqnCpXptv4c=",
     "src/Physics/Terrain.php": "sha256-E99tUqZJze2qlwgErEieYJFgtnPfY4sCYXg2gNxDoFI=",
-    "src/Physics/TerrainCompiler.php": "sha256-62QZx6SDYlT9LrdjFOxOtr02QCpYmBSZzXCMDGcTb+Q=",
+    "src/Physics/TerrainCompiler.php": "sha256-55gc8p45xPavMm983xuRINUjiJIcKmWfpaJvrcyqcGs=",
     "src/Physics/WaterLevel.php": "sha256-a/BzzoDSqTIUnEDfDZJsIlJxM1lpyt6ic1F42eYfEnU=",
     "src/Physics/WaterRegion.php": "sha256-+0rp2gAu6NpVyWrDbnFUPYxAEYMeAWDqgPEgDeJHL/U=",
-    "src/Physics/WaterRegions.php": "sha256-EoaMs6xKJlJe44hJDaMCUi/Qpy7efPj/+9rMHVy0F1k=",
+    "src/Physics/WaterRegions.php": "sha256-ZLiwdFv0+O3ZYckkCWNHCTOZHMkcAbN2lMRz5a7Smig=",
     "src/Render/WaterRenderer.php": "sha256-y25rrwe0B0X15dd3A3gc+RR52jypw1YiDYH6asUFWUo=",
     "templates/player.tx": "sha256-HXtDViX06jVArADA2Z2L4c+LaRYiQ5LHcP8+mgO7YKM=",
     "worlds/badniks.world": "sha256-it0u7ASpcK6zF6Qhj5BoYGEkD46Av/kBgRNbBwTOcvY=",
@@ -524,7 +1825,7 @@
     "worlds/isometric.world": "sha256-m3WS+prsSzR3fp76jYUTRwWtCTw4JHB2acJ8LmbhfC8=",
     "worlds/light-dash.world": "sha256-ETaODDOT8bffnfsJrc9q1v+o/CX0pjThMCCtmV0FjH4=",
     "worlds/loop.world": "sha256-qKEU/6QA8wxdzQtsqmaS2weyqTF5FnFl+iVXduLgaxg=",
-    "worlds/phonics.classes.json": "sha256-3ZNQeATftT+VaqO7Sam3N+Yz0vhdRsd0C2DMuGdcJWw=",
+    "worlds/phonics.classes.json": "sha256-CHm+Co+bBldoFBCaJ4JXfCj+bvZEFAOfQkjP7BPqjgY=",
     "worlds/platformer.world": "sha256-v2y73mJTvgRtJqOZVZ0KrGgCnCpggJEd346+Z/uhljI=",
     "worlds/platforms.world": "sha256-JBZ3nzxh2CCJ/tNxKGkiZbuzqi1mAUu7bRxZ/48EqQI=",
     "worlds/tornado.world": "sha256-FBJDO6SKkUsAZytwPYcp+t+Dy9cuKznwaub/wl/1AI8=",
@@ -534,7 +1835,42 @@
     "worlds/water-skim-rail.world": "sha256-hEW65lSo6bSrBg5r73O2rIRK1QL5vz8aiOdVAfBkEKk=",
     "worlds/water.world": "sha256-1e4eS4TrOyMjd4ZQkBxRn/bAo4Zit6jaw531LsXmHaU=",
     "worlds/world.world": "sha256-OeKG0myXI6uot+4U5X3GbLTsOsZaRMl8unqzp3gJqWE=",
-    "worlds/demo.tiled-project": "sha256-7mtmSCcwOPoqnLD8PXM8IhyNX4fVjQdGb+Q1M2vjVyw=",
-    "templates/spawn.tx": "sha256-mOor9Ih8Q5BYx/TPBwMnV/h5vRwu5Dw5UDGRDH/7mJo="
+    "worlds/demo.tiled-project": "sha256-zUEsEOJR9dEQXrtJZG5DQaFMdS/P/bb09LwRUgfOPt0=",
+    "templates/spawn.tx": "sha256-mOor9Ih8Q5BYx/TPBwMnV/h5vRwu5Dw5UDGRDH/7mJo=",
+    "src/Tiled/Authoring.php": "sha256-iweTmXxc+eggH3O1EpQcVKNe9Yd8og0U5P/TDyL/eyw=",
+    "templates/bendable-bridge.tj": "sha256-ZRiXITeD+eDX4J1yexQPt+Gi9qQjDWgzIXmQ4nYQwss=",
+    "templates/bendable-rail.tj": "sha256-ACjiPBiTSFjj0RqmDjzkAQM4QuuXKk1mXnNE+zU5FaY=",
+    "templates/block.tj": "sha256-cAzb5gpUgRJrhH4+tdIHilMXqrV/Bj0JzQRiOWMKMtE=",
+    "templates/boss-region.tj": "sha256-ANRXypc3m0i5sQcJo6XhPRCrdWCxIKc18Su7CRUXWxI=",
+    "templates/breakable.tj": "sha256-OvlrkErESgL++/FeRiSDpnKCkmGs5U8rNFIzX9hKyj8=",
+    "templates/crab-meat.tj": "sha256-JP5BQx/kkQcdY959nTtTjQ9jLj3dXwo1Oa3gVsv8Nyw=",
+    "templates/curved-ceiling.tj": "sha256-7PzY6GMUODXFaiil4TWFdWF6Bl4DDACjUd2Jchxpy8o=",
+    "templates/drop-vehicle-region.tj": "sha256-aqeGykSwCa6mTuDzEKBa62CG59e4A61sHfRY6tRJmPA=",
+    "templates/egg-walker.tj": "sha256-jRWnZbjq48p4dWN7LmbYJBK1BDUdwrDnzNJBFjDPD7U=",
+    "templates/electric-shield-monitor.tj": "sha256-jX9BrirzJw8ZAWzek+kTVv65QA1yIueFStXs52AiO+8=",
+    "templates/fire-shield-monitor.tj": "sha256-yFnIlBrZqr0IYGzUFA9SNC4kjwOP1zsiUKrCHjOsAV8=",
+    "templates/floating-platform.tj": "sha256-7oL+ObwbBRn3BllSLsxHZ0IVXylR30zJm9i+Kgx+vlY=",
+    "templates/grapple-point.tj": "sha256-jarDYbrG02LP4hQ44IaG+ApumXxV1gn2ewiwHc35bFQ=",
+    "templates/gravity-switch.tj": "sha256-tp3p+Rrhfp1Z3DR455J7dVZG6psqBm5SV44wVt7/uDQ=",
+    "templates/grinding.tj": "sha256-GPWz7MFurTnFVnjt4TS0C808vuu54qyIiwnSMoxu1B4=",
+    "templates/layer-switch.tj": "sha256-BmPW+P01zWONUeL0opBQiw3A/P/fFuCQ1JOwlyZK3qU=",
+    "templates/mini-boss.tj": "sha256-E28KhaSjQAZnO9nM9tuIhF/hZs3dUT7yx37tJieo7ic=",
+    "templates/moving-platform.tj": "sha256-3ZmbLS6TnBUtQ74v5CIeTB9x58i9uFO/2mpJ0Aic5TM=",
+    "templates/normal-shield-monitor.tj": "sha256-Z50CypWJdAcfhSLvmINj5FDl/b8CtZ2ghTQKqQt5rwQ=",
+    "templates/path-node.tj": "sha256-T+EIQ7pgJIs5vE4RchpAcN8W3WvR8DkPPRQyUbjcVw8=",
+    "templates/path-platform.tj": "sha256-2nO5RUQH7tEekLWq7SHkEXpBVUOgMYbk1FPcbX8Woes=",
+    "templates/ring-monitor.tj": "sha256-MJFSWdPOeOh/JRbbiekjVEyfrsd5a0O4IWuQRZd1PuE=",
+    "templates/ring.tj": "sha256-BQOS1HjkDZmpYYwa0b7HA6DiJ90isAv+vLwW9L0bBis=",
+    "templates/rope-anchor.tj": "sha256-3AytzDEgGM+v3aUZRchogPzamYY0Z+jt+kaG4BwQ6g8=",
+    "templates/skateboard.tj": "sha256-FVNI4mnXz5R9XYc/mLzhxVA43R0OMmG9D3dI6Cj8zjk=",
+    "templates/spring.tj": "sha256-KBggWp7EOFr4u3uJGjix8F+ctwkL9rHLAE6PW04r000=",
+    "templates/star-shield-monitor.tj": "sha256-Ven1tpAWIxfmc2fEDpGNgiNM23bIAc9CvtEu2RiWckU=",
+    "templates/switch.tj": "sha256-f4oqnCeHGlfn2TdBkuz/EmfOI2ud0GxsxYVpizpyr+U=",
+    "templates/text-actor.tj": "sha256-AUckOOj/XNLDtTAR6cWM1I3MPPu0iutNEfyCsu9S7PI=",
+    "templates/tornado.tj": "sha256-XIfjzCGK7g3LAUWRP4FZK3BkCqGTQ0k5hrERkrgqedU=",
+    "templates/triple-ring-monitor.tj": "sha256-IZrhQUbxBX5ZeyQrOvUXy56VywRcrNBEZ2Z1tv9Fz8U=",
+    "templates/vehicle-region.tj": "sha256-a9yPzo0rJ+G+DvxzyLPzGV5+71qpHAMjyJnyzZviHbM=",
+    "templates/water-region.tj": "sha256-r7XYLCfBGd+ZuA6+VxHt81jAQxIqm7gOrAJG4wDw07A=",
+    "templates/water-shield-monitor.tj": "sha256-AXOu0zSWfUP1P0yiqwEMt7JNIHsSeDw/Ou/6uI1aELc="
   }
 }

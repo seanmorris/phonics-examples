@@ -1,0 +1,20 @@
+{
+  "type": "template",
+  "object": {
+    "name": "WaterRegion",
+    "x": 0,
+    "y": 0,
+    "width": 1024,
+    "height": 192,
+    "type": "SanePhonics.Entity.WaterRegion",
+    "properties": [
+      {
+        "name": "WaterRegion",
+        "type": "class",
+        "propertytype": "SanePhonics.WaterRegion",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

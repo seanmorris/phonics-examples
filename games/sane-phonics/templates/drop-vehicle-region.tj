@@ -1,0 +1,20 @@
+{
+  "type": "template",
+  "object": {
+    "x": 0,
+    "y": 0,
+    "width": 128,
+    "height": 96,
+    "type": "SanePhonics.Entity.DropVehicleRegion",
+    "properties": [
+      {
+        "name": "VehicleRegion",
+        "type": "class",
+        "propertytype": "SanePhonics.VehicleRegion",
+        "value": {}
+      }
+    ],
+    "name": "DropVehicleRegion",
+    "visible": true
+  }
+}

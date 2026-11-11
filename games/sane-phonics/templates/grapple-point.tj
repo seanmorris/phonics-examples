@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/grapples.tsj"
+  },
+  "object": {
+    "name": "GrapplePoint",
+    "x": 0,
+    "y": 0,
+    "width": 28,
+    "height": 16,
+    "gid": 1,
+    "type": "SanePhonics.Entity.GrapplePoint",
+    "properties": [
+      {
+        "name": "GrapplePoint",
+        "type": "class",
+        "propertytype": "SanePhonics.GrapplePoint",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

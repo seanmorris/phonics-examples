@@ -286,6 +286,8 @@ final class Platforms
 	 */
 	private function load(TileMap $map): void
 	{
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		$objects = [];
 
 		foreach($map->layers as $layer)

@@ -1,0 +1,20 @@
+{
+  "type": "template",
+  "object": {
+    "name": "TextActor",
+    "x": 0,
+    "y": 0,
+    "width": 360,
+    "height": 32,
+    "type": "SanePhonics.Entity.TextActor",
+    "properties": [
+      {
+        "name": "TextActor",
+        "type": "class",
+        "propertytype": "SanePhonics.TextActor",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

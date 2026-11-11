@@ -4100,50 +4100,59 @@
                 {
                     "id": 1,
                     "name": "Left entrance",
-                    "class": "layer-switch",
                     "x": 704,
                     "y": 304,
                     "width": 32,
                     "height": 288,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": false
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 },
                 {
                     "id": 2,
                     "name": "Crown",
-                    "class": "layer-switch",
                     "x": 880,
                     "y": 296,
                     "width": 32,
                     "height": 64,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": true
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 },
                 {
                     "id": 3,
                     "name": "Right entrance",
-                    "class": "layer-switch",
                     "x": 1056,
                     "y": 304,
                     "width": 32,
                     "height": 288,
                     "properties": [
                         {
-                            "name": "back",
-                            "type": "bool",
-                            "value": false
+                            "name": "LayerSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.LayerSwitch",
+                            "value": {
+                                "back": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.layer-switch"
                 }
             ],
             "visible": true,
@@ -4159,53 +4168,28 @@
                 {
                     "id": 10,
                     "name": "Loop pool",
-                    "class": "WaterRegion",
                     "x": 512,
                     "y": 448,
                     "width": 1024,
                     "height": 192,
                     "properties": [
                         {
-                            "name": "gravity",
-                            "type": "float",
-                            "value": 0.4
-                        },
-                        {
-                            "name": "drag",
-                            "type": "float",
-                            "value": 0.85
-                        },
-                        {
-                            "name": "density",
-                            "type": "float",
-                            "value": 1
-                        },
-                        {
-                            "name": "skimSpeed",
-                            "type": "float",
-                            "value": 900
-                        },
-                        {
-                            "name": "color",
-                            "type": "color",
-                            "value": "#4d147ab8"
-                        },
-                        {
-                            "name": "displacement",
-                            "type": "float",
-                            "value": 4
-                        },
-                        {
-                            "name": "displacementScale",
-                            "type": "float",
-                            "value": 64
-                        },
-                        {
-                            "name": "displacementSpeed",
-                            "type": "float",
-                            "value": 42.6666667
+                            "name": "WaterRegion",
+                            "type": "class",
+                            "propertytype": "SanePhonics.WaterRegion",
+                            "value": {
+                                "gravity": 0.4,
+                                "drag": 0.85,
+                                "density": 1,
+                                "skimSpeed": 900,
+                                "color": "#4d147ab8",
+                                "displacement": 4,
+                                "displacementScale": 64,
+                                "displacementSpeed": 42.6666667
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.WaterRegion"
                 },
                 {
                     "id": 111,
@@ -4231,7 +4215,6 @@
                 {
                     "id": 101,
                     "name": "Drain",
-                    "class": "Switch",
                     "gid": 4,
                     "x": 160,
                     "y": 448,
@@ -4239,31 +4222,22 @@
                     "height": 8,
                     "properties": [
                         {
-                            "name": "water",
-                            "type": "object",
-                            "value": 10
-                        },
-                        {
-                            "name": "setPoint",
-                            "type": "object",
-                            "value": 111
-                        },
-                        {
-                            "name": "fillSpeed",
-                            "type": "float",
-                            "value": 96
-                        },
-                        {
-                            "name": "drainSpeed",
-                            "type": "float",
-                            "value": 128
+                            "name": "WaterSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.WaterSwitch",
+                            "value": {
+                                "water": 10,
+                                "setPoint": 111,
+                                "fillSpeed": 96,
+                                "drainSpeed": 128
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Switch"
                 },
                 {
                     "id": 102,
                     "name": "Half",
-                    "class": "Switch",
                     "gid": 4,
                     "x": 256,
                     "y": 448,
@@ -4271,31 +4245,22 @@
                     "height": 8,
                     "properties": [
                         {
-                            "name": "water",
-                            "type": "object",
-                            "value": 10
-                        },
-                        {
-                            "name": "setPoint",
-                            "type": "object",
-                            "value": 112
-                        },
-                        {
-                            "name": "fillSpeed",
-                            "type": "float",
-                            "value": 96
-                        },
-                        {
-                            "name": "drainSpeed",
-                            "type": "float",
-                            "value": 128
+                            "name": "WaterSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.WaterSwitch",
+                            "value": {
+                                "water": 10,
+                                "setPoint": 112,
+                                "fillSpeed": 96,
+                                "drainSpeed": 128
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Switch"
                 },
                 {
                     "id": 103,
                     "name": "Fill",
-                    "class": "Switch",
                     "gid": 4,
                     "x": 352,
                     "y": 448,
@@ -4303,31 +4268,22 @@
                     "height": 8,
                     "properties": [
                         {
-                            "name": "water",
-                            "type": "object",
-                            "value": 10
-                        },
-                        {
-                            "name": "setPoint",
-                            "type": "object",
-                            "value": 113
-                        },
-                        {
-                            "name": "fillSpeed",
-                            "type": "float",
-                            "value": 96
-                        },
-                        {
-                            "name": "drainSpeed",
-                            "type": "float",
-                            "value": 128
+                            "name": "WaterSwitch",
+                            "type": "class",
+                            "propertytype": "SanePhonics.WaterSwitch",
+                            "value": {
+                                "water": 10,
+                                "setPoint": 113,
+                                "fillSpeed": 96,
+                                "drainSpeed": 128
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Switch"
                 },
                 {
                     "id": 120,
                     "name": "Floating platform",
-                    "class": "Block",
                     "gid": 1,
                     "x": 608,
                     "y": 464,
@@ -4335,26 +4291,21 @@
                     "height": 32,
                     "properties": [
                         {
-                            "name": "water",
-                            "type": "object",
-                            "value": 10
-                        },
-                        {
-                            "name": "density",
-                            "type": "float",
-                            "value": 0.5
-                        },
-                        {
-                            "name": "hLock",
-                            "type": "bool",
-                            "value": true
+                            "name": "BuoyantPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BuoyantPlatform",
+                            "value": {
+                                "water": 10,
+                                "density": 0.5,
+                                "hLock": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Block"
                 },
                 {
                     "id": 3958,
                     "name": "Buoyant door block",
-                    "class": "Block",
                     "gid": 1,
                     "x": 1312,
                     "y": 570,
@@ -4362,21 +4313,17 @@
                     "height": 160,
                     "properties": [
                         {
-                            "name": "water",
-                            "type": "object",
-                            "value": 10
-                        },
-                        {
-                            "name": "density",
-                            "type": "float",
-                            "value": 0.8
-                        },
-                        {
-                            "name": "hLock",
-                            "type": "bool",
-                            "value": true
+                            "name": "BuoyantPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BuoyantPlatform",
+                            "value": {
+                                "water": 10,
+                                "density": 0.8,
+                                "hLock": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.Block"
                 }
             ],
             "visible": true,

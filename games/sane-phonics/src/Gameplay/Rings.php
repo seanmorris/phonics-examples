@@ -39,6 +39,8 @@ final class Rings
 		, private ?Terrain $terrain = null
 		, ?callable $onCollect = null
 	){
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		$this->entities = new OwnedEntities($registry);
 		$this->onCollect = $onCollect === null ? null : \Closure::fromCallable($onCollect);
 
@@ -60,6 +62,57 @@ final class Rings
 
 		foreach($map->layers as $layer)
 		{
+			if($layer->visible && $layer->type === 'objectgroup')
+			{
+				foreach($layer->objects as $object)
+				{
+					if(($object['class'] ?? $object['type'] ?? '') !== $tileClass
+						|| !($object['visible'] ?? true)
+					) continue;
+
+					$gid = \Phonics\Tiled\Gid::from($object['gid'] ?? $this->ringGid ?? 0);
+					$tile = $map->tile($gid->id)
+						?? throw new \UnexpectedValueException('Ring object requires ring artwork');
+
+					$width = (float)(($object['width'] ?? 0) ?: $tile['rect'][2]);
+					$height = (float)(($object['height'] ?? 0) ?: $tile['rect'][3]);
+					$angle = deg2rad((float)($object['rotation'] ?? 0));
+					$dx = isset($object['gid']) ? $width / 2 : 0;
+					$dy = isset($object['gid']) ? -$height / 2 : 0;
+					$x = (float)($object['x'] ?? 0) + $map->x + $layer->offsetX + cos($angle) * $dx - sin($angle) * $dy;
+					$y = (float)($object['y'] ?? 0) + $map->y + $layer->offsetY + sin($angle) * $dx + cos($angle) * $dy;
+					$properties = \Phonics\Tiled\Loader::properties($object['properties'] ?? []) + $tile['properties'];
+
+					$ring = new Ring(
+						$x
+						, $y
+						, (float)($properties['ring.radius'] ?? 12)
+						, (int)($properties['ring.value'] ?? 1)
+						, (int)($properties['ring.points'] ?? 0)
+					);
+
+					$sprite = new Sprite($gid->id, $x, $y, .5, .5);
+					$sprite->scaleX = $width / $tile['rect'][2];
+					$sprite->scaleY = $height / $tile['rect'][3];
+					$sprite->rotation = $angle;
+					$sprite->flipX = (bool)($gid->flags & 8);
+					$sprite->flipY = (bool)($gid->flags & 4);
+
+					if($gid->flags & 2)
+					{
+						$sprite->rotation += M_PI / 2;
+						[$sprite->scaleX, $sprite->scaleY] = [$height / $tile['rect'][2], $width / $tile['rect'][3]];
+						[$sprite->flipX, $sprite->flipY] = [$sprite->flipY, !$sprite->flipX];
+					}
+
+					$sprite->tint = $layer->tint;
+					$sprite->opacity = $layer->opacity;
+					$entity = $registry->create($ring, $sprite);
+					$this->entities->own($entity);
+					$this->ringPrevious[$entity] = [$x, $y];
+				}
+			}
+
 			if(!$layer->visible || $layer->type !== 'tilelayer')
 			{
 				continue;

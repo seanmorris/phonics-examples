@@ -370,6 +370,8 @@ final class BendableBridges
 	 */
 	private function load(TileMap $map): void
 	{
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		foreach($map->layers as $layer)
 		{
 			foreach($layer->objects as $object)

@@ -1,0 +1,20 @@
+{
+  "type": "template",
+  "object": {
+    "name": "BossRegion",
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 448,
+    "type": "SanePhonics.Entity.BossRegion",
+    "properties": [
+      {
+        "name": "BossRegion",
+        "type": "class",
+        "propertytype": "SanePhonics.BossRegion",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

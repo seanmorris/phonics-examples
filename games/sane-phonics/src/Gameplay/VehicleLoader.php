@@ -47,6 +47,8 @@ final class VehicleLoader
 	 */
 	public function load(Vehicles $system, TileMap $map): void
 	{
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		$fallback = null;
 		$tornado = [];
 		$walker = [];

@@ -1095,23 +1095,38 @@
                 },
                 {
                     "id": 100,
-                    "class": "RopeAnchor",
                     "name": "Fixed suspension",
                     "x": 128,
                     "y": 160,
-                    "point": true
+                    "point": true,
+                    "type": "SanePhonics.Entity.RopeAnchor",
+                    "properties": [
+                        {
+                            "name": "RopeAnchor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.RopeAnchor",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 101,
-                    "class": "RopeAnchor",
                     "name": "Fixed suspension",
                     "x": 400,
                     "y": 128,
-                    "point": true
+                    "point": true,
+                    "type": "SanePhonics.Entity.RopeAnchor",
+                    "properties": [
+                        {
+                            "name": "RopeAnchor",
+                            "type": "class",
+                            "propertytype": "SanePhonics.RopeAnchor",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 102,
-                    "class": "MovingPlatform",
                     "name": "Moving suspension",
                     "x": 672,
                     "y": 160,
@@ -1120,15 +1135,24 @@
                     "gid": 39,
                     "properties": [
                         {
-                            "name": "oscillateX",
-                            "type": "float",
-                            "value": 96
+                            "name": "MovingPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MovingPlatform",
+                            "value": {}
+                        },
+                        {
+                            "name": "PlatformOscillation",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PlatformOscillation",
+                            "value": {
+                                "oscillateX": 96
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.MovingPlatform"
                 },
                 {
                     "id": 103,
-                    "class": "PathPlatform",
                     "name": "Moving suspension",
                     "x": 1072,
                     "y": 144,
@@ -1137,20 +1161,25 @@
                     "gid": 40,
                     "properties": [
                         {
-                            "name": "path",
-                            "type": "object",
-                            "value": 200
+                            "name": "MovingPlatform",
+                            "type": "class",
+                            "propertytype": "SanePhonics.MovingPlatform",
+                            "value": {}
                         },
                         {
-                            "name": "pathSpeed",
-                            "type": "float",
-                            "value": 1
+                            "name": "PlatformPath",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PlatformPath",
+                            "value": {
+                                "path": 200,
+                                "pathSpeed": 1
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathPlatform"
                 },
                 {
                     "id": 10,
-                    "class": "GrapplePoint",
                     "name": "Jump to grab; Left / Right swing; Jump releases",
                     "x": 114,
                     "y": 352,
@@ -1159,25 +1188,20 @@
                     "gid": 41,
                     "properties": [
                         {
-                            "name": "tiedTo",
-                            "type": "object",
-                            "value": 100
-                        },
-                        {
-                            "name": "ropeLength",
-                            "type": "float",
-                            "value": 192
-                        },
-                        {
-                            "name": "noSwing",
-                            "type": "bool",
-                            "value": false
+                            "name": "GrapplePoint",
+                            "type": "class",
+                            "propertytype": "SanePhonics.GrapplePoint",
+                            "value": {
+                                "tiedTo": 100,
+                                "ropeLength": 192,
+                                "noSwing": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.GrapplePoint"
                 },
                 {
                     "id": 11,
-                    "class": "GrapplePoint",
                     "name": "Angled rope",
                     "x": 458,
                     "y": 288,
@@ -1186,25 +1210,20 @@
                     "gid": 41,
                     "properties": [
                         {
-                            "name": "tiedTo",
-                            "type": "object",
-                            "value": 101
-                        },
-                        {
-                            "name": "ropeLength",
-                            "type": "float",
-                            "value": 176
-                        },
-                        {
-                            "name": "noSwing",
-                            "type": "bool",
-                            "value": false
+                            "name": "GrapplePoint",
+                            "type": "class",
+                            "propertytype": "SanePhonics.GrapplePoint",
+                            "value": {
+                                "tiedTo": 101,
+                                "ropeLength": 176,
+                                "noSwing": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.GrapplePoint"
                 },
                 {
                     "id": 12,
-                    "class": "GrapplePoint",
                     "name": "No-swing shuttle",
                     "x": 706,
                     "y": 336,
@@ -1213,25 +1232,20 @@
                     "gid": 41,
                     "properties": [
                         {
-                            "name": "tiedTo",
-                            "type": "object",
-                            "value": 102
-                        },
-                        {
-                            "name": "ropeLength",
-                            "type": "float",
-                            "value": 176
-                        },
-                        {
-                            "name": "noSwing",
-                            "type": "bool",
-                            "value": true
+                            "name": "GrapplePoint",
+                            "type": "class",
+                            "propertytype": "SanePhonics.GrapplePoint",
+                            "value": {
+                                "tiedTo": 102,
+                                "ropeLength": 176,
+                                "noSwing": true
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.GrapplePoint"
                 },
                 {
                     "id": 13,
-                    "class": "GrapplePoint",
                     "name": "Path-driven suspension",
                     "x": 1106,
                     "y": 320,
@@ -1240,77 +1254,85 @@
                     "gid": 41,
                     "properties": [
                         {
-                            "name": "tiedTo",
-                            "type": "object",
-                            "value": 103
-                        },
-                        {
-                            "name": "ropeLength",
-                            "type": "float",
-                            "value": 176
-                        },
-                        {
-                            "name": "noSwing",
-                            "type": "bool",
-                            "value": false
+                            "name": "GrapplePoint",
+                            "type": "class",
+                            "propertytype": "SanePhonics.GrapplePoint",
+                            "value": {
+                                "tiedTo": 103,
+                                "ropeLength": 176,
+                                "noSwing": false
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.GrapplePoint"
                 },
                 {
                     "id": 200,
-                    "class": "PathNode",
                     "x": 1120,
                     "y": 144,
                     "point": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 201
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 201
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 201,
-                    "class": "PathNode",
                     "x": 1360,
                     "y": 144,
                     "point": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 202
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 202
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 202,
-                    "class": "PathNode",
                     "x": 1360,
                     "y": 224,
                     "point": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 203
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 203
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 },
                 {
                     "id": 203,
-                    "class": "PathNode",
                     "x": 1120,
                     "y": 224,
                     "point": true,
                     "properties": [
                         {
-                            "name": "next",
-                            "type": "object",
-                            "value": 200
+                            "name": "PathNode",
+                            "type": "class",
+                            "propertytype": "SanePhonics.PathNode",
+                            "value": {
+                                "next": 200
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.PathNode"
                 }
             ],
             "visible": true,

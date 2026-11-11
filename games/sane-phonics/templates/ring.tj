@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/tiles.tsj"
+  },
+  "object": {
+    "x": 0,
+    "y": 0,
+    "width": 32,
+    "height": 32,
+    "type": "SanePhonics.Entity.ring",
+    "properties": [
+      {
+        "name": "Ring",
+        "type": "class",
+        "propertytype": "SanePhonics.Ring",
+        "value": {}
+      }
+    ],
+    "name": "ring",
+    "visible": true,
+    "gid": 5
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/bridges.tsj"
+  },
+  "object": {
+    "name": "BendableRail",
+    "x": 0,
+    "y": 0,
+    "width": 384,
+    "height": 16,
+    "gid": 2,
+    "rotation": 0,
+    "visible": true,
+    "type": "SanePhonics.Entity.BendableRail",
+    "properties": [
+      {
+        "name": "BendableBridge",
+        "type": "class",
+        "propertytype": "SanePhonics.BendableBridge",
+        "value": {}
+      }
+    ]
+  }
+}

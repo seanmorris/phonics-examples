@@ -4086,53 +4086,28 @@
             "objects": [
                 {
                     "id": 2,
-                    "class": "WaterRegion",
                     "x": 1280,
                     "y": 448,
                     "width": 768,
                     "height": 192,
                     "properties": [
                         {
-                            "name": "gravity",
-                            "type": "float",
-                            "value": 0.4
-                        },
-                        {
-                            "name": "drag",
-                            "type": "float",
-                            "value": 0.85
-                        },
-                        {
-                            "name": "density",
-                            "type": "float",
-                            "value": 1
-                        },
-                        {
-                            "name": "skimSpeed",
-                            "type": "float",
-                            "value": 900
-                        },
-                        {
-                            "name": "color",
-                            "type": "color",
-                            "value": "#4d147ab8"
-                        },
-                        {
-                            "name": "displacement",
-                            "type": "float",
-                            "value": 4
-                        },
-                        {
-                            "name": "displacementScale",
-                            "type": "float",
-                            "value": 64
-                        },
-                        {
-                            "name": "displacementSpeed",
-                            "type": "float",
-                            "value": 42.6666667
+                            "name": "WaterRegion",
+                            "type": "class",
+                            "propertytype": "SanePhonics.WaterRegion",
+                            "value": {
+                                "gravity": 0.4,
+                                "drag": 0.85,
+                                "density": 1,
+                                "skimSpeed": 900,
+                                "color": "#4d147ab8",
+                                "displacement": 4,
+                                "displacementScale": 64,
+                                "displacementSpeed": 42.6666667
+                            }
                         }
-                    ]
+                    ],
+                    "type": "SanePhonics.Entity.WaterRegion"
                 }
             ],
             "visible": true,

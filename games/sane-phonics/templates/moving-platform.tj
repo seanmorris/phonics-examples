@@ -1,0 +1,31 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/platforms.tsj"
+  },
+  "object": {
+    "name": "MovingPlatform",
+    "x": 0,
+    "y": 0,
+    "width": 96,
+    "height": 16,
+    "gid": 2,
+    "type": "SanePhonics.Entity.MovingPlatform",
+    "properties": [
+      {
+        "name": "MovingPlatform",
+        "type": "class",
+        "propertytype": "SanePhonics.MovingPlatform",
+        "value": {}
+      },
+      {
+        "name": "PlatformOscillation",
+        "type": "class",
+        "propertytype": "SanePhonics.PlatformOscillation",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

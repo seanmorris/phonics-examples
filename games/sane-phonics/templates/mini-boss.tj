@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/bosses.tsj"
+  },
+  "object": {
+    "x": 0,
+    "y": 0,
+    "type": "SanePhonics.Entity.MiniBoss",
+    "properties": [
+      {
+        "name": "MiniBoss",
+        "type": "class",
+        "propertytype": "SanePhonics.MiniBoss",
+        "value": {}
+      }
+    ],
+    "name": "MiniBoss",
+    "visible": true,
+    "gid": 1,
+    "width": 48,
+    "height": 48
+  }
+}

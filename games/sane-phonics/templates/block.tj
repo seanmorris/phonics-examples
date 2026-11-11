@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/tiles.tsj"
+  },
+  "object": {
+    "name": "Block",
+    "gid": 1,
+    "x": 0,
+    "y": 0,
+    "width": 128,
+    "height": 32,
+    "type": "SanePhonics.Entity.Block",
+    "properties": [
+      {
+        "name": "BuoyantPlatform",
+        "type": "class",
+        "propertytype": "SanePhonics.BuoyantPlatform",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

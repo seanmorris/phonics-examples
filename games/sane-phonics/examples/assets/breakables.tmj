@@ -762,7 +762,7 @@
                 {
                     "id": 1,
                     "name": "4 x 3 block",
-                    "type": "breakable",
+                    "type": "SanePhonics.Entity.breakable",
                     "gid": 1,
                     "x": 304,
                     "y": 448,
@@ -772,21 +772,20 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "columns",
-                            "type": "int",
-                            "value": 4
-                        },
-                        {
-                            "name": "rows",
-                            "type": "int",
-                            "value": 3
+                            "name": "BreakableBlock",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BreakableBlock",
+                            "value": {
+                                "columns": 4,
+                                "rows": 3
+                            }
                         }
                     ]
                 },
                 {
                     "id": 2,
                     "name": "2 x 8 block",
-                    "type": "breakable",
+                    "type": "SanePhonics.Entity.breakable",
                     "gid": 1,
                     "x": 560,
                     "y": 448,
@@ -796,21 +795,20 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "columns",
-                            "type": "int",
-                            "value": 2
-                        },
-                        {
-                            "name": "rows",
-                            "type": "int",
-                            "value": 8
+                            "name": "BreakableBlock",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BreakableBlock",
+                            "value": {
+                                "columns": 2,
+                                "rows": 8
+                            }
                         }
                     ]
                 },
                 {
                     "id": 3,
                     "name": "8 x 2 block",
-                    "type": "breakable",
+                    "type": "SanePhonics.Entity.breakable",
                     "gid": 1,
                     "x": 800,
                     "y": 448,
@@ -820,14 +818,13 @@
                     "visible": true,
                     "properties": [
                         {
-                            "name": "columns",
-                            "type": "int",
-                            "value": 8
-                        },
-                        {
-                            "name": "rows",
-                            "type": "int",
-                            "value": 2
+                            "name": "BreakableBlock",
+                            "type": "class",
+                            "propertytype": "SanePhonics.BreakableBlock",
+                            "value": {
+                                "columns": 8,
+                                "rows": 2
+                            }
                         }
                     ]
                 }

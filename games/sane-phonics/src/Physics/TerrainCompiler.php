@@ -27,6 +27,8 @@ final class TerrainCompiler
 	 */
 	public static function build(TileMap ...$maps): Terrain
 	{
+		foreach($maps as $map) \SanePhonics\Tiled\Authoring::prepare($map);
+
 		$terrain = new Terrain;
 
 		MapTerrain::compile($terrain, [

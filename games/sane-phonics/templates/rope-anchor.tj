@@ -1,0 +1,19 @@
+{
+  "type": "template",
+  "object": {
+    "name": "RopeAnchor",
+    "x": 0,
+    "y": 0,
+    "point": true,
+    "type": "SanePhonics.Entity.RopeAnchor",
+    "properties": [
+      {
+        "name": "RopeAnchor",
+        "type": "class",
+        "propertytype": "SanePhonics.RopeAnchor",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "type": "template",
+  "object": {
+    "point": true,
+    "x": 0,
+    "y": 0,
+    "rotation": 0,
+    "type": "SanePhonics.Entity.GravitySwitch",
+    "properties": [
+      {
+        "name": "GravitySwitch",
+        "type": "class",
+        "propertytype": "SanePhonics.GravitySwitch",
+        "value": {}
+      }
+    ],
+    "name": "GravitySwitch",
+    "visible": true
+  }
+}

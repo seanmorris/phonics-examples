@@ -1,0 +1,25 @@
+{
+  "type": "template",
+  "tileset": {
+    "firstgid": 1,
+    "source": "../examples/assets/egg-walker.tsj"
+  },
+  "object": {
+    "name": "EggWalker",
+    "x": 0,
+    "y": 0,
+    "width": 96,
+    "height": 96,
+    "gid": 1,
+    "type": "SanePhonics.Entity.EggWalker",
+    "properties": [
+      {
+        "name": "EggWalker",
+        "type": "class",
+        "propertytype": "SanePhonics.EggWalker",
+        "value": {}
+      }
+    ],
+    "visible": true
+  }
+}

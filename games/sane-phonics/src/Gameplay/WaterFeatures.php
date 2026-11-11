@@ -47,6 +47,8 @@ final class WaterFeatures
 		, private TileMap $map
 		, private WaterRegions $waters
 	){
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		$points = [];
 
 		foreach($waters->regions as $water)

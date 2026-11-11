@@ -95,6 +95,8 @@ final class Monitors
 	 */
 	public function spawn(TileMap $map, string $objectClass = 'Monitor'): array
 	{
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		if($this->closed)
 		{
 			throw new \LogicException('Monitor manager is closed');
@@ -142,6 +144,8 @@ final class Monitors
 			$y = (float)($object['y'] ?? 0) + $map->y + $layer->offsetY;
 			$width = (float)($object['width'] ?? 0) ?: (float)($properties['width'] ?? 30);
 			$height = (float)($object['height'] ?? 0) ?: (float)($properties['height'] ?? 32);
+
+			if(isset($object['gid'])) $x += $width / 2;
 
 			$monitor = new Monitor(
 				$x

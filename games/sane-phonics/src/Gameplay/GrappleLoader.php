@@ -22,6 +22,8 @@ final class GrappleLoader
 	 */
 	public function load(Grapples $system, TileMap $map, ?callable $resolveAnchor = null): void
 	{
+		\SanePhonics\Tiled\Authoring::prepare($map);
+
 		$objects = $art = $anchors = [];
 
 		foreach($map->tilesets as $set)
