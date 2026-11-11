@@ -657,11 +657,14 @@ async function startGame(page,canvas,choice,{seatsRight=0}={})
 
 async function settled(canvas)
 {
+	let snapshot;
 	await expect.poll(async()=>{
-		const s=await state(canvas);
-		return !s.ui.animation||s.ui.animation.elapsed>=s.ui.animation.duration;
+		snapshot=await state(canvas);
+		// The final animation frame still owns the prompt and input. Return the same unlocked snapshot we checked;
+		// reading it again afterwards can instead observe the next bot action's chip animation.
+		return !snapshot.ui.animation&&!snapshot.ui.locked;
 	},{timeout:20_000}).toBe(true);
-	return state(canvas);
+	return snapshot;
 }
 
 test('hold\'em is chosen at setup, deals a board street by street and names each street',async({page})=>{

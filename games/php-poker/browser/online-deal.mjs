@@ -8,7 +8,7 @@
  */
 
 export const ONLINE_DEAL_VERSION=4;
-export const ONLINE_RULES='five-card-draw-anything-v5';
+export const ONLINE_RULES='five-card-draw-anything-v6';
 export const ONLINE_ACTION_TYPES=Object.freeze(['shuffle-packet','card-layers','poker-action','draw-choice','reveal-cards','open-cards']);
 /**
  * The games a table can deal, by id: forced bets and one entry per street. A copy of variants.json, which the PHP
@@ -25,11 +25,12 @@ const rotate=(values,start)=>[...values.slice(start),...values.slice(0,start)];
 const hex=bytes=>[...bytes].map(value=>value.toString(16).padStart(2,'0')).join('');
 const sha256=async value=>hex(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(value))));
 const EMPTY_LEGAL=Object.freeze({fold:false,pass:false,check:false,call:false,callAmount:0,bet:false,minBet:0,maxBet:0,betLabel:'Bet',openingRequired:false});
+const STARTING_STACK=500;
 
 const validatePlayers=(players,localPlayer,breaker)=>{
 	if(!Array.isArray(players)||players.length!==2||new Set(players).size!==players.length
 		||!players.every(player=>typeof player==='string'&&player.length>0&&player.length<=255)
-	)throw new TypeError('Online five-card draw needs two distinct players');
+	)throw new TypeError('Online poker needs exactly two distinct players');
 	if(!players.includes(localPlayer)||!players.includes(breaker))throw new TypeError('Local player and breaker need seats');
 };
 
@@ -364,7 +365,7 @@ export class OnlineDeal
 			v:ONLINE_DEAL_VERSION,rules:ONLINE_RULES,context:this.context,players:[...this.players],breaker,sequence:0
 			,handNumber:0,dealer:this.players.indexOf(breaker),stage:'ready',shuffleIndex:0,deck:[],layers:[],pending:null
 			,allocations:[],allocationIndex:0,nextDeckIndex:1,hands:this.players.map(()=>[]),discards:[],drawAllocations:[]
-			,drawRecipient:null,bankrolls:this.players.map((player,id)=>({id,player,stack:500,folded:false,bet:0,totalBet:0,drawCount:null,lastAction:''}))
+			,drawRecipient:null,bankrolls:this.players.map((player,id)=>({id,player,stack:STARTING_STACK,folded:false,bet:0,totalBet:0,drawCount:null,lastAction:''}))
 			,pot:0,highest:0,raises:0,raiseCounts:this.players.map(()=>0),opener:null,turnQueue:[],awards:[],reveal:false,revealed:this.players.map(()=>null)
 			,message:'',history:[],outcome:null
 			// Street games only: the street being played, the board's allocations, the allocations dealt this street,
@@ -372,6 +373,7 @@ export class OnlineDeal
 			,...(this.streetGame?{street:0,board:[],dealing:[],openQueue:[],opened:{}}:{})
 		};
 		this.beginHand(false);
+		this.assertState();
 	}
 
 	loadSaved()
@@ -699,6 +701,7 @@ export class OnlineDeal
 		if(actor!==this.currentActor())throw new Error('Online Poker action came from the wrong player');
 		if(!action||!ONLINE_ACTION_TYPES.includes(action.type))throw new Error('Unknown online Poker action');
 		if(typeof preHash!=='string'||preHash!==await this.hash())throw new Error('Online Poker action has the wrong parent hash');
+		this.assertState();
 		if(this.follow)this.saved=this.loadSaved();
 		const before={state:clone(this.state),privateCards:clone(this.privateCards),intent:clone(this.intent),saved:clone(this.saved)};
 		let stored;
@@ -711,6 +714,7 @@ export class OnlineDeal
 			else if(this.state.stage==='open')this.applyOpenAction(actor,action);
 			else if(this.state.stage==='reveal')this.applyRevealAction(actor,action);
 			else this.applyPokerAction(actor,action);
+			this.assertState();
 		}
 		catch(error)
 		{
@@ -837,6 +841,8 @@ export class OnlineDeal
 			this.state.highest=0;this.state.raises=0;this.state.raiseCounts=this.players.map(()=>0);
 			for(const player of this.state.bankrolls)player.bet=0;
 		}
+		// An ante can itself put a stud seat all-in. Do not post a bring-in that nobody can answer.
+		if(!this.pendingBettors(order).length){this.endStreet();return;}
 		let first=order.find(player=>active.includes(player)),queue=null;
 		if(street.first==='left-of-blinds')first=dealer;
 		else if(street.first==='low-up')
@@ -860,12 +866,11 @@ export class OnlineDeal
 			}
 		}
 		queue??=[first,...this.ordered(first,false)];
-		const funded=active.filter(player=>this.bankroll(player).stack>0);
 		// With fewer than two players able to bet there is no round and the cards run out, unless the one player
 		// with chips still owes a forced bet: a small blind must call or fold against an all-in big blind.
-		const owing=funded.filter(player=>this.state.highest>this.bankroll(player).bet);
-		if(funded.length<2&&!owing.length){this.endStreet();return;}
-		this.state.stage='betting';this.state.turnQueue=queue.filter(player=>funded.length<2?owing.includes(player):funded.includes(player));
+		this.state.turnQueue=this.pendingBettors(queue);
+		if(!this.state.turnQueue.length){this.endStreet();return;}
+		this.state.stage='betting';
 		// "Pre-flop betting.", "Flop betting.", "Fourth street betting.", as the offline table words them.
 		const label=street.name==='preflop'?'Pre-flop':street.name[0].toUpperCase()+street.name.slice(1)+(this.rules.forced==='blinds'?'':' street');
 		this.state.message=street.first==='low-up'?`${this.name(first)} brings in.`:`${label} betting.`;
@@ -1000,6 +1005,9 @@ export class OnlineDeal
 		}
 		const active=this.activePlayers();
 		if(active.length===1){this.settle(false);return;}
+		// A call can exhaust the small blind while the big blind still has its option queued. Keep only decisions
+		// that can affect the pot: an unfunded hand cannot act, and a lone funded hand may only answer a debt.
+		this.state.turnQueue=this.pendingBettors(this.state.turnQueue);
 		if(this.state.turnQueue.length)return;
 		if(this.streetGame){this.endStreet();return;}
 		this.normalizeRound();
@@ -1042,7 +1050,13 @@ export class OnlineDeal
 				post(dealer,Math.min(this.settings.ante,this.settings.minimum),'Small blind');
 				post(this.ordered(dealer,false)[0],this.settings.minimum,'Big blind');
 			}
-			else for(const player of this.ordered(dealer,true))post(player,this.settings.ante,null);
+			else
+			{
+				// Heads-up antes are matched contributions, separate from the live street bet. Leave any unmatched
+				// excess in its owner's stack before cards are dealt; round normalization only refunds live bets.
+				const ante=Math.min(this.settings.ante,...this.state.bankrolls.map(seat=>seat.stack));
+				for(const player of this.ordered(dealer,true))post(player,ante,null);
+			}
 		}
 		if(this.saved.plan?.hand<this.state.handNumber)delete this.saved.plan;
 		this.saveSaved();
@@ -1085,6 +1099,8 @@ export class OnlineDeal
 		const active=this.activePlayers();let winners=active,best=-1;
 		if(reveal)
 		{
+			if(this.streetGame&&new Set(active.map(player=>this.bankroll(player).totalBet)).size!==1)
+			throw new Error('Contested pot contains unmatched contributions');
 			winners=[];
 			for(const player of active)
 			{
@@ -1123,7 +1139,8 @@ export class OnlineDeal
 		const final=this.streetGame?this.rules.streets[this.state.street].limits==='late':this.state.stage==='final-betting';
 		const increment=final?this.settings.finalMinimum:this.settings.minimum,largest=final?this.settings.finalMaximum:this.settings.maximum;
 		const minimum=this.state.highest+increment,maximum=Math.min(seat.bet+seat.stack,this.state.highest+largest);
-		const canRaise=seat.stack>due&&maximum>=minimum&&(this.state.highest===0||(this.state.raises<this.settings.raiseLimit
+		const opponentCanRespond=this.activePlayers().some(other=>other!==player&&this.bankroll(other).stack>0);
+		const canRaise=opponentCanRespond&&seat.stack>due&&maximum>=minimum&&(this.state.highest===0||(this.state.raises<this.settings.raiseLimit
 			&&this.state.raiseCounts[this.seat(player)]<this.settings.playerRaiseLimit));
 		return {fold:true,pass:opening&&due===0,check:!opening&&due===0,call:due>0&&seat.stack>0
 			,callAmount:Math.min(due,seat.stack),bet:canRaise,minBet:minimum,maxBet:maximum,betIncrement:increment
@@ -1131,6 +1148,38 @@ export class OnlineDeal
 	}
 
 	activePlayers(){return this.players.filter(player=>!this.bankroll(player).folded);}
+	/** Betting needs two funded hands, except for a lone funded player who still has to call or fold. */
+	pendingBettors(queue)
+	{
+		const funded=this.activePlayers().filter(player=>this.bankroll(player).stack>0);
+		return queue.filter(player=>funded.includes(player)&&(funded.length>1||this.bankroll(player).bet<this.state.highest));
+	}
+
+	/** Fail closed before accepting or acknowledging a transition that creates chips or leaves an invalid turn. */
+	assertState()
+	{
+		const {bankrolls,pot,highest,stage,turnQueue}=this.state,valid=value=>Number.isSafeInteger(value)&&value>=0;
+		if(bankrolls.length!==this.players.length||!valid(pot)||!valid(highest)
+			||bankrolls.some((seat,index)=>seat.player!==this.players[index]||seat.id!==index
+				||![seat.stack,seat.bet,seat.totalBet].every(valid)||seat.bet>seat.totalBet)
+			||pot+bankrolls.reduce((sum,seat)=>sum+seat.stack,0)!==STARTING_STACK*this.players.length)
+		throw new Error('Online poker chips are not conserved');
+		if(!['showdown','match-over'].includes(stage))
+		{
+			const committed=bankrolls.reduce((sum,seat)=>sum+seat.totalBet,0);
+			// Draw may carry dead antes over an all-pass redeal; street games always start with an empty pot.
+			if(this.streetGame?pot!==committed:pot<committed)throw new Error('Online poker pot does not match contributions');
+		}
+		if(['betting','final-betting'].includes(stage))
+		{
+			if(!turnQueue.length||new Set(turnQueue).size!==turnQueue.length
+				||this.pendingBettors(turnQueue).length!==turnQueue.length
+				||this.activePlayers().some(player=>this.bankroll(player).stack>0
+					&&this.bankroll(player).bet<highest&&!turnQueue.includes(player))
+				||highest!==Math.max(...bankrolls.map(seat=>seat.bet)))
+			throw new Error('Online poker has an invalid betting turn');
+		}
+	}
 	ordered(after,include)
 	{
 		const result=[],start=this.seat(after),count=this.players.length;
@@ -1192,7 +1241,7 @@ export class OnlineDeal
 				:(known&&cards.length===5?evaluateHand(cards,this.wild).name:null);
 			return {id:index,name:player===this.localPlayer?'You':player,stack:source.stack,debt:0,folded:source.folded,bet:source.bet
 				,totalBet:source.totalBet,drawCount:source.drawCount,lastAction:source.lastAction,creditUsed:false
-				,portrait:index===0?'you':'ada',isHuman:index===0,cards,handName,net:source.stack-500
+				,portrait:index===0?'you':'ada',isHuman:index===0,cards,handName,net:source.stack-STARTING_STACK
 				,...(this.streetGame?{faces:allocations.map(allocation=>this.state.allocations[allocation].face==='up'?'up':'down')}:{})};
 		});
 		const awards=this.state.awards.map(award=>({seat:viewPlayers.indexOf(award.player),amount:award.amount,handName:award.handName}));

@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
 import {
-	DEFAULT_ONLINE_SETTINGS,OnlineDeal,cardLabel,describeOnlineSettings,evaluateHand,limitsLabel,onlineDeck,onlineSettingsForm
+	DEFAULT_ONLINE_SETTINGS,ONLINE_RULES,OnlineDeal,cardLabel,describeOnlineSettings,evaluateHand,limitsLabel,onlineDeck,onlineSettingsForm
 	,onlineWildCards,validateOnlineSettings,wildSelectionLabel
 } from '../games/php-poker/browser/online-deal.mjs';
 
@@ -119,7 +119,7 @@ test('online betting follows the table ante, increments and both raise caps',asy
 	assert.equal(peers.alice.publicState().stage,'final-betting');
 	const opener=peers.alice.currentActor();legal=peers[opener].legalActionsFor(opener);
 	assert.deepEqual([legal.minBet,legal.maxBet,legal.betIncrement],[10,30,10],'after the draw bets run 10 to 30');
-	assert.deepEqual(peers.alice.view().profile,{version:'five-card-draw-anything-v5',...validateOnlineSettings(settings)},'the view reports the table rules');
+	assert.deepEqual(peers.alice.view().profile,{version:ONLINE_RULES,...validateOnlineSettings(settings)},'the view reports the table rules');
 });
 
 test('a wild-card table deals jokers, reads private wild hands and scores the showdown with them',async()=>{
