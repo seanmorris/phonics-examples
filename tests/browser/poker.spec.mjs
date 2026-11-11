@@ -65,12 +65,22 @@ async function installGamepad(page)
 	});
 }
 
+/**
+ * Press and release controller buttons. The game reads the pad once a frame, so each state is held for whole
+ * animation frames as well as its minimum time: on a busy machine a frame can outlast a hold timed in milliseconds,
+ * and then the press is never seen, or two presses of one button run together.
+ */
 async function padPulse(page,buttons)
 {
-	await page.evaluate(buttons=>changePokerPad({buttons}),buttons);
-	await page.waitForTimeout(80);
-	await page.evaluate(()=>changePokerPad());
-	await page.waitForTimeout(50);
+	const held=(buttons,minimum)=>page.evaluate(({buttons,minimum})=>new Promise(resolve=>{
+		const until=performance.now()+minimum;
+		let frames=0;
+		const step=()=>++frames>3&&performance.now()>=until?resolve():requestAnimationFrame(step);
+		changePokerPad({buttons});
+		requestAnimationFrame(step);
+	}),{buttons,minimum});
+	await held(buttons,80);
+	await held([],50);
 }
 
 test('Bicycle PC-speaker cues reach Web Audio and the shared mute control',async({page})=>{
@@ -186,8 +196,28 @@ test('native saved draw continues through keyboard input, rejects stale actions 
 
 // Use the same pure geometry as the PHP renderer, then exercise real browser touch
 // events. The checks are in CSS pixels so high-DPI canvases cannot hide tiny targets.
+/**
+ * Read the canvas box and its drawing buffer while the two agree.
+ *
+ * The page header changes height for a moment when its offline status wraps on a narrow screen. The box follows at
+ * once and the buffer a frame later, and a layout rectangle scaled between the two comes out the wrong size.
+ */
+async function steady(canvas)
+{
+	let read;
+	await expect.poll(async()=>{
+		read=await canvas.evaluate(element=>{
+			const box=element.getBoundingClientRect();
+			return {box:{x:box.x,y:box.y,width:box.width,height:box.height},size:[element.width,element.height]};
+		});
+		return Math.abs(read.size[0]/read.box.width-read.size[1]/read.box.height);
+	}).toBeLessThan(.01);
+	return read;
+}
+
 async function regions(canvas)
 {
+	await steady(canvas);
 	const input=await canvas.evaluate(element=>({view:element.phpPokerDebug.state,
 		width:element.width,height:element.height,dpr:Math.min(2,devicePixelRatio||1)}));
 	return JSON.parse(execFileSync('php',['-r',String.raw`
@@ -228,8 +258,7 @@ echo json_encode($result,JSON_THROW_ON_ERROR);
 
 async function point(canvas,rect)
 {
-	const box=await canvas.boundingBox();
-	const size=await canvas.evaluate(element=>[element.width,element.height]);
+	const {box,size}=await steady(canvas);
 	return {x:box.x+(rect[0]+rect[2]/2)*box.width/size[0],y:box.y+(rect[1]+rect[3]/2)*box.height/size[1],
 		width:rect[2]*box.width/size[0],height:rect[3]*box.height/size[1]};
 }
@@ -667,6 +696,32 @@ async function startGame(page,canvas,choice,{seatsRight=0}={})
 	return setup;
 }
 
+/**
+ * Record the first state the table publishes for each revision, in window.pokerViews.
+ *
+ * Bots act on their own clock, so the table a test reads after a round trip is some later state: a bot may have
+ * folded and turned its exposed card down, or a street may have gone by. The record holds every state in order, and
+ * its first entry is the deal itself, published while the cards are still moving and before any bot can act.
+ */
+const recordViews=page=>page.addInitScript(()=>{
+	window.pokerViews=[];
+	new MutationObserver(records=>{
+		const s=JSON.parse(records.at(-1).target.dataset.phpPoker||'null');
+		if(s?.screen!=='table'||s.revision===window.pokerViews.at(-1)?.revision)return;
+		window.pokerViews.push({
+			revision:s.revision,game:s.game,street:s.street,phase:s.phase,board:s.board
+			,players:s.players.map(({id,cards,faces,folded,lastAction,bet,totalBet})=>({id,cards,faces,folded,lastAction,bet,totalBet}))
+		});
+	}).observe(document,{subtree:true,attributes:true,attributeFilter:['data-php-poker']});
+});
+const views=page=>page.evaluate(()=>window.pokerViews);
+/** @returns The deal as the table first published it, before any bot has acted. */
+async function opening(page)
+{
+	await expect.poll(async()=>(await views(page)).length).toBeGreaterThan(0);
+	return (await views(page))[0];
+}
+
 async function settled(canvas)
 {
 	let snapshot;
@@ -690,10 +745,11 @@ test('hold\'em is chosen at setup, deals a board street by street and names each
 			}
 		}).observe(document,{subtree:true,attributes:true,attributeFilter:['data-php-poker']});
 	});
+	await recordViews(page);
 	const canvas=await boot(page);
 	const setup=await startGame(page,canvas,3);
 	expect(setup).toMatchObject({game:'holdem',players:4});
-	let view=await settled(canvas);
+	let view=await opening(page);
 	expect(view).toMatchObject({game:'holdem',street:'preflop',board:[],phase:'betting'});
 	expect(view.players[0].cards).toHaveLength(2);
 	expect(view.players[0].cards.every(Number.isInteger)).toBe(true);
@@ -748,23 +804,23 @@ test('hold\'em is chosen at setup, deals a board street by street and names each
 });
 
 test('seven-card stud seats seven, shows exposed cards and keeps hole cards private',async({page})=>{
+	await recordViews(page);
 	const canvas=await boot(page);
 	const setup=await startGame(page,canvas,5,{seatsRight:4});
 	expect(setup).toMatchObject({game:'stud7',players:7});
-	let view=await settled(canvas);
+	let view=await opening(page);
 	expect(view).toMatchObject({game:'stud7',street:'third',phase:'betting'});
 	expect(view.players).toHaveLength(7);
 	expect(view.players[0].faces).toEqual(['down','down','up']);
 	expect(view.players[0].cards.every(Number.isInteger)).toBe(true);
 	for(const player of view.players.slice(1))
 	{
+		expect(player.folded).toBe(false);
 		expect(player.cards.slice(0,2)).toEqual([null,null]);
 		expect(Number.isInteger(player.cards[2])).toBe(true);
 	}
 	expect(view.players.filter(player=>player.lastAction.startsWith('Brings in'))).toHaveLength(1);
 	expect(view.players.every(player=>player.totalBet>=1)).toBe(true);
-	const counts={third:3,fourth:4,fifth:5,sixth:6,seventh:7};
-	const seen=new Set();
 	let showdown=null;
 	for(let step=0;step<240&&!showdown;step++)
 	{
@@ -776,16 +832,28 @@ test('seven-card stud seats seven, shows exposed cards and keeps hole cards priv
 			await page.waitForTimeout(120);
 			continue;
 		}
-		seen.add(view.street);
-		expect(view.players[0].cards).toHaveLength(counts[view.street]);
-		for(const player of view.players.slice(1).filter(player=>!player.folded))
-			expect(player.cards.map((card,index)=>card===null?'down':'up')).toEqual(player.faces);
-		for(const player of view.players.filter(player=>player.folded))
-			expect(player.cards.every(card=>card===null)||player.id===0).toBe(true);
 		if(view.turn!==0){await page.waitForTimeout(120);continue;}
 		expect(view.ui.hint).toMatch(/^\dth street: |^3rd street: /i);
 		await page.keyboard.press('c');
 		await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(view.revision);
+	}
+	// Every state of every hand played, not only the ones this test happened to read: each street deals its card
+	// with the right face, a live opponent shows exactly its exposed cards, and a folded one shows nothing.
+	const order=['down','down','up','up','up','up','down'];
+	const counts={third:3,fourth:4,fifth:5,sixth:6,seventh:7};
+	const seen=new Set();
+	for(const played of (await views(page)).filter(played=>played.phase==='betting'))
+	{
+		const at=`revision ${played.revision}, ${played.street} street`;
+		seen.add(played.street);
+		expect(played.players[0].cards.every(Number.isInteger),at).toBe(true);
+		for(const player of played.players.filter(player=>!player.folded))
+		{
+			expect(player.faces,at).toEqual(order.slice(0,counts[played.street]));
+			if(player.id!==0)expect(player.cards.map(card=>card===null?'down':'up'),at).toEqual(player.faces);
+		}
+		for(const player of played.players.filter(player=>player.folded&&player.id!==0))
+			expect(player.cards.every(card=>card===null),at).toBe(true);
 	}
 	expect([...seen]).toEqual(expect.arrayContaining(['third','fourth','fifth','sixth','seventh']));
 	expect(showdown.players[0].faces).toEqual(['down','down','up','up','up','up','down']);
