@@ -549,7 +549,7 @@ final class Game
 		else
 		{
 			$this->state['pending'] = $active;
-			$this->state['message'] = ucfirst($street['name']).' betting.';
+			$this->state['message'] = ($street['name'] === 'preflop' ? 'Pre-flop' : ucfirst($street['name'])).' betting.';
 		}
 		$this->state['turn'] = $this->state['pending'][0];
 	}

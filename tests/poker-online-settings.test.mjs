@@ -162,10 +162,13 @@ test('browsers that disagree on table settings fail at the first handshake',asyn
 test('the House rules form covers every online setting in the offline names, bounds and card labels',()=>{
 	const form=onlineSettingsForm();
 	const fields=form.groups.flatMap(group=>group.fields),byName=Object.fromEntries(fields.map(field=>[field.name,field]));
-	assert.deepEqual(fields.map(field=>field.name).sort(),Object.keys(DEFAULT_ONLINE_SETTINGS).filter(key=>key!=='variant').sort()
-		,'one field per setting except the opening, which is always Anything opens online');
+	assert.deepEqual(fields.map(field=>field.name).sort(),['game',...Object.keys(DEFAULT_ONLINE_SETTINGS).filter(key=>key!=='variant')].sort()
+		,'one field per setting, plus the game, except the opening, which is always Anything opens online');
+	assert.deepEqual([byName.game.type,byName.game.options.map(option=>[option.value,option.label])]
+		,['select',[['draw','Five-card draw'],['holdem',"Texas Hold'em"],['stud5','Five-card stud'],['stud7','Seven-card stud']]]);
 	assert.equal(form.values.variant,'anything','the variant still travels with the chosen settings');
-	assert.deepEqual(form.values,{...DEFAULT_ONLINE_SETTINGS,wild:[],customWild:[]});
+	assert.deepEqual(form.values,{game:'draw',...DEFAULT_ONLINE_SETTINGS,wild:[],customWild:[]});
+	assert.equal('game' in validateOnlineSettings(form.values),false,'the form\'s draw choice is the same table as no choice at all');
 	assert.deepEqual(form.defaults,form.values);
 	assert.ok(!Object.isFrozen(form.values.wild),'the dialog receives plain copies');
 	for(const field of fields.filter(field=>field.type==='number'))
@@ -192,8 +195,10 @@ test('the House rules form covers every online setting in the offline names, bou
 
 test('House rules follow the offline TABLE SETUP rows, labels, captions and row summaries',()=>{
 	const form=onlineSettingsForm({ante:3,maximum:30,finalMinimum:4,finalMaximum:40,raiseLimit:2,playerRaiseLimit:1,wild:['joker']});
-	assert.deepEqual(form.groups.map(group=>group.legend),['Opponents','Wild cards','Limits']);
-	const [opponents,wild,limits]=form.groups;
+	assert.deepEqual(form.groups.map(group=>group.legend),['Opponents','Game','Wild cards','Limits']);
+	const [opponents,game,wild,limits]=form.groups;
+	assert.equal(game.summary(form.values),'Five-card draw');
+	assert.equal(game.summary({...form.values,game:'holdem'}),"Texas Hold'em");
 	assert.deepEqual(opponents.fields,[],'online tables are heads-up, so the row is fixed');
 	assert.equal(opponents.summary(form.values),'1 · heads-up');
 	assert.equal(wild.summary(form.values),'Joker');

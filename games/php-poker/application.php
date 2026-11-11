@@ -20,7 +20,7 @@ $app->lobby([
 		,'actionTimeoutMs'=>300000
 		,'players'=>2,'spectators'=>false,'aspectRatio'=>'auto','checkpointMode'=>'history','actionBatches'=>true
 		,'maximumActionBytes'=>49152
-		,'actionTypes'=>['shuffle-packet','card-layers','poker-action','draw-choice','reveal-cards']
+		,'actionTypes'=>['shuffle-packet','card-layers','poker-action','draw-choice','reveal-cards','open-cards']
 	]
 ]);
 $app->browser(__DIR__.'/browser/persistence.mjs');
