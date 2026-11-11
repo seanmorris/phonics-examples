@@ -57,7 +57,7 @@ A frame is drawn back to front:
 
 1. The device is cleared to the current sky color.
 2. The backdrop is drawn at twice the size of the other tiles, resting on the ground line. Each band of the parallax mask is a separate strip that drifts at its own fraction of the scroll, and the river is a two-frame tile animation.
-3. A cardinal crosses the sky now and then, from right to left. It sets out only in full daylight, changes through its hand-painted dusk and night colors if the light turns while it is airborne, finishes its crossing, and is timed from its own random stream so it never touches the seeded course.
+3. A cardinal crosses the sky now and then, from right to left. It sets out only in full daylight, changes through its hand-painted sunrise/sunset and night colors if the light turns while it is airborne, finishes its crossing, and is timed from its own random stream so it never touches the seeded course.
 4. The ground is two rows of 32-unit tiles that scroll at full speed.
 5. Scenery stands on the ground to the right of each pair. One of six arrangements of tree, shrub, and fence, one of them empty, is chosen from the pair's number.
 6. Each pair is built from 8-unit slices: a cap, wall slices that alternate so the dirt pattern continues, and a base that closes the outline into the grass. The hanging pillar is the same stack with every slice flipped.

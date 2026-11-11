@@ -44,7 +44,7 @@ const RIVER_FRAME_MS = 400;
 // Three hand-graded keyframes: day, dusk (also dawn), and night. Day takes its backdrop from art/terrain.png and its
 // foreground from the parallax copy; the other two are whole sheets. Between each pair the generator grades
 // STEPS - 1 in-between palettes, so each terrain tileset stacks 2 * STEPS + 1 palettes top to bottom.
-const KEYFRAMES = ['day', 'duskdawn', 'night'], STEPS = 3;
+const KEYFRAMES = ['day', 'duskdawn', 'night'], CARDINAL_KEYFRAMES = ['day', 'sunrise-sunset', 'night'], STEPS = 3;
 // A pixel whose hue swings further than WIDE_SWING between keyframes, with one end a warm colour (within WARM_SPREAD of
 // WARM_HUE, the reds through golds), travels through the warm side of the wheel instead of the shorter way through
 // cyan and green, so the sky blushes on its way to dusk and night. Other swings, such as foliage turning from green to
@@ -438,8 +438,8 @@ generated.set('assets/scenery.tsj', tileset('Phlappy Phant scenery', 'scenery.pn
 	properties: [{name: 'phlappy.widths', type: 'string', value: SCENERY.map(([, , , width]) => width).join(',')}]
 }));
 // The cardinal that crosses the sky: three 32x32 flight frames facing left, played down, level, up, level. Its
-// source rows are hand-painted day, dusk/dawn and night keyframes. Grade the same in-between palettes as the terrain
-// so a bird that starts in daylight can keep matching the sky while it finishes its crossing after dusk falls.
+// source rows are hand-painted day, sunrise/sunset and night keyframes. Grade the same in-between palettes as the terrain
+// so a bird that starts in daylight can keep matching the sky while it finishes its crossing after sunset begins.
 const cardinalImage = PNG.sync.read(await fs.readFile(new URL('art/cardinal.png', root)));
 
 if(cardinalImage.width !== 96 || cardinalImage.height !== 96)
@@ -447,7 +447,7 @@ if(cardinalImage.width !== 96 || cardinalImage.height !== 96)
 
 const cardinalSource = new Raster(96, 96);
 cardinalSource.data.set(cardinalImage.data);
-const cardinalFrames = KEYFRAMES.map((_, index) => {
+const cardinalFrames = CARDINAL_KEYFRAMES.map((_, index) => {
 	const row = new Raster(96, 32);
 	for(let y = 0; y < 32; y++) for(let x = 0; x < 96; x++) row.put(x, y, cardinalSource.get(x, index * 32 + y).slice(0, 3), cardinalSource.get(x, index * 32 + y)[3]);
 	return row;
@@ -456,7 +456,7 @@ const cardinalFrames = KEYFRAMES.map((_, index) => {
 for(let keyframe = 1; keyframe < cardinalFrames.length; keyframe++) for(let y = 0; y < 32; y++) for(let x = 0; x < 96; x++)
 {
 	const dayAlpha = cardinalFrames[0].get(x, y)[3], alpha = cardinalFrames[keyframe].get(x, y)[3];
-	if(alpha !== dayAlpha) throw Error(`art/cardinal.png keyframe ${KEYFRAMES[keyframe]} differs in shape from day at ${x},${y}`);
+	if(alpha !== dayAlpha) throw Error(`art/cardinal.png keyframe ${CARDINAL_KEYFRAMES[keyframe]} differs in shape from day at ${x},${y}`);
 }
 
 const cardinalPalettes = [];
@@ -477,7 +477,7 @@ cardinalPalettes.forEach((row, index) => cardinalSheet.blit(row, 0, index * 32))
 generated.set('assets/cardinal.png', cardinalSheet.png());
 generated.set('assets/cardinal.tsj', tileset('Phlappy Phant cardinal', 'cardinal.png', 32, 32, 3, 3 * cardinalPalettes.length, cardinalSheet, {
 	properties: [
-		{name: 'phlappy.keyframes', type: 'string', value: KEYFRAMES.join(',')}
+		{name: 'phlappy.keyframes', type: 'string', value: CARDINAL_KEYFRAMES.join(',')}
 		, {name: 'phlappy.steps', type: 'string', value: String(STEPS)}
 	]
 	// The old four-frame cycle lasted 440 ms. At 352 ms it completes 25% more cycles per second.

@@ -7,7 +7,7 @@ Everything the game draws, apart from text, comes from six hand-edited PNG sheet
 | Sheet | Size | Contents |
 | --- | --- | --- |
 | `art/elephpant.png` | 128×104 | The four elephant frames, traced by hand from `art/elephpant.svg`. |
-| `art/cardinal.png` | 96×96 | Three rows of three 32×32 flight frames, facing left: hand-painted day, dusk/dawn, and night colors. |
+| `art/cardinal.png` | 96×96 | Three rows of three 32×32 flight frames, facing left: hand-painted day, sunrise/sunset, and night colors. |
 | `art/terrain.png` | 224×224 | The daytime backdrop, its river animation, the pillar, the ground, and the scenery. |
 | `art/terrain-parallax.png` | 224×224 | The same layout with the backdrop painted as flat bands that mark its parallax layers. |
 | `art/terrain-duskdawn.png` | 224×224 | The whole terrain sheet graded by hand for dusk and dawn. |

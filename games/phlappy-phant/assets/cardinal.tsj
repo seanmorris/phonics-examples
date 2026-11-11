@@ -13,7 +13,7 @@
     {
       "name": "phlappy.keyframes",
       "type": "string",
-      "value": "day,duskdawn,night"
+      "value": "day,sunrise-sunset,night"
     },
     {
       "name": "phlappy.steps",
