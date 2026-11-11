@@ -55,7 +55,8 @@ final class Scene
 	public const SCENERY_LAYOUTS = [[], [[0, 24]], [[1, 16], [0, 56]], [[2, 32]], [[1, 40]], [[0, 8], [2, 48]]];
 	public const INK = [.21, .20, .33];
 	public const CREAM = [.95, .89, .75];
-	public const PLAQUE = [.95, .89, .75, .97];
+	/** Night grass from the terrain sheet, used behind every plaque glyph. */
+	public const PLAQUE = [.141, .145, .227, .98];
 	public const TEAL = [.18, .43, .45];
 	/** Opacity of the ink plate under a menu's text. */
 	public const PLATE_ALPHA = .92;
@@ -118,13 +119,13 @@ final class Scene
 		$this->menus = new MenuRenderer($font);
 		$this->menus->style['padding'] = 10;
 		$this->menus->style['panel'] = self::PLAQUE;
-		// The bitmap font contains a pale face and a dark inset. A full ink tint crushed both into nearly the same
-		// shade; this lighter violet preserves dark-on-cream readability while separating the two source tones.
-		$this->menus->style['foreground'] = [.70, .62, .75, 1.0];
-		$this->menus->style['selected'] = [1, 1, 1, 1];
-		$this->menus->style['highlight'] = [.18, .43, .45, 1];
-		$this->menus->style['selection'] = [.12, .27, .28, 1];
-		$this->menus->style['disabled'] = [.18, .43, .45, 1];
+		// Plaque colors come straight from the terrain palettes: pale haze and cloud text over night grass, with the
+		// day treeline and field for selection. Even the font's dark inset remains lighter than the panel beneath it.
+		$this->menus->style['foreground'] = [...self::MIST, 1.0];
+		$this->menus->style['selected'] = [.98, .973, .941, 1.0];
+		$this->menus->style['highlight'] = [.145, .31, .349, 1.0];
+		$this->menus->style['selection'] = [.184, .42, .353, 1.0];
+		$this->menus->style['disabled'] = [.545, .549, .502, 1.0];
 
 		// The generator writes the parallax mask's band edges, the chosen rates and the scenery widths into the
 		// tilesets, so the art and its layout data travel together.
