@@ -104,7 +104,7 @@ export function validateOnlineSettings(settings=DEFAULT_ONLINE_SETTINGS)
 		||custom.some((card,index)=>index>0&&card<=custom[index-1])
 	)throw new RangeError('Custom wild cards must be sorted, unique card ids');
 	if(custom.length&&!wild.includes('custom'))throw new RangeError('Custom wild cards require the Custom option');
-	// Five-card draw leaves the game out, so its tables keep the settings, proofs and hashes they have always had.
+	// Five-card draw leaves the game out, so a draw table's settings object is the same as before the other games existed.
 	return Object.freeze({...(game==='draw'?{}:{game}),variant:'anything',ante,minimum,maximum,finalMinimum,finalMaximum,raiseLimit,playerRaiseLimit
 		,wild:Object.freeze(wild),customWild:Object.freeze([...custom])});
 }
