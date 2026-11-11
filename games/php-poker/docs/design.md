@@ -163,7 +163,9 @@ block the next deal and schedules no further changes after it ends.
   anything opens, Texas Hold'em, five-card stud and seven-card stud. Seven-card stud allows six opponents at most.
   Deal sends `start{players, game, variant, …}`.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY
-  (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P). All are ruled boxes.
+  (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P). How to Play
+  first lists Draw Poker, Texas Hold'em, Five-Card Stud and Seven-Card Stud, then opens that game's scrollable rules.
+  Back returns from a rules page to this index before returning to the title. All are ruled boxes.
 - Message: phase-specific guidance (or `error`, in rose) centered below Current bet, wrapping on compact screens.
   In short landscape layouts, the stock and discard piles flank the bet to leave room for the status and hand. Opening bets explain
   that discarding comes afterward; a hand that cannot open is told that Pass keeps it in. The menu bar names

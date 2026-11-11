@@ -724,10 +724,20 @@ final class Painter
 
 	private function helpScreen(): void
 	{
+		$game = $this->state['helpGame'] ?? null;
+		if($game === null)
+		{
+			$menu = $this->layout->gameMenu(count(GameText::HELP_GAMES));
+			$this->dialog($menu['box'], 'HOW TO PLAY');
+			foreach($menu['items'] as $index => $rect)
+			$this->button($rect, GameText::title(GameText::HELP_GAMES[$index]), $this->controller() ? $this->confirmLegend() : (string)($index + 1), 'default', false);
+			$this->button($menu['back'], 'Back', '⎋', 'default', false);
+			return;
+		}
 		$info = $this->layout->information();
 		$box = $info['box'];
-		$this->dialog($box, 'HOW TO PLAY');
-		$paragraphs = Presenter::helpParagraphs($this->controller(), (string)($this->view['game'] ?? 'draw'));
+		$this->dialog($box, 'HOW TO PLAY · ' . GameText::title((string)$game));
+		$paragraphs = Presenter::helpParagraphs($this->controller(), (string)$game);
 		$columnWidth = $box[2] - 48 * $this->layout->stretch();
 		$size = $this->layout->controlText();
 		$leading = $size * 1.45;

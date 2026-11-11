@@ -224,9 +224,9 @@ async function regions(canvas)
 require $argv[1].'/games/php-poker/autoload.php';
 $input=json_decode(stream_get_contents(STDIN),true,flags:JSON_THROW_ON_ERROR);
 $view=$input['view']; $layout=PhpPoker\Ui\Layout::fit($input['width'],$input['height'],$input['dpr'],max(2,count($view['players']??[])));
-$wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui']['setup']['customWildPage']??0)); $limits=$layout->limits();
+$wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui']['setup']['customWildPage']??0)); $limits=$layout->limits(); $gameMenu=$layout->gameMenu(4);
 	$result=['menu'=>$layout->menu($view['canContinue']),'actions'=>$layout->actions($view,$view['ui']),
-	 'cards'=>$layout->discardDialog()['cards'],'information'=>$layout->information(),'wild'=>$wild,'customWild'=>$custom,'limits'=>$limits,
+	 'cards'=>$layout->discardDialog()['cards'],'information'=>$layout->information(),'gameMenu'=>$gameMenu,'wild'=>$wild,'customWild'=>$custom,'limits'=>$limits,
 	 'topMenus'=>$layout->topMenus(),'topGame'=>$layout->topDropdown('game'),'topPoker'=>$layout->topDropdown('poker'),
 	 'gameSettings'=>$layout->gameSettingsDialog((int)($view['ui']['gameSettingsWildLines']??1)),'odds'=>$layout->oddsDialog('odds'),'improving'=>$layout->oddsDialog('improving')];
 	foreach(['menu','actions'] as $key) foreach($result[$key] as &$button) $button['rect']=$layout->rect(...$button['rect']);
@@ -235,6 +235,9 @@ $wild=$layout->wildcardMenu(); $custom=$layout->customWildcards((int)($view['ui'
 	unset($rect);
 	foreach($result['information'] as $key=>&$rect) $rect=$layout->rect(...$rect);
 	unset($rect);
+	foreach($result['gameMenu']['items'] as &$rect) $rect=$layout->rect(...$rect);
+	unset($rect);
+	foreach(['box','back'] as $key) $result['gameMenu'][$key]=$layout->rect(...$result['gameMenu'][$key]);
 	foreach($result['wild']['items'] as &$rect) $rect=$layout->rect(...$rect);
 	unset($rect);
 	foreach(['box','back','apply'] as $key) $result['wild'][$key]=$layout->rect(...$result['wild'][$key]);
@@ -327,6 +330,15 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	await canvas.focus();
 	await page.keyboard.press('h');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('help');
+	await expect.poll(async()=>(await state(canvas)).ui.helpGame).toBe(null);
+	for(const [key,game] of [['1','draw'],['2','holdem'],['3','stud5'],['4','stud7']]){
+		await page.keyboard.press(key);
+		await expect.poll(async()=>(await state(canvas)).ui.helpGame).toBe(game);
+		await page.keyboard.press('Escape');
+		await expect.poll(async()=>(await state(canvas)).ui.helpGame).toBe(null);
+	}
+	await page.keyboard.press('1');
+	await expect.poll(async()=>(await state(canvas)).ui.helpGame).toBe('draw');
 	await expect.poll(async()=>(await state(canvas)).ui.helpScrollMax).toBeGreaterThan(0);
 	const canvasBox=await canvas.boundingBox(),hostScroll=await page.evaluate(()=>scrollY);
 	await page.mouse.move(canvasBox.x+canvasBox.width/2,canvasBox.y+canvasBox.height/2);
@@ -337,6 +349,9 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	await expect.poll(async()=>(await state(canvas)).ui.helpScroll).toBe(0);
 	const helpBack=await point(canvas,(await regions(canvas)).information.back);
 	await page.mouse.click(helpBack.x,helpBack.y);
+	await expect.poll(async()=>(await state(canvas)).ui.helpGame).toBe(null);
+	const helpMenuBack=await point(canvas,(await regions(canvas)).gameMenu.back);
+	await page.mouse.click(helpMenuBack.x,helpMenuBack.y);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
 	await page.setViewportSize({width:390,height:844});
 	await canvas.focus();
@@ -378,7 +393,7 @@ test('menu shortcuts, settings and setup remain usable after returning to the me
 	expect((await state(canvas)).ui.confirmDialog).toBeNull();
 	await page.keyboard.press('h');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('help');
-	const savedHelpBack=await point(canvas,(await regions(canvas)).information.back);
+	const savedHelpBack=await point(canvas,(await regions(canvas)).gameMenu.back);
 	await page.mouse.click(savedHelpBack.x,savedHelpBack.y);
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('menu');
 });

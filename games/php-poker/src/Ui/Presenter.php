@@ -82,6 +82,8 @@ final class Presenter
 	private int $networkWaitDots = 0;
 	/** First help paragraph shown in the measured scroll viewport. */
 	private int $helpScroll = 0;
+	/** Selected How to Play rules page, or null while its game index is open. */
+	private ?string $helpGame = null;
 	/** Latest input family, used to expose controller focus and swap the on-canvas help. */
 	private string $inputTheme = 'keyboard';
 	/** Open table-bar menu and modal odds table. */
@@ -181,7 +183,11 @@ final class Presenter
 			$this->infoDialog = 'game-settings';
 			$this->dirty = true;
 		}
-		if(($view['screen'] ?? '') === 'help' && ($previous['screen'] ?? '') !== 'help') $this->helpScroll = 0;
+		if(($view['screen'] ?? '') === 'help' && ($previous['screen'] ?? '') !== 'help')
+		{
+			$this->helpGame = null;
+			$this->helpScroll = 0;
+		}
 		$this->syncNetworkWait();
 		$this->dirty = true;
 	}
@@ -269,7 +275,7 @@ final class Presenter
 		$this->ensureControllerFocus($targets);
 		if($pulses['pause']) return $this->controllerPause();
 		if($pulses['back']) return $this->controllerBack();
-		$help = ($this->view['screen'] ?? '') === 'help';
+		$help = ($this->view['screen'] ?? '') === 'help' && $this->helpGame !== null;
 		if($help)
 		{
 			if($pulses['pageUp'] || $pulses['up']) $this->scrollHelp(-1);
@@ -402,11 +408,21 @@ final class Presenter
 			}
 			else
 			{
-				$information = $layout->information();
-				$maximum = $this->helpMaximumScroll();
-				$addKey($information['up'], 'arrowup', 'help:up', $this->helpScroll === 0);
-				$addKey($information['back'], 'escape', 'help:back');
-				$addKey($information['down'], 'arrowdown', 'help:down', $this->helpScroll === $maximum);
+				if($this->helpGame === null)
+				{
+					$menu = $layout->gameMenu(count(GameText::HELP_GAMES));
+					foreach($menu['items'] as $index => $rect)
+					$addKey($rect, (string)($index + 1), 'help-game:' . GameText::HELP_GAMES[$index]);
+					$addKey($menu['back'], 'escape', 'help:back');
+				}
+				else
+				{
+					$information = $layout->information();
+					$maximum = $this->helpMaximumScroll();
+					$addKey($information['up'], 'arrowup', 'help:up', $this->helpScroll === 0);
+					$addKey($information['back'], 'escape', 'help:back');
+					$addKey($information['down'], 'arrowdown', 'help:down', $this->helpScroll === $maximum);
+				}
 			}
 			return $targets;
 		}
@@ -650,9 +666,26 @@ final class Presenter
 
 		if($screen === 'help')
 		{
+			if($this->helpGame === null)
+			{
+				if(in_array($key, ['1','2','3','4'], true) && isset(GameText::HELP_GAMES[(int)$key - 1]))
+				{
+					$this->helpGame = GameText::HELP_GAMES[(int)$key - 1];
+					$this->helpScroll = 0;
+					$this->controllerFocus = null;
+					return [];
+				}
+				if(in_array($key, ['escape','backspace','q'], true)) return [['type' => 'menu']];
+				return [];
+			}
 			if(in_array($key, ['arrowup','pageup'], true)) { $this->scrollHelp(-1); return []; }
 			if(in_array($key, ['arrowdown','pagedown'], true)) { $this->scrollHelp(1); return []; }
-			if(in_array($key, ['escape','backspace','enter',' ','q'], true)) return [['type' => 'menu']];
+			if(in_array($key, ['escape','backspace','enter',' ','q'], true))
+			{
+				$this->helpGame = null;
+				$this->helpScroll = 0;
+				$this->controllerFocus = null;
+			}
 			return [];
 		}
 
@@ -983,7 +1016,8 @@ final class Presenter
 		$layout = $this->layout();
 		$information = $layout->information();
 		$box = $information['box'];
-		$paragraphs = self::helpParagraphs($this->inputTheme !== 'keyboard', (string)($this->view['game'] ?? 'draw'));
+		if($this->helpGame === null) return 0;
+		$paragraphs = self::helpParagraphs($this->inputTheme !== 'keyboard', $this->helpGame);
 		$size = $layout->controlText();
 		$leading = $size * 1.45;
 		$start = $box[1] + 36;
@@ -1143,7 +1177,7 @@ final class Presenter
 	 */
 	public function state(): array
 	{
-		$helpMaximum = ($this->view['screen'] ?? '') === 'help' ? $this->helpMaximumScroll() : 0;
+		$helpMaximum = ($this->view['screen'] ?? '') === 'help' && $this->helpGame !== null ? $this->helpMaximumScroll() : 0;
 		$this->helpScroll = min($this->helpScroll, $helpMaximum);
 		$gameSettings=$this->infoDialog==='game-settings'?$this->gameSettings():null;
 		return [
@@ -1165,7 +1199,7 @@ final class Presenter
 			, 'chips' => $this->chips, 'motion' => $this->motion?->frame($this->layout())
 			, 'winnerFlash' => ['active' => $this->winnerElapsed < 4, 'visible' => $this->winnerVisible]
 			, 'networkWait' => ['active' => $this->networkWaitKey !== '', 'dots' => $this->networkWaitDots]
-			, 'helpScroll' => $this->helpScroll, 'helpScrollMax' => $helpMaximum
+			, 'helpGame' => $this->helpGame, 'helpScroll' => $this->helpScroll, 'helpScrollMax' => $helpMaximum
 			, 'inputTheme' => $this->inputTheme, 'controllerFocus' => $this->focusedTarget()
 		];
 	}

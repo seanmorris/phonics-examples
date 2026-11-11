@@ -472,6 +472,16 @@ $test('the title menu stays vertical inside one ruled window and help scrolls wr
 	$view = ['screen' => 'help', 'phase' => 'ready', 'players' => [], 'legalActions' => [], 'revision' => 0, 'generation' => 0, 'error' => '', 'canContinue' => false];
 	$presenter->resize(320, 500, 1);
 	$presenter->update($view);
+	$expect($presenter->state()['helpGame'] === null && $presenter->state()['helpScrollMax'] === 0, 'How to Play opens on its game index');
+	$menu = $presenter->layout()->gameMenu(count(GameText::HELP_GAMES));
+	$expect(count($menu['items']) === 4, 'the help index offers draw, hold\'em and both stud games');
+	foreach(GameText::HELP_GAMES as $index => $game)
+	{
+		$presenter->input([['key' => (string)($index + 1)]], null, 0);
+		$expect($presenter->state()['helpGame'] === $game, GameText::title($game) . ' opens its own rules page');
+		$expect($presenter->input([['key' => 'escape']], null, 0) === [] && $presenter->state()['helpGame'] === null, 'rules Back returns to the help index');
+	}
+	$presenter->input([['key' => '1']], null, 0);
 	$expect($presenter->state()['helpScroll'] === 0, 'help opens at its first paragraph');
 	$expect($presenter->state()['helpScrollMax'] > 0, 'small help window reports measured overflow');
 	$point = static function(Presenter $presenter, array $rect): array {
@@ -495,11 +505,14 @@ $test('the title menu stays vertical inside one ruled window and help scrolls wr
 	$wide = new Presenter($root);
 	$wide->resize(1280, 720, 1);
 	$wide->update($view);
+	$wide->input([['key' => '1']], null, 0);
 	$expect($wide->state()['helpScrollMax'] === 0, 'help disables scrolling when all wrapped copy fits');
 	$view['canContinue'] = true;
 	$wide->update($view);
 	$back = $point($wide, $wide->layout()->information()['back']);
-	$expect($wide->input([], ['x' => $back['x'], 'y' => $back['y'], 'down' => false, 'clicks' => [$back]], 0) === [['type' => 'menu']], 'Help Back returns to the title even when a game can continue');
+	$expect($wide->input([], ['x' => $back['x'], 'y' => $back['y'], 'down' => false, 'clicks' => [$back]], 0) === [] && $wide->state()['helpGame'] === null, 'rules Back returns to the index even when a game can continue');
+	$menuBack = $point($wide, $wide->layout()->gameMenu(count(GameText::HELP_GAMES))['back']);
+	$expect($wide->input([], ['x' => $menuBack['x'], 'y' => $menuBack['y'], 'down' => false, 'clicks' => [$menuBack]], 0) === [['type' => 'menu']], 'the help index Back returns to the title');
 });
 
 $test('controller focus navigates menus, setup, cards and table actions through shared SDL controls', static function(callable $expect) use ($fixture, $root): void {

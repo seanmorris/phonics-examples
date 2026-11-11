@@ -14,6 +14,8 @@ final class GameText
 {
 	/** Setup choices in the order the Game row cycles through them: a game and, for draw, its opening rule. */
 	public const CHOICES = [['draw','jackpots'],['draw','anything'],['holdem','anything'],['stud5','anything'],['stud7','anything']];
+	/** Rules pages shown by How to Play. Draw's two opening rules share one page. */
+	public const HELP_GAMES = ['draw','holdem','stud5','stud7'];
 
 	/** Street names as the menu bar shows them while that street is bet. */
 	private const STREETS = [
