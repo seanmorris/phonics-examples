@@ -4,7 +4,7 @@ Independent games built with [Phonics](https://github.com/seanmorris/php-wasm-en
 
 The catalog contains Sane-Phonics, PHP-Noid, PHPTris, PHP Slalom, PHP Buster, Doom-Phonics, **PHP Billiards**, **PHP Poker**, and Phlappy Phant. Billiards and Poker are direct executable applications. Tiled worlds and WADs remain resources of the games that need them rather than requirements of the examples framework.
 
-PHP Poker offers Bicycle-inspired five-card draw against local opponents, with automatic opponent adaptation and saved-game continuation. Its full page becomes available offline after the complete game and runtime have been verified. Private online poker remains a separate development milestone.
+PHP Poker offers Bicycle-inspired five-card draw, Texas Hold'em and five- and seven-card stud against local opponents, with automatic opponent adaptation and saved-game continuation. Its full page becomes available offline after the complete game and runtime have been verified. The same games play heads-up online over Matrix, with a jointly shuffled deck that neither browser can read.
 
 ```sh
 npm install
