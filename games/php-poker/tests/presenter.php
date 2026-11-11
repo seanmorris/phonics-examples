@@ -1597,5 +1597,16 @@ $test('the Game row cycles draw, hold\'em and both studs, and the table names an
 	$expect(GameText::houseRuleValues(['game'=>'holdem','ante'=>1,'minimum'=>2])['ante'] === '1 and 2 chips' && GameText::welcome(['game'=>'stud7','ante'=>1,'minimum'=>2,'wild'=>[]]) === 'SEVEN-CARD STUD  (ante 1, bring-in 2)', 'blinds, antes and the welcome line come from the profile');
 });
 
+$test('the round history calls a street game\'s first bet a bet, and keeps OPEN for draw', static function(callable $expect): void {
+	$players = [['name' => 'You'], ['name' => 'Ada']];
+	$lines = ['Hand 1: You deals.', 'Ada: Small blind 1.', 'You: Big blind 2.', 'Ada: Calls 1.', 'You: Checks.', 'Flop: 4 of hearts, 10 of hearts, 5 of spades.', 'You: Bets 2.', 'Ada: Calls 2.'];
+	$text = static fn(array $history): array => array_merge(...array_map(static fn(array $row): array => array_column($row['cells'] ?? [], 'text'), $history['rows']));
+	$street = $text(RoundHistory::build($players, $lines, false));
+	$expect(in_array('BET 2', $street, true) && !in_array('OPEN 2', $street, true), 'hold\'em shows BET 2');
+	$expect(in_array('SMALL BLIND 1', $street, true) && in_array('BIG BLIND 2', $street, true), 'blinds are listed as they were posted');
+	$draw = $text(RoundHistory::build($players, ['Hand 1: You deals.', 'Ada: Passes.', 'You: Bets 2.', 'Ada: Calls 2.']));
+	$expect(in_array('OPEN 2', $draw, true), 'draw still shows the opener');
+});
+
 echo "$passed PHP Poker presenter checks passed.\n";
 if($failures) { fwrite(STDERR, "$failures presenter checks failed.\n"); exit(1); }

@@ -518,7 +518,7 @@ final class Painter
 	private function historyDialog(): void
 	{
 		$players=array_slice($this->view['players']??[],0,8);
-		$content=RoundHistory::build($players,$this->view['history']??[]);
+		$content=RoundHistory::build($players,$this->view['history']??[],($this->view['game']??'draw')==='draw');
 		$history = $this->layout->history(count($players),count($content['rows']),count($content['lines']));
 		$box = $history['box'];
 		$this->dialog($box, 'ROUND HISTORY');

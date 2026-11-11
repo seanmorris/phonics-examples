@@ -13,7 +13,7 @@ final class RoundHistory
 	 * @param list<mixed> $history
 	 * @return array{rows:list<array{kind:string,text?:string,cells?:array<int,array{text:string,style:string}>}>,lines:list<string>}
 	 */
-	public static function build(array $players, array $history): array
+	public static function build(array $players, array $history, bool $opening = true): array
 	{
 		$history=array_values(array_filter($history,'is_string'));
 		$lastEight=array_slice($history,-8);
@@ -30,7 +30,8 @@ final class RoundHistory
 		}
 		usort($names,static fn(array $a,array $b): int=>$b['length']<=>$a['length']);
 
-		$rows=[]; $cells=[]; $mode=''; $afterDraw=false; $opened=false;
+		// Only draw has an opener: in the other games the first bet of a round is simply a bet.
+		$rows=[]; $cells=[]; $mode=''; $afterDraw=false; $opened=!$opening;
 		$flush=static function() use (&$rows,&$cells,&$mode): void {
 			if($cells!==[]) $rows[]=['kind'=>'actions','cells'=>$cells];
 			$cells=[]; $mode='';
@@ -43,7 +44,7 @@ final class RoundHistory
 			{
 				$flush();
 				$rows[]=['kind'=>'system','text'=>$line];
-				if(preg_match('/^Hand \d+:/i',$line)===1) { $afterDraw=false; $opened=false; }
+				if(preg_match('/^Hand \d+:/i',$line)===1) { $afterDraw=false; $opened=!$opening; }
 				continue;
 			}
 

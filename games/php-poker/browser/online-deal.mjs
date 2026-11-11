@@ -299,12 +299,20 @@ export function bestHand(cards,wildCards=[])
 	if(!Array.isArray(cards)||cards.length<5||cards.length>7||new Set(cards).size!==cards.length)
 	throw new TypeError('A best hand requires five to seven distinct cards');
 	if(cards.length===5)return evaluateHand(cards,wildCards);
-	const sorted=[...cards].sort((a,b)=>a-b),count=sorted.length;let best=null;
-	for(let a=0;a<count-4;a++)for(let b=a+1;b<count-3;b++)for(let c=b+1;c<count-2;c++)for(let d=c+1;d<count-1;d++)for(let e=d+1;e<count;e++)
-	{
-		const candidate=evaluateHand([sorted[a],sorted[b],sorted[c],sorted[d],sorted[e]],wildCards);
-		if(!best||candidate.score>best.score)best=candidate;
-	}
+	// As in Hand::best: the best hand plays every wild card it can, so only the natural cards beside them are chosen.
+	const wild=new Set(wildCards),sorted=[...cards].sort((a,b)=>a-b);
+	const wilds=sorted.filter(card=>wild.has(card)).slice(0,5),naturals=sorted.filter(card=>!wild.has(card)),need=5-wilds.length;
+	let best=null;
+	const choose=(from,picked)=>{
+		if(picked.length===need)
+		{
+			const candidate=evaluateHand([...picked,...wilds],wildCards);
+			if(!best||candidate.score>best.score)best=candidate;
+			return;
+		}
+		for(let index=from;index<=naturals.length-(need-picked.length);index++)choose(index+1,[...picked,naturals[index]]);
+	};
+	choose(0,[]);
 	return best;
 }
 

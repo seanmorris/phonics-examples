@@ -89,6 +89,18 @@ $test('best five of seven matches an exhaustive subset search and names board pl
 		$expect($best['score']===$top,'Best of '.$size.' disagrees with exhaustive search');
 		$expect(Hand::evaluate($best['cards'],$wild)['score']===$top&&count(array_intersect($best['cards'],$cards))===5);
 	}
+	// Several wild cards: the shortcut of always playing every wild card must agree with scoring every subset.
+	foreach([[0,13,26,39],[0,1,13,14,26,27,39,40]] as $wildSet) for($trial=0;$trial<25;$trial++)
+	{
+		$deck=range(0,51); $cards=[];
+		for($i=0;$i<7;$i++) { $at=$random->boundedInt(count($deck)); $cards[]=$deck[$at]; array_splice($deck,$at,1); }
+		// Seed the hand with wild cards so two to four of them are common.
+		foreach(array_slice($wildSet,0,$trial%4) as $slot=>$card) if(!in_array($card,$cards,true)) $cards[$slot]=$card;
+		$top=0;
+		foreach($combine($cards,5) as $subset) $top=max($top,Hand::evaluate($subset,$wildSet)['score']);
+		$expect(Hand::best($cards,$wildSet)['score']===$top,'Best of seven with wild cards disagrees with exhaustive search');
+	}
+	$expect(Hand::best([0,13,26,39,1,14,27],[0,1,13,14,26,27,39,40])['name']==='Five of a kind','Seven wild cards make five aces');
 	$reject(static fn()=>Hand::best([0,1,2,3]));
 	$reject(static fn()=>Hand::best([0,1,2,3,4,5,6,7]));
 	$reject(static fn()=>Hand::best([0,0,1,2,3,4]));

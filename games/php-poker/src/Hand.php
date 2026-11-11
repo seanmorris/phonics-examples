@@ -104,17 +104,28 @@ final class Hand
 		$key = implode(',', $sorted) . '|' . implode(',', WildCards::custom($wildCards));
 		if(isset($memo[$key])) return $memo[$key];
 		if(count($memo) > 4096) $memo = [];
+		// A wild card can stand for any card it replaces, so the best hand always plays every wild card it can.
+		// Only the natural cards beside them need choosing, which keeps a hand full of wild cards as cheap as one
+		// five-card evaluation instead of twenty-one.
+		$wildLookup = array_fill_keys(WildCards::custom($wildCards), true);
+		$wilds = array_values(array_filter($sorted, static fn(int $card): bool => isset($wildLookup[$card])));
+		$naturals = array_values(array_filter($sorted, static fn(int $card): bool => !isset($wildLookup[$card])));
+		$wilds = array_slice($wilds, 0, 5);
+		$need = 5 - count($wilds);
 		$best = null;
-		for($a = 0; $a < $count - 4; $a++)
-		for($b = $a + 1; $b < $count - 3; $b++)
-		for($c = $b + 1; $c < $count - 2; $c++)
-		for($d = $c + 1; $d < $count - 1; $d++)
-		for($e = $d + 1; $e < $count; $e++)
-		{
-			$subset = [$sorted[$a], $sorted[$b], $sorted[$c], $sorted[$d], $sorted[$e]];
-			$candidate = self::evaluate($subset, $wildCards);
-			if($best === null || $candidate['score'] > $best['score']) $best = $candidate + ['cards' => $subset];
-		}
+		$choose = static function(int $from, array $picked) use (&$choose, &$best, $naturals, $wilds, $need, $wildCards): void {
+			if(count($picked) === $need)
+			{
+				$subset = [...$picked, ...$wilds];
+				sort($subset, SORT_NUMERIC);
+				$candidate = self::evaluate($subset, $wildCards);
+				if($best === null || $candidate['score'] > $best['score']) $best = $candidate + ['cards' => $subset];
+				return;
+			}
+			for($index = $from; $index <= count($naturals) - ($need - count($picked)); $index++)
+				$choose($index + 1, [...$picked, $naturals[$index]]);
+		};
+		$choose(0, []);
 		return $memo[$key] = $best;
 	}
 
