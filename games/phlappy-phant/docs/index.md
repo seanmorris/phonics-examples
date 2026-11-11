@@ -1,6 +1,6 @@
 # Phlappy Phant
 
-Phlappy Phant is a pixel-art homage to Flappy Bird starring the **elePHPant**, the PHP mascot by Vincent Pontier. Instead of pipes, the phant slips between grass pillars: one rises from the ground and its twin hangs from the sky. A deterministic fixed-step PHP simulation runs the flight, the seeded gaps, collisions, scoring, and the day cycle. The browser module supplies taps, music, sounds, fullscreen, the local best score, and accessible menu hit targets.
+Phlappy Phant is a pixel-art homage to Flappy Bird starring the **elePHPant**, the PHP mascot by Vincent Pontier. Instead of pipes, the phant slips between grass pillars: one rises from the ground and its twin hangs from the sky. A deterministic fixed-step PHP simulation runs the flight, the seeded gaps, collisions, scoring, and the day cycle. The browser module supplies taps, adjustable music and sound, fullscreen, the local best score, and accessible menu hit targets.
 
 The game fills any frame instead of letterboxing a fixed canvas. The world is 352 units tall and the visible width follows the frame, so a portrait phone and a widescreen desktop play the same course and differ only in how far ahead they can see.
 
@@ -10,11 +10,11 @@ Press Play, then flap once to start. Gravity pulls the phant down and every flap
 
 The gap between a pair starts 144 units tall and narrows by 8 every eight points until it reaches 112 at 32 points, which leaves the phant's 36-unit body 76 units to spare. Every ten points the light changes: the sky warms through dusk into night, and ten points later it comes back through dawn.
 
-The best score is kept in the browser and shown on the ready screen and the result card. Scores and bindings never leave the device.
+The best score is kept in the browser and shown on the ready screen and the result card. Scores, bindings, and audio levels never leave the device.
 
 ## Controls
 
-A tap or a click anywhere on the canvas flaps, so the game plays one-handed on a phone. **Input settings** edits the keyboard and controller bindings separately, keeps Pause fixed, and stores valid changes locally when the browser allows it.
+A tap or a click anywhere on the canvas flaps, so the game plays one-handed on a phone. **Input settings** edits the keyboard and controller bindings separately, keeps Pause fixed, and stores valid changes locally when the browser allows it. **Audio** is available from the title and pause menus with separate SFX and BGM sliders; the speaker button remains a master mute.
 
 | Action | Xbox | PlayStation | Keyboard and mouse |
 | --- | --- | --- | --- |

@@ -152,6 +152,48 @@ test('the Konami code with no points hands the run to a perfect player that neve
 	expect(errors).toEqual([]);
 });
 
+test('audio levels adjust live from title and pause, then survive a reload', async({page}) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	const canvas = await boot(page);
+	const targets = page.locator('.phlappy-phant-targets');
+
+	await targets.getByRole('button', {name: 'Audio', exact: true}).click();
+	await expect.poll(async() => (await status(page)).regions.map(region => region.label)).toEqual([
+		'SFX level', 'BGM level', 'Back'
+	]);
+	await canvas.focus();
+	await page.keyboard.press('ArrowRight');
+	await page.waitForTimeout(160);
+	await page.keyboard.press('ArrowDown');
+	await page.waitForTimeout(160);
+	await page.keyboard.press('ArrowLeft');
+	await page.waitForTimeout(160);
+
+	expect(await canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .55, music: .7});
+	expect(await canvas.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
+		volume: .7, baseVolume: .7
+	});
+	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('phlappy-phant.profile.v1'))?.audio)).toEqual({
+		effects: .55, music: .7
+	});
+
+	await page.reload();
+	const reloaded = await boot(page);
+	expect(await reloaded.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .55, music: .7});
+	expect(await reloaded.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
+		volume: .7, baseVolume: .7
+	});
+
+	await targets.getByRole('button', {name: 'Play', exact: true}).click();
+	await expect.poll(async() => (await status(page)).page).toBe('play');
+	await reloaded.focus();
+	await page.keyboard.press('Escape');
+	await expect.poll(async() => (await status(page)).page).toBe('pause');
+	await expect(targets.getByRole('button', {name: 'Audio', exact: true})).toBeAttached();
+	expect(errors).toEqual([]);
+});
+
 test('menu pages stand on their plate, skip text rows and stay inside a narrow phone frame', async({browser}) => {
 	const context = await browser.newContext({viewport: {width: 390, height: 844}, deviceScaleFactor: 2});
 	const page = await context.newPage();
@@ -188,7 +230,7 @@ test('menu pages stand on their plate, skip text rows and stay inside a narrow p
 
 	await fits('title');
 
-	for(const [steps, name] of [[2, 'How to play'], [3, 'About']])
+	for(const [steps, name] of [[3, 'How to play'], [4, 'About']])
 	{
 		for(let step = 0; step < steps; step++) await press('ArrowDown');
 
@@ -201,7 +243,7 @@ test('menu pages stand on their plate, skip text rows and stay inside a narrow p
 		await page.waitForTimeout(200);
 		await fits(name);
 		await press('Enter');
-		await expect.poll(async() => (await status(page)).regions.length).toBe(4);
+		await expect.poll(async() => (await status(page)).regions.length).toBe(5);
 
 		for(let step = 0; step < steps; step++) await press('ArrowUp');
 	}

@@ -69,11 +69,11 @@ Steps 2 and 4 to 6 are the terrain, and all of it changes color during the day c
 
 The score, the prompts, and the wordmark use the engine's bitmap font. Every label is drawn twice, cream over an ink copy offset by one pixel, so it reads over day and night skies alike. Glyph layouts are cached by text and scale.
 
-Menus are drawn over the world on a near-solid ink plate, so the text's contrast never depends on the sky, cloud, or field behind it: cream on the plate is at least 7:1 and the pale teal of information rows at least 5:1. The front page leaves the rest of the world undimmed under the wordmark; every other page dims it. The selected row sits on a teal band behind a blinking chevron. Information rows are text, not controls: the selection steps over them and they publish no button. They wrap, pack more tightly than choices, and break long words at a hyphen, and the page picks the largest whole scale at which everything fits between the top of the frame and the hint line. `Scene` publishes one rectangle per choice, which the browser mirrors as real buttons so the menus work with a pointer and with assistive technology, and it publishes the text block's bounds so a browser test can check that no page is cropped on a narrow phone. The bindings editor needs value columns and text entry, so it alone uses the engine's `MenuRenderer`, restyled to match.
+Menus are drawn over the world on a near-solid ink plate, so the text's contrast never depends on the sky, cloud, or field behind it: cream on the plate is at least 7:1 and the pale teal of information rows at least 5:1. The front page leaves the rest of the world undimmed under the wordmark; every other page dims it. The selected row sits on a teal band behind a blinking chevron. Information rows are text, not controls: the selection steps over them and they publish no button. They wrap, pack more tightly than choices, and break long words at a hyphen, and the page picks the largest whole scale at which everything fits between the top of the frame and the hint line. `Scene` publishes one rectangle per choice, which the browser mirrors as real buttons so the menus work with a pointer and with assistive technology, and it publishes the text block's bounds so a browser test can check that no page is cropped on a narrow phone. The bindings editor and Audio page need value columns, sliders, or text entry, so they use the engine's `MenuRenderer`, restyled to match.
 
 ## Browser boundary
 
-`browser/game.mjs` builds on the engine's shell services. `GameShell` claims the WebGL context, mounts the frame, runs fullscreen and mute, and owns the functions that cross between JavaScript and PHP. `RegionButtons` mirrors the menu rectangles, `SamplePlayer` decodes and plays the three effects, and `SafeStorage` holds the best score and the bindings. The host's own `BackgroundTrack` streams the soundtrack instead of decoding the whole song into memory, and follows the same mute.
+`browser/game.mjs` builds on the engine's shell services. `GameShell` claims the WebGL context, mounts the frame, runs fullscreen and mute, and owns the functions that cross between JavaScript and PHP. `RegionButtons` mirrors the menu rectangles, `SamplePlayer` decodes and plays the three effects, and `SafeStorage` holds the best score, audio levels, and bindings. The host's own `BackgroundTrack` streams the soundtrack instead of decoding the whole song into memory, and follows the same mute.
 
 | Bridge | Direction | Carries |
 | --- | --- | --- |
@@ -81,13 +81,14 @@ Menus are drawn over the world on a near-solid ink plate, so the text's contrast
 | `phantTaps` | Browser to PHP | A running count of taps and clicks on the canvas. |
 | `phantSeed` | Browser to PHP | A fresh 31-bit seed for each run. |
 | `phantBest`, `phantSubmitScore` | Both | The stored best score and a finished run's score. |
+| `phantAudioGet`, `phantAudioSet` | Both | The stored SFX and BGM levels as percentages. |
 | `phantStorageRead`, `phantStorageWrite` | Both | The saved bindings profile. |
 | `phantAction` | Browser to PHP | The menu row activated through its mirrored button. |
 | `phantStatus` | PHP to browser | The run's state as JSON, once per frame. |
 
 Taps are counted in the browser and compared in PHP instead of being bound as a mouse button, so one press can never flap twice. Keyboard and controller flaps go through the engine's editable `Bindings`.
 
-Sounds are decoded after the first gesture, as browsers require, and played when a status counter rises. At most two missed events are replayed, so a tab that was stalled does not burst into sound.
+Sounds are decoded after the first gesture, as browsers require, and played when a status counter rises. At most two missed events are replayed, so a tab that was stalled does not burst into sound. The Audio page changes the effects and soundtrack levels live and saves both locally; the quick mute remains a master mute over that mix.
 
 The status is also written to the canvas as `data-php-phant`, which is what the browser tests read. Closing the package closes the shell, which removes listeners and observers, leaves fullscreen, clears the bridge functions, and lets PHP release its GPU resources.
 
@@ -95,7 +96,7 @@ The status is also written to the canvas as `data-php-phant`, which is what the 
 
 - `php games/phlappy-phant/tests/run.php` runs 62 native checks: the generator's first values, the idle bob, the flap and its wing beats, gravity and the fall cap, the bonk and the settle time, seed determinism, gap bounds and the tile grid, scoring, the day flag, the speed and gap ramps, collisions, the bindings and their saved profile, and the built-in player.
 - `php games/phlappy-phant/tests/fairness.php` flies the built-in player over forty seeded courses. [The perfect player](autopilot.md) explains what it shows.
-- `tests/browser/phant.spec.mjs` at the repository root plays in Chromium. One test flaps by key and by click, lets the run end, checks the stored best score, and checks the drawing buffer and layout in a wide and a tall frame. Another enters the Konami code and follows the built-in player into the night. A third opens every text page on a narrow phone and checks that nothing is cropped and that text rows are never selected.
+- `tests/browser/phant.spec.mjs` at the repository root plays in Chromium. One test flaps by key and by click, lets the run end, checks the stored best score, and checks the drawing buffer and layout in a wide and a tall frame. Another enters the Konami code and follows the built-in player into the night. The audio test changes and reloads both mix levels and checks that Audio is available while paused. The narrow-phone test opens every text page and checks that nothing is cropped and that text rows are never selected.
 - `node scripts/generate-phant-sprites.mjs --check` fails when a committed asset no longer matches the sheets in `art/`.
 
 ## License boundary

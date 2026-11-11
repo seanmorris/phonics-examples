@@ -66,6 +66,37 @@ $setPage = null;
 
 $best = static fn(): int => max(0, (int)(vrzno_env('phantBest'))());
 
+$audioItems = static function(): array {
+	return [
+		'effects' => [
+			'label' => 'SFX level'
+			, 'input' => 'number'
+			, 'subType' => 'range'
+			, 'min' => 0
+			, 'max' => 100
+			, 'step' => 5
+			, 'default' => 50
+			, 'valueAlign' => 'right'
+			, 'subtext' => 'Flaps, scoring, and bonks.'
+			, 'get' => static fn(): int => (int)(vrzno_env('phantAudioGet'))('effects')
+			, 'set' => static fn(float $value): bool => (bool)(vrzno_env('phantAudioSet'))('effects', $value)
+		]
+		, 'music' => [
+			'label' => 'BGM level'
+			, 'input' => 'number'
+			, 'subType' => 'range'
+			, 'min' => 0
+			, 'max' => 100
+			, 'step' => 5
+			, 'default' => 75
+			, 'valueAlign' => 'right'
+			, 'subtext' => 'Funktify soundtrack.'
+			, 'get' => static fn(): int => (int)(vrzno_env('phantAudioGet'))('music')
+			, 'set' => static fn(float $value): bool => (bool)(vrzno_env('phantAudioSet'))('music', $value)
+		]
+	];
+};
+
 $startGame = static function() use (&$game, &$page, &$runId, &$counts, &$submitted, &$seenTaps, $menu, $engine): void {
 	$game = new Simulation((int)(vrzno_env('phantSeed'))());
 	$runId++;
@@ -79,13 +110,14 @@ $startGame = static function() use (&$game, &$page, &$runId, &$counts, &$submitt
 	$engine->input->suppressHeldUi();
 };
 
-$titleItems = static function() use (&$startGame, $bindings): array {
+$titleItems = static function() use (&$startGame, $bindings, $audioItems): array {
 	return [
 		'play' => [
 			'label' => 'Play'
 			, 'callback' => static function() use (&$startGame): void { $startGame(); }
 		]
 		, 'controls' => $bindings->item('Input settings')
+		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
 		, 'help' => [
 			'label' => 'How to play'
 			, 'children' => [
@@ -112,7 +144,7 @@ $titleItems = static function() use (&$startGame, $bindings): array {
 };
 
 $setPage = static function(string $next) use (
-	&$setPage, &$startGame, &$page, &$game, $titleItems, $menu, $engine, $best
+	&$setPage, &$startGame, &$page, &$game, $titleItems, $audioItems, $menu, $engine, $best
 ): void {
 	$page = $next;
 
@@ -143,6 +175,7 @@ $setPage = static function(string $next) use (
 			'label' => 'Restart'
 			, 'callback' => static function() use (&$startGame): void { $startGame(); }
 		]
+		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
 		, 'title' => [
 			'label' => 'Return to title'
 			, 'callback' => static function() use (&$setPage): void { $setPage('title'); }

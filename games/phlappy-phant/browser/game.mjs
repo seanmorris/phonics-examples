@@ -81,6 +81,13 @@ class BackgroundTrack
 		if(!this.muted) void this.unlock();
 	}
 
+	setVolume(volume)
+	{
+		this.volume = Math.max(0, Math.min(1, Number(volume) || 0));
+
+		if(this.element) this.element.volume = this.volume;
+	}
+
 	get state()
 	{
 		return {
@@ -423,7 +430,17 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	};
 
 	const rawProfile = safeJson(storage.get(profileKey) ?? '{}', {});
-	const profile = {version: 1, best: Number.isSafeInteger(rawProfile?.best) && rawProfile.best >= 0 ? rawProfile.best : 0};
+	const level = (value, fallback) => Number.isFinite(Number(value))
+		? Math.max(0, Math.min(1, Number(value)))
+		: fallback;
+	const profile = {
+		version: 1
+		, best: Number.isSafeInteger(rawProfile?.best) && rawProfile.best >= 0 ? rawProfile.best : 0
+		, audio: {
+			effects: level(rawProfile?.audio?.effects, MIX.effects)
+			, music: level(rawProfile?.audio?.music, MIX.music)
+		}
+	};
 
 	const saveProfile = () => storage.set(profileKey, JSON.stringify(profile));
 
@@ -468,7 +485,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	});
 
 	samples = new services.SamplePlayer(module, assets, packageUrl, {muted: mute.muted});
-	music = new BackgroundTrack(module, assets, packageUrl, {muted: mute.muted});
+	music = new BackgroundTrack(module, assets, packageUrl, {muted: mute.muted, volume: profile.audio.music});
 
 	async function unlock()
 	{
@@ -485,7 +502,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	function play(name, gain)
 	{
-		void unlock().then(() => samples.play(name, {gain: gain * MIX.effects}));
+		void unlock().then(() => samples.play(name, {gain: gain * profile.audio.effects}));
 	}
 
 	shell.fullscreen({target: ui, quick, onChange: () => view.measure()});
@@ -521,6 +538,18 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	shell.bridge('phantStorageWrite', value => storage.set(controlsKey, String(value)));
 	shell.bridge('phantSeed', () => shell.seed31());
 	shell.bridge('phantBest', () => profile.best);
+	shell.bridge('phantAudioGet', name => Math.round(100 * (profile.audio[String(name)] ?? 0)));
+	shell.bridge('phantAudioSet', (name, value) => {
+		name = String(name);
+
+		if(!Object.hasOwn(profile.audio, name)) return false;
+
+		profile.audio[name] = level(Number(value) / 100, profile.audio[name]);
+
+		if(name === 'music') music.setVolume(profile.audio.music);
+
+		return saveProfile();
+	});
 
 	shell.bridge('phantSubmitScore', score => {
 		profile.best = Math.max(profile.best, Math.max(0, Math.trunc(Number(score) || 0)));
@@ -564,7 +593,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		get state() { return state; }
 		, get profile() { return structuredClone(profile); }
 		, get music() { return music.state; }
-		, get mix() { return {effects: MIX.effects, music: MIX.music}; }
+		, get mix() { return structuredClone(profile.audio); }
 	};
 	session.phlappyPhant = debug;
 	Object.defineProperty(canvas, 'phpPhantDebug', {configurable: true, value: debug});
