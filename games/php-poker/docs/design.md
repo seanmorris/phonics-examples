@@ -73,6 +73,11 @@ controls are at least 48 CSS pixels high across device-pixel ratios; short-scree
 - The dealer button stands at the inner end of a seat's plate. The human's stands in a 34-px gutter between the
   plate and the action lane, and an opponent's moves to the emblem's corner when a neighbour's cards or chips
   are in the way.
+- Hold'em and stud use the same seats. Two Hold'em cards are spread and centred in the fan so both show whole;
+  seven stud cards share its width, which leaves about a fifth of each card visible on the oval. In stud your own
+  face-down cards are shaded. The Hold'em board stands between the pot and bet plates, as large as the opponents
+  leave room for, with the stock drawn as a small pile to its right; on a phone the five cards stand three over two
+  with the stock in the sixth place, and in short landscape the bet plate moves up beside the pot plate.
 - A seat is a plate exactly as wide as its five-card fan (wide opponent cards 68×95 stepped 30; the human's
   90×126 stepped 38), with chip stacks in front of the fan's outer corner (the human's beside the hand).
   A 32×32 object icon sits on the plate's outer edge; the name and total form two centered lines beneath it.
@@ -153,8 +158,10 @@ block the next deal and schedules no further changes after it ends.
 - Menu: wordmark, caption, then Play Offline, Continue Offline (when `canContinue`), Play Online, How to Play,
   Settings. Online opens the Matrix table lobby. Enter plays offline, C continues, H opens help, M opens settings,
   Escape returns. On a controller, the D-pad or left stick moves, A selects, B returns, and Start resumes a saved table.
-- Table setup (local to the presenter): opponents 1–7, Jacks or better / Anything opens, Back, Deal. The
-  Deal sends `start{players, variant}`.
+- Table setup (local to the presenter): opponents 1–7, Game, Wild cards, Limits, Back, Deal. Game (V) opens a
+  window with one button per game in a single column, numbered 1 to 5: draw with jacks or better, draw with
+  anything opens, Texas Hold'em, five-card stud and seven-card stud. Seven-card stud allows six opponents at most.
+  Deal sends `start{players, game, variant, …}`.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY
   (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P). All are ruled boxes.
 - Message: phase-specific guidance (or `error`, in rose) centered below Current bet, wrapping on compact screens.
@@ -173,7 +180,7 @@ Keyboard covers play and menus; pointer and touch share one click path. Canceled
 
 ## Not built
 
-Audio, gamepad bindings, speech balloons and painted portraits are not implemented.
+Speech balloons and painted portraits are not implemented.
 
 ## Open rules questions (tracked, not guessed)
 
