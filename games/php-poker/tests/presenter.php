@@ -59,7 +59,10 @@ $test('the action bar holds exactly the legal actions', static function(callable
 	$ids = static fn(array $view): array => array_map(static fn(array $button): string => $button['id'], Layout::fit(1280, 720)->actions($view, $state));
 	$expect($ids($fixture('opening-8')) === ['fold','pass','bet'], 'opening: fold, pass, bet');
 	$expect($ids($fixture('facing-raise-5')) === ['fold','call','bet'], 'facing a raise: fold, call, raise');
-	$expect($ids($fixture('draw-2')) === ['clear','draw'], 'draw: keep all, draw');
+	$draw = Layout::fit(1280, 720)->actions($fixture('draw-2'), $state);
+	$expect(array_column($draw, 'id') === ['draw'] && $draw[0]['label'] === 'Keep all', 'draw: an empty selection has one working Keep all action');
+	$selected = Layout::fit(1280, 720)->actions($fixture('draw-2'), ['discards' => [0], 'amount' => 8]);
+	$expect(array_column($selected, 'id') === ['clear','draw'] && array_column($selected, 'label') === ['Clear','Draw 1'], 'draw: a selected discard adds Clear beside Draw');
 	$expect($ids($fixture('showdown-5')) === ['next'], 'showdown: the next-deal control stands alone because History is in the Poker menu');
 	$opening = $fixture('opening-8');
 	$opening['legalActions']['bet'] = false;
@@ -217,7 +220,7 @@ $test('card hit regions follow the raised faces and the current viewport before 
 			$expect($presenter->state()['discards'] === [], 'clicking the raised upper edge deselects');
 		}
 		$presenter->input([['key' => 'd']], null, 0);
-		$expect(count($presenter->status()['ui']['hitRegions']) === 3, 'locked draw offers only Keep all and the two table menus, with no card or Draw targets');
+		$expect(count($presenter->status()['ui']['hitRegions']) === 2, 'locked empty draw offers only the two table menus, with no stale card or action targets');
 	}
 	$presenter = new Presenter($root);
 	$view = $fixture('draw-2');
@@ -536,7 +539,7 @@ $test('controller focus navigates menus, setup, cards and table actions through 
 	$drawView = $fixture('draw-2');
 	$draw->update($drawView);
 	$release($draw);
-	$expect(($draw->state()['controllerFocus']['id'] ?? null) === 'action:draw', 'a draw begins on its affirmative Stand pat action');
+	$expect(($draw->state()['controllerFocus']['id'] ?? null) === 'action:draw', 'a draw begins on its affirmative Keep all action');
 	$press($draw, 'up');
 	$cardFocus=$draw->state()['controllerFocus']['id']??'';
 	$expect(str_starts_with($cardFocus,'card:'), 'Up leaves the affirmative draw action for the card row');

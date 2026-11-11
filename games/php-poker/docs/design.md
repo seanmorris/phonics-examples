@@ -106,7 +106,7 @@ it would cut through is not drawn.
 | betting, may check | Fold · Check · Bet N | F · C · B |
 | betting, facing a bet | Fold · Call N · Raise to N | F · C · B |
 | betting, jacks or better not met | Fold · Pass | F · C |
-| draw | Keep all · Draw N / Stand pat | D |
+| draw | Keep all; after selecting cards, Clear · Draw N | D |
 | showdown or redeal | History · Deal, or "Borrow 500 & deal" when broke | H · Enter |
 
 The raise-to amount has − / + steppers (also − / + and the arrow keys) clamped to `minBet`..`maxBet`.

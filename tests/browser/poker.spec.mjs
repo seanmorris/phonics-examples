@@ -499,15 +499,38 @@ test('graphics restoration retains the saved hand and one set of accessible cont
 	expect(errors).toEqual([]);
 });
 
+test('Keep all confirms an empty discard selection',async({page})=>{
+	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
+	const canvas=await boot(page);
+	await canvas.focus();await page.keyboard.press('c');
+	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
+	const before=await state(canvas),actions=(await regions(canvas)).actions;
+	expect(actions.map(button=>[button.id,button.label])).toEqual([['draw','Keep all']]);
+	const keep=await point(canvas,actions[0].rect);
+	await page.mouse.click(keep.x,keep.y);
+	await expect.poll(async()=>(await state(canvas)).revision).toBeGreaterThan(before.revision);
+	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(0);
+});
+
 test('desktop pointer can confirm discards without the dialog covering its action buttons',async({page})=>{
 	await page.setViewportSize({width:1365,height:900});
 	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
 	const canvas=await boot(page);
 	await canvas.focus();await page.keyboard.press('c');
 	await expect.poll(async()=>(await state(canvas)).screen).toBe('table');
-	const before=await state(canvas),layout=await regions(canvas);
+	const before=await state(canvas);let layout=await regions(canvas);
 	const card=await point(canvas,layout.cards[0]);
 	await page.mouse.click(card.x,card.y);
+	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([before.players[0].cards[0]]);
+	let controls=(await regions(canvas)).actions;
+	expect(controls.map(button=>[button.id,button.label])).toEqual([['clear','Clear'],['draw','Draw 1']]);
+	const clear=await point(canvas,controls[0].rect);
+	await page.mouse.click(clear.x,clear.y);
+	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([]);
+	expect((await regions(canvas)).actions.map(button=>[button.id,button.label])).toEqual([['draw','Keep all']]);
+	layout=await regions(canvas);
+	const selectAgain=await point(canvas,layout.cards[0]);
+	await page.mouse.click(selectAgain.x,selectAgain.y);
 	await expect.poll(async()=>(await state(canvas)).ui.discards).toEqual([before.players[0].cards[0]]);
 	const button=(await regions(canvas)).actions.find(button=>button.id==='draw');
 	for(const rect of layout.cards)

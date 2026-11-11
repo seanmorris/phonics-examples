@@ -1367,8 +1367,8 @@ final class Layout
 		elseif(!empty($legal['draw']))
 		{
 			$count = count($state['discards']);
-			$add('clear', 1, 'Keep all', '', 'default', null);
-			$add('draw', 1.3, $count ? "Draw $count" : 'Stand pat', 'D', 'primary', ['type' => 'draw', 'cards' => $state['discards']]);
+			if($count) $add('clear', 1, 'Clear', '', 'default', null);
+			$add('draw', 1.3, $count ? "Draw $count" : 'Keep all', 'D', 'primary', ['type' => 'draw', 'cards' => $state['discards']]);
 		}
 		elseif(!empty($legal['next']))
 		{

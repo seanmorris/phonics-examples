@@ -145,7 +145,7 @@ final class GameText
 				'Jacks or better: a pair of jacks or higher is needed to open. Anything opens: any hand may open.',
 				$wild,
 				'Betting starts left of the dealer. Fold, pass or check, call, or raise.',
-				'Draw: tap cards to select discards. Press Draw to replace them, or Stand pat to keep all five.',
+				'Draw: tap cards to select discards. Press Draw to replace them, or Keep all to stand pat.',
 				'After the draw, final betting starts with the opener. With no bet to call, check or bet; otherwise call, raise, or fold.',
 				$ranking, $controls, $more
 			],
