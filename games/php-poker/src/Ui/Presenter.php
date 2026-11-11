@@ -438,11 +438,10 @@ final class Presenter
 					$frame = $help->frame;
 					$position = array_search($this->helpGame, GameText::HELP_GAMES, true);
 					// The scrollbar is for a pointer: it carries no id, so a controller's focus passes it by.
-					// The thumb comes first: at either end of its track it lies inside an arrow's wider target, and a
-					// press on it must stay a drag.
+					// Near either end of its track the thumb lies inside an arrow's wider target. A tap there is the
+					// arrow's; a press that travels is the thumb's, which `dragHelp()` settles before any tap.
 					if($help->last > 0)
 					{
-						$targets[] = ['rect' => $this->helpThumbReach($help), 'helpTrack' => true];
 						$addKey($frame['reach']['up'], 'arrowup', null, $this->helpScroll === 0);
 						$addKey($frame['reach']['down'], 'arrowdown', null, $this->helpScroll === $help->last);
 						$targets[] = ['rect' => $frame['reach']['track'], 'helpTrack' => true];

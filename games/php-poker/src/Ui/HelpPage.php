@@ -9,9 +9,10 @@ use PhpPoker\Render\Theme;
  * One game's How to Play rules, set for a canvas: the window, and the rows of copy that scroll inside it.
  *
  * The copy is one column, as a text-mode help screen sets it: a part heading, one headed step after another with the
- * showdown's example hand, then the part every game shares (the list of hands, the wild-card rule and the key
- * legend). It scrolls a whole row at a time, so nothing is ever drawn half inside the window. The presenter moves
- * through the rows and the painter draws them, so the two cannot disagree about what is in view.
+ * showdown's example hand, then the part every game shares (the key legend, the list of hands, the wild-card rule
+ * and an example of each hand). Its copy is set in sentence case in both looks, under headings that Classic keeps
+ * in capitals, and it scrolls a whole row at a time, so nothing is ever drawn half inside the window. The presenter moves through the rows and the painter draws them, so
+ * the two cannot disagree about what is in view.
  */
 final class HelpPage
 {
@@ -174,7 +175,11 @@ final class HelpPage
 		$classic = $mode === Theme::CLASSIC;
 		$dos = $classic && isset($text->faces()['dos']);
 		$faces = ['head' => $dos ? 'dos' : 'bold', 'body' => $dos ? 'dos' : ($classic ? 'bold' : 'body')];
-		$shown = static fn(string $copy): string => $classic ? strtoupper($copy) : $copy;
+		// Rules are sentences to read, so copy, notes and labels keep their small letters in both looks: a page of
+		// the capitals Classic sets its plates in would shout. Headings are short, and Classic keeps them in capitals
+		// as it does its buttons.
+		$shown = static fn(string $copy): string => $copy;
+		$headed = static fn(string $copy): string => $classic ? strtoupper($copy) : $copy;
 		$across = $layout->stretch();
 		// Four sizes carry the outline: a part, a section within it, its copy, and notes on that copy.
 		$body = $layout->controlText();
@@ -189,15 +194,21 @@ final class HelpPage
 		$inset = 12 * $across;
 		$measure = static fn(string $copy, float $size, string $face): float
 			=> $text->measure($copy, $size * $layout->uiScale(), $face) / $layout->horizontalScale;
-		$row = static fn(float $height, array $items): array => ['height' => $height, 'ink' => $height, 'items' => $items];
+		// Rows and the gaps between them are whole numbers of device pixels tall, so every line of type lands on the
+		// pixel grid the same way and none is drawn softer than the one above it.
+		$whole = static fn(float $height): float => max(1, round($height * $layout->scale)) / $layout->scale;
+		$row = static function(float $height, array $items) use ($whole): array {
+			$height = $whole($height);
+			return ['height' => $height, 'ink' => $height, 'items' => $items];
+		};
 		$label = static fn(string $copy, float $x, float $middle, float $size, string $face, string $align = 'left'): array
 			=> ['kind' => 'text', 'text' => $copy, 'x' => $x, 'y' => $middle, 'size' => $size, 'face' => $faces[$face], 'align' => $align];
 		$line = static fn(string $copy, float $size): array => $row($leading($size), [$label($copy, $inset, $leading($size) / 2, $size, 'body')]);
 		$wrapped = static fn(string $copy, float $size): array => array_map(static fn(string $each): array => $line($each, $size),
 			$text->wrap($shown($copy), $size * $layout->uiScale(), ($width - $inset) * $layout->horizontalScale, 40, $faces['body']));
 		// A part opens with the largest type over a heavy rule, with a note set against the far edge where it fits.
-		$opens = static function(string $title, string $aside = '') use ($shown, $measure, $label, $row, $leading, $part, $note, $em, $width, $across, $faces, $text): array {
-			$title = $shown($title);
+		$opens = static function(string $title, string $aside = '') use ($shown, $headed, $measure, $label, $row, $leading, $part, $note, $em, $width, $across, $faces, $text): array {
+			$title = $headed($title);
 			$height = $leading($part);
 			$items = [$label($title, 0, $height / 2, $part, 'head')];
 			$aside = $shown($aside);
@@ -208,8 +219,8 @@ final class HelpPage
 			return $row($height + 8, $items);
 		};
 		// A section's heading is a size smaller, with a hairline running on from it to the far edge.
-		$heads = static function(string $title) use ($shown, $measure, $label, $row, $leading, $section, $width, $across, $faces): array {
-			$title = $shown($title);
+		$heads = static function(string $title) use ($headed, $measure, $label, $row, $leading, $section, $width, $across, $faces): array {
+			$title = $headed($title);
 			$height = $leading($section);
 			$ruled = $measure($title, $section, $faces['head']) + 8 * $across;
 			return $row($height + 2, [$label($title, 0, $height / 2, $section, 'head'),
@@ -248,27 +259,8 @@ final class HelpPage
 			$blocks[] = $rows;
 		}
 
-		// Ten hands in two columns of five, numbered so the order is plain.
-		$rows = [$opens('In every game'), $heads('Hands, best first')];
-		$cell = ($width - $inset) / 2;
-		$number = $measure('10', $body, $faces['body']);
-		for($rank = 0; $rank < 5; $rank++)
-		{
-			$items = [];
-			foreach([0, 1] as $side)
-			{
-				$left = $inset + $side * $cell;
-				$items[] = $label((string)($side * 5 + $rank + 1), $left + $number, $leading($body) / 2, $body, 'body', 'right');
-				$items[] = $label($shown(GameText::HAND_RANKS[$side * 5 + $rank]), $left + $number + 8 * $across, $leading($body) / 2, $body, 'body');
-			}
-			$rows[] = $row($leading($body), $items);
-		}
-		$rows[] = $line($shown(GameText::HAND_RANKS_NOTE), $note);
-		$blocks[] = $rows;
-
-		$blocks[] = [$heads('Wild cards'), ...$wrapped(GameText::HELP_WILD, $body)];
-
-		// Key caps end on one line and their meanings start on the next, so the legend reads as a table.
+		// The part every game shares opens with the key legend. Key caps end on one line and their meanings start
+		// on the next, so the legend reads as a table.
 		$controls = GameText::helpControls($game, $theme);
 		$capHeight = $note * $em + 8;
 		$capWidth = static fn(string $cap): float => max($capHeight * $across, $measure(strtoupper($cap), $note, $faces['head']) + 10 * $across);
@@ -277,7 +269,7 @@ final class HelpPage
 		$sides = $width >= 26 * $body * $em * $across ? 2 : 1;
 		$cell = ($width - $inset) / $sides;
 		$step = max($leading($body), $capHeight + 6);
-		$rows = [$heads($theme === 'keyboard' ? 'Keys' : 'Controller')];
+		$rows = [$opens('In every game'), $heads($theme === 'keyboard' ? 'Keys' : 'Controller')];
 		$each = (int)ceil(count($controls) / $sides);
 		for($index = 0; $index < $each; $index++)
 		{
@@ -300,9 +292,91 @@ final class HelpPage
 		}
 		$blocks[] = $rows;
 
+		// Ten hands in two columns of five, numbered so the order is plain.
+		$rows = [$heads('Hands, best first')];
+		$cell = ($width - $inset) / 2;
+		$number = $measure('10', $body, $faces['body']);
+		for($rank = 0; $rank < 5; $rank++)
+		{
+			$items = [];
+			foreach([0, 1] as $side)
+			{
+				$left = $inset + $side * $cell;
+				$items[] = $label((string)($side * 5 + $rank + 1), $left + $number, $leading($body) / 2, $body, 'body', 'right');
+				$items[] = $label($shown(GameText::HAND_RANKS[$side * 5 + $rank]), $left + $number + 8 * $across, $leading($body) / 2, $body, 'body');
+			}
+			$rows[] = $row($leading($body), $items);
+		}
+		$rows[] = $line($shown(GameText::HAND_RANKS_NOTE), $note);
+		$blocks[] = $rows;
+
+		$blocks[] = [$heads('Wild cards'), ...$wrapped(GameText::HELP_WILD, $body)];
+
+		// Each hand again with an example: its five cards, the ones that make it grouped apart from the ones that
+		// only fill it out, beside its number, its name and what makes it that hand. Where the view is too narrow
+		// to say that in two lines beside the cards, the name goes above them and the explanation below.
+		$grow = $body * $em / 14;
+		$card = [28 * $grow * $across, 40 * $grow];
+		$fans = [];
+		$reach = 0.0;
+		foreach(GameText::HAND_EXAMPLES as [$groups])
+		{
+			$fan = [];
+			$x = $inset;
+			foreach($groups as $index => $cards)
+			{
+				if($index) $x += 7 * $grow * $across;
+				foreach($cards as $id)
+				{
+					$fan[] = ['kind' => 'card', 'x' => $x, 'y' => 0, 'width' => $card[0], 'height' => $card[1], 'id' => $id, 'dim' => 1.0];
+					$x += $card[0] + 3 * $grow * $across;
+				}
+			}
+			$fans[] = $fan;
+			$reach = max($reach, $x - 3 * $grow * $across);
+		}
+		// The explanation starts under the name, which stands a number's width in from the cards.
+		$indent = $number + 8 * $across;
+		$beside = $reach + 14 * $across;
+		$folded = static fn(string $copy, float $room): array => $text->wrap($shown($copy), $body * $layout->uiScale(), $room * $layout->horizontalScale, 40, $faces['body']);
+		$abreast = true;
+		foreach(GameText::HAND_EXAMPLES as [, $meaning])
+			$abreast = $abreast && $width - $beside - $indent >= 16 * $body * $em * $across && count($folded($meaning, $width - $beside - $indent)) <= 2;
+		$rows = [$heads('An example of each hand')];
+		foreach(GameText::HAND_EXAMPLES as $rank => [, $meaning])
+		{
+			$left = $abreast ? $beside : $inset;
+			// A hand's name heads its entry, so Classic sets it in capitals like the headings above it.
+			$named = static fn(float $middle): array => [$label((string)($rank + 1), $left + $number, $middle, $body, 'head', 'right'),
+				$label($headed(GameText::HAND_RANKS[$rank]), $left + $indent, $middle, $body, 'head')];
+			$lines = $folded($meaning, $width - $left - $indent);
+			if($abreast)
+			{
+				// The name and its explanation are centred on the cards as one block.
+				$copy = (1 + count($lines)) * $leading($body);
+				$height = max($card[1], $copy);
+				$top = ($height - $copy) / 2;
+				$items = array_map(static fn(array $item): array => ['y' => ($height - $card[1]) / 2] + $item, $fans[$rank]);
+				array_push($items, ...$named($top + $leading($body) / 2));
+				foreach($lines as $index => $each) $items[] = $label($each, $left + $indent, $top + ($index + 1.5) * $leading($body), $body, 'body');
+				$entry = [$row($height, $items)];
+			}
+			else
+			{
+				$items = array_map(static fn(array $item): array => ['y' => $leading($body) + 2] + $item, $fans[$rank]);
+				array_push($items, ...$named($leading($body) / 2));
+				$entry = [$row($leading($body) + 2 + $card[1] + 3, $items),
+					...array_map(static fn(string $each): array => $row($leading($body), [$label($each, $inset + $indent, $leading($body) / 2, $body, 'body')]), $lines)];
+			}
+			// Entries stand apart by space that belongs to the row above, so a view can start flush on any of them.
+			if($rank < count(GameText::HAND_EXAMPLES) - 1) $entry[count($entry) - 1]['height'] += $whole($body * $em * .8);
+			array_push($rows, ...$entry);
+		}
+		$blocks[] = $rows;
+
 		// Blocks follow one another with a gap that belongs to the row above it, so a view that starts on a block
 		// starts flush with its heading.
-		$gap = $body * $em * .8;
+		$gap = $whole($body * $em * .8);
 		$copy = [];
 		foreach($blocks as $index => $rows)
 		{

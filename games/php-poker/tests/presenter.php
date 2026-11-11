@@ -643,7 +643,8 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 			$expect($instance[0] >= $window[0] && $instance[0] + $instance[2] <= $window[0] + $window[2] + 1e-6, "help index copy stays inside its window at $at");
 
 		$frames = [];
-		$shown = static fn(string $copy): string => $mode === Theme::CLASSIC ? strtoupper($copy) : $copy;
+		// Copy is in sentence case in both looks; Classic keeps headings, and the hand names that head the examples, in capitals.
+		$headed = static fn(string $copy): string => $mode === Theme::CLASSIC ? strtoupper($copy) : $copy;
 		foreach(GameText::HELP_GAMES as $position => $game)
 		{
 			$presenter->input([['key' => (string)($position + 1)]], null, 0, $controller, $theme);
@@ -673,44 +674,74 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 				$expect(!$overlaps($reach, $corner), "the scrollbar's $part is clear of the corner buttons at $at");
 			}
 
-			// Every heading, hand and key is set exactly once, in four sizes that follow the outline.
+			// Every heading, hand and key is set once, in four sizes that follow the outline. Headings are in capitals
+			// in Classic; everything else keeps its small letters.
 			$sizes = [];
 			$texts = [];
+			$where = [];
 			$caps = 0;
 			$cards = [];
-			foreach($help->rows as $number => $row) foreach($row['items'] as $item)
+			$whole = true;
+			foreach($help->rows as $number => $row)
 			{
-				if($item['kind'] === 'key') $caps++;
-				if($item['kind'] === 'card') $cards[$number][] = $item;
-				if($item['kind'] !== 'text') continue;
-				$texts[] = $item['text'];
-				$sizes[$item['text']] = $item['size'];
-				$expect($item['x'] >= -1e-6 && $item['y'] <= $row['ink'] + 1e-6, "the $game copy is placed inside its own row at $at");
+				$whole = $whole && abs($help->top($number) * $layout->scale - round($help->top($number) * $layout->scale)) < 1e-6;
+				foreach($row['items'] as $item)
+				{
+					if($item['kind'] === 'key') $caps++;
+					if($item['kind'] === 'card') $cards[$number][] = $item;
+					if($item['kind'] !== 'text') continue;
+					$texts[] = $item['text'];
+					$sizes[$item['text']] = $item['size'];
+					$where[$item['text']] ??= $number;
+					$expect($item['x'] >= -1e-6 && $item['y'] <= $row['ink'] + 1e-6, "the $game copy is placed inside its own row at $at");
+				}
 			}
+			$expect($whole, "every row of the $game rules starts on a whole device pixel at $at");
 			$counts = array_count_values($texts);
 			$steps = array_column(GameText::helpSteps($game), 0);
 			$legend = $theme === 'keyboard' ? 'Keys' : 'Controller';
-			foreach(['Playing a hand', 'In every game', ...$steps, 'Hands, best first', 'Wild cards', $legend, ...GameText::HAND_RANKS, GameText::HAND_RANKS_NOTE,
-				...array_column(GameText::helpControls($game, $theme), 1), ...array_column(GameText::helpExample($game)['groups'], 0)] as $wanted)
-				$expect(($counts[$shown($wanted)] ?? 0) === count(array_keys(array_column(GameText::helpExample($game)['groups'], 0), $wanted)) + (in_array($wanted, array_column(GameText::helpExample($game)['groups'], 0), true) ? 0 : 1),
-					"the $game rules set \"$wanted\" once at $at");
+			$example = GameText::helpExample($game);
+			$headings = ['Playing a hand', 'In every game', ...$steps, $legend, 'Hands, best first', 'Wild cards', 'An example of each hand'];
+			foreach($headings as $wanted) $expect(($counts[$headed($wanted)] ?? 0) === 1, "the $game rules set the heading \"$wanted\" once at $at");
+			// A hand's name stands once in the list and once over its example; the two differ only by Classic's capitals.
+			foreach(GameText::HAND_RANKS as $wanted)
+				$expect(($counts[$wanted] ?? 0) + ($mode === Theme::CLASSIC ? $counts[strtoupper($wanted)] ?? 0 : 0) === 2 && ($counts[$headed($wanted)] ?? 0) >= 1, "the $game rules name \"$wanted\" in the list and over its example at $at");
+			foreach([GameText::HAND_RANKS_NOTE, ...array_column(GameText::helpControls($game, $theme), 1)] as $wanted)
+				$expect(($counts[$wanted] ?? 0) === 1, "the $game rules set \"$wanted\" once at $at");
+			foreach(array_count_values(array_column($example['groups'], 0)) as $wanted => $times)
+				$expect(($counts[$wanted] ?? 0) === $times, "the $game example labels its \"$wanted\" cards at $at");
 			$expect($caps === array_sum(array_map('count', array_column(GameText::helpControls($game, $theme), 0))), "the $game rules draw every key cap once at $at");
-			$expect($sizes[$shown('Playing a hand')] === $sizes[$shown('In every game')] && $sizes[$shown('Playing a hand')] > $sizes[$shown($steps[0])]
-				&& $sizes[$shown($steps[0])] === $sizes[$shown('Wild cards')] && $sizes[$shown($steps[0])] > $sizes[$shown(GameText::HAND_RANKS[0])]
-				&& $sizes[$shown(GameText::HAND_RANKS[0])] > $sizes[$shown(GameText::HAND_RANKS_NOTE)], "the $game rules set parts, sections, copy and notes in four falling sizes at $at");
+			$expect($sizes[$headed('Playing a hand')] === $sizes[$headed('In every game')] && $sizes[$headed('Playing a hand')] > $sizes[$headed($steps[0])]
+				&& $sizes[$headed($steps[0])] === $sizes[$headed('Wild cards')] && $sizes[$headed($steps[0])] > $sizes[GameText::HAND_RANKS_NOTE]
+				&& $sizes[$headed($steps[0])] > $sizes[array_column(GameText::helpControls($game, $theme), 1)[0]]
+				&& $sizes[array_column(GameText::helpControls($game, $theme), 1)[0]] > $sizes[GameText::HAND_RANKS_NOTE], "the $game rules set parts, sections, copy and notes in four falling sizes at $at");
+			$capitals = array_map('strtoupper', [...$headings, ...GameText::HAND_RANKS]);
+			$shouting = array_filter($texts, static fn(string $copy): bool => !in_array($copy, $capitals, true) && $copy === strtoupper($copy) && preg_match('/[a-z]/i', $copy) === 1 && strlen($copy) > 2);
+			$expect($shouting === [], "the $game rules keep their copy out of capitals at $at (" . implode(' | ', array_slice($shouting, 0, 3)) . ')');
+			// The shared part runs: keys, the list of hands, wild cards, then an example of each hand.
+			$order = array_map(static fn(string $wanted): int => $where[$headed($wanted)] ?? -1, ['Showdown', 'In every game', $legend, 'Hands, best first', 'Wild cards', 'An example of each hand']);
+			$sorted = $order;
+			sort($sorted);
+			$expect($order === $sorted && $order[0] >= 0 && count(array_unique($order)) >= 5, "the $game rules run from the showdown to keys, hands, wild cards and examples at $at");
 
 			// The example hand stands in one row of the Showdown section, with the cards that do not play dimmed.
-			$example = GameText::helpExample($game);
 			$dealt = array_merge(...array_column($example['groups'], 1));
-			$expect(count($cards) === 1 && array_column(array_values($cards)[0], 'id') === $dealt, "the $game example is one row of its cards in dealing order at $at");
-			$exampleRow = array_key_first($cards);
-			$headed = static function(string $title) use ($help, $shown): int {
-				foreach($help->rows as $number => $row) foreach($row['items'] as $item) if($item['kind'] === 'text' && $item['text'] === $shown($title)) return $number;
-				return -1;
-			};
-			$expect($exampleRow > $headed('Showdown') && $exampleRow < $headed('In every game'), "the $game example belongs to its Showdown section at $at");
-			foreach(array_values($cards)[0] as $card)
+			$fanned = array_keys($cards);
+			$expect(count($cards) === 1 + count(GameText::HAND_EXAMPLES) && array_column($cards[$fanned[0]], 'id') === $dealt, "the $game example is one row of its cards in dealing order at $at");
+			$expect($fanned[0] > $where[$headed('Showdown')] && $fanned[0] < $where[$headed('In every game')], "the $game example belongs to its Showdown section at $at");
+			foreach($cards[$fanned[0]] as $card)
 				$expect(($card['dim'] === 1.0) === in_array($card['id'], $example['plays'], true), "the $game example dims exactly the cards that do not play at $at");
+			// After wild cards each hand has a row of its own five cards, in order from the best, with its name on that row.
+			foreach(GameText::HAND_EXAMPLES as $rank => [$groups])
+			{
+				$fan = $cards[$fanned[$rank + 1]];
+				$named = array_column(array_filter($help->rows[$fanned[$rank + 1]]['items'], static fn(array $item): bool => $item['kind'] === 'text'), 'text');
+				$expect($fanned[$rank + 1] > $where[$headed('An example of each hand')] && array_column($fan, 'id') === array_merge(...$groups)
+					&& array_unique(array_column($fan, 'dim')) === [1.0] && in_array($headed(GameText::HAND_RANKS[$rank]), $named, true) && in_array((string)($rank + 1), $named, true),
+					"the $game rules show hand " . ($rank + 1) . " with its own cards and name at $at");
+				for($index = 1; $index < count($fan); $index++) $expect($fan[$index]['x'] >= $fan[$index - 1]['x'] + $fan[$index - 1]['width'] - 1e-6, "the cards of hand " . ($rank + 1) . " stand side by side in the $game rules at $at");
+				$expect($fan[4]['x'] + $fan[4]['width'] <= $help->frame['view'][2] + 1e-6, "the cards of hand " . ($rank + 1) . " fit the view in the $game rules at $at");
+			}
 
 			// What is painted lies inside the view, wherever it is scrolled to: no glyph crosses its edge, runs under
 			// the scrollbar or reaches the pager's row. The scrollbar's own arrows are the only glyphs beside it.
@@ -753,6 +784,13 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 			$presenter->input([['key' => 'escape']], null, 0, $controller, $theme);
 		}
 		$expect(count(array_unique(array_map('json_encode', $frames))) === 1, "every game shares one rules window at $at");
+	}
+	// Each example of a hand is that hand to the evaluator, with the jokers wild as the first one needs.
+	$expect(count(GameText::HAND_EXAMPLES) === count(GameText::HAND_RANKS), 'every hand in the list has an example');
+	foreach(GameText::HAND_EXAMPLES as $rank => [$groups, $meaning])
+	{
+		$found = \PhpPoker\Hand::evaluate(array_merge(...$groups), [52, 53])['name'];
+		$expect($found === (GameText::HAND_RANKS[$rank] === 'Pair' ? 'One pair' : GameText::HAND_RANKS[$rank]) && $meaning !== '', 'the example of ' . GameText::HAND_RANKS[$rank] . " is one to the evaluator, which calls it $found");
 	}
 	foreach(GameText::HELP_GAMES as $game)
 	{

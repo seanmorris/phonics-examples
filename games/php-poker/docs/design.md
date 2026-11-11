@@ -174,11 +174,18 @@ block the next deal and schedules no further changes after it ends.
   Enter opens the one the table is set up for, which is the brass row. Back returns to the title.
 - A rules page is one column of copy, as a text-mode help screen sets it, in four sizes that follow its outline:
   the two parts ("Playing a hand", "In every game") largest over a heavy rule, each section's heading a size
-  smaller with a hairline running on from it, then the copy, then notes. The first part walks a hand step by step.
+  smaller with a hairline running on from it, then the copy, then notes. Copy, notes and labels are in sentence
+  case in both looks, because a page of capitals reads as shouting; Classic keeps its headings, the names that
+  head the hand examples and its buttons in capitals. The first part walks a hand step by step.
   Its Showdown section sets out an example, the same full house in every game dealt the way that game deals it,
   each group of cards over its label ("Yours", "The board", "Down", "Up"), the cards that do not play dimmed and
-  a note on what to see. The second part lists the hands from best to worst in two numbered columns, the wild-card
-  rule and a legend of key caps (the controller's buttons when one is in use).
+  a note on what to see.
+- The second part is the same in every game and runs in this order: a legend of key caps (the controller's
+  buttons when one is in use); the hands from best to worst in two numbered columns; the wild-card rule; then an
+  example of each hand, its five cards beside its number, its name and a line on what makes it that hand. The
+  cards that make the hand stand together and the ones that only fill out the five stand apart. The first example
+  holds a joker, since five of a kind needs a wild card. Where the view is too narrow for two lines beside the
+  cards, the name goes above them and the explanation below.
 - The copy scrolls a whole row at a time, so nothing is drawn half inside the window. The scrollbar at the window's
   right edge is a DOS one in Classic: an arrow at each end, a track in the light shade and a one-cell block for the
   thumb; Modern draws a rounded track and a thumb as long as the share of the copy in view. Arrows scroll a row, a

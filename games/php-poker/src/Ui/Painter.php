@@ -739,7 +739,7 @@ final class Painter
 			$fan = (20 + 6 * 13 + 3 * 6) * $grow * $across;
 			$copy = 0.0;
 			foreach($games as $each) foreach([[GameText::title($each), $title], [GameText::helpSummary($each), $caption]] as [$line, $size])
-				$copy = max($copy, $this->canvas->measure($this->mode === Theme::CLASSIC ? strtoupper($line) : $line, $size, $this->face) / $this->horizontalUnit);
+				$copy = max($copy, $this->canvas->measure($line, $size, $this->face) / $this->horizontalUnit);
 			$fanned = 14 * $across + $fan + 12 * $across + $copy <= $menu['items'][0][2] - 40 * $across;
 			foreach($menu['items'] as $index => $rect)
 			{
@@ -763,7 +763,9 @@ final class Painter
 				$room = $rect[0] + $rect[2] - 40 * $across - $left;
 				$top = $rect[1] + ($rect[3] - ($title + $caption) * $em - 5) / 2;
 				$this->text(GameText::title($games[$index]), $left, $top + $title * $em / 2, $title, Theme::INK, 'left', $room);
-				$this->text(GameText::helpSummary($games[$index]), $left, $top + $title * $em + 5 + $caption * $em / 2, $caption, Theme::alpha(Theme::INK, .78), 'left', $room);
+				// The summary is a phrase to read, so like the rules it keeps its small letters in both looks.
+				[$sx, $sy] = $this->layout->point($left, $top + $title * $em + 5 + $caption * $em / 2);
+				$this->canvas->label(GameText::helpSummary($games[$index]), $sx, $sy, $caption, Theme::alpha(Theme::INK, .78), $this->face, 'left', $room * $this->horizontalUnit);
 			}
 			$this->button($menu['back'], 'Back', '⎋', 'default', false);
 			return;
@@ -776,8 +778,9 @@ final class Painter
 			if($item['kind'] === 'card') { $this->card([$item['x'], $item['y'], $item['width'], $item['height']], $item['id'], $item['dim']); continue; }
 			if($item['kind'] === 'text')
 			{
+				// Rows are whole pixels tall; a line set on a whole pixel keeps every row equally sharp.
 				[$x, $y] = $this->layout->point($item['x'], $item['y']);
-				$this->canvas->label($item['text'], $x, $y, $item['size'], Theme::INK, $item['face'], $item['align']);
+				$this->canvas->label($item['text'], $x, round($y), $item['size'], Theme::INK, $item['face'], $item['align']);
 				continue;
 			}
 			[$x, $y, $w, $h] = $this->layout->rect($item['x'], $item['y'], $item['width'], $item['height']);
