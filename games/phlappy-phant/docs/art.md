@@ -7,7 +7,7 @@ Everything the game draws, apart from text, comes from six hand-edited PNG sheet
 | Sheet | Size | Contents |
 | --- | --- | --- |
 | `art/elephpant.png` | 128×104 | The four elephant frames, traced by hand from `art/elephpant.svg`. |
-| `art/cardinal.png` | 96×32 | Three 32×32 flight frames of the cardinal that crosses the daytime sky, facing left. |
+| `art/cardinal.png` | 96×96 | Three rows of three 32×32 flight frames, facing left: hand-painted day, dusk/dawn, and night colors. |
 | `art/terrain.png` | 224×224 | The daytime backdrop, its river animation, the pillar, the ground, and the scenery. |
 | `art/terrain-parallax.png` | 224×224 | The same layout with the backdrop painted as flat bands that mark its parallax layers. |
 | `art/terrain-duskdawn.png` | 224×224 | The whole terrain sheet graded by hand for dusk and dawn. |
@@ -68,7 +68,7 @@ At run time the simulation only says day or night. The renderer eases along the 
 | --- | --- | --- |
 | `assets/phant.png` and `.tsj` | 4 at 64×52 | Right-facing folded and spread, then left-facing folded and spread. |
 | `assets/backdrop.png` and `.tsj` | 14 at 160×160 | Seven palettes, two river frames each, with the animation declared in the tileset. |
-| `assets/cardinal.png` and `.tsj` | 3 at 32×32 | The cardinal's wing-down, level, and wing-up frames, with their animation. |
+| `assets/cardinal.png` and `.tsj` | 21 at 32×32 | Seven day-cycle palettes of the cardinal's wing-down, level, and wing-up frames, with their faster animation. |
 | `assets/pillar.png` and `.tsj` | 28 at 64×8 | Seven palettes of cap, two wall slices, and base. |
 | `assets/ground.png` and `.tsj` | 14 at 32×32 | Seven palettes of grass and dirt. |
 | `assets/scenery.png` and `.tsj` | 21 at 48×32 | Seven palettes of tree, shrub, and fence, each aligned to the bottom left of its cell. |

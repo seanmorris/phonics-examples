@@ -437,17 +437,52 @@ generated.set('assets/scenery.png', scenerySheet.png());
 generated.set('assets/scenery.tsj', tileset('Phlappy Phant scenery', 'scenery.png', SCENERY_W, SCENERY_H, SCENERY.length, SCENERY.length * palettes.length, scenerySheet, {
 	properties: [{name: 'phlappy.widths', type: 'string', value: SCENERY.map(([, , , width]) => width).join(',')}]
 }));
-// The cardinal that crosses the daytime sky: three 32x32 flight frames facing left, played down, level, up, level.
+// The cardinal that crosses the sky: three 32x32 flight frames facing left, played down, level, up, level. Its
+// source rows are hand-painted day, dusk/dawn and night keyframes. Grade the same in-between palettes as the terrain
+// so a bird that starts in daylight can keep matching the sky while it finishes its crossing after dusk falls.
 const cardinalImage = PNG.sync.read(await fs.readFile(new URL('art/cardinal.png', root)));
 
-if(cardinalImage.width !== 96 || cardinalImage.height !== 32)
-	throw Error(`art/cardinal.png must be 96x32, found ${cardinalImage.width}x${cardinalImage.height}`);
+if(cardinalImage.width !== 96 || cardinalImage.height !== 96)
+	throw Error(`art/cardinal.png must be 96x96, found ${cardinalImage.width}x${cardinalImage.height}`);
 
-const cardinalSheet = new Raster(96, 32);
-cardinalSheet.data.set(cardinalImage.data);
+const cardinalSource = new Raster(96, 96);
+cardinalSource.data.set(cardinalImage.data);
+const cardinalFrames = KEYFRAMES.map((_, index) => {
+	const row = new Raster(96, 32);
+	for(let y = 0; y < 32; y++) for(let x = 0; x < 96; x++) row.put(x, y, cardinalSource.get(x, index * 32 + y).slice(0, 3), cardinalSource.get(x, index * 32 + y)[3]);
+	return row;
+});
+
+for(let keyframe = 1; keyframe < cardinalFrames.length; keyframe++) for(let y = 0; y < 32; y++) for(let x = 0; x < 96; x++)
+{
+	const dayAlpha = cardinalFrames[0].get(x, y)[3], alpha = cardinalFrames[keyframe].get(x, y)[3];
+	if(alpha !== dayAlpha) throw Error(`art/cardinal.png keyframe ${KEYFRAMES[keyframe]} differs in shape from day at ${x},${y}`);
+}
+
+const cardinalPalettes = [];
+for(let index = 0; index < cardinalFrames.length - 1; index++) for(let step = 0; step < STEPS; step++)
+{
+	const between = new Raster(96, 32), from = cardinalFrames[index], to = cardinalFrames[index + 1];
+	for(let y = 0; y < 32; y++) for(let x = 0; x < 96; x++)
+	{
+		const [r, g, b, a] = from.get(x, y);
+		between.put(x, y, grade([r, g, b], to.get(x, y).slice(0, 3), step / STEPS), a);
+	}
+	cardinalPalettes.push(between);
+}
+cardinalPalettes.push(cardinalFrames.at(-1));
+
+const cardinalSheet = new Raster(96, 32 * cardinalPalettes.length);
+cardinalPalettes.forEach((row, index) => cardinalSheet.blit(row, 0, index * 32));
 generated.set('assets/cardinal.png', cardinalSheet.png());
-generated.set('assets/cardinal.tsj', tileset('Phlappy Phant cardinal', 'cardinal.png', 32, 32, 3, 3, cardinalSheet, {
-	tiles: [{id: 0, animation: [0, 1, 2, 1].map(tileid => ({tileid, duration: 110}))}]
+generated.set('assets/cardinal.tsj', tileset('Phlappy Phant cardinal', 'cardinal.png', 32, 32, 3, 3 * cardinalPalettes.length, cardinalSheet, {
+	properties: [
+		{name: 'phlappy.keyframes', type: 'string', value: KEYFRAMES.join(',')}
+		, {name: 'phlappy.steps', type: 'string', value: String(STEPS)}
+	]
+	// The old four-frame cycle lasted 440 ms. At 352 ms it completes 25% more cycles per second.
+	, tiles: cardinalPalettes.map((_, palette) => ({id: palette * 3
+		, animation: [0, 1, 2, 1].map(frame => ({tileid: palette * 3 + frame, duration: 88}))}))
 }));
 generated.set('assets/flap.wav', flapSound());
 generated.set('assets/ding.wav', dingSound());

@@ -38,6 +38,7 @@ final class Scene
 	public const STRIDE_PILLAR = 4;
 	public const STRIDE_GROUND = 2;
 	public const STRIDE_SCENERY = 3;
+	public const STRIDE_CARDINAL = 3;
 	/** Seconds for each leg of the cycle: day to dusk, then dusk to night (and back the same way at dawn). */
 	public const LEG_SECONDS = 1.4;
 	/** The backdrop block, its tile size, and the ground tile size, in world units. */
@@ -266,7 +267,7 @@ final class Scene
 		{
 			// A gentle bob keeps the glide from looking like a slide.
 			$bird = $this->tile(
-				self::GID_CARDINAL
+				self::GID_CARDINAL + self::STRIDE_CARDINAL * $this->palette
 				, round($this->cardinal[0]) * $scale
 				, $y($this->cardinal[1] + round(3 * sin($seconds * 2.2)))
 				, $scale

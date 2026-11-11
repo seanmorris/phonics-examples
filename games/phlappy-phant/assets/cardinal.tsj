@@ -4,30 +4,168 @@
   "name": "Phlappy Phant cardinal",
   "tilewidth": 32,
   "tileheight": 32,
-  "tilecount": 3,
+  "tilecount": 21,
   "columns": 3,
   "image": "cardinal.png",
   "imagewidth": 96,
-  "imageheight": 32,
+  "imageheight": 224,
+  "properties": [
+    {
+      "name": "phlappy.keyframes",
+      "type": "string",
+      "value": "day,duskdawn,night"
+    },
+    {
+      "name": "phlappy.steps",
+      "type": "string",
+      "value": "3"
+    }
+  ],
   "tiles": [
     {
       "id": 0,
       "animation": [
         {
           "tileid": 0,
-          "duration": 110
+          "duration": 88
         },
         {
           "tileid": 1,
-          "duration": 110
+          "duration": 88
         },
         {
           "tileid": 2,
-          "duration": 110
+          "duration": 88
         },
         {
           "tileid": 1,
-          "duration": 110
+          "duration": 88
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "animation": [
+        {
+          "tileid": 3,
+          "duration": 88
+        },
+        {
+          "tileid": 4,
+          "duration": 88
+        },
+        {
+          "tileid": 5,
+          "duration": 88
+        },
+        {
+          "tileid": 4,
+          "duration": 88
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "animation": [
+        {
+          "tileid": 6,
+          "duration": 88
+        },
+        {
+          "tileid": 7,
+          "duration": 88
+        },
+        {
+          "tileid": 8,
+          "duration": 88
+        },
+        {
+          "tileid": 7,
+          "duration": 88
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "animation": [
+        {
+          "tileid": 9,
+          "duration": 88
+        },
+        {
+          "tileid": 10,
+          "duration": 88
+        },
+        {
+          "tileid": 11,
+          "duration": 88
+        },
+        {
+          "tileid": 10,
+          "duration": 88
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "animation": [
+        {
+          "tileid": 12,
+          "duration": 88
+        },
+        {
+          "tileid": 13,
+          "duration": 88
+        },
+        {
+          "tileid": 14,
+          "duration": 88
+        },
+        {
+          "tileid": 13,
+          "duration": 88
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "animation": [
+        {
+          "tileid": 15,
+          "duration": 88
+        },
+        {
+          "tileid": 16,
+          "duration": 88
+        },
+        {
+          "tileid": 17,
+          "duration": 88
+        },
+        {
+          "tileid": 16,
+          "duration": 88
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "animation": [
+        {
+          "tileid": 18,
+          "duration": 88
+        },
+        {
+          "tileid": 19,
+          "duration": 88
+        },
+        {
+          "tileid": 20,
+          "duration": 88
+        },
+        {
+          "tileid": 19,
+          "duration": 88
         }
       ]
     }
