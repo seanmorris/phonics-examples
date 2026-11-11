@@ -227,7 +227,9 @@ void main(){vec4 tint=uInstanced?vTint:uBase;vec3 N=normalize(vNormal),V=normali
 		float height=(macro-.5)*.00055+grain*.00021+looseFiber*.00009;
 		N=bumpNormal(vPosition,N,height);float top=smoothstep(.62,.92,N.y);
 		float track=exp(-pow(abs(vPosition.z-.055*sin(vPosition.x*5.0))*18.0,2.0))*top;
-		base*=.92+macro*.13+grain*.08+looseFiber*.05;base=mix(base,base*1.04,track*.035);
+		// Centre the stronger macro term on the old average so the broad wool variation returns without brightening
+		// or darkening the cloth as a whole. Fine grain and loose fibres keep their existing strength.
+		base*=.985+(macro-.5)*.2+grain*.08+looseFiber*.05;base=mix(base,base*1.04,track*.035);
 		// Head and foot spots: thin muted cream stickers on the bed, one under the rack's apex ball and its mirror at
 		// the head end. They sit flat, so the cloth's fuzz does not show through them.
 		float spot=length(vec2(abs(vPosition.x)-uSpot,vPosition.z)),edge=max(fwidth(spot),.0002);

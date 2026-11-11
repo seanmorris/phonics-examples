@@ -98,7 +98,7 @@
     "autoload.php": "sha256-EmJY/5T4hGtkgHDoBwucyEMFN7n3N9BJCi2D0f7IKwE=",
     "browser/contact-kernel.mjs": "sha256-zwYEI3LTplQ4XVu9kCH8i/TuORcwTv/RfaW01Cv+NKM=",
     "browser/game.mjs": "sha256-Z+dBhIokC8jnEUiFi9Tfc9uuNnlsQ3mgBiArflQmhoQ=",
-    "shaders/billiards.frag": "sha256-YizCNNh44Vh4rrXbQzXDxLwyWJMP0O0CA/t6QwrxQZs=",
+    "shaders/billiards.frag": "sha256-Vft9r/33Fm1vC9DJMY0lAoiXVjfqfGFvI3vAnDyeGxs=",
     "shaders/billiards.vert": "sha256-nLVju+IOeEK4t3gR13nhDiegjfdukCrBQdPYX5gZfDE=",
     "shaders/ui.frag": "sha256-1K8qiJo1AtDSxxbVMKvtxhyRWZk+r42DJ6bMEP2m/4g=",
     "shaders/ui.vert": "sha256-nzz5uhcqbAmgR7A4EtN54AIWTMlMoAwsN4Zow6np5LU=",
