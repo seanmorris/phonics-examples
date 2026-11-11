@@ -2,6 +2,7 @@
   "folders": [
     "."
   ],
+  "extensionsPath": "../../../node_modules/@seanmorris/phonics/packages/tiled-phonics/extension",
   "propertyTypes": [
     {
       "name": "PhpNoid.Brick",
