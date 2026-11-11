@@ -15,7 +15,7 @@ $app->lobby([
 	'provider'=>'@matrix/lobby','title'=>'PHP Poker Online'
 	,'options'=>['homeserver'=>'https://matrix.org','room'=>'#php-poker:matrix.org','configurationKey'=>'php-poker']
 	,'game'=>[
-		'id'=>'org.seanmorris.phonics.php-poker.five-card-draw','protocol'=>'1.0.0','rules'=>'five-card-draw-anything-v5'
+		'id'=>'org.seanmorris.phonics.php-poker.five-card-draw','protocol'=>'1.0.0','rules'=>'five-card-draw-anything-v6'
 		// Five minutes per step, so a player can step away briefly; a longer stall forfeits the match.
 		,'actionTimeoutMs'=>300000
 		,'players'=>2,'spectators'=>false,'aspectRatio'=>'auto','checkpointMode'=>'history','actionBatches'=>true

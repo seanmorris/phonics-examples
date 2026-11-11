@@ -282,7 +282,7 @@ test('folding settles uncontested without publishing either hand',async()=>{
 	assert.ok(peers.alice.view().players[1].cards.every(card=>card===null));
 });
 
-test('all-in seats leave betting queues while unmatched raises are refunded',()=>{
+test('a short all-in call refunds unmatched bets and keeps the all-in hand in the draw or reveal',()=>{
 	for(const stage of ['betting','final-betting'])
 	{
 		const deal=new OnlineDeal({
@@ -291,14 +291,15 @@ test('all-in seats leave betting queues while unmatched raises are refunded',()=
 		});
 		const state=deal.state;state.stage=stage;state.opener='alice';state.highest=4;state.raises=1;state.pot=6;
 		state.turnQueue=['alice'];
-		Object.assign(deal.bankroll('alice'),{stack:498,bet:2,totalBet:2,folded:false});
-		Object.assign(deal.bankroll('bob'),{stack:0,bet:4,totalBet:4,folded:false});
+		Object.assign(deal.bankroll('alice'),{stack:1,bet:2,totalBet:2,folded:false});
+		Object.assign(deal.bankroll('bob'),{stack:993,bet:4,totalBet:4,folded:false});
 
-		deal.applyPokerAction('alice',{type:'poker-action',move:'bet',amount:6});
+		deal.applyPokerAction('alice',{type:'poker-action',move:'call'});
 
-		assert.equal(deal.bankroll('alice').bet,4);
-		assert.equal(deal.bankroll('alice').stack,496);
-		assert.equal(state.pot,8);
+		assert.equal(deal.bankroll('alice').bet,3);
+		assert.equal(deal.bankroll('alice').stack,0);
+		assert.equal(deal.bankroll('bob').stack,994);
+		assert.equal(state.pot,6);
 		assert.equal(deal.bankroll('bob').folded,false);
 		assert.equal(state.stage,stage==='betting'?'draw':'reveal');
 		assert.ok(state.turnQueue.includes('bob'),`${stage} keeps the all-in hand in later phases`);
@@ -410,7 +411,7 @@ test('a run of a table stops writing its record once another tab takes the seat'
 
 
 // Street games online: hold'em and stud deal street by street and prove some cards face up as they are dealt.
-const streetTable=async(game,root,settings={})=>{
+const streetTable=async(game,root,settings={},stacks=null)=>{
 	const stores={alice:storage(),bob:storage()},options={
 		api:mentalPoker,root,sessionId:root+'-session',players:['alice','bob'],breaker:'alice',rounds:16,settings:{game,...settings}
 	};
@@ -418,6 +419,15 @@ const streetTable=async(game,root,settings={})=>{
 		alice:new OnlineDeal({...options,localPlayer:'alice',storage:stores.alice})
 		,bob:new OnlineDeal({...options,localPlayer:'bob',storage:stores.bob})
 	};
+	// Start at a reachable bankroll split before posting this hand's forced bets.
+	const initialize=peer=>{
+		if(stacks===null)return;
+		assert.equal(stacks.reduce((sum,value)=>sum+value,0),1000);
+		peer.state.handNumber=0;peer.state.pot=0;peer.state.history=[];
+		peer.state.bankrolls.forEach((seat,index)=>{seat.stack=stacks[index];});
+		peer.beginHand(false);
+	};
+	for(const peer of Object.values(peers))initialize(peer);
 	const history=[];
 	const advance=async action=>{
 		const actor=peers.alice.currentActor();action??=peers[actor].nextAction();
@@ -427,6 +437,8 @@ const streetTable=async(game,root,settings={})=>{
 		const envelope={sequence:history.length+1,actor,pre_hash:await peers.alice.hash(),action};
 		const [left,right]=await Promise.all([peers.alice.apply(envelope),peers.bob.apply(envelope)]);
 		assert.deepEqual(left,right);history.push(structuredClone(envelope));
+		const state=peers.alice.publicState();
+		assert.equal(state.pot+state.bankrolls.reduce((sum,seat)=>sum+seat.stack,0),1000,'every accepted step conserves chips');
 		return action;
 	};
 	// Run the browsers' own steps (shuffle, deals, openings) until someone has a decision to make or the hand ends.
@@ -438,7 +450,7 @@ const streetTable=async(game,root,settings={})=>{
 		peers[actor].command({type:move,...(amount===undefined?{}:{amount}),revision:history.length,generation:peers.alice.publicState().handNumber});
 		await advance();await settle();
 	};
-	return {peers,stores,options,history,advance,settle,act};
+	return {peers,stores,options,history,advance,settle,act,initialize};
 };
 
 test('the online game table is the same data the PHP rules read',async()=>{
@@ -654,4 +666,38 @@ test('folding a street game settles uncontested and an all-in runs the remaining
 	assert.ok(['showdown','match-over'].includes(state.stage),'with one player all-in the board runs out without more betting');
 	assert.equal(shove.peers.alice.view().board.length,5);
 	assert.equal(state.bankrolls.reduce((sum,seat)=>sum+seat.stack,0),1000);
+});
+
+for(const game of ['stud5','stud7'])for(const short of [0,1])
+test(`${game} caps unequal antes before an automatic all-in runout (short seat ${short})`,async()=>{
+	const stacks=short===0?[1,999]:[999,1];
+	const table=await streetTable(game,`$short-ante-${game}-${short}`,{ante:100},stacks),{peers}=table;
+	let state=peers.alice.publicState();
+	assert.deepEqual(state.bankrolls.map(seat=>seat.totalBet),[1,1],'unmatched ante chips stay with their owner');
+	assert.equal(state.pot,2,'only matched antes enter the pot');
+	await table.settle();
+	state=peers.alice.publicState();
+	assert.ok(['showdown','match-over'].includes(state.stage));
+	assert.equal(table.history.some(entry=>entry.action.type==='poker-action'),false,'there is no betting decision against an all-in');
+	assert.equal(state.history.some(line=>line.includes('Brings in')),false,'an ante all-in needs no unanswerable bring-in');
+	assert.equal(state.awards.reduce((sum,award)=>sum+award.amount,0),2);
+	assert.ok(state.bankrolls[short].stack<=2,'the short stack cannot win the unmatched ante');
+	assert.ok(state.bankrolls[1-short].stack>=998,'the funded seat keeps its unmatched chips even if it loses');
+	const restored=new OnlineDeal({...table.options,localPlayer:'bob',storage:table.stores.bob});
+	table.initialize(restored);
+	assert.equal(await restored.replay(table.history),await peers.alice.hash(),'replay agrees on the refund and payout');
+});
+
+test('an all-in small-blind call closes preflop without giving the big blind another turn',async()=>{
+	const table=await streetTable('holdem','$short-small-blind',{},[2,998]),{peers}=table;
+	await table.settle();
+	assert.equal(peers.alice.currentActor(),'alice');
+	assert.equal(peers.alice.view().legalActions.callAmount,1);
+	await table.act('call');
+	const state=peers.alice.publicState();
+	assert.ok(['showdown','match-over'].includes(state.stage),'the matched all-in runs out all remaining streets');
+	assert.equal(table.history.filter(entry=>entry.action.type==='poker-action').length,1);
+	assert.equal(peers.alice.view().board.length,5);
+	assert.equal(state.awards.reduce((sum,award)=>sum+award.amount,0),4);
+	assert.ok(state.bankrolls[0].stack<=4);
 });
