@@ -1,14 +1,21 @@
 /**
- * Deterministic public reducer for two-player private five-card draw.
+ * Deterministic public reducer for two-player private poker: five-card draw, Texas Hold'em and stud.
  *
  * The room transcript contains encrypted cards, proofs and public game actions. Each browser keeps only its own
  * commutative layer key and card faces. Drawn cards are identified publicly by encrypted allocation number; a
- * face enters the transcript only when its owner proves it at a contested showdown.
+ * face enters the transcript only when its owner proves it: at a contested showdown, or straight after the deal
+ * for a card the rules turn face up (a stud up-card or a hold'em board card).
  */
 
 export const ONLINE_DEAL_VERSION=4;
 export const ONLINE_RULES='five-card-draw-anything-v5';
-export const ONLINE_ACTION_TYPES=Object.freeze(['shuffle-packet','card-layers','poker-action','draw-choice','reveal-cards']);
+export const ONLINE_ACTION_TYPES=Object.freeze(['shuffle-packet','card-layers','poker-action','draw-choice','reveal-cards','open-cards']);
+/**
+ * The games a table can deal, by id: forced bets and one entry per street. A copy of variants.json, which the PHP
+ * rules read through Variant; a test fails if the two differ.
+ */
+export const ONLINE_GAMES=Object.freeze({"draw":{"label":"Five-Card Draw","seats":8,"forced":"dealer-ante","evaluate":"exact5","streets":[{"name":"opening","deal":{"down":5,"up":0,"board":0},"limits":"early","first":"left-of-dealer"},{"name":"final","deal":{"down":0,"up":0,"board":0},"limits":"late","first":"opener","draw":true}]},"holdem":{"label":"Texas Hold'em","seats":8,"forced":"blinds","evaluate":"best5","streets":[{"name":"preflop","deal":{"down":2,"up":0,"board":0},"limits":"early","first":"left-of-blinds"},{"name":"flop","deal":{"down":0,"up":0,"board":3},"limits":"early","first":"left-of-dealer"},{"name":"turn","deal":{"down":0,"up":0,"board":1},"limits":"late","first":"left-of-dealer"},{"name":"river","deal":{"down":0,"up":0,"board":1},"limits":"late","first":"left-of-dealer"}]},"stud5":{"label":"Five-Card Stud","seats":8,"forced":"ante-bring-in","evaluate":"exact5","streets":[{"name":"second","deal":{"down":1,"up":1,"board":0},"limits":"early","first":"low-up"},{"name":"third","deal":{"down":0,"up":1,"board":0},"limits":"early","first":"high-showing"},{"name":"fourth","deal":{"down":0,"up":1,"board":0},"limits":"late","first":"high-showing"},{"name":"fifth","deal":{"down":0,"up":1,"board":0},"limits":"late","first":"high-showing"}]},"stud7":{"label":"Seven-Card Stud","seats":7,"forced":"ante-bring-in","evaluate":"best5","streets":[{"name":"third","deal":{"down":2,"up":1,"board":0},"limits":"early","first":"low-up"},{"name":"fourth","deal":{"down":0,"up":1,"board":0},"limits":"early","first":"high-showing"},{"name":"fifth","deal":{"down":0,"up":1,"board":0},"limits":"late","first":"high-showing"},{"name":"sixth","deal":{"down":0,"up":1,"board":0},"limits":"late","first":"high-showing"},{"name":"seventh","deal":{"down":1,"up":0,"board":0},"limits":"late","first":"high-showing"}]}});
+const GAME_NAMES=Object.freeze({draw:'Five-card draw',holdem:"Texas Hold'em",stud5:'Five-card stud',stud7:'Seven-card stud'});
 
 const encoder=new TextEncoder;
 const stable=value=>JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)
@@ -45,7 +52,7 @@ const WILD_PRESETS=Object.freeze({
 });
 const WILD_NAMES=Object.freeze({joker:'Jokers',deuces:'Deuces','one-eyed-jacks':'One-Eyed Jacks','mustached-kings':'Mustached Kings'
 	,'deuces-treys':'Deuces and Treys',kings:'Kings'});
-const SETTING_KEYS=Object.freeze(['variant','ante','minimum','maximum','finalMinimum','finalMaximum','raiseLimit','playerRaiseLimit','wild','customWild']);
+const SETTING_KEYS=Object.freeze(['game','variant','ante','minimum','maximum','finalMinimum','finalMaximum','raiseLimit','playerRaiseLimit','wild','customWild']);
 /** Checkbox names, as the offline wild-card menu shows them (WildCards::OPTIONS). */
 const WILD_OPTION_NAMES=Object.freeze({joker:'Joker',deuces:'Deuces','one-eyed-jacks':'One-Eyed Jacks','mustached-kings':'Mustached Kings'
 	,'deuces-treys':'Deuces and Treys',kings:'Kings',custom:'Custom'});
@@ -74,6 +81,8 @@ export function validateOnlineSettings(settings=DEFAULT_ONLINE_SETTINGS)
 	if(!settings||typeof settings!=='object'||Array.isArray(settings))throw new TypeError('Online table settings must be an object');
 	if(Object.keys(settings).some(key=>!SETTING_KEYS.includes(key)))throw new TypeError('Unknown online table setting');
 	if((settings.variant??'anything')!=='anything')throw new RangeError('Online tables use Anything Opens');
+	const game=settings.game??'draw';
+	if(typeof game!=='string'||!Object.hasOwn(ONLINE_GAMES,game))throw new RangeError('Unknown online game');
 	const integer=(key,low,high,fallback)=>{
 		const value=settings[key]??fallback;
 		if(!Number.isSafeInteger(value)||value<low||value>high)
@@ -94,7 +103,8 @@ export function validateOnlineSettings(settings=DEFAULT_ONLINE_SETTINGS)
 		||custom.some((card,index)=>index>0&&card<=custom[index-1])
 	)throw new RangeError('Custom wild cards must be sorted, unique card ids');
 	if(custom.length&&!wild.includes('custom'))throw new RangeError('Custom wild cards require the Custom option');
-	return Object.freeze({variant:'anything',ante,minimum,maximum,finalMinimum,finalMaximum,raiseLimit,playerRaiseLimit
+	// Five-card draw leaves the game out, so its tables keep the settings, proofs and hashes they have always had.
+	return Object.freeze({...(game==='draw'?{}:{game}),variant:'anything',ante,minimum,maximum,finalMinimum,finalMaximum,raiseLimit,playerRaiseLimit
 		,wild:Object.freeze(wild),customWild:Object.freeze([...custom])});
 }
 
@@ -118,10 +128,13 @@ export function onlineDeck(settings)
 export function describeOnlineSettings(settings)
 {
 	settings=validateOnlineSettings(settings);
-	const parts=['Anything opens',settings.ante?`Ante ${settings.ante}`:'No ante'];
+	const game=settings.game??'draw',forced=ONLINE_GAMES[game].forced;
+	const parts=game==='draw'?['Anything opens',settings.ante?`Ante ${settings.ante}`:'No ante']
+		:[GAME_NAMES[game],forced==='blinds'?`Blinds ${Math.min(settings.ante,settings.minimum)}/${settings.minimum}`
+			:`Ante ${settings.ante}, bring-in ${settings.minimum}`];
 	const range=(low,high)=>low===high?`${low}`:`${low}–${high}`;
 	const before=range(settings.minimum,settings.maximum),after=range(settings.finalMinimum,settings.finalMaximum);
-	parts.push(before===after?`Bets ${before}`:`Bets ${before}, ${after} after the draw`);
+	parts.push(before===after?`Bets ${before}`:`Bets ${before}, ${after} ${game==='draw'?'after the draw':'on later streets'}`);
 	parts.push(settings.raiseLimit===0?'No raises'
 		:`${settings.raiseLimit} raise${settings.raiseLimit===1?'':'s'}`
 			+(settings.playerRaiseLimit<settings.raiseLimit?`, ${settings.playerRaiseLimit} each`:''));
@@ -176,7 +189,7 @@ export function onlineSettingsForm(settings=DEFAULT_ONLINE_SETTINGS)
 	let values;
 	try{values=validateOnlineSettings(settings);}
 	catch{values=DEFAULT_ONLINE_SETTINGS;}
-	const copy=value=>({...value,wild:[...value.wild],customWild:[...value.customWild]});
+	const copy=value=>({game:'draw',...value,wild:[...value.wild],customWild:[...value.customWild]});
 	const limit=(name,label,help,low,high)=>({name,label,help,type:'number',min:low,max:high,default:DEFAULT_ONLINE_SETTINGS[name]});
 	return {
 		title:'House rules'
@@ -185,6 +198,11 @@ export function onlineSettingsForm(settings=DEFAULT_ONLINE_SETTINGS)
 		,defaults:copy(DEFAULT_ONLINE_SETTINGS)
 		,groups:[
 			{legend:'Opponents',fields:[],summary:()=>'1 · heads-up'}
+			,{
+				legend:'Game'
+				,summary:value=>GAME_NAMES[value.game]??GAME_NAMES.draw
+				,fields:[{name:'game',label:'',type:'select',options:Object.keys(ONLINE_GAMES).map(id=>({value:id,label:GAME_NAMES[id]}))}]
+			}
 			,{
 				legend:'Wild cards'
 				,summary:value=>wildSelectionLabel(value.wild)
@@ -274,6 +292,43 @@ export function evaluateHand(cards,wildCards=[])
 	return best;
 }
 
+/** The best five-card hand in five to seven cards, as Hand::best finds it: every five-card subset is scored. */
+export function bestHand(cards,wildCards=[])
+{
+	if(!Array.isArray(cards)||cards.length<5||cards.length>7||new Set(cards).size!==cards.length)
+	throw new TypeError('A best hand requires five to seven distinct cards');
+	if(cards.length===5)return evaluateHand(cards,wildCards);
+	const sorted=[...cards].sort((a,b)=>a-b),count=sorted.length;let best=null;
+	for(let a=0;a<count-4;a++)for(let b=a+1;b<count-3;b++)for(let c=b+1;c<count-2;c++)for(let d=c+1;d<count-1;d++)for(let e=d+1;e<count;e++)
+	{
+		const candidate=evaluateHand([sorted[a],sorted[b],sorted[c],sorted[d],sorted[e]],wildCards);
+		if(!best||candidate.score>best.score)best=candidate;
+	}
+	return best;
+}
+
+/** Rank one to four exposed stud cards by matched ranks and high cards, as Hand::showing does. */
+export function showingHand(cards,wildCards=[])
+{
+	const wild=new Set(wildCards);
+	if(!Array.isArray(cards)||cards.length<1||cards.length>4||new Set(cards).size!==cards.length
+		||!cards.every(card=>Number.isSafeInteger(card)&&card>=0&&card<=53&&(card<52||wild.has(card)))
+	)throw new TypeError('A showing hand has one to four distinct cards');
+	const counts=new Map;let wilds=0;
+	for(const card of cards)
+	{
+		if(wild.has(card)){wilds++;continue;}
+		counts.set(card%13+2,(counts.get(card%13+2)??0)+1);
+	}
+	const order=()=>[...counts.keys()].sort((a,b)=>counts.get(b)-counts.get(a)||b-a);
+	let groups=order();
+	if(wilds){const target=groups[0]??14;counts.set(target,(counts.get(target)??0)+wilds);groups=order();}
+	const first=counts.get(groups[0]),second=groups.length>1?counts.get(groups[1]):0;
+	const category=first===4?7:first===3?3:first===2&&second===2?2:first===2?1:0;
+	let score=category;for(const rank of [...groups,0,0,0,0,0].slice(0,5))score=score*15+rank;
+	return {category,ranks:groups,score,name:HAND_LABELS[category]};
+}
+
 export class OnlineDeal
 {
 	/**
@@ -298,6 +353,8 @@ export class OnlineDeal
 		// disagree about them fail at the initial ready handshake instead of mid-hand.
 		// The room lobby reports a table without settings as null; it plays the defaults, like an omitted value.
 		this.settings=validateOnlineSettings(settings??DEFAULT_ONLINE_SETTINGS);this.wild=onlineWildCards(this.settings);this.deckIds=onlineDeck(this.settings);
+		// A street game deals and bets street by street and turns some cards face up; draw keeps its own stages.
+		this.game=this.settings.game??'draw';this.rules=ONLINE_GAMES[this.game];this.streetGame=this.game!=='draw';
 		this.context=`php-poker:${ONLINE_DEAL_VERSION}:${ONLINE_RULES}:${root}:${sessionId}:${stable(this.settings)}`;
 		this.corpus=api.prepareCorpus(this.deckIds,{context:`${this.context}:corpus`});
 		this.shuffleOrder=rotate(this.players,this.players.indexOf(breaker));
@@ -310,6 +367,9 @@ export class OnlineDeal
 			,drawRecipient:null,bankrolls:this.players.map((player,id)=>({id,player,stack:500,folded:false,bet:0,totalBet:0,drawCount:null,lastAction:''}))
 			,pot:0,highest:0,raises:0,raiseCounts:this.players.map(()=>0),opener:null,turnQueue:[],awards:[],reveal:false,revealed:this.players.map(()=>null)
 			,message:'',history:[],outcome:null
+			// Street games only: the street being played, the board's allocations, the allocations dealt this street,
+			// who still has to turn dealt cards face up, and every card proved face up so far by allocation.
+			,...(this.streetGame?{street:0,board:[],dealing:[],openQueue:[],opened:{}}:{})
 		};
 		this.beginHand(false);
 	}
@@ -438,6 +498,7 @@ export class OnlineDeal
 	currentActor()
 	{
 		if(this.state.stage==='shuffle')return this.shuffleOrder[this.state.shuffleIndex];
+		if(this.state.stage==='open')return this.state.openQueue[0];
 		if(this.state.stage==='deal'||(this.state.stage==='draw'&&this.state.drawAllocations.length))
 		{
 			const allocation=this.relevantAllocations().map(id=>this.state.allocations[id]).find(card=>!this.allocationComplete(card));
@@ -455,7 +516,33 @@ export class OnlineDeal
 	}
 
 	allocationComplete(allocation){return this.requiredRemover(allocation)===allocation.recipient;}
-	relevantAllocations(){return this.state.stage==='draw'?this.state.drawAllocations:this.state.hands.flat();}
+	relevantAllocations()
+	{
+		if(this.streetGame)return this.state.dealing;
+		return this.state.stage==='draw'?this.state.drawAllocations:this.state.hands.flat();
+	}
+	/** @return list<int> Board cards proved face up so far, in dealing order. */
+	boardCards()
+	{
+		const cards=[];
+		for(const allocation of this.state.board??[])
+		{
+			const card=this.state.opened[allocation];if(!Number.isSafeInteger(card))break;cards.push(card);
+		}
+		return cards;
+	}
+	/** A seat's exposed cards, in dealing order, for stud's bring-in and first-to-act rules. */
+	showing(player)
+	{
+		return this.handAllocations(player).filter(allocation=>this.state.allocations[allocation].face==='up')
+			.map(allocation=>this.state.opened[allocation]).filter(Number.isSafeInteger);
+	}
+	/** The hand a revealed seat plays: its own cards, with the board in a street game. */
+	handValue(player)
+	{
+		const cards=this.state.revealed[this.seat(player)];
+		return this.streetGame?bestHand([...cards,...this.boardCards()],this.wild):evaluateHand(cards,this.wild);
+	}
 	shuffleContext(player){return `${this.context}:hand:${this.state.handNumber}:shuffle:${this.state.shuffleIndex}:${player}`;}
 	drawContext(index,player){return `${this.context}:hand:${this.state.handNumber}:allocation:${index}:remove:${player}`;}
 	openContext(index,player){return `${this.context}:hand:${this.state.handNumber}:allocation:${index}:open:${player}`;}
@@ -508,6 +595,7 @@ export class OnlineDeal
 			const action=plan.actions[index];if(!action)throw new Error('Stored shuffle proof is incomplete');return clone(action);
 		}
 		if(this.state.stage==='deal'||(this.state.stage==='draw'&&this.state.drawAllocations.length))return this.makeLayerAction();
+		if(this.state.stage==='open')return this.makeOpenAction();
 		if(this.state.stage==='reveal')return this.makeRevealAction();
 		return this.intent?clone(this.intent):null;
 	}
@@ -531,12 +619,35 @@ export class OnlineDeal
 	{
 		const layer=this.state.layers.find(item=>item.player===this.localPlayer)?.descriptor;
 		if(!layer)throw new Error('Local encryption layer is unavailable');
-		const items=this.handAllocations(this.localPlayer).map(allocation=>{
+		// Cards already proved face up need no second opening.
+		const items=this.handAllocations(this.localPlayer).filter(allocation=>!Object.hasOwn(this.state.opened??{},allocation)).map(allocation=>{
 			const card=this.privateEntry(allocation)?.id;if(!Number.isSafeInteger(card))throw new Error('A private showdown card is unavailable');
 			return {allocation,...this.api.openCard(this.state.allocations[allocation].value,this.corpus.definitions.indexOf(card),this.keyForLocal(),layer,this.corpus,
 				{context:this.openContext(allocation,this.localPlayer)})};
 		});
 		return {type:'reveal-cards',items};
+	}
+
+	/** Prove every card dealt to this player this street that the rules turn face up: stud up-cards and board cards. */
+	makeOpenAction()
+	{
+		const layer=this.state.layers.find(item=>item.player===this.localPlayer)?.descriptor;
+		if(!layer)throw new Error('Local encryption layer is unavailable');
+		const items=this.pendingOpens(this.localPlayer).map(allocation=>{
+			const card=this.privateEntry(allocation)?.id;if(!Number.isSafeInteger(card))throw new Error('A dealt card is unavailable');
+			return {allocation,...this.api.openCard(this.state.allocations[allocation].value,this.corpus.definitions.indexOf(card),this.keyForLocal(),layer,this.corpus,
+				{context:this.openContext(allocation,this.localPlayer)})};
+		});
+		if(!items.length)throw new Error('No dealt cards await opening');
+		return {type:'open-cards',items};
+	}
+	/** @return list<int> This street's face-up allocations a player has been dealt and not yet proved. */
+	pendingOpens(player)
+	{
+		return this.state.dealing.filter(allocation=>{
+			const card=this.state.allocations[allocation];
+			return card.recipient===player&&card.face!=='down'&&!Object.hasOwn(this.state.opened,allocation);
+		});
 	}
 
 	/** Queue one UI intent. Cryptographic protocol steps continue automatically. */
@@ -573,6 +684,7 @@ export class OnlineDeal
 		// Every opening is verified and hashed as it arrives, but only the last one needs the room's two reports.
 		// Keeping the reveal actions in one batch removes a redundant confirmation between visible hands and payout.
 		if(action?.type==='reveal-cards')return this.state.turnQueue.length<=1;
+		if(action?.type==='open-cards')return this.state.openQueue.length<=1;
 		if(action?.type!=='card-layers')return true;
 		const actor=this.currentActor(),cards=new Set(action.items?.map(item=>item.card));
 		return this.relevantAllocations().every(index=>{
@@ -596,6 +708,7 @@ export class OnlineDeal
 			if(this.state.stage==='shuffle')this.applyShuffleAction(actor,action);
 			else if(this.state.stage==='deal'||(this.state.stage==='draw'&&this.state.drawAllocations.length))this.applyLayerAction(actor,action);
 			else if(this.state.stage==='draw')this.applyDrawChoice(actor,action);
+			else if(this.state.stage==='open')this.applyOpenAction(actor,action);
 			else if(this.state.stage==='reveal')this.applyRevealAction(actor,action);
 			else this.applyPokerAction(actor,action);
 		}
@@ -655,6 +768,7 @@ export class OnlineDeal
 
 	beginDeal()
 	{
+		if(this.streetGame){this.state.hands=this.players.map(()=>[]);this.dealStreet(0);return;}
 		const order=this.ordered(this.players[this.state.dealer],true);this.state.hands=this.players.map(()=>[]);
 		for(let round=0;round<5;round++)for(const recipient of order)
 		{
@@ -663,6 +777,106 @@ export class OnlineDeal
 			this.state.hands[this.seat(recipient)].push(id);
 		}
 		this.state.stage='deal';this.state.allocationIndex=0;this.state.message='Dealing five verified private cards.';
+	}
+
+	/**
+	 * Allocate one street's cards from the verified deck: face-down and then face-up cards to each seat from the
+	 * dealer's left, then board cards. A board card is dealt to one player, who must prove it face up at once; the
+	 * two players take the board cards in turn, so neither always sees them first.
+	 */
+	dealStreet(index)
+	{
+		const street=this.rules.streets[index],order=this.ordered(this.players[this.state.dealer],true).filter(player=>!this.bankroll(player).folded);
+		this.state.street=index;this.state.dealing=[];
+		const allocate=(recipient,face)=>{
+			if(this.state.nextDeckIndex>=this.state.deck.length)throw new Error('The verified stock is exhausted');
+			const id=this.state.allocations.length,deckIndex=this.state.nextDeckIndex++,value=this.state.deck[deckIndex];
+			this.state.allocations.push({hand:this.state.handNumber,recipient,deckIndex,value,removed:[],face});
+			this.state.dealing.push(id);return id;
+		};
+		for(const face of ['down','up'])for(let round=0;round<street.deal[face];round++)for(const recipient of order)
+		this.state.hands[this.seat(recipient)].push(allocate(recipient,face));
+		for(let count=0;count<street.deal.board;count++)this.state.board.push(allocate(order[this.state.board.length%order.length],'board'));
+		this.state.stage='deal';this.state.allocationIndex=0;
+		this.state.message=index===0?'Dealing verified private cards.':`Dealing the ${street.name}${street.deal.board?'':' street'}.`;
+		if(index>0&&!street.deal.board)this.history(`${street.name[0].toUpperCase()+street.name.slice(1)} street.`);
+	}
+
+	/** Once a street's cards have reached their players, have the face-up ones proved before anyone bets. */
+	afterStreetDealt()
+	{
+		this.state.openQueue=this.ordered(this.players[this.state.dealer],true).filter(player=>this.pendingOpens(player).length>0);
+		if(this.state.openQueue.length){this.state.stage='open';this.state.message='Turning the dealt cards face up.';}
+		else this.beginStreetBetting();
+	}
+
+	applyOpenAction(actor,action)
+	{
+		const expected=this.pendingOpens(actor),layer=this.state.layers.find(item=>item.player===actor)?.descriptor;
+		if(action.type!=='open-cards'||!layer||!Array.isArray(action.items)||action.items.length!==expected.length
+			||action.items.some((item,index)=>item?.allocation!==expected[index]))throw new Error('Card opening targets the wrong cards');
+		for(const item of action.items)
+		if(!this.api.verifyCardOpening(this.state.allocations[item.allocation].value,item,layer,this.corpus,
+			{context:this.openContext(item.allocation,actor)}))throw new Error('Dealt card opening did not verify');
+		for(const item of action.items)this.state.opened[item.allocation]=this.corpus.definitions[item.card];
+		this.state.openQueue.shift();
+		if(!this.state.openQueue.length)this.beginStreetBetting();
+	}
+
+	/**
+	 * Open a street's betting round. Heads-up, the dealer posts the small blind and acts first before the flop and
+	 * last after it. In stud the lower exposed card brings in for the minimum bet on the first street, and the better
+	 * exposed hand acts first afterwards; a tie goes to the seat on the dealer's left.
+	 */
+	beginStreetBetting()
+	{
+		const index=this.state.street,street=this.rules.streets[index],dealer=this.players[this.state.dealer];
+		const order=this.ordered(dealer,true),active=this.activePlayers();
+		if(index>0)
+		{
+			this.state.highest=0;this.state.raises=0;this.state.raiseCounts=this.players.map(()=>0);
+			for(const player of this.state.bankrolls)player.bet=0;
+		}
+		let first=order.find(player=>active.includes(player)),queue=null;
+		if(street.first==='left-of-blinds')first=dealer;
+		else if(street.first==='low-up')
+		{
+			const value=card=>card>=52?1000+card:(card%13)*4+Math.floor(card/13);
+			let lowest=Infinity;
+			for(const player of order.filter(player=>active.includes(player)))
+			{
+				const card=value(this.showing(player)[0]);if(card<lowest){lowest=card;first=player;}
+			}
+			const seat=this.bankroll(first),amount=Math.min(this.settings.minimum,seat.stack);
+			this.pay(first,amount);seat.bet=amount;this.state.highest=Math.max(this.state.highest,amount);this.record(first,`Brings in ${amount}`);
+			queue=this.ordered(first,false);
+		}
+		else if(street.first==='high-showing')
+		{
+			let best=-1;
+			for(const player of order.filter(player=>active.includes(player)))
+			{
+				const score=showingHand(this.showing(player).slice(0,4),this.wild).score;if(score>best){best=score;first=player;}
+			}
+		}
+		queue??=[first,...this.ordered(first,false)];
+		const funded=active.filter(player=>this.bankroll(player).stack>0);
+		// With fewer than two players able to bet there is no round and the cards run out, unless the one player
+		// with chips still owes a forced bet: a small blind must call or fold against an all-in big blind.
+		const owing=funded.filter(player=>this.state.highest>this.bankroll(player).bet);
+		if(funded.length<2&&!owing.length){this.endStreet();return;}
+		this.state.stage='betting';this.state.turnQueue=queue.filter(player=>funded.length<2?owing.includes(player):funded.includes(player));
+		// "Pre-flop betting.", "Flop betting.", "Fourth street betting.", as the offline table words them.
+		const label=street.name==='preflop'?'Pre-flop':street.name[0].toUpperCase()+street.name.slice(1)+(this.rules.forced==='blinds'?'':' street');
+		this.state.message=street.first==='low-up'?`${this.name(first)} brings in.`:`${label} betting.`;
+	}
+
+	/** After a street's betting: deal the next street, or open the remaining hands when there is none. */
+	endStreet()
+	{
+		this.normalizeRound();
+		if(this.state.street+1<this.rules.streets.length)this.dealStreet(this.state.street+1);
+		else this.beginReveal();
 	}
 
 	applyLayerAction(actor,action)
@@ -693,6 +907,7 @@ export class OnlineDeal
 		}
 		this.state.allocationIndex=this.relevantAllocations().filter(index=>this.allocationComplete(this.state.allocations[index])).length;
 		if(!this.relevantAllocations().every(index=>this.allocationComplete(this.state.allocations[index])))return;
+		if(this.streetGame){this.afterStreetDealt();return;}
 		if(this.state.stage==='deal')this.beginBetting();else this.completeDraw(this.state.drawRecipient,this.state.drawAllocations.length);
 	}
 
@@ -729,13 +944,23 @@ export class OnlineDeal
 
 	applyRevealAction(actor,action)
 	{
-		const hand=this.handAllocations(actor),layer=this.state.layers.find(item=>item.player===actor)?.descriptor;
-		if(action.type!=='reveal-cards'||!layer||!Array.isArray(action.items)||action.items.length!==5
+		const held=this.handAllocations(actor),layer=this.state.layers.find(item=>item.player===actor)?.descriptor;
+		// A draw hand is opened whole; a street game opens only the cards that are still face down.
+		const hand=this.streetGame?held.filter(allocation=>!Object.hasOwn(this.state.opened,allocation)):held;
+		if(action.type!=='reveal-cards'||!layer||!Array.isArray(action.items)||action.items.length!==(this.streetGame?hand.length:5)
 			||action.items.some((item,index)=>item?.allocation!==hand[index]))throw new Error('Showdown opening targets the wrong cards');
 		for(const item of action.items)
 		if(!this.api.verifyCardOpening(this.state.allocations[item.allocation].value,item,layer,this.corpus,
 			{context:this.openContext(item.allocation,actor)}))throw new Error('Showdown card opening did not verify');
-		const cards=action.items.map(item=>this.corpus.definitions[item.card]);evaluateHand(cards,this.wild);this.state.revealed[this.seat(actor)]=cards;
+		let cards=action.items.map(item=>this.corpus.definitions[item.card]);
+		if(this.streetGame)
+		{
+			const shown=new Map(action.items.map(item=>[item.allocation,this.corpus.definitions[item.card]]));
+			cards=held.map(allocation=>shown.get(allocation)??this.state.opened[allocation]);
+			bestHand([...cards,...this.boardCards()],this.wild);
+		}
+		else evaluateHand(cards,this.wild);
+		this.state.revealed[this.seat(actor)]=cards;
 		this.state.turnQueue.shift();
 		if(!this.state.turnQueue.length)this.settle(true);else this.state.message='Opening the remaining hand.';
 	}
@@ -756,7 +981,7 @@ export class OnlineDeal
 			const player=this.bankroll(actor),raising=this.state.highest>0;
 			this.pay(actor,action.amount-player.bet);player.bet=action.amount;this.state.highest=action.amount;
 			if(raising){this.state.raises++;this.state.raiseCounts[this.seat(actor)]++;}
-			if(this.state.stage==='betting'&&this.state.opener===null)this.state.opener=actor;
+			if(!this.streetGame&&this.state.stage==='betting'&&this.state.opener===null)this.state.opener=actor;
 			this.state.turnQueue=this.ordered(actor,false)
 				.filter(player=>!this.bankroll(player).folded&&this.bankroll(player).stack>0);
 			this.record(actor,(raising?'Raises to ':'Bets ')+action.amount);
@@ -776,6 +1001,7 @@ export class OnlineDeal
 		const active=this.activePlayers();
 		if(active.length===1){this.settle(false);return;}
 		if(this.state.turnQueue.length)return;
+		if(this.streetGame){this.endStreet();return;}
 		this.normalizeRound();
 		if(this.state.stage==='final-betting'){this.beginReveal();return;}
 		if(this.state.opener===null)
@@ -796,8 +1022,28 @@ export class OnlineDeal
 		this.state.reveal=false;this.state.revealed=this.players.map(()=>null);this.state.outcome=null;this.privateCards=[];this.intent=null;
 		for(const player of this.state.bankrolls)
 		{player.folded=false;player.bet=0;player.totalBet=0;player.drawCount=null;player.lastAction='';}
-		const dealer=this.players[this.state.dealer],ante=Math.min(this.settings.ante,this.bankroll(dealer).stack);if(ante)this.pay(dealer,ante);
+		const dealer=this.players[this.state.dealer];
+		if(this.streetGame)
+		{
+			this.state.street=0;this.state.board=[];this.state.dealing=[];this.state.openQueue=[];this.state.opened={};
+		}
+		if(!this.streetGame){const ante=Math.min(this.settings.ante,this.bankroll(dealer).stack);if(ante)this.pay(dealer,ante);}
 		this.state.message='Cryptographically shuffling deck.';this.history(`Hand ${this.state.handNumber}: ${this.name(dealer)} deals.`);
+		if(this.streetGame)
+		{
+			// Forced bets go in before the shuffle, as draw's ante does: blinds for hold'em, an ante each for stud.
+			const post=(player,amount,label)=>{
+				const seat=this.bankroll(player),paid=Math.min(amount,seat.stack);if(!paid)return;
+				this.pay(player,paid);
+				if(label){seat.bet=paid;this.state.highest=Math.max(this.state.highest,paid);this.record(player,`${label} ${paid}`);}
+			};
+			if(this.rules.forced==='blinds')
+			{
+				post(dealer,Math.min(this.settings.ante,this.settings.minimum),'Small blind');
+				post(this.ordered(dealer,false)[0],this.settings.minimum,'Big blind');
+			}
+			else for(const player of this.ordered(dealer,true))post(player,this.settings.ante,null);
+		}
 		if(this.saved.plan?.hand<this.state.handNumber)delete this.saved.plan;
 		this.saveSaved();
 	}
@@ -842,7 +1088,7 @@ export class OnlineDeal
 			winners=[];
 			for(const player of active)
 			{
-				const score=evaluateHand(this.state.revealed[this.seat(player)],this.wild).score;
+				const score=this.handValue(player).score;
 				if(score>best){best=score;winners=[player];}else if(score===best)winners.push(player);
 			}
 		}
@@ -850,12 +1096,12 @@ export class OnlineDeal
 		const each=Math.floor(this.state.pot/winners.length),odd=this.state.pot%winners.length;this.state.awards=[];
 		for(const [index,player] of orderedWinners.entries())
 		{
-			const amount=each+(index<odd?1:0),handName=reveal?evaluateHand(this.state.revealed[this.seat(player)],this.wild).name:null;
+			const amount=each+(index<odd?1:0),handName=reveal?this.handValue(player).name:null;
 			this.bankroll(player).stack+=amount;this.state.awards.push({player,amount,handName});
 		}
 		const names=orderedWinners.map(player=>this.name(player));
 		this.state.message=names.join(' and ')+(winners.length>1?' split ':' wins ')+this.state.pot+' chips'
-			+(reveal?' with '+evaluateHand(this.state.revealed[this.seat(orderedWinners[0])],this.wild).name.toLowerCase():' uncontested')+'.';
+			+(reveal?' with '+this.handValue(orderedWinners[0]).name.toLowerCase():' uncontested')+'.';
 		this.state.pot=0;this.state.stage='showdown';this.state.turnQueue=[];this.state.reveal=reveal;this.history(this.state.message);
 		this.retireLocalKey(this.state.handNumber);
 		const solvent=this.players.filter(player=>this.bankroll(player).stack>0);
@@ -872,8 +1118,9 @@ export class OnlineDeal
 		if(['showdown','redeal'].includes(this.state.stage))return {...clone(EMPTY_LEGAL),next:true,loan:0};
 		if(this.state.stage==='draw'&&!this.state.drawAllocations.length)return {...clone(EMPTY_LEGAL),draw:true,maximumDiscards:5};
 		if(!['betting','final-betting'].includes(this.state.stage))return clone(EMPTY_LEGAL);
-		const seat=this.bankroll(player),due=this.state.highest-seat.bet,opening=this.state.stage==='betting'&&this.state.opener===null;
-		const final=this.state.stage==='final-betting';
+		const seat=this.bankroll(player),due=this.state.highest-seat.bet,opening=!this.streetGame&&this.state.stage==='betting'&&this.state.opener===null;
+		// A street names one of the two limit tiers; draw's final round is its late one.
+		const final=this.streetGame?this.rules.streets[this.state.street].limits==='late':this.state.stage==='final-betting';
 		const increment=final?this.settings.finalMinimum:this.settings.minimum,largest=final?this.settings.finalMaximum:this.settings.maximum;
 		const minimum=this.state.highest+increment,maximum=Math.min(seat.bet+seat.stack,this.state.highest+largest);
 		const canRaise=seat.stack>due&&maximum>=minimum&&(this.state.highest===0||(this.state.raises<this.settings.raiseLimit
@@ -923,23 +1170,30 @@ export class OnlineDeal
 
 	view()
 	{
-		const ready=!['shuffle','deal'].includes(this.state.stage),phase=({
-			shuffle:'ready',deal:'ready',betting:'betting',draw:'draw','final-betting':'final-betting',reveal:'final-betting'
-			,showdown:'showdown','match-over':'showdown',redeal:'redeal'
+		// A street game deals again in the middle of a hand; the table stays up and shows the browsers at work.
+		const midHand=this.streetGame&&this.state.street>0&&['deal','open'].includes(this.state.stage);
+		const ready=!['shuffle','deal','open'].includes(this.state.stage)||midHand,phase=midHand?'betting':({
+			shuffle:'ready',deal:'ready',open:'ready',betting:'betting',draw:'draw','final-betting':'final-betting'
+			,reveal:this.streetGame?'betting':'final-betting',showdown:'showdown','match-over':'showdown',redeal:'redeal'
 		})[this.state.stage]??'ready';
 		const viewPlayers=[this.localPlayer,...this.players.filter(player=>player!==this.localPlayer)],turn=this.currentActor();
 		// The shuffle, every private deal and the showdown reveal run between the browsers by themselves, so nobody
 		// has a turn to take; the activity names whose browser is working, and what it is doing, for the plates.
-		const stage=this.state.stage,automatic=!ready||(stage==='draw'&&this.state.drawAllocations.length>0)||stage==='reveal';
+		const stage=this.state.stage,automatic=!ready||midHand||(stage==='draw'&&this.state.drawAllocations.length>0)||stage==='reveal';
 		const activity=automatic?{seat:viewPlayers.indexOf(turn),stage:stage==='shuffle'||stage==='reveal'?stage:'deal'}:null;
+		const board=this.boardCards();
 		const players=viewPlayers.map((player,index)=>{
 			const source=this.bankroll(player),allocations=this.handAllocations(player),revealed=this.state.revealed[this.seat(player)];
+			// Another seat shows only what it has proved: its exposed cards while it is in the hand, all of them at a showdown.
 			const cards=player===this.localPlayer?allocations.map(allocation=>this.privateEntry(allocation)?.id??null)
-				:revealed??Array(allocations.length).fill(null);
-			const visible=cards.length===5&&cards.every(Number.isSafeInteger);
+				:revealed??allocations.map(allocation=>source.folded?null:this.state.opened?.[allocation]??null);
+			const known=cards.every(Number.isSafeInteger);
+			const handName=this.streetGame?(known&&cards.length+board.length>=5?bestHand([...cards,...board],this.wild).name:null)
+				:(known&&cards.length===5?evaluateHand(cards,this.wild).name:null);
 			return {id:index,name:player===this.localPlayer?'You':player,stack:source.stack,debt:0,folded:source.folded,bet:source.bet
 				,totalBet:source.totalBet,drawCount:source.drawCount,lastAction:source.lastAction,creditUsed:false
-				,portrait:index===0?'you':'ada',isHuman:index===0,cards,handName:visible?evaluateHand(cards,this.wild).name:null,net:source.stack-500};
+				,portrait:index===0?'you':'ada',isHuman:index===0,cards,handName,net:source.stack-500
+				,...(this.streetGame?{faces:allocations.map(allocation=>this.state.allocations[allocation].face==='up'?'up':'down')}:{})};
 		});
 		const awards=this.state.awards.map(award=>({seat:viewPlayers.indexOf(award.player),amount:award.amount,handName:award.handName}));
 		return {
@@ -951,6 +1205,7 @@ export class OnlineDeal
 			,legalActions:ready?this.legalActionsFor(this.localPlayer):clone(EMPTY_LEGAL)
 			,stockCount:Math.max(0,this.state.deck.length-this.state.nextDeckIndex),discardCount:this.state.discards.length
 			,screen:'table',canContinue:false,generation:ready?this.state.handNumber:Math.max(0,this.state.handNumber-1),error:this.localError,pace:'normal'
+			,...(this.streetGame?{game:this.game,street:this.rules.streets[this.state.street].name,streetIndex:this.state.street,board}:{})
 		};
 	}
 
@@ -964,8 +1219,8 @@ export class OnlineDeal
 /** Install the protocol constructor after the mental-poker primitive and before the browser bridge. */
 export function activate({session})
 {
-	const api=Object.freeze({OnlineDeal,ONLINE_ACTION_TYPES,ONLINE_DEAL_VERSION,ONLINE_RULES,KEPT_TABLES,DEFAULT_ONLINE_SETTINGS
-		,cardLabel,describeOnlineSettings,evaluateHand,limitsLabel,onlineDeck,onlineSettingsForm,onlineWildCards,readOnlyStorage
+	const api=Object.freeze({OnlineDeal,ONLINE_ACTION_TYPES,ONLINE_DEAL_VERSION,ONLINE_GAMES,ONLINE_RULES,KEPT_TABLES,DEFAULT_ONLINE_SETTINGS
+		,bestHand,cardLabel,describeOnlineSettings,evaluateHand,showingHand,limitsLabel,onlineDeck,onlineSettingsForm,onlineWildCards,readOnlyStorage
 		,validateOnlineSettings,wildSelectionLabel});
 	session.pokerOnline=api;
 	return()=>{if(session.pokerOnline===api)delete session.pokerOnline;};

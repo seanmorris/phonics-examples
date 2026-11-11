@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as mentalPoker from '../games/php-poker/browser/mental-poker-source.mjs';
-import {OnlineDeal,ONLINE_ACTION_TYPES,KEPT_TABLES,evaluateHand,readOnlyStorage} from '../games/php-poker/browser/online-deal.mjs';
+import {OnlineDeal,ONLINE_ACTION_TYPES,ONLINE_GAMES,KEPT_TABLES,bestHand,describeOnlineSettings,evaluateHand,onlineSettingsForm,readOnlyStorage,showingHand
+	,validateOnlineSettings} from '../games/php-poker/browser/online-deal.mjs';
 import {
 	TERMINAL_ROOM_ERRORS,applyOnlineCommand,decorateOnlineView,firstHouseRules,freezeOnlineDispute
 	,houseRulesSeenKey,matrixPlayerName,pendingPokerView,pokerCommandBatch,retryRoomWrite,seatStorage,sheetCell
@@ -407,3 +408,250 @@ test('a run of a table stops writing its record once another tab takes the seat'
 	assert.equal(store.getItem('record'),'second','the new run writes');
 });
 
+
+// Street games online: hold'em and stud deal street by street and prove some cards face up as they are dealt.
+const streetTable=async(game,root,settings={})=>{
+	const stores={alice:storage(),bob:storage()},options={
+		api:mentalPoker,root,sessionId:root+'-session',players:['alice','bob'],breaker:'alice',rounds:16,settings:{game,...settings}
+	};
+	const peers={
+		alice:new OnlineDeal({...options,localPlayer:'alice',storage:stores.alice})
+		,bob:new OnlineDeal({...options,localPlayer:'bob',storage:stores.bob})
+	};
+	const history=[];
+	const advance=async action=>{
+		const actor=peers.alice.currentActor();action??=peers[actor].nextAction();
+		assert.ok(action,`${actor} supplies the next action in ${peers.alice.publicState().stage}`);
+		assert.ok(ONLINE_ACTION_TYPES.includes(action.type));
+		assert.ok(Buffer.byteLength(JSON.stringify(action))<49152,`${action.type} fits one room action`);
+		const envelope={sequence:history.length+1,actor,pre_hash:await peers.alice.hash(),action};
+		const [left,right]=await Promise.all([peers.alice.apply(envelope),peers.bob.apply(envelope)]);
+		assert.deepEqual(left,right);history.push(structuredClone(envelope));
+		return action;
+	};
+	// Run the browsers' own steps (shuffle, deals, openings) until someone has a decision to make or the hand ends.
+	const settle=async()=>{
+		while(['shuffle','deal','open','reveal'].includes(peers.alice.publicState().stage))await advance();
+	};
+	const act=async(move,amount)=>{
+		const actor=peers.alice.currentActor();
+		peers[actor].command({type:move,...(amount===undefined?{}:{amount}),revision:history.length,generation:peers.alice.publicState().handNumber});
+		await advance();await settle();
+	};
+	return {peers,stores,options,history,advance,settle,act};
+};
+
+test('the online game table is the same data the PHP rules read',async()=>{
+	const published=JSON.parse(await readFile(new URL('../games/php-poker/variants.json',import.meta.url),'utf8'));
+	assert.deepEqual(ONLINE_GAMES,published.games);
+	const draw=validateOnlineSettings({}),holdem=validateOnlineSettings({game:'holdem'});
+	assert.equal('game' in draw,false,'a draw table keeps the settings object it always had');
+	assert.deepEqual(validateOnlineSettings({game:'draw'}),draw);
+	assert.equal(holdem.game,'holdem');
+	assert.throws(()=>validateOnlineSettings({game:'omaha'}),/Unknown online game/);
+	assert.equal(describeOnlineSettings({game:'holdem'}),"Texas Hold'em · Blinds 1/2 · Bets 2–20 · 3 raises");
+	assert.equal(describeOnlineSettings({game:'stud7',finalMinimum:4,finalMaximum:40}),'Seven-card stud · Ante 1, bring-in 2 · Bets 2–20, 4–40 on later streets · 3 raises');
+	assert.equal(describeOnlineSettings({}).startsWith('Anything opens · Ante 1'),true);
+	const form=onlineSettingsForm({game:'stud5'});
+	assert.equal(form.values.game,'stud5');assert.equal(form.defaults.game,'draw');
+	assert.deepEqual(form.groups.find(group=>group.legend==='Game').fields[0].options.map(option=>option.value),['draw','holdem','stud5','stud7']);
+	assert.ok(ONLINE_ACTION_TYPES.includes('open-cards'));
+});
+
+test('best-of-seven and stud showing hands score exactly as the PHP evaluator does',async()=>{
+	const {execFileSync}=await import('node:child_process');
+	let seed=20261111;const next=bound=>{seed=(seed*1103515245+12345)%2147483648;return seed%bound;};
+	const hands=[];
+	for(let trial=0;trial<400;trial++)
+	{
+		const deck=Array.from({length:52},(_,card)=>card),cards=[];
+		const size=trial<250?5+trial%3:1+trial%4;
+		for(let index=0;index<size;index++)cards.push(deck.splice(next(deck.length),1)[0]);
+		hands.push({cards,wild:trial%7===0?[cards[0]]:[]});
+	}
+	const php=JSON.parse(execFileSync('php',['-r',String.raw`
+require $argv[1].'/games/php-poker/autoload.php';
+$out=[];
+foreach(json_decode(stream_get_contents(STDIN),true) as $hand)
+{
+	$value=count($hand['cards'])>=5?PhpPoker\Hand::best($hand['cards'],$hand['wild']):PhpPoker\Hand::showing($hand['cards'],$hand['wild']);
+	$out[]=[$value['score'],$value['name'],$value['category']];
+}
+echo json_encode($out);
+`,new URL('../',import.meta.url).pathname],{encoding:'utf8',input:JSON.stringify(hands)}));
+	for(const [index,{cards,wild}] of hands.entries())
+	{
+		const value=cards.length>=5?bestHand(cards,wild):showingHand(cards,wild);
+		assert.deepEqual([value.score,value.name,value.category],php[index],`hand ${index}: ${cards.join(',')} wild ${wild.join(',')}`);
+	}
+	assert.throws(()=>bestHand([0,1,2,3]));assert.throws(()=>showingHand([]));
+});
+
+test('online hold\'em posts blinds, proves the board street by street and settles on the best five of seven',async()=>{
+	const table=await streetTable('holdem','$holdem'),{peers,history}=table;
+	assert.notEqual(peers.alice.context,new OnlineDeal({...table.options,settings:{},localPlayer:'alice',storage:storage()}).context,'the game is part of every proof context');
+	let state=peers.alice.publicState();
+	// Alice deals: she posts the small blind and bob the big blind before the shuffle.
+	assert.deepEqual(state.bankrolls.map(seat=>[seat.bet,seat.lastAction]),[[1,'Small blind 1'],[2,'Big blind 2']]);
+	assert.equal(state.pot,3);assert.equal(state.highest,2);
+	await table.settle();
+	state=peers.alice.publicState();
+	assert.equal(state.stage,'betting');assert.equal(state.street,0);assert.deepEqual(state.board,[]);
+	const holes={alice:peers.alice.privateHand(),bob:peers.bob.privateHand()};
+	assert.equal(holes.alice.length,2);assert.equal(holes.bob.length,2);
+	assert.equal(peers.alice.currentActor(),'alice','heads-up the dealer acts first before the flop');
+	let view=peers.alice.view();
+	assert.deepEqual([view.game,view.street,view.board,view.phase,view.turn],['holdem','preflop',[],'betting',0]);
+	assert.deepEqual(view.players[0].cards,holes.alice);assert.deepEqual(view.players[1].cards,[null,null]);
+	assert.deepEqual(view.players[0].faces,['down','down']);
+	assert.deepEqual([view.legalActions.call,view.legalActions.callAmount,view.legalActions.check,view.legalActions.pass,view.legalActions.minBet],[true,1,false,false,4]);
+	assert.equal(view.profile.game,'holdem');
+	await table.act('call');
+	assert.equal(peers.alice.currentActor(),'bob');
+	assert.deepEqual([peers.bob.view().legalActions.check,peers.bob.view().legalActions.bet],[true,true],'the big blind has its option');
+	// The flop is dealt as three private cards and then proved face up before anyone bets.
+	peers.bob.command({type:'check',revision:history.length,generation:1});await table.advance();
+	assert.equal(peers.alice.publicState().stage,'deal');
+	view=peers.bob.view();
+	assert.deepEqual([view.phase,view.turn,view.activity?.stage,view.street,view.board.length],['betting',-1,'deal','flop',0],'the table stays up while the flop is dealt');
+	const types=[];
+	while(['deal','open'].includes(peers.alice.publicState().stage))types.push((await table.advance()).type);
+	assert.deepEqual(types.filter(type=>type==='open-cards').length,2,'each player proves the board cards dealt to them');
+	assert.ok(types.indexOf('card-layers')<types.indexOf('open-cards'));
+	state=peers.alice.publicState();
+	assert.equal(state.stage,'betting');assert.equal(state.street,1);assert.equal(state.board.length,3);
+	assert.equal(new Set(state.board.map(allocation=>state.allocations[allocation].recipient)).size,2,'the board is shared between both dealers');
+	const flop=peers.alice.view().board;
+	assert.equal(flop.length,3);assert.deepEqual(peers.bob.view().board,flop);
+	assert.equal(new Set([...flop,...holes.alice,...holes.bob]).size,7);
+	assert.equal(peers.alice.currentActor(),'bob','after the flop the dealer acts last');
+	assert.equal(peers.alice.view().players[0].handName!==null,true);
+	assert.equal(peers.alice.view().players[1].handName,null);
+	assert.equal(peers.bob.view().legalActions.minBet,2);
+	// A forged opening and an opening by the wrong player are both rejected without changing state.
+	await table.act('check');await table.act('check');
+	state=peers.alice.publicState();
+	assert.equal(state.street,2);assert.equal(peers.alice.view().board.length,4);
+	assert.equal(peers.bob.view().legalActions.minBet,2);
+	await table.act('bet',2);await table.act('call');
+	assert.equal(peers.alice.publicState().street,3);
+	const board=peers.alice.view().board;
+	assert.equal(board.length,5);assert.deepEqual(board.slice(0,3),flop);
+	const transcript=JSON.stringify(history);
+	await table.act('check');
+	peers.alice.command({type:'check',revision:history.length,generation:1});await table.advance();
+	assert.equal(peers.alice.publicState().stage,'reveal');
+	const reveal=peers[peers.alice.currentActor()].nextAction();
+	assert.equal(reveal.type,'reveal-cards');assert.equal(reveal.items.length,2,'only the two hole cards are opened at the showdown');
+	await table.settle();
+	state=peers.alice.publicState();
+	assert.equal(state.stage,'showdown');assert.equal(state.pot,0);
+	assert.equal(state.awards.reduce((sum,award)=>sum+award.amount,0),8);
+	assert.equal(state.bankrolls.reduce((sum,seat)=>sum+seat.stack,0),1000);
+	const expected=['alice','bob'].map(player=>bestHand([...holes[player],...board]).score);
+	const winners=state.awards.map(award=>award.player).sort();
+	assert.deepEqual(winners,expected[0]===expected[1]?['alice','bob']:[expected[0]>expected[1]?'alice':'bob']);
+	assert.deepEqual(peers.alice.view().players[1].cards,holes.bob);assert.ok(peers.alice.view().players[1].handName);
+	const restored=new OnlineDeal({...table.options,localPlayer:'bob',storage:table.stores.bob});
+	assert.equal(await restored.replay(history),await peers.bob.hash(),'a reload replays the whole hand to the same state');
+	assert.deepEqual(restored.view().board,board);
+	await table.act('next');
+	state=peers.alice.publicState();
+	assert.equal(state.handNumber,2);assert.deepEqual(state.board,[]);assert.deepEqual(state.opened,{});
+	assert.deepEqual(state.bankrolls.map(seat=>seat.lastAction),['Big blind 2','Small blind 1'],'the blinds move with the deal');
+	assert.ok(transcript.length>0);
+});
+
+test('a forged or misplaced board opening is rejected and leaves the table unchanged',async()=>{
+	const table=await streetTable('holdem','$forged'),{peers,history}=table;
+	await table.settle();await table.act('call');
+	peers.bob.command({type:'check',revision:history.length,generation:1});await table.advance();
+	while(peers.alice.publicState().stage==='deal')await table.advance();
+	assert.equal(peers.alice.publicState().stage,'open');
+	const actor=peers.alice.currentActor(),other=actor==='alice'?'bob':'alice';
+	const honest=peers[actor].nextAction(),before=peers[other].publicState(),preHash=await peers.alice.hash();
+	const send=(from,action)=>peers[other].apply({sequence:history.length+1,actor:from,pre_hash:preHash,action});
+	const lied=structuredClone(honest);lied.items[0].card=(lied.items[0].card+1)%52;
+	await assert.rejects(send(actor,lied),/did not verify/);
+	const short=structuredClone(honest);short.items.pop();
+	if(honest.items.length>1)await assert.rejects(send(actor,short),/wrong cards/);
+	await assert.rejects(send(other,honest),/wrong player/);
+	await assert.rejects(send(actor,{type:'poker-action',move:'check'}),/wrong cards/);
+	assert.deepEqual(peers[other].publicState(),before);
+	await table.advance(honest);
+});
+
+for(const [game,counts] of [['stud5',{start:2,down:1,streets:['second','third','fourth','fifth']}],['stud7',{start:3,down:3,streets:['third','fourth','fifth','sixth','seventh']}]])
+test(`online ${game} proves exposed cards, takes a bring-in and keeps hole cards private until the showdown`,async()=>{
+	const table=await streetTable(game,'$'+game,{finalMinimum:4,finalMaximum:40}),{peers,history}=table;
+	assert.equal(peers.alice.publicState().pot,2,'both players ante');
+	await table.settle();
+	let state=peers.alice.publicState();
+	assert.equal(state.stage,'betting');
+	const up=player=>peers.alice.showing(player);
+	const value=card=>(card%13)*4+Math.floor(card/13);
+	const low=value(up('alice')[0])<value(up('bob')[0])?'alice':'bob',high=low==='alice'?'bob':'alice';
+	assert.equal(state.bankrolls[peers.alice.seat(low)].lastAction,'Brings in 2');
+	assert.equal(state.pot,4);assert.equal(peers.alice.currentActor(),high,'the other player answers the bring-in');
+	for(const [viewer,opponent] of [['alice','bob'],['bob','alice']])
+	{
+		const view=peers[viewer].view();
+		assert.deepEqual([view.game,view.street],[game,counts.streets[0]]);
+		assert.equal(view.players[0].cards.length,counts.start);assert.ok(view.players[0].cards.every(Number.isSafeInteger));
+		assert.deepEqual(view.players[1].cards.map(card=>card===null?'down':'up'),view.players[1].faces,`${viewer} sees only ${opponent}'s exposed cards`);
+		assert.deepEqual(view.players[1].cards.filter(card=>card!==null),up(opponent));
+	}
+	const seen=[counts.streets[0]];
+	await table.act('call');
+	for(let step=0;step<40&&peers.alice.publicState().stage==='betting';step++)
+	{
+		state=peers.alice.publicState();
+		const street=counts.streets[state.street];
+		if(!seen.includes(street))
+		{
+			seen.push(street);
+			// Later streets: the better exposed hand acts first, and the late limits apply from the third street dealt.
+			const scores=['alice','bob'].map(player=>showingHand(up(player).slice(0,4)).score);
+			const first=scores[0]===scores[1]?'bob':scores[0]>scores[1]?'alice':'bob';
+			assert.equal(peers.alice.currentActor(),first,`${street}: the better showing hand acts first`);
+			assert.equal(peers[first].view().legalActions.minBet,state.street>=2?4:2);
+		}
+		await table.act('check');
+	}
+	assert.deepEqual(seen,counts.streets);
+	state=peers.alice.publicState();
+	assert.equal(state.stage,'showdown');
+	const reveals=history.filter(entry=>entry.action.type==='reveal-cards');
+	assert.deepEqual(reveals.map(entry=>entry.action.items.length),[counts.down,counts.down],'only face-down cards are opened at the showdown');
+	const hands={alice:peers.alice.privateHand(),bob:peers.bob.privateHand()};
+	assert.equal(hands.alice.length,counts.streets.length+counts.start-1);
+	assert.deepEqual(peers.alice.view().players[1].cards,hands.bob);
+	const scores=['alice','bob'].map(player=>bestHand(hands[player]).score);
+	assert.deepEqual(state.awards.map(award=>award.player).sort(),scores[0]===scores[1]?['alice','bob']:[scores[0]>scores[1]?'alice':'bob']);
+	assert.equal(state.bankrolls.reduce((sum,seat)=>sum+seat.stack,0),1000);
+	const restored=new OnlineDeal({...table.options,localPlayer:'alice',storage:table.stores.alice});
+	assert.equal(await restored.replay(history),await peers.alice.hash());
+});
+
+test('folding a street game settles uncontested and an all-in runs the remaining streets out',async()=>{
+	const fold=await streetTable('holdem','$fold-holdem');
+	await fold.settle();await fold.act('fold');
+	let state=fold.peers.alice.publicState();
+	assert.equal(state.stage,'showdown');assert.equal(state.reveal,false);
+	assert.deepEqual(state.awards,[{player:'bob',amount:3,handName:null}]);
+	assert.equal(fold.history.some(entry=>entry.action.type==='reveal-cards'||entry.action.type==='open-cards'),false,'no card was ever shown');
+
+	const shove=await streetTable('holdem','$shove',{minimum:2,maximum:100,finalMinimum:2,finalMaximum:100});
+	// Bob is left with exactly the big blind, so posting it puts him all-in and nobody can bet again.
+	for(const peer of Object.values(shove.peers)){peer.state.bankrolls[1].stack=0;peer.state.bankrolls[0].stack+=498;}
+	await shove.settle();
+	assert.equal(shove.peers.alice.currentActor(),'alice','the small blind still has to call or fold');
+	assert.deepEqual([shove.peers.alice.view().legalActions.callAmount,shove.peers.alice.view().legalActions.fold],[1,true]);
+	await shove.act('call');
+	state=shove.peers.alice.publicState();
+	assert.equal(shove.history.filter(entry=>entry.action.type==='poker-action').length,1,'after the call nobody is asked to act again');
+	// Bob either doubles his two chips or loses them, which ends the table.
+	assert.ok(['showdown','match-over'].includes(state.stage),'with one player all-in the board runs out without more betting');
+	assert.equal(shove.peers.alice.view().board.length,5);
+	assert.equal(state.bankrolls.reduce((sum,seat)=>sum+seat.stack,0),1000);
+});
