@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . "/generate-authoring.php";
 
 /** Encode one deterministic PNG chunk. */
 function eggWalkerPngChunk(string $type, string $data): string
@@ -345,5 +346,5 @@ $map = [
 
 foreach(['egg-walker.tsj' => $tileset, 'egg-walker.tmj' => $map] as $name => $data)
 {
-	file_put_contents($assets . $name, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+	file_put_contents($assets . $name, json_encode(\SanePhonics\Examples\authoredMap($data), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
 }

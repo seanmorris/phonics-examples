@@ -559,6 +559,25 @@
       "name": "phonics.start",
       "type": "string",
       "value": "endless-01.tmj"
+    },
+    {
+      "name": "phonics.classes",
+      "type": "file",
+      "value": "phonics.classes.json"
+    },
+    {
+      "name": "phonics.modules",
+      "type": "list",
+      "value": [
+        {
+          "type": "string",
+          "value": "@php-tris/components"
+        },
+        {
+          "type": "string",
+          "value": "@php-tris/stage"
+        }
+      ]
     }
   ]
 }

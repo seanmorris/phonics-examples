@@ -1,0 +1,22 @@
+{
+  "folders": [
+    ".",
+    "../examples/assets",
+    "../templates"
+  ],
+  "extensionsPath": "../../../node_modules/@seanmorris/phonics/packages/tiled-phonics/extension",
+  "propertyTypes": [
+    {
+      "name": "Player",
+      "members": [],
+      "type": "class",
+      "id": 1
+    },
+    {
+      "name": "SanePhonics.SpawnPoint",
+      "members": [],
+      "type": "class",
+      "id": 2
+    }
+  ]
+}

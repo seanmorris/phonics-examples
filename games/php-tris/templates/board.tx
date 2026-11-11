@@ -3,24 +3,15 @@
   "object": {
     "id": 1,
     "name": "Board",
-    "type": "PhpTris.Board",
+    "type": "",
     "width": 240,
     "height": 480,
     "properties": [
       {
-        "name": "mode",
-        "type": "string",
-        "value": "endless"
-      },
-      {
-        "name": "seed",
-        "type": "int",
-        "value": 1
-      },
-      {
-        "name": "phonics.entity",
-        "type": "string",
-        "value": "@php-tris/board"
+        "name": "Components",
+        "type": "class",
+        "propertytype": "PhpTris.Match",
+        "value": {}
       }
     ]
   }

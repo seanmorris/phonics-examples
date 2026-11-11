@@ -509,7 +509,7 @@ final class DemoLevel
 	 * Resolve a map-authored player point with inherited world and layer placement.
 	 *
 	 * @param \Phonics\Tiled\TileMap $map Loaded destination map containing object layers.
-	 * @return array{float,float} First Player object's world position, or the demo's legacy spawn.
+	 * @return array{float,float} Authored spawn point's world position, or the demo's legacy spawn.
 	 */
 	private function playerSpawn(\Phonics\Tiled\TileMap $map): array
 	{
@@ -637,8 +637,8 @@ final class DemoLevel
 			if(!isset(Loader::properties($map->data['properties'] ?? [])['phonics.systems']))
 			$map->data['properties'][] = [
 				'name' => 'phonics.systems'
-				, 'type' => 'string'
-				, 'value' => json_encode([\Phonics\Asset\Resource::source(__DIR__ . '/../phonics.json') . '#demo-map'])
+				, 'type' => 'list'
+				, 'value' => [['type' => 'string', 'value' => \Phonics\Asset\Resource::source(__DIR__ . '/../phonics.json') . '#demo-map']]
 			];
 
 			$this->runtime->prepare($this->sourceId, $key);

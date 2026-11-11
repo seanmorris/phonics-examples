@@ -59,15 +59,36 @@ $menu = new Menu([], 'PHPTris');
 $navigation = new MenuInput;
 $setPage = null;
 $startRun = null;
+$runtime = $phonics->runtime;
+$runtime->adapter('tris-tiled', new \Phonics\Tiled\Adapter);
 
-$newMatch = static function() use (&$entity, &$match, &$mode, &$runId, $phonics, $catalog, $initialMode, $initialRank):
+$runtime->source(new \Phonics\World\SourceDefinition('arcade', 'tris-tiled', [
+	['url' => $phonics->world['sourceUrl']]
+], ['lifecycle' => 'reset']));
+
+$source = $runtime->load('arcade');
+$worldLease = $runtime->activate('arcade', 'world');
+$runLease = null;
+$boards = [];
+
+foreach($source->resources() as $resource)
+{
+	if($resource['kind'] !== 'map') continue;
+
+	$data = $source->inspect($resource['id'])->data;
+	$properties = \Phonics\Tiled\Loader::properties($data['properties'] ?? []);
+	$boards[$properties['mode']][$properties['rank']] = $resource['id'];
+}
+
+$newMatch = static function() use (&$entity, &$match, &$mode, &$runId, $phonics, $catalog, $initialMode, $initialRank
+	, $runtime, $boards, &$runLease
+):
 void {
-	if($entity !== null) $phonics->entities->destroy($entity);
+	$runLease?->release();
 
 	$rank = $mode === $initialMode ? $initialRank : 1;
-	$properties = array_column($catalog[$mode][$rank]['properties'] ?? [], 'value', 'name');
-	$seed = (int)($properties['seed'] ?? 1);
-	$entity = $phonics->entities->create(...Module::components(['mode' => $mode,'seed' => $seed]));
+	$runLease = $runtime->activate('arcade', $boards[$mode][$rank]);
+	$entity = iterator_to_array($runLease->context->query(\PhpTris\Component\Board::class))[0];
 	$match = MatchState::get($phonics->entities, $entity);
 	$match->run->catalog = $catalog;
 	$match->stage($catalog[$mode][$rank]);

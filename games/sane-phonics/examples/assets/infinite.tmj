@@ -2147,8 +2147,13 @@
     "properties": [
         {
             "name": "phonics.systems",
-            "type": "string",
-            "value": "[\"@sane/demo-map\"]"
+            "type": "list",
+            "value": [
+                {
+                    "type": "string",
+                    "value": "@sane/demo-map"
+                }
+            ]
         }
     ]
 }

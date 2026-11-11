@@ -46,7 +46,7 @@ Ordinary goal-unit clears award 1, 3, 5, and 8; spin clears award 3, 7, and 6. O
 
 Install `@seanmorris/php-tris` with `@seanmorris/phonics`, or use Composer package `seanmorris/php-tris`. PHP classes live in `PhpTris\`. Before registry publication, install the built npm tarballs or Composer archives; the package names describe the intended releases.
 
-Import the package manifest in Tiled, then choose `@php-tris/game`. The supplied world uses:
+Run `npm install` at the repository root, then open `worlds/arcade.tiled-project` in Tiled 1.12 or later before opening the world. Enable the project extension when Tiled asks. The project provides the component classes and a relative extension path. The supplied world uses:
 
 ```text
 phonics.import.php-tris = ../phonics.json
@@ -55,7 +55,7 @@ phonics.start = endless-01.tmj
 
 Map properties declare `mode`, `name`, `rank`, `seed`, `lineTarget`, `duration`, and `ghost`. Each map is a finite 10×20 grid. Paint its **Initial cells** layer with the supplied tileset: seven colors, neutral garbage, goal garbage, core, and charge. Include one rank for each solo mode you offer and ranks 1–15 for each challenge track you offer. The starting map selects the initial mode and rank; its seed makes restarts reproducible. The game derives its selector from the world's maps. Duplicate ranks and missing stages produce source-specific loading errors.
 
-The `#board` factory creates ECS components. The separately usable `#rules` module registers movement, gravity, resolution, and progression systems. `#arcade` exports the example world. Board occupancy uses a bounded grid; piece IDs and color identity survive movement and line clearing. Rendering and input bridges are separate from simulation. No platformer or brick-breaker package is loaded.
+Each board object has a nested `Components` preset containing `Board`, `Active`, `Queue`, `Input`, and `Run`. The map remains the single source for mode and seed; queue and run components read those settings when the map activates. Its native `phonics.systems` list selects `@php-tris/stage`, while the world lists the component and system modules. Only the selected run owns live components and systems; restarting or changing modes releases them. Challenge rank progression reuses that run and reads the next map as stage data. The legacy `#board` factory and standalone `#rules` module remain available to PHP consumers. `#arcade` exports the example world. Board occupancy uses a bounded grid; piece IDs and color identity survive movement and line clearing. Rendering and input bridges are separate from simulation. No platformer or brick-breaker package is loaded.
 
 The display renders through SDL/WebGL at the screen's physical pixel dimensions. Bitmap glyph scales are integers; portrait phones rearrange the same HUD around a taller board. Transparent accessible buttons provide hit targets over SDL text. Board geometry and text layouts are cached until their content changes.
 

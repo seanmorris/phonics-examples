@@ -40,6 +40,24 @@
       "name": "phonics.classes",
       "type": "file",
       "value": "phonics.classes.json"
+    },
+    {
+      "name": "phonics.modules",
+      "type": "list",
+      "value": [
+        {
+          "type": "string",
+          "value": "@sane/demo-map"
+        },
+        {
+          "type": "string",
+          "value": "@sane/spawn"
+        },
+        {
+          "type": "string",
+          "value": "@sane/spatial-maps"
+        }
+      ]
     }
   ]
 }

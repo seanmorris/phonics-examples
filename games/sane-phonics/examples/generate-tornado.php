@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . "/generate-authoring.php";
 
 /**
  * Encode one PNG chunk for the generated aircraft artwork.
@@ -298,5 +299,5 @@ $map = [
 
 foreach(['tornado.tsj' => $tileset, 'tornado.tmj' => $map] as $name => $data)
 {
-	file_put_contents($assets . $name, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
+	file_put_contents($assets . $name, json_encode(\SanePhonics\Examples\authoredMap($data), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
 }

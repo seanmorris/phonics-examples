@@ -833,5 +833,17 @@
                 }
             ]
         }
+    ],
+    "properties": [
+        {
+            "name": "phonics.systems",
+            "type": "list",
+            "value": [
+                {
+                    "type": "string",
+                    "value": "@sane/demo-map"
+                }
+            ]
+        }
     ]
 }

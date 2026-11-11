@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . "/generate-authoring.php";
 
 // Generate a flat-ended flexible-span course without modifying the source platformer map.
 $map = json_decode(file_get_contents(__DIR__ . '/assets/platformer.tmj'), true, 512, JSON_THROW_ON_ERROR);
@@ -149,7 +150,7 @@ foreach(['bridges.tmj' => $map, 'bridges.tsj' => $tileset] as $name => $data)
 {
 	file_put_contents(
 		__DIR__ . '/assets/' . $name
-		, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
+		, json_encode(\SanePhonics\Examples\authoredMap($data), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
 	);
 }
 

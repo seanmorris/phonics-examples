@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import {deflateSync} from 'node:zlib';
+import {classes, componentNames, boardProperties} from './authoring.mjs';
 const base = new URL('./', import.meta.url);
 const modes = {
 	endless: 'Endless'
@@ -196,6 +197,7 @@ for(const [mode,title] of Object.entries(modes))
 					, prop('lineTarget', 40)
 					, prop('duration', 120)
 					, prop('ghost', true)
+					, prop('phonics.systems', [{type: 'string', value: '@php-tris/stage'}], 'list')
 				]
 				, layers: [{
 					id: 1
@@ -219,16 +221,14 @@ for(const [mode,title] of Object.entries(modes))
 					, objects: [{
 						id: 1
 						, name: 'Board'
-						, type: 'PhpTris.Board'
+						, type: ''
 						, x: 0
 						, y: 0
 						, width: 240
 						, height: 480
 						, rotation: 0
 						, visible: true
-						, properties: [prop('mode', mode)
-							, prop('phonics.entity', '@php-tris/board')
-						]
+						, properties: boardProperties()
 					}]
 				}
 				]
@@ -248,6 +248,12 @@ await write(
 		, maps
 		, properties: [prop('phonics.import.php-tris', '../phonics.json')
 			, prop('phonics.start', 'endless-01.tmj')
+			, prop('phonics.classes', 'phonics.classes.json', 'file')
+			, prop('phonics.modules', [
+				{type: 'string', value: '@php-tris/components'}
+				, {type: 'string', value: '@php-tris/stage'}
+			], 'list'
+			)
 		]
 	}
 );
@@ -259,15 +265,26 @@ await write(
 		, object: {
 			id: 1
 			, name: 'Board'
-			, type: 'PhpTris.Board'
+			, type: ''
 			, width: 240
 			, height: 480
-			, properties: [prop('mode', 'endless')
-				, prop('seed', 1)
-				, prop('phonics.entity', '@php-tris/board')
-			]
+			, properties: boardProperties()
 		}
 	}
 );
+
+await write('worlds/phonics.classes.json', {
+	schemaVersion: 1
+	, classes
+	, bindings: Object.fromEntries(componentNames.map(name => [
+		`PhpTris.${name}`, `@php-tris/${name.toLowerCase()}-component`
+	]))
+});
+
+await write('worlds/arcade.tiled-project', {
+	folders: ['.', '../templates', '../assets']
+	, extensionsPath: '../../../node_modules/@seanmorris/phonics/packages/tiled-phonics/extension'
+	, propertyTypes: classes.map((type, index) => ({...type, type: 'class', id: index + 1}))
+});
 
 console.log(`Generated ${maps.length} original PHPTris maps and cell atlas.`);

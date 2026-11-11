@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "036e223c5a66496e71c0005defdde56d",
+    "content-hash": "492332a14757776423c248722474ecee",
     "packages": [
         {
             "name": "seanmorris/phonics",
@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/seanmorris/php-wasm-engine.git",
-                "reference": "670bb4bd3ffc98a62d53768705929161cca52bf3"
+                "reference": "60833ca33a43d2f6057288a431b7ddeadd0b37f5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/670bb4bd3ffc98a62d53768705929161cca52bf3",
-                "reference": "670bb4bd3ffc98a62d53768705929161cca52bf3",
+                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/60833ca33a43d2f6057288a431b7ddeadd0b37f5",
+                "reference": "60833ca33a43d2f6057288a431b7ddeadd0b37f5",
                 "shasum": ""
             },
             "require": {

@@ -1,0 +1,18 @@
+{
+  "type": "template",
+  "object": {
+    "name": "Player spawn",
+    "type": "",
+    "point": true,
+    "x": 80,
+    "y": 100,
+    "properties": [
+      {
+        "name": "SpawnPoint",
+        "type": "class",
+        "propertytype": "SanePhonics.SpawnPoint",
+        "value": {}
+      }
+    ]
+  }
+}

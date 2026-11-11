@@ -5,8 +5,12 @@
 | File | Role |
 |---|---|
 | `game.php` | Creates the engine, mode menus, match lifecycle, controls, renderer, and browser-facing session. |
-| `modules/rules.php` | Registers board factories and the ordered movement, gravity, resolution, and progress systems. |
+| `modules/components.php` | Registers the five independently authored board components. |
+| `modules/stage.php` / `src/StageSystems.php` | Validates the selected board and attaches its ordered systems to the map scope. |
+| `modules/rules.php` | Preserves the standalone factory and global-system API for PHP consumers. |
 | `src/Module.php` | Constructs match components and exposes the reusable factory and system registration methods. |
+
+The Tiled world is a collection of boards, not a spatial game world. Only the selected run activates a map. Its systems query that map’s entities, so multiple scopes cannot advance one another’s boards. Closing the scope releases both components and system registrations.
 
 Board and session state remain independent of the renderer. Systems advance piece input, gravity, locking, line clearing, challenge evaluation, and UI transitions. Components expose the small pieces of state required by the ECS registry.
 
