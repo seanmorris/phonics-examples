@@ -82,16 +82,16 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	expect(raster.buffer).toEqual(raster.physical.map(value => Math.ceil(value / raster.block)));
 	expect(raster.buffer[0] * raster.buffer[1]).toBeLessThan(raster.physical[0] * raster.physical[1]);
 
+	// Space starts the run with a flap, and a click on the canvas is a flap too. The click follows at once: without
+	// another flap the run ends about a second after the first one, and a busy machine can spend longer than that on
+	// the checks this test used to make between the two inputs. The counter keeps its value after the run ends.
 	await canvas.focus();
 	await page.keyboard.press('Space');
-	await expect.poll(async() => (await status(page)).phase).toBe('playing');
-	await expect.poll(async() => (await status(page)).counts.flap).toBeGreaterThanOrEqual(1);
-	expect(await canvas.evaluate(element => element.phpPhantDebug.music.volume)).toBe(.75);
-
-	// A click on the canvas is a flap too.
-	const before = (await status(page)).counts.flap;
+	await page.waitForTimeout(150);
 	await canvas.click({position: {x: 100, y: 100}});
-	await expect.poll(async() => (await status(page)).counts.flap).toBeGreaterThan(before);
+	await expect.poll(async() => (await status(page)).counts.flap).toBeGreaterThanOrEqual(2);
+	expect(['playing', 'dead']).toContain((await status(page)).phase);
+	expect(await canvas.evaluate(element => element.phpPhantDebug.music.volume)).toBe(.75);
 
 	// Stop flapping: gravity ends the run and the result card opens with the best kept locally.
 	await expect.poll(async() => (await status(page)).phase, {timeout: 15_000}).toBe('dead');

@@ -397,6 +397,20 @@ test('online table follows its stage viewport and switches responsive layouts',a
 test('controller navigates the menu, selects discards, draws, and toggles the game menu',async({page})=>{
 	test.setTimeout(120_000);
 	await installGamepad(page);
+	// Keep every controller focus the page publishes. At the fast pace the wait for the opponent lasts about a tenth
+	// of a second, shorter than one test round trip on a busy machine, so separate reads can miss it entirely.
+	await page.addInitScript(()=>{
+		window.pokerFocus=[];
+		new MutationObserver(records=>{
+			for(const record of records)
+			{
+				const focus=JSON.parse(record.target.dataset.phpPoker||'null')?.ui?.controllerFocus;
+				if(!focus)continue;
+				const entry={id:focus.id,rect:focus.rect!==undefined};
+				if(JSON.stringify(entry)!==JSON.stringify(window.pokerFocus.at(-1)))window.pokerFocus.push(entry);
+			}
+		}).observe(document,{subtree:true,attributes:true,attributeFilter:['data-php-poker']});
+	});
 	await page.addInitScript(({key,save})=>localStorage.setItem(key,save),{key:saveKey,save:drawSave});
 	const canvas=await boot(page);
 	await canvas.focus();
@@ -421,11 +435,9 @@ test('controller navigates the menu, selects discards, draws, and toggles the ga
 	await padPulse(page,[13]);
 	if((await state(canvas)).ui.controllerFocus?.id==='action:clear')await padPulse(page,[15]);
 	await expect.poll(async()=>(await state(canvas)).ui.controllerFocus?.id).toBe('action:draw');
+	await page.evaluate(()=>{window.pokerFocus.length=0;});
 	await padPulse(page,[0]);
-	await expect.poll(async()=>{
-		const focus=(await state(canvas)).ui.controllerFocus;
-		return focus?.id==='table:waiting'&&focus.rect===undefined;
-	}).toBe(true);
+	await expect.poll(()=>page.evaluate(()=>window.pokerFocus.some(focus=>focus.id==='table:waiting'&&!focus.rect))).toBe(true);
 	await expect.poll(async()=>(await state(canvas)).players[0].drawCount).toBe(1);
 });
 
