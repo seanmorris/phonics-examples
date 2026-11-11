@@ -13,6 +13,54 @@ async function boot(page)
 	return canvas;
 }
 
+/**
+ * Wait until the game has published this many more frames. The status is written once per frame, so counting the
+ * writes follows the game's own pace on any machine, where a fixed sleep assumes one.
+ */
+const frames = (page, count) => gameCanvas(page).evaluate((canvas, wanted) => new Promise(resolve => {
+	let seen = 0;
+	const observer = new MutationObserver(records => {
+		seen += records.length;
+
+		if(seen < wanted) return;
+
+		observer.disconnect();
+		resolve();
+	});
+	observer.observe(canvas, {attributes: true, attributeFilter: ['data-php-phant']});
+}), count);
+
+/**
+ * Press a key and give it frames of its own. Keys that arrive inside one slow frame are read together: two presses
+ * of one key merge, and opposite directions cancel. Three frames cover the frame already under way, the frame that
+ * reads the key, and one with nothing held before the next press.
+ */
+async function press(page, key)
+{
+	await page.keyboard.press(key);
+	await frames(page, 3);
+}
+
+/**
+ * Wait until a new run's ready screen takes keys, and return the status it first showed.
+ *
+ * The engine clears the keyboard when a menu closes, so a key pressed in the first frame of the ready screen is
+ * dropped. The ground starts to scroll once the run is being stepped, and from then on every key counts. Clicks and
+ * taps are counted in the browser and are never dropped.
+ */
+async function ready(page)
+{
+	await expect.poll(async() => {
+		const now = await status(page);
+
+		return `${now.page} ${now.phase}`;
+	}).toBe('play ready');
+	const shown = await status(page);
+	await expect.poll(async() => (await status(page)).scroll).toBeGreaterThan(shown.scroll);
+
+	return shown;
+}
+
 test('a run flaps, scores, dies, keeps the best and fills any viewport', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -82,14 +130,11 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	expect(raster.buffer).toEqual(raster.physical.map(value => Math.ceil(value / raster.block)));
 	expect(raster.buffer[0] * raster.buffer[1]).toBeLessThan(raster.physical[0] * raster.physical[1]);
 
-	// Space starts the run with a flap, and a click on the canvas is a flap too. The click follows at once: without
-	// another flap the run ends about a second after the first one, and a busy machine can spend longer than that on
-	// the checks this test used to make between the two inputs. The counter keeps its value after the run ends.
-	await canvas.focus();
-	await page.keyboard.press('Space');
-	await page.waitForTimeout(150);
+	// A click on the canvas is a flap, and the first flap starts the run. Each input in this test is the first flap
+	// of its own run: the ready screen waits for it however long the machine takes, while a second flap inside one
+	// run has about a second before the phant lands, and a hosted runner spends that long on the click alone.
 	await canvas.click({position: {x: 100, y: 100}});
-	await expect.poll(async() => (await status(page)).counts.flap).toBeGreaterThanOrEqual(2);
+	await expect.poll(async() => (await status(page)).counts.flap).toBe(1);
 	expect(['playing', 'dead']).toContain((await status(page)).phase);
 	expect(await canvas.evaluate(element => element.phpPhantDebug.music.volume)).toBe(.75);
 
@@ -97,10 +142,19 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await expect.poll(async() => (await status(page)).phase, {timeout: 15_000}).toBe('dead');
 	await expect.poll(async() => (await status(page)).page, {timeout: 15_000}).toBe('gameover');
 	await expect(hint).toBeVisible();
-	await expect(page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play again'})).toBeAttached();
+	const again = page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play again'});
+	await expect(again).toBeAttached();
 	const profile = await page.evaluate(() => JSON.parse(localStorage.getItem('phlappy-phant.profile.v1') ?? 'null'));
 	expect(profile?.version).toBe(1);
 	expect(profile.best).toBeGreaterThanOrEqual(0);
+
+	// Play again starts a new run with its counters at zero, and Space is a flap as well.
+	await again.click();
+	expect((await ready(page)).counts.flap).toBe(0);
+	await canvas.focus();
+	await page.keyboard.press('Space');
+	await expect.poll(async() => (await status(page)).counts.flap).toBe(1);
+	expect(['playing', 'dead']).toContain((await status(page)).phase);
 
 	// A portrait phone gets the same world, scaled to its height and clamped to the narrower width.
 	await page.setViewportSize({width: 390, height: 844});
@@ -119,15 +173,12 @@ test('the Konami code with no points hands the run to a perfect player that neve
 	await page.setViewportSize({width: 1280, height: 720});
 	const canvas = await boot(page);
 	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play', exact: true}).click();
-	await expect.poll(async() => (await status(page)).phase).toBe('ready');
+	await ready(page);
 	await canvas.focus();
 
 	// The Up presses are also flaps, but a code in progress holds the ready screen until the code resolves.
 	for(const key of ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'])
-	{
-		await page.keyboard.press(key);
-		await page.waitForTimeout(150);
-	}
+		await press(page, key);
 
 	await expect.poll(async() => (await status(page)).autopilot).toBe(true);
 	expect((await status(page)).counts.tas).toBe(1);
@@ -163,14 +214,12 @@ test('audio levels adjust live from title and pause, then survive a reload', asy
 		'SFX level', 'BGM level', 'Back'
 	]);
 	await canvas.focus();
-	await page.keyboard.press('ArrowRight');
-	await page.waitForTimeout(160);
-	await page.keyboard.press('ArrowDown');
-	await page.waitForTimeout(160);
-	await page.keyboard.press('ArrowLeft');
-	await page.waitForTimeout(160);
+	await frames(page, 2);
+	await press(page, 'ArrowRight');
+	await press(page, 'ArrowDown');
+	await press(page, 'ArrowLeft');
 
-	expect(await canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .55, music: .7});
+	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .55, music: .7});
 	expect(await canvas.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
 		volume: .7, baseVolume: .7
 	});
@@ -186,7 +235,7 @@ test('audio levels adjust live from title and pause, then survive a reload', asy
 	});
 
 	await targets.getByRole('button', {name: 'Play', exact: true}).click();
-	await expect.poll(async() => (await status(page)).page).toBe('play');
+	await ready(page);
 	await reloaded.focus();
 	await page.keyboard.press('Escape');
 	await expect.poll(async() => (await status(page)).page).toBe('pause');
@@ -201,12 +250,6 @@ test('menu pages stand on their plate, skip text rows and stay inside a narrow p
 	page.on('pageerror', error => errors.push(error.message));
 	const canvas = await boot(page);
 	await canvas.focus();
-
-	// Presses of one key inside a single slow frame merge, so each one is given time to land.
-	const press = async key => {
-		await page.keyboard.press(key);
-		await page.waitForTimeout(160);
-	};
 
 	const fits = async name => {
 		const state = await status(page);
@@ -232,20 +275,20 @@ test('menu pages stand on their plate, skip text rows and stay inside a narrow p
 
 	for(const [steps, name] of [[3, 'How to play'], [4, 'About']])
 	{
-		for(let step = 0; step < steps; step++) await press('ArrowDown');
+		for(let step = 0; step < steps; step++) await press(page, 'ArrowDown');
 
-		await press('Enter');
+		await press(page, 'Enter');
 		await expect.poll(async() => (await status(page)).regions.map(region => region.label)).toEqual(['Back']);
 
 		// Information rows are text: they publish no button, and moving the selection never lands on one.
-		await press('ArrowDown');
-		await press('ArrowUp');
+		await press(page, 'ArrowDown');
+		await press(page, 'ArrowUp');
 		await page.waitForTimeout(200);
 		await fits(name);
-		await press('Enter');
+		await press(page, 'Enter');
 		await expect.poll(async() => (await status(page)).regions.length).toBe(5);
 
-		for(let step = 0; step < steps; step++) await press('ArrowUp');
+		for(let step = 0; step < steps; step++) await press(page, 'ArrowUp');
 	}
 
 	expect(errors).toEqual([]);
