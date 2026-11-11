@@ -46,6 +46,16 @@
       "name": "ghost",
       "type": "bool",
       "value": true
+    },
+    {
+      "name": "phonics.systems",
+      "type": "list",
+      "value": [
+        {
+          "type": "string",
+          "value": "@php-tris/stage"
+        }
+      ]
     }
   ],
   "layers": [
@@ -273,7 +283,7 @@
         {
           "id": 1,
           "name": "Board",
-          "type": "PhpTris.Board",
+          "type": "",
           "x": 0,
           "y": 0,
           "width": 240,
@@ -282,14 +292,10 @@
           "visible": true,
           "properties": [
             {
-              "name": "mode",
-              "type": "string",
-              "value": "time"
-            },
-            {
-              "name": "phonics.entity",
-              "type": "string",
-              "value": "@php-tris/board"
+              "name": "Components",
+              "type": "class",
+              "propertytype": "PhpTris.Match",
+              "value": {}
             }
           ]
         }

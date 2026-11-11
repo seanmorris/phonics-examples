@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . "/generate-authoring.php";
 
 // Fixed ropes, a squine suspension, and a linked-route suspension share the common backdrop.
 $grappleMap = json_decode(file_get_contents(__DIR__ . '/assets/light-dash.tmj'), true, 512, JSON_THROW_ON_ERROR);
@@ -170,7 +171,7 @@ foreach(['grapples.tmj' => $grappleMap, 'grapples.tsj' => $tileset] as $name => 
 {
 	file_put_contents(
 		__DIR__ . '/assets/' . $name
-		, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
+		, json_encode(\SanePhonics\Examples\authoredMap($data), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
 	);
 }
 

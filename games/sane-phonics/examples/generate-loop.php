@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . "/generate-authoring.php";
 // Invoked by generate-assets.php. Original art and polygon geometry for an 8x8 loop.
 // Clip each quarter's solid exterior to the tile grid, retaining the curved inner edge.
 

@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__, 3) . '/autoload.php';
+$framework = dirname(__DIR__, 3);
+require is_file($framework . '/autoload.php')
+	? $framework . '/autoload.php'
+	: $framework . '/node_modules/@seanmorris/phonics/autoload.php';
 require dirname(__DIR__) . '/autoload.php';
 use Phonics\Package\Context;
 use PhpTris\

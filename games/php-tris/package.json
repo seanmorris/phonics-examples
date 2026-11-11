@@ -121,6 +121,11 @@
     "phonics.json",
     "composer.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "src/StageSystems.php",
+    "modules/components.php",
+    "modules/stage.php",
+    "worlds/arcade.tiled-project",
+    "worlds/phonics.classes.json"
   ]
 }

@@ -1,0 +1,77 @@
+{
+  "folders": [
+    ".",
+    "../templates",
+    "../assets"
+  ],
+  "extensionsPath": "../../../node_modules/@seanmorris/phonics/packages/tiled-phonics/extension",
+  "propertyTypes": [
+    {
+      "name": "PhpTris.Board",
+      "members": [],
+      "type": "class",
+      "id": 1
+    },
+    {
+      "name": "PhpTris.Active",
+      "members": [],
+      "type": "class",
+      "id": 2
+    },
+    {
+      "name": "PhpTris.Queue",
+      "members": [],
+      "type": "class",
+      "id": 3
+    },
+    {
+      "name": "PhpTris.Input",
+      "members": [],
+      "type": "class",
+      "id": 4
+    },
+    {
+      "name": "PhpTris.Run",
+      "members": [],
+      "type": "class",
+      "id": 5
+    },
+    {
+      "name": "PhpTris.Match",
+      "members": [
+        {
+          "name": "Board",
+          "type": "class",
+          "propertyType": "PhpTris.Board",
+          "value": {}
+        },
+        {
+          "name": "Active",
+          "type": "class",
+          "propertyType": "PhpTris.Active",
+          "value": {}
+        },
+        {
+          "name": "Queue",
+          "type": "class",
+          "propertyType": "PhpTris.Queue",
+          "value": {}
+        },
+        {
+          "name": "Input",
+          "type": "class",
+          "propertyType": "PhpTris.Input",
+          "value": {}
+        },
+        {
+          "name": "Run",
+          "type": "class",
+          "propertyType": "PhpTris.Run",
+          "value": {}
+        }
+      ],
+      "type": "class",
+      "id": 6
+    }
+  ]
+}

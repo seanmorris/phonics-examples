@@ -24,6 +24,12 @@ The pause menu can change the level or movement profile without restarting the e
 | Restart level | <span class="controller-glyphs">Hold <img class="controller-glyph" src="../../../art/controllers/xbox-button-b.svg" alt="Xbox B button"><span>+</span><img class="controller-glyph" src="../../../art/controllers/xbox-button-back.svg" alt="Xbox Back button"></span> | <span class="controller-glyphs">Hold <img class="controller-glyph" src="../../../art/controllers/playstation-button-circle.svg" alt="PlayStation Circle button"><span>+</span><img class="controller-glyph" src="../../../art/controllers/playstation-button-select.svg" alt="PlayStation Select button"></span> | Shift+R |
 | Fire-shield air thrust | <span class="controller-glyphs"><img class="controller-glyph" src="../../../art/controllers/xbox-button-lb.svg" alt="Xbox LB button"><span>or</span><img class="controller-glyph" src="../../../art/controllers/xbox-button-rb.svg" alt="Xbox RB button"></span> | <span class="controller-glyphs"><img class="controller-glyph" src="../../../art/controllers/playstation-button-l1.svg" alt="PlayStation L1 button"><span>or</span><img class="controller-glyph" src="../../../art/controllers/playstation-button-r1.svg" alt="PlayStation R1 button"></span> | Q or E |
 
+## Edit a course
+
+Open `worlds/demo.tiled-project` in Tiled 1.12 or later after running `npm install` at the repository root. Enable the project extension when prompted, then open a course world. This loads the custom classes before the maps, keeping nested component properties editable.
+
+Worlds list their modules using native Tiled lists. Each map selects `@sane/demo-map`; the streaming world selects `@sane/spatial-maps` for spatial activation. Player starts use the nested `SpawnPoint` component, also available from `templates/spawn.tx`. The game continues to own terrain and feature behavior. The portable class catalog and project are committed beside the course worlds.
+
 ## Executable PHP
 
 | File | Role |

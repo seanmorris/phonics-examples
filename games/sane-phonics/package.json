@@ -218,7 +218,15 @@
     "phonics.json",
     "composer.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "src/Gameplay/SpawnPoint.php",
+    "modules/demo-map.php",
+    "modules/movement.php",
+    "modules/spatial-maps.php",
+    "modules/spawn.php",
+    "worlds/demo.tiled-project",
+    "worlds/phonics.classes.json",
+    "templates/spawn.tx"
   ],
   "peerDependencies": {
     "@seanmorris/phonics": "0.1.0"

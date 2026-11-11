@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . "/generate-authoring.php";
 
 // Reuse only the hand-edited backdrop; the trail and terrain belong to this generated demo.
 $dashMap = json_decode(file_get_contents(__DIR__ . '/assets/platformer.tmj'), true, 512, JSON_THROW_ON_ERROR);
@@ -63,5 +64,5 @@ $dashMap['layers'][] = [
 
 file_put_contents(
 	__DIR__ . '/assets/light-dash.tmj'
-	, json_encode($dashMap, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n"
+	, json_encode(\SanePhonics\Examples\authoredMap($dashMap), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n"
 );

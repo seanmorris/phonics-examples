@@ -13,6 +13,14 @@ final class ResolutionSystem
 {
 
 	/**
+	 * Limit authored systems to their map; PHP consumers may use the whole registry.
+	 * @param \Phonics\World\ScopeContext|null $scope Optional map ownership boundary.
+	 * @return void Stores the scope used to select boards.
+	 */
+	public function __construct(private ?\Phonics\World\ScopeContext $scope = null) {}
+
+
+	/**
 	 * Advance one timed clear or fall phase per board.
 	 *
 	 * @param Registry $r Registry containing board entities.
@@ -21,7 +29,7 @@ final class ResolutionSystem
 	 */
 	public function update(Registry $r, float $dt): void
 	{
-		foreach($r->query(Board::class) as $id)
+		foreach(($this->scope?->query(Board::class) ?? $r->query(Board::class)) as $id)
 		{
 			$m = MatchState::get($r, $id);
 			$s = $m->run;

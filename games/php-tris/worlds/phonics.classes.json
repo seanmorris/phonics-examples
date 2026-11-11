@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "classes": [
+    {
+      "name": "PhpTris.Board",
+      "members": []
+    },
+    {
+      "name": "PhpTris.Active",
+      "members": []
+    },
+    {
+      "name": "PhpTris.Queue",
+      "members": []
+    },
+    {
+      "name": "PhpTris.Input",
+      "members": []
+    },
+    {
+      "name": "PhpTris.Run",
+      "members": []
+    },
+    {
+      "name": "PhpTris.Match",
+      "members": [
+        {
+          "name": "Board",
+          "type": "class",
+          "propertyType": "PhpTris.Board",
+          "value": {}
+        },
+        {
+          "name": "Active",
+          "type": "class",
+          "propertyType": "PhpTris.Active",
+          "value": {}
+        },
+        {
+          "name": "Queue",
+          "type": "class",
+          "propertyType": "PhpTris.Queue",
+          "value": {}
+        },
+        {
+          "name": "Input",
+          "type": "class",
+          "propertyType": "PhpTris.Input",
+          "value": {}
+        },
+        {
+          "name": "Run",
+          "type": "class",
+          "propertyType": "PhpTris.Run",
+          "value": {}
+        }
+      ]
+    }
+  ],
+  "bindings": {
+    "PhpTris.Board": "@php-tris/board-component",
+    "PhpTris.Active": "@php-tris/active-component",
+    "PhpTris.Queue": "@php-tris/queue-component",
+    "PhpTris.Input": "@php-tris/input-component",
+    "PhpTris.Run": "@php-tris/run-component"
+  }
+}

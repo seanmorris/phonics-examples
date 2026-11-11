@@ -40,8 +40,13 @@
     "properties": [
         {
             "name": "phonics.systems",
-            "type": "string",
-            "value": "[\"@sane/spatial-maps\"]"
+            "type": "list",
+            "value": [
+                {
+                    "type": "string",
+                    "value": "@sane/spatial-maps"
+                }
+            ]
         }
     ]
 }

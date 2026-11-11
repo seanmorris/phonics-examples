@@ -1621,10 +1621,18 @@
             "objects": [
                 {
                     "id": 1,
-                    "class": "Player",
                     "x": 96,
                     "y": 430,
-                    "point": true
+                    "point": true,
+                    "type": "",
+                    "properties": [
+                        {
+                            "name": "SpawnPoint",
+                            "type": "class",
+                            "propertytype": "SanePhonics.SpawnPoint",
+                            "value": {}
+                        }
+                    ]
                 },
                 {
                     "id": 100,
@@ -3142,5 +3150,17 @@
         }
     ],
     "nextobjectid": 104,
-    "nextlayerid": 23
+    "nextlayerid": 23,
+    "properties": [
+        {
+            "name": "phonics.systems",
+            "type": "list",
+            "value": [
+                {
+                    "type": "string",
+                    "value": "@sane/demo-map"
+                }
+            ]
+        }
+    ]
 }

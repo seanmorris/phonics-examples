@@ -22,11 +22,14 @@
       "src/Render/Scene.php",
       "src/Rules.php",
       "src/Shapes.php",
+      "src/StageSystems.php",
       "src/System/GravitySystem.php",
       "src/System/MovementSystem.php",
       "src/System/ProgressSystem.php",
       "src/System/ResolutionSystem.php",
-      "modules/rules.php"
+      "modules/components.php",
+      "modules/rules.php",
+      "modules/stage.php"
     ]
   },
   "exports": {
@@ -35,12 +38,46 @@
       "php": "game.php",
       "browser": "browser/game.mjs",
       "modules": [
-        "#rules"
+        "#components",
+        "#stage"
       ]
     },
     "rules": {
       "type": "module",
       "php": "modules/rules.php"
+    },
+    "components": {
+      "type": "module",
+      "php": "modules/components.php"
+    },
+    "stage": {
+      "type": "system-set",
+      "php": "modules/stage.php"
+    },
+    "board-component": {
+      "type": "component",
+      "class": "PhpTris.Board",
+      "module": "#components"
+    },
+    "active-component": {
+      "type": "component",
+      "class": "PhpTris.Active",
+      "module": "#components"
+    },
+    "queue-component": {
+      "type": "component",
+      "class": "PhpTris.Queue",
+      "module": "#components"
+    },
+    "input-component": {
+      "type": "component",
+      "class": "PhpTris.Input",
+      "module": "#components"
+    },
+    "run-component": {
+      "type": "component",
+      "class": "PhpTris.Run",
+      "module": "#components"
     },
     "board": {
       "type": "factory",
@@ -62,27 +99,64 @@
     "classes": [
       {
         "name": "PhpTris.Board",
+        "members": []
+      },
+      {
+        "name": "PhpTris.Active",
+        "members": []
+      },
+      {
+        "name": "PhpTris.Queue",
+        "members": []
+      },
+      {
+        "name": "PhpTris.Input",
+        "members": []
+      },
+      {
+        "name": "PhpTris.Run",
+        "members": []
+      },
+      {
+        "name": "PhpTris.Match",
         "members": [
           {
-            "name": "mode",
-            "type": "string",
-            "value": "endless"
+            "name": "Board",
+            "type": "class",
+            "propertyType": "PhpTris.Board",
+            "value": {}
           },
           {
-            "name": "seed",
-            "type": "int",
-            "value": 1
+            "name": "Active",
+            "type": "class",
+            "propertyType": "PhpTris.Active",
+            "value": {}
           },
           {
-            "name": "phonics.entity",
-            "type": "string",
-            "value": "@php-tris/board"
+            "name": "Queue",
+            "type": "class",
+            "propertyType": "PhpTris.Queue",
+            "value": {}
+          },
+          {
+            "name": "Input",
+            "type": "class",
+            "propertyType": "PhpTris.Input",
+            "value": {}
+          },
+          {
+            "name": "Run",
+            "type": "class",
+            "propertyType": "PhpTris.Run",
+            "value": {}
           }
         ]
       }
     ]
   },
-  "preload": [],
+  "preload": [
+    "worlds/phonics.classes.json"
+  ],
   "application": {
     "entry": "application.php"
   },
@@ -99,6 +173,7 @@
     ]
   },
   "assets": [
+    "worlds/arcade.tiled-project",
     "worlds/arcade.world",
     "worlds/bonds-01.tmj",
     "worlds/bonds-02.tmj",
@@ -131,6 +206,7 @@
     "worlds/cascade-14.tmj",
     "worlds/cascade-15.tmj",
     "worlds/endless-01.tmj",
+    "worlds/phonics.classes.json",
     "worlds/race-01.tmj",
     "worlds/reactor-01.tmj",
     "worlds/reactor-02.tmj",
@@ -188,7 +264,7 @@
     "assets/blocks.tsj": "sha256-mThyW9QmttfjXTlSwv+p68/j7TGM7rbN3ZJgMULrVk4=",
     "autoload.php": "sha256-l3Pbcs1Lqcw017fhYgEVAEMl9KuQ2XMw6pU+PDDR9q0=",
     "browser/game.mjs": "sha256-Z3iel2Zt+aXmi8yUc1L0PR5q3b2m/1FXWVtj0APhui0=",
-    "game.php": "sha256-T/+gdfGetLPv1ANYACg/qgonVe6catynPJmeCfb8J9s=",
+    "game.php": "sha256-vDqplTlIJI3rOfTzG+XXLHl20Iu4Bfe/FGy6GZKr4HI=",
     "modules/rules.php": "sha256-jg9ZqcgAf6awenNHUJDUTumHbwRte8EZnJpGAp2V+0A=",
     "src/Component/Active.php": "sha256-Ty5OSdrguTWt2zVep2KnIzrmmMRXQk5v9L/OxLVyxbA=",
     "src/Component/Board.php": "sha256-CR1iNis+m4hz1eGybJZTkZcRv/rG+A0bKMfKQmT0H7E=",
@@ -196,94 +272,99 @@
     "src/Component/Queue.php": "sha256-7QxetaOGRPJ2skAO1bS2/AAFpGTOUjoj6sTPxVoXsKQ=",
     "src/Component/Run.php": "sha256-qMP2cre3R50gCnaab46T6C5tVVkUZorPwKBpu+K7W4U=",
     "src/MatchState.php": "sha256-oDuh4AKlubJNDPv0NundOqjjf48bv5cuFu1LlJVYmJA=",
-    "src/Module.php": "sha256-SKhboPcJ0NVSks/ebkmDE9M1zjRGTLry+55TBDyngIo=",
+    "src/Module.php": "sha256-TovJesIPxZ0TvV42N0OsAa8lLFM/TnCdHMaOPdbAzg4=",
     "src/Random.php": "sha256-cul00GJ7nxlBKxzoJGeM5Lz9/XUUy2jFgpwxOWxrayc=",
     "src/Render/Scene.php": "sha256-q2WF/9JxzakRIpekSxKjHfjkRRejazorhEG2+kLIb6k=",
     "src/Rules.php": "sha256-Ei5ReSbAL58j+Q+pjOFcVrsfAabgJnBj8pJUzOhGkLk=",
     "src/Shapes.php": "sha256-/0zHWNIXVZFJrhTZh13eny5gUzLm1lrJQBnUGVAd79o=",
-    "src/System/GravitySystem.php": "sha256-Mun/KeD7eP21yuTU3SgAeivU6Lw6AlVbarwOYJ1vrh0=",
-    "src/System/MovementSystem.php": "sha256-D/u7Z9WDDmiy1K0G3CEIGX7a1k8tBOHdCgqFJB6BfHw=",
-    "src/System/ProgressSystem.php": "sha256-ZhuaQTMUUYvAjib7OQCBj6v8jSgnekw1Al548ZYsD6c=",
-    "src/System/ResolutionSystem.php": "sha256-I6uklPotQ8lIU1W/Ti0cwES5xRfTNMAJqR15me1WXyM=",
-    "templates/board.tx": "sha256-dYN4746oJxCHUcHtn97o1nB88EF4sY+9f9kUugsNi8o=",
-    "worlds/arcade.world": "sha256-BhMeQM0ZvzliYhQi0jPC4iEIStWTXfpkMEM1mZbjLME=",
-    "worlds/bonds-01.tmj": "sha256-0h8h7IZ/gaHPAb3oEFjf13H/U/r2ecLnHbiyrVKCCP0=",
-    "worlds/bonds-02.tmj": "sha256-dq/xfz881CUL/AOgMPYCEnMgm7Uf6RFyXKWWmJsPVPA=",
-    "worlds/bonds-03.tmj": "sha256-m1GeccnoKtb+yO2/vmKoQFZV7bWs0lAyP9zmWj/pDFo=",
-    "worlds/bonds-04.tmj": "sha256-KIxoO7bAGO/5hiJYDbnwdPZa72cgsX1mU2iwXLCbhUg=",
-    "worlds/bonds-05.tmj": "sha256-JJXz0rzTa8jZVKRwhbqKI8Qmcc0f1j0hGU2BMDfjhyw=",
-    "worlds/bonds-06.tmj": "sha256-UCu8XmttjjbE31hlB1xrSLmGKSuG7dE2vT0XuNFTf/g=",
-    "worlds/bonds-07.tmj": "sha256-l8yCsgtWxR8c5C3jI/CHpNYF9/zgHnB+tuVN8ROeMx0=",
-    "worlds/bonds-08.tmj": "sha256-6wRvCyB0Qg7C/zQddnk8LLPJ8VwBVLgi3/TYhRhKSMg=",
-    "worlds/bonds-09.tmj": "sha256-2YL+c1djDBD2KfxB3TxnWKgWa32XM0AtkgG1bTedZPY=",
-    "worlds/bonds-10.tmj": "sha256-sfwo/evO4VTN10LO9GKIbKMxDGHpOQnFeaIoi/0n9js=",
-    "worlds/bonds-11.tmj": "sha256-x3zJP5iGsZGK7r0yISFkgOeJyXI7TX6QDVTksNeSKnc=",
-    "worlds/bonds-12.tmj": "sha256-qIYhtXUCAITAKeLCOKrA7HpDNJEAwrb0nFdainhfy48=",
-    "worlds/bonds-13.tmj": "sha256-GZyXt75tjbZ1VhQPFEU9Ku+kA652Nk148ShSXXm28kk=",
-    "worlds/bonds-14.tmj": "sha256-4aD//13AB5k65cdUGNTQNQVANyyynY7NUc+eaPV0eIY=",
-    "worlds/bonds-15.tmj": "sha256-xmUubX4Wt1YDiU+tXKG2ZVq91ZyNgfnUaXwCG1lphzU=",
-    "worlds/cascade-01.tmj": "sha256-BMUllbnVIHTDjDYYNvIbaIx3lCWrM77s14ovHo9aTas=",
-    "worlds/cascade-02.tmj": "sha256-nDD3wZBHHJSQF5H89RTgKCh+bRPRh6mEDTEKvUOqs3M=",
-    "worlds/cascade-03.tmj": "sha256-79Xe5bh6+CLQpSKdoETWStWN5AyoQ94MYg/iOZacSKs=",
-    "worlds/cascade-04.tmj": "sha256-JmCv8BBFF6zzDt5RL7Ztkq4+IBuA6t7wGuqpLaz3k1k=",
-    "worlds/cascade-05.tmj": "sha256-I08xqEntbHAZc6sHuaK15sfWKu393Kxgi+0Z4OqpTPk=",
-    "worlds/cascade-06.tmj": "sha256-ctwxapACMhlnqvgPOtyr63T9qC31z3M8izixSCxAtSo=",
-    "worlds/cascade-07.tmj": "sha256-AWC08gjAKFffwiq8JS4asdNo7WpUUEd1lye66yHi7z0=",
-    "worlds/cascade-08.tmj": "sha256-jVCLROpoGopfqf/omoGx7Z8H1IoD5VRbwcLNnsTXTXA=",
-    "worlds/cascade-09.tmj": "sha256-tD1xjU9aV9bARCzAHEKHp0fhk+iYUKtRewRJZLkPPc4=",
-    "worlds/cascade-10.tmj": "sha256-CQPSW38dtdfcReThvSkturzw3LqW7PdpPkZeJ0nyUpQ=",
-    "worlds/cascade-11.tmj": "sha256-ruzfToE2ni5NQquoWETFk+FyFJ1Mk7TySLPtW1JCJZU=",
-    "worlds/cascade-12.tmj": "sha256-syYbJxkA4PbRnuEKfnPSBbHhMmxEtHuBByUw5sOZHEo=",
-    "worlds/cascade-13.tmj": "sha256-U1CDFpMejDvsDzyal9qC1SQV/d8kI2mIhGBApbZYWgQ=",
-    "worlds/cascade-14.tmj": "sha256-aOImLFHefw5ZhcYHF0Qm6c+uFgiEy9HSw+yQTyvSd1Q=",
-    "worlds/cascade-15.tmj": "sha256-mthStV7+O3H1hRyTtU1O3lEOTnjF3DbYxTGaJAG+QdU=",
-    "worlds/endless-01.tmj": "sha256-KQarCXPjuzo+hPmU9MgfkAP0UKz/8K4Z3+3Lw4QIjEE=",
-    "worlds/race-01.tmj": "sha256-AhtjE4Uki33iiFFZO+bYaeS6hff17i+wSzBzDnSAAa8=",
-    "worlds/reactor-01.tmj": "sha256-/ff67JWvboBp8UAf/+npBMBvBITx0uAB4zEiTpUP2+s=",
-    "worlds/reactor-02.tmj": "sha256-7X2AUiik4tPGNW+0MdvgLm98rkzQqtJFKvuJzOfhXI4=",
-    "worlds/reactor-03.tmj": "sha256-Zcet3zxd/eapd9Giqnt23zwQnY+myIdGnhXJRY5SqiI=",
-    "worlds/reactor-04.tmj": "sha256-pDek67vhiHt7AaC+PiiLACKtv0pEhDxwSrOuv9j+7bI=",
-    "worlds/reactor-05.tmj": "sha256-Gq5rs7LWsyhph1XyAYMyNQm7p4J6sNoWTd3Vg7xum7U=",
-    "worlds/reactor-06.tmj": "sha256-HWTm4rCAdGiU6A9uRbQdtVDQgkuHAoNZQLsoqREwnSc=",
-    "worlds/reactor-07.tmj": "sha256-QFGLw4D+77p1wtIzAyzm0KiN49B2IHH0jfGhhYoDYGg=",
-    "worlds/reactor-08.tmj": "sha256-RzqdtvRosnawrx+i2EOLEx7shlz5rzhdce3SxlmGKWs=",
-    "worlds/reactor-09.tmj": "sha256-OZ8OQsPEU5wfeW3F1NolaIoCPv50MPCWb1OYwErqbZQ=",
-    "worlds/reactor-10.tmj": "sha256-NYx1w+iOuCFbt5WLj9luPdfCsQlebM1nC4BiyIdUhms=",
-    "worlds/reactor-11.tmj": "sha256-I2H+oWzvPBTlXQJflvZA4jPJNeBw9vkuu2Y/W/UtXNk=",
-    "worlds/reactor-12.tmj": "sha256-x882XTaC/KWFrm9EzIDLrf2v9BNjxK6vd27E4HKKz/w=",
-    "worlds/reactor-13.tmj": "sha256-42fcLvrl2tJxf0A6ziXBtFT4GObo8tzmFXbySzprPcc=",
-    "worlds/reactor-14.tmj": "sha256-x9+CQzoBqxG2ZlYcOoVYyfpCnhYx0zPBX15yuVkEtMA=",
-    "worlds/reactor-15.tmj": "sha256-MIC6BOsf36t/ao9P9OHHeHxUdTBEKVKVKnILToz5iMU=",
-    "worlds/squares-01.tmj": "sha256-T5C1Nt7ArTiMDQEUFWdiO3jMhxf5tVBznY3mLuTeaVc=",
-    "worlds/squares-02.tmj": "sha256-OP8TymkFFrWB/q/9RIZDBsz3IKxbNOaLZXQqvdm3ojA=",
-    "worlds/squares-03.tmj": "sha256-LQvkUAG15aERlWegbe3rKffJUV7nO7u6IwEr4iQtGzc=",
-    "worlds/squares-04.tmj": "sha256-Ek8Dz1MfZ5TyTaDLMMEJAdCxHU5scCJVr4WPnwCspk4=",
-    "worlds/squares-05.tmj": "sha256-UcuH+wQOeVuNWhzeWqOX3dbsTv40wqce2PJ/brM5z1k=",
-    "worlds/squares-06.tmj": "sha256-x0NHHydb5rTfr9Hn+P680GriMVfqDnwtj0vfivR12q4=",
-    "worlds/squares-07.tmj": "sha256-vjZZbInAuMhaR9ovco7BZ/Svypuok7ybx4yttnoFwPs=",
-    "worlds/squares-08.tmj": "sha256-eLvlPQLIE4BJh+AVgMOgSM6yEnqhVuAt7iVBoy3Bjo8=",
-    "worlds/squares-09.tmj": "sha256-Ha0wquSj+Z2KzR7ojiz/2u3zmr5KkbJ0iDErU9zmkNA=",
-    "worlds/squares-10.tmj": "sha256-RnCB16D8lbEcwLwe4UZperaMHVF28Zx9yjjiqBmYJJs=",
-    "worlds/squares-11.tmj": "sha256-kFURL4Dx+IXPCu0ooAdQCKjm0GfaWB+YvBzKuvfSiHU=",
-    "worlds/squares-12.tmj": "sha256-bxrMcrRadY6ZEXXfOupvK7hxaza+bU5Lp6VVam0ofI8=",
-    "worlds/squares-13.tmj": "sha256-SXZ9H4yHr47W51Tq7mXGkiGdsJLnJ0gxz7A5VWZT/XQ=",
-    "worlds/squares-14.tmj": "sha256-sh4FLwdI5qU++IChgzVBKEmLhzMXokt+iDpLcxC7YT0=",
-    "worlds/squares-15.tmj": "sha256-9DqCyJdP0YgLFnWJv7e2r6jQjxa12Rl/oV8JwIMlSPs=",
-    "worlds/targets-01.tmj": "sha256-n4G5Pr8caA2QfmNLcnWs7aiLthfwWAPPyx4V/+TxTpE=",
-    "worlds/targets-02.tmj": "sha256-7oS8dBCX1Sfmcp1xkxp3wqwBBwesHu0eHKXaEknzD7w=",
-    "worlds/targets-03.tmj": "sha256-kseH2sdTpRcahBm6JMvUILSPtJc56UFUuEZIGBRslFY=",
-    "worlds/targets-04.tmj": "sha256-8i4eEndt2n+wDAgw+hr6XUp7hw9H1TVPJmqXOExqdRw=",
-    "worlds/targets-05.tmj": "sha256-OWH/LaNSlgnI2DOTwmL7i2AEDIYfaovpFlRdISDf9ds=",
-    "worlds/targets-06.tmj": "sha256-505QO9fEZ9nyvWBqo0xPwf4BXCInTMxRnQB9Z9Zwcb0=",
-    "worlds/targets-07.tmj": "sha256-XNZouR1SMpjlyyRgU7pXk0Yd9xAiw/BH5BVu1WuPW3Y=",
-    "worlds/targets-08.tmj": "sha256-oLmp17GteOaKRkSrpYRMq0SxBvLlitexre7PUUriwPY=",
-    "worlds/targets-09.tmj": "sha256-q18Er/FYGt9BHk+2FULQ9RvaoqNVHf0fqBicoEodQmU=",
-    "worlds/targets-10.tmj": "sha256-QHreMkBzGicQhEs7Bypbc7D0V4VokyC/0fpsda9L6bE=",
-    "worlds/targets-11.tmj": "sha256-ixjEXJvmxpvkW8QM5yiHF/CuoXU9tEgiWpn4UQfnMZU=",
-    "worlds/targets-12.tmj": "sha256-Q7C3q9FG5FtU582DbWujrznXoBofHzvTZp+1oGWHacE=",
-    "worlds/targets-13.tmj": "sha256-9Up0n8VwTiXso3YBSBP6f+ED1Q4mR7fMNyYUwu2b8ys=",
-    "worlds/targets-14.tmj": "sha256-RyugkeEncAgrJux4TEr2UloEHVxISQ6+KShVUIp0Zbc=",
-    "worlds/targets-15.tmj": "sha256-i1Oicvgn28scT2QRtIrTYAMMIGbcehI13+XzVSzFSXM=",
-    "worlds/time-01.tmj": "sha256-bIeSIJCi1uil34e9oVjfKULBhFYp3JVcCd4KKO5x9nc="
+    "src/System/GravitySystem.php": "sha256-YdbOYru2r7Cz7JBKKO2tq0UKIAe/H8i7ii7om0cEFN4=",
+    "src/System/MovementSystem.php": "sha256-liv0BB+9aobRmqm5jZjfaaoPUG9x0LSHv/wBh4joiOY=",
+    "src/System/ProgressSystem.php": "sha256-8hVyhAYHpDF0MOTM7ywYBCPd+aX/wEWSkhgVMfrIG2k=",
+    "src/System/ResolutionSystem.php": "sha256-97MYGB7f+1xTn8dF1bZUQuaFH50ZsCrCPGnv9iuH3T0=",
+    "templates/board.tx": "sha256-m54z2/2kV5/tj0smEsgOxI06j7+mbRDN25SguZZrPjI=",
+    "worlds/arcade.world": "sha256-YT9cm0+ZAiRf5PQZhV2MeJTDlI38qwrxs5rXEc+Wxxk=",
+    "worlds/bonds-01.tmj": "sha256-A2K2kca0wT9ntYqOREIbvRwl1h3tvzpfPT1pQSJU1j8=",
+    "worlds/bonds-02.tmj": "sha256-CRp3xWZf3PBcAcLMtOzOY4Lh/gszZ0ujmdvKaZ3sIM0=",
+    "worlds/bonds-03.tmj": "sha256-yp8T4E3Cdt9QbEQLQfj1eu199KKQoyZnPX6rcZW9J9E=",
+    "worlds/bonds-04.tmj": "sha256-7fWILXakYwQTD5uSAkfRfCzxxC7RRaUc/mE+T5cVTaQ=",
+    "worlds/bonds-05.tmj": "sha256-ZCyop41Ck9eI5wuOiiUUfM7K3WLbjgsBx562Cb+VapM=",
+    "worlds/bonds-06.tmj": "sha256-DoZRclNaw5/ECyMWT5L+vbL6alMXqwx9mTOkYrkLX+E=",
+    "worlds/bonds-07.tmj": "sha256-lSksx9YB5XAp441il0AcL8pVyW8UwL6QrtMaWkd+hOA=",
+    "worlds/bonds-08.tmj": "sha256-MNJxx4U1+rHAgu03uhAGvdS2rgJjAa0sW6dRWyMcBa8=",
+    "worlds/bonds-09.tmj": "sha256-2ia7srlO90MqUCjh28FNNvtUJjvy03/qlySAVPcgyZw=",
+    "worlds/bonds-10.tmj": "sha256-tG8Bp4qH2Krh9IbkMiFoglpWvdKcVi4J6i70qjpjZ5U=",
+    "worlds/bonds-11.tmj": "sha256-nV5t1dxZ4li8mUYLnCTeuCbyH9Mo7FL+2XYZEoBi4tc=",
+    "worlds/bonds-12.tmj": "sha256-A1xoH+3j5YGOop2+ZCPXRM1bECZXSbmAfs3uJd5Oulo=",
+    "worlds/bonds-13.tmj": "sha256-jCFK+nTDseTBfLLnmxRHltwiYvky/CHj5s78OE+1HtA=",
+    "worlds/bonds-14.tmj": "sha256-GtU8zQI4QbNQ909ZL7iYUT715WXjhi/kGFkwKJ2EOFY=",
+    "worlds/bonds-15.tmj": "sha256-VPByfEVni2/8vfYVQTyWHYGA6qWN2sYmnUKeJ0Z4c5s=",
+    "worlds/cascade-01.tmj": "sha256-ZRms4FxyT3ttri/sZpbM0gjVs53ni7jjlsiKZ5mc3PQ=",
+    "worlds/cascade-02.tmj": "sha256-FB8cKLjBigzb1gmZFD3UXPp/XJLUG9DI0McE3kSX6Lw=",
+    "worlds/cascade-03.tmj": "sha256-cB+V0sgF767WPh5IU03HDYlJh3NehSkpY669K8Ic8Pc=",
+    "worlds/cascade-04.tmj": "sha256-gY6SDRjNXQ2XD4qcVn1udzInRz/LAl5rURFgu9mHpd0=",
+    "worlds/cascade-05.tmj": "sha256-at1rHvIiTJfSY58AAokE8oKVAe7scG2P5WFXg/RzgII=",
+    "worlds/cascade-06.tmj": "sha256-AeERxJCtfvI9Wx/JJLyjmQ/0mzk6x8MbVNkMhXlE82A=",
+    "worlds/cascade-07.tmj": "sha256-vocuNzSACU+uZMFh/mS/zP5Lq9daSlkjjMEynKpQjpE=",
+    "worlds/cascade-08.tmj": "sha256-wJqqGJmmDgWt04tJWZ85dArLa9Ta2HoAGgt43bgllyY=",
+    "worlds/cascade-09.tmj": "sha256-uYbdWWXvzi0naY3m/Z+waYmUu1lfPviJcUMOVnB7TN0=",
+    "worlds/cascade-10.tmj": "sha256-TsGF8Mhj5iP4DF3kS0D1UnMtN10raOwEnkeVdQ8JOo4=",
+    "worlds/cascade-11.tmj": "sha256-TRgcv3UZYYGQ+Y4LiY70HoogaiVgWtsCfuGmSR/WBWc=",
+    "worlds/cascade-12.tmj": "sha256-bf0z1FlfNfey3W0ztJyilcK5ol5ogQ12dqUFltUFraI=",
+    "worlds/cascade-13.tmj": "sha256-HjOziWsFiksrlLK3qt9j0RQpheWcFJ6UmcFYi6eJCWQ=",
+    "worlds/cascade-14.tmj": "sha256-k9q9j0w70xtMneRTCqFiB9YphFRd7sw8bx3uIWC7dbA=",
+    "worlds/cascade-15.tmj": "sha256-fUkycw83GzMIvAKrx8l8OTaa828bMieSXhNIV/VsCgA=",
+    "worlds/endless-01.tmj": "sha256-rWFEV9LJhCjnDde92YcGbX1gfUSUiXeJ4bYvk6QI1pA=",
+    "worlds/race-01.tmj": "sha256-XPqNjbsFoIYib5QHzGkRotIf0M2UyERCJCaOLCRX+xw=",
+    "worlds/reactor-01.tmj": "sha256-oJWHgf2W5R3YQDCngkegGSOLd5Bwswy6Gcqd24PBPbA=",
+    "worlds/reactor-02.tmj": "sha256-7QsWy7iuOFOBSLvbgLTBgKDq2mB2leHUi6DL4bbquEE=",
+    "worlds/reactor-03.tmj": "sha256-SO0zWq13cLGFHzYOfQ7kyt4eqnoWJJ8WDO7szTZ3LoY=",
+    "worlds/reactor-04.tmj": "sha256-KrVMb9eymhfAfGOouwhid3R7X90roYaLOueCxhYWt1g=",
+    "worlds/reactor-05.tmj": "sha256-52wOYb92iXy46U3W552JnEMt42VjHq5LFH99ZH6O+Po=",
+    "worlds/reactor-06.tmj": "sha256-iPGswf/xwLg732KnbrEBzYwUl4/A9PUBep7hjA6+dHA=",
+    "worlds/reactor-07.tmj": "sha256-h/AzZ/QWX/wwiLbOZLcQNyGK30VAtW6QIA6US9kTVyI=",
+    "worlds/reactor-08.tmj": "sha256-bHj4E2BOmKH1wpcIzgHrte4orSTStJMMdg2S1EtOSuw=",
+    "worlds/reactor-09.tmj": "sha256-rJeky91Xw3W4sPCRSCY6kf0eWPVPq3JTiBxfLYKe6s4=",
+    "worlds/reactor-10.tmj": "sha256-JlqJHvdPWTsPbjXO5j6cP0lU9dR8VQ4bdzvtdFpfZhc=",
+    "worlds/reactor-11.tmj": "sha256-v+s352BieV6JssImNYlGWZ1icFesgyGHeGgFeT9S0zs=",
+    "worlds/reactor-12.tmj": "sha256-Qm/QUBbrnIEyUOMaT1dOL52UeA+GdGYoQXx/Y+bXfZw=",
+    "worlds/reactor-13.tmj": "sha256-ltI4vRRvhrwsql9BUwdkc9qcG/mwdDXpC5HNwF/XFq8=",
+    "worlds/reactor-14.tmj": "sha256-zWDbgUgHC5Ytv8EL7uoqiHmtJ7rXz0EqmqK3/Jndjbk=",
+    "worlds/reactor-15.tmj": "sha256-Jw8WAb0dToNBjbORaW1AyUfMR7KPiXP+KbyYwqyGuVc=",
+    "worlds/squares-01.tmj": "sha256-ULwTRHpvpEDQDRZrVlrwS3DvKMsc1vZZZ7R3z1PPk1k=",
+    "worlds/squares-02.tmj": "sha256-fUJYcs20gjPId/g/6h0+/LDDn90FlGlnS+G91ooB+KE=",
+    "worlds/squares-03.tmj": "sha256-7fd1NJ5WTHo7k4HrdzSxg4hijfkH6aKWu7juTp1RBtw=",
+    "worlds/squares-04.tmj": "sha256-osmWHZ0Wj5FCg6SoHfibCoGjOSIPETCTH4UJ/1tXobU=",
+    "worlds/squares-05.tmj": "sha256-xNN4rZNWRZUXje1YE53IBXsxT49x9d0EleT9w2b907s=",
+    "worlds/squares-06.tmj": "sha256-f7ndS9cDtm72xrkPEJvTSnH81/9YMz7qwJ1isVbr0so=",
+    "worlds/squares-07.tmj": "sha256-AYtc5H6/XN2x62rjTRIpNppKtlnGzcQ8+6aQC9qj2kg=",
+    "worlds/squares-08.tmj": "sha256-squaCwr1Z6P2Tio/EXL/NSm/M2mXmpYb2u5EGEt8tC0=",
+    "worlds/squares-09.tmj": "sha256-la2sNhzbtPPgLIvHNPDIg9un+YHgEsl7UXiliQQJFgs=",
+    "worlds/squares-10.tmj": "sha256-nTTumE8cu5tLJfsPzEPf4kMkT6v1VcTPBL+sy5nBGCU=",
+    "worlds/squares-11.tmj": "sha256-69ecpgdOaasFSzNL2EVdPiPlxXKSChRvFs/3rLGLEGw=",
+    "worlds/squares-12.tmj": "sha256-AGK7Y63lSOjJcXVIACODjnD5AoomqrPpHs7Il8HRN9o=",
+    "worlds/squares-13.tmj": "sha256-xWa355BkiMe5TP+LQ/1kh1rP7iF4lwIO9pknDAm9Pns=",
+    "worlds/squares-14.tmj": "sha256-xemlSKko8LcaGQBi2qbd2D6duqdL1Wu/k/ylzzhrLhc=",
+    "worlds/squares-15.tmj": "sha256-kwbkwKxI3Yx5fw4Ooa0qd7thtbfxDpRVtiQezSAL0rU=",
+    "worlds/targets-01.tmj": "sha256-e4UFzD0xOlkHzhM9CbJvu1qj/H5tHv3ZkV/SItMbzr0=",
+    "worlds/targets-02.tmj": "sha256-aEDxYyhsVNNRt/WlRJs8sdnpwVh4+laDCRS0In4WWyg=",
+    "worlds/targets-03.tmj": "sha256-iXsdr4DfVjOByy6s6gV1EiKqi0dV+KMEoWxJMsqnAPg=",
+    "worlds/targets-04.tmj": "sha256-bJGArfABz/a5D9GDIHIkRZcY9iH17QNLZYQ4gJ/Zu2w=",
+    "worlds/targets-05.tmj": "sha256-TuMTve91hThvLz/4EB6ruoycxLmVFO4Q1BVsHJk7+2o=",
+    "worlds/targets-06.tmj": "sha256-sSnQCxDUr0MZ3HzyRbWoAoCgkbCsMkeOz1Z8VC5+nX8=",
+    "worlds/targets-07.tmj": "sha256-l/1uiW7Ze+20O+cDSL0Fo1AAC0LWNqSWKJ2unIFNv2g=",
+    "worlds/targets-08.tmj": "sha256-+x0S7MsWao+vs//loK/chE8w1tRjwTCmw/Z4fa3PUeg=",
+    "worlds/targets-09.tmj": "sha256-MlnEqnDkGvbNzNgiiCiOqbSUTLnk1f8P5cTQeSQNnag=",
+    "worlds/targets-10.tmj": "sha256-Bi3hutZ4HNmdFWio4ikbK1TIPhAouF7Gs8gNvNHzgIM=",
+    "worlds/targets-11.tmj": "sha256-8WHptbbzP5Inw4ViEjGCrYpnoZWFT5u+HLWHMJ5Cn+o=",
+    "worlds/targets-12.tmj": "sha256-2AdF3zA8tEmXEoFqX9F7o+KGJKNHEpPpwblueUstIwU=",
+    "worlds/targets-13.tmj": "sha256-IDvMwPVe7REZLxEQqnpDsgPsIzTbE2X6ii4M4/fJmWo=",
+    "worlds/targets-14.tmj": "sha256-KrtUrt29gJsqTin9DbpSEpvI+iG8VlU7Xs6w92N4ucw=",
+    "worlds/targets-15.tmj": "sha256-DVyM/uexWSFliw7x2r85ndoFAEKMGm5bK6T4hgYbmWY=",
+    "worlds/time-01.tmj": "sha256-AT5wEanipBGN4Q0u+6iJVTh4nIpHz/9Vjrb5xeunYnY=",
+    "src/StageSystems.php": "sha256-sDE9r8o8bwDrMJD/j64BbnmdVvOHf7gYkgGhF6uPqNY=",
+    "modules/components.php": "sha256-QrUynqVfwTqseBjIjsQcSAlZjsm5m5bPshYxyVVU9QQ=",
+    "modules/stage.php": "sha256-4e4jhSJWbhWHaunnJgYdHGws0zccld0x3pZLjxGqfRU=",
+    "worlds/arcade.tiled-project": "sha256-TIZASjEXv2zMs/XZ/xGQFGob9cNWUVw3xjBThj1SJRw=",
+    "worlds/phonics.classes.json": "sha256-p8SZlDGA2smr+0+MFsVyNnnwjbmYj56G8awmcm75pPI="
   }
 }
