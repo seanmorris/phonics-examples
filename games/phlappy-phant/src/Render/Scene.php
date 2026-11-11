@@ -265,7 +265,9 @@ final class Scene
 
 		if($this->cardinal !== null)
 		{
-			// A gentle bob keeps the glide from looking like a slide.
+			// A gentle bob keeps the glide from looking like a slide. Draw the next graded palette over the current one
+			// with the scene's fade so the bird changes light without popping between palette steps. Both sprites use the
+			// same animation clock, keeping their wing frames aligned throughout the fade.
 			$bird = $this->tile(
 				self::GID_CARDINAL + self::STRIDE_CARDINAL * $this->palette
 				, round($this->cardinal[0]) * $scale
@@ -274,7 +276,17 @@ final class Scene
 				, $tint
 			);
 			$bird->animated = true;
-			$this->sprites->render([$bird], $camera, $seconds * 1000);
+			$birds = [$bird];
+
+			if($this->fade > 0)
+			{
+				$next = clone $bird;
+				$next->gid += self::STRIDE_CARDINAL;
+				$next->tint[3] = $this->fade;
+				$birds[] = $next;
+			}
+
+			$this->sprites->render($birds, $camera, $seconds * 1000);
 		}
 
 		for($x = -fmod($game->scroll, self::GROUND_TILE); $x < $visible; $x += self::GROUND_TILE)
