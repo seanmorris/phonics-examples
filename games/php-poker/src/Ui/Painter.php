@@ -101,11 +101,13 @@ final class Painter
 		[,,$pokerWidth]=$this->layout->rect(...$headings['poker']);
 		[$pokerX]=$this->layout->point($headings['poker'][0],0);
 		$game = (string)($this->view['game'] ?? 'draw');
-		$this->canvas->label(GameText::title($game),$pokerX+$pokerWidth+16*$this->unit,$top+$height/2,Theme::LABEL,Theme::MENU_TEXT,$this->face);
 		$stage = $this->state['motion']['kind'] ?? '';
 		$phase = !empty($this->view['waitingForConfirmation']) ? 'CONFIRMING'
 			: GameText::phase($game, (string)($this->view['street'] ?? ''), (string)($this->view['phase'] ?? ''), (string)$stage);
-		$this->canvas->label($phase, $left + $width - 14 * $this->unit, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face, 'right');
+		// The right of the bar reads the step, then the game. It may use all the bar the two menus leave.
+		$right = $left + $width - 14 * $this->unit;
+		$this->canvas->label(GameText::barStatus($game, $phase), $right, $top + $height / 2, Theme::LABEL, Theme::MENU_TEXT, $this->face, 'right'
+			, max(1, $right - ($pokerX + $pokerWidth + 16 * $this->unit)));
 	}
 
 	/** Draw table-bar dropdowns and information windows above every table object. */
@@ -114,8 +116,11 @@ final class Painter
 		if(($this->state['confirmDialog']??null)!==null) { $this->confirmationDialog(); return; }
 		if(($this->state['infoDialog']??null)!==null)
 		{
-			if($this->state['infoDialog']==='game-settings') $this->gameSettingsDialog();
-			else $this->oddsDialog((string)$this->state['infoDialog']);
+			// The rules and the settings are the title's own screens, drawn here as windows over the table.
+			match($this->state['infoDialog']) {
+				'game-settings' => $this->gameSettingsDialog(), 'help' => $this->helpScreen(), 'settings' => $this->settingsScreen(),
+				default => $this->oddsDialog((string)$this->state['infoDialog'])
+			};
 			return;
 		}
 		if(($this->state['topMenu']??null)!==null) $this->dropdownMenu((string)$this->state['topMenu']);
@@ -770,7 +775,7 @@ final class Painter
 			$this->button($menu['back'], 'Back', '⎋', 'default', false);
 			return;
 		}
-		$help = HelpPage::of($this->layout, $this->canvas->text, $this->mode, (string)($this->state['inputTheme'] ?? 'keyboard'), (string)$game);
+		$help = HelpPage::of($this->layout, $this->canvas->text, $this->mode, (string)($this->state['inputTheme'] ?? 'keyboard'), (string)$game, ($this->state['infoDialog'] ?? null) === 'help');
 		$first = max(0, min($help->last, (int)($this->state['helpScroll'] ?? 0)));
 		$this->dialog($help->frame['box'], 'HOW TO PLAY · ' . GameText::title((string)$game));
 		foreach($help->shown($first) as $item)
@@ -849,7 +854,9 @@ final class Painter
 		$this->text('Look', $box[0] + 24, $setup['variant'][1] + $setup['variant'][3] / 2, Theme::LABEL, Theme::INK);
 		$this->button($setup['variant'], $this->mode === Theme::CLASSIC ? 'Classic' : 'Modern', 'M', 'default', false);
 		$this->text('Pace', $box[0] + 24, $setup['pace'][1] + $setup['pace'][3] / 2, Theme::LABEL, Theme::INK);
-		$this->button($setup['pace'], ($this->view['pace'] ?? 'normal') === 'fast' ? 'Fast' : 'Normal', 'P', 'default', false);
+		// Pace is the house players' thinking time; an online table has none, so the button is shown spent.
+		$this->button($setup['pace'], ($this->view['pace'] ?? 'normal') === 'fast' ? 'Fast' : 'Normal', 'P', 'default',
+			($this->view['screen'] ?? '') === 'table' && ($this->view['mode'] ?? 'offline') === 'online');
 		$this->button($setup['back'], 'Back', '⎋', 'default', false);
 	}
 

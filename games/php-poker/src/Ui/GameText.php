@@ -103,6 +103,17 @@ final class GameText
 		return self::STREETS[$street] ?? self::title($game);
 	}
 
+	/**
+	 * What the right of the table's menu bar reads: the step, then the game, as in "4TH STREET / SEVEN-CARD STUD".
+	 * Between hands the step is the game's own name, which is then said once.
+	 *
+	 * @param string $step The step as `phase()` names it, or a word such as CONFIRMING that stands in for it.
+	 */
+	public static function barStatus(string $game, string $step): string
+	{
+		return $step === self::title($game) ? $step : $step . ' / ' . self::title($game);
+	}
+
 	/** @return string The welcome card's line naming the game and its rules. */
 	public static function welcome(array $profile): string
 	{
@@ -260,7 +271,7 @@ final class GameText
 			[['F'], 'Fold'], [['C'], $draw ? 'Call, check or pass' : 'Call or check'], [['B'], 'Bet or raise'],
 			[['+', '-'], 'Change the amount'],
 			...($draw ? [[['1-5'], 'Select cards'], [['D'], 'Draw']] : []),
-			[['H'], 'Round history'], [['Alt+G'], 'Game menu'], [['Alt+P'], 'Poker menu'], [['Esc'], 'Leave the table'],
+			[['H'], 'Round history'], [['?'], 'How to play'], [['Alt+G'], 'Game menu'], [['Alt+P'], 'Poker menu'], [['Esc'], 'Leave the table'],
 		];
 	}
 

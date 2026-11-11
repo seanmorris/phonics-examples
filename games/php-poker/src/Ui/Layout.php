@@ -516,7 +516,8 @@ final class Layout
 		$height=$this->controlSize();
 		$definitions=$menu==='game'
 			? [['new','New Game','N'],['save','Save Game','S'],['load','Load Game','L'],['quit','Quit to title','Q']]
-			: [['game-settings','House Rules','R'],['history','History','H'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I']];
+			: [['game-settings','House Rules','R'],['history','History','H'],['odds','Odds Against Being Dealt','O'],['improving','Odds Against Improving','I'],
+				['help','How to Play','?'],['settings','Settings','M']];
 		// The odds tables count five-card deals and draws: five-card stud is dealt five cards but never draws, and the
 		// other games make their hands from more than five.
 		if($menu === 'poker' && $game !== 'draw')
@@ -1389,6 +1390,10 @@ final class Layout
 		$add = static function(string $id, float $weight, string $label, string $key, string $style, ?array $intent) use (&$entries): void {
 			$entries[] = ['id' => $id, 'weight' => $weight, 'label' => $label, 'key' => $key, 'style' => $style, 'intent' => $intent];
 		};
+		// Fold, the check-call-pass button and the bet button each own a place: F first, C second, B third. A turn
+		// that offers only some of them leaves the other places empty, so a button is never where another one was
+		// a moment ago and a hurried click cannot land on the wrong action.
+		$places = null;
 
 		if($phase === 'ready' && !empty($legal['next'])) $add('deal', 1.2, 'Deal', '↵', 'primary', ['type' => 'next']);
 		elseif(!empty($legal['draw']))
@@ -1405,17 +1410,20 @@ final class Layout
 		}
 		elseif(!empty($legal['fold']))
 		{
-			$add('fold', 1, 'Fold', 'F', 'danger', ['type' => 'fold']);
-			if(!empty($legal['pass'])) $add('pass', 1, 'Pass', 'C', 'default', ['type' => 'pass']);
-			elseif(!empty($legal['check'])) $add('check', 1, 'Check', 'C', 'default', ['type' => 'check']);
-			elseif(!empty($legal['call'])) $add('call', 1, 'Call ' . ($legal['callAmount'] ?? 0), 'C', 'default', ['type' => 'call']);
+			$places = [1.0, 1.0, 1.1];
+			$add('fold', $places[0], 'Fold', 'F', 'danger', ['type' => 'fold']);
+			if(!empty($legal['pass'])) $add('pass', $places[1], 'Pass', 'C', 'default', ['type' => 'pass']);
+			elseif(!empty($legal['check'])) $add('check', $places[1], 'Check', 'C', 'default', ['type' => 'check']);
+			elseif(!empty($legal['call'])) $add('call', $places[1], 'Call ' . ($legal['callAmount'] ?? 0), 'C', 'default', ['type' => 'call']);
 			if(!empty($legal['bet']))
 			{
 				$amount = max((int)$legal['minBet'], min((int)$legal['maxBet'], $state['amount']));
-				$add('bet', 1.1, ($legal['betLabel'] ?? 'Bet') . ' ' . $amount, 'B', 'primary', ['type' => 'bet', 'amount' => $amount]);
+				$add('bet', $places[2], ($legal['betLabel'] ?? 'Bet') . ' ' . $amount, 'B', 'primary', ['type' => 'bet', 'amount' => $amount]);
 			}
 		}
 		if(!$entries) return [];
+		// Which of the three places each betting button stands in; other turns fill the bar from its end as before.
+		$placed = static fn(array $entry): int => $entry['id'] === 'fold' ? 0 : ($entry['id'] === 'bet' ? 2 : 1);
 
 		$gap = 10;
 		if(!empty($legal['draw']) && $phase !== 'ready')
@@ -1440,31 +1448,37 @@ final class Layout
 		{
 			[$x, $width] = $this->actionColumn();
 			$bottom = $this->height() - 26;
-			if(!empty($legal['bet'])) $bottom -= $height + $gap;
-			$y = $bottom - count($entries) * $height - (count($entries) - 1) * $gap;
+			// The three betting places always stand over the row the bet stepper uses, whether or not a bet is offered.
+			if($places !== null || !empty($legal['bet'])) $bottom -= $height + $gap;
+			$count = $places === null ? count($entries) : count($places);
+			$top = $bottom - $count * $height - ($count - 1) * $gap;
 			$buttons = [];
-			foreach($entries as $entry)
+			foreach($entries as $index => $entry)
 			{
+				$y = $top + ($places === null ? $index : $placed($entry)) * ($height + $gap);
 				$buttons[] = ['id' => $entry['id'], 'rect' => [$x, $y, $width, $height], 'label' => $entry['label'], 'key' => $entry['key'], 'style' => $entry['style'], 'intent' => $entry['intent']];
-				$y += $height + $gap;
 			}
 			return $buttons;
 		}
 
 		[$x, $y] = $this->actionOrigin();
-		$weights = array_sum(array_column($entries, 'weight'));
+		// A row of betting buttons is always divided for all three places, so each keeps its width and its position.
+		$shares = $places ?? array_column($entries, 'weight');
+		$weights = array_sum($shares);
 		$unit = match($this->profile) {
-			'landscape' => (316 - $gap * (count($entries) - 1)) / $weights,
-			'tall' => ($this->design['width'] - 2 * $x - $gap * (count($entries) - 1)) / $weights,
-			default => min(160, ($this->design['width'] - $x - 16 - $gap * (count($entries) - 1)) / $weights)
+			'landscape' => (316 - $gap * (count($shares) - 1)) / $weights,
+			'tall' => ($this->design['width'] - 2 * $x - $gap * (count($shares) - 1)) / $weights,
+			default => min(160, ($this->design['width'] - $x - 16 - $gap * (count($shares) - 1)) / $weights)
 		};
-		$buttons = [];
-		foreach($entries as $entry)
+		$lefts = [];
+		foreach($shares as $share)
 		{
-			$width = $entry['weight'] * $unit;
-			$buttons[] = ['id' => $entry['id'], 'rect' => [$x, $y, $width, $height], 'label' => $entry['label'], 'key' => $entry['key'], 'style' => $entry['style'], 'intent' => $entry['intent']];
-			$x += $width + $gap;
+			$lefts[] = $x;
+			$x += $share * $unit + $gap;
 		}
+		$buttons = [];
+		foreach($entries as $index => $entry)
+			$buttons[] = ['id' => $entry['id'], 'rect' => [$lefts[$places === null ? $index : $placed($entry)], $y, $entry['weight'] * $unit, $height], 'label' => $entry['label'], 'key' => $entry['key'], 'style' => $entry['style'], 'intent' => $entry['intent']];
 
 		return $buttons;
 	}
@@ -1807,6 +1821,7 @@ final class Layout
 	 * to fit and centred, for a canvas tall enough to show everything.
 	 *
 	 * @param float|null $content Height the copy needs, or null for all the canvas allows.
+	 * @param bool $bar Whether the table's menu bar is showing, so the window must start beneath it.
 	 * @return array{box:array{float,float,float,float},view:array{float,float,float,float},
 	 *   bar:array{up:array{float,float,float,float},track:array{float,float,float,float},down:array{float,float,float,float}},
 	 *   reach:array{up:array{float,float,float,float},track:array{float,float,float,float},down:array{float,float,float,float}},
@@ -1814,13 +1829,13 @@ final class Layout
 	 *   named:bool} `bar` is the scrollbar as drawn, one character wide; `reach` is the same three parts as targets, at
 	 *   least 48 CSS pixels across. `named` is whether Previous and Next are wide enough to name the game they open.
 	 */
-	public function help(?float $content = null): array
+	public function help(?float $content = null, bool $bar = false): array
 	{
-		if($square = $this->square()) return $this->fromSquare($square->help($content));
+		if($square = $this->square()) return $this->fromSquare($square->help($content, $bar));
 		$text = $this->controlText() * $this->typeScale();
 		$control = $this->controlSize();
-		$bar = max(16, 1.2 * $text);
-		$width = min($this->width() - 24, 24 + 38 * $text + 12 + $bar + 8);
+		$rail = max(16, 1.2 * $text);
+		$width = min($this->width() - 24, 24 + 38 * $text + 12 + $rail + 8);
 		$left = ($this->width() - $width) / 2;
 		// The pager is centred, so it clears the corner buttons while it is no wider than the canvas less twice their
 		// width. Previous and Next name the game they open wherever both names fit beside Back; otherwise they are
@@ -1844,21 +1859,22 @@ final class Layout
 		$pager = 2 * $arrow + $backWidth + 16;
 		$floor = $this->height() - ($pager > $this->width() - 2 * $corner[0] + 1e-6 ? $corner[1] + 4 : 8);
 		$chrome = 28 + 16 + $control + 10;
-		$available = $floor - 8 - $chrome;
+		$ceiling = $bar ? $this->menuHeight() + 6 : 8;
+		$available = $floor - $ceiling - $chrome;
 		$body = $content === null ? $available : min($available, $content);
 		$height = $body + $chrome;
-		$top = 8 + ($floor - 8 - $height) / 2;
-		$view = [$left + 24, $top + 28, $width - 24 - 12 - $bar - 8, $body];
+		$top = $ceiling + ($floor - $ceiling - $height) / 2;
+		$view = [$left + 24, $top + 28, $width - 24 - 12 - $rail - 8, $body];
 		// The scrollbar stands at the window's right edge. Its arrows and track are drawn a character wide and
 		// answer a touch across a full-sized target that reaches back over the margin beside them.
-		$edge = $left + $width - 8 - $bar;
+		$edge = $left + $width - 8 - $rail;
 		$parts = static fn(float $x, float $across, float $end): array => ['up' => [$x, $view[1], $across, $end]
 			, 'track' => [$x, $view[1] + $end, $across, $body - 2 * $end], 'down' => [$x, $view[1] + $body - $end, $across, $end]];
-		$touch = max($bar, 48 * $this->dpr / $this->scale);
+		$touch = max($rail, 48 * $this->dpr / $this->scale);
 		$row = $top + $height - $control - 10;
 		$back = [$this->width() / 2 - $backWidth / 2, $row, $backWidth, $control];
 		return ['box' => [$left, $top, $width, $height], 'view' => $view
-			, 'bar' => $parts($edge, $bar, min($bar, $body / 3))
+			, 'bar' => $parts($edge, $rail, min($rail, $body / 3))
 			, 'reach' => $parts(max($left, $left + $width - 4 - $touch), min($touch, $width), min($touch, $body / 3))
 			, 'previous' => [$back[0] - 8 - $arrow, $row, $arrow, $control], 'back' => $back
 			, 'next' => [$back[0] + $backWidth + 8, $row, $arrow, $control], 'named' => $fitted !== null];

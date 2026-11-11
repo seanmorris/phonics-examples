@@ -969,6 +969,113 @@ $test('no opponent sits behind the action column at any seat count', static func
 	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the action column');
 });
 
+$test('the Poker menu opens the rules of the game being played, and the title\'s settings, over the table', static function(callable $expect) use ($fixture, $root): void {
+	$view = $fixture('opening-8');
+	$presenter = new Presenter($root);
+	$presenter->resize(1280, 720, 1);
+	$presenter->update($view);
+	$state = static fn(): array => $presenter->state();
+	$key = static fn(string ...$keys): array => $presenter->input(array_map(static fn(string $each): array => ['key' => $each], $keys), null, 0);
+	$key('alt+p');
+	$expect($state()['topMenu'] === 'poker', 'Alt+P opens the Poker menu');
+	$expect($key('?') === [] && $state()['infoDialog'] === 'help' && $state()['topMenu'] === null, 'the question mark in the Poker menu opens How to Play');
+	$expect($state()['helpGame'] === 'draw' && $state()['helpScroll'] === 0 && $state()['helpScrollMax'] > 0, 'it opens the rules of the game being played, at their top');
+	$expect($presenter->modal(), 'the house\'s players wait while the rules are read');
+	$layout = $presenter->layout();
+	$frame = (fn(): array => $this->helpPage()->frame)->call($presenter);
+	$expect($frame['box'][1] >= $layout->menuHeight() && $frame['box'][1] + $frame['box'][3] <= $layout->height(), 'over the table the rules window starts beneath the menu bar');
+	$expect(count($presenter->paint(1280, 720)->instances()) > 400, 'the rules paint over the live table');
+	$key('arrowdown', 'arrowdown');
+	$expect($state()['helpScroll'] === 2, 'the rules scroll over the table as they do from the title');
+	$key('arrowright');
+	$expect($state()['helpGame'] === 'holdem' && $state()['infoDialog'] === 'help', 'Next still turns to the neighbouring game');
+	$expect($key('escape') === [] && $state()['infoDialog'] === null && $state()['helpGame'] === null && ($presenter->layout() === $layout), 'Back returns to the table, not to the index or the title');
+	$expect($key('?') === [] && $state()['infoDialog'] === 'help' && $state()['helpGame'] === 'draw', 'the question mark opens the rules straight from the table too');
+	$back = $presenter->layout()->rect(...(fn(): array => $this->helpPage()->frame['back'])->call($presenter));
+	$at = ['x' => $back[0] + $back[2] / 2, 'y' => $back[1] + $back[3] / 2];
+	$expect($presenter->input([], ['x' => $at['x'], 'y' => $at['y'], 'down' => false, 'clicks' => [$at]], 0) === [] && $state()['infoDialog'] === null, 'the Back button closes the rules over the table');
+	foreach(['holdem','stud5','stud7'] as $game)
+	{
+		$other = new Presenter($root);
+		$other->resize(390, 844, 1);
+		$other->update(['game' => $game] + $view);
+		$other->input([['key' => '?']], null, 0);
+		$expect($other->state()['helpGame'] === $game && $other->state()['infoDialog'] === 'help', "a $game table opens the $game rules");
+		$other->input([], null, 1 / 60, ['back' => 1], 'generic');
+		$expect($other->state()['infoDialog'] === null, "a controller's B closes the $game rules over the table");
+	}
+
+	// Settings: the same two choices as the title's screen. Look changes at once; pace is an intent for the session.
+	$key('alt+p');
+	$expect($key('m') === [] && $state()['infoDialog'] === 'settings' && $state()['topMenu'] === null, 'M in the Poker menu opens Settings');
+	$mode = $state()['mode'];
+	$key('m');
+	$expect($state()['mode'] !== $mode && $state()['infoDialog'] === 'settings', 'M in Settings changes the look and stays');
+	$key('m');
+	$other = ($view['pace'] ?? 'normal') === 'fast' ? 'normal' : 'fast';
+	$expect($key('p') === [['type' => 'pace', 'value' => $other]], 'P in Settings asks the session for the other pace');
+	$targets = (fn(): array => $this->clickTargets())->call($presenter);
+	$expect(array_column($targets, 'id') === ['settings:pace','settings:look','settings:back'] && array_filter(array_column($targets, 'disabled')) === [], 'Settings over the table has the title\'s three controls');
+	$expect(count($presenter->paint(1280, 720)->instances()) > 400, 'Settings paints over the live table');
+	$expect($key('escape') === [] && $state()['infoDialog'] === null, 'Back closes Settings and returns to the table');
+	// Online there are no house players for pace to hurry, so it is shown spent and sends nothing.
+	$online = new Presenter($root);
+	$online->resize(1280, 720, 1);
+	$online->update(['mode' => 'online'] + $view);
+	$online->input([['key' => 'alt+p']], null, 0);
+	$online->input([['key' => 'm']], null, 0);
+	$expect($online->state()['infoDialog'] === 'settings' && $online->input([['key' => 'p']], null, 0) === [], 'P sends nothing at an online table');
+	$spent = array_column((fn(): array => $this->clickTargets())->call($online), 'disabled', 'id');
+	$expect(($spent['settings:pace'] ?? false) === true && !isset($spent['settings:look']), 'online, pace is spent and look is not');
+	$online->input([['key' => 'escape']], null, 0);
+	$expect($online->input([['key' => '?']], null, 0) === [] && $online->state()['infoDialog'] === 'help', 'the rules open over an online table without sending anything');
+});
+
+$test('Fold, the check-call-pass button and the bet button keep their places whichever of them a turn offers', static function(callable $expect) use ($fixture, $overlaps): void {
+	$view = $fixture('facing-raise-5');
+	$state = ['discards' => [], 'amount' => 8];
+	$turns = [
+		'fold, call and raise' => ['fold' => true, 'call' => true, 'callAmount' => 6, 'bet' => true, 'minBet' => 8, 'maxBet' => 20, 'betLabel' => 'Raise to'],
+		'fold, check and bet' => ['fold' => true, 'check' => true, 'bet' => true, 'minBet' => 2, 'maxBet' => 20],
+		'fold and call' => ['fold' => true, 'call' => true, 'callAmount' => 6],
+		'fold and check' => ['fold' => true, 'check' => true],
+		'fold and pass' => ['fold' => true, 'pass' => true],
+		'fold and bet' => ['fold' => true, 'bet' => true, 'minBet' => 2, 'maxBet' => 20],
+		'fold alone' => ['fold' => true],
+	];
+	foreach([[1280,720,1],[1024,768,1],[390,844,1],[780,1688,2],[844,390,1],[1800,800,2]] as [$width,$height,$dpr]) foreach([2,5,8] as $seats)
+	{
+		$layout = Layout::fit($width, $height, $dpr, $seats);
+		$at = "$seats seats on $width x $height";
+		$places = [];
+		foreach($turns as $turn => $legal)
+		{
+			$buttons = [];
+			foreach($layout->actions(['legalActions' => $legal] + $view, $state) as $button) $buttons[$button['id'] === 'fold' ? 'F' : ($button['id'] === 'bet' ? 'B' : 'C')] = $button;
+			$expect(array_keys($buttons) === array_values(array_filter(['F', isset($legal['call']) || isset($legal['check']) || isset($legal['pass']) ? 'C' : null, isset($legal['bet']) ? 'B' : null])), "$turn shows exactly its own buttons with $at");
+			foreach($buttons as $place => $button)
+			{
+				$places[$place] ??= $button['rect'];
+				$expect($button['rect'] === $places[$place], "the $place button stands where it always does on a turn to $turn with $at");
+				$expect($button['key'] === $place, "the $place place carries the $place key on a turn to $turn with $at");
+			}
+			$stepper = $layout->stepper(['legalActions' => $legal] + $view);
+			$expect(($stepper !== null) === isset($legal['bet']), "the bet stepper shows only with a bet to make on a turn to $turn with $at");
+		}
+		$expect(count($places) === 3 && !$overlaps($places['F'], $places['C']) && !$overlaps($places['C'], $places['B']) && !$overlaps($places['F'], $places['B']), "the three places stand clear of one another with $at");
+		// The stepper has its own row: no betting button ever stands on it, whether or not it is showing.
+		$stepper = $layout->stepper(['legalActions' => $turns['fold, call and raise']] + $view);
+		foreach($places as $place => $rect) foreach(['less','amount','more'] as $part)
+			$expect(!$overlaps($rect, $stepper[$part]), "the $place place is clear of the stepper's $part with $at");
+		// In a column, Deal, which ends a hand, stands on the stepper's row and so on none of the three places. (A
+		// phone's row has no spare place for it; there the lock on input while the next hand is dealt keeps a second
+		// tap from reaching whatever follows.)
+		$deal = $layout->actions(['phase' => 'showdown', 'legalActions' => ['next' => true]] + $view, $state);
+		$expect(count($deal) === 1, "a finished hand offers Deal alone with $at");
+		if($layout->verticalActionBar()) foreach($places as $place => $rect) $expect(!$overlaps($deal[0]['rect'], $rect), "Deal does not stand on the $place place with $at");
+	}
+});
+
 $test('the human indicator, YOU disc and centered bankroll stay with the hand at a full table', static function(callable $expect): void {
 	// Draw and five-card stud deal five cards, hold'em two with a board of five, seven-card stud seven.
 	foreach([[1280,720,1],[390,844,1],[844,390,1]] as [$width,$height,$dpr]) foreach([[5,0],[2,5],[7,0]] as [$count,$board])
@@ -1904,9 +2011,14 @@ $test('the Game row cycles draw, hold\'em and both studs, and the table names an
 	$hint = (string)$table->state()['hint'];
 	$expect($view['turn'] === 0 ? str_starts_with($hint, 'Pre-flop: ') : $hint === $view['message'], 'a hold\'em turn names its street');
 	$poker = array_column($table->layout()->topDropdown('poker', 'holdem')['items'], 'id');
-	$expect($poker === ['game-settings','history'], 'hold\'em offers no five-card odds tables');
-	$expect(array_column($table->layout()->topDropdown('poker', 'stud5')['items'], 'id') === ['game-settings','history','odds'], 'five-card stud keeps the dealt odds');
-	$expect(array_column($table->layout()->topDropdown('poker')['items'], 'id') === ['game-settings','history','odds','improving'], 'draw keeps both odds tables');
+	$expect($poker === ['game-settings','history','help','settings'], 'hold\'em offers no five-card odds tables');
+	$expect(array_column($table->layout()->topDropdown('poker', 'stud5')['items'], 'id') === ['game-settings','history','odds','help','settings'], 'five-card stud keeps the dealt odds');
+	$expect(array_column($table->layout()->topDropdown('poker')['items'], 'id') === ['game-settings','history','odds','improving','help','settings'], 'draw keeps both odds tables');
+	$expect(array_column($table->layout()->topDropdown('poker')['items'], 'key') === ['R','H','O','I','?','M'], 'How to Play is on the question mark and Settings on M, as on the title');
+	$expect(GameText::barStatus('stud7', GameText::phase('stud7', 'fourth', 'betting', '')) === '4TH STREET / SEVEN-CARD STUD'
+		&& GameText::barStatus('holdem', GameText::phase('holdem', 'flop', 'betting', 'deal')) === "DEALING / TEXAS HOLD'EM"
+		&& GameText::barStatus('draw', 'CONFIRMING') === 'CONFIRMING / DRAW POKER'
+		&& GameText::barStatus('draw', GameText::phase('draw', 'opening', 'ready', '')) === 'DRAW POKER', 'the right of the menu bar reads the step, then the game, and the game alone between hands');
 	$expect(GameText::title('holdem') === "TEXAS HOLD'EM" && GameText::phase('holdem', 'flop', 'betting', '') === 'FLOP' && GameText::phase('stud7', 'seventh', 'betting', '') === '7TH STREET', 'the menu bar names the game and street');
 	$expect(GameText::phase('draw', 'opening', 'betting', '') === 'OPENING BETS' && GameText::phase('holdem', 'river', 'showdown', '') === 'HAND OVER' && GameText::phase('stud5', 'third', 'betting', 'deal') === 'DEALING', 'draw labels and shared labels are unchanged');
 	$expect(array_column(GameText::helpSteps('draw'), 0) === ['The deal','Opening','First bets','The draw','Final bets','Showdown'], 'draw help walks a hand from the deal to the showdown');

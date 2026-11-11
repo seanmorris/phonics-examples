@@ -55,13 +55,14 @@ final class HelpPage
 	 * @param string $mode `classic` or `modern`; the looks set type in different faces, so they wrap differently.
 	 * @param string $theme Input family whose legend closes the copy: `keyboard`, `generic`, `xbox` or `playstation`.
 	 * @param string $game One of `GameText::HELP_GAMES`.
+	 * @param bool $bar Whether the rules are open over the table, whose menu bar the window must stay beneath.
 	 */
-	public static function of(Layout $layout, Text $text, string $mode, string $theme, string $game): self
+	public static function of(Layout $layout, Text $text, string $mode, string $theme, string $game, bool $bar = false): self
 	{
-		$canvas = implode(':', [$layout->profile, $layout->width(), $layout->height(), $layout->scale, $layout->horizontalScale, $layout->dpr, $mode, $theme]);
+		$canvas = implode(':', [$layout->profile, $layout->width(), $layout->height(), $layout->scale, $layout->horizontalScale, $layout->dpr, $mode, $theme, (int)$bar]);
 		if(isset(self::$built["$canvas:$game"])) return self::$built["$canvas:$game"];
 		if(count(self::$built) > 32) self::$built = [];
-		$width = $layout->help()['view'][2];
+		$width = $layout->help(null, $bar)['view'][2];
 		$copies = [];
 		$needed = 0.0;
 		foreach(GameText::HELP_GAMES as $each)
@@ -71,7 +72,7 @@ final class HelpPage
 		}
 		// Every game shares one window, as tall as the longest copy where the canvas allows it, so turning to the next
 		// game never moves the pager from under the pointer.
-		$frame = $layout->help($needed);
+		$frame = $layout->help($needed, $bar);
 		foreach($copies as $each => $rows) self::$built["$canvas:$each"] = new self($frame, $rows, $mode === Theme::CLASSIC);
 		return self::$built["$canvas:$game"] ?? self::$built["$canvas:" . GameText::HELP_GAMES[0]];
 	}

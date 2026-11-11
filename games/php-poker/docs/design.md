@@ -103,6 +103,11 @@ the right of the human's hand, with the raise stepper beneath it; tall: a touch-
 the raise stepper on a second row. While the discard dialog is open it carries the instruction, so a centre plate
 it would cut through is not drawn.
 
+Fold, the check-call-pass button and the bet button each own a place, F first, C second and B third, and a turn
+that offers only some of them leaves the other places empty. A button therefore never stands where another one
+was a moment ago, so a hurried click cannot land on the wrong action. In the lane the three places always stand
+above the stepper's row; Deal, which ends a hand, stands on that row and so on none of them.
+
 | State | Buttons | Keys |
 | --- | --- | --- |
 | hand not dealt | Deal | Enter |
@@ -166,6 +171,12 @@ block the next deal and schedules no further changes after it ends.
   window with one button per game in a single column, numbered 1 to 5: draw with jacks or better, draw with
   anything opens, Texas Hold'em, five-card stud and seven-card stud. Seven-card stud allows six opponents at most.
   Deal sends `start{players, game, variant, …}`.
+- Table menus: Game (Alt+G) holds New Game, Save Game, Load Game and Quit to title. Poker (Alt+P) holds House
+  Rules, History, the odds tables where the game has them, How to Play (?) and Settings (M). How to Play opens the
+  rules of the game being played at their top, over the table and beneath the menu bar; ? also opens them straight
+  from the table. Settings is the title's Settings window, over the table; at an online table, where no seat is a
+  house player, Pace is shown spent. Back, Escape or a controller's B returns from either to the table. The house's
+  players wait while either is open.
 - Dialogs: DRAW POKER welcome before the first deal, SELECT DISCARDS during the human's draw, ROUND HISTORY
   (H) listing the last public lines, HOW TO PLAY, SETTINGS (Classic / Modern with M, Normal / Fast pace with P).
   All are ruled boxes.
@@ -201,8 +212,9 @@ block the next deal and schedules no further changes after it ends.
   window, so they do not move as the game changes.
 - Message: phase-specific guidance (or `error`, in rose) centered below Current bet, wrapping on compact screens.
   In short landscape layouts, the stock and discard piles flank the bet to leave room for the status and hand. Opening bets explain
-  that discarding comes afterward; a hand that cannot open is told that Pass keeps it in. The menu bar names
-  the current phase. A player waiting for another seat's draw is not told to select cards yet.
+  that discarding comes afterward; a hand that cannot open is told that Pass keeps it in. The right of
+  the menu bar names the current phase and then the game, as in "4TH STREET / SEVEN-CARD STUD"; between hands it
+  names the game alone. A player waiting for another seat's draw is not told to select cards yet.
 
 ## Status and accessibility
 

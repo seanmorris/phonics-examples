@@ -282,7 +282,7 @@ final class Presenter
 		$this->ensureControllerFocus($targets);
 		if($pulses['pause']) return $this->controllerPause();
 		if($pulses['back']) return $this->controllerBack();
-		$help = ($this->view['screen'] ?? '') === 'help' && $this->helpGame !== null;
+		$help = $this->helpOpen() && $this->helpGame !== null;
 		if($help)
 		{
 			// Up and Down scroll the open rules a row at a time; the shoulder buttons turn to the game beside it.
@@ -416,41 +416,12 @@ final class Presenter
 
 		if(in_array($this->view['screen'] ?? '', ['help','settings'], true))
 		{
-			if(($this->view['screen'] ?? '') === 'settings')
-			{
-				$toggle = $layout->setup(0, '');
-				$addKey($toggle['pace'], 'p', 'settings:pace');
-				$addKey($toggle['variant'], 'm', 'settings:look');
-				$addKey($toggle['back'], 'escape', 'settings:back');
-			}
-			else
-			{
-				if($this->helpGame === null)
-				{
-					$menu = $layout->helpIndex(count(GameText::HELP_GAMES));
-					foreach($menu['items'] as $index => $rect)
-					$addKey($rect, (string)($index + 1), 'help-game:' . GameText::HELP_GAMES[$index]);
-					$addKey($menu['back'], 'escape', 'help:back');
-				}
-				else
-				{
-					$help = $this->helpPage();
-					$frame = $help->frame;
-					$position = array_search($this->helpGame, GameText::HELP_GAMES, true);
-					// The scrollbar is for a pointer: it carries no id, so a controller's focus passes it by.
-					// Near either end of its track the thumb lies inside an arrow's wider target. A tap there is the
-					// arrow's; a press that travels is the thumb's, which `dragHelp()` settles before any tap.
-					if($help->last > 0)
-					{
-						$addKey($frame['reach']['up'], 'arrowup', null, $this->helpScroll === 0);
-						$addKey($frame['reach']['down'], 'arrowdown', null, $this->helpScroll === $help->last);
-						$targets[] = ['rect' => $frame['reach']['track'], 'helpTrack' => true];
-					}
-					$addKey($frame['previous'], 'arrowleft', 'help:previous', $position === 0);
-					$addKey($frame['back'], 'escape', 'help:back');
-					$addKey($frame['next'], 'arrowright', 'help:next', $position === count(GameText::HELP_GAMES) - 1);
-				}
-			}
+			if(($this->view['screen'] ?? '') === 'settings') return $this->settingsTargets();
+			if($this->helpGame !== null) return $this->helpTargets();
+			$menu = $layout->helpIndex(count(GameText::HELP_GAMES));
+			foreach($menu['items'] as $index => $rect)
+			$addKey($rect, (string)($index + 1), 'help-game:' . GameText::HELP_GAMES[$index]);
+			$addKey($menu['back'], 'escape', 'help:back');
 			return $targets;
 		}
 
@@ -463,6 +434,9 @@ final class Presenter
 			return $targets;
 		}
 
+		// The rules and the settings opened from the Poker menu are the title's own, drawn over the table.
+		if($this->infoDialog === 'help') return $this->helpTargets();
+		if($this->infoDialog === 'settings') return $this->settingsTargets();
 		if($this->infoDialog !== null)
 		{
 			if($this->infoDialog==='game-settings') $dialog=$layout->gameSettingsDialog($this->gameSettingsWildLines($this->gameSettings()));
@@ -557,7 +531,7 @@ final class Presenter
 		}
 		foreach($targets as $target) if($target['id'] === $this->controllerFocus) return;
 		$preferences = $this->confirmDialog !== null ? ['confirm:cancel','confirm:leave']
-			: ($this->infoDialog !== null ? ['info:ok','info:more']
+			: ($this->infoDialog !== null ? ['info:ok','info:more','help:back','settings:look']
 			: ($this->topMenu !== null ? ['top-item:new','top-item:game-settings','top-item:odds']
 			: ['table:waiting','action:check','action:call','action:pass','action:draw','action:next','action:deal',
 				'action:bet','action:fold','setup:start','game:'.GameText::choice($this->setupGame, $this->setupVariant),'wild:none','custom-wild:0','settings:look',
@@ -692,46 +666,8 @@ final class Presenter
 			};
 		}
 
-		if($screen === 'help')
-		{
-			// A digit opens that game's rules from the index and from any other rules page.
-			$chosen = in_array($key, ['enter',' '], true) && $this->helpGame === null ? $this->helpChoice()
-				: (in_array($key, ['1','2','3','4','5','6','7','8','9'], true) ? GameText::HELP_GAMES[(int)$key - 1] ?? null : null);
-			if($chosen !== null)
-			{
-				$this->helpGame = $chosen;
-				$this->helpScroll = 0;
-				$this->controllerFocus = null;
-				return [];
-			}
-			if($this->helpGame === null) return in_array($key, ['escape','backspace','q'], true) ? [['type' => 'menu']] : [];
-			// Up and Down scroll a row, as the wheel does; Page Up and Page Down a viewful; Left and Right change game.
-			$help = $this->helpPage();
-			$row = match($key) {
-				'arrowup' => $this->helpScroll - 1, 'arrowdown' => $this->helpScroll + 1,
-				'pageup' => $help->before($this->helpScroll), 'pagedown' => $help->after($this->helpScroll),
-				'home' => 0, 'end' => $help->last, default => null
-			};
-			if($row !== null) { $this->scrollHelp($row); return []; }
-			if($key === 'arrowleft') { $this->turnHelp(-1); return []; }
-			if($key === 'arrowright') { $this->turnHelp(1); return []; }
-			if(in_array($key, ['escape','backspace','enter',' ','q'], true))
-			{
-				// Back on the index, a controller's focus rests on the game just read.
-				$this->controllerFocus = 'help-game:' . $this->helpGame;
-				$this->helpGame = null;
-				$this->helpScroll = 0;
-			}
-			return [];
-		}
-
-		if($screen === 'settings')
-		{
-			if($key === 'p') return [['type' => 'pace', 'value' => ($this->view['pace'] ?? 'normal') === 'fast' ? 'normal' : 'fast']];
-			if(in_array($key, ['m','v','enter',' '], true)) { $this->mode = $this->mode === Theme::CLASSIC ? Theme::MODERN : Theme::CLASSIC; return []; }
-			if(in_array($key, ['escape','backspace','enter',' ','q'], true)) return [['type' => 'menu']];
-			return [];
-		}
+		if($screen === 'help') return $this->helpKey($key);
+		if($screen === 'settings') return $this->settingsKey($key);
 
 		if($this->confirmDialog !== null)
 		{
@@ -742,6 +678,8 @@ final class Presenter
 			return [];
 		}
 
+		if($this->infoDialog === 'help') return $this->helpKey($key);
+		if($this->infoDialog === 'settings') return $this->settingsKey($key);
 		if($this->infoDialog !== null)
 		{
 			if($this->infoDialog==='odds' && $key==='m') $this->infoDialog='improving';
@@ -753,7 +691,7 @@ final class Presenter
 			if(in_array($key,['escape','backspace'],true)) { $this->topMenu=null; return []; }
 			$action=($this->topMenu==='game'
 				? ['n'=>'new','s'=>'save','l'=>'load','q'=>'quit']
-				: ['r'=>'game-settings','h'=>'history','o'=>'odds','i'=>'improving'])[$key]??null;
+				: ['r'=>'game-settings','h'=>'history','o'=>'odds','i'=>'improving','?'=>'help','m'=>'settings'])[$key]??null;
 			$offered=array_column($this->layout()->topDropdown($this->topMenu,(string)($this->view['game']??'draw'))['items'],'id');
 			return $action===null||!in_array($action,$offered,true)?[]:$this->activateTopAction($action);
 		}
@@ -764,6 +702,8 @@ final class Presenter
 			return $this->leaveTable();
 		}
 		if($key === 'h') { $this->historyOpen = !$this->historyOpen; return []; }
+		// The rules of the game being played are one key away, as they are one item away in the Poker menu.
+		if($key === '?') { $this->openTableHelp(); return []; }
 		if($this->historyOpen) { if(in_array($key, ['enter',' '], true)) $this->historyOpen = false; return []; }
 
 		if(isset(self::KEY_CARDS[$key]) && !empty($this->view['legalActions']['draw']) && !$this->locked())
@@ -802,8 +742,117 @@ final class Presenter
 		if($action==='load') return [['type'=>'load-game']];
 		if($action==='quit') return $this->leaveTable();
 		if($action==='history') { $this->historyOpen=true; return []; }
-		if(in_array($action,['game-settings','odds','improving'],true)) { $this->infoDialog=$action; return []; }
+		if(in_array($action,['game-settings','odds','improving','settings'],true)) { $this->infoDialog=$action; return []; }
+		if($action==='help') $this->openTableHelp();
 		return [];
+	}
+
+	/** Open the rules of the game being played over the table, from their top. */
+	private function openTableHelp(): void
+	{
+		$game = (string)($this->view['game'] ?? Variant::DEFAULT);
+		$this->topMenu = null;
+		$this->historyOpen = false;
+		$this->infoDialog = 'help';
+		$this->helpGame = in_array($game, GameText::HELP_GAMES, true) ? $game : GameText::HELP_GAMES[0];
+		$this->helpScroll = 0;
+		$this->controllerFocus = null;
+		$this->dirty = true;
+	}
+
+	/** Whether the rules are open: as the title's How to Play screen, or over the table from the Poker menu. */
+	private function helpOpen(): bool
+	{
+		return ($this->view['screen'] ?? '') === 'help' || (($this->view['screen'] ?? '') === 'table' && $this->infoDialog === 'help');
+	}
+
+	/**
+	 * A key pressed while How to Play is open.
+	 * @return list<array<string,mixed>>
+	 */
+	private function helpKey(string $key): array
+	{
+		$table = $this->infoDialog === 'help';
+		// A digit opens that game's rules from the index and from any other rules page.
+		$chosen = in_array($key, ['enter',' '], true) && $this->helpGame === null ? $this->helpChoice()
+			: (in_array($key, ['1','2','3','4','5','6','7','8','9'], true) ? GameText::HELP_GAMES[(int)$key - 1] ?? null : null);
+		if($chosen !== null)
+		{
+			$this->helpGame = $chosen;
+			$this->helpScroll = 0;
+			if(!$table) $this->controllerFocus = null;
+			return [];
+		}
+		if($this->helpGame === null) return in_array($key, ['escape','backspace','q'], true) ? [['type' => 'menu']] : [];
+		// Up and Down scroll a row, as the wheel does; Page Up and Page Down a viewful; Left and Right change game.
+		$help = $this->helpPage();
+		$row = match($key) {
+			'arrowup' => $this->helpScroll - 1, 'arrowdown' => $this->helpScroll + 1,
+			'pageup' => $help->before($this->helpScroll), 'pagedown' => $help->after($this->helpScroll),
+			'home' => 0, 'end' => $help->last, default => null
+		};
+		if($row !== null) { $this->scrollHelp($row); return []; }
+		if($key === 'arrowleft') { $this->turnHelp(-1); return []; }
+		if($key === 'arrowright') { $this->turnHelp(1); return []; }
+		if(!in_array($key, ['escape','backspace','enter',' ','q','?'], true)) return [];
+		// Back leads where the rules were opened from: the table, or the index, where a controller's focus rests
+		// on the game just read.
+		if($table) $this->infoDialog = null;
+		else $this->controllerFocus = 'help-game:' . $this->helpGame;
+		$this->helpGame = null;
+		$this->helpScroll = 0;
+		return [];
+	}
+
+	/**
+	 * A key pressed while Settings is open, as the title's screen or over the table.
+	 * @return list<array<string,mixed>>
+	 */
+	private function settingsKey(string $key): array
+	{
+		// Pace is how long the house's players take over a turn. An online table has none, so there it is spent.
+		if($key === 'p') return $this->paceSpent() ? [] : [['type' => 'pace', 'value' => ($this->view['pace'] ?? 'normal') === 'fast' ? 'normal' : 'fast']];
+		if(in_array($key, ['m','v','enter',' '], true)) { $this->mode = $this->mode === Theme::CLASSIC ? Theme::MODERN : Theme::CLASSIC; return []; }
+		if(!in_array($key, ['escape','backspace','q'], true)) return [];
+		if($this->infoDialog !== 'settings') return [['type' => 'menu']];
+		$this->infoDialog = null;
+		return [];
+	}
+
+	/** @return list<array<string,mixed>> Targets of an open rules page: the scrollbar, then Previous, Back and Next. */
+	private function helpTargets(): array
+	{
+		$help = $this->helpPage();
+		$frame = $help->frame;
+		$position = array_search($this->helpGame, GameText::HELP_GAMES, true);
+		$targets = [];
+		// The scrollbar is for a pointer: it carries no id, so a controller's focus passes it by.
+		// Near either end of its track the thumb lies inside an arrow's wider target. A tap there is the
+		// arrow's; a press that travels is the thumb's, which `dragHelp()` settles before any tap.
+		if($help->last > 0)
+		{
+			$targets[] = ['rect' => $frame['reach']['up'], 'key' => 'arrowup'] + ($this->helpScroll === 0 ? ['disabled' => true] : []);
+			$targets[] = ['rect' => $frame['reach']['down'], 'key' => 'arrowdown'] + ($this->helpScroll === $help->last ? ['disabled' => true] : []);
+			$targets[] = ['rect' => $frame['reach']['track'], 'helpTrack' => true];
+		}
+		$targets[] = ['rect' => $frame['previous'], 'key' => 'arrowleft', 'id' => 'help:previous'] + ($position === 0 ? ['disabled' => true] : []);
+		$targets[] = ['rect' => $frame['back'], 'key' => 'escape', 'id' => 'help:back'];
+		$targets[] = ['rect' => $frame['next'], 'key' => 'arrowright', 'id' => 'help:next'] + ($position === count(GameText::HELP_GAMES) - 1 ? ['disabled' => true] : []);
+		return $targets;
+	}
+
+	/** Whether the pace setting has nothing to act on: an online table, where every seat is a person. */
+	private function paceSpent(): bool
+	{
+		return ($this->view['screen'] ?? '') === 'table' && ($this->view['mode'] ?? 'offline') === 'online';
+	}
+
+	/** @return list<array<string,mixed>> Targets of the Settings window: pace, look and Back. */
+	private function settingsTargets(): array
+	{
+		$toggle = $this->layout()->setup(0, '');
+		return [['rect' => $toggle['pace'], 'key' => 'p', 'id' => 'settings:pace'] + ($this->paceSpent() ? ['disabled' => true] : []),
+			['rect' => $toggle['variant'], 'key' => 'm', 'id' => 'settings:look'], ['rect' => $toggle['back'], 'key' => 'escape', 'id' => 'settings:back']];
 	}
 
 	/** @return list<array<string,mixed>> */
@@ -1057,7 +1106,7 @@ final class Presenter
 	 */
 	private function dragHelp(array $position, bool $down): void
 	{
-		if(!$down || ($this->view['screen'] ?? '') !== 'help' || $this->helpGame === null) { $this->helpDrag = null; return; }
+		if(!$down || !$this->helpOpen() || $this->helpGame === null) { $this->helpDrag = null; return; }
 		$layout = $this->layout();
 		$help = $this->helpPage();
 		$point = $layout->design(...$position);
@@ -1096,7 +1145,7 @@ final class Presenter
 	/** The open rules as set for this canvas, look and input family. */
 	private function helpPage(): HelpPage
 	{
-		return HelpPage::of($this->layout(), $this->text, $this->mode, $this->inputTheme, $this->helpGame ?? GameText::HELP_GAMES[0]);
+		return HelpPage::of($this->layout(), $this->text, $this->mode, $this->inputTheme, $this->helpGame ?? GameText::HELP_GAMES[0], $this->infoDialog === 'help');
 	}
 
 	/** Take one of the game selector's choices, keeping the seat count within the new game's limit. */
@@ -1248,7 +1297,7 @@ final class Presenter
 	 */
 	public function state(): array
 	{
-		$helpMaximum = ($this->view['screen'] ?? '') === 'help' && $this->helpGame !== null ? $this->helpMaximumScroll() : 0;
+		$helpMaximum = $this->helpOpen() && $this->helpGame !== null ? $this->helpMaximumScroll() : 0;
 		$this->helpScroll = min($this->helpScroll, $helpMaximum);
 		$gameSettings=$this->infoDialog==='game-settings'?$this->gameSettings():null;
 		return [
