@@ -80,6 +80,10 @@ controls are at least 48 CSS pixels high across device-pixel ratios; short-scree
   with the stock in the sixth place, and in short landscape the bet plate moves up beside the pot plate.
 - A seat is a plate exactly as wide as its five-card fan (wide opponent cards 68×95 stepped 30; the human's
   90×126 stepped 38), with chip stacks in front of the fan's outer corner (the human's beside the hand).
+  The human's plate is exactly as wide as their own hand at its fullest in the game being dealt: two Hold'em
+  cards have a narrower plate than five, and seven stud cards share the five-card width from the first street. The
+  YOU disc, the total under it, the dealer's disc and the bank are placed from that plate, so they stay beside the
+  hand; opponents' seats and the action column do not move with the game.
   A 32×32 object icon sits on the plate's outer edge; the name and total form two centered lines beneath it.
   the cards. Right-side identities and denomination stacks mirror the left-side layout. Cards begin 8px below the
   plate. At dense tables each complete side group shifts inward by the same amount, so only the gap where the two

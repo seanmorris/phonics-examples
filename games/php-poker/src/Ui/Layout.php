@@ -129,6 +129,19 @@ final class Layout
 		return $cards;
 	}
 
+	/**
+	 * Where a full hand of the table's size stands across the five slots a seat was composed for.
+	 *
+	 * @param list<array{float,float,float,float}> $slots The five composed card rectangles.
+	 * @return array{float,float} Left edge of the first card and the width out to the far edge of the last.
+	 */
+	private function handSpan(array $slots): array
+	{
+		$hand = $this->fan($slots);
+		$last = $hand[count($hand) - 1];
+		return [$hand[0][0], $last[0] + $last[2] - $hand[0][0]];
+	}
+
 	/** @var array<string,self> Recently fitted layouts by canvas and table size. */
 	private static array $fitted = [];
 
@@ -854,6 +867,10 @@ final class Layout
 		$fanTop = $plate[1] + $plateHeight + $fanGap;
 		$cards = [];
 		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
+		// The human's plate is exactly as wide as their hand at its fullest, whatever the game deals: two hold'em
+		// cards have a narrower plate than five. The YOU disc and the bank below are placed from it, so they stay
+		// beside the hand too. The five slots keep composing the seat, so nothing else moves with the game.
+		if($human) [$plate[0], $plate[2]] = $this->handSpan($cards);
 		// Chips stand in front of the fan's outer corner; the human bank sits beside the hand.
 		$humanChipsY = $fanTop + $cardHeight + 4;
 		if($human)
@@ -949,6 +966,13 @@ final class Layout
 		$fanTop = $plateTop + self::PLATE_HEIGHT + 8;
 		$cards = [];
 		for($index = 0; $index < 5; $index++) $cards[] = [$fanLeft + $index * $step, $fanTop, $cardWidth, $cardHeight];
+		// As on the oval, the human's plate is exactly as wide as their hand at its fullest, and the YOU disc and
+		// the bank are placed from it.
+		if($human)
+		{
+			[$plateLeft, $plateWidth] = $this->handSpan($cards);
+			[$plate[0], $plate[2]] = [$plateLeft, $plateWidth];
+		}
 		if($human) $chips = [$this->profile === 'landscape' ? $plateLeft + $plateWidth + 4 : $plateLeft - 4, $fanTop + $cardHeight + 4];
 		// A lone opponent on a tall screen follows the oval's right-side seats: its bank stands at the fan's outer
 		// corner, beneath the icon, and grows inward. Its edge stays flush with the fan, because here the name and

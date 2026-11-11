@@ -932,13 +932,14 @@ $test('no opponent sits behind the action column at any seat count', static func
 });
 
 $test('the human indicator, YOU disc and centered bankroll stay with the hand at a full table', static function(callable $expect): void {
-	foreach([[1280,720,1],[390,844,1],[844,390,1]] as [$width,$height,$dpr])
+	// Draw and five-card stud deal five cards, hold'em two with a board of five, seven-card stud seven.
+	foreach([[1280,720,1],[390,844,1],[844,390,1]] as [$width,$height,$dpr]) foreach([[5,0],[2,5],[7,0]] as [$count,$board])
 	{
-		$layout = Layout::fit($width, $height, $dpr);
+		$layout = Layout::fit($width, $height, $dpr, 8, $count, $board);
 		$human = $layout->seat(0, 8);
 		$left = $layout->seat(1, 8);
 		$handLeft = $human['cards'][0][0];
-		$handRight = $human['cards'][4][0] + $human['cards'][4][2];
+		$handRight = $human['cards'][$count - 1][0] + $human['cards'][$count - 1][2];
 		if($layout->profile === 'wide')
 			$expect($human['chips'][0] > $left['plate'][0] + $left['plate'][2], 'the human bank clears the lower-left player');
 		if($layout->profile !== 'landscape')
@@ -1724,7 +1725,7 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	}
 });
 
-$test('hands of two to seven cards stay inside the five-card fan and never move the seat', static function(callable $expect): void {
+$test('hands of two to seven cards stay inside the five-card fan; only the human plate, disc and bank follow the hand', static function(callable $expect): void {
 	foreach([[1280,720,1],[1920,1080,1],[390,844,1],[780,1688,2],[844,390,1],[900,400,1],[1366,768,1]] as [$width, $height, $dpr])
 	foreach([2,5,7,8] as $seats)
 	{
@@ -1738,9 +1739,22 @@ $test('hands of two to seven cards stay inside the five-card fan and never move 
 				$base = $draw->seat($seat, $seats); $geometry = $layout->seat($seat, $seats);
 				$where = "$count cards, seat $seat of $seats on $width x $height";
 				$expect($geometry['slots'] === $base['cards'] && $base['slots'] === $base['cards'], "$where: the composed slots are the draw fan");
-				foreach(['plate','chips','caption','emblem','angle','outward'] as $part) $expect($geometry[$part] === $base[$part], "$where: $part does not move");
 				$expect(count($geometry['cards']) === $count, "$where: one rectangle per card");
 				$first = $geometry['cards'][0]; $last = $geometry['cards'][$count - 1];
+				// An opponent's seat is composed once and never moves with the game. The human's plate is exactly as wide as
+				// their full hand, and the YOU disc, the total under it and the bank keep their places beside that plate.
+				foreach($seat === 0 ? ['angle','outward'] : ['plate','chips','caption','emblem','angle','outward'] as $part)
+					$expect($geometry[$part] === $base[$part], "$where: $part does not move");
+				if($seat === 0)
+				{
+					$plate = $geometry['plate'];
+					$expect(abs($plate[0] - $first[0]) < 1e-9 && abs($plate[0] + $plate[2] - $last[0] - $last[2]) < 1e-9, "$where: the human plate is exactly as wide as the full hand");
+					$expect($plate[1] === $base['plate'][1] && $plate[3] === $base['plate'][3], "$where: the human plate keeps its height and its place above the cards");
+					$expect(abs(($plate[0] - $geometry['emblem'][0]) - ($base['plate'][0] - $base['emblem'][0])) < 1e-9 && $geometry['emblem'][1] === $base['emblem'][1], "$where: the YOU disc keeps its gap from the plate");
+					$expect(abs($geometry['caption'][0] - $geometry['emblem'][0]) < 1e-9 && $geometry['caption'][1] === $base['caption'][1], "$where: the human total stays under the YOU disc");
+					$side = static fn(array $at): float => $at['chips'][0] > $at['plate'][0] + $at['plate'][2] ? $at['chips'][0] - $at['plate'][0] - $at['plate'][2] : $at['chips'][0] - $at['plate'][0];
+					$expect(abs($side($geometry) - $side($base)) < 1e-9 && $geometry['chips'][1] === $base['chips'][1], "$where: the human bank keeps its place at the hand's corner");
+				}
 				$fanLeft = $base['cards'][0][0]; $fanRight = $base['cards'][4][0] + $base['cards'][4][2];
 				$expect($first[0] >= $fanLeft - 1e-9 && $last[0] + $last[2] <= $fanRight + 1e-9, "$where: cards stay inside the fan");
 				$expect(abs(($first[0] - $fanLeft) - ($fanRight - $last[0] - $last[2])) < 1e-9 || $count > 5, "$where: a short hand is centred");
