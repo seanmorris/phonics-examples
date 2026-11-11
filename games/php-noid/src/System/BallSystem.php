@@ -36,7 +36,7 @@ final class BallSystem
 		$collisions = $this->field->collisions;
 		$collisions->sync($this->field->state->width, $height, $paddle);
 
-		foreach($registry->query(Ball::class) as $id)
+		foreach($this->field->query(Ball::class) as $id)
 		{
 			if(!$registry->alive($id)) continue;
 
@@ -161,7 +161,7 @@ final class BallSystem
 		}
 
 		$players = array_filter(
-			$registry->query(Ball::class)
+			$this->field->query(Ball::class)
 			, /**
 			 * Apply the registered session callback.
 			 *

@@ -34,7 +34,7 @@ final class EnemySystem
 
 		$paddle = $registry->get($this->field->paddle, Paddle::class);
 
-		foreach($registry->query(Enemy::class) as $id)
+		foreach($this->field->query(Enemy::class) as $id)
 		{
 			$enemy = $registry->get($id, Enemy::class);
 			$hostile = in_array($enemy->family, ['destroyer', 'annihilator'], true);
@@ -66,7 +66,7 @@ final class EnemySystem
 
 			if($enemy->family === 'sympathizer')
 			{
-				$registry->create(new Capsule($enemy->x, $enemy->y + 15, $enemy->capsule));
+				$this->field->entity(new Capsule($enemy->x, $enemy->y + 15, $enemy->capsule));
 				continue;
 			}
 
@@ -85,7 +85,7 @@ final class EnemySystem
 				$length = max(1, hypot($dx, $dy));
 				$shot->vx = $dx / $length * $shot->speed;
 				$shot->vy = $dy / $length * $shot->speed;
-				$registry->create($shot);
+				$this->field->entity($shot);
 				continue;
 			}
 
@@ -94,7 +94,7 @@ final class EnemySystem
 			$ball->attached = false;
 			$ball->vx = 65 * $enemy->direction;
 			$ball->vy = $enemy->effect === 'pewter' ? 100 : 150;
-			$registry->create($ball);
+			$this->field->entity($ball);
 		}
 	}
 }

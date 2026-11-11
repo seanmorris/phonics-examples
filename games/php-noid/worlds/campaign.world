@@ -188,6 +188,16 @@
       "name": "phonics.start",
       "type": "string",
       "value": "stage-01.tmj"
+    },
+    {
+      "name": "phonics.modules",
+      "type": "string",
+      "value": "[\"@php-noid/stage\"]"
+    },
+    {
+      "name": "phonics.classes",
+      "type": "file",
+      "value": "phonics.classes.json"
     }
   ]
 }

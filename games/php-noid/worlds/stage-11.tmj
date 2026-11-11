@@ -17,6 +17,16 @@
       "name": "name",
       "type": "string",
       "value": "Copper Cascade"
+    },
+    {
+      "name": "phonics.systems",
+      "type": "string",
+      "value": "[\"@php-noid/stage\"]"
+    },
+    {
+      "name": "phonics.lifecycle",
+      "type": "string",
+      "value": "reset"
     }
   ],
   "layers": [

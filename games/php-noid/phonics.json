@@ -31,7 +31,9 @@
       "src/System/ProjectileSystem.php",
       "src/System/StageSystem.php",
       "src/System/TransitionSystem.php",
-      "modules/factories.php"
+      "modules/factories.php",
+      "modules/stage.php",
+      "src/StageSystems.php"
     ]
   },
   "exports": {
@@ -40,12 +42,32 @@
       "php": "game.php",
       "browser": "browser/game.mjs",
       "modules": [
-        "#factories"
+        "#factories",
+        "#stage"
       ]
     },
     "factories": {
       "type": "module",
       "php": "modules/factories.php"
+    },
+    "stage": {
+      "type": "system-set",
+      "php": "modules/stage.php"
+    },
+    "brick-component": {
+      "type": "component",
+      "class": "PhpNoid.Brick",
+      "module": "#factories"
+    },
+    "paddle-component": {
+      "type": "component",
+      "class": "PhpNoid.Paddle",
+      "module": "#factories"
+    },
+    "enemy-component": {
+      "type": "component",
+      "class": "PhpNoid.Enemy",
+      "module": "#factories"
     },
     "brick": {
       "type": "factory",
@@ -157,6 +179,7 @@
   },
   "preload": [
     "assets/capsules.json",
+    "worlds/phonics.classes.json",
     "assets/font.json",
     "assets/font.png",
     "assets/font-sdl.png",
@@ -226,7 +249,8 @@
     "assets/preview.svg",
     "templates/brick.tx",
     "templates/enemy.tx",
-    "templates/paddle.tx"
+    "templates/paddle.tx",
+    "worlds/phonics.classes.json"
   ],
   "integrity": {
     "application.php": "sha256-oFPY96XBIPkXE/pCviEik7n5Tn4/gkqymItW1pXTwvA=",
@@ -250,8 +274,9 @@
     "assets/preview.svg": "sha256-+LVWeSCnv0nULdXIh0dwyWSBDeT2VoL2GFJ59/ZCVCE=",
     "autoload.php": "sha256-rnIEsGQdIwa8lI4MzvCEeJS2AT3XZBdF7GbJZ+m21qI=",
     "browser/game.mjs": "sha256-3epA0pDEOCsyN80nhkzgzu4H6+2iiEuhzPv9tptmyy4=",
-    "game.php": "sha256-EtfWfX05I4lcf0FoL7IFyF54yYPZ5H6xRfQ+b8CxeF0=",
-    "modules/factories.php": "sha256-ihl24BeXJ2pOL7KwWaZaU6SFEF30c3R5plWSQqJu3SE=",
+    "game.php": "sha256-CMyORtecboi/6UwPerHYZfGRKNq08L5T3aFxiMZnLTQ=",
+    "modules/factories.php": "sha256-7c4V/5KhrXC0nbhVLOZHjaYSOXNcy3vDXq8FaWd0Wxg=",
+    "modules/stage.php": "sha256-u6VxpuQnrDTKj1VDPQ5FyxtRuINZiojGQSJ2mL49Vq8=",
     "src/CollisionWorld.php": "sha256-QkVQlMEu9GbYgjGbSO48/874M1oBYCX0Sk0MNLJw0ok=",
     "src/Component/Ball.php": "sha256-St7KTZIwqH9XULNm8XUupaYRDZFrTrYlRqfkIqqKY38=",
     "src/Component/Brick.php": "sha256-b2iJDpGtBQUiDNwCNh2Pqwj8SN+TNyx5Aa+piE8Atbc=",
@@ -261,45 +286,47 @@
     "src/Component/Pointer.php": "sha256-b2nhiuDgCL4UDiIo0I8qabnemFyMPfWEW51BsnE2Rag=",
     "src/Component/Projectile.php": "sha256-Zb2Z+vcTGPGxSsygHqbRYjsMgqxPhBo0KNs6ZcJ9/Rc=",
     "src/Component/State.php": "sha256-uiAiterAtP2Km2+9Z0x0yRZDZ7T9MJTPFfjj/7vXOiA=",
-    "src/Module.php": "sha256-sBe9WP6prwvwBXNSvEHk+cWWk3hIkYhfv3NqCnDznmw=",
-    "src/Playfield.php": "sha256-ZauPKaCKMxx6obs8+jcXn1Gu5ASMpTnFOKpPA4sr+qc=",
+    "src/Module.php": "sha256-SevJteVi47pOjlN2QFi1KVemjxiqPvI0X/laEa4BaPo=",
+    "src/Playfield.php": "sha256-zMb66Pk67lIfuk1xEuLZn1l37fQfi+4h479eOFAb83E=",
     "src/Render/Hud.php": "sha256-sO3F03YXp0s6c90DiW3RkaoIdYtykaNs7L5FsFYy8tk=",
-    "src/Render/Scene.php": "sha256-ygAuygYveKHHr+K2RtKULXmrDINVfptjNQPqSEcr8+U=",
-    "src/System/BallSystem.php": "sha256-d2mE+0sa1M2R8w6KwVVnFo6gDr6mE5HNUbNYdRt2Loo=",
-    "src/System/CapsuleSystem.php": "sha256-Mx0pxlhnnkMcvjxvTecbMCadd110vjAL1bB+5bWddkA=",
-    "src/System/EnemySystem.php": "sha256-pSRyAHhSq2W+gDwmYYmc6lglgTimC4o/KPg2blxZhIg=",
-    "src/System/PaddleSystem.php": "sha256-tu0HFJNQQAcmE3LZlq1Rs6Y02ZO//Q7kQSgWXTfO360=",
-    "src/System/ProjectileSystem.php": "sha256-8RKD0U0cpC8rvxzkbH9tQ3JTBYvGmV4FlKKqsUx8IG4=",
-    "src/System/StageSystem.php": "sha256-gOwzfIv/WJHpKUwz4bUN+MEj1BvzxX08u8+5hhb8luo=",
+    "src/Render/Scene.php": "sha256-X13RVgir3kheNpElpmcddtmLqwnyFwhSQEjO4We+OmE=",
+    "src/StageSystems.php": "sha256-Mu+Zts3T4Mf597xLta6/4igzWN9z0fIrQZqAVmfjhek=",
+    "src/System/BallSystem.php": "sha256-Gu/xzDjRu1E0C4QF/JQS9HzxdBgf+9Er+PoxvyIwD90=",
+    "src/System/CapsuleSystem.php": "sha256-JdYrsi2ncaQxz5ZqQC+pDCc4HEPegrwKuCxgQI3koi4=",
+    "src/System/EnemySystem.php": "sha256-UWuK+1FcZEInbsrOdH1LKuZhy5+2UUHb+h0nVv+IoNg=",
+    "src/System/PaddleSystem.php": "sha256-+ZFR9INMboX/f7waZaEbLOUvFs55Mvez5DSY9BGWlOs=",
+    "src/System/ProjectileSystem.php": "sha256-tp9l+P/axv9kA4k1p/HWXkSQe+U1TdR+ian+JQjlNjw=",
+    "src/System/StageSystem.php": "sha256-YBfXd+HBp4loVrpA1CWzpz9D72eTIvN0t84GMQoX3lk=",
     "src/System/TransitionSystem.php": "sha256-x5nVfzHS20QmydG4JeMor4+nVg0N3pJ/54MP9lDlf2c=",
     "templates/brick.tx": "sha256-p5CfejVNyxZcPqwaJ+vbS4BHU2v0x18lS6DQXtL8RJs=",
     "templates/enemy.tx": "sha256-tt3MmeShMpC7VFZ+dwno8MqLLMUFc2SlLQF8Kq1aEX4=",
     "templates/paddle.tx": "sha256-X/jHuh6gnoz3nRKJzbAtBgc9R90E5B0P4PItArKWMCI=",
-    "worlds/campaign.world": "sha256-WBYj2psunNd/Yo1HJKT/UUxhhW3j9ME2X3UyAO6paaE=",
-    "worlds/stage-01.tmj": "sha256-5kgKYtKEhox6Ld99rSQsz/IDoMdhWbhah58yUI1esVI=",
-    "worlds/stage-02.tmj": "sha256-jVuFROmmU3lzv9vaAjMNDyGSWRldbldIPwRu7CO3s5E=",
-    "worlds/stage-03.tmj": "sha256-S3YrwhrRDRWrByv/dd5JzmMqwZY6dYEMjeseOSuQkKE=",
-    "worlds/stage-04.tmj": "sha256-t9bztrCMLR0fo+JiCT93FU/MtywI8uJsVeKmUSf6CUM=",
-    "worlds/stage-05.tmj": "sha256-gQz4F36dFmOu34sZRSDvmWW/Tl33O8YWCSRQWJlLpvA=",
-    "worlds/stage-06.tmj": "sha256-XFH8IwiGZUL1CKzx4CUTAC1QxuNvmNFzws/8gMJAmUU=",
-    "worlds/stage-07.tmj": "sha256-oTma0lacstk2deeTl2f0qR2uPfqpPvEdhfAyb8sRYlc=",
-    "worlds/stage-08.tmj": "sha256-dGUOEMz+1atBjZiBJ5JHkHicAEFAeGSfsju2RlLrclM=",
-    "worlds/stage-09.tmj": "sha256-LbPoWjvbXko3vO4BfT/sdMPmoe+oMdfuC98JRWxUa3Y=",
-    "worlds/stage-10.tmj": "sha256-Hd8ReLFzRNOm6Rd5y6F3SZpO08DMPYn7XMcx/k+9uYw=",
-    "worlds/stage-11.tmj": "sha256-2j+flg7FMZ4y4G6Iwd7IY6Mc/+OICEdPwDK6GbcbBDE=",
-    "worlds/stage-12.tmj": "sha256-Eq+fufKQcyyU8MBdgVZQ0sNlmEvklSeG+DdVVYi3OL0=",
-    "worlds/stage-13.tmj": "sha256-dakQu5MQhe/8iV/siDwkR/FszA7iPRoTNCkKy2S8V28=",
-    "worlds/stage-14.tmj": "sha256-XlJQn5XHLQBVn8F8WKCWYc78KEX/R9UZXdu35OWeA4c=",
-    "worlds/stage-15.tmj": "sha256-sl6+n/ZKYS9n9gi5t7UFTKoKfEKV7EaojBAXnV+LbPk=",
-    "worlds/stage-16.tmj": "sha256-6q6GosAezLf30v+RAPcwvJTQHbNUXpOz5h0h/YvhwUY=",
-    "worlds/stage-17.tmj": "sha256-Vh4RY3vowQaWxiVSoH/t0XngzdXd8Ynlx8KFSvmH7IM=",
-    "worlds/stage-18.tmj": "sha256-gWoLdms7dNkxZ7tUakYtrbUXfzp9JARqxWQtXTzjB3g=",
-    "worlds/stage-19.tmj": "sha256-BKra563rWi/zb1N8i5aY5aqiow/n1cy5fs0dv8wrfBc=",
-    "worlds/stage-20.tmj": "sha256-oPNWWwz39luXsMuWCMmgb29Hp1JuiEAZMJ+YCDSp/PE=",
-    "worlds/stage-21.tmj": "sha256-1PrN6cpEzu/L+YS3tQd0CfkZ1L7hyeEUzb8DQaw+H/w=",
-    "worlds/stage-22.tmj": "sha256-js0upMyRr2dzLXpDFRNTX9wkG/Yp3M+fIXCG/MhVQQw=",
-    "worlds/stage-23.tmj": "sha256-YmdFlJMW+ChIOiYMuf5cp6sxeY+OKsWTIc9vOD4AGE8=",
-    "worlds/stage-24.tmj": "sha256-jXmGtYiV1OJjfu+6s/0Z4/EULfgHPSp90CqhgPmCztY=",
-    "worlds/stage-25.tmj": "sha256-A4qDK3oAEe4tvweOOlA/MZkFFHnBaUfS6w2NJuY+X8Y="
+    "worlds/campaign.world": "sha256-bw8ObzFEW0uaOq9PZaOFwMzW/gG56vmhQODk5n8DlqY=",
+    "worlds/phonics.classes.json": "sha256-kp1TKpmGtwD4fpzZe9jLcSKusOMg2Ed3H9Q8xrAIbzs=",
+    "worlds/stage-01.tmj": "sha256-IEAlE0BlQAGNAGGGKnmJVsS1tRUMDH+5TgwA8y7uueo=",
+    "worlds/stage-02.tmj": "sha256-bYN4APbleTtTHA5m/3KMTGDMvuFE9iJNxvZr3OTzeFE=",
+    "worlds/stage-03.tmj": "sha256-x3+9JGUzt9ST4/QL9K8n7SeR8RtCqBHEwDGVHLHuu2A=",
+    "worlds/stage-04.tmj": "sha256-Zfo2OdulzBigozJ5/4MauNNRoTs2+kQ1MqXJ7ZYmtbA=",
+    "worlds/stage-05.tmj": "sha256-7g9iukFuWknICX0oW2j8Aboe/MyN9b2JLcY+YzhBqvc=",
+    "worlds/stage-06.tmj": "sha256-veHVrhZqVPHP92Q+/FuR7YPvsuwwgQjbBSM62MA1WVE=",
+    "worlds/stage-07.tmj": "sha256-3x4Idh4lX7sJSZzvUFmXwIbnKX+1XjAwby80eve9G3A=",
+    "worlds/stage-08.tmj": "sha256-tJIoUwK5lVLZncdv/c580ChhewlsbxxympLEtKwGmvQ=",
+    "worlds/stage-09.tmj": "sha256-lyA/se80nuxzsnnwHvxNSl0Y0n9oFxGGceK/NCBk1S4=",
+    "worlds/stage-10.tmj": "sha256-iNJPIMraSu93p0poMNoh+ZXYzwoQF4BioGQ/UM24Grg=",
+    "worlds/stage-11.tmj": "sha256-8uDj/sT0i1TWZsjYfbAwgVsolybHRAdN2qcaREyLD7k=",
+    "worlds/stage-12.tmj": "sha256-9gS15nBbClR60Ta34/JIJyO1VPQ2TyeIRu18IuB+fgg=",
+    "worlds/stage-13.tmj": "sha256-64rrEXV4aa+Tnnwk1v3lTUxVaHCPZm6Z//NbVp1LTUM=",
+    "worlds/stage-14.tmj": "sha256-Cz860zFAaA9J8JJqipuZhXx1S/ZcTAxIPeAYqFcQnz4=",
+    "worlds/stage-15.tmj": "sha256-NvhDVBnLWnrT9x7kFWcnLihb6DvkRrPKz6CbQKirF4Q=",
+    "worlds/stage-16.tmj": "sha256-IWTjtJePkfGWMyCyNLk8LUUmPF9jkHvKqUvGOKse+EE=",
+    "worlds/stage-17.tmj": "sha256-pBPiMgeQ9f5jZvyhcZKbyXZpTKUk318sGV5hy6q2seQ=",
+    "worlds/stage-18.tmj": "sha256-LOHQ0kYLgR/3rTm5xV6CfKY5wRniv91uOQux/QzJhf0=",
+    "worlds/stage-19.tmj": "sha256-lUD29hqN/JtGfYII3RIgZDtxQ7gekRIxxXpIPV2udCc=",
+    "worlds/stage-20.tmj": "sha256-MA+KdUyxmrcCTBRwXQiTAY1grO/UR1gh2GraqyzxrIo=",
+    "worlds/stage-21.tmj": "sha256-4+6o/f/iC2yFdi+iBktMDNgjY+TSe3nHwW8PNCWMKDo=",
+    "worlds/stage-22.tmj": "sha256-TY86/jrd/v4Cqgam7IGSnJ7NfQmxotJk58RhDbbWEgE=",
+    "worlds/stage-23.tmj": "sha256-i+REPOR+Gz9OEQFz3tno8NwcRnELlp22o61E8pOZax0=",
+    "worlds/stage-24.tmj": "sha256-YfubS1/PNb9jVQXXC+hAtkHSDogAuUgGzfI4mRsdPQc=",
+    "worlds/stage-25.tmj": "sha256-RGXjZIA13+dklPRZQJ/9nDEZhxDu5m1mBvznI/JwO1M="
   }
 }

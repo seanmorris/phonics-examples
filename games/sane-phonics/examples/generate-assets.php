@@ -29,6 +29,12 @@ function png(string $path, int $width, int $height, callable $pixel): void
 
 function jsonAsset(string $name, array $data): void
 {
+	if(($data['type'] ?? '') === 'world')
+	$data['properties'][] = ['name' => 'phonics.systems', 'type' => 'string', 'value' => '["@sane/spatial-maps"]'];
+
+	if(($data['type'] ?? '') === 'map')
+	$data['properties'][] = ['name' => 'phonics.systems', 'type' => 'string', 'value' => '["@sane/demo-map"]'];
+
 	file_put_contents(
 		__DIR__ . '/assets/' . $name
 		, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n"

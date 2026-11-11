@@ -218,7 +218,7 @@ for(let stage = 1; stage <= names.length; stage++)
 		, nextobjectid: objects.length + 1
 		, nextlayerid: 3
 		, tilesets: []
-		, properties: [property('name', names[stage - 1])]
+		, properties: [property('name', names[stage - 1]), property('phonics.systems', JSON.stringify(['@php-noid/stage'])), property('phonics.lifecycle', 'reset')]
 		, layers: [{
 			id: 1
 			, name: 'Background'
@@ -252,6 +252,8 @@ const world = {
 	}))
 	, properties: [property('phonics.import.php-noid', '../phonics.json')
 		, property('phonics.start', 'stage-01.tmj')
+		, property('phonics.modules', JSON.stringify(['@php-noid/stage']))
+		, {name: 'phonics.classes', type: 'file', value: 'phonics.classes.json'}
 	]
 };
 

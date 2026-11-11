@@ -33,7 +33,7 @@ final class Scene
 		$height = $field->state->height;
 		$batch = [[0, 0, 8, $height, .1, .6, .9, 1], [$width - 8, 0, 8, $height, .1, .6, .9, 1]];
 
-		foreach($r->query(Brick::class) as $id)
+		foreach($field->query(Brick::class) as $id)
 		{
 			$b = $r->get($id, Brick::class);
 			$color = $b->unbreakable
@@ -52,7 +52,7 @@ final class Scene
 			$batch[] = [$b->x + $b->width - 8, $b->y + 7, 4, 6, 1, .15, .25, 1];
 		}
 
-		foreach($r->query(Paddle::class) as $id)
+		foreach($field->query(Paddle::class) as $id)
 		{
 			$p = $r->get($id, Paddle::class);
 
@@ -86,7 +86,7 @@ final class Scene
 			if(isset($p->powers['missile'])) $batch[] = [$p->x - 4, $p->y - 17, 8, 10, 1, .7, .2, 1];
 		}
 
-		foreach($r->query(Ball::class) as $id)
+		foreach($field->query(Ball::class) as $id)
 		{
 			$b = $r->get($id, Ball::class);
 			$color = $b->team === 'player' ? [1, 1, 1] : self::color($b->effect);
@@ -104,7 +104,7 @@ final class Scene
 			if($b->team !== 'player') $batch[] = [$x - 2, $y - 2, 4, 4, .03, .05, .1, 1];
 		}
 
-		foreach($r->query(Capsule::class) as $id)
+		foreach($field->query(Capsule::class) as $id)
 		{
 			$c = $r->get($id, Capsule::class);
 			$color = $field->capsules[$c->kind]['color'];
@@ -115,7 +115,7 @@ final class Scene
 			if($pixel === '1') $batch[] = [$c->x - 5 + $x * 2, $c->y - 5 + $y * 2, 2, 2, .03, .05, .1, 1];
 		}
 
-		foreach($r->query(Enemy::class) as $id)
+		foreach($field->query(Enemy::class) as $id)
 		{
 			$e = $r->get($id, Enemy::class);
 			$color = match($e->family)
@@ -133,7 +133,7 @@ final class Scene
 			$batch[] = [$e->x - 6 + $hit * 4, $e->y + 3, 2, 2, 1, 1, 1, 1];
 		}
 
-		foreach($r->query(Projectile::class) as $id)
+		foreach($field->query(Projectile::class) as $id)
 		{
 			$p = $r->get($id, Projectile::class);
 

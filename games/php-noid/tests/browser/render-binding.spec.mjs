@@ -88,10 +88,10 @@ test('balls have clear corners and crisp pixels at fractional positions and full
 			$r=$field->registry();
 			foreach([\PhpNoid\Component\Brick::class,\PhpNoid\Component\Ball::class,\PhpNoid\Component\Enemy::class] as $class)
 				foreach($r->query($class) as $id) $r->destroy($id);
-			$r->create(new \PhpNoid\Component\Brick(280,270,160,70));
+			$field->entity(new \PhpNoid\Component\Brick(280,270,160,70));
 			$b=new \PhpNoid\Component\Ball(320.375,300.625);
-			$r->create($b);
-			$r->create(new \PhpNoid\Component\Ball(400.375,300.625,'enemy','cyan'));
+			$field->entity($b);
+			$field->entity(new \PhpNoid\Component\Ball(400.375,300.625,'enemy','cyan'));
 			$engine->device->begin([.025,.035,.085,1]);
 			glViewport(\PhpNoid\Render\Hud::WIDTH,0,\PhpNoid\Render\Hud::PLAYFIELD_WIDTH,\PhpNoid\Render\Hud::HEIGHT);
 			\PhpNoid\Render\Scene::draw(

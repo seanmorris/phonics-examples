@@ -67,10 +67,10 @@ final class PaddleSystem
 			&& $paddle->cooldown <= 0
 		){
 			$x = $weapon === 'missile' ? $paddle->x : $paddle->x - $paddle->width / 2 + 8;
-			$registry->create(new Projectile($x, $paddle->y - 10, $weapon));
+			$this->field->entity(new Projectile($x, $paddle->y - 10, $weapon));
 
 			if($weapon === 'laser')
-			$registry->create(new Projectile($paddle->x + $paddle->width / 2 - 8, $paddle->y - 10));
+			$this->field->entity(new Projectile($paddle->x + $paddle->width / 2 - 8, $paddle->y - 10));
 
 			$paddle->cooldown = $weapon === 'missile' ? .8 : .2;
 			$this->field->state->events[] = 'shoot';

@@ -515,6 +515,8 @@ final class DemoGame
 			{
 				return;
 			}
+
+			$this->pending->activate();
 		}
 		catch(Throwable $error)
 		{
@@ -840,6 +842,7 @@ final class DemoGame
 
 		if($this->scene === 'world')
 		{
+			if(!$level->worldSystems)
 			$level->stream->update(
 				$camera->x
 				, $camera->y

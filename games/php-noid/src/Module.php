@@ -79,13 +79,52 @@ final class Module
 		);
 	}
 
+	/** Register independently composable Tiled components alongside legacy factories. */
+	public static function components(Context $context): void
+	{
+		$context->component('PhpNoid.Brick', static function(array $p, $scope, $target): Brick {
+			$o = $target->value;
+
+			return new Brick(
+				(float)($o['x'] ?? 0) + ($target->layer?->offsetX ?? 0)
+				, (float)($o['y'] ?? 0) + ($target->layer?->offsetY ?? 0)
+				, (float)($o['width'] ?? 54)
+				, (float)($o['height'] ?? 20)
+				, (int)$p['hits']
+				, (bool)$p['unbreakable']
+				, (string)$p['capsule']
+				, (int)$p['score']
+				, (string)$p['material']
+			);
+		});
+
+		$context->component('PhpNoid.Paddle', static function(array $p, $scope, $target): Paddle {
+			return new Paddle(
+				(float)($target->value['x'] ?? 0) + ($target->layer?->offsetX ?? 0)
+				, (float)($target->value['y'] ?? 0) + ($target->layer?->offsetY ?? 0)
+			);
+		});
+
+		$context->component('PhpNoid.Enemy', static function(array $p, $scope, $target): Enemy {
+			return new Enemy(
+				(float)($target->value['x'] ?? 0) + ($target->layer?->offsetX ?? 0)
+				, (float)($target->value['y'] ?? 0) + ($target->layer?->offsetY ?? 0)
+				, $p['family']
+				, $p['effect']
+				, (float)$p['interval']
+				, (int)$p['hits']
+				, $p['capsule']
+			);
+		});
+	}
+
 	/**
 	 * Register independently ordered gameplay systems.
 	 *
 	 * @param Playfield $field Playfield state shared by this system.
 	 * @return void Completes the operation.
 	 */
-	public static function systems(Playfield $field): void
+	public static function systems(Playfield $field, ?\Phonics\World\ScopeContext $scope = null): void
 	{
 		$previous = [];
 
@@ -98,7 +137,7 @@ final class Module
 		] as $class)
 		{
 			$system = new $class($field);
-			$field->context->system($class, [$system, 'update'], $previous);
+			($scope ?? $field->context)->system($class, [$system, 'update'], $previous);
 			$previous = [$class];
 		}
 	}

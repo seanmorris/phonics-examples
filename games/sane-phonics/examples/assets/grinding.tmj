@@ -8734,5 +8734,12 @@
             "x": 0,
             "y": 0
         }
+    ],
+    "properties": [
+        {
+            "name": "phonics.systems",
+            "type": "string",
+            "value": "[\"@sane/demo-map\"]"
+        }
     ]
 }

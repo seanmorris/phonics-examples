@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "classes": [
+    {
+      "name": "Player",
+      "members": []
+    },
+    {
+      "name": "SanePhonics.SpawnPoint",
+      "members": []
+    }
+  ],
+  "bindings": {
+    "Player": "@sane/spawn",
+    "SanePhonics.SpawnPoint": "@sane/spawn"
+  }
+}
