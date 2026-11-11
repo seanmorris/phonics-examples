@@ -57,11 +57,12 @@ final class Scene
 	public const CREAM = [.95, .89, .75];
 	/** Night grass from the terrain sheet, used behind every plaque glyph. */
 	public const PLAQUE = [.141, .145, .227, .98];
-	public const TEAL = [.18, .43, .45];
-	/** Opacity of the ink plate under a menu's text. */
-	public const PLATE_ALPHA = .92;
 	/** The backdrop's pale water teal, for subtitles and information rows over the deep sky. */
 	public const MIST = [.5, .835, .804];
+	/** Cloud white and terrain teal shared by the custom and value-column menu renderers. */
+	public const MENU_TEXT = [.98, .973, .941];
+	public const MENU_HIGHLIGHT = [.145, .31, .349];
+	public const MENU_DISABLED = [.545, .549, .502];
 
 	/** Accessible hit regions published by the menu renderer. */
 	public array $regions = [];
@@ -121,11 +122,11 @@ final class Scene
 		$this->menus->style['panel'] = self::PLAQUE;
 		// Plaque colors come straight from the terrain palettes: pale haze and cloud text over night grass, with the
 		// day treeline and field for selection. Even the font's dark inset remains lighter than the panel beneath it.
-		$this->menus->style['foreground'] = [.98, .973, .941, 1.0];
+		$this->menus->style['foreground'] = [...self::MENU_TEXT, 1.0];
 		$this->menus->style['selected'] = [...self::MIST, 1.0];
-		$this->menus->style['highlight'] = [.145, .31, .349, 1.0];
+		$this->menus->style['highlight'] = [...self::MENU_HIGHLIGHT, 1.0];
 		$this->menus->style['selection'] = [.184, .42, .353, 1.0];
-		$this->menus->style['disabled'] = [.545, .549, .502, 1.0];
+		$this->menus->style['disabled'] = [...self::MENU_DISABLED, 1.0];
 
 		// The generator writes the parallax mask's band edges, the chosen rates and the scenery widths into the
 		// tilesets, so the art and its layout data travel together.
@@ -426,7 +427,7 @@ final class Scene
 
 		if($menu->isOpen)
 		{
-			if($this->needsPlaque($menu)) $this->plaquePage($menu, $width, $height, $seconds, $k);
+			if($this->needsPlaque($menu)) $this->plaquePage($menu, $width, $height, $seconds);
 			else $this->skyPage($menu, $page, $width, $height, $seconds, $k, $camera);
 		}
 	}
@@ -453,10 +454,9 @@ final class Scene
 	 * @param int $width Output width in pixels.
 	 * @param int $height Output height in pixels.
 	 * @param float $seconds Elapsed UI time.
-	 * @param int $k World pixel scale.
 	 * @return void Publishes the plaque's hit regions.
 	 */
-	private function plaquePage(Menu $menu, int $width, int $height, float $seconds, int $k): void
+	private function plaquePage(Menu $menu, int $width, int $height, float $seconds): void
 	{
 		// The shared menu renderer scales by min(style scale, width / 320, height / 180); handing it the whole number
 		// below that keeps its glyphs crisp, and the plaque width follows so the hint row fits.
@@ -466,12 +466,7 @@ final class Scene
 		$this->menus->showHints = $m >= 2 && $width >= 330 * $m - 10;
 		$this->menus->style['dimmer'] = [...self::INK, .35];
 		[$px, $py, $pw, $ph] = $this->plaque($menu, $width, $height);
-		$edge = max(2, round(2 * $k));
-		$drop = max(3, round(4 * $k));
-		$this->rects->render([
-			[$px - $edge + $drop, $py - $edge + $drop, $pw + 2 * $edge, $ph + 2 * $edge, self::INK[0], self::INK[1], self::INK[2], .45]
-			, [$px - $edge, $py - $edge, $pw + 2 * $edge, $ph + 2 * $edge, self::INK[0], self::INK[1], self::INK[2], 1]
-		], $width, $height);
+		$this->rects->render($this->plaqueFrame([$px, $py, $pw, $ph], $m), $width, $height);
 		$this->menus->render($menu, $width, $height, $seconds);
 		$this->regions = $this->menus->regions;
 	}
@@ -543,16 +538,16 @@ final class Scene
 		$rects = [];
 
 		// Only the front page shows the world undimmed; every other page dims it.
-		if(!$front) $rects[] = [0, 0, $width, $height, self::INK[0], self::INK[1], self::INK[2], .4];
+		if(!$front) $rects[] = [0, 0, $width, $height, self::INK[0], self::INK[1], self::INK[2], .35];
 
-		// The text stands on a near-solid ink plate, so its contrast never depends on the sky, cloud or field that
-		// happens to be behind it: cream on the plate is at least 7:1 and the information color at least 5:1.
+		// The text stands on the shared near-solid plaque, so its contrast never depends on the sky, cloud or field
+		// behind it. The border and lower-right shadow use the same scale-dependent frame as Audio and bindings.
 		$margin = 8 * $r;
 		$plate = [max(0, $x - 6 * $r - $margin), max(0, $top - $margin), $blockWidth + 12 * $r + 2 * $margin, $blockHeight + 2 * $margin];
 		$plate[2] = min($plate[2], $width - $plate[0]);
 		$plate[3] = min($plate[3], $height - $plate[1]);
-		$rects[] = [$plate[0] + $r, $plate[1] + $r, $plate[2], $plate[3], self::INK[0], self::INK[1], self::INK[2], .5];
-		$rects[] = [$plate[0], $plate[1], $plate[2], $plate[3], self::INK[0], self::INK[1], self::INK[2], self::PLATE_ALPHA];
+		array_push($rects, ...$this->plaqueFrame($plate, $r));
+		$rects[] = [...$plate, ...self::PLAQUE];
 		// What the menu needs against what the frame offers, for tests that audit every page for cropped text.
 		$this->menuBounds = [
 			'left' => $x - 6 * $r, 'top' => $top, 'right' => $x + $blockWidth + 6 * $r, 'bottom' => $top + $blockHeight
@@ -562,7 +557,7 @@ final class Scene
 		$labels = [];
 		$shadow = (float)$r;
 
-		$this->shadowed($labels, $title, $width / 2, (float)$top, (float)$titleScale, 'center', $front ? self::MIST : self::CREAM);
+		$this->shadowed($labels, $title, $width / 2, (float)$top, (float)$titleScale, 'center', self::MENU_TEXT);
 
 		$y = $top + $titleHeight;
 		$pad = 6 * $r;
@@ -578,12 +573,12 @@ final class Scene
 			if($selected)
 			{
 				$rects[] = [$rect[0] + $shadow, $rect[1] + $shadow, $rect[2], $rect[3], self::INK[0], self::INK[1], self::INK[2], .6];
-				$rects[] = [$rect[0], $rect[1], $rect[2], $rect[3], self::TEAL[0], self::TEAL[1], self::TEAL[2], 1];
+				$rects[] = [...$rect, ...self::MENU_HIGHLIGHT, 1.0];
 
-				if($blink) $this->label($labels, '>', (float)$x, (float)$y, (float)$r, 'left', self::CREAM);
+				if($blink) $this->label($labels, '>', (float)$x, (float)$y, (float)$r, 'left', self::MIST);
 			}
 
-			$colour = $item['disabled'] ? self::MIST : ($selected ? [1, 1, 1] : self::CREAM);
+			$colour = $selected ? self::MIST : self::MENU_TEXT;
 			$textX = (float)($x + $chevron * $r);
 
 			foreach($lines as $n => $line)
@@ -732,6 +727,25 @@ final class Scene
 		$h = $pad * 2 + $header + $footer + $count * $rowHeight;
 
 		return [floor(($width - $w) / 2), floor(($height - $h) / 2), (float)$w, (float)$h];
+	}
+
+	/**
+	 * Draw data for the common ink border and lower-right shadow around a menu plaque.
+	 *
+	 * @param array{float,float,float,float} $plate Plaque face rectangle.
+	 * @param float $scale Logical menu scale in output pixels.
+	 * @return list<array{float,float,float,float,float,float,float,float}> Shadow and border rectangles.
+	 */
+	private function plaqueFrame(array $plate, float $scale): array
+	{
+		[$x, $y, $width, $height] = $plate;
+		$edge = max(2, round(2 * $scale));
+		$drop = max(3, round(4 * $scale));
+
+		return [
+			[$x - $edge + $drop, $y - $edge + $drop, $width + 2 * $edge, $height + 2 * $edge, ...self::INK, .45]
+			, [$x - $edge, $y - $edge, $width + 2 * $edge, $height + 2 * $edge, ...self::INK, 1.0]
+		];
 	}
 
 	/**
