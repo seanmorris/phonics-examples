@@ -159,20 +159,30 @@ final class UiCanvas
 	 * @param float|null $maxWidth Width in pixels beyond which text is ellipsized.
 	 * @param float $tracking Extra spacing between characters in em units.
 	 * @param bool $shadow Whether to draw a soft shadow beneath the text.
+	 * @param bool $exact Whether to draw at exactly this size even where a bitmap face then loses font pixels;
+	 *   see `Text::size()`. A label too wide for `$maxWidth` at the bitmap face's own size is drawn so anyway.
 	 */
 	public function label(string $text, float $x, float $middle, float $size, array $color, string $face = 'body'
-		, string $align = 'left', ?float $maxWidth = null, float $tracking = 0, bool $shadow = false
+		, string $align = 'left', ?float $maxWidth = null, float $tracking = 0, bool $shadow = false, bool $exact = false
 	): float {
 		$size *= $this->unit;
-		if($maxWidth !== null) $text = $this->text->fit($text, $size, $maxWidth, $face, $tracking);
-		$width = $this->text->measure($text, $size, $face, $tracking);
+		// A bitmap face is drawn at no less than its own size, so it keeps every font pixel (`Text::size()`). Where
+		// that would not fit the room given, the label is drawn at exactly the size asked for instead, as it always
+		// was, rather than lose its end to an ellipsis.
+		if($maxWidth !== null && !$exact && $this->text->measure($text, $size, $face, $tracking) > $maxWidth) $exact = true;
+		if($maxWidth !== null) $text = $this->text->fit($text, $size, $maxWidth, $face, $tracking, $exact);
+		$width = $this->text->measure($text, $size, $face, $tracking, $exact);
 		$left = match($align) {'center' => $x - $width / 2, 'right' => $x - $width, default => $x};
 
-		if($shadow) foreach($this->text->glyphs($text, $left, $middle + $size * .06, $size, $face, $tracking) as $quad)
-		$this->push(array_slice($quad, 0, 4), [0,0,0,.55 * $color[3]], 0, 0, self::GLYPH, .16, [0,0,0,0], array_slice($quad, 4));
+		if($shadow) foreach($this->text->glyphs($text, $left, $middle + $size * .06, $size, $face, $tracking, $exact) as $quad)
+		$this->push(array_slice($quad, 0, 4), [0,0,0,.55 * $color[3]], 0, 0, self::GLYPH, .16, [0,0,0,0], array_slice($quad, 4, 4));
 
-		foreach($this->text->glyphs($text, $left, $middle, $size, $face, $tracking) as $quad)
-		$this->push(array_slice($quad, 0, 4), $color, 0, 0, self::GLYPH, 0, [0,0,0,0], array_slice($quad, 4));
+		// A bitmap face whose font pixels are whole screen pixels is drawn with hard edges (the glyph's radius slot,
+		// unused for glyphs, carries the flag), glyph by glyph: a mark it borrows from another font, off its pixel
+		// grid, keeps its anti-aliased edge, as everything else does.
+		$crisp = $this->text->crisp($face, $size, $exact);
+		foreach($this->text->glyphs($text, $left, $middle, $size, $face, $tracking, $exact) as $quad)
+		$this->push(array_slice($quad, 0, 4), $color, $crisp && $quad[8] ? 1.0 : 0.0, 0, self::GLYPH, 0, [0,0,0,0], array_slice($quad, 4, 4));
 
 		return $width;
 	}
@@ -185,8 +195,8 @@ final class UiCanvas
 	 * @param string $face Face name, body or bold.
 	 * @param float $tracking Extra spacing between characters in em units.
 	 */
-	public function measure(string $text, float $size, string $face = 'body', float $tracking = 0): float
+	public function measure(string $text, float $size, string $face = 'body', float $tracking = 0, bool $exact = false): float
 	{
-		return $this->text->measure($text, $size * $this->unit, $face, $tracking);
+		return $this->text->measure($text, $size * $this->unit, $face, $tracking, $exact);
 	}
 }

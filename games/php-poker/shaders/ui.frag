@@ -27,7 +27,9 @@ void main() {
 		// Signed-distance glyph: 0.5 is the outline; softness widens the edge for shadows and glows.
 		// Distance fields stay exact under point sampling; averaged mip levels erase strokes thinner than a texel.
 		float distance=textureLod(uFont,vUv,0.0).r;
-		float width=max(fwidth(distance)*.7,softness);
+		// A bitmap face drawn one or more whole screen pixels per font pixel (radius 1) has its edges on pixel
+		// boundaries, half a pixel from every pixel centre, so a narrow edge leaves each pixel wholly in or out.
+		float width=radius>0.?fwidth(distance)*.3:max(fwidth(distance)*.7,softness);
 		pixel=premultiply(vFill)*smoothstep(.5-width,.5+width,distance);
 		return;
 	}

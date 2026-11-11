@@ -1786,6 +1786,18 @@ final class Layout
 			'back'=>[$left+24,$footer,$backWidth,$control],'done'=>[$left+$width-24-$doneWidth,$footer,$doneWidth,$control]];
 	}
 
+	/**
+	 * Width of the House Rules label column in one of its rows: room for its longest label, "Raises / player", in
+	 * Classic's face at its own size, and never more than two fifths of the row.
+	 *
+	 * @param array{float,float,float,float} $row The row's design rectangle.
+	 * @param float $stretch `stretch()` of the layout the row belongs to.
+	 */
+	public static function houseRulesLabelWidth(array $row, float $stretch): float
+	{
+		return min(150 * $stretch, $row[2] * .4);
+	}
+
 	/** CSS pixels at the frame's lower right that the engine's sound and fullscreen buttons cover, margin included. */
 	private const QUICK_CONTROLS = [94, 52];
 

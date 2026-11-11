@@ -79,11 +79,15 @@ final class RoundHistory
 	{
 		if(preg_match('/^Bets (\d+)$/i',$action,$match)===1)
 		return [(!$afterDraw&&!$opened?'OPEN ':'BET ').$match[1],!$afterDraw&&!$opened?'open':'bet',true];
-		if(preg_match('/^Raises to (\d+)$/i',$action,$match)===1) return ['RAISE TO '.$match[1],'raise',true];
+		// A history cell is ten characters of Classic's face wide, so a raise names only the amount it raises to.
+		if(preg_match('/^Raises to (\d+)$/i',$action,$match)===1) return ['RAISE '.$match[1],'raise',true];
 		if(preg_match('/^Calls(?: (\d+))?$/i',$action,$match)===1) return ['CALL'.(isset($match[1])&&$match[1]!==''?' '.$match[1]:''),'call',false];
 		if(strcasecmp($action,'Checks')===0) return ['CHECK','check',false];
 		if(strcasecmp($action,'Passes')===0) return ['PASS','pass',false];
 		if(strcasecmp($action,'Folds')===0) return ['FOLD','fold',false];
+		// The forced bets use their usual short names.
+		if(preg_match('/^(Small|Big) blind (\d+)$/i',$action,$match)===1) return [(strcasecmp($match[1],'Small')===0?'SB ':'BB ').$match[2],'other',false];
+		if(preg_match('/^Brings in (\d+)$/i',$action,$match)===1) return ['BRING-IN '.$match[1],'other',false];
 		return [strtoupper($action),'other',false];
 	}
 }

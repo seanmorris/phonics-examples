@@ -185,7 +185,9 @@ final class HelpPage
 		// Four sizes carry the outline: a part, a section within it, its copy, and notes on that copy.
 		$body = $layout->controlText();
 		$note = $layout->captionText();
-		$part = $body * 1.5;
+		// Classic's bitmap face is crisp only at whole multiples of its 16-pixel em, and draws anything smaller than
+		// 20 at 16 (see `Text::size()`), so where its copy is that small its part headings take twice the em.
+		$part = $dos ? max($body * 1.5, 32 / $layout->uiScale()) : $body * 1.5;
 		$section = $body * 1.2;
 		// Type is drawn at the chrome's scale, which a short desktop window holds above the field's own. Heights are
 		// in field units, so a line of type is its size times this.
@@ -267,7 +269,9 @@ final class HelpPage
 		$capWidth = static fn(string $cap): float => max($capHeight * $across, $measure(strtoupper($cap), $note, $faces['head']) + 10 * $across);
 		$tab = 0.0;
 		foreach($controls as [$caps]) $tab = max($tab, array_sum(array_map($capWidth, $caps)) + (count($caps) - 1) * 4 * $across);
-		$sides = $width >= 26 * $body * $em * $across ? 2 : 1;
+		// Two columns of keys where the longest meaning fits beside its caps in half the width, measured as drawn.
+		$longest = max(array_map(static fn(array $control): float => $measure($shown($control[1]), $body, $faces['body']), $controls));
+		$sides = 2 * ($tab + 8 * $across + $longest + 12 * $across) <= $width - $inset ? 2 : 1;
 		$cell = ($width - $inset) / $sides;
 		$step = max($leading($body), $capHeight + 6);
 		$rows = [$opens('In every game'), $heads($theme === 'keyboard' ? 'Keys' : 'Controller')];
@@ -293,22 +297,26 @@ final class HelpPage
 		}
 		$blocks[] = $rows;
 
-		// Ten hands in two columns of five, numbered so the order is plain.
+		// Ten hands, numbered so the order is plain: two columns of five where the longest name fits in half the
+		// width as drawn, otherwise one column of ten.
 		$rows = [$heads('Hands, best first')];
-		$cell = ($width - $inset) / 2;
 		$number = $measure('10', $body, $faces['body']);
-		for($rank = 0; $rank < 5; $rank++)
+		$longest = max(array_map(static fn(string $name): float => $measure($shown($name), $body, $faces['body']), GameText::HAND_RANKS));
+		$columns = 2 * ($number + 8 * $across + $longest + 12 * $across) <= $width - $inset ? 2 : 1;
+		$cell = ($width - $inset) / $columns;
+		$down = (int)ceil(count(GameText::HAND_RANKS) / $columns);
+		for($rank = 0; $rank < $down; $rank++)
 		{
 			$items = [];
-			foreach([0, 1] as $side)
+			for($side = 0; $side < $columns; $side++)
 			{
 				$left = $inset + $side * $cell;
-				$items[] = $label((string)($side * 5 + $rank + 1), $left + $number, $leading($body) / 2, $body, 'body', 'right');
-				$items[] = $label($shown(GameText::HAND_RANKS[$side * 5 + $rank]), $left + $number + 8 * $across, $leading($body) / 2, $body, 'body');
+				$items[] = $label((string)($side * $down + $rank + 1), $left + $number, $leading($body) / 2, $body, 'body', 'right');
+				$items[] = $label($shown(GameText::HAND_RANKS[$side * $down + $rank]), $left + $number + 8 * $across, $leading($body) / 2, $body, 'body');
 			}
 			$rows[] = $row($leading($body), $items);
 		}
-		$rows[] = $line($shown(GameText::HAND_RANKS_NOTE), $note);
+		array_push($rows, ...$wrapped(GameText::HAND_RANKS_NOTE, $note));
 		$blocks[] = $rows;
 
 		$blocks[] = [$heads('Wild cards'), ...$wrapped(GameText::HELP_WILD, $body)];

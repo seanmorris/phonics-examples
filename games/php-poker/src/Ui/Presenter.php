@@ -898,12 +898,13 @@ final class Presenter
 	{
 		$layout=$this->layout();
 		$rect=$layout->gameSettingsDialog(1)['rows']['wild'];
-		$labelWidth=min(132*$layout->stretch(),$rect[2]*.36);
+		$labelWidth=Layout::houseRulesLabelWidth($rect,$layout->stretch());
 		$valueWidth=$rect[2]-$labelWidth-10*$layout->stretch();
 		$text=(string)($settings['wild']??'No wild cards');
 		if($this->mode===Theme::CLASSIC) $text=strtoupper($text);
 		$face=$this->mode===Theme::CLASSIC&&isset($this->text->faces()['dos'])?'dos':'bold';
-		$lines=$this->text->wrap($text,$layout->controlText()*$layout->scale,$valueWidth*$layout->horizontalScale,3,$face);
+		// Measured at the scale the painter draws type at, so both count the same lines.
+		$lines=$this->text->wrap($text,$layout->controlText()*$layout->uiScale(),$valueWidth*$layout->horizontalScale,3,$face);
 		return max(1,min(3,count($lines)));
 	}
 

@@ -32,6 +32,14 @@ and dialogs, a dark disc behind each emblem, keycaps on the buttons, and sets te
 - Type: `art/typography/barlow-semi-condensed.json` (OFL) and `fixedsys-excelsior.json` (public domain),
   baked by `scripts/generate-poker-textures.mjs` into one signed-distance atlas with faces `body`, `bold`
   and `dos`. The poster is `art/poster.png`, a capture of the table in classic graphics.
+  Fixedsys is a bitmap face on an 8×16 cell, so Classic never draws it under its own 16 device pixels: smaller, a
+  font pixel would be smaller than a screen pixel and rows of it would vanish (a B read as a D). Each line starts
+  on a whole pixel, and at whole multiples of 16 the edges are drawn hard, so every font pixel is one or more
+  screen pixels. A label with no room for that size is drawn at the size it was given instead, as before, rather
+  than lose its end to an ellipsis; at 1280×720 and above nothing needs to. Tight places use shorter words so
+  they stay crisp: the Limits captions ("Also the big blind"), and the ten-character history cells, where blinds
+  read SB 1 and BB 2, a bring-in BRING-IN 2 and a raise to 12 RAISE 12.
+
 - Palette and sizes live in `src/Render/Theme.php`.
 
 ## Layout

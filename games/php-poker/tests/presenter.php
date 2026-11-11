@@ -125,8 +125,8 @@ $test('round history maps the complete hand into player columns without losing t
 		'P7: Raises to 12.','P0: Calls 10.','P1: Folds.','P2: Calls 9.'];
 	$matrix=RoundHistory::build($players,$sequence)['rows'];
 	$expect(($matrix[4]['cells'][1]['text']??'')==='CHECK' && ($matrix[4]['cells'][2]['text']??'')==='BET 3'
-		&& ($matrix[5]['cells'][5]['text']??'')==='RAISE TO 8'
-		&& ($matrix[6]['cells'][6]['text']??'')==='CALL 8' && ($matrix[6]['cells'][7]['text']??'')==='RAISE TO 12'
+		&& ($matrix[5]['cells'][5]['text']??'')==='RAISE 8'
+		&& ($matrix[6]['cells'][6]['text']??'')==='CALL 8' && ($matrix[6]['cells'][7]['text']??'')==='RAISE 12'
 		&& ($matrix[7]['cells'][0]['text']??'')==='CALL 10' && ($matrix[7]['cells'][1]['text']??'')==='FOLD'
 		&& ($matrix[7]['cells'][2]['text']??'')==='CALL 9','each bet or raise begins the next response row shown in the updated reference');
 });
@@ -706,15 +706,21 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 			// A hand's name stands once in the list and once over its example; the two differ only by Classic's capitals.
 			foreach(GameText::HAND_RANKS as $wanted)
 				$expect(($counts[$wanted] ?? 0) + ($mode === Theme::CLASSIC ? $counts[strtoupper($wanted)] ?? 0 : 0) === 2 && ($counts[$headed($wanted)] ?? 0) >= 1, "the $game rules name \"$wanted\" in the list and over its example at $at");
-			foreach([GameText::HAND_RANKS_NOTE, ...array_column(GameText::helpControls($game, $theme), 1)] as $wanted)
+			foreach(array_column(GameText::helpControls($game, $theme), 1) as $wanted)
 				$expect(($counts[$wanted] ?? 0) === 1, "the $game rules set \"$wanted\" once at $at");
+			// The note under the list may wrap on a narrow view: its lines read on from one another.
+			$listEnd = array_search(GameText::HAND_RANKS[9], $texts, true);
+			$wildAt = array_search($headed('Wild cards'), $texts, true);
+			$noteLines = $listEnd === false || $wildAt === false ? [] : array_slice($texts, $listEnd + 1, $wildAt - $listEnd - 1);
+			$expect(implode(' ', $noteLines) === GameText::HAND_RANKS_NOTE, "the $game rules set the note under the hands once at $at");
+			$noteSize = $sizes[$noteLines[0] ?? ''] ?? 0.0;
 			foreach(array_count_values(array_column($example['groups'], 0)) as $wanted => $times)
 				$expect(($counts[$wanted] ?? 0) === $times, "the $game example labels its \"$wanted\" cards at $at");
 			$expect($caps === array_sum(array_map('count', array_column(GameText::helpControls($game, $theme), 0))), "the $game rules draw every key cap once at $at");
 			$expect($sizes[$headed('Playing a hand')] === $sizes[$headed('In every game')] && $sizes[$headed('Playing a hand')] > $sizes[$headed($steps[0])]
-				&& $sizes[$headed($steps[0])] === $sizes[$headed('Wild cards')] && $sizes[$headed($steps[0])] > $sizes[GameText::HAND_RANKS_NOTE]
+				&& $sizes[$headed($steps[0])] === $sizes[$headed('Wild cards')] && $sizes[$headed($steps[0])] > $noteSize
 				&& $sizes[$headed($steps[0])] > $sizes[array_column(GameText::helpControls($game, $theme), 1)[0]]
-				&& $sizes[array_column(GameText::helpControls($game, $theme), 1)[0]] > $sizes[GameText::HAND_RANKS_NOTE], "the $game rules set parts, sections, copy and notes in four falling sizes at $at");
+				&& $sizes[array_column(GameText::helpControls($game, $theme), 1)[0]] > $noteSize && $noteSize > 0, "the $game rules set parts, sections, copy and notes in four falling sizes at $at");
 			$capitals = array_map('strtoupper', [...$headings, ...GameText::HAND_RANKS]);
 			$shouting = array_filter($texts, static fn(string $copy): bool => !in_array($copy, $capitals, true) && $copy === strtoupper($copy) && preg_match('/[a-z]/i', $copy) === 1 && strlen($copy) > 2);
 			$expect($shouting === [], "the $game rules keep their copy out of capitals at $at (" . implode(' | ', array_slice($shouting, 0, 3)) . ')');
@@ -745,8 +751,10 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 
 			// What is painted lies inside the view, wherever it is scrolled to: no glyph crosses its edge, runs under
 			// the scrollbar or reaches the pager's row. The scrollbar's own arrows are the only glyphs beside it.
-			// A glyph's quad carries a little padding past its pen position, so the edges allow a sliver of an em.
-			$sliver = .15 * $layout->controlText() * $layout->uiScale();
+			// A glyph's quad carries the font's edge padding past its ink, an eighth of an em, and a bitmap face's line
+			// may start up to half a pixel off its pen to land on a whole pixel. The tolerance follows the em the face
+			// is really drawn at (Classic's is never under its own 16 pixels) and, for the larger headings, the quad.
+			$sliver = .16 * (fn(): \PhpPoker\Render\Text => $this->text)->call($presenter)->size($mode === Theme::CLASSIC ? 'dos' : 'body', $layout->controlText() * $layout->uiScale());
 			$rail = $layout->rect(...$help->frame['bar']['track']);
 			$expect($help->last > 0 && $help->thumb(0) !== null, "the $game rules scroll at $at");
 			foreach(array_unique([0, intdiv($help->last, 3), intdiv($help->last, 2), $help->last]) as $first)
@@ -755,9 +763,10 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 				$outside = 0;
 				foreach($presenter->paint($width, $height)->instances() as $instance)
 				{
-					if(abs($instance[10] - 1) > 1e-9 || $instance[1] < $port[1] - $sliver || $instance[1] >= $pager[0][1]) continue;
-					$held = $instance[0] >= $port[0] - $sliver && $instance[0] + $instance[2] <= $port[0] + $port[2] + $sliver && $instance[1] + $instance[3] <= $port[1] + $port[3] + $sliver;
-					$arrow = $instance[0] >= $rail[0] - $sliver && $instance[0] + $instance[2] <= $rail[0] + $rail[2] + $sliver;
+					$pad = max($sliver, .16 * $instance[3]);
+					if(abs($instance[10] - 1) > 1e-9 || $instance[1] < $port[1] - $pad || $instance[1] >= $pager[0][1]) continue;
+					$held = $instance[0] >= $port[0] - $pad && $instance[0] + $instance[2] <= $port[0] + $port[2] + $pad && $instance[1] + $instance[3] <= $port[1] + $port[3] + $pad;
+					$arrow = $instance[0] >= $rail[0] - $pad && $instance[0] + $instance[2] <= $rail[0] + $rail[2] + $pad;
 					if(!$held && !$arrow) $outside++;
 				}
 				$expect($outside === 0, "the $game rules scrolled to row $first keep their copy inside the view at $at ($outside glyphs out)");
@@ -967,6 +976,52 @@ $test('no opponent sits behind the action column at any seat count', static func
 	}
 	$expect(abs(Layout::fit(1280, 720)->seatAngle(1, 5) - (M_PI / 2 + 2 * M_PI / 5)) < 1e-9, 'five seats keep even spacing');
 	$expect(Layout::fit(1280, 720)->seatAngle(7, 8) < 2 * M_PI + Layout::ACTION_CLEARANCE + 1e-9, 'the eighth seat stops short of the action column');
+});
+
+$test('Classic\'s bitmap face is never drawn under its own size, starts on whole pixels and is crisp at whole multiples', static function(callable $expect) use ($fixture, $root): void {
+	$presenter = new Presenter($root);
+	$text = (fn(): \PhpPoker\Render\Text => $this->text)->call($presenter);
+	foreach([12.0 => 16.0, 14.0 => 16.0, 15.0 => 16.0, 19.9 => 16.0, 20.0 => 20.0, 26.0 => 26.0, 32.0 => 32.0, 48.0 => 48.0] as $asked => $drawn)
+		$expect($text->size('dos', $asked) === $drawn, "Fixedsys asked for at $asked pixels is drawn at $drawn");
+	$expect($text->size('dos', 14, true) === 14.0 && $text->size('body', 12) === 12.0 && $text->size('bold', 9) === 9.0, 'an exact size, and the vector faces, are drawn as asked');
+	$expect($text->crisp('dos', 14) && $text->crisp('dos', 32) && !$text->crisp('dos', 26) && !$text->crisp('dos', 14, true) && !$text->crisp('body', 16), 'Fixedsys is crisp at whole multiples of 16 only');
+	$expect(abs($text->measure('BET', 14, 'dos') - 24) < 1e-9 && abs($text->measure('BET', 14, 'dos', 0, true) - 21) < 1e-9, 'it is measured at the size it is drawn at: eight pixels a character at 16');
+	$whole = $text->wrapWhole('BETTING FIRST; CHOOSE DISCARDS AFTERWARD.', 13, 150, 2, 'dos');
+	$expect($whole['exact'] && implode(' ', $whole['lines']) === 'BETTING FIRST; CHOOSE DISCARDS AFTERWARD.', 'a message with no room at 16 pixels is wrapped whole at the size it was given');
+	$crisp = $text->wrapWhole('CHECK OR BET.', 14, 300, 2, 'dos');
+	$expect(!$crisp['exact'] && $crisp['lines'] === ['CHECK OR BET.'], 'a message with room is wrapped at 16 pixels');
+
+	// A table at 1280×720 and its dialogs: every Fixedsys glyph on its pixel grid is crisp and starts on a whole
+	// pixel. Glyphs are told apart by their atlas cells: the chips' vector numerals, and the arrows Fixedsys
+	// borrows from another font, keep their soft edges.
+	[$atlasWidth, $atlasHeight] = $text->atlasSize();
+	$cells = [];
+	foreach($text->faces()['dos']['glyphs'] as $glyph) if(isset($glyph['atlas']) && array_filter($glyph['plane'], static fn(float $edge): bool => abs($edge * 16 - round($edge * 16)) > 1e-6) === [])
+		$cells[sprintf('%.5f,%.5f', $glyph['atlas'][0] / $atlasWidth, $glyph['atlas'][1] / $atlasHeight)] = true;
+	foreach([[], [['key' => 'alt+p'], ['key' => 'r']], [['key' => 'h']], [['key' => '?']]] as $keys)
+	{
+		$table = new Presenter($root);
+		$table->resize(1280, 720, 1);
+		$table->update($fixture('facing-raise-5'));
+		if($keys) $table->input($keys, null, 0);
+		$glyphs = array_values(array_filter($table->paint(1280, 720)->instances(), static fn(array $instance): bool => abs($instance[10] - 1) < 1e-9 && abs($instance[11]) < 1e-9
+			&& isset($cells[sprintf('%.5f,%.5f', $instance[16], $instance[17])])));
+		$soft = array_filter($glyphs, static fn(array $instance): bool => $instance[8] < .5);
+		$offGrid = array_filter($glyphs, static fn(array $instance): bool => $instance[8] > .5 && (abs($instance[0] - round($instance[0])) > 1e-6 || abs($instance[1] - round($instance[1])) > 1e-6));
+		$where = $keys ? implode('+', array_column($keys, 'key')) : 'the table';
+		$expect(count($glyphs) > 100 && $soft === [], "every Fixedsys glyph of $where at 1280×720 is drawn crisp (" . count($soft) . ' of ' . count($glyphs) . ' are not)');
+		$borrowed = array_filter($table->paint(1280, 720)->instances(), static fn(array $instance): bool => abs($instance[10] - 1) < 1e-9 && $instance[8] > .5
+			&& !isset($cells[sprintf('%.5f,%.5f', $instance[16], $instance[17])]));
+		$expect($borrowed === [], "no glyph off Fixedsys's grid is drawn with hard edges in $where");
+		$expect($offGrid === [], "every crisp glyph of $where at 1280×720 starts on a whole pixel");
+	}
+	// Modern's vector faces keep their anti-aliased edges.
+	$modern = new Presenter($root);
+	$modern->resize(1280, 720, 1);
+	$modern->update($fixture('facing-raise-5'));
+	(function(): void { $this->mode = Theme::MODERN; })->call($modern);
+	$crispModern = array_filter($modern->paint(1280, 720)->instances(), static fn(array $instance): bool => abs($instance[10] - 1) < 1e-9 && $instance[8] > .5);
+	$expect($crispModern === [], 'Modern draws no glyph with hard edges');
 });
 
 $test('the Poker menu opens the rules of the game being played, and the title\'s settings, over the table', static function(callable $expect) use ($fixture, $root): void {
@@ -2041,7 +2096,11 @@ $test('the round history calls a street game\'s first bet a bet, and keeps OPEN 
 	$text = static fn(array $history): array => array_merge(...array_map(static fn(array $row): array => array_column($row['cells'] ?? [], 'text'), $history['rows']));
 	$street = $text(RoundHistory::build($players, $lines, false));
 	$expect(in_array('BET 2', $street, true) && !in_array('OPEN 2', $street, true), 'hold\'em shows BET 2');
-	$expect(in_array('SMALL BLIND 1', $street, true) && in_array('BIG BLIND 2', $street, true), 'blinds are listed as they were posted');
+	$expect(in_array('SB 1', $street, true) && in_array('BB 2', $street, true), 'blinds are listed as they were posted, by their short names');
+	$stud = $text(RoundHistory::build($players, ['Hand 1: You deals.', 'Ada: Brings in 2.', 'You: Raises to 12.']));
+	$expect(in_array('BRING-IN 2', $stud, true) && in_array('RAISE 12', $stud, true), 'the bring-in and a raise to 12 fit history cells');
+	// Each cell's text fits a column of ten characters of Classic's face at its own size, so it is drawn crisp.
+	foreach([...$street, ...$stud] as $cell) $expect(strlen($cell) <= 10, "the history cell \"$cell\" fits its column");
 	$draw = $text(RoundHistory::build($players, ['Hand 1: You deals.', 'Ada: Passes.', 'You: Bets 2.', 'Ada: Calls 2.']));
 	$expect(in_array('OPEN 2', $draw, true), 'draw still shows the opener');
 });

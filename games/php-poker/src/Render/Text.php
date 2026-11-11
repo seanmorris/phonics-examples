@@ -23,6 +23,16 @@ final class Text
 	private const FALLBACK = '·';
 
 	/**
+	 * Faces drawn from a bitmap font, by the font pixels in one em. The Classic face is Fixedsys Excelsior, an
+	 * 8×16 cell: drawn smaller than 16 device pixels a font pixel is smaller than a screen pixel, and whole rows
+	 * and columns of it vanish (a B reads as a D).
+	 */
+	private const PIXEL_GRID = ['dos' => 16];
+
+	/** Below this many device pixels per font pixel a bitmap face is drawn at its own size instead. */
+	private const PIXEL_FLOOR = 1.25;
+
+	/**
 	 * @param array<string,mixed> $metrics Decoded `ui-font.json` from the texture generator.
 	 */
 	public function __construct(private array $metrics) {}
@@ -58,6 +68,41 @@ final class Text
 	 * @param string $face Face name, body or bold.
 	 */
 	public function capHeight(string $face = 'body'): float { return (float)$this->metrics['faces'][$face]['capHeight']; }
+
+	/**
+	 * The em size a face is really drawn and measured at.
+	 *
+	 * A bitmap face asked for less than `PIXEL_FLOOR` device pixels per font pixel is drawn at one device pixel per
+	 * font pixel, its own size, so every row and column of it stays on screen and lands on one pixel. Larger sizes
+	 * have room for every font pixel and are drawn as asked. Vector faces are always drawn as asked.
+	 *
+	 * A caller that has no room for that size asks for `$exact` and gets the size it asked for, drawn as before.
+	 *
+	 * @param string $face Face name.
+	 * @param float $size Em size in device pixels.
+	 * @param bool $exact Whether to draw at exactly this size even where that loses font pixels.
+	 */
+	public function size(string $face, float $size, bool $exact = false): float
+	{
+		$grid = self::PIXEL_GRID[$face] ?? null;
+		return !$exact && $grid !== null && $size < $grid * self::PIXEL_FLOOR ? (float)$grid : $size;
+	}
+
+	/**
+	 * Whether a face at this em size draws every font pixel as a whole number of device pixels, so its glyphs can be
+	 * drawn with hard edges.
+	 *
+	 * @param string $face Face name.
+	 * @param float $size Em size in device pixels, before `size()`.
+	 * @param bool $exact Whether the face is drawn at exactly this size; see `size()`.
+	 */
+	public function crisp(string $face, float $size, bool $exact = false): bool
+	{
+		$grid = self::PIXEL_GRID[$face] ?? null;
+		if($grid === null) return false;
+		$scale = $this->size($face, $size, $exact) / $grid;
+		return $scale >= 1 - 1e-6 && abs($scale - round($scale)) < 1e-6;
+	}
 
 	/**
 	 * Split UTF-8 into characters the atlas can draw.
@@ -99,9 +144,11 @@ final class Text
 	 * @param float $size Em size in pixels.
 	 * @param string $face Face name, body or bold.
 	 * @param float $tracking Extra spacing between characters in em units.
+	 * @param bool $exact Whether to measure at exactly this size; see `size()`.
 	 */
-	public function measure(string $text, float $size, string $face = 'body', float $tracking = 0): float
+	public function measure(string $text, float $size, string $face = 'body', float $tracking = 0, bool $exact = false): float
 	{
+		$size = $this->size($face, $size, $exact);
 		$width = 0.0;
 		$previous = null;
 		$characters = $this->characters($text, $face);
@@ -126,16 +173,16 @@ final class Text
 	 * @param string $face Face name, body or bold.
 	 * @param float $tracking Extra spacing between characters in em units.
 	 */
-	public function fit(string $text, float $size, float $maxWidth, string $face = 'body', float $tracking = 0): string
+	public function fit(string $text, float $size, float $maxWidth, string $face = 'body', float $tracking = 0, bool $exact = false): string
 	{
-		if($this->measure($text, $size, $face, $tracking) <= $maxWidth) return $text;
+		if($this->measure($text, $size, $face, $tracking, $exact) <= $maxWidth) return $text;
 		$characters = $this->characters($text, $face);
 
 		while($characters)
 		{
 			array_pop($characters);
 			$candidate = rtrim(implode('', $characters)) . '…';
-			if($this->measure($candidate, $size, $face, $tracking) <= $maxWidth) return $candidate;
+			if($this->measure($candidate, $size, $face, $tracking, $exact) <= $maxWidth) return $candidate;
 		}
 
 		return '';
@@ -151,7 +198,7 @@ final class Text
 	 * @param string $face Face name, body or bold.
 	 * @return list<string>
 	 */
-	public function wrap(string $text, float $size, float $maxWidth, int $maxLines = 2, string $face = 'body'): array
+	public function wrap(string $text, float $size, float $maxWidth, int $maxLines = 2, string $face = 'body', bool $exact = false): array
 	{
 		$words = preg_split('/\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 		$lines = [];
@@ -161,7 +208,7 @@ final class Text
 		{
 			$candidate = $line === '' ? $word : $line . ' ' . $word;
 
-			if($line === '' || $this->measure($candidate, $size, $face) <= $maxWidth)
+			if($line === '' || $this->measure($candidate, $size, $face, 0, $exact) <= $maxWidth)
 			{
 				$line = $candidate;
 				continue;
@@ -179,7 +226,23 @@ final class Text
 
 		if($line !== '') $lines[] = $line;
 
-		return array_map(fn(string $line): string => $this->fit($line, $size, $maxWidth, $face), $lines);
+		return array_map(fn(string $line): string => $this->fit($line, $size, $maxWidth, $face, 0, $exact), $lines);
+	}
+
+	/**
+	 * Wrap as `wrap()` does, at the size the face is really drawn at where the whole text fits in that many lines,
+	 * and otherwise at exactly the size asked for, so a bitmap face loses no words to being drawn crisp.
+	 *
+	 * @return array{lines:list<string>,exact:bool} The lines, and whether they must be drawn at exactly `$size`.
+	 */
+	public function wrapWhole(string $text, float $size, float $maxWidth, int $maxLines = 2, string $face = 'body'): array
+	{
+		if($this->size($face, $size) === $size) return ['lines' => $this->wrap($text, $size, $maxWidth, $maxLines, $face), 'exact' => false];
+		// Wrapped with no limit on lines, the text either fits the lines allowed, every word whole, or it does not.
+		$lines = $this->wrap($text, $size, $maxWidth, PHP_INT_MAX, $face);
+		$whole = count($lines) <= $maxLines;
+		foreach($lines as $line) $whole = $whole && $this->measure($line, $size, $face) <= $maxWidth;
+		return $whole ? ['lines' => $lines, 'exact' => false] : ['lines' => $this->wrap($text, $size, $maxWidth, $maxLines, $face, true), 'exact' => true];
 	}
 
 	/**
@@ -191,13 +254,18 @@ final class Text
 	 * @param float $size Em size in pixels.
 	 * @param string $face Face name, body or bold.
 	 * @param float $tracking Extra spacing between characters in em units.
-	 * @return list<array{float,float,float,float,float,float,float,float}> Screen rect and atlas UV rectangles.
+	 * @param bool $exact Whether to place the glyphs at exactly this size; see `size()`.
+	 * @return list<array{float,float,float,float,float,float,float,float,bool}> Screen rect, atlas UV rectangle, and
+	 *   whether the glyph's outline lies on its face's pixel grid (the arrows a bitmap face borrows do not).
 	 */
-	public function glyphs(string $text, float $x, float $middle, float $size, string $face = 'body', float $tracking = 0): array
+	public function glyphs(string $text, float $x, float $middle, float $size, string $face = 'body', float $tracking = 0, bool $exact = false): array
 	{
 		[$atlasWidth,$atlasHeight] = $this->atlasSize();
 		$metrics = $this->metrics['faces'][$face];
+		$size = $this->size($face, $size, $exact);
 		$baseline = $middle + $metrics['capHeight'] * $size / 2;
+		// A bitmap face starts on a whole device pixel, so at its own size every font pixel is one screen pixel.
+		if(isset(self::PIXEL_GRID[$face])) [$x, $baseline] = [round($x), round($baseline)];
 		$quads = [];
 		$pen = 0.0;
 		$previous = null;
@@ -211,10 +279,14 @@ final class Text
 			{
 				[$atlasX,$atlasY,$cellWidth,$cellHeight] = $glyph['atlas'];
 				[$left,$top,$width,$height] = $glyph['plane'];
+				$grid = self::PIXEL_GRID[$face] ?? 0;
+				$onGrid = $grid > 0;
+				foreach([$left, $top, $width, $height, $glyph['advance']] as $edge) $onGrid = $onGrid && abs($edge * $grid - round($edge * $grid)) < 1e-6;
 				$quads[] = [
 					$x + ($pen + $left) * $size, $baseline + $top * $size, $width * $size, $height * $size
 					, $atlasX / $atlasWidth, $atlasY / $atlasHeight
 					, ($atlasX + $cellWidth) / $atlasWidth, ($atlasY + $cellHeight) / $atlasHeight
+					, $onGrid
 				];
 			}
 

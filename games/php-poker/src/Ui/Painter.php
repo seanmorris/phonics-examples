@@ -190,7 +190,7 @@ final class Painter
 			$position=array_search($index,array_keys($geometry['rows']),true);
 			$fill=((int)$position%2===0)?Theme::alpha(Theme::BUTTON,.72):Theme::DIALOG;
 			$this->canvas->box($x,$y,$w,$h,0,$fill,Theme::alpha(Theme::INK,.2),1*$this->unit);
-			$labelWidth=min(132*$this->layout->stretch(),$rect[2]*.36);
+			$labelWidth=Layout::houseRulesLabelWidth($rect,$this->layout->stretch());
 			$firstLineY=$rect[1]+min($rect[3],30)/2;
 			$this->text($labels[$index],$rect[0]+10*$this->layout->stretch(),$firstLineY,
 				$this->layout->captionText(),Theme::alpha(Theme::INK,.72),'left',$labelWidth-14*$this->layout->stretch());
@@ -204,7 +204,8 @@ final class Painter
 			}
 			$shown=$this->mode===Theme::CLASSIC?strtoupper($value):$value;
 			$size=$this->layout->controlText();
-			$lines=$this->canvas->text->wrap($shown,$size*$this->unit,$valueWidth*$this->horizontalUnit,3,$this->face);
+			// Type is drawn at the canvas's unit, which a short desktop window holds above the field's scale.
+			$lines=$this->canvas->text->wrap($shown,$size*$this->canvas->unit,$valueWidth*$this->horizontalUnit,3,$this->face);
 			$leading=$size*1.25;
 			$lines=array_slice($lines,0,3);
 			$lineY=$firstLineY;
@@ -452,9 +453,16 @@ final class Painter
 			$this->button($stepper['more'], '+', '', 'default', false);
 			[$lx, $ly] = $this->layout->point(...$stepper['label']);
 			$stepperLabel = strtoupper((string)($this->view['legalActions']['betLabel'] ?? 'Bet'));
-			// The primary button already names the bet. In the landscape panel the label would run back over the
-			// last seat's name, so it is shown only where it stays inside the panel.
-			$labelRoom = $this->layout->profile === 'landscape' ? $lx - ($this->layout->point($this->layout->tableRight(), 0)[0] + 4 * $this->unit) : INF;
+			// The primary button already names the bet, so the label is shown only where it has room: inside the
+			// landscape panel, clear of the last seat's name, and in the lane beside the hand, clear of its cards.
+			$labelRoom = INF;
+			if($this->layout->profile === 'landscape') $labelRoom = $lx - ($this->layout->point($this->layout->tableRight(), 0)[0] + 4 * $this->unit);
+			elseif($this->layout->verticalActionBar())
+			{
+				$hand = $this->layout->seat(0, count($this->view['players'] ?? []))['cards'];
+				$last = $hand[count($hand) - 1];
+				$labelRoom = $lx - ($this->layout->point($last[0] + $last[2], 0)[0] + 6 * $this->unit);
+			}
 			if($this->canvas->measure($stepperLabel, $this->layout->captionText(), $this->face) <= $labelRoom)
 			$this->canvas->label($stepperLabel, $lx, $ly, $this->layout->captionText(), Theme::PLATE, $this->face, $stepper['align']);
 		}
@@ -480,8 +488,9 @@ final class Painter
 		[$messageX, $top, $anchorWidth] = $this->layout->centre()['message'];
 		$width = $this->layout->profile === 'wide'
 			? min($this->layout->statusLane()['width'], max(240, $this->canvas->measure(strtoupper($line), Theme::BODY, $this->face) / $this->horizontalUnit + 40)) : min(180, $anchorWidth);
-		// The lane between the columns is narrow, so the message may run to three lines there.
-		$lines = $this->canvas->text->wrap(strtoupper($line), Theme::BODY * $this->canvas->unit, ($width - 12) * $this->horizontalUnit, $this->layout->columns() ? 3 : 2, $this->face);
+		// The lane between the columns is narrow, so the message may run to three lines there. Classic's face is
+		// drawn at its own size where the whole message still fits in those lines, and as asked where it does not.
+		['lines' => $lines, 'exact' => $exact] = $this->canvas->text->wrapWhole(strtoupper($line), Theme::BODY * $this->canvas->unit, ($width - 12) * $this->horizontalUnit, $this->layout->columns() ? 3 : 2, $this->face);
 		$messageHeight = $this->layout->plateHeight() + 16 * (count($lines) - 1);
 		if($this->layout->profile === 'wide')
 		{
@@ -494,8 +503,8 @@ final class Painter
 		{
 			$y = $top + $this->layout->plateHeight() / 2 + $index * 16 + .5;
 			if($drumming && $index === array_key_last($lines))
-			$this->drummingText(rtrim($text, '.'), $messageX, $y, Theme::BODY, Theme::INK, 'center');
-			else $this->text($text, $messageX, $y, Theme::BODY, Theme::INK, 'center');
+			$this->drummingText(rtrim($text, '.'), $messageX, $y, Theme::BODY, Theme::INK, 'center', $exact);
+			else $this->text($text, $messageX, $y, Theme::BODY, Theme::INK, 'center', null, $exact);
 		}
 	}
 
@@ -1132,23 +1141,23 @@ final class Painter
 		$this->canvas->label($title, $x + $w / 2, $y + 7 * $this->unit, Theme::BODY, Theme::INK, $this->face, 'center');
 	}
 
-	private function text(string $text, float $x, float $y, float $size, array $color, string $align = 'left', ?float $maxWidth = null): void
+	private function text(string $text, float $x, float $y, float $size, array $color, string $align = 'left', ?float $maxWidth = null, bool $exact = false): void
 	{
 		[$dx, $dy] = $this->layout->point($x, $y);
-		$this->canvas->label($this->mode === Theme::CLASSIC ? strtoupper($text) : $text, $dx, $dy, $size, $color, $this->face, $align, $maxWidth === null ? null : $maxWidth * $this->horizontalUnit);
+		$this->canvas->label($this->mode === Theme::CLASSIC ? strtoupper($text) : $text, $dx, $dy, $size, $color, $this->face, $align, $maxWidth === null ? null : $maxWidth * $this->horizontalUnit, 0, false, $exact);
 	}
 
 	/** Draw a fixed-width three-dot suffix, revealing only the current presentation cadence. */
-	private function drummingText(string $text, float $x, float $y, float $size, array $color, string $align = 'left'): void
+	private function drummingText(string $text, float $x, float $y, float $size, array $color, string $align = 'left', bool $exact = false): void
 	{
 		$dots = !empty($this->state['networkWait']['active']) ? (int)($this->state['networkWait']['dots'] ?? 0) : 0;
-		if(empty($this->state['networkWait']['active'])) { $this->text($text, $x, $y, $size, $color, $align); return; }
+		if(empty($this->state['networkWait']['active'])) { $this->text($text, $x, $y, $size, $color, $align, null, $exact); return; }
 		$text = $this->mode === Theme::CLASSIC ? strtoupper($text) : $text;
 		[$dx, $dy] = $this->layout->point($x, $y);
-		$fullWidth = $this->canvas->measure($text . '...', $size, $this->face);
+		$fullWidth = $this->canvas->measure($text . '...', $size, $this->face, 0, $exact);
 		$left = match($align) { 'center' => $dx - $fullWidth / 2, 'right' => $dx - $fullWidth, default => $dx };
-		$offset = $this->canvas->label($text, $left, $dy, $size, $color, $this->face);
+		$offset = $this->canvas->label($text, $left, $dy, $size, $color, $this->face, 'left', null, 0, false, $exact);
 		for($index = 0; $index < 3; $index++)
-		$offset += $this->canvas->label('.', $left + $offset, $dy, $size, Theme::alpha($color, $index < $dots ? 1 : 0), $this->face);
+		$offset += $this->canvas->label('.', $left + $offset, $dy, $size, Theme::alpha($color, $index < $dots ? 1 : 0), $this->face, 'left', null, 0, false, $exact);
 	}
 }

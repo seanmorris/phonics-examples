@@ -31,9 +31,9 @@ final class GameText
 	 */
 	public const HAND_EXAMPLES = [
 		// Ace of spades, hearts, diamonds and clubs, and a joker.
-		[[[51, 38, 25, 12, 52]], 'Four cards of one rank and a wild card standing in as the fifth.'],
+		[[[51, 38, 25, 12, 52]], 'Four of one rank, and a wild card as the fifth.'],
 		// Nine to five of hearts.
-		[[[33, 32, 31, 30, 29]], 'Five cards in a row, all of one suit. Ten to ace is the best of them, the royal flush.'],
+		[[[33, 32, 31, 30, 29]], 'Five cards in a row, all of one suit. Ten to ace is a royal flush.'],
 		// Four queens and the four of diamonds.
 		[[[49, 36, 23, 10], [15]], 'Four cards of one rank.'],
 		// Three kings and two sevens, as in the Showdown example.
@@ -49,7 +49,7 @@ final class GameText
 		// Two tens, the ace of spades, the seven of diamonds and the four of clubs.
 		[[[34, 8], [51, 18, 2]], 'Two cards of one rank.'],
 		// Ace of hearts, jack of clubs, eight of spades, six of diamonds, three of clubs.
-		[[[38, 9, 45, 17, 1]], 'None of the hands above. The highest card decides, then the next highest.'],
+		[[[38, 9, 45, 17, 1]], 'None of the above. The highest card decides, then the next.'],
 	];
 
 	/** Shown under the list of hands: the one hand a plain deck cannot make. */
@@ -133,10 +133,10 @@ final class GameText
 	{
 		$common = ['raiseLimit'=>['Total raises','Whole-table cap'], 'playerRaiseLimit'=>['Raises/player',"Each player's cap"]];
 		return match($game) {
-			'holdem' => ['ante'=>['Small blind','Left of the dealer'], 'minimum'=>['Early min','Big blind · pre-flop, flop'],
+			'holdem' => ['ante'=>['Small blind','Left of the dealer'], 'minimum'=>['Early min','Also the big blind'],
 				'maximum'=>['Early max','Pre-flop and flop'], 'finalMinimum'=>['Late min','Turn and river'],
 				'finalMaximum'=>['Late max','Turn and river']] + $common,
-			'stud5', 'stud7' => ['ante'=>['Ante','Every seat pays'], 'minimum'=>['Early min','Bring-in · first two streets'],
+			'stud5', 'stud7' => ['ante'=>['Ante','Every seat pays'], 'minimum'=>['Early min','Also the bring-in'],
 				'maximum'=>['Early max','First two streets'], 'finalMinimum'=>['Late min','Later streets'],
 				'finalMaximum'=>['Late max','Later streets']] + $common,
 			default => ['ante'=>['Ante','Dealer pays pot'], 'minimum'=>['Before min','Minimum bet/raise'],
