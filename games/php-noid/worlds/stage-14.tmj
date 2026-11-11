@@ -20,8 +20,13 @@
     },
     {
       "name": "phonics.systems",
-      "type": "string",
-      "value": "[\"@php-noid/stage\"]"
+      "type": "list",
+      "value": [
+        {
+          "type": "string",
+          "value": "@php-noid/stage"
+        }
+      ]
     },
     {
       "name": "phonics.lifecycle",

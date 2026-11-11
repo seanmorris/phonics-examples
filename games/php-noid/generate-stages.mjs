@@ -21,6 +21,12 @@ const component = (name, values = {}) => {
 	};
 };
 
+const listProperty = (name, values) => ({
+	name
+	, type: 'list'
+	, value: values.map(value => ({type: 'string', value}))
+});
+
 const property = (name, value) => ({
 	name
 	, type: typeof value === 'boolean'
@@ -233,7 +239,7 @@ for(let stage = 1; stage <= names.length; stage++)
 		, nextlayerid: 3
 		, tilesets: []
 		, properties: [property('name', names[stage - 1])
-			, property('phonics.systems', JSON.stringify(['@php-noid/stage']))
+			, listProperty('phonics.systems', ['@php-noid/stage'])
 			, property('phonics.lifecycle', 'reset')
 		]
 		, layers: [{
@@ -269,7 +275,7 @@ const world = {
 	}))
 	, properties: [property('phonics.import.php-noid', '../phonics.json')
 		, property('phonics.start', 'stage-01.tmj')
-		, property('phonics.modules', JSON.stringify(['@php-noid/stage']))
+		, listProperty('phonics.modules', ['@php-noid/stage'])
 		, {name: 'phonics.classes', type: 'file', value: 'phonics.classes.json'}
 	]
 };
@@ -278,6 +284,7 @@ await fs.writeFile(new URL('worlds/campaign.world', root), JSON.stringify(world,
 
 const project = {
 	folders: ['.']
+	, extensionsPath: '../../../node_modules/@seanmorris/phonics/packages/tiled-phonics/extension'
 	, propertyTypes: classes.map((type, index) => ({...type, type: 'class', id: index + 1}))
 };
 
