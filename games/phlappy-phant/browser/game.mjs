@@ -248,9 +248,15 @@ class HintOverlay
 		};
 
 		appendButton('✚');
-		appendText(' MOVE  ');
-		appendButton('⓿');
-		appendText(' SELECT');
+
+		// A text page has nothing to select: its direction keys scroll it.
+		if(hint.scroll) appendText(' SCROLL');
+		else
+		{
+			appendText(' MOVE  ');
+			appendButton('⓿');
+			appendText(' SELECT');
+		}
 
 		if(hint.back)
 		{

@@ -118,26 +118,31 @@ $titleItems = static function() use (&$startGame, $bindings, $audioItems): array
 		]
 		, 'controls' => $bindings->item('Input settings')
 		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
+		// How to play and About are pages to read, not rows to pick: the engine sets them as scrolling text.
 		, 'help' => [
 			'label' => 'How to play'
-			, 'children' => [
-				'flap' => ['label' => 'Tap / click / Space / A to flap.', 'disabled' => true]
-				, 'dodge' => ['label' => 'Slip between the pillars.', 'disabled' => true]
-				, 'night' => ['label' => 'Every ten pillars day turns to night.', 'disabled' => true]
-				, 'pause' => ['label' => 'Escape / P / Start pauses.', 'disabled' => true]
+			, 'text' => [
+				['heading' => 'Fly']
+				, 'Flap to stay in the air and slip between the pillars. Each pair you pass scores a point.'
+				, 'The pillars come faster and their gaps close in as your score climbs. Every ten points, day and night trade places.'
+				, ['heading' => 'Controls']
+				, ['name' => 'Flap', 'value' => 'Tap, click, Space or A']
+				, ['name' => 'Pause', 'value' => 'Escape, P or Start']
+				, 'Change them in Input settings.'
 			]
 		]
 		, 'about' => [
 			'label' => 'About'
-			, 'children' => [
-				'built' => ['label' => 'Built with Phonics', 'disabled' => true]
-				, 'elephpant' => ['label' => 'elePHPant: Vincent Pontier', 'disabled' => true]
-				, 'vector' => ['label' => "Traced from Webysther's SVG", 'disabled' => true]
-				, 'art-licence' => ['label' => 'Sprite: GPL-2.0-or-later', 'disabled' => true]
-				, 'terrain' => ['label' => 'Terrain: GrafxKid (CC0)', 'disabled' => true]
-				, 'music' => ['label' => 'Music: Funktify by Mr. Spastic', 'disabled' => true]
-				, 'music-licence' => ['label' => 'Music: CC BY-NC-ND 3.0', 'disabled' => true]
-				, 'code-licence' => ['label' => 'Code: Apache-2.0', 'disabled' => true]
+			, 'text' => [
+				'Built with Phonics.'
+				, ['heading' => 'Art']
+				, ['name' => 'elePHPant', 'value' => 'Vincent Pontier']
+				, ['name' => 'Sprite', 'value' => "Traced from Webysther's SVG, GPL-2.0-or-later"]
+				, ['name' => 'Terrain', 'value' => 'GrafxKid, CC0']
+				, ['heading' => 'Music']
+				, ['name' => 'Funktify', 'value' => 'Mr. Spastic, CC BY-NC-ND 3.0']
+				, ['heading' => 'Code']
+				, 'Apache-2.0.'
 			]
 		]
 	];
@@ -274,11 +279,8 @@ $engine->setInputHandler(static function(
 		return false;
 	}
 
-	if($action && isset($menu->rows()[$action]))
-	{
-		$menu->select($action);
-		$menu->activate();
-	}
+	// The browser's region buttons press rows, and a text page's scroll arrows.
+	if($action !== '') $menu->press($action);
 
 	$bindings->theme = $engine->input->controllerTheme();
 	$bindingCaptured = $bindings->update($menu, $engine->input->actions, $frame['focused']);
@@ -372,6 +374,7 @@ $engine->start(static function(
 		, 'viewport' => $scene->viewport
 		, 'regions' => $scene->regions
 		, 'menu' => $scene->menuBounds
+		, 'text' => $menu->text === null ? null : ['first' => $menu->text->first, 'last' => $menu->text->last()]
 		, 'hint' => $scene->hint
 		, 'inputTheme' => $engine->input->inputTheme
 		, 'width' => $width

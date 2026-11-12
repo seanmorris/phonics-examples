@@ -12,6 +12,7 @@ use Phonics\Tiled\TileMap;
 use Phonics\Ui\Menu;
 use Phonics\Input\Source;
 use Phonics\Ui\MenuRenderer;
+use Phonics\Ui\TextPage;
 use PhlappyPhant\Random;
 use PhlappyPhant\Simulation;
 
@@ -435,7 +436,8 @@ final class Scene
 
 		if($menu->isOpen)
 		{
-			if($this->needsPlaque($menu)) $this->plaquePage($menu, $width, $height, $seconds, $k);
+			if($menu->text !== null) $this->textPage($menu, $menu->text, $width, $height, $seconds, $k, $camera);
+			elseif($this->needsPlaque($menu)) $this->plaquePage($menu, $width, $height, $seconds, $k);
 			else $this->skyPage($menu, $page, $width, $height, $seconds, $k, $camera);
 		}
 	}
@@ -540,14 +542,21 @@ final class Scene
 	 * The browser draws this small mixed-density line at display resolution. Rendering the four-times-denser key art
 	 * into the reduced world buffer first would discard detail before the host enlarges the pixel-art canvas.
 	 *
-	 * @return array{back:bool,scale:int,y:int} Whether Back is offered, the font scale, and the line's top.
+	 * @return array{back:bool,scroll:bool,scale:int,y:int} Whether Back is offered, whether the page is text that the
+	 * direction keys scroll, the font scale, and the line's top.
 	 */
 	private function hintLine(Menu $menu, int $width, int $height, int $k): array
 	{
-		$hint = $menu->depth() > 0 ? '✚ MOVE  ⓿ SELECT  ❶ BACK' : '✚ MOVE  ⓿ SELECT';
+		$hint = match(true)
+		{
+			$menu->text !== null => '✚ SCROLL  ❶ BACK'
+			, $menu->depth() > 0 => '✚ MOVE  ⓿ SELECT  ❶ BACK'
+			, default => '✚ MOVE  ⓿ SELECT'
+		};
 
 		return [
 			'back' => $menu->depth() > 0
+			, 'scroll' => $menu->text !== null
 			, 'scale' => max(1, min($k, (int)floor(($width - 16) / max(1, $this->measure($hint)))))
 			, 'y' => $height - 34 * $k
 		];
@@ -712,6 +721,152 @@ final class Scene
 		$this->rects->render($rects, $width, $height);
 		$this->text->render($labels, $camera);
 		$this->bindingButtons($menu, $width, $height, $r, 2 * $r, $pad);
+	}
+
+	/**
+	 * Draw a menu text page on the compact plaque: its lines, a scrollbar when they do not all fit, and Back.
+	 *
+	 * The page is as wide as the Audio plaque and as tall as its lines need, up to the room between the top margin and
+	 * the hint line, under a title the size of its text. Headings and names take the mist teal of the information
+	 * rows. A page that does not fit gives up a column to the engine's text-mode scrollbar, drawn in plaque colours,
+	 * and publishes its regions for the shared menu input; the lines and the track are drag regions, which the
+	 * browser leaves to the canvas.
+	 *
+	 * @param Menu $menu Open menu showing the page.
+	 * @param TextPage $page Page to lay out and draw.
+	 * @param int $width Output width in pixels.
+	 * @param int $height Output height in pixels.
+	 * @param float $seconds Elapsed UI time, for the chevron blink.
+	 * @param int $k World pixel scale.
+	 * @param Camera $camera Screen camera.
+	 * @return void Publishes the scrollbar's regions and Back's.
+	 */
+	private function textPage(Menu $menu, TextPage $page, int $width, int $height, float $seconds, int $k, Camera $camera): void
+	{
+		$r = self::compactScale($k, $width, $height);
+		$chevron = $this->measure('> ');
+		$margin = 8 * $r;
+		$avail = $width - 24 * $k;
+		$blockWidth = (int)max(1, min(min(self::COMPACT_WIDTH * $r, $width - 16) - 12 * $r - 2 * $margin, $avail));
+		$title = (string)$menu->title;
+		$titleScale = max(1, min($r, (int)floor($avail / max(1, $this->measure($title)))));
+		$titleHeight = 16 * $titleScale + 8 * $r;
+
+		// Lines are fourteen pixels apart, a little more open than a wrapped information row, with Back a choice's
+		// height below them.
+		$pitch = 14 * $r;
+		$gap = 6 * $r;
+		$backHeight = 18 * $r;
+		$bar = 10 * $r;
+		$menuTop = 8 * $k;
+		$menuBottom = $height - 44 * $k;
+		$visible = max(1, (int)floor(($menuBottom - $menuTop - $titleHeight - $gap - $backHeight) / $pitch));
+		// On a page as wide as the Audio plaque the lines start after the chevron column, level with Back; a narrower
+		// frame gives that column to the text.
+		$indent = $blockWidth >= (self::COMPACT_WIDTH - 28) * $r ? $chevron : 0.0;
+		$page->layout($this->font, max(1, $blockWidth / $r - $indent), $visible, ($bar + 4 * $r) / $r);
+
+		$scrolls = $page->last() > 0;
+		$view = min($visible, max(1, count($page->lines()))) * $pitch;
+		$blockHeight = $titleHeight + $view + $gap + $backHeight;
+		$top = max($menuTop, min((int)floor(($height - $blockHeight) / 2), $menuBottom - $blockHeight));
+		$x = (int)floor(($width - $blockWidth) / 2);
+		$viewTop = $top + $titleHeight;
+		$left = $x + $indent * $r;
+
+		$rects = [[0, 0, $width, $height, self::INK[0], self::INK[1], self::INK[2], .35]];
+		$plate = [max(0, $x - 6 * $r - $margin), max(0, $top - $margin), $blockWidth + 12 * $r + 2 * $margin, $blockHeight + 2 * $margin];
+		$plate[2] = min($plate[2], $width - $plate[0]);
+		$plate[3] = min($plate[3], $height - $plate[1]);
+		array_push($rects, ...$this->plaqueFrame($plate, $r));
+		$rects[] = [...$plate, ...self::PLAQUE];
+		$this->menuBounds = [
+			'left' => $x - 6 * $r, 'top' => $top, 'right' => $x + $blockWidth + 6 * $r, 'bottom' => $top + $blockHeight
+			, 'width' => $width, 'height' => $height, 'scale' => $r, 'large' => false
+		];
+
+		$labels = [];
+		$this->shadowed($labels, $title, (float)$x, (float)$top, (float)$titleScale, 'left', self::MENU_TEXT);
+
+		foreach($page->shown() as $index => $spans) foreach($spans as $span)
+		{
+			$accent = $span['kind'] === TextPage::HEADING || $span['kind'] === TextPage::NAME;
+			$this->shadowed($labels, $span['text'], $left + $span['x'] * $r, (float)($viewTop + $index * $pitch), (float)$r, 'left', $accent ? self::MIST : self::MENU_TEXT);
+		}
+
+		if($scrolls) $this->textScrollbar($rects, $menu, $page, [$x + $blockWidth - $bar, $viewTop, $bar, $view], [$x, $viewTop, $blockWidth - $bar - 4 * $r, $view], $pitch, $r);
+
+		// Back is the page's one choice, so it always stands on the selected band behind the blinking chevron.
+		$pad = 6 * $r;
+		$backY = $viewTop + $view + $gap;
+		$rect = [$x - $pad, $backY - 2 * $r, $blockWidth + 2 * $pad, $backHeight];
+		$selected = $menu->selected === '@back';
+
+		if($selected)
+		{
+			$rects[] = [$rect[0] + $r, $rect[1] + $r, $rect[2], $rect[3], self::INK[0], self::INK[1], self::INK[2], .6];
+			$rects[] = [...$rect, ...self::MENU_HIGHLIGHT, 1.0];
+
+			if(fmod($seconds, .9) < .6) $this->label($labels, '>', (float)$x, (float)$backY, (float)$r, 'left', self::MIST);
+		}
+
+		$this->shadowed($labels, 'Back', $x + $chevron * $r, (float)$backY, (float)$r, 'left', $selected ? self::MIST : self::MENU_TEXT);
+		$this->regions[] = ['id' => '@back', 'label' => 'Back', 'disabled' => false, 'rect' => $rect];
+		$this->hint = $this->hintLine($menu, $width, $height, $k);
+
+		$this->rects->render($rects, $width, $height);
+		$this->text->render($labels, $camera);
+	}
+
+	/**
+	 * Add a text page's scrollbar to the plaque and publish its regions.
+	 *
+	 * Arrow cells are the bar's width and one line tall, with pixel triangles; the track fills the rest in the selected
+	 * band's teal, and the thumb is mist, never shorter than the bar is wide. Arrows and thumb cast the same ink
+	 * shadow as the text.
+	 *
+	 * @param list<array<int,float>> $rects Rectangle batch to append to.
+	 * @param Menu $menu Menu whose title labels the lines' region.
+	 * @param TextPage $page Laid-out page.
+	 * @param array{float,float,float,float} $column The bar's column.
+	 * @param array{float,float,float,float} $area The lines, as the region a drag moves.
+	 * @param float $pitch Line height in output pixels.
+	 * @param int $r Page scale.
+	 * @return void Appends rectangles and four regions.
+	 */
+	private function textScrollbar(array &$rects, Menu $menu, TextPage $page, array $column, array $area, float $pitch, int $r): void
+	{
+		[$x, $y, $w, $h] = $column;
+		$cell = min($pitch, floor($h / 2));
+		$track = [$x, $y + $cell, $w, max(0, $h - 2 * $cell)];
+		$thumb = $page->thumb($track[3], $w);
+		$shade = [self::INK[0], self::INK[1], self::INK[2], .6];
+		$rects[] = [...$track, ...self::MENU_HIGHLIGHT, 1.0];
+
+		if($thumb !== null)
+		{
+			$knob = [$x, $track[1] + round($thumb[0]), $w, round($thumb[1])];
+			$rects[] = [$knob[0] + $r, $knob[1] + $r, $knob[2], $knob[3], ...$shade];
+			$rects[] = [...$knob, ...self::MIST, 1.0];
+		}
+
+		foreach(['up' => [$y, $page->first > 0], 'down' => [$y + $h - $cell, $page->first < $page->last()]] as $end => [$top, $on])
+		{
+			$middle = $top + floor(($cell - 4 * $r) / 2);
+
+			for($row = 0; $row < 4; $row++)
+			{
+				$span = 2 * ($end === 'up' ? $row + 1 : 4 - $row) * $r;
+				$bit = [$x + ($w - $span) / 2, $middle + $row * $r, $span, $r];
+				$rects[] = [$bit[0] + $r, $bit[1] + $r, $bit[2], $bit[3], ...$shade];
+				$rects[] = [...$bit, ...($on ? self::MENU_TEXT : self::MENU_DISABLED), 1.0];
+			}
+
+			$this->regions[] = ['id' => '@text-' . $end, 'label' => $end === 'up' ? 'Scroll up' : 'Scroll down', 'disabled' => !$on, 'scroll' => $end, 'rect' => [$x, $top, $w, $cell]];
+		}
+
+		$this->regions[] = ['id' => '@text-track', 'label' => 'Scroll position', 'disabled' => true, 'drag' => true, 'scroll' => 'track', 'rect' => $track, 'thumb' => $thumb, 'minimum' => $w];
+		$this->regions[] = ['id' => '@text', 'label' => (string)$menu->title, 'disabled' => true, 'drag' => true, 'scroll' => 'view', 'rect' => $area, 'pitch' => $pitch];
 	}
 
 	/**

@@ -396,12 +396,16 @@ test('menu pages stand on their plate, skip text rows and stay inside a narrow p
 		for(let step = 0; step < steps; step++) await press(page, 'ArrowDown');
 
 		await press(page, 'Enter');
-		await expect.poll(async() => (await status(page)).regions.map(region => region.label)).toEqual(['Back']);
+		await expect.poll(async() => (await status(page)).text?.first).toBe(0);
+		expect((await status(page)).regions.at(-1).label, `${name} ends on Back`).toBe('Back');
 
-		// Information rows are text: they publish no button, and moving the selection never lands on one.
+		// A text page is read, not picked from: its arrows scroll it, it fits the frame wherever it stands, and
+		// Enter takes its one choice, Back.
 		await press(page, 'ArrowDown');
 		await press(page, 'ArrowUp');
 		await page.waitForTimeout(200);
+		await fits(name);
+		await press(page, 'End');
 		await fits(name);
 		await press(page, 'Enter');
 		await expect.poll(async() => (await status(page)).regions.length).toBe(5);
@@ -409,6 +413,78 @@ test('menu pages stand on their plate, skip text rows and stay inside a narrow p
 		for(let step = 0; step < steps; step++) await press(page, 'ArrowUp');
 	}
 
+	expect(errors).toEqual([]);
+	await context.close();
+});
+
+test('How to play and About are text pages that scroll by line from keys, wheel, drags and their arrows', async({browser}) => {
+	const context = await browser.newContext({viewport: {width: 390, height: 844}, deviceScaleFactor: 2});
+	const page = await context.newPage();
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	const canvas = await boot(page);
+	await canvas.focus();
+	const first = async() => (await status(page)).text?.first;
+	const point = async(x, y) => {
+		const state = await status(page);
+		const box = await canvas.boundingBox();
+
+		return [box.x + x * box.width / state.width, box.y + y * box.height / state.height];
+	};
+
+	for(let step = 0; step < 4; step++) await press(page, 'ArrowDown');
+
+	await press(page, 'Enter');
+	await expect.poll(first).toBe(0);
+	let state = await status(page);
+	const last = state.text.last;
+
+	// The phone frame is too narrow for the credits, so the page gives up a column to its scrollbar. Only the arrows
+	// and Back get buttons: the lines and the track take drags on the canvas.
+	expect(last).toBeGreaterThan(3);
+	expect(state.regions.map(region => region.id)).toEqual(['@text-up', '@text-down', '@text-track', '@text', '@back']);
+	expect(state.hint).toMatchObject({back: true, scroll: true});
+	const actions = () => page.evaluate(() => [...document.querySelectorAll('.phlappy-phant-targets button')].map(button => button.dataset.action));
+	await expect.poll(actions).toEqual(['@text-up', '@text-down', '@back']);
+	const view = state.regions.find(region => region.id === '@text');
+	const [x, y, width, height] = view.rect;
+	const visible = Math.round(height / view.pitch);
+
+	for(const [key, line] of [['ArrowDown', 1], ['ArrowDown', 2], ['ArrowUp', 1], ['End', last], ['Home', 0], ['PageDown', visible]])
+	{
+		await press(page, key);
+		await expect.poll(first, `${key} reaches line ${line}`).toBe(Math.min(line, last));
+	}
+
+	await press(page, 'Home');
+	await page.mouse.move(...await point(x + width / 2, y + height / 2));
+	// SDL reports whole notches of 100 CSS pixels, and Playwright's wheel deltas come out divided by the pixel ratio.
+	await page.mouse.wheel(0, 100 * await page.evaluate(() => devicePixelRatio));
+	await expect.poll(first, 'a wheel notch scrolls one line').toBe(1);
+
+	// The lines follow a drag: two lines' height up shows two later lines.
+	await page.mouse.down();
+	await page.mouse.move(...await point(x + width / 2, y + height / 2 - 2 * view.pitch), {steps: 5});
+	await page.mouse.up();
+	await expect.poll(first, 'dragging the lines').toBe(3);
+
+	await page.locator('.phlappy-phant-targets button[data-action="@text-up"]').click();
+	await expect.poll(first, 'the up arrow button').toBe(2);
+
+	// The thumb drags in proportion; at the foot of the track the page shows its last line.
+	state = await status(page);
+	const track = state.regions.find(region => region.id === '@text-track');
+	const [tx, ty, , th] = track.rect;
+	const grip = ty + track.thumb[0] + track.thumb[1] / 2;
+	await page.mouse.move(...await point(tx + 2, grip));
+	await page.mouse.down();
+	await page.mouse.move(...await point(tx + 2, grip + th), {steps: 5});
+	await page.mouse.up();
+	await expect.poll(first, 'dragging the thumb to the foot of the track').toBe(last);
+
+	await press(page, 'Escape');
+	await expect.poll(async() => (await status(page)).text).toBe(null);
+	expect((await status(page)).regions.length).toBe(5);
 	expect(errors).toEqual([]);
 	await context.close();
 });
