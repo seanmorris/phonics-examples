@@ -14,7 +14,7 @@ The best score is kept in the browser and shown on the ready screen and the resu
 
 ## Controls
 
-A tap or a click anywhere on the canvas flaps, so the game plays one-handed on a phone. **Input settings** edits the keyboard and controller bindings separately, keeps Pause fixed, and stores valid changes locally when the browser allows it. **Audio** is available from the title and pause menus with separate SFX and BGM sliders; the speaker button remains a master mute.
+A tap or a click anywhere on the canvas flaps, so the game plays one-handed on a phone. **Controls** edits the keyboard and controller bindings separately, keeps Pause fixed, and stores valid changes locally when the browser allows it. **Audio** is available from the title and pause menus with separate SFX and BGM sliders; the speaker button remains a master mute.
 
 | Action | Xbox | PlayStation | Keyboard and mouse |
 | --- | --- | --- | --- |
@@ -27,7 +27,7 @@ With no points on the board, the Konami code (Up, Up, Down, Down, Left, Right, L
 
 ## Credits and licenses
 
-The elePHPant is by Vincent Pontier. The sprite is pixel art traced from the vector drawing that Webysther uploaded to Wikimedia Commons under GPL-2.0-or-later, so the sprite sheet, the source vector, and the poster ship under that license (`art/ELEPHPANT-LICENSE.md`). The backdrop, pillars, ground, and scenery are cut from *Seasonal Platformer Tiles* by GrafxKid, released as CC0 (`art/TERRAIN-LICENSE.md`). The music is "Funktify" by Mr. Spastic, included unchanged under CC BY-NC-ND 3.0 (`art/FUNKTIFY-LICENSE.md`). The game code and the sound effects are Apache-2.0.
+The elePHPant was created by Vincent Pontier in 1998. The sprite is pixel art traced from the vector drawing that Webysther uploaded to Wikimedia Commons under GPL-2.0-or-later, so the sprite sheet, the source vector, and the poster ship under that license (`art/ELEPHPANT-LICENSE.md`). The backdrop, pillars, ground, and scenery are cut from *Seasonal Platformer Tiles* by GrafxKid, released as CC0 (`art/TERRAIN-LICENSE.md`). The music is "Funktify" by Mr. Spastic, included unchanged under CC BY-NC-ND 3.0 (`art/FUNKTIFY-LICENSE.md`). The game code and the sound effects are Apache-2.0.
 
 ## What to study
 

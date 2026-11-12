@@ -75,7 +75,7 @@ $audioItems = static function(): array {
 			, 'min' => 0
 			, 'max' => 100
 			, 'step' => 5
-			, 'default' => 50
+			, 'default' => 60
 			, 'valueAlign' => 'right'
 			, 'subtext' => 'Flaps, scoring, and bonks.'
 			, 'get' => static fn(): int => (int)(vrzno_env('phantAudioGet'))('effects')
@@ -88,7 +88,7 @@ $audioItems = static function(): array {
 			, 'min' => 0
 			, 'max' => 100
 			, 'step' => 5
-			, 'default' => 75
+			, 'default' => 50
 			, 'valueAlign' => 'right'
 			, 'subtext' => 'Funktify soundtrack.'
 			, 'get' => static fn(): int => (int)(vrzno_env('phantAudioGet'))('music')
@@ -116,7 +116,7 @@ $titleItems = static function() use (&$startGame, $bindings, $audioItems): array
 			'label' => 'Play'
 			, 'callback' => static function() use (&$startGame): void { $startGame(); }
 		]
-		, 'controls' => $bindings->item('Input settings')
+		, 'controls' => $bindings->item('Controls')
 		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
 		// How to play and About are pages to read, not rows to pick: the engine sets them as scrolling text.
 		, 'help' => [
@@ -128,21 +128,20 @@ $titleItems = static function() use (&$startGame, $bindings, $audioItems): array
 				, ['heading' => 'Controls']
 				, ['name' => 'Flap', 'value' => 'Tap, click, Space or A']
 				, ['name' => 'Pause', 'value' => 'Escape, P or Start']
-				, 'Change them in Input settings.'
+				, 'Change them in Controls.'
 			]
 		]
 		, 'about' => [
 			'label' => 'About'
 			, 'text' => [
 				'Built with Phonics.'
-				, ['heading' => 'Art']
-				, ['name' => 'elePHPant', 'value' => 'Vincent Pontier']
-				, ['name' => 'Sprite', 'value' => "Traced from Webysther's SVG, GPL-2.0-or-later"]
-				, ['name' => 'Terrain', 'value' => 'GrafxKid, CC0']
-				, ['heading' => 'Music']
-				, ['name' => 'Funktify', 'value' => 'Mr. Spastic, CC BY-NC-ND 3.0']
-				, ['heading' => 'Code']
-				, 'Apache-2.0.'
+				// Credits stand in one table, each licence a little darker under the work it covers.
+				, ['name' => 'elePHPant', 'value' => 'Vincent Pontier, 1998']
+				, ['name' => 'Sprite', 'value' => 'Sean Morris', 'note' => 'GPL-2.0-or-later']
+				, ['name' => 'Source', 'value' => 'SVG uploaded to Wikimedia Commons by Webysther']
+				, ['name' => 'Terrain', 'value' => 'Seasonal Platformer Tiles by GrafxKid', 'note' => 'CC0']
+				, ['name' => 'Music', 'value' => 'Funktify by Mr. Spastic', 'note' => 'CC BY-NC-ND 3.0']
+				, ['name' => 'Code', 'note' => 'Apache-2.0']
 			]
 		]
 	];
@@ -182,7 +181,7 @@ $setPage = static function(string $next) use (
 		]
 		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
 		, 'title' => [
-			'label' => 'Return to title'
+			'label' => 'Quit'
 			, 'callback' => static function() use (&$setPage): void { $setPage('title'); }
 		]
 	];
@@ -195,7 +194,7 @@ $setPage = static function(string $next) use (
 				, 'callback' => static function() use (&$startGame): void { $startGame(); }
 			]
 			, 'title' => [
-				'label' => 'Return to title'
+				'label' => 'Quit'
 				, 'callback' => static function() use (&$setPage): void { $setPage('title'); }
 			]
 			, 'score' => ['label' => 'Score  ' . $game->score, 'disabled' => true]
@@ -375,6 +374,7 @@ $engine->start(static function(
 		, 'regions' => $scene->regions
 		, 'menu' => $scene->menuBounds
 		, 'text' => $menu->text === null ? null : ['first' => $menu->text->first, 'last' => $menu->text->last()]
+		, 'editor' => $menu->editor === null ? null : ['text' => $menu->editor->text, 'caret' => $menu->editor->caret]
 		, 'hint' => $scene->hint
 		, 'inputTheme' => $engine->input->inputTheme
 		, 'width' => $width

@@ -76,7 +76,7 @@ How to play and About are text pages: menu rows with `text`, which the engine's 
 Menus come in two sizes.
 
 - **Large**: the main menu, the pause menu, and the result card. Each takes the largest whole scale at which its rows fit between the wordmark or the top of the frame and the hint line, and every row is centred on the plaque, with the chevron just left of the selected label. When the frame is short, the main menu drops its subtitle before it drops to a smaller scale, because the wordmark above it already names the game.
-- **Compact**: every page beneath those. Input settings, How to play, and About are drawn by `Scene`; the Audio page and the bindings editor need value columns, sliders, or text entry, so they use the engine's `MenuRenderer` with the same palette and frame. All of them share one whole-number scale (`Scene::compactScale`) and one plaque width (`Scene::COMPACT_WIDTH`), a small title at the top left, rows that start after the chevron column, and the same hint line, so moving between them never changes the size of the text.
+- **Compact**: every page beneath those. Controls, How to play, and About are drawn by `Scene`; the Audio page and the bindings editor need value columns, sliders, or text entry, so they use the engine's `MenuRenderer` with the same palette and frame. All of them share one whole-number scale (`Scene::compactScale`) and one plaque width (`Scene::COMPACT_WIDTH`), a small title at the top left, rows that start after the chevron column, and the same hint line, so moving between them never changes the size of the text.
 
 `Scene` publishes one rectangle per choice, which the browser mirrors as real buttons so the menus work with a pointer and with assistive technology. A text page adds its scroll arrows as buttons, and its lines and track as `drag` regions that the browser leaves to the canvas, so wheel and drag scrolling reach the game. It also publishes the text block's bounds, scale, and size class, so browser tests can check that no page is cropped on a narrow phone, that large menus are centred, and that compact pages match the Audio page.
 
@@ -114,7 +114,7 @@ The status is also written to the canvas as `data-php-phant`, which is what the 
 
 The package mixes four licenses, and the files are kept apart so each is easy to honor.
 
-- The elephant is the PHP mascot by Vincent Pontier, traced from Webysther's vector drawing. The source vector, the sprite sheet, the generated frames, and the poster are GPL-2.0-or-later; `art/ELEPHPANT-LICENSE.md` has the text and the credits.
+- The elephant is the PHP mascot Vincent Pontier created in 1998, traced from the vector drawing that Webysther uploaded to Wikimedia Commons. The source vector, the sprite sheet, the generated frames, and the poster are GPL-2.0-or-later; `art/ELEPHPANT-LICENSE.md` has the text and the credits.
 - The terrain is cut from GrafxKid's *Seasonal Platformer Tiles*, released as CC0; `art/TERRAIN-LICENSE.md` has the credit. The dusk and night sheets and the figures in these chapters derive only from it.
 - The soundtrack, `assets/funktify.mp3`, is "Funktify" by Mr. Spastic. It is included byte for byte under CC BY-NC-ND 3.0, which allows neither changes nor commercial use; `art/FUNKTIFY-LICENSE.md` has the details.
 - The code and the synthesized sound effects are original and Apache-2.0.

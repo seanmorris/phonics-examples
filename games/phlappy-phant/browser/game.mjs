@@ -1,6 +1,6 @@
 const MIX = Object.freeze({
-	effects: .5
-	, music: .75
+	effects: .6
+	, music: .5
 });
 
 /** Stream a package-local music track without decoding the whole song into Web Audio memory. */

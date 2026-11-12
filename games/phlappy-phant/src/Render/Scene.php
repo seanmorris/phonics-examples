@@ -65,6 +65,8 @@ final class Scene
 	public const MENU_TEXT = [.98, .973, .941];
 	public const MENU_HIGHLIGHT = [.145, .31, .349];
 	public const MENU_DISABLED = [.545, .549, .502];
+	/** Cloud white a little darkened, for the secondary text of a text page, such as a licence under a credit. */
+	public const MENU_NOTE = [.78, .772, .745];
 	/** Width of every compact menu plaque at scale one: Audio, the bindings pages and the text submenus alike. */
 	public const COMPACT_WIDTH = 344;
 
@@ -728,7 +730,7 @@ final class Scene
 	 *
 	 * The page is as wide as the Audio plaque and as tall as its lines need, up to the room between the top margin and
 	 * the hint line, under a title the size of its text. Headings and names take the mist teal of the information
-	 * rows. A page that does not fit gives up a column to the engine's text-mode scrollbar, drawn in plaque colours,
+	 * rows, and notes such as licences a slightly darker white than the credits above them. A page that does not fit gives up a column to the engine's text-mode scrollbar, drawn in plaque colours,
 	 * and publishes its regions for the shared menu input; the lines and the track are drag regions, which the
 	 * browser leaves to the canvas.
 	 *
@@ -790,8 +792,13 @@ final class Scene
 
 		foreach($page->shown() as $index => $spans) foreach($spans as $span)
 		{
-			$accent = $span['kind'] === TextPage::HEADING || $span['kind'] === TextPage::NAME;
-			$this->shadowed($labels, $span['text'], $left + $span['x'] * $r, (float)($viewTop + $index * $pitch), (float)$r, 'left', $accent ? self::MIST : self::MENU_TEXT);
+			$colour = match($span['kind'])
+			{
+				TextPage::HEADING, TextPage::NAME => self::MIST
+				, TextPage::NOTE => self::MENU_NOTE
+				, default => self::MENU_TEXT
+			};
+			$this->shadowed($labels, $span['text'], $left + $span['x'] * $r, (float)($viewTop + $index * $pitch), (float)$r, 'left', $colour);
 		}
 
 		if($scrolls) $this->textScrollbar($rects, $menu, $page, [$x + $blockWidth - $bar, $viewTop, $bar, $view], [$x, $viewTop, $blockWidth - $bar - 4 * $r, $view], $pitch, $r);

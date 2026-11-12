@@ -112,9 +112,9 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.loaded)).toBe(true);
 	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.music.playing)).toBe(true);
 	expect(await canvas.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
-		loop: true, muted: false, volume: .75, baseVolume: .75
+		loop: true, muted: false, volume: .5, baseVolume: .5
 	});
-	expect(await canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .5, music: .75});
+	expect(await canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .6, music: .5});
 
 	// Wide frame: the phant sits near 28 % of the visible width, at the largest whole scale that keeps the course in view.
 	const wide = await status(page);
@@ -139,7 +139,7 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 	await canvas.click({position: {x: 100, y: 100}});
 	await expect.poll(async() => (await status(page)).counts.flap).toBe(1);
 	expect(['playing', 'dead']).toContain((await status(page)).phase);
-	expect(await canvas.evaluate(element => element.phpPhantDebug.music.volume)).toBe(.75);
+	expect(await canvas.evaluate(element => element.phpPhantDebug.music.volume)).toBe(.5);
 
 	// Stop flapping: gravity ends the run and the result card opens with the best kept locally.
 	await expect.poll(async() => (await status(page)).phase, {timeout: 15_000}).toBe('dead');
@@ -196,7 +196,7 @@ test('the Konami code with no points hands the run to a perfect player that neve
 	// Pausing out of the run leaves nothing behind: the best is untouched and the next run is the player's again.
 	await page.keyboard.press('Escape');
 	await expect.poll(async() => (await status(page)).page).toBe('pause');
-	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Return to title'}).click();
+	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Quit'}).click();
 	await expect.poll(async() => (await status(page)).page).toBe('title');
 	await page.locator('.phlappy-phant-targets').getByRole('button', {name: 'Play', exact: true}).click();
 	await expect.poll(async() => (await status(page)).phase).toBe('ready');
@@ -222,19 +222,19 @@ test('audio levels adjust live from title and pause, then survive a reload', asy
 	await press(page, 'ArrowDown');
 	await press(page, 'ArrowLeft');
 
-	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .55, music: .7});
+	await expect.poll(() => canvas.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .65, music: .45});
 	expect(await canvas.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
-		volume: .7, baseVolume: .7
+		volume: .45, baseVolume: .45
 	});
 	expect(await page.evaluate(() => JSON.parse(localStorage.getItem('phlappy-phant.profile.v1'))?.audio)).toEqual({
-		effects: .55, music: .7
+		effects: .65, music: .45
 	});
 
 	await page.reload();
 	const reloaded = await boot(page);
-	expect(await reloaded.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .55, music: .7});
+	expect(await reloaded.evaluate(element => element.phpPhantDebug.mix)).toEqual({effects: .65, music: .45});
 	expect(await reloaded.evaluate(element => element.phpPhantDebug.music)).toMatchObject({
-		volume: .7, baseVolume: .7
+		volume: .45, baseVolume: .45
 	});
 
 	await targets.getByRole('button', {name: 'Play', exact: true}).click();
@@ -319,12 +319,12 @@ test('main, pause and result menus are large with centred rows; submenus share t
 	};
 
 	// The main menu keeps its large size at 16:9, where it used to fall back to small text.
-	await centred(['Input settings', 'Audio', 'How to play', 'About'], 'main menu');
+	await centred(['Controls', 'Audio', 'How to play', 'About'], 'main menu');
 
 	// Every page under it is compact: the Audio page's whole-number scale and plaque width, with no stray warnings.
 	const widths = new Set;
 
-	for(const label of ['Input settings', 'How to play', 'About'])
+	for(const label of ['Controls', 'How to play', 'About'])
 	{
 		const state = await open(label);
 
@@ -350,13 +350,13 @@ test('main, pause and result menus are large with centred rows; submenus share t
 	await open('Play');
 	await ready(page);
 	expect((await back()).page).toBe('pause');
-	await centred(['Restart', 'Audio', 'Return to title'], 'pause menu');
+	await centred(['Restart', 'Audio', 'Quit'], 'pause menu');
 	expect((await back()).page).toBe('play');
 	await ready(page);
 	await page.keyboard.press('Space');
 	await expect.poll(async() => (await status(page)).page, {timeout: 15_000}).toBe('gameover');
 	await frames(page, 3);
-	await centred(['Return to title'], 'result card');
+	await centred(['Quit'], 'result card');
 
 	expect(errors).toEqual([]);
 });
@@ -417,6 +417,58 @@ test('menu pages stand on their plate, skip text rows and stay inside a narrow p
 	await context.close();
 });
 
+test('audio sliders take presses and drags, and a click in a level\'s number places the caret there', async({page}) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	const canvas = await boot(page);
+	const targets = page.locator('.phlappy-phant-targets');
+	const effects = () => canvas.evaluate(element => element.phpPhantDebug.mix.effects);
+	const caret = async() => (await status(page)).editor?.caret;
+
+	await targets.getByRole('button', {name: 'Audio', exact: true}).click();
+	await expect.poll(async() => (await status(page)).regions.map(region => region.label)).toEqual(['SFX level', 'BGM level', 'Back']);
+	await frames(page, 2);
+	const state = await status(page);
+	const box = await canvas.boundingBox();
+	const at = (x, y) => [box.x + x * box.width / state.width, box.y + y * box.height / state.height];
+	const level = state.regions[0];
+	const [left, width] = level.slider;
+	const y = level.rect[1] + level.rect[3] / 2;
+
+	// The level keeps its button for keyboards and screen readers, but the pointer goes through it to the canvas.
+	expect(level.drag).toBe(true);
+	expect(await targets.locator(`button[data-action="${level.id}"]`).evaluate(button => getComputedStyle(button).pointerEvents)).toBe('none');
+
+	await page.mouse.move(...at(left + width / 4, y));
+	await page.mouse.down();
+	await expect.poll(effects, 'a press on the track').toBe(.25);
+	await page.mouse.move(...at(left + width * .8, y), {steps: 6});
+	await expect.poll(effects, 'dragging the knob').toBe(.8);
+	await page.mouse.move(...at(left + width * 2, y), {steps: 3});
+	await expect.poll(effects, 'past the end of the track').toBe(1);
+	await page.mouse.up();
+	expect((await status(page)).editor).toBe(null);
+
+	// The number beside the track is a field: a click opens it with the caret where the click fell.
+	await frames(page, 2);
+	const idle = (await status(page)).regions[0];
+	await page.mouse.click(...at(idle.carets[0] + 1, y));
+	await expect.poll(caret, 'a click on the first digit').toBe(0);
+	await expect.poll(async() => (await status(page)).editor?.text).toBe('100');
+	await frames(page, 2);
+	const editing = (await status(page)).regions[0];
+	await page.mouse.click(...at(editing.carets.at(-1) + 1, y));
+	await expect.poll(caret, 'a click after the last digit').toBe(3);
+	await page.mouse.click(...at(editing.carets[1] + 1, y));
+	await expect.poll(caret, 'a click on the second digit').toBe(1);
+	expect(await effects()).toBe(1);
+
+	await canvas.focus();
+	await press(page, 'Escape');
+	await expect.poll(async() => (await status(page)).editor).toBe(null);
+	expect(errors).toEqual([]);
+});
+
 test('How to play and About are text pages that scroll by line from keys, wheel, drags and their arrows', async({browser}) => {
 	const context = await browser.newContext({viewport: {width: 390, height: 844}, deviceScaleFactor: 2});
 	const page = await context.newPage();
@@ -439,13 +491,16 @@ test('How to play and About are text pages that scroll by line from keys, wheel,
 	let state = await status(page);
 	const last = state.text.last;
 
-	// The phone frame is too narrow for the credits, so the page gives up a column to its scrollbar. Only the arrows
-	// and Back get buttons: the lines and the track take drags on the canvas.
+	// The phone frame is too narrow for the credits, so the page gives up a column to its scrollbar. The lines and
+	// the track take drags on the canvas, so their buttons let the pointer through; the arrows and Back take clicks.
 	expect(last).toBeGreaterThan(3);
 	expect(state.regions.map(region => region.id)).toEqual(['@text-up', '@text-down', '@text-track', '@text', '@back']);
 	expect(state.hint).toMatchObject({back: true, scroll: true});
-	const actions = () => page.evaluate(() => [...document.querySelectorAll('.phlappy-phant-targets button')].map(button => button.dataset.action));
-	await expect.poll(actions).toEqual(['@text-up', '@text-down', '@back']);
+	const actions = () => page.evaluate(() => [...document.querySelectorAll('.phlappy-phant-targets button')]
+		.map(button => [button.dataset.action, getComputedStyle(button).pointerEvents]));
+	await expect.poll(actions).toEqual([
+		['@text-up', 'auto'], ['@text-down', 'auto'], ['@text-track', 'none'], ['@text', 'none'], ['@back', 'auto']
+	]);
 	const view = state.regions.find(region => region.id === '@text');
 	const [x, y, width, height] = view.rect;
 	const visible = Math.round(height / view.pitch);
@@ -505,7 +560,7 @@ test('a controller action page names each binding it can remove by its button', 
 		await frames(page, 3);
 	};
 
-	for(const label of ['Input settings', 'Controller', 'Flap']) await open(label);
+	for(const label of ['Controls', 'Controller', 'Flap']) await open(label);
 
 	// Each Remove row is labelled only "Remove"; the button it removes stands in the right half of the row.
 	const state = await status(page);
