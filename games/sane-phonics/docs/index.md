@@ -30,6 +30,8 @@ Open `worlds/demo.tiled-project` in Tiled 1.12 or later after running `npm insta
 
 Worlds list their modules using native Tiled lists. Each map selects `@sane/demo-map`; the streaming world selects `@sane/spatial-maps` for spatial activation. Player starts use the nested `SpawnPoint` component, also available from `templates/spawn.tx`. The game continues to own terrain and feature behavior. The portable class catalog and project are committed beside the course worlds.
 
+The project now includes 34 concrete entity presets and templates for rings, seven monitor rewards, enemies, platforms, vehicles, water, and other course features. Drag a template onto an object layer and expand its nested settings. See [Authoring courses in Tiled](authoring.md) for the template catalog, object links, defaults, and save/build workflow.
+
 ## Executable PHP
 
 | File | Role |
@@ -40,6 +42,7 @@ Worlds list their modules using native Tiled lists. Each map selects `@sane/demo
 
 ## What to study
 
+- [Authoring courses in Tiled](authoring.md) covers the project, presets, templates, and nested settings.
 - [Gameplay systems](gameplay.md) explains actors, abilities, combat, and world ownership.
 - [Loops and collision layers](loops.md) covers high-speed terrain traversal.
 - [Menus and browser controls](menus.md) covers the canvas UI and PHP-info modal.
