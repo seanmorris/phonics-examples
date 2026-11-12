@@ -2,7 +2,7 @@
 
 Select **Loop-de-loop** in the live demo and hold Right from the start. After exiting, hold Left to return through the loop. The character needs momentum to stay attached to walls and ceilings. The status line reports the selected collision layer.
 
-Open [`examples/assets/loop.tmj`](../examples/assets/loop.tmj) in Tiled. Its external [`loop.tsj`](../examples/assets/loop.tsj) tileset contains original procedural artwork and collision polygons. Run `php examples/generate-assets.php` to regenerate the demo assets.
+Open `worlds/demo.tiled-project` first, then [`examples/assets/loop.tmj`](../examples/assets/loop.tmj) in Tiled. Its external [`loop.tsj`](../examples/assets/loop.tsj) tileset contains original procedural artwork and collision polygons. Run `php examples/generate-assets.php` to regenerate the demo assets.
 
 Select **Grinding rail** from the pause menu's **Level** list for the extended test course; the main
 menu's level list does not include it. Its
@@ -53,7 +53,7 @@ The collision polygons follow the circular boundary and meet at tile edges. PHP 
 
 Set the integer **collisionLayer** property on collision tile or object layers. Zero means shared terrain. Positive values select one additional plane, and `Body::$collisionLayer` defaults to 1. Names such as `Collision 0`, `Collision 1`, and `Collision 2` also work when the property is omitted. Other layers default to shared terrain; their tiles still need collision shapes or `solid` metadata. An individual solid object can override its layer's `collisionLayer`.
 
-Create rectangle objects with class **layer-switch** (or **LayerSwitch**). Convex polygon regions also work. They are nonsolid and recognize these custom properties:
+Place `templates/layer-switch.tj` and expand **LayerSwitch** in the Properties panel. Its concrete class is `SanePhonics.Entity.layer-switch`. Convex polygon regions also work. The fields below are nested under `LayerSwitch`; legacy **layer-switch** / **LayerSwitch** objects with flat properties remain supported. See [Authoring courses in Tiled](authoring.md) for saving the project and portable defaults. The gates are nonsolid.
 
 | Property | Default | Meaning |
 | --- | --- | --- |

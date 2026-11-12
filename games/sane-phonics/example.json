@@ -19,6 +19,11 @@
         "path": "docs/index.md"
       },
       {
+        "slug": "authoring",
+        "title": "Authoring courses in Tiled",
+        "path": "docs/authoring.md"
+      },
+      {
         "slug": "gameplay",
         "title": "Gameplay systems",
         "path": "docs/gameplay.md"

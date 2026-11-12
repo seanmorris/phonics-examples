@@ -2,9 +2,18 @@
 
 This chapter covers the Sane-Phonics demo's controls and courses, then the gameplay systems behind
 them. `SanePhonics\` classes belong to this package and `Phonics\` classes to the framework. File paths
-are relative to `packages/sane-phonics` unless they link into the framework. To clone the repository,
+are relative to the Sane game directory unless they link into the framework. To clone the repository,
 run the development server, or run the test suites, follow the
 [repository README](../../../README.md) and the [contributing guide](../../../site/pages/contributing.md).
+
+## Authoring names and runtime components
+
+Open the project's [Tiled authoring guide](authoring.md) for the concrete presets, placement templates,
+and nested settings. Current objects use `SanePhonics.Entity.*` classes. The sections below also
+name the legacy loader classes and PHP components; those names remain useful for scripted creation
+and importing older maps. A field such as `GrapplePoint.tiedTo` means `tiedTo` inside the
+`GrapplePoint` settings group, not a flat property with a dot in its name. Legacy flat fields remain
+supported on legacy objects. Sprite-animation tile annotations retain their existing names.
 
 ## Play the demo
 
@@ -34,13 +43,14 @@ Gamepads work in every scene. Click the canvas and press a gamepad button if the
 | Roll into breakable blocks | Down while moving | Down / S while moving |
 | Fire-shield air thrust | LB / RB (L1 / R1) | Q / E |
 
-In **Breakable blocks**, walking stops against a block and jumping can land on top. Gain speed and hold Down to roll through it, breaking it into a grid of particles without losing momentum. At rest, hold Down to crouch; after 0.75 seconds the camera looks lower. Tap Jump to add a discrete charge or hold X or B / Circle to build charge continuously, then release Down to launch a spindash. Untapped charge slowly decays, and charging recenters the camera. Shift+R or **Restart level** restores all three blocks. Their `columns` and `rows` properties in `examples/assets/breakables.tmj` set the grids to 4×3, 2×8, and 8×2. Tiled tile-object sizes set their world dimensions.
+In **Breakable blocks**, walking stops against a block and jumping can land on top. Gain speed and hold Down to roll through it, breaking it into a grid of particles without losing momentum. At rest, hold Down to crouch; after 0.75 seconds the camera looks lower. Tap Jump to add a discrete charge or hold X or B / Circle to build charge continuously, then release Down to launch a spindash. Untapped charge slowly decays, and charging recenters the camera. Shift+R or **Restart level** restores all three blocks. Their nested `BreakableBlock.columns` and `BreakableBlock.rows` fields in `examples/assets/breakables.tmj` set the grids to 4×3, 2×8, and 8×2. Tiled tile-object sizes set their world dimensions.
 
 ## Collectible rings and player HUD
 
-The platformer map marks animated tiles with the Tiled class `ring`. `Gameplay\Rings`
+The platformer map marks animated tiles with `SanePhonics.Entity.ring`. `Gameplay\Rings`
 turns those cells into `Ring` plus `Sprite` entities and clears the original map cells
-before rendering. Each player that owns both `Body` and `RingCounter` can collect them.
+before rendering. Independent object placements from `templates/ring.tj` also become pickups,
+with their authored visibility, transforms, and nested settings. Each player that owns both `Body` and `RingCounter` can collect them.
 The pickup check sweeps from the previous body position to the current one, so fast
 movement cannot tunnel through a ring. Call `sync()` after a teleport to prevent the
 teleport path from collecting anything.
@@ -55,8 +65,8 @@ $rings->sync($player, $body);
 $engine->systems->add('rings', [$rings, 'update'], after: ['movement']);
 ~~~
 
-The optional `ring.radius`, `ring.value`, and `ring.points` tile properties configure
-each pickup. `close()` removes every uncollected entity owned by that map. The live demo
+The nested `Ring.radius`, `Ring.value`, and `Ring.points` fields configure each pickup.
+Legacy `ring` classes and flat `ring.radius`, `ring.value`, and `ring.points` properties remain readable. `close()` removes every uncollected entity owned by that map. The live demo
 resets rings and elapsed level time when a level changes while retaining score in the
 player component.
 
@@ -176,7 +186,9 @@ teleport and `close()` when unloading the level. `close()` removes owned vehicle
 preserving character entities. `Vehicle::forRider($registry, $player)` resolves a live mutual seat
 association for other gameplay systems.
 
-Tiled objects use class `Skateboard` / `skate-board`, or `VehicleRegion` / `DropVehicleRegion`.
+Use the `skateboard.tj`, `vehicle-region.tj`, or `drop-vehicle-region.tj` template.
+The vehicle settings are nested under `Skateboard`; region settings use `VehicleRegion`.
+Legacy objects use class `Skateboard` / `skate-board`, or `VehicleRegion` / `DropVehicleRegion`.
 Tile objects anchor at the bottom; point objects identify the wheel contact point. `seatHeight`,
 `seatForward`, and `seatAngle` configure the seat in pixels and radians. Objects also accept
 `lockedIn`, `quickDrop`, `direction`, and `collisionLayer`. Layers contribute offsets, tint, opacity,
@@ -221,7 +233,7 @@ The aircraft, rider seat, and camera retain one association across ground, takeo
 landing. Swept chassis and passenger casts prevent the wide aircraft from crossing thin terrain at
 high speed.
 
-Tiled objects use class `Tornado`. Annotated `tornado`, `tornado-flight`, `tornado-gear`,
+Use `tornado.tj` and its nested `Tornado` settings; legacy objects use class `Tornado`. Annotated `tornado`, `tornado-flight`, `tornado-gear`,
 `tornado-thrust`, and `tornado-crashed` tiles select artwork without positional tile assumptions.
 The usual `seatHeight`, `seatForward`, `lockedIn`, `direction`, and `collisionLayer` properties apply.
 `Tornado::body()` supplies the reference dimensions and speeds; a scripted vehicle uses the same
@@ -283,7 +295,7 @@ EggWalker itself owns locomotion, crouch/booster state, and presentation. Its re
 art are separate `SpriteLayers` planes anchored around the occupant, matching moving-boxes-2's
 chair/gun/rear-leg → rider → hull/arm/front-leg order without vehicle-specific renderer branches.
 
-Tiled objects use class `EggWalker` or `egg-walker`. Annotated `egg-walker`,
+Use `egg-walker.tj` and its nested `EggWalker` settings; legacy objects use class `EggWalker` or `egg-walker`. Annotated `egg-walker`,
 `egg-walker-walking`, `egg-walker-crouching`, `egg-walker-falling`, `egg-walker-boosting`,
 `egg-walker-punch`, `egg-walker-shooting`, and `egg-walker-shot` tiles select state artwork; matched
 `-front` classes provide each foreground plane.
@@ -330,8 +342,9 @@ rope velocity otherwise, and prevents regrabbing the same handle for 0.25 second
 controls a shared swing. Damage can replace the ability and velocity; detachment preserves that
 knockback. `PlatformCamera` selects its `hooked` framing automatically.
 
-Pass a loaded map as the third `Grapples` constructor argument to load `GrapplePoint` or
-`grapple-point` objects. The `tiedTo` property is a Tiled object reference. `ropeLength` is a
+Pass a loaded map as the third `Grapples` constructor argument to load `grapple-point.tj`
+placements or legacy `GrapplePoint` / `grapple-point` objects. The nested `GrapplePoint.tiedTo`
+field is a Tiled object reference; select the suspension in this map after placing the template. `ropeLength` is a
 positive maximum distance in world pixels, read from the handle, then its anchor, then defaulting
 to 64. `noSwing` keeps the handle horizontally below its anchor. Optional `collisionLayer`
 restricts contact to a plane; zero is shared. Points use their exact coordinates, ordinary
@@ -390,8 +403,11 @@ reports object IDs, positions, velocities, settlement, and whether a rider is pr
 `PlatformPath` uses pixels per second; oscillator times use seconds. A null `loop` stops at the
 last point; an index links the last point back to that point. `rideOnly: true` pauses an empty route.
 
-In Tiled, use `FloatingPlatform`, `MovingPlatform`, or `PathPlatform`. Legacy `block` objects
-with nonzero `float` also load. Tile objects use Tiled's bottom-left anchor; ordinary rectangles
+In Tiled, use `floating-platform.tj`, `moving-platform.tj`, or `path-platform.tj`.
+They nest common fields under `MovingPlatform`, oscillator fields under `PlatformOscillation`,
+and route fields under `PlatformPath`. Route nodes use `PathNode.next`. The table below gives
+the field names within those groups. Legacy `FloatingPlatform`, `MovingPlatform`, and `PathPlatform`
+objects also load, as do legacy `block` objects with nonzero `float`. Tile objects use Tiled's bottom-left anchor; ordinary rectangles
 use their top-left anchor. Both become centered bottom anchors internally. Object and inherited
 layer offsets are included. Rotated collision rectangles are rejected; GID flips remain supported.
 
@@ -448,7 +464,8 @@ $state = $bridges->snapshot();
 $bridges->remove($id);
 ```
 
-Use Tiled class `BendableBridge` or `BendableRail`. The latter marks every changing surface segment
+Use `bendable-bridge.tj` or `bendable-rail.tj` and edit the nested `BendableBridge` settings.
+Legacy classes `BendableBridge` and `BendableRail` remain supported. The rail marks every changing surface segment
 as grindable. A legacy moving-boxes-2 `block` with a `droop` property loads as a bridge as well.
 Tile objects use their bottom edge as the anchor; rectangle objects use their top edge. `droop`
 sets the centered per-body depth, `segmentWidth` controls collision and visual sampling, `response`
@@ -473,8 +490,8 @@ visible liquid rectangle is sampled through a
 scrolling displacement texture and then tinted. The HUD and pause menu render afterward and stay
 sharp.
 
-Draw an unrotated rectangle object in Tiled and give it the class `WaterRegion`, `Water`, or
-`water-region`. The boolean `water` property also marks a rectangle; `region` remains available as
+Place `water-region.tj`, resize its unrotated rectangle, and edit its nested `WaterRegion`
+settings. Legacy rectangles can use class `WaterRegion`, `Water`, or `water-region`. The boolean `water` property also marks a rectangle; `region` remains available as
 a moving-boxes-2 compatibility alias. `WaterRegions::fromMaps()` applies map and object-layer
 offsets, including Tiled's bottom anchor for tile objects.
 
@@ -527,11 +544,12 @@ from a vertical side. `Body::$grinding` and `Body::$skimming` remain independent
 transition. **Rising water loop** rests the loop on the seabed with the initial waterline through
 its center, then uses three pressure switches to drain, restore, or fill the pool.
 
-`WaterFeatures` reads moving-boxes-2-compatible object references from Tiled. A `Switch` or
-`WaterSwitch` uses `water` and `setPoint` object properties plus optional `fillSpeed`,
+`WaterFeatures` reads object references from Tiled, including legacy `Switch` / `WaterSwitch` objects.
+The `switch.tj` template nests `water` and `setPoint` object references under `WaterSwitch`, with optional `fillSpeed`,
 `drainSpeed`, and `collisionLayer` values. Its top is a one-way collision edge: a jump passes
-through from below, then the descending player lands on and activates the plate. A tile object with
-`density` becomes a buoyant solid; `hLock` records that its horizontal position is fixed. These
+through from below, then the descending player lands on and activates the plate. The `block.tj`
+template nests buoyancy settings under `BuoyantPlatform`; legacy tile objects with `density` also
+become buoyant solids. `hLock` records that their horizontal position is fixed. These
 object-reference `water` properties select a volume; they do not turn the control or platform into
 another water rectangle. The demo retains the reference map's object ID 3958 for its 32×160,
 density 0.8 vertical door block. `activate($switchId)` gives scripts and tests the same action as a
@@ -618,7 +636,7 @@ $engine->systems->add('crabmeats', [$crabs, 'update'], after: ['movement']);
 $engine->systems->add('badniks', [$badniks, 'update'], after: ['crabmeats']);
 ~~~
 
-Annotate tiles with `crabmeat-standing`, `crabmeat-walking`, `crabmeat-shooting`, `badnik-projectile`, and `badnik-explosion` classes. The walking, shooting, and explosion tiles may use ordinary Tiled animation frames. Place point objects with class `CrabMeat`; supported properties include `direction`, `patrolBeat`, `patrolPause`, `patrolSpeed`, `patrolOffset`, `shotTelegraph`, projectile tuning, `collisionLayer`, and `points`. Call `$badniks->close()` during level cleanup.
+Annotate tiles with `crabmeat-standing`, `crabmeat-walking`, `crabmeat-shooting`, `badnik-projectile`, and `badnik-explosion` classes. The walking, shooting, and explosion tiles may use ordinary Tiled animation frames. Place `crab-meat.tj` and expand `CrabMeat`; legacy point objects with class `CrabMeat` also work. Supported fields include `direction`, `patrolBeat`, `patrolPause`, `patrolSpeed`, `patrolOffset`, `shotTelegraph`, projectile tuning, `collisionLayer`, and `points`. Call `$badniks->close()` during level cleanup.
 
 Player-to-badnik and player-to-projectile contacts use relative swept bounds, so either participant can cross the other between fixed updates without tunneling. Projectile-to-terrain movement uses `Terrain::castBody()` over the complete displacement. A projectile whose owning badnik has popped retires without damaging the player.
 
@@ -655,8 +673,8 @@ The manager advances `PlayerCombat` mercy clocks by default. Pass `advanceCombat
 `Badniks` manager already advances the same players, as the combined demo does.
 
 Annotate tiles with `mini-boss-idle`, `mini-boss-damaged`, `mini-boss-dead`, `spike-bomb`,
-`spike-fragment`, and `boss-explosion` classes. Place a point or tile object with class `MiniBoss`.
-Its properties can override `hitPoints`, `points`, `collisionLayer`, stalking speed, bomb timing and
+`spike-fragment`, and `boss-explosion` classes. Place `mini-boss.tj` and expand `MiniBoss`; legacy point or tile objects with class `MiniBoss`
+also work. Its settings can override `hitPoints`, `points`, `collisionLayer`, stalking speed, bomb timing and
 gravity, hit and recovery frames, explosion timing, and escape behavior. These editor properties use
 reference frames and pixels per frame; the manager converts them to seconds and pixels per second.
 `snapshot()`, `entityForSourceId()`, `aliveSource()`, and `wakeSource()` provide stable scripting
@@ -699,9 +717,9 @@ spawn or teleport. The debug overlay reports the resolved mode and smoothed anch
 
 ### Boss arena screen locks
 
-`Gameplay\BossRegions` imports moving-boxes-2-compatible `BossRegion` or `boss-region`
-rectangle objects. The historical editor convention of naming an otherwise untyped object
-`boss-region` is accepted too. Set its `boss` property to a Tiled object reference. The
+`Gameplay\BossRegions` loads `boss-region.tj` placements with nested `BossRegion` settings,
+as well as moving-boxes-2-compatible `BossRegion` or `boss-region` rectangle objects. The historical editor convention of naming an otherwise untyped object
+`boss-region` is accepted too. Set `BossRegion.boss` to the boss in the same map using the object picker (legacy objects use a flat `boss` property). The
 application supplies a callback that maps that source object ID to live boss state, so the lock
 works with any ECS boss component or behavior instead of depending on CrabMeat.
 
@@ -797,7 +815,9 @@ $shieldMonitor = $monitors->create(
 );
 ~~~
 
-Tiled point objects may use `Monitor`, `RingMonitor`, `TripleRingMonitor`, `NormalShieldMonitor`, `ElectricShieldMonitor`, `FireShieldMonitor`, `WaterShieldMonitor`, or `StarShieldMonitor`. `BubbleShieldMonitor` is an alias for water. The historical `SheildNormalMonitor` and corresponding elemental class spellings are accepted when importing moving-boxes-2 data. A base `Monitor` selects the same effects with its `reward` property. `amount`, `points`, `starDuration`, `width`, `height`, and `collisionLayer` are optional.
+The seven monitor templates nest shared settings under `Monitor` and reward tuning under
+`RingMonitorEffect` or `ShieldMonitorEffect`. Tile-object placements use their bottom-left anchor;
+legacy point objects retain their bottom-center anchor. Legacy point objects may use `Monitor`, `RingMonitor`, `TripleRingMonitor`, `NormalShieldMonitor`, `ElectricShieldMonitor`, `FireShieldMonitor`, `WaterShieldMonitor`, or `StarShieldMonitor`. `BubbleShieldMonitor` is an alias for water. The historical `SheildNormalMonitor` and corresponding elemental class spellings are accepted when importing moving-boxes-2 data. A base `Monitor` selects the same effects with its `reward` property. `amount`, `points`, `starDuration`, `width`, `height`, and `collisionLayer` are optional.
 
 Annotate tiles with `monitor-shell`, `monitor-broken`, `monitor-explosion`, and the appropriate `monitor-screen-*` class. Shield screens use `monitor-screen-shield-normal`, `-electric`, `-fire`, `-water`, and `-star`. Optional `shield-aura-*` tiles give `Shields` animated player art. Tiled animation controls casing static, screen flicker, aura motion, and the explosion.
 
@@ -1308,7 +1328,8 @@ Landing compares the terrain contact normal with the active gravity vector. A ce
 
 An airborne body moving against gravity at 180 px/s or faster can also acquire an angled upper surface. This mirrors moving-boxes-2's separate sloped upper-collision path: the impact projects velocity onto the terrain tangent, then ordinary adhesion follows the wall-to-ceiling curve while momentum remains sufficient. A flat ceiling remains a head bump. The tests rotate the same spring, wall, quarter curve, and ceiling through all four gravity vectors and both curve directions.
 
-Annotate Tiled point objects with class `GravitySwitch` or `Spring`. Object rotation defines the contact edge: zero faces up, 90 faces right, 180 faces down, and 270 faces left. Both accept `length`, `collisionLayer`, and `spriteGid`. A gravity switch accepts `gravity=down|right|up|left`, or explicit `gravityX` and `gravityY`; a spring accepts positive `power` in pixels per second.
+Place `gravity-switch.tj` or `spring.tj` and edit the corresponding nested settings.
+Legacy point objects with class `GravitySwitch` or `Spring` remain supported. Object rotation defines the contact edge: zero faces up, 90 faces right, 180 faces down, and 270 faces left. Both accept `length`, `collisionLayer`, and `spriteGid`. A gravity switch accepts `gravity=down|right|up|left`, or explicit `gravityX` and `gravityY`; a spring accepts positive `power` in pixels per second.
 
 ~~~php
 $features = new GravityFeatures($entities, $terrain, $map);
