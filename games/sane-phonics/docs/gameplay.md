@@ -1,19 +1,6 @@
-# Gameplay systems
+# Gameplay guide
 
-This chapter covers the Sane-Phonics demo's controls and courses, then the gameplay systems behind
-them. `SanePhonics\` classes belong to this package and `Phonics\` classes to the framework. File paths
-are relative to the Sane game directory unless they link into the framework. To clone the repository,
-run the development server, or run the test suites, follow the
-[repository README](../../../README.md) and the [contributing guide](../../../site/pages/contributing.md).
-
-## Authoring names and runtime components
-
-Open the project's [Tiled authoring guide](authoring.md) for the concrete presets, placement templates,
-and nested settings. Current objects use `SanePhonics.Entity.*` classes. The sections below also
-name the legacy loader classes and PHP components; those names remain useful for scripted creation
-and importing older maps. A field such as `GrapplePoint.tiedTo` means `tiedTo` inside the
-`GrapplePoint` settings group, not a flat property with a dot in its name. Legacy flat fields remain
-supported on legacy objects. Sprite-animation tile annotations retain their existing names.
+Choose a course to try a feature, then follow the chapter for the system you want to reuse or change. The controls below apply across the demo; vehicle chapters include their additional controls.
 
 ## Play the demo
 
@@ -45,1313 +32,179 @@ Gamepads work in every scene. Click the canvas and press a gamepad button if the
 
 In **Breakable blocks**, walking stops against a block and jumping can land on top. Gain speed and hold Down to roll through it, breaking it into a grid of particles without losing momentum. At rest, hold Down to crouch; after 0.75 seconds the camera looks lower. Tap Jump to add a discrete charge or hold X or B / Circle to build charge continuously, then release Down to launch a spindash. Untapped charge slowly decays, and charging recenters the camera. Shift+R or **Restart level** restores all three blocks. Their nested `BreakableBlock.columns` and `BreakableBlock.rows` fields in `examples/assets/breakables.tmj` set the grids to 4×3, 2×8, and 8×2. Tiled tile-object sizes set their world dimensions.
 
-## Collectible rings and player HUD
+## Authoring names and runtime components
 
-The platformer map marks animated tiles with `SanePhonics.Entity.ring`. `Gameplay\Rings`
-turns those cells into `Ring` plus `Sprite` entities and clears the original map cells
-before rendering. Independent object placements from `templates/ring.tj` also become pickups,
-with their authored visibility, transforms, and nested settings. Each player that owns both `Body` and `RingCounter` can collect them.
-The pickup check sweeps from the previous body position to the current one, so fast
-movement cannot tunnel through a ring. Call `sync()` after a teleport to prevent the
-teleport path from collecting anything.
+Open the project's [Tiled authoring guide](authoring.md) for the concrete presets, placement templates,
+and nested settings. Current objects use `SanePhonics.Entity.*` classes. The sections below also
+name the legacy loader classes and PHP components; those names remain useful for scripted creation
+and importing older maps. A field such as `GrapplePoint.tiedTo` means `tiedTo` inside the
+`GrapplePoint` settings group, not a flat property with a dot in its name. Legacy flat fields remain
+supported on legacy objects. Sprite-animation tile annotations retain their existing names.
 
-~~~php
-use SanePhonics\Gameplay\{RingCounter,Rings};
+## Find a system
 
-$counter = new RingCounter;
-$player = $engine->entities->create($body, $counter, $sprite);
-$rings = new Rings($engine->entities, $map); // Run before constructing MapRenderer.
-$rings->sync($player, $body);
-$engine->systems->add('rings', [$rings, 'update'], after: ['movement']);
-~~~
+The reference is divided by what you want to build. Each chapter retains its PHP examples, Tiled settings, update order, and resource-lifetime rules.
 
-The nested `Ring.radius`, `Ring.value`, and `Ring.points` fields configure each pickup.
-Legacy `ring` classes and flat `ring.radius`, `ring.value`, and `ring.points` properties remain readable. `close()` removes every uncollected entity owned by that map. The live demo
-resets rings and elapsed level time when a level changes while retaining score in the
-player component.
+- [Player movement and camera](movement.md)
+- [Vehicles and riders](vehicles.md)
+- [Platforms, ropes, and breakable blocks](platforms.md)
+- [Rings, enemies, and rewards](combat.md)
+- [Water and buoyancy](water.md)
+- [Game setup and world loading](worlds.md)
+- [Drawing the world and effects](rendering.md)
 
-The example player HUD renders **SCORE**, **TIME**, and **RINGS** at the upper left with
-the annotated menu font, colored labels, and pixel shadows matching moving-boxes-2.
-It has no background panel and hides in camera-only scenes. The FPS meter remains an
-independent lower-left diagnostic with no black rectangle behind it.
+The section links below also preserve addresses used by earlier versions of this guide.
 
-## Light-dash
+## Player movement and camera
 
-Choose **Level → Light dash** in either menu with the **Runner** profile. Jump from the start
-and hold **C** or controller **X / Square** to follow the first arc. The second arc has a wider
-gap between rings. Either trail works in reverse; restart the level to restore collected rings.
+### Movement and raycasts
 
-`Gameplay\LightDash` stores one player's target, cooldown, timeout, and combo reward.
-`LightDashes::control()` acquires a ring within 48 world pixels only when another ring continues
-the trail within 48 pixels. Horizontal velocity excludes entrance rings behind the player.
-Subsequent pickups redirect to the nearest eligible ring within 128 pixels. Delayed or decorative
-scattered rings cannot become targets. Releasing the button leaves an acquired dash active.
+[Move against terrain](movement.md#move-against-terrain): Movement profiles, continuous terrain casts, collision planes, and loop traversal.
 
-~~~php
-use SanePhonics\Gameplay\{LightDash, LightDashes, RingCounter, Rings};
+### Gravity switches and springs
 
-$player = $engine->entities->create($body, new RingCounter, new LightDash);
-$dashes = new LightDashes($engine->entities);
-$rings = new Rings($engine->entities, $map, onCollect: [$dashes, 'collected']);
-$rings->sync($player, $body);
+[Change gravity and launch from springs](movement.md#change-gravity-and-launch-from-springs): Cardinal gravity, surface acquisition, spring launches, and authored contact edges.
 
-// Each fixed step: dash control, other abilities, movement, then ring pickups.
-$dashing = $dashes->control($player, $engine->controls, $dt);
-$jumpConsumed = $dashing || ($shields?->control($player, $engine->controls, $dt) ?? false);
-$movement->step($body, $engine->controls, $dt, $jumpConsumed);
-$rings->update($engine->entities, $dt);
-~~~
+### Light-dash
 
-Speed follows MB2's distance/angle calculation, capped at 1,650 world pixels per second
-(55 × 0.5 pixels per reference frame). Each target has a nine-frame timeout, and starting a dash
-sets the same cooldown. Gravity continues, directional steering is suppressed, and
-`Platformer::step()` sweeps the whole displacement against terrain. A solid impact ends steering;
-landing, damage, profile changes, a missing target, or an exhausted trail also release it.
-Momentum survives a normal trail exit. `Body::$lightDashed` prevents releasing Jump from cutting
-the exit's upward velocity and clears on landing. Reset the `LightDash` component and this body
-flag when teleporting or resetting a player.
+[Follow a ring trail with light dash](movement.md#follow-a-ring-trail-with-light-dash): Ring-trail acquisition, steering, exit momentum, and combo rewards.
 
-An existing `Combo` gains one **Light Dash** reward, increasing by 10 points per acquired target.
-A dash alone does not start a combo. `Body::$ability === 'lightdash'` identifies the active pose.
-The generic `Rings` pickup callback receives the collector ID, removed ring ID, and `Ring` after
-awarding the pickup; redirects wait until the next control step so all same-step pickups retire.
+### Grinding rails and combos
 
-Dropdash direction follows MB2's landing input order: a held horizontal direction selects the
-boost on an ordinary moving landing. Neutral input retains the previous orientation. The boost
-adds to existing momentum, so opposite input can reverse a slow landing or brake a faster one.
-Fast grinding keeps its travel-direction lock.
-
-## Vehicles and skateboards
-
-Choose **Level → Skateboard course** from either menu. The player drops onto the first board;
-spares sit farther along the course. Accelerate across ordinary ground, follow four quarter bends,
-and ride a loop with collision-layer switches. Rings above the entry provide jump/trick targets.
-All three character profiles can ride the same board.
-
-| Action | Keyboard | Standard gamepad |
-| --- | --- | --- |
-| Steer or brake | Left / Right | Left stick / D-pad |
-| Crouch | Down | Down |
-| Jump with the board | Space / Z | Button 0: A / Cross |
-| Lean back | X | Button 1: B / Circle |
-| Handstand | C | Button 2: X / Square |
-| Manual | V | Button 3: Y / Triangle |
-| Jump off | Up + Space / Z | Up + button 0 |
-| Restore the course | Shift+R | Hold B / Circle, press Back / Select |
-
-Hold a trick button to sustain its pose. Airborne leanbacks and handstands start a combo; manuals
-extend an existing chain through a landing. Grinding extends that chain with one accumulating
-rail reward. Releasing the trick and reaching ordinary ground banks the score in the rider's
-inventory. Reverse travel relative to facing produces fakie labels. Jump and trick buttons belong
-to the vehicle while seated, so they cannot also trigger flight, gliding, shields, or light-dash.
-
-`Rider` opts a character into boarding. `Vehicle` belongs to a separate entity with its own `Body`
-and optional `Sprite`. The character keeps its identity, movement profile, inventory, combat,
-and combo components. `VehicleBehavior` supplies mounted, before-movement, and after-movement
-callbacks. `Skateboard`, `Tornado`, and `EggWalker` share that chassis lifecycle while contributing
-their own movement state and reusable capabilities.
-
-```php
-use SanePhonics\Gameplay\{Rider, Vehicle, Vehicles, Skateboard};
-
-$registry->add($player, new Rider);
-$vehicles = new Vehicles($registry, $terrain, $movement, $map);
-
-// Or add a scripted board. Body coordinates describe its center, six pixels above the wheels.
-$board = new Vehicle(Skateboard::body(320, 442), seatHeight: 12);
-$boardEntity = $vehicles->add($board, new Skateboard, new Sprite($boardGid));
-
-// Once per fixed update, before character-specific abilities:
-$consumed = $vehicles->control($player, $controls, $dt);
-$movement->step($body, $controls, $dt, $consumed);
-$vehicles->update($registry, $dt);
-
-// After moving platforms, before pickups/rendering; this does not step physics again.
-$vehicles->carry($registry, $dt);
-```
-
-Use the returned `control()` flag to gate other ability systems. `Platformer` leaves a seated
-character's movement to the vehicle. The chassis uses the existing slopes, rails, water, and
-layer-switch solver. Passenger casts check the full displacement of each short curved segment
-against walls and ceilings. Boarding also sweeps the falling character's path; it still works
-when a fast fall reaches the floor in the same step. Rings sweep both rider and chassis bounds
-and credit the rider once. Monitor and badnik rewards also retain the rider as their owner.
-
-`mount($player, $boardEntity)` explicitly takes an empty seat if clearance permits it.
-`dismount($player)` uses the Up+Jump exit; `lockedIn` prevents this voluntary exit and `quickDrop`
-makes button 0 request it without Up. `dismount($player, 'transfer')` hands off the chassis surface and velocity when clearance permits;
-`'damage'` preserves externally applied knockback and `'reset'` leaves motion to the caller.
-Removing either body's component releases the association. Call `sync($player, $body)` after a
-teleport and `close()` when unloading the level. `close()` removes owned vehicles and regions while
-preserving character entities. `Vehicle::forRider($registry, $player)` resolves a live mutual seat
-association for other gameplay systems.
-
-Use the `skateboard.tj`, `vehicle-region.tj`, or `drop-vehicle-region.tj` template.
-The vehicle settings are nested under `Skateboard`; region settings use `VehicleRegion`.
-Legacy objects use class `Skateboard` / `skate-board`, or `VehicleRegion` / `DropVehicleRegion`.
-Tile objects anchor at the bottom; point objects identify the wheel contact point. `seatHeight`,
-`seatForward`, and `seatAngle` configure the seat in pixels and radians. Objects also accept
-`lockedIn`, `quickDrop`, `direction`, and `collisionLayer`. Layers contribute offsets, tint, opacity,
-and collision planes; Tiled GID flips are decoded before atlas lookup. Objects must be axis aligned.
-An annotated `skateboard` tile supplies fallback artwork, avoiding hard-coded atlas positions.
-
-A `VehicleRegion` with `vehicle=skate-board` supplies a locked board for each eligible rider.
-`restricted=true` retires it on exit and prevents repeated supply for that rider. A
-`DropVehicleRegion` forces a momentum-preserving dismount; its detection includes complete
-crossings of thin regions. Region supply currently supports skateboards; other vehicle types can
-be registered through `add()` with their own behavior. Region attachment still requires passenger
-clearance.
-
-`Vehicles::snapshot()` exposes entity IDs, original object IDs, occupant IDs, motion, pose, and
-collision plane. The demo publishes this as `canvas.dataset.vehicles`, with the current vehicle ID
-in `canvas.dataset.body.vehicle`. Restarting a level rebuilds the boards; changing level or movement
-profile releases the old seat. Graphics restoration keeps the same PHP entities and associations.
-Regenerate the example and its original board artwork with `php examples/generate-vehicles.php`.
-
-## Tornado flight
-
-Choose **Level → Tornado flight course** and fall into the aircraft's seat. Space / Z or controller
-A / Cross makes a conventional jump takeoff. Hold C or X / Square to retract the gear and fire the
-rocket engine. While airborne, Up and Down pitch the aircraft; X or B / Circle toggles landing gear.
-Fuel drains at six units per second under thrust and refills at fifteen units per second while the
-thruster is idle. Emptying the tank applies moving-boxes-2's half-second refill and ignition
-lockout. The upper-left HUD and `Vehicles::snapshot()` expose the current fuel.
-
-The 10,240 × 3,072 pixel course has a takeoff runway, an open-sky leveling stretch, two gradual
-terrain-sensor ridges, recovery valleys, and a final landing runway. The ring trail remains four
-tiles above the local ground to demonstrate the downward sensor's useful envelope. The course has
-no ceiling, and its reset region is unbounded above. Low unpowered airspeed stalls; thrusting from
-rest starts a rocket takeoff; a stopped powered impact enters a half-second ignition lockout. Flight
-uses the reference 60 Hz constants converted to seconds: a 5 px/frame runway cap, 8 px/frame
-cruise tuning, 10 px/frame flight cap, 4 px/frame thrust impulse, 5% neutral cruise drag, and
-0.035-radian pitch input. A 128-pixel downward sensor applies the reference pitch damping and
-near-ground thrust lift, but no longer disables climb input when terrain leaves its range. A
-continuous pitch-energy curve replaces the reference's duplicated descent-only speed branch:
-shallow climbs trade little forward speed, steeper climbs trade more, and descents recover speed
-symmetrically. The `airplane` camera mode pans toward the aircraft's travel direction.
-The aircraft, rider seat, and camera retain one association across ground, takeoff, collision, and
-landing. Swept chassis and passenger casts prevent the wide aircraft from crossing thin terrain at
-high speed.
-
-Use `tornado.tj` and its nested `Tornado` settings; legacy objects use class `Tornado`. Annotated `tornado`, `tornado-flight`, `tornado-gear`,
-`tornado-thrust`, and `tornado-crashed` tiles select artwork without positional tile assumptions.
-The usual `seatHeight`, `seatForward`, `lockedIn`, `direction`, and `collisionLayer` properties apply.
-`Tornado::body()` supplies the reference dimensions and speeds; a scripted vehicle uses the same
-API as the skateboard:
-
-```php
-use SanePhonics\Gameplay\{Tornado, Vehicle};
-
-$aircraft = new Vehicle(
-	Tornado::body(320, 442)
-	, seatHeight: 14
-	, seatForward: 0
-	, lockedIn: true
-);
-
-$aircraftEntity = $vehicles->add($aircraft, new Tornado($stateGids), new Sprite($stateGids['tornado']));
-```
-
-The snapshot adds `type`, `flying`, `thrusting`, `landingGear`, `fuel`, `pitch`, and `crashed` for
-Tornado entities. This gives scripts stable verbs and nouns for input playback, assertions, and
-batch test drivers. Generate the map and original aircraft art with
-`php examples/generate-tornado.php`.
-
-## EggWalker
-
-Choose **Level → EggWalker proving ground** and drop into the walker. Its dimensions and time-based
-movement values follow moving-boxes-2: a 32 × 64 standing chassis, 150 px/s walking cap,
-360 px/s² acceleration, 180 px/s² friction, and a 720 px/s jump. The authored course includes a
-crouch-height tunnel, a booster gap, and raised CrabMeat targets matched to that slower, heavier
-movement model.
-
-| Action | Keyboard | Standard gamepad |
-| --- | --- | --- |
-| Walk | Left / Right | Left stick / D-pad |
-| Jump; hold airborne for booster | Space / Z | Button 0: A / Cross |
-| Latch booster after takeoff | Up + Space / Z | Up + button 0 |
-| Cancel booster, dive, or crouch | Down | Down |
-| Chain punch | X | Button 1: B / Circle |
-| Hold cannon fire | C | Button 2: X / Square |
-| Force facing left / right | Q / E | Buttons 4 / 5: shoulders |
-
-The rider remains in the cockpit seat while the body switches between its 64-pixel standing and
-48-pixel crouched bounds. A first airborne crouch adds the reference downward impulse. Landing that
-drop while still crouched at 8 px/reference-frame or faster starts the reference vertical camera
-shake: a 7-pixel impulse that reverses and decays by five percent per frame. The render-only offset
-does not disturb camera following or motion-blur measurement. The booster only counters downward
-gravity velocity, and Up latches it until landing or Down cancels it. Punches stay active for 12
-reference frames with a 25-frame restart interval. Cannon shots repeat every six frames, travel at
-240 px/s, begin falling after six frames, and expire after 200 frames.
-
-EggWalker is composed through the ECS instead of adding weapon branches to `Vehicles`.
-`VehicleComponents` registers `VehicleMelee`, `VehicleEmitter`, `CameraShake`, `Rumble`, and, when the
-map supplies layered art, `SpriteLayers` on the chassis entity;
-`VehicleWeapons` advances those capabilities and creates rider-owned `VehicleProjectile` entities.
-`Badniks` consumes the generic melee and projectile components, so another vehicle can reuse either
-capability without becoming an EggWalker subtype. `VehicleDiagnostics` contributes type-specific
-snapshot fields, and `VehicleTerrainAware` supplies terrain only to behaviors that request it.
-EggWalker itself owns locomotion, crouch/booster state, and presentation. Its rear and foreground
-art are separate `SpriteLayers` planes anchored around the occupant, matching moving-boxes-2's
-chair/gun/rear-leg → rider → hull/arm/front-leg order without vehicle-specific renderer branches.
-
-Use `egg-walker.tj` and its nested `EggWalker` settings; legacy objects use class `EggWalker` or `egg-walker`. Annotated `egg-walker`,
-`egg-walker-walking`, `egg-walker-crouching`, `egg-walker-falling`, `egg-walker-boosting`,
-`egg-walker-punch`, `egg-walker-shooting`, and `egg-walker-shot` tiles select state artwork; matched
-`-front` classes provide each foreground plane.
-The usual seat, direction, lock, and collision-layer properties apply. `Vehicles::snapshot()` adds
-`type`, `crouching`, `boosting`, `punching`, `shooting`, `shots`, and `shakeY`. Regenerate the original demo
-art and map with `php examples/generate-egg-walker.php`.
-
-## Grapple points and ropes
-
-Choose **Level → Grapple ropes** in either menu. Jump into a gold handle to grab it automatically,
-hold Left or Right to pump the swing, and press Jump again to release. The course includes two
-fixed suspensions, a horizontal squine shuttle with `noSwing`, and a suspension following a linked
-path. All three player profiles can hang. Space / Z and controller A / Cross use logical button 0.
-
-`GrappleGrip` opts a player into contact. Each handle entity owns `GrapplePoint` and `Rope`;
-`RopeAnchor` supplies its fixed or moving suspension. `SpriteGroup` repeats atlas tiles along the
-rope, so the existing sprite renderer and context-restoration path handle the artwork.
-
-```php
-use SanePhonics\Gameplay\{GrappleGrip, GrapplePoint, Grapples, Rope, RopeAnchor};
-
-$registry->add($player, new GrappleGrip);
-$grapples = new Grapples($registry, $terrain);
-$anchor = $grapples->anchor(new RopeAnchor(200, 80));
-$handle = $grapples->add(new GrapplePoint, new Rope($anchor, 200, 240, 160));
-
-// In the player movement update, before shields, flight, or ordinary jumping:
-$jumpConsumed = $grapples->control($player, $controls, $dt);
-$movement->step($body, $controls, $dt, $jumpConsumed);
-
-// After player movement and any moving-anchor systems:
-$engine->systems->add('grapples', [$grapples, 'update'], after: ['movement', 'platforms']);
-
-$grapples->release($player);       // Detach with inherited momentum.
-$grapples->sync($player, $body);   // Call after teleporting the player.
-$grapples->remove($handle);       // Releases riders and removes the handle and rope sprites.
-$grapples->close();               // Retires owned handles and anchor proxies when unloading.
-```
-
-While `Body::$ability` is `hanging`, the rope controls position and ordinary platformer movement
-pauses. Skip other movement abilities while hanging or when `control()` consumes Jump. Release
-adds three quarters of the profile's jump speed, uses moving-anchor velocity when present and
-rope velocity otherwise, and prevents regrabbing the same handle for 0.25 seconds. The first rider
-controls a shared swing. Damage can replace the ability and velocity; detachment preserves that
-knockback. `PlatformCamera` selects its `hooked` framing automatically.
-
-Pass a loaded map as the third `Grapples` constructor argument to load `grapple-point.tj`
-placements or legacy `GrapplePoint` / `grapple-point` objects. The nested `GrapplePoint.tiedTo`
-field is a Tiled object reference; select the suspension in this map after placing the template. `ropeLength` is a
-positive maximum distance in world pixels, read from the handle, then its anchor, then defaulting
-to 64. `noSwing` keeps the handle horizontally below its anchor. Optional `collisionLayer`
-restricts contact to a plane; zero is shared. Points use their exact coordinates, ordinary
-rectangles use their bottom center, and tile objects use Tiled's bottom-left image placement.
-Map and inherited layer offsets are applied once. Rotated object rectangles are rejected.
-
-An optional fourth constructor argument, `resolveAnchor($sourceId): ?int`, resolves a suspension
-object to an existing `Body`, `MovingPlatform`, or `BuoyantPlatform` entity. Unresolved objects
-become fixed anchors. Removing or disabling an anchor releases its riders. The optional fifth
-argument, `onChange($player, $handle, $attached)`, lets application code activate a carrier or
-observe attachment. Followed entities remain owned by their original systems.
-
-Tiles annotated `grapple-handle`, `rope-segment`, and `rope-anchor` supply fallback art; an explicit
-object GID overrides the handle or anchor image and preserves Tiled flips. Layers retain tint,
-opacity, and visibility. Scripted handles accept a `Sprite`, a repeated segment GID, and its world
-height through `add()`. `snapshot()` exposes handle and anchor positions, velocity, source IDs,
-length, `noSwing`, availability, and riders. The demo publishes it as `canvas.dataset.grapples`.
-
-Contact uses relative swept bounds. Handle motion, passenger transport, and attachment alignment
-cast their complete displacement through terrain to prevent high-speed tunneling. Standing
-bounds must fit beneath a handle before attachment succeeds. If an obstructed passenger cannot
-follow a moving anchor within the rope length, the passenger releases. The rope is a constrained
-endpoint with a straight visual span; it does not wrap around terrain corners. Regenerate the
-course and original handle/chain artwork with `php examples/generate-grapples.php`.
-
-## Floating and moving platforms
-
-Choose **Level → Moving platforms** in the main or pause menu. The course includes a green
-floating support that sinks eight pixels under a rider, blue horizontal and vertical squine
-shuttles, an elliptical float, and two gold platforms following linked routes. The last route
-waits for a rider. The ground below provides a return route after a missed jump.
-
-```php
-use SanePhonics\Gameplay\{MovingPlatform, PlatformOscillation, PlatformPath, Platforms};
-
-$platforms = new Platforms($engine->entities, $terrain, $map);
-$engine->systems->add('platforms', [$platforms, 'update'], after: ['movement']);
-
-// Components can also be supplied directly. Positions are centered bottom anchors.
-$id = $platforms->add(
-    new MovingPlatform(300, 320, width: 96, height: 16, settle: 8)
-    , motion: new PlatformOscillation(x: 160)
-);
-
-// Preserve each corner and spend remaining travel on the next segment.
-$route = new PlatformPath([[600, 320], [800, 320], [800, 160]], speed: 120, loop: 0);
-$platforms->add(new MovingPlatform(600, 320), motion: $route);
-
-$platforms->remove($id); // Removes its entity and collision shape.
-$platforms->close();    // Call when retiring the level.
-```
-
-`MovingPlatform`, `PlatformOscillation`, and `PlatformPath` are ECS components. Attach an
-optional centered, bottom-anchored `Sprite` as the second argument to `add()`. `snapshot()`
-reports object IDs, positions, velocities, settlement, and whether a rider is present.
-`PlatformPath` uses pixels per second; oscillator times use seconds. A null `loop` stops at the
-last point; an index links the last point back to that point. `rideOnly: true` pauses an empty route.
-
-In Tiled, use `floating-platform.tj`, `moving-platform.tj`, or `path-platform.tj`.
-They nest common fields under `MovingPlatform`, oscillator fields under `PlatformOscillation`,
-and route fields under `PlatformPath`. Route nodes use `PathNode.next`. The table below gives
-the field names within those groups. Legacy `FloatingPlatform`, `MovingPlatform`, and `PathPlatform`
-objects also load, as do legacy `block` objects with nonzero `float`. Tile objects use Tiled's bottom-left anchor; ordinary rectangles
-use their top-left anchor. Both become centered bottom anchors internally. Object and inherited
-layer offsets are included. Rotated collision rectangles are rejected; GID flips remain supported.
-
-| Property | Meaning |
-| --- | --- |
-| `oneWay` / `platform` | Pass upward through the top; defaults to true. False makes all sides solid; legacy `block` defaults to solid. |
-| `settle` | Signed pixel displacement under a rider, recovered after the rider leaves. |
-| `oscillateX`, `oscillateY` | Signed pixel excursions. One axis uses the reference squine curve; two use sine/cosine. |
-| `squinePeriod` | Single-axis squine cycle in seconds; defaults to `1.5 * pi`. |
-| `timeX`, `timeY` | Two-axis divisors in reference frames; defaults to 90 frames each. |
-| `offset` | Oscillator phase in reference frames. |
-| `path` | Tiled object reference to the first route point. |
-| `ridePath` | Same route reference, activated while a rider stands on the platform. |
-| `next` | On each route point: reference to its successor. Missing/zero ends the route; cycles loop. |
-| `pathSpeed` | Reference pixels per frame (60 Hz), converted to pixels per second; defaults to 8. |
-| `collisionLayer` | Shared plane 0 or a positive selected plane. |
-| `outline` | Optional sprite outline override; moving platforms default to true and legacy `block` objects to false. |
-
-Platforms update after body movement, so jumping, walking off, and dropping through release the
-rider before transport. Foot rays verify the actual support shape. Full-displacement body casts
-carry riders and detect platforms pushing stationary bodies, including fast crossings. A passenger
-blocked by a wall or ceiling stops the platform instead of being pushed through terrain. Path
-segments are swept separately, preserving corners even when one update passes several nodes.
-Platforms move on their authored routes; route geometry itself does not stop against map tiles.
-
-This is the suspended-block behavior from moving-boxes-2. Water-density platforms remain handled
-by `WaterFeatures`. Regenerate only this course and its original artwork with
-`php examples/generate-platforms.php`.
-
-## Bendable bridges and rails
-
-Choose **Level → Bendable bridges & rails** for two flexible decks and a deforming grind rail.
-`BendableBridge` stores a sampled surface, while `BendableBridges` owns its removable collision
-path and repeated tile sprites. Each grounded `Body` contributes a smooth load at its own contact
-point. Loads add, so several actors can make several low points instead of fighting over one global
-offset. `maxLoads` caps their combined displacement.
-
-```php
-use SanePhonics\Gameplay\{BendableBridge, BendableBridges};
-
-$bridges = new BendableBridges($engine->entities, $terrain, $map);
-$engine->systems->add('bridges', [$bridges, 'update'], after: ['movement']);
-
-$bridge = new BendableBridge(
-    x: 256
-    , y: 320
-    , width: 384
-    , droop: 48
-    , segmentWidth: 16
-);
-
-$id = $bridges->add($bridge);
-$state = $bridges->snapshot();
-$bridges->remove($id);
-```
-
-Use `bendable-bridge.tj` or `bendable-rail.tj` and edit the nested `BendableBridge` settings.
-Legacy classes `BendableBridge` and `BendableRail` remain supported. The rail marks every changing surface segment
-as grindable. A legacy moving-boxes-2 `block` with a `droop` property loads as a bridge as well.
-Tile objects use their bottom edge as the anchor; rectangle objects use their top edge. `droop`
-sets the centered per-body depth, `segmentWidth` controls collision and visual sampling, `response`
-sets spring speed, `maxLoads` caps summed loads, and `collisionLayer` selects the collision plane.
-The optional `grinding` property turns either class into a rail.
-
-The first and last collision segments remain flat at the authored Y coordinate. Adjacent ordinary
-terrain can therefore share both endpoint height and tangent, avoiding a lip or vertical crack as
-a body walks, rolls, or grinds on and off. The manager replaces one open-path terrain handle after
-movement and places every supported body on the new curve. Surface casts still cover the complete
-movement distance, so high-speed entries cannot tunnel through a bent span. Call `close()` when the
-level unloads. Regenerate the course and its plank and rail tiles with
-`php examples/generate-bridges.php`.
-
-## Water regions and displacement
-
-Choose **Level → Water regions** to use the complete example. Build speed or launch a spindash
-from the bank to skim across the surface, or enter the pool to see reduced gravity and reduced control. Skimming can
-only begin while grounded; jumping or falling onto the surface enters the water instead. Bodies
-may opt into density-based buoyancy, and Tiled properties can add currents. The world behind each
-visible liquid rectangle is sampled through a
-scrolling displacement texture and then tinted. The HUD and pause menu render afterward and stay
-sharp.
-
-Place `water-region.tj`, resize its unrotated rectangle, and edit its nested `WaterRegion`
-settings. Legacy rectangles can use class `WaterRegion`, `Water`, or `water-region`. The boolean `water` property also marks a rectangle; `region` remains available as
-a moving-boxes-2 compatibility alias. `WaterRegions::fromMaps()` applies map and object-layer
-offsets, including Tiled's bottom anchor for tile objects.
-
-~~~php
-use SanePhonics\Physics\{Body,Platformer,TerrainCompiler,WaterRegions};
-use SanePhonics\Render\WaterRenderer;
-
-$terrain = TerrainCompiler::build($map);
-$waters = WaterRegions::fromMaps($map);
-$movement = new Platformer($terrain, waters: $waters);
-$body = new Body(80, 100);
-$body->density = .8; // Zero disables buoyancy; values below water density float.
-
-$waterRenderer = new WaterRenderer($device->width, $device->height);
-
-// During world rendering:
-$waterRenderer->begin();
-$mapRenderer->render($camera, $milliseconds);
-$spriteRenderer->render($sprites, $camera, $milliseconds);
-$waterRenderer->compose($waters, $camera, $milliseconds);
-// Draw screen-space HUD and menus here.
-~~~
-
-The physics properties are `gravity` as a gravity multiplier, `drag` as the underwater control and
-jump multiplier, `density`, `skimSpeed` in pixels per second, and `currentX`/`currentY` as
-accelerations in pixels per second squared. Rendering reads Tiled `color` in `#AARRGGBB` form,
-`displacement` in screen pixels, `displacementScale` in world pixels per repeat, and
-`displacementSpeed` in map pixels per second.
-
-`Body::$water`, `underwater`, `waterDepth`, `waterEntered`, `waterExited`, and `skimming` expose the
-result to gameplay code. Point-segment versus rectangle tests retain entry and exit edges when a
-body crosses an entire water volume in one fixed step. Water remains nonsolid; ordinary terrain
-still uses full body casts. Surface skimming tests the complete vertical step and cannot miss a
-thin boundary solely because the actor is moving quickly.
-
-`WaterParticles` observes those same body edges after movement. Crossing the top surface creates a
-one-shot `water-splash` sprite, while an active grounded skim retains one looping `water-skim`
-sprite behind the body and flips it with travel direction. Both effects are ordinary ECS entities
-with `WaterParticle` and `Sprite` components. Annotate the two animations as Tiled tile classes,
-schedule `WaterParticles::update()` after movement, and call `splash($x, $y)` when scripts need an
-explicit effect.
-
-The example includes four focused maps. **Water regions** places the pool surface at exactly the
-same Y coordinate as both dry banks. **Underwater rail** starts and ends on dry land, retaining the
-grinding state while the rail crosses the water and preserving the exit frame before ordinary
-ground resumes. **Surface skim rail** puts two rails at the waterline and overlaps each rail with
-the water surface before an open-water gap. A fast body therefore moves from grinding to
-skim-grinding to skimming, then back through skim-grinding to grinding without entering the liquid
-from a vertical side. `Body::$grinding` and `Body::$skimming` remain independent throughout the
-transition. **Rising water loop** rests the loop on the seabed with the initial waterline through
-its center, then uses three pressure switches to drain, restore, or fill the pool.
-
-`WaterFeatures` reads object references from Tiled, including legacy `Switch` / `WaterSwitch` objects.
-The `switch.tj` template nests `water` and `setPoint` object references under `WaterSwitch`, with optional `fillSpeed`,
-`drainSpeed`, and `collisionLayer` values. Its top is a one-way collision edge: a jump passes
-through from below, then the descending player lands on and activates the plate. The `block.tj`
-template nests buoyancy settings under `BuoyantPlatform`; legacy tile objects with `density` also
-become buoyant solids. `hLock` records that their horizontal position is fixed. These
-object-reference `water` properties select a volume; they do not turn the control or platform into
-another water rectangle. The demo retains the reference map's object ID 3958 for its 32×160,
-density 0.8 vertical door block. `activate($switchId)` gives scripts and tests the same action as a
-player standing on a switch, while `snapshot()` exposes switches, surfaces, targets, and platform
-motion.
-
-~~~php
-$features = new WaterFeatures($engine->entities, $terrain, $map, $waters);
-$particles = new WaterParticles($engine->entities, $map, $waters);
-$features->activate(103);
-$engine->systems->add('water-features', [$features, 'update'], after: ['movement']);
-$engine->systems->add('water-particles', [$particles, 'update'], after: ['water-features']);
-~~~
-
-`WaterRenderer` captures the scene into a framework `RenderTarget` (colour texture, depth buffer
-and framebuffer) and owns one procedural RG displacement texture. It copies the scene once, then
-submits one clipped quad per visible region. Displacement phase uses world
-coordinates, so neighboring regions do not restart their waves. Call `restore()` after the map and
-sprite resources on WebGL recovery, and call `close()` before closing the device.
-
-## Grinding rails and combos
-
-Set the boolean `grinding` property on a Tiled collision layer to make its surfaces
-grindable. An object polyline with class `Rail` or `Grinding` creates an open one-way rail;
-`collisionLayer` selects its collision plane. Scripted levels use the same path by calling
-`Terrain::addRail()` with ordered world-space points.
-
-~~~php
-use SanePhonics\Gameplay\{Combo,ComboReward};
-use SanePhonics\Physics\{Body,Platformer,Terrain};
-
-$terrain = new Terrain;
-$terrain->addRail([[64, 224], [320, 192], [576, 224]]);
-$movement = new Platformer($terrain);
-$combo = new Combo;
-
-// During each fixed update:
-$movement->step($body, $engine->controls, $dt);
-$banked = $combo->update($body, $dt);
-$counter->score += $banked ?? 0;
-
-// Game-specific tricks can join the same chain.
-$combo->add(new ComboReward('Backflip', 250, 2));
-~~~
-
-A rail contact clears rolling, preserves `Body::$direction` against opposite input, lets that input
-change the independently rendered `Body::$facing`, enforces the reference minimum speed, accelerates
-along its tangent, and permits the lower-friction Down pose.
-Jump leaves along the current surface normal. A rail endpoint retains tangent momentum and becomes
-a plain fall, so a chain can continue onto another rail. The body cast checks the entire movement
-distance before attaching, which prevents fast downward movement from tunneling through a thin rail.
-
-Choose **Level → Grinding rail** for a complete Tiled example. It begins with a level
-rail-to-ground-to-rail transition, then two independent quarter bends lift the track to an upper
-straight and two lower it again before a separate loop. Collision layers 1 and 2 hold the loop's
-alternate lower halves; shared layer 0 holds its crown and straight rail. Directional switches at
-both entrances and a reversed switch at the crown select a passable route in either direction. The
-stop wall after the exit clears tangent motion so opposite input can run the complete course in
-reverse. Open `examples/assets/grinding.tmj` and `grinding.tsj` to inspect the annotations, object
-polygons, and collision planes.
-
-`Combo` adds one live `Rail Grind` reward per rail run and grows its points with speed. `add()`
-accepts game-specific rewards while airborne. An ordinary grounded landing banks
-`ceil(sum(points) * sum(multiplier))`; `fail()` clears the chain and exposes the lost value without
-awarding it. Both results remain available for a configurable duration. The example renders up to
-four recent labels, overflow, chain arithmetic, and the success or failure result in the top-right
-bitmap HUD. Enemy damage fails a player-owned `Combo` automatically.
-
-## Badniks and CrabMeat
-
-`Gameplay\Badnik` holds the position, contact bounds, points, and optional explosion art shared by enemy types. A species component implements the empty `BadnikBehavior` marker. `Badniks` owns player contacts, mercy damage, scoring, airborne rebound, explosions, and owner-tagged ballistic projectiles. A grounded walking player takes damage and loses held rings. The player sprite flickers during mercy and cannot turn its damage knockback into an attack. A rolling or jumping player outside mercy pops the badnik and receives its point value. Walking off a ledge produces a plain fall, not a somersault attack.
-
-`Gameplay\CrabMeats` promotes `CrabMeat` objects from Tiled. It recreates the reference schedule in time-based engine units: 65 walking frames, 10 standing frames, 15 firing-pose frames, paired shots on frame 87, and a three-frame launch delay. Each patrol leg alternates direction. Tiled properties keep their familiar frame units; `patrolSpeed`, projectile speeds, and projectile gravity use per-frame units and convert to pixels per second internally.
-
-~~~php
-use SanePhonics\Gameplay\{Badniks,CrabMeats,PlayerCombat};
-
-$player = $engine->entities->create($body, $counter, new PlayerCombat, $sprite);
-$badniks = new Badniks($engine->entities, $terrain, $rings);
-$crabs = new CrabMeats($engine->entities, $terrain, $map, $badniks);
-$badniks->sync($player, $body); // Also call after teleports.
-
-$engine->systems->add('crabmeats', [$crabs, 'update'], after: ['movement']);
-$engine->systems->add('badniks', [$badniks, 'update'], after: ['crabmeats']);
-~~~
-
-Annotate tiles with `crabmeat-standing`, `crabmeat-walking`, `crabmeat-shooting`, `badnik-projectile`, and `badnik-explosion` classes. The walking, shooting, and explosion tiles may use ordinary Tiled animation frames. Place `crab-meat.tj` and expand `CrabMeat`; legacy point objects with class `CrabMeat` also work. Supported fields include `direction`, `patrolBeat`, `patrolPause`, `patrolSpeed`, `patrolOffset`, `shotTelegraph`, projectile tuning, `collisionLayer`, and `points`. Call `$badniks->close()` during level cleanup.
-
-Player-to-badnik and player-to-projectile contacts use relative swept bounds, so either participant can cross the other between fixed updates without tunneling. Projectile-to-terrain movement uses `Terrain::castBody()` over the complete displacement. A projectile whose owning badnik has popped retires without damaging the player.
-
-## Multi-hit bosses and the floating mini boss
-
-`Gameplay\Boss` holds reusable position, bounds, health, score, collision layer, velocity, and phase
-state without inheriting ordinary one-hit badnik behavior. `MiniBosses` promotes `MiniBoss` or
-`mini-boss` Tiled objects and runs the moving-boxes-2 encounter: the idle boss wakes when its arena
-activates, stalks the player horizontally, and drops a spike bomb every 60 reference frames. A
-landed bomb splits into two outward fragments. Main bombs use complete body casts against terrain,
-and every boss, bomb, and fragment contact uses relative swept bounds so high speeds cannot tunnel.
-
-Rolling and jump somersaults damage the top or sides. An underside attack produces the reference dud
-rebound without removing health. Per-attacker hit cooldowns preserve the eight-hit fight while the
-damaged pose recovers. Zero health releases `BossRegions` immediately, but leaves a dead shell for a
-final attack. The finisher starts a 90-frame stream of explosion entities before the boss escapes
-upward. Player damage reuses rings, shields, mercy, combo failure, and knockback behavior. The final
-hit awards the configured points and increments `PlayerCombat::$defeats` once.
-
-~~~php
-use SanePhonics\Gameplay\{MiniBosses,PlayerCombat};
-
-$player = $engine->entities->create($body, $counter, new PlayerCombat, $sprite);
-$bosses = new MiniBosses($engine->entities, $terrain, $map, $rings);
-$bosses->sync($player, $body); // Also call after teleports.
-
-$engine->systems->add('mini-bosses', [$bosses, 'update'], after: ['movement']);
-
-// Wake the object referenced by the active BossRegion.
-$bosses->wakeSource($region->bossSourceId);
-~~~
-
-The manager advances `PlayerCombat` mercy clocks by default. Pass `advanceCombat: false` when a
-`Badniks` manager already advances the same players, as the combined demo does.
-
-Annotate tiles with `mini-boss-idle`, `mini-boss-damaged`, `mini-boss-dead`, `spike-bomb`,
-`spike-fragment`, and `boss-explosion` classes. Place `mini-boss.tj` and expand `MiniBoss`; legacy point or tile objects with class `MiniBoss`
-also work. Its settings can override `hitPoints`, `points`, `collisionLayer`, stalking speed, bomb timing and
-gravity, hit and recovery frames, explosion timing, and escape behavior. These editor properties use
-reference frames and pixels per frame; the manager converts them to seconds and pixels per second.
-`snapshot()`, `entityForSourceId()`, `aliveSource()`, and `wakeSource()` provide stable scripting
-verbs. Call `close()` with the rest of the level cleanup.
+[Grind rails and score combos](movement.md#grind-rails-and-score-combos): Rail contacts, directional switches, trick chains, and banking or losing a combo.
 
 ### Platform camera
 
-`Gameplay\PlatformCamera` reimplements moving-boxes-2's actor framing as a renderer-independent
-controller. Automatic mode follows ordinary ground movement, waits through short falls before
-switching to aerial framing, tracks climbing, and uses tube framing while rolling on walls and
-ceilings. Speed shifts the actor away from the direction of travel to show more of the route
-ahead. Floor, wall, and ceiling orientations rotate that look-ahead onto the active surface.
+[Follow the player with the camera](movement.md#follow-the-player-with-the-camera): Automatic follow modes, scripted focus, world bounds, and teleport recovery.
 
-The controller also exposes the reference modes for scripted sequences: `panning`, `boss`,
-`perspective`, `bridge`, `cliff`, `walker`, `airplane`, `boost-ring`, `cross-cannon`,
-`cross-cannon-quick`, `cutScene`, `corkscrew`, `popping`, `hooked`, `cinematic`, `draggable`, and
-`locked`. `focus()` and `clearFocus()` pan to and from a world point. `setWorldBounds()` confines
-the visible span, while `setCameraLimits()` applies direct top-left limits such as a level floor.
-Both bounds constrain the destination before damping, so changing a target or screen lock does not
-snap the current view. Anchor and position damping are independent of the simulation step size.
+## Ride vehicles
 
-~~~php
-use SanePhonics\Gameplay\PlatformCamera;
+### Vehicles and skateboards
 
-$cameraBehavior = new PlatformCamera;
-$cameraBehavior->setCameraLimits(maxY: 120);
+[Ride and manage a skateboard](vehicles.md#ride-and-manage-a-skateboard): Riders, shared vehicle ownership, board controls and tricks, boarding regions, and cleanup.
 
-// Call after movement. The final argument is a filtered up/down look axis.
-$cameraBehavior->update($camera, $body, $dt, $look);
+### Tornado flight
 
-$cameraBehavior->focus($switchX, $switchY); // Smooth scripted pan.
-$cameraBehavior->clearFocus();              // Smooth return to the actor.
-$cameraBehavior->setMode('cinematic');       // Explicit framing until setMode('auto').
-~~~
+[Fly the Tornado](vehicles.md#fly-the-tornado): Takeoff, pitching, landing gear, thrust, fuel, and reusable flight capabilities.
 
-Holding Up or Down for 0.75 seconds applies the reference look framing when the application passes
-that input to `update()`. The demo passes it only for a stationary grounded actor, preserving
-crouch, spindash, grinding, and rolling controls. `sync()` clears stale air and look timers after a
-spawn or teleport. The debug overlay reports the resolved mode and smoothed anchor.
+### EggWalker
+
+[Drive the EggWalker](vehicles.md#drive-the-eggwalker): Crouching, boosters, punches, projectiles, layered artwork, and landing shake.
+
+## Platforms, ropes, and breakable blocks
+
+### Floating and moving platforms
+
+[Move a platform along an oscillator or path](platforms.md#move-a-platform-along-an-oscillator-or-path): Floating supports, oscillators, linked routes, swept rider carrying, and authoring units.
+
+### Bendable bridges and rails
+
+[Bend a bridge or rail under its riders](platforms.md#bend-a-bridge-or-rail-under-its-riders): Loads, sampled surfaces, endpoint continuity, and removable collision paths.
+
+### Grapple points and ropes
+
+[Hang from a fixed or moving rope](platforms.md#hang-from-a-fixed-or-moving-rope): Grabbing and releasing handles, moving anchors, rope limits, and contact checks.
+
+### Breakable blocks and particles
+
+[Break blocks into particles](platforms.md#break-blocks-into-particles): Rolling impacts, removable colliders, particle grids, and effect ownership.
+
+## Rings, enemies, and rewards
+
+### Collectible rings and player HUD
+
+[Collect rings and show the player HUD](combat.md#collect-rings-and-show-the-player-hud): Tile and object pickups, swept collection, teleport synchronization, and the score/time/rings display.
+
+### Badniks and CrabMeat
+
+[Add enemies and contact damage](combat.md#add-enemies-and-contact-damage): Enemy movement, player contacts, damage, scoring, and projectiles.
+
+### Losing and recovering rings
+
+[Lose and recover rings after damage](combat.md#lose-and-recover-rings-after-damage): Scattered-ring movement, pickup delays, and lifetimes after a damaging hit.
+
+### Multi-hit bosses and the floating mini boss
+
+[Run a multi-hit boss encounter](combat.md#run-a-multi-hit-boss-encounter): Boss phases, hit rules, bombs, shared combat timers, and scripting.
 
 ### Boss arena screen locks
 
-`Gameplay\BossRegions` loads `boss-region.tj` placements with nested `BossRegion` settings,
-as well as moving-boxes-2-compatible `BossRegion` or `boss-region` rectangle objects. The historical editor convention of naming an otherwise untyped object
-`boss-region` is accepted too. Set `BossRegion.boss` to the boss in the same map using the object picker (legacy objects use a flat `boss` property). The
-application supplies a callback that maps that source object ID to live boss state, so the lock
-works with any ECS boss component or behavior instead of depending on CrabMeat.
-
-Grounded entry engages the arena. The complete movement segment is tested against the rectangle,
-so a body crossing both sides in one fixed step is placed at the entrance instead of tunneling
-through. Once engaged, the body center remains inside the horizontal arena bounds while the camera
-pans toward a destination within those bounds. Aerial pass-through does not start a fight. Target
-defeat releases the player immediately, completes the region, and lets the camera pan back to its
-ordinary follow target. `cameraAnchorY`
-defaults to `0.72`, matching the reference boss framing, and accepts a value from zero through one.
-
-~~~php
-use SanePhonics\Gameplay\{BossRegions,MiniBosses,PlatformCamera};
+[Lock and release a boss arena](combat.md#lock-and-release-a-boss-arena): Arena object links, grounded entry, player and camera limits, and release after defeat.
 
-$bosses = new MiniBosses($engine->entities, $terrain, $map, $rings);
+### Monitors and pluggable rewards
 
-$locks = BossRegions::fromMaps(
-	fn(int $sourceId): bool => $bosses->aliveSource($sourceId)
-	, $map
-);
+[Break monitors and grant rewards](combat.md#break-monitors-and-grant-rewards): Breakable reward boxes, custom reward interfaces, ring grants, and shield monitors.
 
-$locks->sync($body); // Call after spawning or teleporting; $release defaults to true and clears an old lock.
-$region = $locks->update($body); // Call after movement.
-$cameraBehavior = $cameraBehavior ?? new PlatformCamera;
+### Shields
 
-if($region)
-{
-	$bosses->wakeSource($region->bossSourceId);
-	$cameraBehavior->setMode('boss');
-	$cameraBehavior->bossAnchorY = $region->cameraAnchorY;
-	$cameraBehavior->setWorldBounds($region->x, $region->x + $region->width);
-}
-else
-{
-	$cameraBehavior->setMode('auto');
-	$cameraBehavior->clearWorldBounds();
-}
-
-$cameraBehavior->update($camera, $body, $dt);
-~~~
+[Manage shields and their abilities](combat.md#manage-shields-and-their-abilities): Inventory, damage immunity, airborne abilities, aura entities, and cleanup.
 
-`BossRegions::constrainCamera()` remains available for applications that require an immediate hard
-clamp. The demo uses `PlatformCamera` so arena entry and release are visible pans.
-
-The **CrabMeat badniks** demo uses an eight-hit `MiniBoss` as object 3. Enter from either side,
-survive its spike bombs, attack the top or sides, then strike the dead shell to start its escape.
-The arena releases on the eighth hit. `canvas.dataset.boss` exposes health, phase, position, attacks,
-and effects; `canvas.dataset.bossLock` exposes the active bounds for scripts and browser tests.
+## Water and buoyancy
 
-When `Badniks` receives the level's `Rings` manager, damage scatters up to sixteen held rings in two radial groups before clearing the counter. The burst keeps moving-boxes-2's reduced recovery set: every third ring is a short-lived visual, while the others become collectible after 48 reference frames. `ScatteredRing` stores velocity, gravity, pickup delay, lifetime, restitution, and collision layer. `Rings` uses full body casts for terrain bounces and relative swept pickup checks for moving rings. Recovered rings return to `RingCounter`; unrecovered rings expire between about 3.7 and 6 seconds.
+### Water regions and displacement
 
-## Monitors and pluggable rewards
+[Try swimming and surface skimming](water.md#try-swimming-and-surface-skimming): Swimming, skimming, currents, buoyancy, switches, particles, and water rendering.
 
-`Gameplay\Monitor` describes a solid, bottom-anchored reward box independently of its reward. `Monitors` adds each box to the same removable `Terrain` index used by the platformer. Walking and plain falling leave it solid. A roll or jump somersault outside mercy removes the contacted shape during the continuous movement sweep, so a fast player breaks the monitor without stopping or tunneling through it. Airborne somersaulting players rebound after the hit.
+## Game setup and world loading
 
-`MonitorEffect` is the reward API. `RingMonitorEffect` supplies the reference 10-ring reward and accepts any positive amount, including the 30-ring variant. `ShieldMonitorEffect` grants normal, electric, fire, water, or star shields. Implement the interface for lives, information triggers, or game-specific inventory without changing collision and rendering behavior.
+### A PHP game
 
-~~~php
-use SanePhonics\Gameplay\{Monitor,Monitors,RingMonitorEffect,Shield,ShieldMonitorEffect,Shields};
-use Phonics\Physics\Hit;
-use SanePhonics\Physics\{Body,Platformer};
-use Phonics\Render\Sprite;
-
-$shields = new Shields($engine->entities, $map);
-$monitors = new Monitors($engine->entities, $terrain, $map, shields: $shields);
+[Create a minimal PHP game](worlds.md#create-a-minimal-php-game): A complete minimal game and its render, shutdown, and graphics-restoration callbacks.
 
-$movement = new Platformer(
-	$terrain
-	, onImpact: fn(Body $body, Hit $hit): bool =>
-		$monitors->impact($body, $hit, $engine->time * 1000)
-);
-
-$engine->systems->add('monitors', [$monitors, 'update'], after: ['movement']);
-$engine->systems->add('shields', [$shields, 'update'], after: ['monitors']);
-
-// Run before Platformer::step() so shield actions can explicitly consume Jump.
-$jumpConsumed = $shields->control($player, $engine->controls, $dt);
-$movement->step($body, $engine->controls, $dt, $jumpConsumed);
-
-// Direct creation accepts any MonitorEffect and atlas-backed casing/screen sprites.
-$monitor = $monitors->create(
-	new Monitor(320, 448, brokenGid: $brokenGid, explosionGid: $explosionGid)
-	, new RingMonitorEffect(10)
-	, new Sprite($shellGid, 320, 448, .5, 1)
-	, new Sprite($ringScreenGid, 320, 430, .5, .5)
-);
-
-$shieldMonitor = $monitors->create(
-	new Monitor(480, 448, brokenGid: $brokenGid, explosionGid: $explosionGid)
-	, new ShieldMonitorEffect(Shield::ELECTRIC, shields: $shields)
-	, new Sprite($shellGid, 480, 448, .5, 1)
-	, new Sprite($electricScreenGid, 480, 430, .5, .5)
-);
-~~~
-
-The seven monitor templates nest shared settings under `Monitor` and reward tuning under
-`RingMonitorEffect` or `ShieldMonitorEffect`. Tile-object placements use their bottom-left anchor;
-legacy point objects retain their bottom-center anchor. Legacy point objects may use `Monitor`, `RingMonitor`, `TripleRingMonitor`, `NormalShieldMonitor`, `ElectricShieldMonitor`, `FireShieldMonitor`, `WaterShieldMonitor`, or `StarShieldMonitor`. `BubbleShieldMonitor` is an alias for water. The historical `SheildNormalMonitor` and corresponding elemental class spellings are accepted when importing moving-boxes-2 data. A base `Monitor` selects the same effects with its `reward` property. `amount`, `points`, `starDuration`, `width`, `height`, and `collisionLayer` are optional.
+### Entities and systems
 
-Annotate tiles with `monitor-shell`, `monitor-broken`, `monitor-explosion`, and the appropriate `monitor-screen-*` class. Shield screens use `monitor-screen-shield-normal`, `-electric`, `-fire`, `-water`, and `-star`. Optional `shield-aura-*` tiles give `Shields` animated player art. Tiled animation controls casing static, screen flicker, aura motion, and the explosion.
+[Register components and order systems](worlds.md#register-components-and-order-systems): Component queries, system ordering, deferred changes, and lifecycle ownership.
 
-Runner profiles use Jump directly for electric and water shield actions during a jump somersault. Flyer and glider profiles keep an unmodified Jump for their native flight or glide. Hold Up or Down with Jump to select electric jump, or hold Down with Jump to select water bounce. Plain falling cannot start any of these jump abilities. Fire shoulder thrust is additive and does not cancel active flight or glide. Pass the boolean returned by `Shields::control()` to `Platformer::step()` so a shield-selected jump is not also handled as a profile ability.
+### Input
 
-The intact entity combines its casing `Sprite` with a screen `SpriteGroup`. On the first pop, the casing switches to its broken tile and stays in the level, while the screen rises and fades on a temporary entity and the reward applies exactly once. `pop()` is also available for scripted damage. Destroying an intact monitor externally releases its collider. Call `close()` during level cleanup to retire casings and effects.
+[Read input and handle focus changes](worlds.md#read-input-and-handle-focus-changes): Keyboard and controller input, rumble, focus recovery, pause, and timed sequences.
 
-## Shields
+### Tiled data
 
-`Gameplay\Shield` is a player component with a scriptable inventory and one active selection. `grant()`, `select()`, `has()`, and `inventory()` are independent of input and rendering. Acquiring normal, electric, fire, or water retains that type until it absorbs a non-immune hit. Acquiring star temporarily overrides the current selection for 26 seconds by default, then restores it. Reacquiring star refreshes the timer. Granting another type during star adds it to inventory without interrupting the override.
+[Load and edit Tiled maps](worlds.md#load-and-edit-tiled-maps): Supported formats, dependencies, map edits, and GPU residency.
 
-`PlayerCombat::damage()` accepts an optional shield and damage category. Any active shield prevents ring loss for one otherwise damaging hit, then receives the same mercy knockback as the unshielded player. Electric, fire, and water shields ignore their matching category and generic `projectile` damage without consuming the shield or starting mercy. Star ignores every category. `Badniks` reads the player's component automatically: shielded body contact defeats the badnik, immune projectiles retire harmlessly, and an absorbed hit does not scatter rings.
+### Stream a world by proximity
 
-`Shields` owns only map-specific aura entities, so shield inventory can persist when a level closes. Its fixed-step `update()` advances star time, follows each `Body`, retires consumed auras, and completes water rebounds. Call `control()` before platformer movement to enable the reference abilities through `Controls`: electric gets three presses during a jump, fire spends a quarter-second airborne thrust budget with buttons 4 and 5, and water converts a jump into a downward attack and upward rebound. Landing resets electric and fire budgets. Menus and scripts can call `Shield::select()` to switch among acquired types.
+[Load nearby maps and release distant ones](worlds.md#load-nearby-maps-and-release-distant-ones): Nearby-map loading, readiness checks, asset transport, bounds, and level transitions.
 
-Aura rendering is optional. With no annotated map, construct `Shields` without its second argument to update headless `Shield` components and abilities. A `ShieldMonitorEffect` without a manager still grants inventory, which scripts can advance directly through `Shield::update()`. With a map, `Shields` creates a separate `ShieldAura` plus `Sprite`, allowing the ordinary sprite batch to draw it over the player. `Shields::close()` removes those map-specific sprites without erasing inventory. Call `Monitors::close()` as well to retire monitor casings and pop effects.
+### Intro cards and startup
 
-## Input
+[Connect the startup flow](worlds.md#connect-the-startup-flow): Intro cards, loading gates, title flow, and the dedicated startup guide.
 
-`Engine` initializes SDL game controllers and discovers pads connected before or during a run. Disconnecting a pad releases its input. Keyboard and gamepad input combine for one player; D-pad input overrides the left stick on that axis. Stick movement remains proportional after a 20% dead zone, matching moving-boxes-2. Keyboard and D-pad movement use full strength.
+### Bitmap fonts and menus
 
-~~~php
-$engine->input->gamepads->setDeadZone(.2); // Range: 0 <= dead zone < 1.
-$horizontal = $engine->controls->axis('left','right'); // -1..1
-$jumped = $engine->controls->pressed('jump');
-$jumpHeld = $engine->controls->down('jump');
-$jumpReleased = $engine->controls->released('jump');
-$sameJump = $engine->controls->pressed(0); // Space, Xbox A, or PlayStation Cross.
+[Connect menus and bitmap fonts](worlds.md#connect-menus-and-bitmap-fonts): Pause-menu integration, themed controller glyphs, and the dedicated menu guide.
 
-// For custom bindings or separate players, read an individual SDL instance ID.
-foreach($engine->input->gamepads->ids() as $id)
-{
-	$look = $engine->input->gamepads->axis(SDL_CONTROLLER_AXIS_RIGHTX,$id);
-	$interact = $engine->input->gamepads->button(SDL_CONTROLLER_BUTTON_X,$id);
-}
+### Debug overlay
 
-// Pulse the controller that most recently supplied input.
-$engine->input->gamepads->rumble(120, 1, .5);
-~~~
+[Inspect the running game](worlds.md#inspect-the-running-game): Player, camera, collision, and rendering metrics, plus PHP and browser inspection.
 
-SDL supplies device mappings. `axis()` returns stick values in -1..1 and trigger values in 0..1; `button()` returns a boolean. Omitting the instance ID combines buttons from all pads and selects the strongest magnitude for each axis. IDs change on reconnect, even when the browser reuses a slot. `Controls` exposes standard button numbers 0–16, including shoulders, triggers and stick clicks, alongside the existing named actions. The right stick remains available through `Gamepads::axis()`.
+## Drawing the world and effects
 
-`rumble()` uses the active controller's SDL handle, not a browser-wide heuristic.
-It returns false when no controller is active, the device does not advertise
-rumble, or the loaded php-sdl-wasm runtime predates the rumble bindings. The demo's
-Controller rumble preference clears queued ECS pulses and
-stops the active motors when disabled.
+### Background parallax
 
-`Engine` buffers keyboard presses and sampled gamepad action presses until the next simulation step, so short taps survive frames without an update. Custom loops should call `SdlInput::poll()` each frame and pass `SdlInput::consume()` to `Controls::set()` once per simulation step. `snapshot()` previews the pending input without consuming it.
+[Build scrolling and parallax backgrounds](rendering.md#build-scrolling-and-parallax-backgrounds): Image layers, anchored stacks, scrolling, animation, and world-boundary continuity.
 
-Start pauses simulation while rendering and controller polling continue. `Engine::$userPaused` reports this state. Losing canvas focus clears input. After focus, tab visibility or WebGL recovery, held gamepad buttons and axes must return to neutral before they can act again. This prevents an idle tab from replaying a jump or dash. `Engine::stop()` closes controller handles before shutting down SDL. Native hosts that drive `tick()` themselves should call `$engine->input->close()` before `$device->close()`.
+### Sprites
 
-Observe timed codes and fighting-game inputs through the same logical surface:
-
-~~~php
-$codes = $engine->input->sequences;
-$codes->add('konami', [12, 12, 13, 13, 14, 15, 14, 15, 1, 0], .75);
-$codes->add('special', ['down', 'forward', 1], .25);
-$codes->add('uppercut', [['press' => 2, 'held' => ['down']]]);
-
-// In a frame callback, independently of simulation stepping:
-foreach($codes->drain() as $match)
-{
-	// Dispatch $match['name'] to your gameplay code.
-}
-~~~
-
-Sequences retain ordered keyboard taps, support chords, diagonals, charged
-releases, facing-relative directions, overlapping prefixes and timing limits.
-Text editing and input recovery clear partial history. The demo's Konami and
-moving-boxes debug codes enable its debug panel, which also reports example
-fighting inputs. See [logical input and sequences](../../../docs/input.md) for default
-bindings, remapping, timing semantics, replay input and runnable examples.
-
-## Intro cards and startup
-
-`Ui\Card` and `Ui\CardSequence` provide timed cards, readiness gates, guarded
-skipping, fades, and lifecycle callbacks without SDL. `Ui\CardRenderer` draws
-bitmap content and loading progress over an application backdrop. The demo uses
-an image-only Tiled map for the title and keeps its parallax offset continuous
-behind the main menu. Gameplay assets download when Play is selected.
-
-[examples/intro.php](../examples/intro.php) starts the complete flow;
-[examples/cards.php](../examples/cards.php) defines card text and timing. The
-[startup guide](startup.md) covers reusable APIs, input, retries, resource
-ownership, and the moving-boxes-2 reference behavior. Worlds choose startup or direct
-gameplay with the `sane.intro` property; the `bootEngine()` console global exists only on the
-repository's legacy demo page. In-session transitions retain the same engine.
-
-## Bitmap fonts and menus
-
-Press P, Escape, or Start in a running demo to open its pause menu. Settings
-includes live text editing, stepped numbers, sliders, cycling selections,
-boolean toggles, and read-only output. Submenus restore the previous selection
-and scroll position. The game stays paused while the menu accepts input.
-
-`Ui\Menu` holds declarative rows and callbacks without requiring SDL.
-`Ui\PauseMenu` connects it to engine input and rendering. Keyboard, Xbox,
-PlayStation, and generic numbered button glyphs switch with the last input used;
-applications can choose a theme explicitly. The font reads characters, spacing,
-and themed variants from annotated TSJ properties. No character positions are
-hard-coded in PHP.
-
-See [menus and font annotations](menus.md) for a PHP example, controls,
-bindings, lazy submenus, graphics lifecycle, and custom appearance.
-[examples/menu.php](../examples/menu.php) builds the live demo menu.
-
-## Debug overlay
-
-Press **F9** with the game focused, or toggle **Settings → Debug overlay** from the
-pause or main menu. The upper-right bitmap panel follows moving-boxes-2's debug OSD:
-player position, ground and air velocity, grounded state, surface orientation,
-collision layer, and ground/air angles. Speeds use pixels per second and angles use
-radians. Camera-only scenes report **None (camera)** instead of stale player values.
-
-The panel also shows camera position and zoom, entity count, ready/pending/failed
-map counts, world draw calls and instances, tile uploads, collision casts per rendered
-frame, and simulation time. World draw counts exclude the overlay and menus. Detailed
-values refresh every rendered frame; glyph layouts are cached and the overlay adds two
-batched draw calls using the menu's existing font atlas.
-
-**Settings → FPS meter** independently controls the unboxed lower-left FPS/frame-interval
-display, enabled by default. FPS measures browser frames, including paused menus,
-and discards the idle interval after tab or graphics recovery. Both preferences
-survive level changes. Reset settings restores the defaults.
-
-The example keeps the implementation in [DemoDebugOverlay.php](../examples/DemoDebugOverlay.php).
-It renders inside the canvas, so fullscreen, camera zoom, and context recovery keep
-the panel in screen space. Example PHP can control it directly:
-
-```php
-$game->debug->enabled = true;
-$game->debug->showFps = false;
-```
-
-`canvas.dataset.debug` contains the current display state and live rows for browser
-inspection. The overlay stays hidden during intro cards and the main menu.
-
-## A PHP game
-
-~~~php
-require 'autoload.php'; // Or Composer's vendor/autoload.php.
-
-use Phonics\Engine;
-use Phonics\Tiled\Loader;
-use SanePhonics\Physics\{Body,Platformer,TerrainCompiler};
-use Phonics\Render\{Camera,Device,MapRenderer};
-
-$map = (new Loader)->map('/assets/level.tmj');
-$device = new Device(960,540);
-$engine = new Engine($device);
-$camera = new Camera(0,0,960,540);
-$renderer = new MapRenderer($map);
-$movement = new Platformer(TerrainCompiler::build($map));
-$player = new Body(80,100,'runner');
-$entity = $engine->entities->create($player);
-
-$engine->systems->add('movement',function($entities,$dt) use ($movement,$player,$engine) {
-	$movement->step($player,$engine->controls,$dt);
-});
-
-$engine->start(function() use ($device,$renderer,$camera,$engine) {
-	$device->begin();
-	$renderer->render($camera,$engine->time * 1000);
-	$device->present();
-},function() use ($renderer) {
-	$renderer->close();
-},function() use ($renderer) {
-	$renderer->restore();
-});
-~~~
-
-[examples/game.php](../examples/game.php) adds sprites, camera following, reset, and statistics. PHP schedules frames through vrzno; SDL_Delay is never used to yield. Engine::tick lets another PHP host supply time. Engine::stop cancels the callback and closes the device after your cleanup callback; create a new device to restart.
-
-Engine pauses simulation and drawing while the document is hidden or its WebGL context is lost. On restoration, Device reapplies GL state, then Engine calls the third `start()` callback before rendering. Restore each renderer there. MapRenderer restores its atlas and image layers in place; restore any SpriteRenderer that borrows that atlas afterward. WorldRenderer restores its resident maps. Restore a separately owned Atlas before its SpriteRenderer. Custom GPU resources also belong in this callback.
-
-PHP entities, map edits, camera state, and simulation time survive context loss. Resume discards elapsed idle time and held keys. Stop removes the browser listeners and remains available while graphics are lost. If Chrome discards the whole page, it reloads with a new PHP runtime; saving game state across that reload requires application persistence.
-
-## Tiled data
-
-Loader accepts JSON maps (.tmj/.json), external JSON tilesets (.tsj), image collections, and explicit .world map lists. Relative paths resolve against the referring file. Assets caches reads; supply a reader callback for another storage backend.
-
-Open `examples/assets/stream.world` or `demo.world` in Tiled to edit the demo maps. Generated JSON includes `visible: true` and `opacity: 1` on every layer. Tiled 1.12.2 imports layers without those fields as hidden and fully transparent, even when their tile data is present. The generator also writes `parallaxy: 0` for anchored backgrounds so saving in Tiled preserves their vertical behavior.
-
-Tile rendering supports orthogonal/isometric projections, finite maps, sparse infinite chunks with negative coordinates, inherited group visibility/offsets/opacity/tint/parallax, tile animations, tileset margins/spacing/offsets, and flip flags. MapRenderer draws tile and image layers in map order; SpriteRenderer draws actors. Maps retain object metadata. Tiled text and object templates are not automatically rendered.
-
-JSON arrays and base64 layers need no extra extension. Compressed layers require PHP zlib, loaded through the base runtime's dependency resolver:
-
-~~~js
-import * as zlib from 'php-wasm-zlib';
-import {PhpSdl} from 'php-sdl-wasm/php8.4-sdl.mjs';
-const php = new PhpSdl({canvas, sharedLibs: [zlib]});
-~~~
-
-The demo does not download zlib for its uncompressed maps. Tests request it for compressed fixtures. Zstd, XML TMX/TSX, hexagonal/staggered/oblique projections, non-normal blend modes, and world filename patterns are unsupported. Unsupported projections, encodings, and blend modes raise errors.
-
-~~~php
-$loader = new Loader;
-$world = $loader->world('/assets/game.world');
-$worldRenderer = new Phonics\Render\WorldRenderer($world,residentLimit: 8);
-$worldRenderer->render($camera,$timeMilliseconds);
-$map->layer('Terrain')->set(-2,3,17);
-~~~
-
-World metadata loads first; intersecting maps load when requested. WorldRenderer evicts older off-screen GPU resources beyond its residency limit. Visible maps stay resident. World::unload releases a loader cache entry. Rebuild MapTerrain after collision tile changes. Visual edits update the changed GPU slice.
-
-## Stream a world by proximity
-
-WorldStream follows tigl's approach of querying map bounds before initializing nearby maps. The `.world` manifest loads first. PHP selects maps within a preload rectangle, requests their JSON and external tilesets, then requests tileset images and image-layer animation frames. A map becomes ready only after all dependencies are mounted. Distant maps receive no requests.
-
-~~~php
-use Phonics\Tiled\{Loader,WorldStream};
-use Phonics\Render\WorldRenderer;
-
-$world = (new Loader)->world('/engine/examples/assets/stream.world');
-$stream = new WorldStream(
-    $world,
-    request: vrzno_env('requestAsset'),
-    release: vrzno_env('releaseAsset'),
-    loadMargin: 256,
-    retainMargin: 768
-);
-$renderer = new WorldRenderer($stream);
-
-// Each frame, before rendering. Coordinates are world pixels, from the top-left.
-$stream->update($camera->x, $camera->y,
-    $camera->width / $camera->zoom, $camera->height / $camera->zoom);
-$renderer->render($camera, $timeMilliseconds, margin: 0);
-~~~
-
-`loadMargin` expands the requested area. The larger `retainMargin` keeps recently visited maps available around boundaries. Leaving that area drops the map from the PHP cache and releases files once no other map in the stream needs them. WorldRenderer drops the corresponding GPU resources on its next render or restoration. In-memory edits survive while retained; use `exited` to save edits and entity state if revisits should preserve them. The stream owns its Loader cache and requested files; use a dedicated loader and asset transport for each stream.
-
-The [browser asset transport](../../../browser/AssetLoader.mjs) fetches files and mounts them in WASM. It deduplicates pending requests, cancels released requests, rejects writes from obsolete responses, and reports errors without calling back into PHP. It serves paths under one configured HTTP source and filesystem root. PHP owns proximity decisions and Tiled dependency parsing. Hosts give PHP an asset scope through `vrzno_env('createAssetScope')`; [DemoLevel.php](../examples/DemoLevel.php) passes its `request(path, retry)` and `release(path)` methods to `WorldStream`. The request callback returns `true` when mounted, `false` while pending, or an error string. Omit both callbacks for files already available to PHP.
-
-`loaded()` returns ready maps keyed by resolved path, in manifest order. `entered` and `exited` contain this update's activation/removal changes for spawning or saving entities and rebuilding collision terrain. `pending()` lists maps that are not ready, including failures; `errors` maps paths to messages. `retry($path)` retries one failed map. Polling does not repeatedly retry failures.
-
-Use `isReady($x, $y, $width, $height)` before moving a player or completing a teleport into loading maps. Supply the body's entire swept bounds, including its extents and proposed displacement, and keep that area inside the rectangle passed to `update()`. Wait while it returns false. Once ready, build collision terrain from the required loaded maps and use the existing continuous casts for movement. Empty space outside all manifest bounds counts as ready. Streaming does not automatically spawn entities or attach collision terrain.
-
-Call `$renderer->restore()` in Engine's restoration callback. Close the renderer before `$stream->close()` in cleanup. [examples/world.php](../examples/world.php) starts the streaming scene in the shared demo session. [DemoGame.php](../examples/DemoGame.php) owns the persistent engine session; [DemoLevel.php](../examples/DemoLevel.php) owns replaceable map assets, collision, and graphics. Switching levels prepares the destination before retiring the old scene. Asset scopes share transfers and retain files until their last scene reference is released, including across WebGL recovery.
-
-World bounds are indexed in PHP, including negative coordinates, overlaps, and sparse distant maps. `World::entries()` queries metadata without loading maps; `World::visible()` remains the synchronous API for mounted files. Manifest filenames must be unique, with finite nonnegative bounds dimensions. Streaming requires explicit `width` and `height` in pixels. For infinite maps with negative chunks or maps with overhanging artwork, add an entry-level `bounds` rectangle in local projected pixels, such as `"bounds":{"x":-1024,"y":0,"width":3072,"height":640}`. It changes the indexed extent while preserving the entry's `x`/`y` as the map origin. Without it, bounds start at the map origin. Call `reindex()` after changing manifest bounds; recreate a stream when changing its manifest. Streaming operates on whole maps, not individual chunks within a map.
-
-## Background parallax
-
-Add Tiled image layers before the terrain. Set `repeatx`, `repeaty`, `parallaxx`, and `parallaxy` on each layer. A factor of 0 stays fixed relative to the view, 1 follows the map, and intermediate values simulate distance. Group factors multiply. Tile and image layers share Tiled's [view-center and map-origin reference](https://doc.mapeditor.org/en/stable/manual/layers/#parallax-reference-point), including maps placed in a world.
-
-For a viewport-anchored stack like tigl's backgrounds, set the image layer's custom `from` string property to `top`, `center`, or `bottom`. Position strips using `offsety`. Layers with the same anchor share a stack height computed from their image heights and offsets. `stackHeight` can override that height. Anchored strips default to horizontal repetition and zero vertical parallax; explicit `repeatx` and `parallaxy` values override those defaults.
-
-Anchored strips scroll from world-camera coordinates. Map placement and map-local parallax origins do not change their phase. Use the same layer offsets, factors, images, and stack heights in neighboring maps to keep backgrounds aligned across boundaries. Tiled displays these images using its native layer rules; the engine applies the custom anchoring, scrolling, and frame animation during play.
-
-WorldRenderer draws one leading anchored stack, selected from the ready map containing the camera center. While crossing a gap or waiting for that map, it keeps the previous visible ready stack, or uses the first visible ready map. Manifest order breaks ties for overlapping maps. This avoids blending the same translucent background more than once. Regular Tiled image layers remain attached to each map; image layers after terrain retain their map order.
-
-Custom properties add motion like moving-boxes-2's strips:
-
-| Property | Type | Effect |
-| --- | --- | --- |
-| `scrollX`, `scrollY` | float | Automatic image movement in pixels per second; positive values move right/down. |
-| `frames` | string | JSON list of `{"image":"cloud-0.png","duration":150}` entries. Durations are milliseconds; image paths are relative to the map. |
-
-Pass simulation time to `MapRenderer::render($camera, $milliseconds)` so scrolling and animation stop when simulation time stops. Opacity, tint, PNG alpha, and Tiled's `transparentcolor` are supported. Images keep their native proportions when the camera zooms. Repetition works with non-power-of-two images and negative world coordinates.
-
-PHP can also create and change layers directly:
-
-~~~php
-$clouds = new Phonics\Tiled\Layer(20, 'Clouds', 'imagelayer');
-$clouds->image = '/assets/clouds.png';
-$clouds->repeatX = true;
-$clouds->parallaxX = .15;
-$clouds->parallaxY = 0;
-$clouds->properties = ['from' => 'bottom', 'scrollX' => 6];
-array_unshift($map->layers, $clouds);
-~~~
-
-For programmatic animation, set `$clouds->imageFrames` to an array of image/duration entries with resolved image paths.
-
-ImageRenderer caches each image once per map renderer and draws one clipped quad per image layer. Its `draws` and `uploads` counters are available through `$renderer->images`. MapRenderer's draw count includes images; its instance/upload counts still describe tile chunks. Close the MapRenderer to release both renderers' textures. WorldRenderer draws the selected anchored stack and regular leading image layers before drawing terrain, so a neighboring map's sky cannot cover existing terrain.
-
-The live demo includes original procedural sky, cloud, mountain, water, and shimmer strips. `php examples/generate-assets.php` regenerates them along with the demo maps.
-
-## Sprites
-
-SpriteSheet loads a Tiled tileset. Tile classes/types name animations; numeric local IDs work for unnamed tiles.
-
-~~~php
-use Phonics\Render\{Atlas,SpriteSheet,SpriteRenderer};
-$sheet = new SpriteSheet($loader,'/assets/player.tsj');
-$atlas = new Atlas($sheet->map);
-$sprites = new SpriteRenderer($atlas);
-$sprite = $sheet->sprite('run',120,200);
-$sprite->flipX = true;
-$sprite->rotation = .2;
-$sprites->render([$sprite],$camera,$timeMilliseconds);
-$sprites->close();
-$atlas->close();
-~~~
-
-Sprites support anchors, rotation, scaling, flips, tint, opacity, animation offsets, and black outlines. A batch shares one atlas and one instanced draw. The caller supplies painter order, for example sorting by feet Y in an isometric scene. Atlas ownership stays with its creator.
-
-Set `$sprite->crop = [$x, $y, $width, $height]` to draw an integer pixel region relative to the current tile frame. The crop must fit inside that frame; `null` draws the whole image. Cropped dimensions determine the sprite's size and anchor. Set `animated = false` to treat `gid` as a concrete frame, even when that tile also defines an animation.
-
-Anchor the visible soles, accounting for transparent image padding. The demo's 32-pixel sprites have two transparent rows below their feet, so they use `originY: 30 / 32`. Their world anchor follows the body's rotated contact normal, keeping the artwork against floors, walls, and ceilings.
-
-Switch an existing sprite by name with `SpriteSheet::play()`. Pass the same simulation time, in milliseconds, that you pass to SpriteRenderer:
-
-~~~php
-$now = $engine->time * 1000;
-$animation = $body->grounded ? 'run' : 'jump';
-$sheet->play($sprite,$animation,$now);
-$sprites->render([$sprite],$camera,$now);
-~~~
-
-A changed animation starts at its first frame. Repeated requests for the current animation keep its playback position, so calling `play()` every update does not freeze it. `play($sprite,'jump',$now,restart: true)` explicitly restarts it. The method returns `true` when playback starts or restarts, and `false` when unchanged. It preserves the sprite object, position, transform, tint, and opacity, and reuses its atlas.
-
-Tiled frame durations control looping; static tiles also work. Each sprite has its own clock offset. An animation created by `sprite()` initially follows the renderer's clock; use `restart: true` to start that same animation at a later time. Unknown names or non-finite times throw without changing the sprite. Use animations from the tileset backing the renderer's atlas.
-
-### Backdrop displacement
-
-`BackdropTwistRenderer` displaces a localized 64-world-pixel region of the map while leaving player, entity, particle, and HUD sprites intact. Call `begin()` before rendering the background, `compose()` with the field's world center and signed strength, then render foreground sprites. Changing the sign reverses the tangential field.
-
-The demo follows moving-boxes-2's background-filter ordering and placement. Braking against retained ground momentum scales twist from tangent speed and clamps it to ±256. A held spindash charge scales it to ±120 using the retained movement direction. The field follows the player's support point with the reference effect's separate braking and spindash offsets; it never changes the body or sprite pose.
-
-~~~php
-use Phonics\Render\BackdropTwistRenderer;
-
-$twist = new BackdropTwistRenderer($device->width, $device->height);
-$twist->begin();
-$mapRenderer->render($camera, $milliseconds);
-$twist->compose($camera, $centerX, $centerY, 120 * $charge * $direction);
-$spriteRenderer->render($sprites, $camera, $milliseconds);
-~~~
-
-An active effect adds one full-background copy and one clipped effect draw. Skip capture when strength is zero. `begin()` remembers the current framebuffer, so the pass can nest inside `WaterRenderer`: begin water, begin the twist, draw the map, compose the twist, draw sprites, then compose water. `restore()` rebuilds all owned GPU resources after context loss.
-
-### Camera motion blur
-
-`MotionBlur` ports moving-boxes-2's camera-travel response curve without tying it to the renderer.
-Sample it after camera following and clamping. It converts world travel to output pixels, normalizes
-the result to a 60 Hz reference step, squares and caps each axis, and returns the reference Gaussian
-strength plus a normalized screen-space direction. The first sample, a zero-duration recovery frame,
-a zoom change, or a disabled sample establishes a new baseline without producing a stale-motion flash.
-
-~~~php
-use Phonics\Render\{MotionBlur, MotionBlurRenderer};
-
-$motion = new MotionBlur;
-$renderer = new MotionBlurRenderer($device->width, $device->height);
-
-// After updating the camera, before rendering terrain:
-$blur = $motion->sample($camera, $renderSeconds, $motionBlurEnabled);
-
-if($blur['active'])
-{
-	$renderer->begin();
-}
-
-$mapRenderer->render($camera, $milliseconds);
-
-if($blur['active'])
-{
-	$renderer->compose($blur['sigma'], $blur['x'], $blur['y']);
-}
-
-// Actors and screen-space UI drawn here remain sharp.
-$spriteRenderer->render($sprites, $camera, $milliseconds);
-~~~
-
-The renderer uses one RGBA8 capture texture and a directional Gaussian pass with edge clamping.
-Inactive frames add no framebuffer or draw work. `begin()` retains the current framebuffer, so the
-pass nests around `BackdropTwistRenderer` and inside `WaterRenderer`: water capture, motion capture,
-backdrop capture and composition, motion composition, actor sprites, then water composition. This
-keeps map foregrounds blurred, actors and the HUD sharp, and underwater refraction in front of both.
-
-Call `reset()` after teleports and scene changes. Call both `reset()` and the renderer's `restore()`
-after WebGL recovery; call `close()` before closing the device. The live demo exposes the effect as
-**Settings → Motion blur** and publishes the current sample in `canvas.dataset.motionBlur`. A world
-may set `sane.motionBlur` to false, and scripted boots on the legacy demo page may pass
-`motionBlur: false` to `bootEngine()`, when deterministic frame observation or a low-cost graphics
-fixture matters; the browser-facing default remains enabled.
+[Draw and animate sprites](rendering.md#draw-and-animate-sprites): Sprite sheets, transforms, crops, anchors, animation clocks, and atlas ownership.
 
 ### Sprite outlines
 
-Sprites have a black outline by default. The shader expands the silhouette by one world pixel along each of the sprite's local axes, following its rotation. Scaling the artwork keeps that thickness at one world pixel; camera zoom scales it on screen. Transparent gaps get the same outline, and samples stay inside the current animation frame or crop.
-
-~~~php
-$sprite->outline = false; // Disable the outline for this sprite.
-$sprite->outline = true;  // Restore the default.
-~~~
-
-Each member of a `SpriteGroup` has its own flag. The renderer first draws every member's artwork, then draws their enabled outlines at a shared, farther depth. This produces one composite entity silhouette: a member's outline cannot cross or hide sibling artwork. Separate entities retain ordinary painter ordering. Artwork and outline instances still share one draw and atlas. The original artwork keeps its anchor and dimensions, so body and block collision bounds stay the same. RGB tint leaves the outline black. Source alpha, tint alpha, and sprite opacity control its fade; colored and partially transparent artwork retains its original appearance.
-
-The default follows moving-boxes-2's actor policy. Vehicles, monitors, moving platforms, switches, springs, projectiles, effects, and particles are outlined. Regions and terrain-like structures opt out: ordinary blocks and breakable blocks, buoyant block platforms, bridge segments, and repeated rope strips remain unoutlined. The engine's offscreen water, motion-blur, and backdrop targets include depth buffers so composite silhouettes survive postprocessing captures.
-
-`BreakableBlocks::create()` disables outlines on its sprite, and the resulting shards inherit that setting. `ParticleBurst::grid()` copies the source flag for other effects. Disable it before splitting an image when pieces should meet without black seams.
+[Control sprite outlines](rendering.md#control-sprite-outlines): Outline thickness, composite silhouettes, alpha, and per-sprite control.
 
 ### Multiple sprites on one entity
 
-Keep a `Sprite` component for the usual single-image entity. Attach a `SpriteGroup` when an entity needs several independently positioned or animated images. The registry still keeps one component per concrete class.
+[Draw several sprites on one entity](rendering.md#draw-several-sprites-on-one-entity): Sprite groups, painter order, shared atlases, and group-aware outlines.
 
-~~~php
-use Phonics\Render\{Sprite, SpriteGroup};
+### Backdrop displacement
 
-$player = $engine->entities->create(new Sprite(7, 80, 448));
-$assembly = $engine->entities->create(new SpriteGroup(
-    new Sprite(1, 320, 448),
-    new Sprite(5, 320, 400)
-));
+[Distort the background around the player](rendering.md#distort-the-background-around-the-player): Localized map distortion, nested captures, and resource restoration.
 
-$group = $engine->entities->get($assembly, SpriteGroup::class);
-$group->sprites[1]->rotation = .2;
-$sprites->renderEntities($engine->entities, $camera, $engine->time * 1000);
-~~~
+### Camera motion blur
 
-Group positions are world coordinates. Each member has its own transform, crop, and animation clock. `renderEntities()` collects both component types in entity creation order, drawing a primary `Sprite` before its group members if an entity has both. Pass `entityIds: [$assembly, $player]` to choose painter order. `SpriteGroup::collectGroups()` preserves entity boundaries for composite rendering; `collect()` still returns the flat list for custom sorting or the existing `render()` API, where each supplied sprite is treated as a separate outline group. Every selected sprite must use the renderer's atlas. `SpriteRenderer::$instances` counts logical sprites rather than the internal ink instances.
+[Blur the background during camera movement](rendering.md#blur-the-background-during-camera-movement): Camera sampling, directional blur, pass order, and reset/restore behavior.
 
-## Breakable blocks and particles
+### Rendering
 
-`BreakableBlocks` adds a stationary rectangular collider to the same `Terrain` used by the player. It uses the sprite's crop, anchor, rotation, and scale at creation. Collision includes transparent pixels inside that rectangle. Blocks stop walking and support standing, like solid wall tiles. Bind `impact()` to the platformer to break them on rolling contact.
-
-~~~php
-use Phonics\Effects\ParticleSystem;
-use SanePhonics\Gameplay\BreakableBlocks;
-use SanePhonics\Physics\Body;
-use Phonics\Physics\Hit;
-use SanePhonics\Physics\Platformer;
-use Phonics\Render\Sprite;
-
-$blocks = new BreakableBlocks($engine->entities, $terrain, $map);
-$image = new Sprite(1, 320, 448, 0, 1);
-$image->scaleX = $image->scaleY = 3;
-$block = $blocks->create($image, columns: 4, rows: 3);
-
-$movement = new Platformer(
-    $terrain,
-    onImpact: fn(Body $body, Hit $hit): bool =>
-        $blocks->impact($body, $hit, $engine->time * 1000)
-);
-
-// Use this controller in your movement system, then update debris.
-$engine->systems->add('particles', [new ParticleSystem, 'update'], after: ['movement']);
-
-// In the render callback, after drawing the map:
-$sprites->renderEntities($engine->entities, $camera, $engine->time * 1000);
-
-// In scene cleanup, before closing the terrain owner:
-$blocks->close();
-~~~
-
-`create()` returns an entity with `Sprite` and `BreakableBlock` components. `collisionLayer: 0` makes it solid on every plane; supply a positive plane to restrict it. Keep the manager alive and close it when the scene ends. Blocks stay at their initial collision pose; editing a sprite later does not make a moving platform.
-
-`impact()` checks `Body::$rolling` and the contacted shape. Walking leaves the block solid; rolling removes it before collision response, preserving speed and the remaining movement in that step. Each new sweep finds the next live obstacle, so a fast roll can break a chain of blocks and still stop at an ordinary wall. Blocks on inactive collision planes or behind a wall stay intact. Sensor probes and standing on a block do not trigger breaking. Call `shatter($block, $milliseconds)` directly for other damage or scripted triggers.
-
-`shatter()` freezes the current animation frame, removes the collider and primary sprite, and attaches `SpriteGroup` and `ParticleBurst` to the **same entity ID**. It returns `true` once, then `false` for repeated calls. The new group contains exactly `columns * rows` pieces. Uneven image dimensions distribute integer pixels without overlap or gaps. Grid dimensions must be positive and no greater than the cropped source dimensions. Invalid grids, crops, or motion settings throw before changing an intact block.
-
-Pieces inherit flips, rotation, scale, tint, opacity, and the outline flag, then move outward under gravity, spin, and fade. Breakable blocks disable outlines on both their intact sprite and shards. They share the original atlas and one instanced sprite batch. No fragment textures or per-piece entities are allocated. `shatter()` accepts named `speed`, `lift`, `gravity`, and `lifetime` settings, in pixels and seconds. Defaults are 240 px/s outward speed, 240 px/s upward lift, 900 px/s² gravity, and a 1.2-second lifetime. Debris is nonsolid.
-
-`ParticleSystem::update()` queues destruction of expired particle entities; the scheduler flushes that queue after its systems finish. Call `Registry::flush()` yourself when driving the system directly. It destroys the whole particle entity, including any other components. Removing an intact `BreakableBlock` or destroying its entity releases the collider. `BreakableBlocks::close()` destroys its remaining blocks and debris while leaving unrelated terrain alone.
-
-For an effect independent of breakable terrain, create `ParticleBurst::grid($sprite, $map, $columns, $rows, $milliseconds)` and attach both the returned burst and `$burst->sprites` to a disposable entity. Alternatively, call `$burst->step($dt)` yourself and use `finished()` to manage its lifetime. This lets a persistent actor own a group without letting `ParticleSystem` retire that actor.
-
-Terrain also exposes `addShape($points, $oneWay, $collisionLayer): int`, `hasShape($handle): bool`, and `removeShape($handle): bool` for other removable obstacles. Handles are never reused. `Hit::$shape` identifies the removable shape, or is `null` for permanent geometry. Removal updates spatial indexes, polygon occupancy, and shared-edge cancellation immediately. Change geometry between physics steps or in the platformer's `onImpact(Body, Hit)` callback. The callback runs after the earliest body cast and before collision response; only actually removing the contacted shape allows passage, regardless of the return value. Casts and adhesion raycasts remain read-only. Fast movement cannot skip an intact block, and removing a support releases a resting player on the next step.
-
-## Entities and systems
-
-Registry stores PHP objects as components, indexes classes/interfaces/ancestors, and assigns monotonically increasing entity IDs. Replacing a component updates its indexes. Queries return snapshots.
-
-~~~php
-use Phonics\Ecs\Query;
-$players = $engine->entities->query(Query::all(
-	Body::class
-	, Query::not(Frozen::class)
-));
-$engine->systems->add('animation',$animate,after: ['movement']);
-$engine->entities->defer(fn($entities) => $entities->destroy($entity));
-~~~
-
-Query::all, any, and not compose filters. Registry::on subscribes to added/removed components. Scheduler rejects missing dependencies and cycles, then flushes deferred changes after the systems finish. ObjectSpawner maps Tiled object classes to factories returning components.
-
-The registry evaluates boolean queries with indexed set operations and caches composed-query snapshots until a structural change. Shared ancestor memberships use counts, and query caches have fixed entry and ID budgets. The API and snapshot ordering are preserved. See the framework's [ECS benchmarks](../../../docs/ecs-performance.md) for native PHP and browser measurements and reproduction commands.
-
-## Movement and raycasts
-
-`Platformer` is this package's PHP movement implementation. Units are pixels and seconds; the default simulation rate is 60 Hz.
-
-- Acceleration, braking, friction, slope gravity, rolling, variable jump height, jump buffering, and coyote time.
-- Surface-tangent ground speed and outward-normal jumps. Sensors follow slopes, walls, ceilings, and loops while momentum remains sufficient.
-- Jump somersault state and compact collision height persist through the full arc, then clear on landing. Plain ledge falls remain standing and do not count as attacks.
-- Ground and rail departures share MB2-style air steering: 1,080 px/s² acceleration below the running-speed limit, jump-only apex drag, and halved upward velocity on Jump release. Ordinary air steering retains the takeoff look direction.
-- Crouching and tap-charged spindashes, runner drop dashes, reversible glide with wall catching, climbing, ledge-top transitions and jumping, and horizontally steerable flight with a locked airborne look direction and finite lift budget.
-- Solid polygons, tile collision shapes, one-way platforms, and down+jump drop-through.
-- Per-body collision planes and directional Tiled layer switches for open loops, including reversed crown gates and rolling-only gates.
-
-Terrain::castBody casts the center against segments expanded by the oriented body. The earliest time of impact limits the move; remaining motion slides along the surface. It covers the whole displacement, including tiny obstacles between point sensors. Short Terrain::raycast calls handle foot adhesion, head clearance when standing, and wall contact while climbing.
-
-Terrain is spatially indexed and matching internal tile edges cancel. The platform systems handle rider carrying and platform pushes; arbitrary body-to-body collision and recovery from spawning inside solid terrain are not implemented. Place bodies in empty space. Sweeps resolve at most six contacts and discard unresolved motion in tight corners.
-
-Select **Loop-de-loop** and hold Right to run the loop, then Left to return through it. [`examples/assets/loop.tmj`](../examples/assets/loop.tmj) splits an 8×8 circular tileset into a shared crown/floor and two selectable lower halves. `layer-switch` objects outside the entrances select the far wall. A `back=true` gate at the crown changes halves so the character can descend and exit. The rule follows ground speed around the surface, including the ceiling.
-
-`Body::$collisionLayer` defaults to 1. `TerrainCompiler::build` (the framework's `MapTerrain::compile` with
-Sane's grinding, skip and object hooks) reads the integer `collisionLayer` property, or names such as `Collision 0`, `Collision 1`, and `Collision 2`. Zero is common terrain, always included. Set `collision=false` on decorative layers that reuse collision tiles. Rendering remains independent of collision selection. `Terrain::add($points, $oneWay, $collisionLayer)` supports the same planes for geometry created in PHP; `raycast(..., collisionLayer: $body->collisionLayer)` selects the plane for custom probes, and `castBody` reads it from the body.
-
-Gate crossings are swept over the full displacement and processed before later terrain impacts. After each switch, the remaining movement is recast against the destination. Blocked switches retry while overlapping; neither thin gates nor newly solid obstacles are skipped at high speed. The [layout and authoring guide](loops.md) includes the reference map analysis, a diagram, and all switch properties.
-
-## Gravity switches and springs
-
-Each `Body` has a cardinal gravity unit vector in `gravityX` and `gravityY`; gravity magnitude remains in `gravity`. `setGravityDirection()` rejects zero and diagonal vectors. Ground acceleration, air steering, terminal speed, jump release, flight, glide, drop-through, support loss, and landing all project through the active gravity and logical-right tangent axes. Existing down-gravity behavior keeps the same tuning.
-
-Landing compares the terrain contact normal with the active gravity vector. A ceiling whose normal points down therefore becomes ground when gravity points up, and either wall becomes ground for horizontal gravity. `Terrain::castBody()` still resolves the whole displacement, so a fast body cannot tunnel through a ceiling before regrounding.
-
-An airborne body moving against gravity at 180 px/s or faster can also acquire an angled upper surface. This mirrors moving-boxes-2's separate sloped upper-collision path: the impact projects velocity onto the terrain tangent, then ordinary adhesion follows the wall-to-ceiling curve while momentum remains sufficient. A flat ceiling remains a head bump. The tests rotate the same spring, wall, quarter curve, and ceiling through all four gravity vectors and both curve directions.
-
-Place `gravity-switch.tj` or `spring.tj` and edit the corresponding nested settings.
-Legacy point objects with class `GravitySwitch` or `Spring` remain supported. Object rotation defines the contact edge: zero faces up, 90 faces right, 180 faces down, and 270 faces left. Both accept `length`, `collisionLayer`, and `spriteGid`. A gravity switch accepts `gravity=down|right|up|left`, or explicit `gravityX` and `gravityY`; a spring accepts positive `power` in pixels per second.
-
-~~~php
-$features = new GravityFeatures($entities, $terrain, $map);
-$systems->add('gravity-features', [$features, 'update'], after: ['movement']);
-
-$features->activate($switchObjectId, $body);
-$features->launch($springObjectId, $body);
-$state = $features->snapshot();
-~~~
-
-Both features are ECS components with atlas-backed sprites and stable Tiled object IDs. Their directed one-way collision edges preserve authored wall and ceiling normals. Springs launch along that normal, clear ground speed, and leave `jumping=false`, matching a forced airborne bounce rather than a player jump. `GravityFeatures::close()` removes every owned entity and collision edge.
-
-Choose **Gravity switches & springs** in either menu. The wide chamber gives the player room to land and explore before reaching each deliberately spaced pressure plate. The four plates cover floor, right-wall, ceiling, and left-wall gravity, while a spring faces inward from each surface. [`examples/assets/gravity.tmj`](../examples/assets/gravity.tmj) is the complete authoring example.
-
-Choose **Curved ceiling springs** for the focused regression course. It starts on a spring and needs no input: four stations launch the player beside a wall, carry the player around a quarter curve, then change gravity for the flight to the next station. The cycle covers down, left, up, and right gravity before returning to its starting spring. **Shift+R** restarts the sequence. [`examples/assets/ceiling-curves.tmj`](../examples/assets/ceiling-curves.tmj) keeps each smooth collision path as a solid Tiled polyline; [`examples/assets/ceiling-curves.png`](../examples/assets/ceiling-curves.png) renders the matching guide rails.
-
-## Rendering
-
-MapRenderer uploads 32×32 tile-ID planes into GL_TEXTURE_2D_ARRAY. Unsigned RGBA8 texels store dense atlas IDs and flip bits. GLSL fetches IDs and atlas rectangles; PHP does not submit one draw per tile.
-
-Orthogonal chunks/layers use glDrawArraysInstanced with per-instance placement, parallax, opacity, and tint. IDs upload initially and after edits. Isometric rendering merges diagonals across chunk boundaries in painter order, using additional draws to preserve overlapping tall tiles. Sprite batches are instanced. MapRenderer::stats reports draws, instances, and uploads.
-
-Atlas images and metadata must fit GPU texture limits; capacity errors are explicit. Sampling is nearest-neighbor. Close resources explicitly. Atlas paging, lighting, audio abstractions, and editor integration are not included.
-
-Apache-2.0. Runtime licenses and notices ship with its preview archive. No code or artwork from the reference games is copied into this project.
+[Renderer behavior and limits](rendering.md#renderer-behavior-and-limits): Tile uploads, instanced drawing, isometric ordering, statistics, and renderer limits.

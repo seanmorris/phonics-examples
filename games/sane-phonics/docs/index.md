@@ -43,7 +43,7 @@ The project now includes 34 concrete entity presets and templates for rings, sev
 ## What to study
 
 - [Authoring courses in Tiled](authoring.md) covers the project, presets, templates, and nested settings.
-- [Gameplay systems](gameplay.md) explains actors, abilities, combat, and world ownership.
+- [Gameplay guide](gameplay.md) lists controls and directs you to focused references for movement, vehicles, platforms, combat, water, world loading, and rendering.
 - [Loops and collision layers](loops.md) covers high-speed terrain traversal.
 - [Menus and browser controls](menus.md) covers the canvas UI and PHP-info modal.
 - [Startup](startup.md) follows the preloader, intro cards, title, and play transition.
