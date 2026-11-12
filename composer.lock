@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "492332a14757776423c248722474ecee",
+    "content-hash": "2ea9e5281aa6b80e04eb32e411022db2",
     "packages": [
         {
             "name": "seanmorris/phonics",
@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/seanmorris/php-wasm-engine.git",
-                "reference": "60833ca33a43d2f6057288a431b7ddeadd0b37f5"
+                "reference": "0f122933fc6d4c5b0def9b26aca2357f079d9617"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/60833ca33a43d2f6057288a431b7ddeadd0b37f5",
-                "reference": "60833ca33a43d2f6057288a431b7ddeadd0b37f5",
+                "url": "https://api.github.com/repos/seanmorris/php-wasm-engine/zipball/0f122933fc6d4c5b0def9b26aca2357f079d9617",
+                "reference": "0f122933fc6d4c5b0def9b26aca2357f079d9617",
                 "shasum": ""
             },
             "require": {
@@ -78,6 +78,8 @@
                     "php tests/cards-random.php",
                     "php tests/core-phonics.php",
                     "php tests/world-runtime.php",
+                    "php tests/tiled-composition.php",
+                    "php tests/scope-lifecycle.php",
                     "php tests/network.php",
                     "php tests/network-timing.php",
                     "php packages/php-noid/tests/run.php",
@@ -112,7 +114,7 @@
                 "source": "https://github.com/seanmorris/php-wasm-engine/tree/main",
                 "issues": "https://github.com/seanmorris/php-wasm-engine/issues"
             },
-            "time": "2026-11-11T05:36:50+00:00"
+            "time": "2026-11-12T02:35:25+00:00"
         }
     ],
     "packages-dev": [],
