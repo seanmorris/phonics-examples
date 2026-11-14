@@ -3437,7 +3437,6 @@
                 {
                     "id": 1,
                     "name": "Boarding ground",
-                    "class": "",
                     "x": 0,
                     "y": 0,
                     "polygon": [
@@ -3469,7 +3468,8 @@
                             "type": "bool",
                             "value": true
                         }
-                    ]
+                    ],
+                    "class": ""
                 },
                 {
                     "id": 2,

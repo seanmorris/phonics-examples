@@ -4107,7 +4107,7 @@
                             "type": "class",
                             "propertytype": "SanePhonics.TextActor",
                             "value": {
-                                "content": "SPACE / \u24ff TO JUMP",
+                                "content": "SPACE / ⓿ TO JUMP",
                                 "color": "#ffbde7ff",
                                 "scale": 1.25
                             }
