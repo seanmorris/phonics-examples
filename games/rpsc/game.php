@@ -81,7 +81,7 @@ $helpText = [
 	, ['name' => 'Move', 'value' => 'Tap a dotted square']
 	, ['name' => 'Challenge', 'value' => 'Tap a bracketed piece']
 	, ['name' => 'Keyboard', 'value' => 'Arrows, Enter, Escape']
-	, ['name' => 'Menu', 'value' => 'P or Start']
+	, ['name' => 'Menu', 'value' => 'P, Escape or Start']
 ];
 
 $audioItems = static fn(): array => [
@@ -100,7 +100,7 @@ $audioItems = static fn(): array => [
 	]
 ];
 
-$setPage = static function(string $next) use (&$page, &$session, &$start, $menu, $engine, $helpText, $audioItems, $option, $setOption, $show): void {
+$setPage = static function(string $next) use (&$setPage, &$page, &$session, &$start, $menu, $engine, $helpText, $audioItems, $option, $setOption, $show): void {
 	$page = $next;
 	$engine->input->suppressHeldUi();
 
@@ -260,6 +260,10 @@ $engine->setInputHandler(static function(
 		elseif($action === 'menu') $setPage('pause');
 
 		// Keyboard and controller: a cursor walks the board, with the usual delay before a held direction repeats.
+		// Escape is both Back and Pause while no menu is open: it lets go of a held piece, and opens the menu only
+		// when there was nothing to let go of.
+		$released = false;
+
 		foreach(['left' => [-1, 0], 'right' => [1, 0], 'up' => [0, 1], 'down' => [0, -1], 'confirm' => null, 'back' => null, 'pause' => null] as $name => $step)
 		{
 			$down = ($frame['buttons'][$name] ?? 0) >= .5;
@@ -274,8 +278,8 @@ $engine->setInputHandler(static function(
 			if($step !== null) $table->steer(...$step);
 			elseif($name === 'confirm' && $table->cursor >= 0) $press($table->cursor);
 			elseif($name === 'confirm') $table->steer(0, 0);
-			elseif($name === 'back') $table->cancel();
-			elseif($page === 'game') $setPage('pause');
+			elseif($name === 'back') $released = $table->cancel();
+			elseif($page === 'game' && !$released) $setPage('pause');
 		}
 
 		foreach($intents as $intent) $session->command($intent);

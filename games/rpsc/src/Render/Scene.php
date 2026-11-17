@@ -18,8 +18,8 @@ use Rpsc\Ui\Table;
  * Draws the table: the board, the pieces as the table poses them, both sides' rows, the buttons, and the menu.
  *
  * The art is pixel art, so everything is drawn at a whole-number scale: the largest that fits the board and both
- * rows in the frame. Text uses about half that scale, also a whole number. The player's own side is always at the
- * bottom, so Red sees the board turned round.
+ * sides' rows in the frame, stacked on a tall frame or side by side on a wide one. Text uses about half that scale,
+ * also a whole number. The player's own side is always at the bottom, so Red sees the board turned round.
  *
  * Each frame also publishes the regions a pointer or a screen reader can press: one per piece, one per square the
  * selected piece can reach, and one per button.
@@ -29,9 +29,7 @@ final class Scene
 	/** Edge of one board square in art pixels. */
 	public const TILE = 20;
 	/** Narrowest frame, in art pixels, that still holds the board and its border. */
-	public const MIN_WIDTH = 172;
-	/** Shortest frame, in art pixels, that still holds the board and both rows. */
-	public const MIN_HEIGHT = 236;
+	public const MIN_WIDTH = 164;
 
 	private const BACKGROUND = [.066, .074, .094, 1.0];
 	private const WOOD = [.36, .22, .13];
@@ -49,7 +47,7 @@ final class Scene
 	 */
 	public array $regions = [];
 	/**
-	 * @var array<string,mixed> Geometry of the latest render: `scale`, `text`, and the board's `x`, `y`, and `size`.
+	 * @var array<string,mixed> Geometry of the latest render: `mode`, `scale`, `text`, and the board's `x`, `y`, and `size`.
 	 */
 	public array $layout = [];
 	/** Height in frame pixels to keep clear at the top right, where the page sets its mute and fullscreen buttons. */
@@ -129,25 +127,10 @@ final class Scene
 	{
 		$view = $table->view();
 		$human = $view['human'] ?? Board::BLACK;
-		$k = max(1, (int)floor(min($width / self::MIN_WIDTH, $height / self::MIN_HEIGHT)));
-		$t = max(1, intdiv($k, 2));
-		$tile = self::TILE * $k;
-		$size = Board::SIZE * $tile;
-		$border = 2 * $k;
-		$left = intdiv($width - $size, 2);
-		$line = 16 * $t;
-		$gap = 2 * $k;
-		$mini = max(1, intdiv($k, 2));
-		$rowHeight = $line + $gap + self::TILE * $mini;
-		$buttonHeight = max(self::TILE * $mini, $line + 2 * $k);
-		// The opponent's row sits against the board, below the page's own buttons in the corner. The player's side needs
-		// the status line, its row, and the buttons. Whatever height is left over is shared; a frame too short for both
-		// keeps the player's side whole.
-		$above = $this->reserve + $rowHeight + $gap + $border;
-		$under = $border + 3 * $gap + 2 * $line + $buttonHeight + $gap;
-		$spare = $height - $size;
-		$top = $spare >= $above + $under ? $above + intdiv($spare - $above - $under, 2) : max($border, $spare - $under);
-		$this->layout = ['scale' => $k, 'text' => $t, 'x' => $left, 'y' => $top, 'size' => $size, 'flipped' => $human === Board::RED];
+		$fit = $this->fit($width, $height);
+		['scale' => $k, 'text' => $t, 'tile' => $tile, 'size' => $size, 'border' => $border, 'line' => $line, 'gap' => $gap
+			, 'mini' => $mini, 'row' => $rowHeight, 'button' => $buttonHeight, 'x' => $left, 'y' => $top] = $fit;
+		$this->layout = ['mode' => $fit['mode'], 'scale' => $k, 'text' => $t, 'x' => $left, 'y' => $top, 'size' => $size, 'flipped' => $human === Board::RED];
 		$this->regions = [];
 		$camera = new Camera(0, 0, $width, $height);
 		$pulse = .5 + .5 * sin($seconds * 5);
@@ -239,51 +222,68 @@ final class Scene
 			$pieces[] = $this->tile('cursor', $cx, $cy, $k, [1, 1, 1], .75 + .25 * $pulse);
 		}
 
-		// Rows: the opponent above the board, the player below, each with its name, what it has left, and what it lost.
+		// Rows: each side's name, what it has left, its far-rank progress, and what it has lost. The opponent's row is
+		// above the board and the player's below it, or both stand in a column beside the board on a wide frame.
 		$labels = [];
 		$minis = [];
-		$right = $left + $size;
 		$totals = $table->totals();
 		$counts = $totals['counts'] ?? [Board::PIECES, Board::PIECES];
 		$lost = $totals['lost'] ?? [[], []];
 		$filled = $totals['filled'] ?? [0, 0];
 		$other = Board::other($human);
 		$level = ucfirst((string)($view['level'] ?? ''));
-		$status = $rows ? $table->status() : '';
-		$below = $top + $size + $border + $gap;
 		$names = [$human => 'You', $other => $level === '' ? 'Computer' : "Computer: $level"];
+		$status = $rows ? $table->status() : '';
+		$statusColour = $table->banner !== '' || ($view['phase'] ?? '') === 'over' ? self::GOLD : self::CREAM;
+		$wide = $fit['mode'] === 'landscape';
+		$rowLeft = $wide ? $left + $size + $border + 2 * $gap : $left;
+		$rowRight = $wide ? $rowLeft + $fit['column'] : $left + $size;
+		$bottom = $top + $size + $border;
+		// Beside the board a row takes three lines: the name, then the progress and the count, then the lost pieces.
+		$block = $wide ? $rowHeight + $line + $gap : $rowHeight;
+		$placed = $wide
+			? [[$other, max($top - $border, $this->reserve)], [$human, $bottom - $buttonHeight - $gap - $block]]
+			: [[$other, $top - $border - $gap - $rowHeight], [$human, $bottom + 2 * $gap + $line]];
 
-		foreach($rows ? [[$other, $top - $border - $gap - $rowHeight], [$human, $below + $line + $gap]] : [] as [$side, $y])
+		foreach($rows ? $placed : [] as [$side, $y])
 		{
-			$this->label($labels, Board::SIDES[$side], $left, $y, $t, 'left', self::SIDE_TEXT[$side]);
-			$this->label($labels, $names[$side], $left + $this->measure(Board::SIDES[$side] . ' ') * $t, $y, $t, 'left', self::DIM);
-			$this->label($labels, $counts[$side] . ' left', $right, $y, $t, 'right', self::CREAM);
+			$this->label($labels, Board::SIDES[$side], $rowLeft, $y, $t, 'left', self::SIDE_TEXT[$side]);
+			$this->label($labels, $names[$side], $rowLeft + $this->measure(Board::SIDES[$side] . ' ') * $t, $y, $t, 'left', self::DIM);
+			$this->label($labels, $counts[$side] . ' left', $rowRight, $y + ($wide ? $line + $gap : 0), $t, 'right', self::CREAM);
 
-			// Far-rank progress: four crowns, gold for each square held.
-			$crownX = $right - $this->measure($counts[$side] . ' left  ') * $t;
+			// Far-rank progress: four crowns, gold for each square held. A wide frame sets them under the name, with
+			// the count; a tall one sets them beside the count.
+			$crownX = $wide ? $rowLeft + 4 * $t : $rowRight - $this->measure($counts[$side] . ' left  ') * $t - 3 * 9 * $t - 4 * $t;
+			$crownY = $y + ($wide ? $line + $gap : 0) + $line / 2 + $t;
 
-			for($index = Board::GOALS - 1; $index >= 0; $index--)
+			for($index = 0; $index < Board::GOALS; $index++)
 			{
-				$minis[] = $this->tile('crown', $crownX - (Board::GOALS - 1 - $index) * 9 * $t - 4 * $t, $y + $line / 2 + $t, $t, $index < $filled[$side] ? self::GOLD : [.3, .31, .36]);
+				$minis[] = $this->tile('crown', $crownX + $index * 9 * $t, $crownY, $t, $index < $filled[$side] ? self::GOLD : [.3, .31, .36]);
 			}
 
 			// What this side has lost, in the order it lost it: public knowledge, since both players watched each go.
+			$trayY = $y + ($wide ? 2 : 1) * ($line + $gap) + self::TILE * $mini / 2;
+
 			foreach($lost[$side] as $index => $kind)
 			{
 				$name = ($side === Board::BLACK ? 'black-' : 'red-') . strtolower(Board::KINDS[$kind]);
-				$minis[] = $this->tile($name, $left + (self::TILE / 2 + $index * 12) * $mini, $y + $line + $gap + self::TILE * $mini / 2, $mini);
+				$minis[] = $this->tile($name, $rowLeft + (self::TILE / 2 + $index * 12) * $mini, $trayY, $mini);
 			}
 		}
 
-		if($status !== '')
+		if($status !== '' && $wide)
 		{
-			$colour = $table->banner !== '' || ($view['phase'] ?? '') === 'over' ? self::GOLD : self::CREAM;
-			$this->label($labels, $status, $width / 2, $below, $t, 'center', $colour);
-		}
+			$set = $this->label($labels, $status, $rowLeft, 0, $t, 'left', $statusColour, $fit['column']);
+			$middle = ($placed[0][1] + $block + $placed[1][1]) / 2;
 
-		// Buttons sit at the right of the player's lower row, beside the lost pieces.
-		$buttonY = $below + 2 * ($line + $gap);
-		$x = $right;
+			// The wrapped status is centred in the gap between the two rows.
+			foreach($set['count'] > 0 ? array_slice($labels, -$set['count']) : [] as $sprite) $sprite->y += floor($middle - $set['height'] / 2);
+		}
+		elseif($status !== '') $this->label($labels, $status, $left + $size / 2, $bottom + $gap, $t, 'center', $statusColour);
+
+		// Buttons sit at the right of the player's lowest line, beside the lost pieces on a tall frame.
+		$buttonY = $wide ? $bottom - $buttonHeight : $bottom + 3 * $gap + 2 * $line;
+		$x = $rowRight;
 
 		foreach(array_reverse($buttons) as $button)
 		{
@@ -322,6 +322,73 @@ final class Scene
 			$this->menus->render($menu, $width, $height, $seconds);
 			$this->regions = $this->menus->regions;
 		}
+	}
+
+	/**
+	 * Choose the layout and the largest whole-number scale that fit a frame.
+	 *
+	 * A tall frame stacks the opponent's row, the board, and the player's row. A wide frame stands both rows in a
+	 * column to the right of the board, so the board can take the full height. Whichever gives the larger board wins,
+	 * and a tie goes to the stacked layout.
+	 *
+	 * @param int $width Frame width in pixels.
+	 * @param int $height Frame height in pixels.
+	 * @return array<string,int|string|bool> The mode, the art and text scales, every measure derived from them, the
+	 * board's top-left corner, the column width on a wide frame, and whether everything fits.
+	 */
+	public function fit(int $width, int $height): array
+	{
+		$best = null;
+
+		foreach(['portrait', 'landscape'] as $mode)
+		{
+			for($k = max(1, (int)floor($width / self::MIN_WIDTH)); $k >= 1; $k--)
+			{
+				$t = max(1, intdiv($k, 2));
+				$mini = max(1, intdiv($k, 2));
+				$measures = [
+					'mode' => $mode, 'scale' => $k, 'text' => $t, 'tile' => self::TILE * $k, 'size' => Board::SIZE * self::TILE * $k
+					, 'border' => 2 * $k, 'line' => 16 * $t, 'gap' => 2 * $k, 'mini' => $mini
+					, 'row' => 16 * $t + 2 * $k + self::TILE * $mini, 'button' => max(self::TILE * $mini, 16 * $t + 2 * $k)
+				];
+				['size' => $size, 'border' => $border, 'line' => $line, 'gap' => $gap, 'row' => $row, 'button' => $button] = $measures;
+
+				if($mode === 'portrait')
+				{
+					// The opponent's row sits against the board, below the page's own buttons in the corner. The
+					// player's side needs the status line, its row, and the buttons. Spare height is shared, and a
+					// frame too short for both keeps the player's side whole.
+					$above = $this->reserve + $row + $gap + $border;
+					$under = $border + 3 * $gap + 2 * $line + $button + $gap;
+					$spare = $height - $size;
+					$fits = $size + 2 * $border <= $width && $spare >= $above + $under;
+					$measures['x'] = intdiv($width - $size, 2);
+					$measures['y'] = $fits ? $above + intdiv($spare - $above - $under, 2) : max($border, $spare - $under);
+					$measures['column'] = 0;
+				}
+				else
+				{
+					// The column holds the longest row line, or the three placement buttons, whichever is wider.
+					$column = max(176 * $t, 150 * $t + 22 * $k);
+					$total = $size + 2 * $border + 2 * $gap + $column;
+					$fits = $total + 2 * $gap <= $width && $size + 2 * $border <= $height;
+					$measures['x'] = intdiv($width - $total, 2) + $border;
+					$measures['y'] = intdiv($height - $size, 2);
+					$measures['column'] = $column;
+				}
+
+				if(!$fits && $k > 1) continue;
+
+				// When nothing fits even at the smallest scale, the stacked layout is the one that degrades gracefully.
+				$measures['fits'] = $fits;
+
+				if($best === null || ($fits && (!$best['fits'] || $k > $best['scale']))) $best = $measures;
+
+				break;
+			}
+		}
+
+		return $best;
 	}
 
 	/**
@@ -401,26 +468,27 @@ final class Scene
 	}
 
 	/**
-	 * Append one line of text to a batch.
+	 * Append text to a batch.
 	 *
 	 * @param list<Sprite> $batch Text batch to append to.
-	 * @param string $text Line to draw.
+	 * @param string $text Text to draw.
 	 * @param float $x Left, centre, or right edge in frame pixels, by alignment.
-	 * @param float $y Top of the line in frame pixels.
+	 * @param float $y Top of the first line in frame pixels.
 	 * @param float $scale Whole-number text scale.
 	 * @param string $align left, center, or right.
 	 * @param array{float,float,float} $colour Text colour.
-	 * @return void Glyph sprites are appended.
+	 * @param float $wrap Width in frame pixels to wrap at, or INF for a single line.
+	 * @return array{count:int,height:float} How many glyph sprites were appended, and the height they cover.
 	 */
-	private function label(array &$batch, string $text, float $x, float $y, float $scale, string $align, array $colour): void
+	private function label(array &$batch, string $text, float $x, float $y, float $scale, string $align, array $colour, float $wrap = INF): array
 	{
-		$key = json_encode([$text, $scale, $this->font->theme, $colour]);
+		$key = json_encode([$text, $scale, $this->font->theme, $colour, is_finite($wrap) ? $wrap : null]);
 
 		if(!isset($this->cache[$key]))
 		{
 			if(count($this->cache) > 400) $this->cache = [];
 
-			$this->cache[$key] = $this->font->layout($text, $scale, INF, [...$colour, 1.0]);
+			$this->cache[$key] = $this->font->layout($text, $scale, $wrap, [...$colour, 1.0]);
 		}
 
 		if($align === 'right') $x -= $this->cache[$key]['width'];
@@ -433,6 +501,8 @@ final class Scene
 			$sprite->y += floor($y);
 			$batch[] = $sprite;
 		}
+
+		return ['count' => count($this->cache[$key]['sprites']), 'height' => (float)$this->cache[$key]['height']];
 	}
 
 	/**
