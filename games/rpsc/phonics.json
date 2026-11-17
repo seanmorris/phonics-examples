@@ -1,0 +1,113 @@
+{
+  "name": "@seanmorris/rpsc",
+  "php": {
+    "files": [
+      "application.php",
+      "autoload.php",
+      "game.php",
+      "src/Board.php",
+      "src/Bot.php",
+      "src/Game.php",
+      "src/Random.php",
+      "src/Render/Scene.php",
+      "src/Session.php",
+      "src/Ui/Table.php"
+    ],
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "autoload": {
+      "Rpsc\\": "src/"
+    }
+  },
+  "exports": {
+    "game": {
+      "type": "game",
+      "php": "game.php",
+      "browser": "browser/game.mjs",
+      "modules": []
+    },
+    "rpsc": {
+      "type": "asset",
+      "path": "worlds/rpsc.world"
+    }
+  },
+  "tiled": {
+    "previews": [
+      "assets/pieces.png"
+    ]
+  },
+  "preload": [
+    "assets/crown.wav",
+    "assets/flip.wav",
+    "assets/lose.wav",
+    "assets/move.wav",
+    "assets/pieces.png",
+    "assets/pieces.tsj",
+    "assets/take.wav",
+    "assets/tie.wav",
+    "assets/win.wav",
+    "worlds/rpsc.tmj",
+    "worlds/rpsc.world"
+  ],
+  "application": {
+    "entry": "application.php",
+    "assets": [
+      "LICENSE"
+    ]
+  },
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.1.0",
+    "extensions": [
+      "sdl",
+      "vrzno"
+    ]
+  },
+  "dependencies": {},
+  "browser": {
+    "files": [
+      "browser/game.mjs"
+    ]
+  },
+  "assets": [
+    "assets/crown.wav",
+    "assets/flip.wav",
+    "assets/lose.wav",
+    "assets/move.wav",
+    "assets/pieces.png",
+    "assets/pieces.tsj",
+    "assets/take.wav",
+    "assets/tie.wav",
+    "assets/win.wav",
+    "worlds/rpsc.tmj",
+    "worlds/rpsc.world"
+  ],
+  "integrity": {
+    "LICENSE": "sha256-qVwBov2AZnwP5kVIHQqvazhVcYmsu8rd5fwouAMX3UE=",
+    "application.php": "sha256-9pcQAGQ1cMAEiiOZbQZdgXBOLwmXUMy9T7H5I1rzswk=",
+    "assets/crown.wav": "sha256-M5mXbxwd+GsZK5klV+DV8WR3aCryYe2zWynNBQAVSRI=",
+    "assets/flip.wav": "sha256-nfWiSaiK9lUK6PS9ygkEw4LUku1MbRKtA9Mt3O9Qkmo=",
+    "assets/lose.wav": "sha256-mxQ6M85ixu1MzBmb2/Yv6xtlaLtyB+HOvVDVLlfp7+E=",
+    "assets/move.wav": "sha256-TyozPlSidZBSoOHDDh2Rvt3ScfNz/AcG7SD4deFF7sI=",
+    "assets/pieces.png": "sha256-YbtROA5DbiG3CQCUyzkXGatpcyL6H7hmOzc9sEitmgU=",
+    "assets/pieces.tsj": "sha256-qvLrYapCOua+qmsgydV6AgfgNKigchEapRAhSWCoKwE=",
+    "assets/take.wav": "sha256-xAemwQW1aI+Jnsp/VKoAh4vE8SYwY3dvekRDU5MM2BA=",
+    "assets/tie.wav": "sha256-nkQLi4euxsyBfdrS/6iApylHcCUr0gaKispj+L08YGQ=",
+    "assets/win.wav": "sha256-UPF9/RJmy74ySTrPJnhrbfezZ4yoK/R4DrIU1+VggBU=",
+    "autoload.php": "sha256-qqpny+lV80bXM8g7ppS+paaMd1uMRYawtvfXzv6Zbwg=",
+    "browser/game.mjs": "sha256-oVmKh9xRXtwLAgQucEZL2i7Upm1fUmQK1DFEXe9kjgg=",
+    "game.php": "sha256-NWaLdJR1GBmoKEZK6zzvV5gjS7Oiifq9Hflp6Rmo1j4=",
+    "src/Board.php": "sha256-3R1mBwm4tTqpUQ1Yrq3Lvq3E34qup7ulwpwhlW9aBjI=",
+    "src/Bot.php": "sha256-Ffp6wOwxTaXRsa6KDJJ5OeVLEdDCXOD/hl8kJmbQL5Q=",
+    "src/Game.php": "sha256-nUHOvJ0+gAfrJSPFTHv0tuNpmpELgj7MWrT7thatchQ=",
+    "src/Random.php": "sha256-4cLWtjUfUfuLKRpjmGjTDMhOxB7Nicl9EkxkrHNvzO8=",
+    "src/Render/Scene.php": "sha256-E6FSG8T0CF/CwvU2YgYnKb2Etz6T+qM/ShnDye1JtCk=",
+    "src/Session.php": "sha256-x4zfl+o51rVwcjb2nCqAPiea/i9Kg7Kp+XimTJNIt0o=",
+    "src/Ui/Table.php": "sha256-vycJBZV/BhAmw9nQqJ3Awrw8fhYdzwrJH9HVOefAuaU=",
+    "worlds/rpsc.tmj": "sha256-KuPGeVNi42NuW3Bs4pjfG7V+ln5ligwQRnNFBdsTa6s=",
+    "worlds/rpsc.world": "sha256-PexhAAavC3deRlIaKVe+QSYtWdYQri3yScc3hYc2K7k="
+  }
+}

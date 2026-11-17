@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "slug": "rpsc",
+  "title": "RPSC",
+  "description": "Rock Paper Scissors Checkers: two hidden armies on a checkers board that can only meet edge to edge, against a computer opponent with a memory.",
+  "application": "dist/game.phar",
+  "poster": "poster.png",
+  "canvas": {
+    "width": 720,
+    "height": 960
+  },
+  "aspectRatio": "3/4",
+  "fit": "contain",
+  "documentation": {
+    "chapters": [
+      {
+        "slug": "index",
+        "title": "RPSC",
+        "path": "docs/index.md"
+      }
+    ],
+    "api": {
+      "namespace": "Rpsc",
+      "description": "Board geometry, the rules, the computer opponent, the table's selection and animation, and rendering."
+    },
+    "embed": {
+      "kind": "local"
+    }
+  }
+}

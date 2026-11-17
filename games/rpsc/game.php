@@ -1,0 +1,370 @@
+<?php
+declare(strict_types=1);
+
+use Phonics\Asset\Resource;
+use Phonics\Engine;
+use Phonics\Render\BitmapFont;
+use Phonics\Render\Device;
+use Phonics\Ui\Menu;
+use Phonics\Ui\MenuInput;
+use Rpsc\Board;
+use Rpsc\Bot;
+use Rpsc\Render\Scene;
+use Rpsc\Session;
+use Rpsc\Ui\Table;
+
+$engine = new Engine(new Device(720, 960, 'RPSC'));
+$engine->entities = $phonics->entities;
+$engine->systems = $phonics->systems;
+
+$font = new BitmapFont(
+	$phonics->loader
+	, Resource::framework('resources/font.tsj')
+	, [Resource::framework('resources/buttons.tsj')]
+);
+
+$scene = new Scene($font, $phonics->loader->map(__DIR__ . '/worlds/rpsc.tmj'));
+$menu = new Menu([], 'Rock Paper Scissors Checkers');
+$navigation = new MenuInput;
+$table = new Table;
+
+$option = static fn(string $name): string => (string)(vrzno_env('rpscOptionGet'))($name);
+$setOption = static fn(string $name, string $value): bool => (bool)(vrzno_env('rpscOptionSet'))($name, $value);
+
+// A game left unfinished comes back as Continue; anything else in storage is ignored.
+$session = Session::restore((string)(vrzno_env('rpscLoad'))());
+$page = 'title';
+$uiTime = 0.0;
+$counts = [];
+$held = [];
+$setPage = null;
+
+if($session !== null && $session->game->phase === 'over') $session = null;
+
+$show = static function() use (&$session, $table): void {
+	// Behind the title, the table shows a fresh placement so the board is never empty.
+	$table->show(($session ?? new Session(1))->view());
+};
+
+$start = static function() use (&$session, &$setPage, $option, $table, $show): void {
+	$level = in_array($option('level'), Bot::LEVELS, true) ? $option('level') : 'normal';
+	$seed = (int)(vrzno_env('rpscSeed'))();
+	$side = match($option('side'))
+	{
+		'red' => Board::RED,
+		'random' => $seed % 2,
+		default => Board::BLACK
+	};
+	$session = new Session($seed, $level, $side);
+	$table->cancel();
+	$table->cursor = -1;
+	$table->trail = [];
+	$show();
+	$setPage('game');
+};
+
+$helpText = [
+	['heading' => 'Goal']
+	, 'Take every opposing piece, or fill the four crowned squares on the far row.'
+	, ['heading' => 'The board']
+	, 'Each side plays on the squares of the other side\'s colour. Pieces move diagonally, so the two sides never block or jump each other. They only meet edge to edge.'
+	, ['heading' => 'The pieces']
+	, 'Each side places four rocks, four papers and four scissors face down. You always see your own.'
+	, ['heading' => 'A turn']
+	, 'First you may challenge once. Pick one of your pieces, then an opposing piece beside it. Both are shown: rock beats scissors, scissors beats paper, paper beats rock. The loser leaves the board. A tie removes nothing.'
+	, 'Both pieces are then hidden again, so remember what you saw.'
+	, 'Then move one piece one square diagonally forward. A piece that reaches the far row is crowned, and may also move backward.'
+	, ['heading' => 'Draw']
+	, 'Eighty turns in a row with no piece taken and no uncrowned piece moved end the game in a draw.'
+	, ['heading' => 'Controls']
+	, ['name' => 'Pick up', 'value' => 'Tap or click a piece']
+	, ['name' => 'Move', 'value' => 'Tap a dotted square']
+	, ['name' => 'Challenge', 'value' => 'Tap a bracketed piece']
+	, ['name' => 'Keyboard', 'value' => 'Arrows, Enter, Escape']
+	, ['name' => 'Menu', 'value' => 'P or Start']
+];
+
+$audioItems = static fn(): array => [
+	'effects' => [
+		'label' => 'SFX level'
+		, 'input' => 'number'
+		, 'subType' => 'range'
+		, 'min' => 0
+		, 'max' => 100
+		, 'step' => 5
+		, 'default' => 60
+		, 'valueAlign' => 'right'
+		, 'subtext' => 'Moves, challenges, and results.'
+		, 'get' => static fn(): int => (int)$option('effects')
+		, 'set' => static fn(float $value): bool => $setOption('effects', (string)(int)$value)
+	]
+];
+
+$setPage = static function(string $next) use (&$page, &$session, &$start, $menu, $engine, $helpText, $audioItems, $option, $setOption, $show): void {
+	$page = $next;
+	$engine->input->suppressHeldUi();
+
+	if($next === 'game')
+	{
+		$menu->close();
+
+		return;
+	}
+
+	$levels = ['Easy', 'Normal', 'Hard'];
+	$sides = ['Black', 'Red', 'Random'];
+	$quit = static function() use (&$setPage, $show): void {
+		$show();
+		$setPage('title');
+	};
+
+	if($next === 'title') $items = [
+		'continue' => [
+			'label' => 'Continue'
+			, 'hidden' => static fn(): bool => $session === null || $session->game->phase === 'over'
+			, 'callback' => static function() use (&$setPage): void { $setPage('game'); }
+		]
+		, 'new' => [
+			'label' => 'New game'
+			, 'children' => [
+				'level' => [
+					'label' => 'Opponent'
+					, 'input' => 'select'
+					, 'options' => $levels
+					, 'default' => 'Normal'
+					, 'valueAlign' => 'right'
+					, 'get' => static fn(): string => ucfirst($option('level'))
+					, 'set' => static fn(string $value): bool => $setOption('level', strtolower($value))
+				]
+				, 'side' => [
+					'label' => 'You play'
+					, 'input' => 'select'
+					, 'options' => $sides
+					, 'default' => 'Black'
+					, 'valueAlign' => 'right'
+					, 'subtext' => 'Black moves first.'
+					, 'get' => static fn(): string => ucfirst($option('side'))
+					, 'set' => static fn(string $value): bool => $setOption('side', strtolower($value))
+				]
+				, 'start' => ['label' => 'Start', 'callback' => static function() use (&$start): void { $start(); }]
+			]
+		]
+		, 'help' => ['label' => 'How to play', 'text' => $helpText]
+		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
+		, 'about' => [
+			'label' => 'About'
+			, 'text' => [
+				'Rock Paper Scissors Checkers: a checkers board, two hidden armies, and one question asked edge to edge.'
+				, 'Built with Phonics.'
+				, ['name' => 'Licence', 'value' => 'Apache-2.0']
+			]
+		]
+	];
+	else $items = [
+		'resume' => ['label' => 'Resume', 'callback' => static function() use (&$setPage): void { $setPage('game'); }]
+		, 'help' => ['label' => 'How to play', 'text' => $helpText]
+		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
+		, 'resign' => [
+			'label' => 'Resign'
+			, 'hidden' => static fn(): bool => $session === null || $session->game->phase === 'over'
+			, 'children' => [
+				'confirm' => [
+					'label' => 'Resign this game'
+					, 'callback' => static function() use (&$session, &$setPage): void {
+						$session?->command(['type' => 'resign']);
+						$setPage('game');
+					}
+				]
+			]
+		]
+		, 'title' => ['label' => 'Quit', 'callback' => $quit]
+	];
+
+	$menu->setItems($items);
+	$menu->open();
+};
+
+$show();
+$setPage('title');
+
+/**
+ * Buttons under the board for the current state, left to right.
+ *
+ * @return list<array{id:string,label:string,enabled?:bool}> Shuffle and Ready while placing, Play again after the
+ * game, and Menu always.
+ */
+$buttons = static function() use (&$session, &$page, $table): array {
+	if($page !== 'game' || $session === null) return [];
+
+	$list = [];
+	$phase = $session->game->phase;
+
+	if($phase === 'placement' && !$session->game->placed($session->human))
+	{
+		$list[] = ['id' => 'shuffle', 'label' => 'Shuffle'];
+		$list[] = ['id' => 'ready', 'label' => 'Ready'];
+	}
+	elseif($phase === 'over' && !$table->busy()) $list[] = ['id' => 'again', 'label' => 'Play again'];
+
+	$list[] = ['id' => 'menu', 'label' => 'Menu'];
+
+	return $list;
+};
+
+$engine->setInputHandler(static function(
+	Engine $engine
+	, float $elapsed
+) use (
+	&$session, &$page, &$uiTime, &$setPage, &$start, &$counts, &$held, $menu, $navigation, $scene, $table
+): bool {
+	$elapsed = min(.25, max(0, $elapsed));
+	$uiTime += $elapsed;
+	$action = (string)(vrzno_env('rpscAction'))();
+	$frame = $engine->input->uiFrame($menu->editor !== null, $menu->isOpen);
+
+	if($menu->isOpen)
+	{
+		// The browser's region buttons press rows and a text page's scroll arrows.
+		if($action !== '') $menu->press($action);
+
+		$navigation->update($menu, $frame['buttons'], $elapsed, $frame['events'], $scene->regions);
+		$held = [];
+
+		// Backing out of the pause menu resumes; the title has nowhere to back out to.
+		if(!$menu->isOpen) $setPage($page === 'title' ? 'title' : 'game');
+	}
+	elseif($session !== null)
+	{
+		$intents = [];
+		$press = static function(int $square) use ($table, &$intents): void {
+			if($square < 0) $table->cancel();
+			elseif(($intent = $table->press($square)) !== null) $intents[] = $intent;
+		};
+
+		// A press that reaches the canvas missed every region: it is an empty square, or off the board.
+		foreach($frame['events'] as $event)
+		{
+			if($event['type'] !== 'pointer' || $event['action'] !== 'down' || ($event['button'] ?? 1) !== 1) continue;
+
+			$table->cursor = -1;
+			$press($scene->squareAt((float)$event['x'], (float)$event['y']));
+		}
+
+		if(str_starts_with($action, 'square-'))
+		{
+			$table->cursor = -1;
+			$press((int)substr($action, 7));
+		}
+		elseif($action === 'shuffle' || $action === 'ready') $intents[] = ['type' => $action];
+		elseif($action === 'again') $start();
+		elseif($action === 'menu') $setPage('pause');
+
+		// Keyboard and controller: a cursor walks the board, with the usual delay before a held direction repeats.
+		foreach(['left' => [-1, 0], 'right' => [1, 0], 'up' => [0, 1], 'down' => [0, -1], 'confirm' => null, 'back' => null, 'pause' => null] as $name => $step)
+		{
+			$down = ($frame['buttons'][$name] ?? 0) >= .5;
+			$fire = false;
+
+			if(!$down) unset($held[$name]);
+			elseif(!isset($held[$name])) [$held[$name], $fire] = [.32, true];
+			elseif($step !== null && ($held[$name] -= $elapsed) <= 0) [$held[$name], $fire] = [.11, true];
+
+			if(!$fire) continue;
+
+			if($step !== null) $table->steer(...$step);
+			elseif($name === 'confirm' && $table->cursor >= 0) $press($table->cursor);
+			elseif($name === 'confirm') $table->steer(0, 0);
+			elseif($name === 'back') $table->cancel();
+			elseif($page === 'game') $setPage('pause');
+		}
+
+		foreach($intents as $intent) $session->command($intent);
+	}
+
+	if($session !== null)
+	{
+		// The bot and the table share one clock: the bot waits until the table has shown everything so far.
+		if(!$menu->isOpen) $session->tick($elapsed, $table->busy());
+
+		if($session->consumeDirty())
+		{
+			$table->push($session->drain());
+			$table->show($session->view());
+			(vrzno_env('rpscSave'))($session->game->phase === 'over' ? '' : $session->save());
+		}
+	}
+
+	$table->advance($elapsed);
+
+	foreach($table->cues as $cue) $counts[$cue] = ($counts[$cue] ?? 0) + 1;
+
+	$table->cues = [];
+
+	// The game keeps its own pages and pause; the engine's generic pause panel stays out of the way.
+	return true;
+});
+
+(vrzno_env('sceneReady'))(null);
+
+$published = '';
+
+$engine->start(static function(
+	Engine $engine
+	, float $alpha
+) use (
+	&$session, &$page, &$uiTime, &$counts, &$published, $scene, $font, $menu, $table, $buttons
+): void {
+	[$width, $height, $ratio, $coarse] = json_decode((string)(vrzno_env('rpscViewport'))(), true);
+	$engine->device->resize($width, $height);
+	$engine->device->begin($scene->background());
+	glViewport(0, 0, $width, $height);
+	$font->theme = $engine->input->inputTheme;
+	// The page's mute and fullscreen buttons sit in the top right corner: 30 CSS pixels tall, 44 on touch screens.
+	$scene->reserve = (int)ceil(($coarse ? 52 : 38) * $ratio);
+	$scene->render($table, $menu, $buttons(), $page !== 'title', $width, $height, $uiTime);
+	$view = $table->view();
+	$status = json_encode([
+		'page' => $menu->isOpen ? ($page === 'title' ? 'title' : 'pause') : 'game'
+		, 'phase' => $session === null ? 'none' : $view['phase']
+		, 'turn' => $view['turn']
+		, 'human' => $view['human']
+		, 'level' => $view['level']
+		, 'busy' => $table->busy()
+		, 'status' => $table->status()
+		, 'selected' => $table->selected
+		, 'cursor' => $table->cursor
+		, 'targets' => $table->targets()
+		, 'victims' => $table->victims()
+		, 'counts' => $view['counts']
+		, 'lost' => $view['lost']
+		, 'filled' => $view['filled']
+		, 'winner' => $view['winner']
+		, 'reason' => $view['reason']
+		, 'challenged' => $view['challenged']
+		, 'ply' => $view['ply']
+		// Only what the player may know: opposing kinds are null until they are shown.
+		, 'pieces' => array_map(static fn(array $piece): array => [$piece['square'], $piece['side'], $piece['kind'], $piece['king']], array_values($table->pieces))
+		, 'moves' => $view['moves']
+		, 'challenges' => $view['challenges']
+		, 'saved' => $session !== null
+		, 'sounds' => $counts
+		, 'regions' => $scene->regions
+		, 'layout' => $scene->layout
+		, 'text' => $menu->text === null ? null : ['first' => $menu->text->first, 'last' => $menu->text->last()]
+		, 'inputTheme' => $engine->input->inputTheme
+		, 'width' => $width
+		, 'height' => $height
+	], JSON_THROW_ON_ERROR);
+
+	if($status !== $published)
+	{
+		(vrzno_env('rpscStatus'))($status);
+		$published = $status;
+	}
+}, static function() use ($scene, $menu, $phonics): void {
+	$menu->close();
+	$scene->close();
+	$phonics->close();
+}, static function() use ($scene): void {
+	$scene->restore();
+});

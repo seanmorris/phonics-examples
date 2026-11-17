@@ -162,6 +162,9 @@ final class Session
 		$view['home'] = Board::home($this->human);
 		$view['arrangement'] = $this->game->phase === 'placement' && !$this->game->placed($this->human) ? $this->arrangement : null;
 
+		// The player's twelve are in hand until Ready, and they count.
+		if($view['arrangement'] !== null) $view['counts'][$this->human] = Board::PIECES;
+
 		return $view;
 	}
 

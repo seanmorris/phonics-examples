@@ -1,0 +1,9 @@
+{
+  "type": "world",
+  "onlyShowAdjacentMaps": false,
+  "maps": [{"fileName": "rpsc.tmj", "x": 0, "y": 0, "width": 160, "height": 160}],
+  "properties": [
+    {"name": "phonics.import.rpsc", "type": "string", "value": "../phonics.json"},
+    {"name": "phonics.start", "type": "string", "value": "rpsc.tmj"}
+  ]
+}

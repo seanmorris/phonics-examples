@@ -1,0 +1,19 @@
+{
+  "type": "map",
+  "version": "1.10",
+  "tiledversion": "1.12.2",
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "infinite": false,
+  "width": 8,
+  "height": 8,
+  "tilewidth": 20,
+  "tileheight": 20,
+  "layers": [],
+  "tilesets": [
+    {
+      "firstgid": 1,
+      "source": "../assets/pieces.tsj"
+    }
+  ]
+}

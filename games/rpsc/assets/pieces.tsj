@@ -1,0 +1,19 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "name": "RPSC pieces",
+  "tilewidth": 20,
+  "tileheight": 20,
+  "tilecount": 16,
+  "columns": 8,
+  "image": "pieces.png",
+  "imagewidth": 160,
+  "imageheight": 40,
+  "properties": [
+    {
+      "name": "rpsc.tiles",
+      "type": "string",
+      "value": "square-red,square-black,black-back,black-rock,black-paper,black-scissors,red-back,red-rock,red-paper,red-scissors,king,ring,dot,reticle,cursor,crown"
+    }
+  ]
+}

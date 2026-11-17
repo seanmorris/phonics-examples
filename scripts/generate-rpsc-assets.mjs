@@ -1,0 +1,406 @@
+#!/usr/bin/env node
+// Draws RPSC's pixel art and synthesises its sounds. The art is the two board squares, both sides' checkers face
+// down and showing each kind, the king's gold rim, and the white marks the renderer tints for selection, targets and
+// the keyboard cursor. Everything is computed, so the output is deterministic and `--check` can verify the committed
+// files; `--preview DIR` also writes an enlarged sheet and a sample board for looking at.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {PNG} from 'pngjs';
+
+const root = new URL('../games/rpsc/', import.meta.url);
+const check = process.argv.includes('--check');
+const previewAt = process.argv.indexOf('--preview');
+const previewDirectory = previewAt < 0 ? null : process.argv[previewAt + 1];
+
+/** Edge of one board square, and of every tile on the sheet. */
+const TILE = 20;
+const COLUMNS = 8;
+/** Tile order on the sheet. The renderer reads these names from the tileset, so the order can change freely. */
+const TILES = [
+	'square-red', 'square-black'
+	, 'black-back', 'black-rock', 'black-paper', 'black-scissors'
+	, 'red-back', 'red-rock', 'red-paper', 'red-scissors'
+	, 'king', 'ring', 'dot', 'reticle', 'cursor', 'crown'
+];
+
+const hex = value => [1, 3, 5].map(at => parseInt(value.slice(at, at + 2), 16));
+const mix = (from, to, amount) => from.map((channel, index) => Math.round(channel + (to[index] - channel) * amount));
+
+const SIDES = {
+	black: {
+		outline: hex('#0b0b0f'), light: hex('#62627a'), dark: hex('#2f2f3b'), groove: hex('#141419')
+		, face: hex('#2a2a35'), boss: hex('#4a4a5c')
+	}
+	, red: {
+		outline: hex('#35080b'), light: hex('#f58a6c'), dark: hex('#a82426'), groove: hex('#6e1216')
+		, face: hex('#c8302e'), boss: hex('#ee6a54')
+	}
+};
+const EMBLEM = hex('#f6ecd2');
+const EMBLEM_SHADE = hex('#c9b388');
+const GOLD = [hex('#ffe08a'), hex('#d9a12f'), hex('#8a5a12')];
+
+/** Emblems, eleven pixels square: `#` is the light tone and `+` the shaded one. */
+const EMBLEMS = {
+	rock: [
+		'...#####...'
+		, '..#######..'
+		, '.####+####.'
+		, '.###++####.'
+		, '####+######'
+		, '###++###+##'
+		, '##++####++#'
+		, '#+++++##+++'
+		, '.+++++++++.'
+		, '..+++++++..'
+		, '...........'
+	]
+	, paper: [
+		'.#######...'
+		, '.#######+..'
+		, '.#######++.'
+		, '.#########.'
+		, '.#++++++##.'
+		, '.#########.'
+		, '.#++++++##.'
+		, '.#########.'
+		, '.#++++####.'
+		, '.#########.'
+		, '.#########.'
+	]
+	, scissors: [
+		'#.........#'
+		, '##.......##'
+		, '.##.....##.'
+		, '..##...##..'
+		, '...##.##...'
+		, '....###....'
+		, '...##+##...'
+		, '.+++...+++.'
+		, '+..+...+..+'
+		, '+..+...+..+'
+		, '.++.....++.'
+	]
+};
+
+class Sheet
+{
+	constructor(width, height)
+	{
+		this.width = width;
+		this.height = height;
+		this.data = new Uint8Array(width * height * 4);
+	}
+
+	get(x, y)
+	{
+		const at = (y * this.width + x) * 4;
+
+		return [this.data[at], this.data[at + 1], this.data[at + 2], this.data[at + 3]];
+	}
+
+	put(x, y, rgb, alpha = 255)
+	{
+		if(x < 0 || y < 0 || x >= this.width || y >= this.height) return;
+
+		const at = (y * this.width + x) * 4;
+		this.data.set([rgb[0], rgb[1], rgb[2], alpha], at);
+	}
+
+	/** Copy another sheet over this one, enlarged by whole pixels, skipping transparent pixels. */
+	blit(source, dx, dy, scale = 1, region = [0, 0, source.width, source.height], tint = null)
+	{
+		const [sx, sy, sw, sh] = region;
+
+		for(let y = 0; y < sh; y++) for(let x = 0; x < sw; x++)
+		{
+			const pixel = source.get(sx + x, sy + y);
+
+			if(pixel[3] < 128) continue;
+
+			const rgb = tint ? tint.map((channel, index) => Math.round(channel * pixel[index] / 255)) : pixel;
+
+			for(let oy = 0; oy < scale; oy++) for(let ox = 0; ox < scale; ox++) this.put(dx + x * scale + ox, dy + y * scale + oy, rgb);
+		}
+	}
+
+	png()
+	{
+		const image = new PNG({width: this.width, height: this.height});
+		image.data = Buffer.from(this.data);
+
+		return PNG.sync.write(image, {deflateLevel: 9});
+	}
+}
+
+/** A repeatable value from 0 to 1 for a pixel, so textures never depend on a random source. */
+const noise = (x, y, salt) => {
+	let value = (x * 374761393 + y * 668265263 + salt * 2147483647) | 0;
+	value = Math.imul(value ^ (value >>> 13), 1274126177);
+
+	return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
+};
+
+/** Distance of a pixel's centre from the centre of its tile. */
+const reach = (x, y) => Math.hypot(x - (TILE - 1) / 2, y - (TILE - 1) / 2);
+
+function square(colour, salt)
+{
+	const tile = new Sheet(TILE, TILE);
+
+	for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++)
+	{
+		// Long, faint streaks along the rank read as a painted wooden board without fighting the pieces for attention.
+		const grain = noise(x >> 2, y, salt) * .6 + noise(x, y, salt + 1) * .4;
+		const edge = x === 0 || y === 0 ? -.10 : (x === TILE - 1 || y === TILE - 1 ? .05 : 0);
+		const shade = (grain - .5) * .12 + edge;
+
+		tile.put(x, y, shade < 0 ? mix(colour, [0, 0, 0], -shade) : mix(colour, [255, 255, 255], shade));
+	}
+
+	return tile;
+}
+
+/** One checker seen from above: a ridged rim lit from the top left, a groove, and a flat face for the emblem. */
+function checker(side, emblem)
+{
+	const tile = new Sheet(TILE, TILE);
+	const tones = SIDES[side];
+
+	for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++)
+	{
+		const distance = reach(x, y);
+
+		if(distance > 9.3) continue;
+
+		const angle = Math.atan2(y - (TILE - 1) / 2, x - (TILE - 1) / 2);
+		// Light falls from the top left: 1 on the lit edge, 0 on the far one.
+		const lit = (1 - Math.cos(angle + Math.PI * .75)) / 2;
+
+		if(distance > 8.4) tile.put(x, y, tones.outline);
+		else if(distance > 6.5)
+		{
+			const ridge = Math.floor((angle + Math.PI) / (2 * Math.PI) * 28) % 2;
+
+			tile.put(x, y, mix(tones.dark, tones.light, Math.max(0, Math.min(1, lit * .9 + (ridge ? .12 : -.08)))));
+		}
+		else if(distance > 5.7) tile.put(x, y, tones.groove);
+		else tile.put(x, y, mix(tones.face, tones.boss, lit * .25));
+	}
+
+	if(emblem)
+	{
+		const rows = EMBLEMS[emblem];
+		const left = (TILE - rows[0].length) / 2 | 0;
+		const top = (TILE - rows.length) / 2 | 0;
+
+		rows.forEach((row, y) => [...row].forEach((mark, x) => {
+			if(mark === '#') tile.put(left + x + 1, top + y, EMBLEM);
+			else if(mark === '+') tile.put(left + x + 1, top + y, EMBLEM_SHADE);
+		}));
+	}
+	else
+	{
+		// Face down: a plain boss ring, the same on every piece.
+		for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++)
+		{
+			const distance = reach(x, y);
+
+			if(distance > 2.2 && distance <= 3.6) tile.put(x, y, tones.boss);
+			else if(distance <= 1.2) tile.put(x, y, tones.groove);
+		}
+	}
+
+	return tile;
+}
+
+/** The king's rim: the checker's ridged band redrawn in gold, laid over any checker. */
+function king()
+{
+	const tile = new Sheet(TILE, TILE);
+
+	for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++)
+	{
+		const distance = reach(x, y);
+
+		if(distance <= 6.5 || distance > 8.4) continue;
+
+		const angle = Math.atan2(y - (TILE - 1) / 2, x - (TILE - 1) / 2);
+		const lit = (1 - Math.cos(angle + Math.PI * .75)) / 2;
+		const ridge = Math.floor((angle + Math.PI) / (2 * Math.PI) * 28) % 2;
+		const tone = lit * .8 + (ridge ? .2 : 0);
+
+		tile.put(x, y, tone > .62 ? GOLD[0] : (tone > .3 ? GOLD[1] : GOLD[2]));
+	}
+
+	return tile;
+}
+
+/** A white mark the renderer tints: `test` says which pixels belong to it. */
+function mark(test)
+{
+	const tile = new Sheet(TILE, TILE);
+
+	for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++) if(test(x, y)) tile.put(x, y, [255, 255, 255]);
+
+	return tile;
+}
+
+const corner = (x, y, inset, arm) => {
+	const near = value => value < TILE / 2 ? value - inset : TILE - 1 - inset - value;
+	const [dx, dy] = [near(x), near(y)];
+
+	return (dx === 0 && dy >= 0 && dy < arm) || (dy === 0 && dx >= 0 && dx < arm);
+};
+
+const CROWN = ['#..#..#', '#.###.#', '#######', '#######', '.#####.'];
+
+const tiles = {
+	'square-red': square(hex('#9f2c2a'), 3)
+	, 'square-black': square(hex('#1c1a22'), 7)
+	, king: king()
+	// Selection: a ring just outside the checker's own outline.
+	, ring: mark((x, y) => reach(x, y) > 9.3 && reach(x, y) <= 10.4)
+	// A square this piece may step to.
+	, dot: mark((x, y) => reach(x, y) <= 2.7)
+	// An opposing piece this one may challenge: brackets on the corners of its square.
+	, reticle: mark((x, y) => corner(x, y, 0, 5) || corner(x, y, 1, 4))
+	// The keyboard and controller cursor: the square's outline.
+	, cursor: mark((x, y) => x === 0 || y === 0 || x === TILE - 1 || y === TILE - 1)
+	// The far-rank squares a side has to fill.
+	, crown: mark((x, y) => CROWN[y - 8]?.[x - 6] === '#')
+};
+
+for(const side of Object.keys(SIDES))
+{
+	tiles[`${side}-back`] = checker(side, null);
+
+	for(const emblem of Object.keys(EMBLEMS)) tiles[`${side}-${emblem}`] = checker(side, emblem);
+}
+
+const sheet = new Sheet(COLUMNS * TILE, Math.ceil(TILES.length / COLUMNS) * TILE);
+
+TILES.forEach((name, index) => sheet.blit(tiles[name], index % COLUMNS * TILE, Math.floor(index / COLUMNS) * TILE));
+
+const generated = new Map;
+generated.set('assets/pieces.png', sheet.png());
+generated.set('assets/pieces.tsj', Buffer.from(JSON.stringify({
+	type: 'tileset'
+	, version: '1.10'
+	, name: 'RPSC pieces'
+	, tilewidth: TILE
+	, tileheight: TILE
+	, tilecount: TILES.length
+	, columns: COLUMNS
+	, image: 'pieces.png'
+	, imagewidth: sheet.width
+	, imageheight: sheet.height
+	// The renderer finds each tile by name, so adding or reordering tiles never needs a matching edit in PHP.
+	, properties: [{name: 'rpsc.tiles', type: 'string', value: TILES.join(',')}]
+}, null, 2) + '\n'));
+
+/** Deterministic 16-bit mono PCM at 22050 Hz from a sample function of seconds. */
+function wav(seconds, sample)
+{
+	const rate = 22050, count = Math.round(seconds * rate);
+	const buffer = Buffer.alloc(44 + count * 2);
+	buffer.write('RIFF', 0);
+	buffer.writeUInt32LE(36 + count * 2, 4);
+	buffer.write('WAVE', 8);
+	buffer.write('fmt ', 12);
+	buffer.writeUInt32LE(16, 16);
+	buffer.writeUInt16LE(1, 20);
+	buffer.writeUInt16LE(1, 22);
+	buffer.writeUInt32LE(rate, 24);
+	buffer.writeUInt32LE(rate * 2, 28);
+	buffer.writeUInt16LE(2, 32);
+	buffer.writeUInt16LE(16, 34);
+	buffer.write('data', 36);
+	buffer.writeUInt32LE(count * 2, 40);
+
+	for(let index = 0; index < count; index++)
+	{
+		const value = Math.max(-1, Math.min(1, sample(index / rate, index)));
+		buffer.writeInt16LE(Math.round(value * 32767), 44 + index * 2);
+	}
+
+	return buffer;
+}
+
+const hiss = index => noise(index, 0, 11) * 2 - 1;
+const tone = (time, pitch) => Math.sin(2 * Math.PI * pitch * time);
+/** A note that starts at `from` seconds and rings down over `length`. */
+const note = (time, from, length, pitch) => time < from || time > from + length
+	? 0
+	: tone(time - from, pitch) * Math.exp(-5 * (time - from) / length) * Math.min(1, (time - from) * 400);
+
+// A checker set down on wood: a knock with a little grit at the front.
+generated.set('assets/move.wav', wav(.09, (time, index) => (tone(time, 190 - 600 * time) * .8 + hiss(index) * .25 * Math.exp(-time * 90)) * Math.exp(-time * 45)));
+// Two checkers turned over: a soft double tick.
+generated.set('assets/flip.wav', wav(.16, (time, index) => hiss(index) * .5 * (Math.exp(-time * 70) + (time > .07 ? Math.exp(-(time - .07) * 70) : 0)) + note(time, .07, .08, 520) * .25));
+// A piece taken: a lower, longer knock.
+generated.set('assets/take.wav', wav(.22, (time, index) => (tone(time, 120 - 180 * time) * .9 + hiss(index) * .3 * Math.exp(-time * 40)) * Math.exp(-time * 16)));
+// A tie: the same note twice.
+generated.set('assets/tie.wav', wav(.3, time => (note(time, 0, .13, 392) + note(time, .14, .15, 392)) * .5));
+// A crowning: a rising pair.
+generated.set('assets/crown.wav', wav(.34, time => (note(time, 0, .15, 660) + note(time, .11, .22, 990)) * .45));
+generated.set('assets/win.wav', wav(.75, time => [523, 659, 784, 1047].reduce((sum, pitch, index) => sum + note(time, index * .11, index === 3 ? .4 : .2, pitch), 0) * .4));
+generated.set('assets/lose.wav', wav(.7, time => [392, 330, 262].reduce((sum, pitch, index) => sum + note(time, index * .15, index === 2 ? .38 : .22, pitch), 0) * .4));
+
+if(previewDirectory)
+{
+	await fs.mkdir(previewDirectory, {recursive: true});
+	const scale = 8;
+	const big = new Sheet(sheet.width * scale, sheet.height * scale);
+	big.blit(sheet, 0, 0, scale);
+	await fs.writeFile(path.join(previewDirectory, 'pieces-8x.png'), big.png());
+
+	// A sample position at four times, as a 720-pixel-wide frame draws it.
+	const board = new Sheet(8 * TILE * 4, 8 * TILE * 4);
+	const sample = {
+		1: 'black-rock', 3: 'black-paper', 5: 'black-scissors', 8: 'black-paper', 17: 'black-scissors', 26: 'black-rock'
+		, 27: 'red-back', 36: 'red-back', 45: 'red-back', 54: 'red-back', 63: 'red-back', 57: 'red-back', 56: 'black-paper'
+	};
+
+	for(let square = 0; square < 64; square++)
+	{
+		const [x, y] = [square % 8, 7 - (square >> 3)];
+		const colour = (square % 8 + (square >> 3)) % 2 ? 'square-red' : 'square-black';
+		board.blit(tiles[colour], x * TILE * 4, y * TILE * 4, 4);
+
+		if(sample[square]) board.blit(tiles[sample[square]], x * TILE * 4, y * TILE * 4, 4);
+	}
+
+	for(const [square, name, tint] of [[26, 'ring', [255, 224, 138]], [33, 'dot', [246, 236, 210]], [35, 'dot', [246, 236, 210]], [27, 'reticle', [255, 224, 138]], [56, 'king', null], [58, 'crown', [92, 18, 18]], [0, 'crown', [64, 61, 79]], [60, 'cursor', [255, 255, 255]]])
+	{
+		board.blit(tiles[name], square % 8 * TILE * 4, (7 - (square >> 3)) * TILE * 4, 4, undefined, tint);
+	}
+
+	await fs.writeFile(path.join(previewDirectory, 'board-4x.png'), board.png());
+}
+
+if(check)
+{
+	const changed = [];
+
+	for(const [name, bytes] of generated)
+	{
+		const current = await fs.readFile(new URL(name, root)).catch(() => null);
+
+		if(!current?.equals(bytes)) changed.push(name);
+	}
+
+	if(changed.length) throw Error(`Generated RPSC assets are stale: ${changed.join(', ')}`);
+
+	console.log(`Verified ${generated.size} generated RPSC assets`);
+}
+else
+{
+	for(const [name, bytes] of generated)
+	{
+		await fs.mkdir(new URL('.', new URL(name, root)), {recursive: true});
+		await fs.writeFile(new URL(name, root), bytes);
+	}
+
+	console.log(`Generated ${generated.size} RPSC assets in games/rpsc`);
+}

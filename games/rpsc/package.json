@@ -1,0 +1,46 @@
+{
+  "name": "@seanmorris/rpsc",
+  "version": "0.1.0",
+  "description": "Rock Paper Scissors Checkers: hidden rock, paper and scissors armies on a checkers board, built with Phonics",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./phonics.json": "./phonics.json"
+  },
+  "peerDependencies": {
+    "@seanmorris/phonics": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@seanmorris/phonics": {
+      "optional": true
+    }
+  },
+  "files": [
+    "autoload.php",
+    "game.php",
+    "application.php",
+    "src/Board.php",
+    "src/Bot.php",
+    "src/Game.php",
+    "src/Random.php",
+    "src/Render/Scene.php",
+    "src/Session.php",
+    "src/Ui/Table.php",
+    "browser/game.mjs",
+    "assets/crown.wav",
+    "assets/flip.wav",
+    "assets/lose.wav",
+    "assets/move.wav",
+    "assets/pieces.png",
+    "assets/pieces.tsj",
+    "assets/take.wav",
+    "assets/tie.wav",
+    "assets/win.wav",
+    "worlds/rpsc.tmj",
+    "worlds/rpsc.world",
+    "phonics.json",
+    "composer.json",
+    "README.md",
+    "LICENSE"
+  ]
+}
