@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "slug": "rpsc",
   "title": "RPSC",
-  "description": "Rock Paper Scissors Checkers: two hidden armies on a checkers board that can only meet edge to edge, against a computer opponent with a memory.",
+  "description": "Rock Paper Scissors Checkers: two hidden armies on a checkers board that can only meet edge to edge. Play the computer, or another person online with placements neither browser can read.",
   "application": "dist/game.phar",
   "poster": "poster.png",
   "canvas": {
@@ -17,6 +17,11 @@
         "slug": "index",
         "title": "RPSC",
         "path": "docs/index.md"
+      },
+      {
+        "slug": "online",
+        "title": "Playing online",
+        "path": "docs/online.md"
       },
       {
         "slug": "architecture",

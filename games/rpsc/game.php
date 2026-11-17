@@ -38,6 +38,9 @@ $uiTime = 0.0;
 $counts = [];
 $held = [];
 $setPage = null;
+// While an online table is live the browser holds the game, and this is its view as last published.
+$online = null;
+$onlineJson = '';
 
 if($session !== null && $session->game->phase === 'over') $session = null;
 
@@ -76,6 +79,8 @@ $helpText = [
 	, 'Then move one piece one square diagonally forward. A piece that reaches the far row is crowned, and may also move backward.'
 	, ['heading' => 'Draw']
 	, 'Eighty turns in a row with no piece taken and no uncrowned piece moved end the game in a draw.'
+	, ['heading' => 'Online']
+	, 'Play online seats two players at a table. Each browser publishes its placement locked, with a proof that it holds four of each kind, and every challenge is checked against it.'
 	, ['heading' => 'Controls']
 	, ['name' => 'Pick up', 'value' => 'Tap or click a piece']
 	, ['name' => 'Move', 'value' => 'Tap a dotted square']
@@ -100,7 +105,7 @@ $audioItems = static fn(): array => [
 	]
 ];
 
-$setPage = static function(string $next) use (&$setPage, &$page, &$session, &$start, $menu, $engine, $helpText, $audioItems, $option, $setOption, $show): void {
+$setPage = static function(string $next) use (&$setPage, &$page, &$session, &$online, &$start, $menu, $engine, $helpText, $audioItems, $option, $setOption, $show): void {
 	$page = $next;
 	$engine->input->suppressHeldUi();
 
@@ -149,6 +154,11 @@ $setPage = static function(string $next) use (&$setPage, &$page, &$session, &$st
 				, 'start' => ['label' => 'Start', 'callback' => static function() use (&$start): void { $start(); }]
 			]
 		]
+		, 'online' => [
+			'label' => 'Play online'
+			, 'hidden' => static fn(): bool => !(vrzno_env('rpscOnlineReady'))()
+			, 'callback' => static function(): void { (vrzno_env('rpscLobby'))(); }
+		]
 		, 'help' => ['label' => 'How to play', 'text' => $helpText]
 		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
 		, 'about' => [
@@ -164,20 +174,25 @@ $setPage = static function(string $next) use (&$setPage, &$page, &$session, &$st
 		'resume' => ['label' => 'Resume', 'callback' => static function() use (&$setPage): void { $setPage('game'); }]
 		, 'help' => ['label' => 'How to play', 'text' => $helpText]
 		, 'audio' => ['label' => 'Audio', 'children' => $audioItems()]
+		// Offline the rules take the resignation; online the room does, and both players stay to see the board.
 		, 'resign' => [
 			'label' => 'Resign'
-			, 'hidden' => static fn(): bool => $session === null || $session->game->phase === 'over'
+			, 'hidden' => static fn(): bool => $online !== null
+				? $online['phase'] === 'over'
+				: $session === null || $session->game->phase === 'over'
 			, 'children' => [
 				'confirm' => [
 					'label' => 'Resign this game'
-					, 'callback' => static function() use (&$session, &$setPage): void {
-						$session?->command(['type' => 'resign']);
+					, 'callback' => static function() use (&$session, &$online, &$setPage): void {
+						if($online !== null) (vrzno_env('rpscCommand'))(json_encode(['type' => 'resign'], JSON_THROW_ON_ERROR));
+						else $session?->command(['type' => 'resign']);
+
 						$setPage('game');
 					}
 				]
 			]
 		]
-		, 'title' => ['label' => 'Quit', 'callback' => $quit]
+		, 'title' => ['label' => 'Quit', 'hidden' => static fn(): bool => $online !== null, 'callback' => $quit]
 	];
 
 	$menu->setItems($items);
@@ -193,18 +208,19 @@ $setPage('title');
  * @return list<array{id:string,label:string,enabled?:bool}> Shuffle and Ready while placing, Play again after the
  * game, and Menu always.
  */
-$buttons = static function() use (&$session, &$page, $table): array {
-	if($page !== 'game' || $session === null) return [];
+$buttons = static function() use (&$online, &$page, $table): array {
+	if($page !== 'game') return [];
 
 	$list = [];
-	$phase = $session->game->phase;
+	$view = $table->view();
 
-	if($phase === 'placement' && !$session->game->placed($session->human))
+	if(($view['arrangement'] ?? null) !== null && !($view['locked'] ?? false))
 	{
 		$list[] = ['id' => 'shuffle', 'label' => 'Shuffle'];
 		$list[] = ['id' => 'ready', 'label' => 'Ready'];
 	}
-	elseif($phase === 'over' && !$table->busy()) $list[] = ['id' => 'again', 'label' => 'Play again'];
+	// An online rematch is the lobby's to arrange.
+	elseif(($view['phase'] ?? '') === 'over' && !$table->busy() && $online === null) $list[] = ['id' => 'again', 'label' => 'Play again'];
 
 	$list[] = ['id' => 'menu', 'label' => 'Menu'];
 
@@ -215,12 +231,42 @@ $engine->setInputHandler(static function(
 	Engine $engine
 	, float $elapsed
 ) use (
-	&$session, &$page, &$uiTime, &$setPage, &$start, &$counts, &$held, $menu, $navigation, $scene, $table
+	&$session, &$online, &$onlineJson, &$page, &$uiTime, &$setPage, &$start, &$counts, &$held, $menu, $navigation, $scene, $table, $show
 ): bool {
 	$elapsed = min(.25, max(0, $elapsed));
 	$uiTime += $elapsed;
 	$action = (string)(vrzno_env('rpscAction'))();
 	$frame = $engine->input->uiFrame($menu->editor !== null, $menu->isOpen);
+
+	// An online table replaces the local game while it lasts. The browser holds it and publishes its view; every
+	// change of that view may bring events for the table to show.
+	$json = (string)(vrzno_env('rpscOnline'))();
+
+	if($json !== $onlineJson)
+	{
+		$onlineJson = $json;
+		$seated = $online !== null;
+		$online = $json === '' ? null : json_decode($json, true, 16, JSON_THROW_ON_ERROR);
+
+		if($online === null)
+		{
+			// The lobby closed: back to the title, where a local game left unfinished is still waiting.
+			$table->reset();
+			$show();
+			$setPage('title');
+		}
+		else
+		{
+			if(!$seated)
+			{
+				$table->reset();
+				$setPage('game');
+			}
+
+			$table->push(json_decode((string)(vrzno_env('rpscOnlineEvents'))(), true, 16, JSON_THROW_ON_ERROR));
+			$table->show($online);
+		}
+	}
 
 	if($menu->isOpen)
 	{
@@ -233,7 +279,7 @@ $engine->setInputHandler(static function(
 		// Backing out of the pause menu resumes; the title has nowhere to back out to.
 		if(!$menu->isOpen) $setPage($page === 'title' ? 'title' : 'game');
 	}
-	elseif($session !== null)
+	elseif($session !== null || $online !== null)
 	{
 		$intents = [];
 		$press = static function(int $square) use ($table, &$intents): void {
@@ -241,13 +287,25 @@ $engine->setInputHandler(static function(
 			elseif(($intent = $table->press($square)) !== null) $intents[] = $intent;
 		};
 
-		// A press that reaches the canvas missed every region: it is an empty square, or off the board.
+		// A press usually lands on one of the page's buttons over the canvas and arrives as an action. One that reaches
+		// the canvas is an empty square or off the board, unless the page has no buttons there: then it is matched
+		// against the same regions here.
 		foreach($frame['events'] as $event)
 		{
 			if($event['type'] !== 'pointer' || $event['action'] !== 'down' || ($event['button'] ?? 1) !== 1) continue;
 
 			$table->cursor = -1;
-			$press($scene->squareAt((float)$event['x'], (float)$event['y']));
+			$hit = null;
+
+			foreach($scene->regions as $region)
+			{
+				[$x, $y, $w, $h] = $region['rect'];
+
+				if(!($region['disabled'] ?? false) && $event['x'] >= $x && $event['x'] < $x + $w && $event['y'] >= $y && $event['y'] < $y + $h) $hit = (string)$region['id'];
+			}
+
+			if($hit !== null) $action = $hit;
+			else $press($scene->squareAt((float)$event['x'], (float)$event['y']));
 		}
 
 		if(str_starts_with($action, 'square-'))
@@ -256,7 +314,7 @@ $engine->setInputHandler(static function(
 			$press((int)substr($action, 7));
 		}
 		elseif($action === 'shuffle' || $action === 'ready') $intents[] = ['type' => $action];
-		elseif($action === 'again') $start();
+		elseif($action === 'again' && $online === null) $start();
 		elseif($action === 'menu') $setPage('pause');
 
 		// Keyboard and controller: a cursor walks the board, with the usual delay before a held direction repeats.
@@ -282,10 +340,14 @@ $engine->setInputHandler(static function(
 			elseif($page === 'game' && !$released) $setPage('pause');
 		}
 
-		foreach($intents as $intent) $session->command($intent);
+		foreach($intents as $intent)
+		{
+			if($online !== null) (vrzno_env('rpscCommand'))(json_encode($intent, JSON_THROW_ON_ERROR));
+			else $session->command($intent);
+		}
 	}
 
-	if($session !== null)
+	if($session !== null && $online === null)
 	{
 		// The bot and the table share one clock: the bot waits until the table has shown everything so far.
 		if(!$menu->isOpen) $session->tick($elapsed, $table->busy());
@@ -316,7 +378,7 @@ $engine->start(static function(
 	Engine $engine
 	, float $alpha
 ) use (
-	&$session, &$page, &$uiTime, &$counts, &$published, $scene, $font, $menu, $table, $buttons
+	&$session, &$online, &$page, &$uiTime, &$counts, &$published, $scene, $font, $menu, $table, $buttons
 ): void {
 	[$width, $height, $ratio, $coarse] = json_decode((string)(vrzno_env('rpscViewport'))(), true);
 	$engine->device->resize($width, $height);
@@ -329,7 +391,8 @@ $engine->start(static function(
 	$view = $table->view();
 	$status = json_encode([
 		'page' => $menu->isOpen ? ($page === 'title' ? 'title' : 'pause') : 'game'
-		, 'phase' => $session === null ? 'none' : $view['phase']
+		, 'phase' => $session === null && $online === null ? 'none' : $view['phase']
+		, 'online' => $online !== null
 		, 'turn' => $view['turn']
 		, 'human' => $view['human']
 		, 'level' => $view['level']

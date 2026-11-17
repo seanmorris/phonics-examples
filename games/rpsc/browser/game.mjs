@@ -11,12 +11,104 @@ const SOUNDS = Object.freeze({
 const LEVELS = Object.freeze(['easy', 'normal', 'hard']);
 const SIDES = Object.freeze(['black', 'red', 'random']);
 
+/** Room rejections that sending again cannot fix. */
+export const TERMINAL_ROOM_ERRORS = Object.freeze([
+	'It is not your turn', 'Local state differs from the confirmed turn state', 'The game supplied an invalid quantized action'
+	, 'No matching action is settling', 'This browser is not seated at a table'
+]);
+
+/**
+ * Publish one room write, trying again while the connection is down. A dropped connection is not a dispute: the
+ * table waits, says it is reconnecting from the third failure on, and carries on when the room accepts the write.
+ * @param {function(): Promise<*>} operation The write.
+ * @param {object} [options] When to give up and how to report.
+ * @param {function(): boolean} [options.live] False once the table has ended or the lobby has closed.
+ * @param {function(boolean): void} [options.reconnecting] Told when retries start and when they succeed.
+ * @param {function(number): Promise<void>} [options.sleep] Waits between tries; tests replace it.
+ * @returns {Promise<*>} The write's result, or undefined when the table ended first.
+ */
+export async function retryRoomWrite(operation, {live = () => true, reconnecting = () => {}, sleep = delay => new Promise(resolve => setTimeout(resolve, delay))} = {})
+{
+	for(let attempt = 0;; attempt++)
+	{
+		try
+		{
+			const result = await operation();
+
+			if(attempt) reconnecting(false);
+
+			return result;
+		}
+		catch(error)
+		{
+			if(TERMINAL_ROOM_ERRORS.includes(error instanceof Error ? error.message : String(error))) throw error;
+			if(!live()) return undefined;
+			if(attempt >= 2) reconnecting(true);
+
+			await sleep(Math.min(30000, 500 * 2 ** attempt));
+
+			if(!live()) return undefined;
+		}
+	}
+}
+
+/**
+ * Storage for one run of a table in this tab: reads always pass, writes only while `playing()` holds. The private
+ * record is shared by every tab and the room lets one tab play a seat, so a tab that loses the seat stops writing at
+ * once and cannot erase what the new tab keeps.
+ * @param {Storage} storage The browser's storage.
+ * @param {function(): boolean} playing Whether this run still holds the seat.
+ * @returns {object} A storage-shaped object.
+ */
+export function seatStorage(storage, playing)
+{
+	return Object.freeze({
+		getItem: key => storage?.getItem(key) ?? null
+		, setItem: (key, value) => { if(playing()) storage?.setItem(key, value); }
+		, removeItem: key => { if(playing()) storage?.removeItem(key); }
+	});
+}
+
+/**
+ * A short name for a seat: the profile's display name, or the local part of a Matrix id.
+ * @param {string} id The seat's id in the room.
+ * @param {object} [profile] The provider's profile for it.
+ * @returns {string} At most sixteen characters.
+ */
+export function playerName(id, profile = null)
+{
+	const value = String(id ?? '').trim();
+	const name = profile?.displayName?.trim() || /^@([^:]+):/.exec(value)?.[1] || value || 'Player';
+
+	return name.length > 16 ? `${name.slice(0, 15)}.` : name;
+}
+
+/**
+ * Words for a table the room ended before the rules did: someone resigned, left, or ran out of time.
+ * @param {object} detail What the room reported: the winning seat if it named one, the reason, and whether it was a
+ * timeout. The player who leaves is told only `{reason: 'left'}`.
+ * @param {boolean} won Whether this browser's seat is the winner.
+ * @param {string} opponent The other player's name.
+ * @returns {string} One line for the status row.
+ */
+export function endedNotice(detail, won, opponent)
+{
+	const reason = detail?.reason;
+
+	if(detail?.timeout || reason === 'timeout') return won ? `You win: ${opponent} ran out of time` : 'You ran out of time';
+	if(reason === 'left') return won ? `You win: ${opponent} left the table` : 'You left the table';
+	if(reason === 'resigned') return won ? `You win: ${opponent} resigned` : 'You resigned';
+
+	return 'The table ended';
+}
+
 /**
  * The browser half of RPSC: the frame, storage, sounds, and the accessible buttons over the canvas.
  *
- * PHP owns the rules, the bot, and every pixel. This module only gives it what PHP cannot reach: the size of the
- * frame, a place to keep the unfinished game and the options, a random seed, and sample playback. It also mirrors
- * the regions PHP reports as real buttons, so the board works with a pointer, a keyboard, and a screen reader.
+ * PHP owns the offline rules, the bot, and every pixel. This module gives it what PHP cannot reach: the size of the
+ * frame, a place to keep the unfinished game and the options, a random seed, and sample playback. It mirrors the
+ * regions PHP reports as real buttons, so the board works with a pointer, a keyboard, and a screen reader. For online
+ * play it joins the engine's room lobby to the match in online-match.mjs and hands PHP that match's view to draw.
  * @param {object} host What the engine's host hands a game module.
  * @returns {Promise<void>} Resolves once the bridges are in place.
  */
@@ -47,7 +139,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		.rpsc-screen{position:relative;width:100%;height:100%;isolation:isolate;overflow:hidden;background:#11131a}
 		.rpsc-screen>canvas{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;
 			max-height:none;margin:0;border:0;border-radius:0;image-rendering:pixelated;touch-action:none}
-		.rpsc-targets{position:absolute;inset:0;pointer-events:none}
+		.rpsc-targets{position:absolute;inset:0;pointer-events:none;z-index:1}
 		.rpsc-targets button{position:absolute;pointer-events:auto;padding:0;border:0;border-radius:0;
 			background:transparent;color:transparent;box-shadow:none;touch-action:manipulation;cursor:pointer}
 		.rpsc-targets button:is(:hover,:focus,:active){background:transparent;color:transparent;box-shadow:none}
@@ -81,9 +173,10 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	const saveOptions = () => storage.set(optionsKey, JSON.stringify(options));
 
-	// PHP draws at the frame's own pixel size, so the pixel art and the text are both set in whole device pixels.
+	// PHP draws at the frame's own pixel size, so the pixel art and the text are both set in whole device pixels. The
+	// canvas itself is measured, not the frame around it: the online lobby moves the canvas into its own stage.
 	const view = shell.measure({
-		observe: screen
+		observe: canvas
 		, cssSize: false
 		, dprCap: 2
 		, initial: '[720,960,1,false]'
@@ -166,6 +259,225 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		return saveOptions();
 	});
 
+	// Online play. The engine's lobby owns the room and its protocol, online-match.mjs owns the game, and this
+	// section carries actions between them the way the room expects: apply, report, wait for both reports, then act.
+	// The lobby and the two online modules are installed after this one, so they are looked up when first needed.
+	const onlineApi = () => session.rpscOnline ?? null;
+	let port = null, online = null, onlineJson = '', onlineEvents = [];
+	let work = Promise.resolve(), seatRun = 0, names = ['Black', 'Red'];
+	// `active`: the room has confirmed both browsers start from the same state, so actions may be sent. `awaiting`:
+	// an action is applied here but the room has not confirmed it. `ended`: the room closed the table.
+	let active = false, watching = false, submitting = false, awaiting = false, reconnecting = false, tableEnded = true, ended = null, failure = '';
+
+	const publish = () => {
+		if(!online) { onlineJson = ''; return; }
+
+		onlineEvents.push(...online.takeEvents());
+		const next = online.view(names);
+
+		if(awaiting || submitting || watching || tableEnded) { next.moves = []; next.challenges = []; }
+		if(watching) next.notice = 'Watching: this seat is being played in another tab';
+		if(reconnecting) next.notice = 'Reconnecting';
+
+		if(ended)
+		{
+			Object.assign(next, {phase: 'over', winner: ended.winner, reason: 'resign', notice: ended.notice, arrangement: null, moves: [], challenges: []});
+		}
+
+		if(failure) next.notice = 'The table stopped: an action could not be verified';
+
+		onlineJson = JSON.stringify(next);
+	};
+
+	const fail = error => {
+		failure = error instanceof Error ? error.message : String(error);
+		console.error('RPSC online protocol failed', error);
+
+		// A transcript this browser cannot verify freezes the table; it does not concede the game.
+		try { port?.dispute(failure); } catch { /* The room is already gone. */ }
+
+		submitting = false;
+		publish();
+	};
+
+	// Work queued before the latest start belongs to a retired run: a tab that lost its seat expects its writes to fail.
+	const enqueue = task => {
+		const run = seatRun;
+		work = work.then(task).catch(error => { if(run === seatRun) fail(error); });
+
+		return work;
+	};
+
+	const roomWrite = operation => {
+		const run = seatRun;
+
+		return retryRoomWrite(operation, {
+			live: () => Boolean(online) && !tableEnded && run === seatRun
+			, reconnecting: value => { if(reconnecting !== value) { reconnecting = value; publish(); } }
+		});
+	};
+
+	const drive = async() => {
+		if(!online || !active || watching || submitting || awaiting || tableEnded || online.currentActor() !== online.localPlayer) return;
+
+		const move = online.nextAction();
+
+		if(!move) return;
+
+		const preHash = await online.hash(), settle = online.settlesAction(move);
+		submitting = true;
+		publish();
+
+		try { await roomWrite(() => port.submitAction(move, preHash, {settle})); }
+		catch(error) { submitting = false; throw error; }
+	};
+
+	const attach = () => {
+		if(port || !session.lobby || !onlineApi() || !session.mentalPoker) return Boolean(port);
+
+		port = session.lobby.attachGame({
+			// A standby start means another tab plays this seat: show its pieces read-only. The room starts again
+			// when the seat moves between tabs.
+			start: detail => {
+				const run = ++seatRun, standby = Boolean(detail.standby), seat = standby ? detail.seat : detail.localPlayer;
+
+				return enqueue(async() => {
+					const profiles = new Map([port.snapshot?.().profile, ...(port.snapshot?.().peers ?? [])].filter(Boolean).map(profile => [profile.id, profile]));
+					tableEnded = false; reconnecting = false; watching = standby; ended = null; failure = ''; active = false;
+					onlineEvents = [];
+					const match = new (onlineApi().OnlineMatch)({
+						api: session.mentalPoker, root: detail.root, sessionId: detail.sessionId, players: detail.players
+						, localPlayer: seat, breaker: detail.breaker
+						, ...(standby
+							? {storage: onlineApi().readOnlyStorage(globalThis.localStorage), follow: true}
+							: {storage: seatStorage(globalThis.localStorage, () => run === seatRun)})
+					});
+					const hash = await match.replay(detail.history ?? []);
+
+					if(detail.sequence !== match.publicState().sequence) throw new Error('Room history ended at the wrong sequence');
+					if(detail.sequence > 0 && detail.hash !== hash) throw new Error('Room history does not match its confirmed hash');
+
+					names = match.seats.map(id => playerName(id, profiles.get(id)));
+					online = match; submitting = false; awaiting = false;
+					publish();
+
+					// The room answers both players' reports with a confirmation, and play starts from there.
+					if(!standby) await roomWrite(() => port.reportReady(hash));
+				});
+			}
+			, action: detail => enqueue(async() => {
+				if(!online) throw new Error('Received an RPSC action before the table started');
+
+				const settlement = await online.apply(detail);
+
+				if(watching) { publish(); return; }
+				if(detail.batch_end !== false) awaiting = true;
+
+				publish();
+				const waiting = await roomWrite(() => port.reportSettled(settlement));
+
+				if(waiting) return;
+
+				// A packet inside a batch needs no confirmation: the next one may follow at once.
+				awaiting = false; submitting = false;
+				publish();
+				await drive();
+			})
+			, confirmed: detail => enqueue(async() => {
+				if(!online) throw new Error('Received an RPSC confirmation before the table started');
+				if(detail.sequence !== online.publicState().sequence || detail.hash !== await online.hash())
+				throw new Error('Room confirmation does not match this browser\'s game');
+
+				active = true; awaiting = false; submitting = false;
+				publish();
+				await drive();
+			})
+			, stop: detail => {
+				tableEnded = true;
+
+				return enqueue(async() => {
+					reconnecting = false; awaiting = false; submitting = false;
+
+					// The rules finish most games themselves. The room finishes the rest: a player left or timed out.
+					if(online && !online.publicState().outcome && !ended)
+					{
+						// The room names the winner to everyone except a player who walks away, who has conceded.
+						const mine = online.side, named = detail?.winner ? online.sideOf(detail.winner) : -1;
+						const winner = named >= 0 ? named : detail?.reason === 'left' ? 1 - mine : null;
+						ended = {winner, notice: endedNotice(detail, winner === mine, names[1 - mine])};
+						onlineEvents.push({type: 'over', winner, reason: 'resign'});
+					}
+
+					publish();
+				});
+			}
+		});
+
+		session.lobby.protocol.addEventListener('closed', () => {
+			online = null; active = false; watching = false; awaiting = false; submitting = false; reconnecting = false; tableEnded = true; ended = null; failure = '';
+			onlineEvents = [];
+			seatRun++;
+			publish();
+		}, {signal});
+
+		return true;
+	};
+
+	shell.bridge('rpscOnlineReady', () => Boolean(session.lobby && onlineApi() && session.mentalPoker));
+	shell.bridge('rpscLobby', () => {
+		if(!attach()) return false;
+
+		void unlock();
+		// A signed-out player is shown the sign-in card; that is the lobby working, not a failure.
+		session.lobby.open().catch(error => { if(error?.code !== 'matrix_auth_required') console.error('RPSC lobby failed to open', error); });
+
+		return true;
+	});
+	shell.bridge('rpscOnline', () => onlineJson);
+	shell.bridge('rpscOnlineEvents', () => {
+		const json = JSON.stringify(onlineEvents);
+		onlineEvents = [];
+
+		return json;
+	});
+	shell.bridge('rpscCommand', json => {
+		const intent = JSON.parse(String(json));
+
+		if(!online || watching) return false;
+
+		// Resigning concedes the game and stays at the table to see it; leaving the table is the lobby's own button.
+		if(intent?.type === 'resign')
+		{
+			if(tableEnded || online.publicState().outcome) return false;
+
+			void enqueue(() => roomWrite(() => port.resign('resigned')));
+
+			return true;
+		}
+
+		// Nothing may be decided on top of a step the room has not confirmed yet.
+		if(awaiting || submitting || tableEnded || !online.command(intent)) return false;
+
+		publish();
+		void enqueue(drive);
+
+		return true;
+	});
+
+	// The lobby lifts the canvas out of this frame into its own stage for a seated game. The buttons over the canvas
+	// follow it, as a sibling laid over the canvas's own box.
+	const follow = () => {
+		const parent = canvas.parentElement;
+
+		if(!parent) return;
+		if(targets.parentElement !== parent) parent.append(targets);
+
+		const away = parent !== screen;
+		Object.assign(targets.style, away
+			? {inset: 'auto', left: `${canvas.offsetLeft}px`, top: `${canvas.offsetTop}px`, width: `${canvas.offsetWidth}px`, height: `${canvas.offsetHeight}px`}
+			: {inset: '0', left: '', top: '', width: '', height: ''});
+	};
+
 	shell.status('rpscStatus', {
 		dataset: 'rpsc'
 		, handler: next => {
@@ -187,6 +499,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 				}
 			}
 
+			follow();
 			buttons.sync(next.width, next.height, next.regions);
 
 			if(status.textContent !== next.status) status.textContent = next.status;
@@ -197,6 +510,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		get state() { return state; }
 		, get options() { return structuredClone(options); }
 		, get saved() { return storage.get(gameKey) ?? ''; }
+		, get online() { return online ? {state: online.publicState(), view: JSON.parse(onlineJson || 'null'), awaiting, submitting, watching, ended} : null; }
+		// Tests seat this page at an in-memory room through the lobby's own protocol.
+		, get lobby() { return session.lobby ?? null; }
 	};
 	session.rpsc = debug;
 	Object.defineProperty(canvas, 'rpscDebug', {configurable: true, value: debug});

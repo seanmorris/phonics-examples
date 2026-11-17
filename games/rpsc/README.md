@@ -4,7 +4,9 @@ Rock Paper Scissors Checkers, built with Phonics. Two sides share a checkers boa
 
 A side wins by taking every opposing piece, or by standing on all four of its squares on the far row.
 
-The PHP in `src/` owns the rules, the computer opponent, the selection and animation of the table, and every pixel. The browser module supplies the frame size, storage for the unfinished game and the options, a random seed, sounds, and accessible buttons over the canvas.
+You play the computer at three levels, or another person online. Online, each browser publishes its placement locked under its own key, with a proof that it holds four of each kind, and opens single pieces with proofs when they are challenged. `docs/online.md` describes the protocol.
+
+The PHP in `src/` owns the rules, the computer opponent, the selection and animation of the table, and every pixel. `browser/game.mjs` supplies the frame size, storage for the unfinished game and the options, a random seed, sounds, and accessible buttons over the canvas. `browser/online-match.mjs` holds an online game, and `browser/mental-poker.mjs` is the private-deck primitive it shares with PHP Poker, built by `scripts/build-mental-poker.mjs`.
 
 ## Tests
 
@@ -14,7 +16,7 @@ php games/rpsc/tests/bot.php     # the three bot levels and the session
 php games/rpsc/tests/table.php   # selection, labels, and animation
 ```
 
-None of the three needs the engine installed. `tests/browser/rpsc.spec.mjs` plays the built game in Chromium.
+None of the three needs the engine installed. `tests/rpsc-online.test.mjs`, `tests/rpsc-online-room.test.mjs`, and `tests/rpsc-parity.test.mjs` (run by `npm run test:node`) cover online play, and `tests/browser/rpsc.spec.mjs` plays the built game in Chromium, offline and online.
 
 ## Regenerating the art and sounds
 

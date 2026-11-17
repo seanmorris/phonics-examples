@@ -193,7 +193,7 @@ test('a placement is one batch of packets under the room limit, and waits for Re
 		assert.equal(peers.alice.settlesAction(action), settled.nextActor === 'bob', 'only the last packet hands the turn over');
 	}
 
-	assert.ok(packets.length >= 2 && packets.length <= 4, `${packets.length} packets`);
+	assert.equal(packets.length, 2, 'a full-length placement is two packets');
 	assert.deepEqual(peers.alice.ownKinds(), chosen, 'the published placement is the one the player arranged');
 	assert.equal(peers.bob.view().pieces.filter(piece => piece.side === 0).length, 12);
 	assert.ok(peers.bob.view().pieces.every(piece => piece.kind === null));

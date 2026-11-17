@@ -1,6 +1,6 @@
 # Architecture
 
-RPSC is seven PHP classes, one entry script, one browser module, and one generator script. The PHP divides into three layers that never reach upward: the rules, the session, and the presentation.
+RPSC is seven PHP classes, one entry script, three browser modules, and one generator script. The PHP divides into three layers that never reach upward: the rules, the session, and the presentation. Online play adds a fourth part in the browser, which feeds the same presentation.
 
 ## Rules: `Board` and `Game`
 
@@ -41,6 +41,24 @@ Each frame the scene also publishes its pressable regions: one for every piece, 
 
 The status object carries only the player's own view of the game. It is mirrored on the canvas as `data-rpsc`, which is what the browser tests read.
 
+## Online play
+
+An online game is held in the browser, not in PHP. `browser/online-match.mjs` is a reducer over the room's actions: it checks each placement proof and each opening with `browser/mental-poker.mjs`, applies its own copy of the rules, and produces a view in the shape `Session::view()` has. [Playing online](online.md) describes the protocol.
+
+`application.php` creates the engine's room lobby after the world is composed, so the lobby returns the canvas to the game's own frame when a table ends. `browser/game.mjs` attaches to the lobby the first time **Play online** is chosen and then carries each step the way the room expects: apply the action, report the resulting hash, wait for the room to confirm both reports, and only then send the next action.
+
+PHP sees an online game through five more calls.
+
+| PHP calls | The browser module |
+| --- | --- |
+| `rpscOnlineReady` | Says whether the lobby and both online modules are installed |
+| `rpscLobby` | Opens the lobby |
+| `rpscOnline` | Returns the online view as JSON, or an empty string while no table is live |
+| `rpscOnlineEvents` | Hands over the events applied since the last call |
+| `rpscCommand` | Takes one intent: swap, shuffle, ready, move, challenge, or resign |
+
+While `rpscOnline` returns a view, `game.php` shows it on the same `Table` and sends intents to `rpscCommand` instead of the local `Session`. The table, the renderer, and the regions do not know the difference. The lobby lifts the canvas into its own stage for a seated game, so the browser module measures the canvas itself and moves the region buttons with it.
+
 ## Assets
 
 `scripts/generate-rpsc-assets.mjs` computes everything in `assets/` and the poster: two board squares, eight checkers, the king's rim, five white marks that the renderer tints, and seven synthesised sounds. The tileset records each tile's name in an `rpsc.tiles` property and `Scene` looks tiles up by name, so the sheet can be reordered without touching PHP.
@@ -52,4 +70,7 @@ The status object carries only the player's own view of the game. It is mirrored
 | `tests/run.php` | Geometry, every pairing of kinds, crowning, both wins, the draw, save validation, and 300 random games with invariants checked after every action |
 | `tests/bot.php` | Legal placements, the no-peeking check, reproducibility, win rates between levels, and a session played across saves |
 | `tests/table.php` | Selection, labels, the cursor for both sides, and animation against the rules over twelve games |
-| `tests/browser/rpsc.spec.mjs` | The built game in Chromium: placement, a move, a challenge, the keyboard, saving, and resigning |
+| `tests/browser/rpsc.spec.mjs` | The built game in Chromium: placement, a move, a challenge, the keyboard, saving, resigning, both layouts, and an online game against a scripted second player |
+| `tests/rpsc-online.test.mjs` | Two browsers in one process: whole games with every hash compared, forged openings, forged and copied placements, reloads, and a lost record |
+| `tests/rpsc-online-room.test.mjs` | The same two browsers over the engine's room protocol: batches, confirmations, the final reveal, the outcome, resigning, and leaving |
+| `tests/rpsc-parity.test.mjs` | The browser's copy of the rules against thirty games played by PHP |

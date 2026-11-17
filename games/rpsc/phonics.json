@@ -52,8 +52,12 @@
   ],
   "application": {
     "entry": "application.php",
+    "dependencies": {
+      "matrix": "../../packages/phonics-matrix/phonics.json"
+    },
     "assets": [
-      "LICENSE"
+      "LICENSE",
+      "browser/mental-poker.mjs.LICENSE.txt"
     ]
   },
   "schemaVersion": 1,
@@ -69,7 +73,9 @@
   "dependencies": {},
   "browser": {
     "files": [
-      "browser/game.mjs"
+      "browser/game.mjs",
+      "browser/mental-poker.mjs",
+      "browser/online-match.mjs"
     ]
   },
   "assets": [
@@ -87,7 +93,7 @@
   ],
   "integrity": {
     "LICENSE": "sha256-qVwBov2AZnwP5kVIHQqvazhVcYmsu8rd5fwouAMX3UE=",
-    "application.php": "sha256-9pcQAGQ1cMAEiiOZbQZdgXBOLwmXUMy9T7H5I1rzswk=",
+    "application.php": "sha256-dszHUlsyoCd9JUpV39k2ZzQmZ+IQbgQd2qh0ZaRTM0M=",
     "assets/crown.wav": "sha256-M5mXbxwd+GsZK5klV+DV8WR3aCryYe2zWynNBQAVSRI=",
     "assets/flip.wav": "sha256-nfWiSaiK9lUK6PS9ygkEw4LUku1MbRKtA9Mt3O9Qkmo=",
     "assets/lose.wav": "sha256-mxQ6M85ixu1MzBmb2/Yv6xtlaLtyB+HOvVDVLlfp7+E=",
@@ -98,15 +104,18 @@
     "assets/tie.wav": "sha256-nkQLi4euxsyBfdrS/6iApylHcCUr0gaKispj+L08YGQ=",
     "assets/win.wav": "sha256-UPF9/RJmy74ySTrPJnhrbfezZ4yoK/R4DrIU1+VggBU=",
     "autoload.php": "sha256-qqpny+lV80bXM8g7ppS+paaMd1uMRYawtvfXzv6Zbwg=",
-    "browser/game.mjs": "sha256-oVmKh9xRXtwLAgQucEZL2i7Upm1fUmQK1DFEXe9kjgg=",
-    "game.php": "sha256-Ls5fUOgB4hU5MoPkqQVuKIundfPpoVHGa/S5RnEI0oA=",
+    "browser/game.mjs": "sha256-+6zSAIG/b6zKU2cTjjWnBPoWd6Pq9T9Xxse59hLvPC0=",
+    "browser/mental-poker.mjs": "sha256-NyUXE3/CMvDEmVfKBQlUqdonsi6RiKISntns4HZpTLY=",
+    "browser/mental-poker.mjs.LICENSE.txt": "sha256-H3gEgPb0U8/TQnVf3+xDNxTzrA5ijeB/oqmGCzBaAmU=",
+    "browser/online-match.mjs": "sha256-0WvM2JFswT4jRLVodcFCTrNrpDyEqhhFkESJtjhwDQc=",
+    "game.php": "sha256-PuQevro+5SWUpfYtiS+OzlpJ1hWMx3QgDVvzAstRjGk=",
     "src/Board.php": "sha256-3R1mBwm4tTqpUQ1Yrq3Lvq3E34qup7ulwpwhlW9aBjI=",
     "src/Bot.php": "sha256-Ffp6wOwxTaXRsa6KDJJ5OeVLEdDCXOD/hl8kJmbQL5Q=",
     "src/Game.php": "sha256-nUHOvJ0+gAfrJSPFTHv0tuNpmpELgj7MWrT7thatchQ=",
     "src/Random.php": "sha256-4cLWtjUfUfuLKRpjmGjTDMhOxB7Nicl9EkxkrHNvzO8=",
-    "src/Render/Scene.php": "sha256-h9rpfMiNv6EYHpeMiVBsp7zTRCeFEvnI1Qz3awtR3Xo=",
+    "src/Render/Scene.php": "sha256-FdgYtNoM6J4VevuQ4/hbo45fn33nWHecv434WE3Oo9Y=",
     "src/Session.php": "sha256-x4zfl+o51rVwcjb2nCqAPiea/i9Kg7Kp+XimTJNIt0o=",
-    "src/Ui/Table.php": "sha256-vycJBZV/BhAmw9nQqJ3Awrw8fhYdzwrJH9HVOefAuaU=",
+    "src/Ui/Table.php": "sha256-dC7Xf/tpU0t/9O86tkJVWM/fOMy95vhNY+a2dfg8Xos=",
     "worlds/rpsc.tmj": "sha256-KuPGeVNi42NuW3Bs4pjfG7V+ln5ligwQRnNFBdsTa6s=",
     "worlds/rpsc.world": "sha256-PexhAAavC3deRlIaKVe+QSYtWdYQri3yScc3hYc2K7k="
   }

@@ -6,6 +6,8 @@ The catalog contains Sane-Phonics, PHP-Noid, PHPTris, PHP Slalom, PHP Buster, Do
 
 PHP Poker offers Bicycle-inspired five-card draw, Texas Hold'em and five- and seven-card stud against local opponents, with automatic opponent adaptation and saved-game continuation. Its full page becomes available offline after the complete game and runtime have been verified. The same games play heads-up online over Matrix, with a jointly shuffled deck that neither browser can read.
 
+RPSC is Rock Paper Scissors Checkers against the computer or another person online. It reuses Poker's private-deck primitive for placements: each browser proves its twelve hidden pieces are four of each kind without showing where they stand.
+
 ```sh
 npm install
 npm test

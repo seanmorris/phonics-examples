@@ -1,6 +1,6 @@
 # RPSC
 
-RPSC is Rock Paper Scissors Checkers: a checkers board, two armies that cannot touch each other diagonally, and twelve hidden checkers a side. You play the computer at one of three levels.
+RPSC is Rock Paper Scissors Checkers: a checkers board, two armies that cannot touch each other diagonally, and twelve hidden checkers a side. You play the computer at one of three levels, or another person [online](online.md).
 
 ## The board
 
@@ -63,10 +63,11 @@ Every piece, every square the selected piece can reach, and every button is also
 
 ## Saving
 
-The game in progress is stored in the browser after every action, including what the computer remembers, and **Continue** on the title brings it back. The level, the side you play, and the sound level are stored too. Nothing leaves the device.
+The game against the computer is stored in the browser after every action, including what the computer remembers, and **Continue** on the title brings it back. The level, the side you play, and the sound level are stored too. None of it leaves the device.
 
 ## What to study
 
+- [Playing online](online.md) covers how two browsers hide their placements from each other, prove them, and stay in step.
 - [Architecture](architecture.md) covers the rules core, the computer opponent, the table that animates each event, the renderer, the browser boundary, and the tests.
 
 The [PHP API](api/index.html) lists every public type in the package.

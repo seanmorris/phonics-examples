@@ -78,6 +78,20 @@ final class Table
 	}
 
 	/**
+	 * Forget everything, as when the table changes from one game to another.
+	 *
+	 * @return void No pieces, no selection, nothing queued; the next show() draws afresh.
+	 */
+	public function reset(): void
+	{
+		$this->pieces = $this->trail = $this->cues = $this->view = $this->settled = $this->queue = [];
+		$this->selected = $this->active = null;
+		$this->cursor = -1;
+		$this->banner = '';
+		$this->stale = true;
+	}
+
+	/**
 	 * Report whether an event is still being shown.
 	 *
 	 * @return bool True while the player should watch rather than act.
@@ -150,7 +164,7 @@ final class Table
 	{
 		if($this->busy()) return false;
 
-		if(($this->view['arrangement'] ?? null) !== null) return in_array($square, $this->view['home'], true);
+		if(($this->view['arrangement'] ?? null) !== null) return !($this->view['locked'] ?? false) && in_array($square, $this->view['home'], true);
 
 		if($this->selected !== null && (in_array($square, $this->targets(), true) || in_array($square, $this->victims(), true))) return true;
 
@@ -171,7 +185,8 @@ final class Table
 		{
 			$index = array_search($square, $this->view['home'], true);
 
-			if($index === false || $this->selected === $square) { $this->selected = null; return null; }
+			// Online, a placement is locked from Ready until it has been published.
+			if($index === false || $this->selected === $square || ($this->view['locked'] ?? false)) { $this->selected = null; return null; }
 			if($this->selected === null) { $this->selected = $square; return null; }
 
 			$other = array_search($this->selected, $this->view['home'], true);
@@ -281,11 +296,19 @@ final class Table
 		$view = $this->view;
 		$human = $view['human'] ?? Board::BLACK;
 		$other = Board::SIDES[Board::other($human)];
+		// An online table says what it is waiting for: the other player, the room, or a proof.
+		$notice = (string)($view['notice'] ?? '');
 
-		if(($view['phase'] ?? '') === 'placement') return $this->selected === null ? 'Tap two of your pieces to swap them' : 'Tap another piece to swap';
+		if(($view['phase'] ?? '') === 'placement')
+		{
+			if($notice !== '') return $notice;
+
+			return $this->selected === null ? 'Tap two of your pieces to swap them' : 'Tap another piece to swap';
+		}
 
 		if(($view['phase'] ?? '') === 'over')
 		{
+			if($notice !== '') return $notice;
 			if($view['reason'] === 'draw') return 'Draw: 80 quiet turns';
 
 			$won = $view['winner'] === $human;
@@ -299,6 +322,7 @@ final class Table
 		}
 
 		if($this->busy()) return '';
+		if($notice !== '') return $notice;
 		if(($view['turn'] ?? -1) !== $human) return "$other is thinking";
 		if($this->selected !== null) return $this->victims() === [] ? 'Choose where to move' : 'Move or challenge a neighbour';
 		if($view['challenged']) return 'Now move a piece';

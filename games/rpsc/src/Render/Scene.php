@@ -232,7 +232,8 @@ final class Scene
 		$filled = $totals['filled'] ?? [0, 0];
 		$other = Board::other($human);
 		$level = ucfirst((string)($view['level'] ?? ''));
-		$names = [$human => 'You', $other => $level === '' ? 'Computer' : "Computer: $level"];
+		// Online, the other row carries the other player's name instead of the computer's level.
+		$names = [$human => 'You', $other => $view['names'][$other] ?? ($level === '' ? 'Computer' : "Computer: $level")];
 		$status = $rows ? $table->status() : '';
 		$statusColour = $table->banner !== '' || ($view['phase'] ?? '') === 'over' ? self::GOLD : self::CREAM;
 		$wide = $fit['mode'] === 'landscape';
