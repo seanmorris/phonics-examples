@@ -34,7 +34,9 @@
       "description": "Board geometry, the rules, the computer opponent, the table's selection and animation, and rendering."
     },
     "embed": {
-      "kind": "local"
+      "kind": "external",
+      "frame": "https://seanmorris.github.io/phonics-examples/embed/rpsc/",
+      "full": "https://seanmorris.github.io/phonics-examples/games/rpsc/"
     }
   }
 }
