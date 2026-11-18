@@ -264,6 +264,13 @@ async function seatOnline(page)
 
 		real[name] = (...args) => alice[name](...args);
 
+		/** A real room takes a moment to confirm each step: hold the page's reports back to leave that window open. */
+		real.reportSettled = async result => {
+			await new Promise(resolve => setTimeout(resolve, 1500));
+
+			return alice.reportSettled(result);
+		};
+
 		alice.attachGame(real.adapter);
 		const client = globalThis.rpscOpponent = {
 			match: null
@@ -383,8 +390,9 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 		).count()
 	).toBe(1);
 
-	// Play until this page has made a challenge, or the game ends first.
-	let challenged = false;
+	// Play until this page has made a challenge, or the game ends first. The page must take a move as soon as the
+	// other player's is shown, without waiting for the room to confirm it.
+	let challenged = false, early = false;
 
 	for(let turn = 0; turn < 60 && !challenged; turn++)
 	{
@@ -394,13 +402,14 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 
 				return state.phase === 'over' || (!state.busy && state.moves.length > 0);
 			}
-			, {timeout: 60_000}
+			, {timeout: 60_000, intervals: [100]}
 		).toBe(true);
 
 		now = await status(page);
 
 		if(now.phase === 'over') break;
 
+		early ||= await canvas(page).evaluate(element => element.rpscDebug.online.awaiting);
 		const forward = me === 0 ? 1 : -1;
 		const [from, to] = now.challenges[0]
 			?? [...now.moves].sort((a, b) => forward * (Math.floor(b[1] / 8) - Math.floor(a[1] / 8)) || a[0] - b[0])[0];
@@ -411,6 +420,8 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 		await square(page, to).click();
 		await acted(page, now);
 	}
+
+	expect(early, 'a move was offered while the room was still confirming the one before it').toBe(true);
 
 	if(challenged)
 	{

@@ -63,6 +63,11 @@ final class Scene
 	private array $tiles = [];
 	/** @var array<string,array<string,mixed>> Text layouts by content, scale, and colour. */
 	private array $cache = [];
+	/**
+	 * @var array<string,array{int,int,int,int,int}> Where each font glyph's ink falls in its cell, and its advance:
+	 * left, top, right, bottom (all inclusive), advance.
+	 */
+	private array $ink = [];
 
 	/**
 	 * Prepare the sprite, text, rectangle, and menu renderers.
@@ -90,6 +95,9 @@ final class Scene
 		// The generator names every tile in the tileset, so this class never hard-codes a position on the sheet.
 		foreach($map->tilesets as $set) foreach($set['properties'] ?? [] as $entry)
 		{
+			// The generator also measures the font, because a label is centred by its ink, not by its cells.
+			if($entry['name'] === 'rpsc.ink') $this->ink = json_decode((string)$entry['value'], true, 4, JSON_THROW_ON_ERROR);
+
 			if($entry['name'] !== 'rpsc.tiles') continue;
 
 			foreach(explode(',', (string)$entry['value']) as $index => $name) $this->tiles[$name] = (int)$set['firstgid'] + $index;
@@ -286,7 +294,11 @@ final class Scene
 			// The wrapped status is centred in the gap between the two rows.
 			foreach($set['count'] > 0 ? array_slice($labels, -$set['count']) : [] as $sprite) $sprite->y += floor($middle - $set['height'] / 2);
 		}
-		elseif($status !== '') $this->label($labels, $status, $left + $size / 2, $bottom + $gap, $t, 'center', $statusColour);
+		elseif($status !== '')
+		{
+			[$inkLeft, , $inkWidth] = $this->inkBox($status);
+			$this->label($labels, $status, $left + ($size - $inkWidth * $t) / 2 - $inkLeft * $t, $bottom + $gap, $t, 'left', $statusColour);
+		}
 
 		// Buttons sit at the right of the player's lowest line, beside the lost pieces on a tall frame.
 		$buttonY = $wide ? $bottom - $buttonHeight : $bottom + 3 * $gap + 2 * $line;
@@ -294,12 +306,16 @@ final class Scene
 
 		foreach(array_reverse($buttons) as $button)
 		{
-			$buttonWidth = (int)ceil($this->measure($button['label']) * $t) + 6 * $k;
+			// The label is centred by its ink: the same margin left and right of the strokes, and above and below.
+			[$inkLeft, $inkTop, $inkWidth, $inkHeight] = $this->inkBox($button['label']);
+			$buttonWidth = (int)ceil($inkWidth * $t) + 6 * $k;
 			$x -= $buttonWidth;
 			$enabled = $button['enabled'] ?? true;
+			$textX = $x + ($buttonWidth - $inkWidth * $t) / 2 - $inkLeft * $t;
+			$textY = $buttonY + ($buttonHeight - $inkHeight * $t) / 2 - $inkTop * $t;
 			$rects[] = [$x, $buttonY, $buttonWidth, $buttonHeight, ...self::BUTTON_EDGE, $enabled ? 1 : .4];
 			$rects[] = [$x + $k, $buttonY + $k, $buttonWidth - 2 * $k, $buttonHeight - 2 * $k, ...self::BUTTON, 1];
-			$this->label($labels, $button['label'], $x + $buttonWidth / 2, $buttonY + ($buttonHeight - $line) / 2, $t, 'center', $enabled ? self::CREAM : self::DIM);
+			$this->label($labels, $button['label'], $textX, $textY, $t, 'left', $enabled ? self::CREAM : self::DIM);
 			$this->regions[] = ['id' => $button['id'], 'label' => $button['label'], 'rect' => [$x, $buttonY, $buttonWidth, $buttonHeight], 'disabled' => !$enabled];
 			$x -= 2 * $k;
 		}
@@ -358,6 +374,8 @@ final class Scene
 					, 'border' => 2 * $k, 'line' => 16 * $t, 'gap' => 2 * $k, 'mini' => $mini
 					, 'row' => 16 * $t + 2 * $k + self::TILE * $mini, 'button' => max(self::TILE * $mini, 16 * $t + 2 * $k)
 				];
+				// A button is as tall as its text plus an even number of pixels, so the text can sit exactly in the middle.
+				$measures['button'] += ($measures['button'] - (int)$this->inkBox('M')[3] * $t) % 2;
 				['size' => $size, 'border' => $border, 'line' => $line, 'gap' => $gap, 'row' => $row, 'button' => $button] = $measures;
 
 				if($mode === 'portrait')
@@ -510,6 +528,49 @@ final class Scene
 		}
 
 		return ['count' => count($this->cache[$key]['sprites']), 'height' => (float)$this->cache[$key]['height']];
+	}
+
+	/**
+	 * Find the box a line's ink covers at scale one.
+	 *
+	 * The font's cells are wider and taller than its strokes: capitals fill rows 1 to 11 of a 16-row line, and most
+	 * leave their last column empty. Centring a label by its cells would set it left of and above the middle.
+	 *
+	 * @param string $text One line of text.
+	 * @return array{float,float,float,float} Left and top of the ink from the line's origin, then its width and height.
+	 */
+	private function inkBox(string $text): array
+	{
+		$pen = 0;
+		$left = null;
+		$right = 0;
+		$top = INF;
+		$bottom = -INF;
+
+		// The font folds lower case onto its capitals.
+		foreach(str_split(strtoupper($text)) as $character)
+		{
+			$glyph = $this->ink[$character] ?? null;
+
+			// A character the table does not know is measured by the font, cell and all.
+			if($glyph === null) return [0.0, 0.0, $this->measure($text), 16.0];
+
+			[$inkLeft, $inkTop, $inkRight, $inkBottom, $advance] = $glyph;
+
+			if($inkRight >= $inkLeft)
+			{
+				$left ??= $pen + $inkLeft;
+				$right = $pen + $inkRight + 1;
+				$top = min($top, $inkTop);
+				$bottom = max($bottom, $inkBottom + 1);
+			}
+
+			$pen += $advance;
+		}
+
+		if($left === null) return [0.0, 0.0, (float)$pen, 16.0];
+
+		return [(float)$left, (float)$top, (float)($right - $left), (float)($bottom - $top)];
 	}
 
 	/**

@@ -293,7 +293,8 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	let port = null, online = null, onlineJson = '', onlineEvents = [];
 	let work = Promise.resolve(), seatRun = 0, names = ['Black', 'Red'];
 	// `active`: the room has confirmed both browsers start from the same state, so actions may be sent. `awaiting`:
-	// an action is applied here but the room has not confirmed it. `ended`: the room closed the table.
+	// an action is applied here but the room has not confirmed it, so nothing may be sent yet. `ended`: the room
+	// closed the table.
 	let active = false, watching = false, submitting = false, awaiting = false, reconnecting = false, tableEnded = true
 		, ended = null, failure = '';
 
@@ -308,7 +309,10 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		onlineEvents.push(...online.takeEvents());
 		const next = online.view(names);
 
-		if(awaiting || submitting || watching || tableEnded)
+		// The player may decide as soon as the other player's action is shown, even while the room is still confirming
+		// it: the decision is kept and sent when the confirmation arrives. Only a table that is over, or one this tab
+		// merely watches, offers nothing.
+		if(watching || tableEnded)
 		{
 			next.moves = [];
 			next.challenges = [];
@@ -565,8 +569,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 			return true;
 		}
 
-		// Nothing may be decided on top of a step the room has not confirmed yet.
-		if(awaiting || submitting || tableEnded || !online.command(intent)) return false;
+		// The match refuses an intent that is not legal now, and keeps at most one. `drive` sends it at once, or when
+		// the room confirms the step before it.
+		if(tableEnded || !online.command(intent)) return false;
 
 		publish();
 		void enqueue(drive);

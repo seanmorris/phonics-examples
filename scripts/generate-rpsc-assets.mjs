@@ -13,6 +13,60 @@ const check = process.argv.includes('--check');
 const previewAt = process.argv.indexOf('--preview');
 const previewDirectory = previewAt < 0 ? null : process.argv[previewAt + 1];
 
+// The engine's bitmap font: the poster is lettered with it, and the renderer centres labels by where its ink falls.
+const font = JSON.parse(await fs.readFile(new URL('font.tsj', engine), 'utf8'));
+const fontImage = PNG.sync.read(await fs.readFile(new URL('font.png', engine)));
+
+/** The font's glyphs by character: each one's tile, and the width, height and advance its tileset records. */
+const glyphTiles = new Map(font.tiles.map(tile => {
+	const properties = Object.fromEntries(tile.properties.map(property => [property.name, property.value]));
+
+	return [properties['glyph.char'], {...properties, id: tile.id}];
+}));
+
+/** How far a space moves the pen. */
+const spaceAdvance = font.properties.find(property => property.name === 'font.spaceAdvance')?.value ?? 6;
+
+/** Where a glyph's cell starts on the font image. */
+const glyphCell = glyph => {
+	const [column, row] = [glyph.id % font.columns, Math.floor(glyph.id / font.columns)];
+
+	return [column * font.tilewidth, row * font.tileheight];
+};
+
+/**
+ * Find the box of a glyph's strokes inside its cell: `[left, top, right, bottom]`, all inclusive.
+ *
+ * The font's tileset gives each glyph an advance but not where its strokes fall. Capitals are ten rows tall on a
+ * 16-row line and narrower than their advance, so text centred by its advances and its line height lands left of
+ * and above the middle. Only the light strokes count: each glyph also carries a dark shadow one pixel down and to
+ * the right, which the eye does not read as part of the letter.
+ */
+function glyphInk(glyph)
+{
+	const [cellX, cellY] = glyphCell(glyph);
+	const box = [font.tilewidth, font.tileheight, -1, -1];
+
+	for(let y = 0; y < font.tileheight; y++)
+	for(let x = 0; x < font.tilewidth; x++)
+	{
+		const at = ((cellY + y) * fontImage.width + cellX + x) * 4;
+		const [red, green, blue, alpha] = fontImage.data.subarray(at, at + 4);
+
+		if(alpha < 128 || red + green + blue < 384) continue;
+
+		box.splice(0, 4, Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y));
+	}
+
+	return box;
+}
+
+/** One glyph's entry for the renderer: its ink box and its advance. */
+const inkEntry = ([character, glyph]) => [character, [...glyphInk(glyph), glyph['glyph.advance']]];
+
+/** Every glyph's ink box and advance: `{character: [left, top, right, bottom, advance]}`. */
+const fontInk = Object.fromEntries([...glyphTiles].map(inkEntry));
+
 /** Edge of one board square, and of every tile on the sheet. */
 const TILE = 20;
 const COLUMNS = 8;
@@ -48,48 +102,73 @@ const GOLD = [hex('#ffe08a'), hex('#d9a12f'), hex('#8a5a12')];
 /** Read a picture drawn as rows of text, one character a pixel. Used as a template tag. */
 const bitmap = ([picture]) => picture.trim().split('\n').map(row => row.trim());
 
-/** Emblems, eleven pixels square: `#` is the light tone and `+` the shaded one. */
+/**
+ * Emblems: `#` is the light tone and `+` the shaded one. The grid is twelve pixels square because the checker is
+ * twenty: an even grid has the same centre as the checker, and an odd one would sit half a pixel off it.
+ */
 const EMBLEMS = {
 	rock: bitmap`
-		...#####...
-		..#######..
-		.####+####.
-		.###++####.
-		####+######
-		###++###+##
-		##++####++#
-		#+++++##+++
-		.+++++++++.
-		..+++++++..
-		...........
+		............
+		............
+		...######...
+		..########..
+		.###+######.
+		.##++######.
+		.#++####++#.
+		.+++++##+++.
+		..++++++++..
+		...++++++...
+		............
+		............
 	`
 	, paper: bitmap`
-		.#######...
-		.#######+..
-		.#######++.
-		.#########.
-		.#++++++##.
-		.#########.
-		.#++++++##.
-		.#########.
-		.#++++####.
-		.#########.
-		.#########.
+		............
+		..######....
+		..######+...
+		..######++..
+		..########..
+		..#+++++##..
+		..########..
+		..#+++++##..
+		..########..
+		..#++++###..
+		..########..
+		............
 	`
 	, scissors: bitmap`
-		#.........#
-		##.......##
-		.##.....##.
-		..##...##..
-		...##.##...
-		....###....
-		...##+##...
-		.+++...+++.
-		+..+...+..+
-		+..+...+..+
-		.++.....++.
+		............
+		.#........#.
+		.##......##.
+		..##....##..
+		...##..##...
+		....####....
+		....####....
+		..+++..+++..
+		.+..+..+..+.
+		.+..+..+..+.
+		..++....++..
+		............
 	`
 };
+
+/**
+ * Check that a picture is centred: its grid shares the tile's centre, and its ink leaves equal margins left and
+ * right and equal margins above and below. A picture that fails would sit off the middle of its checker.
+ */
+function centred(name, rows)
+{
+	const [width, height] = [rows[0].length, rows.length];
+	const inked = rows.flatMap((row, y) => [...row].map((mark, x) => mark === '.' ? null : [x, y])).filter(Boolean);
+	const [xs, ys] = [inked.map(([x]) => x), inked.map(([, y]) => y)];
+	const level = Math.min(...xs) === width - 1 - Math.max(...xs) && Math.min(...ys) === height - 1 - Math.max(...ys);
+	const even = (TILE - width) % 2 === 0 && (TILE - height) % 2 === 0;
+
+	if(!even || !level) throw Error(`The ${name} picture is off centre`);
+
+	return rows;
+}
+
+for(const [name, rows] of Object.entries(EMBLEMS)) centred(name, rows);
 
 /** A small RGBA image to draw into and write out as a PNG. */
 class Sheet
@@ -211,12 +290,12 @@ function checker(side, emblem)
 	if(emblem)
 	{
 		const rows = EMBLEMS[emblem];
-		const left = (TILE - rows[0].length) / 2 | 0;
-		const top = (TILE - rows.length) / 2 | 0;
+		const left = (TILE - rows[0].length) / 2;
+		const top = (TILE - rows.length) / 2;
 
 		rows.forEach((row, y) => [...row].forEach((mark, x) => {
-			if(mark === '#') tile.put(left + x + 1, top + y, EMBLEM);
-			else if(mark === '+') tile.put(left + x + 1, top + y, EMBLEM_SHADE);
+			if(mark === '#') tile.put(left + x, top + y, EMBLEM);
+			else if(mark === '+') tile.put(left + x, top + y, EMBLEM_SHADE);
 		}));
 	}
 	else
@@ -277,7 +356,17 @@ const corner = (x, y, inset, arm) => {
 	return (dx === 0 && dy >= 0 && dy < arm) || (dy === 0 && dx >= 0 && dx < arm);
 };
 
-const CROWN = ['#..#..#', '#.###.#', '#######', '#######', '.#####.'];
+/** The crown that marks a far-rank square: eight by six, so it too shares the tile's centre. */
+const CROWN = bitmap`
+	#..##..#
+	#..##..#
+	##.##.##
+	########
+	########
+	.######.
+`;
+
+centred('crown', CROWN);
 
 const tiles = {
 	'square-red': square(hex('#9f2c2a'), 3)
@@ -292,7 +381,7 @@ const tiles = {
 	// The keyboard and controller cursor: the square's outline.
 	, cursor: mark((x, y) => x === 0 || y === 0 || x === TILE - 1 || y === TILE - 1)
 	// The far-rank squares a side has to fill.
-	, crown: mark((x, y) => CROWN[y - 8]?.[x - 6] === '#')
+	, crown: mark((x, y) => CROWN[y - (TILE - CROWN.length) / 2]?.[x - (TILE - CROWN[0].length) / 2] === '#')
 };
 
 for(const side of Object.keys(SIDES))
@@ -313,7 +402,12 @@ generated.set('assets/pieces.png', sheet.png());
 // or reordering tiles never needs a matching edit in PHP.
 const grid = {tilewidth: TILE, tileheight: TILE, tilecount: TILES.length, columns: COLUMNS};
 const image = {image: 'pieces.png', imagewidth: sheet.width, imageheight: sheet.height};
-const properties = [{name: 'rpsc.tiles', type: 'string', value: TILES.join(',')}];
+const properties = [
+	{name: 'rpsc.tiles', type: 'string', value: TILES.join(',')}
+	// Where the engine font's ink falls, so the renderer can centre a label by what is drawn, not by its cell.
+	, {name: 'rpsc.ink', type: 'string', value: JSON.stringify({...fontInk, ' ': [0, 0, -1, -1, spaceAdvance]})}
+];
+
 const tileset = {type: 'tileset', version: '1.10', name: 'RPSC pieces', ...grid, ...image, properties};
 
 generated.set('assets/pieces.tsj', Buffer.from(JSON.stringify(tileset, null, 2) + '\n'));
@@ -419,45 +513,25 @@ generated.set(
 );
 
 /** Blit a string from the engine's bitmap font at a pixel scale; a null target only measures. */
-async function title(target, text, x, y, scale, colour)
+function title(target, text, x, y, scale, colour)
 {
-	const font = JSON.parse(await fs.readFile(new URL('font.tsj', engine), 'utf8'));
-	const image = PNG.sync.read(await fs.readFile(new URL('font.png', engine)));
-	const glyphs = new Sheet(image.width, image.height);
-	glyphs.data.set(image.data);
-
-	const glyphTiles = new Map(font.tiles.map(tile => {
-		const properties = Object.fromEntries(tile.properties.map(property => [property.name, property.value]));
-
-		return [properties['glyph.char'], {...properties, id: tile.id}];
-	}));
-
-	const space = font.properties.find(property => property.name === 'font.spaceAdvance')?.value ?? 6;
+	const glyphs = new Sheet(fontImage.width, fontImage.height);
+	glyphs.data.set(fontImage.data);
 	let cursor = x;
 
 	for(const character of text)
 	{
-		if(character === ' ')
+		const glyph = glyphTiles.get(character);
+
+		if(!glyph)
 		{
-			cursor += space * scale;
+			cursor += character === ' ' ? spaceAdvance * scale : 0;
 			continue;
 		}
 
-		const glyph = glyphTiles.get(character);
+		const region = [...glyphCell(glyph), glyph['glyph.width'], glyph['glyph.height']];
 
-		if(!glyph) continue;
-
-		const column = glyph.id % font.columns, row = Math.floor(glyph.id / font.columns);
-
-		if(target)
-		target.blit(
-			glyphs
-			, cursor
-			, y
-			, scale
-			, [column * font.tilewidth, row * font.tileheight, glyph['glyph.width'], glyph['glyph.height']]
-			, colour
-		);
+		if(target) target.blit(glyphs, cursor, y, scale, region, colour);
 
 		cursor += glyph['glyph.advance'] * scale;
 	}
@@ -524,13 +598,13 @@ const marks = [
 
 boardInto(poster, 40, 40, 4, Object.fromEntries(Object.entries(POSITION).flatMap(standing)), marks);
 
-const wordmark = await title(null, 'RPSC', 0, 0, 14, cream);
-await title(poster, 'RPSC', 728 + Math.floor((524 - wordmark) / 2), 96, 14, cream);
+const wordmark = title(null, 'RPSC', 0, 0, 14, cream);
+title(poster, 'RPSC', 728 + Math.floor((524 - wordmark) / 2), 96, 14, cream);
 
 for(const [index, line] of ['ROCK PAPER SCISSORS', 'CHECKERS'].entries())
 {
-	const length = await title(null, line, 0, 0, 3, cream);
-	await title(poster, line, 728 + Math.floor((524 - length) / 2), 336 + index * 54, 3, gold);
+	const length = title(null, line, 0, 0, 3, cream);
+	title(poster, line, 728 + Math.floor((524 - length) / 2), 336 + index * 54, 3, gold);
 }
 
 ['black-rock', 'red-paper', 'black-scissors'].forEach(
