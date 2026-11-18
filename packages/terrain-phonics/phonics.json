@@ -86,7 +86,7 @@
     "src/Noise.php": "sha256-J+Vdqb2vOBGYnloLibEQliWSmImnz5n8+AXhu3GevN8=",
     "src/RayQuery.php": "sha256-6ID6A+s2Ro33UFv7pGzMNRvD0wJ+QlP+Vzx2SaOzKAE=",
     "src/Recipe.php": "sha256-t+RFyE4FmO1+AQpbL2ihXQj8HET6QLHp+GbMriR43Vo=",
-    "src/Scene.php": "sha256-h6nVfNvgxrW5bVCdTapK+UQAwk05fUTKUkVF6+kMADA=",
+    "src/Scene.php": "sha256-Gxmi1iGv5c+S72mIflNep8TSm0xt95YimkZXWCAMbWI=",
     "src/TerrainShadows.php": "sha256-Govu8fN6++8aoKtgr62uBTUMA5jKKEQ0XfrdlDgoLlU=",
     "src/TerrainSurface.php": "sha256-B+n9dypuMRtdx7IwV/FuoU1y3bjJ6H7R5LhA/IArnr8=",
     "src/Water.php": "sha256-SVCB1JwaoBgRnJRSx1pnoThFuC092pFpw8XvI5mYefo=",

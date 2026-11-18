@@ -38,6 +38,7 @@ final class Scene
 	/** Last observed eye and bounded predicted position; speculative jobs never drive visibility. */
 	private ?array $previousEye = null, $lookahead = null;
 	private int $viewportHeight = 720;
+	private float $viewportAspect = 16 / 9;
 	/** Detail multiplier: .5 economical, 1 balanced, 2 detailed. */
 	public float $quality = 1;
 	/** Maximum generation milliseconds spent in one update. */
@@ -319,7 +320,8 @@ final class Scene
 		 */
 			static fn($v) => (int)floor($v / 8)
 			, $camera->position
-		)) . ':' . $this->quality . ':' . $this->viewportHeight . ':' . $camera->fov
+		)) . ':' . $this->quality . ':' . $this->viewportHeight . ':' . $this->viewportAspect . ':' . $camera->fov
+			. ':' . (int)floor($camera->yaw * 16) . ':' . (int)floor($camera->pitch * 16)
 			. ':' . ($this->lookahead === null
 				? 'stopped'
 				: implode(':', array_map(
@@ -337,7 +339,7 @@ final class Scene
 		foreach($this->draw as $node)
 		if($this->morph($node) > 0 || $this->clock - ($this->activated[$node['key']] ?? -1) < .5) $transitioning = true;
 
-		if($key !== $this->selectionKey || (($this->jobs !== [] || $transitioning || $this->selectionPending)
+		if($key !== $this->selectionKey || (($transitioning || $this->selectionPending)
 			&& $this->clock - $this->selectionTime > .15
 		)){
 			$this->select($camera);
@@ -362,10 +364,13 @@ final class Scene
 				$job['lastUse'] = $this->clock;
 				$this->patches[$id] = $job;
 
-				if($id === '0:0:0') $this->uploadHeightMap();
+				if($id === '0:0:0')
+				{
+					$this->uploadHeightMap();
+					$this->changed = true;
+				}
 
 				unset($this->jobs[$id], $job);
-				$this->changed = true;
 				$this->select($camera);
 				break; // A GL upload is a separate bounded unit; never upload several in one frame.
 			}
@@ -469,21 +474,13 @@ final class Scene
 		foreach($this->children($node) as $child)
 		$requests[$child['key']] = $child + ['priority' => $node['priority']];
 
-		foreach($this->requestGroups(array_values($requests)) as $parent => $nodes)
+		[$groups, $blockers] = $this->viewGroups(array_values($requests), $drawKeys, $camera);
+
+		foreach($groups as $parent => $nodes)
 		{
 			if($parent !== '' && !isset($drawKeys[$parent])) continue;
 
-			$blocked = false;
-
-			if($parent !== '')
-			foreach($this->draw as $neighbor)
-			if($neighbor['level'] < $drawKeys[$parent]['level'] && self::meets($drawKeys[$parent], $neighbor))
-			{
-				$blocked = true;
-				break;
-			}
-
-			if($blocked) continue;
+			if(($blockers[$parent] ?? []) !== []) continue;
 
 			$keys = $this->reserved;
 
@@ -571,6 +568,100 @@ final class Scene
 		);
 
 		return $groups;
+	}
+
+	/**
+	 * Favor visible refinement and promote its coarser neighbors before unrelated detail.
+	 * @param array $requests Current-view candidate siblings, including resident transition data.
+	 * @param array $drawKeys Current complete cover indexed by patch key.
+	 * @param Camera $camera Viewing direction and position used only to order work.
+	 * @return array Ordered groups and the coarser neighbors blocking each direct split.
+	 */
+	private function viewGroups(array $requests, array $drawKeys, Camera $camera): array
+	{
+		$groups = $this->requestGroups($requests);
+		$priority = $blockers = [];
+		[$forward] = $camera->basis();
+
+		foreach($groups as $parent => $nodes)
+		{
+			if($parent === '')
+			{
+				$priority[$parent] = PHP_FLOAT_MAX;
+				continue;
+			}
+
+			if(!isset($drawKeys[$parent]))
+			{
+				unset($groups[$parent]);
+				continue;
+			}
+
+			$node = $drawKeys[$parent];
+			$priority[$parent] = $nodes[0]['priority'] * $this->viewWeight($node, $camera, $forward);
+
+			foreach($drawKeys as $neighbor)
+			if($neighbor['level'] < $node['level'] && self::meets($node, $neighbor))
+			$blockers[$parent][] = $neighbor['key'];
+		}
+
+		// Dependencies always point to a lower depth, so one deepest-first pass
+		// propagates urgency through the entire balancing chain without cycles.
+		$parents = array_keys($groups);
+
+		usort($parents, /** Process balancing dependencies from fine to coarse.
+		 * @param string $a First parent key.
+		 * @param string $b Second parent key.
+		 * @return int Descending quadtree depth.
+		 */
+			static fn($a, $b) => (int)$b <=> (int)$a
+		);
+
+		foreach($parents as $parent)
+		foreach($blockers[$parent] ?? [] as $blocker)
+		if(isset($priority[$blocker])) $priority[$blocker] = max($priority[$blocker], $priority[$parent]);
+
+		foreach($groups as $parent => &$nodes)
+		foreach($nodes as &$node) $node['priority'] = $priority[$parent];
+		unset($nodes, $node);
+
+		uasort($groups, /** Generate the highest visible or prerequisite demand first.
+		 * @param array $a First sibling group.
+		 * @param array $b Second sibling group.
+		 * @return int Descending propagated priority.
+		 */
+			static fn($a, $b) => $b[0]['priority'] <=> $a[0]['priority']
+		);
+
+		return [$groups, $blockers];
+	}
+
+	/**
+	 * Reduce speculative screen importance outside a conservative camera cone without culling coverage.
+	 * @param array $node Parent footprint being refined.
+	 * @param Camera $camera Viewing position and vertical field of view.
+	 * @param array $forward Unit camera-forward direction.
+	 * @return float One for intersecting view bounds, reduced for side and rear patches.
+	 */
+	private function viewWeight(array $node, Camera $camera, array $forward): float
+	{
+		$height = $this->patches[$node['key']]['centerHeight'] ?? 0;
+		$offset = [
+			$node['x'] + $node['size'] / 2 - $camera->position[0]
+			, $height - $camera->position[1]
+			, $node['z'] + $node['size'] / 2 - $camera->position[2]
+		];
+
+		$along = $offset[0] * $forward[0] + $offset[1] * $forward[1] + $offset[2] * $forward[2];
+		$distanceSquared = $offset[0] ** 2 + $offset[1] ** 2 + $offset[2] ** 2;
+		$radius = $node['size'] * .75 + ($this->patches[$node['key']]['geometricError'] ?? 0);
+
+		if($along + $radius < 0) return .02;
+
+		$side = sqrt(max(0, $distanceSquared - $along * $along));
+		$halfAngle = atan(tan($camera->fov / 2) * max(1.0, $this->viewportAspect)) + .1;
+
+		return $side <= max(0, $along) * tan(min(1.4, $halfAngle)) + $radius ? 1.0 : .1;
 	}
 
 	/**
@@ -1146,6 +1237,7 @@ final class Scene
 		if($this->closed) return;
 
 		$this->viewportHeight = max(1, $height);
+		$this->viewportAspect = $width / max(1, $height);
 		$this->frames++;
 		$this->atmosphereCache->update($camera->position[1], $this->textures[0], $this->water->level());
 
