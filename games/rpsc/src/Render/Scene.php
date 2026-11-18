@@ -135,7 +135,13 @@ final class Scene
 		$camera = new Camera(0, 0, $width, $height);
 		$pulse = .5 + .5 * sin($seconds * 5);
 
-		// Where a square is drawn: the player's own back rank is always the bottom row.
+		/**
+		 * Find where a board position is drawn: the player's own back rank is always the bottom row.
+		 *
+		 * @param float $x File from 0 (a) to 7 (h); a sliding piece is between two.
+		 * @param float $y Rank from 0 (rank 1) to 7 (rank 8).
+		 * @return array{float,float} Centre of that position in frame pixels.
+		 */
 		$place = static function(float $x, float $y) use ($human, $left, $top, $tile): array {
 			$column = $human === Board::RED ? Board::SIZE - 1 - $x : $x;
 			$row = $human === Board::RED ? $y : Board::SIZE - 1 - $y;

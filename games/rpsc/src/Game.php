@@ -440,6 +440,12 @@ final class Game
 	 */
 	public static function import(mixed $data): self
 	{
+		/**
+		 * Build the refusal for one field of the save.
+		 *
+		 * @param string $what Name of the field that is wrong.
+		 * @return \InvalidArgumentException The exception to throw.
+		 */
 		$fail = static fn(string $what): \InvalidArgumentException => new \InvalidArgumentException("Saved game is invalid: $what");
 
 		if(!is_array($data) || ($data['version'] ?? null) !== self::VERSION) throw $fail('version');

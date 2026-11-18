@@ -24,7 +24,9 @@ const TILES = [
 	, 'king', 'ring', 'dot', 'reticle', 'cursor', 'crown'
 ];
 
+/** Read a `#rrggbb` colour as three channels from 0 to 255. */
 const hex = value => [1, 3, 5].map(at => parseInt(value.slice(at, at + 2), 16));
+/** Blend two colours: `amount` 0 gives the first, 1 the second. */
 const mix = (from, to, amount) => from.map((channel, index) => Math.round(channel + (to[index] - channel) * amount));
 
 const SIDES = {
@@ -84,8 +86,10 @@ const EMBLEMS = {
 	]
 };
 
+/** A small RGBA image to draw into and write out as a PNG. */
 class Sheet
 {
+	/** A transparent sheet of a size in pixels. */
 	constructor(width, height)
 	{
 		this.width = width;
@@ -93,6 +97,7 @@ class Sheet
 		this.data = new Uint8Array(width * height * 4);
 	}
 
+	/** Read one pixel as `[red, green, blue, alpha]`. */
 	get(x, y)
 	{
 		const at = (y * this.width + x) * 4;
@@ -100,6 +105,7 @@ class Sheet
 		return [this.data[at], this.data[at + 1], this.data[at + 2], this.data[at + 3]];
 	}
 
+	/** Set one pixel; a position off the sheet is ignored. */
 	put(x, y, rgb, alpha = 255)
 	{
 		if(x < 0 || y < 0 || x >= this.width || y >= this.height) return;
@@ -125,6 +131,7 @@ class Sheet
 		}
 	}
 
+	/** Encode the sheet as a PNG at the highest compression, so the bytes never vary. */
 	png()
 	{
 		const image = new PNG({width: this.width, height: this.height});
@@ -145,6 +152,7 @@ const noise = (x, y, salt) => {
 /** Distance of a pixel's centre from the centre of its tile. */
 const reach = (x, y) => Math.hypot(x - (TILE - 1) / 2, y - (TILE - 1) / 2);
 
+/** One board square: a flat colour with faint grain and a darker edge on two sides. */
 function square(colour, salt)
 {
 	const tile = new Sheet(TILE, TILE);
@@ -247,6 +255,7 @@ function mark(test)
 	return tile;
 }
 
+/** Whether a pixel lies on one of the four corner brackets set `inset` pixels in, with arms `arm` pixels long. */
 const corner = (x, y, inset, arm) => {
 	const near = value => value < TILE / 2 ? value - inset : TILE - 1 - inset - value;
 	const [dx, dy] = [near(x), near(y)];
@@ -328,7 +337,9 @@ function wav(seconds, sample)
 	return buffer;
 }
 
+/** Repeatable white noise from -1 to 1 for a sample index. */
 const hiss = index => noise(index, 0, 11) * 2 - 1;
+/** A sine wave of a pitch in hertz at a time in seconds. */
 const tone = (time, pitch) => Math.sin(2 * Math.PI * pitch * time);
 /** A note that starts at `from` seconds and rings down over `length`. */
 const note = (time, from, length, pitch) => time < from || time > from + length

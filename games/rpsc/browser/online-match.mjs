@@ -30,19 +30,32 @@ const QUIET_LIMIT = 80;
 const PACKET_BYTES = 28000;
 
 const encoder = new TextEncoder;
+/** Copy a plain value, so a caller can never reach into the match's state. */
 const clone = value => structuredClone(value);
+/** Write a value as JSON with every object's keys in order, so equal states give equal text on both browsers. */
 const stable = value => JSON.stringify(value, (_, item) => item && typeof item === 'object' && !Array.isArray(item)
 	? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+/** Write bytes as lowercase hex. */
 const hex = bytes => [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+/** The SHA-256 of a string, as hex. */
 const sha256 = async value => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
 
+/** The square at a file and rank, numbered from a1 along each rank, or -1 off the board. */
 const square = (x, y) => x < 0 || y < 0 || x >= SIZE || y >= SIZE ? -1 : y * SIZE + x;
+/** A square's file, from 0 (a) to 7 (h). */
 const file = at => at % SIZE;
+/** A square's rank, from 0 (rank 1) to 7 (rank 8). */
 const rank = at => Math.floor(at / SIZE);
 /** Black plays on the red squares, where file plus rank is odd; Red plays on the black ones. */
 const owner = at => (file(at) + rank(at)) % 2 === 1 ? 0 : 1;
+/** The rank a square stands on, counted from a side's own back rank: 7 is the far rank. */
 const advance = (side, at) => side === 0 ? rank(at) : SIZE - 1 - rank(at);
 
+/**
+ * A side's twelve starting squares in placement order: from its own back rank forward, and from file a to file h.
+ * @param {number} side 0 for Black, 1 for Red.
+ * @returns {number[]} Twelve squares.
+ */
 function home(side)
 {
 	const squares = [];
@@ -57,6 +70,11 @@ function home(side)
 	return squares;
 }
 
+/**
+ * The four squares a side must fill on the far rank, from file a to file h.
+ * @param {number} side 0 for Black, 1 for Red.
+ * @returns {number[]} Four squares.
+ */
 function goal(side)
 {
 	const squares = [], y = side === 0 ? SIZE - 1 : 0;
@@ -66,6 +84,13 @@ function goal(side)
 	return squares;
 }
 
+/**
+ * The squares a piece could step to on an empty board, forward steps first.
+ * @param {number} at The square the piece stands on.
+ * @param {number} side The side it belongs to.
+ * @param {boolean} king Whether it is crowned and may also step backward.
+ * @returns {number[]} Diagonal neighbours on the board.
+ */
 function steps(at, side, king)
 {
 	const forward = side === 0 ? 1 : -1, targets = [];
@@ -80,6 +105,11 @@ function steps(at, side, king)
 	return targets;
 }
 
+/**
+ * The squares that share an edge with a square. They always belong to the other side.
+ * @param {number} at A square.
+ * @returns {number[]} Up to four squares.
+ */
 function neighbours(at)
 {
 	const targets = [];
@@ -94,6 +124,7 @@ function neighbours(at)
 	return targets;
 }
 
+/** Whether one kind beats another: rock scissors, scissors paper, paper rock. Kinds are 0, 1, 2 in that cycle. */
 const beats = (kind, against) => (kind - against + 3) % 3 === 1;
 
 /**
@@ -105,6 +136,7 @@ const beats = (kind, against) => (kind - against + 3) % 3 === 1;
 export const Rules = Object.freeze({
 	QUIET_LIMIT, home, goal, steps, neighbours, beats, owner, advance
 
+	/** A new game, before either side has placed. */
 	, create()
 	{
 		return {phase: 'placement', turn: 0, challenged: false, quiet: 0, ply: 0, winner: null, reason: '', placed: [false, false], lost: [[], []], pieces: {}};
@@ -121,16 +153,19 @@ export const Rules = Object.freeze({
 		if(game.placed[0] && game.placed[1]) { game.phase = 'play'; game.turn = 0; }
 	}
 
+	/** How many pieces a side has on the board. */
 	, count(game, side)
 	{
 		return Object.values(game.pieces).filter(piece => piece.side === side).length;
 	}
 
+	/** How many of its four far-rank squares a side stands on. */
 	, filled(game, side)
 	{
 		return goal(side).filter(at => game.pieces[at]?.side === side).length;
 	}
 
+	/** The moves open to a side, as [from, to] pairs in board order of the moving piece. */
 	, moves(game, side = game.turn)
 	{
 		const moves = [];
@@ -149,6 +184,7 @@ export const Rules = Object.freeze({
 		return moves;
 	}
 
+	/** Every place a side's piece shares an edge with an opposing piece, as [own square, opposing square]. */
 	, contacts(game, side)
 	{
 		const pairs = [];
@@ -163,6 +199,7 @@ export const Rules = Object.freeze({
 		return pairs;
 	}
 
+	/** The challenges open to the side to act; none once this turn's challenge is used. */
 	, challenges(game)
 	{
 		return game.phase !== 'play' || game.challenged ? [] : Rules.contacts(game, game.turn);
@@ -235,6 +272,7 @@ export const Rules = Object.freeze({
 		return event;
 	}
 
+	/** End the game where the position already decides it: a side with no pieces, or eighty quiet turns. */
 	, settle(game)
 	{
 		if(game.phase !== 'play') return;
@@ -246,6 +284,7 @@ export const Rules = Object.freeze({
 		else if(game.quiet >= QUIET_LIMIT) Rules.finish(game, null, 'draw');
 	}
 
+	/** Record the result: the winning side or null for a draw, and elimination, home-row, or draw. */
 	, finish(game, winner, reason)
 	{
 		game.phase = 'over';
@@ -254,15 +293,22 @@ export const Rules = Object.freeze({
 	}
 });
 
+/** Where one seat's private record for one table is kept. */
 const storageKey = (root, player) => `rpsc:online:v${ONLINE_VERSION}:${root}:${player}`;
+/** Where the list of tables with a private record is kept, with the time each was last written. */
 const storageIndex = `rpsc:online:v${ONLINE_VERSION}:index`;
 
-/** The record of a seat another tab plays: readable, never written. */
+/**
+ * The record of a seat another tab plays: readable, never written.
+ * @param {Storage} storage The browser's storage.
+ * @returns {object} A storage-shaped object whose writes do nothing.
+ */
 export function readOnlyStorage(storage)
 {
 	return {getItem: key => storage?.getItem(key) ?? null, setItem() {}, removeItem() {}};
 }
 
+/** A uniform random integer below a bound of at most 256, from the platform's random source. */
 const randomBelow = bound => {
 	const limit = 256 - 256 % bound, bytes = new Uint8Array(1);
 
@@ -274,6 +320,7 @@ const randomBelow = bound => {
 	}
 };
 
+/** A copy of a list in a uniformly random order. */
 const shuffled = values => {
 	const result = [...values];
 
@@ -286,6 +333,7 @@ const shuffled = values => {
 	return result;
 };
 
+/** Whether a value is twelve kinds with four of each. */
 const legalArrangement = value => Array.isArray(value) && value.length === PIECES
 	&& [0, 1, 2].every(kind => value.filter(item => item === kind).length === PER_KIND);
 
@@ -351,6 +399,10 @@ export class OnlineMatch
 		this.pruneTables();
 	}
 
+	/**
+	 * Read this seat's private record for the table.
+	 * @returns {object} The record, or an empty one when nothing usable is stored.
+	 */
 	loadSaved()
 	{
 		try
@@ -362,6 +414,10 @@ export class OnlineMatch
 		catch { return {v: ONLINE_VERSION}; }
 	}
 
+	/**
+	 * Write this seat's private record and note the table as recently used.
+	 * @returns {void} A tab that only follows the seat writes nothing.
+	 */
 	save()
 	{
 		if(this.follow) return;
@@ -376,6 +432,10 @@ export class OnlineMatch
 		catch { /* A full or blocked store costs the reload, not the game in this tab. */ }
 	}
 
+	/**
+	 * Read the list of tables this browser keeps a record for.
+	 * @returns {object} Storage keys mapped to the time each was last written.
+	 */
 	readIndex()
 	{
 		try
@@ -387,7 +447,11 @@ export class OnlineMatch
 		catch { return {}; }
 	}
 
-	/** Keep the newest tables' records, never this one, and forget the rest. */
+	/**
+	 * Keep the newest tables' records, never this one, and forget the rest.
+	 * @param {number} [keep] How many tables to keep, counting this one.
+	 * @returns {void} Older records are removed from storage.
+	 */
 	pruneTables(keep = KEPT_TABLES)
 	{
 		if(this.follow) return;
@@ -407,13 +471,29 @@ export class OnlineMatch
 		try { this.storage?.setItem(storageIndex, JSON.stringify(index)); } catch { /* As above. */ }
 	}
 
+	/**
+	 * Copy the state both browsers share and hash.
+	 * @returns {object} The stage, the game, both decks, and whatever is in progress.
+	 */
 	publicState() { return clone(this.state); }
 
+	/**
+	 * Hash the shared state.
+	 * @returns {Promise<string>} SHA-256 of the state written with ordered keys.
+	 */
 	async hash() { return sha256(stable(this.state)); }
 
+	/**
+	 * Find the side a seat plays.
+	 * @param {string} player A seat's id in the room.
+	 * @returns {number} 0 for Black, 1 for Red, -1 for anyone else.
+	 */
 	sideOf(player) { return this.seats.indexOf(player); }
 
-	/** The seat that owes the next action. Once the game is over it names a seat only because the room needs one. */
+	/**
+	 * Name the seat that owes the next action.
+	 * @returns {string} A seat's id. Once the game is over it names a seat only because the room needs one.
+	 */
 	currentActor()
 	{
 		const {stage, game, reveal, outcome} = this.state;
@@ -426,11 +506,25 @@ export class OnlineMatch
 		return outcome?.winner ?? this.seats[0];
 	}
 
+	/**
+	 * The label a side's placement proof is bound to.
+	 * @param {number} side 0 for Black, 1 for Red.
+	 * @returns {string} A string no other table, match, or seat shares.
+	 */
 	placementContext(side) { return `${this.context}:placement:${side}`; }
 
+	/**
+	 * The label an opening of one piece is bound to.
+	 * @param {number} side The side that owns the piece.
+	 * @param {number} id The piece's id, which is also its place in the deck.
+	 * @returns {string} A string no other piece shares.
+	 */
 	openContext(side, id) { return `${this.context}:open:${side}:${id}`; }
 
-	/** This browser's kinds by piece id, or null when its private record is gone or does not match its deck. */
+	/**
+	 * Read this browser's own kinds from its private record.
+	 * @returns {number[]|null} Kinds by piece id, or null when the record is gone or does not match its deck.
+	 */
 	ownKinds()
 	{
 		const order = this.saved.order;
@@ -443,6 +537,7 @@ export class OnlineMatch
 	/**
 	 * Build this browser's placement once: the key, the order, the encrypted deck, its proof, and the packets.
 	 * The record is stored before anything is published, so a reload republishes the same placement.
+	 * @returns {object[]} The `placement-packet` actions to send, in order.
 	 */
 	plan()
 	{
@@ -473,7 +568,11 @@ export class OnlineMatch
 		return packets;
 	}
 
-	/** Prove what one of this browser's own pieces is. */
+	/**
+	 * Prove what one of this browser's own pieces is.
+	 * @param {number} id The piece's id.
+	 * @returns {object} The token it holds and a proof that the published point is that token under this deck's key.
+	 */
 	open(id)
 	{
 		const {key, order} = this.saved;
@@ -483,7 +582,13 @@ export class OnlineMatch
 		return this.api.openCard(this.state.decks[this.side][id + 1], order[id + 1] - 1, key, this.state.layers[this.side], this.corpus, {context: this.openContext(this.side, id)});
 	}
 
-	/** Check a shown piece against its owner's published deck and return its kind. */
+	/**
+	 * Check a shown piece against its owner's published deck.
+	 * @param {number} side The side that owns the piece.
+	 * @param {number} id The piece's id.
+	 * @param {object} opening The token claimed and its proof.
+	 * @returns {number} The piece's kind. Throws when the proof does not hold.
+	 */
 	verifyOpening(side, id, opening)
 	{
 		if(!this.api.verifyCardOpening(this.state.decks[side][id + 1], opening, this.state.layers[side], this.corpus, {context: this.openContext(side, id)}))
@@ -492,12 +597,20 @@ export class OnlineMatch
 		return Math.floor(opening.card / PER_KIND);
 	}
 
+	/**
+	 * List a side's pieces still on the board.
+	 * @param {number} side 0 for Black, 1 for Red.
+	 * @returns {number[]} Piece ids in ascending order.
+	 */
 	survivors(side)
 	{
 		return Object.values(this.state.game.pieces).filter(piece => piece.side === side).map(piece => piece.id).sort((a, b) => a - b);
 	}
 
-	/** The action this browser owes now, or null while it owes nothing or the player has not decided. */
+	/**
+	 * Build the action this browser owes now.
+	 * @returns {object|null} The action, or null while it owes nothing or the player has not decided.
+	 */
 	nextAction()
 	{
 		if(this.follow || this.currentActor() !== this.localPlayer) return null;
@@ -521,7 +634,12 @@ export class OnlineMatch
 		return null;
 	}
 
-	/** A placement is one batch that ends with the proof's tail; every other action is a step of its own. */
+	/**
+	 * Say whether an action ends its batch. A placement is one batch that ends with the proof's tail; every other
+	 * action is a step of its own.
+	 * @param {object} action An action about to be sent.
+	 * @returns {boolean} Whether the room should settle after it.
+	 */
 	settlesAction(action)
 	{
 		return action?.type !== 'placement-packet' || Boolean(action.records?.some(record => record.type === 'shuffle-proof-tail'));
@@ -615,6 +733,12 @@ export class OnlineMatch
 		return {sequence, hash: await this.hash(), nextActor: this.currentActor(), outcome: clone(this.state.outcome)};
 	}
 
+	/**
+	 * Take one packet of a placement, and check the whole proof when its last record arrives.
+	 * @param {string} actor The seat that sent it.
+	 * @param {object} action A `placement-packet` action.
+	 * @returns {void} The side's twelve pieces stand on the board once the proof holds.
+	 */
 	applyPlacement(actor, action)
 	{
 		const side = this.sideOf(actor);
@@ -694,12 +818,22 @@ export class OnlineMatch
 		}
 	}
 
+	/**
+	 * Apply a move by the side to act.
+	 * @param {object} action A `move` action with its two squares.
+	 * @returns {void} The turn passes, or the game is decided.
+	 */
 	applyMove({from, to})
 	{
 		this.events.push(Rules.move(this.state.game, from, to));
 		this.decided();
 	}
 
+	/**
+	 * Take a challenge: check the challenger's piece and wait for the other player to show theirs.
+	 * @param {object} action A `challenge` action with its two squares and the challenger's opening.
+	 * @returns {void} The stage becomes `answer`.
+	 */
 	applyChallenge({from, to, opening})
 	{
 		const {game} = this.state;
@@ -709,6 +843,11 @@ export class OnlineMatch
 		this.state.stage = 'answer';
 	}
 
+	/**
+	 * Take the answer to a challenge: check the challenged piece and resolve the two kinds.
+	 * @param {object} action An `answer` action with the challenged player's opening.
+	 * @returns {void} The loser is gone, and the challenger still has to move unless the game is decided.
+	 */
 	applyAnswer({opening})
 	{
 		const {game, duel} = this.state;
@@ -719,6 +858,11 @@ export class OnlineMatch
 		this.decided();
 	}
 
+	/**
+	 * Take one side's final reveal of every piece it has left.
+	 * @param {object} action A `reveal` action with one opening for each surviving piece, in id order.
+	 * @returns {void} The side's kinds are public; the table is done once both sides have revealed.
+	 */
 	applyReveal({openings})
 	{
 		const side = this.state.reveal[0], ids = this.survivors(side);
@@ -732,7 +876,10 @@ export class OnlineMatch
 		if(!this.state.reveal.length) this.finish();
 	}
 
-	/** Once the rules have a result, each side with pieces left turns them face up, and then the table is done. */
+	/**
+	 * Move on once the rules have a result: each side with pieces left turns them face up, and then the table is done.
+	 * @returns {void} Nothing changes while the game is still in play.
+	 */
 	decided()
 	{
 		const {game} = this.state;
@@ -746,6 +893,10 @@ export class OnlineMatch
 		else this.finish();
 	}
 
+	/**
+	 * Close the table with the outcome the room is told.
+	 * @returns {void} The outcome names the winning seat, or null for a draw.
+	 */
 	finish()
 	{
 		const {game} = this.state;
@@ -767,7 +918,10 @@ export class OnlineMatch
 		return this.hash();
 	}
 
-	/** Take the events applied since the last call, in order, for the table to show. */
+	/**
+	 * Take the events applied since the last call, for the table to show.
+	 * @returns {object[]} start, move, challenge, and over events, oldest first.
+	 */
 	takeEvents()
 	{
 		const events = this.events;
@@ -843,7 +997,11 @@ export class OnlineMatch
 	}
 }
 
-/** Install the online game on the application's browser session. */
+/**
+ * Install the online game on the application's browser session.
+ * @param {object} host What the engine hands a browser module; only its session is used.
+ * @returns {function(): void} Removes the installation.
+ */
 export function activate({session})
 {
 	const api = Object.freeze({ONLINE_VERSION, ONLINE_RULES, ONLINE_ACTION_TYPES, KEPT_TABLES, KINDS, SIDES, Rules, OnlineMatch, readOnlyStorage});

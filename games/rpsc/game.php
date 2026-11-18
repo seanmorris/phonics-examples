@@ -28,7 +28,21 @@ $menu = new Menu([], 'Rock Paper Scissors Checkers');
 $navigation = new MenuInput;
 $table = new Table;
 
+/**
+ * Read one stored option.
+ *
+ * @param string $name level, side, or effects.
+ * @return string The stored value, or the browser module's default.
+ */
 $option = static fn(string $name): string => (string)(vrzno_env('rpscOptionGet'))($name);
+
+/**
+ * Store one option.
+ *
+ * @param string $name level, side, or effects.
+ * @param string $value Value to store; the browser module refuses one it does not know.
+ * @return bool Whether the value was accepted and saved.
+ */
 $setOption = static fn(string $name, string $value): bool => (bool)(vrzno_env('rpscOptionSet'))($name, $value);
 
 // A game left unfinished comes back as Continue; anything else in storage is ignored.
@@ -44,11 +58,21 @@ $onlineJson = '';
 
 if($session !== null && $session->game->phase === 'over') $session = null;
 
+/**
+ * Put the local game on the table.
+ *
+ * @return void The table shows the unfinished game, or a fresh placement when there is none.
+ */
 $show = static function() use (&$session, $table): void {
 	// Behind the title, the table shows a fresh placement so the board is never empty.
 	$table->show(($session ?? new Session(1))->view());
 };
 
+/**
+ * Start a game against the computer with the stored level and side.
+ *
+ * @return void A new session replaces the old one, and the table opens on its placement.
+ */
 $start = static function() use (&$session, &$setPage, $option, $table, $show): void {
 	$level = in_array($option('level'), Bot::LEVELS, true) ? $option('level') : 'normal';
 	$seed = (int)(vrzno_env('rpscSeed'))();
@@ -89,6 +113,11 @@ $helpText = [
 	, ['name' => 'Menu', 'value' => 'P, Escape or Start']
 ];
 
+/**
+ * Rows of the Audio page, shared by the title and pause menus.
+ *
+ * @return array<string,array<string,mixed>> One slider for the sound level.
+ */
 $audioItems = static fn(): array => [
 	'effects' => [
 		'label' => 'SFX level'
@@ -105,6 +134,12 @@ $audioItems = static fn(): array => [
 	]
 ];
 
+/**
+ * Change page: the title menu, the game with no menu, or the pause menu over the game.
+ *
+ * @param string $next title, game, or pause.
+ * @return void The menu is rebuilt and opened for title and pause, and closed for game.
+ */
 $setPage = static function(string $next) use (&$setPage, &$page, &$session, &$online, &$start, $menu, $engine, $helpText, $audioItems, $option, $setOption, $show): void {
 	$page = $next;
 	$engine->input->suppressHeldUi();
@@ -118,6 +153,11 @@ $setPage = static function(string $next) use (&$setPage, &$page, &$session, &$on
 
 	$levels = ['Easy', 'Normal', 'Hard'];
 	$sides = ['Black', 'Red', 'Random'];
+	/**
+	 * Leave the game for the title, keeping it for Continue.
+	 *
+	 * @return void The title menu opens over the local game.
+	 */
 	$quit = static function() use (&$setPage, $show): void {
 		$show();
 		$setPage('title');
@@ -227,7 +267,17 @@ $buttons = static function() use (&$online, &$page, $table): array {
 	return $list;
 };
 
-$engine->setInputHandler(static function(
+$engine->setInputHandler(/**
+ * Run one frame of input and game time.
+ *
+ * Follows the online table when one is live, routes presses to the menu or the board, lets the bot act, and moves
+ * the table's animation on.
+ *
+ * @param Engine $engine The engine, for its input.
+ * @param float $elapsed Seconds since the last frame.
+ * @return bool Always true: the game keeps its own pages, so the engine never shows its pause panel.
+ */
+static function(
 	Engine $engine
 	, float $elapsed
 ) use (
@@ -282,6 +332,12 @@ $engine->setInputHandler(static function(
 	elseif($session !== null || $online !== null)
 	{
 		$intents = [];
+		/**
+		 * Press a square, or let go of the selection for a press off the board.
+		 *
+		 * @param int $square Square number, or -1 for a press that hit no square.
+		 * @return void Any intent the press produced is queued.
+		 */
 		$press = static function(int $square) use ($table, &$intents): void {
 			if($square < 0) $table->cancel();
 			elseif(($intent = $table->press($square)) !== null) $intents[] = $intent;
@@ -374,7 +430,14 @@ $engine->setInputHandler(static function(
 
 $published = '';
 
-$engine->start(static function(
+$engine->start(/**
+ * Draw one frame and publish the status the browser module reads.
+ *
+ * @param Engine $engine The engine, for its device and input theme.
+ * @param float $alpha Unused: nothing here is interpolated between simulation steps.
+ * @return void The frame is drawn, and the status is sent when it has changed.
+ */
+static function(
 	Engine $engine
 	, float $alpha
 ) use (
@@ -428,10 +491,20 @@ $engine->start(static function(
 		(vrzno_env('rpscStatus'))($status);
 		$published = $status;
 	}
-}, static function() use ($scene, $menu, $phonics): void {
+}, /**
+ * Release everything when the game closes.
+ *
+ * @return void The menu, the renderers, and the package context are closed.
+ */
+static function() use ($scene, $menu, $phonics): void {
 	$menu->close();
 	$scene->close();
 	$phonics->close();
-}, static function() use ($scene): void {
+}, /**
+ * Rebuild graphics resources after a lost WebGL context.
+ *
+ * @return void The scene's renderers and atlases are restored.
+ */
+static function() use ($scene): void {
 	$scene->restore();
 });

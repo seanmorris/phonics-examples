@@ -212,8 +212,8 @@ final class Bot
 	 * Work out what the bot believes about every piece in a view.
 	 *
 	 * @param array<string,mixed> $view Game::view() for the bot's side.
-	 * @return array{at:array<int,array<string,mixed>>,beliefs:array<int,array{float,float,float}>,certain:array<int,bool>}
-	 * Pieces by square, and for each opposing piece key the chance of each kind and whether the bot is sure.
+	 * @return array<string,array<int,mixed>> `at`: pieces by square. `beliefs`: for each opposing piece key, the chance
+	 * that it is rock, paper, or scissors. `certain`: for each opposing piece key, whether the bot has seen it.
 	 */
 	private function model(array $view): array
 	{
@@ -240,7 +240,8 @@ final class Bot
 		}
 
 		// A forgotten piece can leave the count short of what is really on the board; never let it go negative.
-		$left = array_map(static fn(int $count): int => max(0, $count), $left);
+		foreach($left as $kind => $count) $left[$kind] = max(0, $count);
+
 		$total = array_sum($left);
 		$spread = !$tuning['counts'] || $total === 0
 			? [1 / 3, 1 / 3, 1 / 3]
