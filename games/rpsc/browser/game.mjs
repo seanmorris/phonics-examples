@@ -19,6 +19,15 @@ export const TERMINAL_ROOM_ERRORS = Object.freeze([
 	, 'No matching action is settling', 'This browser is not seated at a table'
 ]);
 
+/** The default for a table that never ends on its own. */
+const always = () => true;
+
+/** The default for a caller that does not want to hear about retries. */
+const nothing = () => undefined;
+
+/** Wait a number of milliseconds. */
+const pause = delay => new Promise(resolve => setTimeout(resolve, delay));
+
 /**
  * Publish one room write, trying again while the connection is down. A dropped connection is not a dispute: the
  * table waits, says it is reconnecting from the third failure on, and carries on when the room accepts the write.
@@ -29,15 +38,10 @@ export const TERMINAL_ROOM_ERRORS = Object.freeze([
  * @param {function(number): Promise<void>} [options.sleep] Waits between tries; tests replace it.
  * @returns {Promise<*>} The write's result, or undefined when the table ended first.
  */
-export async function retryRoomWrite(
-	operation
-	, {
-		live = () => true
-		, reconnecting = () => {
-		}
-		, sleep = delay => new Promise(resolve => setTimeout(resolve, delay))
-	} = {}
-){
+export async function retryRoomWrite(operation, options = {})
+{
+	const {live = always, reconnecting = nothing, sleep = pause} = options;
+
 	for(let attempt = 0; ; attempt++)
 	{
 		try
@@ -136,16 +140,16 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	const optionsKey = 'rpsc.options.v1';
 	const muteKey = 'rpsc.mute.v1';
 	const storage = new services.SafeStorage;
-	const ui = document.createElement('section');
-	const screen = document.createElement('div');
-	const targets = document.createElement('div');
-	const status = document.createElement('p');
+
+	/** Make an element with a class. */
+	const element = (tag, className) => Object.assign(document.createElement(tag), {className});
+
+	const ui = element('section', 'rpsc-ui');
+	const screen = element('div', 'rpsc-screen');
+	const targets = element('div', 'rpsc-targets');
+	const status = element('p', 'rpsc-sr');
 	const style = document.createElement('style');
-	ui.className = 'rpsc-ui';
 	ui.setAttribute('aria-label', 'Rock Paper Scissors Checkers');
-	screen.className = 'rpsc-screen';
-	targets.className = 'rpsc-targets';
-	status.className = 'rpsc-sr';
 	status.setAttribute('aria-live', 'polite');
 	style.textContent = `
 		.rpsc-ui{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;
@@ -316,18 +320,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 		if(ended)
 		{
-			Object.assign(
-				next
-				, {
-					phase: 'over'
-					, winner: ended.winner
-					, reason: 'resign'
-					, notice: ended.notice
-					, arrangement: null
-					, moves: []
-					, challenges: []
-				}
-			);
+			const {winner, notice} = ended;
+			Object.assign(next, {phase: 'over', winner, reason: 'resign', notice});
+			Object.assign(next, {arrangement: null, moves: [], challenges: []});
 		}
 
 		if(failure) next.notice = 'The table stopped: an action could not be verified';
@@ -395,6 +390,21 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		}
 	};
 
+	/** Forget the table: no game is held, nothing is owed, and nothing is waiting to be shown. */
+	const idle = () => {
+		online = null;
+		ended = null;
+		failure = '';
+		onlineEvents = [];
+
+		active = false;
+		watching = false;
+		awaiting = false;
+		submitting = false;
+		reconnecting = false;
+		tableEnded = true;
+	};
+
 	const attach = () => {
 		if(port || !session.lobby || !onlineApi() || !session.mentalPoker) return Boolean(port);
 
@@ -419,18 +429,15 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 					active = false;
 					onlineEvents = [];
 
-					const match = new (onlineApi().OnlineMatch)({
-						api: session.mentalPoker
-						, root: detail.root
-						, sessionId: detail.sessionId
-						, players: detail.players
-						, localPlayer: seat
-						, breaker: detail.breaker
-						, ...(standby
-							? {storage: onlineApi().readOnlyStorage(globalThis.localStorage), follow: true}
-							: {storage: seatStorage(globalThis.localStorage, () => run === seatRun)}
-						)
-					});
+					// A seat this tab plays keeps its record until another tab takes the seat; a seat it only
+					// watches is read from the other tab's record.
+					const record = standby
+						? {storage: onlineApi().readOnlyStorage(globalThis.localStorage), follow: true}
+						: {storage: seatStorage(globalThis.localStorage, () => run === seatRun)};
+
+					const {root, sessionId, players, breaker} = detail;
+					const table = {api: session.mentalPoker, root, sessionId, players, localPlayer: seat, breaker};
+					const match = new (onlineApi().OnlineMatch)({...table, ...record});
 
 					const hash = await match.replay(detail.history ?? []);
 
@@ -511,16 +518,7 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		});
 
 		session.lobby.protocol.addEventListener('closed', () => {
-			online = null;
-			active = false;
-			watching = false;
-			awaiting = false;
-			submitting = false;
-			reconnecting = false;
-			tableEnded = true;
-			ended = null;
-			failure = '';
-			onlineEvents = [];
+			idle();
 			seatRun++;
 			publish();
 		}, {signal});
@@ -588,18 +586,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 		const away = parent !== screen;
 
-		Object.assign(
-			targets.style
-			, away
-				? {
-					inset: 'auto'
-					, left: `${canvas.offsetLeft}px`
-					, top: `${canvas.offsetTop}px`
-					, width: `${canvas.offsetWidth}px`
-					, height: `${canvas.offsetHeight}px`
-				}
-				: {inset: '0', left: '', top: '', width: '', height: ''}
-		);
+		const lengths = [canvas.offsetLeft, canvas.offsetTop, canvas.offsetWidth, canvas.offsetHeight];
+		const [left, top, width, height] = lengths.map(length => away ? `${length}px` : '');
+		Object.assign(targets.style, {inset: away ? 'auto' : '0', left, top, width, height});
 	};
 
 	shell.status('rpscStatus', {
@@ -630,22 +619,20 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		}
 	});
 
+	/** What a test may read of the online table: the shared state, the view PHP was given, and the step flags. */
+	const tableDebug = () => {
+		if(!online) return null;
+
+		const flags = {awaiting, submitting, watching, ended};
+
+		return {state: online.publicState(), view: JSON.parse(onlineJson || 'null'), ...flags};
+	};
+
 	const debug = {
 		get state() { return state; }
 		, get options() { return structuredClone(options); }
 		, get saved() { return storage.get(gameKey) ?? ''; }
-		, get online() {
-			return online
-				? {
-					state: online.publicState()
-					, view: JSON.parse(onlineJson || 'null')
-					, awaiting
-					, submitting
-					, watching
-					, ended
-				}
-				: null;
-		}
+		, get online() { return tableDebug(); }
 		// Tests seat this page at an in-memory room through the lobby's own protocol.
 		, get lobby() { return session.lobby ?? null; }
 	};

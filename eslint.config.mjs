@@ -12,25 +12,21 @@ const linted = [
 	, 'tests/browser/rpsc.spec.mjs'
 ];
 
-export default [
-	{
-		ignores: [
-			'**/*.{js,mjs,cjs}'
-			, ...linted.map(path => `!${path}`)
-			// Generated: the private-deck bundle is minified third-party code plus one source file of Poker's.
-			, 'games/*/browser/mental-poker.mjs'
-			, 'games/*/dist/**'
-			, 'site/dist/**'
-			, '.worktrees/**'
-		]
-	}
-	, ...smNoSaccadeStyle.configs.recommended
-	, {
-		rules: {
-			'sm-no-saccade-style/max-line-length': ['error', {max: 120, tabWidth: 4}]
-			, 'sm-no-saccade-style/allman-tabs': ['error', {maxLineLength: 120}]
-			, 'sm-no-saccade-style/parameter-layout': ['error', {max: 120}]
-			, 'sm-no-saccade-style/object-layout': ['error', {max: 120}]
-		}
-	}
+const ignores = [
+	'**/*.{js,mjs,cjs}'
+	, ...linted.map(path => `!${path}`)
+	// Generated: the private-deck bundle is minified third-party code plus one source file of Poker's.
+	, 'games/*/browser/mental-poker.mjs'
+	, 'games/*/dist/**'
+	, 'site/dist/**'
+	, '.worktrees/**'
 ];
+
+const rules = {
+	'sm-no-saccade-style/max-line-length': ['error', {max: 120, tabWidth: 4}]
+	, 'sm-no-saccade-style/allman-tabs': ['error', {maxLineLength: 120}]
+	, 'sm-no-saccade-style/parameter-layout': ['error', {max: 120}]
+	, 'sm-no-saccade-style/object-layout': ['error', {max: 120}]
+};
+
+export default [{ignores}, ...smNoSaccadeStyle.configs.recommended, {rules}];

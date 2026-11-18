@@ -47,18 +47,12 @@ echo json_encode(['games' => $games, 'home' => [Board::home(0), Board::home(1)],
 const row = ([at, piece]) => [Number(at), piece.side, piece.king ? 1 : 0, piece.id];
 
 /** The browser's game in the shape PHP exports. */
-const exported = game => ({
-	phase: game.phase
-	, turn: game.turn
-	, challenged: game.challenged
-	, quiet: game.quiet
-	, ply: game.ply
-	, winner: game.winner
-	, reason: game.reason
-	, placed: game.placed
-	, lost: game.lost
-	, pieces: Object.entries(game.pieces).map(row).sort((a, b) => a[0] - b[0])
-});
+const exported = game => {
+	const {phase, turn, challenged, quiet, ply, winner, reason, placed, lost} = game;
+	const pieces = Object.entries(game.pieces).map(row).sort((a, b) => a[0] - b[0]);
+
+	return {phase, turn, challenged, quiet, ply, winner, reason, placed, lost, pieces};
+};
 
 test('the browser rules reproduce every action of thirty PHP games', () => {
 	const {games, home, goal, limit} = transcript();
@@ -111,21 +105,28 @@ test('the browser rules reproduce every action of thirty PHP games', () => {
 });
 
 test('the browser rules refuse what the PHP rules refuse', () => {
+	// Nothing moves before both sides have placed, and a side places once.
 	const game = Rules.create();
 	assert.throws(() => Rules.move(game, 17, 24), /not in play/);
 	Rules.place(game, 0);
 	assert.throws(() => Rules.place(game, 0), /cannot place now/);
 	Rules.place(game, 1);
+
+	// Black to move: not Red's piece, not an occupied square, not straight ahead, not a jump.
 	assert.throws(() => Rules.move(game, 41, 32), /No piece of the side to act/);
 	assert.throws(() => Rules.move(game, 1, 8), /cannot step there/);
 	assert.throws(() => Rules.move(game, 17, 25), /cannot step there/);
 	assert.throws(() => Rules.move(game, 17, 35), /cannot step there/);
 	assert.throws(() => Rules.checkChallenge(game, 17, 25), /shares an edge/);
+
+	// c4 and c5 touch: a man cannot retreat, and a challenge needs the mover's own piece and a shared edge.
 	Rules.move(game, 17, 26);
 	Rules.move(game, 43, 34);
 	assert.throws(() => Rules.move(game, 26, 17), /cannot step there/);
 	assert.throws(() => Rules.checkChallenge(game, 34, 26), /No piece of the side to act/);
 	assert.throws(() => Rules.checkChallenge(game, 19, 34), /shares an edge/);
+
+	// One challenge a turn.
 	Rules.challenge(game, 26, 34, 0, 0);
 	assert.throws(() => Rules.checkChallenge(game, 26, 34), /already had its challenge/);
 	assert.equal(Rules.beats(0, 2) && Rules.beats(2, 1) && Rules.beats(1, 0), true);

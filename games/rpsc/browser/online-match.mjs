@@ -159,18 +159,10 @@ export const Rules = Object.freeze({
 	/** A new game, before either side has placed. */
 
 	, create() {
-		return {
-			phase: 'placement'
-			, turn: 0
-			, challenged: false
-			, quiet: 0
-			, ply: 0
-			, winner: null
-			, reason: ''
-			, placed: [false, false]
-			, lost: [[], []]
-			, pieces: {}
-		};
+		const clock = {phase: 'placement', turn: 0, challenged: false, quiet: 0, ply: 0};
+		const result = {winner: null, reason: ''};
+
+		return {...clock, ...result, placed: [false, false], lost: [[], []], pieces: {}};
 	}
 
 	/** Stand a side's twelve on its home squares; play begins when both sides have. */
@@ -272,18 +264,8 @@ export const Rules = Object.freeze({
 		}
 
 		game.challenged = true;
-		const event = {
-			type: 'challenge'
-			, side: game.turn
-			, from
-			, to
-			, attacker
-			, defender
-			, attackerId: attacking.id
-			, defenderId: defending.id
-			, outcome
-			, removed
-		};
+		const shown = {attacker, defender, attackerId: attacking.id, defenderId: defending.id};
+		const event = {type: 'challenge', side: game.turn, from, to, ...shown, outcome, removed};
 
 		Rules.settle(game);
 
@@ -412,19 +394,11 @@ export class OnlineMatch
 	 * @param {Storage} [options.storage] Where this browser keeps its key, its placement, and an unfinished proof.
 	 * @param {boolean} [options.follow] Another tab plays this seat: read its record before every step, never act.
 	 */
-	constructor(
-		{
-			api
-			, root
-			, sessionId
-			, players
-			, localPlayer
-			, breaker
-			, rounds = 64
-			, storage = globalThis.localStorage
-			, follow = false
-		}
-	){
+	constructor(options)
+	{
+		const {api, root, sessionId, players, localPlayer, breaker} = options;
+		const {rounds = 64, storage = globalThis.localStorage, follow = false} = options;
+
 		if(!api || typeof api.prepareCorpus !== 'function')
 		throw new TypeError('The private-deck primitive is unavailable');
 
@@ -469,20 +443,12 @@ export class OnlineMatch
 		this.assembler = null;
 		this.intent = null;
 		this.events = [];
-		this.state = {
-			v: ONLINE_VERSION
-			, rules: ONLINE_RULES
-			, sequence: 0
-			, stage: 'placement'
-			, game: Rules.create()
-			, decks: [null, null]
-			, layers: [null, null]
-			, pending: null
-			, duel: null
-			, reveal: []
-			, revealed: [null, null]
-			, outcome: null
-		};
+
+		// The state both browsers share: where the transcript stands, both placements, and how the game ends.
+		const transcript = {v: ONLINE_VERSION, rules: ONLINE_RULES, sequence: 0, stage: 'placement'};
+		const placements = {decks: [null, null], layers: [null, null], pending: null};
+		const ending = {reveal: [], revealed: [null, null], outcome: null};
+		this.state = {...transcript, game: Rules.create(), ...placements, duel: null, ...ending};
 
 		if(!this.follow && !legalArrangement(this.saved.arrangement))
 		{
@@ -874,17 +840,7 @@ export class OnlineMatch
 
 		try
 		{
-			const {stage} = this.state;
-			const expected = {placement: 'placement-packet', answer: 'answer', reveal: 'reveal'}[stage];
-
-			if(stage === 'over' || (expected ? action.type !== expected : !['move', 'challenge'].includes(action.type)))
-			throw new Error(`A ${action.type} action does not belong to the ${stage} stage`);
-
-			if(stage === 'placement') this.applyPlacement(actor, action);
-			else if(action.type === 'move') this.applyMove(action);
-			else if(action.type === 'challenge') this.applyChallenge(action);
-			else if(action.type === 'answer') this.applyAnswer(action);
-			else this.applyReveal(action);
+			this.dispatch(actor, action);
 		}
 		catch(error)
 		{
@@ -900,6 +856,27 @@ export class OnlineMatch
 		if(actor === this.localPlayer) this.intent = null;
 
 		return {sequence, hash: await this.hash(), nextActor: this.currentActor(), outcome: clone(this.state.outcome)};
+	}
+
+	/**
+	 * Hand one action to the step its stage expects.
+	 * @param {string} actor The seat that sent it.
+	 * @param {object} action The action, of a known type.
+	 * @returns {void} Throws when the action does not belong to the stage, or the step refuses it.
+	 */
+	dispatch(actor, action)
+	{
+		const {stage} = this.state;
+		const expected = {placement: 'placement-packet', answer: 'answer', reveal: 'reveal'}[stage];
+		const fits = expected ? action.type === expected : ['move', 'challenge'].includes(action.type);
+
+		if(stage === 'over' || !fits) throw new Error(`A ${action.type} action does not belong to the ${stage} stage`);
+
+		if(stage === 'placement') return this.applyPlacement(actor, action);
+
+		const step = {move: 'applyMove', challenge: 'applyChallenge', answer: 'applyAnswer', reveal: 'applyReveal'};
+
+		return this[step[action.type]](action);
 	}
 
 	/**
@@ -1119,13 +1096,39 @@ export class OnlineMatch
 	}
 
 	/**
+	 * Say what this seat is waiting for.
+	 * @param {string} opponent The other player's name.
+	 * @returns {string} One line for the status row, or nothing when the next decision is the player's own.
+	 */
+	waitingFor(opponent)
+	{
+		const {stage, game, pending} = this.state;
+		const mine = this.side, own = this.currentActor() === this.localPlayer;
+		const placing = stage === 'placement' && !game.placed[mine];
+
+		if(placing && !this.saved.ready) return '';
+
+		if(placing) return pending?.side === mine || own ? 'Placing your pieces' : `Waiting for ${opponent} to place`;
+
+		if(stage === 'placement') return `Waiting for ${opponent} to place`;
+
+		if(stage === 'answer') return own ? 'Showing your piece' : `Waiting for ${opponent} to show a piece`;
+
+		if(stage !== 'play') return '';
+
+		if(this.intent) return 'Sending';
+
+		return own ? '' : `${opponent} is thinking`;
+	}
+
+	/**
 	 * Describe the game as this seat may see it, in the shape `Rpsc\Session::view()` gives the table.
 	 * @param {string[]} [names] Display names for Black and Red.
 	 * @returns {object} The view, with `online` set and a `notice` when the player is waiting on something.
 	 */
 	view(names = SIDES)
 	{
-		const {stage, game, revealed, pending} = this.state;
+		const {stage, game, revealed} = this.state;
 		const own = this.ownKinds(), mine = this.side, theirs = 1 - mine;
 		const placing = stage === 'placement' && !game.placed[mine];
 		const pieces = [];
@@ -1147,50 +1150,24 @@ export class OnlineMatch
 
 		const acting = stage === 'play' && !this.follow && !this.intent && this.currentActor() === this.localPlayer;
 		const counts = [Rules.count(game, 0), Rules.count(game, 1)];
-		const opponent = names[theirs];
-		let notice = '';
-
-		if(placing && this.saved.ready)
-		notice = pending?.side === mine || this.currentActor() === this.localPlayer
-			? 'Placing your pieces'
-			: `Waiting for ${opponent} to place`;
-		else if(stage === 'placement' && !placing) notice = `Waiting for ${opponent} to place`;
-		else if(stage === 'answer')
-		notice = this.currentActor() === this.localPlayer
-			? 'Showing your piece'
-			: `Waiting for ${opponent} to show a piece`;
-		else if(stage === 'play' && this.intent) notice = 'Sending';
-		else if(stage === 'play' && this.currentActor() !== this.localPlayer) notice = `${opponent} is thinking`;
+		const notice = this.waitingFor(names[theirs]);
 
 		if(placing) counts[mine] = PIECES;
 
-		return {
-			phase: stage === 'placement' ? 'placement' : game.phase
-			, turn: game.turn
-			, viewer: mine
-			, challenged: game.challenged
-			, ply: game.ply
-			, quiet: game.quiet
-			, quietLimit: QUIET_LIMIT
-			, winner: game.winner
-			, reason: game.reason
-			, placed: [...game.placed]
-			, pieces
-			, counts
-			, lost: clone(game.lost)
-			, goals: [goal(0), goal(1)]
-			, filled: [Rules.filled(game, 0), Rules.filled(game, 1)]
-			, moves: acting ? Rules.moves(game) : []
-			, challenges: acting ? Rules.challenges(game) : []
-			, level: ''
-			, human: mine
-			, home: home(mine)
-			, arrangement: placing && legalArrangement(this.saved.arrangement) ? [...this.saved.arrangement] : null
-			, locked: placing && Boolean(this.saved.ready)
-			, online: true
-			, names: [...names]
-			, notice
-		};
+		const {turn, challenged, ply, quiet, winner, reason} = game;
+		const clock = {phase: stage === 'placement' ? 'placement' : game.phase, turn, challenged, ply, quiet};
+		const position = {placed: [...game.placed], pieces, counts, lost: clone(game.lost)};
+		const progress = {goals: [goal(0), goal(1)], filled: [Rules.filled(game, 0), Rules.filled(game, 1)]};
+		const legal = {moves: acting ? Rules.moves(game) : [], challenges: acting ? Rules.challenges(game) : []};
+
+		// What only this seat is shown: its side, its home squares, and its placement while it is still arranging.
+		const arranging = placing && legalArrangement(this.saved.arrangement);
+		const arrangement = arranging ? [...this.saved.arrangement] : null;
+		const seat = {viewer: mine, human: mine, home: home(mine), level: '', online: true, names: [...names]};
+		const placement = {arrangement, locked: placing && Boolean(this.saved.ready)};
+		const result = {quietLimit: QUIET_LIMIT, winner, reason};
+
+		return {...clock, ...result, ...position, ...progress, ...legal, ...seat, ...placement, notice};
 	}
 }
 
@@ -1201,19 +1178,8 @@ export class OnlineMatch
  */
 export function activate({session})
 {
-	const api = Object.freeze(
-		{
-			ONLINE_VERSION
-			, ONLINE_RULES
-			, ONLINE_ACTION_TYPES
-			, KEPT_TABLES
-			, KINDS
-			, SIDES
-			, Rules
-			, OnlineMatch
-			, readOnlyStorage
-		}
-	);
+	const constants = {ONLINE_VERSION, ONLINE_RULES, ONLINE_ACTION_TYPES, KEPT_TABLES, KINDS, SIDES};
+	const api = Object.freeze({...constants, Rules, OnlineMatch, readOnlyStorage});
 
 	session.rpscOnline = api;
 

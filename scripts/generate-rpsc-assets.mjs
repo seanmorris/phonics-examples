@@ -30,70 +30,65 @@ const hex = value => [1, 3, 5].map(at => parseInt(value.slice(at, at + 2), 16));
 /** Blend two colours: `amount` 0 gives the first, 1 the second. */
 const mix = (from, to, amount) => from.map((channel, index) => Math.round(channel + (to[index] - channel) * amount));
 
+/** A checker's tones by name, from its outline in to the boss at its centre. */
+const TONES = ['outline', 'light', 'dark', 'groove', 'face', 'boss'];
+
+/** Name six `#rrggbb` colours as one side's tones. */
+const tones = colours => Object.fromEntries(TONES.map((name, index) => [name, hex(colours[index])]));
+
 const SIDES = {
-	black: {
-		outline: hex('#0b0b0f')
-		, light: hex('#62627a')
-		, dark: hex('#2f2f3b')
-		, groove: hex('#141419')
-		, face: hex('#2a2a35')
-		, boss: hex('#4a4a5c')
-	}
-	, red: {
-		outline: hex('#35080b')
-		, light: hex('#f58a6c')
-		, dark: hex('#a82426')
-		, groove: hex('#6e1216')
-		, face: hex('#c8302e')
-		, boss: hex('#ee6a54')
-	}
+	black: tones(['#0b0b0f', '#62627a', '#2f2f3b', '#141419', '#2a2a35', '#4a4a5c'])
+	, red: tones(['#35080b', '#f58a6c', '#a82426', '#6e1216', '#c8302e', '#ee6a54'])
 };
 
 const EMBLEM = hex('#f6ecd2');
 const EMBLEM_SHADE = hex('#c9b388');
 const GOLD = [hex('#ffe08a'), hex('#d9a12f'), hex('#8a5a12')];
 
+/** Read a picture drawn as rows of text, one character a pixel. Used as a template tag. */
+const bitmap = ([picture]) => picture.trim().split('\n').map(row => row.trim());
+
 /** Emblems, eleven pixels square: `#` is the light tone and `+` the shaded one. */
 const EMBLEMS = {
-	rock: [
-		'...#####...'
-		, '..#######..'
-		, '.####+####.'
-		, '.###++####.'
-		, '####+######'
-		, '###++###+##'
-		, '##++####++#'
-		, '#+++++##+++'
-		, '.+++++++++.'
-		, '..+++++++..'
-		, '...........'
-	]
-	, paper: [
-		'.#######...'
-		, '.#######+..'
-		, '.#######++.'
-		, '.#########.'
-		, '.#++++++##.'
-		, '.#########.'
-		, '.#++++++##.'
-		, '.#########.'
-		, '.#++++####.'
-		, '.#########.'
-		, '.#########.'
-	]
-	, scissors: [
-		'#.........#'
-		, '##.......##'
-		, '.##.....##.'
-		, '..##...##..'
-		, '...##.##...'
-		, '....###....'
-		, '...##+##...'
-		, '.+++...+++.'
-		, '+..+...+..+'
-		, '+..+...+..+'
-		, '.++.....++.'
-	]
+	rock: bitmap`
+		...#####...
+		..#######..
+		.####+####.
+		.###++####.
+		####+######
+		###++###+##
+		##++####++#
+		#+++++##+++
+		.+++++++++.
+		..+++++++..
+		...........
+	`
+	, paper: bitmap`
+		.#######...
+		.#######+..
+		.#######++.
+		.#########.
+		.#++++++##.
+		.#########.
+		.#++++++##.
+		.#########.
+		.#++++####.
+		.#########.
+		.#########.
+	`
+	, scissors: bitmap`
+		#.........#
+		##.......##
+		.##.....##.
+		..##...##..
+		...##.##...
+		....###....
+		...##+##...
+		.+++...+++.
+		+..+...+..+
+		+..+...+..+
+		.++.....++.
+	`
 };
 
 /** A small RGBA image to draw into and write out as a PNG. */
@@ -314,22 +309,14 @@ TILES.forEach((name, index) => sheet.blit(tiles[name], index % COLUMNS * TILE, M
 const generated = new Map;
 generated.set('assets/pieces.png', sheet.png());
 
-generated.set('assets/pieces.tsj', Buffer.from(JSON.stringify({
-	type: 'tileset'
-	, version: '1.10'
-	, name: 'RPSC pieces'
-	, tilewidth: TILE
-	, tileheight: TILE
-	, tilecount: TILES.length
-	, columns: COLUMNS
-	, image: 'pieces.png'
-	, imagewidth: sheet.width
-	, imageheight: sheet.height
-	// The renderer finds each tile by name, so adding or reordering tiles never needs a matching edit in PHP.
-	, properties: [{name: 'rpsc.tiles', type: 'string', value: TILES.join(',')}]
-}, null, 2
-) + '\n'
-));
+// The tileset in Tiled's own key order. The renderer finds each tile by the name recorded in `rpsc.tiles`, so adding
+// or reordering tiles never needs a matching edit in PHP.
+const grid = {tilewidth: TILE, tileheight: TILE, tilecount: TILES.length, columns: COLUMNS};
+const image = {image: 'pieces.png', imagewidth: sheet.width, imageheight: sheet.height};
+const properties = [{name: 'rpsc.tiles', type: 'string', value: TILES.join(',')}];
+const tileset = {type: 'tileset', version: '1.10', name: 'RPSC pieces', ...grid, ...image, properties};
+
+generated.set('assets/pieces.tsj', Buffer.from(JSON.stringify(tileset, null, 2) + '\n'));
 
 /** Deterministic 16-bit mono PCM at 22050 Hz from a sample function of seconds. */
 function wav(seconds, sample)
@@ -339,6 +326,8 @@ function wav(seconds, sample)
 	buffer.write('RIFF', 0);
 	buffer.writeUInt32LE(36 + count * 2, 4);
 	buffer.write('WAVE', 8);
+
+	// The format chunk: uncompressed, one channel, two bytes a sample.
 	buffer.write('fmt ', 12);
 	buffer.writeUInt32LE(16, 16);
 	buffer.writeUInt16LE(1, 20);
@@ -347,6 +336,8 @@ function wav(seconds, sample)
 	buffer.writeUInt32LE(rate * 2, 28);
 	buffer.writeUInt16LE(2, 32);
 	buffer.writeUInt16LE(16, 34);
+
+	// The data chunk: its length, then the samples.
 	buffer.write('data', 36);
 	buffer.writeUInt32LE(count * 2, 40);
 
@@ -508,53 +499,38 @@ for(let x = 28; x < 692; x++)
 	poster.put(x, y, edge);
 }
 
-boardInto(poster, 40, 40, 4, {
-	1: 'black-rock'
-	, 3: 'black-scissors'
-	, 5: 'black-paper'
-	, 7: 'black-rock'
-	, 8: 'black-paper'
-	, 10: 'black-rock'
-	, 14: 'black-scissors'
-	, 19: 'black-paper'
-	, 21: 'black-scissors'
-	, 26: 'black-scissors'
-	, 28: 'black-rock'
-	, 39: 'black-paper'
-	, 27: 'red-back'
-	, 36: 'red-back'
-	, 38: 'red-back'
-	, 41: 'red-back'
-	, 45: 'red-back'
-	, 48: 'red-back'
-	, 52: 'red-back'
-	, 54: 'red-back'
-	, 57: 'red-back'
-	, 59: 'red-back'
-	, 61: 'red-back'
-	, 63: 'red-back'
-}, [[26, 'ring', [255, 220, 128]]
-	, [27, 'reticle', [255, 220, 128]]
-	, [33, 'dot', [246, 236, 210]]
-	, [35, 'dot', [246, 236, 210]]
-	, [56, 'crown', [92, 18, 18]]
-	, [58, 'crown', [92, 18, 18]]
-	, [60, 'crown', [92, 18, 18]]
-	, [62, 'crown', [92, 18, 18]]
-	, [0, 'crown', [64, 61, 79]]
-	, [2, 'crown', [64, 61, 79]]
-	, [4, 'crown', [64, 61, 79]]
-	, [6, 'crown', [64, 61, 79]]
-]);
+/** The poster's position: each tile and the squares it stands on, numbered from a1. */
+const POSITION = {
+	'black-rock': [1, 7, 10, 28]
+	, 'black-scissors': [3, 14, 21, 26]
+	, 'black-paper': [5, 8, 19, 39]
+	, 'red-back': [27, 36, 38, 41, 45, 48, 52, 54, 57, 59, 61, 63]
+};
 
+/** One `[square, tile]` pair for each square a tile stands on. */
+const standing = ([name, squares]) => squares.map(at => [at, name]);
+
+const gold = [255, 220, 128];
 const cream = [246, 236, 210];
+
+// A selected piece, the two squares it can step to, the piece it can challenge, and both sides' far-rank crowns.
+const marks = [
+	[26, 'ring', gold]
+	, [27, 'reticle', gold]
+	, ...[33, 35].map(at => [at, 'dot', cream])
+	, ...[56, 58, 60, 62].map(at => [at, 'crown', [92, 18, 18]])
+	, ...[0, 2, 4, 6].map(at => [at, 'crown', [64, 61, 79]])
+];
+
+boardInto(poster, 40, 40, 4, Object.fromEntries(Object.entries(POSITION).flatMap(standing)), marks);
+
 const wordmark = await title(null, 'RPSC', 0, 0, 14, cream);
 await title(poster, 'RPSC', 728 + Math.floor((524 - wordmark) / 2), 96, 14, cream);
 
 for(const [index, line] of ['ROCK PAPER SCISSORS', 'CHECKERS'].entries())
 {
 	const length = await title(null, line, 0, 0, 3, cream);
-	await title(poster, line, 728 + Math.floor((524 - length) / 2), 336 + index * 54, 3, [255, 220, 128]);
+	await title(poster, line, 728 + Math.floor((524 - length) / 2), 336 + index * 54, 3, gold);
 }
 
 ['black-rock', 'red-paper', 'black-scissors'].forEach(

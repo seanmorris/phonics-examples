@@ -40,17 +40,10 @@ const until = async(condition, timeout = 120000) => {
 async function seated(t, decide)
 {
 	const hub = new InMemoryLobbyHub;
-	const game = {
-		id: 'org.example.rpsc'
-		, protocol: '1.0.0'
-		, rules: ONLINE_RULES
-		, application: 'rpsc-app'
-		, runtime: 'rpsc-runtime'
-		, actionTypes: [...ONLINE_ACTION_TYPES]
-		, maximumActionBytes: 49152
-		, checkpointMode: 'history'
-		, actionBatches: true
-	};
+	const identity = {id: 'org.example.rpsc', protocol: '1.0.0', rules: ONLINE_RULES};
+	const build = {application: 'rpsc-app', runtime: 'rpsc-runtime'};
+	const actions = {actionTypes: [...ONLINE_ACTION_TYPES], maximumActionBytes: 49152, actionBatches: true};
+	const game = {...identity, ...build, ...actions, checkpointMode: 'history'};
 
 	const clients = {};
 
@@ -58,20 +51,9 @@ async function seated(t, decide)
 	{
 		const provider = new InMemoryLobbyProvider({hub, peerId: id});
 		const protocol = new RoomGameProtocol({provider, game, session: {}, storage: storage()});
-		const client = clients[id] = {
-			id
-			, provider
-			, protocol
-			, match: null
-			, port: null
-			, work: Promise.resolve()
-			, active: false
-			, submitting: false
-			, awaiting: false
-			, error: null
-			, stopped: null
-			, store: storage()
-		};
+		const flags = {active: false, submitting: false, awaiting: false, error: null, stopped: null};
+		const table = {match: null, port: null, work: Promise.resolve(), store: storage()};
+		const client = clients[id] = {id, provider, protocol, ...table, ...flags};
 
 		const enqueue = task => { client.work = client.work.then(task).catch(error => { client.error ??= error; }); };
 
@@ -118,6 +100,7 @@ async function seated(t, decide)
 				client.submitting = false;
 				await drive();
 			})
+
 			, confirmed: detail => enqueue(async() => {
 				assert.equal(detail.hash, await client.match.hash());
 				client.active = true;

@@ -17,22 +17,46 @@ const storage = () => {
 /** Small deterministic generator so failures reproduce. */
 const random = seed => () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
 
+/** The match every test table plays: Alice and Bob, with Alice chosen to go first. */
+const MATCH = {sessionId: 'match-1', players: ['alice', 'bob'], breaker: 'alice'};
+
+/** Alice's seat at a table, in a browser with nothing stored for it. */
+const stranger = root => new OnlineMatch({api, root, ...MATCH, localPlayer: 'alice', rounds: 16, storage: storage()});
+
+/**
+ * Send actions from one seat to one browser until it refuses one.
+ * @param {OnlineMatch} match The browser that checks them.
+ * @param {string} actor The seat they claim to come from.
+ * @param {object[]} actions The actions, in order.
+ * @param {number} sequence The sequence of the last action the browser has applied.
+ * @returns {Promise<Error|null>} The refusal, or null when every action was accepted.
+ */
+async function refusal(match, actor, actions, sequence)
+{
+	let parent = await match.hash();
+
+	for(const action of actions)
+	{
+		const step = {sequence: ++sequence, actor, pre_hash: parent, action};
+		const settled = await match.apply(step).catch(error => error);
+
+		if(settled instanceof Error) return settled;
+
+		parent = settled.hash;
+	}
+
+	return null;
+}
+
 /** Two browsers at one table. Alice goes first, so she plays Black. */
 function table({rounds = 16, root = 'table-1'} = {})
 {
 	const stores = {alice: storage(), bob: storage()};
 
-	const make = (name, extra = {}) => new OnlineMatch({
-		api
-		, root
-		, sessionId: 'match-1'
-		, players: ['alice', 'bob']
-		, localPlayer: name
-		, breaker: 'alice'
-		, rounds
-		, storage: stores[name]
-		, ...extra
-	});
+	/** What one browser is told about its seat. */
+	const seat = name => ({api, root, ...MATCH, localPlayer: name, rounds, storage: stores[name]});
+
+	const make = (name, extra = {}) => new OnlineMatch({...seat(name), ...extra});
 
 	const peers = {alice: make('alice'), bob: make('bob')};
 	const history = [];
@@ -122,12 +146,11 @@ async function playOut(game, next)
 			if(event.type !== 'challenge' || name !== 'alice') continue;
 
 			// Each piece that is shown twice shows the same kind both times.
-			for(const [side, id, kind] of [[event.side, event.attackerId, event.attacker]
-				, [1
-				- event.side
-				, event.defenderId, event.defender
-				]
-			]){
+			const attacker = [event.side, event.attackerId, event.attacker];
+			const defender = [1 - event.side, event.defenderId, event.defender];
+
+			for(const [side, id, kind] of [attacker, defender])
+			{
 				assert.equal(shown[side].get(id) ?? kind, kind, 'a piece never changes kind');
 				shown[side].set(id, kind);
 			}
@@ -212,6 +235,8 @@ test('a placement is one batch of packets under the room limit, and waits for Re
 	assert.equal(peers.alice.command({type: 'swap', a: 0, b: 12}), false);
 	assert.equal(peers.alice.command({type: 'shuffle'}), true);
 	assert.equal(peers.alice.command({type: 'move', from: 17, to: 24}), false, 'no move during placement');
+
+	// Ready locks whatever is arranged at that moment.
 	const chosen = peers.alice.view().arrangement;
 	assert.equal(peers.alice.command({type: 'ready'}), true);
 	assert.equal(peers.alice.command({type: 'shuffle'}), false);
@@ -329,6 +354,8 @@ test('forged, misplaced, and replayed actions are refused and leave the state un
 	const answer = peers.bob.nextAction();
 	assert.equal(answer.type, 'answer');
 	await deliver('bob', answer);
+
+	// The event names both kinds truthfully, and the game goes on with the challenger.
 	const [event] = peers.alice.takeEvents().filter(item => item.type === 'challenge');
 	assert.equal(event.attacker, truth);
 	assert.equal(event.defender, peers.bob.ownKinds()[defender]);
@@ -348,62 +375,18 @@ test('a placement that is not the twelve tokens, or is copied from the other sea
 	for(const action of plan) await game.deliver('alice', action);
 
 	assert.equal(peers.alice.currentActor(), 'bob');
-	const hash = await peers.alice.hash();
-	let sequence = game.history.length, parent = hash, failure = null;
-
-	const copy = new OnlineMatch(
-		{
-			api
-			, root: 'table-1'
-			, sessionId: 'match-1'
-			, players: ['alice', 'bob']
-			, localPlayer: 'alice'
-			, breaker: 'alice'
-			, rounds: 16
-			, storage: storage()
-		}
-	);
-
+	const copy = stranger('table-1');
 	await copy.replay(game.history);
-
-	for(const action of plan)
-	{
-		try
-		{
-			({hash: parent} = await copy.apply({sequence: ++sequence, actor: 'bob', pre_hash: parent, action}));
-		}
-		catch(error)
-		{
-			failure = error;
-			break;
-		}
-	}
-
-	assert.match(failure?.message ?? '', /placement proof does not hold/);
+	const copied = await refusal(copy, 'bob', plan, game.history.length);
+	assert.match(copied?.message ?? '', /placement proof does not hold/);
 
 	// A deck with a rock where a paper should be has no proof at all: an honest proof of another deck does not fit it.
 	const forged = structuredClone(peers.bob.command({type: 'ready'}) && peers.bob.plan());
 	const key = api.generateLayerKey();
 	const five = api.applyShuffle(peers.bob.input, key, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 	forged[0].records[0].deck[5] = five[1];
-	sequence = game.history.length;
-	parent = hash;
-	failure = null;
-
-	for(const action of forged)
-	{
-		try
-		{
-			({hash: parent} = await peers.alice.apply({sequence: ++sequence, actor: 'bob', pre_hash: parent, action}));
-		}
-		catch(error)
-		{
-			failure = error;
-			break;
-		}
-	}
-
-	assert.match(failure?.message ?? '', /placement proof does not hold/);
+	const refused = await refusal(peers.alice, 'bob', forged, game.history.length);
+	assert.match(refused?.message ?? '', /placement proof does not hold/);
 	assert.equal(peers.alice.publicState().game.placed[1], false);
 });
 
@@ -437,18 +420,7 @@ test('a reload rebuilds the game from the room history and keeps the private pla
 	assert.deepEqual(resumed.nextAction(), plan[1]);
 
 	// A browser that lost its record still follows the game, but cannot name or open its own pieces.
-	const lost = new OnlineMatch(
-		{
-			api
-			, root: 'table-1'
-			, sessionId: 'match-1'
-			, players: ['alice', 'bob']
-			, localPlayer: 'alice'
-			, breaker: 'alice'
-			, rounds: 16
-			, storage: storage()
-		}
-	);
+	const lost = stranger('table-1');
 
 	await lost.replay(game.history);
 	assert.equal(lost.ownKinds(), null);

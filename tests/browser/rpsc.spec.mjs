@@ -108,10 +108,12 @@ test('RPSC places, moves, challenges, saves, and resigns', async({page}) => {
 
 		if(now.challenges.length)
 		{
+			// Picking up the piece marks its neighbour; pressing the neighbour makes the challenge.
 			const [from, to] = now.challenges[0];
 			await square(page, from).click();
 			await expect.poll(async() => (await status(page)).victims).toContain(to);
 			await expect(square(page, to)).toHaveAttribute('aria-label', /challenge$/);
+
 			await square(page, to).click();
 			await acted(page, now);
 			duel = {from, to, before: now};
@@ -169,6 +171,8 @@ test('RPSC places, moves, challenges, saves, and resigns', async({page}) => {
 	await button(page, 'Resign this game').click();
 	await expect.poll(async() => (await status(page)).phase).toBe('over');
 	await expect(button(page, 'Play again')).toBeVisible();
+
+	// The other side wins, and nothing on the board is hidden any more.
 	now = await status(page);
 	expect(now.reason).toBe('resign');
 	expect(now.winner).toBe(1 - now.human);
@@ -242,17 +246,10 @@ async function seatOnline(page)
 		};
 
 		const hub = new InMemoryLobbyHub;
-		const game = {
-			id: 'org.example.rpsc'
-			, protocol: '1.0.0'
-			, rules: ONLINE_RULES
-			, application: 'app'
-			, runtime: 'runtime'
-			, actionTypes: [...ONLINE_ACTION_TYPES]
-			, maximumActionBytes: 49152
-			, checkpointMode: 'history'
-			, actionBatches: true
-		};
+		const identity = {id: 'org.example.rpsc', protocol: '1.0.0', rules: ONLINE_RULES};
+		const build = {application: 'app', runtime: 'runtime'};
+		const actions = {actionTypes: [...ONLINE_ACTION_TYPES], maximumActionBytes: 49152, actionBatches: true};
+		const game = {...identity, ...build, ...actions, checkpointMode: 'history'};
 
 		const make = id => new RoomGameProtocol(
 			{provider: new InMemoryLobbyProvider({hub, peerId: id}), game, session: {}, storage: memory()}
