@@ -1,6 +1,6 @@
 # Playing online
 
-**Play online** on the title opens the Phonics room lobby. Sign in with a Matrix account, open a table or challenge someone, and the game starts when a second player sits down. The room picks who goes first; that player is Black.
+**Play online** on the title opens the Phonics room lobby, which lives in the public Matrix room `#phonics-rpsc:matrix.org`. Sign in with a Matrix account, open a table or challenge someone, and the game starts when a second player sits down. The room picks who goes first; that player is Black.
 
 Both players arrange their twelve pieces and press **Ready**. Black's placement is sent first, then Red's, and play begins when both have arrived. From there a turn works as it does against the computer. **Resign** in the menu concedes and leaves both players at the table; **Leave table** in the lobby's panel concedes and walks away. A player who does not answer within five minutes forfeits.
 
@@ -62,5 +62,5 @@ The room lets one tab play a seat. A second tab on the same seat reads the first
 ## Limits
 
 - Two players, no spectators.
-- The lobby's chat room is `#phonics-rpsc:matrix.org` on matrix.org. It has to exist as a public chat room before anyone can sign in to it.
+- Every table is opened from the one lobby room on matrix.org, so both players need an account that can join it.
 - Building a placement proof and checking one each take about a second and a half on a desktop. An opening is about 200 bytes and is checked at once.
