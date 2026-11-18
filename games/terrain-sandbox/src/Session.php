@@ -55,6 +55,8 @@ final class Session
 	public bool $preparing = false;
 	/** Whether exact terrain picking is progressing without blocking a frame. */
 	public bool $picking = false;
+	/** Diagnostics for the last confirmed hit or completed miss. */
+	public ?array $lastPick = null;
 	private ?RayQuery $pickQuery = null;
 	private array $pickIntent = [], $pickQueue = [];
 	private ?int $pin = null;
@@ -84,18 +86,20 @@ final class Session
 	 * Process UI intent immediately before the engine's fixed simulation boundary.
 	 * @param array $input Held keys, accumulated pointer look, actions, values, and clicks.
 	 * @param float $seconds Display elapsed seconds, bounded by the application.
+	 * @param float $pickMs Cooperative pick allowance in milliseconds.
 	 * @param float $aspect Canvas width divided by height for picking.
 	 * @return void Publishes complete edit transactions and updates presentation controls.
 	 */
-	public function input(array $input, float $seconds, float $aspect): void
+	public function input(array $input, float $seconds, float $aspect, float $pickMs = 2.0): void
 	{
 		$this->keys = is_array($input['keys'] ?? null) ? $input['keys'] : [];
 		try
 		{
+			$wasPicking = $this->picking;
 			foreach($input['values'] ?? [] as $name => $value) $this->setting((string)$name, $value);
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
-			$this->advancePick();
+			if($wasPicking) $this->advancePick($pickMs);
 			if($this->draft !== null) { $this->draft->commit(); $this->dirty = true; }
 		}
 		catch(\Throwable $error)
@@ -186,7 +190,7 @@ final class Session
 		if($name === 'haze') $this->atmosphere->setHaze($value);
 		if($name === 'exposure') $this->atmosphere->setExposure($value);
 		if($name === 'azimuth' || $name === 'elevation') $this->sun();
-		$this->dirty = true;
+		$this->dirty = $this->dirty || in_array($name,['quality','exposure','haze','azimuth','elevation','clock'],true);
 	}
 
 	/**
@@ -275,17 +279,19 @@ final class Session
 
 	/**
 	 * Spend a bounded slice finding an exact intersection with the current surface.
+	 * @param float $budgetMs Maximum pick work for this frame in milliseconds.
 	 * @return void Applies a complete hit and leaves the remaining queued road clicks for later frames.
 	 */
-	private function advancePick(): void
+	private function advancePick(float $budgetMs): void
 	{
 		if($this->pickQuery === null && $this->pickQueue !== [])
 		{
 			$this->pickIntent = array_shift($this->pickQueue);
 			$this->pickQuery = $this->landscape->rayQuery($this->pickIntent['origin'], $this->pickIntent['direction'], 6000);
 		}
-		if($this->pickQuery === null || !$this->pickQuery->advance(2, 64)) return;
+		if($this->pickQuery === null || !$this->pickQuery->advance($budgetMs, 512)) return;
 		$hit = $this->pickQuery->result();
+		$this->lastPick = $this->pickQuery->stats();
 		$settings = $this->pickIntent['settings'];
 		$this->pickQuery = null; $this->pickIntent = [];
 		$this->picking = $this->pickQueue !== [];
@@ -318,7 +324,6 @@ final class Session
 			if(count($this->road) >= 64) throw new \RuntimeException('Apply or clear this road before adding more points.');
 			$this->road[] = [$wx,$wy + $settings['roadRaise'],$wz];
 			$this->message = count($this->road) . ' road points. Apply road when the route is ready.';
-			$this->dirty = true;
 			return;
 		}
 		$operation = ['type' => $tool,'x' => $wx,'z' => $wz,'radius' => $settings['radius'],
@@ -532,7 +537,7 @@ final class Session
 	{
 		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
 			'preparing' => $this->preparing,'picking' => $this->picking,
-			'pickProgress' => $this->pickQuery?->stats(),'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
+			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'settings' => $this->settings,'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats()];

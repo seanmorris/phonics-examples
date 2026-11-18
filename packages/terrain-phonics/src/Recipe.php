@@ -219,6 +219,82 @@ final class Recipe
 	}
 
 	/**
+	 * Bound every procedural node in a world rectangle, including warp, terraces and gated detail.
+	 * @param array $box Horizontal bounds [minX,minZ,maxX,maxZ], including any sample halo.
+	 * @return array Conservative node height interval in metres.
+	 */
+	public function regionalBounds(array $box): array
+	{
+		$r = $this->values;
+		$x = ($box[0] + $box[2]) / 2;
+		$z = ($box[1] + $box[3]) / 2;
+		$rx = ($box[2] - $box[0]) / 2 + 1e-9;
+		$rz = ($box[3] - $box[1]) / 2 + 1e-9;
+		$wx = $x; $wz = $z; $hx = $rx; $hz = $rz;
+		$jac = 1.0;
+		$w = $r['warpAmplitude'];
+		$f = $r['warpFrequency'];
+		if($w > 0)
+		{
+			$a = $this->noise->envelope($x*$f+271.13, $z*$f-197.41, $rx*$f, $rz*$f);
+			$b = $this->noise->envelope($x*$f-419.27, $z*$f+113.71, $rx*$f, $rz*$f);
+			$wx += $w * ($a[0]+$a[1])/2; $hx += $w * ($a[1]-$a[0])/2 + 1e-9;
+			$wz += $w * ($b[0]+$b[1])/2; $hz += $w * ($b[1]-$b[0])/2 + 1e-9;
+			$jac += $w*$f * max($a[2]+$b[2], $a[3]+$b[3]);
+		}
+		$f = $r['baseFrequency'];
+		$a = $this->noise->envelope($wx*$f+13.17, $wz*$f-9.31, $hx*$f, $hz*$f);
+		$b = $this->noise->envelope($wx*$f*2+71.43, $wz*$f*2+53.11, $hx*$f*2, $hz*$f*2);
+		$absMin = max(0.0, $a[0], -$a[1]);
+		$absMax = max(-$a[0], $a[1]);
+		$da = max($a[2],$a[3])*$f;
+		$db = max($b[2],$b[3])*$f*2;
+		switch($r['preset'])
+		{
+			case 'mountain':
+				$lo = .35 - sqrt($absMax**2 + .0016) + .24*$b[0];
+				$hi = .35 - sqrt($absMin**2 + .0016) + .24*$b[1];
+				$gradient = $da + .24*$db;
+				break;
+			case 'canyon':
+				$wallLo = max(0.0,min(1.0,($absMin-.055)/.006));
+				$wallHi = max(0.0,min(1.0,($absMax-.055)/.006));
+				$lo = -.55 + Noise::fade($wallLo) + .15*$b[0];
+				$hi = -.55 + Noise::fade($wallHi) + .15*$b[1];
+				$gradient = ($wallHi === 0.0 || $wallLo === 1.0 ? 0 : 1.875/.006)*$da + .15*$db;
+				break;
+			default:
+				$lo = .6*$a[0] + .35*tanh(($wx-$hx)/4500) + .15*$b[0];
+				$hi = .6*$a[1] + .35*tanh(($wx+$hx)/4500) + .15*$b[1];
+				$gradient = .6*$da + .35/4500 + .15*$db;
+		}
+		$lo *= $r['heightScale']; $hi *= $r['heightScale'];
+		$gradient *= $r['heightScale']*$jac;
+		$spacing = $r['terraceSpacing'];
+		if($spacing > 0)
+		{
+			// Within a terrace the displacement is always less than the terrace spacing.
+			// Tiny spacings can lose the fractional part of the level in binary64.
+			$lo -= $spacing*$r['terraceStrength'];
+			$hi += $spacing*$r['terraceStrength'];
+			$gradient *= 1.875;
+		}
+		$slope = 2 * (($gradient+1e-8) / $r['slopeScale'])**2;
+		$f *= 8;
+		$amp = $r['detailAmplitude'];
+		for($i=0; $i<$r['detailOctaves'] && $amp>0; $i++)
+		{
+			[$n,$m] = $this->noise->envelope($x*$f+91.73+$i*19.17, $z*$f-23.49-$i*31.29, $rx*$f, $rz*$f);
+			$minWeight = 1 / (1+$r['damping']*($i+1)**2*$slope);
+			$lo += $amp * min($n,$n*$minWeight);
+			$hi += $amp * max($m,$m*$minWeight);
+			$f *= $r['lacunarity'];
+			$amp *= $r['persistence'];
+		}
+		return [$lo-1e-6,$hi+1e-6];
+	}
+
+	/**
 	 * Conservative node extrema include the maximum possible gradient-noise magnitude.
 	 * @return array Conservative lower and upper node heights.
 	 */

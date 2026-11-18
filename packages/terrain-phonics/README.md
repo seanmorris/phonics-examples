@@ -55,8 +55,9 @@ A transaction contains all operations queued before one `commit()`. Supported op
 flatten, smooth, crater, material, and road. Undo/redo works on transactions. Saved data includes the generator
 version and edit history; derived sample caches and road acceleration indexes are rebuilt on load.
 Finite operation and road-kernel limits keep malformed files from allocating unbounded work.
-For distant pointer picking, use `rayQuery()` and advance it in small time/cell budgets. The completed result
-is identical to `raycast()`, but the UI can remain responsive while the exact cell traversal proceeds.
+For distant pointer picking, use `rayQuery()` and advance it with a time budget and a maximum number of traversal steps.
+The picker skips blocks whose full height range misses the ray, including the effects of edits and cubic
+interpolation. It solves the remaining cells in front-to-back order. Both picking APIs return the same first hit.
 
 A visible application should prepare a candidate with `Landscape::load($ground->save())`, edit that candidate,
 and call `Scene::prepareLandscape()`. Continue simulating and drawing the old surface while preparation runs.

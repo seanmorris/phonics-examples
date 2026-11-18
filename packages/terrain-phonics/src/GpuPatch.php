@@ -5,7 +5,7 @@ namespace TerrainPhonics;
 /**
  * Indexed grid geometry retained across graphics-context restoration.
  *
-	 * The packed stream holds local position, mesh-derived normal, parent height and
+ * The packed stream holds local position, mesh-derived normal, parent height and
  * material identifier. Terrain generation owns those bytes independently of GL names.
  */
 final class GpuPatch
@@ -16,35 +16,31 @@ final class GpuPatch
 	/**
 	 * Retain and upload one patch with matching parent-height and normal attributes.
 	 * @param string $vertices Packed eleven-float vertex records, including parent normal.
+	 * @param int|null $sharedIndex Optional scene-owned element buffer.
 	 * @param string $indices Packed unsigned-short triangle indices.
 	 * @return void Uploads the retained mesh data.
 	 */
-	public function __construct(private string $vertices, private string $indices)
+	public function __construct(private string $vertices, private string $indices, ?int $sharedIndex = null)
 	{
 		$this->count = intdiv(strlen($indices), 2);
-		// The PHP binding validates indexed draws with synchronous GL queries. Expand once
-		// to avoid those stalls on every terrain patch, as the billiards renderer does.
-		$expanded = '';
-
-		foreach(unpack('v*', $indices) as $index) $expanded .= substr($vertices, $index * 44, 44);
-		$this->vertices = $expanded;
-		$this->restore();
+		$this->restore($sharedIndex);
 	}
 
 	/**
 	 * Recreate context-local names from retained bytes.
+	 * @param int|null $sharedIndex Optional restored scene-owned element buffer.
 	 * @return void Uploads vertex and index buffers for the current context.
 	 */
-	public function restore(): void
+	public function restore(?int $sharedIndex = null): void
 	{
 		$this->close();
 		glGenVertexArrays(1, $this->vao);
 		glBindVertexArray($this->vao[0]);
-		glGenBuffers(2, $this->buffers);
+		glGenBuffers($sharedIndex === null ? 2 : 1, $this->buffers);
 		glBindBuffer(GL_ARRAY_BUFFER, $this->buffers[0]);
 		glBufferData(GL_ARRAY_BUFFER, strlen($this->vertices), $this->vertices, GL_STATIC_DRAW);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, $this->buffers[1]);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, strlen($this->indices), $this->indices, GL_STATIC_DRAW);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, $sharedIndex ?? $this->buffers[1]);
+		if($sharedIndex === null) glBufferData(GL_ELEMENT_ARRAY_BUFFER, strlen($this->indices), $this->indices, GL_STATIC_DRAW);
 
 		foreach([[0,3,0],[1,3,12],[2,1,24],[3,1,28],[4,3,32]] as [$location,$size,$offset])
 		{
@@ -56,13 +52,13 @@ final class GpuPatch
 	}
 
 	/**
-	 * Draw the expanded triangle stream for this patch.
-	 * @return void Submits the retained vertices without per-draw index validation.
+	 * Draw the indexed triangle stream for this patch.
+	 * @return void Submits the retained vertices with index validation.
 	 */
 	public function draw(): void
 	{
 		glBindVertexArray($this->vao[0]);
-		glDrawArrays(GL_TRIANGLES, 0, $this->count);
+		glDrawElements(GL_TRIANGLES, $this->count, GL_UNSIGNED_SHORT, 0);
 	}
 
 	/**
@@ -80,9 +76,13 @@ final class GpuPatch
 
 	/**
 	 * Report packed CPU mesh bytes.
-	 * @return int Retained vertex and index payload length in bytes.
+	 * @param bool $includeIndices Include index data when the caller owns this topology.
+	 * @return int Retained payload length in bytes.
 	 */
-	public function bytes(): int { return strlen($this->vertices) + strlen($this->indices); }
+	public function bytes(bool $includeIndices = true): int
+	{
+		return strlen($this->vertices) + ($includeIndices ? strlen($this->indices) : 0);
+	}
 
 	/**
 	 * Construct a consistently wound grid index buffer.

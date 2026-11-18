@@ -36,7 +36,7 @@ final class HeightTile
 	{
 		$index = $this->index($x, $z);
 
-		return $this->valid[$index] === "\0" ? null : unpack('e', substr($this->data, $index * 8, 8))[1];
+		return $this->valid[$index] === "\0" ? null : unpack('e', $this->data, $index * 8)[1];
 	}
 
 	/**

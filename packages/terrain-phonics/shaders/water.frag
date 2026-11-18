@@ -25,6 +25,7 @@ vec4 waterVisualSample(vec2 position, float time, vec2 pixelX, vec2 pixelY)
 		vec2 dynamics = uWaveDynamics[i];
 		vec2 gradient = wave.z * wave.xy;
 		float weight = waterPhaseFilter(dot(gradient,pixelX),dot(gradient,pixelY));
+		if(weight == 0.0) continue;
 		float phase = dot(gradient,position) - dynamics.x * time + dynamics.y;
 		float slope = wave.w * cos(phase);
 		result += weight * vec4(wave.w * sin(phase),slope * gradient,-slope * dynamics.x);
@@ -42,6 +43,7 @@ vec4 waterVisualSample(vec2 position, float time, vec2 pixelX, vec2 pixelY)
 		vec2 deltaY = delta + pixelY;
 		float weight = waterPhaseFilter(2.2 * (sqrt(dot(deltaX,deltaX) + 0.04) - radius),
 			2.2 * (sqrt(dot(deltaY,deltaY) + 0.04) - radius));
+		if(weight == 0.0) continue;
 		float q = radius - 3.0 * age;
 		float fade = pow(sin(3.14159265359 * age / 8.0),2.0);
 		float envelope = wake.z * exp(-0.45 * age - 0.35 * q * q);

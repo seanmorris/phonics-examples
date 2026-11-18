@@ -94,6 +94,48 @@ final class Camera
 	}
 
 	/**
+	 * Extract the six inward clip planes from the same column-major matrix used by the shaders.
+	 * @param int $width Drawing-buffer width.
+	 * @param int $height Drawing-buffer height.
+	 * @return array Camera-relative plane equations.
+	 */
+	public function clipPlanes(int $width, int $height): array
+	{
+		$m = $this->viewProjection($width,$height);
+		$planes = [];
+		foreach([0,1,2] as $row) foreach([-1,1] as $sign)
+			$planes[] = [$m[3]+$sign*$m[$row],$m[7]+$sign*$m[4+$row],
+				$m[11]+$sign*$m[8+$row],$m[15]+$sign*$m[12+$row]];
+		return $planes;
+	}
+
+	/**
+	 * Test the farthest box corner against each plane, allowing for GPU float rounding.
+	 * @param array $planes Camera-relative clip planes.
+	 * @param array $eye World camera position.
+	 * @param array $node Axis-aligned patch footprint.
+	 * @param float $low Minimum rendered vertex height including morph.
+	 * @param float $high Maximum rendered vertex height including morph.
+	 * @return bool Whether the patch can intersect the frustum.
+	 */
+	public static function inView(array $planes, array $eye, array $node, float $low, float $high): bool
+	{
+		$x = $node['x'] - $eye[0];
+		$z = $node['z'] - $eye[2];
+		$size = $node['size'];
+		// GPU clip coordinates are rounded before adding/subtracting w at each plane.
+		$roundoff = 1e-5 * (1 + abs($x) + abs($z) + 2*$size + max(abs($low-$eye[1]), abs($high-$eye[1])));
+		foreach($planes as [$a,$b,$c,$d])
+		{
+			$px = $a*($x + ($a>0 ? $size : 0));
+			$py = $b*(($b>0 ? $high : $low)-$eye[1]);
+			$pz = $c*($z + ($c>0 ? $size : 0));
+			if($px+$py+$pz+$d < -$roundoff - 1e-5*(abs($px)+abs($py)+abs($pz)+abs($d))) return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Reconstruct a picking ray from normalized viewport coordinates.
 	 * @param float $nx Horizontal coordinate, zero at the left edge.
 	 * @param float $ny Vertical coordinate, zero at the top edge.

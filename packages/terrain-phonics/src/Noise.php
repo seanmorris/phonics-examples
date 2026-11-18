@@ -109,6 +109,29 @@ final class Noise
 	}
 
 	/**
+	 * Bound noise over a rectangle by Taylor expansion around its centre.
+	 * @param float $x Centre X in noise coordinates.
+	 * @param float $z Centre Z in noise coordinates.
+	 * @param float $rx Horizontal half-width.
+	 * @param float $rz Vertical half-width.
+	 * @return array Minimum, maximum and absolute bounds on both partial derivatives.
+	 */
+	public function envelope(float $x, float $z, float $rx, float $rz): array
+	{
+		// Unit gradients, corner dot products bounded by sqrt(2), fade' <= 1.875
+		// and |fade''| < 6 give |first partial| < 7 and |second partial| < 32,
+		// including the mixed partial. Noise is C2 across cell boundaries.
+		$rx += 32 * PHP_FLOAT_EPSILON * (1 + abs($x) + $rx);
+		$rz += 32 * PHP_FLOAT_EPSILON * (1 + abs($z) + $rz);
+		$r = $rx + $rz;
+		if($r >= .5) return [-1.42,1.42,7.0,7.0];
+		[$value,$dx,$dz] = $this->sample($x, $z);
+		$radius = abs($dx) * $rx + abs($dz) * $rz + 16 * $r * $r + 1e-12;
+		return [max(-1.42, $value - $radius), min(1.42, $value + $radius),
+			min(7.0, abs($dx) + 32 * $r + 1e-12), min(7.0, abs($dz) + 32 * $r + 1e-12)];
+	}
+
+	/**
 	 * Quintic interpolation has zero first and second derivatives at both ends.
 	 * @param float $t Interpolation coordinate between zero and one.
 	 * @return float Quintic blend with vanishing endpoint first and second derivatives.

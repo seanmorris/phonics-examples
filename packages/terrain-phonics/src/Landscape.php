@@ -26,6 +26,8 @@ final class Landscape implements TerrainSurface
 	private array $range;
 	/** Bounded per-query intermediate edit memo, discarded after each lattice node. */
 	private array $memo = [];
+	/** Bounded caches for ray block intervals and sparsely sampled mesh vertices. */
+	private array $blockBounds = [], $meshNodes = [];
 
 	/**
 	 * Construct an empty lazy cache; the world is centered on X/Z zero.
@@ -434,6 +436,7 @@ final class Landscape implements TerrainSurface
 
 		return [
 			'tiles' => count($this->tiles)
+			, 'meshSamples' => count($this->meshNodes)
 			, 'samples' => $samples
 			, 'pinnedTiles' => $pinned
 			, 'cacheBytes' => $bytes
@@ -456,6 +459,7 @@ final class Landscape implements TerrainSurface
 	public function close(): void
 	{
 		$this->tiles = $this->leases = $this->history = $this->operations = $this->pending = $this->memo = [];
+		$this->blockBounds = $this->meshNodes = [];
 		$this->closed = true;
 	}
 
@@ -495,13 +499,64 @@ final class Landscape implements TerrainSurface
 	}
 
 	/**
-	 * Traverse exact interpolation cells cooperatively, yielding after every cell.
+	 * Bound reconstructed heights in a square of physical cells. A smooth edit can
+	 * depend on earlier terrain outside this square, so expand its input rectangle
+	 * before evaluating preceding operations. All other edit bounds are local.
+	 * @param int $x First cell column.
+	 * @param int $z First cell row.
+	 * @param int $size Number of cells per edge.
+	 * @return array Conservative lower and upper reconstructed heights.
+	 */
+	private function blockRange(int $x, int $z, int $size): array
+	{
+		$key = "$size:$x:$z";
+		if(isset($this->blockBounds[$key])) return $this->blockBounds[$key];
+		$s = $this->parameters['spacing'];
+		$box = [($x-1)*$s,($z-1)*$s,($x+$size+1)*$s,($z+$size+1)*$s];
+		$affecting = [];
+		for($i=count($this->operations)-1; $i>=0; $i--)
+		{
+			$op = $this->operations[$i];
+			$b = Edits::bounds($op);
+			if($b[0]>$box[2] || $b[2]<$box[0] || $b[1]>$box[3] || $b[3]<$box[1]) continue;
+			$affecting[] = $i;
+			if($op['type']==='smooth') $box = [$box[0]-$s,$box[1]-$s,$box[2]+$s,$box[3]+$s];
+		}
+		[$lo,$hi] = $this->generator->regionalBounds($box);
+		foreach(array_reverse($affecting) as $i)
+			[$lo,$hi] = Edits::heightBounds($this->operations[$i], $lo, $hi);
+		// The absolute weight sum of a 1D Catmull-Rom stencil is <= 5/4.
+		// Tensor weights sum to one, hence their negative mass is <= 9/32.
+		$pad = 9/32 * ($hi-$lo) + 1e-8*(1+max(abs($lo),abs($hi)));
+		if(count($this->blockBounds)>=4096) unset($this->blockBounds[array_key_first($this->blockBounds)]);
+		return $this->blockBounds[$key] = [$lo-$pad,$hi+$pad];
+	}
+
+	/**
+	 * Identify the cell entered at a boundary using the same crossing time as traversal.
+	 * @param float $origin Ray origin along this axis.
+	 * @param float $direction Normalized ray component.
+	 * @param float $time Distance travelled.
+	 * @param float $spacing Lattice spacing.
+	 * @return int Index on the forward side of a crossed edge.
+	 */
+	private static function enteredCell(float $origin, float $direction, float $time, float $spacing): int
+	{
+		$cell = (int)floor(($origin + $direction * $time) / $spacing);
+		if(abs($direction) < 1e-14) return $cell;
+		$edge = ($cell + (int)($direction > 0)) * $spacing;
+		if(($edge - $origin) / $direction <= $time) $cell += $direction > 0 ? 1 : -1;
+		return $cell;
+	}
+
+	/**
+	 * Traverse exact interpolation cells cooperatively, yielding after bounded blocks and cells.
 	 * The generator returns the same nearest hit as raycast; resumption rejects changed
 	 * geometry. One cell and its bounded polynomial isolation remain an indivisible unit.
 	 * @param array $origin Finite world ray origin [x,y,z].
 	 * @param array $direction Finite nonzero ray direction [x,y,z].
 	 * @param float $maxDistance Maximum ray travel in metres.
-	 * @return \Generator Completed-cell counts, followed by an exact hit or null as the return value.
+	 * @return \Generator Completed work-unit counts, followed by an exact hit or null as the return value.
 	 */
 	public function raycastSteps(array $origin, array $direction, float $maxDistance = 10000): \Generator
 	{
@@ -562,6 +617,7 @@ final class Landscape implements TerrainSurface
 		$spacing = $this->parameters['spacing'];
 		$time = $near;
 		$cells = 0;
+		$tested = [];
 		yield 0;
 
 		while($time <= $far && $cells++ < 300000)
@@ -570,28 +626,55 @@ final class Landscape implements TerrainSurface
 
 			if($this->version !== $revision) throw new \LogicException('Terrain changed during ray traversal');
 
-			$x = $origin[0] + $direction[0] * $time;
-			$z = $origin[2] + $direction[2] * $time;
-			$ix = (int)floor($x / $spacing);
-			$iz = (int)floor($z / $spacing);
+			$ix = self::enteredCell($origin[0], $direction[0], $time, $spacing);
+			$iz = self::enteredCell($origin[2], $direction[2], $time, $spacing);
 
-			if($direction[0] < 0 && abs($x / $spacing - $ix) < 1e-9) $ix--;
-
-			if($direction[2] < 0 && abs($z / $spacing - $iz) < 1e-9) $iz--;
-
+			foreach([128,16,4] as $size)
+			{
+				$bx = (int)floor($ix/$size)*$size;
+				$bz = (int)floor($iz/$size)*$size;
+				if(($tested[$size] ?? null) === [$bx,$bz]) continue;
+				$tested[$size] = [$bx,$bz];
+				$end = $far;
+				foreach([[0,$bx],[2,$bz]] as [$axis,$first])
+				{
+					$d = $direction[$axis];
+					if(abs($d)<1e-14) continue;
+					$edge = ($first + ($d>0 ? $size : 0))*$spacing;
+					$end = min($end, ($edge-$origin[$axis])/$d);
+				}
+				if($end <= $time) continue;
+				[$low,$high] = $this->blockRange($bx,$bz,$size);
+				$y0 = $origin[1]+$direction[1]*$time;
+				$y1 = $origin[1]+$direction[1]*$end;
+				if(min($y0,$y1) <= $high && max($y0,$y1) >= $low) continue;
+				if($end >= $far) return null;
+				$time = $end;
+				yield $cells;
+				continue 2;
+			}
 			$end = $far;
-
 			foreach([[0,$ix],[2,$iz]] as [$axis,$cell])
 			{
 				if(abs($direction[$axis]) < 1e-14) continue;
-
 				$edge = ($cell + (int)($direction[$axis] > 0)) * $spacing;
 				$crossing = ($edge - $origin[$axis]) / $direction[$axis];
-
-				if($crossing > $time + 1e-10) $end = min($end, $crossing);
+				if($crossing > $time) $end = min($end, $crossing);
 			}
-
-			$polynomial = $this->rayPolynomial($this->patch($ix, $iz), $origin, $direction, $time, $end, $ix, $iz);
+			$rows = $this->patch($ix, $iz);
+			$lo = min(min($rows[0]),min($rows[1]),min($rows[2]),min($rows[3]));
+			$hi = max(max($rows[0]),max($rows[1]),max($rows[2]),max($rows[3]));
+			$pad = 9/32*($hi-$lo) + 1e-8*(1+max(abs($lo),abs($hi)));
+			$y0 = $origin[1]+$direction[1]*$time;
+			$y1 = $origin[1]+$direction[1]*$end;
+			if(min($y0,$y1) > $hi+$pad || max($y0,$y1) < $lo-$pad)
+			{
+				if($end >= $far) return null;
+				$time = $end;
+				yield $cells;
+				continue;
+			}
+			$polynomial = $this->rayPolynomial($rows, $origin, $direction, $time, $end, $ix, $iz);
 			$bernstein = [];
 
 			for($i = 0; $i <= 6; $i++)
@@ -739,25 +822,7 @@ final class Landscape implements TerrainSurface
 			return $value;
 		}
 
-		if(!$this->operations)
-		$value = $this->generator->height($x * $this->parameters['spacing'], $z * $this->parameters['spacing']);
-		else
-		{
-			$this->memo = [];
-
-			try
-			{
-				$value = $this->edited(
-					$x * $this->parameters['spacing']
-					, $z * $this->parameters['spacing']
-					, count($this->operations)
-				);
-			}
-			finally
-			{
-				$this->memo = [];
-			}
-		}
+		$value = $this->generateNode($x, $z);
 
 		$this->generated++;
 		$tile?->set($lx, $lz, $value);
@@ -798,6 +863,62 @@ final class Landscape implements TerrainSurface
 			 */
 			fn(float $px, float $pz): float => $this->edited($px, $pz, $count - 1)
 		);
+	}
+
+	/**
+	 * Sample a coarse mesh without allocating an entire physical tile for one lattice point.
+	 * @param float $wx World X in metres.
+	 * @param float $wz World Z in metres.
+	 * @param float $step Mesh spacing in metres.
+	 * @return float Authoritative reconstructed height.
+	 */
+	public function meshHeight(float $wx, float $wz, float $step): float
+	{
+		$s = $this->parameters['spacing'];
+		if($step < $s*$this->parameters['tileSize']) return $this->height($wx,$wz);
+		$this->coordinates($wx,$wz);
+		$x = $wx/$s; $z = $wz/$s;
+		if($x !== floor($x) || $z !== floor($z)) return $this->height($wx,$wz);
+		$key = (int)$x . ':' . (int)$z;
+		if(isset($this->meshNodes[$key]))
+		{
+			$this->hits++;
+			return $this->meshNodes[$key];
+		}
+		if(count($this->meshNodes)>=4096) unset($this->meshNodes[array_key_first($this->meshNodes)]);
+		$this->generated++;
+		return $this->meshNodes[$key] = $this->generateNode((int)$x,(int)$z);
+	}
+
+	/**
+	 * Evaluate a lattice node through the committed edit history.
+	 * @param int $x Lattice column.
+	 * @param int $z Lattice row.
+	 * @return float Edited height in metres.
+	 */
+	private function generateNode(int $x, int $z): float
+	{
+		if(!$this->operations)
+		$value = $this->generator->height($x * $this->parameters['spacing'], $z * $this->parameters['spacing']);
+		else
+		{
+			$this->memo = [];
+
+			try
+			{
+				$value = $this->edited(
+					$x * $this->parameters['spacing']
+					, $z * $this->parameters['spacing']
+					, count($this->operations)
+				);
+			}
+			finally
+			{
+				$this->memo = [];
+			}
+		}
+
+		return $value;
 	}
 
 	/**
@@ -853,6 +974,7 @@ final class Landscape implements TerrainSurface
 			$tiles[$key] = $tile;
 		}
 
+		$this->blockBounds = $this->meshNodes = [];
 		$this->operations = $operations;
 		$this->range = $range;
 		$this->version = $version;

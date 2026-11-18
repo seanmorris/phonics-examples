@@ -5,8 +5,8 @@ precision highp int;
 uniform vec3 uAerialCacheGrid;
 uniform float uAerialCacheMaxDistance;
 uniform float uAerialCacheAltitude;
-uniform int uAerialCacheOutput;
-out vec4 outColor;
+layout(location=0) out vec4 outTransmittance;
+layout(location=1) out vec4 outRadiance;
 void main()
 {
 	float slice = floor(gl_FragCoord.x / uAerialCacheGrid.x);
@@ -22,7 +22,7 @@ void main()
 	vec3 transmittance;
 	vec3 radiance;
 	terrainIntegrateAtmosphere(ray, uAerialCacheAltitude, distanceMeters, transmittance, radiance);
-	vec3 encoded = uAerialCacheOutput == 0 ? transmittance
-		: clamp(log2(1.0 + max(vec3(0.0), radiance) * 16.0) / 16.0, 0.0, 1.0);
-	outColor = vec4(encoded, 1.0);
+	outTransmittance = vec4(transmittance,1.0);
+	vec3 encoded = clamp(log2(1.0 + max(vec3(0.0), radiance) * 16.0) / 16.0, 0.0, 1.0);
+	outRadiance = vec4(encoded, 1.0);
 }

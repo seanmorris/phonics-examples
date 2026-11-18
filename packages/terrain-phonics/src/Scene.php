@@ -24,7 +24,8 @@ final class Scene
 	private array $heightTexture = [];
 	private int $heightTextureRevision = -1;
 	private array $patches = [], $jobs = [], $draw = [], $vao = [], $textures = [];
-	private array $activated = [];
+	private array $activated = [], $neighbors = [], $gridBuffer = [];
+	private int $groundDraws = 0, $waterDraws = 0;
 	/** Reverse sibling transitions and the exact residency reservation for this selection. */
 	private array $retiring = [], $reserved = [];
 	private string $indices;
@@ -91,7 +92,21 @@ final class Scene
 		$this->terrainShadows = new TerrainShadows;
 		glGenTextures(1, $this->heightTexture);
 		$this->uploadHeightMap();
+		$this->createGridBuffer();
 		$this->craftMesh = $this->makeCraft();
+	}
+
+	/**
+	 * Allocate one immutable index buffer shared by every terrain and water patch.
+	 * @return void Uploads the triangle topology for the current context.
+	 */
+	private function createGridBuffer(): void
+	{
+		glGenBuffers(1, $this->gridBuffer);
+		glBindVertexArray($this->vao[0]);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,$this->gridBuffer[0]);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER,strlen($this->indices),$this->indices,GL_STATIC_DRAW);
+		glBindVertexArray(0);
 	}
 
 	/**
@@ -149,6 +164,7 @@ final class Scene
 			$affected = $this->affected($region);
 		}
 
+		$this->neighbors = [];
 		$this->preparing = $candidate;
 		$this->preparingRevision = $candidate->revision();
 		$this->preparingSourceRevision = $this->landscape->revision();
@@ -262,6 +278,8 @@ final class Scene
 	{
 		if($this->closed) return false;
 
+		$started = microtime(true);
+		$deadline = $started + max(.25, $this->budgetMs) / 1000;
 		$this->checkPreparation();
 		$this->trackMotion($seconds, $camera);
 		$this->clock += max(0, min(.1, $seconds));
@@ -276,19 +294,15 @@ final class Scene
 
 		if($this->preparing !== null)
 		{
-			$start = microtime(true);
-			$deadline = $start + max(.25, $this->budgetMs) / 1000;
-
 			while($this->replacementJobs !== [] && microtime(true) < $deadline)
 			{
 				$id = array_key_first($this->replacementJobs);
 				$job = &$this->replacementJobs[$id];
-				$this->buildVertex($job, $this->preparing, $this->replacements + $this->patches);
+				$this->buildVertex($job, $this->preparing, $this->replacements);
 
 				if($job['index'] === 1089)
 				{
-					$job['geometricError'] = $this->meshError($job);
-					$job['mesh'] = new GpuPatch($job['bytes'], $this->indices);
+					$job['mesh'] = new GpuPatch($job['bytes'], $this->indices, $this->gridBuffer[0]);
 					unset($job['bytes']);
 					$job['centerHeight'] = $job['heights'][544];
 					$job['lastUse'] = $this->clock;
@@ -300,7 +314,7 @@ final class Scene
 				unset($job);
 			}
 
-			$this->lastUpdateMs = (microtime(true) - $start) * 1000;
+			$this->lastUpdateMs = (microtime(true) - $started) * 1000;
 
 			return false;
 		}
@@ -346,9 +360,6 @@ final class Scene
 			$this->selectionKey = $key;
 		}
 
-		$started = microtime(true);
-		$deadline = $started + max(.25, $this->budgetMs) / 1000;
-
 		while($this->jobs !== [] && microtime(true) < $deadline)
 		{
 			$id = array_key_first($this->jobs);
@@ -357,8 +368,7 @@ final class Scene
 
 			if($job['index'] === (Lod::CELLS + 1) ** 2)
 			{
-				$job['geometricError'] = $this->meshError($job);
-				$job['mesh'] = new GpuPatch($job['bytes'], $this->indices);
+				$job['mesh'] = new GpuPatch($job['bytes'], $this->indices, $this->gridBuffer[0]);
 				unset($job['bytes']);
 				$job['centerHeight'] = $job['heights'][16 * 33 + 16];
 				$job['lastUse'] = $this->clock;
@@ -460,7 +470,11 @@ final class Scene
 			$this->patches[$n['key']]['lastUse'] = $this->clock;
 		}
 
-		if($old !== array_column($this->draw, 'key')) $this->changed = true;
+		if($old !== array_column($this->draw, 'key'))
+		{
+			$this->changed = true;
+			$this->neighbors = [];
+		}
 
 		$this->reserved = $this->ancestors($this->draw);
 		$drawKeys = array_column($this->draw, null, 'key');
@@ -975,9 +989,15 @@ final class Scene
 			, [$node['x'] + $node['size'],$node['z'] + $node['size']]
 		];
 
-		foreach($this->draw as $neighbor)
+		$neighbors = &$this->neighbors[$node['key']];
+		if($neighbors === null)
 		{
-			if(!self::meets($node, $neighbor) || $neighbor['level'] > $node['level']) continue;
+			$neighbors = [];
+			foreach($this->draw as $other)
+				if($other['level'] <= $node['level'] && self::meets($node,$other)) $neighbors[] = $other;
+		}
+		foreach($neighbors as $neighbor)
+		{
 
 			$weight = $neighbor['level'] < $node['level'] ? 1.0 : $this->morph($neighbor);
 
@@ -1065,6 +1085,13 @@ final class Scene
 		$step = $job['size'] / Lod::CELLS;
 		$half = $source->recipe()['worldSize'] / 2;
 
+		$parentPatch = null;
+		if($job['level'] > 0)
+		{
+			$key = $this->parentKey($job);
+			$parentPatch = $parents[$key] ?? $this->patches[$key] ?? null;
+		}
+
 		// Pass one samples only this mesh lattice and a shared one-node normal halo.
 		// A single call performs one height query, never a complete patch allocation.
 		if($sample < $vertices + 4 * $stride)
@@ -1075,7 +1102,14 @@ final class Scene
 			{
 				$x = $sample % $stride;
 				$z = intdiv($sample, $stride);
-				$job['heights'][] = $source->height($job['x'] + $x * $step, $job['z'] + $z * $step);
+				$wx = $job['x'] + $x*$step; $wz = $job['z'] + $z*$step;
+				$px = ($job['ix']%2)*16 + intdiv($x,2);
+				$pz = ($job['iz']%2)*16 + intdiv($z,2);
+				if($parentPatch && !($x%2) && !($z%2)
+					&& $wx === $parentPatch['x'] + $px*($parentPatch['size']/32)
+					&& $wz === $parentPatch['z'] + $pz*($parentPatch['size']/32))
+					$job['heights'][] = $parentPatch['heights'][$pz*33+$px];
+				else $job['heights'][] = $source->meshHeight($wx,$wz,$step);
 			}
 			else
 			{
@@ -1086,9 +1120,9 @@ final class Scene
 					0 => [-1,$offset], 1 => [$stride,$offset], 2 => [$offset,-1], 3 => [$offset,$stride]
 				};
 
-				$job['halo'][$side][$offset] = $source->height(
+				$job['halo'][$side][$offset] = $source->meshHeight(
 					max(-$half, min($half, $job['x'] + $x * $step))
-					, max(-$half, min($half, $job['z'] + $z * $step))
+					, max(-$half, min($half, $job['z'] + $z * $step)), $step
 				);
 			}
 
@@ -1112,14 +1146,13 @@ final class Scene
 		$dz = ($back - $front) / (min($half, $wz + $step) - max(-$half, $wz - $step));
 		$length = sqrt(1 + $dx * $dx + $dz * $dz);
 		$normal = [-$dx / $length, 1 / $length, -$dz / $length];
-		$job['normals'] = ($job['normals'] ?? '') . pack('f*', ...$normal);
+		$job['normals'] ??= '';
+		$job['normals'] .= pack('f*', ...$normal);
 		$parent = $h;
 		$parentNormal = $normal;
 
 		if($job['level'] > 0)
 		{
-			$key = ($job['level'] - 1) . ':' . intdiv($job['ix'], 2) . ':' . intdiv($job['iz'], 2);
-			$parentPatch = ($parents ?? $this->patches)[$key] ?? null;
 			$p = $parentPatch['heights'] ?? null;
 
 			if($p !== null)
@@ -1144,7 +1177,7 @@ final class Scene
 					foreach($indices as $index => $vertex)
 					{
 						$parentVertexNormal = array_values(
-							unpack('f3', substr($parentPatch['normals'], $vertex * 12, 12))
+							unpack('f3', $parentPatch['normals'], $vertex * 12)
 						);
 
 						for($axis = 0; $axis < 3; $axis++)
@@ -1157,6 +1190,15 @@ final class Scene
 		$material = array_search($source->material($wx, $wz), ['rock','grass','sand','snow','road'], true);
 		$job['geometricError'] = max($job['geometricError'] ?? 0.0, abs($h - $parent));
 
+		if($x>0 && $x<32 && $z>0 && $z<32)
+		{
+			$axial = abs($left-2*$h+$right) + abs($front-2*$h+$back);
+			$mixed = abs($h-$right-$back+$job['heights'][$i+34]);
+			$job['geometricError'] = max($job['geometricError'], .5*$axial+$mixed);
+		}
+		$job['minY'] = min($job['minY'] ?? INF,$h,$parent);
+		$job['maxY'] = max($job['maxY'] ?? -INF,$h,$parent);
+
 		$job['bytes'] .= pack('f*', ...[
 			$x * $step
 			, $h
@@ -1167,30 +1209,6 @@ final class Scene
 		]);
 
 		if($job['index'] === $vertices) unset($job['halo']);
-	}
-
-	/**
-	 * Estimate mesh deviation from sampled curvature; this does not certify unsampled features.
-	 * @param array $patch Completed patch samples and accumulated parent deviation.
-	 * @return float Sampled geometric-error estimate in world metres.
-	 */
-	private function meshError(array $patch): float
-	{
-		$height = $patch['heights'];
-		$error = $patch['geometricError'] ?? 0.0;
-
-		for($z = 1; $z < 32; $z++)
-		for($x = 1; $x < 32; $x++)
-		{
-			$i = $z * 33 + $x;
-			$axial = abs($height[$i - 1] - 2 * $height[$i] + $height[$i + 1])
-				+ abs($height[$i - 33] - 2 * $height[$i] + $height[$i + 33]);
-
-			$mixed = abs($height[$i] - $height[$i + 1] - $height[$i + 33] + $height[$i + 34]);
-			$error = max($error, .5 * $axial + $mixed);
-		}
-
-		return $error;
 	}
 
 	/**
@@ -1266,9 +1284,14 @@ final class Scene
 		$this->vector($this->groundProgram, 'uCraftRotation', [0,0,0]);
 		$this->scalar($this->groundProgram, 'uCraft', 0);
 
+		$planes = $camera->clipPlanes($width,$height);
+		$eye = $camera->position;
+		$this->groundDraws = $this->waterDraws = 0;
 		foreach($this->draw as $n)
 		{
 			$p = $this->patches[$n['key']];
+			if(!Camera::inView($planes,$eye,$n,$p['minY'],$p['maxY'])) continue;
+			$this->groundDraws++;
 
 			$this->vector(
 				$this->groundProgram
@@ -1315,8 +1338,11 @@ final class Scene
 		$this->waterUniforms($time);
 		$this->scalar($this->waterProgram, 'uWaterExtent', $this->lod->extent);
 
+		[$waterMin,$waterMax] = $this->water->heightRange();
 		foreach($this->draw as $n)
 		{
+			if(!Camera::inView($planes,$eye,$n,$waterMin,$waterMax)) continue;
+			$this->waterDraws++;
 			$this->vector(
 				$this->waterProgram
 				, 'uOrigin'
@@ -1440,12 +1466,17 @@ final class Scene
 	}
 
 	/**
+	 * @return bool Whether the previous view submitted water that can change with time.
+	 */
+	public function showsWater(): bool { return $this->waterDraws > 0; }
+
+	/**
 	 * Whether preparation or LOD animation still requires frames.
 	 * @return bool Whether another frame or preparation step is required.
 	 */
 	public function dirty(): bool
 	{
-		return $this->changed || $this->jobs !== [] || $this->preparing !== null || $this->selectionPending;
+		return $this->selectionKey === '' || $this->changed || $this->jobs !== [] || $this->preparing !== null || $this->selectionPending;
 	}
 
 	/**
@@ -1476,6 +1507,7 @@ final class Scene
 			, 'cameraSpacing' => $cameraSpacing
 			, 'finestVisibleSpacing' => $finest
 			, 'visibleCoverage' => $coverage
+			, 'groundDraws' => $this->groundDraws, 'waterDraws' => $this->waterDraws
 			, 'visible' => count($this->draw)
 			, 'pending' => count($this->jobs)
 			, 'pendingEdits' => count($this->replacementJobs)
@@ -1485,12 +1517,12 @@ final class Scene
 			)
 			, 'maximumPatches' => $this->capacity()
 			, 'transitions' => count($this->retiring)
-			, 'meshBytes' => array_sum(array_map(
+			, 'meshBytes' => strlen($this->indices) + array_sum(array_map(
 				/** Count retained packed mesh bytes.
 			 * @param array $p Resident or staged patch.
 			 * @return int CPU mesh payload bytes.
 			 */
-				static fn($p) => $p['mesh']->bytes()
+				static fn($p) => $p['mesh']->bytes(false)
 				, [...array_values($this->patches), ...array_values($this->replacements)]
 			))
 			, 'generationMs' => $this->lastUpdateMs
@@ -1524,7 +1556,11 @@ final class Scene
 		$this->skyProgram->restore();
 		$this->waterProgram->restore();
 
-		foreach($this->patches as $p) $p['mesh']->restore();
+		if($this->gridBuffer) glDeleteBuffers(1,$this->gridBuffer);
+		if($this->vao) glDeleteVertexArrays(1,$this->vao);
+		glGenVertexArrays(1, $this->vao);
+		$this->createGridBuffer();
+		foreach($this->patches as $p) $p['mesh']->restore($this->gridBuffer[0]);
 		$this->craftMesh->restore();
 		$this->atmosphereCache->restore();
 		$this->terrainShadows->restore();
@@ -1532,10 +1568,9 @@ final class Scene
 		$this->createTextures();
 		glGenTextures(1, $this->heightTexture);
 		$this->uploadHeightMap();
-		glGenVertexArrays(1, $this->vao);
 		$this->changed = true;
 
-		foreach($this->replacements as $p) $p['mesh']->restore();
+		foreach($this->replacements as $p) $p['mesh']->restore($this->gridBuffer[0]);
 	}
 
 	/**
@@ -1550,6 +1585,7 @@ final class Scene
 		$this->preparing = null;
 		$this->replacements = $this->replacementJobs = [];
 		$this->patches = $this->jobs = $this->draw = $this->activated = $this->retiring = $this->reserved = [];
+		$this->neighbors = [];
 		$this->selectionPending = false;
 		$this->previousEye = $this->lookahead = null;
 	}
@@ -1574,6 +1610,8 @@ final class Scene
 		if($this->textures !== []) glDeleteTextures(count($this->textures), $this->textures);
 
 		if($this->heightTexture !== []) glDeleteTextures(count($this->heightTexture), $this->heightTexture);
+
+		if($this->gridBuffer !== []) glDeleteBuffers(1, $this->gridBuffer);
 
 		if($this->vao !== []) glDeleteVertexArrays(1, $this->vao);
 

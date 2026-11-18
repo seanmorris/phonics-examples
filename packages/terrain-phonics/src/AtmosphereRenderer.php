@@ -175,19 +175,17 @@ final class AtmosphereRenderer
 			glUniform1f($this->aerialProgram->location('uAerialCacheMaxDistance'), self::AERIAL_DISTANCE);
 			glUniform1f($this->aerialProgram->location('uAerialCacheAltitude'), $this->altitudes[0]);
 
-			foreach([2,3] as $output => $slot)
+			$this->targets[2]->bind();
+			try
 			{
-				$this->targets[$slot]->bind();
-
-				try
-				{
-					glUniform1i($this->aerialProgram->location('uAerialCacheOutput'), $output);
-					glDrawArrays(GL_TRIANGLES, 0, 3);
-				}
-				finally
-				{
-					$this->targets[$slot]->unbind();
-				}
+				$second = GL_COLOR_ATTACHMENT0 + 1;
+				glFramebufferTexture2D(GL_FRAMEBUFFER, $second, GL_TEXTURE_2D, $this->targets[3]->texture(), 0);
+				glDrawBuffers(2, [GL_COLOR_ATTACHMENT0,$second]);
+				glDrawArrays(GL_TRIANGLES, 0, 3);
+			}
+			finally
+			{
+				$this->targets[2]->unbind();
 			}
 
 			$this->aerialKey = $aerialKey;

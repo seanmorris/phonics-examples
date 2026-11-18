@@ -80,6 +80,17 @@ final class Water implements WaterSurface
 	public function level(): float { return $this->level; }
 
 	/**
+	 * @return array Conservative height interval for the displaced mesh including every wake.
+	 */
+	public function heightRange(): array
+	{
+		$span = 0.0;
+		foreach($this->waves as $wave) $span += abs($wave['amplitude']);
+		foreach($this->wakes as $wake) $span += abs($wake[2]);
+		return [$this->level-$span,$this->level+$span];
+	}
+
+	/**
 	 * Read the revision of explicit level and wake edits.
 	 * @return int Structural revision, separate from time.
 	 */

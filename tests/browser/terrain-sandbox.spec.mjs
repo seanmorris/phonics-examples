@@ -160,6 +160,15 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	now = await status(page);
 	expect(now.renderer.frames).toBe(frame);
 	expect(now.time).toBe(time);
+	const idleUpdates = await canvas(page).evaluate(async element => {
+		let updates = 0;
+		const observer = new MutationObserver(records => { updates += records.length; });
+		observer.observe(element, {attributes:true, attributeFilter:['data-terrain-sandbox']});
+		await new Promise(resolve => setTimeout(resolve, 600));
+		observer.disconnect();
+		return updates;
+	});
+	expect(idleUpdates).toBe(0);
 
 	// Native fields keep WASD and pause shortcuts as text while focused.
 	const position = now.camera.position;
@@ -175,6 +184,7 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	await expect.poll(async() => (await status(page)).generationBudgetMs).toBe(2);
 	await page.locator('[name="seed"]').focus();
 	await page.keyboard.up('e');
+	await expect.poll(async() => (await status(page)).generationBudgetMs).toBe(8);
 	await settled(page);
 	const stopped = (await status(page)).camera.position;
 	await page.waitForTimeout(500);

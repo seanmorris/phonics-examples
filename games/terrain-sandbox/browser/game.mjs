@@ -172,16 +172,21 @@ export function activate({module, canvas, session, services})
 	canvas.addEventListener('pointerup', release, {signal});
 	canvas.addEventListener('pointercancel', release, {signal});
 
-	shell.bridge('terrainViewport', () => view.viewport());
-
+	let previousViewport, previousKeys = '';
 	shell.bridge('terrainInput', () => {
-		const result = JSON.stringify({keys, values, actions, clicks, look});
+		const viewport = view.viewport();
+		const held = Object.keys(keys).filter(key => keys[key]).join(',');
+		if(viewport === previousViewport && held === previousKeys && !actions.length && !clicks.length
+			&& !look[0] && !look[1] && !Object.keys(values).length) return '';
+		const packet = {keys,values,actions,clicks,look};
+		if(viewport !== previousViewport) packet.viewport = JSON.parse(viewport);
+		previousKeys = held;
+		previousViewport = viewport;
 		values = {};
 		actions = [];
 		clicks = [];
 		look = [0,0];
-
-		return result;
+		return JSON.stringify(packet);
 	});
 
 	shell.bridge('terrainDownload', json => {

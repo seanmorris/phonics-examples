@@ -30,24 +30,50 @@ $lastRenderedTime = -1.0;
 $renderMs = 0.0;
 $frameSeconds = 0.0;
 $lastBudgetPose = null;
+$heldKeys = [];
+$statusPending = true;
+$urgentStatus = false;
+$inputMs = 0.0;
+$pickFrame = false;
+$readInput = vrzno_env('terrainInput');
+$publish = vrzno_env('terrainStatus');
 
 $engine->systems->add('terrain-sandbox.simulate', static function(Registry $registry, float $seconds) use ($session): void {
 	$session->step($seconds);
 });
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
-	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds
+	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds,
+	&$heldKeys, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput
 ): bool {
-	$frameSeconds = min(.1, max(0, $elapsed));
-	$viewport = json_decode((string)(vrzno_env('terrainViewport'))(), true, flags: JSON_THROW_ON_ERROR);
-	$nextWidth = max(1, min(3840, (int)($viewport[0] ?? 1280)));
-	$nextHeight = max(1, min(2160, (int)($viewport[1] ?? 720)));
-	if($nextWidth !== $width || $nextHeight !== $height) $dirty = true;
-	[$width,$height] = [$nextWidth,$nextHeight];
+	$frameSeconds = max(0.0, $elapsed);
+	$started = hrtime(true);
+	$packet = (string)$readInput();
+	$input = $packet === '' ? [] : json_decode($packet, true, flags: JSON_THROW_ON_ERROR);
+	if(isset($input['viewport']))
+	{
+		[$w,$h] = $input['viewport'];
+		$width = max(1, min(3840, (int)$w));
+		$height = max(1, min(2160, (int)$h));
+		$dirty = true;
+	}
 	$prepared = $scene->takePreparedLandscape();
 	if($prepared !== null) $session->publishLandscape($prepared);
-	$input = json_decode((string)(vrzno_env('terrainInput'))(), true, flags: JSON_THROW_ON_ERROR);
-	$session->input(is_array($input) ? $input : [], $frameSeconds, $width / max(1, $height));
+	$wasPicking = $session->picking;
+	$previousRoadPoints = count($session->road);
+	$keysChanged = isset($input['keys']) && $heldKeys !== $input['keys'];
+	if($keysChanged) $heldKeys = $input['keys'];
+	if($packet !== '' || $heldKeys || $wasPicking)
+	{
+		$input['keys'] = $heldKeys;
+		$moving = $heldKeys || $session->mode === 'craft' || !empty($input['look'][0]) || !empty($input['look'][1]);
+		$session->input($input, min(.1, $frameSeconds), $width / $height, $moving ? 1.0 : 7.5);
+	}
+	$urgentStatus = $urgentStatus || $keysChanged || isset($input['clicks'][0]) || $wasPicking !== $session->picking
+		|| $previousRoadPoints !== count($session->road);
+	$pickFrame = $wasPicking || $session->picking;
+	$statusPending = $statusPending || $packet !== '' || $wasPicking || $prepared !== null;
+	$inputMs = (hrtime(true) - $started) / 1e6;
 	if($generation !== $session->generation)
 	{
 		$scene->setLandscape($session->landscape);
@@ -66,13 +92,19 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$lastRenderedTime,
-		&$renderMs, &$frameSeconds, &$lastBudgetPose
+		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $publish
 	): void {
 		$pose = [$session->camera->position,$session->camera->yaw,$session->camera->pitch,$session->camera->fov];
-		$scene->budgetMs = $session->mode === 'craft' || $pose !== $lastBudgetPose ? 2.0 : 8.0;
+		$moving = $session->mode === 'craft' || $pose !== $lastBudgetPose;
+		$budget = $moving ? 2.0 : 8.0;
+		$scene->budgetMs = max(.25, $budget - $inputMs);
 		$lastBudgetPose = $pose;
-		$prepared = $scene->update($frameSeconds, $session->camera);
-		$wavesChanged = $scene->stats()['visible'] > 0 && $session->time !== $lastRenderedTime;
+		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
+		// A stationary click gets the generation slice until its confirmed marker is published.
+		if($pickFrame && !$moving && !$dirty) $work = false;
+		$prepared = $work && $scene->update(min(.1, $frameSeconds), $session->camera);
+		$wavesChanged = $scene->showsWater() && $session->time !== $lastRenderedTime;
+		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
 		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;
 		$now = microtime(true);
 		if($dirty && $now - $lastRender >= 1 / 65)
@@ -88,13 +120,14 @@ $engine->start(
 			$lastRenderedTime = $session->time;
 			$dirty = $session->dirty = false;
 		}
-		if($now - $lastStatus >= .2)
+		if($urgentStatus || $statusPending && $now - $lastStatus >= .2)
 		{
 			$status = $session->status() + ['renderer' => $scene->stats(),'renderMs' => $renderMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
-				'generationBudgetMs' => $scene->budgetMs];
-			(vrzno_env('terrainStatus'))(json_encode($status, JSON_THROW_ON_ERROR));
+				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];
+			$publish(json_encode($status, JSON_THROW_ON_ERROR));
 			$lastStatus = $now;
+			$statusPending = $urgentStatus = false;
 		}
 	},
 	static function() use ($engine, $session, $scene): void {

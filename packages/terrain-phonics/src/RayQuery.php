@@ -4,7 +4,7 @@ namespace TerrainPhonics;
 
 /**
  * Cooperative exact first-hit query over one committed landscape revision.
- * Frame budgets are checked between cells; one bounded cell/root solve can overrun
+ * Frame budgets are checked between block skips and individual cells. One bounded solve can overrun
  * the requested time slightly. Cancellation releases the generator without touching terrain.
  */
 final class RayQuery
@@ -36,7 +36,7 @@ final class RayQuery
 	/**
 	 * Advance until the cooperative time or cell budget expires, or the exact hit is known.
 	 * @param float $budgetMs Positive computation budget in milliseconds, at most one second.
-	 * @param int $maxCells Additional hard cap on cells processed by this call.
+	 * @param int $maxCells Additional hard cap on traversal steps (block skips or single cells).
 	 * @return bool Whether traversal completed, including a completed miss.
 	 */
 	public function advance(float $budgetMs = 2, int $maxCells = 64): bool
@@ -126,7 +126,7 @@ final class RayQuery
 
 	/**
 	 * Report progress without resuming generation.
-	 * @return array Cell count, captured revision, state and computation-time counters.
+	 * @return array Traversal steps (legacy cells key), captured revision, state and computation-time counters.
 	 */
 	public function stats(): array
 	{
