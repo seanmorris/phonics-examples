@@ -15,6 +15,7 @@
     ],
     "files": [
       "autoload.php",
+      "src/JetSki.php",
       "src/Session.php"
     ]
   },
@@ -30,15 +31,24 @@
     },
     "assets": [
       "assets/poster.png",
-      "LICENSE"
+      "LICENSE",
+      "assets/jetski/license.txt",
+      "assets/jetski/mesh.bin.gz",
+      "assets/jetski/model.frag",
+      "assets/jetski/model.vert"
     ]
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-k8se2e/uy/djSU0lC23smkCE0IBQ6T71pFZ7WnM2OwI=",
+    "application.php": "sha256-n6gCpxsBKJEI9bdY/Zx1QmGOTE/Un0DhE4VSw05HZdI=",
+    "assets/jetski/license.txt": "sha256-9WoAgRXTPEC8hRXDGAxCadCBBzJeG83Yybl9Ki+EPkQ=",
+    "assets/jetski/mesh.bin.gz": "sha256-2ofl4RltV6iF1apNDjzZC73eLM553zFlop9VM96NMCE=",
+    "assets/jetski/model.frag": "sha256-b5y3Epm1/SECBY9oobADV0FkYQ4QkztdbuKlrzAt93c=",
+    "assets/jetski/model.vert": "sha256-pkZN2ZhUmVq2PsLITY1XxIuBG0U6UPCH2LmdAxsTx8s=",
+    "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/game.mjs": "sha256-AAj5JcHT0F3w0AVff7r26qKD3Sy2Md7M59m1urUPLu0=",
-    "src/Session.php": "sha256-otOQtb21TC2cACYCeO2B/0h/Tw+gKtaprHJQBTFYf2o=",
-    "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w="
+    "browser/game.mjs": "sha256-rUWlbap/0sIdvy69D3uvu+xlS/9f4IAFeRXL9Jdxni4=",
+    "src/JetSki.php": "sha256-BFwuCmv1aNNR0eJU9eBbnS/n8RKyv+vaHDDN3AxhbEM=",
+    "src/Session.php": "sha256-otOQtb21TC2cACYCeO2B/0h/Tw+gKtaprHJQBTFYf2o="
   }
 }

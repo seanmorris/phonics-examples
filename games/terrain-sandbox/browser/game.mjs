@@ -398,7 +398,7 @@ function markup()
 	return `<style>
 	.terrain-sandbox{position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
 	.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
-	.terrain-stage{position:absolute;inset:0}.terrain-panel{position:absolute;right:14px;top:14px;max-height:calc(100% - 28px);width:300px;overflow:auto;border:1px solid #aec8bb65;border-radius:12px;background:#102822eb;box-shadow:0 8px 30px #0006;backdrop-filter:blur(10px)}
+	.terrain-note a{color:inherit}.terrain-stage{position:absolute;inset:0}.terrain-panel{position:absolute;right:14px;top:14px;max-height:calc(100% - 28px);width:300px;overflow:auto;border:1px solid #aec8bb65;border-radius:12px;background:#102822eb;box-shadow:0 8px 30px #0006;backdrop-filter:blur(10px)}
 	.terrain-panel>summary{padding:12px 15px;cursor:pointer;letter-spacing:.07em;font-weight:700}.terrain-panel>div{padding:0 14px 14px}.terrain-panel h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a8cfbd;margin:20px 0 8px}.terrain-panel h2:first-child{margin-top:3px}
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #779d8970;border-radius:5px;min-height:32px;padding:5px 8px;font:inherit}
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}
@@ -486,5 +486,6 @@ function markup()
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
+	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></p>
 	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

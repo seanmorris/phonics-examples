@@ -12,6 +12,7 @@ use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
+use TerrainSandbox\JetSki;
 use TerrainSandbox\Session;
 
 $app = new Context;
@@ -22,6 +23,7 @@ $engine->clock = new FixedStep(1 / 60, 4);
 // The authoring bridge owns pause, avoiding a second toggle from SDL's default P/Escape mapping.
 $engine->input->bindButton(9, []);
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere);
+$jetSki = null;
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
@@ -91,7 +93,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$lastRenderedTime,
+		$session, $scene, &$jetSki, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $publish
 	): void {
 		$pose = [$session->camera->position,$session->camera->yaw,$session->camera->pitch,$session->camera->fov];
@@ -112,8 +114,12 @@ $engine->start(
 			$start = microtime(true);
 			$engine->device->resize($width, $height);
 			$engine->device->begin([.15,.25,.35,1]);
-			$scene->render($session->camera, $width, $height, $session->time,
-				$session->mode === 'craft' ? $session->craft->state() : null);
+			$scene->render($session->camera, $width, $height, $session->time);
+			if($session->mode === 'craft')
+			{
+				$jetSki ??= new JetSki;
+				$jetSki->draw($session->craft->state(), $session->camera, $session->atmosphere, $width, $height);
+			}
 			$engine->device->present();
 			$renderMs = (microtime(true) - $start) * 1000;
 			$lastRender = $now;
@@ -130,11 +136,17 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene): void {
+	static function() use ($engine, $session, $scene, &$jetSki): void {
 		$engine->systems->remove('terrain-sandbox.simulate');
+		$jetSki?->close();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, &$dirty): void { $scene->restore(); $dirty = true; }
+	static function() use ($scene, &$jetSki, &$dirty): void {
+		$jetSki?->close();
+		$jetSki = null;
+		$scene->restore();
+		$dirty = true;
+	}
 );
 
 $app->ready();

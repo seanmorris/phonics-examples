@@ -1,5 +1,6 @@
 import {test, expect} from '@playwright/test';
 import fs from 'node:fs/promises';
+import {gunzipSync} from 'node:zlib';
 
 const canvas = page => page.locator('canvas[data-terrain-sandbox]');
 
@@ -41,6 +42,32 @@ async function load(page, document)
 	});
 
 	await expect.poll(async() => (await status(page)).generation).toBe(generation + 1);
+}
+
+async function restoreContext(page)
+{
+	const events = await canvas(page).evaluate(element => new Promise((resolve, reject) => {
+		const extension = element.getContext('webgl2').getExtension('WEBGL_lose_context');
+
+		if(!extension)
+		{
+			reject(Error('WebGL context-loss testing is unavailable'));
+
+			return;
+		}
+
+		const observed = [];
+
+		element.addEventListener('webglcontextlost', () => {
+			observed.push('lost');
+			setTimeout(() => extension.restoreContext(), 100);
+		}, {once: true});
+
+		element.addEventListener('webglcontextrestored', () => resolve([...observed, 'restored']), {once: true});
+		extension.loseContext();
+	}));
+
+	expect(events).toEqual(['lost', 'restored']);
 }
 
 async function boot(page)
@@ -289,10 +316,26 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	// The craft sees the same persisted seabed as the visible landscape.
 	await load(page, fixture({history: [[{type: 'lower', x: 0, z: 0, radius: 100, amount: 20}]], revision: 1}));
 	await settled(page);
+	const mesh = await fs.readFile(new URL('../../games/terrain-sandbox/assets/jetski/mesh.bin.gz', import.meta.url));
+	const indexCount = gunzipSync(mesh).readUInt32LE(4);
+	await canvas(page).evaluate((element, count) => {
+		const gl = element.getContext('webgl2');
+		const draw = gl.drawElements.bind(gl);
+		element.craftDraws = 0;
+		gl.drawElements = (...args) => {
+			if(args[1] === count) element.craftDraws++;
+			return draw(...args);
+		};
+	}, indexCount);
 	await control(page, 'craft').click();
 	await expect.poll(async() => (await status(page)).mode).toBe('craft');
 	expect((await status(page)).paused).toBe(false);
 	expect((await status(page)).generationBudgetMs).toBe(2);
+	await expect.poll(() => canvas(page).evaluate(element => element.craftDraws)).toBeGreaterThan(0);
+	await restoreContext(page);
+	const priorDraws = await canvas(page).evaluate(element => element.craftDraws);
+	await expect.poll(() => canvas(page).evaluate(element => element.craftDraws)).toBeGreaterThan(priorDraws);
+	expect(await canvas(page).evaluate(element => element.getContext('webgl2').getError())).toBe(0);
 	const before = (await status(page)).craft;
 	await canvas(page).focus();
 	await page.keyboard.down('w');
@@ -320,28 +363,7 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 	await stroke(page, 'raise');
 	const before = await settled(page);
 
-	const events = await canvas(page).evaluate(element => new Promise((resolve, reject) => {
-		const extension = element.getContext('webgl2').getExtension('WEBGL_lose_context');
-
-		if(!extension)
-		{
-			reject(Error('WebGL context-loss testing is unavailable'));
-
-			return;
-		}
-
-		const observed = [];
-
-		element.addEventListener('webglcontextlost', () => {
-			observed.push('lost');
-			setTimeout(() => extension.restoreContext(), 100);
-		}, {once: true});
-
-		element.addEventListener('webglcontextrestored', () => resolve([...observed, 'restored']), {once: true});
-		extension.loseContext();
-	}));
-
-	expect(events).toEqual(['lost', 'restored']);
+	await restoreContext(page);
 	await expect.poll(async() => (await status(page)).renderer.frames).toBeGreaterThan(before.renderer.frames);
 	const restored = await settled(page);
 	expect(restored.renderer.frames).toBe(before.renderer.frames + 1);
