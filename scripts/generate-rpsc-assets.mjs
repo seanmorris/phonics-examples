@@ -26,19 +26,29 @@ const TILES = [
 
 /** Read a `#rrggbb` colour as three channels from 0 to 255. */
 const hex = value => [1, 3, 5].map(at => parseInt(value.slice(at, at + 2), 16));
+
 /** Blend two colours: `amount` 0 gives the first, 1 the second. */
 const mix = (from, to, amount) => from.map((channel, index) => Math.round(channel + (to[index] - channel) * amount));
 
 const SIDES = {
 	black: {
-		outline: hex('#0b0b0f'), light: hex('#62627a'), dark: hex('#2f2f3b'), groove: hex('#141419')
-		, face: hex('#2a2a35'), boss: hex('#4a4a5c')
+		outline: hex('#0b0b0f')
+		, light: hex('#62627a')
+		, dark: hex('#2f2f3b')
+		, groove: hex('#141419')
+		, face: hex('#2a2a35')
+		, boss: hex('#4a4a5c')
 	}
 	, red: {
-		outline: hex('#35080b'), light: hex('#f58a6c'), dark: hex('#a82426'), groove: hex('#6e1216')
-		, face: hex('#c8302e'), boss: hex('#ee6a54')
+		outline: hex('#35080b')
+		, light: hex('#f58a6c')
+		, dark: hex('#a82426')
+		, groove: hex('#6e1216')
+		, face: hex('#c8302e')
+		, boss: hex('#ee6a54')
 	}
 };
+
 const EMBLEM = hex('#f6ecd2');
 const EMBLEM_SHADE = hex('#c9b388');
 const GOLD = [hex('#ffe08a'), hex('#d9a12f'), hex('#8a5a12')];
@@ -89,6 +99,7 @@ const EMBLEMS = {
 /** A small RGBA image to draw into and write out as a PNG. */
 class Sheet
 {
+
 	/** A transparent sheet of a size in pixels. */
 	constructor(width, height)
 	{
@@ -119,7 +130,8 @@ class Sheet
 	{
 		const [sx, sy, sw, sh] = region;
 
-		for(let y = 0; y < sh; y++) for(let x = 0; x < sw; x++)
+		for(let y = 0; y < sh; y++)
+		for(let x = 0; x < sw; x++)
 		{
 			const pixel = source.get(sx + x, sy + y);
 
@@ -127,7 +139,9 @@ class Sheet
 
 			const rgb = tint ? tint.map((channel, index) => Math.round(channel * pixel[index] / 255)) : pixel;
 
-			for(let oy = 0; oy < scale; oy++) for(let ox = 0; ox < scale; ox++) this.put(dx + x * scale + ox, dy + y * scale + oy, rgb);
+			for(let oy = 0; oy < scale; oy++)
+			for(let ox = 0; ox < scale; ox++)
+			this.put(dx + x * scale + ox, dy + y * scale + oy, rgb);
 		}
 	}
 
@@ -157,7 +171,8 @@ function square(colour, salt)
 {
 	const tile = new Sheet(TILE, TILE);
 
-	for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++)
+	for(let y = 0; y < TILE; y++)
+	for(let x = 0; x < TILE; x++)
 	{
 		// Long, faint streaks along the rank read as a painted wooden board without fighting the pieces for attention.
 		const grain = noise(x >> 2, y, salt) * .6 + noise(x, y, salt + 1) * .4;
@@ -176,7 +191,8 @@ function checker(side, emblem)
 	const tile = new Sheet(TILE, TILE);
 	const tones = SIDES[side];
 
-	for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++)
+	for(let y = 0; y < TILE; y++)
+	for(let x = 0; x < TILE; x++)
 	{
 		const distance = reach(x, y);
 
@@ -211,7 +227,8 @@ function checker(side, emblem)
 	else
 	{
 		// Face down: a plain boss ring, the same on every piece.
-		for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++)
+		for(let y = 0; y < TILE; y++)
+		for(let x = 0; x < TILE; x++)
 		{
 			const distance = reach(x, y);
 
@@ -228,7 +245,8 @@ function king()
 {
 	const tile = new Sheet(TILE, TILE);
 
-	for(let y = 0; y < TILE; y++) for(let x = 0; x < TILE; x++)
+	for(let y = 0; y < TILE; y++)
+	for(let x = 0; x < TILE; x++)
 	{
 		const distance = reach(x, y);
 
@@ -257,6 +275,7 @@ function mark(test)
 
 /** Whether a pixel lies on one of the four corner brackets set `inset` pixels in, with arms `arm` pixels long. */
 const corner = (x, y, inset, arm) => {
+
 	const near = value => value < TILE / 2 ? value - inset : TILE - 1 - inset - value;
 	const [dx, dy] = [near(x), near(y)];
 
@@ -294,6 +313,7 @@ TILES.forEach((name, index) => sheet.blit(tiles[name], index % COLUMNS * TILE, M
 
 const generated = new Map;
 generated.set('assets/pieces.png', sheet.png());
+
 generated.set('assets/pieces.tsj', Buffer.from(JSON.stringify({
 	type: 'tileset'
 	, version: '1.10'
@@ -307,7 +327,9 @@ generated.set('assets/pieces.tsj', Buffer.from(JSON.stringify({
 	, imageheight: sheet.height
 	// The renderer finds each tile by name, so adding or reordering tiles never needs a matching edit in PHP.
 	, properties: [{name: 'rpsc.tiles', type: 'string', value: TILES.join(',')}]
-}, null, 2) + '\n'));
+}, null, 2
+) + '\n'
+));
 
 /** Deterministic 16-bit mono PCM at 22050 Hz from a sample function of seconds. */
 function wav(seconds, sample)
@@ -339,25 +361,71 @@ function wav(seconds, sample)
 
 /** Repeatable white noise from -1 to 1 for a sample index. */
 const hiss = index => noise(index, 0, 11) * 2 - 1;
+
 /** A sine wave of a pitch in hertz at a time in seconds. */
 const tone = (time, pitch) => Math.sin(2 * Math.PI * pitch * time);
+
 /** A note that starts at `from` seconds and rings down over `length`. */
 const note = (time, from, length, pitch) => time < from || time > from + length
 	? 0
 	: tone(time - from, pitch) * Math.exp(-5 * (time - from) / length) * Math.min(1, (time - from) * 400);
 
 // A checker set down on wood: a knock with a little grit at the front.
-generated.set('assets/move.wav', wav(.09, (time, index) => (tone(time, 190 - 600 * time) * .8 + hiss(index) * .25 * Math.exp(-time * 90)) * Math.exp(-time * 45)));
+generated.set(
+	'assets/move.wav'
+	, wav(
+		.09
+		, (time, index) => (tone(time, 190 - 600 * time) * .8 + hiss(index) * .25 * Math.exp(-time * 90))
+			* Math.exp(-time * 45)
+	)
+);
+
 // Two checkers turned over: a soft double tick.
-generated.set('assets/flip.wav', wav(.16, (time, index) => hiss(index) * .5 * (Math.exp(-time * 70) + (time > .07 ? Math.exp(-(time - .07) * 70) : 0)) + note(time, .07, .08, 520) * .25));
+generated.set(
+	'assets/flip.wav'
+	, wav(
+		.16
+		, (time, index) => hiss(index) * .5 * (Math.exp(-time * 70) + (time > .07 ? Math.exp(-(time - .07) * 70) : 0))
+			+ note(time, .07, .08, 520) * .25
+	)
+);
+
 // A piece taken: a lower, longer knock.
-generated.set('assets/take.wav', wav(.22, (time, index) => (tone(time, 120 - 180 * time) * .9 + hiss(index) * .3 * Math.exp(-time * 40)) * Math.exp(-time * 16)));
+generated.set(
+	'assets/take.wav'
+	, wav(
+		.22
+		, (time, index) => (tone(time, 120 - 180 * time) * .9 + hiss(index) * .3 * Math.exp(-time * 40))
+			* Math.exp(-time * 16)
+	)
+);
+
 // A tie: the same note twice.
 generated.set('assets/tie.wav', wav(.3, time => (note(time, 0, .13, 392) + note(time, .14, .15, 392)) * .5));
 // A crowning: a rising pair.
 generated.set('assets/crown.wav', wav(.34, time => (note(time, 0, .15, 660) + note(time, .11, .22, 990)) * .45));
-generated.set('assets/win.wav', wav(.75, time => [523, 659, 784, 1047].reduce((sum, pitch, index) => sum + note(time, index * .11, index === 3 ? .4 : .2, pitch), 0) * .4));
-generated.set('assets/lose.wav', wav(.7, time => [392, 330, 262].reduce((sum, pitch, index) => sum + note(time, index * .15, index === 2 ? .38 : .22, pitch), 0) * .4));
+
+generated.set(
+	'assets/win.wav'
+	, wav(
+		.75
+		, time => [523, 659, 784, 1047].reduce(
+			(sum, pitch, index) => sum + note(time, index * .11, index === 3 ? .4 : .2, pitch)
+			, 0
+		) * .4
+	)
+);
+
+generated.set(
+	'assets/lose.wav'
+	, wav(
+		.7
+		, time => [392, 330, 262].reduce(
+			(sum, pitch, index) => sum + note(time, index * .15, index === 2 ? .38 : .22, pitch)
+			, 0
+		) * .4
+	)
+);
 
 /** Blit a string from the engine's bitmap font at a pixel scale; a null target only measures. */
 async function title(target, text, x, y, scale, colour)
@@ -366,17 +434,23 @@ async function title(target, text, x, y, scale, colour)
 	const image = PNG.sync.read(await fs.readFile(new URL('font.png', engine)));
 	const glyphs = new Sheet(image.width, image.height);
 	glyphs.data.set(image.data);
+
 	const glyphTiles = new Map(font.tiles.map(tile => {
 		const properties = Object.fromEntries(tile.properties.map(property => [property.name, property.value]));
 
 		return [properties['glyph.char'], {...properties, id: tile.id}];
 	}));
+
 	const space = font.properties.find(property => property.name === 'font.spaceAdvance')?.value ?? 6;
 	let cursor = x;
 
 	for(const character of text)
 	{
-		if(character === ' ') { cursor += space * scale; continue; }
+		if(character === ' ')
+		{
+			cursor += space * scale;
+			continue;
+		}
 
 		const glyph = glyphTiles.get(character);
 
@@ -384,7 +458,15 @@ async function title(target, text, x, y, scale, colour)
 
 		const column = glyph.id % font.columns, row = Math.floor(glyph.id / font.columns);
 
-		if(target) target.blit(glyphs, cursor, y, scale, [column * font.tilewidth, row * font.tileheight, glyph['glyph.width'], glyph['glyph.height']], colour);
+		if(target)
+		target.blit(
+			glyphs
+			, cursor
+			, y
+			, scale
+			, [column * font.tilewidth, row * font.tileheight, glyph['glyph.width'], glyph['glyph.height']]
+			, colour
+		);
 
 		cursor += glyph['glyph.advance'] * scale;
 	}
@@ -403,7 +485,15 @@ function boardInto(target, left, top, scale, pieces, marks = [])
 		if(pieces[square]) target.blit(tiles[pieces[square]], x, y, scale);
 	}
 
-	for(const [square, name, tint] of marks) target.blit(tiles[name], left + square % 8 * TILE * scale, top + (7 - (square >> 3)) * TILE * scale, scale, undefined, tint);
+	for(const [square, name, tint] of marks)
+	target.blit(
+		tiles[name]
+		, left + square % 8 * TILE * scale
+		, top + (7 - (square >> 3)) * TILE * scale
+		, scale
+		, undefined
+		, tint
+	);
 }
 
 // The poster is a game a few turns in, seen from Black's side, with a challenge about to be made.
@@ -411,20 +501,51 @@ const poster = new Sheet(1280, 720);
 
 for(let y = 0; y < 720; y++) for(let x = 0; x < 1280; x++) poster.put(x, y, hex('#11131a'));
 
-for(let y = 28; y < 692; y++) for(let x = 28; x < 692; x++)
+for(let y = 28; y < 692; y++)
+for(let x = 28; x < 692; x++)
 {
 	const edge = x < 32 || y < 32 ? hex('#805433') : (x >= 688 || y >= 688 ? hex('#331f12') : hex('#5c3821'));
 	poster.put(x, y, edge);
 }
 
 boardInto(poster, 40, 40, 4, {
-	1: 'black-rock', 3: 'black-scissors', 5: 'black-paper', 7: 'black-rock', 8: 'black-paper', 10: 'black-rock', 14: 'black-scissors'
-	, 19: 'black-paper', 21: 'black-scissors', 26: 'black-scissors', 28: 'black-rock', 39: 'black-paper'
-	, 27: 'red-back', 36: 'red-back', 38: 'red-back', 41: 'red-back', 45: 'red-back', 48: 'red-back', 52: 'red-back', 54: 'red-back'
-	, 57: 'red-back', 59: 'red-back', 61: 'red-back', 63: 'red-back'
-}, [[26, 'ring', [255, 220, 128]], [27, 'reticle', [255, 220, 128]], [33, 'dot', [246, 236, 210]], [35, 'dot', [246, 236, 210]]
-	, [56, 'crown', [92, 18, 18]], [58, 'crown', [92, 18, 18]], [60, 'crown', [92, 18, 18]], [62, 'crown', [92, 18, 18]]
-	, [0, 'crown', [64, 61, 79]], [2, 'crown', [64, 61, 79]], [4, 'crown', [64, 61, 79]], [6, 'crown', [64, 61, 79]]]);
+	1: 'black-rock'
+	, 3: 'black-scissors'
+	, 5: 'black-paper'
+	, 7: 'black-rock'
+	, 8: 'black-paper'
+	, 10: 'black-rock'
+	, 14: 'black-scissors'
+	, 19: 'black-paper'
+	, 21: 'black-scissors'
+	, 26: 'black-scissors'
+	, 28: 'black-rock'
+	, 39: 'black-paper'
+	, 27: 'red-back'
+	, 36: 'red-back'
+	, 38: 'red-back'
+	, 41: 'red-back'
+	, 45: 'red-back'
+	, 48: 'red-back'
+	, 52: 'red-back'
+	, 54: 'red-back'
+	, 57: 'red-back'
+	, 59: 'red-back'
+	, 61: 'red-back'
+	, 63: 'red-back'
+}, [[26, 'ring', [255, 220, 128]]
+	, [27, 'reticle', [255, 220, 128]]
+	, [33, 'dot', [246, 236, 210]]
+	, [35, 'dot', [246, 236, 210]]
+	, [56, 'crown', [92, 18, 18]]
+	, [58, 'crown', [92, 18, 18]]
+	, [60, 'crown', [92, 18, 18]]
+	, [62, 'crown', [92, 18, 18]]
+	, [0, 'crown', [64, 61, 79]]
+	, [2, 'crown', [64, 61, 79]]
+	, [4, 'crown', [64, 61, 79]]
+	, [6, 'crown', [64, 61, 79]]
+]);
 
 const cream = [246, 236, 210];
 const wordmark = await title(null, 'RPSC', 0, 0, 14, cream);
@@ -436,7 +557,10 @@ for(const [index, line] of ['ROCK PAPER SCISSORS', 'CHECKERS'].entries())
 	await title(poster, line, 728 + Math.floor((524 - length) / 2), 336 + index * 54, 3, [255, 220, 128]);
 }
 
-['black-rock', 'red-paper', 'black-scissors'].forEach((name, index) => poster.blit(tiles[name], 750 + index * 168, 500, 7));
+['black-rock', 'red-paper', 'black-scissors'].forEach(
+	(name, index) => poster.blit(tiles[name], 750 + index * 168, 500, 7)
+);
+
 generated.set('poster.png', poster.png());
 
 if(previewDirectory)

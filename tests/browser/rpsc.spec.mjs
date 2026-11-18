@@ -2,10 +2,15 @@ import {test, expect} from '@playwright/test';
 import fs from 'node:fs/promises';
 
 // The canvas is found by its label, not its place: the online lobby moves it out of the game's frame into a stage.
+
 const canvas = page => page.locator('canvas[aria-label="RPSC game canvas"]');
+
 const status = page => canvas(page).evaluate(element => JSON.parse(element.dataset.rpsc ?? 'null'));
+
 const button = (page, label) => page.locator(`.rpsc-targets button[aria-label="${label}"]`);
+
 const name = square => 'abcdefgh'[square % 8] + (Math.floor(square / 8) + 1);
+
 /** The button over a square, whatever its label currently says about the piece on it. */
 const square = (page, number) => page.locator(`.rpsc-targets button[aria-label^="${name(number)} "]`);
 
@@ -52,6 +57,7 @@ test('RPSC places, moves, challenges, saves, and resigns', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	page.on('console', message => { if(message.type() === 'error') errors.push(message.text()); });
+
 	await boot(page);
 	await expect(button(page, 'New game')).toBeVisible();
 	await expect(button(page, 'Continue')).toHaveCount(0);
@@ -113,7 +119,11 @@ test('RPSC places, moves, challenges, saves, and resigns', async({page}) => {
 		}
 
 		const forward = now.human === 0 ? 1 : -1;
-		const [from, to] = [...now.moves].sort((a, b) => forward * (Math.floor(b[1] / 8) - Math.floor(a[1] / 8)) || a[0] - b[0])[0];
+
+		const [from, to] = [...now.moves].sort(
+			(a, b) => forward * (Math.floor(b[1] / 8) - Math.floor(a[1] / 8)) || a[0] - b[0]
+		)[0];
+
 		await square(page, from).click();
 		await expect.poll(async() => (await status(page)).targets).toContain(to);
 		await expect(square(page, to)).toHaveAttribute('aria-label', /move here$/);
@@ -205,37 +215,91 @@ test('RPSC fits tall and wide frames at whole-number scales', async({page}) => {
  */
 async function seatOnline(page)
 {
-	const sources = await Promise.all(['mental-poker.mjs', 'online-match.mjs'].map(name => fs.readFile(new URL(`../../games/rpsc/browser/${name}`, import.meta.url), 'utf8')));
+	const sources = await Promise.all(
+		['mental-poker.mjs', 'online-match.mjs'].map(
+			name => fs.readFile(new URL(`../../games/rpsc/browser/${name}`, import.meta.url), 'utf8')
+		)
+	);
 
 	return page.evaluate(async([primitive, match]) => {
+
 		const load = source => import(URL.createObjectURL(new Blob([source], {type: 'text/javascript'})));
-		const {InMemoryLobbyHub, InMemoryLobbyProvider} = await import('/engine/browser/network/InMemoryLobbyProvider.mjs');
+		const {InMemoryLobbyHub, InMemoryLobbyProvider} = await import(
+			'/engine/browser/network/InMemoryLobbyProvider.mjs'
+		);
+
 		const {RoomGameProtocol} = await import('/engine/browser/network/RoomGameLobby.mjs');
 		const api = await load(primitive), {OnlineMatch, ONLINE_ACTION_TYPES, ONLINE_RULES} = await load(match);
-		const memory = () => { const values = new Map; return {getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key)}; };
-		const hub = new InMemoryLobbyHub;
-		const game = {id: 'org.example.rpsc', protocol: '1.0.0', rules: ONLINE_RULES, application: 'app', runtime: 'runtime', actionTypes: [...ONLINE_ACTION_TYPES], maximumActionBytes: 49152, checkpointMode: 'history', actionBatches: true};
-		const make = id => new RoomGameProtocol({provider: new InMemoryLobbyProvider({hub, peerId: id}), game, session: {}, storage: memory()});
-		const alice = make('alice'), bob = make('bob');
-		const canvas = document.querySelector('canvas[aria-label="RPSC game canvas"]'), real = canvas.rpscDebug.lobby.protocol;
 
-		for(const name of ['submitAction', 'reportReady', 'reportSettled', 'dispute', 'resign', 'leave', 'snapshot']) real[name] = (...args) => alice[name](...args);
+		const memory = () => {
+			const values = new Map;
+
+			return {
+				getItem: key => values.get(key) ?? null
+				, setItem: (key, value) => values.set(key, value)
+				, removeItem: key => values.delete(key)
+			};
+		};
+
+		const hub = new InMemoryLobbyHub;
+		const game = {
+			id: 'org.example.rpsc'
+			, protocol: '1.0.0'
+			, rules: ONLINE_RULES
+			, application: 'app'
+			, runtime: 'runtime'
+			, actionTypes: [...ONLINE_ACTION_TYPES]
+			, maximumActionBytes: 49152
+			, checkpointMode: 'history'
+			, actionBatches: true
+		};
+
+		const make = id => new RoomGameProtocol(
+			{provider: new InMemoryLobbyProvider({hub, peerId: id}), game, session: {}, storage: memory()}
+		);
+
+		const alice = make('alice'), bob = make('bob');
+
+		const canvas = document.querySelector('canvas[aria-label="RPSC game canvas"]');
+		const real = canvas.rpscDebug.lobby.protocol;
+
+		for(const name of ['submitAction', 'reportReady', 'reportSettled', 'dispute', 'resign', 'leave', 'snapshot'])
+
+		real[name] = (...args) => alice[name](...args);
 
 		alice.attachGame(real.adapter);
-		const client = globalThis.rpscOpponent = {match: null, work: Promise.resolve(), active: false, submitting: false, awaiting: false, stopped: null, error: null};
-		const enqueue = task => { client.work = client.work.then(task).catch(error => { client.error = String(error?.message ?? error); }); };
+		const client = globalThis.rpscOpponent = {
+			match: null
+			, work: Promise.resolve()
+			, active: false
+			, submitting: false
+			, awaiting: false
+			, stopped: null
+			, error: null
+		};
+
+		const enqueue = task => {
+			client.work = client.work.then(task).catch(error => { client.error = String(error?.message ?? error); });
+		};
+
 		const drive = async() => {
-			if(!client.match || !client.active || client.submitting || client.awaiting || client.stopped || client.match.currentActor() !== 'bob') return;
+			if(!client.match || !client.active || client.submitting || client.awaiting || client.stopped
+				|| client.match.currentActor() !== 'bob'
+			)
+			return;
 
 			let action = client.match.nextAction();
 
 			if(!action)
 			{
 				const view = client.match.view();
-				const challenge = view.challenges.length && Math.random() < .5, pairs = challenge ? view.challenges : view.moves;
+				const challenge = view.challenges.length && Math.random() < .5, pairs = challenge
+					? view.challenges
+					: view.moves;
 
 				if(view.arrangement && !view.locked) client.match.command({type: 'ready'});
-				else if(pairs.length) client.match.command({type: challenge ? 'challenge' : 'move', from: pairs[0][0], to: pairs[0][1]});
+				else if(pairs.length)
+				client.match.command({type: challenge ? 'challenge' : 'move', from: pairs[0][0], to: pairs[0][1]});
 
 				action = client.match.nextAction();
 			}
@@ -245,6 +309,7 @@ async function seatOnline(page)
 			client.submitting = true;
 			await port.submitAction(action, await client.match.hash(), {settle: client.match.settlesAction(action)});
 		};
+
 		const port = bob.attachGame({
 			start: detail => enqueue(async() => {
 				client.match = new OnlineMatch({api, ...detail, localPlayer: 'bob', storage: memory()});
@@ -254,21 +319,27 @@ async function seatOnline(page)
 				const settlement = await client.match.apply(detail);
 
 				if(detail.batch_end !== false) client.awaiting = true;
+
 				if(await port.reportSettled(settlement)) return;
 
-				client.awaiting = false; client.submitting = false;
+				client.awaiting = false;
+				client.submitting = false;
 				await drive();
 			})
-			, confirmed: () => enqueue(async() => { client.active = true; client.awaiting = false; client.submitting = false; await drive(); })
+			, confirmed: () => enqueue(
+				async() => { client.active = true; client.awaiting = false; client.submitting = false; await drive(); }
+			)
 			, stop: detail => { client.stopped = detail ?? {}; }
 		});
+
 		await alice.connect();
 		await bob.connect();
 		await bob.join(await alice.create());
 		const room = document.querySelector('.phonics-room-game');
 		room.classList.add('is-open', 'has-game');
 		room.querySelector('.phonics-room-stage').append(canvas);
-	}, sources);
+	}, sources
+	);
 }
 
 test('RPSC plays an online game through the room: hidden placements, a challenge, and a resignation', async({page}) => {
@@ -277,6 +348,7 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	page.on('console', message => { if(message.type() === 'error') errors.push(message.text()); });
+
 	await page.setViewportSize({width: 1100, height: 760});
 	await boot(page);
 
@@ -286,7 +358,11 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 	await seatOnline(page);
 
 	// Seated: the title gives way to a placement that is the player's to arrange.
-	await expect.poll(async() => { const now = await status(page); return `${now.online} ${now.page} ${now.phase}`; }, {timeout: 60_000}).toBe('true game placement');
+	await expect.poll(
+		async() => { const now = await status(page); return `${now.online} ${now.page} ${now.phase}`; }
+		, {timeout: 60_000}
+	).toBe('true game placement');
+
 	let now = await status(page);
 	const me = now.human, other = 1 - me;
 	expect(now.pieces.filter(piece => piece[1] === me && piece[2] !== null)).toHaveLength(12);
@@ -302,20 +378,36 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 	now = await status(page);
 	expect(now.pieces).toHaveLength(24);
 	expect(now.pieces.filter(piece => piece[1] === other).every(piece => piece[2] === null)).toBe(true);
-	expect(await button(page, `${name(now.pieces.find(piece => piece[1] === other)[0])} ${['Black', 'Red'][other]} piece face down`).count()).toBe(1);
+
+	expect(
+		await button(
+			page
+			, `${name(now.pieces.find(piece => piece[1] === other)[0])} ${['Black', 'Red'][other]} piece face down`
+		).count()
+	).toBe(1);
 
 	// Play until this page has made a challenge, or the game ends first.
 	let challenged = false;
 
 	for(let turn = 0; turn < 60 && !challenged; turn++)
 	{
-		await expect.poll(async() => { const state = await status(page); return state.phase === 'over' || (!state.busy && state.moves.length > 0); }, {timeout: 60_000}).toBe(true);
+		await expect.poll(
+			async() => {
+				const state = await status(page);
+
+				return state.phase === 'over' || (!state.busy && state.moves.length > 0);
+			}
+			, {timeout: 60_000}
+		).toBe(true);
+
 		now = await status(page);
 
 		if(now.phase === 'over') break;
 
 		const forward = me === 0 ? 1 : -1;
-		const [from, to] = now.challenges[0] ?? [...now.moves].sort((a, b) => forward * (Math.floor(b[1] / 8) - Math.floor(a[1] / 8)) || a[0] - b[0])[0];
+		const [from, to] = now.challenges[0]
+			?? [...now.moves].sort((a, b) => forward * (Math.floor(b[1] / 8) - Math.floor(a[1] / 8)) || a[0] - b[0])[0];
+
 		challenged = now.challenges.length > 0;
 		await square(page, from).click();
 		await expect.poll(async() => (await status(page)).selected).toBe(from);
@@ -327,10 +419,20 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 	{
 		// Both pieces were opened with proofs and are shown; afterwards the survivor is hidden again.
 		await expect.poll(async() => (await status(page)).status, {timeout: 30_000}).toMatch(/ beats | meets /);
-		await expect.poll(async() => { const state = await status(page); return state.phase === 'over' || (!state.busy && state.challenged); }, {timeout: 30_000}).toBe(true);
+
+		await expect.poll(
+			async() => {
+				const state = await status(page);
+
+				return state.phase === 'over' || (!state.busy && state.challenged);
+			}
+			, {timeout: 30_000}
+		).toBe(true);
+
 		now = await status(page);
 
-		if(now.phase === 'play') expect(now.pieces.filter(piece => piece[1] === other).every(piece => piece[2] === null)).toBe(true);
+		if(now.phase === 'play')
+		expect(now.pieces.filter(piece => piece[1] === other).every(piece => piece[2] === null)).toBe(true);
 	}
 
 	now = await status(page);
@@ -347,7 +449,9 @@ test('RPSC plays an online game through the room: hidden placements, a challenge
 		now = await status(page);
 		expect(now.status).toBe('You resigned');
 		expect(now.winner).toBe(other);
-		await expect.poll(() => page.evaluate(() => globalThis.rpscOpponent.stopped)).toEqual({winner: 'bob', reason: 'resigned'});
+
+		const told = () => page.evaluate(() => globalThis.rpscOpponent.stopped);
+		await expect.poll(told).toEqual({winner: 'bob', reason: 'resigned'});
 	}
 
 	await expect(button(page, 'Play again')).toHaveCount(0);

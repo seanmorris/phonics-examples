@@ -30,24 +30,36 @@ const QUIET_LIMIT = 80;
 const PACKET_BYTES = 28000;
 
 const encoder = new TextEncoder;
+
 /** Copy a plain value, so a caller can never reach into the match's state. */
 const clone = value => structuredClone(value);
+
 /** Write a value as JSON with every object's keys in order, so equal states give equal text on both browsers. */
-const stable = value => JSON.stringify(value, (_, item) => item && typeof item === 'object' && !Array.isArray(item)
-	? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+const stable = value => JSON.stringify(
+	value
+	, (_, item) => item && typeof item === 'object' && !Array.isArray(item)
+		? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+		: item
+);
+
 /** Write bytes as lowercase hex. */
 const hex = bytes => [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+
 /** The SHA-256 of a string, as hex. */
 const sha256 = async value => hex(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
 
 /** The square at a file and rank, numbered from a1 along each rank, or -1 off the board. */
 const square = (x, y) => x < 0 || y < 0 || x >= SIZE || y >= SIZE ? -1 : y * SIZE + x;
+
 /** A square's file, from 0 (a) to 7 (h). */
 const file = at => at % SIZE;
+
 /** A square's rank, from 0 (rank 1) to 7 (rank 8). */
 const rank = at => Math.floor(at / SIZE);
+
 /** Black plays on the red squares, where file plus rank is odd; Red plays on the black ones. */
 const owner = at => (file(at) + rank(at)) % 2 === 1 ? 0 : 1;
+
 /** The rank a square stands on, counted from a side's own back rank: 7 is the far rank. */
 const advance = (side, at) => side === 0 ? rank(at) : SIZE - 1 - rank(at);
 
@@ -95,7 +107,8 @@ function steps(at, side, king)
 {
 	const forward = side === 0 ? 1 : -1, targets = [];
 
-	for(const dy of king ? [forward, -forward] : [forward]) for(const dx of [-1, 1])
+	for(const dy of king ? [forward, -forward] : [forward])
+	for(const dx of [-1, 1])
 	{
 		const target = square(file(at) + dx, rank(at) + dy);
 
@@ -134,40 +147,63 @@ const beats = (kind, against) => (kind - against + 3) % 3 === 1;
  * square to `{side, id, king}`. Kinds are not part of it: a challenge is handed the two kinds that were shown.
  */
 export const Rules = Object.freeze({
-	QUIET_LIMIT, home, goal, steps, neighbours, beats, owner, advance
+	QUIET_LIMIT
+	, home
+	, goal
+	, steps
+	, neighbours
+	, beats
+	, owner
+	, advance
 
 	/** A new game, before either side has placed. */
-	, create()
-	{
-		return {phase: 'placement', turn: 0, challenged: false, quiet: 0, ply: 0, winner: null, reason: '', placed: [false, false], lost: [[], []], pieces: {}};
+
+	, create() {
+		return {
+			phase: 'placement'
+			, turn: 0
+			, challenged: false
+			, quiet: 0
+			, ply: 0
+			, winner: null
+			, reason: ''
+			, placed: [false, false]
+			, lost: [[], []]
+			, pieces: {}
+		};
 	}
 
 	/** Stand a side's twelve on its home squares; play begins when both sides have. */
-	, place(game, side)
-	{
+
+	, place(game, side) {
 		if(game.phase !== 'placement' || game.placed[side]) throw new Error('That side cannot place now');
 
 		home(side).forEach((at, id) => { game.pieces[at] = {side, id, king: false}; });
+
 		game.placed[side] = true;
 
-		if(game.placed[0] && game.placed[1]) { game.phase = 'play'; game.turn = 0; }
+		if(game.placed[0] && game.placed[1])
+		{
+			game.phase = 'play';
+			game.turn = 0;
+		}
 	}
 
 	/** How many pieces a side has on the board. */
-	, count(game, side)
-	{
+
+	, count(game, side) {
 		return Object.values(game.pieces).filter(piece => piece.side === side).length;
 	}
 
 	/** How many of its four far-rank squares a side stands on. */
-	, filled(game, side)
-	{
+
+	, filled(game, side) {
 		return goal(side).filter(at => game.pieces[at]?.side === side).length;
 	}
 
 	/** The moves open to a side, as [from, to] pairs in board order of the moving piece. */
-	, moves(game, side = game.turn)
-	{
+
+	, moves(game, side = game.turn) {
 		const moves = [];
 
 		if(game.phase !== 'play') return moves;
@@ -185,8 +221,8 @@ export const Rules = Object.freeze({
 	}
 
 	/** Every place a side's piece shares an edge with an opposing piece, as [own square, opposing square]. */
-	, contacts(game, side)
-	{
+
+	, contacts(game, side) {
 		const pairs = [];
 
 		for(let at = 0; at < SQUARES; at++)
@@ -200,23 +236,27 @@ export const Rules = Object.freeze({
 	}
 
 	/** The challenges open to the side to act; none once this turn's challenge is used. */
-	, challenges(game)
-	{
+
+	, challenges(game) {
 		return game.phase !== 'play' || game.challenged ? [] : Rules.contacts(game, game.turn);
 	}
 
 	/** Throw unless the side to act may challenge from one square to the other. */
-	, checkChallenge(game, from, to)
-	{
+
+	, checkChallenge(game, from, to) {
 		if(game.phase !== 'play') throw new Error('The game is not in play');
+
 		if(game.challenged) throw new Error('This turn has already had its challenge');
+
 		if(game.pieces[from]?.side !== game.turn) throw new Error('No piece of the side to act stands there');
-		if(!game.pieces[to] || !neighbours(from).includes(to)) throw new Error('No opposing piece shares an edge with the challenger');
+
+		if(!game.pieces[to] || !neighbours(from).includes(to))
+		throw new Error('No opposing piece shares an edge with the challenger');
 	}
 
 	/** Resolve a challenge between two shown kinds and return the event `Rpsc\Game::challenge()` returns. */
-	, challenge(game, from, to, attacker, defender)
-	{
+
+	, challenge(game, from, to, attacker, defender) {
 		Rules.checkChallenge(game, from, to);
 		const [attacking, defending] = [game.pieces[from], game.pieces[to]];
 		let outcome = 'tie', removed = null;
@@ -233,23 +273,34 @@ export const Rules = Object.freeze({
 
 		game.challenged = true;
 		const event = {
-			type: 'challenge', side: game.turn, from, to, attacker, defender
-			, attackerId: attacking.id, defenderId: defending.id, outcome, removed
+			type: 'challenge'
+			, side: game.turn
+			, from
+			, to
+			, attacker
+			, defender
+			, attackerId: attacking.id
+			, defenderId: defending.id
+			, outcome
+			, removed
 		};
+
 		Rules.settle(game);
 
 		return event;
 	}
 
 	/** Move one piece, crown it on the far rank, and end the turn. */
-	, move(game, from, to)
-	{
+
+	, move(game, from, to) {
 		if(game.phase !== 'play') throw new Error('The game is not in play');
 
 		const piece = game.pieces[from], side = game.turn;
 
 		if(piece?.side !== side) throw new Error('No piece of the side to act stands there');
-		if(game.pieces[to] || !steps(from, side, piece.king).includes(to)) throw new Error('That piece cannot step there');
+
+		if(game.pieces[to] || !steps(from, side, piece.king).includes(to))
+		throw new Error('That piece cannot step there');
 
 		const crowned = !piece.king && advance(side, to) === SIZE - 1;
 		game.quiet = piece.king ? game.quiet + 1 : 0;
@@ -273,8 +324,8 @@ export const Rules = Object.freeze({
 	}
 
 	/** End the game where the position already decides it: a side with no pieces, or eighty quiet turns. */
-	, settle(game)
-	{
+
+	, settle(game) {
 		if(game.phase !== 'play') return;
 
 		const side = game.turn;
@@ -285,8 +336,8 @@ export const Rules = Object.freeze({
 	}
 
 	/** Record the result: the winning side or null for a draw, and elimination, home-row, or draw. */
-	, finish(game, winner, reason)
-	{
+
+	, finish(game, winner, reason) {
 		game.phase = 'over';
 		game.winner = winner;
 		game.reason = reason;
@@ -305,14 +356,20 @@ const storageIndex = `rpsc:online:v${ONLINE_VERSION}:index`;
  */
 export function readOnlyStorage(storage)
 {
-	return {getItem: key => storage?.getItem(key) ?? null, setItem() {}, removeItem() {}};
+	return {
+		getItem: key => storage?.getItem(key) ?? null
+
+		, setItem() {}
+
+		, removeItem() {}
+	};
 }
 
 /** A uniform random integer below a bound of at most 256, from the platform's random source. */
 const randomBelow = bound => {
 	const limit = 256 - 256 % bound, bytes = new Uint8Array(1);
 
-	for(;;)
+	for(; ;)
 	{
 		crypto.getRandomValues(bytes);
 
@@ -342,6 +399,7 @@ const legalArrangement = value => Array.isArray(value) && value.length === PIECE
  */
 export class OnlineMatch
 {
+
 	/**
 	 * @param {object} options What the room and the page supply.
 	 * @param {object} options.api The private-deck primitive, as `session.mentalPoker`.
@@ -354,14 +412,35 @@ export class OnlineMatch
 	 * @param {Storage} [options.storage] Where this browser keeps its key, its placement, and an unfinished proof.
 	 * @param {boolean} [options.follow] Another tab plays this seat: read its record before every step, never act.
 	 */
-	constructor({api, root, sessionId, players, localPlayer, breaker, rounds = 64, storage = globalThis.localStorage, follow = false})
-	{
-		if(!api || typeof api.prepareCorpus !== 'function') throw new TypeError('The private-deck primitive is unavailable');
-		if(typeof root !== 'string' || !root || typeof sessionId !== 'string' || !sessionId) throw new TypeError('An online game needs a room identity');
-		if(!Array.isArray(players) || players.length !== 2 || new Set(players).size !== 2 || players.some(player => typeof player !== 'string' || !player))
+	constructor(
+		{
+			api
+			, root
+			, sessionId
+			, players
+			, localPlayer
+			, breaker
+			, rounds = 64
+			, storage = globalThis.localStorage
+			, follow = false
+		}
+	){
+		if(!api || typeof api.prepareCorpus !== 'function')
+		throw new TypeError('The private-deck primitive is unavailable');
+
+		if(typeof root !== 'string' || !root || typeof sessionId !== 'string' || !sessionId)
+		throw new TypeError('An online game needs a room identity');
+
+		if(!Array.isArray(players) || players.length !== 2 || new Set(players).size !== 2
+			|| players.some(player => typeof player !== 'string' || !player)
+		)
 		throw new TypeError('RPSC is for exactly two players');
-		if(!players.includes(localPlayer) || !players.includes(breaker)) throw new TypeError('The local player and the first player must hold seats');
-		if(!Number.isSafeInteger(rounds) || rounds < 16 || rounds > 128) throw new RangeError('A placement proof needs 16 to 128 rounds');
+
+		if(!players.includes(localPlayer) || !players.includes(breaker))
+		throw new TypeError('The local player and the first player must hold seats');
+
+		if(!Number.isSafeInteger(rounds) || rounds < 16 || rounds > 128)
+		throw new RangeError('A placement proof needs 16 to 128 rounds');
 
 		this.api = api;
 		this.root = root;
@@ -375,19 +454,34 @@ export class OnlineMatch
 		this.follow = Boolean(follow);
 		this.keyName = storageKey(root, localPlayer);
 		this.context = `rpsc:${ONLINE_VERSION}:${ONLINE_RULES}:${root}:${sessionId}`;
+
 		// Twelve tokens, four of each kind. Token index divided by four is its kind.
 		this.corpus = api.prepareCorpus(
-			Array.from({length: PIECES}, (_, index) => ({kind: KINDS[Math.floor(index / PER_KIND)], copy: index % PER_KIND}))
+			Array.from({length: PIECES}, (_, index) => ({
+				kind: KINDS[Math.floor(index / PER_KIND)]
+				, copy: index % PER_KIND
+			}))
 			, {context: `${this.context}:corpus`}
 		);
+
 		this.input = api.corpusDeck(this.corpus);
 		this.saved = this.loadSaved();
 		this.assembler = null;
 		this.intent = null;
 		this.events = [];
 		this.state = {
-			v: ONLINE_VERSION, rules: ONLINE_RULES, sequence: 0, stage: 'placement', game: Rules.create()
-			, decks: [null, null], layers: [null, null], pending: null, duel: null, reveal: [], revealed: [null, null], outcome: null
+			v: ONLINE_VERSION
+			, rules: ONLINE_RULES
+			, sequence: 0
+			, stage: 'placement'
+			, game: Rules.create()
+			, decks: [null, null]
+			, layers: [null, null]
+			, pending: null
+			, duel: null
+			, reveal: []
+			, revealed: [null, null]
+			, outcome: null
 		};
 
 		if(!this.follow && !legalArrangement(this.saved.arrangement))
@@ -411,7 +505,10 @@ export class OnlineMatch
 
 			return value && typeof value === 'object' && value.v === ONLINE_VERSION ? value : {v: ONLINE_VERSION};
 		}
-		catch { return {v: ONLINE_VERSION}; }
+		catch
+		{
+			return {v: ONLINE_VERSION};
+		}
 	}
 
 	/**
@@ -429,7 +526,10 @@ export class OnlineMatch
 			index[this.keyName] = Date.now();
 			this.storage?.setItem(storageIndex, JSON.stringify(index));
 		}
-		catch { /* A full or blocked store costs the reload, not the game in this tab. */ }
+		catch
+		{
+			/* A full or blocked store costs the reload, not the game in this tab. */
+		}
 	}
 
 	/**
@@ -444,7 +544,10 @@ export class OnlineMatch
 
 			return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 		}
-		catch { return {}; }
+		catch
+		{
+			return {};
+		}
 	}
 
 	/**
@@ -457,7 +560,9 @@ export class OnlineMatch
 		if(this.follow) return;
 
 		const index = this.readIndex();
-		const keys = Object.keys(index).filter(key => key !== this.keyName).sort((a, b) => (Number(index[b]) || 0) - (Number(index[a]) || 0));
+
+		const newestFirst = (a, b) => (Number(index[b]) || 0) - (Number(index[a]) || 0);
+		const keys = Object.keys(index).filter(key => key !== this.keyName).sort(newestFirst);
 
 		if(keys.length < keep) return;
 
@@ -499,8 +604,11 @@ export class OnlineMatch
 		const {stage, game, reveal, outcome} = this.state;
 
 		if(stage === 'placement') return this.seats[game.placed[0] ? 1 : 0];
+
 		if(stage === 'play') return this.seats[game.turn];
+
 		if(stage === 'answer') return this.seats[1 - game.turn];
+
 		if(stage === 'reveal') return this.seats[reveal[0]];
 
 		return outcome?.winner ?? this.seats[0];
@@ -542,6 +650,7 @@ export class OnlineMatch
 	plan()
 	{
 		if(this.saved.plan) return this.saved.plan;
+
 		if(!legalArrangement(this.saved.arrangement)) throw new Error('This browser has no placement to publish');
 
 		// Each kind's four tokens are dealt to its squares in a random order, so nothing about a square can be read
@@ -550,15 +659,37 @@ export class OnlineMatch
 		const order = [0, ...this.saved.arrangement.map(kind => 1 + copies[kind].pop())];
 		const key = this.api.generateLayerKey();
 		const deck = this.api.applyShuffle(this.input, key, order);
-		const proof = this.api.proveShuffle(this.input, deck, key, order, {context: this.placementContext(this.side), rounds: this.rounds});
-		const records = [{type: 'deck', deck}, ...this.api.splitShuffleProof(proof, {roundsPerChunk: 8}).map(({kind, ...rest}) => ({type: kind, ...rest}))];
+
+		const proof = this.api.proveShuffle(
+			this.input
+			, deck
+			, key
+			, order
+			, {context: this.placementContext(this.side), rounds: this.rounds}
+		);
+
+		const records = [{type: 'deck', deck}
+			, ...this.api.splitShuffleProof(proof, {roundsPerChunk: 8}).map((
+				{kind, ...rest}
+			) => ({
+				type: kind
+				, ...rest
+			})
+			)
+		];
+
 		const packets = [];
 
 		for(const record of records)
 		{
 			const last = packets.at(-1);
 
-			if(last && encoder.encode(JSON.stringify({type: 'placement-packet', records: [...last.records, record]})).length <= PACKET_BYTES) last.records.push(record);
+			if(last
+				&& encoder.encode(
+					JSON.stringify({type: 'placement-packet', records: [...last.records, record]})
+				).length <= PACKET_BYTES
+			)
+			last.records.push(record);
 			else packets.push({type: 'placement-packet', records: [record]});
 		}
 
@@ -579,7 +710,14 @@ export class OnlineMatch
 
 		if(!key || !this.ownKinds()) throw new Error('This browser lost its private placement');
 
-		return this.api.openCard(this.state.decks[this.side][id + 1], order[id + 1] - 1, key, this.state.layers[this.side], this.corpus, {context: this.openContext(this.side, id)});
+		return this.api.openCard(
+			this.state.decks[this.side][id + 1]
+			, order[id + 1] - 1
+			, key
+			, this.state.layers[this.side]
+			, this.corpus
+			, {context: this.openContext(this.side, id)}
+		);
 	}
 
 	/**
@@ -591,7 +729,13 @@ export class OnlineMatch
 	 */
 	verifyOpening(side, id, opening)
 	{
-		if(!this.api.verifyCardOpening(this.state.decks[side][id + 1], opening, this.state.layers[side], this.corpus, {context: this.openContext(side, id)}))
+		if(!this.api.verifyCardOpening(
+			this.state.decks[side][id + 1]
+			, opening
+			, this.state.layers[side]
+			, this.corpus
+			, {context: this.openContext(side, id)}
+		))
 		throw new Error('A shown piece does not match its placement');
 
 		return Math.floor(opening.card / PER_KIND);
@@ -604,7 +748,9 @@ export class OnlineMatch
 	 */
 	survivors(side)
 	{
-		return Object.values(this.state.game.pieces).filter(piece => piece.side === side).map(piece => piece.id).sort((a, b) => a - b);
+		const pieces = Object.values(this.state.game.pieces).filter(piece => piece.side === side);
+
+		return pieces.map(piece => piece.id).sort((a, b) => a - b);
 	}
 
 	/**
@@ -629,7 +775,12 @@ export class OnlineMatch
 		}
 
 		if(stage === 'answer') return {type: 'answer', opening: this.open(game.pieces[duel.to].id)};
-		if(stage === 'reveal') return {type: 'reveal', openings: this.survivors(this.side).map(id => ({id, ...this.open(id)}))};
+
+		if(stage === 'reveal')
+		return {
+			type: 'reveal'
+			, openings: this.survivors(this.side).map(id => ({id, ...this.open(id)}))
+		};
 
 		return null;
 	}
@@ -642,12 +793,14 @@ export class OnlineMatch
 	 */
 	settlesAction(action)
 	{
-		return action?.type !== 'placement-packet' || Boolean(action.records?.some(record => record.type === 'shuffle-proof-tail'));
+		return action?.type !== 'placement-packet'
+			|| Boolean(action.records?.some(record => record.type === 'shuffle-proof-tail'));
 	}
 
 	/**
 	 * Take one of the player's intents.
-	 * @param {object} intent `swap` with home indexes `a` and `b`, `shuffle`, `ready`, or `move` or `challenge` with squares.
+	 * @param {object} intent `swap` with home indexes `a` and `b`, `shuffle`, `ready`, or `move` or `challenge` with
+	 * its two squares.
 	 * @returns {boolean} Whether it was legal now. An accepted move or challenge is sent by the next `nextAction()`.
 	 */
 	command(intent)
@@ -666,12 +819,20 @@ export class OnlineMatch
 			{
 				const {a, b} = intent;
 
-				if(!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || a === b || !(a in arrangement) || !(b in arrangement)) return false;
+				if(!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || a === b || !(a in arrangement)
+					|| !(b in arrangement)
+				)
+				return false;
 
 				[arrangement[a], arrangement[b]] = [arrangement[b], arrangement[a]];
 			}
 
-			this.saved = {...this.saved, arrangement: intent.type === 'shuffle' ? shuffled(arrangement) : arrangement, ready: intent.type === 'ready'};
+			this.saved = {
+				...this.saved
+				, arrangement: intent.type === 'shuffle' ? shuffled(arrangement) : arrangement
+				, ready: intent.type === 'ready'
+			};
+
 			this.save();
 
 			return true;
@@ -679,7 +840,9 @@ export class OnlineMatch
 
 		if(stage !== 'play' || this.intent || this.currentActor() !== this.localPlayer) return false;
 
-		const pairs = intent.type === 'move' ? Rules.moves(game) : intent.type === 'challenge' ? Rules.challenges(game) : [];
+		const pairs = intent.type === 'move'
+			? Rules.moves(game)
+			: intent.type === 'challenge' ? Rules.challenges(game) : [];
 
 		if(!pairs.some(([from, to]) => from === intent.from && to === intent.to)) return false;
 
@@ -695,10 +858,16 @@ export class OnlineMatch
 	 */
 	async apply({sequence, actor, pre_hash: preHash, action})
 	{
-		if(!Number.isSafeInteger(sequence) || sequence !== this.state.sequence + 1) throw new Error('Online RPSC action is out of sequence');
+		if(!Number.isSafeInteger(sequence) || sequence !== this.state.sequence + 1)
+		throw new Error('Online RPSC action is out of sequence');
+
 		if(actor !== this.currentActor()) throw new Error('Online RPSC action came from the wrong player');
+
 		if(!action || !ONLINE_ACTION_TYPES.includes(action.type)) throw new Error('Unknown online RPSC action');
-		if(typeof preHash !== 'string' || preHash !== await this.hash()) throw new Error('Online RPSC action has the wrong parent hash');
+
+		if(typeof preHash !== 'string' || preHash !== await this.hash())
+		throw new Error('Online RPSC action has the wrong parent hash');
+
 		if(this.follow) this.saved = this.loadSaved();
 
 		const before = {state: clone(this.state), events: this.events.length};
@@ -743,11 +912,13 @@ export class OnlineMatch
 	{
 		const side = this.sideOf(actor);
 
-		if(!Array.isArray(action.records) || !action.records.length || action.records.length > 16) throw new Error('A placement packet carries 1 to 16 records');
+		if(!Array.isArray(action.records) || !action.records.length || action.records.length > 16)
+		throw new Error('A placement packet carries 1 to 16 records');
 
 		const pending = this.state.pending ?? {side, deck: null, records: [], packets: 0};
 
-		if(pending.side !== side || pending.packets >= 16) throw new Error('This placement does not continue the one in progress');
+		if(pending.side !== side || pending.packets >= 16)
+		throw new Error('This placement does not continue the one in progress');
 
 		// After a reload the proof so far is rebuilt from the records the shared state kept.
 		if(!this.assembler)
@@ -763,7 +934,9 @@ export class OnlineMatch
 		{
 			if(record?.type === 'deck')
 			{
-				if(pending.deck || !Array.isArray(record.deck) || record.deck.length !== PIECES + 1 || record.deck.some(point => typeof point !== 'string'))
+				if(pending.deck || !Array.isArray(record.deck) || record.deck.length !== PIECES + 1
+					|| record.deck.some(point => typeof point !== 'string')
+				)
 				throw new Error('A placement names its thirteen points once');
 
 				pending.deck = [...record.deck];
@@ -789,7 +962,12 @@ export class OnlineMatch
 		}
 
 		// The proof is bound to this seat, so a player cannot answer with a copy of the other's deck.
-		if(!this.api.verifyShuffle(this.input, pending.deck, proof, {context: this.placementContext(side), rounds: this.rounds}))
+		if(!this.api.verifyShuffle(
+			this.input
+			, pending.deck
+			, proof
+			, {context: this.placementContext(side), rounds: this.rounds}
+		))
 		throw new Error('The placement proof does not hold');
 
 		this.state.decks[side] = pending.deck;
@@ -804,7 +982,12 @@ export class OnlineMatch
 			const {key, order} = this.saved;
 			const mine = key && this.ownKinds() ? this.api.applyShuffle(this.input, key, order) : null;
 
-			if(!mine || mine.some((point, index) => point !== pending.deck[index])) this.saved = {...this.saved, key: null, order: null};
+			if(!mine || mine.some((point, index) => point !== pending.deck[index]))
+			this.saved = {
+				...this.saved
+				, key: null
+				, order: null
+			};
 
 			// The packets are public now; only the key and the order are still needed.
 			this.saved = {...this.saved, plan: null, ready: true};
@@ -867,10 +1050,15 @@ export class OnlineMatch
 	{
 		const side = this.state.reveal[0], ids = this.survivors(side);
 
-		if(!Array.isArray(openings) || openings.length !== ids.length || openings.some((opening, index) => opening?.id !== ids[index]))
+		if(!Array.isArray(openings) || openings.length !== ids.length
+			|| openings.some((opening, index) => opening?.id !== ids[index])
+		)
 		throw new Error('The final reveal shows each surviving piece once');
 
-		this.state.revealed[side] = Object.fromEntries(openings.map(({id, ...opening}) => [id, this.verifyOpening(side, id, opening)]));
+		this.state.revealed[side] = Object.fromEntries(
+			openings.map(({id, ...opening}) => [id, this.verifyOpening(side, id, opening)])
+		);
+
 		this.state.reveal.shift();
 
 		if(!this.state.reveal.length) this.finish();
@@ -949,7 +1137,10 @@ export class OnlineMatch
 			if(!piece) continue;
 
 			pieces.push({
-				key: piece.side * PIECES + piece.id, side: piece.side, square: at, king: piece.king
+				key: piece.side * PIECES + piece.id
+				, side: piece.side
+				, square: at
+				, king: piece.king
 				, kind: piece.side === mine ? own?.[piece.id] ?? null : revealed[piece.side]?.[piece.id] ?? null
 			});
 		}
@@ -959,9 +1150,15 @@ export class OnlineMatch
 		const opponent = names[theirs];
 		let notice = '';
 
-		if(placing && this.saved.ready) notice = pending?.side === mine || this.currentActor() === this.localPlayer ? 'Placing your pieces' : `Waiting for ${opponent} to place`;
+		if(placing && this.saved.ready)
+		notice = pending?.side === mine || this.currentActor() === this.localPlayer
+			? 'Placing your pieces'
+			: `Waiting for ${opponent} to place`;
 		else if(stage === 'placement' && !placing) notice = `Waiting for ${opponent} to place`;
-		else if(stage === 'answer') notice = this.currentActor() === this.localPlayer ? 'Showing your piece' : `Waiting for ${opponent} to show a piece`;
+		else if(stage === 'answer')
+		notice = this.currentActor() === this.localPlayer
+			? 'Showing your piece'
+			: `Waiting for ${opponent} to show a piece`;
 		else if(stage === 'play' && this.intent) notice = 'Sending';
 		else if(stage === 'play' && this.currentActor() !== this.localPlayer) notice = `${opponent} is thinking`;
 
@@ -1004,7 +1201,20 @@ export class OnlineMatch
  */
 export function activate({session})
 {
-	const api = Object.freeze({ONLINE_VERSION, ONLINE_RULES, ONLINE_ACTION_TYPES, KEPT_TABLES, KINDS, SIDES, Rules, OnlineMatch, readOnlyStorage});
+	const api = Object.freeze(
+		{
+			ONLINE_VERSION
+			, ONLINE_RULES
+			, ONLINE_ACTION_TYPES
+			, KEPT_TABLES
+			, KINDS
+			, SIDES
+			, Rules
+			, OnlineMatch
+			, readOnlyStorage
+		}
+	);
+
 	session.rpscOnline = api;
 
 	return () => { if(session.rpscOnline === api) delete session.rpscOnline; };

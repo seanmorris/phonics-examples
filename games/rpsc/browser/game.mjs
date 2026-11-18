@@ -13,7 +13,9 @@ const SIDES = Object.freeze(['black', 'red', 'random']);
 
 /** Room rejections that sending again cannot fix. */
 export const TERMINAL_ROOM_ERRORS = Object.freeze([
-	'It is not your turn', 'Local state differs from the confirmed turn state', 'The game supplied an invalid quantized action'
+	'It is not your turn'
+	, 'Local state differs from the confirmed turn state'
+	, 'The game supplied an invalid quantized action'
 	, 'No matching action is settling', 'This browser is not seated at a table'
 ]);
 
@@ -27,9 +29,16 @@ export const TERMINAL_ROOM_ERRORS = Object.freeze([
  * @param {function(number): Promise<void>} [options.sleep] Waits between tries; tests replace it.
  * @returns {Promise<*>} The write's result, or undefined when the table ended first.
  */
-export async function retryRoomWrite(operation, {live = () => true, reconnecting = () => {}, sleep = delay => new Promise(resolve => setTimeout(resolve, delay))} = {})
-{
-	for(let attempt = 0;; attempt++)
+export async function retryRoomWrite(
+	operation
+	, {
+		live = () => true
+		, reconnecting = () => {
+		}
+		, sleep = delay => new Promise(resolve => setTimeout(resolve, delay))
+	} = {}
+){
+	for(let attempt = 0; ; attempt++)
 	{
 		try
 		{
@@ -42,7 +51,9 @@ export async function retryRoomWrite(operation, {live = () => true, reconnecting
 		catch(error)
 		{
 			if(TERMINAL_ROOM_ERRORS.includes(error instanceof Error ? error.message : String(error))) throw error;
+
 			if(!live()) return undefined;
+
 			if(attempt >= 2) reconnecting(true);
 
 			await sleep(Math.min(30000, 500 * 2 ** attempt));
@@ -95,8 +106,11 @@ export function endedNotice(detail, won, opponent)
 {
 	const reason = detail?.reason;
 
-	if(detail?.timeout || reason === 'timeout') return won ? `You win: ${opponent} ran out of time` : 'You ran out of time';
+	if(detail?.timeout || reason === 'timeout')
+	return won ? `You win: ${opponent} ran out of time` : 'You ran out of time';
+
 	if(reason === 'left') return won ? `You win: ${opponent} left the table` : 'You left the table';
+
 	if(reason === 'resigned') return won ? `You win: ${opponent} resigned` : 'You resigned';
 
 	return 'The table ended';
@@ -180,7 +194,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		, cssSize: false
 		, dprCap: 2
 		, initial: '[720,960,1,false]'
-		, format: (width, height, dpr, box, coarse) => JSON.stringify([Math.max(1, Math.round(width)), Math.max(1, Math.round(height)), dpr, coarse])
+		, format: (width, height, dpr, box, coarse) => JSON.stringify(
+			[Math.max(1, Math.round(width)), Math.max(1, Math.round(height)), dpr, coarse]
+		)
 	});
 
 	let samples = null;
@@ -229,31 +245,37 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	}, {signal});
 
 	canvas.addEventListener('keydown', () => { void unlock(); }, {signal});
+
 	canvas.addEventListener('pointerdown', () => {
 		canvas.focus({preventScroll: true});
 		void unlock();
 	}, {signal});
 
 	const focus = () => { canvas.focus({preventScroll: true}); void unlock(); };
+
 	const action = shell.action('rpscAction');
 	const buttons = new services.RegionButtons(targets, {signal, focus, onPress: id => action.act(id)});
 
 	shell.bridge('rpscViewport', () => view.viewport());
 	shell.bridge('rpscSeed', () => shell.seed31());
 	shell.bridge('rpscLoad', () => storage.get(gameKey) ?? '');
+
 	shell.bridge('rpscSave', value => {
 		value = String(value);
 
 		return value === '' ? storage.remove(gameKey) : storage.set(gameKey, value);
 	});
+
 	shell.bridge('rpscOptionGet', name => String(options[String(name)] ?? ''));
+
 	shell.bridge('rpscOptionSet', (name, value) => {
 		name = String(name);
 		value = String(value);
 
 		if(name === 'level' && LEVELS.includes(value)) options.level = value;
 		else if(name === 'side' && SIDES.includes(value)) options.side = value;
-		else if(name === 'effects' && Number.isFinite(Number(value))) options.effects = Math.max(0, Math.min(100, Math.round(Number(value))));
+		else if(name === 'effects' && Number.isFinite(Number(value)))
+		options.effects = Math.max(0, Math.min(100, Math.round(Number(value))));
 		else return false;
 
 		return saveOptions();
@@ -262,26 +284,50 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	// Online play. The engine's lobby owns the room and its protocol, online-match.mjs owns the game, and this
 	// section carries actions between them the way the room expects: apply, report, wait for both reports, then act.
 	// The lobby and the two online modules are installed after this one, so they are looked up when first needed.
+
 	const onlineApi = () => session.rpscOnline ?? null;
 	let port = null, online = null, onlineJson = '', onlineEvents = [];
 	let work = Promise.resolve(), seatRun = 0, names = ['Black', 'Red'];
 	// `active`: the room has confirmed both browsers start from the same state, so actions may be sent. `awaiting`:
 	// an action is applied here but the room has not confirmed it. `ended`: the room closed the table.
-	let active = false, watching = false, submitting = false, awaiting = false, reconnecting = false, tableEnded = true, ended = null, failure = '';
+	let active = false, watching = false, submitting = false, awaiting = false, reconnecting = false, tableEnded = true
+		, ended = null, failure = '';
 
 	const publish = () => {
-		if(!online) { onlineJson = ''; return; }
+		if(!online)
+		{
+			onlineJson = '';
+
+			return;
+		}
 
 		onlineEvents.push(...online.takeEvents());
 		const next = online.view(names);
 
-		if(awaiting || submitting || watching || tableEnded) { next.moves = []; next.challenges = []; }
+		if(awaiting || submitting || watching || tableEnded)
+		{
+			next.moves = [];
+			next.challenges = [];
+		}
+
 		if(watching) next.notice = 'Watching: this seat is being played in another tab';
+
 		if(reconnecting) next.notice = 'Reconnecting';
 
 		if(ended)
 		{
-			Object.assign(next, {phase: 'over', winner: ended.winner, reason: 'resign', notice: ended.notice, arrangement: null, moves: [], challenges: []});
+			Object.assign(
+				next
+				, {
+					phase: 'over'
+					, winner: ended.winner
+					, reason: 'resign'
+					, notice: ended.notice
+					, arrangement: null
+					, moves: []
+					, challenges: []
+				}
+			);
 		}
 
 		if(failure) next.notice = 'The table stopped: an action could not be verified';
@@ -300,7 +346,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		publish();
 	};
 
-	// Work queued before the latest start belongs to a retired run: a tab that lost its seat expects its writes to fail.
+	// Work queued before the latest start belongs to a retired run: a tab that lost its seat expects its writes
+	// to fail.
+
 	const enqueue = task => {
 		const run = seatRun;
 		work = work.then(task).catch(error => { if(run === seatRun) fail(error); });
@@ -313,12 +361,20 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 		return retryRoomWrite(operation, {
 			live: () => Boolean(online) && !tableEnded && run === seatRun
-			, reconnecting: value => { if(reconnecting !== value) { reconnecting = value; publish(); } }
+			, reconnecting: value => {
+				if(reconnecting !== value)
+				{
+					reconnecting = value;
+					publish();
+				} }
 		});
 	};
 
 	const drive = async() => {
-		if(!online || !active || watching || submitting || awaiting || tableEnded || online.currentActor() !== online.localPlayer) return;
+		if(!online || !active || watching || submitting || awaiting || tableEnded
+			|| online.currentActor() !== online.localPlayer
+		)
+		return;
 
 		const move = online.nextAction();
 
@@ -328,8 +384,15 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		submitting = true;
 		publish();
 
-		try { await roomWrite(() => port.submitAction(move, preHash, {settle})); }
-		catch(error) { submitting = false; throw error; }
+		try
+		{
+			await roomWrite(() => port.submitAction(move, preHash, {settle}));
+		}
+		catch(error)
+		{
+			submitting = false;
+			throw error;
+		}
 	};
 
 	const attach = () => {
@@ -339,26 +402,48 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 			// A standby start means another tab plays this seat: show its pieces read-only. The room starts again
 			// when the seat moves between tabs.
 			start: detail => {
-				const run = ++seatRun, standby = Boolean(detail.standby), seat = standby ? detail.seat : detail.localPlayer;
+				const run = ++seatRun, standby = Boolean(detail.standby), seat = standby
+					? detail.seat
+					: detail.localPlayer;
 
 				return enqueue(async() => {
-					const profiles = new Map([port.snapshot?.().profile, ...(port.snapshot?.().peers ?? [])].filter(Boolean).map(profile => [profile.id, profile]));
-					tableEnded = false; reconnecting = false; watching = standby; ended = null; failure = ''; active = false;
+					const snapshot = port.snapshot?.();
+					const known = [snapshot?.profile, ...(snapshot?.peers ?? [])].filter(Boolean);
+					const profiles = new Map(known.map(profile => [profile.id, profile]));
+
+					tableEnded = false;
+					reconnecting = false;
+					watching = standby;
+					ended = null;
+					failure = '';
+					active = false;
 					onlineEvents = [];
+
 					const match = new (onlineApi().OnlineMatch)({
-						api: session.mentalPoker, root: detail.root, sessionId: detail.sessionId, players: detail.players
-						, localPlayer: seat, breaker: detail.breaker
+						api: session.mentalPoker
+						, root: detail.root
+						, sessionId: detail.sessionId
+						, players: detail.players
+						, localPlayer: seat
+						, breaker: detail.breaker
 						, ...(standby
 							? {storage: onlineApi().readOnlyStorage(globalThis.localStorage), follow: true}
-							: {storage: seatStorage(globalThis.localStorage, () => run === seatRun)})
+							: {storage: seatStorage(globalThis.localStorage, () => run === seatRun)}
+						)
 					});
+
 					const hash = await match.replay(detail.history ?? []);
 
-					if(detail.sequence !== match.publicState().sequence) throw new Error('Room history ended at the wrong sequence');
-					if(detail.sequence > 0 && detail.hash !== hash) throw new Error('Room history does not match its confirmed hash');
+					if(detail.sequence !== match.publicState().sequence)
+					throw new Error('Room history ended at the wrong sequence');
+
+					if(detail.sequence > 0 && detail.hash !== hash)
+					throw new Error('Room history does not match its confirmed hash');
 
 					names = match.seats.map(id => playerName(id, profiles.get(id)));
-					online = match; submitting = false; awaiting = false;
+					online = match;
+					submitting = false;
+					awaiting = false;
 					publish();
 
 					// The room answers both players' reports with a confirmation, and play starts from there.
@@ -370,7 +455,13 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 				const settlement = await online.apply(detail);
 
-				if(watching) { publish(); return; }
+				if(watching)
+				{
+					publish();
+
+					return;
+				}
+
 				if(detail.batch_end !== false) awaiting = true;
 
 				publish();
@@ -379,16 +470,20 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 				if(waiting) return;
 
 				// A packet inside a batch needs no confirmation: the next one may follow at once.
-				awaiting = false; submitting = false;
+				awaiting = false;
+				submitting = false;
 				publish();
 				await drive();
 			})
 			, confirmed: detail => enqueue(async() => {
 				if(!online) throw new Error('Received an RPSC confirmation before the table started');
+
 				if(detail.sequence !== online.publicState().sequence || detail.hash !== await online.hash())
 				throw new Error('Room confirmation does not match this browser\'s game');
 
-				active = true; awaiting = false; submitting = false;
+				active = true;
+				awaiting = false;
+				submitting = false;
 				publish();
 				await drive();
 			})
@@ -396,7 +491,9 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 				tableEnded = true;
 
 				return enqueue(async() => {
-					reconnecting = false; awaiting = false; submitting = false;
+					reconnecting = false;
+					awaiting = false;
+					submitting = false;
 
 					// The rules finish most games themselves. The room finishes the rest: a player left or timed out.
 					if(online && !online.publicState().outcome && !ended)
@@ -414,7 +511,15 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		});
 
 		session.lobby.protocol.addEventListener('closed', () => {
-			online = null; active = false; watching = false; awaiting = false; submitting = false; reconnecting = false; tableEnded = true; ended = null; failure = '';
+			online = null;
+			active = false;
+			watching = false;
+			awaiting = false;
+			submitting = false;
+			reconnecting = false;
+			tableEnded = true;
+			ended = null;
+			failure = '';
 			onlineEvents = [];
 			seatRun++;
 			publish();
@@ -424,22 +529,29 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 	};
 
 	shell.bridge('rpscOnlineReady', () => Boolean(session.lobby && onlineApi() && session.mentalPoker));
+
 	shell.bridge('rpscLobby', () => {
 		if(!attach()) return false;
 
 		void unlock();
+
 		// A signed-out player is shown the sign-in card; that is the lobby working, not a failure.
-		session.lobby.open().catch(error => { if(error?.code !== 'matrix_auth_required') console.error('RPSC lobby failed to open', error); });
+		session.lobby.open().catch(
+			error => { if(error?.code !== 'matrix_auth_required') console.error('RPSC lobby failed to open', error); }
+		);
 
 		return true;
 	});
+
 	shell.bridge('rpscOnline', () => onlineJson);
+
 	shell.bridge('rpscOnlineEvents', () => {
 		const json = JSON.stringify(onlineEvents);
 		onlineEvents = [];
 
 		return json;
 	});
+
 	shell.bridge('rpscCommand', json => {
 		const intent = JSON.parse(String(json));
 
@@ -466,16 +578,28 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 
 	// The lobby lifts the canvas out of this frame into its own stage for a seated game. The buttons over the canvas
 	// follow it, as a sibling laid over the canvas's own box.
+
 	const follow = () => {
 		const parent = canvas.parentElement;
 
 		if(!parent) return;
+
 		if(targets.parentElement !== parent) parent.append(targets);
 
 		const away = parent !== screen;
-		Object.assign(targets.style, away
-			? {inset: 'auto', left: `${canvas.offsetLeft}px`, top: `${canvas.offsetTop}px`, width: `${canvas.offsetWidth}px`, height: `${canvas.offsetHeight}px`}
-			: {inset: '0', left: '', top: '', width: '', height: ''});
+
+		Object.assign(
+			targets.style
+			, away
+				? {
+					inset: 'auto'
+					, left: `${canvas.offsetLeft}px`
+					, top: `${canvas.offsetTop}px`
+					, width: `${canvas.offsetWidth}px`
+					, height: `${canvas.offsetHeight}px`
+				}
+				: {inset: '0', left: '', top: '', width: '', height: ''}
+		);
 	};
 
 	shell.status('rpscStatus', {
@@ -510,10 +634,22 @@ export async function activate({module, canvas, assets, packageUrl, services, se
 		get state() { return state; }
 		, get options() { return structuredClone(options); }
 		, get saved() { return storage.get(gameKey) ?? ''; }
-		, get online() { return online ? {state: online.publicState(), view: JSON.parse(onlineJson || 'null'), awaiting, submitting, watching, ended} : null; }
+		, get online() {
+			return online
+				? {
+					state: online.publicState()
+					, view: JSON.parse(onlineJson || 'null')
+					, awaiting
+					, submitting
+					, watching
+					, ended
+				}
+				: null;
+		}
 		// Tests seat this page at an in-memory room through the lobby's own protocol.
 		, get lobby() { return session.lobby ?? null; }
 	};
+
 	session.rpsc = debug;
 	Object.defineProperty(canvas, 'rpscDebug', {configurable: true, value: debug});
 

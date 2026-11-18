@@ -10,7 +10,8 @@ const root = fileURLToPath(new URL('../', import.meta.url));
  * PHP plays whole games at random and writes down every action, the event it produced, the position after it with
  * the kinds left out, and what was legal next. The browser's rules must reproduce all of it.
  */
-const transcript = () => JSON.parse(execFileSync('php', ['-r', `declare(strict_types=1);
+const transcript = () => JSON.parse(execFileSync('php', ['-r'
+	, `declare(strict_types=1);
 require $argv[1] . '/games/rpsc/autoload.php';
 use Rpsc\\Board; use Rpsc\\Game; use Rpsc\\Random;
 $games = [];
@@ -38,13 +39,25 @@ for($seed = 1; $seed <= 30; $seed++)
 	$games[] = $steps;
 }
 echo json_encode(['games' => $games, 'home' => [Board::home(0), Board::home(1)], 'goal' => [Board::goal(0), Board::goal(1)], 'limit' => Game::QUIET_LIMIT]);
-`, root], {encoding: 'utf8', maxBuffer: 256 * 1024 * 1024}));
+`
+	, root
+], {encoding: 'utf8', maxBuffer: 256 * 1024 * 1024}));
+
+/** One piece as PHP exports it without its kind: square, side, king, id. */
+const row = ([at, piece]) => [Number(at), piece.side, piece.king ? 1 : 0, piece.id];
 
 /** The browser's game in the shape PHP exports. */
 const exported = game => ({
-	phase: game.phase, turn: game.turn, challenged: game.challenged, quiet: game.quiet, ply: game.ply, winner: game.winner, reason: game.reason
-	, placed: game.placed, lost: game.lost
-	, pieces: Object.entries(game.pieces).map(([at, piece]) => [Number(at), piece.side, piece.king ? 1 : 0, piece.id]).sort((a, b) => a[0] - b[0])
+	phase: game.phase
+	, turn: game.turn
+	, challenged: game.challenged
+	, quiet: game.quiet
+	, ply: game.ply
+	, winner: game.winner
+	, reason: game.reason
+	, placed: game.placed
+	, lost: game.lost
+	, pieces: Object.entries(game.pieces).map(row).sort((a, b) => a[0] - b[0])
 });
 
 test('the browser rules reproduce every action of thirty PHP games', () => {
@@ -70,6 +83,7 @@ test('the browser rules reproduce every action of thirty PHP games', () => {
 			const mine = event.type === 'move'
 				? Rules.move(game, event.from, event.to)
 				: Rules.challenge(game, event.from, event.to, event.attacker, event.defender);
+
 			assert.deepEqual(mine, event, where);
 			assert.deepEqual(exported(game), step.state, where);
 			assert.deepEqual(Rules.moves(game), step.moves, where);
@@ -79,6 +93,7 @@ test('the browser rules reproduce every action of thirty PHP games', () => {
 			seen[event.type]++;
 
 			if(event.crowned) seen.crowned++;
+
 			if(event.type === 'challenge') seen[event.outcome]++;
 		}
 
