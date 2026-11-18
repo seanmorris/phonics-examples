@@ -80,6 +80,10 @@ test('RPSC places, moves, challenges, saves, and resigns', async({page}) => {
 	await expect.poll(async() => (await status(page)).pieces.find(piece => piece[0] === first[0])[2]).toBe(second[2]);
 	expect((await status(page)).pieces.find(piece => piece[0] === second[0])[2]).toBe(first[2]);
 
+	// The two pieces slide across to each other's squares, with one sound, and then the board takes input again.
+	await expect.poll(async() => (await status(page)).sounds.move).toBe(1);
+	await expect.poll(async() => (await status(page)).busy).toBe(false);
+
 	await button(page, 'Shuffle').click();
 	await button(page, 'Ready').click();
 	await expect.poll(async() => (await status(page)).phase).toBe('play');

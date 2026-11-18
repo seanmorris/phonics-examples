@@ -83,9 +83,8 @@ $start = static function() use (&$session, &$setPage, $option, $table, $show): v
 		default => Board::BLACK
 	};
 	$session = new Session($seed, $level, $side);
-	$table->cancel();
-	$table->cursor = -1;
-	$table->trail = [];
+	// A new game is dealt, not slid into place from the last one.
+	$table->reset();
 	$show();
 	$setPage('game');
 };

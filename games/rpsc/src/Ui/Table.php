@@ -8,13 +8,15 @@ use Rpsc\Board;
  * What the player sees and touches: the pieces as drawn, the animation of each event, and the selection.
  *
  * The rules move on the instant an action is taken, but the table shows it afterwards, one event at a time: a piece
- * slides, or two pieces turn face up, wait, and settle. Until an event has played, the table keeps drawing the
+ * slides, two pieces trade places during placement, or two pieces turn face up, wait, and settle. Until an event has played, the table keeps drawing the
  * position from before it. Nothing here touches the graphics device, so the whole class runs in a plain PHP test.
  */
 final class Table
 {
 	/** Seconds a piece takes to slide one square. */
 	public const SLIDE = .18;
+	/** Seconds two checkers take to trade places while the player arranges them. */
+	public const SWAP = .3;
 	/** Seconds a checker takes to turn over. */
 	public const FLIP = .24;
 	/** Seconds both challenged pieces stay face up. */
@@ -52,15 +54,35 @@ final class Table
 	/**
 	 * Take the latest view of the game.
 	 *
+	 * While the player is arranging their pieces, a view whose arrangement differs from the last one is shown as
+	 * the pieces sliding to their new squares: two for a swap, more for a shuffle. A different game does not slide;
+	 * call reset() between games.
+	 *
 	 * @param array<string,mixed> $view Session::view().
 	 * @return void The drawn pieces follow it at once when nothing is waiting to be shown.
 	 */
 	public function show(array $view): void
 	{
+		$before = $this->view['arrangement'] ?? null;
+		$after = $view['arrangement'] ?? null;
+		$same = ($this->view['home'] ?? null) === ($view['home'] ?? []);
 		$this->view = $view;
 		$this->stale = true;
 
-		if($this->active === null && $this->queue === []) $this->rebuild();
+		if($this->active !== null || $this->queue !== []) return;
+
+		$moves = $same && $before !== null && $after !== null ? self::rearranged($before, $after) : [];
+
+		if($moves === [])
+		{
+			$this->rebuild();
+
+			return;
+		}
+
+		// Start at once, so the pieces already carry their new kinds and stand where those kinds came from.
+		$this->queue[] = ['type' => 'arrange', 'moves' => $moves];
+		$this->advance(0.0);
 	}
 
 	/**
@@ -365,10 +387,20 @@ final class Table
 		$length = match($event['type'])
 		{
 			'move' => self::SLIDE,
+			'arrange' => self::SWAP,
 			'challenge' => self::FLIP + self::HOLD + self::SETTLE,
 			default => self::FLIP
 		};
 		$this->active = ['event' => $event, 'clock' => 0.0, 'length' => $length, 'stage' => 0];
+
+		if($event['type'] === 'arrange')
+		{
+			// The pieces are redrawn in their new arrangement first; pose() then starts each from its old square.
+			$this->rebuild();
+			$this->cues[] = 'move';
+
+			return;
+		}
 
 		if($event['type'] === 'move')
 		{
@@ -417,6 +449,25 @@ final class Table
 	{
 		$event = $this->active['event'];
 		$clock = $this->active['clock'];
+
+		if($event['type'] === 'arrange')
+		{
+			$home = $this->view['home'];
+			$human = $this->view['human'];
+			$t = self::ease($clock / self::SWAP);
+			// Every moving piece is lifted for the trip, so two that trade places pass over the board, not through it.
+			$lift = 1 + .2 * sin(M_PI * min(1.0, $clock / self::SWAP));
+
+			foreach($event['moves'] as [$from, $to])
+			{
+				$key = $human * Board::PIECES + $to;
+				$this->pieces[$key]['x'] = Board::x($home[$from]) + (Board::x($home[$to]) - Board::x($home[$from])) * $t;
+				$this->pieces[$key]['y'] = Board::y($home[$from]) + (Board::y($home[$to]) - Board::y($home[$from])) * $t;
+				$this->pieces[$key]['scale'] = $lift;
+			}
+
+			return;
+		}
 
 		if($event['type'] === 'move')
 		{
@@ -493,6 +544,14 @@ final class Table
 		$this->active = null;
 		$this->banner = '';
 
+		if($event['type'] === 'arrange')
+		{
+			// Every piece is set down exactly on its square.
+			$this->rebuild();
+
+			return;
+		}
+
 		if($event['type'] === 'move')
 		{
 			$key = $event['side'] * Board::PIECES + $event['id'];
@@ -564,6 +623,41 @@ final class Table
 
 		if($this->selected !== null && !$this->movable($this->selected) && ($this->view['arrangement'] ?? null) === null) $this->selected = null;
 		if(($this->view['phase'] ?? '') !== 'play') $this->trail = [];
+	}
+
+	/**
+	 * Work out which home squares trade pieces between two arrangements.
+	 *
+	 * For each kind, the squares that lose it are paired in order with the squares that gain it. A swap gives two
+	 * pairs; a shuffle gives one for every square whose kind changed.
+	 *
+	 * @param list<int> $before Kinds by home index before the change.
+	 * @param list<int> $after Kinds by home index after it.
+	 * @return list<array{int,int}> [from, to] home indexes, or an empty list when nothing moved.
+	 */
+	private static function rearranged(array $before, array $after): array
+	{
+		$moves = [];
+
+		if(count($before) !== count($after)) return [];
+
+		foreach([Board::ROCK, Board::PAPER, Board::SCISSORS] as $kind)
+		{
+			$leaving = [];
+			$arriving = [];
+
+			foreach($before as $index => $old)
+			{
+				if($old === $kind && $after[$index] !== $kind) $leaving[] = $index;
+				if($old !== $kind && $after[$index] === $kind) $arriving[] = $index;
+			}
+
+			if(count($leaving) !== count($arriving)) return [];
+
+			foreach($arriving as $n => $to) $moves[] = [$leaving[$n], $to];
+		}
+
+		return $moves;
 	}
 
 	/**

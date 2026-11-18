@@ -13,7 +13,7 @@ The board is an ordinary 8 by 8 checkers board with a1 a black square. Black pla
 
 Each side has four rocks, four papers, and four scissors. Before play, each side places its twelve face down on its first three rows. You always see your own pieces. You see an opposing piece only while a challenge shows it, and when the game is over.
 
-The game deals you a shuffled arrangement. Tap two of your pieces to swap them, **Shuffle** to deal again, and **Ready** to begin.
+The game deals you a shuffled arrangement. Tap two of your pieces to swap them and they slide across to each other's squares. **Shuffle** deals again, and **Ready** begins the game.
 
 ## A turn
 

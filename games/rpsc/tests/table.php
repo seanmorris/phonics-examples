@@ -77,6 +77,74 @@ $session->command($intent);
 $table->show($session->view());
 check($table->pieces[0]['kind'] === $before[11] && $table->pieces[11]['kind'] === $before[0], 'the swap is drawn');
 check($table->label(sq('b8')) === 'b8 Red piece face down' && $table->label(sq('c4')) === 'c4 empty', 'labels say only what the player may know');
+settle($table);
+$table->cues = [];
+
+// A swap is shown as the two pieces trading places: each starts on the other's square and slides home, lifted.
+$session = new Session(4, 'normal', Board::BLACK);
+$table = new Table;
+$table->show($session->view());
+$first = 0;
+$second = (int)array_search(true, array_map(static fn(int $kind): bool => $kind !== $session->arrangement[0], $session->arrangement), true);
+$home = $session->view()['home'];
+$kinds = $session->arrangement;
+check(!$table->busy(), 'a fresh placement stands still');
+$table->press($home[$first]);
+$intent = $table->press($home[$second]);
+check($intent === ['type' => 'swap', 'a' => $first, 'b' => $second], 'two different kinds are picked');
+$session->command($intent);
+$table->show($session->view());
+check($table->busy() && !$table->live($home[2]), 'the swap is shown before anything else can be pressed');
+check($table->pieces[$first]['kind'] === $kinds[$second] && $table->pieces[$second]['kind'] === $kinds[$first], 'each piece already carries its new kind');
+check($table->pieces[$first]['square'] === $home[$first] && $table->label($home[$first]) === Board::name($home[$first]) . ' your ' . strtolower(Board::KINDS[$kinds[$second]]), 'and is labelled on its new square');
+check($table->pieces[$first]['x'] === (float)Board::x($home[$second]) && $table->pieces[$first]['y'] === (float)Board::y($home[$second]), 'it starts where its kind came from');
+check($table->pieces[$second]['x'] === (float)Board::x($home[$first]) && $table->pieces[$second]['y'] === (float)Board::y($home[$first]), 'and so does the other');
+$table->advance(Table::SWAP / 2);
+$between = static fn(float $value, float $a, float $b): bool => $value > min($a, $b) - .001 && $value < max($a, $b) + .001 && ($a === $b || ($value !== $a && $value !== $b));
+check($between($table->pieces[$first]['x'], Board::x($home[$first]), Board::x($home[$second])), 'halfway, the piece is between the two squares');
+check($between($table->pieces[$first]['y'], Board::y($home[$first]), Board::y($home[$second])), 'on both axes');
+check($table->pieces[$first]['scale'] > 1.1 && $table->pieces[$second]['scale'] > 1.1, 'both pieces are lifted for the trip');
+check($table->pieces[2]['scale'] === 1.0 && $table->pieces[2]['x'] === (float)Board::x($home[2]), 'no other piece moves');
+$took = settle($table);
+check($took > 0 && $took <= Table::SWAP, 'the swap takes its set time');
+$fresh = new Table;
+$fresh->show($session->view());
+check(drawn($table) === drawn($fresh) && $table->cues === ['move'], 'the pieces are set down exactly, with one sound');
+check($table->live($home[2]) && $table->status() === 'Tap two of your pieces to swap them', 'and the player can go on arranging');
+
+// Swapping two pieces of the same kind changes nothing, so nothing slides.
+$same = (int)array_search($session->arrangement[0], array_slice($session->arrangement, 1, null, true), true);
+$session->command(['type' => 'swap', 'a' => 0, 'b' => $same]);
+$table->show($session->view());
+check(!$table->busy(), 'equal kinds do not slide');
+
+// A shuffle slides every piece whose kind changed, and ends on the new arrangement.
+$table->cues = [];
+$kinds = $session->arrangement;
+$session->command(['type' => 'shuffle']);
+$table->show($session->view());
+$changed = count(array_filter($session->arrangement, static fn(int $kind, int $index): bool => $kind !== $kinds[$index], ARRAY_FILTER_USE_BOTH));
+check($changed > 0 && $table->busy(), 'a shuffle is shown too');
+$table->advance(Table::SWAP / 2);
+$moving = count(array_filter($table->pieces, static fn(array $piece): bool => $piece['side'] === Board::BLACK && $piece['scale'] > 1.001));
+check($moving === $changed, 'exactly the pieces whose kind changed are in the air');
+settle($table);
+$fresh = new Table;
+$fresh->show($session->view());
+check(drawn($table) === drawn($fresh) && $table->cues === ['move'], 'the shuffle ends on the new arrangement');
+
+// A different game is dealt, not slid into place: the table is reset between games.
+$table->reset();
+$table->show((new Session(9, 'easy', Board::BLACK))->view());
+check(!$table->busy() && count($table->pieces) === 24, 'a new game stands still at once');
+$table->show((new Session(10, 'easy', Board::RED))->view());
+check(!$table->busy(), 'and so does a game seen from the other side');
+$session = new Session(4, 'normal', Board::BLACK);
+$table = new Table;
+$table->show($session->view());
+$session->command(['type' => 'swap', 'a' => 0, 'b' => 11]);
+$table->show($session->view());
+settle($table);
 
 // Play: selection, targets, and the cursor.
 $session->command(['type' => 'ready']);
