@@ -1,0 +1,111 @@
+{
+  "name": "@seanmorris/terrain-phonics",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.1.0"
+  },
+  "php": {
+    "autoload": {
+      "TerrainPhonics\\": "src/"
+    },
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "files": [
+      "autoload.php",
+      "src/Atmosphere.php",
+      "src/AtmosphereRenderer.php",
+      "src/Camera.php",
+      "src/Edits.php",
+      "src/GpuPatch.php",
+      "src/HeightTile.php",
+      "src/Landscape.php",
+      "src/Lod.php",
+      "src/Noise.php",
+      "src/RayQuery.php",
+      "src/Recipe.php",
+      "src/Scene.php",
+      "src/TerrainShadows.php",
+      "src/TerrainSurface.php",
+      "src/Water.php",
+      "src/WaterSurface.php",
+      "src/Watercraft.php"
+    ]
+  },
+  "exports": {},
+  "preload": [
+    "shaders/atmosphere-aerial.frag",
+    "shaders/atmosphere-aerial.glsl",
+    "shaders/atmosphere-cache.frag",
+    "shaders/atmosphere-cache.glsl",
+    "shaders/atmosphere-cache.vert",
+    "shaders/atmosphere.glsl",
+    "shaders/shadows.frag",
+    "shaders/shadows.vert",
+    "shaders/sky.frag",
+    "shaders/sky.vert",
+    "shaders/terrain.frag",
+    "shaders/terrain.vert",
+    "shaders/water-functions.glsl",
+    "shaders/water.frag",
+    "shaders/water.vert"
+  ],
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "dependencies": {},
+  "browser": {
+    "files": []
+  },
+  "assets": [
+    "shaders/atmosphere-aerial.frag",
+    "shaders/atmosphere-aerial.glsl",
+    "shaders/atmosphere-cache.frag",
+    "shaders/atmosphere-cache.glsl",
+    "shaders/atmosphere-cache.vert",
+    "shaders/atmosphere.glsl",
+    "shaders/shadows.frag",
+    "shaders/shadows.vert",
+    "shaders/sky.frag",
+    "shaders/sky.vert",
+    "shaders/terrain.frag",
+    "shaders/terrain.vert",
+    "shaders/water-functions.glsl",
+    "shaders/water.frag",
+    "shaders/water.vert"
+  ],
+  "integrity": {
+    "autoload.php": "sha256-vSmUMMSIdBaV9zSGw3vX45YUc3LpyzWbEq/rSO+PzTc=",
+    "src/Atmosphere.php": "sha256-UIuJlWGU2fSChEMlYIaJSgdSQ3yipmFR3YPhI0cstyI=",
+    "src/AtmosphereRenderer.php": "sha256-MORoKJCO3ANW5idPjiQcYewR69DcIU7DFAqVSwPiIC0=",
+    "src/Camera.php": "sha256-9CJ71VfVLBQOdL+keellqxlB9xFz7C6qe1hNE0sZrOU=",
+    "src/Edits.php": "sha256-uaL6AxmcrO+0Z6K9FABLIpJUgMuP90e7d4SHxEpkdPU=",
+    "src/GpuPatch.php": "sha256-B0CpeqKmIhSe7WJvATVrpEduKI867E15K90TTdLT6Lk=",
+    "src/HeightTile.php": "sha256-Gll5Dd4m2vjxHP0MAJdrYXoHPfG7yYxUUiaKYy1pwns=",
+    "src/Landscape.php": "sha256-ombC+bzrfRC7LKXesvgQ9aPU518EPweDrQ/mI/dBrC0=",
+    "src/Lod.php": "sha256-imU8fLX5MrUP7uf6daMKZ7HCZcwzmvWp6DQSLGLH2go=",
+    "src/Noise.php": "sha256-J+Vdqb2vOBGYnloLibEQliWSmImnz5n8+AXhu3GevN8=",
+    "src/RayQuery.php": "sha256-6ID6A+s2Ro33UFv7pGzMNRvD0wJ+QlP+Vzx2SaOzKAE=",
+    "src/Recipe.php": "sha256-t+RFyE4FmO1+AQpbL2ihXQj8HET6QLHp+GbMriR43Vo=",
+    "src/Scene.php": "sha256-h6nVfNvgxrW5bVCdTapK+UQAwk05fUTKUkVF6+kMADA=",
+    "src/TerrainShadows.php": "sha256-Govu8fN6++8aoKtgr62uBTUMA5jKKEQ0XfrdlDgoLlU=",
+    "src/TerrainSurface.php": "sha256-B+n9dypuMRtdx7IwV/FuoU1y3bjJ6H7R5LhA/IArnr8=",
+    "src/Water.php": "sha256-SVCB1JwaoBgRnJRSx1pnoThFuC092pFpw8XvI5mYefo=",
+    "src/WaterSurface.php": "sha256-z4Mw0nOFoM31y+4tdLhojmCXP8LMN1mIBzg+6Xyr8Jo=",
+    "src/Watercraft.php": "sha256-EaCdbgzAQiS2ZOJYDrDLYL+zLhzXmHrzZQ3t+12def0=",
+    "shaders/atmosphere-aerial.frag": "sha256-+K1cfXTHtEM4Aijy6Uhe0WKNdBji8NXdUQQA866hHm8=",
+    "shaders/atmosphere-aerial.glsl": "sha256-mWZApeH6pvrP59MVxjGzof3qcwiCcZcugNhpwXxlxm8=",
+    "shaders/atmosphere-cache.frag": "sha256-lH4Az2mPTkVrhSeVEbAqd3AuzrzNNTdQJZYHAD/zaDQ=",
+    "shaders/atmosphere-cache.glsl": "sha256-QMjzCqNgzPAh0UvqkXheqEviWnXKXWaXZSKvko+hiqY=",
+    "shaders/atmosphere-cache.vert": "sha256-PLZNQSgmA7jrQJciz3lq3RuaYjOZOy1t613EZE7JORQ=",
+    "shaders/atmosphere.glsl": "sha256-DAduSRK+OydtJG2D22vKIZT65Ws54vu/Wm49Udbg0Vc=",
+    "shaders/shadows.frag": "sha256-BaGY2lY+YZ3eEOCCcORAsf3stxT041jirb/r/AZ64P4=",
+    "shaders/shadows.vert": "sha256-vVHkU4lrjrsx8bzvvj+nYEeRfEc65zp/hycpiEyojeU=",
+    "shaders/sky.frag": "sha256-EAysXsJgKRqQqg8kg6nBW0+w9/+vHnidt2N9on8N0JE=",
+    "shaders/sky.vert": "sha256-SXzckrvME1jSTC/hdNaWcJbN8x2TpL8sPFsx837//2Y=",
+    "shaders/terrain.frag": "sha256-VzLXvKCvak6YpQt7mmuXgN7bbtxa94G9Z6dMfEyY8qc=",
+    "shaders/terrain.vert": "sha256-NPMGsFvEvBUG2SqV//LyWTr47IsS8gZQLD151b0/wSE=",
+    "shaders/water-functions.glsl": "sha256-IGxTaJFhX1CSW/kcG3YQFwgTpZGqQtZOkE7bjik9/yA=",
+    "shaders/water.frag": "sha256-rWh2cUg8t1ueWYYldFHpA7cRyB45+ItePaG/HRskV/k=",
+    "shaders/water.vert": "sha256-XCTJ0Wvg4NsZkNVQwxaIEQwLGuyZzv7k8ysehBAMYXU="
+  }
+}

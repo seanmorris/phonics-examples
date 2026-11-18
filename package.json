@@ -11,11 +11,11 @@
   ],
   "scripts": {
     "generate": "node scripts/generate-billiards-textures.mjs && php scripts/generate-billiards-meshes.php && node scripts/generate-poker-textures.mjs && node scripts/build-mental-poker.mjs && node scripts/generate-phant-sprites.mjs && node scripts/generate-rpsc-assets.mjs",
-    "check:generated": "node scripts/generate-billiards-textures.mjs --check && php scripts/generate-billiards-meshes.php --check && node scripts/generate-poker-textures.mjs --check && node scripts/build-mental-poker.mjs --check && node scripts/generate-phant-sprites.mjs --check && node scripts/generate-rpsc-assets.mjs --check",
+    "check:generated": "node scripts/generate-billiards-textures.mjs --check && php scripts/generate-billiards-meshes.php --check && node scripts/generate-poker-textures.mjs --check && node scripts/build-mental-poker.mjs --check && node scripts/generate-phant-sprites.mjs --check && node scripts/generate-rpsc-assets.mjs --check && node scripts/sync-terrain.mjs --check",
     "build:applications": "node scripts/build-applications.mjs",
     "build:site": "node scripts/build-site.mjs",
     "build": "npm run generate && npm run build:applications && npm run build:site",
-    "test:php": "php games/php-billiards/tests/run.php && php games/php-poker/tests/run.php && php games/php-poker/tests/odds.php && php games/php-poker/tests/presenter.php && php -n games/php-poker/tests/presenter.php && php games/php-poker/tests/motion.php && php games/phlappy-phant/tests/run.php && php games/php-tris/tests/run.php && php games/php-tris/tests/composition.php && php games/rpsc/tests/run.php && php games/rpsc/tests/bot.php && php games/rpsc/tests/table.php",
+    "test:php": "php games/php-billiards/tests/run.php && php games/php-poker/tests/run.php && php games/php-poker/tests/odds.php && php games/php-poker/tests/presenter.php && php -n games/php-poker/tests/presenter.php && php games/php-poker/tests/motion.php && php games/phlappy-phant/tests/run.php && php games/php-tris/tests/run.php && php games/php-tris/tests/composition.php && php games/rpsc/tests/run.php && php games/rpsc/tests/bot.php && php games/rpsc/tests/table.php && php games/terrain-sandbox/tests/session.php",
     "test:node": "node --test tests/*.test.mjs",
     "test:manifest": "node scripts/validate-games.mjs",
     "test:browser": "playwright test",
@@ -23,7 +23,8 @@
     "serve": "node scripts/serve.mjs",
     "test:poker:exhaustive": "php games/php-poker/tests/evaluate-all.php",
     "test:phant:fairness": "php games/phlappy-phant/tests/fairness.php",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "sync:terrain": "node scripts/sync-terrain.mjs"
   },
   "dependencies": {
     "@noble/curves": "2.4.0",

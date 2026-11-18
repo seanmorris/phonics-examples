@@ -1,0 +1,57 @@
+{
+  "name": "@seanmorris/terrain-phonics",
+  "version": "0.1.0",
+  "description": "Editable streamed landscapes, physical waves and atmosphere for Phonics",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    "./phonics.json": "./phonics.json"
+  },
+  "peerDependencies": {
+    "@seanmorris/phonics": "0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@seanmorris/phonics": {
+      "optional": true
+    }
+  },
+  "files": [
+    "autoload.php",
+    "src/Atmosphere.php",
+    "src/AtmosphereRenderer.php",
+    "src/Camera.php",
+    "src/Edits.php",
+    "src/GpuPatch.php",
+    "src/HeightTile.php",
+    "src/Landscape.php",
+    "src/Lod.php",
+    "src/Noise.php",
+    "src/RayQuery.php",
+    "src/Recipe.php",
+    "src/Scene.php",
+    "src/TerrainShadows.php",
+    "src/TerrainSurface.php",
+    "src/Water.php",
+    "src/WaterSurface.php",
+    "src/Watercraft.php",
+    "shaders/atmosphere-aerial.frag",
+    "shaders/atmosphere-aerial.glsl",
+    "shaders/atmosphere-cache.frag",
+    "shaders/atmosphere-cache.glsl",
+    "shaders/atmosphere-cache.vert",
+    "shaders/atmosphere.glsl",
+    "shaders/shadows.frag",
+    "shaders/shadows.vert",
+    "shaders/sky.frag",
+    "shaders/sky.vert",
+    "shaders/terrain.frag",
+    "shaders/terrain.vert",
+    "shaders/water-functions.glsl",
+    "shaders/water.frag",
+    "shaders/water.vert",
+    "phonics.json",
+    "composer.json",
+    "README.md",
+    "LICENSE"
+  ]
+}

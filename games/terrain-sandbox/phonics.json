@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "name": "@seanmorris/terrain-sandbox",
+  "version": "0.1.0",
+  "requires": {
+    "phonics": "^0.1.0",
+    "php": ">=8.1.0"
+  },
+  "php": {
+    "autoload": {
+      "TerrainSandbox\\": "src/"
+    },
+    "bootstrap": [
+      "autoload.php"
+    ],
+    "files": [
+      "autoload.php",
+      "src/Session.php"
+    ]
+  },
+  "browser": {
+    "files": [
+      "browser/game.mjs"
+    ]
+  },
+  "application": {
+    "entry": "application.php",
+    "dependencies": {
+      "terrain": "../../packages/terrain-phonics/phonics.json"
+    },
+    "assets": [
+      "assets/poster.png",
+      "LICENSE"
+    ]
+  },
+  "integrity": {
+    "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
+    "application.php": "sha256-/pajWEoXIbaxMNQk58zklFsd1bSJ5+dEN1XchikjMxM=",
+    "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
+    "browser/game.mjs": "sha256-5ei023Js87bMKnS1vZQpxeYdZ2cskdQ1IYYOjrd9oNk=",
+    "src/Session.php": "sha256-VQx6He6ryaoXBuFtDgTGke/yvsRLz7p6vkHnuZeZdO8=",
+    "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w="
+  }
+}

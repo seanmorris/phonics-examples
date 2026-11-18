@@ -1,0 +1,7 @@
+# Landscape Sandbox
+
+An offline authoring and flight sandbox for the optional `terrain-phonics` package. Fly over procedural mountains, canyons, or coasts; shape the ground; grade roads; adjust the sun and atmosphere; and test a buoyant watercraft.
+
+See [the controls guide](docs/index.md) and [landscape authoring](docs/authoring.md).
+
+The terrain, camera, editing, and simulation run in PHP. Browser code provides accessible authoring controls, file dialogs, input collection, and lifecycle integration. The example does not require Tiled or a network connection.

@@ -6,6 +6,10 @@ import smNoSaccadeStyle from 'sm-no-saccade-style';
  */
 const linted = [
 	'eslint.config.mjs'
+	, 'games/terrain-sandbox/**'
+	, 'scripts/sync-terrain.mjs'
+	, 'tests/terrain-*.test.mjs'
+	, 'tests/browser/terrain-sandbox.spec.mjs'
 	, 'games/rpsc/**'
 	, 'scripts/generate-rpsc-assets.mjs'
 	, 'tests/rpsc-*.test.mjs'

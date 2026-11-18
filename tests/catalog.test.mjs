@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 const game = new URL('games/php-billiards/', root);
-const expectedGames = ['doom-phonics','phlappy-phant','php-billiards','php-buster','php-noid','php-poker','php-slalom','php-tris','rpsc','sane-phonics'];
+const expectedGames = ['doom-phonics','phlappy-phant','php-billiards','php-buster','php-noid','php-poker','php-slalom','php-tris','rpsc','sane-phonics','terrain-sandbox'];
 
 test('catalog metadata owns every migrated game and its documentation', async() => {
 	const directories = (await fs.readdir(new URL('games/', root), {withFileTypes: true}))
