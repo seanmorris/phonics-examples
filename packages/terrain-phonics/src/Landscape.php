@@ -28,6 +28,8 @@ final class Landscape implements TerrainSurface
 	private array $memo = [];
 	/** Bounded caches for ray block intervals and sparsely sampled mesh vertices. */
 	private array $blockBounds = [], $meshNodes = [];
+	/** Row polynomials of recently sampled physics cells, shared by overlapping hull probes. */
+	private array $cellRows = [];
 
 	/**
 	 * Construct an empty lazy cache; the world is centered on X/Z zero.
@@ -459,7 +461,7 @@ final class Landscape implements TerrainSurface
 	public function close(): void
 	{
 		$this->tiles = $this->leases = $this->history = $this->operations = $this->pending = $this->memo = [];
-		$this->blockBounds = $this->meshNodes = [];
+		$this->blockBounds = $this->meshNodes = $this->cellRows = [];
 		$this->closed = true;
 	}
 
@@ -754,13 +756,17 @@ final class Landscape implements TerrainSurface
 				: [$height];
 		}
 
-		$rows = $this->patch($ix, $iz);
+		$key = "$ix:$iz";
+		if(!isset($this->cellRows[$key]))
+		{
+			if(count($this->cellRows) >= 64) unset($this->cellRows[array_key_first($this->cellRows)]);
+			$this->cellRows[$key] = array_map(self::cubic(...), $this->patch($ix, $iz));
+		}
 		$values = [];
 		$slopes = [];
 
-		foreach($rows as $row)
+		foreach($this->cellRows[$key] as $c)
 		{
-			$c = self::cubic($row);
 			$values[] = self::evaluate($c, $u);
 
 			if($derivatives) $slopes[] = $c[1] + $u * (2 * $c[2] + 3 * $u * $c[3]);
@@ -1001,7 +1007,7 @@ final class Landscape implements TerrainSurface
 			$tiles[$key] = $tile;
 		}
 
-		$this->blockBounds = $this->meshNodes = [];
+		$this->blockBounds = $this->meshNodes = $this->cellRows = [];
 		$this->operations = $operations;
 		$this->range = $range;
 		$this->version = $version;

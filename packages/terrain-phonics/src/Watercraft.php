@@ -210,6 +210,7 @@ final class Watercraft
 				, $this->z - cos($this->yaw) * self::LENGTH
 				, min(.18, abs($forward) * .008)
 				, $time
+				, $this->vx, $this->vz
 			);
 
 			$this->wakeClock = 0;

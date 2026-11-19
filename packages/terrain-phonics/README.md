@@ -89,6 +89,10 @@ as the root mesh is ready and refines the view while the player moves.
 parameters and derivatives as PHP. `Watercraft` samples several buoyancy points and adds damping, drag,
 steering, planing, and shoreline contacts. It is an arcade test craft, not a full rigid-body engine.
 
+Above 2 m/s, a hull in contact with the water emits a wake about every 0.2 seconds.
+Foam follows the stern and spreads as the trail ages. The sandbox’s **Shore and wake foam**
+control sets the amount visible.
+
 `Atmosphere` supplies a spherical exponential Rayleigh/Mie model with a cached transmittance texture.
 Sun direction, haze, and exposure have independent controls. This implementation uses single scattering;
 multiple scattering, clouds, ozone absorption, and volumetric fluid simulation are not implemented.

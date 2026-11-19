@@ -29,36 +29,11 @@ vec4 waterVisualSample(vec2 position, float time, vec2 pixelX, vec2 pixelY)
 		if(weight == 0.0) continue;
 		float phase = dot(gradient,position) - dynamics.x * time + dynamics.y;
 		float slope = wave.w * cos(phase);
-		result += weight * vec4(wave.w * sin(phase),slope * gradient,-slope * dynamics.x);
+		result.xyz += weight * vec3(wave.w * sin(phase),slope * gradient);
 	}
-	for(int i = 0; i < TERRAIN_MAX_WAKES; ++i)
-	{
-		if(i >= uWakeCount) break;
-		vec4 wake = uWakeVectors[i];
-		float age = time - wake.w;
-		if(age <= 0.0 || age >= 8.0) continue;
-		vec2 delta = position - wake.xy;
-		float radiusSquared = dot(delta,delta) + 0.04;
-		// Past 18 m from the wavefront its Gaussian envelope is below float32 range.
-		float outer = 3.0 * age + 18.0;
-		if(radiusSquared > outer * outer) continue;
-		float radius = sqrt(radiusSquared);
-		// Finite pixel phase differences remain useful at the radial packet's center, where its gradient vanishes.
-		vec2 deltaX = delta + pixelX;
-		vec2 deltaY = delta + pixelY;
-		float weight = waterPhaseFilter(2.2 * (sqrt(dot(deltaX,deltaX) + 0.04) - radius),
-			2.2 * (sqrt(dot(deltaY,deltaY) + 0.04) - radius));
-		if(weight == 0.0) continue;
-		float q = radius - 3.0 * age;
-		float fade = pow(sin(3.14159265359 * age / 8.0),2.0);
-		float envelope = wake.z * exp(-0.45 * age - 0.35 * q * q);
-		float phase = 2.2 * q;
-		float radial = envelope * fade * (2.2 * cos(phase) - 0.7 * q * sin(phase));
-		float fadeRate = 3.14159265359 / 8.0 * sin(2.0 * 3.14159265359 * age / 8.0);
-		result += weight * vec4(envelope * fade * sin(phase),radial * delta / radius,
-			envelope * (fadeRate - 0.45 * fade) * sin(phase) - 3.0 * radial);
-	}
-	return result;
+	vec4 wake = terrainFrameWakes(position,pixelX,pixelY,true);
+	// The visual sample uses its fourth channel for aerated water coverage.
+	return vec4(result.xyz + wake.xyz,wake.w);
 }
 
 float waterFoamIntegral(float depth)
@@ -106,11 +81,18 @@ void main()
 		- waterFoamIntegral(shoreDepth - 0.5 * shoreFootprint)) / shoreFootprint;
 	float foamWeight = waterPhaseFilter(pixelX.x + pixelX.y,pixelY.x + pixelY.y);
 	float foam = shoreCoverage * (0.65 + 0.35 * foamWeight * sin(vWorld.x + vWorld.z + uWaterTime * 2.0));
-	foam = clamp(foam * uWaterOptics.w,0.0,1.0);
+	float wash = wave.w;
+	if(wash > 0.0)
+	{
+		float footprint = max(length(pixelX),length(pixelY));
+		float detail = (1.0-smoothstep(0.06,0.3,footprint)) * sin(vWorld.x*11.0 + sin(vWorld.z*7.0)) * sin(vWorld.z*13.0 - uWaterTime*3.0);
+		wash *= (0.82+0.18*detail) * (1.0-smoothstep(0.5,2.0,footprint));
+	}
+	foam = clamp(max(foam,wash) * uWaterOptics.w,0.0,1.0);
 	float reflectionWeight = (1.0 - foam) * fresnel;
 	float tintWeight = (1.0 - foam) * (1.0 - fresnel) * (1.0 - uWaterOptics.x);
 	float alpha = foam + reflectionWeight + tintWeight;
-	vec3 lit = (foam * vec3(0.65) * illumination + reflectionWeight * reflection
+	vec3 lit = (foam * mix(vec3(0.65),vec3(1.6,1.85,1.95),wash) * illumination + reflectionWeight * reflection
 		+ tintWeight * body * illumination) / max(alpha, 0.00001);
 	color = vec4(terrainToneMap(terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit)),alpha);
 }

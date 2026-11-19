@@ -14,6 +14,8 @@ final class Lod
 	public const CELLS = 32;
 	/** Maximum depth used by the selector; minimum mesh spacing is configurable. */
 	private int $depth;
+	private array $childGroups = [];
+	private ?float $cachedExtent = null;
 
 	/**
 	 * Configure a finite quadtree without allocating world meshes.
@@ -51,6 +53,30 @@ final class Lod
 			, 'x' => $x * $size - $this->extent / 2
 			, 'z' => $z * $size - $this->extent / 2
 			, 'size' => $size
+		];
+	}
+
+	/**
+	 * Reuse the four immutable footprints visited by view traversal, balance and prefetch.
+	 * @param array $parent Parent quadtree node.
+	 * @return array Four child nodes in Z-major order.
+	 */
+	public function children(array $parent): array
+	{
+		if($this->cachedExtent !== $this->extent)
+		{
+			$this->cachedExtent = $this->extent;
+			$this->childGroups = [];
+		}
+		$key = $parent['key'];
+		if(isset($this->childGroups[$key])) return $this->childGroups[$key];
+		if(count($this->childGroups) >= 512) unset($this->childGroups[array_key_first($this->childGroups)]);
+		$level = $parent['level'] + 1;
+		$x = $parent['ix'] * 2;
+		$z = $parent['iz'] * 2;
+		return $this->childGroups[$key] = [
+			$this->node($level,$x,$z), $this->node($level,$x+1,$z),
+			$this->node($level,$x,$z+1), $this->node($level,$x+1,$z+1)
 		];
 	}
 
@@ -100,16 +126,12 @@ final class Lod
 				continue;
 			}
 
-			$children = [];
+			$children = $this->children($n);
 			$ready = true;
 			$refine[] = $n + ['priority' => $importance];
 
-			for($z = 0; $z < 2; $z++)
-			for($x = 0; $x < 2; $x++)
+			foreach($children as $c)
 			{
-				$c = $this->node($n['level'] + 1, $n['ix'] * 2 + $x, $n['iz'] * 2 + $z);
-				$children[] = $c;
-
 				if(!isset($resident[$c['key']]))
 				{
 					$ready = false;

@@ -506,7 +506,7 @@ function markup()
 	${range('Transparency', 'waterTransparency', 0, 1, .01, .85)}
 	${range('Reflectivity', 'waterReflectivity', 0, 1, .01, .85)}
 	${range('Fog density', 'waterFogDensity', 0, 1, .005, .035)}
-	${range('Shore foam', 'waterFoam', 0, 1, .01, .65)}
+	${range('Shore and wake foam', 'waterFoam', 0, 1, .01, .65)}
 	<p class="terrain-note">Lower fog density to see the bottom in deeper water.</p>
 	<h2>Explore</h2>${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
 	<div class="terrain-row"><button data-action="craft">Board watercraft · B</button><button data-action="fly" hidden>Return to flight · F</button></div>

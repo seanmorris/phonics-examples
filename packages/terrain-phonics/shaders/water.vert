@@ -11,7 +11,7 @@ void main()
 {
 	vec3 world = aPosition + uOrigin + uEye;
 	vGround = world.y;
-	world.y = terrainWaterSample(world.xz,uWaterTime).x;
+	world.y = terrainDirectionalSample(world.xz,uWaterTime).x + terrainFrameWakes(world.xz,vec2(0),vec2(0),false).x;
 	vWorld = world;
 	vRelative = world - uEye;
 	gl_Position = uViewProjection * vec4(vRelative,1.0);

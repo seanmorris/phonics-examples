@@ -35,6 +35,7 @@ final class Scene
 	private bool $changed = true, $closed = false;
 	private ?GpuPatch $craftMesh = null;
 	private float $selectionTime = -1;
+	private float $transitionUntil = -1;
 	private string $selectionKey = '';
 	private bool $selectionPending = false;
 	/** Last observed eye and bounded predicted position; speculative jobs never drive visibility. */
@@ -357,10 +358,7 @@ final class Scene
 				))
 			);
 
-		$transitioning = $this->retiring !== [];
-
-		foreach($this->draw as $node)
-		if($this->morph($node) > 0 || $this->clock - ($this->activated[$node['key']] ?? -1) < .5) $transitioning = true;
+		$transitioning = $this->retiring !== [] || $this->clock < $this->transitionUntil;
 
 		$viewChanged = $key !== $this->selectionKey;
 		$transitionDue = ($transitioning || $this->selectionPending) && $this->clock - $this->selectionTime > .15;
@@ -419,10 +417,7 @@ final class Scene
 
 		$this->lastUpdateMs = (microtime(true) - $started) * 1000;
 
-		foreach($this->draw as $n)
-		if($this->morph($n) > 0 || isset($this->retiring[$this->parentKey($n)])
-			|| $this->clock - ($this->activated[$n['key']] ?? -1) < .5
-		) $this->changed = true;
+		if($this->retiring !== [] || $this->clock < $this->transitionUntil) $this->changed = true;
 		$this->evict();
 
 		return $this->changed;
@@ -451,6 +446,9 @@ final class Scene
 		if($distance < $seconds || $distance > max(64, 600 * $seconds)) return;
 
 		$scale = min(1.5 / $seconds, 512 / $distance);
+		// The padded current view already requests immediate neighbors. Reserve the
+		// extra corridor traversals for travel beyond a finest patch's diagonal.
+		if($distance * $scale <= M_SQRT2 * Lod::CELLS * $this->landscape->recipe()['spacing']) return;
 		$half = $this->lod->extent / 2;
 		$this->lookahead = [
 			max(-$half, min($half, $camera->position[0] + $delta[0] * $scale))
@@ -517,9 +515,11 @@ final class Scene
 		sort($desiredKeys);
 		$this->selectionPending = $actualKeys !== $desiredKeys;
 
+		$this->transitionUntil = -1;
 		foreach($this->draw as $n)
 		{
 			$this->patches[$n['key']]['lastUse'] = $this->clock;
+			$this->transitionUntil = max($this->transitionUntil, ($this->activated[$n['key']] ?? -1) + .5);
 		}
 
 		if($old !== array_column($this->draw, 'key'))
@@ -538,7 +538,7 @@ final class Scene
 		// Otherwise reserving the next requests can evict a completed group before it draws.
 		foreach($result['refine'] as $node)
 		if(isset($drawKeys[$node['key']]))
-		foreach($this->children($node) as $child)
+		foreach($this->lod->children($node) as $child)
 		$requests[$child['key']] = $child + ['priority' => $node['priority']];
 
 		[$groups, $blockers] = $this->viewGroups(array_values($requests), $drawKeys, $camera);
@@ -587,7 +587,7 @@ final class Scene
 			{
 				if($parent === '' || !isset($this->patches[$parent])) continue;
 
-				$keys = $this->ancestors($this->children($this->patches[$parent]));
+				$keys = $this->ancestors($this->lod->children($this->patches[$parent]));
 				$extra = count(array_diff_key($keys, $this->reserved));
 
 				if($speculative + $extra > 32 || count($this->reserved + $keys) > $this->capacity()
@@ -779,6 +779,12 @@ final class Scene
 			foreach($nodes as $a)
 			for($level = $a['level'] - 2; $level >= 0; $level--)
 			{
+				// Once interior on both axes, the leaf cannot touch this ancestor's
+				// boundary or the boundary of any still larger ancestor.
+				$mask = (1 << ($a['level'] - $level)) - 1;
+				$x = $a['ix'] & $mask;
+				$z = $a['iz'] & $mask;
+				if($x !== 0 && $x !== $mask && $z !== 0 && $z !== $mask) break;
 				if(self::neighborsAt($a, $leaves, $level) === []) continue;
 				$shift = $a['level'] - ($level + 1);
 				$replace = $this->lod->node($level + 1, $a['ix'] >> $shift, $a['iz'] >> $shift);
@@ -842,22 +848,6 @@ final class Scene
 		return $node['level'] === 0
 			? ''
 			: ($node['level'] - 1) . ':' . intdiv($node['ix'], 2) . ':' . intdiv($node['iz'], 2);
-	}
-
-	/**
-	 * Describe all direct siblings together so coverage never contains a partial split.
-	 * @param array $node Quadtree patch metadata.
-	 * @return array Four direct children in stable spatial order.
-	 */
-	private function children(array $node): array
-	{
-		$children = [];
-
-		for($z = 0; $z < 2; $z++)
-		for($x = 0; $x < 2; $x++)
-		$children[] = $this->lod->node($node['level'] + 1, $node['ix'] * 2 + $x, $node['iz'] * 2 + $z);
-
-		return $children;
 	}
 
 	/**
@@ -962,7 +952,7 @@ final class Scene
 			if(isset($this->retiring[$key])) continue;
 
 			$parent = $this->lod->node($node['level'] - 1, intdiv($node['ix'], 2), intdiv($node['iz'], 2));
-			$children = $this->children($parent);
+			$children = $this->lod->children($parent);
 			$ready = true;
 
 			foreach($children as $child)
@@ -992,7 +982,7 @@ final class Scene
 
 			if(isset($targetLeaves[$node['key']]) || !isset($targetBranches[$node['key']])) continue;
 
-			$children = $this->children($node);
+			$children = $this->lod->children($node);
 			$ready = true;
 
 			foreach($children as $child)
@@ -1441,7 +1431,9 @@ final class Scene
 		$this->waterProgram->use();
 		$this->water->appearance->bind($this->waterProgram);
 		$this->common($this->waterProgram, $camera, $width, $height);
-		$this->waterUniforms($time);
+		[$wakeCount, $wakeBounds] = $this->waterUniforms($time);
+		$lastCount = null;
+		$wakeLocation = $this->waterProgram->location('uFrameWakeCount');
 
 		[$waterMin,$waterMax] = $this->water->heightRange();
 		foreach($this->draw as $n)
@@ -1449,6 +1441,14 @@ final class Scene
 			$patch = $this->patches[$n['key']];
 			if($patch['minY'] > $waterMax || !Camera::inView($planes,$eye,$n,$waterMin,$waterMax)) continue;
 			$this->waterDraws++;
+			$count = $wakeCount;
+			if($count && ($n['x'] > $wakeBounds[2] || $n['x'] + $n['size'] < $wakeBounds[0]
+				|| $n['z'] > $wakeBounds[3] || $n['z'] + $n['size'] < $wakeBounds[1])) $count = 0;
+			if($count !== $lastCount)
+			{
+				glUniform1i($wakeLocation, $count);
+				$lastCount = $count;
+			}
 			$this->vector(
 				$this->waterProgram
 				, 'uOrigin'
@@ -1511,22 +1511,28 @@ final class Scene
 	/**
 	 * Upload bounded analytic waves and wakes for the requested simulation time.
 	 * @param float $time Interpolated simulation time in seconds.
-	 * @return void Updates water program uniforms.
+	 * @return array Active packet count and their combined world-space bounds.
 	 */
-	private function waterUniforms(float $time): void
+	private function waterUniforms(float $time): array
 	{
 		$this->water->update($time);
 		$data = $this->water->uniforms();
 		$program = $this->waterProgram;
 		$this->scalar($program, 'uWaterTime', $time);
 		glUniform1i($program->location('uWaveCount'), $data['waveCount']);
-		glUniform1i($program->location('uWakeCount'), $data['wakeCount']);
-
-		foreach($data['waveVectors'] as $i => $wave) glUniform4f($program->location("uWaveVectors[$i]"), ...$wave);
-
-		foreach($data['waveDynamics'] as $i => $d) glUniform2f($program->location("uWaveDynamics[$i]"), ...$d);
-
-		foreach($data['wakeVectors'] as $i => $w) glUniform4f($program->location("uWakeVectors[$i]"), ...$w);
+		if($data['waveCount'])
+		{
+			glUniform4fv($program->location('uWaveVectors[0]'), $data['waveCount'], array_merge(...$data['waveVectors']));
+			glUniform2fv($program->location('uWaveDynamics[0]'), $data['waveCount'], array_merge(...$data['waveDynamics']));
+		}
+		$count = count($data['frameWakes']);
+		if($count)
+		{
+			glUniform4fv($program->location('uFrameWakes[0]'), $count, array_merge(...$data['frameWakes']));
+			glUniform2fv($program->location('uJetVelocities[0]'), $count, array_merge(...$data['jetVelocities']));
+			glUniform4f($program->location('uWakeBounds'), ...$data['wakeBounds']);
+		}
+		return [$count, $data['wakeBounds']];
 	}
 
 	/**
@@ -1693,6 +1699,7 @@ final class Scene
 		$this->neighbors = $this->settledBoundaries = [];
 		$this->drawIndex = null;
 		$this->selectionPending = false;
+		$this->transitionUntil = -1;
 		$this->previousEye = $this->lookahead = null;
 	}
 
