@@ -464,6 +464,63 @@ expect($race($wrong)['splits'] === [] && $race($wrong)['next']['id'] === $c['id'
 	'Nor does passing the start gate again before the checkpoint');
 $wrong->close();
 
+// A course without checkpoints ends each lap at the gate it began from. Passing that gate again counts only once the
+// vehicle has been well away from it, so reversing out of a lone start gate and rolling through it again counts no lap.
+$wiggle = new Session($open);
+input($wiggle, ['values' => ['gateLaps' => 2]]);
+$s = click($wiggle, 'start', 0, 20);
+$wiggle->camera->position = [0, 30, 0]; $wiggle->camera->yaw = M_PI;
+enterCar($wiggle);
+$states = [];
+for($i = 0; $i < 3; $i++)
+{
+	drive($wiggle, ['KeyW' => true], 600, fn(Session $session): bool => $session->car->state()['z'] > 24);
+	drive($wiggle, ['KeyS' => true], 900, fn(Session $session): bool => $session->car->state()['z'] < 16);
+	$states[] = $wiggle->race->state;
+}
+drive($wiggle, ['KeyW' => true], 600, fn(Session $session): bool => $session->car->state()['z'] > 24);
+$rocked = $race($wiggle);
+expect($states === ['running', 'running', 'running'] && $rocked['state'] === 'running' && $rocked['lapTimes'] === []
+	&& $rocked['splits'] === [] && $rocked['lap'] === 1,
+	'Rocking back and forth through a lone start gate counts no lap: ' . json_encode([$states, $rocked['lapTimes']]));
+autopilot($wiggle, [[0, 110], [60, 110], [60, -30], [0, -30]], 9000, $state('finished'));
+expect($race($wiggle)['state'] === 'finished' && count($race($wiggle)['lapTimes']) === 2,
+	'Driving round and back through the start gate counts each lap');
+$wiggle->close();
+// The rule in numbers, on a lone start gate with one lap. Each step is one second of travel along +Z.
+$course = new Course;
+$course->place('start', 'road', 0, 0, 0, 0);
+$timer = new Race;
+$reach = Race::LEAVE * $road['extent']['halfWidth'];
+$segment = fn(float $from, float $to, float $time): ?string
+	=> $timer->advance($course, $shapes, [0, 1, $from], [0, 1, $to], $time, 1.0, 'car', 1);
+$events = [$segment(-1, 1, 0), $segment(1, $reach - .01, 1), $segment($reach - .01, -1, 2), $segment(-1, 1, 3),
+	$segment(1, $reach, 4), $segment($reach, -1, 5), $segment(-1, 1, 6)];
+expect($events === ['Race started. Next: the start gate to finish.', null, null, null, null, null, 'Finished in 6.00 s.']
+	&& abs($reach - 22.746) < .001, 'A lap back to the same road gate counts once the car has been 22.7 m from it');
+// Gates the route passes in turn are unaffected. Out and back along one road: the car passes the turnaround
+// checkpoint, turns beyond it and drives back through its window the other way to a finish gate behind the start.
+$return = new Session($open);
+click($return, 'start', 0, 20);
+$c = click($return, 'checkpoint', 0, 150);
+click($return, 'finish', 0, -60, M_PI);
+$return->camera->position = [0, 30, 0]; $return->camera->yaw = M_PI;
+enterCar($return);
+$against = 0;
+$previous = $return->car->state();
+autopilot($return, [[0, 200], [-20, 215], [-8, 185], [0, 160], [0, -120]], 12000,
+	function(Session $session) use (&$against, &$previous, $c, $road, $state): bool {
+		$car = $session->car->state();
+		if(Race::crossing(['yaw' => $c['yaw'] + M_PI] + $c, $road, [$previous['x'], $previous['y'], $previous['z']],
+			[$car['x'], $car['y'], $car['z']]) !== null) $against++;
+		$previous = $car;
+		return $state('finished')($session);
+	});
+expect($against === 1 && $race($return)['state'] === 'finished'
+	&& array_column($race($return)['splits'], 'role') === ['checkpoint', 'finish'],
+	'Driving back through a checkpoint\'s window the other way leaves an out-and-back course to finish');
+$return->close();
+
 // Relocations do not pass gates. A freshly made car stands at the origin, behind this start gate; boarding beyond the
 // gate moves it there without driving through.
 $moves = new Session($open);
@@ -481,6 +538,14 @@ expect($race($moves)['state'] === 'running', 'Driving through it from behind doe
 input($moves, ['actions' => ['fly']]);
 expect($race($moves)['state'] === 'idle' && $moves->message === 'Flight controls active. The race stopped when you left the car.',
 	'Leaving the car stops the race');
+// Home leaves the car without a message of its own. The reason the race stopped replaces the race's last event
+// rather than following it, which read "Race started. Next: the start gate to finish. The race stopped when...".
+$moves->camera->position = [0, 30, 0]; $moves->camera->yaw = M_PI;
+enterCar($moves);
+drive($moves, ['KeyW' => true], 300, $state('running'));
+input($moves, ['actions' => ['reset-camera']]);
+expect($race($moves)['state'] === 'idle' && $moves->message === 'The race stopped when you left the car.',
+	'Leaving the car with Home says only why the race stopped: ' . $moves->message);
 $moves->camera->position = [0, 30, 0]; $moves->camera->yaw = M_PI;
 enterCar($moves);
 drive($moves, ['KeyW' => true], 300, $state('running'));
@@ -614,6 +679,17 @@ input($bay, ['actions' => ['craft']]);
 expect($race($bay)['state'] === 'idle' && str_ends_with($bay->message, 'The race stopped because the jet ski moved to a new spot.'),
 	'Boarding the jet ski again mid-race stops the race');
 $bay->close();
+// A gate click still finding the ground when the player boards the jet ski is dropped, as boarding the car or the jet
+// drops one, so no gate lands under a vehicle that is already moving.
+$late = new Session($lake);
+$late->camera->position = [0, 40, -100]; $late->camera->yaw = M_PI; $late->camera->pitch = -.3;
+$late->input(['values' => ['tool' => 'gate', 'gateRole' => 'start'], 'clicks' => [[.5, .5]]], 1 / 60, 16 / 9, .0001);
+$pending = $late->picking;
+$late->input(['actions' => ['craft']], 1 / 60, 16 / 9, .0001);
+for($i = 0; $i < 100; $i++) input($late, []);
+expect($pending && $late->mode === 'craft' && !$late->picking && $late->course->count() === 0
+	&& str_starts_with($late->message, 'W or RT throttle'), 'Boarding the jet ski drops a gate click still in progress');
+$late->close();
 
 // Courses save with the landscape.
 $file = new Session($open);

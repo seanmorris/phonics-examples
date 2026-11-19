@@ -174,7 +174,8 @@ export function activate({module, canvas, session, services})
 
 			event.preventDefault();
 		}
-		else if(commands[event.code])
+		// With Ctrl, Cmd or Alt held the key belongs to the browser, so Cmd+R reloads rather than resetting the race.
+		else if(commands[event.code] && !event.ctrlKey && !event.metaKey && !event.altKey)
 		{
 			if(!event.repeat) push(commands[event.code]);
 

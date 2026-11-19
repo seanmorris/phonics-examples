@@ -7,9 +7,11 @@ namespace TerrainSandbox;
  *
  * The clock starts as the vehicle passes forward through the start gate's window, without stopping first. After
  * that the vehicle must pass each gate of the course's route in order and in the gate's direction of travel; any
- * other crossing is ignored. Each fixed step tests the straight segment between the vehicle's positions before and
- * after the step, so a jet at 260 m/s cannot skip a gate between two steps. Times are simulation seconds, so pausing
- * stops the clock, and each crossing is timed at the point along its step where the segment meets the gate.
+ * other crossing is ignored. Passing the gate passed last again, which a course without checkpoints asks for at the
+ * end of each lap, counts only once the vehicle has been well away from that gate. Each fixed step tests the
+ * straight segment between the vehicle's positions before and after the step, so a jet at 260 m/s cannot skip a gate
+ * between two steps. Times are simulation seconds, so pausing stops the clock, and each crossing is timed at the
+ * point along its step where the segment meets the gate.
  */
 final class Race
 {
@@ -29,6 +31,16 @@ final class Race
 	/** Latest and best finishing times this session, by course signature. */
 	private array $latest = [], $best = [];
 	private const VEHICLES = ['car' => 'the car', 'craft' => 'the jet ski', 'jet' => 'the F5'];
+	/**
+	 * How far a vehicle must go from a gate, in half widths of the gate's frame, before passing that same gate again
+	 * counts: 23 m for a road gate, 18 m for a water gate and 68 m for an air gate. A course without checkpoints
+	 * ends each lap at the gate it began from, and without this a car could rock back and forth through that gate
+	 * and count a lap each time it rolled forward.
+	 */
+	public const LEAVE = 3.0;
+	/** Id of the gate passed last, and the farthest the vehicle has been from it across the ground since, in metres. */
+	private int $lastGate = 0;
+	private float $farthest = 0.0;
 
 	/**
 	 * Find where a step's segment passes forward through a gate's window.
@@ -77,13 +89,20 @@ final class Race
 		{
 			$target = $this->state === 'running' ? $course->gate($this->route[$this->index]['id']) : $course->start();
 			if($target === null) break;
-			$fraction = self::crossing($target, $shapes->kind($target['kind']), $from, $to);
+			$shape = $shapes->kind($target['kind']);
+			$fraction = self::crossing($target, $shape, $from, $to);
 			if($fraction === null || $fraction <= $reached) break;
+			if($this->state === 'running' && $target['id'] === $this->lastGate
+				&& $this->farthest < self::LEAVE * $shape['extent']['halfWidth']) break;
 			$reached = $fraction;
 			$at = $time + $fraction * $dt;
 			$event = $this->state === 'running' ? $this->pass($course, $at)
 				: $this->begin($course, $at, $vehicle, $boarding);
+			$this->lastGate = $target['id'];
+			$this->farthest = 0.0;
 		}
+		$last = $this->state === 'running' ? $course->gate($this->lastGate) : null;
+		if($last !== null) $this->farthest = max($this->farthest, hypot($to[0] - $last['x'], $to[2] - $last['z']));
 		if($event !== null) $this->message = $event;
 		return $event;
 	}
