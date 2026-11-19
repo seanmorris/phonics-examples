@@ -40,6 +40,7 @@ final class Session
 		'material' => 'grass', 'roadWidth' => 8.0, 'roadShoulder' => 12.0, 'roadRaise' => 0.0,
 		'azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0, 'exposure' => 1.0,
 		'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
+		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
 	] + WaterAppearance::DEFAULTS;
 	/** Uncommitted road control points in [x,y,z] metres. */
 	public array $road = [];
@@ -76,6 +77,7 @@ final class Session
 			['amplitude' => .23,'wavelength' => 17,'direction' => [-.25,1],'phase' => 1.2],
 			['amplitude' => .09,'wavelength' => 8,'direction' => [.7,-.6],'phase' => 2.7],
 		]);
+		$this->settings['waterLevel'] = $this->water->level();
 		$this->atmosphere = new Atmosphere;
 		$this->camera = new Camera;
 		$this->craft = new Watercraft;
@@ -182,7 +184,8 @@ final class Session
 		$ranges = ['radius' => [2,300],'amount' => [.1,200],'flattenHeight' => [-1000,3000],
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4],
-			'quality' => [.5,2],'speed' => [5,300]];
+			'quality' => [.5,2],'speed' => [5,300],
+			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
 		if(isset($ranges[$name]))
 		{
 			if(!is_numeric($value) || !is_finite((float)$value)) throw new \InvalidArgumentException('Invalid control value');
@@ -192,6 +195,12 @@ final class Session
 		elseif($name === 'clock') $value = (bool)$value;
 		elseif($name === 'tool' && !in_array($value, ['navigate','raise','lower','flatten','smooth','crater','material','road'], true)) return;
 		elseif($name === 'material' && !in_array($value, ['grass','rock','sand','snow','road'], true)) return;
+		if($name === 'waterLevel' || $name === 'waterChoppiness')
+		{
+			if($name === 'waterLevel') $this->water->setLevel($value);
+			else $this->water->setWaveScale($value / 100);
+			$this->dirty = $this->dirty || $this->settings[$name] !== $value;
+		}
 		$this->settings[$name] = $value;
 		if($name === 'haze') $this->atmosphere->setHaze($value);
 		if($name === 'exposure') $this->atmosphere->setExposure($value);
@@ -478,7 +487,7 @@ final class Session
 		$this->releasePin();
 		$this->landscape->close();
 		$this->landscape = $landscape;
-		$this->water->setLevel($landscape->recipe()['waterLevel']);
+		$this->setting('waterLevel', $landscape->recipe()['waterLevel']);
 		$this->road = []; $this->generation++; $this->mode = 'fly';
 	}
 
@@ -545,7 +554,7 @@ final class Session
 		$settings = $data['settings'] ?? [];
 		if(!is_array($settings)) throw new \InvalidArgumentException('Invalid saved settings.');
 		$appearance = new WaterAppearance($settings);
-		$settings = array_diff_key($settings, WaterAppearance::DEFAULTS);
+		$settings = array_diff_key($settings, WaterAppearance::DEFAULTS) + ['waterChoppiness' => 100.0];
 		foreach($settings as $name => $value)
 		if(isset($this->settings[$name]) && is_numeric($this->settings[$name]) && (!is_numeric($value) || !is_finite((float)$value)))
 		throw new \InvalidArgumentException('Invalid saved control value.');

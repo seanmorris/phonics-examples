@@ -343,6 +343,7 @@ final class Scene
 			static fn($v) => (int)floor($v / 8)
 			, $camera->position
 		)) . ':' . $this->quality . ':' . $this->viewportHeight . ':' . $this->viewportAspect . ':' . $camera->fov
+			. ':' . $this->water->level() . ':' . $this->water->waveScale()
 			. ':' . (int)floor($camera->yaw * 16) . ':' . (int)floor($camera->pitch * 16)
 			. ':' . ($this->lookahead === null
 				? 'stopped'

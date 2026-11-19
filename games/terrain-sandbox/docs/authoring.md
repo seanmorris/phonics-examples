@@ -2,9 +2,9 @@
 
 Choose a tool under **Shape the ground**, then click the terrain. Each click creates one transaction, allowing deliberate edits without filling history with a brush operation every frame. Right-drag still looks around.
 
-Before generating, open **Landform parameters** to change the height scale, fine detail, slope damping, or water elevation. Stronger damping removes more fine detail from steep faces. Domain warp bends the landforms. Terrace spacing creates smooth ledges; set it to zero to turn terraces off. Canyon country starts with 80-metre terraces.
+Before generating, open **Landform parameters** to change the height scale, fine detail, slope damping, or starting water level. Stronger damping removes more fine detail from steep faces. Domain warp bends the landforms. Terrace spacing creates smooth ledges; set it to zero to turn terraces off. Canyon country starts with 80-metre terraces.
 
-The canyon preset lowers water to −450 metres and starts inside the valley, exposing both its floor and steep walls. Changing water elevation moves the water without moving the ground.
+The canyon preset lowers water to −450 metres and starts inside the valley, exposing both its floor and steep walls. After generation, use **Water level** in the **Water** section to flood or expose the existing ground.
 
 Generating starts a new edit history; save a landscape first if you want to keep it.
 

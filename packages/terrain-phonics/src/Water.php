@@ -9,8 +9,9 @@ final class Water implements WaterSurface
 	public const MAX_WAVES = 8, MAX_WAKES = 16, WAKE_LIFETIME = 8.0;
 	/** Render configuration shared with the scene and its opaque objects. */
 	public WaterAppearance $appearance;
-	/** Normalized directional wave records. */
-	private array $waves = [];
+	/** Authored waves and their current amplitude-scaled values used by both samplers. */
+	private array $baseWaves, $waves = [];
+	private float $waveScale = 1.0;
 	/** Wake centres, amplitudes, and creation times. */
 	private array $wakes = [];
 	/** Time sent to the renderer and monotonic edit revision. */
@@ -59,7 +60,39 @@ final class Water implements WaterSurface
 				, 'phase' => $phase
 			];
 		}
+		$this->baseWaves = $this->waves;
 	}
+
+	/**
+	 * Scale the amplitudes of the authored waves. Wakes retain their own strengths.
+	 * @param float $scale Nonnegative multiplier. Zero gives calm water between wakes.
+	 * @return void Updates the physical samples, shader inputs and visibility bounds together.
+	 */
+	public function setWaveScale(float $scale): void
+	{
+		if(!is_finite($scale) || $scale < 0) throw new \InvalidArgumentException('Wave scale must be finite and nonnegative');
+		if($this->waveScale === $scale) return;
+
+		$waves = [];
+		if($scale > 0)
+		{
+			foreach($this->baseWaves as $wave)
+			{
+				$wave['amplitude'] *= $scale;
+				if(!is_finite($wave['amplitude'])) throw new \InvalidArgumentException('Scaled wave amplitude must be finite');
+				$waves[] = $wave;
+			}
+		}
+		$this->waves = $waves;
+		$this->waveScale = $scale;
+		$this->revision++;
+	}
+
+	/**
+	 * Read the amplitude multiplier of the directional waves.
+	 * @return float Current scale relative to the authored waves.
+	 */
+	public function waveScale(): float { return $this->waveScale; }
 
 	/**
 	 * Replace the common water level without changing any wave phase.
@@ -95,7 +128,7 @@ final class Water implements WaterSurface
 	}
 
 	/**
-	 * Read the revision of explicit level and wake edits.
+	 * Read the revision of explicit water level, wave scale and wake edits.
 	 * @return int Structural revision, separate from time.
 	 */
 	public function revision(): int { return $this->revision; }

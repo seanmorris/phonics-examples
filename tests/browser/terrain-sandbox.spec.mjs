@@ -236,6 +236,26 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	expect(waterEdit.time).toBe(time);
 	expect((await save(page)).settings.waterColor).toBe('#147083');
 
+	const level = page.getByLabel('Water level · m', {exact: true});
+	const chop = page.getByRole('slider', {name: /Choppiness/});
+	await level.fill('-10');
+	await expect.poll(async() => (await status(page)).renderer.waterDraws).toBe(0);
+	await level.fill('6.5');
+	await chop.focus();
+	await chop.press('End');
+	await expect.poll(async() => (await status(page)).settings.waterChoppiness).toBe(300);
+	const rough = await settled(page);
+	expect(rough.renderer.waterDraws).toBeGreaterThan(0);
+	expect(rough.time).toBe(time);
+	expect(rough.generation).toBe(now.generation);
+	const sea = await save(page);
+	expect(sea.settings.waterLevel).toBe(6.5);
+	await load(page, fixture());
+	await expect(chop).toHaveValue('100');
+	await load(page, sea);
+	await expect(level).toHaveValue('6.5');
+	await expect(chop).toHaveValue('300');
+
 	// Native fields keep WASD and pause shortcuts as text while focused.
 	const position = now.camera.position;
 	await page.locator('[name="seed"]').fill('wasd-pause');

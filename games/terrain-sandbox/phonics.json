@@ -47,8 +47,8 @@
     "assets/jetski/model.vert": "sha256-pkZN2ZhUmVq2PsLITY1XxIuBG0U6UPCH2LmdAxsTx8s=",
     "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/game.mjs": "sha256-+1BI2NA3zDRjjqZJwd2q4n2yrmBwozjAkhf6NIiskcs=",
+    "browser/game.mjs": "sha256-abLK2EBDFwnQDIn7VDclZ9da7+pyWT7Qj+3HwL+iuM0=",
     "src/JetSki.php": "sha256-y5YoOGcCUlz2t3fCaLMjUN0gCRtx/eat49OP5+fkLfY=",
-    "src/Session.php": "sha256-aOdi1rUEB/BAlAVNf7QVmEr8GbmltcfwnchXFTxtoJA="
+    "src/Session.php": "sha256-ibBbc3FYUE66wq4ZgjurW6/Gzb+I2Dm+auftnDt85Ws="
   }
 }

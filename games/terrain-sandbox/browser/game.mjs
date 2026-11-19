@@ -36,6 +36,13 @@ export function activate({module, canvas, session, services})
 	for(const field of controls.values())
 	{
 		field.addEventListener('input', () => {
+			if(field.dataset.value === 'waterLevel')
+			{
+				if(!Number.isFinite(field.valueAsNumber) || !field.validity.valid) return;
+
+				field.defaultValue = field.value;
+			}
+
 			values[field.dataset.value] = field.type === 'checkbox'
 				? field.checked
 				: field.type === 'range' || field.type === 'number' ? Number(field.value) : field.value;
@@ -43,6 +50,11 @@ export function activate({module, canvas, session, services})
 			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
 
 			if(output) output.textContent = field.value;
+		}, {signal});
+
+		if(field.dataset.value === 'waterLevel')
+		field.addEventListener('blur', () => {
+			if(!Number.isFinite(field.valueAsNumber) || !field.validity.valid) field.value = field.defaultValue;
 		}, {signal});
 	}
 
@@ -266,6 +278,8 @@ export function activate({module, canvas, session, services})
 					if(field.type === 'checkbox') field.checked = value;
 					else field.value = value;
 
+					if(name === 'waterLevel') field.defaultValue = value;
+
 					const output = frame.querySelector(`[data-output="${name}"]`);
 
 					if(output) output.textContent = value;
@@ -418,7 +432,7 @@ function markup()
 	<label class="terrain-field">Fine detail · m<input name="detailAmplitude" type="number" min="0" max="1000" value="28"></label>
 	<label class="terrain-field">Slope scale<input name="slopeScale" type="number" min="0.001" max="100" step="0.001" value="0.45"></label>
 	<label class="terrain-field">Steep-face detail damping<input name="damping" type="number" min="0" max="100" step="0.1" value="2"></label>
-	<label class="terrain-field">Water elevation · m<input name="waterLevel" type="number" min="-10000" max="10000" value="0"></label>
+	<label class="terrain-field">Starting water level · m<input name="waterLevel" type="number" min="-10000" max="10000" value="0"></label>
 	<label class="terrain-field">Domain warp · m<input name="warpAmplitude" type="number" min="0" max="5000" value="200"></label>
 	<label class="terrain-field">Terrace spacing · m<input name="terraceSpacing" type="number" min="0" max="1000" value="0"></label>
 	<p class="terrain-note">Domain warp bends the landforms. Terrace spacing creates smooth ledges; zero turns terraces off.</p>
@@ -485,7 +499,9 @@ function markup()
 		, 1
 	)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
-	<h2>Water appearance</h2>
+	<h2>Water</h2>
+	<label class="terrain-field">Water level · m<input data-value="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
+	${range('Choppiness · %', 'waterChoppiness', 0, 300, 1, 100)}
 	<label class="terrain-control"><span>Water color</span><input data-value="waterColor" type="color" value="#287276"></label>
 	${range('Transparency', 'waterTransparency', 0, 1, .01, .85)}
 	${range('Reflectivity', 'waterReflectivity', 0, 1, .01, .85)}

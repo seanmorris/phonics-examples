@@ -158,11 +158,22 @@ $optics = ['waterColor' => '#316fc0', 'waterTransparency' => .5, 'waterReflectiv
 input($bay, ['values' => $optics]);
 expect($bay->dirty && $bay->water->appearance->settings === $optics, 'Appearance edits reach the renderer and request a frame');
 expect($bay->water->sample(2, 4, 1) === $physical && $bay->water->revision() === 0, 'Optical edits preserve the physical water');
+$generation = $bay->generation;
+$terrain = $bay->landscape->save();
+input($bay, ['actions' => ['pause']]);
+$bay->dirty = false;
+input($bay, ['values' => ['waterLevel' => 12.5, 'waterChoppiness' => 0]]);
+expect($bay->dirty && $bay->paused && $bay->water->sample(2, 4, 1)['height'] === 12.5,
+	'Live water controls reach the physical surface and request a paused frame');
+expect($bay->landscape->save() === $terrain && $bay->generation === $generation,
+	'Live water changes preserve terrain edits and generation');
 $custom = $bay->save();
 $bay->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+expect($bay->water->level() === 6.0 && $bay->water->sample(2, 4, 1) === $physical, 'Older files restore recipe elevation and original swell');
 expect($bay->water->appearance->settings === TerrainPhonics\WaterAppearance::DEFAULTS, 'Older landscapes get the default water appearance');
 $bay->load($custom);
 expect($bay->water->appearance->settings === $optics, 'All optical settings round-trip');
+expect($bay->water->level() === 12.5 && $bay->water->waveScale() === 0.0, 'Live sea state round-trips');
 $generation = $bay->generation;
 try { $bay->load(str_replace('#316fc0', '#zzzzzz', $custom)); expect(false, 'Invalid water colors must be rejected'); }
 catch(InvalidArgumentException) { expect($bay->generation === $generation && $bay->save() === $custom, 'Invalid optics leave the current scene intact'); }
@@ -189,6 +200,10 @@ $bay->camera->position = [12,20,-5];
 input($bay, ['actions' => ['craft']]);
 $launch = $bay->craft->state();
 expect($launch['x'] === 12.0 && $launch['z'] === -5.0, 'Boarding over deep water keeps the chosen location on a small lake');
+input($bay, ['values' => ['waterLevel' => 10, 'waterChoppiness' => 0]]);
+for($i = 0; $i < 240; $i++) $bay->step(1 / 60);
+expect($bay->mode === 'craft' && $bay->craft->state()['y'] > $launch['y'] + 4,
+	'The boarded jet ski floats up when the lake rises');
 $bay->close();
 
 echo "Landscape sandbox session: $checks checks passed\n";
