@@ -7,6 +7,8 @@ final class Watercraft
 {
 	/** Hull half extents and keel depth, in metres. */
 	private const WIDTH = .65, LENGTH = 1.25, KEEL = .32;
+	/** Full-throttle acceleration in m/s² with the jet intake in the water. */
+	private const FORWARD_THRUST = 16.0, REVERSE_THRUST = 8.0;
 	/** World position, heading, hull angles, and their velocities. */
 	private float $x, $y, $z, $yaw;
 	private float $pitch = 0, $roll = 0, $vx = 0, $vy = 0, $vz = 0;
@@ -150,7 +152,8 @@ final class Watercraft
 		$this->rollVelocity *= exp(-3 * $dt);
 		$this->pitch = max(-.55, min(.55, $this->pitch + $this->pitchVelocity * $dt));
 		$this->roll = max(-.65, min(.65, $this->roll + $this->rollVelocity * $dt));
-		$forward += $throttle * 8 * min(1.0, $wet * 2) * $dt;
+		$thrust = $throttle >= 0 ? self::FORWARD_THRUST : self::REVERSE_THRUST;
+		$forward += $throttle * $thrust * min(1.0, $wet * 2) * $dt;
 		$forward *= exp(-(.25 + .018 * abs($forward)) * (1 - .35 * $planing) * $dt);
 		$lateral *= exp(-(1 + 3 * $wet) * $dt);
 		$previousYaw = $this->yaw;
@@ -171,6 +174,7 @@ final class Watercraft
 			{
 				$this->vx *= .35;
 				$this->vz *= .35;
+				$ground = null;
 				$this->contacts++;
 			}
 			else
@@ -181,12 +185,14 @@ final class Watercraft
 		}
 		catch(\OutOfBoundsException)
 		{
+			$ground = null;
 			$this->yaw = $previousYaw;
 			$this->vx = $this->vz = 0;
 			$this->contacts++;
 		}
 
-		$ground = $this->support($terrain, $this->x, $this->z);
+		// An accepted move already sampled support at the final hull pose.
+		$ground ??= $this->support($terrain, $this->x, $this->z);
 
 		if($this->y < $ground + self::KEEL)
 		{

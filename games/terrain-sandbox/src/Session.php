@@ -399,19 +399,44 @@ final class Session
 	 */
 	private function boardCraft(): void
 	{
-		$x = $this->camera->position[0]; $z = $this->camera->position[2];
-		$half = $this->landscape->recipe()['worldSize'] / 2 - 16;
-		$found = false;
-		for($ring = 0; $ring < 12 && !$found; $ring++) for($i = 0; $i < 16; $i++)
+		[$eyeX, , $eyeZ] = $this->camera->position;
+		$half = max(0.0, $this->landscape->recipe()['worldSize'] / 2 - 16);
+		$yaw = M_PI - $this->camera->yaw;
+		$dx = sin($yaw); $dz = cos($yaw);
+		$launch = null;
+
+		// Board in place over deep water. When relocating, prefer open water along
+		// the pilot's heading among the sites on the nearest navigable ring.
+		for($ring = 0; $ring < 12 && $launch === null; $ring++)
 		{
-			$a = $i * M_PI / 8;
-			$px = max(-$half, min($half, $x + cos($a) * $ring * 200));
-			$pz = max(-$half, min($half, $z + sin($a) * $ring * 200));
-			if($this->landscape->height($px, $pz) < $this->water->level() - 2)
-			{ $x = $px; $z = $pz; $found = true; break; }
+			$bestDistance = -1;
+			$lookAhead = $ring === 0 ? 0 : 200;
+			$sites = $ring === 0 ? 1 : 16;
+			for($i = 0; $i < $sites; $i++)
+			{
+				$a = $i * M_PI / 8;
+				$x = max(-$half, min($half, $eyeX + cos($a) * $ring * 200));
+				$z = max(-$half, min($half, $eyeZ + sin($a) * $ring * 200));
+
+				for($ahead = 0; $ahead <= $lookAhead; $ahead += 50)
+				{
+					$px = $x + $ahead * $dx;
+					$pz = $z + $ahead * $dz;
+					if(abs($px) > $half || abs($pz) > $half
+						|| $this->landscape->height($px, $pz) >= $this->water->level() - 2) break;
+
+					if($ahead > $bestDistance)
+					{
+						$bestDistance = $ahead;
+						$launch = [$x, $z];
+					}
+				}
+				if($bestDistance === $lookAhead) break;
+			}
 		}
-		if(!$found) throw new \RuntimeException('No deep water nearby. Try the coastal preset or fly closer to the coast.');
-		$this->craft->spawn($x, $z, M_PI - $this->camera->yaw, $this->water, $this->landscape, $this->time);
+
+		if($launch === null) throw new \RuntimeException('No deep water nearby. Try the coastal preset or fly closer to the coast.');
+		$this->craft->spawn($launch[0], $launch[1], $yaw, $this->water, $this->landscape, $this->time);
 		$this->mode = 'craft'; $this->paused = false; $this->reserveCraft();
 		$this->message = 'W/S throttle, A/D steer. Return to flight to edit the landscape.';
 	}
