@@ -53,12 +53,13 @@ final class GpuPatch
 
 	/**
 	 * Draw the indexed triangle stream for this patch.
+	 * @param int $stitchMask Shared-grid edge pattern, or zero for ordinary meshes.
 	 * @return void Submits the retained vertices with index validation.
 	 */
-	public function draw(): void
+	public function draw(int $stitchMask = 0): void
 	{
 		glBindVertexArray($this->vao[0]);
-		glDrawElements(GL_TRIANGLES, $this->count, GL_UNSIGNED_SHORT, 0);
+		glDrawElements(GL_TRIANGLES, $this->count, GL_UNSIGNED_SHORT, $stitchMask * $this->count * 2);
 	}
 
 	/**
@@ -82,6 +83,38 @@ final class GpuPatch
 	public function bytes(bool $includeIndices = true): int
 	{
 		return strlen($this->vertices) + ($includeIndices ? strlen($this->indices) : 0);
+	}
+
+	/**
+	 * Pack all sixteen shared edge patterns consecutively for single-draw stitched grids.
+	 * @param int $cells Even number of cells along a patch edge.
+	 * @param string $regular The ordinary grid index stream from indices().
+	 * @return string Sixteen equal-sized uint16 streams indexed by left/right/top/bottom bits.
+	 */
+	public static function stitchPatterns(int $cells, string $regular): string
+	{
+		$indices = unpack('v*', $regular);
+		$changes = [[], [], [], []];
+		$stride = $cells + 1;
+		foreach($indices as $i => $vertex)
+		{
+			$x = $vertex % $stride; $z = intdiv($vertex, $stride);
+			// Snap alternate boundary vertices onto an existing coarse endpoint. These
+			// directions preserve triangle winding even when two stitched edges meet.
+			if(($z & 1) && $x === 0) $changes[0][$i] = $vertex - $stride;
+			if(($z & 1) && $x === $cells) $changes[1][$i] = $vertex + $stride;
+			if(($x & 1) && $z === 0) $changes[2][$i] = $vertex - 1;
+			if(($x & 1) && $z === $cells) $changes[3][$i] = $vertex + 1;
+		}
+		$stream = $regular;
+		for($mask = 1; $mask < 16; $mask++)
+		{
+			$pattern = $indices;
+			foreach($changes as $edge => $entries)
+				if($mask & (1 << $edge)) $pattern = array_replace($pattern, $entries);
+			$stream .= pack('v*', ...$pattern);
+		}
+		return $stream;
 	}
 
 	/**

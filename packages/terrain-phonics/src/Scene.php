@@ -77,10 +77,11 @@ final class Scene
 		$root = dirname(__DIR__) . '/shaders/';
 		$atmosphere = AtmosphereRenderer::shaderSource();
 		$water = file_get_contents($root . 'water-functions.glsl');
+		$grid = file_get_contents($root . 'patch-grid.glsl');
 		$optics = WaterAppearance::shaderSource();
 
 		$this->groundProgram = new Program(
-			file_get_contents($root . 'terrain.vert')
+			str_replace('// PATCH', $grid, file_get_contents($root . 'terrain.vert'))
 			, str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics], file_get_contents($root . 'terrain.frag'))
 		);
 
@@ -90,7 +91,7 @@ final class Scene
 		);
 
 		$this->waterProgram = new Program(
-			str_replace('// WATER', $water, file_get_contents($root . 'water.vert'))
+			str_replace(['// PATCH','// WATER'], [$grid,$water], file_get_contents($root . 'water.vert'))
 			, str_replace(['// ATMOSPHERE','// WATER','// OPTICS'], [$atmosphere,$water,$optics], file_get_contents($root . 'water.frag'))
 		);
 
@@ -113,7 +114,8 @@ final class Scene
 		glGenBuffers(1, $this->gridBuffer);
 		glBindVertexArray($this->vao[0]);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,$this->gridBuffer[0]);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER,strlen($this->indices),$this->indices,GL_STATIC_DRAW);
+		$patterns = GpuPatch::stitchPatterns(Lod::CELLS, $this->indices);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER,strlen($patterns),$patterns,GL_STATIC_DRAW);
 		glBindVertexArray(0);
 	}
 
@@ -811,21 +813,6 @@ final class Scene
 	}
 
 	/**
-	 * Test whether two patches share an edge of positive length.
-	 * @param array $a First quadtree patch.
-	 * @param array $b Second quadtree patch.
-	 * @return bool Whether a nonzero shared edge exists.
-	 */
-	private static function touches(array $a, array $b): bool
-	{
-		$xOverlap = min($a['x'] + $a['size'], $b['x'] + $b['size']) > max($a['x'], $b['x']);
-		$zOverlap = min($a['z'] + $a['size'], $b['z'] + $b['size']) > max($a['z'], $b['z']);
-
-		return ($xOverlap && ($a['z'] + $a['size'] === $b['z'] || $b['z'] + $b['size'] === $a['z']))
-			|| ($zOverlap && ($a['x'] + $a['size'] === $b['x'] || $b['x'] + $b['size'] === $a['x']));
-	}
-
-	/**
 	 * Include corner contacts when balancing and coordinating boundary transitions.
 	 * @param array $a First quadtree patch.
 	 * @param array $b Second quadtree patch.
@@ -833,9 +820,11 @@ final class Scene
 	 */
 	private static function meets(array $a, array $b): bool
 	{
-		return $a['key'] !== $b['key']
-			&& min($a['x'] + $a['size'], $b['x'] + $b['size']) >= max($a['x'], $b['x'])
-			&& min($a['z'] + $a['size'], $b['z'] + $b['size']) >= max($a['z'], $b['z']);
+		$level = max($a['level'], $b['level']);
+		$sa = 1 << ($level - $a['level']); $sb = 1 << ($level - $b['level']);
+		$x = $a['ix']*$sa - $b['ix']*$sb;
+		$z = $a['iz']*$sa - $b['iz']*$sb;
+		return $a['key'] !== $b['key'] && $x >= -$sa && $x <= $sb && $z >= -$sa && $z <= $sb;
 	}
 
 	/**
@@ -906,9 +895,8 @@ final class Scene
 	 */
 	private static function contains(array $outer, array $inner): bool
 	{
-		return $inner['x'] >= $outer['x'] && $inner['z'] >= $outer['z']
-			&& $inner['x'] + $inner['size'] <= $outer['x'] + $outer['size']
-			&& $inner['z'] + $inner['size'] <= $outer['z'] + $outer['size'];
+		$shift = $inner['level'] - $outer['level'];
+		return $shift >= 0 && ($inner['ix'] >> $shift) === $outer['ix'] && ($inner['iz'] >> $shift) === $outer['iz'];
 	}
 
 	/**
@@ -1034,7 +1022,7 @@ final class Scene
 	/**
 	 * Coordinate edge and corner weights, including neighbors activated on earlier frames.
 	 * @param array $node Quadtree patch metadata.
-	 * @return array Shared edge and corner blend-weight vectors.
+	 * @return array Shared edge weights, corner weights and the coarse-neighbor index mask.
 	 */
 	private function boundaryMorph(array $node): array
 	{
@@ -1044,11 +1032,8 @@ final class Scene
 		$own = $this->morph($node);
 		$settled = $this->retiring === [] && $own <= 0.0;
 		$edges = $corners = [$own,$own,$own,$own];
-		$points = [
-			[$node['x'],$node['z']],[$node['x'] + $node['size'],$node['z']]
-			, [$node['x'],$node['z'] + $node['size']]
-			, [$node['x'] + $node['size'],$node['z'] + $node['size']]
-		];
+		$mask = 0;
+		$points = [[0,0],[1,0],[0,1],[1,1]];
 
 		$neighbors = &$this->neighbors[$node['key']];
 		if($neighbors === null)
@@ -1064,26 +1049,28 @@ final class Scene
 			$weight = $coarser ? 1.0 : $this->morph($neighbor);
 			if(!$coarser && $weight > 0.0) $settled = false;
 
-			if(self::touches($node, $neighbor))
+			// Locate the neighbor in this patch's integer coordinates. Fractional
+			// world extents must produce the same topology as power-of-two worlds.
+			$span = 1 << ($node['level'] - $neighbor['level']);
+			$x = $neighbor['ix']*$span - $node['ix'];
+			$z = $neighbor['iz']*$span - $node['iz'];
+			$edge = null;
+			if($z < 1 && $z+$span > 0) $edge = $x < 0 ? 0 : 1;
+			elseif($x < 1 && $x+$span > 0) $edge = $z < 0 ? 2 : 3;
+			if($edge !== null)
 			{
-				if($neighbor['x'] + $neighbor['size'] === $node['x']) $edges[0] = max($edges[0], $weight);
-
-				if($node['x'] + $node['size'] === $neighbor['x']) $edges[1] = max($edges[1], $weight);
-
-				if($neighbor['z'] + $neighbor['size'] === $node['z']) $edges[2] = max($edges[2], $weight);
-
-				if($node['z'] + $node['size'] === $neighbor['z']) $edges[3] = max($edges[3], $weight);
+				$edges[$edge] = max($edges[$edge], $weight);
+				if($coarser) $mask |= 1 << $edge;
 			}
 
-			foreach($points as $i => [$x,$z])
-			if($x >= $neighbor['x'] && $x <= $neighbor['x'] + $neighbor['size']
-				&& $z >= $neighbor['z'] && $z <= $neighbor['z'] + $neighbor['size']
-			)
+			foreach($points as $i => [$px,$pz])
+			if($px >= $x && $px <= $x+$span && $pz >= $z && $pz <= $z+$span)
+
 			$corners[$i] = max($corners[$i], $weight);
 		}
 
-		if($settled) $this->settledBoundaries[$key] = [$edges,$corners];
-		return [$edges,$corners];
+		if($settled) $this->settledBoundaries[$key] = [$edges,$corners,$mask];
+		return [$edges,$corners,$mask];
 	}
 
 	/**
@@ -1313,6 +1300,28 @@ final class Scene
 	}
 
 	/**
+	 * Bind a patch's common grid and transition and select its watertight edge topology.
+	 * @param Program $program Ground or water vertex program.
+	 * @param array $node Visible quadtree leaf.
+	 * @param array|null $lastBoundary Previous boundary uniforms on this program.
+	 * @return int Index pattern connecting fine edges to their coarser neighbors.
+	 */
+	private function bindPatch(Program $program, array $node, ?array &$lastBoundary): int
+	{
+		$half = (1 << $node['level']) * (Lod::CELLS / 2);
+		glUniform4f($program->location('uPatch'), $node['ix']*Lod::CELLS-$half, $node['iz']*Lod::CELLS-$half,
+			$node['size']/Lod::CELLS, $this->morph($node));
+		$boundary = $this->boundaryMorph($node);
+		if($lastBoundary !== $boundary)
+		{
+			glUniform4f($program->location('uEdges'), ...$boundary[0]);
+			glUniform4f($program->location('uCorners'), ...$boundary[1]);
+			$lastBoundary = $boundary;
+		}
+		return $boundary[2];
+	}
+
+	/**
 	 * Draw the sky, terrain and physical wave surface into the caller's framebuffer.
 	 * @param Camera $camera Current viewing camera.
 	 * @param int $width Viewport width in pixels.
@@ -1354,38 +1363,14 @@ final class Scene
 		$planes = $camera->clipPlanes($width,$height);
 		$eye = $camera->position;
 		$this->groundDraws = $this->waterDraws = 0;
-		$lastSize = $lastMorph = $lastBoundary = null;
+		$lastBoundary = null;
 		foreach($this->draw as $n)
 		{
 			$p = $this->patches[$n['key']];
 			if(!Camera::inView($planes,$eye,$n,$p['minY'],$p['maxY'])) continue;
 			$this->groundDraws++;
 
-			$this->vector(
-				$this->groundProgram
-				, 'uOrigin'
-				, [$n['x'] - $camera->position[0],-$camera->position[1],$n['z'] - $camera->position[2]]
-			);
-
-			if($n['size'] !== $lastSize)
-			{
-				$lastSize = $n['size'];
-				$this->scalar($this->groundProgram, 'uSize', $lastSize);
-			}
-			$morph = $this->morph($n);
-			if($morph !== $lastMorph)
-			{
-				$this->scalar($this->groundProgram, 'uMorph', $morph);
-				$lastMorph = $morph;
-			}
-			$boundary = $this->boundaryMorph($n);
-			if($boundary !== $lastBoundary)
-			{
-				glUniform4f($this->groundProgram->location('uEdges'), ...$boundary[0]);
-				glUniform4f($this->groundProgram->location('uCorners'), ...$boundary[1]);
-				$lastBoundary = $boundary;
-			}
-			$p['mesh']->draw();
+			$p['mesh']->draw($this->bindPatch($this->groundProgram, $n, $lastBoundary));
 		}
 
 		if($craftState !== null)
@@ -1432,7 +1417,7 @@ final class Scene
 		$this->water->appearance->bind($this->waterProgram);
 		$this->common($this->waterProgram, $camera, $width, $height);
 		[$wakeCount, $wakeBounds] = $this->waterUniforms($time);
-		$lastCount = null;
+		$lastCount = $lastBoundary = null;
 		$wakeLocation = $this->waterProgram->location('uFrameWakeCount');
 
 		[$waterMin,$waterMax] = $this->water->heightRange();
@@ -1449,13 +1434,7 @@ final class Scene
 				glUniform1i($wakeLocation, $count);
 				$lastCount = $count;
 			}
-			$this->vector(
-				$this->waterProgram
-				, 'uOrigin'
-				, [$n['x'] - $camera->position[0],-$camera->position[1],$n['z'] - $camera->position[2]]
-			);
-
-			$patch['mesh']->draw();
+			$patch['mesh']->draw($this->bindPatch($this->waterProgram, $n, $lastBoundary));
 		}
 
 		glDisable(GL_BLEND);
@@ -1635,7 +1614,7 @@ final class Scene
 			)
 			, 'maximumPatches' => $this->capacity()
 			, 'transitions' => count($this->retiring)
-			, 'meshBytes' => strlen($this->indices) + array_sum(array_map(
+			, 'meshBytes' => 16 * strlen($this->indices) + array_sum(array_map(
 				/** Count retained packed mesh bytes.
 			 * @param array $p Resident or staged patch.
 			 * @return int CPU mesh payload bytes.

@@ -8,8 +8,8 @@ layout(location=3) in float aMaterial;
 layout(location=4) in vec3 aParentNormal;
 uniform mat4 uViewProjection;
 uniform vec3 uOrigin, uEye, uCraftRotation;
-uniform float uSize, uMorph, uCraft;
-uniform vec4 uEdges, uCorners;
+uniform float uCraft;
+// PATCH
 out vec3 vRelative, vWorld, vNormal;
 out vec3 vPaint0, vPaint1;
 void main()
@@ -18,15 +18,11 @@ void main()
 	vec3 normal = aNormal;
 	if(uCraft < 0.5)
 	{
-		bool left = p.x < 0.01, right = p.x > uSize - 0.01;
-		bool top = p.z < 0.01, bottom = p.z > uSize - 0.01;
-		float morph = max(uMorph, max(max(left ? uEdges.x : 0.0, right ? uEdges.y : 0.0),
-			max(top ? uEdges.z : 0.0, bottom ? uEdges.w : 0.0)));
-		if(left && top) morph = uCorners.x;
-		if(right && top) morph = uCorners.y;
-		if(left && bottom) morph = uCorners.z;
-		if(right && bottom) morph = uCorners.w;
-		p.y = mix(p.y, aParent, morph);
+		ivec2 cell = patchCell();
+		vec2 xz = patchWorld(cell);
+		float morph = patchMorph(cell);
+		vWorld = vec3(xz.x, mix(p.y,aParent,morph), xz.y);
+		vRelative = vWorld - uEye;
 		normal = mix(normal, aParentNormal, morph);
 	}
 	else
@@ -37,9 +33,9 @@ void main()
 		mat3 rz = mat3(cos(roll),sin(roll),0.0,-sin(roll),cos(roll),0.0,0.0,0.0,1.0);
 		p = ry * rx * rz * p;
 		normal = ry * rx * rz * normal;
+		vRelative = p + uOrigin;
+		vWorld = vRelative + uEye;
 	}
-	vRelative = p + uOrigin;
-	vWorld = vRelative + uEye;
 	vNormal = normal;
 	vPaint0 = vec3(abs(aMaterial) < 0.1 ? 1.0 : 0.0,
 		abs(aMaterial - 1.0) < 0.1 ? 1.0 : 0.0, abs(aMaterial - 2.0) < 0.1 ? 1.0 : 0.0);

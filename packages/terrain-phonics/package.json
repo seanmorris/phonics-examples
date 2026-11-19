@@ -43,6 +43,7 @@
     "shaders/atmosphere-cache.glsl",
     "shaders/atmosphere-cache.vert",
     "shaders/atmosphere.glsl",
+    "shaders/patch-grid.glsl",
     "shaders/shadows.frag",
     "shaders/shadows.vert",
     "shaders/sky.frag",
