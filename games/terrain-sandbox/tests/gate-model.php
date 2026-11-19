@@ -208,6 +208,12 @@ namespace
 	$race = new Race;
 	$race->advance($pond, $shapes, [0, $level + 1, 58], [0, $level + 1, 59], 1.0, 1 / 60, 'craft', 1);
 	expect($surface->samples === 1, 'A fixed step samples the waves for the one gate the race needs next');
+	$race->advance($pond, $shapes, [0, $level + 1, 59], [0, $level + 1, 61], 1.0, 1 / 60, 'craft', 1);
+	$pond->float($surface, 1.05);
+	$surface->samples = 0;
+	$race->advance($pond, $shapes, [0, $level + 1, 61], [0, $level + 1, 62], 1.05, 1 / 60, 'craft', 1);
+	expect($race->state === 'running' && $surface->samples === 1,
+		'A running race samples the waves for its next gate alone, not for the gate it passed last');
 	$pond->float($surface, 1.1);
 	$surface->samples = 0;
 	$since = count($GLOBALS['gl']);

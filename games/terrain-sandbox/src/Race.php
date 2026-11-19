@@ -38,9 +38,13 @@ final class Race
 	 * and count a lap each time it rolled forward.
 	 */
 	public const LEAVE = 3.0;
-	/** Id of the gate passed last, and the farthest the vehicle has been from it across the ground since, in metres. */
+	/**
+	 * Id and ground position of the gate passed last, and the farthest the vehicle has been from it across the ground
+	 * since, in metres. Changing the course stops the race, so the position stays the gate's own. Keeping it here
+	 * spares a step from asking the course for that gate, which would sample the waves for a second floating gate.
+	 */
 	private int $lastGate = 0;
-	private float $farthest = 0.0;
+	private float $lastX = 0.0, $lastZ = 0.0, $farthest = 0.0;
 
 	/**
 	 * Find where a step's segment passes forward through a gate's window.
@@ -99,10 +103,11 @@ final class Race
 			$event = $this->state === 'running' ? $this->pass($course, $at)
 				: $this->begin($course, $at, $vehicle, $boarding);
 			$this->lastGate = $target['id'];
+			$this->lastX = $target['x']; $this->lastZ = $target['z'];
 			$this->farthest = 0.0;
 		}
-		$last = $this->state === 'running' ? $course->gate($this->lastGate) : null;
-		if($last !== null) $this->farthest = max($this->farthest, hypot($to[0] - $last['x'], $to[2] - $last['z']));
+		if($this->state === 'running')
+			$this->farthest = max($this->farthest, hypot($to[0] - $this->lastX, $to[2] - $this->lastZ));
 		if($event !== null) $this->message = $event;
 		return $event;
 	}
