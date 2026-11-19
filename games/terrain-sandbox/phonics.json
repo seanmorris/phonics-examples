@@ -89,8 +89,8 @@
     "src/GateModel.php": "sha256-kD/3qyDQ3I03e0JKiX6KyXe6CUaTStn2N/IOe8KkwY0=",
     "src/GateShapes.php": "sha256-Pu4YVpIr/FxtfYv/6Gt1AXEPJ/QbZiyIuI9JhQADUIs=",
     "src/Jet.php": "sha256-TRXjJrvi8dEjbtSj2yi8KQ4TnKFwjZQ2a4oRcJlp318=",
-    "src/Race.php": "sha256-YL2Fk66FSvc8rgt5w+r8ffU4sDNX6w9Dhe6Bk1VP/nQ=",
-    "src/Session.php": "sha256-9I0hp1QNrKYwv/dVcyezlLUhwFZdZqH69KiJjxtrR5E=",
+    "src/Race.php": "sha256-DY8T8XZGpiE2MMPfZz2lhoKt+5q65BdYNoAvy85CBAo=",
+    "src/Session.php": "sha256-751HsTPLb75MYiBMm/LkV4hyxTxukfD1Uk5oRHZ09Vk=",
     "src/VehicleModel.php": "sha256-EuVkmclRWSc42Ik3l0vqUVXhRYI3dlaqUfyTAyAqYDs="
   }
 }

@@ -578,7 +578,7 @@ final class Session
 				$this->message = $this->jetMessage();
 				break;
 			case 'jet-controls': $this->setJetControls($this->jetControls === 'expert' ? 'novice' : 'expert'); break;
-			case 'craft': $this->carSearch = null; $this->boardCraft(); break;
+			case 'craft': $this->cancelPick(); $this->carSearch = null; $this->boardCraft(); break;
 			case 'fly':
 				$this->carSearch = null; $this->mode = 'fly'; $this->releasePin(); $this->clampCamera();
 				$this->message = 'Flight controls active.';
