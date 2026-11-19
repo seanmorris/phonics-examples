@@ -9,6 +9,9 @@ final class Recipe
 	private array $values;
 	/** One deterministic noise source, sampled with distinct octave offsets. */
 	private Noise $noise;
+	private float $wallStart = .055;
+	private float $wallWidth = .006;
+	private bool $layered = false;
 
 	/**
 	 * Validate a bounded world recipe before allocating any terrain samples.
@@ -17,8 +20,10 @@ final class Recipe
 	 */
 	public function __construct(array $values = [])
 	{
+		$canyon = ($values['preset'] ?? '') === 'canyon';
+		$version = $values['version'] ?? ($canyon ? 2 : 1);
 		$defaults = [
-			'version' => 1
+			'version' => $version
 			, 'seed' => 'first-light'
 			, 'preset' => 'mountain'
 
@@ -40,14 +45,14 @@ final class Recipe
 			, 'warpAmplitude' => 200.0
 			, 'warpFrequency' => 1 / 10000
 			, 'terraceSpacing' => 0.0
-			, 'terraceStrength' => .7
+			, 'terraceStrength' => $canyon && $version === 2 ? .92 : .7
 		];
 
 		if(array_diff_key($values, $defaults)) throw new \InvalidArgumentException('Unknown terrain recipe field');
 
 		$values += $defaults;
 
-		if($values['version'] !== 1) throw new \InvalidArgumentException('Unsupported terrain recipe version');
+		if(!in_array($values['version'], [1,2], true)) throw new \InvalidArgumentException('Unsupported terrain recipe version');
 
 		if(!is_string($values['seed']) && !is_int($values['seed']))
 		throw new \InvalidArgumentException('Invalid terrain seed');
@@ -92,6 +97,13 @@ final class Recipe
 			throw new \InvalidArgumentException('Invalid terrain ' . $key);
 		}
 
+		$this->layered = $values['preset'] === 'canyon' && $values['version'] === 2 && $values['terraceSpacing'] > 0 && $values['terraceStrength'] > 0;
+		if($this->layered)
+		{
+			// Allow space across the wall for shelves while preserving the unstepped contour at zero strength.
+			$this->wallStart -= .025 * $values['terraceStrength'];
+			$this->wallWidth += .105 * $values['terraceStrength'];
+		}
 		$this->values = $values;
 		$this->noise = new Noise($values['seed']);
 	}
@@ -116,6 +128,7 @@ final class Recipe
 
 		if($scale === 0.0) return [0.0,0.0,0.0];
 
+		$datum = $this->layered ? CanyonBeds::DIP[0]*$x + CanyonBeds::DIP[1]*$z : 0;
 		$jacobian = [1.0,0.0,0.0,1.0];
 
 		if($r['warpAmplitude'] > 0)
@@ -149,12 +162,29 @@ final class Recipe
 			// A narrow contour band connects a distinct floor and plateau. The quintic
 			// has zero first/second derivatives at both ends, so clamping remains C2.
 			// abs() is harmless at zero because a constant floor surrounds that point.
-			$wall = max(0.0, min(1.0, (abs($a[0]) - .055) / .006));
+			$distance = abs($a[0]) - $this->wallStart;
+			$sign = $a[0] < 0 ? -1 : 1;
+			$erosionX = $erosionZ = 0.0;
+			if($this->layered)
+			{
+				// A drainage channel cuts sideways into the escarpment and buries part of its benches.
+				$ef = 22*$f;
+				$erosion = $this->noise->sample($x*$ef+43.7, $z*$ef-81.3);
+				$retreat = .029*$r['terraceStrength'];
+				$distance -= $retreat*$erosion[0];
+				$erosionX = $retreat*$erosion[1]*$ef;
+				$erosionZ = $retreat*$erosion[2]*$ef;
+				$channel = max(0.0,min(1.0,($erosion[0]+.13)/.62));
+				$strength = $r['terraceStrength']*(1-.80*Noise::fade($channel));
+				$ds = -$r['terraceStrength']*.80*30*$channel**2*($channel-1)**2/.62*$ef;
+				$strengthX = $ds*($erosion[1]*$jacobian[0]+$erosion[2]*$jacobian[2]);
+				$strengthZ = $ds*($erosion[1]*$jacobian[1]+$erosion[2]*$jacobian[3]);
+			}
+			$wall = max(0.0, min(1.0, $distance / $this->wallWidth));
 			$value = -.55 + Noise::fade($wall) + .15 * $b[0];
-			$factor = ($a[0] < 0 ? -1 : 1) * 30 * $wall * $wall * ($wall - 1) ** 2 / .006;
-
-			$dx = $factor * $a[1] * $f + .3 * $b[1] * $f;
-			$dz = $factor * $a[2] * $f + .3 * $b[2] * $f;
+			$factor = 30 * $wall * $wall * ($wall - 1) ** 2 / $this->wallWidth;
+			$dx = $sign*$factor*$a[1]*$f - $factor*$erosionX + .3*$b[1]*$f;
+			$dz = $sign*$factor*$a[2]*$f - $factor*$erosionZ + .3*$b[2]*$f;
 		}
 		else
 		{
@@ -170,7 +200,14 @@ final class Recipe
 			, $scale * ($dx * $jacobian[1] + $dz * $jacobian[3])
 		];
 
-		if($r['terraceSpacing'] > 0)
+		if($this->layered)
+		{
+			[$relative, $factor, $displacement] = CanyonBeds::shape($height - $datum, $r['terraceSpacing'], $strength);
+			$height = $relative + $datum;
+			$dx = $factor * $dx + (1 - $factor) * CanyonBeds::DIP[0] + $displacement*$strengthX;
+			$dz = $factor * $dz + (1 - $factor) * CanyonBeds::DIP[1] + $displacement*$strengthZ;
+		}
+		elseif($r['terraceSpacing'] > 0 && $r['terraceStrength'] > 0)
 		{
 			$spacing = $r['terraceSpacing'];
 			$strength = $r['terraceStrength'];
@@ -257,11 +294,22 @@ final class Recipe
 				$gradient = $da + .24*$db;
 				break;
 			case 'canyon':
-				$wallLo = max(0.0,min(1.0,($absMin-.055)/.006));
-				$wallHi = max(0.0,min(1.0,($absMax-.055)/.006));
+				if($this->layered)
+				{
+					$ef = 22*$f;
+					$erosion = $this->noise->envelope($wx*$ef+43.7,$wz*$ef-81.3,$hx*$ef,$hz*$ef);
+					$retreat = .029*$r['terraceStrength'];
+					$absMin -= $retreat*$erosion[1];
+					$absMax -= $retreat*$erosion[0];
+					$dg = max($erosion[2],$erosion[3])*$ef;
+					$da += $retreat*$dg;
+					$strengthGradient = $r['terraceStrength']*.80*1.875/.62*$dg*$jac;
+				}
+				$wallLo = max(0.0,min(1.0,($absMin-$this->wallStart)/$this->wallWidth));
+				$wallHi = max(0.0,min(1.0,($absMax-$this->wallStart)/$this->wallWidth));
 				$lo = -.55 + Noise::fade($wallLo) + .15*$b[0];
 				$hi = -.55 + Noise::fade($wallHi) + .15*$b[1];
-				$gradient = ($wallHi === 0.0 || $wallLo === 1.0 ? 0 : 1.875/.006)*$da + .15*$db;
+				$gradient = ($wallHi === 0.0 || $wallLo === 1.0 ? 0 : 1.875/$this->wallWidth)*$da + .15*$db;
 				break;
 			default:
 				$lo = .6*$a[0] + .35*tanh(($wx-$hx)/4500) + .15*$b[0];
@@ -271,7 +319,23 @@ final class Recipe
 		$lo *= $r['heightScale']; $hi *= $r['heightScale'];
 		$gradient *= $r['heightScale']*$jac;
 		$spacing = $r['terraceSpacing'];
-		if($spacing > 0)
+		if($this->layered)
+		{
+			$datum = CanyonBeds::DIP[0]*$x + CanyonBeds::DIP[1]*$z;
+			$spread = abs(CanyonBeds::DIP[0])*$rx + abs(CanyonBeds::DIP[1])*$rz;
+			// The section is monotone. Bound its argument and its added datum separately.
+			$low = $lo-$datum-$spread; $high = $hi-$datum+$spread;
+			$strength = $r['terraceStrength'];
+			// Elevation is affine in local strength. Its two extremes enclose any gully.
+			$lo = min(CanyonBeds::shape($low,$spacing,.20*$strength)[0], CanyonBeds::shape($low,$spacing,$strength)[0])
+				+ $datum-$spread;
+			$hi = max(CanyonBeds::shape($high,$spacing,.20*$strength)[0], CanyonBeds::shape($high,$spacing,$strength)[0])
+				+ $datum+$spread;
+			// The narrowest ramp spans .46 of its bed. The widest bed is 2.96 spacing units.
+			$gradient = 4.1*$gradient + 3.1*max(abs(CanyonBeds::DIP[0]),abs(CanyonBeds::DIP[1]))
+				+ 3*$spacing*$strengthGradient;
+		}
+		elseif($spacing > 0)
 		{
 			// Within a terrace the displacement is always less than the terrace spacing.
 			// Tiny spacings can lose the fractional part of the level in binary64.
@@ -310,7 +374,7 @@ final class Recipe
 			$amplitude *= $r['persistence'];
 		}
 
-		$range = 3 * $r['heightScale'] + $detail + $r['terraceSpacing'];
+		$range = 3 * $r['heightScale'] + $detail + ($this->layered ? 3 : 1) * $r['terraceSpacing'];
 
 		return [-$range, $range];
 	}

@@ -1,4 +1,4 @@
-/** Browser batch evaluator for aligned, unedited render samples of the version-one terrain recipe. */
+/** Browser batch evaluator for aligned, unedited render samples of the terrain recipe. */
 const cells = 32, side = cells + 1, haloSide = side + 2, count = side * side;
 const diagonal = .7071067811865476;
 const gx = [1,-1,0,0,diagonal,-diagonal,diagonal,-diagonal];
@@ -8,11 +8,14 @@ const fade = t => t*t*t*(t*(t*6-15)+10);
 
 const fadeSlope = t => 30*t*t*(t-1)*(t-1);
 
-function heightSampler(r, permutation)
+function heightSampler(r, permutation, beds, ramps, dip)
 {
 	const p = permutation.concat(permutation);
+	const layered = r.preset === 'canyon' && r.version === 2 && r.terraceSpacing > 0 && r.terraceStrength > 0;
+	const wallStart = layered ? .055 - .025*r.terraceStrength : .055;
+	const wallWidth = layered ? .006 + .105*r.terraceStrength : .006;
 	const warpX = new Float64Array(3), warpZ = new Float64Array(3);
-	const a = new Float64Array(3), b = new Float64Array(3);
+	const a = new Float64Array(3), b = new Float64Array(3), erosion = new Float64Array(3);
 
 	function noise(x, z, gradient)
 	{
@@ -57,7 +60,7 @@ function heightSampler(r, permutation)
 
 			noise(wx*f+13.17, wz*f-9.31, a);
 			noise(wx*f*2+71.43, wz*f*2+53.11, b);
-			let dx, dz;
+			let dx, dz, localStrength, strengthX, strengthZ;
 
 
 			if(r.preset === 'coast')
@@ -70,12 +73,30 @@ function heightSampler(r, permutation)
 			}
 			else if(r.preset === 'canyon')
 			{
-				const wall = Math.max(0, Math.min(1, (Math.abs(a[0])-.055)/.006));
-				const slope = (a[0]<0 ? -1 : 1)*fadeSlope(wall)/.006;
+				let distance = Math.abs(a[0])-wallStart;
+				const sign = a[0]<0 ? -1 : 1;
+				let erosionX = 0, erosionZ = 0;
 
+				if(layered)
+				{
+					const ef = 22*f, retreat = .029*r.terraceStrength;
+					noise(wx*ef+43.7, wz*ef-81.3, erosion);
+					distance -= retreat*erosion[0];
+					erosionX = retreat*erosion[1]*ef;
+					erosionZ = retreat*erosion[2]*ef;
+
+					const channel = Math.max(0, Math.min(1, (erosion[0]+.13)/.62));
+					localStrength = r.terraceStrength*(1-.80*fade(channel));
+					const ds = -r.terraceStrength*.80*fadeSlope(channel)/.62*ef;
+					strengthX = ds*(erosion[1]*(1+wa*wf*warpX[1])+erosion[2]*wa*wf*warpZ[1]);
+					strengthZ = ds*(erosion[1]*wa*wf*warpX[2]+erosion[2]*(1+wa*wf*warpZ[2]));
+				}
+
+				const wall = Math.max(0, Math.min(1, distance/wallWidth));
+				const slope = fadeSlope(wall)/wallWidth;
 				height = -.55 + fade(wall) + .15*b[0];
-				dx = slope*a[1]*f + .3*b[1]*f;
-				dz = slope*a[2]*f + .3*b[2]*f;
+				dx = sign*slope*a[1]*f - slope*erosionX + .3*b[1]*f;
+				dz = sign*slope*a[2]*f - slope*erosionZ + .3*b[2]*f;
 			}
 			else
 			{
@@ -90,10 +111,35 @@ function heightSampler(r, permutation)
 			sx = r.heightScale*(dx*(1+wa*wf*warpX[1]) + dz*wa*wf*warpZ[1]);
 			sz = r.heightScale*(dx*wa*wf*warpX[2] + dz*(1+wa*wf*warpZ[2]));
 
-			if(r.terraceSpacing)
+			if(layered)
+			{
+				const spacing = r.terraceSpacing;
+				const datum = dip[0]*x + dip[1]*z;
+				let level = ((height-datum) % (10*spacing))/spacing;
+
+				if(level < -5) level += 10;
+
+				if(level >= 5) level -= 10;
+
+				let i = 0;
+
+				while(i < beds.length-2 && level >= beds[i+1]) i++;
+
+				const width = beds[i+1]-beds[i], fraction = (level-beds[i])/width;
+				const [start,end] = ramps[i];
+				const t = Math.max(0, Math.min(1, (fraction-start)/(end-start)));
+				const displacement = width*spacing*(fade(t)-fraction);
+				height += localStrength*displacement;
+
+				const slope = 1-localStrength + localStrength*fadeSlope(t)/(end-start);
+				sx = slope*sx + (1-slope)*dip[0] + displacement*strengthX;
+				sz = slope*sz + (1-slope)*dip[1] + displacement*strengthZ;
+			}
+			else if(r.terraceSpacing && r.terraceStrength)
 			{
 				const terrace = height/r.terraceSpacing, level = Math.floor(terrace), t = terrace-level;
 				height += r.terraceStrength*(r.terraceSpacing*(level+fade(t))-height);
+
 				const slope = 1-r.terraceStrength+r.terraceStrength*fadeSlope(t);
 				sx *= slope;
 				sz *= slope;
@@ -116,9 +162,9 @@ function heightSampler(r, permutation)
 }
 
 /** Pack the same vertex layout, parent triangle interpolation and LOD error as Scene's incremental builder. */
-export function patchMesher(recipe, permutation)
+export function patchMesher(recipe, permutation, beds, ramps, dip)
 {
-	const heightAt = heightSampler(recipe, permutation), half = recipe.worldSize/2;
+	const heightAt = heightSampler(recipe, permutation, beds, ramps, dip), half = recipe.worldSize/2;
 	const halo = new Float64Array(haloSide*haloSide);
 
 	return (node, parentBytes) => {
@@ -232,7 +278,7 @@ if(typeof WorkerGlobalScope !== 'undefined' && globalThis instanceof WorkerGloba
 	globalThis.onmessage = ({data}) => {
 		if(data.recipe)
 		{
-			build = patchMesher(data.recipe, data.permutation);
+			build = patchMesher(data.recipe, data.permutation, data.beds, data.ramps, data.dip);
 
 			return;
 		}

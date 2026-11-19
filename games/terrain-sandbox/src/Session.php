@@ -242,8 +242,11 @@ final class Session
 				break;
 			case 'generate':
 				$recipe = $this->landscape->recipe();
-				$recipe['preset'] = (string)($action['preset'] ?? 'coast');
+				$preset = (string)($action['preset'] ?? 'coast');
+				if($preset !== $recipe['preset'] || ($preset === 'canyon' && $recipe['version'] === 1)) unset($recipe['terraceStrength']);
+				$recipe['preset'] = $preset;
 				$recipe['seed'] = (string)($action['seed'] ?? 'first-light');
+				unset($recipe['version']); // A newly generated world uses the current preset's recipe.
 				$defaults = match($recipe['preset']) {
 					'mountain' => [1400.0,1 / 2200], 'canyon' => [650.0,1 / 4000], default => [420.0,1 / 6000]
 				};

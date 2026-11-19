@@ -93,6 +93,7 @@ expect(!$session->paused && $session->time > $time, 'Resume advances the simulat
 input($session, ['actions' => [['type' => 'generate','preset' => 'canyon','seed' => 'another-seed']]]);
 expect($session->landscape->recipe()['preset'] === 'canyon', 'Generation uses the requested preset');
 expect($session->landscape->recipe()['seed'] === 'another-seed', 'Generation uses the requested seed');
+expect($session->landscape->recipe()['version'] === 2, 'Generating Canyon country selects the bedded recipe');
 expect($session->landscape->recipe()['terraceSpacing'] === 80.0, 'Canyon generation supplies smooth terrace spacing by default');
 expect($session->water->level() === -450.0, 'Canyon generation exposes its floor instead of flooding the valley');
 expect($session->camera->yaw === 2.68 && $session->camera->pitch === -.17,

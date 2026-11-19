@@ -1496,10 +1496,17 @@ final class Scene
 		if($program !== $this->skyProgram) $this->scalar($program, 'uWaterLevel', $this->water->level());
 		if($program === $this->groundProgram)
 		{
-			$this->scalar($program, 'uTerrainStyle', match($this->landscape->recipe()['preset'])
+			$recipe = $this->landscape->recipe();
+			$this->scalar($program, 'uTerrainStyle', match($recipe['preset'])
 			{
-				'canyon' => 2, 'mountain' => 1, default => 0
+				'canyon' => $recipe['version'] === 2 ? 3 : 2, 'mountain' => 1, default => 0
 			});
+			if($recipe['preset'] === 'canyon' && $recipe['version'] === 2)
+			{
+				glUniform4fv($program->location('uBedContacts[0]'), 2, CanyonBeds::CONTACTS);
+				$spacing = $recipe['terraceSpacing'] ?: max(1, $recipe['heightScale']/8);
+				glUniform3f($program->location('uBedDatum'), CanyonBeds::DIP[0], CanyonBeds::DIP[1], max(.001, $spacing));
+			}
 			$this->terrainShadows->bind($program);
 		}
 		glActiveTexture(GL_TEXTURE0);

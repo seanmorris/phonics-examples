@@ -21,6 +21,7 @@
     "src/AtmosphereRenderer.php",
     "src/BrowserPatchBuilder.php",
     "src/Camera.php",
+    "src/CanyonBeds.php",
     "src/Edits.php",
     "src/GpuPatch.php",
     "src/HeightTile.php",

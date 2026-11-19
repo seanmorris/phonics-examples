@@ -45,7 +45,8 @@ final class BrowserPatchBuilder
 			$recipe = $source->recipe();
 			$noise = new Noise($recipe['seed']);
 			$this->available = ($this->bridge)('configure', $this->path, '', json_encode([
-				'recipe' => $recipe, 'permutation' => $noise->permutation()
+				'recipe' => $recipe, 'permutation' => $noise->permutation(),
+				'beds' => CanyonBeds::CONTACTS, 'ramps' => CanyonBeds::RAMPS, 'dip' => CanyonBeds::DIP
 			], JSON_THROW_ON_ERROR)) !== 'unavailable';
 			$this->source = $source;
 			$this->revision = $source->revision();

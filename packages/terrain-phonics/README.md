@@ -30,7 +30,7 @@ The guide never feeds back from an already attenuated surface. Rounded mountain 
 Surface normals differentiate the final reconstructed height, including all terrain edits.
 Optional domain warps and quintic terraces retain continuous derivatives; the guide includes their full derivative chain.
 `warpAmplitude` bends the larger landforms, while `terraceSpacing` and `terraceStrength` add smooth terrace-like steps.
-The canyon preset separates a low floor from a high plateau with narrow, nearly vertical walls.
+In new canyon recipes, exposed rock and physical ledges share a sequence of dipping beds. Terrace spacing scales the thickness of the sequence in metres. Resistant beds form cliffs above shelves, and softer beds form debris slopes. Version-one recipes retain their original canyon geometry for replay.
 Smooth joins preserve derivatives; a heightfield still cannot represent an exactly vertical face or an overhang.
 
 Only requested lattice nodes are generated. Packed tiles have a bounded LRU cache; `pin()` reserves a small

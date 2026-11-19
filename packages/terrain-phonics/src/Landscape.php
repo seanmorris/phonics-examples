@@ -300,7 +300,7 @@ final class Landscape implements TerrainSurface
 			|| $value['cursor'] < 0 || $value['cursor'] > count($value['history']) || $value['revision'] < 0
 		) throw new \InvalidArgumentException('Invalid terrain document');
 
-		$result = new self($value['recipe']);
+		$result = new self($value['recipe'] + ['version' => 1]);
 		$all = [];
 
 		foreach($value['history'] as $batch)
