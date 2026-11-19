@@ -10,7 +10,7 @@ Run `node scripts/bench-terrain.mjs` from the examples checkout with the preview
 
 While the view moves, the renderer selects terrain detail at most ten times a second. To compare frame rates without that limit, run `document.querySelector('canvas').terrainSandboxDebug.values({selectionInterval: 0})` in the browser console, or pass another spacing in seconds up to 1. The same object's `state.selectionInterval` reports the value in use and `state.renderer.selections` counts selections. The value has no control in the panel and is not saved with a landscape.
 
-A selection that needs more than half a millisecond of work continues over the following frames and changes the drawn terrain in one of them. Set `selectionSliceMs` through the same `values()` call to give each frame more or less of that work, or to 0 to run every selection whole in one frame as before. `state.selectionSliceMs` reports the value in use, and `state.renderer` reports `selectionWorkMs` for the last frame, `selectionUpdates` for the frames the last selection took and `selectionInFlight` while one is under way. This value is not saved either.
+A selection that needs more than 3 milliseconds of work continues over the following frames and changes the drawn terrain in one of them. Set `selectionSliceMs` through the same `values()` call to give each frame more or less of that work, or to 0 to run every selection whole in one frame as before. `state.selectionSliceMs` reports the value in use, and `state.renderer` reports `selectionWorkMs` for the last frame, `selectionUpdates` for the frames the last selection took and `selectionInFlight` while one is under way. This value is not saved either.
 
 ## Watercraft model
 

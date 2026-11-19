@@ -99,8 +99,12 @@ final class Scene
 	public const DEFAULT_SELECTION_INTERVAL = .1;
 	/** Seconds between detail selections while the view moves. Zero selects on every change, as before the limiter. */
 	public float $selectionInterval = self::DEFAULT_SELECTION_INTERVAL;
-	/** Default for selectionSliceMs, shared with applications that expose the setting. */
-	public const DEFAULT_SELECTION_SLICE_MS = .5;
+	/**
+	 * Default for selectionSliceMs, shared with applications that expose the setting. It is set for PHP compiled to
+	 * WebAssembly in a browser, where a whole selection takes 10 to 14 ms and 3 ms spreads it over about eight
+	 * frames. Native PHP runs about six times faster, so the same work there needs about 0.5 ms.
+	 */
+	public const DEFAULT_SELECTION_SLICE_MS = 3.0;
 	/**
 	 * Milliseconds of selection work one update aims at. A selection that needs more continues on later updates
 	 * and changes the drawn cover in one of them. An update can run past the slice by one pause interval, or by
