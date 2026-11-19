@@ -235,6 +235,51 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	expect(errors).toEqual([]);
 });
 
+test('the default canyon lets all four wheels leave the ground and touch down again', async({page}) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await page.setViewportSize({width:672,height:420});
+	await page.goto('/games/terrain-sandbox/');
+	const view = canvas(page);
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60000});
+	await page.locator('[name="preset"]').selectOption('canyon');
+	await control(page,'generate').click();
+	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
+	await control(page,'car').click();
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await view.evaluate(el => {
+		const gl = el.getContext('webgl2');
+		const draw = gl.drawElements.bind(gl), locations = new Map();
+		el.suspensionDraw = {drooped:false,compressed:false};
+		gl.drawElements = (...args) => {
+			const program = gl.getParameter(gl.CURRENT_PROGRAM);
+			if(!locations.has(program)) locations.set(program,gl.getUniformLocation(program,'uWheelTravel'));
+			const location = locations.get(program);
+			if(location) {
+				const travel = gl.getUniform(program,location);
+				el.suspensionDraw.drooped ||= travel.every(v => v < -.12);
+				el.suspensionDraw.compressed ||= travel.some(v => v > .04);
+			}
+			return draw(...args);
+		};
+		new MutationObserver(() => {
+			const car = JSON.parse(el.dataset.terrainSandbox).car;
+			if(car?.motion === 'airborne' && car.wheelContacts === 0) el.airborneCar = car;
+			if(el.airborneCar && car?.wheelContacts === 4) el.landedCar = car;
+		}).observe(el, {attributes:true,attributeFilter:['data-terrain-sandbox']});
+	});
+	await view.focus();
+	await page.keyboard.down('w');
+	await expect.poll(() => view.evaluate(el => !!el.landedCar), {timeout:90000}).toBe(true);
+	await page.keyboard.up('w');
+	const result = await view.evaluate(el => [el.airborneCar,el.landedCar,el.suspensionDraw,el.getContext('webgl2').getError()]);
+	expect(result[1].z).toBeGreaterThan(result[0].z);
+	expect(result[1].recoveries).toBe(0);
+	expect(result[2]).toEqual({drooped:true,compressed:true});
+	expect(result[3]).toBe(0);
+	expect(errors).toEqual([]);
+});
+
 test('a rollover settles on the roof before the Testarossa recovers', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));

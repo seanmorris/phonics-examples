@@ -34,7 +34,7 @@ final class CarChase
 			return true;
 		}
 		$this->previousEye = clone $camera;
-		$landed = $to['motion'] === 'driving' && $from['motion'] !== 'driving';
+		$landed = $to['motion'] === 'driving' && in_array($from['motion'],['overturned','tumbling'],true);
 		$this->previousCar = $landed ? $to : $from;
 		$this->follow($camera, $to, $land, 1 - 2**(-$dt/.12), 1 - 2**(-$dt/.17), 1 - 2**(-$dt/.24), $dt);
 		return true;
@@ -51,7 +51,7 @@ final class CarChase
 		$ground = $land->height(max(-$half,min($half,$x)), max(-$half,min($half,$z)));
 		// Measure the grade over the whole camera boom. Small changes in tire pitch should stay on the chassis.
 		$heightAtCar = $pose['y'];
-		if($pose['motion'] !== 'driving')
+		if(in_array($pose['motion'],['overturned','tumbling'],true))
 			$heightAtCar += .5*(cos($pose['pitch'])*cos($pose['roll']) - 1);
 		$grade = max(-.5, min(.5, ($heightAtCar - $ground) / self::DISTANCE));
 		$floor = $ground + 1.35;
@@ -86,6 +86,11 @@ final class CarChase
 			$delta = $pose[$key] - $previous;
 			if(in_array($key,['yaw','pitch','roll','wheelSpin'],true)) $delta = self::angle($delta);
 			$pose[$key] = $previous + $alpha*$delta;
+		}
+		foreach($pose['wheelTravel'] as $i => $travel)
+		{
+			$previous = $this->previousCar['wheelTravel'][$i];
+			$pose['wheelTravel'][$i] = $previous + $alpha*($travel-$previous);
 		}
 		return [$eye,$pose];
 	}

@@ -94,6 +94,7 @@ final class VehicleModel
 		glUniformMatrix4fv($p->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
 		if(isset($pose['wheelSpin']))
 		{
+			glUniform4f($p->location('uWheelTravel'), ...$pose['wheelTravel']);
 			glUniform2f($p->location('uWheelAngles'), $pose['wheelSpin'], $pose['steering']);
 			glUniform4f($p->location('uWheelLayout'), Car::FRONT_TRACK / 2, Car::REAR_TRACK / 2, Car::WHEELBASE / 2, Car::TIRE_RADIUS);
 		}

@@ -17,6 +17,7 @@
       "autoload.php",
       "src/Car.php",
       "src/CarChase.php",
+      "src/CarSuspension.php",
       "src/CarTumble.php",
       "src/Session.php",
       "src/VehicleModel.php"
@@ -52,13 +53,14 @@
     "assets/testarossa/license.txt": "sha256-/9ZQt2jc5NTX9mZTSd3OGLgMWNIQHyBLpSc3HI88iNU=",
     "assets/testarossa/mesh.bin.gz": "sha256-5rWBhpvY6uCtuxW0mqMd8h1fQpKHn8wStOHFQHXROvo=",
     "assets/vehicles/model.frag": "sha256-kwiQrzU81dsmxveHLdTR7giBSIjzkEEeMG1+RJpDs8k=",
-    "assets/vehicles/model.vert": "sha256-Mc7V02w+mgqSD0BQJRPLFTRXyUDUbFjEMYLQMKlesqU=",
+    "assets/vehicles/model.vert": "sha256-KINA4lT0onf4AIsuNNq/AV4oQIo5QcdPvvMiFOZdvzM=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
     "browser/game.mjs": "sha256-N5HarnN12v85KSGJ/TjXdaMijnYKffbqrT2tkNvQoS8=",
-    "src/Car.php": "sha256-v5v5WbuADjTpmnrToYEjUJAdDoBKgup5rKTGGcjO6+I=",
-    "src/CarChase.php": "sha256-cFRv0Chq1TbaOQch0GZ3usvRk081hyzNgWS35WzyVxQ=",
-    "src/CarTumble.php": "sha256-XN/q4GcQ/NrxU0aW3Ieez9UBHEMWf5XFWlRJ3PBap6U=",
+    "src/Car.php": "sha256-3jlMklD/0JAlebd7UuSCMp+NS48tEeTjEct/EB+HP1w=",
+    "src/CarChase.php": "sha256-Nrf61HNyT1EkNVBzGZPwFWOK4pUshrMtwEo49LZmUvA=",
+    "src/CarSuspension.php": "sha256-bq66+ExjcWbqIeSGZFOAWz04PlryL7Bd5bWUf2Mqhl4=",
+    "src/CarTumble.php": "sha256-llr3HAmWXN5xT5hRXvAnkGZm42H37B2zWbqYxQP9xFg=",
     "src/Session.php": "sha256-BPuLBqg/WpTdDylAlqmySUSl2Ew46ol3hj4mMQE+u34=",
-    "src/VehicleModel.php": "sha256-b/nGYfcotUXJE7KwDI8xMewn4gZawJnqY75Rw0QDGis="
+    "src/VehicleModel.php": "sha256-lZ+SZY7V2BODOGwtxxL/9CtIJ/DEMG+5lif2uov9iB4="
   }
 }

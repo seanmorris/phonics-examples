@@ -26,7 +26,7 @@ Use **Water color** to tint the surface and underwater haze. Raise **Transparenc
 
 Select **Drive car** or press **C** to take the Testarossa. The sandbox checks the ground below you first, then searches nearby for a dry, gently sloping patch with room to pull away. Graded roads use the same ground surface. If you start over water or a cliff and the search finds nothing, fly closer to land and try again.
 
-**W** accelerates. **S** brakes while moving forward and reverses when held. **A/D** steer. An inward bank helps the tires carry speed through a corner. Steeper faces can tip the car into a roll, and a sharp crest can lift the wheels clear. A wheels-down landing gives you control again. If the car comes to rest on its roof, it waits 1.5 seconds before righting itself. It uses the last stable patch if the landing spot is too steep. Water and the map edge still bound the drive. Press **F** to return to flight.
+**W** accelerates. **S** brakes while moving forward and reverses when held. **A/D** steer. An inward bank helps the tires carry speed through a corner. The wheels move independently over bumps. A crest you can roll over slowly can launch the car at speed. It carries its momentum through the air, and the suspension compresses on landing. Steeper faces can tip the car into a roll. If the car comes to rest on its roof, it waits 1.5 seconds before righting itself. It uses the last stable patch if the landing spot is too steep. Water and the map edge still bound the drive. Press **F** to return to flight.
 
 ## Ride the water
 

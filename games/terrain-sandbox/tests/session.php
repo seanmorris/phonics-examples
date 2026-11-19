@@ -329,6 +329,56 @@ foreach(['KeyD','KeyA'] as $steer)
 }
 expect($turns['KeyD'] < -2*$turns['KeyA'] && $turns['KeyA'] > 0, 'Banking into the turn provides more cornering grip than adverse camber');
 
+// Cross exactly the same crest at low speed and at full throttle.
+foreach([false,true] as $fast)
+{
+	$jump = new Session($dry);
+	$jump->landscape->queue(['type'=>'raise','x'=>0,'z'=>0,'radius'=>22,'amount'=>2.8]);
+	$jump->landscape->commit();
+	$jump->camera->position = [0,30,-75]; $jump->camera->yaw = M_PI;
+	enterCar($jump);
+	$air = 0; $peakGap = 0.0; $gravityError = 0.0; $drift = 0.0; $roll = 0.0;
+	$landingStroke = 0.0; $previous = $older = $jump->car->state();
+	for($i = 0; $i < 1700 && $previous['z'] < 60; $i++)
+	{
+		$flying = $previous['motion'] === 'airborne';
+		input($jump, ['keys'=>['KeyW'=>!$flying && ($fast || $previous['speed'] < 6), 'KeyS'=>$flying,'KeyA'=>$flying]]);
+		$jump->step(1/60);
+		$pose = $jump->car->state();
+		$roll = max($roll,abs($pose['roll']));
+		if($pose['motion'] === 'airborne')
+		{
+			$air++;
+			$peakGap = max($peakGap, $pose['y']-$jump->landscape->height($pose['x'],$pose['z']));
+			if($flying && $older['motion'] === 'airborne')
+			{
+				$gravityError = max($gravityError,abs(3600*($pose['y']-2*$previous['y']+$older['y'])+9.81));
+				$drift = max($drift,abs($pose['yaw']-$previous['yaw']),abs($pose['speed']-$previous['speed']),
+					abs($pose['z']-2*$previous['z']+$older['z']));
+			}
+		}
+		elseif($air) $landingStroke = max($landingStroke,max($pose['wheelTravel']));
+		$older = $previous; $previous = $pose;
+	}
+	expect($pose['z'] >= 60 && $pose['motion'] === 'driving' && $pose['recoveries'] === 0, 'A clean crest crossing finishes under driver control');
+	if($fast)
+	{
+		expect($air > 30 && $peakGap > 1 && $gravityError < 1e-5 && $drift < 1e-7,
+			'All four tires can unload, with gravity alone curving the flight path even under braking and steering');
+		expect($landingStroke > .08 && $pose['wheelContacts'] === 4, 'The tires take up the landing through real suspension travel');
+	}
+	else expect($air === 0 && $roll < 1e-6, 'A slow crossing keeps tire contact and a symmetric crest induces no roll');
+	$jump->close();
+}
+
+$springs = new TerrainSandbox\CarSuspension;
+$springs->reset([.02,0.0,0.0,0.0,[0,0,0,0]]);
+$springs->step(1/60,[.07,0,0,0],true);
+expect($springs->travel[0] > .05 && abs($springs->travel[1]) < .01 && $springs->y < .032,
+	'A single tire takes up a short bump before the sprung chassis follows');
+for($i = 0; $i < 240; $i++) $springs->step(1/60,[0,0,0,0],false);
+expect($springs->resting && abs($springs->y-.02) < .001, 'A parked suspension settles back to its static ride height');
+
 // Drive into a steep face from the same approach, varying its width to land on the roof or the tires.
 foreach([[45,16,30,true],[55,32,34,false]] as [$z,$radius,$amount,$landsOnRoof])
 {

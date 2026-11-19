@@ -12,6 +12,7 @@ uniform mat3 uRotation;
 uniform vec3 uOrigin;
 uniform vec2 uWheelAngles; // spin and front steering, in radians
 uniform vec4 uWheelLayout; // front/rear half track, half wheelbase, tire radius
+uniform vec4 uWheelTravel; // spring displacement at front -X/+X, then rear -X/+X
 out vec3 vRelative, vNormal;
 out vec2 vUv;
 flat out vec4 vPaint;
@@ -34,6 +35,8 @@ void main()
 		normal.yz = rolling * normal.yz;
 		normal.xz = steering * normal.xz;
 		position += hub;
+		position.y += front ? (hub.x < 0.0 ? uWheelTravel.x : uWheelTravel.y)
+			: (hub.x < 0.0 ? uWheelTravel.z : uWheelTravel.w);
 	}
 	vRelative = uOrigin + uRotation * position;
 	vNormal = uRotation * normal;

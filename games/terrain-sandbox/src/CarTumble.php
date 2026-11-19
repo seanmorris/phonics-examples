@@ -22,13 +22,13 @@ final class CarTumble
 	public bool $onWheels = false, $settled = false, $roofDown = false;
 
 	public function __construct(float $x, float $y, float $z, float $yaw,
-		public float $pitch, public float $roll, float $speed, float $verticalSpeed,
+		public float $pitch, public float $roll, float $horizontalSpeed, float $verticalSpeed,
 		private float $pitchRate, private float $rollRate)
 	{
 		$this->sinYaw = sin($yaw); $this->cosYaw = cos($yaw);
 		[$ox,$oy,$oz] = $this->offsetToCG();
 		$this->x = $x + $ox; $this->y = $y + $oy; $this->z = $z + $oz;
-		$this->ahead = $speed*cos($pitch); $this->up = $verticalSpeed;
+		$this->ahead = $horizontalSpeed; $this->up = $verticalSpeed;
 	}
 
 	private function offsetToCG(): array
