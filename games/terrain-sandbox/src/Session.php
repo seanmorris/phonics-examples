@@ -734,7 +734,7 @@ final class Session
 	/** How many checkpoints the course holds. */
 	private function checkpointCount(): int
 	{
-		return count(array_filter($this->course->gates(),
+		return count(array_filter($this->course->gates(false),
 			static fn(array $gate): bool => $gate['role'] === 'checkpoint'));
 	}
 

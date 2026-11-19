@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace TerrainSandbox;
 
-use TerrainPhonics\Water;
+use TerrainPhonics\WaterSurface;
 
 /**
  * Race gates placed on a landscape, and the order a race passes them in.
@@ -26,8 +26,18 @@ final class Course
 	 * Anything that remembers the course, such as a race in progress or a cache of post positions, compares it.
 	 */
 	public int $revision = 0;
-	/** Height of each water gate's origin at the last float() call, by gate id. */
-	private array $floating = [];
+	/** Water surface and simulation time of the last float() call. */
+	private ?WaterSurface $surface = null;
+	private float $surfaceTime = 0.0;
+	/**
+	 * Ids of the water gates that stood at the last float() call. Each one's height is sampled from the surface the
+	 * first time something asks for it, and kept in $floating until the next call, so a fixed step that only races
+	 * through one gate samples the water for that gate alone.
+	 */
+	private array $afloat = [], $floating = [];
+	/** Ids of the water gates for the revision in $waterRevision. */
+	private array $waterIds = [];
+	private int $waterRevision = -1;
 	/** Road posts in world space for the revision in $postsRevision. */
 	private array $posts = [];
 	private int $postsRevision = -1, $signatureRevision = -1;
@@ -54,7 +64,7 @@ final class Course
 			'x' => $x, 'y' => $y, 'z' => $z, 'yaw' => $yaw];
 		if($role === 'start') $gate['laps'] = $existing['laps'] ?? max(1, min(self::MAX_LAPS, $laps));
 		if($role === 'checkpoint') $gate['number'] = count($this->checkpoints) + 1;
-		unset($this->floating[$gate['id']]);
+		unset($this->afloat[$gate['id']], $this->floating[$gate['id']]);
 		if($role === 'start') $this->start = $gate;
 		elseif($role === 'finish') $this->finish = $gate;
 		else $this->checkpoints[] = $gate;
@@ -81,7 +91,7 @@ final class Course
 			break;
 		}
 		if($removed === null) return null;
-		unset($this->floating[$id]);
+		unset($this->afloat[$id], $this->floating[$id]);
 		$this->revision++;
 		return $removed;
 	}
@@ -95,7 +105,7 @@ final class Course
 		$count = $this->count();
 		if($count === 0) return 0;
 		$this->start = $this->finish = null;
-		$this->checkpoints = $this->floating = [];
+		$this->checkpoints = $this->afloat = $this->floating = [];
 		$this->revision++;
 		return $count;
 	}
@@ -133,27 +143,40 @@ final class Course
 	 */
 	public function gate(int $id): ?array
 	{
-		foreach($this->gates() as $gate) if($gate['id'] === $id) return $gate;
+		if(($this->start['id'] ?? null) === $id) return $this->pose($this->start);
+		if(($this->finish['id'] ?? null) === $id) return $this->pose($this->finish);
+		foreach($this->checkpoints as $gate) if($gate['id'] === $id) return $this->pose($gate);
 		return null;
 	}
 
 	/**
 	 * List the gates: the start gate, the checkpoints by number, then the finish gate.
+	 * @param bool $afloat Whether water gates report their height on the waves. Without it each gate reports the
+	 * height it was placed at and the water is not sampled; height() then gives the height on the waves.
 	 * @return list<array> Each gate's id, role, kind, x, y, z and yaw, with laps on the start gate and number on a
 	 * checkpoint. y is the origin's height now, so a water gate reports the wave height at its position.
 	 */
-	public function gates(): array
+	public function gates(bool $afloat = true): array
 	{
 		$gates = [];
-		if($this->start !== null) $gates[] = $this->pose($this->start);
-		foreach($this->checkpoints as $gate) $gates[] = $this->pose($gate);
-		if($this->finish !== null) $gates[] = $this->pose($this->finish);
+		if($this->start !== null) $gates[] = $afloat ? $this->pose($this->start) : $this->start;
+		foreach($this->checkpoints as $gate) $gates[] = $afloat ? $this->pose($gate) : $gate;
+		if($this->finish !== null) $gates[] = $afloat ? $this->pose($this->finish) : $this->finish;
 		return $gates;
 	}
 
+	/**
+	 * Report a gate's height now.
+	 * @param array $gate A gate from this course.
+	 * @return float The wave height at a gate that floated at the last float() call, otherwise its placed height.
+	 */
+	public function height(array $gate): float { return $this->pose($gate)['y']; }
+
 	private function pose(array $gate): array
 	{
-		if(isset($this->floating[$gate['id']])) $gate['y'] = $this->floating[$gate['id']];
+		if(isset($this->afloat[$gate['id']]))
+			$gate['y'] = $this->floating[$gate['id']]
+				??= $this->surface->sample($gate['x'], $gate['z'], $this->surfaceTime)['height'];
 		return $gate;
 	}
 
@@ -190,23 +213,34 @@ final class Course
 
 	/**
 	 * Lift each water gate to the water surface at its position, so it rises and falls with the waves and wakes.
-	 * @param Water $water Shared water surface.
+	 * @param WaterSurface $water Shared water surface. Only its sample() is called.
 	 * @param float $time Simulation time in seconds.
-	 * @return void Updates the heights gates() reports. The course revision does not change.
+	 * @return void Updates the heights gates() reports. The course revision does not change. Each gate samples the
+	 * surface at this time when its height is first asked for, which gives the height an immediate sample would, as
+	 * long as the surface's waves, level and wakes stay as they are until the next call.
 	 */
-	public function float(Water $water, float $time): void
+	public function float(WaterSurface $water, float $time): void
 	{
-		foreach([$this->start, ...$this->checkpoints, $this->finish] as $gate)
-			if($gate !== null && $gate['kind'] === 'water')
-				$this->floating[$gate['id']] = $water->sample($gate['x'], $gate['z'], $time)['height'];
+		$this->surface = $water;
+		$this->surfaceTime = $time;
+		$this->afloat = $this->waterIds();
+		$this->floating = [];
 	}
 
 	/** Whether any gate floats on the water. */
-	public function floats(): bool
+	public function floats(): bool { return $this->waterIds() !== []; }
+
+	/**
+	 * Find the water gates, once per revision.
+	 * @return array<int,true> Water gate ids as keys.
+	 */
+	private function waterIds(): array
 	{
-		foreach([$this->start, ...$this->checkpoints, $this->finish] as $gate)
-			if($gate !== null && $gate['kind'] === 'water') return true;
-		return false;
+		if($this->waterRevision === $this->revision) return $this->waterIds;
+		$this->waterIds = [];
+		foreach($this->gates(false) as $gate) if($gate['kind'] === 'water') $this->waterIds[$gate['id']] = true;
+		$this->waterRevision = $this->revision;
+		return $this->waterIds;
 	}
 
 	/**
@@ -219,7 +253,7 @@ final class Course
 	{
 		if($this->postsRevision === $this->revision) return $this->posts;
 		$posts = [];
-		foreach($this->gates() as $gate)
+		foreach($this->gates(false) as $gate)
 		{
 			if($gate['kind'] !== 'road') continue;
 			$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);

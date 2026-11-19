@@ -13,7 +13,7 @@ use TerrainPhonics\Water;
  * stacked in its atlas, so a gate's role is a texture offset chosen per draw.
  *
  * A gate is drawn only within its kind's range of the eye and when its extent's box meets the view. The program and
- * each kind's mesh are uploaded on the first frame that draws them.
+ * the mesh of each kind the course holds are uploaded on the course's first frame, whether or not a gate is in view.
  */
 final class GateModel
 {
@@ -25,6 +25,8 @@ final class GateModel
 	private ?Program $program = null;
 	/** Meshes by kind, uploaded on first use. */
 	private array $meshes = [];
+	/** Kinds of the gates in $course at $revision, as keys. */
+	private array $kinds = [];
 	/** Per-gate drawing data for $course at $revision: basis, texture offset and culling box. */
 	private array $placed = [];
 	private ?Course $course = null;
@@ -58,35 +60,52 @@ final class GateModel
 		$this->drawn = 0;
 		// Loading a file or generating a landscape replaces the course, whose revision count starts again.
 		if($course !== $this->course || $course->revision !== $this->revision) $this->place($course);
+		// Compiling the shaders and uploading a mesh hold up the frame they happen in. Doing both when the course
+		// loads, or when a gate of a new kind is placed, keeps that stall out of a race, where a gate can first come
+		// into view at speed. In Chromium under SwiftShader the compile took 0.7 to 2.3 seconds in three runs.
+		foreach(array_keys($this->kinds) as $kind)
+			$this->meshes[$kind] ??= new BakedMesh($this->folder . $this->shapes->kind($kind)['mesh']);
+		if($this->kinds) $this->program ??= VehicleModel::program();
 		$eye = $camera->position;
 		$planes = $camera->clipPlanes($width, $height);
 		$visible = [];
 		$nearest = INF;
 		$altitude = $eye[1];
-		foreach($course->gates() as $gate)
+		$surface = null;
+		foreach($course->gates(false) as $gate)
 		{
 			$placed = $this->placed[$gate['id']];
-			$y = $gate['y'];
-			$dx = $gate['x'] - $eye[0]; $dy = $y + $placed['middle'] - $eye[1]; $dz = $gate['z'] - $eye[2];
+			// A floating gate stands somewhere within the water's height range. Culling against that range means only
+			// the gates that draw sample the waves for their exact height.
+			$low = $high = $gate['y'];
+			if($placed['kind'] === 'water')
+			{
+				$surface ??= $water->heightRange();
+				$low = min($low, $surface[0]); $high = max($high, $surface[1]);
+			}
+			$dx = $gate['x'] - $eye[0]; $dz = $gate['z'] - $eye[2];
+			$dy = ($low + $high) / 2 + $placed['middle'] - $eye[1];
 			$distance = $dx * $dx + $dy * $dy + $dz * $dz;
 			if($distance > $placed['range']) continue;
-			$hidden = Camera::rejectingPlane($planes, $eye, $placed['box'], $y + $placed['low'], $y + $placed['high'],
-				$this->cull[$gate['id']] ?? -1);
+			$hidden = Camera::rejectingPlane($planes, $eye, $placed['box'], $low + $placed['low'],
+				$high + $placed['high'], $this->cull[$gate['id']] ?? -1);
 			if($hidden >= 0) { $this->cull[$gate['id']] = $hidden; continue; }
 			unset($this->cull[$gate['id']]);
+			if($placed['kind'] === 'water') $gate['y'] = $course->height($gate);
+			$y = $gate['y'];
 			$visible[$placed['kind']][] = [$placed, $gate];
 			if($distance < $nearest) { $nearest = $distance; $altitude = $y; }
 		}
 		if($visible)
 		{
-			$p = $this->program ??= VehicleModel::program();
+			$p = $this->program;
 			VehicleModel::light($p, $camera, $sky, $water, $width, $height, $altitude);
 			$rotation = $p->location('uRotation');
 			$origin = $p->location('uOrigin');
 			$offset = $p->location('uUvOffset');
 			foreach($visible as $kind => $gates)
 			{
-				$mesh = $this->meshes[$kind] ??= new BakedMesh($this->folder . $this->shapes->kind($kind)['mesh']);
+				$mesh = $this->meshes[$kind];
 				$mesh->bind();
 				foreach($gates as [$placed, $gate])
 				{
@@ -109,11 +128,12 @@ final class GateModel
 	 */
 	private function place(Course $course): void
 	{
-		$this->placed = $this->cull = [];
+		$this->placed = $this->cull = $this->kinds = [];
 		$atlas = $this->shapes->atlas;
-		foreach($course->gates() as $gate)
+		foreach($course->gates(false) as $gate)
 		{
 			$extent = $this->shapes->kind($gate['kind'])['extent'];
+			$this->kinds[$gate['kind']] = true;
 			$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
 			// A square around the gate holds its footprint at any heading.
 			$reach = sqrt($extent['halfWidth'] ** 2 + $extent['halfDepth'] ** 2);
