@@ -49,5 +49,5 @@ vec3 terrainAtmosphere(vec3 ray, float eyeAltitude, float distanceMeters, vec3 s
 		terrainAerialSlice(uAerialCacheTransmittance, pixel, high, false), weight);
 	vec3 radiance = mix(terrainAerialSlice(uAerialCacheRadiance, pixel, low, true),
 		terrainAerialSlice(uAerialCacheRadiance, pixel, high, true), weight);
-	return max(vec3(0.0), sceneLinear) * transmittance + radiance;
+	return mix(terrainNightSky(normalize(ray).y), max(vec3(0.0), sceneLinear), transmittance) + radiance;
 }

@@ -179,7 +179,8 @@ void main()
 	if(uTerrainStyle > 2.5)
 		ambient += vec3(0.11,0.066,0.048) * illumination * (1.0 - max(0.0,n.y));
 	vec3 lit = albedo * (ambient + direct * max(0.0,dot(mix(lightingNormal,n,painted),uSunDirection)) * shadow);
-	lit = waterColumnLight(lit, vRelative, uEye.y, uWaterLevel, illumination);
+	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
+	lit = waterColumnLight(lit, vRelative, uEye.y, uWaterLevel, vec3(illumination) + uNightAmbient);
 	vec3 aerial = terrainAtmosphere(normalize(vRelative), uEye.y, length(vRelative), lit);
 	color = vec4(terrainToneMap(aerial),1.0);
 }

@@ -521,6 +521,7 @@ function markup()
 		, .1
 		, 1
 	)}
+	${range('Night glow', 'nightGlow', 0, 1, .01, .5)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
 	<h2>Water</h2>
 	<label class="terrain-field">Water level · m<input data-value="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>

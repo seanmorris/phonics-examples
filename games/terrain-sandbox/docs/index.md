@@ -14,7 +14,7 @@ Choose a preset and seed, then select **Generate** to create a new landscape. Ge
 
 Sun azimuth moves the sun around the horizon; elevation raises or lowers it. Haze controls aerosols, and Exposure adjusts the displayed brightness. Enable **Animate the sun** to see the light move over time.
 
-The sun, sky, distant landscape haze, and water use the same atmosphere and lighting settings. Clouds are outside this example.
+As the sun drops below the horizon, stars appear and a blue ambient light picks out the terrain, water, and jet ski. **Night glow** sets the strength of the sky glow and this reflected light. At zero you can see the stars against a dark sky. Set **Sun elevation** to −12° for a quick night preview. The glow setting travels with the saved landscape.
 
 ## Adjust the water
 

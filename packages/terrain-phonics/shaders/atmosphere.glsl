@@ -9,6 +9,7 @@ uniform float uMieAlbedo;
 uniform float uMieG;
 uniform float uHaze;
 uniform float uExposure;
+uniform vec3 uNightAmbient;
 uniform float uPlanetRadius;
 uniform float uAtmosphereHeight;
 uniform float uRayleighHeight;
@@ -16,6 +17,12 @@ uniform float uMieHeight;
 uniform sampler2D uTransmittance;
 uniform vec2 uTransmittanceSize;
 const float TERRAIN_PI = 3.141592653589793;
+
+vec3 terrainNightSky(float elevation)
+{
+	float h = clamp(elevation, 0.0, 1.0);
+	return uNightAmbient * (0.27 - 0.17 * h * (2.0 - h));
+}
 
 float terrainAtmosphereAltitude(float altitude, float mu, float distanceMeters)
 {
@@ -126,7 +133,7 @@ vec3 skyRadiance(vec3 ray, float altitude, float angularFootprint, bool includeS
 	vec3 radiance;
 	terrainIntegrateAtmosphere(ray, altitude, 1e20, transmittance, radiance);
 	if(includeSolarDisk) radiance += terrainSolarDisk(ray,altitude,transmittance,angularFootprint);
-	return radiance;
+	return radiance + terrainNightSky(ray.y);
 }
 
 vec3 skyRadiance(vec3 ray, float altitude, float angularFootprint)
@@ -144,7 +151,7 @@ vec3 terrainAtmosphere(vec3 ray, float eyeAltitude, float distanceMeters, vec3 s
 	vec3 transmittance;
 	vec3 radiance;
 	terrainIntegrateAtmosphere(ray, eyeAltitude, distanceMeters, transmittance, radiance);
-	return max(vec3(0.0), sceneLinear) * transmittance + radiance;
+	return mix(terrainNightSky(normalize(ray).y), max(vec3(0.0), sceneLinear), transmittance) + radiance;
 }
 
 vec3 terrainToneMap(vec3 linearColor)

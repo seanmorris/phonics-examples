@@ -236,6 +236,11 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	expect(waterEdit.time).toBe(time);
 	expect((await save(page)).settings.waterColor).toBe('#147083');
 
+	const nightGlow = page.getByRole('slider', {name: /Night glow/});
+	await nightGlow.focus();
+	await nightGlow.press('End');
+	await expect.poll(async() => (await status(page)).settings.nightGlow).toBe(1);
+
 	const coarseFog = page.getByRole('slider', {name: /Fog density · coarse/});
 	const fineFog = page.getByRole('slider', {name: /Fog density · fine/});
 	await coarseFog.focus();
@@ -268,9 +273,11 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	expect(sea.settings.waterFogDensity).toBe(.9999);
 	await load(page, fixture());
 	await expect(chop).toHaveValue('100');
+	await expect(nightGlow).toHaveValue('0.5');
 	await load(page, sea);
 	await expect(level).toHaveValue('6.5');
 	await expect(chop).toHaveValue('300');
+	await expect(nightGlow).toHaveValue('1');
 	await expect(fineFog).toHaveValue('0.9999');
 	await expect(coarseFog).toHaveValue('1');
 

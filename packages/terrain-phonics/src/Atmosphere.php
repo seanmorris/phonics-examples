@@ -10,6 +10,8 @@ namespace TerrainPhonics;
  */
 final class Atmosphere
 {
+	public const DEFAULT_NIGHT_GLOW = 0.5;
+
 	/** Physical and display parameters, separate from the cached optical-depth integration. */
 	private array $parameters;
 	/** Most recently requested transmittance texture; bounded to one resolution per instance. */
@@ -39,6 +41,7 @@ final class Atmosphere
 			, 'sunIntensity' => 20.0
 			, 'angularRadius' => .004675
 			, 'exposure' => 1.0
+			, 'nightGlow' => self::DEFAULT_NIGHT_GLOW
 		], $options
 		);
 
@@ -50,7 +53,7 @@ final class Atmosphere
 			throw new \InvalidArgumentException('Atmosphere requires a positive ' . $key);
 		}
 
-		foreach(['mie','haze','sunIntensity','exposure'] as $key)
+		foreach(['mie','haze','sunIntensity','exposure','nightGlow'] as $key)
 		{
 			$value = $this->parameters[$key];
 
@@ -119,13 +122,27 @@ final class Atmosphere
 		$this->parameters['exposure'] = $exposure;
 	}
 
+	/** Set the artistic night illumination without rebuilding solar scattering or extinction textures. */
+	public function setNightGlow(float $strength): void
+	{
+		if(!is_finite($strength) || $strength < 0) throw new \InvalidArgumentException('Night glow must be nonnegative');
+		$this->parameters['nightGlow'] = $strength;
+	}
+
 	/**
 	 * Read shader parameters.
 	 * @return array Physical uniforms plus texture dimensions and generation.
 	 */
 	public function uniforms(): array
 	{
-		return $this->parameters + [
+		// Smooth dusk from the horizon to ten degrees below. Star visibility is independent of the fill dimmer.
+		$t = min(1.0, max(0.0, -$this->parameters['sunDirection'][1] / 0.17364818));
+		$night = $t * $t * (3 - 2 * $t);
+		$strength = $night * $this->parameters['nightGlow'];
+		return [
+			'nightVisibility' => $night
+			, 'nightAmbient' => [.075 * $strength, .15 * $strength, .60 * $strength]
+		] + $this->parameters + [
 			'transmittanceSize' => [$this->lut['width'] ?? 0,$this->lut['height'] ?? 0]
 			, 'lutGeneration' => $this->lutGeneration
 		];
@@ -201,7 +218,7 @@ final class Atmosphere
 	}
 
 	/**
-	 * Evaluate single-scattered sky radiance and the attenuated solar disk for CPU previews and tests.
+	 * Evaluate sky glow, single-scattered radiance and the attenuated solar disk for CPU previews and tests.
 	 * @param array $direction Viewing direction as [x,y,z].
 	 * @param float $altitude Viewer height above sea level, in metres.
 	 * @param int $samples View-ray integration samples, clamped between eight and 128.
@@ -254,6 +271,9 @@ final class Atmosphere
 			for($channel = 0; $channel < 3; $channel++) $rgb[$channel] += $view[$channel] * $disk;
 		}
 
+		$gradient = max(0.0, min(1.0, $ray[1]));
+		$glow = .27 - .17 * $gradient * (2 - $gradient);
+		foreach($this->uniforms()['nightAmbient'] as $channel => $fill) $rgb[$channel] += $fill * $glow;
 		return $rgb;
 	}
 

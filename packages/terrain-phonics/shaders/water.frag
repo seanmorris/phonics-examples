@@ -56,7 +56,7 @@ vec3 waterEnvironmentReflection(vec3 ray, float altitude, float angularFootprint
 	// This is a smooth shading fallback; it does not claim terrain reflections or multiple scattering.
 	vec3 upperRay = normalize(vec3(ray.x,max(0.002,ray.y),ray.z));
 	vec3 upper = skyRadiance(upperRay,altitude,angularFootprint,false);
-	vec3 lower = mix(body,vec3(0.035,0.075,0.11),0.45) * illumination;
+	vec3 lower = mix(body,vec3(0.035,0.075,0.11),0.45) * (vec3(illumination) + uNightAmbient);
 	vec3 reflected = mix(lower,upper,smoothstep(-0.12,0.04,ray.y));
 	// Keep the solar disk on the true reflection direction, with its existing pixel-footprint filter.
 	return reflected + terrainSolarDisk(ray,altitude,terrainTransmittance(altitude,ray.y),angularFootprint);
@@ -92,7 +92,8 @@ void main()
 	float reflectionWeight = (1.0 - foam) * fresnel;
 	float tintWeight = (1.0 - foam) * (1.0 - fresnel) * (1.0 - uWaterOptics.x);
 	float alpha = foam + reflectionWeight + tintWeight;
-	vec3 lit = (foam * mix(vec3(0.65),vec3(1.6,1.85,1.95),wash) * illumination + reflectionWeight * reflection
-		+ tintWeight * body * illumination) / max(alpha, 0.00001);
+	vec3 surfaceLight = vec3(illumination) + uNightAmbient;
+	vec3 lit = (foam * mix(vec3(0.65),vec3(1.6,1.85,1.95),wash) * surfaceLight + reflectionWeight * reflection
+		+ tintWeight * body * surfaceLight) / max(alpha, 0.00001);
 	color = vec4(terrainToneMap(terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit)),alpha);
 }

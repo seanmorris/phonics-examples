@@ -12,7 +12,7 @@ use Phonics\Render\Program;
  */
 final class Scene
 {
-	private Program $groundProgram, $skyProgram, $waterProgram;
+	private Program $groundProgram, $skyProgram, $starsProgram, $waterProgram;
 	private AtmosphereRenderer $atmosphereCache;
 	private TerrainShadows $terrainShadows;
 	private Lod $lod;
@@ -89,6 +89,8 @@ final class Scene
 			file_get_contents($root . 'sky.vert')
 			, str_replace('// ATMOSPHERE', $atmosphere, file_get_contents($root . 'sky.frag'))
 		);
+
+		$this->starsProgram = new Program(file_get_contents($root . 'stars.vert'), file_get_contents($root . 'stars.frag'));
 
 		$this->waterProgram = new Program(
 			str_replace(['// PATCH','// WATER'], [$grid,$water], file_get_contents($root . 'water.vert'))
@@ -1340,10 +1342,11 @@ final class Scene
 		$this->frames++;
 		$this->atmosphereCache->update($camera->position[1], $this->textures[0], $this->water->level());
 
+		$environment = $this->atmosphere->uniforms();
 		$this->terrainShadows->update(
 			isset($this->patches['0:0:0']) ? $this->heightTexture[0] : 0
 			, $this->lod->extent
-			, $this->atmosphere->uniforms()['sunDirection']
+			, $environment['sunDirection']
 			, $this->heightTextureRevision
 		);
 
@@ -1409,6 +1412,17 @@ final class Scene
 		$this->common($this->skyProgram, $camera, $width, $height);
 		glBindVertexArray($this->vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
+		if($environment['nightVisibility'] > 0)
+		{
+			$this->starsProgram->use();
+			glUniformMatrix4fv($this->starsProgram->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
+			$this->scalar($this->starsProgram, 'uPixelScale', min(3.0, max(.8, $height / 720)));
+			$this->scalar($this->starsProgram, 'uNightVisibility', $environment['nightVisibility']);
+			$this->scalar($this->starsProgram, 'uExposure', $environment['exposure']);
+			glEnable(GL_BLEND);
+			glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ZERO, GL_ONE);
+			glDrawArrays(GL_POINTS, 0, 2400);
+		}
 		glDepthMask(true);
 		glDepthFunc(GL_LESS);
 		glEnable(GL_BLEND);
@@ -1651,6 +1665,7 @@ final class Scene
 
 		$this->groundProgram->restore();
 		$this->skyProgram->restore();
+		$this->starsProgram->restore();
 		$this->waterProgram->restore();
 
 		if($this->gridBuffer) glDeleteBuffers(1,$this->gridBuffer);
@@ -1702,6 +1717,7 @@ final class Scene
 		$this->clearPatches();
 		$this->groundProgram->close();
 		$this->skyProgram->close();
+		$this->starsProgram->close();
 		$this->waterProgram->close();
 		$this->craftMesh?->close();
 		$this->atmosphereCache->close();

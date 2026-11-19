@@ -103,9 +103,15 @@ final class AtmosphereRenderer
 
 		return "#define skyRadiance terrainUncachedSkyRadiance\n#define terrainAtmosphere terrainUncachedAtmosphere\n"
 			. file_get_contents($root . 'atmosphere.glsl') . "\n#undef skyRadiance\n#undef terrainAtmosphere\n"
-			. file_get_contents($root . 'atmosphere-cache.glsl') . "\n" . file_get_contents(
+			. self::nightLightingSource() . "\n" . file_get_contents($root . 'atmosphere-cache.glsl') . "\n" . file_get_contents(
 				$root . 'atmosphere-aerial.glsl'
 			);
+	}
+
+	/** Shared blue fill for opaque scene materials, evaluated before exposure and tone mapping. */
+	public static function nightLightingSource(): string
+	{
+		return file_get_contents(dirname(__DIR__) . '/shaders/night-light.glsl');
 	}
 
 	/**
@@ -130,7 +136,8 @@ final class AtmosphereRenderer
 		throw new \LogicException('Build and upload the atmosphere transmittance LUT before updating the sky cache');
 
 		$physical = $parameters;
-		unset($physical['exposure'], $physical['angularRadius']);
+		unset($physical['exposure'], $physical['angularRadius'], $physical['nightGlow'],
+			$physical['nightAmbient'], $physical['nightVisibility']);
 		$signature = json_encode($physical, JSON_THROW_ON_ERROR);
 		$changed = false;
 

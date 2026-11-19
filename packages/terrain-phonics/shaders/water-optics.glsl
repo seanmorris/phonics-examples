@@ -2,7 +2,7 @@ uniform vec3 uWaterTint;
 // Surface transmission, reflection strength, extinction per metre, and foam coverage.
 uniform vec4 uWaterOptics;
 
-vec3 waterColumnLight(vec3 light, vec3 eyeToPoint, float eyeHeight, float level, float illumination)
+vec3 waterColumnLight(vec3 light, vec3 eyeToPoint, float eyeHeight, float level, vec3 illumination)
 {
 	// Intersect the actual sightline to this fragment with the mean water plane.
 	float eyeDepth = level - eyeHeight;
@@ -12,4 +12,9 @@ vec3 waterColumnLight(vec3 light, vec3 eyeToPoint, float eyeHeight, float level,
 		: max(eyeDepth, pointDepth) / abs(eyeToPoint.y);
 	float transmission = exp(-uWaterOptics.z * wetFraction * length(eyeToPoint));
 	return mix(uWaterTint * illumination, light, transmission);
+}
+
+vec3 waterColumnLight(vec3 light, vec3 eyeToPoint, float eyeHeight, float level, float illumination)
+{
+	return waterColumnLight(light, eyeToPoint, eyeHeight, level, vec3(illumination));
 }

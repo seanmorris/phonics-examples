@@ -5,6 +5,7 @@ namespace TerrainSandbox;
 
 use Phonics\Render\Program;
 use TerrainPhonics\Atmosphere;
+use TerrainPhonics\AtmosphereRenderer;
 use TerrainPhonics\Camera;
 use TerrainPhonics\Water;
 use TerrainPhonics\WaterAppearance;
@@ -32,7 +33,8 @@ final class JetSki
 			|| strlen($data) !== $pixelOffset + $header['width'] * $header['height'] * 4)
 			throw new \RuntimeException('Invalid jet ski mesh dimensions');
 
-		$fragment = str_replace('// OPTICS', WaterAppearance::shaderSource(), file_get_contents($root . 'model.frag'));
+		$fragment = str_replace(['// OPTICS','// NIGHT LIGHT'],
+			[WaterAppearance::shaderSource(), AtmosphereRenderer::nightLightingSource()], file_get_contents($root . 'model.frag'));
 		$this->program = new Program(file_get_contents($root . 'model.vert'), $fragment);
 		try
 		{
@@ -96,6 +98,7 @@ final class JetSki
 		glUniform3f($p->location('uSunDirection'), ...$sun);
 		glUniform3f($p->location('uSunlight'), $transmission[0]*$intensity, $transmission[1]*$intensity, $transmission[2]*$intensity);
 		glUniform1f($p->location('uDaylight'), min(1.0, max(0.0, ($sun[1] + .10)/.15)) * $environment['sunIntensity']/20);
+		glUniform3f($p->location('uNightAmbient'), ...$environment['nightAmbient']);
 		glUniform1f($p->location('uExposure'), $environment['exposure']);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, $this->texture[0]);

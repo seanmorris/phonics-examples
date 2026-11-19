@@ -39,7 +39,7 @@ final class Session
 		'tool' => 'navigate', 'radius' => 40.0, 'amount' => 12.0, 'flattenHeight' => 0.0,
 		'material' => 'grass', 'roadWidth' => 8.0, 'roadShoulder' => 12.0, 'roadRaise' => 0.0,
 		'azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0, 'exposure' => 1.0,
-		'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
+		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
 	] + WaterAppearance::DEFAULTS;
 	/** Uncommitted road control points in [x,y,z] metres. */
@@ -183,7 +183,7 @@ final class Session
 		}
 		$ranges = ['radius' => [2,300],'amount' => [.1,200],'flattenHeight' => [-1000,3000],
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100],
-			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4],
+			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
 			'quality' => [.5,2],'speed' => [5,300],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
 		if(isset($ranges[$name]))
@@ -203,9 +203,10 @@ final class Session
 		}
 		$this->settings[$name] = $value;
 		if($name === 'haze') $this->atmosphere->setHaze($value);
+		if($name === 'nightGlow') $this->atmosphere->setNightGlow($value);
 		if($name === 'exposure') $this->atmosphere->setExposure($value);
 		if($name === 'azimuth' || $name === 'elevation') $this->sun();
-		$this->dirty = $this->dirty || in_array($name,['quality','exposure','haze','azimuth','elevation','clock'],true);
+		$this->dirty = $this->dirty || in_array($name,['quality','exposure','nightGlow','haze','azimuth','elevation','clock'],true);
 	}
 
 	/** Keep the saved controls and renderer in sync, including while the simulation is paused. */
@@ -557,7 +558,7 @@ final class Session
 		$settings = $data['settings'] ?? [];
 		if(!is_array($settings)) throw new \InvalidArgumentException('Invalid saved settings.');
 		$appearance = new WaterAppearance($settings);
-		$settings = array_diff_key($settings, WaterAppearance::DEFAULTS) + ['waterChoppiness' => 100.0];
+		$settings = array_diff_key($settings, WaterAppearance::DEFAULTS) + ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW];
 		foreach($settings as $name => $value)
 		if(isset($this->settings[$name]) && is_numeric($this->settings[$name]) && (!is_numeric($value) || !is_finite((float)$value)))
 		throw new \InvalidArgumentException('Invalid saved control value.');

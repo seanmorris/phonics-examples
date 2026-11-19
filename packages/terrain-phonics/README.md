@@ -96,7 +96,7 @@ control sets the amount visible.
 `Atmosphere` supplies a spherical exponential Rayleigh/Mie model with a cached transmittance texture.
 Sun direction, haze, and exposure have independent controls. This implementation uses single scattering;
 multiple scattering, clouds, ozone absorption, and volumetric fluid simulation are not implemented.
-Rendering keeps lighting linear until exposure and tone mapping.
+Use `Atmosphere::setNightGlow($strength)` to set the blue night fill. The default is 0.5. Custom materials can read the linear RGB `nightAmbient` from `Atmosphere::uniforms()`. The glow and stars fade in between sunset and a solar elevation of −10°. The stars keep fixed directions as the camera moves.
 Terrain shadows use a coarse heightfield cache for broad mountain shadows. Water reflects the cached sky with
 a lower-environment approximation; it does not reflect individual terrain objects. Distant wave normals and
 foam are filtered for their pixel footprint without changing the physical waves.

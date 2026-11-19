@@ -61,13 +61,18 @@ input($session, ['actions' => ['redo']]);
 publish($session);
 expect($session->landscape->height(0, 0) > 11.9, 'Redo restores the edited surface');
 
-input($session, ['values' => ['exposure' => 2,'haze' => .5,'elevation' => 8]]);
+input($session, ['values' => ['exposure' => 2,'haze' => .5,'elevation' => 8,'nightGlow' => .78]]);
 $saved = $session->save();
 $beforeHeight = $session->landscape->height(1, 1);
 $session->load($saved);
 expect($session->generation === 1, 'Load replaces the landscape once');
 expect(abs($session->landscape->height(1, 1) - $beforeHeight) < 1e-9, 'Save/load preserves terrain edits');
 expect($session->settings['exposure'] === 2.0 && $session->settings['elevation'] === 8.0, 'Save/load preserves environment');
+expect($session->atmosphere->uniforms()['nightGlow'] === .78, 'Saved glow reaches the renderer');
+$legacy = json_decode($saved, true, flags: JSON_THROW_ON_ERROR);
+unset($legacy['settings']['nightGlow']);
+$session->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+expect($session->settings['nightGlow'] === TerrainPhonics\Atmosphere::DEFAULT_NIGHT_GLOW, 'Legacy saves restore the default night glow');
 $before = $session->save();
 try { $session->load('{"version":999}'); expect(false, 'Malformed save must be rejected'); }
 catch(InvalidArgumentException) { expect($session->save() === $before, 'Rejected save cannot alter the active scene'); }
