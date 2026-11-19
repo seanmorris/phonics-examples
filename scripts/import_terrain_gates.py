@@ -34,16 +34,21 @@ ROLES = ("start", "checkpoint", "finish", "start-finish")
 POST_DEPTH = 8.0
 AIR_SCALE = 3.0
 WATER_WIDTH = 12.0
-# The arch's feet stand this far below the water line: the sum of the amplitudes of the sandbox's three waves.
+# The source arch's base stands this far below the water line, which leaves its opening 3.6 metres high.
 WATER_DRAFT = .8
+# The feet then reach this far down. A gate rides at the wave height at its centre, and the sandbox's swell can leave
+# the water at a foot up to 0.83 metres lower than that at 100% choppiness, 2.5 metres at the panel's highest, 300%.
+# The last 0.2 metres allow for the jet ski's wakes.
+FOOT_DEPTH = 2.7
 # Atlas sizes and the board's print layout in pixels of one role band: the label, then a strip for each board
 # colour. The generator reads these back from gates.json.
 BOARD_ATLAS = (1024, 512)
 BOARD_PRINT = {"label": [8, 8, 760, 112], "swatches": {"frame": [776, 0, 80, 128], "light": [856, 0, 84, 128],
                                                         "dark": [940, 0, 84, 128]}}
-# The arch print maps gate metres to band pixels: the gate origin lands on `origin`, and +Y runs up the band.
-WATER_ATLAS = (608, 1600)
-WATER_PRINT = {"pixelsPerMetre": 49, "origin": [304, 353]}
+# The arch print maps gate metres to band pixels: the gate origin lands on `origin`, and +Y runs up the band. Each
+# 400-row band holds the arch from its crown to its feet; a taller atlas would take the mesh past BakedMesh's 4 MiB.
+WATER_ATLAS = (496, 1600)
+WATER_PRINT = {"pixelsPerMetre": 40, "origin": [248, 287]}
 # Cells of the gantry's 8 by 8 palette texture that its board uses, by column and row.
 BOARD_CELLS = {(0, 7): "light", (7, 7): "dark", (2, 7): "frame", (3, 5): "label"}
 
@@ -318,8 +323,15 @@ def arch(parts):
     scale = WATER_WIDTH / (high[0] - low[0])
     centre_x, centre_z = (low[0] + high[0]) / 2, (low[2] + high[2]) / 2
 
+    # Below the water line the source has only the bevelled rims of the feet. Lowering them stretches the legs' walls,
+    # each of which runs between two edges parallel to Z, so every face stays flat.
+    rims = [(p[1] - low[1]) * scale - WATER_DRAFT for p in part["points"]]
+    if max(y for y in rims if y < 0) > -WATER_DRAFT + .05:
+        raise ValueError("Expected nothing but the feet's rims below the water line")
+
     def place(p):
-        return ((p[0] - centre_x) * scale, (p[1] - low[1]) * scale - WATER_DRAFT, (p[2] - centre_z) * scale)
+        y = (p[1] - low[1]) * scale - WATER_DRAFT
+        return ((p[0] - centre_x) * scale, y - (FOOT_DEPTH - WATER_DRAFT if y < 0 else 0), (p[2] - centre_z) * scale)
 
     width, height = WATER_ATLAS
     k = WATER_PRINT["pixelsPerMetre"]
