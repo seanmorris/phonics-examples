@@ -5,13 +5,18 @@ namespace TerrainSandbox;
 use TerrainPhonics\Landscape;
 use TerrainPhonics\Water;
 
-/** Kinematic bicycle steering and four tire contacts on the committed landscape. */
+/** Tire-supported bicycle steering and free chassis motion on the committed landscape. */
 final class Car
 {
 	// Metres, measured from the baked Testarossa. Its origin is midway between the axles.
 	public const WHEELBASE = 2.515, FRONT_TRACK = 1.57, REAR_TRACK = 1.644, TIRE_RADIUS = .297;
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
 	private float $speed = 0, $steering = 0, $spin = 0;
+	private const RECOVERY_DELAY = 1.5;
+	private ?CarTumble $tumble = null;
+	private float $recoveryTime = 0;
+	private array $lastSafe = [];
+	private int $recoveries = 0;
 	private int $revision = -1;
 	private float $waterLevel = 0;
 
@@ -59,7 +64,7 @@ final class Car
 					}
 					yield;
 					$support = $this->support($land, $water->heightRange()[1], $x, $z, $heading);
-					if($support !== null) return [$x,$z,$heading,$support];
+					if($support !== null && self::safe($support)) return [$x,$z,$heading,$support];
 				}
 			}
 		}
@@ -72,6 +77,8 @@ final class Car
 		[$this->x,$this->z,$this->yaw,$support] = $site;
 		[$this->y,$this->pitch,$this->roll] = $support;
 		$this->speed = $this->steering = $this->spin = 0;
+		$this->tumble = null; $this->recoveryTime = 0; $this->recoveries = 0;
+		$this->lastSafe = [$this->x,$this->z,$this->yaw];
 		$this->revision = $land->revision();
 		$this->waterLevel = $waterLevel;
 	}
@@ -83,14 +90,21 @@ final class Car
 		{
 			$support = $this->support($land, $waterLevel, $this->x, $this->z, $this->yaw);
 			if($support === null) return false;
-			[$this->y,$this->pitch,$this->roll] = $support;
+			if($this->tumble === null) [$this->y,$this->pitch,$this->roll] = $support;
+			elseif($this->revision !== $land->revision())
+			{
+				$this->tumble->wake();
+				$this->recoveryTime = 0;
+			}
 			$this->revision = $land->revision(); $this->waterLevel = $waterLevel;
 		}
+		if($this->tumble !== null) return $this->stepTumble($dt,$land,$waterLevel);
 		// Steering tightens at parking speeds. Swapping pedals brakes before engaging reverse.
 		$target = -$turn * .52 / (1 + .035 * abs($this->speed));
 		$this->steering += max(-2.5*$dt, min(2.5*$dt, $target - $this->steering));
 		if($throttle === 0)
 		{
+			if($this->speed != 0 || abs(sin($this->pitch)) > .18) $this->speed -= 9.81*sin($this->pitch)*$dt;
 			$drag = (1.7 + .006*$this->speed**2)*$dt;
 			$this->speed = ($this->speed <=> 0) * max(0.0, abs($this->speed) - $drag);
 		}
@@ -102,24 +116,108 @@ final class Car
 		}
 		if($this->speed == 0) return true;
 		$distance = $this->speed * $dt;
-		$rotation = $distance * tan($this->steering) / self::WHEELBASE;
+		// An inward bank supplies some centripetal acceleration. Only the remainder needs tire grip.
+		$gravitySide = 9.81*sin($this->roll);
+		$grip = 9.81*cos($this->roll)*cos($this->pitch);
+		$demand = $this->speed**2*tan($this->steering)/self::WHEELBASE;
+		$direction = $demand <=> 0;
+		$lateral = $direction*min(abs($demand), max(0.0, $grip+$direction*$gravitySide));
+		$rotation = $lateral*$dt/$this->speed;
 		$heading = $this->yaw + .5*$rotation;
 		$x = $this->x + sin($heading)*$distance*cos($this->pitch);
 		$z = $this->z + cos($heading)*$distance*cos($this->pitch);
 		$yaw = $this->yaw + $rotation;
 		$support = $this->support($land, $waterLevel, $x, $z, $yaw);
-		if($support === null || abs($support[0] - $this->y) > .12 + abs($distance)*.58)
+		if($support === null)
 		{
 			$this->speed = 0;
 			return true;
 		}
+		[,$pitch,$roll] = $support;
+		// Downhill gravity and outward cornering load act together on an adverse camber.
+		$sideLoad = 9.81*sin($roll) - $lateral*cos($roll);
+		$normalLoad = 9.81*cos($pitch)*cos($roll) + $lateral*sin($roll);
+		$tipSide = abs($roll) > .40 && abs($sideLoad) > 1.32*max(0,$normalLoad);
+		$tipEnd = abs($pitch) > 1.02;
+		$vertical = $this->speed*sin($this->pitch);
+		$crest = max(abs($pitch),abs($this->pitch)) > .32 && $vertical-$this->speed*sin($pitch) > 1.6;
+		$this->spin = fmod($this->spin + $distance/self::TIRE_RADIUS, 2*M_PI);
+		if($tipSide || $tipEnd || $crest)
+		{
+			// Leave the last tire pose with its momentum. The free body resolves the approaching face itself.
+			$pitchRate = max(-3.5,min(3.5,($pitch-$this->pitch)/$dt));
+			$rollRate = max(-4.5,min(4.5,($roll-$this->roll)/$dt));
+			if($tipEnd) $pitchRate += ($pitch <=> 0)*1.65;
+			if($tipSide) $rollRate += ($sideLoad <=> 0)*2.1;
+			$this->tumble = new CarTumble($this->x,$this->y,$this->z,$this->yaw,$this->pitch,$this->roll,
+				$this->speed,$vertical,$pitchRate,$rollRate);
+			return $this->stepTumble($dt,$land,$waterLevel);
+		}
 		$this->x = $x; $this->z = $z; $this->yaw = atan2(sin($yaw), cos($yaw));
 		[$this->y,$this->pitch,$this->roll] = $support;
-		$this->spin = fmod($this->spin + $distance/self::TIRE_RADIUS, 2*M_PI);
+		if(self::safe($support)) $this->lastSafe = [$x,$z,$this->yaw];
 		return true;
 	}
 
-	/** Fit a support plane through the two axles and reject submerged tires, ledges and high-centering. */
+	/** Grounded, drivable locations retained as a fallback if a wreck settles on a cliff. */
+	private static function safe(array $support): bool
+	{
+		return abs($support[1]) < .40 && abs($support[2]) < .40 && $support[3] < .38;
+	}
+
+	private function stepTumble(float $dt, Landscape $land, float $water): bool
+	{
+		$body = $this->tumble;
+		if($this->recoveryTime > 0)
+		{
+			$this->recoveryTime = max(0, $this->recoveryTime-$dt);
+			if($this->recoveryTime > 1e-8) return true;
+			return $this->rightCar($land,$water);
+		}
+
+		$body->advance($dt,$land,$water);
+		[$this->x,$this->y,$this->z,$this->pitch,$this->roll,$this->speed] = $body->pose();
+		if(!$body->onWheels && !$body->settled) return true;
+		if($body->settled && $body->roofDown)
+		{
+			$this->speed = 0;
+			$this->recoveryTime = self::RECOVERY_DELAY;
+			return true;
+		}
+		// A half somersault plus a half barrel roll lands facing the other way.
+		$reversed = cos($this->pitch) < 0;
+		$heading = $reversed ? $this->yaw + M_PI : $this->yaw;
+		$support = $this->support($land,$water,$this->x,$this->z,$heading);
+		// Leave a margin below the tipping load and let sideways momentum dissipate before gripping.
+		if($support !== null && abs($support[1]) < .98 && abs(tan($support[2])) < 1.22*cos($support[1]))
+		{
+			$this->speed /= cos($support[1]);
+			if($reversed) $this->speed = -$this->speed;
+			$this->yaw = atan2(sin($heading),cos($heading));
+			[$this->y,$this->pitch,$this->roll] = $support;
+			$this->tumble = null;
+		}
+		elseif($body->settled) return $this->rightCar($land,$water);
+		return true;
+	}
+
+	private function rightCar(Landscape $land, float $water): bool
+	{
+		$support = $this->support($land,$water,$this->x,$this->z,$this->yaw);
+		if($support === null || !self::safe($support))
+		{
+			[$this->x,$this->z,$this->yaw] = $this->lastSafe;
+			$support = $this->support($land,$water,$this->x,$this->z,$this->yaw);
+			if($support === null || !self::safe($support)) return false;
+		}
+		[$this->y,$this->pitch,$this->roll] = $support;
+		$this->speed = $this->steering = $this->recoveryTime = 0;
+		$this->tumble = null;
+		$this->recoveries++;
+		return true;
+	}
+
+	/** Fit a plane through both axles. Water and the edge of the heightfield bound travel. */
 	private function support(Landscape $land, float $waterLevel, float $x, float $z, float $yaw): ?array
 	{
 		$limit = $land->recipe()['worldSize'] / 2 - 2.6;
@@ -144,14 +242,15 @@ final class Car
 		$bank = ($frontBank+$rearBank) / 2;
 		$y = array_sum($heights) / 4;
 		$center = $land->height($x, $z);
-		if(hypot($rise,$bank) > .58 || abs($frontBank-$rearBank) > .38
-			|| $center <= $waterLevel + .12 || abs($center-$y) > .22) return null;
-		return [$y + .02,atan($rise),-atan($bank)];
+		if($center <= $waterLevel + .12) return null;
+		return [max($y,$center-.14) + .02,atan($rise),-atan($bank/sqrt(1+$rise*$rise)),max(abs($frontBank-$rearBank),abs($center-$y))];
 	}
 
 	public function state(): array
 	{
 		return ['x'=>$this->x,'y'=>$this->y,'z'=>$this->z,'yaw'=>$this->yaw,'pitch'=>$this->pitch,'roll'=>$this->roll,
-			'speed'=>$this->speed,'steering'=>$this->steering,'wheelSpin'=>$this->spin,'terrainRevision'=>$this->revision];
+			'speed'=>$this->speed,'steering'=>$this->steering,'wheelSpin'=>$this->spin,'terrainRevision'=>$this->revision,
+			'motion'=>$this->tumble === null ? 'driving' : ($this->recoveryTime > 0 ? 'overturned' : 'tumbling'),
+			'recoveries'=>$this->recoveries];
 	}
 }

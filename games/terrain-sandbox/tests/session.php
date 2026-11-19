@@ -304,12 +304,84 @@ $ledge->landscape->commit();
 $ledge->camera->position = [0,20,0]; $ledge->camera->yaw = M_PI;
 input($ledge, ['actions'=>['car','fly']]);
 expect(!$ledge->findingCarSite() && $ledge->mode === 'fly', 'Flight cancels a pending boarding request');
-enterCar($ledge);
-input($ledge, ['keys'=>['KeyW'=>true]]);
-for($i = 0; $i < 300; $i++) $ledge->step(1/60);
-$s = $ledge->car->state();
-expect($s['z'] > 10 && $s['z'] < 26 && $s['speed'] < 1, 'The tires stop the car at a steep dry ledge');
 $ledge->close();
+
+// The road runs across the car's path. Both turns enter the same 31° bank at the same speed.
+$dry = ['worldSize'=>512,'spacing'=>1,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-100];
+foreach(['KeyD','KeyA'] as $steer)
+{
+	$bank = new Session($dry);
+	$bank->landscape->queue(['type'=>'road','points'=>[[-60,-36,0],[60,36,0]],'width'=>190,'shoulder'=>40,'crown'=>0]);
+	$bank->landscape->commit();
+	$bank->camera->position = [0,30,-155]; $bank->camera->yaw = M_PI;
+	enterCar($bank);
+	input($bank, ['keys'=>['KeyW'=>true]]);
+	for($i = 0; $i < 265; $i++) $bank->step(1/60);
+	$entry = $bank->car->state();
+	expect($entry['speed'] > 26 && abs($entry['roll']) > deg2rad(30), 'A drivable bank carries speed through the former slope cutoff');
+	input($bank, ['keys'=>['KeyW'=>true,$steer=>true]]);
+	for($i = 0; $i < 24; $i++) $bank->step(1/60);
+	$exit = $bank->car->state();
+	$turns[$steer] = $exit['yaw'] - $entry['yaw'];
+	expect($exit['motion'] === 'driving' && $exit['z'] > $entry['z'] + 10 && $exit['speed'] >= $entry['speed'],
+		'The car stays on its tires and continues across the bank through the corner');
+	$bank->close();
+}
+expect($turns['KeyD'] < -2*$turns['KeyA'] && $turns['KeyA'] > 0, 'Banking into the turn provides more cornering grip than adverse camber');
+
+// Drive into a steep face from the same approach, varying its width to land on the roof or the tires.
+foreach([[45,16,30,true],[55,32,34,false]] as [$z,$radius,$amount,$landsOnRoof])
+{
+	$ramp = new Session($dry);
+	$ramp->landscape->queue(['type'=>'raise','x'=>0,'z'=>$z,'radius'=>$radius,'amount'=>$amount]);
+	$ramp->landscape->commit();
+	$ramp->camera->position = [0,30,$landsOnRoof ? -40 : -32]; $ramp->camera->yaw = M_PI;
+	enterCar($ramp);
+	input($ramp, ['keys'=>['KeyW'=>true]]);
+	for($i = 0; $i < 500 && $ramp->car->state()['motion'] === 'driving'; $i++) $ramp->step(1/60);
+	$launch = $ramp->car->state();
+	expect($launch['motion'] === 'tumbling' && $launch['speed'] > 8, 'A steep face releases the car with its momentum');
+	input($ramp, ['keys'=>[]]);
+	$inverted = false;
+	for($i = 0; $i < 1300 && $ramp->car->state()['motion'] === 'tumbling'; $i++)
+	{
+		$ramp->step(1/60);
+		$pose = $ramp->car->state();
+		if(cos($pose['pitch'])*cos($pose['roll']) < -.7) $inverted = true;
+	}
+	$landing = $ramp->car->state();
+	if($landsOnRoof)
+	{
+		expect($inverted && $landing['motion'] === 'overturned' && $landing['y'] > .95,
+			'The chassis rotates over the roof and comes to rest on its roof contacts');
+		$ramp->landscape->queue(['type'=>'lower','x'=>$landing['x'],'z'=>$landing['z'],'radius'=>18,'amount'=>3]);
+		$ramp->landscape->commit();
+		for($i = 0; $i < 18; $i++) $ramp->step(1/60);
+		$falling = $ramp->car->state();
+		expect($falling['motion'] === 'tumbling' && $falling['y'] < $landing['y']-.2,
+			'Removing supporting ground wakes the overturned chassis and interrupts recovery');
+		for($i = 0; $i < 400 && $ramp->car->state()['motion'] === 'tumbling'; $i++) $ramp->step(1/60);
+		$landing = $ramp->car->state();
+		expect($landing['motion'] === 'overturned', 'Recovery begins afresh on the new surface');
+		input($ramp, ['actions'=>['pause'],'keys'=>['KeyW'=>true]]);
+		for($i = 0; $i < 180; $i++) $ramp->step(1/60);
+		expect($ramp->car->state() === $landing, 'Pausing freezes the wreck and the recovery clock');
+		input($ramp, ['actions'=>['pause'],'keys'=>['KeyW'=>true]]);
+		for($i = 0; $i < 89; $i++) $ramp->step(1/60);
+		expect($ramp->car->state() === $landing, 'The settled wreck waits in place even with the accelerator held');
+		$ramp->step(1/60);
+		$upright = $ramp->car->state();
+		expect($upright['motion'] === 'driving' && $upright['recoveries'] === 1 && $upright['speed'] === 0.0
+			&& abs($upright['roll']) < .05 && abs($upright['pitch']) < .05
+			&& hypot($landing['x']-$upright['x'],$landing['z']-$upright['z']) < .1,
+			'A settled roof landing rights in place after 1.5 seconds and clears crash momentum');
+		$ramp->step(1/60);
+		expect($ramp->car->state()['speed'] > 0, 'The pedals work again after recovery');
+	}
+	else expect($landing['motion'] === 'driving' && $landing['recoveries'] === 0 && abs($landing['speed']) > 2,
+		'A wheels-down landing returns control while the chassis is still moving');
+	$ramp->close();
+}
 
 $edge = new Session($flat);
 $edge->camera->position = [0,20,40]; $edge->camera->yaw = M_PI;

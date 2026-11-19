@@ -237,7 +237,9 @@ export function activate({module, canvas, session, services})
 		dataset: 'terrainSandbox'
 		, handler: state => {
 			latest = state;
-			status.textContent = state.message;
+			if(state.car?.motion === 'overturned') status.textContent = 'Car overturned. Recovering…';
+			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';
+			else status.textContent = state.message;
 			button('pause').textContent = state.paused ? 'Resume · P' : 'Pause · P';
 			button('craft').hidden = state.mode === 'craft';
 			button('car').hidden = state.mode === 'car';

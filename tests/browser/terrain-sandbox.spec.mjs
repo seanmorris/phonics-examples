@@ -235,6 +235,33 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	expect(errors).toEqual([]);
 });
 
+test('a rollover settles on the roof before the Testarossa recovers', async({page}) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await page.setViewportSize({width:672,height:420});
+	await boot(page);
+	const ramp = fixture({history:[[{type:'raise',x:0,z:45,radius:16,amount:30}]],revision:1});
+	Object.assign(ramp.landscape.recipe, {worldSize:512,spacing:1});
+	ramp.settings.waterLevel = -100;
+	ramp.camera = {position:[0,30,-40],yaw:Math.PI,pitch:-.4};
+	await load(page,ramp);
+	await control(page,'car').click();
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await canvas(page).focus();
+	await page.keyboard.down('w');
+	await expect.poll(async() => (await status(page)).car.motion).toBe('tumbling');
+	await page.keyboard.up('w');
+	await expect.poll(async() => (await status(page)).car.motion, {timeout:60000}).toBe('overturned');
+	const landed = (await status(page)).car;
+	expect(Math.cos(landed.pitch)*Math.cos(landed.roll)).toBeLessThan(-.8);
+	await expect.poll(async() => (await status(page)).car.recoveries).toBe(1);
+	const righted = (await status(page)).car;
+	expect(righted.motion).toBe('driving');
+	expect(Math.hypot(righted.x-landed.x,righted.z-landed.z)).toBeLessThan(.1);
+	expect(Math.abs(righted.roll)+Math.abs(righted.pitch)).toBeLessThan(.1);
+	expect(errors).toEqual([]);
+});
+
 test('terrain without a mesh worker still renders and settles', async({page}) => {
 	await page.addInitScript(() => {
 

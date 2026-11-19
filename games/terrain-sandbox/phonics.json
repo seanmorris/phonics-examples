@@ -17,6 +17,7 @@
       "autoload.php",
       "src/Car.php",
       "src/CarChase.php",
+      "src/CarTumble.php",
       "src/Session.php",
       "src/VehicleModel.php"
     ]
@@ -53,9 +54,10 @@
     "assets/vehicles/model.frag": "sha256-kwiQrzU81dsmxveHLdTR7giBSIjzkEEeMG1+RJpDs8k=",
     "assets/vehicles/model.vert": "sha256-Mc7V02w+mgqSD0BQJRPLFTRXyUDUbFjEMYLQMKlesqU=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/game.mjs": "sha256-U+BdWMZGudDa6xv4jJKY4n6rLZfChBaKLVVB3t6Pz04=",
-    "src/Car.php": "sha256-HlvSczLCAH9kgVU3ZFshGsmXbvYYCk9kjoK8IZTlcnA=",
-    "src/CarChase.php": "sha256-/OnUs+Au3JfvOa6b9e2SPVoIem/t+fdiv4XdjcIHd20=",
+    "browser/game.mjs": "sha256-N5HarnN12v85KSGJ/TjXdaMijnYKffbqrT2tkNvQoS8=",
+    "src/Car.php": "sha256-v5v5WbuADjTpmnrToYEjUJAdDoBKgup5rKTGGcjO6+I=",
+    "src/CarChase.php": "sha256-cFRv0Chq1TbaOQch0GZ3usvRk081hyzNgWS35WzyVxQ=",
+    "src/CarTumble.php": "sha256-XN/q4GcQ/NrxU0aW3Ieez9UBHEMWf5XFWlRJ3PBap6U=",
     "src/Session.php": "sha256-BPuLBqg/WpTdDylAlqmySUSl2Ew46ol3hj4mMQE+u34=",
     "src/VehicleModel.php": "sha256-b/nGYfcotUXJE7KwDI8xMewn4gZawJnqY75Rw0QDGis="
   }
