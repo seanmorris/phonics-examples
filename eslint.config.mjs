@@ -8,6 +8,7 @@ const linted = [
 	'eslint.config.mjs'
 	, 'games/terrain-sandbox/**'
 	, 'scripts/sync-terrain.mjs'
+	, 'scripts/generate-terrain-gates.mjs'
 	, 'tests/terrain-*.test.mjs'
 	, 'tests/browser/terrain-sandbox.spec.mjs'
 	, 'games/rpsc/**'

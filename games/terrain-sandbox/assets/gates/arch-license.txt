@@ -1,0 +1,11 @@
+Model Information:
+* title:	Davita Finish-Line 2020
+* source:	https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3
+* author:	BrandXR (https://sketchfab.com/brandxr)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Davita Finish-Line 2020" (https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3) by BrandXR (https://sketchfab.com/brandxr) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

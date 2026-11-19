@@ -45,7 +45,13 @@
       "assets/testarossa/mesh.bin.gz",
       "assets/f5/license.txt",
       "assets/f5/mesh.bin.gz",
-      "assets/f5/surfaces.json"
+      "assets/f5/surfaces.json",
+      "assets/gates/gates.json",
+      "assets/gates/road.mesh.bin.gz",
+      "assets/gates/water.mesh.bin.gz",
+      "assets/gates/air.mesh.bin.gz",
+      "assets/gates/finish-line-license.txt",
+      "assets/gates/arch-license.txt"
     ]
   },
   "integrity": {
@@ -54,6 +60,12 @@
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
     "assets/f5/mesh.bin.gz": "sha256-MvzvhSBqNzcqkY2ivZ1iZ4FF1vYLNsb305WgAUuumeg=",
     "assets/f5/surfaces.json": "sha256-uqkDIywdj3xctjDJkR4Yp/mFPfgqx1VdDeHq9UX47wo=",
+    "assets/gates/air.mesh.bin.gz": "sha256-5bGfFxfZZMPKOEIdnDAhXsAoIew6q0rE8+rqGMX94Bo=",
+    "assets/gates/arch-license.txt": "sha256-xlNN0sgAgW97o2m5sbPf1oO2DiRAUNa9dKcSF5a1wRQ=",
+    "assets/gates/finish-line-license.txt": "sha256-JdZnSV0yOcRzRh+oB+TfxxMtFD/JFKycrSDoTfENrNY=",
+    "assets/gates/gates.json": "sha256-35zhBWXl9ljdY/cSJT3P7tvpScgj9K0vxi+61yetEsI=",
+    "assets/gates/road.mesh.bin.gz": "sha256-Fb1/Xo6l9K2KW79M3H2+hYgtZ9lmCLxn2ysFiV4Z9kQ=",
+    "assets/gates/water.mesh.bin.gz": "sha256-3Tkrs5L9bYArMMuf3aegOfIZnl0ZFANaVYwY7pnMMpk=",
     "assets/jetski/license.txt": "sha256-9WoAgRXTPEC8hRXDGAxCadCBBzJeG83Yybl9Ki+EPkQ=",
     "assets/jetski/mesh.bin.gz": "sha256-2ofl4RltV6iF1apNDjzZC73eLM553zFlop9VM96NMCE=",
     "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w=",
@@ -62,7 +74,7 @@
     "assets/vehicles/model.frag": "sha256-kwiQrzU81dsmxveHLdTR7giBSIjzkEEeMG1+RJpDs8k=",
     "assets/vehicles/model.vert": "sha256-wwExW5oFwI6N0H9uaik3pGCL1l+7phO74QIwdBxigUg=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/game.mjs": "sha256-ELTqU/XNU5txOvnBmn8vhypetHIlk3To8788OT0Ecdo=",
+    "browser/game.mjs": "sha256-f24iqCx70rGV/aolthehxJnLtJEyn3XmmxQ6brGWZ/0=",
     "src/Car.php": "sha256-/f6SZLSDWyOecghbEDrX1UAl2gxHZmjEL8tbRkb2THM=",
     "src/CarChase.php": "sha256-MUcAOlPD9mE3md1xdbzDhjMhY48h299VtVr3CF9xejs=",
     "src/CarSuspension.php": "sha256-bq66+ExjcWbqIeSGZFOAWz04PlryL7Bd5bWUf2Mqhl4=",
