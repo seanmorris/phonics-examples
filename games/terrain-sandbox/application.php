@@ -119,7 +119,7 @@ $engine->start(
 		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
 		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;
 		$now = microtime(true);
-		if($dirty && ($lastRender === null || $now - $lastRender >= 1 / 65))
+		if($dirty)
 		{
 			$start = microtime(true);
 			$engine->device->resize($width, $height);

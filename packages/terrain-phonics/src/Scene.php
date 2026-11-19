@@ -362,9 +362,10 @@ final class Scene
 		foreach($this->draw as $node)
 		if($this->morph($node) > 0 || $this->clock - ($this->activated[$node['key']] ?? -1) < .5) $transitioning = true;
 
-		if($key !== $this->selectionKey || (($transitioning || $this->selectionPending)
-			&& $this->clock - $this->selectionTime > .15
-		)){
+		$viewChanged = $key !== $this->selectionKey;
+		$transitionDue = ($transitioning || $this->selectionPending) && $this->clock - $this->selectionTime > .15;
+		if($viewChanged)
+		{
 			$this->select($camera);
 			$this->selectionKey = $key;
 		}
@@ -410,7 +411,11 @@ final class Scene
 			unset($job);
 		}
 
-		if($coverReady) $this->select($camera);
+		// A new root must draw immediately. Otherwise combine transitions and completed
+		// siblings in one selection, even when a moving camera also reordered work.
+		if($coverReady && $this->draw === []) $this->select($camera);
+		elseif(!$viewChanged && ($coverReady || $transitionDue)) $this->select($camera);
+		elseif($coverReady) $this->selectionKey = '';
 
 		$this->lastUpdateMs = (microtime(true) - $started) * 1000;
 
@@ -493,11 +498,14 @@ final class Scene
 		$old = array_column($this->draw, 'key');
 		$desired = $this->balance($result['draw']);
 
-		while(count($this->ancestors($desired)) > $this->capacity())
+		// Each split adds four resident nodes and replaces one leaf with four.
+		$capacity = $this->capacity();
+		$leafLimit = 1 + 3 * intdiv($capacity - 1, 4);
+		while(count($desired) > $leafLimit)
 		$desired = $this->balance($this->coarsen($desired));
 		$this->transition($desired);
 
-		while(count($this->ancestors($this->draw)) > $this->capacity())
+		while(count($this->draw) > $leafLimit)
 		{
 			$this->draw = $this->balance($this->coarsen($this->draw));
 			$this->retiring = [];
@@ -541,14 +549,9 @@ final class Scene
 
 			if(($blockers[$parent] ?? []) !== []) continue;
 
-			$keys = $this->reserved;
-
-			if($parent === '') $keys['0:0:0'] = true;
-			else foreach($this->children($drawKeys[$parent]) as $child) $keys[$child['key']] = true;
-
-			if(count($keys) > $this->capacity()) continue;
-
-			$this->reserved = $keys;
+			$extra = array_diff_key(array_fill_keys(array_column($nodes, 'key'), true), $this->reserved);
+			if(count($this->reserved) + count($extra) > $capacity) continue;
+			$this->reserved += $extra;
 
 			foreach($nodes as $n)
 			if(!isset($this->patches[$n['key']])) $wanted[$n['key']] = $n + ['speculative' => false];
@@ -556,7 +559,9 @@ final class Scene
 
 		// Prediction reserves only unused cache space after all current-view demand.
 		// Midpoint plus endpoint cover the short swept corridor, without speculative draws.
-		if($this->lookahead !== null)
+		// Twelve missing patches already fill all three worker slots with current-view
+		// sibling groups. Reconsider the flight corridor as soon as a slot can open.
+		if($this->lookahead !== null && ($this->builder === null || count($wanted) < 12))
 		{
 			$midpoint = [];
 

@@ -38,10 +38,10 @@ final class Lod
 	 */
 	public function node(int $level = 0, int $x = 0, int $z = 0): array
 	{
-		if($level < 0 || $level > 20 || $x < 0 || $z < 0 || $x >= 2 ** $level || $z >= 2 ** $level)
+		if($level < 0 || $level > 20 || $x < 0 || $z < 0 || $x >= (1 << $level) || $z >= (1 << $level))
 		throw new \InvalidArgumentException('Invalid quadtree node');
 
-		$size = $this->extent / (2 ** $level);
+		$size = $this->extent / (1 << $level);
 
 		return [
 			'key' => "$level:$x:$z"
