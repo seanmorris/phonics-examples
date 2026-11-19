@@ -346,6 +346,15 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 		return Math.hypot(after.x - before.x, after.z - before.z);
 	}).toBeGreaterThan(.5);
 
+	for(const [key, direction] of [['d', 1], ['a', -1]])
+	{
+		const heading = (await status(page)).camera.yaw;
+		await page.keyboard.down(key);
+		await expect.poll(async() => direction * Math.sin((await status(page)).camera.yaw - heading))
+			.toBeGreaterThan(.05);
+		await page.keyboard.up(key);
+	}
+
 	await page.keyboard.up('w');
 	await control(page, 'fly').click();
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');

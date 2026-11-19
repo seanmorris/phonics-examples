@@ -72,7 +72,7 @@ final class Watercraft
 	 * Advance bounded fixed substeps with longitudinal thrust and speed-dependent steering.
 	 * @param float $seconds Elapsed seconds, from zero through one; long pauses belong to the engine clock.
 	 * @param float $throttle Forward/reverse control clamped to minus one through one.
-	 * @param float $steer Left/right control clamped to minus one through one.
+	 * @param float $steer Handlebar input from -1 (left) to +1 (right).
 	 * @param Water $water Shared analytic water field; moving craft append bounded wake packets.
 	 * @param TerrainSurface $terrain Full-resolution heightfield queried on every substep after edits.
 	 * @param float $time Time at the beginning of this update, in seconds.
@@ -154,7 +154,8 @@ final class Watercraft
 		$forward *= exp(-(.25 + .018 * abs($forward)) * (1 - .35 * $planing) * $dt);
 		$lateral *= exp(-(1 + 3 * $wet) * $dt);
 		$previousYaw = $this->yaw;
-		$this->yaw += $steer * .85 * $forward / (2 + abs($forward)) * $dt;
+		// The bow faces local +Z, so turning right decreases yaw when travelling forward.
+		$this->yaw -= $steer * .85 * $forward / (2 + abs($forward)) * $dt;
 		$this->yaw = atan2(sin($this->yaw), cos($this->yaw));
 		$this->vx = sin($this->yaw) * $forward + cos($this->yaw) * $lateral;
 		$this->vz = cos($this->yaw) * $forward - sin($this->yaw) * $lateral;

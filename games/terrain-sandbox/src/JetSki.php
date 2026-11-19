@@ -72,7 +72,7 @@ final class JetSki
 		$cy = cos($pose['yaw']);   $sy = sin($pose['yaw']);
 		$cp = cos($pose['pitch']); $sp = sin($pose['pitch']);
 		$cr = cos($pose['roll']);  $sr = sin($pose['roll']);
-		// Column-major basis. Positive pitch raises the bow; positive roll lowers starboard.
+		// Column-major basis. Positive pitch raises the bow and positive roll lowers the port side.
 		$basis = [
 			$cy*$cr + $sy*$sp*$sr, -$cp*$sr, -$sy*$cr + $cy*$sp*$sr,
 			$cy*$sr - $sy*$sp*$cr,  $cp*$cr, -$sy*$sr - $cy*$sp*$cr,
