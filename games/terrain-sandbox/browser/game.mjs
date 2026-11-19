@@ -25,6 +25,25 @@ export function activate({module, canvas, session, services})
 
 	const controls = new Map([...frame.querySelectorAll('[data-value]')].map(field => [field.dataset.value, field]));
 
+	const coarseFog = controls.get('waterFogDensity');
+	const fineFog = frame.querySelector('[data-fine-fog]');
+	const fineOutput = fineFog.parentElement.querySelector('output');
+
+	// Hold the fine window still while dragging it. Only a coarse edit or a
+	// restored landscape recentres the window on the nearest coarse tick.
+	const setFineFogWindow = value => {
+		const center = coarseFog.valueAsNumber;
+		fineFog.min = Math.max(0, center - .005).toFixed(4);
+		fineFog.max = Math.min(1, center + .005).toFixed(4);
+		fineFog.value = value;
+		fineOutput.value = String(value);
+	};
+
+	fineFog.addEventListener('input', () => {
+		values.waterFogDensity = fineFog.valueAsNumber;
+		fineOutput.value = fineFog.value;
+	}, {signal});
+
 	const button = name => frame.querySelector(`[data-action="${name}"]`);
 
 	const push = action => { actions.push(typeof action === 'string' ? {type: action} : action); };
@@ -50,6 +69,8 @@ export function activate({module, canvas, session, services})
 			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
 
 			if(output) output.textContent = field.value;
+
+			if(field === coarseFog) setFineFogWindow(field.valueAsNumber);
 		}, {signal});
 
 		if(field.dataset.value === 'waterLevel')
@@ -282,7 +303,9 @@ export function activate({module, canvas, session, services})
 
 					const output = frame.querySelector(`[data-output="${name}"]`);
 
-					if(output) output.textContent = value;
+					if(output) output.textContent = field === coarseFog ? field.value : value;
+
+					if(field === coarseFog) setFineFogWindow(value);
 				}
 
 				lastGeneration = state.generation;
@@ -505,7 +528,8 @@ function markup()
 	<label class="terrain-control"><span>Water color</span><input data-value="waterColor" type="color" value="#287276"></label>
 	${range('Transparency', 'waterTransparency', 0, 1, .01, .85)}
 	${range('Reflectivity', 'waterReflectivity', 0, 1, .01, .85)}
-	${range('Fog density', 'waterFogDensity', 0, 1, .005, .035)}
+	${range('Fog density · coarse', 'waterFogDensity', 0, 1, .005, .035)}
+	<label class="terrain-control"><span>Fog density · fine</span><input data-fine-fog type="range" min=".030" max=".040" step=".0001" value=".035"><output>0.035</output></label>
 	${range('Shore and wake foam', 'waterFoam', 0, 1, .01, .65)}
 	<p class="terrain-note">Lower fog density to see the bottom in deeper water.</p>
 	<h2>Explore</h2>${range('Flight · m/s', 'speed', 5, 300, 5, 100)}

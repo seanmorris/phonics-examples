@@ -236,6 +236,21 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	expect(waterEdit.time).toBe(time);
 	expect((await save(page)).settings.waterColor).toBe('#147083');
 
+	const coarseFog = page.getByRole('slider', {name: /Fog density · coarse/});
+	const fineFog = page.getByRole('slider', {name: /Fog density · fine/});
+	await coarseFog.focus();
+	await coarseFog.press('Home');
+	await expect(fineFog).toHaveAttribute('min', '0.0000');
+	await fineFog.focus();
+	await fineFog.press('ArrowRight');
+	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(.0001);
+	await coarseFog.focus();
+	await coarseFog.press('End');
+	await expect(fineFog).toHaveAttribute('max', '1.0000');
+	await fineFog.focus();
+	await fineFog.press('ArrowLeft');
+	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(.9999);
+
 	const level = page.getByLabel('Water level · m', {exact: true});
 	const chop = page.getByRole('slider', {name: /Choppiness/});
 	await level.fill('-10');
@@ -250,11 +265,14 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	expect(rough.generation).toBe(now.generation);
 	const sea = await save(page);
 	expect(sea.settings.waterLevel).toBe(6.5);
+	expect(sea.settings.waterFogDensity).toBe(.9999);
 	await load(page, fixture());
 	await expect(chop).toHaveValue('100');
 	await load(page, sea);
 	await expect(level).toHaveValue('6.5');
 	await expect(chop).toHaveValue('300');
+	await expect(fineFog).toHaveValue('0.9999');
+	await expect(coarseFog).toHaveValue('1');
 
 	// Native fields keep WASD and pause shortcuts as text while focused.
 	const position = now.camera.position;

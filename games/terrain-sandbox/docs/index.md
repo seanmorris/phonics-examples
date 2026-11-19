@@ -20,7 +20,7 @@ The sun, sky, distant landscape haze, and water use the same atmosphere and ligh
 
 **Water level** raises or lowers the surface immediately, in metres. **Choppiness** controls the height and steepness of the waves the jet ski rides. At 0% the surface is calm between wakes, 100% gives the original swell, and 300% triples its height. Both controls work while paused and are included in saved landscapes.
 
-Use **Water color** to tint the surface and underwater haze. Raise **Transparency** to see through the surface. Lower **Fog density** for a longer view through the water, or raise it for a murkier lake. **Reflectivity** controls sky and sun reflections, strongest toward the horizon. **Shore foam** controls the white fringe in the shallows. These settings take effect while riding or paused and travel with a saved landscape.
+Use **Water color** to tint the surface and underwater haze. Raise **Transparency** to see through the surface. Lower the fog density for a longer view through the water, or raise it for a murkier lake. **Fog density · coarse** covers the full range from 0 to 1 per metre. **Fog density · fine** adjusts within 0.005 of the coarse setting in increments of 0.0001 per metre. **Reflectivity** controls sky and sun reflections, strongest toward the horizon. **Shore foam** controls the white fringe in the shallows. These settings take effect while riding or paused and travel with a saved landscape.
 
 ## Ride the water
 
