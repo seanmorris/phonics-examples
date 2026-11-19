@@ -322,9 +322,11 @@ final class Session
 	 */
 	private function guardRace(): bool
 	{
+		// A message still showing the race's last event is out of date once the race stops, so the reason replaces it.
+		$stale = $this->message === $this->race->message;
 		$why = $this->race->guard($this->course, $this->mode, $this->boarding);
 		if($why === null) return false;
-		$this->message = trim($this->message . ' ' . $why);
+		$this->message = $stale ? $why : trim($this->message . ' ' . $why);
 		$this->dirty = true;
 		return true;
 	}

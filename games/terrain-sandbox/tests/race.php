@@ -538,6 +538,14 @@ expect($race($moves)['state'] === 'running', 'Driving through it from behind doe
 input($moves, ['actions' => ['fly']]);
 expect($race($moves)['state'] === 'idle' && $moves->message === 'Flight controls active. The race stopped when you left the car.',
 	'Leaving the car stops the race');
+// Home leaves the car without a message of its own. The reason the race stopped replaces the race's last event
+// rather than following it, which read "Race started. Next: the start gate to finish. The race stopped when...".
+$moves->camera->position = [0, 30, 0]; $moves->camera->yaw = M_PI;
+enterCar($moves);
+drive($moves, ['KeyW' => true], 300, $state('running'));
+input($moves, ['actions' => ['reset-camera']]);
+expect($race($moves)['state'] === 'idle' && $moves->message === 'The race stopped when you left the car.',
+	'Leaving the car with Home says only why the race stopped: ' . $moves->message);
 $moves->camera->position = [0, 30, 0]; $moves->camera->yaw = M_PI;
 enterCar($moves);
 drive($moves, ['KeyW' => true], 300, $state('running'));
