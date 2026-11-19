@@ -1,5 +1,7 @@
 #version 300 es
 precision highp float;
+// OPTICS
+uniform vec2 uEyeAndWaterHeight;
 
 in vec3 vRelative, vNormal;
 in vec2 vUv;
@@ -34,6 +36,7 @@ void main()
 	vec3 sky = mix(vec3(.07,.09,.11), vec3(.24,.32,.40), normal.y * .5 + .5) * uDaylight;
 	vec3 light = sky * (diffuse + metallic * reflectance)
 		+ uSunlight * facingSun * (diffuse + reflectance * highlight);
+	light = waterColumnLight(light, vRelative, uEyeAndWaterHeight.x, uEyeAndWaterHeight.y, uDaylight);
 	vec3 exposed = 1.0 - exp(-light * uExposure);
 	vec3 displayColor = mix(12.92 * exposed, 1.055 * pow(exposed, vec3(1.0/2.4)) - .055,
 		step(vec3(.0031308), exposed));

@@ -16,6 +16,10 @@ Sun azimuth moves the sun around the horizon; elevation raises or lowers it. Haz
 
 The sun, sky, distant landscape haze, and water use the same atmosphere and lighting settings. Clouds are outside this example.
 
+## Water appearance
+
+Use **Water color** to tint the surface and underwater haze. Raise **Transparency** to see through the surface. Lower **Fog density** for a longer view through the water, or raise it for a murkier lake. **Reflectivity** controls sky and sun reflections, strongest toward the horizon. **Shore foam** controls the white fringe in the shallows. These settings take effect while riding or paused and travel with a saved landscape.
+
 ## Ride the water
 
 Select **Board watercraft**, or press **B**, to find nearby water deep enough for the craft. Use **W/S** for throttle and reverse and **A/D** to steer. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.

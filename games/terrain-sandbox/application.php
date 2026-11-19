@@ -91,9 +91,14 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	return false;
 });
 
+$drawJetSki = static function() use ($session, &$jetSki, &$width, &$height): void {
+	$jetSki ??= new JetSki;
+	$jetSki->draw($session->craft->state(), $session->camera, $session->atmosphere, $session->water, $width, $height);
+};
+
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, &$jetSki, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$lastRenderedTime,
+		$session, $scene, $drawJetSki, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $publish
 	): void {
 		$pose = [$session->camera->position,$session->camera->yaw,$session->camera->pitch,$session->camera->fov];
@@ -114,12 +119,8 @@ $engine->start(
 			$start = microtime(true);
 			$engine->device->resize($width, $height);
 			$engine->device->begin([.15,.25,.35,1]);
-			$scene->render($session->camera, $width, $height, $session->time);
-			if($session->mode === 'craft')
-			{
-				$jetSki ??= new JetSki;
-				$jetSki->draw($session->craft->state(), $session->camera, $session->atmosphere, $width, $height);
-			}
+			$scene->render($session->camera, $width, $height, $session->time,
+				drawOpaque: $session->mode === 'craft' ? $drawJetSki : null);
 			$engine->device->present();
 			$renderMs = (microtime(true) - $start) * 1000;
 			$lastRender = $now;

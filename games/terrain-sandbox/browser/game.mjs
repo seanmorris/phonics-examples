@@ -481,6 +481,13 @@ function markup()
 		, 1
 	)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
+	<h2>Water appearance</h2>
+	<label class="terrain-control"><span>Water color</span><input data-value="waterColor" type="color" value="#287276"></label>
+	${range('Transparency', 'waterTransparency', 0, 1, .01, .85)}
+	${range('Reflectivity', 'waterReflectivity', 0, 1, .01, .85)}
+	${range('Fog density', 'waterFogDensity', 0, 1, .005, .035)}
+	${range('Shore foam', 'waterFoam', 0, 1, .01, .65)}
+	<p class="terrain-note">Lower fog density to see the bottom in deeper water.</p>
 	<h2>Explore</h2>${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
 	<div class="terrain-row"><button data-action="craft">Board watercraft · B</button><button data-action="fly" hidden>Return to flight · F</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>

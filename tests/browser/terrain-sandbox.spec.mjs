@@ -110,7 +110,8 @@ async function settled(page)
 		const unchanged = previous === now.renderer.frames;
 		previous = now.renderer.frames;
 
-		return !now.preparing && !now.picking && !now.renderer.pending && !now.renderer.pendingEdits && unchanged;
+		return !now.preparing && !now.picking && !now.renderer.pending && !now.renderer.pendingEdits
+			&& !now.renderer.selectionPending && !now.renderer.transitions && unchanged;
 	}, {timeout: 90_000, intervals: [400,800,1200]}).toBe(true);
 
 	return status(page);
@@ -196,6 +197,14 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 		return updates;
 	});
 	expect(idleUpdates).toBe(0);
+
+	// A water edit redraws a paused scene and is included in the portable save.
+	await page.locator('[data-value="waterColor"]').fill('#147083');
+	await expect.poll(async() => (await status(page)).settings.waterColor).toBe('#147083');
+	const waterEdit = await settled(page);
+	expect(waterEdit.renderer.frames).toBeGreaterThan(frame);
+	expect(waterEdit.time).toBe(time);
+	expect((await save(page)).settings.waterColor).toBe('#147083');
 
 	// Native fields keep WASD and pause shortcuts as text while focused.
 	const position = now.camera.position;

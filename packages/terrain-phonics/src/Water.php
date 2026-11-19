@@ -7,6 +7,8 @@ final class Water implements WaterSurface
 {
 	/** Limits shared by the shader include. */
 	public const MAX_WAVES = 8, MAX_WAKES = 16, WAKE_LIFETIME = 8.0;
+	/** Render configuration shared with the scene and its opaque objects. */
+	public WaterAppearance $appearance;
 	/** Normalized directional wave records. */
 	private array $waves = [];
 	/** Wake centres, amplitudes, and creation times. */
@@ -26,6 +28,8 @@ final class Water implements WaterSurface
 	{
 		if(!is_finite($level) || count($waves) > self::MAX_WAVES)
 		throw new \InvalidArgumentException('Water requires a finite level and at most eight waves');
+
+		$this->appearance = new WaterAppearance;
 
 		foreach($waves as $wave)
 		{

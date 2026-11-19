@@ -2,6 +2,7 @@
 precision highp float;
 precision highp int;
 // ATMOSPHERE
+// OPTICS
 in vec3 vRelative, vWorld, vNormal;
 in vec3 vPaint0, vPaint1;
 uniform vec3 uEye;
@@ -81,6 +82,7 @@ void main()
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
 	vec3 ambient = vec3(0.08,0.13,0.20) * (0.35 + 0.65 * max(0.0,n.y)) * illumination;
 	vec3 lit = albedo * (ambient + direct * max(0.0,dot(n,uSunDirection)) * shadow);
+	lit = waterColumnLight(lit, vRelative, uEye.y, uWaterLevel, illumination);
 	vec3 aerial = terrainAtmosphere(normalize(vRelative), uEye.y, length(vRelative), lit);
 	color = vec4(terrainToneMap(aerial),1.0);
 }

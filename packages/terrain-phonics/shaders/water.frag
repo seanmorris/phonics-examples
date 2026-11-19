@@ -2,6 +2,7 @@
 precision highp float;
 precision highp int;
 // ATMOSPHERE
+// OPTICS
 // WATER
 in vec3 vRelative, vWorld;
 in float vGround;
@@ -90,20 +91,22 @@ void main()
 	vec3 view = normalize(-vRelative);
 	vec3 n = waterFacingNormal(terrainWaterNormal(wave),view);
 	vec3 reflected = reflect(-view,n);
-	float fresnel = 0.02 + 0.98 * pow(1.0 - max(0.0,dot(view,n)),5.0);
-	float depth = max(0.0,wave.x - vGround);
-	vec3 body = mix(vec3(0.08,0.25,0.22),vec3(0.006,0.045,0.09),1.0 - exp(-depth * 0.08));
+	float fresnel = uWaterOptics.y * (0.02 + 0.98 * pow(1.0 - clamp(dot(view,n),0.0,1.0),5.0));
+	vec3 body = uWaterTint;
 	float reflectionFootprint = max(length(dFdx(reflected)),length(dFdy(reflected)));
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
 	vec3 reflection = waterEnvironmentReflection(reflected,max(0.0,wave.x),reflectionFootprint,body,illumination);
-	// The environment reflection includes the solar disk once, weighted by Fresnel.
-	vec3 lit = mix(body * illumination,reflection,fresnel);
 	float shoreDepth = wave.x - vGround;
 	float shoreFootprint = max(0.001,fwidth(shoreDepth));
 	float shoreCoverage = (waterFoamIntegral(shoreDepth + 0.5 * shoreFootprint)
 		- waterFoamIntegral(shoreDepth - 0.5 * shoreFootprint)) / shoreFootprint;
 	float foamWeight = waterPhaseFilter(pixelX.x + pixelX.y,pixelY.x + pixelY.y);
 	float foam = shoreCoverage * (0.65 + 0.35 * foamWeight * sin(vWorld.x + vWorld.z + uWaterTime * 2.0));
-	lit = mix(lit,vec3(0.65) * illumination,foam * 0.7);
-	color = vec4(terrainToneMap(terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit)),1.0);
+	foam = clamp(foam * uWaterOptics.w,0.0,1.0);
+	float reflectionWeight = (1.0 - foam) * fresnel;
+	float tintWeight = (1.0 - foam) * (1.0 - fresnel) * (1.0 - uWaterOptics.x);
+	float alpha = foam + reflectionWeight + tintWeight;
+	vec3 lit = (foam * vec3(0.65) * illumination + reflectionWeight * reflection
+		+ tintWeight * body * illumination) / max(alpha, 0.00001);
+	color = vec4(terrainToneMap(terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit)),alpha);
 }

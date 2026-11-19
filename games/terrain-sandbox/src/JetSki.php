@@ -6,6 +6,8 @@ namespace TerrainSandbox;
 use Phonics\Render\Program;
 use TerrainPhonics\Atmosphere;
 use TerrainPhonics\Camera;
+use TerrainPhonics\Water;
+use TerrainPhonics\WaterAppearance;
 
 /** The sandbox's textured watercraft, drawn against the landscape and water depth buffer. */
 final class JetSki
@@ -30,7 +32,8 @@ final class JetSki
 			|| strlen($data) !== $pixelOffset + $header['width'] * $header['height'] * 4)
 			throw new \RuntimeException('Invalid jet ski mesh dimensions');
 
-		$this->program = new Program(file_get_contents($root . 'model.vert'), file_get_contents($root . 'model.frag'));
+		$fragment = str_replace('// OPTICS', WaterAppearance::shaderSource(), file_get_contents($root . 'model.frag'));
+		$this->program = new Program(file_get_contents($root . 'model.vert'), $fragment);
 		try
 		{
 			glGenVertexArrays(1, $this->vao);
@@ -67,7 +70,7 @@ final class JetSki
 	}
 
 	/** Render the current hull pose in metres, with local +Z pointing at the bow. */
-	public function draw(array $pose, Camera $camera, Atmosphere $sky, int $width, int $height): void
+	public function draw(array $pose, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height): void
 	{
 		$cy = cos($pose['yaw']);   $sy = sin($pose['yaw']);
 		$cp = cos($pose['pitch']); $sp = sin($pose['pitch']);
@@ -84,6 +87,8 @@ final class JetSki
 		$intensity = $environment['sunIntensity'] / M_PI;
 		$p = $this->program;
 		$p->use();
+		$water->appearance->bind($p);
+		glUniform2f($p->location('uEyeAndWaterHeight'), $camera->position[1], $water->level());
 		glUniformMatrix4fv($p->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
 		glUniformMatrix3fv($p->location('uRotation'), 1, false, $basis);
 		glUniform3f($p->location('uOrigin'), $pose['x'] - $camera->position[0], $pose['y'] - $camera->position[1],

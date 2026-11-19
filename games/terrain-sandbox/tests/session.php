@@ -148,4 +148,24 @@ finishPicking($roads);
 expect(count($roads->road) === 2, 'Rapid road clicks queue distinct exact picks without losing a point');
 $roads->close();
 
+$bay = new Session(['worldSize' => 128, 'waterLevel' => 6, 'heightScale' => 0]);
+$legacy = json_decode($bay->save(), true, flags: JSON_THROW_ON_ERROR);
+$legacy['settings'] = [];
+$physical = $bay->water->sample(2, 4, 1);
+$bay->dirty = false;
+$optics = ['waterColor' => '#316fc0', 'waterTransparency' => .5, 'waterReflectivity' => .2,
+	'waterFogDensity' => .12, 'waterFoam' => .7];
+input($bay, ['values' => $optics]);
+expect($bay->dirty && $bay->water->appearance->settings === $optics, 'Appearance edits reach the renderer and request a frame');
+expect($bay->water->sample(2, 4, 1) === $physical && $bay->water->revision() === 0, 'Optical edits preserve the physical water');
+$custom = $bay->save();
+$bay->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+expect($bay->water->appearance->settings === TerrainPhonics\WaterAppearance::DEFAULTS, 'Older landscapes get the default water appearance');
+$bay->load($custom);
+expect($bay->water->appearance->settings === $optics, 'All optical settings round-trip');
+$generation = $bay->generation;
+try { $bay->load(str_replace('#316fc0', '#zzzzzz', $custom)); expect(false, 'Invalid water colors must be rejected'); }
+catch(InvalidArgumentException) { expect($bay->generation === $generation && $bay->save() === $custom, 'Invalid optics leave the current scene intact'); }
+$bay->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

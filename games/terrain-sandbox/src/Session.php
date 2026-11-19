@@ -7,6 +7,7 @@ use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 use TerrainPhonics\RayQuery;
 use TerrainPhonics\Water;
+use TerrainPhonics\WaterAppearance;
 use TerrainPhonics\Watercraft;
 
 /**
@@ -39,7 +40,7 @@ final class Session
 		'material' => 'grass', 'roadWidth' => 8.0, 'roadShoulder' => 12.0, 'roadRaise' => 0.0,
 		'azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0, 'exposure' => 1.0,
 		'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
-	];
+	] + WaterAppearance::DEFAULTS;
 	/** Uncommitted road control points in [x,y,z] metres. */
 	public array $road = [];
 	/** Last operation result shown in the authoring panel. */
@@ -173,6 +174,11 @@ final class Session
 	private function setting(string $name, mixed $value): void
 	{
 		if(!array_key_exists($name, $this->settings)) return;
+		if(array_key_exists($name, WaterAppearance::DEFAULTS))
+		{
+			$this->setWaterAppearance(new WaterAppearance([$name => $value] + $this->settings));
+			return;
+		}
 		$ranges = ['radius' => [2,300],'amount' => [.1,200],'flattenHeight' => [-1000,3000],
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4],
@@ -191,6 +197,15 @@ final class Session
 		if($name === 'exposure') $this->atmosphere->setExposure($value);
 		if($name === 'azimuth' || $name === 'elevation') $this->sun();
 		$this->dirty = $this->dirty || in_array($name,['quality','exposure','haze','azimuth','elevation','clock'],true);
+	}
+
+	/** Keep the saved controls and renderer in sync, including while the simulation is paused. */
+	private function setWaterAppearance(WaterAppearance $appearance): void
+	{
+		if($this->water->appearance->settings === $appearance->settings) return;
+		$this->water->appearance = $appearance;
+		$this->settings = $appearance->settings + $this->settings;
+		$this->dirty = true;
 	}
 
 	/**
@@ -504,6 +519,8 @@ final class Session
 		$candidate = Landscape::load(json_encode($data['landscape'] ?? null, JSON_THROW_ON_ERROR));
 		$settings = $data['settings'] ?? [];
 		if(!is_array($settings)) throw new \InvalidArgumentException('Invalid saved settings.');
+		$appearance = new WaterAppearance($settings);
+		$settings = array_diff_key($settings, WaterAppearance::DEFAULTS);
 		foreach($settings as $name => $value)
 		if(isset($this->settings[$name]) && is_numeric($this->settings[$name]) && (!is_numeric($value) || !is_finite((float)$value)))
 		throw new \InvalidArgumentException('Invalid saved control value.');
@@ -515,6 +532,7 @@ final class Session
 		if(!is_numeric($yaw) || !is_numeric($pitch) || !is_finite((float)$yaw) || !is_finite((float)$pitch))
 		throw new \InvalidArgumentException('Invalid saved camera direction.');
 		$this->replace($candidate);
+		$this->setWaterAppearance($appearance);
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
 		$this->camera->position = array_map('floatval', $position);
 		$this->camera->yaw = (float)$yaw; $this->camera->pitch = max(-1.52, min(1.52, (float)$pitch));

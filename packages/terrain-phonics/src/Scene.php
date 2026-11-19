@@ -70,10 +70,11 @@ final class Scene
 		$root = dirname(__DIR__) . '/shaders/';
 		$atmosphere = AtmosphereRenderer::shaderSource();
 		$water = file_get_contents($root . 'water-functions.glsl');
+		$optics = WaterAppearance::shaderSource();
 
 		$this->groundProgram = new Program(
 			file_get_contents($root . 'terrain.vert')
-			, str_replace('// ATMOSPHERE', $atmosphere, file_get_contents($root . 'terrain.frag'))
+			, str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics], file_get_contents($root . 'terrain.frag'))
 		);
 
 		$this->skyProgram = new Program(
@@ -83,7 +84,7 @@ final class Scene
 
 		$this->waterProgram = new Program(
 			str_replace('// WATER', $water, file_get_contents($root . 'water.vert'))
-			, str_replace(['// ATMOSPHERE','// WATER'], [$atmosphere,$water], file_get_contents($root . 'water.frag'))
+			, str_replace(['// ATMOSPHERE','// WATER','// OPTICS'], [$atmosphere,$water,$optics], file_get_contents($root . 'water.frag'))
 		);
 
 		glGenVertexArrays(1, $this->vao);
@@ -1248,9 +1249,10 @@ final class Scene
 	 * @param int $height Viewport height in pixels.
 	 * @param float $time Interpolated simulation time in seconds.
 	 * @param array|null $craftState Optional demonstration hull pose.
+	 * @param callable|null $drawOpaque Draw additional depth-tested opaque objects before the water surface.
 	 * @return void Submits draws without presenting the caller-owned framebuffer.
 	 */
-	public function render(Camera $camera, int $width, int $height, float $time, ?array $craftState = null): void
+	public function render(Camera $camera, int $width, int $height, float $time, ?array $craftState = null, ?callable $drawOpaque = null): void
 	{
 		if($this->closed) return;
 
@@ -1281,6 +1283,7 @@ final class Scene
 		glEnable(GL_CULL_FACE);
 		$this->groundProgram->use();
 		$this->common($this->groundProgram, $camera, $width, $height);
+		$this->water->appearance->bind($this->groundProgram);
 		$this->vector($this->groundProgram, 'uCraftRotation', [0,0,0]);
 		$this->scalar($this->groundProgram, 'uCraft', 0);
 
@@ -1333,7 +1336,11 @@ final class Scene
 		}
 
 		glDisable(GL_CULL_FACE);
+		if($drawOpaque !== null) $drawOpaque();
+		glEnable(GL_BLEND);
+		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 		$this->waterProgram->use();
+		$this->water->appearance->bind($this->waterProgram);
 		$this->common($this->waterProgram, $camera, $width, $height);
 		$this->waterUniforms($time);
 		$this->scalar($this->waterProgram, 'uWaterExtent', $this->lod->extent);
@@ -1352,6 +1359,7 @@ final class Scene
 			$this->patches[$n['key']]['mesh']->draw();
 		}
 
+		glDisable(GL_BLEND);
 		glBindVertexArray(0);
 	}
 
