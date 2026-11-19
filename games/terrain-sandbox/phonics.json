@@ -16,6 +16,7 @@
     "files": [
       "autoload.php",
       "src/Car.php",
+      "src/CarChase.php",
       "src/Session.php",
       "src/VehicleModel.php"
     ]
@@ -43,7 +44,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-smv3pGTuEt+fWCcKrOyUU2IaXgX+pL4aX1lBwLg0jIE=",
+    "application.php": "sha256-OB2AKVKyMwGoP6qeN6GayhSQlJ/2R7Y9MYHVephOObI=",
     "assets/jetski/license.txt": "sha256-9WoAgRXTPEC8hRXDGAxCadCBBzJeG83Yybl9Ki+EPkQ=",
     "assets/jetski/mesh.bin.gz": "sha256-2ofl4RltV6iF1apNDjzZC73eLM553zFlop9VM96NMCE=",
     "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w=",
@@ -54,7 +55,8 @@
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
     "browser/game.mjs": "sha256-U+BdWMZGudDa6xv4jJKY4n6rLZfChBaKLVVB3t6Pz04=",
     "src/Car.php": "sha256-HlvSczLCAH9kgVU3ZFshGsmXbvYYCk9kjoK8IZTlcnA=",
-    "src/Session.php": "sha256-yiW06ySj+Ry5iOd7OKpKUC8ugGF8stztfbcvxiN/QG4=",
+    "src/CarChase.php": "sha256-/OnUs+Au3JfvOa6b9e2SPVoIem/t+fdiv4XdjcIHd20=",
+    "src/Session.php": "sha256-BPuLBqg/WpTdDylAlqmySUSl2Ew46ol3hj4mMQE+u34=",
     "src/VehicleModel.php": "sha256-b/nGYfcotUXJE7KwDI8xMewn4gZawJnqY75Rw0QDGis="
   }
 }

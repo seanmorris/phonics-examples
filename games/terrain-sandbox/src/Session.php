@@ -29,6 +29,7 @@ final class Session
 	/** Controllable physical watercraft. */
 	public Watercraft $craft;
 	public Car $car;
+	private CarChase $chase;
 	private ?\Generator $carSearch = null;
 	/** Whether simulation is paused; authoring remains available. */
 	public bool $paused = false;
@@ -84,6 +85,7 @@ final class Session
 		$this->camera = new Camera;
 		$this->craft = new Watercraft;
 		$this->car = new Car;
+		$this->chase = new CarChase;
 		$this->resetCamera();
 		$this->sun();
 	}
@@ -162,7 +164,8 @@ final class Session
 				$this->message = 'The ground under the car changed. Choose Drive car to find another spot.';
 				$this->dirty = true;
 			}
-			elseif($before !== $this->car->state()) $this->followCar();
+			elseif($this->chase->advance($this->camera, $before, $this->car->state(), $this->landscape, $seconds))
+				$this->dirty = true;
 		}
 		$this->time += $seconds;
 		$this->water->update($this->time);
@@ -249,7 +252,10 @@ final class Session
 		{ $this->message = 'Finding the ground for the previous click. Please wait.'; return; }
 		switch($action['type'] ?? '')
 		{
-			case 'pause': $this->paused = !$this->paused; break;
+			case 'pause':
+				$this->paused = !$this->paused;
+				$this->chase->resetInterpolation();
+				break;
 			case 'reset-camera': $this->mode = 'fly'; $this->resetCamera(); break;
 			case 'undo':
 				$this->editable()->commit();
@@ -455,23 +461,15 @@ final class Session
 		$this->releasePin();
 		$this->car->spawn($site, $this->landscape, $this->water->level());
 		$this->mode = 'car'; $this->paused = false;
-		$this->followCar();
+		$this->chase->board($this->camera, $this->car->state(), $this->landscape);
+		$this->dirty = true;
 		$this->message = 'W accelerates, S brakes or reverses, A/D steer. F returns to flight.';
 	}
 
-	/** Keep the chase camera clear of the slope immediately behind the car. */
-	private function followCar(): void
+	/** Return the matched camera and car pose at the engine's presentation time. */
+	public function carView(float $alpha): array
 	{
-		$s = $this->car->state();
-		$sin = sin($s['yaw']); $cos = cos($s['yaw']);
-		$x = $s['x'] - 6.7*$sin; $z = $s['z'] - 6.7*$cos;
-		$half = $this->landscape->recipe()['worldSize'] / 2;
-		$ground = $this->landscape->height(max(-$half,min($half,$x)), max(-$half,min($half,$z)));
-		$y = max($ground + 1.35, $s['y'] + 2.55 - 6.7*tan($s['pitch']));
-		$this->camera->position = [$x,$y,$z];
-		$this->camera->yaw = M_PI - $s['yaw'];
-		$this->camera->pitch = atan2($s['y'] + .7 + 2*tan($s['pitch']) - $y, 8.7);
-		$this->dirty = true;
+		return $this->chase->view($this->camera, $this->car->state(), $alpha);
 	}
 
 	/**

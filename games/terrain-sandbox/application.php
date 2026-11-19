@@ -28,6 +28,8 @@ $batch = vrzno_env('terrainPatchBatch');
 $builder = new BrowserPatchBuilder(static fn($action, $path, $key, $payload) => $batch($action, $path, $key, $payload));
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere, $builder);
 $models = [];
+$viewCamera = $session->camera;
+$carPose = null;
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
@@ -97,28 +99,32 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	return false;
 });
 
-$drawVehicle = static function() use ($session, &$models, &$width, &$height): void {
+$drawVehicle = static function() use ($session, &$models, &$width, &$height, &$viewCamera, &$carPose): void {
 	$car = $session->mode === 'car';
 	$name = $car ? 'testarossa' : 'jetski';
 	$model = $models[$name] ??= new VehicleModel(__DIR__ . '/assets/' . $name . '/mesh.bin.gz');
-	$model->draw($car ? $session->car->state() : $session->craft->state(),
-		$session->camera, $session->atmosphere, $session->water, $width, $height);
+	$model->draw($carPose ?? $session->craft->state(),
+		$viewCamera, $session->atmosphere, $session->water, $width, $height);
 };
 
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, $drawVehicle, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		$session, $scene, $drawVehicle, &$viewCamera, &$carPose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $publish
 	): void {
-		$pose = [$session->camera->position,$session->camera->yaw,$session->camera->pitch,$session->camera->fov];
+		$lastCar = $carPose;
+		[$viewCamera,$carPose] = $session->mode === 'car' ? $session->carView($alpha) : [$session->camera,null];
+		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->fov];
 		$moving = $session->mode === 'craft' || $pose !== $lastBudgetPose;
+		// High-refresh frames can advance the presentation fraction without a new simulation tick.
+		if($carPose !== null && ($lastCar !== $carPose || $moving)) $dirty = true;
 		$budget = $moving ? 2.0 : 8.0;
 		$scene->budgetMs = max(.25, $budget - $inputMs);
 		$lastBudgetPose = $pose;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
-		$prepared = $work && $scene->update($frameSeconds, $session->camera);
+		$prepared = $work && $scene->update($frameSeconds, $viewCamera);
 		$wavesChanged = $scene->showsWater() && $session->time !== $lastRenderedTime;
 		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
 		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;
@@ -128,7 +134,7 @@ $engine->start(
 			$start = microtime(true);
 			$engine->device->resize($width, $height);
 			$engine->device->begin([.15,.25,.35,1]);
-			$scene->render($session->camera, $width, $height, $session->time,
+			$scene->render($viewCamera, $width, $height, $session->time,
 				drawOpaque: $session->mode === 'fly' ? null : $drawVehicle);
 			$engine->device->present();
 			$renderMs = (microtime(true) - $start) * 1000;

@@ -145,6 +145,34 @@ input($canyon, ['actions' => [['type' => 'generate','preset' => 'canyon','seed' 
 expect(array_map('floatval', $canyon->camera->position) === [-340.0,50.0,1600.0],
 	'The default canyon starts in the visually verified corridor');
 expect($canyon->landscape->height(-340, 1600) > $canyon->water->level(), 'The canyon floor remains above water');
+enterCar($canyon);
+$start = $canyon->car->state();
+$maxPitchStep = 0;
+$clearance = INF;
+$frameError = 0;
+input($canyon, ['keys'=>['KeyW'=>true]]);
+for($i = 0; $i < 600; $i++)
+{
+	$lastPitch = $canyon->camera->pitch;
+	$canyon->step(1/60);
+	$camera = $canyon->camera;
+	[$x,$y,$z] = $camera->position;
+	$car = $canyon->car->state();
+	$maxPitchStep = max($maxPitchStep, abs($camera->pitch - $lastPitch));
+	$clearance = min($clearance, $y - $canyon->landscape->height($x,$z));
+	$angle = atan2($car['y'] + .65 - $y, hypot($car['x']-$x, $car['z']-$z)) - $camera->pitch;
+	$frameError = max($frameError, abs(tan($angle)/tan($camera->fov/2)));
+}
+expect(hypot($car['x']-$start['x'],$car['z']-$start['z']) > 230 && $maxPitchStep < deg2rad(.25),
+	'The chase horizon stays steady at speed on the default canyon floor');
+expect($clearance >= 1.349 && $frameError < .55, 'The camera clears the ground and keeps the chassis in frame');
+[$previousEye,$previousCar] = $canyon->carView(0);
+[$halfEye,$halfCar] = $canyon->carView(.5);
+expect(abs(2*$halfEye->position[2] - $previousEye->position[2] - $camera->position[2]) < 1e-8
+	&& abs(2*$halfCar['z'] - $previousCar['z'] - $car['z']) < 1e-8 && $previousCar['z'] < $halfCar['z'],
+	'The rendered car and eye advance through the same fraction of the physics step');
+input($canyon, ['actions'=>['pause']]);
+expect($canyon->carView(0) === [$camera,$car], 'Pausing flushes both interpolation histories');
 $canyon->close();
 
 $roads = new Session(['worldSize' => 256,'heightScale' => 0,'detailAmplitude' => 0]);
