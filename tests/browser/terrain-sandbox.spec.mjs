@@ -174,6 +174,36 @@ test('the default landscape produces visible terrain while input remains respons
 	await testInfo.attach('default-landscape', {path: screenshot, contentType: 'image/png'});
 });
 
+test('boarding the craft refines the ground near the camera during cold startup', async({page}) => {
+	await page.setViewportSize({width: 672, height: 420});
+	await page.goto('/games/terrain-sandbox/');
+	await canvas(page).focus();
+	await page.keyboard.press('b');
+	await expect.poll(async() => (await status(page)).mode).toBe('craft');
+
+	await expect.poll(
+		async() => (await status(page)).renderer.cameraSpacing ?? Infinity
+		, {timeout: 30_000}
+	).toBeLessThanOrEqual(32);
+});
+
+test('terrain without a mesh worker still renders and settles', async({page}) => {
+	await page.addInitScript(() => {
+
+		window.Worker = class extends Worker {
+
+			constructor(url, options) {
+				if(options?.name === 'terrain-patch-mesher') throw Error('Worker disabled for test');
+
+				super(url, options);
+			}
+		};
+	});
+
+	await boot(page);
+	expect((await settled(page)).renderer.visible).toBeGreaterThan(0);
+});
+
 test('terrain controls preserve input focus and return paused rendering to idle', async({page}) => {
 	test.setTimeout(240_000);
 	const errors = [];

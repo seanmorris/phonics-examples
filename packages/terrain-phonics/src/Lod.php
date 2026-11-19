@@ -60,9 +60,10 @@ final class Lod
 	 * @param array $resident Resident patch metadata keyed by node key.
 	 * @param float $quality Detail multiplier, from .5 to 2.
 	 * @param float $projection Vertical focal length in pixels for projected geometric error.
+	 * @param callable|null $inDetailView Optional predicate for the padded view used to request finer meshes.
 	 * @return array Lists named draw, request and refine; requested/refining nodes include group priority.
 	 */
-	public function select(array $eye, array $resident, float $quality = 1, float $projection = 600): array
+	public function select(array $eye, array $resident, float $quality = 1, float $projection = 600, ?callable $inDetailView = null): array
 	{
 		if(count($eye) !== 3 || !array_is_list($eye) || !is_finite($quality) || $quality <= 0
 			|| !is_finite($projection) || $projection <= 0
@@ -88,7 +89,8 @@ final class Lod
 			}
 
 			$importance = $this->importance($n, $eye, $resident, $quality, $projection);
-			$split = $n['level'] < $this->depth && $importance > 1;
+			$split = $n['level'] < $this->depth && $importance > 1
+				&& ($inDetailView === null || $inDetailView($n, $resident[$n['key']]));
 
 			// Traversal is already bounded by resident meshes. A separate greedy leaf
 			// cutoff can strand an adjacent quadrant at root depth and collapse balance.
@@ -115,21 +117,7 @@ final class Lod
 				}
 			}
 
-			if($ready)
-			{
-				// The stack pops the largest importance first, keeping the finite leaf
-				// allowance around the camera instead of its old fixed quadrant order.
-				usort($children, /** Visit more important children first through the LIFO stack.
-				 * @param array $a First resident child.
-				 * @param array $b Second resident child.
-				 * @return int Ascending projected importance.
-				 */
-					fn($a, $b) => $this->importance($a, $eye, $resident, $quality, $projection)
-						<=> $this->importance($b, $eye, $resident, $quality, $projection)
-				);
-
-				array_push($stack, ...$children);
-			}
+			if($ready) array_push($stack, ...$children);
 			else $draw[] = $n;
 		}
 

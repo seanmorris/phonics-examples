@@ -76,7 +76,14 @@ call `update()` with a bounded generation budget, then `render()` when the camer
 changes. The caller owns the graphics device and frame presentation. Call `restore()` after context loss and
 `close()` on unloading. `stats()` exposes residency, pending work, mesh bytes, generation time, and frame count.
 Patch selection combines distance with sampled projected error; it is not a certified error bound for every
-unsampled feature. Nearby patches refine first, and a bounded motion lookahead prepares likely future coverage.
+unsampled feature. Nearby patches in a padded camera frustum refine first. Ground outside it keeps coarse
+coverage, and a bounded motion lookahead prepares likely future coverage.
+
+The sandbox activates `browser/PatchMesher.mjs` and passes a `BrowserPatchBuilder` to `Scene`. A dedicated
+worker samples the seeded recipe in sibling groups and sends packed vertices, normals, and error bounds
+through one reusable in-memory file. Patches with edited samples or off-lattice coordinates use the PHP
+sampler. PHP also handles collision and authoring queries in both cases. The renderer starts drawing as soon
+as the root mesh is ready and refines the view while the player moves.
 
 `Water` evaluates analytic directional waves and bounded wake packets. Its shader include uses the same
 parameters and derivatives as PHP. `Watercraft` samples several buoyancy points and adds damping, drag,

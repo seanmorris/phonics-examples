@@ -12,17 +12,21 @@ use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
+use TerrainPhonics\BrowserPatchBuilder;
 use TerrainSandbox\JetSki;
 use TerrainSandbox\Session;
 
 $app = new Context;
 $app->browser(__DIR__ . '/browser/game.mjs');
+$app->browser($archive . 'dependencies/terrain-phonics/browser/PatchMesher.mjs');
 $session = new Session;
 $engine = new Engine(new Device(1280, 720, 'Landscape Sandbox'));
 $engine->clock = new FixedStep(1 / 60, 4);
 // The authoring bridge owns pause, avoiding a second toggle from SDL's default P/Escape mapping.
 $engine->input->bindButton(9, []);
-$scene = new Scene($session->landscape, $session->water, $session->atmosphere);
+$batch = vrzno_env('terrainPatchBatch');
+$builder = new BrowserPatchBuilder(static fn($action, $path, $key, $payload) => $batch($action, $path, $key, $payload));
+$scene = new Scene($session->landscape, $session->water, $session->atmosphere, $builder);
 $jetSki = null;
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
@@ -109,7 +113,7 @@ $engine->start(
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
-		$prepared = $work && $scene->update(min(.1, $frameSeconds), $session->camera);
+		$prepared = $work && $scene->update($frameSeconds, $session->camera);
 		$wavesChanged = $scene->showsWater() && $session->time !== $lastRenderedTime;
 		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
 		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;

@@ -209,10 +209,13 @@ export function activate({module, canvas, session, services})
 			button('craft').hidden = state.mode === 'craft';
 			button('fly').hidden = state.mode !== 'craft';
 
-			pending.hidden = !state.preparing && !state.picking && state.renderer.pending === 0;
-			pending.textContent = state.preparing
-				? 'Preparing terrain edit…'
-				: state.picking ? 'Finding the ground…' : `Preparing terrain · ${state.renderer.pending} patches`;
+			const patches = state.renderer.pending;
+			pending.hidden = !state.preparing && !state.picking && patches === 0;
+
+			if(state.preparing) pending.textContent = 'Preparing terrain edit…';
+			else if(state.picking) pending.textContent = 'Finding the ground…';
+			else if(state.renderer.visible) pending.textContent = `Refining terrain · ${patches} ${patches === 1 ? 'patch' : 'patches'}`;
+			else pending.textContent = 'Preparing terrain…';
 
 			for(const name of ['undo','redo','generate','road-apply','load','save'])
 		button(name).disabled = state.preparing || state.picking && ['undo','redo','road-apply','save'].includes(name);

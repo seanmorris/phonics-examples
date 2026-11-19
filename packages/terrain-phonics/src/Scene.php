@@ -25,6 +25,7 @@ final class Scene
 	private int $heightTextureRevision = -1;
 	private array $patches = [], $jobs = [], $draw = [], $vao = [], $textures = [];
 	private array $activated = [], $neighbors = [], $gridBuffer = [];
+	private ?array $drawIndex = null;
 	private int $groundDraws = 0, $waterDraws = 0;
 	/** Reverse sibling transitions and the exact residency reservation for this selection. */
 	private array $retiring = [], $reserved = [];
@@ -42,7 +43,7 @@ final class Scene
 	private float $viewportAspect = 16 / 9;
 	/** Detail multiplier: .5 economical, 1 balanced, 2 detailed. */
 	public float $quality = 1;
-	/** Maximum generation milliseconds spent in one update. */
+	/** Time slice for incremental sampling. Slow display frames may also upload one ready sibling group. */
 	public float $budgetMs = 2;
 	/** Maximum retained patches including parents. */
 	public int $maximumPatches = 384;
@@ -52,10 +53,15 @@ final class Scene
 	 * @param Landscape $landscape Authoritative committed terrain surface.
 	 * @param Water $water Shared analytic water model.
 	 * @param Atmosphere $atmosphere Shared atmosphere parameters and numerical lookup data.
+	 * @param BrowserPatchBuilder|null $builder Optional background render mesh generator.
 	 * @return void Initializes bounded preparation and graphics resources.
 	 */
-	public function __construct(private Landscape $landscape, private Water $water, private Atmosphere $atmosphere)
-	{
+	public function __construct(
+		private Landscape $landscape,
+		private Water $water,
+		private Atmosphere $atmosphere,
+		private ?BrowserPatchBuilder $builder = null
+	){
 		$this->indices = GpuPatch::indices(Lod::CELLS);
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
 		$this->create();
@@ -166,6 +172,7 @@ final class Scene
 		}
 
 		$this->neighbors = [];
+		$this->drawIndex = null;
 		$this->preparing = $candidate;
 		$this->preparingRevision = $candidate->revision();
 		$this->preparingSourceRevision = $this->landscape->revision();
@@ -283,7 +290,7 @@ final class Scene
 		$deadline = $started + max(.25, $this->budgetMs) / 1000;
 		$this->checkPreparation();
 		$this->trackMotion($seconds, $camera);
-		$this->clock += max(0, min(.1, $seconds));
+		$this->clock += max(0, $seconds);
 		$this->changed = false;
 		$lut = $this->atmosphere->transmittanceLut(64, 16, 24);
 
@@ -299,7 +306,7 @@ final class Scene
 			{
 				$id = array_key_first($this->replacementJobs);
 				$job = &$this->replacementJobs[$id];
-				$this->buildVertex($job, $this->preparing, $this->replacements);
+				if($this->buildVertex($job, $this->preparing, $this->replacements)) { unset($job); break; }
 
 				if($job['index'] === 1089)
 				{
@@ -361,11 +368,19 @@ final class Scene
 			$this->selectionKey = $key;
 		}
 
-		while($this->jobs !== [] && microtime(true) < $deadline)
+		$uploads = 0;
+		$coverReady = false;
+		// On slow displays, accept one ready sibling group during a fraction of
+		// the frame interval. CPU sampling still obeys the original time slice.
+		$uploadDeadline = $started + min(.032, max(0, $seconds - 1 / 60) * .1);
+		// Let a queued worker result make progress even on a frame spent selecting LOD.
+		$poll = $this->builder !== null;
+		while($this->jobs !== [] && ($poll || microtime(true) < $deadline))
 		{
 			$id = array_key_first($this->jobs);
 			$job = &$this->jobs[$id];
-			$this->buildVertex($job);
+			$poll = false;
+			if($this->buildVertex($job)) { unset($job); break; }
 
 			if($job['index'] === (Lod::CELLS + 1) ** 2)
 			{
@@ -381,13 +396,20 @@ final class Scene
 					$this->changed = true;
 				}
 
+				$parentKey = $this->parentKey($job);
 				unset($this->jobs[$id], $job);
-				$this->select($camera);
-				break; // A GL upload is a separate bounded unit; never upload several in one frame.
+				$next = reset($this->jobs);
+				if($next === false || $this->parentKey($next) !== $parentKey) $coverReady = true;
+				$uploads++;
+				if($this->builder === null || $uploads === 4) break;
+				$poll = $next && empty($next['incremental']) && microtime(true) < $uploadDeadline;
+				continue;
 			}
 
 			unset($job);
 		}
+
+		if($coverReady) $this->select($camera);
 
 		$this->lastUpdateMs = (microtime(true) - $started) * 1000;
 
@@ -440,11 +462,31 @@ final class Scene
 	{
 		$this->selections++;
 
+		// A one-patch margin leaves room for camera turns and the neighboring
+		// splits needed for 2:1 seams. Out-of-view ground retains coarse coverage.
+		$planes = $camera->clipPlanes(max(1, (int)round($this->viewportHeight * $this->viewportAspect)), $this->viewportHeight);
+		$eye = $camera->position;
+		[$waterMin, $waterMax] = $this->water->heightRange();
+		$inDetailView = /** Test the expanded ground and water bounds against the viewing frustum.
+		 * @param array $node Quadtree node to consider refining.
+		 * @param array $patch Resident mesh carrying its vertical bounds.
+		 * @return bool Whether finer detail may be needed near this view.
+		 */
+			static function(array $node, array $patch) use ($planes, $eye, $waterMin, $waterMax): bool {
+			$margin = $node['size'];
+			$node['x'] -= $margin;
+			$node['z'] -= $margin;
+			$node['size'] += 2 * $margin;
+			return Camera::inView($planes, $eye, $node, min($patch['minY'], $waterMin) - $margin,
+				max($patch['maxY'], $waterMax) + $margin);
+		};
+
 		$result = $this->lod->select(
 			$camera->position
 			, $this->patches
 			, $this->quality
 			, $this->viewportHeight / (2 * tan($camera->fov / 2))
+			, $inDetailView
 		);
 
 		$old = array_column($this->draw, 'key');
@@ -475,6 +517,7 @@ final class Scene
 		{
 			$this->changed = true;
 			$this->neighbors = [];
+			$this->drawIndex = null;
 		}
 
 		$this->reserved = $this->ancestors($this->draw);
@@ -559,6 +602,18 @@ final class Scene
 		foreach($wanted as $n)
 		$ordered[$n['key']] = $n + ($this->jobs[$n['key']] ?? ['index' => 0,'bytes' => '', 'heights' => []]);
 		$this->jobs = $ordered;
+		if($this->builder !== null)
+		{
+			$queued = [];
+			foreach($ordered as $node)
+			{
+				$parent = $this->parentKey($node);
+				if(isset($queued[$parent])) continue;
+				$this->builder->prime($this->landscape, $node, $this->patches[$parent] ?? null);
+				$queued[$parent] = true;
+				if(count($queued) === 3) break;
+			}
+		}
 		$this->evict();
 		$this->selectionTime = $this->clock;
 	}
@@ -615,9 +670,7 @@ final class Scene
 			$node = $drawKeys[$parent];
 			$priority[$parent] = $nodes[0]['priority'] * $this->viewWeight($node, $camera, $forward);
 
-			foreach($drawKeys as $neighbor)
-			if($neighbor['level'] < $node['level'] && self::meets($node, $neighbor))
-			$blockers[$parent][] = $neighbor['key'];
+			$blockers[$parent] = array_keys(self::neighborsAt($node, $drawKeys, $node['level'] - 1));
 		}
 
 		// Dependencies always point to a lower depth, so one deepest-first pass
@@ -680,6 +733,31 @@ final class Scene
 	}
 
 	/**
+	 * Look up the cells touching a node at an equal or coarser quadtree level.
+	 * @param array $node Patch in the current leaf cover.
+	 * @param array $leaves Complete cover indexed by quadtree key.
+	 * @param int $level Neighbor depth to inspect.
+	 * @return array Touching leaves indexed by key, including corner contacts.
+	 */
+	private static function neighborsAt(array $node, array $leaves, int $level): array
+	{
+		if($level < 0) return [];
+		$shift = $node['level'] - $level;
+		$x = $node['ix']; $z = $node['iz'];
+		$cx = $x >> $shift; $cz = $z >> $shift;
+		$last = (1 << $level) - 1;
+		$result = [];
+		for($nz = max(0, ($z - 1) >> $shift); $nz <= min($last, ($z + 1) >> $shift); $nz++)
+		for($nx = max(0, ($x - 1) >> $shift); $nx <= min($last, ($x + 1) >> $shift); $nx++)
+		{
+			if($nx === $cx && $nz === $cz) continue;
+			$key = "$level:$nx:$nz";
+			if(isset($leaves[$key])) $result[$key] = $leaves[$key];
+		}
+		return $result;
+	}
+
+	/**
 	 * Coarsen a complete cover until all touching leaves differ by at most one level.
 	 * @param array $nodes Complete list of quadtree leaf patches.
 	 * @return array Complete cover satisfying edge and corner balance.
@@ -691,13 +769,13 @@ final class Scene
 		{
 			$replace = null;
 
+			$leaves = array_column($nodes, null, 'key');
 			foreach($nodes as $a)
-			foreach($nodes as $b)
-			if($a['level'] > $b['level'] + 1 && self::meets($a, $b))
+			for($level = $a['level'] - 2; $level >= 0; $level--)
 			{
-				$level = $b['level'] + 1;
-				$factor = 2 ** ($a['level'] - $level);
-				$replace = $this->lod->node($level, (int)floor($a['ix'] / $factor), (int)floor($a['iz'] / $factor));
+				if(self::neighborsAt($a, $leaves, $level) === []) continue;
+				$shift = $a['level'] - ($level + 1);
+				$replace = $this->lod->node($level + 1, $a['ix'] >> $shift, $a['iz'] >> $shift);
 				break 2;
 			}
 
@@ -788,8 +866,10 @@ final class Scene
 		foreach($nodes as $node)
 		for($level = $node['level']; $level >= 0; $level--)
 		{
-			$factor = 2 ** ($node['level'] - $level);
-			$result[$level . ':' . (int)floor($node['ix'] / $factor) . ':' . (int)floor($node['iz'] / $factor)] = true;
+			$shift = $node['level'] - $level;
+			$key = $level . ':' . ($node['ix'] >> $shift) . ':' . ($node['iz'] >> $shift);
+			if(isset($result[$key])) break;
+			$result[$key] = true;
 		}
 
 		return $result;
@@ -865,26 +945,17 @@ final class Scene
 			unset($this->retiring[$key]);
 		}
 
+		$targetLeaves = array_column($desired, null, 'key');
+		$targetBranches = $this->ancestors($desired);
 		foreach(array_values($nodes) as $node)
 		{
-			if($node['level'] === 0) continue;
+			if($node['level'] === 0 || isset($targetBranches[$node['key']])) continue;
 
 			$key = $this->parentKey($node);
 
 			if(isset($this->retiring[$key])) continue;
 
 			$parent = $this->lod->node($node['level'] - 1, intdiv($node['ix'], 2), intdiv($node['iz'], 2));
-			$wanted = false;
-
-			foreach($desired as $target)
-			if(self::contains($target, $parent))
-			{
-				$wanted = true;
-				break;
-			}
-
-			if(!$wanted) continue;
-
 			$children = $this->children($parent);
 			$ready = true;
 
@@ -913,16 +984,7 @@ final class Scene
 		{
 			if($this->morph($node) > 0 || isset($this->retiring[$this->parentKey($node)])) continue;
 
-			$wanted = false;
-
-			foreach($desired as $target)
-			if($target['level'] > $node['level'] && self::contains($node, $target))
-			{
-				$wanted = true;
-				break;
-			}
-
-			if(!$wanted) continue;
+			if(isset($targetLeaves[$node['key']]) || !isset($targetBranches[$node['key']])) continue;
 
 			$children = $this->children($node);
 			$ready = true;
@@ -936,12 +998,10 @@ final class Scene
 
 			if(!$ready) continue;
 
-			foreach($nodes as $neighbor)
-			if(self::meets($node, $neighbor) && ($neighbor['level'] < $node['level']
-				|| ($neighbor['level'] === $node['level'] && ($this->morph(
-					$neighbor
-				) > 0 || isset($this->retiring[$this->parentKey($neighbor)])))
-			)){
+			if(self::neighborsAt($node, $nodes, $node['level'] - 1)) continue;
+			foreach(self::neighborsAt($node, $nodes, $node['level']) as $neighbor)
+			if($this->morph($neighbor) > 0 || isset($this->retiring[$this->parentKey($neighbor)]))
+			{
 				$ready = false;
 				break;
 			}
@@ -993,9 +1053,9 @@ final class Scene
 		$neighbors = &$this->neighbors[$node['key']];
 		if($neighbors === null)
 		{
-			$neighbors = [];
-			foreach($this->draw as $other)
-				if($other['level'] <= $node['level'] && self::meets($node,$other)) $neighbors[] = $other;
+			$this->drawIndex ??= array_column($this->draw, null, 'key');
+			$neighbors = self::neighborsAt($node, $this->drawIndex, $node['level'])
+				+ self::neighborsAt($node, $this->drawIndex, $node['level'] - 1);
 		}
 		foreach($neighbors as $neighbor)
 		{
@@ -1075,9 +1135,9 @@ final class Scene
 	 * @param array $job Mutable incremental mesh generation record.
 	 * @param Landscape|null $surface Candidate surface override, or the live landscape.
 	 * @param array|null $parents Available parent patch data, including staged replacements.
-	 * @return void Samples one mesh/halo node or packs one eleven-float vertex with its parent data.
+	 * @return bool Whether the caller should yield until the worker responds.
 	 */
-	private function buildVertex(array &$job, ?Landscape $surface = null, ?array $parents = null): void
+	private function buildVertex(array &$job, ?Landscape $surface = null, ?array $parents = null): bool
 	{
 		$source = $surface ?? $this->landscape;
 		$stride = Lod::CELLS + 1;
@@ -1091,6 +1151,12 @@ final class Scene
 		{
 			$key = $this->parentKey($job);
 			$parentPatch = $parents[$key] ?? $this->patches[$key] ?? null;
+		}
+
+		if($this->builder !== null && empty($job['incremental']))
+		{
+			if($this->builder->advance($source, $job, $parentPatch)) return $job['index'] !== $vertices;
+			$job['incremental'] = true;
 		}
 
 		// Pass one samples only this mesh lattice and a shared one-node normal halo.
@@ -1127,7 +1193,7 @@ final class Scene
 				);
 			}
 
-			return;
+			return false;
 		}
 
 		// Pass two derives visual normals from these exact mesh samples. Physics still
@@ -1210,6 +1276,7 @@ final class Scene
 		]);
 
 		if($job['index'] === $vertices) unset($job['halo']);
+		return false;
 	}
 
 	/**
@@ -1594,6 +1661,7 @@ final class Scene
 		$this->replacements = $this->replacementJobs = [];
 		$this->patches = $this->jobs = $this->draw = $this->activated = $this->retiring = $this->reserved = [];
 		$this->neighbors = [];
+		$this->drawIndex = null;
 		$this->selectionPending = false;
 		$this->previousEye = $this->lookahead = null;
 	}
@@ -1607,6 +1675,7 @@ final class Scene
 		if($this->closed) return;
 
 		$this->closed = true;
+		$this->builder?->close();
 		$this->clearPatches();
 		$this->groundProgram->close();
 		$this->skyProgram->close();

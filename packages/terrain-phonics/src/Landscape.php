@@ -866,6 +866,33 @@ final class Landscape implements TerrainSurface
 	}
 
 	/**
+	 * Determine whether the base recipe reproduces every vertex and normal-halo sample.
+	 * @param float $x Minimum patch X in metres.
+	 * @param float $z Minimum patch Z in metres.
+	 * @param float $size Width of the square patch in metres.
+	 * @return bool True for aligned samples untouched by committed terrain edits.
+	 */
+	public function proceduralMeshPatch(float $x, float $z, float $size): bool
+	{
+		$step = $size / Lod::CELLS;
+		$spacing = $this->parameters['spacing'];
+		foreach([$x, $z, $step, $this->parameters['worldSize'] / 2] as $value)
+		if(fmod($value, $spacing) !== 0.0) return false;
+		// Only mesh vertices and their one-node normal halo sample the landscape.
+		// A small brush between distant coarse samples can leave the whole mesh procedural.
+		foreach($this->operations as $op)
+		{
+			[$left,$front,$right,$back] = Edits::bounds($op);
+			$firstX = max(-1, ceil(($left - $x) / $step));
+			$lastX = min(Lod::CELLS + 1, floor(($right - $x) / $step));
+			$firstZ = max(-1, ceil(($front - $z) / $step));
+			$lastZ = min(Lod::CELLS + 1, floor(($back - $z) / $step));
+			if($firstX <= $lastX && $firstZ <= $lastZ) return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Sample a coarse mesh without allocating an entire physical tile for one lattice point.
 	 * @param float $wx World X in metres.
 	 * @param float $wz World Z in metres.

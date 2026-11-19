@@ -35,6 +35,12 @@ final class Noise
 	}
 
 	/**
+	 * Share the seed's gradient lookup with batch render backends.
+	 * @return array The 256 permutation entries before periodic repetition.
+	 */
+	public function permutation(): array { return array_slice($this->permutation, 0, 256); }
+
+	/**
 	 * Evaluate value and coordinate derivatives as [value, dx, dz].
 	 * @param float $x Coordinate in noise-lattice units.
 	 * @param float $z Coordinate in noise-lattice units.
