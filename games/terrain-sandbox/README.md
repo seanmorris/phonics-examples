@@ -1,6 +1,6 @@
 # Landscape Sandbox
 
-An offline authoring and flight sandbox for the optional `terrain-phonics` package. Fly over procedural mountains, canyons, or coasts; shape the ground; grade roads; adjust the sun and atmosphere; drive a car on land, and test a buoyant watercraft.
+An offline authoring and flight sandbox for the optional `terrain-phonics` package. Fly over procedural mountains, canyons, or coasts; shape the ground; grade roads; adjust the sun and atmosphere; drive a car, ride a buoyant watercraft, or fly an F5.
 
 See [the controls guide](docs/index.md) and [landscape authoring](docs/authoring.md).
 
@@ -15,3 +15,7 @@ The watercraft uses “Jetski” by Futurealiti. The sandbox uses a simplified m
 ## Car model
 
 The car uses “Ferrari-Testarossa-84-low-poly” by XGLOL235. The sandbox scales the model to 4.48 metres, bakes its materials, and animates the wheels while driving. Rebuild it with `python3 scripts/import_terrain_vehicle.py --vehicle testarossa /path/to/ferrari-testarossa-84-low-poly.zip` and gltfpack 0.18. [Original model](https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a) · [Author](https://sketchfab.com/XGLOL235) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+## Aircraft model
+
+The aircraft uses “F5” by manilov.ap. The sandbox uses a gear-up mesh scaled to 15.6 metres and packs the original paint textures into one atlas. Rebuild it with `python3 scripts/import_terrain_vehicle.py --vehicle f5 /path/to/f5.zip`, gltfpack 0.18, and ImageMagick. [Original model](https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02) · [Author](https://sketchfab.com/manilov.ap) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)

@@ -29,7 +29,7 @@ $builder = new BrowserPatchBuilder(static fn($action, $path, $key, $payload) => 
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere, $builder);
 $models = [];
 $viewCamera = $session->camera;
-$carPose = null;
+$vehiclePose = null;
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
@@ -76,7 +76,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	if($packet !== '' || $heldKeys || $wasPicking || $wasSearching)
 	{
 		$input['keys'] = $heldKeys;
-		$moving = $heldKeys || $session->mode === 'craft' || !empty($input['look'][0]) || !empty($input['look'][1]);
+		$moving = $heldKeys || in_array($session->mode, ['craft','jet'], true) || !empty($input['look'][0]) || !empty($input['look'][1]);
 		$session->input($input, min(.1, $frameSeconds), $width / $height, $moving ? 1.0 : 7.5);
 	}
 	$urgentStatus = $urgentStatus || $keysChanged || isset($input['clicks'][0]) || $wasPicking !== $session->picking
@@ -99,25 +99,28 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	return false;
 });
 
-$drawVehicle = static function() use ($session, &$models, &$width, &$height, &$viewCamera, &$carPose): void {
-	$car = $session->mode === 'car';
-	$name = $car ? 'testarossa' : 'jetski';
+$drawVehicle = static function() use ($session, &$models, &$width, &$height, &$viewCamera, &$vehiclePose): void {
+	$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
 	$model = $models[$name] ??= new VehicleModel(__DIR__ . '/assets/' . $name . '/mesh.bin.gz');
-	$model->draw($carPose ?? $session->craft->state(),
+	$model->draw($vehiclePose ?? $session->craft->state(),
 		$viewCamera, $session->atmosphere, $session->water, $width, $height);
 };
 
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, $drawVehicle, &$viewCamera, &$carPose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		$session, $scene, $drawVehicle, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $publish
 	): void {
-		$lastCar = $carPose;
-		[$viewCamera,$carPose] = $session->mode === 'car' ? $session->carView($alpha) : [$session->camera,null];
+		$lastVehicle = $vehiclePose;
+		[$viewCamera,$vehiclePose] = match($session->mode) {
+			'car' => $session->carView($alpha),
+			'jet' => $session->jet->view($session->camera, $session->paused ? 1.0 : $alpha),
+			default => [$session->camera,null]
+		};
 		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->fov];
 		$moving = $session->mode === 'craft' || $pose !== $lastBudgetPose;
 		// High-refresh frames can advance the presentation fraction without a new simulation tick.
-		if($carPose !== null && ($lastCar !== $carPose || $moving)) $dirty = true;
+		if($vehiclePose !== null && ($lastVehicle !== $vehiclePose || $moving)) $dirty = true;
 		$budget = $moving ? 2.0 : 8.0;
 		$scene->budgetMs = max(.25, $budget - $inputMs);
 		$lastBudgetPose = $pose;

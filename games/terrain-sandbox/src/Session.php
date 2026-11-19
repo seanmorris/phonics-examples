@@ -29,11 +29,12 @@ final class Session
 	/** Controllable physical watercraft. */
 	public Watercraft $craft;
 	public Car $car;
+	public Jet $jet;
 	private CarChase $chase;
 	private ?\Generator $carSearch = null;
 	/** Whether simulation is paused; authoring remains available. */
 	public bool $paused = false;
-	/** Current interaction mode: fly, craft or car. */
+	/** Current interaction mode: fly, craft, car or jet. */
 	public string $mode = 'fly';
 	/** Simulation clock in seconds. */
 	public float $time = 0;
@@ -85,6 +86,7 @@ final class Session
 		$this->camera = new Camera;
 		$this->craft = new Watercraft;
 		$this->car = new Car;
+		$this->jet = new Jet;
 		$this->chase = new CarChase;
 		$this->resetCamera();
 		$this->sun();
@@ -166,6 +168,18 @@ final class Session
 			}
 			elseif($this->chase->advance($this->camera, $before, $this->car->state(), $this->landscape, $seconds))
 				$this->dirty = true;
+		}
+		if($this->mode === 'jet')
+		{
+			if(!$this->jet->step($seconds, $this->held('KeyW') - $this->held('KeyS'),
+				$this->held('KeyD') - $this->held('KeyA'), $this->held('KeyE') - $this->held('KeyQ'),
+				$this->camera, $this->landscape, $this->water->level()))
+			{
+				$this->mode = 'fly';
+				$this->clampCamera();
+				$this->message = 'Reached the edge of the landscape. Free flight controls active.';
+			}
+			$this->dirty = true;
 		}
 		$this->time += $seconds;
 		$this->water->update($this->time);
@@ -307,6 +321,15 @@ final class Session
 					$this->carSearch = $this->car->findSite($this->landscape, $this->water, $this->camera->position, M_PI - $this->camera->yaw);
 					$this->message = 'Looking for level ground…';
 				}
+				break;
+			case 'jet':
+				if($this->mode === 'jet') break;
+				$this->cancelPick();
+				$this->carSearch = null;
+				$this->releasePin();
+				$this->jet->board($this->camera, $this->landscape, $this->water->level());
+				$this->mode = 'jet'; $this->paused = false;
+				$this->message = 'W/S change speed, A/D bank, Q/E dive or climb. F returns to free flight.';
 				break;
 			case 'craft': $this->carSearch = null; $this->boardCraft(); break;
 			case 'fly':
@@ -666,6 +689,7 @@ final class Session
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'settings' => $this->settings,'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
+			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats()];
 	}

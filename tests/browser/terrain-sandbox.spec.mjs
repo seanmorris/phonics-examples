@@ -187,6 +187,58 @@ test('boarding the craft refines the ground near the camera during cold startup'
 	).toBeLessThanOrEqual(32);
 });
 
+test('fly the F5, pause in a bank, and return to free flight', async({page}) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await boot(page);
+	const airspace = fixture();
+	airspace.landscape.recipe.worldSize = 8192;
+	airspace.camera = {position: [0,150,0], yaw: 0, pitch: 0};
+	await load(page, airspace);
+	const view = canvas(page);
+	const mesh = await fs.readFile(new URL('../../games/terrain-sandbox/assets/f5/mesh.bin.gz', import.meta.url));
+
+	await view.evaluate((element, count) => {
+		const gl = element.getContext('webgl2'), draw = gl.drawElements.bind(gl);
+		element.jetDraws = 0;
+
+		gl.drawElements = (...args) => {
+			if(args[1] === count) element.jetDraws++;
+
+			return draw(...args);
+		};
+	}, gunzipSync(mesh).readUInt32LE(4));
+
+	await control(page, 'jet').click();
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
+	await expect.poll(() => view.evaluate(el => el.jetDraws)).toBeGreaterThan(0);
+	await expect(control(page, 'jet')).toBeHidden();
+	await view.focus();
+	await page.keyboard.down('d');
+	await page.keyboard.down('e');
+	await page.keyboard.down('w');
+	await expect.poll(async() => (await status(page)).jet.roll).toBeLessThan(-.4);
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status(page)).paused).toBe(true);
+	const frozen = (await status(page)).jet;
+	expect(frozen.x).toBeGreaterThan(0);
+	expect(frozen.y).toBeGreaterThan(150);
+	expect(frozen.speed).toBeGreaterThan(110);
+
+	for(const key of ['w','e','d']) await page.keyboard.up(key);
+	const before = await view.evaluate(el => el.jetDraws);
+	await restoreContext(page);
+	await expect.poll(() => view.evaluate(el => el.jetDraws)).toBeGreaterThan(before);
+	expect((await status(page)).jet).toEqual(frozen);
+	expect(await view.evaluate(el => el.getContext('webgl2').getError())).toBe(0);
+	await view.focus();
+	await page.keyboard.press('f');
+	await expect.poll(async() => (await status(page)).mode).toBe('fly');
+	await page.keyboard.press('j');
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
+	expect(errors).toEqual([]);
+});
+
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));

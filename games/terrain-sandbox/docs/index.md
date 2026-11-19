@@ -10,6 +10,12 @@ Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and 
 
 Choose a preset and seed, then select **Generate** to create a new landscape. Generation replaces the current landscape and its edits, so save your work first. A seed reproduces its landscape under the saved generator version.
 
+## Fly the F5
+
+Press **J** or choose **Fly F5** to start airborne at your current location, facing the same direction as the camera. The jet carries its speed when you release the throttle. Hold **W/S** to speed up or slow down, **A/D** to bank into a turn, and **Q/E** to dive or climb. Release the flight controls to level the wings and nose.
+
+The chase camera keeps the horizon level. **P** pauses the flight. Press **F** to leave the jet and explore from the chase camera’s position. Reaching the map edge also returns you to free flight.
+
 ## Watch the atmosphere
 
 Sun azimuth moves the sun around the horizon; elevation raises or lowers it. Haze controls aerosols, and Exposure adjusts the displayed brightness. Enable **Animate the sun** to see the light move over time.
@@ -36,7 +42,7 @@ Select **Return to flight**, or press **F**, to explore and edit again. The craf
 
 ## Pause and save
 
-**P** pauses waves, the moving sun, and watercraft physics. Camera movement and authoring remain available. Once terrain preparation settles, an unchanged paused view stops submitting rendered frames.
+**P** pauses waves, the moving sun, and vehicle motion. Camera movement and authoring remain available. Once terrain preparation settles, an unchanged paused view stops submitting rendered frames.
 
 **Save file** downloads a JSON document containing the landscape recipe, committed edits, environment controls, and camera. **Load file** opens a file picker. Files are local to your device; the sandbox does not upload them.
 

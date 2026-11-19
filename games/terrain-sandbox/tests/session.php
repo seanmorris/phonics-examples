@@ -444,4 +444,40 @@ input($edge, ['actions'=>['fly']]);
 expect($edge->mode === 'fly' && $edge->status()['car'] === null, 'Returning to flight retires the active car pose');
 $edge->close();
 
+$flight = new Session(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0]);
+$flight->camera->position = [0,1,0];
+$flight->camera->yaw = 0;
+input($flight, ['values'=>['waterLevel'=>20], 'actions'=>['pause','jet']]);
+$spawn = $flight->status()['jet'];
+expect($flight->mode === 'jet' && !$flight->paused && $spawn['y'] >= 95 && $spawn['yaw'] === M_PI,
+	'Boarding from low over water starts airborne facing the current heading');
+$flight->step(1/60);
+expect($flight->jet->state()['z'] < $spawn['z'], 'The jet cruises forward without a held key');
+input($flight, ['keys'=>['KeyW'=>true,'KeyD'=>true,'KeyE'=>true]]);
+for($i=0; $i<60; $i++) $flight->step(1/60);
+$turn = $flight->jet->state();
+expect($turn['x'] > 0 && $turn['roll'] < 0 && $turn['yaw'] < $spawn['yaw'],
+	'Right bank turns toward screen right when facing north');
+expect($turn['y'] > $spawn['y'] && $turn['speed'] > $spawn['speed'], 'Throttle and climb carry the jet upward and accelerate it');
+[$eye,$middle] = $flight->jet->view($flight->camera,.5);
+expect($middle['y'] < $turn['y'] && abs($eye->position[1] - $middle['eyeY']) < 1e-9
+	&& abs($eye->yaw + $middle['yaw'] - M_PI) < 1e-9, 'The chase camera and jet interpolate at the same presentation time');
+input($flight, ['actions'=>['pause']]);
+$flight->dirty = false;
+$flight->step(1/60);
+expect($flight->jet->state() === $turn && !$flight->dirty, 'Pausing freezes the jet without dirtying the frame');
+input($flight, ['actions'=>['pause'], 'keys'=>['KeyA'=>true,'KeyQ'=>true,'KeyS'=>true]]);
+for($i=0; $i<360; $i++) $flight->step(1/60);
+$low = $flight->jet->state();
+expect($flight->mode === 'jet' && $low['speed'] === 55.0 && abs($low['y'] - 28) < .001 && $low['roll'] > 0,
+	'Diving and braking in a left turn respects the water clearance and minimum cruise speed');
+input($flight, ['actions'=>['fly']]);
+expect($flight->status()['jet'] === null && $flight->mode === 'fly', 'Leaving the jet restores free flight');
+$flight->camera->position = [0,40,-2047];
+$flight->camera->yaw = 0;
+input($flight, ['actions'=>['jet']]);
+$flight->step(1/60);
+expect($flight->mode === 'fly' && str_contains($flight->message,'edge'), 'Flight at the map boundary returns control inside the landscape');
+$flight->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";
