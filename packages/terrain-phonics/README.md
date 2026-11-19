@@ -36,6 +36,12 @@ Smooth joins preserve derivatives; a heightfield still cannot represent an exact
 Only requested lattice nodes are generated. Packed tiles have a bounded LRU cache; `pin()` reserves a small
 region for a physical body independently of camera travel. `unpin()` and `close()` release ownership.
 
+`localBounds($x, $z, $cells)` bounds the surface over the square block of lattice cells around a point without
+generating a node. The interval includes terrain edits and cubic interpolation, and it stays valid until the next
+committed revision. A body that only has to stay above the ground can compare its height with the block's `maxY`
+and take an exact `height()` sample only when that test fails. The sandbox's jet does this with blocks from 2 to
+256 cells, so it generates no nodes while it cruises.
+
 ## Edit and preserve a landscape
 
 ```php

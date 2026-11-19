@@ -516,4 +516,142 @@ expect($knob->selectionInterval === .05 && !array_key_exists('selectionInterval'
 	'A file cannot set the interval or add it to the settings');
 $knob->close();
 
+/**
+ * Work out where one step leaves the jet and its chase eye when both sample the exact surface every time.
+ * @param array $before Jet state before the step.
+ * @param array $after Jet state after the step, which supplies the new attitude, speed and position.
+ * @param TerrainPhonics\Landscape $ground Surface with the same recipe and edits as the one the jet flies over.
+ * @param float $water Water level in metres.
+ * @return array Jet height and eye height in metres.
+ */
+function exactJet(array $before, array $after, TerrainPhonics\Landscape $ground, float $water): array
+{
+	$travel = $after['speed'] * (1 / 60);
+	$y = min(15000.0, $before['y'] + sin($after['pitch']) * $travel);
+	$y = max($y, $ground->height($after['x'], $after['z']) + 8, $water + 8);
+	$half = $ground->recipe()['worldSize'] / 2;
+	$x = max(-$half, min($half, $after['x'] - $after['boom'] * sin($after['yaw'])));
+	$z = max(-$half, min($half, $after['z'] - $after['boom'] * cos($after['yaw'])));
+	$eye = max($water + 3, $y + 24.0 * sin(.38 - .75 * $after['pitch']));
+	return [$y, max($eye, $ground->height($x, $z) + 3)];
+}
+
+/**
+ * Fly the session's jet and compare every step with the exact rule.
+ * @param Session $session Session with a boarded jet and held keys.
+ * @param TerrainPhonics\Landscape $ground Second surface, so the exact rule leaves the session's cache alone.
+ * @param int $steps Fixed steps to fly.
+ * @return array Whether every step matched, and how many steps left the jet resting on the ground's 8 metre floor.
+ */
+function flyExactly(Session $session, TerrainPhonics\Landscape $ground, int $steps): array
+{
+	$matched = true;
+	$resting = 0;
+	for($i = 0; $i < $steps; $i++)
+	{
+		$before = $session->jet->state();
+		$session->step(1 / 60);
+		$after = $session->jet->state();
+		$expected = exactJet($before, $after, $ground, $session->water->level());
+		$matched = $matched && [$after['y'], $after['eyeY']] === $expected;
+		$resting += (int)($after['y'] === $ground->height($after['x'], $after['z']) + 8);
+	}
+	return [$matched, $resting];
+}
+
+// The jet samples the ground only as finely as its height demands. A second landscape with the same recipe answers
+// the exact rule, so the session's own counter shows the nodes that the jet alone generated.
+$air = new Session;
+$ground = new TerrainPhonics\Landscape($air->landscape->recipe());
+$air->camera->position = [9000,900,1800];
+$air->camera->yaw = M_PI / 2;
+input($air, ['actions'=>['jet'], 'keys'=>['KeyW'=>true,'KeyD'=>true]]);
+$nodes = $air->landscape->stats()['generated'];
+[$matched] = flyExactly($air, $ground, 600);
+expect($matched && $air->landscape->stats()['generated'] === $nodes,
+	'A jet cruising high over the coast stays on the exact path without generating a lattice node');
+input($air, ['keys'=>['KeyW'=>true,'KeyQ'=>true]]);
+[$matched] = flyExactly($air, $ground, 420);
+$nodes = $air->landscape->stats()['generated'];
+[$skimmed, $resting] = flyExactly($air, $ground, 300);
+expect($matched && $skimmed && $resting > 200 && $air->landscape->stats()['generated'] > $nodes + 3000,
+	"A diving jet samples the true surface and rests on its 8 metre floor: $resting of 300 steps");
+input($air, ['keys'=>['KeyW'=>true,'KeyE'=>true]]);
+[$matched] = flyExactly($air, $ground, 240);
+$nodes = $air->landscape->stats()['generated'];
+input($air, ['keys'=>['KeyW'=>true]]);
+[$level] = flyExactly($air, $ground, 240);
+expect($matched && $level && $air->landscape->stats()['generated'] === $nodes,
+	'Climbing away returns the jet to steps without node generation');
+
+// A bound remembered from before an edit would let the jet fly through ground that the edit raised.
+$s = $air->jet->state();
+[$eyeX, $eyeY, $eyeZ] = $air->camera->position;
+$bump = ['type'=>'raise','x'=>$eyeX,'z'=>$eyeZ,'radius'=>12.0,'amount'=>$eyeY - $ground->height($eyeX, $eyeZ) + 40];
+foreach([$air->landscape, $ground] as $surface) { $surface->queue($bump); $surface->commit(); }
+[$matched] = flyExactly($air, $ground, 1);
+[$eyeX, $lifted, $eyeZ] = $air->camera->position;
+expect($matched && $lifted === $ground->height($eyeX, $eyeZ) + 3 && $lifted > $eyeY + 20
+	&& abs($air->jet->state()['y'] - $s['y']) < 1,
+	'Ground raised behind the jet lifts the chase eye onto the true surface and leaves the jet level');
+$s = $air->jet->state();
+$dome = ['type'=>'raise','x'=>$s['x'],'z'=>$s['z'],'radius'=>600.0,'amount'=>2500.0];
+foreach([$air->landscape, $ground] as $surface) { $surface->queue($dome); $surface->commit(); }
+[$matched, $resting] = flyExactly($air, $ground, 1);
+expect($matched && $resting === 1 && $air->jet->state()['y'] > $s['y'] + 1500,
+	'Ground raised under a cruising jet carries it up on the next step');
+[$matched] = flyExactly($air, $ground, 400);
+$s = $air->jet->state();
+$mesa = ['type'=>'raise','x'=>$s['x'],'z'=>$s['z'],'radius'=>500.0,'amount'=>6000.0];
+$replacement = TerrainPhonics\Landscape::load($air->landscape->save());
+$replacement->queue($mesa); $replacement->commit();
+$air->publishLandscape($replacement);
+$ground->queue($mesa); $ground->commit();
+[$published, $resting] = flyExactly($air, $ground, 1);
+expect($matched && $published && $resting === 1 && $air->jet->state()['y'] > $s['y'] + 1500,
+	'A published replacement landscape takes effect on the next step');
+[$matched] = flyExactly($air, $ground, 120);
+expect($matched, 'The jet stays on the exact path over the replacement');
+$ground->close();
+$air->close();
+
+// A generated world starts again at revision zero, so only its identity tells the jet that the ground changed.
+$worlds = new Session(['heightScale'=>0,'detailAmplitude'=>0]);
+$ground = new TerrainPhonics\Landscape($worlds->landscape->recipe());
+$worlds->camera->position = [600,40,1800];
+input($worlds, ['actions'=>['jet']]);
+[$matched] = flyExactly($worlds, $ground, 20);
+expect($matched && $worlds->jet->state()['y'] === 75.0, 'A jet over a featureless plain holds its boarding height');
+$ground->close();
+input($worlds, ['actions'=>[['type'=>'generate','preset'=>'mountain','seed'=>'first-light']]]);
+$ground = new TerrainPhonics\Landscape($worlds->landscape->recipe());
+expect($worlds->landscape->revision() === 0 && $ground->height(600, 1800) > 100,
+	'The generated mountains stand where the plain was');
+$worlds->camera->position = [600,40,1800];
+input($worlds, ['actions'=>['jet'], 'keys'=>['KeyQ'=>true]]);
+[$matched, $resting] = flyExactly($worlds, $ground, 240);
+expect($matched && $resting > 60, 'Boarding over a newly generated world forgets the bounds of the old one');
+$ground->close();
+$worlds->close();
+
+// A block bound says nothing about ground beyond its own rectangle. Six thin towers stand 37 metres apart on a
+// plain, each 100 metres taller than the last, so they meet the 2 to 256 metre blocks at six different offsets.
+$tower = new Session(['heightScale'=>0,'detailAmplitude'=>0]);
+for($i = 0; $i < 6; $i++)
+	$tower->landscape->queue(['type'=>'raise','x'=>600,'z'=>1900 + 37 * $i,'radius'=>6.0,'amount'=>500.0 + 100 * $i]);
+$tower->landscape->commit();
+$ground = TerrainPhonics\Landscape::load($tower->landscape->save());
+$tower->camera->position = [600,40,1800];
+$tower->camera->yaw = M_PI;
+input($tower, ['actions'=>['jet']]);
+$nodes = $tower->landscape->stats()['generated'];
+[$matched] = flyExactly($tower, $ground, 40);
+expect($matched && $tower->landscape->stats()['generated'] === $nodes,
+	'A jet approaching a tower clears the open plain without sampling it');
+[$matched, $resting] = flyExactly($tower, $ground, 130);
+expect($matched && $resting >= 12 && $tower->jet->state()['y'] > 1007,
+	"The jet rides up each tower face in turn: $resting steps on a face");
+$ground->close();
+$tower->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

@@ -65,7 +65,7 @@
     "src/CarChase.php": "sha256-Nrf61HNyT1EkNVBzGZPwFWOK4pUshrMtwEo49LZmUvA=",
     "src/CarSuspension.php": "sha256-bq66+ExjcWbqIeSGZFOAWz04PlryL7Bd5bWUf2Mqhl4=",
     "src/CarTumble.php": "sha256-llr3HAmWXN5xT5hRXvAnkGZm42H37B2zWbqYxQP9xFg=",
-    "src/Jet.php": "sha256-/VcRs5/wMrv6seHdFVoMeGrIDqq1ZKyS78cOX0pHLJw=",
+    "src/Jet.php": "sha256-A70kkVushvm5EyLegD1eBy5rdmPvVdFWJbTOxm4hlQo=",
     "src/Session.php": "sha256-aqky4jRQLegCP+FSGJm2ZKY/Dzm5sR7Sn7WPa1yzzd8=",
     "src/VehicleModel.php": "sha256-lZ+SZY7V2BODOGwtxxL/9CtIJ/DEMG+5lif2uov9iB4="
   }

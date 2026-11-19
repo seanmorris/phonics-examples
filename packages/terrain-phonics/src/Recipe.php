@@ -574,10 +574,13 @@ final class Recipe
 			// The section is monotone. Bound its argument and its added datum separately.
 			$low = $lo-$datum-$spread; $high = $hi-$datum+$spread;
 			$strength = $r['terraceStrength'];
-			// Elevation is affine in local strength. Its two extremes enclose any gully.
-			$lo = min(CanyonBeds::shape($low,$spacing,.20*$strength)[0], CanyonBeds::shape($low,$spacing,$strength)[0])
+			// Elevation is affine in local strength, and strength falls as the erosion noise rises. The noise
+			// envelope of this box therefore gives the two strengths that enclose every gully inside it.
+			$weak = $strength*(1-.80*Noise::fade(max(0.0,min(1.0,($erosion[1]+.13)/.62))));
+			$firm = $strength*(1-.80*Noise::fade(max(0.0,min(1.0,($erosion[0]+.13)/.62))));
+			$lo = min(CanyonBeds::shape($low,$spacing,$weak)[0], CanyonBeds::shape($low,$spacing,$firm)[0])
 				+ $datum-$spread;
-			$hi = max(CanyonBeds::shape($high,$spacing,.20*$strength)[0], CanyonBeds::shape($high,$spacing,$strength)[0])
+			$hi = max(CanyonBeds::shape($high,$spacing,$weak)[0], CanyonBeds::shape($high,$spacing,$firm)[0])
 				+ $datum+$spread;
 			// The narrowest ramp spans .46 of its bed. The widest bed is 2.96 spacing units.
 			$gradient = 4.1*$gradient + 3.1*max(abs(CanyonBeds::DIP[0]),abs(CanyonBeds::DIP[1]))

@@ -462,6 +462,37 @@ final class Landscape implements TerrainSurface
 	}
 
 	/**
+	 * Bound the surface over the square block of lattice cells around a point, generating no nodes. Blocks of one
+	 * size tile the lattice from its origin. Every height() with minX <= x < maxX and minZ <= z < maxZ lies between
+	 * minY and maxY, so a caller following a moving point can keep the answer until the point leaves the rectangle
+	 * or the revision changes. A smaller block gives a tighter interval.
+	 * @param float $x World X coordinate in metres of a point inside the block.
+	 * @param float $z World Z coordinate in metres of a point inside the block.
+	 * @param int $cells Number of lattice cells along each edge of the block.
+	 * @return array Block rectangle and conservative elevations, named as in bounds().
+	 */
+	public function localBounds(float $x, float $z, int $cells): array
+	{
+		$this->coordinates($x, $z);
+
+		if($cells < 1) throw new \InvalidArgumentException('Terrain block needs at least one cell');
+
+		$spacing = $this->parameters['spacing'];
+		$left = (int)floor(floor($x / $spacing) / $cells) * $cells;
+		$front = (int)floor(floor($z / $spacing) / $cells) * $cells;
+		[$low,$high] = $this->blockRange($left, $front, $cells);
+
+		return [
+			'minX' => $left * $spacing
+			, 'minY' => $low
+			, 'minZ' => $front * $spacing
+			, 'maxX' => ($left + $cells) * $spacing
+			, 'maxY' => $high
+			, 'maxZ' => ($front + $cells) * $spacing
+		];
+	}
+
+	/**
 	 * Reserve all tile blocks supporting a rectangle, including its interpolation halo. Reservation is atomic and
 	 * generates no height samples. Refuse leases exceeding capacity.
 	 * @param array $region Horizontal rectangle [minX,minZ,maxX,maxZ] in metres.
