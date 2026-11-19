@@ -128,6 +128,62 @@ final class Camera
 	}
 
 	/**
+	 * Name the plane that puts a box outside the frustum, trying a suggested plane first.
+	 *
+	 * One rejecting plane is enough to hide a box, so the order of testing cannot change whether it is
+	 * hidden. A box that left the view through one plane usually stays behind that plane on the next
+	 * frame, which makes the suggestion the only test most hidden boxes need.
+	 * @param array $planes Camera-relative clip planes.
+	 * @param array $eye World camera position.
+	 * @param array $node Axis-aligned patch footprint.
+	 * @param float $low Minimum rendered vertex height including morph.
+	 * @param float $high Maximum rendered vertex height including morph.
+	 * @param int $first Index of the plane to try first, or -1 for none.
+	 * @return int Index of a plane the box lies wholly behind, or -1 when inView() would return true.
+	 */
+	public static function rejectingPlane(
+		array $planes,
+		array $eye,
+		array $node,
+		float $low,
+		float $high,
+		int $first = -1
+	): int
+	{
+		$x = $node['x'] - $eye[0];
+		$z = $node['z'] - $eye[2];
+		$size = $node['size'];
+		$low -= $eye[1];
+		$high -= $eye[1];
+		// Magnitudes are taken with comparisons: abs() and max() are function calls, and this runs for every
+		// drawn patch on every frame. The values are those inView() computes.
+		$reach = ($low < 0 ? -$low : $low);
+		if(($high < 0 ? -$high : $high) > $reach) $reach = $high < 0 ? -$high : $high;
+		// GPU clip coordinates are rounded before adding/subtracting w at each plane.
+		$roundoff = 1e-5 * (1 + ($x < 0 ? -$x : $x) + ($z < 0 ? -$z : $z) + 2*$size + $reach);
+		if($first >= 0)
+		{
+			[$a,$b,$c,$d] = $planes[$first];
+			$px = $a*($x + ($a>0 ? $size : 0));
+			$py = $b*($b>0 ? $high : $low);
+			$pz = $c*($z + ($c>0 ? $size : 0));
+			$slack = 1e-5*(($px < 0 ? -$px : $px)+($py < 0 ? -$py : $py)+($pz < 0 ? -$pz : $pz)+($d < 0 ? -$d : $d));
+
+			if($px+$py+$pz+$d < -$roundoff - $slack) return $first;
+		}
+		foreach($planes as $i => [$a,$b,$c,$d])
+		{
+			$px = $a*($x + ($a>0 ? $size : 0));
+			$py = $b*($b>0 ? $high : $low);
+			$pz = $c*($z + ($c>0 ? $size : 0));
+			$slack = 1e-5*(($px < 0 ? -$px : $px)+($py < 0 ? -$py : $py)+($pz < 0 ? -$pz : $pz)+($d < 0 ? -$d : $d));
+
+			if($px+$py+$pz+$d < -$roundoff - $slack) return $i;
+		}
+		return -1;
+	}
+
+	/**
 	 * Reconstruct a picking ray from normalized viewport coordinates.
 	 * @param float $nx Horizontal coordinate, zero at the left edge.
 	 * @param float $ny Vertical coordinate, zero at the top edge.

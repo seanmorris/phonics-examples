@@ -26,6 +26,12 @@ final class Scene
 	private array $patches = [], $jobs = [], $draw = [], $vao = [], $textures = [];
 	private array $activated = [], $neighbors = [], $settledBoundaries = [], $gridBuffer = [];
 	private ?array $drawIndex = null;
+	/** Clip plane that last hid each drawn patch from the ground pass and from the water pass. */
+	private array $groundCull = [], $waterCull = [];
+	/** Transition weights already computed for the frame being drawn; null outside render(). */
+	private ?array $morphMemo = null;
+	/** For each cached seam, the parents whose retirement would set it moving again. */
+	private array $settledParents = [];
 	private int $groundDraws = 0, $waterDraws = 0;
 	/** Reverse sibling transitions and the exact residency reservation for this selection. */
 	private array $retiring = [], $reserved = [];
@@ -176,7 +182,7 @@ final class Scene
 			$affected = $this->affected($region);
 		}
 
-		$this->neighbors = $this->settledBoundaries = [];
+		$this->neighbors = $this->settledBoundaries = $this->settledParents = $this->groundCull = $this->waterCull = [];
 		$this->drawIndex = null;
 		$this->preparing = $candidate;
 		$this->preparingRevision = $candidate->revision();
@@ -291,6 +297,7 @@ final class Scene
 	{
 		if($this->closed) return false;
 
+		$this->morphMemo = null;
 		$started = microtime(true);
 		$deadline = $started + max(.25, $this->budgetMs) / 1000;
 		$this->checkPreparation();
@@ -526,11 +533,13 @@ final class Scene
 			$this->transitionUntil = max($this->transitionUntil, ($this->activated[$n['key']] ?? -1) + .5);
 		}
 
-		if($old !== array_column($this->draw, 'key'))
+		$drawn = array_column($this->draw, 'key');
+		if($old !== $drawn)
 		{
 			$this->changed = true;
-			$this->neighbors = $this->settledBoundaries = [];
 			$this->drawIndex = null;
+			$this->forgetSeamsAround(array_merge(array_diff($old, $drawn), array_diff($drawn, $old)));
+			if(count($this->groundCull) + count($this->waterCull) > 4096) $this->groundCull = $this->waterCull = [];
 		}
 
 		$this->reserved = $this->ancestors($this->draw);
@@ -1013,12 +1022,23 @@ final class Scene
 	 */
 	private function morph(array $node): float
 	{
-		$parent = $this->parentKey($node);
+		$key = $node['key'];
+		if($this->morphMemo !== null && isset($this->morphMemo[$key])) return $this->morphMemo[$key];
 
-		if(isset($this->retiring[$parent]))
-		return min(1, max(0, ($this->clock - $this->retiring[$parent]['start']) / .35));
+		// Only a retiring sibling group needs its parent's key, and building that string is the costly part.
+		if($this->retiring !== [] && isset($this->retiring[$parent = $this->parentKey($node)]))
+		{
+			$value = (float)min(1, max(0, ($this->clock - $this->retiring[$parent]['start']) / .35));
+		}
+		else
+		{
+			$since = $this->clock - ($this->activated[$key] ?? ($this->clock - .35));
+			$value = (float)min(1, max(0, 1 - $since / .35));
+		}
 
-		return min(1, max(0, 1 - ($this->clock - ($this->activated[$node['key']] ?? ($this->clock - .35))) / .35));
+		if($this->morphMemo !== null) $this->morphMemo[$key] = $value;
+
+		return $value;
 	}
 
 	/**
@@ -1029,50 +1049,133 @@ final class Scene
 	private function boundaryMorph(array $node): array
 	{
 		$key = $node['key'];
-		if($this->retiring === [] && isset($this->settledBoundaries[$key])) return $this->settledBoundaries[$key];
+		$settled = $this->settledBoundary($key);
+		if($settled !== null) return $settled;
 
 		$own = $this->morph($node);
-		$settled = $this->retiring === [] && $own <= 0.0;
+		$ownParent = $this->parentKey($node);
+		$settled = $own <= 0.0 && !isset($this->retiring[$ownParent]);
+		$parents = [$ownParent => true];
 		$edges = $corners = [$own,$own,$own,$own];
 		$mask = 0;
-		$points = [[0,0],[1,0],[0,1],[1,1]];
 
-		$neighbors = &$this->neighbors[$node['key']];
+		$neighbors = &$this->neighbors[$key];
 		if($neighbors === null)
 		{
 			$this->drawIndex ??= array_column($this->draw, null, 'key');
-			$neighbors = self::neighborsAt($node, $this->drawIndex, $node['level'])
-				+ self::neighborsAt($node, $this->drawIndex, $node['level'] - 1);
-		}
-		foreach($neighbors as $neighbor)
-		{
+			$neighbors = [];
 
-			$coarser = $neighbor['level'] < $node['level'];
-			$weight = $coarser ? 1.0 : $this->morph($neighbor);
-			if(!$coarser && $weight > 0.0) $settled = false;
-
-			// Locate the neighbor in this patch's integer coordinates. Fractional
-			// world extents must produce the same topology as power-of-two worlds.
-			$span = 1 << ($node['level'] - $neighbor['level']);
-			$x = $neighbor['ix']*$span - $node['ix'];
-			$z = $neighbor['iz']*$span - $node['iz'];
-			$edge = null;
-			if($z < 1 && $z+$span > 0) $edge = $x < 0 ? 0 : 1;
-			elseif($x < 1 && $x+$span > 0) $edge = $z < 0 ? 2 : 3;
-			if($edge !== null)
+			// Where a neighbor meets this patch is fixed for one draw set, so find the edge and corners it
+			// touches once. Only its transition weight changes from frame to frame.
+			foreach(self::neighborsAt($node, $this->drawIndex, $node['level'])
+				+ self::neighborsAt($node, $this->drawIndex, $node['level'] - 1) as $neighbor)
 			{
-				$edges[$edge] = max($edges[$edge], $weight);
+				// Locate the neighbor in this patch's integer coordinates. Fractional
+				// world extents must produce the same topology as power-of-two worlds.
+				$span = 1 << ($node['level'] - $neighbor['level']);
+				$x = $neighbor['ix']*$span - $node['ix'];
+				$z = $neighbor['iz']*$span - $node['iz'];
+				$edge = -1;
+				if($z < 1 && $z+$span > 0) $edge = $x < 0 ? 0 : 1;
+				elseif($x < 1 && $x+$span > 0) $edge = $z < 0 ? 2 : 3;
+				$touched = [];
+
+				foreach([[0,0],[1,0],[0,1],[1,1]] as $i => [$px,$pz])
+				if($px >= $x && $px <= $x+$span && $pz >= $z && $pz <= $z+$span) $touched[] = $i;
+
+				$coarser = $neighbor['level'] < $node['level'];
+				$neighbors[] = [$neighbor, $coarser, $edge, $touched, $this->parentKey($neighbor)];
+			}
+		}
+		foreach($neighbors as [$neighbor, $coarser, $edge, $touched, $parent])
+		{
+			$weight = $coarser ? 1.0 : $this->morph($neighbor);
+
+			// A group that has just begun to retire still has weight zero on its first frame.
+			if(!$coarser)
+			{
+				$parents[$parent] = true;
+				if($weight > 0.0 || isset($this->retiring[$parent])) $settled = false;
+			}
+
+			if($edge >= 0)
+			{
+				if($weight > $edges[$edge]) $edges[$edge] = $weight;
 				if($coarser) $mask |= 1 << $edge;
 			}
 
-			foreach($points as $i => [$px,$pz])
-			if($px >= $x && $px <= $x+$span && $pz >= $z && $pz <= $z+$span)
+			foreach($touched as $i) if($weight > $corners[$i]) $corners[$i] = $weight;
+		}
+		unset($neighbors);
 
-			$corners[$i] = max($corners[$i], $weight);
+		if($settled)
+		{
+			$this->settledBoundaries[$key] = [$edges,$corners,$mask];
+			$this->settledParents[$key] = array_keys($parents);
+		}
+		return [$edges,$corners,$mask];
+	}
+
+	/**
+	 * Drop the cached neighbors and seams that adding or removing these patches can change.
+	 *
+	 * A patch reads only the drawn patches beside it at its own level and one level coarser. So a patch that
+	 * enters or leaves the draw set matters to the eight around it at its level and to the finer patches
+	 * along its edges, and to no others. Everything else keeps its cached seam through the change. Clearing
+	 * the whole cache instead made each selection in a moving view recompute every seam.
+	 * @param array $keys Quadtree keys that entered or left the draw set.
+	 * @return void Forgets the affected cache entries.
+	 */
+	private function forgetSeamsAround(array $keys): void
+	{
+		foreach($keys as $key)
+		{
+			[$level, $x, $z] = explode(':', $key);
+			$level = (int)$level; $x = (int)$x; $z = (int)$z;
+
+			for($nz = $z - 1; $nz <= $z + 1; $nz++)
+			for($nx = $x - 1; $nx <= $x + 1; $nx++)
+			{
+				$near = $level . ':' . $nx . ':' . $nz;
+				unset($this->neighbors[$near], $this->settledBoundaries[$near], $this->settledParents[$near]);
+			}
+
+			$fine = $level + 1;
+
+			for($nz = 2 * $z - 1; $nz <= 2 * $z + 2; $nz++)
+			for($nx = 2 * $x - 1; $nx <= 2 * $x + 2; $nx++)
+			{
+				$near = $fine . ':' . $nx . ':' . $nz;
+				unset($this->neighbors[$near], $this->settledBoundaries[$near], $this->settledParents[$near]);
+			}
+		}
+	}
+
+	/**
+	 * Return a patch's cached seam weights while they still hold.
+	 *
+	 * A seam is cached once the patch and its same-level neighbors have finished their transitions. From
+	 * then on it can change in only two ways. A new draw set clears the cache. A sibling group that starts
+	 * to retire blends the patches inside it, so the entry is refused, and dropped, while the parent of
+	 * the patch or of one of those neighbors is retiring. Patches away from a retirement keep their entry;
+	 * previously one retirement anywhere made every patch recompute its seams on every frame.
+	 * @param string $key Quadtree key of a drawn patch.
+	 * @return array|null Edge weights, corner weights and coarse-neighbor mask, or null when they must be recomputed.
+	 */
+	private function settledBoundary(string $key): ?array
+	{
+		if(!isset($this->settledBoundaries[$key])) return null;
+		if($this->retiring === []) return $this->settledBoundaries[$key];
+
+		foreach($this->settledParents[$key] as $parent)
+		if(isset($this->retiring[$parent]))
+		{
+			unset($this->settledBoundaries[$key], $this->settledParents[$key]);
+
+			return null;
 		}
 
-		if($settled) $this->settledBoundaries[$key] = [$edges,$corners,$mask];
-		return [$edges,$corners,$mask];
+		return $this->settledBoundaries[$key];
 	}
 
 	/**
@@ -1303,21 +1406,25 @@ final class Scene
 
 	/**
 	 * Bind a patch's common grid and transition and select its watertight edge topology.
-	 * @param Program $program Ground or water vertex program.
+	 * @param int $uPatch Location of the program's uPatch uniform.
+	 * @param int $uEdges Location of the program's uEdges uniform.
+	 * @param int $uCorners Location of the program's uCorners uniform.
 	 * @param array $node Visible quadtree leaf.
 	 * @param array|null $lastBoundary Previous boundary uniforms on this program.
 	 * @return int Index pattern connecting fine edges to their coarser neighbors.
 	 */
-	private function bindPatch(Program $program, array $node, ?array &$lastBoundary): int
+	private function bindPatch(int $uPatch, int $uEdges, int $uCorners, array $node, ?array &$lastBoundary): int
 	{
 		$half = (1 << $node['level']) * (Lod::CELLS / 2);
-		glUniform4f($program->location('uPatch'), $node['ix']*Lod::CELLS-$half, $node['iz']*Lod::CELLS-$half,
-			$node['size']/Lod::CELLS, $this->morph($node));
-		$boundary = $this->boundaryMorph($node);
+		// A settled seam means the patch itself finished its transition, so its own weight is zero.
+		$boundary = $this->settledBoundary($node['key']);
+		glUniform4f($uPatch, $node['ix']*Lod::CELLS-$half, $node['iz']*Lod::CELLS-$half,
+			$node['size']/Lod::CELLS, $boundary === null ? $this->morph($node) : 0.0);
+		$boundary ??= $this->boundaryMorph($node);
 		if($lastBoundary !== $boundary)
 		{
-			glUniform4f($program->location('uEdges'), ...$boundary[0]);
-			glUniform4f($program->location('uCorners'), ...$boundary[1]);
+			glUniform4f($uEdges, ...$boundary[0]);
+			glUniform4f($uCorners, ...$boundary[1]);
 			$lastBoundary = $boundary;
 		}
 		return $boundary[2];
@@ -1340,6 +1447,8 @@ final class Scene
 		$this->viewportHeight = max(1, $height);
 		$this->viewportAspect = $width / max(1, $height);
 		$this->frames++;
+		// Nothing below changes a transition, so each patch's weight is worked out once for both passes.
+		$this->morphMemo = [];
 		$this->atmosphereCache->update($camera->position[1], $this->textures[0], $this->water->level());
 
 		$environment = $this->atmosphere->uniforms();
@@ -1367,13 +1476,23 @@ final class Scene
 		$eye = $camera->position;
 		$this->groundDraws = $this->waterDraws = 0;
 		$lastBoundary = null;
+		$uPatch = $this->groundProgram->location('uPatch');
+		$uEdges = $this->groundProgram->location('uEdges');
+		$uCorners = $this->groundProgram->location('uCorners');
 		foreach($this->draw as $n)
 		{
-			$p = $this->patches[$n['key']];
-			if(!Camera::inView($planes,$eye,$n,$p['minY'],$p['maxY'])) continue;
+			$key = $n['key'];
+			$p = $this->patches[$key];
+			$hidden = Camera::rejectingPlane($planes, $eye, $n, $p['minY'], $p['maxY'], $this->groundCull[$key] ?? -1);
+			if($hidden >= 0)
+			{
+				$this->groundCull[$key] = $hidden;
+				continue;
+			}
+			unset($this->groundCull[$key]);
 			$this->groundDraws++;
 
-			$p['mesh']->draw($this->bindPatch($this->groundProgram, $n, $lastBoundary));
+			$p['mesh']->draw($this->bindPatch($uPatch, $uEdges, $uCorners, $n, $lastBoundary));
 		}
 
 		if($craftState !== null)
@@ -1435,10 +1554,21 @@ final class Scene
 		$wakeLocation = $this->waterProgram->location('uFrameWakeCount');
 
 		[$waterMin,$waterMax] = $this->water->heightRange();
+		$uPatch = $this->waterProgram->location('uPatch');
+		$uEdges = $this->waterProgram->location('uEdges');
+		$uCorners = $this->waterProgram->location('uCorners');
 		foreach($this->draw as $n)
 		{
-			$patch = $this->patches[$n['key']];
-			if($patch['minY'] > $waterMax || !Camera::inView($planes,$eye,$n,$waterMin,$waterMax)) continue;
+			$key = $n['key'];
+			$patch = $this->patches[$key];
+			if($patch['minY'] > $waterMax) continue;
+			$hidden = Camera::rejectingPlane($planes, $eye, $n, $waterMin, $waterMax, $this->waterCull[$key] ?? -1);
+			if($hidden >= 0)
+			{
+				$this->waterCull[$key] = $hidden;
+				continue;
+			}
+			unset($this->waterCull[$key]);
 			$this->waterDraws++;
 			$count = $wakeCount;
 			if($count && ($n['x'] > $wakeBounds[2] || $n['x'] + $n['size'] < $wakeBounds[0]
@@ -1448,11 +1578,12 @@ final class Scene
 				glUniform1i($wakeLocation, $count);
 				$lastCount = $count;
 			}
-			$patch['mesh']->draw($this->bindPatch($this->waterProgram, $n, $lastBoundary));
+			$patch['mesh']->draw($this->bindPatch($uPatch, $uEdges, $uCorners, $n, $lastBoundary));
 		}
 
 		glDisable(GL_BLEND);
 		glBindVertexArray(0);
+		$this->morphMemo = null;
 	}
 
 	/**
@@ -1697,7 +1828,7 @@ final class Scene
 		$this->preparing = null;
 		$this->replacements = $this->replacementJobs = [];
 		$this->patches = $this->jobs = $this->draw = $this->activated = $this->retiring = $this->reserved = [];
-		$this->neighbors = $this->settledBoundaries = [];
+		$this->neighbors = $this->settledBoundaries = $this->settledParents = $this->groundCull = $this->waterCull = [];
 		$this->drawIndex = null;
 		$this->selectionPending = false;
 		$this->transitionUntil = -1;
