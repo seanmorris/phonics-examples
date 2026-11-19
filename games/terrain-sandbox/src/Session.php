@@ -61,6 +61,11 @@ final class Session
 	 */
 	public float $selectionInterval = Scene::DEFAULT_SELECTION_INTERVAL;
 	/**
+	 * Milliseconds of terrain selection work the renderer may do in one frame; zero runs each selection whole.
+	 * Like the interval, the page sets it to compare frame rates, and no file stores or restores it.
+	 */
+	public float $selectionSliceMs = Scene::DEFAULT_SELECTION_SLICE_MS;
+	/**
 	 * Jet handling, after AirForce Delta's Controller option: 'novice' banks to turn and levels itself, 'expert'
 	 * rolls, pitches and yaws freely. Like the next setting it belongs to the player, so no file stores it.
 	 */
@@ -132,6 +137,7 @@ final class Session
 			{
 				// load() passes every saved name to setting(). Taking these names here keeps them out of reach of files.
 				if($name === 'selectionInterval') $this->setSelectionInterval($value);
+				elseif($name === 'selectionSliceMs') $this->setSelectionSliceMs($value);
 				elseif($name === 'jetControls') $this->setJetControls($value);
 				elseif($name === 'invertPitch')
 				{
@@ -370,6 +376,18 @@ final class Session
 		if(!is_numeric($value) || !is_finite((float)$value))
 		throw new \InvalidArgumentException('Invalid control value');
 		$this->selectionInterval = max(0.0, min(1.0, (float)$value));
+	}
+
+	/**
+	 * Set how many milliseconds of terrain selection work the renderer may do in one frame.
+	 * @param mixed $value Milliseconds before validation; zero runs every selection whole in one frame.
+	 * @return void Stores a slice between zero and 100 ms for the application to copy to the scene.
+	 */
+	private function setSelectionSliceMs(mixed $value): void
+	{
+		if(!is_numeric($value) || !is_finite((float)$value))
+		throw new \InvalidArgumentException('Invalid control value');
+		$this->selectionSliceMs = max(0.0, min(100.0, (float)$value));
 	}
 
 	/** Keep the saved controls and renderer in sync, including while the simulation is paused. */
@@ -820,6 +838,7 @@ final class Session
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'settings' => $this->settings,'selectionInterval' => $this->selectionInterval,
+			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],

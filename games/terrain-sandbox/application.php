@@ -100,6 +100,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	if($candidate !== null) $scene->prepareLandscape($candidate);
 	$scene->quality = $session->settings['quality'];
 	$scene->selectionInterval = $session->selectionInterval;
+	$scene->selectionSliceMs = $session->selectionSliceMs;
 	$engine->userPaused = $session->paused;
 	if(($download = $session->download()) !== null) (vrzno_env('terrainDownload'))($download);
 	$dirty = $dirty || $session->dirty;

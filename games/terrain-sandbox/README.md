@@ -10,6 +10,8 @@ Run `node scripts/bench-terrain.mjs` from the examples checkout with the preview
 
 While the view moves, the renderer selects terrain detail at most ten times a second. To compare frame rates without that limit, run `document.querySelector('canvas').terrainSandboxDebug.values({selectionInterval: 0})` in the browser console, or pass another spacing in seconds up to 1. The same object's `state.selectionInterval` reports the value in use and `state.renderer.selections` counts selections. The value has no control in the panel and is not saved with a landscape.
 
+A selection that needs more than half a millisecond of work continues over the following frames and changes the drawn terrain in one of them. Set `selectionSliceMs` through the same `values()` call to give each frame more or less of that work, or to 0 to run every selection whole in one frame as before. `state.selectionSliceMs` reports the value in use, and `state.renderer` reports `selectionWorkMs` for the last frame, `selectionUpdates` for the frames the last selection took and `selectionInFlight` while one is under way. This value is not saved either.
+
 ## Watercraft model
 
 The watercraft uses “Jetski” by Futurealiti. The sandbox uses a simplified mesh and a resized dashboard texture. To regenerate them, run `python3 scripts/import-terrain-jetski.py /path/to/jetski.zip` with gltfpack 0.18 and ImageMagick on the path. [Original model](https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b) · [Author](https://sketchfab.com/futurealiti) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)

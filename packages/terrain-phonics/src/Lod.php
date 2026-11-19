@@ -110,6 +110,46 @@ final class Lod
 		, float $detailHigh = -INF
 	): array {
 
+		$walk = $this->walk($eye, $resident, $quality, $projection, $inDetailView, $detailPlanes, $detailLow
+			, $detailHigh);
+
+		// Without a credit the walk never pauses, so its first step is the whole selection.
+		$walk->current();
+
+		return $walk->getReturn();
+	}
+
+	/**
+	 * Walk the quadtree as select() does, pausing after a given number of refined nodes.
+	 *
+	 * A caller that spreads one selection over several frames resumes the walk with send(), passing the credit
+	 * for the next slice, and takes the lists from getReturn() once valid() is false. The walk keeps the
+	 * resident set it was given, so patches that arrive or leave meanwhile change neither its lists nor its
+	 * course. Only a node that refines spends credit: the walk visits at most a few dozen nodes between two
+	 * of those, and a test there would cost every other node a decrement and a comparison.
+	 * @param array $eye Camera world position.
+	 * @param array $resident Resident patch metadata keyed by node key.
+	 * @param float $quality Detail multiplier, from .5 to 2.
+	 * @param float $projection Vertical focal length in pixels for projected geometric error.
+	 * @param callable|null $inDetailView Optional predicate for the padded view used to request finer meshes.
+	 * @param array|null $detailPlanes Optional clip planes relative to the eye, which replace the predicate.
+	 * @param float $detailLow Lowest height the padded bounds must reach, such as the lowest water.
+	 * @param float $detailHigh Highest height the padded bounds must reach, such as the highest water.
+	 * @param int $credit Nodes to refine before the first pause; zero or less never pauses.
+	 * @return \Generator Yields at each pause and returns the lists that select() returns.
+	 */
+	public function walk(
+		array $eye
+		, array $resident
+		, float $quality = 1
+		, float $projection = 600
+		, ?callable $inDetailView = null
+		, ?array $detailPlanes = null
+		, float $detailLow = INF
+		, float $detailHigh = -INF
+		, int $credit = 0
+	): \Generator {
+
 		if(count($eye) !== 3 || !array_is_list($eye) || !is_finite($quality) || $quality <= 0
 			|| !is_finite($projection) || $projection <= 0
 		)
@@ -349,6 +389,9 @@ final class Lod
 					$request[] = $c + ['priority' => $importance];
 				}
 			}
+
+			// A credit that starts at zero falls below it and never comes back, so a whole walk never pauses.
+			if(--$credit === 0) $credit = yield;
 
 			if($ready) continue;
 

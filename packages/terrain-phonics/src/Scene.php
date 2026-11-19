@@ -70,10 +70,50 @@ final class Scene
 	private ?array $previousEye = null, $lookahead = null;
 	private int $viewportHeight = 720;
 	private float $viewportAspect = 16 / 9;
+	/**
+	 * The selection in flight while it is spread over several updates, or null. See advanceSelection().
+	 *
+	 * It holds what the selection captured when it started, the phase it has reached and what the phases
+	 * before that one produced.
+	 */
+	private ?array $flight = null;
+	/** Milliseconds each phase took when it last ran, which decides whether it fits what is left of a slice. */
+	private array $phaseCost = [];
+	/** Selection work done so far in this update, in milliseconds and in steps. */
+	private float $sliceMs = 0;
+	private int $sliceSteps = 0;
+	/**
+	 * Updates run so far. Of the last completed selection: how many updates it took part in, and in which of
+	 * them, counted from one, it changed the drawn cover.
+	 */
+	private int $updates = 0, $selectionUpdates = 0, $selectionApplyUpdate = 0;
+	/** Selections that ran to the end, which falls short of $selections by those that were dropped. */
+	private int $selectionsCompleted = 0;
+	/**
+	 * Selections that update() dropped for a relocation or a changed setting since the last one completed. A
+	 * setting that changes on every update, such as a dragged slider or a window being resized, drops every
+	 * spread selection before it can apply.
+	 */
+	private int $selectionsDropped = 0;
 	/** Default for selectionInterval, shared with applications that expose the setting. */
 	public const DEFAULT_SELECTION_INTERVAL = .1;
 	/** Seconds between detail selections while the view moves. Zero selects on every change, as before the limiter. */
 	public float $selectionInterval = self::DEFAULT_SELECTION_INTERVAL;
+	/** Default for selectionSliceMs, shared with applications that expose the setting. */
+	public const DEFAULT_SELECTION_SLICE_MS = .5;
+	/**
+	 * Milliseconds of selection work one update aims at. A selection that needs more continues on later updates
+	 * and changes the drawn cover in one of them. An update can run past the slice by one pause interval, or by
+	 * one phase that cannot pause, such as the one that changes the drawn cover. Zero runs every selection whole
+	 * in the update that starts it, as before selections were spread.
+	 */
+	public float $selectionSliceMs = self::DEFAULT_SELECTION_SLICE_MS;
+	/**
+	 * Steps of selection work one update may do, in place of selectionSliceMs, so that tests can spread a
+	 * selection without the clock. A step is one node that a walk refines, or one whole phase between the walks.
+	 * Zero leaves the slice to selectionSliceMs.
+	 */
+	public int $selectionSliceSteps = 0;
 	/** Detail multiplier: .5 economical, 1 balanced, 2 detailed. */
 	public float $quality = 1;
 	/** Time slice for incremental sampling. Slow display frames may also upload one ready sibling group. */
@@ -189,6 +229,8 @@ final class Scene
 		if($candidate->recipe() !== $this->landscape->recipe())
 		throw new \InvalidArgumentException('Staged edits must retain the landscape recipe');
 
+		// The selection in flight read patches that the eviction below can remove and that the edit replaces.
+		$this->abandonSelection();
 		// Derive the actual edit footprint; callers cannot accidentally omit a changed mesh.
 		$region = $this->landscape->changedRegion($candidate);
 		$this->jobs = [];
@@ -207,6 +249,9 @@ final class Scene
 			$this->evict(true);
 			$affected = $this->affected($region);
 		}
+
+		// The cover may have coarsened above, so the next selection works out its ancestors again.
+		$this->drawnKeys = $this->drawnBranches = [];
 
 		$this->neighbors = $this->settledBoundaries = $this->settledParents = $this->groundCull = $this->waterCull = [];
 		$this->drawIndex = null;
@@ -242,6 +287,10 @@ final class Scene
 
 		if($this->preparing === null || $this->replacementJobs !== []) return null;
 
+		// prepareLandscape() dropped any selection in flight and update() starts none while it prepares, so this
+		// only keeps the rule that a selection never outlives the meshes it read.
+		$this->abandonSelection();
+
 		foreach($this->replacements as $key => $patch)
 		{
 			$this->patches[$key]['mesh']->close();
@@ -268,6 +317,7 @@ final class Scene
 	{
 		$candidate = $this->preparing;
 
+		$this->abandonSelection();
 		foreach($this->replacements as $patch) $patch['mesh']->close();
 		$this->preparing = null;
 		$this->replacementJobs = $this->replacements = [];
@@ -326,6 +376,10 @@ final class Scene
 		$this->morphMemo = null;
 		$started = microtime(true);
 		$deadline = $started + max(.25, $this->budgetMs) / 1000;
+		$this->updates++;
+		$this->sliceMs = 0;
+		$this->sliceSteps = 0;
+
 		$this->checkPreparation();
 		$this->trackMotion($seconds, $camera);
 		$this->clock += max(0, $seconds);
@@ -397,11 +451,28 @@ final class Scene
 
 		$transitioning = $this->retiring !== [] || $this->clock < $this->transitionUntil;
 
+		// A selection in flight whose view was relocated, or whose settings changed, would apply a cover chosen for
+		// a view that is gone. Dropping it here lets the code below start its replacement in this same update.
+		if($this->flight !== null && $this->flightOutdated($seconds, $camera))
+		{
+			$this->abandonSelection();
+			$this->selectionsDropped++;
+		}
+
 		// A selection the limiter postponed stays wanted until it runs, exactly like a changed view.
 		$viewChanged = $key !== $this->selectionKey || $this->selectionDeferred;
 		$transitionDue = ($transitioning || $this->selectionPending) && $this->clock - $this->selectionTime > .15;
 		$hold = $this->selectionInterval > 0 && $this->holdSelection($seconds, $camera);
-		if($viewChanged && !$hold)
+
+		if($this->flight !== null)
+		{
+			// One selection runs at a time. A view that changed since this one started is owed the next.
+			if($key !== $this->selectionKey) $this->selectionDeferred = true;
+
+			// A slice turned off while a selection is in flight finishes that selection now, as it would have run.
+			$this->advanceSelection($this->selectionSliceMs <= 0 && $this->selectionSliceSteps <= 0);
+		}
+		elseif($viewChanged && !$hold)
 		{
 			$this->select($camera);
 			$this->selectionKey = $key;
@@ -451,6 +522,9 @@ final class Scene
 		// A new root must draw immediately. Otherwise combine transitions and completed
 		// siblings in one selection, even when a moving camera also reordered work.
 		if($coverReady && $this->draw === []) $this->select($camera);
+		// The selection in flight read the patches before this group finished, so the group is owed the next one.
+		// A due transition needs no note: it is worked out again on every update.
+		elseif($this->flight !== null) $this->selectionDeferred = $this->selectionDeferred || $coverReady;
 		// While the limiter holds, the changed view or finished group waits for the next allowed selection.
 		elseif($hold) $this->selectionDeferred = $viewChanged || $coverReady;
 		elseif(!$viewChanged && ($coverReady || $transitionDue)) $this->select($camera);
@@ -478,10 +552,11 @@ final class Scene
 	 * selection answers all three. While the camera pose has changed within the last selectionInterval
 	 * seconds, routine selections run that far apart, so a fast vehicle stops selecting on nearly every
 	 * frame. Whatever waits is answered by the next allowed selection, at most one interval later, so a
-	 * finished group or a transition cannot starve behind a view that keeps moving. A view at rest for a
-	 * whole interval is not limited. By then it has had a selection for its resting pose, and its finished
-	 * groups and transitions select at once. So does the first changed view after the rest, because dirty()
-	 * keeps the scene clock running for one interval after every selection.
+	 * finished group or a transition cannot starve behind a view that keeps moving. A selection spread over
+	 * several updates delays that answer until it completes, because the next one starts only then. A view
+	 * at rest for a whole interval is not limited. By then it has had a selection for its resting pose, and
+	 * its finished groups and transitions select at once. So does the first changed view after the rest,
+	 * because dirty() keeps the scene clock running for one interval after every selection.
 	 *
 	 * Four cases never wait, because the last selection is wrong for them, not merely late. Nothing is
 	 * drawn yet. The landscape was replaced or republished, which empties the selection key. A setting that
@@ -500,8 +575,7 @@ final class Scene
 	{
 		$previous = $this->previousPose;
 		$pose = $this->previousPose = [$camera->position, $camera->yaw, $camera->pitch];
-		$settings = [$this->quality, $this->viewportHeight, $this->viewportAspect, $camera->fov
-			, $this->water->level(), $this->water->waveScale()];
+		$settings = $this->selectionSettings($camera);
 		$adjusted = $settings !== $this->previousSettings;
 		$this->previousSettings = $settings;
 
@@ -519,20 +593,45 @@ final class Scene
 		if($this->clock - $this->motionTime >= $wait || $this->clock - $this->selectionTime >= $wait) return false;
 
 		// From here the view is moving and the last selection is recent, so only a relocation selects now.
-		// The distance limit is the one trackMotion() uses to drop its lookahead after a jump.
+		return !$this->relocated($previous, $seconds, $camera);
+	}
+
+	/**
+	 * List the settings that a selection reads besides the camera pose.
+	 * @param Camera $camera Current viewing camera.
+	 * @return array Detail, viewport height and aspect, field of view, water level and wave scale.
+	 */
+	private function selectionSettings(Camera $camera): array
+	{
+		return [$this->quality, $this->viewportHeight, $this->viewportAspect, $camera->fov
+			, $this->water->level(), $this->water->waveScale()];
+	}
+
+	/**
+	 * Decide whether one update relocated the eye rather than moved it.
+	 *
+	 * The distance limit is the one trackMotion() uses to drop its lookahead after a jump. The turn limit is
+	 * half the vertical field of view, which replaces a third of a 16:9 picture or more.
+	 * @param array $previous Eye position, yaw and pitch at the update before this one.
+	 * @param float $seconds Elapsed display seconds for this update.
+	 * @param Camera $camera Current viewing camera.
+	 * @return bool Whether the eye moved farther than travel can or turned by more than half the field of view.
+	 */
+	private function relocated(array $previous, float $seconds, Camera $camera): bool
+	{
 		[$from, $yaw, $pitch] = $previous;
 		$reach = 600 * $seconds;
 		if($reach < 64) $reach = 64;
-		$x = $pose[0][0] - $from[0];
-		$y = $pose[0][1] - $from[1];
-		$z = $pose[0][2] - $from[2];
+		$x = $camera->position[0] - $from[0];
+		$y = $camera->position[1] - $from[1];
+		$z = $camera->position[2] - $from[2];
 
-		if($x * $x + $y * $y + $z * $z > $reach * $reach) return false;
+		if($x * $x + $y * $y + $z * $z > $reach * $reach) return true;
 
 		$turn = $camera->fov / 2;
 		$pitch -= $camera->pitch;
 
-		if($pitch > $turn || -$pitch > $turn) return false;
+		if($pitch > $turn || -$pitch > $turn) return true;
 
 		$yaw -= $camera->yaw;
 		if($yaw < 0) $yaw = -$yaw;
@@ -543,7 +642,8 @@ final class Scene
 			if($yaw > M_PI) $yaw = 2 * M_PI - $yaw;
 		}
 
-		return $yaw <= $turn;
+		// Written as the negation, so that a yaw that is not a number counts as a relocation, as it always has.
+		return !($yaw <= $turn);
 	}
 
 	/**
@@ -581,13 +681,25 @@ final class Scene
 	}
 
 	/**
-	 * Choose a complete resident cover and reserve bounded sibling-generation work.
+	 * Start choosing a complete resident cover and reserving bounded sibling-generation work.
+	 *
+	 * The selection runs as much as this update's slice allows, and advanceSelection() carries on with it in
+	 * later updates. It runs whole when nothing is drawn yet: the picture stays empty until a selection
+	 * completes, and a walk over an empty or root-only cache is short. It also runs whole while both slice
+	 * settings are zero, and after update() dropped two selections in a row for a changed view or setting.
 	 * @param Camera $camera Current viewing camera.
-	 * @return void Updates draw coverage and reserved generation jobs.
+	 * @return void Starts a selection, which is complete on return when it runs whole.
 	 */
 	private function select(Camera $camera): void
 	{
+		// Selection work is timed with hrtime(), as in advanceSelection().
+		$from = hrtime(true);
 		$this->selections++;
+		// The limiter counts its spacing from the start of a selection. While the view keeps moving, a selection
+		// that takes longer than one interval is therefore followed at once by the next, never by a further wait.
+		// Whatever was owed until now, this selection answers.
+		$this->selectionTime = $this->clock;
+		$this->selectionDeferred = false;
 
 		// A one-patch margin leaves room for camera turns and the neighboring
 		// splits needed for 2:1 seams. Out-of-view ground retains coarse coverage.
@@ -598,21 +710,244 @@ final class Scene
 			, $this->viewportHeight
 		);
 
-		[$waterMin, $waterMax] = $this->water->heightRange();
+		// Nothing drawn cannot wait for a slice. Nor can a cover whose last two selections were dropped for a changed
+		// view or setting: a setting that keeps changing would drop every spread selection and hold the cover still
+		// for as long as it changes. Running the third whole lets the cover follow such a change every third update,
+		// where it used to follow it on every update.
+		$this->flight = [
+			'phase' => 'walk'
+			, 'whole' => $this->draw === [] || ($this->selectionSliceMs <= 0 && $this->selectionSliceSteps <= 0)
+				|| $this->selectionsDropped >= 2
+			, 'task' => null
+			, 'first' => $this->updates
+			, 'pose' => [$camera->position, $camera->yaw, $camera->pitch]
+		];
 
-		$result = $this->lod->select(
-			$camera->position
-			, $this->patches
-			, $this->quality
-			, $this->viewportHeight / (2 * tan($camera->fov / 2))
-			, null
-			, $planes
-			, $waterMin
-			, $waterMax
-		);
+		// Everything the walks and the work order read from the view is captured here, so a selection that runs
+		// over several updates chooses the cover of the view it started with.
+		$this->flight += [
+			'camera' => clone $camera
+			, 'settings' => $this->selectionSettings($camera)
+			, 'planes' => $planes
+			, 'water' => $this->water->heightRange()
+			, 'quality' => $this->quality
+			, 'projection' => $this->viewportHeight / (2 * tan($camera->fov / 2))
+			, 'lookahead' => $this->lookahead
+		];
 
+		$this->sliceMs += (hrtime(true) - $from) / 1e6;
+		$this->advanceSelection($this->flight['whole']);
+	}
+
+	/**
+	 * Run phases of the selection in flight until it completes or this update's slice is spent.
+	 *
+	 * A selection has eight phases: the view walk, balance, apply, groups, the midpoint and endpoint walks of
+	 * the lookahead, speculate and publish. The walks, groups and speculate pause after a slice of work. Balance,
+	 * apply and publish run whole, and one of them starts in an update only when its last cost fits what is left
+	 * of the slice, or when it is the first work of the update. An update therefore does its slice and at most
+	 * one of those three phases more. Each walk keeps the resident set it started with and reads the camera,
+	 * planes, projection, detail and water range that select() captured.
+	 *
+	 * Apply alone changes the drawn cover, in one update, through transition(). The phases before it change
+	 * neither the draw list, the reservation nor the jobs, and the phases after it only reserve and queue
+	 * work. The lookahead walks only feed speculative jobs, so they come after the cover and the current-view
+	 * groups. When every phase runs in one call they run in the order select() always used, and the result is
+	 * the one an unspread selection gives.
+	 *
+	 * Every drawn patch stays resident, and so does the parent of every queued job, which buildVertex() reads for
+	 * the job's morph heights. evict() removes only patches outside the reservation, and whenever it runs, the
+	 * reservation holds every drawn patch and its ancestors and the parent of every queued job:
+	 *  - Until apply, the draw list, the jobs and the reservation are the ones the previous selection left together.
+	 *  - Apply adds a changed cover and its ancestors to the reservation in the update that changes the draw
+	 *    list, and groups reserves afresh from that cover, which has not changed since.
+	 *  - Groups and speculate add what they reserve to the reservation in force and keep the rest of it, which the
+	 *    jobs still queued rely on. Publish replaces the jobs and installs the new reservation alone in one step.
+	 *  - prepareLandscape() and clearPatches() drop the selection in flight before they change either.
+	 * The patches that apply draws are resident when it draws them, whatever left the cache after the walk read
+	 * it. transition() splits a patch only into children resident at that moment, retires a group only to its
+	 * parent, and coarsens only to ancestors of the drawn cover, which are reserved and so resident. A patch
+	 * evicted while a selection is in flight is skipped by it in this way. Speculate asks again whether a parent
+	 * is resident, and speculate and publish drop the wanted patches that arrived meanwhile, so none is built twice.
+	 * @param bool $whole Whether to run every remaining phase now, whatever the slice.
+	 * @return void Advances the selection in flight, and completes it when it fits.
+	 */
+	private function advanceSelection(bool $whole): void
+	{
+		// The slice is timed with hrtime(), not microtime(). In the browser's PHP, microtime() reads Date.now(),
+		// which moves in whole milliseconds, coarser than the slice itself. hrtime() reads performance.now() there.
+		// It is a float in that 32-bit build and an integer natively, so the readings stay untyped.
+		$from = hrtime(true);
+		$steps = $this->selectionSliceSteps;
+		$left = $this->selectionSliceMs - $this->sliceMs;
+		// A walk pauses after a number of refined nodes and a grouping task after units of work, one unit being
+		// roughly a quarter of a microsecond of native work. Either pause comes after some thirty to fifty
+		// microseconds of native work: often enough to keep near the slice, and seldom enough that looking at the
+		// clock costs under one percent. With a slice in steps, each refined node or loop pass is one step.
+		[$nodes, $units] = $whole ? [0, PHP_INT_MAX] : ($steps > 0 ? [1, 1] : [16, 128]);
+
+		while($this->flight !== null)
+		{
+			$phase = $this->flight['phase'];
+			$resumable = $phase !== 'balance' && $phase !== 'apply' && $phase !== 'publish';
+
+			// Each update does at least one step, so every selection completes. A phase that cannot pause starts only
+			// if it fits what is left of the slice, judged by the forecast below.
+			if(!$whole && $this->sliceSteps > 0 && ($steps > 0
+				? $this->sliceSteps >= $steps
+				: (hrtime(true) - $from) / 1e6 + ($resumable ? 0.0 : $this->phaseCost[$phase] ?? 0.0) > $left
+			)) break;
+
+			if($resumable)
+			{
+				$credit = $phase === 'groups' || $phase === 'speculate' ? $units : $nodes;
+				$task = $this->flight['task'];
+
+				if($task === null)
+				{
+					$task = $this->flight['task'] = $this->startTask($phase, $credit);
+					$task->current();
+				}
+				else $task->send($credit);
+
+				$this->sliceSteps++;
+
+				// The same task carries on while the slice lasts, without the round of the loop above.
+				while($task->valid()
+					&& ($steps > 0 ? $this->sliceSteps < $steps : (hrtime(true) - $from) / 1e6 < $left)
+				){
+					$task->send($credit);
+					$this->sliceSteps++;
+				}
+
+				if(!$task->valid()) $this->finishTask($phase, $task->getReturn());
+
+				continue;
+			}
+
+			$begin = hrtime(true);
+
+			match($phase)
+			{
+				'balance' => $this->balancePhase()
+				, 'apply' => $this->applyPhase()
+				, 'publish' => $this->publishPhase()
+			};
+
+			$this->sliceSteps++;
+			// The forecast follows a dearer run at once and a cheaper one slowly. One phase that ran long makes the
+			// next few wait for an update of their own rather than overrun the one they would have shared.
+			$cost = (hrtime(true) - $begin) / 1e6;
+			$this->phaseCost[$phase] = max($cost, .75 * ($this->phaseCost[$phase] ?? 0.0));
+		}
+
+		$this->sliceMs += (hrtime(true) - $from) / 1e6;
+	}
+
+	/**
+	 * Create the resumable task of a phase.
+	 *
+	 * The view walk refines inside the padded view with the captured planes and water range. The lookahead
+	 * walks have no planes. Their eyes are the predicted position and the midpoint between it and the eye.
+	 * The groups and speculate tasks are reserveView() and reserveCorridor().
+	 * @param string $phase Phase that starts: walk, groups, midpoint, endpoint or speculate.
+	 * @param int $credit Refined nodes or units of work before the first pause; see advanceSelection().
+	 * @return \Generator Task that has not yet run.
+	 */
+	private function startTask(string $phase, int $credit): \Generator
+	{
+		if($phase === 'groups') return $this->reserveView($credit);
+
+		if($phase === 'speculate') return $this->reserveCorridor($credit);
+
+		if($phase === 'walk')
+		{
+			[$low, $high] = $this->flight['water'];
+
+			return $this->lod->walk($this->flight['camera']->position, $this->patches, $this->flight['quality']
+				, $this->flight['projection'], null, $this->flight['planes'], $low, $high, $credit);
+		}
+
+		$eye = $this->flight['lookahead'];
+
+		if($phase === 'midpoint')
+		{
+			$position = $this->flight['camera']->position;
+			$eye = [];
+
+			for($axis = 0; $axis < 3; $axis++) $eye[] = ($position[$axis] + $this->flight['lookahead'][$axis]) / 2;
+		}
+
+		return $this->lod->walk($eye, $this->patches, $this->flight['quality'], $this->flight['projection']
+			, credit: $credit);
+	}
+
+	/**
+	 * Keep what a completed task found and move to the next phase.
+	 * @param string $phase Phase whose task completed.
+	 * @param array $result What the task returned.
+	 * @return void Records the result in the selection in flight.
+	 */
+	private function finishTask(string $phase, array $result): void
+	{
+		$this->flight['task'] = null;
+
+		if($phase === 'walk')
+		{
+			$this->flight['view'] = $result;
+			$this->flight['phase'] = 'balance';
+
+			return;
+		}
+
+		if($phase === 'speculate')
+		{
+			unset($this->flight['corridor']);
+			$this->flight['wanted'] = $result;
+			$this->flight['phase'] = 'publish';
+
+			return;
+		}
+
+		if($phase !== 'groups')
+		{
+			// Speculate merges these with pauses. Merging them here would be one loop of several hundred passes.
+			$this->flight['corridor'][] = $result['request'];
+			$this->flight['phase'] = $phase === 'midpoint' ? 'endpoint' : 'speculate';
+
+			return;
+		}
+
+		unset($this->flight['view']);
+		$this->flight['wanted'] = $result;
+		$this->flight['corridor'] = [];
+		// Twelve missing patches already fill all three worker slots with current-view sibling groups.
+		// Reconsider the flight corridor as soon as a slot can open.
+		$corridor = $this->flight['lookahead'] !== null && ($this->builder === null || count($result) < 12);
+		$this->flight['phase'] = $corridor ? 'midpoint' : 'publish';
+	}
+
+	/**
+	 * Balance the cover that the view walk chose, which becomes the target of the apply phase.
+	 *
+	 * Balancing a large cover is the longest phase that cannot pause: its passes depend on each other, and
+	 * the cover it starts from has to stay whole until the last of them.
+	 * @return void Records the balanced target and moves to the apply phase.
+	 */
+	private function balancePhase(): void
+	{
+		$this->flight['desired'] = $this->balance($this->flight['view']['draw']);
+		$this->flight['phase'] = 'apply';
+	}
+
+	/**
+	 * Move the drawn cover toward the balanced target, keep it within capacity and protect it from eviction.
+	 * @return void Changes the draw list in one step and moves to the groups phase.
+	 */
+	private function applyPhase(): void
+	{
 		$old = array_column($this->draw, 'key');
-		$desired = $this->balance($result['draw']);
+		$desired = $this->flight['desired'];
 
 		// Each split adds four resident nodes and replaces one leaf with four.
 		$capacity = $this->capacity();
@@ -627,25 +962,11 @@ final class Scene
 			$this->retiring = [];
 		}
 
-		// The key caches gain an entry for every patch the view asks about. Residents are looked up again
-		// on every selection, so a trim keeps their entries and drops the rest.
-		if(count($this->parentKeys) > 4096)
-		{
-			$this->parentKeys = array_intersect_key($this->parentKeys, $this->patches);
-			$this->coarserKeys = array_intersect_key($this->coarserKeys, $this->patches);
-		}
-
 		$drawn = array_column($this->draw, 'key');
-		// A loose array comparison ignores order, so counting each key compares the two covers as sets.
-		// Sorting both lists of keys to compare them took thousands of string comparisons per selection.
-		$this->selectionPending = array_count_values($drawn) != array_count_values(array_column($desired, 'key'));
-
-		$clock = $this->clock;
 		$until = -1.0;
 
 		foreach($drawn as $key)
 		{
-			$this->patches[$key]['lastUse'] = $clock;
 			$settles = ($this->activated[$key] ?? -1) + .5;
 			if($settles > $until) $until = $settles;
 		}
@@ -660,38 +981,93 @@ final class Scene
 			if(count($this->groundCull) + count($this->waterCull) > 4096) $this->groundCull = $this->waterCull = [];
 		}
 
-		// The reservation starts from the drawn cover and its ancestors.
 		if($drawn !== $this->drawnKeys)
 		{
 			$this->drawnKeys = $drawn;
 			$this->drawnBranches = $this->ancestors($this->draw);
+			// Until groups reserves afresh, an update may end and evict. The new cover joins the old reservation so
+			// that neither the patches just drawn nor the work already reserved can go. An unchanged cover is in
+			// the reservation already: every reservation since it was drawn started from it, and the two places
+			// that change the draw list outside a selection also empty this cache. A whole selection reaches
+			// groups before any eviction and skips this.
+			if(!$this->flight['whole']) $this->reserved += $this->drawnBranches;
 		}
 
-		$this->reserved = $this->drawnBranches;
+		// The frame drawn after this update reads everything above. What it does not read waits for the groups
+		// task, which can pause.
+		$this->flight['desired'] = $desired;
+		$this->flight['drawn'] = $drawn;
+		$this->flight['appliedAt'] = $this->clock;
+		$this->flight['applied'] = $this->updates;
+		$this->flight['phase'] = 'groups';
+	}
+
+	/**
+	 * Reserve the missing sibling groups of the current view in order of importance.
+	 *
+	 * The new reservation is built apart. Until it is complete an eviction still sees the one in force, which holds
+	 * the drawn cover and the work that the last selection reserved. A whole selection then installs it; a spread
+	 * one adds it to the one in force and leaves publish to install it with the new jobs.
+	 * @param int $credit Units of work before the first pause; see advanceSelection().
+	 * @return \Generator Pauses with yield and returns the wanted patches of the current view, keyed by patch key.
+	 */
+	private function reserveView(int $credit): \Generator
+	{
+		$drawn = $this->flight['drawn'];
+		// A loose array comparison ignores order, so counting each key compares the two covers as sets.
+		// Sorting both lists of keys to compare them took thousands of string comparisons per selection.
+		$this->selectionPending = array_count_values($drawn)
+			!= array_count_values(array_column($this->flight['desired'], 'key'));
+		$clock = $this->flight['appliedAt'];
+		unset($this->flight['desired'], $this->flight['drawn']);
+
+		// The drawn patches are reserved, so eviction does not read their last use until a later selection.
+		foreach($drawn as $key)
+		{
+			if(--$credit <= 0) $credit = yield;
+
+			$this->patches[$key]['lastUse'] = $clock;
+		}
+
 		$drawKeys = array_column($this->draw, null, 'key');
 		$wanted = [];
-		$requests = array_column($result['request'], null, 'key');
+		$view = $this->flight['view'];
+		$requests = array_column($view['request'], null, 'key');
 
 		// Retain ready siblings while their shared morph/neighbor transition is pending.
 		// Otherwise reserving the next requests can evict a completed group before it draws.
-		foreach($result['refine'] as $node)
-		if(isset($drawKeys[$node['key']]))
-		foreach($this->lod->children($node) as $child)
-		$requests[$child['key']] = $child + ['priority' => $node['priority']];
+		foreach($view['refine'] as $node)
+		{
+			if(($credit -= 2) <= 0) $credit = yield;
 
-		[$groups, $blockers] = $this->viewGroups($requests, $drawKeys, $camera);
-		// The reservation only grows from here, so its size is counted once and then kept in step.
-		$reserved = count($this->reserved);
+			if(isset($drawKeys[$node['key']]))
+			foreach($this->lod->children($node) as $child)
+			$requests[$child['key']] = $child + ['priority' => $node['priority']];
+		}
+
+		[$groups, $blockers, $credit] = yield from $this->viewGroups(
+			$requests
+			, $drawKeys
+			, $this->flight['camera']
+			, $credit
+		);
+		// The reservation starts from the drawn cover and its ancestors. It only grows from here, so its size is
+		// counted once and then kept in step.
+		$reservation = $this->drawnBranches;
+		$reserved = count($reservation);
+		$capacity = $this->capacity();
 
 		foreach($groups as $parent => $nodes)
 		{
+			if(($credit -= 2) <= 0) $credit = yield;
+
 			if($parent !== '' && !isset($drawKeys[$parent])) continue;
 
 			if(($blockers[$parent] ?? []) !== []) continue;
 
 			$extra = 0;
 
-			foreach($nodes as $n) if(!isset($this->reserved[$n['key']])) $extra++;
+			foreach($nodes as $n) if(!isset($reservation[$n['key']])) $extra++;
 
 			if($reserved + $extra > $capacity) continue;
 
@@ -700,67 +1076,119 @@ final class Scene
 			foreach($nodes as $n)
 			{
 				$key = $n['key'];
-				$this->reserved[$key] = true;
+				$reservation[$key] = true;
 				if(!isset($this->patches[$key])) $wanted[$key] = $n + ['speculative' => false];
 			}
 		}
 
-		// Prediction reserves only unused cache space after all current-view demand.
-		// Midpoint plus endpoint cover the short swept corridor, without speculative draws.
-		// Twelve missing patches already fill all three worker slots with current-view
-		// sibling groups. Reconsider the flight corridor as soon as a slot can open.
-		if($this->lookahead !== null && ($this->builder === null || count($wanted) < 12))
+		// A whole selection meets no eviction before publish, so its reservation takes over here, as it always has.
+		// A spread one leaves the jobs of the last selection queued until publish, and buildVertex() reads each
+		// job's parent, which only the reservation in force may hold. So the new reservation joins that one here,
+		// and publish installs it alone in the update that replaces the jobs.
+		if($this->flight['whole']) $this->reserved = $reservation;
+		else
 		{
-			$midpoint = [];
-
-			for($axis = 0; $axis < 3; $axis++) $midpoint[] = ($camera->position[$axis] + $this->lookahead[$axis]) / 2;
-			$requests = [];
-
-			foreach([$midpoint, $this->lookahead] as $eye)
-			{
-				$predicted = $this->lod->select(
-					$eye
-					, $this->patches
-					, $this->quality
-					, $this->viewportHeight / (2 * tan($camera->fov / 2))
-				);
-
-				foreach($predicted['request'] as $node)
-				if(!isset($wanted[$node['key']])) $requests[$node['key']] = $node;
-			}
-
-			$speculative = 0;
-
-			foreach($this->requestGroups($requests) as $parent => $nodes)
-			{
-				if($parent === '' || !isset($this->patches[$parent])) continue;
-
-				// The keys counted below include the four siblings, so the unreserved siblings are a
-				// floor for $extra. A group that breaks a budget on that floor alone is refused before
-				// the rest of its keys are built. Once a budget is spent, that is every later group with
-				// an unreserved sibling.
-				$children = $this->lod->children($this->patches[$parent]);
-				$floor = 0;
-
-				foreach($children as $child) if(!isset($this->reserved[$child['key']])) $floor++;
-
-				if($speculative + $floor > 32 || $reserved + $floor > $capacity) continue;
-
-				$keys = $this->ancestors($children);
-				$extra = count(array_diff_key($keys, $this->reserved));
-
-				// Merging the keys into the reservation adds exactly the $extra that are new to it.
-				if($speculative + $extra > 32 || $reserved + $extra > $capacity
-					|| count($this->patches) + count($wanted) + count($nodes) > $capacity
-				) continue;
-
-				$speculative += $extra;
-				$reserved += $extra;
-				$this->reserved += $keys;
-
-				foreach($nodes as $n) $wanted[$n['key']] = $n + ['speculative' => true];
-			}
+			$this->flight['reservation'] = $reservation;
+			$this->reserved += $reservation;
 		}
+
+		return $wanted;
+	}
+
+	/**
+	 * Reserve speculative sibling groups for the predicted corridor in the cache space left over.
+	 *
+	 * Prediction reserves only unused cache space after all current-view demand. The midpoint and endpoint
+	 * walks cover the short swept corridor, and their patches are never drawn before the view asks for them.
+	 * Each group it takes joins the reservation at once. A pause therefore leaves the reservation larger, never
+	 * missing a patch that an eviction must keep.
+	 * @param int $credit Units of work before the first pause; see advanceSelection().
+	 * @return \Generator Pauses with yield and returns the wanted patches with the speculative ones added.
+	 */
+	private function reserveCorridor(int $credit): \Generator
+	{
+		$wanted = $this->flight['wanted'];
+		$requests = [];
+
+		// The midpoint's requests come first and the endpoint's replace them where both ask for a patch.
+		foreach($this->flight['corridor'] as $list)
+		foreach($list as $node)
+		{
+			if(--$credit <= 0) $credit = yield;
+
+			if(!isset($wanted[$node['key']])) $requests[$node['key']] = $node;
+		}
+
+		// Patches that arrived since groups need no job. A whole selection has had no update in between.
+		if(!$this->flight['whole']) foreach($wanted as $key => $n) if(isset($this->patches[$key])) unset($wanted[$key]);
+
+		[$groups, $credit] = yield from $this->requestGroups($requests, $credit);
+		// The budgets below count the reservation this selection builds. For a spread selection that is not yet the
+		// one in force, which also keeps what the queued jobs need until publish.
+		$whole = $this->flight['whole'];
+
+		if($whole) $reservation = &$this->reserved;
+		else $reservation = &$this->flight['reservation'];
+
+		$reserved = count($reservation);
+		$capacity = $this->capacity();
+		$speculative = 0;
+
+		foreach($groups as $parent => $nodes)
+		{
+			if(($credit -= 6) <= 0) $credit = yield;
+
+			if($parent === '' || !isset($this->patches[$parent])) continue;
+
+			// The keys counted below include the four siblings, so the unreserved siblings are a
+			// floor for $extra. A group that breaks a budget on that floor alone is refused before
+			// the rest of its keys are built. Once a budget is spent, that is every later group with
+			// an unreserved sibling.
+			$children = $this->lod->children($this->patches[$parent]);
+			$floor = 0;
+
+			foreach($children as $child) if(!isset($reservation[$child['key']])) $floor++;
+
+			if($speculative + $floor > 32 || $reserved + $floor > $capacity) continue;
+
+			$keys = $this->ancestors($children);
+			$extra = count(array_diff_key($keys, $reservation));
+
+			// Merging the keys into the reservation adds exactly the $extra that are new to it.
+			if($speculative + $extra > 32 || $reserved + $extra > $capacity
+				|| count($this->patches) + count($wanted) + count($nodes) > $capacity
+			) continue;
+
+			$speculative += $extra;
+			$reserved += $extra;
+			$reservation += $keys;
+
+			// The parent of this group must survive every eviction until publish queues the group.
+			if(!$whole) $this->reserved += $keys;
+
+			foreach($nodes as $n) $wanted[$n['key']] = $n + ['speculative' => true];
+		}
+
+		return $wanted;
+	}
+
+	/**
+	 * Replace the job list with the wanted patches, keep what is already built of them and release the rest.
+	 * @return void Completes the selection in flight.
+	 */
+	private function publishPhase(): void
+	{
+		// The key caches gain an entry for every patch the view asks about. Residents are looked up again
+		// on every selection, so a trim keeps their entries and drops the rest.
+		if(count($this->parentKeys) > 4096)
+		{
+			$this->parentKeys = array_intersect_key($this->parentKeys, $this->patches);
+			$this->coarserKeys = array_intersect_key($this->coarserKeys, $this->patches);
+		}
+
+		$wanted = $this->flight['wanted'];
+
+		if(!$this->flight['whole']) foreach($wanted as $key => $n) if(isset($this->patches[$key])) unset($wanted[$key]);
 
 		// Rebuild order on every selection while retaining partially generated payloads.
 		// Current-view sibling groups always run before speculative work.
@@ -769,6 +1197,8 @@ final class Scene
 		foreach($wanted as $n)
 		$ordered[$n['key']] = $n + ($this->jobs[$n['key']] ?? ['index' => 0,'bytes' => '', 'heights' => []]);
 		$this->jobs = $ordered;
+		// The jobs and the reservation they were queued under change together, before the eviction below.
+		if(!$this->flight['whole']) $this->reserved = $this->flight['reservation'];
 		if($this->builder !== null)
 		{
 			$queued = [];
@@ -781,23 +1211,61 @@ final class Scene
 				if(count($queued) === 3) break;
 			}
 		}
+
 		$this->evict();
-		$this->selectionTime = $this->clock;
-		$this->selectionDeferred = false;
+		$this->selectionUpdates = $this->updates - $this->flight['first'] + 1;
+		$this->selectionApplyUpdate = $this->flight['applied'] - $this->flight['first'] + 1;
+		$this->selectionsCompleted++;
+		$this->selectionsDropped = 0;
+		$this->flight = null;
+	}
+
+	/**
+	 * Drop the selection in flight, if any, and owe the view a new one.
+	 * @return void Clears the staged selection and empties the selection key.
+	 */
+	private function abandonSelection(): void
+	{
+		if($this->flight === null) return;
+
+		$this->flight = null;
+		$this->selectionKey = '';
+	}
+
+	/**
+	 * Decide whether the selection in flight was started for a view that is now gone.
+	 *
+	 * That is so when a setting it captured has changed, or when this update relocated the eye as the limiter
+	 * defines it. Ordinary travel and turns only make the result a few updates late.
+	 * @param float $seconds Elapsed display seconds for this update.
+	 * @param Camera $camera Current viewing camera.
+	 * @return bool Whether the selection in flight must be dropped.
+	 */
+	private function flightOutdated(float $seconds, Camera $camera): bool
+	{
+		$previous = $this->flight['pose'];
+		$this->flight['pose'] = [$camera->position, $camera->yaw, $camera->pitch];
+
+		return $this->flight['settings'] !== $this->selectionSettings($camera)
+			|| $this->relocated($previous, $seconds, $camera);
 	}
 
 	/**
 	 * Keep siblings together and prioritize groups by projected current-view demand.
 	 * @param array $requests Missing nodes with parent-group priority from the selector.
-	 * @return array Missing sibling groups ordered from greatest to least importance.
+	 * @param int $credit Units of work before the first pause; see advanceSelection().
+	 * @return \Generator Pauses with yield and returns the missing sibling groups ordered from greatest to least
+	 *     importance, with the credit left.
 	 */
-	private function requestGroups(array $requests): array
+	private function requestGroups(array $requests, int $credit): \Generator
 	{
 		$parents = &$this->parentKeys;
 		$groups = $priority = [];
 
 		foreach($requests as $node)
 		{
+			if(--$credit <= 0) $credit = yield;
+
 			$key = $node['key'];
 			$parent = $parents[$key] ??= self::parentOf($key);
 
@@ -812,7 +1280,7 @@ final class Scene
 
 		foreach($priority as $parent => $first) $ordered[$parent] = $groups[$parent];
 
-		return $ordered;
+		return [$ordered, $credit];
 	}
 
 	/**
@@ -824,11 +1292,13 @@ final class Scene
 	 * @param array $requests Current-view candidate siblings, including resident transition data.
 	 * @param array $drawKeys Current complete cover indexed by patch key.
 	 * @param Camera $camera Viewing direction and position used only to order work.
-	 * @return array Ordered groups and the coarser neighbors blocking each direct split.
+	 * @param int $credit Units of work before the first pause; see advanceSelection().
+	 * @return \Generator Pauses with yield and returns the ordered groups, the coarser neighbors blocking each
+	 *     direct split, and the credit left.
 	 */
-	private function viewGroups(array $requests, array $drawKeys, Camera $camera): array
+	private function viewGroups(array $requests, array $drawKeys, Camera $camera, int $credit): \Generator
 	{
-		$groups = $this->requestGroups($requests);
+		[$groups, $credit] = yield from $this->requestGroups($requests, $credit);
 		$priority = $blockers = $byLevel = [];
 		[$forward] = $camera->basis();
 		$eye = $camera->position;
@@ -839,6 +1309,8 @@ final class Scene
 
 		foreach($groups as $parent => $nodes)
 		{
+			if(($credit -= 8) <= 0) $credit = yield;
+
 			if($parent === '')
 			{
 				$priority[$parent] = PHP_FLOAT_MAX;
@@ -899,6 +1371,8 @@ final class Scene
 
 		foreach($priority as $parent => $propagated)
 		{
+			if(--$credit <= 0) $credit = yield;
+
 			$nodes = $groups[$parent];
 
 			// Siblings arrive carrying their group's priority, so only a group whose priority the view
@@ -913,7 +1387,7 @@ final class Scene
 			$ordered[$parent] = $nodes;
 		}
 
-		return [$ordered, $blockers];
+		return [$ordered, $blockers, $credit];
 	}
 
 	/**
@@ -1470,24 +1944,32 @@ final class Scene
 	 */
 	private function forgetSeamsAround(array $keys): void
 	{
+		// This runs in the update that changes the cover, which cannot pause, for 25 keys around every patch that
+		// entered or left. Most of those keys name no drawn patch. boundaryMorph() files every patch it settles
+		// under neighbors first, so one lookup there decides whether any of the three caches holds the key, and
+		// a column prefix shared by the keys of one column saves building each key from four parts.
 		foreach($keys as $key)
 		{
 			[$level, $x, $z] = explode(':', $key);
 			$level = (int)$level; $x = (int)$x; $z = (int)$z;
 
-			for($nz = $z - 1; $nz <= $z + 1; $nz++)
 			for($nx = $x - 1; $nx <= $x + 1; $nx++)
 			{
-				$near = $level . ':' . $nx . ':' . $nz;
+				$column = $level . ':' . $nx . ':';
+
+				for($nz = $z - 1; $nz <= $z + 1; $nz++)
+				if(isset($this->neighbors[$near = $column . $nz]))
 				unset($this->neighbors[$near], $this->settledBoundaries[$near], $this->settledParents[$near]);
 			}
 
 			$fine = $level + 1;
 
-			for($nz = 2 * $z - 1; $nz <= 2 * $z + 2; $nz++)
 			for($nx = 2 * $x - 1; $nx <= 2 * $x + 2; $nx++)
 			{
-				$near = $fine . ':' . $nx . ':' . $nz;
+				$column = $fine . ':' . $nx . ':';
+
+				for($nz = 2 * $z - 1; $nz <= 2 * $z + 2; $nz++)
+				if(isset($this->neighbors[$near = $column . $nz]))
 				unset($this->neighbors[$near], $this->settledBoundaries[$near], $this->settledParents[$near]);
 			}
 		}
@@ -2067,7 +2549,7 @@ final class Scene
 		// A selection the limiter postponed needs later updates even when the camera has stopped. So does the
 		// limiter's own spacing after a selection, which only updates can count.
 		return $this->selectionKey === '' || $this->changed || $this->jobs !== [] || $this->preparing !== null
-			|| $this->selectionPending || $this->selectionDeferred || $this->selectionRecent;
+			|| $this->selectionPending || $this->selectionDeferred || $this->selectionRecent || $this->flight !== null;
 	}
 
 	/**
@@ -2119,8 +2601,17 @@ final class Scene
 			, 'generationMs' => $this->lastUpdateMs
 			, 'frames' => $this->frames
 			, 'selections' => $this->selections
+			, 'selectionsCompleted' => $this->selectionsCompleted
 			// A postponed selection is still owed, so callers that wait for a settled scene must see it here.
-			, 'selectionPending' => $this->selectionPending || $this->selectionDeferred
+			// So is one that has started and not yet completed.
+			, 'selectionPending' => $this->selectionPending || $this->selectionDeferred || $this->flight !== null
+			, 'selectionInFlight' => $this->flight !== null
+			, 'selectionPhase' => $this->flight['phase'] ?? null
+			// Selection work in the last update. Of the last completed selection: how many updates it took part
+			// in, and in which of them it changed the drawn cover. A whole selection reports one and one.
+			, 'selectionWorkMs' => $this->sliceMs
+			, 'selectionUpdates' => $this->selectionUpdates
+			, 'selectionApplyUpdate' => $this->selectionApplyUpdate
 			, 'revision' => $this->revision
 			, 'pendingVertices' => array_sum(array_column($this->jobs, 'index'))
 			, 'pendingHeightSamples' => array_sum(array_column($this->jobs, 'sampleIndex'))
@@ -2144,6 +2635,9 @@ final class Scene
 	{
 		if($this->closed) return;
 
+		// The meshes are rebuilt in place, so a selection in flight would still be right. It is dropped anyway,
+		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
+		$this->abandonSelection();
 		$this->groundProgram->restore();
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
@@ -2172,12 +2666,16 @@ final class Scene
 	 */
 	private function clearPatches(): void
 	{
+		$this->abandonSelection();
+
 		foreach($this->patches as $p) $p['mesh']->close();
 
 		foreach($this->replacements as $p) $p['mesh']->close();
 		$this->preparing = null;
 		$this->replacements = $this->replacementJobs = [];
+
 		$this->patches = $this->jobs = $this->draw = $this->activated = $this->retiring = $this->reserved = [];
+		$this->drawnKeys = $this->drawnBranches = [];
 		$this->neighbors = $this->settledBoundaries = $this->settledParents = $this->groundCull = $this->waterCull = [];
 		$this->drawIndex = null;
 		$this->selectionPending = $this->selectionDeferred = $this->selectionRecent = false;

@@ -88,6 +88,16 @@ selections run at least `Scene::$selectionInterval` seconds apart, 0.1 by defaul
 change of view. A camera at rest, a relocated camera, and a changed detail, viewport or water setting
 select at once.
 
+One update does about `Scene::$selectionSliceMs` milliseconds of selection work, 0.5 by default, and at most
+one step that cannot pause besides, such as the one that changes the drawn cover. A selection that needs more
+continues over the following updates and changes the drawn cover in one of them; until then the previous cover
+stays drawn, complete and resident. A relocation or a changed setting drops a selection under way and starts its
+replacement at once. With nothing drawn, and while the slice is zero, every selection runs whole in the update
+that starts it. So does the next selection after two were dropped in a row for a relocation or a changed
+setting, so that a setting that changes on every update, such as a dragged slider, still moves the cover every
+third update. `stats()` reports `selectionInFlight`, `selectionWorkMs` for the last update and
+`selectionUpdates` for the updates the last selection took.
+
 The sandbox activates `browser/PatchMesher.mjs` and passes a `BrowserPatchBuilder` to `Scene`. A dedicated
 worker samples the seeded recipe in sibling groups and sends packed vertices, normals, and error bounds
 through one reusable in-memory file. Patches with edited samples or off-lattice coordinates use the PHP

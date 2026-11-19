@@ -830,6 +830,42 @@ expect($knob->selectionInterval === .05 && !array_key_exists('selectionInterval'
 	'A file cannot set the interval or add it to the settings');
 $knob->close();
 
+// The selection slice is a second comparison value of the same kind: zero runs every selection whole.
+$knob = new Session(['worldSize' => 256,'heightScale' => 0,'detailAmplitude' => 0]);
+expect($knob->selectionSliceMs === TerrainPhonics\Scene::DEFAULT_SELECTION_SLICE_MS
+	&& $knob->status()['selectionSliceMs'] === $knob->selectionSliceMs,
+	'The selection slice starts at the renderer default and the status reports it');
+$settings = $knob->settings;
+$file = $knob->save();
+$knob->dirty = false;
+
+input($knob, ['values' => ['selectionSliceMs' => 0]]);
+expect($knob->selectionSliceMs === 0.0 && $knob->status()['selectionSliceMs'] === 0.0,
+	'The page can turn spread selections off');
+expect($knob->settings === $settings && $knob->save() === $file && !$knob->dirty,
+	'The slice changes neither the saved settings, the save file nor the picture');
+input($knob, ['values' => ['selectionSliceMs' => '3','selectionInterval' => .2]]);
+expect($knob->selectionSliceMs === 3.0 && $knob->selectionInterval === .2,
+	'The slice travels beside the interval in one input packet');
+
+input($knob, ['values' => ['selectionSliceMs' => 500]]);
+expect($knob->selectionSliceMs === 100.0, 'The slice is held to 100 ms at most');
+input($knob, ['values' => ['selectionSliceMs' => -2]]);
+expect($knob->selectionSliceMs === 0.0, 'A negative slice turns spreading off');
+input($knob, ['values' => ['selectionSliceMs' => 'lots']]);
+expect($knob->selectionSliceMs === 0.0 && $knob->message === 'Invalid control value',
+	'A slice that is not a number is refused and reported');
+
+input($knob, ['values' => ['selectionSliceMs' => 1.5]]);
+$file = json_decode($knob->save(), true, flags: JSON_THROW_ON_ERROR);
+expect(!array_key_exists('selectionSliceMs', $file) && !array_key_exists('selectionSliceMs', $file['settings']),
+	'Save files do not record the slice');
+$file['settings']['selectionSliceMs'] = 9;
+$knob->load(json_encode($file, JSON_THROW_ON_ERROR));
+expect($knob->selectionSliceMs === 1.5 && !array_key_exists('selectionSliceMs', $knob->settings),
+	'A file cannot set the slice or add it to the settings');
+$knob->close();
+
 /**
  * Work out where one step leaves the jet and its chase eye when both sample the exact surface every time.
  * @param array $before Jet state before the step.
