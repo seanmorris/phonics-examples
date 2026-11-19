@@ -42,6 +42,7 @@ namespace
 	use Phonics\Render\Program;
 	use TerrainSandbox\Course;
 	use TerrainSandbox\GateModel;
+	use TerrainSandbox\Race;
 	use TerrainSandbox\Session;
 
 	foreach(['GL_ARRAY_BUFFER', 'GL_ELEMENT_ARRAY_BUFFER', 'GL_STATIC_DRAW', 'GL_FLOAT', 'GL_SHORT', 'GL_UNSIGNED_SHORT',
@@ -187,6 +188,43 @@ namespace
 	$session->course = new Course;
 	$model->draw($session->course, $camera, $session->atmosphere, $session->water, 1280, 720);
 	expect($model->drawn === 0, 'A course without gates draws nothing');
+
+	// Floating gates sample the waves only where something reads their height: the gate a race needs next, and the
+	// gates a frame draws. Every fixed step floats the course, so sampling all 32 there cost the jet ski's steps.
+	$surface = new class($session->water) implements TerrainPhonics\WaterSurface {
+		public int $samples = 0;
+		public function __construct(private readonly TerrainPhonics\Water $water) {}
+		public function sample(float $x, float $z, float $time): array
+		{
+			$this->samples++;
+			return $this->water->sample($x, $z, $time);
+		}
+	};
+	$pond = new Course;
+	$level = $session->water->level();
+	$pond->place('start', 'water', 0, $level, 60, 0, 1);
+	for($i = 1; $i < 32; $i++) $pond->place('checkpoint', 'water', 0, $level, $i % 2 ? -60.0 * $i : 60.0 + 40 * $i, 0);
+	$pond->float($surface, 1.0);
+	$race = new Race;
+	$race->advance($pond, $shapes, [0, $level + 1, 58], [0, $level + 1, 59], 1.0, 1 / 60, 'craft', 1);
+	expect($surface->samples === 1, 'A fixed step samples the waves for the one gate the race needs next');
+	$pond->float($surface, 1.1);
+	$surface->samples = 0;
+	$since = count($GLOBALS['gl']);
+	$model->draw($pond, $camera, $session->atmosphere, $session->water, 1280, 720);
+	$drawSamples = $surface->samples;
+	$ahead = array_values(array_filter($pond->gates(), static fn(array $gate): bool => $gate['z'] > 0));
+	$origins = values('uOrigin', $since);
+	$placedRight = count($origins) === 16;
+	foreach($ahead as $index => $gate)
+		$placedRight = $placedRight && abs($origins[$index][1] - ($gate['y'] - $camera->position[1])) < 1e-9
+			&& $origins[$index][2] === $gate['z'];
+	expect($model->drawn === 16 && $drawSamples === 16 && $placedRight,
+		'Drawing samples only the 16 gates in view, and each draws at its height on the waves');
+	expect($surface->samples === 32 && $pond->start()['y'] === $session->water->sample(0, 60, 1.1)['height'],
+		'Listing the course samples the 16 gates behind the camera once, with the height an immediate sample gives');
+	$model->draw($pond, $camera, $session->atmosphere, $session->water, 1280, 720);
+	expect($surface->samples === 32, 'Later frames at the same simulation time reuse the sampled heights');
 
 	$session->close();
 	echo "Landscape sandbox gate drawing: $checks checks passed\n";

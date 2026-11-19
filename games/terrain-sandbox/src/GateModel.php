@@ -63,17 +63,28 @@ final class GateModel
 		$visible = [];
 		$nearest = INF;
 		$altitude = $eye[1];
-		foreach($course->gates() as $gate)
+		$surface = null;
+		foreach($course->gates(false) as $gate)
 		{
 			$placed = $this->placed[$gate['id']];
-			$y = $gate['y'];
-			$dx = $gate['x'] - $eye[0]; $dy = $y + $placed['middle'] - $eye[1]; $dz = $gate['z'] - $eye[2];
+			// A floating gate stands somewhere within the water's height range. Culling against that range means only
+			// the gates that draw sample the waves for their exact height.
+			$low = $high = $gate['y'];
+			if($placed['kind'] === 'water')
+			{
+				$surface ??= $water->heightRange();
+				$low = min($low, $surface[0]); $high = max($high, $surface[1]);
+			}
+			$dx = $gate['x'] - $eye[0]; $dz = $gate['z'] - $eye[2];
+			$dy = ($low + $high) / 2 + $placed['middle'] - $eye[1];
 			$distance = $dx * $dx + $dy * $dy + $dz * $dz;
 			if($distance > $placed['range']) continue;
-			$hidden = Camera::rejectingPlane($planes, $eye, $placed['box'], $y + $placed['low'], $y + $placed['high'],
-				$this->cull[$gate['id']] ?? -1);
+			$hidden = Camera::rejectingPlane($planes, $eye, $placed['box'], $low + $placed['low'],
+				$high + $placed['high'], $this->cull[$gate['id']] ?? -1);
 			if($hidden >= 0) { $this->cull[$gate['id']] = $hidden; continue; }
 			unset($this->cull[$gate['id']]);
+			if($placed['kind'] === 'water') $gate['y'] = $course->height($gate);
+			$y = $gate['y'];
 			$visible[$placed['kind']][] = [$placed, $gate];
 			if($distance < $nearest) { $nearest = $distance; $altitude = $y; }
 		}
@@ -111,7 +122,7 @@ final class GateModel
 	{
 		$this->placed = $this->cull = [];
 		$atlas = $this->shapes->atlas;
-		foreach($course->gates() as $gate)
+		foreach($course->gates(false) as $gate)
 		{
 			$extent = $this->shapes->kind($gate['kind'])['extent'];
 			$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
