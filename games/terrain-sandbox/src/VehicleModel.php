@@ -14,9 +14,13 @@ use TerrainPhonics\WaterAppearance;
 final class VehicleModel
 {
 	private const STRIDE = 28;
+	/** Surface tags from 250 up turn about the hinges in the uniform arrays of model.vert, which hold this many. */
+	public const FIRST_SURFACE = 250, SURFACES = 5;
 	private Program $program;
 	private array $vao = [], $buffers = [], $texture = [];
 	private int $indexCount;
+	/** Pose key driving each hinge slot, and every slot's hinge point and unit axis, flattened for the shader. */
+	private array $controls = [], $hingePoints = [], $hingeAxes = [];
 
 	/** Upload the baked model once on boarding, or again when the context is restored. */
 	public function __construct(string $meshFile)
@@ -32,6 +36,19 @@ final class VehicleModel
 		if($header['vertices'] > 65536 || !$this->indexCount || $this->indexCount % 3
 			|| strlen($data) !== $pixelOffset + $header['width'] * $header['height'] * 4)
 			throw new \RuntimeException('Invalid vehicle mesh dimensions');
+		$hinges = self::hinges($meshFile);
+		if($hinges)
+		{
+			$points = $axes = array_fill(0, self::SURFACES, [0.0, 0.0, 0.0]);
+			foreach($hinges as $slot => $hinge)
+			{
+				$this->controls[$slot] = $hinge['control'];
+				$points[$slot] = $hinge['point'];
+				$axes[$slot] = $hinge['axis'];
+			}
+			$this->hingePoints = array_merge(...$points);
+			$this->hingeAxes = array_merge(...$axes);
+		}
 
 		$fragment = str_replace(['// OPTICS','// NIGHT LIGHT'],
 			[WaterAppearance::shaderSource(), AtmosphereRenderer::nightLightingSource()], file_get_contents($root . 'model.frag'));
@@ -71,6 +88,32 @@ final class VehicleModel
 		}
 	}
 
+	/**
+	 * Read the hinges of the moving surfaces that the importer writes beside a mesh as surfaces.json.
+	 * @param string $meshFile Path of the baked mesh.
+	 * @return array Hinge slot (the surface tag minus FIRST_SURFACE) => pose key that drives it, a point on the hinge
+	 * and its unit axis in model metres. Empty for a mesh without moving surfaces.
+	 */
+	public static function hinges(string $meshFile): array
+	{
+		$file = dirname($meshFile) . '/surfaces.json';
+		if(!is_file($file)) return [];
+		$hinges = [];
+
+		foreach(json_decode(file_get_contents($file), true, flags: JSON_THROW_ON_ERROR)['surfaces'] as $surface)
+		{
+			$slot = $surface['tag'] - self::FIRST_SURFACE;
+			[$x, $y, $z] = $surface['axis'];
+			$length = sqrt($x*$x + $y*$y + $z*$z);
+			if($slot < 0 || $slot >= self::SURFACES || isset($hinges[$slot]) || !$length)
+				throw new \RuntimeException('Invalid vehicle surface');
+			$hinges[$slot] = ['control' => $surface['control'], 'point' => array_map('floatval', $surface['point']),
+				'axis' => [$x / $length, $y / $length, $z / $length]];
+		}
+
+		return $hinges;
+	}
+
 	/** Render the current vehicle pose in metres, with local +Z pointing forward. */
 	public function draw(array $pose, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height): void
 	{
@@ -97,6 +140,14 @@ final class VehicleModel
 			glUniform4f($p->location('uWheelTravel'), ...$pose['wheelTravel']);
 			glUniform2f($p->location('uWheelAngles'), $pose['wheelSpin'], $pose['steering']);
 			glUniform4f($p->location('uWheelLayout'), Car::FRONT_TRACK / 2, Car::REAR_TRACK / 2, Car::WHEELBASE / 2, Car::TIRE_RADIUS);
+		}
+		if($this->controls)
+		{
+			$angles = array_fill(0, self::SURFACES, 0.0);
+			foreach($this->controls as $slot => $control) $angles[$slot] = (float)($pose[$control] ?? 0.0);
+			glUniform3fv($p->location('uHingePoint[0]'), self::SURFACES, $this->hingePoints);
+			glUniform3fv($p->location('uHingeAxis[0]'), self::SURFACES, $this->hingeAxes);
+			glUniform1fv($p->location('uHingeAngle[0]'), self::SURFACES, $angles);
 		}
 		glUniformMatrix3fv($p->location('uRotation'), 1, false, $basis);
 		glUniform3f($p->location('uOrigin'), $pose['x'] - $camera->position[0], $pose['y'] - $camera->position[1],

@@ -13,6 +13,10 @@ final class Jet
 	private const FINEST = 2, COARSEST = 256;
 	/** Steps to fly on after a block rises too close before asking about a larger one. */
 	private const PATIENCE = 8;
+	/** Full travel of the control surfaces in radians: 20 degrees of aileron, 15 of stabilator and 10 of rudder. */
+	public const AILERON = .3490658504, STABILATOR = .2617993878, RUDDER = .1745329252;
+	/** Actuators follow their command with this time constant in seconds, and at 60 degrees a second at most. */
+	public const SURFACE_LAG = .08, SURFACE_RATE = 1.0471975512;
 	private array $pose = [], $previous = [];
 	/** Surface and revision that the cached limits and blocks below describe. */
 	private ?Landscape $surveyed = null;
@@ -29,7 +33,8 @@ final class Jet
 		$x = max(-$half,min($half,$x));
 		$z = max(-$half,min($half,$z));
 		$this->pose = ['x'=>$x, 'y'=>max($y, max($water,$land->height($x,$z)) + 75), 'z'=>$z,
-			'yaw'=>M_PI - $camera->yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>110.0];
+			'yaw'=>M_PI - $camera->yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>110.0,
+			'aileron'=>0.0, 'stabilator'=>0.0, 'rudder'=>0.0];
 		$this->previous = [];
 		$this->follow($camera, $land, $water);
 	}
@@ -41,9 +46,14 @@ final class Jet
 		$this->previous = $this->pose;
 		$p = &$this->pose;
 		$p['speed'] = max(55.0,min(260.0,$p['speed'] + $throttle * 55 * $dt));
-		$p['roll'] += (-$bank * 1.10 - $p['roll']) * (1 - exp(-3.6 * $dt));
-		$p['pitch'] += ($climb * .78 - $p['pitch']) * (1 - exp(-2.1 * $dt));
-		$p['yaw'] += sin($p['roll']) * .68 * $dt;
+		// Roll and pitch close on their targets at a rate in proportion to the angle still to go.
+		$rollDemand = -$bank * 1.10 - $p['roll'];
+		$pitchDemand = $climb * .78 - $p['pitch'];
+		$p['roll'] += $rollDemand * (1 - exp(-3.6 * $dt));
+		$p['pitch'] += $pitchDemand * (1 - exp(-2.1 * $dt));
+		$turn = sin($p['roll']) * .68;
+		$p['yaw'] += $turn * $dt;
+		$this->deflect($dt, $rollDemand, $pitchDemand, $turn);
 		$travel = $p['speed'] * $dt;
 		$x = $p['x'] + sin($p['yaw']) * cos($p['pitch']) * $travel;
 		$z = $p['z'] + cos($p['yaw']) * cos($p['pitch']) * $travel;
@@ -55,6 +65,42 @@ final class Jet
 		$p['y'] = max($p['y'], $water + 8);
 		$this->follow($camera,$land,$water);
 		return true;
+	}
+
+	/**
+	 * Move the control surfaces for the attitude change asked of this step. They animate the model and nothing else.
+	 * A positive aileron raises the +X trailing edge and lowers the other, a positive stabilator raises both of its
+	 * trailing edges and a positive rudder swings towards +X.
+	 * @param float $dt Fixed step in seconds.
+	 * @param float $rollDemand Roll still to go to the commanded bank, in radians. Positive lowers the +X wing.
+	 * @param float $pitchDemand Pitch still to go to the commanded climb, in radians. Positive raises the nose.
+	 * @param float $turn Yaw rate of the coordinated turn in radians a second. Positive turns the nose towards +X.
+	 * @return void Updates the aileron, stabilator and rudder angles in the pose, in radians.
+	 */
+	private function deflect(float $dt, float $rollDemand, float $pitchDemand, float $turn): void
+	{
+		$p = &$this->pose;
+		// Full aileron until the roll still to go falls to a quarter of the full bank, and full stabilator likewise
+		// for the climb. The rudder follows the turn rate and reaches its stop in the steepest bank.
+		$p['aileron'] = self::actuate($p['aileron'], self::AILERON * $rollDemand / (.25 * 1.10), self::AILERON, $dt);
+		$p['stabilator'] = self::actuate($p['stabilator'], self::STABILATOR * $pitchDemand / (.25 * .78),
+			self::STABILATOR, $dt);
+		$p['rudder'] = self::actuate($p['rudder'], self::RUDDER * $turn / (.68 * sin(1.10)), self::RUDDER, $dt);
+	}
+
+	/**
+	 * Advance one control surface towards its command as an actuator would: a short lag, then a rate limit.
+	 * @param float $angle Current deflection in radians.
+	 * @param float $command Requested deflection in radians, which may lie beyond the surface's travel.
+	 * @param float $travel Largest deflection either way, in radians.
+	 * @param float $dt Fixed step in seconds.
+	 * @return float The deflection after this step, in radians.
+	 */
+	private static function actuate(float $angle, float $command, float $travel, float $dt): float
+	{
+		$move = (max(-$travel, min($travel, $command)) - $angle) * (1 - exp(-$dt / self::SURFACE_LAG));
+		$rate = self::SURFACE_RATE * $dt;
+		return $angle + max(-$rate, min($rate, $move));
 	}
 
 	private function follow(Camera $camera, Landscape $land, float $water): void

@@ -480,6 +480,316 @@ $flight->step(1/60);
 expect($flight->mode === 'fly' && str_contains($flight->message,'edge'), 'Flight at the map boundary returns control inside the landscape');
 $flight->close();
 
+/**
+ * Advance a jet one fixed step by the flight model as it stood before the control surfaces moved.
+ * @param array $p Jet state before the step.
+ * @param int $throttle Throttle keys, -1 to 1.
+ * @param int $bank Bank keys, -1 to 1.
+ * @param int $climb Climb keys, -1 to 1.
+ * @return array Speed, roll, pitch, yaw, x and z after the step.
+ */
+function oldMotion(array $p, int $throttle, int $bank, int $climb): array
+{
+	$dt = 1 / 60;
+	$speed = max(55.0,min(260.0,$p['speed'] + $throttle * 55 * $dt));
+	$roll = $p['roll'] + (-$bank * 1.10 - $p['roll']) * (1 - exp(-3.6 * $dt));
+	$pitch = $p['pitch'] + ($climb * .78 - $p['pitch']) * (1 - exp(-2.1 * $dt));
+	$yaw = $p['yaw'] + sin($roll) * .68 * $dt;
+
+	$travel = $speed * $dt;
+	return [$speed, $roll, $pitch, $yaw, $p['x'] + sin($yaw) * cos($pitch) * $travel,
+		$p['z'] + cos($yaw) * cos($pitch) * $travel];
+}
+
+// The control surfaces only animate the model. Flown through every control, the jet keeps to the old flight model
+// step for step, while each surface stays within its travel and rate and moves the way the demand asks.
+$controls = new Session(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0]);
+$ground = new TerrainPhonics\Landscape($controls->landscape->recipe());
+$controls->camera->position = [0,300,0];
+$controls->camera->yaw = 0;
+input($controls, ['actions'=>['jet']]);
+$s = $controls->jet->state();
+expect($s['aileron'] === 0.0 && $s['stabilator'] === 0.0 && $s['rudder'] === 0.0,
+	'Boarding starts the control surfaces at neutral');
+
+$travel = ['aileron'=>TerrainSandbox\Jet::AILERON, 'stabilator'=>TerrainSandbox\Jet::STABILATOR,
+	'rudder'=>TerrainSandbox\Jet::RUDDER];
+$oldKeys = ['x','y','z','yaw','pitch','roll','speed','aileron','stabilator','rudder','boom','eyeY'];
+$matched = $bounded = $interpolated = true;
+$peak = array_fill_keys(array_keys($travel), 0.0);
+$seen = [];
+// Bank left and climb, reverse into a right bank and a dive, then level out at low speed and let go.
+$script = [['left climb', ['KeyA','KeyE'], 120], ['right dive', ['KeyD','KeyQ','KeyW'], 150],
+	['level brake', ['KeyS'], 200], ['hands off', [], 120]];
+foreach($script as [$name, $held, $steps])
+{
+	input($controls, ['keys'=>array_fill_keys($held, true)]);
+	$throttle = (int)in_array('KeyW', $held) - (int)in_array('KeyS', $held);
+	$bank = (int)in_array('KeyD', $held) - (int)in_array('KeyA', $held);
+	$climb = (int)in_array('KeyE', $held) - (int)in_array('KeyQ', $held);
+
+	for($i = 0; $i < $steps; $i++)
+	{
+		$before = $controls->jet->state();
+		$controls->step(1 / 60);
+		$after = $controls->jet->state();
+		$matched = $matched && array_keys($after) === $oldKeys
+			&& [$after['speed'], $after['roll'], $after['pitch'], $after['yaw'], $after['x'], $after['z']]
+				=== oldMotion($before, $throttle, $bank, $climb)
+			&& [$after['y'], $after['eyeY']] === exactJet($before, $after, $ground, $controls->water->level())
+			&& $after['boom'] === 24.0 * cos(.38 - .75 * $after['pitch']);
+
+		foreach($travel as $key => $limit)
+		{
+			$bounded = $bounded && abs($after[$key]) <= $limit
+				&& abs($after[$key] - $before[$key]) <= TerrainSandbox\Jet::SURFACE_RATE / 60 + 1e-15;
+			$peak[$key] = max($peak[$key], abs($after[$key]));
+		}
+		if($i === 11 || $i === $steps - 1) $seen[$name][$i === 11 ? 'early' : 'late'] = $after;
+		if($i !== 30) continue;
+
+		[$eye, $middle] = $controls->jet->view($controls->camera, .25);
+		foreach($travel as $key => $limit)
+			$interpolated = $interpolated && $middle[$key] === $before[$key] + .25 * ($after[$key] - $before[$key]);
+	}
+}
+
+expect($matched, 'Moving control surfaces leave the jet on the old flight path, attitude, speed and chase eye');
+expect($bounded && $peak['aileron'] > .99 * $travel['aileron'] && $peak['stabilator'] > .99 * $travel['stabilator']
+	&& $peak['rudder'] > .99 * $travel['rudder'],
+	'Each control surface reaches its stop without passing it and moves no faster than its actuator');
+
+expect($seen['left climb']['early']['aileron'] > 0 && $seen['right dive']['early']['aileron'] < 0
+	&& $seen['level brake']['early']['aileron'] > 0,
+	'The aileron follows the roll demand: positive while the +X wing is going down');
+expect($seen['left climb']['early']['stabilator'] > 0 && $seen['right dive']['early']['stabilator'] < 0
+	&& $seen['level brake']['early']['stabilator'] > 0,
+	'The stabilator follows the pitch demand: positive while the nose is coming up');
+expect($seen['left climb']['late']['rudder'] > .99 * $travel['rudder'] && $seen['left climb']['late']['roll'] > 1
+	&& $seen['right dive']['late']['rudder'] < -.99 * $travel['rudder'] && $seen['right dive']['late']['roll'] < -1,
+	'The rudder follows the turn: positive while the nose swings towards +X in a left bank');
+
+$settled = $seen['hands off']['late'];
+expect(abs($settled['aileron']) < .01 && abs($settled['stabilator']) < .01 && abs($settled['rudder']) < .01,
+	'Letting go of the controls returns every surface to neutral');
+expect($interpolated, 'Presentation frames interpolate the control surfaces with the rest of the pose');
+
+input($controls, ['keys'=>['KeyA'=>true,'KeyE'=>true]]);
+for($i = 0; $i < 12; $i++) $controls->step(1 / 60);
+$held = $controls->jet->state();
+input($controls, ['actions'=>['pause'], 'keys'=>['KeyD'=>true,'KeyQ'=>true]]);
+for($i = 0; $i < 30; $i++) $controls->step(1 / 60);
+expect($controls->jet->state() === $held && $held['aileron'] > 0 && $held['stabilator'] > 0,
+	'Pausing freezes the control surfaces where they stand');
+
+// The checks above measure travel and rate against Jet's own constants, so pin those to the requested feel too.
+expect(abs($travel['aileron'] - deg2rad(20)) < 1e-9 && abs($travel['stabilator'] - deg2rad(15)) < 1e-9
+	&& abs($travel['rudder'] - deg2rad(10)) < 1e-9,
+	'The stops sit at 20 degrees of aileron, 15 of stabilator and 10 of rudder');
+
+// Leave the jet with its surfaces deflected, then board again: the new flight starts from neutral.
+input($controls, ['actions'=>['fly']]);
+input($controls, ['actions'=>['jet']]);
+$s = $controls->jet->state();
+expect($controls->mode === 'jet' && !$controls->paused && $s['aileron'] === 0.0 && $s['stabilator'] === 0.0
+	&& $s['rudder'] === 0.0, 'Boarding again after leaving with deflected surfaces starts them at neutral');
+
+// A full demand from neutral is held back by the rate limit, one degree in a 1/60 s step. Once the stabilator is
+// near its stop in a held climb, it closes the remaining gap with the 0.08 s lag.
+input($controls, ['keys'=>['KeyA'=>true,'KeyE'=>true]]);
+$controls->step(1 / 60);
+$s = $controls->jet->state();
+expect(abs($s['aileron'] - deg2rad(1)) < 1e-9 && abs($s['stabilator'] - deg2rad(1)) < 1e-9,
+	'A full demand swings the aileron and stabilator at 60 degrees a second');
+
+// The rate limit lets go after ten steps, and the climb demand keeps the command at the stop until step 39.
+$lagged = true;
+for($i = 2; $i <= 30; $i++)
+{
+	$gap = $travel['stabilator'] - $controls->jet->state()['stabilator'];
+	$controls->step(1 / 60);
+	if($i > 10) $lagged = $lagged && $gap > .001
+		&& abs($travel['stabilator'] - $controls->jet->state()['stabilator'] - $gap * exp(-1 / 60 / .08)) < 1e-12;
+}
+expect($lagged, 'Near its stop the stabilator closes on it with a 0.08 s time constant');
+
+$ground->close();
+$controls->close();
+
+/**
+ * Turn a point about a hinge line as model.vert does, by Rodrigues' rotation.
+ * @param array $point Point in model metres.
+ * @param array $hinge Hinge from VehicleModel::hinges(), with a point on the line and a unit axis.
+ * @param float $angle Deflection in radians, by the right-hand rule about the axis.
+ * @return array The turned point.
+ */
+function turnAboutHinge(array $point, array $hinge, float $angle): array
+{
+	[$kx, $ky, $kz] = $hinge['axis'];
+	[$px, $py, $pz] = $hinge['point'];
+	[$ax, $ay, $az] = [$point[0] - $px, $point[1] - $py, $point[2] - $pz];
+
+	$c = cos($angle);
+	$s = sin($angle);
+	$along = ($kx*$ax + $ky*$ay + $kz*$az) * (1 - $c);
+	return [$px + $ax*$c + ($ky*$az - $kz*$ay)*$s + $kx*$along, $py + $ay*$c + ($kz*$ax - $kx*$az)*$s + $ky*$along,
+		$pz + $az*$c + ($kx*$ay - $ky*$ax)*$s + $kz*$along];
+}
+
+/**
+ * Find the arm from a hinge line to a point, square to the line.
+ * @param array $point Point in model metres.
+ * @param array $hinge Hinge with a point on the line and a unit axis.
+ * @return array Arm vector in metres.
+ */
+function hingeArm(array $point, array $hinge): array
+{
+	[$kx, $ky, $kz] = $hinge['axis'];
+	$arm = [$point[0] - $hinge['point'][0], $point[1] - $hinge['point'][1], $point[2] - $hinge['point'][2]];
+	$along = $arm[0]*$kx + $arm[1]*$ky + $arm[2]*$kz;
+	return [$arm[0] - $along*$kx, $arm[1] - $along*$ky, $arm[2] - $along*$kz];
+}
+
+/**
+ * Measure a vector.
+ * @param array $v Three components in metres.
+ * @return float Length in metres.
+ */
+function vectorLength(array $v): float
+{
+	return sqrt($v[0]**2 + $v[1]**2 + $v[2]**2);
+}
+
+// The importer centres the F5 on its centre of gravity, tags its moving surfaces and writes their hinges beside the
+// mesh. Turned the way model.vert turns them, the baked surfaces move as their controls say and stay on their hinges.
+$meshFile = dirname(__DIR__) . '/assets/f5/mesh.bin.gz';
+$hinges = TerrainSandbox\VehicleModel::hinges($meshFile);
+$mesh = gzdecode(file_get_contents($meshFile));
+
+$parts = [];
+$low = [INF, INF, INF];
+$high = [-INF, -INF, -INF];
+
+for($i = 0, $count = unpack('V', $mesh)[1]; $i < $count; $i++)
+{
+	$point = array_values(unpack('g3', $mesh, 16 + 28 * $i));
+	$slot = ord($mesh[16 + 28 * $i + 27]) - TerrainSandbox\VehicleModel::FIRST_SURFACE;
+	if($slot >= 0 && $slot < TerrainSandbox\VehicleModel::SURFACES) $parts[$slot][] = $point;
+	$low = array_map('min', $low, $point);
+	$high = array_map('max', $high, $point);
+}
+
+expect(abs($low[0] + $high[0]) < .001 && abs(($low[1] + $high[1]) / 2 - .50) < .001
+	&& abs(($low[2] + $high[2]) / 2 - 1.53) < .001,
+	'The F5 turns about its centre of gravity, 1.53 m behind and 0.50 m below the middle of its bounding box');
+ksort($parts);
+expect(array_keys($parts) === array_keys($hinges) && count($hinges) === 5
+	&& array_count_values(array_column($hinges, 'control')) === ['aileron'=>2, 'stabilator'=>2, 'rudder'=>1],
+	'Two ailerons, two stabilators and the rudder are tagged, each with a hinge');
+
+$conventions = true;
+$slip = 0.0;
+foreach($hinges as $slot => $hinge)
+{
+	$arms = [];
+	foreach($parts[$slot] as $index => $point) $arms[$index] = hingeArm($point, $hinge);
+	$reach = max(array_map('vectorLength', $arms));
+
+	foreach($parts[$slot] as $index => $point)
+	{
+		$moved = turnAboutHinge($point, $hinge, $travel[$hinge['control']]);
+		// Trailing-edge vertices lie within 2 cm of the farthest reach from the hinge.
+		if(vectorLength($arms[$index]) > $reach - .02) $conventions = $conventions && match($hinge['control']) {
+			'aileron' => ($moved[1] - $point[1]) * $hinge['point'][0] > 0,
+			'stabilator' => $moved[1] > $point[1],
+			'rudder' => $moved[0] > $point[0]
+		};
+		// An aileron or the rudder meets the skin along its leading edge: the vertices within 6 cm of the hinge
+		// along the chord, through the whole thickness. An all-moving stabilator has no such seam.
+		if($hinge['control'] !== 'stabilator' && abs($arms[$index][2]) < .06)
+			$slip = max($slip, vectorLength([$moved[0] - $point[0], $moved[1] - $point[1], $moved[2] - $point[2]]));
+	}
+}
+expect($conventions, 'At full travel the +X aileron trailing edge rises, the -X one falls, both stabilator trailing'
+	. ' edges rise and the rudder swings towards +X');
+expect($slip < .02, sprintf('Vertices along the hinges move %.1f mm at full travel', $slip * 1000));
+
+/**
+ * Measure how far below a point of the baked F5 the nearest fixed triangle lies.
+ * @param array $point Point in model metres.
+ * @param array $positions Position of every vertex in model metres.
+ * @param array $vertexTags Surface tag of every vertex.
+ * @param array $corners Vertex indices, three per triangle.
+ * @return float Distance straight down to fixed skin in metres, or INF when there is none.
+ */
+function skinBelow(array $point, array $positions, array $vertexTags, array $corners): float
+{
+	$depth = INF;
+	for($k = 0; $k < count($corners); $k += 3)
+	{
+		$slot = $vertexTags[$corners[$k]] - TerrainSandbox\VehicleModel::FIRST_SURFACE;
+		if($slot >= 0 && $slot < TerrainSandbox\VehicleModel::SURFACES) continue;
+		[$a, $b, $c] = [$positions[$corners[$k]], $positions[$corners[$k + 1]], $positions[$corners[$k + 2]]];
+		$area = ($b[2] - $c[2]) * ($a[0] - $c[0]) + ($c[0] - $b[0]) * ($a[2] - $c[2]);
+		if(abs($area) < 1e-12) continue;
+
+		$u = (($b[2] - $c[2]) * ($point[0] - $c[0]) + ($c[0] - $b[0]) * ($point[2] - $c[2])) / $area;
+		$v = (($c[2] - $a[2]) * ($point[0] - $c[0]) + ($a[0] - $c[0]) * ($point[2] - $c[2])) / $area;
+		if($u < 0 || $v < 0 || $u + $v > 1) continue;
+		$below = $point[1] - ($u * $a[1] + $v * $b[1] + (1 - $u - $v) * $c[1]);
+		if($below >= 0) $depth = min($depth, $below);
+	}
+
+	return $depth;
+}
+
+// A deflected part must not uncover the inside of the model. Every moving part is a closed surface, and fixed skin
+// lies just below the rudder's foot, where the source model leaves the fuselage spine open under the rudder.
+$positions = $vertexTags = $names = $edges = $feet = [];
+for($i = 0; $i < $count; $i++)
+{
+	$positions[] = array_values(unpack('g3', $mesh, 16 + 28 * $i));
+	$vertexTags[] = ord($mesh[16 + 28 * $i + 27]);
+	// Corners are named to a tenth of a millimetre. Adding zero turns -0 into 0 on the centreline.
+	$names[] = implode(',', [round($positions[$i][0], 4) + 0.0, round($positions[$i][1], 4) + 0.0,
+		round($positions[$i][2], 4) + 0.0]);
+}
+$corners = array_values(unpack('v*', substr($mesh, 16 + 28 * $count, 2 * unpack('V', $mesh, 4)[1])));
+
+for($k = 0; $k < count($corners); $k += 3)
+{
+	$slot = $vertexTags[$corners[$k]] - TerrainSandbox\VehicleModel::FIRST_SURFACE;
+	if($slot < 0 || $slot >= TerrainSandbox\VehicleModel::SURFACES) continue;
+
+	for($j = 0; $j < 3; $j++)
+	{
+		$ends = [$names[$corners[$k + $j]], $names[$corners[$k + ($j + 1) % 3]]];
+		sort($ends);
+		$edges[$slot][implode(' ', $ends)] = ($edges[$slot][implode(' ', $ends)] ?? 0) + 1;
+	}
+	if($hinges[$slot]['control'] === 'rudder') $feet[] = array_slice($corners, $k, 3);
+}
+
+$closed = count($edges) === TerrainSandbox\VehicleModel::SURFACES;
+foreach($edges as $uses) $closed = $closed && !array_diff($uses, [2]);
+expect($closed, 'Each moving part of the F5 is a closed surface, so a deflection never shows its inside');
+
+$foot = INF;
+foreach($feet as $triangle) foreach($triangle as $i) $foot = min($foot, $positions[$i][1]);
+$floored = true;
+$standing = 0;
+
+foreach($feet as [$a, $b, $c])
+{
+	if(max($positions[$a][1], $positions[$b][1], $positions[$c][1]) > $foot + .012) continue;
+	$middle = [];
+	for($axis = 0; $axis < 3; $axis++)
+		$middle[] = ($positions[$a][$axis] + $positions[$b][$axis] + $positions[$c][$axis]) / 3;
+	$standing++;
+	$floored = $floored && skinBelow($middle, $positions, $vertexTags, $corners) < .01;
+}
+expect($floored && $standing > 0, 'Fixed skin lies under the rudder\'s foot, so the spine stays closed as it swings');
+
 // The page compares frame rates through one value that is neither an authoring setting nor part of a file.
 $knob = new Session(['worldSize' => 256,'heightScale' => 0,'detailAmplitude' => 0]);
 expect($knob->selectionInterval === TerrainPhonics\Scene::DEFAULT_SELECTION_INTERVAL

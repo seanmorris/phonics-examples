@@ -44,29 +44,31 @@
       "assets/testarossa/license.txt",
       "assets/testarossa/mesh.bin.gz",
       "assets/f5/license.txt",
-      "assets/f5/mesh.bin.gz"
+      "assets/f5/mesh.bin.gz",
+      "assets/f5/surfaces.json"
     ]
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
     "application.php": "sha256-SuyAMWG8Kco2izcGPWtkgbtW9oK3LA/ks9ry1ys33NQ=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
-    "assets/f5/mesh.bin.gz": "sha256-lanntm6qAQt1tHVSEaC0tKFyWTqK4HPxrjiPtKIpXMg=",
+    "assets/f5/mesh.bin.gz": "sha256-MvzvhSBqNzcqkY2ivZ1iZ4FF1vYLNsb305WgAUuumeg=",
+    "assets/f5/surfaces.json": "sha256-uqkDIywdj3xctjDJkR4Yp/mFPfgqx1VdDeHq9UX47wo=",
     "assets/jetski/license.txt": "sha256-9WoAgRXTPEC8hRXDGAxCadCBBzJeG83Yybl9Ki+EPkQ=",
     "assets/jetski/mesh.bin.gz": "sha256-2ofl4RltV6iF1apNDjzZC73eLM553zFlop9VM96NMCE=",
     "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w=",
     "assets/testarossa/license.txt": "sha256-/9ZQt2jc5NTX9mZTSd3OGLgMWNIQHyBLpSc3HI88iNU=",
     "assets/testarossa/mesh.bin.gz": "sha256-5rWBhpvY6uCtuxW0mqMd8h1fQpKHn8wStOHFQHXROvo=",
     "assets/vehicles/model.frag": "sha256-kwiQrzU81dsmxveHLdTR7giBSIjzkEEeMG1+RJpDs8k=",
-    "assets/vehicles/model.vert": "sha256-KINA4lT0onf4AIsuNNq/AV4oQIo5QcdPvvMiFOZdvzM=",
+    "assets/vehicles/model.vert": "sha256-wwExW5oFwI6N0H9uaik3pGCL1l+7phO74QIwdBxigUg=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
     "browser/game.mjs": "sha256-JqCjPQoeYPZQ/AwrBoAk815XnmckV7EMURkHFzOdgns=",
     "src/Car.php": "sha256-3jlMklD/0JAlebd7UuSCMp+NS48tEeTjEct/EB+HP1w=",
     "src/CarChase.php": "sha256-Nrf61HNyT1EkNVBzGZPwFWOK4pUshrMtwEo49LZmUvA=",
     "src/CarSuspension.php": "sha256-bq66+ExjcWbqIeSGZFOAWz04PlryL7Bd5bWUf2Mqhl4=",
     "src/CarTumble.php": "sha256-llr3HAmWXN5xT5hRXvAnkGZm42H37B2zWbqYxQP9xFg=",
-    "src/Jet.php": "sha256-A70kkVushvm5EyLegD1eBy5rdmPvVdFWJbTOxm4hlQo=",
+    "src/Jet.php": "sha256-UhQh7dYpnJV4OiBcnQrdGHzelaAaS9hHORjUf8o1mq0=",
     "src/Session.php": "sha256-aqky4jRQLegCP+FSGJm2ZKY/Dzm5sR7Sn7WPa1yzzd8=",
-    "src/VehicleModel.php": "sha256-lZ+SZY7V2BODOGwtxxL/9CtIJ/DEMG+5lif2uov9iB4="
+    "src/VehicleModel.php": "sha256-1n52rwKNBTt549rA3BamJz8dkDfq2kydjXonAq6q9F8="
   }
 }
