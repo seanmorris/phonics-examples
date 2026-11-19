@@ -1,6 +1,6 @@
 # Landscape Sandbox
 
-An offline authoring and flight sandbox for the optional `terrain-phonics` package. Fly over procedural mountains, canyons, or coasts; shape the ground; grade roads; adjust the sun and atmosphere; and test a buoyant watercraft.
+An offline authoring and flight sandbox for the optional `terrain-phonics` package. Fly over procedural mountains, canyons, or coasts; shape the ground; grade roads; adjust the sun and atmosphere; drive a car on land, and test a buoyant watercraft.
 
 See [the controls guide](docs/index.md) and [landscape authoring](docs/authoring.md).
 
@@ -11,3 +11,7 @@ Run `node scripts/bench-terrain.mjs` from the examples checkout with the preview
 ## Watercraft model
 
 The watercraft uses “Jetski” by Futurealiti. The sandbox uses a simplified mesh and a resized dashboard texture. To regenerate them, run `python3 scripts/import-terrain-jetski.py /path/to/jetski.zip` with gltfpack 0.18 and ImageMagick on the path. [Original model](https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b) · [Author](https://sketchfab.com/futurealiti) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+
+## Car model
+
+The car uses “Ferrari-Testarossa-84-low-poly” by XGLOL235. The sandbox scales the model to 4.48 metres, bakes its materials, and animates the wheels while driving. Rebuild it with `python3 scripts/import_terrain_vehicle.py --vehicle testarossa /path/to/ferrari-testarossa-84-low-poly.zip` and gltfpack 0.18. [Original model](https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a) · [Author](https://sketchfab.com/XGLOL235) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)

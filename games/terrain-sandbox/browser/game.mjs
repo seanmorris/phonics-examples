@@ -127,7 +127,7 @@ export function activate({module, canvas, session, services})
 	}, {signal});
 
 	const heldKeys = new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','ShiftLeft','ShiftRight']);
-	const commands = {KeyP: 'pause', Escape: 'pause', KeyF: 'fly', KeyB: 'craft', Home: 'reset-camera'};
+	const commands = {KeyP: 'pause', Escape: 'pause', KeyF: 'fly', KeyB: 'craft', KeyC: 'car', Home: 'reset-camera'};
 
 	frame.addEventListener('keydown', event => {
 		if(focusedField(event.target)) return;
@@ -240,12 +240,15 @@ export function activate({module, canvas, session, services})
 			status.textContent = state.message;
 			button('pause').textContent = state.paused ? 'Resume · P' : 'Pause · P';
 			button('craft').hidden = state.mode === 'craft';
-			button('fly').hidden = state.mode !== 'craft';
+			button('car').hidden = state.mode === 'car';
+			button('car').disabled = state.findingCarSite;
+			button('fly').hidden = state.mode === 'fly' && !state.findingCarSite;
 
 			const patches = state.renderer.pending;
-			pending.hidden = !state.preparing && !state.picking && patches === 0;
+			pending.hidden = !state.preparing && !state.picking && !state.findingCarSite && patches === 0;
 
 			if(state.preparing) pending.textContent = 'Preparing terrain edit…';
+			else if(state.findingCarSite) pending.textContent = 'Looking for level ground…';
 			else if(state.picking) pending.textContent = 'Finding the ground…';
 			else if(state.renderer.visible) pending.textContent = `Refining terrain · ${patches} ${patches === 1 ? 'patch' : 'patches'}`;
 			else pending.textContent = 'Preparing terrain…';
@@ -264,7 +267,7 @@ export function activate({module, canvas, session, services})
 			canvas.style.cursor = state.mode === 'fly' && state.settings.tool !== 'navigate' ? 'crosshair' : 'grab';
 			const [x,y,z] = state.camera.position;
 
-			detail.textContent = `${state.mode === 'craft' ? 'WATERCRAFT' : 'FLIGHT'} · ${Math.round(
+			detail.textContent = `${state.mode === 'craft' ? 'WATERCRAFT' : state.mode === 'car' ? 'CAR' : 'FLIGHT'} · ${Math.round(
 				x
 			)}, ${Math.round(
 				z
@@ -534,10 +537,10 @@ function markup()
 	${range('Shore and wake foam', 'waterFoam', 0, 1, .01, .65)}
 	<p class="terrain-note">Lower fog density to see the bottom in deeper water.</p>
 	<h2>Explore</h2>${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
-	<div class="terrain-row"><button data-action="craft">Board watercraft · B</button><button data-action="fly" hidden>Return to flight · F</button></div>
+	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="fly" hidden>Return to flight · F</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
-	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></p>
+	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></p>
 	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

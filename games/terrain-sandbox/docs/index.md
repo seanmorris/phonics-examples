@@ -22,6 +22,12 @@ As the sun drops below the horizon, stars appear and a blue ambient light picks 
 
 Use **Water color** to tint the surface and underwater haze. Raise **Transparency** to see through the surface. Lower the fog density for a longer view through the water, or raise it for a murkier lake. **Fog density · coarse** covers the full range from 0 to 1 per metre. **Fog density · fine** adjusts within 0.005 of the coarse setting in increments of 0.0001 per metre. **Reflectivity** controls sky and sun reflections, strongest toward the horizon. **Shore foam** controls the white fringe in the shallows. These settings take effect while riding or paused and travel with a saved landscape.
 
+## Drive on land
+
+Select **Drive car** or press **C** to take the Testarossa. The sandbox checks the ground below you first, then searches nearby for a dry, gently sloping patch with room to pull away. Graded roads use the same ground surface. If you start over water or a cliff and the search finds nothing, fly closer to land and try again.
+
+**W** accelerates. **S** brakes while moving forward and reverses when held. **A/D** steer. The car follows the grade and stops at deep ruts, steep ledges, water, and the map boundary. Press **F** to return to flight.
+
 ## Ride the water
 
 Select **Board watercraft**, or press **B**, to find nearby water deep enough for the craft. Use **W/S** for throttle and reverse and **A/D** to steer. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.

@@ -11,7 +11,7 @@ use TerrainPhonics\WaterAppearance;
 use TerrainPhonics\Watercraft;
 
 /**
- * Offline landscape authoring session with fixed-step watercraft simulation.
+ * Offline landscape authoring session with fixed-step vehicle simulation.
  *
  * Browser controls provide intent; this object owns camera motion, edit transactions,
  * environment configuration, and portable save files independently of graphics objects.
@@ -24,13 +24,15 @@ final class Session
 	public Water $water;
 	/** Shared physical atmospheric parameters. */
 	public Atmosphere $atmosphere;
-	/** Perspective camera used for flight and craft chase view. */
+	/** Perspective camera used for flight and vehicle chase views. */
 	public Camera $camera;
 	/** Controllable physical watercraft. */
 	public Watercraft $craft;
+	public Car $car;
+	private ?\Generator $carSearch = null;
 	/** Whether simulation is paused; authoring remains available. */
 	public bool $paused = false;
-	/** Current interaction mode: fly or craft. */
+	/** Current interaction mode: fly, craft or car. */
 	public string $mode = 'fly';
 	/** Simulation clock in seconds. */
 	public float $time = 0;
@@ -81,6 +83,7 @@ final class Session
 		$this->atmosphere = new Atmosphere;
 		$this->camera = new Camera;
 		$this->craft = new Watercraft;
+		$this->car = new Car;
 		$this->resetCamera();
 		$this->sun();
 	}
@@ -103,12 +106,13 @@ final class Session
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($wasPicking) $this->advancePick($pickMs);
+			if($this->carSearch !== null) $this->advanceCarSearch();
 			if($this->draft !== null) { $this->draft->commit(); $this->dirty = true; }
 		}
 		catch(\Throwable $error)
 		{
 			$this->draft?->close(); $this->draft = null;
-			$this->cancelPick();
+			$this->cancelPick(); $this->carSearch = null;
 			$this->message = $error->getMessage();
 			$this->dirty = true;
 		}
@@ -146,6 +150,19 @@ final class Session
 			$this->camera->position = [$s['x'] - sin($s['yaw']) * 9,$s['y'] + 4,$s['z'] - cos($s['yaw']) * 9];
 			$this->camera->yaw = M_PI - $s['yaw'];
 			$this->camera->pitch = -.27;
+		}
+		if($this->mode === 'car')
+		{
+			$before = $this->car->state();
+			if(!$this->car->step($seconds, $this->held('KeyW') - $this->held('KeyS'),
+				$this->held('KeyD') - $this->held('KeyA'), $this->landscape, $this->water->level()))
+			{
+				$this->mode = 'fly';
+				$this->clampCamera();
+				$this->message = 'The ground under the car changed. Choose Drive car to find another spot.';
+				$this->dirty = true;
+			}
+			elseif($before !== $this->car->state()) $this->followCar();
 		}
 		$this->time += $seconds;
 		$this->water->update($this->time);
@@ -277,8 +294,19 @@ final class Session
 				if($this->preparing || $this->draft !== null) throw new \RuntimeException('Wait for the terrain edit before saving.');
 				$this->download = $this->save(); break;
 			case 'load': $this->load((string)($action['json'] ?? '')); break;
-			case 'craft': $this->boardCraft(); break;
-			case 'fly': $this->mode = 'fly'; $this->releasePin(); break;
+			case 'car':
+				if($this->mode !== 'car' && $this->carSearch === null)
+				{
+					$this->cancelPick();
+					$this->carSearch = $this->car->findSite($this->landscape, $this->water, $this->camera->position, M_PI - $this->camera->yaw);
+					$this->message = 'Looking for level ground…';
+				}
+				break;
+			case 'craft': $this->carSearch = null; $this->boardCraft(); break;
+			case 'fly':
+				$this->carSearch = null; $this->mode = 'fly'; $this->releasePin(); $this->clampCamera();
+				$this->message = 'Flight controls active.';
+				break;
 		}
 		$this->dirty = true;
 	}
@@ -293,7 +321,7 @@ final class Session
 	private function pick(float $x, float $y, float $aspect): void
 	{
 		$tool = $this->settings['tool'];
-		if($tool === 'navigate' || $this->mode === 'craft') return;
+		if($tool === 'navigate' || $this->mode !== 'fly' || $this->carSearch !== null) return;
 		if($this->preparing) { $this->message = 'Preparing the previous terrain edit. Please wait.'; return; }
 		$queuedTool = $this->pickIntent['settings']['tool'] ?? $this->pickQueue[0]['settings']['tool'] ?? '';
 		if($this->picking && ($tool !== 'road' || $queuedTool !== 'road'))
@@ -390,7 +418,7 @@ final class Session
 		$this->camera->position = [$x,$height,$z];
 		$this->camera->yaw = $coast ? .7 : ($canyon ? 2.68 : -.3);
 		$this->camera->pitch = $coast ? -.35 : ($canyon ? -.17 : -.25);
-		$this->mode = 'fly'; $this->releasePin();
+		$this->mode = 'fly'; $this->carSearch = null; $this->releasePin();
 	}
 
 	/**
@@ -404,6 +432,46 @@ final class Session
 		$this->camera->position[2] = max(-$half, min($half, $this->camera->position[2]));
 		$ground = $this->landscape->height($this->camera->position[0], $this->camera->position[2]);
 		$this->camera->position[1] = max($ground + 2, min(15000, $this->camera->position[1]));
+	}
+
+	public function findingCarSite(): bool { return $this->carSearch !== null; }
+
+	/** Limit cold collision queries to a small slice of each input frame. */
+	private function advanceCarSearch(): void
+	{
+		$end = hrtime(true) + 2000000;
+		while($this->carSearch->valid())
+		{
+			$this->carSearch->next();
+			if(hrtime(true) >= $end && $this->carSearch->valid()) return;
+		}
+		$site = $this->carSearch->getReturn();
+		$this->carSearch = null;
+		if($site === null)
+		{
+			$this->message = 'No dry, level ground nearby. Fly closer to a plain or a graded road.';
+			return;
+		}
+		$this->releasePin();
+		$this->car->spawn($site, $this->landscape, $this->water->level());
+		$this->mode = 'car'; $this->paused = false;
+		$this->followCar();
+		$this->message = 'W accelerates, S brakes or reverses, A/D steer. F returns to flight.';
+	}
+
+	/** Keep the chase camera clear of the slope immediately behind the car. */
+	private function followCar(): void
+	{
+		$s = $this->car->state();
+		$sin = sin($s['yaw']); $cos = cos($s['yaw']);
+		$x = $s['x'] - 6.7*$sin; $z = $s['z'] - 6.7*$cos;
+		$half = $this->landscape->recipe()['worldSize'] / 2;
+		$ground = $this->landscape->height(max(-$half,min($half,$x)), max(-$half,min($half,$z)));
+		$y = max($ground + 1.35, $s['y'] + 2.55 - 6.7*tan($s['pitch']));
+		$this->camera->position = [$x,$y,$z];
+		$this->camera->yaw = M_PI - $s['yaw'];
+		$this->camera->pitch = atan2($s['y'] + .7 + 2*tan($s['pitch']) - $y, 8.7);
+		$this->dirty = true;
 	}
 
 	/**
@@ -486,7 +554,7 @@ final class Session
 	 */
 	private function replace(Landscape $landscape): void
 	{
-		$this->cancelPick();
+		$this->cancelPick(); $this->carSearch = null;
 		$this->draft?->close(); $this->draft = null;
 		$this->releasePin();
 		$this->landscape->close();
@@ -527,6 +595,10 @@ final class Session
 		$this->releasePin();
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		if($this->carSearch !== null)
+		{
+			$this->carSearch = $this->car->findSite($landscape, $this->water, $this->camera->position, M_PI - $this->camera->yaw);
+		}
 		$this->preparing = false;
 		$this->dirty = true;
 	}
@@ -592,10 +664,11 @@ final class Session
 	public function status(): array
 	{
 		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
-			'preparing' => $this->preparing,'picking' => $this->picking,
+			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'settings' => $this->settings,'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
+			'car' => $this->mode === 'car' ? $this->car->state() : null,
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats()];
 	}
 
@@ -605,7 +678,7 @@ final class Session
 	 */
 	public function close(): void
 	{
-		$this->cancelPick();
+		$this->cancelPick(); $this->carSearch = null;
 		$this->releasePin(); $this->landscape->close(); $this->draft?->close(); $this->draft = null;
 		$this->keys = $this->road = [];
 	}

@@ -212,4 +212,86 @@ expect($bay->mode === 'craft' && $bay->craft->state()['y'] > $launch['y'] + 4,
 	'The boarded jet ski floats up when the lake rises');
 $bay->close();
 
+function enterCar(Session $session): void
+{
+	input($session, ['actions' => ['car']]);
+	for($i = 0; $session->findingCarSite() && $i < 2000; $i++) input($session, []);
+	expect(!$session->findingCarSite(), 'The bounded car search completes');
+}
+
+$flat = ['worldSize' => 128, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
+$drive = new Session($flat);
+$drive->camera->position = [.25,50,0]; $drive->camera->yaw = M_PI;
+enterCar($drive);
+$s = $drive->car->state();
+expect($drive->mode === 'car' && $s['x'] === .25 && $s['z'] === 0.0, 'Board in place on dry planar ground');
+expect(abs($s['y'] - .02) < .001 && $s['pitch'] === 0.0 && abs($s['roll']) < .001, 'Tires rest on flat ground');
+$drive->dirty = false;
+$drive->step(1/60);
+expect(!$drive->dirty, 'A parked car leaves the dry scene idle');
+input($drive, ['keys' => ['KeyW'=>true,'KeyD'=>true]]);
+for($i = 0; $i < 60; $i++) $drive->step(1/60);
+$s = $drive->car->state();
+expect($s['z'] > 2 && $s['x'] < 0 && $s['speed'] > 6 && $s['steering'] < 0 && $s['wheelSpin'] != 0,
+	'Forward right steering turns toward the driver’s right and rolls the wheels');
+input($drive, ['actions'=>['pause'], 'keys'=>['KeyS'=>true]]);
+$drive->step(1/60);
+expect($drive->car->state() === $s, 'Pause freezes vehicle motion');
+input($drive, ['actions'=>['pause'], 'keys'=>['KeyS'=>true,'KeyD'=>true]]);
+for($i = 0; $i < 100; $i++) $drive->step(1/60);
+$reverse = $drive->car->state();
+$drive->step(1/60);
+expect($reverse['speed'] < -2 && $drive->car->state()['yaw'] > $reverse['yaw'], 'Braking engages reverse and reverses the turn');
+input($drive, ['values'=>['tool'=>'raise'],'clicks'=>[[.5,.5]]]);
+expect(!$drive->picking && $drive->takeCandidate() === null, 'Clicks while driving cannot edit terrain');
+input($drive, ['values'=>['waterLevel'=>10]]);
+$drive->step(1/60);
+expect($drive->mode === 'fly', 'Flooding the car returns control to flight');
+input($drive, ['actions'=>['craft']]);
+$craft = $drive->craft->state();
+enterCar($drive);
+expect($drive->mode === 'craft' && $drive->craft->state() === $craft && str_contains($drive->message, 'No dry'),
+	'An unsuccessful search leaves the boarded vehicle in place');
+$drive->close();
+
+$road = new Session($flat);
+$road->landscape->queue(['type'=>'road','points'=>[[0,2,-45],[0,8,45]],'width'=>10,'shoulder'=>1,'crown'=>0]);
+$road->landscape->commit();
+input($road, ['values'=>['waterLevel'=>1]]);
+$road->camera->position = [30,30,0]; $road->camera->yaw = M_PI;
+enterCar($road);
+$s = $road->car->state();
+expect($road->mode === 'car' && abs($s['x']) < 5 && abs($s['pitch']) > .04 && abs($s['roll']) < .02,
+	'Search relocates from water to the gently graded dry road');
+expect(abs($s['y'] - $road->landscape->height($s['x'],$s['z']) - .02) < .02, 'Car rests on the edited road elevation');
+input($road, ['keys'=>['KeyW'=>true]]);
+for($i = 0; $i < 600; $i++) $road->step(1/60);
+$s = $road->car->state();
+expect($s['z'] <= 52 && $s['speed'] < 1 && $road->landscape->height($s['x'],$s['z']) > 1, 'Car stops before leaving the road for water');
+$road->close();
+
+$ledge = new Session($flat);
+$ledge->landscape->queue(['type'=>'raise','x'=>0,'z'=>26,'radius'=>6,'amount'=>30]);
+$ledge->landscape->commit();
+$ledge->camera->position = [0,20,0]; $ledge->camera->yaw = M_PI;
+input($ledge, ['actions'=>['car','fly']]);
+expect(!$ledge->findingCarSite() && $ledge->mode === 'fly', 'Flight cancels a pending boarding request');
+enterCar($ledge);
+input($ledge, ['keys'=>['KeyW'=>true]]);
+for($i = 0; $i < 300; $i++) $ledge->step(1/60);
+$s = $ledge->car->state();
+expect($s['z'] > 10 && $s['z'] < 26 && $s['speed'] < 1, 'The tires stop the car at a steep dry ledge');
+$ledge->close();
+
+$edge = new Session($flat);
+$edge->camera->position = [0,20,40]; $edge->camera->yaw = M_PI;
+enterCar($edge);
+input($edge, ['keys'=>['KeyW'=>true]]);
+for($i = 0; $i < 400; $i++) $edge->step(1/60);
+$s = $edge->car->state();
+expect($edge->mode === 'car' && $s['z'] > 59 && $s['z'] <= 61.4 && $s['speed'] < 1, 'Car stays inside the terrain at the world edge');
+input($edge, ['actions'=>['fly']]);
+expect($edge->mode === 'fly' && $edge->status()['car'] === null, 'Returning to flight retires the active car pose');
+$edge->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

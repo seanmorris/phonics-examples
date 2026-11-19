@@ -10,8 +10,8 @@ use TerrainPhonics\Camera;
 use TerrainPhonics\Water;
 use TerrainPhonics\WaterAppearance;
 
-/** The sandbox's textured watercraft, drawn against the landscape and water depth buffer. */
-final class JetSki
+/** A baked vehicle, drawn against the landscape and water depth buffer. */
+final class VehicleModel
 {
 	private const STRIDE = 28;
 	private Program $program;
@@ -19,11 +19,11 @@ final class JetSki
 	private int $indexCount;
 
 	/** Upload the baked model once on boarding, or again when the context is restored. */
-	public function __construct()
+	public function __construct(string $meshFile)
 	{
-		$root = dirname(__DIR__) . '/assets/jetski/';
-		$data = gzdecode(file_get_contents($root . 'mesh.bin.gz'), 4194304);
-		if($data === false || strlen($data) < 16) throw new \RuntimeException('Cannot read jet ski mesh');
+		$root = dirname(__DIR__) . '/assets/vehicles/';
+		$data = gzdecode(file_get_contents($meshFile), 4194304);
+		if($data === false || strlen($data) < 16) throw new \RuntimeException('Cannot read vehicle mesh');
 		$header = unpack('Vvertices/Vindices/Vwidth/Vheight', $data);
 		$vertexBytes = $header['vertices'] * self::STRIDE;
 		$this->indexCount = $header['indices'];
@@ -31,7 +31,7 @@ final class JetSki
 		$pixelOffset = 16 + $vertexBytes + $indexBytes;
 		if($header['vertices'] > 65536 || !$this->indexCount || $this->indexCount % 3
 			|| strlen($data) !== $pixelOffset + $header['width'] * $header['height'] * 4)
-			throw new \RuntimeException('Invalid jet ski mesh dimensions');
+			throw new \RuntimeException('Invalid vehicle mesh dimensions');
 
 		$fragment = str_replace(['// OPTICS','// NIGHT LIGHT'],
 			[WaterAppearance::shaderSource(), AtmosphereRenderer::nightLightingSource()], file_get_contents($root . 'model.frag'));
@@ -71,13 +71,13 @@ final class JetSki
 		}
 	}
 
-	/** Render the current hull pose in metres, with local +Z pointing at the bow. */
+	/** Render the current vehicle pose in metres, with local +Z pointing forward. */
 	public function draw(array $pose, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height): void
 	{
 		$cy = cos($pose['yaw']);   $sy = sin($pose['yaw']);
 		$cp = cos($pose['pitch']); $sp = sin($pose['pitch']);
 		$cr = cos($pose['roll']);  $sr = sin($pose['roll']);
-		// Column-major basis. Positive pitch raises the bow and positive roll lowers the port side.
+		// Column-major basis. Positive pitch raises the nose and positive roll lowers local +X.
 		$basis = [
 			$cy*$cr + $sy*$sp*$sr, -$cp*$sr, -$sy*$cr + $cy*$sp*$sr,
 			$cy*$sr - $sy*$sp*$cr,  $cp*$cr, -$sy*$sr - $cy*$sp*$cr,
@@ -92,6 +92,11 @@ final class JetSki
 		$water->appearance->bind($p);
 		glUniform2f($p->location('uEyeAndWaterHeight'), $camera->position[1], $water->level());
 		glUniformMatrix4fv($p->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
+		if(isset($pose['wheelSpin']))
+		{
+			glUniform2f($p->location('uWheelAngles'), $pose['wheelSpin'], $pose['steering']);
+			glUniform4f($p->location('uWheelLayout'), Car::FRONT_TRACK / 2, Car::REAR_TRACK / 2, Car::WHEELBASE / 2, Car::TIRE_RADIUS);
+		}
 		glUniformMatrix3fv($p->location('uRotation'), 1, false, $basis);
 		glUniform3f($p->location('uOrigin'), $pose['x'] - $camera->position[0], $pose['y'] - $camera->position[1],
 			$pose['z'] - $camera->position[2]);

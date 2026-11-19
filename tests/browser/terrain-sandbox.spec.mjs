@@ -187,6 +187,54 @@ test('boarding the craft refines the ground near the camera during cold startup'
 	).toBeLessThanOrEqual(32);
 });
 
+test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await boot(page);
+	const dry = fixture();
+	dry.settings.waterLevel = -4;
+	dry.camera = {position: [0,30,0], yaw: Math.PI, pitch: -.4};
+	await load(page, dry);
+	const view = canvas(page);
+	const mesh = await fs.readFile(new URL('../../games/terrain-sandbox/assets/testarossa/mesh.bin.gz', import.meta.url));
+	await view.evaluate((element, count) => {
+		const gl = element.getContext('webgl2'), draw = gl.drawElements.bind(gl);
+		element.carDraws = 0;
+		gl.drawElements = (...args) => {
+			if(args[1] === count) element.carDraws++;
+			return draw(...args);
+		};
+	}, gunzipSync(mesh).readUInt32LE(4));
+	await control(page, 'car').click();
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(0);
+	await expect(control(page, 'car')).toBeHidden();
+	await expect(control(page, 'fly')).toBeVisible();
+	await view.focus();
+	await page.keyboard.down('w');
+	await page.keyboard.down('d');
+	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
+	await page.keyboard.up('d');
+	await page.keyboard.up('w');
+	const beforeRestore = await view.evaluate(element => element.carDraws);
+	await restoreContext(page);
+	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(beforeRestore);
+	expect(await view.evaluate(element => element.getContext('webgl2').getError())).toBe(0);
+	await view.focus();
+	await page.keyboard.press('f');
+	await expect.poll(async() => (await status(page)).mode).toBe('fly');
+	await page.keyboard.press('c');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await page.locator('[data-value="waterLevel"]').fill('10');
+	await expect.poll(async() => (await status(page)).mode).toBe('fly');
+	await control(page, 'craft').click();
+	await expect.poll(async() => (await status(page)).mode).toBe('craft');
+	await control(page, 'car').click();
+	await expect.poll(async() => (await status(page)).message).toContain('No dry');
+	expect((await status(page)).mode).toBe('craft');
+	expect(errors).toEqual([]);
+});
+
 test('terrain without a mesh worker still renders and settles', async({page}) => {
 	await page.addInitScript(() => {
 
