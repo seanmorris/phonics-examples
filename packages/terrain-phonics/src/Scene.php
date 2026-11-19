@@ -24,7 +24,7 @@ final class Scene
 	private array $heightTexture = [];
 	private int $heightTextureRevision = -1;
 	private array $patches = [], $jobs = [], $draw = [], $vao = [], $textures = [];
-	private array $activated = [], $neighbors = [], $gridBuffer = [];
+	private array $activated = [], $neighbors = [], $settledBoundaries = [], $gridBuffer = [];
 	private ?array $drawIndex = null;
 	private int $groundDraws = 0, $waterDraws = 0;
 	/** Reverse sibling transitions and the exact residency reservation for this selection. */
@@ -171,7 +171,7 @@ final class Scene
 			$affected = $this->affected($region);
 		}
 
-		$this->neighbors = [];
+		$this->neighbors = $this->settledBoundaries = [];
 		$this->drawIndex = null;
 		$this->preparing = $candidate;
 		$this->preparingRevision = $candidate->revision();
@@ -516,7 +516,7 @@ final class Scene
 		if($old !== array_column($this->draw, 'key'))
 		{
 			$this->changed = true;
-			$this->neighbors = [];
+			$this->neighbors = $this->settledBoundaries = [];
 			$this->drawIndex = null;
 		}
 
@@ -1042,7 +1042,11 @@ final class Scene
 	 */
 	private function boundaryMorph(array $node): array
 	{
+		$key = $node['key'];
+		if($this->retiring === [] && isset($this->settledBoundaries[$key])) return $this->settledBoundaries[$key];
+
 		$own = $this->morph($node);
+		$settled = $this->retiring === [] && $own <= 0.0;
 		$edges = $corners = [$own,$own,$own,$own];
 		$points = [
 			[$node['x'],$node['z']],[$node['x'] + $node['size'],$node['z']]
@@ -1060,7 +1064,9 @@ final class Scene
 		foreach($neighbors as $neighbor)
 		{
 
-			$weight = $neighbor['level'] < $node['level'] ? 1.0 : $this->morph($neighbor);
+			$coarser = $neighbor['level'] < $node['level'];
+			$weight = $coarser ? 1.0 : $this->morph($neighbor);
+			if(!$coarser && $weight > 0.0) $settled = false;
 
 			if(self::touches($node, $neighbor))
 			{
@@ -1080,6 +1086,7 @@ final class Scene
 			$corners[$i] = max($corners[$i], $weight);
 		}
 
+		if($settled) $this->settledBoundaries[$key] = [$edges,$corners];
 		return [$edges,$corners];
 	}
 
@@ -1338,13 +1345,7 @@ final class Scene
 		glViewport(0, 0, $width, $height);
 		glDisable(GL_SCISSOR_TEST);
 		glDisable(GL_BLEND);
-		glDisable(GL_CULL_FACE);
-		glDisable(GL_DEPTH_TEST);
-		glDepthMask(false);
-		$this->skyProgram->use();
-		$this->common($this->skyProgram, $camera, $width, $height);
-		glBindVertexArray($this->vao[0]);
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glDepthFunc(GL_LESS);
 		glDepthMask(true);
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
@@ -1357,6 +1358,7 @@ final class Scene
 		$planes = $camera->clipPlanes($width,$height);
 		$eye = $camera->position;
 		$this->groundDraws = $this->waterDraws = 0;
+		$lastSize = $lastMorph = $lastBoundary = null;
 		foreach($this->draw as $n)
 		{
 			$p = $this->patches[$n['key']];
@@ -1369,11 +1371,24 @@ final class Scene
 				, [$n['x'] - $camera->position[0],-$camera->position[1],$n['z'] - $camera->position[2]]
 			);
 
-			$this->scalar($this->groundProgram, 'uSize', $n['size']);
-			$this->scalar($this->groundProgram, 'uMorph', $this->morph($n));
-			[$edges,$corners] = $this->boundaryMorph($n);
-			glUniform4f($this->groundProgram->location('uEdges'), ...$edges);
-			glUniform4f($this->groundProgram->location('uCorners'), ...$corners);
+			if($n['size'] !== $lastSize)
+			{
+				$lastSize = $n['size'];
+				$this->scalar($this->groundProgram, 'uSize', $lastSize);
+			}
+			$morph = $this->morph($n);
+			if($morph !== $lastMorph)
+			{
+				$this->scalar($this->groundProgram, 'uMorph', $morph);
+				$lastMorph = $morph;
+			}
+			$boundary = $this->boundaryMorph($n);
+			if($boundary !== $lastBoundary)
+			{
+				glUniform4f($this->groundProgram->location('uEdges'), ...$boundary[0]);
+				glUniform4f($this->groundProgram->location('uCorners'), ...$boundary[1]);
+				$lastBoundary = $boundary;
+			}
 			$p['mesh']->draw();
 		}
 
@@ -1404,18 +1419,29 @@ final class Scene
 
 		glDisable(GL_CULL_FACE);
 		if($drawOpaque !== null) $drawOpaque();
+		// Opaque depth is complete. Shade the sky only through pixels left at the far depth.
+		glEnable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE);
+		glDepthFunc(GL_LEQUAL);
+		glDepthMask(false);
+		$this->skyProgram->use();
+		$this->common($this->skyProgram, $camera, $width, $height);
+		glBindVertexArray($this->vao[0]);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+		glDepthMask(true);
+		glDepthFunc(GL_LESS);
 		glEnable(GL_BLEND);
 		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 		$this->waterProgram->use();
 		$this->water->appearance->bind($this->waterProgram);
 		$this->common($this->waterProgram, $camera, $width, $height);
 		$this->waterUniforms($time);
-		$this->scalar($this->waterProgram, 'uWaterExtent', $this->lod->extent);
 
 		[$waterMin,$waterMax] = $this->water->heightRange();
 		foreach($this->draw as $n)
 		{
-			if(!Camera::inView($planes,$eye,$n,$waterMin,$waterMax)) continue;
+			$patch = $this->patches[$n['key']];
+			if($patch['minY'] > $waterMax || !Camera::inView($planes,$eye,$n,$waterMin,$waterMax)) continue;
 			$this->waterDraws++;
 			$this->vector(
 				$this->waterProgram
@@ -1423,7 +1449,7 @@ final class Scene
 				, [$n['x'] - $camera->position[0],-$camera->position[1],$n['z'] - $camera->position[2]]
 			);
 
-			$this->patches[$n['key']]['mesh']->draw();
+			$patch['mesh']->draw();
 		}
 
 		glDisable(GL_BLEND);
@@ -1440,13 +1466,16 @@ final class Scene
 	 */
 	private function common(Program $program, Camera $camera, int $width, int $height): void
 	{
-		glUniformMatrix4fv($program->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
 		$this->vector($program, 'uEye', $camera->position);
-		[$forward,$right,$up] = $camera->basis();
-		$this->vector($program, 'uForward', $forward);
-		$this->vector($program, 'uRight', $right);
-		$this->vector($program, 'uUp', $up);
-		glUniform2f($program->location('uScreen'), $width / max(1, $height), tan($camera->fov / 2));
+		if($program === $this->skyProgram)
+		{
+			[$forward,$right,$up] = $camera->basis();
+			$this->vector($program, 'uForward', $forward);
+			$this->vector($program, 'uRight', $right);
+			$this->vector($program, 'uUp', $up);
+			glUniform2f($program->location('uScreen'), $width / max(1, $height), tan($camera->fov / 2));
+		}
+		else glUniformMatrix4fv($program->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
 		$environment = $this->atmosphere->uniforms();
 
 		foreach($environment as $name => $value)
@@ -1458,23 +1487,19 @@ final class Scene
 			elseif(is_numeric($value)) $this->scalar($program, $key, $value);
 		}
 
-		$this->scalar($program, 'uWaterLevel', $this->water->uniforms()['level']);
-
-		$this->scalar($program, 'uTerrainStyle', match($this->landscape->recipe()['preset'])
+		if($program !== $this->skyProgram) $this->scalar($program, 'uWaterLevel', $this->water->level());
+		if($program === $this->groundProgram)
 		{
-			'canyon' => 2, 'mountain' => 1, default => 0
-		});
-
-		$this->scalar($program, 'uWorldSize', $this->lod->extent);
+			$this->scalar($program, 'uTerrainStyle', match($this->landscape->recipe()['preset'])
+			{
+				'canyon' => 2, 'mountain' => 1, default => 0
+			});
+			$this->terrainShadows->bind($program);
+		}
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, $this->textures[0]);
 		glUniform1i($program->location('uTransmittance'), 0);
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_2D, $this->heightTexture[0]);
-		glUniform1i($program->location('uTerrainHeights'), 1);
-		$this->scalar($program, 'uHasHeightMap', isset($this->patches['0:0:0']) ? 1 : 0);
 		$this->atmosphereCache->bind($program);
-		$this->terrainShadows->bind($program);
 	}
 
 	/**
@@ -1486,7 +1511,6 @@ final class Scene
 	{
 		$this->water->update($time);
 		$data = $this->water->uniforms();
-		$this->scalar($this->waterProgram, 'uTime', $time);
 		$program = $this->waterProgram;
 		$this->scalar($program, 'uWaterTime', $time);
 		glUniform1i($program->location('uWaveCount'), $data['waveCount']);
@@ -1660,7 +1684,7 @@ final class Scene
 		$this->preparing = null;
 		$this->replacements = $this->replacementJobs = [];
 		$this->patches = $this->jobs = $this->draw = $this->activated = $this->retiring = $this->reserved = [];
-		$this->neighbors = [];
+		$this->neighbors = $this->settledBoundaries = [];
 		$this->drawIndex = null;
 		$this->selectionPending = false;
 		$this->previousEye = $this->lookahead = null;

@@ -238,8 +238,9 @@ export function activate({module, canvas, session, services})
 			)} m`
 			+ ` · altitude ${Math.round(y)} m\n${state.renderer.visible} patches · `
 			+ `${(state.renderer.meshBytes / 1048576).toFixed(1)} MiB mesh · `
-			+ `${state.renderer.generationMs.toFixed(1)} ms generation\n`
-			+ `${state.renderMs.toFixed(1)} ms render submission · revision ${state.revision}`;
+			+ `${state.renderer.generationMs.toFixed(1)} ms generation · revision ${state.revision}\n`
+			+ `${state.renderMs.toFixed(1)} ms render submission · `
+			+ `${state.drawIntervalMs?.toFixed(1) ?? '—'} ms between draws`;
 
 			if(state.generation !== lastGeneration)
 			{

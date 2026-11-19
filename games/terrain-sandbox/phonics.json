@@ -40,14 +40,14 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-soSQ1VdbJKlB8/IA/pZcjYk4aXpntgiKpVI+/RUG8lA=",
+    "application.php": "sha256-Rs7Z3Q9PqDrhd4tJsLGsr4XuiUH8ZPdZp91SxkNuHZY=",
     "assets/jetski/license.txt": "sha256-9WoAgRXTPEC8hRXDGAxCadCBBzJeG83Yybl9Ki+EPkQ=",
     "assets/jetski/mesh.bin.gz": "sha256-2ofl4RltV6iF1apNDjzZC73eLM553zFlop9VM96NMCE=",
     "assets/jetski/model.frag": "sha256-B8fmzWHHxpXkpB3Kq0FsGlsQGFWcj3Tf/hqCKRA7wGY=",
     "assets/jetski/model.vert": "sha256-pkZN2ZhUmVq2PsLITY1XxIuBG0U6UPCH2LmdAxsTx8s=",
     "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/game.mjs": "sha256-zVB/kSomLY02c0Yd8s7TYgivuMWz8TmUuRtrXjZ+WQc=",
+    "browser/game.mjs": "sha256-+1BI2NA3zDRjjqZJwd2q4n2yrmBwozjAkhf6NIiskcs=",
     "src/JetSki.php": "sha256-y5YoOGcCUlz2t3fCaLMjUN0gCRtx/eat49OP5+fkLfY=",
     "src/Session.php": "sha256-aOdi1rUEB/BAlAVNf7QVmEr8GbmltcfwnchXFTxtoJA="
   }

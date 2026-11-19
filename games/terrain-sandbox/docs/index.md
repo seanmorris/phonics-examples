@@ -34,7 +34,7 @@ Select **Return to flight**, or press **F**, to explore and edit again. The craf
 
 ## Choose detail
 
-Economical, Balanced, and Detailed adjust terrain mesh density. They do not change collision heights or saved terrain. The diagnostic display reports rendered patches, mesh memory, generation time, and render submission time. Render submission time alone is not a GPU frame-rate measurement.
+Economical, Balanced, and Detailed adjust terrain mesh density. They do not change collision heights or saved terrain. The diagnostic display reports rendered patches, mesh memory, generation time, and render submission time. Render submission measures how long the application spends issuing the scene and presenting it. The interval between draws includes the rest of the frame and any idle time. During continuous animation, 16.7 ms between draws corresponds to 60 frames per second.
 
 The sandbox gives terrain generation an eight-millisecond work budget while the view is stationary and reduces it to two milliseconds while flying, looking, or driving. Work stops when the requested terrain is ready; this budget does not make settled paused views redraw.
 

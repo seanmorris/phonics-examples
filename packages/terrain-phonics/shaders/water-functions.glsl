@@ -29,7 +29,11 @@ vec4 terrainWaterSample(vec2 position, float time)
 		float age = time - wake.w;
 		if(age <= 0.0 || age >= 8.0) continue;
 		vec2 delta = position - wake.xy;
-		float radius = sqrt(dot(delta, delta) + 0.04);
+		float radiusSquared = dot(delta,delta) + 0.04;
+		// Past 18 m from the wavefront its Gaussian envelope is below float32 range.
+		float outer = 3.0 * age + 18.0;
+		if(radiusSquared > outer * outer) continue;
+		float radius = sqrt(radiusSquared);
 		float q = radius - 3.0 * age;
 		float fade = pow(sin(3.141592653589793 * age / 8.0), 2.0);
 		float envelope = wake.z * exp(-0.45 * age - 0.35 * q * q);

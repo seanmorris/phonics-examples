@@ -38,7 +38,11 @@ vec4 waterVisualSample(vec2 position, float time, vec2 pixelX, vec2 pixelY)
 		float age = time - wake.w;
 		if(age <= 0.0 || age >= 8.0) continue;
 		vec2 delta = position - wake.xy;
-		float radius = sqrt(dot(delta,delta) + 0.04);
+		float radiusSquared = dot(delta,delta) + 0.04;
+		// Past 18 m from the wavefront its Gaussian envelope is below float32 range.
+		float outer = 3.0 * age + 18.0;
+		if(radiusSquared > outer * outer) continue;
+		float radius = sqrt(radiusSquared);
 		// Finite pixel phase differences remain useful at the radial packet's center, where its gradient vanishes.
 		vec2 deltaX = delta + pixelX;
 		vec2 deltaY = delta + pixelY;

@@ -31,7 +31,8 @@ $jetSki = null;
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
-$lastRender = 0.0;
+$lastRender = null;
+$drawIntervalMs = null;
 $lastRenderedTime = -1.0;
 $renderMs = 0.0;
 $frameSeconds = 0.0;
@@ -102,7 +103,7 @@ $drawJetSki = static function() use ($session, &$jetSki, &$width, &$height): voi
 
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, $drawJetSki, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$lastRenderedTime,
+		$session, $scene, $drawJetSki, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $publish
 	): void {
 		$pose = [$session->camera->position,$session->camera->yaw,$session->camera->pitch,$session->camera->fov];
@@ -118,7 +119,7 @@ $engine->start(
 		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
 		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;
 		$now = microtime(true);
-		if($dirty && $now - $lastRender >= 1 / 65)
+		if($dirty && ($lastRender === null || $now - $lastRender >= 1 / 65))
 		{
 			$start = microtime(true);
 			$engine->device->resize($width, $height);
@@ -127,13 +128,14 @@ $engine->start(
 				drawOpaque: $session->mode === 'craft' ? $drawJetSki : null);
 			$engine->device->present();
 			$renderMs = (microtime(true) - $start) * 1000;
+			$drawIntervalMs = $lastRender === null ? null : ($now - $lastRender) * 1000;
 			$lastRender = $now;
 			$lastRenderedTime = $session->time;
 			$dirty = $session->dirty = false;
 		}
 		if($urgentStatus || $statusPending && $now - $lastStatus >= .2)
 		{
-			$status = $session->status() + ['renderer' => $scene->stats(),'renderMs' => $renderMs,
+			$status = $session->status() + ['renderer' => $scene->stats(),'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];
 			$publish(json_encode($status, JSON_THROW_ON_ERROR));

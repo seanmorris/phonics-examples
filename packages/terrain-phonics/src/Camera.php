@@ -69,28 +69,20 @@ final class Camera
 	 */
 	public function viewProjection(int $width, int $height): array
 	{
-		[$f,$r,$u] = $this->basis();
-		$v = [$r[0],$u[0],-$f[0],0,$r[1],$u[1],-$f[1],0,$r[2],$u[2],-$f[2],0,0,0,0,1];
-		$t = 1 / tan($this->fov / 2);
+		[$forward,$right,$up] = $this->basis();
+		$scaleY = 1 / tan($this->fov / 2);
+		$scaleX = $scaleY / ($width / max(1, $height));
 		$near = .25;
 		$far = 90000.0;
-		$p = [
-			$t / ($width / max(1, $height)),0,0,0,0,$t,0,0,0,0
-			, ($far + $near) / ($near - $far)
-			, -1
-			, 0
-			, 0
-			, 2 * $far * $near / ($near - $far)
-			, 0
+		$depth = ($far + $near) / ($far - $near);
+
+		// Scale the camera basis by the four nonzero projection coefficients.
+		return [
+			$scaleX*$right[0], $scaleY*$up[0], $depth*$forward[0], $forward[0],
+			$scaleX*$right[1], $scaleY*$up[1], $depth*$forward[1], $forward[1],
+			$scaleX*$right[2], $scaleY*$up[2], $depth*$forward[2], $forward[2],
+			0.0, 0.0, -2*$far*$near / ($far - $near), 0.0
 		];
-
-		$result = array_fill(0, 16, 0.0);
-
-		for($column = 0; $column < 4; $column++)
-		for($row = 0; $row < 4; $row++)
-		for($k = 0; $k < 4; $k++) $result[$column * 4 + $row] += $p[$k * 4 + $row] * $v[$column * 4 + $k];
-
-		return $result;
 	}
 
 	/**
