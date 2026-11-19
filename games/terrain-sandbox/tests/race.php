@@ -1,0 +1,830 @@
+<?php
+declare(strict_types=1);
+
+$package = getenv('PHONICS_TERRAIN_ROOT') ?: dirname(__DIR__, 3) . '/packages/terrain-phonics';
+require_once $package . '/autoload.php';
+require_once dirname(__DIR__) . '/autoload.php';
+
+use TerrainSandbox\Car;
+use TerrainSandbox\Course;
+use TerrainSandbox\GateShapes;
+use TerrainSandbox\Jet;
+use TerrainSandbox\Race;
+use TerrainSandbox\Session;
+
+$checks = 0;
+function expect(bool $condition, string $message): void
+{
+	global $checks;
+	$checks++;
+	if(!$condition) throw new RuntimeException($message);
+}
+function input(Session $session, array $value): void { $session->input($value, 1 / 60, 16 / 9); }
+function finishPicking(Session $session): void
+{
+	for($i = 0; $session->picking && $i < 1000; $i++) input($session, []);
+	expect(!$session->picking, 'A bounded picking query eventually completes');
+}
+function enterCar(Session $session): void
+{
+	input($session, ['actions' => ['car']]);
+	for($i = 0; $session->findingCarSite() && $i < 2000; $i++) input($session, []);
+	expect(!$session->findingCarSite() && $session->mode === 'car', 'The car boards');
+}
+/** Wrap an angle into -pi to pi. */
+function wrap(float $angle): float { return atan2(sin($angle), cos($angle)); }
+
+/**
+ * Click the gate tool straight down onto a point from free flight, as a player looking along a heading would.
+ * @param Session $session Session in free flight.
+ * @param string $role start, checkpoint, finish or remove.
+ * @param float $x World X to click.
+ * @param float $z World Z to click.
+ * @param float $heading Direction of travel the camera faces, in the vehicles' convention.
+ * @param float $height Gate height setting in metres.
+ * @return array|null The course gate the click placed or moved, or null when the click placed none.
+ */
+function click(Session $session, string $role, float $x, float $z, float $heading = 0.0, float $height = 0.0,
+	float $eye = 40.0): ?array
+{
+	$session->camera->position = [$x, $eye, $z];
+	$session->camera->pitch = -M_PI / 2 + .001;
+	$session->camera->yaw = M_PI - $heading;
+	$revision = $session->course->revision;
+	input($session, ['values' => ['tool' => 'gate', 'gateRole' => $role, 'gateHeight' => $height], 'clicks' => [[.5, .5]]]);
+	finishPicking($session);
+	if($role === 'remove' || $session->course->revision === $revision) return null;
+	$latest = null;
+	foreach($session->course->gates() as $gate)
+		if($gate['role'] === $role && ($latest === null || $role !== 'checkpoint' || $gate['number'] > $latest['number']))
+			$latest = $gate;
+	return $latest;
+}
+/** The gates the status reports, by id. */
+function statusGates(Session $session): array { return array_column($session->status()['course']['gates'], null, 'id'); }
+
+// Gate shapes come from assets/gates/gates.json when the package has one, and from defaults of the same layout.
+$scratch = sys_get_temp_dir() . '/terrain-gates-' . getmypid();
+mkdir($scratch);
+$defaults = GateShapes::defaults();
+expect(!$defaults->fromFile && GateShapes::load("$scratch/absent.json")->export() === $defaults->export(),
+	'A missing gates.json reads as the built-in defaults');
+expect($defaults->kind('road')['window']['top'] === 2.94 && count($defaults->kind('road')['posts']) === 2
+	&& $defaults->kind('water')['posts'] === [] && $defaults->kind('air')['posts'] === [],
+	'The defaults carry the provisional window and only the road gate has posts');
+$post = $defaults->kind('road')['posts'][0];
+expect($post['bottom'] === -GateShapes::POST_DEPTH && $post['top'] === $defaults->kind('road')['extent']['top'],
+	'A post without a stated reach runs from 8 m below the base to the top of the gate');
+$file = GateShapes::DEFAULTS;
+$file['kinds']['air']['window']['top'] = 9;
+$file['kinds']['road']['posts'][0] += ['bottom' => -6, 'top' => 4];
+$file['kinds']['road']['label'] = 'extra fields are left for the renderer';
+file_put_contents("$scratch/gates.json", json_encode($file));
+$read = GateShapes::load("$scratch/gates.json");
+expect($read->fromFile && $read->kind('air')['window']['top'] === 9.0 && $read->kind('road')['posts'][0]['bottom'] === -6.0
+	&& $read->kind('road')['posts'][1]['bottom'] === -8.0, 'gates.json overrides the defaults, post by post');
+$broken = [
+	'no water kind' => function(array &$f) { unset($f['kinds']['water']); },
+	'a window without width' => function(array &$f) { $f['kinds']['road']['window']['halfWidth'] = 0; },
+	'an extent inside its window' => function(array &$f) { $f['kinds']['air']['extent']['top'] = 1; },
+	'a mesh path' => function(array &$f) { $f['kinds']['road']['mesh'] = '../road.bin'; },
+	'a post with no size' => function(array &$f) { $f['kinds']['road']['posts'][0]['halfSize'] = -1; },
+	'another version' => function(array &$f) { $f['version'] = 2; },
+];
+foreach($broken as $name => $break)
+{
+	$file = GateShapes::DEFAULTS;
+	$break($file);
+	file_put_contents("$scratch/gates.json", json_encode($file));
+	try { GateShapes::load("$scratch/gates.json"); expect(false, "gates.json with $name must be refused"); }
+	catch(RuntimeException $error) { expect(!str_contains($error->getMessage(), 'must be refused'), "gates.json with $name is refused"); }
+}
+// The atlas only matters to the renderer, so a file may lay out its prints another way.
+$file = GateShapes::DEFAULTS;
+unset($file['atlas']['roles']['start-finish'], $file['kinds']['water']['mesh']);
+$file['atlas']['layout'] = 'one texture per role';
+file_put_contents("$scratch/gates.json", json_encode($file));
+$read = GateShapes::load("$scratch/gates.json");
+expect($read->atlas === null && $read->document['atlas']['layout'] === 'one texture per role'
+	&& $read->kind('water')['mesh'] === 'water.mesh.bin.gz' && $defaults->atlas['checkpoint'] === [0.0, .25],
+	'A file with another print layout loads, keeps its own fields for the renderer and names default meshes');
+unlink("$scratch/gates.json");
+rmdir($scratch);
+$packaged = GateShapes::packaged();
+expect($packaged === GateShapes::packaged()
+	&& $packaged->fromFile === is_file(dirname(__DIR__) . '/assets/gates/gates.json'),
+	'The packaged shapes are read once, from gates.json when it ships');
+$shapes = $packaged;
+$road = $shapes->kind('road');
+$water = $shapes->kind('water');
+$air = $shapes->kind('air');
+
+// Placement. The flat fixture stands well above its water.
+$flat = ['worldSize' => 512, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
+$edit = new Session($flat);
+expect($edit->settings['gateRole'] === 'start' && $edit->settings['gateLaps'] === 1 && $edit->settings['gateHeight'] === 0.0,
+	'Gate settings start on the start role, one lap and ground height');
+$start = click($edit, 'start', 10, 20, M_PI / 2);
+expect($start !== null && $start['kind'] === 'road' && abs($start['x'] - 10) < .1 && abs($start['z'] - 20) < .1
+	&& abs($start['y']) < 1e-6 && abs($start['yaw'] - M_PI / 2) < 1e-9 && $start['laps'] === 1,
+	'A click on land at zero height places a road gate on the ground facing the camera heading');
+expect($edit->message === 'Placed the start gate at 10, 20 m.', 'Placing a gate says what and where: ' . $edit->message);
+$gates = statusGates($edit);
+expect(count($gates) === 1 && $gates[$start['id']]['print'] === 'start-finish' && $gates[$start['id']]['laps'] === 1,
+	'A start gate without a finish gate shows the START / FINISH print');
+$moved = click($edit, 'start', -30, 40, -2.5);
+expect($edit->course->count() === 1 && $moved['id'] === $start['id'] && abs($moved['x'] + 30) < .1
+	&& abs($moved['yaw'] + 2.5) < 1e-9 && str_starts_with($edit->message, 'Moved the start gate to -30, 40 m'),
+	'Placing a second start gate moves the first');
+$facing = click($edit, 'checkpoint', 0, 0, 7.5);
+expect($facing['number'] === 1 && $facing['yaw'] >= -M_PI && $facing['yaw'] <= M_PI && abs($facing['yaw'] - (7.5 - 2 * M_PI)) < 1e-9,
+	'A gate heading is kept within -pi to pi');
+for($i = 2; $i <= 4; $i++) click($edit, 'checkpoint', 50 * $i, 0);
+$numbers = array_column(array_filter($edit->course->gates(), fn($g) => $g['role'] === 'checkpoint'), 'number');
+expect(array_values($numbers) === [1, 2, 3, 4] && $edit->message === 'Placed checkpoint 4 at 200, 0 m.',
+	'Checkpoints are numbered in placement order');
+$finish = click($edit, 'finish', 0, -100);
+$gates = statusGates($edit);
+expect($finish['role'] === 'finish' && $gates[$moved['id']]['print'] === 'start' && $gates[$finish['id']]['print'] === 'finish',
+	'With a finish gate the start gate shows the START print');
+$again = click($edit, 'finish', 0, -120);
+expect($again['id'] === $finish['id'] && abs($again['z'] + 120) < .1 && $edit->course->count() === 6,
+	'Placing a second finish gate moves the first');
+$second = array_values(array_filter($edit->course->gates(), fn($g) => ($g['number'] ?? 0) === 2))[0];
+click($edit, 'remove', 100, 3);
+$after = array_column(array_filter($edit->course->gates(), fn($g) => $g['role'] === 'checkpoint'), 'number', 'id');
+expect(!isset($after[$second['id']]) && array_values($after) === [1, 2, 3]
+	&& $edit->message === 'Removed checkpoint 2. Later checkpoints moved up one number.',
+	'Remove deletes the gate nearest the click and renumbers the later checkpoints');
+$revision = $edit->course->revision;
+click($edit, 'remove', 100, 60);
+expect($edit->course->revision === $revision && str_starts_with($edit->message, 'No gate there'),
+	'A click beyond every gate\'s span removes nothing');
+// Two gates 10 m apart: the click lands 3 m from one of them.
+$near = click($edit, 'checkpoint', -100, 200);
+$far = click($edit, 'checkpoint', -90, 200);
+click($edit, 'remove', -93, 200);
+expect($edit->course->gate($far['id']) === null && $edit->course->gate($near['id']) !== null,
+	'Of two gates within reach, Remove takes the nearer');
+$high = click($edit, 'checkpoint', 150, 150, 0, 60);
+expect($high['kind'] === 'air' && abs($high['y'] - 60) < 1e-9 && str_ends_with($edit->message, ', 60 m above the ground.'),
+	'With a height above zero a click on land places an air gate that far above the ground');
+// The camera looks along +Z, 550 m short of a gate 60 m above the ground. The ray through the gate's window meets the
+// ground about 145 m beyond it.
+$edit->camera->position = [150, 360, -400];
+$edit->camera->yaw = M_PI;
+$edit->camera->pitch = atan2(60 + $air['window']['top'] / 2 - 360, 550);
+input($edit, ['values' => ['gateRole' => 'remove'], 'clicks' => [[.5, .5]]]);
+finishPicking($edit);
+expect($edit->course->gate($high['id']) === null, 'Remove finds an air gate along the ray, high above the ground the ray hits');
+$count = $edit->course->count();
+input($edit, ['values' => ['gateRole' => 'pit lane', 'gateHeight' => 900]]);
+expect($edit->settings['gateRole'] === 'remove' && $edit->settings['gateHeight'] === 400.0,
+	'An unknown role is ignored and the height is held to 400 m');
+input($edit, ['values' => ['gateHeight' => -5]]);
+expect($edit->settings['gateHeight'] === 0.0, 'A negative height places road gates');
+
+// Laps belong to the start gate.
+input($edit, ['values' => ['gateLaps' => 3]]);
+expect($edit->course->laps() === 3 && statusGates($edit)[$moved['id']]['laps'] === 3 && $edit->message === 'The race runs 3 laps.',
+	'Editing the lap count updates the start gate');
+input($edit, ['values' => ['gateLaps' => 25]]);
+expect($edit->course->laps() === 20 && $edit->settings['gateLaps'] === 20, 'Laps are held to 20');
+input($edit, ['values' => ['gateLaps' => 2.6]]);
+expect($edit->course->laps() === 3 && $edit->settings['gateLaps'] === 3, 'Laps round to a whole number');
+input($edit, ['values' => ['gateLaps' => 'many']]);
+expect($edit->course->laps() === 3 && $edit->message === 'Invalid control value', 'A lap count that is not a number is refused');
+$movedAgain = click($edit, 'start', 0, 100);
+expect($movedAgain['laps'] === 3, 'A moved start gate keeps its laps');
+
+input($edit, ['actions' => ['gates-clear']]);
+expect($edit->course->count() === 0 && $edit->message === "Removed all $count gates." && $edit->status()['course']['gates'] === [],
+	'Clear gates removes them all');
+input($edit, ['actions' => ['gates-clear']]);
+expect($edit->message === 'There are no gates to clear.', 'Clearing an empty course says so');
+input($edit, ['values' => ['gateLaps' => 4]]);
+$fresh = click($edit, 'start', 0, 0);
+expect($fresh['laps'] === 4, 'A new start gate takes the lap setting');
+for($i = 1; $i <= Course::MAX_CHECKPOINTS; $i++) click($edit, 'checkpoint', -200 + 12 * $i, 50);
+$revision = $edit->course->revision;
+click($edit, 'checkpoint', 0, -50);
+expect($edit->course->revision === $revision && $edit->message === 'A course holds 32 checkpoints. Remove one to add another.',
+	'A course holds at most 32 checkpoints');
+$edit->close();
+
+// The route: every lap passes the checkpoints by number, and returns through the start gate unless a finish gate ends
+// the last lap.
+$course = new Course;
+expect($course->route() === [], 'A course without a start gate has no route');
+$s = $course->place('start', 'road', 0, 0, 0, 0, 2)['gate'];
+expect(array_column($course->route(), 'id') === [$s['id'], $s['id']] && array_column($course->route(), 'lapEnd') === [true, true],
+	'Two laps of a lone start gate pass back through it twice');
+$c1 = $course->place('checkpoint', 'road', 0, 0, 50, 0)['gate'];
+$c2 = $course->place('checkpoint', 'air', 0, 20, 100, 0)['gate'];
+$route = $course->route();
+expect(array_column($route, 'id') === [$c1['id'], $c2['id'], $s['id'], $c1['id'], $c2['id'], $s['id']]
+	&& array_column($route, 'lap') === [1, 1, 1, 2, 2, 2] && array_column($route, 'lapEnd') === [false, false, true, false, false, true],
+	'Without a finish gate each lap ends at the start gate');
+$f = $course->place('finish', 'road', 0, 0, 150, 0)['gate'];
+expect(array_column($course->route(), 'id') === [$c1['id'], $c2['id'], $s['id'], $c1['id'], $c2['id'], $f['id']],
+	'With a finish gate the last lap ends there and earlier laps at the start gate');
+$course->setLaps(1);
+expect(array_column($course->route(), 'id') === [$c1['id'], $c2['id'], $f['id']], 'One lap with a finish gate runs start to finish');
+
+// The crossing test uses the segment between two fixed steps.
+$gate = ['x' => 0.0, 'y' => 10.0, 'z' => 0.0, 'yaw' => M_PI / 2];
+$top = $road['window']['top'];
+$half = $road['window']['halfWidth'];
+expect(abs(Race::crossing($gate, $road, [-1, 11, 3], [3, 11, 3]) - .25) < 1e-12, 'A forward crossing reports where along the step it met the gate');
+expect(Race::crossing($gate, $road, [3, 11, 3], [-1, 11, 3]) === null, 'A backward crossing does not count');
+expect(Race::crossing($gate, $road, [-1, 11, $half + .1], [3, 11, $half + .1]) === null
+	&& Race::crossing($gate, $road, [-1, 11, -$half + .1], [3, 11, -$half + .1]) !== null,
+	'Only a crossing within the window\'s half width counts');
+expect(Race::crossing($gate, $road, [-1, 10 + $top + .1, 0], [1, 10 + $top + .1, 0]) === null
+	&& Race::crossing($gate, $road, [-1, 10 - $road['below'] + .1, 0], [1, 10 - $road['below'] + .1, 0]) !== null
+	&& Race::crossing($gate, $road, [-1, 10 - $road['below'] - .1, 0], [1, 10 - $road['below'] - .1, 0]) === null,
+	'A road crossing counts from the posts\' feet to the window top');
+expect(Race::crossing($gate, $road, [-2, 11, 0], [0, 11, 0]) === 1.0 && Race::crossing($gate, $road, [0, 11, 0], [2, 11, 0]) === null,
+	'A step ending on the gate plane crosses it, so the next step starting there does not cross again');
+$high = ['x' => 0.0, 'y' => 200.0, 'z' => 500.0, 'yaw' => 0.0];
+$step = Jet::FASTEST / 60;
+expect(abs(Race::crossing($high, $air, [3, 201, 500 - $step / 3], [3, 201, 500 + 2 * $step / 3]) - 1 / 3) < 1e-12,
+	'A jet at 260 m/s, 4.3 m a step, meets the window inside one step');
+expect(Race::crossing($high, $air, [3, 199.9, 499], [3, 199.9, 501]) === null
+	&& Race::crossing($high, $air, [3, 200 + $air['window']['top'] + .1, 499], [3, 200 + $air['window']['top'] + .1, 501]) === null,
+	'An air gate counts only between its window\'s bottom and top edges');
+// One 30 m step of a jet passes the start gate, a checkpoint and the finish gate, each timed where the step meets it.
+$course = new Course;
+$course->place('start', 'air', 0, 100, 0, 0);
+$course->place('checkpoint', 'air', 0, 100, 10, 0);
+$course->place('finish', 'air', 0, 100, 20, 0);
+$timer = new Race;
+$middle = 100 + ($air['window']['bottom'] + $air['window']['top']) / 2;
+$runs = [];
+foreach([1.5, 3.0, .75] as $dt)
+{
+	$event = $timer->advance($course, $shapes, [0, $middle, -5], [0, $middle, 25], 10.0, $dt, 'jet', 1);
+	$runs[] = [$event, $timer->status($course, 10 + $dt)];
+}
+expect($runs[0][1]['state'] === 'finished' && abs($runs[0][1]['time'] - 1) < 1e-12
+	&& abs($runs[0][1]['splits'][0]['time'] - .5) < 1e-12 && count($runs[0][1]['splits']) === 2
+	&& $runs[0][0] === 'Finished in 1.00 s.', 'Several gates within one step each count, in order along the step');
+expect($runs[1][0] === 'Finished in 2.00 s. Best 1.00 s.' && $runs[2][0] === 'Finished in 0.50 s, a new best by 0.50 s.'
+	&& $runs[2][1]['best'] === $runs[2][1]['time'] && $runs[2][1]['last'] === $runs[2][1]['time'],
+	'A finish reports the best time, or how much a new best beat it by');
+expect(Race::clock(12.345) === '12.35 s' && Race::clock(83.456) === '1:23.46' && Race::clock(59.996) === '1:00.00',
+	'Race times read in hundredths, with minutes from one minute up');
+
+
+/**
+ * Drive the car round waypoints with the gamepad, steering at each in turn and holding a cruising speed.
+ * @param Session $session Session with the car boarded.
+ * @param list<array> $waypoints [x, z] points, visited in a loop. The car moves on to the next within 12 m.
+ * @param int $steps Most fixed steps to drive.
+ * @param callable $until Called after each step; driving stops when it returns true.
+ * @return int Steps driven.
+ */
+function autopilot(Session $session, array $waypoints, int $steps, callable $until, float $cruise = 12.0): int
+{
+	$next = 0;
+	for($i = 1; $i <= $steps; $i++)
+	{
+		$car = $session->car->state();
+		[$x, $z] = $waypoints[$next % count($waypoints)];
+		if(hypot($x - $car['x'], $z - $car['z']) < 12) [$x, $z] = $waypoints[++$next % count($waypoints)];
+		// Positive steering turns right, which lowers the heading.
+		$turn = max(-1.0, min(1.0, -2.5 * wrap(atan2($x - $car['x'], $z - $car['z']) - $car['yaw'])));
+		$pedal = max(-1.0, min(1.0, ($cruise - $car['speed']) * .5));
+		input($session, ['pad' => [$turn, 0, 0, 0, max(0.0, -$pedal), max(0.0, $pedal), 0]]);
+		$session->step(1 / 60);
+		if($until($session)) return $i;
+	}
+	return $steps;
+}
+/** Step a session with keys held until a condition holds. */
+function drive(Session $session, array $keys, int $steps, callable $until): int
+{
+	input($session, ['keys' => $keys]);
+	for($i = 1; $i <= $steps; $i++) { $session->step(1 / 60); if($until($session)) return $i; }
+	return $steps;
+}
+$race = fn(Session $session): array => $session->status()['race'];
+$state = fn(string $wanted): Closure => fn(Session $session): bool => $session->race->state === $wanted;
+
+// A rolling start on a straight: the clock starts where the car meets the start gate within its step.
+$open = ['worldSize' => 1024, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
+$sprint = new Session($open);
+$s = click($sprint, 'start', 0, 20);
+$c = click($sprint, 'checkpoint', 0, 100);
+$f = click($sprint, 'finish', 0, 180);
+$idle = $race($sprint);
+expect($idle['state'] === 'idle' && $idle['time'] === null && $idle['laps'] === 1 && $idle['next']['id'] === $s['id']
+	&& $idle['next']['print'] === 'start' && $idle['splits'] === [] && $idle['best'] === null,
+	'Before a race the status points at the start gate');
+$sprint->camera->position = [0, 30, -10]; $sprint->camera->yaw = M_PI;
+enterCar($sprint);
+$revision = $sprint->course->revision;
+input($sprint, ['values' => ['tool' => 'gate', 'gateRole' => 'remove'], 'clicks' => [[.5, .5]]]);
+input($sprint, ['values' => ['gateRole' => 'checkpoint'], 'clicks' => [[.5, .5]]]);
+expect(!$sprint->picking && $sprint->course->revision === $revision, 'Gate clicks while driving change nothing');
+$before = $sprint->car->state();
+drive($sprint, ['KeyW' => true], 600, function(Session $session) use (&$before, $state): bool {
+	if($state('running')($session)) return true;
+	$before = $session->car->state();
+	return false;
+});
+$after = $sprint->car->state();
+$running = $race($sprint);
+$share = ($s['z'] - $before['z']) / ($after['z'] - $before['z']);
+expect($running['state'] === 'running' && $before['z'] < $s['z'] && $after['z'] >= $s['z'] && $before['speed'] > 10
+	&& abs($running['time'] - (1 - $share) / 60) < 1e-9 && $running['lap'] === 1 && $running['vehicle'] === 'car'
+	&& $running['next']['id'] === $c['id'] && $sprint->message === 'Race started. Next: checkpoint 1.',
+	'Driving through the start gate at speed starts the clock at the crossing, part way through the step');
+$times = [];
+drive($sprint, ['KeyW' => true], 900, function(Session $session) use (&$times, $state): bool {
+	$times[] = $session->race->status($session->course, $session->time)['time'];
+	return $state('finished')($session);
+});
+$done = $race($sprint);
+expect($done['state'] === 'finished' && array_column($done['splits'], 'gate') === [$c['id'], $f['id']]
+	&& $done['time'] === $done['splits'][1]['time'] && $done['lastSplit'] === $done['time'] && $done['last'] === $done['time']
+	&& $done['best'] === $done['time'] && $done['lapTimes'] === [$done['time']] && $done['lap'] === 1
+	&& str_starts_with($sprint->message, 'Finished in ') && $done['splits'][0]['time'] < $done['time'],
+	'The finish gate stops the clock and records the time as the best for the course');
+$monotonic = true;
+for($i = 1; $i < count($times) - 1; $i++) $monotonic = $monotonic && abs($times[$i] - $times[$i - 1] - 1 / 60) < 1e-9;
+expect($monotonic, 'The race clock runs at simulation speed');
+// The car covers the 160 m from the start gate to the finish gate at 10 to 36 m/s, which takes 4.4 to 16 seconds.
+expect($done['time'] > 4 && $done['time'] < 16, 'The time is the simulated time between the two crossings');
+$t = $done['time'];
+input($sprint, ['actions' => ['pause']]);
+for($i = 0; $i < 30; $i++) $sprint->step(1 / 60);
+input($sprint, ['actions' => ['pause']]);
+// Run the same straight again, slower, from a fresh boarding behind the start gate.
+input($sprint, ['actions' => ['fly']]);
+$sprint->camera->position = [0, 30, -10]; $sprint->camera->yaw = M_PI;
+enterCar($sprint);
+expect($race($sprint)['state'] === 'finished', 'A finished result stays on show until the next start');
+$pad = [0, 0, 0, 0, 0, .6, 0];
+for($i = 0; $i < 2400 && $sprint->race->state !== 'running'; $i++) { input($sprint, ['pad' => $pad]); $sprint->step(1 / 60); }
+expect($race($sprint)['state'] === 'running' && $race($sprint)['best'] === $t && $race($sprint)['splits'] === [],
+	'Passing the start gate again starts a new race');
+for($i = 0; $i < 2400 && $sprint->race->state !== 'finished'; $i++) { input($sprint, ['pad' => $pad]); $sprint->step(1 / 60); }
+$slow = $race($sprint);
+expect($slow['state'] === 'finished' && $slow['time'] > $t && $slow['best'] === $t && $slow['last'] === $slow['time']
+	&& $sprint->message === 'Finished in ' . Race::clock($slow['time']) . '. Best ' . Race::clock($t) . '.',
+	'A slower run keeps the earlier best and says so');
+// Pausing stops the clock.
+input($sprint, ['actions' => ['fly']]);
+$sprint->camera->position = [0, 30, -10]; $sprint->camera->yaw = M_PI;
+enterCar($sprint);
+drive($sprint, ['KeyW' => true], 600, $state('running'));
+input($sprint, ['actions' => ['pause']]);
+$held = $race($sprint)['time'];
+for($i = 0; $i < 60; $i++) $sprint->step(1 / 60);
+expect($race($sprint)['time'] === $held && $sprint->race->state === 'running', 'Pausing stops the race clock');
+input($sprint, ['actions' => ['pause', 'race-reset']]);
+expect($race($sprint)['state'] === 'idle' && $race($sprint)['best'] === $t
+	&& $sprint->message === 'Race reset. Pass through the start gate to start the clock.',
+	'Race reset returns to waiting for a start and keeps the best time');
+// Changing the course mid-race stops the race.
+input($sprint, ['actions' => ['fly']]);
+$sprint->camera->position = [0, 30, -10]; $sprint->camera->yaw = M_PI;
+enterCar($sprint);
+drive($sprint, ['KeyW' => true], 600, $state('running'));
+input($sprint, ['values' => ['gateLaps' => 2]]);
+expect($race($sprint)['state'] === 'idle' && $sprint->message === 'The race runs 2 laps. The race stopped because the course changed.'
+	&& $race($sprint)['message'] === 'The race stopped because the course changed.',
+	'Changing the laps mid-race stops the race');
+expect($race($sprint)['best'] === null, 'A course with other laps keeps its own best time');
+input($sprint, ['values' => ['gateLaps' => 1]]);
+expect($race($sprint)['best'] === $t, 'Changing the laps back finds the course\'s best time again');
+$sprint->close();
+
+// Two laps round a loop with a finish gate. The car passes the finish gate early in lap 1 and the start gate late in
+// lap 2, and neither counts out of order.
+$loop = new Session($open);
+$s = click($loop, 'start', 0, 20);
+$c = click($loop, 'checkpoint', 60, 60, M_PI);
+$f = click($loop, 'finish', 0, 60);
+input($loop, ['values' => ['gateLaps' => 2]]);
+$loop->camera->position = [0, 30, -30]; $loop->camera->yaw = M_PI;
+enterCar($loop);
+$route = [[0, 110], [60, 110], [60, -30], [0, -30]];
+$events = [];
+$track = function(Session $session) use (&$events): bool {
+	if(end($events) !== $session->message) $events[] = $session->message;
+	return $session->race->state === 'finished';
+};
+autopilot($loop, $route, 9000, $track);
+$lapped = $race($loop);
+expect($lapped['state'] === 'finished' && $lapped['laps'] === 2
+	&& array_column($lapped['splits'], 'gate') === [$c['id'], $s['id'], $c['id'], $f['id']]
+	&& array_column($lapped['splits'], 'lap') === [1, 1, 2, 2] && count($lapped['lapTimes']) === 2
+	&& abs(array_sum($lapped['lapTimes']) - $lapped['time']) < 1e-9,
+	'Lap 1 returns through the start gate and lap 2 ends at the finish gate');
+expect(array_slice($events, 1) === ['Race started. Next: checkpoint 1.',
+	'Checkpoint 1 at ' . Race::clock($lapped['splits'][0]['time']) . '. Next: the start gate.',
+	'Lap 2 of 2 after ' . Race::clock($lapped['splits'][1]['time']) . '. Next: checkpoint 1.',
+	'Checkpoint 1 at ' . Race::clock($lapped['splits'][2]['time']) . '. Next: the finish gate.',
+	'Finished in ' . Race::clock($lapped['time']) . '.'], 'Each gate passed in order reports its split and the next gate');
+$loop->close();
+
+// The same loop with the checkpoint facing north, so the car passes it the wrong way, and no finish gate.
+$wrong = new Session($open);
+$s = click($wrong, 'start', 0, 20);
+$c = click($wrong, 'checkpoint', 60, 60, 0);
+$wrong->camera->position = [0, 30, -30]; $wrong->camera->yaw = M_PI;
+enterCar($wrong);
+$passes = 0;
+autopilot($wrong, $route, 9000, function(Session $session) use (&$passes): bool {
+	$car = $session->car->state();
+	if($session->race->state === 'running' && $car['z'] < -20) $passes++;
+	return $passes === 1;
+});
+$stuck = $race($wrong);
+expect($stuck['state'] === 'running' && $stuck['splits'] === [] && $stuck['next']['id'] === $c['id']
+	&& $stuck['remaining'] === 2, 'Passing a checkpoint the wrong way does not count');
+autopilot($wrong, $route, 2400, fn(Session $session): bool => $session->car->state()['z'] > 40);
+expect($race($wrong)['splits'] === [] && $race($wrong)['next']['id'] === $c['id'],
+	'Nor does passing the start gate again before the checkpoint');
+$wrong->close();
+
+// Relocations do not pass gates. A freshly made car stands at the origin, behind this start gate; boarding beyond the
+// gate moves it there without driving through.
+$moves = new Session($open);
+$s = click($moves, 'start', 0, 20);
+expect(Race::crossing($s, $road, [0, 0, 0], [0, .02, 30]) !== null, 'The boarding jump would pass the gate if it counted');
+$moves->camera->position = [0, 30, 30]; $moves->camera->yaw = M_PI;
+enterCar($moves);
+for($i = 0; $i < 30; $i++) $moves->step(1 / 60);
+expect($moves->car->state()['z'] === 30.0 && $race($moves)['state'] === 'idle', 'Boarding a car past the start gate does not start a race');
+input($moves, ['actions' => ['fly']]);
+$moves->camera->position = [0, 30, 0]; $moves->camera->yaw = M_PI;
+enterCar($moves);
+drive($moves, ['KeyW' => true], 300, $state('running'));
+expect($race($moves)['state'] === 'running', 'Driving through it from behind does');
+input($moves, ['actions' => ['fly']]);
+expect($race($moves)['state'] === 'idle' && $moves->message === 'Flight controls active. The race stopped when you left the car.',
+	'Leaving the car stops the race');
+$moves->camera->position = [0, 30, 0]; $moves->camera->yaw = M_PI;
+enterCar($moves);
+drive($moves, ['KeyW' => true], 300, $state('running'));
+input($moves, ['actions' => ['gates-clear']]);
+expect($race($moves)['state'] === 'idle' && $moves->message === 'Removed the only gate. The race stopped because the course changed.',
+	'Clearing the gates stops the race');
+$moves->close();
+
+// Righting a wreck can move the car back to its last safe spot. Here that jump runs forward through a start gate the
+// car drove through the wrong way before it crashed.
+$dry = ['worldSize' => 512, 'spacing' => 1, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -100];
+$crash = new Session($dry);
+$crash->landscape->queue(['type' => 'raise', 'x' => 0, 'z' => 45, 'radius' => 16, 'amount' => 30]);
+$crash->landscape->commit();
+$s = click($crash, 'start', 0, 31, M_PI);
+$crash->camera->position = [0, 30, -40]; $crash->camera->yaw = M_PI;
+enterCar($crash);
+drive($crash, ['KeyW' => true], 500, fn(Session $session): bool => $session->car->state()['motion'] !== 'driving');
+drive($crash, [], 1300, fn(Session $session): bool => $session->car->state()['motion'] !== 'tumbling');
+$wreck = $crash->car->state();
+expect($wreck['motion'] === 'overturned' && $race($crash)['state'] === 'idle', 'The car crashes on its roof beyond the gate');
+$crash->landscape->queue(['type' => 'crater', 'x' => $wreck['x'], 'z' => $wreck['z'], 'radius' => 6, 'amount' => 4]);
+$crash->landscape->commit();
+$jumped = null;
+drive($crash, [], 3000, function(Session $session) use (&$jumped, &$wreck): bool {
+	$car = $session->car->state();
+	if($car['recoveries'] === 0) { $wreck = $car; return false; }
+	$jumped = $car;
+	return true;
+});
+expect($jumped !== null && hypot($jumped['x'] - $wreck['x'], $jumped['z'] - $wreck['z']) > 20
+	&& Race::crossing($crash->course->start(), $road, [$wreck['x'], $wreck['y'], $wreck['z']],
+		[$jumped['x'], $jumped['y'], $jumped['z']]) !== null,
+	'Settling in a crater moves the wreck back through the start gate the way it faces');
+expect($race($crash)['state'] === 'idle', 'A car moved by recovery does not pass a gate');
+$crash->close();
+
+// The F5 through air gates at 260 m/s. The gates stand so that the jet's 75 m boarding height meets the middle of
+// each window.
+$plain = ['worldSize' => 8192, 'heightScale' => 0, 'detailAmplitude' => 0];
+$flight = new Session($plain);
+$lift = 75 - ($air['window']['bottom'] + $air['window']['top']) / 2;
+$s = click($flight, 'start', 0, 0, 0, $lift);
+$side = click($flight, 'checkpoint', $air['window']['halfWidth'] + 1, 700, 0, $lift);
+expect($s['kind'] === 'air' && abs($s['y'] - $lift) < 1e-6, 'The air gates float at their height above the plain');
+$flight->camera->position = [0, 75, -1000]; $flight->camera->yaw = M_PI;
+input($flight, ['actions' => ['jet'], 'keys' => ['KeyW' => true]]);
+$from = null;
+drive($flight, ['KeyW' => true], 600, function(Session $session) use (&$from, $state): bool {
+	if($state('running')($session)) return true;
+	$from = $session->jet->state();
+	return false;
+});
+$to = $flight->jet->state();
+expect($from['speed'] === Jet::FASTEST && $to['z'] - $from['z'] > 4.3
+	&& abs($race($flight)['time'] - ($to['z'] - $s['z']) / ($to['z'] - $from['z']) / 60) < 1e-9,
+	'At full speed the jet starts the clock where its 4.3 m step meets the start gate');
+drive($flight, ['KeyW' => true], 900, fn(Session $session): bool => $session->jet->state()['z'] > 800);
+expect($race($flight)['splits'] === [] && $race($flight)['next']['id'] === $side['id'],
+	'A jet passing just beside a window does not pass the gate');
+$flight->close();
+$flight = new Session($plain);
+$s = click($flight, 'start', 0, 0, 0, $lift);
+$c = click($flight, 'checkpoint', 0, 1500, 0, $lift);
+$f = click($flight, 'finish', 0, 2500, 0, $lift);
+$flight->camera->position = [0, 75, -1000]; $flight->camera->yaw = M_PI;
+input($flight, ['actions' => ['jet']]);
+drive($flight, ['KeyW' => true], 1200, $state('finished'));
+$flown = $race($flight);
+expect($flown['state'] === 'finished' && array_column($flown['splits'], 'gate') === [$c['id'], $f['id']]
+	&& abs($flown['time'] - 2500 / Jet::FASTEST) < 1e-6 && $flown['vehicle'] === 'jet',
+	'The jet finishes 2500 m on in 2500 / 260 seconds');
+// Board again on the same line: the race starts afresh at the start gate. The jet then climbs over the other gates
+// and flies on to the map edge, which ends the race.
+input($flight, ['actions' => ['fly']]);
+$flight->camera->position = [0, 75, -1000]; $flight->camera->yaw = M_PI;
+input($flight, ['actions' => ['jet']]);
+drive($flight, ['KeyW' => true], 600, $state('running'));
+input($flight, ['actions' => ['jet-controls']]);
+expect($race($flight)['state'] === 'running' && $flight->jet->expert(), 'Switching the jet handling keeps the race going');
+input($flight, ['actions' => ['jet-controls']]);
+drive($flight, ['KeyW' => true, 'KeyE' => true], 3000, fn(Session $session): bool => $session->mode === 'fly');
+expect($race($flight)['state'] === 'idle' && str_ends_with($flight->message, 'The race stopped when you left the F5.'),
+	'Reaching the map edge ends the jet\'s race');
+$flight->close();
+
+// The jet ski through floating gates on a lake with the sandbox's swell.
+$lake = ['worldSize' => 512, 'waterLevel' => 5, 'heightScale' => 0, 'detailAmplitude' => 0];
+$bay = new Session($lake);
+$s = click($bay, 'start', 0, -100);
+$c = click($bay, 'checkpoint', 0, 0);
+$f = click($bay, 'finish', 0, 100);
+expect($s['kind'] === 'water' && $bay->message === 'Placed the finish gate at 0, 100 m, floating on the water.'
+	&& abs($c['y'] - $bay->water->sample($c['x'], $c['z'], $bay->time)['height']) < 1e-12
+	&& $bay->course->export()['gates'][1]['y'] === 5.0,
+	'A click on water places a gate that floats on the surface and saves the water level');
+// The click aims 20 m ahead of the camera, so the ray meets the water well before the lake bed.
+$bay->camera->position = [0, 40, -60]; $bay->camera->yaw = M_PI; $bay->camera->pitch = -atan2(35, 20);
+input($bay, ['values' => ['gateRole' => 'checkpoint'], 'clicks' => [[.5, .5]]]);
+finishPicking($bay);
+$ahead = $bay->course->gate(max(array_column($bay->course->gates(), 'id')));
+expect(abs($ahead['z'] + 40) < 1e-6 && $ahead['kind'] === 'water', 'A water gate stands where the ray meets the water');
+input($bay, ['values' => ['gateRole' => 'remove'], 'clicks' => [[.5, .5]]]);
+finishPicking($bay);
+$heights = [];
+$bay->camera->position = [0, 20, -150]; $bay->camera->yaw = M_PI;
+input($bay, ['actions' => ['craft']]);
+drive($bay, ['KeyW' => true], 3000, function(Session $session) use (&$heights, $c, $state): bool {
+	$gate = $session->course->gate($c['id']);
+	$heights[] = $gate['y'] - $session->water->sample($gate['x'], $gate['z'], $session->time)['height'];
+	return $state('finished')($session);
+});
+$ridden = $race($bay);
+expect($ridden['state'] === 'finished' && array_column($ridden['splits'], 'gate') === [$c['id'], $f['id']]
+	&& $ridden['vehicle'] === 'craft', 'The jet ski races through the floating gates');
+$bob = array_column(array_slice($race($bay)['splits'], 0, 0), 'time');
+expect(max(array_map('abs', $heights)) < 1e-12, 'Each step lifts the floating gates to the wave height at their position');
+$range = [];
+for($i = 0; $i < 240; $i++) { $bay->step(1 / 60); $range[] = $bay->course->gate($c['id'])['y']; }
+expect(max($range) - min($range) > .3, 'The floating gates rise and fall with the swell');
+input($bay, ['actions' => ['pause'], 'values' => ['waterLevel' => 9, 'waterChoppiness' => 0]]);
+expect($bay->course->gate($c['id'])['y'] === 9.0 && $bay->status()['course']['gates'][1]['y'] === 9.0,
+	'A paused water level change moves the floating gates at once');
+input($bay, ['actions' => ['pause', 'race-reset']]);
+// Board again behind the start gate and race, then board again mid-race.
+input($bay, ['values' => ['waterChoppiness' => 100]]);
+$bay->camera->position = [0, 20, -150]; $bay->camera->yaw = M_PI;
+input($bay, ['actions' => ['craft']]);
+drive($bay, ['KeyW' => true], 600, $state('running'));
+input($bay, ['actions' => ['craft']]);
+expect($race($bay)['state'] === 'idle' && str_ends_with($bay->message, 'The race stopped because the jet ski moved to a new spot.'),
+	'Boarding the jet ski again mid-race stops the race');
+$bay->close();
+
+// Courses save with the landscape.
+$file = new Session($open);
+$s = click($file, 'start', 0, 20, .5);
+click($file, 'checkpoint', 0, 100);
+click($file, 'checkpoint', 50, 150, 0, 30);
+click($file, 'finish', 0, 180, -1);
+input($file, ['values' => ['gateLaps' => 3, 'gateRole' => 'checkpoint', 'gateHeight' => 30]]);
+// Loading holds the camera within the look limits, which the straight-down clicks exceed.
+$file->camera->pitch = -.4;
+$saved = $file->save();
+$data = json_decode($saved, true, flags: JSON_THROW_ON_ERROR);
+expect($data['version'] === 2 && count($data['course']['gates']) === 4 && $data['course']['gates'][0]['laps'] === 3
+	&& !isset($data['course']['gates'][0]['id']) && $data['course']['gates'][2]['number'] === 2,
+	'Version 2 files carry the course: every gate, its laps and its checkpoint numbers');
+$copy = new Session($open);
+$copy->load($saved);
+expect($copy->course->export() === $file->course->export() && $copy->course->signature() === $file->course->signature()
+	&& $copy->settings['gateLaps'] === 3 && $copy->settings['gateHeight'] === 30.0
+	&& array_column($copy->status()['course']['gates'], 'id') === [1, 2, 3, 4]
+	&& $copy->message === 'Landscape loaded, including terrain edits, environment settings and 4 gates.',
+	'Loading restores the course, its laps and the gate settings');
+expect($copy->save() === $saved, 'A loaded course saves back byte for byte');
+// A file's lap count follows its start gate.
+$data['settings']['gateLaps'] = 7;
+$copy->load(json_encode($data));
+expect($copy->course->laps() === 3 && $copy->settings['gateLaps'] === 3, 'The start gate\'s laps win over the lap setting');
+$legacy = $data;
+$legacy['version'] = 1;
+unset($legacy['course'], $legacy['settings']['gateRole'], $legacy['settings']['gateLaps'], $legacy['settings']['gateHeight']);
+$copy->load(json_encode($legacy));
+expect($copy->course->count() === 0 && $copy->status()['course']['gates'] === [] && $copy->settings['gateLaps'] === 3,
+	'A version 1 file loads without gates and leaves the gate settings alone');
+$bare = $data;
+unset($bare['course']);
+$copy->load(json_encode($bare));
+expect($copy->course->count() === 0, 'A version 2 file without a course loads without gates');
+$copy->load($saved);
+$intact = $copy->save();
+$generation = $copy->generation;
+$gate = $data['course']['gates'];
+$malformed = [
+	'a course that is a list' => [['role' => 'start']],
+	'gates that are not a list' => ['gates' => ['a' => $gate[0]]],
+	'an unknown course key' => ['gates' => $gate, 'lap' => 2],
+	'an unknown role' => ['gates' => [['role' => 'pit'] + $gate[1]]],
+	'an unknown kind' => ['gates' => [['kind' => 'lava'] + $gate[1]]],
+	'an extra gate key' => ['gates' => [$gate[1] + ['colour' => 'red']]],
+	'a start gate without laps' => ['gates' => [array_diff_key($gate[0], ['laps' => 0])]],
+	'laps on a checkpoint' => ['gates' => [$gate[1] + ['laps' => 2]]],
+	'no laps' => ['gates' => [['laps' => 0] + $gate[0]]],
+	'too many laps' => ['gates' => [['laps' => 21] + $gate[0]]],
+	'fractional laps' => ['gates' => [['laps' => 2.5] + $gate[0]]],
+	'a string coordinate' => ['gates' => [['x' => '1'] + $gate[1]]],
+	'a gate off the landscape' => ['gates' => [['z' => 513] + $gate[1]]],
+	'a gate out of height range' => ['gates' => [['y' => 1e6] + $gate[1]]],
+	'a yaw beyond pi' => ['gates' => [['yaw' => 4] + $gate[1]]],
+	'two start gates' => ['gates' => [$gate[0], $gate[0]]],
+	'two finish gates' => ['gates' => [$gate[3], $gate[3]]],
+	'a gap in the checkpoint numbers' => ['gates' => [$gate[1], ['number' => 3] + $gate[2]]],
+	'a repeated checkpoint number' => ['gates' => [$gate[1], ['number' => 1] + $gate[2]]],
+	'a fractional checkpoint number' => ['gates' => [['number' => 1.5] + $gate[1]]],
+	'33 checkpoints' => ['gates' => array_map(fn($n) => ['number' => $n] + $gate[1], range(1, 33))],
+	'a gate that is a list' => ['gates' => [array_values($gate[1])]],
+];
+foreach($malformed as $name => $course)
+{
+	$bad = $data;
+	$bad['course'] = $course;
+	try { $copy->load(json_encode($bad)); expect(false, "A file with $name must be refused"); }
+	catch(InvalidArgumentException $error)
+	{
+		expect(str_starts_with($error->getMessage(), 'Invalid saved course: ') && $copy->save() === $intact
+			&& $copy->generation === $generation, "A file with $name is refused and leaves the scene intact");
+	}
+}
+$future = $data;
+$future['version'] = 3;
+try { $copy->load(json_encode($future)); expect(false, 'A version 3 file must be refused'); }
+catch(InvalidArgumentException) { expect($copy->save() === $intact, 'A file from a later version is refused'); }
+// The page loads files through an action, which reports the problem instead of throwing.
+$bad = $data;
+$bad['course']['gates'][0]['laps'] = 99;
+input($copy, ['actions' => [['type' => 'load', 'json' => json_encode($bad)]]]);
+expect($copy->message === 'Invalid saved course: laps must be a whole number from 1 to 20.' && $copy->save() === $intact,
+	'A refused course says why');
+// Loading in the middle of a race stops it, and a best time follows the course into the file and back.
+input($copy, ['actions' => ['gates-clear']]);
+click($copy, 'start', 0, 20);
+click($copy, 'finish', 0, 120);
+input($copy, ['values' => ['gateLaps' => 1]]);
+$copy->camera->position = [0, 30, -10]; $copy->camera->yaw = M_PI;
+enterCar($copy);
+drive($copy, ['KeyW' => true], 3000, $state('finished'));
+$best = $race($copy)['best'];
+$one = $copy->save();
+$copy->camera->position = [0, 30, -10]; $copy->camera->yaw = M_PI;
+input($copy, ['actions' => ['fly']]);
+enterCar($copy);
+drive($copy, ['KeyW' => true], 600, $state('running'));
+$copy->load($one);
+expect($race($copy)['state'] === 'idle' && $copy->mode === 'fly' && $best !== null && $race($copy)['best'] === $best,
+	'Loading stops a race, and the reloaded course keeps its best time for the session');
+input($copy, ['actions' => [['type' => 'generate', 'preset' => 'coast', 'seed' => 'no-gates']]]);
+expect($copy->course->count() === 0 && str_ends_with($copy->message, 'The new landscape starts without gates.'),
+	'Generating a new landscape clears its course');
+$copy->close();
+$file->close();
+
+// Road gate posts are solid for the car. The gate faces across the car's line, so one post stands in its path.
+$wide = ['worldSize' => 2048, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
+$wall = new Session($wide);
+$gate = click($wall, 'checkpoint', 0, 400, M_PI / 2);
+$posts = $wall->course->posts($wall->gateShapes);
+usort($posts, fn($a, $b) => $a[1] <=> $b[1]);
+$post = $posts[0];
+expect(count($posts) === count($road['posts']) && abs($post[0] - $gate['x']) < 1e-9
+	&& abs($post[1] - (400 - abs($road['posts'][0]['x']))) < .1 && abs($post[5] - ($gate['y'] + $road['posts'][0]['bottom'])) < 1e-9,
+	'Each road post stands at its place across the gate and reaches into the ground');
+$wall->camera->position = [0, 30, -300]; $wall->camera->yaw = M_PI;
+enterCar($wall);
+$overlap = 0.0; $fastest = 0.0; $impact = null;
+$front = $post[1] - $post[2] - Car::BODY_FRONT;
+$deepest = function(Session $session) use (&$overlap, $posts): array {
+	$car = $session->car->state();
+	foreach($posts as $p) $overlap = max($overlap, Car::penetration($car['x'], $car['z'], $car['yaw'], $p)[0] ?? 0.0);
+	return $car;
+};
+drive($wall, ['KeyW' => true], 2400, function(Session $session) use ($deepest, &$fastest, &$impact): bool {
+	$car = $deepest($session);
+	if($impact === null && $car['speed'] < $fastest - 5) $impact = ['before' => $fastest, 'after' => $car];
+	$fastest = max($fastest, $car['speed']);
+	return $impact !== null && $car['speed'] > 0 && abs($car['speed']) < .1 && $car['z'] > $impact['after']['z'] + .1;
+});
+expect($impact !== null && $impact['before'] === 36.0 && $impact['after']['speed'] < -5 && $overlap < 1e-3
+	&& abs($impact['after']['z'] - $front) < .01, 'At 36 m/s the car stops dead at the post and bounces back');
+drive($wall, ['KeyW' => true], 120, fn(Session $session): bool => $deepest($session) && false);
+$pressing = $wall->car->state();
+expect($pressing['z'] <= $front + 1e-3 && $pressing['z'] > $front - .05 && abs($pressing['speed']) < .3 && $overlap < 1e-3,
+	'Holding the throttle against the post leaves the car resting on it');
+drive($wall, ['KeyS' => true], 600, fn(Session $session): bool => $deepest($session)['z'] < $front - 6);
+drive($wall, ['KeyW' => true, 'KeyA' => true], 600, fn(Session $session): bool => $deepest($session)['yaw'] > .6);
+drive($wall, ['KeyW' => true, 'KeyD' => true], 600, fn(Session $session): bool => $deepest($session)['yaw'] < 0);
+$away = $wall->car->state();
+expect($away['z'] > $post[1] + 5 && $away['motion'] === 'driving' && $overlap < 1e-3,
+	'Backing off and steering round, the car drives on past the post');
+$wall->close();
+// A glancing blow. The car runs past a post with 13 cm to spare and steers towards it, so its side scrapes the post's
+// face. The same drive without the gate shows what the post took.
+$scrapes = [];
+foreach([true, false] as $withPost)
+{
+	$scrape = new Session($wide);
+	// The gate stands across the car's line with one post at x = 0, z = 400 and the other 14 m away.
+	if($withPost) $scrape->course->place('checkpoint', 'road', $road['posts'][0]['x'], 0, 400, 0);
+	$posts = $scrape->course->posts($scrape->gateShapes);
+	$scrape->camera->position = [Car::BODY_HALF_WIDTH + $road['posts'][1]['halfSize'] + .13, 30, 385]; $scrape->camera->yaw = M_PI;
+	enterCar($scrape);
+	$overlap = 0.0;
+	drive($scrape, ['KeyW' => true], 600, fn(Session $session): bool => $session->car->state()['z'] > 397);
+	drive($scrape, ['KeyW' => true, 'KeyD' => true], 40, function(Session $session) use (&$overlap, $posts): bool {
+		$car = $session->car->state();
+		foreach($posts as $p) $overlap = max($overlap, Car::penetration($car['x'], $car['z'], $car['yaw'], $p)[0] ?? 0.0);
+		return false;
+	});
+	$scrapes[] = $scrape->car->state() + ['overlap' => $overlap, 'posts' => count($posts)];
+	$scrape->close();
+}
+[$scraped, $clean] = $scrapes;
+expect($scraped['posts'] === 2 && $scraped['overlap'] < 1e-3 && $scraped['z'] > 405 && $scraped['motion'] === 'driving'
+	&& $scraped['speed'] > .9 * $clean['speed'] && $scraped['speed'] < $clean['speed'] && $scraped['x'] > $clean['x'] + .05,
+	sprintf('A car that scrapes a post slides along its face, pushed %.2f m aside and %.2f m/s slower',
+		$scraped['x'] - $clean['x'], $clean['speed'] - $scraped['speed']));
+// Boarding beside a post finds a spot clear of it.
+$park = new Session($open);
+$gate = click($park, 'start', 0, 20);
+$posts = $park->course->posts($park->gateShapes);
+$park->camera->position = [$posts[1][0], 30, 20]; $park->camera->yaw = M_PI / 2;
+enterCar($park);
+$car = $park->car->state();
+expect(hypot($car['x'] - $posts[1][0], $car['z'] - 20) > 1 && Car::penetration($car['x'], $car['z'], $car['yaw'], $posts[1]) === null,
+	'Boarding over a post moves the car to clear ground');
+$park->close();
+// A tumbling body pushed out of a post loses the speed that carried it in.
+$body = new TerrainSandbox\CarTumble(0, 0, 0, 0, 0, 0, 10, 0, 0, 0);
+$body->push(0, -.1, 0, -1, .25);
+expect(abs($body->pose()[2] + .1) < 1e-12 && abs($body->pose()[5] + 2.5) < 1e-12 && !$body->settled,
+	'A tumbling car that meets a post bounces back off it');
+
+// Gates elsewhere leave the car's path bit for bit as it was: the existing driving checks pin that path exactly.
+$paths = [];
+foreach(['none', 'air and water', 'far road'] as $layout)
+{
+	$session = new Session($open);
+	if($layout === 'air and water')
+	{
+		$session->course->place('checkpoint', 'air', 0, 30, 60, 0);
+		$session->course->place('finish', 'water', 0, -5, 90, 0);
+	}
+	if($layout === 'far road') $session->course->place('checkpoint', 'road', 300, 0, 300, 0);
+	$session->camera->position = [0, 30, 0]; $session->camera->yaw = M_PI;
+	enterCar($session);
+	$run = [];
+	input($session, ['keys' => ['KeyW' => true, 'KeyD' => true]]);
+	for($i = 0; $i < 240; $i++) { $session->step(1 / 60); $run[] = $session->car->state(); }
+	input($session, ['keys' => ['KeyS' => true, 'Space' => true, 'KeyA' => true]]);
+	for($i = 0; $i < 120; $i++) { $session->step(1 / 60); $run[] = $session->car->state(); }
+	$paths[$layout] = $run;
+	$session->close();
+}
+expect($paths['air and water'] === $paths['none'] && $paths['far road'] === $paths['none'],
+	'Gates without posts, or with posts out of reach, leave the car\'s path exactly as it was');
+
+// The status gives the page and the renderer everything they draw.
+$view = new Session($lake);
+$s = click($view, 'start', 0, -100);
+$status = $view->status();
+expect(array_keys($status['course']) === ['revision', 'laps', 'gates']
+	&& array_keys($status['course']['gates'][0]) === ['id', 'role', 'kind', 'print', 'number', 'laps', 'x', 'y', 'z', 'yaw']
+	&& array_keys($status['race']) === ['state', 'time', 'lap', 'laps', 'vehicle', 'next', 'remaining', 'splits', 'lastSplit',
+		'lapTimes', 'last', 'best', 'message'] && is_string(json_encode($status, JSON_THROW_ON_ERROR)),
+	'The status reports the course and the race');
+input($view, ['actions' => ['gates-clear', 'race-reset']]);
+expect($view->message === 'Race reset. Place a start gate to race.' && $view->status()['race']['next'] === null,
+	'Without a start gate the race has nothing to point at');
+$view->close();
+
+echo "Landscape sandbox race: $checks checks passed\n";

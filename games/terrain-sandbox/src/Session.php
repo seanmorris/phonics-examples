@@ -31,6 +31,14 @@ final class Session
 	public Watercraft $craft;
 	public Car $car;
 	public Jet $jet;
+	/** Race gates on the landscape. Saved with it, and replaced when a file loads or a new landscape is generated. */
+	public Course $course;
+	/** Timed run through the course by the vehicle being driven, ridden or flown. */
+	public Race $race;
+	/** Dimensions of each gate kind, for placement, crossings, car collision and drawing. */
+	public readonly GateShapes $gateShapes;
+	/** Counts vehicle boardings and respawns, so a race can tell when its vehicle was put somewhere new. */
+	private int $boarding = 0;
 	private CarChase $chase;
 	private ?\Generator $carSearch = null;
 	/** Whether simulation is paused; authoring remains available. */
@@ -46,7 +54,12 @@ final class Session
 		'azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0, 'exposure' => 1.0,
 		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
+		'gateRole' => 'start', 'gateLaps' => 1, 'gateHeight' => 0.0,
 	] + WaterAppearance::DEFAULTS;
+	/** Gate tool roles. Remove deletes the gate nearest the click. */
+	public const GATE_ROLES = ['start', 'checkpoint', 'finish', 'remove'];
+	/** Distance in metres a pick ray reaches when it hits no ground. */
+	private const PICK_RANGE = 6000.0;
 	/** Uncommitted road control points in [x,y,z] metres. */
 	public array $road = [];
 	/** Last operation result shown in the authoring panel. */
@@ -97,10 +110,14 @@ final class Session
 	/**
 	 * Create a complete offline authoring session.
 	 * @param array $recipe Optional terrain recipe; coastal terrain is the sandbox default.
+	 * @param GateShapes|null $gateShapes Gate dimensions; the package's gates.json, or its defaults, when omitted.
 	 * @return void Creates a flyable landscape with explicit physical swells.
 	 */
-	public function __construct(array $recipe = [])
+	public function __construct(array $recipe = [], ?GateShapes $gateShapes = null)
 	{
+		$this->gateShapes = $gateShapes ?? GateShapes::packaged();
+		$this->course = new Course;
+		$this->race = new Race;
 		$this->landscape = new Landscape($recipe + ['preset' => 'coast']);
 		$this->water = new Water($this->landscape->recipe()['waterLevel'], [
 			['amplitude' => .48,'wavelength' => 34,'direction' => [1,.35]],
@@ -159,6 +176,7 @@ final class Session
 			$this->message = $error->getMessage();
 			$this->dirty = true;
 		}
+		$this->guardRace();
 		$look = $input['look'] ?? [0,0];
 		if($this->mode === 'fly' && (($look[0] ?? 0) != 0 || ($look[1] ?? 0) != 0))
 		{
@@ -194,6 +212,12 @@ final class Session
 	public function step(float $seconds): void
 	{
 		if($this->paused) return;
+		$racing = $this->course->count() > 0 && $this->mode !== 'fly';
+		if($racing)
+		{
+			$from = $this->racePoint(); $mode = $this->mode;
+			$recoveries = $this->car->state()['recoveries'];
+		}
 		if($this->mode === 'craft')
 		{
 			$this->reserveCraft();
@@ -217,7 +241,8 @@ final class Session
 			$this->chase->look = $this->lookAngle();
 			if(!$this->car->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
 				$this->blend('KeyA', 'KeyD', $this->pad['x']), $this->landscape, $this->water->level(),
-				$this->held('Space') === 1 || ($this->pad['buttons'] & self::PAD_A) !== 0))
+				$this->held('Space') === 1 || ($this->pad['buttons'] & self::PAD_A) !== 0,
+				$this->course->posts($this->gateShapes)))
 			{
 				$this->mode = 'fly';
 				$this->clampCamera();
@@ -243,8 +268,12 @@ final class Session
 			}
 			$this->dirty = true;
 		}
+		$start = $this->time;
 		$this->time += $seconds;
 		$this->water->update($this->time);
+		// The application redraws for wave time whenever water shows, which covers the gates that float on it.
+		if($this->course->floats()) $this->course->float($this->water, $this->time);
+		if($racing) $this->advanceRace($from, $mode, $recoveries, $start, $seconds);
 		if($this->settings['clock'])
 		{
 			$this->settings['azimuth'] = fmod($this->settings['azimuth'] + $seconds * .2, 360);
@@ -254,6 +283,50 @@ final class Session
 		// Waves only need a frame once rendering has terrain/water coverage. The application
 		// compares simulation time then; sun and craft motion affect the visible sky/camera now.
 		$this->dirty = $this->dirty || $this->mode === 'craft' || $this->settings['clock'];
+	}
+
+	/**
+	 * Find the point of the active vehicle that passes through gates.
+	 * @return array [x, y, z] in metres, or an empty list in free flight.
+	 */
+	private function racePoint(): array
+	{
+		$pose = match($this->mode) {
+			'car' => $this->car->state(), 'craft' => $this->craft->state(), 'jet' => $this->jet->state(),
+			default => null
+		};
+		return $pose === null ? [] : [$pose['x'], $pose['y'], $pose['z']];
+	}
+
+	/**
+	 * Test the step just taken against the race, unless the vehicle was put somewhere rather than driven there.
+	 * @param array $from Vehicle position before the step.
+	 * @param string $mode Mode before the step.
+	 * @param int $recoveries Car recoveries before the step. Righting a wreck can move the car to its last safe spot.
+	 * @param float $start Simulation time at the start of the step.
+	 * @param float $seconds Step length.
+	 * @return void Updates the race and shows its latest event.
+	 */
+	private function advanceRace(array $from, string $mode, int $recoveries, float $start, float $seconds): void
+	{
+		if($this->guardRace() || $this->mode !== $mode) return;
+		if($mode === 'car' && $this->car->state()['recoveries'] !== $recoveries) return;
+		$event = $this->race->advance($this->course, $this->gateShapes, $from, $this->racePoint(), $start, $seconds,
+			$mode, $this->boarding);
+		if($event !== null) { $this->message = $event; $this->dirty = true; }
+	}
+
+	/**
+	 * Stop a running race whose course, vehicle or ride has changed since it started.
+	 * @return bool Whether a race stopped.
+	 */
+	private function guardRace(): bool
+	{
+		$why = $this->race->guard($this->course, $this->mode, $this->boarding);
+		if($why === null) return false;
+		$this->message = trim($this->message . ' ' . $why);
+		$this->dirty = true;
+		return true;
 	}
 
 	/**
@@ -341,7 +414,7 @@ final class Session
 		$ranges = ['radius' => [2,300],'amount' => [.1,200],'flattenHeight' => [-1000,3000],
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
-			'quality' => [.5,2],'speed' => [5,300],
+			'quality' => [.5,2],'speed' => [5,300],'gateHeight' => [0.0,400.0],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
 		if(isset($ranges[$name]))
 		{
@@ -350,12 +423,22 @@ final class Session
 			$value = max($min, min($max, (float)$value));
 		}
 		elseif($name === 'clock') $value = (bool)$value;
-		elseif($name === 'tool' && !in_array($value, ['navigate','raise','lower','flatten','smooth','crater','material','road'], true)) return;
+		elseif($name === 'tool' && !in_array($value, ['navigate','raise','lower','flatten','smooth','crater','material','road','gate'], true)) return;
 		elseif($name === 'material' && !in_array($value, ['grass','rock','sand','snow','road'], true)) return;
+		elseif($name === 'gateRole' && !in_array($value, self::GATE_ROLES, true)) return;
+		elseif($name === 'gateLaps')
+		{
+			if(!is_numeric($value) || !is_finite((float)$value))
+				throw new \InvalidArgumentException('Invalid control value');
+			$value = (int)max(1, min(Course::MAX_LAPS, round((float)$value)));
+			if($this->course->setLaps($value))
+				$this->message = $value === 1 ? 'The race runs one lap.' : "The race runs $value laps.";
+		}
 		if($name === 'waterLevel' || $name === 'waterChoppiness')
 		{
 			if($name === 'waterLevel') $this->water->setLevel($value);
 			else $this->water->setWaveScale($value / 100);
+			if($this->course->floats()) $this->course->float($this->water, $this->time);
 			$this->dirty = $this->dirty || $this->settings[$name] !== $value;
 		}
 		$this->settings[$name] = $value;
@@ -448,6 +531,20 @@ final class Session
 				$this->replace(new Landscape($recipe));
 				$this->resetCamera();
 				$this->message = 'Generated ' . $recipe['preset'] . ' terrain. Detail streams in as you fly.';
+				if($this->course->count() > 0) $this->message .= ' The new landscape starts without gates.';
+				$this->course = new Course;
+				break;
+			case 'gates-clear':
+				$count = $this->course->clear();
+				$this->message = match($count) {
+					0 => 'There are no gates to clear.', 1 => 'Removed the only gate.',
+					default => "Removed all $count gates."
+				};
+				break;
+			case 'race-reset':
+				$this->race->reset();
+				$this->message = $this->course->start() === null ? 'Race reset. Place a start gate to race.'
+					: 'Race reset. Pass through the start gate to start the clock.';
 				break;
 			case 'road-clear': $this->cancelPick(); $this->road = []; $this->message = 'Road control points cleared.'; break;
 			case 'road-apply':
@@ -465,7 +562,8 @@ final class Session
 				if($this->mode !== 'car' && $this->carSearch === null)
 				{
 					$this->cancelPick();
-					$this->carSearch = $this->car->findSite($this->landscape, $this->water, $this->camera->position, M_PI - $this->camera->yaw);
+					$this->carSearch = $this->car->findSite($this->landscape, $this->water, $this->camera->position,
+						M_PI - $this->camera->yaw, $this->course->posts($this->gateShapes));
 					$this->message = 'Looking for level ground…';
 				}
 				break;
@@ -476,7 +574,7 @@ final class Session
 				$this->releasePin();
 				$this->jet->setExpert($this->jetControls === 'expert');
 				$this->jet->board($this->camera, $this->landscape, $this->water->level());
-				$this->mode = 'jet'; $this->paused = false;
+				$this->mode = 'jet'; $this->paused = false; $this->boarding++;
 				$this->message = $this->jetMessage();
 				break;
 			case 'jet-controls': $this->setJetControls($this->jetControls === 'expert' ? 'novice' : 'expert'); break;
@@ -506,7 +604,7 @@ final class Session
 		{ $this->message = 'Finding the ground for the previous click. Please wait.'; return; }
 		if(count($this->pickQueue) + count($this->road) >= 64) return;
 		$this->pickQueue[] = ['origin' => $this->camera->position, 'direction' => $this->camera->ray($x, $y, $aspect),
-			'settings' => $this->settings];
+			'yaw' => M_PI - $this->camera->yaw, 'settings' => $this->settings];
 		$this->picking = true;
 		$this->message = 'Finding the ground…';
 	}
@@ -526,10 +624,10 @@ final class Session
 		if($this->pickQuery === null || !$this->pickQuery->advance($budgetMs, 512)) return;
 		$hit = $this->pickQuery->result();
 		$this->lastPick = $this->pickQuery->stats();
-		$settings = $this->pickIntent['settings'];
+		$intent = $this->pickIntent;
 		$this->pickQuery = null; $this->pickIntent = [];
 		$this->picking = $this->pickQueue !== [];
-		$this->applyPick($hit, $settings);
+		$this->applyPick($hit, $intent['settings'], $intent);
 	}
 
 	/**
@@ -546,11 +644,13 @@ final class Session
 	 * Turn a completed exact terrain hit into one edit or road control point.
 	 * @param array|null $hit Exact ray intersection, or null when the ray misses.
 	 * @param array $settings Authoring settings captured when the user clicked.
+	 * @param array $intent The click's ray origin and direction and the camera heading at the time.
 	 * @return void Stages a complete operation against the unchanged source revision.
 	 */
-	private function applyPick(?array $hit, array $settings): void
+	private function applyPick(?array $hit, array $settings, array $intent): void
 	{
 		$tool = $settings['tool'];
+		if($tool === 'gate') { $this->pickGate($hit, $settings, $intent); return; }
 		if($hit === null) { $this->message = 'No terrain within reach. Fly closer or aim down.'; return; }
 		[$wx,$wy,$wz] = $hit['position'];
 		if($tool === 'road')
@@ -566,6 +666,80 @@ final class Session
 		if($tool === 'material') $operation['material'] = $settings['material'];
 		$this->editable()->queue($operation);
 		$this->message = ucfirst($tool) . ' at ' . round($wx) . ', ' . round($wz) . ' m.';
+	}
+
+	/**
+	 * Place or remove a gate where a click met the ground.
+	 * A click on water places a floating water gate where the ray meets the water level. A click on land places a road
+	 * gate on the ground when the gate height is zero, or an air gate that height above the ground. The gate faces the
+	 * camera's heading at the click, so a vehicle passes through it travelling the way the camera looked.
+	 * @param array|null $hit Exact ray intersection, or null when the ray met no ground in range.
+	 * @param array $settings Authoring settings captured at the click.
+	 * @param array $intent The click's ray and camera heading.
+	 * @return void Changes the course and says what changed.
+	 */
+	private function pickGate(?array $hit, array $settings, array $intent): void
+	{
+		$role = $settings['gateRole'];
+		if($role === 'remove')
+		{
+			$id = $this->course->nearest($intent['origin'], $intent['direction'], $hit['distance'] ?? self::PICK_RANGE,
+				$this->gateShapes);
+			$gate = $id === null ? null : $this->course->remove($id);
+			$renumbered = $gate !== null && $gate['role'] === 'checkpoint'
+				&& $this->checkpointCount() >= $gate['number'];
+			$this->message = $gate === null ? 'No gate there. Click on a gate or the ground beside it to remove it.'
+				: 'Removed ' . self::gateName($gate) . ($renumbered ? '. Later checkpoints moved up one number.' : '.');
+			return;
+		}
+		if($hit === null) { $this->message = 'No terrain within reach. Fly closer or aim down.'; return; }
+		[$x, $y, $z] = $hit['position'];
+		$level = $this->water->level();
+		if($y < $level)
+		{
+			$kind = 'water';
+			[$ox, $oy, $oz] = $intent['origin'];
+			[$dx, $dy, $dz] = $intent['direction'];
+			// The ray crosses the water surface before it reaches the bed, and the gate floats where it crossed.
+			if($oy > $level && $dy < 0)
+			{
+				$half = $this->landscape->recipe()['worldSize'] / 2;
+				$t = ($level - $oy) / $dy;
+				$x = max(-$half, min($half, $ox + $dx * $t));
+				$z = max(-$half, min($half, $oz + $dz * $t));
+			}
+			$y = $level;
+		}
+		elseif($settings['gateHeight'] > 0) { $kind = 'air'; $y += $settings['gateHeight']; }
+		else $kind = 'road';
+		$yaw = atan2(sin($intent['yaw']), cos($intent['yaw']));
+		$placed = $this->course->place($role, $kind, $x, $y, $z, $yaw, (int)$settings['gateLaps']);
+		if($placed === null)
+		{
+			$this->message = 'A course holds ' . Course::MAX_CHECKPOINTS . ' checkpoints. Remove one to add another.';
+			return;
+		}
+		if($kind === 'water') $this->course->float($this->water, $this->time);
+		$where = ' at ' . round($x) . ', ' . round($z) . ' m';
+		$this->message = ($placed['moved'] ? 'Moved ' . self::gateName($placed['gate']) . ' to' . substr($where, 3)
+			: 'Placed ' . self::gateName($placed['gate']) . $where) . match($kind) {
+				'water' => ', floating on the water.',
+				'air' => ', ' . round($settings['gateHeight']) . ' m above the ground.',
+				'road' => '.'
+			};
+	}
+
+	/** How many checkpoints the course holds. */
+	private function checkpointCount(): int
+	{
+		return count(array_filter($this->course->gates(),
+			static fn(array $gate): bool => $gate['role'] === 'checkpoint'));
+	}
+
+	/** Name a gate for a message: the start gate, checkpoint 3 or the finish gate. */
+	private static function gateName(array $gate): string
+	{
+		return $gate['role'] === 'checkpoint' ? 'checkpoint ' . $gate['number'] : 'the ' . $gate['role'] . ' gate';
 	}
 
 	/**
@@ -632,7 +806,7 @@ final class Session
 		}
 		$this->releasePin();
 		$this->car->spawn($site, $this->landscape, $this->water->level());
-		$this->mode = 'car'; $this->paused = false;
+		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->chase->board($this->camera, $this->car->state(), $this->landscape);
 		$this->dirty = true;
 		$this->message = 'W or RT accelerates, S or LT brakes then reverses, A/D or stick steer, Space or A handbrake. F returns to flight.';
@@ -688,7 +862,7 @@ final class Session
 
 		if($launch === null) throw new \RuntimeException('No deep water nearby. Try the coastal preset or fly closer to the coast.');
 		$this->craft->spawn($launch[0], $launch[1], $yaw, $this->water, $this->landscape, $this->time);
-		$this->mode = 'craft'; $this->paused = false; $this->reserveCraft();
+		$this->mode = 'craft'; $this->paused = false; $this->reserveCraft(); $this->boarding++;
 		$this->craftLook = 0.0;
 		$this->message = 'W or RT throttle, S or LT reverse, A/D or stick steer. Return to flight to edit the landscape.';
 	}
@@ -732,6 +906,7 @@ final class Session
 		$this->landscape = $landscape;
 		$this->setting('waterLevel', $landscape->recipe()['waterLevel']);
 		$this->road = []; $this->generation++; $this->mode = 'fly';
+		$this->race->reset();
 	}
 
 	/**
@@ -768,22 +943,25 @@ final class Session
 		$this->landscape = $landscape;
 		if($this->carSearch !== null)
 		{
-			$this->carSearch = $this->car->findSite($landscape, $this->water, $this->camera->position, M_PI - $this->camera->yaw);
+			$this->carSearch = $this->car->findSite($landscape, $this->water, $this->camera->position,
+				M_PI - $this->camera->yaw, $this->course->posts($this->gateShapes));
 		}
 		$this->preparing = false;
 		$this->dirty = true;
 	}
 
 	/**
-	 * Serialize terrain, controls and camera in a versioned standalone JSON file.
+	 * Serialize terrain, controls, camera and race course in a versioned standalone JSON file.
+	 * Version 2 added the course. Version 1 files load as landscapes without gates.
 	 * @return string Complete portable JSON save document.
 	 */
 	public function save(): string
 	{
-		return json_encode(['schema' => 'phonics-landscape-sandbox','version' => 1,
+		return json_encode(['schema' => 'phonics-landscape-sandbox','version' => 2,
 			'landscape' => json_decode($this->landscape->save(), true, flags: JSON_THROW_ON_ERROR),
 			'settings' => $this->settings,'camera' => ['position' => $this->camera->position,
-				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch]], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
+				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch],
+			'course' => $this->course->export()], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
 	}
 
 	/**
@@ -795,9 +973,11 @@ final class Session
 	{
 		if(strlen($json) > 4 * 1024 * 1024) throw new \InvalidArgumentException('Landscape file exceeds 4 MiB.');
 		$data = json_decode($json, true, 64, JSON_THROW_ON_ERROR);
-		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || ($data['version'] ?? 0) !== 1)
+		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2], true))
 		throw new \InvalidArgumentException('This is not a supported landscape sandbox file.');
 		$candidate = Landscape::load(json_encode($data['landscape'] ?? null, JSON_THROW_ON_ERROR));
+		try { $course = Course::import($data['course'] ?? null, $candidate->recipe()['worldSize'] / 2); }
+		catch(\InvalidArgumentException $error) { $candidate->close(); throw $error; }
 		$settings = $data['settings'] ?? [];
 		if(!is_array($settings)) throw new \InvalidArgumentException('Invalid saved settings.');
 		$appearance = new WaterAppearance($settings);
@@ -815,10 +995,18 @@ final class Session
 		$this->replace($candidate);
 		$this->setWaterAppearance($appearance);
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
+		$this->course = $course;
+		if($course->laps() !== null) $this->settings['gateLaps'] = $course->laps();
+		$this->course->float($this->water, $this->time);
 		$this->camera->position = array_map('floatval', $position);
 		$this->camera->yaw = (float)$yaw; $this->camera->pitch = max(-1.52, min(1.52, (float)$pitch));
 		$this->clampCamera();
-		$this->message = 'Landscape loaded, including terrain edits and environment settings.';
+		$gates = $course->count();
+		$this->message = match($gates) {
+			0 => 'Landscape loaded, including terrain edits and environment settings.',
+			1 => 'Landscape loaded, including terrain edits, environment settings and one gate.',
+			default => "Landscape loaded, including terrain edits, environment settings and $gates gates.",
+		};
 		$this->dirty = true;
 	}
 
@@ -844,7 +1032,23 @@ final class Session
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
-			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats()];
+			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats(),
+			'course' => $this->courseStatus(),'race' => $this->race->status($this->course, $this->time)];
+	}
+
+	/**
+	 * Describe the course for the page and the renderer.
+	 * @return array Revision, laps and every gate with its pose now, its print and, on a checkpoint, its number.
+	 */
+	private function courseStatus(): array
+	{
+		$gates = [];
+		foreach($this->course->gates() as $gate)
+			$gates[] = ['id' => $gate['id'], 'role' => $gate['role'], 'kind' => $gate['kind'],
+				'print' => $this->course->print($gate), 'number' => $gate['number'] ?? null,
+				'laps' => $gate['laps'] ?? null,
+				'x' => $gate['x'], 'y' => $gate['y'], 'z' => $gate['z'], 'yaw' => $gate['yaw']];
+		return ['revision' => $this->course->revision, 'laps' => $this->course->laps(), 'gates' => $gates];
 	}
 
 	/**

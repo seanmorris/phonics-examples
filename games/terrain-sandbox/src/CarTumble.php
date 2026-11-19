@@ -46,6 +46,30 @@ final class CarTumble
 		return [$this->x-$ox,$this->y-$oy,$this->z-$oz,$this->pitch,$this->roll,$this->ahead];
 	}
 
+	/**
+	 * Move the body out of a solid obstacle and bounce the part of its motion that carried it in.
+	 * @param float $dx World X shift in metres.
+	 * @param float $dz World Z shift in metres.
+	 * @param float $normalX X of the obstacle face's outward unit normal.
+	 * @param float $normalZ Z of the obstacle face's outward unit normal.
+	 * @param float $bounce Share of the inward speed that returns outward.
+	 * @return void Wakes the body, since the obstacle has moved it.
+	 */
+	public function push(float $dx, float $dz, float $normalX, float $normalZ, float $bounce): void
+	{
+		$this->x += $dx; $this->z += $dz;
+		$vx = $this->cosYaw*$this->side + $this->sinYaw*$this->ahead;
+		$vz = -$this->sinYaw*$this->side + $this->cosYaw*$this->ahead;
+		$into = $vx*$normalX + $vz*$normalZ;
+		if($into < 0)
+		{
+			$vx -= (1 + $bounce)*$into*$normalX; $vz -= (1 + $bounce)*$into*$normalZ;
+			$this->side = $this->cosYaw*$vx - $this->sinYaw*$vz;
+			$this->ahead = $this->sinYaw*$vx + $this->cosYaw*$vz;
+		}
+		$this->wake();
+	}
+
 	public function wake(): void
 	{
 		$this->quiet = 0;
