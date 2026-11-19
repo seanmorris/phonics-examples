@@ -41,6 +41,23 @@ final class Noise
 	public function permutation(): array { return array_slice($this->permutation, 0, 256); }
 
 	/**
+	 * Share the lattice hash with samplers that expand sample() in place to avoid its calls.
+	 * @return array Repeated 512-entry permutation, then the X and Z gradient components that each entry selects.
+	 */
+	public function lattice(): array
+	{
+		$x = $z = [];
+
+		foreach($this->permutation as $entry)
+		{
+			$x[] = self::GRADIENTS[$entry & 7][0];
+			$z[] = self::GRADIENTS[$entry & 7][1];
+		}
+
+		return [$this->permutation, $x, $z];
+	}
+
+	/**
 	 * Evaluate value and coordinate derivatives as [value, dx, dz].
 	 * @param float $x Coordinate in noise-lattice units.
 	 * @param float $z Coordinate in noise-lattice units.

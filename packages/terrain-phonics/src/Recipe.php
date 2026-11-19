@@ -12,6 +12,17 @@ final class Recipe
 	private float $wallStart = .055;
 	private float $wallWidth = .006;
 	private bool $layered = false;
+	/** Lattice hash of the noise source. coarse() and height() read these tables directly to avoid Noise calls. */
+	private array $permutation;
+	private array $gradientX;
+	private array $gradientZ;
+	/**
+	 * Squared lattice radius inside which coarse() and height() expand the noise in place. Both coordinates of
+	 * a point inside it lie strictly between -2 ** 29 and 2 ** 29, so their integer casts and cell indices fit
+	 * the 32-bit integers of browser PHP. The Noise methods handle every point outside it, including the
+	 * non-finite ones they reject.
+	 */
+	private const REACH = 288230376151711744.0;
 
 	/**
 	 * Validate a bounded world recipe before allocating any terrain samples.
@@ -106,6 +117,7 @@ final class Recipe
 		}
 		$this->values = $values;
 		$this->noise = new Noise($values['seed']);
+		[$this->permutation, $this->gradientX, $this->gradientZ] = $this->noise->lattice();
 	}
 
 	/**
@@ -116,6 +128,11 @@ final class Recipe
 
 	/**
 	 * Evaluate the C2 macro field, including world-space first derivatives.
+	 *
+	 * A node sampled through the Noise methods makes over a hundred calls, and calls are the main cost of PHP
+	 * in the browser. Each sample here is therefore Noise::sample() written out with the same operations in
+	 * the same order, which returns the same bits. A scalar suffixed 0, 1 or 2 holds a sample's value, X
+	 * derivative or Z derivative. An integer cast stepped down below a negative fraction replaces floor().
 	 * @param float $x World X coordinate in metres.
 	 * @param float $z World Z coordinate in metres.
 	 * @return array Coarse height and world-space derivatives [height,dx,dz].
@@ -129,76 +146,274 @@ final class Recipe
 		if($scale === 0.0) return [0.0,0.0,0.0];
 
 		$datum = $this->layered ? CanyonBeds::DIP[0]*$x + CanyonBeds::DIP[1]*$z : 0;
-		$jacobian = [1.0,0.0,0.0,1.0];
+		// Warp Jacobian in row order. It stays the identity without a warp.
+		$j0 = $j3 = 1.0;
+		$j1 = $j2 = 0.0;
+		$p = $this->permutation;
+		$gx = $this->gradientX;
+		$gz = $this->gradientZ;
 
 		if($r['warpAmplitude'] > 0)
 		{
 			$wf = $r['warpFrequency'];
 			$wa = $r['warpAmplitude'];
-			$wx = $this->noise->sample($x * $wf + 271.13, $z * $wf - 197.41);
-			$wz = $this->noise->sample($x * $wf - 419.27, $z * $wf + 113.71);
-			$x += $wa * $wx[0];
-			$z += $wa * $wz[0];
+			$sx = $x * $wf + 271.13;
+			$sz = $z * $wf - 197.41;
 
-			$jacobian = [
-				1 + $wa * $wf * $wx[1], $wa * $wf * $wx[2]
-				, $wa * $wf * $wz[1], 1 + $wa * $wf * $wz[2]
-			];
+			// Warp along X: Noise::sample($sx, $sz) written out.
+			if($sx * $sx + $sz * $sz < self::REACH)
+			{
+				$ix = (int)$sx; $iz = (int)$sz;
+
+				if($sx < $ix) $ix--;
+
+				if($sz < $iz) $iz--;
+
+				$sx -= $ix; $sz -= $iz; $ix &= 255; $iz &= 255;
+				$h = $p[$ix] + $iz; $k = $p[$ix + 1] + $iz;
+				$tx = $sx - 1; $tz = $sz - 1;
+				$u = $sx * $sx * $sx * ($sx * ($sx * 6 - 15) + 10);
+				$v = $sz * $sz * $sz * ($sz * ($sz * 6 - 15) + 10);
+				$du = 30 * $sx * $sx * $tx * $tx;
+
+				$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+				$left = $lx * $sx + $lz * $sz;
+				$span = $rx * $tx + $rz * $sz - $left;
+				$near = $left + $u * $span;
+				$nearX = $lx + $u * ($rx - $lx) + $du * $span;
+				$nearZ = $lz + $u * ($rz - $lz);
+
+				$h++; $k++;
+				$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+				$left = $lx * $sx + $lz * $tz;
+				$span = $rx * $tx + $rz * $tz - $left;
+				$rise = $left + $u * $span - $near;
+				$wx0 = $near + $v * $rise;
+				$wx1 = $nearX + $v * ($lx + $u * ($rx - $lx) + $du * $span - $nearX);
+				$wx2 = $nearZ + $v * ($lz + $u * ($rz - $lz) - $nearZ) + 30 * $sz * $sz * $tz * $tz * $rise;
+			}
+			else [$wx0,$wx1,$wx2] = $this->noise->sample($sx, $sz);
+
+			$sx = $x * $wf - 419.27;
+			$sz = $z * $wf + 113.71;
+
+			// Warp along Z: Noise::sample($sx, $sz) written out.
+			if($sx * $sx + $sz * $sz < self::REACH)
+			{
+				$ix = (int)$sx; $iz = (int)$sz;
+
+				if($sx < $ix) $ix--;
+
+				if($sz < $iz) $iz--;
+
+				$sx -= $ix; $sz -= $iz; $ix &= 255; $iz &= 255;
+				$h = $p[$ix] + $iz; $k = $p[$ix + 1] + $iz;
+				$tx = $sx - 1; $tz = $sz - 1;
+				$u = $sx * $sx * $sx * ($sx * ($sx * 6 - 15) + 10);
+				$v = $sz * $sz * $sz * ($sz * ($sz * 6 - 15) + 10);
+				$du = 30 * $sx * $sx * $tx * $tx;
+
+				$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+				$left = $lx * $sx + $lz * $sz;
+				$span = $rx * $tx + $rz * $sz - $left;
+				$near = $left + $u * $span;
+				$nearX = $lx + $u * ($rx - $lx) + $du * $span;
+				$nearZ = $lz + $u * ($rz - $lz);
+
+				$h++; $k++;
+				$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+				$left = $lx * $sx + $lz * $tz;
+				$span = $rx * $tx + $rz * $tz - $left;
+				$rise = $left + $u * $span - $near;
+				$wz0 = $near + $v * $rise;
+				$wz1 = $nearX + $v * ($lx + $u * ($rx - $lx) + $du * $span - $nearX);
+				$wz2 = $nearZ + $v * ($lz + $u * ($rz - $lz) - $nearZ) + 30 * $sz * $sz * $tz * $tz * $rise;
+			}
+			else [$wz0,$wz1,$wz2] = $this->noise->sample($sx, $sz);
+
+			$x += $wa * $wx0;
+			$z += $wa * $wz0;
+			$j0 = 1 + $wa * $wf * $wx1;
+			$j1 = $wa * $wf * $wx2;
+			$j2 = $wa * $wf * $wz1;
+			$j3 = 1 + $wa * $wf * $wz2;
 		}
 
-		$a = $this->noise->sample($x * $f + 13.17, $z * $f - 9.31);
-		$b = $this->noise->sample($x * $f * 2 + 71.43, $z * $f * 2 + 53.11);
+		$sx = $x * $f + 13.17;
+		$sz = $z * $f - 9.31;
+
+		// Contour field: Noise::sample($sx, $sz) written out.
+		if($sx * $sx + $sz * $sz < self::REACH)
+		{
+			$ix = (int)$sx; $iz = (int)$sz;
+
+			if($sx < $ix) $ix--;
+
+			if($sz < $iz) $iz--;
+
+			$sx -= $ix; $sz -= $iz; $ix &= 255; $iz &= 255;
+			$h = $p[$ix] + $iz; $k = $p[$ix + 1] + $iz;
+			$tx = $sx - 1; $tz = $sz - 1;
+			$u = $sx * $sx * $sx * ($sx * ($sx * 6 - 15) + 10);
+			$v = $sz * $sz * $sz * ($sz * ($sz * 6 - 15) + 10);
+			$du = 30 * $sx * $sx * $tx * $tx;
+
+			$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+			$left = $lx * $sx + $lz * $sz;
+			$span = $rx * $tx + $rz * $sz - $left;
+			$near = $left + $u * $span;
+			$nearX = $lx + $u * ($rx - $lx) + $du * $span;
+			$nearZ = $lz + $u * ($rz - $lz);
+
+			$h++; $k++;
+			$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+			$left = $lx * $sx + $lz * $tz;
+			$span = $rx * $tx + $rz * $tz - $left;
+			$rise = $left + $u * $span - $near;
+			$a0 = $near + $v * $rise;
+			$a1 = $nearX + $v * ($lx + $u * ($rx - $lx) + $du * $span - $nearX);
+			$a2 = $nearZ + $v * ($lz + $u * ($rz - $lz) - $nearZ) + 30 * $sz * $sz * $tz * $tz * $rise;
+		}
+		else [$a0,$a1,$a2] = $this->noise->sample($sx, $sz);
+
+		$sx = $x * $f * 2 + 71.43;
+		$sz = $z * $f * 2 + 53.11;
+
+		// Broad relief: Noise::sample($sx, $sz) written out.
+		if($sx * $sx + $sz * $sz < self::REACH)
+		{
+			$ix = (int)$sx; $iz = (int)$sz;
+
+			if($sx < $ix) $ix--;
+
+			if($sz < $iz) $iz--;
+
+			$sx -= $ix; $sz -= $iz; $ix &= 255; $iz &= 255;
+			$h = $p[$ix] + $iz; $k = $p[$ix + 1] + $iz;
+			$tx = $sx - 1; $tz = $sz - 1;
+			$u = $sx * $sx * $sx * ($sx * ($sx * 6 - 15) + 10);
+			$v = $sz * $sz * $sz * ($sz * ($sz * 6 - 15) + 10);
+			$du = 30 * $sx * $sx * $tx * $tx;
+
+			$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+			$left = $lx * $sx + $lz * $sz;
+			$span = $rx * $tx + $rz * $sz - $left;
+			$near = $left + $u * $span;
+			$nearX = $lx + $u * ($rx - $lx) + $du * $span;
+			$nearZ = $lz + $u * ($rz - $lz);
+
+			$h++; $k++;
+			$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+			$left = $lx * $sx + $lz * $tz;
+			$span = $rx * $tx + $rz * $tz - $left;
+			$rise = $left + $u * $span - $near;
+			$b0 = $near + $v * $rise;
+			$b1 = $nearX + $v * ($lx + $u * ($rx - $lx) + $du * $span - $nearX);
+			$b2 = $nearZ + $v * ($lz + $u * ($rz - $lz) - $nearZ) + 30 * $sz * $sz * $tz * $tz * $rise;
+		}
+		else [$b0,$b1,$b2] = $this->noise->sample($sx, $sz);
 
 		if($r['preset'] === 'mountain')
 		{
-			$rounded = sqrt($a[0] * $a[0] + .04 * .04);
-			$value = .35 - $rounded + .24 * $b[0];
-			$factor = -$a[0] / $rounded;
-			$dx = $factor * $a[1] * $f + .48 * $b[1] * $f;
-			$dz = $factor * $a[2] * $f + .48 * $b[2] * $f;
+			$rounded = sqrt($a0 * $a0 + .04 * .04);
+			$value = .35 - $rounded + .24 * $b0;
+			$factor = -$a0 / $rounded;
+			$dx = $factor * $a1 * $f + .48 * $b1 * $f;
+			$dz = $factor * $a2 * $f + .48 * $b2 * $f;
 		}
 		elseif($r['preset'] === 'canyon')
 		{
 			// A narrow contour band connects a distinct floor and plateau. The quintic
 			// has zero first/second derivatives at both ends, so clamping remains C2.
 			// abs() is harmless at zero because a constant floor surrounds that point.
-			$distance = abs($a[0]) - $this->wallStart;
-			$sign = $a[0] < 0 ? -1 : 1;
+			// Comparisons replace its call for every ordinary value. A zero or NaN goes through abs(), which
+			// defines its sign bit.
+			$distance = ($a0 > 0 ? $a0 : ($a0 < 0 ? -$a0 : abs($a0))) - $this->wallStart;
+			$sign = $a0 < 0 ? -1 : 1;
 			$erosionX = $erosionZ = 0.0;
+
 			if($this->layered)
 			{
 				// A drainage channel cuts sideways into the escarpment and buries part of its benches.
 				$ef = 22*$f;
-				$erosion = $this->noise->sample($x*$ef+43.7, $z*$ef-81.3);
+				$sx = $x*$ef+43.7;
+				$sz = $z*$ef-81.3;
+
+				// Drainage: Noise::sample($sx, $sz) written out.
+				if($sx * $sx + $sz * $sz < self::REACH)
+				{
+					$ix = (int)$sx; $iz = (int)$sz;
+
+					if($sx < $ix) $ix--;
+
+					if($sz < $iz) $iz--;
+
+					$sx -= $ix; $sz -= $iz; $ix &= 255; $iz &= 255;
+					$h = $p[$ix] + $iz; $k = $p[$ix + 1] + $iz;
+					$tx = $sx - 1; $tz = $sz - 1;
+					$u = $sx * $sx * $sx * ($sx * ($sx * 6 - 15) + 10);
+					$v = $sz * $sz * $sz * ($sz * ($sz * 6 - 15) + 10);
+					$du = 30 * $sx * $sx * $tx * $tx;
+
+					$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+					$left = $lx * $sx + $lz * $sz;
+					$span = $rx * $tx + $rz * $sz - $left;
+					$near = $left + $u * $span;
+					$nearX = $lx + $u * ($rx - $lx) + $du * $span;
+					$nearZ = $lz + $u * ($rz - $lz);
+
+					$h++; $k++;
+					$lx = $gx[$h]; $lz = $gz[$h]; $rx = $gx[$k]; $rz = $gz[$k];
+					$left = $lx * $sx + $lz * $tz;
+					$span = $rx * $tx + $rz * $tz - $left;
+					$rise = $left + $u * $span - $near;
+					$erosion0 = $near + $v * $rise;
+					$erosion1 = $nearX + $v * ($lx + $u * ($rx - $lx) + $du * $span - $nearX);
+					$erosion2 = $nearZ + $v * ($lz + $u * ($rz - $lz) - $nearZ) + 30 * $sz * $sz * $tz * $tz * $rise;
+				}
+				else [$erosion0,$erosion1,$erosion2] = $this->noise->sample($sx, $sz);
+
 				$retreat = .029*$r['terraceStrength'];
-				$distance -= $retreat*$erosion[0];
-				$erosionX = $retreat*$erosion[1]*$ef;
-				$erosionZ = $retreat*$erosion[2]*$ef;
-				$channel = max(0.0,min(1.0,($erosion[0]+.13)/.62));
-				$strength = $r['terraceStrength']*(1-.80*Noise::fade($channel));
+				$distance -= $retreat*$erosion0;
+				$erosionX = $retreat*$erosion1*$ef;
+				$erosionZ = $retreat*$erosion2*$ef;
+
+				// Comparisons clamp every ordinary value to [0,1] without a call. A zero or NaN goes through
+				// max() and min(), which define the sign of zero and the handling of NaN.
+				$channel = ($erosion0+.13)/.62;
+				$channel = $channel >= 1.0 ? 1.0
+					: ($channel > 0.0 ? $channel : ($channel < 0.0 ? 0.0 : max(0.0,min(1.0,$channel))));
+
+				// Noise::fade() written out, as is every fade below.
+				$fade = $channel * $channel * $channel * ($channel * ($channel * 6 - 15) + 10);
+				$strength = $r['terraceStrength']*(1-.80*$fade);
 				$ds = -$r['terraceStrength']*.80*30*$channel**2*($channel-1)**2/.62*$ef;
-				$strengthX = $ds*($erosion[1]*$jacobian[0]+$erosion[2]*$jacobian[2]);
-				$strengthZ = $ds*($erosion[1]*$jacobian[1]+$erosion[2]*$jacobian[3]);
+				$strengthX = $ds*($erosion1*$j0+$erosion2*$j2);
+				$strengthZ = $ds*($erosion1*$j1+$erosion2*$j3);
 			}
-			$wall = max(0.0, min(1.0, $distance / $this->wallWidth));
-			$value = -.55 + Noise::fade($wall) + .15 * $b[0];
+
+			// The same clamp as the channel above.
+			$wall = $distance / $this->wallWidth;
+			$wall = $wall >= 1.0 ? 1.0 : ($wall > 0.0 ? $wall : ($wall < 0.0 ? 0.0 : max(0.0, min(1.0, $wall))));
+
+			$value = -.55 + $wall * $wall * $wall * ($wall * ($wall * 6 - 15) + 10) + .15 * $b0;
 			$factor = 30 * $wall * $wall * ($wall - 1) ** 2 / $this->wallWidth;
-			$dx = $sign*$factor*$a[1]*$f - $factor*$erosionX + .3*$b[1]*$f;
-			$dz = $sign*$factor*$a[2]*$f - $factor*$erosionZ + .3*$b[2]*$f;
+			$dx = $sign*$factor*$a1*$f - $factor*$erosionX + .3*$b1*$f;
+			$dz = $sign*$factor*$a2*$f - $factor*$erosionZ + .3*$b2*$f;
 		}
 		else
 		{
 			$coast = tanh($x / 4500);
-			$value = .6 * $a[0] + .35 * $coast + .15 * $b[0];
-			$dx = .6 * $a[1] * $f + .35 * (1 - $coast * $coast) / 4500 + .3 * $b[1] * $f;
-			$dz = .6 * $a[2] * $f + .3 * $b[2] * $f;
+			$value = .6 * $a0 + .35 * $coast + .15 * $b0;
+			$dx = .6 * $a1 * $f + .35 * (1 - $coast * $coast) / 4500 + .3 * $b1 * $f;
+			$dz = .6 * $a2 * $f + .3 * $b2 * $f;
 		}
 
 		$height = $scale * $value;
-		[$dx,$dz] = [
-			$scale * ($dx * $jacobian[0] + $dz * $jacobian[2])
-			, $scale * ($dx * $jacobian[1] + $dz * $jacobian[3])
-		];
+		// Both world derivatives read both field derivatives, so hold the first until the second exists.
+		$worldX = $scale * ($dx * $j0 + $dz * $j2);
+		$dz = $scale * ($dx * $j1 + $dz * $j3);
+		$dx = $worldX;
 
 		if($this->layered)
 		{
@@ -214,7 +429,8 @@ final class Recipe
 			$level = floor($height / $spacing);
 			$fraction = $height / $spacing - $level;
 
-			$height += $strength * ($spacing * ($level + Noise::fade($fraction)) - $height);
+			$fade = $fraction * $fraction * $fraction * ($fraction * ($fraction * 6 - 15) + 10);
+			$height += $strength * ($spacing * ($level + $fade) - $height);
 			$factor = 1 - $strength + $strength * 30 * $fraction * $fraction * ($fraction - 1) ** 2;
 			$dx *= $factor;
 			$dz *= $factor;
@@ -225,6 +441,9 @@ final class Recipe
 
 	/**
 	 * Sample finite smooth detail, gating every octave from the independent coarse guide.
+	 *
+	 * The octave loop reads each recipe field once and writes Noise::value() out in place, for the reason
+	 * given on coarse(). The operations keep their order, so every height keeps its bits.
 	 * @param float $x World X coordinate in metres.
 	 * @param float $z World Z coordinate in metres.
 	 * @return float Final procedural lattice height in metres.
@@ -239,17 +458,46 @@ final class Recipe
 
 		if($amplitude === 0.0) return $height;
 
-		for($i = 0; $i < $r['detailOctaves']; $i++)
+		$octaves = $r['detailOctaves'];
+		$damping = $r['damping'];
+		$lacunarity = $r['lacunarity'];
+		$persistence = $r['persistence'];
+		$p = $this->permutation;
+		$gx = $this->gradientX;
+		$gz = $this->gradientZ;
+
+		for($i = 0; $i < $octaves; $i++)
 		{
-			$weight = 1 / (1 + $r['damping'] * ($i + 1) * ($i + 1) * $slope);
+			$weight = 1 / (1 + $damping * ($i + 1) * ($i + 1) * $slope);
+			$sx = $x * $frequency + 91.73 + $i * 19.17;
+			$sz = $z * $frequency - 23.49 - $i * 31.29;
 
-			$height += $amplitude * $weight * $this->noise->value(
-				$x * $frequency + 91.73 + $i * 19.17
-				, $z * $frequency - 23.49 - $i * 31.29
-			);
+			// Detail octave: Noise::value($sx, $sz) written out.
+			if($sx * $sx + $sz * $sz < self::REACH)
+			{
+				$ix = (int)$sx; $iz = (int)$sz;
 
-			$frequency *= $r['lacunarity'];
-			$amplitude *= $r['persistence'];
+				if($sx < $ix) $ix--;
+
+				if($sz < $iz) $iz--;
+
+				$sx -= $ix; $sz -= $iz; $ix &= 255; $iz &= 255;
+				$h = $p[$ix] + $iz; $k = $p[$ix + 1] + $iz;
+				$tx = $sx - 1; $tz = $sz - 1;
+				$u = $sx * $sx * $sx * ($sx * ($sx * 6 - 15) + 10);
+				$v = $sz * $sz * $sz * ($sz * ($sz * 6 - 15) + 10);
+
+				$left = $gx[$h] * $sx + $gz[$h] * $sz;
+				$near = $left + $u * ($gx[$k] * $tx + $gz[$k] * $sz - $left);
+				$h++; $k++;
+				$left = $gx[$h] * $sx + $gz[$h] * $tz;
+				$value = $near + $v * ($left + $u * ($gx[$k] * $tx + $gz[$k] * $tz - $left) - $near);
+			}
+			else $value = $this->noise->value($sx, $sz);
+
+			$height += $amplitude * $weight * $value;
+			$frequency *= $lacunarity;
+			$amplitude *= $persistence;
 		}
 
 		return $height;

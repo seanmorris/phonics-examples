@@ -8,11 +8,27 @@ namespace TerrainPhonics;
  */
 final class Landscape implements TerrainSurface
 {
+	/**
+	 * A tile key is (row + TILE_BIAS) * TILE_SPAN + column + TILE_BIAS. The largest legal world reaches tile
+	 * 16385 on either side of the origin, and the largest key stays below 2^31 for the 32-bit browser build.
+	 */
+	private const TILE_BIAS = 20000;
+	private const TILE_SPAN = 40000;
+	/** Names of the sixteen stencil nodes in row-major order, as HeightTile::layout() assigns them. */
+	private const SLOTS = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p'];
 	/** Immutable procedural recipe and normalized parameters. */
 	private Recipe $generator;
 	private array $parameters;
+	/** Half the world edge, the lattice spacing and the tile edge, copied out for the per-query path. */
+	private float $half, $spacing;
+	private int $tileSize;
 	/** LRU tile map; PHP insertion order tracks most recent use without an unbounded queue. */
 	private array $tiles = [];
+	/** Key and tile of the last entry in the tile map, or -1 and null when that entry is unknown. */
+	private int $recentKey = -1;
+	private ?HeightTile $recentTile = null;
+	/** Tile reads of a stencil, indexed by the local position of its first node. See parts(). */
+	private array $stencils = [];
 	/** Edit transaction history, current applied prefix, and staged transaction. */
 	private array $history = [], $operations = [], $pending = [];
 	private int $cursor = 0, $version = 0;
@@ -28,8 +44,11 @@ final class Landscape implements TerrainSurface
 	private array $memo = [];
 	/** Bounded caches for ray block intervals and sparsely sampled mesh vertices. */
 	private array $blockBounds = [], $meshNodes = [];
-	/** Row polynomials of recently sampled physics cells, shared by overlapping hull probes. */
+	/** Row polynomials of recently sampled physics cells, shared by overlapping hull probes: [row][column]. */
 	private array $cellRows = [];
+	/** Ring of the cached cells in insertion order. A sixty-fifth cell replaces the oldest. */
+	private array $queueX = [], $queueZ = [];
+	private int $queueNext = 0, $queueCount = 0;
 
 	/**
 	 * Construct an empty lazy cache; the world is centered on X/Z zero.
@@ -41,6 +60,9 @@ final class Landscape implements TerrainSurface
 		$this->generator = new Recipe($recipe);
 		$this->parameters = $this->generator->values();
 		$this->range = $this->generator->bounds();
+		$this->half = $this->parameters['worldSize'] / 2;
+		$this->spacing = $this->parameters['spacing'];
+		$this->tileSize = $this->parameters['tileSize'];
 	}
 
 	/**
@@ -63,9 +85,39 @@ final class Landscape implements TerrainSurface
 	 */
 	public function height(float $x, float $z): float
 	{
-		$this->coordinates($x, $z);
+		$half = $this->half;
 
-		return $this->interpolate($x, $z, false)[0];
+		// Every legal query passes this chain without a call. NaN fails it, so coordinates() names the fault.
+		if($this->closed || !($x >= -$half && $x <= $half && $z >= -$half && $z <= $half)) $this->coordinates($x, $z);
+
+		$spacing = $this->spacing;
+		$u = $x / $spacing;
+		$v = $z / $spacing;
+		// Truncation plus one step down for a negative fraction equals floor() anywhere inside the world.
+		$ix = (int)$u;
+		$iz = (int)$v;
+
+		if($u < $ix) $ix--;
+
+		if($v < $iz) $iz--;
+
+		$u -= $ix;
+		$v -= $iz;
+
+		// Mesh vertices normally lie on the lattice. Their exact cubic value is the node itself.
+		if($u === 0.0 && $v === 0.0) return $this->node($ix, $iz);
+
+		$c = $this->cellRows[$iz][$ix] ?? $this->cell($ix, $iz);
+		// Horner's rule along each of the four rows, then Catmull-Rom through the four results.
+		$p0 = $c[0] + $u * ($c[1] + $u * ($c[2] + $u * $c[3]));
+		$p1 = $c[4] + $u * ($c[5] + $u * ($c[6] + $u * $c[7]));
+		$p2 = $c[8] + $u * ($c[9] + $u * ($c[10] + $u * $c[11]));
+		$p3 = $c[12] + $u * ($c[13] + $u * ($c[14] + $u * $c[15]));
+
+		return $p1 + $v * (
+			.5 * ($p2 - $p0)
+			+ $v * (($p0 - 2.5 * $p1 + 2 * $p2 - .5 * $p3) + $v * (.5 * (-$p0 + 3 * $p1 - 3 * $p2 + $p3)))
+		);
 	}
 
 	/**
@@ -76,8 +128,58 @@ final class Landscape implements TerrainSurface
 	 */
 	public function sample(float $x, float $z): array
 	{
-		$this->coordinates($x, $z);
-		[$height,$dx,$dz] = $this->interpolate($x, $z, true);
+		$half = $this->half;
+
+		// The same validation and cell lookup as height(), repeated here to keep both free of calls.
+		if($this->closed || !($x >= -$half && $x <= $half && $z >= -$half && $z <= $half)) $this->coordinates($x, $z);
+
+		$spacing = $this->spacing;
+		$u = $x / $spacing;
+		$v = $z / $spacing;
+		$ix = (int)$u;
+		$iz = (int)$v;
+
+		if($u < $ix) $ix--;
+
+		if($v < $iz) $iz--;
+
+		$u -= $ix;
+		$v -= $iz;
+
+		// Mesh vertices normally lie on the lattice. Their exact cubic value/gradient
+		// need one/five nodes rather than gathering sixteen zero-weight contributions.
+		if($u === 0.0 && $v === 0.0)
+		{
+			$height = $this->node($ix, $iz);
+			$dx = ($this->node($ix + 1, $iz) - $this->node($ix - 1, $iz)) / (2 * $spacing);
+			$dz = ($this->node($ix, $iz + 1) - $this->node($ix, $iz - 1)) / (2 * $spacing);
+		}
+		else
+		{
+			$c = $this->cellRows[$iz][$ix] ?? $this->cell($ix, $iz);
+			// Value and X slope of each row polynomial at u.
+			$p0 = $c[0] + $u * ($c[1] + $u * ($c[2] + $u * $c[3]));
+			$p1 = $c[4] + $u * ($c[5] + $u * ($c[6] + $u * $c[7]));
+			$p2 = $c[8] + $u * ($c[9] + $u * ($c[10] + $u * $c[11]));
+			$p3 = $c[12] + $u * ($c[13] + $u * ($c[14] + $u * $c[15]));
+			$s0 = $c[1] + $u * (2 * $c[2] + 3 * $u * $c[3]);
+			$s1 = $c[5] + $u * (2 * $c[6] + 3 * $u * $c[7]);
+			$s2 = $c[9] + $u * (2 * $c[10] + 3 * $u * $c[11]);
+			$s3 = $c[13] + $u * (2 * $c[14] + 3 * $u * $c[15]);
+			// Catmull-Rom coefficients through the four row values.
+			$c1 = .5 * ($p2 - $p0);
+			$c2 = $p0 - 2.5 * $p1 + 2 * $p2 - .5 * $p3;
+			$c3 = .5 * (-$p0 + 3 * $p1 - 3 * $p2 + $p3);
+			$height = $p1 + $v * ($c1 + $v * ($c2 + $v * $c3));
+
+			$dx = ($s1 + $v * (
+				.5 * ($s2 - $s0)
+				+ $v * (($s0 - 2.5 * $s1 + 2 * $s2 - .5 * $s3) + $v * (.5 * (-$s0 + 3 * $s1 - 3 * $s2 + $s3)))
+			)) / $spacing;
+
+			$dz = ($c1 + $v * (2 * $c2 + 3 * $v * $c3)) / $spacing;
+		}
+
 		$length = sqrt(1 + $dx * $dx + $dz * $dz);
 
 		return [
@@ -85,7 +187,8 @@ final class Landscape implements TerrainSurface
 			, 'dx' => $dx
 			, 'dz' => $dz
 			, 'normal' => [-$dx / $length, 1 / $length, -$dz / $length]
-			, 'material' => Edits::material($x, $z, $this->operations)
+			// Without edits no operation can paint a material, and the lookup returns null.
+			, 'material' => $this->operations ? Edits::material($x, $z, $this->operations) : null
 			, 'revision' => $this->version
 		];
 	}
@@ -385,7 +488,8 @@ final class Landscape implements TerrainSurface
 
 		$keys = [];
 
-		for($z = $z0; $z <= $z1; $z++) for($x = $x0; $x <= $x1; $x++) $keys[$x . ':' . $z] = true;
+		for($z = $z0; $z <= $z1; $z++)
+		for($x = $x0; $x <= $x1; $x++) $keys[($z + self::TILE_BIAS) * self::TILE_SPAN + $x + self::TILE_BIAS] = true;
 		$pinned = $keys;
 
 		foreach($this->tiles as $key => $tile) if($tile->pins) $pinned[$key] = true;
@@ -461,7 +565,10 @@ final class Landscape implements TerrainSurface
 	public function close(): void
 	{
 		$this->tiles = $this->leases = $this->history = $this->operations = $this->pending = $this->memo = [];
-		$this->blockBounds = $this->meshNodes = $this->cellRows = [];
+		$this->blockBounds = $this->meshNodes = $this->cellRows = $this->queueX = $this->queueZ = [];
+		$this->queueNext = $this->queueCount = 0;
+		$this->recentKey = -1;
+		$this->recentTile = null;
 		$this->closed = true;
 	}
 
@@ -725,63 +832,48 @@ final class Landscape implements TerrainSurface
 	}
 
 	/**
-	 * Return tensor cubic interpolation and optional world derivatives.
-	 * @param float $x World X coordinate, or integer lattice column for node access.
-	 * @param float $z World Z coordinate, or integer lattice row for node access.
-	 * @param bool $derivatives Whether to evaluate exact reconstruction derivatives.
-	 * @return array Elevation and optional world-space X/Z derivatives.
+	 * Gather a cell's stencil once and remember its four row polynomials. At most sixty-four cells stay cached.
+	 * @param int $ix Lattice column of the cell.
+	 * @param int $iz Lattice row of the cell.
+	 * @return array Sixteen power-basis coefficients, four for each stencil row.
 	 */
-	private function interpolate(float $x, float $z, bool $derivatives): array
+	private function cell(int $ix, int $iz): array
 	{
-		$spacing = $this->parameters['spacing'];
-		$u = $x / $spacing;
-		$v = $z / $spacing;
-		$ix = (int)floor($u);
-		$iz = (int)floor($v);
-		$u -= $ix;
-		$v -= $iz;
+		$slot = $this->queueNext;
 
-		// Mesh vertices normally lie on the lattice. Their exact cubic value/gradient
-		// need one/five nodes rather than gathering sixteen zero-weight contributions.
-		if($u === 0.0 && $v === 0.0)
+		// The oldest cell leaves before the gather. A failed generation therefore still costs that cell.
+		if($this->queueCount >= 64)
 		{
-			$height = $this->node($ix, $iz);
+			$oldest = $this->queueZ[$slot];
+			unset($this->cellRows[$oldest][$this->queueX[$slot]]);
 
-			return $derivatives
-				? [
-					$height
-					, ($this->node($ix + 1, $iz) - $this->node($ix - 1, $iz)) / (2 * $spacing)
-					, ($this->node($ix, $iz + 1) - $this->node($ix, $iz - 1)) / (2 * $spacing)
-				]
-				: [$height];
+			if(!$this->cellRows[$oldest]) unset($this->cellRows[$oldest]);
+
+			$this->queueCount--;
 		}
 
-		$key = "$ix:$iz";
-		if(!isset($this->cellRows[$key]))
-		{
-			if(count($this->cellRows) >= 64) unset($this->cellRows[array_key_first($this->cellRows)]);
-			$this->cellRows[$key] = array_map(self::cubic(...), $this->patch($ix, $iz));
-		}
-		$values = [];
-		$slopes = [];
+		[
+			'a' => $a, 'b' => $b, 'c' => $c, 'd' => $d
+			, 'e' => $e, 'f' => $f, 'g' => $g, 'h' => $h
+			, 'i' => $i, 'j' => $j, 'k' => $k, 'l' => $l
+			, 'm' => $m, 'n' => $n, 'o' => $o, 'p' => $p
+		] = $this->stencil($ix, $iz);
 
-		foreach($this->cellRows[$key] as $c)
-		{
-			$values[] = self::evaluate($c, $u);
+		// Each line converts one row of four nodes exactly as cubic() does.
+		$rows = [
+			$b, .5 * ($c - $a), $a - 2.5 * $b + 2 * $c - .5 * $d, .5 * (-$a + 3 * $b - 3 * $c + $d)
+			, $f, .5 * ($g - $e), $e - 2.5 * $f + 2 * $g - .5 * $h, .5 * (-$e + 3 * $f - 3 * $g + $h)
+			, $j, .5 * ($k - $i), $i - 2.5 * $j + 2 * $k - .5 * $l, .5 * (-$i + 3 * $j - 3 * $k + $l)
+			, $n, .5 * ($o - $m), $m - 2.5 * $n + 2 * $o - .5 * $p, .5 * (-$m + 3 * $n - 3 * $o + $p)
+		];
 
-			if($derivatives) $slopes[] = $c[1] + $u * (2 * $c[2] + 3 * $u * $c[3]);
-		}
+		$this->cellRows[$iz][$ix] = $rows;
+		$this->queueX[$slot] = $ix;
+		$this->queueZ[$slot] = $iz;
+		$this->queueNext = ($slot + 1) & 63;
+		$this->queueCount++;
 
-		$c = self::cubic($values);
-		$height = self::evaluate($c, $v);
-
-		return $derivatives
-			? [
-				$height
-				, self::evaluate(self::cubic($slopes), $v) / $spacing
-				, ($c[1] + $v * (2 * $c[2] + 3 * $v * $c[3])) / $spacing
-			]
-			: [$height];
+		return $rows;
 	}
 
 	/**
@@ -792,17 +884,146 @@ final class Landscape implements TerrainSurface
 	 */
 	private function patch(int $x, int $z): array
 	{
-		$rows = [];
+		$s = $this->stencil($x, $z);
 
-		for($j = -1; $j <= 2; $j++)
+		return [
+			[$s['a'], $s['b'], $s['c'], $s['d']]
+			, [$s['e'], $s['f'], $s['g'], $s['h']]
+			, [$s['i'], $s['j'], $s['k'], $s['l']]
+			, [$s['m'], $s['n'], $s['o'], $s['p']]
+		];
+	}
+
+	/**
+	 * Gather the sixteen nodes around a cell. The result, the counters and the tile order match sixteen node()
+	 * calls in row-major order. Resident tiles answer with one read each instead of one per node.
+	 * @param int $x Lattice column of the cell.
+	 * @param int $z Lattice row of the cell.
+	 * @return array Node elevations keyed 'a' to 'p' in row-major order, in no particular array order.
+	 */
+	private function stencil(int $x, int $z): array
+	{
+		$size = $this->tileSize;
+		$lx = ($x - 1) % $size;
+		$lz = ($z - 1) % $size;
+
+		if($lx < 0) $lx += $size;
+
+		if($lz < 0) $lz += $size;
+
+		// Both differences are multiples of the tile size, so the quotients stay integers.
+		$key = (($z - 1 - $lz) / $size + self::TILE_BIAS) * self::TILE_SPAN + ($x - 1 - $lx) / $size + self::TILE_BIAS;
+		$parts = $this->stencils[$lz * $size + $lx] ?? $this->parts($lx, $lz);
+		$values = null;
+
+		foreach($parts as [$offset, $layout, $px, $pz])
 		{
-			$row = [];
+			$tile = $this->tiles[$key + $offset] ?? null;
 
-			for($i = -1; $i <= 2; $i++) $row[] = $this->node($x + $i, $z + $j);
-			$rows[] = $row;
+			// Creating a tile can evict another one at any node. Only the node-by-node path reproduces that.
+			if($tile === null)
+			{
+				$values = [];
+
+				for($slot = 0; $slot < 16; $slot++)
+				$values[self::SLOTS[$slot]] = $this->node($x - 1 + ($slot & 3), $z - 1 + ($slot >> 2));
+
+				return $values;
+			}
+
+			$block = $tile->block($layout, $px, $pz);
+			$values = $values === null ? $block : $values + $block;
 		}
 
-		return $rows;
+		// A hole reads as NaN and a sum of finite heights never does, so one sum finds any hole.
+		$sum = $values['a'] + $values['b'] + $values['c'] + $values['d'] + $values['e'] + $values['f']
+			+ $values['g'] + $values['h'] + $values['i'] + $values['j'] + $values['k'] + $values['l']
+			+ $values['m'] + $values['n'] + $values['o'] + $values['p'];
+
+		if($sum === $sum)
+		{
+			// Sixteen hits leave the tiles most recently used in the order of the parts.
+			foreach($parts as [$offset])
+			{
+				$used = $key + $offset;
+
+				if($used === $this->recentKey) continue;
+
+				$tile = $this->tiles[$used];
+				unset($this->tiles[$used]);
+				$this->tiles[$used] = $tile;
+				$this->recentKey = $used;
+				$this->recentTile = $tile;
+			}
+
+			$this->hits += 16;
+
+			return $values;
+		}
+
+		// Some nodes are missing. Visit all sixteen in order, so that a generation which throws leaves the
+		// tile order and the counters exactly where sixteen node() calls would.
+		$columns = $size - $lx;
+		$rows = $size - $lz;
+
+		for($slot = 0; $slot < 16; $slot++)
+		{
+			$i = $slot & 3;
+			$j = $slot >> 2;
+			$left = $i < $columns;
+			$top = $j < $rows;
+			$used = $key + ($left ? 0 : 1) + ($top ? 0 : self::TILE_SPAN);
+
+			if($used !== $this->recentKey) $this->tile($used);
+
+			$name = self::SLOTS[$slot];
+			$value = $values[$name];
+
+			if($value === $value)
+			{
+				$this->hits++;
+
+				continue;
+			}
+
+			// Unedited terrain is the recipe itself. generateNode() adds only the edit history.
+			$value = $this->operations
+				? $this->generateNode($x - 1 + $i, $z - 1 + $j)
+				: $this->generator->height(($x - 1 + $i) * $this->spacing, ($z - 1 + $j) * $this->spacing);
+
+			$this->generated++;
+			$this->recentTile->set($left ? $lx + $i : $i - $columns, $top ? $lz + $j : $j - $rows, $value);
+			$values[$name] = $value;
+		}
+
+		return $values;
+	}
+
+	/**
+	 * Plan the tile reads for a stencil whose first node sits at a given local position. A stencil continues
+	 * into the tile to the right, the tile below, or both, when fewer than four nodes remain before the edge.
+	 * @param int $lx Local column of the stencil's first node.
+	 * @param int $lz Local row of the stencil's first node.
+	 * @return array Parts in the order node() first reaches them, each [key offset, layout, local x, local z].
+	 */
+	private function parts(int $lx, int $lz): array
+	{
+		$size = $this->tileSize;
+		$columns = min(4, $size - $lx);
+		$rows = min(4, $size - $lz);
+		$parts = [[0, HeightTile::layout($size, 0, $columns, 0, $rows), $lx, $lz]];
+
+		if($columns < 4) $parts[] = [1, HeightTile::layout($size, $columns, 4 - $columns, 0, $rows), 0, $lz];
+
+		if($rows < 4) $parts[] = [self::TILE_SPAN, HeightTile::layout($size, 0, $columns, $rows, 4 - $rows), $lx, 0];
+
+		if($columns < 4 && $rows < 4)
+		{
+			$layout = HeightTile::layout($size, $columns, 4 - $columns, $rows, 4 - $rows);
+			$parts[] = [self::TILE_SPAN + 1, $layout, 0, 0];
+		}
+
+		return $this->stencils[$lz * $size + $lx] = $parts;
 	}
 
 	/**
@@ -813,12 +1034,18 @@ final class Landscape implements TerrainSurface
 	 */
 	private function node(int $x, int $z): float
 	{
-		$size = $this->parameters['tileSize'];
-		$tx = (int)floor($x / $size);
-		$tz = (int)floor($z / $size);
-		$tile = $this->tile($tx . ':' . $tz);
-		$lx = $x - $tx * $size;
-		$lz = $z - $tz * $size;
+		$size = $this->tileSize;
+		$lx = $x % $size;
+		$lz = $z % $size;
+
+		if($lx < 0) $lx += $size;
+
+		if($lz < 0) $lz += $size;
+
+		// Both differences are multiples of the tile size, so the quotients stay integers.
+		$key = (($z - $lz) / $size + self::TILE_BIAS) * self::TILE_SPAN + ($x - $lx) / $size + self::TILE_BIAS;
+		// Moving the last tile of the map to its end changes nothing, so that case needs no call.
+		$tile = $key === $this->recentKey ? $this->recentTile : $this->tile($key);
 		$value = $tile?->get($lx, $lz);
 
 		if($value !== null)
@@ -828,7 +1055,10 @@ final class Landscape implements TerrainSurface
 			return $value;
 		}
 
-		$value = $this->generateNode($x, $z);
+		// Unedited terrain is the recipe itself. generateNode() adds only the edit history.
+		$value = $this->operations
+			? $this->generateNode($x, $z)
+			: $this->generator->height($x * $this->spacing, $z * $this->spacing);
 
 		$this->generated++;
 		$tile?->set($lx, $lz, $value);
@@ -956,18 +1186,19 @@ final class Landscape implements TerrainSurface
 
 	/**
 	 * Get/create an LRU tile without exceeding the configured tile count.
-	 * @param string $key Globally addressed tile cache key.
+	 * @param int $key Globally addressed tile cache key.
 	 * @return HeightTile|null Existing or newly reserved tile, or null when all capacity is pinned elsewhere.
 	 */
-	private function tile(string $key): ?HeightTile
+	private function tile(int $key): ?HeightTile
 	{
 		if(isset($this->tiles[$key]))
 		{
 			$tile = $this->tiles[$key];
 			unset($this->tiles[$key]);
 			$this->tiles[$key] = $tile;
+			$this->recentKey = $key;
 
-			return $tile;
+			return $this->recentTile = $tile;
 		}
 
 		if(count($this->tiles) >= $this->parameters['maxTiles'])
@@ -984,7 +1215,9 @@ final class Landscape implements TerrainSurface
 			if(count($this->tiles) >= $this->parameters['maxTiles']) return null;
 		}
 
-		return $this->tiles[$key] = new HeightTile($this->parameters['tileSize'], $this->version);
+		$this->recentKey = $key;
+
+		return $this->tiles[$key] = $this->recentTile = new HeightTile($this->parameters['tileSize'], $this->version);
 	}
 
 	/**
@@ -1007,7 +1240,10 @@ final class Landscape implements TerrainSurface
 			$tiles[$key] = $tile;
 		}
 
-		$this->blockBounds = $this->meshNodes = $this->cellRows = [];
+		$this->blockBounds = $this->meshNodes = $this->cellRows = $this->queueX = $this->queueZ = [];
+		$this->queueNext = $this->queueCount = 0;
+		$this->recentKey = -1;
+		$this->recentTile = null;
 		$this->operations = $operations;
 		$this->range = $range;
 		$this->version = $version;
@@ -1144,17 +1380,6 @@ final class Landscape implements TerrainSurface
 			, $p[0] - 2.5 * $p[1] + 2 * $p[2] - .5 * $p[3]
 			, .5 * (-$p[0] + 3 * $p[1] - 3 * $p[2] + $p[3])
 		];
-	}
-
-	/**
-	 * Evaluate a cubic with Horner's rule.
-	 * @param array $c Cubic power-basis coefficients.
-	 * @param float $t Normalized interpolation coordinate.
-	 * @return float Cubic value at the requested parameter.
-	 */
-	private static function evaluate(array $c, float $t): float
-	{
-		return $c[0] + $t * ($c[1] + $t * ($c[2] + $t * $c[3]));
 	}
 
 	/**

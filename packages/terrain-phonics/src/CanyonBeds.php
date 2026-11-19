@@ -22,7 +22,9 @@ final class CanyonBeds
 	public static function shape(float $height, float $spacing, float $strength): array
 	{
 		// Reduce in metres first so even submillimetre spacing cannot overflow height / spacing.
-		$level = fmod($height, 10 * $spacing) / $spacing;
+		// fmod() returns a height inside one period unchanged, so only a height outside it pays for the call.
+		$period = 10 * $spacing;
+		$level = ($height < $period && $height > -$period ? $height : fmod($height, $period)) / $spacing;
 		if($level < -5) $level += 10;
 		if($level >= 5) $level -= 10;
 		$i = 0;
@@ -30,8 +32,12 @@ final class CanyonBeds
 		$width = self::CONTACTS[$i + 1] - self::CONTACTS[$i];
 		$fraction = ($level - self::CONTACTS[$i]) / $width;
 		[$start, $end] = self::RAMPS[$i];
-		$t = max(0.0, min(1.0, ($fraction - $start) / ($end - $start)));
-		$displacement = $width * $spacing * (Noise::fade($t) - $fraction);
+		$t = ($fraction - $start) / ($end - $start);
+		// Comparisons clamp every ordinary value to [0,1] without a call. A zero or NaN goes through max() and
+		// min(), which define the sign of zero and the handling of NaN.
+		$t = $t >= 1.0 ? 1.0 : ($t > 0.0 ? $t : ($t < 0.0 ? 0.0 : max(0.0, min(1.0, $t))));
+		// Noise::fade() written out, because the call costs more than the polynomial.
+		$displacement = $width * $spacing * ($t * $t * $t * ($t * ($t * 6 - 15) + 10) - $fraction);
 		return [
 			$height + $strength * $displacement,
 			1 - $strength + $strength * 30 * $t * $t * ($t - 1) ** 2 / ($end - $start),

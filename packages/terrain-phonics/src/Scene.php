@@ -35,6 +35,20 @@ final class Scene
 	private int $groundDraws = 0, $waterDraws = 0;
 	/** Reverse sibling transitions and the exact residency reservation for this selection. */
 	private array $retiring = [], $reserved = [];
+	/**
+	 * For each patch key, its parent's key and the keys of the coarser cells that touch it.
+	 *
+	 * Both follow from the key alone, so an entry never goes stale. Building one of these strings costs
+	 * more than a function call in the browser, and each selection asks for hundreds of them.
+	 */
+	private array $parentKeys = [], $coarserKeys = [];
+	/**
+	 * Ancestor sets of the last target cover and the last drawn cover, with the key lists they came from.
+	 *
+	 * A cover's ancestors follow from its keys alone, and a selection often meets the cover that the one
+	 * before it met, so each set is rebuilt only when its keys change.
+	 */
+	private array $targetKeys = [], $targetBranches = [], $drawnKeys = [], $drawnBranches = [];
 	private string $indices;
 	private float $clock = 0, $lastUpdateMs = 0;
 	private int $revision = -1, $frames = 0, $selections = 0;
@@ -479,29 +493,24 @@ final class Scene
 
 		// A one-patch margin leaves room for camera turns and the neighboring
 		// splits needed for 2:1 seams. Out-of-view ground retains coarse coverage.
-		$planes = $camera->clipPlanes(max(1, (int)round($this->viewportHeight * $this->viewportAspect)), $this->viewportHeight);
-		$eye = $camera->position;
+		// The selector applies that margin itself, to ground and water bounds alike, when it gets the
+		// planes: a predicate here would cost a call and a copied node for every patch that wants to split.
+		$planes = $camera->clipPlanes(
+			max(1, (int)round($this->viewportHeight * $this->viewportAspect))
+			, $this->viewportHeight
+		);
+
 		[$waterMin, $waterMax] = $this->water->heightRange();
-		$inDetailView = /** Test the expanded ground and water bounds against the viewing frustum.
-		 * @param array $node Quadtree node to consider refining.
-		 * @param array $patch Resident mesh carrying its vertical bounds.
-		 * @return bool Whether finer detail may be needed near this view.
-		 */
-			static function(array $node, array $patch) use ($planes, $eye, $waterMin, $waterMax): bool {
-			$margin = $node['size'];
-			$node['x'] -= $margin;
-			$node['z'] -= $margin;
-			$node['size'] += 2 * $margin;
-			return Camera::inView($planes, $eye, $node, min($patch['minY'], $waterMin) - $margin,
-				max($patch['maxY'], $waterMax) + $margin);
-		};
 
 		$result = $this->lod->select(
 			$camera->position
 			, $this->patches
 			, $this->quality
 			, $this->viewportHeight / (2 * tan($camera->fov / 2))
-			, $inDetailView
+			, null
+			, $planes
+			, $waterMin
+			, $waterMax
 		);
 
 		$old = array_column($this->draw, 'key');
@@ -520,20 +529,31 @@ final class Scene
 			$this->retiring = [];
 		}
 
-		$actualKeys = array_column($this->draw, 'key');
-		$desiredKeys = array_column($desired, 'key');
-		sort($actualKeys);
-		sort($desiredKeys);
-		$this->selectionPending = $actualKeys !== $desiredKeys;
-
-		$this->transitionUntil = -1;
-		foreach($this->draw as $n)
+		// The key caches gain an entry for every patch the view asks about. Residents are looked up again
+		// on every selection, so a trim keeps their entries and drops the rest.
+		if(count($this->parentKeys) > 4096)
 		{
-			$this->patches[$n['key']]['lastUse'] = $this->clock;
-			$this->transitionUntil = max($this->transitionUntil, ($this->activated[$n['key']] ?? -1) + .5);
+			$this->parentKeys = array_intersect_key($this->parentKeys, $this->patches);
+			$this->coarserKeys = array_intersect_key($this->coarserKeys, $this->patches);
 		}
 
 		$drawn = array_column($this->draw, 'key');
+		// A loose array comparison ignores order, so counting each key compares the two covers as sets.
+		// Sorting both lists of keys to compare them took thousands of string comparisons per selection.
+		$this->selectionPending = array_count_values($drawn) != array_count_values(array_column($desired, 'key'));
+
+		$clock = $this->clock;
+		$until = -1.0;
+
+		foreach($drawn as $key)
+		{
+			$this->patches[$key]['lastUse'] = $clock;
+			$settles = ($this->activated[$key] ?? -1) + .5;
+			if($settles > $until) $until = $settles;
+		}
+
+		$this->transitionUntil = $until;
+
 		if($old !== $drawn)
 		{
 			$this->changed = true;
@@ -542,7 +562,14 @@ final class Scene
 			if(count($this->groundCull) + count($this->waterCull) > 4096) $this->groundCull = $this->waterCull = [];
 		}
 
-		$this->reserved = $this->ancestors($this->draw);
+		// The reservation starts from the drawn cover and its ancestors.
+		if($drawn !== $this->drawnKeys)
+		{
+			$this->drawnKeys = $drawn;
+			$this->drawnBranches = $this->ancestors($this->draw);
+		}
+
+		$this->reserved = $this->drawnBranches;
 		$drawKeys = array_column($this->draw, null, 'key');
 		$wanted = [];
 		$requests = array_column($result['request'], null, 'key');
@@ -554,7 +581,9 @@ final class Scene
 		foreach($this->lod->children($node) as $child)
 		$requests[$child['key']] = $child + ['priority' => $node['priority']];
 
-		[$groups, $blockers] = $this->viewGroups(array_values($requests), $drawKeys, $camera);
+		[$groups, $blockers] = $this->viewGroups($requests, $drawKeys, $camera);
+		// The reservation only grows from here, so its size is counted once and then kept in step.
+		$reserved = count($this->reserved);
 
 		foreach($groups as $parent => $nodes)
 		{
@@ -562,12 +591,20 @@ final class Scene
 
 			if(($blockers[$parent] ?? []) !== []) continue;
 
-			$extra = array_diff_key(array_fill_keys(array_column($nodes, 'key'), true), $this->reserved);
-			if(count($this->reserved) + count($extra) > $capacity) continue;
-			$this->reserved += $extra;
+			$extra = 0;
+
+			foreach($nodes as $n) if(!isset($this->reserved[$n['key']])) $extra++;
+
+			if($reserved + $extra > $capacity) continue;
+
+			$reserved += $extra;
 
 			foreach($nodes as $n)
-			if(!isset($this->patches[$n['key']])) $wanted[$n['key']] = $n + ['speculative' => false];
+			{
+				$key = $n['key'];
+				$this->reserved[$key] = true;
+				if(!isset($this->patches[$key])) $wanted[$key] = $n + ['speculative' => false];
+			}
 		}
 
 		// Prediction reserves only unused cache space after all current-view demand.
@@ -596,18 +633,31 @@ final class Scene
 
 			$speculative = 0;
 
-			foreach($this->requestGroups(array_values($requests)) as $parent => $nodes)
+			foreach($this->requestGroups($requests) as $parent => $nodes)
 			{
 				if($parent === '' || !isset($this->patches[$parent])) continue;
 
-				$keys = $this->ancestors($this->lod->children($this->patches[$parent]));
+				// The keys counted below include the four siblings, so the unreserved siblings are a
+				// floor for $extra. A group that breaks a budget on that floor alone is refused before
+				// the rest of its keys are built. Once a budget is spent, that is every later group with
+				// an unreserved sibling.
+				$children = $this->lod->children($this->patches[$parent]);
+				$floor = 0;
+
+				foreach($children as $child) if(!isset($this->reserved[$child['key']])) $floor++;
+
+				if($speculative + $floor > 32 || $reserved + $floor > $capacity) continue;
+
+				$keys = $this->ancestors($children);
 				$extra = count(array_diff_key($keys, $this->reserved));
 
-				if($speculative + $extra > 32 || count($this->reserved + $keys) > $this->capacity()
-					|| count($this->patches) + count($wanted) + count($nodes) > $this->capacity()
+				// Merging the keys into the reservation adds exactly the $extra that are new to it.
+				if($speculative + $extra > 32 || $reserved + $extra > $capacity
+					|| count($this->patches) + count($wanted) + count($nodes) > $capacity
 				) continue;
 
 				$speculative += $extra;
+				$reserved += $extra;
 				$this->reserved += $keys;
 
 				foreach($nodes as $n) $wanted[$n['key']] = $n + ['speculative' => true];
@@ -624,9 +674,9 @@ final class Scene
 		if($this->builder !== null)
 		{
 			$queued = [];
-			foreach($ordered as $node)
+			foreach($ordered as $key => $node)
 			{
-				$parent = $this->parentKey($node);
+				$parent = $this->parentKeys[$key] ??= self::parentOf($key);
 				if(isset($queued[$parent])) continue;
 				$this->builder->prime($this->landscape, $node, $this->patches[$parent] ?? null);
 				$queued[$parent] = true;
@@ -644,23 +694,34 @@ final class Scene
 	 */
 	private function requestGroups(array $requests): array
 	{
-		$groups = [];
+		$parents = &$this->parentKeys;
+		$groups = $priority = [];
 
-		foreach($requests as $node) $groups[$this->parentKey($node)][] = $node;
+		foreach($requests as $node)
+		{
+			$key = $node['key'];
+			$parent = $parents[$key] ??= self::parentOf($key);
 
-		uasort($groups, /** Compare complete sibling-group refinement priorities.
-		 * @param array $a First group of missing siblings.
-		 * @param array $b Second group of missing siblings.
-		 * @return int Descending importance order.
-		 */
-			static fn($a, $b) => $b[0]['priority'] <=> $a[0]['priority']
-		);
+			if(!isset($groups[$parent])) $priority[$parent] = $node['priority'];
+			$groups[$parent][] = $node;
+		}
 
-		return $groups;
+		// A comparison callback costs a PHP call for every pair it ranks. arsort() compares each group's
+		// first priority itself, ranks them as the callback did and keeps equal ones in their first order.
+		arsort($priority);
+		$ordered = [];
+
+		foreach($priority as $parent => $first) $ordered[$parent] = $groups[$parent];
+
+		return $ordered;
 	}
 
 	/**
 	 * Favor visible refinement and promote its coarser neighbors before unrelated detail.
+	 *
+	 * A group outside a conservative camera cone keeps its coverage and loses screen importance: its
+	 * priority is scaled by one where the parent's bounds meet the cone, by a tenth beside it and by a
+	 * fiftieth behind the camera.
 	 * @param array $requests Current-view candidate siblings, including resident transition data.
 	 * @param array $drawKeys Current complete cover indexed by patch key.
 	 * @param Camera $camera Viewing direction and position used only to order work.
@@ -669,8 +730,13 @@ final class Scene
 	private function viewGroups(array $requests, array $drawKeys, Camera $camera): array
 	{
 		$groups = $this->requestGroups($requests);
-		$priority = $blockers = [];
+		$priority = $blockers = $byLevel = [];
 		[$forward] = $camera->basis();
+		$eye = $camera->position;
+		// The cone depends on the camera alone, so its slope is worked out once for all the groups.
+		$halfAngle = atan(tan($camera->fov / 2) * max(1.0, $this->viewportAspect)) + .1;
+		$slope = tan(min(1.4, $halfAngle));
+		$deepest = 0;
 
 		foreach($groups as $parent => $nodes)
 		{
@@ -687,68 +753,91 @@ final class Scene
 			}
 
 			$node = $drawKeys[$parent];
-			$priority[$parent] = $nodes[0]['priority'] * $this->viewWeight($node, $camera, $forward);
+			$key = $node['key'];
+			$patch = $this->patches[$key] ?? [];
+			$x = $node['x'] + $node['size'] / 2 - $eye[0];
+			$y = ($patch['centerHeight'] ?? 0) - $eye[1];
+			$z = $node['z'] + $node['size'] / 2 - $eye[2];
+			$along = $x * $forward[0] + $y * $forward[1] + $z * $forward[2];
+			$radius = $node['size'] * .75 + ($patch['geometricError'] ?? 0);
 
-			$blockers[$parent] = array_keys(self::neighborsAt($node, $drawKeys, $node['level'] - 1));
+			if($along + $radius < 0) $weight = .02;
+			else
+			{
+				// Comparisons stand in for max() here: this runs for every group of every selection.
+				$spread = $x ** 2 + $y ** 2 + $z ** 2 - $along * $along;
+				$side = $spread <= 0 ? 0.0 : sqrt($spread);
+				$weight = $side <= ($along <= 0 ? 0 : $along) * $slope + $radius ? 1.0 : .1;
+			}
+
+			$priority[$parent] = $nodes[0]['priority'] * $weight;
+			$blocking = [];
+
+			foreach($this->coarserKeys[$key] ??= self::coarserNeighborKeys($node) as $coarser)
+			if(isset($drawKeys[$coarser])) $blocking[] = $coarser;
+
+			$blockers[$parent] = $blocking;
+
+			if($blocking === []) continue;
+
+			$level = (int)$parent;
+			$byLevel[$level][] = $parent;
+			if($level > $deepest) $deepest = $level;
 		}
 
 		// Dependencies always point to a lower depth, so one deepest-first pass
 		// propagates urgency through the entire balancing chain without cycles.
-		$parents = array_keys($groups);
+		for($level = $deepest; $level >= 0; $level--)
+		foreach($byLevel[$level] ?? [] as $parent)
+		foreach($blockers[$parent] as $blocker)
+		if(isset($priority[$blocker]) && $priority[$blocker] < $priority[$parent])
+		$priority[$blocker] = $priority[$parent];
 
-		usort($parents, /** Process balancing dependencies from fine to coarse.
-		 * @param string $a First parent key.
-		 * @param string $b Second parent key.
-		 * @return int Descending quadtree depth.
-		 */
-			static fn($a, $b) => (int)$b <=> (int)$a
-		);
+		// Generate the highest visible or prerequisite demand first. $priority lists the surviving
+		// groups in their current order, which arsort() keeps for equal priorities.
+		arsort($priority);
+		$ordered = [];
 
-		foreach($parents as $parent)
-		foreach($blockers[$parent] ?? [] as $blocker)
-		if(isset($priority[$blocker])) $priority[$blocker] = max($priority[$blocker], $priority[$parent]);
+		foreach($priority as $parent => $propagated)
+		{
+			$nodes = $groups[$parent];
 
-		foreach($groups as $parent => &$nodes)
-		foreach($nodes as &$node) $node['priority'] = $priority[$parent];
-		unset($nodes, $node);
+			// Siblings arrive carrying their group's priority, so only a group whose priority the view
+			// or a blocked neighbor changed has its records copied.
+			foreach($nodes as $i => $node)
+			if($node['priority'] !== $propagated)
+			{
+				$node['priority'] = $propagated;
+				$nodes[$i] = $node;
+			}
 
-		uasort($groups, /** Generate the highest visible or prerequisite demand first.
-		 * @param array $a First sibling group.
-		 * @param array $b Second sibling group.
-		 * @return int Descending propagated priority.
-		 */
-			static fn($a, $b) => $b[0]['priority'] <=> $a[0]['priority']
-		);
+			$ordered[$parent] = $nodes;
+		}
 
-		return [$groups, $blockers];
+		return [$ordered, $blockers];
 	}
 
 	/**
-	 * Reduce speculative screen importance outside a conservative camera cone without culling coverage.
-	 * @param array $node Parent footprint being refined.
-	 * @param Camera $camera Viewing position and vertical field of view.
-	 * @param array $forward Unit camera-forward direction.
-	 * @return float One for intersecting view bounds, reduced for side and rear patches.
+	 * List the keys of the coarser cells that touch a patch, in the order neighborsAt() visits them.
+	 * @param array $node Quadtree patch metadata.
+	 * @return array Keys of the up to three cells one level up that meet the patch at an edge or a corner.
 	 */
-	private function viewWeight(array $node, Camera $camera, array $forward): float
+	private static function coarserNeighborKeys(array $node): array
 	{
-		$height = $this->patches[$node['key']]['centerHeight'] ?? 0;
-		$offset = [
-			$node['x'] + $node['size'] / 2 - $camera->position[0]
-			, $height - $camera->position[1]
-			, $node['z'] + $node['size'] / 2 - $camera->position[2]
-		];
+		$level = $node['level'] - 1;
 
-		$along = $offset[0] * $forward[0] + $offset[1] * $forward[1] + $offset[2] * $forward[2];
-		$distanceSquared = $offset[0] ** 2 + $offset[1] ** 2 + $offset[2] ** 2;
-		$radius = $node['size'] * .75 + ($this->patches[$node['key']]['geometricError'] ?? 0);
+		if($level < 0) return [];
 
-		if($along + $radius < 0) return .02;
+		$x = $node['ix']; $z = $node['iz'];
+		$cx = $x >> 1; $cz = $z >> 1;
+		$last = (1 << $level) - 1;
+		$keys = [];
 
-		$side = sqrt(max(0, $distanceSquared - $along * $along));
-		$halfAngle = atan(tan($camera->fov / 2) * max(1.0, $this->viewportAspect)) + .1;
+		for($nz = max(0, ($z - 1) >> 1); $nz <= min($last, ($z + 1) >> 1); $nz++)
+		for($nx = max(0, ($x - 1) >> 1); $nx <= min($last, ($x + 1) >> 1); $nx++)
+		if($nx !== $cx || $nz !== $cz) $keys[] = "$level:$nx:$nz";
 
-		return $side <= max(0, $along) * tan(min(1.4, $halfAngle)) + $radius ? 1.0 : .1;
+		return $keys;
 	}
 
 	/**
@@ -783,41 +872,119 @@ final class Scene
 	 */
 	private function balance(array $nodes): array
 	{
+		if($nodes === []) return $nodes;
+
+		// Index the leaves by level, row and column. Lod::node() builds every key from those three
+		// integers, so they identify a leaf exactly as its key does, and a probe becomes three array
+		// lookups in place of one "level:x:z" string composed for each candidate cell.
+		$grid = [];
+
+		foreach($nodes as $n) $grid[$n['level']][$n['iz']][$n['ix']] = true;
+
+		// No leaf is coarser than this level. A replacement is always finer than the coarse
+		// leaf that forces it, so this holds in every pass and no probe has to go further.
+		$coarsest = min(array_keys($grid));
+
+		// Most covers arrive balanced, so the first scan only has to learn whether any leaf is out
+		// of balance. Until one is, it may skip a leaf whose probes another leaf is sure to repeat.
+		$quick = true;
+
 		// Coarsen, never request new data, until shared edges differ by at most one level.
-		for($pass = count($nodes); $pass > 0; $pass--)
+		for($pass = count($nodes); $pass > 0;)
 		{
 			$replace = null;
 
-			$leaves = array_column($nodes, null, 'key');
 			foreach($nodes as $a)
-			for($level = $a['level'] - 2; $level >= 0; $level--)
 			{
-				// Once interior on both axes, the leaf cannot touch this ancestor's
-				// boundary or the boundary of any still larger ancestor.
-				$mask = (1 << ($a['level'] - $level)) - 1;
-				$x = $a['ix'] & $mask;
-				$z = $a['iz'] & $mask;
-				if($x !== 0 && $x !== $mask && $z !== 0 && $z !== $mask) break;
-				if(self::neighborsAt($a, $leaves, $level) === []) continue;
-				$shift = $a['level'] - ($level + 1);
-				$replace = $this->lod->node($level + 1, $a['ix'] >> $shift, $a['iz'] >> $shift);
-				break 2;
+				$level = $a['level'] - 2;
+
+				if($level < $coarsest) continue;
+
+				$x = $a['ix'];
+				$z = $a['iz'];
+
+				// Bit 1 of an index plus one is set exactly when the index is one of the middle two of
+				// the four its grandparent spans. Such a leaf lies on neither grandparent edge of that axis.
+				if(($x + 1) & 2)
+				{
+					// Strictly inside its grandparent on both axes, the leaf cannot touch that
+					// ancestor's boundary or the boundary of any still larger ancestor.
+					if(($z + 1) & 2) continue;
+
+					// On one edge of its grandparent, a leaf probes only the cells across that edge,
+					// here and at every coarser level. The sibling beside it along that edge lies on
+					// the grandparent's corner and probes all of those cells among its own. While
+					// that sibling is in the cover, skipping this leaf cannot hide an imbalance.
+					if($quick && isset($grid[$level + 2][$z][$x ^ 1])) continue;
+				}
+				// The same holds on the other axis, where that sibling shares the column.
+				elseif($quick && (($z + 1) & 2) && isset($grid[$level + 2][$z ^ 1][$x])) continue;
+
+				// Track two cells per axis up the tree: the ancestor holding the leaf, and the ancestor
+				// of the cell one step outward from the leaf. An even index can only lie on the low
+				// edge of an ancestor and an odd index only on the high edge, so the step goes down
+				// for even and up for odd. Where the two cells agree, no ancestor edge lies between.
+				$cx = $x >> 2;
+				$cz = $z >> 2;
+				$nx = ($x + (($x & 1) << 1) - 1) >> 2;
+				$nz = ($z + (($z & 1) << 1) - 1) >> 2;
+
+				// Each level up halves all four indices, also after a probe that found nothing.
+				for(; $level >= $coarsest; --$level, $cx >>= 1, $nx >>= 1, $cz >>= 1, $nz >>= 1)
+				{
+					if($nx === $cx)
+					{
+						// Once interior on both axes, the leaf stays interior under every larger ancestor.
+						if($nz === $cz) break;
+
+						if(!isset($grid[$level][$nz][$cx])) continue;
+					}
+					elseif($nz === $cz)
+					{
+						if(!isset($grid[$level][$cz][$nx])) continue;
+					}
+					elseif(!isset($grid[$level][$cz][$nx]) && !isset($grid[$level][$nz][$cx])
+						&& !isset($grid[$level][$nz][$nx])
+					) continue;
+
+					// One touching leaf two or more levels coarser is enough to decide.
+					$shift = $a['level'] - $level - 1;
+					$replace = $this->lod->node($level + 1, $x >> $shift, $z >> $shift);
+					break 2;
+				}
 			}
 
 			if($replace === null) break;
 
-			$nodes = array_values(array_filter($nodes, /** Keep patches outside the replacement subtree.
-			 * @param array $n Candidate leaf patch.
-			 * @return bool Whether to retain this leaf.
-			 */
-				static fn($n) => !(
-					$n['x'] >= $replace['x'] && $n['z'] >= $replace['z']
-					&& $n['x'] + $n['size'] <= $replace['x'] + $replace['size']
-					&& $n['z'] + $n['size'] <= $replace['z'] + $replace['size']
-				)
-			));
+			// The shortcut proves that some leaf is out of balance, but the leaf it stopped at need
+			// not be the first one in the list, and the first one decides what is replaced and in
+			// which order. Scan again without the shortcut. That scan does not use up a pass.
+			if($quick)
+			{
+				$quick = false;
+				continue;
+			}
 
-			$nodes[] = $replace;
+			// Keep patches outside the replacement subtree, and take the others out of the
+			// index in the same loop so that no pass has to build the index again.
+			$minX = $replace['x'];
+			$minZ = $replace['z'];
+			$maxX = $minX + $replace['size'];
+			$maxZ = $minZ + $replace['size'];
+			$kept = [];
+
+			foreach($nodes as $n)
+			{
+				if($n['x'] >= $minX && $n['z'] >= $minZ
+					&& $n['x'] + $n['size'] <= $maxX && $n['z'] + $n['size'] <= $maxZ
+				) unset($grid[$n['level']][$n['iz']][$n['ix']]);
+				else $kept[] = $n;
+			}
+
+			$kept[] = $replace;
+			$grid[$replace['level']][$replace['iz']][$replace['ix']] = true;
+			$nodes = $kept;
+			$pass--;
 		}
 
 		return $nodes;
@@ -851,22 +1018,41 @@ final class Scene
 	}
 
 	/**
+	 * Derive a parent's key from a patch key alone, for callers that fill the parent-key cache.
+	 * @param string $key Quadtree key in the level:x:z form that Lod::node() writes.
+	 * @return string Parent key, or an empty string for the world root.
+	 */
+	private static function parentOf(string $key): string
+	{
+		[$level, $x, $z] = explode(':', $key);
+
+		return $level === '0' ? '' : ((int)$level - 1) . ':' . ((int)$x >> 1) . ':' . ((int)$z >> 1);
+	}
+
+	/**
 	 * Return every resident ancestor needed to preserve fallback coverage and parent heights.
 	 * @param array $nodes Complete list of quadtree leaf patches.
 	 * @return array Set of keys needed for coverage and parent interpolation.
 	 */
 	private function ancestors(array $nodes): array
 	{
-		$result = [];
+		$parents = &$this->parentKeys;
+		// The root's parent is the empty key. Listing it stops each climb at the root with the same
+		// test that stops it at an ancestor an earlier patch already listed.
+		$result = ['' => true];
 
 		foreach($nodes as $node)
-		for($level = $node['level']; $level >= 0; $level--)
 		{
-			$shift = $node['level'] - $level;
-			$key = $level . ':' . ($node['ix'] >> $shift) . ':' . ($node['iz'] >> $shift);
-			if(isset($result[$key])) break;
-			$result[$key] = true;
+			$key = $node['key'];
+
+			while(!isset($result[$key]))
+			{
+				$result[$key] = true;
+				$key = $parents[$key] ??= self::parentOf($key);
+			}
 		}
+
+		unset($result['']);
 
 		return $result;
 	}
@@ -885,17 +1071,24 @@ final class Scene
 		foreach($nodes as $node) if($node['level'] > $deepest['level']) $deepest = $node;
 		$parent = $this->lod->node($deepest['level'] - 1, intdiv($deepest['ix'], 2), intdiv($deepest['iz'], 2));
 
-		$nodes = array_values(array_filter($nodes, /** Retain leaves outside the coarsened parent.
-		 * @param array $node Candidate leaf.
-		 * @return bool Whether the leaf survives.
-		 */
-			static fn($node) => !self::contains($parent, $node)
-		));
+		// Retain leaves outside the coarsened parent. This is the test contains() makes, written
+		// out because a closure and a static call for every leaf cost more than the test itself.
+		$level = $parent['level'];
+		$x = $parent['ix'];
+		$z = $parent['iz'];
+		$kept = [];
 
-		$nodes[] = $parent;
+		foreach($nodes as $node)
+		{
+			$shift = $node['level'] - $level;
+
+			if($shift < 0 || ($node['ix'] >> $shift) !== $x || ($node['iz'] >> $shift) !== $z) $kept[] = $node;
+		}
+
+		$kept[] = $parent;
 		$this->activated[$parent['key']] = $this->clock - .35;
 
-		return $nodes;
+		return $kept;
 	}
 
 	/**
@@ -940,16 +1133,38 @@ final class Scene
 			unset($this->retiring[$key]);
 		}
 
-		$targetLeaves = array_column($desired, null, 'key');
-		$targetBranches = $this->ancestors($desired);
-		foreach(array_values($nodes) as $node)
+		// Only a patch that the target does not keep as a leaf can retire or split. Those are a few among
+		// hundreds, so both passes below visit them alone.
+		$target = array_column($desired, 'key');
+		$unsettled = array_diff_key($nodes, array_flip($target));
+		$splitting = $tried = [];
+
+		if($unsettled !== [] && $target !== $this->targetKeys)
 		{
-			if($node['level'] === 0 || isset($targetBranches[$node['key']])) continue;
+			$this->targetKeys = $target;
+			$this->targetBranches = $this->ancestors($desired);
+		}
 
-			$key = $this->parentKey($node);
+		foreach($unsettled as $node)
+		{
+			$nodeKey = $node['key'];
 
-			if(isset($this->retiring[$key])) continue;
+			// The target refines below this patch, so it is a candidate to split in the second pass.
+			if(isset($this->targetBranches[$nodeKey]))
+			{
+				$splitting[] = $node;
+				continue;
+			}
 
+			if($node['level'] === 0) continue;
+
+			$key = $this->parentKeys[$nodeKey] ??= self::parentOf($nodeKey);
+
+			// Nothing this pass changes can alter a group's answer, so its first sibling settles it for
+			// all four. A group held back by a finer neighbor used to be scanned again for each of them.
+			if(isset($tried[$key]) || isset($this->retiring[$key])) continue;
+
+			$tried[$key] = true;
 			$parent = $this->lod->node($node['level'] - 1, intdiv($node['ix'], 2), intdiv($node['iz'], 2));
 			$children = $this->lod->children($parent);
 			$ready = true;
@@ -963,23 +1178,41 @@ final class Scene
 
 			if(!$ready) continue;
 
+			$level = $parent['level'];
+
+			// A patch two or more levels finer that touches the parent from outside would break the 2:1
+			// cover. Measured in that patch's own cells the parent spans 0 to $span - 1 on each axis, so
+			// such a patch lies within one cell of the span and not inside it. The comparisons are written
+			// out because this loop visits every drawn patch, and two calls for each cost more than the
+			// rest of the pass.
 			foreach($nodes as $neighbor)
-			if(!self::contains($parent, $neighbor) && self::meets($parent, $neighbor) && $neighbor['level'] > $parent[
-				'level'
-			] + 1
-			){
-				$ready = false;
-				break;
+			{
+				$shift = $neighbor['level'] - $level;
+
+				if($shift < 2) continue;
+
+				$span = 1 << $shift;
+				$x = $neighbor['ix'] - $parent['ix'] * $span;
+				$z = $neighbor['iz'] - $parent['iz'] * $span;
+
+				if($x >= -1 && $x <= $span && $z >= -1 && $z <= $span
+					&& ($x < 0 || $x >= $span || $z < 0 || $z >= $span)
+				){
+					$ready = false;
+					break;
+				}
 			}
 
 			if($ready) $this->retiring[$key] = ['parent' => $parent, 'children' => $children, 'start' => $this->clock];
 		}
 
-		foreach(array_values($nodes) as $node)
+		foreach($splitting as $node)
 		{
-			if($this->morph($node) > 0 || isset($this->retiring[$this->parentKey($node)])) continue;
+			$nodeKey = $node['key'];
 
-			if(isset($targetLeaves[$node['key']]) || !isset($targetBranches[$node['key']])) continue;
+			if($this->morph($node) > 0
+				|| isset($this->retiring[$this->parentKeys[$nodeKey] ??= self::parentOf($nodeKey)])
+			) continue;
 
 			$children = $this->lod->children($node);
 			$ready = true;
@@ -993,17 +1226,25 @@ final class Scene
 
 			if(!$ready) continue;
 
-			if(self::neighborsAt($node, $nodes, $node['level'] - 1)) continue;
+			// A coarser patch beside this one has to split first.
+			foreach($this->coarserKeys[$nodeKey] ??= self::coarserNeighborKeys($node) as $coarser)
+			if(isset($nodes[$coarser])) continue 2;
+
 			foreach(self::neighborsAt($node, $nodes, $node['level']) as $neighbor)
-			if($this->morph($neighbor) > 0 || isset($this->retiring[$this->parentKey($neighbor)]))
 			{
-				$ready = false;
-				break;
+				$key = $neighbor['key'];
+
+				if($this->morph($neighbor) > 0
+					|| isset($this->retiring[$this->parentKeys[$key] ??= self::parentOf($key)])
+				){
+					$ready = false;
+					break;
+				}
 			}
 
 			if(!$ready) continue;
 
-			unset($nodes[$node['key']]);
+			unset($nodes[$nodeKey]);
 
 			foreach($children as $child)
 			{
@@ -1025,9 +1266,11 @@ final class Scene
 		$key = $node['key'];
 		if($this->morphMemo !== null && isset($this->morphMemo[$key])) return $this->morphMemo[$key];
 
-		// Only a retiring sibling group needs its parent's key, and building that string is the costly part.
-		if($this->retiring !== [] && isset($this->retiring[$parent = $this->parentKey($node)]))
-		{
+		// Only a retiring sibling group needs its parent's key, and building that string is the costly part,
+		// so each key's parent is kept once it has been built.
+		if($this->retiring !== []
+			&& isset($this->retiring[$parent = $this->parentKeys[$key] ??= self::parentOf($key)])
+		){
 			$value = (float)min(1, max(0, ($this->clock - $this->retiring[$parent]['start']) / .35));
 		}
 		else
@@ -1382,25 +1625,29 @@ final class Scene
 	private function evict(bool $allUnreserved = false): void
 	{
 		$limit = $this->capacity() - count($this->jobs) - count($this->replacementJobs) - count($this->replacements);
+		$excess = count($this->patches) - $limit;
 
-		if(!$allUnreserved && count($this->patches) <= $limit) return;
+		if(!$allUnreserved && $excess <= 0) return;
 
-		uasort($this->patches, /** Order unreserved resources by last use.
-		 * @param array $a First retained patch.
-		 * @param array $b Second retained patch.
-		 * @return int Least-recently-used ordering.
-		 */
-			static fn($a, $b) => $a['lastUse'] <=> $b['lastUse']
-		);
+		// Order the patches by last use. A comparison callback costs a PHP call for every pair it ranks,
+		// a few thousand for a full cache. asort() compares the times itself, ranks them as the callback
+		// did and keeps equal ones in their current order.
+		$lastUse = [];
+
+		foreach($this->patches as $key => $p) $lastUse[$key] = $p['lastUse'];
+
+		asort($lastUse);
+		$this->patches = array_replace($lastUse, $this->patches);
 
 		foreach($this->patches as $key => $p)
 		{
-			if(!$allUnreserved && count($this->patches) <= $limit) break;
+			if(!$allUnreserved && $excess <= 0) break;
 
 			if(isset($this->reserved[$key])) continue;
 
 			$p['mesh']->close();
 			unset($this->patches[$key], $this->activated[$key]);
+			$excess--;
 		}
 	}
 
