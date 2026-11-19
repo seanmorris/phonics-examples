@@ -12,6 +12,16 @@ final class Car
 	public const WHEELBASE = 2.515, FRONT_TRACK = 1.57, REAR_TRACK = 1.644, TIRE_RADIUS = .297;
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
 	private float $speed = 0, $steering = 0, $spin = 0;
+	/** Angle in radians from the direction of travel to the way the body points, while the tail slides out. */
+	private float $drift = 0;
+	/** Deceleration in metres a second squared from locked rear tires carrying all the rear load. */
+	private const HANDBRAKE = 6.5;
+	/**
+	 * Largest drift the handbrake swings the tail to, in radians, and the time constant of that swing, in seconds.
+	 * Once the rear tires roll again the drift dies away with its own time constant and a steady rate in radians a
+	 * second, so it settles on zero.
+	 */
+	private const DRIFT = .6, DRIFT_IN = .35, DRIFT_OUT = .3, DRIFT_SETTLE = .3;
 	private const RECOVERY_DELAY = 1.5;
 	private CarSuspension $suspension;
 	private float $roadPitch = 0, $roadRoll = 0;
@@ -80,7 +90,7 @@ final class Car
 	{
 		[$this->x,$this->z,$this->yaw,$support] = $site;
 		$this->restOnWheels($support);
-		$this->speed = $this->steering = $this->spin = 0;
+		$this->speed = $this->steering = $this->spin = $this->drift = 0;
 		$this->tumble = null; $this->recoveryTime = 0; $this->recoveries = 0;
 		$this->lastSafe = [$this->x,$this->z,$this->yaw];
 		$this->revision = $land->revision();
@@ -88,7 +98,18 @@ final class Car
 	}
 
 	/** Return false if a water-level change or published terrain edit removes support at the current pose. */
-	public function step(float $dt, int $throttle, int $turn, Landscape $land, float $waterLevel): bool
+	/**
+	 * Drive one fixed step. The keyboard gives whole pedal and steering values and a gamepad anything between.
+	 * @param float $dt Fixed step in seconds.
+	 * @param float $throttle -1 to 1. Positive drives forward. Negative brakes while rolling forward, then reverses.
+	 * @param float $turn -1 to 1. Positive steers right.
+	 * @param Landscape $land Ground under the wheels.
+	 * @param float $waterLevel Water the car may not drive into.
+	 * @param bool $handbrake Lock the rear wheels.
+	 * @return bool False when the ground under the car changed and no support remains.
+	 */
+	public function step(float $dt, float $throttle, float $turn, Landscape $land, float $waterLevel,
+		bool $handbrake = false): bool
 	{
 		if($dt <= 0) return true;
 		if($this->revision !== $land->revision() || $this->waterLevel !== $waterLevel)
@@ -110,7 +131,7 @@ final class Car
 		$this->steering += max(-2.5*$dt, min(2.5*$dt, $target - $this->steering));
 		$gripFraction = $this->suspension->contacts/4;
 		$grade = sin($this->roadPitch);
-		if($gripFraction > 0 && $throttle === 0)
+		if($gripFraction > 0 && $throttle == 0)
 		{
 			if($this->speed != 0 || abs($grade) > .18) $this->speed -= 9.81*$grade*$dt*$gripFraction;
 			$drag = (1.7 + .006*$this->speed**2)*$dt;
@@ -122,8 +143,22 @@ final class Car
 			$rearGrip = ($this->suspension->contacts-$this->suspension->frontContacts)/2;
 			$traction = $throttle*$this->speed < 0 ? $gripFraction : $rearGrip;
 			$this->speed += ($throttle*$power*$traction - (.006*$this->speed*abs($this->speed)+9.81*$grade)*$gripFraction)*$dt;
+			$pedal = abs($throttle);
+			// A light pedal leaves some of the rolling resistance a released one would meet.
+			if($pedal < 1)
+				$this->speed = ($this->speed <=> 0)*max(0.0, abs($this->speed) - 1.7*(1 - $pedal)*$gripFraction*$dt);
 			$this->speed = min(36, max(-8, $this->speed));
 		}
+		$rear = ($this->suspension->contacts - $this->suspension->frontContacts)/2;
+		if($handbrake && $rear > 0 && $this->speed != 0)
+			$this->speed = ($this->speed <=> 0)*max(0.0, abs($this->speed) - self::HANDBRAKE*$rear*$dt);
+		if($this->drift != 0 && $gripFraction > 0)
+		{
+			// Tires sliding sideways scrub speed.
+			$scrub = 3.0*abs(sin($this->drift))*$gripFraction*$dt;
+			$this->speed = ($this->speed <=> 0)*max(0.0, abs($this->speed) - $scrub);
+		}
+		if($this->speed == 0) $this->drift = 0;
 		if($this->speed == 0 && $this->suspension->resting) return true;
 		$distance = $this->speed * $dt;
 		// An inward bank supplies some centripetal acceleration. Only the remainder needs tire grip.
@@ -133,10 +168,26 @@ final class Car
 		$direction = $demand <=> 0;
 		$lateral = $direction*min(abs($demand), max(0.0, $grip+$direction*$gravitySide))*$this->suspension->frontContacts/2;
 		$rotation = $this->speed == 0 ? 0.0 : $lateral*$dt/$this->speed;
-		$heading = $this->yaw + .5*$rotation;
+		// Locked rear tires stop holding the tail on line, so it swings out into the turn. Once they roll again
+		// the car keeps pointing where it was and its path swings round to meet it.
+		$slide = $handbrake && $rear > 0 && $this->speed > 2
+			? -max(-1.0, min(1.0, $turn))*self::DRIFT*min(1.0, $this->speed/14) : 0.0;
+		if($slide == 0 && $this->drift == 0)
+		{
+			$heading = $this->yaw + .5*$rotation;
+			$yaw = $this->yaw + $rotation;
+		}
+		else
+		{
+			$path = $this->yaw - $this->drift;
+			$drift = $slide != 0 ? $this->drift + ($slide - $this->drift)*(1 - exp(-$dt/self::DRIFT_IN))
+				: ($this->drift <=> 0)*max(0.0, abs($this->drift)*exp(-$dt/self::DRIFT_OUT) - self::DRIFT_SETTLE*$dt);
+			$yaw = $slide != 0 ? $path + $rotation + $drift : $this->yaw + $rotation;
+			$heading = .5*($path + $yaw - $drift);
+			$this->drift = $drift;
+		}
 		$x = $this->x + sin($heading)*$distance*cos($this->roadPitch);
 		$z = $this->z + cos($heading)*$distance*cos($this->roadPitch);
-		$yaw = $this->yaw + $rotation;
 		$support = $this->support($land, $waterLevel, $x, $z, $yaw);
 		if($support === null)
 		{
@@ -160,6 +211,7 @@ final class Car
 			$pitchRate = max(-3.5,min(3.5,$springs->pitchRate)); $rollRate = max(-4.5,min(4.5,$springs->rollRate));
 			if($tipEnd && $gripFraction > 0) $pitchRate += ($pitch <=> 0)*1.65;
 			if($tipSide && $gripFraction > 0) $rollRate += ($sideLoad <=> 0)*2.1;
+			$this->drift = 0;
 			$this->tumble = new CarTumble($this->x,$this->y,$this->z,$this->yaw,$this->pitch,$this->roll,
 				$this->speed*cos($this->roadPitch),$springs->verticalSpeed,$pitchRate,$rollRate);
 			return $this->stepTumble($dt,$land,$waterLevel);
@@ -273,7 +325,7 @@ final class Car
 	public function state(): array
 	{
 		return ['x'=>$this->x,'y'=>$this->y,'z'=>$this->z,'yaw'=>$this->yaw,'pitch'=>$this->pitch,'roll'=>$this->roll,
-			'speed'=>$this->speed,'steering'=>$this->steering,'wheelSpin'=>$this->spin,'terrainRevision'=>$this->revision,
+			'speed'=>$this->speed,'steering'=>$this->steering,'drift'=>$this->drift,'wheelSpin'=>$this->spin,'terrainRevision'=>$this->revision,
 			'wheelTravel'=>$this->tumble === null ? $this->suspension->travel : [0.0,0.0,0.0,0.0],
 			'wheelContacts'=>$this->tumble === null ? $this->suspension->contacts : 0,
 			'motion'=>$this->tumble === null ? ($this->suspension->contacts ? 'driving' : 'airborne') : ($this->recoveryTime > 0 ? 'overturned' : 'tumbling'),

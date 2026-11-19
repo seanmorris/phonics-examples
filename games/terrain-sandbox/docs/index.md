@@ -6,15 +6,23 @@ Landscape Sandbox is a place to explore and edit procedural terrain. The default
 
 Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and **Q/E** to descend or climb. Hold **Shift** to fly at 300 metres per second. The Flight slider changes the ordinary movement speed.
 
+With a gamepad, the left stick moves, the right stick looks around, and the right and left triggers climb and descend. Hold the left stick pressed in to fly at 300 metres per second.
+
 **Home view** returns to the starting viewpoint. **H** folds or opens the controls. **Fullscreen** enlarges the whole sandbox, including its controls.
 
 Choose a preset and seed, then select **Generate** to create a new landscape. Generation replaces the current landscape and its edits, so save your work first. A seed reproduces its landscape under the saved generator version.
 
 ## Fly the F5
 
-Press **J** or choose **Fly F5** to start airborne at your current location, facing the same direction as the camera. The jet carries its speed when you release the throttle. Hold **W/S** to speed up or slow down, **A/D** to bank into a turn, and **Q/E** to dive or climb. Release the flight controls to level the wings and nose.
+Press **J**, choose **Fly F5**, or press up on a gamepad's D-pad to start airborne at your current location, facing the same direction as the camera. The jet handles like AirForce Delta on the Dreamcast and offers its two control types. Choose one under **Jet controls**, or press **Back** on a gamepad, even in flight.
 
-The chase camera keeps the horizon level. **P** pauses the flight. Press **F** to leave the jet and explore from the chase camera’s position. Reaching the map edge also returns you to free flight.
+**Novice**, the default, banks into turns and levels itself. **A/D** or the left stick turn. **E/Q**, or pulling and pushing the stick, climb and dive. Let go and the jet levels its wings and nose.
+
+**Expert** turns the jet about its own axes and holds whatever attitude you leave it in, so it can roll inverted and loop. **A/D** or the stick roll, **E/Q** or the stick pitch, and **Z/X** or **LB/RB** work the rudder. In a bank the wings support only part of the jet's weight unless you pull, so a banked jet turns slowly and one on its side slides towards the ground. Switching back to Novice keeps the jet's orientation and then levels it.
+
+In both, hold **W** or the right trigger to speed up towards 260 metres per second, and **S** or the left trigger to slow towards 55. Let go and the jet returns to its 140 metre per second cruise, as the Dreamcast game does. A trigger sets a speed in proportion to how far you squeeze it. Pulling the stick back raises the nose; tick **Push the stick forward to climb** to reverse it. The sandbox remembers both choices in this browser. Saved landscapes do not carry them.
+
+Both chase cameras keep the horizon level. The Novice camera looks along the jet's heading. The Expert camera swings in behind the nose, so it follows loops. It turns round quickly as the nose passes straight up or down. **P** or **Start** pauses the flight. Press **F**, or down on the D-pad, to leave the jet and explore from the chase camera's position. Reaching the map edge also returns you to free flight.
 
 ## Watch the atmosphere
 
@@ -30,15 +38,19 @@ Use **Water color** to tint the surface and underwater haze. Raise **Transparenc
 
 ## Drive on land
 
-Select **Drive car** or press **C** to take the Testarossa. The sandbox checks the ground below you first, then searches nearby for a dry, gently sloping patch with room to pull away. Graded roads use the same ground surface. If you start over water or a cliff and the search finds nothing, fly closer to land and try again.
+Select **Drive car**, press **C**, or press left on a gamepad's D-pad to take the Testarossa. The sandbox checks the ground below you first, then searches nearby for a dry, gently sloping patch with room to pull away. Graded roads use the same ground surface. If you start over water or a cliff and the search finds nothing, fly closer to land and try again.
 
-**W** accelerates. **S** brakes while moving forward and reverses when held. **A/D** steer. An inward bank helps the tires carry speed through a corner. The wheels move independently over bumps. A crest you can roll over slowly can launch the car at speed. It carries its momentum through the air, and the suspension compresses on landing. Steeper faces can tip the car into a roll. If the car comes to rest on its roof, it waits 1.5 seconds before righting itself. It uses the last stable patch if the landing spot is too steep. Water and the map edge still bound the drive. Press **F** to return to flight.
+**W** or the right trigger accelerates. **S** or the left trigger brakes while moving forward and reverses once the car stops. **A/D** or the left stick steer. The triggers and stick act in proportion to how far you move them. **Space** or **A** pulls the handbrake. The rear tires lock, slow the car and let the tail swing out into a turn. Release it and the car carries on the way it points. On a gamepad the right stick looks around the car; pull it back to look behind. An inward bank helps the tires carry speed through a corner. The wheels move independently over bumps. A crest you can roll over slowly can launch the car at speed. It carries its momentum through the air, and the suspension compresses on landing. Steeper faces can tip the car into a roll. If the car comes to rest on its roof, it waits 1.5 seconds before righting itself. It uses the last stable patch if the landing spot is too steep. Water and the map edge still bound the drive. Press **F** to return to flight.
 
 ## Ride the water
 
-Select **Board watercraft**, or press **B**, to find nearby water deep enough for the craft. Use **W/S** for throttle and reverse and **A/D** to steer. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.
+Select **Board watercraft**, press **B**, or press right on a gamepad's D-pad to find nearby water deep enough for the craft. Use **W/S** or the triggers for throttle and reverse, and **A/D** or the left stick to steer. The right stick looks around the craft. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.
 
 Select **Return to flight**, or press **F**, to explore and edit again. The craft is an arcade physics demonstration, not a complete racing game.
+
+## Use a gamepad
+
+The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. The D-pad chooses where you are: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
 
 ## Pause and save
 

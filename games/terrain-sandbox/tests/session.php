@@ -481,7 +481,8 @@ expect($flight->mode === 'fly' && str_contains($flight->message,'edge'), 'Flight
 $flight->close();
 
 /**
- * Advance a jet one fixed step by the flight model as it stood before the control surfaces moved.
+ * Advance a jet one fixed step by the Novice flight model as it stood before the control surfaces moved, with the
+ * speed rule of AirForce Delta's triggers: held throttle moves towards 260 or 55 m/s and release returns to 140.
  * @param array $p Jet state before the step.
  * @param int $throttle Throttle keys, -1 to 1.
  * @param int $bank Bank keys, -1 to 1.
@@ -491,7 +492,9 @@ $flight->close();
 function oldMotion(array $p, int $throttle, int $bank, int $climb): array
 {
 	$dt = 1 / 60;
-	$speed = max(55.0,min(260.0,$p['speed'] + $throttle * 55 * $dt));
+	$target = $throttle >= 0 ? 140.0 + $throttle * 120.0 : 140.0 + $throttle * 85.0;
+	$gap = $target - $p['speed'];
+	$speed = abs($gap) <= 55 * $dt ? $target : $p['speed'] + ($gap <=> 0) * 55 * $dt;
 	$roll = $p['roll'] + (-$bank * 1.10 - $p['roll']) * (1 - exp(-3.6 * $dt));
 	$pitch = $p['pitch'] + ($climb * .78 - $p['pitch']) * (1 - exp(-2.1 * $dt));
 	$yaw = $p['yaw'] + sin($roll) * .68 * $dt;
@@ -514,7 +517,8 @@ expect($s['aileron'] === 0.0 && $s['stabilator'] === 0.0 && $s['rudder'] === 0.0
 
 $travel = ['aileron'=>TerrainSandbox\Jet::AILERON, 'stabilator'=>TerrainSandbox\Jet::STABILATOR,
 	'rudder'=>TerrainSandbox\Jet::RUDDER];
-$oldKeys = ['x','y','z','yaw','pitch','roll','speed','aileron','stabilator','rudder','boom','eyeY'];
+$oldKeys = ['x','y','z','yaw','pitch','roll','speed','aileron','stabilator','rudder','boom','eyeY','eyeX','eyeZ',
+	'lookYaw','lookPitch'];
 $matched = $bounded = $interpolated = true;
 $peak = array_fill_keys(array_keys($travel), 0.0);
 $seen = [];
@@ -955,13 +959,322 @@ $tower->camera->position = [600,40,1800];
 $tower->camera->yaw = M_PI;
 input($tower, ['actions'=>['jet']]);
 $nodes = $tower->landscape->stats()['generated'];
-[$matched] = flyExactly($tower, $ground, 40);
+// At the 140 m/s cruise, 31 steps stop 72 metres on, short of the first tower, and 102 more cross all six.
+[$matched] = flyExactly($tower, $ground, 31);
 expect($matched && $tower->landscape->stats()['generated'] === $nodes,
 	'A jet approaching a tower clears the open plain without sampling it');
-[$matched, $resting] = flyExactly($tower, $ground, 130);
+[$matched, $resting] = flyExactly($tower, $ground, 102);
 expect($matched && $resting >= 12 && $tower->jet->state()['y'] > 1007,
 	"The jet rides up each tower face in turn: $resting steps on a face");
 $ground->close();
 $tower->close();
+
+
+// Gamepads. The page sends [left X, left Y, right X, right Y, left trigger, right trigger, button bits] with +Y
+// towards the player, and only when the pad changes; the application re-sends the last packet every frame.
+use TerrainSandbox\Jet;
+
+/** Build a gamepad packet. */
+function pad(float $x = 0, float $y = 0, float $lookX = 0, float $lookY = 0, float $lt = 0, float $rt = 0,
+	int $buttons = 0): array
+{
+	return [$x, $y, $lookX, $lookY, $lt, $rt, $buttons];
+}
+
+/**
+ * Hold a pad and keys for some fixed steps, as the application does each frame.
+ * @return list<array> Vehicle state after each step, taken with $read.
+ */
+function hold(Session $session, array $pad, int $steps, callable $read, array $keys = []): array
+{
+	$states = [];
+	for($i = 0; $i < $steps; $i++)
+	{
+		input($session, ['pad'=>$pad, 'keys'=>$keys]);
+		$session->step(1 / 60);
+		$states[] = $read($session);
+	}
+	return $states;
+}
+
+/** The jet's left, up and forward axes for a pose, as VehicleModel draws them. */
+function jetAxes(array $p): array
+{
+	$cy = cos($p['yaw']); $sy = sin($p['yaw']); $cp = cos($p['pitch']); $sp = sin($p['pitch']);
+	$cr = cos($p['roll']); $sr = sin($p['roll']);
+	return [[$cy*$cr + $sy*$sp*$sr, -$cp*$sr, -$sy*$cr + $cy*$sp*$sr],
+		[$cy*$sr - $sy*$sp*$cr, $cp*$cr, -$sy*$sr - $cy*$sp*$cr], [$sy*$cp, $sp, $cy*$cp]];
+}
+
+/** Largest change of heading, pitch or roll between consecutive states. */
+function largestTurn(array $states): float
+{
+	$largest = 0.0;
+	for($i = 1; $i < count($states); $i++)
+		foreach(['yaw','pitch','roll'] as $key)
+			$largest = max($largest, abs($states[$i][$key] - $states[$i - 1][$key]));
+	return $largest;
+}
+
+/** Board a jet high over an open plain, heading towards +Z. */
+function pilot(string $controls = 'novice'): Session
+{
+	$session = new Session(['worldSize'=>8192,'heightScale'=>0,'detailAmplitude'=>0]);
+	$session->camera->position = [0,1500,-2500];
+	$session->camera->yaw = M_PI;
+	input($session, ['values'=>['jetControls'=>$controls], 'actions'=>['jet']]);
+	return $session;
+}
+
+$jet = fn(Session $session): array => $session->jet->state();
+$eye = fn(Session $session): array => [$session->camera->position, $session->camera->yaw, $session->camera->pitch];
+
+// Free flight.
+$roam = new Session(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0]);
+$roam->camera->position = [0,300,0]; $roam->camera->yaw = 0; $roam->camera->pitch = 0;
+input($roam, ['pad'=>pad(y: -1)]);
+[$x,,$z] = $roam->camera->position;
+expect($z < -1.6 && abs($x) < 1e-9, 'Pushing the left stick forward flies the free camera ahead');
+$before = $roam->camera->position;
+input($roam, ['pad'=>pad(rt: 1)]);
+expect($roam->camera->position[1] > $before[1] + 1.6, 'The right trigger climbs in free flight');
+$yaw = $roam->camera->yaw;
+$before = $roam->camera->position;
+input($roam, ['pad'=>pad(lookX: 1)]);
+expect($roam->camera->yaw > $yaw && $roam->camera->position === $before,
+	'The right stick turns the free view without moving it');
+$before = $roam->camera->position;
+input($roam, ['pad'=>pad(y: -1, buttons: Session::PAD_LS)]);
+$fast = hypot($roam->camera->position[0] - $before[0], $roam->camera->position[2] - $before[2]);
+expect(abs($fast - 5) < 1e-9, 'Clicking the left stick flies at 300 m/s, as Shift does');
+foreach([[1,2], ['1',0,0,0,0,0,0], [INF,0,0,0,0,0,0], ['x'=>1], 'pad', [0,0,0,0,0,0,0,0]] as $bad)
+{
+	$before = [$roam->camera->position, $roam->camera->yaw];
+	input($roam, ['pad'=>$bad]);
+	expect([$roam->camera->position, $roam->camera->yaw] === $before, 'A malformed pad packet reads as a pad at rest');
+}
+$before = $roam->camera->position;
+input($roam, ['pad'=>pad(y: -7)]);
+$far = $before[2] - $roam->camera->position[2];
+$before = $roam->camera->position;
+input($roam, ['pad'=>pad(y: -1)]);
+expect(abs($far - ($before[2] - $roam->camera->position[2])) < 1e-9 && $far > 1.6,
+	'Stick values beyond full travel count as full travel');
+$roam->close();
+
+// Novice: AirForce Delta's default handling. A full stick or trigger flies exactly as the key it stands for.
+$keys = pilot(); $stick = pilot();
+$keyed = hold($keys, pad(), 200, $jet, ['KeyW'=>true,'KeyD'=>true,'KeyE'=>true]);
+$padded = hold($stick, pad(x: 1, y: 1, rt: 1), 200, $jet);
+expect($keyed === $padded, 'In Novice the full stick and right trigger fly exactly as D, E and W');
+$keys->close();
+$s = $stick->jet->state();
+expect($stick->jetControls === 'novice' && !$stick->jet->expert() && $s['speed'] === Jet::FASTEST,
+	'Holding the right trigger reaches top speed');
+hold($stick, pad(x: .5), 300, $jet);
+$s = $stick->jet->state();
+expect(abs($s['roll'] + .55) < 1e-3 && $s['speed'] === Jet::CRUISE,
+	'Half stick holds half the Novice bank, and releasing the trigger returns to cruise');
+hold($stick, pad(lt: .5), 300, $jet);
+expect($stick->jet->state()['speed'] === Jet::CRUISE - .5 * (Jet::CRUISE - Jet::SLOWEST) && abs($stick->jet->state()['roll']) < 1e-3,
+	'Half the left trigger slows to a speed halfway towards the slowest, and the wings level hands off');
+hold($stick, pad(y: 1), 150, $jet);
+expect($stick->jet->state()['pitch'] > .75, 'Pulling the stick back raises the nose');
+input($stick, ['values'=>['invertPitch'=>true]]);
+hold($stick, pad(y: 1), 150, $jet);
+expect($stick->invertPitch && $stick->jet->state()['pitch'] < -.75, 'With the stick inverted, pulling back lowers the nose');
+input($stick, ['values'=>['invertPitch'=>'yes']]);
+expect($stick->invertPitch && $stick->message === 'Invert pitch must be true or false', 'A non-boolean invert is refused');
+input($stick, ['values'=>['invertPitch'=>false]]);
+hold($stick, pad(x: -1), 60, $jet, ['KeyD'=>true]);
+expect($stick->jet->state()['roll'] < -1, 'Held keys win over the stick');
+$stick->close();
+
+// Expert: roll, pitch and rudder about the jet's own axes. The attitude holds when the stick is released.
+$ace = pilot('expert');
+expect($ace->jet->expert() && str_starts_with($ace->message, 'Expert') && $ace->status()['jetControls'] === 'expert',
+	'Expert handling can be chosen before boarding');
+$start = $ace->jet->state();
+$rolled = hold($ace, pad(x: 1), (int)round(2 * M_PI / Jet::ROLL_RATE * 60), $jet);
+$rolled = array_merge($rolled, hold($ace, pad(), 60, $jet));
+$s = $ace->jet->state();
+[, $up] = jetAxes($s);
+expect($rolled[5]['roll'] < $start['roll'] && $rolled[5]['aileron'] < 0 && min(array_column($rolled, 'aileron')) < -.99 * Jet::AILERON,
+	'Right stick rolls right on full aileron');
+expect($up[1] > .995 && abs($s['roll'] - ($start['roll'] - 2 * M_PI)) < .05 && largestTurn($rolled) < 1.05 * Jet::ROLL_RATE / 60,
+	'A full roll comes back wings level, and its angles change smoothly all the way round');
+$heading = $s['yaw'];
+[, , $ahead] = jetAxes($s);
+// Read each step's pose, the drawn pose halfway to it, and the camera.
+$looped = hold($ace, pad(y: 1), (int)round(2 * M_PI / Jet::PITCH_RATE * 60), fn($session) => $session->jet->state()
+	+ ['camera'=>[$session->camera->position, $session->camera->yaw], 'middle'=>$session->jet->view($session->camera, .5)[1]]);
+$turning = count($looped);
+$looped = array_merge($looped, hold($ace, pad(), 60, $jet));
+$s = $ace->jet->state();
+[, $up, $nose] = jetAxes($s);
+$top = [INF, 0.0];
+$noseTurn = $drawn = $cameraTurn = 0.0;
+$farthest = 0.0; $nearest = INF;
+for($i = 1; $i < $turning; $i++)
+{
+	[, , $a] = jetAxes($looped[$i - 1]); [, $u, $b] = jetAxes($looped[$i]); [, , $m] = jetAxes($looped[$i]['middle']);
+	$back = $b[0]*$ahead[0] + $b[1]*$ahead[1] + $b[2]*$ahead[2];
+	if($back < $top[0]) $top = [$back, $u[1]];
+	$noseTurn = max($noseTurn, acos(min(1.0, $a[0]*$b[0] + $a[1]*$b[1] + $a[2]*$b[2])));
+	$half = array_map(fn($u, $v) => $u + $v, $a, $b);
+	$length = sqrt(array_sum(array_map(fn($u) => $u * $u, $half)));
+	$drawn = max($drawn, acos(min(1.0, ($half[0]*$m[0] + $half[1]*$m[1] + $half[2]*$m[2]) / $length)));
+	$cameraTurn = max($cameraTurn, abs($looped[$i]['camera'][1] - $looped[$i - 1]['camera'][1]));
+	$distance = sqrt(array_sum(array_map(fn($u, $v) => ($u - $v) ** 2, $looped[$i]['camera'][0],
+		[$looped[$i]['x'], $looped[$i]['y'], $looped[$i]['z']])));
+	$farthest = max($farthest, $distance); $nearest = min($nearest, $distance);
+}
+expect($top[0] < -.999 && $top[1] < -.99,
+	'Halfway round a loop the jet flies inverted the opposite way');
+expect($noseTurn < 1.05 * Jet::PITCH_RATE / 60 && $drawn < 1e-3,
+	'The nose turns smoothly through the loop, and the pose drawn between steps lies halfway between them');
+expect($nose[1] < .05 && $up[1] > .99 && abs(atan2(sin($s['yaw'] - $heading), cos($s['yaw'] - $heading))) < .05,
+	'A full loop returns level on the heading it started on');
+expect($cameraTurn <= 4.0 / 60 + 1e-9 && $nearest > 15 && $farthest < 40,
+	'The Expert chase camera stays behind the jet through the loop and turns smoothly over the top');
+$level = $ace->jet->state();
+hold($ace, pad(), 30, $jet, ['KeyX'=>true]);
+$s = $ace->jet->state();
+expect($s['yaw'] < $level['yaw'] - .1 && abs($s['roll'] - $level['roll']) < .02 && $s['rudder'] < 0,
+	'X yaws the nose right on the rudder');
+hold($ace, pad(buttons: Session::PAD_LB), 60, $jet);
+expect($ace->jet->state()['yaw'] > $s['yaw'] + .2, 'LB yaws the nose left');
+hold($ace, pad(x: 1), (int)round(M_PI / 4 / Jet::ROLL_RATE * 60), $jet);
+hold($ace, pad(), 30, $jet);
+$banked = $ace->jet->state();
+hold($ace, pad(), 120, $jet);
+$s = $ace->jet->state();
+expect(abs($s['roll'] - $banked['roll']) < .01 && $s['yaw'] < $banked['yaw'] - .05 && $s['yaw'] > $banked['yaw'] - .2,
+	'Released in a bank, the jet holds it and slowly turns towards the lower wing');
+input($ace, ['actions'=>['jet-controls']]);
+expect(!$ace->jet->expert() && $ace->jetControls === 'novice' && str_starts_with($ace->message, 'Novice'),
+	'Back on the pad switches to Novice in flight');
+input($ace, ['values'=>['jetControls'=>'arcade']]);
+expect($ace->jetControls === 'novice' && $ace->message === 'Jet controls must be novice or expert',
+	'Unknown handling is refused');
+$ace->close();
+// Over the top of a half loop the jet flies inverted with its nose past vertical.
+$ace = pilot('expert');
+hold($ace, pad(y: 1), (int)round(.75 * M_PI / Jet::PITCH_RATE * 60), $jet);
+hold($ace, pad(), 20, $jet);
+$over = $ace->jet->state();
+input($ace, ['values'=>['jetControls'=>'novice']]);
+$s = $ace->jet->state();
+$same = true;
+foreach([jetAxes($over), jetAxes($s)] as $i => $axes) $orientation[$i] = $axes;
+foreach([0, 1, 2] as $axis) foreach([0, 1, 2] as $j) $same = $same && abs($orientation[0][$axis][$j] - $orientation[1][$axis][$j]) < 1e-9;
+expect($over['pitch'] > M_PI / 2 && abs($s['pitch']) <= M_PI / 2 && $same,
+	'Novice takes over an inverted jet in the same orientation, with the nose within 90 degrees of level');
+hold($ace, pad(), 600, $jet);
+$s = $ace->jet->state();
+expect(abs($s['pitch']) < .01 && abs(atan2(sin($s['roll']), cos($s['roll']))) < .01
+	&& abs(atan2(sin($ace->camera->yaw + $s['yaw'] - M_PI), cos($ace->camera->yaw + $s['yaw'] - M_PI))) < 1e-9,
+	'Novice then rolls the jet upright, levels it and puts the camera back behind it');
+$file = json_decode($ace->save(), true, flags: JSON_THROW_ON_ERROR);
+expect(!array_key_exists('jetControls', $file['settings']) && !array_key_exists('invertPitch', $file['settings']),
+	'Save files do not record the jet handling');
+$file['settings']['jetControls'] = 'expert';
+$ace->load(json_encode($file, JSON_THROW_ON_ERROR));
+expect($ace->jetControls === 'novice', 'A file cannot choose the jet handling');
+$ace->close();
+
+// The car: right trigger accelerates, left trigger brakes and then reverses, A is the handbrake.
+$open = ['worldSize' => 1024, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
+$car = fn(Session $session): array => $session->car->state();
+$park = function() use ($open): Session {
+	$session = new Session($open);
+	$session->camera->position = [0,50,-300]; $session->camera->yaw = M_PI;
+	enterCar($session);
+	return $session;
+};
+$keys = $park(); $stick = $park();
+expect(hold($keys, pad(), 120, $car, ['KeyW'=>true,'KeyD'=>true]) === hold($stick, pad(x: 1, rt: 1), 120, $car),
+	'A full stick and right trigger drive exactly as W and D');
+$keys->close();
+$floored = $park(); $light = $park();
+$full = hold($floored, pad(rt: 1), 60, $car);
+$half = hold($light, pad(rt: .5), 60, $car);
+// Half the pedal gives half the drive and leaves half the rolling resistance a released pedal meets.
+expect(end($half)['speed'] > end($full)['speed'] / 3 && end($half)['speed'] < end($full)['speed'] / 2,
+	'Half the right trigger accelerates more gently');
+$light->close(); $floored->close();
+$feathered = $park(); $released = $park();
+hold($feathered, pad(rt: 1), 60, $car);
+hold($released, pad(rt: 1), 60, $car);
+$feather = hold($feathered, pad(rt: .02), 60, $car);
+$coast = hold($released, pad(), 60, $car);
+$lost = fn(array $run): float => $run[0]['speed'] - $run[59]['speed'];
+expect(abs($lost($feather) - $lost($coast)) < .25 && $lost($coast) > 1,
+	'A feathered trigger rolls on almost as freely as a released one');
+$feathered->close(); $released->close();
+$rolling = $stick->car->state()['speed'];
+$braked = hold($stick, pad(lt: 1), 240, $car);
+expect($braked[10]['speed'] < $rolling - 1.5 && end($braked)['speed'] < -2, 'The left trigger brakes, then reverses');
+$stick->close();
+
+$slide = $park(); $straight = $park(); $grip = $park();
+foreach([$slide, $straight, $grip] as $session) hold($session, pad(rt: 1), 150, $car);
+$speed = $straight->car->state()['speed'];
+$locked = hold($straight, pad(buttons: Session::PAD_A), 30, $car);
+$rolled = hold($grip, pad(), 30, $car);
+expect($speed > 15 && end($locked)['speed'] < end($rolled)['speed'] - 2.5 && max(array_map('abs', array_column($locked, 'drift'))) === 0.0,
+	'The handbrake slows a car running straight without sliding it');
+$space = $park();
+hold($space, pad(rt: 1), 150, $car);
+expect(hold($space, pad(), 30, $car, ['Space'=>true]) === $locked, 'Space is the same handbrake as A');
+$space->close(); $grip->close();
+$entry = $slide->car->state();
+$turning = hold($slide, pad(x: 1, buttons: Session::PAD_A), 40, $car);
+$release = end($turning);
+$travel = atan2($release['x'] - $turning[38]['x'], $release['z'] - $turning[38]['z']);
+expect($release['drift'] < -.3 && abs(atan2(sin($release['yaw'] - $release['drift'] - $travel), cos($release['yaw'] - $release['drift'] - $travel))) < .05,
+	'Handbrake and right steer swing the tail out, so the car points right of where it travels');
+$recovered = hold($slide, pad(), 90, $car);
+$s = end($recovered);
+expect($s['drift'] === 0.0 && abs($s['yaw'] - $release['yaw']) < .15 && $s['speed'] > 1,
+	'Releasing the handbrake lets the path swing round to where the car points');
+$straight->close();
+
+$parked = $slide;
+// Brake until the car stops. Holding on would reverse it.
+for($i = 0; $parked->car->state()['speed'] > 0 && $i < 600; $i++) hold($parked, pad(lt: 1), 1, $car);
+hold($parked, pad(), 120, $car);
+$s = $parked->car->state();
+expect(abs($s['speed']) < .01, 'The car comes to rest');
+$view = hold($parked, pad(lookY: 1), 60, $eye);
+[$position, $yaw] = end($view);
+$ahead = ($position[0] - $s['x']) * sin($s['yaw']) + ($position[2] - $s['z']) * cos($s['yaw']);
+expect($ahead > 5 && abs(atan2(sin($yaw - (2 * M_PI - $s['yaw'])), cos($yaw - (2 * M_PI - $s['yaw'])))) < .01,
+	'Pulling the right stick back swings the camera round to look back over a parked car');
+$view = hold($parked, pad(), 60, $eye);
+[$position] = end($view);
+$ahead = ($position[0] - $s['x']) * sin($s['yaw']) + ($position[2] - $s['z']) * cos($s['yaw']);
+expect($ahead < -5, 'Releasing the stick brings the camera back behind the car');
+$parked->close();
+
+// The jet ski answers the triggers and stick as the car does, and the right stick looks around it.
+$boat = function(): Session {
+	$session = new Session(['worldSize' => 512, 'waterLevel' => 5, 'heightScale' => 0, 'detailAmplitude' => 0]);
+	$session->camera->position = [0,20,-150]; $session->camera->yaw = M_PI;
+	input($session, ['actions' => ['craft']]);
+	return $session;
+};
+$craft = fn(Session $session): array => $session->craft->state();
+$keys = $boat(); $stick = $boat();
+expect(hold($keys, pad(), 120, $craft, ['KeyW'=>true,'KeyA'=>true]) === hold($stick, pad(x: -1, rt: 1), 120, $craft),
+	'A full stick and right trigger ride exactly as W and A');
+$keys->close();
+$s = $stick->craft->state();
+$view = hold($stick, pad(lookX: 1), 60, $eye);
+[, $yaw] = end($view);
+$s = $stick->craft->state();
+expect(abs(atan2(sin($yaw - (M_PI - $s['yaw'] + M_PI / 2)), cos($yaw - (M_PI - $s['yaw'] + M_PI / 2)))) < .02,
+	'Pushing the right stick right looks to the jet ski\'s right');
+$stick->close();
 
 echo "Landscape sandbox session: $checks checks passed\n";

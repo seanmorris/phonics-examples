@@ -50,7 +50,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-SuyAMWG8Kco2izcGPWtkgbtW9oK3LA/ks9ry1ys33NQ=",
+    "application.php": "sha256-YO2zPoIvbeEEh2rOyRvY/QKZsAdD1Qa2FPGABsSIe7Y=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
     "assets/f5/mesh.bin.gz": "sha256-MvzvhSBqNzcqkY2ivZ1iZ4FF1vYLNsb305WgAUuumeg=",
     "assets/f5/surfaces.json": "sha256-uqkDIywdj3xctjDJkR4Yp/mFPfgqx1VdDeHq9UX47wo=",
@@ -62,13 +62,13 @@
     "assets/vehicles/model.frag": "sha256-kwiQrzU81dsmxveHLdTR7giBSIjzkEEeMG1+RJpDs8k=",
     "assets/vehicles/model.vert": "sha256-wwExW5oFwI6N0H9uaik3pGCL1l+7phO74QIwdBxigUg=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/game.mjs": "sha256-JqCjPQoeYPZQ/AwrBoAk815XnmckV7EMURkHFzOdgns=",
-    "src/Car.php": "sha256-3jlMklD/0JAlebd7UuSCMp+NS48tEeTjEct/EB+HP1w=",
-    "src/CarChase.php": "sha256-Nrf61HNyT1EkNVBzGZPwFWOK4pUshrMtwEo49LZmUvA=",
+    "browser/game.mjs": "sha256-ELTqU/XNU5txOvnBmn8vhypetHIlk3To8788OT0Ecdo=",
+    "src/Car.php": "sha256-/f6SZLSDWyOecghbEDrX1UAl2gxHZmjEL8tbRkb2THM=",
+    "src/CarChase.php": "sha256-MUcAOlPD9mE3md1xdbzDhjMhY48h299VtVr3CF9xejs=",
     "src/CarSuspension.php": "sha256-bq66+ExjcWbqIeSGZFOAWz04PlryL7Bd5bWUf2Mqhl4=",
     "src/CarTumble.php": "sha256-llr3HAmWXN5xT5hRXvAnkGZm42H37B2zWbqYxQP9xFg=",
-    "src/Jet.php": "sha256-UhQh7dYpnJV4OiBcnQrdGHzelaAaS9hHORjUf8o1mq0=",
-    "src/Session.php": "sha256-aqky4jRQLegCP+FSGJm2ZKY/Dzm5sR7Sn7WPa1yzzd8=",
+    "src/Jet.php": "sha256-TRXjJrvi8dEjbtSj2yi8KQ4TnKFwjZQ2a4oRcJlp318=",
+    "src/Session.php": "sha256-Fjd/I0IgGpvxJKkahni1EqH5cJfPLI8hef+0oEN8Chg=",
     "src/VehicleModel.php": "sha256-1n52rwKNBTt549rA3BamJz8dkDfq2kydjXonAq6q9F8="
   }
 }

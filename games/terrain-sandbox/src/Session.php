@@ -60,7 +60,22 @@ final class Session
 	 * The page sets it to compare frame rates. It is not an authoring setting, so no file stores or restores it.
 	 */
 	public float $selectionInterval = Scene::DEFAULT_SELECTION_INTERVAL;
+	/**
+	 * Jet handling, after AirForce Delta's Controller option: 'novice' banks to turn and levels itself, 'expert'
+	 * rolls, pitches and yaws freely. Like the next setting it belongs to the player, so no file stores it.
+	 */
+	public string $jetControls = 'novice';
+	/** Whether pushing the stick forward raises the jet's nose instead of lowering it. */
+	public bool $invertPitch = false;
+	/** Buttons the page reports in the last element of a pad packet, one bit each, while they are held. */
+	public const PAD_A = 1, PAD_B = 2, PAD_X = 4, PAD_Y = 8, PAD_LB = 16, PAD_RB = 32, PAD_LS = 64, PAD_RS = 128;
+	/** A gamepad at rest: both sticks centred, both triggers released and no buttons held. */
+	private const NO_PAD = ['x' => 0.0, 'y' => 0.0, 'lookX' => 0.0, 'lookY' => 0.0, 'lt' => 0.0, 'rt' => 0.0, 'buttons' => 0];
 	private array $keys = [];
+	/** Gamepad state from the page: sticks run -1 to 1 with +Y towards the player, triggers 0 to 1. */
+	private array $pad = self::NO_PAD;
+	/** How far the jet ski's camera has swung round to the right stick's look direction, in radians. */
+	private float $craftLook = 0.0;
 	private ?string $download = null;
 	private ?Landscape $draft = null;
 	/** Whether a complete edited revision is awaiting its matching GPU representation. */
@@ -109,13 +124,20 @@ final class Session
 	public function input(array $input, float $seconds, float $aspect, float $pickMs = 2.0): void
 	{
 		$this->keys = is_array($input['keys'] ?? null) ? $input['keys'] : [];
+		$this->pad = self::readPad($input['pad'] ?? null);
 		try
 		{
 			$wasPicking = $this->picking;
 			foreach($input['values'] ?? [] as $name => $value)
 			{
-				// load() passes every saved name to setting(). Taking this name here keeps it out of reach of files.
+				// load() passes every saved name to setting(). Taking these names here keeps them out of reach of files.
 				if($name === 'selectionInterval') $this->setSelectionInterval($value);
+				elseif($name === 'jetControls') $this->setJetControls($value);
+				elseif($name === 'invertPitch')
+				{
+					if(!is_bool($value)) throw new \InvalidArgumentException('Invert pitch must be true or false');
+					$this->invertPitch = $value;
+				}
 				else $this->setting((string)$name, $value);
 			}
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
@@ -138,11 +160,21 @@ final class Session
 			$this->dirty = true;
 		}
 		if($this->mode !== 'fly') return;
-		$forward = $this->held('KeyW') - $this->held('KeyS');
-		$right = $this->held('KeyD') - $this->held('KeyA');
-		$up = $this->held('KeyE') - $this->held('KeyQ');
-		if($forward === 0 && $right === 0 && $up === 0) return;
-		$speed = ($this->held('ShiftLeft') || $this->held('ShiftRight')) ? 300 : $this->settings['speed'];
+		$pad = $this->pad;
+		$elapsed = max(0, min(.1, $seconds));
+		if($pad['lookX'] != 0 || $pad['lookY'] != 0)
+		{
+			// Square the stick so small deflections aim finely.
+			$this->camera->look($pad['lookX'] * abs($pad['lookX']) * 2.2 * $elapsed,
+				-$pad['lookY'] * abs($pad['lookY']) * 1.6 * $elapsed);
+			$this->dirty = true;
+		}
+		$forward = $this->blend('KeyS', 'KeyW', -$pad['y']);
+		$right = $this->blend('KeyA', 'KeyD', $pad['x']);
+		$up = $this->blend('KeyQ', 'KeyE', $pad['rt'] - $pad['lt']);
+		if($forward == 0 && $right == 0 && $up == 0) return;
+		$speed = ($this->held('ShiftLeft') || $this->held('ShiftRight') || $pad['buttons'] & self::PAD_LS)
+			? 300 : $this->settings['speed'];
 		$this->camera->move($forward, $right, $up, max(0, min(.1, $seconds)), $speed);
 		$this->clampCamera();
 		$this->dirty = true;
@@ -159,9 +191,16 @@ final class Session
 		if($this->mode === 'craft')
 		{
 			$this->reserveCraft();
-			$this->craft->step($seconds, $this->held('KeyW') - $this->held('KeyS'),
-				$this->held('KeyD') - $this->held('KeyA'), $this->water, $this->landscape, $this->time);
+			$this->craft->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
+				$this->blend('KeyA', 'KeyD', $this->pad['x']), $this->water, $this->landscape, $this->time);
 			$s = $this->craft->state();
+			$look = $this->lookAngle();
+			if($look != 0 || $this->craftLook != 0)
+			{
+				$gap = atan2(sin($look - $this->craftLook), cos($look - $this->craftLook));
+				$this->craftLook = abs($gap) < 1e-4 ? $look : $this->craftLook + $gap * (1 - exp(-$seconds / .15));
+				$s['yaw'] -= $this->craftLook;
+			}
 			$this->camera->position = [$s['x'] - sin($s['yaw']) * 9,$s['y'] + 4,$s['z'] - cos($s['yaw']) * 9];
 			$this->camera->yaw = M_PI - $s['yaw'];
 			$this->camera->pitch = -.27;
@@ -169,8 +208,10 @@ final class Session
 		if($this->mode === 'car')
 		{
 			$before = $this->car->state();
-			if(!$this->car->step($seconds, $this->held('KeyW') - $this->held('KeyS'),
-				$this->held('KeyD') - $this->held('KeyA'), $this->landscape, $this->water->level()))
+			$this->chase->look = $this->lookAngle();
+			if(!$this->car->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
+				$this->blend('KeyA', 'KeyD', $this->pad['x']), $this->landscape, $this->water->level(),
+				$this->held('Space') === 1 || ($this->pad['buttons'] & self::PAD_A) !== 0))
 			{
 				$this->mode = 'fly';
 				$this->clampCamera();
@@ -182,9 +223,13 @@ final class Session
 		}
 		if($this->mode === 'jet')
 		{
-			if(!$this->jet->step($seconds, $this->held('KeyW') - $this->held('KeyS'),
-				$this->held('KeyD') - $this->held('KeyA'), $this->held('KeyE') - $this->held('KeyQ'),
-				$this->camera, $this->landscape, $this->water->level()))
+			$pad = $this->pad;
+			// Pulling the stick back raises the nose unless the player inverted it.
+			$climb = $this->blend('KeyQ', 'KeyE', $this->invertPitch ? -$pad['y'] : $pad['y']);
+			$rudder = $this->blend('KeyZ', 'KeyX', ($pad['buttons'] & self::PAD_RB ? 1 : 0) - ($pad['buttons'] & self::PAD_LB ? 1 : 0));
+			if(!$this->jet->step($seconds, $this->blend('KeyS', 'KeyW', $pad['rt'] - $pad['lt']),
+				$this->blend('KeyA', 'KeyD', $pad['x']), $climb,
+				$this->camera, $this->landscape, $this->water->level(), $rudder))
 			{
 				$this->mode = 'fly';
 				$this->clampCamera();
@@ -211,6 +256,67 @@ final class Session
 	 * @return int One when held, otherwise zero.
 	 */
 	private function held(string $key): int { return !empty($this->keys[$key]) ? 1 : 0; }
+
+	/**
+	 * Combine a pair of opposing keys with a gamepad axis. Held keys win, so keyboard control stays whole and exact.
+	 * @param string $negative Key that drives the control to -1.
+	 * @param string $positive Key that drives the control to 1.
+	 * @param float $analog Gamepad value from -1 to 1, used while neither key decides.
+	 * @return float The control from -1 to 1.
+	 */
+	private function blend(string $negative, string $positive, float $analog): float
+	{
+		$keys = $this->held($positive) - $this->held($negative);
+		return $keys !== 0 ? (float)$keys : max(-1.0, min(1.0, $analog));
+	}
+
+	/**
+	 * Read the right stick as a direction to look in, as racing games do: up looks ahead, down looks back.
+	 * @return float Radians from straight ahead, positive to the right, or zero while the stick rests.
+	 */
+	private function lookAngle(): float
+	{
+		$x = $this->pad['lookX']; $y = $this->pad['lookY'];
+		return $x*$x + $y*$y < .35*.35 ? 0.0 : atan2($x, -$y);
+	}
+
+	/**
+	 * Validate the page's gamepad packet: six axes and a button mask. Anything malformed reads as a pad at rest.
+	 * @param mixed $pad [left X, left Y, right X, right Y, left trigger, right trigger, buttons].
+	 * @return array Clamped stick, trigger and button state.
+	 */
+	private static function readPad(mixed $pad): array
+	{
+		if(!is_array($pad) || !array_is_list($pad) || count($pad) !== 7) return self::NO_PAD;
+		foreach($pad as $value) if(!(is_int($value) || is_float($value)) || !is_finite((float)$value)) return self::NO_PAD;
+		$stick = static fn($value): float => max(-1.0, min(1.0, (float)$value));
+		$trigger = static fn($value): float => max(0.0, min(1.0, (float)$value));
+		return ['x' => $stick($pad[0]), 'y' => $stick($pad[1]), 'lookX' => $stick($pad[2]), 'lookY' => $stick($pad[3]),
+			'lt' => $trigger($pad[4]), 'rt' => $trigger($pad[5]), 'buttons' => max(0, min(255, (int)$pad[6]))];
+	}
+
+	/**
+	 * Choose Novice or Expert jet handling.
+	 * @param mixed $value 'novice' or 'expert'.
+	 * @return void Switches the jet now if it is flying, and says which controls apply.
+	 */
+	private function setJetControls(mixed $value): void
+	{
+		if(!in_array($value, ['novice','expert'], true))
+			throw new \InvalidArgumentException('Jet controls must be novice or expert');
+		$this->jetControls = $value;
+		$this->jet->setExpert($value === 'expert');
+		if($this->mode === 'jet') $this->message = $this->jetMessage();
+		$this->dirty = true;
+	}
+
+	/** Describe the jet's controls for the current handling. */
+	private function jetMessage(): string
+	{
+		return $this->jetControls === 'expert'
+			? 'Expert · A/D or stick roll, E/Q or stick pitch, Z/X or LB/RB rudder, hold W/S or RT/LT for speed. F leaves the jet.'
+			: 'Novice · A/D or stick turn, E/Q or stick climb and dive, hold W/S or RT/LT for speed. F leaves the jet.';
+	}
 
 	/**
 	 * Apply a validated authoring or environment control.
@@ -350,10 +456,12 @@ final class Session
 				$this->cancelPick();
 				$this->carSearch = null;
 				$this->releasePin();
+				$this->jet->setExpert($this->jetControls === 'expert');
 				$this->jet->board($this->camera, $this->landscape, $this->water->level());
 				$this->mode = 'jet'; $this->paused = false;
-				$this->message = 'W/S change speed, A/D bank, Q/E dive or climb. F returns to free flight.';
+				$this->message = $this->jetMessage();
 				break;
+			case 'jet-controls': $this->setJetControls($this->jetControls === 'expert' ? 'novice' : 'expert'); break;
 			case 'craft': $this->carSearch = null; $this->boardCraft(); break;
 			case 'fly':
 				$this->carSearch = null; $this->mode = 'fly'; $this->releasePin(); $this->clampCamera();
@@ -509,7 +617,7 @@ final class Session
 		$this->mode = 'car'; $this->paused = false;
 		$this->chase->board($this->camera, $this->car->state(), $this->landscape);
 		$this->dirty = true;
-		$this->message = 'W accelerates, S brakes or reverses, A/D steer. F returns to flight.';
+		$this->message = 'W or RT accelerates, S or LT brakes then reverses, A/D or stick steer, Space or A handbrake. F returns to flight.';
 	}
 
 	/** Return the matched camera and car pose at the engine's presentation time. */
@@ -563,7 +671,8 @@ final class Session
 		if($launch === null) throw new \RuntimeException('No deep water nearby. Try the coastal preset or fly closer to the coast.');
 		$this->craft->spawn($launch[0], $launch[1], $yaw, $this->water, $this->landscape, $this->time);
 		$this->mode = 'craft'; $this->paused = false; $this->reserveCraft();
-		$this->message = 'W/S throttle, A/D steer. Return to flight to edit the landscape.';
+		$this->craftLook = 0.0;
+		$this->message = 'W or RT throttle, S or LT reverse, A/D or stick steer. Return to flight to edit the landscape.';
 	}
 
 	/**
@@ -711,6 +820,7 @@ final class Session
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'settings' => $this->settings,'selectionInterval' => $this->selectionInterval,
+			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
@@ -727,5 +837,6 @@ final class Session
 		$this->cancelPick(); $this->carSearch = null;
 		$this->releasePin(); $this->landscape->close(); $this->draft?->close(); $this->draft = null;
 		$this->keys = $this->road = [];
+		$this->pad = self::NO_PAD;
 	}
 }

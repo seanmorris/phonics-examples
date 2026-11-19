@@ -12,6 +12,13 @@ final class CarChase
 	private ?Camera $previousEye = null;
 	private array $previousCar = [];
 	private const DISTANCE = 6.7;
+	/**
+	 * Angle in radians the driver looks away from straight ahead; positive looks right and half a turn looks back.
+	 * The boom swings round to it through the same damping that follows the car's heading.
+	 */
+	public float $look = 0.0;
+	/** Look angle the camera last followed, so a parked car still answers a new one. */
+	private float $looked = 0.0;
 
 	public function board(Camera $camera, array $pose, Landscape $land): void
 	{
@@ -21,7 +28,7 @@ final class CarChase
 
 	public function advance(Camera $camera, array $from, array $to, Landscape $land, float $dt): bool
 	{
-		if($from === $to && !$this->settling)
+		if($from === $to && !$this->settling && $this->look === $this->looked)
 		{
 			$this->previousEye = null;
 			return false;
@@ -42,7 +49,8 @@ final class CarChase
 
 	private function follow(Camera $camera, array $pose, Landscape $land, float $turn, float $lift, float $tilt, float $dt): void
 	{
-		$heading = M_PI - $pose['yaw'];
+		$heading = $this->look === 0.0 ? M_PI - $pose['yaw'] : M_PI - $pose['yaw'] + $this->look;
+		$this->looked = $this->look;
 		$remaining = self::angle($heading - $camera->yaw) * (1 - $turn);
 		$yaw = $heading - (abs($remaining) > .0001 ? $remaining : 0);
 		$x = $pose['x'] - self::DISTANCE*sin($yaw);

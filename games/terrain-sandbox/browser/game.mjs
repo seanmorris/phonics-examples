@@ -11,7 +11,12 @@ export function activate({module, canvas, session, services})
 	const stage = frame.querySelector('.terrain-stage');
 	shell.mount(frame, {screen: stage});
 	canvas.style.cssText = 'display:block;width:100%;height:100%;max-width:none;max-height:none;border:0;outline:none';
-	canvas.setAttribute('aria-label', 'Landscape Sandbox. Right-drag to look; WASD to fly; Q and E down and up.');
+
+	canvas.setAttribute(
+		'aria-label'
+		, 'Landscape Sandbox. Right-drag to look; WASD to fly; Q and E down and up. A gamepad also flies and drives.'
+	);
+
 	const view = shell.measure({observe: stage, dprCap: 1, skipEmpty: true, initial: '[1280,720,1]'});
 	shell.suppressContextMenu();
 	const fullscreen = shell.fullscreen({target: frame});
@@ -126,7 +131,10 @@ export function activate({module, canvas, session, services})
 		event.target.value = '';
 	}, {signal});
 
-	const heldKeys = new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','ShiftLeft','ShiftRight']);
+	const heldKeys = new Set(
+		['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyZ','KeyX','Space','ShiftLeft','ShiftRight']
+	);
+
 	const commands = {
 		KeyP: 'pause'
 		, Escape: 'pause'
@@ -140,7 +148,11 @@ export function activate({module, canvas, session, services})
 	frame.addEventListener('keydown', event => {
 		if(focusedField(event.target)) return;
 
-		if(heldKeys.has(event.code))
+		// Space still presses a focused button or link rather than the handbrake.
+		const activates = event.code === 'Space' && event.target instanceof HTMLElement
+			&& Boolean(event.target.closest('button,summary,a,label'));
+
+		if(heldKeys.has(event.code) && !event.ctrlKey && !event.metaKey && !activates)
 		{
 			keys[event.code] = true;
 			event.preventDefault();
@@ -213,20 +225,79 @@ export function activate({module, canvas, session, services})
 	canvas.addEventListener('pointerup', release, {signal});
 	canvas.addEventListener('pointercancel', release, {signal});
 
-	let previousViewport, previousKeys = '';
+	// Jet handling is the player's preference, so it is remembered in this browser rather than in landscape files.
+	const jetControls = controls.get('jetControls');
+	const invertPitch = controls.get('invertPitch');
+
+	const rememberJet = () => {
+		try
+		{
+			localStorage.setItem(
+				JET_PREFERENCE
+				, JSON.stringify({jetControls: jetControls.value, invertPitch: invertPitch.checked})
+			);
+		}
+		catch
+		{
+			/* Storage can be unavailable; the choice then lasts for this visit. */
+		}
+	};
+
+	try
+	{
+		const saved = JSON.parse(localStorage.getItem(JET_PREFERENCE) ?? 'null');
+
+		if(['novice','expert'].includes(saved?.jetControls)) values.jetControls = jetControls.value = saved.jetControls;
+
+		if(typeof saved?.invertPitch === 'boolean') values.invertPitch = invertPitch.checked = saved.invertPitch;
+	}
+	catch
+	{
+		/* A missing or unreadable preference leaves Novice with the stick unreversed. */
+	}
+
+	jetControls.addEventListener('change', rememberJet, {signal});
+	invertPitch.addEventListener('change', rememberJet, {signal});
+
+	let previousViewport, previousKeys = '', previousPad = '', padButtons = new Set();
+
 	shell.bridge('terrainInput', () => {
 		const viewport = view.viewport();
 		const held = Object.keys(keys).filter(key => keys[key]).join(',');
-		if(viewport === previousViewport && held === previousKeys && !actions.length && !clicks.length
-			&& !look[0] && !look[1] && !Object.keys(values).length) return '';
+		// Browsers stop updating gamepads in a background page, so a stick held at blur must not stay held.
+		const gamepad = document.hidden || !document.hasFocus() ? null : readGamepads();
+		const buttons = gamepad?.buttons ?? new Set();
+
+		for(const [index, command] of PAD_COMMANDS)
+		if(buttons.has(index) && !padButtons.has(index)) push(command);
+
+		padButtons = buttons;
+		const pad = gamepad
+			? [...gamepad.axes.map(value => Math.round(value * 1000) / 1000)
+				, PAD_HELD.reduce((mask, [index, bit]) => buttons.has(index) ? mask | bit : mask, 0)
+			]
+			: [0,0,0,0,0,0,0];
+
+		const padKey = pad.join(',');
+
+		if(viewport === previousViewport && held === previousKeys && padKey === previousPad && !actions.length
+			&& !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
+		) return '';
+
 		const packet = {keys,values,actions,clicks,look};
+
 		if(viewport !== previousViewport) packet.viewport = JSON.parse(viewport);
+
+		if(padKey !== previousPad) packet.pad = pad.some(value => value !== 0) ? pad : [];
+
+		previousPad = padKey;
 		previousKeys = held;
 		previousViewport = viewport;
 		values = {};
 		actions = [];
 		clicks = [];
 		look = [0,0];
+
 		return JSON.stringify(packet);
 	});
 
@@ -245,6 +316,14 @@ export function activate({module, canvas, session, services})
 		dataset: 'terrainSandbox'
 		, handler: state => {
 			latest = state;
+
+			// Back on a gamepad switches the handling in PHP. Show it here and remember it.
+			if(state.jetControls && jetControls.value !== state.jetControls && document.activeElement !== jetControls)
+			{
+				jetControls.value = state.jetControls;
+				rememberJet();
+			}
+
 			if(state.car?.motion === 'overturned') status.textContent = 'Car overturned. Recovering…';
 			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';
 			else status.textContent = state.message;
@@ -441,6 +520,69 @@ function generationValues(frame)
 	return result;
 }
 
+/** Local storage key for the jet handling preference. */
+const JET_PREFERENCE = 'terrain-sandbox.jet';
+
+/** Gamepad buttons in the standard layout that issue a command when pressed. */
+const PAD_COMMANDS = new Map([[9, 'pause'], [8, 'jet-controls'], [12, 'jet'], [14, 'car'], [15, 'craft'], [13, 'fly']]);
+
+/** Gamepad buttons PHP reads while held: A, B, X, Y, LB, RB and the two stick clicks, with their bits in the packet. */
+const PAD_HELD = [[0, 1], [1, 2], [2, 4], [3, 8], [4, 16], [5, 32], [10, 64], [11, 128]];
+
+/**
+ * Remove a radial dead zone from a stick and rescale the rest to reach full travel.
+ * @param {number} x Raw horizontal value, -1 to 1.
+ * @param {number} y Raw vertical value, -1 to 1, positive towards the player.
+ * @returns {number[]} The filtered stick.
+ */
+function stick(x, y)
+{
+	const length = Math.hypot(x, y);
+
+	if(!(length > .15)) return [0,0];
+
+	const scale = (Math.min(1, length) - .15) / (.85 * length);
+
+	return [x * scale, y * scale];
+}
+
+/**
+ * Read every connected gamepad in the standard layout as one: the stick or trigger pushed furthest wins, and a
+ * button counts while any pad holds it.
+ * @returns {{axes: number[], buttons: Set<number>}|null} Left X and Y, right X and Y, left and right trigger,
+ * and the held button indices; null when no such pad is connected.
+ */
+function readGamepads()
+{
+	let found = false;
+	const axes = [0,0,0,0,0,0];
+	const buttons = new Set();
+
+	for(const pad of navigator.getGamepads?.() ?? [])
+	{
+		if(!pad?.connected || pad.mapping !== 'standard') continue;
+
+		found = true;
+
+		const trigger = index => {
+			const value = pad.buttons[index]?.value ?? 0;
+
+			return value > .04 ? Math.min(1, (value - .04) / .96) : 0;
+		};
+
+		const values = [...stick(pad.axes[0] ?? 0, pad.axes[1] ?? 0)
+			, ...stick(pad.axes[2] ?? 0, pad.axes[3] ?? 0)
+			, trigger(6), trigger(7)
+		];
+
+		values.forEach((value, index) => { if(Math.abs(value) > Math.abs(axes[index])) axes[index] = value; });
+
+		pad.buttons.forEach((button, index) => { if(button.pressed) buttons.add(index); });
+	}
+
+	return found ? {axes, buttons} : null;
+}
+
 function range(label, key, min, max, step, value)
 {
 	return `<label class="terrain-control"><span>${label}</span><input data-value="${key}" type="range"`
@@ -550,7 +692,10 @@ function markup()
 	<h2>Explore</h2>${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
-	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
+	<label class="terrain-field">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
+	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
+	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
+	<p class="terrain-note">Gamepad: left stick flies, steers or banks · right stick looks · RT/LT climb or descend, accelerate or brake · A: handbrake · LB/RB: Expert rudder · D-pad: ↑ jet, ← car, → watercraft, ↓ free flight · Start: pause · Back: Novice or Expert.</p>
 	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
 	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></p>
 	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;

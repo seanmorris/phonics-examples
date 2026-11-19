@@ -5,10 +5,24 @@ namespace TerrainSandbox;
 use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 
-/** Arcade flight with a world-up chase camera. Coordinates are metres, angles are radians. */
+/**
+ * Arcade flight after AirForce Delta on the Dreamcast, with a world-up chase camera.
+ * Novice banks into turns and levels itself when the stick is released. Expert rolls, pitches and yaws about the
+ * jet's own axes and holds its attitude. In both, the speed controls work like the game's triggers: the jet speeds
+ * up or slows down while one is held and returns to cruise when it is released.
+ * Coordinates are metres, angles are radians.
+ */
 final class Jet
 {
 	private const BOOM = 24.0;
+	/** Speeds in metres a second, and how fast the jet changes speed, in metres a second squared. */
+	public const CRUISE = 140.0, FASTEST = 260.0, SLOWEST = 55.0, ACCELERATION = 55.0;
+	/** Expert body rates at full deflection in radians a second, and the time constant with which they follow it. */
+	public const ROLL_RATE = 2.8, PITCH_RATE = 1.05, YAW_RATE = .35, RATE_LAG = .12;
+	/** Time constant in seconds with which the Expert chase camera swings in behind the nose. */
+	private const CHASE_LAG = .22;
+	/** Fastest the Expert chase camera turns, in radians a second, so it swings round when the nose passes vertical. */
+	private const CHASE_TURN = 4.0;
 	/** Smallest and largest square blocks, in lattice cells, whose height bound can replace an exact sample. */
 	private const FINEST = 2, COARSEST = 256;
 	/** Steps to fly on after a block rises too close before asking about a larger one. */
@@ -18,6 +32,12 @@ final class Jet
 	/** Actuators follow their command with this time constant in seconds, and at 60 degrees a second at most. */
 	public const SURFACE_LAG = .08, SURFACE_RATE = 1.0471975512;
 	private array $pose = [], $previous = [];
+	/** Whether the jet flies Expert's three axes rather than Novice's banked turns. */
+	private bool $expert = false;
+	/** Expert roll, pitch and yaw rates in radians a second: right roll, nose up and nose right are positive. */
+	private array $rates = [0.0, 0.0, 0.0];
+	/** Unit direction the Expert chase camera looks along, lagging the nose. */
+	private array $chase = [0.0, 0.0, 1.0];
 	/** Surface and revision that the cached limits and blocks below describe. */
 	private ?Landscape $surveyed = null;
 	private int $revision = 0;
@@ -33,38 +53,198 @@ final class Jet
 		$x = max(-$half,min($half,$x));
 		$z = max(-$half,min($half,$z));
 		$this->pose = ['x'=>$x, 'y'=>max($y, max($water,$land->height($x,$z)) + 75), 'z'=>$z,
-			'yaw'=>M_PI - $camera->yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>110.0,
+			'yaw'=>M_PI - $camera->yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>self::CRUISE,
 			'aileron'=>0.0, 'stabilator'=>0.0, 'rudder'=>0.0];
 		$this->previous = [];
-		$this->follow($camera, $land, $water);
+		$this->rates = [0.0, 0.0, 0.0];
+		$this->chase = self::axes($this->pose['yaw'], 0.0, 0.0)[2];
+		$this->follow(0.0, $camera, $land, $water);
 	}
 
-	/** Return false on reaching the map edge, where the session hands back the free camera. */
-	public function step(float $dt, int $throttle, int $bank, int $climb, Camera $camera, Landscape $land, float $water): bool
+	/**
+	 * Choose Novice or Expert handling, as AirForce Delta's Controller option does. The jet keeps its attitude.
+	 * Novice cannot hold the loops and inverted attitudes Expert can reach, so it takes the same orientation with
+	 * the nose within 90 degrees of level and then levels the wings and nose as usual.
+	 * @param bool $expert True for Expert, false for Novice.
+	 * @return void Updates the handling and restarts interpolation, so the next frame draws the new pose as it is.
+	 */
+	public function setExpert(bool $expert): void
+	{
+		if($expert === $this->expert) return;
+		$this->expert = $expert;
+		$this->rates = [0.0, 0.0, 0.0];
+		$this->previous = [];
+		if(!$this->pose) return;
+		$p = &$this->pose;
+		[$x,$y,$z] = self::axes($p['yaw'], $p['pitch'], $p['roll']);
+		if($expert) $this->chase = $z;
+		else [$p['yaw'],$p['pitch'],$p['roll']] = self::angles($x, $z, $p['yaw'], 0.0, 0.0, true);
+	}
+
+	public function expert(): bool { return $this->expert; }
+
+	/**
+	 * Fly one fixed step. Every control runs from -1 to 1; the keyboard gives whole values and a gamepad any between.
+	 * @param float $dt Fixed step in seconds.
+	 * @param float $throttle Positive speeds up towards FASTEST, negative slows towards SLOWEST, zero returns to CRUISE.
+	 * @param float $bank Positive turns or rolls right.
+	 * @param float $climb Positive raises the nose.
+	 * @param Camera $camera Chase camera, placed behind the jet after the step.
+	 * @param Landscape $land Surface the jet keeps clear of.
+	 * @param float $water Water level the jet keeps clear of.
+	 * @param float $rudder Expert only: positive yaws the nose right.
+	 * @return bool False on reaching the map edge, where the session hands back the free camera.
+	 */
+	public function step(float $dt, float $throttle, float $bank, float $climb, Camera $camera, Landscape $land,
+		float $water, float $rudder = 0.0): bool
 	{
 		$this->survey($land);
 		$this->previous = $this->pose;
 		$p = &$this->pose;
-		$p['speed'] = max(55.0,min(260.0,$p['speed'] + $throttle * 55 * $dt));
-		// Roll and pitch close on their targets at a rate in proportion to the angle still to go.
-		$rollDemand = -$bank * 1.10 - $p['roll'];
-		$pitchDemand = $climb * .78 - $p['pitch'];
-		$p['roll'] += $rollDemand * (1 - exp(-3.6 * $dt));
-		$p['pitch'] += $pitchDemand * (1 - exp(-2.1 * $dt));
-		$turn = sin($p['roll']) * .68;
-		$p['yaw'] += $turn * $dt;
-		$this->deflect($dt, $rollDemand, $pitchDemand, $turn);
+		$target = $throttle >= 0 ? self::CRUISE + $throttle * (self::FASTEST - self::CRUISE)
+			: self::CRUISE + $throttle * (self::CRUISE - self::SLOWEST);
+		$change = self::ACCELERATION * $dt;
+		$gap = $target - $p['speed'];
+		$p['speed'] = abs($gap) <= $change ? $target : $p['speed'] + ($gap <=> 0) * $change;
 		$travel = $p['speed'] * $dt;
-		$x = $p['x'] + sin($p['yaw']) * cos($p['pitch']) * $travel;
-		$z = $p['z'] + cos($p['yaw']) * cos($p['pitch']) * $travel;
+		if($this->expert)
+		{
+			[, , $nose] = $this->rotate($dt, $bank, $climb, $rudder);
+			$x = $p['x'] + $nose[0] * $travel;
+			$z = $p['z'] + $nose[2] * $travel;
+			$rise = $nose[1] * $travel;
+		}
+		else
+		{
+			// Roll and pitch close on their targets at a rate in proportion to the angle still to go.
+			$rollDemand = -$bank * 1.10 - $p['roll'];
+			$pitchDemand = $climb * .78 - $p['pitch'];
+			$p['roll'] += $rollDemand * (1 - exp(-3.6 * $dt));
+			$p['pitch'] += $pitchDemand * (1 - exp(-2.1 * $dt));
+			$turn = sin($p['roll']) * .68;
+			$p['yaw'] += $turn * $dt;
+			$this->deflect($dt, $rollDemand, $pitchDemand, $turn);
+			$x = $p['x'] + sin($p['yaw']) * cos($p['pitch']) * $travel;
+			$z = $p['z'] + cos($p['yaw']) * cos($p['pitch']) * $travel;
+			$rise = sin($p['pitch']) * $travel;
+		}
 		$half = $this->half;
 		if(abs($x) > $half || abs($z) > $half) return false;
 		$p['x'] = $x; $p['z'] = $z;
-		$p['y'] = min(15000.0,$p['y'] + sin($p['pitch']) * $travel);
+		$p['y'] = min(15000.0,$p['y'] + $rise);
 		if($p['y'] < $this->roof + 8) $p['y'] = $this->lift($this->body, $land, $x, $z, $p['y'], 8.0);
 		$p['y'] = max($p['y'], $water + 8);
-		$this->follow($camera,$land,$water);
+		$this->follow($dt,$camera,$land,$water);
 		return true;
+	}
+
+	/**
+	 * Turn the jet about its own axes for one Expert step, then move the control surfaces with the stick.
+	 * @param float $dt Fixed step in seconds.
+	 * @param float $roll Positive rolls right.
+	 * @param float $pitch Positive raises the nose.
+	 * @param float $yaw Positive yaws the nose right.
+	 * @return array The jet's left, up and forward unit vectors after the step.
+	 */
+	private function rotate(float $dt, float $roll, float $pitch, float $yaw): array
+	{
+		$p = &$this->pose;
+		$r = &$this->rates;
+		$follow = 1 - exp(-$dt / self::RATE_LAG);
+		$r[0] += ($roll * self::ROLL_RATE - $r[0]) * $follow;
+		$r[1] += ($pitch * self::PITCH_RATE - $r[1]) * $follow;
+		$r[2] += ($yaw * self::YAW_RATE - $r[2]) * $follow;
+		[$left,$up,$nose] = self::axes($p['yaw'], $p['pitch'], $p['roll']);
+		// The wings hold up only the part of the weight along their own up axis. The rest slews the nose towards the
+		// lower wing, so a banked jet turns gently without a pull and a knife-edge one slides off.
+		$slew = 9.81 * $left[1] / max(1.0, $p['speed']);
+		self::turn($nose, $up, $r[1] * $dt);
+		self::turn($left, $up, $r[0] * $dt);
+		self::turn($nose, $left, -($r[2] + $slew) * $dt);
+		// Remove the rounding the turns leave so the axes stay square and of unit length.
+		$length = sqrt($nose[0]*$nose[0] + $nose[1]*$nose[1] + $nose[2]*$nose[2]);
+		foreach($nose as $i => $value) $nose[$i] = $value / $length;
+		$along = $left[0]*$nose[0] + $left[1]*$nose[1] + $left[2]*$nose[2];
+		foreach($left as $i => $value) $left[$i] = $value - $along * $nose[$i];
+		$length = sqrt($left[0]*$left[0] + $left[1]*$left[1] + $left[2]*$left[2]);
+		foreach($left as $i => $value) $left[$i] = $value / $length;
+		[$p['yaw'],$p['pitch'],$p['roll']] = self::angles($left, $nose, $p['yaw'], $p['pitch'], $p['roll']);
+		// A positive aileron lowers the right wing's trailing edge, which rolls left, so right stick asks for a
+		// negative one. A positive rudder yaws the nose left.
+		$p['aileron'] = self::actuate($p['aileron'], -self::AILERON * $roll, self::AILERON, $dt);
+		$p['stabilator'] = self::actuate($p['stabilator'], self::STABILATOR * $pitch, self::STABILATOR, $dt);
+		$p['rudder'] = self::actuate($p['rudder'], -self::RUDDER * $yaw, self::RUDDER, $dt);
+		return [$left, [$nose[1]*$left[2] - $nose[2]*$left[1], $nose[2]*$left[0] - $nose[0]*$left[2],
+			$nose[0]*$left[1] - $nose[1]*$left[0]], $nose];
+	}
+
+	/**
+	 * Rotate one axis towards another in their shared plane.
+	 * @param array $a Axis to rotate towards $b, updated in place.
+	 * @param array $b Axis $a turns towards, updated in place to stay square to it.
+	 * @param float $angle Rotation in radians.
+	 * @return void
+	 */
+	private static function turn(array &$a, array &$b, float $angle): void
+	{
+		$c = cos($angle); $s = sin($angle);
+		foreach($a as $i => $value)
+		{
+			$a[$i] = $value * $c + $b[$i] * $s;
+			$b[$i] = $b[$i] * $c - $value * $s;
+		}
+	}
+
+	/**
+	 * The jet's axes for a heading, pitch and roll, as VehicleModel draws them.
+	 * @param float $yaw Heading; zero flies towards +Z.
+	 * @param float $pitch Positive raises the nose.
+	 * @param float $roll Positive lowers the left (+X) wing.
+	 * @return array Left (+X), up and forward unit vectors in world space.
+	 */
+	private static function axes(float $yaw, float $pitch, float $roll): array
+	{
+		$cy = cos($yaw); $sy = sin($yaw); $cp = cos($pitch); $sp = sin($pitch); $cr = cos($roll); $sr = sin($roll);
+		return [[$cy*$cr + $sy*$sp*$sr, -$cp*$sr, -$sy*$cr + $cy*$sp*$sr],
+			[$cy*$sr - $sy*$sp*$cr, $cp*$cr, -$sy*$sr - $cy*$sp*$cr], [$sy*$cp, $sp, $cy*$cp]];
+	}
+
+	/**
+	 * Recover heading, pitch and roll from the jet's axes, continuing smoothly from the previous angles.
+	 * Every orientation has two such sets, one with the nose within 90 degrees of level and one past it with the
+	 * heading and roll turned half round. Taking whichever lies nearer the previous step keeps the angles continuous
+	 * through loops and rolls, so a pose interpolates between steps without spinning.
+	 * @param array $left Left (+X) unit vector.
+	 * @param array $nose Forward unit vector.
+	 * @param float $yaw Previous heading in radians.
+	 * @param float $pitch Previous pitch in radians.
+	 * @param float $roll Previous roll in radians.
+	 * @param bool $upright Take only the set with the nose within 90 degrees of level, as Novice needs.
+	 * @return array Heading, pitch and roll in radians, each within half a turn of its previous value.
+	 */
+	private static function angles(array $left, array $nose, float $yaw, float $pitch, float $roll,
+		bool $upright = false): array
+	{
+		$level = sqrt($nose[0]*$nose[0] + $nose[2]*$nose[2]);
+		$best = null;
+		foreach($upright ? [1.0] : [1.0, -1.0] as $side)
+		{
+			// Straight up or down the heading is free; keep the previous one and let roll take up the rest.
+			$y = self::near($level > 1e-12 ? atan2($side * $nose[0], $side * $nose[2]) : $yaw, $yaw);
+			$p = self::near(atan2($nose[1], $side * $level), $pitch);
+			$cy = cos($y); $sy = sin($y); $cp = cos($p); $sp = sin($p);
+			// The left axis is cos(roll) along (cy, 0, -sy) plus sin(roll) along (sy*sp, -cp, cy*sp).
+			$r = self::near(atan2($left[0]*$sy*$sp - $left[1]*$cp + $left[2]*$cy*$sp, $left[0]*$cy - $left[2]*$sy), $roll);
+			$distance = abs($y - $yaw) + abs($p - $pitch) + abs($r - $roll);
+			if($best === null || $distance < $best[3]) $best = [$y, $p, $r, $distance];
+		}
+		return [$best[0], $best[1], $best[2]];
+	}
+
+	/** Add whole turns to an angle to bring it within half a turn of a reference. */
+	private static function near(float $angle, float $reference): float
+	{
+		return $angle + 2 * M_PI * round(($reference - $angle) / (2 * M_PI));
 	}
 
 	/**
@@ -103,8 +283,13 @@ final class Jet
 		return $angle + max(-$rate, min($rate, $move));
 	}
 
-	private function follow(Camera $camera, Landscape $land, float $water): void
+	private function follow(float $dt, Camera $camera, Landscape $land, float $water): void
 	{
+		if($this->expert)
+		{
+			$this->chaseExpert($dt, $camera, $land, $water);
+			return;
+		}
 		$p = &$this->pose;
 		// Raise the camera behind a descending jet and keep the horizon level through banked turns.
 		$angle = .38 - .75 * $p['pitch'];
@@ -118,6 +303,47 @@ final class Jet
 			$p['eyeY'] = $this->lift($this->eye, $land, $x, $z, $p['eyeY'], 3.0);
 		}
 		$this->placeCamera($camera,$p);
+		$p['eyeX'] = $camera->position[0]; $p['eyeZ'] = $camera->position[2];
+		$p['lookYaw'] = $camera->yaw; $p['lookPitch'] = $camera->pitch;
+	}
+
+	/**
+	 * Place the Expert chase camera. It swings in behind the nose with a short lag and keeps the horizon level, so
+	 * it follows loops and dives that the Novice camera, which only looks along the heading, cannot.
+	 * @param float $dt Fixed step in seconds; zero places the camera directly behind the nose.
+	 * @param Camera $camera Camera to place.
+	 * @param Landscape $land Surface the eye keeps clear of.
+	 * @param float $water Water level the eye keeps clear of.
+	 * @return void Records the eye and its view direction in the pose and places the camera there.
+	 */
+	private function chaseExpert(float $dt, Camera $camera, Landscape $land, float $water): void
+	{
+		$p = &$this->pose;
+		[, , $nose] = self::axes($p['yaw'], $p['pitch'], $p['roll']);
+		$c = &$this->chase;
+		$follow = $dt > 0 ? 1 - exp(-$dt / self::CHASE_LAG) : 1.0;
+		foreach($c as $i => $value) $c[$i] = $value + ($nose[$i] - $value) * $follow;
+		$length = sqrt($c[0]*$c[0] + $c[1]*$c[1] + $c[2]*$c[2]);
+		if($length < 1e-9) $c = $nose;
+		else foreach($c as $i => $value) $c[$i] = $value / $length;
+		$half = $this->half;
+		$x = max(-$half, min($half, $p['x'] - self::BOOM * $c[0]));
+		$z = max(-$half, min($half, $p['z'] - self::BOOM * $c[2]));
+		$y = max($water + 3, $p['y'] - self::BOOM * $c[1] + 5);
+		if($y < $this->roof + 3) $y = $this->lift($this->eye, $land, $x, $z, $y, 3.0);
+		// Aim a little ahead of the jet.
+		$ax = $p['x'] + 8 * $nose[0] - $x; $ay = $p['y'] + 1.5 + 8 * $nose[1] - $y; $az = $p['z'] + 8 * $nose[2] - $z;
+		$pitch = max(-1.45, min(1.45, atan2($ay, sqrt($ax*$ax + $az*$az))));
+		$yaw = atan2($ax, -$az);
+		if(isset($p['lookYaw']) && $dt > 0)
+		{
+			$yaw = self::near($yaw, $p['lookYaw']);
+			$turn = self::CHASE_TURN * $dt;
+			$yaw = $p['lookYaw'] + max(-$turn, min($turn, $yaw - $p['lookYaw']));
+		}
+		$p['eyeX'] = $x; $p['eyeY'] = $y; $p['eyeZ'] = $z; $p['lookYaw'] = $yaw; $p['lookPitch'] = $pitch;
+		$p['boom'] = self::BOOM;
+		$this->placeCamera($camera, $p);
 	}
 
 	/**
@@ -202,6 +428,13 @@ final class Jet
 
 	private function placeCamera(Camera $camera, array $p): void
 	{
+		if($this->expert)
+		{
+			$camera->position = [$p['eyeX'], $p['eyeY'], $p['eyeZ']];
+			$camera->yaw = $p['lookYaw'];
+			$camera->pitch = $p['lookPitch'];
+			return;
+		}
 		$camera->position = [$p['x'] - $p['boom'] * sin($p['yaw']), $p['eyeY'], $p['z'] - $p['boom'] * cos($p['yaw'])];
 		$camera->yaw = M_PI - $p['yaw'];
 		$camera->pitch = atan2($p['y'] + 1.5 + 6 * sin($p['pitch']) - $p['eyeY'], $p['boom'] + 6);
@@ -215,6 +448,27 @@ final class Jet
 		$p = $this->pose;
 		if(!$this->previous || $alpha >= 1) return [$camera,$p];
 		foreach($this->previous as $key => $value) $p[$key] = $value + $alpha * ($p[$key] - $value);
+		if($this->expert)
+		{
+			// Near vertical, heading and roll trade large amounts between steps while the jet hardly turns. Blend
+			// its axes instead, which follow the true rotation, and keep the blended angles only as a reference.
+			$q = $this->previous;
+			[$left0, , $nose0] = self::axes($q['yaw'], $q['pitch'], $q['roll']);
+			[$left1, , $nose1] = self::axes($this->pose['yaw'], $this->pose['pitch'], $this->pose['roll']);
+			$nose = $left = [];
+			foreach([0, 1, 2] as $i)
+			{
+				$nose[$i] = $nose0[$i] + $alpha * ($nose1[$i] - $nose0[$i]);
+				$left[$i] = $left0[$i] + $alpha * ($left1[$i] - $left0[$i]);
+			}
+			$length = sqrt($nose[0]*$nose[0] + $nose[1]*$nose[1] + $nose[2]*$nose[2]);
+			foreach($nose as $i => $value) $nose[$i] = $value / $length;
+			$along = $left[0]*$nose[0] + $left[1]*$nose[1] + $left[2]*$nose[2];
+			foreach($left as $i => $value) $left[$i] = $value - $along * $nose[$i];
+			$length = sqrt($left[0]*$left[0] + $left[1]*$left[1] + $left[2]*$left[2]);
+			foreach($left as $i => $value) $left[$i] = $value / $length;
+			[$p['yaw'],$p['pitch'],$p['roll']] = self::angles($left, $nose, $p['yaw'], $p['pitch'], $p['roll']);
+		}
 		$eye = clone $camera;
 		$this->placeCamera($eye,$p);
 		return [$eye,$p];

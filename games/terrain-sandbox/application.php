@@ -22,8 +22,10 @@ $app->browser($archive . 'dependencies/terrain-phonics/browser/PatchMesher.mjs')
 $session = new Session;
 $engine = new Engine(new Device(1280, 720, 'Landscape Sandbox'));
 $engine->clock = new FixedStep(1 / 60, 4);
-// The authoring bridge owns pause, avoiding a second toggle from SDL's default P/Escape mapping.
+// The authoring bridge owns pause, avoiding a second toggle from SDL's default P/Escape and Start mappings.
+// The page reads gamepads itself and sends Start as the sandbox's own pause action.
 $engine->input->bindButton(9, []);
+$engine->input->bindGamepad(9, []);
 $batch = vrzno_env('terrainPatchBatch');
 $builder = new BrowserPatchBuilder(static fn($action, $path, $key, $payload) => $batch($action, $path, $key, $payload));
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere, $builder);
@@ -40,6 +42,7 @@ $renderMs = 0.0;
 $frameSeconds = 0.0;
 $lastBudgetPose = null;
 $heldKeys = [];
+$heldPad = [];
 $statusPending = true;
 $urgentStatus = false;
 $inputMs = 0.0;
@@ -53,7 +56,7 @@ $engine->systems->add('terrain-sandbox.simulate', static function(Registry $regi
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds,
-	&$heldKeys, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput
+	&$heldKeys, &$heldPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput
 ): bool {
 	$frameSeconds = max(0.0, $elapsed);
 	$started = hrtime(true);
@@ -73,10 +76,13 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$previousRoadPoints = count($session->road);
 	$keysChanged = isset($input['keys']) && $heldKeys !== $input['keys'];
 	if($keysChanged) $heldKeys = $input['keys'];
-	if($packet !== '' || $heldKeys || $wasPicking || $wasSearching)
+	// The page sends the pad only when it changes; a pad at rest arrives as an empty list.
+	if(isset($input['pad'])) $heldPad = is_array($input['pad']) && array_filter($input['pad']) ? $input['pad'] : [];
+	if($packet !== '' || $heldKeys || $heldPad || $wasPicking || $wasSearching)
 	{
 		$input['keys'] = $heldKeys;
-		$moving = $heldKeys || in_array($session->mode, ['craft','jet'], true) || !empty($input['look'][0]) || !empty($input['look'][1]);
+		$input['pad'] = $heldPad;
+		$moving = $heldKeys || $heldPad || in_array($session->mode, ['craft','jet'], true) || !empty($input['look'][0]) || !empty($input['look'][1]);
 		$session->input($input, min(.1, $frameSeconds), $width / $height, $moving ? 1.0 : 7.5);
 	}
 	$urgentStatus = $urgentStatus || $keysChanged || isset($input['clicks'][0]) || $wasPicking !== $session->picking
