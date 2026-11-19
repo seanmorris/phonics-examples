@@ -480,4 +480,40 @@ $flight->step(1/60);
 expect($flight->mode === 'fly' && str_contains($flight->message,'edge'), 'Flight at the map boundary returns control inside the landscape');
 $flight->close();
 
+// The page compares frame rates through one value that is neither an authoring setting nor part of a file.
+$knob = new Session(['worldSize' => 256,'heightScale' => 0,'detailAmplitude' => 0]);
+expect($knob->selectionInterval === TerrainPhonics\Scene::DEFAULT_SELECTION_INTERVAL
+	&& $knob->status()['selectionInterval'] === $knob->selectionInterval,
+	'The selection interval starts at the renderer default and the status reports it');
+$settings = $knob->settings;
+$file = $knob->save();
+$knob->dirty = false;
+
+input($knob, ['values' => ['selectionInterval' => 0]]);
+expect($knob->selectionInterval === 0.0 && $knob->status()['selectionInterval'] === 0.0,
+	'The page can turn the selection limiter off');
+expect($knob->settings === $settings && $knob->save() === $file && !$knob->dirty,
+	'The interval changes neither the saved settings, the save file nor the picture');
+input($knob, ['values' => ['selectionInterval' => '0.25','exposure' => 2]]);
+expect($knob->selectionInterval === .25 && $knob->settings['exposure'] === 2.0,
+	'The interval travels beside ordinary settings in one input packet');
+
+input($knob, ['values' => ['selectionInterval' => 5]]);
+expect($knob->selectionInterval === 1.0, 'The interval is held to one second at most');
+input($knob, ['values' => ['selectionInterval' => -1]]);
+expect($knob->selectionInterval === 0.0, 'A negative interval turns the limiter off');
+input($knob, ['values' => ['selectionInterval' => 'fast']]);
+expect($knob->selectionInterval === 0.0 && $knob->message === 'Invalid control value',
+	'An interval that is not a number is refused and reported');
+
+input($knob, ['values' => ['selectionInterval' => .05]]);
+$file = json_decode($knob->save(), true, flags: JSON_THROW_ON_ERROR);
+expect(!array_key_exists('selectionInterval', $file) && !array_key_exists('selectionInterval', $file['settings']),
+	'Save files do not record the interval');
+$file['settings']['selectionInterval'] = .5;
+$knob->load(json_encode($file, JSON_THROW_ON_ERROR));
+expect($knob->selectionInterval === .05 && !array_key_exists('selectionInterval', $knob->settings),
+	'A file cannot set the interval or add it to the settings');
+$knob->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

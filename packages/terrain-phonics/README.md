@@ -77,7 +77,10 @@ changes. The caller owns the graphics device and frame presentation. Call `resto
 `close()` on unloading. `stats()` exposes residency, pending work, mesh bytes, generation time, and frame count.
 Patch selection combines distance with sampled projected error; it is not a certified error bound for every
 unsampled feature. Nearby patches in a padded camera frustum refine first. Ground outside it keeps coarse
-coverage, and a bounded motion lookahead prepares likely future coverage.
+coverage, and a bounded motion lookahead prepares likely future coverage. While the camera moves, patch
+selections run at least `Scene::$selectionInterval` seconds apart, 0.1 by default. Zero selects on every
+change of view. A camera at rest, a relocated camera, and a changed detail, viewport or water setting
+select at once.
 
 The sandbox activates `browser/PatchMesher.mjs` and passes a `BrowserPatchBuilder` to `Scene`. A dedicated
 worker samples the seeded recipe in sibling groups and sends packed vertices, normals, and error bounds

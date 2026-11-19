@@ -49,7 +49,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-Ef6dup37MrkiLAn5l7o4Pd2a5KrLynx68ywUDc8BXNQ=",
+    "application.php": "sha256-SuyAMWG8Kco2izcGPWtkgbtW9oK3LA/ks9ry1ys33NQ=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
     "assets/f5/mesh.bin.gz": "sha256-lanntm6qAQt1tHVSEaC0tKFyWTqK4HPxrjiPtKIpXMg=",
     "assets/jetski/license.txt": "sha256-9WoAgRXTPEC8hRXDGAxCadCBBzJeG83Yybl9Ki+EPkQ=",
@@ -66,7 +66,7 @@
     "src/CarSuspension.php": "sha256-bq66+ExjcWbqIeSGZFOAWz04PlryL7Bd5bWUf2Mqhl4=",
     "src/CarTumble.php": "sha256-llr3HAmWXN5xT5hRXvAnkGZm42H37B2zWbqYxQP9xFg=",
     "src/Jet.php": "sha256-/VcRs5/wMrv6seHdFVoMeGrIDqq1ZKyS78cOX0pHLJw=",
-    "src/Session.php": "sha256-r1ym/ej1pbYHWtKqa4TGqlYUqMzv33/LW1bW+aYTC2c=",
+    "src/Session.php": "sha256-aqky4jRQLegCP+FSGJm2ZKY/Dzm5sR7Sn7WPa1yzzd8=",
     "src/VehicleModel.php": "sha256-lZ+SZY7V2BODOGwtxxL/9CtIJ/DEMG+5lif2uov9iB4="
   }
 }

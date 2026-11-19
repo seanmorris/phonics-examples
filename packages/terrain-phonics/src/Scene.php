@@ -58,10 +58,22 @@ final class Scene
 	private float $transitionUntil = -1;
 	private string $selectionKey = '';
 	private bool $selectionPending = false;
+	/** A changed view or finished sibling group that the limiter made wait. dirty() reports it until it is selected. */
+	private bool $selectionDeferred = false;
+	/** Whether the last update ended less than one limiter spacing after a selection. dirty() reports it. */
+	private bool $selectionRecent = false;
+	/** Scene clock at the last limited update whose camera pose differed from the update before it. */
+	private float $motionTime = -INF;
+	/** Camera pose and selection settings seen by the previous limited update. */
+	private ?array $previousPose = null, $previousSettings = null;
 	/** Last observed eye and bounded predicted position; speculative jobs never drive visibility. */
 	private ?array $previousEye = null, $lookahead = null;
 	private int $viewportHeight = 720;
 	private float $viewportAspect = 16 / 9;
+	/** Default for selectionInterval, shared with applications that expose the setting. */
+	public const DEFAULT_SELECTION_INTERVAL = .1;
+	/** Seconds between detail selections while the view moves. Zero selects on every change, as before the limiter. */
+	public float $selectionInterval = self::DEFAULT_SELECTION_INTERVAL;
 	/** Detail multiplier: .5 economical, 1 balanced, 2 detailed. */
 	public float $quality = 1;
 	/** Time slice for incremental sampling. Slow display frames may also upload one ready sibling group. */
@@ -385,9 +397,11 @@ final class Scene
 
 		$transitioning = $this->retiring !== [] || $this->clock < $this->transitionUntil;
 
-		$viewChanged = $key !== $this->selectionKey;
+		// A selection the limiter postponed stays wanted until it runs, exactly like a changed view.
+		$viewChanged = $key !== $this->selectionKey || $this->selectionDeferred;
 		$transitionDue = ($transitioning || $this->selectionPending) && $this->clock - $this->selectionTime > .15;
-		if($viewChanged)
+		$hold = $this->selectionInterval > 0 && $this->holdSelection($seconds, $camera);
+		if($viewChanged && !$hold)
 		{
 			$this->select($camera);
 			$this->selectionKey = $key;
@@ -437,15 +451,99 @@ final class Scene
 		// A new root must draw immediately. Otherwise combine transitions and completed
 		// siblings in one selection, even when a moving camera also reordered work.
 		if($coverReady && $this->draw === []) $this->select($camera);
+		// While the limiter holds, the changed view or finished group waits for the next allowed selection.
+		elseif($hold) $this->selectionDeferred = $viewChanged || $coverReady;
 		elseif(!$viewChanged && ($coverReady || $transitionDue)) $this->select($camera);
+		// Emptying the key would make the next update select at once, which the limiter must be free to delay.
+		elseif($coverReady && $this->selectionInterval > 0) $this->selectionDeferred = true;
 		elseif($coverReady) $this->selectionKey = '';
 
 		$this->lastUpdateMs = (microtime(true) - $started) * 1000;
 
 		if($this->retiring !== [] || $this->clock < $this->transitionUntil) $this->changed = true;
 		$this->evict();
+		// The limiter measures its spacing on the scene clock, and that clock stands still while a host skips
+		// updates. Asking for updates until the spacing has passed lets the first changed view after a rest
+		// select at once, however soon after its last selection the scene had nothing else left to do.
+		$this->selectionRecent = $this->selectionInterval > 0 && $seconds > 0
+			&& $this->clock - $this->selectionTime < $this->selectionInterval - $seconds / 2;
 
 		return $this->changed;
+	}
+
+	/**
+	 * Decide whether the selection limiter makes this update's routine selection wait.
+	 *
+	 * A routine selection answers a changed view, a finished sibling group or a due transition, and one
+	 * selection answers all three. While the camera pose has changed within the last selectionInterval
+	 * seconds, routine selections run that far apart, so a fast vehicle stops selecting on nearly every
+	 * frame. Whatever waits is answered by the next allowed selection, at most one interval later, so a
+	 * finished group or a transition cannot starve behind a view that keeps moving. A view at rest for a
+	 * whole interval is not limited. By then it has had a selection for its resting pose, and its finished
+	 * groups and transitions select at once. So does the first changed view after the rest, because dirty()
+	 * keeps the scene clock running for one interval after every selection.
+	 *
+	 * Four cases never wait, because the last selection is wrong for them, not merely late. Nothing is
+	 * drawn yet. The landscape was replaced or republished, which empties the selection key. A setting that
+	 * selection reads has changed. Or the eye was relocated: one update moved it farther than trackMotion()
+	 * accepts as travel, or turned it by more than half the vertical field of view, which replaces a third
+	 * of a 16:9 picture or more. A 300 m/s flight covers 5 m in a 60 Hz frame, so travel never comes near
+	 * either limit. Boarding a vehicle, the home view and similar jumps cross them.
+	 *
+	 * An update of zero seconds never waits either. The scene clock stands still in it, so a host that
+	 * updates a paused scene that way would keep a postponed selection waiting for as long as it stays paused.
+	 * @param float $seconds Elapsed display seconds for this update.
+	 * @param Camera $camera Current viewing camera.
+	 * @return bool Whether routine selections must wait for a later update.
+	 */
+	private function holdSelection(float $seconds, Camera $camera): bool
+	{
+		$previous = $this->previousPose;
+		$pose = $this->previousPose = [$camera->position, $camera->yaw, $camera->pitch];
+		$settings = [$this->quality, $this->viewportHeight, $this->viewportAspect, $camera->fov
+			, $this->water->level(), $this->water->waveScale()];
+		$adjusted = $settings !== $this->previousSettings;
+		$this->previousSettings = $settings;
+
+		// The first pose seen is not motion: a scene that starts with a resting camera is never limited.
+		if($previous === null) return false;
+
+		if($pose !== $previous) $this->motionTime = $this->clock;
+
+		if($adjusted || $seconds <= 0 || $this->draw === [] || $this->selectionKey === '') return false;
+
+		// Frames rarely land on the interval exactly. An update within half its own length of the interval
+		// counts as on time, so 60 Hz frames select every sixth frame and never alternate between six and seven.
+		$wait = $this->selectionInterval - $seconds / 2;
+
+		if($this->clock - $this->motionTime >= $wait || $this->clock - $this->selectionTime >= $wait) return false;
+
+		// From here the view is moving and the last selection is recent, so only a relocation selects now.
+		// The distance limit is the one trackMotion() uses to drop its lookahead after a jump.
+		[$from, $yaw, $pitch] = $previous;
+		$reach = 600 * $seconds;
+		if($reach < 64) $reach = 64;
+		$x = $pose[0][0] - $from[0];
+		$y = $pose[0][1] - $from[1];
+		$z = $pose[0][2] - $from[2];
+
+		if($x * $x + $y * $y + $z * $z > $reach * $reach) return false;
+
+		$turn = $camera->fov / 2;
+		$pitch -= $camera->pitch;
+
+		if($pitch > $turn || -$pitch > $turn) return false;
+
+		$yaw -= $camera->yaw;
+		if($yaw < 0) $yaw = -$yaw;
+		// A yaw that wraps past a whole turn has not moved the view.
+		if($yaw > M_PI)
+		{
+			$yaw = fmod($yaw, 2 * M_PI);
+			if($yaw > M_PI) $yaw = 2 * M_PI - $yaw;
+		}
+
+		return $yaw <= $turn;
 	}
 
 	/**
@@ -685,6 +783,7 @@ final class Scene
 		}
 		$this->evict();
 		$this->selectionTime = $this->clock;
+		$this->selectionDeferred = false;
 	}
 
 	/**
@@ -1965,7 +2064,10 @@ final class Scene
 	 */
 	public function dirty(): bool
 	{
-		return $this->selectionKey === '' || $this->changed || $this->jobs !== [] || $this->preparing !== null || $this->selectionPending;
+		// A selection the limiter postponed needs later updates even when the camera has stopped. So does the
+		// limiter's own spacing after a selection, which only updates can count.
+		return $this->selectionKey === '' || $this->changed || $this->jobs !== [] || $this->preparing !== null
+			|| $this->selectionPending || $this->selectionDeferred || $this->selectionRecent;
 	}
 
 	/**
@@ -2017,7 +2119,8 @@ final class Scene
 			, 'generationMs' => $this->lastUpdateMs
 			, 'frames' => $this->frames
 			, 'selections' => $this->selections
-			, 'selectionPending' => $this->selectionPending
+			// A postponed selection is still owed, so callers that wait for a settled scene must see it here.
+			, 'selectionPending' => $this->selectionPending || $this->selectionDeferred
 			, 'revision' => $this->revision
 			, 'pendingVertices' => array_sum(array_column($this->jobs, 'index'))
 			, 'pendingHeightSamples' => array_sum(array_column($this->jobs, 'sampleIndex'))
@@ -2077,7 +2180,7 @@ final class Scene
 		$this->patches = $this->jobs = $this->draw = $this->activated = $this->retiring = $this->reserved = [];
 		$this->neighbors = $this->settledBoundaries = $this->settledParents = $this->groundCull = $this->waterCull = [];
 		$this->drawIndex = null;
-		$this->selectionPending = false;
+		$this->selectionPending = $this->selectionDeferred = $this->selectionRecent = false;
 		$this->transitionUntil = -1;
 		$this->previousEye = $this->lookahead = null;
 	}

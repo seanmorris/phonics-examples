@@ -6,6 +6,7 @@ use TerrainPhonics\Atmosphere;
 use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 use TerrainPhonics\RayQuery;
+use TerrainPhonics\Scene;
 use TerrainPhonics\Water;
 use TerrainPhonics\WaterAppearance;
 use TerrainPhonics\Watercraft;
@@ -54,6 +55,11 @@ final class Session
 	public bool $dirty = true;
 	/** Incremented for whole landscape replacement; staged edits preserve this generation. */
 	public int $generation = 0;
+	/**
+	 * Seconds between terrain detail selections while the view moves; zero selects on every change.
+	 * The page sets it to compare frame rates. It is not an authoring setting, so no file stores or restores it.
+	 */
+	public float $selectionInterval = Scene::DEFAULT_SELECTION_INTERVAL;
 	private array $keys = [];
 	private ?string $download = null;
 	private ?Landscape $draft = null;
@@ -106,7 +112,12 @@ final class Session
 		try
 		{
 			$wasPicking = $this->picking;
-			foreach($input['values'] ?? [] as $name => $value) $this->setting((string)$name, $value);
+			foreach($input['values'] ?? [] as $name => $value)
+			{
+				// load() passes every saved name to setting(). Taking this name here keeps it out of reach of files.
+				if($name === 'selectionInterval') $this->setSelectionInterval($value);
+				else $this->setting((string)$name, $value);
+			}
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($wasPicking) $this->advancePick($pickMs);
@@ -241,6 +252,18 @@ final class Session
 		if($name === 'exposure') $this->atmosphere->setExposure($value);
 		if($name === 'azimuth' || $name === 'elevation') $this->sun();
 		$this->dirty = $this->dirty || in_array($name,['quality','exposure','nightGlow','haze','azimuth','elevation','clock'],true);
+	}
+
+	/**
+	 * Set how often the renderer may select terrain detail while the view moves.
+	 * @param mixed $value Seconds between selections before validation; zero removes the limit.
+	 * @return void Stores a spacing between zero and one second for the application to copy to the scene.
+	 */
+	private function setSelectionInterval(mixed $value): void
+	{
+		if(!is_numeric($value) || !is_finite((float)$value))
+		throw new \InvalidArgumentException('Invalid control value');
+		$this->selectionInterval = max(0.0, min(1.0, (float)$value));
 	}
 
 	/** Keep the saved controls and renderer in sync, including while the simulation is paused. */
@@ -687,7 +710,8 @@ final class Session
 		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
-			'settings' => $this->settings,'roadPoints' => $this->road,'message' => $this->message,
+			'settings' => $this->settings,'selectionInterval' => $this->selectionInterval,
+			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
