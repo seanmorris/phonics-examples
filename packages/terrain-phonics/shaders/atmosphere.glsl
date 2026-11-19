@@ -31,6 +31,14 @@ float terrainAtmosphereAltitude(float altitude, float mu, float distanceMeters)
 	return max(0.0, altitude + delta / (sqrt(max(0.0, radius * radius + delta)) + radius));
 }
 
+float terrainAtmosphereExit(float altitude, float mu)
+{
+	float radius = uPlanetRadius + altitude;
+	float delta = (uAtmosphereHeight - altitude) * (2.0 * uPlanetRadius + uAtmosphereHeight + altitude);
+	float root = sqrt(max(0.0, radius * radius * mu * mu + delta));
+	return mu >= 0.0 ? delta / max(1e-6, root + radius * mu) : root - radius * mu;
+}
+
 float terrainAtmosphereBoundary(float altitude, float mu, out bool ground)
 {
 	float radius = uPlanetRadius + altitude;
@@ -38,9 +46,7 @@ float terrainAtmosphereBoundary(float altitude, float mu, out bool ground)
 	float groundRoot = radius * radius * mu * mu - groundDelta;
 	ground = mu < 0.0 && groundRoot >= 0.0;
 	if(ground) return groundDelta / max(1e-6, -radius * mu + sqrt(groundRoot));
-	float delta = (uAtmosphereHeight - altitude) * (2.0 * uPlanetRadius + uAtmosphereHeight + altitude);
-	float root = sqrt(max(0.0, radius * radius * mu * mu + delta));
-	return mu >= 0.0 ? delta / max(1e-6, root + radius * mu) : root - radius * mu;
+	return terrainAtmosphereExit(altitude, mu);
 }
 
 vec3 terrainTransmittance(float altitude, float mu)
@@ -72,13 +78,15 @@ vec3 terrainAtmosphereAttenuation(vec2 opticalDepth)
 	return exp(-uRayleigh * opticalDepth.x - vec3(uMie * uHaze / uMieAlbedo * opticalDepth.y));
 }
 
-void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanceMeters,
+void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanceMeters, bool visibleSurface,
 	out vec3 transmittance, out vec3 radiance)
 {
 	vec3 ray = normalize(direction);
 	float altitude = clamp(eyeAltitude, 0.0, uAtmosphereHeight);
 	bool ground;
-	float distanceToBoundary = terrainAtmosphereBoundary(altitude, ray.y, ground);
+	// The depth-tested terrain or water is the endpoint of a visible scene ray, including inside canyons.
+	float distanceToBoundary = visibleSurface ? terrainAtmosphereExit(altitude, ray.y)
+		: terrainAtmosphereBoundary(altitude, ray.y, ground);
 	float stepSize = min(max(0.0, distanceMeters), distanceToBoundary) / 12.0;
 	float radius = uPlanetRadius + altitude;
 	float nu = clamp(dot(ray, uSunDirection), -1.0, 1.0);
@@ -131,7 +139,7 @@ vec3 skyRadiance(vec3 ray, float altitude, float angularFootprint, bool includeS
 	ray = normalize(ray);
 	vec3 transmittance;
 	vec3 radiance;
-	terrainIntegrateAtmosphere(ray, altitude, 1e20, transmittance, radiance);
+	terrainIntegrateAtmosphere(ray, altitude, 1e20, false, transmittance, radiance);
 	if(includeSolarDisk) radiance += terrainSolarDisk(ray,altitude,transmittance,angularFootprint);
 	return radiance + terrainNightSky(ray.y);
 }
@@ -150,7 +158,7 @@ vec3 terrainAtmosphere(vec3 ray, float eyeAltitude, float distanceMeters, vec3 s
 {
 	vec3 transmittance;
 	vec3 radiance;
-	terrainIntegrateAtmosphere(ray, eyeAltitude, distanceMeters, transmittance, radiance);
+	terrainIntegrateAtmosphere(ray, eyeAltitude, distanceMeters, true, transmittance, radiance);
 	return mix(terrainNightSky(normalize(ray).y), max(vec3(0.0), sceneLinear), transmittance) + radiance;
 }
 

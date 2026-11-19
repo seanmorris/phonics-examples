@@ -17,7 +17,7 @@ void main()
 	vec3 transmittance;
 	vec3 radiance;
 	// Integrate scattering only: a tiny bright solar disk cannot be resolved faithfully in this map.
-	terrainIntegrateAtmosphere(ray, uSkyCacheAltitude, 1e20, transmittance, radiance);
+	terrainIntegrateAtmosphere(ray, uSkyCacheAltitude, 1e20, false, transmittance, radiance);
 	// Log RGBA8 stores [0,4095.9375] linear radiance, with finer steps near black. Alpha is unused.
 	outColor = vec4(clamp(log2(1.0 + max(vec3(0.0), radiance) * 16.0) / 16.0, 0.0, 1.0), 1.0);
 }

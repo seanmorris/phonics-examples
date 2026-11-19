@@ -21,7 +21,7 @@ void main()
 		* log(1.0 + uAerialCacheMaxDistance / 100.0)) - 1.0);
 	vec3 transmittance;
 	vec3 radiance;
-	terrainIntegrateAtmosphere(ray, uAerialCacheAltitude, distanceMeters, transmittance, radiance);
+	terrainIntegrateAtmosphere(ray, uAerialCacheAltitude, distanceMeters, true, transmittance, radiance);
 	outTransmittance = vec4(transmittance,1.0);
 	vec3 encoded = clamp(log2(1.0 + max(vec3(0.0), radiance) * 16.0) / 16.0, 0.0, 1.0);
 	outRadiance = vec4(encoded, 1.0);
