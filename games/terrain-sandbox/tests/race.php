@@ -666,6 +666,25 @@ expect(max(array_map('abs', $heights)) < 1e-12, 'Each step lifts the floating ga
 $range = [];
 for($i = 0; $i < 240; $i++) { $bay->step(1 / 60); $range[] = $bay->course->gate($c['id'])['y']; }
 expect(max($range) - min($range) > .3, 'The floating gates rise and fall with the swell');
+// A floating gate rides at the wave height at its centre, so the swell can leave the water at a foot lower than
+// that. At the panel's highest choppiness, every corner of each foot must still reach under the water.
+input($bay, ['values' => ['waterChoppiness' => 300]]);
+['window' => $opening, 'extent' => $reach] = $bay->gateShapes->kind('water');
+$exposed = -INF;
+for($yaw = 0; $yaw < 180; $yaw += 10)
+{
+	$cos = cos(deg2rad($yaw)); $sin = sin(deg2rad($yaw));
+	for($along = 0; $along < 34; $along += 4)
+		for($t = 0; $t < 12; $t += .1)
+		{
+			$feet = $bay->water->sample($along, 0, $t)['height'] + $reach['bottom'];
+			foreach([-$reach['halfWidth'], -$opening['halfWidth'], $opening['halfWidth'], $reach['halfWidth']] as $x)
+				foreach([-$reach['halfDepth'], $reach['halfDepth']] as $z)
+					$exposed = max($exposed,
+						$feet - $bay->water->sample($along + $x * $cos + $z * $sin, -$x * $sin + $z * $cos, $t)['height']);
+		}
+}
+expect($exposed < 0, sprintf('The water gate\'s feet stay in the water at 300%% choppiness (highest foot %.2f m)', $exposed));
 input($bay, ['actions' => ['pause'], 'values' => ['waterLevel' => 9, 'waterChoppiness' => 0]]);
 expect($bay->course->gate($c['id'])['y'] === 9.0 && $bay->status()['course']['gates'][1]['y'] === 9.0,
 	'A paused water level change moves the floating gates at once');
