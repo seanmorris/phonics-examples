@@ -226,6 +226,24 @@ namespace
 	$model->draw($pond, $camera, $session->atmosphere, $session->water, 1280, 720);
 	expect($surface->samples === 32, 'Later frames at the same simulation time reuse the sampled heights');
 
+	// A loaded course whose gates are all out of view still compiles and uploads on its first frame, so the stall
+	// does not wait for a gate to come into view during a race.
+	$model->release();
+	$unseen = new Course;
+	$unseen->place('start', 'road', 0, 0, -100, 0, 1);
+	$unseen->place('checkpoint', 'air', 0, 40, 6000, 0);
+	$created = Program::$created;
+	$since = count($GLOBALS['gl']);
+	$model->draw($unseen, $camera, $session->atmosphere, $session->water, 1280, 720);
+	expect($model->drawn === 0 && Program::$created === $created + 1 && count(calls('glGenVertexArrays', $since)) === 2,
+		'The first frame of a course with no gate in view compiles the program and uploads its road and air meshes');
+	$camera->yaw = 0.0;
+	$since = count($GLOBALS['gl']);
+	$model->draw($unseen, $camera, $session->atmosphere, $session->water, 1280, 720);
+	expect($model->drawn === 1 && Program::$created === $created + 1 && calls('glGenVertexArrays', $since) === [],
+		'Turning to the start gate draws it without compiling or uploading');
+	$camera->yaw = M_PI;
+
 	$session->close();
 	echo "Landscape sandbox gate drawing: $checks checks passed\n";
 }

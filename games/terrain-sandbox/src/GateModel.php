@@ -13,7 +13,7 @@ use TerrainPhonics\Water;
  * stacked in its atlas, so a gate's role is a texture offset chosen per draw.
  *
  * A gate is drawn only within its kind's range of the eye and when its extent's box meets the view. The program and
- * each kind's mesh are uploaded on the first frame that draws them.
+ * the mesh of each kind the course holds are uploaded on the course's first frame, whether or not a gate is in view.
  */
 final class GateModel
 {
@@ -25,6 +25,8 @@ final class GateModel
 	private ?Program $program = null;
 	/** Meshes by kind, uploaded on first use. */
 	private array $meshes = [];
+	/** Kinds of the gates in $course at $revision, as keys. */
+	private array $kinds = [];
 	/** Per-gate drawing data for $course at $revision: basis, texture offset and culling box. */
 	private array $placed = [];
 	private ?Course $course = null;
@@ -58,6 +60,12 @@ final class GateModel
 		$this->drawn = 0;
 		// Loading a file or generating a landscape replaces the course, whose revision count starts again.
 		if($course !== $this->course || $course->revision !== $this->revision) $this->place($course);
+		// Compiling the shaders and uploading a mesh hold up the frame they happen in. Doing both when the course
+		// loads, or when a gate of a new kind is placed, keeps that stall out of a race, where a gate can first come
+		// into view at speed. In Chromium under SwiftShader the compile took 0.7 to 2.3 seconds in three runs.
+		foreach(array_keys($this->kinds) as $kind)
+			$this->meshes[$kind] ??= new BakedMesh($this->folder . $this->shapes->kind($kind)['mesh']);
+		if($this->kinds) $this->program ??= VehicleModel::program();
 		$eye = $camera->position;
 		$planes = $camera->clipPlanes($width, $height);
 		$visible = [];
@@ -90,14 +98,14 @@ final class GateModel
 		}
 		if($visible)
 		{
-			$p = $this->program ??= VehicleModel::program();
+			$p = $this->program;
 			VehicleModel::light($p, $camera, $sky, $water, $width, $height, $altitude);
 			$rotation = $p->location('uRotation');
 			$origin = $p->location('uOrigin');
 			$offset = $p->location('uUvOffset');
 			foreach($visible as $kind => $gates)
 			{
-				$mesh = $this->meshes[$kind] ??= new BakedMesh($this->folder . $this->shapes->kind($kind)['mesh']);
+				$mesh = $this->meshes[$kind];
 				$mesh->bind();
 				foreach($gates as [$placed, $gate])
 				{
@@ -120,11 +128,12 @@ final class GateModel
 	 */
 	private function place(Course $course): void
 	{
-		$this->placed = $this->cull = [];
+		$this->placed = $this->cull = $this->kinds = [];
 		$atlas = $this->shapes->atlas;
 		foreach($course->gates(false) as $gate)
 		{
 			$extent = $this->shapes->kind($gate['kind'])['extent'];
+			$this->kinds[$gate['kind']] = true;
 			$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
 			// A square around the gate holds its footprint at any heading.
 			$reach = sqrt($extent['halfWidth'] ** 2 + $extent['halfDepth'] ** 2);
