@@ -27,6 +27,7 @@ export function activate({module, canvas, session, services})
 	const detail = frame.querySelector('[data-diagnostics]');
 	const pending = frame.querySelector('[data-pending]');
 	const roadPreview = frame.querySelector('[data-road-preview]');
+	const race = frame.querySelector('[data-race]');
 
 	const controls = new Map([...frame.querySelectorAll('[data-value]')].map(field => [field.dataset.value, field]));
 
@@ -57,10 +58,16 @@ export function activate({module, canvas, session, services})
 
 	const focusedField = target => target instanceof HTMLElement && Boolean(target.closest('input,select,textarea'));
 
+	// These fields send nothing while their text is out of range, and return to the last value sent when left so.
+	const checked = new Set(['waterLevel', 'gateLaps', 'gateHeight']);
+	const gateTool = frame.querySelector('[data-gate-tool]');
+
+	const showToolControls = () => { gateTool.hidden = controls.get('tool').value !== 'gate'; };
+
 	for(const field of controls.values())
 	{
 		field.addEventListener('input', () => {
-			if(field.dataset.value === 'waterLevel')
+			if(checked.has(field.dataset.value))
 			{
 				if(!Number.isFinite(field.valueAsNumber) || !field.validity.valid) return;
 
@@ -76,9 +83,11 @@ export function activate({module, canvas, session, services})
 			if(output) output.textContent = field.value;
 
 			if(field === coarseFog) setFineFogWindow(field.valueAsNumber);
+
+			if(field.dataset.value === 'tool') showToolControls();
 		}, {signal});
 
-		if(field.dataset.value === 'waterLevel')
+		if(checked.has(field.dataset.value))
 		field.addEventListener('blur', () => {
 			if(!Number.isFinite(field.valueAsNumber) || !field.validity.valid) field.value = field.defaultValue;
 		}, {signal});
@@ -143,6 +152,7 @@ export function activate({module, canvas, session, services})
 		, KeyC: 'car'
 		, KeyJ: 'jet'
 		, Home: 'reset-camera'
+		, KeyR: 'race-reset'
 	};
 
 	frame.addEventListener('keydown', event => {
@@ -392,7 +402,7 @@ export function activate({module, canvas, session, services})
 					if(field.type === 'checkbox') field.checked = value;
 					else field.value = value;
 
-					if(name === 'waterLevel') field.defaultValue = value;
+					if(checked.has(name)) field.defaultValue = value;
 
 					const output = frame.querySelector(`[data-output="${name}"]`);
 
@@ -401,8 +411,11 @@ export function activate({module, canvas, session, services})
 					if(field === coarseFog) setFineFogWindow(value);
 				}
 
+				showToolControls();
 				lastGeneration = state.generation;
 			}
+
+			updateRace(race, state);
 		}
 	});
 
@@ -499,6 +512,74 @@ function updateRoadPreview(svg, state)
 	});
 }
 
+/**
+ * Show the race clock, lap, next gate, last split and best time while the landscape has gates.
+ * @param {HTMLElement} line The HUD line under the status message.
+ * @param {object} state Latest status from PHP.
+ */
+function updateRace(line, state)
+{
+	const {course, race} = state;
+	line.hidden = !course?.gates.length;
+
+	if(line.hidden) return;
+
+	const parts = [];
+
+	if(race.state === 'running') parts.push(raceClock(race.time, 1), `Lap ${race.lap} of ${race.laps}`);
+	else if(race.state === 'finished') parts.push(`Finished in ${raceClock(race.time)}`);
+	else if(race.laps === null) parts.push('Place a start gate to race');
+	else parts.push(race.laps === 1 ? '1 lap' : `${race.laps} laps`);
+
+	const next = race.next && course.gates.find(gate => gate.id === race.next.id);
+
+	if(next)
+	{
+		const from = state.car ?? state.craft ?? state.jet;
+		const [x, y, z] = from ? [from.x, from.y, from.z] : state.camera.position;
+		const metres = Math.hypot(next.x - x, next.y - y, next.z - z);
+		const away = metres < 1000 ? `${Math.round(metres)} m` : `${(metres / 1000).toFixed(1)} km`;
+		parts.push(`Next: ${gateName(race.next, race)}, ${away}`);
+	}
+
+	if(race.state === 'running' && race.lastSplit !== null) parts.push(`Split ${raceClock(race.lastSplit)}`);
+
+	if(race.best !== null) parts.push(`Best ${raceClock(race.best)}`);
+
+	line.textContent = parts.join(' · ');
+}
+
+/**
+ * Name the gate a race needs next.
+ * @param {{role: string, number: ?number}} gate The race status's next gate.
+ * @param {{state: string, remaining: ?number}} race The race status.
+ * @returns {string} For example checkpoint 2, finish gate or start gate to finish.
+ */
+function gateName(gate, race)
+{
+	if(gate.role === 'checkpoint') return `checkpoint ${gate.number}`;
+
+	if(gate.role === 'finish') return 'finish gate';
+
+	return race.state === 'running' && race.remaining === 1 ? 'start gate to finish' : 'start gate';
+}
+
+/**
+ * Format a race time as Race::clock() does in PHP.
+ * @param {number} seconds Time in seconds.
+ * @param {number} digits Decimal places of a second.
+ * @returns {string} For example 12.34 s, or 1:02.35 from one minute up.
+ */
+function raceClock(seconds, digits = 2)
+{
+	const scale = 10 ** digits;
+	const units = Math.round(seconds * scale);
+	const minutes = Math.floor(units / (60 * scale));
+	const rest = ((units - minutes * 60 * scale) / scale).toFixed(digits);
+
+	return minutes ? `${minutes}:${rest.padStart(digits + 3, '0')}` : `${rest} s`;
+}
+
 /** Read only the recipe controls; presentation settings travel through their own input channel. */
 function generationValues(frame)
 {
@@ -524,7 +605,9 @@ function generationValues(frame)
 const JET_PREFERENCE = 'terrain-sandbox.jet';
 
 /** Gamepad buttons in the standard layout that issue a command when pressed. */
-const PAD_COMMANDS = new Map([[9, 'pause'], [8, 'jet-controls'], [12, 'jet'], [14, 'car'], [15, 'craft'], [13, 'fly']]);
+const PAD_COMMANDS = new Map(
+	[[9, 'pause'], [8, 'jet-controls'], [12, 'jet'], [14, 'car'], [15, 'craft'], [13, 'fly'], [3, 'race-reset']]
+);
 
 /** Gamepad buttons PHP reads while held: A, B, X, Y, LB, RB and the two stick clicks, with their bits in the packet. */
 const PAD_HELD = [[0, 1], [1, 2], [2, 4], [3, 8], [4, 16], [5, 32], [10, 64], [11, 128]];
@@ -600,7 +683,7 @@ function markup()
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #779d8970;border-radius:5px;min-height:32px;padding:5px 8px;font:inherit}
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}
 	.terrain-row{display:flex;gap:6px;margin:6px 0}.terrain-row>*{flex:1;min-width:0}.terrain-field{display:grid;gap:4px;margin:8px 0}.terrain-control{display:grid;grid-template-columns:90px 1fr 36px;gap:6px;align-items:center;margin:7px 0}.terrain-control output{font-variant-numeric:tabular-nums;text-align:right;color:#e5bc75;font-size:12px}
-	.terrain-note{font-size:12px;color:#bdd2c7;margin:8px 0}.terrain-check{display:flex;align-items:center;gap:8px;margin:10px 0}.terrain-hud{position:absolute;left:16px;bottom:16px;max-width:calc(100% - 355px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-sandbox [hidden]{display:none!important}
+	.terrain-note{font-size:12px;color:#bdd2c7;margin:8px 0}.terrain-check{display:flex;align-items:center;gap:8px;margin:10px 0}.terrain-hud{position:absolute;left:16px;bottom:16px;max-width:calc(100% - 355px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sandbox [hidden]{display:none!important}
 	@media(max-width:700px){.terrain-panel{width:260px;right:8px;top:8px;max-height:70%}.terrain-hud{max-width:calc(100% - 56px);font-size:12px;bottom:8px}.terrain-panel:not([open]){width:auto}.terrain-panel>div{padding:0 10px 10px}}
 	</style><div class="terrain-stage"></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
 	<details class="terrain-panel" open><summary>LANDSCAPE LAB</summary><div>
@@ -618,7 +701,12 @@ function markup()
 	<p class="terrain-note">Higher damping smooths steep faces by reducing fine-noise amplitude. These values apply when you generate.</p></details>
 	<div class="terrain-row"><button data-action="generate">Generate</button><button data-action="reset-camera">Home view</button></div>
 	<label class="terrain-field">Detail<select data-value="quality"><option value="0.5">Economical</option><option value="1" selected>Balanced</option><option value="2">Detailed</option></select></label>
-	<h2>Shape the ground</h2><label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option></select></label>
+	<h2>Shape the ground</h2><label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option></select></label>
+	<div data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
+	<label class="terrain-field">Laps · set on the start gate<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
+	<label class="terrain-field">Height above ground · m<input data-value="gateHeight" type="number" min="0" max="400" step="any" value="0"></label>
+	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. Placing a second start or finish gate moves it, checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
+	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
 	${range('Radius · m', 'radius', 2, 300, 1, 40)}${range('Strength · m', 'amount', .1, 200, .1, 12)}
 	<label class="terrain-field">Flatten elevation · m<input data-value="flattenHeight" type="number" min="-1000" max="3000" value="0"></label>
 	<label class="terrain-field">Paint<select data-value="material"><option value="grass">Grass</option><option value="rock">Rock</option><option value="sand">Sand</option><option value="snow">Snow</option><option value="road">Road</option></select></label>
@@ -694,9 +782,9 @@ function markup()
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<label class="terrain-field">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
-	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
-	<p class="terrain-note">Gamepad: left stick flies, steers or banks · right stick looks · RT/LT climb or descend, accelerate or brake · A: handbrake · LB/RB: Expert rudder · D-pad: ↑ jet, ← car, → watercraft, ↓ free flight · Start: pause · Back: Novice or Expert.</p>
+	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
+	<p class="terrain-note">Gamepad: left stick flies, steers or banks · right stick looks · RT/LT climb or descend, accelerate or brake · A: handbrake · LB/RB: Expert rudder · D-pad: ↑ jet, ← car, → watercraft, ↓ free flight · Y: reset the race · Start: pause · Back: Novice or Expert.</p>
 	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
 	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></p>
-	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
+	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

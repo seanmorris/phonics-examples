@@ -720,7 +720,7 @@ final class Session
 			return;
 		}
 		if($kind === 'water') $this->course->float($this->water, $this->time);
-		$where = ' at ' . round($x) . ', ' . round($z) . ' m';
+		$where = ' at ' . (int)round($x) . ', ' . (int)round($z) . ' m';
 		$this->message = ($placed['moved'] ? 'Moved ' . self::gateName($placed['gate']) . ' to' . substr($where, 3)
 			: 'Placed ' . self::gateName($placed['gate']) . $where) . match($kind) {
 				'water' => ', floating on the water.',

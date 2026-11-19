@@ -48,15 +48,31 @@ Select **Board watercraft**, press **B**, or press right on a gamepad's D-pad to
 
 Select **Return to flight**, or press **F**, to explore and edit again. The craft is an arcade physics demonstration, not a complete racing game.
 
+## Race through gates
+
+Choose **Race gate** under **Tool** to build a course in free flight. Click the ground to place a gate. It faces the way the camera looks, so you pass through it travelling that way. Where you click decides the kind of gate:
+
+- On water, an inflatable arch for the jet ski, 8.9 metres wide and 3.6 metres high inside. It floats and rises and falls with the waves.
+- On land with **Height above ground** at 0, a gantry on two solid posts for the car, 13.3 metres wide and 3.1 metres high inside. The car collides with the posts.
+- On land with a height above 0, a banner for the F5 that hangs that many metres above the ground. Fly through the space below it, 40 metres wide and 8.8 metres high. The F5 starts at least 75 metres above the ground, so a height of 71 metres puts the opening in its path.
+
+**Gate role** chooses what a click does. A course has one start gate and one finish gate, and placing another moves it. Checkpoints are numbered in the order you place them, up to 32. **Remove** takes away the gate you click on or beside, and the checkpoints after it move up a number. **Clear gates** removes every gate.
+
+**Laps** belongs to the start gate and runs from 1 to 20. Without a finish gate, each lap passes the checkpoints in order and returns through the start gate, which then reads START / FINISH. With a finish gate, every lap but the last returns through the start gate and the last lap ends at the finish gate.
+
+Drive, ride or fly through the start gate to start the clock; you do not need to stop first. Pass each gate in order and in its direction. The race ignores every other crossing. The line under the status message shows the time, the lap, the next gate and its distance, the last split and the best time. The sandbox keeps your best time for each course until you reload the page. **R**, **Reset race** or **Y** on a gamepad sends the race back to wait at the start gate. Pausing stops the clock. Leaving the vehicle, boarding again, reaching the map edge or changing the course stops the race.
+
+**Save file** stores the gates with the landscape, and **Load file** brings them back. **Generate** starts the new landscape without gates.
+
 ## Use a gamepad
 
-The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. The D-pad chooses where you are: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
+The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. The D-pad chooses where you are: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses and **Y** resets a race. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
 
 ## Pause and save
 
 **P** pauses waves, the moving sun, and vehicle motion. Camera movement and authoring remain available. Once terrain preparation settles, an unchanged paused view stops submitting rendered frames.
 
-**Save file** downloads a JSON document containing the landscape recipe, committed edits, environment controls, and camera. **Load file** opens a file picker. Files are local to your device; the sandbox does not upload them.
+**Save file** downloads a JSON document containing the landscape recipe, committed edits, environment controls, camera and race gates. **Load file** opens a file picker. Files are local to your device; the sandbox does not upload them.
 
 ## Choose detail
 

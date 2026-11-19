@@ -17,6 +17,8 @@ uniform vec4 uWheelTravel; // spring displacement at front -X/+X, then rear -X/+
 const int SURFACES = 5;
 uniform vec3 uHingePoint[SURFACES], uHingeAxis[SURFACES];
 uniform float uHingeAngle[SURFACES];
+// Shifts the texture lookup to another print in the atlas, as the race gates choose their role. Vehicles leave it zero.
+uniform vec2 uUvOffset;
 out vec3 vRelative, vNormal;
 out vec2 vUv;
 flat out vec4 vPaint;
@@ -53,7 +55,7 @@ void main()
 	}
 	vRelative = uOrigin + uRotation * position;
 	vNormal = uRotation * normal;
-	vUv = aUv;
+	vUv = aUv + uUvOffset;
 	vPaint = aPaint;
 	vSurface = aSurface;
 	gl_Position = uViewProjection * vec4(vRelative, 1.0);

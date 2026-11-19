@@ -13,6 +13,7 @@ use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
 use TerrainPhonics\BrowserPatchBuilder;
+use TerrainSandbox\GateModel;
 use TerrainSandbox\VehicleModel;
 use TerrainSandbox\Session;
 
@@ -30,6 +31,9 @@ $batch = vrzno_env('terrainPatchBatch');
 $builder = new BrowserPatchBuilder(static fn($action, $path, $key, $payload) => $batch($action, $path, $key, $payload));
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere, $builder);
 $models = [];
+$gates = new GateModel($session->gateShapes, __DIR__ . '/assets/gates/');
+$courseRevision = -1;
+$course = null;
 $viewCamera = $session->camera;
 $vehiclePose = null;
 $width = 1280; $height = 720; $dirty = true;
@@ -107,17 +111,23 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	return false;
 });
 
-$drawVehicle = static function() use ($session, &$models, &$width, &$height, &$viewCamera, &$vehiclePose): void {
-	$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
-	$model = $models[$name] ??= new VehicleModel(__DIR__ . '/assets/' . $name . '/mesh.bin.gz');
-	$model->draw($vehiclePose ?? $session->craft->state(),
-		$viewCamera, $session->atmosphere, $session->water, $width, $height);
+$drawOpaque = static function() use ($session, $gates, &$models, &$width, &$height, &$viewCamera, &$vehiclePose): void {
+	if($session->mode !== 'fly')
+	{
+		$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
+		$model = $models[$name] ??= new VehicleModel(__DIR__ . '/assets/' . $name . '/mesh.bin.gz');
+		$model->draw($vehiclePose ?? $session->craft->state(),
+			$viewCamera, $session->atmosphere, $session->water, $width, $height);
+	}
+	// Gates draw in free flight too, where the course is edited.
+	if($session->course->count() > 0)
+		$gates->draw($session->course, $viewCamera, $session->atmosphere, $session->water, $width, $height);
 };
 
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, $drawVehicle, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
-		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $publish
+		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course, $publish
 	): void {
 		$lastVehicle = $vehiclePose;
 		[$viewCamera,$vehiclePose] = match($session->mode) {
@@ -132,6 +142,13 @@ $engine->start(
 		$budget = $moving ? 2.0 : 8.0;
 		$scene->budgetMs = max(.25, $budget - $inputMs);
 		$lastBudgetPose = $pose;
+		// Placing, moving or removing a gate needs a new frame even while the view stands still.
+		if($session->course !== $course || $session->course->revision !== $courseRevision)
+		{
+			$course = $session->course;
+			$courseRevision = $course->revision;
+			$dirty = true;
+		}
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
@@ -146,7 +163,7 @@ $engine->start(
 			$engine->device->resize($width, $height);
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
-				drawOpaque: $session->mode === 'fly' ? null : $drawVehicle);
+				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 ? null : $drawOpaque);
 			$engine->device->present();
 			$renderMs = (microtime(true) - $start) * 1000;
 			$drawIntervalMs = $lastRender === null ? null : ($now - $lastRender) * 1000;
@@ -156,7 +173,9 @@ $engine->start(
 		}
 		if($urgentStatus || $statusPending && $now - $lastStatus >= .2)
 		{
-			$status = $session->status() + ['renderer' => $scene->stats(),'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
+			$status = $session->status() + ['renderer' => $scene->stats() + ($session->course->count() > 0
+					? ['gateDraws' => $gates->drawn, 'gateMs' => $gates->ms] : ['gateDraws' => 0, 'gateMs' => 0.0]),
+				'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];
 			$publish(json_encode($status, JSON_THROW_ON_ERROR));
@@ -164,14 +183,16 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, &$models): void {
+	static function() use ($engine, $session, $scene, $gates, &$models): void {
 		$engine->systems->remove('terrain-sandbox.simulate');
 		foreach($models as $model) $model->close();
+		$gates->release();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, &$models, &$dirty): void {
+	static function() use ($scene, $gates, &$models, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
+		$gates->release();
 		$scene->restore();
 		$dirty = true;
 	}

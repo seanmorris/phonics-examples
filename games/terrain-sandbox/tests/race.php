@@ -69,15 +69,27 @@ mkdir($scratch);
 $defaults = GateShapes::defaults();
 expect(!$defaults->fromFile && GateShapes::load("$scratch/absent.json")->export() === $defaults->export(),
 	'A missing gates.json reads as the built-in defaults');
-expect($defaults->kind('road')['window']['top'] === 2.94 && count($defaults->kind('road')['posts']) === 2
-	&& $defaults->kind('water')['posts'] === [] && $defaults->kind('air')['posts'] === [],
-	'The defaults carry the provisional window and only the road gate has posts');
-$post = $defaults->kind('road')['posts'][0];
-expect($post['bottom'] === -GateShapes::POST_DEPTH && $post['top'] === $defaults->kind('road')['extent']['top'],
+expect(count($defaults->kind('road')['posts']) === 2 && $defaults->kind('water')['posts'] === []
+	&& $defaults->kind('air')['posts'] === [], 'Only the road gate has posts');
+$shipped = dirname(__DIR__) . '/assets/gates/gates.json';
+if(is_file($shipped))
+	expect(GateShapes::load($shipped)->export() === $defaults->export(),
+		'The built-in defaults repeat the shapes gates.json ships, so a package without the file races the same gates');
+$file = GateShapes::DEFAULTS;
+foreach($file['kinds']['road']['posts'] as $index => $reach) unset($file['kinds']['road']['posts'][$index]['bottom'],
+	$file['kinds']['road']['posts'][$index]['top']);
+unset($file['kinds']['water']['extent']['bottom'], $file['kinds']['water']['extent']['halfDepth']);
+file_put_contents("$scratch/gates.json", json_encode($file));
+$read = GateShapes::load("$scratch/gates.json");
+$post = $read->kind('road')['posts'][0];
+expect($post['bottom'] === -GateShapes::POST_DEPTH && $post['top'] === $read->kind('road')['extent']['top'],
 	'A post without a stated reach runs from 8 m below the base to the top of the gate');
+expect($read->kind('water')['extent']['bottom'] === $read->kind('water')['window']['bottom']
+	&& $read->kind('water')['extent']['halfDepth'] === GateShapes::HALF_DEPTH,
+	'An extent without a stated bottom or depth reaches the window bottom and 1 m along the travel');
 $file = GateShapes::DEFAULTS;
 $file['kinds']['air']['window']['top'] = 9;
-$file['kinds']['road']['posts'][0] += ['bottom' => -6, 'top' => 4];
+$file['kinds']['road']['posts'][0] = ['bottom' => -6, 'top' => 4] + $file['kinds']['road']['posts'][0];
 $file['kinds']['road']['label'] = 'extra fields are left for the renderer';
 file_put_contents("$scratch/gates.json", json_encode($file));
 $read = GateShapes::load("$scratch/gates.json");
@@ -89,6 +101,8 @@ $broken = [
 	'an extent inside its window' => function(array &$f) { $f['kinds']['air']['extent']['top'] = 1; },
 	'a mesh path' => function(array &$f) { $f['kinds']['road']['mesh'] = '../road.bin'; },
 	'a post with no size' => function(array &$f) { $f['kinds']['road']['posts'][0]['halfSize'] = -1; },
+	'an extent above its window' => function(array &$f) { $f['kinds']['water']['extent']['bottom'] = 1; },
+	'an extent with no depth' => function(array &$f) { $f['kinds']['air']['extent']['halfDepth'] = 0; },
 	'another version' => function(array &$f) { $f['version'] = 2; },
 ];
 foreach($broken as $name => $break)

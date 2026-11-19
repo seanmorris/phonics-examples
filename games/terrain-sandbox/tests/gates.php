@@ -55,7 +55,7 @@ foreach($gates['roles'] as $band => $role)
 foreach($gates['kinds'] as $name => $kind)
 {
 	expect($shipped($kind['mesh']), "The application ships the $name mesh");
-	// The same limit and checks as VehicleModel, which the gates' renderer can share.
+	// The same limit and checks as BakedMesh, which loads the vehicles and the gates.
 	$data = gzdecode(file_get_contents($folder . $kind['mesh']), 4194304);
 	expect($data !== false, "The $name mesh decompresses within 4 MiB");
 	$header = unpack('Vvertices/Vindices/Vwidth/Vheight', $data);

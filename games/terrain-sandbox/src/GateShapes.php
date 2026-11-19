@@ -15,20 +15,21 @@ final class GateShapes
 	/** Prints the meshes carry, one per role, plus the print of a start gate that also ends the race. */
 	public const PRINTS = ['start', 'checkpoint', 'finish', 'start-finish'];
 	/**
-	 * Built-in shapes, used when the package has no gates.json. They follow the file's layout and carry the
-	 * provisional numbers agreed before the meshes were measured.
+	 * Built-in shapes, used when the package has no gates.json. They follow the file's layout and repeat the
+	 * measurements the gate importer wrote to it; tests/race.php fails when the two differ.
 	 */
 	public const DEFAULTS = [
 		'version' => 1,
 		'roles' => self::PRINTS,
 		'kinds' => [
-			'road' => ['mesh' => 'road.mesh.bin.gz', 'window' => ['halfWidth' => 6.76, 'bottom' => 0, 'top' => 2.94],
-				'posts' => [['x' => -7.16, 'z' => 0, 'halfSize' => .4], ['x' => 7.16, 'z' => 0, 'halfSize' => .4]],
-				'extent' => ['halfWidth' => 7.58, 'top' => 4.14]],
-			'water' => ['mesh' => 'water.mesh.bin.gz', 'window' => ['halfWidth' => 4.2, 'bottom' => 0, 'top' => 5.5],
-				'posts' => [], 'extent' => ['halfWidth' => 6, 'top' => 7.8]],
-			'air' => ['mesh' => 'air.mesh.bin.gz', 'window' => ['halfWidth' => 22.0, 'bottom' => 0, 'top' => 30.0],
-				'posts' => [], 'extent' => ['halfWidth' => 22.8, 'top' => 33.6]],
+			'road' => ['mesh' => 'road.mesh.bin.gz', 'window' => ['halfWidth' => 6.662, 'bottom' => 0, 'top' => 3.073],
+				'posts' => [['x' => -7.062, 'z' => 0, 'halfSize' => .4, 'bottom' => -8.0, 'top' => 4.137],
+					['x' => 7.062, 'z' => 0, 'halfSize' => .4, 'bottom' => -8.0, 'top' => 4.137]],
+				'extent' => ['halfWidth' => 7.582, 'bottom' => -8.0, 'top' => 4.28, 'halfDepth' => .53]],
+			'water' => ['mesh' => 'water.mesh.bin.gz', 'window' => ['halfWidth' => 4.459, 'bottom' => 0, 'top' => 3.596],
+				'posts' => [], 'extent' => ['halfWidth' => 6.0, 'bottom' => -.8, 'top' => 7.034, 'halfDepth' => .621]],
+			'air' => ['mesh' => 'air.mesh.bin.gz', 'window' => ['halfWidth' => 19.986, 'bottom' => 0, 'top' => 8.813],
+				'posts' => [], 'extent' => ['halfWidth' => 22.746, 'bottom' => -.406, 'top' => 12.433, 'halfDepth' => 1.591]],
 		],
 		'atlas' => ['roles' => ['start' => [0, 0], 'checkpoint' => [0, .25], 'finish' => [0, .5],
 			'start-finish' => [0, .75]]],
@@ -41,7 +42,9 @@ final class GateShapes
 	public const BELOW = ['road' => 8.0, 'water' => 3.0, 'air' => 0.0];
 	/** Default depth of a road post's foot below the gate origin. */
 	public const POST_DEPTH = 8.0;
-	/** Shapes by kind: mesh file name, window, extent and posts with their vertical reach. */
+	/** Default half depth of a gate's extent along its direction of travel, in metres. */
+	public const HALF_DEPTH = 1.0;
+	/** Shapes by kind: mesh file name, window, extent (with its bottom and half depth) and posts with their reach. */
 	public readonly array $kinds;
 	/**
 	 * Texture offset [u, v] that selects each print, keyed by print name, or null when gates.json lays its prints out
@@ -121,6 +124,12 @@ final class GateShapes
 		if(!is_array($extent) || !self::number($extent['halfWidth'] ?? null) || !self::number($extent['top'] ?? null)
 			|| $extent['halfWidth'] < $window['halfWidth'] || $extent['top'] < $window['top'])
 			throw new \RuntimeException("The $kind gate extent must enclose its window");
+		// The renderer culls each gate by its extent's box, which also reaches below the window and along +Z.
+		$extentBottom = $extent['bottom'] ?? $window['bottom'];
+		$halfDepth = $extent['halfDepth'] ?? self::HALF_DEPTH;
+		if(!self::number($extentBottom) || !self::number($halfDepth) || $extentBottom > $window['bottom']
+			|| $halfDepth <= 0)
+			throw new \RuntimeException("The $kind gate extent needs a bottom at or below its window and a positive depth");
 		$mesh = $data['mesh'] ?? self::DEFAULTS['kinds'][$kind]['mesh'];
 		if(!is_string($mesh) || $mesh === '' || basename($mesh) !== $mesh)
 			throw new \RuntimeException("The $kind gate mesh must be a file name beside gates.json");
@@ -143,7 +152,8 @@ final class GateShapes
 		return ['mesh' => $mesh,
 			'window' => ['halfWidth' => (float)$window['halfWidth'], 'bottom' => (float)$window['bottom'],
 				'top' => (float)$window['top']],
-			'extent' => ['halfWidth' => (float)$extent['halfWidth'], 'top' => (float)$extent['top']],
+			'extent' => ['halfWidth' => (float)$extent['halfWidth'], 'bottom' => (float)$extentBottom,
+				'top' => (float)$extent['top'], 'halfDepth' => (float)$halfDepth],
 			'posts' => $solid, 'below' => self::BELOW[$kind]];
 	}
 
