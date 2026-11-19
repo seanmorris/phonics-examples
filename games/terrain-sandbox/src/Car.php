@@ -23,6 +23,16 @@ final class Car
 	 */
 	private const DRIFT = .6, DRIFT_IN = .35, DRIFT_OUT = .3, DRIFT_SETTLE = .3;
 	private const RECOVERY_DELAY = 1.5;
+	/**
+	 * The body's footprint and height in metres, measured from the baked Testarossa: half its width, and how far it
+	 * reaches ahead of and behind the midpoint between the axles. Gate posts collide with this box.
+	 */
+	public const BODY_HALF_WIDTH = .97, BODY_FRONT = 2.37, BODY_REAR = 2.11, BODY_HEIGHT = 1.13;
+	/**
+	 * Share of the speed into a post that bounces back out, and the friction between the body and the post's face,
+	 * which takes speed along the face in proportion to the speed into it.
+	 */
+	private const POST_BOUNCE = .25, POST_FRICTION = .5;
 	private CarSuspension $suspension;
 	private float $roadPitch = 0, $roadRoll = 0;
 	private ?CarTumble $tumble = null;
@@ -34,8 +44,12 @@ final class Car
 
 	public function __construct() { $this->suspension = new CarSuspension; }
 
-	/** Search the camera position first, then progressively wider rings. Each yield permits a frame boundary. */
-	public function findSite(Landscape $land, Water $water, array $eye, float $yaw): \Generator
+	/**
+	 * Search the camera position first, then progressively wider rings. Each yield permits a frame boundary.
+	 * @param array $posts Solid posts as Course::posts() lists them. A site whose body would stand within half a
+	 * metre of one is passed over.
+	 */
+	public function findSite(Landscape $land, Water $water, array $eye, float $yaw, array $posts = []): \Generator
 	{
 		$half = $land->recipe()['worldSize'] / 2;
 		$spacing = $land->recipe()['spacing'];
@@ -78,7 +92,8 @@ final class Car
 					}
 					yield;
 					$support = $this->support($land, $water->heightRange()[1], $x, $z, $heading);
-					if($support !== null && self::safe($support)) return [$x,$z,$heading,$support];
+					if($support !== null && self::safe($support)
+						&& !self::nearPost($posts, $x, $z, $heading, $support[0])) return [$x,$z,$heading,$support];
 				}
 			}
 		}
@@ -106,10 +121,11 @@ final class Car
 	 * @param Landscape $land Ground under the wheels.
 	 * @param float $waterLevel Water the car may not drive into.
 	 * @param bool $handbrake Lock the rear wheels.
+	 * @param array $posts Solid posts as Course::posts() lists them. The body cannot pass through one.
 	 * @return bool False when the ground under the car changed and no support remains.
 	 */
 	public function step(float $dt, float $throttle, float $turn, Landscape $land, float $waterLevel,
-		bool $handbrake = false): bool
+		bool $handbrake = false, array $posts = []): bool
 	{
 		if($dt <= 0) return true;
 		if($this->revision !== $land->revision() || $this->waterLevel !== $waterLevel)
@@ -125,7 +141,7 @@ final class Car
 			}
 			$this->revision = $land->revision(); $this->waterLevel = $waterLevel;
 		}
-		if($this->tumble !== null) return $this->stepTumble($dt,$land,$waterLevel);
+		if($this->tumble !== null) return $this->stepTumble($dt,$land,$waterLevel,$posts);
 		// Steering tightens at parking speeds. Swapping pedals brakes before engaging reverse.
 		$target = -$turn * .52 / (1 + .035 * abs($this->speed));
 		$this->steering += max(-2.5*$dt, min(2.5*$dt, $target - $this->steering));
@@ -188,6 +204,19 @@ final class Car
 		}
 		$x = $this->x + sin($heading)*$distance*cos($this->roadPitch);
 		$z = $this->z + cos($heading)*$distance*cos($this->roadPitch);
+		if($posts && ($blocked = $this->avoidPosts($posts, $x, $z, $yaw)) !== null)
+		{
+			[$x,$z,$yaw,$normalX,$normalZ] = $blocked;
+			// The tires keep the car on its heading, so only the speed along it changes. Its part into the post
+			// bounces back and its part along the post's face loses what friction takes.
+			$into = sin($heading)*$normalX + cos($heading)*$normalZ;
+			if($this->speed*$into < 0)
+			{
+				$along = sqrt(max(0.0, 1 - $into*$into));
+				$slide = max(0.0, $along - self::POST_FRICTION*(1 + self::POST_BOUNCE)*abs($into));
+				$this->speed *= $slide*$along - self::POST_BOUNCE*$into*$into;
+			}
+		}
 		$support = $this->support($land, $waterLevel, $x, $z, $yaw);
 		if($support === null)
 		{
@@ -214,7 +243,7 @@ final class Car
 			$this->drift = 0;
 			$this->tumble = new CarTumble($this->x,$this->y,$this->z,$this->yaw,$this->pitch,$this->roll,
 				$this->speed*cos($this->roadPitch),$springs->verticalSpeed,$pitchRate,$rollRate);
-			return $this->stepTumble($dt,$land,$waterLevel);
+			return $this->stepTumble($dt,$land,$waterLevel,$posts);
 		}
 		$this->x = $x; $this->z = $z; $this->yaw = atan2(sin($yaw), cos($yaw));
 		$springs->step($dt,$support[4],$distance != 0);
@@ -234,7 +263,7 @@ final class Car
 		return abs($support[1]) < .40 && abs($support[2]) < .40 && $support[3] < .38;
 	}
 
-	private function stepTumble(float $dt, Landscape $land, float $water): bool
+	private function stepTumble(float $dt, Landscape $land, float $water, array $posts = []): bool
 	{
 		$body = $this->tumble;
 		if($this->recoveryTime > 0)
@@ -244,8 +273,21 @@ final class Car
 			return $this->rightCar($land,$water);
 		}
 
+		$before = [$this->x, $this->z];
 		$body->advance($dt,$land,$water);
 		[$this->x,$this->y,$this->z,$this->pitch,$this->roll,$this->speed] = $body->pose();
+		if($posts)
+		{
+			[$x,$z] = [$this->x, $this->z];
+			[$this->x,$this->z] = $before;
+			$blocked = $this->avoidPosts($posts, $x, $z, $this->yaw);
+			[$this->x,$this->z] = [$x, $z];
+			if($blocked !== null)
+			{
+				$body->push($blocked[0] - $x, $blocked[1] - $z, $blocked[3], $blocked[4], self::POST_BOUNCE);
+				[$this->x,$this->y,$this->z,$this->pitch,$this->roll,$this->speed] = $body->pose();
+			}
+		}
 		if(!$body->onWheels && !$body->settled) return true;
 		if($body->settled && $body->roofDown)
 		{
@@ -291,6 +333,112 @@ final class Car
 		[$this->y,$this->pitch,$this->roll] = $support;
 		$this->roadPitch = $this->pitch; $this->roadRoll = $this->roll;
 		$this->suspension->reset($support,$verticalSpeed);
+	}
+
+	/**
+	 * Keep the body out of every post near one step's travel. The step is checked every quarter metre from the
+	 * current pose, so even at 36 m/s it cannot pass through a post between two checks. Between the last clear check
+	 * and the first touching one, halving the gap finds the moment of contact to a millimetre, so the face the body
+	 * met is known: a bumper corner that clips a post stops on it however the checks fell. The rest of the step then
+	 * slides along that face, keeping only its travel along it.
+	 * @param array $posts Solid posts as Course::posts() lists them.
+	 * @param float $x World X the step would reach.
+	 * @param float $z World Z the step would reach.
+	 * @param float $yaw Heading the step would reach.
+	 * @return array|null [x, z, yaw, normal X, normal Z] at the end of the step, clear of every post, with the outward
+	 * normal of the face the body met, or null when the step touches no post.
+	 */
+	private function avoidPosts(array $posts, float $x, float $z, float $yaw): ?array
+	{
+		$travel = hypot($x - $this->x, $z - $this->z);
+		$reach = self::BODY_FRONT + self::BODY_HALF_WIDTH + $travel;
+		$near = [];
+		foreach($posts as $post)
+		{
+			$range = $reach + 1.5*$post[2];
+			if(abs($post[0] - $x) < $range && abs($post[1] - $z) < $range
+				&& $this->y + self::BODY_HEIGHT > $post[5] && $this->y < $post[6]) $near[] = $post;
+		}
+		if(!$near) return null;
+		$pose = fn(float $along): array => [$this->x + ($x - $this->x)*$along, $this->z + ($z - $this->z)*$along,
+			$this->yaw + ($yaw - $this->yaw)*$along];
+		$deepest = static function(array $at) use ($near): ?array {
+			$deepest = null;
+			foreach($near as $post)
+			{
+				$overlap = self::penetration($at[0], $at[1], $at[2], $post);
+				if($overlap !== null && ($deepest === null || $overlap[0] > $deepest[0])) $deepest = $overlap;
+			}
+			return $deepest;
+		};
+		$checks = max(1, (int)ceil($travel/.25));
+		$clear = 0.0;
+		for($i = 1; $i <= $checks; $i++)
+		{
+			$touch = $i/$checks;
+			if($deepest($pose($touch)) === null) { $clear = $touch; continue; }
+			for($halving = 0; $halving < 8; $halving++)
+			{
+				$middle = ($clear + $touch)/2;
+				if($deepest($pose($middle)) === null) $clear = $middle; else $touch = $middle;
+			}
+			$contact = $pose($touch);
+			[, $normalX, $normalZ] = $deepest($contact);
+			$restX = $x - $contact[0]; $restZ = $z - $contact[1];
+			$inward = $restX*$normalX + $restZ*$normalZ;
+			if($inward < 0) { $restX -= $inward*$normalX; $restZ -= $inward*$normalZ; }
+			$px = $contact[0] + $restX; $pz = $contact[1] + $restZ;
+			// Turning can still press the body into the face, and a push out of one post can press it into another,
+			// so push out of the deepest overlap until clear.
+			for($pass = 0; $pass < 4 && ($overlap = $deepest([$px,$pz,$yaw])) !== null; $pass++)
+			{
+				$px += $overlap[1]*($overlap[0] + 1e-4);
+				$pz += $overlap[2]*($overlap[0] + 1e-4);
+			}
+			return [$px, $pz, $yaw, $normalX, $normalZ];
+		}
+		return null;
+	}
+
+	/**
+	 * Measure how far the body overlaps one post, by separating axes between two rectangles seen from above.
+	 * @param float $x World X of the midpoint between the axles.
+	 * @param float $z World Z of the midpoint between the axles.
+	 * @param float $yaw Heading of the body.
+	 * @param array $post [x, z, half size, cos yaw, sin yaw, bottom, top] of a square post.
+	 * @return array|null [depth, normal X, normal Z] of the shortest push that separates them, pointing from the post
+	 * to the body, or null when they do not overlap.
+	 */
+	public static function penetration(float $x, float $z, float $yaw, array $post): ?array
+	{
+		$sin = sin($yaw); $cos = cos($yaw);
+		$length = (self::BODY_FRONT + self::BODY_REAR)/2;
+		$ahead = (self::BODY_FRONT - self::BODY_REAR)/2;
+		[$px,$pz,$half,$postCos,$postSin] = $post;
+		$dx = $x + $sin*$ahead - $px; $dz = $z + $cos*$ahead - $pz;
+		$best = null;
+		foreach([[$sin,$cos],[$cos,-$sin],[$postSin,$postCos],[$postCos,-$postSin]] as [$ux,$uz])
+		{
+			$body = $length*abs($sin*$ux + $cos*$uz) + self::BODY_HALF_WIDTH*abs($cos*$ux - $sin*$uz);
+			$box = $half*(abs($postSin*$ux + $postCos*$uz) + abs($postCos*$ux - $postSin*$uz));
+			$gap = $dx*$ux + $dz*$uz;
+			$depth = $body + $box - abs($gap);
+			if($depth <= 0) return null;
+			if($best === null || $depth < $best[0]) $best = $gap < 0 ? [$depth,-$ux,-$uz] : [$depth,$ux,$uz];
+		}
+		return $best;
+	}
+
+	/** Whether a body standing at a pose would come within half a metre of any post. */
+	private static function nearPost(array $posts, float $x, float $z, float $yaw, float $y): bool
+	{
+		foreach($posts as $post)
+		{
+			if($y + self::BODY_HEIGHT <= $post[5] || $y >= $post[6]) continue;
+			$post[2] += .5;
+			if(self::penetration($x, $z, $yaw, $post) !== null) return true;
+		}
+		return false;
 	}
 
 	/** Fit a plane through both axles. Water and the edge of the heightfield bound travel. */
