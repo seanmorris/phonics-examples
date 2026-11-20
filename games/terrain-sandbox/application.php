@@ -130,11 +130,7 @@ $engine->start(
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course, $publish
 	): void {
 		$lastVehicle = $vehiclePose;
-		[$viewCamera,$vehiclePose] = match($session->mode) {
-			'car' => $session->carView($alpha),
-			'jet' => $session->jet->view($session->camera, $session->paused ? 1.0 : $alpha),
-			default => [$session->camera,null]
-		};
+		[$viewCamera,$vehiclePose] = $session->view($alpha);
 		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->fov];
 		$moving = $session->mode === 'craft' || $pose !== $lastBudgetPose;
 		// High-refresh frames can advance the presentation fraction without a new simulation tick.

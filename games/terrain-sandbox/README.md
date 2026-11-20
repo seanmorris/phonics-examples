@@ -12,7 +12,7 @@ While the view moves, the renderer selects terrain detail at most ten times a se
 
 A selection that needs more than 3 milliseconds of work continues over the following frames and changes the drawn terrain in one of them. Set `selectionSliceMs` through the same `values()` call to give each frame more or less of that work, or to 0 to run every selection whole in one frame as before. `state.selectionSliceMs` reports the value in use, and `state.renderer` reports `selectionWorkMs` for the last frame, `selectionUpdates` for the frames the last selection took and `selectionInFlight` while one is under way. This value is not saved either.
 
-The status object reports the race gates in `state.course` and the race in `state.race`. `state.renderer.gateDraws` counts the gates the last frame drew, after culling by distance and by the view, and `state.renderer.gateMs` is the time it spent on them in milliseconds.
+The status object reports the race gates in `state.course` and the race in `state.race`. `state.renderer.gateDraws` counts the gates the last frame drew, after culling by distance and by the view, and `state.renderer.gateMs` is the time it spent on them in milliseconds. While you drive, ride or fly, `state.duck.offset` gives the metres [x, y, z] by which the drawn chase eye moved to clear a gate at the last step, and `state.duck.passages` the passage it holds past each nearby gate by id: `through`, `over` or `under`. `state.camera` stays the eye the vehicle's camera chose.
 
 ## Watercraft model
 

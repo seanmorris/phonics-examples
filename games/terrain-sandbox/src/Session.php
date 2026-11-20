@@ -40,6 +40,15 @@ final class Session
 	/** Counts vehicle boardings and respawns, so a race can tell when its vehicle was put somewhere new. */
 	private int $boarding = 0;
 	private CarChase $chase;
+	/** Ducks the chase camera through gates; made afresh for each boarding, mode and course revision. */
+	private ?GateDuck $duck = null;
+	private string $duckFor = '';
+	private ?Course $duckCourse = null;
+	/**
+	 * Distance in metres before and after a gate over which each vehicle's camera ducks and rises again. The F5
+	 * covers its 60 m in 0.23 to 1.1 seconds.
+	 */
+	private const DUCK_LEAD = ['car' => 10.0, 'craft' => 8.0, 'jet' => 60.0];
 	private ?\Generator $carSearch = null;
 	/** Whether simulation is paused; authoring remains available. */
 	public bool $paused = false;
@@ -273,6 +282,8 @@ final class Session
 		$this->water->update($this->time);
 		// The application redraws for wave time whenever water shows, which covers the gates that float on it.
 		if($this->course->floats()) $this->course->float($this->water, $this->time);
+		if($this->mode !== 'fly')
+			$this->duck()->step($this->nearGates($this->camera->position), $this->camera->position, $this->racePoint());
 		if($racing) $this->advanceRace($from, $mode, $recoveries, $start, $seconds);
 		if($this->settings['clock'])
 		{
@@ -821,6 +832,45 @@ final class Session
 	}
 
 	/**
+	 * Return the camera and vehicle pose to draw at the engine's presentation time. A chase camera ducks through any
+	 * race gate it would otherwise pass through; the session's camera keeps the eye the vehicle's camera chose.
+	 * @param float $alpha Fraction of a fixed step since the last one.
+	 * @return array [Camera, car or jet pose or null]. The camera is the session's own when nothing moves it.
+	 */
+	public function view(float $alpha): array
+	{
+		[$eye, $pose] = match($this->mode) {
+			'car' => $this->carView($alpha),
+			'jet' => $this->jet->view($this->camera, $this->paused ? 1.0 : $alpha),
+			default => [$this->camera, null]
+		};
+		if($this->mode === 'fly' || $this->course->count() === 0) return [$eye, $pose];
+		$target = $pose ?? $this->craft->state();
+		return [$this->duck()->apply($eye, [$target['x'], $target['y'], $target['z']], $this->nearGates($eye->position)),
+			$pose];
+	}
+
+	/** Return the camera ducking for the current vehicle, boarding and course, starting a fresh one when any changed. */
+	private function duck(): GateDuck
+	{
+		$for = $this->mode . ' ' . $this->boarding . ' ' . $this->course->revision;
+		if($this->duck === null || $for !== $this->duckFor || $this->course !== $this->duckCourse)
+		{
+			$this->duck = new GateDuck(self::DUCK_LEAD[$this->mode]);
+			$this->duckFor = $for;
+			$this->duckCourse = $this->course;
+		}
+		return $this->duck;
+	}
+
+	/** List the gates that could move a chase camera's eye at this position. */
+	private function nearGates(array $eye): array
+	{
+		return $this->course->count() === 0 ? []
+			: $this->course->obstructions($this->gateShapes, [$eye[0], $eye[2], $this->duck()->reach()]);
+	}
+
+	/**
 	 * Find nearby deep water and spawn the craft.
 	 * @return void Starts craft mode or reports that no suitable water was found.
 	 */
@@ -1032,6 +1082,8 @@ final class Session
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
+			'duck' => $this->mode === 'fly' || $this->duck === null ? null
+				: ['offset' => $this->duck->offset, 'passages' => $this->duck->held()],
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats(),

@@ -42,6 +42,9 @@ final class Course
 	private array $posts = [];
 	private int $postsRevision = -1, $signatureRevision = -1;
 	private string $signature = '';
+	/** Solid parts and openings of every gate at its placed height, for the revision in $obstructionsRevision. */
+	private array $obstructions = [];
+	private int $obstructionsRevision = -1;
 
 	/**
 	 * Place a gate. A second start or finish gate moves the existing one, which keeps its id and its laps.
@@ -265,6 +268,84 @@ final class Course
 		$this->posts = $posts;
 		$this->postsRevision = $this->revision;
 		return $posts;
+	}
+
+	/**
+	 * List what a chase camera keeps out of: the solid parts of each gate and the opening a vehicle passes through.
+	 * Provisional: every gate takes its kind's fixed size from GateShapes.
+	 * @param GateShapes $shapes Gate dimensions.
+	 * @param array|null $near [x, z, radius] lists only the gates whose solid parts come within radius metres of that
+	 * point across the ground. Null lists every gate.
+	 * @return list<array{id:int,solids:list<array>,opening:array}> Gates in race order, in world space. Each solid is
+	 * an oriented box {centre: [x, y, z], yaw, halfX, halfY, halfZ}: halfX lies across the gate, halfY up and halfZ
+	 * along the direction of travel, and yaw turns the box as a gate's yaw turns the gate. The opening is
+	 * {centre: [x, y, z], yaw, halfWidth, bottom, top}: the centre lies on the gate's plane midway up the window,
+	 * and bottom and top are world heights. A water gate stands at its height on the waves at the last float() call;
+	 * only the water gates listed sample the surface.
+	 */
+	public function obstructions(GateShapes $shapes, ?array $near = null): array
+	{
+		if($this->obstructionsRevision !== $this->revision)
+		{
+			$this->obstructions = [];
+			foreach($this->gates(false) as $gate)
+			{
+				$shape = $shapes->kind($gate['kind']);
+				$window = $shape['window']; $extent = $shape['extent'];
+				// Boxes in the gate frame as [x, y, z, half x, half y, half z]. Every kind spans its full width above
+				// the window: the road gate's board and post tabs, the air gate's banner and tabs, the arch's crossbar.
+				$boxes = [[0.0, ($window['top'] + $extent['top']) / 2, 0.0, $extent['halfWidth'],
+					($extent['top'] - $window['top']) / 2, $extent['halfDepth']]];
+				foreach($shape['posts'] as $post)
+					$boxes[] = [$post['x'], ($post['bottom'] + $post['top']) / 2, $post['z'], $post['halfSize'],
+						($post['top'] - $post['bottom']) / 2, $post['halfSize']];
+				// The arch's legs stand beside the window down to its feet. The gantries' base plates, one tab wide,
+				// lie at the ends of the window's lower edge: on the ground under the road gate's posts, as thick as
+				// the tabs on their tops, and in the air under the air gate's banner, where their box stops 0.024 m
+				// short of their top.
+				$tops = array_column($shape['posts'], 'top');
+				$side = match($gate['kind']) {
+					'water' => [($window['halfWidth'] + $extent['halfWidth']) / 2,
+						($extent['halfWidth'] - $window['halfWidth']) / 2, $extent['bottom'], $window['top']],
+					'road' => [$extent['halfWidth'] - $extent['halfDepth'], $extent['halfDepth'], $window['bottom'],
+						$window['bottom'] + ($tops ? $extent['top'] - max($tops) : 0.0)],
+					'air' => [$extent['halfWidth'] - $extent['halfDepth'], $extent['halfDepth'], $extent['bottom'],
+						$window['bottom']],
+				};
+				foreach([-1, 1] as $sign)
+						$boxes[] = [$sign * $side[0], ($side[2] + $side[3]) / 2, 0.0, $side[1], ($side[3] - $side[2]) / 2,
+							$extent['halfDepth']];
+				$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
+				$solids = [];
+				foreach($boxes as [$x, $y, $z, $halfX, $halfY, $halfZ])
+					$solids[] = ['centre' => [$gate['x'] + $x * $cos + $z * $sin, $gate['y'] + $y,
+						$gate['z'] - $x * $sin + $z * $cos], 'yaw' => $gate['yaw'],
+						'halfX' => $halfX, 'halfY' => $halfY, 'halfZ' => $halfZ];
+				$this->obstructions[] = ['gate' => $gate, 'reach' => hypot($extent['halfWidth'], $extent['halfDepth']),
+					'id' => $gate['id'], 'solids' => $solids, 'opening' => ['centre' => [$gate['x'],
+						$gate['y'] + ($window['bottom'] + $window['top']) / 2, $gate['z']], 'yaw' => $gate['yaw'],
+						'halfWidth' => $window['halfWidth'], 'bottom' => $gate['y'] + $window['bottom'],
+						'top' => $gate['y'] + $window['top']]];
+			}
+			$this->obstructionsRevision = $this->revision;
+		}
+		$list = [];
+		foreach($this->obstructions as $entry)
+		{
+			$gate = $entry['gate'];
+			if($near !== null && hypot($gate['x'] - $near[0], $gate['z'] - $near[1]) > $near[2] + $entry['reach'])
+				continue;
+			$rise = isset($this->afloat[$gate['id']]) ? $this->pose($gate)['y'] - $gate['y'] : 0.0;
+			if($rise != 0)
+			{
+				foreach($entry['solids'] as $i => $solid) $entry['solids'][$i]['centre'][1] += $rise;
+				$entry['opening']['centre'][1] += $rise;
+				$entry['opening']['bottom'] += $rise;
+				$entry['opening']['top'] += $rise;
+			}
+			$list[] = ['id' => $entry['id'], 'solids' => $entry['solids'], 'opening' => $entry['opening']];
+		}
+		return $list;
 	}
 
 	/**
