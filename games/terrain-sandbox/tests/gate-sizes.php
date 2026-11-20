@@ -277,6 +277,30 @@ expect($race->reach($course, $hanging, 'jet', $waterLevel) === null && $race->re
 	'An air gate 20 m up is within the F5\'s reach, and a water arch 3.6 m tall needs 9 m');
 $reacher->close();
 
+// An air gate hanging just above the ground or the water is within reach of the car and the jet ski, and they pass
+// through it: the car's body rises above its position on the ground, and the jet ski rides the swell.
+foreach([['car', .3, -5], ['craft', 1.0, 5], ['craft', 2.5, 5]] as [$vehicle, $altitude, $waterLevel])
+{
+	$low = new Session(['worldSize' => 2048, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => $waterLevel]);
+	if($vehicle === 'craft') input($low, ['values' => ['waterChoppiness' => 0]]);
+	$low->camera->position = [0, 30, 380]; $low->camera->yaw = 0; $low->camera->pitch = -.3;
+	input($low, ['actions' => [$vehicle]]);
+	for($i = 0; $low->findingCarSite() && $i < 2000; $i++) input($low, []);
+	$ride = $vehicle === 'car' ? $low->car->state() : $low->craft->state();
+	$surface = max($low->landscape->height($ride['x'], $ride['z'] - 60), $low->water->level());
+	$low->course->place('start', 'air', $ride['x'], $surface + $altitude, $ride['z'] - 60, M_PI, 1, null, null,
+		fn(float $x, float $z): float => $low->landscape->height($x, $z));
+	$reach = $low->status()['race']['reach'];
+	input($low, ['keys' => ['KeyW' => true]]);
+	for($i = 0; $i < 900 && $low->race->state === 'idle'; $i++) $low->step(1 / 60);
+	$passed = ($vehicle === 'car' ? $low->car->state() : $low->craft->state())['z'] < $ride['z'] - 60;
+	expect($low->mode === $vehicle && $reach === null && $passed && $low->race->state === 'running',
+		"The $vehicle passes through an air gate hanging $altitude m above the "
+		. ($vehicle === 'car' ? 'ground' : 'calm water') . ' and starts the race: '
+		. json_encode([$low->mode, $reach, $passed, $low->race->state]));
+	$low->close();
+}
+
 // The gate tool sizes the opening: 0 takes the kind's own size, and a size beyond the kind's range takes the nearest
 // the range allows, which the message names.
 $flat = ['worldSize' => 1024, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];

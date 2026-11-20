@@ -46,8 +46,16 @@ final class Race
 	public const CRAFT_REACH = 3.0;
 	/** Car::support() needs the ground at a wheel this far above the water level. */
 	private const CAR_WATER = .12;
-	/** The car's position runs along the ground. This many metres above it allow for bumps. */
+	/**
+	 * The car's position runs along the ground, under a body 1.13 m tall. An opening whose bottom edge stands this many
+	 * metres above that position is within its reach.
+	 */
 	private const CAR_REACH = .5;
+	/**
+	 * How far below an opening's bottom edge the position of the car or the jet ski may pass and still count, so each
+	 * passes every opening reach() finds within its reach: an air gate hanging just above the ground or the water.
+	 */
+	private const RIDE = ['car' => self::CAR_REACH, 'craft' => self::CRAFT_REACH];
 	/**
 	 * Id and ground position of the start gate, and the farthest the vehicle has been from it across the ground since
 	 * it last passed through, in metres. Changing the course stops the race, so the position stays the gate's own.
@@ -104,7 +112,9 @@ final class Race
 			$target = $this->state === 'running' ? $course->gate($this->route[$this->index]['id']) : $course->start();
 			if($target === null) break;
 			$measure = $course->measure($target);
-			$fraction = self::crossing($target, $measure['window'], $from, $to);
+			$window = $measure['window'];
+			$window['bottom'] -= self::RIDE[$vehicle] ?? 0.0;
+			$fraction = self::crossing($target, $window, $from, $to);
 			if($fraction === null || $fraction <= $reached) break;
 			if($this->state === 'running' && $target['id'] === $this->startGate
 				&& $this->farthest < self::LEAVE * $measure['extent']['halfWidth']) break;
