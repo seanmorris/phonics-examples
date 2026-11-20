@@ -3,6 +3,7 @@ precision highp float;
 precision highp int;
 // ATMOSPHERE
 // OPTICS
+// SPOT LIGHTS
 in vec3 vRelative, vWorld, vNormal;
 in vec3 vPaint0, vPaint1;
 uniform vec3 uEye;
@@ -432,7 +433,9 @@ void main()
 		ambient += uCanyonBounce * illumination * (1.0 - max(0.0,n.y));
 	vec3 lit = albedo * (ambient + direct * max(0.0,dot(mix(lightingNormal,n,painted),uSunDirection)) * shadow);
 	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
-	lit = waterColumnLight(lit, vRelative, uEye.y, uWaterLevel, vec3(illumination) + uNightAmbient);
+	lit += albedo / 3.14159265 * terrainSpotLight(vWorld, mix(lightingNormal,n,painted), uWaterLevel, uWaterOptics.z);
+	lit = waterColumnLight(lit, vRelative, uEye.y, uWaterLevel,
+		vec3(illumination) + uNightAmbient + terrainSpotWaterColumn(uEye, vWorld, uWaterLevel));
 	vec3 aerial = terrainAtmosphere(normalize(vRelative), uEye.y, length(vRelative), lit);
 	color = vec4(terrainToneMap(aerial),1.0);
 }

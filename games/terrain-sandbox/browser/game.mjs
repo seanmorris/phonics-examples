@@ -153,6 +153,8 @@ export function activate({module, canvas, session, services})
 		, KeyJ: 'jet'
 		, Home: 'reset-camera'
 		, KeyR: 'race-reset'
+
+		, KeyL: 'headlights'
 	};
 
 	frame.addEventListener('keydown', event => {
@@ -270,6 +272,33 @@ export function activate({module, canvas, session, services})
 	jetControls.addEventListener('change', rememberJet, {signal});
 	invertPitch.addEventListener('change', rememberJet, {signal});
 
+	// The headlight switch is also the player's, remembered here and left out of landscape files.
+	const headlights = controls.get('headlights');
+
+	const rememberHeadlights = () => {
+		try
+		{
+			localStorage.setItem(CAR_PREFERENCE, JSON.stringify({headlights: headlights.value}));
+		}
+		catch
+		{
+			/* Storage can be unavailable; the choice then lasts for this visit. */
+		}
+	};
+
+	try
+	{
+		const saved = JSON.parse(localStorage.getItem(CAR_PREFERENCE) ?? 'null');
+
+		if(HEADLIGHTS.includes(saved?.headlights)) values.headlights = headlights.value = saved.headlights;
+	}
+	catch
+	{
+		/* A missing or unreadable preference leaves the headlights on Auto. */
+	}
+
+	headlights.addEventListener('change', rememberHeadlights, {signal});
+
 	let previousViewport, previousKeys = '', previousPad = '', padButtons = new Set();
 
 	shell.bridge('terrainInput', () => {
@@ -333,6 +362,13 @@ export function activate({module, canvas, session, services})
 			{
 				jetControls.value = state.jetControls;
 				rememberJet();
+			}
+
+			// L and X switch the headlights in PHP. Show and remember that too.
+			if(state.headlights && headlights.value !== state.headlights && document.activeElement !== headlights)
+			{
+				headlights.value = state.headlights;
+				rememberHeadlights();
 			}
 
 			if(state.car?.motion === 'overturned') status.textContent = 'Car overturned. Recovering…';
@@ -675,10 +711,15 @@ function generationValues(frame)
 /** Local storage key for the jet handling preference. */
 const JET_PREFERENCE = 'terrain-sandbox.jet';
 
+/** Local storage key for the car's headlight switch, and the positions PHP accepts. */
+const CAR_PREFERENCE = 'terrain-sandbox.car';
+const HEADLIGHTS = ['auto', 'on', 'off'];
+
 /** Gamepad buttons in the standard layout that issue a command when pressed. */
-const PAD_COMMANDS = new Map(
-	[[9, 'pause'], [8, 'jet-controls'], [12, 'jet'], [14, 'car'], [15, 'craft'], [13, 'fly'], [3, 'race-reset']]
-);
+const PAD_COMMANDS = new Map([
+	[9, 'pause'], [8, 'jet-controls'], [12, 'jet'], [14, 'car'], [15, 'craft']
+	, [13, 'fly'], [3, 'race-reset'], [2, 'headlights']
+]);
 
 /** Gamepad buttons PHP reads while held: A, B, X, Y, LB, RB and the two stick clicks, with their bits in the packet. */
 const PAD_HELD = [[0, 1], [1, 2], [2, 4], [3, 8], [4, 16], [5, 32], [10, 64], [11, 128]];
@@ -857,8 +898,9 @@ function markup()
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<label class="terrain-field">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
-	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
-	<p class="terrain-note">Gamepad: left stick flies, steers or banks · right stick looks · RT/LT climb or descend, accelerate or brake · A: handbrake · LB/RB: Expert rudder · D-pad: ↑ jet, ← car, → watercraft, ↓ free flight · Y: reset the race · Start: pause · Back: Novice or Expert.</p>
+	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on when the sun is low</option><option value="on">On</option><option value="off">Off</option></select></label>
+	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
+	<p class="terrain-note">Gamepad: left stick flies, steers or banks · right stick looks · RT/LT climb or descend, accelerate or brake · A: handbrake · X: headlights · LB/RB: Expert rudder · D-pad: ↑ jet, ← car, → watercraft, ↓ free flight · Y: reset the race · Start: pause · Back: Novice or Expert.</p>
 	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
 	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></p>
 	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;

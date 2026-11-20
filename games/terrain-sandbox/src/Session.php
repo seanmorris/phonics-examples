@@ -30,6 +30,8 @@ final class Session
 	/** Controllable physical watercraft. */
 	public Watercraft $craft;
 	public Car $car;
+	/** The car's lamp levels and how far its pop-up headlights stand open. */
+	private CarLamps $lamps;
 	public Jet $jet;
 	/** Race gates on the landscape. Saved with it, and replaced when a file loads or a new landscape is generated. */
 	public Course $course;
@@ -98,6 +100,15 @@ final class Session
 	public string $jetControls = 'novice';
 	/** Whether pushing the stick forward raises the jet's nose instead of lowering it. */
 	public bool $invertPitch = false;
+	/**
+	 * The car's headlight switch: 'auto' lights them while the sun is lower than AUTO_HEADLIGHTS, and 'on' and 'off'
+	 * keep them lit or dark. Like the jet controls it belongs to the player, so no file stores it.
+	 */
+	public string $headlights = 'auto';
+	/** Headlight switch positions in the order L and the X button step through them. */
+	public const HEADLIGHTS = ['auto', 'on', 'off'];
+	/** Sun elevation in degrees below which Auto lights the headlights. */
+	public const AUTO_HEADLIGHTS = 5.0;
 	/** Buttons the page reports in the last element of a pad packet, one bit each, while they are held. */
 	public const PAD_A = 1, PAD_B = 2, PAD_X = 4, PAD_Y = 8, PAD_LB = 16, PAD_RB = 32, PAD_LS = 64, PAD_RS = 128;
 	/** A gamepad at rest: both sticks centred, both triggers released and no buttons held. */
@@ -142,6 +153,7 @@ final class Session
 		$this->camera = new Camera;
 		$this->craft = new Watercraft;
 		$this->car = new Car;
+		$this->lamps = new CarLamps;
 		$this->jet = new Jet;
 		$this->chase = new CarChase;
 		$this->resetCamera();
@@ -160,6 +172,7 @@ final class Session
 	{
 		$this->keys = is_array($input['keys'] ?? null) ? $input['keys'] : [];
 		$this->pad = self::readPad($input['pad'] ?? null);
+		$switch = [$this->headlights, $this->headlightsLit()];
 		try
 		{
 			$wasPicking = $this->picking;
@@ -169,6 +182,7 @@ final class Session
 				if($name === 'selectionInterval') $this->setSelectionInterval($value);
 				elseif($name === 'selectionSliceMs') $this->setSelectionSliceMs($value);
 				elseif($name === 'jetControls') $this->setJetControls($value);
+				elseif($name === 'headlights') $this->setHeadlights($value);
 				elseif($name === 'invertPitch')
 				{
 					if(!is_bool($value)) throw new \InvalidArgumentException('Invert pitch must be true or false');
@@ -189,6 +203,7 @@ final class Session
 			$this->message = $error->getMessage();
 			$this->dirty = true;
 		}
+		$this->showPausedHeadlights($switch);
 		$this->guardRace();
 		$look = $input['look'] ?? [0,0];
 		if($this->mode === 'fly' && (($look[0] ?? 0) != 0 || ($look[1] ?? 0) != 0))
@@ -262,8 +277,14 @@ final class Session
 				$this->message = 'The ground under the car changed. Choose Drive car to find another spot.';
 				$this->dirty = true;
 			}
-			elseif($this->chase->advance($this->camera, $before, $this->car->state(), $this->landscape, $seconds))
-				$this->dirty = true;
+			else
+			{
+				$after = $this->car->state();
+				if($this->chase->advance($this->camera, $before, $after, $this->landscape, $seconds))
+					$this->dirty = true;
+				if($this->lamps->step($seconds, $after['braking'], $after['reversing'], $this->headlightsLit()))
+					$this->dirty = true;
+			}
 		}
 		if($this->mode === 'jet')
 		{
@@ -404,6 +425,49 @@ final class Session
 		$this->jet->setExpert($value === 'expert');
 		if($this->mode === 'jet') $this->message = $this->jetMessage();
 		$this->dirty = true;
+	}
+
+	/**
+	 * Set the car's headlight switch.
+	 * @param mixed $value 'auto', 'on' or 'off'.
+	 * @return void Says what the switch now does while the car is driven. Its lamps follow from the next step, or at
+	 * once while the game is paused (showPausedHeadlights()).
+	 */
+	private function setHeadlights(mixed $value): void
+	{
+		if(!in_array($value, self::HEADLIGHTS, true))
+			throw new \InvalidArgumentException('Headlights must be auto, on or off');
+		$this->headlights = $value;
+		if($this->mode === 'car') $this->message = $this->headlightMessage();
+		$this->dirty = true;
+	}
+
+	/**
+	 * Show a change of the headlight switch on a paused car, which takes no steps to move its lamps.
+	 * @param array $before The switch and whether it lit the headlights before this input, as [position, lit].
+	 * @return void Snaps the headlamps and pods to what the switch, or the sun on Auto, now asks for.
+	 */
+	private function showPausedHeadlights(array $before): void
+	{
+		if($this->paused && $this->mode === 'car' && $before !== [$this->headlights, $this->headlightsLit()]
+			&& $this->lamps->snap($this->headlightsLit())) $this->dirty = true;
+	}
+
+	/** Describe the headlight switch's position. */
+	private function headlightMessage(): string
+	{
+		return match($this->headlights) {
+			'auto' => 'Headlights on Auto: lit while the sun is below ' . self::AUTO_HEADLIGHTS . '°.',
+			'on' => 'Headlights on.',
+			'off' => 'Headlights off.',
+		};
+	}
+
+	/** Whether the switch lights the headlights now: on, or on Auto with the sun low. */
+	public function headlightsLit(): bool
+	{
+		return $this->headlights === 'on'
+			|| $this->headlights === 'auto' && $this->settings['elevation'] < self::AUTO_HEADLIGHTS;
 	}
 
 	/** Describe the jet's controls for the current handling. */
@@ -598,6 +662,11 @@ final class Session
 				$this->message = $this->jetMessage();
 				break;
 			case 'jet-controls': $this->setJetControls($this->jetControls === 'expert' ? 'novice' : 'expert'); break;
+			case 'headlights':
+				$next = (array_search($this->headlights, self::HEADLIGHTS, true) + 1) % count(self::HEADLIGHTS);
+				$this->setHeadlights(self::HEADLIGHTS[$next]);
+				$this->message = $this->headlightMessage();
+				break;
 			case 'craft': $this->cancelPick(); $this->carSearch = null; $this->boardCraft(); break;
 			case 'fly':
 				// Free flight starts from the eye a race gate ducked, not from inside the gate.
@@ -861,10 +930,12 @@ final class Session
 		}
 		$this->releasePin();
 		$this->car->spawn($site, $this->landscape, $this->water->level());
+		$this->lamps->reset();
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->chase->board($this->camera, $this->car->state(), $this->landscape);
 		$this->dirty = true;
-		$this->message = 'W or RT accelerates, S or LT brakes then reverses, A/D or stick steer, Space or A handbrake. F returns to flight.';
+		$this->message = 'W or RT accelerates, S or LT brakes then reverses, A/D or stick steer, Space or A handbrake, '
+			. 'L or X headlights. F returns to flight.';
 	}
 
 	/** Return the matched camera and car pose at the engine's presentation time. */
@@ -910,6 +981,17 @@ final class Session
 	{
 		return $this->course->count() === 0 ? []
 			: $this->course->obstructions($eye, $this->duck()->reach());
+	}
+
+	/**
+	 * Read the car's lamps at the engine's presentation time, for drawing beside carView().
+	 * @param float $alpha Fraction of the latest fixed step to show. A paused car shows the step it stopped on, with
+	 * the headlamps and pods of any change to the headlight switch since.
+	 * @return array Lamp levels and the pods' opening as CarLamps::view() gives them.
+	 */
+	public function carLamps(float $alpha): array
+	{
+		return $this->lamps->view($this->paused ? 1.0 : $alpha);
 	}
 
 	/**
@@ -1137,12 +1219,14 @@ final class Session
 			'settings' => $this->settings,'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
+			'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
 			'duck' => $this->mode === 'fly' || $this->duck === null ? null
 				: ['offset' => $this->duck->offset, 'passages' => $this->duck->held()],
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
+			'lamps' => $this->mode === 'car' ? $this->lamps->view(1.0) : null,
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats(),
 			'course' => $this->courseStatus(),'gateSizes' => $this->gateSizes(),
 			'race' => $this->race->status($this->course, $this->time, $this->mode === 'fly' ? null : $this->mode,

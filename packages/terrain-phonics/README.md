@@ -124,6 +124,86 @@ Terrain shadows use a coarse heightfield cache for broad mountain shadows. Water
 a lower-environment approximation; it does not reflect individual terrain objects. Distant wave normals and
 foam are filtered for their pixel footprint without changing the physical waves.
 
+`Scene::setSpotLights($lights)` sets up to two spot lights, such as a vehicle's headlights, that light the ground
+and the water from the next `render()`. Call it on each frame the lamps move; an empty list clears them. Each light
+is an array with exactly these keys:
+
+| Key | Unit | Meaning |
+| --- | --- | --- |
+| `position` | metres | World position of the lamp, `[x, y, z]`. |
+| `direction` | | Axis of the beam, `[x, y, z]`, of any nonzero length. |
+| `color` | | Linear RGB, each channel nonnegative, scaling the intensity per channel. White is `[1, 1, 1]`. |
+| `intensity` | candela | Luminous intensity along the axis. |
+| `range` | metres | Distance at which the light has faded out; at least 0.01. |
+| `inner`, `outer` | radians | Half-angles of the cone: full light inside `inner`, none outside `outer`. `0 <= inner <= outer` and `0 < outer <= π/2`. |
+
+```php
+$scene->setSpotLights([
+    ['position' => [12, 3.1, -40], 'direction' => [0, -.05, 1], 'color' => [1, .9, .75],
+        'intensity' => 20000, 'range' => 80, 'inner' => .15, 'outer' => .4],
+]);
+```
+
+A list that breaks any of these rules throws `InvalidArgumentException` and leaves the previous lights in place.
+A lamp's irradiance is its intensity times the cosine of incidence, divided by the squared distance. It fades to
+zero at the range, as `(1 - (d/range)^4)^2`, and across the band between the cones, as the square of the linear
+blend of their cosines. `SpotLights::LUX` converts lux to scene units: Atmosphere's default `sunIntensity` of 20
+stands for about 128,000 lux of sunlight above the atmosphere. By day a lamp adds that physical share and little
+shows. At night the renderer multiplies lamp light by `SpotLights::NIGHT_GAIN`, 10,000, along the dusk curve of
+the night fill. The default fill lights level ground as about 4,200 lux of sunlight would, standing for moonlit
+ground seen by eyes adapted to the dark. Under the same gain it matches about 0.4 lux; a full moon on a clear night
+gives 0.05 to 0.3 lux.
+
+On level ground a low lamp's irradiance falls with the cube of distance, so the ground 3 m ahead of a car receives
+hundreds of times what the ground 50 m ahead does, more than the tone map can show without turning the near ground
+white. The shaders therefore compress the lamps' summed irradiance above `SpotLights::KNEE`, 1 scene unit after the
+night gain. With m the largest channel of the sum the lamps would give with their cones wide open, they scale the
+sum through the cones by `KNEE ln(1 + m / KNEE) / m`, which keeps the lamps' colour. Light well below the knee passes
+almost unchanged; ten times the knee comes out as 2.4 times it, and a hundred times as 4.6 times. Because the scale
+ignores the cones, a beam on a nearby slope fades across its whole band between the cones. Scaled by the light
+through the cones instead, such a beam would stay near full brightness until close to its outer cone and show as a
+flat disc with a hard rim.
+Exposure and tone mapping then treat the compressed lamp light like sunlight.
+
+The terrain reflects lamp light diffusely from its albedo. Light that reaches submerged ground loses the water's
+`waterFogDensity` for each metre of its path below the water level. The water between the eye and submerged ground
+scatters the lamp light that falls where the sightline enters it. The water surface adds lamp light to its foam
+and its body colour; it does not reflect the lamps. No surface casts a shadow from a lamp, so a lamp lights the
+far side of a hill within its range. Models drawn by the `drawOpaque` callback do not receive lamp light.
+The scene links each of its ground and water programs twice: once with `SpotLights::shaderSource()` and once with
+`SpotLights::shaderSource(false)`, which defines `TERRAIN_NO_SPOT_LIGHTS` so that both lamp functions return zero.
+`render()` draws with the lit pair while at least one light is set and with the lamp-free pair otherwise, and then
+uploads nothing for the lights. A GL implementation may compile a program's pipeline only when the program first
+draws. In SwiftShader the first draw of the lit ground and water programs took 0.19 and 0.24 s, against 3 and 1 ms
+for later draws, so the frame in which the first lamp lit stalled. Each lit program therefore also draws once in the
+first frame that has patches to draw, and again after `restore()`, even without a light. After that, changing pair
+costs nothing more than drawing with the same one. A lit program receives the lights again only when they change
+and after `restore()`, and keeps them while the lamp-free pair draws.
+An application that draws only changed frames must draw one after changing the lights. A custom shader can include
+either source and upload `SpotLights::uniforms($nightVisibility)` to a program built with the lit one.
+
+Measured in the sandbox in Chromium with SwiftShader, PHP compiled to WebAssembly takes 0.034 ms to validate and
+pack two lights, 0.013 ms to upload changed lights to one program and 0.006 ms to find a program's lights unchanged.
+Moving lamps cost about 0.06 ms a frame for both programs. Choosing the pair costs native PHP nothing measurable:
+`render()` took the same time within 1% with the lamp-free pair as with the single pair before it.
+
+Full-screen passes of the linked shaders at 960 by 540 pixels in SwiftShader, timed in pairs against the shaders
+from before the lamp code existed, gave these ratios on a shared machine. The first two columns come from two runs.
+The third comes from a later 40-round run of the current shaders, whose knee takes its scale from the open cones; that
+run gave the lamp-free programs 0.98, 1.01 and 1.01:
+
+| Pass | Lamp code, no light set | Lamp-free program | Lit program, two lights |
+| --- | --- | --- | --- |
+| Terrain | 1.10 to 1.14 | 0.95 to 0.96 | 1.26 |
+| Submerged terrain | 1.07 to 1.15 | 0.95 to 1.04 | 1.34 |
+| Water | 1.06 to 1.14 | 1.02 to 1.06 | 1.14 |
+
+The first column is what every frame without a light paid before the lamp-free programs; the second is within the
+spread between runs. In Mesa's llvmpipe every variant stayed within 0.87 to 1.20 of the old shaders, as widely as the same variant
+varied between runs, so these runs show no reliable lamp cost there. No GPU was available to measure. Compiling,
+linking and first drawing one ground or water program took 0.4 to 0.7 s in SwiftShader on the same machine, and the
+scene now links four of them where it linked two.
+
 Call `$water->setLevel($metres)` to move the mean surface and `$water->setWaveScale($multiplier)` to change swell height and steepness during play. A scale of zero leaves only local wakes, and one restores the authored waves. Rendering, buoyancy samples, and visibility bounds share those values.
 
 Set `$water->appearance = new WaterAppearance([...])` to tune water rendering. Use `waterColor` (sRGB hex), `waterTransparency`, `waterReflectivity`, and `waterFoam` (fractions), and `waterFogDensity` (extinction per metre). The renderer blends sky reflection and foam over the opaque scene. Submerged terrain fades toward the water tint according to the length of the sightline below mean water level. Draw custom opaque objects with the optional `drawOpaque` callback to `Scene::render()` so the water surface covers only their submerged portions. Their shaders can use `WaterAppearance::shaderSource()` and `bind()` for the same underwater fog.

@@ -36,6 +36,8 @@ $courseRevision = -1;
 $course = null;
 $viewCamera = $session->camera;
 $vehiclePose = null;
+$carLamps = null;
+$spotLights = [];
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
@@ -127,10 +129,23 @@ $drawOpaque = static function() use ($session, $gates, &$models, &$width, &$heig
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
-		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course, $publish
+		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
+		&$carLamps, &$spotLights, $publish
 	): void {
 		$lastVehicle = $vehiclePose;
 		[$viewCamera,$vehiclePose] = $session->view($alpha);
+		// Lamp levels blend between steps like the pose, and a change in either redraws the frame below.
+		if($session->mode === 'car') $vehiclePose['lamps'] = $session->carLamps($alpha);
+		// Lit headlamps light the ground and water from this frame's pose once the sun has set. Daylight, dark lamps
+		// and other modes clear the lights.
+		$lights = $session->mode === 'car' ? VehicleModel::spotLights(
+			$carLamps ??= VehicleModel::lamps(__DIR__ . '/assets/testarossa/mesh.bin.gz'), $vehiclePose,
+			$session->atmosphere->uniforms()['nightVisibility']) : [];
+		if($lights !== $spotLights)
+		{
+			$scene->setSpotLights($spotLights = $lights);
+			$dirty = true;
+		}
 		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->fov];
 		$moving = $session->mode === 'craft' || $pose !== $lastBudgetPose;
 		// High-refresh frames can advance the presentation fraction without a new simulation tick.
@@ -170,7 +185,8 @@ $engine->start(
 		if($urgentStatus || $statusPending && $now - $lastStatus >= .2)
 		{
 			$status = $session->status() + ['renderer' => $scene->stats() + ($session->course->count() > 0
-					? ['gateDraws' => $gates->drawn, 'gateMs' => $gates->ms] : ['gateDraws' => 0, 'gateMs' => 0.0]),
+					? ['gateDraws' => $gates->drawn, 'gateMs' => $gates->ms] : ['gateDraws' => 0, 'gateMs' => 0.0])
+					+ ['spotLights' => count($spotLights)],
 				'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];

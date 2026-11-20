@@ -4,6 +4,7 @@ precision highp int;
 // ATMOSPHERE
 // OPTICS
 // WATER
+// SPOT LIGHTS
 in vec3 vRelative, vWorld;
 in float vGround;
 uniform vec3 uEye;
@@ -93,6 +94,8 @@ void main()
 	float tintWeight = (1.0 - foam) * (1.0 - fresnel) * (1.0 - uWaterOptics.x);
 	float alpha = foam + reflectionWeight + tintWeight;
 	vec3 surfaceLight = vec3(illumination) + uNightAmbient;
+	// Lamps, in the units of illumination, where 20 is full sunlight.
+	surfaceLight += terrainSpotLight(vWorld, n, uWaterLevel, 0.0) / 20.0;
 	vec3 lit = (foam * mix(vec3(0.65),vec3(1.6,1.85,1.95),wash) * surfaceLight + reflectionWeight * reflection
 		+ tintWeight * body * surfaceLight) / max(alpha, 0.00001);
 	color = vec4(terrainToneMap(terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit)),alpha);

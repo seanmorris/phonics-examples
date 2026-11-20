@@ -8,6 +8,8 @@ in vec3 vRelative, vNormal;
 in vec2 vUv;
 flat in vec4 vPaint;
 flat in vec2 vSurface;
+// Light a lamp gives off, zero on every other surface.
+flat in vec3 vGlow;
 uniform sampler2D uDashboard;
 uniform vec3 uSunDirection, uSunlight, uNightAmbient;
 uniform float uDaylight, uExposure;
@@ -40,6 +42,8 @@ void main()
 	// At grazing angles the blue sky also catches the edges of the dark fittings.
 	float rim = pow(1.0 - clamp(dot(normal,view),0.0,1.0), 3.0);
 	light += terrainNightMaterial(diffuse + metallic * reflectance, normal, uNightAmbient) + 0.10 * rim * uNightAmbient;
+	// A lamp is brightest seen along its axis. The glow stays on the lamp: nothing else on the model receives it.
+	light += vGlow * (.6 + .4 * max(0.0, dot(normal, view)));
 	light = waterColumnLight(light, vRelative, uEyeAndWaterHeight.x, uEyeAndWaterHeight.y, vec3(uDaylight) + uNightAmbient);
 	vec3 exposed = 1.0 - exp(-light * uExposure);
 	vec3 displayColor = mix(12.92 * exposed, 1.055 * pow(exposed, vec3(1.0/2.4)) - .055,

@@ -41,6 +41,8 @@ final class Car
 	private int $recoveries = 0;
 	private int $revision = -1;
 	private float $waterLevel = 0;
+	/** Whether the brake lamps and the reversing lamps are switched on after the last step. */
+	private bool $braking = false, $reversing = false;
 
 	public function __construct() { $this->suspension = new CarSuspension; }
 
@@ -107,6 +109,7 @@ final class Car
 		$this->restOnWheels($support);
 		$this->speed = $this->steering = $this->spin = $this->drift = 0;
 		$this->tumble = null; $this->recoveryTime = 0; $this->recoveries = 0;
+		$this->braking = $this->reversing = false;
 		$this->lastSafe = [$this->x,$this->z,$this->yaw];
 		$this->revision = $land->revision();
 		$this->waterLevel = $waterLevel;
@@ -126,6 +129,26 @@ final class Car
 	 */
 	public function step(float $dt, float $throttle, float $turn, Landscape $land, float $waterLevel,
 		bool $handbrake = false, array $posts = []): bool
+	{
+		$supported = $this->drive($dt, $throttle, $turn, $land, $waterLevel, $handbrake, $posts);
+		if($this->tumble !== null)
+		{
+			// A tumbling or overturned wreck rocks about zero speed, so the rule below would swap its rear lamps.
+			// Its brake lamps follow the brake pedal and the handbrake alone, and its reversing lamps stay dark.
+			$this->braking = $handbrake || $throttle < 0;
+			$this->reversing = false;
+			return $supported;
+		}
+		// The brake lamps light while the pedal opposes the motion or the handbrake is held, whether or not the tires
+		// grip. The reversing lamps light while the car rolls backwards or the pedal holds reverse at a standstill.
+		$this->braking = $handbrake || $throttle * $this->speed < 0;
+		$this->reversing = $this->speed < 0 || $this->speed == 0 && $throttle < 0;
+		return $supported;
+	}
+
+	/** Move the car one fixed step for step(), which documents the parameters. */
+	private function drive(float $dt, float $throttle, float $turn, Landscape $land, float $waterLevel,
+		bool $handbrake, array $posts): bool
 	{
 		if($dt <= 0) return true;
 		if($this->revision !== $land->revision() || $this->waterLevel !== $waterLevel)
@@ -477,6 +500,6 @@ final class Car
 			'wheelTravel'=>$this->tumble === null ? $this->suspension->travel : [0.0,0.0,0.0,0.0],
 			'wheelContacts'=>$this->tumble === null ? $this->suspension->contacts : 0,
 			'motion'=>$this->tumble === null ? ($this->suspension->contacts ? 'driving' : 'airborne') : ($this->recoveryTime > 0 ? 'overturned' : 'tumbling'),
-			'recoveries'=>$this->recoveries];
+			'recoveries'=>$this->recoveries,'braking'=>$this->braking,'reversing'=>$this->reversing];
 	}
 }

@@ -13,6 +13,22 @@ use Phonics\Render\Program;
 final class Scene
 {
 	private Program $groundProgram, $skyProgram, $starsProgram, $waterProgram;
+
+	/**
+	 * Ground and water programs built with the lamp code. render() draws them while at least one spot light is set,
+	 * and once before the first lamp needs them (litDrawn), and the lamp-free groundProgram and waterProgram
+	 * otherwise: in SwiftShader the lamp code made the ground pass about a fifth slower even with no light set.
+	 */
+	private Program $litGroundProgram, $litWaterProgram;
+	/**
+	 * Whether the lit ground and water programs have drawn since they were linked. A GL implementation may compile a
+	 * program's pipeline at its first draw: in SwiftShader the first draw of each lit program took about 0.2 s more
+	 * than the next. While patches are ready to draw, render() draws with a lit program that has not drawn yet even
+	 * without a light, so that cost falls on the scene's first frames instead of the frame in which the first lamp
+	 * lights.
+	 */
+	private array $litDrawn = ['ground' => false, 'water' => false];
+
 	private AtmosphereRenderer $atmosphereCache;
 	private TerrainShadows $terrainShadows;
 	private Lod $lod;
@@ -54,6 +70,8 @@ final class Scene
 	private int $revision = -1, $frames = 0, $selections = 0;
 	private bool $changed = true, $closed = false;
 	private ?GpuPatch $craftMesh = null;
+	/** Lamps lighting the ground and water, from the first setSpotLights() on. */
+	private ?SpotLights $spotLights = null;
 	private float $selectionTime = -1;
 	private float $transitionUntil = -1;
 	private string $selectionKey = '';
@@ -129,8 +147,8 @@ final class Scene
 	 * unchanged frames must draw one after replacing it.
 	 */
 	public TerrainAppearance $appearance;
-	/** The appearance whose uniforms the ground program holds, or null when they need uploading. */
-	private ?TerrainAppearance $boundAppearance = null;
+	/** The appearance whose uniforms each ground program holds, by spl_object_id(); a missing one needs uploading. */
+	private array $boundAppearance = [];
 
 	/**
 	 * Create an incremental terrain scene with independent simulation surfaces.
@@ -164,11 +182,14 @@ final class Scene
 		$water = file_get_contents($root . 'water-functions.glsl');
 		$grid = file_get_contents($root . 'patch-grid.glsl');
 		$optics = WaterAppearance::shaderSource();
+		$lamps = SpotLights::shaderSource();
+		$dark = SpotLights::shaderSource(false);
 
-		$this->groundProgram = new Program(
-			str_replace('// PATCH', $grid, file_get_contents($root . 'terrain.vert'))
-			, str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics], file_get_contents($root . 'terrain.frag'))
-		);
+		$groundVertex = str_replace('// PATCH', $grid, file_get_contents($root . 'terrain.vert'));
+		$ground = str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics]
+			, file_get_contents($root . 'terrain.frag'));
+		$this->groundProgram = new Program($groundVertex, str_replace('// SPOT LIGHTS', $dark, $ground));
+		$this->litGroundProgram = new Program($groundVertex, str_replace('// SPOT LIGHTS', $lamps, $ground));
 
 		$this->skyProgram = new Program(
 			file_get_contents($root . 'sky.vert')
@@ -177,10 +198,11 @@ final class Scene
 
 		$this->starsProgram = new Program(file_get_contents($root . 'stars.vert'), file_get_contents($root . 'stars.frag'));
 
-		$this->waterProgram = new Program(
-			str_replace(['// PATCH','// WATER'], [$grid,$water], file_get_contents($root . 'water.vert'))
-			, str_replace(['// ATMOSPHERE','// WATER','// OPTICS'], [$atmosphere,$water,$optics], file_get_contents($root . 'water.frag'))
-		);
+		$waterVertex = str_replace(['// PATCH','// WATER'], [$grid,$water], file_get_contents($root . 'water.vert'));
+		$surface = str_replace(['// ATMOSPHERE','// WATER','// OPTICS'], [$atmosphere,$water,$optics]
+			, file_get_contents($root . 'water.frag'));
+		$this->waterProgram = new Program($waterVertex, str_replace('// SPOT LIGHTS', $dark, $surface));
+		$this->litWaterProgram = new Program($waterVertex, str_replace('// SPOT LIGHTS', $lamps, $surface));
 
 		glGenVertexArrays(1, $this->vao);
 		$this->createTextures();
@@ -374,6 +396,20 @@ final class Scene
 		$this->selectionKey = '';
 		$this->changed = true;
 		$this->uploadHeightMap();
+	}
+
+	/**
+	 * Set the spot lights, such as a vehicle's headlights, that light the ground and the water from the next render().
+	 * Call it each frame the lamps move; an empty list clears them. Without lights render() draws ground and water
+	 * programs built without the lamp code and uploads nothing for them. See SpotLights::set() for the keys and units:
+	 * position in world metres, a nonzero direction, linear colour, intensity in candela, range in metres, and inner
+	 * and outer cone half-angles in radians. Lamp light gets SpotLights::NIGHT_GAIN at night.
+	 * @param array $lights List of at most SpotLights::MAX lights.
+	 * @return void Replaces the lights, or throws InvalidArgumentException and keeps the previous ones.
+	 */
+	public function setSpotLights(array $lights): void
+	{
+		($this->spotLights ??= new SpotLights)->set($lights);
 	}
 
 	/**
@@ -2307,27 +2343,34 @@ final class Scene
 		glDepthMask(true);
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
-		$this->groundProgram->use();
-		$this->common($this->groundProgram, $camera, $width, $height);
-		$this->water->appearance->bind($this->groundProgram);
+
+		// Both pairs of programs are linked up front, and each lit program draws once in the first frame with patches
+		// (litDrawn), so changing pair later costs no more than drawing with the same one.
+		$lit = ($this->spotLights?->count() ?? 0) > 0;
+		$warm = $this->draw !== [];
+		$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
+		$waterProgram = $lit || $warm && !$this->litDrawn['water'] ? $this->litWaterProgram : $this->waterProgram;
+		$groundProgram->use();
+		$this->common($groundProgram, $camera, $width, $height);
+		$this->water->appearance->bind($groundProgram);
 
 		// A program keeps its uniforms between frames, so only a new appearance or a relinked program needs them.
-		if($this->boundAppearance !== $this->appearance)
+		if(($this->boundAppearance[spl_object_id($groundProgram)] ?? null) !== $this->appearance)
 		{
-			$this->appearance->bind($this->groundProgram);
-			$this->boundAppearance = $this->appearance;
+			$this->appearance->bind($groundProgram);
+			$this->boundAppearance[spl_object_id($groundProgram)] = $this->appearance;
 		}
 
-		$this->vector($this->groundProgram, 'uCraftRotation', [0,0,0]);
-		$this->scalar($this->groundProgram, 'uCraft', 0);
+		$this->vector($groundProgram, 'uCraftRotation', [0,0,0]);
+		$this->scalar($groundProgram, 'uCraft', 0);
 
 		$planes = $camera->clipPlanes($width,$height);
 		$eye = $camera->position;
 		$this->groundDraws = $this->waterDraws = 0;
 		$lastBoundary = null;
-		$uPatch = $this->groundProgram->location('uPatch');
-		$uEdges = $this->groundProgram->location('uEdges');
-		$uCorners = $this->groundProgram->location('uCorners');
+		$uPatch = $groundProgram->location('uPatch');
+		$uEdges = $groundProgram->location('uEdges');
+		$uCorners = $groundProgram->location('uCorners');
 		foreach($this->draw as $n)
 		{
 			$key = $n['key'];
@@ -2346,10 +2389,10 @@ final class Scene
 
 		if($craftState !== null)
 		{
-			$this->scalar($this->groundProgram, 'uCraft', 1);
+			$this->scalar($groundProgram, 'uCraft', 1);
 
 			$this->vector(
-				$this->groundProgram
+				$groundProgram
 				, 'uOrigin'
 				, [
 					$craftState['x'] - $camera->position[0]
@@ -2361,13 +2404,15 @@ final class Scene
 			);
 
 			$this->vector(
-				$this->groundProgram
+				$groundProgram
 				, 'uCraftRotation'
 				, [$craftState['yaw'],$craftState['pitch'],$craftState['roll']]
 			);
 
 			$this->craftMesh->draw();
 		}
+
+		if($groundProgram === $this->litGroundProgram && $this->groundDraws > 0) $this->litDrawn['ground'] = true;
 
 		glDisable(GL_CULL_FACE);
 		if($drawOpaque !== null) $drawOpaque();
@@ -2395,17 +2440,17 @@ final class Scene
 		glDepthFunc(GL_LESS);
 		glEnable(GL_BLEND);
 		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-		$this->waterProgram->use();
-		$this->water->appearance->bind($this->waterProgram);
-		$this->common($this->waterProgram, $camera, $width, $height);
-		[$wakeCount, $wakeBounds] = $this->waterUniforms($time);
+		$waterProgram->use();
+		$this->water->appearance->bind($waterProgram);
+		$this->common($waterProgram, $camera, $width, $height);
+		[$wakeCount, $wakeBounds] = $this->waterUniforms($waterProgram, $time);
 		$lastCount = $lastBoundary = null;
-		$wakeLocation = $this->waterProgram->location('uFrameWakeCount');
+		$wakeLocation = $waterProgram->location('uFrameWakeCount');
 
 		[$waterMin,$waterMax] = $this->water->heightRange();
-		$uPatch = $this->waterProgram->location('uPatch');
-		$uEdges = $this->waterProgram->location('uEdges');
-		$uCorners = $this->waterProgram->location('uCorners');
+		$uPatch = $waterProgram->location('uPatch');
+		$uEdges = $waterProgram->location('uEdges');
+		$uCorners = $waterProgram->location('uCorners');
 		foreach($this->draw as $n)
 		{
 			$key = $n['key'];
@@ -2430,6 +2475,7 @@ final class Scene
 			$patch['mesh']->draw($this->bindPatch($uPatch, $uEdges, $uCorners, $n, $lastBoundary));
 		}
 
+		if($waterProgram === $this->litWaterProgram && $this->waterDraws > 0) $this->litDrawn['water'] = true;
 		glDisable(GL_BLEND);
 		glBindVertexArray(0);
 		$this->morphMemo = null;
@@ -2467,7 +2513,9 @@ final class Scene
 		}
 
 		if($program !== $this->skyProgram) $this->scalar($program, 'uWaterLevel', $this->water->level());
-		if($program === $this->groundProgram)
+		if($program === $this->litGroundProgram || $program === $this->litWaterProgram)
+			$this->spotLights?->bind($program, $environment['nightVisibility']);
+		if($program === $this->groundProgram || $program === $this->litGroundProgram)
 		{
 			$recipe = $this->landscape->recipe();
 			$this->scalar($program, 'uTerrainStyle', match($recipe['preset'])
@@ -2490,14 +2538,14 @@ final class Scene
 
 	/**
 	 * Upload bounded analytic waves and wakes for the requested simulation time.
+	 * @param Program $program Water program in use.
 	 * @param float $time Interpolated simulation time in seconds.
 	 * @return array Active packet count and their combined world-space bounds.
 	 */
-	private function waterUniforms(float $time): array
+	private function waterUniforms(Program $program, float $time): array
 	{
 		$this->water->update($time);
 		$data = $this->water->uniforms();
-		$program = $this->waterProgram;
 		$this->scalar($program, 'uWaterTime', $time);
 		glUniform1i($program->location('uWaveCount'), $data['waveCount']);
 		if($data['waveCount'])
@@ -2660,10 +2708,14 @@ final class Scene
 		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
 		$this->abandonSelection();
 		$this->groundProgram->restore();
-		$this->boundAppearance = null;
+		$this->litGroundProgram->restore();
+		$this->boundAppearance = [];
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
 		$this->waterProgram->restore();
+		$this->litWaterProgram->restore();
+		$this->litDrawn = ['ground' => false, 'water' => false];
+		$this->spotLights?->forget();
 
 		if($this->gridBuffer) glDeleteBuffers(1,$this->gridBuffer);
 		if($this->vao) glDeleteVertexArrays(1,$this->vao);
@@ -2716,10 +2768,13 @@ final class Scene
 		$this->closed = true;
 		$this->builder?->close();
 		$this->clearPatches();
+
 		$this->groundProgram->close();
+		$this->litGroundProgram->close();
 		$this->skyProgram->close();
 		$this->starsProgram->close();
 		$this->waterProgram->close();
+		$this->litWaterProgram->close();
 		$this->craftMesh?->close();
 		$this->atmosphereCache->close();
 		$this->terrainShadows->close();
