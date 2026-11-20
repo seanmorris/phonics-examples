@@ -68,45 +68,46 @@ namespace
 
 	$parked = ['x' => 0.0, 'y' => .1, 'z' => 0.0, 'yaw' => 0.0];
 
-	// On the ground the patch is a soft dark area between the wheels, the same whichever way the car faces.
+	// On the ground the patch is darkest between the wheels, with a fainter skirt under the body's outline that shows
+	// just past the bumpers and sills, where the chase camera can see it.
 	$standing = GroundShadow::shape($parked, 0.0);
-	$shade = $standing['shade'];
-	expect(near($shade[0], GroundShadow::STRENGTH), 'A car on the ground darkens its patch fully');
-	[$a0, $a1, $c0, $c1] = $standing['extent'];
-	expect(near($a0, -$a1) && near($c0, -$c1), 'The patch is centred between the axles');
-	expect(near(GroundShadow::darkness($shade, 0, 0), GroundShadow::STRENGTH), 'It is darkest under the middle of the car');
+	$dark = static fn(float $along, float $across, ?array $shape = null): float =>
+		GroundShadow::darkness($shape ?? $standing, $along, $across);
+	expect(near($standing['shade'][0], GroundShadow::STRENGTH) && near($standing['skirt'][0], GroundShadow::SKIRT),
+		'A car on the ground darkens its patch fully');
+	expect(near($dark(0, 0), GroundShadow::STRENGTH), 'It is darkest under the middle of the car');
 	$halfBase = Car::WHEELBASE / 2;
 	$tyres = [[$halfBase, Car::FRONT_TRACK / 2], [$halfBase, -Car::FRONT_TRACK / 2], [-$halfBase, Car::REAR_TRACK / 2],
 		[-$halfBase, -Car::REAR_TRACK / 2]];
-	$atTyres = max(array_map(static fn(array $at) => GroundShadow::darkness($shade, ...$at), $tyres));
-	$underTyres = min(array_map(static fn(array $at) => GroundShadow::darkness($shade, ...$at), $tyres));
-	expect($underTyres > .05 * GroundShadow::STRENGTH && $atTyres < .2 * GroundShadow::STRENGTH,
-		"It has mostly faded where the tyres touch the ground ($underTyres to $atTyres)");
-	$side = GroundShadow::darkness($shade, 0, Car::REAR_TRACK / 2);
-	$axle = GroundShadow::darkness($shade, $halfBase, 0);
-	expect(min($side, $axle) > .2 * GroundShadow::STRENGTH && max($side, $axle) < .5 * GroundShadow::STRENGTH,
-		"At the middle of each wheel line some of it remains ($side, $axle)");
-	expect(GroundShadow::darkness($shade, $halfBase + .26, 0) === 0.0
-		&& GroundShadow::darkness($shade, 0, Car::REAR_TRACK / 2 + .26) === 0.0
-		&& Car::REAR_TRACK / 2 + .26 < Car::BODY_HALF_WIDTH + .15 && $halfBase + .26 < Car::BODY_REAR,
-		'It is gone just past the wheels, under the sills and the overhangs');
-	expect($a1 >= GroundShadow::HALF_LENGTH + $shade[2] && $c1 >= GroundShadow::HALF_WIDTH + $shade[2]
-		&& $a1 < $halfBase + .5 && $c1 < Car::REAR_TRACK / 2 + .5, 'The grid covers the fade and little more');
+	$atTyres = array_map(static fn(array $at) => $dark(...$at), $tyres);
+	// The rear tyres sit 0.15 m inside the sills, where the skirt has just begun to fade.
+	expect(min($atTyres) >= .9 * GroundShadow::SKIRT && max($atTyres) < GroundShadow::STRENGTH,
+		'Under the tyres it is lighter than the middle and about as dark as the skirt');
+	$bumper = $dark(-Car::BODY_REAR, 0); $sill = $dark(0, Car::BODY_HALF_WIDTH);
+	expect($bumper > .2 && $sill > .2 && $bumper < GroundShadow::SKIRT && $sill < GroundShadow::SKIRT,
+		"At the rear bumper and the sills it shows ($bumper, $sill)");
+	expect($dark(-Car::BODY_REAR - .2, 0) > 0 && $dark(-Car::BODY_REAR - .4, 0) === 0.0
+		&& $dark(Car::BODY_FRONT + .4, 0) === 0.0 && $dark(0, Car::BODY_HALF_WIDTH + .4) === 0.0,
+		'It is gone 0.4 m past the body on every side');
+	[$a0, $a1, $c0, $c1] = $standing['extent'];
+	expect(near($c0, -$c1) && near($a0 + $a1, 2 * GroundShadow::BODY_CENTRE) && $a0 <= -Car::BODY_REAR - .4
+		&& $a1 >= Car::BODY_FRONT + .4 && $c1 >= Car::BODY_HALF_WIDTH + .4 && $a1 < Car::BODY_FRONT + .6,
+		'The grid covers the body and its fade, and little more');
 	$fading = true;
-	for($r = 0.0; $r <= 1.5; $r += .05)
-		$fading = $fading && GroundShadow::darkness($shade, $r, 0) >= GroundShadow::darkness($shade, $r + .05, 0)
-			&& GroundShadow::darkness($shade, 0, $r) >= GroundShadow::darkness($shade, 0, $r + .05);
+	for($r = 0.0; $r <= 3.0; $r += .05)
+		$fading = $fading && $dark($r, 0) >= $dark($r + .05, 0) && $dark(-$r, 0) >= $dark(-$r - .05, 0)
+			&& $dark(0, $r) >= $dark(0, $r + .05);
 	expect($fading, 'It only ever fades outwards');
 
 	// In the air it grows fainter and wider, measured from the ground under the car.
 	$jump = GroundShadow::shape(['y' => 4.0] + $parked, 0.0);
-	expect($jump['shade'][0] < .25 * GroundShadow::STRENGTH && $jump['shade'][2] > $shade[2] && $jump['extent'][1] > $a1,
-		'A car 4 m up leaves a fainter, wider patch');
+	expect($dark(0, 0, $jump) < .25 * GroundShadow::STRENGTH && $jump['skirt'][2] > $standing['skirt'][2]
+		&& $jump['extent'][1] > $a1, 'A car 4 m up leaves a fainter, wider patch');
 	$high = GroundShadow::shape(['y' => 25.0] + $parked, 0.0);
 	expect($high['shade'][0] < .005 && $high['extent'][1] === GroundShadow::shape(['y' => 9.0] + $parked, 0.0)['extent'][1],
 		'High enough it is gone, and it stops widening');
 	$hill = GroundShadow::shape(['y' => 30.1] + $parked, 30.0);
-	expect(near($hill['shade'][0], GroundShadow::STRENGTH), 'On a hill top the car still stands on its patch');
+	expect(near($dark(0, 0, $hill), GroundShadow::STRENGTH), 'On a hill top the car still stands on its patch');
 
 	// The grid covers the extent at any heading.
 	foreach([0.0, .4, M_PI / 2, 2.5, -1.1] as $yaw)
@@ -147,9 +148,11 @@ namespace
 		'It leaves blending off, depth writes on and the depth test at LESS');
 	expect(near($gl['uniforms']['uOrigin'][0], 7.2, 1e-6) && near($gl['uniforms']['uOrigin'][1], 29.4, 1e-6),
 		'The shadow centres on the car, relative to the eye');
+	$drawn = GroundShadow::shape($pose, $land->height(10.2, 20.4));
 	expect($gl['uniforms']['uHalf'] === [GroundShadow::HALF_LENGTH, GroundShadow::HALF_WIDTH]
-		&& $gl['uniforms']['uShade'] === GroundShadow::shape($pose, $land->height(10.2, 20.4))['shade'],
-		'The shader gets the footprint and the shade that darkness() describes');
+		&& $gl['uniforms']['uShade'] === $drawn['shade'] && $gl['uniforms']['uSkirt'] === $drawn['skirt']
+		&& $gl['uniforms']['uBody'] === [GroundShadow::BODY_HALF_LENGTH, GroundShadow::BODY_HALF_WIDTH, GroundShadow::BODY_CENTRE],
+		'The shader gets the footprints and the shades that darkness() describes');
 
 	expect($shadow->draw($pose, $land, $camera, 1280, 720) === 1, 'A parked car looks up only the ground at its centre');
 	$moved = ['x' => $pose['x'] + GroundShadow::SPACING] + $pose;

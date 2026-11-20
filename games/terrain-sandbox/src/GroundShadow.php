@@ -8,9 +8,10 @@ use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 
 /**
- * A soft dark patch on the ground under the car, between its wheels, so it reads as standing on the ground. It is
- * darkest under the middle of the car and fades out by the wheels, the same at any hour and from any sun. A car in
- * the air leaves a fainter, wider patch, and none from about 12 m up.
+ * A soft dark patch on the ground under the car, so it reads as standing on the ground, the same at any hour and from
+ * any sun. A dark core lies between the wheels. A fainter skirt fills the body's outline and shows a little past the
+ * bumpers and sills, which is all of the patch the chase camera behind the car can see. A car in the air leaves a
+ * fainter, wider patch, and none from about 12 m up.
  *
  * It darkens what the terrain pass drew by multiplying it, through a small world-aligned grid that takes the
  * terrain's own heights. Each grid point's height is looked up once and kept, so a parked car costs no lookups and a
@@ -31,6 +32,17 @@ final class GroundShadow
 	 * outside them, under the sills and the overhangs.
 	 */
 	public const FADE_IN = .45, FADE_OUT = .25;
+	/**
+	 * The skirt's footprint: half the body's length and width, how far its middle sits ahead of the midpoint between
+	 * the axles, and the rounding of its corners, in metres.
+	 */
+	public const BODY_HALF_LENGTH = (Car::BODY_FRONT + Car::BODY_REAR) / 2, BODY_HALF_WIDTH = Car::BODY_HALF_WIDTH,
+		BODY_CENTRE = (Car::BODY_FRONT - Car::BODY_REAR) / 2, BODY_CORNER = .5;
+	/**
+	 * The skirt's strength, and how far inside and outside the body's edge it fades. It removes about 30% of the
+	 * ground's light at the body's edge and is gone 0.4 m outside it.
+	 */
+	public const SKIRT = .4, SKIRT_FADE_IN = .2, SKIRT_FADE_OUT = .4;
 	/** Grid spacing in metres. */
 	public const SPACING = .75;
 	/** Most heights kept before the cache starts again. */
@@ -73,15 +85,24 @@ final class GroundShadow
 		#version 300 es
 		precision highp float;
 		in vec2 vLocal;
-		uniform vec2 uHalf;   // half the footprint's length and width
-		uniform vec3 uShade;  // strength, then how far inside and outside the footprint's edge the fade runs, in metres
+		uniform vec2 uHalf;   // half the core's length and width
+		uniform vec3 uShade;  // the core's strength, then how far inside and outside its edge the fade runs, in metres
+		uniform vec3 uBody;   // half the body's length and width, and how far its middle sits ahead of the axles' midpoint
+		uniform vec3 uSkirt;  // the skirt's strength and fade, as uShade
 		out vec4 color;
+		// Signed distance from the edge of a rectangle with rounded corners.
+		float edge(vec2 p, vec2 size, float corner)
+		{
+			vec2 q = abs(p) - size + corner;
+			return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - corner;
+		}
 		void main()
 		{
-			// Signed distance from the footprint's rounded edge; GroundShadow::darkness() mirrors this.
-			vec2 q = abs(vLocal) - uHalf + CORNER;
-			float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - CORNER;
-			color = vec4(vec3(1.0 - uShade.x * (1.0 - smoothstep(-uShade.y, uShade.z, d))), 1.0);
+			// GroundShadow::darkness() mirrors this.
+			float core = uShade.x * (1.0 - smoothstep(-uShade.y, uShade.z, edge(vLocal, uHalf, CORNER)));
+			float skirt = uSkirt.x * (1.0 - smoothstep(-uSkirt.y, uSkirt.z,
+				edge(vLocal - vec2(uBody.z, 0.0), uBody.xy, BODY_CORNER)));
+			color = vec4(vec3(1.0 - max(core, skirt)), 1.0);
 		}
 		GLSL;
 
@@ -90,7 +111,8 @@ final class GroundShadow
 	{
 		$this->program = new Program(str_replace(['PULL_LIMIT', 'PULL'],
 			[sprintf('%.3f', self::PULL_LIMIT), sprintf('%.3f', self::PULL)], self::VERTEX),
-			str_replace('CORNER', sprintf('%.3f', self::CORNER), self::FRAGMENT));
+			str_replace(['BODY_CORNER', 'CORNER'], [sprintf('%.3f', self::BODY_CORNER), sprintf('%.3f', self::CORNER)],
+				self::FRAGMENT));
 		glGenVertexArrays(1, $this->vao);
 		glBindVertexArray($this->vao[0]);
 		glGenBuffers(2, $this->buffers);
@@ -106,33 +128,42 @@ final class GroundShadow
 	 * @param array $pose The car's y as drawn.
 	 * @param float $ground Terrain height under the car's centre.
 	 * @return array The extent to cover in the car's frame (along from and to, across from and to, from the midpoint
-	 *   between the axles), and the shade: strength, and how far inside and outside the edge the fade runs.
+	 *   between the axles); the core's shade: strength, and how far inside and outside its edge the fade runs; and the
+	 *   skirt's, likewise.
 	 */
 	public static function shape(array $pose, float $ground): array
 	{
 		// In the air the patch grows fainter and wider: gone from about 12 m up, and no wider than 4 m up makes it.
 		$lift = max(0.0, $pose['y'] - $ground - .25);
 		$spread = min(4.0, $lift);
-		$shade = [self::STRENGTH * exp(-$lift / 2.5), self::FADE_IN + .2 * $spread, self::FADE_OUT + .4 * $spread];
-		$along = self::HALF_LENGTH + $shade[2] + .05; $across = self::HALF_WIDTH + $shade[2] + .05;
+		$fade = exp(-$lift / 2.5);
+		$shade = [self::STRENGTH * $fade, self::FADE_IN + .2 * $spread, self::FADE_OUT + .4 * $spread];
+		$skirt = [self::SKIRT * $fade, self::SKIRT_FADE_IN + .2 * $spread, self::SKIRT_FADE_OUT + .4 * $spread];
+		$along = self::BODY_HALF_LENGTH + $skirt[2] + .05; $across = self::BODY_HALF_WIDTH + $skirt[2] + .05;
 
-		return ['extent' => [-$along, $along, -$across, $across], 'shade' => $shade];
+		return ['extent' => [self::BODY_CENTRE - $along, self::BODY_CENTRE + $along, -$across, $across],
+			'shade' => $shade, 'skirt' => $skirt];
 	}
 
 	/**
 	 * How much light the patch removes at a point, as the fragment shader works it out.
-	 * @param array $shade The shade from shape().
+	 * @param array $shape The result of shape().
 	 * @param float $along Distance ahead of the midpoint between the axles, in metres.
 	 * @param float $across Distance to the side of it, in metres.
-	 * @return float Share of the ground's light removed, from 0 to the strength.
+	 * @return float Share of the ground's light removed, from 0 to the core's strength.
 	 */
-	public static function darkness(array $shade, float $along, float $across): float
+	public static function darkness(array $shape, float $along, float $across): float
 	{
-		$qx = abs($along) - self::HALF_LENGTH + self::CORNER; $qy = abs($across) - self::HALF_WIDTH + self::CORNER;
-		$d = hypot(max($qx, 0.0), max($qy, 0.0)) + min(max($qx, $qy), 0.0) - self::CORNER;
-		$t = max(0.0, min(1.0, ($d + $shade[1]) / ($shade[1] + $shade[2])));
+		$fade = static function(array $shade, float $x, float $y, float $halfX, float $halfY, float $corner): float {
+			$qx = abs($x) - $halfX + $corner; $qy = abs($y) - $halfY + $corner;
+			$d = hypot(max($qx, 0.0), max($qy, 0.0)) + min(max($qx, $qy), 0.0) - $corner;
+			$t = max(0.0, min(1.0, ($d + $shade[1]) / ($shade[1] + $shade[2])));
+			return $shade[0] * (1 - $t * $t * (3 - 2 * $t));
+		};
 
-		return $shade[0] * (1 - $t * $t * (3 - 2 * $t));
+		return max($fade($shape['shade'], $along, $across, self::HALF_LENGTH, self::HALF_WIDTH, self::CORNER),
+			$fade($shape['skirt'], $along - self::BODY_CENTRE, $across, self::BODY_HALF_LENGTH, self::BODY_HALF_WIDTH,
+				self::BODY_CORNER));
 	}
 
 	/**
@@ -216,6 +247,8 @@ final class GroundShadow
 		glUniform2f($p->location('uAxis'), sin($pose['yaw']), cos($pose['yaw']));
 		glUniform2f($p->location('uHalf'), self::HALF_LENGTH, self::HALF_WIDTH);
 		glUniform3f($p->location('uShade'), ...$shape['shade']);
+		glUniform3f($p->location('uBody'), self::BODY_HALF_LENGTH, self::BODY_HALF_WIDTH, self::BODY_CENTRE);
+		glUniform3f($p->location('uSkirt'), ...$shape['skirt']);
 		glEnable(GL_BLEND);
 		glBlendFuncSeparate(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE);
 		glDepthMask(false);
