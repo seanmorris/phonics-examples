@@ -9,9 +9,7 @@ export function activate({module, canvas})
 	canvas.parentElement.append(screen);
 
 	const ctx = screen.getContext('2d');
-	const labels = new Image();
 	const green = '#59ff86', white = '#f1fff4', red = '#ff5148';
-	let lastFrame = null;
 
 	function draw(frame)
 	{
@@ -39,7 +37,6 @@ export function activate({module, canvas})
 		ctx.lineJoin = 'round';
 		ctx.shadowColor = '#0a2219';
 		ctx.shadowBlur = 2*unit;
-		ctx.imageSmoothingEnabled = false;
 		const focal = h/(2*Math.tan(frame.fov/2));
 
 		const dot = (a, b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -78,11 +75,11 @@ export function activate({module, canvas})
 			ctx.fillText(String(value), x, y);
 		}
 
-		function label(row, srcWidth, x, y, width, fallback)
+		function label(value, x, y, width)
 		{
-			if(labels.complete && labels.naturalWidth)
-				ctx.drawImage(labels, 0, row, srcWidth, 16, x, y, width, 16);
-			else text(fallback, x+width/2, y+8);
+			ctx.fillStyle = '#17c652';
+			ctx.fillRect(x-width/2, y-10, width, 20);
+			text(value, x, y, 16, '#071d0d');
 		}
 
 		const target = targets[range.selected];
@@ -172,7 +169,7 @@ export function activate({module, canvas})
 			ctx.closePath();
 			ctx.fillStyle = '#45ca6f';
 			ctx.fill();
-			label(32, 88, left+44, top+8, 64, 'ENG');
+			label('ENG', left+76, top+16, 44);
 			text(Math.round(thrust*100) + '%', left+76, top+40, 19);
 
 			const seconds = Math.floor(range.elapsed);
@@ -195,7 +192,7 @@ export function activate({module, canvas})
 			}
 
 			text(range.ready, left+50, bottom-5, 27);
-			label(0, 216, left, bottom+10, 104, 'MISSILE');
+			label('MISSILE', left+50, bottom+18, 86);
 
 			const radius = 57, rx = end-radius, ry = bottom-radius+12;
 			ctx.fillStyle = 'rgba(8,27,22,.48)';
@@ -248,19 +245,13 @@ export function activate({module, canvas})
 
 		if(range.locked && Math.floor(range.elapsed*4)%2===0) text('LOCK ON', 0, h*.42, 20);
 
-		if(range.hit) label(16, 168, -45, h*.34, 90, 'HIT');
+		if(range.hit) label('HIT', 0, h*.34+8, 52);
 	}
 
-	module.terrainHudArt = b64 => { labels.src = 'data:image/png;base64,' + b64; };
-
-	module.terrainJetFrame = json => { lastFrame = json ? JSON.parse(json) : null; draw(lastFrame); };
-
-	labels.onload = () => { if(lastFrame) draw(lastFrame); };
+	module.terrainJetFrame = json => draw(json ? JSON.parse(json) : null);
 
 	return () => {
 		delete module.terrainJetFrame;
-		delete module.terrainHudArt;
-		labels.onload = null;
 		screen.remove();
 	};
 }

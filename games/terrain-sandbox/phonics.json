@@ -66,16 +66,14 @@
       "assets/balloon/license.txt",
       "assets/balloon/mesh.bin.gz",
       "assets/projectile/license.txt",
-      "assets/projectile/mesh.bin.gz",
-      "assets/f5/hud-labels.png"
+      "assets/projectile/mesh.bin.gz"
     ]
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-PKCZcVouAYR+mRjlIxmd1oT3+uWAtpEOYKJT4HAFiV4=",
+    "application.php": "sha256-UCnbCvIy8I8qYDw4E7PWz28WR9q/yR7cufe6tOodYzY=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
-    "assets/f5/hud-labels.png": "sha256-GmI09wk+SHhiOlEahRbf6QZjxc1y4BtF7rXB2k2sgok=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
     "assets/f5/mesh.bin.gz": "sha256-MvzvhSBqNzcqkY2ivZ1iZ4FF1vYLNsb305WgAUuumeg=",
     "assets/f5/surfaces.json": "sha256-uqkDIywdj3xctjDJkR4Yp/mFPfgqx1VdDeHq9UX47wo=",
@@ -96,7 +94,7 @@
     "assets/vehicles/model.frag": "sha256-isr4k+3rbvq7CNQq5d+g68AVtJK3TzLWTj6PTpDyW/s=",
     "assets/vehicles/model.vert": "sha256-dbjWIvHjXVBvTYmDAfolftSrWWUDEGIAnoKN4CJMwTs=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/cockpit.mjs": "sha256-wr3ErJTuoL/xtbn1vmK8LQ3nZT6rs4Qb7Q4QOjnE2M0=",
+    "browser/cockpit.mjs": "sha256-mI//sd1cneUXCWbsssneNmVluur3kuKj5An4iMsx3dI=",
     "browser/game.mjs": "sha256-aSppgsCaF5q7C6d8KPHdYVrM0NJVUvKuVe5xBKVGvZQ=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
     "src/BalloonPractice.php": "sha256-X3+nUv2rvw/Ph9WNgXJPMtYLHAS743agZVd64Xc4jbI=",

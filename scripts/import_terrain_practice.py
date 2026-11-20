@@ -1,4 +1,4 @@
-"""Bake the supplied balloon, game projectile and HUD labels for the F5 practice demo."""
+"""Bake the supplied balloon and game projectile for the F5 practice demo."""
 import argparse
 import gzip
 import json
@@ -49,28 +49,10 @@ def bake(path, name, height_or_length):
         (folder / "license.txt").write_bytes(archive.read("license.txt"))
 
 
-def labels(path):
-    # All source pixels are opaque. Isolate the green ink in three clean labels, preserving dark lettering.
-    source = subprocess.check_output(["convert", str(path), "-depth", "8", "RGB:-"])
-    if len(source) != 1280*720*3:
-        raise ValueError("Expected the 1280 by 720 HUD extraction")
-    pixels = bytearray(224 * 48 * 4)
-    for sx, sy, w, h, dy in [(20,655,216,16,0),(280,655,168,16,16),(91,153,88,16,32)]:
-        for y in range(h):
-            for x in range(w):
-                i = ((sy+y)*1280+sx+x)*3
-                r, g, b = source[i:i+3]
-                j = ((dy+y)*224+x)*4
-                pixels[j:j+4] = bytes((r,g,b,255 if g > max(r,b)*1.12 and g > 24 else 0))
-    subprocess.run(["convert", "-size", "224x48", "-depth", "8", "RGBA:-", "-strip",
-                    "PNG32:"+str(ASSETS / "f5" / "hud-labels.png")], input=pixels, check=True)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ["balloon", "projectile", "hud"]:
-        parser.add_argument(name, type=Path)
+    parser.add_argument("balloon", type=Path)
+    parser.add_argument("projectile", type=Path)
     args = parser.parse_args()
     bake(args.balloon, "balloon", 20)
     bake(args.projectile, "projectile", 4)
-    labels(args.hud)

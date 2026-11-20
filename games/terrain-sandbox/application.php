@@ -61,7 +61,6 @@ $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainJetFrame');
 $hudShown = false;
-(vrzno_env('terrainHudArt'))(base64_encode(file_get_contents(__DIR__ . '/assets/f5/hud-labels.png')));
 // The panel builds its Surface tab once from the appearance settings' groups, ranges, defaults and per-style use.
 (vrzno_env('terrainSurface'))(json_encode(['groups' => TerrainPhonics\TerrainAppearance::GROUPS,
 	'ranges' => TerrainPhonics\TerrainAppearance::RANGES, 'defaults' => TerrainPhonics\TerrainAppearance::DEFAULTS,

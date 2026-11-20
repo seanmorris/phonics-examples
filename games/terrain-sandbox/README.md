@@ -44,4 +44,4 @@ A placed gate's opening takes any width and height in its kind's range. The impo
 
 The balloon model is *CC0 - Balloon* by plaggy. Its supplied license identifies it as CC BY 4.0. The game projectile model is *Heatseeker Air-Air missile* by Martini-SF, licensed under CC BY-NC 4.0. The importer scales the meshes and bakes the material and texture data. [Balloon credit](assets/balloon/license.txt) · [Projectile credit](assets/projectile/license.txt)
 
-The cockpit instruments use three labels from the supplied *AirForce Delta* HUD extraction. The remaining instruments are drawn live. Rebuild the practice assets with `python3 scripts/import_terrain_practice.py cc0_-_balloon.zip f5-game-projectile.zip aircraft-hud.png`.
+The cockpit draws its instruments and labels with Canvas text and shapes in a palette inspired by *AirForce Delta*. Rebuild the practice assets with `python3 scripts/import_terrain_practice.py cc0_-_balloon.zip f5-game-projectile.zip`.
