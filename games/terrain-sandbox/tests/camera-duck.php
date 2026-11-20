@@ -11,6 +11,7 @@ use TerrainSandbox\Course;
 use TerrainSandbox\GateDuck;
 use TerrainSandbox\GateModel;
 use TerrainSandbox\GateShapes;
+use TerrainSandbox\Jet;
 use TerrainSandbox\Session;
 
 $checks = 0;
@@ -224,17 +225,49 @@ foreach($setups as $name => $setup)
 		"The $name: an eye beside its end stays clear behind a vehicle passing beside it");
 }
 
-// An eye crossing a post sideways within the slab is held clear. It jumps to the far side halfway across the band
-// from the clear opening's edge to the gate's end, which the post tabs and base plates set 0.12 m beyond the post.
+// An eye that swings sideways into a post within the slab, past the post's middle and back out, as the look stick
+// swings it, keeps to the opening's side of the post and moves no farther than the eye does at any step.
 $course = new Course;
 $course->place('start', 'road', 0.0, 0.0, 0.0, 0.0);
 $gates = $course->obstructions();
 $road = $shapes->kind('road');
-$band = $road['extent']['halfWidth'] + $c - ($road['window']['halfWidth'] - $c);
+// The base plates reach 0.14 m into the window's lower corners, which narrows the clear opening at every height.
+$edge = min($road['window']['halfWidth'], $road['extent']['halfWidth'] - 2 * $road['extent']['halfDepth']) - $c;
+$band = $road['extent']['halfWidth'] + $c - $edge;
+$swing = follow(new GateDuck(10.0), $gates, fn(int $i): array => [[5.0 + 2.9 * sin(M_PI * $i / 300), 2.0, 0.0],
+	[0.0, .5, 6.7]], 300);
+expect($swing['raw'] < 0 && $swing['placed'] >= $c - 1e-9 && $swing['ratio'] <= 1 + 1e-9
+	&& abs($swing['offset'] - (7.9 - $edge)) < 1e-3 && $swing['passages'] === ['through'],
+	sprintf('An eye swinging into a post past its middle and back stays %.3f m clear on the opening\'s side, moving at most %.2f times its own step',
+		$swing['placed'], $swing['ratio']));
+// An eye that crosses the whole post within the slab keeps to the opening's edge until it is past the post and its
+// clearance, then takes the far side, which the post tabs and base plates set 0.12 m beyond the post.
 $run = follow(new GateDuck(10.0), $gates, fn(int $i): array => [[5.0 + $i * .01, 2.0, 0.0], [0.0, .5, 6.7]], 500);
-expect($run['raw'] < 0 && $run['placed'] >= $c - 1e-9 && $run['offset'] > $band / 2 && $run['offset'] < $band / 2 + .15,
-	sprintf('An eye sliding sideways through a post stays clear of it, moving at most %.2f m to the nearer side',
+expect($run['raw'] < 0 && $run['placed'] >= $c - 1e-9 && $run['offset'] > $band - .02 && $run['offset'] <= $band + 1e-9,
+	sprintf('An eye sliding sideways through a whole post stays clear of it, held at most %.2f m on the opening\'s side',
 		$run['offset']));
+
+// An eye that comes within the lead at the banner's height and then climbs steeply before it reaches the gate, as
+// an Expert F5's eye does when the jet loops up in front of a gate, is let go: it never moves more than 2 m and
+// passes over the gate. Without the release it would be pulled down to the window from 95 m above it.
+$course = new Course;
+$air = $course->place('start', 'air', 0.0, 70.0, 0.0, 0.0)['gate'];
+$gates = $course->obstructions();
+$window = $shapes->kind('air')['window'];
+$banner = 70 + ($window['top'] + $shapes->kind('air')['extent']['top']) / 2;
+$loop = follow(new GateDuck(60.0), $gates, function(int $i) use ($banner, $window): array {
+	$v = -62 + $i * .25;
+	$eye = $banner + .05 * max(0.0, $v + 45) ** 2;
+	return [[0.0, $eye, $v], [0.0, $v < -45 ? 70 + $window['top'] / 2 : $eye + 10, $v + 24]];
+}, 242);
+expect($loop['raw'] > 25 && $loop['placed'] >= $c - 1e-9 && $loop['offset'] < 2 && $loop['ratio'] < 3
+	&& in_array('over', $loop['passages'], true),
+	sprintf('An eye that climbs away in front of an air gate moves at most %.2f m and passes over it', $loop['offset']));
+// Nothing stands under an air gate's window, so an eye below it stays where it is.
+$under = follow(new GateDuck(60.0), $gates, fn(int $i): array => [[0.0, 68.5, -70 + $i * .5],
+	[0.0, 70 + $window['top'] / 2, -46 + $i * .5]], 280);
+expect($under['offset'] === 0.0 && $under['passages'] === ['through'],
+	sprintf('An eye 1.5 m below an air gate\'s window passes under it unmoved (moved %.2f m)', $under['offset']));
 
 // The held passage keeps the eye ducking behind an F5 that climbs above the banner while the eye is still on its way.
 $course = new Course;
@@ -466,6 +499,75 @@ foreach(['novice', 'expert'] as $controls)
 			$controls, $flight['duck'], $flight['least'], $flight['jump']));
 	foreach($flights as [$session]) $session->close();
 }
+
+/**
+ * Step a session and measure the drawn eye against the session's camera after each step.
+ * @param callable $control fn(int $i): array input for the step.
+ * @return array Vehicle states, the least clearance of the drawn eye, its largest offset from the camera and the
+ * largest step of the drawn eye beyond the camera's step.
+ */
+function watch(Session $session, callable $control, int $steps): array
+{
+	$states = []; $least = INF; $offset = 0.0; $jump = 0.0; $previous = null;
+	for($i = 0; $i < $steps; $i++)
+	{
+		input($session, $control($i));
+		$session->step(1 / 60);
+		$states[] = match($session->mode) { 'car' => $session->car->state(), 'jet' => $session->jet->state() };
+		[$view] = $session->view(1.0);
+		$least = min($least, clearance($view->position, $session->course->obstructions()));
+		$offset = max($offset, distance($view->position, $session->camera->position));
+		if($previous !== null)
+			$jump = max($jump, distance($view->position, $previous[0]) - distance($session->camera->position, $previous[1]));
+		$previous = [$view->position, $session->camera->position];
+	}
+	return ['states' => $states, 'least' => $least, 'offset' => $offset, 'jump' => $jump];
+}
+
+// The Expert F5 at its slowest pulls up into a loop 60 m in front of an air gate and never reaches it. The gate lets
+// its eye go as it climbs away, where it once pulled the eye down to the window from 50 m above it.
+$loops = [];
+foreach(['gate', 'none'] as $name)
+{
+	$session = new Session(['worldSize' => 8192, 'heightScale' => 0, 'detailAmplitude' => 0]);
+	$session->camera->position = [0, 200, -1000]; $session->camera->yaw = M_PI; $session->camera->pitch = 0.0;
+	input($session, ['values' => ['jetControls' => 'expert'], 'actions' => ['jet']]);
+	if($name === 'gate') $session->course->place('start', 'air', 0.0, 200 - $shapes->kind('air')['window']['top'] / 2, 0.0, 0.0);
+	input($session, ['keys' => ['KeyS' => true]]);
+	for($i = 0; $i < 2000 && $session->jet->state()['z'] < -60; $i++) $session->step(1 / 60);
+	$loops[$name] = [$session, $session->jet->state()['speed'],
+		watch($session, fn(int $i): array => ['keys' => ['KeyS' => true, 'KeyE' => true]], 300)];
+}
+[$session, $speed, $loop] = $loops['gate'];
+expect($speed === Jet::SLOWEST && $loop['states'] === $loops['none'][2]['states'] && end($loop['states'])['z'] < 0
+	&& $loop['offset'] < 3 && $loop['least'] >= $c - 1e-9 && $loop['jump'] < 2,
+	sprintf('The slowest Expert F5 looping in front of an air gate moves its drawn eye at most %.2f m, %.2f m beyond its camera\'s step',
+		$loop['offset'], $loop['jump']));
+foreach($loops as [$session]) $session->close();
+
+// The car stops in a road gate 1 m off its middle and the driver swings the look stick right round. The drawn eye
+// keeps to its side of each post instead of jumping across it, and stays clear of the gate.
+$session = new Session($open);
+$session->camera->position = [0, 30, 0]; $session->camera->yaw = M_PI;
+input($session, ['actions' => ['car']]);
+for($i = 0; $session->findingCarSite() && $i < 2000; $i++) input($session, []);
+$x = $session->car->state()['x'];
+$session->course->place('start', 'road', $x - 1, $session->landscape->height($x - 1, 60.0), 60.0, 0.0, 1, null, null,
+	fn(float $x, float $z): float => $session->landscape->height($x, $z));
+for($i = 0; $i < 1200 && !($session->car->state()['z'] > 58.5 && abs($session->car->state()['speed']) < .01); $i++)
+{
+	$car = $session->car->state();
+	input($session, ['pad' => [0, 0, 0, 0, $car['z'] > 58.5 ? 1 : 0, $car['z'] <= 58.5 && $car['speed'] < 6 ? .5 : 0, 0]]);
+	$session->step(1 / 60);
+}
+$swing = watch($session, fn(int $i): array => ['pad' => [0, 0, sin(2 * M_PI * $i / 300), -cos(2 * M_PI * $i / 300), 0, 0, 0]],
+	320);
+$car = $session->car->state();
+expect(abs($car['x'] - $x) < .05 && abs($car['z'] - 59) < 1 && $swing['offset'] > .5 && $swing['least'] >= $c - 1e-9
+	&& $swing['jump'] < .3,
+	sprintf('Swinging the look stick round in a road gate moves the drawn car eye up to %.2f m, at most %.2f m beyond the chase eye\'s step',
+		$swing['offset'], $swing['jump']));
+$session->close();
 
 // A gate far from the drive changes nothing the application draws.
 $session = new Session($open);
