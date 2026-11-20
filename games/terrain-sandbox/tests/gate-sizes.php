@@ -424,7 +424,7 @@ $half = $road['window']['halfWidth'] + 2 * $road['posts'][1]['halfSize'];
 $measure = $course->measure($sloped);
 expect(near($sloped['y'], .2 * $half) && near($sloped['ground'][0], -.4 * $half) && near($sloped['ground'][1], 0.0)
 	&& near($measure['feet'][2], .2 * $road['posts'][0]['x'] - $sloped['y']) && near($measure['feet'][3], .2 * $road['posts'][1]['x'] - $sloped['y'])
-	&& near($measure['feet'][0], $measure['feet'][2] - Course::POST_FOOT),
+	&& near($measure['feet'][0], $measure['feet'][2] - .2 * $road['posts'][0]['halfSize'] - Course::POST_FOOT),
 	'A road gate on a cross slope stands on its higher side, and each post reaches below the ground under it');
 expect(near($measure['window']['bottom'], -.4 * $half - Course::ROAD_BELOW)
 	&& Race::crossing($sloped, $measure['window'], [-6, .2 * -6 + .05, -1], [-6, .2 * -6 + .05, 1]) !== null,
@@ -433,6 +433,25 @@ $turned = $course->place('checkpoint', 'road', 0, 0, 100, M_PI / 2, 1, null, nul
 // Along its travel only the posts' footprints, 0.8 m deep, meet the slope.
 expect(near($turned['y'], .2 * $road['posts'][1]['halfSize']) && near($turned['ground'][0], -.4 * $road['posts'][1]['halfSize']),
 	'A gate facing up the slope stands level across it');
+// On a cliff rising 2 m in 1 both across the gate and along its travel, the ground under one corner of a post's 0.8 m
+// footprint lies 1.6 m below the ground under its middle. Each post still reaches a metre below the lowest of it, and
+// so do the posts the car collides with.
+$cliff = static fn(float $x, float $z): float => 2 * ($x + $z);
+$course = new Course;
+$steep = $course->place('start', 'road', 0, 0, 0, 0, 1, null, null, $cliff)['gate'];
+$measure = $course->measure($steep);
+$reaches = [];
+foreach($measure['posts'] as $index => $post)
+{
+	$lowest = INF;
+	for($a = -1; $a <= 1; $a += .25) for($b = -1; $b <= 1; $b += .25)
+		$lowest = min($lowest,
+			$cliff($post['x'] + $a * $post['halfSize'], $post['z'] + $b * $post['halfSize']) - $steep['y']);
+	$reaches[] = $lowest - $post['bottom'];
+	$reaches[] = $steep['y'] + $lowest - $course->posts()[$index][5];
+}
+expect(min($reaches) >= Course::POST_FOOT - 1e-9 && near($measure['feet'][2], 2 * $road['posts'][0]['x'] - $steep['y']),
+	'On a cliff each post reaches a metre below the lowest ground under its footprint: ' . json_encode($reaches));
 // On a landscape, the gate tool fits a road gate to the ground, and the drawn posts reach the ground under them.
 $ramp = new Session(['worldSize' => 512, 'spacing' => 1, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -50]);
 $ramp->landscape->queue(['type' => 'road', 'points' => [[-60, 0, 0], [60, 12, 0]], 'width' => 60, 'shoulder' => 20,

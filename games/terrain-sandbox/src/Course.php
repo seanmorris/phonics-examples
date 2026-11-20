@@ -21,7 +21,10 @@ final class Course
 	public const MAX_CHECKPOINTS = 32, MAX_LAPS = 20;
 	/** Keys a saved gate may carry, beyond laps on the start gate, number on a checkpoint and its size. */
 	private const SAVED = ['role', 'kind', 'x', 'y', 'z', 'yaw'];
-	/** How far a road post reaches below the ground under its middle, in metres, so a slope shows no gap. */
+	/**
+	 * How far a road post reaches below the lowest ground under its footprint, in metres, so a slope shows no gap. The
+	 * footprint is sampled at its middle and its corners.
+	 */
 	public const POST_FOOT = 1.0;
 	/**
 	 * How far below the lowest ground across a road gate a car still counts as passing through it. The ground is
@@ -184,13 +187,14 @@ final class Course
 	 * @param array $gate Gate record without fitting.
 	 * @param \Closure|null $ground Ground height sampler, or null to count the ground as level with the origin.
 	 * @return array The gate with ground [lowest, highest] across its span and, on a road gate, posts [-X, +X]: the
-	 * ground under each post's middle. All are heights in metres from the gate's origin. A water gate's ground is
-	 * [0, 0], and an air gate placed without a sampler has ground null.
+	 * ground under each post's middle, where its base plate lies, and footings [-X, +X]: the lowest ground under each
+	 * post's footprint. All are heights in metres from the gate's origin. A water gate's ground is [0, 0], and an air
+	 * gate placed without a sampler has ground null.
 	 */
 	private function fit(array $gate, ?\Closure $ground): array
 	{
 		$gate['ground'] = $gate['kind'] === 'air' && $ground === null ? null : [0.0, 0.0];
-		if($gate['kind'] === 'road') $gate['posts'] = [0.0, 0.0];
+		if($gate['kind'] === 'road') $gate['posts'] = $gate['footings'] = [0.0, 0.0];
 		if($ground === null || $gate['kind'] === 'water') return $gate;
 		$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
 		$at = static fn(float $across, float $along): float
@@ -203,14 +207,16 @@ final class Course
 			// The posts' outer faces bound the span. Each post's footprint is sampled at its middle and corners.
 			$post = $shape['posts'][1]['halfSize'];
 			$reach = $half + 2 * $post;
-			$middles = [];
+			$middles = $lows = [];
 			foreach([-1, 1] as $side)
 			{
 				$middle = $side * ($half + $post);
-				$middles[] = $at($middle, 0.0);
-				foreach([-1, 1] as $a) foreach([-1, 1] as $b) $heights[] = $at($middle + $a * $post, $b * $post);
+				$footprint = [$at($middle, 0.0)];
+				foreach([-1, 1] as $a) foreach([-1, 1] as $b) $footprint[] = $at($middle + $a * $post, $b * $post);
+				$middles[] = $footprint[0];
+				$lows[] = min($footprint);
+				$heights = [...$heights, ...$footprint];
 			}
-			$heights = [...$heights, ...$middles];
 		}
 		else $reach = $half;
 		$steps = (int)ceil(2 * $reach / self::SAMPLE_STEP);
@@ -220,6 +226,7 @@ final class Course
 		{
 			$gate['y'] = $high;
 			$gate['posts'] = [$middles[0] - $high, $middles[1] - $high];
+			$gate['footings'] = [$lows[0] - $high, $lows[1] - $high];
 		}
 		$gate['ground'] = [$low - $gate['y'], $high - $gate['y']];
 		return $gate;
@@ -409,7 +416,7 @@ final class Course
 	 * vehicle passes through, from the lowest point that still counts (halfWidth, bottom, top); the extent of the
 	 * drawn gate (halfWidth, bottom, top, halfDepth); each post (x, z, halfSize, bottom, top); the resize model.vert
 	 * applies [half width added, height added, scale across, scale up]; and [foot of the -X post, foot of the +X post,
-	 * ground under the -X post, ground under the +X post].
+	 * ground under the middle of the -X post, ground under the middle of the +X post].
 	 */
 	public function measure(array $gate): array
 	{
@@ -441,7 +448,7 @@ final class Course
 			if($gate['kind'] === 'road')
 			{
 				[$left, $right] = $gate['posts'];
-				$feet = [$left - self::POST_FOOT, $right - self::POST_FOOT, $left, $right];
+				$feet = [$gate['footings'][0] - self::POST_FOOT, $gate['footings'][1] - self::POST_FOOT, $left, $right];
 				foreach($shape['posts'] as $index => $post)
 					$posts[] = ['x' => $post['x'] + ($post['x'] < 0 ? -$added : $added), 'z' => $post['z'],
 						'halfSize' => $post['halfSize'], 'bottom' => $feet[$post['x'] < 0 ? 0 : 1],
