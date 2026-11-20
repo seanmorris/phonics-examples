@@ -26,24 +26,26 @@ Press **J**, choose **Fly F5**, or press up on a gamepad's D-pad to start airbor
 
 **Novice**, the default, banks into turns and levels itself. **A/D** or the left stick turn. **E/Q**, or pulling and pushing the stick, climb and dive. Let go and the jet levels its wings and nose.
 
-**Expert** turns the jet about its own axes and holds whatever attitude you leave it in, so it can roll inverted and loop. **A/D** or the stick roll, **E/Q** or the stick pitch, and **Z/X** or **LB/RB** work the rudder. In a bank the wings support only part of the jet's weight unless you pull, so a banked jet turns slowly and one on its side slides towards the ground. Switching back to Novice keeps the jet's orientation and then levels it.
+**Expert** turns the jet about its own axes and holds whatever attitude you leave it in, so it can roll inverted and loop. **A/D** or the left stick rolls the jet. **E/Q** or the left stick controls pitch. **LT/RT** works the rudder left/right, as does **Z/X** or the horizontal right stick. In a bank the wings support only part of the jet's weight unless you pull, so a banked jet turns slowly and one on its side slides towards the ground. Switching back to Novice keeps the jet's orientation and then levels it.
 
-In both, hold **W** or the right trigger to speed up towards 260 metres per second, and **S** or the left trigger to slow towards 55. Let go and the jet returns to its 140 metre per second cruise, as the Dreamcast game does. Trigger travel sets the requested engine power. The ENG gauge shows delivered power as the engine spools up or down, and airspeed follows. Pulling the stick back raises the nose; tick **Push the stick forward to climb** to reverse it. The sandbox remembers both choices in this browser. Saved landscapes do not carry them.
+Hold **RT** in Novice or **Y** in Expert to speed up. Hold **LT** in Novice or **B** in Expert to slow down. On the keyboard, **W/S** controls speed in either mode. Airspeed ranges from 55 to 260 metres per second and returns to 140 on release. ENG reads 30% at minimum power, 75% at cruise and 140% at full power. Above 100% the dial warms from green through amber to red as the engine spools up. Novice trigger travel sets the requested power proportionally. Pulling the left stick back raises the nose. **Push the stick forward to climb** reverses pitch. The browser remembers handling and pitch preferences.
 
-Both chase cameras keep the horizon level. The Novice camera looks along the jet's heading. The Expert camera swings in behind the nose, so it follows loops. It turns round quickly as the nose passes straight up or down. **P** or **Start** pauses the flight. Press **F**, or down on the D-pad, to leave the jet and explore from the current camera position. Reaching the map edge also returns you to free flight.
+Both chase cameras keep the horizon level. The Novice camera looks along the jet's heading. The Expert camera swings in behind the nose, so it follows loops. It turns round quickly as the nose passes straight up or down. **P** or **Start** pauses the flight. Press **F**, or hold **Back** and press **D-pad down**, to leave the jet and explore from the current camera position. Reaching the map edge also returns you to free flight.
 
 ### Cockpit and balloon practice
 
-Press **V** or click the right stick to switch between the chase camera and the pilot’s view. The cockpit banks with the jet. Its left tape shows speed in km/h and its right tape shows metres above the ground or water. The bottom-right radar plots balloons relative to the nose. **H** opens the Landscape Lab in flight.
+Press **V**, press **Y+B** together, or click the right stick to switch between the chase camera and the pilot’s view. The cockpit banks with the jet. Its left tape shows speed in km/h and its right tape shows metres above the ground or water. The lower-left minimap follows the jet with north at the top. Its shaded relief follows the terrain, water level and surface colours. A white pointer shows your heading. Amber blips mark balloons, red identifies the selected one and an edge chevron points towards a balloon outside the map. Press **D-pad down** or **N** for a chart of the entire landscape. Press it again to restore your previous map display. The bottom-right radar plots balloons relative to the nose. **H** opens the Landscape Lab in flight.
 
-To try a target, choose **Balloon practice** under **Explore**. Centre the balloon inside the HUD ring. Within 1,200 metres, a clear view for 0.3 seconds turns its box red and flashes **LOCK ON**. **T** or gamepad **B** selects the next balloon.
+To try a target, choose **Balloon practice** under **Explore**. Centre the balloon inside the HUD ring. Within 1,200 metres, a clear view for 0.3 seconds turns its box red and flashes **LOCK ON**. **T** or **D-pad up** selects the next balloon.
 
 | Action | Keyboard | Standard gamepad |
 | --- | --- | --- |
 | Launch a projectile | Space | A |
 | Fire Vulcan tracers | Hold G | Hold X |
-| Switch view | V | Right stick click |
-| Cycle balloons | T | B |
+| Toggle minimap | M | Left stick click |
+| Toggle wide-area map | N | D-pad down |
+| Switch view | V | Y+B or right stick click |
+| Cycle balloons | T | D-pad up |
 
 A projectile follows the balloon selected at launch if you have a lock. Otherwise it travels straight ahead. Each of the two charges returns after three seconds of flight. Projectiles leave a widening smoke trail that lingers after a hit. Tracers have their own firing cadence. A loaded banked turn draws short condensation trails from both wingtips. A hit pops a balloon, and quick practice places another ahead of you. Pause freezes the practice clock.
 
@@ -91,7 +93,7 @@ The F5 keeps at least 8 metres above the ground and the water, so it flies under
 
 **Laps** belongs to the start gate, runs from 1 to 20, and counts only on a course without a finish gate. Each lap then passes the checkpoints in order and returns through the start gate, which reads START / FINISH. A course with a finish gate runs once, from the start gate through the checkpoints to the finish gate. The note under **Laps** says which of the two the course you have built does.
 
-Drive, ride or fly through the start gate to start the clock; you do not need to stop first. Pass each gate in order and in its direction. The race ignores every other crossing. A course without a finish gate ends each lap back at the start gate, and the lap counts only once you have been at least three half widths of that gate's frame away from it since you last passed through it: 23 m from a road gate, 18 m from a water gate or 68 m from an air gate at their own sizes. Rocking back and forth through the start gate, or through it and a checkpoint just clear of it, counts no lap. The line under the status message shows the time, the lap, the next gate and its distance, the last split and the best time. The sandbox keeps your best time for each course until you reload the page. **R**, **Reset race** or **Y** on a gamepad sends the race back to wait at the start gate. Pausing stops the clock. Leaving the vehicle, boarding again, reaching the map edge or changing the course stops the race.
+Drive, ride or fly through the start gate to start the clock; you do not need to stop first. Pass each gate in order and in its direction. The race ignores every other crossing. A course without a finish gate ends each lap back at the start gate, and the lap counts only once you have been at least three half widths of that gate's frame away from it since you last passed through it: 23 m from a road gate, 18 m from a water gate or 68 m from an air gate at their own sizes. Rocking back and forth through the start gate, or through it and a checkpoint just clear of it, counts no lap. The line under the status message shows the time, the lap, the next gate and its distance, the last split and the best time. The sandbox keeps your best time for each course until you reload the page. **R**, **Reset race** or **Y** on a gamepad (**Back + Y** in the F5) sends the race back to wait at the start gate. Pausing stops the clock. Leaving the vehicle, boarding again, reaching the map edge or changing the course stops the race.
 
 The chase camera never passes through a gate. Behind a vehicle that goes through the opening, it lowers itself under the board, banner or arch and rises again once past, keeping clear of the posts and legs, at whatever size the gate is. The car's camera starts lowering 10 metres before a gate, the jet ski's 8 metres and the F5's 60 metres. Behind a vehicle that goes over a gate, the camera passes over it too, and when the F5 climbs away before it reaches a gate, as it does looping up in front of one, the camera lets that gate go and follows the jet up. When the look stick swings the camera into a post, the camera stays on its side of the post, or goes round the post's face when the stick swings it farther across.
 
@@ -99,7 +101,7 @@ The chase camera never passes through a gate. Behind a vehicle that goes through
 
 ## Use a gamepad
 
-The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. The D-pad chooses where you are: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses, **Y** resets a race and **X** switches the car headlights or fires the F5’s Vulcan. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
+The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. Outside the F5, the D-pad chooses your vehicle: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses, **Y** resets a race outside the F5 (**Back + Y** in flight) and **X** switches the car headlights or fires the F5’s Vulcan. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
 
 ## Pause and save
 

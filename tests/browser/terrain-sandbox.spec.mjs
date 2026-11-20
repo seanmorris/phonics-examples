@@ -304,11 +304,39 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	await restoreContext(page);
 	expect((await status(page)).balloons).toEqual(before);
 	expect(await canvas(page).evaluate(el => el.getContext('webgl2').getError())).toBe(0);
-	await page.keyboard.press('v');
+	const map = page.locator('.terrain-flight-map');
+	await expect(map).toBeVisible();
+	await setButton(10, true);
+	await expect(map).toBeHidden();
+	await setButton(10, false);
+	await page.keyboard.press('m');
+	await expect(map).toBeVisible();
+
+	await setButton(13, true);
+	await expect.poll(async() => (await status(page)).jetWideMap).toBe(true);
+	await setButton(13, false);
+
+	const color = () => map.evaluate(el => Array.from(el.getContext('2d').getImageData(23, 24, 1, 1).data));
+	await canvas(page).evaluate(el => el.terrainSandboxDebug.values({waterColor: '#247dd1', waterLevel: 25}));
+	await expect.poll(async() => { const [r,g,b] = await color(); return b > g && g > r+40; }).toBe(true);
+	await canvas(page).evaluate(el => el.terrainSandboxDebug.values({waterLevel: -1, sandColor: '#d38129'}));
+	await expect.poll(async() => { const [r,g,b] = await color(); return r > g+40 && g > b+40; }).toBe(true);
+
+	await setButton(3, true);
+	await setButton(1, true);
 	await expect.poll(async() => (await status(page)).jetView).toBe('chase');
+	await setButton(1, false);
+	await setButton(3, false);
 	await expect(page.locator('.terrain-panel')).toHaveAttribute('open', '');
-	await page.keyboard.press('f');
+
+	await setButton(8, true);
+	await setButton(13, true);
+	await expect.poll(async() => (await status(page)).mode).toBe('fly');
+	await setButton(13, false);
+	await setButton(8, false);
 	await expect(page.locator('.terrain-instruments')).toBeHidden();
+	await expect(map).toBeHidden();
+	expect((await status(page)).jetControls).toBe('novice');
 	expect(errors).toEqual([]);
 });
 

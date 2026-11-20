@@ -37,6 +37,7 @@ final class Session
 	public BalloonPractice $balloons;
 	public ?FlightTrails $flightTrails = null;
 	public string $jetView = 'chase';
+	public bool $jetMap = true, $jetWideMap = false;
 	private int $launches = 0;
 	/** Race gates on the landscape. Saved with it, and replaced when a file loads or a new landscape is generated. */
 	public Course $course;
@@ -309,9 +310,17 @@ final class Session
 			$pad = $this->pad;
 			// Pulling the stick back raises the nose unless the player inverted it.
 			$climb = $this->blend('KeyQ', 'KeyE', $this->invertPitch ? -$pad['y'] : $pad['y']);
-			$rudder = $this->blend('KeyZ', 'KeyX', ($pad['buttons'] & self::PAD_RB ? 1 : 0) - ($pad['buttons'] & self::PAD_LB ? 1 : 0));
+			$trigger = $pad['rt'] - $pad['lt'];
+			$throttle = $trigger;
+			$yaw = $pad['lookX'];
+			if($this->jetControls === 'expert')
+			{
+				$throttle = (int)(bool)($pad['buttons'] & self::PAD_Y) - (int)(bool)($pad['buttons'] & self::PAD_B);
+				if(abs($trigger) > abs($yaw)) $yaw = $trigger;
+			}
+			$rudder = $this->blend('KeyZ', 'KeyX', $yaw);
 			$before = $this->jet->state();
-			if(!$this->jet->step($seconds, $this->blend('KeyS', 'KeyW', $pad['rt'] - $pad['lt']),
+			if(!$this->jet->step($seconds, $this->blend('KeyS', 'KeyW', $throttle),
 				$this->blend('KeyA', 'KeyD', $pad['x']), $climb,
 				$this->camera, $this->landscape, $this->water->level(), $rudder))
 			{
@@ -503,7 +512,7 @@ final class Session
 	private function jetMessage(): string
 	{
 		return $this->jetControls === 'expert'
-			? 'Expert · A/D or stick roll, E/Q or stick pitch, Z/X or LB/RB rudder, hold W/S or RT/LT for speed. F leaves the jet.'
+			? 'Expert · A/D or stick roll, E/Q or stick pitch, LT/RT or Z/X rudder, hold Y/B or W/S for speed. F leaves the jet.'
 			: 'Novice · A/D or stick turn, E/Q or stick climb and dive, hold W/S or RT/LT for speed. F leaves the jet.';
 	}
 
@@ -631,7 +640,15 @@ final class Session
 		throw new \RuntimeException('Preparing the previous terrain edit. Please wait.');
 		if($this->picking && in_array($action['type'] ?? '', ['undo','redo','road-apply','save'], true))
 		{ $this->message = 'Finding the ground for the previous click. Please wait.'; return; }
-		switch($action['type'] ?? '')
+		$jet = $this->mode === 'jet';
+		$type = match($action['type'] ?? '')
+		{
+			'pad-up' => $jet ? 'jet-target' : 'jet',
+			'pad-down' => $jet ? 'jet-wide-map' : 'fly',
+			'pad-y' => $jet ? '' : 'race-reset',
+			default => $action['type'] ?? ''
+		};
+		switch($type)
 		{
 			case 'pause':
 				$this->launches = 0;
@@ -715,6 +732,21 @@ final class Session
 				$this->flightTrails = new FlightTrails;
 				$this->mode = 'jet'; $this->paused = false; $this->boarding++;
 				$this->message = $this->jetMessage();
+				break;
+			case 'jet-map':
+				if($this->mode === 'jet')
+				{
+					$this->jetMap = !($this->jetMap || $this->jetWideMap);
+					$this->jetWideMap = false;
+					$this->dirty = true;
+				}
+				break;
+			case 'jet-wide-map':
+				if($jet)
+				{
+					$this->jetWideMap = !$this->jetWideMap;
+					$this->dirty = true;
+				}
 				break;
 			case 'jet-view':
 				if($this->mode === 'jet')
@@ -1341,7 +1373,7 @@ final class Session
 			'settings' => $this->settings,'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
 			'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
-			'jetView' => $this->jetView, 'balloons' => $this->balloons->status(),
+			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
 			'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),
 			'roadPoints' => $this->road,'message' => $this->message,

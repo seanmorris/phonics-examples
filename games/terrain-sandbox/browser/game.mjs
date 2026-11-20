@@ -280,6 +280,8 @@ export function activate({module, canvas, session, services})
 		, KeyR: 'race-reset'
 
 		, KeyL: 'headlights'
+		, KeyM: 'jet-map'
+		, KeyN: 'jet-wide-map'
 		, KeyV: 'jet-view'
 		, KeyT: 'jet-target'
 	};
@@ -435,7 +437,8 @@ export function activate({module, canvas, session, services})
 
 	headlights.addEventListener('change', rememberHeadlights, {signal});
 
-	let previousViewport, previousKeys = '', previousPad = '', padButtons = new Set();
+	let previousViewport, previousKeys = '', previousPad = '', padButtons = new Set(), viewChord = false;
+	let backShortcut = false;
 
 	shell.bridge('terrainInput', () => {
 		const viewport = view.viewport();
@@ -444,13 +447,37 @@ export function activate({module, canvas, session, services})
 		const gamepad = document.hidden || !document.hasFocus() ? null : readGamepads();
 		const buttons = gamepad?.buttons ?? new Set();
 
+		if(buttons.has(8) && !padButtons.has(8)) backShortcut = false;
+
 		for(const [index, command] of PAD_COMMANDS)
-		if(buttons.has(index) && !padButtons.has(index)) push(command);
+		{
+			if(!buttons.has(index) || padButtons.has(index)) continue;
+
+			if(buttons.has(8) && (index === 13 || index === 3))
+			{
+				push(index === 13 ? 'fly' : 'race-reset');
+				backShortcut = true;
+			}
+			else push(command);
+		}
+
+		if(gamepad && !buttons.has(8) && padButtons.has(8) && !backShortcut) push('jet-controls');
+
+		// Y+B changes perspective once, including when the second button arrives a poll later.
+		// Keep its throttle buttons released until both are up again.
+		if(!buttons.has(1) && !buttons.has(3)) viewChord = false;
+
+		if(!buttons.has(8) && buttons.has(1) && buttons.has(3) && !viewChord)
+		{
+			push('jet-view');
+			viewChord = true;
+		}
 
 		padButtons = buttons;
+		const heldMask = PAD_HELD.reduce((mask, [index, bit]) => buttons.has(index) ? mask | bit : mask, 0);
 		const pad = gamepad
 			? [...gamepad.axes.map(value => Math.round(value * 1000) / 1000)
-				, PAD_HELD.reduce((mask, [index, bit]) => buttons.has(index) ? mask | bit : mask, 0)
+				, viewChord || buttons.has(8) ? heldMask & ~SPEED_BUTTONS : heldMask
 			]
 			: [0,0,0,0,0,0,0];
 
@@ -877,17 +904,20 @@ const HEADLIGHTS = ['auto', 'on', 'off'];
 
 /** Gamepad buttons in the standard layout that issue a command when pressed. */
 const PAD_COMMANDS = new Map([
-	[9, 'pause'], [8, 'jet-controls'], [12, 'jet'], [14, 'car'], [15, 'craft']
-	, [13, 'fly']
-	, [3, 'race-reset']
+	[9, 'pause'], [12, 'pad-up'], [14, 'car'], [15, 'craft']
+	, [13, 'pad-down']
+	, [3, 'pad-y']
 	, [2, 'pad-x']
 	, [0, 'jet-launch']
-	, [1, 'jet-target']
+	, [10, 'jet-map']
 	, [11, 'jet-view']
 ]);
 
 /** Gamepad buttons PHP reads while held: A, B, X, Y, LB, RB and the two stick clicks, with their bits in the packet. */
 const PAD_HELD = [[0, 1], [1, 2], [2, 4], [3, 8], [4, 16], [5, 32], [10, 64], [11, 128]];
+
+/** Y and B share speed control with the view chord in flight. */
+const SPEED_BUTTONS = 8 | 2;
 
 /**
  * Remove a radial dead zone from a stick and rescale the rest to reach full travel.
@@ -1060,7 +1090,7 @@ function markup()
 {
 	return `<style>
 	.terrain-sandbox{position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
-	.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
+	.terrain-flight-map{position:absolute;left:10px;bottom:10px;pointer-events:none}.terrain-sandbox.has-flight-map .terrain-hud{bottom:calc(var(--flight-map-size) + 18px)}.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
 	.in-cockpit .terrain-panel:not([open]){width:auto;top:auto;right:50%;bottom:4px;transform:translateX(50%)}.in-cockpit .terrain-panel:not([open])>summary{padding:3px 8px;font-size:11px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud{display:none}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud:has([data-race]:not([hidden])){display:block;bottom:43px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud>:not([data-race]){display:none}.terrain-note a{color:inherit}.terrain-stage{position:absolute;inset:0}.terrain-panel{position:absolute;right:14px;top:14px;max-height:calc(100% - 28px);width:300px;overflow:auto;border:1px solid #aec8bb65;border-radius:12px;background:#102822eb;box-shadow:0 8px 30px #0006;backdrop-filter:blur(10px)}
 	.terrain-panel>summary{padding:12px 15px;cursor:pointer;letter-spacing:.07em;font-weight:700}.terrain-panel>div{padding:0 14px 14px}.terrain-panel h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a8cfbd;margin:20px 0 8px}.terrain-panel h2:first-child{margin-top:3px}
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #779d8970;border-radius:5px;min-height:32px;padding:5px 8px;font:inherit}
@@ -1187,12 +1217,12 @@ function markup()
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
-	<p class="terrain-note">Space / A launches · hold G / X for Vulcan · T / B cycles balloons · V / right-stick click changes view.</p></div>
+	<p class="terrain-note">Space / A launches · hold G / X for Vulcan · T / D-pad ↑ cycles balloons · M / left-stick click toggles the minimap · N / D-pad ↓ toggles the wide map · V / Y+B changes view.</p></div>
 	<label class="terrain-field">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
 	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on when the sun is low</option><option value="on">On</option><option value="off">Off</option></select></label>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
-	<p class="terrain-note">Gamepad: left stick flies, steers or banks · right stick looks · RT/LT climb or descend, accelerate or brake · A: handbrake · X: headlights · LB/RB: Expert rudder · D-pad: ↑ jet, ← car, → watercraft, ↓ free flight · Y: reset the race · Start: pause · Back: Novice or Expert.</p>
+	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car, → boards the watercraft and ↓ returns to free flight. In the F5, ↑ cycles balloons and ↓ toggles the wide map. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ to leave flight, or Back + Y to reset the race. Start pauses.</p>
 	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p>
 	</section>
 	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;

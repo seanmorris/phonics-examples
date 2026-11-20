@@ -23,11 +23,12 @@
       "src/CarSuspension.php",
       "src/CarTumble.php",
       "src/Course.php",
+      "src/FlightMap.php",
       "src/FlightTrails.php",
       "src/GateDuck.php",
       "src/GateModel.php",
-      "src/GroundShadow.php",
       "src/GateShapes.php",
+      "src/GroundShadow.php",
       "src/Jet.php",
       "src/Race.php",
       "src/Session.php",
@@ -38,8 +39,9 @@
   },
   "browser": {
     "files": [
-      "browser/game.mjs",
-      "browser/cockpit.mjs"
+      "browser/cockpit.mjs",
+      "browser/flight-map.mjs",
+      "browser/game.mjs"
     ]
   },
   "application": {
@@ -74,7 +76,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-febvI7qKBgOp/Y+h00iWF62PtwHkxIKmY2enFVISxYs=",
+    "application.php": "sha256-lVSgrBmUjIuMWxUJw9JipHt/2Uno9H1KQeVN1JDUslI=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
@@ -97,8 +99,9 @@
     "assets/vehicles/model.frag": "sha256-isr4k+3rbvq7CNQq5d+g68AVtJK3TzLWTj6PTpDyW/s=",
     "assets/vehicles/model.vert": "sha256-dbjWIvHjXVBvTYmDAfolftSrWWUDEGIAnoKN4CJMwTs=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/cockpit.mjs": "sha256-V7QbR0+UYbKy1TMD6L4oy9+rtAImHP4mhpPe6NuN3i0=",
-    "browser/game.mjs": "sha256-aSppgsCaF5q7C6d8KPHdYVrM0NJVUvKuVe5xBKVGvZQ=",
+    "browser/cockpit.mjs": "sha256-4GZVugyoPt78Aqp3C28HCU5mpytYLhSPhSKpGfavZPg=",
+    "browser/flight-map.mjs": "sha256-XRyqAxWVishG+XZ/puSUbeO+PHVSU0yzh8DANpOzpJs=",
+    "browser/game.mjs": "sha256-OhtI4feFri/Q/LP0UKz/S9nlrZ0tRvYH5oCGAsDaEx8=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
     "src/BalloonPractice.php": "sha256-3q4ykYHOX/NWIAc7UUdMSIKOpeWE8wGbzxAb47qI7c4=",
     "src/Car.php": "sha256-dftdcj9BdxIQiNGWGZKtWBvG2eGh843CKPDDA9OJ/rc=",
@@ -107,14 +110,15 @@
     "src/CarSuspension.php": "sha256-bq66+ExjcWbqIeSGZFOAWz04PlryL7Bd5bWUf2Mqhl4=",
     "src/CarTumble.php": "sha256-PLQtyVOq6m6+iw6O/9yL5hszQDhRDfs7DV6hZHwi4w4=",
     "src/Course.php": "sha256-wn4HVuddpEMjmaKrBDH1bJ5jmoc7iKYbiOZHF3hSCzs=",
+    "src/FlightMap.php": "sha256-u7EvkIzua+8ZDW2VjgZo6AKod1ZslUM5UEVFaixu8eQ=",
     "src/FlightTrails.php": "sha256-urp5oCCLuJKKOXmLet5COvASwyVZHt7SmhpEYBwLbgk=",
     "src/GateDuck.php": "sha256-Y/9hrNmLlb8BlRicqDJo7ma9CA/9LL9I/NKrGjTfCpQ=",
     "src/GateModel.php": "sha256-ONoCfTkoGKqtUw3tObxyw7UUIH0gw5XR54ycgmm5A+k=",
     "src/GateShapes.php": "sha256-abFK5MdqZ6QMk6Fx00y/qEDphTUSDy7qK6oRMcbBEZM=",
     "src/GroundShadow.php": "sha256-QyiM8cubXmCsBVosaBk08iSWPrI6Uzu4mdbjDTTVqpM=",
-    "src/Jet.php": "sha256-oczHlQ0ZfMUpZbmEhdMGhr8Apt6/aFEknHMRqtrGrOM=",
+    "src/Jet.php": "sha256-fjCMiPLVAXoW6NL9hsnAuvu7pmaNBQznHU6pjuObqkI=",
     "src/Race.php": "sha256-hqPKUAhqAWWVF0OI7c5NatJNlf0+rOXO0LKcm6OAbM4=",
-    "src/Session.php": "sha256-0sC09oCbAe7y9j9EwnElVOva9wEjmV1CLG7nf1bQSj4=",
+    "src/Session.php": "sha256-s+//07ktmMrXVREeSyCPAyv54ykIsjNS5qbD2exRbbo=",
     "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/TrailRenderer.php": "sha256-nmhFiDIt/zfasMNkF8LPWCqHfpApZmKSyjUmfnSftns=",
     "src/VehicleModel.php": "sha256-H9+ELDqmaS8PrTolYazhiyPegOPZzkvvzC1jRsU021I="

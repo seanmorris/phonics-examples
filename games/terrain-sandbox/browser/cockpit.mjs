@@ -13,7 +13,9 @@ export function activate({module, canvas})
 
 	function draw(frame)
 	{
-		if(!frame)
+		module.drawTerrainFlightMap(frame);
+
+		if(!frame || !frame.cockpit && !Object.keys(frame.targets).length && !frame.range.hit)
 		{
 			screen.hidden = true;
 
@@ -75,11 +77,11 @@ export function activate({module, canvas})
 			ctx.fillText(String(value), x, y);
 		}
 
-		function label(value, x, y, width)
+		function label(value, x, y, width, fill = '#17c652', ink = '#071d0d')
 		{
-			ctx.fillStyle = '#17c652';
+			ctx.fillStyle = fill;
 			ctx.fillRect(x-width/2, y-10, width, 20);
-			text(value, x, y, 16, '#071d0d');
+			text(value, x, y, 16, ink);
 		}
 
 		const target = targets[range.selected];
@@ -161,16 +163,34 @@ export function activate({module, canvas})
 			tape(jet.speed*3.6, 25, -1, 'KM/H');
 			tape(Math.max(0, jet.y-range.ground), 50, 1, 'M AGL');
 
-			const thrust = jet.power;
-			circle(left+39, top+24, 31);
+			const percent = frame.thrust, hot = Math.max(0, (percent-100)/40);
+			const hue = Math.round(141*(1-hot));
+			const rim = 'hsl(' + hue + ' 88% 55%)';
+			const cx = left+38, cy = top+23, dialRadius = 31, start = Math.PI/2;
+			const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, dialRadius);
+			gradient.addColorStop(0, 'hsl(' + (95-39*hot) + ' 100% 63%)');
+			gradient.addColorStop(.54, 'hsl(' + (127-101*hot) + ' 94% 53%)');
+			gradient.addColorStop(1, rim);
+
+			// The scale sweeps clockwise from six o'clock to three. Its free quadrant holds the readout.
 			ctx.beginPath();
-			ctx.moveTo(left+39, top+24);
-			ctx.arc(left+39, top+24, 28, Math.PI*.5, Math.PI*(.5+2*thrust));
+			ctx.moveTo(cx, cy);
+			ctx.arc(cx, cy, dialRadius, start, start+1.5*Math.PI*percent/140);
 			ctx.closePath();
-			ctx.fillStyle = '#45ca6f';
+
+			ctx.fillStyle = gradient;
 			ctx.fill();
-			label('ENG', left+76, top+16, 44);
-			text(Math.round(thrust*100) + '%', left+76, top+40, 19);
+
+			ctx.strokeStyle = rim;
+			ctx.beginPath();
+			ctx.arc(cx, cy, dialRadius, start, 2*Math.PI);
+			ctx.stroke();
+			line(cx-dialRadius-4, cy, cx-dialRadius+4, cy, rim);
+			line(cx, cy-dialRadius-4, cx, cy-dialRadius+4, rim);
+			line(cx, cy+dialRadius-3, cx, cy+dialRadius+3, rim);
+
+			label('ENG', cx+23, cy+5, 44, rim, '#171c14');
+			text(percent + '%', cx+3, cy+27, 19, rim, 'left');
 
 			const seconds = Math.floor(range.elapsed);
 
@@ -188,11 +208,11 @@ export function activate({module, canvas})
 			for(let i = 0; i<2; i++)
 			{
 				ctx.fillStyle = i<range.ready ? green : '#28573b';
-				ctx.fillRect(left+33+i*23, bottom-39, 11, 24);
+				ctx.fillRect(end-177+i*23, bottom-39, 11, 24);
 			}
 
-			text(range.ready, left+50, bottom-5, 27);
-			label('MISSILE', left+50, bottom+18, 86);
+			text(range.ready, end-160, bottom-5, 27);
+			label('MISSILE', end-160, bottom+18, 86);
 
 			const radius = 57, rx = end-radius, ry = bottom-radius+12;
 			ctx.fillStyle = 'rgba(8,27,22,.48)';

@@ -364,6 +364,20 @@ final class Scene
 	}
 
 	/**
+	 * Read finished mesh samples without requesting more terrain work. The grid runs west to east, then north
+	 * to south, including both edges. Paint bytes are 0 for natural, then rock, grass, sand, snow and road.
+	 * @param string $key Quadtree key of the form level:x:z.
+	 * @return array|null Heights and optional paint bytes, or null if this patch is not resident.
+	 */
+	public function surfacePatch(string $key): ?array
+	{
+		$patch = $this->patches[$key] ?? null;
+		if($patch === null) return null;
+
+		return ['heights' => $patch['heights'], 'materials' => $patch['materials'] ?? ''];
+	}
+
+	/**
 	 * Upload the resident coarse terrain heights for shared water and atmospheric occlusion.
 	 * @return void Updates the height lookup texture.
 	 */
@@ -2224,6 +2238,11 @@ final class Scene
 		}
 
 		$material = array_search($source->material($wx, $wz), ['rock','grass','sand','snow','road'], true);
+		if($material !== false)
+		{
+			$job['materials'] ??= str_repeat("\0", $vertices);
+			$job['materials'][$i] = chr(1 + $material);
+		}
 		$job['geometricError'] = max($job['geometricError'] ?? 0.0, abs($h - $parent));
 
 		if($x>0 && $x<32 && $z>0 && $z<32)

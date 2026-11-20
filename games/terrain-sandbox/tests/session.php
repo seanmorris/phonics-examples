@@ -454,6 +454,8 @@ expect($flight->mode === 'jet' && !$flight->paused && $spawn['y'] >= 95 && $spaw
 	'Boarding from low over water starts airborne facing the current heading');
 $flight->step(1/60);
 expect($flight->jet->state()['z'] < $spawn['z'], 'The jet cruises forward without a held key');
+expect(Jet::thrustPercent(0) === 30 && Jet::thrustPercent(Jet::CRUISE_POWER) === 75
+	&& Jet::thrustPercent(1) === 140, 'ENG reads 30% at idle, 75% at cruise and 140% at full throttle');
 expect($flight->jet->state()['power'] === Jet::CRUISE_POWER, 'The engine starts at cruise power');
 input($flight, ['keys'=>['KeyW'=>true]]);
 $flight->step(1/60);
@@ -1099,6 +1101,28 @@ expect(abs($far - ($before[2] - $roam->camera->position[2])) < 1e-9 && $far > 1.
 	'Stick values beyond full travel count as full travel');
 $roam->close();
 
+// The two Dreamcast handling layouts share the aircraft and expose different throttle controls.
+$bindings = pilot('expert');
+$triggerTurn = hold($bindings, pad(rt:.5), 60, $jet);
+$halfTurn = end($triggerTurn);
+expect($halfTurn['yaw'] < -.10 && $halfTurn['yaw'] > -.20 && $halfTurn['power'] === Jet::CRUISE_POWER,
+	'Expert right trigger applies proportional right rudder at cruise power');
+$full = hold($bindings, pad(buttons:Session::PAD_Y), 90, $jet);
+$slow = hold($bindings, pad(buttons:Session::PAD_B), 100, $jet);
+expect(end($full)['power'] > .98 && end($slow)['power'] < .01, 'Expert Y and B spool the engine up and down');
+input($bindings, ['actions'=>['pad-down']]);
+expect($bindings->jetWideMap && $bindings->mode === 'jet', 'D-pad down opens the wide chart in flight');
+input($bindings, ['actions'=>['pad-down','jet-map']]);
+expect(!$bindings->jetMap && !$bindings->jetWideMap, 'Stick click can hide the local chart after closing the wide chart');
+$bindings->balloons->place(10,-2000,200,$bindings->landscape,0);
+$bindings->balloons->place(10,-1800,200,$bindings->landscape,0);
+$bindings->balloons->cycle();
+$selected = $bindings->balloons->status()['selected'];
+input($bindings, ['actions'=>['pad-up']]);
+expect($selected !== $bindings->balloons->status()['selected'] && $bindings->mode === 'jet',
+	'D-pad up cycles a placed balloon while flying');
+$bindings->close();
+
 // Novice: AirForce Delta's default handling. A full stick or trigger flies exactly as the key it stands for.
 $keys = pilot(); $stick = pilot();
 $keyed = hold($keys, pad(), 200, $jet, ['KeyW'=>true,'KeyD'=>true,'KeyE'=>true]);
@@ -1179,8 +1203,8 @@ hold($ace, pad(), 30, $jet, ['KeyX'=>true]);
 $s = $ace->jet->state();
 expect($s['yaw'] < $level['yaw'] - .1 && abs($s['roll'] - $level['roll']) < .02 && $s['rudder'] < 0,
 	'X yaws the nose right on the rudder');
-hold($ace, pad(buttons: Session::PAD_LB), 60, $jet);
-expect($ace->jet->state()['yaw'] > $s['yaw'] + .2, 'LB yaws the nose left');
+hold($ace, pad(lookX: -1), 60, $jet);
+expect($ace->jet->state()['yaw'] > $s['yaw'] + .2, 'The right stick yaws the nose left');
 hold($ace, pad(x: 1), (int)round(M_PI / 4 / Jet::ROLL_RATE * 60), $jet);
 hold($ace, pad(), 30, $jet);
 $banked = $ace->jet->state();
