@@ -1,111 +1,5 @@
-/** Heading-up relief chart made from the terrain meshes that have already reached the scene. */
-const cells = 32, pixels = 48, stride = cells+1;
-const headings = ['N','NE','E','SE','S','SW','W','NW'];
-
-const clamp = n => Math.max(0, Math.min(1, n));
-
-const ramp = (low, high, n) => clamp((n-low)/(high-low));
-
-const lerp = (a, b, t) => a+(b-a)*t;
-
-function palette(settings)
-{
-	const colors = {};
-
-	for(const [key, value] of Object.entries(settings))
-	{
-		if(!key.endsWith('Color')) continue;
-
-		const rgb = parseInt(value.slice(1), 16);
-		colors[key] = [rgb>>16, (rgb>>8)&255, rgb&255];
-	}
-
-	return {...settings, ...colors};
-}
-
-function bytes(encoded)
-{
-	if(Uint8Array.fromBase64) return Uint8Array.fromBase64(encoded);
-
-	return Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
-}
-
-/** Sample the grid at pixel centres. Neighbouring corners supply both height and the hillshade gradient. */
-function relief(tile, p)
-{
-	const texture = document.createElement('canvas');
-	texture.width = texture.height = pixels;
-	const ctx = texture.getContext('2d');
-	const image = ctx.createImageData(pixels, pixels);
-	const heights = tile.heights, step = tile.size/cells;
-	const canyon = p.preset.startsWith('canyon'), mountain = p.preset === 'mountain';
-	const painted = [null, p.rockColor, p.grassColor, p.sandColor, p.snowColor, p.roadColor];
-
-	for(let row = 0; row<pixels; row++)
-	for(let col = 0; col<pixels; col++)
-	{
-		const u = (col+.5)*cells/pixels, v = (row+.5)*cells/pixels;
-		const i = Math.floor(v)*stride+Math.floor(u), x = u%1, z = v%1;
-		const a = heights[i], b = heights[i+1], c = heights[i+stride], d = heights[i+stride+1];
-		const h = lerp(lerp(a, b, x), lerp(c, d, x), z);
-		const dx = lerp(b-a, d-c, z)/step, dz = lerp(c-a, d-b, x)/step;
-		const normalY = 1/Math.sqrt(1+dx*dx+dz*dz), slope = 1-normalY;
-
-		const offset = (row*pixels+col)*4;
-
-		if(h < p.waterLevel)
-		{
-			const depth = ramp(0, 70, p.waterLevel-h);
-
-			for(let k = 0; k<3; k++)
-				image.data[offset+k] = p.waterColor[k]*(1.12-.38*depth)+9*(1-depth);
-		}
-		else
-		{
-			let cover = p.grassColor, rock = p.rockColor;
-			let bare = ramp(p.rockSlopeStart, p.rockSlopeEnd, slope);
-
-			if(canyon)
-			{
-				cover = p.preset === 'canyon-v1' ? p.soilColor : p.canyonSandstoneColor;
-				rock = p.preset === 'canyon-v1' ? p.rockBandColor : p.canyonRustColor;
-			}
-			else if(mountain)
-			{
-				const above = h-p.snowline;
-
-				cover = above < p.treeline ? p.forestColor : above < p.tundraStart ? p.meadowColor : p.tundraColor;
-				rock = p.graniteColor;
-				bare = Math.max(bare, ramp(p.alpineStart, p.alpineEnd, above));
-			}
-
-			const beach = (1-ramp(p.beachHeight, p.beachHeight+p.beachWidth, h-p.waterLevel))*normalY;
-			const snow = canyon
-				? 0
-				: ramp(p.snowline, p.snowline+p.snowTransition, h)
-				*(1-ramp(p.snowSlopeStart, p.snowSlopeEnd, slope));
-
-			const ink = painted[tile.paint[i+(x>=.5 ? 1 : 0)+(z>=.5 ? stride : 0)]];
-			// Fixed north-west light keeps relief legible when flying at night.
-			const shade = Math.max(.58, Math.min(1.45, 1.09+.52*(dx+dz)*normalY))
-				*(.94+.14*ramp(-200, 500, h-p.waterLevel));
-
-			for(let k = 0; k<3; k++)
-			{
-				let value = lerp(cover[k], rock[k], bare);
-				value = lerp(lerp(value, p.sandColor[k], beach), p.snowColor[k], snow);
-				image.data[offset+k] = (ink ? ink[k] : value)*shade;
-			}
-		}
-
-		image.data[offset+3] = 255;
-	}
-
-	ctx.putImageData(image, 0, 0);
-
-	return texture;
-}
-
+/** Transparent navigation symbols over the GPU-rendered terrain chart. */
+const headings=['N','NE','E','SE','S','SW','W','NW'];
 export function activate({module, canvas})
 {
 	const map = document.createElement('canvas');
@@ -116,8 +10,7 @@ export function activate({module, canvas})
 
 	canvas.parentElement.append(map);
 	const frame = map.closest('.terrain-sandbox'), ctx = map.getContext('2d');
-	const tiles = new Map();
-	let ordered = [], style, span, wide;
+	let span, wide;
 
 	function hide()
 	{
@@ -125,8 +18,6 @@ export function activate({module, canvas})
 
 		map.hidden = true;
 		frame.classList.remove('has-flight-map');
-		tiles.clear();
-		ordered = [];
 	}
 
 	module.drawTerrainFlightMap = (data, bearing) => {
@@ -139,32 +30,7 @@ export function activate({module, canvas})
 			return;
 		}
 
-		if(delta.reset)
-		{
-			tiles.clear();
-			ordered = [];
-		}
-
-		if(delta.span)
-		{
-			span = delta.span;
-			wide = delta.wide;
-		}
-
-		if(delta.style)
-		{
-			style = palette(delta.style);
-
-			for(const tile of tiles.values()) tile.image = null;
-		}
-
-		for(const key of delta.drop ?? []) tiles.delete(key);
-
-		for(const [key,x,z,size,elevations,materials] of delta.tiles ?? [])
-			tiles.set(key, {x,z,size, heights: new Float32Array(bytes(elevations).buffer), paint: bytes(materials)});
-
-		if(delta.tiles || delta.drop) ordered = [...tiles.values()].sort((a, b) => b.size-a.size);
-
+		span=delta.span; wide=delta.wide;
 		const size = Math.round(Math.min(184, data.width*.235, data.height*.245));
 
 		if(map.hidden || map.width !== size)
@@ -189,24 +55,7 @@ export function activate({module, canvas})
 			return [c*dx+s*dz, -s*dx+c*dz];
 		}
 
-		ctx.fillStyle = '#132328';
-		ctx.fillRect(0, 0, size, size);
-		ctx.save();
-		ctx.transform(c, -s, s, c, mid, mid);
-		const reach = mid*diagonal;
-
-		for(const tile of ordered)
-		{
-			const x = (tile.x-centerX)*scale, y = (tile.z-centerZ)*scale, side = tile.size*scale;
-
-			if(x >= reach || y >= reach || x+side <= -reach || y+side <= -reach) continue;
-
-			tile.image ??= relief(tile, style);
-			// Cover the antialiased joint between rotated tile edges.
-			ctx.drawImage(tile.image, x-.25, y-.25, side+.5, side+.5);
-		}
-
-		ctx.restore();
+		ctx.clearRect(0,0,size,size);
 		ctx.lineWidth = 1;
 		ctx.strokeStyle = '#bad5b5';
 		ctx.strokeRect(.5, .5, size-1, size-1);

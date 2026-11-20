@@ -126,13 +126,14 @@ final class Camera
 		$x = $node['x'] - $eye[0];
 		$z = $node['z'] - $eye[2];
 		$size = $node['size'];
+		$depth = $node['depth'] ?? $size;
 		// GPU clip coordinates are rounded before adding/subtracting w at each plane.
 		$roundoff = 1e-5 * (1 + abs($x) + abs($z) + 2*$size + max(abs($low-$eye[1]), abs($high-$eye[1])));
 		foreach($planes as [$a,$b,$c,$d])
 		{
 			$px = $a*($x + ($a>0 ? $size : 0));
 			$py = $b*(($b>0 ? $high : $low)-$eye[1]);
-			$pz = $c*($z + ($c>0 ? $size : 0));
+			$pz = $c*($z + ($c>0 ? $depth : 0));
 			if($px+$py+$pz+$d < -$roundoff - 1e-5*(abs($px)+abs($py)+abs($pz)+abs($d))) return false;
 		}
 		return true;
@@ -164,6 +165,7 @@ final class Camera
 		$x = $node['x'] - $eye[0];
 		$z = $node['z'] - $eye[2];
 		$size = $node['size'];
+		$depth = $node['depth'] ?? $size;
 		$low -= $eye[1];
 		$high -= $eye[1];
 		// Magnitudes are taken with comparisons: abs() and max() are function calls, and this runs for every
@@ -171,13 +173,13 @@ final class Camera
 		$reach = ($low < 0 ? -$low : $low);
 		if(($high < 0 ? -$high : $high) > $reach) $reach = $high < 0 ? -$high : $high;
 		// GPU clip coordinates are rounded before adding/subtracting w at each plane.
-		$roundoff = 1e-5 * (1 + ($x < 0 ? -$x : $x) + ($z < 0 ? -$z : $z) + 2*$size + $reach);
+		$roundoff = 1e-5 * (1 + ($x < 0 ? -$x : $x) + ($z < 0 ? -$z : $z) + $size + $depth + $reach);
 		if($first >= 0)
 		{
 			[$a,$b,$c,$d] = $planes[$first];
 			$px = $a*($x + ($a>0 ? $size : 0));
 			$py = $b*($b>0 ? $high : $low);
-			$pz = $c*($z + ($c>0 ? $size : 0));
+			$pz = $c*($z + ($c>0 ? $depth : 0));
 			$slack = 1e-5*(($px < 0 ? -$px : $px)+($py < 0 ? -$py : $py)+($pz < 0 ? -$pz : $pz)+($d < 0 ? -$d : $d));
 
 			if($px+$py+$pz+$d < -$roundoff - $slack) return $first;
@@ -186,7 +188,7 @@ final class Camera
 		{
 			$px = $a*($x + ($a>0 ? $size : 0));
 			$py = $b*($b>0 ? $high : $low);
-			$pz = $c*($z + ($c>0 ? $size : 0));
+			$pz = $c*($z + ($c>0 ? $depth : 0));
 			$slack = 1e-5*(($px < 0 ? -$px : $px)+($py < 0 ? -$py : $py)+($pz < 0 ? -$pz : $pz)+($d < 0 ? -$d : $d));
 
 			if($px+$py+$pz+$d < -$roundoff - $slack) return $i;

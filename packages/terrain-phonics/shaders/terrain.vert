@@ -16,14 +16,25 @@ void main()
 {
 	vec3 p = aPosition;
 	vec3 normal = aNormal;
+	float material=aMaterial;
 	if(uCraft < 0.5)
 	{
+		#ifdef CLIPMAP
+		ivec2 cell=clipStitchedCell(clipCell());
+		float morph=clipMorph(cell);
+		vec2 xz=vec2(cell)*uGridStep;
+		vWorld=vec3(xz.x,clipHeight(cell,morph),xz.y);
+		vRelative=vWorld-uEye;
+		normal=clipNormal(cell);
+		material=texelFetch(uInk,texelAt(cell),0).r*255.-1.;
+#else
 		ivec2 cell = patchCell();
 		vec2 xz = patchWorld(cell);
 		float morph = patchMorph(cell);
 		vWorld = vec3(xz.x, mix(p.y,aParent,morph), xz.y);
 		vRelative = vWorld - uEye;
 		normal = mix(normal, aParentNormal, morph);
+#endif
 	}
 	else
 	{
@@ -37,9 +48,9 @@ void main()
 		vWorld = vRelative + uEye;
 	}
 	vNormal = normal;
-	vPaint0 = vec3(abs(aMaterial) < 0.1 ? 1.0 : 0.0,
-		abs(aMaterial - 1.0) < 0.1 ? 1.0 : 0.0, abs(aMaterial - 2.0) < 0.1 ? 1.0 : 0.0);
-	vPaint1 = vec3(abs(aMaterial - 3.0) < 0.1 ? 1.0 : 0.0,
-		abs(aMaterial - 4.0) < 0.1 ? 1.0 : 0.0, abs(aMaterial - 5.0) < 0.1 ? 1.0 : 0.0);
+	vPaint0 = vec3(abs(material) < 0.1 ? 1.0 : 0.0,
+		abs(material - 1.0) < 0.1 ? 1.0 : 0.0, abs(material - 2.0) < 0.1 ? 1.0 : 0.0);
+	vPaint1 = vec3(abs(material - 3.0) < 0.1 ? 1.0 : 0.0,
+		abs(material - 4.0) < 0.1 ? 1.0 : 0.0, abs(material - 5.0) < 0.1 ? 1.0 : 0.0);
 	gl_Position = uViewProjection * vec4(vRelative, 1.0);
 }

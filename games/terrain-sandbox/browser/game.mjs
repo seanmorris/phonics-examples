@@ -179,8 +179,41 @@ export function activate({module, canvas, session, services})
 		surfaceStyle = '';
 	});
 
+	const layerBox=frame.querySelector('[data-layer-fields]');
+	let lastLayers='';
+	function layerRow(row,i) {
+		const labels={low:'Minimum elevation',high:'Maximum elevation',fade:'Elevation fade',slopeLow:'Minimum slope',
+			slopeHigh:'Maximum slope',slopeFade:'Slope fade',noise:'Edge noise · m',scale:'Noise scale · m',
+			parent:'Parent index (−1 for none)',period:'Repeat interval · m'};
+		const fields=Object.entries(labels).map(([key,label])=>`<label class="terrain-field">${label}
+			<input data-layer-key="${key}" type="number" step="any" value="${Number(row[key])}"></label>`).join('');
+		return `<details data-layer><summary>Layer ${i} · ${row.color}</summary><label class="terrain-field">Colour
+			<input type="color" data-layer-key="color" value="${row.color}"></label>${fields}
+			<label class="terrain-field">Heights relative to<select data-layer-key="datum">
+			${['absolute','water','beds'].map(k=>`<option ${k===row.datum?'selected':''}>${k}</option>`).join('')}
+			</select></label></details>`;
+	}
+	function formLayers() {
+		return [...layerBox.querySelectorAll('[data-layer]')].map(row=>Object.fromEntries(
+			[...row.querySelectorAll('[data-layer-key]')].map(f=>[f.dataset.layerKey,f.type==='number'?Number(f.value):f.value])));
+	}
+	frame.querySelector('[data-layer-add]').onclick=()=>{
+		const rows=formLayers();
+		if(rows.length<12) layerBox.insertAdjacentHTML('beforeend',layerRow({...rows.at(-1),parent:-1},rows.length));
+	};
+	frame.querySelector('[data-layer-remove]').onclick=()=>{
+		if(layerBox.children.length>1) layerBox.lastElementChild.remove();
+	};
+	frame.querySelector('[data-layer-apply]').onclick=()=>push({type:'surface-layers',layers:formLayers()});
+	frame.querySelector('[data-layer-reset]').onclick=()=>{ lastLayers=''; push({type:'surface-layers'}); };
+
 	const showSurface = state => {
 		if(!surface || !state.surfaceStyle) return;
+		const layerKey=JSON.stringify(state.surfaceLayers);
+		if(layerKey && layerKey!==lastLayers) {
+			layerBox.innerHTML=state.surfaceLayers.map(layerRow).join('');
+			lastLayers=layerKey;
+		}
 
 		if(state.surfaceStyle !== surfaceStyle)
 		{
@@ -236,12 +269,10 @@ export function activate({module, canvas, session, services})
 	}
 
 	frame.querySelector('[name="preset"]').addEventListener('change', event => {
-		frame.querySelector(
-			'[name="heightScale"]'
-		).value = {coast: 420, mountain: 1400, canyon: 650}[event.target.value];
-
-		frame.querySelector('[name="terraceSpacing"]').value = event.target.value === 'canyon' ? 80 : 0;
-		frame.querySelector('[name="waterLevel"]').value = event.target.value === 'canyon' ? -450 : 0;
+		for(const [key,value] of Object.entries(surface.presets[event.target.value])) {
+			const field=frame.querySelector(`[name="${key}"]`);
+			if(field) field.value=value;
+		}
 	}, {signal});
 
 	frame.querySelector('[data-file]').addEventListener('change', async event => {
@@ -607,15 +638,8 @@ export function activate({module, canvas, session, services})
 				frame.querySelector('[name="preset"]').value = state.recipe.preset;
 				frame.querySelector('[name="seed"]').value = state.recipe.seed;
 
-				for(const key of ['heightScale'
-					, 'detailAmplitude'
-					, 'slopeScale'
-					, 'damping'
-					, 'waterLevel'
-					, 'warpAmplitude'
-					, 'terraceSpacing'
-				])
-			frame.querySelector(`[name="${key}"]`).value = state.recipe[key];
+				for(const key of Object.keys(surface.presets[state.recipe.preset]))
+				frame.querySelector(`[name="${key}"]`).value = state.recipe[key];
 
 				for(const [name, value] of Object.entries(state.settings))
 				{
@@ -882,15 +906,8 @@ function generationValues(frame)
 		, seed: frame.querySelector('[name="seed"]').value
 	};
 
-	for(const key of ['heightScale'
-		, 'detailAmplitude'
-		, 'slopeScale'
-		, 'damping'
-		, 'waterLevel'
-		, 'warpAmplitude'
-		, 'terraceSpacing'
-	])
-	result[key] = Number(frame.querySelector(`[name="${key}"]`).value);
+	for(const field of frame.querySelectorAll('[data-landform] [name]'))
+		result[field.name]=field.tagName==='SELECT'?field.value:Number(field.value);
 
 	return result;
 }
@@ -1105,7 +1122,7 @@ function markup()
 	<section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
 	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option></select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
-	<details><summary>Landform parameters</summary>
+	<details data-landform><summary>Landform parameters</summary>
 	<label class="terrain-field">Height scale · m<input name="heightScale" type="number" min="0" max="10000" value="420"></label>
 	<label class="terrain-field">Fine detail · m<input name="detailAmplitude" type="number" min="0" max="1000" value="28"></label>
 	<label class="terrain-field">Slope scale<input name="slopeScale" type="number" min="0.001" max="100" step="0.001" value="0.45"></label>
@@ -1113,6 +1130,24 @@ function markup()
 	<label class="terrain-field">Starting water level · m<input name="waterLevel" type="number" min="-10000" max="10000" value="0"></label>
 	<label class="terrain-field">Domain warp · m<input name="warpAmplitude" type="number" min="0" max="5000" value="200"></label>
 	<label class="terrain-field">Terrace spacing · m<input name="terraceSpacing" type="number" min="0" max="1000" value="0"></label>
+	<label class="terrain-field">Base frequency<input name="baseFrequency" type="number" step="any"></label>
+	<label class="terrain-field">Base bias<input name="baseBias" type="number" step="any"></label>
+	<label class="terrain-field">Rolling<input name="rolling" type="number" step="any"></label>
+	<label class="terrain-field">Directional rise<input name="directionalRise" type="number" step="any"></label>
+	<label class="terrain-field">Ridge height<input name="ridgeHeight" type="number" step="any"></label>
+	<label class="terrain-field">Ridge roundness<input name="ridgeRoundness" type="number" step="any"></label>
+	<label class="terrain-field">Wall height<input name="wallHeight" type="number" step="any"></label>
+	<label class="terrain-field">Floor width<input name="floorWidth" type="number" step="any"></label>
+	<label class="terrain-field">Wall width<input name="wallWidth" type="number" step="any"></label>
+	<label class="terrain-field">Secondary<input name="secondary" type="number" step="any"></label>
+	<label class="terrain-field">Bedding<input name="bedding" type="number" step="any"></label>
+	<label class="terrain-field">Terrace strength<input name="terraceStrength" type="number" step="any"></label>
+	<label class="terrain-field">Warp frequency<input name="warpFrequency" type="number" step="any"></label>
+	<label class="terrain-field">Detail octaves<input name="detailOctaves" type="number" step="any"></label>
+	<label class="terrain-field">Lacunarity<input name="lacunarity" type="number" step="any"></label>
+	<label class="terrain-field">Persistence<input name="persistence" type="number" step="any"></label>
+	<label class="terrain-field">Transition width<input name="transitionWidth" type="number" step="any"></label>
+	<label class="terrain-field">Surround<select name="surround"><option value="sea">Open sea</option><option value="plateau">Desert plateau</option><option value="mountains">Continuing terrain</option><option value="none">None</option></select></label>
 	<p class="terrain-note">Domain warp bends the landforms. Terrace spacing creates smooth ledges; zero turns terraces off.</p>
 	<p class="terrain-note">Higher damping smooths steep faces by reducing fine-noise amplitude. These values apply when you generate.</p></details>
 	<div class="terrain-row"><button data-action="generate">Generate</button><button data-action="reset-camera">Home view</button></div>
@@ -1164,6 +1199,9 @@ function markup()
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note>Colours, banding and blending of the generated ground. The landscape file saves them.</p>
+	<details><summary>Colour layers</summary><div data-layer-fields></div>
+	<div class="terrain-row"><button data-layer-add>Add layer</button><button data-layer-remove>Remove last</button></div>
+	<div class="terrain-row"><button data-layer-apply>Apply layers</button><button data-layer-reset>Use preset colours</button></div></details>
 	<div data-surface></div>
 	<div class="terrain-row"><button data-surface-reset="all">Reset the whole surface</button></div>
 	</section>

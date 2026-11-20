@@ -380,8 +380,11 @@ void mountainMaterial(float footprint, vec3 weights, float slope, float macro, f
 	normal = normalize(normal - tangential * relief / (1.0 + length(tangential)));
 }
 
+// LAYERS
+uniform float uPlayHalf;
 void main()
 {
+	if(uPlayHalf>0. && max(abs(vWorld.x),abs(vWorld.z))>uPlayHalf) discard;
 	vec3 n = normalize(vNormal);
 	vec3 weights = pow(abs(n), vec3(4.0)); weights /= dot(weights, vec3(1.0));
 	float detail = dot(weights, vec3(grain(vWorld.yz * 0.3), grain(vWorld.xz * 0.3), grain(vWorld.xy * 0.3)));
@@ -389,6 +392,10 @@ void main()
 	float macro = landVariation(vWorld.xz, footprint) * uMacroVariation;
 	float slope = 1.0 - max(0.0, n.y);
 	vec3 grass = uGrassColor * (0.85 + 0.15 * macro);
+#ifdef SURFACE_LAYERS
+	vec3 rock=uRockColor, sand=uSandColor, snow=uSnowColor, lightingNormal=n;
+	vec3 albedo=layerSurface(vWorld,n,footprint,uWaterLevel)*(1.+.07*macro);
+#else
 	vec3 rock, cover, lightingNormal = n;
 	float bare = smoothstep(uSlopeBlend.x,uSlopeBlend.y,slope);
 	float snowline = uSnowline.x + 25.0 * macro;
@@ -418,6 +425,7 @@ void main()
 	if(uTerrainStyle < 1.5)
 		albedo = mix(albedo, snow, smoothstep(snowline,snowline + uSnowline.y,vWorld.y)
 			* (1.0 - smoothstep(uSlopeBlend.z,uSlopeBlend.w,slope)));
+#endif
 	// Blend material weights, never categorical identifiers: a rock/road boundary must not become snow.
 	float painted = clamp(dot(vPaint0 + vPaint1, vec3(1.0)), 0.0, 1.0);
 	vec3 craft = mix(vec3(0.06,0.12,0.17), vec3(0.95,0.28,0.03), step(0.15,vWorld.y - uWaterLevel));

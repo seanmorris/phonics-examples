@@ -71,6 +71,20 @@ final class Landscape implements TerrainSurface
 	 */
 	public function recipe(): array { return $this->parameters; }
 
+	/** Index only committed operations. Every rectangle includes the cubic reconstruction halo. */
+	public function editIndex(): EditIndex
+	{
+		$extent=$this->parameters['worldSize'];
+		$half=$extent/2;
+		$pad=2*$this->parameters['spacing'];
+		$boxes=[];
+		foreach($this->operations as $operation) {
+			[$x,$z,$r,$b]=Edits::bounds($operation);
+			$boxes[]=[max(-$half,$x-$pad),max(-$half,$z-$pad),min($half,$r+$pad),min($half,$b+$pad)];
+		}
+		return new EditIndex($extent,$boxes);
+	}
+
 	/**
 	 * Return the monotonically increasing committed revision.
 	 * @return int Monotonically increasing committed surface revision.
@@ -1130,33 +1144,6 @@ final class Landscape implements TerrainSurface
 			 */
 			fn(float $px, float $pz): float => $this->edited($px, $pz, $count - 1)
 		);
-	}
-
-	/**
-	 * Determine whether the base recipe reproduces every vertex and normal-halo sample.
-	 * @param float $x Minimum patch X in metres.
-	 * @param float $z Minimum patch Z in metres.
-	 * @param float $size Width of the square patch in metres.
-	 * @return bool True for aligned samples untouched by committed terrain edits.
-	 */
-	public function proceduralMeshPatch(float $x, float $z, float $size): bool
-	{
-		$step = $size / Lod::CELLS;
-		$spacing = $this->parameters['spacing'];
-		foreach([$x, $z, $step, $this->parameters['worldSize'] / 2] as $value)
-		if(fmod($value, $spacing) !== 0.0) return false;
-		// Only mesh vertices and their one-node normal halo sample the landscape.
-		// A small brush between distant coarse samples can leave the whole mesh procedural.
-		foreach($this->operations as $op)
-		{
-			[$left,$front,$right,$back] = Edits::bounds($op);
-			$firstX = max(-1, ceil(($left - $x) / $step));
-			$lastX = min(Lod::CELLS + 1, floor(($right - $x) / $step));
-			$firstZ = max(-1, ceil(($front - $z) / $step));
-			$lastZ = min(Lod::CELLS + 1, floor(($back - $z) / $step));
-			if($firstX <= $lastX && $firstZ <= $lastZ) return false;
-		}
-		return true;
 	}
 
 	/**

@@ -77,36 +77,25 @@ cannot describe caves or overhangs.
 
 ## Draw and simulate
 
-`Camera` supplies flight motion, a perspective matrix, and picking rays. `Scene` owns GPU meshes and shaders;
-call `update()` with a bounded generation budget, then `render()` when the camera, simulation, or preparation
-changes. The caller owns the graphics device and frame presentation. Call `restore()` after context loss and
-`close()` on unloading. `stats()` exposes residency, pending work, mesh bytes, generation time, and frame count.
-Patch selection combines distance with sampled projected error; it is not a certified error bound for every
-unsampled feature. Nearby patches in a padded camera frustum refine first. Ground outside it keeps coarse
-coverage, and a bounded motion lookahead prepares likely future coverage. While the camera moves, patch
-selections run at least `Scene::$selectionInterval` seconds apart, 0.1 by default. Zero selects on every
-change of view. A camera at rest, a relocated camera, and a changed detail, viewport or water setting
-select at once.
+`Camera` supplies flight motion, a perspective matrix, and picking rays. `Scene` draws the ground and water
+using nested grids. Each grid has an elevation texture that the GPU fills from the seed and recipe. As the
+camera travels, only the newly exposed strips need to be evaluated. The grid edges share vertices across
+levels. Coarse levels draw first after a jump or context restore, and finer levels follow.
 
-One update does about `Scene::$selectionSliceMs` milliseconds of selection work, 3 by default, and at most
-one step that cannot pause besides, such as the one that changes the drawn cover. A selection that needs more
-continues over the following updates and changes the drawn cover in one of them; until then the previous cover
-stays drawn, complete and resident. A relocation or a changed setting drops a selection under way and starts its
-replacement at once. With nothing drawn, and while the slice is zero, every selection runs whole in the update
-that starts it. So does the next selection after two were dropped in a row for a relocation or a changed
-setting, so that a setting that changes on every update, such as a dragged slider, still moves the cover every
-third update. `stats()` reports `selectionInFlight`, `selectionWorkMs` for the last update and
-`selectionUpdates` for the updates the last selection took.
+Call `update()` before `render()`. The caller owns frame presentation. Call `restore()` after context loss and
+`close()` when unloading. `stats()` reports resident levels, pending work, texture bytes, and edit uploads.
+Pass `useClipmap: false` to `Scene` for the PHP patch renderer, which uses the selection interval and work
+budget settings. Its GPU resources and update path are independent of the clipmap.
 
-The default suits PHP compiled to WebAssembly in a browser. There a whole selection takes 10 to 14 ms, and 3 ms
-spreads it over about eight frames, about 130 ms at 60 frames a second. Native PHP does the same work about six
-times faster, so a native caller wants about 0.5 ms for the same spread.
+Collision and picking use `Landscape::height()` and its related samplers. The clipmap's edit index finds
+committed edits that intersect each refreshed strip and uploads edited samples. `Scene::drawChart()` draws
+a heading-up local map or a whole-world chart from the same elevation and surface layers.
 
-The sandbox activates `browser/PatchMesher.mjs` and passes a `BrowserPatchBuilder` to `Scene`. A dedicated
-worker samples the seeded recipe in sibling groups and sends packed vertices, normals, and error bounds
-through one reusable in-memory file. Patches with edited samples or off-lattice coordinates use the PHP
-sampler. PHP also handles collision and authoring queries in both cases. The renderer starts drawing as soon
-as the root mesh is ready and refines the view while the player moves.
+Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
+rise, rounded ridges, canyon walls, rolling relief and terracing. Existing recipes expand to the values of
+their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
+changing the landscape's playable extent. `SurfaceLayers` accepts an ordered list of up to twelve colour
+layers with height and slope fades, spatial noise, and an optional earlier layer as a parent.
 
 `Water` evaluates analytic directional waves and bounded wake packets. Its shader include uses the same
 parameters and derivatives as PHP. `Watercraft` samples several buoyancy points and adds damping, drag,

@@ -1,7 +1,14 @@
 #version 300 es
 precision highp float;
 precision highp int;
-uniform sampler2D uTerrainHeights;
+uniform highp sampler2D uTerrainHeights;
+uniform bool uPacked;
+float sampleHeight(ivec2 c) {
+	vec4 t=texelFetch(uTerrainHeights,c,0);
+	if(!uPacked) return t.r;
+	uvec4 b=uvec4(t*255.+.5);
+	return uintBitsToFloat(b.x|(b.y<<8)|(b.z<<16)|(b.w<<24));
+}
 uniform float uTerrainShadowExtent;
 uniform float uTerrainShadowSize;
 uniform vec3 uShadowSunDirection;
@@ -9,14 +16,15 @@ out vec4 color;
 
 float coarseHeight(vec2 position)
 {
-	vec2 pixel = clamp(position / uTerrainShadowExtent + 0.5, 0.0, 1.0) * 32.0;
+	int side=textureSize(uTerrainHeights,0).x-1;
+	vec2 pixel = clamp(position / uTerrainShadowExtent + 0.5, 0.0, 1.0) * float(side);
 	ivec2 low = ivec2(floor(pixel));
-	ivec2 high = min(low + ivec2(1), ivec2(32));
+	ivec2 high = min(low + ivec2(1), ivec2(side));
 	vec2 weight = fract(pixel);
-	float a = mix(texelFetch(uTerrainHeights, low, 0).r,
-		texelFetch(uTerrainHeights, ivec2(high.x, low.y), 0).r, weight.x);
-	float b = mix(texelFetch(uTerrainHeights, ivec2(low.x, high.y), 0).r,
-		texelFetch(uTerrainHeights, high, 0).r, weight.x);
+	float a = mix(sampleHeight(low),
+		sampleHeight(ivec2(high.x, low.y)), weight.x);
+	float b = mix(sampleHeight(ivec2(low.x, high.y)),
+		sampleHeight(high), weight.x);
 	return mix(a, b, weight.y);
 }
 

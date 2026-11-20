@@ -32,6 +32,11 @@ final class Scene
 	private AtmosphereRenderer $atmosphereCache;
 	private TerrainShadows $terrainShadows;
 	private Lod $lod;
+	private ?Clipmap $clipmap = null;
+	public ?SurfaceLayers $layers=null;
+	private ?SurfaceLayers $defaultLayers=null;
+	private ?TerrainAppearance $paletteAppearance=null;
+	private array $layerBinding=[];
 	private ?Landscape $preparing = null;
 	private int $preparingRevision = -1, $preparingSourceRevision = -1;
 	private array $replacementJobs = [], $replacements = [];
@@ -155,16 +160,17 @@ final class Scene
 	 * @param Landscape $landscape Authoritative committed terrain surface.
 	 * @param Water $water Shared analytic water model.
 	 * @param Atmosphere $atmosphere Shared atmosphere parameters and numerical lookup data.
-	 * @param BrowserPatchBuilder|null $builder Optional background render mesh generator.
+	 * @param bool $useClipmap Use GPU elevation textures. Pass false for the PHP patch renderer.
 	 * @return void Initializes bounded preparation and graphics resources.
 	 */
 	public function __construct(
 		private Landscape $landscape,
 		private Water $water,
 		private Atmosphere $atmosphere,
-		private ?BrowserPatchBuilder $builder = null
+		private bool $useClipmap = true
 	){
-		$this->indices = GpuPatch::indices(Lod::CELLS);
+		if($useClipmap) $this->clipmap = new Clipmap;
+		$this->indices = $useClipmap ? '' : GpuPatch::indices(Lod::CELLS);
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
 		$this->appearance = new TerrainAppearance;
 
@@ -180,7 +186,7 @@ final class Scene
 		$root = dirname(__DIR__) . '/shaders/';
 		$atmosphere = AtmosphereRenderer::shaderSource();
 		$water = file_get_contents($root . 'water-functions.glsl');
-		$grid = file_get_contents($root . 'patch-grid.glsl');
+		$grid = $this->useClipmap ? "#define CLIPMAP\n".file_get_contents($root.'clip-grid.glsl') : file_get_contents($root.'patch-grid.glsl');
 		$optics = WaterAppearance::shaderSource();
 		$lamps = SpotLights::shaderSource();
 		$dark = SpotLights::shaderSource(false);
@@ -188,6 +194,7 @@ final class Scene
 		$groundVertex = str_replace('// PATCH', $grid, file_get_contents($root . 'terrain.vert'));
 		$ground = str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics]
 			, file_get_contents($root . 'terrain.frag'));
+		if($this->useClipmap) $ground=str_replace('// LAYERS',file_get_contents($root.'surface-layers.glsl'),$ground);
 		$this->groundProgram = new Program($groundVertex, str_replace('// SPOT LIGHTS', $dark, $ground));
 		$this->litGroundProgram = new Program($groundVertex, str_replace('// SPOT LIGHTS', $lamps, $ground));
 
@@ -210,7 +217,7 @@ final class Scene
 		$this->terrainShadows = new TerrainShadows;
 		glGenTextures(1, $this->heightTexture);
 		$this->uploadHeightMap();
-		$this->createGridBuffer();
+		if(!$this->clipmap) $this->createGridBuffer();
 		$this->craftMesh = $this->makeCraft();
 	}
 
@@ -332,6 +339,7 @@ final class Scene
 			$this->patches[$key] = $patch;
 		}
 
+		$this->clipmap?->invalidate($this->replacementRegion);
 		$this->landscape = $this->preparing;
 		$this->preparing = null;
 		$this->replacements = [];
@@ -339,6 +347,7 @@ final class Scene
 		$this->jobs = [];
 		$this->selectionKey = '';
 		$this->changed = true;
+		$this->heightTextureRevision++;
 		$this->uploadHeightMap();
 
 		return $this->landscape;
@@ -383,7 +392,7 @@ final class Scene
 	 */
 	private function uploadHeightMap(): void
 	{
-		if($this->heightTexture === []) return;
+		if($this->useClipmap || $this->heightTexture === []) return;
 
 		// A new recipe can also start at revision zero; every upload invalidates shadows.
 		$this->heightTextureRevision++;
@@ -404,7 +413,9 @@ final class Scene
 	public function setLandscape(Landscape $landscape): void
 	{
 		$this->clearPatches();
+		$this->clipmap?->invalidate();
 		$this->landscape = $landscape;
+		$this->defaultLayers=null; $this->layerBinding=[];
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
 		$this->revision = -1;
 		$this->selectionKey = '';
@@ -443,6 +454,16 @@ final class Scene
 		$this->sliceMs = 0;
 		$this->sliceSteps = 0;
 
+		if($this->clipmap !== null) {
+			$lut=$this->atmosphere->transmittanceLut(64,16,24);
+			$lighting=$lut['generation'] !== $this->textureGeneration;
+			if($lighting) $this->createTextures();
+			$this->changed=$this->clipmap->update($this->landscape,$camera,$this->quality) || $lighting;
+			if($this->revision !== $this->landscape->revision()) $this->heightTextureRevision++;
+			$this->revision=$this->landscape->revision();
+			$this->lastUpdateMs=(microtime(true)-$started)*1000;
+			return $this->changed;
+		}
 		$this->checkPreparation();
 		$this->trackMotion($seconds, $camera);
 		$this->clock += max(0, $seconds);
@@ -541,18 +562,11 @@ final class Scene
 			$this->selectionKey = $key;
 		}
 
-		$uploads = 0;
 		$coverReady = false;
-		// On slow displays, accept one ready sibling group during a fraction of
-		// the frame interval. CPU sampling still obeys the original time slice.
-		$uploadDeadline = $started + min(.032, max(0, $seconds - 1 / 60) * .1);
-		// Let a queued worker result make progress even on a frame spent selecting LOD.
-		$poll = $this->builder !== null;
-		while($this->jobs !== [] && ($poll || microtime(true) < $deadline))
+		while($this->jobs !== [] && microtime(true) < $deadline)
 		{
 			$id = array_key_first($this->jobs);
 			$job = &$this->jobs[$id];
-			$poll = false;
 			if($this->buildVertex($job)) { unset($job); break; }
 
 			if($job['index'] === (Lod::CELLS + 1) ** 2)
@@ -573,10 +587,7 @@ final class Scene
 				unset($this->jobs[$id], $job);
 				$next = reset($this->jobs);
 				if($next === false || $this->parentKey($next) !== $parentKey) $coverReady = true;
-				$uploads++;
-				if($this->builder === null || $uploads === 4) break;
-				$poll = $next && empty($next['incremental']) && microtime(true) < $uploadDeadline;
-				continue;
+				break;
 			}
 
 			unset($job);
@@ -985,9 +996,7 @@ final class Scene
 		unset($this->flight['view']);
 		$this->flight['wanted'] = $result;
 		$this->flight['corridor'] = [];
-		// Twelve missing patches already fill all three worker slots with current-view sibling groups.
-		// Reconsider the flight corridor as soon as a slot can open.
-		$corridor = $this->flight['lookahead'] !== null && ($this->builder === null || count($result) < 12);
+		$corridor = $this->flight['lookahead'] !== null;
 		$this->flight['phase'] = $corridor ? 'midpoint' : 'publish';
 	}
 
@@ -1263,18 +1272,6 @@ final class Scene
 		$this->jobs = $ordered;
 		// The jobs and the reservation they were queued under change together, before the eviction below.
 		if(!$this->flight['whole']) $this->reserved = $this->flight['reservation'];
-		if($this->builder !== null)
-		{
-			$queued = [];
-			foreach($ordered as $key => $node)
-			{
-				$parent = $this->parentKeys[$key] ??= self::parentOf($key);
-				if(isset($queued[$parent])) continue;
-				$this->builder->prime($this->landscape, $node, $this->patches[$parent] ?? null);
-				$queued[$parent] = true;
-				if(count($queued) === 3) break;
-			}
-		}
 
 		$this->evict();
 		$this->selectionUpdates = $this->updates - $this->flight['first'] + 1;
@@ -2118,7 +2115,7 @@ final class Scene
 	 * @param array $job Mutable incremental mesh generation record.
 	 * @param Landscape|null $surface Candidate surface override, or the live landscape.
 	 * @param array|null $parents Available parent patch data, including staged replacements.
-	 * @return bool Whether the caller should yield until the worker responds.
+	 * @return bool Whether to postpone the remaining work.
 	 */
 	private function buildVertex(array &$job, ?Landscape $surface = null, ?array $parents = null): bool
 	{
@@ -2136,11 +2133,6 @@ final class Scene
 			$parentPatch = $parents[$key] ?? $this->patches[$key] ?? null;
 		}
 
-		if($this->builder !== null && empty($job['incremental']))
-		{
-			if($this->builder->advance($source, $job, $parentPatch)) return $job['index'] !== $vertices;
-			$job['incremental'] = true;
-		}
 
 		// Pass one samples only this mesh lattice and a shared one-node normal halo.
 		// A single call performs one height query, never a complete patch allocation.
@@ -2350,10 +2342,10 @@ final class Scene
 
 		$environment = $this->atmosphere->uniforms();
 		$this->terrainShadows->update(
-			isset($this->patches['0:0:0']) ? $this->heightTexture[0] : 0
+			$this->clipmap ? $this->clipmap->overview()[0] : (isset($this->patches['0:0:0']) ? $this->heightTexture[0] : 0)
 			, $this->lod->extent
 			, $environment['sunDirection']
-			, $this->heightTextureRevision
+			, $this->heightTextureRevision, $this->clipmap?->packed() ?? false
 		);
 
 		glViewport(0, 0, $width, $height);
@@ -2367,7 +2359,7 @@ final class Scene
 		// Both pairs of programs are linked up front, and each lit program draws once in the first frame with patches
 		// (litDrawn), so changing pair later costs no more than drawing with the same one.
 		$lit = ($this->spotLights?->count() ?? 0) > 0;
-		$warm = $this->draw !== [];
+		$warm = $this->clipmap !== null || $this->draw !== [];
 		$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
 		$waterProgram = $lit || $warm && !$this->litDrawn['water'] ? $this->litWaterProgram : $this->waterProgram;
 		$groundProgram->use();
@@ -2381,6 +2373,15 @@ final class Scene
 			$this->boundAppearance[spl_object_id($groundProgram)] = $this->appearance;
 		}
 
+		if($this->clipmap) {
+			$palette=$this->palette();
+			$id=spl_object_id($groundProgram);
+			if(($this->layerBinding[$id] ?? null)!==$palette) {
+				$palette->bind($groundProgram);
+				$this->clipmap->paletteOrigin($groundProgram);
+				$this->layerBinding[$id]=$palette;
+			}
+		}
 		$this->vector($groundProgram, 'uCraftRotation', [0,0,0]);
 		$this->scalar($groundProgram, 'uCraft', 0);
 
@@ -2391,6 +2392,20 @@ final class Scene
 		$uPatch = $groundProgram->location('uPatch');
 		$uEdges = $groundProgram->location('uEdges');
 		$uCorners = $groundProgram->location('uCorners');
+		if($this->clipmap) {
+			$bounds = $this->landscape->bounds();
+			$recipe = $this->landscape->recipe();
+			$floor = $bounds['minY'];
+			$ceiling = $bounds['maxY'];
+			if($recipe['surround'] === 'sea') $floor = min($floor, $recipe['waterLevel'] - 200);
+			if($recipe['surround'] === 'mountains') {
+				$floor = min($floor, -3 * $recipe['heightScale']);
+				$ceiling = max($ceiling, $recipe['heightScale']);
+			}
+			$this->groundDraws = $this->clipmap->draw($groundProgram, $camera, $planes, [$floor, $ceiling]);
+			// The craft shares the terrain program and has its own clipping.
+			glUniform1f($groundProgram->location('uPlayHalf'), 0);
+		}
 		foreach($this->draw as $n)
 		{
 			$key = $n['key'];
@@ -2471,6 +2486,10 @@ final class Scene
 		$uPatch = $waterProgram->location('uPatch');
 		$uEdges = $waterProgram->location('uEdges');
 		$uCorners = $waterProgram->location('uCorners');
+		if($this->clipmap && ($recipe['surround'] === 'sea' || $waterMax >= $floor)) {
+			glUniform1i($wakeLocation, $wakeCount);
+			$this->waterDraws = $this->clipmap->draw($waterProgram, $camera, $planes, [$waterMin, $waterMax]);
+		}
 		foreach($this->draw as $n)
 		{
 			$key = $n['key'];
@@ -2637,6 +2656,7 @@ final class Scene
 	{
 		// A selection the limiter postponed needs later updates even when the camera has stopped. So does the
 		// limiter's own spacing after a selection, which only updates can count.
+		if($this->clipmap) return $this->changed || $this->clipmap->pending || $this->preparing !== null;
 		return $this->selectionKey === '' || $this->changed || $this->jobs !== [] || $this->preparing !== null
 			|| $this->selectionPending || $this->selectionDeferred || $this->selectionRecent || $this->flight !== null;
 	}
@@ -2664,7 +2684,7 @@ final class Scene
 			$cameraSpacing = $cameraSpacing === null ? $spacing : min($cameraSpacing, $spacing);
 		}
 
-		return [
+		return ($this->clipmap?->stats() ?? []) + [
 			'patches' => count($this->patches)
 			, 'cameraSpacing' => $cameraSpacing
 			, 'finestVisibleSpacing' => $finest
@@ -2720,6 +2740,21 @@ final class Scene
 	 * Rebuild graphics resources after context restoration.
 	 * @return void Recreates expired graphics-context resources.
 	 */
+	private function palette(): SurfaceLayers
+	{
+		if($this->layers) return $this->layers;
+		if(!$this->defaultLayers || $this->paletteAppearance!==$this->appearance) {
+			$this->defaultLayers=SurfaceLayers::landscape($this->landscape->recipe(),$this->appearance);
+			$this->paletteAppearance=$this->appearance;
+		}
+		return $this->defaultLayers;
+	}
+
+	public function drawChart(array $xz,float $bearing,bool $wide,int $width,int $height,array $waterColor): void
+	{
+		$this->clipmap?->chart($xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,$this->palette(),$this->appearance);
+	}
+
 	public function restore(): void
 	{
 		if($this->closed) return;
@@ -2727,9 +2762,10 @@ final class Scene
 		// The meshes are rebuilt in place, so a selection in flight would still be right. It is dropped anyway,
 		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
 		$this->abandonSelection();
+		if($this->clipmap) { $this->clipmap->close(); $this->clipmap = new Clipmap; }
 		$this->groundProgram->restore();
 		$this->litGroundProgram->restore();
-		$this->boundAppearance = [];
+		$this->boundAppearance = []; $this->layerBinding=[];
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
 		$this->waterProgram->restore();
@@ -2740,7 +2776,7 @@ final class Scene
 		if($this->gridBuffer) glDeleteBuffers(1,$this->gridBuffer);
 		if($this->vao) glDeleteVertexArrays(1,$this->vao);
 		glGenVertexArrays(1, $this->vao);
-		$this->createGridBuffer();
+		if(!$this->clipmap) $this->createGridBuffer();
 		foreach($this->patches as $p) $p['mesh']->restore($this->gridBuffer[0]);
 		$this->craftMesh->restore();
 		$this->atmosphereCache->restore();
@@ -2786,9 +2822,9 @@ final class Scene
 		if($this->closed) return;
 
 		$this->closed = true;
-		$this->builder?->close();
 		$this->clearPatches();
 
+		$this->clipmap?->close();
 		$this->groundProgram->close();
 		$this->litGroundProgram->close();
 		$this->skyProgram->close();

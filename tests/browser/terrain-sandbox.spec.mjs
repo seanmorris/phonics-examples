@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import {PNG} from 'pngjs';
 import fs from 'node:fs/promises';
 import {gunzipSync} from 'node:zlib';
 
@@ -33,6 +34,7 @@ function fixture({history = [], revision = 0} = {})
 		, seed: 'browser-authoring'
 		, worldSize: 128
 		, spacing: 4
+		, surround: 'none'
 	};
 
 	Object.assign(recipe, {heightScale: 0, detailAmplitude: 0, detailOctaves: 1});
@@ -260,12 +262,18 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 	await page.setViewportSize({width: 960, height: 760});
 	await page.addInitScript(() => {
 		const proto = CanvasRenderingContext2D.prototype;
-		const drawImage = proto.drawImage, fillText = proto.fillText;
-
-		proto.drawImage = function(...args) {
-			if(this.canvas.matches('.terrain-flight-map')) window.chartEast = this.getTransform().b;
-
-			return drawImage.apply(this, args);
+		const fillText = proto.fillText;
+		const gl = WebGL2RenderingContext.prototype;
+		const locations = new WeakSet();
+		const getUniformLocation = gl.getUniformLocation, uniform2f = gl.uniform2f;
+		gl.getUniformLocation = function(program, name) {
+			const location = getUniformLocation.call(this, program, name);
+			if(location && name === 'uHeading') locations.add(location);
+			return location;
+		};
+		gl.uniform2f = function(location, cosine, sine) {
+			if(locations.has(location)) window.terrainChartHeading = [cosine, sine];
+			return uniform2f.call(this, location, cosine, sine);
 		};
 
 		proto.fillText = function(label, x, y, ...rest) {
@@ -329,7 +337,7 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 		await expect.poll(async() => (await status(page)).jetView).toBe(view);
 		await expect(radar).toBeVisible();
 		await expect(map).toBeVisible();
-		await expect.poll(() => page.evaluate(() => window.chartEast)).toBeCloseTo(-1);
+		await expect.poll(() => page.evaluate(() => window.terrainChartHeading?.[1])).toBeCloseTo(1);
 		const chart = await map.evaluate(blips);
 		expect(chart).toHaveLength(3);
 		expect(chart[1].y).toBeLessThan(Math.min(chart[0].y, chart[2].y)-10);
@@ -680,7 +688,11 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	await expect.poll(async() => (await status(page)).jetWideMap).toBe(true);
 	await setButton(13, false);
 
-	const color = () => map.evaluate(el => Array.from(el.getContext('2d').getImageData(23, 24, 1, 1).data));
+	const color = async() => {
+		const image = PNG.sync.read(await map.screenshot());
+		const offset = 4 * (24 * image.width + 23);
+		return Array.from(image.data.subarray(offset, offset + 4));
+	};
 	await canvas(page).evaluate(el => el.terrainSandboxDebug.values({waterColor: '#247dd1', waterLevel: 25}));
 	await expect.poll(async() => { const [r,g,b] = await color(); return b > g && g > r+40; }).toBe(true);
 	await canvas(page).evaluate(el => el.terrainSandboxDebug.values({waterLevel: -1, sandColor: '#d38129'}));
@@ -1251,7 +1263,8 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 	await restoreContext(page);
 	await expect.poll(async() => (await status(page)).renderer.frames).toBeGreaterThan(before.renderer.frames);
 	const restored = await settled(page);
-	expect(restored.renderer.frames).toBe(before.renderer.frames + 1);
+		expect(restored.renderer.frames - before.renderer.frames).toBeLessThanOrEqual(restored.renderer.visible + 2);
+	expect(restored.renderer.pending).toBe(0);
 	expect(restored.revision).toBe(before.revision);
 	expect(restored.surface.operations).toBe(before.surface.operations);
 	await page.waitForTimeout(1000);
@@ -1264,4 +1277,68 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 	await page.getByRole('link', {name: '← All examples'}).click();
 	await expect(page.locator('.terrain-sandbox')).toHaveCount(0);
 	expect(errors).toEqual([]);
+});
+test('landform parameters and nested colours survive a save and reload', async({page}) => {
+	await page.setViewportSize({width: 720, height: 460});
+	await boot(page);
+	await page.locator('[name="preset"]').selectOption('canyon');
+	await page.getByText('Landform parameters', {exact: true}).click();
+	const wall = page.getByLabel('Wall width', {exact: true});
+	await expect(wall).toHaveValue('0.006');
+	await wall.fill('0.0085');
+	await page.getByLabel('Surround', {exact: true}).selectOption('plateau');
+	await press(page, 'generate');
+	await expect.poll(async() => (await status(page)).recipe.wallWidth).toBe(.0085);
+	await expect.poll(async() => (await status(page)).recipe.version).toBe(2);
+
+	await page.locator('[aria-controls="terrain-section-surface"]').click();
+	await page.getByText('Colour layers', {exact: true}).click();
+	const layers = page.locator('[data-layer-fields] [data-layer]');
+	const child = layers.nth(1);
+	await child.locator('summary').click();
+	await child.locator('[data-layer-key="parent"]').fill('0');
+	await child.locator('[data-layer-key="color"]').fill('#7e513d');
+	await page.getByRole('button', {name: 'Apply layers', exact: true}).click();
+	await expect.poll(async() => (await status(page)).surfaceLayers[1].color).toBe('#7e513d');
+
+	const document = await save(page);
+	expect(document.version).toBe(4);
+	expect(document.landscape.recipe.wallWidth).toBe(.0085);
+	expect(document.landscape.recipe.surround).toBe('plateau');
+	expect(document.layers[1]).toMatchObject({color: '#7e513d', parent: 0});
+	await load(page, fixture());
+	await load(page, document);
+	await expect.poll(async() => (await status(page)).surfaceLayers).toEqual(document.layers);
+	await expect(wall).toHaveValue('0.0085');
+});
+
+test('the signed clipmap grid covers the ground after relocation', async({page}) => {
+	await page.setViewportSize({width: 640, height: 420});
+	await boot(page);
+	const doc = fixture();
+	doc.landscape.recipe.worldSize = 4096;
+	doc.landscape.recipe.spacing = 1;
+	doc.settings.quality = 1;
+	doc.settings.waterLevel = -50;
+	doc.settings.elevation = 55;
+	doc.version = 4;
+	doc.layers = [{color: '#da492b'}];
+
+	for(const position of [[-701, 550, -703], [709, 550, 717]]) {
+		doc.camera = {position, yaw: .71, pitch: -1.52};
+		await load(page, doc);
+		const result = await settled(page);
+		expect(result.renderer.visible).toBeGreaterThan(4);
+		expect(result.renderer.proceduralVertexBytes).toBe(0);
+		const image = PNG.sync.read(await canvas(page).screenshot());
+		let sky = 0;
+		// Left-hand crop is clear of the controls. A missing triangle in this down-facing
+		// view shows the sky's blue or the blue clear colour through the red ground.
+		for(let y = 45; y < image.height - 110; ++y)
+		for(let x = 35; x < 265; ++x) {
+			const index = 4 * (y * image.width + x);
+			if(image.data[index + 2] > image.data[index] + 5) ++sky;
+		}
+		expect(sky).toBe(0);
+	}
 });

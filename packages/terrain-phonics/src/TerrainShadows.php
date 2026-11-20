@@ -59,7 +59,7 @@ final class TerrainShadows
 	 * @return bool True if the map was regenerated. The parent framebuffer is restored; the caller resets viewport,
 	 * program, VAO, textures, depth mask and depth/cull/blend/scissor enables before rendering its scene.
 	 */
-	public function update(int $heightTexture, float $extent, array $sunDirection, int $revision): bool
+	public function update(int $heightTexture, float $extent, array $sunDirection, int $revision, bool $packed = false): bool
 	{
 		if($this->closed) throw new \LogicException('Terrain shadows are closed');
 
@@ -102,6 +102,7 @@ final class TerrainShadows
 		glActiveTexture(GL_TEXTURE0 + 1);
 		glBindTexture(GL_TEXTURE_2D, $heightTexture);
 		glUniform1i($this->program->location('uTerrainHeights'), 1);
+		glUniform1i($this->program->location('uPacked'),(int)$packed);
 		glUniform1f($this->program->location('uTerrainShadowExtent'), $extent);
 		glUniform1f($this->program->location('uTerrainShadowSize'), $this->resolution);
 		glUniform3f($this->program->location('uShadowSunDirection'), ...$sun);

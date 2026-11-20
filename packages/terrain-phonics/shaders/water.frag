@@ -63,8 +63,10 @@ vec3 waterEnvironmentReflection(vec3 ray, float altitude, float angularFootprint
 	return reflected + terrainSolarDisk(ray,altitude,terrainTransmittance(altitude,ray.y),angularFootprint);
 }
 
+uniform float uPlayHalf;
 void main()
 {
+	if(uPlayHalf>0. && max(abs(vWorld.x),abs(vWorld.z))>uPlayHalf) discard;
 	vec2 pixelX = dFdx(vWorld.xz);
 	vec2 pixelY = dFdy(vWorld.xz);
 	vec4 wave = waterVisualSample(vWorld.xz,uWaterTime,pixelX,pixelY);

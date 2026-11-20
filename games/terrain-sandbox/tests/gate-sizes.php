@@ -517,7 +517,7 @@ click($file, 'start', 0, 0, 0, ['gateWidth' => 24, 'gateHeight' => 9]);
 click($file, 'checkpoint', 0, 100, 0, ['gateWidth' => 120, 'gateHeight' => 60, 'gateAltitude' => 40]);
 input($file, ['values' => ['gateWidth' => 24, 'gateHeight' => 9]]);
 $saved = json_decode($file->save(), true, flags: JSON_THROW_ON_ERROR);
-expect($saved['version'] === 3 && $saved['course']['gates'][0]['width'] == 24 && $saved['course']['gates'][1]['height'] == 60
+expect($saved['version'] === 4 && $saved['course']['gates'][0]['width'] == 24 && $saved['course']['gates'][1]['height'] == 60
 	&& $saved['settings']['gateWidth'] == 24, 'A saved file holds each gate\'s size and the size settings');
 $copy = new Session($flat);
 $copy->load(json_encode($saved));

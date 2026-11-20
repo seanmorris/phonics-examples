@@ -12,9 +12,8 @@ use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
-use TerrainPhonics\BrowserPatchBuilder;
 use TerrainSandbox\GateModel;
-use TerrainSandbox\FlightMap;
+use TerrainPhonics\TerrainAppearance;
 use TerrainSandbox\GroundShadow;
 use TerrainSandbox\Jet;
 use TerrainSandbox\VehicleModel;
@@ -26,7 +25,6 @@ $app = new Context;
 $app->browser(__DIR__ . '/browser/game.mjs');
 $app->browser(__DIR__ . '/browser/flight-map.mjs');
 $app->browser(__DIR__ . '/browser/cockpit.mjs');
-$app->browser($archive . 'dependencies/terrain-phonics/browser/PatchMesher.mjs');
 $session = new Session;
 $engine = new Engine(new Device(1280, 720, 'Landscape Sandbox'));
 $engine->clock = new FixedStep(1 / 60, 4);
@@ -34,9 +32,7 @@ $engine->clock = new FixedStep(1 / 60, 4);
 // The page reads gamepads itself and sends Start as the sandbox's own pause action.
 $engine->input->bindButton(9, []);
 $engine->input->bindGamepad(9, []);
-$batch = vrzno_env('terrainPatchBatch');
-$builder = new BrowserPatchBuilder(static fn($action, $path, $key, $payload) => $batch($action, $path, $key, $payload));
-$scene = new Scene($session->landscape, $session->water, $session->atmosphere, $builder);
+$scene = new Scene($session->landscape, $session->water, $session->atmosphere, useClipmap: true);
 $models = [];
 $tracers = null;
 $trailRenderer = null;
@@ -67,11 +63,11 @@ $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainJetFrame');
 $hudShown = false;
-$flightMap = null;
 // The panel builds its Surface tab once from the appearance settings' groups, ranges, defaults and per-style use.
 (vrzno_env('terrainSurface'))(json_encode(['groups' => TerrainPhonics\TerrainAppearance::GROUPS,
 	'ranges' => TerrainPhonics\TerrainAppearance::RANGES, 'defaults' => TerrainPhonics\TerrainAppearance::DEFAULTS,
-	'uses' => TerrainPhonics\TerrainAppearance::USES], JSON_THROW_ON_ERROR));
+	'uses' => TerrainPhonics\TerrainAppearance::USES,
+	'presets'=>array_combine(['coast','mountain','canyon'],array_map([Session::class,'preset'],['coast','mountain','canyon']))], JSON_THROW_ON_ERROR));
 
 $engine->systems->add('terrain-sandbox.simulate', static function(Registry $registry, float $seconds) use ($session): void {
 	$session->step($seconds);
@@ -124,6 +120,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$scene->quality = $session->settings['quality'];
 	// The same object while nothing changes, so the scene uploads the appearance only after a change.
 	$scene->appearance = $session->terrainAppearance;
+	$scene->layers = $session->activeLayers();
 	$scene->selectionInterval = $session->selectionInterval;
 	$scene->selectionSliceMs = $session->selectionSliceMs;
 	$engine->userPaused = $session->paused;
@@ -182,7 +179,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$hudShown, &$flightMap, $hud, $publish
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$hudShown, $hud, $publish
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -231,20 +228,24 @@ $engine->start(
 			if($session->mode === 'jet' && $session->flightTrails->active())
 				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
+			$showMap=$session->mode==='jet' && ($session->jetMap || $session->jetWideMap);
+			if($showMap) {
+				$bearing=M_PI-$vehiclePose['yaw']+(cos($vehiclePose['pitch'])<0 ? M_PI : 0);
+				$scene->drawChart([$vehiclePose['x'],$vehiclePose['z']],$bearing,$session->jetWideMap,$width,$height,
+					TerrainAppearance::linear($session->settings['waterColor']));
+			}
 			$engine->device->present();
 			if($session->mode === 'jet')
 			{
 				$hudShown = true;
-				$showMap = $session->jetMap || $session->jetWideMap;
-				if(!$showMap) $flightMap = null;
 				$hud(json_encode(['width'=>$width,'height'=>$height,'eye'=>$viewCamera->position,'basis'=>$viewCamera->basis(),
 					'fov'=>$viewCamera->fov,'jet'=>$vehiclePose,'thrust'=>TerrainSandbox\Jet::thrustPercent($vehiclePose['power']),'cockpit'=>$session->jetView === 'cockpit',
-					'map'=>$showMap ? ($flightMap ??= new FlightMap)->update($session,$scene,$vehiclePose,$now) : null,
+					'map'=>$showMap ? ['wide'=>$session->jetWideMap,'span'=>$session->jetWideMap ? $session->landscape->recipe()['worldSize'] : min(4000.,$session->landscape->recipe()['worldSize'])] : null,
 					'range'=>$session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
 					'contactRange'=>TerrainSandbox\BalloonPractice::CONTACT_RANGE,
 					'targets'=>$session->balloons->targets()], JSON_THROW_ON_ERROR));
 			}
-			elseif($hudShown) { $hud(''); $hudShown = false; $flightMap = null; }
+			elseif($hudShown) { $hud(''); $hudShown = false; }
 			$renderMs = (microtime(true) - $start) * 1000;
 			$drawIntervalMs = $lastRender === null ? null : ($now - $lastRender) * 1000;
 			$lastRender = $now;

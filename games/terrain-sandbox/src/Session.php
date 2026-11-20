@@ -80,6 +80,22 @@ final class Session
 	] + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
 	/** The terrain's colours, banding and blending, which the scene draws with. Its settings are part of $settings. */
 	public TerrainAppearance $terrainAppearance;
+	public ?\TerrainPhonics\SurfaceLayers $surfaceLayers=null;
+	private ?\TerrainPhonics\SurfaceLayers $generatedLayers=null;
+	private ?TerrainAppearance $layerAppearance=null;
+	private array $layerRecipe=[];
+
+	public function activeLayers(): \TerrainPhonics\SurfaceLayers
+	{
+		if($this->surfaceLayers) return $this->surfaceLayers;
+		$recipe=$this->landscape->recipe();
+		if($this->layerRecipe!==$recipe || $this->layerAppearance!==$this->terrainAppearance) {
+			$this->generatedLayers=\TerrainPhonics\SurfaceLayers::landscape($recipe,$this->terrainAppearance);
+			$this->layerRecipe=$recipe;
+			$this->layerAppearance=$this->terrainAppearance;
+		}
+		return $this->generatedLayers;
+	}
 	/** Gate tool roles. Remove deletes the gate nearest the click. */
 	public const GATE_ROLES = ['start', 'checkpoint', 'finish', 'remove'];
 	/** Distance in metres a pick ray reaches when it hits no ground. */
@@ -633,6 +649,18 @@ final class Session
 	 * @param mixed $action Action name or structured action record.
 	 * @return void Stages edits or changes session state.
 	 */
+	public static function preset(string $name): array
+	{
+		$base=new \TerrainPhonics\Recipe(['preset'=>$name]);
+		$fields=$base->values();
+		foreach(['seed','preset','version','maxTiles','tileSize','worldSize','spacing'] as $key) unset($fields[$key]);
+		$fields['heightScale']=match($name){'coast'=>420.,'mountain'=>1400.,'canyon'=>650.};
+		$fields['baseFrequency']=1/match($name){'coast'=>6000,'mountain'=>2200,'canyon'=>4000};
+		$fields['terraceSpacing']=$name==='canyon'?80.:0.;
+		$fields['waterLevel']=$name==='canyon'?-450.:0.;
+		return $fields;
+	}
+
 	private function action(mixed $action): void
 	{
 		if(!is_array($action)) $action = ['type' => $action];
@@ -663,25 +691,22 @@ final class Session
 			case 'redo':
 				$this->message = $this->editable()->redo() ? 'Redid the terrain transaction.' : 'Nothing to redo.';
 				break;
+			case 'surface-layers':
+				$this->surfaceLayers=isset($action['layers']) ? new \TerrainPhonics\SurfaceLayers($action['layers']) : null;
+				$this->dirty=true;
+				break;
 			case 'generate':
-				$recipe = $this->landscape->recipe();
-				$preset = (string)($action['preset'] ?? 'coast');
-				if($preset !== $recipe['preset'] || ($preset === 'canyon' && $recipe['version'] === 1)) unset($recipe['terraceStrength']);
-				$recipe['preset'] = $preset;
-				$recipe['seed'] = (string)($action['seed'] ?? 'first-light');
-				unset($recipe['version']); // A newly generated world uses the current preset's recipe.
-				$defaults = match($recipe['preset']) {
-					'mountain' => [1400.0,1 / 2200], 'canyon' => [650.0,1 / 4000], default => [420.0,1 / 6000]
-				};
-				$recipe['heightScale'] = $defaults[0]; $recipe['baseFrequency'] = $defaults[1];
-				$recipe['terraceSpacing'] = $recipe['preset'] === 'canyon' ? 80.0 : 0.0;
-				$recipe['waterLevel'] = $recipe['preset'] === 'canyon' ? -450.0 : 0.0;
-				foreach(['heightScale','detailAmplitude','slopeScale','damping','waterLevel','warpAmplitude','terraceSpacing'] as $key)
-				if(isset($action[$key]))
-				{
-					if(!is_numeric($action[$key]) || !is_finite((float)$action[$key]))
-					throw new \InvalidArgumentException('Invalid terrain generation parameter.');
-					$recipe[$key] = (float)$action[$key];
+				$preset=(string)($action['preset'] ?? 'coast');
+				$defaults=self::preset($preset);
+				$recipe=$defaults+$this->landscape->recipe();
+				$recipe['preset']=$preset;
+				$recipe['version']=$preset==='canyon'?2:1;
+				$recipe['seed']=(string)($action['seed'] ?? 'first-light');
+				foreach($defaults as $key=>$default) if(array_key_exists($key,$action)) {
+					if(is_string($default)) $recipe[$key]=(string)$action[$key];
+					elseif(!is_numeric($action[$key]) || !is_finite((float)$action[$key]))
+						throw new \InvalidArgumentException('Invalid terrain generation parameter.');
+					else $recipe[$key]=is_int($default)?(int)$action[$key]:(float)$action[$key];
 				}
 				$this->replace(new Landscape($recipe));
 				$this->resetCamera();
@@ -1276,11 +1301,12 @@ final class Session
 	 * Version 2 added the course. Version 3 added each gate's size and renamed the gateHeight setting, the height an
 	 * air gate hangs at, to gateAltitude; gateHeight now sizes a new gate's opening. Version 1 files load as
 	 * landscapes without gates, and the gates of version 2 files take their kinds' own sizes.
+	 * Version 4 saves custom surface colour layers and the expanded shape coefficients.
 	 * @return string Complete portable JSON save document.
 	 */
 	public function save(): string
 	{
-		return json_encode(['schema' => 'phonics-landscape-sandbox','version' => 3,
+		return json_encode(['schema' => 'phonics-landscape-sandbox','version' => 4, 'layers'=>$this->surfaceLayers?->layers,
 			'landscape' => json_decode($this->landscape->save(), true, flags: JSON_THROW_ON_ERROR),
 			'settings' => $this->settings,'camera' => ['position' => $this->camera->position,
 				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch],
@@ -1296,7 +1322,7 @@ final class Session
 	{
 		if(strlen($json) > 4 * 1024 * 1024) throw new \InvalidArgumentException('Landscape file exceeds 4 MiB.');
 		$data = json_decode($json, true, 64, JSON_THROW_ON_ERROR);
-		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2, 3], true))
+		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2, 3, 4], true))
 		throw new \InvalidArgumentException('This is not a supported landscape sandbox file.');
 		$candidate = Landscape::load(json_encode($data['landscape'] ?? null, JSON_THROW_ON_ERROR));
 		try
@@ -1319,6 +1345,7 @@ final class Session
 			// file throws here, before anything changes. A file without terrain settings draws the defaults.
 			$appearance = new WaterAppearance($settings);
 			$terrain = new TerrainAppearance($settings);
+			$layers=isset($data['layers']) ? new \TerrainPhonics\SurfaceLayers($data['layers']) : null;
 			$settings = array_diff_key($settings, WaterAppearance::DEFAULTS, TerrainAppearance::DEFAULTS)
 				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW];
 			foreach($settings as $name => $value)
@@ -1339,6 +1366,7 @@ final class Session
 		$this->balloons = $balloons;
 		$this->setWaterAppearance($appearance);
 		$this->setTerrainAppearance($terrain);
+		$this->surfaceLayers=$layers;
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
 		$this->course = $course;
 		if($course->start() !== null) $this->settings['gateLaps'] = $course->start()['laps'];
@@ -1370,7 +1398,7 @@ final class Session
 		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
-			'settings' => $this->settings,'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
+			'settings' => $this->settings,'surfaceLayers'=>$this->activeLayers()->layers,'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
 			'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),
