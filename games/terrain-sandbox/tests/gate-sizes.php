@@ -421,15 +421,20 @@ $roadGate = $course->place('start', 'road', 10, 0, 20, M_PI / 2, 1, 30.0, 12.0, 
 $airGate = $course->place('checkpoint', 'air', 0, 100, 400, 0, 1, 100.0, 30.0, $rise)['gate'];
 $arch = $course->place('checkpoint', 'water', -300, 2, 0, 0, 1, 20.0, 8.0)['gate'];
 $found = array_column($course->obstructions(), null, 'id');
-$parts = $found[$roadGate['id']]['boxes'];
-expect(count($found) === 3 && count($parts) === 3 && count($found[$airGate['id']]['boxes']) === 1
-	&& count($found[$arch['id']]['boxes']) === 3, 'A road gate has three boxes, an air gate one and a water arch three');
+$parts = $found[$roadGate['id']]['solids'];
+expect(count($found) === 3 && count($parts) === 5 && count($found[$airGate['id']]['solids']) === 1
+	&& count($found[$arch['id']]['solids']) === 3,
+	'A road gate has five boxes (posts, base plates and board), an air gate one and a water arch three');
 $posts = $course->posts();
 expect(near($parts[0]['centre'][0], $posts[0][0]) && near($parts[0]['centre'][2], $posts[0][1])
 	&& near($parts[0]['centre'][1] - $parts[0]['halfY'], $posts[0][5]) && near($parts[0]['centre'][1] + $parts[0]['halfY'], $posts[0][6])
 	&& near($parts[1]['centre'][1] - $parts[1]['halfY'], $posts[1][5]) && $parts[0]['yaw'] === M_PI / 2
 	&& near($parts[0]['halfX'], $road['posts'][0]['halfSize']), 'Each post\'s box is the post the car collides with');
-$board = $parts[2];
+$plate = $parts[3];
+expect(near($plate['centre'][1] - $plate['halfY'], $roadGate['y'] + $roadGate['posts'][1])
+	&& near($plate['halfX'], $road['extent']['halfDepth']),
+	'Each base plate\'s box lies on the ground under its post');
+$board = $parts[4];
 expect(near($board['centre'][1] - $board['halfY'], $roadGate['y'] + 12) && near($board['halfX'], 15 + $road['extent']['halfWidth'] - $road['window']['halfWidth'])
 	&& near($board['centre'][1] + $board['halfY'], $roadGate['y'] + 12 + $road['extent']['top'] - $road['window']['top']),
 	'The board\'s box sits on top of the 12 m opening and spans the 30 m gate');
@@ -437,7 +442,7 @@ $opening = $found[$roadGate['id']]['opening'];
 expect($opening['centre'] === [$roadGate['x'], $roadGate['y'], $roadGate['z']] && $opening['halfWidth'] === 15.0
 	&& near($opening['top'], $roadGate['y'] + 12) && near($opening['bottom'], $roadGate['y'] + $roadGate['ground'][0]),
 	'The road gate\'s opening reaches from the lowest ground across it to the board');
-$legs = $found[$arch['id']]['boxes'];
+$legs = $found[$arch['id']]['solids'];
 $scale = 20 / (2 * $water['window']['halfWidth']);
 expect(near($legs[0]['centre'][0], -300 - $scale * ($water['window']['halfWidth'] + $water['extent']['halfWidth']) / 2)
 	&& near($legs[2]['halfX'], $scale * $water['extent']['halfWidth']) && near($found[$arch['id']]['opening']['top'], 2 + 8)

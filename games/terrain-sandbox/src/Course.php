@@ -59,6 +59,9 @@ final class Course
 	/** Each gate's measure() for the revision in $measuredRevision, by id. */
 	private array $measured = [];
 	private int $measuredRevision = -1;
+	/** Solid parts and opening of every gate at its placed height, for the revision in $obstructionsRevision. */
+	private array $obstructions = [];
+	private int $obstructionsRevision = -1;
 	public readonly GateShapes $shapes;
 
 	/** @param GateShapes|null $shapes Gate dimensions; the package's gates.json, or its defaults, when omitted. */
@@ -478,58 +481,89 @@ final class Course
 	}
 
 	/**
-	 * List the solid parts and the opening of each gate in world space, for a camera to keep clear of.
-	 * @param array|null $near [x, y, z] in metres to list only the gates that reach within $reach of it, or null for
-	 * every gate. Only the water gates listed sample the waves.
+	 * List the solid parts and the opening of each gate in world space, for a chase camera to keep clear of.
+	 * @param array|null $near [x, y, z] in metres to list only the gates whose extent comes within $reach of it across
+	 * the ground, or null for every gate. Only the water gates listed sample the waves.
 	 * @param float $reach Distance in metres from $near.
-	 * @return list<array{id:int,kind:string,boxes:list<array>,opening:array}> Per gate, boxes that enclose its solid
-	 * parts, each {centre: [x, y, z], yaw, halfX, halfY, halfZ} with its half sizes along the gate's X (across), Y
-	 * (up) and Z (along its travel); and the opening {centre: [x, y, z], yaw, halfWidth, bottom, top}, whose centre
-	 * is the gate origin and whose bottom and top are world heights. A road gate's posts are one box each and its
-	 * board with the tabs one more; an air gate has the board's box; a water arch has a box per leg and one for its
-	 * crossbar. The opening of a road gate reaches down to the lowest ground across it, and of a water gate to the
-	 * water line.
+	 * @return list<array{id:int,kind:string,solids:list<array>,opening:array}> Gates in race order. Each solid is a
+	 * box {centre: [x, y, z], yaw, halfX, halfY, halfZ} with its half sizes along the gate's X (across), Y (up) and Z
+	 * (along its travel). A road gate lists its two posts, the two base plates under them and its board with the post
+	 * tabs; a water arch its two legs and its crossbar; an air gate its banner. The opening is
+	 * {centre: [x, y, z], yaw, halfWidth, bottom, top}: the centre is the gate's origin, and bottom and top are world
+	 * heights. A road gate's opening reaches down to the lowest ground across it, and a water gate's to the water line.
+	 * A water gate stands at its height on the waves at the last float() call.
 	 */
 	public function obstructions(?array $near = null, float $reach = INF): array
 	{
-		$found = [];
-		foreach($this->gates(false) as $gate)
+		if($this->obstructionsRevision !== $this->revision)
 		{
-			$measure = $this->measure($gate);
-			['window' => $window, 'extent' => $extent] = $measure;
-			if($near !== null)
+			$this->obstructions = [];
+			foreach($this->gates(false) as $gate) $this->obstructions[] = $this->obstruction($gate);
+			$this->obstructionsRevision = $this->revision;
+		}
+		$found = [];
+		foreach($this->obstructions as $entry)
+		{
+			$gate = $entry['gate'];
+			if($near !== null && hypot($gate['x'] - $near[0], $gate['z'] - $near[2]) > $reach + $entry['reach']) continue;
+			$rise = isset($this->afloat[$gate['id']]) ? $this->pose($gate)['y'] - $gate['y'] : 0.0;
+			if($rise != 0)
 			{
-				$span = hypot($extent['halfWidth'], $extent['halfDepth']);
-				if(hypot($gate['x'] - $near[0], $gate['z'] - $near[2]) > $reach + $span) continue;
+				foreach($entry['solids'] as $i => $solid) $entry['solids'][$i]['centre'][1] += $rise;
+				$entry['opening']['centre'][1] += $rise;
+				$entry['opening']['bottom'] += $rise;
+				$entry['opening']['top'] += $rise;
 			}
-			if($gate['kind'] === 'water') $gate = $this->pose($gate);
-			$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
-			$box = static fn(float $x, float $bottom, float $top, float $halfX, float $halfZ): array => [
-				'centre' => [$gate['x'] + $x * $cos, $gate['y'] + ($bottom + $top) / 2, $gate['z'] - $x * $sin],
-				'yaw' => $gate['yaw'], 'halfX' => $halfX, 'halfY' => ($top - $bottom) / 2, 'halfZ' => $halfZ];
-			$boxes = [];
-			if($gate['kind'] === 'water')
-			{
-				$inner = $window['halfWidth']; $outer = $extent['halfWidth'];
-				foreach([-1, 1] as $side)
-					$boxes[] = $box($side * ($inner + $outer) / 2, $extent['bottom'], $window['top'], ($outer - $inner) / 2,
-						$extent['halfDepth']);
-				$boxes[] = $box(0.0, $window['top'], $extent['top'], $outer, $extent['halfDepth']);
-				$bottom = 0.0;
-			}
-			else
-			{
-				foreach($measure['posts'] as $post)
-					$boxes[] = $box($post['x'], $post['bottom'], $post['top'], $post['halfSize'], $post['halfSize']);
-				$boxes[] = $box(0.0, $window['top'], $extent['top'], $extent['halfWidth'], $extent['halfDepth']);
-				$bottom = $gate['kind'] === 'road' ? min(0.0, $gate['ground'][0]) : $window['bottom'];
-			}
-			$found[] = ['id' => $gate['id'], 'kind' => $gate['kind'], 'boxes' => $boxes,
-				'opening' => ['centre' => [$gate['x'], $gate['y'], $gate['z']], 'yaw' => $gate['yaw'],
-					'halfWidth' => $window['halfWidth'], 'bottom' => $gate['y'] + $bottom,
-					'top' => $gate['y'] + $window['top']]];
+			unset($entry['gate'], $entry['reach']);
+			$found[] = $entry;
 		}
 		return $found;
+	}
+
+	/**
+	 * Build one gate's entry for obstructions() at the height it was placed at.
+	 * @param array $gate A gate from this course, without its height on the waves.
+	 * @return array The obstructions() entry, with the gate and its horizontal reach from its origin.
+	 */
+	private function obstruction(array $gate): array
+	{
+		$measure = $this->measure($gate);
+		['window' => $window, 'extent' => $extent] = $measure;
+		$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
+		$box = static fn(float $x, float $bottom, float $top, float $halfX, float $halfZ): array => [
+			'centre' => [$gate['x'] + $x * $cos, $gate['y'] + ($bottom + $top) / 2, $gate['z'] - $x * $sin],
+			'yaw' => $gate['yaw'], 'halfX' => $halfX, 'halfY' => ($top - $bottom) / 2, 'halfZ' => $halfZ];
+		$solids = [];
+		$bottom = 0.0;
+		if($gate['kind'] === 'water')
+		{
+			$inner = $window['halfWidth']; $outer = $extent['halfWidth'];
+			foreach([-1, 1] as $side)
+				$solids[] = $box($side * ($inner + $outer) / 2, $extent['bottom'], $window['top'], ($outer - $inner) / 2,
+					$extent['halfDepth']);
+		}
+		elseif($gate['kind'] === 'road')
+		{
+			foreach($measure['posts'] as $post)
+				$solids[] = $box($post['x'], $post['bottom'], $post['top'], $post['halfSize'], $post['halfSize']);
+			// The base plates, one tab wide, reach the gate's ends and lie on the ground under each post, as thick as
+			// the tabs on the posts' tops.
+			$shape = $this->shapes->kind('road');
+			$plate = $shape['extent']['top'] - max(array_column($shape['posts'], 'top'));
+			foreach([-1, 1] as $index => $side)
+			{
+				$ground = $measure['feet'][2 + $index];
+				$solids[] = $box($side * ($extent['halfWidth'] - $extent['halfDepth']), $ground, $ground + $plate,
+					$extent['halfDepth'], $extent['halfDepth']);
+			}
+			$bottom = min(0.0, $gate['ground'][0]);
+		}
+		// Every kind spans its full width above the window: the board and post tabs, the crossbar, the banner and tabs.
+		$solids[] = $box(0.0, $window['top'], $extent['top'], $extent['halfWidth'], $extent['halfDepth']);
+		return ['gate' => $gate, 'reach' => hypot($extent['halfWidth'], $extent['halfDepth']), 'id' => $gate['id'],
+			'kind' => $gate['kind'], 'solids' => $solids,
+			'opening' => ['centre' => [$gate['x'], $gate['y'], $gate['z']], 'yaw' => $gate['yaw'],
+				'halfWidth' => $window['halfWidth'], 'bottom' => $gate['y'] + $bottom, 'top' => $gate['y'] + $window['top']]];
 	}
 
 	/**

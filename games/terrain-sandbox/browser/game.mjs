@@ -417,6 +417,7 @@ export function activate({module, canvas, session, services})
 			}
 
 			updateRace(race, state);
+			updateGateTool(gateTool, state);
 		}
 	});
 
@@ -553,6 +554,73 @@ function updateRace(line, state)
 }
 
 /**
+ * Show the opening sizes each kind of gate takes, and whether the course runs laps.
+ * @param {HTMLElement} tool The gate tool's controls.
+ * @param {object} state Latest status from PHP.
+ */
+function updateGateTool(tool, state)
+{
+	const sizes = tool.querySelector('[data-gate-sizes]');
+
+	if(state.gateSizes && !sizes.textContent)
+	{
+		const lines = Object.entries(state.gateSizes).map(([kind, size]) => gateSizeLine(kind, size));
+
+		sizes.textContent = lines.join('\n');
+	}
+
+	tool.querySelector('[data-gate-laps]').textContent = lapNote(state.course);
+}
+
+/**
+ * Describe the opening sizes of one kind of gate.
+ * @param {string} kind road, water or air.
+ * @param {{width: number, height: number, widths: number[], heights: number[], stretch: ?number}} size Its own size
+ * and ranges in metres, from the status's gateSizes.
+ * @returns {string} For example Road: 6 to 60 m wide, 2 to 40 m tall, its own 13.3 by 3.1 m.
+ */
+function gateSizeLine(kind, size)
+{
+	const name = kind[0].toUpperCase() + kind.slice(1);
+	const wide = `${roundMetres(size.widths[0])} to ${roundMetres(size.widths[1])} m wide`;
+	const tall = `${roundMetres(size.heights[0])} to ${roundMetres(size.heights[1])} m tall`;
+	const own = `its own ${roundMetres(size.width)} by ${roundMetres(size.height)} m`;
+
+	if(!size.stretch) return `${name}: ${wide}, ${tall}, ${own}.`;
+
+	return `${name}: ${wide}, ${tall}, ${own}, stretching at most ${roundMetres(size.stretch)} times more one way.`;
+}
+
+/**
+ * Round a length for the gate tool's notes.
+ * @param {number} value Metres.
+ * @returns {string} The length to a tenth of a metre, without a trailing zero.
+ */
+function roundMetres(value)
+{
+	return String(Number(value.toFixed(1)));
+}
+
+/**
+ * Say whether a course runs the laps its start gate carries.
+ * @param {?{laps: ?number, gates: object[]}} course The status's course.
+ * @returns {string} The note under the Laps field.
+ */
+function lapNote(course)
+{
+	const gates = course?.gates ?? [];
+	const start = gates.find(gate => gate.role === 'start');
+
+	if(!start) return 'Laps count when the start gate is also the finish.';
+
+	const finish = gates.some(gate => gate.role === 'finish');
+
+	if(finish) return 'This course runs once, from its start gate to its finish gate.';
+
+	return `This course runs ${course.laps} ${course.laps === 1 ? 'lap' : 'laps'} through its start / finish gate.`;
+}
+
+/**
  * Name the gate a race needs next.
  * @param {{role: string, number: ?number}} gate The race status's next gate.
  * @param {{state: string, remaining: ?number}} race The race status.
@@ -686,7 +754,7 @@ function markup()
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #779d8970;border-radius:5px;min-height:32px;padding:5px 8px;font:inherit}
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}
 	.terrain-row{display:flex;gap:6px;margin:6px 0}.terrain-row>*{flex:1;min-width:0}.terrain-field{display:grid;gap:4px;margin:8px 0}.terrain-control{display:grid;grid-template-columns:90px 1fr 36px;gap:6px;align-items:center;margin:7px 0}.terrain-control output{font-variant-numeric:tabular-nums;text-align:right;color:#e5bc75;font-size:12px}
-	.terrain-note{font-size:12px;color:#bdd2c7;margin:8px 0}.terrain-check{display:flex;align-items:center;gap:8px;margin:10px 0}.terrain-hud{position:absolute;left:16px;bottom:16px;max-width:calc(100% - 355px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sandbox [hidden]{display:none!important}
+	.terrain-note{font-size:12px;color:#bdd2c7;margin:8px 0}.terrain-check{display:flex;align-items:center;gap:8px;margin:10px 0}.terrain-hud{position:absolute;left:16px;bottom:16px;max-width:calc(100% - 355px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
 	@media(max-width:700px){.terrain-panel{width:260px;right:8px;top:8px;max-height:70%}.terrain-hud{max-width:calc(100% - 56px);font-size:12px;bottom:8px}.terrain-panel:not([open]){width:auto}.terrain-panel>div{padding:0 10px 10px}}
 	</style><div class="terrain-stage"></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
 	<details class="terrain-panel" open><summary>LANDSCAPE LAB</summary><div>
@@ -707,10 +775,12 @@ function markup()
 	<h2>Shape the ground</h2><label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option></select></label>
 	<div data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
 	<label class="terrain-field">Laps · start / finish courses only<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
+	<p class="terrain-note" data-gate-laps>Laps count when the start gate is also the finish.</p>
 	<label class="terrain-field">Height above ground · m<input data-value="gateAltitude" type="number" min="0" max="400" step="any" value="0"></label>
 	<label class="terrain-field">Opening width · m<input data-value="gateWidth" type="number" min="0" max="300" step="any" value="0"></label>
 	<label class="terrain-field">Opening height · m<input data-value="gateHeight" type="number" min="0" max="150" step="any" value="0"></label>
-	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening size of 0 takes the gate's own: 13.3 by 3.1 m on the road, 8.9 by 3.6 m on water and 40 by 8.8 m in the air. Road and water gates reach 60 by 40 m, air gates 300 by 150 m. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. Laps count only when the start gate is also the finish. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
+	<p class="terrain-note terrain-sizes" data-gate-sizes></p>
+	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening width or height of 0 takes the gate's own. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. A gate that would overlap another is refused. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
 	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
 	${range('Radius · m', 'radius', 2, 300, 1, 40)}${range('Strength · m', 'amount', .1, 200, .1, 12)}
 	<label class="terrain-field">Flatten elevation · m<input data-value="flattenHeight" type="number" min="-1000" max="3000" value="0"></label>
