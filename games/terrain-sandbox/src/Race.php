@@ -254,22 +254,24 @@ final class Race
 	 * @return array{gate:int,needed:?float,message:string}|null Null when the vehicle can reach the opening, or when
 	 * that is unknown because an air gate was placed without the ground under it. Otherwise the gate, the opening
 	 * height in metres that would let the vehicle through when a taller opening would, and a sentence for the page.
+	 * A floating gate is measured at the water level, so the answer holds while the waves lift and drop it.
 	 */
 	public function reach(Course $course, array $gate, string $vehicle, float $water, ?array $step = null): ?array
 	{
 		$window = $course->measure($gate)['window'];
-		$bottom = $gate['y'] + $window['bottom']; $top = $gate['y'] + $window['top'];
+		$floating = $gate['kind'] === 'water';
+		$origin = $floating ? $water : $gate['y'];
+		$bottom = $origin + $window['bottom']; $top = $origin + $window['top'];
 		$ground = $gate['ground'];
 		if($ground === null) return null;
 		$name = ucfirst($step === null ? self::gateLabel($gate) : $this->describe($course, $step));
-		$floating = $gate['kind'] === 'water';
 		if($vehicle === 'jet')
 		{
 			// The F5 may pass where the ground or the water across the gate is lowest.
 			$floor = ($floating ? $water : max($gate['y'] + $ground[0], $water)) + self::JET_FLOOR;
 			if($top >= $floor + self::JET_ROOM) return null;
 			// The opening's bottom edge stands at the gate's origin on every kind.
-			$needed = ceil($floor + self::JET_ROOM - $gate['y']);
+			$needed = ceil($floor + self::JET_ROOM - $origin);
 			return ['gate' => $gate['id'], 'needed' => $needed,
 				'message' => "$name is out of reach for the F5, which keeps " . (int)self::JET_FLOOR
 					. ' m above the ground and the water. It needs an opening at least ' . GateShapes::metres($needed)

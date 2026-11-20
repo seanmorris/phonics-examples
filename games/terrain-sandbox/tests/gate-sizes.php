@@ -277,6 +277,33 @@ expect($race->reach($course, $hanging, 'jet', $waterLevel) === null && $race->re
 	'An air gate 20 m up is within the F5\'s reach, and a water arch 3.6 m tall needs 9 m');
 $reacher->close();
 
+// A floating gate rises and falls with the waves, but what the F5 can reach of it does not: on the roughest water
+// the sandbox makes, an arch 3.6 m tall needs 9 m at every moment, and one 9.5 m tall stays within reach.
+$waves = new Session(['worldSize' => 2048, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => 5]);
+input($waves, ['values' => ['waterChoppiness' => 300]]);
+$level = $waves->water->level();
+$short = $waves->course->place('start', 'water', 0, $level, 400, 0)['gate'];
+$tall = $waves->course->place('checkpoint', 'water', 0, $level, 600, 0, 1, 12.0, 9.5)['gate'];
+$race = new Race;
+$needs = $reached = [];
+for($i = 0; $i < 600; $i++)
+{
+	$waves->water->update($i / 60);
+	$waves->course->float($waves->water, $i / 60);
+	$needs[] = $race->reach($waves->course, $waves->course->gate($short['id']), 'jet', $level)['needed'] ?? null;
+	$reached[] = $race->reach($waves->course, $waves->course->gate($tall['id']), 'jet', $level);
+}
+$heights = [];
+for($i = 0; $i < 600; $i += 30)
+{
+	$waves->course->float($waves->water, $i / 60);
+	$heights[] = $waves->course->height($short);
+}
+expect(max($heights) - min($heights) > 1 && array_unique($needs) === [9.0] && array_filter($reached) === [],
+	'The F5\'s reach for a floating gate holds steady on the waves: '
+		. json_encode([array_count_values(array_map('strval', $needs)), count(array_filter($reached))]));
+$waves->close();
+
 // An air gate hanging just above the ground or the water is within reach of the car and the jet ski, and they pass
 // through it: the car's body rises above its position on the ground, and the jet ski rides the swell.
 foreach([['car', .3, -5], ['craft', 1.0, 5], ['craft', 2.5, 5]] as [$vehicle, $altitude, $waterLevel])
