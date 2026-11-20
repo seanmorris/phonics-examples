@@ -798,7 +798,8 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 	await expect(tab('landscape')).toBeFocused();
 	expect((await status(page)).camera.position).toEqual(position);
 
-	// Paused, the view settles quickly, and a surface change must still redraw it.
+	// Paused, the view stops drawing, and a surface change must still redraw it. Pausing also stops terrain
+	// refinement, so the test waits for the drawing to stop rather than for the detail to finish.
 	await press(page, 'pause');
 	await expect.poll(async() => (await status(page)).paused).toBe(true);
 
@@ -809,7 +810,13 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 	await expect(page.locator('[data-surface-key="graniteColor"]')).toBeHidden();
 	await expect(page.locator('[data-surface-group="rock"]')).toBeHidden();
 
-	const frames = (await settled(page)).renderer.frames;
+	let frames = -1;
+	await expect.poll(async() => {
+		const now = (await status(page)).renderer.frames;
+		const still = now === frames;
+		frames = now;
+		return still;
+	}, {timeout: 120_000, intervals: [1500]}).toBe(true);
 	await page.locator('[data-value="grassColor"]').fill('#ff0000');
 	await expect.poll(async() => (await status(page)).settings.grassColor).toBe('#ff0000');
 	await expect.poll(async() => (await status(page)).renderer.frames).toBeGreaterThan(frames);
