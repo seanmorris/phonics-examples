@@ -319,7 +319,7 @@ export function activate({module, canvas, session, services})
 		, KeyR: 'race-reset'
 
 		, KeyL: 'headlights'
-		, KeyM: 'jet-map'
+		, KeyM: 'vehicle-map'
 		, KeyN: 'jet-wide-map'
 		, KeyV: 'jet-view'
 		, KeyT: 'jet-target'
@@ -944,7 +944,7 @@ const PAD_COMMANDS = new Map([
 	, [3, 'pad-y']
 	, [2, 'pad-x']
 	, [0, 'jet-launch']
-	, [10, 'jet-map']
+	, [10, 'vehicle-map']
 	, [11, 'jet-view']
 ]);
 
@@ -1126,6 +1126,7 @@ function markup()
 	return `<style>
 	.terrain-sandbox{position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
 	.terrain-sandbox:has(.terrain-instruments:not([hidden])){--radar-room:min(20%,18vw)}.terrain-flight-map{position:absolute;left:10px;bottom:10px;pointer-events:none}.terrain-sandbox.has-flight-map .terrain-hud{bottom:calc(var(--flight-map-size) + 18px)}.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
+	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--radar-room:var(--speedometer-size)}.terrain-speedometer{position:absolute;right:10px;bottom:10px;pointer-events:none}
 	.in-cockpit .terrain-panel:not([open]){width:auto;top:auto;right:50%;bottom:4px;transform:translateX(50%)}.in-cockpit .terrain-panel:not([open])>summary{padding:3px 8px;font-size:11px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud{display:none}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud:has([data-race]:not([hidden])){display:block;bottom:43px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud>:not([data-race]){display:none}.terrain-note a{color:inherit}.terrain-stage{position:absolute;inset:0}.terrain-panel{position:absolute;right:14px;top:14px;max-height:calc(100% - 28px - var(--radar-room,0px));width:300px;overflow:auto;border:1px solid #aec8bb65;border-radius:12px;background:#102822eb;box-shadow:0 8px 30px #0006;backdrop-filter:blur(10px)}
 	.terrain-panel>summary{padding:12px 15px;cursor:pointer;letter-spacing:.07em;font-weight:700}.terrain-panel>div{padding:0 14px 14px}.terrain-panel h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a8cfbd;margin:20px 0 8px}.terrain-panel h2:first-child{margin-top:3px}
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #779d8970;border-radius:5px;min-height:32px;padding:5px 8px;font:inherit}
@@ -1134,6 +1135,9 @@ function markup()
 	.terrain-note{font-size:12px;color:#bdd2c7;margin:8px 0}.terrain-check{display:flex;align-items:center;gap:8px;margin:10px 0}.terrain-hud{position:absolute;left:16px;bottom:16px;max-width:calc(100% - 355px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
 	.terrain-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:0 0 10px}.terrain-tabs [role=tab]{min-height:32px;padding:4px 6px;font-size:12px;letter-spacing:.04em;background:#183428;color:#c7dccf;border-color:#779d8950}.terrain-tabs [role=tab][aria-selected=true]{background:#2f5a46;color:#fff;border-color:#e5bc75;box-shadow:inset 0 -2px #e5bc75}.terrain-section>h2:first-child,.terrain-section>:first-child{margin-top:3px}.terrain-surface-group{display:grid;gap:0}.terrain-surface-group[hidden]{display:none}
 	@media(max-width:700px){.terrain-panel{width:260px;right:8px;top:8px;max-height:min(70%,calc(100% - 16px - var(--radar-room,0px)))}.terrain-hud{max-width:calc(100% - 56px);font-size:12px;bottom:8px}.terrain-panel:not([open]){width:auto}.terrain-panel>div{padding:0 10px 10px}}
+	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--map-room:0px}
+	.terrain-sandbox.has-flight-map:has(.terrain-speedometer:not([hidden])){--map-room:calc(var(--flight-map-size) + 8px)}
+	.terrain-sandbox:has(.terrain-speedometer:not([hidden])) .terrain-hud{left:calc(16px + var(--map-room));bottom:16px;max-width:calc(100% - var(--map-room) - var(--speedometer-size) - 58px)}
 	</style><div class="terrain-stage"></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
 	<details class="terrain-panel" open><summary>LANDSCAPE LAB</summary><div>
 	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
@@ -1278,10 +1282,11 @@ function markup()
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
-	<p class="terrain-note">Space / A launches · hold G / X for Vulcan · T / D-pad ↑ cycles balloons · M / left-stick click toggles the minimap · N / D-pad ↓ toggles the wide map · V / Y+B changes view.</p></div>
+	<p class="terrain-note">Space / A launches · hold G / X for Vulcan · T / D-pad ↑ cycles balloons · N / D-pad ↓ toggles the wide map · V / Y+B changes view.</p></div>
 	<label class="terrain-field">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
 	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on when the sun is low</option><option value="on">On</option><option value="off">Off</option></select></label>
+	<p class="terrain-note">Press M or click the left stick to toggle the car or F5 minimap.</p>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car, → boards the watercraft and ↓ returns to free flight. In the F5, ↑ cycles balloons and ↓ toggles the wide map. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ to leave flight, or Back + Y to reset the race. Start pauses.</p>
 	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p>

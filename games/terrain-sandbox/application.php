@@ -24,6 +24,7 @@ use TerrainSandbox\Session;
 $app = new Context;
 $app->browser(__DIR__ . '/browser/game.mjs');
 $app->browser(__DIR__ . '/browser/flight-map.mjs');
+$app->browser(__DIR__ . '/browser/speedometer.mjs');
 $app->browser(__DIR__ . '/browser/cockpit.mjs');
 $session = new Session;
 $engine = new Engine(new Device(1280, 720, 'Landscape Sandbox'));
@@ -61,7 +62,7 @@ $inputMs = 0.0;
 $pickFrame = false;
 $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
-$hud = vrzno_env('terrainJetFrame');
+$hud = vrzno_env('terrainVehicleFrame');
 $hudShown = false;
 // The panel builds its Surface tab once from the appearance settings' groups, ranges, defaults and per-style use.
 (vrzno_env('terrainSurface'))(json_encode(['groups' => TerrainPhonics\TerrainAppearance::GROUPS,
@@ -227,24 +228,35 @@ $engine->start(
 			if($session->mode === 'jet' && $session->flightTrails->active())
 				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
-			$showMap=$session->mode==='jet' && ($session->jetMap || $session->jetWideMap);
-			if($showMap) {
-				$bearing=M_PI-$vehiclePose['yaw']+(cos($vehiclePose['pitch'])<0 ? M_PI : 0);
-				$scene->drawChart([$vehiclePose['x'],$vehiclePose['z']],$bearing,$session->jetWideMap,$width,$height,
+			$jet = $session->mode === 'jet';
+			$car = $session->mode === 'car';
+			$frame = $jet || $car ? ['width'=>$width,'height'=>$height] : null;
+			$showMap = $jet ? $session->jetMap || $session->jetWideMap : $car && $session->carMap;
+			if($showMap)
+			{
+				$wide = $jet && $session->jetWideMap;
+				$bearing = M_PI-$vehiclePose['yaw']+($jet && cos($vehiclePose['pitch']) < 0 ? M_PI : 0);
+				$position = [$vehiclePose['x'],$vehiclePose['z']];
+				$extent = $session->landscape->recipe()['worldSize'];
+				$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'wide'=>$wide,'span'=>$wide ? $extent : min(4000.,$extent)];
+				$scene->drawChart($position,$bearing,$wide,$width,$height,
 					TerrainAppearance::linear($session->settings['waterColor']));
 			}
 			$engine->device->present();
-			if($session->mode === 'jet')
+			if($jet)
 			{
-				$hudShown = true;
-				$hud(json_encode(['width'=>$width,'height'=>$height,'eye'=>$viewCamera->position,'basis'=>$viewCamera->basis(),
+				$frame += ['eye'=>$viewCamera->position,'basis'=>$viewCamera->basis(),
 					'fov'=>$viewCamera->fov,'jet'=>$vehiclePose,'thrust'=>TerrainSandbox\Jet::thrustPercent($vehiclePose['power']),'cockpit'=>$session->jetView === 'cockpit',
-					'map'=>$showMap ? ['wide'=>$session->jetWideMap,'span'=>$session->jetWideMap ? $session->landscape->recipe()['worldSize'] : min(4000.,$session->landscape->recipe()['worldSize'])] : null,
 					'range'=>$session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
 					'contactRange'=>TerrainSandbox\BalloonPractice::CONTACT_RANGE,
-					'targets'=>$session->balloons->targets()], JSON_THROW_ON_ERROR));
+					'targets'=>$session->balloons->targets()];
 			}
-			elseif($hudShown) { $hud(''); $hudShown = false; }
+			if($car) $frame['speedKph'] = abs($vehiclePose['speed'])*3.6;
+			if($frame !== null || $hudShown)
+			{
+				$hud($frame !== null ? json_encode($frame, JSON_THROW_ON_ERROR) : '');
+				$hudShown = $frame !== null;
+			}
 			$renderMs = (microtime(true) - $start) * 1000;
 			$drawIntervalMs = $lastRender === null ? null : ($now - $lastRender) * 1000;
 			$lastRender = $now;

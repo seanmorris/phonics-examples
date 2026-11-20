@@ -5,12 +5,11 @@ export function activate({module, canvas})
 	const map = document.createElement('canvas');
 	map.className = 'terrain-flight-map';
 	map.setAttribute('role', 'img');
-	map.setAttribute('aria-label', 'Heading-up terrain elevation map with balloon positions');
+	map.setAttribute('aria-label', 'Heading-up terrain elevation map');
 	map.hidden = true;
 
 	canvas.parentElement.append(map);
 	const frame = map.closest('.terrain-sandbox'), ctx = map.getContext('2d');
-	let span, wide;
 
 	function hide()
 	{
@@ -20,17 +19,17 @@ export function activate({module, canvas})
 		frame.classList.remove('has-flight-map');
 	}
 
-	module.drawTerrainFlightMap = (data, bearing) => {
-		const delta = data?.map;
+	module.drawTerrainMap = data => {
+		const chart = data?.map;
 
-		if(!delta)
+		if(!chart)
 		{
 			hide();
 
 			return;
 		}
 
-		span=delta.span; wide=delta.wide;
+		const {span, wide, bearing, position} = chart;
 		const size = Math.round(Math.min(184, data.width*.235, data.height*.245));
 
 		if(map.hidden || map.width !== size)
@@ -41,12 +40,12 @@ export function activate({module, canvas})
 			frame.classList.add('has-flight-map');
 		}
 
-		const mid = size/2, jet = data.jet;
+		const mid = size/2;
 		const c = Math.cos(bearing), s = Math.sin(bearing);
 		const diagonal = Math.abs(c)+Math.abs(s);
 		// Fit all four corners of the landscape on the wide chart at every heading.
 		const scale = size/(wide ? span*diagonal : span);
-		const centerX = wide ? 0 : jet.x, centerZ = wide ? 0 : jet.z;
+		const [centerX, centerZ] = wide ? [0,0] : position;
 
 		function offset(x, z)
 		{
@@ -79,7 +78,7 @@ export function activate({module, canvas})
 
 		ctx.lineJoin = 'round';
 
-		for(const [id,pos] of Object.entries(data.targets))
+		for(const [id,pos] of Object.entries(data.targets ?? {}))
 		{
 			const [x,y] = offset(pos[0], pos[2]);
 			const edge = (mid-7)/Math.max(1, Math.abs(x), Math.abs(y));
@@ -116,8 +115,8 @@ export function activate({module, canvas})
 		}
 
 		ctx.save();
-		const [jetX,jetY] = offset(jet.x, jet.z);
-		ctx.translate(mid+jetX, mid+jetY);
+		const [vehicleX,vehicleY] = offset(...position);
+		ctx.translate(mid+vehicleX, mid+vehicleY);
 
 		ctx.beginPath();
 		ctx.moveTo(0, -7);
@@ -136,7 +135,7 @@ export function activate({module, canvas})
 
 	return () => {
 		hide();
-		delete module.drawTerrainFlightMap;
+		delete module.drawTerrainMap;
 		map.remove();
 	};
 }

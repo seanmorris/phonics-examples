@@ -18,7 +18,6 @@ export function activate({module, canvas})
 		{
 			screen.hidden = true;
 			acquiringId = contactFrame = null;
-			module.drawTerrainFlightMap(null);
 
 			return;
 		}
@@ -26,7 +25,6 @@ export function activate({module, canvas})
 		const {width, height, eye, basis, jet, targets, range, cockpit} = frame;
 		// Compass bearing of the horizontal nose, including the far side of an Expert loop.
 		const bearing = Math.PI-jet.yaw+(Math.cos(jet.pitch)<0 ? Math.PI : 0);
-		module.drawTerrainFlightMap(frame, bearing);
 		screen.hidden = false;
 
 		if(screen.width !== width || screen.height !== height)
@@ -349,10 +347,15 @@ export function activate({module, canvas})
 		if(range.hit) label('HIT', 0, h*.34+8, 52);
 	}
 
-	module.terrainJetFrame = json => draw(json ? JSON.parse(json) : null);
+	module.terrainVehicleFrame = json => {
+		const frame = json ? JSON.parse(json) : null;
+		module.drawTerrainMap(frame);
+		module.drawTerrainSpeedometer(frame);
+		draw(frame?.jet ? frame : null);
+	};
 
 	return () => {
-		delete module.terrainJetFrame;
+		delete module.terrainVehicleFrame;
 		screen.remove();
 	};
 }

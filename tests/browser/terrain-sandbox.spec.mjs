@@ -366,7 +366,7 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 		const url = URL.createObjectURL(new Blob([source], {type: 'text/javascript'}));
 		const {activate} = await import(url);
 		URL.revokeObjectURL(url);
-		const module = {drawTerrainFlightMap() {}};
+		const module = {drawTerrainMap() {}, drawTerrainSpeedometer() {}};
 		activate({module, canvas: document.querySelector('canvas')});
 		const ctx = document.querySelector('.terrain-instruments').getContext('2d');
 		const frame = {
@@ -394,7 +394,7 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 			frame.range.elapsed = elapsed;
 			frame.range.lockProgress = progress;
 			frame.range.locked = progress === 1;
-			module.terrainJetFrame(JSON.stringify(frame));
+			module.terrainVehicleFrame(JSON.stringify(frame));
 
 			return [ink(-60,-50), ink(15,-52), ink(6,-52), ink(72,-54,true), ink(72,-58,true)];
 		}
@@ -719,6 +719,17 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
+	await page.setViewportSize({width: 900, height: 600});
+	await page.addInitScript(() => {
+		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false}));
+		const pad = {id: 'Car test controller', index: 0, timestamp: 1, mapping: 'standard', connected: true,
+			axes: [0,0,0,0], buttons};
+		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+		window.clickCarStick = pressed => {
+			buttons[10] = {value: Number(pressed), pressed};
+			pad.timestamp++;
+		};
+	});
 	await boot(page);
 	const dry = fixture();
 	dry.settings.waterLevel = -4;
@@ -737,12 +748,46 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(0);
+	const map = page.locator('.terrain-flight-map'), dial = page.locator('.terrain-speedometer');
+	await expect(map).toBeVisible();
+	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 kilometres per hour');
+	await expect(page.locator('.terrain-instruments')).toBeHidden();
+	const viewport = await view.boundingBox(), mapBox = await map.boundingBox(), dialBox = await dial.boundingBox();
+	expect(mapBox.x-viewport.x).toBeCloseTo(10);
+	expect(viewport.x+viewport.width-dialBox.x-dialBox.width).toBeCloseTo(10);
+	for(const box of [mapBox,dialBox])
+		expect(viewport.y+viewport.height-box.y-box.height).toBeCloseTo(10);
+	const statusBox = await page.locator('.terrain-hud').boundingBox();
+	expect(statusBox.x).toBeGreaterThan(mapBox.x+mapBox.width);
+	expect(statusBox.x+statusBox.width).toBeLessThan(dialBox.x);
+	const needle = () => dial.evaluate(element => {
+		const size = element.width, ctx = element.getContext('2d');
+		const pixels = ctx.getImageData(0,0,size,size).data;
+		let xSum = 0, ySum = 0;
+		for(let y = 0; y < size; y++)
+		for(let x = 0; x < size; x++)
+		{
+			const i = 4*(y*size+x);
+			if(Math.hypot(x-size/2,y-size/2) < .13*size || pixels[i] < 200 || pixels[i+1] > 90) continue;
+			xSum += x-size/2;
+			ySum += y-size/2;
+		}
+		return (Math.atan2(ySum,xSum) + 2*Math.PI) % (2*Math.PI);
+	});
+	expect(await needle()).toBeCloseTo(.75*Math.PI, 1);
 	await expect(control(page, 'car')).toBeHidden();
 	await expect(control(page, 'fly')).toBeVisible();
 	await view.focus();
+	await page.keyboard.press('m');
+	await expect(map).toBeHidden();
+	await expect(dial).toBeVisible();
+	await page.evaluate(() => window.clickCarStick(true));
+	await expect(map).toBeVisible();
+	await page.evaluate(() => window.clickCarStick(false));
 	await page.keyboard.down('w');
 	await page.keyboard.down('d');
 	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
+	await expect.poll(needle).toBeGreaterThan(.75*Math.PI + .15);
 	await page.keyboard.up('d');
 	await page.keyboard.up('w');
 	const beforeRestore = await view.evaluate(element => element.carDraws);
@@ -752,6 +797,8 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await view.focus();
 	await page.keyboard.press('f');
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');
+	await expect(map).toBeHidden();
+	await expect(dial).toBeHidden();
 	await page.keyboard.press('c');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await (await field(page, '[data-value="waterLevel"]')).fill('10');

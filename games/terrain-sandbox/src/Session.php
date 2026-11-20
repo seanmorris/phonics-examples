@@ -38,6 +38,7 @@ final class Session
 	public ?FlightTrails $flightTrails = null;
 	public string $jetView = 'chase';
 	public bool $jetMap = true, $jetWideMap = false;
+	public bool $carMap = true;
 	private int $launches = 0;
 	/** Race gates on the landscape. Saved with it, and replaced when a file loads or a new landscape is generated. */
 	public Course $course;
@@ -758,11 +759,17 @@ final class Session
 				$this->mode = 'jet'; $this->paused = false; $this->boarding++;
 				$this->message = $this->jetMessage();
 				break;
+			case 'vehicle-map':
 			case 'jet-map':
 				if($this->mode === 'jet')
 				{
 					$this->jetMap = !($this->jetMap || $this->jetWideMap);
 					$this->jetWideMap = false;
+					$this->dirty = true;
+				}
+				elseif($this->mode === 'car')
+				{
+					$this->carMap = !$this->carMap;
 					$this->dirty = true;
 				}
 				break;
@@ -1403,7 +1410,7 @@ final class Session
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
-			'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),
+			'carMap' => $this->carMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
 			'duck' => $this->mode === 'fly' || $this->duck === null ? null
