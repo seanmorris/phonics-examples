@@ -13,6 +13,7 @@ final class BalloonPractice
 	public const RING = .285;
 	private array $placements = [], $positions = [], $popped = [];
 	private int $nextId = 1, $practiceId = 0;
+	private int $lastPracticeSide = 0;
 	private ?array $practicePoint = null;
 	private bool $practice = false, $visible = false;
 	private float $respawn = 0, $dwell = 0, $checkAt = 0, $floorAt = 0, $gunAt = 0;
@@ -103,17 +104,26 @@ final class BalloonPractice
 
 	private function spawn(array $p, Landscape $land, float $water): bool
 	{
-		$half = $land->recipe()['worldSize']/2;
-		$eye = Jet::cockpit($p);
-		[$nose] = $eye->basis();
-		// Try progressively nearer positions when the map edge or a canyon wall cuts off the first one.
-		foreach([650,420,250,140,75,35] as $distance)
+		$width = $land->recipe()['worldSize'];
+		$limit = $width/2 - max(7.0,min(160.0,$width*.04));
+		$scale = min(1.0,$width/8000);
+		$distance = mt_rand(1800,3200)*$scale;
+		$side = $this->lastPracticeSide === 0 ? (mt_rand(0,1) ? 1 : -1) : -$this->lastPracticeSide;
+		$offset = mt_rand(30,75);
+		$heading = $p['yaw'] + (cos($p['pitch']) < 0 ? M_PI : 0);
+
+		// Turn back into the landscape at its edges, keeping the same approach distance.
+		foreach([$offset,-$offset,100,-100,145,-145,180] as $degrees)
 		{
-			$x = $eye->position[0]+$distance*$nose[0]; $z = $eye->position[2]+$distance*$nose[2];
-			if(abs($x)+7 > $half || abs($z)+7 > $half) continue;
-			$point = [$x,max($eye->position[1]+$distance*$nose[1],max($land->height($x,$z),$water)+16),$z];
-			if(self::blocked($eye->position,$point,$land,$water)) continue;
-			$this->practicePoint = $point;
+			$bearing = $heading + deg2rad($side*$degrees);
+			$x = $p['x'] + $distance*sin($bearing);
+			$z = $p['z'] + $distance*cos($bearing);
+			if(max(abs($x),abs($z)) > $limit) continue;
+
+			$floor = max($water,$land->height($x,$z));
+			$clearance = max(16.0,mt_rand(80,200)*$scale);
+			$this->practicePoint = [$x,max($floor+$clearance,$p['y']-.04*$distance),$z];
+			$this->lastPracticeSide = $degrees < 0 ? -$side : $side;
 			$this->select(--$this->practiceId);
 			return true;
 		}

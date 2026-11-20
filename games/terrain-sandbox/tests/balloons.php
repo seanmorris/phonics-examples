@@ -19,7 +19,7 @@ function check(bool $ok, string $message): void
 	if(!$ok) throw new RuntimeException($message);
 }
 
-$recipe = ['worldSize'=>4096, 'heightScale'=>0, 'detailAmplitude'=>0];
+$recipe = ['worldSize'=>16384, 'heightScale'=>0, 'detailAmplitude'=>0];
 $land = new Landscape($recipe);
 $pose = ['x'=>0, 'y'=>100, 'z'=>0, 'speed'=>140, 'yaw'=>0, 'pitch'=>0, 'roll'=>0];
 foreach([[0,0,0],[1,.54,-.78],[-2,1.56,2.4],[3,-.4,M_PI]] as [$yaw,$pitch,$roll])
@@ -103,11 +103,45 @@ check($range->remove([0,100,0],[0,0,1],160) && count($range->targets()) === 1, '
 check(!$range->remove([0,100,0],[0,0,1],10), 'Solid foreground clips an editor pick');
 $range->refit($land,40);
 check(array_values($range->targets())[0][1] === 140.0, 'Changing water level refits an authored placement');
-check($range->start($pose,$land,0), 'Quick practice places a balloon in front');
-$tick(24); $tick(1,true); $tick(84);
+check($range->start($pose,$land,0), 'Quick practice places a balloon');
+$point = $range->targets()[$range->status()['selected']];
+$bearing = atan2($point[0],$point[2]);
+$tick(24);
+check(abs(rad2deg($bearing)) >= 29.99 && !$range->status()['locked'], 'Starting practice requires a turn');
+// Approach the selected balloon, turn onto it and pop it from inside the lock range.
+$approach = array_replace($pose,['x'=>$point[0]-700*sin($bearing),'y'=>$point[1],
+	'z'=>$point[2]-700*cos($bearing),'yaw'=>$bearing]);
+for($i=0; $i<110; $i++) $range->step(1/60,$approach,$i === 24,false,$land,0,true);
 check($range->hits === 1, 'Quick-practice shot pops the transient balloon');
-$tick(60);
+for($i=0; $i<60; $i++) $range->step(1/60,$approach,false,false,$land,0,true);
 check(count($range->targets()) === 2 && count($range->export()) === 1, 'Practice replaces its balloon without adding it to saves');
+$next = $range->targets()[$range->status()['selected']];
+$nextBearing = atan2($next[0]-$approach['x'],$next[2]-$approach['z']);
+check(sin($nextBearing-$bearing)*sin($bearing) < 0, 'The replacement favours the other side of the new heading');
+
+$open = new Landscape(array_replace($recipe,['worldSize'=>32768]));
+$practice = new BalloonPractice;
+foreach([[0,0,0,0],[0,0,1.8,2.2],[16380,16380,M_PI/4,0],[-16380,-16380,-3*M_PI/4,0]] as [$x,$z,$yaw,$pitch])
+{
+	$flight = array_replace($pose,compact('x','z','yaw','pitch'));
+	check($practice->start($flight,$open,200), 'Practice finds an approach even from an outward-facing map corner');
+	[$bx,$by,$bz] = $practice->targets()[$practice->status()['selected']];
+	$distance = hypot($bx-$x,$bz-$z);
+	check($distance >= 1799.99 && $distance <= 3200.01, 'Full-size landscapes give the pilot a long approach');
+	check(max(abs($bx),abs($bz)) <= 16384-160 && $by >= 280, 'The balloon clears the shoreline and map edge');
+	if($x === 0)
+	{
+		$heading = $yaw + ($pitch > M_PI/2 ? M_PI : 0);
+		$angle = rad2deg(acos(cos(atan2($bx-$x,$bz-$z)-$heading)));
+		check($angle >= 29.99 && $angle <= 75.01, 'Off-axis bearings follow the horizontal nose direction even past vertical');
+	}
+}
+$open->close();
+$small = new Landscape(array_replace($recipe,['worldSize'=>128]));
+check($practice->start($pose,$small,0), 'Practice scales down on a compact map');
+[$x,,$z] = $practice->targets()[$practice->status()['selected']];
+check(hypot($x,$z) > 28 && max(abs($x),abs($z)) <= 57, 'The compact approach fits the map and balloon envelope');
+$small->close();
 
 // A real heightfield edit blocks sight and both kinds of shot along the same segment.
 $ridge = new Landscape($recipe);

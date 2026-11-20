@@ -325,6 +325,7 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	const airspace = fixture();
 	airspace.landscape.recipe.worldSize = 8192;
 	airspace.camera = {position: [0,150,0], yaw: 0, pitch: 0};
+	airspace.balloons = [[0,-1350,150],[0,-2200,150]];
 	await load(page, airspace);
 	await press(page, 'jet');
 	await press(page, 'balloon-practice');
@@ -335,6 +336,21 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	await setButton(11, false);
 	await expect(page.locator('.terrain-instruments')).toBeVisible();
 	await expect(page.locator('.terrain-panel')).not.toHaveAttribute('open', '');
+	const map = page.locator('.terrain-flight-map');
+	await expect.poll(() => map.evaluate(el => {
+		const pixels = el.getContext('2d').getImageData(0,0,el.width,el.height).data;
+		for(let i = 0; i < pixels.length; i += 4)
+		{
+			const x = (i/4)%el.width;
+			if(Math.abs(x-el.width/2) > .12*el.width
+				&& pixels[i] === 255 && pixels[i+1] === 99 && pixels[i+2] === 87) return true;
+		}
+		return false;
+	})).toBe(true);
+	expect((await status(page)).balloons.locked).toBe(false);
+	// Cycle from the distant practice blip to the first of two authored balloons on this flight path.
+	await canvas(page).focus();
+	await page.keyboard.press('t');
 	await expect.poll(async() => (await status(page)).balloons.locked).toBe(true);
 	await setButton(0, true);
 	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: 60_000}).toBe(1);
@@ -351,7 +367,6 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	await restoreContext(page);
 	expect((await status(page)).balloons).toEqual(before);
 	expect(await canvas(page).evaluate(el => el.getContext('webgl2').getError())).toBe(0);
-	const map = page.locator('.terrain-flight-map');
 	await expect(map).toBeVisible();
 	await setButton(10, true);
 	await expect(map).toBeHidden();

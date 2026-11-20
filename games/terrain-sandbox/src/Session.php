@@ -766,7 +766,7 @@ final class Session
 				{
 					$this->dirty = true;
 					$this->message = $this->balloons->start($this->jet->state(),$this->landscape,$this->water->level())
-						? 'Balloon practice. Space launches, hold G for Vulcan.' : 'Fly toward open terrain to place a practice balloon.';
+						? 'Balloon practice. Follow the red blip on your map.' : 'Fly toward open terrain to place a practice balloon.';
 				}
 				break;
 			case 'balloons-reset': $this->dirty = true; $this->balloons->reset(false); $this->launches = 0; $this->message = 'Balloons restored.'; break;
