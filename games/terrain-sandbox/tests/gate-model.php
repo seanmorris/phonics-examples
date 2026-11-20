@@ -136,6 +136,11 @@ namespace
 	expect($offsets[0] === $shapes->atlas['start'] && $offsets[1] === $shapes->atlas['finish']
 		&& $offsets[2] === $shapes->atlas['checkpoint'] && $offsets[3] === $shapes->atlas['checkpoint'],
 		'Each gate shows its role print through the atlas offset');
+	$resized = values('uGateSize', $since);
+	expect(count($resized) === 4 && $resized[0] === [0.0, 0.0, 1.0, 1.0] && count(values('uGateFeet', $since)) === 4
+		&& values('uGateColumns', $since)[0] === [14.0, (float)$shapes->kind('road')['board']['baked']]
+		&& values('uGateBoard', $since)[2] === [...$shapes->kind('air')['board']['label'], ...$shapes->kind('air')['board']['column']],
+		'Each drawn gate sets the uniforms model.vert resizes it with; a gate at its own size adds nothing');
 	$rotation = values('uRotation', $since);
 	$basis = $rotation[2];
 	expect(abs($basis[6] - 1) < 1e-12 && abs($basis[8]) < 1e-12 && abs($basis[0]) < 1e-12 && abs($basis[2] + 1) < 1e-12,
@@ -157,6 +162,15 @@ namespace
 	$since = $draw();
 	expect(values('uUvOffset', $since)[0] === $shapes->atlas['start-finish'],
 		'Removing the finish gate switches the start gate to the start / finish print');
+
+	// A resized gate draws with its size, and a new size places the course afresh.
+	$sized = $course->place('checkpoint', 'road', 0, 0, 300, 0, 1, 30.0, 12.0)['gate'];
+	$since = $draw();
+	$found = null;
+	foreach(values('uOrigin', $since) as $index => $origin) if($origin[2] === 300.0) $found = $index;
+	expect($found !== null && values('uGateSize', $since)[$found] === [15 - $shapes->kind('road')['window']['halfWidth'],
+		12 - $shapes->kind('road')['window']['top'], 1.0, 1.0], 'A 30 by 12 m road gate draws with its added half width and height');
+	$course->remove($sized['id']);
 
 	// A water gate floats at the wave height of its position.
 	$session->input(['values' => ['waterLevel' => 3.0, 'waterChoppiness' => 300.0]], 1 / 60, 16 / 9);
@@ -206,12 +220,12 @@ namespace
 	for($i = 1; $i < 32; $i++) $pond->place('checkpoint', 'water', 0, $level, $i % 2 ? -60.0 * $i : 60.0 + 40 * $i, 0);
 	$pond->float($surface, 1.0);
 	$race = new Race;
-	$race->advance($pond, $shapes, [0, $level + 1, 58], [0, $level + 1, 59], 1.0, 1 / 60, 'craft', 1);
+	$race->advance($pond, [0, $level + 1, 58], [0, $level + 1, 59], 1.0, 1 / 60, 'craft', 1);
 	expect($surface->samples === 1, 'A fixed step samples the waves for the one gate the race needs next');
-	$race->advance($pond, $shapes, [0, $level + 1, 59], [0, $level + 1, 61], 1.0, 1 / 60, 'craft', 1);
+	$race->advance($pond, [0, $level + 1, 59], [0, $level + 1, 61], 1.0, 1 / 60, 'craft', 1);
 	$pond->float($surface, 1.05);
 	$surface->samples = 0;
-	$race->advance($pond, $shapes, [0, $level + 1, 61], [0, $level + 1, 62], 1.05, 1 / 60, 'craft', 1);
+	$race->advance($pond, [0, $level + 1, 61], [0, $level + 1, 62], 1.05, 1 / 60, 'craft', 1);
 	expect($race->state === 'running' && $surface->samples === 1,
 		'A running race samples the waves for its next gate alone, not for the gate it passed last');
 	$pond->float($surface, 1.1);

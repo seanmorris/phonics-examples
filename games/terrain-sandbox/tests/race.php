@@ -41,17 +41,21 @@ function wrap(float $angle): float { return atan2(sin($angle), cos($angle)); }
  * @param float $x World X to click.
  * @param float $z World Z to click.
  * @param float $heading Direction of travel the camera faces, in the vehicles' convention.
- * @param float $height Gate height setting in metres.
+ * @param float $altitude Gate altitude setting in metres: 0 for road and water gates, above 0 for air gates.
+ * @param float $eye Camera height in metres.
+ * @param float $width Gate width setting in metres, 0 for the kind's own.
+ * @param float $height Gate height setting in metres, 0 for the kind's own.
  * @return array|null The course gate the click placed or moved, or null when the click placed none.
  */
-function click(Session $session, string $role, float $x, float $z, float $heading = 0.0, float $height = 0.0,
-	float $eye = 40.0): ?array
+function click(Session $session, string $role, float $x, float $z, float $heading = 0.0, float $altitude = 0.0,
+	float $eye = 40.0, float $width = 0.0, float $height = 0.0): ?array
 {
 	$session->camera->position = [$x, $eye, $z];
 	$session->camera->pitch = -M_PI / 2 + .001;
 	$session->camera->yaw = M_PI - $heading;
 	$revision = $session->course->revision;
-	input($session, ['values' => ['tool' => 'gate', 'gateRole' => $role, 'gateHeight' => $height], 'clicks' => [[.5, .5]]]);
+	input($session, ['values' => ['tool' => 'gate', 'gateRole' => $role, 'gateAltitude' => $altitude,
+		'gateWidth' => $width, 'gateHeight' => $height], 'clicks' => [[.5, .5]]]);
 	finishPicking($session);
 	if($role === 'remove' || $session->course->revision === $revision) return null;
 	$latest = null;
@@ -136,13 +140,15 @@ $air = $shapes->kind('air');
 // Placement. The flat fixture stands well above its water.
 $flat = ['worldSize' => 512, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
 $edit = new Session($flat);
-expect($edit->settings['gateRole'] === 'start' && $edit->settings['gateLaps'] === 1 && $edit->settings['gateHeight'] === 0.0,
-	'Gate settings start on the start role, one lap and ground height');
+expect($edit->settings['gateRole'] === 'start' && $edit->settings['gateLaps'] === 1 && $edit->settings['gateAltitude'] === 0.0
+	&& $edit->settings['gateWidth'] === 0.0 && $edit->settings['gateHeight'] === 0.0,
+	'Gate settings start on the start role, one lap, ground height and each kind\'s own size');
 $start = click($edit, 'start', 10, 20, M_PI / 2);
 expect($start !== null && $start['kind'] === 'road' && abs($start['x'] - 10) < .1 && abs($start['z'] - 20) < .1
 	&& abs($start['y']) < 1e-6 && abs($start['yaw'] - M_PI / 2) < 1e-9 && $start['laps'] === 1,
 	'A click on land at zero height places a road gate on the ground facing the camera heading');
-expect($edit->message === 'Placed the start gate at 10, 20 m.', 'Placing a gate says what and where: ' . $edit->message);
+expect($edit->message === 'Placed the start gate at 10, 20 m, its opening 13.3 by 3.1 m.',
+	'Placing a gate says what, where and how big: ' . $edit->message);
 $gates = statusGates($edit);
 expect(count($gates) === 1 && $gates[$start['id']]['print'] === 'start-finish' && $gates[$start['id']]['laps'] === 1,
 	'A start gate without a finish gate shows the START / FINISH print');
@@ -155,7 +161,7 @@ expect($facing['number'] === 1 && $facing['yaw'] >= -M_PI && $facing['yaw'] <= M
 	'A gate heading is kept within -pi to pi');
 for($i = 2; $i <= 4; $i++) click($edit, 'checkpoint', 50 * $i, 0);
 $numbers = array_column(array_filter($edit->course->gates(), fn($g) => $g['role'] === 'checkpoint'), 'number');
-expect(array_values($numbers) === [1, 2, 3, 4] && $edit->message === 'Placed checkpoint 4 at 200, 0 m.',
+expect(array_values($numbers) === [1, 2, 3, 4] && $edit->message === 'Placed checkpoint 4 at 200, 0 m, its opening 13.3 by 3.1 m.',
 	'Checkpoints are numbered in placement order');
 $finish = click($edit, 'finish', 0, -100);
 $gates = statusGates($edit);
@@ -174,14 +180,15 @@ $revision = $edit->course->revision;
 click($edit, 'remove', 100, 60);
 expect($edit->course->revision === $revision && str_starts_with($edit->message, 'No gate there'),
 	'A click beyond every gate\'s span removes nothing');
-// Two gates 10 m apart: the click lands 3 m from one of them.
+// Two gates 10 m apart, one behind the other: the click lands 3 m from one of them.
 $near = click($edit, 'checkpoint', -100, 200);
-$far = click($edit, 'checkpoint', -90, 200);
-click($edit, 'remove', -93, 200);
+$far = click($edit, 'checkpoint', -100, 210);
+click($edit, 'remove', -100, 207);
 expect($edit->course->gate($far['id']) === null && $edit->course->gate($near['id']) !== null,
 	'Of two gates within reach, Remove takes the nearer');
 $high = click($edit, 'checkpoint', 150, 150, 0, 60);
-expect($high['kind'] === 'air' && abs($high['y'] - 60) < 1e-9 && str_ends_with($edit->message, ', 60 m above the ground.'),
+expect($high['kind'] === 'air' && abs($high['y'] - 60) < 1e-9
+	&& str_ends_with($edit->message, ', 60 m above the ground, its opening 40 by 8.8 m.'),
 	'With a height above zero a click on land places an air gate that far above the ground');
 // The camera looks along +Z, 550 m short of a gate 60 m above the ground. The ray through the gate's window meets the
 // ground about 145 m beyond it.
@@ -192,22 +199,23 @@ input($edit, ['values' => ['gateRole' => 'remove'], 'clicks' => [[.5, .5]]]);
 finishPicking($edit);
 expect($edit->course->gate($high['id']) === null, 'Remove finds an air gate along the ray, high above the ground the ray hits');
 $count = $edit->course->count();
-input($edit, ['values' => ['gateRole' => 'pit lane', 'gateHeight' => 900]]);
-expect($edit->settings['gateRole'] === 'remove' && $edit->settings['gateHeight'] === 400.0,
-	'An unknown role is ignored and the height is held to 400 m');
-input($edit, ['values' => ['gateHeight' => -5]]);
-expect($edit->settings['gateHeight'] === 0.0, 'A negative height places road gates');
+input($edit, ['values' => ['gateRole' => 'pit lane', 'gateAltitude' => 900]]);
+expect($edit->settings['gateRole'] === 'remove' && $edit->settings['gateAltitude'] === 400.0,
+	'An unknown role is ignored and the altitude is held to 400 m');
+input($edit, ['values' => ['gateAltitude' => -5]]);
+expect($edit->settings['gateAltitude'] === 0.0, 'A negative altitude places road gates');
 
-// Laps belong to the start gate.
+// Laps belong to the start gate. This course has a finish gate, so it keeps them for when that gate goes.
 input($edit, ['values' => ['gateLaps' => 3]]);
-expect($edit->course->laps() === 3 && statusGates($edit)[$moved['id']]['laps'] === 3 && $edit->message === 'The race runs 3 laps.',
-	'Editing the lap count updates the start gate');
+expect($edit->course->start()['laps'] === 3 && statusGates($edit)[$moved['id']]['laps'] === 3 && $edit->course->laps() === 1
+	&& $edit->message === 'Laps apply to a course that finishes at its start gate. This course runs once to its finish gate.',
+	'Editing the lap count updates the start gate, and says a course with a finish gate runs once');
 input($edit, ['values' => ['gateLaps' => 25]]);
-expect($edit->course->laps() === 20 && $edit->settings['gateLaps'] === 20, 'Laps are held to 20');
+expect($edit->course->start()['laps'] === 20 && $edit->settings['gateLaps'] === 20, 'Laps are held to 20');
 input($edit, ['values' => ['gateLaps' => 2.6]]);
-expect($edit->course->laps() === 3 && $edit->settings['gateLaps'] === 3, 'Laps round to a whole number');
+expect($edit->course->start()['laps'] === 3 && $edit->settings['gateLaps'] === 3, 'Laps round to a whole number');
 input($edit, ['values' => ['gateLaps' => 'many']]);
-expect($edit->course->laps() === 3 && $edit->message === 'Invalid control value', 'A lap count that is not a number is refused');
+expect($edit->course->start()['laps'] === 3 && $edit->message === 'Invalid control value', 'A lap count that is not a number is refused');
 $movedAgain = click($edit, 'start', 0, 100);
 expect($movedAgain['laps'] === 3, 'A moved start gate keeps its laps');
 
@@ -219,7 +227,8 @@ expect($edit->message === 'There are no gates to clear.', 'Clearing an empty cou
 input($edit, ['values' => ['gateLaps' => 4]]);
 $fresh = click($edit, 'start', 0, 0);
 expect($fresh['laps'] === 4, 'A new start gate takes the lap setting');
-for($i = 1; $i <= Course::MAX_CHECKPOINTS; $i++) click($edit, 'checkpoint', -200 + 12 * $i, 50);
+// One behind another along their direction of travel, 11 m apart, which keeps their spans clear of each other.
+for($i = 1; $i <= Course::MAX_CHECKPOINTS; $i++) click($edit, 'checkpoint', 50, -190 + 11 * $i);
 $revision = $edit->course->revision;
 click($edit, 'checkpoint', 0, -50);
 expect($edit->course->revision === $revision && $edit->message === 'A course holds 32 checkpoints. Remove one to add another.',
@@ -240,44 +249,54 @@ expect(array_column($route, 'id') === [$c1['id'], $c2['id'], $s['id'], $c1['id']
 	&& array_column($route, 'lap') === [1, 1, 1, 2, 2, 2] && array_column($route, 'lapEnd') === [false, false, true, false, false, true],
 	'Without a finish gate each lap ends at the start gate');
 $f = $course->place('finish', 'road', 0, 0, 150, 0)['gate'];
-expect(array_column($course->route(), 'id') === [$c1['id'], $c2['id'], $s['id'], $c1['id'], $c2['id'], $f['id']],
-	'With a finish gate the last lap ends there and earlier laps at the start gate');
-$course->setLaps(1);
-expect(array_column($course->route(), 'id') === [$c1['id'], $c2['id'], $f['id']], 'One lap with a finish gate runs start to finish');
+expect(array_column($course->route(), 'id') === [$c1['id'], $c2['id'], $f['id']] && $course->laps() === 1
+	&& $course->start()['laps'] === 2, 'A course with a finish gate runs once from start to finish, whatever its laps');
+$revision = $course->revision;
+expect($course->setLaps(3) && $course->revision === $revision && $course->laps() === 1,
+	'Its start gate keeps a new lap count without changing the course');
+$course->remove($f['id']);
+expect(count($course->route()) === 9 && $course->laps() === 3, 'Without the finish gate the kept laps run again');
 
-// The crossing test uses the segment between two fixed steps.
+// The crossing test uses the segment between two fixed steps. A road gate on level ground counts a crossing from a
+// metre under the ground, which allows for the ground between samples, up to the window top.
+$roadWindow = ['halfWidth' => $road['window']['halfWidth'], 'bottom' => -Course::ROAD_BELOW, 'top' => $road['window']['top']];
+$airWindow = $air['window'];
+$level = new Course;
+expect($level->measure($level->place('start', 'road', 0, 0, 0, 0)['gate'])['window'] == $roadWindow,
+	'A road gate on level ground measures its window from a metre below the ground to the board');
 $gate = ['x' => 0.0, 'y' => 10.0, 'z' => 0.0, 'yaw' => M_PI / 2];
 $top = $road['window']['top'];
 $half = $road['window']['halfWidth'];
-expect(abs(Race::crossing($gate, $road, [-1, 11, 3], [3, 11, 3]) - .25) < 1e-12, 'A forward crossing reports where along the step it met the gate');
-expect(Race::crossing($gate, $road, [3, 11, 3], [-1, 11, 3]) === null, 'A backward crossing does not count');
-expect(Race::crossing($gate, $road, [-1, 11, $half + .1], [3, 11, $half + .1]) === null
-	&& Race::crossing($gate, $road, [-1, 11, -$half + .1], [3, 11, -$half + .1]) !== null,
+expect(abs(Race::crossing($gate, $roadWindow, [-1, 11, 3], [3, 11, 3]) - .25) < 1e-12, 'A forward crossing reports where along the step it met the gate');
+expect(Race::crossing($gate, $roadWindow, [3, 11, 3], [-1, 11, 3]) === null, 'A backward crossing does not count');
+expect(Race::crossing($gate, $roadWindow, [-1, 11, $half + .1], [3, 11, $half + .1]) === null
+	&& Race::crossing($gate, $roadWindow, [-1, 11, -$half + .1], [3, 11, -$half + .1]) !== null,
 	'Only a crossing within the window\'s half width counts');
-expect(Race::crossing($gate, $road, [-1, 10 + $top + .1, 0], [1, 10 + $top + .1, 0]) === null
-	&& Race::crossing($gate, $road, [-1, 10 - $road['below'] + .1, 0], [1, 10 - $road['below'] + .1, 0]) !== null
-	&& Race::crossing($gate, $road, [-1, 10 - $road['below'] - .1, 0], [1, 10 - $road['below'] - .1, 0]) === null,
-	'A road crossing counts from the posts\' feet to the window top');
-expect(Race::crossing($gate, $road, [-2, 11, 0], [0, 11, 0]) === 1.0 && Race::crossing($gate, $road, [0, 11, 0], [2, 11, 0]) === null,
+expect(Race::crossing($gate, $roadWindow, [-1, 10 + $top + .1, 0], [1, 10 + $top + .1, 0]) === null
+	&& Race::crossing($gate, $roadWindow, [-1, 10 - Course::ROAD_BELOW + .1, 0], [1, 10 - Course::ROAD_BELOW + .1, 0]) !== null
+	&& Race::crossing($gate, $roadWindow, [-1, 10 - Course::ROAD_BELOW - .1, 0], [1, 10 - Course::ROAD_BELOW - .1, 0]) === null,
+	'A road crossing counts from just under the ground to the window top');
+expect(Race::crossing($gate, $roadWindow, [-2, 11, 0], [0, 11, 0]) === 1.0 && Race::crossing($gate, $roadWindow, [0, 11, 0], [2, 11, 0]) === null,
 	'A step ending on the gate plane crosses it, so the next step starting there does not cross again');
 $high = ['x' => 0.0, 'y' => 200.0, 'z' => 500.0, 'yaw' => 0.0];
 $step = Jet::FASTEST / 60;
-expect(abs(Race::crossing($high, $air, [3, 201, 500 - $step / 3], [3, 201, 500 + 2 * $step / 3]) - 1 / 3) < 1e-12,
+expect(abs(Race::crossing($high, $airWindow, [3, 201, 500 - $step / 3], [3, 201, 500 + 2 * $step / 3]) - 1 / 3) < 1e-12,
 	'A jet at 260 m/s, 4.3 m a step, meets the window inside one step');
-expect(Race::crossing($high, $air, [3, 199.9, 499], [3, 199.9, 501]) === null
-	&& Race::crossing($high, $air, [3, 200 + $air['window']['top'] + .1, 499], [3, 200 + $air['window']['top'] + .1, 501]) === null,
+expect(Race::crossing($high, $airWindow, [3, 199.9, 499], [3, 199.9, 501]) === null
+	&& Race::crossing($high, $airWindow, [3, 200 + $air['window']['top'] + .1, 499], [3, 200 + $air['window']['top'] + .1, 501]) === null,
 	'An air gate counts only between its window\'s bottom and top edges');
-// One 30 m step of a jet passes the start gate, a checkpoint and the finish gate, each timed where the step meets it.
+// One 60 m step of a jet passes the start gate, a checkpoint and the finish gate, each timed where the step meets it.
+// The finish gate stands one air gate width beyond the start gate, the nearest it can stand without merging.
 $course = new Course;
 $course->place('start', 'air', 0, 100, 0, 0);
-$course->place('checkpoint', 'air', 0, 100, 10, 0);
-$course->place('finish', 'air', 0, 100, 20, 0);
+$course->place('checkpoint', 'air', 0, 100, 20, 0);
+$course->place('finish', 'air', 0, 100, 40, 0);
 $timer = new Race;
 $middle = 100 + ($air['window']['bottom'] + $air['window']['top']) / 2;
 $runs = [];
 foreach([1.5, 3.0, .75] as $dt)
 {
-	$event = $timer->advance($course, $shapes, [0, $middle, -5], [0, $middle, 25], 10.0, $dt, 'jet', 1);
+	$event = $timer->advance($course, [0, $middle, -10], [0, $middle, 50], 10.0, $dt, 'jet', 1);
 	$runs[] = [$event, $timer->status($course, 10 + $dt)];
 }
 expect($runs[0][1]['state'] === 'finished' && abs($runs[0][1]['time'] - 1) < 1e-12
@@ -407,16 +426,21 @@ $sprint->camera->position = [0, 30, -10]; $sprint->camera->yaw = M_PI;
 enterCar($sprint);
 drive($sprint, ['KeyW' => true], 600, $state('running'));
 input($sprint, ['values' => ['gateLaps' => 2]]);
-expect($race($sprint)['state'] === 'idle' && $sprint->message === 'The race runs 2 laps. The race stopped because the course changed.'
-	&& $race($sprint)['message'] === 'The race stopped because the course changed.',
-	'Changing the laps mid-race stops the race');
-expect($race($sprint)['best'] === null, 'A course with other laps keeps its own best time');
-input($sprint, ['values' => ['gateLaps' => 1]]);
-expect($race($sprint)['best'] === $t, 'Changing the laps back finds the course\'s best time again');
+expect($race($sprint)['state'] === 'running' && $race($sprint)['laps'] === 1 && $race($sprint)['best'] === $t
+	&& $sprint->message === 'Laps apply to a course that finishes at its start gate. This course runs once to its finish gate.',
+	'Laps leave a race to a finish gate running on the same course, and say they apply without one');
+// Changing the course mid-race stops the race, and the course without its finish gate runs the laps and keeps a best
+// time of its own.
+$sprint->course->remove($f['id']);
+input($sprint, []);
+expect($race($sprint)['state'] === 'idle' && str_ends_with($sprint->message, 'The race stopped because the course changed.')
+	&& $race($sprint)['laps'] === 2 && $race($sprint)['best'] === null,
+	'Removing the finish gate mid-race stops the race; the course then runs its two laps with a best time of its own');
 $sprint->close();
 
-// Two laps round a loop with a finish gate. The car passes the finish gate early in lap 1 and the start gate late in
-// lap 2, and neither counts out of order.
+// A loop with a finish gate and the lap setting at 2, which a course with a finish gate leaves aside: the race runs
+// once. The car passes the finish gate early in the lap and the start gate late in it, and neither counts out of
+// order.
 $loop = new Session($open);
 $s = click($loop, 'start', 0, 20);
 $c = click($loop, 'checkpoint', 60, 60, M_PI);
@@ -432,15 +456,12 @@ $track = function(Session $session) use (&$events): bool {
 };
 autopilot($loop, $route, 9000, $track);
 $lapped = $race($loop);
-expect($lapped['state'] === 'finished' && $lapped['laps'] === 2
-	&& array_column($lapped['splits'], 'gate') === [$c['id'], $s['id'], $c['id'], $f['id']]
-	&& array_column($lapped['splits'], 'lap') === [1, 1, 2, 2] && count($lapped['lapTimes']) === 2
-	&& abs(array_sum($lapped['lapTimes']) - $lapped['time']) < 1e-9,
-	'Lap 1 returns through the start gate and lap 2 ends at the finish gate');
+expect($lapped['state'] === 'finished' && $lapped['laps'] === 1
+	&& array_column($lapped['splits'], 'gate') === [$c['id'], $f['id']]
+	&& array_column($lapped['splits'], 'lap') === [1, 1] && $lapped['lapTimes'] === [$lapped['time']],
+	'A course with a finish gate runs once to it, passing the start gate on the way without counting it');
 expect(array_slice($events, 1) === ['Race started. Next: checkpoint 1.',
-	'Checkpoint 1 at ' . Race::clock($lapped['splits'][0]['time']) . '. Next: the start gate.',
-	'Lap 2 of 2 after ' . Race::clock($lapped['splits'][1]['time']) . '. Next: checkpoint 1.',
-	'Checkpoint 1 at ' . Race::clock($lapped['splits'][2]['time']) . '. Next: the finish gate.',
+	'Checkpoint 1 at ' . Race::clock($lapped['splits'][0]['time']) . '. Next: the finish gate.',
 	'Finished in ' . Race::clock($lapped['time']) . '.'], 'Each gate passed in order reports its split and the next gate');
 $loop->close();
 
@@ -493,7 +514,7 @@ $course->place('start', 'road', 0, 0, 0, 0);
 $timer = new Race;
 $reach = Race::LEAVE * $road['extent']['halfWidth'];
 $segment = fn(float $from, float $to, float $time): ?string
-	=> $timer->advance($course, $shapes, [0, 1, $from], [0, 1, $to], $time, 1.0, 'car', 1);
+	=> $timer->advance($course, [0, 1, $from], [0, 1, $to], $time, 1.0, 'car', 1);
 $events = [$segment(-1, 1, 0), $segment(1, $reach - .01, 1), $segment($reach - .01, -1, 2), $segment(-1, 1, 3),
 	$segment(1, $reach, 4), $segment($reach, -1, 5), $segment(-1, 1, 6)];
 expect($events === ['Race started. Next: the start gate to finish.', null, null, null, null, null, 'Finished in 6.00 s.']
@@ -509,9 +530,9 @@ enterCar($return);
 $against = 0;
 $previous = $return->car->state();
 autopilot($return, [[0, 200], [-20, 215], [-8, 185], [0, 160], [0, -120]], 12000,
-	function(Session $session) use (&$against, &$previous, $c, $road, $state): bool {
+	function(Session $session) use (&$against, &$previous, $c, $roadWindow, $state): bool {
 		$car = $session->car->state();
-		if(Race::crossing(['yaw' => $c['yaw'] + M_PI] + $c, $road, [$previous['x'], $previous['y'], $previous['z']],
+		if(Race::crossing(['yaw' => $c['yaw'] + M_PI] + $c, $roadWindow, [$previous['x'], $previous['y'], $previous['z']],
 			[$car['x'], $car['y'], $car['z']]) !== null) $against++;
 		$previous = $car;
 		return $state('finished')($session);
@@ -525,7 +546,7 @@ $return->close();
 // gate moves it there without driving through.
 $moves = new Session($open);
 $s = click($moves, 'start', 0, 20);
-expect(Race::crossing($s, $road, [0, 0, 0], [0, .02, 30]) !== null, 'The boarding jump would pass the gate if it counted');
+expect(Race::crossing($s, $roadWindow, [0, 0, 0], [0, .02, 30]) !== null, 'The boarding jump would pass the gate if it counted');
 $moves->camera->position = [0, 30, 30]; $moves->camera->yaw = M_PI;
 enterCar($moves);
 for($i = 0; $i < 30; $i++) $moves->step(1 / 60);
@@ -577,7 +598,8 @@ drive($crash, [], 3000, function(Session $session) use (&$jumped, &$wreck): bool
 	return true;
 });
 expect($jumped !== null && hypot($jumped['x'] - $wreck['x'], $jumped['z'] - $wreck['z']) > 20
-	&& Race::crossing($crash->course->start(), $road, [$wreck['x'], $wreck['y'], $wreck['z']],
+	&& Race::crossing($crash->course->start(), $crash->course->measure($crash->course->start())['window'],
+		[$wreck['x'], $wreck['y'], $wreck['z']],
 		[$jumped['x'], $jumped['y'], $jumped['z']]) !== null,
 	'Settling in a crater moves the wreck back through the start gate the way it faces');
 expect($race($crash)['state'] === 'idle', 'A car moved by recovery does not pass a gate');
@@ -638,7 +660,7 @@ $bay = new Session($lake);
 $s = click($bay, 'start', 0, -100);
 $c = click($bay, 'checkpoint', 0, 0);
 $f = click($bay, 'finish', 0, 100);
-expect($s['kind'] === 'water' && $bay->message === 'Placed the finish gate at 0, 100 m, floating on the water.'
+expect($s['kind'] === 'water' && $bay->message === 'Placed the finish gate at 0, 100 m, floating on the water, its opening 8.9 by 3.6 m.'
 	&& abs($c['y'] - $bay->water->sample($c['x'], $c['z'], $bay->time)['height']) < 1e-12
 	&& $bay->course->export()['gates'][1]['y'] === 5.0,
 	'A click on water places a gate that floats on the surface and saves the water level');
@@ -716,18 +738,19 @@ $s = click($file, 'start', 0, 20, .5);
 click($file, 'checkpoint', 0, 100);
 click($file, 'checkpoint', 50, 150, 0, 30);
 click($file, 'finish', 0, 180, -1);
-input($file, ['values' => ['gateLaps' => 3, 'gateRole' => 'checkpoint', 'gateHeight' => 30]]);
+input($file, ['values' => ['gateLaps' => 3, 'gateRole' => 'checkpoint', 'gateAltitude' => 30]]);
 // Loading holds the camera within the look limits, which the straight-down clicks exceed.
 $file->camera->pitch = -.4;
 $saved = $file->save();
 $data = json_decode($saved, true, flags: JSON_THROW_ON_ERROR);
-expect($data['version'] === 2 && count($data['course']['gates']) === 4 && $data['course']['gates'][0]['laps'] === 3
-	&& !isset($data['course']['gates'][0]['id']) && $data['course']['gates'][2]['number'] === 2,
-	'Version 2 files carry the course: every gate, its laps and its checkpoint numbers');
+expect($data['version'] === 3 && count($data['course']['gates']) === 4 && $data['course']['gates'][0]['laps'] === 3
+	&& !isset($data['course']['gates'][0]['id']) && $data['course']['gates'][2]['number'] === 2
+	&& $data['course']['gates'][2]['width'] === 2 * $air['window']['halfWidth'],
+	'Version 3 files carry the course: every gate, its laps, its checkpoint numbers and its size');
 $copy = new Session($open);
 $copy->load($saved);
 expect($copy->course->export() === $file->course->export() && $copy->course->signature() === $file->course->signature()
-	&& $copy->settings['gateLaps'] === 3 && $copy->settings['gateHeight'] === 30.0
+	&& $copy->settings['gateLaps'] === 3 && $copy->settings['gateAltitude'] === 30.0
 	&& array_column($copy->status()['course']['gates'], 'id') === [1, 2, 3, 4]
 	&& $copy->message === 'Landscape loaded, including terrain edits, environment settings and 4 gates.',
 	'Loading restores the course, its laps and the gate settings');
@@ -735,17 +758,18 @@ expect($copy->save() === $saved, 'A loaded course saves back byte for byte');
 // A file's lap count follows its start gate.
 $data['settings']['gateLaps'] = 7;
 $copy->load(json_encode($data));
-expect($copy->course->laps() === 3 && $copy->settings['gateLaps'] === 3, 'The start gate\'s laps win over the lap setting');
+expect($copy->course->start()['laps'] === 3 && $copy->settings['gateLaps'] === 3, 'The start gate\'s laps win over the lap setting');
 $legacy = $data;
 $legacy['version'] = 1;
-unset($legacy['course'], $legacy['settings']['gateRole'], $legacy['settings']['gateLaps'], $legacy['settings']['gateHeight']);
+unset($legacy['course'], $legacy['settings']['gateRole'], $legacy['settings']['gateLaps'], $legacy['settings']['gateAltitude'],
+	$legacy['settings']['gateWidth'], $legacy['settings']['gateHeight']);
 $copy->load(json_encode($legacy));
 expect($copy->course->count() === 0 && $copy->status()['course']['gates'] === [] && $copy->settings['gateLaps'] === 3,
 	'A version 1 file loads without gates and leaves the gate settings alone');
 $bare = $data;
 unset($bare['course']);
 $copy->load(json_encode($bare));
-expect($copy->course->count() === 0, 'A version 2 file without a course loads without gates');
+expect($copy->course->count() === 0, 'A version 3 file without a course loads without gates');
 $copy->load($saved);
 $intact = $copy->save();
 $generation = $copy->generation;
@@ -773,6 +797,10 @@ $malformed = [
 	'a fractional checkpoint number' => ['gates' => [['number' => 1.5] + $gate[1]]],
 	'33 checkpoints' => ['gates' => array_map(fn($n) => ['number' => $n] + $gate[1], range(1, 33))],
 	'a gate that is a list' => ['gates' => [array_values($gate[1])]],
+	'a width without a height' => ['gates' => [array_diff_key($gate[1], ['height' => 0])]],
+	'a string width' => ['gates' => [['width' => '20'] + $gate[1]]],
+	'a road gate too wide' => ['gates' => [['width' => 61] + $gate[1]]],
+	'a road gate too low' => ['gates' => [['height' => 1] + $gate[1]]],
 ];
 foreach($malformed as $name => $course)
 {
@@ -786,8 +814,8 @@ foreach($malformed as $name => $course)
 	}
 }
 $future = $data;
-$future['version'] = 3;
-try { $copy->load(json_encode($future)); expect(false, 'A version 3 file must be refused'); }
+$future['version'] = 4;
+try { $copy->load(json_encode($future)); expect(false, 'A version 4 file must be refused'); }
 catch(InvalidArgumentException) { expect($copy->save() === $intact, 'A file from a later version is refused'); }
 // The page loads files through an action, which reports the problem instead of throwing.
 $bad = $data;
@@ -822,11 +850,11 @@ $file->close();
 $wide = ['worldSize' => 2048, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
 $wall = new Session($wide);
 $gate = click($wall, 'checkpoint', 0, 400, M_PI / 2);
-$posts = $wall->course->posts($wall->gateShapes);
+$posts = $wall->course->posts();
 usort($posts, fn($a, $b) => $a[1] <=> $b[1]);
 $post = $posts[0];
 expect(count($posts) === count($road['posts']) && abs($post[0] - $gate['x']) < 1e-9
-	&& abs($post[1] - (400 - abs($road['posts'][0]['x']))) < .1 && abs($post[5] - ($gate['y'] + $road['posts'][0]['bottom'])) < 1e-9,
+	&& abs($post[1] - (400 - abs($road['posts'][0]['x']))) < .1 && abs($post[5] - ($gate['y'] - Course::POST_FOOT)) < 1e-9,
 	'Each road post stands at its place across the gate and reaches into the ground');
 $wall->camera->position = [0, 30, -300]; $wall->camera->yaw = M_PI;
 enterCar($wall);
@@ -864,7 +892,7 @@ foreach([true, false] as $withPost)
 	$scrape = new Session($wide);
 	// The gate stands across the car's line with one post at x = 0, z = 400 and the other 14 m away.
 	if($withPost) $scrape->course->place('checkpoint', 'road', $road['posts'][0]['x'], 0, 400, 0);
-	$posts = $scrape->course->posts($scrape->gateShapes);
+	$posts = $scrape->course->posts();
 	$scrape->camera->position = [Car::BODY_HALF_WIDTH + $road['posts'][1]['halfSize'] + .13, 30, 385]; $scrape->camera->yaw = M_PI;
 	enterCar($scrape);
 	$overlap = 0.0;
@@ -885,7 +913,7 @@ expect($scraped['posts'] === 2 && $scraped['overlap'] < 1e-3 && $scraped['z'] > 
 // Boarding beside a post finds a spot clear of it.
 $park = new Session($open);
 $gate = click($park, 'start', 0, 20);
-$posts = $park->course->posts($park->gateShapes);
+$posts = $park->course->posts();
 $park->camera->position = [$posts[1][0], 30, 20]; $park->camera->yaw = M_PI / 2;
 enterCar($park);
 $car = $park->car->state();
@@ -927,9 +955,11 @@ $view = new Session($lake);
 $s = click($view, 'start', 0, -100);
 $status = $view->status();
 expect(array_keys($status['course']) === ['revision', 'laps', 'gates']
-	&& array_keys($status['course']['gates'][0]) === ['id', 'role', 'kind', 'print', 'number', 'laps', 'x', 'y', 'z', 'yaw']
+	&& array_keys($status['course']['gates'][0]) === ['id', 'role', 'kind', 'print', 'number', 'laps', 'x', 'y', 'z', 'yaw',
+		'width', 'height']
 	&& array_keys($status['race']) === ['state', 'time', 'lap', 'laps', 'vehicle', 'next', 'remaining', 'splits', 'lastSplit',
-		'lapTimes', 'last', 'best', 'message'] && is_string(json_encode($status, JSON_THROW_ON_ERROR)),
+		'lapTimes', 'last', 'best', 'message', 'reach'] && is_string(json_encode($status, JSON_THROW_ON_ERROR))
+	&& array_keys($status['gateSizes']) === ['road', 'water', 'air'],
 	'The status reports the course and the race');
 input($view, ['actions' => ['gates-clear', 'race-reset']]);
 expect($view->message === 'Race reset. Place a start gate to race.' && $view->status()['race']['next'] === null,

@@ -10,7 +10,8 @@ use TerrainPhonics\Water;
 
 /**
  * Draws a course's race gates with the vehicle shaders: one baked mesh per gate kind, each holding four role prints
- * stacked in its atlas, so a gate's role is a texture offset chosen per draw.
+ * stacked in its atlas, so a gate's role is a texture offset chosen per draw. model.vert resizes each gate's mesh to
+ * its opening from the uGate uniforms set per draw.
  *
  * A gate is drawn only within its kind's range of the eye and when its extent's box meets the view. The program and
  * the mesh of each kind the course holds are uploaded on the course's first frame, whether or not a gate is in view.
@@ -18,8 +19,8 @@ use TerrainPhonics\Water;
 final class GateModel
 {
 	/**
-	 * Distance in metres beyond which a gate is not drawn. An air gate is three times the size of the others, and an
-	 * F5 at 260 m/s covers this range in about 17 seconds.
+	 * Distance in metres from a gate's extent beyond which it is not drawn. An air gate is three times the size of the
+	 * others at their own sizes, and an F5 at 260 m/s covers this range in about 17 seconds.
 	 */
 	public const RANGE = ['road' => 1500.0, 'water' => 1500.0, 'air' => 4500.0];
 	private ?Program $program = null;
@@ -27,7 +28,7 @@ final class GateModel
 	private array $meshes = [];
 	/** Kinds of the gates in $course at $revision, as keys. */
 	private array $kinds = [];
-	/** Per-gate drawing data for $course at $revision: basis, texture offset and culling box. */
+	/** Per-gate drawing data for $course at $revision: basis, texture offset, resize uniforms and culling box. */
 	private array $placed = [];
 	private ?Course $course = null;
 	private int $revision = -1;
@@ -103,6 +104,8 @@ final class GateModel
 			$rotation = $p->location('uRotation');
 			$origin = $p->location('uOrigin');
 			$offset = $p->location('uUvOffset');
+			[$size, $board, $columns, $feet] = array_map([$p, 'location'],
+				['uGateSize', 'uGateBoard', 'uGateColumns', 'uGateFeet']);
 			foreach($visible as $kind => $gates)
 			{
 				$mesh = $this->meshes[$kind];
@@ -112,6 +115,11 @@ final class GateModel
 					glUniformMatrix3fv($rotation, 1, false, $placed['basis']);
 					glUniform3f($origin, $gate['x'] - $eye[0], $gate['y'] - $eye[1], $gate['z'] - $eye[2]);
 					glUniform2f($offset, ...$placed['uv']);
+					[$resize, $layout, $count, $base] = $placed['resize'];
+					glUniform4f($size, ...$resize);
+					glUniform4f($board, ...$layout);
+					glUniform2f($columns, ...$count);
+					glUniform4f($feet, ...$base);
 					$mesh->draw();
 					$this->drawn++;
 				}
@@ -132,7 +140,7 @@ final class GateModel
 		$atlas = $this->shapes->atlas;
 		foreach($course->gates(false) as $gate)
 		{
-			$extent = $this->shapes->kind($gate['kind'])['extent'];
+			$extent = $course->measure($gate)['extent'];
 			$this->kinds[$gate['kind']] = true;
 			$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
 			// A square around the gate holds its footprint at any heading.
@@ -142,6 +150,7 @@ final class GateModel
 				// Column-major, as VehicleModel's basis with no pitch or roll: X across, Y up, Z along the travel.
 				'basis' => [$cos, 0.0, -$sin, 0.0, 1.0, 0.0, $sin, 0.0, $cos],
 				'uv' => $atlas[$course->print($gate)] ?? [0.0, 0.0],
+				'resize' => array_values($this->uniforms($course, $gate)),
 				'box' => ['x' => $gate['x'] - $reach, 'z' => $gate['z'] - $reach, 'size' => 2 * $reach],
 				'low' => $extent['bottom'], 'high' => $extent['top'],
 				'middle' => ($extent['bottom'] + $extent['top']) / 2,
@@ -150,6 +159,26 @@ final class GateModel
 		}
 		$this->course = $course;
 		$this->revision = $course->revision;
+	}
+
+	/**
+	 * Work out the uniforms with which model.vert resizes a gate's mesh to its opening.
+	 * @param Course $course The course the gate belongs to.
+	 * @param array $gate A gate of the course.
+	 * @return array{uGateSize:list<float>,uGateBoard:list<float>,uGateColumns:list<float>,uGateFeet:list<float>}
+	 * The half width and height the opening adds and the arch's scales across and up; the board's label half width
+	 * and checker column width on its -X and +X sides; the columns each side shows at the mesh's size and holds; and
+	 * the feet of the -X and +X posts and the ground under each, from the gate origin.
+	 */
+	public function uniforms(Course $course, array $gate): array
+	{
+		$measure = $course->measure($gate);
+		$layout = $this->shapes->kind($gate['kind'])['board'];
+		return ['uGateSize' => $measure['resize'],
+			// A board without a layout keeps its width: its label reaches past every vertex.
+			'uGateBoard' => $layout === null ? [1e9, 1e9, 1.0, 1.0] : [...$layout['label'], ...$layout['column']],
+			'uGateColumns' => $layout === null ? [1.0, 1.0] : [(float)$layout['columns'], (float)$layout['baked']],
+			'uGateFeet' => $measure['feet']];
 	}
 
 	/** Release the context-local handles. The next draw uploads what it needs again. */

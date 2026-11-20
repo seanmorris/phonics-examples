@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 
-// The race gate assets: gates.json against the three gate meshes that scripts/import_terrain_gates.py bakes.
+// The race gate assets: gates.json against the three gate meshes that scripts/import_terrain_gates.py bakes, each
+// measured at its own size as model.vert draws it.
 
 $checks = 0;
 function expect(bool $condition, string $message): void
@@ -11,27 +12,7 @@ function expect(bool $condition, string $message): void
 	if(!$condition) throw new RuntimeException($message);
 }
 
-/** Whether a triangle meets an axis-aligned box, by the separating axis test. */
-function triangleMeetsBox(array $triangle, array $centre, array $half): bool
-{
-	$v = array_map(fn(array $p): array => [$p[0] - $centre[0], $p[1] - $centre[1], $p[2] - $centre[2]], $triangle);
-	$edges = [];
-	foreach([[0, 1], [1, 2], [2, 0]] as [$a, $b])
-		$edges[] = [$v[$b][0] - $v[$a][0], $v[$b][1] - $v[$a][1], $v[$b][2] - $v[$a][2]];
-	$cross = fn(array $a, array $b): array
-		=> [$a[1]*$b[2] - $a[2]*$b[1], $a[2]*$b[0] - $a[0]*$b[2], $a[0]*$b[1] - $a[1]*$b[0]];
-	$axes = [[1, 0, 0], [0, 1, 0], [0, 0, 1], $cross($edges[0], $edges[1])];
-	foreach($edges as $edge) foreach([[1, 0, 0], [0, 1, 0], [0, 0, 1]] as $unit) $axes[] = $cross($edge, $unit);
-
-	foreach($axes as $axis)
-	{
-		$reach = abs($axis[0]) * $half[0] + abs($axis[1]) * $half[1] + abs($axis[2]) * $half[2];
-		$projections = array_map(fn(array $p): float => $p[0]*$axis[0] + $p[1]*$axis[1] + $p[2]*$axis[2], $v);
-		if(min($projections) > $reach + 1e-9 || max($projections) < -$reach - 1e-9) return false;
-	}
-
-	return true;
-}
+require __DIR__ . '/support/gate-mesh.php';
 
 $root = dirname(__DIR__);
 $folder = $root . '/assets/gates/';
@@ -66,31 +47,53 @@ foreach($gates['kinds'] as $name => $kind)
 		"The $name mesh has its atlas after the indices");
 	expect($header['height'] % 4 === 0, "The $name atlas divides into four role bands");
 
-	$points = [];
+	$mesh = readGateMesh($folder . $kind['mesh']);
 	$textured = $outsideBand = $otherTags = 0;
-	for($i = 0; $i < $header['vertices']; $i++)
+	foreach($mesh['vertices'] as $vertex)
 	{
-		$record = substr($data, 16 + $i * 28, 28);
-		$points[] = array_values(unpack('g3', $record));
-		$tag = ord($record[27]);
-		if($tag === 255)
+		$tag = $vertex['tag'];
+		if($tag < 128 || $tag >= 224 || !in_array($tag & 63, [GATE_LABEL, GATE_FRAME, GATE_SQUARE, GATE_CAP, GATE_POST,
+			GATE_BASE, GATE_ARCH], true) || ($tag & 64) !== (in_array($tag & 63, [GATE_CAP, GATE_POST, GATE_BASE], true) ? 0 : 64))
+			$otherTags++;
+		elseif($tag & 64)
 		{
 			$textured++;
-			if(unpack('v', $record, 20)[1] > 65535 / 4) $outsideBand++;
+			if($vertex['uv'][1] > .25) $outsideBand++;
 		}
-		else if($tag !== 0) $otherTags++;
 	}
 	expect($textured > 0 && $outsideBand === 0, "Every textured $name vertex samples the first role band");
-	expect($otherTags === 0, "No $name vertex carries a wheel or hinge tag");
-	$corners = array_values(unpack('v*', substr($data, 16 + $vertexBytes, $header['indices'] * 2)));
+	expect($otherTags === 0, "Every $name vertex carries a gate part tag, clear of the wheel and hinge tags");
+	$corners = $mesh['corners'];
 	expect(max($corners) < $header['vertices'], "Every $name index names a vertex");
+	// At its own size the mesh draws as baked, except the spare checker columns, which fold into the end of each band.
+	$own = ['uGateSize' => [0.0, 0.0, 1.0, 1.0],
+		'uGateBoard' => isset($kind['board']) ? [...$kind['board']['label'], ...$kind['board']['column']] : [1e9, 1e9, 1.0, 1.0],
+		'uGateColumns' => isset($kind['board']) ? [$kind['board']['columns'], $kind['board']['baked']] : [1.0, 1.0],
+		'uGateFeet' => [$kind['posts'][0]['bottom'] ?? 0.0, $kind['posts'][1]['bottom'] ?? 0.0, 0.0, 0.0]];
+	$points = [];
+	$spares = 0;
+	$moved = 0;
+	foreach($mesh['vertices'] as $vertex)
+	{
+		$at = resizeGateVertex($vertex['position'], $vertex['tag'], $own);
+		$points[] = $at;
+		if($at === $vertex['position']) continue;
+		$band = isset($kind['board']) ? $own['uGateBoard'][$at[0] < 0 ? 0 : 1]
+			+ $kind['board']['columns'] * $own['uGateBoard'][$at[0] < 0 ? 2 : 3] : INF;
+		if(($vertex['tag'] & 63) === GATE_SQUARE && abs(abs($at[0]) - $band) < 1e-6) $spares++;
+		elseif(max(array_map(fn($a, $b) => abs($a - $b), $at, $vertex['position'])) > 1e-6) $moved++;
+	}
+	expect($moved === 0, "At its own size the $name mesh draws where it was baked ($moved vertices move)");
+	if(isset($kind['board']))
+		expect($spares > 0 && $kind['board']['baked'] > $kind['board']['columns'],
+			"The $name mesh folds $spares spare checker vertices into the ends of its bands");
 
 	['window' => $window, 'extent' => $extent] = $kind;
 	$low = [min(array_column($points, 0)), min(array_column($points, 1)), min(array_column($points, 2))];
 	$high = [max(array_column($points, 0)), max(array_column($points, 1)), max(array_column($points, 2))];
 	expect(abs(max(-$low[0], $high[0]) - $extent['halfWidth']) < .001 && abs($high[1] - $extent['top']) < .001
-		&& abs($low[1] - $extent['bottom']) < .001 && abs(max(-$low[2], $high[2]) - $extent['halfDepth']) < .001,
-		"The $name extent bounds its mesh");
+		&& abs(min(0, $low[1]) - $extent['bottom']) < .001 && abs(max(-$low[2], $high[2]) - $extent['halfDepth']) < .001,
+		"The $name extent bounds its mesh and reaches down to the window's bottom edge at least");
 	expect($window['bottom'] === 0 && $window['halfWidth'] < $extent['halfWidth'] && $window['top'] < $extent['top'],
 		"The $name window starts at the origin, inside the extent");
 
@@ -99,11 +102,7 @@ foreach($gates['kinds'] as $name => $kind)
 	$box = [$window['halfWidth'] - .01, ($window['top'] - .15) / 2 - .005, $extent['halfDepth'] + 1];
 	$centre = [0, .15 + $box[1], 0];
 	$blocked = 0;
-	for($k = 0; $k < count($corners); $k += 3)
-	{
-		$triangle = [$points[$corners[$k]], $points[$corners[$k + 1]], $points[$corners[$k + 2]]];
-		if(triangleMeetsBox($triangle, $centre, $box)) $blocked++;
-	}
+	foreach(resizeGateMesh($mesh, $own) as $triangle) if(triangleMeetsBox($triangle, $centre, $box)) $blocked++;
 	expect($blocked === 0, "The $name window is clear of the mesh ($blocked triangles in it)");
 
 	foreach($kind['posts'] as $post)
@@ -121,5 +120,6 @@ foreach($gates['kinds'] as $name => $kind)
 }
 expect(count($gates['kinds']['road']['posts']) === 2, 'The road gate has two posts');
 expect($gates['kinds']['road']['posts'][0]['bottom'] <= -8, 'The road posts reach 8 metres below the base');
+expect($gates['kinds']['air']['extent']['bottom'] === 0, 'The air gate has no base plates below its board');
 
 echo "Landscape sandbox gates: $checks checks passed\n";

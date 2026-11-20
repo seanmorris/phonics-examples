@@ -25,26 +25,37 @@ final class GateShapes
 			'road' => ['mesh' => 'road.mesh.bin.gz', 'window' => ['halfWidth' => 6.662, 'bottom' => 0, 'top' => 3.073],
 				'posts' => [['x' => -7.062, 'z' => 0, 'halfSize' => .4, 'bottom' => -8.0, 'top' => 4.137],
 					['x' => 7.062, 'z' => 0, 'halfSize' => .4, 'bottom' => -8.0, 'top' => 4.137]],
-				'extent' => ['halfWidth' => 7.582, 'bottom' => -8.0, 'top' => 4.28, 'halfDepth' => .53]],
+				'extent' => ['halfWidth' => 7.582, 'bottom' => -8.0, 'top' => 4.28, 'halfDepth' => .53],
+				'size' => ['width' => [6, 60], 'height' => [2, 40]],
+				'board' => ['label' => [3.0008, 2.9774], 'column' => [.32052, .32183], 'columns' => 14, 'baked' => 88]],
 			'water' => ['mesh' => 'water.mesh.bin.gz', 'window' => ['halfWidth' => 4.458, 'bottom' => 0, 'top' => 3.596],
-				'posts' => [], 'extent' => ['halfWidth' => 6.0, 'bottom' => -2.7, 'top' => 7.034, 'halfDepth' => .621]],
+				'posts' => [], 'extent' => ['halfWidth' => 6.0, 'bottom' => -2.7, 'top' => 7.034, 'halfDepth' => .621],
+				'size' => ['width' => [4.5, 60], 'height' => [2, 40], 'stretch' => 2]],
 			'air' => ['mesh' => 'air.mesh.bin.gz', 'window' => ['halfWidth' => 19.986, 'bottom' => 0, 'top' => 8.813],
-				'posts' => [], 'extent' => ['halfWidth' => 22.746, 'bottom' => -.406, 'top' => 12.433, 'halfDepth' => 1.591]],
+				'posts' => [], 'extent' => ['halfWidth' => 22.746, 'bottom' => 0, 'top' => 12.433, 'halfDepth' => 1.591],
+				'size' => ['width' => [20, 300], 'height' => [5, 150]],
+				'board' => ['label' => [9.0024, 8.9322], 'column' => [.96157, .9655], 'columns' => 14, 'baked' => 150]],
 		],
 		'atlas' => ['roles' => ['start' => [0, 0], 'checkpoint' => [0, .25], 'finish' => [0, .5],
 			'start-finish' => [0, .75]]],
 	];
 	/**
-	 * How far below the window's bottom edge a vehicle still counts as passing through it. A car on ground that
-	 * slopes across a road gate runs below the gate's origin on the downhill side, where the posts reach 8 m into
-	 * the ground. A jet ski in a trough sits below the water line at the gate's centre. A jet has no such excuse.
+	 * How far below the window's bottom edge a vehicle still counts as passing through it. A jet ski in a trough sits
+	 * below the water line at the gate's centre. A jet has no such excuse. A road gate measures its own from the
+	 * ground across it, Course::ROAD_BELOW under the lowest, so its figure here applies only on level ground.
 	 */
-	public const BELOW = ['road' => 8.0, 'water' => 3.0, 'air' => 0.0];
-	/** Default depth of a road post's foot below the gate origin. */
+	public const BELOW = ['road' => Course::ROAD_BELOW, 'water' => 3.0, 'air' => 0.0];
+	/**
+	 * Default depth of a road post's foot below the gate origin in the mesh. A placed gate sets each foot from the
+	 * ground under the post, which Course::measure() reports.
+	 */
 	public const POST_DEPTH = 8.0;
 	/** Default half depth of a gate's extent along its direction of travel, in metres. */
 	public const HALF_DEPTH = 1.0;
-	/** Shapes by kind: mesh file name, window, extent (with its bottom and half depth) and posts with their reach. */
+	/**
+	 * Shapes by kind: mesh file name, window, extent (with its bottom and half depth), posts with their reach, the
+	 * range of sizes its opening takes and, on the road and air gates, the layout of the board's checker bands.
+	 */
 	public readonly array $kinds;
 	/**
 	 * Texture offset [u, v] that selects each print, keyed by print name, or null when gates.json lays its prints out
@@ -149,12 +160,38 @@ final class GateShapes
 			$solid[] = ['x' => (float)$post['x'], 'z' => (float)$post['z'], 'halfSize' => (float)$post['halfSize'],
 				'bottom' => (float)$bottom, 'top' => (float)$top];
 		}
+		$width = 2 * (float)$window['halfWidth'];
+		$height = (float)$window['top'] - (float)$window['bottom'];
+		$size = $data['size'] ?? self::DEFAULTS['kinds'][$kind]['size'];
+		$range = static fn(mixed $pair, float $default): bool => is_array($pair) && array_is_list($pair)
+			&& count($pair) === 2 && self::number($pair[0]) && self::number($pair[1]) && $pair[0] > 0
+			&& $pair[0] <= $default + 1e-9 && $pair[1] >= $default - 1e-9;
+		$stretch = is_array($size) ? $size['stretch'] ?? null : null;
+		if(!is_array($size) || !$range($size['width'] ?? null, $width) || !$range($size['height'] ?? null, $height)
+			|| $stretch !== null && (!self::number($stretch) || $stretch < 1))
+			throw new \RuntimeException("The $kind gate size needs width and height ranges that hold its window");
+		// Without a board layout the board keeps its own width, and only the posts and tabs move.
+		$board = $data['board'] ?? null;
+		if($board !== null)
+		{
+			$pair = static fn(mixed $value): bool => is_array($value) && array_is_list($value) && count($value) === 2
+				&& self::number($value[0]) && self::number($value[1]) && $value[0] > 0 && $value[1] > 0;
+			if(!is_array($board) || !$pair($board['label'] ?? null) || !$pair($board['column'] ?? null)
+				|| !is_int($board['columns'] ?? null) || !is_int($board['baked'] ?? null) || $board['columns'] < 1
+				|| $board['baked'] < $board['columns'])
+				throw new \RuntimeException("The $kind gate board needs its label, column widths and column counts");
+			$board = ['label' => array_map('floatval', $board['label']), 'column' => array_map('floatval', $board['column']),
+				'columns' => $board['columns'], 'baked' => $board['baked']];
+		}
 		return ['mesh' => $mesh,
 			'window' => ['halfWidth' => (float)$window['halfWidth'], 'bottom' => (float)$window['bottom'],
 				'top' => (float)$window['top']],
 			'extent' => ['halfWidth' => (float)$extent['halfWidth'], 'bottom' => (float)$extentBottom,
 				'top' => (float)$extent['top'], 'halfDepth' => (float)$halfDepth],
-			'posts' => $solid, 'below' => self::BELOW[$kind]];
+			'posts' => $solid, 'below' => self::BELOW[$kind],
+			'size' => ['width' => array_map('floatval', $size['width']), 'height' => array_map('floatval', $size['height']),
+				'default' => [$width, $height], 'stretch' => $stretch === null ? null : (float)$stretch],
+			'board' => $board];
 	}
 
 	private static function number(mixed $value): bool
@@ -165,15 +202,79 @@ final class GateShapes
 	/**
 	 * Return one kind's shape.
 	 * @param string $kind road, water or air.
-	 * @return array Mesh name, window, extent, posts and the crossing allowance below the window.
+	 * @return array Mesh name, window, extent, posts, the crossing allowance below the window, the size range with
+	 * the default size and the arch's stretch, and the board layout or null.
 	 */
 	public function kind(string $kind): array { return $this->kinds[$kind]; }
+
+	/**
+	 * Fit a requested opening to a kind's sizes.
+	 * @param string $kind road, water or air.
+	 * @param float|null $width Opening width in metres, or null for the kind's own.
+	 * @param float|null $height Opening height in metres, or null for the kind's own.
+	 * @return array{width:float,height:float,limits:list<string>} The size within the kind's ranges, and a phrase
+	 * for each limit that changed it, such as "a road gate is at most 60 m wide". A water arch also keeps its scale
+	 * up within its stretch of its scale across, by changing the height.
+	 */
+	public function fit(string $kind, ?float $width, ?float $height): array
+	{
+		$size = $this->kinds[$kind]['size'];
+		$name = ['road' => 'a road gate', 'water' => 'a water arch', 'air' => 'an air gate'][$kind];
+		$limits = [];
+		$clamp = static function(?float $value, array $range, float $default, string $wide) use (&$limits, $name): float {
+			if($value === null) return $default;
+			$held = max($range[0], min($range[1], $value));
+			if($held !== $value)
+				$limits[] = "$name is " . ($held < $value ? 'at most ' : 'at least ') . self::metres($held) . " m $wide";
+			return $held;
+		};
+		[$defaultWidth, $defaultHeight] = $size['default'];
+		$width = $clamp($width, $size['width'], $defaultWidth, 'wide');
+		$height = $clamp($height, $size['height'], $defaultHeight, 'tall');
+		if($size['stretch'] !== null)
+		{
+			$across = $width / $defaultWidth;
+			$low = max($size['height'][0], $defaultHeight * $across / $size['stretch']);
+			$high = min($size['height'][1], $defaultHeight * $across * $size['stretch']);
+			$held = max($low, min($high, $height));
+			if(abs($held - $height) > 1e-9)
+				$limits[] = "$name " . self::metres($width) . ' m wide is ' . ($held < $height ? 'at most ' : 'at least ')
+					. self::metres($held) . ' m tall';
+			$height = $held;
+		}
+		return ['width' => $width, 'height' => $height, 'limits' => $limits];
+	}
+
+	/**
+	 * Whether a size fits a kind exactly as fit() would leave it.
+	 * @param string $kind road, water or air.
+	 * @param float $width Opening width in metres.
+	 * @param float $height Opening height in metres.
+	 */
+	public function fits(string $kind, float $width, float $height): bool
+	{
+		$fitted = $this->fit($kind, $width, $height);
+		return abs($fitted['width'] - $width) < 1e-6 && abs($fitted['height'] - $height) < 1e-6;
+	}
+
+	/** Write a length for a message: whole metres, or one decimal place under 100 m. */
+	public static function metres(float $metres): string
+	{
+		$rounded = round($metres, $metres < 100 ? 1 : 0);
+		return $rounded == floor($rounded) ? (string)(int)$rounded : sprintf('%.1f', $rounded);
+	}
 
 	/** Report the shapes in the layout of gates.json, with each post's vertical reach filled in. */
 	public function export(): array
 	{
 		$kinds = [];
-		foreach($this->kinds as $kind => $shape) $kinds[$kind] = array_diff_key($shape, ['below' => 0]);
+		foreach($this->kinds as $kind => $shape)
+		{
+			$kinds[$kind] = array_diff_key($shape, ['below' => 0, 'board' => 0]);
+			$kinds[$kind]['size'] = array_diff_key($shape['size'], ['default' => 0]);
+			if($shape['size']['stretch'] === null) unset($kinds[$kind]['size']['stretch']);
+			if($shape['board'] !== null) $kinds[$kind]['board'] = $shape['board'];
+		}
 		return ['version' => 1, 'roles' => self::PRINTS, 'kinds' => $kinds, 'atlas' => ['roles' => $this->atlas]];
 	}
 }

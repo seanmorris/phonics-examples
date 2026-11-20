@@ -3,13 +3,19 @@
 Usage: python3 scripts/import_terrain_gates.py finish_line.zip davita_finish-line_2020.zip
 
 The road gate is the "Finish Line" gantry with solid posts in place of its lattice towers and a flat label panel in
-place of its 3D lettering. The air gate is the same board and metal tabs at three times the size, without posts.
-The water gate is the inflatable arch scaled to 12 metres. Only geometry comes from the archives: the importer never
-extracts their textures, and scripts/generate-terrain-gates.mjs paints every pixel of the three atlases.
+place of its 3D lettering. The air gate is the same board and the tabs on top of the towers at three times the size,
+without posts or base plates. The water gate is the inflatable arch scaled to 12 metres. Only geometry comes from the
+archives: the importer never extracts their textures, and scripts/generate-terrain-gates.mjs paints every pixel of
+the three atlases.
 
 Each gate's frame puts the origin at the bottom centre of its window, +Y up, +Z along the direction of travel and
 +X across. Every atlas stacks one print per role in bands a quarter of its height, and the meshes address the top
 band, so a draw selects a role by adding that role's offset from gates.json to the texture coordinates.
+
+Each vertex carries a tag naming its part, so that model.vert can resize a gate's opening. The posts and the tabs move
+out with the window's sides, the board and the tabs rise with its top, and the checker bands either side of the label
+show as many whole columns as fill the board. The meshes hold enough spare columns for the widest opening; at the
+mesh's own size they fold away into the end of each band. The arch scales.
 """
 import argparse
 import gzip
@@ -51,6 +57,19 @@ WATER_ATLAS = (496, 1600)
 WATER_PRINT = {"pixelsPerMetre": 40, "origin": [248, 287]}
 # Cells of the gantry's 8 by 8 palette texture that its board uses, by column and row.
 BOARD_CELLS = {(0, 7): "light", (7, 7): "dark", (2, 7): "frame", (3, 5): "label"}
+# The range of each kind's opening in metres, width then height. The board meshes hold checker columns for the widest.
+SIZES = {"road": ((6, 60), (2, 40)), "water": ((4.5, 60), (2, 40)), "air": ((20, 300), (5, 150))}
+# The arch stretches to an opening of another shape, scaling up at most twice as much as across, or across at most
+# twice as much as up, which keeps its lettering legible.
+ARCH_STRETCH = 2
+# Part tags, the last byte of each vertex. Every gate tag lies from 128 to 223, clear of the vehicles' wheel tags
+# below 128 and the F5's hinge tags from 250 to 254. Bit 6 marks a part that samples the atlas.
+TEXTURED = 64
+LABEL, FRAME, SQUARE, CAP, POST, BASE, ARCH = range(1, 8)
+
+
+def tag(part):
+    return 128 + (TEXTURED if part in (LABEL, FRAME, SQUARE, ARCH) else 0) + part
 
 
 def multiply(a, b):
@@ -107,9 +126,10 @@ class Mesh:
 
     def __init__(self):
         self.vertices, self.indices, self.ids, self.triangles = bytearray(), bytearray(), {}, 0
+        # Corners of the gate at the mesh's own size, which leaves out the spare checker columns.
         self.points = []
 
-    def triangle(self, corners, paint):
+    def triangle(self, corners, paint, spare=False):
         """Add one triangle of (position, normal, uv) corners, wound anticlockwise seen from its front."""
         for point, normal, uv in corners:
             record = VERTEX.pack(*point, *(round(max(-1, min(1, n)) * 32767) for n in normal),
@@ -117,7 +137,8 @@ class Mesh:
             if record not in self.ids:
                 self.ids[record] = len(self.ids)
                 self.vertices.extend(record)
-                self.points.append(point)
+                if not spare:
+                    self.points.append(point)
             self.indices.extend(struct.pack("<H", self.ids[record]))
         self.triangles += 1
 
@@ -133,9 +154,9 @@ class Mesh:
         return gzip.compress(header + self.vertices + self.indices + bytes(width * height * 4), mtime=0)
 
 
-def metal_paint(material):
+def metal_paint(material, part):
     color = [srgb(v) for v in material["baseColorFactor"][:3]]
-    return (*color, round(255 * material["roughnessFactor"]), round(255 * material["metallicFactor"]), 0)
+    return (*color, round(255 * material["roughnessFactor"]), round(255 * material["metallicFactor"]), tag(part))
 
 
 def board_uv(rectangle, width, height):
@@ -152,8 +173,9 @@ def cell(board, corners):
     return BOARD_CELLS[next(iter(cells))]
 
 
-def gantry(parts, scale, lift, posts):
-    """The gantry's board and tabs, and optionally solid posts, in a gate frame with the board facing -Z."""
+def gantry(parts, scale, lift, posts, widest):
+    """The gantry's board and tabs, and optionally solid posts and base plates, in a gate frame with the board facing
+    -Z. The checker bands run on in spare columns for an opening `widest` metres wide."""
     towers = parts["pole.001_Metal_0"]
     board = parts["Board.001_CP Black_0"]
     # The two lattice towers, each one's lowest and highest corner.
@@ -172,7 +194,10 @@ def gantry(parts, scale, lift, posts):
     mesh = Mesh()
     width, height = BOARD_ATLAS
     swatches = {name: board_uv(rect, width, height) for name, rect in BOARD_PRINT["swatches"].items()}
-    textured = (255, 255, 255, round(255 * board["material"]["roughnessFactor"]), 0, 255)
+
+    def textured(part):
+        return (255, 255, 255, round(255 * board["material"]["roughnessFactor"]), 0, tag(part))
+
     board_low, board_high = bounds(board["points"])
     back = board_low[2]
     # The printed face is a frame around a recessed floor, which holds the squares and the red panel that the
@@ -194,9 +219,12 @@ def gantry(parts, scale, lift, posts):
         if role == "label":
             continue
         uv = swatches[role]
-        mesh.triangle([(place(p), turn(board["normals"][i]), uv) for p, i in zip(points, corners)], textured)
+        paint = textured(FRAME if role == "frame" else SQUARE)
+        mesh.triangle([(place(p), turn(board["normals"][i]), uv) for p, i in zip(points, corners)], paint)
         counts["kept"] += 1
         if all(abs(p[2] - floor) < .0005 for p in points):
+            if role == "frame":
+                raise ValueError("Expected only checker squares on the board's floor")
             squares.append((points, uv))
 
     # A flat copy of the floor replaces the back face, inside a ring of the frame colour, so the board reads from
@@ -207,7 +235,7 @@ def gantry(parts, scale, lift, posts):
         return corners, turn((0, 0, -1)), uvs
 
     for points, uv in squares:
-        mesh.triangle([(place((p[0], p[1], back)), turn((0, 0, -1)), uv) for p in points[::-1]], textured)
+        mesh.triangle([(place((p[0], p[1], back)), turn((0, 0, -1)), uv) for p in points[::-1]], textured(SQUARE))
         counts["copied"] += 1
     (inner_x0, inner_y0, _), (inner_x1, inner_y1, _) = bounds([p for points, _ in squares for p in points] + panel)
     frame = [swatches["frame"]] * 4
@@ -215,7 +243,7 @@ def gantry(parts, scale, lift, posts):
                            (board_low[0], board_high[0], inner_y1, board_high[1]),
                            (board_low[0], inner_x0, inner_y0, inner_y1),
                            (inner_x1, board_high[0], inner_y0, inner_y1)):
-        mesh.quad(*behind(x0, x1, y0, y1, frame), textured)
+        mesh.quad(*behind(x0, x1, y0, y1, frame), textured(FRAME))
     counts["ring"] = 8
 
     # The label panel replaces the red panel on the floor, and its copy lies on the back.
@@ -227,14 +255,55 @@ def gantry(parts, scale, lift, posts):
     top, bottom = label_y / height, (label_y + label_h) / height
     uvs = [(left, bottom), (right, bottom), (right, top), (left, top)]
     front = [place(p) for p in ((x0, y0, floor), (x1, y0, floor), (x1, y1, floor), (x0, y1, floor))]
-    mesh.quad(front, turn((0, 0, 1)), uvs, textured)
-    mesh.quad(*behind(x0, x1, y0, y1, uvs), textured)
+    mesh.quad(front, turn((0, 0, 1)), uvs, textured(LABEL))
+    mesh.quad(*behind(x0, x1, y0, y1, uvs), textured(LABEL))
     counts["labels"] = 4
 
+    # Each checker band, in the gate frame: where it starts beside the label, how wide its columns are, and how
+    # many it shows. A side is -1 for -X and 1 for +X.
+    def levels(values):
+        """Distinct values, merging those within a millimetre of the last one kept."""
+        found = []
+        for value in sorted(values):
+            if not found or value - found[-1] > .001:
+                found.append(value)
+        return found
+
+    band = {}
+    for side in (-1, 1):
+        placed = [place(p) for points, _ in squares for p in points]
+        across = levels(abs(p[0]) for p in placed if p[0] * side > 0)
+        rows = levels(p[1] for p in placed)
+        band[side] = {"label": across[0], "column": (across[-1] - across[0]) / (len(across) - 1),
+                      "columns": len(across) - 1, "rows": len(rows) - 1}
+    columns = {band[side]["columns"] for side in band}
+    if len(columns) != 1 or any(b["rows"] != 4 for b in band.values()):
+        raise ValueError("Expected the same number of checker columns on both sides, in four rows")
+    (shown,) = columns
+
+    # Spare columns continue each band past its end, the pattern repeating every two columns. They lie over the end
+    # of the board and the posts, where at the mesh's own size model.vert folds them into the band's last edge.
+    def spares(baked):
+        for points, uv in squares:
+            placed = [place(p) for p in points]
+            side = 1 if sum(p[0] for p in placed) > 0 else -1
+            b = band[side]
+            column = int((min(abs(p[0]) for p in placed) - b["label"]) / b["column"] + .5)
+            if column < shown - 2:
+                continue
+            for extra in range(shown + (column - shown) % 2, baked, 2):
+                shift = side * (extra - column) * b["column"]
+                moved = [(p[0] + shift, p[1], p[2]) for p in placed]
+                mesh.triangle([(q, turn((0, 0, 1)), uv) for q in moved], textured(SQUARE), spare=True)
+                rear = [(q[0], q[1], place((0, 0, back))[2]) for q in moved[::-1]]
+                mesh.triangle([(q, turn((0, 0, -1)), uv) for q in rear], textured(SQUARE), spare=True)
+                counts["spare"] = counts.get("spare", 0) + 2
+
     metal = None
-    for name in ("matel tab_Metal_0", "matel tab bottom_Metal_0"):
+    tabs = ("matel tab_Metal_0", "matel tab bottom_Metal_0") if posts else ("matel tab_Metal_0",)
+    for name, part in zip(tabs, (CAP, BASE)):
         tab = parts[name]
-        metal = metal_paint(tab["material"])
+        metal = metal_paint(tab["material"], part)
         for k in range(0, len(tab["corners"]), 3):
             corners = tab["corners"][k:k + 3]
             mesh.triangle([(place(tab["points"][i]), turn(tab["normals"][i]), (0, 0)) for i in corners], metal)
@@ -248,6 +317,7 @@ def gantry(parts, scale, lift, posts):
     if posts:
         if scale != 1:
             raise ValueError("Only the road gate has posts")
+        paint = metal_paint(parts["matel tab_Metal_0"]["material"], POST)
         top = (min(p[1] for p in parts["matel tab_Metal_0"]["points"]) + lift) * scale
         for x in (-post_x, post_x):
             footprint.append({"x": x, "z": 0, "halfSize": half, "bottom": -POST_DEPTH, "top": round(top, 3)})
@@ -258,13 +328,19 @@ def gantry(parts, scale, lift, posts):
                 b = (x + half * (nx + nz), half * (nz - nx))
                 corners = [(a[0], -POST_DEPTH, a[1]), (b[0], -POST_DEPTH, b[1]),
                            (b[0], top, b[1]), (a[0], top, a[1])]
-                mesh.quad(corners, (nx, 0, nz), [(0, 0)] * 4, metal)
+                mesh.quad(corners, (nx, 0, nz), [(0, 0)] * 4, paint)
         counts["posts"] = 16
 
     # The window spans the towers' inner faces, from the base to the board's lower edge.
     window = {"halfWidth": round((post_x - half) * scale, 3), "bottom": 0,
               "top": round((board_low[1] + lift) * scale, 3)}
-    return mesh, window, footprint, counts
+    # Enough columns for the widest opening, which widens each band by the half width it adds.
+    added = widest / 2 - window["halfWidth"]
+    baked = max(round((shown * b["column"] + added) / b["column"]) for b in band.values()) + 1
+    spares(baked)
+    layout = {"label": [round(band[side]["label"], 4) for side in (-1, 1)],
+              "column": [round(band[side]["column"], 5) for side in (-1, 1)], "columns": shown, "baked": baked}
+    return mesh, window, footprint, layout, counts
 
 
 def crossings(triangles, axis, value):
@@ -337,7 +413,7 @@ def arch(parts):
     k = WATER_PRINT["pixelsPerMetre"]
     ox, oy = WATER_PRINT["origin"]
     mesh = Mesh()
-    paint = (255, 255, 255, round(255 * part["material"].get("roughnessFactor", 1)), 0, 255)
+    paint = (255, 255, 255, round(255 * part["material"].get("roughnessFactor", 1)), 0, tag(ARCH))
     faces = []
     for t in range(0, len(part["corners"]), 3):
         corners = part["corners"][t:t + 3]
@@ -399,10 +475,20 @@ def arch(parts):
 
 
 def extent(mesh):
-    """How far the mesh reaches from the gate origin, in metres."""
+    """How far the gate reaches from its origin at the mesh's own size, in metres. The extent reaches down to the
+    window's bottom edge at least, which the air gate's board hangs above."""
     low, high = bounds(mesh.points)
-    return {"halfWidth": round(max(-low[0], high[0]), 3), "bottom": round(low[1], 3), "top": round(high[1], 3),
-            "halfDepth": round(max(-low[2], high[2]), 3)}
+    return {"halfWidth": round(max(-low[0], high[0]), 3), "bottom": round(min(0, low[1]), 3),
+            "top": round(high[1], 3), "halfDepth": round(max(-low[2], high[2]), 3)}
+
+
+def opening(name):
+    """The range of a kind's opening as gates.json records it."""
+    (narrowest, widest), (lowest, highest) = SIZES[name]
+    found = {"width": [narrowest, widest], "height": [lowest, highest]}
+    if name == "water":
+        found["stretch"] = ARCH_STRETCH
+    return found
 
 
 def main():
@@ -422,16 +508,16 @@ def main():
 
     # The road gate's base plates rest on the ground. The air gate keeps the towers' feet at its origin.
     lift = -min(p[1] for p in sources["gantry"]["matel tab bottom_Metal_0"]["points"])
-    road, road_window, posts, counts = gantry(sources["gantry"], 1, lift, True)
-    air, air_window, _, _ = gantry(sources["gantry"], AIR_SCALE, 0, False)
+    road, road_window, posts, road_board, counts = gantry(sources["gantry"], 1, lift, True, SIZES["road"][0][1])
+    air, air_window, _, air_board, _ = gantry(sources["gantry"], AIR_SCALE, 0, False, SIZES["air"][0][1])
     water, water_window = arch(sources["arch"])
     kinds = {
         "road": {"mesh": "road.mesh.bin.gz", "window": road_window, "posts": posts, "extent": extent(road),
-                 "print": BOARD_PRINT},
+                 "size": opening("road"), "board": road_board, "print": BOARD_PRINT},
         "water": {"mesh": "water.mesh.bin.gz", "window": water_window, "posts": [], "extent": extent(water),
-                  "print": WATER_PRINT},
+                  "size": opening("water"), "print": WATER_PRINT},
         "air": {"mesh": "air.mesh.bin.gz", "window": air_window, "posts": [], "extent": extent(air),
-                "print": BOARD_PRINT},
+                "size": opening("air"), "board": air_board, "print": BOARD_PRINT},
     }
     contract = {"version": 1, "roles": list(ROLES), "kinds": kinds,
                 "atlas": {"roles": {role: [0, i / len(ROLES)] for i, role in enumerate(ROLES)}}}

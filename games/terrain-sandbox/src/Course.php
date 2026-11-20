@@ -8,15 +8,29 @@ use TerrainPhonics\WaterSurface;
  * Race gates placed on a landscape, and the order a race passes them in.
  *
  * A course holds at most one start gate, at most one finish gate and up to 32 checkpoints numbered in the order they
- * were placed. The start gate carries the lap count. A gate stands at x, y, z in metres and faces yaw radians: a
- * vehicle passes through it travelling along (sin yaw, 0, cos yaw), the convention the vehicles use for heading.
+ * were placed. A gate stands at x, y, z in metres and faces yaw radians: a vehicle passes through it travelling along
+ * (sin yaw, 0, cos yaw), the convention the vehicles use for heading. Each gate's opening is width by height metres,
+ * within the ranges of its kind in GateShapes.
+ *
+ * A course without a finish gate starts and finishes at its start gate, and runs the laps the start gate carries. A
+ * course with a finish gate runs once from the start gate to the finish gate.
  */
 final class Course
 {
 	public const ROLES = ['start', 'checkpoint', 'finish'];
 	public const MAX_CHECKPOINTS = 32, MAX_LAPS = 20;
-	/** Keys a saved gate may carry, beyond laps on the start gate and number on a checkpoint. */
+	/** Keys a saved gate may carry, beyond laps on the start gate, number on a checkpoint and its size. */
 	private const SAVED = ['role', 'kind', 'x', 'y', 'z', 'yaw'];
+	/** How far a road post reaches below the ground under its middle, in metres, so a slope shows no gap. */
+	public const POST_FOOT = 1.0;
+	/**
+	 * How far below the lowest ground across a road gate a car still counts as passing through it. The ground is
+	 * sampled every metre at most, and a car rolling over a hump between samples sits a little under the line
+	 * between them.
+	 */
+	public const ROAD_BELOW = 1.0;
+	/** Longest step in metres between ground samples across a gate's span. */
+	private const SAMPLE_STEP = 1.0;
 	private ?array $start = null, $finish = null;
 	/** Checkpoints in race order; each one's number is its position plus one. */
 	private array $checkpoints = [];
@@ -42,26 +56,81 @@ final class Course
 	private array $posts = [];
 	private int $postsRevision = -1, $signatureRevision = -1;
 	private string $signature = '';
+	/** Each gate's measure() for the revision in $measuredRevision, by id. */
+	private array $measured = [];
+	private int $measuredRevision = -1;
+	public readonly GateShapes $shapes;
+
+	/** @param GateShapes|null $shapes Gate dimensions; the package's gates.json, or its defaults, when omitted. */
+	public function __construct(?GateShapes $shapes = null)
+	{
+		$this->shapes = $shapes ?? GateShapes::packaged();
+	}
 
 	/**
 	 * Place a gate. A second start or finish gate moves the existing one, which keeps its id and its laps.
+	 *
+	 * A finish gate placed within one start gate width of the start gate is not added: the start gate becomes the
+	 * course's start / finish gate, and any finish gate standing elsewhere goes. A start gate placed within its own
+	 * width of the finish gate does the same. A gate whose span would overlap another gate's is refused.
 	 * @param string $role start, checkpoint or finish.
 	 * @param string $kind road, water or air.
 	 * @param float $x World X of the gate origin in metres.
-	 * @param float $y World Y of the gate origin in metres; a water gate's water level when it was placed.
+	 * @param float $y World Y of the gate origin in metres; a water gate's water level when it was placed. A road gate
+	 * placed with $ground stands on the highest ground across its span instead.
 	 * @param float $z World Z of the gate origin in metres.
 	 * @param float $yaw Heading of travel through the gate in radians, from -pi to pi.
 	 * @param int $laps Laps a new start gate carries, from 1 to 20.
-	 * @return array|null The placed gate and whether it moved an existing one, or null when 32 checkpoints stand.
+	 * @param float|null $width Opening width in metres, or null for the kind's own. It must lie in the kind's range.
+	 * @param float|null $height Opening height in metres, or null for the kind's own. It must lie in the kind's range,
+	 * and a water arch's within its stretch, as GateShapes::fit() leaves it.
+	 * @param \Closure|null $ground fn(float $x, float $z): float giving the ground height anywhere on the landscape.
+	 * Without it the ground under each gate counts as level with the gate's origin.
+	 * @return array{gate:?array,moved:bool,merged:bool,removed:?array,refused:?string,with:?array} The placed gate,
+	 * or on a merge the start gate; whether it moved an existing gate; whether a finish gate merged into the start
+	 * gate, and the finish gate that went. A refused gate leaves the course unchanged, with refused 'full' when 32
+	 * checkpoints stand or 'overlap' with the gate in the way.
+	 * @throws \InvalidArgumentException For an unknown role or kind, or a size outside the kind's range.
 	 */
-	public function place(string $role, string $kind, float $x, float $y, float $z, float $yaw, int $laps = 1): ?array
+	public function place(string $role, string $kind, float $x, float $y, float $z, float $yaw, int $laps = 1,
+		?float $width = null, ?float $height = null, ?\Closure $ground = null): array
 	{
+		$result = ['gate' => null, 'moved' => false, 'merged' => false, 'removed' => null, 'refused' => null,
+			'with' => null];
 		if(!in_array($role, self::ROLES, true) || !in_array($kind, GateShapes::KINDS, true))
 			throw new \InvalidArgumentException('Unknown gate role or kind');
-		if($role === 'checkpoint' && count($this->checkpoints) >= self::MAX_CHECKPOINTS) return null;
+		[$defaultWidth, $defaultHeight] = $this->shapes->kind($kind)['size']['default'];
+		$width ??= $defaultWidth; $height ??= $defaultHeight;
+		if(!$this->shapes->fits($kind, $width, $height))
+			throw new \InvalidArgumentException("A $kind gate cannot be $width by $height metres");
+		if($role === 'checkpoint' && count($this->checkpoints) >= self::MAX_CHECKPOINTS)
+			return ['refused' => 'full'] + $result;
 		$existing = $role === 'start' ? $this->start : ($role === 'finish' ? $this->finish : null);
-		$gate = ['id' => $existing['id'] ?? $this->nextId++, 'role' => $role, 'kind' => $kind,
-			'x' => $x, 'y' => $y, 'z' => $z, 'yaw' => $yaw];
+		// A finish gate this close to the start gate would be passed straight after the start, or rocked through.
+		$near = static fn(array $other, float $distance): bool
+			=> sqrt(($x - $other['x']) ** 2 + ($y - $other['y']) ** 2 + ($z - $other['z']) ** 2) < $distance;
+		if($role === 'finish' && $this->start !== null && $near($this->start, $this->start['width']))
+		{
+			$removed = $this->finish;
+			if($removed !== null) $this->remove($removed['id']);
+			return ['gate' => $this->pose($this->start), 'merged' => true, 'removed' => $removed] + $result;
+		}
+		// The candidate measures as a new gate until it takes its place, so nothing reads the gate it replaces.
+		$gate = ['id' => 0, 'role' => $role, 'kind' => $kind,
+			'x' => $x, 'y' => $y, 'z' => $z, 'yaw' => $yaw, 'width' => $width, 'height' => $height];
+		$gate = $this->fit($gate, $ground);
+		$merge = $role === 'start' && $this->finish !== null && $near($this->finish, $width);
+		$ignore = array_filter([$existing['id'] ?? null, $merge ? $this->finish['id'] : null]);
+		foreach($this->gates(false) as $other)
+			if(!in_array($other['id'], $ignore, true) && $this->overlap($gate, $other))
+				return ['refused' => 'overlap', 'with' => $this->pose($other)] + $result;
+		if($merge)
+		{
+			$result['merged'] = true;
+			$result['removed'] = $this->finish;
+			$this->remove($this->finish['id']);
+		}
+		$gate['id'] = $existing['id'] ?? $this->nextId++;
 		if($role === 'start') $gate['laps'] = $existing['laps'] ?? max(1, min(self::MAX_LAPS, $laps));
 		if($role === 'checkpoint') $gate['number'] = count($this->checkpoints) + 1;
 		unset($this->afloat[$gate['id']], $this->floating[$gate['id']]);
@@ -69,7 +138,86 @@ final class Course
 		elseif($role === 'finish') $this->finish = $gate;
 		else $this->checkpoints[] = $gate;
 		$this->revision++;
-		return ['gate' => $gate, 'moved' => $existing !== null];
+		return ['gate' => $this->pose($gate), 'moved' => $existing !== null] + $result;
+	}
+
+	/**
+	 * Whether two gates' spans meet: their footprints seen from above, each the width of its frame and the depth of
+	 * its frame along its direction of travel, overlap, and so do their heights from the bottom of the window to the
+	 * top of the frame.
+	 */
+	private function overlap(array $a, array $b): bool
+	{
+		$boxes = [];
+		foreach([$a, $b] as $gate)
+		{
+			$measure = $this->measure($gate);
+			$extent = $measure['extent'];
+			$boxes[] = ['x' => $gate['x'], 'z' => $gate['z'], 'cos' => cos($gate['yaw']), 'sin' => sin($gate['yaw']),
+				'half' => [$extent['halfWidth'], $extent['halfDepth']],
+				'low' => $gate['y'] + min($measure['window']['bottom'], $extent['bottom']),
+				'high' => $gate['y'] + $extent['top']];
+		}
+		[$p, $q] = $boxes;
+		if($p['high'] <= $q['low'] || $q['high'] <= $p['low']) return false;
+		$dx = $q['x'] - $p['x']; $dz = $q['z'] - $p['z'];
+		// Separating axes: each footprint's across (cos, -sin) and along (sin, cos) directions.
+		foreach([$p, $q] as $box) foreach([[$box['cos'], -$box['sin']], [$box['sin'], $box['cos']]] as [$ux, $uz])
+		{
+			$reach = 0.0;
+			foreach([$p, $q] as $other)
+				$reach += $other['half'][0] * abs($other['cos'] * $ux - $other['sin'] * $uz)
+					+ $other['half'][1] * abs($other['sin'] * $ux + $other['cos'] * $uz);
+			if(abs($dx * $ux + $dz * $uz) >= $reach) return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Fit a gate to the ground under it. A road gate stands on the highest ground across its span, so its board stays
+	 * clear of a slope; each post reaches below the ground under it, and the window reaches down to the lowest ground.
+	 * @param array $gate Gate record without fitting.
+	 * @param \Closure|null $ground Ground height sampler, or null to count the ground as level with the origin.
+	 * @return array The gate with ground [lowest, highest] across its span and, on a road gate, posts [-X, +X]: the
+	 * ground under each post's middle. All are heights in metres from the gate's origin. A water gate's ground is
+	 * [0, 0], and an air gate placed without a sampler has ground null.
+	 */
+	private function fit(array $gate, ?\Closure $ground): array
+	{
+		$gate['ground'] = $gate['kind'] === 'air' && $ground === null ? null : [0.0, 0.0];
+		if($gate['kind'] === 'road') $gate['posts'] = [0.0, 0.0];
+		if($ground === null || $gate['kind'] === 'water') return $gate;
+		$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
+		$at = static fn(float $across, float $along): float
+			=> $ground($gate['x'] + $across * $cos + $along * $sin, $gate['z'] - $across * $sin + $along * $cos);
+		$shape = $this->shapes->kind($gate['kind']);
+		$half = $gate['width'] / 2;
+		$heights = [];
+		if($gate['kind'] === 'road')
+		{
+			// The posts' outer faces bound the span. Each post's footprint is sampled at its middle and corners.
+			$post = $shape['posts'][1]['halfSize'];
+			$reach = $half + 2 * $post;
+			$middles = [];
+			foreach([-1, 1] as $side)
+			{
+				$middle = $side * ($half + $post);
+				$middles[] = $at($middle, 0.0);
+				foreach([-1, 1] as $a) foreach([-1, 1] as $b) $heights[] = $at($middle + $a * $post, $b * $post);
+			}
+			$heights = [...$heights, ...$middles];
+		}
+		else $reach = $half;
+		$steps = (int)ceil(2 * $reach / self::SAMPLE_STEP);
+		for($i = 0; $i <= $steps; $i++) $heights[] = $at(-$reach + 2 * $reach * $i / $steps, 0.0);
+		$high = max($heights); $low = min($heights);
+		if($gate['kind'] === 'road')
+		{
+			$gate['y'] = $high;
+			$gate['posts'] = [$middles[0] - $high, $middles[1] - $high];
+		}
+		$gate['ground'] = [$low - $gate['y'], $high - $gate['y']];
+		return $gate;
 	}
 
 	/**
@@ -111,7 +259,7 @@ final class Course
 	}
 
 	/**
-	 * Set the lap count on the start gate.
+	 * Set the lap count on the start gate. A course with a finish gate keeps it for when that gate goes.
 	 * @param int $laps Laps from 1 to 20.
 	 * @return bool Whether a start gate exists and its lap count changed.
 	 */
@@ -120,12 +268,17 @@ final class Course
 		$laps = max(1, min(self::MAX_LAPS, $laps));
 		if($this->start === null || $this->start['laps'] === $laps) return false;
 		$this->start['laps'] = $laps;
-		$this->revision++;
+		// A course with a finish gate runs once, so its route and a race on it stay as they were.
+		if($this->finish === null) $this->revision++;
 		return true;
 	}
 
-	/** Laps on the start gate, or null without one. */
-	public function laps(): ?int { return $this->start['laps'] ?? null; }
+	/** Laps a race runs: the start gate's laps without a finish gate, one with it, or null without a start gate. */
+	public function laps(): ?int
+	{
+		if($this->start === null) return null;
+		return $this->finish === null ? $this->start['laps'] : 1;
+	}
 
 	public function count(): int
 	{
@@ -153,8 +306,9 @@ final class Course
 	 * List the gates: the start gate, the checkpoints by number, then the finish gate.
 	 * @param bool $afloat Whether water gates report their height on the waves. Without it each gate reports the
 	 * height it was placed at and the water is not sampled; height() then gives the height on the waves.
-	 * @return list<array> Each gate's id, role, kind, x, y, z and yaw, with laps on the start gate and number on a
-	 * checkpoint. y is the origin's height now, so a water gate reports the wave height at its position.
+	 * @return list<array> Each gate's id, role, kind, x, y, z, yaw, width, height and ground, with posts on a road
+	 * gate, laps on the start gate and number on a checkpoint. y is the origin's height now, so a water gate reports
+	 * the wave height at its position.
 	 */
 	public function gates(bool $afloat = true): array
 	{
@@ -192,8 +346,9 @@ final class Course
 	}
 
 	/**
-	 * List the gates a race passes after its start, in order. Every lap passes the checkpoints by number. Each lap
-	 * then returns through the start gate, except that a finish gate, when one stands, ends the last lap.
+	 * List the gates a race passes after its start, in order. Without a finish gate, every lap passes the
+	 * checkpoints by number and returns through the start gate. With one, the race passes the checkpoints once and
+	 * ends at the finish gate.
 	 * @return list<array{id:int,lap:int,lapEnd:bool}> Gate ids with the lap each belongs to, or an empty list
 	 * without a start gate.
 	 */
@@ -201,12 +356,11 @@ final class Course
 	{
 		if($this->start === null) return [];
 		$route = [];
-		$laps = $this->start['laps'];
+		$laps = $this->laps();
 		for($lap = 1; $lap <= $laps; $lap++)
 		{
 			foreach($this->checkpoints as $gate) $route[] = ['id' => $gate['id'], 'lap' => $lap, 'lapEnd' => false];
-			$closing = $lap === $laps && $this->finish !== null ? $this->finish : $this->start;
-			$route[] = ['id' => $closing['id'], 'lap' => $lap, 'lapEnd' => true];
+			$route[] = ['id' => ($this->finish ?? $this->start)['id'], 'lap' => $lap, 'lapEnd' => true];
 		}
 		return $route;
 	}
@@ -244,12 +398,68 @@ final class Course
 	}
 
 	/**
-	 * List the solid posts of every road gate in world space, for car collision.
-	 * @param GateShapes $shapes Gate dimensions.
-	 * @return list<array> [x, z, half size, cos yaw, sin yaw, bottom y, top y] of each post. Each post is a square
-	 * aligned with its gate.
+	 * Measure a gate at its size, in its own frame: heights from its origin, X across and Z along its travel.
+	 * @param array $gate A gate from this course, or one about to join it.
+	 * @return array{window:array,extent:array,posts:list<array>,resize:list<float>,feet:list<float>} The window a
+	 * vehicle passes through, from the lowest point that still counts (halfWidth, bottom, top); the extent of the
+	 * drawn gate (halfWidth, bottom, top, halfDepth); each post (x, z, halfSize, bottom, top); the resize model.vert
+	 * applies [half width added, height added, scale across, scale up]; and [foot of the -X post, foot of the +X post,
+	 * ground under the -X post, ground under the +X post].
 	 */
-	public function posts(GateShapes $shapes): array
+	public function measure(array $gate): array
+	{
+		if($this->measuredRevision !== $this->revision) { $this->measured = []; $this->measuredRevision = $this->revision; }
+		if($gate['id'] > 0 && isset($this->measured[$gate['id']])) return $this->measured[$gate['id']];
+		$shape = $this->shapes->kind($gate['kind']);
+		[$defaultWidth, $defaultHeight] = $shape['size']['default'];
+		$window = $shape['window']; $extent = $shape['extent'];
+		$posts = [];
+		$feet = [0.0, 0.0, 0.0, 0.0];
+		if($gate['kind'] === 'water')
+		{
+			$across = $gate['width'] / $defaultWidth; $up = $gate['height'] / $defaultHeight;
+			$resize = [0.0, 0.0, $across, $up];
+			$measure = [
+				'window' => ['halfWidth' => $window['halfWidth'] * $across, 'bottom' => $window['bottom'] - $shape['below'],
+					'top' => $window['top'] * $up],
+				// Below the water line the feet keep their depth.
+				'extent' => ['halfWidth' => $extent['halfWidth'] * $across, 'bottom' => $extent['bottom'],
+					'top' => $extent['top'] * $up, 'halfDepth' => $extent['halfDepth'] * sqrt($across * $up)],
+			];
+		}
+		else
+		{
+			$added = $gate['width'] / 2 - $window['halfWidth'];
+			$raised = $gate['height'] - $window['top'];
+			$resize = [$added, $raised, 1.0, 1.0];
+			$bottom = $gate['kind'] === 'road' ? min(0.0, $gate['ground'][0]) - self::ROAD_BELOW : $window['bottom'];
+			if($gate['kind'] === 'road')
+			{
+				[$left, $right] = $gate['posts'];
+				$feet = [$left - self::POST_FOOT, $right - self::POST_FOOT, $left, $right];
+				foreach($shape['posts'] as $index => $post)
+					$posts[] = ['x' => $post['x'] + ($post['x'] < 0 ? -$added : $added), 'z' => $post['z'],
+						'halfSize' => $post['halfSize'], 'bottom' => $feet[$post['x'] < 0 ? 0 : 1],
+						'top' => $post['top'] + $raised];
+			}
+			$measure = [
+				'window' => ['halfWidth' => $gate['width'] / 2, 'bottom' => $bottom, 'top' => $gate['height']],
+				'extent' => ['halfWidth' => $extent['halfWidth'] + $added,
+					'bottom' => $gate['kind'] === 'road' ? min($feet[0], $feet[1]) : $extent['bottom'],
+					'top' => $extent['top'] + $raised, 'halfDepth' => $extent['halfDepth']],
+			];
+		}
+		$measure += ['posts' => $posts, 'resize' => $resize, 'feet' => $feet];
+		if($gate['id'] > 0) $this->measured[$gate['id']] = $measure;
+		return $measure;
+	}
+
+	/**
+	 * List the solid posts of every road gate in world space, for car collision.
+	 * @return list<array> [x, z, half size, cos yaw, sin yaw, bottom y, top y] of each post. Each post is a square
+	 * aligned with its gate, beside the window at the gate's size and reaching below the ground under it.
+	 */
+	public function posts(): array
 	{
 		if($this->postsRevision === $this->revision) return $this->posts;
 		$posts = [];
@@ -257,7 +467,7 @@ final class Course
 		{
 			if($gate['kind'] !== 'road') continue;
 			$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
-			foreach($shapes->kind('road')['posts'] as $post)
+			foreach($this->measure($gate)['posts'] as $post)
 				$posts[] = [$gate['x'] + $post['x'] * $cos + $post['z'] * $sin,
 					$gate['z'] - $post['x'] * $sin + $post['z'] * $cos,
 					$post['halfSize'], $cos, $sin, $gate['y'] + $post['bottom'], $gate['y'] + $post['top']];
@@ -268,26 +478,80 @@ final class Course
 	}
 
 	/**
+	 * List the solid parts and the opening of each gate in world space, for a camera to keep clear of.
+	 * @param array|null $near [x, y, z] in metres to list only the gates that reach within $reach of it, or null for
+	 * every gate. Only the water gates listed sample the waves.
+	 * @param float $reach Distance in metres from $near.
+	 * @return list<array{id:int,kind:string,boxes:list<array>,opening:array}> Per gate, boxes that enclose its solid
+	 * parts, each {centre: [x, y, z], yaw, halfX, halfY, halfZ} with its half sizes along the gate's X (across), Y
+	 * (up) and Z (along its travel); and the opening {centre: [x, y, z], yaw, halfWidth, bottom, top}, whose centre
+	 * is the gate origin and whose bottom and top are world heights. A road gate's posts are one box each and its
+	 * board with the tabs one more; an air gate has the board's box; a water arch has a box per leg and one for its
+	 * crossbar. The opening of a road gate reaches down to the lowest ground across it, and of a water gate to the
+	 * water line.
+	 */
+	public function obstructions(?array $near = null, float $reach = INF): array
+	{
+		$found = [];
+		foreach($this->gates(false) as $gate)
+		{
+			$measure = $this->measure($gate);
+			['window' => $window, 'extent' => $extent] = $measure;
+			if($near !== null)
+			{
+				$span = hypot($extent['halfWidth'], $extent['halfDepth']);
+				if(hypot($gate['x'] - $near[0], $gate['z'] - $near[2]) > $reach + $span) continue;
+			}
+			if($gate['kind'] === 'water') $gate = $this->pose($gate);
+			$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
+			$box = static fn(float $x, float $bottom, float $top, float $halfX, float $halfZ): array => [
+				'centre' => [$gate['x'] + $x * $cos, $gate['y'] + ($bottom + $top) / 2, $gate['z'] - $x * $sin],
+				'yaw' => $gate['yaw'], 'halfX' => $halfX, 'halfY' => ($top - $bottom) / 2, 'halfZ' => $halfZ];
+			$boxes = [];
+			if($gate['kind'] === 'water')
+			{
+				$inner = $window['halfWidth']; $outer = $extent['halfWidth'];
+				foreach([-1, 1] as $side)
+					$boxes[] = $box($side * ($inner + $outer) / 2, $extent['bottom'], $window['top'], ($outer - $inner) / 2,
+						$extent['halfDepth']);
+				$boxes[] = $box(0.0, $window['top'], $extent['top'], $outer, $extent['halfDepth']);
+				$bottom = 0.0;
+			}
+			else
+			{
+				foreach($measure['posts'] as $post)
+					$boxes[] = $box($post['x'], $post['bottom'], $post['top'], $post['halfSize'], $post['halfSize']);
+				$boxes[] = $box(0.0, $window['top'], $extent['top'], $extent['halfWidth'], $extent['halfDepth']);
+				$bottom = $gate['kind'] === 'road' ? min(0.0, $gate['ground'][0]) : $window['bottom'];
+			}
+			$found[] = ['id' => $gate['id'], 'kind' => $gate['kind'], 'boxes' => $boxes,
+				'opening' => ['centre' => [$gate['x'], $gate['y'], $gate['z']], 'yaw' => $gate['yaw'],
+					'halfWidth' => $window['halfWidth'], 'bottom' => $gate['y'] + $bottom,
+					'top' => $gate['y'] + $window['top']]];
+		}
+		return $found;
+	}
+
+	/**
 	 * Find the gate a pick ray passes closest to, among those it passes within their half extent.
 	 * @param array $origin Ray origin [x, y, z] in metres.
 	 * @param array $direction Unit ray direction.
 	 * @param float $length Distance along the ray to the ground it hit, or the pick range when it hit nothing.
-	 * @param GateShapes $shapes Gate dimensions.
 	 * @return int|null The nearest gate's id, or null when the ray passes no gate within its span.
 	 */
-	public function nearest(array $origin, array $direction, float $length, GateShapes $shapes): ?int
+	public function nearest(array $origin, array $direction, float $length): ?int
 	{
 		$end = [$origin[0] + $direction[0] * $length, $origin[1] + $direction[1] * $length,
 			$origin[2] + $direction[2] * $length];
 		$best = null;
 		foreach($this->gates() as $gate)
 		{
-			$shape = $shapes->kind($gate['kind']);
+			['window' => $window, 'extent' => $extent] = $this->measure($gate);
 			// The gate's centre line runs from the lowest point a vehicle may pass to the top of its frame.
-			$foot = [$gate['x'], $gate['y'] + $shape['window']['bottom'] - $shape['below'], $gate['z']];
-			$head = [$gate['x'], $gate['y'] + $shape['extent']['top'], $gate['z']];
+			$foot = [$gate['x'], $gate['y'] + $window['bottom'], $gate['z']];
+			$head = [$gate['x'], $gate['y'] + $extent['top'], $gate['z']];
 			[$distance, $along] = self::segmentDistance($origin, $end, $foot, $head);
-			if($distance > $shape['extent']['halfWidth']) continue;
+			if($distance > $extent['halfWidth']) continue;
 			if($best === null || $distance < $best[1] || $distance === $best[1] && $along < $best[2])
 				$best = [$gate['id'], $distance, $along];
 		}
@@ -328,22 +592,32 @@ final class Course
 
 	/**
 	 * Describe the course for a save file. Water gates record the water level they were placed at.
-	 * @return array{gates:list<array>} Gates in race order without ids, which loading assigns afresh.
+	 * @return array{gates:list<array>} Gates in race order with their sizes, without ids, which loading assigns
+	 * afresh, and without the ground under them, which loading measures again.
 	 */
 	public function export(): array
 	{
 		$gates = [];
 		foreach([$this->start, ...$this->checkpoints, $this->finish] as $gate)
-			if($gate !== null) $gates[] = array_diff_key($gate, ['id' => 0]);
+		{
+			if($gate === null) continue;
+			$saved = [];
+			foreach([...self::SAVED, 'laps', 'number', 'width', 'height'] as $key)
+				if(array_key_exists($key, $gate)) $saved[$key] = $gate[$key];
+			$gates[] = $saved;
+		}
 		return ['gates' => $gates];
 	}
 
-	/** Identify the course by its gates and laps, so a session keeps one best time per course. */
+	/** Identify the course by its gates and the laps it runs, so a session keeps one best time per course. */
 	public function signature(): string
 	{
 		if($this->signatureRevision !== $this->revision)
 		{
-			$this->signature = md5(json_encode($this->export(), JSON_THROW_ON_ERROR));
+			$course = $this->export();
+			// A course with a finish gate runs once, whatever laps its start gate keeps for when that gate goes.
+			if($this->finish !== null && $this->start !== null) $course['gates'][0]['laps'] = 1;
+			$this->signature = md5(json_encode($course, JSON_THROW_ON_ERROR));
 			$this->signatureRevision = $this->revision;
 		}
 		return $this->signature;
@@ -353,12 +627,16 @@ final class Course
 	 * Rebuild a course from a save file, which is untrusted input.
 	 * @param mixed $data The file's course object; null reads as a course without gates.
 	 * @param float $half Half the landscape's width in metres. Every gate must stand on it.
-	 * @return self The course, with ids assigned in race order.
+	 * @param \Closure|null $ground Ground height sampler for the landscape the course stands on. With it each road gate
+	 * stands on the highest ground across its span again, and each gate measures the ground under it.
+	 * @param GateShapes|null $shapes Gate dimensions; the package's when omitted.
+	 * @return self The course, with ids assigned in race order. A gate saved without a width and height, as files
+	 * from before gate sizes are, takes its kind's own.
 	 * @throws \InvalidArgumentException When any part of the course is malformed or out of range.
 	 */
-	public static function import(mixed $data, float $half): self
+	public static function import(mixed $data, float $half, ?\Closure $ground = null, ?GateShapes $shapes = null): self
 	{
-		$course = new self;
+		$course = new self($shapes);
 		if($data === null) return $course;
 		$fail = static fn(string $why): \InvalidArgumentException
 			=> new \InvalidArgumentException("Invalid saved course: $why.");
@@ -374,25 +652,35 @@ final class Course
 			if(!is_array($gate) || array_is_list($gate)) throw $fail('each gate must be an object');
 			$role = $gate['role'] ?? null;
 			if(!in_array($role, self::ROLES, true)) throw $fail('a gate has an unknown role');
-			if(!in_array($gate['kind'] ?? null, GateShapes::KINDS, true)) throw $fail('a gate has an unknown kind');
+			$kind = $gate['kind'] ?? null;
+			if(!in_array($kind, GateShapes::KINDS, true)) throw $fail('a gate has an unknown kind');
 			$keys = [...self::SAVED,
 				...match($role) { 'start' => ['laps'], 'checkpoint' => ['number'], 'finish' => [] }];
+			$sized = array_key_exists('width', $gate) || array_key_exists('height', $gate);
+			if($sized) $keys = [...$keys, 'width', 'height'];
 			$present = array_keys($gate);
 			sort($present); sort($keys);
 			if($present !== $keys) throw $fail("a $role gate must hold exactly " . implode(', ', $keys));
-			foreach(['x', 'y', 'z', 'yaw'] as $key)
+			foreach(['x', 'y', 'z', 'yaw', ...($sized ? ['width', 'height'] : [])] as $key)
 				if(!$number($gate[$key])) throw $fail("a gate's $key is not a number");
 			if(abs($gate['x']) > $half || abs($gate['z']) > $half) throw $fail('a gate stands off the landscape');
 			if(abs($gate['y']) > 20000) throw $fail('a gate stands out of height range');
 			if(abs($gate['yaw']) > M_PI) throw $fail('a gate yaw lies outside -pi to pi');
+			[$width, $height] = $course->shapes->kind($kind)['size']['default'];
+			if($sized)
+			{
+				[$width, $height] = [(float)$gate['width'], (float)$gate['height']];
+				if(!$course->shapes->fits($kind, $width, $height)) throw $fail("a $kind gate's size is out of range");
+			}
 			if($role === 'start' && (!is_int($gate['laps']) || $gate['laps'] < 1 || $gate['laps'] > self::MAX_LAPS))
 				throw $fail('laps must be a whole number from 1 to 20');
 			if($role === 'checkpoint' && !is_int($gate['number']))
 				throw $fail('a checkpoint number must be a whole number');
 			if($role === 'start' && $course->start !== null || $role === 'finish' && $course->finish !== null)
 				throw $fail("the course has two $role gates");
-			$record = ['id' => 0, 'role' => $role, 'kind' => $gate['kind'], 'x' => (float)$gate['x'],
-				'y' => (float)$gate['y'], 'z' => (float)$gate['z'], 'yaw' => (float)$gate['yaw']];
+			$record = $course->fit(['id' => 0, 'role' => $role, 'kind' => $kind, 'x' => (float)$gate['x'],
+				'y' => (float)$gate['y'], 'z' => (float)$gate['z'], 'yaw' => (float)$gate['yaw'], 'width' => $width,
+				'height' => $height], $ground);
 			if($role === 'start') $course->start = $record + ['laps' => $gate['laps']];
 			elseif($role === 'finish') $course->finish = $record;
 			else $checkpoints[] = $record + ['number' => $gate['number']];

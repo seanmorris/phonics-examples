@@ -36,6 +36,28 @@
 				"top": 4.28,
 				"halfDepth": 0.53
 			},
+			"size": {
+				"width": [
+					6,
+					60
+				],
+				"height": [
+					2,
+					40
+				]
+			},
+			"board": {
+				"label": [
+					3.0008,
+					2.9774
+				],
+				"column": [
+					0.32052,
+					0.32183
+				],
+				"columns": 14,
+				"baked": 88
+			},
 			"print": {
 				"label": [
 					8,
@@ -79,6 +101,17 @@
 				"top": 7.034,
 				"halfDepth": 0.621
 			},
+			"size": {
+				"width": [
+					4.5,
+					60
+				],
+				"height": [
+					2,
+					40
+				],
+				"stretch": 2
+			},
 			"print": {
 				"pixelsPerMetre": 40,
 				"origin": [
@@ -97,9 +130,31 @@
 			"posts": [],
 			"extent": {
 				"halfWidth": 22.746,
-				"bottom": -0.406,
+				"bottom": 0,
 				"top": 12.433,
 				"halfDepth": 1.591
+			},
+			"size": {
+				"width": [
+					20,
+					300
+				],
+				"height": [
+					5,
+					150
+				]
+			},
+			"board": {
+				"label": [
+					9.0024,
+					8.9322
+				],
+				"column": [
+					0.96157,
+					0.9655
+				],
+				"columns": 14,
+				"baked": 150
 			},
 			"print": {
 				"label": [

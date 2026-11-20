@@ -47,14 +47,18 @@ final class Session
 	public string $mode = 'fly';
 	/** Simulation clock in seconds. */
 	public float $time = 0;
-	/** UI configuration, serialized alongside the terrain. */
+	/**
+	 * UI configuration, serialized alongside the terrain. gateAltitude hangs a gate placed on land that many metres
+	 * above the ground, which makes it an air gate. gateWidth and gateHeight size a new gate's opening in metres, and
+	 * 0 takes the size of the kind the click places; a size outside that kind's range takes the nearest it allows.
+	 */
 	public array $settings = [
 		'tool' => 'navigate', 'radius' => 40.0, 'amount' => 12.0, 'flattenHeight' => 0.0,
 		'material' => 'grass', 'roadWidth' => 8.0, 'roadShoulder' => 12.0, 'roadRaise' => 0.0,
 		'azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0, 'exposure' => 1.0,
 		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
-		'gateRole' => 'start', 'gateLaps' => 1, 'gateHeight' => 0.0,
+		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
 	] + WaterAppearance::DEFAULTS;
 	/** Gate tool roles. Remove deletes the gate nearest the click. */
 	public const GATE_ROLES = ['start', 'checkpoint', 'finish', 'remove'];
@@ -116,7 +120,7 @@ final class Session
 	public function __construct(array $recipe = [], ?GateShapes $gateShapes = null)
 	{
 		$this->gateShapes = $gateShapes ?? GateShapes::packaged();
-		$this->course = new Course;
+		$this->course = new Course($this->gateShapes);
 		$this->race = new Race;
 		$this->landscape = new Landscape($recipe + ['preset' => 'coast']);
 		$this->water = new Water($this->landscape->recipe()['waterLevel'], [
@@ -242,7 +246,7 @@ final class Session
 			if(!$this->car->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
 				$this->blend('KeyA', 'KeyD', $this->pad['x']), $this->landscape, $this->water->level(),
 				$this->held('Space') === 1 || ($this->pad['buttons'] & self::PAD_A) !== 0,
-				$this->course->posts($this->gateShapes)))
+				$this->course->posts()))
 			{
 				$this->mode = 'fly';
 				$this->clampCamera();
@@ -311,8 +315,8 @@ final class Session
 	{
 		if($this->guardRace() || $this->mode !== $mode) return;
 		if($mode === 'car' && $this->car->state()['recoveries'] !== $recoveries) return;
-		$event = $this->race->advance($this->course, $this->gateShapes, $from, $this->racePoint(), $start, $seconds,
-			$mode, $this->boarding);
+		$event = $this->race->advance($this->course, $from, $this->racePoint(), $start, $seconds, $mode,
+			$this->boarding);
 		if($event !== null) { $this->message = $event; $this->dirty = true; }
 	}
 
@@ -416,7 +420,8 @@ final class Session
 		$ranges = ['radius' => [2,300],'amount' => [.1,200],'flattenHeight' => [-1000,3000],
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
-			'quality' => [.5,2],'speed' => [5,300],'gateHeight' => [0.0,400.0],
+			'quality' => [.5,2],'speed' => [5,300],'gateAltitude' => [0.0,400.0],
+			'gateWidth' => [0.0,300.0],'gateHeight' => [0.0,150.0],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
 		if(isset($ranges[$name]))
 		{
@@ -434,7 +439,9 @@ final class Session
 				throw new \InvalidArgumentException('Invalid control value');
 			$value = (int)max(1, min(Course::MAX_LAPS, round((float)$value)));
 			if($this->course->setLaps($value))
-				$this->message = $value === 1 ? 'The race runs one lap.' : "The race runs $value laps.";
+				$this->message = $this->course->finish() !== null
+					? 'Laps apply to a course that finishes at its start gate. This course runs once to its finish gate.'
+					: ($value === 1 ? 'The race runs one lap.' : "The race runs $value laps.");
 		}
 		if($name === 'waterLevel' || $name === 'waterChoppiness')
 		{
@@ -534,7 +541,7 @@ final class Session
 				$this->resetCamera();
 				$this->message = 'Generated ' . $recipe['preset'] . ' terrain. Detail streams in as you fly.';
 				if($this->course->count() > 0) $this->message .= ' The new landscape starts without gates.';
-				$this->course = new Course;
+				$this->course = new Course($this->gateShapes);
 				break;
 			case 'gates-clear':
 				$count = $this->course->clear();
@@ -565,7 +572,7 @@ final class Session
 				{
 					$this->cancelPick();
 					$this->carSearch = $this->car->findSite($this->landscape, $this->water, $this->camera->position,
-						M_PI - $this->camera->yaw, $this->course->posts($this->gateShapes));
+						M_PI - $this->camera->yaw, $this->course->posts());
 					$this->message = 'Looking for level ground…';
 				}
 				break;
@@ -685,8 +692,7 @@ final class Session
 		$role = $settings['gateRole'];
 		if($role === 'remove')
 		{
-			$id = $this->course->nearest($intent['origin'], $intent['direction'], $hit['distance'] ?? self::PICK_RANGE,
-				$this->gateShapes);
+			$id = $this->course->nearest($intent['origin'], $intent['direction'], $hit['distance'] ?? self::PICK_RANGE);
 			$gate = $id === null ? null : $this->course->remove($id);
 			$renumbered = $gate !== null && $gate['role'] === 'checkpoint'
 				&& $this->checkpointCount() >= $gate['number'];
@@ -712,23 +718,56 @@ final class Session
 			}
 			$y = $level;
 		}
-		elseif($settings['gateHeight'] > 0) { $kind = 'air'; $y += $settings['gateHeight']; }
+		elseif($settings['gateAltitude'] > 0) { $kind = 'air'; $y += $settings['gateAltitude']; }
 		else $kind = 'road';
 		$yaw = atan2(sin($intent['yaw']), cos($intent['yaw']));
-		$placed = $this->course->place($role, $kind, $x, $y, $z, $yaw, (int)$settings['gateLaps']);
-		if($placed === null)
+		$size = $this->gateShapes->fit($kind, $settings['gateWidth'] > 0 ? (float)$settings['gateWidth'] : null,
+			$settings['gateHeight'] > 0 ? (float)$settings['gateHeight'] : null);
+		$placed = $this->course->place($role, $kind, $x, $y, $z, $yaw, (int)$settings['gateLaps'], $size['width'],
+			$size['height'], self::ground($this->landscape));
+		if($placed['refused'] === 'full')
 		{
 			$this->message = 'A course holds ' . Course::MAX_CHECKPOINTS . ' checkpoints. Remove one to add another.';
 			return;
 		}
+		$name = $role === 'checkpoint' ? 'Checkpoint ' . ($this->checkpointCount() + 1) : 'The ' . $role . ' gate';
+		if($placed['refused'] === 'overlap')
+		{
+			$this->message = "$name would overlap " . self::gateName($placed['with'])
+				. '. Place it clear of that gate.';
+			return;
+		}
+		if($placed['merged'] && $role === 'finish')
+		{
+			$this->message = 'The finish is within one gate width of the start gate, so the start gate is now the start / '
+				. 'finish gate.' . ($placed['removed'] !== null ? ' The finish gate that stood elsewhere is removed.' : '')
+				. ($this->course->laps() > 1 ? ' The race runs ' . $this->course->laps() . ' laps.' : '');
+			return;
+		}
 		if($kind === 'water') $this->course->float($this->water, $this->time);
-		$where = ' at ' . (int)round($x) . ', ' . (int)round($z) . ' m';
-		$this->message = ($placed['moved'] ? 'Moved ' . self::gateName($placed['gate']) . ' to' . substr($where, 3)
-			: 'Placed ' . self::gateName($placed['gate']) . $where) . match($kind) {
-				'water' => ', floating on the water.',
-				'air' => ', ' . round($settings['gateHeight']) . ' m above the ground.',
-				'road' => '.'
-			};
+		$gate = $placed['gate'];
+		$where = ' at ' . (int)round($gate['x']) . ', ' . (int)round($gate['z']) . ' m';
+		$this->message = ($placed['moved'] ? 'Moved ' . self::gateName($gate) . ' to' . substr($where, 3)
+			: 'Placed ' . self::gateName($gate) . $where) . match($kind) {
+				'water' => ', floating on the water',
+				'air' => ', ' . round($settings['gateAltitude']) . ' m above the ground',
+				'road' => ''
+			} . ', its opening ' . GateShapes::metres($size['width']) . ' by ' . GateShapes::metres($size['height'])
+			. ' m.' . ($size['limits'] ? ' ' . ucfirst(implode(', and ', $size['limits'])) . '.' : '')
+			. ($placed['merged'] ? ' The finish gate stood within one gate width, so the start gate now also finishes.'
+				: '');
+	}
+
+	/**
+	 * Sample the ground height anywhere on a landscape, holding points beyond its edge to the edge.
+	 * @param Landscape $land The landscape a course stands on.
+	 * @return \Closure fn(float $x, float $z): float, as Course::place() and Course::import() take it.
+	 */
+	private static function ground(Landscape $land): \Closure
+	{
+		$half = $land->recipe()['worldSize'] / 2;
+		return static fn(float $x, float $z): float
+			=> $land->height(max(-$half, min($half, $x)), max(-$half, min($half, $z)));
 	}
 
 	/** How many checkpoints the course holds. */
@@ -946,7 +985,7 @@ final class Session
 		if($this->carSearch !== null)
 		{
 			$this->carSearch = $this->car->findSite($landscape, $this->water, $this->camera->position,
-				M_PI - $this->camera->yaw, $this->course->posts($this->gateShapes));
+				M_PI - $this->camera->yaw, $this->course->posts());
 		}
 		$this->preparing = false;
 		$this->dirty = true;
@@ -954,12 +993,14 @@ final class Session
 
 	/**
 	 * Serialize terrain, controls, camera and race course in a versioned standalone JSON file.
-	 * Version 2 added the course. Version 1 files load as landscapes without gates.
+	 * Version 2 added the course. Version 3 added each gate's size and renamed the gateHeight setting, the height an
+	 * air gate hangs at, to gateAltitude; gateHeight now sizes a new gate's opening. Version 1 files load as
+	 * landscapes without gates, and the gates of version 2 files take their kinds' own sizes.
 	 * @return string Complete portable JSON save document.
 	 */
 	public function save(): string
 	{
-		return json_encode(['schema' => 'phonics-landscape-sandbox','version' => 2,
+		return json_encode(['schema' => 'phonics-landscape-sandbox','version' => 3,
 			'landscape' => json_decode($this->landscape->save(), true, flags: JSON_THROW_ON_ERROR),
 			'settings' => $this->settings,'camera' => ['position' => $this->camera->position,
 				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch],
@@ -975,13 +1016,23 @@ final class Session
 	{
 		if(strlen($json) > 4 * 1024 * 1024) throw new \InvalidArgumentException('Landscape file exceeds 4 MiB.');
 		$data = json_decode($json, true, 64, JSON_THROW_ON_ERROR);
-		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2], true))
+		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2, 3], true))
 		throw new \InvalidArgumentException('This is not a supported landscape sandbox file.');
 		$candidate = Landscape::load(json_encode($data['landscape'] ?? null, JSON_THROW_ON_ERROR));
-		try { $course = Course::import($data['course'] ?? null, $candidate->recipe()['worldSize'] / 2); }
+		try
+		{
+			$course = Course::import($data['course'] ?? null, $candidate->recipe()['worldSize'] / 2,
+				self::ground($candidate), $this->gateShapes);
+		}
 		catch(\InvalidArgumentException $error) { $candidate->close(); throw $error; }
 		$settings = $data['settings'] ?? [];
 		if(!is_array($settings)) throw new \InvalidArgumentException('Invalid saved settings.');
+		// Before version 3, gateHeight was the height an air gate hangs at.
+		if($data['version'] < 3 && array_key_exists('gateHeight', $settings))
+		{
+			$settings['gateAltitude'] = $settings['gateHeight'];
+			unset($settings['gateHeight']);
+		}
 		$appearance = new WaterAppearance($settings);
 		$settings = array_diff_key($settings, WaterAppearance::DEFAULTS) + ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW];
 		foreach($settings as $name => $value)
@@ -998,7 +1049,7 @@ final class Session
 		$this->setWaterAppearance($appearance);
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
 		$this->course = $course;
-		if($course->laps() !== null) $this->settings['gateLaps'] = $course->laps();
+		if($course->start() !== null) $this->settings['gateLaps'] = $course->start()['laps'];
 		$this->course->float($this->water, $this->time);
 		$this->camera->position = array_map('floatval', $position);
 		$this->camera->yaw = (float)$yaw; $this->camera->pitch = max(-1.52, min(1.52, (float)$pitch));
@@ -1035,7 +1086,9 @@ final class Session
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats(),
-			'course' => $this->courseStatus(),'race' => $this->race->status($this->course, $this->time)];
+			'course' => $this->courseStatus(),'gateSizes' => $this->gateSizes(),
+			'race' => $this->race->status($this->course, $this->time, $this->mode === 'fly' ? null : $this->mode,
+				$this->water->level())];
 	}
 
 	/**
@@ -1049,8 +1102,27 @@ final class Session
 			$gates[] = ['id' => $gate['id'], 'role' => $gate['role'], 'kind' => $gate['kind'],
 				'print' => $this->course->print($gate), 'number' => $gate['number'] ?? null,
 				'laps' => $gate['laps'] ?? null,
-				'x' => $gate['x'], 'y' => $gate['y'], 'z' => $gate['z'], 'yaw' => $gate['yaw']];
+				'x' => $gate['x'], 'y' => $gate['y'], 'z' => $gate['z'], 'yaw' => $gate['yaw'],
+				'width' => $gate['width'], 'height' => $gate['height']];
 		return ['revision' => $this->course->revision, 'laps' => $this->course->laps(), 'gates' => $gates];
+	}
+
+	/**
+	 * Describe the opening sizes each kind of gate takes, for the gate tool.
+	 * @return array<string,array{width:float,height:float,widths:array,heights:array,stretch:?float}> By kind, the
+	 * kind's own width and height in metres, the [least, greatest] of each, and for the water arch the most its
+	 * scale up may exceed its scale across, or the reverse.
+	 */
+	private function gateSizes(): array
+	{
+		$sizes = [];
+		foreach(GateShapes::KINDS as $kind)
+		{
+			$size = $this->gateShapes->kind($kind)['size'];
+			$sizes[$kind] = ['width' => $size['default'][0], 'height' => $size['default'][1], 'widths' => $size['width'],
+				'heights' => $size['height'], 'stretch' => $size['stretch']];
+		}
+		return $sizes;
 	}
 
 	/**

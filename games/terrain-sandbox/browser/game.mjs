@@ -59,7 +59,7 @@ export function activate({module, canvas, session, services})
 	const focusedField = target => target instanceof HTMLElement && Boolean(target.closest('input,select,textarea'));
 
 	// These fields send nothing while their text is out of range, and return to the last value sent when left so.
-	const checked = new Set(['waterLevel', 'gateLaps', 'gateHeight']);
+	const checked = new Set(['waterLevel', 'gateLaps', 'gateAltitude', 'gateWidth', 'gateHeight']);
 	const gateTool = frame.querySelector('[data-gate-tool]');
 
 	const showToolControls = () => { gateTool.hidden = controls.get('tool').value !== 'gate'; };
@@ -514,7 +514,8 @@ function updateRoadPreview(svg, state)
 }
 
 /**
- * Show the race clock, lap, next gate, last split and best time while the landscape has gates.
+ * Show the race clock, lap, next gate, last split and best time while the landscape has gates, and say when the
+ * vehicle cannot reach the next gate's opening.
  * @param {HTMLElement} line The HUD line under the status message.
  * @param {object} state Latest status from PHP.
  */
@@ -547,7 +548,8 @@ function updateRace(line, state)
 
 	if(race.best !== null) parts.push(`Best ${raceClock(race.best)}`);
 
-	line.textContent = parts.join(' · ');
+	// Why the vehicle cannot pass the next gate follows the race figures.
+	line.textContent = parts.join(' · ') + (race.reach ? ` · ${race.reach.message}` : '');
 }
 
 /**
@@ -704,9 +706,11 @@ function markup()
 	<label class="terrain-field">Detail<select data-value="quality"><option value="0.5">Economical</option><option value="1" selected>Balanced</option><option value="2">Detailed</option></select></label>
 	<h2>Shape the ground</h2><label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option></select></label>
 	<div data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
-	<label class="terrain-field">Laps · set on the start gate<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
-	<label class="terrain-field">Height above ground · m<input data-value="gateHeight" type="number" min="0" max="400" step="any" value="0"></label>
-	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. Placing a second start or finish gate moves it, checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
+	<label class="terrain-field">Laps · start / finish courses only<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
+	<label class="terrain-field">Height above ground · m<input data-value="gateAltitude" type="number" min="0" max="400" step="any" value="0"></label>
+	<label class="terrain-field">Opening width · m<input data-value="gateWidth" type="number" min="0" max="300" step="any" value="0"></label>
+	<label class="terrain-field">Opening height · m<input data-value="gateHeight" type="number" min="0" max="150" step="any" value="0"></label>
+	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening size of 0 takes the gate's own: 13.3 by 3.1 m on the road, 8.9 by 3.6 m on water and 40 by 8.8 m in the air. Road and water gates reach 60 by 40 m, air gates 300 by 150 m. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. Laps count only when the start gate is also the finish. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
 	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
 	${range('Radius · m', 'radius', 2, 300, 1, 40)}${range('Strength · m', 'amount', .1, 200, .1, 12)}
 	<label class="terrain-field">Flatten elevation · m<input data-value="flattenHeight" type="number" min="-1000" max="3000" value="0"></label>
