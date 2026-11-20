@@ -131,6 +131,100 @@ namespace
 				|| $s['reversing'] !== ($s['speed'] < 0 || $s['speed'] == 0 && $pedal < 0)) return false;
 		return true;
 	}
+	/**
+	 * Cast rays over each headlamp's beam cone against the car's body, the pods left out.
+	 * @param string $meshFile The car's baked mesh.
+	 * @param array $lamps The car's pods and headlamps from VehicleModel::lamps().
+	 * @return Closure Takes the pods' opening from 0 to 1 and returns, for each beam, the share of its light that
+	 * leaves the car: rays from the beam's origin over its cone, weighted as the terrain shader fades the cone, that
+	 * strike no body triangle within 3 metres.
+	 */
+	function beamClearance(string $meshFile, array $lamps): Closure
+	{
+		$data = gzdecode(file_get_contents($meshFile));
+		['v' => $count, 'i' => $corners] = unpack('Vv/Vi', $data);
+		$vertices = [];
+		for($i = 0; $i < $count; $i++)
+			$vertices[] = array_values(unpack('g3', $data, 16 + 28 * $i)) + [3 => ord($data[16 + 28 * $i + 27])];
+		$indices = array_values(unpack("v$corners", $data, 16 + 28 * $count));
+
+		// The body ahead of the windscreen, each triangle as a corner and two edges.
+		$body = [];
+		for($k = 0; $k < $corners; $k += 3)
+		{
+			[$a, $b, $c] = [$vertices[$indices[$k]], $vertices[$indices[$k + 1]], $vertices[$indices[$k + 2]]];
+			if(in_array($a[3], [6, 7], true) || max($a[2], $b[2], $c[2]) < 1.5) continue;
+			$body[] = [$a, [$b[0] - $a[0], $b[1] - $a[1], $b[2] - $a[2]],
+				[$c[0] - $a[0], $c[1] - $a[1], $c[2] - $a[2]]];
+		}
+
+		$cross = static fn(array $p, array $q): array => [$p[1] * $q[2] - $p[2] * $q[1], $p[2] * $q[0] - $p[0] * $q[2],
+			$p[0] * $q[1] - $p[1] * $q[0]];
+		$dot = static fn(array $p, array $q): float => $p[0] * $q[0] + $p[1] * $q[1] + $p[2] * $q[2];
+
+		$blocked = static function(array $o, array $d) use ($body, $cross, $dot): bool {
+			foreach($body as [$a, $e1, $e2])
+			{
+				$p = $cross($d, $e2);
+				$det = $dot($e1, $p);
+				if(abs($det) < 1e-12) continue;
+
+				$s = [$o[0] - $a[0], $o[1] - $a[1], $o[2] - $a[2]];
+				$u = $dot($s, $p) / $det;
+				if($u < 0 || $u > 1) continue;
+				$q = $cross($s, $e1);
+				$v = $dot($d, $q) / $det;
+				$t = $dot($e2, $q) / $det;
+				if($v >= 0 && $u + $v <= 1 && $t > .02 && $t < 3) return true;
+			}
+			return false;
+		};
+
+		return static function(float $opening) use ($lamps, $blocked, $cross, $dot): array {
+			[, $hingeY, $hingeZ] = $lamps['pods']['point'];
+			$angle = $lamps['pods']['angle'] * ($opening - 1);
+			$c = cos($angle);
+			$s = sin($angle);
+			$inner = cos(VehicleModel::BEAM_INNER);
+			$outer = cos(VehicleModel::BEAM_OUTER);
+
+			$shares = [];
+			foreach($lamps['headlamps'] as ['position' => [$x, $y, $z], 'direction' => [$dx, $dy, $dz]])
+			{
+				$origin = [$x, $hingeY + ($y - $hingeY) * $c - ($z - $hingeZ) * $s,
+					$hingeZ + ($y - $hingeY) * $s + ($z - $hingeZ) * $c];
+				$axis = [$dx, $dy * $c - $dz * $s, $dy * $s + $dz * $c];
+				$across = $cross($axis, [0, 1, 0]);
+				$length = sqrt($dot($across, $across));
+				$across = array_map(static fn(float $v): float => $v / $length, $across);
+				$up = $cross($across, $axis);
+
+				$total = $free = 0.0;
+
+				for($ring = 0; $ring <= 6; $ring++)
+				{
+					$theta = VehicleModel::BEAM_OUTER * $ring / 6;
+					$weight = max(0, min(1, (cos($theta) - $outer) / ($inner - $outer))) ** 2 * sin(max($theta, .01));
+
+					for($k = 0; $k < ($ring ? 12 : 1); $k++)
+					{
+						$phi = M_PI * $k / 6;
+
+						$ray = [];
+						for($j = 0; $j < 3; $j++)
+							$ray[] = cos($theta) * $axis[$j]
+								+ sin($theta) * (cos($phi) * $across[$j] + sin($phi) * $up[$j]);
+
+						$total += $weight;
+						if(!$blocked($origin, $ray)) $free += $weight;
+					}
+				}
+				$shares[] = $free / $total;
+			}
+
+			return $shares;
+		};
+	}
 
 	// Brake lamps light while the pedal opposes the motion, reversing lamps while the car rolls backwards.
 	$keys = park();
@@ -413,12 +507,29 @@ namespace
 		&& $lights[0]['intensity'] === VehicleModel::BEAM_INTENSITY && $lights[0]['color'] === VehicleModel::WHITE,
 		'Open pods with lit headlamps give two spot lights on the beams');
 
-	$dim = ['lamps' => ['headlamps' => .5, 'pods' => .5] + $level['lamps']] + $level;
+	// While the pods rise, the headlamps face into the car's nose until they clear it. No light passes the body.
+	[$hidden, $clear] = VehicleModel::BEAM_CLEAR;
+	$leaving = beamClearance($meshFile, $data);
+	expect(max($leaving($hidden)) === 0.0 && min($leaving($clear)) >= .99,
+		'The nose stops every ray of both beams with the pods open to the first of BEAM_CLEAR, and almost none at the '
+		. 'second');
+	$rising = static fn(float $pods): array => VehicleModel::spotLights($data,
+		['lamps' => ['headlamps' => 1.0, 'pods' => $pods] + $level['lamps']] + $level);
+	expect($rising(.5) === [] && $rising($hidden) === [],
+		'Half-open pods give no spot lights: the headlamps still face into the nose');
+
+	$part = $rising(($hidden + $clear) / 2);
+	expect(count($part) === 2 && $part[0]['intensity'] > 0 && $part[0]['intensity'] < VehicleModel::BEAM_INTENSITY,
+		'The beams brighten as the headlamps rise clear of the nose');
+
+	$dim = ['lamps' => ['headlamps' => .5, 'pods' => $clear] + $level['lamps']] + $level;
 	$dimBeams = VehicleModel::beams($data, $dim);
 	$dimLights = VehicleModel::spotLights($data, $dim);
-	expect(abs($dimLights[0]['intensity'] - VehicleModel::BEAM_INTENSITY * .25) < 1e-9
-		&& $dimLights[0]['direction'] === $dimBeams[0]['direction'],
-		'A beam\'s intensity follows the headlamps and the pods, and its aim swings with the pods');
+	expect(abs($dimLights[0]['intensity'] - VehicleModel::BEAM_INTENSITY * .5) < 1e-9
+		&& $dimLights[0]['direction'] === $dimBeams[0]['direction']
+		&& $dimBeams[0]['direction'] !== $beams[0]['direction'],
+		'Clear of the nose, a beam\'s intensity follows the headlamps, and its aim swings with the pods');
+
 	foreach(['dark headlamps' => ['headlamps' => 0.0], 'shut pods' => ['pods' => 0.0]] as $case => $levels)
 		expect(VehicleModel::spotLights($data, ['lamps' => $levels + $level['lamps']] + $level) === [],
 			"With $case the car gives no spot lights, so the application clears them");
