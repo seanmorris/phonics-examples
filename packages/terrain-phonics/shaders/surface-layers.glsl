@@ -31,20 +31,30 @@ float patternMask(vec2 uv, int kind) {
 		return grit*(1.-smoothstep(radius-.04,radius+.04,length(fract(uv)-center)));
 	}
 	float noise=layerValueNoise(uv);
-	if(kind==2) return 1.-smoothstep(.04,.31,abs(noise));
+	if(kind==2 || kind==4) return 1.-smoothstep(.04,.31,abs(noise));
 	return smoothstep(-.55,.55,noise);
 }
 
-vec3 layerColor(int layer, vec3 pos, vec3 normal, float footprint) {
+vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeight,float beddingPixel) {
 	vec3 base=uLayerColor[layer];
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
 	if(kind==0 || pattern.y<=0.) return base;
 
 	// Narrow streaks and gravel disappear earlier than large patches of colour.
-	float filterStart=kind==1 ? .2 : .06;
+	float filterStart=kind==1 ? .2 : (kind==3 ? .06 : .11);
 	float visibility=1.-smoothstep(filterStart,filterStart*3.,footprint/pattern.z);
-	if(visibility<=0.) return base;
+	float partings=0.;
+	if(kind==4) {
+		// Fine sediment lines follow the dipped bed, even where the weathering streaks run across it.
+		float spacing=pattern.z*.19;
+		float resolved=1.-smoothstep(.28,1.05,beddingPixel/spacing);
+		if(resolved>0.) {
+			float grain=layerValueNoise(vec2(beddingHeight/spacing+uPaletteOffset.y,.618));
+			partings=resolved*smoothstep(-.28,.62,grain);
+		}
+	}
+	if(visibility<=0.) return mix(base,uLayerPatternColor[layer],pattern.y*.52*partings);
 
 	// Project onto the ground and both upright planes, in world space. Blending the
 	// projections keeps the tint continuous where cliff faces turn a corner.
@@ -57,26 +67,57 @@ vec3 layerColor(int layer, vec3 pos, vec3 normal, float footprint) {
 	if(weight.x>0.) amount+=weight.x*patternMask((pos.zy+offset)/verticalScale,kind);
 	if(weight.y>0.) amount+=weight.y*patternMask((pos.xz+offset)/pattern.z,kind);
 	if(weight.z>0.) amount+=weight.z*patternMask((pos.xy+offset.yx)/verticalScale,kind);
-	return mix(base,uLayerPatternColor[layer],pattern.y*visibility*amount);
+	return mix(base,uLayerPatternColor[layer],pattern.y*max(visibility*amount,.52*partings));
 }
+float repeatingMask(float height,vec2 range,float fade,float period) {
+	float width=clamp(range.y-range.x,0.,period);
+	if(width==period) return 1.;
+	float center=.5*(range.x+range.y);
+	float distanceToCenter=abs(mod(height-center+.5*period,period)-.5*period);
+	// Use the unwrapped height derivative. A pixel that straddles the wrap still sees an ordinary bed contact.
+	float footprint=fwidth(height);
+	float edge=max(fade,.65*footprint);
+	float mask=1.-smoothstep(.5*width-edge,.5*width+edge,distanceToCenter);
+	return mix(mask,width/period,smoothstep(.16,.55,footprint/period));
+}
+
 vec3 layerSurface(vec3 pos,vec3 normal,float footprint,float water) {
 	float masks[12];
-	vec3 result=layerColor(0,pos,normal,footprint);
+	float beddingHeight=pos.y-dot(pos.xz,vec2(.006,-.003));
+	float beddingPixel=fwidth(beddingHeight);
+	vec3 result=layerColor(0,pos,normal,footprint,beddingHeight,beddingPixel);
 	float slope=1.-clamp(normal.y,0.,1.);
+	vec3 sectionColor=vec3(0.);
+	float sectionCoverage=0.;
 	masks[0]=1.;
 	for(int i=1;i<12;i++) {
 		if(i>=uLayerCount) break;
 		vec4 r=uLayerRange[i],b=uLayerBlend[i],m=uLayerMode[i];
 		float noise=b.z>0. ? layerNoise(pos.xz,b.w,footprint) : 0.;
-		float h=pos.y+(b.z*noise)-(m.y==1.?water:(m.y==2.?dot(pos.xz,vec2(.006,-.003)):0.));
-		if(m.z>0.) h=mod(h+.5*m.z,m.z);
+		float h=(m.y==2. ? beddingHeight : pos.y-(m.y==1. ? water : 0.))+b.z*noise;
 		float fade=max(.0001,b.x), sf=max(.00001,b.y);
-		float mask=smoothstep(r.x-fade,r.x,h)*(1.-smoothstep(r.y,r.y+fade,h));
-		mask*=smoothstep(r.z-sf,r.z,slope)*(1.-smoothstep(r.w,r.w+sf,slope));
-		if(m.z>0.) mask=mix(mask,clamp((r.y-r.x)/m.z,0.,1.),smoothstep(.25,1.,fwidth(pos.y)/m.z));
-		if(m.x>=0.) mask*=masks[int(m.x)];
+		// Repeating elevations were authored relative to the midpoint of the cycle.
+		float heightMask=m.z>0. ? repeatingMask(h+.5*m.z,r.xy,fade,m.z)
+			: smoothstep(r.x-fade,r.x,h)*(1.-smoothstep(r.y,r.y+fade,h));
+		float cliffMask=smoothstep(r.z-sf,r.z,slope)*(1.-smoothstep(r.w,r.w+sf,slope));
+		if(m.x>=0.) cliffMask*=masks[int(m.x)];
+		float mask=heightMask*cliffMask;
 		masks[i]=mask;
-		if(mask>0.) result=mix(result,layerColor(i,pos,normal,footprint),mask);
+
+		if(mask>0.) {
+			vec3 shade=layerColor(i,pos,normal,footprint,beddingHeight,beddingPixel);
+			if(m.w==0.) result=mix(result,shade,mask);
+			else {
+				sectionColor+=shade*heightMask;
+				sectionCoverage+=heightMask;
+			}
+		}
+		if(m.w==2.) {
+			// A full section shares one slope and parent mask. Blend its adjacent beds before applying them.
+			if(sectionCoverage>0.) result=mix(result,sectionColor/sectionCoverage,cliffMask);
+			sectionColor=vec3(0.);
+			sectionCoverage=0.;
+		}
 	}
 	return result;
 }

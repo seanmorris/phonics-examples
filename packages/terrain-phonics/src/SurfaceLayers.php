@@ -8,7 +8,7 @@ use Phonics\Render\Program;
 final class SurfaceLayers
 {
 	public const LIMIT = 12;
-	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel'];
+	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded'];
 	public const DEFAULTS = [
 		'color' => '#807355'
 		, 'low' => -1000000.
@@ -98,6 +98,36 @@ final class SurfaceLayers
 		}
 
 		$this->layers = $rows;
+		$this->markRepeatingSections();
+	}
+
+	/** Blend a complete, contiguous section of sibling beds together at each contact. */
+	private function markRepeatingSections(): void
+	{
+		$fields = array_flip(['datum', 'period', 'parent', 'noise', 'scale', 'slopeLow', 'slopeHigh', 'slopeFade']);
+		$count = count($this->layers);
+		for($first = 1; $first < $count; $first = $next)
+		{
+			$start = $this->layers[$first];
+			$next = $first + 1;
+			if($start['period'] <= 0) continue;
+
+			$mask = array_intersect_key($start, $fields);
+			$precision = $start['period'] * 1e-7;
+			$end = $start['high'];
+			while($next < $count)
+			{
+				$layer = $this->layers[$next];
+				if(abs($layer['low'] - $end) > $precision || array_intersect_key($layer, $fields) != $mask) break;
+
+				$end = $layer['high'];
+				$next++;
+			}
+
+			if($next - $first < 2 || abs($end - $start['low'] - $start['period']) > $precision) continue;
+
+			for($i = $first; $i < $next; ++$i) $this->modes[4*$i + 3] = $i + 1 === $next ? 2 : 1;
+		}
 	}
 
 	public static function landscape(array $r, TerrainAppearance $appearance): self
@@ -105,17 +135,13 @@ final class SurfaceLayers
 		$s = $appearance->settings;
 		$style = TerrainAppearance::style($r);
 		$canyon = str_starts_with($style, 'canyon');
-		$rows = [['color' => $s[$canyon?'canyonSandstoneColor':($style === 'mountain'?'forestColor':'grassColor')]]];
-
-		if($canyon) $rows[0] += [
-			'pattern' => 'mottle', 'patternColor' => $s['canyonCapColor'],
-			'patternScale' => 42., 'patternAmount' => .35,
-		];
-
-		$cliffPattern = $canyon ? [
-			'pattern' => 'streaks', 'patternColor' => $s['canyonShaleColor'],
-			'patternScale' => 24., 'patternStretch' => 5., 'patternAmount' => .55,
-		] : [];
+		$rows = match($style)
+		{
+			'canyon' => self::canyonLayers($r, $appearance),
+			'canyon-v1' => self::earlyCanyonLayers($s),
+			'mountain' => [['color' => $s['forestColor']]],
+			default => [['color' => $s['grassColor']]],
+		};
 
 		if($style === 'mountain')
 		{
@@ -123,29 +149,8 @@ final class SurfaceLayers
 			$rows[] = ['color' => $s['tundraColor'],'low' => $s['snowline'] + $s['tundraStart'],'fade' => 34,'noise' => 12];
 		}
 
-		$rows[] = [
-			'color' => $s[$canyon?'canyonCapColor':($style === 'mountain'?'graniteColor':'rockColor')]
-			// The layer lower bound is where the fade finishes. The rock control is where it begins.
-			, 'slopeLow' => $s['rockSlopeEnd']
-			, 'slopeFade' => $s['rockSlopeEnd'] - $s['rockSlopeStart']
-		] + $cliffPattern;
-
-		if($canyon)
-		{
-			$spacing = $r['terraceSpacing'] ?: $s['bandSpacing'];
-
-			foreach([[1,'canyonRustColor'],[3,'canyonShaleColor'],[5,'canyonCapColor']] as [$i,$key])
-			$rows[] = [
-				'color' => $s[$key]
-				, 'datum' => 'beds'
-				, 'period' => 10 * $spacing
-				, 'low' => (CanyonBeds::CONTACTS[$i] + 5) * $spacing
-				, 'high' => (CanyonBeds::CONTACTS[$i + 1] + 5) * $spacing
-				, 'fade' => .07 * $spacing
-				, 'noise' => .025 * $spacing
-				, 'patternColor' => $s[$key === 'canyonShaleColor' ? 'canyonRustColor' : 'canyonShaleColor']
-			] + $cliffPattern;
-		}
+		if(!$canyon) $rows[] = self::exposedRock($s)
+			+ ['color' => $s[$style === 'mountain' ? 'graniteColor' : 'rockColor']];
 
 		$rows[] = ['color' => $s['sandColor'],'high' => $s['beachHeight'],'datum' => 'water','fade' => $s['beachWidth']];
 
@@ -160,6 +165,90 @@ final class SurfaceLayers
 		];
 
 		return new self($rows);
+	}
+
+	/** Translate a start/end slope blend into a layer's full-coverage threshold and fade. */
+	private static function exposedRock(array $settings): array
+	{
+		return ['slopeLow' => $settings['rockSlopeEnd'], 'slopeFade' => $settings['rockSlopeEnd'] - $settings['rockSlopeStart']];
+	}
+
+	private static function hex(array $linear): string
+	{
+		$channels = array_map(static function(float $value): int {
+			$srgb = $value <= .0031308 ? 12.92 * $value : 1.055 * $value ** (1 / 2.4) - .055;
+
+			return (int)round(255 * $srgb);
+		}, $linear);
+
+		return sprintf('#%02x%02x%02x', ...$channels);
+	}
+
+	/** Recover all seven exposed beds from the same dipping contacts as the elevation field. */
+	private static function canyonLayers(array $recipe, TerrainAppearance $appearance): array
+	{
+		$settings = $appearance->settings;
+		$palette = $appearance->canyonColors();
+		$spacing = $recipe['terraceSpacing'] ?: $settings['bandSpacing'];
+		$contacts = CanyonBeds::CONTACTS;
+		$average = $palette['distant'];
+		$contrast = $settings['bandContrast'];
+		$rows = [
+			[
+				'color' => self::hex($palette['dust']), 'pattern' => 'mottle',
+				'patternColor' => self::hex($palette['cap']), 'patternScale' => 61., 'patternAmount' => .24,
+			],
+		];
+
+		$rock = self::exposedRock($settings);
+		foreach(['rust', 'shale', 'ledge', 'sandstone', 'redBeds', 'sandstone', 'cap'] as $i => $name)
+		{
+			$color = array_map(
+				static fn(float $base, float $bed) => $base + $contrast * ($bed - $base),
+				$average, $palette[$name]
+			);
+			$rows[] = [
+				'color' => self::hex($color),
+				'datum' => 'beds',
+				'period' => ($contacts[7] - $contacts[0]) * $spacing,
+				'low' => ($contacts[$i] - $contacts[0]) * $spacing,
+				'high' => ($contacts[$i + 1] - $contacts[0]) * $spacing,
+				'fade' => .055 * $spacing / $settings['bandSharpness'],
+				'noise' => .014 * $spacing,
+				'scale' => 72.,
+				'pattern' => 'bedded',
+				'patternColor' => self::hex(array_map(static fn(float $channel) => .42 * $channel, $color)),
+				'patternScale' => 33.,
+				'patternStretch' => 4.5,
+				'patternAmount' => .64,
+			] + $rock;
+		}
+
+		return $rows;
+	}
+
+	/** Version-one terrain has horizontal sediment bands and its own soil and rock controls. */
+	private static function earlyCanyonLayers(array $settings): array
+	{
+		$spacing = $settings['bandSpacing'];
+		$contrast = $settings['bandContrast'];
+		$rock = TerrainAppearance::linear($settings['rockColor']);
+		$light = TerrainAppearance::linear($settings['rockBandColor']);
+		$mean = array_map(static fn(float $a, float $b) => .5 * ($a + $b), $rock, $light);
+		$rows = [['color' => $settings['soilColor']]];
+		foreach([$light, $rock] as $i => $color)
+		{
+			$blend = array_map(static fn(float $a, float $b) => $a + $contrast * ($b - $a), $mean, $color);
+			$rows[] = [
+				'color' => self::hex($blend),
+				'period' => $spacing,
+				'low' => .5 * ($i + 1) * $spacing,
+				'high' => .5 * ($i + 2) * $spacing,
+				'fade' => .16 * $spacing / $settings['bandSharpness'],
+			] + self::exposedRock($settings);
+		}
+
+		return $rows;
 	}
 
 	public function bind(Program $p): void

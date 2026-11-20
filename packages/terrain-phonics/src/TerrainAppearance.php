@@ -182,6 +182,12 @@ final class TerrainAppearance
 	public static function linear(string $hex): array { return self::decode(self::color('color', $hex)); }
 
 	/**
+	 * Give the layer editor the same colours as the original canyon material.
+	 * @return array Linear colours for the bed sequence, dust, distant strata, and reflected light.
+	 */
+	public function canyonColors(): array { return self::canyonPalette($this->settings); }
+
+	/**
 	 * Name the terrain style a recipe draws with, as Scene chooses its material.
 	 * @param array $recipe Landscape recipe with its preset and version.
 	 * @return string A key of USES: coast, mountain, canyon-v1 or canyon.
