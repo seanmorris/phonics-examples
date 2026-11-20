@@ -746,7 +746,17 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 			return viewport(x,y,w,h);
 		};
 		gl.drawElements = (...args) => {
-			if(args[1] === count) element.carDraws++;
+			if(args[1] === count)
+			{
+				element.carDraws++;
+				if(!element.splitFrontSteering)
+				{
+					const program = gl.getParameter(gl.CURRENT_PROGRAM);
+					const location = gl.getUniformLocation(program, 'uWheelAngles');
+					const angles = location && gl.getUniform(program, location);
+					element.splitFrontSteering = angles?.length === 3 && angles[1] < angles[2] && angles[2] < 0;
+				}
+			}
 			return draw(...args);
 		};
 	}, gunzipSync(mesh).readUInt32LE(4));
@@ -796,6 +806,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await page.keyboard.down('d');
 	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
 	await expect.poll(needle).toBeGreaterThan(.75*Math.PI + .15);
+	await expect.poll(() => view.evaluate(element => element.splitFrontSteering)).toBe(true);
 	await page.keyboard.up('d');
 	await page.keyboard.up('w');
 	const beforeRestore = await view.evaluate(element => element.carDraws);
@@ -925,10 +936,11 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 			return draw(...args);
 		};
 		new MutationObserver(() => {
+			if(el.landedCar) return;
 			const {car, camera} = JSON.parse(el.dataset.terrainSandbox);
 			if(car?.motion === 'airborne' && car.wheelContacts === 0)
 			{
-				el.airborneCar = car;
+				el.airborneCar ??= car;
 				const [x,y,z] = camera.position;
 				const focus = Math.atan2(car.y+.65-y, Math.hypot(car.x-x,car.z-z));
 				const frameY = Math.tan(focus-camera.pitch)/Math.tan(camera.fov/2);

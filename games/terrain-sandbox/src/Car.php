@@ -14,6 +14,8 @@ final class Car
 	private const TOP_SPEED = self::TOP_SPEED_MPH * self::MPS_PER_MPH;
 	// Keep the low-speed resistance while allowing a long straight to reach the speed governor.
 	private const ROAD_DRAG = .0059, ROAD_DRAG_LIMIT = 30, AERO_DRAG = .0001;
+	/** Share of downhill acceleration that pulls the steering downhill on a bank. */
+	private const BANK_PULL = .16;
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
 	private float $speed = 0, $steering = 0, $spin = 0;
 	/** Angle in radians from the direction of travel to the way the body points, while the tail slides out. */
@@ -170,7 +172,13 @@ final class Car
 		}
 		if($this->tumble !== null) return $this->stepTumble($dt,$land,$waterLevel,$posts);
 		// Steering tightens at parking speeds. Swapping pedals brakes before engaging reverse.
-		$target = -$turn * .52 / (1 + .035 * abs($this->speed));
+		$speed = abs($this->speed);
+		$target = -$turn * .52 / (1 + .035 * $speed);
+		$gravitySide = 9.81*sin($this->roadRoll);
+		// Approximate steering pull as a small downhill curvature. Fade it in while rolling and out when the
+		// front axle loses contact. The speed term keeps the lateral acceleration bounded at highway speeds.
+		if($this->suspension->frontContacts > 0)
+			$target += self::BANK_PULL*$gravitySide*self::WHEELBASE*min(1.0,$speed/4)/($speed**2 + 36.0);
 		$this->steering += max(-2.5*$dt, min(2.5*$dt, $target - $this->steering));
 		$gripFraction = $this->suspension->contacts/4;
 		$rear = ($this->suspension->contacts - $this->suspension->frontContacts)/2;
@@ -209,7 +217,6 @@ final class Car
 		if($this->speed == 0 && $this->suspension->resting) return true;
 		$distance = $this->speed * $dt;
 		// An inward bank supplies some centripetal acceleration. Only the remainder needs tire grip.
-		$gravitySide = 9.81*sin($this->roadRoll);
 		$grip = 9.81*cos($this->roadRoll)*cos($this->roadPitch);
 		$demand = $this->speed**2*tan($this->steering)/self::WHEELBASE;
 		$direction = $demand <=> 0;
@@ -499,6 +506,14 @@ final class Car
 		$center = $land->height($x, $z);
 		if($center <= $waterLevel + .12) return null;
 		return [max($y,$center-.14) + .02,atan($rise),-atan($bank/sqrt(1+$rise*$rise)),max(abs($frontBank-$rearBank),abs($center-$y)),$heights];
+	}
+
+	/** Ackermann angles at the front -X and +X wheels for the simulated centerline steering angle. */
+	public static function frontWheelAngles(float $steering): array
+	{
+		$tangent = tan($steering);
+		$offset = $tangent*self::FRONT_TRACK/(2*self::WHEELBASE);
+		return [atan($tangent/(1 + $offset)), atan($tangent/(1 - $offset))];
 	}
 
 	public function state(): array

@@ -5,6 +5,7 @@ $package = getenv('PHONICS_TERRAIN_ROOT') ?: dirname(__DIR__, 3) . '/packages/te
 require_once $package . '/autoload.php';
 require_once dirname(__DIR__) . '/autoload.php';
 
+use TerrainSandbox\Car;
 use TerrainSandbox\CarChase;
 use TerrainSandbox\Jet;
 use TerrainSandbox\Session;
@@ -264,6 +265,9 @@ for($i = 0; $i < 60; $i++) $drive->step(1/60);
 $s = $drive->car->state();
 expect($s['z'] > 2 && $s['x'] < 0 && $s['speed'] > 6 && $s['steering'] < 0 && $s['wheelSpin'] != 0,
 	'Forward right steering turns toward the driver’s right and rolls the wheels');
+[$inside,$outside] = Car::frontWheelAngles($s['steering']);
+expect($inside < $outside && $outside < 0 && abs(1/tan($inside) - 1/tan($outside) - Car::FRONT_TRACK/Car::WHEELBASE) < 1e-9,
+	'The inside wheel steers farther and both front wheels follow the same center of rotation');
 input($drive, ['actions'=>['pause'], 'keys'=>['KeyS'=>true]]);
 $drive->step(1/60);
 expect($drive->car->state() === $s, 'Pause freezes vehicle motion');
@@ -341,6 +345,24 @@ for($i = 1; $i <= 360; $i++)
 expect($frameError < .52 && $landingPitch !== null && $landingPitch < -.8 && $drop->camera->pitch > $landingPitch + .4,
 	'The chase camera tilts with a falling car through interpolated frames and lifts after clearing the ledge');
 $drop->close();
+
+foreach([-1,0,1] as $downhill)
+{
+	$crossfall = new Session($dry);
+	$crossfall->landscape->queue(['type'=>'road','points'=>[[-100,18*$downhill,0],[100,-18*$downhill,0]],'width'=>130,'shoulder'=>6,'crown'=>0]);
+	$crossfall->landscape->commit();
+	$crossfall->camera->position = [0,30,-42]; $crossfall->camera->yaw = M_PI;
+	enterCar($crossfall);
+	$crossfall->step(1/60);
+	expect($crossfall->car->state()['steering'] === 0.0, 'A parked car keeps its wheels centered on a bank');
+	input($crossfall, ['keys'=>['KeyW'=>true]]);
+	for($i = 0; $i < 180; $i++) $crossfall->step(1/60);
+	$car = $crossfall->car->state();
+	expect($downhill === 0 ? $car['x'] === 0.0 && $car['yaw'] === 0.0
+		: $downhill*$car['x'] > .5 && $downhill*$car['yaw'] > .02 && $downhill*$car['steering'] > 0,
+		'With the steering released, a rolling car pulls gently downhill on either bank and stays straight on level ground');
+	$crossfall->close();
+}
 
 // The road runs across the car's path. Both turns enter the same 31° bank at the same speed.
 foreach(['KeyD','KeyA'] as $steer)

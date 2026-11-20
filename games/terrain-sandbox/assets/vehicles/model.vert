@@ -10,7 +10,7 @@ layout(location=4) in vec2 aSurface;    // metallic factor and surface tag (whee
 uniform mat4 uViewProjection;
 uniform mat3 uRotation;
 uniform vec3 uOrigin;
-uniform vec2 uWheelAngles; // spin and front steering, in radians
+uniform vec3 uWheelAngles; // spin, front -X steer, front +X steer, in radians
 uniform vec4 uWheelLayout; // front/rear half track, half wheelbase, tire radius
 uniform vec4 uWheelTravel; // spring displacement at front -X/+X, then rear -X/+X
 // Tags 250 to 254 turn about these hinges by the right-hand rule. Other vehicles leave them unset.
@@ -101,7 +101,7 @@ void main()
 		bool front = position.z > 0.0;
 		vec3 hub = vec3(sign(position.x) * (front ? uWheelLayout.x : uWheelLayout.y),
 			uWheelLayout.w, sign(position.z) * uWheelLayout.z);
-		float spin = uWheelAngles.x, steer = front ? uWheelAngles.y : 0.0;
+		float spin = uWheelAngles.x, steer = front ? (hub.x < 0.0 ? uWheelAngles.y : uWheelAngles.z) : 0.0;
 		mat2 rolling = mat2(cos(spin),sin(spin),-sin(spin),cos(spin));
 		mat2 steering = mat2(cos(steer),-sin(steer),sin(steer),cos(steer));
 		position -= hub;
