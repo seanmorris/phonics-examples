@@ -344,6 +344,77 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 	expect([SPD[1],ALT[1]]).toEqual(['#59ff86','#59ff86']);
 });
 
+test('the acquisition diamond separates from the flight path, follows the balloon and clears on lock', async({page}) => {
+	const source = await fs.readFile(new URL('../../games/terrain-sandbox/browser/cockpit.mjs', import.meta.url), 'utf8');
+	await page.setContent('<div><canvas></canvas></div>');
+
+	const states = await page.evaluate(async source => {
+		const url = URL.createObjectURL(new Blob([source], {type: 'text/javascript'}));
+		const {activate} = await import(url);
+		URL.revokeObjectURL(url);
+		const module = {drawTerrainFlightMap() {}};
+		activate({module, canvas: document.querySelector('canvas')});
+		const ctx = document.querySelector('.terrain-instruments').getContext('2d');
+		const frame = {
+			width: 800, height: 720, cockpit: true, ring: .285, fov: Math.PI/2
+			, eye: [0,0,0], basis: [[0,0,-1],[1,0,0],[0,1,0]]
+			, jet: {x: 0, y: 0, z: 0, yaw: Math.PI, pitch: 0, vx: -20, vy: 15, vz: -120, speed: 120}
+			, thrust: 75, targets: {1: [400,200,-1600], 2: [320,200,-1600]}
+			, range: {selected: 1, visible: true, locked: false, elapsed: 5, ground: 0, ready: 2}
+		};
+
+		// The winged marker is at (-60,-45). Check ink at diamond tips, clear of the target box and pitch ladder.
+		function ink(x, y, red = false)
+		{
+			const pixels = ctx.getImageData(399+x,359+y,3,3).data;
+
+			for(let i = 0; i<pixels.length; i+=4)
+				if(pixels[i+3] > 120 && (red ? pixels[i] > 200 && pixels[i+1] < 100 : pixels[i+1] > 200 && pixels[i] < 140))
+					return true;
+
+			return false;
+		}
+
+		function sample(elapsed)
+		{
+			frame.range.elapsed = elapsed;
+			module.terrainJetFrame(JSON.stringify(frame));
+
+			return [ink(-60,-50), ink(15,-52), ink(90,-54), ink(72,-54), ink(72,-58,true)];
+		}
+
+		const start = sample(5), moving = sample(5.10), paused = sample(5.10), tracking = sample(5.22);
+		frame.targets[1][0] = 320;
+		const follows = sample(5.26);
+		frame.range.locked = true;
+		const lock = sample(5.31);
+		frame.range.locked = false;
+		const reacquire = sample(5.5);
+		sample(5.73);
+		frame.range.selected = 2;
+		const cycle = sample(5.8);
+		sample(6.02);
+		frame.range.visible = false;
+		const hidden = sample(6.1);
+		frame.range.visible = true;
+		const reappear = sample(6.2);
+		frame.cockpit = false;
+		const chase = sample(6.8);
+
+		return {start,moving,paused,tracking,follows,lock,reacquire,cycle,hidden,reappear,chase};
+	}, source);
+
+	const origin = [true,false,false,false,false];
+	expect(states.start).toEqual(origin);
+	expect(states.moving).toEqual([true,true,false,false,false]);
+	expect(states.paused).toEqual(states.moving);
+	expect(states.tracking).toEqual([true,false,true,false,false]);
+	expect(states.follows).toEqual([true,false,false,true,false]);
+	expect(states.lock).toEqual([true,false,false,false,true]);
+	for(const state of ['reacquire','cycle','hidden','reappear']) expect(states[state]).toEqual(origin);
+	expect(states.chase).toEqual([false,false,false,false,false]);
+});
+
 test('the cockpit flight-path diamond projects ground track through the banked pilot view', async({page}) => {
 	await page.addInitScript(() => {
 		const axes = [0,0,0,0];

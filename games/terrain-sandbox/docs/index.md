@@ -40,7 +40,7 @@ In both chase and cockpit views, the bottom-left minimap turns with the nose. St
 
 The bottom-right radar uses the same heading. An upward triangle marks a balloon above the aircraft, a downward triangle marks one below and a square marks one at the same altitude. **H** opens the Landscape Lab in flight.
 
-Choose **Balloon practice** under **Explore** and look for the red blip on the minimap. On a full-size landscape the balloon appears 1.8–3.2 km away, usually 30–75 degrees to either side of your heading. Near the map edge you may need to turn back inland. Follow the blip even if a ridge hides the balloon. Within 1,200 metres, keeping the balloon in the HUD ring with a clear view for 0.3 seconds turns its box red and flashes **LOCK ON**. **T** or **D-pad up** selects the next balloon.
+Choose **Balloon practice** under **Explore** and look for the red blip on the minimap. On a full-size landscape the balloon appears 1.8–3.2 km away, usually 30–75 degrees to either side of your heading. Near the map edge you may need to turn back inland. Follow the blip even if a ridge hides the balloon. When the selected balloon comes into view, a second diamond slides out from behind the cockpit flight-path marker and follows the balloon. Keep the balloon inside the HUD ring with a clear view for 0.3 seconds from within 1,200 metres. The diamond gives way to a red target box and **LOCK ON** flashes. **T** or **D-pad up** selects the next balloon.
 
 | Action | Keyboard | Standard gamepad |
 | --- | --- | --- |

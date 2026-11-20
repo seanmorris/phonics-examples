@@ -10,12 +10,14 @@ export function activate({module, canvas})
 
 	const ctx = screen.getContext('2d');
 	const green = '#59ff86', red = '#ff5148';
+	let trackingId = null, trackingStart = 0;
 
 	function draw(frame)
 	{
 		if(!frame)
 		{
 			screen.hidden = true;
+			trackingId = null;
 			module.drawTerrainFlightMap(null);
 
 			return;
@@ -61,6 +63,22 @@ export function activate({module, canvas})
 			ctx.stroke();
 		}
 
+		function diamond(x, y, rx, ry)
+		{
+			ctx.save();
+			ctx.translate(x, y);
+
+			ctx.strokeStyle = green;
+			ctx.beginPath();
+			ctx.moveTo(-rx, 0);
+			ctx.lineTo(0, -ry);
+			ctx.lineTo(rx, 0);
+			ctx.lineTo(0, ry);
+			ctx.closePath();
+			ctx.stroke();
+			ctx.restore();
+		}
+
 		function circle(x, y, r, color = green)
 		{
 			ctx.strokeStyle = color;
@@ -86,6 +104,12 @@ export function activate({module, canvas})
 		}
 
 		const target = targets[range.selected];
+		const targetPoint = target && range.visible ? project(target.map((n, i) => n-eye[i]), .25) : null;
+		const tracking = cockpit && !range.locked && targetPoint
+			&& Math.abs(targetPoint[0]) <= w/2 && Math.abs(targetPoint[1]) <= h/2;
+
+		if(!tracking) trackingId = null;
+
 		const dx = target ? target[0]-jet.x : 0, dz = target ? target[2]-jet.z : 0;
 		const distance = target ? Math.hypot(dx, target[1]-jet.y, dz) : 0;
 		ctx.lineWidth = 1.8;
@@ -124,22 +148,29 @@ export function activate({module, canvas})
 
 			ctx.restore();
 			const path = project([jet.vx, jet.vy, jet.vz], 1e-6);
+			const pathVisible = path && Math.abs(path[0]) <= w/2+25 && Math.abs(path[1]) <= h/2+5;
 
-			if(path && Math.abs(path[0]) <= w/2+25 && Math.abs(path[1]) <= h/2+5)
+			if(tracking)
 			{
-				ctx.save();
-				ctx.translate(...path);
-				line(-25, 0, -6, 0);
-				line(6, 0, 25, 0);
+				if(trackingId !== range.selected || range.elapsed < trackingStart)
+				{
+					trackingId = range.selected;
+					trackingStart = range.elapsed;
+				}
 
-				ctx.beginPath();
-				ctx.moveTo(-6, 0);
-				ctx.lineTo(0, -5);
-				ctx.lineTo(6, 0);
-				ctx.lineTo(0, 5);
-				ctx.closePath();
-				ctx.stroke();
-				ctx.restore();
+				// Both cues use this frame's projections. Pausing the game freezes the separation.
+				const t = Math.min(1, (range.elapsed-trackingStart)/.20);
+				const blend = t*t*(3-2*t);
+				const [fromX,fromY] = pathVisible ? path : targetPoint;
+				diamond(fromX+(targetPoint[0]-fromX)*blend, fromY+(targetPoint[1]-fromY)*blend, 6+3*blend, 5+4*blend);
+			}
+
+			if(pathVisible)
+			{
+				const [x,y] = path;
+				line(x-25, y, x-6, y);
+				line(x+6, y, x+25, y);
+				diamond(x, y, 6, 5);
 			}
 
 			const headings = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
@@ -264,28 +295,23 @@ export function activate({module, canvas})
 			}
 		}
 
-		if(target && range.visible)
+		if(targetPoint)
 		{
-			const xy = project(target.map((n, i) => n-eye[i]), .25);
+			const [x,y] = targetPoint, c = range.locked ? red : green;
+			ctx.strokeStyle = c;
+			ctx.setLineDash(distance>1200 ? [5,4] : []);
+			ctx.strokeRect(x-13, y-13, 26, 26);
+			ctx.setLineDash([]);
 
-			if(xy)
+			if(range.locked)
+			for(const side of [-1,1])
 			{
-				const [x,y] = xy, c = range.locked ? red : green;
-				ctx.strokeStyle = c;
-				ctx.setLineDash(distance>1200 ? [5,4] : []);
-				ctx.strokeRect(x-13, y-13, 26, 26);
-				ctx.setLineDash([]);
-
-				if(range.locked)
-				for(const side of [-1,1])
-				{
-					line(x+side*10, y, x+side*19, y, c);
-					line(x, y+side*10, x, y+side*19, c);
-				}
-
-				text('BAL', x+21, y-8, 14, c, 'left');
-				text(Math.round(distance) + ' m', x+21, y+9, 14, c, 'left');
+				line(x+side*10, y, x+side*19, y, c);
+				line(x, y+side*10, x, y+side*19, c);
 			}
+
+			text('BAL', x+21, y-8, 14, c, 'left');
+			text(Math.round(distance) + ' m', x+21, y+9, 14, c, 'left');
 		}
 
 		if(range.locked && Math.floor(range.elapsed*4)%2===0) text('LOCK ON', 0, h*.42, 20);
