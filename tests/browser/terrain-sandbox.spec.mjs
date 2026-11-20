@@ -262,9 +262,9 @@ test('the cockpit flight-path diamond projects ground track through the banked p
 		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false, touched: false}));
 		const pad = {id: 'Flight-path test', index: 0, mapping: 'standard', timestamp: 1, connected: true, axes, buttons};
 		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
-		window.bankAndClimb = () => {
-			axes[0] = .5;
-			axes[1] = .35;
+		window.flightStick = (x,y) => {
+			axes[0] = x;
+			axes[1] = y;
 			pad.timestamp++;
 		};
 
@@ -283,24 +283,72 @@ test('the cockpit flight-path diamond projects ground track through the banked p
 	await boot(page);
 	const airspace = fixture();
 	airspace.landscape.recipe.worldSize = 8192;
-	airspace.camera = {position: [0,15000,0], yaw: 0, pitch: 0};
+	airspace.camera = {position: [0,1500,0], yaw: 0, pitch: 0};
 	await load(page, airspace);
 	await press(page, 'jet');
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
 	await canvas(page).focus();
 	await page.keyboard.press('v');
+	await expect.poll(async() => (await status(page)).jetView).toBe('cockpit');
 	await expect.poll(() => page.evaluate(() => Math.hypot(...(window.pathOffset ?? [Infinity])))).toBeLessThan(.01);
 
-	await page.evaluate(() => window.bankAndClimb());
+	await page.evaluate(() => window.flightStick(.5,.35));
 	await expect.poll(async() => (await status(page)).jet.pitch).toBeGreaterThan(.14);
 	await page.keyboard.press('p');
 	await expect.poll(async() => (await status(page)).paused).toBe(true);
 	const {jet,viewport,camera} = await status(page);
-	expect(jet.vy).toBe(0);
+	expect(jet.vy).toBeGreaterThan(0);
 	const focal = viewport[1]/(2*Math.tan(camera.fov/2));
-	const down = focal*Math.tan(jet.pitch);
+	const along = jet.vx*Math.sin(jet.yaw) + jet.vz*Math.cos(jet.yaw);
+	const left = jet.vx*Math.cos(jet.yaw) - jet.vz*Math.sin(jet.yaw);
+	const up = jet.vy*Math.cos(jet.pitch) - along*Math.sin(jet.pitch);
+	const depth = along*Math.cos(jet.pitch) + jet.vy*Math.sin(jet.pitch);
 	const [x,y] = await page.evaluate(() => window.pathOffset);
-	expect(x).toBeCloseTo(-Math.sin(jet.roll)*down, 3);
-	expect(y).toBeCloseTo(Math.cos(jet.roll)*down, 3);
+	expect(Math.hypot(x,y)).toBeGreaterThan(12);
+	expect(x).toBeCloseTo(focal*(-left*Math.cos(jet.roll) + up*Math.sin(jet.roll))/depth, 3);
+	expect(y).toBeCloseTo(-focal*(left*Math.sin(jet.roll) + up*Math.cos(jet.roll))/depth, 3);
+	await page.evaluate(() => window.flightStick(0,0));
+	await page.keyboard.press('p');
+	await expect.poll(() => page.evaluate(() => Math.hypot(...window.pathOffset))).toBeLessThan(1);
+});
+
+test('F5 underwing models leave and refill on their own wings', async({page}) => {
+	await boot(page);
+	const airspace = fixture();
+	airspace.landscape.recipe.worldSize = 8192;
+	airspace.camera = {position: [0,1500,0], yaw: 0, pitch: 0};
+	await load(page, airspace);
+	const counts = await Promise.all(['f5','projectile'].map(async name =>
+		gunzipSync(await fs.readFile(new URL(`../../games/terrain-sandbox/assets/${name}/mesh.bin.gz`, import.meta.url))).readUInt32LE(4)));
+	const view = canvas(page);
+	await view.evaluate((el,[jetCount,projectileCount]) => {
+		const gl = el.getContext('webgl2'), draw = gl.drawElements.bind(gl);
+		let body;
+		el.mounted = [];
+		gl.drawElements = (...args) => {
+			if(args[1] === jetCount || args[1] === projectileCount)
+			{
+				const p = gl.getParameter(gl.CURRENT_PROGRAM);
+				const origin = gl.getUniform(p,gl.getUniformLocation(p,'uOrigin'));
+				if(args[1] === jetCount) { body = origin; el.mounted = []; }
+				else if(body && Math.abs(origin[2]-body[2]) < 1 && origin[1] < body[1])
+					el.mounted.push(origin[0] < body[0] ? 'left' : 'right');
+			}
+			return draw(...args);
+		};
+	}, counts);
+	const wings = () => view.evaluate(el => el.mounted);
+	await press(page, 'jet');
+	await expect.poll(wings).toEqual(['left','right']);
+	await view.focus();
+	await page.keyboard.press('Space');
+	await expect.poll(wings).toEqual(['right']);
+	const firstLaunch = (await status(page)).balloons.elapsed;
+	await expect.poll(async() => (await status(page)).balloons.elapsed-firstLaunch).toBeGreaterThan(.8);
+	await page.keyboard.press('Space');
+	await expect.poll(wings).toEqual([]);
+	await expect.poll(wings, {intervals:[75]}).toEqual(['left']);
+	await expect.poll(wings).toEqual(['left','right']);
 });
 
 test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({page}) => {
@@ -325,7 +373,7 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	const airspace = fixture();
 	airspace.landscape.recipe.worldSize = 8192;
 	airspace.camera = {position: [0,150,0], yaw: 0, pitch: 0};
-	airspace.balloons = [[0,-1350,150],[0,-2200,150]];
+	airspace.balloons = [[0,-1350,150],[0,-1750,150]];
 	await load(page, airspace);
 	await press(page, 'jet');
 	await press(page, 'balloon-practice');
@@ -352,9 +400,27 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	await canvas(page).focus();
 	await page.keyboard.press('t');
 	await expect.poll(async() => (await status(page)).balloons.locked).toBe(true);
+	// The authored balloon is straight ahead. Read the rendered impact at the centre of the 3D canvas,
+	// before the cockpit overlay, and compare the same pixels immediately before the effect draw.
+	await canvas(page).evaluate(el => {
+		const gl = el.getContext('webgl2'), draw = gl.drawArraysInstanced.bind(gl);
+		const before = new Uint8Array(48*48*4), after = new Uint8Array(before.length);
+		const read = pixels => gl.readPixels(Math.floor(gl.drawingBufferWidth/2)-24,Math.floor(gl.drawingBufferHeight/2)-24,
+			48,48,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+		gl.drawArraysInstanced = (...args) => {
+			if(el.sawBurst || args[1] !== 0 || args[2] !== 72 || !JSON.parse(el.dataset.terrainSandbox).balloons.hit)
+				return draw(...args);
+			read(before);
+			draw(...args);
+			read(after);
+			for(let i = 0; i < after.length; i += 4)
+				if(after[i] > 190 && after[i] > after[i+2]+70 && after[i] > before[i]+35) { el.sawBurst = true; break; }
+		};
+	});
 	await setButton(0, true);
 	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: 60_000}).toBe(1);
 	await setButton(0, false);
+	await expect.poll(() => canvas(page).evaluate(el => el.sawBurst)).toBe(true);
 	await expect.poll(async() => (await status(page)).balloons.locked).toBe(true);
 	await setButton(2, true);
 	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: 60_000}).toBe(2);

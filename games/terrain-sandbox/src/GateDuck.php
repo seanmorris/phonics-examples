@@ -15,11 +15,11 @@ use TerrainPhonics\Camera;
  * until the eye leaves, so the camera follows the vehicle through. Over the lead distance either side of the slab
  * the eye blends back to where the camera put it.
  *
- * Before it reaches the slab, an eye that climbs above the gate's parts, or sinks below them, beyond the height it
+ * On either side of the slab, an eye that climbs above the gate's parts, or sinks below them, beyond the height it
  * took its passage at, takes less of the duck the farther it has gone and the farther it is from the slab. Once
  * that height times that distance reaches RELEASE, the gate lets the eye go and chooses its passage afresh. An F5
  * that loops up in front of a gate takes its eye high over the gate this way, instead of pulling it down to the
- * opening. Within the slab and beyond it the eye keeps to its passage, and rises back over the lead distance.
+ * opening. The eye keeps its passage within the slab and can release it after crossing if it climbs away.
  *
  * Within SIDE of the slab, a post or an arch leg stands beside the opening. On coming that near, the eye takes the
  * side of the post nearer to it, the opening or the gate's end, and keeps to that side while it stays near. An eye
@@ -51,7 +51,7 @@ final class GateDuck
 	public const RELEASE = 40.0;
 	/** Passage held for each gate id while the eye is within the lead distance of the gate's slab. */
 	private array $held = [];
-	/** Height of the eye when it took each held passage, and the side of the slab it came from (-1 or 1), by gate id. */
+	/** Height of the eye when it took each held passage, by gate id. */
 	private array $taken = [];
 	/**
 	 * Side held for each gate id while the eye is within SIDE of the gate's slab: -1 beyond the -X post or leg, 0 the
@@ -92,8 +92,8 @@ final class GateDuck
 			$frame = self::measure($gate);
 			[$u, $v] = self::local($frame, $eye);
 			$distance = self::outside($frame, $v);
-			$from = $this->taken[$id] ?? [$eye[1], self::front($frame, $v)];
-			if($this->released($frame, $eye[1], $v, $from, $distance)) continue;
+			$from = $this->taken[$id] ?? $eye[1];
+			if($this->released($frame, $eye[1], $from, $distance)) continue;
 			$held[$id] = $this->held[$id] ?? self::choose($frame, $u, $eye[1], $target[1], $distance < $this->lead / 2);
 			$taken[$id] = $from;
 			if($distance < self::SIDE) $lanes[$id] = self::lane($frame, $u, $this->lanes[$id] ?? null);
@@ -120,13 +120,13 @@ final class GateDuck
 			$frame = self::measure($gate);
 			[$u, $v] = self::local($frame, $eye);
 			$distance = self::outside($frame, $v);
-			$from = $this->taken[$gate['id']] ?? [$eye[1], self::front($frame, $v)];
-			if($this->released($frame, $eye[1], $v, $from, $distance)) continue;
+			$from = $this->taken[$gate['id']] ?? $eye[1];
+			if($this->released($frame, $eye[1], $from, $distance)) continue;
 			$passage = $this->held[$gate['id']]
 				?? self::choose($frame, $u, $eye[1], $target[1], $distance < $this->lead / 2);
 			$lane = self::lane($frame, $u, $this->lanes[$gate['id']] ?? null);
 			[$du, $dy, $dv] = $this->shift($frame, $passage, $lane, $u, $v, $eye[1],
-				self::share($frame, $eye[1], $v, $from, $distance), $distance);
+				self::share($frame, $eye[1], $from, $distance), $distance);
 			if($du == 0 && $dy == 0 && $dv == 0) continue;
 			$eye = [$eye[0] + $du * $frame['cos'] + $dv * $frame['sin'], $eye[1] + $dy,
 				$eye[2] - $du * $frame['sin'] + $dv * $frame['cos']];
@@ -241,32 +241,24 @@ final class GateDuck
 		return max(0.0, $frame['low'][2] - self::CLEARANCE - $v, $v - $frame['high'][2] - self::CLEARANCE);
 	}
 
-	/** The side of a gate's slab a point at v along its travel stands on: -1 before its middle, 1 after. */
-	private static function front(array $frame, float $v): int
-	{
-		return 2 * $v < $frame['low'][2] + $frame['high'][2] ? -1 : 1;
-	}
-
 	/**
-	 * Share of its passage's duck that a gate gives an eye. It is 1 within the slab and beyond it. Before the slab it
+	 * Share of its passage's duck that a gate gives an eye. It is 1 within the slab. Outside the slab it
 	 * falls to 0 as the height the eye has climbed or sunk past the gate's parts and its opening, with the clearance,
 	 * and past the height it took its passage at, times its distance from the slab, grows to RELEASE.
 	 * @param float $y The eye's height.
-	 * @param float $v The eye's position along the travel.
-	 * @param array $from [height, side of the slab] of the eye when it took its passage.
+	 * @param float $from Height where the eye took its passage.
 	 */
-	private static function share(array $frame, float $y, float $v, array $from, float $distance): float
+	private static function share(array $frame, float $y, float $from, float $distance): float
 	{
-		if(self::front($frame, $v) !== $from[1]) return 1.0;
 		$c = self::CLEARANCE;
-		$gone = max(0.0, min($frame['bottom'] - $c, $from[0]) - $y, $y - max($frame['high'][1] + $c, $from[0]));
-		return self::smooth(1 - $gone * $distance / self::RELEASE);
+		$gone = max(0.0, min($frame['bottom'] - $c, $from) - $y, $y - max($frame['high'][1] + $c, $from));
+		return self::smooth(1 - sqrt($gone * $distance / self::RELEASE));
 	}
 
 	/** Whether a gate moves an eye by nothing, whatever passage it holds, so it can let go of it. */
-	private function released(array $frame, float $y, float $v, array $from, float $distance): bool
+	private function released(array $frame, float $y, float $from, float $distance): bool
 	{
-		return $distance >= $this->lead || self::share($frame, $y, $v, $from, $distance) == 0;
+		return $distance >= $this->lead || self::share($frame, $y, $from, $distance) == 0;
 	}
 
 	/**

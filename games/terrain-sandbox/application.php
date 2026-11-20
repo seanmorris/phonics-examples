@@ -16,6 +16,7 @@ use TerrainPhonics\BrowserPatchBuilder;
 use TerrainSandbox\GateModel;
 use TerrainSandbox\FlightMap;
 use TerrainSandbox\GroundShadow;
+use TerrainSandbox\Jet;
 use TerrainSandbox\VehicleModel;
 use TerrainSandbox\TracerBatch;
 use TerrainSandbox\TrailRenderer;
@@ -144,6 +145,12 @@ $drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$sh
 		$model->draw($vehiclePose ?? $session->craft->state(),
 			$viewCamera, $session->atmosphere, $session->water, $width, $height);
 	}
+	$projectiles = [];
+	if($session->mode === 'jet' && $session->jetView === 'chase')
+	{
+		foreach($session->balloons->readySlots() as $slot)
+			$projectiles[] = Jet::projectileMount($vehiclePose,$slot);
+	}
 	foreach($session->balloons->targets() as [$x,$y,$z])
 	{
 		$model = $models['balloon'] ??= new VehicleModel(__DIR__ . '/assets/balloon/mesh.bin.gz');
@@ -157,9 +164,13 @@ $drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$sh
 		foreach($shot['previous'] as $i=>$from) $position[] = $from+($shot['position'][$i]-$from)*$shotAlpha;
 		$dir = $shot['direction'];
 		if($shot['tracer']) { $streaks[] = [$position,$dir]; continue; }
+		$projectiles[] = ['x'=>$position[0],'y'=>$position[1],'z'=>$position[2],'yaw'=>atan2($dir[0],$dir[2]),
+			'pitch'=>asin(max(-1,min(1,$dir[1]))),'roll'=>$shot['roll']];
+	}
+	if($projectiles)
+	{
 		$model = $models['projectile'] ??= new VehicleModel(__DIR__ . '/assets/projectile/mesh.bin.gz');
-		$model->draw(['x'=>$position[0],'y'=>$position[1],'z'=>$position[2],'yaw'=>atan2($dir[0],$dir[2]),
-			'pitch'=>asin(max(-1,min(1,$dir[1]))),'roll'=>0], $viewCamera,$session->atmosphere,$session->water,$width,$height);
+		foreach($projectiles as $pose) $model->draw($pose,$viewCamera,$session->atmosphere,$session->water,$width,$height);
 	}
 	if($streaks) ($tracers ??= new TracerBatch)->draw($streaks,$viewCamera,$width,$height);
 	// Gates draw in free flight too, where the course is edited.

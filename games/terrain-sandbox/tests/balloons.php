@@ -19,6 +19,17 @@ function check(bool $ok, string $message): void
 	if(!$ok) throw new RuntimeException($message);
 }
 
+function bursts(FlightTrails $trails): array
+{
+	$points = [];
+	foreach(str_split($trails->instances(),FlightTrails::STRIDE) as $bytes)
+	{
+		$record = array_values(unpack('g*',$bytes));
+		if($record[8] === 2.0) $points[] = array_slice($record,0,3);
+	}
+	return $points;
+}
+
 $recipe = ['worldSize'=>16384, 'heightScale'=>0, 'detailAmplitude'=>0];
 $land = new Landscape($recipe);
 $pose = ['x'=>0, 'y'=>100, 'z'=>0, 'speed'=>140, 'yaw'=>0, 'pitch'=>0, 'roll'=>0];
@@ -33,6 +44,18 @@ foreach([[0,0,0],[1,.54,-.78],[-2,1.56,2.4],[3,-.4,M_PI]] as [$yaw,$pitch,$roll]
 		check(abs($nose[$i]-$model[6+$i]) < 1e-9 && abs($right[$i]+$model[$i]) < 1e-9
 			&& abs($up[$i]-$model[3+$i]) < 1e-9, 'Cockpit follows all three model axes');
 		check(abs($eye->position[$i]-($p[$axis]+4.6*$nose[$i]+.85*$up[$i])) < 1e-9, 'Canopy offset follows bank');
+	}
+	$mounts = new BalloonPractice;
+	foreach([0,1] as $slot)
+	{
+		$mounts->step(1/60,$pose,true,false,$land,0,false,previousPose:$p);
+		$shot = end($mounts->shots);
+		$attached = Jet::projectileMount($p,$slot);
+		$world = [$attached['x'],$attached['y'],$attached['z']];
+		check($shot['previous'] === $world, 'A banked release starts at the last attached position');
+		foreach(['x','y','z'] as $i=>$axis)
+			check(abs($world[$i] - ($p[$axis]+($slot === 0 ? -2.65 : 2.65)*$right[$i]-.62*$up[$i]-.45*$nose[$i])) < 1e-8,
+				'Each mount follows the aircraft body under its own wing');
 	}
 }
 $trails = new FlightTrails;
@@ -59,8 +82,13 @@ for($i=0; $i<8; $i++)
 	$smoke->step($dt,$pose,$i === 0,false,$land,0,true,$trails);
 }
 check($smoke->hits === 1 && !$smoke->shots && $trails->active(), 'Smoke lingers after the projectile pops a balloon');
+$impact = bursts($trails);
+check(count($impact) === 1 && $impact[0][2] < 36
+	&& abs(($impact[0][0]/6.7)**2 + (($impact[0][1]-100)/10)**2 + (($impact[0][2]-36)/6.7)**2 - 1) < 1e-5,
+	'One burst appears on the near surface of the popped balloon');
 $first = array_values(unpack('g*',substr($trails->instances(),0,FlightTrails::STRIDE)));
-check($first[8] === 1.0 && abs($first[2] - 7.6) < 1e-4 && $first[6] > $first[2], 'Smoke is emitted behind the moving projectile');
+check($first[8] === 1.0 && abs($first[2] + 2.45) < 1e-4 && abs($first[0]-2.65) < 1e-4 && $first[6] > $first[2],
+	'Smoke starts at the tail of the projectile on the left wing');
 for($i=0; $i<150; $i++)
 {
 	$trails->step($dt,$pose,$pose);
@@ -68,18 +96,43 @@ for($i=0; $i<150; $i++)
 }
 check(!$trails->active(), 'Exhaust expires completely and held Vulcan fire produces no smoke');
 
+$fire = static function(array $flight, float $water, bool $tracer = false) use ($dt,$land): array {
+	$range = new BalloonPractice;
+	$effects = new FlightTrails;
+	for($i = 0; $i < 220; $i++)
+	{
+		$effects->step($dt,$flight,$flight);
+		$range->step($dt,$flight,$i === 0 && !$tracer,$i === 0 && $tracer,$land,$water,false,$effects);
+		if(!$range->shots) break;
+	}
+	return bursts($effects);
+};
+$dive = array_replace($pose,['pitch'=>-.5]);
+foreach([-10,25] as $water)
+{
+	$impact = $fire($dive,$water);
+	$surface = max(0,$water);
+	$mount = Jet::projectileMount($dive,0);
+	$z = $mount['z'] + ($surface-$mount['y'])/tan($dive['pitch']);
+	check(count($impact) === 1 && abs($impact[0][1]-$surface) < .001 && abs($impact[0][2]-$z) < .001,
+		'A surface impact bursts at the intersection within the step');
+}
+check(!$fire($pose,-10) && !$fire(array_replace($pose,['z'=>8188]),-10) && !$fire($dive,-10,true),
+	'Expiry, map exits and tracer contacts leave no projectile burst');
+
 $range = new BalloonPractice;
 $tick = static function(int $steps, bool $launch = false, bool $gun = false) use ($range,$pose,$land): void {
 	for($i=0; $i<$steps; $i++) $range->step(1/60,$pose,$launch && $i === 0,$gun,$land,0,true);
 };
 $tick(1,true);
 check($range->status()['ready'] === 1 && reset($range->shots)['target'] === null, 'Can launch with no target');
+check($range->readySlots() === [1], 'Launching from the left wing leaves the right wing loaded');
 $tick(30); $tick(1,true); $tick(1,true);
-check($range->status()['ready'] === 0 && count($range->shots) === 2, 'Two independently expended charges');
+check($range->readySlots() === [] && $range->status()['ready'] === 0 && count($range->shots) === 2, 'Two independently expended charges');
 $tick(149);
-check($range->status()['ready'] === 1, 'First charge recovers ahead of the second');
+check($range->readySlots() === [0] && $range->status()['ready'] === 1, 'Left wing refills ahead of the right');
 $tick(32);
-check($range->status()['ready'] === 2, 'Second charge recovers');
+check($range->readySlots() === [0,1] && $range->status()['ready'] === 2, 'Both wing mounts refill');
 $range->reset();
 $range->place(0,150,100,$land,0);
 $range->place(0,200,100,$land,0);

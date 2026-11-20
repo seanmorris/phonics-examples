@@ -497,17 +497,28 @@ $flight->step(1/60);
 expect($flight->mode === 'fly' && str_contains($flight->message,'edge'), 'Flight at the map boundary returns control inside the landscape');
 $flight->close();
 
-/** Reference Novice attitude and horizontal motion for the airspeed delivered by the engine. */
-function expectedMotion(array $p, float $speed, int $bank, int $climb): array
+/** Reference Novice attitude after one fixed step. */
+function expectedAttitude(array $p, int $bank, int $climb): array
 {
 	$dt = 1 / 60;
 	$roll = $p['roll'] + (-$bank * 1.10 - $p['roll']) * (1 - exp(-3.6 * $dt));
 	$pitch = $p['pitch'] + ($climb * .78 - $p['pitch']) * (1 - exp(-2.1 * $dt));
 	$yaw = $p['yaw'] + sin($roll) * .68 * $dt;
 
-	$travel = $speed * $dt;
-	return [$roll, $pitch, $yaw, $p['x'] + sin($yaw) * cos($pitch) * $travel,
-		$p['z'] + cos($yaw) * cos($pitch) * $travel];
+	return [$roll, $pitch, $yaw];
+}
+
+/** Advance an independent free-flight reference through the same sequence of body attitudes. */
+function expectedTravel(array $before, array $after, ?array &$track): array
+{
+	$track ??= jetAxes($before)[2];
+	$nose = jetAxes($after)[2];
+	$keep = exp(-1 / 60 / .36);
+	foreach($track as $i => $v) $track[$i] = $keep*$v + (1-$keep)*$nose[$i];
+	$length = vectorLength($track);
+	foreach($track as &$v) $v /= $length;
+	unset($v);
+	return array_map(static fn($v) => $v*$after['speed']/60, $track);
 }
 
 // Check the flight path and the direction, travel and rate of the animated control surfaces.
@@ -525,6 +536,7 @@ $travel = ['aileron'=>TerrainSandbox\Jet::AILERON, 'stabilator'=>TerrainSandbox\
 $oldKeys = ['x','y','z','yaw','pitch','roll','speed','power','vx','vy','vz','aileron','stabilator','rudder','boom','eyeY','eyeX','eyeZ',
 	'lookYaw','lookPitch'];
 $matched = $bounded = $interpolated = true;
+$track = null;
 $peak = array_fill_keys(array_keys($travel), 0.0);
 $seen = [];
 // Bank left and climb, reverse into a right bank and a dive, then level out at low speed and let go.
@@ -541,10 +553,12 @@ foreach($script as [$name, $held, $steps])
 		$before = $controls->jet->state();
 		$controls->step(1 / 60);
 		$after = $controls->jet->state();
+		[$dx,$dy,$dz] = expectedTravel($before,$after,$track);
+		[$y,$eyeY] = exactJet($before['y']+$dy,$after,$ground,$controls->water->level());
 		$matched = $matched && array_keys($after) === $oldKeys
-			&& [$after['roll'], $after['pitch'], $after['yaw'], $after['x'], $after['z']]
-				=== expectedMotion($before, $after['speed'], $bank, $climb)
-			&& [$after['y'], $after['eyeY']] === exactJet($before, $after, $ground, $controls->water->level())
+			&& [$after['roll'],$after['pitch'],$after['yaw']] === expectedAttitude($before,$bank,$climb)
+			&& abs($after['x']-$before['x']-$dx) < 1e-9 && abs($after['z']-$before['z']-$dz) < 1e-9
+			&& abs($after['y']-$y) < 1e-9 && abs($after['eyeY']-$eyeY) < 1e-9
 			&& $after['boom'] === 24.0 * cos(.38 - .75 * $after['pitch']);
 
 		foreach($travel as $key => $limit)
@@ -687,9 +701,9 @@ for($i = 0, $count = unpack('V', $mesh)[1]; $i < $count; $i++)
 	$high = array_map('max', $high, $point);
 }
 
-expect(abs($low[0] + $high[0]) < .001 && abs(($low[1] + $high[1]) / 2 - .50) < .001
+expect(abs($low[0] + $high[0]) < .001 && abs($high[1] - 2.461) < .001 && abs($low[1] + .826) < .001
 	&& abs(($low[2] + $high[2]) / 2 - 1.53) < .001,
-	'The F5 turns about its centre of gravity, 1.53 m behind and 0.50 m below the middle of its bounding box');
+	'Removing the belly tank raises the keel while the tail, span and nose retain their balance-point frame');
 ksort($parts);
 expect(array_keys($parts) === array_keys($hinges) && count($hinges) === 5
 	&& array_count_values(array_column($hinges, 'control')) === ['aileron'=>2, 'stabilator'=>2, 'rudder'=>1],
@@ -872,16 +886,15 @@ $knob->close();
 
 /**
  * Work out where one step leaves the jet and its chase eye when both sample the exact surface every time.
- * @param array $before Jet state before the step.
+ * @param float $freeY Altitude the flight path reaches before clearance.
  * @param array $after Jet state after the step, which supplies the new attitude, speed and position.
  * @param TerrainPhonics\Landscape $ground Surface with the same recipe and edits as the one the jet flies over.
  * @param float $water Water level in metres.
  * @return array Jet height and eye height in metres.
  */
-function exactJet(array $before, array $after, TerrainPhonics\Landscape $ground, float $water): array
+function exactJet(float $freeY, array $after, TerrainPhonics\Landscape $ground, float $water): array
 {
-	$travel = $after['speed'] * (1 / 60);
-	$y = min(15000.0, $before['y'] + sin($after['pitch']) * $travel);
+	$y = min(15000.0, $freeY);
 	$y = max($y, $ground->height($after['x'], $after['z']) + 8, $water + 8);
 	$half = $ground->recipe()['worldSize'] / 2;
 	$x = max(-$half, min($half, $after['x'] - $after['boom'] * sin($after['yaw'])));
@@ -895,9 +908,10 @@ function exactJet(array $before, array $after, TerrainPhonics\Landscape $ground,
  * @param Session $session Session with a boarded jet and held keys.
  * @param TerrainPhonics\Landscape $ground Second surface, so the exact rule leaves the session's cache alone.
  * @param int $steps Fixed steps to fly.
+ * @param array|null $track Reference direction carried between successive calls for the same flight.
  * @return array Whether every step matched, and how many steps left the jet resting on the ground's 8 metre floor.
  */
-function flyExactly(Session $session, TerrainPhonics\Landscape $ground, int $steps): array
+function flyExactly(Session $session, TerrainPhonics\Landscape $ground, int $steps, ?array &$track): array
 {
 	$matched = true;
 	$resting = 0;
@@ -906,8 +920,9 @@ function flyExactly(Session $session, TerrainPhonics\Landscape $ground, int $ste
 		$before = $session->jet->state();
 		$session->step(1 / 60);
 		$after = $session->jet->state();
-		$expected = exactJet($before, $after, $ground, $session->water->level());
-		$matched = $matched && [$after['y'], $after['eyeY']] === $expected;
+		[, $dy] = expectedTravel($before,$after,$track);
+		[$y,$eyeY] = exactJet($before['y']+$dy, $after, $ground, $session->water->level());
+		$matched = $matched && abs($after['y']-$y) < 1e-9 && abs($after['eyeY']-$eyeY) < 1e-9;
 		$resting += (int)($after['y'] === $ground->height($after['x'], $after['z']) + 8);
 	}
 	return [$matched, $resting];
@@ -920,21 +935,22 @@ $ground = new TerrainPhonics\Landscape($air->landscape->recipe());
 $air->camera->position = [9000,900,1800];
 $air->camera->yaw = M_PI / 2;
 input($air, ['actions'=>['jet'], 'keys'=>['KeyW'=>true,'KeyD'=>true]]);
+$track = null;
 $nodes = $air->landscape->stats()['generated'];
-[$matched] = flyExactly($air, $ground, 600);
+[$matched] = flyExactly($air, $ground, 600, $track);
 expect($matched && $air->landscape->stats()['generated'] === $nodes,
 	'A jet cruising high over the coast stays on the exact path without generating a lattice node');
 input($air, ['keys'=>['KeyW'=>true,'KeyQ'=>true]]);
-[$matched] = flyExactly($air, $ground, 420);
+[$matched] = flyExactly($air, $ground, 420, $track);
 $nodes = $air->landscape->stats()['generated'];
-[$skimmed, $resting] = flyExactly($air, $ground, 300);
+[$skimmed, $resting] = flyExactly($air, $ground, 300, $track);
 expect($matched && $skimmed && $resting > 200 && $air->landscape->stats()['generated'] > $nodes + 3000,
 	"A diving jet samples the true surface and rests on its 8 metre floor: $resting of 300 steps");
 input($air, ['keys'=>['KeyW'=>true,'KeyE'=>true]]);
-[$matched] = flyExactly($air, $ground, 240);
+[$matched] = flyExactly($air, $ground, 240, $track);
 $nodes = $air->landscape->stats()['generated'];
 input($air, ['keys'=>['KeyW'=>true]]);
-[$level] = flyExactly($air, $ground, 240);
+[$level] = flyExactly($air, $ground, 240, $track);
 expect($matched && $level && $air->landscape->stats()['generated'] === $nodes,
 	'Climbing away returns the jet to steps without node generation');
 
@@ -943,7 +959,7 @@ $s = $air->jet->state();
 [$eyeX, $eyeY, $eyeZ] = $air->camera->position;
 $bump = ['type'=>'raise','x'=>$eyeX,'z'=>$eyeZ,'radius'=>12.0,'amount'=>$eyeY - $ground->height($eyeX, $eyeZ) + 40];
 foreach([$air->landscape, $ground] as $surface) { $surface->queue($bump); $surface->commit(); }
-[$matched] = flyExactly($air, $ground, 1);
+[$matched] = flyExactly($air, $ground, 1, $track);
 [$eyeX, $lifted, $eyeZ] = $air->camera->position;
 expect($matched && $lifted === $ground->height($eyeX, $eyeZ) + 3 && $lifted > $eyeY + 20
 	&& abs($air->jet->state()['y'] - $s['y']) < 1,
@@ -951,20 +967,20 @@ expect($matched && $lifted === $ground->height($eyeX, $eyeZ) + 3 && $lifted > $e
 $s = $air->jet->state();
 $dome = ['type'=>'raise','x'=>$s['x'],'z'=>$s['z'],'radius'=>600.0,'amount'=>2500.0];
 foreach([$air->landscape, $ground] as $surface) { $surface->queue($dome); $surface->commit(); }
-[$matched, $resting] = flyExactly($air, $ground, 1);
+[$matched, $resting] = flyExactly($air, $ground, 1, $track);
 expect($matched && $resting === 1 && $air->jet->state()['y'] > $s['y'] + 1500,
 	'Ground raised under a cruising jet carries it up on the next step');
-[$matched] = flyExactly($air, $ground, 400);
+[$matched] = flyExactly($air, $ground, 400, $track);
 $s = $air->jet->state();
 $mesa = ['type'=>'raise','x'=>$s['x'],'z'=>$s['z'],'radius'=>500.0,'amount'=>6000.0];
 $replacement = TerrainPhonics\Landscape::load($air->landscape->save());
 $replacement->queue($mesa); $replacement->commit();
 $air->publishLandscape($replacement);
 $ground->queue($mesa); $ground->commit();
-[$published, $resting] = flyExactly($air, $ground, 1);
+[$published, $resting] = flyExactly($air, $ground, 1, $track);
 expect($matched && $published && $resting === 1 && $air->jet->state()['y'] > $s['y'] + 1500,
 	'A published replacement landscape takes effect on the next step');
-[$matched] = flyExactly($air, $ground, 120);
+[$matched] = flyExactly($air, $ground, 120, $track);
 expect($matched, 'The jet stays on the exact path over the replacement');
 $ground->close();
 $air->close();
@@ -974,7 +990,8 @@ $worlds = new Session(['heightScale'=>0,'detailAmplitude'=>0]);
 $ground = new TerrainPhonics\Landscape($worlds->landscape->recipe());
 $worlds->camera->position = [600,40,1800];
 input($worlds, ['actions'=>['jet']]);
-[$matched] = flyExactly($worlds, $ground, 20);
+$track = null;
+[$matched] = flyExactly($worlds, $ground, 20, $track);
 expect($matched && $worlds->jet->state()['y'] === 75.0, 'A jet over a featureless plain holds its boarding height');
 $ground->close();
 input($worlds, ['actions'=>[['type'=>'generate','preset'=>'mountain','seed'=>'first-light']]]);
@@ -983,7 +1000,8 @@ expect($worlds->landscape->revision() === 0 && $ground->height(600, 1800) > 100,
 	'The generated mountains stand where the plain was');
 $worlds->camera->position = [600,40,1800];
 input($worlds, ['actions'=>['jet'], 'keys'=>['KeyQ'=>true]]);
-[$matched, $resting] = flyExactly($worlds, $ground, 240);
+$track = null;
+[$matched, $resting] = flyExactly($worlds, $ground, 240, $track);
 expect($matched && $resting > 60, 'Boarding over a newly generated world forgets the bounds of the old one');
 $ground->close();
 $worlds->close();
@@ -998,12 +1016,13 @@ $ground = TerrainPhonics\Landscape::load($tower->landscape->save());
 $tower->camera->position = [600,40,1800];
 $tower->camera->yaw = M_PI;
 input($tower, ['actions'=>['jet']]);
+$track = null;
 $nodes = $tower->landscape->stats()['generated'];
 // At the 140 m/s cruise, 31 steps stop 72 metres on, short of the first tower, and 102 more cross all six.
-[$matched] = flyExactly($tower, $ground, 31);
+[$matched] = flyExactly($tower, $ground, 31, $track);
 expect($matched && $tower->landscape->stats()['generated'] === $nodes,
 	'A jet approaching a tower clears the open plain without sampling it');
-[$matched, $resting] = flyExactly($tower, $ground, 102);
+[$matched, $resting] = flyExactly($tower, $ground, 102, $track);
 expect($matched && $resting >= 12 && $tower->jet->state()['y'] > 1007,
 	"The jet rides up each tower face in turn: $resting steps on a face");
 $ground->close();
@@ -1122,6 +1141,20 @@ foreach(['x','y','z'] as $axis)
 }
 expect($now['pitch'] > .1 && $now['vy'] === 0.0, 'The flight path stays horizontal at the ceiling while the nose climbs');
 $path->close();
+
+foreach(['novice','expert'] as $handling)
+{
+	$path = pilot($handling);
+	$pull = hold($path,pad(y:.7),30,$jet);
+	$p = end($pull);
+	$pathPitch = atan2($p['vy'],hypot($p['vx'],$p['vz']));
+	expect($pathPitch > 0 && $p['pitch']-$pathPitch > .07, "$handling pull-up carries forward below the nose in open air");
+	$straight = hold($path,pad(),260,$jet);
+	$p = end($straight);
+	expect(abs($p['pitch']-atan2($p['vy'],hypot($p['vx'],$p['vz']))) < .001,
+		"$handling flight path catches up once the nose steadies");
+	$path->close();
+}
 
 // The two Dreamcast handling layouts share the aircraft and expose different throttle controls.
 $bindings = pilot('expert');

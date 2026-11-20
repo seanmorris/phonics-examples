@@ -335,7 +335,7 @@ final class Session
 				$pose = $this->jet->state();
 				$this->flightTrails->step($seconds,$before,$pose);
 				$this->balloons->step($seconds,$pose,$this->launches > 0,
-					(bool)($this->held('KeyG') || ($pad['buttons'] & self::PAD_X)), $this->landscape,$this->water->level(), $this->jetView === 'cockpit',$this->flightTrails);
+					(bool)($this->held('KeyG') || ($pad['buttons'] & self::PAD_X)), $this->landscape,$this->water->level(), $this->jetView === 'cockpit',$this->flightTrails,$before);
 			}
 			$this->launches = max(0,$this->launches-1);
 			$this->dirty = true;

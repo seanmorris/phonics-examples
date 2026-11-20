@@ -20,6 +20,8 @@ final class Jet
 	public const CRUISE_POWER = self::CRUISE / self::FASTEST;
 	/** Time constants in seconds for the engine and the airspeed that follows it. */
 	private const SPOOL_UP = .36, SPOOL_DOWN = .27, SPEED_LAG = .18;
+	/** Seconds for the direction of travel to close about two thirds of a small change in nose direction. */
+	private const FLIGHT_PATH_LAG = .36;
 	/** Expert body rates at full deflection in radians a second, and the time constant with which they follow it. */
 	public const ROLL_RATE = 2.8, PITCH_RATE = 1.05, YAW_RATE = .35, RATE_LAG = .12;
 	/** Time constant in seconds with which the Expert chase camera swings in behind the nose. */
@@ -39,6 +41,8 @@ final class Jet
 	private bool $expert = false;
 	/** Expert roll, pitch and yaw rates in radians a second: right roll, nose up and nose right are positive. */
 	private array $rates = [0.0, 0.0, 0.0];
+	/** Free-flight direction before terrain or the ceiling constrains a step. */
+	private array $flightDirection = [0.0, 0.0, 1.0];
 	/** Unit direction the Expert chase camera looks along, lagging the nose. */
 	private array $chase = [0.0, 0.0, 1.0];
 	/** Surface and revision that the cached limits and blocks below describe. */
@@ -56,7 +60,7 @@ final class Jet
 		$x = max(-$half,min($half,$x));
 		$z = max(-$half,min($half,$z));
 		$yaw = M_PI - $camera->yaw;
-		$this->chase = self::axes($yaw, 0.0, 0.0)[2];
+		$this->flightDirection = $this->chase = self::axes($yaw, 0.0, 0.0)[2];
 		$this->pose = ['x'=>$x, 'y'=>max($y, max($water,$land->height($x,$z)) + 75), 'z'=>$z,
 			'yaw'=>$yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>self::CRUISE, 'power'=>self::CRUISE_POWER,
 			'vx'=>self::CRUISE*$this->chase[0], 'vy'=>0.0, 'vz'=>self::CRUISE*$this->chase[2],
@@ -120,12 +124,7 @@ final class Jet
 		$p['speed'] = abs($gap) < .04 ? $target : $p['speed'] + ($gap <=> 0) * $change;
 		$travel = $p['speed'] * $dt;
 		if($this->expert)
-		{
 			[, , $nose] = $this->rotate($dt, $bank, $climb, $rudder);
-			$x = $p['x'] + $nose[0] * $travel;
-			$z = $p['z'] + $nose[2] * $travel;
-			$rise = $nose[1] * $travel;
-		}
 		else
 		{
 			// Roll and pitch close on their targets at a rate in proportion to the angle still to go.
@@ -136,10 +135,20 @@ final class Jet
 			$turn = sin($p['roll']) * .68;
 			$p['yaw'] += $turn * $dt;
 			$this->deflect($dt, $rollDemand, $pitchDemand, $turn);
-			$x = $p['x'] + sin($p['yaw']) * cos($p['pitch']) * $travel;
-			$z = $p['z'] + cos($p['yaw']) * cos($p['pitch']) * $travel;
-			$rise = sin($p['pitch']) * $travel;
+			$nose = [sin($p['yaw'])*cos($p['pitch']), sin($p['pitch']), cos($p['yaw'])*cos($p['pitch'])];
 		}
+		// Turning the body redirects travel over time. Ground clearance can lift a single step without
+		// imparting a permanent upward velocity when the terrain is edited below a flying jet.
+		$follow = 1 - exp(-$dt / self::FLIGHT_PATH_LAG);
+		[$dx,$dy,$dz] = $this->flightDirection;
+		$dx += ($nose[0] - $dx)*$follow;
+		$dy += ($nose[1] - $dy)*$follow;
+		$dz += ($nose[2] - $dz)*$follow;
+		$length = sqrt($dx*$dx + $dy*$dy + $dz*$dz);
+		$this->flightDirection = [$dx/$length,$dy/$length,$dz/$length];
+		$x = $p['x'] + $this->flightDirection[0]*$travel;
+		$rise = $this->flightDirection[1]*$travel;
+		$z = $p['z'] + $this->flightDirection[2]*$travel;
 		$half = $this->half;
 		if(abs($x) > $half || abs($z) > $half) return false;
 		$p['x'] = $x; $p['z'] = $z;
@@ -479,6 +488,16 @@ final class Jet
 		$camera->position = [$p['x'] - $p['boom'] * sin($p['yaw']), $p['eyeY'], $p['z'] - $p['boom'] * cos($p['yaw'])];
 		$camera->yaw = M_PI - $p['yaw'];
 		$camera->pitch = atan2($p['y'] + 1.5 + 6 * sin($p['pitch']) - $p['eyeY'], $p['boom'] + 6);
+	}
+
+	/** Pose of a carried game projectile under the wing skin of the baked mesh. Slot zero is the pilot's left. */
+	public static function projectileMount(array $p, int $slot): array
+	{
+		[$left,$up,$nose] = self::axes($p['yaw'],$p['pitch'],$p['roll']);
+		$span = $slot === 0 ? 2.65 : -2.65;
+		foreach(['x','y','z'] as $i => $axis)
+			$p[$axis] += $span*$left[$i] - .62*$up[$i] - .45*$nose[$i];
+		return $p;
 	}
 
 	public function state(): array { return $this->pose; }

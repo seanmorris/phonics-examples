@@ -283,8 +283,8 @@ $climb = follow(new GateDuck(60.0), $gates, function(int $i): array {
 	$height = 4.4 + max(0.0, $jet) * .6;
 	return [[0.0, 70 + $height + 5 - max(0.0, $jet) * .3, $v], [0.0, 70 + $height, $jet]];
 }, 320);
-expect($climb['passages'] === ['through'] && $climb['placed'] >= $c - 1e-9 && $climb['ratio'] < 3,
-	'An F5 that climbs above the banner after its window keeps the eye ducking through the window');
+expect($climb['passages'] === ['through','over'] && $climb['placed'] >= $c - 1e-9 && $climb['ratio'] < 3,
+	'A climbing F5 keeps the eye in the window at the slab, then releases it above the banner');
 
 // A gate placed beside an eye already deep in its blend takes the passage the eye stands in, so the eye stays put.
 $duck = new GateDuck(10.0);
@@ -528,26 +528,30 @@ function watch(Session $session, callable $control, int $steps): array
 	return ['states' => $states, 'least' => $least, 'offset' => $offset, 'jump' => $jump];
 }
 
-// The Expert F5 at its slowest pulls up into a loop 60 m in front of an air gate and never reaches it. The gate lets
-// its eye go as it climbs away, where it once pulled the eye down to the window from 50 m above it.
-$loops = [];
-foreach(['gate', 'none'] as $name)
+// With momentum the slower F5 turns short of the gate from 90 m out. From 60 m it crosses, climbs,
+// and returns over the banner. The drawn eye must release the window before coming back across.
+foreach([90,60] as $leadIn)
 {
-	$session = new Session(['worldSize' => 8192, 'heightScale' => 0, 'detailAmplitude' => 0]);
-	$session->camera->position = [0, 200, -1000]; $session->camera->yaw = M_PI; $session->camera->pitch = 0.0;
-	input($session, ['values' => ['jetControls' => 'expert'], 'actions' => ['jet']]);
-	if($name === 'gate') $session->course->place('start', 'air', 0.0, 200 - $shapes->kind('air')['window']['top'] / 2, 0.0, 0.0);
-	input($session, ['keys' => ['KeyS' => true]]);
-	for($i = 0; $i < 2000 && $session->jet->state()['z'] < -60; $i++) $session->step(1 / 60);
-	$loops[$name] = [$session, $session->jet->state()['speed'],
-		watch($session, fn(int $i): array => ['keys' => ['KeyS' => true, 'KeyE' => true]], 300)];
+	$crosses = $leadIn === 60;
+	$loops = [];
+	foreach(['gate', 'none'] as $name)
+	{
+		$session = new Session(['worldSize' => 8192, 'heightScale' => 0, 'detailAmplitude' => 0]);
+		$session->camera->position = [0, 200, -1000]; $session->camera->yaw = M_PI; $session->camera->pitch = 0.0;
+		input($session, ['values' => ['jetControls' => 'expert'], 'actions' => ['jet']]);
+		if($name === 'gate') $session->course->place('start', 'air', 0.0, 200 - $shapes->kind('air')['window']['top'] / 2, 0.0, 0.0);
+		input($session, ['keys' => ['KeyS' => true]]);
+		for($i = 0; $i < 2000 && $session->jet->state()['z'] < -$leadIn; $i++) $session->step(1 / 60);
+		$loops[$name] = [$session, $session->jet->state()['speed'],
+			watch($session, fn(int $i): array => ['keys' => ['KeyS' => true, 'KeyE' => true]], 300)];
+	}
+	[$session, $speed, $loop] = $loops['gate'];
+	expect($speed === Jet::SLOWEST && $loop['states'] === $loops['none'][2]['states'] && end($loop['states'])['z'] < 0
+		&& (max(array_column($loop['states'],'z')) > 0) === $crosses && $loop['offset'] < ($crosses ? 12 : 3) && $loop['least'] >= $c - 1e-9 && $loop['jump'] < 2,
+		sprintf('The slowest Expert F5 looping in front of an air gate moves its drawn eye at most %.2f m, %.2f m beyond its camera\'s step',
+			$loop['offset'], $loop['jump']));
+	foreach($loops as [$session]) $session->close();
 }
-[$session, $speed, $loop] = $loops['gate'];
-expect($speed === Jet::SLOWEST && $loop['states'] === $loops['none'][2]['states'] && end($loop['states'])['z'] < 0
-	&& $loop['offset'] < 3 && $loop['least'] >= $c - 1e-9 && $loop['jump'] < 2,
-	sprintf('The slowest Expert F5 looping in front of an air gate moves its drawn eye at most %.2f m, %.2f m beyond its camera\'s step',
-		$loop['offset'], $loop['jump']));
-foreach($loops as [$session]) $session->close();
 
 // The car stops in a road gate 1 m off its middle and the driver swings the look stick right round. The drawn eye
 // keeps to its side of each post instead of jumping across it, and stays clear of the gate.

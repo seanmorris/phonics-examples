@@ -20,6 +20,7 @@ final class BalloonPractice
 	private ?int $selected = null;
 	private ?RayQuery $sight = null;
 	private array $readyAt = [0.0,0.0];
+	private int $nextSlot = 0;
 	public array $shots = [];
 	public float $elapsed = 0, $ground = 0, $hitUntil = 0;
 	public int $hits = 0;
@@ -86,7 +87,7 @@ final class BalloonPractice
 		$this->select(null);
 		if($restartClock) $this->elapsed = 0;
 		$this->gunAt = $this->dwell = $this->floorAt = $this->checkAt = $this->hitUntil = 0;
-		$this->hits = 0; $this->readyAt = [0.0,0.0];
+		$this->hits = 0; $this->readyAt = [0.0,0.0]; $this->nextSlot = 0;
 	}
 
 	public function targets(): array
@@ -159,16 +160,22 @@ final class BalloonPractice
 		return $disc < 0 || $bb >= 0 ? null : (-$bb-sqrt($disc))/$aa;
 	}
 
-	private static function blocked(array $from, array $to, Landscape $land, float $water): bool
+	/** First terrain or water contact on the part of this step before the nearest balloon. */
+	private static function surfaceDistance(array $from, array $dir, float $travel, Landscape $land, float $water): ?float
 	{
-		$half = $land->recipe()['worldSize']/2;
-		if(max(abs($to[0]),abs($to[2])) > $half || min($from[1],$to[1]) <= $water) return true;
-		if(min($from[1],$to[1]) > $land->bounds()['maxY']) return false;
-		$delta = [$to[0]-$from[0],$to[1]-$from[1],$to[2]-$from[2]];
-		$length = sqrt(array_sum(array_map(static fn($v)=>$v*$v,$delta)));
-		if($length < .001) return false;
-		$dir = array_map(static fn($v)=>$v/$length,$delta);
-		return $land->raycast($from,$dir,$length) !== null;
+		if($from[1] <= $water) return 0.0;
+		$endY = $from[1]+$travel*$dir[1];
+		$surface = null;
+		if($endY <= $water)
+		{
+			$t = ($water-$from[1])/$dir[1];
+			$half = $land->recipe()['worldSize']/2;
+			if(max(abs($from[0]+$t*$dir[0]),abs($from[2]+$t*$dir[2])) <= $half) $surface = $t;
+		}
+		$limit = $surface ?? $travel;
+		if($limit > 0 && min($from[1],$endY) <= $land->bounds()['maxY'])
+			return $land->raycast($from,$dir,$limit)['distance'] ?? $surface;
+		return $surface;
 	}
 
 	private function track(array $p, Landscape $land, float $water, float $dt): void
@@ -219,7 +226,7 @@ final class BalloonPractice
 	}
 
 	public function step(float $dt, array $p, bool $launch, bool $gun, Landscape $land, float $water, bool $inCockpit,
-		?FlightTrails $trails = null): void
+		?FlightTrails $trails = null, ?array $previousPose = null): void
 	{
 		$this->elapsed += $dt;
 		if($this->practice && !$this->practicePoint && $this->elapsed >= $this->respawn)
@@ -235,17 +242,19 @@ final class BalloonPractice
 		}
 		if($launch)
 		{
-			foreach($this->readyAt as $i => $time)
+			foreach([$this->nextSlot, 1-$this->nextSlot] as $slot)
 			{
-				if($time > $this->elapsed) continue;
-				$this->emit($p,false,$i === 0 ? -1 : 1);
-				$this->readyAt[$i] = $this->elapsed+3;
+				if($this->readyAt[$slot] > $this->elapsed) continue;
+				// The projectile advances during this step, starting where the wing was at its beginning.
+				$this->emit($previousPose ?? $p,$slot);
+				$this->readyAt[$slot] = $this->elapsed+3;
+				$this->nextSlot = 1-$slot;
 				break;
 			}
 		}
 		if($gun && $this->elapsed >= $this->gunAt)
 		{
-			$this->emit($p,true,0);
+			$this->emit($p,null);
 			$this->gunAt = $this->elapsed+.09;
 		}
 		$points = $this->targets();
@@ -262,17 +271,23 @@ final class BalloonPractice
 				$length = sqrt(array_sum(array_map(static fn($v)=>$v*$v,$d)));
 				$d = array_map(static fn($v)=>$v/max(.001,$length),$d);
 			}
-			$travel = $shot['speed']*$dt; $hit = null;
+			$travel = $shot['speed']*max(0.0,min($dt,$shot['expires']-($this->elapsed-$dt))); $hit = null;
 			foreach($points as $id => $point)
 			{
 				$t = self::intersection($a,$d,$point);
 				if($t !== null && $t <= $travel) { $hit = $id; $travel = $t; }
 			}
+			$surface = self::surfaceDistance($a,$d,$travel,$land,$water);
+			if($surface !== null) { $travel = $surface; $hit = null; }
 			$b = array_map(static fn($v,$dir)=>$v+$dir*$travel,$a,$d);
-			$obstructed = self::blocked($a,$b,$land,$water);
-			if(!$shot['tracer'] && !$obstructed)
-				$trails?->exhaust($a,$b,$shot['direction'],$d,$travel/$shot['speed']);
-			if($hit !== null && !$obstructed)
+			$outside = max(abs($b[0]),abs($b[2])) > $land->recipe()['worldSize']/2;
+			if(!$shot['tracer'] && !$outside && $trails !== null)
+			{
+				$duration = $travel/$shot['speed'];
+				$trails->exhaust($a,$b,$shot['direction'],$d,$duration);
+				if($hit !== null || $surface !== null) $trails->burst($b,$duration);
+			}
+			if($hit !== null && !$outside)
 			{
 				unset($points[$hit]);
 				if($hit === $this->practiceId) { $this->practicePoint = null; $this->respawn = $this->elapsed+.85; }
@@ -280,28 +295,45 @@ final class BalloonPractice
 				if($this->selected === $hit) $this->select(null);
 				$this->hits++; $this->hitUntil = $this->elapsed+.65;
 			}
-			if($obstructed || $hit !== null || $this->elapsed >= $shot['expires']) unset($this->shots[$i]);
+			if($outside || $surface !== null || $hit !== null || $this->elapsed >= $shot['expires']) unset($this->shots[$i]);
 			else { $shot['previous'] = $a; $shot['position'] = $b; $shot['direction'] = $d; }
 		}
 		unset($shot);
 	}
 
-	private function emit(array $p, bool $tracer, int $side): void
+	private function emit(array $p, ?int $slot): void
 	{
-		$eye = Jet::cockpit($p);
-		[$nose,$right,$up] = $eye->basis();
-		$a = $eye->position;
-		foreach($a as $i=>$v) $a[$i] += $side*3*$right[$i] - ($tracer ? 1.1 : 2)*$up[$i] + 5*$nose[$i];
+		$tracer = $slot === null;
+		if($tracer)
+		{
+			$eye = Jet::cockpit($p);
+			[$nose,,$up] = $eye->basis();
+			$a = $eye->position;
+			foreach($a as $i=>$v) $a[$i] += 5*$nose[$i] - 1.1*$up[$i];
+		}
+		else
+		{
+			$mount = Jet::projectileMount($p,$slot);
+			$a = [$mount['x'],$mount['y'],$mount['z']];
+			$nose = array_slice(VehicleModel::basis($p),6);
+		}
 		$this->shots[] = ['previous'=>$a,'position'=>$a,'direction'=>$nose,'tracer'=>$tracer,
+			'roll'=>$p['roll'] + (cos($p['pitch']) < 0 ? M_PI : 0),
 			'speed'=>$p['speed']+($tracer ? 760 : 490),'expires'=>$this->elapsed+($tracer ? 1.4 : 3.5),
 			'target'=>!$tracer && $this->dwell >= .3 ? $this->selected : null];
+	}
+
+	/** Loaded wings use the same flight clock as launch and the cockpit's charge count. */
+	public function readySlots(): array
+	{
+		return array_keys(array_filter($this->readyAt,fn($time)=>$time <= $this->elapsed));
 	}
 
 	public function status(): array
 	{
 		return ['selected'=>$this->selected,'visible'=>$this->visible,'locked'=>$this->dwell >= .3,'hits'=>$this->hits,
 			'hit'=>$this->elapsed < $this->hitUntil,'elapsed'=>$this->elapsed,'practice'=>$this->practice,
-			'ready'=>count(array_filter($this->readyAt,fn($t)=>$t <= $this->elapsed)),
+			'ready'=>count($this->readySlots()),
 			'placements'=>count($this->placements),'shots'=>count($this->shots),'ground'=>$this->ground];
 	}
 }

@@ -7,17 +7,18 @@ final class FlightTrails
 {
 	// Two vec4 endpoints (position and birth time), followed by kind, lifetime and opacity.
 	public const STRIDE = 44;
-	private const SMOKE_LIFE = 1.85, VAPOR_LIFE = .78;
-	private array $smoke = [], $vapor = [];
+	private const SMOKE_LIFE = 1.85, VAPOR_LIFE = .78, BURST_LIFE = .95;
+	private array $smoke = [], $vapor = [], $bursts = [];
 	private float $now = 0.0, $stepStart = 0.0, $density = 0.0;
 	private int $tick = 0;
 	public int $revision = 0;
 
-	public function active(): bool { return (bool)($this->vapor || $this->smoke); }
+	public function active(): bool { return (bool)($this->vapor || $this->smoke || $this->bursts); }
 
 	public function instances(): string
 	{
-		return implode('',array_column($this->smoke,1)) . implode('',array_column($this->vapor,1));
+		return implode('',array_column($this->smoke,1)) . implode('',array_column($this->vapor,1))
+			. implode('',array_column($this->bursts,1));
 	}
 
 	public function timeAt(float $alpha): float
@@ -42,6 +43,7 @@ final class FlightTrails
 		$this->tick++;
 		$this->expire($this->vapor,self::VAPOR_LIFE);
 		$this->expire($this->smoke,self::SMOKE_LIFE);
+		$this->expire($this->bursts,self::BURST_LIFE);
 
 		// The vertical component of the span stays well behaved through inverted flight and loops.
 		$bank = abs(sin($after['roll']) * cos($after['pitch']));
@@ -87,6 +89,16 @@ final class FlightTrails
 		$this->smoke[$this->tick] ??= [$this->now,''];
 		$this->smoke[$this->tick][1] .= pack('g*',$a[0],$a[1],$a[2],$this->stepStart,
 			$b[0],$b[1],$b[2],min($this->now,$this->stepStart+$duration),1.0,self::SMOKE_LIFE,1.0);
+		$this->revision++;
+	}
+
+	/** A world-space flash and smoke bloom born at the instant of contact within this step. */
+	public function burst(array $point, float $duration): void
+	{
+		[$x,$y,$z] = $point;
+		$birth = min($this->now,$this->stepStart+$duration);
+		$this->bursts[$this->tick] ??= [$this->now,''];
+		$this->bursts[$this->tick][1] .= pack('g*',$x,$y,$z,$birth,$x,$y,$z,$birth,2.0,self::BURST_LIFE,1.0);
 		$this->revision++;
 	}
 }

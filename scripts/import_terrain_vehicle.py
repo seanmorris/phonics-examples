@@ -312,6 +312,9 @@ def export_model(folder, vehicle, pods=None):
     if vehicle == "f5":
         keel_y = (min(b["min"][1] for b in bounds) + max(b["max"][1] for b in bounds)) / 2
         scale = 15.6 / (max(b["max"][2] for b in bounds) - min(b["min"][2] for b in bounds))
+        # The belly tank sets the lower bound of the source mesh. Keep that reference frame for the hinges and
+        # cockpit, then omit the tank geometry and its texture from the playable model.
+        primitives = [part for part in primitives if scene["materials"][part["material"]]["name"] != "bak-FACES"]
         atlas, rects = jet_atlas(folder, scene, primitives)
         # Find the moving surfaces in the bounding-box frame, then move the origin to the centre of gravity.
         box = (center_x, keel_y, center_z)
