@@ -403,6 +403,25 @@ namespace
 	$closed = VehicleModel::beams($data, ['lamps' => ['pods' => 0.0] + $level['lamps']] + $level);
 	expect($closed[0]['level'] === 0.0 && $closed[0]['direction'][1] < -.8,
 		'With the pods closed the headlamps face down into the body and give no beam');
+
+	// The beams become the terrain package's spot lights.
+	$lights = VehicleModel::spotLights($data, $level);
+	$spots = new TerrainPhonics\SpotLights;
+	$spots->set($lights);
+	expect(count($lights) === 2 && $spots->count() === 2 && $lights[1]['position'] === $beams[1]['position']
+		&& $lights[1]['direction'] === $beams[1]['direction']
+		&& $lights[0]['intensity'] === VehicleModel::BEAM_INTENSITY && $lights[0]['color'] === VehicleModel::WHITE,
+		'Open pods with lit headlamps give two spot lights on the beams');
+
+	$dim = ['lamps' => ['headlamps' => .5, 'pods' => .5] + $level['lamps']] + $level;
+	$dimBeams = VehicleModel::beams($data, $dim);
+	$dimLights = VehicleModel::spotLights($data, $dim);
+	expect(abs($dimLights[0]['intensity'] - VehicleModel::BEAM_INTENSITY * .25) < 1e-9
+		&& $dimLights[0]['direction'] === $dimBeams[0]['direction'],
+		'A beam\'s intensity follows the headlamps and the pods, and its aim swings with the pods');
+	foreach(['dark headlamps' => ['headlamps' => 0.0], 'shut pods' => ['pods' => 0.0]] as $case => $levels)
+		expect(VehicleModel::spotLights($data, ['lamps' => $levels + $level['lamps']] + $level) === [],
+			"With $case the car gives no spot lights, so the application clears them");
 	$session->close();
 
 	echo "Landscape sandbox lamps: $checks checks passed\n";

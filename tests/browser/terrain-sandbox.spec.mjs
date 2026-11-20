@@ -324,6 +324,8 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 	await expect(headlights).toHaveValue('on');
 	expect((await status(page)).message).toBe('Headlights on.');
 	await expect.poll(async() => (await status(page)).lamps.pods, {timeout: 60_000}).toBe(1);
+	// Each open headlamp lights the ground as one of the renderer's spot lights.
+	expect((await status(page)).renderer.spotLights).toBe(2);
 	expect(await page.evaluate(() => localStorage.getItem('terrain-sandbox.car'))).toBe('{"headlights":"on"}');
 
 	await page.reload();
@@ -331,6 +333,7 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 	await expect.poll(async() => (await status(page)).headlights).toBe('on');
 	await expect(headlights).toHaveValue('on');
 	expect((await status(page)).message).not.toContain('Headlights');
+	expect((await status(page)).renderer.spotLights).toBe(0);
 	expect(errors).toEqual([]);
 });
 

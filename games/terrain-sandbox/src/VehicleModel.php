@@ -28,6 +28,11 @@ final class VehicleModel
 	 * facing it gives up to 20 / π. A tail lamp glows at TAIL while the headlights are on, and at BRAKE while braking.
 	 */
 	public const BRAKE = 6.0, TAIL = .7, REVERSE = 2.5, HEADLAMP = 3.5;
+	/**
+	 * Each headlamp's beam on the ground and water, in the units of the terrain package's SpotLights: candela on the
+	 * axis at full brightness, the range in metres, and the cone's inner and outer half-angles in radians.
+	 */
+	public const BEAM_INTENSITY = 20000.0, BEAM_RANGE = 80.0, BEAM_INNER = .05, BEAM_OUTER = .3;
 	private Program $program;
 	private BakedMesh $mesh;
 	/** Pose key driving each hinge slot, and every slot's hinge point and unit axis, flattened for the shader. */
@@ -195,6 +200,24 @@ final class VehicleModel
 				'level' => $pose['lamps']['headlamps'] * $pose['lamps']['pods']];
 		}
 		return $beams;
+	}
+
+	/**
+	 * Build the spot lights for Scene::setSpotLights() from a car's headlamps.
+	 * @param array $lamps The car's pods and headlamps from lamps().
+	 * @param array $pose Pose as draw() takes it, with the levels from Session::carLamps() under 'lamps'.
+	 * @return list<array> One light per beam from beams(), its intensity scaled by the beam's level. Empty while the
+	 * headlamps are dark or the pods are shut.
+	 */
+	public static function spotLights(array $lamps, array $pose): array
+	{
+		if($pose['lamps']['headlamps'] * $pose['lamps']['pods'] <= 0) return [];
+		$lights = [];
+		foreach(self::beams($lamps, $pose) as $beam)
+			$lights[] = ['position' => $beam['position'], 'direction' => $beam['direction'], 'color' => self::WHITE,
+				'intensity' => self::BEAM_INTENSITY * $beam['level'], 'range' => self::BEAM_RANGE,
+				'inner' => self::BEAM_INNER, 'outer' => self::BEAM_OUTER];
+		return $lights;
 	}
 
 	/**
