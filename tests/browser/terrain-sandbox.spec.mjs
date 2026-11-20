@@ -1287,7 +1287,7 @@ test('landform parameters and nested colours survive a save and reload', async({
 	const wall = page.getByLabel('Wall width', {exact: true});
 	await expect(wall).toHaveValue('0.006');
 	await wall.fill('0.0085');
-	await page.getByLabel('Surround', {exact: true}).selectOption('plateau');
+	await page.getByRole('combobox', {name: 'Surround', exact: true}).selectOption('plateau');
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.wallWidth).toBe(.0085);
 	await expect.poll(async() => (await status(page)).recipe.version).toBe(2);
