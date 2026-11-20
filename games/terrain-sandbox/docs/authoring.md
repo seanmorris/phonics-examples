@@ -43,3 +43,9 @@ You can save up to 32 placements with a landscape. Popping a balloon during flig
 A save records the seed and complete recipe together with the ordered edit history. It pins the generator version so a later algorithm change cannot silently reshape an old landscape. Render caches are reconstructed as needed after loading.
 
 The example is offline. Reproducible local terrain and edit replay do not, by themselves, establish a multiplayer authority or synchronization protocol.
+
+## Colour patterns
+
+In **Surface → Colour layers**, open a layer to choose a colour pattern. **Mottled** blends patches of a second colour, **Streaks** follows upright faces, and **Gravel** scatters small flecks. Set the pattern colour and amount, then set its scale in metres. Vertical stretch lengthens the pattern on cliffs. Choose **Apply layers** to preview and save the result.
+
+The layer's elevation and slope masks set where its colour and pattern can appear. **Edge noise** varies those mask boundaries. Colour patterns use fixed world coordinates and fade as their features become too small to resolve.

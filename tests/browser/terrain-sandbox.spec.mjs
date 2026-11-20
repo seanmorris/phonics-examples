@@ -1299,6 +1299,11 @@ test('landform parameters and nested colours survive a save and reload', async({
 	await child.locator('summary').click();
 	await child.locator('[data-layer-key="parent"]').fill('0');
 	await child.locator('[data-layer-key="color"]').fill('#7e513d');
+	await child.getByRole('combobox', {name:'Colour pattern'}).selectOption('streaks');
+	await child.locator('[data-layer-key="patternColor"]').fill('#2f2120');
+	await child.locator('[data-layer-key="patternAmount"]').fill('0.7');
+	await child.locator('[data-layer-key="patternScale"]').fill('18');
+	await child.locator('[data-layer-key="patternStretch"]').fill('6');
 	await page.getByRole('button', {name: 'Apply layers', exact: true}).click();
 	await expect.poll(async() => (await status(page)).surfaceLayers[1].color).toBe('#7e513d');
 
@@ -1306,7 +1311,10 @@ test('landform parameters and nested colours survive a save and reload', async({
 	expect(document.version).toBe(4);
 	expect(document.landscape.recipe.wallWidth).toBe(.0085);
 	expect(document.landscape.recipe.surround).toBe('plateau');
-	expect(document.layers[1]).toMatchObject({color: '#7e513d', parent: 0});
+	expect(document.layers[1]).toMatchObject({
+		color: '#7e513d', parent: 0, pattern: 'streaks', patternColor: '#2f2120',
+		patternAmount: .7, patternScale: 18, patternStretch: 6,
+	});
 	await load(page, fixture());
 	await load(page, document);
 	await expect.poll(async() => (await status(page)).surfaceLayers).toEqual(document.layers);
@@ -1342,4 +1350,30 @@ test('the signed clipmap grid covers the ground after relocation', async({page})
 		}
 		expect(sky).toBe(0);
 	}
+});
+
+test('the coastal palette shows inland grass and shore sand', async({page}) => {
+	await page.setViewportSize({width: 640, height: 460});
+	await boot(page);
+	const coast = fixture();
+	Object.assign(coast.settings, {waterLevel: -40, waterChoppiness: 0, elevation: 55});
+	await load(page, coast);
+	await settled(page);
+
+	const groundColor = async() => {
+		const image = PNG.sync.read(await canvas(page).screenshot());
+		const offset = 4 * (Math.floor(image.height * .42) * image.width + Math.floor(image.width * .3));
+		return [...image.data.subarray(offset, offset + 3)];
+	};
+
+	let [red, green, blue] = await groundColor();
+	expect(green).toBeGreaterThan(red + 5);
+	expect(green).toBeGreaterThan(blue + 5);
+
+	await canvas(page).evaluate(element => element.terrainSandboxDebug.values({waterLevel: -2}));
+	await expect.poll(async() => (await status(page)).settings.waterLevel).toBe(-2);
+	await settled(page);
+	[red, green, blue] = await groundColor();
+	expect(red).toBeGreaterThan(green + 5);
+	expect(green).toBeGreaterThan(blue + 5);
 });

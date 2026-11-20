@@ -100,7 +100,7 @@
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
     "browser/cockpit.mjs": "sha256-ZdIh25kQUXzWgLueC/K4dM9a0suiROBHPB/KK6/EfsA=",
     "browser/flight-map.mjs": "sha256-bcRJ6NuuHY65cMyvwqXoaF+V3vu8Oijh+cnM/6VJTks=",
-    "browser/game.mjs": "sha256-GOvgdsRPBS2GL/djFZGNixNjl0+UTANMbNLxd42V/kY=",
+    "browser/game.mjs": "sha256-kU9SX0wUDpjr/LjTaqewrL5GC/4OVlBjZKuL6TcqSeg=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
     "src/BalloonPractice.php": "sha256-x9qU7rjd/v8tcWaet8U5cStcKWDEnVSfQtaa6D18fVA=",
     "src/Car.php": "sha256-dftdcj9BdxIQiNGWGZKtWBvG2eGh843CKPDDA9OJ/rc=",

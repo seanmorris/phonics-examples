@@ -187,8 +187,16 @@ export function activate({module, canvas, session, services})
 			parent:'Parent index (−1 for none)',period:'Repeat interval · m'};
 		const fields=Object.entries(labels).map(([key,label])=>`<label class="terrain-field">${label}
 			<input data-layer-key="${key}" type="number" step="any" value="${Number(row[key])}"></label>`).join('');
+		const patterns = {none:'Solid', mottle:'Mottled', streaks:'Streaks', gravel:'Gravel'};
 		return `<details data-layer><summary>Layer ${i} · ${row.color}</summary><label class="terrain-field">Colour
-			<input type="color" data-layer-key="color" value="${row.color}"></label>${fields}
+			<input type="color" data-layer-key="color" value="${row.color}"></label>
+			<label class="terrain-field">Colour pattern<select data-layer-key="pattern">
+			${Object.entries(patterns).map(([key,label])=>`<option value="${key}" ${key===row.pattern?'selected':''}>${label}</option>`).join('')}
+			</select></label>
+			<label class="terrain-field">Pattern colour<input type="color" data-layer-key="patternColor" value="${row.patternColor}"></label>
+			<label class="terrain-field">Pattern amount<input type="number" data-layer-key="patternAmount" min="0" max="1" step="0.05" value="${row.patternAmount}"></label>
+			<label class="terrain-field">Pattern scale · m<input type="number" data-layer-key="patternScale" min="0.05" max="10000" step="any" value="${row.patternScale}"></label>
+			<label class="terrain-field">Vertical stretch<input type="number" data-layer-key="patternStretch" min="0.25" max="64" step="any" value="${row.patternStretch}"></label>${fields}
 			<label class="terrain-field">Heights relative to<select data-layer-key="datum">
 			${['absolute','water','beds'].map(k=>`<option ${k===row.datum?'selected':''}>${k}</option>`).join('')}
 			</select></label></details>`;

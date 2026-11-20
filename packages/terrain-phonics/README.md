@@ -95,7 +95,10 @@ Recipe presets fill in a common set of shape coefficients. These coefficients ca
 rise, rounded ridges, canyon walls, rolling relief and terracing. Existing recipes expand to the values of
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
 changing the landscape's playable extent. `SurfaceLayers` accepts an ordered list of up to twelve colour
-layers with height and slope fades, spatial noise, and an optional earlier layer as a parent.
+layers with height and slope fades, spatial noise, and an optional earlier layer as a parent. Set a layer's
+`pattern` to `mottle`, `streaks` or `gravel` to blend its `patternColor` into the base colour. The
+`patternAmount` sets the blend from 0 to 1, `patternScale` sets the feature size in metres, and
+`patternStretch` scales the pattern vertically on cliffs. The same layer settings shade the ground and charts.
 
 `Water` evaluates analytic directional waves and bounded wake packets. Its shader include uses the same
 parameters and derivatives as PHP. `Watercraft` samples several buoyancy points and adds damping, drag,
