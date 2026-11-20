@@ -130,7 +130,7 @@
     "src/RayQuery.php": "sha256-IrhxcoKUi4TdXtVa3CVBQj84UMoN1kSTmLVhk1gUD4c=",
     "src/Recipe.php": "sha256-6kMd/stIQcXTHope5xtKvqO2XppSKzjaxpGCGpiDoGU=",
     "src/Scene.php": "sha256-MyGVj88kTQAsymtw/Ih9a9i/VoLYvjrSdURLaRsQwQQ=",
-    "src/SpotLights.php": "sha256-NurKGjttj53eF9HtSzfD8Ue+69oNH1SgPCawYoFlAX8=",
+    "src/SpotLights.php": "sha256-7+4KNXtHGJeBO3HVMwoegl/J5UcgK2pRbP/EbOwwT7A=",
     "src/TerrainAppearance.php": "sha256-iXDpDWUN8IUyj+rvbr+qA/epO5Eyw+CdbtyoIw4JuBM=",
     "src/TerrainShadows.php": "sha256-Govu8fN6++8aoKtgr62uBTUMA5jKKEQ0XfrdlDgoLlU=",
     "src/TerrainSurface.php": "sha256-B+n9dypuMRtdx7IwV/FuoU1y3bjJ6H7R5LhA/IArnr8=",

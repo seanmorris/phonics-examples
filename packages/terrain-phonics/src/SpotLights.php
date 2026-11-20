@@ -28,7 +28,13 @@ final class SpotLights
 	public const NIGHT_GAIN = 1e4;
 	/** Keys every light needs, as keys. */
 	private const KEYS = [
-		'position' => 0, 'direction' => 0, 'color' => 0, 'intensity' => 0, 'range' => 0, 'inner' => 0, 'outer' => 0
+		'position' => 0
+		, 'direction' => 0
+		, 'color' => 0
+		, 'intensity' => 0
+		, 'range' => 0
+		, 'inner' => 0
+		, 'outer' => 0
 	];
 	/** Twelve floats for each light, in the layout of uSpotLights, with colour in scene units before the gain. */
 	private array $values = [];
@@ -56,7 +62,10 @@ final class SpotLights
 		$this->values = $values;
 	}
 
-	/** @return int Lights currently set. */
+	/**
+	 * Count the lights set.
+	 * @return int Lights currently set, from zero to MAX.
+	 */
 	public function count(): int { return intdiv(count($this->values), 12); }
 
 	/**
@@ -106,7 +115,10 @@ final class SpotLights
 	 */
 	public function forget(): void { $this->sent = []; }
 
-	/** @return string GLSL declaring the uniforms and terrainSpotLight(), for the "// SPOT LIGHTS" marker. */
+	/**
+	 * Read the GLSL that the ground and water shaders include at their "// SPOT LIGHTS" marker.
+	 * @return string Source declaring the uniforms, terrainSpotLight() and terrainSpotWaterColumn().
+	 */
 	public static function shaderSource(): string
 	{
 		return file_get_contents(dirname(__DIR__) . '/shaders/spot-lights.glsl');
@@ -159,7 +171,10 @@ final class SpotLights
 		return [
 			$px, $py, $pz, 1 / ($range * $range)
 			, $dx / $length, $dy / $length, $dz / $length, $scale
-			, $red * $irradiance, $green * $irradiance, $blue * $irradiance, -cos($outer) * $scale
+			, $red * $irradiance
+			, $green * $irradiance
+			, $blue * $irradiance
+			, -cos($outer) * $scale
 		];
 	}
 
@@ -175,7 +190,8 @@ final class SpotLights
 		if(!is_array($value) || count($value) !== 3 || !array_is_list($value))
 		throw new \InvalidArgumentException("Spot light $index $key must be a list of three numbers");
 
-		foreach($value as $c) if(is_float($c) ? !is_finite($c) : !is_int($c))
+		foreach($value as $c)
+		if(is_float($c) ? !is_finite($c) : !is_int($c))
 		throw new \InvalidArgumentException("Spot light $index $key must hold finite numbers");
 
 		return [(float)$value[0], (float)$value[1], (float)$value[2]];
