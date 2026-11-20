@@ -30,7 +30,22 @@ Press **J**, choose **Fly F5**, or press up on a gamepad's D-pad to start airbor
 
 In both, hold **W** or the right trigger to speed up towards 260 metres per second, and **S** or the left trigger to slow towards 55. Let go and the jet returns to its 140 metre per second cruise, as the Dreamcast game does. A trigger sets a speed in proportion to how far you squeeze it. Pulling the stick back raises the nose; tick **Push the stick forward to climb** to reverse it. The sandbox remembers both choices in this browser. Saved landscapes do not carry them.
 
-Both chase cameras keep the horizon level. The Novice camera looks along the jet's heading. The Expert camera swings in behind the nose, so it follows loops. It turns round quickly as the nose passes straight up or down. **P** or **Start** pauses the flight. Press **F**, or down on the D-pad, to leave the jet and explore from the chase camera's position. Reaching the map edge also returns you to free flight.
+Both chase cameras keep the horizon level. The Novice camera looks along the jet's heading. The Expert camera swings in behind the nose, so it follows loops. It turns round quickly as the nose passes straight up or down. **P** or **Start** pauses the flight. Press **F**, or down on the D-pad, to leave the jet and explore from the current camera position. Reaching the map edge also returns you to free flight.
+
+### Cockpit and balloon practice
+
+Press **V** or click the right stick to switch between the chase camera and the pilot’s view. The cockpit banks with the jet. Its left tape shows speed in km/h and its right tape shows metres above the ground or water. The bottom-right radar plots balloons relative to the nose. **H** opens the Landscape Lab in flight.
+
+To try a target, choose **Balloon practice** under **Explore**. Centre the balloon inside the HUD ring. Within 1,200 metres, a clear view for 0.3 seconds turns its box red and flashes **LOCK ON**. **T** or gamepad **B** selects the next balloon.
+
+| Action | Keyboard | Standard gamepad |
+| --- | --- | --- |
+| Launch a projectile | Space | A |
+| Fire Vulcan tracers | Hold G | Hold X |
+| Switch view | V | Right stick click |
+| Cycle balloons | T | B |
+
+A projectile follows the balloon selected at launch if you have a lock. Otherwise it travels straight ahead. Each of the two charges returns after three seconds of flight. Tracers have their own firing cadence. A hit pops a balloon, and quick practice places another ahead of you. Pause freezes the practice clock.
 
 ## Watch the atmosphere
 
@@ -84,7 +99,7 @@ The chase camera never passes through a gate. Behind a vehicle that goes through
 
 ## Use a gamepad
 
-The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. The D-pad chooses where you are: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses, **Y** resets a race and **X** switches the headlights. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
+The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. The D-pad chooses where you are: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses, **Y** resets a race and **X** switches the car headlights or fires the F5’s Vulcan. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
 
 ## Pause and save
 

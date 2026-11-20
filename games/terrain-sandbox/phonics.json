@@ -16,6 +16,7 @@
     "files": [
       "autoload.php",
       "src/BakedMesh.php",
+      "src/BalloonPractice.php",
       "src/Car.php",
       "src/CarChase.php",
       "src/CarLamps.php",
@@ -28,12 +29,14 @@
       "src/Jet.php",
       "src/Race.php",
       "src/Session.php",
+      "src/TracerBatch.php",
       "src/VehicleModel.php"
     ]
   },
   "browser": {
     "files": [
-      "browser/game.mjs"
+      "browser/game.mjs",
+      "browser/cockpit.mjs"
     ]
   },
   "application": {
@@ -59,12 +62,20 @@
       "assets/gates/water.mesh.bin.gz",
       "assets/gates/air.mesh.bin.gz",
       "assets/gates/finish-line-license.txt",
-      "assets/gates/arch-license.txt"
+      "assets/gates/arch-license.txt",
+      "assets/balloon/license.txt",
+      "assets/balloon/mesh.bin.gz",
+      "assets/projectile/license.txt",
+      "assets/projectile/mesh.bin.gz",
+      "assets/f5/hud-labels.png"
     ]
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-z3L+ksBqFXu8XV5SskMcwMzqQP9r7Ynday0zTvXEWf8=",
+    "application.php": "sha256-PKCZcVouAYR+mRjlIxmd1oT3+uWAtpEOYKJT4HAFiV4=",
+    "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
+    "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
+    "assets/f5/hud-labels.png": "sha256-GmI09wk+SHhiOlEahRbf6QZjxc1y4BtF7rXB2k2sgok=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
     "assets/f5/mesh.bin.gz": "sha256-MvzvhSBqNzcqkY2ivZ1iZ4FF1vYLNsb305WgAUuumeg=",
     "assets/f5/surfaces.json": "sha256-uqkDIywdj3xctjDJkR4Yp/mFPfgqx1VdDeHq9UX47wo=",
@@ -77,14 +88,18 @@
     "assets/jetski/license.txt": "sha256-9WoAgRXTPEC8hRXDGAxCadCBBzJeG83Yybl9Ki+EPkQ=",
     "assets/jetski/mesh.bin.gz": "sha256-2ofl4RltV6iF1apNDjzZC73eLM553zFlop9VM96NMCE=",
     "assets/poster.png": "sha256-JqL4UgQ/wrrrx3YPcByGRZvVyeEo9daFNhnm5PFJp1w=",
+    "assets/projectile/license.txt": "sha256-/wCkc55BHuambClXzWiNfmcWYz69Ft3hnpcHWdPxN2w=",
+    "assets/projectile/mesh.bin.gz": "sha256-FXkc0/AIwMFazkJrSe2F3oQojFk8clcLHv86WM+UQ9Y=",
     "assets/testarossa/lamps.json": "sha256-F/h+F49bvHxxpbngDRN4a3Pyw0uoA8ovZ0YjnHgO8j4=",
     "assets/testarossa/license.txt": "sha256-/9ZQt2jc5NTX9mZTSd3OGLgMWNIQHyBLpSc3HI88iNU=",
     "assets/testarossa/mesh.bin.gz": "sha256-bjunAeyco1CrY+rtykEIEbYda2PO82nic9NcoQ2eaZI=",
     "assets/vehicles/model.frag": "sha256-isr4k+3rbvq7CNQq5d+g68AVtJK3TzLWTj6PTpDyW/s=",
     "assets/vehicles/model.vert": "sha256-dbjWIvHjXVBvTYmDAfolftSrWWUDEGIAnoKN4CJMwTs=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
-    "browser/game.mjs": "sha256-s8s0WhlSn0GGbw4CNnccvU7Bw5knK/k16Hdk+1z6kLg=",
+    "browser/cockpit.mjs": "sha256-wr3ErJTuoL/xtbn1vmK8LQ3nZT6rs4Qb7Q4QOjnE2M0=",
+    "browser/game.mjs": "sha256-aSppgsCaF5q7C6d8KPHdYVrM0NJVUvKuVe5xBKVGvZQ=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
+    "src/BalloonPractice.php": "sha256-X3+nUv2rvw/Ph9WNgXJPMtYLHAS743agZVd64Xc4jbI=",
     "src/Car.php": "sha256-dftdcj9BdxIQiNGWGZKtWBvG2eGh843CKPDDA9OJ/rc=",
     "src/CarChase.php": "sha256-MUcAOlPD9mE3md1xdbzDhjMhY48h299VtVr3CF9xejs=",
     "src/CarLamps.php": "sha256-QzluARSfEK2OUHe1/7vkAVBYRguTuwgzcvglwxUX1PQ=",
@@ -94,9 +109,10 @@
     "src/GateDuck.php": "sha256-Y/9hrNmLlb8BlRicqDJo7ma9CA/9LL9I/NKrGjTfCpQ=",
     "src/GateModel.php": "sha256-ONoCfTkoGKqtUw3tObxyw7UUIH0gw5XR54ycgmm5A+k=",
     "src/GateShapes.php": "sha256-abFK5MdqZ6QMk6Fx00y/qEDphTUSDy7qK6oRMcbBEZM=",
-    "src/Jet.php": "sha256-TRXjJrvi8dEjbtSj2yi8KQ4TnKFwjZQ2a4oRcJlp318=",
+    "src/Jet.php": "sha256-IT23SlopfWC7PlDOcTOihXfiNBIVmdBhCdyx0h+CedM=",
     "src/Race.php": "sha256-hqPKUAhqAWWVF0OI7c5NatJNlf0+rOXO0LKcm6OAbM4=",
-    "src/Session.php": "sha256-/+OiVwMp0g+3HzBw80zChRcuSWni8QryRtCkFsgIxxM=",
+    "src/Session.php": "sha256-j6ZfHAQ33gG3+TgAgpYRTNo0pL5Ub0XkVRfDEEiauaE=",
+    "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/VehicleModel.php": "sha256-H9+ELDqmaS8PrTolYazhiyPegOPZzkvvzC1jRsU021I="
   }
 }

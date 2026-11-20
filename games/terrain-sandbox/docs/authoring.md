@@ -32,6 +32,12 @@ Width sets the road surface width. Shoulder sets how far the cut or fill blends 
 
 Roads modify the heightfield. Bridges, tunnels, and overhangs require separate geometry and are outside this sandbox.
 
+## Place practice balloons
+
+In **Shape**, choose **Balloon**, set the height, and click the ground or water under the desired position. The balloon stays that height above the higher surface when you edit the ground or change the water level. Choose **Remove** and click a balloon to delete its placement.
+
+You can save up to 32 placements with a landscape. Popping a balloon during flight preserves its placement. **Reset balloons** in **Explore** restores the authored targets and ends quick practice.
+
 ## Keep a reusable landscape
 
 A save records the seed and complete recipe together with the ordered edit history. It pins the generator version so a later algorithm change cannot silently reshape an old landscape. Render caches are reconstructed as needed after loading.

@@ -34,6 +34,9 @@ final class Session
 	/** The car's lamp levels and how far its pop-up headlights stand open. */
 	private CarLamps $lamps;
 	public Jet $jet;
+	public BalloonPractice $balloons;
+	public string $jetView = 'chase';
+	private int $launches = 0;
 	/** Race gates on the landscape. Saved with it, and replaced when a file loads or a new landscape is generated. */
 	public Course $course;
 	/** Timed run through the course by the vehicle being driven, ridden or flown. */
@@ -70,6 +73,7 @@ final class Session
 		'azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0, 'exposure' => 1.0,
 		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
+		'balloonAltitude' => 100.0, 'balloonTool' => 'place',
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
 	] + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
 	/** The terrain's colours, banding and blending, which the scene draws with. Its settings are part of $settings. */
@@ -159,6 +163,7 @@ final class Session
 		$this->car = new Car;
 		$this->lamps = new CarLamps;
 		$this->jet = new Jet;
+		$this->balloons = new BalloonPractice;
 		$this->chase = new CarChase;
 		$this->resetCamera();
 		$this->sun();
@@ -179,12 +184,14 @@ final class Session
 		$switch = [$this->headlights, $this->headlightsLit()];
 		try
 		{
+			$wasJet = $this->mode === 'jet';
 			$wasPicking = $this->picking;
 			foreach($input['values'] ?? [] as $name => $value)
 			{
 				// load() passes every saved name to setting(). Taking these names here keeps them out of reach of files.
 				if($name === 'selectionInterval') $this->setSelectionInterval($value);
 				elseif($name === 'selectionSliceMs') $this->setSelectionSliceMs($value);
+				elseif($name === 'jetView' && in_array($value,['chase','cockpit'],true)) { $this->jetView = $value; $this->dirty = true; }
 				elseif($name === 'jetControls') $this->setJetControls($value);
 				elseif($name === 'headlights') $this->setHeadlights($value);
 				elseif($name === 'invertPitch')
@@ -198,6 +205,7 @@ final class Session
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($wasPicking) $this->advancePick($pickMs);
 			if($this->carSearch !== null) $this->advanceCarSearch();
+			if($wasJet && $this->mode !== 'jet') { $this->balloons->reset(); $this->launches = 0; }
 			if($this->draft !== null) { $this->draft->commit(); $this->dirty = true; }
 		}
 		catch(\Throwable $error)
@@ -302,8 +310,15 @@ final class Session
 			{
 				$this->mode = 'fly';
 				$this->clampCamera();
+				$this->balloons->reset();
 				$this->message = 'Reached the edge of the landscape. Free flight controls active.';
 			}
+			else
+			{
+				$this->balloons->step($seconds,$this->jet->state(),$this->launches > 0,
+					(bool)($this->held('KeyG') || ($pad['buttons'] & self::PAD_X)), $this->landscape,$this->water->level(), $this->jetView === 'cockpit');
+			}
+			$this->launches = max(0,$this->launches-1);
 			$this->dirty = true;
 		}
 		$start = $this->time;
@@ -311,7 +326,7 @@ final class Session
 		$this->water->update($this->time);
 		// The application redraws for wave time whenever water shows, which covers the gates that float on it.
 		if($this->course->floats()) $this->course->float($this->water, $this->time);
-		if($this->mode !== 'fly')
+		if($this->mode !== 'fly' && !($this->mode === 'jet' && $this->jetView === 'cockpit'))
 			$this->duck()->step($this->nearGates($this->camera->position), $this->camera->position, $this->racePoint());
 		if($racing) $this->advanceRace($from, $mode, $recoveries, $start, $seconds);
 		if($this->settings['clock'])
@@ -474,6 +489,14 @@ final class Session
 			|| $this->headlights === 'auto' && $this->settings['elevation'] < self::AUTO_HEADLIGHTS;
 	}
 
+	/** Relative commanded power, with neutral controls at cruise. */
+	public function jetPower(): float
+	{
+		$input = $this->blend('KeyS','KeyW',$this->pad['rt']-$this->pad['lt']);
+		$cruise = Jet::CRUISE/Jet::FASTEST;
+		return $cruise + $input*($input < 0 ? $cruise : 1-$cruise);
+	}
+
 	/** Describe the jet's controls for the current handling. */
 	private function jetMessage(): string
 	{
@@ -506,7 +529,7 @@ final class Session
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
 			'quality' => [.5,2],'speed' => [5,300],'gateAltitude' => [0.0,400.0],
-			'gateWidth' => [0.0,300.0],'gateHeight' => [0.0,150.0],
+			'balloonAltitude' => [12.0,1200.0], 'gateWidth' => [0.0,300.0],'gateHeight' => [0.0,150.0],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
 		if(isset($ranges[$name]))
 		{
@@ -515,8 +538,9 @@ final class Session
 			$value = max($min, min($max, (float)$value));
 		}
 		elseif($name === 'clock') $value = (bool)$value;
-		elseif($name === 'tool' && !in_array($value, ['navigate','raise','lower','flatten','smooth','crater','material','road','gate'], true)) return;
+		elseif($name === 'tool' && !in_array($value, ['navigate','raise','lower','flatten','smooth','crater','material','road','gate','balloon'], true)) return;
 		elseif($name === 'material' && !in_array($value, ['grass','rock','sand','snow','road'], true)) return;
+		elseif($name === 'balloonTool' && !in_array($value,['place','remove'],true)) return;
 		elseif($name === 'gateRole' && !in_array($value, self::GATE_ROLES, true)) return;
 		elseif($name === 'gateLaps')
 		{
@@ -530,7 +554,11 @@ final class Session
 		}
 		if($name === 'waterLevel' || $name === 'waterChoppiness')
 		{
-			if($name === 'waterLevel') $this->water->setLevel($value);
+			if($name === 'waterLevel')
+			{
+				if($this->water->level() !== (float)$value) $this->balloons->refit($this->landscape,$value);
+				$this->water->setLevel($value);
+			}
 			else $this->water->setWaveScale($value / 100);
 			if($this->course->floats()) $this->course->float($this->water, $this->time);
 			$this->dirty = $this->dirty || $this->settings[$name] !== $value;
@@ -604,6 +632,7 @@ final class Session
 		switch($action['type'] ?? '')
 		{
 			case 'pause':
+				$this->launches = 0;
 				$this->paused = !$this->paused;
 				$this->chase->resetInterpolation();
 				break;
@@ -684,7 +713,31 @@ final class Session
 				$this->mode = 'jet'; $this->paused = false; $this->boarding++;
 				$this->message = $this->jetMessage();
 				break;
+			case 'jet-view':
+				if($this->mode === 'jet')
+				{
+					$this->jetView = $this->jetView === 'cockpit' ? 'chase' : 'cockpit';
+					$this->dirty = true;
+				}
+				break;
+			case 'jet-launch':
+				if($this->mode === 'jet' && !$this->paused) $this->launches = min(2,$this->launches+1);
+				break;
+			case 'jet-target':
+				if($this->mode === 'jet') { $this->balloons->cycle(); $this->dirty = true; }
+				break;
+			case 'balloon-practice':
+				if($this->mode === 'jet')
+				{
+					$this->dirty = true;
+					$this->message = $this->balloons->start($this->jet->state(),$this->landscape,$this->water->level())
+						? 'Balloon practice. Space launches, hold G for Vulcan.' : 'Fly toward open terrain to place a practice balloon.';
+				}
+				break;
+			case 'balloons-reset': $this->dirty = true; $this->balloons->reset(false); $this->launches = 0; $this->message = 'Balloons restored.'; break;
 			case 'jet-controls': $this->setJetControls($this->jetControls === 'expert' ? 'novice' : 'expert'); break;
+			case 'pad-x': if($this->mode === 'jet') break;
+				// Outside the F5 the X button retains its headlight shortcut.
 			case 'headlights':
 				$next = (array_search($this->headlights, self::HEADLIGHTS, true) + 1) % count(self::HEADLIGHTS);
 				$this->setHeadlights(self::HEADLIGHTS[$next]);
@@ -693,7 +746,15 @@ final class Session
 			case 'craft': $this->cancelPick(); $this->carSearch = null; $this->boardCraft(); break;
 			case 'fly':
 				// Free flight starts from the eye a race gate ducked, not from inside the gate.
-				if($this->mode !== 'fly' && $this->duck !== null)
+				if($this->mode === 'jet' && $this->jetView === 'cockpit')
+				{
+					$eye = Jet::cockpit($this->jet->state());
+					[$nose] = $eye->basis();
+					$this->camera->position = $eye->position;
+					$this->camera->yaw = atan2($nose[0],-$nose[2]);
+					$this->camera->pitch = max(-1.52,min(1.52,asin(max(-1,min(1,$nose[1])))));
+				}
+				elseif($this->mode !== 'fly' && $this->duck !== null)
 					for($i = 0; $i < 3; $i++) $this->camera->position[$i] += $this->duck->offset[$i];
 				$this->carSearch = null; $this->mode = 'fly'; $this->releasePin(); $this->clampCamera();
 				$this->message = 'Flight controls active.';
@@ -765,6 +826,24 @@ final class Session
 	private function applyPick(?array $hit, array $settings, array $intent): void
 	{
 		$tool = $settings['tool'];
+		if($tool === 'balloon')
+		{
+			[$ox,$oy,$oz] = $intent['origin']; [$dx,$dy,$dz] = $intent['direction'];
+			$distance = $hit['distance'] ?? self::PICK_RANGE;
+			if($dy < 0 && $oy >= $this->water->level())
+				$distance = min($distance,($this->water->level()-$oy)/$dy);
+			if($settings['balloonTool'] === 'remove')
+				$this->message = $this->balloons->remove($intent['origin'],$intent['direction'],$distance)
+					? 'Removed balloon.' : 'Aim at the balloon to remove it.';
+			elseif($distance < self::PICK_RANGE || $hit !== null)
+			{
+				$this->balloons->place($ox+$dx*$distance,$oz+$dz*$distance,$settings['balloonAltitude'],$this->landscape,$this->water->level());
+				$this->message = 'Placed a balloon.';
+			}
+			else $this->message = 'Aim at land or water to place a balloon.';
+			$this->dirty = true;
+			return;
+		}
 		if($tool === 'gate') { $this->pickGate($hit, $settings, $intent); return; }
 		if($hit === null) { $this->message = 'No terrain within reach. Fly closer or aim down.'; return; }
 		[$wx,$wy,$wz] = $hit['position'];
@@ -980,6 +1059,7 @@ final class Session
 			'jet' => $this->jet->view($this->camera, $this->paused ? 1.0 : $alpha),
 			default => [$this->camera, null]
 		};
+		if($this->mode === 'jet' && $this->jetView === 'cockpit') return [Jet::cockpit($pose),$pose];
 		if($this->mode === 'fly' || $this->course->count() === 0) return [$eye, $pose];
 		$target = $pose ?? $this->craft->state();
 		return [$this->duck()->apply($eye, [$target['x'], $target['y'], $target['z']], $this->nearGates($eye->position)),
@@ -1103,6 +1183,8 @@ final class Session
 		$this->releasePin();
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		$this->balloons = new BalloonPractice;
+		$this->launches = 0;
 		$this->setting('waterLevel', $landscape->recipe()['waterLevel']);
 		$this->road = []; $this->generation++; $this->mode = 'fly';
 		$this->race->reset();
@@ -1138,6 +1220,7 @@ final class Session
 	public function publishLandscape(Landscape $landscape): void
 	{
 		$this->releasePin();
+		$this->balloons->refit($landscape,$this->water->level());
 		// Gates on the edited ground stand on it again.
 		if($this->course->count() > 0)
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
@@ -1165,7 +1248,7 @@ final class Session
 			'landscape' => json_decode($this->landscape->save(), true, flags: JSON_THROW_ON_ERROR),
 			'settings' => $this->settings,'camera' => ['position' => $this->camera->position,
 				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch],
-			'course' => $this->course->export()], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
+			'balloons' => $this->balloons->export(), 'course' => $this->course->export()], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
 	}
 
 	/**
@@ -1205,6 +1288,8 @@ final class Session
 			foreach($settings as $name => $value)
 			if(isset($this->settings[$name]) && is_numeric($this->settings[$name]) && (!is_numeric($value) || !is_finite((float)$value)))
 			throw new \InvalidArgumentException('Invalid saved control value.');
+			$balloons = BalloonPractice::load(array_key_exists('balloons',$data) ? $data['balloons'] : [],
+				$candidate,$candidate->recipe()['waterLevel']);
 			$position = $data['camera']['position'] ?? [0,600,1200];
 			if(!is_array($position) || !array_is_list($position) || count($position) !== 3 || count(array_filter($position, 'is_numeric')) !== 3
 				|| count(array_filter(array_map('floatval', $position), 'is_finite')) !== 3)
@@ -1215,6 +1300,7 @@ final class Session
 		}
 		catch(\InvalidArgumentException $error) { $candidate->close(); throw $error; }
 		$this->replace($candidate);
+		$this->balloons = $balloons;
 		$this->setWaterAppearance($appearance);
 		$this->setTerrainAppearance($terrain);
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
@@ -1251,6 +1337,7 @@ final class Session
 			'settings' => $this->settings,'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
 			'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
+			'jetView' => $this->jetView, 'balloons' => $this->balloons->status(),
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
 			'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),
 			'roadPoints' => $this->road,'message' => $this->message,

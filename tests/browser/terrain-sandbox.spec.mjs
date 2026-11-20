@@ -256,6 +256,62 @@ test('fly the F5, pause in a bank, and return to free flight', async({page}) => 
 	expect(errors).toEqual([]);
 });
 
+test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({page}) => {
+	test.setTimeout(180_000);
+	await page.setViewportSize({width: 720, height: 480});
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+
+	await page.addInitScript(() => {
+		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false}));
+		const pad = {id: 'F5 test controller', index: 0, timestamp: 1, mapping: 'standard', connected: true,
+			axes: [0,0,0,0], buttons};
+		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+
+		window.testF5Button = (n, on) => {
+			pad.timestamp++;
+			buttons[n] = {value: Number(on), pressed: on, touched: on};
+		};
+	});
+
+	await boot(page);
+	const airspace = fixture();
+	airspace.landscape.recipe.worldSize = 8192;
+	airspace.camera = {position: [0,150,0], yaw: 0, pitch: 0};
+	await load(page, airspace);
+	await press(page, 'jet');
+	await press(page, 'balloon-practice');
+
+	const setButton = (n, on) => page.evaluate(([n,on]) => window.testF5Button(n, on), [n,on]);
+	await setButton(11, true);
+	await expect.poll(async() => (await status(page)).jetView).toBe('cockpit');
+	await setButton(11, false);
+	await expect(page.locator('.terrain-instruments')).toBeVisible();
+	await expect(page.locator('.terrain-panel')).not.toHaveAttribute('open', '');
+	await expect.poll(async() => (await status(page)).balloons.locked).toBe(true);
+	await setButton(0, true);
+	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: 60_000}).toBe(1);
+	await setButton(0, false);
+	await expect.poll(async() => (await status(page)).balloons.locked).toBe(true);
+	await setButton(2, true);
+	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: 60_000}).toBe(2);
+	await setButton(2, false);
+	expect((await status(page)).headlights).toBe('auto');
+	await canvas(page).focus();
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status(page)).paused).toBe(true);
+	const before = (await status(page)).balloons;
+	await restoreContext(page);
+	expect((await status(page)).balloons).toEqual(before);
+	expect(await canvas(page).evaluate(el => el.getContext('webgl2').getError())).toBe(0);
+	await page.keyboard.press('v');
+	await expect.poll(async() => (await status(page)).jetView).toBe('chase');
+	await expect(page.locator('.terrain-panel')).toHaveAttribute('open', '');
+	await page.keyboard.press('f');
+	await expect(page.locator('.terrain-instruments')).toBeHidden();
+	expect(errors).toEqual([]);
+});
+
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));

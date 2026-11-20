@@ -59,10 +59,13 @@ export function activate({module, canvas, session, services})
 	const focusedField = target => target instanceof HTMLElement && Boolean(target.closest('input,select,textarea'));
 
 	// These fields send nothing while their text is out of range, and return to the last value sent when left so.
-	const checked = new Set(['waterLevel', 'gateLaps', 'gateAltitude', 'gateWidth', 'gateHeight']);
+	const checked = new Set(['waterLevel', 'gateLaps', 'gateAltitude', 'gateWidth', 'gateHeight', 'balloonAltitude']);
 	const gateTool = frame.querySelector('[data-gate-tool]');
 
-	const showToolControls = () => { gateTool.hidden = controls.get('tool').value !== 'gate'; };
+	const showToolControls = () => {
+		gateTool.hidden = controls.get('tool').value !== 'gate';
+		frame.querySelector('[data-balloon-tool]').hidden = controls.get('tool').value !== 'balloon';
+	};
 
 	const listen = field => {
 		field.addEventListener('input', () => {
@@ -263,7 +266,7 @@ export function activate({module, canvas, session, services})
 	}, {signal});
 
 	const heldKeys = new Set(
-		['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyZ','KeyX','Space','ShiftLeft','ShiftRight']
+		['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyZ','KeyX','KeyG','Space','ShiftLeft','ShiftRight']
 	);
 
 	const commands = {
@@ -277,6 +280,8 @@ export function activate({module, canvas, session, services})
 		, KeyR: 'race-reset'
 
 		, KeyL: 'headlights'
+		, KeyV: 'jet-view'
+		, KeyT: 'jet-target'
 	};
 
 	frame.addEventListener('keydown', event => {
@@ -289,6 +294,9 @@ export function activate({module, canvas, session, services})
 		if(heldKeys.has(event.code) && !event.ctrlKey && !event.metaKey && !activates)
 		{
 			keys[event.code] = true;
+
+			if(event.code === 'Space' && !event.repeat) push('jet-launch');
+
 			event.preventDefault();
 		}
 
@@ -364,12 +372,16 @@ export function activate({module, canvas, session, services})
 	const jetControls = controls.get('jetControls');
 	const invertPitch = controls.get('invertPitch');
 
+	let jetView = 'chase';
+	const panel = frame.querySelector('.terrain-panel');
+	let panelBeforeCockpit = true;
+
 	const rememberJet = () => {
 		try
 		{
 			localStorage.setItem(
 				JET_PREFERENCE
-				, JSON.stringify({jetControls: jetControls.value, invertPitch: invertPitch.checked})
+				, JSON.stringify({jetControls: jetControls.value, invertPitch: invertPitch.checked, jetView})
 			);
 		}
 		catch
@@ -383,6 +395,8 @@ export function activate({module, canvas, session, services})
 		const saved = JSON.parse(localStorage.getItem(JET_PREFERENCE) ?? 'null');
 
 		if(['novice','expert'].includes(saved?.jetControls)) values.jetControls = jetControls.value = saved.jetControls;
+
+		if(['cockpit','chase'].includes(saved?.jetView)) values.jetView = jetView = saved.jetView;
 
 		if(typeof saved?.invertPitch === 'boolean') values.invertPitch = invertPitch.checked = saved.invertPitch;
 	}
@@ -478,6 +492,29 @@ export function activate({module, canvas, session, services})
 		dataset: 'terrainSandbox'
 		, handler: state => {
 			latest = state;
+
+			if(jetView !== state.jetView)
+			{
+				jetView = state.jetView;
+				rememberJet();
+			}
+
+			frame.querySelector('[data-jet-actions]').hidden = state.mode !== 'jet';
+			button('jet-view').textContent = jetView === 'chase' ? 'Cockpit · V' : 'Chase view · V';
+			const cockpit = state.mode === 'jet' && jetView === 'cockpit';
+
+			if(frame.classList.contains('in-cockpit') !== cockpit)
+			{
+				if(cockpit)
+				{
+					panelBeforeCockpit = panel.open;
+					panel.open = false;
+				}
+				else panel.open = panelBeforeCockpit;
+
+				frame.classList.toggle('in-cockpit', cockpit);
+			}
+
 			showSurface(state);
 
 			// Back on a gamepad switches the handling in PHP. Show it here and remember it.
@@ -841,7 +878,12 @@ const HEADLIGHTS = ['auto', 'on', 'off'];
 /** Gamepad buttons in the standard layout that issue a command when pressed. */
 const PAD_COMMANDS = new Map([
 	[9, 'pause'], [8, 'jet-controls'], [12, 'jet'], [14, 'car'], [15, 'craft']
-	, [13, 'fly'], [3, 'race-reset'], [2, 'headlights']
+	, [13, 'fly']
+	, [3, 'race-reset']
+	, [2, 'pad-x']
+	, [0, 'jet-launch']
+	, [1, 'jet-target']
+	, [11, 'jet-view']
 ]);
 
 /** Gamepad buttons PHP reads while held: A, B, X, Y, LB, RB and the two stick clicks, with their bits in the packet. */
@@ -1019,7 +1061,7 @@ function markup()
 	return `<style>
 	.terrain-sandbox{position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
 	.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
-	.terrain-note a{color:inherit}.terrain-stage{position:absolute;inset:0}.terrain-panel{position:absolute;right:14px;top:14px;max-height:calc(100% - 28px);width:300px;overflow:auto;border:1px solid #aec8bb65;border-radius:12px;background:#102822eb;box-shadow:0 8px 30px #0006;backdrop-filter:blur(10px)}
+	.in-cockpit .terrain-panel:not([open]){width:auto;top:auto;right:50%;bottom:4px;transform:translateX(50%)}.in-cockpit .terrain-panel:not([open])>summary{padding:3px 8px;font-size:11px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud{display:none}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud:has([data-race]:not([hidden])){display:block;bottom:43px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud>:not([data-race]){display:none}.terrain-note a{color:inherit}.terrain-stage{position:absolute;inset:0}.terrain-panel{position:absolute;right:14px;top:14px;max-height:calc(100% - 28px);width:300px;overflow:auto;border:1px solid #aec8bb65;border-radius:12px;background:#102822eb;box-shadow:0 8px 30px #0006;backdrop-filter:blur(10px)}
 	.terrain-panel>summary{padding:12px 15px;cursor:pointer;letter-spacing:.07em;font-weight:700}.terrain-panel>div{padding:0 14px 14px}.terrain-panel h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a8cfbd;margin:20px 0 8px}.terrain-panel h2:first-child{margin-top:3px}
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #779d8970;border-radius:5px;min-height:32px;padding:5px 8px;font:inherit}
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}
@@ -1048,7 +1090,9 @@ function markup()
 	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-shape" aria-labelledby="terrain-tab-shape" data-tab-panel="shape" hidden>
-	<label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option></select></label>
+	<label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option><option value="balloon">Balloon</option></select></label>
+	<div data-balloon-tool hidden><label class="terrain-field">Balloon tool<select data-value="balloonTool"><option value="place">Place</option><option value="remove">Remove</option></select></label>
+	<label class="terrain-field">Height above surface · m<input data-value="balloonAltitude" type="number" min="12" max="1200" value="100"></label></div>
 	<div data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
 	<label class="terrain-field">Laps · start / finish courses only<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
 	<p class="terrain-note" data-gate-laps>Laps count when the start gate is also the finish.</p>
@@ -1141,12 +1185,15 @@ function markup()
 	${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
+	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
+	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
+	<p class="terrain-note">Space / A launches · hold G / X for Vulcan · T / B cycles balloons · V / right-stick click changes view.</p></div>
 	<label class="terrain-field">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
 	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on when the sun is low</option><option value="on">On</option><option value="off">Off</option></select></label>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<p class="terrain-note">Gamepad: left stick flies, steers or banks · right stick looks · RT/LT climb or descend, accelerate or brake · A: handbrake · X: headlights · LB/RB: Expert rudder · D-pad: ↑ jet, ← car, → watercraft, ↓ free flight · Y: reset the race · Start: pause · Back: Novice or Expert.</p>
-	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></p>
+	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p>
 	</section>
 	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

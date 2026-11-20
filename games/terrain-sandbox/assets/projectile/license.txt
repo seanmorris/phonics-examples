@@ -1,0 +1,11 @@
+Model Information:
+* title:	Heatseeker Air-Air missile
+* source:	https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856
+* author:	Martini-SF (https://sketchfab.com/Martini-SF)
+
+Model License:
+* license type:	CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)
+* requirements:	Author must be credited. No commercial use.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Heatseeker Air-Air missile" (https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856) by Martini-SF (https://sketchfab.com/Martini-SF) licensed under CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)

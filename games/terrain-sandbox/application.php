@@ -15,10 +15,12 @@ use TerrainPhonics\Scene;
 use TerrainPhonics\BrowserPatchBuilder;
 use TerrainSandbox\GateModel;
 use TerrainSandbox\VehicleModel;
+use TerrainSandbox\TracerBatch;
 use TerrainSandbox\Session;
 
 $app = new Context;
 $app->browser(__DIR__ . '/browser/game.mjs');
+$app->browser(__DIR__ . '/browser/cockpit.mjs');
 $app->browser($archive . 'dependencies/terrain-phonics/browser/PatchMesher.mjs');
 $session = new Session;
 $engine = new Engine(new Device(1280, 720, 'Landscape Sandbox'));
@@ -31,6 +33,8 @@ $batch = vrzno_env('terrainPatchBatch');
 $builder = new BrowserPatchBuilder(static fn($action, $path, $key, $payload) => $batch($action, $path, $key, $payload));
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere, $builder);
 $models = [];
+$tracers = null;
+$shotAlpha = 1.0;
 $gates = new GateModel($session->gateShapes, __DIR__ . '/assets/gates/');
 $courseRevision = -1;
 $course = null;
@@ -55,6 +59,9 @@ $inputMs = 0.0;
 $pickFrame = false;
 $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
+$hud = vrzno_env('terrainJetFrame');
+$hudShown = false;
+(vrzno_env('terrainHudArt'))(base64_encode(file_get_contents(__DIR__ . '/assets/f5/hud-labels.png')));
 // The panel builds its Surface tab once from the appearance settings' groups, ranges, defaults and per-style use.
 (vrzno_env('terrainSurface'))(json_encode(['groups' => TerrainPhonics\TerrainAppearance::GROUPS,
 	'ranges' => TerrainPhonics\TerrainAppearance::RANGES, 'defaults' => TerrainPhonics\TerrainAppearance::DEFAULTS,
@@ -119,14 +126,32 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	return false;
 });
 
-$drawOpaque = static function() use ($session, $gates, &$models, &$width, &$height, &$viewCamera, &$vehiclePose): void {
-	if($session->mode !== 'fly')
+$drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$shotAlpha, &$width, &$height, &$viewCamera, &$vehiclePose): void {
+	if($session->mode !== 'fly' && !($session->mode === 'jet' && $session->jetView === 'cockpit'))
 	{
 		$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
 		$model = $models[$name] ??= new VehicleModel(__DIR__ . '/assets/' . $name . '/mesh.bin.gz');
 		$model->draw($vehiclePose ?? $session->craft->state(),
 			$viewCamera, $session->atmosphere, $session->water, $width, $height);
 	}
+	foreach($session->balloons->targets() as [$x,$y,$z])
+	{
+		$model = $models['balloon'] ??= new VehicleModel(__DIR__ . '/assets/balloon/mesh.bin.gz');
+		$model->draw(['x'=>$x,'y'=>$y,'z'=>$z,'yaw'=>0,'pitch'=>0,'roll'=>0],
+			$viewCamera,$session->atmosphere,$session->water,$width,$height);
+	}
+	$streaks = [];
+	foreach($session->balloons->shots as $shot)
+	{
+		$position = [];
+		foreach($shot['previous'] as $i=>$from) $position[] = $from+($shot['position'][$i]-$from)*$shotAlpha;
+		$dir = $shot['direction'];
+		if($shot['tracer']) { $streaks[] = [$position,$dir]; continue; }
+		$model = $models['projectile'] ??= new VehicleModel(__DIR__ . '/assets/projectile/mesh.bin.gz');
+		$model->draw(['x'=>$position[0],'y'=>$position[1],'z'=>$position[2],'yaw'=>atan2($dir[0],$dir[2]),
+			'pitch'=>asin(max(-1,min(1,$dir[1]))),'roll'=>0], $viewCamera,$session->atmosphere,$session->water,$width,$height);
+	}
+	if($streaks) ($tracers ??= new TracerBatch)->draw($streaks,$viewCamera,$width,$height);
 	// Gates draw in free flight too, where the course is edited.
 	if($session->course->count() > 0)
 		$gates->draw($session->course, $viewCamera, $session->atmosphere, $session->water, $width, $height);
@@ -136,8 +161,9 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, $publish
+		&$carLamps, &$spotLights, &$shotAlpha, &$hudShown, $hud, $publish
 	): void {
+		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
 		[$viewCamera,$vehiclePose] = $session->view($alpha);
 		// Lamp levels blend between steps like the pose, and a change in either redraws the frame below.
@@ -152,7 +178,7 @@ $engine->start(
 			$scene->setSpotLights($spotLights = $lights);
 			$dirty = true;
 		}
-		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->fov];
+		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->roll,$viewCamera->fov];
 		$moving = $session->mode === 'craft' || $pose !== $lastBudgetPose;
 		// High-refresh frames can advance the presentation fraction without a new simulation tick.
 		if($vehiclePose !== null && ($lastVehicle !== $vehiclePose || $moving)) $dirty = true;
@@ -180,8 +206,18 @@ $engine->start(
 			$engine->device->resize($width, $height);
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
-				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 ? null : $drawOpaque);
+				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$session->balloons->targets() ? null : $drawOpaque);
 			$engine->device->present();
+			if($session->mode === 'jet' && ($session->jetView === 'cockpit' || $session->balloons->targets()
+				|| $session->balloons->elapsed < $session->balloons->hitUntil))
+			{
+				$hudShown = true;
+				$hud(json_encode(['width'=>$width,'height'=>$height,'eye'=>$viewCamera->position,'basis'=>$viewCamera->basis(),
+					'fov'=>$viewCamera->fov,'jet'=>$vehiclePose,'cockpit'=>$session->jetView === 'cockpit',
+					'power'=>$session->jetPower(),'range'=>$session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
+					'targets'=>$session->balloons->targets()], JSON_THROW_ON_ERROR));
+			}
+			elseif($hudShown) { $hud(''); $hudShown = false; }
 			$renderMs = (microtime(true) - $start) * 1000;
 			$drawIntervalMs = $lastRender === null ? null : ($now - $lastRender) * 1000;
 			$lastRender = $now;
@@ -201,15 +237,17 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $gates, &$models): void {
+	static function() use ($engine, $session, $scene, $gates, &$models, &$tracers): void {
 		$engine->systems->remove('terrain-sandbox.simulate');
 		foreach($models as $model) $model->close();
+		$tracers?->close(); $tracers = null;
 		$gates->release();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $gates, &$models, &$dirty): void {
+	static function() use ($scene, $gates, &$models, &$tracers, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
+		$tracers?->close(); $tracers = null;
 		$gates->release();
 		$scene->restore();
 		$dirty = true;

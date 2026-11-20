@@ -426,6 +426,18 @@ final class Jet
 		return $block;
 	}
 
+	/** Pilot eye in the forward canopy, relative to the aircraft's balance point. */
+	public static function cockpit(array $p): Camera
+	{
+		$eye = new Camera;
+		$eye->yaw = M_PI - $p['yaw'];
+		$eye->pitch = $p['pitch'];
+		$eye->roll = $p['roll'];
+		[$nose,,$up] = $eye->basis();
+		foreach(['x','y','z'] as $i=>$axis) $eye->position[$i] = $p[$axis]+4.6*$nose[$i]+.85*$up[$i];
+		return $eye;
+	}
+
 	private function placeCamera(Camera $camera, array $p): void
 	{
 		if($this->expert)
