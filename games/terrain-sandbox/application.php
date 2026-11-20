@@ -12,6 +12,7 @@ use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
+use TerrainSandbox\Car;
 use TerrainSandbox\GateModel;
 use TerrainPhonics\TerrainAppearance;
 use TerrainSandbox\GroundShadow;
@@ -230,6 +231,7 @@ $engine->start(
 					$session->atmosphere->uniforms()['nightVisibility']);
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
+			$carHudSize = $car ? (int)round(min(240, $width*.275, $height*.30)) : null;
 			$frame = $jet || $car ? ['width'=>$width,'height'=>$height] : null;
 			$showMap = $jet ? $session->jetMap || $session->jetWideMap : $car && $session->carMap;
 			if($showMap)
@@ -238,9 +240,10 @@ $engine->start(
 				$bearing = M_PI-$vehiclePose['yaw']+($jet && cos($vehiclePose['pitch']) < 0 ? M_PI : 0);
 				$position = [$vehiclePose['x'],$vehiclePose['z']];
 				$extent = $session->landscape->recipe()['worldSize'];
-				$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'wide'=>$wide,'span'=>$wide ? $extent : min(4000.,$extent)];
+				$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'wide'=>$wide,
+					'span'=>$wide ? $extent : min(4000.,$extent),'size'=>$carHudSize];
 				$scene->drawChart($position,$bearing,$wide,$width,$height,
-					TerrainAppearance::linear($session->settings['waterColor']));
+					TerrainAppearance::linear($session->settings['waterColor']),$carHudSize);
 			}
 			$engine->device->present();
 			if($jet)
@@ -251,7 +254,8 @@ $engine->start(
 					'contactRange'=>TerrainSandbox\BalloonPractice::CONTACT_RANGE,
 					'targets'=>$session->balloons->targets()];
 			}
-			if($car) $frame['speedKph'] = abs($vehiclePose['speed'])*3.6;
+			if($car) $frame['speedometer'] = ['mph'=>abs($vehiclePose['speed'])/Car::MPS_PER_MPH,
+				'maximum'=>Car::TOP_SPEED_MPH,'size'=>$carHudSize];
 			if($frame !== null || $hudShown)
 			{
 				$hud($frame !== null ? json_encode($frame, JSON_THROW_ON_ERROR) : '');

@@ -10,6 +10,10 @@ final class Car
 {
 	// Metres, measured from the baked Testarossa. Its origin is midway between the axles.
 	public const WHEELBASE = 2.515, FRONT_TRACK = 1.57, REAR_TRACK = 1.644, TIRE_RADIUS = .297;
+	public const TOP_SPEED_MPH = 240, MPS_PER_MPH = .44704;
+	private const TOP_SPEED = self::TOP_SPEED_MPH * self::MPS_PER_MPH;
+	// Keep the low-speed resistance while allowing a long straight to reach the speed governor.
+	private const ROAD_DRAG = .0059, ROAD_DRAG_LIMIT = 30, AERO_DRAG = .0001;
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
 	private float $speed = 0, $steering = 0, $spin = 0;
 	/** Angle in radians from the direction of travel to the way the body points, while the tail slides out. */
@@ -169,26 +173,30 @@ final class Car
 		$target = -$turn * .52 / (1 + .035 * abs($this->speed));
 		$this->steering += max(-2.5*$dt, min(2.5*$dt, $target - $this->steering));
 		$gripFraction = $this->suspension->contacts/4;
-		$grade = sin($this->roadPitch);
-		if($gripFraction > 0 && $throttle == 0)
-		{
-			if($this->speed != 0 || abs($grade) > .18) $this->speed -= 9.81*$grade*$dt*$gripFraction;
-			$drag = (1.7 + .006*$this->speed**2)*$dt;
-			$this->speed = ($this->speed <=> 0) * max(0.0, abs($this->speed) - $drag*$gripFraction);
-		}
-		elseif($gripFraction > 0)
-		{
-			$power = $throttle*$this->speed < 0 ? 13 : ($throttle > 0 ? 8 : 4);
-			$rearGrip = ($this->suspension->contacts-$this->suspension->frontContacts)/2;
-			$traction = $throttle*$this->speed < 0 ? $gripFraction : $rearGrip;
-			$this->speed += ($throttle*$power*$traction - (.006*$this->speed*abs($this->speed)+9.81*$grade)*$gripFraction)*$dt;
-			$pedal = abs($throttle);
-			// A light pedal leaves some of the rolling resistance a released one would meet.
-			if($pedal < 1)
-				$this->speed = ($this->speed <=> 0)*max(0.0, abs($this->speed) - 1.7*(1 - $pedal)*$gripFraction*$dt);
-			$this->speed = min(36, max(-8, $this->speed));
-		}
 		$rear = ($this->suspension->contacts - $this->suspension->frontContacts)/2;
+		if($gripFraction > 0)
+		{
+			$grade = sin($this->roadPitch);
+			if($throttle == 0 && ($this->speed != 0 || abs($grade) > .18))
+				$this->speed -= 9.81*$grade*$dt*$gripFraction;
+			$speed = abs($this->speed);
+			$drag = self::AERO_DRAG*$speed**2 + self::ROAD_DRAG*min($speed, self::ROAD_DRAG_LIMIT)**2;
+			if($throttle == 0)
+				$this->speed = ($this->speed <=> 0)*max(0.0, $speed - (1.7 + $drag)*$gripFraction*$dt);
+			else
+			{
+				$braking = $throttle*$this->speed < 0;
+				$power = $braking ? 13 : ($throttle > 0 ? 8 : 4);
+				$traction = $braking ? $gripFraction : $rear;
+				$this->speed += ($throttle*$power*$traction - (($this->speed <=> 0)*$drag+9.81*$grade)*$gripFraction)*$dt;
+				$pedal = abs($throttle);
+				// A light pedal leaves some of the rolling resistance a released one would meet.
+				if($pedal < 1)
+					$this->speed = ($this->speed <=> 0)*max(0.0, abs($this->speed) - 1.7*(1 - $pedal)*$gripFraction*$dt);
+				$this->speed = max(-8, $this->speed);
+			}
+			$this->speed = min(self::TOP_SPEED, $this->speed);
+		}
 		if($handbrake && $rear > 0 && $this->speed != 0)
 			$this->speed = ($this->speed <=> 0)*max(0.0, abs($this->speed) - self::HANDBRAKE*$rear*$dt);
 		if($this->drift != 0 && $gripFraction > 0)
@@ -360,7 +368,7 @@ final class Car
 
 	/**
 	 * Keep the body out of every post near one step's travel. The step is checked every quarter metre from the
-	 * current pose, so even at 36 m/s it cannot pass through a post between two checks. Between the last clear check
+	 * current pose, so even at top speed it cannot pass through a post between two checks. Between the last clear check
 	 * and the first touching one, halving the gap finds the moment of contact to a millimetre, so the face the body
 	 * met is known: a bumper corner that clips a post stops on it however the checks fell. The rest of the step then
 	 * slides along that face, keeping only its travel along it.

@@ -550,6 +550,7 @@ final class Clipmap
 		, array $waterColor
 		, SurfaceLayers $layers
 		, TerrainAppearance $appearance
+		, ?int $size = null
 	): void {
 		if(!$this->overview) return;
 
@@ -563,9 +564,9 @@ final class Clipmap
 		}
 
 		$this->paletteOrigin($p);
-		$n = (int)round(min(184, $w * .235, $h * .245));
+		$n = min($size ?? (int)round(min(184, $w * .235, $h * .245)), $w - 10, $h - 10);
 
-		if(!$n) return;
+		if($n <= 0) return;
 
 		$c = cos($bearing);
 		$s = sin($bearing);

@@ -739,7 +739,12 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	const mesh = await fs.readFile(new URL('../../games/terrain-sandbox/assets/testarossa/mesh.bin.gz', import.meta.url));
 	await view.evaluate((element, count) => {
 		const gl = element.getContext('webgl2'), draw = gl.drawElements.bind(gl);
+		const viewport = gl.viewport.bind(gl);
 		element.carDraws = 0;
+		gl.viewport = (x,y,w,h) => {
+			if(x === 10 && y === 10) element.chartSize = [w,h];
+			return viewport(x,y,w,h);
+		};
 		gl.drawElements = (...args) => {
 			if(args[1] === count) element.carDraws++;
 			return draw(...args);
@@ -750,9 +755,12 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(0);
 	const map = page.locator('.terrain-flight-map'), dial = page.locator('.terrain-speedometer');
 	await expect(map).toBeVisible();
-	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 kilometres per hour');
+	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour');
 	await expect(page.locator('.terrain-instruments')).toBeHidden();
 	const viewport = await view.boundingBox(), mapBox = await map.boundingBox(), dialBox = await dial.boundingBox();
+	expect(mapBox.width).toBe(dialBox.width);
+	expect(mapBox.width).toBeGreaterThan(Math.round(Math.min(184, viewport.width*.235, viewport.height*.245)));
+	await expect.poll(() => view.evaluate(element => element.chartSize)).toEqual([mapBox.width,mapBox.height]);
 	expect(mapBox.x-viewport.x).toBeCloseTo(10);
 	expect(viewport.x+viewport.width-dialBox.x-dialBox.width).toBeCloseTo(10);
 	for(const box of [mapBox,dialBox])

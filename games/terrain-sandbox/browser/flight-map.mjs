@@ -30,7 +30,7 @@ export function activate({module, canvas})
 		}
 
 		const {span, wide, bearing, position} = chart;
-		const size = Math.round(Math.min(184, data.width*.235, data.height*.245));
+		const size = chart.size ?? Math.round(Math.min(184, data.width*.235, data.height*.245));
 
 		if(map.hidden || map.width !== size)
 		{

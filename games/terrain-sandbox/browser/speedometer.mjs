@@ -1,8 +1,7 @@
-const fullScale = 160;
-const dialAngle = speed => Math.PI*(.75 + 1.5*speed/fullScale);
+const dialAngle = (speed, maximum) => Math.PI*(.75 + 1.5*speed/maximum);
 
 /** Cache the trim, carbon weave and lettering so a moving needle only repaints the composite. */
-function paintFace(ctx, size)
+function paintFace(ctx, size, maximum)
 {
 	ctx.setTransform(size/160, 0, 0, size/160, size/2, size/2);
 	const rim = ctx.createLinearGradient(0,-78,0,78);
@@ -37,10 +36,10 @@ function paintFace(ctx, size)
 	ctx.textBaseline = 'middle';
 	ctx.font = '700 12px system-ui, sans-serif';
 	ctx.fillStyle = '#fff';
-	for(let speed = 0; speed <= fullScale; speed += 10)
+	for(let speed = 0; speed <= maximum; speed += 10)
 	{
-		const angle = dialAngle(speed), x = Math.cos(angle), y = Math.sin(angle);
-		const major = speed%20 === 0, inner = major ? 61 : 64;
+		const angle = dialAngle(speed, maximum), x = Math.cos(angle), y = Math.sin(angle);
+		const major = speed%30 === 0, inner = major ? 61 : 64;
 		ctx.strokeStyle = major ? '#f8f9fa' : '#a9afb4';
 		ctx.lineWidth = major ? 1.5 : 1;
 		ctx.beginPath();
@@ -50,7 +49,7 @@ function paintFace(ctx, size)
 		if(major) ctx.fillText(speed,x*49,y*49);
 	}
 	ctx.font = '600 10px system-ui, sans-serif';
-	ctx.fillText('km/h',0,33);
+	ctx.fillText('MPH',0,33);
 }
 
 export function activate({module, canvas})
@@ -67,30 +66,29 @@ export function activate({module, canvas})
 	let lastAngle, lastValue;
 
 	module.drawTerrainSpeedometer = frame => {
-		if(frame?.speedKph === undefined)
+		if(!frame?.speedometer)
 		{
 			if(!dial.hidden) dial.hidden = true;
 			return;
 		}
 
-		const {width, height, speedKph} = frame;
-		const size = Math.round(Math.min(160, width*.235, height*.245));
+		const {mph, maximum, size} = frame.speedometer;
 		if(dial.width !== size || dial.height !== size)
 		{
 			dial.width = dial.height = face.width = face.height = size;
-			paintFace(faceCtx, size);
+			paintFace(faceCtx, size, maximum);
 			sandbox.style.setProperty('--speedometer-size', size + 'px');
 			lastAngle = undefined;
 		}
 
 		dial.hidden = false;
-		const value = Math.round(speedKph);
+		const value = Math.round(mph);
 		if(lastValue !== value)
 		{
-			dial.setAttribute('aria-label', `Speedometer, ${value} kilometres per hour`);
+			dial.setAttribute('aria-label', `Speedometer, ${value} miles per hour`);
 			lastValue = value;
 		}
-		const angle = dialAngle(Math.min(speedKph, fullScale));
+		const angle = dialAngle(Math.min(mph, maximum), maximum);
 		if(lastAngle === angle) return;
 		lastAngle = angle;
 		ctx.setTransform(1,0,0,1,0,0);

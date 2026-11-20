@@ -387,7 +387,7 @@ expect($done['state'] === 'finished' && array_column($done['splits'], 'gate') ==
 $monotonic = true;
 for($i = 1; $i < count($times) - 1; $i++) $monotonic = $monotonic && abs($times[$i] - $times[$i - 1] - 1 / 60) < 1e-9;
 expect($monotonic, 'The race clock runs at simulation speed');
-// The car covers the 160 m from the start gate to the finish gate at 10 to 36 m/s, which takes 4.4 to 16 seconds.
+// This short straight measures the gate crossings while the car is still accelerating.
 expect($done['time'] > 4 && $done['time'] < 16, 'The time is the simulated time between the two crossings');
 $t = $done['time'];
 input($sprint, ['actions' => ['pause']]);
@@ -871,7 +871,7 @@ $copy->close();
 $file->close();
 
 // Road gate posts are solid for the car. The gate faces across the car's line, so one post stands in its path.
-$wide = ['worldSize' => 2048, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
+$wide = ['worldSize' => 8192, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
 $wall = new Session($wide);
 $gate = click($wall, 'checkpoint', 0, 400, M_PI / 2);
 $posts = $wall->course->posts();
@@ -880,23 +880,25 @@ $post = $posts[0];
 expect(count($posts) === count($road['posts']) && abs($post[0] - $gate['x']) < 1e-9
 	&& abs($post[1] - (400 - abs($road['posts'][0]['x']))) < .1 && abs($post[5] - ($gate['y'] - Course::POST_FOOT)) < 1e-9,
 	'Each road post stands at its place across the gate and reaches into the ground');
-$wall->camera->position = [0, 30, -300]; $wall->camera->yaw = M_PI;
+$wall->camera->position = [0, 30, -3500]; $wall->camera->yaw = M_PI;
 enterCar($wall);
-$overlap = 0.0; $fastest = 0.0; $impact = null;
+$overlap = 0.0; $fastest = 0.0; $impact = null; $topSpeedTicks = 0;
 $front = $post[1] - $post[2] - Car::BODY_FRONT;
 $deepest = function(Session $session) use (&$overlap, $posts): array {
 	$car = $session->car->state();
 	foreach($posts as $p) $overlap = max($overlap, Car::penetration($car['x'], $car['z'], $car['yaw'], $p)[0] ?? 0.0);
 	return $car;
 };
-drive($wall, ['KeyW' => true], 2400, function(Session $session) use ($deepest, &$fastest, &$impact): bool {
+drive($wall, ['KeyW' => true], 4800, function(Session $session) use ($deepest, &$fastest, &$impact, &$topSpeedTicks): bool {
 	$car = $deepest($session);
 	if($impact === null && $car['speed'] < $fastest - 5) $impact = ['before' => $fastest, 'after' => $car];
 	$fastest = max($fastest, $car['speed']);
+	if(abs($car['speed'] - 107.2896) < 1e-6) $topSpeedTicks++;
 	return $impact !== null && $car['speed'] > 0 && abs($car['speed']) < .1 && $car['z'] > $impact['after']['z'] + .1;
 });
-expect($impact !== null && $impact['before'] === 36.0 && $impact['after']['speed'] < -5 && $overlap < 1e-3
-	&& abs($impact['after']['z'] - $front) < .01, 'At 36 m/s the car stops dead at the post and bounces back');
+expect($topSpeedTicks >= 60 && abs($fastest - 107.2896) < 1e-6, 'The car reaches and holds 240 mph on level ground');
+expect($impact !== null && abs($impact['before'] - 107.2896) < 1e-6 && $impact['after']['speed'] < -5 && $overlap < 1e-3
+	&& abs($impact['after']['z'] - $front) < .01, 'At 240 mph the car stops at the post and bounces back');
 drive($wall, ['KeyW' => true], 120, fn(Session $session): bool => $deepest($session) && false);
 $pressing = $wall->car->state();
 expect($pressing['z'] <= $front + 1e-3 && $pressing['z'] > $front - .05 && abs($pressing['speed']) < .3 && $overlap < 1e-3,
