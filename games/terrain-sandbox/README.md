@@ -22,6 +22,19 @@ The Testarossa sits on a soft dark patch of ground (`src/GroundShadow.php`), the
 
 The panel's Surface tab sets the terrain package's `TerrainAppearance`: the ground's colours, banding and blending. PHP sends the settings' groups, ranges, defaults and `TerrainAppearance::USES` once through the `terrainSurface` bridge, and the page shows only the settings the current preset reads (`state.surfaceStyle`). The settings are ordinary saved settings; `Session::load()` builds the whole appearance from a file before it replaces anything.
 
+## Terrain streaming measurements
+
+Chromium with SwiftShader, a 640 × 400 viewport, balanced detail and 40 animation callbacks per phase. The camera starts at 750 m and the moving phase uses forward flight at 300 m/s. Coverage measures from submitting the load until terrain is first visible. The baseline is the previous shared preview, including its worker. The GPU result uses the new terrain package in the private preview.
+
+| Preset | First coverage, ms before → after | Stationary p95 / p99, ms before → after | Moving p95 / p99, ms before → after | Moving vertex upload, MB before → after |
+| --- | ---: | ---: | ---: | ---: |
+| Coast | 503 → 479 | 467 / 533 → 300 / 400 | 533 / 533 → 217 / 333 | 5.56 → 0 |
+| Mountain | 678 → 365 | 467 / 500 → 267 / 400 | 633 / 683 → 317 / 417 | 5.37 → 0 |
+| Canyon v1 | 645 → 243 | 500 / 533 → 283 / 350 | 550 / 550 → 317 / 417 | 5.27 → 0 |
+| Canyon v2 | 588 → 223 | 367 / 450 → 283 / 350 | 500 / 567 → 267 / 433 | 4.79 → 0 |
+
+Balanced detail retained about 2.4 MB of elevation and material textures during this run. The old pipeline held 11.2–12.5 MB of terrain meshes at the end of moving samples. Browser CPU rendering limits these frame rates. Discrete GPU timing, the lowest detail setting and matching projected error between the two renderers have yet to be measured.
+
 ## Watercraft model
 
 The watercraft uses “Jetski” by Futurealiti. The sandbox uses a simplified mesh and a resized dashboard texture. To regenerate them, run `python3 scripts/import-terrain-jetski.py /path/to/jetski.zip` with gltfpack 0.18 and ImageMagick on the path. [Original model](https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b) · [Author](https://sketchfab.com/futurealiti) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
