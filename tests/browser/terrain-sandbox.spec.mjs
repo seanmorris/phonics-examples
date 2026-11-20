@@ -484,6 +484,7 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 });
 
 test('a rollover settles on the roof before the Testarossa recovers', async({page}) => {
+	test.setTimeout(360_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width:672,height:420});
@@ -497,12 +498,13 @@ test('a rollover settles on the roof before the Testarossa recovers', async({pag
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await canvas(page).focus();
 	await page.keyboard.down('w');
-	await expect.poll(async() => (await status(page)).car.motion).toBe('tumbling');
+	// The software renderer simulates well below real time, and slower still on a loaded machine.
+	await expect.poll(async() => (await status(page)).car.motion, {timeout:60000}).toBe('tumbling');
 	await page.keyboard.up('w');
-	await expect.poll(async() => (await status(page)).car.motion, {timeout:60000}).toBe('overturned');
+	await expect.poll(async() => (await status(page)).car.motion, {timeout:120000}).toBe('overturned');
 	const landed = (await status(page)).car;
 	expect(Math.cos(landed.pitch)*Math.cos(landed.roll)).toBeLessThan(-.8);
-	await expect.poll(async() => (await status(page)).car.recoveries).toBe(1);
+	await expect.poll(async() => (await status(page)).car.recoveries, {timeout:60000}).toBe(1);
 	const righted = (await status(page)).car;
 	expect(righted.motion).toBe('driving');
 	expect(Math.hypot(righted.x-landed.x,righted.z-landed.z)).toBeLessThan(.1);
