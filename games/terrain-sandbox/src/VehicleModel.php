@@ -32,7 +32,7 @@ final class VehicleModel
 	 * Each headlamp's beam on the ground and water, in the units of the terrain package's SpotLights: candela on the
 	 * axis at full brightness, the range in metres, and the cone's inner and outer half-angles in radians.
 	 */
-	public const BEAM_INTENSITY = 20000.0, BEAM_RANGE = 80.0, BEAM_INNER = .05, BEAM_OUTER = .3;
+	public const BEAM_INTENSITY = 80000.0, BEAM_RANGE = 120.0, BEAM_INNER = .1, BEAM_OUTER = .3;
 	/**
 	 * Openings of the pods, as Session::carLamps() gives them, between which the rising headlamps clear the car's
 	 * nose. Below the first the nose stops all of each beam, and above the second it stops less than 1%.
