@@ -233,6 +233,35 @@ final class Course
 	}
 
 	/**
+	 * Fit the road and air gates over changed ground to it again, as place() fits a new gate: a road gate stands on
+	 * the highest ground across its span and its posts reach the ground under them. Water gates float and stay.
+	 * @param \Closure $ground fn(float $x, float $z): float giving the ground height now.
+	 * @param array|null $region [minX, minZ, maxX, maxZ] in metres around the ground that changed, as
+	 * Landscape::changedRegion() gives it, an empty array when nothing changed, or null when all of it may have.
+	 * @return bool Whether any gate moved or now stands over different ground. Only then does the revision change.
+	 */
+	public function refit(\Closure $ground, ?array $region = null): bool
+	{
+		if($region === []) return false;
+		$changed = false;
+		$refit = function(?array $gate) use ($ground, $region, &$changed): ?array {
+			if($gate === null || $gate['kind'] === 'water') return $gate;
+			$extent = $this->measure($gate)['extent'];
+			$reach = hypot($extent['halfWidth'], $extent['halfDepth']);
+			if($region !== null && ($gate['x'] + $reach < $region[0] || $gate['x'] - $reach > $region[2]
+				|| $gate['z'] + $reach < $region[1] || $gate['z'] - $reach > $region[3])) return $gate;
+			$fitted = $this->fit($gate, $ground);
+			$changed = $changed || $fitted !== $gate;
+			return $fitted;
+		};
+		$this->start = $refit($this->start);
+		$this->finish = $refit($this->finish);
+		foreach($this->checkpoints as $index => $gate) $this->checkpoints[$index] = $refit($gate);
+		if($changed) $this->revision++;
+		return $changed;
+	}
+
+	/**
 	 * Remove one gate. Checkpoints after a removed one move up a number.
 	 * @param int $id Gate id.
 	 * @return array|null The removed gate, or null when no gate has that id.

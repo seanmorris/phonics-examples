@@ -468,6 +468,48 @@ expect($ramp->landscape->height(7, 0) - $ramp->landscape->height(-7, 0) > 1 && n
 	'On a graded ramp the gate stands on the higher ground and model.vert sets each base plate on the ground under it');
 $ramp->close();
 
+// Editing the ground under a road gate fits the gate to it again: lowered 6 m, the gate comes down with it, and raised
+// 6 m, its board rises clear. The car drives through either and starts the race. An edit away from every gate leaves
+// the course as it was.
+foreach([-6.0, 6.0] as $change)
+{
+	$dig = new Session(['worldSize' => 2048, 'spacing' => 2, 'heightScale' => 0, 'detailAmplitude' => 0,
+		'waterLevel' => -50]);
+	$dig->course->place('start', 'road', 0, 0, 150, 0, 1, null, null,
+		fn(float $x, float $z): float => $dig->landscape->height($x, $z));
+	$far = $dig->course->place('checkpoint', 'air', 0, 20, 900, 0, 1, null, null,
+		fn(float $x, float $z): float => $dig->landscape->height($x, $z))['gate'];
+	$edited = TerrainPhonics\Landscape::load($dig->landscape->save());
+	$edited->queue(['type' => $change < 0 ? 'lower' : 'raise', 'x' => 0.0, 'z' => 150.0, 'radius' => 60.0,
+		'amount' => abs($change)]);
+	$edited->commit();
+	$revision = $dig->course->revision;
+	$dig->publishLandscape($edited);
+	$gate = $dig->course->start();
+	$heights = [];
+	for($x = -$half; $x <= $half; $x += .5) $heights[] = $dig->landscape->height($x, 150);
+	$farNow = $dig->course->gate($far['id']);
+	expect($dig->course->revision > $revision && near($gate['y'], max($heights), .05)
+		&& near($gate['y'] + $gate['footings'][0], min($heights), .5) && $farNow === $far,
+		"Ground changed by $change m under a road gate refits it: " . json_encode([$gate['y'], max($heights)]));
+	$dig->camera->position = [0, 30, 60]; $dig->camera->yaw = M_PI; $dig->camera->pitch = -.3;
+	input($dig, ['actions' => ['car']]);
+	for($i = 0; $dig->findingCarSite() && $i < 2000; $i++) input($dig, []);
+	$reach = $dig->status()['race']['reach'];
+	input($dig, ['keys' => ['KeyW' => true]]);
+	for($i = 0; $i < 900 && $dig->race->state === 'idle'; $i++) $dig->step(1 / 60);
+	expect($reach === null && $dig->race->state === 'running',
+		"The car drives through the refitted gate and starts the race: " . json_encode([$reach, $dig->race->state]));
+	input($dig, ['actions' => ['fly']]);
+	$revision = $dig->course->revision;
+	$elsewhere = TerrainPhonics\Landscape::load($dig->landscape->save());
+	$elsewhere->queue(['type' => 'raise', 'x' => 600.0, 'z' => 400.0, 'radius' => 40.0, 'amount' => 10.0]);
+	$elsewhere->commit();
+	$dig->publishLandscape($elsewhere);
+	expect($dig->course->revision === $revision, 'An edit away from every gate leaves the course revision as it was');
+	$dig->close();
+}
+
 // Saved files keep each gate's size. A file from before sizes loads with each kind's own size, reads its old
 // gateHeight setting as the air gate altitude, and stands its road gates on the higher ground across their span.
 $file = new Session($flat);
