@@ -232,8 +232,7 @@ $engine->start(
 				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
 			$engine->device->present();
-			if($session->mode === 'jet' && ($session->jetMap || $session->jetWideMap || $session->jetView === 'cockpit' || $session->balloons->targets()
-				|| $session->balloons->elapsed < $session->balloons->hitUntil))
+			if($session->mode === 'jet')
 			{
 				$hudShown = true;
 				$showMap = $session->jetMap || $session->jetWideMap;

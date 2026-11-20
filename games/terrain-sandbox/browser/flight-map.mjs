@@ -1,5 +1,6 @@
-/** North-up relief chart made from the terrain meshes that have already reached the scene. */
+/** Heading-up relief chart made from the terrain meshes that have already reached the scene. */
 const cells = 32, pixels = 48, stride = cells+1;
+const headings = ['N','NE','E','SE','S','SW','W','NW'];
 
 const clamp = n => Math.max(0, Math.min(1, n));
 
@@ -110,7 +111,7 @@ export function activate({module, canvas})
 	const map = document.createElement('canvas');
 	map.className = 'terrain-flight-map';
 	map.setAttribute('role', 'img');
-	map.setAttribute('aria-label', 'North-up terrain elevation map with aircraft heading and balloon positions');
+	map.setAttribute('aria-label', 'Heading-up terrain elevation map with balloon positions');
 	map.hidden = true;
 
 	canvas.parentElement.append(map);
@@ -128,7 +129,7 @@ export function activate({module, canvas})
 		ordered = [];
 	}
 
-	module.drawTerrainFlightMap = data => {
+	module.drawTerrainFlightMap = (data, bearing) => {
 		const delta = data?.map;
 
 		if(!delta)
@@ -174,25 +175,38 @@ export function activate({module, canvas})
 			frame.classList.add('has-flight-map');
 		}
 
-		const mid = size/2, scale = size/span, jet = data.jet;
-
+		const mid = size/2, jet = data.jet;
+		const c = Math.cos(bearing), s = Math.sin(bearing);
+		const diagonal = Math.abs(c)+Math.abs(s);
+		// Fit all four corners of the landscape on the wide chart at every heading.
+		const scale = size/(wide ? span*diagonal : span);
 		const centerX = wide ? 0 : jet.x, centerZ = wide ? 0 : jet.z;
 
-		const px = x => mid+(x-centerX)*scale, py = z => mid+(z-centerZ)*scale;
+		function offset(x, z)
+		{
+			const dx = (x-centerX)*scale, dz = (z-centerZ)*scale;
+
+			return [c*dx+s*dz, -s*dx+c*dz];
+		}
+
 		ctx.fillStyle = '#132328';
 		ctx.fillRect(0, 0, size, size);
+		ctx.save();
+		ctx.transform(c, -s, s, c, mid, mid);
+		const reach = mid*diagonal;
 
 		for(const tile of ordered)
 		{
-			const x = Math.round(px(tile.x)), y = Math.round(py(tile.z));
-			const right = Math.round(px(tile.x+tile.size)), bottom = Math.round(py(tile.z+tile.size));
+			const x = (tile.x-centerX)*scale, y = (tile.z-centerZ)*scale, side = tile.size*scale;
 
-			if(x >= size || y >= size || right <= 0 || bottom <= 0) continue;
+			if(x >= reach || y >= reach || x+side <= -reach || y+side <= -reach) continue;
 
 			tile.image ??= relief(tile, style);
-			ctx.drawImage(tile.image, x, y, right-x, bottom-y);
+			// Cover the antialiased joint between rotated tile edges.
+			ctx.drawImage(tile.image, x-.25, y-.25, side+.5, side+.5);
 		}
 
+		ctx.restore();
 		ctx.lineWidth = 1;
 		ctx.strokeStyle = '#bad5b5';
 		ctx.strokeRect(.5, .5, size-1, size-1);
@@ -202,12 +216,13 @@ export function activate({module, canvas})
 		const bar = meters*scale;
 		ctx.font = 'bold 10px monospace';
 		ctx.fillStyle = '#10201edc';
-		ctx.fillRect(1, 1, 16, 15);
+		ctx.fillRect(1, 1, 20, 15);
 		ctx.fillRect(size-bar-11, size-19, bar+10, 18);
 
 		ctx.fillStyle = '#edf8db';
 		ctx.textAlign = 'center';
-		ctx.fillText('N', 9, 12);
+		const octant = Math.round(bearing/(Math.PI/4));
+		ctx.fillText(headings[(octant%8+8)%8], 11, 12);
 		ctx.fillText(label, size-bar/2-6, size-8);
 		ctx.fillRect(size-bar-6, size-5, bar, 1);
 		ctx.fillRect(size-bar-6, size-7, 1, 3);
@@ -217,7 +232,7 @@ export function activate({module, canvas})
 
 		for(const [id,pos] of Object.entries(data.targets))
 		{
-			const x = px(pos[0])-mid, y = py(pos[2])-mid;
+			const [x,y] = offset(pos[0], pos[2]);
 			const edge = (mid-7)/Math.max(1, Math.abs(x), Math.abs(y));
 
 			ctx.save();
@@ -252,8 +267,8 @@ export function activate({module, canvas})
 		}
 
 		ctx.save();
-		ctx.translate(px(jet.x), py(jet.z));
-		ctx.rotate(Math.PI-jet.yaw);
+		const [jetX,jetY] = offset(jet.x, jet.z);
+		ctx.translate(mid+jetX, mid+jetY);
 
 		ctx.beginPath();
 		ctx.moveTo(0, -7);

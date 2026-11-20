@@ -256,6 +256,94 @@ test('fly the F5, pause in a bank, and return to free flight', async({page}) => 
 	expect(errors).toEqual([]);
 });
 
+test('the heading-up map and altitude radar agree in chase and cockpit views', async({page}) => {
+	await page.setViewportSize({width: 960, height: 760});
+	await page.addInitScript(() => {
+		const proto = CanvasRenderingContext2D.prototype;
+		const drawImage = proto.drawImage, fillText = proto.fillText;
+
+		proto.drawImage = function(...args) {
+			if(this.canvas.matches('.terrain-flight-map')) window.chartEast = this.getTransform().b;
+
+			return drawImage.apply(this, args);
+		};
+
+		proto.fillText = function(label, x, y, ...rest) {
+			if(this.canvas.matches('.terrain-instruments') && ['SPD','ALT'].includes(label))
+			{
+				const position = this.getTransform().transformPoint({x,y});
+				(window.tapeLabels ??= {})[label] = [position.x/this.canvas.width, this.fillStyle];
+			}
+
+			return fillText.call(this, label, x, y, ...rest);
+		};
+	});
+
+	await boot(page);
+	const airspace = fixture();
+	airspace.landscape.recipe.worldSize = 8192;
+	airspace.settings.waterLevel = -1;
+	airspace.camera = {position: [0,200,0], yaw: Math.PI/2, pitch: 0};
+	// Facing east, the level northern balloon is left, the high eastern one ahead, and the low southern one right.
+	airspace.balloons = [[0,-650,200],[800,0,400],[0,650,80]];
+	await load(page, airspace);
+	await canvas(page).focus();
+	await page.keyboard.press('j');
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status(page)).paused).toBe(true);
+
+	const map = page.locator('.terrain-flight-map'), radar = page.locator('.terrain-instruments');
+
+	// Group the actual blip pixels from left to right and compare the top and bottom rows of each glyph.
+	const blips = el => {
+		const isMap = el.matches('.terrain-flight-map'), w = el.width, h = el.height;
+		const pixels = el.getContext('2d').getImageData(0,0,w,h).data;
+		const groups = [];
+		let last = -2;
+
+		for(let x = isMap ? 0 : Math.floor(.82*w); x<w; x++)
+		for(let y = isMap ? 0 : Math.floor(.77*h); y<h; y++)
+		{
+			const i = (w*y+x)*4;
+			const amber = pixels[i+1] === (isMap ? 220 : 202) && pixels[i+2] === (isMap ? 105 : 81);
+			const red = pixels[i+1] === (isMap ? 99 : 81) && pixels[i+2] === (isMap ? 87 : 72);
+			if(pixels[i] !== 255 || pixels[i+3] < 250 || !(amber || red)) continue;
+
+			if(x > last+1) groups.push(new Map());
+			const rows = groups.at(-1);
+			rows.set(y, (rows.get(y) ?? 0)+1);
+			last = x;
+		}
+
+		return groups.map(rows => {
+			const top = Math.min(...rows.keys()), bottom = Math.max(...rows.keys());
+
+			return {y: (top+bottom)/2, tip: Math.sign(rows.get(bottom)-rows.get(top))};
+		});
+	};
+
+	for(const view of ['chase','cockpit'])
+	{
+		if(view === 'cockpit') await page.keyboard.press('v');
+		await expect.poll(async() => (await status(page)).jetView).toBe(view);
+		await expect(radar).toBeVisible();
+		await expect(map).toBeVisible();
+		await expect.poll(() => page.evaluate(() => window.chartEast)).toBeCloseTo(-1);
+		const chart = await map.evaluate(blips);
+		expect(chart).toHaveLength(3);
+		expect(chart[1].y).toBeLessThan(Math.min(chart[0].y, chart[2].y)-10);
+		const contacts = await radar.evaluate(blips);
+		expect(contacts.map(b => b.tip)).toEqual([0,1,-1]);
+		expect(contacts[1].y).toBeLessThan(Math.min(contacts[0].y, contacts[2].y)-10);
+	}
+
+	const {SPD,ALT} = await page.evaluate(() => window.tapeLabels);
+	expect(SPD[0]).toBeLessThan(.09);
+	expect(ALT[0]).toBeGreaterThan(.91);
+	expect([SPD[1],ALT[1]]).toEqual(['#59ff86','#59ff86']);
+});
+
 test('the cockpit flight-path diamond projects ground track through the banked pilot view', async({page}) => {
 	await page.addInitScript(() => {
 		const axes = [0,0,0,0];

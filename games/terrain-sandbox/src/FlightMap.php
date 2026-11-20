@@ -51,7 +51,8 @@ final class FlightMap
 		}
 		if($now < $this->nextPoll) return $delta;
 
-		// Only keep tiles around this chart. A square on the screen needs at most eight 32-cell patches across.
+		// Keep the corners of a rotated chart resident, with a small margin for motion between polls.
+		$reach = $wide ? $extent / 2 : $span * (sqrt(.5) + .05);
 		$finest = max($recipe['spacing'] * Lod::CELLS, $span / 8);
 		$half = $extent / 2;
 		$visible = [];
@@ -59,10 +60,10 @@ final class FlightMap
 		for($level = 0, $size = $extent; $level === 0 || $size >= $finest; $level++, $size /= 2)
 		{
 			$last = (1 << $level) - 1;
-			$x0 = max(0, (int)floor(($centerX - $span*.55 + $half)/$size));
-			$x1 = min($last, (int)floor(($centerX + $span*.55 + $half)/$size));
-			$z0 = max(0, (int)floor(($centerZ - $span*.55 + $half)/$size));
-			$z1 = min($last, (int)floor(($centerZ + $span*.55 + $half)/$size));
+			$x0 = max(0, (int)floor(($centerX - $reach + $half)/$size));
+			$x1 = min($last, (int)floor(($centerX + $reach + $half)/$size));
+			$z0 = max(0, (int)floor(($centerZ - $reach + $half)/$size));
+			$z1 = min($last, (int)floor(($centerZ + $reach + $half)/$size));
 			for($z = $z0; $z <= $z1; $z++)
 			for($x = $x0; $x <= $x1; $x++)
 			{

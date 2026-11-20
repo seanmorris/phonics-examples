@@ -9,20 +9,22 @@ export function activate({module, canvas})
 	canvas.parentElement.append(screen);
 
 	const ctx = screen.getContext('2d');
-	const green = '#59ff86', white = '#f1fff4', red = '#ff5148';
+	const green = '#59ff86', red = '#ff5148';
 
 	function draw(frame)
 	{
-		module.drawTerrainFlightMap(frame);
-
-		if(!frame || !frame.cockpit && !Object.keys(frame.targets).length && !frame.range.hit)
+		if(!frame)
 		{
 			screen.hidden = true;
+			module.drawTerrainFlightMap(null);
 
 			return;
 		}
 
 		const {width, height, eye, basis, jet, targets, range, cockpit} = frame;
+		// Compass bearing of the horizontal nose, including the far side of an Expert loop.
+		const bearing = Math.PI-jet.yaw+(Math.cos(jet.pitch)<0 ? Math.PI : 0);
+		module.drawTerrainFlightMap(frame, bearing);
 		screen.hidden = false;
 
 		if(screen.width !== width || screen.height !== height)
@@ -87,14 +89,15 @@ export function activate({module, canvas})
 		const dx = target ? target[0]-jet.x : 0, dz = target ? target[2]-jet.z : 0;
 		const distance = target ? Math.hypot(dx, target[1]-jet.y, dz) : 0;
 		ctx.lineWidth = 1.8;
+		const bottom = h/2-37, end = w/2-22;
 
 		if(cockpit)
 		{
 			const ring = h*frame.ring, deg = Math.PI/180;
 			const pitch = Math.asin(Math.max(-1, Math.min(1, nose[1])))/deg;
 			const roll = Math.atan2(right[1], up[1]);
-			const heading = (Math.atan2(nose[0], -nose[2])/deg+360)%360;
-			const top = -h/2+36, bottom = h/2-37, left = -w/2+22, end = w/2-22;
+			const heading = (bearing/deg%360+360)%360;
+			const top = -h/2+36, left = -w/2+22;
 
 			circle(0, 0, ring);
 			ctx.save();
@@ -149,9 +152,9 @@ export function activate({module, canvas})
 				if(tick%5===0) text(headings[((tick/5)%16+16)%16], x, top, 18);
 			}
 
-			function tape(value, step, side, title)
+			function tape(value, step, side, title, caption)
 			{
-				const x = side*Math.min(w*.35, ring+120);
+				const x = side*(w/2-96), readout = x+side*51;
 
 				for(let n = Math.floor(value/step)-4; n<=Math.floor(value/step)+4; n++)
 				{
@@ -160,16 +163,17 @@ export function activate({module, canvas})
 					const y = (value/step-n)*33;
 					line(x, y, x+side*(n%2===0 ? 20 : 10), y);
 
-					if(n%2===0 && Math.abs(y)>16) text(n*step, x+side*47, y, 14);
+					if(n%2===0 && (y < -18 || y > 35)) text(n*step, readout, y, 14);
 				}
 
 				text(title, x, -161, 13);
-				text(Math.round(value), x+side*56, 0, 24, white);
-				line(x-side*12, 0, x, 0, white);
+				text(Math.round(value), readout, 0, 24);
+				text(caption, readout, 21, 13);
+				line(x-side*12, 0, x, 0);
 			}
 
-			tape(jet.speed*3.6, 25, -1, 'KM/H');
-			tape(Math.max(0, jet.y-range.ground), 50, 1, 'M AGL');
+			tape(jet.speed*3.6, 25, -1, 'KM/H', 'SPD');
+			tape(Math.max(0, jet.y-range.ground), 50, 1, 'M AGL', 'ALT');
 
 			const percent = frame.thrust, hot = Math.max(0, (percent-100)/40);
 			const hue = Math.round(141*(1-hot));
@@ -221,29 +225,42 @@ export function activate({module, canvas})
 
 			text(range.ready, end-160, bottom-5, 27);
 			label('MISSILE', end-160, bottom+18, 86);
+		}
 
-			const radius = 57, rx = end-radius, ry = bottom-radius+12;
-			ctx.fillStyle = 'rgba(8,27,22,.48)';
-			ctx.beginPath();
-			ctx.arc(rx, ry, radius, 0, 2*Math.PI);
-			ctx.fill();
-			circle(rx, ry, radius);
-			line(rx-radius, ry, rx+radius, ry);
-			line(rx, ry-radius, rx, ry+radius);
-			line(rx, ry, rx-35, ry-44);
-			line(rx, ry, rx+35, ry-44);
+		const radius = 57, rx = end-radius, ry = bottom-radius+12;
+		ctx.fillStyle = 'rgba(8,27,22,.48)';
+		ctx.beginPath();
+		ctx.arc(rx, ry, radius, 0, 2*Math.PI);
+		ctx.fill();
+		circle(rx, ry, radius);
+		line(rx-radius, ry, rx+radius, ry);
+		line(rx, ry-radius, rx, ry+radius);
+		line(rx, ry, rx-35, ry-44);
+		line(rx, ry, rx+35, ry-44);
 
-			const scale = distance>2500 ? 5000 : distance>1000 ? 2500 : 1000;
-			text(scale===1000 ? 'S' : scale===2500 ? 'M' : 'L', rx-radius-12, ry, 15);
+		const scale = distance>2500 ? 5000 : distance>1000 ? 2500 : 1000;
+		text(scale===1000 ? 'S' : scale===2500 ? 'M' : 'L', rx-radius-12, ry, 15);
 
-			for(const [id,pos] of Object.entries(targets))
+		const c = Math.cos(bearing), s = Math.sin(bearing);
+
+		for(const [id,pos] of Object.entries(targets))
+		{
+			const x = pos[0]-jet.x,z = pos[2]-jet.z;
+			const factor = radius/Math.max(scale, Math.hypot(x, z)*1.09);
+			const bx = rx+(c*x+s*z)*factor;
+			const by = ry+(-s*x+c*z)*factor;
+			ctx.fillStyle = Number(id)===range.selected ? red : '#ffca51';
+			const altitude = Math.sign(pos[1]-jet.y);
+
+			if(altitude === 0) ctx.fillRect(bx-3, by-3, 6, 6);
+			else
 			{
-				const x = pos[0]-jet.x,z = pos[2]-jet.z;
-				const factor = radius/Math.max(scale, Math.hypot(x, z)*1.09);
-				const bx = rx-(x*Math.cos(jet.yaw)-z*Math.sin(jet.yaw))*factor;
-				const by = ry-(x*Math.sin(jet.yaw)+z*Math.cos(jet.yaw))*factor;
-				ctx.fillStyle = Number(id)===range.selected ? red : '#ffca51';
-				ctx.fillRect(bx-3, by-3, 6, 6);
+				ctx.beginPath();
+				ctx.moveTo(bx, by-6*altitude);
+				ctx.lineTo(bx+5.5, by+4*altitude);
+				ctx.lineTo(bx-5.5, by+4*altitude);
+				ctx.closePath();
+				ctx.fill();
 			}
 		}
 
