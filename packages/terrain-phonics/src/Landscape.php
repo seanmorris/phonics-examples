@@ -507,6 +507,19 @@ final class Landscape implements TerrainSurface
 	}
 
 	/**
+	 * Bound a world-aligned render block in lattice cells, including fine-to-coarse height samples.
+	 * @param int $column Left block edge.
+	 * @param int $row Front block edge.
+	 * @param int $size Cells along each block edge.
+	 * @param int $halo Extra cells neighbouring the block that can contribute to morphed heights.
+	 * @return array Lower and upper elevation limits.
+	 */
+	public function renderBlockRange(int $column, int $row, int $size, int $halo): array
+	{
+		return $this->blockRange($column - $halo, $row - $halo, $size + 2 * $halo);
+	}
+
+	/**
 	 * Reserve all tile blocks supporting a rectangle, including its interpolation halo. Reservation is atomic and
 	 * generates no height samples. Refuse leases exceeding capacity.
 	 * @param array $region Horizontal rectangle [minX,minZ,maxX,maxZ] in metres.

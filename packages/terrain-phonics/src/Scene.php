@@ -2488,7 +2488,7 @@ final class Scene
 		$uCorners = $waterProgram->location('uCorners');
 		if($this->clipmap && ($recipe['surround'] === 'sea' || $waterMax >= $floor)) {
 			glUniform1i($wakeLocation, $wakeCount);
-			$this->waterDraws = $this->clipmap->draw($waterProgram, $camera, $planes, [$waterMin, $waterMax]);
+			$this->waterDraws = $this->clipmap->draw($waterProgram, $camera, $planes, [$waterMin, $waterMax], water: true);
 		}
 		foreach($this->draw as $n)
 		{

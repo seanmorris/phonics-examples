@@ -1377,3 +1377,42 @@ test('the coastal palette shows inland grass and shore sand', async({page}) => {
 	expect(red).toBeGreaterThan(green + 5);
 	expect(green).toBeGreaterThan(blue + 5);
 });
+
+test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joins', async({page}) => {
+	test.setTimeout(180_000);
+	await page.setViewportSize({width: 720, height: 440});
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await boot(page);
+
+	const canyon = fixture();
+	canyon.landscape.recipe = {
+		preset: 'canyon', version: 2, seed: 'visual-canyon', heightScale: 650,
+		baseFrequency: 1/4000, terraceSpacing: 80, waterLevel: -450,
+	};
+	canyon.settings.quality = 1;
+	canyon.camera = {position: [791,570,-1771], yaw: .09, pitch: -.38};
+	await load(page, canyon);
+
+	// This wall is about 1.5 km from the starting camera. The old 64 m mesh smoothed
+	// the ledges and changed their shape as the aircraft advanced.
+	const wallSpacing = ({renderer}) => renderer.visibleCoverage.find(([left,front,size]) =>
+		left <= 1867 && 1867 < left+size && front <= -3217 && -3217 < front+size)?.[3];
+	const before = await settled(page);
+	expect(wallSpacing(before)).toBeLessThanOrEqual(16);
+
+	await press(page, 'jet');
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
+	await canvas(page).focus();
+	await page.keyboard.press('v');
+	await expect.poll(async() => (await status(page)).jetView).toBe('cockpit');
+
+	const initial = await status(page);
+	await expect.poll(async() => (await status(page)).jet.z, {timeout:90_000}).toBeLessThan(initial.jet.z - 65);
+	const moving = await status(page);
+	expect(moving.renderer.pending).toBe(0);
+	expect(moving.renderer.visible).toBe(before.renderer.visible);
+	expect(wallSpacing(moving)).toBeLessThanOrEqual(16);
+	expect(moving.renderer.proceduralVertexBytes).toBe(0);
+	expect(errors).toEqual([]);
+});

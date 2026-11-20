@@ -25,7 +25,7 @@ void main()
 		vec2 xz=vec2(cell)*uGridStep;
 		vWorld=vec3(xz.x,clipHeight(cell,morph),xz.y);
 		vRelative=vWorld-uEye;
-		normal=clipNormal(cell);
+		normal=clipNormal(cell,morph);
 		material=texelFetch(uInk,texelAt(cell),0).r*255.-1.;
 #else
 		ivec2 cell = patchCell();

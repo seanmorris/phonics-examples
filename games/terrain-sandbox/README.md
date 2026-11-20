@@ -24,7 +24,8 @@ The panel's Surface tab sets the terrain package's `TerrainAppearance`: the grou
 
 ## Terrain streaming measurements
 
-Chromium with SwiftShader, a 640 × 400 viewport, balanced detail and 40 animation callbacks per phase. The camera starts at 750 m and the moving phase uses forward flight at 300 m/s. Coverage measures from submitting the load until terrain is first visible. The baseline is the previous shared preview, including its worker. The GPU result uses the new terrain package in the private preview.
+Initial clipmap comparison, before the wider canyon grids. Chromium with SwiftShader, a 640 × 400 viewport,
+balanced detail and 40 animation callbacks per phase. The camera starts at 750 m and the moving phase uses forward flight at 300 m/s. Coverage measures from submitting the load until terrain is first visible. The baseline is the previous shared preview, including its worker. The GPU result uses the new terrain package in the private preview.
 
 | Preset | First coverage, ms before → after | Stationary p95 / p99, ms before → after | Moving p95 / p99, ms before → after | Moving vertex upload, MB before → after |
 | --- | ---: | ---: | ---: | ---: |

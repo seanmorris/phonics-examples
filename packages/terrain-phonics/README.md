@@ -80,7 +80,9 @@ cannot describe caves or overhangs.
 `Camera` supplies flight motion, a perspective matrix, and picking rays. `Scene` draws the ground and water
 using nested grids. Each grid has an elevation texture that the GPU fills from the seed and recipe. As the
 camera travels, only the newly exposed strips need to be evaluated. The grid edges share vertices across
-levels. Coarse levels draw first after a jump or context restore, and finer levels follow.
+levels. Coarse levels draw first after a jump or context restore, and finer levels follow. Steep terrain gets
+wider midrange grids to hold detail on visible cliffs. Transition weights follow the continuous camera
+position. The fine and coarse grids share interpolated heights and normals where their coverage meets.
 
 Call `update()` before `render()`. The caller owns frame presentation. Call `restore()` after context loss and
 `close()` when unloading. `stats()` reports resident levels, pending work, texture bytes, and edit uploads.

@@ -12,7 +12,10 @@ final class Clipmap
 	private array $vao = [], $framebuffer = [], $permutation = [], $levels = [], $overview = [];
 	private ?Landscape $source = null;
 	private EditIndex $edits;
-	private int $revision = -1, $span = 0;
+	// Parent normals sample two cells beyond the drawn grid.
+	private const HALO = 2;
+	private int $revision = -1;
+	private array $spans = [];
 	private ?array $dirtyRegion = null;
 
 	public function invalidate(?array $region = null): void
@@ -250,32 +253,79 @@ final class Clipmap
 		if($level) glDeleteTextures(2, $level['textures']);
 	}
 
+	/** Grid widths, from the near field to the horizon, in cells of their own level. */
+	public static function spans(array $recipe, float $quality): array
+	{
+		$base = $quality < .75 ? 24 : ($quality > 1.5 ? 120 : 56);
+		$peak = $quality < .75 ? 120 : 248;
+		$wall = $recipe['wallHeight'] > 0 && $recipe['heightScale'] > 0;
+		$reach = $recipe['surround'] === 'none' ? $recipe['worldSize'] : 90000;
+		$spans = [];
+		$step = $recipe['spacing'];
+		$inner = 0;
+
+		do
+		{
+			$level = count($spans);
+			$span = $base;
+			if($wall)
+			{
+				// Preserve the steep walls at midrange, where the small camera-centred rings were
+				// choosing a coarse grid. Tighten the mesh over the wider midrange on Detailed.
+				$start = $quality > 1.5 ? 2 : 3;
+				$end = $quality > 1.5 ? 5 : 4;
+				if($level >= $start && $level <= $end)
+				$span = $level === 3 && $quality >= .75 && $quality <= 1.5 ? 184 : $peak;
+				elseif($level > 0 && $level < $start) $span = max($base, $peak === 120 ? 56 : 120);
+			}
+
+			// Keep the inner ring and its snap margin away from this ring's outer blend.
+			while($span / 2 - self::transition($span) < $inner / 4 + 4) $span += 4;
+			$spans[] = $inner = $span;
+			if(($span / 2 - 2) * $step >= $reach) break;
+			$step *= 2;
+		}
+		while(true);
+
+		return $spans;
+	}
+
+	public static function transition(int $span): float
+	{
+		return max(2., min(20., $span * .1, $span / 4 - 4));
+	}
+
+	private static function storageSize(int $span): int
+	{
+		$size = 1;
+		while($size < $span + 1 + 2 * self::HALO) $size *= 2;
+
+		return $size;
+	}
+
 	/** Refresh only cells newly exposed to the camera or changed by committed edits. */
 	public function update(Landscape $land, Camera $camera, float $quality): bool
 	{
 		$changed = $this->source !== $land || $this->revision !== $land->revision();
 		$region = $this->dirtyRegion;
 		$this->dirtyRegion = null;
-		$n = $quality < .75 ? 32 : ($quality > 1.5 ? 128 : 64);
-		$span = $n - 4;
 		$recipe = $land->recipe();
 		$step = $recipe['spacing'];
-		$reach = $recipe['surround'] === 'none' ? $recipe['worldSize'] : 90000;
-		$count = 1;
-
-		while(($span / 2 - 2) * $step * 2 ** ($count - 1) < $reach) $count++;
+		$spans = self::spans($recipe, $quality);
+		$count = count($spans);
 		$origins = [];
 
-		for($l = 0; $l < $count; $l++)
+		foreach($spans as $l => $span)
 		{
 			$s = $step * (2 ** $l);
+			$margin = intdiv($span, 2) + self::HALO;
 			$origins[$l] = [
-				2 * (int)floor($camera->position[0] / (2 * $s)) - intdiv($span, 2) - 1
-				, 2 * (int)floor($camera->position[2] / (2 * $s)) - intdiv($span, 2) - 1
+				2 * (int)floor($camera->position[0] / (2 * $s)) - $margin
+				, 2 * (int)floor($camera->position[2] / (2 * $s)) - $margin
 			];
 		}
 
-		if(!$changed && !$this->pending && $this->span === $span && $origins === array_column($this->levels, 'origin'))
+		if(!$changed && !$this->pending && $this->spans === $spans && $origins === array_column($this->levels, 'origin'))
 		return false;
 
 		$previous = glGetIntegerv(GL_FRAMEBUFFER_BINDING);
@@ -292,11 +342,11 @@ final class Clipmap
 		{
 			if($changed) $this->generate($land);
 
-			if($this->span !== $span || count($this->levels) !== $count)
+			if($this->spans !== $spans)
 			{
 				foreach($this->levels as $level) self::release($level);
 				$this->levels = array_fill(0, $count, []);
-				$this->span = $span;
+				$this->spans = $spans;
 			}
 
 			$half = $this->recipe['worldSize'] / 2;
@@ -314,6 +364,7 @@ final class Clipmap
 			for($l = $count - 1; $l >= 0; $l--)
 			{
 				$level = $this->levels[$l];
+				$n = $level['n'] ?? self::storageSize($spans[$l]);
 				$origin = $level['origin'] ?? null;
 				$needsFull = $origin === null
 					|| ($changed && $region === null)
@@ -375,27 +426,28 @@ final class Clipmap
 	public function packed(): bool {return $this->packed === true;}
 
 	/** Draw a solid inner grid and rectangular strips around each finer level. */
-	public function draw(Program $p, Camera $camera, array $planes, array $vertical): int
+	public function draw(Program $p, Camera $camera, array $planes, array $vertical, bool $water = false): int
 	{
 		$count = 0;
 		$inner = null;
 		glBindVertexArray($this->vao[0]);
 		glUniform1i($p->location('uPacked'), (int)$this->packed);
-		glUniform1i($p->location('uSpan'), $this->span);
 		glUniform1i($p->location('uElevations'), 7);
 		glUniform1i($p->location('uInk'), 8);
-		$half = $this->recipe['surround'] === 'none' ? $this->recipe['worldSize'] / 2 : 0;
+		$halfWorld = $this->recipe['worldSize'] / 2;
+		$half = $this->recipe['surround'] === 'none' ? $halfWorld : 0;
 		glUniform1f($p->location('uPlayHalf'), $half);
 
-		foreach($this->levels as $level)
+		foreach($this->levels as $index => $level)
 		{
 			if(!isset($level['origin'])) continue;
 
 			[$ox,$oz] = $level['origin'];
-			$x = $ox + 1;
-			$z = $oz + 1;
-			$r = $x + $this->span;
-			$b = $z + $this->span;
+			$span = $this->spans[$index];
+			$x = $ox + self::HALO;
+			$z = $oz + self::HALO;
+			$r = $x + $span;
+			$b = $z + $span;
 			$s = $level['step'];
 
 			if($inner === null) $rects = [[$x,$z,$r,$b]];
@@ -407,7 +459,12 @@ final class Clipmap
 
 			$inner = [intdiv($x, 2),intdiv($z, 2),intdiv($r, 2),intdiv($b, 2)];
 			glUniform2i($p->location('uRingMin'), $x, $z);
+			glUniform1i($p->location('uSpan'), $span);
+			glUniform1i($p->location('uHasParent'), (int)isset($this->levels[$index + 1]['origin']));
+			glUniform2f($p->location('uEyeCell'), $camera->position[0] / $s, $camera->position[2] / $s);
+			glUniform1f($p->location('uMorphWidth'), self::transition($span));
 			glUniform1f($p->location('uGridStep'), $s);
+			glUniform1i($p->location('uTextureMask'), $level['n'] - 1);
 
 			foreach($level['textures'] as $i => $tex)
 			{
@@ -436,9 +493,43 @@ final class Clipmap
 				if(Camera::rejectingPlane($planes, $camera->position, $box, $vertical[0], $vertical[1], -1) >= 0)
 				continue;
 
-				glUniform2i($p->location('uDrawCell'), $left, $top);
-				glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($width + 1), $rows);
-				$count++;
+				if($this->recipe['wallHeight'] <= 0 && $span <= 120)
+				{
+					glUniform2i($p->location('uDrawCell'), $left, $top);
+					glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($width + 1), $rows);
+					$count++;
+					continue;
+				}
+
+				// World-aligned blocks reuse conservative bounds as the clipmap moves across them.
+				$blockSize = 64;
+				$stride = 2 ** $index;
+				for($front = (int)floor($top / $blockSize) * $blockSize; $front < $bottom; $front += $blockSize)
+				for($west = (int)floor($left / $blockSize) * $blockSize; $west < $right; $west += $blockSize)
+				{
+					$x0 = max($west, $left);
+					$z0 = max($front, $top);
+					$columns = min($west + $blockSize, $right) - $x0;
+					$lines = min($front + $blockSize, $bottom) - $z0;
+					$block = ['x' => $x0 * $s, 'z' => $z0 * $s, 'size' => $columns * $s, 'depth' => $lines * $s];
+					[$low,$high] = $vertical;
+					if($this->source !== null && $blockSize * $s <= 512
+						&& (min($west, $front) - 2) * $s >= -$halfWorld
+						&& (max($west, $front) + $blockSize + 2) * $s <= $halfWorld)
+					{
+						[$groundMin,$groundMax] = $this->source->renderBlockRange(
+							$west * $stride, $front * $stride, $blockSize * $stride, 2 * $stride
+						);
+						// Allow for the float elevation shader's rounding relative to the PHP field.
+						if($water && $groundMin > $high + .05) continue;
+						if(!$water) [$low,$high] = [$groundMin - .05, $groundMax + .05];
+					}
+					if(Camera::rejectingPlane($planes, $camera->position, $block, $low, $high) >= 0) continue;
+
+					glUniform2i($p->location('uDrawCell'), $x0, $z0);
+					glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($columns + 1), $lines);
+					$count++;
+				}
 			}
 		}
 
@@ -477,14 +568,16 @@ final class Clipmap
 		$extent = $this->recipe['worldSize'];
 		$span = $wide ? $extent * (abs($c) + abs($s)) : min(4000., $extent);
 		$level = $this->overview;
+		$localSpan = 0;
 
-		foreach($this->levels as $resident)
+		foreach($this->levels as $index => $resident)
 		{
 			if(!isset($resident['origin'])) continue;
 
 			$level = $resident;
+			$localSpan = $this->spans[$index];
 
-			if($level['step'] * $this->span >= $span * 1.5) break;
+			if($level['step'] * $localSpan >= $span * 1.5) break;
 		}
 
 		$step = $level['step'];
@@ -493,10 +586,10 @@ final class Clipmap
 
 		glUniform4f(
 			$p->location('uLocal')
-			, ($level['origin'][0] + 1) * $step
-			, ($level['origin'][1] + 1) * $step
+			, ($level['origin'][0] + self::HALO) * $step
+			, ($level['origin'][1] + self::HALO) * $step
 			, $step
-			, $this->span
+			, $localSpan
 		);
 
 		glUniform1i($p->location('uWide'), (int)$wide);
@@ -542,6 +635,13 @@ final class Clipmap
 		$texels = ($this->overview['n'] ?? 0) ** 2;
 
 		foreach($this->levels as $level) $texels += ($level['n'] ?? 0) ** 2;
+		$coverage = [];
+		foreach($live as $index => $level)
+		{
+			[$left,$front] = $level['origin'];
+			$step = $level['step'];
+			$coverage[] = [($left + self::HALO) * $step, ($front + self::HALO) * $step, $this->spans[$index] * $step, $step];
+		}
 
 		return [
 			'backend' => 'clipmap'
@@ -550,6 +650,7 @@ final class Clipmap
 			, 'pending' => $this->pending ? max(1, count($this->levels) - count($live)) : 0
 			, 'cameraSpacing' => $spacing
 			, 'finestVisibleSpacing' => $spacing
+			, 'visibleCoverage' => $coverage
 			, 'heightTexelsWritten' => $this->texels
 			, 'editUploadBytes' => $this->uploads
 			, 'meshBytes' => 0
