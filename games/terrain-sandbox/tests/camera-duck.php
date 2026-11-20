@@ -225,8 +225,9 @@ foreach($setups as $name => $setup)
 		"The $name: an eye beside its end stays clear behind a vehicle passing beside it");
 }
 
-// An eye that swings sideways into a post within the slab, past the post's middle and back out, as the look stick
-// swings it, keeps to the opening's side of the post and moves no farther than the eye does at any step.
+// An eye that swings sideways into a post within the slab, as the look stick swings it, keeps to the opening's side
+// of the post while it is less than half way across the post's band, from the clear opening's edge to the post's far
+// side and its clearance, and moves no farther than the eye does at any step.
 $course = new Course;
 $course->place('start', 'road', 0.0, 0.0, 0.0, 0.0);
 $gates = $course->obstructions();
@@ -234,18 +235,21 @@ $road = $shapes->kind('road');
 // The base plates reach 0.14 m into the window's lower corners, which narrows the clear opening at every height.
 $edge = min($road['window']['halfWidth'], $road['extent']['halfWidth'] - 2 * $road['extent']['halfDepth']) - $c;
 $band = $road['extent']['halfWidth'] + $c - $edge;
-$swing = follow(new GateDuck(10.0), $gates, fn(int $i): array => [[5.0 + 2.9 * sin(M_PI * $i / 300), 2.0, 0.0],
-	[0.0, .5, 6.7]], 300);
+$swing = follow(new GateDuck(10.0), $gates, fn(int $i): array => [[5.0 + ($edge + .45 * $band - 5) * sin(M_PI * $i / 300),
+	2.0, 0.0], [0.0, .5, 6.7]], 300);
 expect($swing['raw'] < 0 && $swing['placed'] >= $c - 1e-9 && $swing['ratio'] <= 1 + 1e-9
-	&& abs($swing['offset'] - (7.9 - $edge)) < 1e-3 && $swing['passages'] === ['through'],
-	sprintf('An eye swinging into a post past its middle and back stays %.3f m clear on the opening\'s side, moving at most %.2f times its own step',
+	&& abs($swing['offset'] - .45 * $band) < 1e-3 && $swing['passages'] === ['through'],
+	sprintf('An eye swinging less than half way into a post and back stays %.3f m clear on the opening\'s side, moving at most %.2f times its own step',
 		$swing['placed'], $swing['ratio']));
-// An eye that crosses the whole post within the slab keeps to the opening's edge until it is past the post and its
-// clearance, then takes the far side, which the post tabs and base plates set 0.12 m beyond the post.
-$run = follow(new GateDuck(10.0), $gates, fn(int $i): array => [[5.0 + $i * .01, 2.0, 0.0], [0.0, .5, 6.7]], 500);
-expect($run['raw'] < 0 && $run['placed'] >= $c - 1e-9 && $run['offset'] > $band - .02 && $run['offset'] <= $band + 1e-9,
-	sprintf('An eye sliding sideways through a whole post stays clear of it, held at most %.2f m on the opening\'s side',
-		$run['offset']));
+// Farther in, the eye goes round the nearer face of the slab and comes back in beyond the post, without a jump. A jump
+// across the band, 2.06 m, would be 70 times the eye's largest step in the swing and 200 times its step in the slide.
+$deep = follow(new GateDuck(10.0), $gates, fn(int $i): array => [[5.0 + 2.9 * sin(M_PI * $i / 300), 2.0, -.3],
+	[0.0, .5, 6.7]], 300);
+$run = follow(new GateDuck(10.0), $gates, fn(int $i): array => [[5.0 + $i * .01, 2.0, .2], [0.0, .5, 6.7]], 500);
+expect($deep['raw'] < 0 && $deep['placed'] >= $c - 1e-9 && $deep['ratio'] < 10 && $run['raw'] < 0
+	&& $run['placed'] >= $c - 1e-9 && $run['ratio'] < 10,
+	sprintf('An eye swinging or sliding through a post goes round it %.3f m clear, moving at most %.1f times its own step',
+		min($deep['placed'], $run['placed']), max($deep['ratio'], $run['ratio'])));
 
 // An eye that comes within the lead at the banner's height and then climbs steeply before it reaches the gate, as
 // an Expert F5's eye does when the jet loops up in front of a gate, is let go: it never moves more than 2 m and

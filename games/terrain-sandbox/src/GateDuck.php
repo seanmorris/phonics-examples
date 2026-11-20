@@ -22,13 +22,15 @@ use TerrainPhonics\Camera;
  * opening. Within the slab and beyond it the eye keeps to its passage, and rises back over the lead distance.
  *
  * Within SIDE of the slab, a post or an arch leg stands beside the opening. On coming that near, the eye takes the
- * side of the post nearer to it, the opening or the gate's end, and keeps to that side while it stays near, so an
- * eye that swings into a post, as the look stick swings it, does not jump over it.
+ * side of the post nearer to it, the opening or the gate's end, and keeps to that side while it stays near. An eye
+ * that carries on sideways into the post, as the look stick swings it, stays at the post's side until it is half
+ * way across, then goes round the face of the slab nearer to it and comes back in on the far side of the post as
+ * the eye reaches it.
  *
  * Every blend depends only on the eye's position and the passage and side held, which change only where they move
- * the eye by nothing, so an eye that moves smoothly stays smooth. One case jumps: an eye that crosses the whole of a
- * post or an arch leg sideways within the slab goes over to the far side once it is past. No continuous rule can
- * carry an eye round a post's footprint.
+ * the eye by nothing, so an eye that moves smoothly stays smooth. One case jumps: an eye that goes more than half way
+ * into a post and then through the slab along the travel changes from one face of the slab to the other as it
+ * passes the slab's middle.
  *
  * Callers apply the result to the eye they draw from. The camera's own state does not change, so the vehicle and the
  * camera's damping run exactly as they do without gates.
@@ -123,10 +125,11 @@ final class GateDuck
 			$passage = $this->held[$gate['id']]
 				?? self::choose($frame, $u, $eye[1], $target[1], $distance < $this->lead / 2);
 			$lane = self::lane($frame, $u, $this->lanes[$gate['id']] ?? null);
-			[$du, $dy] = $this->shift($frame, $passage, $lane, $u, $eye[1], self::share($frame, $eye[1], $v, $from, $distance),
-				$distance);
-			if($du == 0 && $dy == 0) continue;
-			$eye = [$eye[0] + $du * $frame['cos'], $eye[1] + $dy, $eye[2] - $du * $frame['sin']];
+			[$du, $dy, $dv] = $this->shift($frame, $passage, $lane, $u, $v, $eye[1],
+				self::share($frame, $eye[1], $v, $from, $distance), $distance);
+			if($du == 0 && $dy == 0 && $dv == 0) continue;
+			$eye = [$eye[0] + $du * $frame['cos'] + $dv * $frame['sin'], $eye[1] + $dy,
+				$eye[2] - $du * $frame['sin'] + $dv * $frame['cos']];
 		}
 		return $eye;
 	}
@@ -327,28 +330,23 @@ final class GateDuck
 	 * @param string $passage through, over or under.
 	 * @param int $lane The side of the posts or legs the eye keeps to, as lane() gives it.
 	 * @param float $u The eye's position across the gate.
+	 * @param float $v The eye's position along the travel.
 	 * @param float $y The eye's height.
 	 * @param float $share Share of the duck the gate gives the eye, from share().
 	 * @param float $distance Distance along the travel from the eye to the gate's slab.
-	 * @return array{0:float,1:float} Metres across the gate and up.
+	 * @return array{0:float,1:float,2:float} Metres across the gate, up and along the travel.
 	 */
-	private function shift(array $frame, string $passage, int $lane, float $u, float $y, float $share, float $distance): array
+	private function shift(array $frame, string $passage, int $lane, float $u, float $v, float $y, float $share,
+		float $distance): array
 	{
 		$c = self::CLEARANCE;
 		$clear = $frame['clear'];
 		if($passage === 'through' && $clear === null) $passage = $y > $frame['high'][1] ? 'over' : 'under';
-		$du = 0.0;
+		$du = $dv = 0.0;
 		if($passage === 'through' && $distance < self::SIDE)
 		{
-			// Beside the opening, a post or a leg fills the gate's width out to its ends. The eye keeps to its side
-			// of each one: within the opening's edges, or beyond the post's or leg's outer side.
-			[$left, $right] = $frame['sides'];
-			[$least, $most] = match($lane) {
-				-1 => [-INF, $left],
-				1 => [$right, INF],
-				default => [$left === null ? -INF : $clear[0], $right === null ? INF : $clear[2]],
-			};
-			$du = $share * self::smooth(1 - $distance / self::SIDE) * (max($least, min($most, $u)) - $u);
+			[$du, $dv] = self::round($frame, $lane, $u, $v);
+			$du *= $share * self::smooth(1 - $distance / self::SIDE);
 		}
 		$u += $du;
 		// Only a gate with parts below its opening, such as posts and legs, raises an eye that is lower than the
@@ -358,12 +356,46 @@ final class GateDuck
 			'over' => max($y, $frame['high'][1] + $c),
 			'under' => min($y, $frame['low'][1] - $c),
 		};
-		if($target == $y) return [$du, 0.0];
+		if($target == $y) return [$du, 0.0, $dv];
 		// Beyond the gate's ends the eye passes no solid part, so the duck fades out there.
 		$beyond = max(0.0, $frame['low'][0] - $c - $u, $u - $frame['high'][0] - $c);
-		if($beyond >= self::SIDE) return [$du, 0.0];
+		if($beyond >= self::SIDE) return [$du, 0.0, $dv];
 		return [$du, $share * self::smooth(1 - $distance / $this->lead) * self::smooth(1 - $beyond / self::SIDE)
-			* ($target - $y)];
+			* ($target - $y), $dv];
+	}
+
+	/**
+	 * Work out how an eye within the slab keeps clear of the post or leg beside the side it holds.
+	 * @param array $frame The gate's measurements.
+	 * @param int $lane The side of the posts or legs the eye keeps to, as lane() gives it.
+	 * @param float $u The eye's position across the gate.
+	 * @param float $v The eye's position along the travel.
+	 * @return array{0:float,1:float} Metres across the gate and along the travel. Up to half way into the post's band,
+	 * from the edge of the side held to the far side with the clearance, the eye stays at that edge. Over the next
+	 * tenth it moves out to the nearer face of the slab, over the next three tenths it moves along that face to the
+	 * far side, and over the last tenth it moves back in, where it meets the eye on the far side of the post.
+	 */
+	private static function round(array $frame, int $lane, float $u, float $v): array
+	{
+		$clear = $frame['clear'];
+		[$left, $right] = $frame['sides'];
+		// The band the eye has gone into from its side, as [edge of the side held, far edge].
+		$band = match($lane) {
+			-1 => $left === null ? null : [$left, $clear[0]],
+			1 => $right === null ? null : [$right, $clear[2]],
+			default => $u > $clear[2] && $right !== null ? [$clear[2], $right]
+				: ($u < $clear[0] && $left !== null ? [$clear[0], $left] : null),
+		};
+		if($band === null) return [0.0, 0.0];
+		[$edge, $far] = $band;
+		$t = ($u - $edge) / ($far - $edge);
+		if($t <= 0 || $t >= 1) return [0.0, 0.0];
+		$along = $t <= .6 ? 0.0 : ($t >= .9 ? 1.0 : self::smooth(($t - .6) / .3));
+		$out = $t <= .5 ? 0.0 : ($t < .6 ? self::smooth(($t - .5) / .1) : ($t <= .9 ? 1.0 : self::smooth((1 - $t) / .1)));
+		$c = self::CLEARANCE;
+		$face = 2 * $v < $frame['low'][2] + $frame['high'][2] ? min(0.0, $frame['low'][2] - $c - $v)
+			: max(0.0, $frame['high'][2] + $c - $v);
+		return [$edge + ($far - $edge) * $along - $u, $out * $face];
 	}
 
 	/** Smoothstep from 0 at 0 to 1 at 1, flat at both ends. */
