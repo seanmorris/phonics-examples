@@ -76,7 +76,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-N4vJQr0+keQ8aqU9rWu3xaAvZx1ERuTTOtNARedoIsw=",
+    "application.php": "sha256-Jkhq5o/tbY4V4s/ENTgmFptdoO7VYn3lstM9oggdUE8=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
@@ -100,8 +100,8 @@
     "assets/vehicles/model.vert": "sha256-LSUFI8Q0C/USFnEGl0mK5wa2Hh6CA7FrTWHaTUak6zc=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
     "browser/cockpit.mjs": "sha256-TL03wPPGeUva91NiM1oOTWku8pRT1TMZiOABsTOddCg=",
-    "browser/flight-map.mjs": "sha256-sHk27Xws6spSPOruhhLg0n5De7WygjPqt/vlfa80kuk=",
-    "browser/game.mjs": "sha256-diU/rLysS/DmeT3G6hE3P6zvkkrD8g4zP7uzH6Ck768=",
+    "browser/flight-map.mjs": "sha256-Q8pJnIs1CHWEYdxHBnpU78kzRFPqUIUx2MKrwnDpRfk=",
+    "browser/game.mjs": "sha256-nTRj2j6skjYCBV8ggkVMP+1wAGdBgBv9xbDhPELvbLk=",
     "browser/speedometer.mjs": "sha256-XmRtcA2A51U/sAXAPekxvsfCZoZrxz7aGBmHeZGfmig=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
     "src/BalloonPractice.php": "sha256-x9qU7rjd/v8tcWaet8U5cStcKWDEnVSfQtaa6D18fVA=",
@@ -118,7 +118,7 @@
     "src/GroundShadow.php": "sha256-Cx/hcdJAF0kYsGe1XnFoFQJHTjNKA3M2zecl0YU2Aug=",
     "src/Jet.php": "sha256-1AxD4bc2bTgzwA8DDXwiV+Od6WEOWFpsR8DL9NmJWIk=",
     "src/Race.php": "sha256-hqPKUAhqAWWVF0OI7c5NatJNlf0+rOXO0LKcm6OAbM4=",
-    "src/Session.php": "sha256-wOMoy0/Yz0DXV5CtmeXCPqRpe83xsNIrIaRis24N6Yg=",
+    "src/Session.php": "sha256-rKmP7P2lv30j4kWd6/+p5h8Zf4jc/GRuux/oRb8Y5cM=",
     "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/TrailRenderer.php": "sha256-uprLo2j+J4+qA0rN6gvcVDuQm81lcDsPrR598okVHmk=",
     "src/VehicleModel.php": "sha256-iTbcDMy3BTiEeZoXfOoeNtIUeqnN2f9IxEESG+KwA+A="

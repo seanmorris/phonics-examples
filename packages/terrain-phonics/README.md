@@ -91,7 +91,8 @@ budget settings. Its GPU resources and update path are independent of the clipma
 
 Collision and picking use `Landscape::height()` and its related samplers. The clipmap's edit index finds
 committed edits that intersect each refreshed strip and uploads edited samples. `Scene::drawChart()` draws
-a heading-up local map or a whole-world chart from the same elevation and surface layers.
+a heading-up chart at two zoom levels from the same elevation and surface layers. It keeps the vehicle centered
+and limits the wider view near the map boundary to keep the square filled where possible.
 
 Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
 rise, rounded ridges, canyon walls, rolling relief and terracing. Existing recipes expand to the values of

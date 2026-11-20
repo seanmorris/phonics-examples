@@ -3,7 +3,7 @@ precision highp float;
 precision highp int;
 // LAYERS
 uniform highp sampler2D uOverview,uMapInk,uFine,uFineInk;
-uniform bool uPacked,uWide;
+uniform bool uPacked;
 uniform vec4 uChart; // centre, span, viewport side
 uniform vec4 uLocal; // world lower left, step, interior span
 uniform vec2 uHeading,uViewportOrigin;
@@ -23,7 +23,7 @@ vec4 chartSample(vec2 pos,out int ink) {
 	vec2 f=fract(q);
 	float stepSize=uExtent/256.;
 	float h00,h10,h01,h11;
-	if(!uWide && all(greaterThanEqual(pos,uLocal.xy)) && all(lessThan(pos,uLocal.xy+(uLocal.w-1.)*uLocal.z))) {
+	if(all(greaterThanEqual(pos,uLocal.xy)) && all(lessThan(pos,uLocal.xy+(uLocal.w-1.)*uLocal.z))) {
 		q=pos/uLocal.z; a=ivec2(floor(q)); b=a+1; f=fract(q);
 		int mask=textureSize(uFine,0).x-1;
 		ink=int(texelFetch(uFineInk,ivec2(floor(q+.5))&mask,0).r*255.+.5);

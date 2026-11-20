@@ -264,16 +264,21 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 		const proto = CanvasRenderingContext2D.prototype;
 		const fillText = proto.fillText;
 		const gl = WebGL2RenderingContext.prototype;
-		const locations = new WeakSet();
-		const getUniformLocation = gl.getUniformLocation, uniform2f = gl.uniform2f;
+		const headings = new WeakSet(), charts = new WeakSet();
+		const getUniformLocation = gl.getUniformLocation, uniform2f = gl.uniform2f, uniform4f = gl.uniform4f;
 		gl.getUniformLocation = function(program, name) {
 			const location = getUniformLocation.call(this, program, name);
-			if(location && name === 'uHeading') locations.add(location);
+			if(location && name === 'uHeading') headings.add(location);
+			if(location && name === 'uChart') charts.add(location);
 			return location;
 		};
 		gl.uniform2f = function(location, cosine, sine) {
-			if(locations.has(location)) window.terrainChartHeading = [cosine, sine];
+			if(headings.has(location)) window.terrainChartHeading = [cosine, sine];
 			return uniform2f.call(this, location, cosine, sine);
+		};
+		gl.uniform4f = function(location, x, z, span, side) {
+			if(charts.has(location)) window.terrainChart = [x,z,span,side];
+			return uniform4f.call(this, location, x, z, span, side);
 		};
 
 		proto.fillText = function(label, x, y, ...rest) {
@@ -356,6 +361,16 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 	expect((.5-wider.SPD[0])*after).toBeCloseTo((.5-SPD[0])*before, 1);
 	expect((wider.ALT[0]-.5)*after).toBeCloseTo((ALT[0]-.5)*before, 1);
 	expect([SPD[1],ALT[1]]).toEqual(['#59ff86','#59ff86']);
+
+	const chart = () => page.evaluate(() => window.terrainChart);
+	const local = await chart();
+	await page.keyboard.press('n');
+	await expect.poll(async() => (await chart())[2]).toBeGreaterThan(local[2]);
+	const wide = await chart();
+	expect(wide.slice(0,2)).toEqual(local.slice(0,2));
+	expect(wide[2]).toBeLessThanOrEqual(8192/Math.SQRT2 + .001);
+	await page.keyboard.press('n');
+	await expect.poll(chart).toEqual(local);
 });
 
 test('cockpit cues show the nearest balloon and the diamond meets the selected balloon at lock', async({page}) => {
@@ -725,8 +740,8 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 		const pad = {id: 'Car test controller', index: 0, timestamp: 1, mapping: 'standard', connected: true,
 			axes: [0,0,0,0], buttons};
 		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
-		window.clickCarStick = pressed => {
-			buttons[10] = {value: Number(pressed), pressed};
+		window.testCarButton = (n, pressed) => {
+			buttons[n] = {value: Number(pressed), pressed};
 			pad.timestamp++;
 		};
 	});
@@ -799,9 +814,16 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await page.keyboard.press('m');
 	await expect(map).toBeHidden();
 	await expect(dial).toBeVisible();
-	await page.evaluate(() => window.clickCarStick(true));
+	const setButton = (n, on) => page.evaluate(([n,on]) => window.testCarButton(n, on), [n,on]);
+	await setButton(10, true);
 	await expect(map).toBeVisible();
-	await page.evaluate(() => window.clickCarStick(false));
+	await setButton(10, false);
+	await setButton(13, true);
+	await expect.poll(async() => (await status(page)).carWideMap).toBe(true);
+	expect((await status(page)).mode).toBe('car');
+	await setButton(13, false);
+	await page.keyboard.press('n');
+	await expect.poll(async() => (await status(page)).carWideMap).toBe(false);
 	await page.keyboard.down('w');
 	await page.keyboard.down('d');
 	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
@@ -814,8 +836,11 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(beforeRestore);
 	expect(await view.evaluate(element => element.getContext('webgl2').getError())).toBe(0);
 	await view.focus();
-	await page.keyboard.press('f');
+	await setButton(8, true);
+	await setButton(13, true);
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');
+	await setButton(13, false);
+	await setButton(8, false);
 	await expect(map).toBeHidden();
 	await expect(dial).toBeHidden();
 	await page.keyboard.press('c');

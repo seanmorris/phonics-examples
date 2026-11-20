@@ -260,6 +260,11 @@ expect(abs($s['y'] - .02) < .001 && $s['pitch'] === 0.0 && abs($s['roll']) < .00
 $drive->dirty = false;
 $drive->step(1/60);
 expect(!$drive->dirty, 'A parked car leaves the dry scene idle');
+input($drive, ['actions'=>['pad-down']]);
+expect($drive->mode === 'car' && $drive->carWideMap && !$drive->jetWideMap && $drive->dirty,
+	'D-pad down zooms out the car minimap independently of the jet');
+input($drive, ['actions'=>['pad-down']]);
+expect($drive->mode === 'car' && $drive->carMap && !$drive->carWideMap, 'A second tap restores the car minimap');
 input($drive, ['keys' => ['KeyW'=>true,'KeyD'=>true]]);
 for($i = 0; $i < 60; $i++) $drive->step(1/60);
 $s = $drive->car->state();

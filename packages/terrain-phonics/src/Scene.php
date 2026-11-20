@@ -2757,9 +2757,9 @@ final class Scene
 		return $this->defaultLayers;
 	}
 
-	public function drawChart(array $xz,float $bearing,bool $wide,int $width,int $height,array $waterColor,?int $size = null): void
+	public function drawChart(array $xz,float $bearing,bool $wide,int $width,int $height,array $waterColor,?int $size = null): ?float
 	{
-		$this->clipmap?->chart($xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,$this->palette(),$this->appearance,$size);
+		return $this->clipmap?->chart($xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,$this->palette(),$this->appearance,$size);
 	}
 
 	public function restore(): void

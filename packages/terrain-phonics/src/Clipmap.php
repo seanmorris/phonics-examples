@@ -540,6 +540,23 @@ final class Clipmap
 		return $count;
 	}
 
+	/** World metres across the heading-up, vehicle-centred chart. */
+	public static function chartSpan(float $extent, array $position, float $bearing, bool $wide): float
+	{
+		// At the middle of the world, even a 45° chart fits at this scale.
+		$maximum = $extent / M_SQRT2;
+		$local = min(4000., $maximum/1.5);
+		if(!$wide) return $local;
+
+		$zoomedOut = min(12000., $maximum);
+		$diagonal = abs(cos($bearing)) + abs(sin($bearing));
+		$edgeRoom = $extent/2 - max(abs($position[0]), abs($position[1]));
+		$fits = 2*$edgeRoom/$diagonal;
+		// Near the boundary, leave a useful difference between the two zoom levels.
+		return max(min($zoomedOut, 1.5*$local), min($zoomedOut, $fits));
+	}
+
+	/** Return the drawn span for overlays that need the same world-to-chart scale. */
 	public function chart(
 		array $position
 		, float $bearing
@@ -551,8 +568,8 @@ final class Clipmap
 		, SurfaceLayers $layers
 		, TerrainAppearance $appearance
 		, ?int $size = null
-	): void {
-		if(!$this->overview) return;
+	): ?float {
+		if(!$this->overview) return null;
 
 		$p = $this->chart;
 		$p->use();
@@ -566,12 +583,12 @@ final class Clipmap
 		$this->paletteOrigin($p);
 		$n = min($size ?? (int)round(min(184, $w * .235, $h * .245)), $w - 10, $h - 10);
 
-		if($n <= 0) return;
+		if($n <= 0) return null;
 
 		$c = cos($bearing);
 		$s = sin($bearing);
 		$extent = $this->recipe['worldSize'];
-		$span = $wide ? $extent * (abs($c) + abs($s)) : min(4000., $extent);
+		$span = self::chartSpan($extent, $position, $bearing, $wide);
 		$level = $this->overview;
 		$localSpan = 0;
 
@@ -587,7 +604,7 @@ final class Clipmap
 
 		$step = $level['step'];
 		glUniform2f($p->location('uHeading'), $c, $s);
-		glUniform4f($p->location('uChart'), $wide?0:$position[0], $wide?0:$position[1], $span, $n);
+		glUniform4f($p->location('uChart'), $position[0], $position[1], $span, $n);
 
 		glUniform4f(
 			$p->location('uLocal')
@@ -597,7 +614,6 @@ final class Clipmap
 			, $localSpan
 		);
 
-		glUniform1i($p->location('uWide'), (int)$wide);
 		glUniform1i($p->location('uPacked'), (int)$this->packed);
 		glUniform1f($p->location('uExtent'), $extent);
 		glUniform1f($p->location('uWaterLevel'), $water);
@@ -625,6 +641,8 @@ final class Clipmap
 		glBindVertexArray($this->vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		glViewport(0, 0, $w, $h);
+
+		return $span;
 	}
 
 	public function paletteOrigin(Program $p): void

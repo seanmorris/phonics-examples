@@ -29,7 +29,7 @@ export function activate({module, canvas})
 			return;
 		}
 
-		const {span, wide, bearing, position} = chart;
+		const {span, bearing, position} = chart;
 		const size = chart.size ?? Math.round(Math.min(184, data.width*.235, data.height*.245));
 
 		if(map.hidden || map.width !== size)
@@ -42,10 +42,8 @@ export function activate({module, canvas})
 
 		const mid = size/2;
 		const c = Math.cos(bearing), s = Math.sin(bearing);
-		const diagonal = Math.abs(c)+Math.abs(s);
-		// Fit all four corners of the landscape on the wide chart at every heading.
-		const scale = size/(wide ? span*diagonal : span);
-		const [centerX, centerZ] = wide ? [0,0] : position;
+		const scale = size/span;
+		const [centerX, centerZ] = position;
 
 		function offset(x, z)
 		{
@@ -115,8 +113,7 @@ export function activate({module, canvas})
 		}
 
 		ctx.save();
-		const [vehicleX,vehicleY] = offset(...position);
-		ctx.translate(mid+vehicleX, mid+vehicleY);
+		ctx.translate(mid, mid);
 
 		ctx.beginPath();
 		ctx.moveTo(0, -7);

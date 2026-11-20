@@ -38,7 +38,7 @@ final class Session
 	public ?FlightTrails $flightTrails = null;
 	public string $jetView = 'chase';
 	public bool $jetMap = true, $jetWideMap = false;
-	public bool $carMap = true;
+	public bool $carMap = true, $carWideMap = false;
 	private int $launches = 0;
 	/** Race gates on the landscape. Saved with it, and replaced when a file loads or a new landscape is generated. */
 	public Course $course;
@@ -673,7 +673,7 @@ final class Session
 		$type = match($action['type'] ?? '')
 		{
 			'pad-up' => $jet ? 'jet-target' : 'jet',
-			'pad-down' => $jet ? 'jet-wide-map' : 'fly',
+			'pad-down' => $jet || $this->mode === 'car' ? 'vehicle-wide-map' : 'fly',
 			'pad-y' => $jet ? '' : 'race-reset',
 			default => $action['type'] ?? ''
 		};
@@ -769,14 +769,21 @@ final class Session
 				}
 				elseif($this->mode === 'car')
 				{
-					$this->carMap = !$this->carMap;
+					$this->carMap = !($this->carMap || $this->carWideMap);
+					$this->carWideMap = false;
 					$this->dirty = true;
 				}
 				break;
+			case 'vehicle-wide-map':
 			case 'jet-wide-map':
 				if($jet)
 				{
 					$this->jetWideMap = !$this->jetWideMap;
+					$this->dirty = true;
+				}
+				elseif($this->mode === 'car')
+				{
+					$this->carWideMap = !$this->carWideMap;
 					$this->dirty = true;
 				}
 				break;
@@ -1410,7 +1417,7 @@ final class Session
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
-			'carMap' => $this->carMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),
+			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
 			'duck' => $this->mode === 'fly' || $this->duck === null ? null

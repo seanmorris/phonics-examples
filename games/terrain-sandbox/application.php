@@ -233,17 +233,16 @@ $engine->start(
 			$car = $session->mode === 'car';
 			$carHudSize = $car ? (int)round(min(240, $width*.275, $height*.30)) : null;
 			$frame = $jet || $car ? ['width'=>$width,'height'=>$height] : null;
-			$showMap = $jet ? $session->jetMap || $session->jetWideMap : $car && $session->carMap;
+			$wide = $jet ? $session->jetWideMap : $car && $session->carWideMap;
+			$showMap = $wide || ($jet ? $session->jetMap : $car && $session->carMap);
 			if($showMap)
 			{
-				$wide = $jet && $session->jetWideMap;
 				$bearing = M_PI-$vehiclePose['yaw']+($jet && cos($vehiclePose['pitch']) < 0 ? M_PI : 0);
 				$position = [$vehiclePose['x'],$vehiclePose['z']];
-				$extent = $session->landscape->recipe()['worldSize'];
-				$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'wide'=>$wide,
-					'span'=>$wide ? $extent : min(4000.,$extent),'size'=>$carHudSize];
-				$scene->drawChart($position,$bearing,$wide,$width,$height,
+				$span = $scene->drawChart($position,$bearing,$wide,$width,$height,
 					TerrainAppearance::linear($session->settings['waterColor']),$carHudSize);
+				if($span !== null)
+					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$carHudSize];
 			}
 			$engine->device->present();
 			if($jet)
