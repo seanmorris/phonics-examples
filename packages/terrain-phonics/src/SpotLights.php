@@ -29,10 +29,11 @@ final class SpotLights
 	/**
 	 * Summed irradiance, in scene units after the night gain, above which the shaders compress lamp light.
 	 *
-	 * With m the sum's largest channel, the sum is scaled by KNEE ln(1 + m / KNEE) / m, which keeps its colour. On
-	 * level ground a low lamp's light falls off with the cube of distance, so the ground a few metres ahead would
-	 * otherwise receive hundreds of times what the ground 50 m ahead does and turn white in the tone map.
-	 * TERRAIN_SPOT_KNEE in spot-lights.glsl matches it.
+	 * With m the largest channel of the sum the lights would give with their cones wide open, the sum through the
+	 * cones is scaled by KNEE ln(1 + m / KNEE) / m, which keeps its colour and lets each beam fade across its whole
+	 * band between the inner and outer cone. On level ground a low lamp's light falls off with the cube of distance,
+	 * so the ground a few metres ahead would otherwise receive hundreds of times what the ground 50 m ahead does and
+	 * turn white in the tone map. TERRAIN_SPOT_KNEE in spot-lights.glsl matches it.
 	 */
 	public const KNEE = 1.0;
 	/** Keys every light needs, as keys. */

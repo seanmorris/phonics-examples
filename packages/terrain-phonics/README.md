@@ -157,9 +157,13 @@ gives 0.05 to 0.3 lux.
 On level ground a low lamp's irradiance falls with the cube of distance, so the ground 3 m ahead of a car receives
 hundreds of times what the ground 50 m ahead does, more than the tone map can show without turning the near ground
 white. The shaders therefore compress the lamps' summed irradiance above `SpotLights::KNEE`, 1 scene unit after the
-night gain. With m the largest channel of the sum, they scale it by `KNEE ln(1 + m / KNEE) / m`, which keeps the
-lamps' colour. Light well below the knee passes almost unchanged; ten times the knee comes out as 2.4 times it, and a
-hundred times as 4.6 times. Exposure and tone mapping then treat the compressed lamp light like sunlight.
+night gain. With m the largest channel of the sum the lamps would give with their cones wide open, they scale the
+sum through the cones by `KNEE ln(1 + m / KNEE) / m`, which keeps the lamps' colour. Light well below the knee passes
+almost unchanged; ten times the knee comes out as 2.4 times it, and a hundred times as 4.6 times. Because the scale
+ignores the cones, a beam on a nearby slope fades across its whole band between the cones. Scaled by the light
+through the cones instead, such a beam would stay near full brightness until close to its outer cone and show as a
+flat disc with a hard rim.
+Exposure and tone mapping then treat the compressed lamp light like sunlight.
 
 The terrain reflects lamp light diffusely from its albedo. Light that reaches submerged ground loses the water's
 `waterFogDensity` for each metre of its path below the water level. The water between the eye and submerged ground
