@@ -31,6 +31,7 @@
     "src/RayQuery.php",
     "src/Recipe.php",
     "src/Scene.php",
+    "src/TerrainAppearance.php",
     "src/TerrainShadows.php",
     "src/TerrainSurface.php",
     "src/Water.php",

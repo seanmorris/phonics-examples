@@ -124,6 +124,13 @@ final class Scene
 	public float $budgetMs = 2;
 	/** Maximum retained patches including parents. */
 	public int $maximumPatches = 384;
+	/**
+	 * Terrain colours, banding and blending. The next render() uploads a replacement. An application that skips
+	 * unchanged frames must draw one after replacing it.
+	 */
+	public TerrainAppearance $appearance;
+	/** The appearance whose uniforms the ground program holds, or null when they need uploading. */
+	private ?TerrainAppearance $boundAppearance = null;
 
 	/**
 	 * Create an incremental terrain scene with independent simulation surfaces.
@@ -141,6 +148,8 @@ final class Scene
 	){
 		$this->indices = GpuPatch::indices(Lod::CELLS);
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
+		$this->appearance = new TerrainAppearance;
+
 		$this->create();
 	}
 
@@ -2301,6 +2310,14 @@ final class Scene
 		$this->groundProgram->use();
 		$this->common($this->groundProgram, $camera, $width, $height);
 		$this->water->appearance->bind($this->groundProgram);
+
+		// A program keeps its uniforms between frames, so only a new appearance or a relinked program needs them.
+		if($this->boundAppearance !== $this->appearance)
+		{
+			$this->appearance->bind($this->groundProgram);
+			$this->boundAppearance = $this->appearance;
+		}
+
 		$this->vector($this->groundProgram, 'uCraftRotation', [0,0,0]);
 		$this->scalar($this->groundProgram, 'uCraft', 0);
 
@@ -2643,6 +2660,7 @@ final class Scene
 		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
 		$this->abandonSelection();
 		$this->groundProgram->restore();
+		$this->boundAppearance = null;
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
 		$this->waterProgram->restore();

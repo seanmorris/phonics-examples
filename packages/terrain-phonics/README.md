@@ -128,14 +128,154 @@ Call `$water->setLevel($metres)` to move the mean surface and `$water->setWaveSc
 
 Set `$water->appearance = new WaterAppearance([...])` to tune water rendering. Use `waterColor` (sRGB hex), `waterTransparency`, `waterReflectivity`, and `waterFoam` (fractions), and `waterFogDensity` (extinction per metre). The renderer blends sky reflection and foam over the opaque scene. Submerged terrain fades toward the water tint according to the length of the sightline below mean water level. Draw custom opaque objects with the optional `drawOpaque` callback to `Scene::render()` so the water surface covers only their submerged portions. Their shaders can use `WaterAppearance::shaderSource()` and `bind()` for the same underwater fog.
 
+## Terrain appearance
+
+`Scene::$appearance` holds a `TerrainAppearance`: the ground's colours, the banding of exposed rock, the slopes
+and heights where one material gives way to another, and the amounts of talus, stain and lichen on mountain rock.
+Replace it to change the look; the next `render()` uploads it. The renderer uploads an appearance once, and again only
+after a replacement or `restore()`. An application that draws only changed frames must draw one after a replacement.
+
+```php
+$scene->appearance = new TerrainPhonics\TerrainAppearance(['snowline' => 220, 'snowColor' => '#f4f8ff'] + $saved);
+```
+
+The constructor reads the keys of `TerrainAppearance::DEFAULTS` and ignores others, so an application can pass its whole
+settings array. It throws `InvalidArgumentException`, naming the setting, for a colour that is not a six-digit hex
+string and for a number that is not a finite integer or float; numeric strings are rejected. Numbers outside
+`TerrainAppearance::RANGES` are clamped. Each start and end listed in `TerrainAppearance::ORDER` stays apart by a
+minimum gap: an end that is too low moves up to the start plus the gap, rounded to nine decimal places, and when that
+passes the top of the end's range the end stays at the top and the start moves down. Values one gap apart, such as 0.2
+and 0.21, stay as they are, although their binary difference is slightly less than 0.01. `settings` holds the result, in
+the order of `DEFAULTS`, with colours in lower case. `GROUPS` lists the settings in panel order under `colors`,
+`banding`, `blending` and `rock`. `uniforms()` returns the values `bind()` uploads, for a custom terrain shader.
+`TerrainAppearance::linear($hex)` converts one colour to linear RGB and throws `InvalidArgumentException` for anything
+but a six-digit hex string.
+
+Coast and canyon terrain look as they did before these settings existed. Each of their default colours is the nearest
+8-bit sRGB value to the linear constant it replaced, and each number equals the constant it replaced. Mountain terrain
+has its own material, whose settings were tuned against photographs of granite cirques and forested ranges.
+
+The presets use the settings differently. Coast terrain has grass cover, banded rock and snow. Mountain terrain is
+granite: steep ground shows jointed slabs, iron stains and lichen streaked down the fall line, talus lies on the
+moderately steep ground, and the cover runs from forest through subalpine meadow to tundra and bare rock as the ground
+nears the snowline. Grass covers level valley floors below the treeline. Version-one canyons have soil cover and banded
+rock. Current canyons draw rock from the canyon colours and debris from their dust. Sand applies to every preset. The
+material tool's rock, grass, sand, snow and road paint use the same colours as the generated ground; mountain rock paint
+is the mountain rock: granite, mixed with talus rubble on gentle ground.
+
+The table lists what each setting changes in each preset. A preset ignores the settings with an empty cell.
+
+| Setting | Coast | Mountain | Version-one canyon | Canyon |
+| --- | --- | --- | --- | --- |
+| `grassColor` | Cover | Level valley floors | Paint only | Paint only |
+| `soilColor` | | | Cover | |
+| `rockColor`, `rockBandColor`, `bandSpacing` | Rock | | Rock | |
+| `bandContrast` | Rock | | Rock | Beds |
+| `bandSharpness` | Rock | | Rock | Bed contacts |
+| `sandColor`, `beachHeight`, `beachWidth` | Beach | Beach | Beach | Beach |
+| `snowColor` | Snow | Snow | Paint only | Paint only |
+| `roadColor` | Paint | Paint | Paint | Paint |
+| `canyonRustColor`, `canyonShaleColor`, `canyonSandstoneColor`, `canyonCapColor` | | | | Beds |
+| `forestColor`, `meadowColor`, `tundraColor`, `graniteColor`, `stainColor`, `talusColor` | | Ground | | |
+| `rockSlopeStart`, `rockSlopeEnd` | Rock | Bare rock, talus | Rock | Rock |
+| `snowline` | Snow | Snow, and the zones that follow it | | |
+| `snowTransition`, `snowSlopeStart`, `snowSlopeEnd` | Snow | Snow | | |
+| `alpineStart`, `alpineEnd` | | Bare rock | | |
+| `treeline`, `tundraStart` | | Zones | | |
+| `talusAmount`, `stainAmount`, `lichenAmount` | | Rock | | |
+| `macroVariation` | Grass, snowline | Granite, talus, snowline and zones | Soil | Dust and debris |
+
+### Colours
+
+Colours are sRGB hex strings.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `grassColor` | `#425b2d` | Grass cover on coast and mountain terrain, and grass paint. |
+| `soilColor` | `#815f40` | Soil cover on version-one canyons, mixed 40% toward the banded rock. |
+| `rockColor` | `#867c6f` | Rock between the light bands on coast and version-one canyon terrain. |
+| `rockBandColor` | `#af957c` | The light bands in that rock. |
+| `sandColor` | `#bfaf8b` | Sand on level ground near the water, and sand paint. |
+| `snowColor` | `#eaf1f8` | Snow on coast and mountain terrain, and snow paint. |
+| `roadColor` | `#65615b` | Road paint. |
+| `canyonRustColor` | `#794944` | The lowest bed of each canyon section. The red beds are a brighter shade of it. |
+| `canyonShaleColor` | `#5f484c` | The soft shale above the rust. |
+| `canyonSandstoneColor` | `#906356` | Both sandstone cliffs. |
+| `canyonCapColor` | `#a38775` | The pale cap rock at the top of the section. The ledges are a darker shade of it. |
+| `forestColor` | `#1d291b` | Spruce-fir forest below the mountain treeline. |
+| `meadowColor` | `#48581f` | Subalpine shrubs and meadow above the treeline. Shrub clumps mix it about halfway to the forest colour. |
+| `tundraColor` | `#484230` | Tundra between the meadow and the snow. |
+| `graniteColor` | `#565a5c` | Mountain rock. Lichen tints it grey-green. |
+| `stainColor` | `#74605a` | Iron stains on the granite. |
+| `talusColor` | `#7b7b77` | Talus, and the block fields on gentle bare ground near the snowline. |
+
+The red beds and ledges keep the ratio, channel by channel, that they had to the rust and the cap rock in the default
+palette. Canyon dust and debris, beds too fine to resolve at a distance, and the light the walls throw into shadow
+follow the average of the beds weighted by their thickness. The red beds and the dust are lighter than the colours they
+follow, so each derived channel stops at 1: red beds under a white rust are white.
+
+### Banding
+
+| Setting | Default | Range | Effect |
+| --- | --- | --- | --- |
+| `bandSpacing` | 52.36 m (2π / 0.12) | 5 to 1000 | Height of one dark and one light band in coast and version-one canyon rock. |
+| `bandContrast` | 1 | 0 to 1 | 0 paints banded rock one colour: halfway between the two rock colours, or the canyon's distant colour. |
+| `bandSharpness` | 1 | 1 to 8 | 1 is a sine profile. Higher values flatten each band and narrow the transitions, and narrow the contacts between canyon beds by the same factor. |
+
+Canyon beds take their spacing from the recipe's `terraceSpacing`, because the relief shares them, so `bandSpacing`
+does not apply to them. Bands fade to their average colour where a pixel spans several of them. A sharpened profile
+turns back into a sine where one band covers fewer than about twice (sharpness + 2) pixels, so the harmonics that
+sharpen it have faded before they pass the pixel rate.
+
+### Blending
+
+A slope is 1 minus the upward component of the surface normal: 0 on level ground, 1 on a vertical face. A slope of
+0.08 is about 23° and 0.38 about 52°.
+
+| Setting | Default | Range | Effect |
+| --- | --- | --- | --- |
+| `rockSlopeStart` | 0.08 | 0 to 1 | Slope where rock starts to replace grass, soil or canyon debris. |
+| `rockSlopeEnd` | 0.38 | 0 to 1 | Slope where rock has replaced them. At least 0.01 above the start. |
+| `beachHeight` | 3 m | −100 to 500 | Height above the water up to which level ground is sand. |
+| `beachWidth` | 15 m | 0.5 to 500 | Height over which the sand fades into the ground above it. |
+| `snowline` | 340 m | −1000 to 5000 | World height where snow begins on coast and mountain terrain. |
+| `snowTransition` | 65 m | 1 to 1000 | Height above the snowline over which snow becomes complete. |
+| `alpineStart` | −110 m | −2000 to 0 | Height relative to the snowline where mountain terrain starts turning to bare rock. |
+| `alpineEnd` | −30 m | −2000 to 0 | Height relative to the snowline where it is bare rock. At least 1 m above the start. |
+| `treeline` | −150 m | −2000 to 0 | Height relative to the snowline where mountain forest gives way to subalpine meadow. |
+| `tundraStart` | −90 m | −2000 to 0 | Height relative to the snowline where the meadow gives way to tundra. At least 1 m above the treeline. |
+| `snowSlopeStart` | 0.25 | 0 to 1 | Slope where snow starts to thin. |
+| `snowSlopeEnd` | 0.65 | 0 to 1 | Slope beyond which ground stays bare. At least 0.01 above the start. |
+| `macroVariation` | 1 | 0 to 3 | Strength of the broad noise that varies grass brightness, soil cover, canyon dust and debris, granite brightness, mountain talus, the snowline and the mountain zones. At 1 the snowline moves up to 25 m either way. 0 removes the variation. |
+
+On mountains, ribs and patchy noise lower the treeline, the foot of the tundra and the start of bare rock by up to
+about 95 m, and gullies raise them by up to about 75 m, so rock runs down the ribs and vegetation climbs the gullies.
+The broad noise moves these zones 70 m against the snowline at a `macroVariation` of 1: where it raises the snowline
+25 m, the zones lie 45 m lower. The transitions break into clumps of trees, shrubs and rock, and avalanche chutes open
+the forest down the gullies of steeper slopes. Below the treeline, soil holds on slopes about 0.07 steeper than it does
+above it.
+
+### Rock
+
+These settings apply to mountain terrain.
+
+| Setting | Default | Range | Effect |
+| --- | --- | --- | --- |
+| `talusAmount` | 0.5 | 0 to 1 | Share of the moderately steep ground covered by talus. 0 leaves none. |
+| `stainAmount` | 0.3 | 0 to 1 | Share of the granite stained with iron. |
+| `lichenAmount` | 0.5 | 0 to 1 | Strength of the lichen that tints the granite grey-green in patches. |
+
 ## Verify changes
 
-From the engine checkout run `npm run test:terrain`. The surface suite checks derivatives and seams,
+From the engine checkout run `npm run test:terrain`. The appearance suite checks validation, the defaults against the
+old shader constants, and the uniform values `bind()` uploads. The surface suite checks derivatives and seams,
 transaction replay, roads, residency, and picking. Water tests cover derivative parity, wakes, buoyancy,
 shoreline contacts, and fixed-step behavior. Atmosphere tests cover optical depth, boundary cases and cache
 invalidation. Renderer tests check bounded residency, complete coverage and revision publication.
 Run `npm run test:terrain:gpu` with Chromium installed to compare cached scattering against direct GLSL
-integration and to check GPU wave heights, derivatives, velocities, and normals against PHP.
+integration and to check GPU wave heights, derivatives, velocities, and normals against PHP. It also checks that every
+appearance uniform is read, that banded rock does not alias, that mountain rock has no bands, and that talus and stain
+colours show nowhere at an amount of 0.
 
 The performance target is hardware-accelerated desktop WebGL2 at 1080p/60 FPS. Record the browser and GPU
 alongside measured frame distributions; software WebGL results are correctness evidence, not proof of that
