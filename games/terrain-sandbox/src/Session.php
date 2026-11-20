@@ -702,7 +702,7 @@ final class Session
 				$recipe['preset']=$preset;
 				$recipe['version']=$preset==='canyon'?2:1;
 				$recipe['seed']=(string)($action['seed'] ?? 'first-light');
-				foreach($defaults as $key=>$default) if(array_key_exists($key,$action)) {
+				foreach($defaults + ['worldSize' => $recipe['worldSize']] as $key=>$default) if(array_key_exists($key,$action)) {
 					if(is_string($default)) $recipe[$key]=(string)$action[$key];
 					elseif(!is_numeric($action[$key]) || !is_finite((float)$action[$key]))
 						throw new \InvalidArgumentException('Invalid terrain generation parameter.');

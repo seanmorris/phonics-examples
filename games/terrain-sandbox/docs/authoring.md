@@ -8,6 +8,9 @@ The canyon preset lowers water to −450 metres and starts inside the valley, ex
 
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
+
+Choose **World size** in the **Landscape** tab before selecting **Generate**. The 65.5 km setting doubles the side length and gives four times the playable area. The whole-world map uses a coarser elevation overview at the larger size.
+
 ## Sculpt and paint
 
 - **Raise / Lower:** change the ground by the selected strength, fading smoothly toward the brush edge.

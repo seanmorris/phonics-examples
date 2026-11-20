@@ -108,6 +108,10 @@ final class Clipmap
 
 		$residual = static fn(float $f): float => $f - unpack('g', pack('g', $f))[1];
 		glUniform2f($p->location('uFieldResidual'), $residual($r['baseFrequency']), $residual($r['warpFrequency']));
+		// Rounding the already-converted base frequency times 22 moves the drainage
+		// contours at large coordinates. Pass the exact recipe product and its residual.
+		$erosion = 22 * $r['baseFrequency'];
+		glUniform2f($p->location('uErosion'), $erosion, $residual($erosion));
 		glUniform1f($p->location('uSlopeScale'), $r['slopeScale']);
 		glUniform1i($p->location('uOctaves'), $r['detailOctaves']);
 

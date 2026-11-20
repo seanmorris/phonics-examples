@@ -1416,3 +1416,40 @@ test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joi
 	expect(moving.renderer.proceduralVertexBytes).toBe(0);
 	expect(errors).toEqual([]);
 });
+
+test('the wider landscape can be generated, saved, and flown beyond the original boundary', async({page}) => {
+	test.setTimeout(180_000);
+	await page.setViewportSize({width: 640, height: 420});
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await boot(page);
+
+	await page.getByRole('tab', {name: 'Landscape', exact: true}).click();
+	const worldSize = page.getByRole('combobox', {name: 'World size', exact: true});
+	await expect(worldSize).toHaveValue('128');
+	await worldSize.selectOption('65536');
+	await page.locator('[name="preset"]').selectOption('canyon');
+	await expect(worldSize).toHaveValue('65536');
+	await press(page, 'generate');
+	await expect.poll(async() => (await status(page)).recipe.worldSize).toBe(65536);
+
+	const wide = await save(page);
+	expect(wide.landscape.recipe.worldSize).toBe(65536);
+	wide.camera = {position: [32550,850,-32000], yaw: Math.PI/2, pitch: -.22};
+	await load(page, wide);
+	const nearEdge = await settled(page);
+	expect(nearEdge.camera.position[0]).toBe(32550);
+	expect(nearEdge.camera.position[2]).toBe(-32000);
+	expect(nearEdge.renderer.visible).toBeGreaterThan(0);
+	await expect(worldSize).toHaveValue('65536');
+
+	await canvas(page).focus();
+	await page.keyboard.press('j');
+	await expect.poll(async() => (await status(page)).mode).toBe('jet');
+	await expect.poll(async() => (await status(page)).jet.x).toBeGreaterThan(32550);
+	await page.keyboard.press('n');
+	await expect.poll(async() => (await status(page)).jetWideMap).toBe(true);
+	await expect(page.locator('.terrain-flight-map')).toBeVisible();
+	expect(await canvas(page).evaluate(element => element.getContext('webgl2').getError())).toBe(0);
+	expect(errors).toEqual([]);
+});

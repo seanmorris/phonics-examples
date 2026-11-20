@@ -100,7 +100,7 @@
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
     "browser/cockpit.mjs": "sha256-ZdIh25kQUXzWgLueC/K4dM9a0suiROBHPB/KK6/EfsA=",
     "browser/flight-map.mjs": "sha256-bcRJ6NuuHY65cMyvwqXoaF+V3vu8Oijh+cnM/6VJTks=",
-    "browser/game.mjs": "sha256-3R7fa4NwOL+O4zYuvOnj8AZHo/hzyEs/W6rATFeRDRg=",
+    "browser/game.mjs": "sha256-hNcjp/0RiZGWBM0Mtm94PVTI2fg3MF7K7rtGLNPDsZo=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
     "src/BalloonPractice.php": "sha256-x9qU7rjd/v8tcWaet8U5cStcKWDEnVSfQtaa6D18fVA=",
     "src/Car.php": "sha256-dftdcj9BdxIQiNGWGZKtWBvG2eGh843CKPDDA9OJ/rc=",
@@ -116,7 +116,7 @@
     "src/GroundShadow.php": "sha256-Cx/hcdJAF0kYsGe1XnFoFQJHTjNKA3M2zecl0YU2Aug=",
     "src/Jet.php": "sha256-1AxD4bc2bTgzwA8DDXwiV+Od6WEOWFpsR8DL9NmJWIk=",
     "src/Race.php": "sha256-hqPKUAhqAWWVF0OI7c5NatJNlf0+rOXO0LKcm6OAbM4=",
-    "src/Session.php": "sha256-B+U3xuLB0RdeX68QDjSiS43Vi0PcHUJmS3Sj+rR78c4=",
+    "src/Session.php": "sha256-LLzrseH5TxPl1VFSDAMpTF4VKEVSm6SSj34TymZ1bVA=",
     "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/TrailRenderer.php": "sha256-uprLo2j+J4+qA0rN6gvcVDuQm81lcDsPrR598okVHmk=",
     "src/VehicleModel.php": "sha256-Zuo4fYVk1/9Y1tcmrwcd/1QwVU0cNlydZ/gts1nSsLM="

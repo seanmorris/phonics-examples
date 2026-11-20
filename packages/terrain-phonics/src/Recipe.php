@@ -98,7 +98,7 @@ final class Recipe
 			'baseBias' => [-2,2], 'rolling' => [0,2], 'directionalRise' => [-2,2], 'ridgeHeight' => [0,2],
 			'ridgeRoundness' => [.001,1], 'wallHeight' => [0,2], 'floorWidth' => [.03,1],
 			'wallWidth' => [.001,1], 'secondary' => [0,2], 'bedding' => [0,1], 'transitionWidth' => [1,65536],
-			'worldSize' => [16,32768]
+			'worldSize' => [16,65536]
 			, 'spacing' => [.25,32]
 			, 'waterLevel' => [-10000,10000]
 			, 'heightScale' => [0,10000]

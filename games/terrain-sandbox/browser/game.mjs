@@ -645,6 +645,15 @@ export function activate({module, canvas, session, services})
 			{
 				frame.querySelector('[name="preset"]').value = state.recipe.preset;
 				frame.querySelector('[name="seed"]').value = state.recipe.seed;
+				const worldSize = frame.querySelector('[name="worldSize"]');
+				const customSize = worldSize.querySelector('[data-loaded-size]');
+				const size = String(state.recipe.worldSize);
+				customSize.hidden = [...worldSize.options].some(option => option !== customSize && option.value === size);
+				if(!customSize.hidden) {
+					customSize.value = size;
+					customSize.textContent = size + ' m per side';
+				}
+				worldSize.value = size;
 
 				for(const key of Object.keys(surface.presets[state.recipe.preset]))
 				frame.querySelector(`[name="${key}"]`).value = state.recipe[key];
@@ -912,6 +921,7 @@ function generationValues(frame)
 	const result = {
 		preset: frame.querySelector('[name="preset"]').value
 		, seed: frame.querySelector('[name="seed"]').value
+		, worldSize: Number(frame.querySelector('[name="worldSize"]').value)
 	};
 
 	for(const field of frame.querySelectorAll('[data-landform] [name]'))
@@ -1130,6 +1140,11 @@ function markup()
 	<section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
 	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option></select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
+	<label class="terrain-field">World size<select name="worldSize">
+		<option value="32768">32.8 km per side</option>
+		<option value="65536">65.5 km per side</option>
+		<option data-loaded-size hidden></option>
+	</select></label>
 	<details data-landform><summary>Landform parameters</summary>
 	<label class="terrain-field">Height scale · m<input name="heightScale" type="number" min="0" max="10000" value="420"></label>
 	<label class="terrain-field">Fine detail · m<input name="detailAmplitude" type="number" min="0" max="1000" value="28"></label>

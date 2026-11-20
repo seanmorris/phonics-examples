@@ -6,6 +6,7 @@ uniform vec4 uShape; // bias, rolling, rise, ridge
 uniform vec4 uProfile; // ridge rounding, wall height, floor width, wall width
 uniform vec4 uField; // scale, frequency, warp amplitude, warp frequency
 uniform vec2 uFieldResidual;
+uniform vec2 uErosion; // drainage frequency and its float rounding residual
 uniform vec4 uRock; // secondary, terrace spacing, strength, bedding
 uniform vec4 uDetail; // amplitude, persistence, lacunarity, damping
 uniform vec4 uRegion; // half extent, surround type, transition, sea level
@@ -42,6 +43,60 @@ vec3 sampleNoise(vec2 position, vec2 displacement,float frequency,float residual
 	vec2 g=mix(mix(a,b,u),mix(c,d,u),w)+vec2(derivative(q.x)*mix(r-p,t-s,w),derivative(q.y)*(hi-lo));
 	return vec3(mix(lo,hi,w),g);
 }
+// A float pair retains the low bits that matter for the steep contour band.
+vec2 addPair(vec2 a,vec2 b)
+{
+	float sum=a.x+b.x, carry=sum-a.x;
+	float tail=(a.x-(sum-carry))+(b.x-carry)+a.y+b.y;
+	float lead=sum+tail;
+	return vec2(lead,(sum-lead)+tail);
+}
+vec2 multiplyPair(vec2 a,vec2 b)
+{
+	float product=a.x*b.x;
+	float ah=uintBitsToFloat(floatBitsToUint(a.x)&0xfffff000u), al=a.x-ah;
+	float bh=uintBitsToFloat(floatBitsToUint(b.x)&0xfffff000u), bl=b.x-bh;
+	float error=((ah*bh-product)+ah*bl+al*bh)+al*bl;
+	return addPair(vec2(product,error),vec2(a.x*b.y+a.y*b.x,0.));
+}
+vec2 preciseFade(vec2 t)
+{
+	vec2 cubic=multiplyPair(multiplyPair(t,t),t);
+	vec2 h=addPair(multiplyPair(t,vec2(6.,0.)),vec2(-15.,0.));
+	return multiplyPair(cubic,addPair(multiplyPair(t,h),vec2(10.,0.)));
+}
+vec2 preciseGradient(float g)
+{
+	return vec2(g,abs(g)==1. || g==0. ? 0. : sign(g)*1.2101617152815436e-8);
+}
+vec2 preciseDot(vec2 g,vec2 dx,vec2 dz)
+{
+	return addPair(multiplyPair(preciseGradient(g.x),dx),multiplyPair(preciseGradient(g.y),dz));
+}
+vec2 preciseMix(vec2 a,vec2 b,vec2 t)
+{
+	return addPair(a,multiplyPair(addPair(b,-a),t));
+}
+float preciseContour(vec2 world,vec2 warp)
+{
+	vec2 frequency=vec2(uField.y,uFieldResidual.x);
+	vec2 x=multiplyPair(addPair(vec2(world.x,0.),vec2(warp.x,0.)),frequency);
+	vec2 z=multiplyPair(addPair(vec2(world.y,0.),vec2(warp.y,0.)),frequency);
+	// The contour offsets are 13.17 and -9.31. Add the fractional parts without
+	// discarding their decimal rounding residuals.
+	x=addPair(x,vec2(.17,-1.7881393432617188e-9));
+	z=addPair(z,vec2(.69,2.384185791015625e-9));
+	ivec2 cell=ivec2(floor(vec2(x.x,z.x)))+ivec2(13,-10);
+	x=addPair(x,vec2(-floor(x.x),0.));
+	z=addPair(z,vec2(-floor(z.x),0.));
+	vec2 u=preciseFade(x), v=preciseFade(z);
+	vec2 x1=addPair(x,vec2(-1.,0.)), z1=addPair(z,vec2(-1.,0.));
+	int left=perm(cell.x), right=perm(cell.x+1);
+	vec2 low=preciseMix(preciseDot(grad(left,cell.y),x,z),preciseDot(grad(right,cell.y),x1,z),u);
+	vec2 high=preciseMix(preciseDot(grad(left,cell.y+1),x,z1),preciseDot(grad(right,cell.y+1),x1,z1),u);
+	return preciseMix(low,high,v).x;
+}
+
 float terrainHeight(vec2 world)
 {
 	if(uField.x==0. && (uDetail.x==0. || uOctaves==0)) return 0.;
@@ -56,6 +111,12 @@ float terrainHeight(vec2 world)
 	}
 	vec3 a=sampleNoise(world,displacement,f,uFieldResidual.x,ivec2(13,-10),vec2(.17,.69));
 	vec3 b=sampleNoise(world,displacement,f*2.,2.*uFieldResidual.x,ivec2(71,53),vec2(.43,.11));
+	bool beds=uRock.w>0. && uRock.y>0. && uRock.z>0.;
+	float contourDistance=abs(a.x)-uProfile.z;
+	// The narrow, unbedded wall can magnify an otherwise imperceptible noise error.
+	// Use the compensated contour only where that wall can affect the height.
+	if(uField.x>0. && uProfile.y>0. && !beds && contourDistance>-.00001 && contourDistance<uProfile.w+.00001)
+		a.x=preciseContour(world,displacement);
 	vec3 h=vec3(uShape.x,0,0)+uShape.y*a*vec3(1.,f,f)+uRock.x*b*vec3(1.,2.*f,2.*f);
 	if(uShape.z!=0.) {
 		float coast=tanh(p.x/4500.);
@@ -67,19 +128,18 @@ float terrainHeight(vec2 world)
 	}
 	float strength=uRock.z;
 	vec2 ds=vec2(0);
-	bool beds=uRock.w>0. && uRock.y>0. && strength>0.;
 	if(uProfile.y>0. || beds) {
 		float dist=abs(a.x)-uProfile.z, width=uProfile.w;
 		vec2 slope=sign(a.x)*a.yz*f;
 		if(beds) {
 			float amount=strength*uRock.w;
-			vec3 e=sampleNoise(world,displacement,22.*f,22.*uFieldResidual.x,ivec2(43,-82),vec2(.7,.7));
+			vec3 e=sampleNoise(world,displacement,uErosion.x,uErosion.y,ivec2(43,-82),vec2(.7,.7));
 			dist+=amount*(.025-.029*e.x);
 			width+=.105*amount;
-			slope-=.029*amount*e.yz*22.*f;
+			slope-=.029*amount*e.yz*uErosion.x;
 			float channel=clamp((e.x+.13)/.62,0.,1.);
 			strength=amount*(1.-.8*fade(channel));
-			ds=-amount*.8*derivative(channel)*22.*f/.62*e.yz;
+			ds=-amount*.8*derivative(channel)*uErosion.x/.62*e.yz;
 			ds+=ds.x*wx+ds.y*wz;
 		}
 		float t=clamp(dist/width,0.,1.);
