@@ -54,6 +54,8 @@ final class Scene
 	private int $revision = -1, $frames = 0, $selections = 0;
 	private bool $changed = true, $closed = false;
 	private ?GpuPatch $craftMesh = null;
+	/** Lamps lighting the ground and water, from the first setSpotLights() on. */
+	private ?SpotLights $spotLights = null;
 	private float $selectionTime = -1;
 	private float $transitionUntil = -1;
 	private string $selectionKey = '';
@@ -124,6 +126,13 @@ final class Scene
 	public float $budgetMs = 2;
 	/** Maximum retained patches including parents. */
 	public int $maximumPatches = 384;
+	/**
+	 * Terrain colours, banding and blending. The next render() uploads a replacement. An application that skips
+	 * unchanged frames must draw one after replacing it.
+	 */
+	public TerrainAppearance $appearance;
+	/** The appearance whose uniforms the ground program holds, or null when they need uploading. */
+	private ?TerrainAppearance $boundAppearance = null;
 
 	/**
 	 * Create an incremental terrain scene with independent simulation surfaces.
@@ -141,6 +150,8 @@ final class Scene
 	){
 		$this->indices = GpuPatch::indices(Lod::CELLS);
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
+		$this->appearance = new TerrainAppearance;
+
 		$this->create();
 	}
 
@@ -155,10 +166,12 @@ final class Scene
 		$water = file_get_contents($root . 'water-functions.glsl');
 		$grid = file_get_contents($root . 'patch-grid.glsl');
 		$optics = WaterAppearance::shaderSource();
+		$spots = SpotLights::shaderSource();
 
 		$this->groundProgram = new Program(
 			str_replace('// PATCH', $grid, file_get_contents($root . 'terrain.vert'))
-			, str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics], file_get_contents($root . 'terrain.frag'))
+			, str_replace(['// ATMOSPHERE','// OPTICS','// SPOT LIGHTS'], [$atmosphere,$optics,$spots]
+				, file_get_contents($root . 'terrain.frag'))
 		);
 
 		$this->skyProgram = new Program(
@@ -170,7 +183,8 @@ final class Scene
 
 		$this->waterProgram = new Program(
 			str_replace(['// PATCH','// WATER'], [$grid,$water], file_get_contents($root . 'water.vert'))
-			, str_replace(['// ATMOSPHERE','// WATER','// OPTICS'], [$atmosphere,$water,$optics], file_get_contents($root . 'water.frag'))
+			, str_replace(['// ATMOSPHERE','// WATER','// OPTICS','// SPOT LIGHTS'], [$atmosphere,$water,$optics,$spots]
+				, file_get_contents($root . 'water.frag'))
 		);
 
 		glGenVertexArrays(1, $this->vao);
@@ -365,6 +379,20 @@ final class Scene
 		$this->selectionKey = '';
 		$this->changed = true;
 		$this->uploadHeightMap();
+	}
+
+	/**
+	 * Set the spot lights, such as a vehicle's headlights, that light the ground and the water from the next render().
+	 * Call it each frame the lamps move; an empty list clears them. Without lights the shaders skip the lamp loop and
+	 * render() uploads nothing for them. See SpotLights::set() for the keys and units: position in world metres, a
+	 * nonzero direction, linear colour, intensity in candela, range in metres, and inner and outer cone half-angles
+	 * in radians. Lamp light gets SpotLights::NIGHT_GAIN at night.
+	 * @param array $lights List of at most SpotLights::MAX lights.
+	 * @return void Replaces the lights, or throws InvalidArgumentException and keeps the previous ones.
+	 */
+	public function setSpotLights(array $lights): void
+	{
+		($this->spotLights ??= new SpotLights)->set($lights);
 	}
 
 	/**
@@ -2301,6 +2329,14 @@ final class Scene
 		$this->groundProgram->use();
 		$this->common($this->groundProgram, $camera, $width, $height);
 		$this->water->appearance->bind($this->groundProgram);
+
+		// A program keeps its uniforms between frames, so only a new appearance or a relinked program needs them.
+		if($this->boundAppearance !== $this->appearance)
+		{
+			$this->appearance->bind($this->groundProgram);
+			$this->boundAppearance = $this->appearance;
+		}
+
 		$this->vector($this->groundProgram, 'uCraftRotation', [0,0,0]);
 		$this->scalar($this->groundProgram, 'uCraft', 0);
 
@@ -2450,6 +2486,7 @@ final class Scene
 		}
 
 		if($program !== $this->skyProgram) $this->scalar($program, 'uWaterLevel', $this->water->level());
+		if($program !== $this->skyProgram) $this->spotLights?->bind($program, $environment['nightVisibility']);
 		if($program === $this->groundProgram)
 		{
 			$recipe = $this->landscape->recipe();
@@ -2643,9 +2680,11 @@ final class Scene
 		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
 		$this->abandonSelection();
 		$this->groundProgram->restore();
+		$this->boundAppearance = null;
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
 		$this->waterProgram->restore();
+		$this->spotLights?->forget();
 
 		if($this->gridBuffer) glDeleteBuffers(1,$this->gridBuffer);
 		if($this->vao) glDeleteVertexArrays(1,$this->vao);

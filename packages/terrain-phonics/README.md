@@ -124,13 +124,148 @@ Terrain shadows use a coarse heightfield cache for broad mountain shadows. Water
 a lower-environment approximation; it does not reflect individual terrain objects. Distant wave normals and
 foam are filtered for their pixel footprint without changing the physical waves.
 
+`Scene::setSpotLights($lights)` sets up to two spot lights, such as a vehicle's headlights, that light the ground
+and the water from the next `render()`. Call it on each frame the lamps move; an empty list clears them. Each light
+is an array with exactly these keys:
+
+| Key | Unit | Meaning |
+| --- | --- | --- |
+| `position` | metres | World position of the lamp, `[x, y, z]`. |
+| `direction` | | Axis of the beam, `[x, y, z]`, of any nonzero length. |
+| `color` | | Linear RGB, each channel nonnegative, scaling the intensity per channel. White is `[1, 1, 1]`. |
+| `intensity` | candela | Luminous intensity along the axis. |
+| `range` | metres | Distance at which the light has faded out; at least 0.01. |
+| `inner`, `outer` | radians | Half-angles of the cone: full light inside `inner`, none outside `outer`. `0 <= inner <= outer` and `0 < outer <= π/2`. |
+
+```php
+$scene->setSpotLights([
+    ['position' => [12, 3.1, -40], 'direction' => [0, -.05, 1], 'color' => [1, .9, .75],
+        'intensity' => 20000, 'range' => 80, 'inner' => .15, 'outer' => .4],
+]);
+```
+
+A list that breaks any of these rules throws `InvalidArgumentException` and leaves the previous lights in place.
+A lamp's irradiance is its intensity times the cosine of incidence, divided by the squared distance. It fades to
+zero at the range, as `(1 - (d/range)^4)^2`, and across the band between the cones, as the square of the linear
+blend of their cosines. `SpotLights::LUX` converts lux to scene units: Atmosphere's default `sunIntensity` of 20
+stands for about 128,000 lux of sunlight above the atmosphere. By day a lamp adds that physical share and little
+shows. At night the renderer multiplies lamp light by `SpotLights::NIGHT_GAIN`, 10,000, along the dusk curve of
+the night fill. The default fill lights level ground as about 4,200 lux of sunlight would, standing for moonlit
+ground seen by eyes adapted to the dark. Under the same gain it matches about 0.4 lux; a full moon on a clear night
+gives 0.05 to 0.3 lux. Exposure and tone mapping then treat lamp light like sunlight.
+
+The terrain reflects lamp light diffusely from its albedo. Light that reaches submerged ground loses the water's
+`waterFogDensity` for each metre of its path below the water level. The water between the eye and submerged ground
+scatters the lamp light that falls where the sightline enters it. The water surface adds lamp light to its foam
+and its body colour; it does not reflect the lamps. No surface casts a shadow from a lamp, so a lamp lights the
+far side of a hill within its range. Models drawn by the `drawOpaque` callback do not receive lamp light.
+Without lights the shaders skip the lamp loop and `render()` uploads nothing for them. A program receives the
+lights again only when they change and after `restore()`. An application that draws only changed frames must
+draw one after changing the lights. A custom shader can include `SpotLights::shaderSource()` and upload
+`SpotLights::uniforms($nightVisibility)`.
+
+Measured in the sandbox in Chromium with SwiftShader, PHP compiled to WebAssembly takes 0.034 ms to validate and
+pack two lights, 0.013 ms to upload changed lights to one program and 0.006 ms to find a program's lights unchanged.
+Moving lamps cost about 0.06 ms a frame for both programs. In full-screen passes of the linked shaders at 960 by 540
+pixels, against the shaders without the lamp code, terrain took 19% longer with no lights set and 30% longer with
+two, and water 13% and 19% longer. With no lights the terrain cost about what it did with one, which suggests that
+SwiftShader runs the loop body once with every pixel masked off. A GPU can branch over the loop when the count is
+zero, so the cost there may be smaller; no GPU was available to measure it.
+
 Call `$water->setLevel($metres)` to move the mean surface and `$water->setWaveScale($multiplier)` to change swell height and steepness during play. A scale of zero leaves only local wakes, and one restores the authored waves. Rendering, buoyancy samples, and visibility bounds share those values.
 
 Set `$water->appearance = new WaterAppearance([...])` to tune water rendering. Use `waterColor` (sRGB hex), `waterTransparency`, `waterReflectivity`, and `waterFoam` (fractions), and `waterFogDensity` (extinction per metre). The renderer blends sky reflection and foam over the opaque scene. Submerged terrain fades toward the water tint according to the length of the sightline below mean water level. Draw custom opaque objects with the optional `drawOpaque` callback to `Scene::render()` so the water surface covers only their submerged portions. Their shaders can use `WaterAppearance::shaderSource()` and `bind()` for the same underwater fog.
 
+## Terrain appearance
+
+`Scene::$appearance` holds a `TerrainAppearance`: the ground's colours, the banding of exposed rock, and the slopes
+and heights where one material gives way to another. Replace it to change the look; the next `render()` uploads it.
+The renderer uploads an appearance once, and again only after a replacement or `restore()`. An application that draws
+only changed frames must draw one after a replacement.
+
+```php
+$scene->appearance = new TerrainPhonics\TerrainAppearance(['snowline' => 220, 'snowColor' => '#f4f8ff'] + $saved);
+```
+
+The constructor reads the keys of `TerrainAppearance::DEFAULTS` and ignores others, so an application can pass its whole
+settings array. It throws `InvalidArgumentException`, naming the setting, for a colour that is not a six-digit hex
+string and for a number that is not a finite integer or float; numeric strings are rejected. Numbers outside
+`TerrainAppearance::RANGES` are clamped. Each start and end listed in `TerrainAppearance::ORDER` stays apart by a
+minimum gap: an end that is too low moves up to the start plus the gap, rounded to nine decimal places, and when that
+passes the top of the end's range the end stays at the top and the start moves down. Values one gap apart, such as 0.2
+and 0.21, stay as they are, although their binary difference is slightly less than 0.01. `settings` holds the result, in
+the order of `DEFAULTS`, with colours in lower case. `GROUPS` lists the settings in panel order under `colors`,
+`banding` and `blending`. `uniforms()` returns the values `bind()` uploads, for a custom terrain shader.
+`TerrainAppearance::linear($hex)` converts one colour to linear RGB and throws `InvalidArgumentException` for anything
+but a six-digit hex string.
+
+The defaults reproduce the terrain from before these settings existed. Each default colour is the nearest 8-bit sRGB
+value to the linear constant it replaced, and each number equals the constant it replaced.
+
+The presets use the settings differently. Coast and mountain terrain have grass cover, banded rock and snow; mountain
+terrain also turns to bare rock below the snowline. Version-one canyons have soil cover and banded rock. Current
+canyons draw rock from the canyon colours and debris from their dust. Sand applies to every preset. The material
+tool's rock, grass, sand, snow and road paint use the same colours as the generated ground.
+
+### Colours
+
+Colours are sRGB hex strings.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `grassColor` | `#425b2d` | Grass cover on coast and mountain terrain, and grass paint. |
+| `soilColor` | `#815f40` | Soil cover on version-one canyons, mixed 40% toward the banded rock. |
+| `rockColor` | `#867c6f` | Rock between the light bands on coast, mountain and version-one canyon terrain. |
+| `rockBandColor` | `#af957c` | The light bands in that rock. |
+| `sandColor` | `#bfaf8b` | Sand on level ground near the water, and sand paint. |
+| `snowColor` | `#eaf1f8` | Snow on coast and mountain terrain, and snow paint. |
+| `roadColor` | `#65615b` | Road paint. |
+| `canyonRustColor` | `#794944` | The lowest bed of each canyon section. The red beds are a brighter shade of it. |
+| `canyonShaleColor` | `#5f484c` | The soft shale above the rust. |
+| `canyonSandstoneColor` | `#906356` | Both sandstone cliffs. |
+| `canyonCapColor` | `#a38775` | The pale cap rock at the top of the section. The ledges are a darker shade of it. |
+
+The red beds and ledges keep the ratio, channel by channel, that they had to the rust and the cap rock in the default
+palette. Canyon dust and debris, beds too fine to resolve at a distance, and the light the walls throw into shadow
+follow the average of the beds weighted by their thickness. The red beds and the dust are lighter than the colours they
+follow, so each derived channel stops at 1: red beds under a white rust are white.
+
+### Banding
+
+| Setting | Default | Range | Effect |
+| --- | --- | --- | --- |
+| `bandSpacing` | 52.36 m (2π / 0.12) | 5 to 1000 | Height of one dark and one light band in coast, mountain and version-one canyon rock. |
+| `bandContrast` | 1 | 0 to 1 | 0 paints banded rock one colour: halfway between the two rock colours, or the canyon's distant colour. |
+| `bandSharpness` | 1 | 1 to 8 | 1 is a sine profile. Higher values flatten each band and narrow the transitions, and narrow the contacts between canyon beds by the same factor. |
+
+Canyon beds take their spacing from the recipe's `terraceSpacing`, because the relief shares them, so `bandSpacing`
+does not apply to them. Bands fade to their average colour where a pixel spans several of them. A sharpened profile
+turns back into a sine where one band covers fewer than about twice (sharpness + 2) pixels, so the harmonics that
+sharpen it have faded before they pass the pixel rate.
+
+### Blending
+
+A slope is 1 minus the upward component of the surface normal: 0 on level ground, 1 on a vertical face. A slope of
+0.08 is about 23° and 0.38 about 52°.
+
+| Setting | Default | Range | Effect |
+| --- | --- | --- | --- |
+| `rockSlopeStart` | 0.08 | 0 to 1 | Slope where rock starts to replace grass, soil or canyon debris. |
+| `rockSlopeEnd` | 0.38 | 0 to 1 | Slope where rock has replaced them. At least 0.01 above the start. |
+| `beachHeight` | 3 m | −100 to 500 | Height above the water up to which level ground is sand. |
+| `beachWidth` | 15 m | 0.5 to 500 | Height over which the sand fades into the ground above it. |
+| `snowline` | 340 m | −1000 to 5000 | World height where snow begins on coast and mountain terrain. |
+| `snowTransition` | 65 m | 1 to 1000 | Height above the snowline over which snow becomes complete. |
+| `alpineStart` | −170 m | −2000 to 0 | Height relative to the snowline where mountain terrain starts turning to bare rock. |
+| `alpineEnd` | −30 m | −2000 to 0 | Height relative to the snowline where it is bare rock. At least 1 m above the start. |
+| `snowSlopeStart` | 0.25 | 0 to 1 | Slope where snow starts to thin. |
+| `snowSlopeEnd` | 0.65 | 0 to 1 | Slope beyond which ground stays bare. At least 0.01 above the start. |
+| `macroVariation` | 1 | 0 to 3 | Strength of the broad noise that varies grass brightness, soil cover, canyon dust and debris, and the snowline. At 1 the snowline moves up to 25 m either way. 0 removes the variation. |
+
 ## Verify changes
 
-From the engine checkout run `npm run test:terrain`. The surface suite checks derivatives and seams,
+From the engine checkout run `npm run test:terrain`. The appearance suite checks validation, the defaults against the
+old shader constants, and the uniform values `bind()` uploads. The surface suite checks derivatives and seams,
 transaction replay, roads, residency, and picking. Water tests cover derivative parity, wakes, buoyancy,
 shoreline contacts, and fixed-step behavior. Atmosphere tests cover optical depth, boundary cases and cache
 invalidation. Renderer tests check bounded residency, complete coverage and revision publication.
