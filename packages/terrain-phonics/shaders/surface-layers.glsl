@@ -1,4 +1,4 @@
-#define SURFACE_LAYERS
+const int STIPPLE_PATTERN = 5;
 uniform int uLayerCount;
 uniform vec3 uLayerColor[12];
 uniform vec4 uLayerRange[12],uLayerBlend[12],uLayerMode[12];
@@ -23,6 +23,13 @@ float layerNoise(vec2 xz,float scale,float footprint) {
 }
 
 float patternMask(vec2 uv, int kind) {
+	if(kind==STIPPLE_PATTERN) {
+		ivec2 cell=ivec2(floor(uv));
+		float seed=.5+.5*layerCorner(cell+ivec2(89,13));
+		vec2 center=vec2(.5)+.25*vec2(layerCorner(cell),layerCorner(cell+ivec2(29,7)));
+		float radius=mix(.07,.18,seed);
+		return smoothstep(.10,.40,seed)*(1.-smoothstep(radius-.03,radius+.05,length(fract(uv)-center)));
+	}
 	if(kind==3) {
 		ivec2 cell=ivec2(floor(uv));
 		float grit=.5+.5*layerCorner(cell);
@@ -35,15 +42,28 @@ float patternMask(vec2 uv, int kind) {
 	return smoothstep(-.55,.55,noise);
 }
 
+float patternVisibility(float footprint,float scale,int kind) {
+	// Narrow streaks and small flecks disappear earlier than large patches of colour.
+	float start=kind==STIPPLE_PATTERN ? .045 : (kind==1 ? .2 : (kind==3 ? .06 : .11));
+	return 1.-smoothstep(start,start*3.,footprint/scale);
+}
+
+float projectedPattern(vec3 pos,vec3 weight,float scale,float stretch,vec2 offset,int kind) {
+	vec2 verticalScale=scale*vec2(1.,stretch);
+	float amount=0.;
+	if(weight.x>0.) amount+=weight.x*patternMask((pos.zy+offset)/verticalScale,kind);
+	if(weight.y>0.) amount+=weight.y*patternMask((pos.xz+offset)/scale,kind);
+	if(weight.z>0.) amount+=weight.z*patternMask((pos.xy+offset.yx)/verticalScale,kind);
+	return amount;
+}
+
 vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeight,float beddingPixel) {
 	vec3 base=uLayerColor[layer];
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
 	if(kind==0 || pattern.y<=0.) return base;
 
-	// Narrow streaks and gravel disappear earlier than large patches of colour.
-	float filterStart=kind==1 ? .2 : (kind==3 ? .06 : .11);
-	float visibility=1.-smoothstep(filterStart,filterStart*3.,footprint/pattern.z);
+	float visibility=patternVisibility(footprint,pattern.z,kind);
 	float partings=0.;
 	if(kind==4) {
 		// Fine sediment lines follow the dipped bed, even where the weathering streaks run across it.
@@ -61,12 +81,8 @@ vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeig
 	vec3 weight=abs(normal);
 	weight*=weight;
 	weight/=max(.0001,dot(weight,vec3(1.)));
-	vec2 verticalScale=pattern.z*vec2(1.,pattern.w);
 	vec2 offset=uPaletteOffset+vec2(73.37,19.81);
-	float amount=0.;
-	if(weight.x>0.) amount+=weight.x*patternMask((pos.zy+offset)/verticalScale,kind);
-	if(weight.y>0.) amount+=weight.y*patternMask((pos.xz+offset)/pattern.z,kind);
-	if(weight.z>0.) amount+=weight.z*patternMask((pos.xy+offset.yx)/verticalScale,kind);
+	float amount=projectedPattern(pos,weight,pattern.z,pattern.w,offset,kind);
 	return mix(base,uLayerPatternColor[layer],pattern.y*max(visibility*amount,.52*partings));
 }
 float repeatingMask(float height,vec2 range,float fade,float period) {

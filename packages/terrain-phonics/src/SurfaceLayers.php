@@ -8,7 +8,7 @@ use Phonics\Render\Program;
 final class SurfaceLayers
 {
 	public const LIMIT = 12;
-	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded'];
+	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple'];
 	public const DEFAULTS = [
 		'color' => '#807355'
 		, 'low' => -1000000.
@@ -139,20 +139,27 @@ final class SurfaceLayers
 		{
 			'canyon' => self::canyonLayers($r, $appearance),
 			'canyon-v1' => self::earlyCanyonLayers($s),
-			'mountain' => [['color' => $s['forestColor']]],
+			'mountain' => [['color' => $s['forestColor']] + self::stipple($s['forestColor'], .70)],
 			default => [['color' => $s['grassColor']]],
 		};
 
 		if($style === 'mountain')
 		{
-			$rows[] = ['color' => $s['meadowColor'],'low' => $s['snowline'] + $s['treeline'],'fade' => 40,'noise' => 15];
-			$rows[] = ['color' => $s['tundraColor'],'low' => $s['snowline'] + $s['tundraStart'],'fade' => 34,'noise' => 12];
+			$rows[] = ['color' => $s['meadowColor'],'low' => $s['snowline'] + $s['treeline'],'fade' => 40,'noise' => 15]
+				+ self::stipple($s['meadowColor'], .70);
+			$rows[] = ['color' => $s['tundraColor'],'low' => $s['snowline'] + $s['tundraStart'],'fade' => 34,'noise' => 12]
+				+ self::stipple($s['tundraColor'], .70);
 		}
 
-		if(!$canyon) $rows[] = self::exposedRock($s)
-			+ ['color' => $s[$style === 'mountain' ? 'graniteColor' : 'rockColor']];
+		if(!$canyon)
+		{
+			$rock = $s[$style === 'mountain' ? 'graniteColor' : 'rockColor'];
+			$rows[] = self::exposedRock($s) + ['color' => $rock]
+				+ ($style === 'mountain' ? self::stipple($rock, .68, $s['lichenAmount']) : self::stipple($rock, .80, .60));
+		}
 
-		$rows[] = ['color' => $s['sandColor'],'high' => $s['beachHeight'],'datum' => 'water','fade' => $s['beachWidth']];
+		$rows[] = ['color' => $s['sandColor'],'high' => $s['beachHeight'],'datum' => 'water','fade' => $s['beachWidth']]
+			+ self::stipple($s['sandColor'], .80, .55, .70);
 
 		if(!$canyon)
 		$rows[] = [
@@ -162,9 +169,17 @@ final class SurfaceLayers
 			, 'slopeHigh' => $s['snowSlopeEnd']
 			, 'slopeFade' => $s['snowSlopeEnd'] - $s['snowSlopeStart']
 			, 'noise' => 24.
-		];
+		] + ($style === 'mountain' ? self::stipple($s['snowColor'], .65) : []);
 
 		return new self($rows);
+	}
+
+	private static function stipple(string $color, float $shade, float $amount = 1., float $size = 1.6): array
+	{
+		$darker = array_map(static fn(float $channel): float => $shade*$channel, TerrainAppearance::linear($color));
+
+		return ['pattern'=>'stipple', 'patternColor'=>self::hex($darker), 'patternAmount'=>$amount,
+			'patternScale'=>$size, 'patternStretch'=>1.];
 	}
 
 	/** Translate a start/end slope blend into a layer's full-coverage threshold and fade. */

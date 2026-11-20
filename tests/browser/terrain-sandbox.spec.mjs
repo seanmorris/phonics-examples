@@ -1456,6 +1456,53 @@ test('the coastal palette shows inland grass and shore sand', async({page}) => {
 	expect(green).toBeGreaterThan(blue + 5);
 });
 
+test('Mountain Ridges shades lichen and custom layers can stipple their interiors', async({page}) => {
+	await page.setViewportSize({width: 520, height: 360});
+	await boot(page);
+	const mountain = fixture();
+	Object.assign(mountain.landscape.recipe, {
+		preset: 'mountain', seed: 'visual-mountain', worldSize: 8192,
+		spacing: 2, heightScale: 1400, baseFrequency: 1/2200, surround: 'mountains',
+	});
+	Object.assign(mountain.settings, {lichenAmount: 0, waterLevel: 0, elevation: 45, azimuth: 140});
+	mountain.camera = {position: [-1880,235,-1328], yaw: -2.02, pitch: -.42};
+	await load(page, mountain);
+	await page.locator('.terrain-panel, .terrain-hud').evaluateAll(nodes => nodes.forEach(node => {
+		node.style.visibility = 'hidden';
+	}));
+
+	const view = canvas(page);
+	const capture = async() => {
+		await settled(page);
+		return PNG.sync.read(await view.screenshot()).data;
+	};
+	const changedFraction = (first, second) => {
+		let changed = 0;
+		for(let i = 0; i < first.length; i += 4)
+			if(Math.abs(first[i+1]-second[i+1]) > 2) changed++;
+		return changed/(first.length/4);
+	};
+	const withoutLichen = await capture();
+	await view.evaluate(el => el.terrainSandboxDebug.values({lichenAmount: 1}));
+	await expect.poll(async() => (await status(page)).settings.lichenAmount).toBe(1);
+	const withLichen = await capture();
+	expect(changedFraction(withLichen, withoutLichen)).toBeGreaterThan(.01);
+
+	// One unbounded layer gives the pattern no edges to hide behind.
+	const setStipple = async amount => {
+		await view.evaluate((el, patternAmount) => el.terrainSandboxDebug.action({type:'surface-layers',
+			layers:[{color:'#aa906f',pattern:'stipple',patternColor:'#514431',patternScale:1.6,patternAmount}]}), amount);
+		await expect.poll(async() => (await status(page)).surfaceLayers[0]).toMatchObject({pattern:'stipple',patternAmount:amount});
+		return capture();
+	};
+	const solidRock = await setStipple(0);
+	const stippledRock = await setStipple(.8);
+	expect(changedFraction(solidRock, stippledRock)).toBeGreaterThan(.02);
+	await view.evaluate(el => el.terrainSandboxDebug.action({type:'surface-layers'}));
+	await expect.poll(async() => (await status(page)).surfaceLayers[0].color).not.toBe('#aa906f');
+	expect(changedFraction(await capture(), withLichen)).toBeLessThan(.005);
+});
+
 test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joins', async({page}) => {
 	test.setTimeout(180_000);
 	await page.setViewportSize({width: 720, height: 440});

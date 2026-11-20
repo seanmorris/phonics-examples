@@ -4,6 +4,7 @@ precision highp int;
 // ATMOSPHERE
 // OPTICS
 // SPOT LIGHTS
+// LAYERS
 in vec3 vRelative, vWorld, vNormal;
 in vec3 vPaint0, vPaint1;
 uniform vec3 uEye;
@@ -195,10 +196,19 @@ float sparse(float amount, float noise, float detail)
 	return patchy(amount, noise, detail) * min(1.0, 10.0*amount);
 }
 
+// Small flecks stay tied to the ground and fade out before a fleck shrinks below a few pixels.
+float mountainStipple(float footprint, vec3 weights)
+{
+	const float size = 1.6;
+	float fade = patternVisibility(footprint,size,STIPPLE_PATTERN);
+	if(fade <= 0.0) return 0.0;
+	return fade * projectedPattern(vWorld,weights,size,1.0,vec2(73.37,19.81),STIPPLE_PATTERN);
+}
+
 // Granite mountains. Steep ground shows jointed slabs streaked down the fall line, talus lies on the moderately steep
 // ground, and the cover runs from forest through subalpine meadow to tundra as the ground nears the snowline. Ribs and
 // gullies running down the fall line move every boundary up or down, so none of them follows a contour.
-void mountainMaterial(float footprint, vec3 weights, float slope, float macro, float snowline,
+void mountainMaterial(float footprint, vec3 weights, float slope, float macro, float snowline, float stipple,
 	out vec3 rock, out vec3 cover, out float bare, inout vec3 normal)
 {
 	vec3 forest = uMountainColors[0], meadow = uMountainColors[1], tundra = uMountainColors[2];
@@ -299,7 +309,7 @@ void mountainMaterial(float footprint, vec3 weights, float slope, float macro, f
 		0.6*max(raggedDetail, max(blotchFade, gullyFade)));
 	// Gullies hold shade and water, so everything in them is darker than on the ribs.
 	float hollows = 1.0 + 0.25*rib*upright;
-	cover = mix(vegetation, forest * crowns * (1.0 + 0.3*blotch + 0.3*clump), trees) * hollows;
+	cover = mix(vegetation, forest * crowns * (1.0 + 0.3*blotch + 0.3*clump), trees) * hollows * (1.0 - 0.30*stipple);
 
 	// Talus lies on moderately steep ground, runs down the gullies in tongues and thins where forest has grown over
 	// it. It runs on a little under the bare rock of steeper ground, but it cannot rest on the steepest ground.
@@ -347,7 +357,7 @@ void mountainMaterial(float footprint, vec3 weights, float slope, float macro, f
 		max(blotchFade, gullyFade));
 	vec3 cliff = mix(granite, stain, sheets * clamp(0.5 + 0.8*streak + 0.4*rill, 0.0, 0.85)) * tone;
 	float lichen = uMountainAmounts.z * patchy(0.55, blotch + ragged + 0.4*streak, max(raggedDetail, blotchFade));
-	cliff *= mix(vec3(1.0), vec3(0.88, 0.94, 0.84), lichen);
+	cliff *= mix(vec3(1.0), vec3(0.88, 0.94, 0.84) - 0.22*stipple, lichen);
 
 	// Bare rock covers the steep ground and, nearing the snowline, the ridges. Rock follows the ribs and vegetation the
 	// gullies between them. Gentle bare ground is a block field.
@@ -380,7 +390,6 @@ void mountainMaterial(float footprint, vec3 weights, float slope, float macro, f
 	normal = normalize(normal - tangential * relief / (1.0 + length(tangential)));
 }
 
-// LAYERS
 uniform float uPlayHalf;
 void main()
 {
@@ -392,40 +401,47 @@ void main()
 	float macro = landVariation(vWorld.xz, footprint) * uMacroVariation;
 	float slope = 1.0 - max(0.0, n.y);
 	vec3 grass = uGrassColor * (0.85 + 0.15 * macro);
+	vec3 rock = uRockColor, sand = uSandColor, snow = uSnowColor, lightingNormal = n;
+	vec3 albedo;
 #ifdef SURFACE_LAYERS
-	vec3 rock=uRockColor, sand=uSandColor, snow=uSnowColor, lightingNormal=n;
-	vec3 albedo=layerSurface(vWorld,n,footprint,uWaterLevel)*(1.+.07*macro);
-#else
-	vec3 rock, cover, lightingNormal = n;
-	float bare = smoothstep(uSlopeBlend.x,uSlopeBlend.y,slope);
-	float snowline = uSnowline.x + 25.0 * macro;
-	if(uTerrainStyle > 2.5)
-		canyonMaterial(footprint, weights, slope, macro, rock, cover, lightingNormal);
-	else if(uTerrainStyle > 0.5 && uTerrainStyle < 1.5)
-		mountainMaterial(footprint, weights, slope, macro, snowline, rock, cover, bare, lightingNormal);
+	if(uLayerCount > 0) albedo = layerSurface(vWorld,n,footprint,uWaterLevel)*(1.+.07*macro);
 	else
-	{
-		float strataPhase = vWorld.y * uBanding.x;
-		float blur = fwidth(strataPhase);
-		float strataFilter = exp(-0.125 * pow(blur, 2.0));
-		// Clamping the sine adds odd harmonics: strong ones up to about the sharpness times the band frequency, and a
-		// third harmonic at any sharpness above 1. The sharpening fades with the filter of the harmonic two orders
-		// above the sharpness, before any of them passes the pixel rate and folds back.
-		float sharpness = 1.0 + (uBanding.z - 1.0) * exp(-0.125 * pow(blur * (uBanding.z + 2.0), 2.0));
-		float profile = clamp(sin(strataPhase) * sharpness, -1.0, 1.0);
-		rock = mix(uRockColor, uRockBandColor, 0.5 + 0.5 * uBanding.y * profile * strataFilter);
-		// Strong macro variation must not push the soil weight outside 0 to 1, past either colour.
-		cover = uTerrainStyle > 1.5 ? mix(uSoilColor, rock, clamp(0.4 + 0.2 * macro, 0.0, 1.0)) : grass;
-	}
-	vec3 sand = uSandColor;
-	vec3 snow = uSnowColor;
-	vec3 albedo = mix(cover, rock, bare);
-	albedo = mix(albedo, sand,
-		(1.0 - smoothstep(uWaterLevel + uHeightBlend.x,uWaterLevel + uHeightBlend.y,vWorld.y)) * n.y);
-	if(uTerrainStyle < 1.5)
-		albedo = mix(albedo, snow, smoothstep(snowline,snowline + uSnowline.y,vWorld.y)
-			* (1.0 - smoothstep(uSlopeBlend.z,uSlopeBlend.w,slope)));
 #endif
+	{
+		vec3 cover;
+		float bare = smoothstep(uSlopeBlend.x,uSlopeBlend.y,slope);
+		float snowline = uSnowline.x + 25.0 * macro;
+		float stipple = 0.0;
+#ifndef SURFACE_LAYERS
+		if(uTerrainStyle > 0.5 && uTerrainStyle < 1.5)
+#endif
+		{
+			stipple = mountainStipple(footprint, weights);
+			mountainMaterial(footprint, weights, slope, macro, snowline, stipple, rock, cover, bare, lightingNormal);
+		}
+#ifndef SURFACE_LAYERS
+		else if(uTerrainStyle > 2.5)
+			canyonMaterial(footprint, weights, slope, macro, rock, cover, lightingNormal);
+		else
+		{
+			float strataPhase = vWorld.y * uBanding.x;
+			float blur = fwidth(strataPhase);
+			float strataFilter = exp(-0.125 * pow(blur, 2.0));
+			// Clamping the sine adds odd harmonics and needs filtering before they fold back into the pixel rate.
+			float sharpness = 1.0 + (uBanding.z - 1.0) * exp(-0.125 * pow(blur * (uBanding.z + 2.0), 2.0));
+			float profile = clamp(sin(strataPhase) * sharpness, -1.0, 1.0);
+			rock = mix(uRockColor, uRockBandColor, 0.5 + 0.5 * uBanding.y * profile * strataFilter);
+			// Strong macro variation must not push the soil weight outside 0 to 1, past either colour.
+			cover = uTerrainStyle > 1.5 ? mix(uSoilColor, rock, clamp(0.4 + 0.2 * macro, 0.0, 1.0)) : grass;
+		}
+#endif
+		albedo = mix(cover, rock, bare);
+		albedo = mix(albedo, sand * (1.0 - 0.16*stipple),
+			(1.0 - smoothstep(uWaterLevel + uHeightBlend.x,uWaterLevel + uHeightBlend.y,vWorld.y)) * n.y);
+		if(uTerrainStyle < 1.5)
+			albedo = mix(albedo, snow * (1.0 - 0.35*stipple), smoothstep(snowline,snowline + uSnowline.y,vWorld.y)
+				* (1.0 - smoothstep(uSlopeBlend.z,uSlopeBlend.w,slope)));
+	}
 	// Blend material weights, never categorical identifiers: a rock/road boundary must not become snow.
 	float painted = clamp(dot(vPaint0 + vPaint1, vec3(1.0)), 0.0, 1.0);
 	vec3 craft = mix(vec3(0.06,0.12,0.17), vec3(0.95,0.28,0.03), step(0.15,vWorld.y - uWaterLevel));

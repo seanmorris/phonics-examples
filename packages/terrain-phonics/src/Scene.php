@@ -194,7 +194,8 @@ final class Scene
 		$groundVertex = str_replace('// PATCH', $grid, file_get_contents($root . 'terrain.vert'));
 		$ground = str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics]
 			, file_get_contents($root . 'terrain.frag'));
-		if($this->useClipmap) $ground=str_replace('// LAYERS',file_get_contents($root.'surface-layers.glsl'),$ground);
+		$patterns = ($this->useClipmap ? "#define SURFACE_LAYERS\n" : '') . file_get_contents($root.'surface-layers.glsl');
+		$ground = str_replace('// LAYERS', $patterns, $ground);
 		$this->groundProgram = new Program($groundVertex, str_replace('// SPOT LIGHTS', $dark, $ground));
 		$this->litGroundProgram = new Program($groundVertex, str_replace('// SPOT LIGHTS', $lamps, $ground));
 
@@ -2374,11 +2375,17 @@ final class Scene
 		}
 
 		if($this->clipmap) {
-			$palette=$this->palette();
+			// The mountain preset uses its vegetation, lichen and granite shader. Explicit colour layers replace it.
+			$palette = $this->layers === null && $this->landscape->recipe()['preset'] === 'mountain'
+				? false : $this->palette();
 			$id=spl_object_id($groundProgram);
 			if(($this->layerBinding[$id] ?? null)!==$palette) {
-				$palette->bind($groundProgram);
-				$this->clipmap->paletteOrigin($groundProgram);
+				if($palette === false) glUniform1i($groundProgram->location('uLayerCount'), 0);
+				else
+				{
+					$palette->bind($groundProgram);
+					$this->clipmap->paletteOrigin($groundProgram);
+				}
 				$this->layerBinding[$id]=$palette;
 			}
 		}

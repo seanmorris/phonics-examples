@@ -122,7 +122,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$scene->quality = $session->settings['quality'];
 	// The same object while nothing changes, so the scene uploads the appearance only after a change.
 	$scene->appearance = $session->terrainAppearance;
-	$scene->layers = $session->activeLayers();
+	$scene->layers = $session->surfaceLayers;
 	$scene->selectionInterval = $session->selectionInterval;
 	$scene->selectionSliceMs = $session->selectionSliceMs;
 	$engine->userPaused = $session->paused;
