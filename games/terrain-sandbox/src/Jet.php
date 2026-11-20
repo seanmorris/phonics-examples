@@ -55,12 +55,14 @@ final class Jet
 		$half = $this->half;
 		$x = max(-$half,min($half,$x));
 		$z = max(-$half,min($half,$z));
+		$yaw = M_PI - $camera->yaw;
+		$this->chase = self::axes($yaw, 0.0, 0.0)[2];
 		$this->pose = ['x'=>$x, 'y'=>max($y, max($water,$land->height($x,$z)) + 75), 'z'=>$z,
-			'yaw'=>M_PI - $camera->yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>self::CRUISE, 'power'=>self::CRUISE_POWER,
+			'yaw'=>$yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>self::CRUISE, 'power'=>self::CRUISE_POWER,
+			'vx'=>self::CRUISE*$this->chase[0], 'vy'=>0.0, 'vz'=>self::CRUISE*$this->chase[2],
 			'aileron'=>0.0, 'stabilator'=>0.0, 'rudder'=>0.0];
 		$this->previous = [];
 		$this->rates = [0.0, 0.0, 0.0];
-		$this->chase = self::axes($this->pose['yaw'], 0.0, 0.0)[2];
 		$this->follow(0.0, $camera, $land, $water);
 	}
 
@@ -144,6 +146,13 @@ final class Jet
 		$p['y'] = min(15000.0,$p['y'] + $rise);
 		if($p['y'] < $this->roof + 8) $p['y'] = $this->lift($this->body, $land, $x, $z, $p['y'], 8.0);
 		$p['y'] = max($p['y'], $water + 8);
+		// Measure translation after clearance and ceiling corrections. The canopy follows a different path in a roll.
+		if($dt > 0)
+		{
+			$p['vx'] = ($x - $this->previous['x']) / $dt;
+			$p['vy'] = ($p['y'] - $this->previous['y']) / $dt;
+			$p['vz'] = ($z - $this->previous['z']) / $dt;
+		}
 		$this->follow($dt,$camera,$land,$water);
 		return true;
 	}

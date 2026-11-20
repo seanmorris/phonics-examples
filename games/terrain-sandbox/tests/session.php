@@ -522,7 +522,7 @@ expect($s['aileron'] === 0.0 && $s['stabilator'] === 0.0 && $s['rudder'] === 0.0
 
 $travel = ['aileron'=>TerrainSandbox\Jet::AILERON, 'stabilator'=>TerrainSandbox\Jet::STABILATOR,
 	'rudder'=>TerrainSandbox\Jet::RUDDER];
-$oldKeys = ['x','y','z','yaw','pitch','roll','speed','power','aileron','stabilator','rudder','boom','eyeY','eyeX','eyeZ',
+$oldKeys = ['x','y','z','yaw','pitch','roll','speed','power','vx','vy','vz','aileron','stabilator','rudder','boom','eyeY','eyeX','eyeZ',
 	'lookYaw','lookPitch'];
 $matched = $bounded = $interpolated = true;
 $peak = array_fill_keys(array_keys($travel), 0.0);
@@ -1100,6 +1100,28 @@ input($roam, ['pad'=>pad(y: -1)]);
 expect(abs($far - ($before[2] - $roam->camera->position[2])) < 1e-9 && $far > 1.6,
 	'Stick values beyond full travel count as full travel');
 $roam->close();
+
+// At the ceiling the aircraft can point upwards while travelling horizontally.
+$path = new Session(['worldSize'=>8192, 'heightScale'=>0, 'detailAmplitude'=>0]);
+$path->camera->position = [0,15000,0];
+input($path, ['actions'=>['jet']]);
+$start = $path->jet->state();
+expect(abs($start['vy']) < 1e-9 && abs(hypot($start['vx'],$start['vz']) - Jet::CRUISE) < 1e-8,
+	'The flight path starts at the boarding heading and cruise speed');
+input($path, ['pad'=>pad(x:.45,y:.4)]);
+for($i = 0; $i < 40; $i++) $path->step(1/60);
+$last = $path->jet->state();
+$path->step(1/60);
+$now = $path->jet->state();
+[, $mid] = $path->jet->view($path->camera,.5);
+foreach(['x','y','z'] as $axis)
+{
+	$v = 'v'.$axis;
+	expect(abs($now[$v] - 60*($now[$axis]-$last[$axis])) < 1e-9 && abs($mid[$v] - ($last[$v]+$now[$v])/2) < 1e-9,
+		"Flight path $axis follows real movement and interpolates with the attitude");
+}
+expect($now['pitch'] > .1 && $now['vy'] === 0.0, 'The flight path stays horizontal at the ceiling while the nose climbs');
+$path->close();
 
 // The two Dreamcast handling layouts share the aircraft and expose different throttle controls.
 $bindings = pilot('expert');

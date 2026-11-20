@@ -256,6 +256,53 @@ test('fly the F5, pause in a bank, and return to free flight', async({page}) => 
 	expect(errors).toEqual([]);
 });
 
+test('the cockpit flight-path diamond projects ground track through the banked pilot view', async({page}) => {
+	await page.addInitScript(() => {
+		const axes = [0,0,0,0];
+		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false, touched: false}));
+		const pad = {id: 'Flight-path test', index: 0, mapping: 'standard', timestamp: 1, connected: true, axes, buttons};
+		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+		window.bankAndClimb = () => {
+			axes[0] = .5;
+			axes[1] = .35;
+			pad.timestamp++;
+		};
+
+		const lineTo = CanvasRenderingContext2D.prototype.lineTo;
+		CanvasRenderingContext2D.prototype.lineTo = function(x, y) {
+			if(this.canvas.className === 'terrain-instruments' && x === 0 && y === -5)
+			{
+				const t = this.getTransform();
+				window.pathOffset = [t.e-this.canvas.width/2, t.f-this.canvas.height/2];
+			}
+
+			return lineTo.call(this, x, y);
+		};
+	});
+
+	await boot(page);
+	const airspace = fixture();
+	airspace.landscape.recipe.worldSize = 8192;
+	airspace.camera = {position: [0,15000,0], yaw: 0, pitch: 0};
+	await load(page, airspace);
+	await press(page, 'jet');
+	await canvas(page).focus();
+	await page.keyboard.press('v');
+	await expect.poll(() => page.evaluate(() => Math.hypot(...(window.pathOffset ?? [Infinity])))).toBeLessThan(.01);
+
+	await page.evaluate(() => window.bankAndClimb());
+	await expect.poll(async() => (await status(page)).jet.pitch).toBeGreaterThan(.14);
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status(page)).paused).toBe(true);
+	const {jet,viewport,camera} = await status(page);
+	expect(jet.vy).toBe(0);
+	const focal = viewport[1]/(2*Math.tan(camera.fov/2));
+	const down = focal*Math.tan(jet.pitch);
+	const [x,y] = await page.evaluate(() => window.pathOffset);
+	expect(x).toBeCloseTo(-Math.sin(jet.roll)*down, 3);
+	expect(y).toBeCloseTo(Math.cos(jet.roll)*down, 3);
+});
+
 test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({page}) => {
 	test.setTimeout(180_000);
 	await page.setViewportSize({width: 720, height: 480});

@@ -44,11 +44,10 @@ export function activate({module, canvas})
 		const dot = (a, b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 		const [nose,right,up] = basis;
 
-		const point = p => {
-			const v = p.map((n, i) => n-eye[i]);
+		const project = (v, near) => {
 			const z = dot(v, nose);
 
-			return z > .25 ? [focal*dot(v, right)/z, -focal*dot(v, up)/z] : null;
+			return z > near ? [focal*dot(v, right)/z, -focal*dot(v, up)/z] : null;
 		};
 
 		function line(x, y, x2, y2, color = green)
@@ -121,15 +120,24 @@ export function activate({module, canvas})
 			}
 
 			ctx.restore();
-			line(-25, 0, -6, 0);
-			line(6, 0, 25, 0);
-			ctx.beginPath();
-			ctx.moveTo(-6, 0);
-			ctx.lineTo(0, -5);
-			ctx.lineTo(6, 0);
-			ctx.lineTo(0, 5);
-			ctx.closePath();
-			ctx.stroke();
+			const path = project([jet.vx, jet.vy, jet.vz], 1e-6);
+
+			if(path && Math.abs(path[0]) <= w/2+25 && Math.abs(path[1]) <= h/2+5)
+			{
+				ctx.save();
+				ctx.translate(...path);
+				line(-25, 0, -6, 0);
+				line(6, 0, 25, 0);
+
+				ctx.beginPath();
+				ctx.moveTo(-6, 0);
+				ctx.lineTo(0, -5);
+				ctx.lineTo(6, 0);
+				ctx.lineTo(0, 5);
+				ctx.closePath();
+				ctx.stroke();
+				ctx.restore();
+			}
 
 			const headings = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
 
@@ -241,7 +249,7 @@ export function activate({module, canvas})
 
 		if(target && range.visible)
 		{
-			const xy = point(target);
+			const xy = project(target.map((n, i) => n-eye[i]), .25);
 
 			if(xy)
 			{
