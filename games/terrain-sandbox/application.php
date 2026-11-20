@@ -14,6 +14,7 @@ use Phonics\Render\Device;
 use TerrainPhonics\Scene;
 use TerrainPhonics\BrowserPatchBuilder;
 use TerrainSandbox\GateModel;
+use TerrainSandbox\GroundShadow;
 use TerrainSandbox\VehicleModel;
 use TerrainSandbox\Session;
 
@@ -119,7 +120,12 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	return false;
 });
 
-$drawOpaque = static function() use ($session, $gates, &$models, &$width, &$height, &$viewCamera, &$vehiclePose): void {
+$shadow = null;
+$drawOpaque = static function() use ($session, $gates, &$models, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose): void {
+	// The car's shadow darkens the ground it stands on, so it draws after the terrain and before the car.
+	if($session->mode === 'car' && $vehiclePose !== null)
+		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape,
+			$session->atmosphere->uniforms()['sunDirection'], $viewCamera, $width, $height);
 	if($session->mode !== 'fly')
 	{
 		$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
@@ -201,15 +207,19 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $gates, &$models): void {
+	static function() use ($engine, $session, $scene, $gates, &$models, &$shadow): void {
 		$engine->systems->remove('terrain-sandbox.simulate');
 		foreach($models as $model) $model->close();
+		$shadow?->close();
 		$gates->release();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $gates, &$models, &$dirty): void {
+	static function() use ($scene, $gates, &$models, &$shadow, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
+		// The lost context took the shadow's program and grid with it; the next frame that needs it builds them again.
+		$shadow?->close();
+		$shadow = null;
 		$gates->release();
 		$scene->restore();
 		$dirty = true;
