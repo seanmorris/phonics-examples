@@ -8,8 +8,8 @@ use Phonics\Render\Program;
  * Up to two spot lights, such as a vehicle's headlights, for the ground and water shaders.
  *
  * Light falls off with the square of distance and with the cosine of incidence. It fades to nothing at the light's
- * range and across the band between its inner and outer cone. No surface casts a shadow, so a lamp also lights the
- * far side of a hill within its range.
+ * range and across the band between its inner and outer cone. The shaders compress the lights' summed irradiance
+ * above KNEE. No surface casts a shadow, so a lamp also lights the far side of a hill within its range.
  */
 final class SpotLights
 {
@@ -26,6 +26,15 @@ final class SpotLights
 	 * the same gain. By day the gain is one.
 	 */
 	public const NIGHT_GAIN = 1e4;
+	/**
+	 * Summed irradiance, in scene units after the night gain, above which the shaders compress lamp light.
+	 *
+	 * With m the sum's largest channel, the sum is scaled by KNEE ln(1 + m / KNEE) / m, which keeps its colour. On
+	 * level ground a low lamp's light falls off with the cube of distance, so the ground a few metres ahead would
+	 * otherwise receive hundreds of times what the ground 50 m ahead does and turn white in the tone map.
+	 * TERRAIN_SPOT_KNEE in spot-lights.glsl matches it.
+	 */
+	public const KNEE = 1.0;
 	/** Keys every light needs, as keys. */
 	private const KEYS = [
 		'position' => 0
@@ -117,11 +126,17 @@ final class SpotLights
 
 	/**
 	 * Read the GLSL that the ground and water shaders include at their "// SPOT LIGHTS" marker.
-	 * @return string Source declaring the uniforms, terrainSpotLight() and terrainSpotWaterColumn().
+	 * @param bool $lit False for the lamp-free variant, in which both functions return zero and no uniform exists.
+	 * Scene draws that variant while no light is set: in SwiftShader the lamp code made the ground pass about a
+	 * fifth slower even with a count of zero.
+	 * @return string Source declaring terrainSpotLight() and terrainSpotWaterColumn(), and for lit programs the
+	 * uniforms they read.
 	 */
-	public static function shaderSource(): string
+	public static function shaderSource(bool $lit = true): string
 	{
-		return file_get_contents(dirname(__DIR__) . '/shaders/spot-lights.glsl');
+		$source = file_get_contents(dirname(__DIR__) . '/shaders/spot-lights.glsl');
+
+		return $lit ? $source : "#define TERRAIN_NO_SPOT_LIGHTS\n" . $source;
 	}
 
 	/**

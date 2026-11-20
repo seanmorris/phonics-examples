@@ -2,12 +2,25 @@
 // metres and the inverse square of the range; unit axis and cone scale; irradiance on the axis at one metre, in scene
 // units, and cone offset. SpotLights::uniforms() documents the layout.
 #define TERRAIN_MAX_SPOT_LIGHTS 2
+// Summed lamp irradiance, in scene units, above which it grows with its logarithm. SpotLights::KNEE matches it.
+#define TERRAIN_SPOT_KNEE 1.0
+#ifdef TERRAIN_NO_SPOT_LIGHTS
+// SpotLights::shaderSource(false) defines TERRAIN_NO_SPOT_LIGHTS for the programs Scene draws while no lamp is set.
+// The compiler folds these zeros away, so those programs cost what they did before lamps existed.
+vec3 terrainSpotLight(vec3 position, vec3 normal, float waterLevel, float extinction) { return vec3(0.0); }
+vec3 terrainSpotWaterColumn(vec3 eye, vec3 position, float waterLevel) { return vec3(0.0); }
+#else
 uniform int uSpotLightCount;
 uniform vec4 uSpotLights[TERRAIN_MAX_SPOT_LIGHTS * 3];
 
 // Irradiance in scene units on a surface at a world position with a unit normal. Light falls off with the square of
 // distance and the cosine of incidence, and fades out at the range and across the cone's edge. The part of its path
 // below the water level loses the extinction per metre. Nothing casts a shadow.
+//
+// Ground near a low lamp receives hundreds of times what the ground 50 m ahead does, more than the tone map can show
+// without turning the near ground white. A soft knee compresses the sum: with m its largest channel and K the knee,
+// it is scaled by K ln(1 + m / K) / m. Below K it is nearly linear; ten times K comes out as 2.4 K, a hundred times K
+// as 4.6 K. The scale keeps the lamps' colour.
 vec3 terrainSpotLight(vec3 position, vec3 normal, float waterLevel, float extinction)
 {
 	vec3 irradiance = vec3(0.0);
@@ -26,7 +39,8 @@ vec3 terrainSpotLight(vec3 position, vec3 normal, float waterLevel, float extinc
 		irradiance += light.rgb * (range * range * cone * cone * max(dot(normal, direction), 0.0)
 			* exp(-extinction * wet * squared * inverse) / squared);
 	}
-	return irradiance;
+	float peak = max(irradiance.r, max(irradiance.g, irradiance.b));
+	return irradiance * (TERRAIN_SPOT_KNEE * log(1.0 + peak / TERRAIN_SPOT_KNEE) / max(peak, 1e-6));
 }
 
 // Lamp light that the water between the eye and a submerged point scatters toward the eye, in the water's units of
@@ -37,3 +51,4 @@ vec3 terrainSpotWaterColumn(vec3 eye, vec3 position, float waterLevel)
 	float entry = eye.y > waterLevel ? (eye.y - waterLevel) / (eye.y - position.y) : 0.0;
 	return terrainSpotLight(mix(eye, position, entry), vec3(0.0, 1.0, 0.0), waterLevel, 0.0) / 20.0;
 }
+#endif

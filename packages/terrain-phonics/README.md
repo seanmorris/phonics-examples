@@ -152,25 +152,47 @@ stands for about 128,000 lux of sunlight above the atmosphere. By day a lamp add
 shows. At night the renderer multiplies lamp light by `SpotLights::NIGHT_GAIN`, 10,000, along the dusk curve of
 the night fill. The default fill lights level ground as about 4,200 lux of sunlight would, standing for moonlit
 ground seen by eyes adapted to the dark. Under the same gain it matches about 0.4 lux; a full moon on a clear night
-gives 0.05 to 0.3 lux. Exposure and tone mapping then treat lamp light like sunlight.
+gives 0.05 to 0.3 lux.
+
+On level ground a low lamp's irradiance falls with the cube of distance, so the ground 3 m ahead of a car receives
+hundreds of times what the ground 50 m ahead does, more than the tone map can show without turning the near ground
+white. The shaders therefore compress the lamps' summed irradiance above `SpotLights::KNEE`, 1 scene unit after the
+night gain. With m the largest channel of the sum, they scale it by `KNEE ln(1 + m / KNEE) / m`, which keeps the
+lamps' colour. Light well below the knee passes almost unchanged; ten times the knee comes out as 2.4 times it, and a
+hundred times as 4.6 times. Exposure and tone mapping then treat the compressed lamp light like sunlight.
 
 The terrain reflects lamp light diffusely from its albedo. Light that reaches submerged ground loses the water's
 `waterFogDensity` for each metre of its path below the water level. The water between the eye and submerged ground
 scatters the lamp light that falls where the sightline enters it. The water surface adds lamp light to its foam
 and its body colour; it does not reflect the lamps. No surface casts a shadow from a lamp, so a lamp lights the
 far side of a hill within its range. Models drawn by the `drawOpaque` callback do not receive lamp light.
-Without lights the shaders skip the lamp loop and `render()` uploads nothing for them. A program receives the
-lights again only when they change and after `restore()`. An application that draws only changed frames must
-draw one after changing the lights. A custom shader can include `SpotLights::shaderSource()` and upload
-`SpotLights::uniforms($nightVisibility)`.
+The scene links each of its ground and water programs twice: once with `SpotLights::shaderSource()` and once with
+`SpotLights::shaderSource(false)`, which defines `TERRAIN_NO_SPOT_LIGHTS` so that both lamp functions return zero.
+`render()` draws with the lit pair while at least one light is set and with the lamp-free pair otherwise, and then
+uploads nothing for the lights. Changing pair costs nothing more than drawing with the same one. A lit program
+receives the lights again only when they change and after `restore()`, and keeps them while the lamp-free pair draws.
+An application that draws only changed frames must draw one after changing the lights. A custom shader can include
+either source and upload `SpotLights::uniforms($nightVisibility)` to a program built with the lit one.
 
 Measured in the sandbox in Chromium with SwiftShader, PHP compiled to WebAssembly takes 0.034 ms to validate and
 pack two lights, 0.013 ms to upload changed lights to one program and 0.006 ms to find a program's lights unchanged.
-Moving lamps cost about 0.06 ms a frame for both programs. In full-screen passes of the linked shaders at 960 by 540
-pixels, against the shaders without the lamp code, terrain took 19% longer with no lights set and 30% longer with
-two, and water 13% and 19% longer. With no lights the terrain cost about what it did with one, which suggests that
-SwiftShader runs the loop body once with every pixel masked off. A GPU can branch over the loop when the count is
-zero, so the cost there may be smaller; no GPU was available to measure it.
+Moving lamps cost about 0.06 ms a frame for both programs. Choosing the pair costs native PHP nothing measurable:
+`render()` took the same time within 1% with the lamp-free pair as with the single pair before it.
+
+Full-screen passes of the linked shaders at 960 by 540 pixels in SwiftShader, timed in pairs against the shaders
+from before the lamp code existed, gave these ratios in two runs on a shared machine:
+
+| Pass | Lamp code, no light set | Lamp-free program | Lit program, two lights |
+| --- | --- | --- | --- |
+| Terrain | 1.10 to 1.14 | 0.95 to 0.96 | 1.23 |
+| Submerged terrain | 1.07 to 1.15 | 0.95 to 1.04 | 1.31 |
+| Water | 1.06 to 1.14 | 1.02 to 1.06 | 1.17 |
+
+The first column is what every frame without a light paid before the lamp-free programs; the second is within the
+spread between runs. In Mesa's llvmpipe every variant stayed within 0.87 to 1.20 of the old shaders, as widely as the same variant
+varied between runs, so these runs show no reliable lamp cost there. No GPU was available to measure. Compiling,
+linking and first drawing one ground or water program took 0.4 to 0.7 s in SwiftShader on the same machine, and the
+scene now links four of them where it linked two.
 
 Call `$water->setLevel($metres)` to move the mean surface and `$water->setWaveScale($multiplier)` to change swell height and steepness during play. A scale of zero leaves only local wakes, and one restores the authored waves. Rendering, buoyancy samples, and visibility bounds share those values.
 
