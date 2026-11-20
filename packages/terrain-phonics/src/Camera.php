@@ -14,6 +14,8 @@ final class Camera
 	public array $position = [0,700,1600];
 	/** Heading and elevation in radians. */
 	public float $yaw = 0, $pitch = -.22;
+	/** Bank in radians. A positive bank lifts the right side of the view. */
+	public float $roll = 0.0;
 	/** Vertical field of view in radians. */
 	public float $fov = 1.0471975512;
 
@@ -58,7 +60,16 @@ final class Camera
 		$p = sin($this->pitch);
 		$q = cos($this->pitch);
 
-		return [[$s * $q,$p,-$c * $q],[$c,0,$s],[-$s * $p,$q,$c * $p]];
+		$forward = [$s * $q,$p,-$c * $q];
+		$right = [$c,0,$s];
+		$up = [-$s * $p,$q,$c * $p];
+		if($this->roll != 0)
+		{
+			$cr = cos($this->roll); $sr = sin($this->roll);
+			for($i = 0; $i < 3; $i++)
+				[$right[$i],$up[$i]] = [$cr*$right[$i] + $sr*$up[$i], $cr*$up[$i] - $sr*$right[$i]];
+		}
+		return [$forward,$right,$up];
 	}
 
 	/**

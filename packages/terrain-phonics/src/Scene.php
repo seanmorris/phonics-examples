@@ -485,7 +485,7 @@ final class Scene
 			, $camera->position
 		)) . ':' . $this->quality . ':' . $this->viewportHeight . ':' . $this->viewportAspect . ':' . $camera->fov
 			. ':' . $this->water->level() . ':' . $this->water->waveScale()
-			. ':' . (int)floor($camera->yaw * 16) . ':' . (int)floor($camera->pitch * 16)
+			. ':' . (int)floor($camera->yaw * 16) . ':' . (int)floor($camera->pitch * 16) . ':' . (int)floor($camera->roll * 16)
 			. ':' . ($this->lookahead === null
 				? 'stopped'
 				: implode(':', array_map(
@@ -623,7 +623,7 @@ final class Scene
 	private function holdSelection(float $seconds, Camera $camera): bool
 	{
 		$previous = $this->previousPose;
-		$pose = $this->previousPose = [$camera->position, $camera->yaw, $camera->pitch];
+		$pose = $this->previousPose = [$camera->position, $camera->yaw, $camera->pitch, $camera->roll];
 		$settings = $this->selectionSettings($camera);
 		$adjusted = $settings !== $this->previousSettings;
 		$this->previousSettings = $settings;
@@ -668,7 +668,7 @@ final class Scene
 	 */
 	private function relocated(array $previous, float $seconds, Camera $camera): bool
 	{
-		[$from, $yaw, $pitch] = $previous;
+		[$from, $yaw, $pitch, $roll] = $previous;
 		$reach = 600 * $seconds;
 		if($reach < 64) $reach = 64;
 		$x = $camera->position[0] - $from[0];
@@ -678,6 +678,7 @@ final class Scene
 		if($x * $x + $y * $y + $z * $z > $reach * $reach) return true;
 
 		$turn = $camera->fov / 2;
+		if(abs(atan2(sin($roll - $camera->roll),cos($roll - $camera->roll))) > $turn) return true;
 		$pitch -= $camera->pitch;
 
 		if($pitch > $turn || -$pitch > $turn) return true;
@@ -769,7 +770,7 @@ final class Scene
 				|| $this->selectionsDropped >= 2
 			, 'task' => null
 			, 'first' => $this->updates
-			, 'pose' => [$camera->position, $camera->yaw, $camera->pitch]
+			, 'pose' => [$camera->position, $camera->yaw, $camera->pitch, $camera->roll]
 		];
 
 		// Everything the walks and the work order read from the view is captured here, so a selection that runs
@@ -1293,7 +1294,7 @@ final class Scene
 	private function flightOutdated(float $seconds, Camera $camera): bool
 	{
 		$previous = $this->flight['pose'];
-		$this->flight['pose'] = [$camera->position, $camera->yaw, $camera->pitch];
+		$this->flight['pose'] = [$camera->position, $camera->yaw, $camera->pitch, $camera->roll];
 
 		return $this->flight['settings'] !== $this->selectionSettings($camera)
 			|| $this->relocated($previous, $seconds, $camera);
