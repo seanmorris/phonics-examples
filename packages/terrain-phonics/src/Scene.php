@@ -15,11 +15,19 @@ final class Scene
 	private Program $groundProgram, $skyProgram, $starsProgram, $waterProgram;
 
 	/**
-	 * Ground and water programs built with the lamp code. render() draws them while at least one spot light is set and
-	 * the lamp-free groundProgram and waterProgram otherwise: in SwiftShader the lamp code made the ground pass about a
-	 * fifth slower even with no light set.
+	 * Ground and water programs built with the lamp code. render() draws them while at least one spot light is set,
+	 * and once before the first lamp needs them (litDrawn), and the lamp-free groundProgram and waterProgram
+	 * otherwise: in SwiftShader the lamp code made the ground pass about a fifth slower even with no light set.
 	 */
 	private Program $litGroundProgram, $litWaterProgram;
+	/**
+	 * Whether the lit ground and water programs have drawn since they were linked. A GL implementation may compile a
+	 * program's pipeline at its first draw: in SwiftShader the first draw of each lit program took about 0.2 s more
+	 * than the next. While patches are ready to draw, render() draws with a lit program that has not drawn yet even
+	 * without a light, so that cost falls on the scene's first frames instead of the frame in which the first lamp
+	 * lights.
+	 */
+	private array $litDrawn = ['ground' => false, 'water' => false];
 
 	private AtmosphereRenderer $atmosphereCache;
 	private TerrainShadows $terrainShadows;
@@ -2336,10 +2344,12 @@ final class Scene
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
 
-		// Both pairs of programs are linked up front, so changing pair costs no more than drawing with the same one.
+		// Both pairs of programs are linked up front, and each lit program draws once in the first frame with patches
+		// (litDrawn), so changing pair later costs no more than drawing with the same one.
 		$lit = ($this->spotLights?->count() ?? 0) > 0;
-		$groundProgram = $lit ? $this->litGroundProgram : $this->groundProgram;
-		$waterProgram = $lit ? $this->litWaterProgram : $this->waterProgram;
+		$warm = $this->draw !== [];
+		$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
+		$waterProgram = $lit || $warm && !$this->litDrawn['water'] ? $this->litWaterProgram : $this->waterProgram;
 		$groundProgram->use();
 		$this->common($groundProgram, $camera, $width, $height);
 		$this->water->appearance->bind($groundProgram);
@@ -2402,6 +2412,8 @@ final class Scene
 			$this->craftMesh->draw();
 		}
 
+		if($groundProgram === $this->litGroundProgram && $this->groundDraws > 0) $this->litDrawn['ground'] = true;
+
 		glDisable(GL_CULL_FACE);
 		if($drawOpaque !== null) $drawOpaque();
 		// Opaque depth is complete. Shade the sky only through pixels left at the far depth.
@@ -2463,6 +2475,7 @@ final class Scene
 			$patch['mesh']->draw($this->bindPatch($uPatch, $uEdges, $uCorners, $n, $lastBoundary));
 		}
 
+		if($waterProgram === $this->litWaterProgram && $this->waterDraws > 0) $this->litDrawn['water'] = true;
 		glDisable(GL_BLEND);
 		glBindVertexArray(0);
 		$this->morphMemo = null;
@@ -2701,6 +2714,7 @@ final class Scene
 		$this->starsProgram->restore();
 		$this->waterProgram->restore();
 		$this->litWaterProgram->restore();
+		$this->litDrawn = ['ground' => false, 'water' => false];
 		$this->spotLights?->forget();
 
 		if($this->gridBuffer) glDeleteBuffers(1,$this->gridBuffer);

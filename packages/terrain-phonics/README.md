@@ -173,8 +173,12 @@ far side of a hill within its range. Models drawn by the `drawOpaque` callback d
 The scene links each of its ground and water programs twice: once with `SpotLights::shaderSource()` and once with
 `SpotLights::shaderSource(false)`, which defines `TERRAIN_NO_SPOT_LIGHTS` so that both lamp functions return zero.
 `render()` draws with the lit pair while at least one light is set and with the lamp-free pair otherwise, and then
-uploads nothing for the lights. Changing pair costs nothing more than drawing with the same one. A lit program
-receives the lights again only when they change and after `restore()`, and keeps them while the lamp-free pair draws.
+uploads nothing for the lights. A GL implementation may compile a program's pipeline only when the program first
+draws. In SwiftShader the first draw of the lit ground and water programs took 0.19 and 0.24 s, against 3 and 1 ms
+for later draws, so the frame in which the first lamp lit stalled. Each lit program therefore also draws once in the
+first frame that has patches to draw, and again after `restore()`, even without a light. After that, changing pair
+costs nothing more than drawing with the same one. A lit program receives the lights again only when they change
+and after `restore()`, and keeps them while the lamp-free pair draws.
 An application that draws only changed frames must draw one after changing the lights. A custom shader can include
 either source and upload `SpotLights::uniforms($nightVisibility)` to a program built with the lit one.
 
