@@ -5,7 +5,7 @@ layout(location=0) in vec3 aPosition;
 layout(location=1) in vec3 aNormal;
 layout(location=2) in vec2 aUv;
 layout(location=3) in vec4 aPaint;      // sRGB base color and linear roughness
-layout(location=4) in vec2 aSurface;    // metallic factor and surface tag (wheel, textured or moving surface)
+layout(location=4) in vec2 aSurface;    // metallic factor and surface tag (wheel, lamp, textured or moving surface)
 
 uniform mat4 uViewProjection;
 uniform mat3 uRotation;
@@ -19,15 +19,25 @@ uniform vec3 uHingePoint[SURFACES], uHingeAxis[SURFACES];
 uniform float uHingeAngle[SURFACES];
 // Shifts the texture lookup to another print in the atlas, as the race gates choose their role. Vehicles leave it zero.
 uniform vec2 uUvOffset;
+// Tags 2 to 7 are the Testarossa's lamps and the covers of its pop-up headlights. Tags 2 to 6 give off uLampGlow, the
+// radiance of each lamp, which the fragment shader adds to the light the surface reflects. Tags 6 (the headlamps)
+// and 7 (the covers) turn by uPodAngle about the line along X at the height and Z in uPodHinge. Other vehicles and the
+// gates leave all three zero.
+const int FIRST_LAMP = 2, LAMPS = 5, FIRST_POD = 6;
+uniform vec3 uLampGlow[LAMPS];
+uniform vec2 uPodHinge;
+uniform float uPodAngle;
 out vec3 vRelative, vNormal;
 out vec2 vUv;
 flat out vec4 vPaint;
 flat out vec2 vSurface;
+flat out vec3 vGlow;
 
 void main()
 {
 	vec3 position = aPosition, normal = aNormal;
-	if(aSurface.y > 0.0 && aSurface.y < 0.5)
+	int tag = int(aSurface.y * 255.0 + .5);
+	if(tag == 1)
 	{
 		bool front = position.z > 0.0;
 		vec3 hub = vec3(sign(position.x) * (front ? uWheelLayout.x : uWheelLayout.y),
@@ -44,7 +54,7 @@ void main()
 		position.y += front ? (hub.x < 0.0 ? uWheelTravel.x : uWheelTravel.y)
 			: (hub.x < 0.0 ? uWheelTravel.z : uWheelTravel.w);
 	}
-	int hinge = int(aSurface.y * 255.0 + .5) - 250;
+	int hinge = tag - 250;
 	if(hinge >= 0 && hinge < SURFACES)
 	{
 		// Rodrigues' rotation about the hinge line, applied to the arm from the hinge and to the normal.
@@ -52,6 +62,13 @@ void main()
 		float c = cos(uHingeAngle[hinge]), s = sin(uHingeAngle[hinge]);
 		position = uHingePoint[hinge] + arm * c + cross(axis, arm) * s + axis * dot(axis, arm) * (1.0 - c);
 		normal = normal * c + cross(axis, normal) * s + axis * dot(axis, normal) * (1.0 - c);
+	}
+	vGlow = tag >= FIRST_LAMP && tag < FIRST_LAMP + LAMPS ? uLampGlow[tag - FIRST_LAMP] : vec3(0.0);
+	if(tag >= FIRST_POD && tag <= FIRST_POD + 1 && uPodAngle != 0.0)
+	{
+		mat2 turn = mat2(cos(uPodAngle), sin(uPodAngle), -sin(uPodAngle), cos(uPodAngle));
+		position.yz = uPodHinge + turn * (position.yz - uPodHinge);
+		normal.yz = turn * normal.yz;
 	}
 	vRelative = uOrigin + uRotation * position;
 	vNormal = uRotation * normal;

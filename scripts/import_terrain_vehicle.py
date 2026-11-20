@@ -3,6 +3,7 @@ import argparse
 import gzip
 import itertools
 import json
+import math
 from pathlib import Path
 import struct
 import subprocess
@@ -30,12 +31,29 @@ F5_SURFACES = (
 )
 # Surface tags count up from here. Like 255 they mark textured surfaces, and the vertex shader turns them.
 FIRST_SURFACE = 250
+# The Testarossa's lamps and the covers of its pop-up headlights, by the node that holds each part and the part's
+# material, with the surface tag each gets. model.vert adds a glow to tags 2 to 6 and turns 6 and 7 with the pods.
+# In the model frame: the red strip runs across the tail 0.55 to 0.63 m up; the small red lamp sits on the engine
+# cover 0.86 m up, facing up and back; the two white rear lamps sit above the strip; the white bumper lamps sit below
+# the front indicators; each pod holds two white lamps and, closed, hides them under its painted cover.
+CAR_LAMPS = {
+    ("rear_light_21", "Red_light"): 2,
+    ("rear_hood_20", "Red_light"): 3,
+    ("rear_light_21", "Lights"): 4,
+    ("bottom_light_2", "Lights"): 5,
+    ("pop_up_lighs_15", "Lights"): 6,
+    ("pop_up_lighs_15", "material"): 7,
+}
+CAR_PODS = "pop_up_lighs_15"
+HEADLAMP_TAG = 6
+# Headlamps aim straight ahead and 1% down, the usual setting for dipped beams.
+HEADLAMP_AIM = (0.0, -0.01, 1.0)
 
 
 def accessor(scene, binary, number):
     field = scene["accessors"][number]
     view = scene["bufferViews"][field["bufferView"]]
-    components = {"SCALAR": 1, "VEC2": 2, "VEC3": 3}[field["type"]]
+    components = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[field["type"]]
     kind = {5123: "H", 5125: "I", 5126: "f"}[field["componentType"]]
     record = struct.Struct(f"<{components}{kind}")
     start = view.get("byteOffset", 0) + field.get("byteOffset", 0)
@@ -48,24 +66,77 @@ def srgb(value):
     return round(255 * encoded)
 
 
+def node_matrix(node):
+    # Column-major 4x4 local transform of a glTF node.
+    if "matrix" in node:
+        return node["matrix"]
+    x, y, z, w = node.get("rotation", (0, 0, 0, 1))
+    sx, sy, sz = node.get("scale", (1, 1, 1))
+    return [(1 - 2*(y*y + z*z))*sx, 2*(x*y + z*w)*sx, 2*(x*z - y*w)*sx, 0,
+            2*(x*y - z*w)*sy, (1 - 2*(x*x + z*z))*sy, 2*(y*z + x*w)*sy, 0,
+            2*(x*z + y*w)*sz, 2*(y*z - x*w)*sz, (1 - 2*(x*x + y*y))*sz, 0, *node.get("translation", (0, 0, 0)), 1]
+
+
+def pod_hinge(scene, binary):
+    # The pods' hinge in world coordinates: the origin and X axis of their node, which its animation turns about X.
+    # Returns the point, the axis and the angle in radians from the closed pose that the model's own animation opens
+    # them to.
+    parents = {child: i for i, node in enumerate(scene["nodes"]) for child in node.get("children", ())}
+    pod = next(i for i, node in enumerate(scene["nodes"]) if node.get("name") == CAR_PODS)
+    world = node_matrix(scene["nodes"][pod])
+    i = pod
+    while i in parents:
+        i = parents[i]
+        outer = node_matrix(scene["nodes"][i])
+        world = [sum(outer[r + 4*k] * world[k + 4*c] for k in range(4)) for c in range(4) for r in range(4)]
+    def angle(turn):
+        # A quaternion with no Y or Z part turns about X by this many radians.
+        return 2 * math.atan2(turn[0], turn[3])
+
+    closed = scene["nodes"][pod]["rotation"]
+    turns = []
+    for animation in scene.get("animations", ()):
+        for channel in animation["channels"]:
+            if channel["target"] == {"node": pod, "path": "rotation"}:
+                turns += accessor(scene, binary, animation["samplers"][channel["sampler"]]["output"])
+    if not turns or any(abs(q[1]) > 1e-6 or abs(q[2]) > 1e-6 for q in turns + [closed]):
+        raise ValueError("Expected the Testarossa's pop-up headlights to turn about their node's X axis")
+    axis = world[0:3]
+    if abs(axis[0]) < .9999 * math.sqrt(sum(v * v for v in axis)):
+        raise ValueError("Expected the Testarossa's pop-up headlight hinge to run across the car")
+    return world[12:15], axis, min(angle(q) for q in turns) - angle(closed)
+
+
 def prepare_car(folder):
-    # Preserve wheel membership through gltfpack's static mesh merge.
+    # Preserve wheel and lamp membership through gltfpack's static mesh merge, and keep the pods' hinge.
     file = folder / "scene.gltf"
     scene = json.loads(file.read_text())
+    hinge = pod_hinge(scene, (folder / scene["buffers"][0]["uri"]).read_bytes())
     scene.pop("animations", None)
-    wheel_materials = {}
+    split_materials = {}
+
+    def split(part, suffix):
+        original = part["material"]
+        if (original, suffix) not in split_materials:
+            material = scene["materials"][original]
+            split_materials[original, suffix] = len(scene["materials"])
+            scene["materials"].append(dict(material, name=material["name"] + suffix))
+        part["material"] = split_materials[original, suffix]
+
     for node in scene["nodes"]:
-        if not node.get("name", "").startswith(("left_tire_", "right_tire_", "left_wheel_", "right_wheel_")):
+        name = node.get("name", "")
+        wheel = name.startswith(("left_tire_", "right_tire_", "left_wheel_", "right_wheel_"))
+        if not wheel and not any(holder == name for holder, _ in CAR_LAMPS):
             continue
         for child in node["children"]:
             for part in scene["meshes"][scene["nodes"][child]["mesh"]]["primitives"]:
-                original = part["material"]
-                if original not in wheel_materials:
-                    material = scene["materials"][original]
-                    wheel_materials[original] = len(scene["materials"])
-                    scene["materials"].append(dict(material, name=material["name"] + "_wheel"))
-                part["material"] = wheel_materials[original]
+                material = scene["materials"][part["material"]]["name"]
+                if wheel:
+                    split(part, "_wheel")
+                elif (name, material) in CAR_LAMPS:
+                    split(part, f"_lamp{CAR_LAMPS[name, material]}")
     file.write_text(json.dumps(scene))
+    return hinge
 
 
 def prepare_jet(folder):
@@ -214,7 +285,8 @@ def jet_repairs(vertices, indices, vertex):
             indices.extend(struct.pack("<H", vertex(record)))
 
 
-def export_model(folder, vehicle):
+def export_model(folder, vehicle, pods=None):
+    # pods: the Testarossa's pod hinge from prepare_car, in world coordinates.
     car = vehicle == "testarossa"
     scene = json.loads((folder / "craft.gltf").read_text())
     roots = [scene["nodes"][i] for i in scene["scenes"][scene.get("scene", 0)]["nodes"]]
@@ -251,6 +323,8 @@ def export_model(folder, vehicle):
     vertices = bytearray()
     indices = bytearray()
     vertex_ids = {}
+    # Area and area-weighted centre of the headlamps on each side, closed, in the model frame.
+    headlamps = {}
 
     def vertex(record):
         if record not in vertex_ids:
@@ -265,7 +339,10 @@ def export_model(folder, vehicle):
         color = [srgb(v) for v in pbr.get("baseColorFactor", [1, 1, 1, 1])[:3]]
         roughness = round(255 * pbr.get("roughnessFactor", 1))
         metallic = round(255 * pbr.get("metallicFactor", 1))
-        surface = 255 if textured else int(scene["materials"][part["material"]].get("name", "").endswith("_wheel"))
+        name = scene["materials"][part["material"]].get("name", "")
+        surface = 255 if textured else int(name.endswith("_wheel"))
+        if "_lamp" in name:
+            surface = int(name.rpartition("_lamp")[2])
         positions = accessor(scene, binary, attributes["POSITION"])
         normals = accessor(scene, binary, attributes["NORMAL"])
         uvs = accessor(scene, binary, attributes["TEXCOORD_0"]) if textured else itertools.repeat((0, 0))
@@ -291,6 +368,14 @@ def export_model(folder, vehicle):
         # separate copies and each triangle turns with its own part.
         for index, tag in zip(corners, corner_tags):
             indices.extend(struct.pack("<H", vertex(records[index][:-1] + bytes([tag]))))
+        if surface == HEADLAMP_TAG:
+            for k in range(0, len(corners), 3):
+                a, b, c = (struct.unpack_from("<3f", records[i]) for i in corners[k:k + 3])
+                u, v = [q - p for p, q in zip(a, b)], [q - p for p, q in zip(a, c)]
+                area = math.hypot(u[1]*v[2] - u[2]*v[1], u[2]*v[0] - u[0]*v[2], u[0]*v[1] - u[1]*v[0]) / 2
+                side = headlamps.setdefault(a[0] > 0, [0.0, [0.0, 0.0, 0.0]])
+                side[0] += area
+                side[1] = [total + area * (p + q + r) / 3 for total, p, q, r in zip(side[1], a, b, c)]
     if hinges:
         jet_repairs(vertices, indices, vertex)
 
@@ -305,7 +390,24 @@ def export_model(folder, vehicle):
         if len(pixels) != width * height * 4:
             raise ValueError("Unexpected dashboard texture dimensions")
     header = struct.pack("<4I", len(vertices) // VERTEX.size, len(indices) // 2, width, height)
-    return gzip.compress(header + vertices + indices + pixels, compresslevel=9, mtime=0), hinges
+    lamps = None
+    if pods:
+        point, axis, angle = pods
+        point = [(v - c) * scale for v, c in zip(point, (center_x, keel_y, center_z))]
+        # The shader turns the pods about +X.
+        if axis[0] < 0:
+            angle = -angle
+        cos, sin = math.cos(angle), math.sin(angle)
+        beams = []
+        for _, (area, total) in sorted(headlamps.items()):
+            x, y, z = (v / area for v in total)
+            y, z = y - point[1], z - point[2]
+            opened = (x, point[1] + y*cos - z*sin, point[2] + y*sin + z*cos)
+            beams.append({"position": [round(v, 4) for v in opened],
+                          "direction": [round(v / math.hypot(*HEADLAMP_AIM), 6) for v in HEADLAMP_AIM]})
+        lamps = {"pods": {"point": [round(v, 4) for v in point], "axis": [1, 0, 0], "angle": round(angle, 5)},
+                 "headlamps": beams}
+    return gzip.compress(header + vertices + indices + pixels, compresslevel=9, mtime=0), hinges, lamps
 
 
 def main():
@@ -319,8 +421,9 @@ def main():
         for name in ("scene.gltf", "scene.bin"):
             archive.extract(name, folder)
         options = ["-km"]
+        pods = None
         if args.vehicle == "testarossa":
-            prepare_car(folder)
+            pods = prepare_car(folder)
         elif args.vehicle == "f5":
             for name in archive.namelist():
                 if name.startswith("textures/") and name.endswith(".jpeg"):
@@ -331,13 +434,19 @@ def main():
             options = ["-si", "0.05", "-sa"]
         subprocess.run(["gltfpack", "-i", str(folder / "scene.gltf"), "-o", str(folder / "craft.gltf"),
                         *options, "-noq"], check=True)
-        data, hinges = export_model(folder, args.vehicle)
+        data, hinges, lamps = export_model(folder, args.vehicle, pods)
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "mesh.bin.gz").write_bytes(data)
         if hinges:
             # Hinges of the tagged surfaces, in metres in the model frame, for the vertex shader.
             lines = ",\n".join(" " + json.dumps(hinge) for hinge in hinges)
             (destination / "surfaces.json").write_text('{"surfaces": [\n' + lines + "\n]}\n")
+        if lamps:
+            # The pods' hinge and opening angle for the vertex shader, and the headlamps with the pods open, in metres
+            # in the model frame.
+            lines = ",\n".join("\t\t" + json.dumps(beam) for beam in lamps["headlamps"])
+            (destination / "lamps.json").write_text('{\n\t"pods": ' + json.dumps(lamps["pods"])
+                                                     + ',\n\t"headlamps": [\n' + lines + "\n\t]\n}\n")
         (destination / "license.txt").write_bytes(archive.read("license.txt"))
 
 

@@ -135,6 +135,8 @@ $engine->start(
 			'jet' => $session->jet->view($session->camera, $session->paused ? 1.0 : $alpha),
 			default => [$session->camera,null]
 		};
+		// Lamp levels blend between steps like the pose, and a change in either redraws the frame below.
+		if($session->mode === 'car') $vehiclePose['lamps'] = $session->carLamps($alpha);
 		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->fov];
 		$moving = $session->mode === 'craft' || $pose !== $lastBudgetPose;
 		// High-refresh frames can advance the presentation fraction without a new simulation tick.

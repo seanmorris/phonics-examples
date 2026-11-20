@@ -287,6 +287,53 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	expect(errors).toEqual([]);
 });
 
+test('the Testarossa lights its lamps and the page keeps the headlight switch', async({page}) => {
+	test.setTimeout(180_000);
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await boot(page);
+
+	const dry = fixture();
+	Object.assign(dry.landscape.recipe, {worldSize: 512});
+	dry.settings.waterLevel = -4;
+	dry.camera = {position: [0,30,0], yaw: Math.PI, pitch: -.4};
+	await load(page, dry);
+	await control(page, 'car').click();
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+
+	await canvas(page).focus();
+	await page.keyboard.down('w');
+	await expect.poll(async() => (await status(page)).car.speed, {timeout: 60_000}).toBeGreaterThan(12);
+	await page.keyboard.up('w');
+	await page.keyboard.down('s');
+
+	const braking = async() => {
+		const {car, lamps} = await status(page);
+
+		return car.braking && !car.reversing && lamps.brake;
+	};
+
+	await expect.poll(braking, {intervals: [100], timeout: 60_000}).toBe(1);
+	await expect.poll(async() => (await status(page)).car.reversing, {timeout: 60_000}).toBe(true);
+	await page.keyboard.up('s');
+
+	const headlights = page.locator('.terrain-sandbox [data-value="headlights"]');
+	await expect(headlights).toHaveValue('auto');
+	await page.keyboard.press('l');
+	await expect.poll(async() => (await status(page)).headlights).toBe('on');
+	await expect(headlights).toHaveValue('on');
+	expect((await status(page)).message).toBe('Headlights on.');
+	await expect.poll(async() => (await status(page)).lamps.pods, {timeout: 60_000}).toBe(1);
+	expect(await page.evaluate(() => localStorage.getItem('terrain-sandbox.car'))).toBe('{"headlights":"on"}');
+
+	await page.reload();
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect.poll(async() => (await status(page)).headlights).toBe('on');
+	await expect(headlights).toHaveValue('on');
+	expect((await status(page)).message).not.toContain('Headlights');
+	expect(errors).toEqual([]);
+});
+
 test('the default canyon lets all four wheels leave the ground and touch down again', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
