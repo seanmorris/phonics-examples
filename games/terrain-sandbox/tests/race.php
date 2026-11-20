@@ -519,6 +519,30 @@ $events = [$segment(-1, 1, 0), $segment(1, $reach - .01, 1), $segment($reach - .
 	$segment(1, $reach, 4), $segment($reach, -1, 5), $segment(-1, 1, 6)];
 expect($events === ['Race started. Next: the start gate to finish.', null, null, null, null, null, 'Finished in 6.00 s.']
 	&& abs($reach - 22.746) < .001, 'A lap back to the same road gate counts once the car has been 22.7 m from it');
+// A checkpoint just clear of the start gate, 1.1 m behind or ahead of it, gives rocking no lap either: a lap ends at
+// the start gate once the car has been 22.7 m from it since it last passed through.
+foreach([-1.1, 1.1] as $behind)
+{
+	$course = new Course;
+	$course->place('start', 'road', 0, 0, 0, 0, 5);
+	$checkpoint = $course->place('checkpoint', 'road', 0, 0, $behind, 0)['gate'];
+	$timer = new Race;
+	$time = 0.0;
+	$segment = function(float $from, float $to) use ($course, $timer, &$time): ?string {
+		$event = $timer->advance($course, [0, 1, $from], [0, 1, $to], $time, 1.0, 'car', 1);
+		$time++;
+		return $event;
+	};
+	for($rock = 0; $rock < 20; $rock++) { $segment(-3, 3); $segment(3, -3); }
+	$rocked = $timer->status($course, $time);
+	expect($checkpoint !== null && $rocked['state'] === 'running' && $rocked['lapTimes'] === [],
+		"Rocking through the start gate and a checkpoint $behind m from it counts no lap: "
+			. json_encode($rocked['lapTimes']));
+	$segment(-3, 3); $segment(3, $reach); $segment($reach, -3); $segment(-3, 3);
+	$lapped = $timer->status($course, $time);
+	expect(count($lapped['lapTimes']) === 1 && $lapped['lap'] === 2,
+		'Once the car has been 22.7 m from the start gate, the lap counts: ' . json_encode($lapped['lapTimes']));
+}
 // Gates the route passes in turn are unaffected. Out and back along one road: the car passes the turnaround
 // checkpoint, turns beyond it and drives back through its window the other way to a finish gate behind the start.
 $return = new Session($open);

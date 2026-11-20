@@ -21,7 +21,10 @@ final class Course
 	public const MAX_CHECKPOINTS = 32, MAX_LAPS = 20;
 	/** Keys a saved gate may carry, beyond laps on the start gate, number on a checkpoint and its size. */
 	private const SAVED = ['role', 'kind', 'x', 'y', 'z', 'yaw'];
-	/** How far a road post reaches below the ground under its middle, in metres, so a slope shows no gap. */
+	/**
+	 * How far a road post reaches below the lowest ground under its footprint, in metres, so a slope shows no gap. The
+	 * footprint is sampled at its middle and its corners.
+	 */
 	public const POST_FOOT = 1.0;
 	/**
 	 * How far below the lowest ground across a road gate a car still counts as passing through it. The ground is
@@ -75,7 +78,8 @@ final class Course
 	 *
 	 * A finish gate placed within one start gate width of the start gate is not added: the start gate becomes the
 	 * course's start / finish gate, and any finish gate standing elsewhere goes. A start gate placed within its own
-	 * width of the finish gate does the same. A gate whose span would overlap another gate's is refused.
+	 * width of the finish gate does the same. Both distances run between gate origins after the fit to the ground. A
+	 * gate whose span would overlap another gate's is refused.
 	 * @param string $role start, checkpoint or finish.
 	 * @param string $kind road, water or air.
 	 * @param float $x World X of the gate origin in metres.
@@ -109,19 +113,20 @@ final class Course
 		if($role === 'checkpoint' && count($this->checkpoints) >= self::MAX_CHECKPOINTS)
 			return ['refused' => 'full'] + $result;
 		$existing = $role === 'start' ? $this->start : ($role === 'finish' ? $this->finish : null);
+		// The candidate measures as a new gate until it takes its place, so nothing reads the gate it replaces.
+		$gate = ['id' => 0, 'role' => $role, 'kind' => $kind,
+			'x' => $x, 'y' => $y, 'z' => $z, 'yaw' => $yaw, 'width' => $width, 'height' => $height];
+		$gate = $this->fit($gate, $ground);
 		// A finish gate this close to the start gate would be passed straight after the start, or rocked through.
-		$near = static fn(array $other, float $distance): bool
-			=> sqrt(($x - $other['x']) ** 2 + ($y - $other['y']) ** 2 + ($z - $other['z']) ** 2) < $distance;
+		// Both stand where the fit put them: a road gate on a hump rises above the ground the click hit.
+		$near = static fn(array $other, float $distance): bool => sqrt(($gate['x'] - $other['x']) ** 2
+			+ ($gate['y'] - $other['y']) ** 2 + ($gate['z'] - $other['z']) ** 2) < $distance;
 		if($role === 'finish' && $this->start !== null && $near($this->start, $this->start['width']))
 		{
 			$removed = $this->finish;
 			if($removed !== null) $this->remove($removed['id']);
 			return ['gate' => $this->pose($this->start), 'merged' => true, 'removed' => $removed] + $result;
 		}
-		// The candidate measures as a new gate until it takes its place, so nothing reads the gate it replaces.
-		$gate = ['id' => 0, 'role' => $role, 'kind' => $kind,
-			'x' => $x, 'y' => $y, 'z' => $z, 'yaw' => $yaw, 'width' => $width, 'height' => $height];
-		$gate = $this->fit($gate, $ground);
 		$merge = $role === 'start' && $this->finish !== null && $near($this->finish, $width);
 		$ignore = array_filter([$existing['id'] ?? null, $merge ? $this->finish['id'] : null]);
 		foreach($this->gates(false) as $other)
@@ -182,13 +187,14 @@ final class Course
 	 * @param array $gate Gate record without fitting.
 	 * @param \Closure|null $ground Ground height sampler, or null to count the ground as level with the origin.
 	 * @return array The gate with ground [lowest, highest] across its span and, on a road gate, posts [-X, +X]: the
-	 * ground under each post's middle. All are heights in metres from the gate's origin. A water gate's ground is
-	 * [0, 0], and an air gate placed without a sampler has ground null.
+	 * ground under each post's middle, where its base plate lies, and footings [-X, +X]: the lowest ground under each
+	 * post's footprint. All are heights in metres from the gate's origin. A water gate's ground is [0, 0], and an air
+	 * gate placed without a sampler has ground null.
 	 */
 	private function fit(array $gate, ?\Closure $ground): array
 	{
 		$gate['ground'] = $gate['kind'] === 'air' && $ground === null ? null : [0.0, 0.0];
-		if($gate['kind'] === 'road') $gate['posts'] = [0.0, 0.0];
+		if($gate['kind'] === 'road') $gate['posts'] = $gate['footings'] = [0.0, 0.0];
 		if($ground === null || $gate['kind'] === 'water') return $gate;
 		$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
 		$at = static fn(float $across, float $along): float
@@ -201,14 +207,16 @@ final class Course
 			// The posts' outer faces bound the span. Each post's footprint is sampled at its middle and corners.
 			$post = $shape['posts'][1]['halfSize'];
 			$reach = $half + 2 * $post;
-			$middles = [];
+			$middles = $lows = [];
 			foreach([-1, 1] as $side)
 			{
 				$middle = $side * ($half + $post);
-				$middles[] = $at($middle, 0.0);
-				foreach([-1, 1] as $a) foreach([-1, 1] as $b) $heights[] = $at($middle + $a * $post, $b * $post);
+				$footprint = [$at($middle, 0.0)];
+				foreach([-1, 1] as $a) foreach([-1, 1] as $b) $footprint[] = $at($middle + $a * $post, $b * $post);
+				$middles[] = $footprint[0];
+				$lows[] = min($footprint);
+				$heights = [...$heights, ...$footprint];
 			}
-			$heights = [...$heights, ...$middles];
 		}
 		else $reach = $half;
 		$steps = (int)ceil(2 * $reach / self::SAMPLE_STEP);
@@ -218,9 +226,39 @@ final class Course
 		{
 			$gate['y'] = $high;
 			$gate['posts'] = [$middles[0] - $high, $middles[1] - $high];
+			$gate['footings'] = [$lows[0] - $high, $lows[1] - $high];
 		}
 		$gate['ground'] = [$low - $gate['y'], $high - $gate['y']];
 		return $gate;
+	}
+
+	/**
+	 * Fit the road and air gates over changed ground to it again, as place() fits a new gate: a road gate stands on
+	 * the highest ground across its span and its posts reach the ground under them. Water gates float and stay.
+	 * @param \Closure $ground fn(float $x, float $z): float giving the ground height now.
+	 * @param array|null $region [minX, minZ, maxX, maxZ] in metres around the ground that changed, as
+	 * Landscape::changedRegion() gives it, an empty array when nothing changed, or null when all of it may have.
+	 * @return bool Whether any gate moved or now stands over different ground. Only then does the revision change.
+	 */
+	public function refit(\Closure $ground, ?array $region = null): bool
+	{
+		if($region === []) return false;
+		$changed = false;
+		$refit = function(?array $gate) use ($ground, $region, &$changed): ?array {
+			if($gate === null || $gate['kind'] === 'water') return $gate;
+			$extent = $this->measure($gate)['extent'];
+			$reach = hypot($extent['halfWidth'], $extent['halfDepth']);
+			if($region !== null && ($gate['x'] + $reach < $region[0] || $gate['x'] - $reach > $region[2]
+				|| $gate['z'] + $reach < $region[1] || $gate['z'] - $reach > $region[3])) return $gate;
+			$fitted = $this->fit($gate, $ground);
+			$changed = $changed || $fitted !== $gate;
+			return $fitted;
+		};
+		$this->start = $refit($this->start);
+		$this->finish = $refit($this->finish);
+		foreach($this->checkpoints as $index => $gate) $this->checkpoints[$index] = $refit($gate);
+		if($changed) $this->revision++;
+		return $changed;
 	}
 
 	/**
@@ -407,7 +445,7 @@ final class Course
 	 * vehicle passes through, from the lowest point that still counts (halfWidth, bottom, top); the extent of the
 	 * drawn gate (halfWidth, bottom, top, halfDepth); each post (x, z, halfSize, bottom, top); the resize model.vert
 	 * applies [half width added, height added, scale across, scale up]; and [foot of the -X post, foot of the +X post,
-	 * ground under the -X post, ground under the +X post].
+	 * ground under the middle of the -X post, ground under the middle of the +X post].
 	 */
 	public function measure(array $gate): array
 	{
@@ -439,7 +477,7 @@ final class Course
 			if($gate['kind'] === 'road')
 			{
 				[$left, $right] = $gate['posts'];
-				$feet = [$left - self::POST_FOOT, $right - self::POST_FOOT, $left, $right];
+				$feet = [$gate['footings'][0] - self::POST_FOOT, $gate['footings'][1] - self::POST_FOOT, $left, $right];
 				foreach($shape['posts'] as $index => $post)
 					$posts[] = ['x' => $post['x'] + ($post['x'] < 0 ? -$added : $added), 'z' => $post['z'],
 						'halfSize' => $post['halfSize'], 'bottom' => $feet[$post['x'] < 0 ? 0 : 1],

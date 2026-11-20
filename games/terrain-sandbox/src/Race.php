@@ -7,11 +7,10 @@ namespace TerrainSandbox;
  *
  * The clock starts as the vehicle passes forward through the start gate's window, without stopping first. After
  * that the vehicle must pass each gate of the course's route in order and in the gate's direction of travel; any
- * other crossing is ignored. Passing the gate passed last again, which a course without checkpoints asks for at the
- * end of each lap, counts only once the vehicle has been well away from that gate. Each fixed step tests the
- * straight segment between the vehicle's positions before and after the step, so a jet at 260 m/s cannot skip a gate
- * between two steps. Times are simulation seconds, so pausing stops the clock, and each crossing is timed at the
- * point along its step where the segment meets the gate.
+ * other crossing is ignored. A lap ends at the start gate only once the vehicle has been well away from that gate
+ * since it last passed through it. Each fixed step tests the straight segment between the vehicle's positions before
+ * and after the step, so a jet at 260 m/s cannot skip a gate between two steps. Times are simulation seconds, so
+ * pausing stops the clock, and each crossing is timed at the point along its step where the segment meets the gate.
  */
 final class Race
 {
@@ -32,10 +31,11 @@ final class Race
 	private array $latest = [], $best = [];
 	private const VEHICLES = ['car' => 'the car', 'craft' => 'the jet ski', 'jet' => 'the F5'];
 	/**
-	 * How far a vehicle must go from a gate, in half widths of the gate's frame, before passing that same gate again
-	 * counts: at their own sizes 23 m for a road gate, 18 m for a water gate and 68 m for an air gate. A course
-	 * without checkpoints ends each lap at the gate it began from, and without this a car could rock back and forth
-	 * through that gate and count a lap each time it rolled forward.
+	 * How far a vehicle must go from the start gate after passing through it, in half widths of the gate's frame,
+	 * before a lap can end there: at their own sizes 23 m for a road gate, 18 m for a water gate and 68 m for an air
+	 * gate. A course without a finish gate ends each lap at its start gate. Without this a car could rock back and
+	 * forth through that gate, or through it and a checkpoint just clear of it, and count a lap each time it rolled
+	 * forward.
 	 */
 	public const LEAVE = 3.0;
 	/** Jet::step() keeps the F5 at least this many metres above the ground and the water level. */
@@ -46,15 +46,24 @@ final class Race
 	public const CRAFT_REACH = 3.0;
 	/** Car::support() needs the ground at a wheel this far above the water level. */
 	private const CAR_WATER = .12;
-	/** The car's position runs along the ground. This many metres above it allow for bumps. */
+	/**
+	 * The car's position runs along the ground, under a body 1.13 m tall. An opening whose bottom edge stands this many
+	 * metres above that position is within its reach.
+	 */
 	private const CAR_REACH = .5;
 	/**
-	 * Id and ground position of the gate passed last, and the farthest the vehicle has been from it across the ground
-	 * since, in metres. Changing the course stops the race, so the position stays the gate's own. Keeping it here
-	 * spares a step from asking the course for that gate, which would sample the waves for a second floating gate.
+	 * How far below an opening's bottom edge the position of the car or the jet ski may pass and still count, so each
+	 * passes every opening reach() finds within its reach: an air gate hanging just above the ground or the water.
 	 */
-	private int $lastGate = 0;
-	private float $lastX = 0.0, $lastZ = 0.0, $farthest = 0.0;
+	private const RIDE = ['car' => self::CAR_REACH, 'craft' => self::CRAFT_REACH];
+	/**
+	 * Id and ground position of the start gate, and the farthest the vehicle has been from it across the ground since
+	 * it last passed through, in metres. Changing the course stops the race, so the position stays the gate's own.
+	 * Keeping it here spares a step from asking the course for that gate, which would sample the waves for a second
+	 * floating gate.
+	 */
+	private int $startGate = 0;
+	private float $startX = 0.0, $startZ = 0.0, $farthest = 0.0;
 
 	/**
 	 * Find where a step's segment passes forward through a gate's window.
@@ -103,20 +112,23 @@ final class Race
 			$target = $this->state === 'running' ? $course->gate($this->route[$this->index]['id']) : $course->start();
 			if($target === null) break;
 			$measure = $course->measure($target);
-			$fraction = self::crossing($target, $measure['window'], $from, $to);
+			$window = $measure['window'];
+			$window['bottom'] -= self::RIDE[$vehicle] ?? 0.0;
+			$fraction = self::crossing($target, $window, $from, $to);
 			if($fraction === null || $fraction <= $reached) break;
-			if($this->state === 'running' && $target['id'] === $this->lastGate
+			if($this->state === 'running' && $target['id'] === $this->startGate
 				&& $this->farthest < self::LEAVE * $measure['extent']['halfWidth']) break;
 			$reached = $fraction;
 			$at = $time + $fraction * $dt;
 			$event = $this->state === 'running' ? $this->pass($course, $at)
 				: $this->begin($course, $at, $vehicle, $boarding);
-			$this->lastGate = $target['id'];
-			$this->lastX = $target['x']; $this->lastZ = $target['z'];
+			if($target['role'] !== 'start') continue;
+			$this->startGate = $target['id'];
+			$this->startX = $target['x']; $this->startZ = $target['z'];
 			$this->farthest = 0.0;
 		}
 		if($this->state === 'running')
-			$this->farthest = max($this->farthest, hypot($to[0] - $this->lastX, $to[2] - $this->lastZ));
+			$this->farthest = max($this->farthest, hypot($to[0] - $this->startX, $to[2] - $this->startZ));
 		if($event !== null) $this->message = $event;
 		return $event;
 	}
@@ -242,22 +254,24 @@ final class Race
 	 * @return array{gate:int,needed:?float,message:string}|null Null when the vehicle can reach the opening, or when
 	 * that is unknown because an air gate was placed without the ground under it. Otherwise the gate, the opening
 	 * height in metres that would let the vehicle through when a taller opening would, and a sentence for the page.
+	 * A floating gate is measured at the water level, so the answer holds while the waves lift and drop it.
 	 */
 	public function reach(Course $course, array $gate, string $vehicle, float $water, ?array $step = null): ?array
 	{
 		$window = $course->measure($gate)['window'];
-		$bottom = $gate['y'] + $window['bottom']; $top = $gate['y'] + $window['top'];
+		$floating = $gate['kind'] === 'water';
+		$origin = $floating ? $water : $gate['y'];
+		$bottom = $origin + $window['bottom']; $top = $origin + $window['top'];
 		$ground = $gate['ground'];
 		if($ground === null) return null;
 		$name = ucfirst($step === null ? self::gateLabel($gate) : $this->describe($course, $step));
-		$floating = $gate['kind'] === 'water';
 		if($vehicle === 'jet')
 		{
 			// The F5 may pass where the ground or the water across the gate is lowest.
 			$floor = ($floating ? $water : max($gate['y'] + $ground[0], $water)) + self::JET_FLOOR;
 			if($top >= $floor + self::JET_ROOM) return null;
 			// The opening's bottom edge stands at the gate's origin on every kind.
-			$needed = ceil($floor + self::JET_ROOM - $gate['y']);
+			$needed = ceil($floor + self::JET_ROOM - $origin);
 			return ['gate' => $gate['id'], 'needed' => $needed,
 				'message' => "$name is out of reach for the F5, which keeps " . (int)self::JET_FLOOR
 					. ' m above the ground and the water. It needs an opening at least ' . GateShapes::metres($needed)

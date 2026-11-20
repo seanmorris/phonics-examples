@@ -277,6 +277,57 @@ expect($race->reach($course, $hanging, 'jet', $waterLevel) === null && $race->re
 	'An air gate 20 m up is within the F5\'s reach, and a water arch 3.6 m tall needs 9 m');
 $reacher->close();
 
+// A floating gate rises and falls with the waves, but what the F5 can reach of it does not: on the roughest water
+// the sandbox makes, an arch 3.6 m tall needs 9 m at every moment, and one 9.5 m tall stays within reach.
+$waves = new Session(['worldSize' => 2048, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => 5]);
+input($waves, ['values' => ['waterChoppiness' => 300]]);
+$level = $waves->water->level();
+$short = $waves->course->place('start', 'water', 0, $level, 400, 0)['gate'];
+$tall = $waves->course->place('checkpoint', 'water', 0, $level, 600, 0, 1, 12.0, 9.5)['gate'];
+$race = new Race;
+$needs = $reached = [];
+for($i = 0; $i < 600; $i++)
+{
+	$waves->water->update($i / 60);
+	$waves->course->float($waves->water, $i / 60);
+	$needs[] = $race->reach($waves->course, $waves->course->gate($short['id']), 'jet', $level)['needed'] ?? null;
+	$reached[] = $race->reach($waves->course, $waves->course->gate($tall['id']), 'jet', $level);
+}
+$heights = [];
+for($i = 0; $i < 600; $i += 30)
+{
+	$waves->course->float($waves->water, $i / 60);
+	$heights[] = $waves->course->height($short);
+}
+expect(max($heights) - min($heights) > 1 && array_unique($needs) === [9.0] && array_filter($reached) === [],
+	'The F5\'s reach for a floating gate holds steady on the waves: '
+		. json_encode([array_count_values(array_map('strval', $needs)), count(array_filter($reached))]));
+$waves->close();
+
+// An air gate hanging just above the ground or the water is within reach of the car and the jet ski, and they pass
+// through it: the car's body rises above its position on the ground, and the jet ski rides the swell.
+foreach([['car', .3, -5], ['craft', 1.0, 5], ['craft', 2.5, 5]] as [$vehicle, $altitude, $waterLevel])
+{
+	$low = new Session(['worldSize' => 2048, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => $waterLevel]);
+	if($vehicle === 'craft') input($low, ['values' => ['waterChoppiness' => 0]]);
+	$low->camera->position = [0, 30, 380]; $low->camera->yaw = 0; $low->camera->pitch = -.3;
+	input($low, ['actions' => [$vehicle]]);
+	for($i = 0; $low->findingCarSite() && $i < 2000; $i++) input($low, []);
+	$ride = $vehicle === 'car' ? $low->car->state() : $low->craft->state();
+	$surface = max($low->landscape->height($ride['x'], $ride['z'] - 60), $low->water->level());
+	$low->course->place('start', 'air', $ride['x'], $surface + $altitude, $ride['z'] - 60, M_PI, 1, null, null,
+		fn(float $x, float $z): float => $low->landscape->height($x, $z));
+	$reach = $low->status()['race']['reach'];
+	input($low, ['keys' => ['KeyW' => true]]);
+	for($i = 0; $i < 900 && $low->race->state === 'idle'; $i++) $low->step(1 / 60);
+	$passed = ($vehicle === 'car' ? $low->car->state() : $low->craft->state())['z'] < $ride['z'] - 60;
+	expect($low->mode === $vehicle && $reach === null && $passed && $low->race->state === 'running',
+		"The $vehicle passes through an air gate hanging $altitude m above the "
+		. ($vehicle === 'car' ? 'ground' : 'calm water') . ' and starts the race: '
+		. json_encode([$low->mode, $reach, $passed, $low->race->state]));
+	$low->close();
+}
+
 // The gate tool sizes the opening: 0 takes the kind's own size, and a size beyond the kind's range takes the nearest
 // the range allows, which the message names.
 $flat = ['worldSize' => 1024, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
@@ -322,6 +373,24 @@ expect($moved['merged'] && $moved['moved'] && $course->finish() === null && $cou
 $wideStart = new Course;
 $wideStart->place('start', 'road', 0, 0, 0, 0, 1, 60.0, 4.0);
 expect($wideStart->place('finish', 'road', 50, 0, 20, 0)['merged'], 'One gate width is the start gate\'s own width');
+// A boulder 12 m tall under the start gate's +X post raises the gate 12 m above the click. A finish clicked on the
+// ground 1.2 m behind it stands on the same boulder once fitted, so it merges, and a race cannot finish by rocking
+// through both gates.
+$boulder = static fn(float $x, float $z): float => 12 * max(0.0, 1 - abs($x - 3.4) / 2);
+$course = new Course;
+$start = $course->place('start', 'road', 0, 0, 0, 0, 1, 6.0, 3.0, $boulder)['gate'];
+$merged = $course->place('finish', 'road', 0, 0, -1.2, 0, 1, 6.0, 3.0, $boulder);
+expect(near($start['y'], 12.0) && $merged['merged'] && $course->finish() === null,
+	'A finish behind a start gate raised by a boulder merges into it: '
+		. json_encode([$start['y'], $merged['merged']]));
+$slope = static fn(float $x, float $z): float => 2 * $x;
+$course = new Course;
+$course->place('start', 'road', 0, 0, 0, 0, 1, null, null, $slope);
+expect($course->place('finish', 'road', 0, 0, -1.2, 0, 1, null, null, $slope)['merged'],
+	'A finish 1.2 m behind the start gate on ground rising 2 m in 1 across it merges into the start gate');
+$course->place('finish', 'road', 0, 0, -40, 0, 1, null, null, $slope);
+expect($course->place('start', 'road', 0, 0, -38.8, 0, 1, null, null, $slope)['merged'],
+	'Moving the start gate 1.2 m in front of the finish gate on that slope merges them too');
 
 // Overlap. A gate whose span meets another's is refused, and the course stays as it was.
 $course = new Course;
@@ -355,7 +424,7 @@ $half = $road['window']['halfWidth'] + 2 * $road['posts'][1]['halfSize'];
 $measure = $course->measure($sloped);
 expect(near($sloped['y'], .2 * $half) && near($sloped['ground'][0], -.4 * $half) && near($sloped['ground'][1], 0.0)
 	&& near($measure['feet'][2], .2 * $road['posts'][0]['x'] - $sloped['y']) && near($measure['feet'][3], .2 * $road['posts'][1]['x'] - $sloped['y'])
-	&& near($measure['feet'][0], $measure['feet'][2] - Course::POST_FOOT),
+	&& near($measure['feet'][0], $measure['feet'][2] - .2 * $road['posts'][0]['halfSize'] - Course::POST_FOOT),
 	'A road gate on a cross slope stands on its higher side, and each post reaches below the ground under it');
 expect(near($measure['window']['bottom'], -.4 * $half - Course::ROAD_BELOW)
 	&& Race::crossing($sloped, $measure['window'], [-6, .2 * -6 + .05, -1], [-6, .2 * -6 + .05, 1]) !== null,
@@ -364,6 +433,25 @@ $turned = $course->place('checkpoint', 'road', 0, 0, 100, M_PI / 2, 1, null, nul
 // Along its travel only the posts' footprints, 0.8 m deep, meet the slope.
 expect(near($turned['y'], .2 * $road['posts'][1]['halfSize']) && near($turned['ground'][0], -.4 * $road['posts'][1]['halfSize']),
 	'A gate facing up the slope stands level across it');
+// On a cliff rising 2 m in 1 both across the gate and along its travel, the ground under one corner of a post's 0.8 m
+// footprint lies 1.6 m below the ground under its middle. Each post still reaches a metre below the lowest of it, and
+// so do the posts the car collides with.
+$cliff = static fn(float $x, float $z): float => 2 * ($x + $z);
+$course = new Course;
+$steep = $course->place('start', 'road', 0, 0, 0, 0, 1, null, null, $cliff)['gate'];
+$measure = $course->measure($steep);
+$reaches = [];
+foreach($measure['posts'] as $index => $post)
+{
+	$lowest = INF;
+	for($a = -1; $a <= 1; $a += .25) for($b = -1; $b <= 1; $b += .25)
+		$lowest = min($lowest,
+			$cliff($post['x'] + $a * $post['halfSize'], $post['z'] + $b * $post['halfSize']) - $steep['y']);
+	$reaches[] = $lowest - $post['bottom'];
+	$reaches[] = $steep['y'] + $lowest - $course->posts()[$index][5];
+}
+expect(min($reaches) >= Course::POST_FOOT - 1e-9 && near($measure['feet'][2], 2 * $road['posts'][0]['x'] - $steep['y']),
+	'On a cliff each post reaches a metre below the lowest ground under its footprint: ' . json_encode($reaches));
 // On a landscape, the gate tool fits a road gate to the ground, and the drawn posts reach the ground under them.
 $ramp = new Session(['worldSize' => 512, 'spacing' => 1, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -50]);
 $ramp->landscape->queue(['type' => 'road', 'points' => [[-60, 0, 0], [60, 12, 0]], 'width' => 60, 'shoulder' => 20,
@@ -379,6 +467,48 @@ expect($ramp->landscape->height(7, 0) - $ramp->landscape->height(-7, 0) > 1 && n
 	&& near($gate['y'] + $uniforms['uGateFeet'][3], $ramp->landscape->height($road['posts'][1]['x'], 0), 1e-6),
 	'On a graded ramp the gate stands on the higher ground and model.vert sets each base plate on the ground under it');
 $ramp->close();
+
+// Editing the ground under a road gate fits the gate to it again: lowered 6 m, the gate comes down with it, and raised
+// 6 m, its board rises clear. The car drives through either and starts the race. An edit away from every gate leaves
+// the course as it was.
+foreach([-6.0, 6.0] as $change)
+{
+	$dig = new Session(['worldSize' => 2048, 'spacing' => 2, 'heightScale' => 0, 'detailAmplitude' => 0,
+		'waterLevel' => -50]);
+	$dig->course->place('start', 'road', 0, 0, 150, 0, 1, null, null,
+		fn(float $x, float $z): float => $dig->landscape->height($x, $z));
+	$far = $dig->course->place('checkpoint', 'air', 0, 20, 900, 0, 1, null, null,
+		fn(float $x, float $z): float => $dig->landscape->height($x, $z))['gate'];
+	$edited = TerrainPhonics\Landscape::load($dig->landscape->save());
+	$edited->queue(['type' => $change < 0 ? 'lower' : 'raise', 'x' => 0.0, 'z' => 150.0, 'radius' => 60.0,
+		'amount' => abs($change)]);
+	$edited->commit();
+	$revision = $dig->course->revision;
+	$dig->publishLandscape($edited);
+	$gate = $dig->course->start();
+	$heights = [];
+	for($x = -$half; $x <= $half; $x += .5) $heights[] = $dig->landscape->height($x, 150);
+	$farNow = $dig->course->gate($far['id']);
+	expect($dig->course->revision > $revision && near($gate['y'], max($heights), .05)
+		&& near($gate['y'] + $gate['footings'][0], min($heights), .5) && $farNow === $far,
+		"Ground changed by $change m under a road gate refits it: " . json_encode([$gate['y'], max($heights)]));
+	$dig->camera->position = [0, 30, 60]; $dig->camera->yaw = M_PI; $dig->camera->pitch = -.3;
+	input($dig, ['actions' => ['car']]);
+	for($i = 0; $dig->findingCarSite() && $i < 2000; $i++) input($dig, []);
+	$reach = $dig->status()['race']['reach'];
+	input($dig, ['keys' => ['KeyW' => true]]);
+	for($i = 0; $i < 900 && $dig->race->state === 'idle'; $i++) $dig->step(1 / 60);
+	expect($reach === null && $dig->race->state === 'running',
+		"The car drives through the refitted gate and starts the race: " . json_encode([$reach, $dig->race->state]));
+	input($dig, ['actions' => ['fly']]);
+	$revision = $dig->course->revision;
+	$elsewhere = TerrainPhonics\Landscape::load($dig->landscape->save());
+	$elsewhere->queue(['type' => 'raise', 'x' => 600.0, 'z' => 400.0, 'radius' => 40.0, 'amount' => 10.0]);
+	$elsewhere->commit();
+	$dig->publishLandscape($elsewhere);
+	expect($dig->course->revision === $revision, 'An edit away from every gate leaves the course revision as it was');
+	$dig->close();
+}
 
 // Saved files keep each gate's size. A file from before sizes loads with each kind's own size, reads its old
 // gateHeight setting as the air gate altitude, and stands its road gates on the higher ground across their span.

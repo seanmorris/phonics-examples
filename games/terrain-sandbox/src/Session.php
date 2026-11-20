@@ -1033,6 +1033,9 @@ final class Session
 	public function publishLandscape(Landscape $landscape): void
 	{
 		$this->releasePin();
+		// Gates on the edited ground stand on it again.
+		if($this->course->count() > 0)
+			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
 		$this->landscape->close();
 		$this->landscape = $landscape;
 		if($this->carSearch !== null)

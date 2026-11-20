@@ -86,13 +86,13 @@
     "src/CarChase.php": "sha256-MUcAOlPD9mE3md1xdbzDhjMhY48h299VtVr3CF9xejs=",
     "src/CarSuspension.php": "sha256-bq66+ExjcWbqIeSGZFOAWz04PlryL7Bd5bWUf2Mqhl4=",
     "src/CarTumble.php": "sha256-PLQtyVOq6m6+iw6O/9yL5hszQDhRDfs7DV6hZHwi4w4=",
-    "src/Course.php": "sha256-UBQtmxsY9qmelh9flWhOR9yyq6jVjCShrrXgrbyFe/A=",
+    "src/Course.php": "sha256-wn4HVuddpEMjmaKrBDH1bJ5jmoc7iKYbiOZHF3hSCzs=",
     "src/GateDuck.php": "sha256-m0yzWohl3JjTIqxp/WAOL3GIe5WXGIN+HfmehJmUQ8E=",
     "src/GateModel.php": "sha256-ONoCfTkoGKqtUw3tObxyw7UUIH0gw5XR54ycgmm5A+k=",
     "src/GateShapes.php": "sha256-abFK5MdqZ6QMk6Fx00y/qEDphTUSDy7qK6oRMcbBEZM=",
     "src/Jet.php": "sha256-TRXjJrvi8dEjbtSj2yi8KQ4TnKFwjZQ2a4oRcJlp318=",
-    "src/Race.php": "sha256-ivfWh/354KQAPDG6OZXdGufhXn9DUuqx9vwO5BGW7mE=",
-    "src/Session.php": "sha256-MS9DLVfautIW065DXsIP0ARHZZRwo+Ejj3pzlfhUG+o=",
+    "src/Race.php": "sha256-hqPKUAhqAWWVF0OI7c5NatJNlf0+rOXO0LKcm6OAbM4=",
+    "src/Session.php": "sha256-qbXEEJZwyOYXwye3NnfBkDBt1BnUNufCMtyRezj+0Jw=",
     "src/VehicleModel.php": "sha256-EuVkmclRWSc42Ik3l0vqUVXhRYI3dlaqUfyTAyAqYDs="
   }
 }
