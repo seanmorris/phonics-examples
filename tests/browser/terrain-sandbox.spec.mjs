@@ -925,8 +925,15 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 			return draw(...args);
 		};
 		new MutationObserver(() => {
-			const car = JSON.parse(el.dataset.terrainSandbox).car;
-			if(car?.motion === 'airborne' && car.wheelContacts === 0) el.airborneCar = car;
+			const {car, camera} = JSON.parse(el.dataset.terrainSandbox);
+			if(car?.motion === 'airborne' && car.wheelContacts === 0)
+			{
+				el.airborneCar = car;
+				const [x,y,z] = camera.position;
+				const focus = Math.atan2(car.y+.65-y, Math.hypot(car.x-x,car.z-z));
+				const frameY = Math.tan(focus-camera.pitch)/Math.tan(camera.fov/2);
+				el.airborneFrameError = Math.max(el.airborneFrameError ?? 0, Math.abs(frameY));
+			}
 			if(el.airborneCar && car?.wheelContacts === 4) el.landedCar = car;
 		}).observe(el, {attributes:true,attributeFilter:['data-terrain-sandbox']});
 	});
@@ -934,11 +941,15 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 	await page.keyboard.down('w');
 	await expect.poll(() => view.evaluate(el => !!el.landedCar), {timeout:90000}).toBe(true);
 	await page.keyboard.up('w');
-	const result = await view.evaluate(el => [el.airborneCar,el.landedCar,el.suspensionDraw,el.getContext('webgl2').getError()]);
-	expect(result[1].z).toBeGreaterThan(result[0].z);
-	expect(result[1].recoveries).toBe(0);
-	expect(result[2]).toEqual({drooped:true,compressed:true});
-	expect(result[3]).toBe(0);
+	const {airborneCar, landedCar, suspensionDraw, airborneFrameError, glError} = await view.evaluate(el => ({
+		airborneCar: el.airborneCar, landedCar: el.landedCar, suspensionDraw: el.suspensionDraw,
+		airborneFrameError: el.airborneFrameError, glError: el.getContext('webgl2').getError()
+	}));
+	expect(landedCar.z).toBeGreaterThan(airborneCar.z);
+	expect(landedCar.recoveries).toBe(0);
+	expect(suspensionDraw).toEqual({drooped:true,compressed:true});
+	expect(airborneFrameError).toBeLessThan(.51);
+	expect(glError).toBe(0);
 	expect(errors).toEqual([]);
 });
 

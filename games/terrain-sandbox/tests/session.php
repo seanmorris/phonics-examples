@@ -5,6 +5,7 @@ $package = getenv('PHONICS_TERRAIN_ROOT') ?: dirname(__DIR__, 3) . '/packages/te
 require_once $package . '/autoload.php';
 require_once dirname(__DIR__) . '/autoload.php';
 
+use TerrainSandbox\CarChase;
 use TerrainSandbox\Jet;
 use TerrainSandbox\Session;
 
@@ -307,8 +308,41 @@ input($ledge, ['actions'=>['car','fly']]);
 expect(!$ledge->findingCarSite() && $ledge->mode === 'fly', 'Flight cancels a pending boarding request');
 $ledge->close();
 
-// The road runs across the car's path. Both turns enter the same 31° bank at the same speed.
 $dry = ['worldSize'=>512,'spacing'=>1,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-100];
+
+// Drop past a ledge that is still under the camera after the car has reached the ground below.
+$drop = new Session($dry);
+$drop->landscape->queue(['type'=>'road','points'=>[[-30,16,-10],[30,16,-10]],'width'=>18,'shoulder'=>.5,'crown'=>0]);
+$drop->landscape->commit();
+$chase = new CarChase;
+$pose = ['y'=>16.02,'z'=>-.3,'speed'=>2.0] + $drop->car->state();
+$chase->board($drop->camera, $pose, $drop->landscape);
+$frameError = 0.0; $landingPitch = null;
+for($i = 1; $i <= 360; $i++)
+{
+	$time = $i/60;
+	$y = max(.02, 16.02 - .5*9.81*$time**2);
+	$next = ['y'=>$y,'z'=>-.3 + 2*$time,'motion'=>$y > .02 ? 'airborne' : 'driving'] + $pose;
+	$chase->advance($drop->camera, $pose, $next, $drop->landscape, 1/60);
+	foreach([.5,1.0] as $alpha)
+	{
+		[$eye,$presented] = $chase->view($drop->camera, $next, $alpha);
+		[$x,$eyeY,$z] = $eye->position;
+		$focus = atan2($presented['y'] + .65 - $eyeY, hypot($presented['x'] - $x, $presented['z'] - $z));
+		$frameError = max($frameError, abs(tan($focus - $eye->pitch)/tan($eye->fov/2)));
+	}
+	if($y === .02 && $landingPitch === null)
+	{
+		expect($drop->camera->position[1] >= 17.34, 'The ledge keeps the camera high above the landed car');
+		$landingPitch = $drop->camera->pitch;
+	}
+	$pose = $next;
+}
+expect($frameError < .52 && $landingPitch !== null && $landingPitch < -.8 && $drop->camera->pitch > $landingPitch + .4,
+	'The chase camera tilts with a falling car through interpolated frames and lifts after clearing the ledge');
+$drop->close();
+
+// The road runs across the car's path. Both turns enter the same 31° bank at the same speed.
 foreach(['KeyD','KeyA'] as $steer)
 {
 	$bank = new Session($dry);

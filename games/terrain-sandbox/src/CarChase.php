@@ -43,11 +43,14 @@ final class CarChase
 		$this->previousEye = clone $camera;
 		$landed = $to['motion'] === 'driving' && in_array($from['motion'],['overturned','tumbling'],true);
 		$this->previousCar = $landed ? $to : $from;
-		$this->follow($camera, $to, $land, 1 - 2**(-$dt/.12), 1 - 2**(-$dt/.17), 1 - 2**(-$dt/.24), $dt);
+		$inAir = in_array($from['motion'],['airborne','tumbling'],true) || in_array($to['motion'],['airborne','tumbling'],true);
+		$this->follow($camera, $to, $land, 1 - 2**(-$dt/.12), 1 - 2**(-$dt/.17), 1 - 2**(-$dt/.24), $dt,
+			$inAir ? $to['y'] - $from['y'] : null);
 		return true;
 	}
 
-	private function follow(Camera $camera, array $pose, Landscape $land, float $turn, float $lift, float $tilt, float $dt): void
+	private function follow(Camera $camera, array $pose, Landscape $land, float $turn, float $lift, float $tilt, float $dt,
+		?float $airTravel = null): void
 	{
 		$heading = $this->look === 0.0 ? M_PI - $pose['yaw'] : M_PI - $pose['yaw'] + $this->look;
 		$this->looked = $this->look;
@@ -64,13 +67,21 @@ final class CarChase
 		$grade = max(-.5, min(.5, ($heightAtCar - $ground) / self::DISTANCE));
 		$floor = $ground + 1.35;
 		$desiredHeight = max($floor, $heightAtCar + 2.55 - .40*self::DISTANCE*$grade);
-		// Carry sustained uphill/downhill motion through the damper without feeding individual wheel bumps into it.
-		$predicted = $camera->position[1] + $dt*$pose['speed']*$grade;
+		// Follow the car's vertical travel in the air. On the ground the grade keeps tire bumps out of the eye.
+		$predicted = $camera->position[1] + ($airTravel ?? $dt*$pose['speed']*$grade);
 		$height = max($floor, $predicted + $lift*($desiredHeight - $predicted));
 		if(abs($desiredHeight - $height) <= .001) $height = $desiredHeight;
-		$desiredPitch = atan2($heightAtCar + .7 + 1.5*$grade - $desiredHeight, self::DISTANCE + 2);
+		$pitchHeight = $airTravel === null ? $desiredHeight : $height;
+		$desiredPitch = atan2($heightAtCar + .7 + 1.5*$grade - $pitchHeight, self::DISTANCE + 2);
+		// The ground can hold the eye above a ledge while the car falls. Allow it to tilt ahead of the damper
+		// in that case, keeping the car's center within the middle half of the frame.
+		$focus = atan2($heightAtCar + .65 - $height, self::DISTANCE);
+		$margin = atan(.5*tan($camera->fov / 2));
+		$minPitch = $focus - $margin; $maxPitch = $focus + $margin;
+		$desiredPitch = max($minPitch, min($maxPitch, $desiredPitch));
 		$pitch = $camera->pitch + $tilt*($desiredPitch - $camera->pitch);
 		if(abs($desiredPitch - $pitch) <= .0001) $pitch = $desiredPitch;
+		$pitch = max($minPitch, min($maxPitch, $pitch));
 		$camera->position = [$x,$height,$z];
 		$camera->yaw = $yaw;
 		$camera->pitch = $pitch;
