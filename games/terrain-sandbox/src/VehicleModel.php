@@ -33,6 +33,12 @@ final class VehicleModel
 	 * axis at full brightness, the range in metres, and the cone's inner and outer half-angles in radians.
 	 */
 	public const BEAM_INTENSITY = 20000.0, BEAM_RANGE = 80.0, BEAM_INNER = .05, BEAM_OUTER = .3;
+	/**
+	 * Openings of the pods, as Session::carLamps() gives them, between which the rising headlamps clear the car's
+	 * nose. Below the first the nose stops all of each beam, and above the second it stops less than 1%.
+	 * tests/lamps.php measures both by casting rays over the beams' cones against the Testarossa's mesh.
+	 */
+	public const BEAM_CLEAR = [.6, .76];
 	private Program $program;
 	private BakedMesh $mesh;
 	/** Pose key driving each hinge slot, and every slot's hinge point and unit axis, flattened for the shader. */
@@ -178,8 +184,9 @@ final class VehicleModel
 	 * @param array $lamps The car's pods and headlamps from lamps().
 	 * @param array $pose Pose as draw() takes it, with the levels from Session::carLamps() under 'lamps'.
 	 * @return list<array> One beam per pod: its 'position' and unit 'direction' in world metres, and its 'level' from
-	 * 0 to 1, the headlamps' brightness scaled by how far the pods stand open. The beams swing with the pods and turn
-	 * with the body, so a car on its side or roof shines them wherever its nose points.
+	 * 0 to 1, the headlamps' brightness scaled by how much of the beam clears the nose as the pods rise (BEAM_CLEAR).
+	 * The beams swing with the pods and turn with the body, so a car on its side or roof shines them wherever its nose
+	 * points.
 	 */
 	public static function beams(array $lamps, array $pose): array
 	{
@@ -188,8 +195,15 @@ final class VehicleModel
 		$angle = $lamps['pods']['angle'] * ($pose['lamps']['pods'] - 1);
 		$c = cos($angle); $s = sin($angle);
 		[, $hingeY, $hingeZ] = $lamps['pods']['point'];
+
+		// The nose hides the headlamps until the pods lift them clear, so no light reaches the ground through the body.
+		[$hidden, $clear] = self::BEAM_CLEAR;
+		$rise = max(0.0, min(1.0, ($pose['lamps']['pods'] - $hidden) / ($clear - $hidden)));
+		$level = $pose['lamps']['headlamps'] * $rise * $rise * (3 - 2 * $rise);
+
 		$world = static fn(array $v): array => [$basis[0]*$v[0] + $basis[3]*$v[1] + $basis[6]*$v[2],
 			$basis[1]*$v[0] + $basis[4]*$v[1] + $basis[7]*$v[2], $basis[2]*$v[0] + $basis[5]*$v[1] + $basis[8]*$v[2]];
+
 		$beams = [];
 		foreach($lamps['headlamps'] as ['position' => [$x, $y, $z], 'direction' => [$dx, $dy, $dz]])
 		{
@@ -197,8 +211,9 @@ final class VehicleModel
 			$at = $world([$x, $hingeY + $y*$c - $z*$s, $hingeZ + $y*$s + $z*$c]);
 			$beams[] = ['position' => [$pose['x'] + $at[0], $pose['y'] + $at[1], $pose['z'] + $at[2]],
 				'direction' => $world([$dx, $dy*$c - $dz*$s, $dy*$s + $dz*$c]),
-				'level' => $pose['lamps']['headlamps'] * $pose['lamps']['pods']];
+				'level' => $level];
 		}
+
 		return $beams;
 	}
 
@@ -207,13 +222,15 @@ final class VehicleModel
 	 * @param array $lamps The car's pods and headlamps from lamps().
 	 * @param array $pose Pose as draw() takes it, with the levels from Session::carLamps() under 'lamps'.
 	 * @return list<array> One light per beam from beams(), its intensity scaled by the beam's level. Empty while the
-	 * headlamps are dark or the pods are shut.
+	 * headlamps are dark or the nose still hides them.
 	 */
 	public static function spotLights(array $lamps, array $pose): array
 	{
-		if($pose['lamps']['headlamps'] * $pose['lamps']['pods'] <= 0) return [];
+		$beams = self::beams($lamps, $pose);
+		if(!$beams || $beams[0]['level'] <= 0) return [];
+
 		$lights = [];
-		foreach(self::beams($lamps, $pose) as $beam)
+		foreach($beams as $beam)
 			$lights[] = ['position' => $beam['position'], 'direction' => $beam['direction'], 'color' => self::WHITE,
 				'intensity' => self::BEAM_INTENSITY * $beam['level'], 'range' => self::BEAM_RANGE,
 				'inner' => self::BEAM_INNER, 'outer' => self::BEAM_OUTER];
