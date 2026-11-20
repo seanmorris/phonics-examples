@@ -43,7 +43,7 @@ export function activate({module, canvas})
 		ctx.lineJoin = 'round';
 		ctx.shadowColor = '#0a2219';
 		ctx.shadowBlur = 2*unit;
-		const focal = h/(2*Math.tan(frame.fov/2));
+		const focal = h/(2*Math.tan(frame.fov/2)), ring = h*frame.ring;
 
 		const dot = (a, b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 		const [nose,right,up] = basis;
@@ -119,7 +119,7 @@ export function activate({module, canvas})
 
 		if(cockpit)
 		{
-			const ring = h*frame.ring, deg = Math.PI/180;
+			const deg = Math.PI/180;
 			const pitch = Math.asin(Math.max(-1, Math.min(1, nose[1])))/deg;
 			const roll = Math.atan2(right[1], up[1]);
 			const heading = (bearing/deg%360+360)%360;
@@ -304,23 +304,25 @@ export function activate({module, canvas})
 		{
 			const direction = nearest.map((n, i) => n-eye[i]);
 			const across = dot(direction, right), down = -dot(direction, up);
-			// A contact directly behind has no screen projection. Put it at six o'clock.
-			const angle = Math.hypot(across, down) < .001
-				? (dot(direction, nose) < 0 ? Math.PI : 0)
-				: Math.atan2(across, -down);
+			const forward = dot(direction, nose), radial = Math.hypot(across, down);
 
-			ctx.save();
-			ctx.rotate(angle);
-			ctx.translate(0, -h*frame.ring);
+			// In front, the projected distance from the centre is focal * radial / forward.
+			if(forward <= 0 || focal*radial > ring*forward)
+			{
+				const angle = radial < .001 ? Math.PI : Math.atan2(across, -down);
+				ctx.save();
+				ctx.rotate(angle);
+				ctx.translate(0, -ring-4);
 
-			ctx.beginPath();
-			ctx.moveTo(0, -2);
-			ctx.lineTo(6, 10);
-			ctx.lineTo(-6, 10);
-			ctx.closePath();
-			ctx.fillStyle = green;
-			ctx.fill();
-			ctx.restore();
+				ctx.beginPath();
+				ctx.moveTo(0, -12);
+				ctx.lineTo(6, 0);
+				ctx.lineTo(-6, 0);
+				ctx.closePath();
+				ctx.fillStyle = green;
+				ctx.fill();
+				ctx.restore();
+			}
 		}
 
 		if(targetPoint)

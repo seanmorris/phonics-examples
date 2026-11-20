@@ -392,9 +392,17 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 		}
 
 		sample(5,0);
-		const waiting = sample(9,0), nearestRight = ink(142,-142);
-		frame.targets[2] = [-400,-400,400];
-		const moving = sample(9.15,.5), nearestBehind = ink(-142,142);
+		const waiting = sample(9,0), nearestRight = ink(150,-150), underRim = ink(142,-142);
+		// Move the nearest balloon across the rim with a farther contact still outside on the opposite side.
+		frame.targets[3] = [-700,-700,-600];
+		frame.targets[2] = [161,161,-400];
+		sample(9.04,0);
+		const inside = ink(150,-150) || ink(-150,150);
+		frame.targets[2] = [162,162,-400];
+		sample(9.08,0);
+		const outsideAgain = ink(150,-150);
+		frame.targets[2] = [-10,-10,400];
+		const moving = sample(9.15,.5), nearestBehind = ink(-150,150);
 		const paused = sample(9.15,.5);
 		frame.targets[1][0] = 200;
 		const follows = sample(9.16,.5);
@@ -404,7 +412,7 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 		const hidden = sample(10.2,0);
 		frame.targets = {2: [5000,5000,0]};
 		sample(10.3,0);
-		const distant = ink(142,-142) || ink(-142,142);
+		const distant = ink(150,-150) || ink(-150,150);
 		frame.range.visible = true;
 		frame.range.selected = 2;
 		const cycle = sample(10.4,0);
@@ -412,7 +420,7 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 		const chase = sample(10.5,.5);
 
 		return {waiting,moving,paused,follows,contact,pausedContact,locked,interrupted,hidden,cycle,chase,
-			nearestRight,nearestBehind,distant};
+			nearestRight,underRim,inside,outsideAgain,nearestBehind,distant};
 	}, source);
 
 	const origin = [true,false,false,false,false];
@@ -424,7 +432,12 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 	expect(states.pausedContact).toEqual(states.contact);
 	expect(states.locked).toEqual([true,false,false,false,true]);
 	expect(states.chase).toEqual([false,false,false,false,false]);
-	expect([states.nearestRight,states.nearestBehind,states.distant]).toEqual([true,true,false]);
+	expect(states.nearestRight).toBe(true);
+	expect(states.underRim).toBe(false);
+	expect(states.inside).toBe(false);
+	expect(states.outsideAgain).toBe(true);
+	expect(states.nearestBehind).toBe(true);
+	expect(states.distant).toBe(false);
 });
 
 test('the cockpit flight-path diamond projects ground track through the banked pilot view', async({page}) => {
