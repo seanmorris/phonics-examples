@@ -323,8 +323,8 @@ A slope is 1 minus the upward component of the surface normal: 0 on level ground
 | `snowSlopeEnd` | 0.65 | 0 to 1 | Slope beyond which ground stays bare. At least 0.01 above the start. |
 | `macroVariation` | 1 | 0 to 3 | Strength of the broad noise that varies grass brightness, soil cover, canyon dust and debris, granite brightness, mountain talus, the snowline and the mountain zones. At 1 the snowline moves up to 25 m either way. 0 removes the variation. |
 
-On mountains, ribs and patchy noise lower the treeline, the foot of the tundra and the start of bare rock by up to
-about 95 m, and gullies raise them by up to about 75 m, so rock runs down the ribs and vegetation climbs the gullies.
+On mountains, winding ribs and patchy noise lower the treeline, the foot of the tundra and the start of bare rock
+locally. Gullies raise those boundaries, so rock runs down the ribs and vegetation climbs the gullies.
 The broad noise moves these zones 70 m against the snowline at a `macroVariation` of 1: where it raises the snowline
 25 m, the zones lie 45 m lower. The transitions break into clumps of trees, shrubs and rock, and avalanche chutes open
 the forest down the gullies of steeper slopes. Below the treeline, soil holds on slopes about 0.07 steeper than it does

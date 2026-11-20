@@ -118,7 +118,7 @@
     "shaders/stars.frag": "sha256-iT87V40qiUf40avlm0soZjGO/J1WgjlKc33tEh0N77k=",
     "shaders/stars.vert": "sha256-71D8/TsLXl5zD9ceWR5xDIg6Tk024Er7NSjEvEc7/JU=",
     "shaders/surface-layers.glsl": "sha256-9cTEfxl7tyEwpEnQ44rruUDevXZAba8R9YJqTlW17gY=",
-    "shaders/terrain.frag": "sha256-Pb9hTyvpuoANKIRg3erqkHWyBV9CAy+ag/d0bpqmoO8=",
+    "shaders/terrain.frag": "sha256-+36BhHzPOI8ophi8NAoO+HrVGO1oPdTCFoCYv/vesMQ=",
     "shaders/terrain.vert": "sha256-fB0WYD7BDYauJk2nq06njbi7p9unJcEB9bn7ytP/odY=",
     "shaders/water-functions.glsl": "sha256-o0RESmAinx18vCptaz1x1zI19X7ybaGb1Lw8QxhAB60=",
     "shaders/water-optics.glsl": "sha256-kz4GNjxL+Sf1lZaTFY+vMZyHAfJDfwDN0wKcaQ+g8SQ=",
