@@ -120,6 +120,15 @@ foreach([-10,25] as $water)
 check(!$fire($pose,-10) && !$fire(array_replace($pose,['z'=>8188]),-10) && !$fire($dive,-10,true),
 	'Expiry, map exits and tracer contacts leave no projectile burst');
 
+foreach([[0,1700], [350,50]] as [$x,$z])
+{
+	$visible = new BalloonPractice;
+	$visible->place($x,$z,100,$land,0);
+	for($i = 0; $i < 45; $i++) $visible->step(1/60,$pose,false,false,$land,0,true);
+	check($visible->status()['visible'] && $visible->status()['lockProgress'] === 0.0,
+		'A visible balloon outside lock range or outside the ring leaves the diamond hidden');
+}
+
 $range = new BalloonPractice;
 $tick = static function(int $steps, bool $launch = false, bool $gun = false) use ($range,$pose,$land): void {
 	for($i=0; $i<$steps; $i++) $range->step(1/60,$pose,$launch && $i === 0,$gun,$land,0,true);
@@ -138,11 +147,12 @@ $range->place(0,150,100,$land,0);
 $range->place(0,200,100,$land,0);
 $range->cycle();
 $tick(8);
-check(!$range->status()['locked'] && $range->status()['visible'], 'Visible before the dwell completes');
+check(!$range->status()['locked'] && $range->status()['visible']
+	&& abs($range->status()['lockProgress'] - 8/18) < 1e-6, 'HUD acquisition uses the actual lock dwell');
 $tick(14);
-check($range->status()['locked'], 'Sustained alignment locks');
+check($range->status()['locked'] && $range->status()['lockProgress'] === 1.0, 'The diamond arrives at lock');
 $range->cycle();
-check(!$range->status()['locked'], 'A target change clears the lock');
+check(!$range->status()['locked'] && $range->status()['lockProgress'] === 0.0, 'A target change restarts acquisition');
 $tick(20); $tick(1,true);
 check(reset($range->shots)['target'] === $range->status()['selected'], 'Launched projectile remembers the locked balloon');
 $tick(24);

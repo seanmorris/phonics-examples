@@ -454,15 +454,19 @@ final class Jet
 		return $block;
 	}
 
-	/** Calibrate the cockpit readout against delivered power at minimum, hands-off cruise and full throttle. */
-	public static function thrustPercent(float $power): int
+	/** Delivered thrust relative to full dry power, shared by the cockpit and the exhaust material. */
+	public static function thrustLevel(float $power): float
 	{
 		$power = max(0.0, min(1.0, $power));
-		if($power <= self::CRUISE_POWER) return (int)round(30 + 45 * $power / self::CRUISE_POWER);
+		if($power <= self::CRUISE_POWER) return .30 + .45 * $power / self::CRUISE_POWER;
 
-		return (int)round(75 + 65 * ($power - self::CRUISE_POWER) / (1 - self::CRUISE_POWER));
+		return .75 + .65 * ($power - self::CRUISE_POWER) / (1 - self::CRUISE_POWER);
 	}
 
+	public static function thrustPercent(float $power): int
+	{
+		return (int)round(100 * self::thrustLevel($power));
+	}
 
 	/** Pilot eye in the forward canopy, relative to the aircraft's balance point. */
 	public static function cockpit(array $p): Camera

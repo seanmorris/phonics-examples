@@ -241,6 +241,7 @@ $engine->start(
 					'fov'=>$viewCamera->fov,'jet'=>$vehiclePose,'thrust'=>TerrainSandbox\Jet::thrustPercent($vehiclePose['power']),'cockpit'=>$session->jetView === 'cockpit',
 					'map'=>$showMap ? ($flightMap ??= new FlightMap)->update($session,$scene,$vehiclePose,$now) : null,
 					'range'=>$session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
+					'contactRange'=>TerrainSandbox\BalloonPractice::CONTACT_RANGE,
 					'targets'=>$session->balloons->targets()], JSON_THROW_ON_ERROR));
 			}
 			elseif($hudShown) { $hud(''); $hudShown = false; $flightMap = null; }

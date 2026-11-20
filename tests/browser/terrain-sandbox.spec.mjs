@@ -339,12 +339,18 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 	}
 
 	const {SPD,ALT} = await page.evaluate(() => window.tapeLabels);
-	expect(SPD[0]).toBeLessThan(.09);
-	expect(ALT[0]).toBeGreaterThan(.91);
+	const before = await radar.evaluate(el => el.width);
+	expect(ALT[0]-.5).toBeCloseTo(.5-SPD[0], 3);
+	await page.setViewportSize({width: 1440, height: 760});
+	await expect.poll(() => radar.evaluate(el => el.width)).toBeGreaterThan(before+300);
+	const after = await radar.evaluate(el => el.width);
+	const wider = await page.evaluate(() => window.tapeLabels);
+	expect((.5-wider.SPD[0])*after).toBeCloseTo((.5-SPD[0])*before, 1);
+	expect((wider.ALT[0]-.5)*after).toBeCloseTo((ALT[0]-.5)*before, 1);
 	expect([SPD[1],ALT[1]]).toEqual(['#59ff86','#59ff86']);
 });
 
-test('the acquisition diamond separates from the flight path, follows the balloon and clears on lock', async({page}) => {
+test('cockpit cues show the nearest balloon and the diamond meets the selected balloon at lock', async({page}) => {
 	const source = await fs.readFile(new URL('../../games/terrain-sandbox/browser/cockpit.mjs', import.meta.url), 'utf8');
 	await page.setContent('<div><canvas></canvas></div>');
 
@@ -356,10 +362,10 @@ test('the acquisition diamond separates from the flight path, follows the balloo
 		activate({module, canvas: document.querySelector('canvas')});
 		const ctx = document.querySelector('.terrain-instruments').getContext('2d');
 		const frame = {
-			width: 800, height: 720, cockpit: true, ring: .285, fov: Math.PI/2
+			width: 800, height: 720, cockpit: true, ring: .285, contactRange: 4000, fov: Math.PI/2
 			, eye: [0,0,0], basis: [[0,0,-1],[1,0,0],[0,1,0]]
 			, jet: {x: 0, y: 0, z: 0, yaw: Math.PI, pitch: 0, vx: -20, vy: 15, vz: -120, speed: 120}
-			, thrust: 75, targets: {1: [400,200,-1600], 2: [320,200,-1600]}
+			, thrust: 75, targets: {1: [250,125,-1000], 2: [400,400,-400]}
 			, range: {selected: 1, visible: true, locked: false, elapsed: 5, ground: 0, ready: 2}
 		};
 
@@ -375,44 +381,50 @@ test('the acquisition diamond separates from the flight path, follows the balloo
 			return false;
 		}
 
-		function sample(elapsed)
+		function sample(elapsed, progress)
 		{
 			frame.range.elapsed = elapsed;
+			frame.range.lockProgress = progress;
+			frame.range.locked = progress === 1;
 			module.terrainJetFrame(JSON.stringify(frame));
 
-			return [ink(-60,-50), ink(15,-52), ink(90,-54), ink(72,-54), ink(72,-58,true)];
+			return [ink(-60,-50), ink(15,-52), ink(6,-52), ink(72,-54,true), ink(72,-58,true)];
 		}
 
-		const start = sample(5), moving = sample(5.10), paused = sample(5.10), tracking = sample(5.22);
-		frame.targets[1][0] = 320;
-		const follows = sample(5.26);
-		frame.range.locked = true;
-		const lock = sample(5.31);
-		frame.range.locked = false;
-		const reacquire = sample(5.5);
-		sample(5.73);
-		frame.range.selected = 2;
-		const cycle = sample(5.8);
-		sample(6.02);
+		sample(5,0);
+		const waiting = sample(9,0), nearestRight = ink(142,-142);
+		frame.targets[2] = [-400,-400,400];
+		const moving = sample(9.15,.5), nearestBehind = ink(-142,142);
+		const paused = sample(9.15,.5);
+		frame.targets[1][0] = 200;
+		const follows = sample(9.16,.5);
+		const contact = sample(9.3,1), pausedContact = sample(9.3,1), locked = sample(9.33,1);
+		const interrupted = sample(10,0);
 		frame.range.visible = false;
-		const hidden = sample(6.1);
+		const hidden = sample(10.2,0);
+		frame.targets = {2: [5000,5000,0]};
+		sample(10.3,0);
+		const distant = ink(142,-142) || ink(-142,142);
 		frame.range.visible = true;
-		const reappear = sample(6.2);
+		frame.range.selected = 2;
+		const cycle = sample(10.4,0);
 		frame.cockpit = false;
-		const chase = sample(6.8);
+		const chase = sample(10.5,.5);
 
-		return {start,moving,paused,tracking,follows,lock,reacquire,cycle,hidden,reappear,chase};
+		return {waiting,moving,paused,follows,contact,pausedContact,locked,interrupted,hidden,cycle,chase,
+			nearestRight,nearestBehind,distant};
 	}, source);
 
 	const origin = [true,false,false,false,false];
-	expect(states.start).toEqual(origin);
+	for(const state of ['waiting','interrupted','hidden','cycle']) expect(states[state]).toEqual(origin);
 	expect(states.moving).toEqual([true,true,false,false,false]);
 	expect(states.paused).toEqual(states.moving);
-	expect(states.tracking).toEqual([true,false,true,false,false]);
-	expect(states.follows).toEqual([true,false,false,true,false]);
-	expect(states.lock).toEqual([true,false,false,false,true]);
-	for(const state of ['reacquire','cycle','hidden','reappear']) expect(states[state]).toEqual(origin);
+	expect(states.follows).toEqual([true,false,true,false,false]);
+	expect(states.contact).toEqual([true,false,false,true,true]);
+	expect(states.pausedContact).toEqual(states.contact);
+	expect(states.locked).toEqual([true,false,false,false,true]);
 	expect(states.chase).toEqual([false,false,false,false,false]);
+	expect([states.nearestRight,states.nearestBehind,states.distant]).toEqual([true,true,false]);
 });
 
 test('the cockpit flight-path diamond projects ground track through the banked pilot view', async({page}) => {
@@ -469,6 +481,58 @@ test('the cockpit flight-path diamond projects ground track through the banked p
 	await page.evaluate(() => window.flightStick(0,0));
 	await page.keyboard.press('p');
 	await expect.poll(() => page.evaluate(() => Math.hypot(...window.pathOffset))).toBeLessThan(1);
+});
+
+test('both F5 exhausts brighten as the engine spools through cruise and afterburner', async({page}) => {
+	await boot(page);
+	const airspace = fixture();
+	airspace.landscape.recipe.worldSize = 8192;
+	airspace.camera = {position: [0,500,0], yaw: 0, pitch: 0};
+	await load(page, airspace);
+	const indexCount = gunzipSync(await fs.readFile(new URL('../../games/terrain-sandbox/assets/f5/mesh.bin.gz', import.meta.url))).readUInt32LE(4);
+	const view = canvas(page);
+	await view.evaluate((el, count) => {
+		const gl = el.getContext('webgl2'), draw = gl.drawElements.bind(gl);
+		el.exhausts = {};
+		gl.drawElements = (...args) => {
+			draw(...args);
+			if(args[1] !== count) return;
+			const pg = gl.getParameter(gl.CURRENT_PROGRAM);
+			const uniform = key => gl.getUniform(pg, gl.getUniformLocation(pg, key));
+			const level = uniform('uEngineThrust');
+			const state = level < .32 ? 'idle' : Math.abs(level-.75) < .005 ? 'cruise' : level > 1.38 ? 'full' : '';
+			if(!state || el.exhausts[state]) return;
+
+			const origin = uniform('uOrigin'), basis = uniform('uRotation'), projection = uniform('uViewProjection');
+			el.exhausts[state] = [-.296,.290].map(x => {
+				const local = [x,-.233,-6.13];
+				const point = [0,1,2].map(i => origin[i]+local.reduce((v,n,j) => v+n*basis[3*j+i], 0));
+				point.push(1);
+				const clip = [0,1,2,3].map(i => point.reduce((v,n,j) => v+n*projection[4*j+i], 0));
+				const px = Math.floor((1+clip[0]/clip[3])*gl.drawingBufferWidth/2);
+				const py = Math.floor((1+clip[1]/clip[3])*gl.drawingBufferHeight/2);
+				const pixels = new Uint8Array(36);
+				gl.readPixels(px-1,py-1,3,3,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+				return pixels.reduce((sum,v,i) => sum+(i%4 < 2 ? v : 0), 0)/9;
+			});
+		};
+	}, indexCount);
+	await view.focus();
+	await page.keyboard.press('j');
+	const light = state => view.evaluate((el, name) => el.exhausts[name], state);
+	await expect.poll(() => light('cruise')).toBeTruthy();
+	await page.keyboard.down('w');
+	await expect.poll(() => light('full')).toBeTruthy();
+	await page.keyboard.up('w');
+	await page.keyboard.down('s');
+	await expect.poll(() => light('idle')).toBeTruthy();
+	await page.keyboard.up('s');
+	const [idle,cruise,full] = await Promise.all(['idle','cruise','full'].map(light));
+	for(let nozzle = 0; nozzle<2; nozzle++)
+	{
+		expect(cruise[nozzle]).toBeGreaterThan(idle[nozzle]+10);
+		expect(full[nozzle]).toBeGreaterThan(cruise[nozzle]+25);
+	}
 });
 
 test('F5 underwing models leave and refill on their own wings', async({page}) => {

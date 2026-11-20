@@ -268,6 +268,8 @@ final class VehicleModel
 		$basis = self::basis($pose);
 		$p = $this->program;
 		self::light($p, $camera, $sky, $water, $width, $height, $pose['y']);
+		if(isset($pose['power']) && $this->controls)
+			glUniform1f($p->location('uEngineThrust'), Jet::thrustLevel($pose['power']));
 		if(isset($pose['wheelSpin']))
 		{
 			glUniform4f($p->location('uWheelTravel'), ...$pose['wheelTravel']);

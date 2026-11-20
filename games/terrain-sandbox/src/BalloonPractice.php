@@ -9,6 +9,8 @@ use TerrainPhonics\RayQuery;
 final class BalloonPractice
 {
 	private const MAX_BALLOONS = 32;
+	private const LOCK_SECONDS = .3;
+	public const CONTACT_RANGE = 4000.0;
 	/** Ring radius as a fraction of viewport height. The HUD draws this same circle. */
 	public const RING = .285;
 	private array $placements = [], $positions = [], $popped = [];
@@ -201,7 +203,7 @@ final class BalloonPractice
 		$x = $point[0]-$eye->position[0]; $y = $point[1]-$eye->position[1]; $z = $point[2]-$eye->position[2];
 		$range = sqrt($x*$x+$y*$y+$z*$z);
 		$angle = ($x*$nose[0]+$y*$nose[1]+$z*$nose[2])/max(.001,$range);
-		if($angle <= 0 || $range > 4000 || min($eye->position[1],$targets[$id][1]) <= $water)
+		if($angle <= 0 || $range > self::CONTACT_RANGE || min($eye->position[1],$targets[$id][1]) <= $water)
 		{
 			$this->select($id);
 			return;
@@ -222,7 +224,7 @@ final class BalloonPractice
 			$this->checkAt = $this->elapsed+.10;
 		}
 		$inside = $angle >= 1/sqrt(1+(2*self::RING*tan($eye->fov/2))**2);
-		$this->dwell = $this->visible && $inside && $range <= 1200 ? min(.3,$this->dwell+$dt) : 0;
+		$this->dwell = $this->visible && $inside && $range <= 1200 ? min(self::LOCK_SECONDS,$this->dwell+$dt) : 0;
 	}
 
 	public function step(float $dt, array $p, bool $launch, bool $gun, Landscape $land, float $water, bool $inCockpit,
@@ -320,7 +322,7 @@ final class BalloonPractice
 		$this->shots[] = ['previous'=>$a,'position'=>$a,'direction'=>$nose,'tracer'=>$tracer,
 			'roll'=>$p['roll'] + (cos($p['pitch']) < 0 ? M_PI : 0),
 			'speed'=>$p['speed']+($tracer ? 760 : 490),'expires'=>$this->elapsed+($tracer ? 1.4 : 3.5),
-			'target'=>!$tracer && $this->dwell >= .3 ? $this->selected : null];
+			'target'=>!$tracer && $this->dwell >= self::LOCK_SECONDS ? $this->selected : null];
 	}
 
 	/** Loaded wings use the same flight clock as launch and the cockpit's charge count. */
@@ -331,7 +333,8 @@ final class BalloonPractice
 
 	public function status(): array
 	{
-		return ['selected'=>$this->selected,'visible'=>$this->visible,'locked'=>$this->dwell >= .3,'hits'=>$this->hits,
+		return ['selected'=>$this->selected,'visible'=>$this->visible,'locked'=>$this->dwell >= self::LOCK_SECONDS,
+			'lockProgress'=>$this->dwell/self::LOCK_SECONDS,'hits'=>$this->hits,
 			'hit'=>$this->elapsed < $this->hitUntil,'elapsed'=>$this->elapsed,'practice'=>$this->practice,
 			'ready'=>count($this->readySlots()),
 			'placements'=>count($this->placements),'shots'=>count($this->shots),'ground'=>$this->ground];

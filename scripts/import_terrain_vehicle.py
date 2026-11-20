@@ -344,6 +344,9 @@ def export_model(folder, vehicle, pods=None):
         metallic = round(255 * pbr.get("metallicFactor", 1))
         name = scene["materials"][part["material"]].get("name", "")
         surface = 255 if textured else int(name.endswith("_wheel"))
+        # Both exhaust nozzles share this source material and keep their atlas texture under the glow.
+        if vehicle == "f5" and name == "soplo-FACES":
+            surface = 249
         if "_lamp" in name:
             surface = int(name.rpartition("_lamp")[2])
         positions = accessor(scene, binary, attributes["POSITION"])

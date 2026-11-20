@@ -10,14 +10,14 @@ export function activate({module, canvas})
 
 	const ctx = screen.getContext('2d');
 	const green = '#59ff86', red = '#ff5148';
-	let trackingId = null, trackingStart = 0;
+	let acquiringId = null, contactFrame = null;
 
 	function draw(frame)
 	{
 		if(!frame)
 		{
 			screen.hidden = true;
-			trackingId = null;
+			acquiringId = contactFrame = null;
 			module.drawTerrainFlightMap(null);
 
 			return;
@@ -63,12 +63,12 @@ export function activate({module, canvas})
 			ctx.stroke();
 		}
 
-		function diamond(x, y, rx, ry)
+		function diamond(x, y, rx, ry, color = green)
 		{
 			ctx.save();
 			ctx.translate(x, y);
 
-			ctx.strokeStyle = green;
+			ctx.strokeStyle = color;
 			ctx.beginPath();
 			ctx.moveTo(-rx, 0);
 			ctx.lineTo(0, -ry);
@@ -105,11 +105,13 @@ export function activate({module, canvas})
 
 		const target = targets[range.selected];
 		const targetPoint = target && range.visible ? project(target.map((n, i) => n-eye[i]), .25) : null;
-		const tracking = cockpit && !range.locked && targetPoint
-			&& Math.abs(targetPoint[0]) <= w/2 && Math.abs(targetPoint[1]) <= h/2;
+		const acquiring = cockpit && targetPoint && range.lockProgress > 0 && !range.locked;
 
-		if(!tracking) trackingId = null;
+		// Draw contact at the target on the first locked frame, including redraws of that frame while paused.
+		if(!cockpit || !targetPoint || !range.locked) contactFrame = null;
+		else if(acquiringId === range.selected) contactFrame = range.elapsed;
 
+		acquiringId = acquiring ? range.selected : null;
 		const dx = target ? target[0]-jet.x : 0, dz = target ? target[2]-jet.z : 0;
 		const distance = target ? Math.hypot(dx, target[1]-jet.y, dz) : 0;
 		ctx.lineWidth = 1.8;
@@ -150,19 +152,13 @@ export function activate({module, canvas})
 			const path = project([jet.vx, jet.vy, jet.vz], 1e-6);
 			const pathVisible = path && Math.abs(path[0]) <= w/2+25 && Math.abs(path[1]) <= h/2+5;
 
-			if(tracking)
+			if(acquiring || targetPoint && contactFrame === range.elapsed)
 			{
-				if(trackingId !== range.selected || range.elapsed < trackingStart)
-				{
-					trackingId = range.selected;
-					trackingStart = range.elapsed;
-				}
-
-				// Both cues use this frame's projections. Pausing the game freezes the separation.
-				const t = Math.min(1, (range.elapsed-trackingStart)/.20);
-				const blend = t*t*(3-2*t);
-				const [fromX,fromY] = pathVisible ? path : targetPoint;
-				diamond(fromX+(targetPoint[0]-fromX)*blend, fromY+(targetPoint[1]-fromY)*blend, 6+3*blend, 5+4*blend);
+				const t = range.lockProgress, blend = t*t*(3-2*t);
+				const fromX = Math.max(-w/2, Math.min(w/2, path?.[0] ?? 0));
+				const fromY = Math.max(-h/2, Math.min(h/2, path?.[1] ?? 0));
+				const x = fromX+(targetPoint[0]-fromX)*blend, y = fromY+(targetPoint[1]-fromY)*blend;
+				diamond(x, y, 6+3*blend, 5+4*blend, range.locked ? red : green);
 			}
 
 			if(pathVisible)
@@ -185,7 +181,7 @@ export function activate({module, canvas})
 
 			function tape(value, step, side, title, caption)
 			{
-				const x = side*(w/2-96), readout = x+side*51;
+				const readout = side*Math.min(ring+190, w*.43), x = readout-side*51;
 
 				for(let n = Math.floor(value/step)-4; n<=Math.floor(value/step)+4; n++)
 				{
@@ -273,6 +269,7 @@ export function activate({module, canvas})
 		text(scale===1000 ? 'S' : scale===2500 ? 'M' : 'L', rx-radius-12, ry, 15);
 
 		const c = Math.cos(bearing), s = Math.sin(bearing);
+		let nearest = null, closestSq = frame.contactRange**2;
 
 		for(const [id,pos] of Object.entries(targets))
 		{
@@ -281,7 +278,14 @@ export function activate({module, canvas})
 			const bx = rx+(c*x+s*z)*factor;
 			const by = ry+(-s*x+c*z)*factor;
 			ctx.fillStyle = Number(id)===range.selected ? red : '#ffca51';
-			const altitude = Math.sign(pos[1]-jet.y);
+			const dy = pos[1]-jet.y, altitude = Math.sign(dy);
+			const distanceSq = x*x+dy*dy+z*z;
+
+			if(cockpit && distanceSq <= closestSq)
+			{
+				nearest = pos;
+				closestSq = distanceSq;
+			}
 
 			if(altitude === 0) ctx.fillRect(bx-3, by-3, 6, 6);
 			else
@@ -291,8 +295,32 @@ export function activate({module, canvas})
 				ctx.lineTo(bx+5.5, by+4*altitude);
 				ctx.lineTo(bx-5.5, by+4*altitude);
 				ctx.closePath();
+
 				ctx.fill();
 			}
+		}
+
+		if(nearest)
+		{
+			const direction = nearest.map((n, i) => n-eye[i]);
+			const across = dot(direction, right), down = -dot(direction, up);
+			// A contact directly behind has no screen projection. Put it at six o'clock.
+			const angle = Math.hypot(across, down) < .001
+				? (dot(direction, nose) < 0 ? Math.PI : 0)
+				: Math.atan2(across, -down);
+
+			ctx.save();
+			ctx.rotate(angle);
+			ctx.translate(0, -h*frame.ring);
+
+			ctx.beginPath();
+			ctx.moveTo(0, -2);
+			ctx.lineTo(6, 10);
+			ctx.lineTo(-6, 10);
+			ctx.closePath();
+			ctx.fillStyle = green;
+			ctx.fill();
+			ctx.restore();
 		}
 
 		if(targetPoint)
