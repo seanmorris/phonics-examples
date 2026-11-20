@@ -4,6 +4,7 @@ declare(strict_types=1);
 use TerrainPhonics\Landscape;
 use TerrainSandbox\BalloonPractice;
 use TerrainSandbox\Jet;
+use TerrainSandbox\FlightTrails;
 use TerrainSandbox\Session;
 use TerrainSandbox\VehicleModel;
 
@@ -34,6 +35,39 @@ foreach([[0,0,0],[1,.54,-.78],[-2,1.56,2.4],[3,-.4,M_PI]] as [$yaw,$pitch,$roll]
 		check(abs($eye->position[$i]-($p[$axis]+4.6*$nose[$i]+.85*$up[$i])) < 1e-9, 'Canopy offset follows bank');
 	}
 }
+$trails = new FlightTrails;
+$dt = 1/60;
+$clipped = array_replace($pose,['roll'=>.9]);
+$trails->step($dt,$clipped,$clipped);
+check(!$trails->active(), 'A bank without turning load leaves no vapor');
+$turn = array_replace($clipped,['yaw'=>.01,'z'=>2.3]);
+$trails->step($dt,$clipped,$turn);
+$segments = str_split($trails->instances(),FlightTrails::STRIDE);
+check(count($segments) === 2, 'A loaded bank emits a trail from each wing');
+$ends = array_map(static fn($bytes)=>array_values(unpack('g*',$bytes)), $segments);
+check(abs(hypot($ends[0][0]-$ends[1][0],$ends[0][1]-$ends[1][1]) - 8.34) < 1e-4
+	&& $ends[0][1] > $ends[1][1] && abs($ends[1][2] + 2.16) < 1e-4,
+	'Vapor starts at the two banked mesh wingtips');
+check(abs($trails->timeAt(.5) - 1.5*$dt) < 1e-9, 'Birth times follow fixed-step interpolation');
+for($i=0; $i<100; $i++) $trails->step($dt,$pose,$pose);
+check(!$trails->active(), 'Old wingtip vapor dissipates after leveling out');
+$smoke = new BalloonPractice;
+$smoke->place(0,36,100,$land,0);
+for($i=0; $i<8; $i++)
+{
+	$trails->step($dt,$pose,$pose);
+	$smoke->step($dt,$pose,$i === 0,false,$land,0,true,$trails);
+}
+check($smoke->hits === 1 && !$smoke->shots && $trails->active(), 'Smoke lingers after the projectile pops a balloon');
+$first = array_values(unpack('g*',substr($trails->instances(),0,FlightTrails::STRIDE)));
+check($first[8] === 1.0 && abs($first[2] - 7.6) < 1e-4 && $first[6] > $first[2], 'Smoke is emitted behind the moving projectile');
+for($i=0; $i<150; $i++)
+{
+	$trails->step($dt,$pose,$pose);
+	$smoke->step($dt,$pose,false,true,$land,0,true,$trails);
+}
+check(!$trails->active(), 'Exhaust expires completely and held Vulcan fire produces no smoke');
+
 $range = new BalloonPractice;
 $tick = static function(int $steps, bool $launch = false, bool $gun = false) use ($range,$pose,$land): void {
 	for($i=0; $i<$steps; $i++) $range->step(1/60,$pose,$launch && $i === 0,$gun,$land,0,true);

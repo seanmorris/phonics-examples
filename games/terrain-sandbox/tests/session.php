@@ -5,6 +5,7 @@ $package = getenv('PHONICS_TERRAIN_ROOT') ?: dirname(__DIR__, 3) . '/packages/te
 require_once $package . '/autoload.php';
 require_once dirname(__DIR__) . '/autoload.php';
 
+use TerrainSandbox\Jet;
 use TerrainSandbox\Session;
 
 $checks = 0;
@@ -453,6 +454,20 @@ expect($flight->mode === 'jet' && !$flight->paused && $spawn['y'] >= 95 && $spaw
 	'Boarding from low over water starts airborne facing the current heading');
 $flight->step(1/60);
 expect($flight->jet->state()['z'] < $spawn['z'], 'The jet cruises forward without a held key');
+expect($flight->jet->state()['power'] === Jet::CRUISE_POWER, 'The engine starts at cruise power');
+input($flight, ['keys'=>['KeyW'=>true]]);
+$flight->step(1/60);
+$first = $flight->jet->state();
+expect($first['power'] > Jet::CRUISE_POWER && $first['power'] < 1.0
+	&& $first['speed'] > Jet::CRUISE && $first['speed'] < Jet::CRUISE + Jet::ACCELERATION/60,
+	'Applying full throttle spools up and eases into acceleration');
+[, $between] = $flight->jet->view($flight->camera,.5);
+expect(abs($between['power'] - ($first['power'] + Jet::CRUISE_POWER)/2) < 1e-10,
+	'The cockpit samples engine power at the presented flight pose');
+input($flight, ['keys'=>[]]);
+$flight->step(1/60);
+expect($flight->jet->state()['power'] < $first['power'] && $flight->jet->state()['power'] > Jet::CRUISE_POWER,
+	'Letting go eases power back down towards cruise');
 input($flight, ['keys'=>['KeyW'=>true,'KeyD'=>true,'KeyE'=>true]]);
 for($i=0; $i<60; $i++) $flight->step(1/60);
 $turn = $flight->jet->state();
@@ -480,32 +495,20 @@ $flight->step(1/60);
 expect($flight->mode === 'fly' && str_contains($flight->message,'edge'), 'Flight at the map boundary returns control inside the landscape');
 $flight->close();
 
-/**
- * Advance a jet one fixed step by the Novice flight model as it stood before the control surfaces moved, with the
- * speed rule of AirForce Delta's triggers: held throttle moves towards 260 or 55 m/s and release returns to 140.
- * @param array $p Jet state before the step.
- * @param int $throttle Throttle keys, -1 to 1.
- * @param int $bank Bank keys, -1 to 1.
- * @param int $climb Climb keys, -1 to 1.
- * @return array Speed, roll, pitch, yaw, x and z after the step.
- */
-function oldMotion(array $p, int $throttle, int $bank, int $climb): array
+/** Reference Novice attitude and horizontal motion for the airspeed delivered by the engine. */
+function expectedMotion(array $p, float $speed, int $bank, int $climb): array
 {
 	$dt = 1 / 60;
-	$target = $throttle >= 0 ? 140.0 + $throttle * 120.0 : 140.0 + $throttle * 85.0;
-	$gap = $target - $p['speed'];
-	$speed = abs($gap) <= 55 * $dt ? $target : $p['speed'] + ($gap <=> 0) * 55 * $dt;
 	$roll = $p['roll'] + (-$bank * 1.10 - $p['roll']) * (1 - exp(-3.6 * $dt));
 	$pitch = $p['pitch'] + ($climb * .78 - $p['pitch']) * (1 - exp(-2.1 * $dt));
 	$yaw = $p['yaw'] + sin($roll) * .68 * $dt;
 
 	$travel = $speed * $dt;
-	return [$speed, $roll, $pitch, $yaw, $p['x'] + sin($yaw) * cos($pitch) * $travel,
+	return [$roll, $pitch, $yaw, $p['x'] + sin($yaw) * cos($pitch) * $travel,
 		$p['z'] + cos($yaw) * cos($pitch) * $travel];
 }
 
-// The control surfaces only animate the model. Flown through every control, the jet keeps to the old flight model
-// step for step, while each surface stays within its travel and rate and moves the way the demand asks.
+// Check the flight path and the direction, travel and rate of the animated control surfaces.
 $controls = new Session(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0]);
 $ground = new TerrainPhonics\Landscape($controls->landscape->recipe());
 $controls->camera->position = [0,300,0];
@@ -517,7 +520,7 @@ expect($s['aileron'] === 0.0 && $s['stabilator'] === 0.0 && $s['rudder'] === 0.0
 
 $travel = ['aileron'=>TerrainSandbox\Jet::AILERON, 'stabilator'=>TerrainSandbox\Jet::STABILATOR,
 	'rudder'=>TerrainSandbox\Jet::RUDDER];
-$oldKeys = ['x','y','z','yaw','pitch','roll','speed','aileron','stabilator','rudder','boom','eyeY','eyeX','eyeZ',
+$oldKeys = ['x','y','z','yaw','pitch','roll','speed','power','aileron','stabilator','rudder','boom','eyeY','eyeX','eyeZ',
 	'lookYaw','lookPitch'];
 $matched = $bounded = $interpolated = true;
 $peak = array_fill_keys(array_keys($travel), 0.0);
@@ -528,7 +531,6 @@ $script = [['left climb', ['KeyA','KeyE'], 120], ['right dive', ['KeyD','KeyQ','
 foreach($script as [$name, $held, $steps])
 {
 	input($controls, ['keys'=>array_fill_keys($held, true)]);
-	$throttle = (int)in_array('KeyW', $held) - (int)in_array('KeyS', $held);
 	$bank = (int)in_array('KeyD', $held) - (int)in_array('KeyA', $held);
 	$climb = (int)in_array('KeyE', $held) - (int)in_array('KeyQ', $held);
 
@@ -538,8 +540,8 @@ foreach($script as [$name, $held, $steps])
 		$controls->step(1 / 60);
 		$after = $controls->jet->state();
 		$matched = $matched && array_keys($after) === $oldKeys
-			&& [$after['speed'], $after['roll'], $after['pitch'], $after['yaw'], $after['x'], $after['z']]
-				=== oldMotion($before, $throttle, $bank, $climb)
+			&& [$after['roll'], $after['pitch'], $after['yaw'], $after['x'], $after['z']]
+				=== expectedMotion($before, $after['speed'], $bank, $climb)
 			&& [$after['y'], $after['eyeY']] === exactJet($before, $after, $ground, $controls->water->level())
 			&& $after['boom'] === 24.0 * cos(.38 - .75 * $after['pitch']);
 
@@ -558,7 +560,7 @@ foreach($script as [$name, $held, $steps])
 	}
 }
 
-expect($matched, 'Moving control surfaces leave the jet on the old flight path, attitude, speed and chase eye');
+expect($matched, 'Control surfaces preserve the expected flight path, attitude and chase eye at the delivered speed');
 expect($bounded && $peak['aileron'] > .99 * $travel['aileron'] && $peak['stabilator'] > .99 * $travel['stabilator']
 	&& $peak['rudder'] > .99 * $travel['rudder'],
 	'Each control surface reaches its stop without passing it and moves no faster than its actuator');
@@ -1008,7 +1010,6 @@ $tower->close();
 
 // Gamepads. The page sends [left X, left Y, right X, right Y, left trigger, right trigger, button bits] with +Y
 // towards the player, and only when the pad changes; the application re-sends the last packet every frame.
-use TerrainSandbox\Jet;
 
 /** Build a gamepad packet. */
 function pad(float $x = 0, float $y = 0, float $lookX = 0, float $lookY = 0, float $lt = 0, float $rt = 0,

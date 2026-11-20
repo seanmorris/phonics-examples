@@ -28,7 +28,7 @@ Press **J**, choose **Fly F5**, or press up on a gamepad's D-pad to start airbor
 
 **Expert** turns the jet about its own axes and holds whatever attitude you leave it in, so it can roll inverted and loop. **A/D** or the stick roll, **E/Q** or the stick pitch, and **Z/X** or **LB/RB** work the rudder. In a bank the wings support only part of the jet's weight unless you pull, so a banked jet turns slowly and one on its side slides towards the ground. Switching back to Novice keeps the jet's orientation and then levels it.
 
-In both, hold **W** or the right trigger to speed up towards 260 metres per second, and **S** or the left trigger to slow towards 55. Let go and the jet returns to its 140 metre per second cruise, as the Dreamcast game does. A trigger sets a speed in proportion to how far you squeeze it. Pulling the stick back raises the nose; tick **Push the stick forward to climb** to reverse it. The sandbox remembers both choices in this browser. Saved landscapes do not carry them.
+In both, hold **W** or the right trigger to speed up towards 260 metres per second, and **S** or the left trigger to slow towards 55. Let go and the jet returns to its 140 metre per second cruise, as the Dreamcast game does. Trigger travel sets the requested engine power. The ENG gauge shows delivered power as the engine spools up or down, and airspeed follows. Pulling the stick back raises the nose; tick **Push the stick forward to climb** to reverse it. The sandbox remembers both choices in this browser. Saved landscapes do not carry them.
 
 Both chase cameras keep the horizon level. The Novice camera looks along the jet's heading. The Expert camera swings in behind the nose, so it follows loops. It turns round quickly as the nose passes straight up or down. **P** or **Start** pauses the flight. Press **F**, or down on the D-pad, to leave the jet and explore from the current camera position. Reaching the map edge also returns you to free flight.
 
@@ -45,7 +45,7 @@ To try a target, choose **Balloon practice** under **Explore**. Centre the ballo
 | Switch view | V | Right stick click |
 | Cycle balloons | T | B |
 
-A projectile follows the balloon selected at launch if you have a lock. Otherwise it travels straight ahead. Each of the two charges returns after three seconds of flight. Tracers have their own firing cadence. A hit pops a balloon, and quick practice places another ahead of you. Pause freezes the practice clock.
+A projectile follows the balloon selected at launch if you have a lock. Otherwise it travels straight ahead. Each of the two charges returns after three seconds of flight. Projectiles leave a widening smoke trail that lingers after a hit. Tracers have their own firing cadence. A loaded banked turn draws short condensation trails from both wingtips. A hit pops a balloon, and quick practice places another ahead of you. Pause freezes the practice clock.
 
 ## Watch the atmosphere
 

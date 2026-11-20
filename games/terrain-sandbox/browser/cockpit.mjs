@@ -161,7 +161,7 @@ export function activate({module, canvas})
 			tape(jet.speed*3.6, 25, -1, 'KM/H');
 			tape(Math.max(0, jet.y-range.ground), 50, 1, 'M AGL');
 
-			const thrust = frame.power;
+			const thrust = jet.power;
 			circle(left+39, top+24, 31);
 			ctx.beginPath();
 			ctx.moveTo(left+39, top+24);

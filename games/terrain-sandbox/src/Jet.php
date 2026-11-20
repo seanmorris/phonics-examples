@@ -17,6 +17,9 @@ final class Jet
 	private const BOOM = 24.0;
 	/** Speeds in metres a second, and how fast the jet changes speed, in metres a second squared. */
 	public const CRUISE = 140.0, FASTEST = 260.0, SLOWEST = 55.0, ACCELERATION = 55.0;
+	public const CRUISE_POWER = self::CRUISE / self::FASTEST;
+	/** Time constants in seconds for the engine and the airspeed that follows it. */
+	private const SPOOL_UP = .36, SPOOL_DOWN = .27, SPEED_LAG = .18;
 	/** Expert body rates at full deflection in radians a second, and the time constant with which they follow it. */
 	public const ROLL_RATE = 2.8, PITCH_RATE = 1.05, YAW_RATE = .35, RATE_LAG = .12;
 	/** Time constant in seconds with which the Expert chase camera swings in behind the nose. */
@@ -53,7 +56,7 @@ final class Jet
 		$x = max(-$half,min($half,$x));
 		$z = max(-$half,min($half,$z));
 		$this->pose = ['x'=>$x, 'y'=>max($y, max($water,$land->height($x,$z)) + 75), 'z'=>$z,
-			'yaw'=>M_PI - $camera->yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>self::CRUISE,
+			'yaw'=>M_PI - $camera->yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>self::CRUISE, 'power'=>self::CRUISE_POWER,
 			'aileron'=>0.0, 'stabilator'=>0.0, 'rudder'=>0.0];
 		$this->previous = [];
 		$this->rates = [0.0, 0.0, 0.0];
@@ -101,11 +104,18 @@ final class Jet
 		$this->survey($land);
 		$this->previous = $this->pose;
 		$p = &$this->pose;
-		$target = $throttle >= 0 ? self::CRUISE + $throttle * (self::FASTEST - self::CRUISE)
-			: self::CRUISE + $throttle * (self::CRUISE - self::SLOWEST);
-		$change = self::ACCELERATION * $dt;
+		$command = self::CRUISE_POWER + $throttle * ($throttle < 0 ? self::CRUISE_POWER : 1 - self::CRUISE_POWER);
+		$powerGap = $command - $p['power'];
+		$lag = $powerGap > 0 ? self::SPOOL_UP : self::SPOOL_DOWN;
+		$p['power'] += $powerGap * (1 - exp(-$dt / $lag));
+		if(abs($command - $p['power']) < .0005) $p['power'] = $command;
+
+		$target = $p['power'] < self::CRUISE_POWER
+			? self::SLOWEST + (self::CRUISE - self::SLOWEST) * ($p['power'] / self::CRUISE_POWER)
+			: self::CRUISE + (self::FASTEST - self::CRUISE) * (($p['power'] - self::CRUISE_POWER) / (1 - self::CRUISE_POWER));
 		$gap = $target - $p['speed'];
-		$p['speed'] = abs($gap) <= $change ? $target : $p['speed'] + ($gap <=> 0) * $change;
+		$change = min(self::ACCELERATION * $dt, abs($gap) * (1 - exp(-$dt / self::SPEED_LAG)));
+		$p['speed'] = abs($gap) < .04 ? $target : $p['speed'] + ($gap <=> 0) * $change;
 		$travel = $p['speed'] * $dt;
 		if($this->expert)
 		{

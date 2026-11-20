@@ -208,7 +208,8 @@ final class BalloonPractice
 		$this->dwell = $this->visible && $inside && $range <= 1200 ? min(.3,$this->dwell+$dt) : 0;
 	}
 
-	public function step(float $dt, array $p, bool $launch, bool $gun, Landscape $land, float $water, bool $inCockpit): void
+	public function step(float $dt, array $p, bool $launch, bool $gun, Landscape $land, float $water, bool $inCockpit,
+		?FlightTrails $trails = null): void
 	{
 		$this->elapsed += $dt;
 		if($this->practice && !$this->practicePoint && $this->elapsed >= $this->respawn)
@@ -259,6 +260,8 @@ final class BalloonPractice
 			}
 			$b = array_map(static fn($v,$dir)=>$v+$dir*$travel,$a,$d);
 			$obstructed = self::blocked($a,$b,$land,$water);
+			if(!$shot['tracer'] && !$obstructed)
+				$trails?->exhaust($a,$b,$shot['direction'],$d,$travel/$shot['speed']);
 			if($hit !== null && !$obstructed)
 			{
 				unset($points[$hit]);

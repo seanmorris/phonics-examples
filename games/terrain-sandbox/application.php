@@ -16,6 +16,7 @@ use TerrainPhonics\BrowserPatchBuilder;
 use TerrainSandbox\GateModel;
 use TerrainSandbox\VehicleModel;
 use TerrainSandbox\TracerBatch;
+use TerrainSandbox\TrailRenderer;
 use TerrainSandbox\Session;
 
 $app = new Context;
@@ -34,6 +35,7 @@ $builder = new BrowserPatchBuilder(static fn($action, $path, $key, $payload) => 
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere, $builder);
 $models = [];
 $tracers = null;
+$trailRenderer = null;
 $shotAlpha = 1.0;
 $gates = new GateModel($session->gateShapes, __DIR__ . '/assets/gates/');
 $courseRevision = -1;
@@ -160,7 +162,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$hudShown, $hud, $publish
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$hudShown, $hud, $publish
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -206,6 +208,9 @@ $engine->start(
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
 				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$session->balloons->targets() ? null : $drawOpaque);
+			if($session->mode === 'jet' && $session->flightTrails->active())
+				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
+					$session->atmosphere->uniforms()['nightVisibility']);
 			$engine->device->present();
 			if($session->mode === 'jet' && ($session->jetView === 'cockpit' || $session->balloons->targets()
 				|| $session->balloons->elapsed < $session->balloons->hitUntil))
@@ -213,7 +218,7 @@ $engine->start(
 				$hudShown = true;
 				$hud(json_encode(['width'=>$width,'height'=>$height,'eye'=>$viewCamera->position,'basis'=>$viewCamera->basis(),
 					'fov'=>$viewCamera->fov,'jet'=>$vehiclePose,'cockpit'=>$session->jetView === 'cockpit',
-					'power'=>$session->jetPower(),'range'=>$session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
+					'range'=>$session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
 					'targets'=>$session->balloons->targets()], JSON_THROW_ON_ERROR));
 			}
 			elseif($hudShown) { $hud(''); $hudShown = false; }
@@ -236,17 +241,19 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $gates, &$models, &$tracers): void {
+	static function() use ($engine, $session, $scene, $gates, &$models, &$tracers, &$trailRenderer): void {
 		$engine->systems->remove('terrain-sandbox.simulate');
 		foreach($models as $model) $model->close();
 		$tracers?->close(); $tracers = null;
+		$trailRenderer?->close(); $trailRenderer = null;
 		$gates->release();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $gates, &$models, &$tracers, &$dirty): void {
+	static function() use ($scene, $gates, &$models, &$tracers, &$trailRenderer, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
+		$trailRenderer?->close(); $trailRenderer = null;
 		$gates->release();
 		$scene->restore();
 		$dirty = true;

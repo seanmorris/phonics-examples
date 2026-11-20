@@ -35,6 +35,7 @@ final class Session
 	private CarLamps $lamps;
 	public Jet $jet;
 	public BalloonPractice $balloons;
+	public ?FlightTrails $flightTrails = null;
 	public string $jetView = 'chase';
 	private int $launches = 0;
 	/** Race gates on the landscape. Saved with it, and replaced when a file loads or a new landscape is generated. */
@@ -205,7 +206,12 @@ final class Session
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($wasPicking) $this->advancePick($pickMs);
 			if($this->carSearch !== null) $this->advanceCarSearch();
-			if($wasJet && $this->mode !== 'jet') { $this->balloons->reset(); $this->launches = 0; }
+			if($wasJet && $this->mode !== 'jet')
+			{
+				$this->balloons->reset();
+				$this->launches = 0;
+				$this->flightTrails = null;
+			}
 			if($this->draft !== null) { $this->draft->commit(); $this->dirty = true; }
 		}
 		catch(\Throwable $error)
@@ -304,6 +310,7 @@ final class Session
 			// Pulling the stick back raises the nose unless the player inverted it.
 			$climb = $this->blend('KeyQ', 'KeyE', $this->invertPitch ? -$pad['y'] : $pad['y']);
 			$rudder = $this->blend('KeyZ', 'KeyX', ($pad['buttons'] & self::PAD_RB ? 1 : 0) - ($pad['buttons'] & self::PAD_LB ? 1 : 0));
+			$before = $this->jet->state();
 			if(!$this->jet->step($seconds, $this->blend('KeyS', 'KeyW', $pad['rt'] - $pad['lt']),
 				$this->blend('KeyA', 'KeyD', $pad['x']), $climb,
 				$this->camera, $this->landscape, $this->water->level(), $rudder))
@@ -311,12 +318,15 @@ final class Session
 				$this->mode = 'fly';
 				$this->clampCamera();
 				$this->balloons->reset();
+				$this->flightTrails = null;
 				$this->message = 'Reached the edge of the landscape. Free flight controls active.';
 			}
 			else
 			{
-				$this->balloons->step($seconds,$this->jet->state(),$this->launches > 0,
-					(bool)($this->held('KeyG') || ($pad['buttons'] & self::PAD_X)), $this->landscape,$this->water->level(), $this->jetView === 'cockpit');
+				$pose = $this->jet->state();
+				$this->flightTrails->step($seconds,$before,$pose);
+				$this->balloons->step($seconds,$pose,$this->launches > 0,
+					(bool)($this->held('KeyG') || ($pad['buttons'] & self::PAD_X)), $this->landscape,$this->water->level(), $this->jetView === 'cockpit',$this->flightTrails);
 			}
 			$this->launches = max(0,$this->launches-1);
 			$this->dirty = true;
@@ -487,14 +497,6 @@ final class Session
 	{
 		return $this->headlights === 'on'
 			|| $this->headlights === 'auto' && $this->settings['elevation'] < self::AUTO_HEADLIGHTS;
-	}
-
-	/** Relative commanded power, with neutral controls at cruise. */
-	public function jetPower(): float
-	{
-		$input = $this->blend('KeyS','KeyW',$this->pad['rt']-$this->pad['lt']);
-		$cruise = Jet::CRUISE/Jet::FASTEST;
-		return $cruise + $input*($input < 0 ? $cruise : 1-$cruise);
 	}
 
 	/** Describe the jet's controls for the current handling. */
@@ -710,6 +712,7 @@ final class Session
 				$this->releasePin();
 				$this->jet->setExpert($this->jetControls === 'expert');
 				$this->jet->board($this->camera, $this->landscape, $this->water->level());
+				$this->flightTrails = new FlightTrails;
 				$this->mode = 'jet'; $this->paused = false; $this->boarding++;
 				$this->message = $this->jetMessage();
 				break;
@@ -1186,6 +1189,7 @@ final class Session
 		$this->balloons = new BalloonPractice;
 		$this->launches = 0;
 		$this->setting('waterLevel', $landscape->recipe()['waterLevel']);
+		$this->flightTrails = null;
 		$this->road = []; $this->generation++; $this->mode = 'fly';
 		$this->race->reset();
 	}
