@@ -94,12 +94,13 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	if($prepared !== null) $session->publishLandscape($prepared);
 	$wasPicking = $session->picking;
 	$wasSearching = $session->findingCarSite();
+	$wasFindingCircuit = $session->findingCircuit();
 	$previousRoadPoints = count($session->road);
 	$keysChanged = isset($input['keys']) && $heldKeys !== $input['keys'];
 	if($keysChanged) $heldKeys = $input['keys'];
 	// The page sends the pad only when it changes; a pad at rest arrives as an empty list.
 	if(isset($input['pad'])) $heldPad = is_array($input['pad']) && array_filter($input['pad']) ? $input['pad'] : [];
-	if($packet !== '' || $heldKeys || $heldPad || $wasPicking || $wasSearching)
+	if($packet !== '' || $heldKeys || $heldPad || $wasPicking || $wasSearching || $wasFindingCircuit)
 	{
 		$input['keys'] = $heldKeys;
 		$input['pad'] = $heldPad;
@@ -107,9 +108,10 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		$session->input($input, min(.1, $frameSeconds), $width / $height, $moving ? 1.0 : 7.5);
 	}
 	$urgentStatus = $urgentStatus || $keysChanged || isset($input['clicks'][0]) || $wasPicking !== $session->picking
-		|| $previousRoadPoints !== count($session->road) || $wasSearching !== $session->findingCarSite();
+		|| $previousRoadPoints !== count($session->road) || $wasSearching !== $session->findingCarSite()
+		|| $wasFindingCircuit !== $session->findingCircuit();
 	$pickFrame = $wasPicking || $session->picking;
-	$statusPending = $statusPending || $packet !== '' || $wasPicking || $wasSearching || $prepared !== null;
+	$statusPending = $statusPending || $packet !== '' || $wasPicking || $wasSearching || $wasFindingCircuit || $prepared !== null;
 	$inputMs = (hrtime(true) - $started) / 1e6;
 	if($generation !== $session->generation)
 	{
@@ -231,16 +233,19 @@ $engine->start(
 					$session->atmosphere->uniforms()['nightVisibility']);
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
+			$waterRace = $session->mode === 'craft' && $session->usingFloodedCircuit();
 			$carHudSize = $car ? (int)round(min(240, $width*.275, $height*.30)) : null;
-			$frame = $jet || $car ? ['width'=>$width,'height'=>$height] : null;
+			$frame = $jet || $car || $waterRace ? ['width'=>$width,'height'=>$height] : null;
 			$wide = $jet ? $session->jetWideMap : $car && $session->carWideMap;
-			$showMap = $wide || ($jet ? $session->jetMap : $car && $session->carMap);
+			$showMap = $waterRace || $wide || ($jet ? $session->jetMap : $car && $session->carMap);
 			if($showMap)
 			{
-				$bearing = M_PI-$vehiclePose['yaw']+($jet && cos($vehiclePose['pitch']) < 0 ? M_PI : 0);
-				$position = [$vehiclePose['x'],$vehiclePose['z']];
+				$mapPose = $vehiclePose ?? $session->craft->state();
+				$bearing = M_PI-$mapPose['yaw']+($jet && cos($mapPose['pitch']) < 0 ? M_PI : 0);
+				$position = [$mapPose['x'],$mapPose['z']];
 				$span = $scene->drawChart($position,$bearing,$wide,$width,$height,
-					TerrainAppearance::linear($session->settings['waterColor']),$carHudSize);
+					TerrainAppearance::linear($session->settings['waterColor']),$carHudSize,
+					$car || $waterRace ? $session->circuitChartSpan() : null);
 				if($span !== null)
 					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$carHudSize];
 			}

@@ -1,6 +1,6 @@
 /** Transparent navigation symbols over the GPU-rendered terrain chart. */
 const headings=['N','NE','E','SE','S','SW','W','NW'];
-export function activate({module, canvas})
+export function activate({module, canvas, session})
 {
 	const map = document.createElement('canvas');
 	map.className = 'terrain-flight-map';
@@ -53,6 +53,36 @@ export function activate({module, canvas})
 		}
 
 		ctx.clearRect(0,0,size,size);
+		const state = session.terrainSandbox?.state;
+		const circuit = state?.circuit;
+		const route = circuit?.preview ? circuit.activePoints : circuit?.active && circuit.points;
+		if(route)
+		{
+			ctx.beginPath();
+			for(const [i,[x,z]] of route.entries())
+			{
+				const [px,py] = offset(x,z);
+				if(i) ctx.lineTo(mid+px,mid+py);
+				else ctx.moveTo(mid+px,mid+py);
+			}
+			ctx.closePath();
+			ctx.lineJoin = 'round';
+			ctx.lineWidth = 4;
+			ctx.strokeStyle = '#162a23';
+			ctx.stroke();
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = '#ffd272';
+			ctx.stroke();
+			const next = state.course.gates.find(gate => gate.id === state.race?.next?.id);
+			if(next)
+			{
+				const [x,y] = offset(next.x,next.z);
+				ctx.beginPath();
+				ctx.arc(mid+x,mid+y,3,0,2*Math.PI);
+				ctx.fillStyle = '#fffce4';
+				ctx.fill();
+			}
+		}
 		ctx.lineWidth = 1;
 		ctx.strokeStyle = '#bad5b5';
 		ctx.strokeRect(.5, .5, size-1, size-1);

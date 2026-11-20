@@ -568,6 +568,7 @@ final class Clipmap
 		, SurfaceLayers $layers
 		, TerrainAppearance $appearance
 		, ?int $size = null
+		, ?float $localView = null
 	): ?float {
 		if(!$this->overview) return null;
 
@@ -589,6 +590,7 @@ final class Clipmap
 		$s = sin($bearing);
 		$extent = $this->recipe['worldSize'];
 		$span = self::chartSpan($extent, $position, $bearing, $wide);
+		if(!$wide && $localView !== null) $span = max(1.,min($span,$localView));
 		$level = $this->overview;
 		$localSpan = 0;
 

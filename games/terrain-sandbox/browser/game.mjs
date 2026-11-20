@@ -61,6 +61,9 @@ export function activate({module, canvas, session, services})
 	// These fields send nothing while their text is out of range, and return to the last value sent when left so.
 	const checked = new Set(['waterLevel', 'gateLaps', 'gateAltitude', 'gateWidth', 'gateHeight', 'balloonAltitude']);
 	const gateTool = frame.querySelector('[data-gate-tool]');
+	const circuitMap = frame.querySelector('[data-circuit-map]');
+	const circuitSummary = frame.querySelector('[data-circuit-summary]');
+	let lastCircuit = '';
 
 	const showToolControls = () => {
 		gateTool.hidden = controls.get('tool').value !== 'gate';
@@ -618,6 +621,21 @@ export function activate({module, canvas, session, services})
 
 			for(const name of ['undo','redo','generate','road-apply','load','save'])
 		button(name).disabled = state.preparing || state.picking && ['undo','redo','road-apply','save'].includes(name);
+			const circuit = state.circuit;
+			const editable = state.mode === 'fly' && !state.preparing && !state.picking && !circuit.searching;
+			button('circuit-find').disabled = !editable;
+			button('circuit-cancel').hidden = !circuit.searching && !circuit.preview;
+			button('circuit-dry').disabled = !editable || !circuit.points;
+			button('circuit-flooded').disabled = !editable || circuit.floodedLevel === null;
+			circuitSummary.textContent = circuit.searching ? 'Searching the surrounding terrain…'
+				: circuit.points ? `${(circuit.length/1000).toFixed(2)} km · ${circuit.gates.length} gates`
+					+ (circuit.floodedLevel === null ? '' : ` · flood level ${circuit.floodedLevel} m`) : '';
+			const circuitKey = JSON.stringify(circuit.points);
+			if(circuitKey !== lastCircuit)
+			{
+				drawCircuit(circuitMap,circuit);
+				lastCircuit = circuitKey;
+			}
 			frame.querySelector('[data-road-count]').textContent = `${state.roadPoints.length} control points`;
 			const projection = JSON.stringify([state.roadPoints, state.camera, state.viewport]);
 
@@ -775,6 +793,31 @@ function updateRoadPreview(svg, state)
 		label.textContent = String(index + 1);
 		marker.append(circle, label);
 		svg.append(marker);
+	});
+}
+
+/** Draw a plan view of the circuit with a larger mark at the start/finish. */
+function drawCircuit(canvas, circuit)
+{
+	canvas.hidden = !circuit.points;
+	if(canvas.hidden) return;
+	const xs = circuit.points.map(point => point[0]), zs = circuit.points.map(point => point[1]);
+	const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+	const w = canvas.width, h = canvas.height;
+	const scale = Math.min((w-24)/Math.max(1,maxX-minX),(h-24)/Math.max(1,maxZ-minZ));
+	const point = (x,z) => [w/2+(x-(minX+maxX)/2)*scale,h/2+(z-(minZ+maxZ)/2)*scale];
+	const ctx = canvas.getContext('2d');
+	ctx.clearRect(0,0,w,h);
+	ctx.beginPath();
+	circuit.points.forEach(([x,z],i) => i ? ctx.lineTo(...point(x,z)) : ctx.moveTo(...point(x,z)));
+	ctx.closePath();
+	ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = '#efc275';
+	ctx.stroke();
+	circuit.gates.forEach(([x,z],i) => {
+		ctx.beginPath();
+		ctx.arc(...point(x,z),i ? 2 : 4,0,2*Math.PI);
+		ctx.fillStyle = i ? '#eadbb8' : '#fff';
+		ctx.fill();
 	});
 }
 
@@ -1194,6 +1237,12 @@ function markup()
 	<p class="terrain-note terrain-sizes" data-gate-sizes></p>
 	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening width or height of 0 takes the gate's own. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. A gate that would overlap another is refused. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
 	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
+	<details><summary>Circuit generator</summary>
+	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
+	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
+	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
+	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button></div>
+	</details>
 	${range('Radius · m', 'radius', 2, 300, 1, 40)}${range('Strength · m', 'amount', .1, 200, .1, 12)}
 	<label class="terrain-field">Flatten elevation · m<input data-value="flattenHeight" type="number" min="-1000" max="3000" value="0"></label>
 	<label class="terrain-field">Paint<select data-value="material"><option value="grass">Grass</option><option value="rock">Rock</option><option value="sand">Sand</option><option value="snow">Snow</option><option value="road">Road</option></select></label>

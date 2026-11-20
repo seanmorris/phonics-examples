@@ -57,8 +57,14 @@ final class Car
 	 * @param array $posts Solid posts as Course::posts() lists them. A site whose body would stand within half a
 	 * metre of one is passed over.
 	 */
-	public function findSite(Landscape $land, Water $water, array $eye, float $yaw, array $posts = []): \Generator
+	public function findSite(Landscape $land, Water $water, array $eye, float $yaw, array $posts = [],
+		bool $circuitStart = false): \Generator
 	{
+		if($circuitStart)
+		{
+			$site = $this->checkedSite($land, $water->heightRange()[1], $eye[0], $eye[2], $yaw, $posts);
+			if($site !== null) return $site;
+		}
 		$half = $land->recipe()['worldSize'] / 2;
 		$spacing = $land->recipe()['spacing'];
 		$areaScale = min(1.0, ($half - 2.6) / 12);
@@ -99,13 +105,20 @@ final class Car
 						if($h <= $dry || abs($h - $plane) > .40) continue 2;
 					}
 					yield;
-					$support = $this->support($land, $water->heightRange()[1], $x, $z, $heading);
-					if($support !== null && self::safe($support)
-						&& !self::nearPost($posts, $x, $z, $heading, $support[0])) return [$x,$z,$heading,$support];
+					$site = $this->checkedSite($land, $water->heightRange()[1], $x, $z, $heading, $posts);
+					if($site !== null) return $site;
 				}
 			}
 		}
 		return null;
+	}
+
+	/** Check tire support, clearances and stability at a precise boarding pose. */
+	public function checkedSite(Landscape $land, float $highWater, float $x, float $z, float $yaw, array $posts): ?array
+	{
+		$support = $this->support($land, $highWater, $x, $z, $yaw);
+		return $support !== null && self::safe($support) && !self::nearPost($posts, $x, $z, $yaw, $support[0])
+			? [$x,$z,$yaw,$support] : null;
 	}
 
 	/** Adopt a fully checked site only when the search succeeds. */

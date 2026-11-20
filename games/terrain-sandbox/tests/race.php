@@ -992,4 +992,44 @@ expect($view->message === 'Race reset. Place a start gate to race.' && $view->st
 	'Without a start gate the race has nothing to point at');
 $view->close();
 
+$generator = new Session;
+input($generator, ['actions' => [['type'=>'generate','preset'=>'canyon','seed'=>'first-light']]]);
+$generator->course->place('start', 'air', 0, 0, 0, 0);
+$original = $generator->course;
+input($generator, ['actions' => ['circuit-find']]);
+expect($generator->findingCircuit(), 'Find starts a cooperative circuit search');
+input($generator, ['actions' => ['circuit-cancel']]);
+expect(!$generator->findingCircuit() && $generator->course === $original,
+	'Cancel keeps the original course');
+input($generator, ['actions' => ['circuit-find']]);
+for($i = 0; $generator->findingCircuit() && $i < 6000; $i++) input($generator, []);
+$preview = $generator->status()['circuit'];
+expect($preview['preview'] && $generator->course === $original && $preview['floodedLevel'] > $preview['dryLevel'],
+	'The default canyon previews both variants without replacing a course');
+
+$gateLine = [];
+foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
+{
+	input($generator, ['actions' => ['circuit-' . $variant]]);
+	$active = $generator->status()['circuit'];
+	$gates = $generator->course->gates();
+	expect($active['active'] === $variant && !$active['preview'] && count($gates) >= 8
+		&& $generator->course->finish() === null, 'Apply places a start/finish and ordered checkpoints');
+	$gateLine[] = array_map(fn(array $g): array => [$g['x'],$g['z'],$g['yaw']], $gates);
+	$copy = new Session;
+	input($copy, ['actions' => [['type'=>'load','json'=>$generator->save()]]]);
+	expect($copy->status()['circuit'] == $active && $copy->course->export() == $generator->course->export(),
+		'Save and load preserve the applied circuit and its gate positions');
+	if($vehicle === 'car') enterCar($copy);
+	else input($copy, ['actions'=>[$vehicle]]);
+	input($copy, ['keys'=>['KeyW'=>true]]);
+	for($i = 0; $i < 300 && $copy->race->status($copy->course,$copy->time)['state'] === 'idle'; $i++)
+		$copy->step(1/60);
+	expect($copy->mode === $vehicle && $copy->race->status($copy->course,$copy->time)['state'] === 'running',
+		'The generated launch pose lets the vehicle go straight through the first gate');
+	$copy->close();
+}
+expect($gateLine[0] === $gateLine[1], 'The road gates and floating arches share a line and heading');
+$generator->close();
+
 echo "Landscape sandbox race: $checks checks passed\n";

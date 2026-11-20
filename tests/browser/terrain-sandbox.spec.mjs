@@ -990,6 +990,58 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 	expect(errors).toEqual([]);
 });
 
+test('preview, apply and switch between dry and flooded canyon circuits', async({page}) => {
+	test.setTimeout(150_000);
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await page.setViewportSize({width:672,height:420});
+	await page.goto('/games/terrain-sandbox/');
+	const view = canvas(page);
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	await (await field(page, '[name="preset"]')).selectOption('canyon');
+	await press(page, 'generate');
+	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
+	await press(page, 'pause');
+	await page.getByRole('tab', {name:'Shape', exact:true}).click();
+	await page.getByText('Circuit generator', {exact:true}).click();
+	await control(page, 'circuit-find').click();
+	await expect.poll(async() => (await status(page)).circuit.preview, {timeout:75_000}).toBe(true);
+	const preview = await status(page);
+	expect(preview.course.gates).toHaveLength(0);
+	expect(preview.circuit.gates.length).toBeGreaterThanOrEqual(8);
+	await expect(page.getByRole('img', {name:'Circuit route and gates'})).toBeVisible();
+
+	await control(page, 'circuit-dry').click();
+	await expect.poll(async() => (await status(page)).circuit.active).toBe('dry');
+	const dry = await status(page);
+	expect(dry.course.gates.every(gate => gate.kind === 'road')).toBe(true);
+	await control(page, 'circuit-flooded').click();
+	await expect.poll(async() => (await status(page)).circuit.active).toBe('flooded');
+	const flooded = await status(page);
+	expect(flooded.course.gates.every(gate => gate.kind === 'water')).toBe(true);
+	expect(flooded.settings.waterLevel).toBe(preview.circuit.floodedLevel);
+	const gateLine = ({course}) => course.gates.map(({x,z,yaw}) => [x,z,yaw]);
+	expect(gateLine(flooded)).toEqual(gateLine(dry));
+
+	await press(page, 'craft');
+	await expect.poll(async() => (await status(page)).mode).toBe('craft');
+	const map = page.getByRole('img', {name:'Heading-up terrain elevation map'});
+	await expect(map).toBeVisible();
+	await expect.poll(() => map.evaluate(element => {
+		const colors = element.getContext('2d').getImageData(0,0,element.width,element.height).data;
+		let left = Infinity, right = -Infinity;
+		for(let i = 0; i < colors.length; i += 4)
+			if(colors[i] === 255 && colors[i+1] === 210 && colors[i+2] === 114 && colors[i+3] > 200)
+			{
+				const x = (i/4)%element.width;
+				left = Math.min(left,x);
+				right = Math.max(right,x);
+			}
+		return right-left;
+	})).toBeGreaterThan(12);
+	expect(errors).toEqual([]);
+});
+
 test('a rollover settles on the roof before the Testarossa recovers', async({page}) => {
 	test.setTimeout(360_000);
 	const errors = [];

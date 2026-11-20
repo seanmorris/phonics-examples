@@ -42,6 +42,9 @@ final class Session
 	private int $launches = 0;
 	/** Race gates on the landscape. Saved with it, and replaced when a file loads or a new landscape is generated. */
 	public Course $course;
+	private ?Circuit $circuit = null, $circuitPreview = null;
+	private ?string $circuitVariant = null;
+	private ?\Generator $circuitSearch = null;
 	/** Timed run through the course by the vehicle being driven, ridden or flown. */
 	public Race $race;
 	/** Dimensions of each gate kind, for placement, crossings, car collision and drawing. */
@@ -224,6 +227,8 @@ final class Session
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($wasPicking) $this->advancePick($pickMs);
 			if($this->carSearch !== null) $this->advanceCarSearch();
+			if($this->circuitSearch !== null && $this->draft === null && !$this->preparing)
+				$this->advanceCircuit(min(3.0,$pickMs));
 			if($wasJet && $this->mode !== 'jet')
 			{
 				$this->balloons->reset();
@@ -236,6 +241,7 @@ final class Session
 		{
 			$this->draft?->close(); $this->draft = null;
 			$this->cancelPick(); $this->carSearch = null;
+			$this->circuitSearch = null;
 			$this->message = $error->getMessage();
 			$this->dirty = true;
 		}
@@ -420,6 +426,69 @@ final class Session
 		$this->message = $stale ? $why : trim($this->message . ' ' . $why);
 		$this->dirty = true;
 		return true;
+	}
+
+	public function findingCircuit(): bool { return $this->circuitSearch !== null; }
+	public function usingFloodedCircuit(): bool { return $this->circuitVariant === 'flooded'; }
+	public function circuitChartSpan(): ?float
+	{
+		return $this->circuit === null ? null : max(320.,$this->circuit->length*1.15);
+	}
+
+	private function findCircuit(): void
+	{
+		if($this->mode !== 'fly') throw new \RuntimeException('Return to free flight to find a circuit.');
+		if($this->preparing || $this->picking || $this->draft !== null)
+			throw new \RuntimeException('Wait for the terrain edit before finding a circuit.');
+		[$x,,$z] = $this->camera->position;
+		$dry = $this->circuitVariant === 'flooded' ? $this->circuit->dryLevel : $this->water->level();
+		$water = clone $this->water;
+		$water->setWaveScale(3.);
+		$swell = $water->level()-$water->heightRange()[0];
+		$this->circuitPreview = null;
+		$this->circuitSearch = (new CircuitFinder($this->landscape,$dry,$swell))->find($x,$z,$this->gateShapes,
+			$this->settings['gateLaps']);
+		$this->message = 'Looking for a closed route around the terrain…';
+	}
+
+	private function advanceCircuit(float $budgetMs): void
+	{
+		$deadline = hrtime(true)+(int)($budgetMs*1e6);
+		$job = $this->circuitSearch;
+		do
+		{
+			if($job->valid()) $job->next();
+			if(!$job->valid())
+			{
+				$this->circuitSearch = null;
+				$this->circuitPreview = $job->getReturn();
+				$this->message = $this->circuitPreview
+					? 'Circuit found. Choose a course to place its gates.'
+					: 'No drivable loop around a natural feature here. Fly toward another valley or basin and try again.';
+				return;
+			}
+		}
+		while(hrtime(true)<$deadline);
+	}
+
+	private function applyCircuit(bool $flooded): void
+	{
+		if($this->mode !== 'fly' || $this->preparing || $this->draft !== null || $this->picking)
+			throw new \RuntimeException('Use free flight on the settled landscape to apply a circuit.');
+		$circuit = $this->circuitPreview ?? $this->circuit;
+		if($circuit === null) throw new \RuntimeException('Find a circuit first.');
+		$course = $circuit->course($this->landscape,$this->gateShapes,$this->settings['gateLaps'],$flooded);
+		$this->course = $course;
+		$this->race->reset();
+		$this->circuit = $circuit; $this->circuitPreview = null; $this->circuitSearch = null;
+		$this->circuitVariant = $flooded ? 'flooded' : 'dry';
+		$this->setting('waterLevel',$flooded ? $circuit->floodedLevel : $circuit->dryLevel);
+		[$x,$z,$yaw] = $circuit->approach();
+		$this->camera->position = [$x,max($this->landscape->height($x,$z),$this->water->level())+45,$z];
+		$this->camera->yaw = M_PI-$yaw; $this->camera->pitch = -.4;
+		$this->message = $flooded ? 'Flooded circuit ready. Board the jet ski and pass through the start arch.'
+			: 'Dry circuit ready. Board the car and pass through the start gate.';
+		$this->dirty = true;
 	}
 
 	/**
@@ -717,10 +786,20 @@ final class Session
 				break;
 			case 'gates-clear':
 				$count = $this->course->clear();
+				$this->circuit = null; $this->circuitVariant = null;
 				$this->message = match($count) {
 					0 => 'There are no gates to clear.', 1 => 'Removed the only gate.',
 					default => "Removed all $count gates."
 				};
+				break;
+			case 'circuit-find': $this->findCircuit(); break;
+			case 'circuit-cancel':
+				$this->circuitSearch = null; $this->circuitPreview = null;
+				$this->message = 'Circuit search cleared.';
+				break;
+			case 'circuit-dry':
+			case 'circuit-flooded':
+				$this->applyCircuit($type === 'circuit-flooded');
 				break;
 			case 'race-reset':
 				$this->race->reset();
@@ -743,8 +822,16 @@ final class Session
 				if($this->mode !== 'car' && $this->carSearch === null)
 				{
 					$this->cancelPick();
+					$atStart = false;
+					$yaw = M_PI - $this->camera->yaw;
+					if($this->mode === 'fly' && $this->circuitVariant === 'dry')
+					{
+						[$x,$z,$heading] = $this->circuit->approach();
+						$atStart = hypot($x-$this->camera->position[0],$z-$this->camera->position[2]) < .1
+							&& cos($heading-$yaw) > .999;
+					}
 					$this->carSearch = $this->car->findSite($this->landscape, $this->water, $this->camera->position,
-						M_PI - $this->camera->yaw, $this->course->posts());
+						$yaw, $this->course->posts(), $atStart);
 					$this->message = 'Looking for level ground…';
 				}
 				break;
@@ -953,6 +1040,7 @@ final class Session
 		{
 			$id = $this->course->nearest($intent['origin'], $intent['direction'], $hit['distance'] ?? self::PICK_RANGE);
 			$gate = $id === null ? null : $this->course->remove($id);
+			if($gate !== null) { $this->circuit = null; $this->circuitVariant = null; }
 			$renumbered = $gate !== null && $gate['role'] === 'checkpoint'
 				&& $this->checkpointCount() >= $gate['number'];
 			$this->message = $gate === null ? 'No gate there. Click on a gate or the ground beside it to remove it.'
@@ -984,6 +1072,7 @@ final class Session
 			$settings['gateHeight'] > 0 ? (float)$settings['gateHeight'] : null);
 		$placed = $this->course->place($role, $kind, $x, $y, $z, $yaw, (int)$settings['gateLaps'], $size['width'],
 			$size['height'], self::ground($this->landscape));
+		if($placed['gate'] !== null) { $this->circuit = null; $this->circuitVariant = null; }
 		if($placed['refused'] === 'full')
 		{
 			$this->message = 'A course holds ' . Course::MAX_CHECKPOINTS . ' checkpoints. Remove one to add another.';
@@ -1262,6 +1351,7 @@ final class Session
 		$this->setting('waterLevel', $landscape->recipe()['waterLevel']);
 		$this->flightTrails = null;
 		$this->road = []; $this->generation++; $this->mode = 'fly';
+		$this->circuit = $this->circuitPreview = null; $this->circuitVariant = null; $this->circuitSearch = null;
 		$this->race->reset();
 	}
 
@@ -1294,6 +1384,8 @@ final class Session
 	 */
 	public function publishLandscape(Landscape $landscape): void
 	{
+		$this->circuitSearch = null; $this->circuitPreview = null;
+		$this->circuit = null; $this->circuitVariant = null;
 		$this->releasePin();
 		$this->balloons->refit($landscape,$this->water->level());
 		// Gates on the edited ground stand on it again.
@@ -1320,11 +1412,14 @@ final class Session
 	 */
 	public function save(): string
 	{
-		return json_encode(['schema' => 'phonics-landscape-sandbox','version' => 4, 'layers'=>$this->surfaceLayers?->layers,
+		$document = ['schema' => 'phonics-landscape-sandbox','version' => 4, 'layers'=>$this->surfaceLayers?->layers,
 			'landscape' => json_decode($this->landscape->save(), true, flags: JSON_THROW_ON_ERROR),
 			'settings' => $this->settings,'camera' => ['position' => $this->camera->position,
 				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch],
-			'balloons' => $this->balloons->export(), 'course' => $this->course->export()], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
+			'balloons' => $this->balloons->export(), 'course' => $this->course->export()];
+		if($this->circuit !== null)
+			$document['circuit'] = ['route'=>$this->circuit->export(),'variant'=>$this->circuitVariant];
+		return json_encode($document, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
 	}
 
 	/**
@@ -1339,12 +1434,24 @@ final class Session
 		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2, 3, 4], true))
 		throw new \InvalidArgumentException('This is not a supported landscape sandbox file.');
 		$candidate = Landscape::load(json_encode($data['landscape'] ?? null, JSON_THROW_ON_ERROR));
+		$circuit = null; $variant = null;
 		try
 		{
 			$course = Course::import($data['course'] ?? null, $candidate->recipe()['worldSize'] / 2,
 				self::ground($candidate), $this->gateShapes);
+			if(isset($data['circuit']))
+			{
+				$savedCircuit = $data['circuit'];
+				if(!is_array($savedCircuit) || !in_array($savedCircuit['variant'] ?? null,['dry','flooded'],true))
+					throw new \InvalidArgumentException('Invalid saved circuit variant.');
+				$variant = $savedCircuit['variant'];
+				$circuit = Circuit::import($savedCircuit['route'] ?? null,$candidate->recipe()['worldSize']/2);
+				$derived = $circuit->course($candidate,$this->gateShapes,$course->laps(),$variant === 'flooded');
+				if($derived->export() != $course->export())
+					throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
+			}
 		}
-		catch(\InvalidArgumentException $error) { $candidate->close(); throw $error; }
+		catch(\RuntimeException | \InvalidArgumentException $error) { $candidate->close(); throw $error; }
 		$settings = $data['settings'] ?? [];
 		if(!is_array($settings)) throw new \InvalidArgumentException('Invalid saved settings.');
 		// Before version 3, gateHeight was the height an air gate hangs at.
@@ -1383,6 +1490,7 @@ final class Session
 		$this->surfaceLayers=$layers;
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
 		$this->course = $course;
+		$this->circuit = $circuit; $this->circuitVariant = $variant;
 		if($course->start() !== null) $this->settings['gateLaps'] = $course->start()['laps'];
 		$this->course->float($this->water, $this->time);
 		$this->camera->position = array_map('floatval', $position);
@@ -1426,9 +1534,18 @@ final class Session
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
 			'lamps' => $this->mode === 'car' ? $this->lamps->view(1.0) : null,
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats(),
-			'course' => $this->courseStatus(),'gateSizes' => $this->gateSizes(),
+			'course' => $this->courseStatus(),'gateSizes' => $this->gateSizes(),'circuit' => $this->circuitStatus(),
 			'race' => $this->race->status($this->course, $this->time, $this->mode === 'fly' ? null : $this->mode,
 				$this->water->level())];
+	}
+
+	private function circuitStatus(): array
+	{
+		$plan = $this->circuitPreview ?? $this->circuit;
+		return ['searching'=>$this->findingCircuit(),'preview'=>$this->circuitPreview !== null,
+			'active'=>$this->circuitVariant,'points'=>$plan?->points,
+			'activePoints'=>$this->circuitPreview !== null ? $this->circuit?->points : null,'length'=>$plan?->length,
+			'floodedLevel'=>$plan?->floodedLevel,'dryLevel'=>$plan?->dryLevel,'gates'=>$plan?->gates()];
 	}
 
 	/**
@@ -1472,6 +1589,7 @@ final class Session
 	public function close(): void
 	{
 		$this->cancelPick(); $this->carSearch = null;
+		$this->circuitSearch = null;
 		$this->releasePin(); $this->landscape->close(); $this->draft?->close(); $this->draft = null;
 		$this->keys = $this->road = [];
 		$this->pad = self::NO_PAD;

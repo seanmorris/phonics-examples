@@ -107,6 +107,14 @@ The chase camera never passes through a gate. Behind a vehicle that goes through
 
 **Save file** stores the gates and their sizes with the landscape, and **Load file** brings them back. Gates in files saved before gates had sizes load at their kinds' own sizes. **Generate** starts the new landscape without gates.
 
+### Generate a circuit
+
+In free flight, open **Shape → Circuit generator** and select **Find circuit near camera**. Try the default **Canyon country** preset from its starting view. The search follows connected floor passages around high ground and checks the lane for width, grade and corner clearance. A valley with only branches may have no suitable loop. You can cancel the search or move to another part of the landscape and search again.
+
+The preview shows the route and gate positions. Choose **Apply dry course** to place the road gates, or **Apply flooded course** if the loop can hold enough water for the jet ski. Both variants use the same route and checkpoint order. Applying a variant replaces the current gates, sets its water level and moves the camera just before the start. Board the vehicle there and follow the line on the minimap. The bright dot marks the next gate.
+
+Landscape files save the applied variant and both available water levels, so you can switch variants after loading. Run the search again after changing the terrain.
+
 ## Use a gamepad
 
 The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. Outside the F5, the D-pad chooses your vehicle: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses, **Y** resets a race outside the F5 (**Back + Y** in flight) and **X** switches the car headlights or fires the F5’s Vulcan. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
