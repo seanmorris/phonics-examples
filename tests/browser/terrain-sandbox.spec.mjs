@@ -8,6 +8,23 @@ const status = page => canvas(page).evaluate(element => JSON.parse(element.datas
 
 const control = (page, action) => page.locator(`.terrain-sandbox [data-action="${action}"]`);
 
+/**
+ * Open the panel tab that holds an element, as a player would before using it.
+ * @param {import('@playwright/test').Page} page Sandbox page.
+ * @param {string} selector CSS selector of a panel control.
+ * @returns {Promise<import('@playwright/test').Locator>} The control.
+ */
+const field = async (page, selector) => {
+	const section = await page.locator(selector).first().evaluate(element => element.closest('[role="tabpanel"]')?.id ?? '');
+
+	if(section) await page.locator(`.terrain-sandbox [aria-controls="${section}"]`).click();
+
+	return page.locator(selector);
+};
+
+/** Open the tab holding a panel button, then press it. */
+const press = async (page, action) => (await field(page, `.terrain-sandbox [data-action="${action}"]`)).click();
+
 /** A small, flat landscape keeps authoring regressions independent of the streaming benchmark. */
 function fixture({history = [], revision = 0} = {})
 {
@@ -95,7 +112,7 @@ async function boot(page)
 		if(next.renderer.visible === 0) expect(next.renderer.frames).toBe(initial.renderer.frames);
 	}
 
-	await control(page, 'pause').click();
+	await press(page, 'pause');
 	await expect.poll(async() => (await status(page)).paused).toBe(true);
 	await load(page, fixture());
 }
@@ -120,7 +137,7 @@ async function settled(page)
 async function save(page)
 {
 	const downloading = page.waitForEvent('download');
-	await control(page, 'save').click();
+	await press(page, 'save');
 	const download = await downloading;
 	expect(download.suggestedFilename()).toBe('landscape.json');
 
@@ -129,7 +146,7 @@ async function save(page)
 
 async function stroke(page, tool, x = .5, y = .5)
 {
-	await page.locator('[data-value="tool"]').selectOption(tool);
+	await (await field(page, '[data-value="tool"]')).selectOption(tool);
 	await expect.poll(async() => (await status(page)).settings.tool).toBe(tool);
 	const before = (await status(page)).revision;
 	const box = await canvas(page).boundingBox();
@@ -209,7 +226,7 @@ test('fly the F5, pause in a bank, and return to free flight', async({page}) => 
 		};
 	}, gunzipSync(mesh).readUInt32LE(4));
 
-	await control(page, 'jet').click();
+	await press(page, 'jet');
 	await expect.poll(async() => (await status(page)).mode).toBe('jet');
 	await expect.poll(() => view.evaluate(el => el.jetDraws)).toBeGreaterThan(0);
 	await expect(control(page, 'jet')).toBeHidden();
@@ -257,7 +274,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 			return draw(...args);
 		};
 	}, gunzipSync(mesh).readUInt32LE(4));
-	await control(page, 'car').click();
+	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(0);
 	await expect(control(page, 'car')).toBeHidden();
@@ -277,11 +294,11 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');
 	await page.keyboard.press('c');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
-	await page.locator('[data-value="waterLevel"]').fill('10');
+	await (await field(page, '[data-value="waterLevel"]')).fill('10');
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');
-	await control(page, 'craft').click();
+	await press(page, 'craft');
 	await expect.poll(async() => (await status(page)).mode).toBe('craft');
-	await control(page, 'car').click();
+	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).message).toContain('No dry');
 	expect((await status(page)).mode).toBe('craft');
 	expect(errors).toEqual([]);
@@ -298,7 +315,7 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 	dry.settings.waterLevel = -4;
 	dry.camera = {position: [0,30,0], yaw: Math.PI, pitch: -.4};
 	await load(page, dry);
-	await control(page, 'car').click();
+	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 
 	await canvas(page).focus();
@@ -372,10 +389,10 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
 	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60000});
-	await page.locator('[name="preset"]').selectOption('canyon');
-	await control(page,'generate').click();
+	await (await field(page, '[name="preset"]')).selectOption('canyon');
+	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
-	await control(page,'car').click();
+	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await view.evaluate(el => {
 		const gl = el.getContext('webgl2');
@@ -420,7 +437,7 @@ test('a rollover settles on the roof before the Testarossa recovers', async({pag
 	ramp.settings.waterLevel = -100;
 	ramp.camera = {position:[0,30,-40],yaw:Math.PI,pitch:-.4};
 	await load(page,ramp);
-	await control(page,'car').click();
+	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await canvas(page).focus();
 	await page.keyboard.down('w');
@@ -479,18 +496,20 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	expect(idleUpdates).toBe(0);
 
 	// A water edit redraws a paused scene and is included in the portable save.
-	await page.locator('[data-value="waterColor"]').fill('#147083');
+	await (await field(page, '[data-value="waterColor"]')).fill('#147083');
 	await expect.poll(async() => (await status(page)).settings.waterColor).toBe('#147083');
 	const waterEdit = await settled(page);
 	expect(waterEdit.renderer.frames).toBeGreaterThan(frame);
 	expect(waterEdit.time).toBe(time);
 	expect((await save(page)).settings.waterColor).toBe('#147083');
 
+	await field(page, '[data-value="nightGlow"]');
 	const nightGlow = page.getByRole('slider', {name: /Night glow/});
 	await nightGlow.focus();
 	await nightGlow.press('End');
 	await expect.poll(async() => (await status(page)).settings.nightGlow).toBe(1);
 
+	await field(page, '[data-value="waterFogDensity"]');
 	const coarseFog = page.getByRole('slider', {name: /Fog density · coarse/});
 	const fineFog = page.getByRole('slider', {name: /Fog density · fine/});
 	await coarseFog.focus();
@@ -521,19 +540,22 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	const sea = await save(page);
 	expect(sea.settings.waterLevel).toBe(6.5);
 	expect(sea.settings.waterFogDensity).toBe(.9999);
+	// The file buttons open the Landscape tab. The Water and Sky fields still hold the loaded values while hidden.
+	const chopField = page.locator('[data-value="waterChoppiness"]'), glowField = page.locator('[data-value="nightGlow"]');
+	const levelField = page.locator('[data-value="waterLevel"]'), fineField = page.locator('[data-fine-fog]');
 	await load(page, fixture());
-	await expect(chop).toHaveValue('100');
-	await expect(nightGlow).toHaveValue('0.5');
+	await expect(chopField).toHaveValue('100');
+	await expect(glowField).toHaveValue('0.5');
 	await load(page, sea);
-	await expect(level).toHaveValue('6.5');
-	await expect(chop).toHaveValue('300');
-	await expect(nightGlow).toHaveValue('1');
-	await expect(fineFog).toHaveValue('0.9999');
-	await expect(coarseFog).toHaveValue('1');
+	await expect(levelField).toHaveValue('6.5');
+	await expect(chopField).toHaveValue('300');
+	await expect(glowField).toHaveValue('1');
+	await expect(fineField).toHaveValue('0.9999');
+	await expect(page.locator('[data-value="waterFogDensity"]')).toHaveValue('1');
 
 	// Native fields keep WASD and pause shortcuts as text while focused.
 	const position = now.camera.position;
-	await page.locator('[name="seed"]').fill('wasd-pause');
+	await (await field(page, '[name="seed"]')).fill('wasd-pause');
 	await page.keyboard.press('p');
 	await page.waitForTimeout(500);
 	expect((await status(page)).camera.position).toEqual(position);
@@ -543,7 +565,7 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	await page.keyboard.down('e');
 	await expect.poll(async() => (await status(page)).camera.position[1]).toBeGreaterThan(position[1]);
 	await expect.poll(async() => (await status(page)).generationBudgetMs).toBe(2);
-	await page.locator('[name="seed"]').focus();
+	await (await field(page, '[name="seed"]')).focus();
 	await page.keyboard.up('e');
 	await expect.poll(async() => (await status(page)).generationBudgetMs).toBe(8);
 	await settled(page);
@@ -573,9 +595,9 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 
 	await expect.poll(async() => (await status(page)).settings.haze).toBe(2);
 	expect((await status(page)).settings.exposure).toBe(1.5);
-	await page.locator('[name="preset"]').selectOption('mountain');
-	await page.locator('[name="seed"]').fill('mountain-browser-check');
-	await control(page, 'generate').click();
+	await (await field(page, '[name="preset"]')).selectOption('mountain');
+	await (await field(page, '[name="seed"]')).fill('mountain-browser-check');
+	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.seed).toBe('mountain-browser-check');
 	expect((await status(page)).recipe.heightScale).toBe(1400);
 	await settled(page);
@@ -596,10 +618,10 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	expect(saved.landscape.cursor).toBe(1);
 	expect((await status(page)).generation).toBe(initialGeneration);
 
-	await control(page, 'undo').click();
+	await press(page, 'undo');
 	await expect.poll(async() => (await status(page)).surface.operations, {timeout: 90_000}).toBe(0);
 	await settled(page);
-	await control(page, 'redo').click();
+	await press(page, 'redo');
 	await expect.poll(async() => (await status(page)).surface.operations, {timeout: 90_000}).toBe(1);
 	await settled(page);
 
@@ -608,7 +630,7 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	await stroke(page, 'smooth', .55, .4);
 	await stroke(page, 'flatten', .45, .6);
 	await stroke(page, 'lower', .5, .5);
-	await page.locator('[data-value="tool"]').selectOption('road');
+	await (await field(page, '[data-value="tool"]')).selectOption('road');
 	await expect.poll(async() => (await status(page)).settings.tool).toBe('road');
 	const box = await canvas(page).boundingBox();
 
@@ -634,7 +656,7 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	await page.mouse.up({button: 'right'});
 	await expect(page.locator('[data-road-marker]')).toHaveCount(2);
 
-	await control(page, 'road-apply').click();
+	await press(page, 'road-apply');
 	await expect.poll(async() => (await status(page)).surface.operations, {timeout: 90_000}).toBe(7);
 	await settled(page);
 
@@ -661,7 +683,7 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 			return draw(...args);
 		};
 	}, indexCount);
-	await control(page, 'craft').click();
+	await press(page, 'craft');
 	await expect.poll(async() => (await status(page)).mode).toBe('craft');
 	expect((await status(page)).paused).toBe(false);
 	expect((await status(page)).generationBudgetMs).toBe(2);
@@ -690,11 +712,74 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	}
 
 	await page.keyboard.up('w');
-	await control(page, 'fly').click();
+	await press(page, 'fly');
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');
-	await control(page, 'pause').click();
+	await press(page, 'pause');
 	await settled(page);
 	expect(errors).toEqual([]);
+});
+
+test('the panel tabs work from the keyboard and the Surface tab changes the ground', async({page}) => {
+	await page.goto('/games/terrain-sandbox/');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	const tab = name => page.locator(`.terrain-sandbox #terrain-tab-${name}`);
+	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(6);
+	await expect(tab('landscape')).toHaveAttribute('aria-selected', 'true');
+
+	// Arrow keys, Home and End move between tabs and wrap round; Home on a tab does not reset the camera.
+	await tab('landscape').focus();
+	await page.keyboard.press('ArrowRight');
+	await expect(tab('shape')).toBeFocused();
+	await expect(tab('shape')).toHaveAttribute('aria-selected', 'true');
+	await expect(page.locator('#terrain-section-landscape')).toBeHidden();
+	await page.keyboard.press('End');
+	await expect(tab('explore')).toHaveAttribute('aria-selected', 'true');
+	await page.keyboard.press('ArrowRight');
+	await expect(tab('landscape')).toHaveAttribute('aria-selected', 'true');
+	const position = (await status(page)).camera.position;
+	await page.keyboard.press('End');
+	await page.keyboard.press('Home');
+	await expect(tab('landscape')).toBeFocused();
+	expect((await status(page)).camera.position).toEqual(position);
+
+	// Paused, the view settles quickly, and a surface change must still redraw it.
+	await press(page, 'pause');
+	await expect.poll(async() => (await status(page)).paused).toBe(true);
+
+	// The coast reads grass and the rock strata, not the mountain granite.
+	await tab('surface').click();
+	await expect(page.locator('[data-surface-key="grassColor"]')).toBeVisible();
+	await expect(page.locator('[data-surface-key="bandSpacing"]')).toBeVisible();
+	await expect(page.locator('[data-surface-key="graniteColor"]')).toBeHidden();
+	await expect(page.locator('[data-surface-group="rock"]')).toBeHidden();
+
+	const frames = (await settled(page)).renderer.frames;
+	await page.locator('[data-value="grassColor"]').fill('#ff0000');
+	await expect.poll(async() => (await status(page)).settings.grassColor).toBe('#ff0000');
+	await expect.poll(async() => (await status(page)).renderer.frames).toBeGreaterThan(frames);
+
+	// Raising where rock starts past where it covers moves the end up with it, and the end's slider shows that.
+	await page.locator('[data-value="rockSlopeStart"]').evaluate(element => {
+		element.value = '0.6';
+		element.dispatchEvent(new Event('input', {bubbles: true}));
+	});
+	await expect.poll(async() => (await status(page)).settings.rockSlopeEnd).toBeCloseTo(.61, 9);
+	await expect(page.locator('[data-value="rockSlopeEnd"]')).toHaveValue('0.61');
+	const file = await save(page);
+	expect(file.settings.grassColor).toBe('#ff0000');
+	expect(file.settings.rockSlopeStart).toBe(.6);
+
+	// Saving opened the Landscape tab, which holds the file buttons.
+	await tab('surface').click();
+	await page.locator('[data-surface-reset="all"]').click();
+	await expect.poll(async() => (await status(page)).settings.grassColor).toBe('#425b2d');
+	await expect.poll(async() => (await status(page)).settings.rockSlopeStart).toBe(.08);
+
+	// The page opens on the tab shown last.
+	await page.reload();
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect(tab('surface')).toHaveAttribute('aria-selected', 'true');
+	await expect(page.locator('#terrain-section-surface')).toBeVisible();
 });
 
 test('terrain restores a lost WebGL context and releases page ownership on navigation', async({page}) => {

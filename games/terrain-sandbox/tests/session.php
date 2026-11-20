@@ -1313,4 +1313,57 @@ expect(abs(atan2(sin($yaw - (M_PI - $s['yaw'] + M_PI / 2)), cos($yaw - (M_PI - $
 	'Pushing the right stick right looks to the jet ski\'s right');
 $stick->close();
 
+// The terrain's colours, banding and blending are saved settings that the session hands the renderer.
+$look = new Session(['worldSize'=>256,'heightScale'=>0,'detailAmplitude'=>0]);
+expect(array_intersect_key($look->settings, TerrainPhonics\TerrainAppearance::DEFAULTS) == TerrainPhonics\TerrainAppearance::DEFAULTS
+	&& $look->terrainAppearance->settings === TerrainPhonics\TerrainAppearance::DEFAULTS,
+	'A new session draws the default terrain appearance');
+expect($look->status()['surfaceStyle'] === 'coast', 'Status names the terrain style the Surface tab shows');
+$before = $look->terrainAppearance;
+input($look, ['values' => ['grassColor' => '#FF0000', 'bandSpacing' => 2]]);
+expect($look->settings['grassColor'] === '#ff0000' && $look->settings['bandSpacing'] === 5.0
+	&& $look->terrainAppearance !== $before && $look->terrainAppearance->settings['grassColor'] === '#ff0000',
+	'Appearance settings reach the renderer as a new appearance, lower-cased and clamped');
+$kept = $look->terrainAppearance;
+input($look, ['values' => ['grassColor' => '#ff0000']]);
+expect($look->terrainAppearance === $kept, 'An unchanged setting keeps the same appearance, so the scene uploads nothing');
+input($look, ['values' => ['rockSlopeStart' => .6]]);
+expect($look->settings['rockSlopeStart'] === .6 && abs($look->settings['rockSlopeEnd'] - .61) < 1e-12,
+	'Raising a blend start past its end moves the end with it');
+$held = $look->terrainAppearance;
+input($look, ['values' => ['grassColor' => 'red']]);
+expect($look->settings['grassColor'] === '#ff0000' && str_contains($look->message, 'grassColor')
+	&& $look->terrainAppearance === $held, 'A colour that is not six-digit hex is refused and reported');
+$file = json_decode($look->save(), true, flags: JSON_THROW_ON_ERROR);
+expect($file['settings']['grassColor'] === '#ff0000' && $file['settings']['rockSlopeEnd'] === $look->settings['rockSlopeEnd'],
+	'Save files carry the terrain appearance');
+$other = new Session(['worldSize'=>256,'heightScale'=>0,'detailAmplitude'=>0]);
+$other->load(json_encode($file, JSON_THROW_ON_ERROR));
+expect($other->terrainAppearance->settings === $look->terrainAppearance->settings,
+	'Loading a file restores its terrain appearance');
+$plain = $file;
+foreach(TerrainPhonics\TerrainAppearance::DEFAULTS as $name => $value) unset($plain['settings'][$name]);
+$other->load(json_encode($plain, JSON_THROW_ON_ERROR));
+expect($other->terrainAppearance->settings === TerrainPhonics\TerrainAppearance::DEFAULTS,
+	'A file without terrain appearance settings draws the defaults');
+$generation = $other->generation;
+$hostile = $file;
+$hostile['settings']['grassColor'] = 'red';
+try { $other->load(json_encode($hostile, JSON_THROW_ON_ERROR)); expect(false, 'A file with a bad colour must be refused'); }
+catch(InvalidArgumentException)
+{
+	expect($other->generation === $generation && $other->terrainAppearance->settings === TerrainPhonics\TerrainAppearance::DEFAULTS,
+		'A file with a bad terrain colour changes nothing');
+}
+$order = $file;
+$order['settings']['rockSlopeStart'] = .7;
+$order['settings']['rockSlopeEnd'] = .9;
+$other->load(json_encode($order, JSON_THROW_ON_ERROR));
+expect($other->settings['rockSlopeStart'] === .7 && $other->settings['rockSlopeEnd'] === .9,
+	'A file sets both ends of a blend together, whatever order the session would apply them in');
+input($other, ['actions' => [['type' => 'generate', 'preset' => 'mountain', 'seed' => 'look']]]);
+expect($other->status()['surfaceStyle'] === 'mountain' && $other->settings['rockSlopeStart'] === .7,
+	'Generating keeps the appearance and the status follows the new style');
+$look->close(); $other->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

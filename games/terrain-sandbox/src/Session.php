@@ -7,6 +7,7 @@ use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 use TerrainPhonics\RayQuery;
 use TerrainPhonics\Scene;
+use TerrainPhonics\TerrainAppearance;
 use TerrainPhonics\Water;
 use TerrainPhonics\WaterAppearance;
 use TerrainPhonics\Watercraft;
@@ -70,7 +71,9 @@ final class Session
 		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
-	] + WaterAppearance::DEFAULTS;
+	] + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
+	/** The terrain's colours, banding and blending, which the scene draws with. Its settings are part of $settings. */
+	public TerrainAppearance $terrainAppearance;
 	/** Gate tool roles. Remove deletes the gate nearest the click. */
 	public const GATE_ROLES = ['start', 'checkpoint', 'finish', 'remove'];
 	/** Distance in metres a pick ray reaches when it hits no ground. */
@@ -139,6 +142,7 @@ final class Session
 	 */
 	public function __construct(array $recipe = [], ?GateShapes $gateShapes = null)
 	{
+		$this->terrainAppearance = new TerrainAppearance;
 		$this->gateShapes = $gateShapes ?? GateShapes::packaged();
 		$this->course = new Course($this->gateShapes);
 		$this->race = new Race;
@@ -492,6 +496,12 @@ final class Session
 			$this->setWaterAppearance(new WaterAppearance([$name => $value] + $this->settings));
 			return;
 		}
+		if(array_key_exists($name, TerrainAppearance::DEFAULTS))
+		{
+			// The appearance clamps the value and keeps each blend's start below its end, which can move the partner too.
+			$this->setTerrainAppearance(new TerrainAppearance([$name => $value] + $this->settings));
+			return;
+		}
 		$ranges = ['radius' => [2,300],'amount' => [.1,200],'flattenHeight' => [-1000,3000],
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
@@ -562,6 +572,19 @@ final class Session
 	{
 		if($this->water->appearance->settings === $appearance->settings) return;
 		$this->water->appearance = $appearance;
+		$this->settings = $appearance->settings + $this->settings;
+		$this->dirty = true;
+	}
+
+	/**
+	 * Draw the terrain with new colours, banding and blending. The scene uploads a new appearance when it changes.
+	 * @param TerrainAppearance $appearance Validated appearance.
+	 * @return void Keeps the current appearance object when nothing changed, so the scene uploads nothing.
+	 */
+	private function setTerrainAppearance(TerrainAppearance $appearance): void
+	{
+		if($this->terrainAppearance->settings === $appearance->settings) return;
+		$this->terrainAppearance = $appearance;
 		$this->settings = $appearance->settings + $this->settings;
 		$this->dirty = true;
 	}
@@ -1171,20 +1194,29 @@ final class Session
 			$settings['gateAltitude'] = $settings['gateHeight'];
 			unset($settings['gateHeight']);
 		}
-		$appearance = new WaterAppearance($settings);
-		$settings = array_diff_key($settings, WaterAppearance::DEFAULTS) + ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW];
-		foreach($settings as $name => $value)
-		if(isset($this->settings[$name]) && is_numeric($this->settings[$name]) && (!is_numeric($value) || !is_finite((float)$value)))
-		throw new \InvalidArgumentException('Invalid saved control value.');
-		$position = $data['camera']['position'] ?? [0,600,1200];
-		if(!is_array($position) || !array_is_list($position) || count($position) !== 3 || count(array_filter($position, 'is_numeric')) !== 3
-			|| count(array_filter(array_map('floatval', $position), 'is_finite')) !== 3)
-		throw new \InvalidArgumentException('Invalid saved camera position.');
-		$yaw = $data['camera']['yaw'] ?? 0; $pitch = $data['camera']['pitch'] ?? -.25;
-		if(!is_numeric($yaw) || !is_numeric($pitch) || !is_finite((float)$yaw) || !is_finite((float)$pitch))
-		throw new \InvalidArgumentException('Invalid saved camera direction.');
+		try
+		{
+			// Both appearances come from the whole file at once, so a blend's start and end apply together, and a bad
+			// file throws here, before anything changes. A file without terrain settings draws the defaults.
+			$appearance = new WaterAppearance($settings);
+			$terrain = new TerrainAppearance($settings);
+			$settings = array_diff_key($settings, WaterAppearance::DEFAULTS, TerrainAppearance::DEFAULTS)
+				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW];
+			foreach($settings as $name => $value)
+			if(isset($this->settings[$name]) && is_numeric($this->settings[$name]) && (!is_numeric($value) || !is_finite((float)$value)))
+			throw new \InvalidArgumentException('Invalid saved control value.');
+			$position = $data['camera']['position'] ?? [0,600,1200];
+			if(!is_array($position) || !array_is_list($position) || count($position) !== 3 || count(array_filter($position, 'is_numeric')) !== 3
+				|| count(array_filter(array_map('floatval', $position), 'is_finite')) !== 3)
+			throw new \InvalidArgumentException('Invalid saved camera position.');
+			$yaw = $data['camera']['yaw'] ?? 0; $pitch = $data['camera']['pitch'] ?? -.25;
+			if(!is_numeric($yaw) || !is_numeric($pitch) || !is_finite((float)$yaw) || !is_finite((float)$pitch))
+			throw new \InvalidArgumentException('Invalid saved camera direction.');
+		}
+		catch(\InvalidArgumentException $error) { $candidate->close(); throw $error; }
 		$this->replace($candidate);
 		$this->setWaterAppearance($appearance);
+		$this->setTerrainAppearance($terrain);
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
 		$this->course = $course;
 		if($course->start() !== null) $this->settings['gateLaps'] = $course->start()['laps'];
@@ -1216,7 +1248,8 @@ final class Session
 		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
-			'settings' => $this->settings,'selectionInterval' => $this->selectionInterval,
+			'settings' => $this->settings,'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
+			'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
 			'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),

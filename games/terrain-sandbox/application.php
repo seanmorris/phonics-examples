@@ -55,6 +55,10 @@ $inputMs = 0.0;
 $pickFrame = false;
 $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
+// The panel builds its Surface tab once from the appearance settings' groups, ranges, defaults and per-style use.
+(vrzno_env('terrainSurface'))(json_encode(['groups' => TerrainPhonics\TerrainAppearance::GROUPS,
+	'ranges' => TerrainPhonics\TerrainAppearance::RANGES, 'defaults' => TerrainPhonics\TerrainAppearance::DEFAULTS,
+	'uses' => TerrainPhonics\TerrainAppearance::USES], JSON_THROW_ON_ERROR));
 
 $engine->systems->add('terrain-sandbox.simulate', static function(Registry $registry, float $seconds) use ($session): void {
 	$session->step($seconds);
@@ -105,6 +109,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$candidate = $session->takeCandidate();
 	if($candidate !== null) $scene->prepareLandscape($candidate);
 	$scene->quality = $session->settings['quality'];
+	// The same object while nothing changes, so the scene uploads the appearance only after a change.
+	$scene->appearance = $session->terrainAppearance;
 	$scene->selectionInterval = $session->selectionInterval;
 	$scene->selectionSliceMs = $session->selectionSliceMs;
 	$engine->userPaused = $session->paused;

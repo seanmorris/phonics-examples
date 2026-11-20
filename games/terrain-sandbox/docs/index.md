@@ -2,6 +2,14 @@
 
 Landscape Sandbox is a place to explore and edit procedural terrain. The default landscape is about 32 kilometres square. Nearby geometry becomes more detailed as you approach it, while the physical ground remains independent of visual detail.
 
+## Use the Landscape Lab panel
+
+The panel on the right has six tabs. **Landscape** generates terrain and saves or loads it. **Shape** holds the editing tools, road grading and race gates. **Surface** colours the ground. **Water** and **Sky** set the water and the sun and atmosphere. **Explore** boards the vehicles and sets their controls. Click a tab, or move between tabs with the arrow keys, **Home** and **End**. The panel opens on the tab you used last. **H** folds or opens the whole panel.
+
+## Colour the ground
+
+The **Surface** tab sets the colours of the generated ground, the rock bands on coasts and early canyons, and where one material gives way to another: rock on steep slopes, a beach above the water, snow above the snowline and, on mountains, forest, meadow and tundra below it. Each preset reads its own settings, so the tab shows only those for the current landscape. Mountains show granite, talus and stain, and canyons show their rock beds. A blend's start stays below its end: moving one past the other moves both. **Reset** returns one group to its defaults, and **Reset the whole surface** returns them all. The surface settings travel with a saved landscape and stay when you generate a new one.
+
 ## Fly over the landscape
 
 Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and **Q/E** to descend or climb. Hold **Shift** to fly at 300 metres per second. The Flight slider changes the ordinary movement speed.

@@ -64,8 +64,7 @@ export function activate({module, canvas, session, services})
 
 	const showToolControls = () => { gateTool.hidden = controls.get('tool').value !== 'gate'; };
 
-	for(const field of controls.values())
-	{
+	const listen = field => {
 		field.addEventListener('input', () => {
 			if(checked.has(field.dataset.value))
 			{
@@ -80,7 +79,7 @@ export function activate({module, canvas, session, services})
 
 			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
 
-			if(output) output.textContent = field.value;
+			if(output) output.textContent = readout(field.value);
 
 			if(field === coarseFog) setFineFogWindow(field.valueAsNumber);
 
@@ -91,7 +90,130 @@ export function activate({module, canvas, session, services})
 		field.addEventListener('blur', () => {
 			if(!Number.isFinite(field.valueAsNumber) || !field.validity.valid) field.value = field.defaultValue;
 		}, {signal});
+	};
+
+	for(const field of controls.values()) listen(field);
+
+	// Tabs: a click or the arrow, Home and End keys select one, and the page remembers the last for next time.
+	const tabs = [...frame.querySelectorAll('[role="tab"]')];
+
+	const selectTab = (tab, moveFocus = false) => {
+		for(const other of tabs)
+		{
+			const selected = other === tab;
+
+			other.setAttribute('aria-selected', String(selected));
+			other.tabIndex = selected ? 0 : -1;
+			frame.querySelector(`#${other.getAttribute('aria-controls')}`).hidden = !selected;
+		}
+
+		if(moveFocus) tab.focus();
+
+		try
+		{
+			localStorage.setItem(TAB_PREFERENCE, tab.dataset.tab);
+		}
+		catch
+		{
+			/* Without storage the panel opens on its first tab next time. */
+		}
+	};
+
+	for(const tab of tabs) tab.addEventListener('click', () => selectTab(tab), {signal});
+
+	frame.querySelector('[role="tablist"]').addEventListener('keydown', event => {
+		const index = tabs.indexOf(event.target);
+
+		if(index < 0) return;
+
+		const next = {ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: tabs.length - 1}[event.code];
+
+		if(next === undefined) return;
+
+		selectTab(tabs[(next + tabs.length) % tabs.length], true);
+		event.preventDefault();
+		event.stopPropagation();
+	}, {signal});
+
+	try
+	{
+		const remembered = tabs.find(tab => tab.dataset.tab === localStorage.getItem(TAB_PREFERENCE));
+
+		if(remembered) selectTab(remembered);
 	}
+	catch
+	{
+		/* An unreadable preference leaves the first tab open. */
+	}
+
+	// The Surface tab: PHP sends the appearance settings' groups, ranges, defaults and the settings each terrain style
+	// reads, once, and the page builds a control for each. A preset shows only the settings it reads.
+	let surface = null, surfaceStyle = '';
+	const surfaceBox = frame.querySelector('[data-surface]');
+
+	shell.bridge('terrainSurface', json => {
+		surface = JSON.parse(json);
+		surfaceBox.innerHTML = surfaceMarkup(surface);
+
+		for(const field of surfaceBox.querySelectorAll('[data-value]'))
+		{
+			controls.set(field.dataset.value, field);
+			listen(field);
+			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
+
+			if(output) output.textContent = readout(field.value);
+		}
+
+		for(const reset of frame.querySelectorAll('[data-surface-reset]'))
+
+		reset.onclick = () => {
+			const group = reset.dataset.surfaceReset;
+			const keys = group === 'all' ? Object.keys(surface.defaults) : surface.groups[group];
+
+			for(const key of keys) values[key] = surface.defaults[key];
+		};
+
+		surfaceStyle = '';
+	});
+
+	const showSurface = state => {
+		if(!surface || !state.surfaceStyle) return;
+
+		if(state.surfaceStyle !== surfaceStyle)
+		{
+			surfaceStyle = state.surfaceStyle;
+			const uses = new Set(surface.uses[surfaceStyle]);
+
+			for(const row of surfaceBox.querySelectorAll('[data-surface-key]'))
+			row.hidden = !uses.has(row.dataset.surfaceKey);
+
+			for(const group of surfaceBox.querySelectorAll('[data-surface-group]'))
+			group.hidden = !surface.groups[group.dataset.surfaceGroup].some(key => uses.has(key));
+
+			frame.querySelector(
+				'[data-surface-note]'
+			).textContent = `Settings the ${SURFACE_STYLES[surfaceStyle]} ground `
+				+ 'reads. The landscape file saves them.';
+		}
+
+		// Show what the session holds: it clamps values and keeps each blend's start below its end.
+		for(const key of Object.keys(surface.defaults))
+		{
+			const field = controls.get(key), value = state.settings[key];
+
+			if(!field || value === undefined || field === document.activeElement) continue;
+
+			const shown = field.type === 'color' ? field.value : Number(field.value);
+
+			if(shown === value || field.type === 'color' && shown.toLowerCase() === String(value).toLowerCase())
+			continue;
+
+			field.value = value;
+			const output = frame.querySelector(`[data-output="${key}"]`);
+
+			if(output) output.textContent = field.type === 'color' ? value : readout(field.value);
+		}
+	};
 
 	for(const field of frame.querySelectorAll('[data-action]'))
 	{
@@ -356,6 +478,7 @@ export function activate({module, canvas, session, services})
 		dataset: 'terrainSandbox'
 		, handler: state => {
 			latest = state;
+			showSurface(state);
 
 			// Back on a gamepad switches the handling in PHP. Show it here and remember it.
 			if(state.jetControls && jetControls.value !== state.jetControls && document.activeElement !== jetControls)
@@ -443,7 +566,7 @@ export function activate({module, canvas, session, services})
 
 					const output = frame.querySelector(`[data-output="${name}"]`);
 
-					if(output) output.textContent = field === coarseFog ? field.value : value;
+					if(output) output.textContent = field === coarseFog ? field.value : readout(value);
 
 					if(field === coarseFog) setFineFogWindow(value);
 				}
@@ -778,6 +901,112 @@ function readGamepads()
 	return found ? {axes, buttons} : null;
 }
 
+/**
+ * Show a control's number short enough for its readout: whole numbers from 100, one decimal from 10, and below that
+ * at most four decimals with trailing zeros dropped.
+ * @param {string|number} value The field's value or a setting.
+ * @returns {string} The readout, or the value unchanged when it is not a number.
+ */
+function readout(value)
+{
+	const number = Number(value);
+
+	if(value === '' || !Number.isFinite(number)) return String(value);
+
+	const decimals = Math.abs(number) >= 100 ? 0 : Math.abs(number) >= 10 ? 1 : 4;
+
+	return String(Number(number.toFixed(decimals)));
+}
+
+/** Local storage key for the panel tab shown last. */
+const TAB_PREFERENCE = 'terrain-sandbox.tab';
+
+/** What the Surface tab calls each terrain style. */
+const SURFACE_STYLES = {coast: 'coastal', mountain: 'mountain', 'canyon-v1': 'early canyon', canyon: 'canyon'};
+
+/** Headings for the appearance groups. */
+const SURFACE_GROUPS = {colors: 'Colours', banding: 'Banding', rock: 'Rock detail', blending: 'Blending'};
+
+/** Labels and slider steps for the appearance settings. Heights relative to the snowline are negative below it. */
+const SURFACE_LABELS = {
+	grassColor: 'Grass'
+	, soilColor: 'Soil'
+	, rockColor: 'Rock'
+	, rockBandColor: 'Rock bands'
+	, sandColor: 'Sand'
+	, snowColor: 'Snow'
+	, roadColor: 'Road'
+	, canyonRustColor: 'Rust beds'
+	, canyonShaleColor: 'Shale'
+	, canyonSandstoneColor: 'Sandstone'
+	, canyonCapColor: 'Cap rock'
+	, forestColor: 'Forest'
+	, meadowColor: 'Meadow'
+	, tundraColor: 'Tundra'
+	, graniteColor: 'Granite'
+	, stainColor: 'Iron stain'
+	, talusColor: 'Talus'
+	, bandSpacing: ['Band spacing · m', 'any']
+	, bandContrast: ['Band contrast', .01]
+	, bandSharpness: ['Band sharpness', .1]
+	, talusAmount: ['Talus', .01]
+	, stainAmount: ['Iron stain', .01]
+	, lichenAmount: ['Lichen', .01]
+	, rockSlopeStart: ['Rock starts · slope', .01]
+	, rockSlopeEnd: ['Rock covers · slope', .01]
+	, beachHeight: ['Beach top · m', 1]
+	, beachWidth: ['Beach fade · m', .5]
+	, snowline: ['Snowline · m', 1]
+	, snowTransition: ['Snow fade · m', 1]
+	, alpineStart: ['Alpine rock from · m', 1]
+	, alpineEnd: ['Alpine rock to · m', 1]
+	, snowSlopeStart: ['Snow thins · slope', .01]
+	, snowSlopeEnd: ['Snow gone · slope', .01]
+	, macroVariation: ['Variation', .05]
+	, treeline: ['Treeline · m', 1]
+	, tundraStart: ['Tundra from · m', 1]
+};
+
+/**
+ * Build the Surface tab's controls from the appearance schema PHP sends.
+ * @param {{groups: Object, ranges: Object, defaults: Object}} surface The appearance settings' schema.
+ * @returns {string} One group per heading, each with a reset button.
+ */
+function surfaceMarkup(surface)
+{
+	let html = '';
+
+	for(const [group, keys] of Object.entries(surface.groups))
+	{
+		html += `<div class="terrain-surface-group" data-surface-group="${group}"><h2>${SURFACE_GROUPS[group]
+			?? group}</h2>`;
+
+		for(const key of keys)
+		{
+			const value = surface.defaults[key];
+			const label = SURFACE_LABELS[key];
+
+			if(typeof value === 'string')
+			{
+				html += `<label class="terrain-control" data-surface-key="${key}"><span>${label ?? key}</span>`
+					+ `<input data-value="${key}" type="color" value="${value}"></label>`;
+			}
+			else
+			{
+				const [name, step] = Array.isArray(label) ? label : [key, 'any'];
+				const [min, max] = surface.ranges[key];
+
+				html += `<div data-surface-key="${key}">${range(name, key, min, max, step, value)}</div>`;
+			}
+		}
+
+		html += `<div class="terrain-row"><button type="button" data-surface-reset="${group}">`
+			+ `Reset ${(SURFACE_GROUPS[group] ?? group).toLowerCase()}</button></div></div>`;
+	}
+
+	return html;
+}
+
 function range(label, key, min, max, step, value)
 {
 	return `<label class="terrain-control"><span>${label}</span><input data-value="${key}" type="range"`
@@ -796,10 +1025,13 @@ function markup()
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}
 	.terrain-row{display:flex;gap:6px;margin:6px 0}.terrain-row>*{flex:1;min-width:0}.terrain-field{display:grid;gap:4px;margin:8px 0}.terrain-control{display:grid;grid-template-columns:90px 1fr 36px;gap:6px;align-items:center;margin:7px 0}.terrain-control output{font-variant-numeric:tabular-nums;text-align:right;color:#e5bc75;font-size:12px}
 	.terrain-note{font-size:12px;color:#bdd2c7;margin:8px 0}.terrain-check{display:flex;align-items:center;gap:8px;margin:10px 0}.terrain-hud{position:absolute;left:16px;bottom:16px;max-width:calc(100% - 355px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
+	.terrain-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:0 0 10px}.terrain-tabs [role=tab]{min-height:32px;padding:4px 6px;font-size:12px;letter-spacing:.04em;background:#183428;color:#c7dccf;border-color:#779d8950}.terrain-tabs [role=tab][aria-selected=true]{background:#2f5a46;color:#fff;border-color:#e5bc75;box-shadow:inset 0 -2px #e5bc75}.terrain-section>h2:first-child,.terrain-section>:first-child{margin-top:3px}.terrain-surface-group{display:grid;gap:0}.terrain-surface-group[hidden]{display:none}
 	@media(max-width:700px){.terrain-panel{width:260px;right:8px;top:8px;max-height:70%}.terrain-hud{max-width:calc(100% - 56px);font-size:12px;bottom:8px}.terrain-panel:not([open]){width:auto}.terrain-panel>div{padding:0 10px 10px}}
 	</style><div class="terrain-stage"></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
 	<details class="terrain-panel" open><summary>LANDSCAPE LAB</summary><div>
-	<h2>Landscape</h2><label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option></select></label>
+	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
+	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option></select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
 	<details><summary>Landform parameters</summary>
 	<label class="terrain-field">Height scale · m<input name="heightScale" type="number" min="0" max="10000" value="420"></label>
@@ -813,7 +1045,10 @@ function markup()
 	<p class="terrain-note">Higher damping smooths steep faces by reducing fine-noise amplitude. These values apply when you generate.</p></details>
 	<div class="terrain-row"><button data-action="generate">Generate</button><button data-action="reset-camera">Home view</button></div>
 	<label class="terrain-field">Detail<select data-value="quality"><option value="0.5">Economical</option><option value="1" selected>Balanced</option><option value="2">Detailed</option></select></label>
-	<h2>Shape the ground</h2><label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option></select></label>
+	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
+	</section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-shape" aria-labelledby="terrain-tab-shape" data-tab-panel="shape" hidden>
+	<label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option></select></label>
 	<div data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
 	<label class="terrain-field">Laps · start / finish courses only<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
 	<p class="terrain-note" data-gate-laps>Laps count when the start gate is also the finish.</p>
@@ -852,7 +1087,25 @@ function markup()
 	)}
 	<p class="terrain-note">Choose Road control points, then click along a route. Offset raises or cuts each new point.</p><p class="terrain-note" data-road-count>0 control points</p>
 	<div class="terrain-row"><button data-action="road-apply">Apply road</button><button data-action="road-clear">Clear points</button></div>
-	<h2>Sun & atmosphere</h2>${range(
+	</section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
+	<p class="terrain-note" data-surface-note>Colours, banding and blending of the generated ground. The landscape file saves them.</p>
+	<div data-surface></div>
+	<div class="terrain-row"><button data-surface-reset="all">Reset the whole surface</button></div>
+	</section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-water" aria-labelledby="terrain-tab-water" data-tab-panel="water" hidden>
+	<label class="terrain-field">Water level · m<input data-value="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
+	${range('Choppiness · %', 'waterChoppiness', 0, 300, 1, 100)}
+	<label class="terrain-control"><span>Water color</span><input data-value="waterColor" type="color" value="#287276"></label>
+	${range('Transparency', 'waterTransparency', 0, 1, .01, .85)}
+	${range('Reflectivity', 'waterReflectivity', 0, 1, .01, .85)}
+	${range('Fog density · coarse', 'waterFogDensity', 0, 1, .005, .035)}
+	<label class="terrain-control"><span>Fog density · fine</span><input data-fine-fog type="range" min=".030" max=".040" step=".0001" value=".035"><output>0.035</output></label>
+	${range('Shore and wake foam', 'waterFoam', 0, 1, .01, .65)}
+	<p class="terrain-note">Lower fog density to see the bottom in deeper water.</p>
+	</section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-sky" aria-labelledby="terrain-tab-sky" data-tab-panel="sky" hidden>
+	${range(
 		'Sun azimuth'
 		, 'azimuth'
 		, 0
@@ -883,17 +1136,9 @@ function markup()
 	)}
 	${range('Night glow', 'nightGlow', 0, 1, .01, .5)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
-	<h2>Water</h2>
-	<label class="terrain-field">Water level · m<input data-value="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
-	${range('Choppiness · %', 'waterChoppiness', 0, 300, 1, 100)}
-	<label class="terrain-control"><span>Water color</span><input data-value="waterColor" type="color" value="#287276"></label>
-	${range('Transparency', 'waterTransparency', 0, 1, .01, .85)}
-	${range('Reflectivity', 'waterReflectivity', 0, 1, .01, .85)}
-	${range('Fog density · coarse', 'waterFogDensity', 0, 1, .005, .035)}
-	<label class="terrain-control"><span>Fog density · fine</span><input data-fine-fog type="range" min=".030" max=".040" step=".0001" value=".035"><output>0.035</output></label>
-	${range('Shore and wake foam', 'waterFoam', 0, 1, .01, .65)}
-	<p class="terrain-note">Lower fog density to see the bottom in deeper water.</p>
-	<h2>Explore</h2>${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
+	</section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
+	${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<label class="terrain-field">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
@@ -901,7 +1146,7 @@ function markup()
 	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on when the sun is low</option><option value="on">On</option><option value="off">Off</option></select></label>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<p class="terrain-note">Gamepad: left stick flies, steers or banks · right stick looks · RT/LT climb or descend, accelerate or brake · A: handbrake · X: headlights · LB/RB: Expert rudder · D-pad: ↑ jet, ← car, → watercraft, ↓ free flight · Y: reset the race · Start: pause · Back: Novice or Expert.</p>
-	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
 	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a></p>
+	</section>
 	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

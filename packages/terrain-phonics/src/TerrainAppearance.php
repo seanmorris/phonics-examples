@@ -69,6 +69,39 @@ final class TerrainAppearance
 		'rock' => ['talusAmount', 'stainAmount', 'lichenAmount'],
 	];
 	/**
+	 * The settings each terrain style reads, in GROUPS order, so a panel can show only those. The keys are what style()
+	 * returns. Colours that only the material tool's paint uses count, because painted ground shows them.
+	 */
+	public const USES = [
+		'coast' => [
+			'grassColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
+			'bandSpacing', 'bandContrast', 'bandSharpness',
+			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'snowline', 'snowTransition',
+			'snowSlopeStart', 'snowSlopeEnd', 'macroVariation',
+		],
+
+		'mountain' => [
+			'grassColor', 'sandColor', 'snowColor', 'roadColor',
+			'forestColor', 'meadowColor', 'tundraColor', 'graniteColor', 'stainColor', 'talusColor',
+			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'snowline', 'snowTransition',
+			'alpineStart', 'alpineEnd', 'snowSlopeStart', 'snowSlopeEnd', 'macroVariation', 'treeline', 'tundraStart',
+			'talusAmount', 'stainAmount', 'lichenAmount',
+		],
+
+		'canyon-v1' => [
+			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
+			'bandSpacing', 'bandContrast', 'bandSharpness',
+			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'macroVariation',
+		],
+
+		'canyon' => [
+			'grassColor', 'sandColor', 'snowColor', 'roadColor',
+			'canyonRustColor', 'canyonShaleColor', 'canyonSandstoneColor', 'canyonCapColor',
+			'bandContrast', 'bandSharpness',
+			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'macroVariation',
+		],
+	];
+	/**
 	 * Linear canyon shades in the default palette. Each keeps its ratio to the colour it follows: ledges follow the
 	 * cap rock and red beds the rust. Dust, beds too fine to resolve and the light the walls throw into shadow follow
 	 * the beds' average weighted by thickness. Each derived channel stops at 1.
@@ -147,6 +180,21 @@ final class TerrainAppearance
 	 * @return array Red, green and blue from 0 to 1.
 	 */
 	public static function linear(string $hex): array { return self::decode(self::color('color', $hex)); }
+
+	/**
+	 * Name the terrain style a recipe draws with, as Scene chooses its material.
+	 * @param array $recipe Landscape recipe with its preset and version.
+	 * @return string A key of USES: coast, mountain, canyon-v1 or canyon.
+	 */
+	public static function style(array $recipe): string
+	{
+		return match($recipe['preset'] ?? null)
+		{
+			'canyon' => ($recipe['version'] ?? 0) === 2 ? 'canyon' : 'canyon-v1',
+			'mountain' => 'mountain',
+			default => 'coast'
+		};
+	}
 
 	/**
 	 * Convert a colour that has already been validated.
