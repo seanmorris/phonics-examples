@@ -599,13 +599,13 @@ export function activate({module, canvas, session, services})
 			button('car').disabled = state.findingCarSite;
 			button('fly').hidden = state.mode === 'fly' && !state.findingCarSite;
 
-			const patches = state.renderer.pending;
-			pending.hidden = !state.preparing && !state.picking && !state.findingCarSite && patches === 0;
+			const levelsPending = state.renderer.pending;
+			pending.hidden = !state.preparing && !state.picking && !state.findingCarSite && levelsPending === 0;
 
 			if(state.preparing) pending.textContent = 'Preparing terrain edit…';
 			else if(state.findingCarSite) pending.textContent = 'Looking for level ground…';
 			else if(state.picking) pending.textContent = 'Finding the ground…';
-			else if(state.renderer.visible) pending.textContent = `Refining terrain · ${patches} ${patches === 1 ? 'patch' : 'patches'}`;
+			else if(state.renderer.visible) pending.textContent = `Refining terrain · ${levelsPending} ${levelsPending === 1 ? 'level' : 'levels'} remaining`;
 			else pending.textContent = 'Preparing terrain…';
 
 			for(const name of ['undo','redo','generate','road-apply','load','save'])
@@ -627,8 +627,8 @@ export function activate({module, canvas, session, services})
 			detail.textContent = `${mode} · ${Math.round(x)}, ${Math.round(z)} m`
 			+ ` · altitude ${Math.round(state.jet?.y ?? y)} m`
 			+ (state.jet ? ` · ${Math.round(state.jet.speed)} m/s` : '')
-			+ `\n${state.renderer.visible} patches · `
-			+ `${(state.renderer.meshBytes / 1048576).toFixed(1)} MiB mesh · `
+			+ `\n${state.renderer.visible} terrain levels · `
+			+ `${(state.renderer.terrainTextureBytes / 1048576).toFixed(1)} MiB elevation textures · `
 			+ `${state.renderer.generationMs.toFixed(1)} ms generation · revision ${state.revision}\n`
 			+ `${state.renderMs.toFixed(1)} ms render submission · `
 			+ `${state.drawIntervalMs?.toFixed(1) ?? '—'} ms between draws`;

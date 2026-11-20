@@ -1281,6 +1281,7 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 test('landform parameters and nested colours survive a save and reload', async({page}) => {
 	await page.setViewportSize({width: 720, height: 460});
 	await boot(page);
+	await page.getByRole('tab', {name: 'Landscape', exact: true}).click();
 	await page.locator('[name="preset"]').selectOption('canyon');
 	await page.getByText('Landform parameters', {exact: true}).click();
 	const wall = page.getByLabel('Wall width', {exact: true});

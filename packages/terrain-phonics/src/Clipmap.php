@@ -547,7 +547,7 @@ final class Clipmap
 			'backend' => 'clipmap'
 			, 'patches' => count($live)
 			, 'visible' => count($live)
-			, 'pending' => (int)$this->pending
+			, 'pending' => $this->pending ? max(1, count($this->levels) - count($live)) : 0
 			, 'cameraSpacing' => $spacing
 			, 'finestVisibleSpacing' => $spacing
 			, 'heightTexelsWritten' => $this->texels
