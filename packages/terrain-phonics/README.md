@@ -184,13 +184,15 @@ Moving lamps cost about 0.06 ms a frame for both programs. Choosing the pair cos
 `render()` took the same time within 1% with the lamp-free pair as with the single pair before it.
 
 Full-screen passes of the linked shaders at 960 by 540 pixels in SwiftShader, timed in pairs against the shaders
-from before the lamp code existed, gave these ratios in two runs on a shared machine:
+from before the lamp code existed, gave these ratios on a shared machine. The first two columns come from two runs.
+The third comes from a later 40-round run of the current shaders, whose knee takes its scale from the open cones; that
+run gave the lamp-free programs 0.98, 1.01 and 1.01:
 
 | Pass | Lamp code, no light set | Lamp-free program | Lit program, two lights |
 | --- | --- | --- | --- |
-| Terrain | 1.10 to 1.14 | 0.95 to 0.96 | 1.23 |
-| Submerged terrain | 1.07 to 1.15 | 0.95 to 1.04 | 1.31 |
-| Water | 1.06 to 1.14 | 1.02 to 1.06 | 1.17 |
+| Terrain | 1.10 to 1.14 | 0.95 to 0.96 | 1.26 |
+| Submerged terrain | 1.07 to 1.15 | 0.95 to 1.04 | 1.34 |
+| Water | 1.06 to 1.14 | 1.02 to 1.06 | 1.14 |
 
 The first column is what every frame without a light paid before the lamp-free programs; the second is within the
 spread between runs. In Mesa's llvmpipe every variant stayed within 0.87 to 1.20 of the old shaders, as widely as the same variant
