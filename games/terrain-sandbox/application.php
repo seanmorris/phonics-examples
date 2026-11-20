@@ -131,10 +131,9 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 
 $shadow = null;
 $drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose): void {
-	// The car's shadow darkens the ground it stands on, so it draws after the terrain and before the car.
+	// The car's shadow darkens the ground under it, so it draws after the terrain and before the car.
 	if($session->mode === 'car' && $vehiclePose !== null)
-		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape,
-			$session->atmosphere->uniforms()['sunDirection'], $viewCamera, $width, $height);
+		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape, $viewCamera, $width, $height);
 	if($session->mode !== 'fly' && !($session->mode === 'jet' && $session->jetView === 'cockpit'))
 	{
 		$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
