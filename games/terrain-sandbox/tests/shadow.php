@@ -26,6 +26,7 @@ namespace
 	require_once $package . '/autoload.php';
 	require_once dirname(__DIR__) . '/autoload.php';
 
+	use TerrainSandbox\Car;
 	use TerrainSandbox\GroundShadow;
 	use TerrainSandbox\Session;
 
@@ -67,47 +68,51 @@ namespace
 
 	$parked = ['x' => 0.0, 'y' => .1, 'z' => 0.0, 'yaw' => 0.0];
 
-	// With the sun overhead the shadow lies straight under the car, as dark as it gets.
-	$noon = GroundShadow::shape($parked, 0.0, [0.0, 1.0, 0.0]);
-	expect(near($noon['throw'][0], 0) && near($noon['throw'][1], 0), 'An overhead sun throws no shadow sideways');
-	expect(near($noon['shade'][0], GroundShadow::SUN) && near($noon['shade'][1], GroundShadow::CONTACT),
-		'A car on the ground at noon casts the full sun and contact shadows');
-	[$a0, $a1, $c0, $c1] = $noon['extent'];
-	expect(near($a0 + $a1, 2 * GroundShadow::CENTRE) && near($c0, -$c1)
-		&& $a1 > TerrainSandbox\Car::BODY_FRONT + $noon['shade'][3] && -$a0 > TerrainSandbox\Car::BODY_REAR + $noon['shade'][3]
-		&& $c1 > TerrainSandbox\Car::BODY_HALF_WIDTH + $noon['shade'][3], 'The extent covers the body and its soft edge');
+	// On the ground the patch is a soft dark area between the wheels, the same whichever way the car faces.
+	$standing = GroundShadow::shape($parked, 0.0);
+	$shade = $standing['shade'];
+	expect(near($shade[0], GroundShadow::STRENGTH), 'A car on the ground darkens its patch fully');
+	[$a0, $a1, $c0, $c1] = $standing['extent'];
+	expect(near($a0, -$a1) && near($c0, -$c1), 'The patch is centred between the axles');
+	expect(near(GroundShadow::darkness($shade, 0, 0), GroundShadow::STRENGTH), 'It is darkest under the middle of the car');
+	$halfBase = Car::WHEELBASE / 2;
+	$tyres = [[$halfBase, Car::FRONT_TRACK / 2], [$halfBase, -Car::FRONT_TRACK / 2], [-$halfBase, Car::REAR_TRACK / 2],
+		[-$halfBase, -Car::REAR_TRACK / 2]];
+	$atTyres = max(array_map(static fn(array $at) => GroundShadow::darkness($shade, ...$at), $tyres));
+	$underTyres = min(array_map(static fn(array $at) => GroundShadow::darkness($shade, ...$at), $tyres));
+	expect($underTyres > .05 * GroundShadow::STRENGTH && $atTyres < .2 * GroundShadow::STRENGTH,
+		"It has mostly faded where the tyres touch the ground ($underTyres to $atTyres)");
+	$side = GroundShadow::darkness($shade, 0, Car::REAR_TRACK / 2);
+	$axle = GroundShadow::darkness($shade, $halfBase, 0);
+	expect(min($side, $axle) > .2 * GroundShadow::STRENGTH && max($side, $axle) < .5 * GroundShadow::STRENGTH,
+		"At the middle of each wheel line some of it remains ($side, $axle)");
+	expect(GroundShadow::darkness($shade, $halfBase + .26, 0) === 0.0
+		&& GroundShadow::darkness($shade, 0, Car::REAR_TRACK / 2 + .26) === 0.0
+		&& Car::REAR_TRACK / 2 + .26 < Car::BODY_HALF_WIDTH + .15 && $halfBase + .26 < Car::BODY_REAR,
+		'It is gone just past the wheels, under the sills and the overhangs');
+	expect($a1 >= GroundShadow::HALF_LENGTH + $shade[2] && $c1 >= GroundShadow::HALF_WIDTH + $shade[2]
+		&& $a1 < $halfBase + .5 && $c1 < Car::REAR_TRACK / 2 + .5, 'The grid covers the fade and little more');
+	$fading = true;
+	for($r = 0.0; $r <= 1.5; $r += .05)
+		$fading = $fading && GroundShadow::darkness($shade, $r, 0) >= GroundShadow::darkness($shade, $r + .05, 0)
+			&& GroundShadow::darkness($shade, 0, $r) >= GroundShadow::darkness($shade, 0, $r + .05);
+	expect($fading, 'It only ever fades outwards');
 
-	// A low sun from +X throws the shadow towards -X, which is the car's -across side when it faces +Z.
-	$low = GroundShadow::shape($parked, 0.0, [cos(.35), sin(.35), 0.0]);
-	expect($low['throw'][1] < -2 && abs($low['throw'][0]) < 1e-9, 'A low sun throws the shadow away from itself');
-	expect($low['extent'][2] < $low['throw'][1] - GroundShadow::HALF_WIDTH, 'The extent reaches the far end of the throw');
-	$setting = GroundShadow::shape($parked, 0.0, [cos(.02), sin(.02), 0.0]);
-	expect(near(hypot(...$setting['throw']), GroundShadow::LONGEST), 'A setting sun stretches the shadow no farther than the cap');
-	// Turning the car carries the throw round in its frame: the world direction stays away from the sun.
-	$turned = GroundShadow::shape(['yaw' => M_PI / 2] + $parked, 0.0, [cos(.35), sin(.35), 0.0]);
-	expect($turned['throw'][0] < -2 && abs($turned['throw'][1]) < 1e-9, 'Facing +X, the sun behind throws the shadow ahead');
-
-	// After sunset only the contact shadow stays.
-	$night = GroundShadow::shape($parked, 0.0, [.3, -.2, .93]);
-	expect($night['shade'][0] === 0.0 && near($night['shade'][1], GroundShadow::CONTACT),
-		'Below the horizon the sun casts nothing and the contact shadow stays');
-
-	// In the air the shadow fades and softens with height above the ground.
-	$jump = GroundShadow::shape(['y' => 4.0] + $parked, 0.0, [0.0, 1.0, 0.0]);
-	expect($jump['shade'][1] < .25 * GroundShadow::CONTACT && $jump['shade'][3] > 1.5 * $noon['shade'][3],
-		'A car 4 m up leaves a fainter, softer shadow');
-	$high = GroundShadow::shape(['y' => 25.0] + $parked, 0.0, [0.0, 1.0, 0.0]);
-	expect($high['shade'][1] < .005 && $high['shade'][2] <= 1.5 && $high['shade'][3] <= 1.5,
-		'High enough, the car leaves no shadow, and the softness stays bounded');
-	// The shadow measures height from the ground under the car, not from zero.
-	$hill = GroundShadow::shape(['y' => 30.1] + $parked, 30.0, [0.0, 1.0, 0.0]);
-	expect(near($hill['shade'][1], GroundShadow::CONTACT), 'On a hill top the car still stands on its shadow');
+	// In the air it grows fainter and wider, measured from the ground under the car.
+	$jump = GroundShadow::shape(['y' => 4.0] + $parked, 0.0);
+	expect($jump['shade'][0] < .25 * GroundShadow::STRENGTH && $jump['shade'][2] > $shade[2] && $jump['extent'][1] > $a1,
+		'A car 4 m up leaves a fainter, wider patch');
+	$high = GroundShadow::shape(['y' => 25.0] + $parked, 0.0);
+	expect($high['shade'][0] < .005 && $high['extent'][1] === GroundShadow::shape(['y' => 9.0] + $parked, 0.0)['extent'][1],
+		'High enough it is gone, and it stops widening');
+	$hill = GroundShadow::shape(['y' => 30.1] + $parked, 30.0);
+	expect(near($hill['shade'][0], GroundShadow::STRENGTH), 'On a hill top the car still stands on its patch');
 
 	// The grid covers the extent at any heading.
 	foreach([0.0, .4, M_PI / 2, 2.5, -1.1] as $yaw)
 	{
 		$pose = ['x' => 13.3, 'z' => -7.9, 'yaw' => $yaw];
-		$extent = GroundShadow::shape($pose + $parked, 0.0, [cos(.4), sin(.4), .2])['extent'];
+		$extent = GroundShadow::shape($pose + $parked, 0.0)['extent'];
 		[$i, $j, $columns, $rows] = GroundShadow::grid($pose, $extent);
 		$s = sin($yaw); $c = cos($yaw);
 		$inside = true;
@@ -125,11 +130,10 @@ namespace
 	$land = $session->landscape;
 	$camera = $session->camera;
 	$camera->position = [3.0, 12.0, -9.0];
-	$sun = [cos(.5), sin(.5), .1];
 	$shadow = new GroundShadow;
 	$pose = ['x' => 10.2, 'y' => $land->height(10.2, 20.4) + .1, 'z' => 20.4, 'yaw' => .3];
-	$first = $shadow->draw($pose, $land, $sun, $camera, 1280, 720);
-	[, , $columns, $rows] = GroundShadow::grid($pose, GroundShadow::shape($pose, $land->height(10.2, 20.4), $sun)['extent']);
+	$first = $shadow->draw($pose, $land, $camera, 1280, 720);
+	[, , $columns, $rows] = GroundShadow::grid($pose, GroundShadow::shape($pose, $land->height(10.2, 20.4))['extent']);
 	expect($first === $columns * $rows + 1, 'The first frame looks up every grid point once, and the centre');
 	expect(count($gl['draws']) === 1 && $gl['draws'][0] === 6 * ($columns - 1) * ($rows - 1), 'It draws the whole grid');
 	$points = array_chunk(array_values(unpack('g*', $gl['vertices'])), 3);
@@ -143,16 +147,19 @@ namespace
 		'It leaves blending off, depth writes on and the depth test at LESS');
 	expect(near($gl['uniforms']['uOrigin'][0], 7.2, 1e-6) && near($gl['uniforms']['uOrigin'][1], 29.4, 1e-6),
 		'The shadow centres on the car, relative to the eye');
+	expect($gl['uniforms']['uHalf'] === [GroundShadow::HALF_LENGTH, GroundShadow::HALF_WIDTH]
+		&& $gl['uniforms']['uShade'] === GroundShadow::shape($pose, $land->height(10.2, 20.4))['shade'],
+		'The shader gets the footprint and the shade that darkness() describes');
 
-	expect($shadow->draw($pose, $land, $sun, $camera, 1280, 720) === 1, 'A parked car looks up only the ground at its centre');
+	expect($shadow->draw($pose, $land, $camera, 1280, 720) === 1, 'A parked car looks up only the ground at its centre');
 	$moved = ['x' => $pose['x'] + GroundShadow::SPACING] + $pose;
-	$step = $shadow->draw($moved, $land, $sun, $camera, 1280, 720);
+	$step = $shadow->draw($moved, $land, $camera, 1280, 720);
 	expect($step - 1 <= $rows + 1, "Moving one grid step looks up at most one new column ($step)");
 
 	// An edit, or another landscape, starts the heights again.
 	$land->queue(['type' => 'raise', 'x' => 10, 'z' => 20, 'radius' => 6, 'amount' => 3]);
 	$land->commit();
-	expect($shadow->draw($moved, $land, $sun, $camera, 1280, 720) > $columns * $rows / 2, 'An edited landscape is looked up again');
+	expect($shadow->draw($moved, $land, $camera, 1280, 720) > $columns * $rows / 2, 'An edited landscape is looked up again');
 	$points = array_chunk(array_values(unpack('g*', $gl['vertices'])), 3);
 	$fits = true;
 	foreach($points as [$x, $y, $z]) $fits = $fits && near($y, $land->height($x + 3.0, $z - 9.0) + .03 - 12.0, 1e-4);
@@ -160,7 +167,7 @@ namespace
 
 	// High in the air the car leaves nothing to draw.
 	$draws = count($gl['draws']);
-	$shadow->draw(['y' => $pose['y'] + 30] + $pose, $land, $sun, $camera, 1280, 720);
+	$shadow->draw(['y' => $pose['y'] + 30] + $pose, $land, $camera, 1280, 720);
 	expect(count($gl['draws']) === $draws, 'A car 30 m up draws no shadow');
 	$shadow->close();
 	$session->close();

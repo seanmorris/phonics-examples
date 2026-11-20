@@ -8,26 +8,29 @@ use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 
 /**
- * A soft shadow on the ground under the car. It darkens what the terrain pass drew by multiplying it, through a
- * small world-aligned grid that takes the terrain's own heights. Each grid point's height is looked up once and kept,
- * so a parked car costs no lookups and a moving one only the points it reaches.
+ * A soft dark patch on the ground under the car, between its wheels, so it reads as standing on the ground. It is
+ * darkest under the middle of the car and fades out by the wheels, the same at any hour and from any sun. A car in
+ * the air leaves a fainter, wider patch, and none from about 12 m up.
  *
- * Two shadows combine. A contact shadow darkens the ground under and just around the body at any hour. The sun's
- * shadow sweeps the footprint away from the sun by the roof's throw, and fades as the sun sets. A car in the air
- * leaves lighter, softer shadows on the ground below.
+ * It darkens what the terrain pass drew by multiplying it, through a small world-aligned grid that takes the
+ * terrain's own heights. Each grid point's height is looked up once and kept, so a parked car costs no lookups and a
+ * moving one only the points it reaches.
  */
 final class GroundShadow
 {
 	/**
-	 * The car's body box, from Car: half its length and width, how far its middle sits ahead of the midpoint between
-	 * the axles, and its height, which sets how far the sun throws the shadow. All in metres.
+	 * Half the length and width of the patch's footprint, in metres: the wheelbase and the wider (rear) track, centred
+	 * between the axles, with corners rounded by CORNER.
 	 */
-	public const HALF_LENGTH = (Car::BODY_FRONT + Car::BODY_REAR) / 2, HALF_WIDTH = Car::BODY_HALF_WIDTH,
-		CENTRE = (Car::BODY_FRONT - Car::BODY_REAR) / 2, ROOF = Car::BODY_HEIGHT;
-	/** Longest throw of the sun's shadow away from the car, in metres, so a setting sun cannot stretch it without end. */
-	public const LONGEST = 3.0;
-	/** Fractions of the ground's light the sun's shadow and the contact shadow remove at their darkest. */
-	public const SUN = .55, CONTACT = .45;
+	public const HALF_LENGTH = Car::WHEELBASE / 2, HALF_WIDTH = Car::REAR_TRACK / 2, CORNER = .3;
+	/** Share of the ground's light the patch removes under the middle of the car. */
+	public const STRENGTH = .6;
+	/**
+	 * How far inside the footprint's edge the fade starts, and how far outside it ends, in metres. The patch keeps
+	 * about 30% of its strength at the middle of each wheel line and 9 to 12% under the tyres. It is gone 0.25 m
+	 * outside them, under the sills and the overhangs.
+	 */
+	public const FADE_IN = .45, FADE_OUT = .25;
 	/** Grid spacing in metres. */
 	public const SPACING = .75;
 	/** Most heights kept before the cache starts again. */
@@ -70,24 +73,15 @@ final class GroundShadow
 		#version 300 es
 		precision highp float;
 		in vec2 vLocal;
-		uniform vec3 uBody;   // half the body's length and width, and how far its middle sits ahead of the car's centre
-		uniform vec2 uThrow;  // how far the sun throws the roof's shadow, in the car's frame
-		uniform vec4 uShade;  // sun and contact strengths, then the sun's and the contact's edge softness in metres
+		uniform vec2 uHalf;   // half the footprint's length and width
+		uniform vec3 uShade;  // strength, then how far inside and outside the footprint's edge the fade runs, in metres
 		out vec4 color;
-		// Cover of a rounded footprint grown by `grow`, soft over a band either side of its edge.
-		float cover(vec2 p, float grow, float soft)
-		{
-			vec2 q = abs(p - vec2(uBody.z, 0.0)) - uBody.xy - grow + 0.45;
-			float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.45;
-			return 1.0 - smoothstep(-soft, soft, d);
-		}
 		void main()
 		{
-			// The body's shadow runs from its foot to the roof's, so sweep the footprint along the throw.
-			float sun = 0.0;
-			for(int i = 0; i <= 6; i++) sun = max(sun, cover(vLocal - uThrow * (float(i) / 6.0), -0.1, uShade.z));
-			float contact = cover(vLocal, 0.0, uShade.w);
-			color = vec4(vec3((1.0 - uShade.x * sun) * (1.0 - uShade.y * contact)), 1.0);
+			// Signed distance from the footprint's rounded edge; GroundShadow::darkness() mirrors this.
+			vec2 q = abs(vLocal) - uHalf + CORNER;
+			float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - CORNER;
+			color = vec4(vec3(1.0 - uShade.x * (1.0 - smoothstep(-uShade.y, uShade.z, d))), 1.0);
 		}
 		GLSL;
 
@@ -95,7 +89,8 @@ final class GroundShadow
 	public function __construct()
 	{
 		$this->program = new Program(str_replace(['PULL_LIMIT', 'PULL'],
-			[sprintf('%.3f', self::PULL_LIMIT), sprintf('%.3f', self::PULL)], self::VERTEX), self::FRAGMENT);
+			[sprintf('%.3f', self::PULL_LIMIT), sprintf('%.3f', self::PULL)], self::VERTEX),
+			str_replace('CORNER', sprintf('%.3f', self::CORNER), self::FRAGMENT));
 		glGenVertexArrays(1, $this->vao);
 		glBindVertexArray($this->vao[0]);
 		glGenBuffers(2, $this->buffers);
@@ -107,37 +102,37 @@ final class GroundShadow
 	}
 
 	/**
-	 * Work out where the shadow lies and how dark it is.
-	 * @param array $pose The car's x, y, z and yaw as drawn.
+	 * Work out how far the patch reaches and how dark it is.
+	 * @param array $pose The car's y as drawn.
 	 * @param float $ground Terrain height under the car's centre.
-	 * @param array $sun Unit vector towards the sun.
 	 * @return array The extent to cover in the car's frame (along from and to, across from and to, from the midpoint
-	 *   between the axles), the sun's throw in that frame, and the sun and contact strengths and softnesses.
+	 *   between the axles), and the shade: strength, and how far inside and outside the edge the fade runs.
 	 */
-	public static function shape(array $pose, float $ground, array $sun): array
+	public static function shape(array $pose, float $ground): array
 	{
-		$s = sin($pose['yaw']); $c = cos($pose['yaw']);
-		// The sun throws the roof's shadow away from itself, farther the lower it stands.
-		$height = max(.15, $sun[1]);
-		$throwX = -$sun[0] / $height * self::ROOF; $throwZ = -$sun[2] / $height * self::ROOF;
-		$length = sqrt($throwX * $throwX + $throwZ * $throwZ);
-		if($length > self::LONGEST) { $throwX *= self::LONGEST / $length; $throwZ *= self::LONGEST / $length; }
-		$along = $throwX * $s + $throwZ * $c; $across = $throwX * $c - $throwZ * $s;
-		// A car in the air leaves lighter, softer shadows, and none from about ten metres up.
+		// In the air the patch grows fainter and wider: gone from about 12 m up, and no wider than 4 m up makes it.
 		$lift = max(0.0, $pose['y'] - $ground - .25);
-		$fade = exp(-$lift / 2.5);
-		$sunSoft = min(1.5, .12 + .3 * $lift); $contactSoft = min(1.5, .4 + .3 * $lift);
-		// Daylight sets the sun's shadow. Below the horizon only the contact shadow stays.
-		$daylight = max(0.0, min(1.0, $sun[1] / .12));
-		$margin = 1.2 * max($sunSoft, $contactSoft) + .1;
+		$spread = min(4.0, $lift);
+		$shade = [self::STRENGTH * exp(-$lift / 2.5), self::FADE_IN + .2 * $spread, self::FADE_OUT + .4 * $spread];
+		$along = self::HALF_LENGTH + $shade[2] + .05; $across = self::HALF_WIDTH + $shade[2] + .05;
 
-		return [
-			'extent' => [self::CENTRE + min(0.0, $along) - self::HALF_LENGTH - $margin,
-				self::CENTRE + max(0.0, $along) + self::HALF_LENGTH + $margin,
-				min(0.0, $across) - self::HALF_WIDTH - $margin, max(0.0, $across) + self::HALF_WIDTH + $margin],
-			'throw' => [$along, $across],
-			'shade' => [self::SUN * $daylight * $fade, self::CONTACT * $fade, $sunSoft, $contactSoft],
-		];
+		return ['extent' => [-$along, $along, -$across, $across], 'shade' => $shade];
+	}
+
+	/**
+	 * How much light the patch removes at a point, as the fragment shader works it out.
+	 * @param array $shade The shade from shape().
+	 * @param float $along Distance ahead of the midpoint between the axles, in metres.
+	 * @param float $across Distance to the side of it, in metres.
+	 * @return float Share of the ground's light removed, from 0 to the strength.
+	 */
+	public static function darkness(array $shade, float $along, float $across): float
+	{
+		$qx = abs($along) - self::HALF_LENGTH + self::CORNER; $qy = abs($across) - self::HALF_WIDTH + self::CORNER;
+		$d = hypot(max($qx, 0.0), max($qy, 0.0)) + min(max($qx, $qy), 0.0) - self::CORNER;
+		$t = max(0.0, min(1.0, ($d + $shade[1]) / ($shade[1] + $shade[2])));
+
+		return $shade[0] * (1 - $t * $t * (3 - 2 * $t));
 	}
 
 	/**
@@ -164,13 +159,12 @@ final class GroundShadow
 	 * Darken the ground under the car. Call it from the scene's opaque pass, after the terrain and before the car.
 	 * @param array $pose The car's x, y, z and yaw as drawn.
 	 * @param Landscape $land Ground under the car.
-	 * @param array $sun Unit vector towards the sun.
 	 * @param Camera $camera The drawing camera.
 	 * @param int $width Drawing-buffer width.
 	 * @param int $height Drawing-buffer height.
 	 * @return int Terrain heights looked up for this frame.
 	 */
-	public function draw(array $pose, Landscape $land, array $sun, Camera $camera, int $width, int $height): int
+	public function draw(array $pose, Landscape $land, Camera $camera, int $width, int $height): int
 	{
 		if($land !== $this->land || $land->revision() !== $this->revision || count($this->heights) > self::CACHE)
 		{
@@ -178,8 +172,8 @@ final class GroundShadow
 			$this->land = $land;
 			$this->revision = $land->revision();
 		}
-		$shape = self::shape($pose, $land->height($pose['x'], $pose['z']), $sun);
-		if($shape['shade'][1] < .005) return 1;
+		$shape = self::shape($pose, $land->height($pose['x'], $pose['z']));
+		if($shape['shade'][0] < .005) return 1;
 		[$i0, $j0, $columns, $rows] = self::grid($pose, $shape['extent']);
 		[$ex, $ey, $ez] = $camera->position;
 		$half = $land->recipe()['worldSize'] / 2;
@@ -220,9 +214,8 @@ final class GroundShadow
 		glUniformMatrix4fv($p->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
 		glUniform2f($p->location('uOrigin'), $pose['x'] - $ex, $pose['z'] - $ez);
 		glUniform2f($p->location('uAxis'), sin($pose['yaw']), cos($pose['yaw']));
-		glUniform3f($p->location('uBody'), self::HALF_LENGTH, self::HALF_WIDTH, self::CENTRE);
-		glUniform2f($p->location('uThrow'), ...$shape['throw']);
-		glUniform4f($p->location('uShade'), ...$shape['shade']);
+		glUniform2f($p->location('uHalf'), self::HALF_LENGTH, self::HALF_WIDTH);
+		glUniform3f($p->location('uShade'), ...$shape['shade']);
 		glEnable(GL_BLEND);
 		glBlendFuncSeparate(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE);
 		glDepthMask(false);
