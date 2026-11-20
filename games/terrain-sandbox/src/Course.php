@@ -75,7 +75,8 @@ final class Course
 	 *
 	 * A finish gate placed within one start gate width of the start gate is not added: the start gate becomes the
 	 * course's start / finish gate, and any finish gate standing elsewhere goes. A start gate placed within its own
-	 * width of the finish gate does the same. A gate whose span would overlap another gate's is refused.
+	 * width of the finish gate does the same. Both distances run between gate origins after the fit to the ground. A
+	 * gate whose span would overlap another gate's is refused.
 	 * @param string $role start, checkpoint or finish.
 	 * @param string $kind road, water or air.
 	 * @param float $x World X of the gate origin in metres.
@@ -109,19 +110,20 @@ final class Course
 		if($role === 'checkpoint' && count($this->checkpoints) >= self::MAX_CHECKPOINTS)
 			return ['refused' => 'full'] + $result;
 		$existing = $role === 'start' ? $this->start : ($role === 'finish' ? $this->finish : null);
+		// The candidate measures as a new gate until it takes its place, so nothing reads the gate it replaces.
+		$gate = ['id' => 0, 'role' => $role, 'kind' => $kind,
+			'x' => $x, 'y' => $y, 'z' => $z, 'yaw' => $yaw, 'width' => $width, 'height' => $height];
+		$gate = $this->fit($gate, $ground);
 		// A finish gate this close to the start gate would be passed straight after the start, or rocked through.
-		$near = static fn(array $other, float $distance): bool
-			=> sqrt(($x - $other['x']) ** 2 + ($y - $other['y']) ** 2 + ($z - $other['z']) ** 2) < $distance;
+		// Both stand where the fit put them: a road gate on a hump rises above the ground the click hit.
+		$near = static fn(array $other, float $distance): bool => sqrt(($gate['x'] - $other['x']) ** 2
+			+ ($gate['y'] - $other['y']) ** 2 + ($gate['z'] - $other['z']) ** 2) < $distance;
 		if($role === 'finish' && $this->start !== null && $near($this->start, $this->start['width']))
 		{
 			$removed = $this->finish;
 			if($removed !== null) $this->remove($removed['id']);
 			return ['gate' => $this->pose($this->start), 'merged' => true, 'removed' => $removed] + $result;
 		}
-		// The candidate measures as a new gate until it takes its place, so nothing reads the gate it replaces.
-		$gate = ['id' => 0, 'role' => $role, 'kind' => $kind,
-			'x' => $x, 'y' => $y, 'z' => $z, 'yaw' => $yaw, 'width' => $width, 'height' => $height];
-		$gate = $this->fit($gate, $ground);
 		$merge = $role === 'start' && $this->finish !== null && $near($this->finish, $width);
 		$ignore = array_filter([$existing['id'] ?? null, $merge ? $this->finish['id'] : null]);
 		foreach($this->gates(false) as $other)

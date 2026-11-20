@@ -373,6 +373,24 @@ expect($moved['merged'] && $moved['moved'] && $course->finish() === null && $cou
 $wideStart = new Course;
 $wideStart->place('start', 'road', 0, 0, 0, 0, 1, 60.0, 4.0);
 expect($wideStart->place('finish', 'road', 50, 0, 20, 0)['merged'], 'One gate width is the start gate\'s own width');
+// A boulder 12 m tall under the start gate's +X post raises the gate 12 m above the click. A finish clicked on the
+// ground 1.2 m behind it stands on the same boulder once fitted, so it merges, and a race cannot finish by rocking
+// through both gates.
+$boulder = static fn(float $x, float $z): float => 12 * max(0.0, 1 - abs($x - 3.4) / 2);
+$course = new Course;
+$start = $course->place('start', 'road', 0, 0, 0, 0, 1, 6.0, 3.0, $boulder)['gate'];
+$merged = $course->place('finish', 'road', 0, 0, -1.2, 0, 1, 6.0, 3.0, $boulder);
+expect(near($start['y'], 12.0) && $merged['merged'] && $course->finish() === null,
+	'A finish behind a start gate raised by a boulder merges into it: '
+		. json_encode([$start['y'], $merged['merged']]));
+$slope = static fn(float $x, float $z): float => 2 * $x;
+$course = new Course;
+$course->place('start', 'road', 0, 0, 0, 0, 1, null, null, $slope);
+expect($course->place('finish', 'road', 0, 0, -1.2, 0, 1, null, null, $slope)['merged'],
+	'A finish 1.2 m behind the start gate on ground rising 2 m in 1 across it merges into the start gate');
+$course->place('finish', 'road', 0, 0, -40, 0, 1, null, null, $slope);
+expect($course->place('start', 'road', 0, 0, -38.8, 0, 1, null, null, $slope)['merged'],
+	'Moving the start gate 1.2 m in front of the finish gate on that slope merges them too');
 
 // Overlap. A gate whose span meets another's is refused, and the course stays as it was.
 $course = new Course;
