@@ -41,6 +41,26 @@ final class CarLamps
 	}
 
 	/**
+	 * Light or put out the headlamps and open or close the pods at once, for a paused car whose switch changes. The
+	 * brake and reversing lamps keep their levels.
+	 * @param bool $headlights Whether the headlights are switched on.
+	 * @return bool Whether the headlamps or the pods changed.
+	 */
+	public function snap(bool $headlights): bool
+	{
+		$level = $headlights ? 1.0 : 0.0;
+		$changed = false;
+
+		foreach(['headlamps', 'pods'] as $part)
+		{
+			$changed = $changed || $this->now[$part] !== $level || $this->before[$part] !== $level;
+			$this->now[$part] = $this->before[$part] = $level;
+		}
+
+		return $changed;
+	}
+
+	/**
 	 * Read the lamps between the last two steps.
 	 * @param float $alpha Fraction of the way from the previous step to the latest, from 0 to 1.
 	 * @return array Levels from 0 (dark) to 1 (full): 'brake', 'reverse' and 'headlamps', which the tail lamps also

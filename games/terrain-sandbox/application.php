@@ -140,9 +140,11 @@ $engine->start(
 		};
 		// Lamp levels blend between steps like the pose, and a change in either redraws the frame below.
 		if($session->mode === 'car') $vehiclePose['lamps'] = $session->carLamps($alpha);
-		// Lit headlamps light the ground and water from this frame's pose; dark lamps and other modes clear the lights.
+		// Lit headlamps light the ground and water from this frame's pose once the sun has set. Daylight, dark lamps
+		// and other modes clear the lights.
 		$lights = $session->mode === 'car' ? VehicleModel::spotLights(
-			$carLamps ??= VehicleModel::lamps(__DIR__ . '/assets/testarossa/mesh.bin.gz'), $vehiclePose) : [];
+			$carLamps ??= VehicleModel::lamps(__DIR__ . '/assets/testarossa/mesh.bin.gz'), $vehiclePose,
+			$session->atmosphere->uniforms()['nightVisibility']) : [];
 		if($lights !== $spotLights)
 		{
 			$scene->setSpotLights($spotLights = $lights);

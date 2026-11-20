@@ -324,9 +324,37 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 	await expect(headlights).toHaveValue('on');
 	expect((await status(page)).message).toBe('Headlights on.');
 	await expect.poll(async() => (await status(page)).lamps.pods, {timeout: 60_000}).toBe(1);
-	// Each open headlamp lights the ground as one of the renderer's spot lights.
-	expect((await status(page)).renderer.spotLights).toBe(2);
+	// By day the beams would make no visible difference, so the renderer gets no spot lights.
+	expect((await status(page)).renderer.spotLights).toBe(0);
 	expect(await page.evaluate(() => localStorage.getItem('terrain-sandbox.car'))).toBe('{"headlights":"on"}');
+
+	// Below the horizon each open headlamp lights the ground as one of the renderer's spot lights.
+	await page.locator('.terrain-sandbox [data-value="elevation"]').evaluate(element => {
+		element.value = -12;
+		element.dispatchEvent(new Event('input', {bubbles: true}));
+	});
+
+	await expect.poll(async() => (await status(page)).renderer.spotLights, {timeout: 30_000}).toBe(2);
+
+	// While paused, the switch opens and closes the pods at once.
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status(page)).paused).toBe(true);
+
+	const lit = async() => {
+		const {paused, headlights: setting, lamps, renderer} = await status(page);
+
+		return [paused, setting, lamps.headlamps, lamps.pods, renderer.spotLights];
+	};
+
+	await page.keyboard.press('l');
+	await expect.poll(lit).toEqual([true, 'off', 0, 0, 0]);
+	await page.keyboard.press('l');
+	await expect.poll(lit).toEqual([true, 'auto', 1, 1, 2]);
+	await page.keyboard.press('l');
+	await expect.poll(lit).toEqual([true, 'on', 1, 1, 2]);
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status(page)).paused).toBe(false);
+	await expect(headlights).toHaveValue('on');
 
 	await page.reload();
 	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});

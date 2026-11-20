@@ -159,6 +159,7 @@ final class Session
 	{
 		$this->keys = is_array($input['keys'] ?? null) ? $input['keys'] : [];
 		$this->pad = self::readPad($input['pad'] ?? null);
+		$switch = [$this->headlights, $this->headlightsLit()];
 		try
 		{
 			$wasPicking = $this->picking;
@@ -189,6 +190,7 @@ final class Session
 			$this->message = $error->getMessage();
 			$this->dirty = true;
 		}
+		$this->showPausedHeadlights($switch);
 		$this->guardRace();
 		$look = $input['look'] ?? [0,0];
 		if($this->mode === 'fly' && (($look[0] ?? 0) != 0 || ($look[1] ?? 0) != 0))
@@ -413,7 +415,8 @@ final class Session
 	/**
 	 * Set the car's headlight switch.
 	 * @param mixed $value 'auto', 'on' or 'off'.
-	 * @return void Says what the switch now does while the car is driven, whose lamps follow from the next step.
+	 * @return void Says what the switch now does while the car is driven. Its lamps follow from the next step, or at
+	 * once while the game is paused (showPausedHeadlights()).
 	 */
 	private function setHeadlights(mixed $value): void
 	{
@@ -422,6 +425,17 @@ final class Session
 		$this->headlights = $value;
 		if($this->mode === 'car') $this->message = $this->headlightMessage();
 		$this->dirty = true;
+	}
+
+	/**
+	 * Show a change of the headlight switch on a paused car, which takes no steps to move its lamps.
+	 * @param array $before The switch and whether it lit the headlights before this input, as [position, lit].
+	 * @return void Snaps the headlamps and pods to what the switch, or the sun on Auto, now asks for.
+	 */
+	private function showPausedHeadlights(array $before): void
+	{
+		if($this->paused && $this->mode === 'car' && $before !== [$this->headlights, $this->headlightsLit()]
+			&& $this->lamps->snap($this->headlightsLit())) $this->dirty = true;
 	}
 
 	/** Describe the headlight switch's position. */
@@ -879,7 +893,8 @@ final class Session
 
 	/**
 	 * Read the car's lamps at the engine's presentation time, for drawing beside carView().
-	 * @param float $alpha Fraction of the latest fixed step to show. A paused car shows the step it stopped on.
+	 * @param float $alpha Fraction of the latest fixed step to show. A paused car shows the step it stopped on, with
+	 * the headlamps and pods of any change to the headlight switch since.
 	 * @return array Lamp levels and the pods' opening as CarLamps::view() gives them.
 	 */
 	public function carLamps(float $alpha): array

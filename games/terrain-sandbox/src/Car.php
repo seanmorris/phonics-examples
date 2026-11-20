@@ -131,6 +131,14 @@ final class Car
 		bool $handbrake = false, array $posts = []): bool
 	{
 		$supported = $this->drive($dt, $throttle, $turn, $land, $waterLevel, $handbrake, $posts);
+		if($this->tumble !== null)
+		{
+			// A tumbling or overturned wreck rocks about zero speed, so the rule below would swap its rear lamps.
+			// Its brake lamps follow the brake pedal and the handbrake alone, and its reversing lamps stay dark.
+			$this->braking = $handbrake || $throttle < 0;
+			$this->reversing = false;
+			return $supported;
+		}
 		// The brake lamps light while the pedal opposes the motion or the handbrake is held, whether or not the tires
 		// grip. The reversing lamps light while the car rolls backwards or the pedal holds reverse at a standstill.
 		$this->braking = $handbrake || $throttle * $this->speed < 0;
