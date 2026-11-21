@@ -4,7 +4,7 @@ namespace TerrainSandbox;
 
 use TerrainPhonics\Landscape;
 
-/** Terrain sight lines from above the car to the centre and corners of the crate lid. */
+/** Terrain sight lines from above the car to the center and corners of the crate lid. */
 final class PickupCover
 {
 	private const EYE = 2.55;
@@ -19,7 +19,7 @@ final class PickupCover
 		$dx = $site['x']-$car['x']; $dz = $site['z']-$car['z'];
 		$distance = hypot($dx,$dz);
 
-		// A few probes usually find the intervening mesa without traversing kilometres of lattice cells.
+		// A few probes usually find the intervening mesa without traversing kilometers of lattice cells.
 		$divisions = max(2.,$distance/($distance <= 384. ? 4. : 24.));
 		for($n=2; $n<=$divisions; $n*=2)
 		{

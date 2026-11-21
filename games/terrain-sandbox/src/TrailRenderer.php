@@ -91,7 +91,7 @@ GLSL);
 		glGenBuffers(2,$this->buffers);
 		glBindVertexArray($this->vao[0]);
 
-		// Each instance covers one travelled segment. Stagger soft billboards along it so it
+		// Each instance covers one traveled segment. Stagger soft billboards along it so it
 		// keeps its volume when seen straight down its length from the cockpit.
 		$shape = '';
 		for($i = 0; $i < self::PUFFS; $i++)

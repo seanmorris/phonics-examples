@@ -272,11 +272,11 @@ final class Text
 	}
 
 	/**
-	 * Place glyph quads for one line whose caps are vertically centred on `$middle`.
+	 * Place glyph quads for one line whose caps are vertically centered on `$middle`.
 	 *
 	 * @param string $text UTF-8 text on one line.
 	 * @param float $x Left edge of the pen in pixels.
-	 * @param float $middle Vertical centre of the capitals in pixels.
+	 * @param float $middle Vertical center of the capitals in pixels.
 	 * @param float $size Em size in pixels.
 	 * @param string $face Face name, body or bold.
 	 * @param float $tracking Extra spacing between characters in em units.

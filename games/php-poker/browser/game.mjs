@@ -1,5 +1,5 @@
 /**
- * Browser bridge for PHP Poker: viewport, keyboard and pointer input, card art rasterisation, status publication
+ * Browser bridge for PHP Poker: viewport, keyboard and pointer input, card art rasterization, status publication
  * and the test/accessibility command queue. It never opens a network connection and never holds a hand.
  */
 
@@ -12,7 +12,7 @@ const SCROLL_KEYS=new Set(['arrowup','arrowdown','pageup','pagedown','home','end
 /** Whether the scrolling How to Play window is open: as the title's screen, over the table, or as PHP Info. */
 const rulesOpen=state=>state?.screen==='help'||(state?.screen==='table'&&state?.ui?.infoDialog==='help')||(state?.screen==='menu'&&state?.ui?.local==='phpinfo');
 
-/** Cell size for the rasterised cards, capped so the atlas crossing into PHP stays under ~8 MB. */
+/** Cell size for the rasterized cards, capped so the atlas crossing into PHP stays under ~8 MB. */
 export function cardCell(dpr)
 {
 	return dpr>1.25?[150,210]:[125,175];
@@ -282,10 +282,10 @@ export function decorateOnlineView(view,{players=[],localPlayer=null,profiles=ne
 }
 
 /**
- * Rasterise the deck sheet and both backs into one RGBA atlas: 9 columns of cells, sheet order first, then red and
+ * Rasterize the deck sheet and both backs into one RGBA atlas: 9 columns of cells, sheet order first, then red and
  * blue backs. Returns the descriptor PHP expects, with the pixels as base64.
  */
-export async function rasteriseCards(art,dpr,{createImage=source=>loadArt(source)}={})
+export async function rasterizeCards(art,dpr,{createImage=source=>loadArt(source)}={})
 {
 	const [cellWidth,cellHeight]=cardCell(dpr),columns=art.columns;
 	// Give the percentage-sized source SVG an intrinsic raster viewport before cropping.
@@ -501,15 +501,15 @@ export function activate({module, canvas, session, services})
 	let described='';
 
 	// Card art arrives from PHP as SVG text. Matrix avatars can append cells and replace the atlas later.
-	let cardArt=null,atlas=null,rasterising=null,rebuildAtlas=false,dynamicIcons={};
+	let cardArt=null,atlas=null,rasterizing=null,rebuildAtlas=false,dynamicIcons={};
 	const requestAtlas=()=>{
 		if(shell.closed||!cardArt)return;
-		if(rasterising){rebuildAtlas=true;return;}
+		if(rasterizing){rebuildAtlas=true;return;}
 		rebuildAtlas=false;
 		const art={...cardArt,icons:{...(cardArt.icons??{}),...dynamicIcons}};
-		rasterising=rasteriseCards(art,JSON.parse(viewport)[2]).then(result=>{atlas=JSON.stringify(result);})
+		rasterizing=rasterizeCards(art,JSON.parse(viewport)[2]).then(result=>{atlas=JSON.stringify(result);})
 			.catch(error=>console.error('Poker card art failed',error)).finally(()=>{
-				rasterising=null;if(rebuildAtlas)requestAtlas();
+				rasterizing=null;if(rebuildAtlas)requestAtlas();
 			});
 	};
 	shell.bridge('pokerCardArt',json=>{

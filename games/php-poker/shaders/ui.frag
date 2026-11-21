@@ -28,7 +28,7 @@ void main() {
 		// Distance fields stay exact under point sampling; averaged mip levels erase strokes thinner than a texel.
 		float distance=textureLod(uFont,vUv,0.0).r;
 		// A bitmap face drawn one or more whole screen pixels per font pixel (radius 1) has its edges on pixel
-		// boundaries, half a pixel from every pixel centre, so a narrow edge leaves each pixel wholly in or out.
+		// boundaries, half a pixel from every pixel center, so a narrow edge leaves each pixel wholly in or out.
 		float width=radius>0.?fwidth(distance)*.3:max(fwidth(distance)*.7,softness);
 		pixel=premultiply(vFill)*smoothstep(.5-width,.5+width,distance);
 		return;

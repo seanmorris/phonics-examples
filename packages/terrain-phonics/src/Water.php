@@ -12,7 +12,7 @@ final class Water implements WaterSurface
 	/** Authored waves and their current amplitude-scaled values used by both samplers. */
 	private array $baseWaves, $waves = [];
 	private float $waveScale = 1.0;
-	/** Wake centres, amplitudes, and creation times. */
+	/** Wake centers, amplitudes, and creation times. */
 	private array $wakes = [];
 	/** Time-dependent wake terms reused by the hull probes within a physics substep. */
 	private ?float $sampleTime = null;
@@ -23,7 +23,7 @@ final class Water implements WaterSurface
 
 	/**
 	 * Construct a water plane with optional explicit waves; an empty list is flat water.
-	 * @param float $level Mean world-space surface height in metres.
+	 * @param float $level Mean world-space surface height in meters.
 	 * @param array $waves Records with amplitude, wavelength, direction [x,z], optional angularSpeed and phase.
 	 * Angular speed defaults to the deep-water dispersion relation sqrt(9.81 * wavenumber).
 	 * @return void Retains validated, normalized parameters for CPU and GPU use.
@@ -99,7 +99,7 @@ final class Water implements WaterSurface
 
 	/**
 	 * Replace the common water level without changing any wave phase.
-	 * @param float $level Mean surface height in metres.
+	 * @param float $level Mean surface height in meters.
 	 * @return void Increments the revision only when the level changes.
 	 */
 	public function setLevel(float $level): void
@@ -115,7 +115,7 @@ final class Water implements WaterSurface
 
 	/**
 	 * Read the common water-plane elevation.
-	 * @return float Mean surface height in metres.
+	 * @return float Mean surface height in meters.
 	 */
 	public function level(): float { return $this->level; }
 
@@ -160,12 +160,12 @@ final class Water implements WaterSurface
 
 	/**
 	 * Add an expanding wave packet; oldest packets are evicted at the fixed capacity.
-	 * @param float $x World X in metres.
-	 * @param float $z World Z in metres.
-	 * @param float $strength Signed amplitude in metres, clamped to two metres.
+	 * @param float $x World X in meters.
+	 * @param float $z World Z in meters.
+	 * @param float $strength Signed amplitude in meters, clamped to two meters.
 	 * @param float $time Creation time in seconds.
-	 * @param float $vx Emitter X velocity for a directional foam trail, in metres per second.
-	 * @param float $vz Emitter Z velocity for a directional foam trail, in metres per second.
+	 * @param float $vx Emitter X velocity for a directional foam trail, in meters per second.
+	 * @param float $vz Emitter Z velocity for a directional foam trail, in meters per second.
 	 * @return void Adds one bounded wake and advances the edit revision.
 	 */
 	public function wake(float $x, float $z, float $strength, float $time, float $vx = 0, float $vz = 0): void
@@ -183,8 +183,8 @@ final class Water implements WaterSurface
 
 	/**
 	 * Evaluate exact heights and first derivatives of the analytic wave field.
-	 * @param float $x World X in metres.
-	 * @param float $z World Z in metres.
+	 * @param float $x World X in meters.
+	 * @param float $z World Z in meters.
 	 * @param float $time Simulation time in seconds.
 	 * @return array{height:float,normal:array,velocity:float,dx:float,dz:float} Height and analytic derivatives.
 	 */
@@ -225,7 +225,7 @@ final class Water implements WaterSurface
 
 		foreach($this->sampleWakes as [$wx,$wz,$strength,$age,$fade,$fadeRate,$outerSquared])
 		{
-			// Smooth radial distance avoids an undefined derivative at the packet centre.
+			// Smooth radial distance avoids an undefined derivative at the packet center.
 			$distanceSquared = ($x - $wx) ** 2 + ($z - $wz) ** 2 + .04;
 			// Beyond this radius exp(-.35 * 48²) already rounds to zero in a double.
 			if($distanceSquared > $outerSquared) continue;

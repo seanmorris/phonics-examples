@@ -5,7 +5,7 @@ namespace TerrainSandbox;
 /** Four unilateral springs and dampers support the chassis in heave, pitch and roll. */
 final class CarSuspension
 {
-	// Static sag and extra bump travel in metres. The mesh is authored at its loaded ride height.
+	// Static sag and extra bump travel in meters. The mesh is authored at its loaded ride height.
 	public const SAG = .13;
 	private const BUMP = .14;
 	// Extra rebound damping fades during the first stroke after all four tires leave the ground.
@@ -88,7 +88,7 @@ final class CarSuspension
 	/** At the end of the spring stroke the wheel transmits an inelastic contact, with no stored extra spring energy. */
 	private function bottomOut(array $roadSpeed, float $elapsed): void
 	{
-		// Combine simultaneous strikes before applying an impulse. A centred bump must not kick one side first.
+		// Combine simultaneous strikes before applying an impulse. A centered bump must not kick one side first.
 		for($pass = 0; $pass < 3; $pass++)
 		{
 			[$rise,$bank,$normalUp] = $this->plane();

@@ -5,12 +5,12 @@ namespace TerrainPhonics;
 /**
  * Perspective flight camera with camera-relative GPU coordinates.
  *
- * World positions remain in metres. Only the rotational view matrix reaches the GPU;
+ * World positions remain in meters. Only the rotational view matrix reaches the GPU;
  * mesh origins subtract the eye before projection to preserve precision during travel.
  */
 final class Camera
 {
-	/** World-space eye position in metres. */
+	/** World-space eye position in meters. */
 	public array $position = [0,700,1600];
 	/** Heading and elevation in radians. */
 	public float $yaw = 0, $pitch = -.22;
@@ -37,7 +37,7 @@ final class Camera
 	 * @param float $right Rightward input, normally -1 to 1.
 	 * @param float $up Vertical input, normally -1 to 1.
 	 * @param float $seconds Elapsed seconds.
-	 * @param float $speed Movement speed in metres per second.
+	 * @param float $speed Movement speed in meters per second.
 	 * @return void Updates world position without changing terrain residency directly.
 	 */
 	public function move(float $forward, float $right, float $up, float $seconds, float $speed): void

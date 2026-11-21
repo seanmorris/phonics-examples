@@ -304,7 +304,7 @@ export function activate({module, canvas})
 			const across = dot(direction, right), down = -dot(direction, up);
 			const forward = dot(direction, nose), radial = Math.hypot(across, down);
 
-			// In front, the projected distance from the centre is focal * radial / forward.
+			// In front, the projected distance from the center is focal * radial / forward.
 			if(forward <= 0 || focal*radial > ring*forward)
 			{
 				const angle = radial < .001 ? Math.PI : Math.atan2(across, -down);

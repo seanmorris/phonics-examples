@@ -7,7 +7,7 @@ use Phonics\Ui\CardSequence;
  *
  * @param callable():bool $ready Gate indicating that the title backdrop can render.
  * @param bool $titleOnly Whether to return directly to the title after leaving the main menu.
- * @return CardSequence Fresh sequence; the caller owns starting, updating, and cancelling it.
+ * @return CardSequence Fresh sequence; the caller owns starting, updating, and canceling it.
  */
 function demoCards(callable $ready, bool $titleOnly = false): CardSequence
 {

@@ -33,21 +33,21 @@ final class Layout
 	/** @var array<string,array<string,mixed>> Design metrics per profile. */
 	private const PROFILES = [
 		'wide' => [
-			'width' => 1280, 'height' => 720, 'centre' => [640,378], 'oval' => [470,250], 'upperStretch' => 24, 'emblemSize' => 32
+			'width' => 1280, 'height' => 720, 'center' => [640,378], 'oval' => [470,250], 'upperStretch' => 24, 'emblemSize' => 32
 			, 'card' => [68,95], 'cardStep' => 30, 'handCard' => [90,126], 'handStep' => 38, 'dialogCard' => [112,157]
 			, 'plateWidth' => 200, 'handPlateWidth' => 250, 'plateLift' => 62, 'handPlateLift' => 90, 'handBankLift' => 14
 			, 'actions' => [790,588], 'actionRows' => false, 'buttonHeight' => 32, 'chipRadius' => 15, 'handChipRadius' => 17
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 680, 'display' => 54
 		]
 		, 'tall' => [
-			'width' => 470, 'height' => 836, 'centre' => [235,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemSize' => 32
+			'width' => 470, 'height' => 836, 'center' => [235,352], 'oval' => [165,260], 'upperStretch' => 6, 'emblemSize' => 32
 			, 'card' => [36,50], 'cardStep' => 16, 'handCard' => [66,92], 'handStep' => 28, 'dialogCard' => [72,101]
 			, 'plateWidth' => 100, 'handPlateWidth' => 190, 'plateLift' => 48, 'handPlateLift' => 70, 'handBankLift' => 24
 			, 'actions' => [16,676], 'actionRows' => true, 'buttonHeight' => 44, 'chipRadius' => 10, 'handChipRadius' => 12
 			, 'menuItem' => [300,52], 'menuTop' => 300, 'dialogWidth' => 418, 'display' => 42
 		]
 		, 'landscape' => [
-			'width' => 900, 'height' => 400, 'centre' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemSize' => 32
+			'width' => 900, 'height' => 400, 'center' => [300,210], 'oval' => [210,115], 'upperStretch' => 12, 'emblemSize' => 32
 			, 'card' => [28,40], 'cardStep' => 12, 'handCard' => [72,101], 'handStep' => 30, 'dialogCard' => [86,120]
 			, 'plateWidth' => 112, 'handPlateWidth' => 192, 'plateLift' => 44, 'handPlateLift' => 70, 'handBankLift' => 0
 			, 'actions' => [568,250], 'actionRows' => false, 'buttonHeight' => 52, 'chipRadius' => 9, 'handChipRadius' => 11
@@ -96,7 +96,7 @@ final class Layout
 		if($cards !== 5 || $board !== 0)
 		{
 			$layout = clone $layout;
-			$layout->handCards = $cards; $layout->boardCards = $board; $layout->centreMemo = null;
+			$layout->handCards = $cards; $layout->boardCards = $board; $layout->centerMemo = null;
 		}
 		return self::$fitted[$key] = $layout;
 	}
@@ -109,7 +109,7 @@ final class Layout
 	/**
 	 * Place a hand of the table's size inside the five slots a seat was composed for.
 	 *
-	 * Five cards fill the slots exactly. Fewer spread apart, up to a small gap between whole cards, and are centred
+	 * Five cards fill the slots exactly. Fewer spread apart, up to a small gap between whole cards, and are centered
 	 * in the fan, so both hold'em cards show in full; more share the fan's width with a tighter overlap, so a
 	 * seven-card stud hand is no wider than a draw hand.
 	 *
@@ -173,7 +173,7 @@ final class Layout
 		if($profile === 'tall')
 		{
 			// When the responsive field gains room, let the cards and chips share a little of it. The identity
-			// emblems remain 32x32, and the modest cap still leaves a useful centre lane at a full table.
+			// emblems remain 32x32, and the modest cap still leaves a useful center lane at a full table.
 			$widthRoom = min(1, max(0, ($design['width'] - 470) / 230));
 			$heightRoom = min(1, max(0, ($design['height'] - 836) / 264));
 			$growth = 1 + min(.18, .28 * max($widthRoom, $heightRoom));
@@ -275,7 +275,7 @@ final class Layout
 
 	/**
 	 * Whether any two things on the oval that should stand apart overlap: seat blocks with each other, with the
-	 * centre cluster, with the action lane or with the edge of the field.
+	 * center cluster, with the action lane or with the edge of the field.
 	 */
 	private function collides(): bool
 	{
@@ -308,11 +308,11 @@ final class Layout
 		}
 		foreach($parts as $a => $first) foreach($parts as $b => $second) if($a < $b)
 			foreach($first as $one) foreach($second as $other) if($hit($one, $other)) return true;
-		$centre = $this->centre();
+		$center = $this->center();
 		foreach(['pot','deck','bet'] as $name) foreach($parts as $blocks) foreach($blocks as $block)
-			if($hit($centre[$name], $block)) return true;
+			if($hit($center[$name], $block)) return true;
 		// The status message needs its lines between the bet plate and the human's plate.
-		if($parts[0][0][1] - ($centre['bet'][1] + $centre['bet'][3]) < $this->plateHeight() + 16 * $this->statusLane()['lines'] - .01) return true;
+		if($parts[0][0][1] - ($center['bet'][1] + $center['bet'][3]) < $this->plateHeight() + 16 * $this->statusLane()['lines'] - .01) return true;
 		// The full action lane: three buttons over the raise stepper.
 		$control = $this->controlSize();
 		[$laneLeft, $laneWidth] = $this->actionColumn();
@@ -356,7 +356,7 @@ final class Layout
 	}
 
 	/**
-	 * A centred panel of fixed CSS width for notices painted outside the dialog geometry.
+	 * A centered panel of fixed CSS width for notices painted outside the dialog geometry.
 	 *
 	 * @return array{float,float,float,float}
 	 */
@@ -431,11 +431,11 @@ final class Layout
 			$bottom = max($geometry['slots'][0][1] + $geometry['slots'][0][3], $bank[1] + $bank[3], $geometry['caption'][1] + ($seat === 0 ? 8 : 22));
 			$blocks[$seat] = [$left, $top, $right - $left, $bottom - $top];
 		}
-		$centre = $layout->centre();
+		$center = $layout->center();
 		$chip = (float)$layout->metric('chipRadius');
-		$cluster = [min($centre['pot'][0], $centre['deck'][0], $centre['pile'][0] - $centre['pile'][2] - $chip), $centre['pot'][1], 0, 0];
-		$cluster[2] = max($centre['pot'][0] + $centre['pot'][2], $centre['discard'][0] + $centre['discard'][2], $centre['pile'][0] + $centre['pile'][2] + $chip) - $cluster[0];
-		$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56 - $cluster[1];
+		$cluster = [min($center['pot'][0], $center['deck'][0], $center['pile'][0] - $center['pile'][2] - $chip), $center['pot'][1], 0, 0];
+		$cluster[2] = max($center['pot'][0] + $center['pot'][2], $center['discard'][0] + $center['discard'][2], $center['pile'][0] + $center['pile'][2] + $chip) - $cluster[0];
+		$cluster[3] = max($center['bet'][1] + $center['bet'][3], $center['deck'][1] + $center['deck'][3]) + 8 + 56 - $cluster[1];
 		$overlaps = [];
 		foreach($blocks as $seat => $block)
 		{
@@ -446,12 +446,12 @@ final class Layout
 				+ max(0, $block[0] + $block[2] - $layout->width() - $edgeTolerance)
 				+ max(0, $layout->menuHeight() + 4 - $block[1] - $edgeTolerance)
 				+ max(0, $block[1] + $block[3] - $layout->height() - $edgeTolerance);
-			$overlaps["seat:$seat:centre"] = self::intersectionArea($block, $cluster);
+			$overlaps["seat:$seat:center"] = self::intersectionArea($block, $cluster);
 		}
 		foreach($blocks as $a => $first) foreach($blocks as $b => $second) if($a < $b)
 			$overlaps["seat:$a:seat:$b"] = self::intersectionArea($first, $second);
 		// Sparse hands may grow only while the permanent action lane remains clear. Reserve the complete vertical
-		// button/stepper envelope so the growth solver cannot trade centre space for a control collision.
+		// button/stepper envelope so the growth solver cannot trade center space for a control collision.
 		$control = $layout->controlSize();
 		$actionTop = $layout->height() - 26 - 5 * $control - 4 * 10;
 		[$actionLeft, $actionWidth] = $layout->actionColumn();
@@ -509,7 +509,7 @@ final class Layout
 		if(!in_array($menu,['game','poker'],true)) throw new \InvalidArgumentException('Unknown Poker menu');
 		$headings=$this->topMenus();
 		$unit=$this->uiScale()/$this->horizontalScale;
-		// The fitted field is centred, so the canvas extends by the same gutter on both sides.
+		// The fitted field is centered, so the canvas extends by the same gutter on both sides.
 		$canvasRight=$this->width()+$this->left/$this->horizontalScale;
 		$preferred=($menu==='game'?238:292)*$unit;
 		$width=min($preferred,$canvasRight-$headings[$menu][0]-8*$unit);
@@ -631,7 +631,7 @@ final class Layout
 	/**
 	 * Room for the status message above the human's plate: the widest plate it may use and the lines to reserve.
 	 *
-	 * The message is centred over the hand. On a short oval the action lane rises beside that row, so the plate may
+	 * The message is centered over the hand. On a short oval the action lane rises beside that row, so the plate may
 	 * only be as wide as leaves the lane clear, and when that is too narrow for a sentence on one line a second
 	 * line is reserved for it.
 	 *
@@ -644,7 +644,7 @@ final class Layout
 		$control = $this->controlSize();
 		$laneTop = $this->height() - 26 - 4 * $control - 3 * 10;
 		[$laneLeft] = $this->actionColumn();
-		if($laneTop < $this->seat(0, $this->seats)['plate'][1]) $width = min($width, 2 * ($laneLeft - 8 * $this->stretch() - $this->design['centre'][0]));
+		if($laneTop < $this->seat(0, $this->seats)['plate'][1]) $width = min($width, 2 * ($laneLeft - 8 * $this->stretch() - $this->design['center'][0]));
 		return ['width' => $width, 'lines' => $width < 400 * $this->dpr / $this->horizontalScale ? 2 : 1];
 	}
 
@@ -652,7 +652,7 @@ final class Layout
 	public const ACTION_GUTTER = 34;
 
 	/**
-	 * Centre and radius of a seat's dealer button, in design units; the radius is vertical, so the disc spans
+	 * Center and radius of a seat's dealer button, in design units; the radius is vertical, so the disc spans
 	 * `radius * stretch()` either side in x.
 	 *
 	 * @return array{float,float,float}
@@ -669,7 +669,7 @@ final class Layout
 		$offset = ($seat === 0 && $this->profile === 'wide' ? 17 : 14) * $across;
 		$marker = [$seat !== 0 && $geometry['outward'] > 0 ? $x - $offset : $x + $width + $offset, $y + $height / 2, 9.0];
 		if($seat === 0 || $this->profile !== 'wide') return $marker;
-		// An opponent's button stands at the inner end of the plate unless a neighbour's cards or chips are there.
+		// An opponent's button stands at the inner end of the plate unless a neighbor's cards or chips are there.
 		$disc = [$marker[0] - 9 * $across, $marker[1] - 9, 18 * $across, 18];
 		$size = (float)$this->design['emblemSize'];
 		for($other = 0; $other < $seats; $other++) if($other !== $seat)
@@ -824,9 +824,9 @@ final class Layout
 		// Larger opponent faces need a wider vertical arc. This spacing is independent of the viewport width, so
 		// compressing x cannot pull diagonal chip banks into the next player's indicator.
 		if(!$human && $seats > 2) $verticalRadius += max(0, $d['card'][1] - self::PROFILES['wide']['card'][1]) * 1.25;
-		[$cx,$cy] = [$d['centre'][0] + $ux * $d['oval'][0], $d['centre'][1] + $uy * $verticalRadius];
+		[$cx,$cy] = [$d['center'][0] + $ux * $d['oval'][0], $d['center'][1] + $uy * $verticalRadius];
 		// Heads-up sits exactly on the top axis, where cosine rounding used to pick the left treatment. Keep the
-		// hand centred but mirror its identity, bank and denomination rows like every opponent on the right side.
+		// hand centered but mirror its identity, bank and denomination rows like every opponent on the right side.
 		$outward = $seats === 2 && !$human ? 1 : ($ux > .2 ? 1 : -1);
 		[$cardWidth,$cardHeight] = $human ? $d['handCard'] : $d['card'];
 		$step = $human ? $d['handStep'] : $d['cardStep'];
@@ -839,7 +839,7 @@ final class Layout
 		// The icon and its two-line caption sit to the left, so the indicator needs no caption lane below it.
 		if(!$human) $plateTop = max($this->menuHeight() + 10 * $chrome, $plateTop);
 		// The fan is the seat anchor. Plates, identities and chips derive from its bounds; in heads-up neither fan
-		// may be pushed off the shared centre line merely to make room for its surrounding chrome.
+		// may be pushed off the shared center line merely to make room for its surrounding chrome.
 		$plateLeft = $cx - $plateWidth / 2;
 		// Identity blocks sit on the outer side of the table: left of left seats and right of right seats.
 		// Emblems keep their CSS size when the field is compressed in x, so their lane is measured across it.
@@ -857,8 +857,8 @@ final class Layout
 			{
 				$leftAngle = $this->seatAngle($firstRight - 1, $seats);
 				$rightAngle = $this->seatAngle($firstRight, $seats);
-				$leftBase = $clampPlate($d['centre'][0] + cos($leftAngle) * $d['oval'][0] - $plateWidth / 2, -1);
-				$rightBase = $clampPlate($d['centre'][0] + cos($rightAngle) * $d['oval'][0] - $plateWidth / 2, 1);
+				$leftBase = $clampPlate($d['center'][0] + cos($leftAngle) * $d['oval'][0] - $plateWidth / 2, -1);
+				$rightBase = $clampPlate($d['center'][0] + cos($rightAngle) * $d['oval'][0] - $plateWidth / 2, 1);
 				$pull = max(0, ($rightBase - ($leftBase + $plateWidth) - 64) / 2);
 				$plateLeft += $outward > 0 ? -$pull : $pull;
 			}
@@ -1017,7 +1017,7 @@ final class Layout
 	/** Keep a wide opponent name outside its card fan; narrow names remain centered under the emblem. */
 	public static function identityNameX(array $geometry, float $width, float $gap = 4): float
 	{
-		$centre = (float)$geometry['caption'][0];
+		$center = (float)$geometry['caption'][0];
 		$width = max(0, $width);
 		// The name clears the whole composed fan, not only the cards of a shorter hand.
 		$fan = $geometry['slots'] ?? $geometry['cards'];
@@ -1025,25 +1025,25 @@ final class Layout
 		$last = $fan[array_key_last($fan)];
 		$right = (float)$last[0] + (float)$last[2];
 		if(($geometry['outward'] ?? -1) > 0)
-		return $centre - $width / 2 < $right - 1e-9 ? $right + $gap + $width / 2 : $centre;
-		return $centre + $width / 2 > $left + 1e-9 ? $left - $gap - $width / 2 : $centre;
+		return $center - $width / 2 < $right - 1e-9 ? $right + $gap + $width / 2 : $center;
+		return $center + $width / 2 > $left + 1e-9 ? $left - $gap - $width / 2 : $center;
 	}
 
 	/**
-	 * Design-space geometry of the centre: pot plate, deck, chip anchors and bet plate.
+	 * Design-space geometry of the center: pot plate, deck, chip anchors and bet plate.
 	 *
 	 * @return array{pot:array{float,float,float,float},deck:array{float,float,float,float},discard:array{float,float,float,float},bet:array{float,float,float,float},chips:list<array{float,float}>,pile:array{float,float,float,float}}
 	 */
-	public function centre(): array { return $this->centreMemo ??= $this->placeCentre(); }
+	public function center(): array { return $this->centerMemo ??= $this->placeCenter(); }
 
-	/** @var array<string,mixed>|null The centre geometry; every pot chip asks for it. */
-	private ?array $centreMemo = null;
+	/** @var array<string,mixed>|null The center geometry; every pot chip asks for it. */
+	private ?array $centerMemo = null;
 
-	private function placeCentre(): array
+	private function placeCenter(): array
 	{
-		[$cx,$cy] = $this->design['centre'];
+		[$cx,$cy] = $this->design['center'];
 		// The larger fixed-height wide cards leave the status lane directly above the local hand. Lift the entire
-		// centre cluster together so its current-bet plate and message can occupy that lane without stacking.
+		// center cluster together so its current-bet plate and message can occupy that lane without stacking.
 		if($this->profile === 'wide') $cy -= 30;
 		[$cardWidth,$cardHeight] = $this->design['handCard'];
 		$chrome = (float)($this->design['chromeScale'] ?? 1);
@@ -1055,7 +1055,7 @@ final class Layout
 			// it less than its natural height, the loose pot and piles shrink so the pot plate clears the
 			// opponent's chips rather than covering them.
 			$opponent = $this->seat(1, 2);
-			// Every denomination present gives the deepest bank: larger chips stand in rows nearer the centre.
+			// Every denomination present gives the deepest bank: larger chips stand in rows nearer the center.
 			$bank = $this->bankBounds(1, 2, array_fill_keys(Chips::VALUES, 1));
 			$under = max($opponent['slots'][0][1] + $opponent['slots'][0][3], $bank[1] + $bank[3]) + 6;
 			$room = $this->handTop() - 14 - 8 - 56 - $under - 2 * self::PLATE_HEIGHT - 14;
@@ -1067,10 +1067,10 @@ final class Layout
 		$lift = $cardHeight * .57;
 		if($this->columns())
 		{
-			// Between the two columns: no wider than the gap they leave, and centred in the height above the hand.
+			// Between the two columns: no wider than the gap they leave, and centered in the height above the hand.
 			$cx = $this->tableRight() / 2;
 			// Full tables reserve a broad lane beside both columns. Sparse tables can use those empty row positions
-			// for a wider centre, and heads-up has no side column to constrain it at all.
+			// for a wider center, and heads-up has no side column to constrain it at all.
 			$clearance = match($this->seats) { 3 => 2, 4 => 3, 5 => 4, 6 => 6, 7 => 9, default => 18 };
 			$inner = self::IDENTITY + max($this->design['card'][0] + 4 * $this->design['cardStep'], $this->design['plateWidth']) + $clearance;
 			if($this->profile === 'tall' && $this->seats > 2) $plateWidth = min($plateWidth, $this->tableRight() - 2 * $inner);
@@ -1090,13 +1090,13 @@ final class Layout
 			if($this->profile === 'tall')
 			{
 				$lowest = $this->handTop() - 14 - $cluster;
-				// Heads-up has no side rows in the centre lane. Use its full height so the cluster clears the remote
+				// Heads-up has no side rows in the center lane. Use its full height so the cluster clears the remote
 				// cards and finishes directly above the local plate; denser tables retain the gentler shared bias.
 				$clusterTop += max(0, $lowest - $clusterTop) * ($this->seats === 2 ? 1 : .65);
 			}
 			$cy = $clusterTop + $lift + 38;
 		}
-		$centre = [
+		$center = [
 			'pot' => [$cx - $plateWidth / 2, $cy - $lift - 38 * $chrome, $plateWidth, $plateHeight]
 			, 'deck' => [$cx - $cardWidth / 2, $cy - $lift, $cardWidth, $cardHeight]
 			, 'discard' => [$cx + $cardWidth / 2 + 16, $cy - $lift, $cardWidth, $cardHeight]
@@ -1104,58 +1104,58 @@ final class Layout
 			, 'chips' => [[$cx - 80, $cy + 10], [$cx - 50, $cy + 30], [$cx + 70, $cy + 18], [$cx + 40, $cy + 36]]
 		];
 		$radius = (float)$this->design['chipRadius'];
-		// The loose pot: centre of the pile and its horizontal and vertical spread.
-		$centre['pile'] = [$centre['deck'][0] - $radius * 2.8, $centre['deck'][1] + $cardHeight / 2, $radius * 1.6, $radius * 2];
+		// The loose pot: center of the pile and its horizontal and vertical spread.
+		$center['pile'] = [$center['deck'][0] - $radius * 2.8, $center['deck'][1] + $cardHeight / 2, $radius * 1.6, $radius * 2];
 		if($this->profile === 'tall')
 		{
 			// A phone stacks the cluster in the lane between the columns: pot plate, the loose pot, the stock and
 			// discards side by side, then the bet plate, all inside the plate's width.
 			[$deckWidth, $deckHeight] = [48 * $objectScale, 67 * $objectScale];
-			$top = $centre['pot'][1];
-			$centre['pile'] = [$cx, $top + self::PLATE_HEIGHT + 8 + 20 * $objectScale, min(34 * $objectScale, $plateWidth / 2 - $radius), 12 * $objectScale];
-			$centre['deck'] = [$cx - $deckWidth - 6 * $objectScale, $top + self::PLATE_HEIGHT + 56 * $objectScale, $deckWidth, $deckHeight];
-			$centre['discard'] = [$cx + 6 * $objectScale, $centre['deck'][1], $deckWidth, $deckHeight];
-			$centre['bet'] = [$centre['pot'][0], $centre['deck'][1] + $deckHeight + 14, $plateWidth, self::PLATE_HEIGHT];
+			$top = $center['pot'][1];
+			$center['pile'] = [$cx, $top + self::PLATE_HEIGHT + 8 + 20 * $objectScale, min(34 * $objectScale, $plateWidth / 2 - $radius), 12 * $objectScale];
+			$center['deck'] = [$cx - $deckWidth - 6 * $objectScale, $top + self::PLATE_HEIGHT + 56 * $objectScale, $deckWidth, $deckHeight];
+			$center['discard'] = [$cx + 6 * $objectScale, $center['deck'][1], $deckWidth, $deckHeight];
+			$center['bet'] = [$center['pot'][0], $center['deck'][1] + $deckHeight + 14, $plateWidth, self::PLATE_HEIGHT];
 		}
 		if($this->profile === 'landscape')
 		{
 			// Put the stock and discards beside the bet, leaving room for status text below it and above the hand.
-			$centre['bet'][1] = $centre['deck'][1];
-			$centre['deck'][0] = $cx - $plateWidth / 2 - $cardWidth - 12;
-			$centre['discard'][0] = $cx + $plateWidth / 2 + 12;
-			$centre['chips'][0] = [$cx - $plateWidth / 2 - 33, $centre['deck'][1] - 36];
+			$center['bet'][1] = $center['deck'][1];
+			$center['deck'][0] = $cx - $plateWidth / 2 - $cardWidth - 12;
+			$center['discard'][0] = $cx + $plateWidth / 2 + 12;
+			$center['chips'][0] = [$cx - $plateWidth / 2 - 33, $center['deck'][1] - 36];
 			// The loose pot sits above the stock, left of the pot plate, clear of the left column.
-			$centre['pile'] = [$centre['deck'][0] + $cardWidth / 2, $centre['pot'][1] + self::PLATE_HEIGHT / 2 + 2, 12, 7];
+			$center['pile'] = [$center['deck'][0] + $cardWidth / 2, $center['pot'][1] + self::PLATE_HEIGHT / 2 + 2, 12, 7];
 		}
-		if($this->profile === 'wide') $centre = $this->fitWideCentre($centre);
-		$centre['board'] = [];
-		return $this->boardCards > 0 ? $this->placeBoard($centre) : $centre + ['message' => self::underPlate($centre['bet'])];
+		if($this->profile === 'wide') $center = $this->fitWideCenter($center);
+		$center['board'] = [];
+		return $this->boardCards > 0 ? $this->placeBoard($center) : $center + ['message' => self::underPlate($center['bet'])];
 	}
 
 	/**
 	 * Lay the shared board out between the pot and bet plates, as large as the lane the seats leave free allows.
 	 *
 	 * The seats were composed for draw, so the board never moves them: its cards grow or shrink to the room between
-	 * the opponents. The five cards are centred under the pot, with the stock to their right and, on the oval, the
+	 * the opponents. The five cards are centered under the pot, with the stock to their right and, on the oval, the
 	 * loose pot to their left. On the oval the row may sit anywhere between the two plates, so it can drop below
 	 * opponents' chips that reach into the stock's row. Landscape keeps the stock's row, and moves its bet plate up
 	 * beside the pot plate, because that row used to hold it. On a phone, where one row would make the cards too
 	 * small to read, they stand three over two with the stock in the sixth place, and the bet plate moves down.
 	 */
-	private function placeBoard(array $centre): array
+	private function placeBoard(array $center): array
 	{
 		$across = $this->stretch();
 		$radius = (float)$this->design['chipRadius'];
-		[, $deckY, $deckWidth, $deckHeight] = $centre['deck'];
+		[, $deckY, $deckWidth, $deckHeight] = $center['deck'];
 		$aspect = $deckHeight / $deckWidth;
-		$cx = $centre['pot'][0] + $centre['pot'][2] / 2;
+		$cx = $center['pot'][0] + $center['pot'][2] / 2;
 		$margin = ($this->profile === 'wide' ? 8 : 4) * $across;
 		$blocks = $this->opponentBlocks();
 		$count = $this->boardCards;
 		// In card widths: a narrow gap between board cards and a wider one before the stock.
 		$board = $count + ($count - 1) * .12;
 		$stock = .3 + 1;
-		$pileWidth = 2 * ($centre['pile'][2] + $radius * $across);
+		$pileWidth = 2 * ($center['pile'][2] + $radius * $across);
 		$leftZone = $this->profile === 'wide' ? $pileWidth + 6 * $across : 0;
 		$rightZone = $this->profile === 'landscape' ? 8 * $across + $pileWidth : 0;
 		$fits = function(float $top, float $height) use ($blocks, $cx, $margin): array {
@@ -1179,10 +1179,10 @@ final class Layout
 				$cells = [];
 				for($index = 0; $index < 6; $index++)
 					$cells[] = [$x + ($index % 3) * 1.12 * $width, $deckY + intdiv($index, 3) * 1.1 * $height, $width, $height];
-				$centre['deck'] = $centre['discard'] = array_pop($cells);
-				$centre['board'] = array_slice($cells, 0, $count);
-				$centre['bet'][1] += 2.1 * $height - $deckHeight;
-				return $centre + ['message' => self::underPlate($centre['bet'])];
+				$center['deck'] = $center['discard'] = array_pop($cells);
+				$center['board'] = array_slice($cells, 0, $count);
+				$center['bet'][1] += 2.1 * $height - $deckHeight;
+				return $center + ['message' => self::underPlate($center['bet'])];
 			}
 			$placement = [$single, $deckY + ($deckHeight - $single * $aspect) / 2, $left, $right];
 		}
@@ -1191,7 +1191,7 @@ final class Layout
 			// The largest card width whose row fits somewhere in the band, preferring the stock's own row.
 			$preferred = $deckY + $deckHeight / 2;
 			[$top, $bottom] = $this->profile === 'wide'
-				? [$centre['pot'][1] + $centre['pot'][3] + 6, $centre['bet'][1] - 6]
+				? [$center['pot'][1] + $center['pot'][3] + 6, $center['bet'][1] - 6]
 				: [$deckY, $deckY + $deckHeight];
 			$placement = null;
 			for($step = 0; $step <= 40 && $placement === null; $step++)
@@ -1215,31 +1215,31 @@ final class Layout
 		$height = $width * $aspect;
 		$x = $cx - $board * $width / 2;
 		$x = max($left + $leftZone, min($right - $rightZone - $stock * $width - $board * $width, $x));
-		for($index = 0; $index < $count; $index++) $centre['board'][] = [$x + $index * 1.12 * $width, $y, $width, $height];
-		$centre['deck'] = $centre['discard'] = [$x + ($board + .3) * $width, $y, $width, $height];
+		for($index = 0; $index < $count; $index++) $center['board'][] = [$x + $index * 1.12 * $width, $y, $width, $height];
+		$center['deck'] = $center['discard'] = [$x + ($board + .3) * $width, $y, $width, $height];
 		if($this->profile === 'wide')
 		{
-			$centre['pile'][0] = $x - 6 * $across - $pileWidth / 2;
-			$centre['pile'][1] = $y + $height / 2;
-			$centre['pile'][3] = min($centre['pile'][3], max($radius * .5, $height / 2 - $radius));
+			$center['pile'][0] = $x - 6 * $across - $pileWidth / 2;
+			$center['pile'][1] = $y + $height / 2;
+			$center['pile'][3] = min($center['pile'][3], max($radius * .5, $height / 2 - $radius));
 		}
 		if($this->profile === 'landscape')
 		{
-			$centre['pile'][0] = $centre['deck'][0] + $width + 8 * $across + $pileWidth / 2;
-			$centre['pile'][1] = $y + $height / 2;
+			$center['pile'][0] = $center['deck'][0] + $width + 8 * $across + $pileWidth / 2;
+			$center['pile'][1] = $y + $height / 2;
 			// The pot and bet plates share the top line, each as wide as the lane there allows.
-			[$plateTop, $plateBottom] = [$centre['pot'][1], $centre['pot'][1] + $centre['pot'][3]];
+			[$plateTop, $plateBottom] = [$center['pot'][1], $center['pot'][1] + $center['pot'][3]];
 			[$lineLeft, $lineRight] = $this->laneBetween($blocks, $plateTop, $plateBottom, $cx);
-			$plate = min($centre['pot'][2], ($lineRight - $lineLeft - 2 * $margin - 10 * $across) / 2);
-			$centre['pot'] = [$cx - 5 * $across - $plate, $plateTop, $plate, $centre['pot'][3]];
-			$centre['bet'] = [$cx + 5 * $across, $plateTop, $plate, $centre['bet'][3]];
-			// The message stands under the board, centred like the cluster.
-			return $centre + ['message' => [$cx, $y + $height + 8, 2 * $plate + 10 * $across]];
+			$plate = min($center['pot'][2], ($lineRight - $lineLeft - 2 * $margin - 10 * $across) / 2);
+			$center['pot'] = [$cx - 5 * $across - $plate, $plateTop, $plate, $center['pot'][3]];
+			$center['bet'] = [$cx + 5 * $across, $plateTop, $plate, $center['bet'][3]];
+			// The message stands under the board, centered like the cluster.
+			return $center + ['message' => [$cx, $y + $height + 8, 2 * $plate + 10 * $across]];
 		}
-		return $centre + ['message' => self::underPlate($centre['bet'])];
+		return $center + ['message' => self::underPlate($center['bet'])];
 	}
 
-	/** @return array{float,float,float} Centre x, top and width of the status message beneath a plate. */
+	/** @return array{float,float,float} Center x, top and width of the status message beneath a plate. */
 	private static function underPlate(array $plate): array
 	{
 		return [$plate[0] + $plate[2] / 2, $plate[1] + $plate[3] + 8, $plate[2]];
@@ -1290,20 +1290,20 @@ final class Layout
 	}
 
 	/**
-	 * Keep the oval's centre cluster inside its lane: under whichever opponent stands over it and above the status
+	 * Keep the oval's center cluster inside its lane: under whichever opponent stands over it and above the status
 	 * message that sits on the human's plate. A cluster that already fits is returned untouched; otherwise it moves,
 	 * and the stock and discards shrink, until the pot plate clears the cards and chips above it and the bet plate
 	 * leaves the message its line.
 	 */
-	private function fitWideCentre(array $centre): array
+	private function fitWideCenter(array $center): array
 	{
 		$chrome = (float)($this->design['chromeScale'] ?? 1);
 		$plateHeight = $this->plateHeight();
 		$radius = (float)$this->design['chipRadius'];
 		$across = $this->stretch();
-		$left = min($centre['pot'][0], $centre['pile'][0] - $centre['pile'][2] - $radius * $across);
-		$right = max($centre['pot'][0] + $centre['pot'][2], $centre['discard'][0] + $centre['discard'][2]);
-		$middle = ($centre['pot'][1] + $centre['bet'][1] + $centre['bet'][3]) / 2;
+		$left = min($center['pot'][0], $center['pile'][0] - $center['pile'][2] - $radius * $across);
+		$right = max($center['pot'][0] + $center['pot'][2], $center['discard'][0] + $center['discard'][2]);
+		$middle = ($center['pot'][1] + $center['bet'][1] + $center['bet'][3]) / 2;
 		$above = $this->menuHeight();
 		for($seat = 1; $seat < $this->seats; $seat++)
 		{
@@ -1318,25 +1318,25 @@ final class Layout
 		}
 		// The status message sits between the bet plate and the human's plate.
 		$below = $this->seat(0, $this->seats)['plate'][1] - 8 - $plateHeight - 16 * ($this->statusLane()['lines'] - 1) - 8;
-		if($centre['pot'][1] >= $above && $centre['bet'][1] + $centre['bet'][3] <= $below) return $centre;
+		if($center['pot'][1] >= $above && $center['bet'][1] + $center['bet'][3] <= $below) return $center;
 
-		$gap = $centre['deck'][1] - $centre['pot'][1] - $plateHeight;
+		$gap = $center['deck'][1] - $center['pot'][1] - $plateHeight;
 		$top = $above + 8 * $chrome;
-		[$deckWidth, $deckHeight] = [$centre['deck'][2], $centre['deck'][3]];
+		[$deckWidth, $deckHeight] = [$center['deck'][2], $center['deck'][3]];
 		$fitted = max(40, min($deckHeight, $below - $top - 2 * $plateHeight - 2 * $gap));
 		$deckWidth *= $fitted / $deckHeight;
 		$deckHeight = $fitted;
 		$height = 2 * $plateHeight + 2 * $gap + $deckHeight;
-		$y = max($top, min($centre['pot'][1], $below - $height));
-		$cx = $centre['pot'][0] + $centre['pot'][2] / 2;
-		$shift = $y + $plateHeight + $gap + $deckHeight / 2 - ($centre['deck'][1] + $centre['deck'][3] / 2);
-		$centre['pot'][1] = $y;
-		$centre['deck'] = [$cx - $deckWidth / 2, $y + $plateHeight + $gap, $deckWidth, $deckHeight];
-		$centre['discard'] = [$cx + $deckWidth / 2 + 16, $centre['deck'][1], $deckWidth, $deckHeight];
-		$centre['bet'][1] = $centre['deck'][1] + $deckHeight + $gap;
-		$centre['pile'] = [$centre['deck'][0] - $radius * 2.8, $centre['deck'][1] + $deckHeight / 2, $radius * 1.6, min($radius * 2, max($radius * .8, $deckHeight / 2 - $radius * .6))];
-		$centre['chips'] = array_map(static fn(array $point): array => [$point[0], $point[1] + $shift], $centre['chips']);
-		return $centre;
+		$y = max($top, min($center['pot'][1], $below - $height));
+		$cx = $center['pot'][0] + $center['pot'][2] / 2;
+		$shift = $y + $plateHeight + $gap + $deckHeight / 2 - ($center['deck'][1] + $center['deck'][3] / 2);
+		$center['pot'][1] = $y;
+		$center['deck'] = [$cx - $deckWidth / 2, $y + $plateHeight + $gap, $deckWidth, $deckHeight];
+		$center['discard'] = [$cx + $deckWidth / 2 + 16, $center['deck'][1], $deckWidth, $deckHeight];
+		$center['bet'][1] = $center['deck'][1] + $deckHeight + $gap;
+		$center['pile'] = [$center['deck'][0] - $radius * 2.8, $center['deck'][1] + $deckHeight / 2, $radius * 1.6, min($radius * 2, max($radius * .8, $deckHeight / 2 - $radius * .6))];
+		$center['chips'] = array_map(static fn(array $point): array => [$point[0], $point[1] + $shift], $center['chips']);
+		return $center;
 	}
 
 	/** Stable positions shared by stacks, the loose pot, and every transfer endpoint. */
@@ -1347,7 +1347,7 @@ final class Layout
 		$radius = (float)$this->metric($owner === 0 ? 'handChipRadius' : 'chipRadius');
 		if($owner === 'pot')
 		{
-			[$x, $y, $spreadX, $spreadY] = $this->centre()['pile'];
+			[$x, $y, $spreadX, $spreadY] = $this->center()['pile'];
 			// A fixed low-discrepancy scatter: adding or removing chips never reshuffles the remaining pile.
 			$id = $index * count(Chips::VALUES) + $slot + 1;
 			$angle = $id * 2.399963229728653;
@@ -1836,7 +1836,7 @@ final class Layout
 	 *
 	 * Copy is set in one column no wider than reads well, as a text-mode help screen sets it. Called without a height
 	 * this is the tallest window the canvas allows; called with the height the copy needs, it is that window shrunk
-	 * to fit and centred, for a canvas tall enough to show everything.
+	 * to fit and centered, for a canvas tall enough to show everything.
 	 *
 	 * @param float|null $content Height the copy needs, or null for all the canvas allows.
 	 * @param bool $bar Whether the table's menu bar is showing, so the window must start beneath it.
@@ -1855,7 +1855,7 @@ final class Layout
 		$rail = max(16, 1.2 * $text);
 		$width = min($this->width() - 24, 24 + 38 * $text + 12 + $rail + 8);
 		$left = ($this->width() - $width) / 2;
-		// The pager is centred, so it clears the corner buttons while it is no wider than the canvas less twice their
+		// The pager is centered, so it clears the corner buttons while it is no wider than the canvas less twice their
 		// width. Previous and Next name the game they open wherever both names fit beside Back; otherwise they are
 		// arrows. A phone held upright has height to spare, so there the window stops above the corner instead.
 		$corner = [self::QUICK_CONTROLS[0] * $this->dpr / $this->scale, self::QUICK_CONTROLS[1] * $this->dpr / $this->scale];

@@ -2,7 +2,7 @@
 precision highp float;
 precision highp int;
 uniform highp sampler2D uCaster, uOverview, uVertices;
-uniform vec3 uShadowGrid; // Lower-left world X/Z and metres per triangle cell.
+uniform vec3 uShadowGrid; // Lower-left world X/Z and meters per triangle cell.
 uniform float uCasterStep, uReach, uExtent, uPlayHalf;
 uniform vec3 uSun;
 uniform bool uPacked, uRefine;
@@ -27,7 +27,7 @@ float heightAt(highp sampler2D field, vec2 cell, bool torus)
 }
 
 // One horizontal step per caster texel. PHP guarantees the entire near ray is resident,
-// including its bilinear neighbours. Continue on the fixed overview to meet the broad shadow.
+// including its bilinear neighbors. Continue on the fixed overview to meet the broad shadow.
 float clearance(vec2 vertex, bool stopAtBlocker)
 {
 	vec2 world = uShadowGrid.xy + vertex * uShadowGrid.z;
@@ -91,9 +91,9 @@ void main()
 	if(all(lit) || !any(lit))
 	{
 		// A narrow shadow or sunbeam can miss all three vertices. Split such an interior
-		// feature into three triangles that share the centre and one edge of the original.
+		// feature into three triangles that share the center and one edge of the original.
 		vec2 center = vec2(origin)+vec2(float(side)/3.);
-		// For three dark corners any blocker settles the centre. Only a lit centre needs its full margin.
+		// For three dark corners any blocker settles the center. Only a lit center needs its full margin.
 		float middle = clearance(center,!lit.x);
 		if((middle >= 0.) == lit.x)
 			color = vec4(float(lit.x)/255.,0.,0.,0.);

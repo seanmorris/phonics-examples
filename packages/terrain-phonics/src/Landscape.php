@@ -129,7 +129,7 @@ final class Landscape implements TerrainSurface
 	 * Return interpolated elevation; at most sixteen missing lattice nodes are requested.
 	 * @param float $x World X coordinate, or integer lattice column for node access.
 	 * @param float $z World Z coordinate, or integer lattice row for node access.
-	 * @return float Committed reconstructed elevation in metres.
+	 * @return float Committed reconstructed elevation in meters.
 	 */
 	public function height(float $x, float $z): float
 	{
@@ -243,8 +243,8 @@ final class Landscape implements TerrainSurface
 
 	/**
 	 * Query painted surface material without generating height or normal samples.
-	 * @param float $x World horizontal X coordinate in metres.
-	 * @param float $z World horizontal Z coordinate in metres.
+	 * @param float $x World horizontal X coordinate in meters.
+	 * @param float $z World horizontal Z coordinate in meters.
 	 * @return string|null Most recent covering material, or null for recipe shading.
 	 */
 	public function material(float $x, float $z): ?string
@@ -340,7 +340,7 @@ final class Landscape implements TerrainSurface
 	}
 
 	/**
-	 * Discard only uncommitted edits, for a cancelled authoring transaction.
+	 * Discard only uncommitted edits, for a canceled authoring transaction.
 	 * @return void Clears only the uncommitted transaction.
 	 */
 	public function discard(): void
@@ -483,7 +483,7 @@ final class Landscape implements TerrainSurface
 
 	/**
 	 * Return conservative world bounds, optionally restricting the horizontal query rectangle.
-	 * @param array|null $region Horizontal rectangle [minX,minZ,maxX,maxZ] in metres.
+	 * @param array|null $region Horizontal rectangle [minX,minZ,maxX,maxZ] in meters.
 	 * @return array Conservative axis-aligned bounds with named minimum and maximum coordinates.
 	 */
 	public function bounds(?array $region = null): array
@@ -514,8 +514,8 @@ final class Landscape implements TerrainSurface
 	 * size tile the lattice from its origin. Every height() with minX <= x < maxX and minZ <= z < maxZ lies between
 	 * minY and maxY, so a caller following a moving point can keep the answer until the point leaves the rectangle
 	 * or the revision changes. A smaller block gives a tighter interval.
-	 * @param float $x World X coordinate in metres of a point inside the block.
-	 * @param float $z World Z coordinate in metres of a point inside the block.
+	 * @param float $x World X coordinate in meters of a point inside the block.
+	 * @param float $z World Z coordinate in meters of a point inside the block.
 	 * @param int $cells Number of lattice cells along each edge of the block.
 	 * @return array Block rectangle and conservative elevations, named as in bounds().
 	 */
@@ -545,7 +545,7 @@ final class Landscape implements TerrainSurface
 	 * @param int $column Left block edge.
 	 * @param int $row Front block edge.
 	 * @param int $size Cells along each block edge.
-	 * @param int $halo Extra cells neighbouring the block that can contribute to morphed heights.
+	 * @param int $halo Extra cells neighboring the block that can contribute to morphed heights.
 	 * @return array Lower and upper elevation limits.
 	 */
 	public function renderBlockRange(int $column, int $row, int $size, int $halo): array
@@ -556,7 +556,7 @@ final class Landscape implements TerrainSurface
 	/**
 	 * Reserve all tile blocks supporting a rectangle, including its interpolation halo. Reservation is atomic and
 	 * generates no height samples. Refuse leases exceeding capacity.
-	 * @param array $region Horizontal rectangle [minX,minZ,maxX,maxZ] in metres.
+	 * @param array $region Horizontal rectangle [minX,minZ,maxX,maxZ] in meters.
 	 * @return int New atomic residency lease token.
 	 */
 	public function pin(array $region): int
@@ -671,7 +671,7 @@ final class Landscape implements TerrainSurface
 	 * above it.
 	 * @param array $origin Finite world ray origin [x,y,z].
 	 * @param array $direction Finite nonzero ray direction [x,y,z].
-	 * @param float $maxDistance Maximum ray travel in metres.
+	 * @param float $maxDistance Maximum ray travel in meters.
 	 * @return array|null Nearest surface hit with distance, position, normal, material and revision, or null.
 	 */
 	public function raycast(array $origin, array $direction, float $maxDistance = 10000): ?array
@@ -690,7 +690,7 @@ final class Landscape implements TerrainSurface
 	 * Create a resumable exact picker without generating any terrain cells immediately.
 	 * @param array $origin Finite world ray origin [x,y,z].
 	 * @param array $direction Finite nonzero ray direction [x,y,z].
-	 * @param float $maxDistance Maximum ray travel in metres.
+	 * @param float $maxDistance Maximum ray travel in meters.
 	 * @return RayQuery Revision-guarded query that the caller advances within its frame budget.
 	 */
 	public function rayQuery(array $origin, array $direction, float $maxDistance = 10000): RayQuery
@@ -738,7 +738,7 @@ final class Landscape implements TerrainSurface
 	 * Identify the cell entered at a boundary using the same crossing time as traversal.
 	 * @param float $origin Ray origin along this axis.
 	 * @param float $direction Normalized ray component.
-	 * @param float $time Distance travelled.
+	 * @param float $time Distance traveled.
 	 * @param float $spacing Lattice spacing.
 	 * @return int Index on the forward side of a crossed edge.
 	 */
@@ -757,7 +757,7 @@ final class Landscape implements TerrainSurface
 	 * geometry. One cell and its bounded polynomial isolation remain an indivisible unit.
 	 * @param array $origin Finite world ray origin [x,y,z].
 	 * @param array $direction Finite nonzero ray direction [x,y,z].
-	 * @param float $maxDistance Maximum ray travel in metres.
+	 * @param float $maxDistance Maximum ray travel in meters.
 	 * @return \Generator Completed work-unit counts, followed by an exact hit or null as the return value.
 	 */
 	public function raycastSteps(array $origin, array $direction, float $maxDistance = 10000): \Generator
@@ -1196,9 +1196,9 @@ final class Landscape implements TerrainSurface
 
 	/**
 	 * Sample a coarse mesh without allocating an entire physical tile for one lattice point.
-	 * @param float $wx World X in metres.
-	 * @param float $wz World Z in metres.
-	 * @param float $step Mesh spacing in metres.
+	 * @param float $wx World X in meters.
+	 * @param float $wz World Z in meters.
+	 * @param float $step Mesh spacing in meters.
 	 * @return float Authoritative reconstructed height.
 	 */
 	public function meshHeight(float $wx, float $wz, float $step): float
@@ -1223,7 +1223,7 @@ final class Landscape implements TerrainSurface
 	 * Evaluate a lattice node through the committed edit history.
 	 * @param int $x Lattice column.
 	 * @param int $z Lattice row.
-	 * @return float Edited height in metres.
+	 * @return float Edited height in meters.
 	 */
 	private function generateNode(int $x, int $z): float
 	{
@@ -1392,7 +1392,7 @@ final class Landscape implements TerrainSurface
 
 	/**
 	 * Validate ordered finite horizontal rectangle coordinates.
-	 * @param array $region Horizontal rectangle [minX,minZ,maxX,maxZ] in metres.
+	 * @param array $region Horizontal rectangle [minX,minZ,maxX,maxZ] in meters.
 	 * @return array Validated finite rectangle with ascending bounds.
 	 */
 	private function region(array $region): array

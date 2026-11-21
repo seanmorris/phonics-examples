@@ -15,7 +15,7 @@ final class CircuitRoad
 	// At 75 mph a 140 m vertical radius asks for 8.0 m/s² of downward acceleration, below gravity.
 	private const MIN_CREST_RADIUS = 140.;
 
-	/** @return \Generator The road edit records for a validated centreline. */
+	/** @return \Generator The road edit records for a validated centerline. */
 	public static function grade(Landscape $land, Circuit $circuit): \Generator
 	{
 		$count = (int)ceil($circuit->length/self::STATION_SPACING);
@@ -42,7 +42,7 @@ final class CircuitRoad
 			$leftZ = ($nx-$px)/$length;
 			$turn = ($x-$px)*($nz-$z)-($z-$pz)*($nx-$x);
 			// A 36 m road brings sections of its inside lane close together on a tight uphill turn.
-			// Ease the approach and exit towards the apex height as the deflection approaches 60 degrees.
+			// Ease the approach and exit toward the apex height as the deflection approaches 60 degrees.
 			$span = hypot($x-$px,$z-$pz)*hypot($nx-$x,$nz-$z);
 			if($span < 1.) return null;
 			$cosine = (($x-$px)*($nx-$x)+($z-$pz)*($nz-$z))/$span;
@@ -69,7 +69,7 @@ final class CircuitRoad
 		}
 		$banks = self::smooth($banks);
 		$edits = [];
-		// The two extra stations at each end let a section fade onto the fully graded neighbouring spline.
+		// The two extra stations at each end let a section fade onto the fully graded neighboring spline.
 		for($start = 0; $start<$count; $start+=64)
 		{
 			$end = min($start+64,$count);
@@ -81,7 +81,7 @@ final class CircuitRoad
 		return $edits;
 	}
 
-	/** Smooth evenly spaced stations using the same neighbours on both sides of the lap line. */
+	/** Smooth evenly spaced stations using the same neighbors on both sides of the lap line. */
 	private static function smooth(array $values): array
 	{
 		$count = count($values);

@@ -1,4 +1,4 @@
-// CPU parity: TerrainPhonics\Water. Units are metres and seconds; Y is up.
+// CPU parity: TerrainPhonics\Water. Units are meters and seconds; Y is up.
 #define TERRAIN_MAX_WAVES 8
 #define TERRAIN_MAX_WAKES 16
 uniform float uWaterLevel;
@@ -57,7 +57,7 @@ vec3 terrainWaterNormal(vec4 sampleValue)
 	return normalize(vec3(-sampleValue.y, 1.0, -sampleValue.z));
 }
 
-// Render-time packets contain the centre, wavefront radius, and age-attenuated amplitude.
+// Render-time packets contain the center, wavefront radius, and age-attenuated amplitude.
 uniform vec4 uFrameWakes[TERRAIN_MAX_WAKES], uWakeBounds;
 uniform int uFrameWakeCount;
 uniform vec2 uJetVelocities[TERRAIN_MAX_WAKES];
@@ -96,7 +96,7 @@ vec4 terrainFrameWakes(vec2 position, vec2 pixelX, vec2 pixelY, bool shading)
 		float speed2 = dot(velocity,velocity);
 		float age = packet.z / 3.0;
 		if(speed2 <= 4.0 || age >= 3.0) continue;
-		// Each emission covers the short stretch travelled until the next stern sample.
+		// Each emission covers the short stretch traveled until the next stern sample.
 		float along = clamp(dot(delta,velocity)/speed2,0.0,min(age,0.21));
 		float ageHere = age - along;
 		float lateral = length(delta - along*velocity);

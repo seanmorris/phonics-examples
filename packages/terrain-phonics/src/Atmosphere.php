@@ -3,7 +3,7 @@ declare(strict_types=1);
 namespace TerrainPhonics;
 
 /**
- * Spherical exponential Rayleigh/Mie single scattering in metres and linear RGB.
+ * Spherical exponential Rayleigh/Mie single scattering in meters and linear RGB.
  *
  * Optical depth follows Beer-Lambert extinction. The model includes planet shadow and a finite solar disk;
  * multiple scattering, clouds, ozone, and ground-reflected light are deliberately outside this first model.
@@ -21,7 +21,7 @@ final class Atmosphere
 	private int $lutGeneration = 0;
 
 	/**
-	 * Configure Earth-like scattering, with optional overrides in metres and inverse metres.
+	 * Configure Earth-like scattering, with optional overrides in meters and inverse meters.
 	 * @param array $options Keys match uniforms(); sunIntensity is irradiance in the model's linear units.
 	 * @return void Validates all parameters and normalizes the direction from the viewer toward the sun.
 	 */
@@ -220,7 +220,7 @@ final class Atmosphere
 	/**
 	 * Evaluate sky glow, single-scattered radiance and the attenuated solar disk for CPU previews and tests.
 	 * @param array $direction Viewing direction as [x,y,z].
-	 * @param float $altitude Viewer height above sea level, in metres.
+	 * @param float $altitude Viewer height above sea level, in meters.
 	 * @param int $samples View-ray integration samples, clamped between eight and 128.
 	 * @return array Linear HDR RGB; tone mapping belongs to the final composition pass.
 	 */
@@ -305,8 +305,8 @@ final class Atmosphere
 
 	/**
 	 * Convert molecular/aerosol optical lengths into channel transmittances.
-	 * @param float $rayleigh Integrated molecular density in metres.
-	 * @param float $mie Integrated aerosol density in metres.
+	 * @param float $rayleigh Integrated molecular density in meters.
+	 * @param float $mie Integrated aerosol density in meters.
 	 * @return array Three Beer-Lambert transmittances.
 	 */
 	private function attenuation(float $rayleigh, float $mie): array
@@ -324,7 +324,7 @@ final class Atmosphere
 	 * Find the nearest atmosphere or planet boundary without near-vertical subtractive cancellation.
 	 * @param float $altitude Validated altitude above the planet.
 	 * @param float $mu Cosine of ray zenith.
-	 * @return array Distance in metres and whether the boundary is opaque ground.
+	 * @return array Distance in meters and whether the boundary is opaque ground.
 	 */
 	private function boundary(float $altitude, float $mu): array
 	{
@@ -360,7 +360,7 @@ final class Atmosphere
 
 	/**
 	 * Validate finite sampling coordinates and restrict them to the LUT domain.
-	 * @param float $altitude Requested height in metres.
+	 * @param float $altitude Requested height in meters.
 	 * @param float $mu Requested zenith cosine.
 	 * @return array Clamped altitude and cosine.
 	 */

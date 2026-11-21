@@ -62,7 +62,7 @@ final class Session
 	private string $duckFor = '';
 	private ?Course $duckCourse = null;
 	/**
-	 * Distance in metres before and after a gate over which each vehicle's camera ducks and rises again. The F5
+	 * Distance in meters before and after a gate over which each vehicle's camera ducks and rises again. The F5
 	 * covers its 60 m in 0.23 to 1.1 seconds.
 	 */
 	private const DUCK_LEAD = ['car' => 10.0, 'craft' => 8.0, 'jet' => 60.0];
@@ -81,8 +81,8 @@ final class Session
 	];
 
 	/**
-	 * UI configuration, serialized alongside the terrain. gateAltitude hangs a gate placed on land that many metres
-	 * above the ground, which makes it an air gate. gateWidth and gateHeight size a new gate's opening in metres, and
+	 * UI configuration, serialized alongside the terrain. gateAltitude hangs a gate placed on land that many meters
+	 * above the ground, which makes it an air gate. gateWidth and gateHeight size a new gate's opening in meters, and
 	 * 0 takes the size of the kind the click places; a size outside that kind's range takes the nearest it allows.
 	 */
 	public array $settings = [
@@ -95,7 +95,7 @@ final class Session
 		'balloonAltitude' => 100.0, 'balloonTool' => 'place',
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
 	] + self::SKY_DEFAULTS + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
-	/** The terrain's colours, banding and blending, which the scene draws with. Its settings are part of $settings. */
+	/** The terrain's colors, banding and blending, which the scene draws with. Its settings are part of $settings. */
 	public TerrainAppearance $terrainAppearance;
 	public ?\TerrainPhonics\SurfaceLayers $surfaceLayers=null;
 	private ?\TerrainPhonics\SurfaceLayers $generatedLayers=null;
@@ -115,9 +115,9 @@ final class Session
 	}
 	/** Gate tool roles. Remove deletes the gate nearest the click. */
 	public const GATE_ROLES = ['start', 'checkpoint', 'finish', 'remove'];
-	/** Distance in metres a pick ray reaches when it hits no ground. */
+	/** Distance in meters a pick ray reaches when it hits no ground. */
 	private const PICK_RANGE = 6000.0;
-	/** Uncommitted road control points in [x,y,z] metres. */
+	/** Uncommitted road control points in [x,y,z] meters. */
 	public array $road = [];
 	/** Last operation result shown in the authoring panel. */
 	public string $message = 'Right-drag to look. WASD to fly, Q/E down/up. Choose a tool to edit.';
@@ -153,10 +153,10 @@ final class Session
 	public const AUTO_HEADLIGHTS = 5.0;
 	/** Buttons the page reports in the last element of a pad packet, one bit each, while they are held. */
 	public const PAD_A = 1, PAD_B = 2, PAD_X = 4, PAD_Y = 8, PAD_LB = 16, PAD_RB = 32, PAD_LS = 64, PAD_RS = 128;
-	/** A gamepad at rest: both sticks centred, both triggers released and no buttons held. */
+	/** A gamepad at rest: both sticks centered, both triggers released and no buttons held. */
 	private const NO_PAD = ['x' => 0.0, 'y' => 0.0, 'lookX' => 0.0, 'lookY' => 0.0, 'lt' => 0.0, 'rt' => 0.0, 'buttons' => 0];
 	private array $keys = [];
-	/** Gamepad state from the page: sticks run -1 to 1 with +Y towards the player, triggers 0 to 1. */
+	/** Gamepad state from the page: sticks run -1 to 1 with +Y toward the player, triggers 0 to 1. */
 	private array $pad = self::NO_PAD;
 	/** How far the jet ski's camera has swung round to the right stick's look direction, in radians. */
 	private float $craftLook = 0.0;
@@ -407,7 +407,7 @@ final class Session
 
 	/**
 	 * Find the point of the active vehicle that passes through gates.
-	 * @return array [x, y, z] in metres, or an empty list in free flight.
+	 * @return array [x, y, z] in meters, or an empty list in free flight.
 	 */
 	private function racePoint(): array
 	{
@@ -758,7 +758,7 @@ final class Session
 	}
 
 	/**
-	 * Draw the terrain with new colours, banding and blending. The scene uploads a new appearance when it changes.
+	 * Draw the terrain with new colors, banding and blending. The scene uploads a new appearance when it changes.
 	 * @param TerrainAppearance $appearance Validated appearance.
 	 * @return void Keeps the current appearance object when nothing changed, so the scene uploads nothing.
 	 */
@@ -770,7 +770,7 @@ final class Session
 		$this->dirty = true;
 	}
 
-	/** Keep authored colours and lighting when moving between preset defaults. */
+	/** Keep authored colors and lighting when moving between preset defaults. */
 	private function switchPresetLook(string $previous, string $next): void
 	{
 		if($previous === $next || ($previous !== 'limestone' && $next !== 'limestone')) return;
@@ -1109,7 +1109,7 @@ final class Session
 	 * Place or remove a gate where a click met the ground.
 	 * A click on water places a floating water gate where the ray meets the water level. A click on land places a road
 	 * gate on the ground when the gate height is zero, or an air gate that height above the ground. The gate faces the
-	 * camera's heading at the click, so a vehicle passes through it travelling the way the camera looked.
+	 * camera's heading at the click, so a vehicle passes through it traveling the way the camera looked.
 	 * @param array|null $hit Exact ray intersection, or null when the ray met no ground in range.
 	 * @param array $settings Authoring settings captured at the click.
 	 * @param array $intent The click's ray and camera heading.
@@ -1182,7 +1182,7 @@ final class Session
 				'water' => ', floating on the water',
 				'air' => ', ' . round($settings['gateAltitude']) . ' m above the ground',
 				'road' => ''
-			} . ', its opening ' . GateShapes::metres($size['width']) . ' by ' . GateShapes::metres($size['height'])
+			} . ', its opening ' . GateShapes::meters($size['width']) . ' by ' . GateShapes::meters($size['height'])
 			. ' m.' . ($size['limits'] ? ' ' . ucfirst(implode(', and ', $size['limits'])) . '.' : '')
 			. ($placed['merged'] ? ' The finish gate stood within one gate width, so the start gate now also finishes.'
 				: '');
@@ -1446,7 +1446,7 @@ final class Session
 
 	/**
 	 * Release the physical craft terrain lease.
-	 * @return void Clears the lease id and its tracked centre.
+	 * @return void Clears the lease id and its tracked center.
 	 */
 	private function releasePin(): void
 	{
@@ -1534,7 +1534,7 @@ final class Session
 	 * Version 2 added the course. Version 3 added each gate's size and renamed the gateHeight setting, the height an
 	 * air gate hangs at, to gateAltitude; gateHeight now sizes a new gate's opening. Version 1 files load as
 	 * landscapes without gates, and the gates of version 2 files take their kinds' own sizes.
-	 * Version 4 saves custom surface colour layers and the expanded shape coefficients.
+	 * Version 4 saves custom surface color layers and the expanded shape coefficients.
 	 * @return string Complete portable JSON save document.
 	 */
 	public function save(): string
@@ -1735,7 +1735,7 @@ final class Session
 	/**
 	 * Describe the opening sizes each kind of gate takes, for the gate tool.
 	 * @return array<string,array{width:float,height:float,widths:array,heights:array,stretch:?float}> By kind, the
-	 * kind's own width and height in metres, the [least, greatest] of each, and for the water arch the most its
+	 * kind's own width and height in meters, the [least, greatest] of each, and for the water arch the most its
 	 * scale up may exceed its scale across, or the reverse.
 	 */
 	private function gateSizes(): array

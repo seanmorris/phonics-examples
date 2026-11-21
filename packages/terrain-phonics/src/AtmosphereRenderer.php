@@ -115,8 +115,8 @@ final class AtmosphereRenderer
 	}
 
 	/**
-	 * Recompute only maps whose physical atmosphere or rounded half-metre altitude changed.
-	 * @param float $eyeAltitude Eye height above the model's sea-level radius, in metres.
+	 * Recompute only maps whose physical atmosphere or rounded half-meter altitude changed.
+	 * @param float $eyeAltitude Eye height above the model's sea-level radius, in meters.
 	 * @param int $transmittanceTexture Uploaded raw RGBA8 texture from this Atmosphere's transmittanceLut().
 	 * @param float $waterAltitude Mean water height, used for reflected sky lighting.
 	 * @return bool True when at least one map was rendered. Exposure, position and rotation do not invalidate it.

@@ -36,7 +36,7 @@ The DOS help describes draw poker only. Texas Hold'em and the two stud games fol
 | Stud: every seat antes; the lowest card showing brings in for the early minimum bet, with ties broken by suit, clubs lowest | Standard rules; the bring-in is a full minimum bet |
 | Stud, later streets: the best hand showing acts first; a tie goes to the seat nearest the dealer's left | Standard rules |
 | Seven-card stud seats at most seven, so the 52-card deck always covers the deal | Explicit local limit |
-| Two bet ranges: the early one for Hold'em before the flop and on the flop and for the first two stud streets, the late one afterwards | Explicit local adaptation of the draw game's before-draw and after-draw ranges |
+| Two bet ranges: the early one for Hold'em before the flop and on the flop and for the first two stud streets, the late one afterward | Explicit local adaptation of the draw game's before-draw and after-draw ranges |
 | A raise over a blind or a bring-in counts toward the raise caps | Explicit local adaptation |
 | Showdown takes the best five cards of a seat's own cards and the board; a board that plays for everyone splits the pot | Standard rules |
 | Loans, the single pot and the dealer rotation work as in draw | Same local profile |

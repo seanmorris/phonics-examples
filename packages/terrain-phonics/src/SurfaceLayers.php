@@ -4,7 +4,7 @@ namespace TerrainPhonics;
 
 use Phonics\Render\Program;
 
-/** Ordered colour masks shared by the ground and both map scales. */
+/** Ordered color masks shared by the ground and both map scales. */
 final class SurfaceLayers
 {
 	public const LIMIT = 12;
@@ -35,7 +35,7 @@ final class SurfaceLayers
 	public function __construct(array $layers)
 	{
 		if(!array_is_list($layers) || !$layers || count($layers) > self::LIMIT)
-		throw new \InvalidArgumentException('A surface needs one to twelve colour layers.');
+		throw new \InvalidArgumentException('A surface needs one to twelve color layers.');
 
 		$rows = [];
 
@@ -48,7 +48,7 @@ final class SurfaceLayers
 
 			foreach(['color', 'patternColor'] as $field)
 			if(!is_string($row[$field]) || !preg_match('/^#[0-9a-f]{6}$/iD', $row[$field]))
-			throw new \InvalidArgumentException('Choose a six-digit layer colour.');
+			throw new \InvalidArgumentException('Choose a six-digit layer color.');
 
 			foreach([
 				'low'
@@ -78,7 +78,7 @@ final class SurfaceLayers
 			if($pattern === false || $row['patternAmount'] < 0 || $row['patternAmount'] > 1
 				|| $row['patternScale'] < .05 || $row['patternScale'] > 10000
 				|| $row['patternStretch'] < .25 || $row['patternStretch'] > 64)
-			throw new \InvalidArgumentException('Invalid colour pattern, amount, scale, or vertical stretch.');
+			throw new \InvalidArgumentException('Invalid color pattern, amount, scale, or vertical stretch.');
 
 			if($datum === false || $row['parent'] < -1 || $row['parent'] >= $i || floor($row['parent']) !== $row['parent']
 				|| $row['low'] > $row['high'] || $row['slopeLow'] > $row['slopeHigh'] || $row['slopeLow'] < 0

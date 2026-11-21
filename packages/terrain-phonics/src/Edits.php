@@ -98,12 +98,12 @@ final class Edits
 	/**
 	 * Apply one edit to a node. The callback samples the surface before this edit. Smooth edits use a fixed lattice
 	 * step so memoized histories share their work.
-	 * @param float $x World X coordinate in metres.
-	 * @param float $z World Z coordinate in metres.
-	 * @param float $height Previous height in metres.
+	 * @param float $x World X coordinate in meters.
+	 * @param float $z World Z coordinate in meters.
+	 * @param float $height Previous height in meters.
 	 * @param array $operation Validated edit record, including derived road data when applicable.
 	 * @param callable $before Height evaluator for the surface before this edit, used by smoothing.
-	 * @return float Edited lattice height in metres.
+	 * @return float Edited lattice height in meters.
 	 */
 	public static function apply(float $x, float $z, float $height, array $operation, callable $before): float
 	{
@@ -135,7 +135,7 @@ final class Edits
 
 		if($type === 'crater')
 		{
-			// A smooth depressed centre and low annular rim, both zero at the boundary.
+			// A smooth depressed center and low annular rim, both zero at the boundary.
 			return $height + $amount * $weight * (2 * $q - 1);
 		}
 
@@ -149,8 +149,8 @@ final class Edits
 
 	/**
 	 * Return the most recent material covering the query, including explicit erasure.
-	 * @param float $x World X coordinate in metres.
-	 * @param float $z World Z coordinate in metres.
+	 * @param float $x World X coordinate in meters.
+	 * @param float $z World Z coordinate in meters.
 	 * @param array $operations Committed edits in application order.
 	 * @return ?string Painted material identifier, or null for procedural classification.
 	 */
@@ -209,8 +209,8 @@ final class Edits
 
 	/**
 	 * Quintic falloff in squared radius is twice continuously differentiable.
-	 * @param float $q Normalized distance from the brush or road centre.
-	 * @return float Smooth weight from one at the centre to zero at the boundary.
+	 * @param float $q Normalized distance from the brush or road center.
+	 * @return float Smooth weight from one at the center to zero at the boundary.
 	 */
 	private static function falloff(float $q): float
 	{
@@ -255,7 +255,7 @@ final class Edits
 	}
 
 	/**
-	 * Sample a Catmull-Rom centreline into overlapping smooth local road planes. Compact kernels avoid
+	 * Sample a Catmull-Rom centerline into overlapping smooth local road planes. Compact kernels avoid
 	 * nearest-segment changes at bends, ends and junctions.
 	 * @param array $operation Validated edit record, including derived road data when applicable.
 	 * @return array Normalized road and bounded spatially indexed spline samples.
@@ -396,8 +396,8 @@ final class Edits
 
 	/**
 	 * Blend only nearby kernels; no hard minimum or winner selection affects geometry.
-	 * @param float $x World X coordinate in metres.
-	 * @param float $z World Z coordinate in metres.
+	 * @param float $x World X coordinate in meters.
+	 * @param float $z World Z coordinate in meters.
 	 * @param array $operation Validated edit record, including derived road data when applicable.
 	 * @return array Blended road height, influence weight and width information.
 	 */

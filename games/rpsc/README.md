@@ -1,6 +1,6 @@
 # RPSC
 
-Rock Paper Scissors Checkers, built with Phonics. Two sides share a checkers board, but each plays on the squares of the other side's colour, so their pieces never block or jump each other. Every checker is secretly a rock, a paper, or a scissors. Before moving, a player may challenge an opposing piece that shares an edge with one of theirs: both are turned over, rock-paper-scissors decides, and the loser leaves the board. The survivors are turned face down again.
+Rock Paper Scissors Checkers, built with Phonics. Two sides share a checkers board, but each plays on the squares of the other side's color, so their pieces never block or jump each other. Every checker is secretly a rock, a paper, or a scissors. Before moving, a player may challenge an opposing piece that shares an edge with one of theirs: both are turned over, rock-paper-scissors decides, and the loser leaves the board. The survivors are turned face down again.
 
 A side wins by taking every opposing piece, or by standing on all four of its squares on the far row.
 
@@ -20,6 +20,6 @@ None of the three needs the engine installed. `tests/rpsc-online.test.mjs`, `tes
 
 ## Regenerating the art and sounds
 
-`node scripts/generate-rpsc-assets.mjs` (from the repository root) draws the pieces sheet and the poster and synthesises the seven sounds. The output is deterministic: `--check` verifies the committed files, and `--preview DIR` writes an enlarged sheet for inspection.
+`node scripts/generate-rpsc-assets.mjs` (from the repository root) draws the pieces sheet and the poster and synthesizes the seven sounds. The output is deterministic: `--check` verifies the committed files, and `--preview DIR` writes an enlarged sheet for inspection.
 
 The code, art, and sounds are Apache-2.0, like the other example games.

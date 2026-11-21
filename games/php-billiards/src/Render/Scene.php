@@ -19,11 +19,11 @@ final class Scene
 	private const BALL = [.03,1.56,1,.35];
 	private const WOOD = [.5,1.52,2,1];
 	private const CUE = [.42,1.52,6,1];
-	/** Veneer, ring, and inlay colour of each player's cue: blue for free play and the first player, red for the second. */
+	/** Veneer, ring, and inlay color of each player's cue: blue for free play and the first player, red for the second. */
 	public const CUE_ACCENTS = [[.16,.36,.78,1],[.74,.12,.1,1]];
 	private const FELT = [.9,1.5,3,.85];
 	private const CUSHION_FELT = [.93,1.5,3,1.15];
-	/** Ball colours of a pre-1970 Bakelite set, matching art/svg/ball-atlas.svg; index 0 is the aged-ivory cue ball. */
+	/** Ball colors of a pre-1970 Bakelite set, matching art/svg/ball-atlas.svg; index 0 is the aged-ivory cue ball. */
 	public const BALL_COLORS = [
 		[.945,.918,.839,1],[.914,.627,.098,1],[.114,.227,.620,1],[.784,.078,.227,1]
 		, [.290,.173,.541,1],[.941,.275,.118,1],[.071,.502,.416,1],[.576,.173,.282,1]
@@ -33,7 +33,7 @@ final class Scene
 
 	private Program $program;
 	private MeshBundle $meshes;
-	/** Ball skins as one texture array; independent layer mip chains prevent neighbouring skins bleeding at the poles. */
+	/** Ball skins as one texture array; independent layer mip chains prevent neighboring skins bleeding at the poles. */
 	private Texture $ballSkins;
 	private Texture $wood;
 	private Texture $felt;
@@ -195,8 +195,8 @@ final class Scene
 		);
 		$offset = $stroke['offset'] ?? $idle['offset'] ?? $game->cueDraw();
 		foreach($pose['tip'] as $index => $value) $pose['tip'][$index] = $value - $pose['direction'][$index] * $offset;
-		// The cue mesh is built in metres with its tip at the origin, so it sits at the (drawn-back) tip unscaled; the
-		// tint carries the shooter's accent colour into the veneers, rings, and inlays.
+		// The cue mesh is built in meters with its tip at the origin, so it sits at the (drawn-back) tip unscaled; the
+		// tint carries the shooter's accent color into the veneers, rings, and inlays.
 		$this->draw('cue', $pose['tip'], [1,1,1], $pose['rotation'], self::CUE_ACCENTS[$game->cuePlayer()], self::CUE);
 
 		// The guide follows this browser's aim. A dawdling cue dances about it; an opponent's considering cue does not,
@@ -234,7 +234,7 @@ final class Scene
 		$total += hypot($points[$index][0] - $points[$index - 1][0], $points[$index][1] - $points[$index - 1][1]);
 		if($total <= 1e-8 || !is_finite($total)) return;
 
-		$travelled = 0.0;
+		$traveled = 0.0;
 		$phase = 0.0;
 		for($index = 1; $index < count($points); $index++)
 		{
@@ -251,7 +251,7 @@ final class Scene
 				$to = min($length, $start + $dash);
 				if($to - $from <= 1e-6) continue;
 				$middle = ($from + $to) / 2 / $length;
-				$fade = 1 - .65 * (($travelled + ($from + $to) / 2) / $total);
+				$fade = 1 - .65 * (($traveled + ($from + $to) / 2) / $total);
 				$this->draw(
 					'cube', [$x1 + ($x2 - $x1) * $middle,.0135,$y1 + ($y2 - $y1) * $middle]
 					, [$to - $from,.0012,$width], $rotation, [...$color,$alpha * $fade], [0,0,7,0]
@@ -259,7 +259,7 @@ final class Scene
 			}
 
 			$phase = fmod($phase + $length, $dash + $gap);
-			$travelled += $length;
+			$traveled += $length;
 		}
 	}
 

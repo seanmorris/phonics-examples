@@ -717,7 +717,7 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	await canvas(page).focus();
 	await page.keyboard.press('t');
 	await expect.poll(async() => (await status(page)).balloons.locked).toBe(true);
-	// The authored balloon is straight ahead. Read the rendered impact at the centre of the 3D canvas,
+	// The authored balloon is straight ahead. Read the rendered impact at the center of the 3D canvas,
 	// before the cockpit overlay, and compare the same pixels immediately before the effect draw.
 	await canvas(page).evaluate(el => {
 		const gl = el.getContext('webgl2'), draw = gl.drawArraysInstanced.bind(gl);
@@ -928,7 +928,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 			const before = pixels();
 			triangle(...args);
 			const after = pixels(), mid = Math.floor(size/2);
-			// The centre and four cardinal points get terrain. All four corners keep the driving scene.
+			// The center and four cardinal points get terrain. All four corners keep the driving scene.
 			element.chartSamples = [[mid,mid],[mid,3],[mid,size-4],[3,mid],[size-4,mid],
 				[3,3],[3,size-4],[size-4,3],[size-4,size-4]].map(([x,y]) => before[y*size+x] !== after[y*size+x]);
 		};
@@ -1746,7 +1746,7 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	await expect.poll(async() => (await status(page)).recipe).toEqual({...document.landscape.recipe, seed: 'another-plain'});
 });
 
-test('landform parameters and nested colours survive a save and reload', async({page}) => {
+test('landform parameters and nested colors survive a save and reload', async({page}) => {
 	await page.setViewportSize({width: 720, height: 460});
 	await boot(page);
 	await page.getByRole('tab', {name: 'Landscape', exact: true}).click();
@@ -1761,13 +1761,13 @@ test('landform parameters and nested colours survive a save and reload', async({
 	await expect.poll(async() => (await status(page)).recipe.version).toBe(2);
 
 	await page.locator('[aria-controls="terrain-section-surface"]').click();
-	await page.getByText('Colour layers', {exact: true}).click();
+	await page.getByText('Color layers', {exact: true}).click();
 	const layers = page.locator('[data-layer-fields] [data-layer]');
 	const child = layers.nth(1);
 	await child.locator('summary').click();
 	await child.locator('[data-layer-key="parent"]').fill('0');
 	await child.locator('[data-layer-key="color"]').fill('#7e513d');
-	await child.getByRole('combobox', {name:'Colour pattern'}).selectOption('streaks');
+	await child.getByRole('combobox', {name:'Color pattern'}).selectOption('streaks');
 	await child.locator('[data-layer-key="patternColor"]').fill('#2f2120');
 	await child.locator('[data-layer-key="patternAmount"]').fill('0.7');
 	await child.locator('[data-layer-key="patternScale"]').fill('18');
@@ -1810,7 +1810,7 @@ test('the signed clipmap grid covers the ground after relocation', async({page})
 		const image = PNG.sync.read(await canvas(page).screenshot());
 		let sky = 0;
 		// Left-hand crop is clear of the controls. A missing triangle in this down-facing
-		// view shows the sky's blue or the blue clear colour through the red ground.
+		// view shows the sky's blue or the blue clear color through the red ground.
 		for(let y = 45; y < image.height - 110; ++y)
 		for(let x = 35; x < 265; ++x) {
 			const index = 4 * (y * image.width + x);
@@ -1905,8 +1905,8 @@ test('the distant face in the default canyon stays sunlit at the starting viewpo
 	await press(page,'pause');
 	await settled(page);
 
-	// This sunlit sandstone band is about six kilometres away. The coarse mesh used
-	// to drop a blue triangle into it until the camera had travelled about 1.2 km.
+	// This sunlit sandstone band is about six kilometers away. The coarse mesh used
+	// to drop a blue triangle into it until the camera had traveled about 1.2 km.
 	const image = PNG.sync.read(await view.screenshot());
 	const cx = Math.round(image.width/2 - image.height*11/561);
 	const cy = Math.round(image.height*203/561);

@@ -36,7 +36,7 @@ export function activate({module, canvas, session, services})
 	const fineOutput = fineFog.parentElement.querySelector('output');
 
 	// Hold the fine window still while dragging it. Only a coarse edit or a
-	// restored landscape recentres the window on the nearest coarse tick.
+	// restored landscape recenters the window on the nearest coarse tick.
 	const setFineFogWindow = value => {
 		const center = coarseFog.valueAsNumber;
 		fineFog.min = Math.max(0, center - .005).toFixed(4);
@@ -196,12 +196,12 @@ export function activate({module, canvas, session, services})
 		const fields=Object.entries(labels).map(([key,label])=>`<label class="terrain-field">${label}
 			<input data-layer-key="${key}" type="number" step="any" value="${Number(row[key])}"></label>`).join('');
 		const patterns = {none:'Solid', mottle:'Mottled', streaks:'Streaks', gravel:'Gravel', bedded:'Weathered beds', stipple:'Stipple', fractal:'Fractal noise', veins:'Mineral veins'};
-		return `<details data-layer><summary>Layer ${i} · ${row.color}</summary><div class="terrain-grid"><label class="terrain-field">Colour
+		return `<details data-layer><summary>Layer ${i} · ${row.color}</summary><div class="terrain-grid"><label class="terrain-field">Color
 			<input type="color" data-layer-key="color" value="${row.color}"></label>
-			<label class="terrain-field">Colour pattern<select data-layer-key="pattern">
+			<label class="terrain-field">Color pattern<select data-layer-key="pattern">
 			${Object.entries(patterns).map(([key,label])=>`<option value="${key}" ${key===row.pattern?'selected':''}>${label}</option>`).join('')}
 			</select></label>
-			<label class="terrain-field">Pattern colour<input type="color" data-layer-key="patternColor" value="${row.patternColor}"></label>
+			<label class="terrain-field">Pattern color<input type="color" data-layer-key="patternColor" value="${row.patternColor}"></label>
 			<label class="terrain-field">Pattern amount<input type="number" data-layer-key="patternAmount" min="0" max="1" step="0.05" value="${row.patternAmount}"></label>
 			<label class="terrain-field">Pattern scale · m<input type="number" data-layer-key="patternScale" min="0.05" max="10000" step="any" value="${row.patternScale}"></label>
 			<label class="terrain-field">Vertical stretch<input type="number" data-layer-key="patternStretch" min="0.25" max="64" step="any" value="${row.patternStretch}"></label>${fields}
@@ -871,8 +871,8 @@ function updateRace(line, state)
 	{
 		const from = state.car ?? state.craft ?? state.jet;
 		const [x, y, z] = from ? [from.x, from.y, from.z] : state.camera.position;
-		const metres = Math.hypot(next.x - x, next.y - y, next.z - z);
-		const away = metres < 1000 ? `${Math.round(metres)} m` : `${(metres / 1000).toFixed(1)} km`;
+		const meters = Math.hypot(next.x - x, next.y - y, next.z - z);
+		const away = meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
 		parts.push(`Next: ${gateName(race.next, race)}, ${away}`);
 	}
 
@@ -907,27 +907,27 @@ function updateGateTool(tool, state)
  * Describe the opening sizes of one kind of gate.
  * @param {string} kind road, water or air.
  * @param {{width: number, height: number, widths: number[], heights: number[], stretch: ?number}} size Its own size
- * and ranges in metres, from the status's gateSizes.
+ * and ranges in meters, from the status's gateSizes.
  * @returns {string} For example Road: 6 to 60 m wide, 2 to 40 m tall, its own 13.3 by 3.1 m.
  */
 function gateSizeLine(kind, size)
 {
 	const name = kind[0].toUpperCase() + kind.slice(1);
-	const wide = `${roundMetres(size.widths[0])} to ${roundMetres(size.widths[1])} m wide`;
-	const tall = `${roundMetres(size.heights[0])} to ${roundMetres(size.heights[1])} m tall`;
-	const own = `its own ${roundMetres(size.width)} by ${roundMetres(size.height)} m`;
+	const wide = `${roundMeters(size.widths[0])} to ${roundMeters(size.widths[1])} m wide`;
+	const tall = `${roundMeters(size.heights[0])} to ${roundMeters(size.heights[1])} m tall`;
+	const own = `its own ${roundMeters(size.width)} by ${roundMeters(size.height)} m`;
 
 	if(!size.stretch) return `${name}: ${wide}, ${tall}, ${own}.`;
 
-	return `${name}: ${wide}, ${tall}, ${own}, stretching at most ${roundMetres(size.stretch)} times more one way.`;
+	return `${name}: ${wide}, ${tall}, ${own}, stretching at most ${roundMeters(size.stretch)} times more one way.`;
 }
 
 /**
  * Round a length for the gate tool's notes.
- * @param {number} value Metres.
- * @returns {string} The length to a tenth of a metre, without a trailing zero.
+ * @param {number} value Meters.
+ * @returns {string} The length to a tenth of a meter, without a trailing zero.
  */
-function roundMetres(value)
+function roundMeters(value)
 {
 	return String(Number(value.toFixed(1)));
 }
@@ -1024,7 +1024,7 @@ const SPEED_BUTTONS = 8 | 2;
 /**
  * Remove a radial dead zone from a stick and rescale the rest to reach full travel.
  * @param {number} x Raw horizontal value, -1 to 1.
- * @param {number} y Raw vertical value, -1 to 1, positive towards the player.
+ * @param {number} y Raw vertical value, -1 to 1, positive toward the player.
  * @returns {number[]} The filtered stick.
  */
 function stick(x, y)
@@ -1099,7 +1099,7 @@ const TAB_PREFERENCE = 'terrain-sandbox.tab';
 const SURFACE_STYLES = {coast: 'coastal', mountain: 'mountain', 'canyon-v1': 'early canyon', canyon: 'canyon'};
 
 /** Headings for the appearance groups. */
-const SURFACE_GROUPS = {colors: 'Colours', banding: 'Banding', rock: 'Rock detail', blending: 'Blending'};
+const SURFACE_GROUPS = {colors: 'Colors', banding: 'Banding', rock: 'Rock detail', blending: 'Blending'};
 
 /** Labels and slider steps for the appearance settings. Heights relative to the snowline are negative below it. */
 const SURFACE_LABELS = {
@@ -1410,10 +1410,10 @@ function markup()
 	<div class="terrain-row"><button data-action="road-apply">Apply road</button><button data-action="road-clear">Clear points</button></div>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
-	<p class="terrain-note" data-surface-note>Colours, banding and blending of the generated ground. The landscape file saves them.</p>
-	<details><summary>Colour layers</summary><div data-layer-fields></div>
+	<p class="terrain-note" data-surface-note>Colors, banding and blending of the generated ground. The landscape file saves them.</p>
+	<details><summary>Color layers</summary><div data-layer-fields></div>
 	<div class="terrain-row"><button data-layer-add>Add layer</button><button data-layer-remove>Remove last</button></div>
-	<div class="terrain-row"><button data-layer-apply>Apply layers</button><button data-layer-reset>Use preset colours</button></div></details>
+	<div class="terrain-row"><button data-layer-apply>Apply layers</button><button data-layer-reset>Use preset colors</button></div></details>
 	<div data-surface></div>
 	<div class="terrain-row"><button data-surface-reset="all">Reset the whole surface</button></div>
 	</section>

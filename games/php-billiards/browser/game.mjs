@@ -13,8 +13,8 @@ export function impactLowpassCutoff(strength, sampleRate, material)
 
 /**
  * Pick the recorded pocket knock for one strike inside a pocket: 1 is the strongest hit and 3 the weakest.
- * The three hits are centred on geometric strengths, and a little jitter lets a strike near a boundary use
- * either neighbour, so a ball knocking around the liner never repeats one sample mechanically.
+ * The three hits are centered on geometric strengths, and a little jitter lets a strike near a boundary use
+ * either neighbor, so a ball knocking around the liner never repeats one sample mechanically.
  */
 export function pocketHit(strength, random=Math.random)
 {

@@ -7,7 +7,7 @@ namespace Rpsc;
  *
  * A turn is an optional challenge followed by one move. A challenge names one of the mover's pieces and an opposing
  * piece that shares an edge with it. Both are shown, rock-paper-scissors decides, and the loser leaves the board; a
- * tie removes nothing. Both pieces are hidden again afterwards, so what was shown has to be remembered. Men step one
+ * tie removes nothing. Both pieces are hidden again afterward, so what was shown has to be remembered. Men step one
  * square diagonally forward, a man that reaches the far rank is crowned, and a king may also step backward.
  *
  * A side wins by removing every opposing piece, or by standing on all four of its squares on the far rank. Eighty
@@ -214,7 +214,7 @@ final class Game
 		{
 			if(($this->pieces[$square]['side'] ?? -1) !== $side) continue;
 
-			foreach(Board::neighbours($square) as $target)
+			foreach(Board::neighbors($square) as $target)
 			{
 				if(isset($this->pieces[$target])) $pairs[] = [$square, $target];
 			}
@@ -240,7 +240,7 @@ final class Game
 		$defender = $this->pieces[$to] ?? null;
 
 		if($attacker === null || $attacker['side'] !== $this->turn) throw new \InvalidArgumentException('No piece of the side to act stands there');
-		if($defender === null || !in_array($to, Board::neighbours($from), true)) throw new \InvalidArgumentException('No opposing piece shares an edge with the challenger');
+		if($defender === null || !in_array($to, Board::neighbors($from), true)) throw new \InvalidArgumentException('No opposing piece shares an edge with the challenger');
 
 		$outcome = 'tie';
 		$removed = null;
@@ -431,7 +431,7 @@ final class Game
 	 * Restore a game written by export().
 	 *
 	 * Saves come back from browser storage, so every field is checked: a piece must stand on a square of its own
-	 * side's colour, piece ids must be distinct, the pieces on the board plus the pieces lost must add up to a legal
+	 * side's color, piece ids must be distinct, the pieces on the board plus the pieces lost must add up to a legal
 	 * starting twelve, and a game still in play cannot already hold a full far rank.
 	 *
 	 * @param mixed $data Decoded save.

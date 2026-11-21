@@ -168,8 +168,8 @@ final class Recipe
 	 * in the browser. Each sample here is therefore Noise::sample() written out with the same operations in
 	 * the same order, which returns the same bits. A scalar suffixed 0, 1 or 2 holds a sample's value, X
 	 * derivative or Z derivative. An integer cast stepped down below a negative fraction replaces floor().
-	 * @param float $x World X coordinate in metres.
-	 * @param float $z World Z coordinate in metres.
+	 * @param float $x World X coordinate in meters.
+	 * @param float $z World Z coordinate in meters.
 	 * @return array Coarse height and world-space derivatives [height,dx,dz].
 	 */
 	public function coarse(float $x, float $z): array
@@ -484,9 +484,9 @@ final class Recipe
 	 *
 	 * The octave loop reads each recipe field once and writes Noise::value() out in place, for the reason
 	 * given on coarse(). The operations keep their order, so every height keeps its bits.
-	 * @param float $x World X coordinate in metres.
-	 * @param float $z World Z coordinate in metres.
-	 * @return float Final procedural lattice height in metres.
+	 * @param float $x World X coordinate in meters.
+	 * @param float $z World Z coordinate in meters.
+	 * @return float Final procedural lattice height in meters.
 	 */
 	public function height(float $x, float $z): float
 	{
@@ -546,7 +546,7 @@ final class Recipe
 	/**
 	 * Bound every procedural node in a world rectangle, including warp, terraces and gated detail.
 	 * @param array $box Horizontal bounds [minX,minZ,maxX,maxZ], including any sample halo.
-	 * @return array Conservative node height interval in metres.
+	 * @return array Conservative node height interval in meters.
 	 */
 	public function regionalBounds(array $box): array
 	{

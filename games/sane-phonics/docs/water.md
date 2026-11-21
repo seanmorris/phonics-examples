@@ -100,7 +100,7 @@ $engine->systems->add('water-particles', [$particles, 'update'], after: ['water-
 
 ## Restore and close the water renderer
 
-`WaterRenderer` captures the scene into a framework `RenderTarget` (colour texture, depth buffer
+`WaterRenderer` captures the scene into a framework `RenderTarget` (color texture, depth buffer
 and framebuffer) and owns one procedural RG displacement texture. It copies the scene once, then
 submits one clipped quad per visible region. Displacement phase uses world
 coordinates, so neighboring regions do not restart their waves. Call `restore()` after the map and

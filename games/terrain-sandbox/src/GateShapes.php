@@ -5,9 +5,9 @@ namespace TerrainSandbox;
 /**
  * Dimensions of the three race gate kinds, read from assets/gates/gates.json when the package ships it.
  *
- * Each kind is measured in the gate's own frame: the origin sits at the bottom centre of the window (on the ground
+ * Each kind is measured in the gate's own frame: the origin sits at the bottom center of the window (on the ground
  * for road, at the water line for water, at the window's lower edge for air), +Y is up, +Z is the direction of
- * travel and +X lies across the gate. Every figure is in metres.
+ * travel and +X lies across the gate. Every figure is in meters.
  */
 final class GateShapes
 {
@@ -41,7 +41,7 @@ final class GateShapes
 	];
 	/**
 	 * How far below the window's bottom edge a vehicle still counts as passing through it. A jet ski in a trough sits
-	 * below the water line at the gate's centre. A jet has no such excuse. A road gate measures its own from the
+	 * below the water line at the gate's center. A jet has no such excuse. A road gate measures its own from the
 	 * ground across it, Course::ROAD_BELOW under the lowest, so its figure here applies only on level ground.
 	 */
 	public const BELOW = ['road' => Course::ROAD_BELOW, 'water' => 3.0, 'air' => 0.0];
@@ -50,7 +50,7 @@ final class GateShapes
 	 * ground under the post, which Course::measure() reports.
 	 */
 	public const POST_DEPTH = 8.0;
-	/** Default half depth of a gate's extent along its direction of travel, in metres. */
+	/** Default half depth of a gate's extent along its direction of travel, in meters. */
 	public const HALF_DEPTH = 1.0;
 	/**
 	 * Shapes by kind: mesh file name, window, extent (with its bottom and half depth), posts with their reach, the
@@ -210,8 +210,8 @@ final class GateShapes
 	/**
 	 * Fit a requested opening to a kind's sizes.
 	 * @param string $kind road, water or air.
-	 * @param float|null $width Opening width in metres, or null for the kind's own.
-	 * @param float|null $height Opening height in metres, or null for the kind's own.
+	 * @param float|null $width Opening width in meters, or null for the kind's own.
+	 * @param float|null $height Opening height in meters, or null for the kind's own.
 	 * @return array{width:float,height:float,limits:list<string>} The size within the kind's ranges, and a phrase
 	 * for each limit that changed it, such as "a road gate is at most 60 m wide". A water arch also keeps its scale
 	 * up within its stretch of its scale across, by changing the height.
@@ -225,7 +225,7 @@ final class GateShapes
 			if($value === null) return $default;
 			$held = max($range[0], min($range[1], $value));
 			if($held !== $value)
-				$limits[] = "$name is " . ($held < $value ? 'at most ' : 'at least ') . self::metres($held) . " m $wide";
+				$limits[] = "$name is " . ($held < $value ? 'at most ' : 'at least ') . self::meters($held) . " m $wide";
 			return $held;
 		};
 		[$defaultWidth, $defaultHeight] = $size['default'];
@@ -238,8 +238,8 @@ final class GateShapes
 			$high = min($size['height'][1], $defaultHeight * $across * $size['stretch']);
 			$held = max($low, min($high, $height));
 			if(abs($held - $height) > 1e-9)
-				$limits[] = "$name " . self::metres($width) . ' m wide is ' . ($held < $height ? 'at most ' : 'at least ')
-					. self::metres($held) . ' m tall';
+				$limits[] = "$name " . self::meters($width) . ' m wide is ' . ($held < $height ? 'at most ' : 'at least ')
+					. self::meters($held) . ' m tall';
 			$height = $held;
 		}
 		return ['width' => $width, 'height' => $height, 'limits' => $limits];
@@ -248,8 +248,8 @@ final class GateShapes
 	/**
 	 * Whether a size fits a kind exactly as fit() would leave it.
 	 * @param string $kind road, water or air.
-	 * @param float $width Opening width in metres.
-	 * @param float $height Opening height in metres.
+	 * @param float $width Opening width in meters.
+	 * @param float $height Opening height in meters.
 	 */
 	public function fits(string $kind, float $width, float $height): bool
 	{
@@ -257,10 +257,10 @@ final class GateShapes
 		return abs($fitted['width'] - $width) < 1e-6 && abs($fitted['height'] - $height) < 1e-6;
 	}
 
-	/** Write a length for a message: whole metres, or one decimal place under 100 m. */
-	public static function metres(float $metres): string
+	/** Write a length for a message: whole meters, or one decimal place under 100 m. */
+	public static function meters(float $meters): string
 	{
-		$rounded = round($metres, $metres < 100 ? 1 : 0);
+		$rounded = round($meters, $meters < 100 ? 1 : 0);
 		return $rounded == floor($rounded) ? (string)(int)$rounded : sprintf('%.1f', $rounded);
 	}
 

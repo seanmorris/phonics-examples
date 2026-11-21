@@ -13,7 +13,7 @@ import zipfile
 ASSETS = Path(__file__).resolve().parents[1] / "games/terrain-sandbox/assets"
 TEXTURE = "textures/texMain_baseColor.png"
 VERTEX = struct.Struct("<3f3h2H6B")
-# The F5 turns about its centre of gravity, in metres from the middle of its bounding box with the nose along +Z:
+# The F5 turns about its center of gravity, in meters from the middle of its bounding box with the nose along +Z:
 # a quarter of the way along the mean aerodynamic chord of the wing's reference trapezoid, halfway up the fuselage.
 F5_BALANCE = (0.0, -0.50, -1.53)
 # The F5's moving surfaces in the same frame. Each is a closed piece of the fuselage mesh that shares no vertex
@@ -21,7 +21,7 @@ F5_BALANCE = (0.0, -0.50, -1.53)
 # second: the middle of the leading edge at both ends of an aileron or the rudder, and the stabilators' common
 # spanwise pivot at a quarter of their mean chord. Positive angles follow the right-hand rule about that direction,
 # so a positive aileron raises the +X trailing edge and lowers the -X one, a positive stabilator raises both and a
-# positive rudder swings towards +X.
+# positive rudder swings toward +X.
 F5_SURFACES = (
     ("aileron", ((2.2, -1.1, -3.6), (3.2, -0.9, -2.7)), (2.2649, -0.9753, -2.8175), (3.1411, -0.9805, -2.9156)),
     ("aileron", ((-3.2, -1.1, -3.6), (-2.2, -0.9, -2.7)), (-2.2628, -0.9753, -2.8175), (-3.1389, -0.9805, -2.9156)),
@@ -203,7 +203,7 @@ def jet_surfaces(scene, binary, primitives, frame):
     # Return the surface tag of every moving triangle by primitive and triangle, and the hinges in the same frame.
     found = [[] for _ in F5_SURFACES]
     for number, part in enumerate(primitives):
-        # Positions that agree to a tenth of a millimetre are joined. Some panel corners differ in the last bits.
+        # Positions that agree to a tenth of a millimeter are joined. Some panel corners differ in the last bits.
         positions = accessor(scene, binary, part["attributes"]["POSITION"])
         points = [tuple(round(v, 4) for v in frame(p)) for p in positions]
         corners = [i for (i,) in accessor(scene, binary, part["indices"])]
@@ -263,7 +263,7 @@ def jet_repairs(vertices, indices, vertex):
         if None in mirrored or len(set(mirrored)) < 3 or shape(pair[tag], mirrored) in existing:
             continue
         existing.add(shape(pair[tag], mirrored))
-        # Reflection reverses the winding, so the corners are taken backwards.
+        # Reflection reverses the winding, so the corners are taken backward.
         for i, point in reversed(list(zip(triangle, mirrored))):
             nx, ny, nz = struct.unpack_from("<3h", records[i], 12)
             record = struct.pack("<3f3h", *point, -nx, ny, nz) + records[i][18:-1] + bytes([pair[tag]])
@@ -300,7 +300,7 @@ def export_model(folder, vehicle, pods=None):
     keel_y = min(b["min"][1] for b in bounds) + .32
     scale = 1.0
     if car:
-        # The source nose points along +Z. Centre on the axles, with Y=0 at the tire contacts.
+        # The source nose points along +Z. Center on the axles, with Y=0 at the tire contacts.
         tires = next(p for p in primitives if scene["materials"][p["material"]]["name"] == "Tires_wheel")
         points = accessor(scene, binary, tires["attributes"]["POSITION"])
         center_x = (max(p[0] for p in points) + min(p[0] for p in points)) / 2
@@ -316,7 +316,7 @@ def export_model(folder, vehicle, pods=None):
         # cockpit, then omit the tank geometry and its texture from the playable model.
         primitives = [part for part in primitives if scene["materials"][part["material"]]["name"] != "bak-FACES"]
         atlas, rects = jet_atlas(folder, scene, primitives)
-        # Find the moving surfaces in the bounding-box frame, then move the origin to the centre of gravity.
+        # Find the moving surfaces in the bounding-box frame, then move the origin to the center of gravity.
         box = (center_x, keel_y, center_z)
         tags, hinges = jet_surfaces(scene, binary, primitives, lambda p: [(v - c) * scale for v, c in zip(p, box)])
         center_x, keel_y, center_z = (c + offset / scale for c, offset in zip(box, F5_BALANCE))
@@ -326,7 +326,7 @@ def export_model(folder, vehicle, pods=None):
     vertices = bytearray()
     indices = bytearray()
     vertex_ids = {}
-    # Area and area-weighted centre of the headlamps on each side, closed, in the model frame.
+    # Area and area-weighted center of the headlamps on each side, closed, in the model frame.
     headlamps = {}
 
     def vertex(record):
@@ -444,11 +444,11 @@ def main():
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "mesh.bin.gz").write_bytes(data)
         if hinges:
-            # Hinges of the tagged surfaces, in metres in the model frame, for the vertex shader.
+            # Hinges of the tagged surfaces, in meters in the model frame, for the vertex shader.
             lines = ",\n".join(" " + json.dumps(hinge) for hinge in hinges)
             (destination / "surfaces.json").write_text('{"surfaces": [\n' + lines + "\n]}\n")
         if lamps:
-            # The pods' hinge and opening angle for the vertex shader, and the headlamps with the pods open, in metres
+            # The pods' hinge and opening angle for the vertex shader, and the headlamps with the pods open, in meters
             # in the model frame.
             lines = ",\n".join("\t\t" + json.dumps(beam) for beam in lamps["headlamps"])
             (destination / "lamps.json").write_text('{\n\t"pods": ' + json.dumps(lamps["pods"])

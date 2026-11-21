@@ -1,4 +1,4 @@
-// Builds games/php-billiards/art/svg/ball-atlas.svg: sixteen 256×128 equirectangular ball skins in the colours of
+// Builds games/php-billiards/art/svg/ball-atlas.svg: sixteen 256×128 equirectangular ball skins in the colors of
 // pre-1970 Bakelite sets, on aged ivory, numbered in Lobster (Impallari Type, SIL OFL 1.1).
 //
 //   node scripts/build-ball-atlas.mjs                     rebuild the SVG from art/typography/ball-numerals.json
@@ -48,7 +48,7 @@ for(let number = 0; number < 16; number++)
 	const x = number % 4 * 256, y = Math.floor(number / 4) * 128;
 	if(number === 0) {cells.push(`<g transform="translate(${x} ${y})"><rect width="256" height="128" fill="${colors[0]}"/></g>`); continue;}
 
-	// One path per number: its digits set side by side, then scaled to the digit height and centred in each spot.
+	// One path per number: its digits set side by side, then scaled to the digit height and centered in each spot.
 	let pen = 0;
 	const path = [];
 	for(const digit of String(number))

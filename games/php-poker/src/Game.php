@@ -491,7 +491,7 @@ final class Game
 	 *
 	 * Blinds sit to the dealer's left, except heads-up where the dealer posts the small blind and acts first before
 	 * the flop. In stud the lowest exposed card brings in for the minimum bet on the first street, and the best
-	 * exposed hand acts first afterwards; ties go to the seat nearest the dealer's left.
+	 * exposed hand acts first afterward; ties go to the seat nearest the dealer's left.
 	 */
 	private function open(): void
 	{

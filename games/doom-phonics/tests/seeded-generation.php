@@ -245,7 +245,7 @@ verifyWad(!in_array($default['goal'],$bad->search($default['start'],['water'=>'d
 	'an inaccessible pump cannot falsely certify a generated level');
 $packed = $default['layers'];
 $packed['upper.0']['architectural'] = $packed['ground.0']['architectural'];
-verifyWad((bool)SeededLevel::overlaps($packed),'architectural overlap checks catch conflicting storeys even when WAD packing is disjoint');
+verifyWad((bool)SeededLevel::overlaps($packed),'architectural overlap checks catch conflicting stories even when WAD packing is disjoint');
 foreach([1,17] as $rooms)
 {
 	$rejected = false;

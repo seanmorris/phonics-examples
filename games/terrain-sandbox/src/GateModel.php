@@ -19,7 +19,7 @@ use TerrainPhonics\Water;
 final class GateModel
 {
 	/**
-	 * Distance in metres from a gate's extent beyond which it is not drawn. An air gate is three times the size of the
+	 * Distance in meters from a gate's extent beyond which it is not drawn. An air gate is three times the size of the
 	 * others at their own sizes, and an F5 at 260 m/s covers this range in about 17 seconds.
 	 */
 	public const RANGE = ['road' => 1500.0, 'water' => 1500.0, 'air' => 4500.0];

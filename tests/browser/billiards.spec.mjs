@@ -200,7 +200,7 @@ test('joined-room canvas keeps its aspect ratio in a constrained viewport', asyn
 	];
 	await expect.poll(()=>canvas.evaluate(element=>[element.width,element.height])).toEqual(grownBuffer);
 	const freePlay=await canvas.evaluate(element=>{
-		// Mirrors Hud::unit() and Hud::titleLayout() for the Free Play item centre.
+		// Mirrors Hud::unit() and Hud::titleLayout() for the Free Play item center.
 		const width=element.width,height=element.height,dpr=Math.min(2,devicePixelRatio||1);
 		const unit=dpr*Math.max(.8,Math.min(1.25,width / dpr / 1280,height / dpr / 720));
 		const margin=16*unit,top=Math.max(margin,height * .05),limit=height * .32;
@@ -518,7 +518,7 @@ test('a restored WebGL context restarts the direct application cleanly', async (
 	await expect(page.locator('.php-billiards-ui')).toHaveCount(0);
 });
 
-test('an energetic off-centre side-pocket shot rattles back onto the table', async ({page}) => {
+test('an energetic off-center side-pocket shot rattles back onto the table', async ({page}) => {
 	test.setTimeout(120_000);
 	await page.goto('/games/php-billiards/');
 	const canvas = page.locator('canvas');

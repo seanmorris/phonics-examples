@@ -43,7 +43,7 @@ final class Collision
 	 * Sweep a body through the map and preserve the tangential remainder after each impact.
 	 *
 	 * Expanding every wall segment by the body's radius turns circle-versus-segment movement
-	 * into a point-versus-capsule sweep. This prevents tunnelling and removes the sticky
+	 * into a point-versus-capsule sweep. This prevents tunneling and removes the sticky
 	 * push-out response at corners while retaining exact round endpoints.
 	 *
 	 * @return array{collided:bool,dx:float,dy:float,normals:list<array{0:float,1:float}>,actors:list<int>}

@@ -101,7 +101,7 @@ function goal(side)
  * @param {number} at The square the piece stands on.
  * @param {number} side The side it belongs to.
  * @param {boolean} king Whether it is crowned and may also step backward.
- * @returns {number[]} Diagonal neighbours on the board.
+ * @returns {number[]} Diagonal neighbors on the board.
  */
 function steps(at, side, king)
 {
@@ -123,7 +123,7 @@ function steps(at, side, king)
  * @param {number} at A square.
  * @returns {number[]} Up to four squares.
  */
-function neighbours(at)
+function neighbors(at)
 {
 	const targets = [];
 
@@ -151,7 +151,7 @@ export const Rules = Object.freeze({
 	, home
 	, goal
 	, steps
-	, neighbours
+	, neighbors
 	, beats
 	, owner
 	, advance
@@ -221,7 +221,7 @@ export const Rules = Object.freeze({
 		{
 			if(game.pieces[at]?.side !== side) continue;
 
-			for(const target of neighbours(at)) if(game.pieces[target]) pairs.push([at, target]);
+			for(const target of neighbors(at)) if(game.pieces[target]) pairs.push([at, target]);
 		}
 
 		return pairs;
@@ -242,7 +242,7 @@ export const Rules = Object.freeze({
 
 		if(game.pieces[from]?.side !== game.turn) throw new Error('No piece of the side to act stands there');
 
-		if(!game.pieces[to] || !neighbours(from).includes(to))
+		if(!game.pieces[to] || !neighbors(from).includes(to))
 		throw new Error('No opposing piece shares an edge with the challenger');
 	}
 

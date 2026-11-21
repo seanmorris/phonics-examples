@@ -7,7 +7,7 @@ final class RoundHistory
 {
 	/**
 	 * Keep the complete current hand plus every line the former eight-line transcript exposed. Player actions become
-	 * column cells; dealer, result, and unrecognised lines remain full-width rows with their exact text.
+	 * column cells; dealer, result, and unrecognized lines remain full-width rows with their exact text.
 	 *
 	 * @param list<array<string,mixed>> $players
 	 * @param list<mixed> $history
@@ -74,7 +74,7 @@ final class RoundHistory
 		return ['rows'=>$rows,'lines'=>$lastEight];
 	}
 
-	/** @return array{string,string,bool} Display text, colour role, and whether responses begin on a new row. */
+	/** @return array{string,string,bool} Display text, color role, and whether responses begin on a new row. */
 	private static function action(string $action, bool $afterDraw, bool $opened): array
 	{
 		if(preg_match('/^Bets (\d+)$/i',$action,$match)===1)

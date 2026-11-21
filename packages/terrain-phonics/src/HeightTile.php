@@ -48,7 +48,7 @@ final class HeightTile
 	 * Store one computed finite node in the fixed-size packed buffer.
 	 * @param int $x Local node coordinate within this tile.
 	 * @param int $z Local node coordinate within this tile.
-	 * @param float $height Previous height in metres.
+	 * @param float $height Previous height in meters.
 	 * @return void Stores a finite node and marks it valid.
 	 */
 	public function set(int $x, int $z, float $height): void
@@ -75,7 +75,7 @@ final class HeightTile
 
 	/**
 	 * Write the unpack format for the part of a four-by-four stencil that one tile stores. The stencil's sixteen
-	 * nodes are named 'a' to 'p' in row-major order, so the parts read from neighbouring tiles merge by array union.
+	 * nodes are named 'a' to 'p' in row-major order, so the parts read from neighboring tiles merge by array union.
 	 * @param int $size Number of lattice nodes along each tile edge.
 	 * @param int $column First stencil column that the tile stores.
 	 * @param int $columns Number of stencil columns that the tile stores.

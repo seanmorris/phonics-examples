@@ -74,11 +74,11 @@ check($cross($air($second,-12,-4,0),$air($second,12,-4,0)) === null, 'Passing un
 check($cross($air($second,-12,7,3.1),$air($second,12,7,3.1)) === null, 'A low jump wide of the box misses');
 check($cross($air($second,-12,16,0),$air($second,12,4,0)) === null, 'Descending to pickup height after leaving the box misses');
 check($cross($air($second,-12,14,0),$air($second,12,4,0)) !== null && $s->delivery->carrying,
-	'Descending through the edge of the pickup collects the box even if the car crossed its centre too high');
+	'Descending through the edge of the pickup collects the box even if the car crossed its center too high');
 check($cross($air($depot,-12,6,6.1),$air($depot,12,6,6.1)) === null, 'A low jump outside the depot misses');
 check($cross($air($depot,5,12,0),$air($depot,5,8.01,0)) === null, 'Crossing above the depot keeps the box on board');
 check($cross($air($depot,5,10,0),$air($depot,5,8,0)) !== null && $s->delivery->delivered === 2 && !$s->delivery->carrying,
-	'Descending onto the eight-metre ceiling inside the depot completes the delivery');
+	'Descending onto the eight-meter ceiling inside the depot completes the delivery');
 $next('pickup');
 $s->input(['values'=>['waterLevel'=>2]],1/60,16/9);
 check($s->navigationTarget() === null, 'Rising water retires the submerged box immediately');
@@ -112,7 +112,7 @@ $origin = ['x'=>0.,'z'=>0.,'y'=>0.];
 $region = new DriveRegion($gentle,-100.,$origin);
 $goal = $region->nearest(192.,0.);
 check($region->nearest(80.,0.) === $region->nearest(0.,0.) && $region->point($goal) === [192.,0.,0.],
-	'The regional grid has a 192-metre link');
+	'The regional grid has a 192-meter link');
 $before = $gentle->stats()['generated'];
 $probe = $region->connect($goal);
 foreach($probe as $_) {}
@@ -120,7 +120,7 @@ check($probe->getReturn() && $gentle->stats()['generated']-$before < 100,
 	'An unedited dry link uses sparse probes even when there are edits elsewhere on the map');
 $gentle->close();
 
-// The old 64-metre grade average accepted this level eight-metre-high shelf with a narrow vertical lip.
+// The old 64-meter grade average accepted this level eight-meter-high shelf with a narrow vertical lip.
 $relief = new Landscape(['worldSize'=>1164,'spacing'=>1,'heightScale'=>0,'detailAmplitude'=>0,'surround'=>'none']);
 $relief->queue(['type'=>'road','points'=>[[176,8,0],[208,8,0]],'width'=>28,'shoulder'=>1,'crown'=>0]);
 $relief->commit();
@@ -247,7 +247,7 @@ check($box !== null && PickupCover::blocks($mountain->landscape,$start,$box,$box
 	&& hypot($box['x']-$start['x'],$box['z']-$start['z'])>500., 'Mountain roads continue inside the innermost distance band');
 $mountain->close();
 
-// Only the local grid can leave this 120-metre island. No coarse-grid neighbour of the depot is dry.
+// Only the local grid can leave this 120-meter island. No coarse-grid neighbor of the depot is dry.
 $island = new Landscape(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0]);
 $island->queue(['type'=>'road','points'=>[[-58,3,0],[58,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
 $island->commit();

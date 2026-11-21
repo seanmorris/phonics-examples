@@ -56,6 +56,6 @@ void main()
 	lightLevel = int(round(aStyle.y));
 	opacity = aStyle.z;
 	styleMode = int(round(aStyle.w));
-	// The stencil colour arrives packed as r * 65536 + g * 256 + b, exact in a float.
+	// The stencil color arrives packed as r * 65536 + g * 256 + b, exact in a float.
 	stencil = vec3(floor(aStencil / 65536.0), floor(mod(aStencil, 65536.0) / 256.0), mod(aStencil, 256.0)) / 255.0;
 }

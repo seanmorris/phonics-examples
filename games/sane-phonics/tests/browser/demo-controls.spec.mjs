@@ -407,12 +407,12 @@ for(const [asset, scene] of [
 			await expect(page.locator('#start')).toBeEnabled();
 			await expect(page.locator('#status')).toContainText('Stopped');
 
-			await test.step('Release cancelled manifest', () =>
+			await test.step('Release canceled manifest', () =>
 				pending.fulfill({json: ['autoload.php']}).catch(() => {})
 			);
 
 			await page.unroute('**/engine/packages/sane-phonics/' + asset);
-			await test.step('Retry cancelled level', () => start(page));
+			await test.step('Retry canceled level', () => start(page));
 			await expect(page.locator('canvas')).toHaveAttribute('data-scene', 'platformer');
 			expect(errors).toEqual([]);
 		}

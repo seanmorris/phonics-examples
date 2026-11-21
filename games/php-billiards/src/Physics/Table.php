@@ -3,7 +3,7 @@ declare(strict_types=1);
 namespace PhpBilliards\Physics;
 
 /**
- * Standard nine-foot pool-table playfield and pocket geometry, in metres.
+ * Standard nine-foot pool-table playfield and pocket geometry, in meters.
  *
  * Regulation ball, mouth, jaw, shelf, and rail measurements live here so simulation and constructive render
  * geometry query one canonical physical model for all six pockets and every playable boundary.
@@ -12,7 +12,7 @@ final class Table
 {
 	public const WIDTH = 2.54;
 	public const HEIGHT = 1.27;
-	/** Distance of the foot spot, where the rack's apex ball sits, from the table centre; the head spot mirrors it. */
+	/** Distance of the foot spot, where the rack's apex ball sits, from the table center; the head spot mirrors it. */
 	public const FOOT_SPOT = self::WIDTH * .23;
 	/** Midpoints of the WPA mouth ranges: 4 9/16 and 5 1/16 inches. */
 	public const CORNER_MOUTH = 0.1158875;
@@ -32,9 +32,9 @@ final class Table
 	private const CORNER_JAW = 0.08194483710475602;
 
 	/**
-	 * Return the six pocket centres: one round cut through the slate and rail, where balls drop and liners hang.
+	 * Return the six pocket centers: one round cut through the slate and rail, where balls drop and liners hang.
 	 *
-	 * Corner centres follow the rounded table corners while side centres sit beyond the long rail, giving physics and
+	 * Corner centers follow the rounded table corners while side centers sit beyond the long rail, giving physics and
 	 * rendering one ordered index for mouths, liners, shelves, drops, and sound events.
 	 *
 	 * @return list<array{float,float}>
@@ -106,7 +106,7 @@ final class Table
 
 	/**
 	 * @param int $index Pocket index in table order.
-	 * @return array{float,float} Centre of the regulation jaw chord.
+	 * @return array{float,float} Center of the regulation jaw chord.
 	 */
 	public static function pocketMouthCenter(int $index): array
 	{
@@ -208,10 +208,10 @@ final class Table
 	}
 
 	/**
-	 * Whether a ball centre is over a slate cut, where the cloth no longer holds it up.
+	 * Whether a ball center is over a slate cut, where the cloth no longer holds it up.
 	 *
-	 * @param float $x Ball-centre X coordinate.
-	 * @param float $y Ball-centre Y coordinate.
+	 * @param float $x Ball-center X coordinate.
+	 * @param float $y Ball-center Y coordinate.
 	 */
 	public static function pocketed(float $x, float $y): bool
 	{
@@ -222,13 +222,13 @@ final class Table
 	}
 
 	/**
-	 * Find the slate cut a ball centre has crossed.
+	 * Find the slate cut a ball center has crossed.
 	 *
-	 * A ball drops as soon as its centre passes the cloth edge, the same circle the renderer cuts from the bed, so
+	 * A ball drops as soon as its center passes the cloth edge, the same circle the renderer cuts from the bed, so
 	 * nothing rests over a visible hole; it then tips over the rim into the liner rather than needing to fit it first.
 	 *
-	 * @param float $x Ball-centre X coordinate.
-	 * @param float $y Ball-centre Y coordinate.
+	 * @param float $x Ball-center X coordinate.
+	 * @param float $y Ball-center Y coordinate.
 	 * @return array{index:int,x:float,y:float}|null
 	 */
 	public static function pocketEntry(float $x, float $y): ?array

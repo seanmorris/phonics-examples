@@ -45,10 +45,10 @@ function wrap(float $angle): float { return atan2(sin($angle), cos($angle)); }
  * @param float $x World X to click.
  * @param float $z World Z to click.
  * @param float $heading Direction of travel the camera faces, in the vehicles' convention.
- * @param float $altitude Gate altitude setting in metres: 0 for road and water gates, above 0 for air gates.
- * @param float $eye Camera height in metres.
- * @param float $width Gate width setting in metres, 0 for the kind's own.
- * @param float $height Gate height setting in metres, 0 for the kind's own.
+ * @param float $altitude Gate altitude setting in meters: 0 for road and water gates, above 0 for air gates.
+ * @param float $eye Camera height in meters.
+ * @param float $width Gate width setting in meters, 0 for the kind's own.
+ * @param float $height Gate height setting in meters, 0 for the kind's own.
  * @return array|null The course gate the click placed or moved, or null when the click placed none.
  */
 function click(Session $session, string $role, float $x, float $z, float $heading = 0.0, float $altitude = 0.0,
@@ -284,12 +284,12 @@ $course->remove($f['id']);
 expect(count($course->route()) === 9 && $course->laps() === 3, 'Without the finish gate the kept laps run again');
 
 // The crossing test uses the segment between two fixed steps. A road gate on level ground counts a crossing from a
-// metre under the ground, which allows for the ground between samples, up to the window top.
+// meter under the ground, which allows for the ground between samples, up to the window top.
 $roadWindow = ['halfWidth' => $road['window']['halfWidth'], 'bottom' => -Course::ROAD_BELOW, 'top' => $road['window']['top']];
 $airWindow = $air['window'];
 $level = new Course;
 expect($level->measure($level->place('start', 'road', 0, 0, 0, 0)['gate'])['window'] == $roadWindow,
-	'A road gate on level ground measures its window from a metre below the ground to the board');
+	'A road gate on level ground measures its window from a meter below the ground to the board');
 $gate = ['x' => 0.0, 'y' => 10.0, 'z' => 0.0, 'yaw' => M_PI / 2];
 $top = $road['window']['top'];
 $half = $road['window']['halfWidth'];
@@ -757,7 +757,7 @@ expect(max(array_map('abs', $heights)) < 1e-12, 'Each step lifts the floating ga
 $range = [];
 for($i = 0; $i < 240; $i++) { $bay->step(1 / 60); $range[] = $bay->course->gate($c['id'])['y']; }
 expect(max($range) - min($range) > .3, 'The floating gates rise and fall with the swell');
-// A floating gate rides at the wave height at its centre, so the swell can leave the water at a foot lower than
+// A floating gate rides at the wave height at its center, so the swell can leave the water at a foot lower than
 // that. At the panel's highest choppiness, every corner of each foot must still reach under the water.
 input($bay, ['values' => ['waterChoppiness' => 300]]);
 ['window' => $opening, 'extent' => $reach] = $bay->gateShapes->kind('water');
@@ -849,7 +849,7 @@ $malformed = [
 	'an unknown course key' => ['gates' => $gate, 'lap' => 2],
 	'an unknown role' => ['gates' => [['role' => 'pit'] + $gate[1]]],
 	'an unknown kind' => ['gates' => [['kind' => 'lava'] + $gate[1]]],
-	'an extra gate key' => ['gates' => [$gate[1] + ['colour' => 'red']]],
+	'an extra gate key' => ['gates' => [$gate[1] + ['color' => 'red']]],
 	'a start gate without laps' => ['gates' => [array_diff_key($gate[0], ['laps' => 0])]],
 	'laps on a checkpoint' => ['gates' => [$gate[1] + ['laps' => 2]]],
 	'no laps' => ['gates' => [['laps' => 0] + $gate[0]]],
@@ -955,7 +955,7 @@ $away = $wall->car->state();
 expect($away['z'] > $post[1] + 5 && $away['motion'] === 'driving' && $overlap < 1e-3,
 	'Backing off and steering round, the car drives on past the post');
 $wall->close();
-// A glancing blow. The car runs past a post with 13 cm to spare and steers towards it, so its side scrapes the post's
+// A glancing blow. The car runs past a post with 13 cm to spare and steers toward it, so its side scrapes the post's
 // face. The same drive without the gate shows what the post took.
 $scrapes = [];
 foreach([true, false] as $withPost)
@@ -1037,7 +1037,7 @@ expect($view->message === 'Race reset. Place a start gate to race.' && $view->st
 	'Without a start gate the race has nothing to point at');
 $view->close();
 
-// One lane crests at station zero while the centreline and the approach grades remain gentle.
+// One lane crests at station zero while the centerline and the approach grades remain gentle.
 $roadFixture = new Landscape(['worldSize'=>512,'heightScale'=>0,'detailAmplitude'=>0]);
 $roadFixture->queue(['type'=>'material','x'=>0,'z'=>0,'radius'=>220,'material'=>'road']);
 $roadFixture->commit();
@@ -1172,7 +1172,7 @@ $lakeRace->close();
 $vehicle = ['x'=>12., 'z'=>10.];
 $target = ['kind'=>'checkpoint', 'x'=>0., 'z'=>0., 'yaw'=>0., 'halfWidth'=>15.];
 expect(NavigationArrow::bearing($target,$vehicle,null,0.) === 0.,
-	'An off-centre vehicle within the checkpoint span aims straight across it.');
+	'An off-center vehicle within the checkpoint span aims straight across it.');
 expect(abs(NavigationArrow::bearing($target,['x'=>19.,'z'=>4.],null,0.) + M_PI/4) < 1e-9,
 	'A vehicle outside the span aims at the near end.');
 $target['yaw'] = M_PI/3;

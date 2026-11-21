@@ -10,25 +10,25 @@ in vec3 vPaint0, vPaint1;
 uniform vec3 uEye;
 uniform float uWaterLevel, uWorldSize, uTerrainStyle;
 uniform vec4 uBedContacts[2];
-uniform vec3 uBedDatum; // X/Z dip and vertical spacing in metres.
+uniform vec3 uBedDatum; // X/Z dip and vertical spacing in meters.
 uniform highp sampler2D uTerrainShadowMap;
 uniform vec2 uShadowHeightRange;
 uniform vec2 uShadowReceiverRange;
 uniform float uCraft;
 uniform float uTerrainShadowExtent;
 uniform int uTerrainShadowReady;
-// TerrainAppearance. Colours are linear. The canyon palette runs rust, shale, ledge, sandstone, red beds, cap, dust,
-// then the colour of beds too fine to resolve.
+// TerrainAppearance. Colors are linear. The canyon palette runs rust, shale, ledge, sandstone, red beds, cap, dust,
+// then the color of beds too fine to resolve.
 uniform vec3 uGrassColor, uSoilColor, uRockColor, uRockBandColor, uSandColor, uSnowColor, uRoadColor;
 uniform vec3 uCanyonColors[8], uCanyonBounce;
-uniform vec3 uBanding; // Strata phase per metre, band contrast and band sharpness.
+uniform vec3 uBanding; // Strata phase per meter, band contrast and band sharpness.
 uniform vec4 uSlopeBlend; // Start and end slopes of cover to rock, then of snow fading off steep ground.
 uniform vec4 uHeightBlend; // Sand start and end above the water, then alpine rock start and end from the snowline.
 uniform vec2 uSnowline; // Mean snowline and the height over which snow becomes complete.
 uniform float uMacroVariation;
 // The mountain palette runs forest, meadow, tundra, granite, stain and talus.
 uniform vec3 uMountainColors[6];
-uniform vec2 uMountainZones; // Treeline and the foot of the tundra, in metres from the snowline.
+uniform vec2 uMountainZones; // Treeline and the foot of the tundra, in meters from the snowline.
 uniform vec3 uMountainAmounts; // Talus, stain and lichen.
 out vec4 color;
 float mountainShadow(vec3 position)
@@ -162,7 +162,7 @@ vec4 cliffNoiseGradient(vec3 p, vec2 scale, float xWeight)
 		mix(front.z, side.z, xWeight) / scale.y, xWeight * side.y / scale.x);
 }
 
-// Tilt a normal by the screen-space gradient of a relief height in metres. `fade` scales the tilt.
+// Tilt a normal by the screen-space gradient of a relief height in meters. `fade` scales the tilt.
 vec3 bump(vec3 normal, float relief, float fade)
 {
 	vec3 dx = dFdx(vWorld), dy = dFdy(vWorld);
@@ -282,7 +282,7 @@ void mountainMaterial(float footprint, vec3 weights, float slope, float macro, f
 	float clumpFade = 1.0 - smoothstep(1.5, 4.0, footprint), tuftFade = 1.0 - smoothstep(0.5, 1.3, footprint);
 	vec3 blotchGradient = smoothNoiseGradient(vWorld.xz / 31.0 + 5.17);
 	// Let nearby gullies bend differently across the face as they descend. Carry the warp's derivative through
-	// the noise so diffuse relief follows the same bends as the colour.
+	// the noise so diffuse relief follows the same bends as the color.
 	float phase = vWorld.y / 64.0 + 2.8*blotchGradient.x;
 	float meander = 7.0*sin(phase);
 	vec3 facePosition = vWorld + vec3(meander, 0.0, -meander);
@@ -353,7 +353,7 @@ void mountainMaterial(float footprint, vec3 weights, float slope, float macro, f
 	float boulders = mix(1.0, mix(0.84, 0.98 + 0.3*boulderSeed, boulder) / 0.88, 1.0 - smoothstep(1.2, 3.0, footprint));
 
 	// Shrubs mottle the meadow, tundra keeps meadow green in its hollows, and wet grass fills level floors. Shrubs
-	// blend into the meadow over a few metres rather than ending at a line, and they fill most openings in the forest.
+	// blend into the meadow over a few meters rather than ending at a line, and they fill most openings in the forest.
 	// Shrub crowns show more faintly than tree crowns. Ledges on steep ground lie in the shade of the rock around them.
 	float shrubs = max(patchy(0.4 + 0.3*steep, ragged + 0.4*blotch, 0.6*max(raggedDetail, blotchFade)),
 		0.7*lowland);
@@ -390,14 +390,14 @@ void mountainMaterial(float footprint, vec3 weights, float slope, float macro, f
 	// irregular spacing.
 	vec2 face = (xWeight > 0.5 ? facePosition.zy : facePosition.xy) + vec2(3.0*gully, 0.0);
 	float column = floor(face.x / 13.0), across = fract(face.x / 13.0);
-	// Neighbouring columns share the direction in which their joints dip.
+	// Neighboring columns share the direction in which their joints dip.
 	float lean = hashCell(vec2(column, 5.3));
 	float tilt = (0.15 + 0.45*lean) * sign(hashCell(vec2(floor(column / 4.0), 8.9)) - 0.5);
 	float along = (face.y + tilt * across * 13.0) / 23.0 + hashCell(vec2(column, 1.9));
 	vec2 slabCell = vec2(column, floor(along));
 	float slab = hashCell(slabCell);
 	// Each slab steps down over the one below it, so a joint shades the foot of the slab above it. `riser` is the
-	// distance up from the joint below and `below` the distance down from the joint above, in metres.
+	// distance up from the joint below and `below` the distance down from the joint above, in meters.
 	float rise = 23.0 * inversesqrt(1.0 + tilt*tilt);
 	float riser = fract(along) * rise, below = (1.0 - fract(along)) * rise, side = min(across, 1.0 - across) * 13.0;
 	float jointFade = 1.0 - smoothstep(0.4, 1.5, footprint), slabFade = 1.0 - smoothstep(1.5, 4.5, footprint);
@@ -414,7 +414,7 @@ void mountainMaterial(float footprint, vec3 weights, float slope, float macro, f
 	float wet = patchy(0.25, streak + 0.3*rill, max(streakFade, rillFade));
 	float tone = (1.0 + 0.2*(slab - 0.5)*slabFade*settled) * (1.0 - 0.20*joints) * (1.0 - 0.11*wet)
 		* (1.0 + 0.12*blotch + 0.1*macro) * hollows;
-	// Iron stains broad sheets of the faces and runs down them in streaks; lichen tints the rock grey-green in patches.
+	// Iron stains broad sheets of the faces and runs down them in streaks; lichen tints the rock gray-green in patches.
 	float sheets = sparse(0.6*uMountainAmounts.y, 0.4*blotch - 0.8*gully + 0.3*(slab - 0.5)*slabFade*settled,
 		max(blotchFade, gullyFade));
 	vec3 cliff = mix(granite, stain, sheets * clamp(0.5 + 0.42*streak + 0.4*rill, 0.0, 0.85)) * tone;
@@ -499,7 +499,7 @@ void main()
 			float sharpness = 1.0 + (uBanding.z - 1.0) * exp(-0.125 * pow(blur * (uBanding.z + 2.0), 2.0));
 			float profile = clamp(sin(strataPhase) * sharpness, -1.0, 1.0);
 			rock = mix(uRockColor, uRockBandColor, 0.5 + 0.5 * uBanding.y * profile * strataFilter);
-			// Strong macro variation must not push the soil weight outside 0 to 1, past either colour.
+			// Strong macro variation must not push the soil weight outside 0 to 1, past either color.
 			cover = uTerrainStyle > 1.5 ? mix(uSoilColor, rock, clamp(0.4 + 0.2 * macro, 0.0, 1.0)) : grass;
 		}
 #endif

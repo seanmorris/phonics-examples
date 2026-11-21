@@ -45,7 +45,7 @@ final class UiRenderer
 	}
 
 	/**
-	 * Install the card atlas once the browser has rasterised it.
+	 * Install the card atlas once the browser has rasterized it.
 	 *
 	 * @param string $pixels Raw RGBA bytes.
 	 * @param int $width Atlas width in texels.

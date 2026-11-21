@@ -25,18 +25,18 @@ function input(Session $session, array $value): void { $session->input($value, 1
 
 /**
  * Measure how far a point stands from the nearest solid part of the listed gates.
- * @param array $point [x, y, z] in metres.
+ * @param array $point [x, y, z] in meters.
  * @param list<array> $gates Gates from Course::obstructions().
- * @return float Metres to the nearest box surface; negative inside a box, by the depth to its nearest face.
+ * @return float Meters to the nearest box surface; negative inside a box, by the depth to its nearest face.
  */
 function clearance(array $point, array $gates): float
 {
 	$nearest = INF;
 	foreach($gates as $gate) foreach($gate['solids'] as $box)
 	{
-		$dx = $point[0] - $box['centre'][0]; $dz = $point[2] - $box['centre'][2];
+		$dx = $point[0] - $box['center'][0]; $dz = $point[2] - $box['center'][2];
 		$cos = cos($box['yaw']); $sin = sin($box['yaw']);
-		$gap = [abs($dx * $cos - $dz * $sin) - $box['halfX'], abs($point[1] - $box['centre'][1]) - $box['halfY'],
+		$gap = [abs($dx * $cos - $dz * $sin) - $box['halfX'], abs($point[1] - $box['center'][1]) - $box['halfY'],
 			abs($dx * $sin + $dz * $cos) - $box['halfZ']];
 		$out = 0.0;
 		foreach($gap as $d) if($d > 0) $out += $d * $d;
@@ -96,7 +96,7 @@ foreach($sizes as $kind => $list) foreach($list as $size) foreach($kind === 'roa
 	[$gate] = $course->obstructions();
 	$uniforms = $model->uniforms($course, $placed);
 	$window = $gate['opening'];
-	// gates.json rounds the extent to millimetres, which an arch's scale multiplies.
+	// gates.json rounds the extent to millimeters, which an arch's scale multiplies.
 	$slack = .001 * max(1, ...array_slice($uniforms['uGateSize'], 2));
 	$count = $outside = $inWindow = 0;
 	foreach(resizeGateMesh(readGateMesh(dirname(__DIR__) . '/assets/gates/' . $shapes->kind($kind)['mesh']), $uniforms)
@@ -127,8 +127,8 @@ $window = $shapes->kind('road')['window'];
 $post = $shapes->kind('road')['posts'][1];
 $foot = $course->measure($course->start())['posts'][1]['bottom'];
 expect($road['opening']['bottom'] === 3.0 + $window['bottom'] && $road['opening']['top'] === 3.0 + $window['top']
-	&& $road['opening']['yaw'] === .6 && abs($road['opening']['centre'][0] - 100) < 1e-12
-	&& abs(distance($road['solids'][1]['centre'], world(['x' => 100.0, 'y' => 3.0, 'z' => -50.0, 'yaw' => .6],
+	&& $road['opening']['yaw'] === .6 && abs($road['opening']['center'][0] - 100) < 1e-12
+	&& abs(distance($road['solids'][1]['center'], world(['x' => 100.0, 'y' => 3.0, 'z' => -50.0, 'yaw' => .6],
 		$post['x'], ($foot + $post['top']) / 2, $post['z']))) < 1e-9 && $road['solids'][1]['yaw'] === .6,
 	'A road gate lists its parts where its pose puts them, and its window as world heights');
 expect(array_column($course->obstructions([100.0, 0.0, -40.0], 20.0), 'id') === [$road['id']]
@@ -140,7 +140,7 @@ $lake->step(1 / 60);
 [$arch] = $lake->course->obstructions();
 $wave = $lake->water->sample(0.0, 0.0, $lake->time)['height'];
 expect(abs($arch['opening']['bottom'] - $wave) < 1e-12 && $wave !== 5.0
-	&& abs($arch['solids'][0]['centre'][1] - $wave - ($arch['solids'][0]['centre'][1] - $arch['opening']['bottom'])) < 1e-12,
+	&& abs($arch['solids'][0]['center'][1] - $wave - ($arch['solids'][0]['center'][1] - $arch['opening']['bottom'])) < 1e-12,
 	'A water gate lists its parts at its height on the waves');
 $lake->close();
 
@@ -312,11 +312,11 @@ $view = $duck->apply($camera, [0.0, .5, 6.5], $gates);
 [$after] = $view->basis();
 $looked = [];
 for($i = 0; $i < 3; $i++) $looked[] = $camera->position[$i] + $before[$i] * distance($camera->position, [0.0, .5, 6.5]);
-$towards = [];
-for($i = 0; $i < 3; $i++) $towards[] = $looked[$i] - $view->position[$i];
-$length = sqrt($towards[0] ** 2 + $towards[1] ** 2 + $towards[2] ** 2);
+$toward = [];
+for($i = 0; $i < 3; $i++) $toward[] = $looked[$i] - $view->position[$i];
+$length = sqrt($toward[0] ** 2 + $toward[1] ** 2 + $toward[2] ** 2);
 expect($view !== $camera && $camera->position === [0.0, 3.5, -.2] && abs($view->position[1] - (3.073 - $c)) < 1e-9
-	&& abs($after[0] * $towards[0] + $after[1] * $towards[1] + $after[2] * $towards[2] - $length) < 1e-9,
+	&& abs($after[0] * $toward[0] + $after[1] * $toward[1] + $after[2] * $toward[2] - $length) < 1e-9,
 	'apply() lowers a copy of the camera and turns it to the point the camera looked at');
 
 // Descend from a raised road toward a short gantry. The gate's own base cannot bound ground behind the car.
@@ -386,7 +386,7 @@ function race(Session $session, array $keys, int $steps, bool $draw = true): arr
 }
 
 // The car through a road gate. On flat ground the chase eye rides 2.56 m up, 0.5 m under the board of a gate at its
-// own size, so that gate moves it a centimetre at most. The board of a gate 2.3 m tall cuts the eye's path: the drawn
+// own size, so that gate moves it a centimeter at most. The board of a gate 2.3 m tall cuts the eye's path: the drawn
 // eye ducks under it and back, and nothing else changes.
 $open = ['worldSize' => 1024, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5];
 $drivers = [];

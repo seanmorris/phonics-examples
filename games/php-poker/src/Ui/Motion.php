@@ -181,7 +181,7 @@ final class Motion
 			}
 			break;
 		}
-		$centre = $layout->centre();
+		$center = $layout->center();
 		if($this->arrivals)
 		{
 			// Every card dealt this step stays off the table until it lands; until then it flies face down.
@@ -192,9 +192,9 @@ final class Motion
 				else $frame['hiddenCards'][$seat][] = $index;
 				$t = ($this->elapsed - $this->cardStart - $order * self::CARD_GAP) / self::CARD_TRAVEL;
 				if($t < 0) continue;
-				$to = $seat === null ? $centre['board'][$index] ?? null : $layout->seat($seat, $seats)['cards'][$index] ?? null;
+				$to = $seat === null ? $center['board'][$index] ?? null : $layout->seat($seat, $seats)['cards'][$index] ?? null;
 				if($to === null) continue;
-				$from = [$centre['deck'][0] + ($centre['deck'][2] - $to[2]) / 2, $centre['deck'][1] + ($centre['deck'][3] - $to[3]) / 2, $to[2], $to[3]];
+				$from = [$center['deck'][0] + ($center['deck'][2] - $to[2]) / 2, $center['deck'][1] + ($center['deck'][3] - $to[3]) / 2, $to[2], $to[3]];
 				$id = $seat === null ? $this->next['board'][$index] : $this->next['players'][$seat]['cards'][$index];
 				// The last card's progress can fall a rounding error short of one when the timeline ends.
 				$landed = $t >= 1 - 1e-9 || $this->elapsed >= $this->duration;
@@ -211,7 +211,7 @@ final class Motion
 				$t = ($this->elapsed - $this->cardStart - ($round * $seats + $offset - 1) * self::CARD_GAP) / self::CARD_TRAVEL;
 				if($t < 0) continue;
 				$to = $layout->seat($seat, $seats)['cards'][$round];
-				$from = [$centre['deck'][0] + ($centre['deck'][2] - $to[2]) / 2, $centre['deck'][1] + ($centre['deck'][3] - $to[3]) / 2, $to[2], $to[3]];
+				$from = [$center['deck'][0] + ($center['deck'][2] - $to[2]) / 2, $center['deck'][1] + ($center['deck'][3] - $to[3]) / 2, $to[2], $to[3]];
 				$frame['cards'][] = ['rect' => self::slide($from, $to, $t), 'id' => $t >= 1 ? $this->next['players'][$seat]['cards'][$round] : null];
 			}
 		}
@@ -230,14 +230,14 @@ final class Motion
 			{
 				$t = ($this->elapsed - $this->cardStart - $order * self::CARD_GAP) / self::CARD_TRAVEL;
 				if($t >= 1) continue;
-				$frame['cards'][] = ['rect' => self::slide($from[$index], $centre['discard'], $t), 'id' => $oldCards[$index]];
+				$frame['cards'][] = ['rect' => self::slide($from[$index], $center['discard'], $t), 'id' => $oldCards[$index]];
 			}
 			foreach($this->added as $order => $index)
 			{
 				$t = ($this->elapsed - $drawStart - $order * self::CARD_GAP) / self::CARD_TRAVEL;
 				if($t < 0) continue;
 				$to = $fan[$index];
-				$start = [$centre['deck'][0] + ($centre['deck'][2] - $to[2]) / 2, $centre['deck'][1] + ($centre['deck'][3] - $to[3]) / 2, $to[2], $to[3]];
+				$start = [$center['deck'][0] + ($center['deck'][2] - $to[2]) / 2, $center['deck'][1] + ($center['deck'][3] - $to[3]) / 2, $to[2], $to[3]];
 				$frame['cards'][] = ['rect' => self::slide($start, $to, $t), 'id' => $t >= 1 ? $newCards[$index] : null];
 			}
 			if($this->elapsed < $this->cardStart + self::CARD_TRAVEL) $frame['discardCount'] = (int)$this->previous['discardCount'];

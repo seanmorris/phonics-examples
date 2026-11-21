@@ -81,12 +81,12 @@ namespace
 		'A car on the ground darkens its patch fully');
 	expect(near($dark(0, 0), GroundShadow::STRENGTH), 'It is darkest under the middle of the car');
 	$halfBase = Car::WHEELBASE / 2;
-	$tyres = [[$halfBase, Car::FRONT_TRACK / 2], [$halfBase, -Car::FRONT_TRACK / 2], [-$halfBase, Car::REAR_TRACK / 2],
+	$tires = [[$halfBase, Car::FRONT_TRACK / 2], [$halfBase, -Car::FRONT_TRACK / 2], [-$halfBase, Car::REAR_TRACK / 2],
 		[-$halfBase, -Car::REAR_TRACK / 2]];
-	$atTyres = array_map(static fn(array $at) => $dark(...$at), $tyres);
-	// The rear tyres sit 0.15 m inside the sills, where the skirt has just begun to fade.
-	expect(min($atTyres) >= .9 * GroundShadow::SKIRT && max($atTyres) < GroundShadow::STRENGTH,
-		'Under the tyres it is lighter than the middle and about as dark as the skirt');
+	$atTires = array_map(static fn(array $at) => $dark(...$at), $tires);
+	// The rear tires sit 0.15 m inside the sills, where the skirt has just begun to fade.
+	expect(min($atTires) >= .9 * GroundShadow::SKIRT && max($atTires) < GroundShadow::STRENGTH,
+		'Under the tires it is lighter than the middle and about as dark as the skirt');
 	$bumper = $dark(-Car::BODY_REAR, 0); $sill = $dark(0, Car::BODY_HALF_WIDTH);
 	expect($bumper > .2 && $sill > .2 && $bumper < GroundShadow::SKIRT && $sill < GroundShadow::SKIRT,
 		"At the rear bumper and the sills it shows ($bumper, $sill)");
@@ -94,14 +94,14 @@ namespace
 		&& $dark(Car::BODY_FRONT + .4, 0) === 0.0 && $dark(0, Car::BODY_HALF_WIDTH + .4) === 0.0,
 		'It is gone 0.4 m past the body on every side');
 	[$a0, $a1, $c0, $c1] = $standing['extent'];
-	expect(near($c0, -$c1) && near($a0 + $a1, 2 * GroundShadow::BODY_CENTRE) && $a0 <= -Car::BODY_REAR - .4
+	expect(near($c0, -$c1) && near($a0 + $a1, 2 * GroundShadow::BODY_CENTER) && $a0 <= -Car::BODY_REAR - .4
 		&& $a1 >= Car::BODY_FRONT + .4 && $c1 >= Car::BODY_HALF_WIDTH + .4 && $a1 < Car::BODY_FRONT + .6,
 		'The grid covers the body and its fade, and little more');
 	$fading = true;
 	for($r = 0.0; $r <= 3.0; $r += .05)
 		$fading = $fading && $dark($r, 0) >= $dark($r + .05, 0) && $dark(-$r, 0) >= $dark(-$r - .05, 0)
 			&& $dark(0, $r) >= $dark(0, $r + .05);
-	expect($fading, 'It only ever fades outwards');
+	expect($fading, 'It only ever fades outward');
 
 	// In the air it grows fainter and wider, measured from the ground under the car.
 	$previous = GroundShadow::STRENGTH;
@@ -144,7 +144,7 @@ namespace
 	$pose = ['x' => 10.2, 'y' => $land->height(10.2, 20.4) + .1, 'z' => 20.4, 'yaw' => .3];
 	$first = $shadow->draw($pose, $land, $camera, 1280, 720);
 	[, , $columns, $rows] = GroundShadow::grid($pose, GroundShadow::shape($pose, $land->height(10.2, 20.4))['extent']);
-	expect($first === $columns * $rows + 1, 'The first frame looks up every grid point once, and the centre');
+	expect($first === $columns * $rows + 1, 'The first frame looks up every grid point once, and the center');
 	expect(count($gl['draws']) === 1 && $gl['draws'][0] === 6 * ($columns - 1) * ($rows - 1), 'It draws the whole grid');
 	$points = array_chunk(array_values(unpack('g*', $gl['vertices'])), 3);
 	expect(count($points) === $columns * $rows, 'One vertex per grid point');
@@ -156,14 +156,14 @@ namespace
 	expect(!isset($gl['enabled'][GL_BLEND]) && $gl['depthMask'] === true && $gl['depthFunc'] === GL_LESS,
 		'It leaves blending off, depth writes on and the depth test at LESS');
 	expect(near($gl['uniforms']['uOrigin'][0], 7.2, 1e-6) && near($gl['uniforms']['uOrigin'][1], 29.4, 1e-6),
-		'The shadow centres on the car, relative to the eye');
+		'The shadow centers on the car, relative to the eye');
 	$drawn = GroundShadow::shape($pose, $land->height(10.2, 20.4));
 	expect($gl['uniforms']['uHalf'] === [GroundShadow::HALF_LENGTH, GroundShadow::HALF_WIDTH]
 		&& $gl['uniforms']['uShade'] === $drawn['shade'] && $gl['uniforms']['uSkirt'] === $drawn['skirt']
-		&& $gl['uniforms']['uBody'] === [GroundShadow::BODY_HALF_LENGTH, GroundShadow::BODY_HALF_WIDTH, GroundShadow::BODY_CENTRE],
+		&& $gl['uniforms']['uBody'] === [GroundShadow::BODY_HALF_LENGTH, GroundShadow::BODY_HALF_WIDTH, GroundShadow::BODY_CENTER],
 		'The shader gets the footprints and the shades that darkness() describes');
 
-	expect($shadow->draw($pose, $land, $camera, 1280, 720) === 1, 'A parked car looks up only the ground at its centre');
+	expect($shadow->draw($pose, $land, $camera, 1280, 720) === 1, 'A parked car looks up only the ground at its center');
 	$moved = ['x' => $pose['x'] + GroundShadow::SPACING] + $pose;
 	$step = $shadow->draw($moved, $land, $camera, 1280, 720);
 	expect($step - 1 <= $rows + 1, "Moving one grid step looks up at most one new column ($step)");
@@ -181,7 +181,7 @@ namespace
 	$draws = count($gl['draws']);
 	$shadow->draw(['y' => $pose['y'] + 30] + $pose, $land, $camera, 1280, 720);
 	expect(count($gl['draws']) === $draws, 'A car 30 m up draws no shadow');
-	// Install a resident one-metre clipmap grid in the GL fixture, as after the terrain has streamed in.
+	// Install a resident one-meter clipmap grid in the GL fixture, as after the terrain has streamed in.
 	$clip = (new ReflectionClass(TerrainPhonics\Clipmap::class))->newInstanceWithoutConstructor();
 	$scene = (new ReflectionClass(TerrainPhonics\Scene::class))->newInstanceWithoutConstructor();
 	(new ReflectionProperty($scene,'clipmap'))->setValue($scene,$clip);
@@ -192,11 +192,11 @@ namespace
 	$gl['vertices'] = ''; $gl['strips'] = [];
 	expect($shadow->draw($air,$land,$camera,1280,720,$scene) === 1 && $gl['vertices'] === ''
 		&& count($gl['strips']) === 1 && $gl['strips'][0][0] === GL_TRIANGLE_STRIP,
-		'An airborne shadow uses one centre sample and draws the resident terrain with no vertex upload');
+		'An airborne shadow uses one center sample and draws the resident terrain with no vertex upload');
 	$above = ['y'=>$land->height($pose['x'],$pose['z'])+3] + $pose;
 	expect($shadow->draw($above,$land,$camera,1280,720,$scene) === 1 && count($gl['strips']) === 1
 		&& count($gl['draws']) === $draws && $gl['vertices'] === '',
-		'At the three-metre cutoff neither renderer submits any shadow geometry');
+		'At the three-meter cutoff neither renderer submits any shadow geometry');
 	expect($shadow->draw($air,$land,$camera,1280,720,$scene) === 1 && count($gl['strips']) === 2,
 		'Descending below the cutoff brings the shadow back');
 	$edge = ['x'=>32.,'z'=>0.,'y'=>$land->height(32.,0.)+1] + $pose;

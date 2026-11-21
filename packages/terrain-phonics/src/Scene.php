@@ -148,7 +148,7 @@ final class Scene
 	/** Maximum retained patches including parents. */
 	public int $maximumPatches = 384;
 	/**
-	 * Terrain colours, banding and blending. The next render() uploads a replacement. An application that skips
+	 * Terrain colors, banding and blending. The next render() uploads a replacement. An application that skips
 	 * unchanged frames must draw one after replacing it.
 	 */
 	public TerrainAppearance $appearance;
@@ -358,7 +358,7 @@ final class Scene
 
 	/**
 	 * Cancel staged meshes and return the candidate without taking its ownership.
-	 * @return Landscape|null Cancelled candidate, still owned by the caller, or null.
+	 * @return Landscape|null Canceled candidate, still owned by the caller, or null.
 	 */
 	public function cancelPreparedLandscape(): ?Landscape
 	{
@@ -430,7 +430,7 @@ final class Scene
 	 * Set the spot lights, such as a vehicle's headlights, that light the ground and the water from the next render().
 	 * Call it each frame the lamps move; an empty list clears them. Without lights render() draws ground and water
 	 * programs built without the lamp code and uploads nothing for them. See SpotLights::set() for the keys and units:
-	 * position in world metres, a nonzero direction, linear colour, intensity in candela, range in metres, and inner
+	 * position in world meters, a nonzero direction, linear color, intensity in candela, range in meters, and inner
 	 * and outer cone half-angles in radians. Lamp light gets SpotLights::NIGHT_GAIN at night.
 	 * @param array $lights List of at most SpotLights::MAX lights.
 	 * @return void Replaces the lights, or throws InvalidArgumentException and keeps the previous ones.
@@ -517,7 +517,7 @@ final class Scene
 		$key = implode(':', array_map(
 			/** Quantize camera motion for selection invalidation.
 		 * @param float $v One world coordinate.
-		 * @return int Eight-metre position bucket.
+		 * @return int Eight-meter position bucket.
 		 */
 			static fn($v) => (int)floor($v / 8)
 			, $camera->position
@@ -529,7 +529,7 @@ final class Scene
 				: implode(':', array_map(
 					/** Quantize the predicted eye independently of current-view motion.
 					 * @param float $value Predicted world coordinate.
-					 * @return int Thirty-two-metre prediction bucket.
+					 * @return int Thirty-two-meter prediction bucket.
 					 */
 					static fn($value) => (int)floor($value / 32)
 					, $this->lookahead
@@ -2175,7 +2175,7 @@ final class Scene
 		}
 
 		// Pass two derives visual normals from these exact mesh samples. Physics still
-		// uses Landscape::sample() and its authoritative one-metre reconstruction.
+		// uses Landscape::sample() and its authoritative one-meter reconstruction.
 		$i = $job['index']++;
 		$x = $i % $stride;
 		$z = intdiv($i, $stride);
@@ -2379,7 +2379,7 @@ final class Scene
 		}
 
 		if($this->clipmap) {
-			// The mountain preset uses its vegetation, lichen and granite shader. Explicit colour layers replace it.
+			// The mountain preset uses its vegetation, lichen and granite shader. Explicit color layers replace it.
 			$palette = $this->layers === null && $this->landscape->recipe()['preset'] === 'mountain'
 				? false : $this->palette();
 			$id=spl_object_id($groundProgram);
@@ -2663,7 +2663,7 @@ final class Scene
 	 * Draw an overlay on the same triangles as the finest resident terrain, including edits and LOD blending.
 	 * @param Program $program Active overlay program using the vertex functions from Clipmap::gridShader().
 	 * @param Camera $camera Camera for the current terrain pass.
-	 * @param array $bounds Minimum X and Z, then maximum X and Z, in world metres.
+	 * @param array $bounds Minimum X and Z, then maximum X and Z, in world meters.
 	 * @return bool Whether the grid covered the whole rectangle and submitted a draw.
 	 */
 	public function drawGroundPatch(Program $program, Camera $camera, array $bounds): bool

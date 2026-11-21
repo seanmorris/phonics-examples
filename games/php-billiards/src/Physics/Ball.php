@@ -17,9 +17,9 @@ final class Ball
 	public float $previousX;
 	/** Cloth-plane Y coordinate from the preceding fixed update. */
 	public float $previousY;
-	/** Linear X velocity in metres per second. */
+	/** Linear X velocity in meters per second. */
 	public float $vx = 0;
-	/** Linear Y velocity in metres per second. */
+	/** Linear Y velocity in meters per second. */
 	public float $vy = 0;
 	/** Angular velocity about the world X axis in radians per second. */
 	public float $spinX = 0;
@@ -41,7 +41,7 @@ final class Ball
 	public float $drop = 0;
 	/** Pocket drop from the preceding fixed update. */
 	public float $previousDrop = 0;
-	/** Downward pocket velocity in metres per second. */
+	/** Downward pocket velocity in meters per second. */
 	public float $vDrop = 0;
 	/** Whether the ball remains active in play or in a pocket channel. */
 	public bool $active = true;
@@ -71,7 +71,7 @@ final class Ball
 	/**
 	 * Integrate position and visible sphere orientation.
 	 *
-	 * Linear velocity advances the cloth-plane centre while angular velocity is integrated into a normalized
+	 * Linear velocity advances the cloth-plane center while angular velocity is integrated into a normalized
 	 * quaternion, giving rendering a camera-independent material orientation for every ball.
 	 *
 	 * @param float $seconds Integration interval in seconds.
@@ -84,7 +84,7 @@ final class Ball
 	}
 
 	/**
-	 * Integrate orientation without advancing a centre already handled by the contact integrator.
+	 * Integrate orientation without advancing a center already handled by the contact integrator.
 	 *
 	 * @param float $seconds Accepted integration interval in seconds.
 	 */

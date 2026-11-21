@@ -4,7 +4,7 @@ namespace DoomPhonics\Render;
 
 use Phonics\Render\RenderTarget;
 
-/** Offscreen colour-and-depth target a camera texture, mirror or portal view is rendered into. */
+/** Offscreen color-and-depth target a camera texture, mirror or portal view is rendered into. */
 final class CameraPortalTarget
 {
 	private RenderTarget $target;

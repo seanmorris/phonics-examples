@@ -191,7 +191,7 @@ final class MonsterMove
 	}
 
 	/**
-	 * P_TryMove over P_CheckPosition: whether a body can stand at the destination. Afterwards `$floor` is the
+	 * P_TryMove over P_CheckPosition: whether a body can stand at the destination. Afterward `$floor` is the
 	 * destination's floor, `$specials` the special lines the destination straddles, and `$floatOk` whether only the
 	 * monster's height blocked it.
 	 */

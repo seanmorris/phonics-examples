@@ -4,7 +4,7 @@ precision highp int;
 // LAYERS
 uniform highp sampler2D uOverview,uMapInk,uFine,uFineInk;
 uniform bool uPacked,uCircular;
-uniform vec4 uChart; // centre, span, viewport side
+uniform vec4 uChart; // center, span, viewport side
 uniform vec4 uLocal; // world lower left, step, interior span
 uniform vec2 uHeading,uViewportOrigin;
 uniform float uExtent,uWaterLevel;

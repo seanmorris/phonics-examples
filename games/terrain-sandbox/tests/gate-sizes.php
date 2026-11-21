@@ -132,13 +132,13 @@ foreach($sizes as $kind => $list) foreach($list as [$width, $height])
 	['window' => $window, 'extent' => $extent] = $measure;
 	expect(near($window['halfWidth'], $width / 2) && near($window['top'], $height),
 		"$name measures its window at its size");
-	// Nothing of the resized mesh stands in the window, above its lowest 15 centimetres.
+	// Nothing of the resized mesh stands in the window, above its lowest 15 centimeters.
 	$box = [$window['halfWidth'] - .01, ($window['top'] - .15) / 2 - .005, $extent['halfDepth'] + 1];
 	$blocked = count(array_filter($triangles, fn(array $t): bool => triangleMeetsBox($t, [0, .15 + $box[1], 0], $box)));
 	expect($blocked === 0, "$name keeps its window clear ($blocked triangles in it)");
 	$low = [INF, INF, INF]; $high = [-INF, -INF, -INF];
 	foreach($triangles as $t) foreach($t as $p) { $low = array_map('min', $low, $p); $high = array_map('max', $high, $p); }
-	// gates.json rounds the extent to millimetres, which an arch's scale multiplies.
+	// gates.json rounds the extent to millimeters, which an arch's scale multiplies.
 	$slack = .001 * max(1, ...array_slice($uniforms['uGateSize'], 2));
 	expect(near(max(-$low[0], $high[0]), $extent['halfWidth'], $slack) && near($high[1], $extent['top'], $slack)
 		&& near(min(0, $low[1]), min(0, $extent['bottom']), $slack), "$name stays inside its measured extent: "
@@ -174,7 +174,7 @@ foreach($sizes as $kind => $list) foreach($list as [$width, $height])
 		expect(near($posts['high'][0] - 2 * $road['posts'][1]['halfSize'], $width / 2, 1e-4)
 			&& near($posts['high'][1], $height + $road['posts'][1]['top'] - $road['window']['top'], .001)
 			&& near($posts['low'][1], -Course::POST_FOOT, 1e-4),
-			"$name stands its posts beside the opening, up to the board and a metre into the ground");
+			"$name stands its posts beside the opening, up to the board and a meter into the ground");
 		$tabs = $found['parts'][GATE_CAP];
 		expect(near($tabs['low'][1] - $height, $road['posts'][1]['top'] - $road['window']['top'], .001),
 			"$name caps its posts with their tabs");
@@ -268,7 +268,7 @@ $lowAir = $course->place('checkpoint', 'air', 0, .3, 300, 0, 1, null, null, $gro
 $race = new Race;
 $waterLevel = $reacher->water->level();
 expect($race->reach($course, $roadGate, 'car', $waterLevel) === null && $race->reach($course, $lowAir, 'car', $waterLevel) === null,
-	'The car reaches a road gate and an air gate hanging within half a metre of the ground');
+	'The car reaches a road gate and an air gate hanging within half a meter of the ground');
 expect($race->reach($course, $floating, 'car', $waterLevel)['message'] === 'Checkpoint 1 floats on the water, out of reach for the car.'
 	&& $race->reach($course, $hanging, 'car', $waterLevel)['message'] === 'Checkpoint 2 hangs 20 m above the ground, out of reach for the car.',
 	'The car cannot reach a floating gate or one hanging 20 m up');
@@ -436,7 +436,7 @@ $turned = $course->place('checkpoint', 'road', 0, 0, 100, M_PI / 2, 1, null, nul
 expect(near($turned['y'], .2 * $road['posts'][1]['halfSize']) && near($turned['ground'][0], -.4 * $road['posts'][1]['halfSize']),
 	'A gate facing up the slope stands level across it');
 // On a cliff rising 2 m in 1 both across the gate and along its travel, the ground under one corner of a post's 0.8 m
-// footprint lies 1.6 m below the ground under its middle. Each post still reaches a metre below the lowest of it, and
+// footprint lies 1.6 m below the ground under its middle. Each post still reaches a meter below the lowest of it, and
 // so do the posts the car collides with.
 $cliff = static fn(float $x, float $z): float => 2 * ($x + $z);
 $course = new Course;
@@ -453,7 +453,7 @@ foreach($measure['posts'] as $index => $post)
 	$reaches[] = $steep['y'] + $lowest - $course->posts()[$index][5];
 }
 expect(min($reaches) >= Course::POST_FOOT - 1e-9 && near($measure['feet'][2], 2 * $road['posts'][0]['x'] - $steep['y']),
-	'On a cliff each post reaches a metre below the lowest ground under its footprint: ' . json_encode($reaches));
+	'On a cliff each post reaches a meter below the lowest ground under its footprint: ' . json_encode($reaches));
 // On a landscape, the gate tool fits a road gate to the ground, and the drawn posts reach the ground under them.
 $ramp = new Session(['worldSize' => 512, 'spacing' => 1, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -50]);
 $ramp->landscape->queue(['type' => 'road', 'points' => [[-60, 0, 0], [60, 12, 0]], 'width' => 60, 'shoulder' => 20,
@@ -558,25 +558,25 @@ expect(count($found) === 3 && count($parts) === 5 && count($found[$airGate['id']
 	&& count($found[$arch['id']]['solids']) === 3,
 	'A road gate has five boxes (posts, base plates and board), an air gate one and a water arch three');
 $posts = $course->posts();
-expect(near($parts[0]['centre'][0], $posts[0][0]) && near($parts[0]['centre'][2], $posts[0][1])
-	&& near($parts[0]['centre'][1] - $parts[0]['halfY'], $posts[0][5]) && near($parts[0]['centre'][1] + $parts[0]['halfY'], $posts[0][6])
-	&& near($parts[1]['centre'][1] - $parts[1]['halfY'], $posts[1][5]) && $parts[0]['yaw'] === M_PI / 2
+expect(near($parts[0]['center'][0], $posts[0][0]) && near($parts[0]['center'][2], $posts[0][1])
+	&& near($parts[0]['center'][1] - $parts[0]['halfY'], $posts[0][5]) && near($parts[0]['center'][1] + $parts[0]['halfY'], $posts[0][6])
+	&& near($parts[1]['center'][1] - $parts[1]['halfY'], $posts[1][5]) && $parts[0]['yaw'] === M_PI / 2
 	&& near($parts[0]['halfX'], $road['posts'][0]['halfSize']), 'Each post\'s box is the post the car collides with');
 $plate = $parts[3];
-expect(near($plate['centre'][1] - $plate['halfY'], $roadGate['y'] + $roadGate['posts'][1])
+expect(near($plate['center'][1] - $plate['halfY'], $roadGate['y'] + $roadGate['posts'][1])
 	&& near($plate['halfX'], $road['extent']['halfDepth']),
 	'Each base plate\'s box lies on the ground under its post');
 $board = $parts[4];
-expect(near($board['centre'][1] - $board['halfY'], $roadGate['y'] + 12) && near($board['halfX'], 15 + $road['extent']['halfWidth'] - $road['window']['halfWidth'])
-	&& near($board['centre'][1] + $board['halfY'], $roadGate['y'] + 12 + $road['extent']['top'] - $road['window']['top']),
+expect(near($board['center'][1] - $board['halfY'], $roadGate['y'] + 12) && near($board['halfX'], 15 + $road['extent']['halfWidth'] - $road['window']['halfWidth'])
+	&& near($board['center'][1] + $board['halfY'], $roadGate['y'] + 12 + $road['extent']['top'] - $road['window']['top']),
 	'The board\'s box sits on top of the 12 m opening and spans the 30 m gate');
 $opening = $found[$roadGate['id']]['opening'];
-expect($opening['centre'] === [$roadGate['x'], $roadGate['y'], $roadGate['z']] && $opening['halfWidth'] === 15.0
+expect($opening['center'] === [$roadGate['x'], $roadGate['y'], $roadGate['z']] && $opening['halfWidth'] === 15.0
 	&& near($opening['top'], $roadGate['y'] + 12) && near($opening['bottom'], $roadGate['y'] + $roadGate['ground'][0]),
 	'The road gate\'s opening reaches from the lowest ground across it to the board');
 $legs = $found[$arch['id']]['solids'];
 $scale = 20 / (2 * $water['window']['halfWidth']);
-expect(near($legs[0]['centre'][0], -300 - $scale * ($water['window']['halfWidth'] + $water['extent']['halfWidth']) / 2)
+expect(near($legs[0]['center'][0], -300 - $scale * ($water['window']['halfWidth'] + $water['extent']['halfWidth']) / 2)
 	&& near($legs[2]['halfX'], $scale * $water['extent']['halfWidth']) && near($found[$arch['id']]['opening']['top'], 2 + 8)
 	&& near($found[$arch['id']]['opening']['bottom'], 2), 'The arch\'s legs and crossbar scale with it');
 expect(array_column($course->obstructions([0, 100, 420], 80), 'id') === [$airGate['id']],

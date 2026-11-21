@@ -112,7 +112,7 @@ $planner = new PickupSearch($land,-5.,$origin);
 [$box] = search($planner,['x'=>512.,'z'=>0.,'y'=>0.]);
 $regions = (new ReflectionProperty(PickupSearch::class,'regions'))->getValue($planner);
 check($box === null && count($regions)===2 && isset($regions[64],$regions[16]),
-	'A separated car checks each actual grid once when two caps round to 64 metres');
+	'A separated car checks each actual grid once when two caps round to 64 meters');
 $land->close();
 
 // The bend is between two coarse rows. A hill screens the distant island across the bend.
@@ -162,7 +162,7 @@ foreach([[$a,$b],[$b,$a]] as [$from,$to])
 {
 	$probe = $edge->invoke($region,$from,$to);
 	iterator_count($probe);
-	check(!$probe->getReturn(), 'The sharp tyre-track rise between the first-light canyon probes rejects the link');
+	check(!$probe->getReturn(), 'The sharp tire-track rise between the first-light canyon probes rejects the link');
 }
 $canyon->input(['actions'=>['delivery']],1/60,16/9);
 while($canyon->findingCarSite()) $canyon->input([],1/60,16/9);
@@ -174,7 +174,7 @@ check($box !== null && hypot($box['x']-$start['x'],$box['z']-$start['z']) > 2000
 // The original default canyon sent every phase down the same rear branch. This phase prefers the fork ahead.
 [$front] = search(new PickupSearch($land,$canyon->water->level(),$start),$start,5*M_PI/4);
 check($front !== null && ($front['x']-$start['x'])*sin($start['yaw'])+($front['z']-$start['z'])*cos($start['yaw']) > 500,
-	'A covered box can be more than half a kilometre ahead of the driver on the default canyon floor');
+	'A covered box can be more than half a kilometer ahead of the driver on the default canyon floor');
 $turned = ['yaw'=>$start['yaw']+M_PI]+$start;
 [$same] = search(new PickupSearch($land,$canyon->water->level(),$start),$turned,5*M_PI/4);
 check($same === $front && PickupCover::blocks($land,$turned,$front,$front['cover']), 'Reversing heading leaves a fixed-phase hidden site eligible');

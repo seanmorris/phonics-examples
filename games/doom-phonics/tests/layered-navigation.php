@@ -41,7 +41,7 @@ foreach([64,240] as $depth)
 {
 	$variant = LayeredPrototype::build($depth);
 	$routes = MapConnectivity::compile($variant)->search('basement',['water' => 'dry']);
-	verifyWad($reachable($routes,'balcony') && !$routes['traps'], 'moving the basement/cavern deeper preserves anchored upper storeys and a solvable flood route');
+	verifyWad($reachable($routes,'balcony') && !$routes['traps'], 'moving the basement/cavern deeper preserves anchored upper stories and a solvable flood route');
 }
 
 foreach($prototype['pins'] as [$a,$aa,$b,$ba])

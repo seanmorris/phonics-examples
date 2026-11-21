@@ -5,7 +5,7 @@ namespace TerrainPhonics;
 /** Four-probe arcade hull with fixed substeps, buoyancy, planing, drag, and heightfield shore contacts. */
 final class Watercraft
 {
-	/** Hull half extents and keel depth, in metres. */
+	/** Hull half extents and keel depth, in meters. */
 	private const WIDTH = .65, LENGTH = 1.25, KEEL = .32;
 	/** Full-throttle acceleration in m/s² with the jet intake in the water. */
 	private const FORWARD_THRUST = 16.0, REVERSE_THRUST = 8.0;
@@ -21,10 +21,10 @@ final class Watercraft
 
 	/**
 	 * Create a stationary craft. Use spawn() to place it on a sampled water surface.
-	 * @param float $x World X in metres.
-	 * @param float $z World Z in metres.
+	 * @param float $x World X in meters.
+	 * @param float $z World Z in meters.
 	 * @param float $yaw Heading in radians; zero faces positive Z.
-	 * @param float $y Hull centre height in metres.
+	 * @param float $y Hull center height in meters.
 	 * @param float $gravity Downward acceleration in m/s². Buoyancy compensates for the hull's weight at rest.
 	 * @return void Creates a craft with zero linear and angular velocity.
 	 */
@@ -44,8 +44,8 @@ final class Watercraft
 
 	/**
 	 * Reset the craft above both the current water and terrain surfaces.
-	 * @param float $x World X in metres.
-	 * @param float $z World Z in metres.
+	 * @param float $x World X in meters.
+	 * @param float $z World Z in meters.
 	 * @param float $yaw Heading in radians.
 	 * @param Water $water Authoritative water surface.
 	 * @param TerrainSurface $terrain Authoritative collision surface, independent of visual LOD.
@@ -167,7 +167,7 @@ final class Watercraft
 		$forward *= exp(-(.25 + .018 * abs($forward)) * $dragScale * $dt);
 		$lateral *= exp(-(1 + 3 * $wet) * $dt);
 		$previousYaw = $this->yaw;
-		// The bow faces local +Z, so turning right decreases yaw when travelling forward.
+		// The bow faces local +Z, so turning right decreases yaw when traveling forward.
 		$this->yaw -= $steer * .85 * $forward / (2 + abs($forward)) * $dt;
 		$this->yaw = atan2(sin($this->yaw), cos($this->yaw));
 		$this->vx = sin($this->yaw) * $forward + cos($this->yaw) * $lateral;
@@ -240,11 +240,11 @@ final class Watercraft
 	}
 
 	/**
-	 * Find the highest terrain support under the hull, including its centre.
+	 * Find the highest terrain support under the hull, including its center.
 	 * @param TerrainSurface $terrain Full-resolution collision surface.
-	 * @param float $x Hull centre X.
-	 * @param float $z Hull centre Z.
-	 * @return float Minimum safe centre height minus keel depth.
+	 * @param float $x Hull center X.
+	 * @param float $z Hull center Z.
+	 * @return float Minimum safe center height minus keel depth.
 	 */
 	private function support(TerrainSurface $terrain, float $x, float $z): float
 	{

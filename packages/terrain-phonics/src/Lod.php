@@ -19,8 +19,8 @@ final class Lod
 
 	/**
 	 * Configure a finite quadtree without allocating world meshes.
-	 * @param float $extent Width of the square world in metres.
-	 * @param float $spacing Minimum physical sample spacing in metres.
+	 * @param float $extent Width of the square world in meters.
+	 * @param float $spacing Minimum physical sample spacing in meters.
 	 * @return void Establishes the quadtree's finite leaf depth.
 	 */
 	public function __construct(public float $extent = 32768, float $spacing = 1)

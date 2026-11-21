@@ -13,7 +13,7 @@ use TerrainPhonics\Landscape;
  * A soft dark patch on the ground under the car, so it reads as standing on the ground, the same at any hour and from
  * any sun. A dark core lies between the wheels. A fainter skirt fills the body's outline and shows a little past the
  * bumpers and sills, which is all of the patch the chase camera behind the car can see. A car in the air leaves a
- * fainter, wider patch that vanishes three metres above the ground.
+ * fainter, wider patch that vanishes three meters above the ground.
  *
  * It darkens what the terrain pass drew by multiplying it, through a small world-aligned grid that takes the
  * terrain's own heights. The clipmap supplies the same GPU triangles drawn under the wheels. While that grid is
@@ -22,39 +22,39 @@ use TerrainPhonics\Landscape;
 final class GroundShadow
 {
 	/**
-	 * Half the length and width of the patch's footprint, in metres: the wheelbase and the wider (rear) track, centred
+	 * Half the length and width of the patch's footprint, in meters: the wheelbase and the wider (rear) track, centered
 	 * between the axles, with corners rounded by CORNER.
 	 */
 	public const HALF_LENGTH = Car::WHEELBASE / 2, HALF_WIDTH = Car::REAR_TRACK / 2, CORNER = .3;
 	/** Share of the ground's light the patch removes under the middle of the car. */
 	public const STRENGTH = .6;
 	/**
-	 * How far inside the footprint's edge the fade starts, and how far outside it ends, in metres. The patch keeps
-	 * about 30% of its strength at the middle of each wheel line and 9 to 12% under the tyres. It is gone 0.25 m
+	 * How far inside the footprint's edge the fade starts, and how far outside it ends, in meters. The patch keeps
+	 * about 30% of its strength at the middle of each wheel line and 9 to 12% under the tires. It is gone 0.25 m
 	 * outside them, under the sills and the overhangs.
 	 */
 	public const FADE_IN = .45, FADE_OUT = .25;
 	/**
 	 * The skirt's footprint: half the body's length and width, how far its middle sits ahead of the midpoint between
-	 * the axles, and the rounding of its corners, in metres.
+	 * the axles, and the rounding of its corners, in meters.
 	 */
 	public const BODY_HALF_LENGTH = (Car::BODY_FRONT + Car::BODY_REAR) / 2, BODY_HALF_WIDTH = Car::BODY_HALF_WIDTH,
-		BODY_CENTRE = (Car::BODY_FRONT - Car::BODY_REAR) / 2, BODY_CORNER = .5;
+		BODY_CENTER = (Car::BODY_FRONT - Car::BODY_REAR) / 2, BODY_CORNER = .5;
 	/**
 	 * The skirt's strength, and how far inside and outside the body's edge it fades. It removes about 30% of the
 	 * ground's light at the body's edge and is gone 0.4 m outside it.
 	 */
 	public const SKIRT = .4, SKIRT_FADE_IN = .2, SKIRT_FADE_OUT = .4;
-	/** Tire-sole clearance in metres where the shadow starts fading and where drawing stops. */
+	/** Tire-sole clearance in meters where the shadow starts fading and where drawing stops. */
 	private const FADE_START = .25, FADE_END = 3.0;
-	/** Grid spacing in metres. */
+	/** Grid spacing in meters. */
 	public const SPACING = .75;
 	/** Most heights kept before the cache starts again. */
 	private const CACHE = 4096;
-	/** Height of the grid above the terrain in metres. */
+	/** Height of the grid above the terrain in meters. */
 	private const LIFT = .03;
 	/**
-	 * How far each grid point moves towards the eye, as a fraction of its distance, and at most in metres. From a
+	 * How far each grid point moves toward the eye, as a fraction of its distance, and at most in meters. From a
 	 * chase camera 18 degrees above the ground, the 8 m pull clears terrain drawn up to about 20 cm too high.
 	 */
 	public const PULL = .08, PULL_LIMIT = .8;
@@ -73,7 +73,7 @@ final class GroundShadow
 		precision highp int;
 		// POSITION_SOURCE
 		uniform mat4 uViewProjection;
-		uniform vec2 uOrigin;   // the car's centre relative to the eye, on X and Z
+		uniform vec2 uOrigin;   // the car's center relative to the eye, on X and Z
 		uniform vec2 uAxis;     // sine and cosine of the car's heading: forward is (s, c), across is (c, -s)
 		out vec2 vLocal;
 		void main()
@@ -81,7 +81,7 @@ final class GroundShadow
 			vec3 position = relativePosition();
 			vec2 offset = position.xz - uOrigin;
 			vLocal = vec2(dot(offset, uAxis), dot(offset, vec2(uAxis.y, -uAxis.x)));
-			// Pull the point towards the eye along its own view ray. It stays where it is on screen, but clears
+			// Pull the point toward the eye along its own view ray. It stays where it is on screen, but clears
 			// terrain drawn a little above its true height, as coarse patches are before detail streams in.
 			float distance = length(position);
 			gl_Position = uViewProjection * vec4(position * max(0.0, 1.0 - min(PULL_LIMIT, PULL * distance) / distance), 1.0);
@@ -93,7 +93,7 @@ final class GroundShadow
 		precision highp float;
 		in vec2 vLocal;
 		uniform vec2 uHalf;   // half the core's length and width
-		uniform vec3 uShade;  // the core's strength, then how far inside and outside its edge the fade runs, in metres
+		uniform vec3 uShade;  // the core's strength, then how far inside and outside its edge the fade runs, in meters
 		uniform vec3 uBody;   // half the body's length and width, and how far its middle sits ahead of the axles' midpoint
 		uniform vec3 uSkirt;  // the skirt's strength and fade, as uShade
 		out vec4 color;
@@ -147,7 +147,7 @@ final class GroundShadow
 	/**
 	 * Work out how far the patch reaches and how dark it is.
 	 * @param array $pose The car's y as drawn.
-	 * @param float $ground Terrain height under the car's centre.
+	 * @param float $ground Terrain height under the car's center.
 	 * @return array The extent to cover in the car's frame (along from and to, across from and to, from the midpoint
 	 *   between the axles); the core's shade: strength, and how far inside and outside its edge the fade runs; and the
 	 *   skirt's, likewise.
@@ -162,15 +162,15 @@ final class GroundShadow
 		$skirt = [self::SKIRT * $fade, self::SKIRT_FADE_IN + .2 * $spread, self::SKIRT_FADE_OUT + .4 * $spread];
 		$along = self::BODY_HALF_LENGTH + $skirt[2] + .05; $across = self::BODY_HALF_WIDTH + $skirt[2] + .05;
 
-		return ['extent' => [self::BODY_CENTRE - $along, self::BODY_CENTRE + $along, -$across, $across],
+		return ['extent' => [self::BODY_CENTER - $along, self::BODY_CENTER + $along, -$across, $across],
 			'shade' => $shade, 'skirt' => $skirt];
 	}
 
 	/**
 	 * How much light the patch removes at a point, as the fragment shader works it out.
 	 * @param array $shape The result of shape().
-	 * @param float $along Distance ahead of the midpoint between the axles, in metres.
-	 * @param float $across Distance to the side of it, in metres.
+	 * @param float $along Distance ahead of the midpoint between the axles, in meters.
+	 * @param float $across Distance to the side of it, in meters.
 	 * @return float Share of the ground's light removed, from 0 to the core's strength.
 	 */
 	public static function darkness(array $shape, float $along, float $across): float
@@ -183,7 +183,7 @@ final class GroundShadow
 		};
 
 		return max($fade($shape['shade'], $along, $across, self::HALF_LENGTH, self::HALF_WIDTH, self::CORNER),
-			$fade($shape['skirt'], $along - self::BODY_CENTRE, $across, self::BODY_HALF_LENGTH, self::BODY_HALF_WIDTH,
+			$fade($shape['skirt'], $along - self::BODY_CENTER, $across, self::BODY_HALF_LENGTH, self::BODY_HALF_WIDTH,
 				self::BODY_CORNER));
 	}
 
@@ -313,7 +313,7 @@ final class GroundShadow
 		glUniform2f($p->location('uAxis'), sin($pose['yaw']), cos($pose['yaw']));
 		glUniform2f($p->location('uHalf'), self::HALF_LENGTH, self::HALF_WIDTH);
 		glUniform3f($p->location('uShade'), ...$shape['shade']);
-		glUniform3f($p->location('uBody'), self::BODY_HALF_LENGTH, self::BODY_HALF_WIDTH, self::BODY_CENTRE);
+		glUniform3f($p->location('uBody'), self::BODY_HALF_LENGTH, self::BODY_HALF_WIDTH, self::BODY_CENTER);
 		glUniform3f($p->location('uSkirt'), ...$shape['skirt']);
 	}
 

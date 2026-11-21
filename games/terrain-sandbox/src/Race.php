@@ -38,17 +38,17 @@ final class Race
 	 * forward.
 	 */
 	public const LEAVE = 3.0;
-	/** Jet::step() keeps the F5 at least this many metres above the ground and the water level. */
+	/** Jet::step() keeps the F5 at least this many meters above the ground and the water level. */
 	public const JET_FLOOR = 8.0;
-	/** Room in metres the F5 needs between its floor and the top of an opening to fly through it. */
+	/** Room in meters the F5 needs between its floor and the top of an opening to fly through it. */
 	public const JET_ROOM = 1.0;
-	/** How far the jet ski rides above or below the water level, in metres, at the sandbox's highest swell. */
+	/** How far the jet ski rides above or below the water level, in meters, at the sandbox's highest swell. */
 	public const CRAFT_REACH = 3.0;
 	/** Car::support() needs the ground at a wheel this far above the water level. */
 	private const CAR_WATER = .12;
 	/**
 	 * The car's position runs along the ground, under a body 1.13 m tall. An opening whose bottom edge stands this many
-	 * metres above that position is within its reach.
+	 * meters above that position is within its reach.
 	 */
 	private const CAR_REACH = .5;
 	/**
@@ -58,7 +58,7 @@ final class Race
 	private const RIDE = ['car' => self::CAR_REACH, 'craft' => self::CRAFT_REACH];
 	/**
 	 * Id and ground position of the start gate, and the farthest the vehicle has been from it across the ground since
-	 * it last passed through, in metres. Changing the course stops the race, so the position stays the gate's own.
+	 * it last passed through, in meters. Changing the course stops the race, so the position stays the gate's own.
 	 * Keeping it here spares a step from asking the course for that gate, which would sample the waves for a second
 	 * floating gate.
 	 */
@@ -68,7 +68,7 @@ final class Race
 	/**
 	 * Find where a step's segment passes forward through a gate's window.
 	 * @param array $gate Gate with x, y, z and yaw.
-	 * @param array $window The gate's window as Course::measure() gives it: halfWidth, and bottom and top in metres
+	 * @param array $window The gate's window as Course::measure() gives it: halfWidth, and bottom and top in meters
 	 * from the origin, the bottom at the lowest point a vehicle still counts as passing.
 	 * @param array $from Vehicle position [x, y, z] before the step.
 	 * @param array $to Vehicle position [x, y, z] after the step.
@@ -224,7 +224,7 @@ final class Race
 	 * @param Course $course The session's course.
 	 * @param float $now Simulation time in seconds.
 	 * @param string|null $vehicle Session mode of the vehicle being driven, ridden or flown, or null in free flight.
-	 * @param float $water Water level in metres.
+	 * @param float $water Water level in meters.
 	 * @return array State, clock, laps, next gate, splits, lap times, latest and best times, the last message, and
 	 * reach: null, or why the vehicle cannot pass the next gate, as reach() gives it.
 	 */
@@ -257,11 +257,11 @@ final class Race
 	 * @param Course $course The session's course.
 	 * @param array $gate A gate of the course at its height now.
 	 * @param string $vehicle Session mode: car, craft or jet.
-	 * @param float $water Water level in metres.
+	 * @param float $water Water level in meters.
 	 * @param array|null $step The route step the gate stands for, which names a start gate that finishes the race.
 	 * @return array{gate:int,needed:?float,message:string}|null Null when the vehicle can reach the opening, or when
 	 * that is unknown because an air gate was placed without the ground under it. Otherwise the gate, the opening
-	 * height in metres that would let the vehicle through when a taller opening would, and a sentence for the page.
+	 * height in meters that would let the vehicle through when a taller opening would, and a sentence for the page.
 	 * A floating gate is measured at the water level, so the answer holds while the waves lift and drop it.
 	 */
 	public function reach(Course $course, array $gate, string $vehicle, float $water, ?array $step = null): ?array
@@ -282,7 +282,7 @@ final class Race
 			$needed = ceil($floor + self::JET_ROOM - $origin);
 			return ['gate' => $gate['id'], 'needed' => $needed,
 				'message' => "$name is out of reach for the F5, which keeps " . (int)self::JET_FLOOR
-					. ' m above the ground and the water. It needs an opening at least ' . GateShapes::metres($needed)
+					. ' m above the ground and the water. It needs an opening at least ' . GateShapes::meters($needed)
 					. ' m tall.'];
 		}
 		if($vehicle === 'car')
@@ -297,12 +297,12 @@ final class Race
 					'message' => "$name stands in the water, out of reach for the car."];
 			if($bottom <= $high + self::CAR_REACH && $top >= $low) return null;
 			return ['gate' => $gate['id'], 'needed' => null, 'message' => "$name hangs "
-				. GateShapes::metres($bottom - $high) . ' m above the ground, out of reach for the car.'];
+				. GateShapes::meters($bottom - $high) . ' m above the ground, out of reach for the car.'];
 		}
 		if($floating || $bottom <= $water + self::CRAFT_REACH && $top >= $water - self::CRAFT_REACH
 			&& $gate['y'] + $ground[0] < $water) return null;
 		$where = $gate['y'] + $ground[0] >= $water ? 'stands over land'
-			: 'hangs ' . GateShapes::metres($bottom - $water) . ' m above the water';
+			: 'hangs ' . GateShapes::meters($bottom - $water) . ' m above the water';
 		return ['gate' => $gate['id'], 'needed' => null, 'message' => "$name $where, out of reach for the jet ski."];
 	}
 

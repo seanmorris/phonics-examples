@@ -58,7 +58,7 @@ final class EmbeddedPlanarGraph
 				$x=(int)(round(($c['center'][0]-$w/2)/64)*64); $y=(int)(round(($c['center'][1]-$h/2)/64)*64);
 				match($side) {0=>$x=(int)$c['x1'],1=>$y=(int)$c['y1'],2=>$x=(int)$c['x0']-$w,3=>$y=(int)$c['y0']-$h};
 				if($side%2===0) $y+=$offset; else $x+=$offset;
-				// Leave the special building and its inter-storey approaches untouched.
+				// Leave the special building and its inter-story approaches untouched.
 				if($x<$specialSize || max(abs($x+$w),abs($y+$h))>12000) continue;
 				if(!$isAnchor) for($fit=0;$fit<8;$fit++) {
 					$distance=self::distance([$x+$w/2,$y+$h/2],$anchors); $target=self::size($distance);

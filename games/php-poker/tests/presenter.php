@@ -50,7 +50,7 @@ $test('seats sit on the oval with no two plates overlapping at any seat count', 
 		}
 		foreach($plates as $i => $a) foreach($plates as $j => $b) if($i < $j)
 		$expect(!$overlaps($a, $b), "plates $i and $j do not overlap at $seats seats");
-		$expect(abs(Layout::fit(1280, 720)->seat(0, $seats)['plate'][0] + Layout::fit(1280, 720)->seat(0, $seats)['plate'][2] / 2 - Layout::fit(1280, 720)->width() / 2) < 1e-6, "the human sits at the bottom centre with $seats seats");
+		$expect(abs(Layout::fit(1280, 720)->seat(0, $seats)['plate'][0] + Layout::fit(1280, 720)->seat(0, $seats)['plate'][2] / 2 - Layout::fit(1280, 720)->width() / 2) < 1e-6, "the human sits at the bottom center with $seats seats");
 	}
 });
 
@@ -829,7 +829,7 @@ $test('How to Play sets every game whole, on every canvas, look and input family
 	}
 	$full = Layout::fit(1280, 720, 1);
 	$expect(abs($full->help()['view'][2] - 38 * 14) < 1e-6, 'copy is set in one column of 76 characters on a desktop');
-	$expect($full->help(200)['box'][3] < $full->help()['box'][3] && abs($full->help(200)['box'][1] + $full->help(200)['box'][3] / 2 - 360) < 1e-6, 'a rules window shrinks to copy that fits and stays centred');
+	$expect($full->help(200)['box'][3] < $full->help()['box'][3] && abs($full->help(200)['box'][1] + $full->help(200)['box'][3] / 2 - 360) < 1e-6, 'a rules window shrinks to copy that fits and stays centered');
 });
 
 $test('controller focus navigates menus, setup, cards and table actions through shared SDL controls', static function(callable $expect) use ($fixture, $root): void {
@@ -1189,7 +1189,7 @@ $test('the Poker menu opens the rules of the game being played, and the title\'s
 	$key('arrowdown', 'arrowdown');
 	$expect($state()['helpScroll'] === 2, 'the rules scroll over the table as they do from the title');
 	$key('arrowright');
-	$expect($state()['helpGame'] === 'holdem' && $state()['infoDialog'] === 'help', 'Next still turns to the neighbouring game');
+	$expect($state()['helpGame'] === 'holdem' && $state()['infoDialog'] === 'help', 'Next still turns to the neighboring game');
 	$expect($key('escape') === [] && $state()['infoDialog'] === null && $state()['helpGame'] === null && ($presenter->layout() === $layout), 'Back returns to the table, not to the index or the title');
 	$expect($key('?') === [] && $state()['infoDialog'] === 'help' && $state()['helpGame'] === 'draw', 'the question mark opens the rules straight from the table too');
 	$back = $presenter->layout()->rect(...(fn(): array => $this->helpPage()->frame['back'])->call($presenter));
@@ -1345,7 +1345,7 @@ $test('phones get the tall profile with touch-sized controls and no overlaps', s
 	$stepper = $layout->stepper($view);
 	$expect($stepper !== null && $stepper['more'][0] + $stepper['more'][2] <= $layout->width() - 15, 'the stepper row fits the field width');
 	$expect($stepper['align'] === 'right' && $stepper['less'][0] - $stepper['label'][0] <= 12 && $stepper['label'][0] < $stepper['less'][0], 'the stepper label reads straight into the minus button');
-	$expect(abs($stepper['label'][1] - ($stepper['less'][1] + $stepper['less'][3] / 2)) < .01, 'the stepper label is centred on its row');
+	$expect(abs($stepper['label'][1] - ($stepper['less'][1] + $stepper['less'][3] / 2)) < .01, 'the stepper label is centered on its row');
 	$landscape = Layout::fit(1000, 435, 1, 8);
 	$landscapeButtons = $landscape->actions($view, ['discards' => [], 'amount' => 8]);
 	$expect($landscape->profile === 'landscape' && $landscape->verticalActionBar(), 'the short many-player desktop uses a vertical action column');
@@ -1462,7 +1462,7 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$fanRight = $headsUp['cards'][4][0] + $headsUp['cards'][4][2];
 			$bank = $layout->bankBounds(1, 2, Chips::bank(500));
 			$expect(abs($bank[0] + $bank[2] - $fanRight) < 1e-6, "the heads-up bank is flush with the right corner of its hand in {$layout->width()}x{$layout->height()}");
-			$pot = $layout->centre()['pot'];
+			$pot = $layout->center()['pot'];
 			$clear = true;
 			for($value = 0; $value <= 1000; $value += 7) if(($bounds = $layout->bankBounds(1, 2, Chips::bank($value))) && $overlaps($bounds, $pot)) $clear = false;
 			$expect($clear, "no heads-up bank reaches the pot plate in {$layout->width()}x{$layout->height()}");
@@ -1478,13 +1478,13 @@ $test('seat indicators match their hands and CPU identity blocks sit below their
 			$deltas = [-1 => [], 1 => []];
 			[$cardWidth] = $layout->metric('card');
 			$plateWidth = $cardWidth + 4 * $layout->metric('cardStep');
-			[$centreX] = $layout->metric('centre');
+			[$centerX] = $layout->metric('center');
 			[$ovalX] = $layout->metric('oval');
 			for($seat = 1; $seat < $seats; $seat++)
 			{
 				$g = $layout->seat($seat, $seats);
 				$side = $g['outward'];
-				$raw = $centreX + cos($g['angle']) * $ovalX - $plateWidth / 2;
+				$raw = $centerX + cos($g['angle']) * $ovalX - $plateWidth / 2;
 				$base = max($side > 0 ? 0 : 40, min($layout->width() - $plateWidth - ($side > 0 ? 40 : 0), $raw));
 				$deltas[$side][] = $g['plate'][0] - $base;
 			}
@@ -1505,21 +1505,21 @@ $test('tall table objects grow modestly into responsive field space', static fun
 		$expect($wide->metric($metric)[0] >= $base->metric($metric)[0] * 1.1, "$metric uses the extra horizontal space");
 	}
 	$expect($portrait->metric('emblemSize') === 32 && $wide->metric('emblemSize') === 32, 'responsive growth preserves 32px identity emblems');
-	$expect($portrait->centre()['deck'][2] > $base->centre()['deck'][2], 'the centre cards grow with the portrait field');
-	$expect($wide->centre()['pot'][2] > $base->centre()['pot'][2], 'the centre plates grow with the wider field');
-	$expect($portrait->centre()['pot'][1] > $portrait->height() * .3, 'the portrait centre cluster uses the vertical void');
+	$expect($portrait->center()['deck'][2] > $base->center()['deck'][2], 'the center cards grow with the portrait field');
+	$expect($wide->center()['pot'][2] > $base->center()['pot'][2], 'the center plates grow with the wider field');
+	$expect($portrait->center()['pot'][1] > $portrait->height() * .3, 'the portrait center cluster uses the vertical void');
 });
 
 $test('sparser tall tables spend their free space on larger table objects', static function(callable $expect) use ($overlaps): void {
 	$previous = INF;
-	$fullCentreWidth = Layout::fit(390, 782, 1, 8)->centre()['pot'][2];
+	$fullCenterWidth = Layout::fit(390, 782, 1, 8)->center()['pot'][2];
 	foreach(range(2, 8) as $seats)
 	{
 		$layout = Layout::fit(390, 782, 1, $seats);
 		$width = $layout->metric('card')[0];
 		$expect($width < $previous, "$seats-player cards follow the density curve");
 		$previous = $width;
-		if($seats < 8) $expect($layout->centre()['pot'][2] > $fullCentreWidth, "$seats-player centre plate grows beyond the full-table plate");
+		if($seats < 8) $expect($layout->center()['pot'][2] > $fullCenterWidth, "$seats-player center plate grows beyond the full-table plate");
 		$blocks = [];
 		for($seat = 0; $seat < $seats; $seat++)
 		{
@@ -1533,21 +1533,21 @@ $test('sparser tall tables spend their free space on larger table objects', stat
 		}
 		foreach($blocks as $i => $a) foreach($blocks as $j => $b) if($i < $j)
 			$expect(!$overlaps($a, $b), "$seats-player responsive seat blocks remain separate");
-		$centre = $layout->centre();
+		$center = $layout->center();
 		$chip = $layout->metric('chipRadius');
-		$cluster = [min($centre['pot'][0], $centre['deck'][0], $centre['pile'][0] - $centre['pile'][2] - $chip), $centre['pot'][1], 0, 0];
-		$cluster[2] = max($centre['pot'][0] + $centre['pot'][2], $centre['discard'][0] + $centre['discard'][2], $centre['pile'][0] + $centre['pile'][2] + $chip) - $cluster[0];
-		$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56 - $cluster[1];
-		foreach($blocks as $seat => $block) $expect(!$overlaps($block, $cluster), "$seats-player centre cluster clears seat $seat");
+		$cluster = [min($center['pot'][0], $center['deck'][0], $center['pile'][0] - $center['pile'][2] - $chip), $center['pot'][1], 0, 0];
+		$cluster[2] = max($center['pot'][0] + $center['pot'][2], $center['discard'][0] + $center['discard'][2], $center['pile'][0] + $center['pile'][2] + $chip) - $cluster[0];
+		$cluster[3] = max($center['bet'][1] + $center['bet'][3], $center['deck'][1] + $center['deck'][3]) + 8 + 56 - $cluster[1];
+		foreach($blocks as $seat => $block) $expect(!$overlaps($block, $cluster), "$seats-player center cluster clears seat $seat");
 	}
 	$headsUp = Layout::fit(973, 1222, 1, 2);
 	$remote = $headsUp->seat(1, 2);
 	$human = $headsUp->seat(0, 2);
-	$centre = $headsUp->centre();
+	$center = $headsUp->center();
 	$remoteBottom = $remote['cards'][0][1] + $remote['cards'][0][3];
-	$statusBottom = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56;
-	$expect($centre['pot'][1] >= $remoteBottom + 14, 'the tall heads-up pot clears the remote cards');
-	$expect(abs($human['plate'][1] - 14 - $statusBottom) < 1e-9, 'the tall heads-up centre cluster uses the lane down to the local plate');
+	$statusBottom = max($center['bet'][1] + $center['bet'][3], $center['deck'][1] + $center['deck'][3]) + 8 + 56;
+	$expect($center['pot'][1] >= $remoteBottom + 14, 'the tall heads-up pot clears the remote cards');
+	$expect(abs($human['plate'][1] - 14 - $statusBottom) < 1e-9, 'the tall heads-up center cluster uses the lane down to the local plate');
 });
 
 $test('wide card fans anchor every player layout and CPU cards use the available vertical room', static function(callable $expect): void {
@@ -1564,10 +1564,10 @@ $test('wide card fans anchor every player layout and CPU cards use the available
 			$last = $geometry['cards'][4];
 			$fanLeft = $first[0];
 			$fanRight = $last[0] + $last[2];
-			$fanCentre = ($fanLeft + $fanRight) / 2;
+			$fanCenter = ($fanLeft + $fanRight) / 2;
 			$expect(abs($geometry['plate'][0] - $fanLeft) < 1e-9 && abs($geometry['plate'][0] + $geometry['plate'][2] - $fanRight) < 1e-9, "seat $seat plate derives from its card fan at $seats players, $width x $height");
 			if($seat === 0 || $seats === 2)
-				$expect(abs($fanCentre - $layout->width() / 2) < 1e-9, "heads-up/human seat $seat is centered at $seats players, $width x $height");
+				$expect(abs($fanCenter - $layout->width() / 2) < 1e-9, "heads-up/human seat $seat is centered at $seats players, $width x $height");
 		}
 	}
 	$canonical = Layout::fit(1280, 720, 1, 8);
@@ -1592,8 +1592,8 @@ $test('wide tables keep vertical sizing independent from horizontal compression'
 		foreach(range(0, 1) as $seat)
 		{
 			$cards = $layout->seat($seat, 2)['cards'];
-			$fanCentre = ($cards[0][0] + $cards[4][0] + $cards[4][2]) / 2;
-			$expect(abs($fanCentre - $layout->width() / 2) < 1e-9, "heads-up seat $seat anchors its fan on the table center line");
+			$fanCenter = ($cards[0][0] + $cards[4][0] + $cards[4][2]) / 2;
+			$expect(abs($fanCenter - $layout->width() / 2) < 1e-9, "heads-up seat $seat anchors its fan on the table center line");
 		}
 	}
 	$expect($tall->metric('handCard')[1] * $tall->scale > $base->metric('handCard')[1] * $base->scale, 'vertical room enlarges rendered cards');
@@ -1618,7 +1618,7 @@ $test('wide tables keep vertical sizing independent from horizontal compression'
 	$canonical = Layout::fit(1280, 720, 1, 2);
 	$expect($canonical->metric('handCard')[1] >= 151.2 && $canonical->metric('handChipRadius') >= 17, 'the sparse canonical composition uses its free room without shrinking the local hand');
 	$compact = Layout::fit(770, 700, 1, 2);
-	$expect($compact->metric('handCard')[1] * $compact->scale < $tall->metric('handCard')[1] * $tall->scale, 'actual centre and seat constraints can reduce the rendered size');
+	$expect($compact->metric('handCard')[1] * $compact->scale < $tall->metric('handCard')[1] * $tall->scale, 'actual center and seat constraints can reduce the rendered size');
 	$view = $fixture('facing-raise-5');
 	$horizontalChrome = [];
 	foreach([[1920,1080,1],[1280,720,1],[1920,1208,1],[1378,1208,1],[1280,1208,1],[1536,1500,2]] as [$width,$height,$dpr])
@@ -1750,15 +1750,15 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 				$expect($left >= 0 && $right <= $edge + 1e-9 && $g['plate'][1] >= Layout::MENU_BAR + 4 && $bottom <= $layout->height(), "seat $seat of $seats stays on the table at $width x $height");
 			}
 			foreach($blocks as $i => $a) foreach($blocks as $j => $b) if($i < $j) $expect(!$overlaps($a, $b), "seats $i and $j are apart at $seats seats, $width x $height");
-			$centre = $layout->centre();
+			$center = $layout->center();
 			$chip = $layout->metric('chipRadius');
-			$cluster = [min($centre['pot'][0], $centre['deck'][0], $centre['pile'][0] - $centre['pile'][2] - $chip), $centre['pot'][1], 0, 0];
-			$cluster[2] = max($centre['pot'][0] + $centre['pot'][2], $centre['discard'][0] + $centre['discard'][2], $centre['pile'][0] + $centre['pile'][2] + $chip) - $cluster[0];
-			$cluster[3] = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56 - $cluster[1];
+			$cluster = [min($center['pot'][0], $center['deck'][0], $center['pile'][0] - $center['pile'][2] - $chip), $center['pot'][1], 0, 0];
+			$cluster[2] = max($center['pot'][0] + $center['pot'][2], $center['discard'][0] + $center['discard'][2], $center['pile'][0] + $center['pile'][2] + $chip) - $cluster[0];
+			$cluster[3] = max($center['bet'][1] + $center['bet'][3], $center['deck'][1] + $center['deck'][3]) + 8 + 56 - $cluster[1];
 			foreach($blocks as $seat => $block) $expect(!$overlaps($block, $cluster), "the pot cluster clears seat $seat at $seats seats, $width x $height");
 			// Each of the pot's plates on its own, against each seat's plate, at every table size.
 			foreach(['pot','bet'] as $name) for($seat = 1; $seat < $seats; $seat++)
-			$expect(!$overlaps($centre[$name], $layout->seat($seat, $seats)['plate']), "the $name plate clears seat $seat's plate at $seats seats, $width x $height");
+			$expect(!$overlaps($center[$name], $layout->seat($seat, $seats)['plate']), "the $name plate clears seat $seat's plate at $seats seats, $width x $height");
 			$view = $fixture('facing-raise-5');
 			foreach($layout->actions($view, ['discards' => [], 'amount' => 8]) as $button) foreach($blocks as $seat => $block)
 			$expect(!$overlaps($block, $button['rect']), "{$button['id']} clears seat $seat at $seats seats, $width x $height");
@@ -1768,14 +1768,14 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 		if($layout->profile === 'tall')
 		{
 			// The pot's plates keep clear air beside each column and use the lane above the human hand.
-			$centre = $layout->centre();
+			$center = $layout->center();
 			$leftPlate = $layout->seat(1, 8)['plate'];
 			$rightPlate = $layout->seat(7, 8)['plate'];
 			$humanPlate = $layout->seat(0, 8)['plate'];
-			$statusBottom = max($centre['bet'][1] + $centre['bet'][3], $centre['deck'][1] + $centre['deck'][3]) + 8 + 56;
-			$expect($centre['pot'][0] - ($leftPlate[0] + $leftPlate[2]) >= 16 && $rightPlate[0] - ($centre['pot'][0] + $centre['pot'][2]) >= 16, "the pot plates stand apart from both columns at $width x $height");
-			$expect($centre['pot'][1] > $layout->height() * .25, "the pot uses the middle of the phone field at $width x $height");
-			$expect($statusBottom <= $humanPlate[1] - 14 + 1e-9, "the complete centre cluster clears the human hand at $width x $height");
+			$statusBottom = max($center['bet'][1] + $center['bet'][3], $center['deck'][1] + $center['deck'][3]) + 8 + 56;
+			$expect($center['pot'][0] - ($leftPlate[0] + $leftPlate[2]) >= 16 && $rightPlate[0] - ($center['pot'][0] + $center['pot'][2]) >= 16, "the pot plates stand apart from both columns at $width x $height");
+			$expect($center['pot'][1] > $layout->height() * .25, "the pot uses the middle of the phone field at $width x $height");
+			$expect($statusBottom <= $humanPlate[1] - 14 + 1e-9, "the complete center cluster clears the human hand at $width x $height");
 		}
 		// Opponents run clockwise from the human's left: up the left column, then down the right.
 		$tops = [];
@@ -1789,7 +1789,7 @@ $test('column profiles seat everyone without overlap and fill the canvas', stati
 			sort($sorted);
 			$expect($lefts === $sorted && count(array_unique($lefts)) === 7, "the row runs left to right in turn order at $width x $height");
 			$expect(count(array_unique(array_column($tops, 1))) === 1, "the row keeps every opponent on one line at $width x $height");
-			$expect($layout->centre()['pot'][1] > $layout->seat(1, 8)['cards'][0][1] + $layout->seat(1, 8)['cards'][0][3], "the pot sits below the row at $width x $height");
+			$expect($layout->center()['pot'][1] > $layout->seat(1, 8)['cards'][0][1] + $layout->seat(1, 8)['cards'][0][3], "the pot sits below the row at $width x $height");
 			continue;
 		}
 		$expect($tops[1][0] === -1 && $tops[4][0] === -1 && $tops[5][0] === 1 && $tops[7][0] === 1, "four seats sit left and three right at $width x $height");
@@ -1821,7 +1821,7 @@ $test('a rejected action stops showing once the table moves on', static function
 	$expect(!$shown($presenter), 'a cleared error stays cleared');
 });
 
-$test('the oval keeps its seats, centre plates and controls apart on laptop, desktop and narrow canvases', static function(callable $expect) use ($overlaps, $fixture): void {
+$test('the oval keeps its seats, center plates and controls apart on laptop, desktop and narrow canvases', static function(callable $expect) use ($overlaps, $fixture): void {
 	$view = $fixture('facing-raise-5');
 	foreach([[1280, 627], [1366, 675], [1440, 697], [1365, 807], [1536, 771], [1920, 987], [2560, 987], [1100, 700], [1000, 807], [900, 807], [800, 807]] as [$width, $height]) foreach(range(2, 8) as $seats)
 	{
@@ -1847,15 +1847,15 @@ $test('the oval keeps its seats, centre plates and controls apart on laptop, des
 		foreach($parts as $first => $one) foreach($parts as $second => $other) if($first < $second)
 		foreach($one as $firstName => $a) foreach($other as $secondName => $b)
 		$expect(!$overlaps($inset($a), $b), "seat $first's $firstName clears seat $second's $secondName $at");
-		$centre = $layout->centre();
+		$center = $layout->center();
 		foreach(['pot', 'deck', 'bet'] as $name) foreach($parts as $seat => $blocks) foreach($blocks as $part => $block)
-		$expect(!$overlaps($inset($centre[$name]), $block), "the $name clears seat $seat's $part $at");
-		$expect($centre['pot'][1] + $centre['pot'][3] <= $centre['deck'][1] && $centre['deck'][1] + $centre['deck'][3] <= $centre['bet'][1], "the centre cluster keeps its order $at");
-		$expect($centre['deck'][3] >= 40 && abs($centre['deck'][2] / $centre['deck'][3] - $centre['discard'][2] / $centre['discard'][3]) < 1e-9, "the stock stays a readable card $at");
+		$expect(!$overlaps($inset($center[$name]), $block), "the $name clears seat $seat's $part $at");
+		$expect($center['pot'][1] + $center['pot'][3] <= $center['deck'][1] && $center['deck'][1] + $center['deck'][3] <= $center['bet'][1], "the center cluster keeps its order $at");
+		$expect($center['deck'][3] >= 40 && abs($center['deck'][2] / $center['deck'][3] - $center['discard'][2] / $center['discard'][3]) < 1e-9, "the stock stays a readable card $at");
 		$status = $layout->statusLane();
-		$expect($parts[0]['plate'][1] - ($centre['bet'][1] + $centre['bet'][3]) >= $layout->plateHeight() + 16 * $status['lines'] - .01, "the status message fits between the bet plate and the local plate $at");
-		// The message is centred on the hand; beside the action lane it is never wide enough to run under a button.
-		$messageRight = $centre['bet'][0] + $centre['bet'][2] / 2 + $status['width'] / 2;
+		$expect($parts[0]['plate'][1] - ($center['bet'][1] + $center['bet'][3]) >= $layout->plateHeight() + 16 * $status['lines'] - .01, "the status message fits between the bet plate and the local plate $at");
+		// The message is centered on the hand; beside the action lane it is never wide enough to run under a button.
+		$messageRight = $center['bet'][0] + $center['bet'][2] / 2 + $status['width'] / 2;
 		$messageTop = $parts[0]['plate'][1] - 8 - $layout->plateHeight() - 16 * ($status['lines'] - 1);
 		$statusBox = [$messageRight - $status['width'], $messageTop, $status['width'], $parts[0]['plate'][1] - 8 - $messageTop];
 		$expect($status['width'] >= 240 || $status['lines'] === 2, "the status message has a useful width $at");
@@ -1891,11 +1891,11 @@ $test('heads-up on a phone keeps the pot plate off the opponent', static functio
 	{
 		$layout = Layout::fit($width, $height, $dpr, 2);
 		$expect($layout->profile === 'tall', "$width x $height is a tall table");
-		$centre = $layout->centre();
+		$center = $layout->center();
 		$opponent = $layout->seat(1, 2);
 		$bank = $layout->bankBounds(1, 2, Chips::bank(500));
-		$expect($centre['pot'][1] >= max($opponent['cards'][0][1] + $opponent['cards'][0][3], $bank[1] + $bank[3]), "the pot plate starts below the opponent's cards and chips at $width x $height");
-		$expect($centre['bet'][1] + $centre['bet'][3] <= $layout->seat(0, 2)['plate'][1], "the bet plate ends above the local plate at $width x $height");
+		$expect($center['pot'][1] >= max($opponent['cards'][0][1] + $opponent['cards'][0][3], $bank[1] + $bank[3]), "the pot plate starts below the opponent's cards and chips at $width x $height");
+		$expect($center['bet'][1] + $center['bet'][3] <= $layout->seat(0, 2)['plate'][1], "the bet plate ends above the local plate at $width x $height");
 	}
 });
 
@@ -2031,7 +2031,7 @@ $test('the table bar opens command menus and both odds dialogs', static function
 	$heavyOdds=$heavy->state()['oddsTables'];
 	$expect($heavyOdds['rules']==='Twos, Threes and Fours wild','the odds heading names the wild cards: '.$heavyOdds['rules']);
 	$improving=array_column($heavyOdds['improving'],'odds');
-	$expect(count($improving)===11 && in_array('1/4.21',$improving,true),'a favourite reads as 1/4.21 (34,236 to 144,129 against) rather than 0.24/1: '.json_encode($improving));
+	$expect(count($improving)===11 && in_array('1/4.21',$improving,true),'a favorite reads as 1/4.21 (34,236 to 144,129 against) rather than 0.24/1: '.json_encode($improving));
 	$expect(array_filter([...$improving,...array_column($heavyOdds['odds'],'odds')],static fn(string $odds): bool => str_starts_with($odds,'0'))===[],'no odds start with 0.');
 	$expect(count($poker->paint(1280,720)->instances())>100,'the first odds table paints over a live table');
 	$click($poker,$poker->layout()->oddsDialog('odds',count($odds['odds']))['more']);
@@ -2103,7 +2103,7 @@ $test('hands of two to seven cards stay inside the five-card fan; only the human
 				}
 				$fanLeft = $base['cards'][0][0]; $fanRight = $base['cards'][4][0] + $base['cards'][4][2];
 				$expect($first[0] >= $fanLeft - 1e-9 && $last[0] + $last[2] <= $fanRight + 1e-9, "$where: cards stay inside the fan");
-				$expect(abs(($first[0] - $fanLeft) - ($fanRight - $last[0] - $last[2])) < 1e-9 || $count > 5, "$where: a short hand is centred");
+				$expect(abs(($first[0] - $fanLeft) - ($fanRight - $last[0] - $last[2])) < 1e-9 || $count > 5, "$where: a short hand is centered");
 				$expect($count < 5 || (abs($first[0] - $fanLeft) < 1e-9 && abs($last[0] + $last[2] - $fanRight) < 1e-9), "$where: a long hand spans the fan");
 				for($index = 1; $index < $count; $index++)
 				{
@@ -2126,9 +2126,9 @@ $test('the hold\'em board stands in the free lane on every table without crowdin
 		$at = "$seats seats, $width x $height";
 		$draw = Layout::fit($width, $height, $dpr, $seats);
 		$layout = Layout::fit($width, $height, $dpr, $seats, 2, 5);
-		$centre = $layout->centre();
-		$board = $centre['board'];
-		$expect(count($board) === 5 && $draw->centre()['board'] === [], "five board places only for a board game at $at");
+		$center = $layout->center();
+		$board = $center['board'];
+		$expect(count($board) === 5 && $draw->center()['board'] === [], "five board places only for a board game at $at");
 		$size = $layout->metric('emblemSize') * $layout->stretch();
 		$blocks = [];
 		for($seat = 0; $seat < $seats; $seat++)
@@ -2139,7 +2139,7 @@ $test('the hold\'em board stands in the free lane on every table without crowdin
 			$blocks[$seat] = [$g['plate'], [$g['slots'][0][0], $g['slots'][0][1], $last[0] + $last[2] - $g['slots'][0][0], $last[3]],
 				[$g['emblem'][0] - $size / 2, $g['emblem'][1] - $size / 2, $size, $size + 28], $bank];
 		}
-		$pile = $centre['pile']; $chip = $layout->metric('chipRadius') * $layout->stretch();
+		$pile = $center['pile']; $chip = $layout->metric('chipRadius') * $layout->stretch();
 		$pileBox = [$pile[0] - $pile[2] - $chip, $pile[1] - $pile[3] - $chip, 2 * ($pile[2] + $chip), 2 * ($pile[3] + $chip)];
 		foreach($board as $index => $card)
 		{
@@ -2149,18 +2149,18 @@ $test('the hold\'em board stands in the free lane on every table without crowdin
 			$expect($card[2] >= .6 * $opponent, "board card $index is at least 60% of an opponent's card at $at");
 			$expect($card[2] * $layout->horizontalScale / $dpr >= 30 || $card[2] >= .9 * $opponent, "board card $index is 30 CSS px wide, or nearly an opponent's card, at $at");
 			foreach($blocks as $seat => $parts) foreach($parts as $part) $expect(!$overlaps($inset($card), $part), "board card $index clears seat $seat at $at");
-			foreach(['pot','bet','deck'] as $name) $expect(!$overlaps($inset($card), $centre[$name]), "board card $index clears the $name at $at");
+			foreach(['pot','bet','deck'] as $name) $expect(!$overlaps($inset($card), $center[$name]), "board card $index clears the $name at $at");
 			$expect(!$overlaps($inset($card), $pileBox), "board card $index clears the loose pot at $at");
 			if($index > 0) $expect($card[0] >= $board[$index - 1][0] + $board[$index - 1][2] || $card[1] >= $board[$index - 1][1] + $board[$index - 1][3], "board cards $index and " . ($index - 1) . " do not overlap at $at");
 		}
 		foreach(['pot','bet'] as $name) for($seat = 1; $seat < $seats; $seat++) foreach($blocks[$seat] as $part)
-			$expect(!$overlaps($inset($centre[$name]), $part), "the $name plate clears seat $seat at $at");
-		[$messageX, $messageTop] = $centre['message'];
-		$lowest = max(array_map(static fn(array $r): float => $r[1] + $r[3], [...$board, $centre['bet'], $centre['deck']]));
+			$expect(!$overlaps($inset($center[$name]), $part), "the $name plate clears seat $seat at $at");
+		[$messageX, $messageTop] = $center['message'];
+		$lowest = max(array_map(static fn(array $r): float => $r[1] + $r[3], [...$board, $center['bet'], $center['deck']]));
 		$expect($messageTop >= $lowest + 8 - 1e-9 || $layout->profile === 'wide', "the message starts below the board and plates at $at");
 		$humanTop = $layout->seat(0, $seats)['plate'][1];
 		if($layout->profile === 'wide')
-			$expect($humanTop - ($centre['bet'][1] + $centre['bet'][3]) >= $layout->plateHeight() + 16 * $layout->statusLane()['lines'] - .01, "the message fits above the hand at $at");
+			$expect($humanTop - ($center['bet'][1] + $center['bet'][3]) >= $layout->plateHeight() + 16 * $layout->statusLane()['lines'] - .01, "the message fits above the hand at $at");
 		else $expect($messageTop + 56 <= $humanTop - 14 + 1e-9, "a three-line message fits above the hand at $at");
 		$view = ['players' => array_fill(0, $seats, []), 'legalActions' => ['fold' => true, 'call' => true, 'callAmount' => 2, 'bet' => true, 'minBet' => 4, 'maxBet' => 8, 'betIncrement' => 2, 'betLabel' => 'Raise to'], 'phase' => 'betting', 'turn' => 0];
 		foreach($layout->actions($view, ['discards' => [], 'amount' => 4]) as $button) foreach($board as $index => $card)

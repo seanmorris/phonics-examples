@@ -57,7 +57,7 @@ final class PocketModel
 
 		if($onRim && $relativeX * $outwardX + $relativeY * $outwardY > 0 && $radial > Table::LINER_RADIUS)
 		{
-			// Behind the pocket centre the cut is closed by the rail and the back of the liner: a wall that returns
+			// Behind the pocket center the cut is closed by the rail and the back of the liner: a wall that returns
 			// the ball rather than a rim it could tip over or a cloth it could roll back onto. The leather hangs at the
 			// lip, inside the cut, so a ball pressed against it is already past the rim edge and tips in rather than
 			// balancing on top of it.
@@ -67,7 +67,7 @@ final class PocketModel
 		}
 		elseif($onRim)
 		{
-			// Rolling over the rim of the cut: the centre keeps one radius from the rim edge, so pushing back along
+			// Rolling over the rim of the cut: the center keeps one radius from the rim edge, so pushing back along
 			// the line to that edge lets the ball tip inward and down rather than fall straight through the cloth.
 			$inward = Table::THROAT_RADIUS - $radial;
 			$above = Ball::RADIUS - $ball->drop;
@@ -128,13 +128,13 @@ final class PocketModel
 			}
 		}
 
-		// Facings already support the horizontal sphere cross-section while its centre is above the cloth.
+		// Facings already support the horizontal sphere cross-section while its center is above the cloth.
 		// Waiting for drop=0 lets a nearly level ball cross the wall and then snap sideways into another ball.
 		if($ball->drop < Ball::RADIUS) self::clearPocketFacingOverlap($ball, $index);
 		[$mouthX,$mouthY] = Table::pocketMouthCenter($index);
 		$crossedMouth = ($ball->x - $mouthX) * $outwardX + ($ball->y - $mouthY) * $outwardY <= 0;
 		$leaving = $ball->vx * $outwardX + $ball->vy * $outwardY < -1e-6;
-		// Once its centre is past the cut on the table side, the ball rests on the shelf cloth whatever its speed. Only
+		// Once its center is past the cut on the table side, the ball rests on the shelf cloth whatever its speed. Only
 		// cloth friction turns its leftover spin into roll or stops it; kept here, a resting ball would never end the shot.
 		$relativeX = $ball->x - $pocketX;
 		$relativeY = $ball->y - $pocketY;
@@ -147,7 +147,7 @@ final class PocketModel
 		}
 		elseif($onShelf || ($crossedMouth && $leaving && $ball->drop < 0))
 		{
-			// The facing correction can push the centre back over the cut; it stays in the pocket until it clears both.
+			// The facing correction can push the center back over the cut; it stays in the pocket until it clears both.
 			if(!self::clearPocketFacingOverlap($ball, $index)
 				|| self::length($ball->x - $pocketX, $ball->y - $pocketY) <= Table::THROAT_RADIUS)
 			{
@@ -178,7 +178,7 @@ final class PocketModel
 	 * Keep a rattling ball on the open side of both tangent pocket facings before returning it to cloth physics.
 	 *
 	 * Pocket integration owns the ball while it is above the cut, so the ordinary facing sweep cannot protect it.
-	 * Projecting a penetration to the ball-centre offset and reflecting the inward velocity supplies that missing
+	 * Projecting a penetration to the ball-center offset and reflecting the inward velocity supplies that missing
 	 * contact. The ball may leave pocket physics only once it clears both solid facings by one radius.
 	 */
 	private static function clearPocketFacingOverlap(Ball $ball, int $index): bool

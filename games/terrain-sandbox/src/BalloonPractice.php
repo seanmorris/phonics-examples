@@ -189,7 +189,7 @@ final class BalloonPractice
 		if(!isset($targets[$this->selected]))
 		{
 			$best = -INF;
-			// On acquiring a new target, prefer the balloon closest to the centre of the pilot's view.
+			// On acquiring a new target, prefer the balloon closest to the center of the pilot's view.
 			foreach($targets as $id => $point)
 			{
 				$x = $point[0]-$eye->position[0]; $y = $point[1]-$eye->position[1]; $z = $point[2]-$eye->position[2];

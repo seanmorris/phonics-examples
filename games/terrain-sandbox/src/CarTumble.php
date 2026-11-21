@@ -4,7 +4,7 @@ namespace TerrainSandbox;
 
 use TerrainPhonics\Landscape;
 
-/** Free translation, pitch and roll about the centre of mass after the tires lose support. */
+/** Free translation, pitch and roll about the center of mass after the tires lose support. */
 final class CarTumble
 {
 	private const CG = .50;
@@ -48,8 +48,8 @@ final class CarTumble
 
 	/**
 	 * Move the body out of a solid obstacle and bounce the part of its motion that carried it in.
-	 * @param float $dx World X shift in metres.
-	 * @param float $dz World Z shift in metres.
+	 * @param float $dx World X shift in meters.
+	 * @param float $dz World Z shift in meters.
 	 * @param float $normalX X of the obstacle face's outward unit normal.
 	 * @param float $normalZ Z of the obstacle face's outward unit normal.
 	 * @param float $bounce Share of the inward speed that returns outward.

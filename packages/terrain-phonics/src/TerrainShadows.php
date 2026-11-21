@@ -55,12 +55,12 @@ final class TerrainShadows
 	/**
 	 * Refresh broad visibility after the authoritative coarse height field or illumination direction changes.
 	 * @param int $heightTexture Scene-owned overview texture. Zero disables caching until ready.
-	 * @param float $extent Width and depth of the centered square world, in metres.
+	 * @param float $extent Width and depth of the centered square world, in meters.
 	 * @param array $sunDirection Direction toward the sun as [x,y,z]; normalized before use.
 	 * @param int $revision Revision represented by the uploaded height field.
 	 * @param bool $packed Whether height samples are stored in RGBA8.
-	 * @param float $minHeight Conservative minimum elevation of the sampled terrain, in metres.
-	 * @param float $maxHeight Conservative maximum elevation of the sampled terrain, in metres.
+	 * @param float $minHeight Conservative minimum elevation of the sampled terrain, in meters.
+	 * @param float $maxHeight Conservative maximum elevation of the sampled terrain, in meters.
 	 * @return bool True if the map was regenerated. The parent framebuffer is restored; the caller resets viewport,
 	 * program, VAO, textures, depth mask and depth/cull/blend/scissor enables before rendering its scene.
 	 */

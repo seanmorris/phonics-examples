@@ -97,12 +97,12 @@ foreach($gates['kinds'] as $name => $kind)
 	expect($window['bottom'] === 0 && $window['halfWidth'] < $extent['halfWidth'] && $window['top'] < $extent['top'],
 		"The $name window starts at the origin, inside the extent");
 
-	// Nothing stands in the window. Its lowest 15 centimetres are left out: there the road gate's base plates
-	// reach 13 centimetres past the posts, as they do past the source towers.
+	// Nothing stands in the window. Its lowest 15 centimeters are left out: there the road gate's base plates
+	// reach 13 centimeters past the posts, as they do past the source towers.
 	$box = [$window['halfWidth'] - .01, ($window['top'] - .15) / 2 - .005, $extent['halfDepth'] + 1];
-	$centre = [0, .15 + $box[1], 0];
+	$center = [0, .15 + $box[1], 0];
 	$blocked = 0;
-	foreach(resizeGateMesh($mesh, $own) as $triangle) if(triangleMeetsBox($triangle, $centre, $box)) $blocked++;
+	foreach(resizeGateMesh($mesh, $own) as $triangle) if(triangleMeetsBox($triangle, $center, $box)) $blocked++;
 	expect($blocked === 0, "The $name window is clear of the mesh ($blocked triangles in it)");
 
 	foreach($kind['posts'] as $post)
@@ -119,7 +119,7 @@ foreach($gates['kinds'] as $name => $kind)
 	}
 }
 expect(count($gates['kinds']['road']['posts']) === 2, 'The road gate has two posts');
-expect($gates['kinds']['road']['posts'][0]['bottom'] <= -8, 'The road posts reach 8 metres below the base');
+expect($gates['kinds']['road']['posts'][0]['bottom'] <= -8, 'The road posts reach 8 meters below the base');
 expect($gates['kinds']['air']['extent']['bottom'] === 0, 'The air gate has no base plates below its board');
 
 echo "Landscape sandbox gates: $checks checks passed\n";

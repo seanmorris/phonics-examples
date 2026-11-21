@@ -19,7 +19,7 @@ uniform vec3 uHingePoint[SURFACES], uHingeAxis[SURFACES];
 uniform float uHingeAngle[SURFACES];
 // Shifts the texture lookup to another print in the atlas, as the race gates choose their role. Vehicles leave it zero.
 uniform vec2 uUvOffset;
-// A race gate's opening resized from the mesh's own, in metres: the half width and the height it adds, then the water
+// A race gate's opening resized from the mesh's own, in meters: the half width and the height it adds, then the water
 // arch's scale across and up. A gate always sets the arch scales, 1 on the other kinds; vehicles leave them zero,
 // which leaves every vertex where the mesh has it.
 uniform vec4 uGateSize;

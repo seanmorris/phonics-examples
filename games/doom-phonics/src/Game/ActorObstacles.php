@@ -12,7 +12,7 @@ use Phonics\Physics\Sweep;
  * Dynamic square actor bounds used by Doom-style Minkowski movement sweeps.
  *
  * Without a grid every sweep tests every body in the registry, so moving N actors costs N^2 tests per tic. With
- * `$grid`, bodies are binned by centre in 128-unit cells, the size of Doom's blockmap blocks, and a sweep tests only
+ * `$grid`, bodies are binned by center in 128-unit cells, the size of Doom's blockmap blocks, and a sweep tests only
  * the cells its path covers, widened by the largest binned radius. The grid persists between steps: the owner calls
  * beginStep() at the start of each simulation step, after which the first query re-bins the bodies whose cell changed
  * since the last step, and moved() after changing a body's position within the step, which Collision does for every
@@ -39,7 +39,7 @@ final class ActorObstacles
 	private array $bodies = [];
 	/** Whether a step began since the last query, so bodies moved without moved() must be re-binned. */
 	private bool $stepped = false;
-	/** Largest radius among binned bodies; queries widen by it because bodies are binned by centre. */
+	/** Largest radius among binned bodies; queries widen by it because bodies are binned by center. */
 	private float $reach = 0;
 	/** @var list<int>|null Registry snapshot the grid was built from, or null when it must be rebuilt. */
 	private ?array $snapshot = null;
@@ -87,7 +87,7 @@ final class ActorObstacles
 	{
 		if(!$this->grid) return $this->registry->query($this->solids);
 
-		// Every body has a transform, so the one-type query, which the registry answers without serialising a Query,
+		// Every body has a transform, so the one-type query, which the registry answers without serializing a Query,
 		// names the same entities; the snapshot is the registry's own array, so an unchanged set compares at once.
 		$solids = $this->registry->query(Body::class);
 

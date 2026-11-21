@@ -251,7 +251,7 @@ final class Simulation
 	 * together than a human could tap. That set is built backward from
 	 * the horizon over the velocity lattice (a flap always resets the velocity, so the velocity is just the number of
 	 * steps since the last flap), with the pillars advanced exactly as the run will advance them. It may flap before
-	 * coasting becomes unsafe to keep its hitbox near the next gap's centre, but only when the same safe set proves that
+	 * coasting becomes unsafe to keep its hitbox near the next gap's center, but only when the same safe set proves that
 	 * flap can still complete the course ahead.
 	 *
 	 * @return bool True to flap this step.
@@ -320,13 +320,13 @@ final class Simulation
 		if(!$pillar) return false;
 
 		$boxHeight = self::PHANT_H - 2 * self::HITBOX_INSET_Y;
-		$centre = $this->y + self::HITBOX_INSET_Y + $boxHeight / 2;
+		$center = $this->y + self::HITBOX_INSET_Y + $boxHeight / 2;
 		$target = $pillar->gapTop + $pillar->gap / 2;
 		$rising = min(0.0, $this->vy);
-		$apex = $centre - $rising * $rising / (2 * self::GRAVITY);
+		$apex = $center - $rising * $rising / (2 * self::GRAVITY);
 
-		// One flap rises about 44 units. Starting it 24 units below centre makes the resulting arc straddle the
-		// centre instead of waiting beside the lower pillar until safety forces a flap.
+		// One flap rises about 44 units. Starting it 24 units below center makes the resulting arc straddle the
+		// center instead of waiting beside the lower pillar until safety forces a flap.
 		if($apex > $target + 24.0) return true;
 
 		return false;
@@ -349,7 +349,7 @@ final class Simulation
 	}
 
 	/**
-	 * Snapshot the scrolling course and initialise a backward safe-set pass.
+	 * Snapshot the scrolling course and initialize a backward safe-set pass.
 	 *
 	 * @return void The inexpensive forward bands are ready for incremental backward work.
 	 */

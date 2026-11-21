@@ -149,7 +149,7 @@ test(
 	}
 );
 
-test('latest level request wins and cancelled assets cannot reappear', async ({page}) => {
+test('latest level request wins and canceled assets cannot reappear', async ({page}) => {
 	await start(page);
 	let pending;
 	await page.route('**/loop.tmj', route => { pending = route; });
@@ -194,7 +194,7 @@ test(
 	}
 );
 
-test('cancelling the first level load settles startup and Run can retry', async ({page}) => {
+test('canceling the first level load settles startup and Run can retry', async ({page}) => {
 	await page.goto('/sane-phonics/');
 	await page.waitForFunction(() => typeof bootEngine === 'function');
 	let pending;
@@ -211,8 +211,8 @@ test('cancelling the first level load settles startup and Run can retry', async 
 	await select(page, 'level');
 	await select(page, 'cancel-load');
 	await expect(page.locator('#start')).toBeEnabled();
-	await expect(page.locator('#status')).toContainText('cancelled');
-	expect(await page.evaluate(() => startResult)).toContain('cancelled');
+	await expect(page.locator('#status')).toContainText('canceled');
+	expect(await page.evaluate(() => startResult)).toContain('canceled');
 	await pending.fulfill({status: 200, body: '{}'}).catch(() => {});
 
 	await page.unroute('**/loop.tmj');

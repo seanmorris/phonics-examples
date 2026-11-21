@@ -76,16 +76,16 @@ test('a run flaps, scores, dies, keeps the best and fills any viewport', async({
 		const world = document.querySelector('.phlappy-phant-screen > canvas:not(.phlappy-phant-hints)');
 		const hints = document.querySelector('.phlappy-phant-hints');
 		const pixels = hints.getContext('2d').getImageData(0, 0, hints.width, hints.height).data;
-		const colours = new Set;
+		const colors = new Set;
 
 		for(let offset = 0; offset < pixels.length; offset += 4)
-		if(pixels[offset + 3] === 255) colours.add(`${pixels[offset]},${pixels[offset + 1]},${pixels[offset + 2]}`);
+		if(pixels[offset + 3] === 255) colors.add(`${pixels[offset]},${pixels[offset + 1]},${pixels[offset + 2]}`);
 
 		return {
 			world: world.width / world.getBoundingClientRect().width
 			, hints: hints.width / hints.getBoundingClientRect().width
-			, face: colours.has('242,224,191')
-			, inset: colours.has('69,64,83')
+			, face: colors.has('242,224,191')
+			, inset: colors.has('69,64,83')
 		};
 	});
 	expect(hintDensity.hints).toBeGreaterThan(hintDensity.world);
@@ -246,7 +246,7 @@ test('audio levels adjust live from title and pause, then survive a reload', asy
 	expect(errors).toEqual([]);
 });
 
-test('main, pause and result menus are large with centred rows; submenus share the Audio page\'s size', async({page}) => {
+test('main, pause and result menus are large with centered rows; submenus share the Audio page\'s size', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	page.on('console', message => { if(/PHP (Warning|Notice|Fatal)/.test(message.text())) errors.push(message.text()); });
@@ -301,7 +301,7 @@ test('main, pause and result menus are large with centred rows; submenus share t
 
 		return {left: x + left / unit, right: x + (right + 1) / unit, band: [x, x + width]};
 	};
-	const centred = async(labels, name) => {
+	const centered = async(labels, name) => {
 		const state = await status(page);
 		const middle = (state.menu.left + state.menu.right) / 2;
 
@@ -312,14 +312,14 @@ test('main, pause and result menus are large with centred rows; submenus share t
 		{
 			const text = await lettering(label);
 
-			expect(Math.abs((text.left + text.right) / 2 - middle), `${name}: ${label} is centred on the plate`).toBeLessThanOrEqual(2);
+			expect(Math.abs((text.left + text.right) / 2 - middle), `${name}: ${label} is centered on the plate`).toBeLessThanOrEqual(2);
 			expect(text.left, `${name}: ${label} stays on its band`).toBeGreaterThanOrEqual(text.band[0]);
 			expect(text.right, `${name}: ${label} stays on its band`).toBeLessThanOrEqual(text.band[1]);
 		}
 	};
 
 	// The main menu keeps its large size at 16:9, where it used to fall back to small text.
-	await centred(['Controls', 'Audio', 'How to play', 'About'], 'main menu');
+	await centered(['Controls', 'Audio', 'How to play', 'About'], 'main menu');
 
 	// Every page under it is compact: the Audio page's whole-number scale and plaque width, with no stray warnings.
 	const widths = new Set;
@@ -339,24 +339,24 @@ test('main, pause and result menus are large with centred rows; submenus share t
 	expect(widths.size).toBe(1);
 	const audio = await open('Audio');
 	expect(audio.regions.map(region => region.label)).toEqual(['SFX level', 'BGM level', 'Back']);
-	// The Audio plaque is 344 wide with ten of padding; its rows span the rest, centred in the frame like the others.
+	// The Audio plaque is 344 wide with ten of padding; its rows span the rest, centered in the frame like the others.
 	const [rowLeft, , rowWidth] = audio.regions[0].rect;
 	expect(rowWidth).toBe(344 - 20);
 	expect(rowLeft + rowWidth / 2).toBeCloseTo(audio.width / 2, 0);
 	expect(audio.hint, 'the Audio page shows the same hint line as the other pages').toMatchObject({back: true});
 	await back();
 
-	// Pause and the result card are large and centred too.
+	// Pause and the result card are large and centered too.
 	await open('Play');
 	await ready(page);
 	expect((await back()).page).toBe('pause');
-	await centred(['Restart', 'Audio', 'Quit'], 'pause menu');
+	await centered(['Restart', 'Audio', 'Quit'], 'pause menu');
 	expect((await back()).page).toBe('play');
 	await ready(page);
 	await page.keyboard.press('Space');
 	await expect.poll(async() => (await status(page)).page, {timeout: 15_000}).toBe('gameover');
 	await frames(page, 3);
-	await centred(['Quit'], 'result card');
+	await centered(['Quit'], 'result card');
 
 	expect(errors).toEqual([]);
 });
@@ -562,7 +562,7 @@ test('a controller action page names each binding it can remove by its button', 
 
 	for(const label of ['Controls', 'Controller', 'Flap']) await open(label);
 
-	// Each Remove row is labelled only "Remove"; the button it removes stands in the right half of the row.
+	// Each Remove row is labeled only "Remove"; the button it removes stands in the right half of the row.
 	const state = await status(page);
 	const removes = state.regions.filter(region => region.label === 'Remove');
 	expect(removes.length).toBeGreaterThan(0);

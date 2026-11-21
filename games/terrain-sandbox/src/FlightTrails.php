@@ -80,7 +80,7 @@ final class FlightTrails
 
 	public function exhaust(array $a, array $b, array $oldDirection, array $direction, float $duration): void
 	{
-		// The exhaust leaves the back of the four-metre game model.
+		// The exhaust leaves the back of the four-meter game model.
 		for($i = 0; $i < 3; $i++)
 		{
 			$a[$i] -= 2.0 * $oldDirection[$i];

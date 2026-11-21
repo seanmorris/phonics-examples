@@ -34,8 +34,8 @@ final class ContactModel
 	}
 
 	/**
-	 * @param float $compression Positive centre overlap in metres.
-	 * @param float $approach Relative normal approach speed in metres per second.
+	 * @param float $compression Positive center overlap in meters.
+	 * @param float $approach Relative normal approach speed in meters per second.
 	 * @return array{float,float} Repulsive normal force (N), and tangential damping (kg/s).
 	 */
 	public static function response(float $compression, float $approach): array
@@ -69,7 +69,7 @@ final class ContactModel
 
 	/**
 	 * Integrate one contact microstep. The caller supplies active balls in number order and handles boundaries
-	 * after this accepted step, never during an RK stage. On-cloth centres have no vertical degree of freedom.
+	 * after this accepted step, never during an RK stage. On-cloth centers have no vertical degree of freedom.
 	 * @param list<Ball> $balls Active balls in ascending number order.
 	 * @param float $seconds Accepted contact microstep duration.
 	 */

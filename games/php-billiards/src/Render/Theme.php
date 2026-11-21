@@ -5,7 +5,7 @@ namespace PhpBilliards\Render;
 /**
  * Shared HUD palette, type scale, and radii.
  *
- * Colours are straight RGBA floats. Text colours keep at least 4.5:1 contrast against `PANEL` composited over the
+ * Colors are straight RGBA floats. Text colors keep at least 4.5:1 contrast against `PANEL` composited over the
  * darkest table tones, including disabled states, which change emphasis through opacity of fills rather than text.
  */
 final class Theme
@@ -39,15 +39,15 @@ final class Theme
 	public const GAP = 8.0;
 	public const MARGIN = 16.0;
 
-	/** Gamepad face colours for keycap glyphs, matching common controller legends at reduced saturation. */
+	/** Gamepad face colors for keycap glyphs, matching common controller legends at reduced saturation. */
 	public const FACE = [
 		'A' => [.36,.7,.39,1],'B' => [.84,.35,.3,1],'X' => [.33,.55,.88,1],'Y' => [.9,.75,.28,1]
 	];
 
 	/**
-	 * Multiply a colour's alpha.
+	 * Multiply a color's alpha.
 	 *
-	 * @param array{float,float,float,float} $color Straight RGBA colour.
+	 * @param array{float,float,float,float} $color Straight RGBA color.
 	 * @param float $alpha Opacity multiplier, clamped to [0,1].
 	 */
 	public static function alpha(array $color, float $alpha): array
@@ -57,10 +57,10 @@ final class Theme
 	}
 
 	/**
-	 * Linear blend between two colours.
+	 * Linear blend between two colors.
 	 *
-	 * @param array{float,float,float,float} $from Colour at zero.
-	 * @param array{float,float,float,float} $to Colour at one.
+	 * @param array{float,float,float,float} $from Color at zero.
+	 * @param array{float,float,float,float} $to Color at one.
 	 * @param float $amount Blend fraction, clamped to [0,1].
 	 */
 	public static function mix(array $from, array $to, float $amount): array

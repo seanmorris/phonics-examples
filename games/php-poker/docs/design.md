@@ -8,7 +8,7 @@ Status: reflects what is built (plan node #2279). Owner: Claude. The rules, cont
 The guide is MS-DOS Bicycle Poker (SWFTE, 1991–93). What we keep from it is the composition: the whole screen is
 felt; every seat is a white status plate that says what the player did, over a stepped fan of five cards, with
 denomination stacks in front; each player has a small object emblem; the pot and deck sit in the
-centre between "Total pot" and "Current bet" plates; a menu bar runs along the top; dialogs are ruled boxes
+center between "Total pot" and "Current bet" plates; a menu bar runs along the top; dialogs are ruled boxes
 with the title set into the top rule. What we do not take is any asset: no Bicycle branding, characters, card
 faces or portraits are reproduced.
 
@@ -16,7 +16,7 @@ faces or portraits are reproduced.
 
 The layout, type, card art and controls are the same in both; only the finish changes, from Settings.
 **Classic** (default) is the DOS field: flat `#1f8f45` felt, square corners, white plates with a 2 px black
-edge, bevelled grey buttons, no shadows or gradients, all text in Fixedsys Excelsior. **Modern** rounds the
+edge, beveled gray buttons, no shadows or gradients, all text in Fixedsys Excelsior. **Modern** rounds the
 corners, lights the felt with a gentle radial vignette (no texture), adds light shadows under plates, cards
 and dialogs, a dark disc behind each emblem, keycaps on the buttons, and sets text in Barlow Semi Condensed.
 
@@ -26,7 +26,7 @@ and dialogs, a dark disc behind each emblem, keycaps on the buttons, and sets te
   the order spades, hearts, clubs, diamonds, two jokers. Backs: `art/cards/back-red.svg` (default) and
   `back-blue.svg`, the public-domain broken-line rhombus backs. Emblems: `art/icons/*.svg`, Codex's original
   64×64 whole-pixel drawings keyed by `players[].portrait`, with distinct material palettes and one-pixel contours. All of these ship as SVG; at boot PHP hands their text to the browser,
-  which rasterises them into one RGBA atlas (card cells 125×175, or 150×210 above 1.25 dpr; emblems at their native 64×64 resolution
+  which rasterizes them into one RGBA atlas (card cells 125×175, or 150×210 above 1.25 dpr; emblems at their native 64×64 resolution
   with no smoothing) and returns it once. Until it arrives, cards draw as plain faces with their index and
   emblems as discs with an initial.
 - Type: `art/typography/barlow-semi-condensed.json` (OFL) and `fixedsys-excelsior.json` (public domain),
@@ -52,7 +52,7 @@ controls are at least 48 CSS pixels high across device-pixel ratios; short-scree
 - **Choosing a profile.** The oval is the table's own composition, so it is tried first on every canvas that is
   at least 760 CSS px wide, at least 480 CSS px high and not narrower than 55% of the field's aspect. It is kept
   when nothing on it collides: no seat block (plate, fan, emblem with its caption, chip bank) with another, with
-  the centre plates and stock, with the action lane or with the field edge, and with one status line free between
+  the center plates and stock, with the action lane or with the field edge, and with one status line free between
   the bet plate and the human's plate. Cards and chips are first tried at their preferred size and otherwise given
   the largest size at which nothing collides, down to 60%; plates, emblems, controls and type keep their CSS size
   throughout. Only when the oval cannot fit does a landscape canvas under 720 CSS px high use **landscape** and
@@ -70,18 +70,18 @@ controls are at least 48 CSS pixels high across device-pixel ratios; short-scree
   label such as 10♣; otherwise the dialog pages by suit, ace first as in the matrix. A button label that cannot
   share its button with the key legend keeps the label and drops the legend.
 - Seats sit on an oval (wide 470×250) with the human at the bottom. Opponents are spaced evenly from the
-  human's left. Its upper half stretches upward by 24 design pixels, opening space around the centre while
+  human's left. Its upper half stretches upward by 24 design pixels, opening space around the center while
   keeping the human hand in place. The action buttons stand in a lane to the right of the human's hand, so no
   seat may come lower on that side than `ACTION_CLEARANCE`; from six seats up the opponents spread over the arc
   that stops short of it.
-- The centre cluster (pot plate, loose pot, stock and discards, bet plate) keeps its canonical place when it fits
+- The center cluster (pot plate, loose pot, stock and discards, bet plate) keeps its canonical place when it fits
   between the opponent standing over it and the status line above the human's plate. Otherwise it moves, and the
   stock and discards shrink, until the pot plate clears the cards and chips above it; heads-up on a phone the
   loose pot and piles shrink the same way.
 - The dealer button stands at the inner end of a seat's plate. The human's stands in a 34-px gutter between the
-  plate and the action lane, and an opponent's moves to the emblem's corner when a neighbour's cards or chips
+  plate and the action lane, and an opponent's moves to the emblem's corner when a neighbor's cards or chips
   are in the way.
-- Hold'em and stud use the same seats. Two Hold'em cards are spread and centred in the fan so both show whole;
+- Hold'em and stud use the same seats. Two Hold'em cards are spread and centered in the fan so both show whole;
   seven stud cards share its width, which leaves about a fifth of each card visible on the oval. In stud your own
   face-down cards are shaded. The Hold'em board stands between the pot and bet plates, as large as the opponents
   leave room for, with the stock drawn as a small pile to its right; on a phone the five cards stand three over two
@@ -100,15 +100,15 @@ controls are at least 48 CSS pixels high across device-pixel ratios; short-scree
   enough to retain field and phone-control clearance. Their Bet indicator has its own space to the left, clear of denominations and cards.
 - Plates: white for the last action or "Thinking", rose for Fold, straw for the hand name at showdown; a brass
   edge marks the seat whose turn it is. The dealer gets a small "D" disc beside the plate.
-- Centre: "Total pot (n)" plate, the deck (a back the size of a hand card), the pot's chips in front of it,
+- Center: "Total pot (n)" plate, the deck (a back the size of a hand card), the pot's chips in front of it,
   and "Current bet (n)".
-- Draw order: plates, cards, chips, emblems and markers, centre, message, discard dialog, actions, then modal history/welcome dialogs. Discard cards never overlap the Draw target.
+- Draw order: plates, cards, chips, emblems and markers, center, message, discard dialog, actions, then modal history/welcome dialogs. Discard cards never overlap the Draw target.
 
 ## Actions
 
 Built only from `legalActions`, so an illegal move never has a button. Wide and landscape: a vertical lane to
 the right of the human's hand, with the raise stepper beneath it; tall: a touch-sized row across the bottom with
-the raise stepper on a second row. While the discard dialog is open it carries the instruction, so a centre plate
+the raise stepper on a second row. While the discard dialog is open it carries the instruction, so a center plate
 it would cut through is not drawn.
 
 Fold, the check-call-pass button and the bet button each own a place, F first, C second and B third, and a turn

@@ -3,7 +3,7 @@ under the package LICENSE.
 
 Card faces: art/cards/deck.svg
   "Public domain complete playing card deck" from Wikimedia Commons. Released into the public domain (CC0).
-  Rasterised in the browser at boot; the SVG is shipped unchanged.
+  Rasterized in the browser at boot; the SVG is shipped unchanged.
 
 Card backs: art/cards/back-red.svg, art/cards/back-blue.svg
   "Tiled red/blue broken line rhombus card back" from Wikimedia Commons. Public domain.

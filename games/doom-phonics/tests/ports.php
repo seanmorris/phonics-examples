@@ -97,21 +97,21 @@ foreach([4 => [0x12, 0x30], 2 => [0b01101100], 1 => [0b01000000]] as $depth => $
 	);
 }
 
-// Greyscale maps through the palette like colour; a grey colour key and a grey alpha channel both apply.
-$grey = PngDecoder::SIGNATURE . $chunk('IHDR', pack('N2C5', 2, 1, 8, 0, 0, 0, 0)) . $chunk('tRNS', pack('n', 40))
+// Grayscale maps through the palette like color; a gray color key and a gray alpha channel both apply.
+$gray = PngDecoder::SIGNATURE . $chunk('IHDR', pack('N2C5', 2, 1, 8, 0, 0, 0, 0)) . $chunk('tRNS', pack('n', 40))
 	. $chunk('IDAT', gzcompress(pack('C*', 0, 40, 99))) . $chunk('IEND', '');
-$image = PngDecoder::decode(PortMap::archive(['GREY' => $grey])->lump('GREY'), $portPalette);
-verifyWad($image->pixels === chr(40) . chr(99) && $image->alpha === "\0\xff", 'PNG greyscale maps to PLAYPAL with its colour key');
-$greyAlpha = PngDecoder::SIGNATURE . $chunk('IHDR', pack('N2C5', 2, 1, 8, 4, 0, 0, 0))
+$image = PngDecoder::decode(PortMap::archive(['GRAY' => $gray])->lump('GRAY'), $portPalette);
+verifyWad($image->pixels === chr(40) . chr(99) && $image->alpha === "\0\xff", 'PNG grayscale maps to PLAYPAL with its color key');
+$grayAlpha = PngDecoder::SIGNATURE . $chunk('IHDR', pack('N2C5', 2, 1, 8, 4, 0, 0, 0))
 	. $chunk('IDAT', gzcompress(pack('C*', 0, 40, 7, 99, 200))) . $chunk('IEND', '');
-$image = PngDecoder::decode(PortMap::archive(['GREYA' => $greyAlpha])->lump('GREYA'), $portPalette);
-verifyWad($image->pixels === chr(40) . chr(99) && $image->alpha === chr(7) . chr(200), 'PNG greyscale with alpha keeps its alpha');
+$image = PngDecoder::decode(PortMap::archive(['GRAYA' => $grayAlpha])->lump('GRAYA'), $portPalette);
+verifyWad($image->pixels === chr(40) . chr(99) && $image->alpha === chr(7) . chr(200), 'PNG grayscale with alpha keeps its alpha');
 
-// 16-bit samples keep their high byte; the colour key compares at full precision.
+// 16-bit samples keep their high byte; the color key compares at full precision.
 $deep = PngDecoder::SIGNATURE . $chunk('IHDR', pack('N2C5', 2, 1, 16, 2, 0, 0, 0)) . $chunk('tRNS', pack('n3', 0x2801, 0x2801, 0x2801))
 	. $chunk('IDAT', gzcompress("\0" . pack('n*', 0x2801, 0x2801, 0x2801, 0x6300, 0x6300, 0x6300))) . $chunk('IEND', '');
 $image = PngDecoder::decode(PortMap::archive(['DEEP' => $deep])->lump('DEEP'), $portPalette);
-verifyWad($image->pixels === chr(40) . chr(99) && $image->alpha === "\0\xff", 'PNG 16-bit truecolour keeps high bytes and keys at full precision');
+verifyWad($image->pixels === chr(40) . chr(99) && $image->alpha === "\0\xff", 'PNG 16-bit truecolor keeps high bytes and keys at full precision');
 
 foreach([[16, 3], [8, 7], [4, 2]] as [$depth, $type])
 {
@@ -126,13 +126,13 @@ foreach([[16, 3], [8, 7], [4, 2]] as [$depth, $type])
 	}
 }
 
-// A grAb chunk whose CRC covers only its data, as the Omega Weapon Pack's shotgun frames have, is still honoured, the
+// A grAb chunk whose CRC covers only its data, as the Omega Weapon Pack's shotgun frames have, is still honored, the
 // way ZDoom reads every chunk without checking; a critical chunk with a bad CRC below still fails.
 $dataOnly = pack('N', 8) . 'grAb' . pack('N2', -3, 9) . hash('crc32b', pack('N2', -3, 9), true);
 $lenient = PngDecoder::SIGNATURE . $chunk('IHDR', pack('N2C5', 4, 5, 8, 3, 0, 0, 0)) . $chunk('PLTE', $grays) . $dataOnly
 	. $chunk('IDAT', gzcompress($filtered)) . $chunk('IEND', '');
 $image = PngDecoder::decode(PortMap::archive(['LENIENT' => $lenient])->lump('LENIENT'), $portPalette);
-verifyWad($image->leftOffset === -3 && $image->topOffset === 9, 'PNG grAb with a data-only CRC is honoured as ZDoom honours it');
+verifyWad($image->leftOffset === -3 && $image->topOffset === 9, 'PNG grAb with a data-only CRC is honored as ZDoom honors it');
 
 $badCrc = $png;
 $badCrc[29] = chr(ord($badCrc[29]) ^ 1);

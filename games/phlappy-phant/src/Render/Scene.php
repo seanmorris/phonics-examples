@@ -48,7 +48,7 @@ final class Scene
 	/** The backdrop draws at twice the world's pixel size, so its 160-pixel block spans 320 world units. */
 	public const BACKDROP_SCALE = 2;
 	public const GROUND_TILE = 32;
-	/** Pillar slices are 64 wide with the 56-unit pillar centred, and 8 tall so any grid height can be built. */
+	/** Pillar slices are 64 wide with the 56-unit pillar centered, and 8 tall so any grid height can be built. */
 	public const SLICE_W = 64;
 	public const SLICE_H = 8;
 	/** The elephant is not in the terrain sheets, so it takes a light tint to sit in each keyframe's light. */
@@ -65,7 +65,7 @@ final class Scene
 	public const MENU_TEXT = [.98, .973, .941];
 	public const MENU_HIGHLIGHT = [.145, .31, .349];
 	public const MENU_DISABLED = [.545, .549, .502];
-	/** Cloud white a little darkened, for the secondary text of a text page, such as a licence under a credit. */
+	/** Cloud white a little darkened, for the secondary text of a text page, such as a license under a credit. */
 	public const MENU_NOTE = [.78, .772, .745];
 	/** Width of every compact menu plaque at scale one: Audio, the bindings pages and the text submenus alike. */
 	public const COMPACT_WIDTH = 344;
@@ -95,9 +95,9 @@ final class Scene
 	/** The palette every world sprite draws in this frame, and how far the next one is faded over it. */
 	private int $palette = 0;
 	private float $fade = 0;
-	/** Palettes per leg of the cycle: the keyframe and the in-betweens graded towards the next. */
+	/** Palettes per leg of the cycle: the keyframe and the in-betweens graded toward the next. */
 	private int $steps = 1;
-	/** @var list<array{float,float,float}> Sky colour above the backdrop for each palette. */
+	/** @var list<array{float,float,float}> Sky color above the backdrop for each palette. */
 	private array $skies = [];
 	private float $blendClock = 0;
 	private float $deathSpin = 0;
@@ -163,9 +163,9 @@ final class Scene
 	}
 
 	/**
-	 * Sky colour for the device clear, blended between day and night.
+	 * Sky color for the device clear, blended between day and night.
 	 *
-	 * @return array{float,float,float,float} RGBA clear colour.
+	 * @return array{float,float,float,float} RGBA clear color.
 	 */
 	public function skyColor(): array
 	{
@@ -492,7 +492,7 @@ final class Scene
 	/**
 	 * Draw the controller button each binding row stands for at the right of that row.
 	 *
-	 * A controller action's page lists one Remove row per button bound to it, labelled only "Remove" and carrying the
+	 * A controller action's page lists one Remove row per button bound to it, labeled only "Remove" and carrying the
 	 * button as its value; the shared menu renderer draws values only for rows that edit something, so without this
 	 * every row would read the same. The buttons use the controller's theme, whatever was pressed last.
 	 *
@@ -567,7 +567,7 @@ final class Scene
 	/**
 	 * Draw a text page on the shared plaque, in one of two sizes.
 	 *
-	 * The title, pause and result menus are the large ones: the biggest whole scale that fits, every row centred.
+	 * The title, pause and result menus are the large ones: the biggest whole scale that fits, every row centered.
 	 * Every page beneath them is compact: the same scale and plaque width as the Audio page, rows from the left under
 	 * a small title, so all submenus read alike. The selected row sits on a band behind a blinking chevron.
 	 *
@@ -674,7 +674,7 @@ final class Scene
 		$y = $top + $titleHeight;
 		$pad = 6 * $r;
 		$blink = fmod($seconds, .9) < .6;
-		$centre = $x + $blockWidth / 2;
+		$center = $x + $blockWidth / 2;
 
 		foreach($rows as $id => $item)
 		{
@@ -683,9 +683,9 @@ final class Scene
 			$rowHeight = $heights[$id];
 			$rect = [$x - $pad, $y - 2 * $r, $blockWidth + 2 * $pad, $rowHeight];
 
-			// A large page centres every line on the plaque; a compact page starts them all after the chevron column.
+			// A large page centers every line on the plaque; a compact page starts them all after the chevron column.
 			$starts = array_map(
-				fn(string $line): float => $large ? floor($centre - $this->measure($line) * $r / 2) : (float)($x + $chevron * $r)
+				fn(string $line): float => $large ? floor($center - $this->measure($line) * $r / 2) : (float)($x + $chevron * $r)
 				, $lines
 			);
 
@@ -698,13 +698,13 @@ final class Scene
 				if($blink) $this->label($labels, '>', max($rect[0] + $r, $starts[0] - $chevron * $r), (float)$y, (float)$r, 'left', self::MIST);
 			}
 
-			$colour = $selected ? self::MIST : self::MENU_TEXT;
+			$color = $selected ? self::MIST : self::MENU_TEXT;
 
 			foreach($lines as $n => $line)
 			{
 				$lineY = (float)($y + $pitch * $n * $r);
 
-				$this->shadowed($labels, $line, $starts[$n], $lineY, (float)$r, 'left', $colour);
+				$this->shadowed($labels, $line, $starts[$n], $lineY, (float)$r, 'left', $color);
 			}
 
 			// Information rows are text, not controls: they take no selection and publish no button.
@@ -730,7 +730,7 @@ final class Scene
 	 *
 	 * The page is as wide as the Audio plaque and as tall as its lines need, up to the room between the top margin and
 	 * the hint line, under a title the size of its text. Headings and names take the mist teal of the information
-	 * rows, and notes such as licences a slightly darker white than the credits above them. A page that does not fit gives up a column to the engine's text-mode scrollbar, drawn in plaque colours,
+	 * rows, and notes such as licenses a slightly darker white than the credits above them. A page that does not fit gives up a column to the engine's text-mode scrollbar, drawn in plaque colors,
 	 * and publishes its regions for the shared menu input; the lines and the track are drag regions, which the
 	 * browser leaves to the canvas.
 	 *
@@ -792,13 +792,13 @@ final class Scene
 
 		foreach($page->shown() as $index => $spans) foreach($spans as $span)
 		{
-			$colour = match($span['kind'])
+			$color = match($span['kind'])
 			{
 				TextPage::HEADING, TextPage::NAME => self::MIST
 				, TextPage::NOTE => self::MENU_NOTE
 				, default => self::MENU_TEXT
 			};
-			$this->shadowed($labels, $span['text'], $left + $span['x'] * $r, (float)($viewTop + $index * $pitch), (float)$r, 'left', $colour);
+			$this->shadowed($labels, $span['text'], $left + $span['x'] * $r, (float)($viewTop + $index * $pitch), (float)$r, 'left', $color);
 		}
 
 		if($scrolls) $this->textScrollbar($rects, $menu, $page, [$x + $blockWidth - $bar, $viewTop, $bar, $view], [$x, $viewTop, $blockWidth - $bar - 4 * $r, $view], $pitch, $r);
@@ -944,7 +944,7 @@ final class Scene
 	 * Append a terrain sprite in this frame's keyframe palette, with the next palette faded over it mid-transition.
 	 *
 	 * Every terrain sheet keeps the same shapes, so drawing the next palette over the current one at the eased
-	 * fraction interpolates each pixel between the two hand-graded colours.
+	 * fraction interpolates each pixel between the two hand-graded colors.
 	 *
 	 * @param list<array{Sprite,int}> $terrain Batch to append to, in painter's order.
 	 * @param Sprite $sprite Sprite built with its day-palette GID.
@@ -1020,7 +1020,7 @@ final class Scene
 	 * @param float $y Vertical output position.
 	 * @param float $scale Bitmap-font scale.
 	 * @param string $align Horizontal alignment name.
-	 * @param array{float,float,float} $colour Face tint; the shadow is always ink.
+	 * @param array{float,float,float} $color Face tint; the shadow is always ink.
 	 * @return void Shadow then face glyphs are appended to the batch.
 	 */
 	private function shadowed(
@@ -1030,10 +1030,10 @@ final class Scene
 		, float $y
 		, float $scale
 		, string $align = 'left'
-		, array $colour = self::CREAM
+		, array $color = self::CREAM
 	): void {
 		$this->label($batch, $text, $x + $scale, $y + $scale, $scale, $align, self::INK);
-		$this->label($batch, $text, $x, $y, $scale, $align, $colour);
+		$this->label($batch, $text, $x, $y, $scale, $align, $color);
 	}
 
 	private function label(
@@ -1043,12 +1043,12 @@ final class Scene
 		, float $y
 		, float $scale
 		, string $align = 'left'
-		, array $colour = [1, 1, 1]
+		, array $color = [1, 1, 1]
 	): void {
-		$key = json_encode([$text, $scale, $this->font->theme, $align, $colour]);
+		$key = json_encode([$text, $scale, $this->font->theme, $align, $color]);
 
 		if(!isset($this->cache[$key]))
-		$this->cache[$key] = $this->font->layout($text, $scale, INF, [...$colour, 1.0]);
+		$this->cache[$key] = $this->font->layout($text, $scale, INF, [...$color, 1.0]);
 
 		if($align === 'right') $x -= $this->cache[$key]['width'];
 		elseif($align === 'center') $x -= $this->cache[$key]['width'] / 2;
@@ -1080,10 +1080,10 @@ final class Scene
 	/**
 	 * Blend two RGB triples.
 	 *
-	 * @param array{float,float,float} $from Colour at zero.
-	 * @param array{float,float,float} $to Colour at one.
+	 * @param array{float,float,float} $from Color at zero.
+	 * @param array{float,float,float} $to Color at one.
 	 * @param float $t Blend fraction.
-	 * @return array{float,float,float} Interpolated colour.
+	 * @return array{float,float,float} Interpolated color.
 	 */
 	private static function lerp(array $from, array $to, float $t): array
 	{

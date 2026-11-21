@@ -30,9 +30,9 @@ final class SpotLights
 	 * Summed irradiance, in scene units after the night gain, above which the shaders compress lamp light.
 	 *
 	 * With m the largest channel of the sum the lights would give with their cones wide open, the sum through the
-	 * cones is scaled by KNEE ln(1 + m / KNEE) / m, which keeps its colour and lets each beam fade across its whole
+	 * cones is scaled by KNEE ln(1 + m / KNEE) / m, which keeps its color and lets each beam fade across its whole
 	 * band between the inner and outer cone. On level ground a low lamp's light falls off with the cube of distance,
-	 * so the ground a few metres ahead would otherwise receive hundreds of times what the ground 50 m ahead does and
+	 * so the ground a few meters ahead would otherwise receive hundreds of times what the ground 50 m ahead does and
 	 * turn white in the tone map. TERRAIN_SPOT_KNEE in spot-lights.glsl matches it.
 	 */
 	public const KNEE = 1.0;
@@ -46,7 +46,7 @@ final class SpotLights
 		, 'inner' => 0
 		, 'outer' => 0
 	];
-	/** Twelve floats for each light, in the layout of uSpotLights, with colour in scene units before the gain. */
+	/** Twelve floats for each light, in the layout of uSpotLights, with color in scene units before the gain. */
 	private array $values = [];
 	/** The floats each program last received, by the spl_object_id() of its Program. */
 	private array $sent = [];
@@ -54,8 +54,8 @@ final class SpotLights
 	/**
 	 * Replace the lights. On an invalid list the previous lights stay.
 	 * @param array $lights List of at most MAX lights, each with exactly these keys: position [x,y,z] in world
-	 * metres; direction [x,y,z] of the beam's axis, any nonzero length; color [r,g,b], linear and nonnegative,
-	 * scaling the intensity per channel; intensity in candela along the axis; range in metres, at least 0.01,
+	 * meters; direction [x,y,z] of the beam's axis, any nonzero length; color [r,g,b], linear and nonnegative,
+	 * scaling the intensity per channel; intensity in candela along the axis; range in meters, at least 0.01,
 	 * where the light fades out; inner and outer, half-angles of the cone in radians, with 0 <= inner <= outer
 	 * and 0 < outer <= pi/2. The light is full inside inner and absent outside outer.
 	 * @return void Stores the packed lights. An empty list clears them.
@@ -82,7 +82,7 @@ final class SpotLights
 	 * Read the uniform values bind() uploads, for a custom shader that includes shaderSource().
 	 * @param float $night Atmosphere::uniforms()['nightVisibility'], from zero by day to one at full night.
 	 * @return array uSpotLightCount, and uSpotLights[0] with twelve floats per light: world position and the inverse
-	 * square of the range; unit axis and cone scale; irradiance on the axis at one metre in scene units, including
+	 * square of the range; unit axis and cone scale; irradiance on the axis at one meter in scene units, including
 	 * the night gain, and cone offset. The cone factor is the square of clamp(cos θ * scale + offset, 0, 1).
 	 */
 	public function uniforms(float $night): array
@@ -175,7 +175,7 @@ final class SpotLights
 		if(min($red, $green, $blue, $intensity) < 0)
 		throw new \InvalidArgumentException("Spot light $index color and intensity must be nonnegative");
 
-		if($range < .01) throw new \InvalidArgumentException("Spot light $index range must be at least 0.01 metres");
+		if($range < .01) throw new \InvalidArgumentException("Spot light $index range must be at least 0.01 meters");
 
 		if(!($outer > 0 && $outer <= M_PI / 2 && $inner >= 0 && $inner <= $outer))
 		throw new \InvalidArgumentException("Spot light $index needs 0 <= inner <= outer and 0 < outer <= pi/2");

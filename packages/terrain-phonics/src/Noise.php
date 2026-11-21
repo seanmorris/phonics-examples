@@ -132,9 +132,9 @@ final class Noise
 	}
 
 	/**
-	 * Bound noise over a rectangle by Taylor expansion around its centre.
-	 * @param float $x Centre X in noise coordinates.
-	 * @param float $z Centre Z in noise coordinates.
+	 * Bound noise over a rectangle by Taylor expansion around its center.
+	 * @param float $x Center X in noise coordinates.
+	 * @param float $z Center Z in noise coordinates.
 	 * @param float $rx Horizontal half-width.
 	 * @param float $rz Vertical half-width.
 	 * @return array Minimum, maximum and absolute bounds on both partial derivatives.

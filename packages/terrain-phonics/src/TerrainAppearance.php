@@ -5,10 +5,10 @@ namespace TerrainPhonics;
 use Phonics\Render\Program;
 
 /**
- * Colours, rock banding, material blending and the mountain material for the terrain shader.
+ * Colors, rock banding, material blending and the mountain material for the terrain shader.
  *
- * Settings are flat so that an application can store them beside its own. Colours are sRGB hex strings. Heights are
- * in metres. A slope is 1 minus the upward component of the surface normal: 0 on level ground, 1 on a vertical face.
+ * Settings are flat so that an application can store them beside its own. Colors are sRGB hex strings. Heights are
+ * in meters. A slope is 1 minus the upward component of the surface normal: 0 on level ground, 1 on a vertical face.
  */
 final class TerrainAppearance
 {
@@ -70,7 +70,7 @@ final class TerrainAppearance
 	];
 	/**
 	 * The settings each terrain style reads, in GROUPS order, so a panel can show only those. The keys are what style()
-	 * returns. Colours that only the material tool's paint uses count, because painted ground shows them.
+	 * returns. Colors that only the material tool's paint uses count, because painted ground shows them.
 	 */
 	public const USES = [
 		'coast' => [
@@ -102,13 +102,13 @@ final class TerrainAppearance
 		],
 	];
 	/**
-	 * Linear canyon shades in the default palette. Each keeps its ratio to the colour it follows: ledges follow the
+	 * Linear canyon shades in the default palette. Each keeps its ratio to the color it follows: ledges follow the
 	 * cap rock and red beds the rust. Dust, beds too fine to resolve and the light the walls throw into shadow follow
 	 * the beds' average weighted by thickness. Each derived channel stops at 1.
 	 */
 	private const LEDGE = [.285, .196, .148], RED_BEDS = [.235, .082, .067], DUST = [.275, .163, .104],
 		DISTANT = [.246, .133, .106], BOUNCE = [.11, .066, .048];
-	/** Validated settings with the keys and order of DEFAULTS. Colours are lower case. */
+	/** Validated settings with the keys and order of DEFAULTS. Colors are lower case. */
 	public readonly array $settings;
 	/** Shader uniform values by uniform name. */
 	private readonly array $uniforms;
@@ -145,10 +145,10 @@ final class TerrainAppearance
 	}
 
 	/**
-	 * Read one colour setting.
+	 * Read one color setting.
 	 * @param string $name Setting name, used in the error message.
 	 * @param mixed $value Value from a file or a page.
-	 * @return string Lower-case six-digit hex colour.
+	 * @return string Lower-case six-digit hex color.
 	 */
 	private static function color(string $name, mixed $value): string
 	{
@@ -175,15 +175,15 @@ final class TerrainAppearance
 	}
 
 	/**
-	 * Convert an sRGB hex colour to linear RGB.
-	 * @param string $hex Six-digit hex colour with a leading #. Anything else throws InvalidArgumentException.
+	 * Convert an sRGB hex color to linear RGB.
+	 * @param string $hex Six-digit hex color with a leading #. Anything else throws InvalidArgumentException.
 	 * @return array Red, green and blue from 0 to 1.
 	 */
 	public static function linear(string $hex): array { return self::decode(self::color('color', $hex)); }
 
 	/**
-	 * Give the layer editor the same colours as the original canyon material.
-	 * @return array Linear colours for the bed sequence, dust, distant strata, and reflected light.
+	 * Give the layer editor the same colors as the original canyon material.
+	 * @return array Linear colors for the bed sequence, dust, distant strata, and reflected light.
 	 */
 	public function canyonColors(): array { return self::canyonPalette($this->settings); }
 
@@ -203,8 +203,8 @@ final class TerrainAppearance
 	}
 
 	/**
-	 * Convert a colour that has already been validated.
-	 * @param string $hex Six-digit hex colour with a leading #.
+	 * Convert a color that has already been validated.
+	 * @param string $hex Six-digit hex color with a leading #.
 	 * @return array Red, green and blue from 0 to 1.
 	 */
 	private static function decode(string $hex): array
@@ -221,9 +221,9 @@ final class TerrainAppearance
 	}
 
 	/**
-	 * Work out the canyon palette from its four chosen colours.
+	 * Work out the canyon palette from its four chosen colors.
 	 * @param array $settings Validated settings.
-	 * @return array Linear colours by name: the six beds in the shader's order, then dust, distant and bounce.
+	 * @return array Linear colors by name: the six beds in the shader's order, then dust, distant and bounce.
 	 */
 	private static function canyonPalette(array $settings): array
 	{
@@ -241,7 +241,7 @@ final class TerrainAppearance
 	/**
 	 * List the canyon's beds from the bottom of the section up.
 	 * @param array $settings Validated settings.
-	 * @return array Linear rust, shale, ledge, sandstone, red bed and cap colours by name.
+	 * @return array Linear rust, shale, ledge, sandstone, red bed and cap colors by name.
 	 */
 	private static function canyonBeds(array $settings): array
 	{
@@ -259,8 +259,8 @@ final class TerrainAppearance
 
 	/**
 	 * Average the beds over one repeat of the section, weighted by thickness.
-	 * @param array $beds Linear bed colours in the order of canyonBeds().
-	 * @return array Linear average colour.
+	 * @param array $beds Linear bed colors in the order of canyonBeds().
+	 * @return array Linear average color.
 	 */
 	private static function bedAverage(array $beds): array
 	{
@@ -278,12 +278,12 @@ final class TerrainAppearance
 	}
 
 	/**
-	 * Keep a shade's ratio to the colour it follows, channel by channel, up to 1. Red beds are brighter than the rust
+	 * Keep a shade's ratio to the color it follows, channel by channel, up to 1. Red beds are brighter than the rust
 	 * and dust than the bed average, so a light source would otherwise give an albedo above 1.
-	 * @param array $source Linear colour the shade follows.
-	 * @param array $default Linear source colour in the default palette.
+	 * @param array $source Linear color the shade follows.
+	 * @param array $default Linear source color in the default palette.
 	 * @param array $shade Linear shade in the default palette.
-	 * @return array Linear shade of the current source colour.
+	 * @return array Linear shade of the current source color.
 	 */
 	private static function shade(array $source, array $default, array $shade): array
 	{
@@ -330,7 +330,7 @@ final class TerrainAppearance
 
 	/**
 	 * Report the values that bind() uploads.
-	 * @return array Float lists by uniform name. Lists longer than four are palettes of three-channel colours: eight
+	 * @return array Float lists by uniform name. Lists longer than four are palettes of three-channel colors: eight
 	 * for the canyon and six for the mountain.
 	 */
 	public function uniforms(): array { return $this->uniforms; }

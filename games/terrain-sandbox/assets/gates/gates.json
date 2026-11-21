@@ -113,7 +113,7 @@
 				"stretch": 2
 			},
 			"print": {
-				"pixelsPerMetre": 40,
+				"pixelsPerMeter": 40,
 				"origin": [
 					248,
 					287

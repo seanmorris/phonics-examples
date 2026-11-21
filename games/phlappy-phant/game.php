@@ -135,7 +135,7 @@ $titleItems = static function() use (&$startGame, $bindings, $audioItems): array
 			'label' => 'About'
 			, 'text' => [
 				'Built with Phonics.'
-				// Credits stand in one table, each licence a little darker under the work it covers.
+				// Credits stand in one table, each license a little darker under the work it covers.
 				, ['name' => 'elePHPant', 'value' => 'Vincent Pontier, 1998']
 				, ['name' => 'Sprite', 'value' => 'Sean Morris', 'note' => 'GPL-2.0-or-later']
 				, ['name' => 'Source', 'value' => 'SVG uploaded to Wikimedia Commons by Webysther']

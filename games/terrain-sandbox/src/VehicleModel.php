@@ -21,7 +21,7 @@ final class VehicleModel
 	 * lamps, the headlamps in the pods, and the pods' covers.
 	 */
 	public const FIRST_LAMP = 2, LAMPS = 5;
-	/** Linear colours of the lamps' light: red lenses, and halogen bulbs behind clear ones. */
+	/** Linear colors of the lamps' light: red lenses, and halogen bulbs behind clear ones. */
 	public const RED = [1.0, .008, .004], WHITE = [1.0, .88, .7];
 	/**
 	 * Radiance of each lamp at full brightness in the shader's linear units, in which full sunlight on a white surface
@@ -30,7 +30,7 @@ final class VehicleModel
 	public const BRAKE = 6.0, TAIL = .7, REVERSE = 2.5, HEADLAMP = 3.5;
 	/**
 	 * Each headlamp's beam on the ground and water, in the units of the terrain package's SpotLights: candela on the
-	 * axis at full brightness, the range in metres, and the cone's inner and outer half-angles in radians.
+	 * axis at full brightness, the range in meters, and the cone's inner and outer half-angles in radians.
 	 */
 	public const BEAM_INTENSITY = 80000.0, BEAM_RANGE = 120.0, BEAM_INNER = .1, BEAM_OUTER = .3;
 	/**
@@ -92,7 +92,7 @@ final class VehicleModel
 	 * @param Water $water Water level and appearance, for models below the surface.
 	 * @param int $width Viewport width in pixels.
 	 * @param int $height Viewport height in pixels.
-	 * @param float $altitude Height in metres at which to measure the sunlight's path through the atmosphere.
+	 * @param float $altitude Height in meters at which to measure the sunlight's path through the atmosphere.
 	 * @return void Leaves the program in use.
 	 */
 	public static function light(Program $p, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height,
@@ -118,7 +118,7 @@ final class VehicleModel
 	 * Read the hinges of the moving surfaces that the importer writes beside a mesh as surfaces.json.
 	 * @param string $meshFile Path of the baked mesh.
 	 * @return array Hinge slot (the surface tag minus FIRST_SURFACE) => pose key that drives it, a point on the hinge
-	 * and its unit axis in model metres. Empty for a mesh without moving surfaces.
+	 * and its unit axis in model meters. Empty for a mesh without moving surfaces.
 	 */
 	public static function hinges(string $meshFile): array
 	{
@@ -143,9 +143,9 @@ final class VehicleModel
 	/**
 	 * Read the pop-up headlights and the headlamps that the importer writes beside a car's mesh as lamps.json.
 	 * @param string $meshFile Path of the baked mesh.
-	 * @return array|null 'pods': the hinge's 'point' in model metres, its 'axis', which is +X, and the 'angle' in
+	 * @return array|null 'pods': the hinge's 'point' in model meters, its 'axis', which is +X, and the 'angle' in
 	 * radians that opens the pods; 'headlamps': one beam per pod with the pods open, each a 'position' in model
-	 * metres and a unit 'direction'. Null for a mesh without lamps.
+	 * meters and a unit 'direction'. Null for a mesh without lamps.
 	 */
 	public static function lamps(string $meshFile): ?array
 	{
@@ -180,10 +180,10 @@ final class VehicleModel
 	}
 
 	/**
-	 * Find where a car's headlamps shine from and towards, for lighting the ground and water ahead.
+	 * Find where a car's headlamps shine from and toward, for lighting the ground and water ahead.
 	 * @param array $lamps The car's pods and headlamps from lamps().
 	 * @param array $pose Pose as draw() takes it, with the levels from Session::carLamps() under 'lamps'.
-	 * @return list<array> One beam per pod: its 'position' and unit 'direction' in world metres, and its 'level' from
+	 * @return list<array> One beam per pod: its 'position' and unit 'direction' in world meters, and its 'level' from
 	 * 0 to 1, the headlamps' brightness scaled by how much of the beam clears the nose as the pods rise (BEAM_CLEAR).
 	 * The beams swing with the pods and turn with the body, so a car on its side or roof shines them wherever its nose
 	 * points.
@@ -259,7 +259,7 @@ final class VehicleModel
 	}
 
 	/**
-	 * Render the current vehicle pose in metres, with local +Z pointing forward.
+	 * Render the current vehicle pose in meters, with local +Z pointing forward.
 	 * @param array $pose Position, orientation and moving parts. A car with lamps also reads the levels from
 	 * Session::carLamps() under 'lamps'; without them its lamps keep the last levels drawn, dark at first.
 	 */

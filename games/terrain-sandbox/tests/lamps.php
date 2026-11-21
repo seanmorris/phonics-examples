@@ -114,7 +114,7 @@ namespace
 		}
 		return $states;
 	}
-	/** Board the car on open level ground in daylight, heading towards +Z. */
+	/** Board the car on open level ground in daylight, heading toward +Z. */
 	function park(): Session
 	{
 		$session = new Session(['worldSize' => 1024, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5]);
@@ -138,7 +138,7 @@ namespace
 	 * @param array $lamps The car's pods and headlamps from VehicleModel::lamps().
 	 * @return Closure Takes the pods' opening from 0 to 1 and returns, for each beam, the share of its light that
 	 * leaves the car: rays from the beam's origin over its cone, weighted as the terrain shader fades the cone, that
-	 * strike no body triangle within 3 metres.
+	 * strike no body triangle within 3 meters.
 	 */
 	function beamClearance(string $meshFile, array $lamps): Closure
 	{
@@ -227,7 +227,7 @@ namespace
 		};
 	}
 
-	// Brake lamps light while the pedal opposes the motion, reversing lamps while the car rolls backwards.
+	// Brake lamps light while the pedal opposes the motion, reversing lamps while the car rolls backward.
 	$keys = park();
 	$status = $keys->status();
 	expect($status['headlights'] === 'auto' && !$status['headlightsLit'] && $status['lamps'] === ['brake' => 0.0,
@@ -254,7 +254,7 @@ namespace
 		'A lamp takes a tenth of a second to light or go dark');
 	$forward = hold($keys, 30, ['KeyW' => true]);
 	expect(switchesFollow($forward, 1) && $forward[0]['braking'] && $forward[0]['reversing'],
-		'W while rolling backwards brakes, with the reversing lamps still lit');
+		'W while rolling backward brakes, with the reversing lamps still lit');
 	$backing = hold($keys, 400);
 	$rolling = array_values(array_filter($backing, static fn(array $s): bool => $s['speed'] < 0));
 	expect(switchesFollow($backing, 0) && end($backing)['speed'] == 0 && !end($backing)['reversing']
@@ -273,7 +273,7 @@ namespace
 	expect(switchesFollow($reverse, -1) && !end($reverse)['braking'] && end($reverse)['reversing'],
 		'Holding the left trigger from a stop reverses with the reversing lamps lit');
 	$check = hold($stick, 10, pad: pad(rt: .5));
-	expect(switchesFollow($check, 1) && $check[0]['braking'], 'The right trigger brakes a car rolling backwards');
+	expect(switchesFollow($check, 1) && $check[0]['braking'], 'The right trigger brakes a car rolling backward');
 	$stick->close();
 
 	// The handbrake lights the brake lamps, moving or parked.
@@ -500,7 +500,7 @@ namespace
 		&& abs($left['position'][0] + $right['position'][0]) < .03 && $left['position'][2] > $hingeZ
 		&& abs($left['position'][1] - .58) < .01 && $left['direction'] === $right['direction']
 		&& $left['direction'][2] > .999 && $left['direction'][1] < 0,
-		'One beam per pod, 0.58 m up beside the centre line, aims straight ahead and slightly down');
+		'One beam per pod, 0.58 m up beside the center line, aims straight ahead and slightly down');
 
 	// The uniforms: every lamp dark gives no glow, and only a car with lamps sets them.
 	expect(VehicleModel::lampGlow(['brake' => 0.0, 'reverse' => 0.0, 'headlamps' => 0.0, 'pods' => 0.0])

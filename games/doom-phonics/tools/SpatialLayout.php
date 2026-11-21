@@ -6,7 +6,7 @@ namespace DoomPhonics\Tools;
  * Place independently authored layers by joining matching entrance frames.
  *
  * Architectural translations describe the imagined building. Packed translations
- * keep overlapping storeys separate in a WAD. This prototype supports translation
+ * keep overlapping stories separate in a WAD. This prototype supports translation
  * and opposed, axis-aligned anchors; rotations require an explicit future solver.
  */
 final class SpatialLayout

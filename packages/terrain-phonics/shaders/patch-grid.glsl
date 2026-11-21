@@ -1,5 +1,5 @@
 // Indexed 32-cell patches share integer grid coordinates even across two resolutions.
-// uPatch contains the signed grid origin in cells, cell spacing in metres and parent blend.
+// uPatch contains the signed grid origin in cells, cell spacing in meters and parent blend.
 uniform vec4 uPatch, uEdges, uCorners;
 ivec2 patchCell()
 {

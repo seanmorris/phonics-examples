@@ -297,6 +297,7 @@
     "templates/brick.tx": "sha256-zR05dFF5x6CictxVjiGW6oLuC3HRliYDriDi3jv9ASc=",
     "templates/enemy.tx": "sha256-rMpYnAtLv3MKumA8Gzd5vOwKnX+zrfRmjB38AIhO3uw=",
     "templates/paddle.tx": "sha256-R9YIVFRCprdpNadmmB0/PHyH5SlJ6Ex9hHHcnXtwEl4=",
+    "worlds/campaign.tiled-project": "sha256-fXQcFvMMrD3ButaBdjsXUNGqqeYkmegx5DClEPZoUTo=",
     "worlds/campaign.world": "sha256-5L228lyvKUSpfO7oLQJIhvvHul66Gb0bKKZpaOhB2u0=",
     "worlds/phonics.classes.json": "sha256-dF5cDC7Tf7V4RU7AEcAlvKHM5TFY9gYEvd9Q7nT92BQ=",
     "worlds/stage-01.tmj": "sha256-EqmSwdGDcRuliHM6SNKCPDRvjfBeLmtaJrlO0meL2s4=",
@@ -323,7 +324,6 @@
     "worlds/stage-22.tmj": "sha256-6ssDympVnGUEH46VroxWG6MTwzzarVQlA9MI31MccYg=",
     "worlds/stage-23.tmj": "sha256-5nDcw8F39ATnTD38cMXG79Nq87iKchdV9tstGDefIr8=",
     "worlds/stage-24.tmj": "sha256-ssSmvRRlRDerFmAS8gsfoDqxF9jw9K5/94LBh9jrAvs=",
-    "worlds/stage-25.tmj": "sha256-VygiOsblIwg9/g8cXRnhMBGXN1doftRrHdJOnizYtSk=",
-    "worlds/campaign.tiled-project": "sha256-fXQcFvMMrD3ButaBdjsXUNGqqeYkmegx5DClEPZoUTo="
+    "worlds/stage-25.tmj": "sha256-VygiOsblIwg9/g8cXRnhMBGXN1doftRrHdJOnizYtSk="
   }
 }

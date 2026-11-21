@@ -6,7 +6,7 @@ namespace PhpBilliards\Render;
  * Immediate-mode draw list for the native HUD.
  *
  * Each primitive appends one 20-float instance consumed by `UiRenderer`: rect, fill, radius/border/mode/softness,
- * border colour, and either glyph UVs or a gradient end colour. Building the list is pure PHP so layouts can be
+ * border color, and either glyph UVs or a gradient end color. Building the list is pure PHP so layouts can be
  * measured and tested without a GL context.
  */
 final class UiCanvas
@@ -72,7 +72,7 @@ final class UiCanvas
 	 * @param float $height Height in pixels.
 	 * @param float $radius Corner radius in pixels.
 	 * @param float $blur Blur distance in pixels.
-	 * @param array{float,float,float,float} $color Straight RGBA shadow colour.
+	 * @param array{float,float,float,float} $color Straight RGBA shadow color.
 	 */
 	public function shadow(float $x, float $y, float $width, float $height, float $radius, float $blur, array $color = Theme::SHADOW): void
 	{
@@ -87,8 +87,8 @@ final class UiCanvas
 	 * @param float $width Width in pixels.
 	 * @param float $height Height in pixels.
 	 * @param float $radius Corner radius in pixels.
-	 * @param array{float,float,float,float} $top Straight RGBA colour at the top edge.
-	 * @param array{float,float,float,float} $bottom Straight RGBA colour at the bottom edge.
+	 * @param array{float,float,float,float} $top Straight RGBA color at the top edge.
+	 * @param array{float,float,float,float} $bottom Straight RGBA color at the bottom edge.
 	 */
 	public function gradient(float $x, float $y, float $width, float $height, float $radius, array $top, array $bottom): void
 	{
@@ -98,8 +98,8 @@ final class UiCanvas
 	/**
 	 * Filled disc with an optional ring, or a bare ring when the fill is transparent.
 	 *
-	 * @param float $centerX Centre X in pixels.
-	 * @param float $centerY Centre Y in pixels.
+	 * @param float $centerX Center X in pixels.
+	 * @param float $centerY Center Y in pixels.
 	 * @param float $radius Outer radius in pixels.
 	 * @param array{float,float,float,float} $fill Straight RGBA fill.
 	 * @param array{float,float,float,float}|null $ring Straight RGBA ring, or null for none.
@@ -112,13 +112,13 @@ final class UiCanvas
 	}
 
 	/**
-	 * Draw one line of text with its caps centred on `$middle`, returning the drawn width.
+	 * Draw one line of text with its caps centered on `$middle`, returning the drawn width.
 	 *
 	 * @param string $text UTF-8 text on one line.
 	 * @param float $x Anchor X in pixels.
-	 * @param float $middle Vertical centre of the capitals in pixels.
+	 * @param float $middle Vertical center of the capitals in pixels.
 	 * @param float $size Design em size, scaled by the canvas unit.
-	 * @param array{float,float,float,float} $color Straight RGBA text colour.
+	 * @param array{float,float,float,float} $color Straight RGBA text color.
 	 * @param string $face Face name, body or bold.
 	 * @param string $align left, center, or right relative to `$x`.
 	 * @param float|null $maxWidth Width in pixels beyond which text is ellipsized.
@@ -158,11 +158,11 @@ final class UiCanvas
 	/**
 	 * Keyboard key or gamepad face button legend, returning its width.
 	 *
-	 * Single gamepad face letters become coloured discs; everything else becomes a rounded keycap.
+	 * Single gamepad face letters become colored discs; everything else becomes a rounded keycap.
 	 *
 	 * @param string $legend Key or button legend.
 	 * @param float $x Left edge in pixels.
-	 * @param float $middle Vertical centre in pixels.
+	 * @param float $middle Vertical center in pixels.
 	 * @param float $size Design caption size.
 	 * @param bool $pad Whether the legend names a controller button rather than a key.
 	 */

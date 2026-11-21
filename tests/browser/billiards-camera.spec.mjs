@@ -54,7 +54,7 @@ test('opening controls preserve the transition and pointer follow returns to idl
 			setTimeout(()=>{observer.disconnect();resolve(true);},1500);
 		}));
 		const s=await state(),cue=s.balls.find(ball=>ball.number===0),[x,,z]=s.camera.target;
-		// Behind the cue, the view frames the table at a point on the line from the cue ball to the table centre.
+		// Behind the cue, the view frames the table at a point on the line from the cue ball to the table center.
 		return quiet && Math.abs(Math.atan2(Math.sin(s.camera.yaw-s.aim-Math.PI),Math.cos(s.camera.yaw-s.aim-Math.PI)))<1e-8
 			&& Math.abs(x*cue.y-z*cue.x)<1e-9 && x/cue.x>=-1e-9 && x/cue.x<=1+1e-9;
 	},{timeout:60_000}).toBe(true);

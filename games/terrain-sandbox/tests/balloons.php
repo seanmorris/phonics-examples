@@ -180,7 +180,7 @@ for($i=0; $i<60; $i++) $range->step(1/60,$approach,false,false,$land,0,true);
 check(count($range->targets()) === 2 && count($range->export()) === 1, 'Practice replaces its balloon without adding it to saves');
 $next = $range->targets()[$range->status()['selected']];
 $nextBearing = atan2($next[0]-$approach['x'],$next[2]-$approach['z']);
-check(sin($nextBearing-$bearing)*sin($bearing) < 0, 'The replacement favours the other side of the new heading');
+check(sin($nextBearing-$bearing)*sin($bearing) < 0, 'The replacement favors the other side of the new heading');
 
 $open = new Landscape(array_replace($recipe,['worldSize'=>32768]));
 $practice = new BalloonPractice;

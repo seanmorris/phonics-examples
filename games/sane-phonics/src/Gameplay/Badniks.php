@@ -614,7 +614,7 @@ final class Badniks
 	 * @param float $halfWidth Positive combined horizontal half extent.
 	 * @param float $halfHeight Positive combined vertical half extent.
 	 * @return bool True when relative motion enters the rectangle during the normalized interval, as `Sweep::box`
-	 * decides it with the rectangle centred on the second body.
+	 * decides it with the rectangle centered on the second body.
 	 */
 	private function swept(
 		array $aFrom

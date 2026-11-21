@@ -10,7 +10,7 @@ final class RoadAtlas
 	/**
 	 * Pack normalized road operations in application order. All pointers address RGBA texels.
 	 * @param array $roads Committed splines with their derived sample planes.
-	 * @param float $extent Width of the editable square in metres.
+	 * @param float $extent Width of the editable square in meters.
 	 * @return array Float texture bytes, dimensions and spatial directory coordinates.
 	 */
 	public static function build(array $roads, float $extent): array

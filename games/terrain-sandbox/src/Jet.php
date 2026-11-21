@@ -10,12 +10,12 @@ use TerrainPhonics\Landscape;
  * Novice banks into turns and levels itself when the stick is released. Expert rolls, pitches and yaws about the
  * jet's own axes and holds its attitude. In both, the speed controls work like the game's triggers: the jet speeds
  * up or slows down while one is held and returns to cruise when it is released.
- * Coordinates are metres, angles are radians.
+ * Coordinates are meters, angles are radians.
  */
 final class Jet
 {
 	private const BOOM = 24.0;
-	/** Speeds in metres a second, and how fast the jet changes speed, in metres a second squared. */
+	/** Speeds in meters a second, and how fast the jet changes speed, in meters a second squared. */
 	public const CRUISE = 140.0, FASTEST = 260.0, SLOWEST = 55.0, ACCELERATION = 55.0;
 	public const CRUISE_POWER = self::CRUISE / self::FASTEST;
 	/** Time constants in seconds for the engine and the airspeed that follows it. */
@@ -95,7 +95,7 @@ final class Jet
 	/**
 	 * Fly one fixed step. Every control runs from -1 to 1; the keyboard gives whole values and a gamepad any between.
 	 * @param float $dt Fixed step in seconds.
-	 * @param float $throttle Positive speeds up towards FASTEST, negative slows towards SLOWEST, zero returns to CRUISE.
+	 * @param float $throttle Positive speeds up toward FASTEST, negative slows toward SLOWEST, zero returns to CRUISE.
 	 * @param float $bank Positive turns or rolls right.
 	 * @param float $climb Positive raises the nose.
 	 * @param Camera $camera Chase camera, placed behind the jet after the step.
@@ -183,7 +183,7 @@ final class Jet
 		$r[1] += ($pitch * self::PITCH_RATE - $r[1]) * $follow;
 		$r[2] += ($yaw * self::YAW_RATE - $r[2]) * $follow;
 		[$left,$up,$nose] = self::axes($p['yaw'], $p['pitch'], $p['roll']);
-		// The wings hold up only the part of the weight along their own up axis. The rest slews the nose towards the
+		// The wings hold up only the part of the weight along their own up axis. The rest slews the nose toward the
 		// lower wing, so a banked jet turns gently without a pull and a knife-edge one slides off.
 		$slew = 9.81 * $left[1] / max(1.0, $p['speed']);
 		self::turn($nose, $up, $r[1] * $dt);
@@ -207,9 +207,9 @@ final class Jet
 	}
 
 	/**
-	 * Rotate one axis towards another in their shared plane.
-	 * @param array $a Axis to rotate towards $b, updated in place.
-	 * @param array $b Axis $a turns towards, updated in place to stay square to it.
+	 * Rotate one axis toward another in their shared plane.
+	 * @param array $a Axis to rotate toward $b, updated in place.
+	 * @param array $b Axis $a turns toward, updated in place to stay square to it.
 	 * @param float $angle Rotation in radians.
 	 * @return void
 	 */
@@ -225,7 +225,7 @@ final class Jet
 
 	/**
 	 * The jet's axes for a heading, pitch and roll, as VehicleModel draws them.
-	 * @param float $yaw Heading; zero flies towards +Z.
+	 * @param float $yaw Heading; zero flies toward +Z.
 	 * @param float $pitch Positive raises the nose.
 	 * @param float $roll Positive lowers the left (+X) wing.
 	 * @return array Left (+X), up and forward unit vectors in world space.
@@ -278,11 +278,11 @@ final class Jet
 	/**
 	 * Move the control surfaces for the attitude change asked of this step. They animate the model and nothing else.
 	 * A positive aileron raises the +X trailing edge and lowers the other, a positive stabilator raises both of its
-	 * trailing edges and a positive rudder swings towards +X.
+	 * trailing edges and a positive rudder swings toward +X.
 	 * @param float $dt Fixed step in seconds.
 	 * @param float $rollDemand Roll still to go to the commanded bank, in radians. Positive lowers the +X wing.
 	 * @param float $pitchDemand Pitch still to go to the commanded climb, in radians. Positive raises the nose.
-	 * @param float $turn Yaw rate of the coordinated turn in radians a second. Positive turns the nose towards +X.
+	 * @param float $turn Yaw rate of the coordinated turn in radians a second. Positive turns the nose toward +X.
 	 * @return void Updates the aileron, stabilator and rudder angles in the pose, in radians.
 	 */
 	private function deflect(float $dt, float $rollDemand, float $pitchDemand, float $turn): void
@@ -297,7 +297,7 @@ final class Jet
 	}
 
 	/**
-	 * Advance one control surface towards its command as an actuator would: a short lag, then a rate limit.
+	 * Advance one control surface toward its command as an actuator would: a short lag, then a rate limit.
 	 * @param float $angle Current deflection in radians.
 	 * @param float $command Requested deflection in radians, which may lie beyond the surface's travel.
 	 * @param float $travel Largest deflection either way, in radians.
@@ -397,10 +397,10 @@ final class Jet
 	 * samples the surface exactly.
 	 * @param array $block Block remembered for this point, updated in place.
 	 * @param Landscape $land Surface under the point.
-	 * @param float $x World X of the point in metres.
-	 * @param float $z World Z of the point in metres.
+	 * @param float $x World X of the point in meters.
+	 * @param float $z World Z of the point in meters.
 	 * @param float $y Height of the point before the ground acts on it.
-	 * @param float $margin Clearance the point keeps above the ground, in metres.
+	 * @param float $margin Clearance the point keeps above the ground, in meters.
 	 * @return float The given height, or the exact surface plus the margin when that is higher.
 	 */
 	private function lift(array &$block, Landscape $land, float $x, float $z, float $y, float $margin): float
@@ -438,10 +438,10 @@ final class Jet
 	/**
 	 * Ask the landscape to bound the block of one size around a point.
 	 * @param Landscape $land Surface to bound.
-	 * @param float $x World X of the point in metres.
-	 * @param float $z World Z of the point in metres.
+	 * @param float $x World X of the point in meters.
+	 * @param float $z World Z of the point in meters.
 	 * @param int $cells Lattice cells along each edge of the block.
-	 * @param float $margin Clearance the point keeps above the ground, in metres.
+	 * @param float $margin Clearance the point keeps above the ground, in meters.
 	 * @param int $wait Steps to fly on before asking about a larger block.
 	 * @return array Block rectangle and size, the lowest height that clears it, and the wait.
 	 */

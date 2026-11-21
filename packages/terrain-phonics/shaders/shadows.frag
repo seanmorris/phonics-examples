@@ -11,7 +11,7 @@ float sampleHeight(ivec2 c) {
 }
 uniform float uTerrainShadowExtent;
 uniform float uTerrainShadowSize;
-uniform vec2 uShadowHeightRange; // Minimum terrain elevation and encoded span, in metres.
+uniform vec2 uShadowHeightRange; // Minimum terrain elevation and encoded span, in meters.
 uniform vec3 uShadowSunDirection;
 out vec4 color;
 
@@ -42,7 +42,7 @@ void main()
 	float grade = uShadowSunDirection.y / max(horizontal,.00001);
 	float stride = uTerrainShadowExtent / float(textureSize(uTerrainHeights,0).x - 1);
 	float run = stride, ceiling = uShadowHeightRange.x, softness = 2.;
-	// Start one overview texel away so a near rim cannot fall between kilometre-long steps.
+	// Start one overview texel away so a near rim cannot fall between kilometer-long steps.
 	// Widen the spacing after the nearby samples to retain coverage to the far side of the map.
 	for(int i = 1; i <= 32; ++i)
 	{

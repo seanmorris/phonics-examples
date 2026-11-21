@@ -22,7 +22,7 @@ final class CarLamps
 	public function reset(): void { $this->now = $this->before = self::DARK; }
 
 	/**
-	 * Move the lamps one fixed step towards what the switches ask for.
+	 * Move the lamps one fixed step toward what the switches ask for.
 	 * @param float $dt Step in seconds.
 	 * @param bool $braking Whether the brake lamps are switched on.
 	 * @param bool $reversing Whether the reversing lamps are switched on.

@@ -142,7 +142,7 @@ $region = new DriveRegion($karst->landscape, $karst->water->level(), ['x'=>$x, '
 $route = $region->containsPosition(4110., -4933.);
 foreach($route as $_) {}
 expect($route->getReturn() && $karst->landscape->height(4110., -4933.)-$floor > 350,
-	'A hillside over 350 m above the opening plain is connected by driveable grades on both tyre tracks.');
+	'A hillside over 350 m above the opening plain is connected by driveable grades on both tire tracks.');
 input($karst, ['values' => ['grassColor' => '#224422', 'haze' => 2.0, 'rockSlopeStart' => .65]]);
 input($karst, ['actions' => [['type' => 'generate', 'preset' => 'limestone', 'seed' => 'second', 'wallWidth' => .7]]]);
 expect($karst->landscape->recipe()['wallWidth'] === .7 && $karst->landscape->recipe()['seed'] === 'second',
@@ -257,7 +257,7 @@ for($i = 0; $i < 480 && $distance < 200; $i++)
 	$contacts += $run['contacts'];
 	$distance = hypot($run['x'] - $launch['x'], $run['z'] - $launch['z']);
 }
-expect($contacts === 0 && $distance >= 200, 'Default coastal launch has 200 metres of clear water ahead');
+expect($contacts === 0 && $distance >= 200, 'Default coastal launch has 200 meters of clear water ahead');
 $coast->close();
 
 $bay = new Session(['worldSize' => 128, 'waterLevel' => 5, 'heightScale' => 0, 'detailAmplitude' => 0]);
@@ -475,7 +475,7 @@ expect($springs->travel[0] > .05 && abs($springs->travel[1]) < .01 && $springs->
 for($i = 0; $i < 240; $i++) $springs->step(1/60,[0,0,0,0],false);
 expect($springs->resting && abs($springs->y-.02) < .001, 'A parked suspension settles back to its static ride height');
 
-// A one-metre drop should compress the springs and settle with little rebound.
+// A one-meter drop should compress the springs and settle with little rebound.
 $springs->y += 1;
 $bottomed = false; $rise = 0.0;
 for($i = 0; $i < 240; $i++)
@@ -485,7 +485,7 @@ for($i = 0; $i < 240; $i++)
 	if($bottomed) $rise = max($rise, $springs->y - .02);
 }
 expect($bottomed && $rise > 0 && $rise < .017 && $springs->contacts === 4,
-	'Landing dampers limit rebound to less than 17 mm after a one-metre drop');
+	'Landing dampers limit rebound to less than 17 mm after a one-meter drop');
 
 $landingSurface = new TerrainPhonics\Landscape($flat);
 foreach([[0,3,0,true],[0,-3,0,true],[2,0,0,true],[-2,0,0,true],[0,12,0,false],[0,3,.08,false]] as [$pitch,$roll,$clearance,$catch])
@@ -498,7 +498,7 @@ foreach([[0,3,0,true],[0,-3,0,true],[2,0,0,true],[-2,0,0,true],[0,12,0,false],[0
 }
 $landingSurface->close();
 
-// A narrow ramp overturns the car. Hitting the wider ramp off centre also sends it sliding sideways.
+// A narrow ramp overturns the car. Hitting the wider ramp off center also sends it sliding sideways.
 foreach([[0,45,16,30,true],[0,55,32,34,false],[12,55,32,34,false],[-8,55,32,34,false]] as [$x,$z,$radius,$amount,$landsOnRoof])
 {
 	$ramp = new Session($dry);
@@ -600,7 +600,7 @@ expect(abs($between['power'] - ($first['power'] + Jet::CRUISE_POWER)/2) < 1e-10,
 input($flight, ['keys'=>[]]);
 $flight->step(1/60);
 expect($flight->jet->state()['power'] < $first['power'] && $flight->jet->state()['power'] > Jet::CRUISE_POWER,
-	'Letting go eases power back down towards cruise');
+	'Letting go eases power back down toward cruise');
 input($flight, ['keys'=>['KeyW'=>true,'KeyD'=>true,'KeyE'=>true]]);
 for($i=0; $i<60; $i++) $flight->step(1/60);
 $turn = $flight->jet->state();
@@ -720,7 +720,7 @@ expect($seen['left climb']['early']['stabilator'] > 0 && $seen['right dive']['ea
 	'The stabilator follows the pitch demand: positive while the nose is coming up');
 expect($seen['left climb']['late']['rudder'] > .99 * $travel['rudder'] && $seen['left climb']['late']['roll'] > 1
 	&& $seen['right dive']['late']['rudder'] < -.99 * $travel['rudder'] && $seen['right dive']['late']['roll'] < -1,
-	'The rudder follows the turn: positive while the nose swings towards +X in a left bank');
+	'The rudder follows the turn: positive while the nose swings toward +X in a left bank');
 
 $settled = $seen['hands off']['late'];
 expect(abs($settled['aileron']) < .01 && abs($settled['stabilator']) < .01 && abs($settled['rudder']) < .01,
@@ -771,7 +771,7 @@ $controls->close();
 
 /**
  * Turn a point about a hinge line as model.vert does, by Rodrigues' rotation.
- * @param array $point Point in model metres.
+ * @param array $point Point in model meters.
  * @param array $hinge Hinge from VehicleModel::hinges(), with a point on the line and a unit axis.
  * @param float $angle Deflection in radians, by the right-hand rule about the axis.
  * @return array The turned point.
@@ -791,9 +791,9 @@ function turnAboutHinge(array $point, array $hinge, float $angle): array
 
 /**
  * Find the arm from a hinge line to a point, square to the line.
- * @param array $point Point in model metres.
+ * @param array $point Point in model meters.
  * @param array $hinge Hinge with a point on the line and a unit axis.
- * @return array Arm vector in metres.
+ * @return array Arm vector in meters.
  */
 function hingeArm(array $point, array $hinge): array
 {
@@ -805,15 +805,15 @@ function hingeArm(array $point, array $hinge): array
 
 /**
  * Measure a vector.
- * @param array $v Three components in metres.
- * @return float Length in metres.
+ * @param array $v Three components in meters.
+ * @return float Length in meters.
  */
 function vectorLength(array $v): float
 {
 	return sqrt($v[0]**2 + $v[1]**2 + $v[2]**2);
 }
 
-// The importer centres the F5 on its centre of gravity, tags its moving surfaces and writes their hinges beside the
+// The importer centers the F5 on its center of gravity, tags its moving surfaces and writes their hinges beside the
 // mesh. Turned the way model.vert turns them, the baked surfaces move as their controls say and stay on their hinges.
 $meshFile = dirname(__DIR__) . '/assets/f5/mesh.bin.gz';
 $hinges = TerrainSandbox\VehicleModel::hinges($meshFile);
@@ -864,16 +864,16 @@ foreach($hinges as $slot => $hinge)
 	}
 }
 expect($conventions, 'At full travel the +X aileron trailing edge rises, the -X one falls, both stabilator trailing'
-	. ' edges rise and the rudder swings towards +X');
+	. ' edges rise and the rudder swings toward +X');
 expect($slip < .02, sprintf('Vertices along the hinges move %.1f mm at full travel', $slip * 1000));
 
 /**
  * Measure how far below a point of the baked F5 the nearest fixed triangle lies.
- * @param array $point Point in model metres.
- * @param array $positions Position of every vertex in model metres.
+ * @param array $point Point in model meters.
+ * @param array $positions Position of every vertex in model meters.
  * @param array $vertexTags Surface tag of every vertex.
  * @param array $corners Vertex indices, three per triangle.
- * @return float Distance straight down to fixed skin in metres, or INF when there is none.
+ * @return float Distance straight down to fixed skin in meters, or INF when there is none.
  */
 function skinBelow(array $point, array $positions, array $vertexTags, array $corners): float
 {
@@ -903,7 +903,7 @@ for($i = 0; $i < $count; $i++)
 {
 	$positions[] = array_values(unpack('g3', $mesh, 16 + 28 * $i));
 	$vertexTags[] = ord($mesh[16 + 28 * $i + 27]);
-	// Corners are named to a tenth of a millimetre. Adding zero turns -0 into 0 on the centreline.
+	// Corners are named to a tenth of a millimeter. Adding zero turns -0 into 0 on the centerline.
 	$names[] = implode(',', [round($positions[$i][0], 4) + 0.0, round($positions[$i][1], 4) + 0.0,
 		round($positions[$i][2], 4) + 0.0]);
 }
@@ -1020,8 +1020,8 @@ $knob->close();
  * @param float $freeY Altitude the flight path reaches before clearance.
  * @param array $after Jet state after the step, which supplies the new attitude, speed and position.
  * @param TerrainPhonics\Landscape $ground Surface with the same recipe and edits as the one the jet flies over.
- * @param float $water Water level in metres.
- * @return array Jet height and eye height in metres.
+ * @param float $water Water level in meters.
+ * @return array Jet height and eye height in meters.
  */
 function exactJet(float $freeY, array $after, TerrainPhonics\Landscape $ground, float $water): array
 {
@@ -1040,7 +1040,7 @@ function exactJet(float $freeY, array $after, TerrainPhonics\Landscape $ground, 
  * @param TerrainPhonics\Landscape $ground Second surface, so the exact rule leaves the session's cache alone.
  * @param int $steps Fixed steps to fly.
  * @param array|null $track Reference direction carried between successive calls for the same flight.
- * @return array Whether every step matched, and how many steps left the jet resting on the ground's 8 metre floor.
+ * @return array Whether every step matched, and how many steps left the jet resting on the ground's 8 meter floor.
  */
 function flyExactly(Session $session, TerrainPhonics\Landscape $ground, int $steps, ?array &$track): array
 {
@@ -1076,7 +1076,7 @@ input($air, ['keys'=>['KeyW'=>true,'KeyQ'=>true]]);
 $nodes = $air->landscape->stats()['generated'];
 [$skimmed, $resting] = flyExactly($air, $ground, 300, $track);
 expect($matched && $skimmed && $resting > 200 && $air->landscape->stats()['generated'] > $nodes + 3000,
-	"A diving jet samples the true surface and rests on its 8 metre floor: $resting of 300 steps");
+	"A diving jet samples the true surface and rests on its 8 meter floor: $resting of 300 steps");
 input($air, ['keys'=>['KeyW'=>true,'KeyE'=>true]]);
 [$matched] = flyExactly($air, $ground, 240, $track);
 $nodes = $air->landscape->stats()['generated'];
@@ -1137,8 +1137,8 @@ expect($matched && $resting > 60, 'Boarding over a newly generated world forgets
 $ground->close();
 $worlds->close();
 
-// A block bound says nothing about ground beyond its own rectangle. Six thin towers stand 37 metres apart on a
-// plain, each 100 metres taller than the last, so they meet the 2 to 256 metre blocks at six different offsets.
+// A block bound says nothing about ground beyond its own rectangle. Six thin towers stand 37 meters apart on a
+// plain, each 100 meters taller than the last, so they meet the 2 to 256 meter blocks at six different offsets.
 $tower = new Session(['heightScale'=>0,'detailAmplitude'=>0]);
 for($i = 0; $i < 6; $i++)
 	$tower->landscape->queue(['type'=>'raise','x'=>600,'z'=>1900 + 37 * $i,'radius'=>6.0,'amount'=>500.0 + 100 * $i]);
@@ -1149,7 +1149,7 @@ $tower->camera->yaw = M_PI;
 input($tower, ['actions'=>['jet']]);
 $track = null;
 $nodes = $tower->landscape->stats()['generated'];
-// At the 140 m/s cruise, 31 steps stop 72 metres on, short of the first tower, and 102 more cross all six.
+// At the 140 m/s cruise, 31 steps stop 72 meters on, short of the first tower, and 102 more cross all six.
 [$matched] = flyExactly($tower, $ground, 31, $track);
 expect($matched && $tower->landscape->stats()['generated'] === $nodes,
 	'A jet approaching a tower clears the open plain without sampling it');
@@ -1161,7 +1161,7 @@ $tower->close();
 
 
 // Gamepads. The page sends [left X, left Y, right X, right Y, left trigger, right trigger, button bits] with +Y
-// towards the player, and only when the pad changes; the application re-sends the last packet every frame.
+// toward the player, and only when the pad changes; the application re-sends the last packet every frame.
 
 /** Build a gamepad packet. */
 function pad(float $x = 0, float $y = 0, float $lookX = 0, float $lookY = 0, float $lt = 0, float $rt = 0,
@@ -1205,7 +1205,7 @@ function largestTurn(array $states): float
 	return $largest;
 }
 
-/** Board a jet high over an open plain, heading towards +Z. */
+/** Board a jet high over an open plain, heading toward +Z. */
 function pilot(string $controls = 'novice'): Session
 {
 	$session = new Session(['worldSize'=>8192,'heightScale'=>0,'detailAmplitude'=>0]);
@@ -1251,7 +1251,7 @@ expect(abs($far - ($before[2] - $roam->camera->position[2])) < 1e-9 && $far > 1.
 	'Stick values beyond full travel count as full travel');
 $roam->close();
 
-// At the ceiling the aircraft can point upwards while travelling horizontally.
+// At the ceiling the aircraft can point upward while traveling horizontally.
 $path = new Session(['worldSize'=>8192, 'heightScale'=>0, 'detailAmplitude'=>0]);
 $path->camera->position = [0,15000,0];
 input($path, ['actions'=>['jet']]);
@@ -1324,7 +1324,7 @@ expect(abs($s['roll'] + .55) < 1e-3 && $s['speed'] === Jet::CRUISE,
 	'Half stick holds half the Novice bank, and releasing the trigger returns to cruise');
 hold($stick, pad(lt: .5), 300, $jet);
 expect($stick->jet->state()['speed'] === Jet::CRUISE - .5 * (Jet::CRUISE - Jet::SLOWEST) && abs($stick->jet->state()['roll']) < 1e-3,
-	'Half the left trigger slows to a speed halfway towards the slowest, and the wings level hands off');
+	'Half the left trigger slows to a speed halfway toward the slowest, and the wings level hands off');
 hold($stick, pad(y: 1), 150, $jet);
 expect($stick->jet->state()['pitch'] > .75, 'Pulling the stick back raises the nose');
 input($stick, ['values'=>['invertPitch'=>true]]);
@@ -1397,7 +1397,7 @@ $banked = $ace->jet->state();
 hold($ace, pad(), 120, $jet);
 $s = $ace->jet->state();
 expect(abs($s['roll'] - $banked['roll']) < .01 && $s['yaw'] < $banked['yaw'] - .05 && $s['yaw'] > $banked['yaw'] - .2,
-	'Released in a bank, the jet holds it and slowly turns towards the lower wing');
+	'Released in a bank, the jet holds it and slowly turns toward the lower wing');
 input($ace, ['actions'=>['jet-controls']]);
 expect(!$ace->jet->expert() && $ace->jetControls === 'novice' && str_starts_with($ace->message, 'Novice'),
 	'Back on the pad switches to Novice in flight');
@@ -1524,7 +1524,7 @@ expect(abs(atan2(sin($yaw - (M_PI - $s['yaw'] + M_PI / 2)), cos($yaw - (M_PI - $
 	'Pushing the right stick right looks to the jet ski\'s right');
 $stick->close();
 
-// The terrain's colours, banding and blending are saved settings that the session hands the renderer.
+// The terrain's colors, banding and blending are saved settings that the session hands the renderer.
 $look = new Session(['worldSize'=>256,'heightScale'=>0,'detailAmplitude'=>0]);
 expect(array_intersect_key($look->settings, TerrainPhonics\TerrainAppearance::DEFAULTS) == TerrainPhonics\TerrainAppearance::DEFAULTS
 	&& $look->terrainAppearance->settings === TerrainPhonics\TerrainAppearance::DEFAULTS,
@@ -1544,7 +1544,7 @@ expect($look->settings['rockSlopeStart'] === .6 && abs($look->settings['rockSlop
 $held = $look->terrainAppearance;
 input($look, ['values' => ['grassColor' => 'red']]);
 expect($look->settings['grassColor'] === '#ff0000' && str_contains($look->message, 'grassColor')
-	&& $look->terrainAppearance === $held, 'A colour that is not six-digit hex is refused and reported');
+	&& $look->terrainAppearance === $held, 'A color that is not six-digit hex is refused and reported');
 $file = json_decode($look->save(), true, flags: JSON_THROW_ON_ERROR);
 expect($file['settings']['grassColor'] === '#ff0000' && $file['settings']['rockSlopeEnd'] === $look->settings['rockSlopeEnd'],
 	'Save files carry the terrain appearance');
@@ -1560,11 +1560,11 @@ expect($other->terrainAppearance->settings === TerrainPhonics\TerrainAppearance:
 $generation = $other->generation;
 $hostile = $file;
 $hostile['settings']['grassColor'] = 'red';
-try { $other->load(json_encode($hostile, JSON_THROW_ON_ERROR)); expect(false, 'A file with a bad colour must be refused'); }
+try { $other->load(json_encode($hostile, JSON_THROW_ON_ERROR)); expect(false, 'A file with a bad color must be refused'); }
 catch(InvalidArgumentException)
 {
 	expect($other->generation === $generation && $other->terrainAppearance->settings === TerrainPhonics\TerrainAppearance::DEFAULTS,
-		'A file with a bad terrain colour changes nothing');
+		'A file with a bad terrain color changes nothing');
 }
 $order = $file;
 $order['settings']['rockSlopeStart'] = .7;

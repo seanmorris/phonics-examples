@@ -134,7 +134,7 @@ final class DemoStartup
 	 * Make the configured intro or title-only sequence with a live backdrop readiness gate.
 	 *
 	 * @param bool $titleOnly Whether to omit loading, credit, and controls screens.
-	 * @return CardSequence Fresh configuration; any previous sequence is cancelled first.
+	 * @return CardSequence Fresh configuration; any previous sequence is canceled first.
 	 */
 	private function sequence(bool $titleOnly): CardSequence
 	{
@@ -175,7 +175,7 @@ final class DemoStartup
 	}
 
 	/**
-	 * Open the root menu, cancelling a staged level while retaining the last playable scene.
+	 * Open the root menu, canceling a staged level while retaining the last playable scene.
 	 *
 	 * @return void Pauses gameplay and shares settings with the in-game pause menu.
 	 */

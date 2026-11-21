@@ -89,7 +89,7 @@ function resizeGateMesh(array $mesh, array $uniforms): array
 	return $triangles;
 }
 
-/** Area of a triangle in square metres. */
+/** Area of a triangle in square meters. */
 function triangleArea(array $t): float
 {
 	$a = [$t[1][0] - $t[0][0], $t[1][1] - $t[0][1], $t[1][2] - $t[0][2]];
@@ -99,9 +99,9 @@ function triangleArea(array $t): float
 }
 
 /** Whether a triangle meets an axis-aligned box, by the separating axis test. */
-function triangleMeetsBox(array $triangle, array $centre, array $half): bool
+function triangleMeetsBox(array $triangle, array $center, array $half): bool
 {
-	$v = array_map(fn(array $p): array => [$p[0] - $centre[0], $p[1] - $centre[1], $p[2] - $centre[2]], $triangle);
+	$v = array_map(fn(array $p): array => [$p[0] - $center[0], $p[1] - $center[1], $p[2] - $center[2]], $triangle);
 	$edges = [];
 	foreach([[0, 1], [1, 2], [2, 0]] as [$a, $b])
 		$edges[] = [$v[$b][0] - $v[$a][0], $v[$b][1] - $v[$a][1], $v[$b][2] - $v[$a][2]];

@@ -4,11 +4,11 @@ Usage: python3 scripts/import_terrain_gates.py finish_line.zip davita_finish-lin
 
 The road gate is the "Finish Line" gantry with solid posts in place of its lattice towers and a flat label panel in
 place of its 3D lettering. The air gate is the same board and the tabs on top of the towers at three times the size,
-without posts or base plates. The water gate is the inflatable arch scaled to 12 metres. Only geometry comes from the
+without posts or base plates. The water gate is the inflatable arch scaled to 12 meters. Only geometry comes from the
 archives: the importer never extracts their textures, and scripts/generate-terrain-gates.mjs paints every pixel of
 the three atlases.
 
-Each gate's frame puts the origin at the bottom centre of its window, +Y up, +Z along the direction of travel and
+Each gate's frame puts the origin at the bottom center of its window, +Y up, +Z along the direction of travel and
 +X across. Every atlas stacks one print per role in bands a quarter of its height, and the meshes address the top
 band, so a draw selects a role by adding that role's offset from gates.json to the texture coordinates.
 
@@ -41,24 +41,24 @@ ROLES = ("start", "checkpoint", "finish", "start-finish")
 POST_DEPTH = 8.0
 AIR_SCALE = 3.0
 WATER_WIDTH = 12.0
-# The source arch's base stands this far below the water line, which leaves its opening 3.6 metres high.
+# The source arch's base stands this far below the water line, which leaves its opening 3.6 meters high.
 WATER_DRAFT = .8
-# The feet then reach this far down. A gate rides at the wave height at its centre, and the sandbox's swell can leave
-# the water at a foot up to 0.83 metres lower than that at 100% choppiness, 2.5 metres at the panel's highest, 300%.
-# The last 0.2 metres allow for the jet ski's wakes.
+# The feet then reach this far down. A gate rides at the wave height at its center, and the sandbox's swell can leave
+# the water at a foot up to 0.83 meters lower than that at 100% choppiness, 2.5 meters at the panel's highest, 300%.
+# The last 0.2 meters allow for the jet ski's wakes.
 FOOT_DEPTH = 2.7
 # Atlas sizes and the board's print layout in pixels of one role band: the label, then a strip for each board
-# colour. The generator reads these back from gates.json.
+# color. The generator reads these back from gates.json.
 BOARD_ATLAS = (1024, 512)
 BOARD_PRINT = {"label": [8, 8, 760, 112], "swatches": {"frame": [776, 0, 80, 128], "light": [856, 0, 84, 128],
                                                         "dark": [940, 0, 84, 128]}}
-# The arch print maps gate metres to band pixels: the gate origin lands on `origin`, and +Y runs up the band. Each
+# The arch print maps gate meters to band pixels: the gate origin lands on `origin`, and +Y runs up the band. Each
 # 400-row band holds the arch from its crown to its feet; a taller atlas would take the mesh past BakedMesh's 4 MiB.
 WATER_ATLAS = (496, 1600)
-WATER_PRINT = {"pixelsPerMetre": 40, "origin": [248, 287]}
+WATER_PRINT = {"pixelsPerMeter": 40, "origin": [248, 287]}
 # Cells of the gantry's 8 by 8 palette texture that its board uses, by column and row.
 BOARD_CELLS = {(0, 7): "light", (7, 7): "dark", (2, 7): "frame", (3, 5): "label"}
-# The range of each kind's opening in metres, width then height. The board meshes hold checker columns for the widest.
+# The range of each kind's opening in meters, width then height. The board meshes hold checker columns for the widest.
 SIZES = {"road": ((6, 60), (2, 40)), "water": ((4.5, 60), (2, 40)), "air": ((20, 300), (5, 150))}
 # The arch stretches to an opening of another shape, scaling up at most twice as much as across, or across at most
 # twice as much as up, which keeps its lettering legible.
@@ -131,7 +131,7 @@ class Mesh:
         self.points = []
 
     def triangle(self, corners, paint, spare=False):
-        """Add one triangle of (position, normal, uv) corners, wound anticlockwise seen from its front."""
+        """Add one triangle of (position, normal, uv) corners, wound counterclockwise seen from its front."""
         for point, normal, uv in corners:
             record = VERTEX.pack(*point, *(round(max(-1, min(1, n)) * 32767) for n in normal),
                                  *(round(max(0, min(1, v)) * 65535) for v in uv), *paint)
@@ -161,13 +161,13 @@ def metal_paint(material, part):
 
 
 def board_uv(rectangle, width, height):
-    """Texture coordinates of the centre of a rectangle given in band pixels."""
+    """Texture coordinates of the center of a rectangle given in band pixels."""
     x, y, w, h = rectangle
     return (x + w / 2) / width, (y + h / 2) / height
 
 
 def cell(board, corners):
-    """Which board colour a triangle samples from the gantry's palette texture."""
+    """Which board color a triangle samples from the gantry's palette texture."""
     cells = {(int(board["uvs"][i][0] * 8), int(board["uvs"][i][1] * 8)) for i in corners}
     if len(cells) != 1 or next(iter(cells)) not in BOARD_CELLS:
         raise ValueError(f"Unexpected board palette cells {sorted(cells)}")
@@ -176,18 +176,18 @@ def cell(board, corners):
 
 def gantry(parts, scale, lift, posts, widest, board_height_scale=1.0):
     """The gantry's board and tabs, and optionally solid posts and base plates, in a gate frame with the board facing
-    -Z. The checker bands run on in spare columns for an opening `widest` metres wide."""
+    -Z. The checker bands run on in spare columns for an opening `widest` meters wide."""
     towers = parts["pole.001_Metal_0"]
     board = parts["Board.001_CP Black_0"]
     # The two lattice towers, each one's lowest and highest corner.
     sides = [bounds([p for p in towers["points"] if p[0] * sign > 0]) for sign in (-1, 1)]
     # The towers stand on one line across the gate, which becomes the gate's plane.
-    centre_x = sum(low[0] + high[0] for low, high in sides) / 4
-    centre_z = sum(low[2] + high[2] for low, high in sides) / 4
+    center_x = sum(low[0] + high[0] for low, high in sides) / 4
+    center_z = sum(low[2] + high[2] for low, high in sides) / 4
 
     def place(p):
-        # A half turn about Y puts the board's printed face towards the oncoming vehicle, on the -Z side.
-        return (-(p[0] - centre_x) * scale, (p[1] + lift) * scale, -(p[2] - centre_z) * scale)
+        # A half turn about Y puts the board's printed face toward the oncoming vehicle, on the -Z side.
+        return (-(p[0] - center_x) * scale, (p[1] + lift) * scale, -(p[2] - center_z) * scale)
 
     def turn(n):
         return (-n[0], n[1], -n[2])
@@ -243,7 +243,7 @@ def gantry(parts, scale, lift, posts, widest, board_height_scale=1.0):
                 raise ValueError("Expected only checker squares on the board's floor")
             squares.append((points, uv))
 
-    # A flat copy of the floor replaces the back face, inside a ring of the frame colour, so the board reads from
+    # A flat copy of the floor replaces the back face, inside a ring of the frame color, so the board reads from
     # behind without growing thicker. Seen from behind, source -X is to the right, so the copies take their corners
     # in reverse order and the labels read along -X.
     def behind(x0, x1, y0, y1, uvs):
@@ -278,7 +278,7 @@ def gantry(parts, scale, lift, posts, widest, board_height_scale=1.0):
     # Each checker band, in the gate frame: where it starts beside the label, how wide its columns are, and how
     # many it shows. A side is -1 for -X and 1 for +X.
     def levels(values):
-        """Distinct values, merging those within a millimetre of the last one kept."""
+        """Distinct values, merging those within a millimeter of the last one kept."""
         found = []
         for value in sorted(values):
             if not found or value - found[-1] > .001:
@@ -326,9 +326,9 @@ def gantry(parts, scale, lift, posts, widest, board_height_scale=1.0):
             mesh.triangle([(points[i], turn(tab["normals"][i]), (0, 0)) for i in corners], metal)
         counts[name] = len(tab["corners"]) // 3
 
-    # The posts take the towers' square footprint and centre line, rounded to millimetres.
+    # The posts take the towers' square footprint and center line, rounded to millimeters.
     low, high = sides[1]
-    post_x = round((low[0] + high[0]) / 2 - centre_x, 3)
+    post_x = round((low[0] + high[0]) / 2 - center_x, 3)
     half = round(max(high[0] - low[0], high[2] - low[2]) / 2, 3)
     footprint = []
     if posts:
@@ -340,7 +340,7 @@ def gantry(parts, scale, lift, posts, widest, board_height_scale=1.0):
             footprint.append({"x": x, "z": 0, "halfSize": half, "bottom": -POST_DEPTH, "top": round(top, 3)})
             # Four walls with outward normals. The top tab covers the top and the ground hides the bottom.
             for nx, nz in ((1, 0), (0, 1), (-1, 0), (0, -1)):
-                # Corners run anticlockwise seen from outside: along the wall, then up.
+                # Corners run counterclockwise seen from outside: along the wall, then up.
                 a = (x + half * (nx - nz), half * (nz + nx))
                 b = (x + half * (nx + nz), half * (nz - nx))
                 corners = [(a[0], -POST_DEPTH, a[1]), (b[0], -POST_DEPTH, b[1]),
@@ -387,7 +387,7 @@ def inside(point, triangle):
 
 def grooves(plane):
     """Quads closing the gaps between pieces of one flat face: two nearly vertical edges of its outline that stand
-    less than 5 centimetres apart, over the heights both span. Each quad's corners run up one edge and down the
+    less than 5 centimeters apart, over the heights both span. Each quad's corners run up one edge and down the
     other."""
     uses = {}
     for triangle in plane:
@@ -410,13 +410,13 @@ def grooves(plane):
 
 
 def arch(parts):
-    """The inflatable arch, 12 metres wide, with its feet below the water line and its print mapped flat."""
+    """The inflatable arch, 12 meters wide, with its feet below the water line and its print mapped flat."""
     (part,) = parts.values()
     low, high = bounds(part["points"])
     scale = WATER_WIDTH / (high[0] - low[0])
-    centre_x, centre_z = (low[0] + high[0]) / 2, (low[2] + high[2]) / 2
+    center_x, center_z = (low[0] + high[0]) / 2, (low[2] + high[2]) / 2
 
-    # Below the water line the source has only the bevelled rims of the feet. Lowering them stretches the legs' walls,
+    # Below the water line the source has only the beveled rims of the feet. Lowering them stretches the legs' walls,
     # each of which runs between two edges parallel to Z, so every face stays flat.
     rims = [(p[1] - low[1]) * scale - WATER_DRAFT for p in part["points"]]
     if max(y for y in rims if y < 0) > -WATER_DRAFT + .05:
@@ -424,10 +424,10 @@ def arch(parts):
 
     def place(p):
         y = (p[1] - low[1]) * scale - WATER_DRAFT
-        return ((p[0] - centre_x) * scale, y - (FOOT_DEPTH - WATER_DRAFT if y < 0 else 0), (p[2] - centre_z) * scale)
+        return ((p[0] - center_x) * scale, y - (FOOT_DEPTH - WATER_DRAFT if y < 0 else 0), (p[2] - center_z) * scale)
 
     width, height = WATER_ATLAS
-    k = WATER_PRINT["pixelsPerMetre"]
+    k = WATER_PRINT["pixelsPerMeter"]
     ox, oy = WATER_PRINT["origin"]
     mesh = Mesh()
     paint = (255, 255, 255, round(255 * part["material"].get("roughnessFactor", 1)), 0, tag(ARCH))
@@ -439,7 +439,7 @@ def arch(parts):
         faces.append((corners, [place(part["points"][i]) for i in corners], [v / length for v in normal]))
     front = [points for _, points, normal in faces if normal[2] > .9]
     # The legs are separate pieces whose inner walls run on up inside the crossbar, where their edges show through
-    # the faces. A wall whose outward side, 5 centimetres out, is still inside the arch faces into it.
+    # the faces. A wall whose outward side, 5 centimeters out, is still inside the arch faces into it.
     # A flat projection, as in the source, but each face reads left to right from its own side. Seen from -Z,
     # which faces oncoming vehicles, the print runs along -X. The edges take the +Z face's mapping.
     def mapping(p, direction):
@@ -476,7 +476,7 @@ def arch(parts):
         raise ValueError("The arch no longer fits its print band")
     # The opening, seen along Z: lines up through it meet the crossbar's underside first, and lines across it meet
     # the legs' inner faces. A first pass finds the legs below the crossbar's middle. Then both are sampled every
-    # centimetre over the window, from the water line to just under the crossbar, and the narrowest values kept.
+    # centimeter over the window, from the water line to just under the crossbar, and the narrowest values kept.
     def legs(top):
         heights = [i / 100 for i in range(int(top * 100))]
         return min(min(abs(v) for span in crossings(triangles, 1, y) for v in span) for y in heights)
@@ -492,7 +492,7 @@ def arch(parts):
 
 
 def extent(mesh):
-    """How far the gate reaches from its origin at the mesh's own size, in metres. The extent reaches down to the
+    """How far the gate reaches from its origin at the mesh's own size, in meters. The extent reaches down to the
     window's bottom edge at least, which the air gate's board hangs above."""
     low, high = bounds(mesh.points)
     return {"halfWidth": round(max(-low[0], high[0]), 3), "bottom": round(min(0, low[1]), 3),

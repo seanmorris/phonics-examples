@@ -8,8 +8,8 @@ use TerrainPhonics\WaterSurface;
  * Race gates placed on a landscape, and the order a race passes them in.
  *
  * A course holds at most one start gate, at most one finish gate and up to 32 checkpoints numbered in the order they
- * were placed. A gate stands at x, y, z in metres and faces yaw radians: a vehicle passes through it travelling along
- * (sin yaw, 0, cos yaw), the convention the vehicles use for heading. Each gate's opening is width by height metres,
+ * were placed. A gate stands at x, y, z in meters and faces yaw radians: a vehicle passes through it traveling along
+ * (sin yaw, 0, cos yaw), the convention the vehicles use for heading. Each gate's opening is width by height meters,
  * within the ranges of its kind in GateShapes.
  *
  * A course without a finish gate starts and finishes at its start gate, and runs the laps the start gate carries. A
@@ -22,17 +22,17 @@ final class Course
 	/** Keys a saved gate may carry, beyond laps on the start gate, number on a checkpoint and its size. */
 	private const SAVED = ['role', 'kind', 'x', 'y', 'z', 'yaw'];
 	/**
-	 * How far a road post reaches below the lowest ground under its footprint, in metres, so a slope shows no gap. The
+	 * How far a road post reaches below the lowest ground under its footprint, in meters, so a slope shows no gap. The
 	 * footprint is sampled at its middle and its corners.
 	 */
 	public const POST_FOOT = 1.0;
 	/**
 	 * How far below the lowest ground across a road gate a car still counts as passing through it. The ground is
-	 * sampled every metre at most, and a car rolling over a hump between samples sits a little under the line
+	 * sampled every meter at most, and a car rolling over a hump between samples sits a little under the line
 	 * between them.
 	 */
 	public const ROAD_BELOW = 1.0;
-	/** Longest step in metres between ground samples across a gate's span. */
+	/** Longest step in meters between ground samples across a gate's span. */
 	private const SAMPLE_STEP = 1.0;
 	private ?array $start = null, $finish = null;
 	/** Checkpoints in race order; each one's number is its position plus one. */
@@ -82,14 +82,14 @@ final class Course
 	 * gate whose span would overlap another gate's is refused.
 	 * @param string $role start, checkpoint or finish.
 	 * @param string $kind road, water or air.
-	 * @param float $x World X of the gate origin in metres.
-	 * @param float $y World Y of the gate origin in metres; a water gate's water level when it was placed. A road gate
+	 * @param float $x World X of the gate origin in meters.
+	 * @param float $y World Y of the gate origin in meters; a water gate's water level when it was placed. A road gate
 	 * placed with $ground stands on the highest ground across its span instead.
-	 * @param float $z World Z of the gate origin in metres.
+	 * @param float $z World Z of the gate origin in meters.
 	 * @param float $yaw Heading of travel through the gate in radians, from -pi to pi.
 	 * @param int $laps Laps a new start gate carries, from 1 to 20.
-	 * @param float|null $width Opening width in metres, or null for the kind's own. It must lie in the kind's range.
-	 * @param float|null $height Opening height in metres, or null for the kind's own. It must lie in the kind's range,
+	 * @param float|null $width Opening width in meters, or null for the kind's own. It must lie in the kind's range.
+	 * @param float|null $height Opening height in meters, or null for the kind's own. It must lie in the kind's range,
 	 * and a water arch's within its stretch, as GateShapes::fit() leaves it.
 	 * @param \Closure|null $ground fn(float $x, float $z): float giving the ground height anywhere on the landscape.
 	 * Without it the ground under each gate counts as level with the gate's origin.
@@ -109,7 +109,7 @@ final class Course
 		[$defaultWidth, $defaultHeight] = $this->shapes->kind($kind)['size']['default'];
 		$width ??= $defaultWidth; $height ??= $defaultHeight;
 		if(!$this->shapes->fits($kind, $width, $height))
-			throw new \InvalidArgumentException("A $kind gate cannot be $width by $height metres");
+			throw new \InvalidArgumentException("A $kind gate cannot be $width by $height meters");
 		if($role === 'checkpoint' && count($this->checkpoints) >= self::MAX_CHECKPOINTS)
 			return ['refused' => 'full'] + $result;
 		$existing = $role === 'start' ? $this->start : ($role === 'finish' ? $this->finish : null);
@@ -188,7 +188,7 @@ final class Course
 	 * @param \Closure|null $ground Ground height sampler, or null to count the ground as level with the origin.
 	 * @return array The gate with ground [lowest, highest] across its span and, on a road gate, posts [-X, +X]: the
 	 * ground under each post's middle, where its base plate lies, and footings [-X, +X]: the lowest ground under each
-	 * post's footprint. All are heights in metres from the gate's origin. A water gate's ground is [0, 0], and an air
+	 * post's footprint. All are heights in meters from the gate's origin. A water gate's ground is [0, 0], and an air
 	 * gate placed without a sampler has ground null.
 	 */
 	private function fit(array $gate, ?\Closure $ground): array
@@ -236,7 +236,7 @@ final class Course
 	 * Fit the road and air gates over changed ground to it again, as place() fits a new gate: a road gate stands on
 	 * the highest ground across its span and its posts reach the ground under them. Water gates float and stay.
 	 * @param \Closure $ground fn(float $x, float $z): float giving the ground height now.
-	 * @param array|null $region [minX, minZ, maxX, maxZ] in metres around the ground that changed, as
+	 * @param array|null $region [minX, minZ, maxX, maxZ] in meters around the ground that changed, as
 	 * Landscape::changedRegion() gives it, an empty array when nothing changed, or null when all of it may have.
 	 * @return bool Whether any gate moved or now stands over different ground. Only then does the revision change.
 	 */
@@ -520,14 +520,14 @@ final class Course
 
 	/**
 	 * List the solid parts and the opening of each gate in world space, for a chase camera to keep clear of.
-	 * @param array|null $near [x, y, z] in metres to list only the gates whose extent comes within $reach of it across
+	 * @param array|null $near [x, y, z] in meters to list only the gates whose extent comes within $reach of it across
 	 * the ground, or null for every gate. Only the water gates listed sample the waves.
-	 * @param float $reach Distance in metres from $near.
+	 * @param float $reach Distance in meters from $near.
 	 * @return list<array{id:int,kind:string,solids:list<array>,opening:array}> Gates in race order. Each solid is a
-	 * box {centre: [x, y, z], yaw, halfX, halfY, halfZ} with its half sizes along the gate's X (across), Y (up) and Z
+	 * box {center: [x, y, z], yaw, halfX, halfY, halfZ} with its half sizes along the gate's X (across), Y (up) and Z
 	 * (along its travel). A road gate lists its two posts, the two base plates under them and its board with the post
 	 * tabs; a water arch its two legs and its crossbar; an air gate its banner. The opening is
-	 * {centre: [x, y, z], yaw, halfWidth, bottom, top}: the centre is the gate's origin, and bottom and top are world
+	 * {center: [x, y, z], yaw, halfWidth, bottom, top}: the center is the gate's origin, and bottom and top are world
 	 * heights. A road gate's opening reaches down to the lowest ground across it, and a water gate's to the water line.
 	 * A water gate stands at its height on the waves at the last float() call.
 	 */
@@ -547,8 +547,8 @@ final class Course
 			$rise = isset($this->afloat[$gate['id']]) ? $this->pose($gate)['y'] - $gate['y'] : 0.0;
 			if($rise != 0)
 			{
-				foreach($entry['solids'] as $i => $solid) $entry['solids'][$i]['centre'][1] += $rise;
-				$entry['opening']['centre'][1] += $rise;
+				foreach($entry['solids'] as $i => $solid) $entry['solids'][$i]['center'][1] += $rise;
+				$entry['opening']['center'][1] += $rise;
 				$entry['opening']['bottom'] += $rise;
 				$entry['opening']['top'] += $rise;
 			}
@@ -569,7 +569,7 @@ final class Course
 		['window' => $window, 'extent' => $extent] = $measure;
 		$cos = cos($gate['yaw']); $sin = sin($gate['yaw']);
 		$box = static fn(float $x, float $bottom, float $top, float $halfX, float $halfZ): array => [
-			'centre' => [$gate['x'] + $x * $cos, $gate['y'] + ($bottom + $top) / 2, $gate['z'] - $x * $sin],
+			'center' => [$gate['x'] + $x * $cos, $gate['y'] + ($bottom + $top) / 2, $gate['z'] - $x * $sin],
 			'yaw' => $gate['yaw'], 'halfX' => $halfX, 'halfY' => ($top - $bottom) / 2, 'halfZ' => $halfZ];
 		$solids = [];
 		$bottom = 0.0;
@@ -600,13 +600,13 @@ final class Course
 		$solids[] = $box(0.0, $window['top'], $extent['top'], $extent['halfWidth'], $extent['halfDepth']);
 		return ['gate' => $gate, 'reach' => hypot($extent['halfWidth'], $extent['halfDepth']), 'id' => $gate['id'],
 			'kind' => $gate['kind'], 'solids' => $solids,
-			'opening' => ['centre' => [$gate['x'], $gate['y'], $gate['z']], 'yaw' => $gate['yaw'],
+			'opening' => ['center' => [$gate['x'], $gate['y'], $gate['z']], 'yaw' => $gate['yaw'],
 				'halfWidth' => $window['halfWidth'], 'bottom' => $gate['y'] + $bottom, 'top' => $gate['y'] + $window['top']]];
 	}
 
 	/**
 	 * Find the gate a pick ray passes closest to, among those it passes within their half extent.
-	 * @param array $origin Ray origin [x, y, z] in metres.
+	 * @param array $origin Ray origin [x, y, z] in meters.
 	 * @param array $direction Unit ray direction.
 	 * @param float $length Distance along the ray to the ground it hit, or the pick range when it hit nothing.
 	 * @return int|null The nearest gate's id, or null when the ray passes no gate within its span.
@@ -619,7 +619,7 @@ final class Course
 		foreach($this->gates() as $gate)
 		{
 			['window' => $window, 'extent' => $extent] = $this->measure($gate);
-			// The gate's centre line runs from the lowest point a vehicle may pass to the top of its frame.
+			// The gate's center line runs from the lowest point a vehicle may pass to the top of its frame.
 			$foot = [$gate['x'], $gate['y'] + $window['bottom'], $gate['z']];
 			$head = [$gate['x'], $gate['y'] + $extent['top'], $gate['z']];
 			[$distance, $along] = self::segmentDistance($origin, $end, $foot, $head);
@@ -632,7 +632,7 @@ final class Course
 
 	/**
 	 * Measure the closest approach of two segments, after Ericson's Real-Time Collision Detection, section 5.1.9.
-	 * @return array{0:float,1:float} The distance in metres and the fraction along the first segment where it occurs.
+	 * @return array{0:float,1:float} The distance in meters and the fraction along the first segment where it occurs.
 	 */
 	private static function segmentDistance(array $p1, array $q1, array $p2, array $q2): array
 	{
@@ -698,7 +698,7 @@ final class Course
 	/**
 	 * Rebuild a course from a save file, which is untrusted input.
 	 * @param mixed $data The file's course object; null reads as a course without gates.
-	 * @param float $half Half the landscape's width in metres. Every gate must stand on it.
+	 * @param float $half Half the landscape's width in meters. Every gate must stand on it.
 	 * @param \Closure|null $ground Ground height sampler for the landscape the course stands on. With it each road gate
 	 * stands on the highest ground across its span again, and each gate measures the ground under it.
 	 * @param GateShapes|null $shapes Gate dimensions; the package's when omitted.

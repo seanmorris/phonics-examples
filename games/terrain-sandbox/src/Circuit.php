@@ -56,7 +56,7 @@ final class Circuit
 		return $this->gatePlan = $this->stations($stations);
 	}
 
-	/** Sample X, Z and heading at ordered distances along the centreline. */
+	/** Sample X, Z and heading at ordered distances along the centerline. */
 	public function stations(array $stations): array
 	{
 		$result = [];

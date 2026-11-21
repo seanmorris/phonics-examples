@@ -71,7 +71,7 @@ float patternMask(vec2 uv, int kind) {
 }
 
 float patternVisibility(float footprint,float scale,int kind) {
-	// Narrow streaks and small flecks disappear earlier than large patches of colour.
+	// Narrow streaks and small flecks disappear earlier than large patches of color.
 	float start=kind==STIPPLE_PATTERN ? .045 : (kind==1 ? .2 : (kind==3 ? .06 : .11));
 	return 1.-smoothstep(start,start*3.,footprint/scale);
 }

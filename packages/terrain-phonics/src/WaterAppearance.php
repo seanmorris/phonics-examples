@@ -14,7 +14,7 @@ final class WaterAppearance
 	public readonly array $settings;
 	private readonly array $linearColor;
 
-	/** Color is sRGB. Fog density is per metre. The other controls are fractions. */
+	/** Color is sRGB. Fog density is per meter. The other controls are fractions. */
 	public function __construct(array $options = [])
 	{
 		$settings = self::DEFAULTS;

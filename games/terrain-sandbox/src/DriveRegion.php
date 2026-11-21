@@ -270,7 +270,7 @@ final class DriveRegion
 		return abs($b[2]-$h) <= $rise;
 	}
 
-	/** Three ground heights across the car, one metre to either side of its centre. */
+	/** Three ground heights across the car, one meter to either side of its center. */
 	private function footprint(float $x, float $z, float $sideX, float $sideZ): array
 	{
 		return [$this->land->height($x-$sideX,$z-$sideZ),$this->land->height($x,$z),
@@ -289,7 +289,7 @@ final class DriveRegion
 		return max(abs($a[0]-$b[0]),abs($a[1]-$b[1]),abs($a[2]-$b[2]));
 	}
 
-	/** Check both tyre tracks and the centre at driving resolution wherever relief could exceed a driving limit. */
+	/** Check both tire tracks and the center at driving resolution wherever relief could exceed a driving limit. */
 	private function driveEdge(array $a, array $b): \Generator
 	{
 		$dx = $b[0]-$a[0]; $dz = $b[1]-$a[1]; $length = hypot($dx,$dz);
@@ -297,7 +297,7 @@ final class DriveRegion
 		if($length == 0.) return true;
 		$steps = (int)ceil($length/self::FINE_STEP);
 		$limit = self::GRADE*$length/$steps;
-		// The full height interval bounds every rise, side slope and centre deviation in a dry swath.
+		// The full height interval bounds every rise, side slope and center deviation in a dry swath.
 		if($this->dryRelief <= min(.30,$limit)) return true;
 		if($this->flatBase && !$this->edits->intersect([
 			min($a[0],$b[0])-1,min($a[1],$b[1])-1,max($a[0],$b[0])+1,max($a[1],$b[1])+1,

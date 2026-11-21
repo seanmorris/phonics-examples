@@ -223,7 +223,7 @@ final class HelpPage
 			$height = $leading($size);
 			$items = [$label($title, 0, $height / 2, $size, 'head')];
 			$aside = $shown($aside);
-			// The note shares the title's baseline: capitals are centred on a label's middle, so the smaller sits lower.
+			// The note shares the title's baseline: capitals are centered on a label's middle, so the smaller sits lower.
 			if($aside !== '' && $measure($title, $size, $faces['head']) + 16 * $across + $measure($aside, $note, $faces['body']) <= $width)
 				$items[] = $label($aside, $width, $height / 2 + $text->capHeight($faces['head']) * ($size - $note) * $em / 2, $note, 'body', 'right');
 			$items[] = ['kind' => 'rule', 'x' => 0, 'y' => $height, 'width' => $width, 'height' => 2];
@@ -433,7 +433,7 @@ final class HelpPage
 			$lines = $folded($meaning, $width - $left - $indent);
 			if($abreast)
 			{
-				// The name and its explanation are centred on the cards as one block.
+				// The name and its explanation are centered on the cards as one block.
 				$copy = (1 + count($lines)) * $leading($body);
 				$height = max($card[1], $copy);
 				$top = ($height - $copy) / 2;

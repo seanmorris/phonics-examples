@@ -227,7 +227,7 @@ final class Odds
 	}
 
 	/**
-	 * Visit every multiset of $size ranks that the pool can supply, with the number of card choices that realise it
+	 * Visit every multiset of $size ranks that the pool can supply, with the number of card choices that realize it
 	 * and, per suit, how many of those choices lie entirely in that suit.
 	 *
 	 * @param array<int,list<int>> $pool Available suits for each rank from 2 to 14.

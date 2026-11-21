@@ -20,7 +20,7 @@ $contact = $ground->sample(120, -80);
 // height, dx, dz, upward normal, material, and committed revision
 ```
 
-Coordinates are metres, Y is up, and the square world's X/Z bounds are centered on zero.
+Coordinates are meters, Y is up, and the square world's X/Z bounds are centered on zero.
 Queries outside the bounded world are rejected. `height()` and `sample()` use the same authoritative
 Catmull–Rom reconstruction. A renderer can change its mesh resolution without changing these queries.
 
@@ -30,7 +30,7 @@ The guide never feeds back from an already attenuated surface. Rounded mountain 
 Surface normals differentiate the final reconstructed height, including all terrain edits.
 Optional domain warps and quintic terraces retain continuous derivatives; the guide includes their full derivative chain.
 `warpAmplitude` bends the larger landforms, while `terraceSpacing` and `terraceStrength` add smooth terrace-like steps.
-In new canyon recipes, exposed rock and physical ledges share a sequence of dipping beds. Terrace spacing scales the thickness of the sequence in metres. Resistant beds form cliffs above shelves, and softer beds form debris slopes. Version-one recipes retain their original canyon geometry for replay.
+In new canyon recipes, exposed rock and physical ledges share a sequence of dipping beds. Terrace spacing scales the thickness of the sequence in meters. Resistant beds form cliffs above shelves, and softer beds form debris slopes. Version-one recipes retain their original canyon geometry for replay.
 Smooth joins preserve derivatives; a heightfield still cannot represent an exactly vertical face or an overhang.
 
 Only requested lattice nodes are generated. Packed tiles have a bounded LRU cache; `pin()` reserves a small
@@ -61,7 +61,7 @@ $saved = $ground->save();
 $restored = TerrainPhonics\Landscape::load($saved);
 ```
 
-Road edits accept an optional `endBlend` distance in metres. Set it on overlapping spline sections to fade their grade and paint into each other. It defaults to zero.
+Road edits accept an optional `endBlend` distance in meters. Set it on overlapping spline sections to fade their grade and paint into each other. It defaults to zero.
 
 A transaction contains all operations queued before one `commit()`. Supported operations are raise, lower,
 flatten, smooth, crater, material, and road. Undo/redo works on transactions. Saved data includes the generator
@@ -108,10 +108,10 @@ rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone
 base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at
 175 m elevation intervals form sloping benches below the summits. Existing recipes expand to the values of
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
-changing the landscape's playable extent. `SurfaceLayers` accepts an ordered list of up to twelve colour
+changing the landscape's playable extent. `SurfaceLayers` accepts an ordered list of up to twelve color
 layers with height and slope fades, spatial noise, and an optional earlier layer as a parent. Set a layer's
-`pattern` to `mottle`, `streaks`, `gravel`, `bedded`, `stipple`, `fractal` or `veins` to blend its `patternColor` into the base colour. The
-`patternAmount` sets the blend from 0 to 1, `patternScale` sets the feature size in metres, and
+`pattern` to `mottle`, `streaks`, `gravel`, `bedded`, `stipple`, `fractal` or `veins` to blend its `patternColor` into the base color. The
+`patternAmount` sets the blend from 0 to 1, `patternScale` sets the feature size in meters, and
 `patternStretch` scales the pattern vertically on cliffs. The same layer settings shade the ground and charts.
 
 `Water` evaluates analytic directional waves and bounded wake packets. Its shader include uses the same
@@ -133,7 +133,7 @@ terrain overview. Nearby ledges compare their own elevation against the ridge. A
 lighting blends into the overview’s visibility, filtered over the area each pixel covers. The map refreshes
 when terrain changes or the sun moves by a tenth of a degree. Around the camera the clipmap also tests sunlight
 at shared vertices on a world-aligned terrain grid. Where the vertices disagree it refines the crossing edges.
-Where they agree it checks the centre for a shadow or a sunbeam. Nearby pixels resolve the edge. Small projected triangles
+Where they agree it checks the center for a shadow or a sunbeam. Nearby pixels resolve the edge. Small projected triangles
 use their sunlit area. The close shadow fades with distance from the eye so crossing a cache boundary leaves
 the blend continuous. Both local passes stay cached across ordinary frames and refresh when the camera crosses
 a grid block, the terrain changes, or the sun moves by a tenth of a degree. Water reflects the cached sky with
@@ -146,11 +146,11 @@ is an array with exactly these keys:
 
 | Key | Unit | Meaning |
 | --- | --- | --- |
-| `position` | metres | World position of the lamp, `[x, y, z]`. |
+| `position` | meters | World position of the lamp, `[x, y, z]`. |
 | `direction` | | Axis of the beam, `[x, y, z]`, of any nonzero length. |
 | `color` | | Linear RGB, each channel nonnegative, scaling the intensity per channel. White is `[1, 1, 1]`. |
 | `intensity` | candela | Luminous intensity along the axis. |
-| `range` | metres | Distance at which the light has faded out; at least 0.01. |
+| `range` | meters | Distance at which the light has faded out; at least 0.01. |
 | `inner`, `outer` | radians | Half-angles of the cone: full light inside `inner`, none outside `outer`. `0 <= inner <= outer` and `0 < outer <= π/2`. |
 
 ```php
@@ -174,7 +174,7 @@ On level ground a low lamp's irradiance falls with the cube of distance, so the 
 hundreds of times what the ground 50 m ahead does, more than the tone map can show without turning the near ground
 white. The shaders therefore compress the lamps' summed irradiance above `SpotLights::KNEE`, 1 scene unit after the
 night gain. With m the largest channel of the sum the lamps would give with their cones wide open, they scale the
-sum through the cones by `KNEE ln(1 + m / KNEE) / m`, which keeps the lamps' colour. Light well below the knee passes
+sum through the cones by `KNEE ln(1 + m / KNEE) / m`, which keeps the lamps' color. Light well below the knee passes
 almost unchanged; ten times the knee comes out as 2.4 times it, and a hundred times as 4.6 times. Because the scale
 ignores the cones, a beam on a nearby slope fades across its whole band between the cones. Scaled by the light
 through the cones instead, such a beam would stay near full brightness until close to its outer cone and show as a
@@ -182,9 +182,9 @@ flat disc with a hard rim.
 Exposure and tone mapping then treat the compressed lamp light like sunlight.
 
 The terrain reflects lamp light diffusely from its albedo. Light that reaches submerged ground loses the water's
-`waterFogDensity` for each metre of its path below the water level. The water between the eye and submerged ground
+`waterFogDensity` for each meter of its path below the water level. The water between the eye and submerged ground
 scatters the lamp light that falls where the sightline enters it. The water surface adds lamp light to its foam
-and its body colour; it does not reflect the lamps. No surface casts a shadow from a lamp, so a lamp lights the
+and its body color; it does not reflect the lamps. No surface casts a shadow from a lamp, so a lamp lights the
 far side of a hill within its range. Models drawn by the `drawOpaque` callback do not receive lamp light.
 The scene links each of its ground and water programs twice: once with `SpotLights::shaderSource()` and once with
 `SpotLights::shaderSource(false)`, which defines `TERRAIN_NO_SPOT_LIGHTS` so that both lamp functions return zero.
@@ -220,13 +220,13 @@ varied between runs, so these runs show no reliable lamp cost there. No GPU was 
 linking and first drawing one ground or water program took 0.4 to 0.7 s in SwiftShader on the same machine, and the
 scene now links four of them where it linked two.
 
-Call `$water->setLevel($metres)` to move the mean surface and `$water->setWaveScale($multiplier)` to change swell height and steepness during play. A scale of zero leaves only local wakes, and one restores the authored waves. Rendering, buoyancy samples, and visibility bounds share those values.
+Call `$water->setLevel($meters)` to move the mean surface and `$water->setWaveScale($multiplier)` to change swell height and steepness during play. A scale of zero leaves only local wakes, and one restores the authored waves. Rendering, buoyancy samples, and visibility bounds share those values.
 
-Set `$water->appearance = new WaterAppearance([...])` to tune water rendering. Use `waterColor` (sRGB hex), `waterTransparency`, `waterReflectivity`, and `waterFoam` (fractions), and `waterFogDensity` (extinction per metre). The renderer blends sky reflection and foam over the opaque scene. Submerged terrain fades toward the water tint according to the length of the sightline below mean water level. Draw custom opaque objects with the optional `drawOpaque` callback to `Scene::render()` so the water surface covers only their submerged portions. Their shaders can use `WaterAppearance::shaderSource()` and `bind()` for the same underwater fog.
+Set `$water->appearance = new WaterAppearance([...])` to tune water rendering. Use `waterColor` (sRGB hex), `waterTransparency`, `waterReflectivity`, and `waterFoam` (fractions), and `waterFogDensity` (extinction per meter). The renderer blends sky reflection and foam over the opaque scene. Submerged terrain fades toward the water tint according to the length of the sightline below mean water level. Draw custom opaque objects with the optional `drawOpaque` callback to `Scene::render()` so the water surface covers only their submerged portions. Their shaders can use `WaterAppearance::shaderSource()` and `bind()` for the same underwater fog.
 
 ## Terrain appearance
 
-`Scene::$appearance` holds a `TerrainAppearance`: the ground's colours, the banding of exposed rock, the slopes
+`Scene::$appearance` holds a `TerrainAppearance`: the ground's colors, the banding of exposed rock, the slopes
 and heights where one material gives way to another, and the amounts of talus, stain and lichen on mountain rock.
 Replace it to change the look; the next `render()` uploads it. The renderer uploads an appearance once, and again only
 after a replacement or `restore()`. An application that draws only changed frames must draw one after a replacement.
@@ -236,18 +236,18 @@ $scene->appearance = new TerrainPhonics\TerrainAppearance(['snowline' => 220, 's
 ```
 
 The constructor reads the keys of `TerrainAppearance::DEFAULTS` and ignores others, so an application can pass its whole
-settings array. It throws `InvalidArgumentException`, naming the setting, for a colour that is not a six-digit hex
+settings array. It throws `InvalidArgumentException`, naming the setting, for a color that is not a six-digit hex
 string and for a number that is not a finite integer or float; numeric strings are rejected. Numbers outside
 `TerrainAppearance::RANGES` are clamped. Each start and end listed in `TerrainAppearance::ORDER` stays apart by a
 minimum gap: an end that is too low moves up to the start plus the gap, rounded to nine decimal places, and when that
 passes the top of the end's range the end stays at the top and the start moves down. Values one gap apart, such as 0.2
 and 0.21, stay as they are, although their binary difference is slightly less than 0.01. `settings` holds the result, in
-the order of `DEFAULTS`, with colours in lower case. `GROUPS` lists the settings in panel order under `colors`,
+the order of `DEFAULTS`, with colors in lower case. `GROUPS` lists the settings in panel order under `colors`,
 `banding`, `blending` and `rock`. `uniforms()` returns the values `bind()` uploads, for a custom terrain shader.
-`TerrainAppearance::linear($hex)` converts one colour to linear RGB and throws `InvalidArgumentException` for anything
+`TerrainAppearance::linear($hex)` converts one color to linear RGB and throws `InvalidArgumentException` for anything
 but a six-digit hex string.
 
-Coast and canyon terrain look as they did before these settings existed. Each of their default colours is the nearest
+Coast and canyon terrain look as they did before these settings existed. Each of their default colors is the nearest
 8-bit sRGB value to the linear constant it replaced, and each number equals the constant it replaced. Mountain terrain
 has its own material, whose settings were tuned against photographs of granite cirques and forested ranges.
 
@@ -255,8 +255,8 @@ The presets use the settings differently. Coast terrain has grass cover, banded 
 granite: steep ground shows jointed slabs, iron stains and lichen streaked down the fall line, talus lies on the
 moderately steep ground, and the cover runs from forest through subalpine meadow to tundra and bare rock as the ground
 nears the snowline. Grass covers level valley floors below the treeline. Version-one canyons have soil cover and banded
-rock. Current canyons draw rock from the canyon colours and debris from their dust. Sand applies to every preset. The
-material tool's rock, grass, sand, snow and road paint use the same colours as the generated ground; mountain rock paint
+rock. Current canyons draw rock from the canyon colors and debris from their dust. Sand applies to every preset. The
+material tool's rock, grass, sand, snow and road paint use the same colors as the generated ground; mountain rock paint
 is the mountain rock: granite, mixed with talus rubble on gentle ground.
 
 The table lists what each setting changes in each preset. A preset ignores the settings with an empty cell.
@@ -281,9 +281,9 @@ The table lists what each setting changes in each preset. A preset ignores the s
 | `talusAmount`, `stainAmount`, `lichenAmount` | | Rock | | |
 | `macroVariation` | Grass, snowline | Granite, talus, snowline and zones | Soil | Dust and debris |
 
-### Colours
+### Colors
 
-Colours are sRGB hex strings.
+Colors are sRGB hex strings.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
@@ -299,15 +299,15 @@ Colours are sRGB hex strings.
 | `canyonSandstoneColor` | `#906356` | Both sandstone cliffs. |
 | `canyonCapColor` | `#a38775` | The pale cap rock at the top of the section. The ledges are a darker shade of it. |
 | `forestColor` | `#1d291b` | Spruce-fir forest below the mountain treeline. |
-| `meadowColor` | `#48581f` | Subalpine shrubs and meadow above the treeline. Shrub clumps mix it about halfway to the forest colour. |
+| `meadowColor` | `#48581f` | Subalpine shrubs and meadow above the treeline. Shrub clumps mix it about halfway to the forest color. |
 | `tundraColor` | `#484230` | Tundra between the meadow and the snow. |
-| `graniteColor` | `#565a5c` | Mountain rock. Lichen tints it grey-green. |
+| `graniteColor` | `#565a5c` | Mountain rock. Lichen tints it gray-green. |
 | `stainColor` | `#74605a` | Iron stains on the granite. |
 | `talusColor` | `#7b7b77` | Talus, and the block fields on gentle bare ground near the snowline. |
 
 The red beds and ledges keep the ratio, channel by channel, that they had to the rust and the cap rock in the default
 palette. Canyon dust and debris, beds too fine to resolve at a distance, and the light the walls throw into shadow
-follow the average of the beds weighted by their thickness. The red beds and the dust are lighter than the colours they
+follow the average of the beds weighted by their thickness. The red beds and the dust are lighter than the colors they
 follow, so each derived channel stops at 1: red beds under a white rust are white.
 
 ### Banding
@@ -315,11 +315,11 @@ follow, so each derived channel stops at 1: red beds under a white rust are whit
 | Setting | Default | Range | Effect |
 | --- | --- | --- | --- |
 | `bandSpacing` | 52.36 m (2π / 0.12) | 5 to 1000 | Height of one dark and one light band in coast and version-one canyon rock. |
-| `bandContrast` | 1 | 0 to 1 | 0 paints banded rock one colour: halfway between the two rock colours, or the canyon's distant colour. |
+| `bandContrast` | 1 | 0 to 1 | 0 paints banded rock one color: halfway between the two rock colors, or the canyon's distant color. |
 | `bandSharpness` | 1 | 1 to 8 | 1 is a sine profile. Higher values flatten each band and narrow the transitions, and narrow the contacts between canyon beds by the same factor. |
 
 Canyon beds take their spacing from the recipe's `terraceSpacing`, because the relief shares them, so `bandSpacing`
-does not apply to them. Bands fade to their average colour where a pixel spans several of them. A sharpened profile
+does not apply to them. Bands fade to their average color where a pixel spans several of them. A sharpened profile
 turns back into a sine where one band covers fewer than about twice (sharpness + 2) pixels, so the harmonics that
 sharpen it have faded before they pass the pixel rate.
 
@@ -359,7 +359,7 @@ These settings apply to mountain terrain.
 | --- | --- | --- | --- |
 | `talusAmount` | 0.5 | 0 to 1 | Share of the moderately steep ground covered by talus. 0 leaves none. |
 | `stainAmount` | 0.3 | 0 to 1 | Share of the granite stained with iron. |
-| `lichenAmount` | 0.5 | 0 to 1 | Strength of the lichen that tints the granite grey-green in patches. |
+| `lichenAmount` | 0.5 | 0 to 1 | Strength of the lichen that tints the granite gray-green in patches. |
 
 ## Verify changes
 
@@ -371,7 +371,7 @@ invalidation. Renderer tests check bounded residency, complete coverage and revi
 Run `npm run test:terrain:gpu` with Chromium installed to compare cached scattering against direct GLSL
 integration and to check GPU wave heights, derivatives, velocities, and normals against PHP. It also checks that every
 appearance uniform is read, that banded rock does not alias, that mountain rock has no bands, and that talus and stain
-colours show nowhere at an amount of 0.
+colors show nowhere at an amount of 0.
 
 The performance target is hardware-accelerated desktop WebGL2 at 1080p/60 FPS. Record the browser and GPU
 alongside measured frame distributions; software WebGL results are correctness evidence, not proof of that

@@ -37,15 +37,15 @@ use TerrainPhonics\Camera;
  */
 final class GateDuck
 {
-	/** Distance in metres the eye keeps from every solid part. The near plane's corners are 0.39 m from the eye at 16:9. */
+	/** Distance in meters the eye keeps from every solid part. The near plane's corners are 0.39 m from the eye at 16:9. */
 	public const CLEARANCE = .5;
 	/**
-	 * Distance in metres over which a push across the gate fades in along the direction of travel, and over which the
+	 * Distance in meters over which a push across the gate fades in along the direction of travel, and over which the
 	 * duck fades out beyond the gate's ends.
 	 */
 	public const SIDE = 2.0;
 	/**
-	 * Square metres at which a gate lets go of an eye that has climbed or sunk past its parts: the height beyond them
+	 * Square meters at which a gate lets go of an eye that has climbed or sunk past its parts: the height beyond them
 	 * and beyond the height the eye held its passage at, times the distance from the slab. 4 m up 10 m out lets go.
 	 */
 	public const RELEASE = 40.0;
@@ -58,12 +58,12 @@ final class GateDuck
 	 * opening between them, 1 beyond the +X post or leg.
 	 */
 	private array $lanes = [];
-	/** Eye offset [x, y, z] in metres at the last step, for the status. */
+	/** Eye offset [x, y, z] in meters at the last step, for the status. */
 	public array $offset = [0.0, 0.0, 0.0];
 
 	/**
-	 * @param float $lead Distance in metres before and after a gate's slab over which the eye ducks and rises again.
-	 * @param ?\Closure $ground Road or terrain elevation in metres at the final eye X and Z.
+	 * @param float $lead Distance in meters before and after a gate's slab over which the eye ducks and rises again.
+	 * @param ?\Closure $ground Road or terrain elevation in meters at the final eye X and Z.
 	 * @throws \InvalidArgumentException When the lead is shorter than SIDE.
 	 */
 	public function __construct(public readonly float $lead, private readonly ?\Closure $ground = null)
@@ -72,7 +72,7 @@ final class GateDuck
 	}
 
 	/**
-	 * Radius in metres to ask Course::obstructions() for. A gate whose solid parts lie farther from the eye cannot move
+	 * Radius in meters to ask Course::obstructions() for. A gate whose solid parts lie farther from the eye cannot move
 	 * it: the duck fades out within SIDE beyond a gate's ends and the lead distance beyond its slab.
 	 */
 	public function reach(): float { return $this->lead + 2 * self::CLEARANCE + self::SIDE; }
@@ -80,7 +80,7 @@ final class GateDuck
 	/**
 	 * Hold a passage for each gate the eye has come near, and release the gates it has left. Call once per fixed step.
 	 * @param list<array> $gates Gates near the eye, from Course::obstructions().
-	 * @param array $eye Eye position [x, y, z] in metres, as the camera placed it.
+	 * @param array $eye Eye position [x, y, z] in meters, as the camera placed it.
 	 * @param array $target Position [x, y, z] of the vehicle the camera follows.
 	 * @return void Updates the held passages and the offset the status reports.
 	 */
@@ -109,7 +109,7 @@ final class GateDuck
 	/**
 	 * Move an eye out of the solid parts of nearby gates.
 	 * @param list<array> $gates Gates near the eye, from Course::obstructions(), applied in this order.
-	 * @param array $eye Eye position [x, y, z] in metres.
+	 * @param array $eye Eye position [x, y, z] in meters.
 	 * @param array $target Position [x, y, z] of the vehicle the camera follows. It chooses the passage past a gate
 	 * the last step held none for.
 	 * @return array The eye position, the same array when no gate moves it.
@@ -187,28 +187,28 @@ final class GateDuck
 	/**
 	 * Work out a gate's frame, the box its solid parts fill and the box of its opening that keeps CLEARANCE.
 	 * @param array $gate One gate from Course::obstructions().
-	 * @return array Opening centre and heading, the solid parts' bounds across the gate (u), up (y) and along its
-	 * travel (v) from the opening's centre, the clear opening's bounds, or null bounds when it has no room, how far
+	 * @return array Opening center and heading, the solid parts' bounds across the gate (u), up (y) and along its
+	 * travel (v) from the opening's center, the clear opening's bounds, or null bounds when it has no room, how far
 	 * across the parts beside the clear opening reach on each side, and the lowest height of the parts or the opening.
 	 */
 	private static function measure(array $gate): array
 	{
 		$opening = $gate['opening'];
 		$cos = cos($opening['yaw']); $sin = sin($opening['yaw']);
-		[$ox, , $oz] = $opening['centre'];
+		[$ox, , $oz] = $opening['center'];
 		$c = self::CLEARANCE;
 		$parts = [];
 		$low = [INF, INF, INF]; $high = [-INF, -INF, -INF];
 		foreach($gate['solids'] as $box)
 		{
-			$dx = $box['centre'][0] - $ox; $dz = $box['centre'][2] - $oz;
+			$dx = $box['center'][0] - $ox; $dz = $box['center'][2] - $oz;
 			$u = $dx * $cos - $dz * $sin; $v = $dx * $sin + $dz * $cos;
 			$turn = $box['yaw'] - $opening['yaw'];
 			$across = abs(cos($turn)); $along = abs(sin($turn));
 			$halfU = $across * $box['halfX'] + $along * $box['halfZ'];
 			$halfV = $along * $box['halfX'] + $across * $box['halfZ'];
-			$part = [$u - $halfU, $box['centre'][1] - $box['halfY'], $v - $halfV,
-				$u + $halfU, $box['centre'][1] + $box['halfY'], $v + $halfV];
+			$part = [$u - $halfU, $box['center'][1] - $box['halfY'], $v - $halfV,
+				$u + $halfU, $box['center'][1] + $box['halfY'], $v + $halfV];
 			$parts[] = $part;
 			for($i = 0; $i < 3; $i++) { $low[$i] = min($low[$i], $part[$i]); $high[$i] = max($high[$i], $part[$i + 3]); }
 		}
@@ -246,7 +246,7 @@ final class GateDuck
 
 	/**
 	 * Express an eye position in a gate's frame.
-	 * @return array{0:float,1:float} Metres across the gate (u) and along its travel (v) from the opening's centre.
+	 * @return array{0:float,1:float} Meters across the gate (u) and along its travel (v) from the opening's center.
 	 */
 	private static function local(array $frame, array $eye): array
 	{
@@ -254,7 +254,7 @@ final class GateDuck
 		return [$dx * $frame['cos'] - $dz * $frame['sin'], $dx * $frame['sin'] + $dz * $frame['cos']];
 	}
 
-	/** Distance in metres along a gate's travel from v to the slab that keeps CLEARANCE from its solid parts. */
+	/** Distance in meters along a gate's travel from v to the slab that keeps CLEARANCE from its solid parts. */
 	private static function outside(array $frame, float $v): float
 	{
 		return max(0.0, $frame['low'][2] - self::CLEARANCE - $v, $v - $frame['high'][2] - self::CLEARANCE);
@@ -345,7 +345,7 @@ final class GateDuck
 	 * @param float $y The eye's height.
 	 * @param float $share Share of the duck the gate gives the eye, from share().
 	 * @param float $distance Distance along the travel from the eye to the gate's slab.
-	 * @return array{0:float,1:float,2:float} Metres across the gate, up and along the travel.
+	 * @return array{0:float,1:float,2:float} Meters across the gate, up and along the travel.
 	 */
 	private function shift(array $frame, string $passage, int $lane, float $u, float $v, float $y, float $share,
 		float $distance): array
@@ -381,7 +381,7 @@ final class GateDuck
 	 * @param int $lane The side of the posts or legs the eye keeps to, as lane() gives it.
 	 * @param float $u The eye's position across the gate.
 	 * @param float $v The eye's position along the travel.
-	 * @return array{0:float,1:float} Metres across the gate and along the travel. Up to half way into the post's band,
+	 * @return array{0:float,1:float} Meters across the gate and along the travel. Up to half way into the post's band,
 	 * from the edge of the side held to the far side with the clearance, the eye stays at that edge. Over the next
 	 * tenth it moves out to the nearer face of the slab, over the next three tenths it moves along that face to the
 	 * far side, and over the last tenth it moves back in, where it meets the eye on the far side of the post.

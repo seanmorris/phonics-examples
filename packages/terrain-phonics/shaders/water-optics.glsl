@@ -1,5 +1,5 @@
 uniform vec3 uWaterTint;
-// Surface transmission, reflection strength, extinction per metre, and foam coverage.
+// Surface transmission, reflection strength, extinction per meter, and foam coverage.
 uniform vec4 uWaterOptics;
 
 vec3 waterColumnLight(vec3 light, vec3 eyeToPoint, float eyeHeight, float level, vec3 illumination)

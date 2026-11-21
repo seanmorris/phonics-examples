@@ -8,7 +8,7 @@ use TerrainPhonics\Water;
 /** Tire-supported bicycle steering and free chassis motion on the committed landscape. */
 final class Car
 {
-	// Metres, measured from the baked Testarossa. Its origin is midway between the axles.
+	// Meters, measured from the baked Testarossa. Its origin is midway between the axles.
 	public const WHEELBASE = 2.515, FRONT_TRACK = 1.57, REAR_TRACK = 1.644, TIRE_RADIUS = .297;
 	public const TOP_SPEED_MPH = 240, MPS_PER_MPH = .44704;
 	private const TOP_SPEED = self::TOP_SPEED_MPH * self::MPS_PER_MPH;
@@ -22,7 +22,7 @@ final class Car
 	private float $speed = 0, $steering = 0, $spin = 0;
 	/** Angle in radians from the direction of travel to the way the body points, while the tail slides out. */
 	private float $drift = 0;
-	/** Deceleration in metres a second squared from locked rear tires carrying all the rear load. */
+	/** Deceleration in meters a second squared from locked rear tires carrying all the rear load. */
 	private const HANDBRAKE = 6.5;
 	/**
 	 * Largest drift the handbrake swings the tail to, in radians, and the time constant of that swing, in seconds.
@@ -32,7 +32,7 @@ final class Car
 	private const DRIFT = .6, DRIFT_IN = .35, DRIFT_OUT = .3, DRIFT_SETTLE = .3;
 	private const RECOVERY_DELAY = 1.5;
 	/**
-	 * The body's footprint and height in metres, measured from the baked Testarossa: half its width, and how far it
+	 * The body's footprint and height in meters, measured from the baked Testarossa: half its width, and how far it
 	 * reaches ahead of and behind the midpoint between the axles. Gate posts collide with this box.
 	 */
 	public const BODY_HALF_WIDTH = .97, BODY_FRONT = 2.37, BODY_REAR = 2.11, BODY_HEIGHT = 1.13;
@@ -57,7 +57,7 @@ final class Car
 	/**
 	 * Search the camera position first, then progressively wider rings. Each yield permits a frame boundary.
 	 * @param array $posts Solid posts as Course::posts() lists them. A site whose body would stand within half a
-	 * metre of one is passed over.
+	 * meter of one is passed over.
 	 */
 	public function findSite(Landscape $land, Water $water, array $eye, float $yaw, array $posts = [],
 		bool $circuitStart = false, ?\Closure $floor = null): \Generator
@@ -164,7 +164,7 @@ final class Car
 			return $supported;
 		}
 		// The brake lamps light while the pedal opposes the motion or the handbrake is held, whether or not the tires
-		// grip. The reversing lamps light while the car rolls backwards or the pedal holds reverse at a standstill.
+		// grip. The reversing lamps light while the car rolls backward or the pedal holds reverse at a standstill.
 		$this->braking = $handbrake || $throttle * $this->speed < 0;
 		$this->reversing = $this->speed < 0 || $this->speed == 0 && $throttle < 0;
 		return $supported;
@@ -212,7 +212,7 @@ final class Car
 			else
 			{
 				$braking = $throttle*$this->speed < 0;
-				// A landing can send the car backwards faster than reverse gear can drive it.
+				// A landing can send the car backward faster than reverse gear can drive it.
 				$reverseLimit = min(-8.0, $this->speed);
 				$power = $braking ? self::SERVICE_BRAKE : ($throttle > 0 ? 9 : 4);
 				$traction = $braking ? $gripFraction : $rear;
@@ -364,7 +364,7 @@ final class Car
 		{
 			$forward = $reversed ? -$this->speed : $this->speed;
 			if($reversed) $side = -$side;
-			// The tire model travels along yaw minus drift, with signed speed for a backwards skid.
+			// The tire model travels along yaw minus drift, with signed speed for a backward skid.
 			$sign = $forward < 0 ? -1 : 1;
 			$this->drift = atan2(-$sign*$side,abs($forward));
 			$this->speed = $sign*hypot($forward,$side)/cos($support[1]);
@@ -401,9 +401,9 @@ final class Car
 	}
 
 	/**
-	 * Keep the body out of every post near one step's travel. The step is checked every quarter metre from the
+	 * Keep the body out of every post near one step's travel. The step is checked every quarter meter from the
 	 * current pose, so even at top speed it cannot pass through a post between two checks. Between the last clear check
-	 * and the first touching one, halving the gap finds the moment of contact to a millimetre, so the face the body
+	 * and the first touching one, halving the gap finds the moment of contact to a millimeter, so the face the body
 	 * met is known: a bumper corner that clips a post stops on it however the checks fell. The rest of the step then
 	 * slides along that face, keeping only its travel along it.
 	 * @param array $posts Solid posts as Course::posts() lists them.
@@ -494,7 +494,7 @@ final class Car
 		return $best;
 	}
 
-	/** Whether a body standing at a pose would come within half a metre of any post. */
+	/** Whether a body standing at a pose would come within half a meter of any post. */
 	private static function nearPost(array $posts, float $x, float $z, float $yaw, float $y): bool
 	{
 		foreach($posts as $post)

@@ -2,9 +2,9 @@
 
 Choose a tool under **Shape the ground**, then click the terrain. Each click creates one transaction, allowing deliberate edits without filling history with a brush operation every frame. Right-drag still looks around.
 
-Before generating, open **Landform parameters** to change the height scale, fine detail, slope damping, or starting water level. Stronger damping removes more fine detail from steep faces. Domain warp bends the landforms. Terrace spacing creates smooth ledges; set it to zero to turn terraces off. In Canyon country the spacing controls the thickness of the whole sequence of rock beds. At the default setting of 80 metres, look for a pale shelf below the salmon cliffs. Exposed faces show fractures and fine red layers, while loose debris softens the boundaries on gentler slopes.
+Before generating, open **Landform parameters** to change the height scale, fine detail, slope damping, or starting water level. Stronger damping removes more fine detail from steep faces. Domain warp bends the landforms. Terrace spacing creates smooth ledges; set it to zero to turn terraces off. In Canyon country the spacing controls the thickness of the whole sequence of rock beds. At the default setting of 80 meters, look for a pale shelf below the salmon cliffs. Exposed faces show fractures and fine red layers, while loose debris softens the boundaries on gentler slopes.
 
-The canyon preset lowers water to −450 metres and starts inside the valley, exposing both its floor and steep walls. After generation, use **Water level** in the **Water** section to flood or expose the existing ground.
+The canyon preset lowers water to −450 meters and starts inside the valley, exposing both its floor and steep walls. After generation, use **Water level** in the **Water** section to flood or expose the existing ground.
 
 **Limestone Plain** rises from a grassy valley into broad foothills and pointed summits. The lower slopes have routes a car can climb, and sloping benches break up the longer faces. **Terrace spacing** sets the height between benches (175 m by default). Lower **Terrace strength** to soften their edges, or increase **Floor width** for more open ground between peaks.
 
@@ -21,7 +21,7 @@ Choose **World size** in the **Landscape** tab before selecting **Generate**. Th
 - **Crater:** cut a depression with a low surrounding rim.
 - **Paint material:** replace the procedural material within the brush area.
 
-Radius is measured in metres. Strength is the maximum elevation change for Raise, Lower, and Crater; Flatten and Smooth use a fixed blending strength.
+Radius is measured in meters. Strength is the maximum elevation change for Raise, Lower, and Crater; Flatten and Smooth use a fixed blending strength.
 
 The current landscape stays visible and physical while the next revision is prepared. Editing controls pause briefly during this preparation so terrain and collision can switch together. **Undo** and **Redo**, or **Ctrl+Z** and **Ctrl+Shift+Z**, operate on complete transactions.
 
@@ -49,10 +49,10 @@ A save records the seed and complete recipe together with the ordered edit histo
 
 The example is offline. Reproducible local terrain and edit replay do not, by themselves, establish a multiplayer authority or synchronization protocol.
 
-## Colour patterns
+## Color patterns
 
-In **Surface → Colour layers**, open a layer to choose a colour pattern. **Mottled** blends patches of a second colour, **Streaks** follows upright faces, and **Gravel** scatters small flecks. **Weathered beds** adds thin sediment lines that follow the dipping strata and streaks that cross them. Set the pattern colour and amount, then set its scale in metres. Vertical stretch lengthens the pattern on cliffs. Choose **Apply layers** to preview and save the result.
+In **Surface → Color layers**, open a layer to choose a color pattern. **Mottled** blends patches of a second color, **Streaks** follows upright faces, and **Gravel** scatters small flecks. **Weathered beds** adds thin sediment lines that follow the dipping strata and streaks that cross them. Set the pattern color and amount, then set its scale in meters. Vertical stretch lengthens the pattern on cliffs. Choose **Apply layers** to preview and save the result.
 
-The layer's elevation and slope masks set where its colour and pattern can appear. **Edge noise** varies those mask boundaries. **Stipple** adds flecks throughout the layer, including on broad stretches of sand or rock. **Fractal noise** blends broad patches with finer flecks. **Mineral veins** adds narrow, broken seams. Limestone Plain uses the first pattern for grass and slope vegetation and stretches the veins down exposed rock faces. Colour patterns use fixed world coordinates and fade as their features become too small to resolve.
+The layer's elevation and slope masks set where its color and pattern can appear. **Edge noise** varies those mask boundaries. **Stipple** adds flecks throughout the layer, including on broad stretches of sand or rock. **Fractal noise** blends broad patches with finer flecks. **Mineral veins** adds narrow, broken seams. Limestone Plain uses the first pattern for grass and slope vegetation and stretches the veins down exposed rock faces. Color patterns use fixed world coordinates and fade as their features become too small to resolve.
 
-Mountain Ridges uses its preset grass, lichen, and snow detail until you apply a custom layer stack. **Use preset colours** restores the mountain shading.
+Mountain Ridges uses its preset grass, lichen, and snow detail until you apply a custom layer stack. **Use preset colors** restores the mountain shading.

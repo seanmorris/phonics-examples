@@ -2,7 +2,7 @@
 declare(strict_types=1);
 namespace TerrainSandbox;
 
-/** A centreline graph of passages and forks extracted from the traversable floor cells. */
+/** A centerline graph of passages and forks extracted from the traversable floor cells. */
 final class CorridorGraph
 {
 	/**
@@ -51,7 +51,7 @@ final class CorridorGraph
 				$junctions[] = $id;
 		}
 
-		// A short distance field lets the route planner favour the middle of a corridor.
+		// A short distance field lets the route planner favor the middle of a corridor.
 		for($i = 0; $i<count($queue); $i++)
 		{
 			if($i%256 === 0) yield;

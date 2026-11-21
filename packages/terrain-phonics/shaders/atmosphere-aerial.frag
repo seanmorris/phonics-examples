@@ -16,7 +16,7 @@ void main()
 	// A cubic latitude warp preserves the very narrow horizon band even with sixteen rows.
 	float latitude = latitudeCoordinate * latitudeCoordinate * latitudeCoordinate * TERRAIN_PI * 0.5;
 	vec3 ray = vec3(cos(latitude) * cos(longitude), sin(latitude), cos(latitude) * sin(longitude));
-	// A 100-metre scale keeps samples useful across terrain viewing distances while preserving distance zero.
+	// A 100-meter scale keeps samples useful across terrain viewing distances while preserving distance zero.
 	float distanceMeters = 100.0 * (exp(slice / (uAerialCacheGrid.z - 1.0)
 		* log(1.0 + uAerialCacheMaxDistance / 100.0)) - 1.0);
 	vec3 transmittance;

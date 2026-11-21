@@ -199,7 +199,7 @@ $test('aim projection enters all six pocket openings instead of reflecting from 
 		$expect(count($path) === 2, "Pocket $index projection reflected before its opening");
 		[$lastX,$lastY] = $path[array_key_last($path)];
 		[$pocketX,$pocketY] = Table::pockets()[$index];
-		// A ball drops as its centre crosses the cloth edge, so the guide ends on the slate cut itself.
+		// A ball drops as its center crosses the cloth edge, so the guide ends on the slate cut itself.
 		$expect(abs(hypot($lastX - $pocketX, $lastY - $pocketY) - Table::THROAT_RADIUS) < 1e-8,
 			"Pocket $index guide did not end where the ball drops");
 	}
@@ -472,7 +472,7 @@ $test('identical shots replay deterministically', static function() use ($expect
 	$expect($left->hash() === $right->hash(), 'Fixed replay diverged');
 });
 
-$test('swept sphere contacts prevent tunnelling', static function() use ($expect): void {
+$test('swept sphere contacts prevent tunneling', static function() use ($expect): void {
 	$game = new Simulation;
 	foreach($game->balls as $ball) $ball->active = false;
 	$a = $game->balls[0];
@@ -671,7 +671,7 @@ $test('pocket cone can reject an energetic ball and loses energy deterministical
 	[$pocketX,$pocketY] = Table::pockets()[$rejectedPocket];
 	$expect(hypot($ball->x - $pocketX, $ball->y - $pocketY) > Table::THROAT_RADIUS
 		&& ($ball->x - $pocketX) * $outwardX + ($ball->y - $pocketY) * $outwardY <= 0,
-		'Rejected ball left pocket physics before its centre cleared the cut onto the shelf');
+		'Rejected ball left pocket physics before its center cleared the cut onto the shelf');
 	$expect($ball->vx * $outwardX + $ball->vy * $outwardY < 0,
 		'Rejected ball was moving back into the pocket when released');
 	foreach(array_slice(Table::facings(), $rejectedPocket * 2, 2) as [$startX,$startY,$endX,$endY])
@@ -738,7 +738,7 @@ $test('a pocket ball resting on the shelf returns to the cloth and ends the shot
 });
 
 $test('a ball sliding along the back of a pocket drops instead of balancing on the rim', static function() use ($expect): void {
-	// Behind the pocket centre the liner is a wall. Pinned exactly over the rim edge, a ball used to balance there
+	// Behind the pocket center the liner is a wall. Pinned exactly over the rim edge, a ball used to balance there
 	// for seconds once it stopped sliding.
 	[$pocketX,$pocketY] = Table::pockets()[0];
 	[$outwardX,$outwardY] = Table::pocketOutward(0);
@@ -771,7 +771,7 @@ $test('a ball sliding along the back of a pocket drops instead of balancing on t
 	}
 
 	$expect($sank, 'The ball was still above the pocket a second after reaching its back wall');
-	$expect($balanced < 15, "The ball sat on the rim behind the pocket centre for $balanced steps");
+	$expect($balanced < 15, "The ball sat on the rim behind the pocket center for $balanced steps");
 	// The sound tells a ball at the edge from one out of sight by how deep each knock is, in ball radii.
 	// The last knock can land a little past the 0.115 m sink depth before the ball is clamped to it.
 	$expect($depths && min($depths) >= 0 && min($depths) < 2 && max($depths) >= 2 && max($depths) < .12 / Ball::RADIUS,

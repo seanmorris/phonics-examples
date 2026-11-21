@@ -2,8 +2,8 @@
 // Paints the role prints of the Landscape Sandbox's race gates into the atlases of their meshes. Each atlas stacks
 // four bands, one per role in the order of gates.json, and the meshes sample the top band, so a draw picks a role by
 // offsetting its texture coordinates. The road and air gates share one design: a lettered label and the board's
-// three colours. The water gate's arch print is drawn in gate metres and edged by a trim that follows the arch
-// outline, found by rasterising the arch's own faces.
+// three colors. The water gate's arch print is drawn in gate meters and edged by a trim that follows the arch
+// outline, found by rasterizing the arch's own faces.
 //
 // scripts/import_terrain_gates.py writes the geometry and gates.json and then runs this script. Only the pixels
 // change here, so `--check` can verify the committed meshes without the source models. Files are written only when
@@ -25,12 +25,12 @@ const font = JSON.parse(await fs.readFile(typography, 'utf8')).faces.bold;
 
 /** Bytes of one vertex record: position, normal, texture coordinates, paint and surface. */
 const STRIDE = 28;
-// The gantry palette's own white, black and frame grey, and the role colours.
+// The gantry palette's own white, black and frame gray, and the role colors.
 const WHITE = '#f5f5f5', BLACK = '#1f1f1f', FRAME = '#cecece';
 const GREEN = '#17924a', YELLOW = '#f6cf16', RED = '#c3201f';
 
 /**
- * Each role's lettering and colours. `board` colours the gantry's light and dark squares and its frame, `label` is
+ * Each role's lettering and colors. `board` colors the gantry's light and dark squares and its frame, `label` is
  * the label's ground and lettering, and `arch` is the arch's ground, its edge trim, the banner's ground and
  * lettering, and the pattern on its legs.
  */
@@ -76,21 +76,21 @@ const svg = (width, height, body) =>
 /** Resvg options for every print: the outlines carry the lettering, so no system fonts load. */
 const RENDERING = {fitTo: {mode: 'original'}, shapeRendering: 2, font: {loadSystemFonts: false}};
 
-/** Rasterise an SVG to RGBA bytes. Every print is opaque. */
+/** Rasterize an SVG to RGBA bytes. Every print is opaque. */
 function render(source)
 {
 	return new Resvg(source, RENDERING).render().pixels;
 }
 
 /**
- * Set a line of capitals centred on a point.
+ * Set a line of capitals centered on a point.
  *
  * @param {string} text Capitals, spaces and slashes.
- * @param {number} x Centre in pixels.
- * @param {number} y Centre of the capitals in pixels.
+ * @param {number} x Center in pixels.
+ * @param {number} y Center of the capitals in pixels.
  * @param {number} size Capital height in pixels, reduced if the line would be wider than `width`.
  * @param {number} width Widest the inked line may be, in pixels.
- * @param {string} fill Lettering colour.
+ * @param {string} fill Lettering color.
  */
 function lettering(text, x, y, size, width, fill)
 {
@@ -120,14 +120,14 @@ function lettering(text, x, y, size, width, fill)
 	return `<g fill="${fill}" transform="translate(${origin.join(' ')}) scale(${scale})">${glyphs.join('')}</g>`;
 }
 
-/** One role band of a gantry atlas: the label and a strip of each board colour, from the layout in gates.json. */
+/** One role band of a gantry atlas: the label and a strip of each board color, from the layout in gates.json. */
 function boardBand(role, print, width, height)
 {
 	const {text, board, label: [ground, ink]} = ROLES[role];
 	const [x, y, w, h] = print.label;
 	const strips = Object.entries(print.swatches).map(([name, area]) => rect(...area, board[name]));
 
-	// The label's ground also fills the gutters, so filtering at its edges keeps its colour.
+	// The label's ground also fills the gutters, so filtering at its edges keeps its color.
 	return svg(width, height, [rect(0, 0, width, height, ground), ...strips
 		, lettering(text, x + w / 2, y + h / 2, h * .68, w - h * .5, ink)
 	]);
@@ -248,7 +248,7 @@ function insideDistance(mask, width, height)
 }
 
 /**
- * The pattern on the arch's legs in band pixels. `area` gives the visible part of each leg in metres, between the
+ * The pattern on the arch's legs in band pixels. `area` gives the visible part of each leg in meters, between the
  * trims at its sides and from the banner down. The pattern runs on under the trim and the banner, which are painted
  * over it, so no edge of its own shows.
  */
@@ -275,7 +275,7 @@ function legPattern([kind, ink], area, toPixels)
 		}
 		else if(kind === 'stripes')
 		{
-			// Bands at 45 degrees that fall towards the window on both legs.
+			// Bands at 45 degrees that fall toward the window on both legs.
 			const width = .45, rise = far - near;
 
 			const [a, b] = [side * near, side * far];
@@ -307,7 +307,7 @@ function legPattern([kind, ink], area, toPixels)
 /** One role band of the arch atlas. */
 function archBand(role, kind, mask, distance, width, height)
 {
-	const {pixelsPerMetre: k, origin: [ox, oy]} = kind.print;
+	const {pixelsPerMeter: k, origin: [ox, oy]} = kind.print;
 	const {window, extent} = kind;
 	const {text, arch} = ROLES[role];
 
@@ -367,7 +367,7 @@ function atlas(name, kind, mesh)
 	if(name === 'water')
 	{
 		const front = archMask(mesh, width, band);
-		// The faces towards -Z use the mapping mirrored about the origin's column, so the trim is measured from the
+		// The faces toward -Z use the mapping mirrored about the origin's column, so the trim is measured from the
 		// outline both mappings share, and is at least TRIM wide on either face.
 		const [ox] = kind.print.origin;
 
@@ -397,7 +397,7 @@ function atlas(name, kind, mesh)
 	return {pixels, bands, band};
 }
 
-/** Dim the pixels outside a mask. Outside the arch's +Z face the print only lends its colour to filtering. */
+/** Dim the pixels outside a mask. Outside the arch's +Z face the print only lends its color to filtering. */
 function dimOutside(rgba, mask)
 {
 	for(let index = 0; index < mask.length; index++)

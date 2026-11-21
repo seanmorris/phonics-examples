@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draws RPSC's pixel art and synthesises its sounds. The art is the two board squares, both sides' checkers face
+// Draws RPSC's pixel art and synthesizes its sounds. The art is the two board squares, both sides' checkers face
 // down and showing each kind, the king's gold rim, and the white marks the renderer tints for selection, targets and
 // the keyboard cursor. Everything is computed, so the output is deterministic and `--check` can verify the committed
 // files; `--preview DIR` also writes an enlarged sheet and a sample board for looking at.
@@ -13,7 +13,7 @@ const check = process.argv.includes('--check');
 const previewAt = process.argv.indexOf('--preview');
 const previewDirectory = previewAt < 0 ? null : process.argv[previewAt + 1];
 
-// The engine's bitmap font: the poster is lettered with it, and the renderer centres labels by where its ink falls.
+// The engine's bitmap font: the poster is lettered with it, and the renderer centers labels by where its ink falls.
 const font = JSON.parse(await fs.readFile(new URL('font.tsj', engine), 'utf8'));
 const fontImage = PNG.sync.read(await fs.readFile(new URL('font.png', engine)));
 
@@ -38,7 +38,7 @@ const glyphCell = glyph => {
  * Find the box of a glyph's strokes inside its cell: `[left, top, right, bottom]`, all inclusive.
  *
  * The font's tileset gives each glyph an advance but not where its strokes fall. Capitals are ten rows tall on a
- * 16-row line and narrower than their advance, so text centred by its advances and its line height lands left of
+ * 16-row line and narrower than their advance, so text centered by its advances and its line height lands left of
  * and above the middle. Only the light strokes count: each glyph also carries a dark shadow one pixel down and to
  * the right, which the eye does not read as part of the letter.
  */
@@ -78,17 +78,17 @@ const TILES = [
 	, 'king', 'ring', 'dot', 'reticle', 'cursor', 'crown'
 ];
 
-/** Read a `#rrggbb` colour as three channels from 0 to 255. */
+/** Read a `#rrggbb` color as three channels from 0 to 255. */
 const hex = value => [1, 3, 5].map(at => parseInt(value.slice(at, at + 2), 16));
 
-/** Blend two colours: `amount` 0 gives the first, 1 the second. */
+/** Blend two colors: `amount` 0 gives the first, 1 the second. */
 const mix = (from, to, amount) => from.map((channel, index) => Math.round(channel + (to[index] - channel) * amount));
 
-/** A checker's tones by name, from its outline in to the boss at its centre. */
+/** A checker's tones by name, from its outline in to the boss at its center. */
 const TONES = ['outline', 'light', 'dark', 'groove', 'face', 'boss'];
 
-/** Name six `#rrggbb` colours as one side's tones. */
-const tones = colours => Object.fromEntries(TONES.map((name, index) => [name, hex(colours[index])]));
+/** Name six `#rrggbb` colors as one side's tones. */
+const tones = colors => Object.fromEntries(TONES.map((name, index) => [name, hex(colors[index])]));
 
 const SIDES = {
 	black: tones(['#0b0b0f', '#62627a', '#2f2f3b', '#141419', '#2a2a35', '#4a4a5c'])
@@ -104,7 +104,7 @@ const bitmap = ([picture]) => picture.trim().split('\n').map(row => row.trim());
 
 /**
  * Emblems: `#` is the light tone and `+` the shaded one. The grid is twelve pixels square because the checker is
- * twenty: an even grid has the same centre as the checker, and an odd one would sit half a pixel off it.
+ * twenty: an even grid has the same center as the checker, and an odd one would sit half a pixel off it.
  */
 const EMBLEMS = {
 	rock: bitmap`
@@ -152,10 +152,10 @@ const EMBLEMS = {
 };
 
 /**
- * Check that a picture is centred: its grid shares the tile's centre, and its ink leaves equal margins left and
+ * Check that a picture is centered: its grid shares the tile's center, and its ink leaves equal margins left and
  * right and equal margins above and below. A picture that fails would sit off the middle of its checker.
  */
-function centred(name, rows)
+function centered(name, rows)
 {
 	const [width, height] = [rows[0].length, rows.length];
 	const inked = rows.flatMap((row, y) => [...row].map((mark, x) => mark === '.' ? null : [x, y])).filter(Boolean);
@@ -163,12 +163,12 @@ function centred(name, rows)
 	const level = Math.min(...xs) === width - 1 - Math.max(...xs) && Math.min(...ys) === height - 1 - Math.max(...ys);
 	const even = (TILE - width) % 2 === 0 && (TILE - height) % 2 === 0;
 
-	if(!even || !level) throw Error(`The ${name} picture is off centre`);
+	if(!even || !level) throw Error(`The ${name} picture is off center`);
 
 	return rows;
 }
 
-for(const [name, rows] of Object.entries(EMBLEMS)) centred(name, rows);
+for(const [name, rows] of Object.entries(EMBLEMS)) centered(name, rows);
 
 /** A small RGBA image to draw into and write out as a PNG. */
 class Sheet
@@ -237,11 +237,11 @@ const noise = (x, y, salt) => {
 	return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
 };
 
-/** Distance of a pixel's centre from the centre of its tile. */
+/** Distance of a pixel's center from the center of its tile. */
 const reach = (x, y) => Math.hypot(x - (TILE - 1) / 2, y - (TILE - 1) / 2);
 
-/** One board square: a flat colour with faint grain and a darker edge on two sides. */
-function square(colour, salt)
+/** One board square: a flat color with faint grain and a darker edge on two sides. */
+function square(color, salt)
 {
 	const tile = new Sheet(TILE, TILE);
 
@@ -253,7 +253,7 @@ function square(colour, salt)
 		const edge = x === 0 || y === 0 ? -.10 : (x === TILE - 1 || y === TILE - 1 ? .05 : 0);
 		const shade = (grain - .5) * .12 + edge;
 
-		tile.put(x, y, shade < 0 ? mix(colour, [0, 0, 0], -shade) : mix(colour, [255, 255, 255], shade));
+		tile.put(x, y, shade < 0 ? mix(color, [0, 0, 0], -shade) : mix(color, [255, 255, 255], shade));
 	}
 
 	return tile;
@@ -356,7 +356,7 @@ const corner = (x, y, inset, arm) => {
 	return (dx === 0 && dy >= 0 && dy < arm) || (dy === 0 && dx >= 0 && dx < arm);
 };
 
-/** The crown that marks a far-rank square: eight by six, so it too shares the tile's centre. */
+/** The crown that marks a far-rank square: eight by six, so it too shares the tile's center. */
 const CROWN = bitmap`
 	#..##..#
 	#..##..#
@@ -366,7 +366,7 @@ const CROWN = bitmap`
 	.######.
 `;
 
-centred('crown', CROWN);
+centered('crown', CROWN);
 
 const tiles = {
 	'square-red': square(hex('#9f2c2a'), 3)
@@ -404,7 +404,7 @@ const grid = {tilewidth: TILE, tileheight: TILE, tilecount: TILES.length, column
 const image = {image: 'pieces.png', imagewidth: sheet.width, imageheight: sheet.height};
 const properties = [
 	{name: 'rpsc.tiles', type: 'string', value: TILES.join(',')}
-	// Where the engine font's ink falls, so the renderer can centre a label by what is drawn, not by its cell.
+	// Where the engine font's ink falls, so the renderer can center a label by what is drawn, not by its cell.
 	, {name: 'rpsc.ink', type: 'string', value: JSON.stringify({...fontInk, ' ': [0, 0, -1, -1, spaceAdvance]})}
 ];
 
@@ -513,7 +513,7 @@ generated.set(
 );
 
 /** Blit a string from the engine's bitmap font at a pixel scale; a null target only measures. */
-function title(target, text, x, y, scale, colour)
+function title(target, text, x, y, scale, color)
 {
 	const glyphs = new Sheet(fontImage.width, fontImage.height);
 	glyphs.data.set(fontImage.data);
@@ -531,7 +531,7 @@ function title(target, text, x, y, scale, colour)
 
 		const region = [...glyphCell(glyph), glyph['glyph.width'], glyph['glyph.height']];
 
-		if(target) target.blit(glyphs, cursor, y, scale, region, colour);
+		if(target) target.blit(glyphs, cursor, y, scale, region, color);
 
 		cursor += glyph['glyph.advance'] * scale;
 	}

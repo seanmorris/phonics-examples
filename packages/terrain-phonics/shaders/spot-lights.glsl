@@ -1,5 +1,5 @@
 // Spot lights from Scene::setSpotLights(), such as a vehicle's headlights. Each takes three vec4s: world position in
-// metres and the inverse square of the range; unit axis and cone scale; irradiance on the axis at one metre, in scene
+// meters and the inverse square of the range; unit axis and cone scale; irradiance on the axis at one meter, in scene
 // units, and cone offset. SpotLights::uniforms() documents the layout.
 #define TERRAIN_MAX_SPOT_LIGHTS 2
 // Summed lamp irradiance, in scene units, above which it grows with its logarithm. SpotLights::KNEE matches it.
@@ -15,13 +15,13 @@ uniform vec4 uSpotLights[TERRAIN_MAX_SPOT_LIGHTS * 3];
 
 // Irradiance in scene units on a surface at a world position with a unit normal. Light falls off with the square of
 // distance and the cosine of incidence, and fades out at the range and across the cone's edge. The part of its path
-// below the water level loses the extinction per metre. Nothing casts a shadow.
+// below the water level loses the extinction per meter. Nothing casts a shadow.
 //
 // Ground near a low lamp receives hundreds of times what the ground 50 m ahead does, more than the tone map can show
 // without turning the near ground white. A soft knee compresses the sum: with m the largest channel of the light the
 // lamps would give with their cones wide open and K the knee, the light through the cones is scaled by
 // K ln(1 + m / K) / m. Below K it is nearly linear; ten times K comes out as 2.4 K, a hundred times K as 4.6 K. The
-// scale keeps the lamps' colour. Because it ignores the cones, a beam fades across its whole band between the inner
+// scale keeps the lamps' color. Because it ignores the cones, a beam fades across its whole band between the inner
 // and outer cone. Scaled by the light through the cones instead, a lamp facing a nearby slope would stay near full
 // brightness until close to its outer cone and draw a flat disc with a hard rim.
 vec3 terrainSpotLight(vec3 position, vec3 normal, float waterLevel, float extinction)

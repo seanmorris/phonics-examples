@@ -4,7 +4,7 @@ namespace TerrainPhonics;
 
 use Phonics\Render\Program;
 
-/** A camera-centred stack of toroidal GPU elevation textures and one world overview. */
+/** A camera-centered stack of toroidal GPU elevation textures and one world overview. */
 final class Clipmap
 {
 	private Program $generator, $chart;
@@ -145,7 +145,7 @@ final class Clipmap
 	/**
 	 * Replace the resident spatial index, including the empty state after undo.
 	 * @param array $roads Normalized road operations in application order.
-	 * @param float $extent Width of the editable square in metres.
+	 * @param float $extent Width of the editable square in meters.
 	 * @return void Updates the generator uniforms and the texture byte counters.
 	 */
 	private function uploadRoads(array $roads, float $extent): void
@@ -315,7 +315,7 @@ final class Clipmap
 			$span = $base;
 			if($wall)
 			{
-				// Preserve the steep walls at midrange, where the small camera-centred rings were
+				// Preserve the steep walls at midrange, where the small camera-centered rings were
 				// choosing a coarse grid. Tighten the mesh over the wider midrange on Detailed.
 				$start = $quality > 1.5 ? 2 : 3;
 				$end = $quality > 1.5 ? 5 : 4;
@@ -439,7 +439,7 @@ final class Clipmap
 
 				if($needsFull && $newLevel)
 				{
-					// Keep the newly centred coarse rings visible while finer rings reload.
+					// Keep the newly centered coarse rings visible while finer rings reload.
 					for($finer = $l; $finer >= 0; $finer--)
 					if($this->levels[$finer]) $this->levels[$finer]['origin'] = null;
 					$this->pending = true;
@@ -547,7 +547,7 @@ final class Clipmap
 
 	/**
 	 * Redraw a rectangle on the finest resident terrain grid using the active overlay program.
-	 * Bounds are [minX, minZ, maxX, maxZ] in metres. An uncovered rectangle is left to the caller.
+	 * Bounds are [minX, minZ, maxX, maxZ] in meters. An uncovered rectangle is left to the caller.
 	 */
 	public function drawGroundPatch(Program $p, Camera $camera, array $bounds): bool
 	{
@@ -702,7 +702,7 @@ final class Clipmap
 		return $count;
 	}
 
-	/** World metres across the heading-up, vehicle-centred chart. */
+	/** World meters across the heading-up, vehicle-centered chart. */
 	public static function chartSpan(float $extent, array $position, float $bearing, bool $wide): float
 	{
 		// At the middle of the world, even a 45° chart fits at this scale.
