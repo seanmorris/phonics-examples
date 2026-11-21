@@ -31,7 +31,7 @@ namespace
 	use TerrainSandbox\Session;
 
 	foreach(['GL_ARRAY_BUFFER', 'GL_ELEMENT_ARRAY_BUFFER', 'GL_STATIC_DRAW', 'GL_DYNAMIC_DRAW', 'GL_FLOAT',
-		'GL_UNSIGNED_SHORT', 'GL_TRIANGLES', 'GL_BLEND', 'GL_ZERO', 'GL_SRC_COLOR', 'GL_ONE', 'GL_LEQUAL', 'GL_LESS'] as $index => $name)
+		'GL_TEXTURE0','GL_TEXTURE_2D','GL_TRIANGLE_STRIP', 'GL_UNSIGNED_SHORT', 'GL_TRIANGLES', 'GL_BLEND', 'GL_ZERO', 'GL_SRC_COLOR', 'GL_ONE', 'GL_LEQUAL', 'GL_LESS'] as $index => $name)
 		if(!defined($name)) define($name, 0x1000 + $index);
 
 	/** GL state the shadow leaves behind, and what it uploaded and drew. */
@@ -52,8 +52,12 @@ namespace
 	{
 		if($target === GL_ARRAY_BUFFER) $GLOBALS['gl']['vertices'] = $data;
 	}
+	function glDrawArraysInstanced(int $mode, int $first, int $vertices, int $instances): void
+	{
+		$GLOBALS['gl']['strips'][] = [$mode,$vertices,$instances];
+	}
 	function glDrawElements(int $mode, int $count, int $type, int $offset): void { $GLOBALS['gl']['draws'][] = $count; }
-	foreach(['glBindVertexArray', 'glDeleteVertexArrays', 'glBindBuffer', 'glEnableVertexAttribArray',
+	foreach(['glUniform1i','glUniform2i','glUniform1f','glBindTexture','glActiveTexture','glBindVertexArray', 'glDeleteVertexArrays', 'glBindBuffer', 'glEnableVertexAttribArray',
 		'glVertexAttribPointer', 'glDeleteBuffers', 'glBlendFuncSeparate'] as $name)
 		eval("function $name(...\$arguments): void {}");
 
@@ -172,6 +176,22 @@ namespace
 	$draws = count($gl['draws']);
 	$shadow->draw(['y' => $pose['y'] + 30] + $pose, $land, $camera, 1280, 720);
 	expect(count($gl['draws']) === $draws, 'A car 30 m up draws no shadow');
+	// Install a resident one-metre clipmap grid in the GL fixture, as after the terrain has streamed in.
+	$clip = (new ReflectionClass(TerrainPhonics\Clipmap::class))->newInstanceWithoutConstructor();
+	$scene = (new ReflectionClass(TerrainPhonics\Scene::class))->newInstanceWithoutConstructor();
+	(new ReflectionProperty($scene,'clipmap'))->setValue($scene,$clip);
+	foreach(['levels'=>[['origin'=>[-34,-34],'n'=>128,'step'=>1.,'textures'=>[7,8]]],
+		'spans'=>[64],'recipe'=>$land->recipe(),'vao'=>[1]] as $field=>$value)
+		(new ReflectionProperty($clip,$field))->setValue($clip,$value);
+	$air = ['y'=>$land->height($pose['x'],$pose['z'])+4] + $pose;
+	$gl['vertices'] = ''; $gl['strips'] = [];
+	expect($shadow->draw($air,$land,$camera,1280,720,$scene) === 1 && $gl['vertices'] === ''
+		&& count($gl['strips']) === 1 && $gl['strips'][0][0] === GL_TRIANGLE_STRIP,
+		'An airborne shadow uses one centre sample and draws the resident terrain with no vertex upload');
+	$edge = ['x'=>32.,'z'=>0.,'y'=>$land->height(32.,0.)+1] + $pose;
+	expect($shadow->draw($edge,$land,$camera,1280,720,$scene) > 1 && $gl['vertices'] !== '' && count($gl['strips']) === 1,
+		'A shadow crossing the resident grid boundary falls back to sampled terrain');
+
 	$shadow->close();
 	$session->close();
 

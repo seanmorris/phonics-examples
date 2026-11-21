@@ -5,6 +5,8 @@ namespace TerrainSandbox;
 
 use Phonics\Render\Program;
 use TerrainPhonics\Camera;
+use TerrainPhonics\Clipmap;
+use TerrainPhonics\Scene;
 use TerrainPhonics\Landscape;
 
 /**
@@ -14,8 +16,8 @@ use TerrainPhonics\Landscape;
  * fainter, wider patch, and none from about 12 m up.
  *
  * It darkens what the terrain pass drew by multiplying it, through a small world-aligned grid that takes the
- * terrain's own heights. Each grid point's height is looked up once and kept, so a parked car costs no lookups and a
- * moving one only the points it reaches.
+ * terrain's own heights. The clipmap supplies the same GPU triangles drawn under the wheels. While that grid is
+ * streaming, or when rendering with CPU terrain, the car uses a cached grid of sampled heights.
  */
 final class GroundShadow
 {
@@ -55,7 +57,8 @@ final class GroundShadow
 	 */
 	public const PULL = .08, PULL_LIMIT = .8;
 
-	private Program $program;
+	private ?Program $sampledProgram = null;
+	private ?Program $terrainProgram = null;
 	private array $vao = [0], $buffers = [0, 0];
 	/** @var array<int, float> Terrain height at each grid point, keyed by its packed grid coordinates. */
 	private array $heights = [];
@@ -65,19 +68,21 @@ final class GroundShadow
 	private const VERTEX = <<<'GLSL'
 		#version 300 es
 		precision highp float;
-		layout(location=0) in vec3 aPosition; // the grid point relative to the eye
+		precision highp int;
+		// POSITION_SOURCE
 		uniform mat4 uViewProjection;
 		uniform vec2 uOrigin;   // the car's centre relative to the eye, on X and Z
 		uniform vec2 uAxis;     // sine and cosine of the car's heading: forward is (s, c), across is (c, -s)
 		out vec2 vLocal;
 		void main()
 		{
-			vec2 offset = aPosition.xz - uOrigin;
+			vec3 position = relativePosition();
+			vec2 offset = position.xz - uOrigin;
 			vLocal = vec2(dot(offset, uAxis), dot(offset, vec2(uAxis.y, -uAxis.x)));
 			// Pull the point towards the eye along its own view ray. It stays where it is on screen, but clears
 			// terrain drawn a little above its true height, as coarse patches are before detail streams in.
-			float distance = length(aPosition);
-			gl_Position = uViewProjection * vec4(aPosition * max(0.0, 1.0 - min(PULL_LIMIT, PULL * distance) / distance), 1.0);
+			float distance = length(position);
+			gl_Position = uViewProjection * vec4(position * max(0.0, 1.0 - min(PULL_LIMIT, PULL * distance) / distance), 1.0);
 		}
 		GLSL;
 
@@ -106,13 +111,26 @@ final class GroundShadow
 		}
 		GLSL;
 
-	/** Compile the program and create the grid's buffers. */
-	public function __construct()
+	private static function program(bool $terrain): Program
 	{
-		$this->program = new Program(str_replace(['PULL_LIMIT', 'PULL'],
-			[sprintf('%.3f', self::PULL_LIMIT), sprintf('%.3f', self::PULL)], self::VERTEX),
+		$source = $terrain ? Clipmap::gridShader() . <<<'GLSL'
+
+			uniform vec3 uEye;
+			vec3 relativePosition() {
+				ivec2 cell = clipStitchedCell(clipCell());
+				vec2 xz = vec2(cell) * uGridStep;
+				return vec3(xz.x, clipHeight(cell,clipMorph(cell)) + LIFT, xz.y) - uEye;
+			}
+			GLSL : 'layout(location=0) in vec3 aPosition; vec3 relativePosition() { return aPosition; }';
+		return new Program(str_replace(['// POSITION_SOURCE','PULL_LIMIT','PULL','LIFT'],
+			[$source,sprintf('%.3f', self::PULL_LIMIT), sprintf('%.3f', self::PULL),sprintf('%.3f', self::LIFT)], self::VERTEX),
 			str_replace(['BODY_CORNER', 'CORNER'], [sprintf('%.3f', self::BODY_CORNER), sprintf('%.3f', self::CORNER)],
 				self::FRAGMENT));
+	}
+
+	/** Compile the program and create the grid's buffers. */
+	private function makeSampledProgram(): Program
+	{
 		glGenVertexArrays(1, $this->vao);
 		glBindVertexArray($this->vao[0]);
 		glGenBuffers(2, $this->buffers);
@@ -121,6 +139,7 @@ final class GroundShadow
 		glVertexAttribPointer(0, 3, GL_FLOAT, false, 12, 0);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, $this->buffers[1]);
 		glBindVertexArray(0);
+		return self::program(false);
 	}
 
 	/**
@@ -174,16 +193,24 @@ final class GroundShadow
 	 */
 	public static function grid(array $pose, array $extent): array
 	{
-		$s = sin($pose['yaw']); $c = cos($pose['yaw']);
-		$xs = $zs = [];
-		foreach([[$extent[0], $extent[2]], [$extent[0], $extent[3]], [$extent[1], $extent[2]], [$extent[1], $extent[3]]] as [$a, $b])
-		{
-			$xs[] = $pose['x'] + $a * $s + $b * $c;
-			$zs[] = $pose['z'] + $a * $c - $b * $s;
-		}
-		$i = (int)floor(min($xs) / self::SPACING); $j = (int)floor(min($zs) / self::SPACING);
+		return self::sampleGrid(self::bounds($pose, $extent));
+	}
 
-		return [$i, $j, min(32, (int)ceil(max($xs) / self::SPACING) - $i + 1), min(32, (int)ceil(max($zs) / self::SPACING) - $j + 1)];
+	private static function sampleGrid(array $bounds): array
+	{
+		[$left,$top,$right,$bottom] = $bounds;
+		$i = (int)floor($left/self::SPACING); $j = (int)floor($top/self::SPACING);
+		return [$i,$j,(int)ceil($right/self::SPACING)-$i+1,(int)ceil($bottom/self::SPACING)-$j+1];
+	}
+
+	private static function bounds(array $pose, array $extent): array
+	{
+		$s = sin($pose['yaw']); $c = cos($pose['yaw']);
+		[$from,$to,$left,$right] = $extent;
+		return [$pose['x'] + min($from*$s,$to*$s) + min($left*$c,$right*$c),
+			$pose['z'] + min($from*$c,$to*$c) + min(-$left*$s,-$right*$s),
+			$pose['x'] + max($from*$s,$to*$s) + max($left*$c,$right*$c),
+			$pose['z'] + max($from*$c,$to*$c) + max(-$left*$s,-$right*$s)];
 	}
 
 	/**
@@ -193,9 +220,10 @@ final class GroundShadow
 	 * @param Camera $camera The drawing camera.
 	 * @param int $width Drawing-buffer width.
 	 * @param int $height Drawing-buffer height.
+	 * @param Scene|null $scene Scene providing the resident terrain grid when available.
 	 * @return int Terrain heights looked up for this frame.
 	 */
-	public function draw(array $pose, Landscape $land, Camera $camera, int $width, int $height): int
+	public function draw(array $pose, Landscape $land, Camera $camera, int $width, int $height, ?Scene $scene = null): int
 	{
 		if($land !== $this->land || $land->revision() !== $this->revision || count($this->heights) > self::CACHE)
 		{
@@ -205,10 +233,39 @@ final class GroundShadow
 		}
 		$shape = self::shape($pose, $land->height($pose['x'], $pose['z']));
 		if($shape['shade'][0] < .005) return 1;
-		[$i0, $j0, $columns, $rows] = self::grid($pose, $shape['extent']);
+		$bounds = self::bounds($pose, $shape['extent']);
+		glEnable(GL_BLEND);
+		glBlendFuncSeparate(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE);
+		glDepthMask(false);
+		glDepthFunc(GL_LEQUAL);
+		$looked = 1;
+		$drawn = false;
+		if($scene !== null)
+		{
+			$p = $this->terrainProgram ??= self::program(true);
+			$this->bind($p, $pose, $shape, $camera, $width, $height);
+			glUniform3f($p->location('uEye'), ...$camera->position);
+			$drawn = $scene->drawGroundPatch($p, $camera, $bounds);
+		}
+		if(!$drawn)
+		{
+			$this->sampledProgram ??= $this->makeSampledProgram();
+			$this->bind($this->sampledProgram, $pose, $shape, $camera, $width, $height);
+			$looked += $this->drawSampled($land, $camera, $bounds);
+		}
+		glDepthFunc(GL_LESS);
+		glDepthMask(true);
+		glDisable(GL_BLEND);
+		glBindVertexArray(0);
+		return $looked;
+	}
+
+	private function drawSampled(Landscape $land, Camera $camera, array $bounds): int
+	{
+		[$i0, $j0, $columns, $rows] = self::sampleGrid($bounds);
 		[$ex, $ey, $ez] = $camera->position;
 		$half = $land->recipe()['worldSize'] / 2;
-		$looked = 1;
+		$looked = 0;
 		$points = [];
 		for($j = $j0; $j < $j0 + $rows; $j++)
 			for($i = $i0; $i < $i0 + $columns; $i++)
@@ -223,8 +280,6 @@ final class GroundShadow
 				array_push($points, $x - $ex, $this->heights[$key] + self::LIFT - $ey, $z - $ez);
 			}
 
-		$p = $this->program;
-		$p->use();
 		glBindVertexArray($this->vao[0]);
 		$data = pack('g*', ...$points);
 		glBindBuffer(GL_ARRAY_BUFFER, $this->buffers[0]);
@@ -242,6 +297,14 @@ final class GroundShadow
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, strlen($data), $data, GL_STATIC_DRAW);
 			[$this->columns, $this->rows, $this->indexCount] = [$columns, $rows, count($indices)];
 		}
+		glDrawElements(GL_TRIANGLES, $this->indexCount, GL_UNSIGNED_SHORT, 0);
+		return $looked;
+	}
+
+	private function bind(Program $p, array $pose, array $shape, Camera $camera, int $width, int $height): void
+	{
+		$p->use();
+		[$ex,,$ez] = $camera->position;
 		glUniformMatrix4fv($p->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
 		glUniform2f($p->location('uOrigin'), $pose['x'] - $ex, $pose['z'] - $ez);
 		glUniform2f($p->location('uAxis'), sin($pose['yaw']), cos($pose['yaw']));
@@ -249,24 +312,17 @@ final class GroundShadow
 		glUniform3f($p->location('uShade'), ...$shape['shade']);
 		glUniform3f($p->location('uBody'), self::BODY_HALF_LENGTH, self::BODY_HALF_WIDTH, self::BODY_CENTRE);
 		glUniform3f($p->location('uSkirt'), ...$shape['skirt']);
-		glEnable(GL_BLEND);
-		glBlendFuncSeparate(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE);
-		glDepthMask(false);
-		glDepthFunc(GL_LEQUAL);
-		glDrawElements(GL_TRIANGLES, $this->indexCount, GL_UNSIGNED_SHORT, 0);
-		glDepthFunc(GL_LESS);
-		glDepthMask(true);
-		glDisable(GL_BLEND);
-		glBindVertexArray(0);
-
-		return $looked;
 	}
 
 	/** Release the program and the grid. */
 	public function close(): void
 	{
-		glDeleteBuffers(2, $this->buffers);
-		glDeleteVertexArrays(1, $this->vao);
-		$this->program->close();
+		if($this->sampledProgram !== null)
+		{
+			glDeleteBuffers(2, $this->buffers);
+			glDeleteVertexArrays(1, $this->vao);
+			$this->sampledProgram->close();
+		}
+		$this->terrainProgram?->close();
 	}
 }

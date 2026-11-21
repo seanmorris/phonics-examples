@@ -519,6 +519,63 @@ final class Clipmap
 
 	public function packed(): bool {return $this->packed === true;}
 
+	/** Vertex helpers shared by terrain and overlays drawn on its triangles. */
+	public static function gridShader(): string
+	{
+		return file_get_contents(dirname(__DIR__) . '/shaders/clip-grid.glsl');
+	}
+
+	private function bindGrid(Program $p, Camera $camera, int $index, array $level): void
+	{
+		[$ox,$oz] = $level['origin'];
+		$x = $ox + self::HALO; $z = $oz + self::HALO;
+		$s = $level['step']; $span = $this->spans[$index];
+		glUniform2i($p->location('uRingMin'), $x, $z);
+		glUniform1i($p->location('uSpan'), $span);
+		glUniform1i($p->location('uHasParent'), (int)isset($this->levels[$index + 1]['origin']));
+		glUniform2f($p->location('uEyeCell'), $camera->position[0] / $s, $camera->position[2] / $s);
+		glUniform1f($p->location('uMorphWidth'), self::transition($span));
+		glUniform1f($p->location('uGridStep'), $s);
+		glUniform1i($p->location('uTextureMask'), $level['n'] - 1);
+
+		foreach($level['textures'] as $i => $tex)
+		{
+			glActiveTexture(GL_TEXTURE0 + 7 + $i);
+			glBindTexture(GL_TEXTURE_2D, $tex);
+		}
+	}
+
+	/**
+	 * Redraw a rectangle on the finest resident terrain grid using the active overlay program.
+	 * Bounds are [minX, minZ, maxX, maxZ] in metres. An uncovered rectangle is left to the caller.
+	 */
+	public function drawGroundPatch(Program $p, Camera $camera, array $bounds): bool
+	{
+		$level = $this->levels[0] ?? null;
+		if(!isset($level['origin']) || $bounds[2] <= $bounds[0] || $bounds[3] <= $bounds[1]) return false;
+		$s = $level['step'];
+		$left = (int)floor($bounds[0]/$s); $top = (int)floor($bounds[1]/$s);
+		$right = (int)ceil($bounds[2]/$s); $bottom = (int)ceil($bounds[3]/$s);
+		$x = $level['origin'][0] + self::HALO; $z = $level['origin'][1] + self::HALO;
+		if($left < $x || $top < $z || $right > $x + $this->spans[0] || $bottom > $z + $this->spans[0]) return false;
+		if($this->recipe['surround'] === 'none')
+		{
+			$half = $this->recipe['worldSize']/2;
+			if($left*$s < -$half || $top*$s < -$half || $right*$s > $half || $bottom*$s > $half) return false;
+		}
+
+		glUniform1i($p->location('uPacked'), (int)$this->packed);
+		glUniform1i($p->location('uElevations'), 7);
+		glUniform1i($p->location('uInk'), 8);
+		$this->bindGrid($p, $camera, 0, $level);
+		glBindVertexArray($this->vao[0]);
+		glUniform2i($p->location('uDrawCell'), $left, $top);
+		glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2*($right-$left+1), $bottom-$top);
+		glBindVertexArray(0);
+		glActiveTexture(GL_TEXTURE0);
+		return true;
+	}
+
 	/** Draw a solid inner grid and rectangular strips around each finer level. */
 	public function draw(Program $p, Camera $camera, array $planes, array $vertical, bool $water = false): int
 	{
@@ -632,19 +689,7 @@ final class Clipmap
 				}
 			}
 			if(!$visible) continue;
-			glUniform2i($p->location('uRingMin'), $x, $z);
-			glUniform1i($p->location('uSpan'), $span);
-			glUniform1i($p->location('uHasParent'), (int)isset($this->levels[$index + 1]['origin']));
-			glUniform2f($p->location('uEyeCell'), $camera->position[0] / $s, $camera->position[2] / $s);
-			glUniform1f($p->location('uMorphWidth'), self::transition($span));
-			glUniform1f($p->location('uGridStep'), $s);
-			glUniform1i($p->location('uTextureMask'), $level['n'] - 1);
-
-			foreach($level['textures'] as $i => $tex)
-			{
-				glActiveTexture(GL_TEXTURE0 + 7 + $i);
-				glBindTexture(GL_TEXTURE_2D, $tex);
-			}
+			$this->bindGrid($p, $camera, $index, $level);
 
 			foreach($visible as [$left,$top,$right,$bottom])
 			{

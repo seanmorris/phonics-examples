@@ -1099,12 +1099,24 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await view.evaluate(el => {
 		const gl = el.getContext('webgl2');
-		const draw = gl.drawElements.bind(gl), locations = new Map();
-		el.suspensionDraw = {drooped:false,compressed:false};
+		const use = gl.useProgram.bind(gl), draw = gl.drawElements.bind(gl), strip = gl.drawArraysInstanced.bind(gl);
+		const locations = new Map();
+		let program = null;
+		el.suspensionDraw = {drooped:false,compressed:false,terrainShadow:false};
+		gl.useProgram = next => {
+			program = next;
+			if(next && !locations.has(next)) locations.set(next,{
+				travel:gl.getUniformLocation(next,'uWheelTravel'), shade:gl.getUniformLocation(next,'uShade')
+			});
+			return use(next);
+		};
+		gl.drawArraysInstanced = (...args) => {
+			if(locations.get(program)?.shade && args[0] === gl.TRIANGLE_STRIP && args[3] > 0)
+				el.suspensionDraw.terrainShadow = true;
+			return strip(...args);
+		};
 		gl.drawElements = (...args) => {
-			const program = gl.getParameter(gl.CURRENT_PROGRAM);
-			if(!locations.has(program)) locations.set(program,gl.getUniformLocation(program,'uWheelTravel'));
-			const location = locations.get(program);
+			const location = locations.get(program)?.travel;
 			if(location) {
 				const travel = gl.getUniform(program,location);
 				el.suspensionDraw.drooped ||= travel.every(v => v < -.12);
@@ -1136,7 +1148,7 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 	}));
 	expect(landedCar.z).toBeGreaterThan(airborneCar.z);
 	expect(landedCar.recoveries).toBe(0);
-	expect(suspensionDraw).toEqual({drooped:true,compressed:true});
+	expect(suspensionDraw).toEqual({drooped:true,compressed:true,terrainShadow:true});
 	expect(airborneFrameError).toBeLessThan(.51);
 	expect(glError).toBe(0);
 	expect(errors).toEqual([]);

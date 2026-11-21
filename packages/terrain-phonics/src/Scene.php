@@ -188,7 +188,7 @@ final class Scene
 		$root = dirname(__DIR__) . '/shaders/';
 		$atmosphere = AtmosphereRenderer::shaderSource();
 		$water = file_get_contents($root . 'water-functions.glsl');
-		$grid = $this->useClipmap ? "#define CLIPMAP\n".file_get_contents($root.'clip-grid.glsl') : file_get_contents($root.'patch-grid.glsl');
+		$grid = $this->useClipmap ? "#define CLIPMAP\n".Clipmap::gridShader() : file_get_contents($root.'patch-grid.glsl');
 		$optics = WaterAppearance::shaderSource();
 		$lamps = SpotLights::shaderSource();
 		$dark = SpotLights::shaderSource(false);
@@ -2657,6 +2657,18 @@ final class Scene
 			$vertices
 			, pack('v*', 0, 5, 1, 1, 5, 4, 1, 4, 2, 2, 4, 3, 3, 4, 5, 3, 5, 0, 0, 1, 2, 0, 2, 3)
 		);
+	}
+
+	/**
+	 * Draw an overlay on the same triangles as the finest resident terrain, including edits and LOD blending.
+	 * @param Program $program Active overlay program using the vertex functions from Clipmap::gridShader().
+	 * @param Camera $camera Camera for the current terrain pass.
+	 * @param array $bounds Minimum X and Z, then maximum X and Z, in world metres.
+	 * @return bool Whether the grid covered the whole rectangle and submitted a draw.
+	 */
+	public function drawGroundPatch(Program $program, Camera $camera, array $bounds): bool
+	{
+		return $this->clipmap?->drawGroundPatch($program, $camera, $bounds) ?? false;
 	}
 
 	/**

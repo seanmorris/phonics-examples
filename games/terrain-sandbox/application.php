@@ -139,11 +139,11 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 });
 
 $shadow = null;
-$drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
+$drawOpaque = static function() use ($scene, $session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
 	foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
 	// The car's shadow darkens the ground under it, so it draws after the terrain and before the car.
 	if($session->mode === 'car' && $vehiclePose !== null)
-		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape, $viewCamera, $width, $height);
+		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape, $viewCamera, $width, $height, $scene);
 	if($session->mode !== 'fly' && !($session->mode === 'jet' && $session->jetView === 'cockpit'))
 	{
 		$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
