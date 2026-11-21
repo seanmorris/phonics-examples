@@ -1,4 +1,6 @@
 const int STIPPLE_PATTERN = 5;
+const int FRACTAL_PATTERN = 6;
+const int VEIN_PATTERN = 7;
 uniform int uLayerCount;
 uniform vec3 uLayerColor[12];
 uniform vec4 uLayerRange[12],uLayerBlend[12],uLayerMode[12];
@@ -17,6 +19,32 @@ float layerValueNoise(vec2 uv) {
 	ivec2 c=ivec2(floor(uv));
 	return mix(mix(layerCorner(c),layerCorner(c+ivec2(1,0)),t.x),
 		mix(layerCorner(c+ivec2(0,1)),layerCorner(c+1),t.x),t.y);
+}
+float fractalMask(vec3 pos,float scale,float stretch,float footprint,bool veins) {
+	vec3 p=vec3(pos.x+uPaletteOffset.x,pos.y/stretch,pos.z+uPaletteOffset.y)/scale;
+	float pixel=footprint/(scale*min(1.,stretch));
+	if(veins && pixel>=.28) return .37;
+	float field=0., amplitude=.46, coarse=0.;
+	const mat2 turn=mat2(.8,.6,-.6,.8);
+	for(int octave=0;octave<3;octave++) {
+		if(pixel>=.8) break;
+		// Tilt each projection through world space so a stain continues around corners.
+		float n=layerValueNoise(p.xz+p.y*vec2(.64,.83));
+		if(octave==0) coarse=n;
+		field+=amplitude*n*(1.-smoothstep(.22,.8,pixel));
+		// Rotate the finer bands and bend them slightly around the coarser patches.
+		p.xz=turn*(3.25*p.xz)+vec2(13.7,27.9)+n*vec2(1.25,-.85);
+		p.y=-3.25*p.y+17.2;
+		amplitude*=.72;
+		pixel*=3.25;
+	}
+	// Each unresolved band converges to its mean, including on the minimap.
+	float patches=smoothstep(-.43,.43,field);
+	if(!veins) return patches;
+	// Dark seams taper and break along the broad stains, keeping the stone between them visible.
+	float seams=(1.-smoothstep(.024,.11,abs(field+.06)))*smoothstep(-.52,.25,coarse);
+	float ink=.60*patches+.40*seams;
+	return mix(ink,.37,smoothstep(.075,.28,footprint/(scale*min(1.,stretch))));
 }
 float layerNoise(vec2 xz,float scale,float footprint) {
 	return (1.-smoothstep(.3,1.,footprint/scale))*layerValueNoise((xz+uPaletteOffset)/scale);
@@ -62,6 +90,8 @@ vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeig
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
 	if(kind==0 || pattern.y<=0.) return base;
+	if(kind==FRACTAL_PATTERN || kind==VEIN_PATTERN)
+		return mix(base,uLayerPatternColor[layer],pattern.y*fractalMask(pos,pattern.z,pattern.w,footprint,kind==VEIN_PATTERN));
 
 	float visibility=patternVisibility(footprint,pattern.z,kind);
 	float partings=0.;

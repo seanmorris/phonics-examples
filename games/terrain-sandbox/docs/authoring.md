@@ -53,6 +53,6 @@ The example is offline. Reproducible local terrain and edit replay do not, by th
 
 In **Surface → Colour layers**, open a layer to choose a colour pattern. **Mottled** blends patches of a second colour, **Streaks** follows upright faces, and **Gravel** scatters small flecks. **Weathered beds** adds thin sediment lines that follow the dipping strata and streaks that cross them. Set the pattern colour and amount, then set its scale in metres. Vertical stretch lengthens the pattern on cliffs. Choose **Apply layers** to preview and save the result.
 
-The layer's elevation and slope masks set where its colour and pattern can appear. **Edge noise** varies those mask boundaries. **Stipple** adds flecks throughout the layer, including on broad stretches of sand or rock. Colour patterns use fixed world coordinates and fade as their features become too small to resolve.
+The layer's elevation and slope masks set where its colour and pattern can appear. **Edge noise** varies those mask boundaries. **Stipple** adds flecks throughout the layer, including on broad stretches of sand or rock. **Fractal noise** blends broad patches with finer flecks. **Mineral veins** adds narrow, broken seams. Limestone Plain uses the first pattern for grass and slope vegetation and stretches the veins down exposed rock faces. Colour patterns use fixed world coordinates and fade as their features become too small to resolve.
 
 Mountain Ridges uses its preset grass, lichen, and snow detail until you apply a custom layer stack. **Use preset colours** restores the mountain shading.

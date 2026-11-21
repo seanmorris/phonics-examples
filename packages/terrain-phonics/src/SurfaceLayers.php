@@ -8,7 +8,7 @@ use Phonics\Render\Program;
 final class SurfaceLayers
 {
 	public const LIMIT = 12;
-	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple'];
+	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins'];
 	public const DEFAULTS = [
 		'color' => '#807355'
 		, 'low' => -1000000.
@@ -133,12 +133,13 @@ final class SurfaceLayers
 	public static function landscape(array $r, TerrainAppearance $appearance): self
 	{
 		$s = $appearance->settings;
-		$style = TerrainAppearance::style($r);
+		$style = ($r['preset'] ?? '') === 'limestone' ? 'limestone' : TerrainAppearance::style($r);
 		$canyon = str_starts_with($style, 'canyon');
 		$rows = match($style)
 		{
 			'canyon' => self::canyonLayers($r, $appearance),
 			'canyon-v1' => self::earlyCanyonLayers($s),
+			'limestone' => self::limestoneLayers($s, ($r['baseBias'] ?? 0.) * ($r['heightScale'] ?? 0.)),
 			'mountain' => [['color' => $s['forestColor']] + self::stipple($s['forestColor'], .70)],
 			default => [['color' => $s['grassColor']]],
 		};
@@ -151,7 +152,7 @@ final class SurfaceLayers
 				+ self::stipple($s['tundraColor'], .70);
 		}
 
-		if(!$canyon)
+		if(!$canyon && $style !== 'limestone')
 		{
 			$rock = $s[$style === 'mountain' ? 'graniteColor' : 'rockColor'];
 			$rows[] = self::exposedRock($s) + ['color' => $rock]
@@ -197,6 +198,40 @@ final class SurfaceLayers
 		}, $linear);
 
 		return sprintf('#%02x%02x%02x', ...$channels);
+	}
+
+	/** Grassland on the valley floor, broken vegetation and weathered stone on its steeper sides. */
+	private static function limestoneLayers(array $s, float $floor): array
+	{
+		$grass = $s['grassColor'];
+		$rock = $s['rockColor'];
+		$deepGrass = self::tint($grass, .18, .32, .47);
+		$dryGrass = self::tint($grass, 1.14, 1.01, .93);
+		$weathering = self::tint($rock, .16, .23, .30);
+		$exposure = self::exposedRock($s);
+		return [
+			['color' => $grass, 'pattern' => 'fractal', 'patternColor' => $deepGrass,
+				'patternScale' => 69., 'patternAmount' => 1.],
+			// Fine grass gives way to darker vegetation at different heights along the feet of the peaks.
+			['color' => $dryGrass, 'high' => $floor - 9., 'fade' => 62., 'noise' => 60., 'scale' => 49.,
+				'pattern' => 'fractal', 'patternColor' => $deepGrass, 'patternScale' => 5.5, 'patternAmount' => .83],
+			// Small outcrops among the darker vegetation break up the boundary between the grass and the cliffs.
+			['color' => $deepGrass, 'slopeLow' => $s['rockSlopeStart'], 'slopeFade' => $exposure['slopeFade'] * .30,
+				'slopeHigh' => $s['rockSlopeEnd'], 'pattern' => 'fractal', 'patternColor' => $rock,
+				'patternScale' => 26., 'patternStretch' => 1.4, 'patternAmount' => .58],
+			['color' => $rock, 'pattern' => 'fractal', 'patternColor' => $weathering,
+				'patternScale' => 94., 'patternStretch' => 2.2, 'patternAmount' => .95] + $exposure,
+			// A second, finer pattern gives exposed faces long mineral stains.
+			['color' => $s['rockBandColor'], 'parent' => 3, 'slopeLow' => 1., 'slopeFade' => .85,
+				'pattern' => 'veins', 'patternColor' => $weathering, 'patternScale' => 26.,
+				'patternStretch' => 5.2, 'patternAmount' => .86],
+		];
+	}
+
+	private static function tint(string $color, float $red, float $green, float $blue): string
+	{
+		$base = TerrainAppearance::linear($color);
+		return self::hex([min(1., $red * $base[0]), min(1., $green * $base[1]), min(1., $blue * $base[2])]);
 	}
 
 	/** Recover all seven exposed beds from the same dipping contacts as the elevation field. */

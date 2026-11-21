@@ -1722,6 +1722,10 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	await expect(page.locator('[data-landform] :invalid')).toHaveCount(0);
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('limestone');
+	const {surfaceLayers} = await status(page);
+	expect(surfaceLayers[0]).toMatchObject({color: '#476239', pattern: 'fractal'});
+	const veins = surfaceLayers.find(layer => layer.pattern === 'veins');
+	expect(surfaceLayers[veins.parent].color).toBe('#777b6f');
 	const document = await save(page);
 	expect(document.landscape.recipe).toMatchObject({seed: 'limestone-plain', version: 2, heightScale: 1600, wallWidth: .56});
 	expect(document.camera.position).toEqual([1152, 105, -2304]);

@@ -109,7 +109,7 @@ and wall controls to raise isolated peaks above a broad plain. Existing recipes 
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
 changing the landscape's playable extent. `SurfaceLayers` accepts an ordered list of up to twelve colour
 layers with height and slope fades, spatial noise, and an optional earlier layer as a parent. Set a layer's
-`pattern` to `mottle`, `streaks`, `gravel` or `bedded` to blend its `patternColor` into the base colour. The
+`pattern` to `mottle`, `streaks`, `gravel`, `bedded`, `stipple`, `fractal` or `veins` to blend its `patternColor` into the base colour. The
 `patternAmount` sets the blend from 0 to 1, `patternScale` sets the feature size in metres, and
 `patternStretch` scales the pattern vertically on cliffs. The same layer settings shade the ground and charts.
 

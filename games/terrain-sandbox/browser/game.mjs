@@ -195,7 +195,7 @@ export function activate({module, canvas, session, services})
 			parent:'Parent index (−1 for none)',period:'Repeat interval · m'};
 		const fields=Object.entries(labels).map(([key,label])=>`<label class="terrain-field">${label}
 			<input data-layer-key="${key}" type="number" step="any" value="${Number(row[key])}"></label>`).join('');
-		const patterns = {none:'Solid', mottle:'Mottled', streaks:'Streaks', gravel:'Gravel', bedded:'Weathered beds', stipple:'Stipple'};
+		const patterns = {none:'Solid', mottle:'Mottled', streaks:'Streaks', gravel:'Gravel', bedded:'Weathered beds', stipple:'Stipple', fractal:'Fractal noise', veins:'Mineral veins'};
 		return `<details data-layer><summary>Layer ${i} · ${row.color}</summary><div class="terrain-grid"><label class="terrain-field">Colour
 			<input type="color" data-layer-key="color" value="${row.color}"></label>
 			<label class="terrain-field">Colour pattern<select data-layer-key="pattern">
