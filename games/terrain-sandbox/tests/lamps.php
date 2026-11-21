@@ -102,7 +102,7 @@ namespace
 	 * Hold keys and a pad for some fixed steps, as the application does each frame.
 	 * @return list<array> The car's state and lamp levels after each step.
 	 */
-	function hold(Session $session, int $steps, array $keys = [], ?array $pad = null): array
+	function hold(Session $session, int $steps, array $keys = [], ?array $pad = null, ?string $untilMotion = null): array
 	{
 		$states = [];
 		for($i = 0; $i < $steps; $i++)
@@ -110,6 +110,7 @@ namespace
 			input($session, ['keys' => $keys, 'pad' => $pad ?? pad()]);
 			$session->step(1 / 60);
 			$states[] = $session->car->state() + ['lamps' => $session->carLamps(1.0)];
+			if($states[$i]['motion'] === $untilMotion) break;
 		}
 		return $states;
 	}
@@ -299,8 +300,8 @@ namespace
 	input($wreck, ['actions' => ['car']]);
 	for($i = 0; $wreck->findingCarSite() && $i < 2000; $i++) input($wreck, []);
 
-	$launch = hold($wreck, 300, ['KeyW' => true]);
-	$crash = hold($wreck, 700, ['KeyS' => true]);
+	$launch = hold($wreck, 500, ['KeyW' => true], untilMotion: 'tumbling');
+	$crash = hold($wreck, 1500, ['KeyS' => true], untilMotion: 'overturned');
 	$after = hold($wreck, 300);
 
 	$down = static fn(array $s): bool => in_array($s['motion'], ['tumbling', 'overturned'], true);

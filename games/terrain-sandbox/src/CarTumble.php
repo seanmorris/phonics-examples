@@ -17,13 +17,13 @@ final class CarTumble
 	// Inverse moments per unit mass about the transverse and longitudinal axes, in m⁻².
 	private const INV_PITCH = .64, INV_ROLL = 2.7;
 	private float $sinYaw, $cosYaw;
-	private float $x, $y, $z, $side = 0, $ahead, $up;
+	private float $x, $y, $z, $ahead, $up;
 	private float $quiet = 0;
 	public bool $onWheels = false, $settled = false, $roofDown = false;
 
 	public function __construct(float $x, float $y, float $z, float $yaw,
 		public float $pitch, public float $roll, float $horizontalSpeed, float $verticalSpeed,
-		private float $pitchRate, private float $rollRate)
+		private float $pitchRate, private float $rollRate, private float $side = 0)
 	{
 		$this->sinYaw = sin($yaw); $this->cosYaw = cos($yaw);
 		[$ox,$oy,$oz] = $this->offsetToCG();
@@ -39,11 +39,11 @@ final class CarTumble
 			-$this->sinYaw*$side + $this->cosYaw*$forward];
 	}
 
-	/** Render origin stays at the tire soles even when the centre of mass is below it. */
+	/** Tire-sole origin, pitch and roll, then forward and sideways velocity in the original yaw frame. */
 	public function pose(): array
 	{
 		[$ox,$oy,$oz] = $this->offsetToCG();
-		return [$this->x-$ox,$this->y-$oy,$this->z-$oz,$this->pitch,$this->roll,$this->ahead];
+		return [$this->x-$ox,$this->y-$oy,$this->z-$oz,$this->pitch,$this->roll,$this->ahead,$this->side];
 	}
 
 	/**
@@ -147,7 +147,7 @@ final class CarTumble
 		}
 		$angular = hypot($this->pitchRate,$this->rollRate);
 		$this->roofDown = $contacts && $upDot < .1*count($contacts);
-		$this->onWheels = $wheels >= 3 && !$this->roofDown && $angular < 1.1 && abs($this->side) < 1.8;
+		$this->onWheels = $wheels >= 3 && !$this->roofDown && $angular < 1.1;
 		$slow = $contacts && $angular < .27 && hypot($this->side,$this->ahead) < .24 && abs($this->up) < .22;
 		$this->quiet = $slow ? $this->quiet + $dt : 0;
 		$this->settled = $this->quiet >= .25;

@@ -210,7 +210,7 @@ final class Car
 			else
 			{
 				$braking = $throttle*$this->speed < 0;
-				$power = $braking ? 13 : ($throttle > 0 ? 8 : 4);
+				$power = $braking ? 13 : ($throttle > 0 ? 9 : 4);
 				$traction = $braking ? $gripFraction : $rear;
 				$this->speed += ($throttle*$power*$traction - (($this->speed <=> 0)*$drag+9.81*$grade)*$gripFraction)*$dt;
 				$pedal = abs($throttle);
@@ -294,9 +294,11 @@ final class Car
 			$pitchRate = max(-3.5,min(3.5,$springs->pitchRate)); $rollRate = max(-4.5,min(4.5,$springs->rollRate));
 			if($tipEnd && $gripFraction > 0) $pitchRate += ($pitch <=> 0)*1.65;
 			if($tipSide && $gripFraction > 0) $rollRate += ($sideLoad <=> 0)*2.1;
-			$this->drift = 0;
+			$horizontal = $this->speed*cos($this->roadPitch);
+			$slip = $heading - $this->yaw;
 			$this->tumble = new CarTumble($this->x,$this->y,$this->z,$this->yaw,$this->pitch,$this->roll,
-				$this->speed*cos($this->roadPitch),$springs->verticalSpeed,$pitchRate,$rollRate);
+				$horizontal*cos($slip),$springs->verticalSpeed,$pitchRate,$rollRate,$horizontal*sin($slip));
+			$this->drift = 0;
 			return $this->stepTumble($dt,$land,$waterLevel,$posts);
 		}
 		$this->x = $x; $this->z = $z; $this->yaw = atan2(sin($yaw), cos($yaw));
@@ -329,7 +331,7 @@ final class Car
 
 		$before = [$this->x, $this->z];
 		$body->advance($dt,$land,$water);
-		[$this->x,$this->y,$this->z,$this->pitch,$this->roll,$this->speed] = $body->pose();
+		[$this->x,$this->y,$this->z,$this->pitch,$this->roll,$this->speed,$side] = $body->pose();
 		if($posts)
 		{
 			[$x,$z] = [$this->x, $this->z];
@@ -339,7 +341,7 @@ final class Car
 			if($blocked !== null)
 			{
 				$body->push($blocked[0] - $x, $blocked[1] - $z, $blocked[3], $blocked[4], self::POST_BOUNCE);
-				[$this->x,$this->y,$this->z,$this->pitch,$this->roll,$this->speed] = $body->pose();
+				[$this->x,$this->y,$this->z,$this->pitch,$this->roll,$this->speed,$side] = $body->pose();
 			}
 		}
 		if(!$body->onWheels && !$body->settled) return true;
@@ -353,13 +355,18 @@ final class Car
 		$reversed = cos($this->pitch) < 0;
 		$heading = $reversed ? $this->yaw + M_PI : $this->yaw;
 		$support = $this->support($land,$water,$this->x,$this->z,$heading);
-		// Leave a margin below the tipping load and let sideways momentum dissipate before gripping.
+		// Leave a margin below the tipping load so the same bank cannot immediately start another tumble.
 		if($support !== null && abs($support[1]) < .98 && abs(tan($support[2])) < 1.22*cos($support[1]))
 		{
-			$this->speed /= cos($support[1]);
-			if($reversed) $this->speed = -$this->speed;
+			$forward = $reversed ? -$this->speed : $this->speed;
+			if($reversed) $side = -$side;
+			// The tire model travels along yaw minus drift, with signed speed for a backwards skid.
+			$sign = $forward < 0 ? -1 : 1;
+			$this->drift = atan2(-$sign*$side,abs($forward));
+			$this->speed = $sign*hypot($forward,$side)/cos($support[1]);
 			$this->yaw = atan2(sin($heading),cos($heading));
-			$this->restOnWheels($support,$this->speed*sin($support[1]));
+			$verticalSpeed = ($forward*sin($support[1]) - $side*tan($support[2]))/cos($support[1]);
+			$this->restOnWheels($support,$verticalSpeed);
 			$this->tumble = null;
 		}
 		elseif($body->settled) return $this->rightCar($land,$water);
