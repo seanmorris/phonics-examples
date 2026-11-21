@@ -21,7 +21,7 @@ use TerrainPhonics\Watercraft;
 final class Session
 {
 	/** Downward acceleration in m/s² for driving and riding. */
-	public const DRIVING_GRAVITY = 12.0;
+	public const DRIVING_GRAVITY = 9.81;
 	/** Current authoritative landscape; replaced by generation or loading. */
 	public Landscape $landscape;
 	/** Shared render and physics environment. */
