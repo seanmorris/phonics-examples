@@ -902,10 +902,28 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await view.evaluate((element, count) => {
 		const gl = element.getContext('webgl2'), draw = gl.drawElements.bind(gl);
 		const viewport = gl.viewport.bind(gl);
+		const triangle = gl.drawArrays.bind(gl);
+		let chartDraw = false;
 		element.carDraws = 0;
 		gl.viewport = (x,y,w,h) => {
-			if(x === 10 && y === 10) element.chartSize = [w,h];
+			chartDraw = x === 10 && y === 10;
+			if(chartDraw) element.chartSize = [w,h];
 			return viewport(x,y,w,h);
+		};
+		gl.drawArrays = (...args) => {
+			if(!chartDraw || element.chartSamples) return triangle(...args);
+			const [size] = element.chartSize;
+			const pixels = () => {
+				const data = new Uint8Array(size*size*4);
+				gl.readPixels(10,10,size,size,gl.RGBA,gl.UNSIGNED_BYTE,data);
+				return new Uint32Array(data.buffer);
+			};
+			const before = pixels();
+			triangle(...args);
+			const after = pixels(), mid = Math.floor(size/2);
+			// The centre and four cardinal points get terrain. All four corners keep the driving scene.
+			element.chartSamples = [[mid,mid],[mid,3],[mid,size-4],[3,mid],[size-4,mid],
+				[3,3],[3,size-4],[size-4,3],[size-4,size-4]].map(([x,y]) => before[y*size+x] !== after[y*size+x]);
 		};
 		gl.drawElements = (...args) => {
 			if(args[1] === count)
@@ -930,8 +948,15 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour');
 	await expect(page.locator('.terrain-instruments')).toBeHidden();
 	const viewport = await view.boundingBox(), mapBox = await map.boundingBox(), dialBox = await dial.boundingBox();
-	expect(mapBox.width).toBe(dialBox.width);
-	expect(mapBox.width).toBeGreaterThan(Math.round(Math.min(184, viewport.width*.235, viewport.height*.245)));
+	expect(mapBox.width).toBeGreaterThan(1.25*dialBox.width);
+	expect(mapBox.width).toBe(mapBox.height);
+	expect(await view.evaluate(el => el.chartSamples)).toEqual([true,true,true,true,true,false,false,false,false]);
+	const outline = await map.evaluate(el => {
+		const ctx = el.getContext('2d'), mid = Math.floor(el.width/2);
+		return [[2,2],[el.width-3,el.height-3],[mid,1]].map(([x,y]) => ctx.getImageData(x,y,1,1).data[3]);
+	});
+	expect(outline.slice(0,2)).toEqual([0,0]);
+	expect(outline[2]).toBeGreaterThan(200);
 	await expect.poll(() => view.evaluate(element => element.chartSize)).toEqual([mapBox.width,mapBox.height]);
 	expect(mapBox.x-viewport.x).toBeCloseTo(10);
 	expect(viewport.x+viewport.width-dialBox.x-dialBox.width).toBeCloseTo(10);

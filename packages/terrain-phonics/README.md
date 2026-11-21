@@ -101,7 +101,7 @@ nearby spline samples to grade the surface and paint the road and shoulders. Whe
 PHP supplies the final samples in edit order. The world overview also uses PHP reconstruction in edited
 areas when its pixels fall between terrain lattice nodes. `Scene::drawChart()` draws
 a heading-up chart at two zoom levels from the same elevation and surface layers. It keeps the vehicle centered
-and limits the wider view near the map boundary to keep the square filled where possible.
+and limits the wider view near the map boundary. Pass `circular: true` to draw a disc within the chart viewport.
 
 Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
 rise, rounded ridges, canyon walls, rolling relief and terracing. Existing recipes expand to the values of

@@ -2779,10 +2779,10 @@ final class Scene
 	}
 
 	public function drawChart(array $xz,float $bearing,bool $wide,int $width,int $height,array $waterColor,
-		?int $size = null, ?float $localSpan = null): ?float
+		?int $size = null, ?float $localSpan = null, bool $circular = false): ?float
 	{
 		return $this->clipmap?->chart($xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,
-			$this->palette(),$this->appearance,$size,$localSpan);
+			$this->palette(),$this->appearance,$size,$localSpan,$circular);
 	}
 
 	public function restore(): void

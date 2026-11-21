@@ -278,14 +278,14 @@ $engine->start(
 			$showMap = $waterRace || $wide || ($jet ? $session->jetMap : $car && $session->carMap);
 			if($showMap)
 			{
-				$mapSize = $car ? $dialSize : null;
+				$mapSize = $car ? (int)round(min(320, $width*.36, $height*.40)) : null;
 				$bearing = M_PI-$vehiclePose['yaw']+($jet && cos($vehiclePose['pitch']) < 0 ? M_PI : 0);
 				$position = [$vehiclePose['x'],$vehiclePose['z']];
 				$span = $scene->drawChart($position,$bearing,$wide,$width,$height,
 					TerrainAppearance::linear($session->settings['waterColor']),$mapSize,
-					$car || $waterRace ? $session->circuitChartSpan() : null);
+					$car || $waterRace ? $session->circuitChartSpan() : null, circular: $car);
 				if($span !== null)
-					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize,
+					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize,'circular'=>$car,
 						'markers'=>$sites ?: ($target === null ? [] : [$target])];
 			}
 			$engine->device->present();

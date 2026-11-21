@@ -3,7 +3,7 @@ precision highp float;
 precision highp int;
 // LAYERS
 uniform highp sampler2D uOverview,uMapInk,uFine,uFineInk;
-uniform bool uPacked;
+uniform bool uPacked,uCircular;
 uniform vec4 uChart; // centre, span, viewport side
 uniform vec4 uLocal; // world lower left, step, interior span
 uniform vec2 uHeading,uViewportOrigin;
@@ -40,6 +40,7 @@ vec4 chartSample(vec2 pos,out int ink) {
 }
 void main() {
 	vec2 uv=((gl_FragCoord.xy-uViewportOrigin)/uChart.w-.5)*vec2(1.,-1.);
+	if(uCircular && dot(uv,uv)>.25) discard;
 	vec2 pos=uChart.xy+mat2(uHeading.x,uHeading.y,-uHeading.y,uHeading.x)*uv*uChart.z;
 	if(any(greaterThan(abs(pos),vec2(uExtent*.5)))) { color=vec4(.07,.13,.15,1); return; }
 	int ink;

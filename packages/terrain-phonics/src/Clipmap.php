@@ -731,6 +731,7 @@ final class Clipmap
 		, TerrainAppearance $appearance
 		, ?int $size = null
 		, ?float $localView = null
+		, bool $circular = false
 	): ?float {
 		if(!$this->overview) return null;
 
@@ -768,6 +769,7 @@ final class Clipmap
 
 		$step = $level['step'];
 		glUniform2f($p->location('uHeading'), $c, $s);
+		glUniform1i($p->location('uCircular'), (int)$circular);
 		glUniform4f($p->location('uChart'), $position[0], $position[1], $span, $n);
 
 		glUniform4f(

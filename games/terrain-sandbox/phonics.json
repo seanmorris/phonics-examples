@@ -85,7 +85,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-yMOQ5s4OPbv2PJkWYpH0hFgJs32XanTTS4Wk7cu28j4=",
+    "application.php": "sha256-oYZLKipRGqa/Fmks7CUgXfXd3mCqbSZpANMiVLtFvVo=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
@@ -109,7 +109,7 @@
     "assets/vehicles/model.vert": "sha256-LSUFI8Q0C/USFnEGl0mK5wa2Hh6CA7FrTWHaTUak6zc=",
     "autoload.php": "sha256-WiZy3+K8/EN1mrNHQvmERBoiVvLHzjCmHNdWgI54Kb0=",
     "browser/cockpit.mjs": "sha256-TL03wPPGeUva91NiM1oOTWku8pRT1TMZiOABsTOddCg=",
-    "browser/flight-map.mjs": "sha256-DKfCBh+jrHEWICeWI/jEeVoGo1K9REs10aGLyh6+bpE=",
+    "browser/flight-map.mjs": "sha256-xjNxspYu2AcwQJftDp8DxQk/hFtt0Es1sps3BR8qKEs=",
     "browser/game.mjs": "sha256-HjRBd9S7VZdui1SoiT+cVMNcxqMLhJqk9LTNDLwtJTM=",
     "browser/speedometer.mjs": "sha256-4Uuf0Tq9KUQqmwsSY/7vTUHOjawMmnvKJ7kyFSUDhxU=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
