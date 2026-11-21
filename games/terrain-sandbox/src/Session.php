@@ -1476,7 +1476,17 @@ final class Session
 				$variant = $savedCircuit['variant'];
 				$circuit = Circuit::import($savedCircuit['route'] ?? null,$candidate->recipe()['worldSize']/2);
 				$derived = $circuit->course($candidate,$this->gateShapes,$course->laps(),$variant === 'flooded');
-				if($derived->export() != $course->export())
+				$expected = $derived->export();
+				$savedGates = $course->export();
+				$oldRoadHeight = $this->gateShapes->kind('road')['size']['default'][1];
+				if($variant === 'dry' && ($course->start()['height'] ?? null) === $oldRoadHeight)
+				{
+					// Older generated circuits used the stock road height for every gate.
+					foreach($expected['gates'] as &$gate) $gate['height'] = $oldRoadHeight;
+					unset($gate);
+					$course = $derived;
+				}
+				if($expected != $savedGates)
 					throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
 			}
 		}

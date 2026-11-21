@@ -114,6 +114,8 @@ final class Race
 			$measure = $course->measure($target);
 			$window = $measure['window'];
 			$window['bottom'] -= self::RIDE[$vehicle] ?? 0.0;
+			// A car can jump a road gantry anywhere between its posts.
+			if($vehicle === 'car' && $target['kind'] === 'road') $window['top'] = INF;
 			$fraction = self::crossing($target, $window, $from, $to);
 			if($fraction === null || $fraction <= $reached) break;
 			if($this->state === 'running' && $target['id'] === $this->startGate

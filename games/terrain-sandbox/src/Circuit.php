@@ -83,12 +83,13 @@ final class Circuit
 		if($flooded && $this->floodedLevel === null) throw new \RuntimeException('This circuit has no flooded variant.');
 		$course = new Course($shapes);
 		$ground = $landscape->height(...);
+		$kind = $flooded ? 'water' : 'road';
+		['width'=>$width,'height'=>$height] = $shapes->fit($kind,
+			$this->featureArea === null ? null : ($flooded ? 24. : 30.),
+			$flooded ? null : 2 * $shapes->kind('road')['size']['default'][1]);
 		foreach($this->gates() as $i => [$x,$z,$yaw])
 		{
 			$role = $i === 0 ? 'start' : 'checkpoint';
-			$kind = $flooded ? 'water' : 'road';
-			['width'=>$width,'height'=>$height] = $shapes->fit($kind,
-				$this->featureArea === null ? null : ($flooded ? 24. : 30.), null);
 			$placed = $course->place($role, $kind, $x, $flooded ? $this->floodedLevel : $ground($x,$z), $z, $yaw, $laps,
 				$width,$height,$ground);
 			if($placed['refused'] !== null) throw new \RuntimeException('The circuit needs more room between its gates.');

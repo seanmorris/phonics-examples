@@ -285,6 +285,25 @@ expect(abs(Race::crossing($high, $airWindow, [3, 201, 500 - $step / 3], [3, 201,
 expect(Race::crossing($high, $airWindow, [3, 199.9, 499], [3, 199.9, 501]) === null
 	&& Race::crossing($high, $airWindow, [3, 200 + $air['window']['top'] + .1, 499], [3, 200 + $air['window']['top'] + .1, 501]) === null,
 	'An air gate counts only between its window\'s bottom and top edges');
+// Jump a rotated road course, crossing the checkpoint plane while descending.
+$jumpCourse = new Course;
+foreach(['start'=>0., 'checkpoint'=>40., 'finish'=>80.] as $role=>$x)
+	$jumpCourse->place($role, 'road', $x, 0, 0, M_PI / 2, height: 2 * $top);
+$jumpRace = new Race;
+$jumpRace->advance($jumpCourse, [-2,0,0], [2,0,0], 0, 1, 'car', 1);
+foreach([
+	[[38,18,$half+1],[42,8,$half+1]], // Beyond the posts.
+	[[42,18,0],[38,8,0]],              // Wrong direction.
+	[[38,-4,0],[42,-4,0]],             // Below the ground.
+	[[78,18,0],[82,8,0]],              // Finish before checkpoint.
+] as [$from,$to])
+	expect($jumpRace->advance($jumpCourse,$from,$to,1,1,'car',1) === null, 'A missed or out-of-order jump earns no split');
+$jumpRace->advance($jumpCourse, [38,18,0], [42,8,0], 4, 1, 'car', 1);
+$jumpRace->advance($jumpCourse, [78,15,0], [82,14,0], 6, 1, 'car', 1);
+$jumpResult = $jumpRace->status($jumpCourse,7);
+expect($jumpResult['state'] === 'finished' && array_column($jumpResult['splits'],'time') === [4.,6.],
+	'A car sailing between the posts above the boards earns the checkpoint and finish at their crossing times');
+
 // One 60 m step of a jet passes the start gate, a checkpoint and the finish gate, each timed where the step meets it.
 // The finish gate stands one air gate width beyond the start gate, the nearest it can stand without merging.
 $course = new Course;
@@ -1030,6 +1049,24 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 	input($copy, ['actions' => [['type'=>'load','json'=>$generator->save()]]]);
 	expect($copy->status()['circuit'] == $active && $copy->course->export() == $generator->course->export(),
 		'Save and load preserve the applied circuit and its gate positions');
+	if($variant === 'dry')
+	{
+		$stock = $generator->gateShapes->kind('road')['size']['default'][1];
+		expect(array_unique(array_column($gates,'height')) === [2 * $stock],
+			'Every dry circuit gate has double the stock road clearance');
+		$legacy = json_decode($generator->save(), true, flags: JSON_THROW_ON_ERROR);
+		foreach($legacy['course']['gates'] as &$gate) $gate['height'] = $stock;
+		unset($gate);
+		$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+		expect($copy->course->export() === $generator->course->export(), 'A saved stock-height circuit upgrades on load');
+		$legacy['course']['gates'][1]['x'] += 1;
+		try {
+			$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+			throw new RuntimeException('An altered legacy circuit was accepted');
+		} catch(InvalidArgumentException $error) {
+			expect($error->getMessage() === 'The saved circuit and its gates disagree.', 'Upgrading still checks gate placement');
+		}
+	}
 	if($vehicle === 'car') enterCar($copy);
 	else input($copy, ['actions'=>[$vehicle]]);
 	input($copy, ['keys'=>['KeyW'=>true]]);
