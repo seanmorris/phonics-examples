@@ -168,6 +168,8 @@ foreach($sizes as $kind => $list) foreach($list as [$width, $height])
 			min($found['squares']), max($found['squares']), $column));
 	if($kind === 'road')
 	{
+		expect(near($frame['high'][1] - $frame['low'][1], 1.991, .001) && near($label[1], 1.762, .001),
+			"$name carries the double-height board and printed label at every opening size");
 		$posts = $found['parts'][GATE_POST];
 		expect(near($posts['high'][0] - 2 * $road['posts'][1]['halfSize'], $width / 2, 1e-4)
 			&& near($posts['high'][1], $height + $road['posts'][1]['top'] - $road['window']['top'], .001)

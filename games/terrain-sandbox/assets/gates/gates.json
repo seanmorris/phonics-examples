@@ -20,20 +20,20 @@
 					"z": 0,
 					"halfSize": 0.4,
 					"bottom": -8.0,
-					"top": 4.137
+					"top": 5.132
 				},
 				{
 					"x": 7.062,
 					"z": 0,
 					"halfSize": 0.4,
 					"bottom": -8.0,
-					"top": 4.137
+					"top": 5.132
 				}
 			],
 			"extent": {
 				"halfWidth": 7.582,
 				"bottom": -8.0,
-				"top": 4.28,
+				"top": 5.275,
 				"halfDepth": 0.53
 			},
 			"size": {

@@ -23,9 +23,9 @@ final class GateShapes
 		'roles' => self::PRINTS,
 		'kinds' => [
 			'road' => ['mesh' => 'road.mesh.bin.gz', 'window' => ['halfWidth' => 6.662, 'bottom' => 0, 'top' => 3.073],
-				'posts' => [['x' => -7.062, 'z' => 0, 'halfSize' => .4, 'bottom' => -8.0, 'top' => 4.137],
-					['x' => 7.062, 'z' => 0, 'halfSize' => .4, 'bottom' => -8.0, 'top' => 4.137]],
-				'extent' => ['halfWidth' => 7.582, 'bottom' => -8.0, 'top' => 4.28, 'halfDepth' => .53],
+				'posts' => [['x' => -7.062, 'z' => 0, 'halfSize' => .4, 'bottom' => -8.0, 'top' => 5.132],
+					['x' => 7.062, 'z' => 0, 'halfSize' => .4, 'bottom' => -8.0, 'top' => 5.132]],
+				'extent' => ['halfWidth' => 7.582, 'bottom' => -8.0, 'top' => 5.275, 'halfDepth' => .53],
 				'size' => ['width' => [6, 60], 'height' => [2, 40]],
 				'board' => ['label' => [3.0008, 2.9774], 'column' => [.32052, .32183], 'columns' => 14, 'baked' => 88]],
 			'water' => ['mesh' => 'water.mesh.bin.gz', 'window' => ['halfWidth' => 4.458, 'bottom' => 0, 'top' => 3.596],
