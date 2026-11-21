@@ -1710,6 +1710,36 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 	await expect(page.locator('.terrain-sandbox')).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
+test('Limestone Plain generates its skyline and round-trips as a named preset', async({page}) => {
+	await page.setViewportSize({width: 720, height: 460});
+	await page.goto('/games/terrain-sandbox/');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	const preset = page.locator('[name="preset"]');
+	const seed = page.locator('[name="seed"]');
+	await preset.selectOption({label: 'Limestone Plain'});
+	await expect(seed).toHaveValue('limestone-plain');
+	await expect(page.locator('[name="floorWidth"]')).toHaveValue('0.24');
+	await expect(page.locator('[data-landform] :invalid')).toHaveCount(0);
+	await press(page, 'generate');
+	await expect.poll(async() => (await status(page)).recipe.preset).toBe('limestone');
+	const document = await save(page);
+	expect(document.landscape.recipe).toMatchObject({seed: 'limestone-plain', version: 2, heightScale: 1600, wallWidth: .56});
+	expect(document.camera.position).toEqual([1152, 105, -2304]);
+	expect(document.settings).toMatchObject({grassColor: '#476239', snowline: 3000, waterLevel: -40, azimuth: 106});
+	await preset.selectOption('coast');
+	await expect(seed).toHaveValue('first-light');
+	await seed.fill('my-karst');
+	await preset.selectOption('limestone');
+	await expect(seed).toHaveValue('my-karst');
+	await load(page, fixture());
+	await load(page, document);
+	await expect(preset).toHaveValue('limestone');
+	await expect(seed).toHaveValue('limestone-plain');
+	await seed.fill('another-plain');
+	await press(page, 'generate');
+	await expect.poll(async() => (await status(page)).recipe).toEqual({...document.landscape.recipe, seed: 'another-plain'});
+});
+
 test('landform parameters and nested colours survive a save and reload', async({page}) => {
 	await page.setViewportSize({width: 720, height: 460});
 	await boot(page);

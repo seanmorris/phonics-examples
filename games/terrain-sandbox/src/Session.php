@@ -73,6 +73,13 @@ final class Session
 	public string $mode = 'fly';
 	/** Simulation clock in seconds. */
 	public float $time = 0;
+	private const SKY_DEFAULTS = ['azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0];
+	private const LIMESTONE_SKY = ['azimuth' => 106.0, 'elevation' => 36.0, 'haze' => .7];
+	public const LIMESTONE_SURFACE = [
+		'snowline' => 3000.0, 'grassColor' => '#476239', 'rockColor' => '#777b6f',
+		'rockBandColor' => '#85897c', 'rockSlopeStart' => .25, 'rockSlopeEnd' => .73,
+	];
+
 	/**
 	 * UI configuration, serialized alongside the terrain. gateAltitude hangs a gate placed on land that many metres
 	 * above the ground, which makes it an air gate. gateWidth and gateHeight size a new gate's opening in metres, and
@@ -82,12 +89,12 @@ final class Session
 		'tool' => 'navigate', 'radius' => 40.0, 'amount' => 12.0, 'flattenHeight' => 0.0,
 		'material' => 'grass', 'roadWidth' => 8.0, 'roadShoulder' => 12.0, 'roadRaise' => 0.0,
 		'circuitRelief'=>120.0, 'circuitStartHeight'=>null,
-		'azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0, 'exposure' => 1.0,
+		'exposure' => 1.0,
 		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
 		'balloonAltitude' => 100.0, 'balloonTool' => 'place',
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
-	] + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
+	] + self::SKY_DEFAULTS + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
 	/** The terrain's colours, banding and blending, which the scene draws with. Its settings are part of $settings. */
 	public TerrainAppearance $terrainAppearance;
 	public ?\TerrainPhonics\SurfaceLayers $surfaceLayers=null;
@@ -193,6 +200,7 @@ final class Session
 		$this->jet = new Jet;
 		$this->balloons = new BalloonPractice;
 		$this->chase = new CarChase;
+		$this->switchPresetLook('coast', $this->landscape->recipe()['preset']);
 		$this->resetCamera();
 		$this->sun();
 	}
@@ -761,23 +769,42 @@ final class Session
 		$this->dirty = true;
 	}
 
+	/** Keep authored colours and lighting when moving between preset defaults. */
+	private function switchPresetLook(string $previous, string $next): void
+	{
+		if($previous === $next || ($previous !== 'limestone' && $next !== 'limestone')) return;
+		$standard = TerrainAppearance::DEFAULTS + self::SKY_DEFAULTS;
+		$limestone = self::LIMESTONE_SURFACE + self::LIMESTONE_SKY;
+		$changes = [];
+		foreach($limestone as $key => $value)
+		{
+			$old = $previous === 'limestone' ? $value : $standard[$key];
+			if($this->settings[$key] === $old) $changes[$key] = $next === 'limestone' ? $value : $standard[$key];
+		}
+		// The two endpoints belong to the same blend. Keep an authored range together.
+		if(!isset($changes['rockSlopeStart'], $changes['rockSlopeEnd'])) unset($changes['rockSlopeStart'], $changes['rockSlopeEnd']);
+		$this->setTerrainAppearance(new TerrainAppearance($changes + $this->settings));
+		foreach(array_intersect_key($changes, self::SKY_DEFAULTS) as $key => $value) $this->setting($key, $value);
+	}
+
+	/** Values the Landscape tab fills when a preset is selected. */
+	public static function preset(string $name): array
+	{
+		$options = match($name) {
+			'mountain' => ['heightScale' => 1400., 'baseFrequency' => 1 / 2200],
+			'canyon' => ['heightScale' => 650., 'baseFrequency' => 1 / 4000, 'terraceSpacing' => 80., 'waterLevel' => -450.],
+			default => [],
+		};
+		$fields = (new \TerrainPhonics\Recipe(['preset' => $name] + $options))->values();
+		foreach(['preset', 'version', 'maxTiles', 'tileSize', 'worldSize', 'spacing'] as $key) unset($fields[$key]);
+		return $fields;
+	}
+
 	/**
 	 * Dispatch a single authoring action.
 	 * @param mixed $action Action name or structured action record.
 	 * @return void Stages edits or changes session state.
 	 */
-	public static function preset(string $name): array
-	{
-		$base=new \TerrainPhonics\Recipe(['preset'=>$name]);
-		$fields=$base->values();
-		foreach(['seed','preset','version','maxTiles','tileSize','worldSize','spacing'] as $key) unset($fields[$key]);
-		$fields['heightScale']=match($name){'coast'=>420.,'mountain'=>1400.,'canyon'=>650.};
-		$fields['baseFrequency']=1/match($name){'coast'=>6000,'mountain'=>2200,'canyon'=>4000};
-		$fields['terraceSpacing']=$name==='canyon'?80.:0.;
-		$fields['waterLevel']=$name==='canyon'?-450.:0.;
-		return $fields;
-	}
-
 	private function action(mixed $action): void
 	{
 		if(!is_array($action)) $action = ['type' => $action];
@@ -817,15 +844,16 @@ final class Session
 				$defaults=self::preset($preset);
 				$recipe=$defaults+$this->landscape->recipe();
 				$recipe['preset']=$preset;
-				$recipe['version']=$preset==='canyon'?2:1;
-				$recipe['seed']=(string)($action['seed'] ?? 'first-light');
+				unset($recipe['version']); // A new landscape uses the selected preset's current recipe version.
 				foreach($defaults + ['worldSize' => $recipe['worldSize']] as $key=>$default) if(array_key_exists($key,$action)) {
 					if(is_string($default)) $recipe[$key]=(string)$action[$key];
 					elseif(!is_numeric($action[$key]) || !is_finite((float)$action[$key]))
 						throw new \InvalidArgumentException('Invalid terrain generation parameter.');
 					else $recipe[$key]=is_int($default)?(int)$action[$key]:(float)$action[$key];
 				}
+				$previous = $this->landscape->recipe()['preset'];
 				$this->replace(new Landscape($recipe));
+				$this->switchPresetLook($previous, $preset);
 				$this->resetCamera();
 				$this->message = 'Generated ' . $recipe['preset'] . ' terrain. Detail streams in as you fly.';
 				if($this->course->count() > 0) $this->message .= ' The new landscape starts without gates.';
@@ -1201,17 +1229,29 @@ final class Session
 	private function resetCamera(): void
 	{
 		$half = $this->landscape->recipe()['worldSize'] / 2;
-		$coast = $this->landscape->recipe()['preset'] === 'coast';
-		$canyon = $this->landscape->recipe()['preset'] === 'canyon';
-		$x = $canyon ? -min(340, $half * .35) : min($coast ? 3600 : 600, $half * ($coast ? .22 : .15));
-		$z = min($canyon ? 1600 : 1800, $half * .3);
-		$ground = $this->landscape->height($x, $z);
-		$height = $coast ? max(300, $this->water->level() + 300, $ground + 280)
-			: ($canyon ? max(50, $this->water->level() + 120, $ground + 120)
-				: max(500, $this->water->level() + 300, $ground + 400));
-		$this->camera->position = [$x,$height,$z];
-		$this->camera->yaw = $coast ? .7 : ($canyon ? 2.68 : -.3);
-		$this->camera->pitch = $coast ? -.35 : ($canyon ? -.17 : -.25);
+		$preset = $this->landscape->recipe()['preset'];
+		if($preset === 'limestone')
+		{
+			$x = min(1152., $half * .3);
+			$z = -min(2304., $half * .3);
+			$this->camera->position = [$x, max(105., $this->landscape->height($x, $z) + 45., $this->water->level() + 45.), $z];
+			$this->camera->yaw = deg2rad(316);
+			$this->camera->pitch = .058;
+		}
+		else
+		{
+			$coast = $preset === 'coast';
+			$canyon = $preset === 'canyon';
+			$x = $canyon ? -min(340, $half * .35) : min($coast ? 3600 : 600, $half * ($coast ? .22 : .15));
+			$z = min($canyon ? 1600 : 1800, $half * .3);
+			$ground = $this->landscape->height($x, $z);
+			$height = $coast ? max(300, $this->water->level() + 300, $ground + 280)
+				: ($canyon ? max(50, $this->water->level() + 120, $ground + 120)
+					: max(500, $this->water->level() + 300, $ground + 400));
+			$this->camera->position = [$x,$height,$z];
+			$this->camera->yaw = $coast ? .7 : ($canyon ? 2.68 : -.3);
+			$this->camera->pitch = $coast ? -.35 : ($canyon ? -.17 : -.25);
+		}
 		$this->mode = 'fly'; $this->carSearch = null; $this->releasePin();
 	}
 
@@ -1547,6 +1587,7 @@ final class Session
 		catch(\RuntimeException | \InvalidArgumentException $error) { $candidate->close(); throw $error; }
 		$settings = $data['settings'] ?? [];
 		if(!is_array($settings)) throw new \InvalidArgumentException('Invalid saved settings.');
+		if($candidate->recipe()['preset'] === 'limestone') $settings += self::LIMESTONE_SURFACE + self::LIMESTONE_SKY;
 		// Before version 3, gateHeight was the height an air gate hangs at.
 		if($data['version'] < 3 && array_key_exists('gateHeight', $settings))
 		{

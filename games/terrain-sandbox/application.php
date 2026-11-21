@@ -12,6 +12,7 @@ use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
+use TerrainPhonics\Recipe;
 use TerrainSandbox\Car;
 use TerrainSandbox\DeliveryBeacon;
 use TerrainSandbox\DeliveryRun;
@@ -74,7 +75,8 @@ $hudShown = false;
 (vrzno_env('terrainSurface'))(json_encode(['groups' => TerrainPhonics\TerrainAppearance::GROUPS,
 	'ranges' => TerrainPhonics\TerrainAppearance::RANGES, 'defaults' => TerrainPhonics\TerrainAppearance::DEFAULTS,
 	'uses' => TerrainPhonics\TerrainAppearance::USES,
-	'presets'=>array_combine(['coast','mountain','canyon'],array_map([Session::class,'preset'],['coast','mountain','canyon']))], JSON_THROW_ON_ERROR));
+	'presetSurfaces' => ['limestone' => Session::LIMESTONE_SURFACE],
+	'presets' => array_combine(Recipe::PRESETS, array_map([Session::class, 'preset'], Recipe::PRESETS))], JSON_THROW_ON_ERROR));
 
 // Slow GPU frames can be hundreds of milliseconds apart. Give a pending route short turns in the gaps.
 $window = new \Vrzno;

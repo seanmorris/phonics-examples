@@ -6,6 +6,8 @@ Before generating, open **Landform parameters** to change the height scale, fine
 
 The canyon preset lowers water to −450 metres and starts inside the valley, exposing both its floor and steep walls. After generation, use **Water level** in the **Water** section to flood or expose the existing ground.
 
+**Limestone Plain** places steep, separate peaks in a grassy plain. The preset seed, `limestone-plain`, opens with several peaks in view. Increase **Floor width** for more open ground between them, or change the seed for a different arrangement.
+
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 

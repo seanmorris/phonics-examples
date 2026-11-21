@@ -180,7 +180,8 @@ export function activate({module, canvas, session, services})
 			const group = reset.dataset.surfaceReset;
 			const keys = group === 'all' ? Object.keys(surface.defaults) : surface.groups[group];
 
-			for(const key of keys) values[key] = surface.defaults[key];
+			const presetDefaults = surface.presetSurfaces[latest?.recipe?.preset];
+			for(const key of keys) values[key] = presetDefaults?.[key] ?? surface.defaults[key];
 		};
 
 		surfaceStyle = '';
@@ -230,7 +231,7 @@ export function activate({module, canvas, session, services})
 			lastLayers=layerKey;
 		}
 
-		if(state.surfaceStyle !== surfaceStyle)
+		if(state.surfaceStyle !== surfaceStyle || state.generation !== lastGeneration)
 		{
 			surfaceStyle = state.surfaceStyle;
 			const uses = new Set(surface.uses[surfaceStyle]);
@@ -243,7 +244,7 @@ export function activate({module, canvas, session, services})
 
 			frame.querySelector(
 				'[data-surface-note]'
-			).textContent = `Settings the ${SURFACE_STYLES[surfaceStyle]} ground `
+			).textContent = `Settings the ${state.recipe.preset === 'limestone' ? 'limestone' : SURFACE_STYLES[surfaceStyle]} ground `
 				+ 'reads. The landscape file saves them.';
 		}
 
@@ -283,11 +284,14 @@ export function activate({module, canvas, session, services})
 		}, {signal});
 	}
 
-	frame.querySelector('[name="preset"]').addEventListener('change', event => {
-		for(const [key,value] of Object.entries(surface.presets[event.target.value])) {
-			const field=frame.querySelector(`[name="${key}"]`);
-			if(field) field.value=value;
-		}
+	const presetField = frame.querySelector('[name="preset"]');
+	const seedField = frame.querySelector('[name="seed"]');
+	let presetSeed = seedField.defaultValue;
+	presetField.addEventListener('change', () => {
+		const {seed, ...parameters} = surface.presets[presetField.value];
+		if(seedField.value === '' || seedField.value === presetSeed) seedField.value = seed;
+		presetSeed = seed;
+		for(const [name, value] of Object.entries(parameters)) frame.querySelector(`[name="${name}"]`).value = value;
 	}, {signal});
 
 	frame.querySelector('[data-file]').addEventListener('change', async event => {
@@ -672,8 +676,8 @@ export function activate({module, canvas, session, services})
 
 			if(state.generation !== lastGeneration)
 			{
-				frame.querySelector('[name="preset"]').value = state.recipe.preset;
-				frame.querySelector('[name="seed"]').value = state.recipe.seed;
+				presetField.value = state.recipe.preset;
+				presetSeed = surface.presets[state.recipe.preset].seed;
 				const worldSize = frame.querySelector('[name="worldSize"]');
 				const customSize = worldSize.querySelector('[data-loaded-size]');
 				const size = String(state.recipe.worldSize);
@@ -1278,7 +1282,7 @@ function markup()
 	<div class="lab-workspace">
 	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
 	<div class="lab-pages"><section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
-	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option></select></label>
+	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option><option value="limestone">Limestone Plain</option></select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
 	<label class="terrain-field">World size<select name="worldSize">
 		<option value="32768">32.8 km per side</option>
@@ -1323,7 +1327,7 @@ function markup()
 		<small id="${hintPrefix}-bedding">Shapes terraces into irregular rock beds with eroded channels. Requires terrace spacing and strength above zero.</small></div>
 	</div></fieldset>
 	<fieldset class="terrain-landform-group"><legend>Fine detail</legend><div class="terrain-grid">
-	<div class="landform-field"><label class="terrain-field">Fine detail · m<input aria-describedby="${hintPrefix}-detailAmplitude" name="detailAmplitude" type="number" min="0" max="1000" value="28"></label>
+	<div class="landform-field"><label class="terrain-field">Fine detail · m<input aria-describedby="${hintPrefix}-detailAmplitude" name="detailAmplitude" type="number" min="0" max="1000" step="any" value="28"></label>
 		<small id="${hintPrefix}-detailAmplitude">Sets the height of the first layer of small bumps on the terrain.</small></div>
 	<div class="landform-field"><label class="terrain-field">Detail octaves<input aria-describedby="${hintPrefix}-detailOctaves" name="detailOctaves" type="number" step="any"></label>
 		<small id="${hintPrefix}-detailOctaves">Sets how many progressively finer layers of bumps are added.</small></div>

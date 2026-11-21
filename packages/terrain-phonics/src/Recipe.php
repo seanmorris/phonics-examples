@@ -5,6 +5,9 @@ namespace TerrainPhonics;
 /** Validated serializable terrain recipe and independent coarse slope guide. */
 final class Recipe
 {
+	/** Named sets of coefficients for the shared terrain field. */
+	public const PRESETS = ['coast', 'mountain', 'canyon', 'limestone'];
+
 	/** Parameters are immutable after normalization. */
 	private array $values;
 	/** One deterministic noise source, sampled with distinct octave offsets. */
@@ -27,6 +30,14 @@ final class Recipe
 	/** Shape coefficients copied by preset selection and by the legacy recipe loader. */
 	public static function shapeDefaults(string $preset, int $version = 2): array
 	{
+		if($preset === 'limestone')
+		return [
+			'seed' => 'limestone-plain', 'heightScale' => 1600., 'baseFrequency' => 1 / 1450, 'floorWidth' => .24, 'wallWidth' => .56,
+			'wallHeight' => 1., 'rolling' => 0., 'secondary' => 0., 'directionalRise' => 0.,
+			'warpAmplitude' => 120., 'warpFrequency' => 1 / 3800, 'detailAmplitude' => 1.2, 'detailOctaves' => 4,
+			'terraceStrength' => 0., 'waterLevel' => -40., 'surround' => 'mountains'
+		] + self::shapeDefaults('coast', $version);
+
 		$coast = $preset === 'coast';
 		$canyon = $preset === 'canyon';
 		return [
@@ -47,8 +58,9 @@ final class Recipe
 	 */
 	public function __construct(array $values = [])
 	{
-		$canyon = ($values['preset'] ?? '') === 'canyon';
-		$version = array_key_exists('version', $values) ? $values['version'] : ($canyon ? 2 : 1);
+		$preset = array_key_exists('preset', $values) ? $values['preset'] : 'mountain';
+		$canyon = $preset === 'canyon';
+		$version = array_key_exists('version', $values) ? $values['version'] : ($canyon || $preset === 'limestone' ? 2 : 1);
 		$defaults = [
 			'version' => $version
 			, 'seed' => 'first-light'
@@ -75,11 +87,10 @@ final class Recipe
 			, 'terraceStrength' => $canyon && $version === 2 ? .92 : .7
 		];
 
-		$preset = array_key_exists('preset', $values) ? $values['preset'] : 'mountain';
-		if(!in_array($preset, ['mountain','canyon','coast'], true))
-		throw new \InvalidArgumentException('Terrain preset must be mountain, canyon, or coast');
+		if(!in_array($preset, self::PRESETS, true))
+		throw new \InvalidArgumentException('Unknown terrain preset. Expected one of ' . implode(', ', self::PRESETS));
 		if(!in_array($version, [1,2], true)) throw new \InvalidArgumentException('Unsupported terrain recipe version');
-		$defaults += self::shapeDefaults($preset, $version);
+		$defaults = self::shapeDefaults($preset, $version) + $defaults;
 		if(array_diff_key($values, $defaults)) throw new \InvalidArgumentException('Unknown terrain recipe field');
 
 		$values += $defaults;

@@ -127,6 +127,23 @@ expect($session->download() === null, 'Downloads are consumed once');
 $session->close();
 expect($session->landscape->stats()['closed'], 'Close releases the landscape');
 
+$karst = new Session;
+input($karst, ['actions' => [['type' => 'generate', 'preset' => 'limestone']]]);
+expect($karst->landscape->recipe()['seed'] === 'limestone-plain' && $karst->water->level() === -40.,
+	'Limestone defaults supply the example seed and a dry plain.');
+expect($karst->landscape->height(-2496, -7552) > 1400 && abs($karst->landscape->height(1152, -2304)) < 3,
+	'The example peak and the flat ground at its starting viewpoint retain their relief.');
+input($karst, ['values' => ['grassColor' => '#224422', 'haze' => 2.0, 'rockSlopeStart' => .65]]);
+input($karst, ['actions' => [['type' => 'generate', 'preset' => 'limestone', 'seed' => 'second', 'wallWidth' => .7]]]);
+expect($karst->landscape->recipe()['wallWidth'] === .7 && $karst->landscape->recipe()['seed'] === 'second',
+	'Limestone uses authored shape coefficients and seeds.');
+input($karst, ['actions' => [['type' => 'generate', 'preset' => 'mountain']]]);
+expect($karst->settings['snowline'] === 340.0 && $karst->settings['azimuth'] === 125.0
+	&& $karst->settings['grassColor'] === '#224422' && $karst->settings['haze'] === 2.0
+	&& $karst->settings['rockSlopeStart'] === .65 && $karst->settings['rockSlopeEnd'] === .73,
+	'Leaving Limestone restores the ordinary palette and sun while preserving authored settings.');
+$karst->close();
+
 $far = new Session;
 expect(array_map('floatval', $far->camera->position) === [3600.0,300.0,1800.0] && $far->camera->yaw === .7,
 	'The coastal home view faces editable land and its shoreline');
