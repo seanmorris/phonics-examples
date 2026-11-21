@@ -57,6 +57,20 @@ $s->step(1/60);
 check($s->delivery->delivered === 1 && !$s->delivery->carrying, 'Drive into the drop to complete delivery');
 $second = $next('pickup');
 check($s->delivery->sites() === [$depot,$second] && $second !== $pickup, 'The original depot stays marked for a different second package');
+$air = static fn(array $site, float $x, float $y, float $z) => [
+	'x'=>$site['x']+$x,'y'=>$site['y']+$y,'z'=>$site['z']+$z,'motion'=>'airborne',
+] + $to;
+check($cross($air($second,-12,8.01,0),$air($second,12,8.01,0)) === null, 'A jump above the pickup ceiling misses');
+check($cross($air($second,-12,-4,0),$air($second,12,-4,0)) === null, 'Passing under the site cannot collect it');
+check($cross($air($second,-12,7,3.1),$air($second,12,7,3.1)) === null, 'A low jump wide of the box misses');
+check($cross($air($second,-12,16,0),$air($second,12,4,0)) === null, 'Descending to pickup height after leaving the box misses');
+check($cross($air($second,-12,14,0),$air($second,12,4,0)) !== null && $s->delivery->carrying,
+	'Descending through the edge of the pickup collects the box even if the car crossed its centre too high');
+check($cross($air($depot,-12,6,6.1),$air($depot,12,6,6.1)) === null, 'A low jump outside the depot misses');
+check($cross($air($depot,5,12,0),$air($depot,5,8.01,0)) === null, 'Crossing above the depot keeps the box on board');
+check($cross($air($depot,5,10,0),$air($depot,5,8,0)) !== null && $s->delivery->delivered === 2 && !$s->delivery->carrying,
+	'Descending onto the eight-metre ceiling inside the depot completes the delivery');
+$next('pickup');
 $s->input(['values'=>['waterLevel'=>2]],1/60,16/9);
 check($s->navigationTarget() === null, 'Rising water retires the submerged box immediately');
 check($s->delivery->sites() === [$depot], 'Flooding preserves the permanent depot marker');

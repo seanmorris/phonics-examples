@@ -11,6 +11,7 @@ final class DeliveryRun
 	public const HEIGHT = 108.0;
 	public const RADIUS = 18.0;
 	public const MAX_LEG = 5600.;
+	private const JUMP_CLEARANCE = 8.0;
 	public const COLORS = ['pickup'=>'#caff18', 'drop'=>'#ff3528', 'checkpoint'=>'#ffcc54'];
 
 	public bool $carrying = false;
@@ -99,15 +100,32 @@ final class DeliveryRun
 			return 'Drive into the box under the lime smoke.';
 		}
 
-		if($from['recoveries'] !== $to['recoveries']) return null;
-		$x = $target['x']-$from['x']; $z = $target['z']-$from['z'];
-		$dx = $to['x']-$from['x']; $dz = $to['z']-$from['z'];
-		$t = max(0., min(1., ($x*$dx+$z*$dz)/max(1e-9,$dx*$dx+$dz*$dz)));
-		if(hypot($x-$t*$dx,$z-$t*$dz) > ($this->carrying ? 6.0 : 3.0)
-			|| abs($from['y']+$t*($to['y']-$from['y'])-$target['y']) > 3.0) return null;
+		if($from['recoveries'] !== $to['recoveries']
+			|| !self::crossesSite($from,$to,$target,$this->carrying ? 6.0 : 3.0)) return null;
 		if($this->carrying) $this->delivered++;
 		$this->carrying = !$this->carrying;
 		$this->pickup = null;
 		return $this->carrying ? 'Box collected. Return to the red depot.' : 'Delivered! Finding the next box…';
+	}
+
+	/** Clip this step to the site's height range, then find the closest point within that part of the jump. */
+	private static function crossesSite(array $from, array $to, array $site, float $radius): bool
+	{
+		$bottom = $site['y']-3.0;
+		$top = $site['y']+self::JUMP_CLEARANCE;
+		if(min($from['y'],$to['y']) > $top || max($from['y'],$to['y']) < $bottom) return false;
+		$enter = 0.; $exit = 1.;
+		$dy = $to['y']-$from['y'];
+		if($dy != 0.)
+		{
+			$atBottom = ($bottom-$from['y'])/$dy; $atTop = ($top-$from['y'])/$dy;
+			$enter = max(0.,min($atBottom,$atTop));
+			$exit = min(1.,max($atBottom,$atTop));
+		}
+		$x = $site['x']-$from['x']; $z = $site['z']-$from['z'];
+		$dx = $to['x']-$from['x']; $dz = $to['z']-$from['z'];
+		$distanceSquared = $dx*$dx+$dz*$dz;
+		$t = $distanceSquared > 0. ? max($enter,min($exit,($x*$dx+$z*$dz)/$distanceSquared)) : $enter;
+		return hypot($x-$t*$dx,$z-$t*$dz) <= $radius;
 	}
 }

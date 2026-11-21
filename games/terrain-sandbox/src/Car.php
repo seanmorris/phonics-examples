@@ -14,6 +14,8 @@ final class Car
 	private const TOP_SPEED = self::TOP_SPEED_MPH * self::MPS_PER_MPH;
 	// Keep the low-speed resistance while allowing a long straight to reach the speed governor.
 	private const ROAD_DRAG = .0059, ROAD_DRAG_LIMIT = 30, AERO_DRAG = .0001;
+	/** Full pedal braking in m/s² with all four tires on the ground. */
+	private const SERVICE_BRAKE = 15.0;
 	/** Share of downhill acceleration that pulls the steering downhill on a bank. */
 	private const BANK_PULL = .16;
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
@@ -212,7 +214,7 @@ final class Car
 				$braking = $throttle*$this->speed < 0;
 				// A landing can send the car backwards faster than reverse gear can drive it.
 				$reverseLimit = min(-8.0, $this->speed);
-				$power = $braking ? 13 : ($throttle > 0 ? 9 : 4);
+				$power = $braking ? self::SERVICE_BRAKE : ($throttle > 0 ? 9 : 4);
 				$traction = $braking ? $gripFraction : $rear;
 				$this->speed += ($throttle*$power*$traction - (($this->speed <=> 0)*$drag+Session::DRIVING_GRAVITY*$grade)*$gripFraction)*$dt;
 				$pedal = abs($throttle);
