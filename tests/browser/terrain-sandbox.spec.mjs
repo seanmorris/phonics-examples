@@ -837,12 +837,18 @@ test('a package run marks its unseen pickup and reveals the smoke when the drive
 		};
 	});
 	await boot(page);
-	const dry = fixture();
-	dry.landscape.recipe.worldSize = 1024;
-	dry.settings.waterLevel = -5;
+	// A short dry causeway makes the two possible sight lines pass clear of the red depot smoke.
+	// The distant search bands all land in water. The local search must follow the causeway.
+	const road = {type:'road',points:[[-192,5,0],[192,5,0]],width:22,shoulder:2,crown:0};
+	const dry = fixture({history:[[road]],revision:1});
+	dry.landscape.recipe.worldSize = 8192;
+	dry.settings.waterLevel = 1;
 	await load(page,dry);
 	await press(page,'delivery');
 	await expect.poll(async() => (await status(page)).delivery?.target?.kind).toBe('pickup');
+	const {target,depot} = (await status(page)).delivery;
+	expect(Math.abs(target.x-depot.x)).toBeGreaterThanOrEqual(96);
+	expect(target.z).toBe(depot.z);
 	await canvas(page).focus();
 	await page.keyboard.press('h');
 
