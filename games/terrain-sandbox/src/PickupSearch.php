@@ -10,7 +10,7 @@ use TerrainPhonics\Recipe;
 final class PickupSearch
 {
 	private DriveRegion $region;
-	private ?DriveRegion $local = null;
+	private ?DriveRegion $nearby = null, $local = null;
 	private ?\Closure $floor;
 	private float $range;
 	private ?array $previous = null;
@@ -37,7 +37,7 @@ final class PickupSearch
 	public function find(array $car, Camera $camera, float $aspect, float $phase): \Generator
 	{
 		if($this->floor !== null && !($this->floor)($this->depot['x'],$this->depot['z'],$this->depot['y'])) return null;
-		if(!(yield from $this->region->containsPosition($car['x'],$car['z']))) return yield from $this->localSite($car,$camera,$aspect);
+		if(!(yield from $this->region->containsPosition($car['x'],$car['z']))) return yield from $this->confinedSite($car,$camera,$aspect);
 		$attempt = 0;
 		$seen = [];
 		foreach([1.,.72,.45,.25] as $fraction)
@@ -69,8 +69,7 @@ final class PickupSearch
 				return $this->previous = $site;
 			}
 		}
-		$site = yield from $this->nearbySite($this->region,min(1200.,$this->range),$car,$camera,$aspect);
-		return $site ?? (yield from $this->localSite($car,$camera,$aspect));
+		return yield from $this->confinedSite($car,$camera,$aspect);
 	}
 
 	private function site(array $point, array $car, Camera $camera, float $aspect, bool $allowPrevious = false): ?array
@@ -83,6 +82,18 @@ final class PickupSearch
 		if(DeliveryRun::visible($site,$camera,$aspect) || ($this->floor !== null && !($this->floor)($x,$z,$y))) return null;
 		$s = $this->land->sample($x,$z);
 		return hypot($s['dx'],$s['dz']) <= .25 ? $site : null;
+	}
+
+	/** A coarse link can miss a turn halfway across its cell. Keep the closer searches at their original scales. */
+	private function confinedSite(array $car, Camera $camera, float $aspect): \Generator
+	{
+		$this->nearby ??= new DriveRegion($this->land,$this->water,$this->depot,96.);
+		if(yield from $this->nearby->containsPosition($car['x'],$car['z']))
+		{
+			$site = yield from $this->nearbySite($this->nearby,min(1200.,$this->range),$car,$camera,$aspect);
+			if($site !== null) return $site;
+		}
+		return yield from $this->localSite($car,$camera,$aspect);
 	}
 
 	private function localSite(array $car, Camera $camera, float $aspect): \Generator

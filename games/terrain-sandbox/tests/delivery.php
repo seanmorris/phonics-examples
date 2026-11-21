@@ -81,6 +81,22 @@ check($s->delivery !== null && $s->navigationTarget() === null, 'Package run tak
 $action('delivery');
 check($s->delivery === null && $s->navigationTarget()['kind'] === 'checkpoint', 'Ending deliveries restores race guidance');
 $s->close();
+// Keep this a work-count test so host load cannot hide a return to scanning entire gentle routes.
+$gentle = new Landscape(['worldSize'=>8192,'spacing'=>1,'heightScale'=>0,'detailAmplitude'=>0]);
+$gentle->queue(['type'=>'raise','x'=>0,'z'=>1500,'radius'=>12,'amount'=>10]);
+$gentle->commit();
+$origin = ['x'=>0.,'z'=>0.,'y'=>0.];
+$region = new DriveRegion($gentle,-100.,$origin);
+$goal = $region->nearest(192.,0.);
+check($region->nearest(80.,0.) === $region->nearest(0.,0.) && $region->point($goal) === [192.,0.,0.],
+	'The regional grid has a 192-metre link');
+$before = $gentle->stats()['generated'];
+$probe = $region->connect($goal);
+foreach($probe as $_) {}
+check($probe->getReturn() && $gentle->stats()['generated']-$before < 100,
+	'An unedited dry link uses sparse probes even when there are edits elsewhere on the map');
+$gentle->close();
+
 // The old 64-metre grade average accepted this level eight-metre-high shelf with a narrow vertical lip.
 $relief = new Landscape(['worldSize'=>1164,'spacing'=>1,'heightScale'=>0,'detailAmplitude'=>0,'surround'=>'none']);
 $relief->queue(['type'=>'road','points'=>[[176,8,0],[208,8,0]],'width'=>28,'shoulder'=>1,'crown'=>0]);
@@ -114,6 +130,22 @@ $channel->commit();
 check(!$reachable(new DriveRegion($channel,-.5,$start),192,0), 'An edge cannot bridge a narrow flooded channel');
 check($reachable(new DriveRegion($channel,-5.,$start),192,0), 'Lowering water opens a traversable dry crossing');
 $channel->close();
+
+// This natural canyon span climbs only 6 m over 192 m. Its final lip has a local grade over 50%.
+$sandstone = new Session;
+$sandstone->input(['actions'=>[['type'=>'generate','preset'=>'canyon','seed'=>'sandstone']]],1/60,16/9);
+$land = $sandstone->landscape;
+$a = [-376.,-2314.,$land->height(-376.,-2314.)];
+$b = [-568.,-2314.,$land->height(-568.,-2314.)];
+$region = new DriveRegion($land,$sandstone->water->level(),['x'=>$a[0],'z'=>$a[1],'y'=>$a[2]]);
+$checkSpan = new ReflectionMethod(DriveRegion::class,'driveEdge');
+foreach([[$a,$b],[$b,$a]] as [$from,$to])
+{
+	$probe = $checkSpan->invoke($region,$from,$to);
+	foreach($probe as $_) {}
+	check(!$probe->getReturn(), 'A low overall grade cannot hide the sharp natural lip in either direction');
+}
+$sandstone->close();
 
 // On the default canyon a straight drive to these sites runs into a mesa. Valley bends make the route possible.
 $canyon = new Session;
