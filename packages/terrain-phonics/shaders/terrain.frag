@@ -13,6 +13,8 @@ uniform vec4 uBedContacts[2];
 uniform vec3 uBedDatum; // X/Z dip and vertical spacing in metres.
 uniform highp sampler2D uTerrainShadowMap;
 uniform vec2 uShadowHeightRange;
+uniform vec2 uShadowReceiverRange;
+uniform float uCraft;
 uniform float uTerrainShadowExtent;
 uniform int uTerrainShadowReady;
 // TerrainAppearance. Colours are linear. The canyon palette runs rust, shale, ledge, sandstone, red beds, cap, dust,
@@ -35,23 +37,28 @@ float mountainShadow(vec3 position)
 	if(uTerrainShadowReady == 0) return 1.0;
 	vec2 uv = position.xz / uTerrainShadowExtent + 0.5;
 	if(any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 1.0;
-	vec2 bytes = texture(uTerrainShadowMap, uv).gb;
-	float ceiling = uShadowHeightRange.x + uShadowHeightRange.y * dot(bytes,vec2(256.,1.)/257.);
-	return smoothstep(-max(2.,.0001*uTerrainShadowExtent),0.,position.y+3.-ceiling);
+	vec3 sampleMap = texture(uTerrainShadowMap, uv).rgb;
+	float ceiling = uShadowHeightRange.x + uShadowHeightRange.y * dot(sampleMap.gb,vec2(256.,1.)/257.);
+	float ledge = smoothstep(-max(2.,.0001*uTerrainShadowExtent),0.,position.y+3.-ceiling);
+	if(uCraft > .5 || uShadowReceiverRange.y <= 0.) return ledge;
+	// At distance, coarse mesh triangles can cut straight through a cliff. The overview
+	// compares caster and receiver on the same fixed terrain surface before filtering.
+	vec2 distanceToEye = abs(position.xz-uEye.xz);
+	return mix(ledge,sampleMap.r,smoothstep(uShadowReceiverRange.x,uShadowReceiverRange.y,max(distanceToEye.x,distanceToEye.y)));
 }
 #ifdef SURFACE_LAYERS
 uniform highp sampler2D uShadowTriangles;
 uniform vec3 uShadowGrid;
-uniform float uCraft, uGridStep;
-flat in float vSunCoverage;
 
 float localSunlight(vec2 world, float footprint, float broad)
 {
 	if(uShadowGrid.z <= 0. || uCraft > .5 || broad <= 0.) return broad;
 	vec2 grid = (world-uShadowGrid.xy)/uShadowGrid.z;
-	vec2 border = min(grid,vec2(64.)-grid);
-	float edge = min(border.x,border.y);
-	if(edge <= 0.) return broad;
+	// The cache moves in blocks of at most eight cells. Its inner 28-cell radius is
+	// resident on both sides of a snap. Anchor the blend to the moving eye within it.
+	vec2 offset = abs(world-uEye.xz)/uShadowGrid.z;
+	float reach = max(offset.x,offset.y);
+	if(reach >= 28. || any(lessThan(grid,vec2(0.))) || any(greaterThanEqual(grid,vec2(64.)))) return broad;
 	ivec2 cell = ivec2(floor(grid));
 	vec2 f = fract(grid);
 	bool upper = f.x+f.y > 1.;
@@ -85,7 +92,7 @@ float localSunlight(vec2 world, float footprint, float broad)
 		shade = mix(smoothstep(-aa,aa,side),area,smoothstep(.15,.75,pixel));
 		if(!singleLit) shade = 1.-shade;
 	}
-	return mix(broad,min(broad,shade),smoothstep(0.,5.,edge));
+	return mix(min(broad,shade),broad,smoothstep(14.,28.,reach));
 }
 #endif
 float grain(vec2 p)
@@ -515,7 +522,6 @@ void main()
 	#ifdef SURFACE_LAYERS
 	if(facing > 0. && uSunDirection.y > 0.)
 	{
-		if(vSunCoverage >= 0.) shadow = min(shadow,mix(shadow,vSunCoverage,smoothstep(.12,.6,footprint/uGridStep)));
 		shadow = localSunlight(vWorld.xz,footprint,shadow);
 	}
 	#endif

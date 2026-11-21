@@ -37,11 +37,12 @@ final class TriangleShadows
 		bool $packed, float $playHalf, int $revision, int $vao): void
 	{
 		$step = $level['step'];
-		// Snap in eight-texel blocks. Leave room on every side for the same rays after a recenter.
-		$cx = (int)round($eye[0]/(8*$step))*8;
-		$cz = (int)round($eye[2]/(8*$step))*8;
 		$safeRadius = intdiv($span,2)-6;
 		$cell = 2 ** floor(log($safeRadius/self::CELLS,2));
+		// Keep the moving blend inside the cache, including when a probe cell is smaller than a caster texel.
+		$snap = 8 * min(1.,$cell);
+		$cx = round($eye[0]/($snap*$step))*$snap;
+		$cz = round($eye[2]/($snap*$step))*$snap;
 		$half = self::CELLS*$cell/2;
 		$reach = (int)floor($safeRadius-$half);
 		$grid = [($cx-$half)*$step,($cz-$half)*$step,$cell*$step];

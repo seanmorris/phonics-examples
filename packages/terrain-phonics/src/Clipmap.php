@@ -20,6 +20,7 @@ final class Clipmap
 	private const HALO = 2;
 	private int $revision = -1;
 	private array $spans = [];
+	private array $shadowReceiverRange = [0.,0.];
 	private ?array $dirtyRegion = null;
 
 	public function invalidate(?array $region = null): void
@@ -386,6 +387,22 @@ final class Clipmap
 		{
 			glActiveTexture(GL_TEXTURE0);
 			if($changed) $this->generate($land);
+			if($changed || $this->spans !== $spans)
+			{
+				// Fade out the actual mesh elevation before the overview and the mesh have
+				// comparable spacing. The inner part of each ring precedes its morph strip.
+				$texel = $recipe['worldSize']/256.;
+				$near = 0.;
+				$far = $step;
+				foreach($spans as $i => $span)
+				{
+					$spacing = $step*(2 ** $i);
+					if($spacing > $texel/2.) break;
+					$far = ($span/2-self::transition($span)-3)*$spacing;
+					if($spacing <= $texel/8.) $near = $far;
+				}
+				$this->shadowReceiverRange = [$near,max($near+$step,$far)];
+			}
 			glActiveTexture(GL_TEXTURE0 + 2);
 			glBindTexture(GL_TEXTURE_2D, $this->roadTexture[0] ?? $this->permutation[0]);
 			glUniform1i($this->generator->location('uRoadAtlas'), 2);
@@ -495,6 +512,7 @@ final class Clipmap
 
 	public function bindShadows(Program $program): void
 	{
+		glUniform2f($program->location('uShadowReceiverRange'),...$this->shadowReceiverRange);
 		if($this->shadows) $this->shadows->bind($program);
 		else glUniform3f($program->location('uShadowGrid'),0,0,0);
 	}

@@ -127,6 +127,10 @@ final class TerrainShadows
 		{
 			$this->target->unbind();
 		}
+		// Average distant coverage over the pixel footprint on a fixed world grid.
+		glBindTexture(GL_TEXTURE_2D, $this->target->texture());
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 
 		$this->key = $key;
 		$this->extent = $extent;

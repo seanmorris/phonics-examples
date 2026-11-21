@@ -1665,6 +1665,30 @@ test('Mountain Ridges shades lichen and custom layers can stipple their interior
 	expect(changedFraction(await capture(), withLichen)).toBeLessThan(.005);
 });
 
+test('the distant face in the default canyon stays sunlit at the starting viewpoint', async({page}) => {
+	test.setTimeout(150_000);
+	await page.setViewportSize({width:960,height:600});
+	await page.goto('/games/terrain-sandbox/');
+	const view = canvas(page);
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	await (await field(page,'[name="preset"]')).selectOption('canyon');
+	await press(page,'generate');
+	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
+	await press(page,'pause');
+	await settled(page);
+
+	// This sunlit sandstone band is about six kilometres away. The coarse mesh used
+	// to drop a blue triangle into it until the camera had travelled about 1.2 km.
+	const image = PNG.sync.read(await view.screenshot());
+	const cx = Math.round(image.width/2 - image.height*11/561);
+	const cy = Math.round(image.height*203/561);
+	for(let y=cy-1;y<=cy+1;y++) {
+		const adjacent = image.data[4*(image.width*y+cx-6)];
+		for(let x=cx-1;x<=cx+1;x++)
+			expect(Math.abs(image.data[4*(image.width*y+x)]-adjacent)).toBeLessThan(28);
+	}
+});
+
 test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joins', async({page}) => {
 	test.setTimeout(180_000);
 	await page.setViewportSize({width: 720, height: 440});
