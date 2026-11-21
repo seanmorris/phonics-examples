@@ -14,12 +14,12 @@ final class DriveRegion
 	private array $nodes = [], $edges = [], $connected = [];
 	private bool $level;
 
-	public function __construct(private Landscape $land, private float $water, private array $start)
+	public function __construct(private Landscape $land, private float $water, private array $start, float $maxCell = 96.)
 	{
 		$recipe = $land->recipe();
 		$this->limit = $recipe['worldSize']/2-6;
 		$spacing = $recipe['spacing'];
-		$this->cell = max(1.,round(min(96.,max(4.,$this->limit/12))/$spacing))*$spacing;
+		$this->cell = max(1.,round(min($maxCell,max(4.,$this->limit/12))/$spacing))*$spacing;
 		$this->baseX = round($start['x']/$spacing)*$spacing;
 		$this->baseZ = round($start['z']/$spacing)*$spacing;
 		$this->radius = (int)ceil(min(1.4*DeliveryRun::MAX_LEG,2*$this->limit)/$this->cell)+1;
@@ -87,6 +87,43 @@ final class DriveRegion
 			if($id === $goal) return true;
 		}
 		return false;
+	}
+
+	/** Flood outward from the depot when point samples have missed a pocket or a winding strip of road. */
+	public function nearby(float $radius): \Generator
+	{
+		$queue = [$this->origin];
+		$seen = [$this->origin=>true];
+		for($i=0; $i<count($queue); $i++)
+		{
+			$id = $queue[$i];
+			$col = $id%$this->side; $row = intdiv($id,$this->side);
+			foreach(self::NEIGHBORS as [$dx,$dz])
+			{
+				yield;
+				$x = $col+$dx; $z = $row+$dz;
+				if(hypot($x-$this->radius,$z-$this->radius)*$this->cell > $radius
+					|| min($x,$z)<0 || max($x,$z)>=$this->side) continue;
+				$n = $z*$this->side+$x;
+				if(isset($seen[$n])) continue;
+				$point = $this->point($n);
+				if($point === null) continue;
+				if(!isset($this->connected[$n]))
+				{
+					$key = $this->edgeKey($id,$n);
+					if(($this->edges[$key] ?? true) === false) continue;
+					if(!$this->level && !(yield from $this->driveEdge($this->point($id),$point)))
+					{
+						$this->edges[$key] = false;
+						continue;
+					}
+					$this->connected[$n] = true;
+				}
+				$seen[$n] = true;
+				$queue[] = $n;
+				yield $point;
+			}
+		}
 	}
 
 	private function edgeKey(int $a, int $b): int

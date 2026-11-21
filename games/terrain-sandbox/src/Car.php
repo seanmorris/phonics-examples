@@ -58,19 +58,21 @@ final class Car
 	 * metre of one is passed over.
 	 */
 	public function findSite(Landscape $land, Water $water, array $eye, float $yaw, array $posts = [],
-		bool $circuitStart = false): \Generator
+		bool $circuitStart = false, ?\Closure $floor = null): \Generator
 	{
 		if($circuitStart)
 		{
 			$site = $this->checkedSite($land, $water->heightRange()[1], $eye[0], $eye[2], $yaw, $posts);
-			if($site !== null) return $site;
+			if($site !== null && ($floor === null || $floor($eye[0],$eye[2],$land->height($eye[0],$eye[2])))) return $site;
 		}
 		$half = $land->recipe()['worldSize'] / 2;
 		$spacing = $land->recipe()['spacing'];
 		$areaScale = min(1.0, ($half - 2.6) / 12);
-		foreach([0,4,12,32,64,128,256,512,900,1400,2200] as $radius)
+		$radii = [0,4,12,32,64,128,256,512,900,1400,2200];
+		if($floor !== null) array_push($radii,3000,4000,5000,6000);
+		foreach($radii as $radius)
 		{
-			$count = match($radius) { 0 => 1, 4 => 4, 12 => 8, default => 16 };
+			$count = match($radius) { 0 => 1, 4 => 4, 12 => 8, default => $floor !== null && $radius >= 512 ? 48 : 16 };
 			for($i = 0; $i < $count; $i++)
 			{
 				$a = $yaw + $i * 2 * M_PI / $count;
@@ -83,7 +85,8 @@ final class Car
 				if(abs($x) + 2.6 > $half || abs($z) + 2.6 > $half) continue;
 				yield;
 				$dry = $water->heightRange()[1] + .12;
-				if($land->height($x, $z) <= $dry) continue;
+				$y = $land->height($x,$z);
+				if($y <= $dry || ($floor !== null && !$floor($x,$z,$y))) continue;
 				$center = $land->sample($x, $z);
 				if(hypot($center['dx'], $center['dz']) > .20) continue;
 				// Try the pilot's heading first, then other approaches for a road or a narrow terrace.

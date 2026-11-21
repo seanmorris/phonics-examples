@@ -332,7 +332,7 @@ final class Session
 				$after = $this->car->state();
 				if($this->chase->advance($this->camera, $before, $after, $this->landscape, $seconds))
 					$this->dirty = true;
-				if($this->delivery !== null)
+				if($this->delivery !== null && $this->carSearch === null)
 				{
 					$event = $this->delivery->step($this->landscape,$this->water->level(),$this->camera,$this->aspect,$before,$after);
 					if($event !== null) { $this->message = $event; $this->dirty = true; }
@@ -867,6 +867,7 @@ final class Session
 				if($this->delivery !== null)
 				{
 					$this->delivery = null;
+					$this->carSearch = null;
 					$this->message = 'Package run ended.';
 					break;
 				}
@@ -874,24 +875,16 @@ final class Session
 				$this->delivery = new DeliveryRun;
 				$this->message = 'Finding a package site…';
 				$this->paused = false;
-				if($this->mode === 'car') break;
-				// The normal car-site search boards the driver for a package run.
-			case 'car':
-				if($this->mode !== 'car' && $this->carSearch === null)
+				if($this->mode === 'car')
 				{
-					$this->cancelPick();
-					$atStart = false;
-					$yaw = M_PI - $this->camera->yaw;
-					if($this->mode === 'fly' && $this->circuitVariant === 'dry')
-					{
-						[$x,$z,$heading] = $this->circuit->approach();
-						$atStart = hypot($x-$this->camera->position[0],$z-$this->camera->position[2]) < .1
-							&& cos($heading-$yaw) > .999;
-					}
-					$this->carSearch = $this->car->findSite($this->landscape, $this->water, $this->camera->position,
-						$yaw, $this->course->posts(), $atStart);
-					$this->message = 'Looking for level ground…';
+					$floor = PickupSearch::floorTest($this->landscape);
+					$car = $this->car->state();
+					if($floor === null || $floor($car['x'],$car['z'],$this->landscape->height($car['x'],$car['z']))) break;
 				}
+				$this->startCarSearch();
+				break;
+			case 'car':
+				if($this->mode !== 'car' && $this->carSearch === null) $this->startCarSearch();
 				break;
 			case 'jet':
 				if($this->mode === 'jet') break;
@@ -1233,6 +1226,28 @@ final class Session
 		$this->camera->position[1] = max($ground + 2, min(15000, $this->camera->position[1]));
 	}
 
+	private function startCarSearch(): void
+	{
+		$this->cancelPick();
+		$eye = $this->camera->position;
+		$yaw = M_PI - $this->camera->yaw;
+		$atStart = false;
+		if($this->mode === 'car')
+		{
+			$car = $this->car->state();
+			$eye = [$car['x'],$car['y'],$car['z']];
+			$yaw = $car['yaw'];
+		}
+		elseif($this->mode === 'fly' && $this->circuitVariant === 'dry')
+		{
+			[$x,$z,$heading] = $this->circuit->approach();
+			$atStart = hypot($x-$eye[0],$z-$eye[2]) < .1 && cos($heading-$yaw) > .999;
+		}
+		$floor = $this->delivery !== null ? PickupSearch::floorTest($this->landscape) : null;
+		$this->carSearch = $this->car->findSite($this->landscape,$this->water,$eye,$yaw,$this->course->posts(),$atStart,$floor);
+		$this->message = $floor !== null ? 'Looking for a dry canyon floor for the depot…' : 'Looking for level ground…';
+	}
+
 	public function findingCarSite(): bool { return $this->carSearch !== null; }
 
 	/** Limit cold collision queries to a small slice of each input frame. */
@@ -1248,7 +1263,9 @@ final class Session
 		$this->carSearch = null;
 		if($site === null)
 		{
-			$this->message = 'No dry, level ground nearby. Fly closer to a plain or a graded road.';
+			$this->message = $this->delivery !== null ? 'No dry depot site nearby. Start a package run closer to the valley floor.'
+				: 'No dry, level ground nearby. Fly closer to a plain or a graded road.';
+			$this->delivery = null;
 			return;
 		}
 		$this->releasePin();
@@ -1461,11 +1478,7 @@ final class Session
 			$this->activateCircuit(...$this->circuitCommit);
 			$this->circuitCommit = null;
 		}
-		if($this->carSearch !== null)
-		{
-			$this->carSearch = $this->car->findSite($landscape, $this->water, $this->camera->position,
-				M_PI - $this->camera->yaw, $this->course->posts());
-		}
+		if($this->carSearch !== null) $this->startCarSearch();
 		$this->preparing = false;
 		$this->dirty = true;
 	}

@@ -67,15 +67,21 @@ final class DeliveryRun
 		$target = $this->target();
 		if($target === null)
 		{
-			if($this->waitingAt !== null)
+			if($this->search === null)
 			{
-				[$x,$z,$yaw,$oldAspect] = $this->waitingAt;
-				if(hypot($to['x']-$x,$to['z']-$z) < 8 && cos($camera->yaw-$yaw) > .98 && $oldAspect === $aspect)
-					return null;
-				$this->waitingAt = null;
+				$retry = $this->waitingAt !== null;
+				if($retry)
+				{
+					[$x,$z,$yaw,$pitch,$oldAspect] = $this->waitingAt;
+					if(hypot($to['x']-$x,$to['z']-$z) < 4 && cos($camera->yaw-$yaw) > .999
+						&& abs($camera->pitch-$pitch)<.04 && $oldAspect === $aspect) return null;
+				}
+				// Retry when the view changes during a search, even if the driver is parked by the time it finishes.
+				$this->waitingAt = [$to['x'],$to['z'],$camera->yaw,$camera->pitch,$aspect];
+				$this->planner ??= new PickupSearch($land,$water,$this->depot);
+				$this->search = $this->planner->find($to,$camera,$aspect,$this->phase);
+				if($retry) return 'Searching for a reachable pickup…';
 			}
-			$this->planner ??= new PickupSearch($land,$water,$this->depot);
-			$this->search ??= $this->planner->find($to,$camera,$aspect,$this->phase);
 			// Spend more of a parked frame checking the first route. Keep moving-car slices under a millisecond.
 			$parked = abs($to['speed']) < .25;
 			$deadline = hrtime(true)+($parked ? 2500000 : 900000);
@@ -84,11 +90,8 @@ final class DeliveryRun
 			$site = $this->search->getReturn();
 			$this->search = null;
 			$this->phase += 1.79;
-			if($site === null)
-			{
-				$this->waitingAt = [$to['x'],$to['z'],$camera->yaw,$aspect];
-				return 'No reachable pickup out of view here. Drive on or turn the camera to search again.';
-			}
+			if($site === null) return 'No hidden pickup found on reachable ground. Turn the camera or drive on to search again.';
+			$this->waitingAt = null;
 			// A driver can move or look around while the route is being sampled.
 			if(self::visible($site,$camera,$aspect) || hypot($site['x']-$to['x'],$site['z']-$to['z']) > self::MAX_LEG)
 				return null;

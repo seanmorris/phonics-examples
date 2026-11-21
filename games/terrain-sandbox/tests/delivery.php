@@ -148,4 +148,68 @@ $search = (new PickupSearch($canyon->landscape,$canyon->water->level(),$rim))->f
 foreach($search as $_) {}
 check($search->getReturn() === null, 'Starting on the plateau never authorizes a box on its top');
 $canyon->close();
+// Ordinary car boarding can use a mesa. Starting deliveries from the seat or the fly camera must choose a floor depot.
+foreach([false,true] as $alreadyDriving)
+{
+	$river = new Session;
+	$actions = [['type'=>'generate','preset'=>'canyon','seed'=>'river']];
+	if($alreadyDriving) $actions[] = 'car';
+	$river->input(['actions'=>$actions],1/60,16/9);
+	while($river->findingCarSite()) $river->input([],1/60,16/9);
+	$floor = PickupSearch::floorTest($river->landscape);
+	if($alreadyDriving)
+	{
+		$seat = $river->car->state();
+		check(!$floor($seat['x'],$seat['z'],$seat['y']), 'Regular driving can board on the river mesa');
+	}
+	$river->input(['actions'=>['delivery']],1/60,16/9);
+	while($river->findingCarSite())
+	{
+		$river->step(1/60);
+		check($river->delivery->depot === null, 'An unfinished boarding search cannot anchor the depot');
+		$river->input([],1/60,16/9);
+	}
+	for($i=0; $i<20000 && $river->navigationTarget() === null; $i++) $river->step(1/60);
+	$depot = $river->delivery->depot;
+	$site = $river->navigationTarget();
+	check($site !== null && $floor($depot['x'],$depot['z'],$depot['y']) && $floor($site['x'],$site['z'],$site['y']),
+		'River canyon starts a playable floor-to-floor run');
+	check(!DeliveryRun::visible($site,$river->camera,16/9), 'River pickup spawns outside the view');
+	$river->close();
+}
+
+$mountain = new Session;
+$mountain->input(['actions'=>[['type'=>'generate','preset'=>'mountain','seed'=>'first-light'],'car']],1/60,16/9);
+while($mountain->findingCarSite()) $mountain->input([],1/60,16/9);
+$start = $mountain->car->state();
+$start['y'] = $mountain->landscape->height($start['x'],$start['z']);
+$find = (new PickupSearch($mountain->landscape,$mountain->water->level(),$start))->find($start,$mountain->camera,16/9,0.);
+foreach($find as $_) {}
+$box = $find->getReturn();
+check($box !== null && !DeliveryRun::visible($box,$mountain->camera,16/9)
+	&& hypot($box['x']-$start['x'],$box['z']-$start['z'])>500., 'Mountain roads continue inside the innermost distance band');
+$mountain->close();
+
+// Only the local grid can leave this 120-metre island. No coarse-grid neighbour of the depot is dry.
+$island = new Landscape(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0]);
+$island->queue(['type'=>'road','points'=>[[-58,3,0],[58,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
+$island->commit();
+$start = ['x'=>0.,'z'=>0.,'y'=>3.,'motion'=>'driving','speed'=>0.,'recoveries'=>0];
+$camera = new TerrainPhonics\Camera;
+$camera->position = [0.,40.,300.]; $camera->yaw = 0.; $camera->pitch = -.12;
+$run = new DeliveryRun;
+for($i=0; $i<5000; $i++)
+{
+	$message = $run->step($island,1.,$camera,1.6,$start,$start);
+	if($message !== null) break;
+}
+check($message !== null && $run->target() === null, 'A fully visible island waits for the view to change');
+$camera->pitch = 1.35;
+check($run->step($island,1.,$camera,1.6,$start,$start) === 'Searching for a reachable pickup…',
+	'A parked camera change clears the exhausted-search message immediately');
+for($i=0; $i<5000 && $run->target() === null; $i++) $run->step($island,1.,$camera,1.6,$start,$start);
+$box = $run->target();
+check($box !== null && $box['y']>1. && abs($box['x'])>=32 && abs($box['z'])<6,
+	'Tilting the camera while parked finds the unseen drive along the small island');
+$island->close();
 echo "Delivery legs, crossings and shared checkpoint navigation passed.\n";
