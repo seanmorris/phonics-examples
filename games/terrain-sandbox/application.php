@@ -41,7 +41,8 @@ $scene = new Scene($session->landscape, $session->water, $session->atmosphere, u
 $models = [];
 $tracers = null;
 $trailRenderer = null;
-$beacon = $arrow = $visibleSite = null;
+$beacon = $arrow = null;
+$visibleSites = [];
 $shotAlpha = 1.0;
 $gates = new GateModel($session->gateShapes, __DIR__ . '/assets/gates/');
 $courseRevision = -1;
@@ -138,8 +139,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 });
 
 $shadow = null;
-$drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSite): void {
-	if($visibleSite !== null) ($beacon ??= new DeliveryBeacon)->solid($visibleSite,$viewCamera,$width,$height);
+$drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
+	foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
 	// The car's shadow darkens the ground under it, so it draws after the terrain and before the car.
 	if($session->mode === 'car' && $vehiclePose !== null)
 		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape, $viewCamera, $width, $height);
@@ -187,7 +188,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$visibleSite, &$hudShown, $hud, $publish
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$visibleSites, &$hudShown, $hud, $publish
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -219,9 +220,19 @@ $engine->start(
 			$dirty = true;
 		}
 		$target = $session->navigationTarget();
-		$visibleSite = $session->delivery?->target;
-		if($visibleSite !== null && !DeliveryRun::visible($visibleSite,$viewCamera,$width/$height)) $visibleSite = null;
-		if($visibleSite !== null && $session->time !== $lastRenderedTime) $dirty = true;
+		$sites = $session->delivery?->sites() ?? [];
+		$visibleSites = [];
+		foreach($sites as $site)
+			if(DeliveryRun::visible($site,$viewCamera,$width/$height)) $visibleSites[] = $site;
+		if(count($visibleSites) === 2)
+		{
+			[$a,$b] = $visibleSites;
+			[$forward] = $viewCamera->basis();
+			// Composite the farther plume first when both signals lie along the same bearing.
+			if(($b['x']-$a['x'])*$forward[0]+($b['y']-$a['y'])*$forward[1]+($b['z']-$a['z'])*$forward[2] > 0)
+				$visibleSites = [$b,$a];
+		}
+		if($visibleSites && $session->time !== $lastRenderedTime) $dirty = true;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
@@ -240,14 +251,14 @@ $engine->start(
 			if($session->mode === 'jet' && $session->flightTrails->active())
 				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
-			if($visibleSite !== null) $beacon->smoke($visibleSite,$viewCamera,$width,$height,$session->time);
+			foreach($visibleSites as $site) $beacon->smoke($site,$viewCamera,$width,$height,$session->time);
 			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$vehiclePose,$viewCamera,$width,$height);
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
 			$craft = $session->mode === 'craft';
 			$waterRace = $craft && $session->usingFloodedCircuit();
 			$dialSize = $car || $craft ? (int)round(min(240, $width*.275, $height*.30)) : null;
-			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height,'navigation'=>$target] : null;
+			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height] : null;
 			$wide = $jet ? $session->jetWideMap : $car && $session->carWideMap;
 			$showMap = $waterRace || $wide || ($jet ? $session->jetMap : $car && $session->carMap);
 			if($showMap)
@@ -259,7 +270,8 @@ $engine->start(
 					TerrainAppearance::linear($session->settings['waterColor']),$mapSize,
 					$car || $waterRace ? $session->circuitChartSpan() : null);
 				if($span !== null)
-					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize];
+					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize,
+						'markers'=>$sites ?: ($target === null ? [] : [$target])];
 			}
 			$engine->device->present();
 			if($jet)

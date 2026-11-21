@@ -783,6 +783,43 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	expect(errors).toEqual([]);
 });
 
+test('the overhead checkpoint arrow points down for forward and enlarges its near end', async({page}) => {
+	await page.setViewportSize({width:760,height:460});
+	await boot(page);
+	const doc = fixture();
+	doc.settings.waterLevel = -5;
+	doc.camera = {position:[0,15,0],yaw:0,pitch:-.35};
+	doc.landscape.recipe.worldSize = 512;
+	await canvas(page).focus();
+	await page.keyboard.press('h');
+
+	const faceWidths = async z => {
+		doc.course = {gates:[{role:'start',kind:'road',x:0,y:0,z,yaw:Math.PI,laps:1}]};
+		await load(page,doc);
+		await canvas(page).focus();
+		await page.keyboard.press('c');
+		await expect.poll(async()=>(await status(page)).mode).toBe('car');
+		const {width,height,data} = PNG.sync.read(await canvas(page).screenshot());
+		const rows = [];
+		for(let y=0; y<height*.22; y++)
+		{
+			let count = 0;
+			for(let x=Math.floor(width*.4); x<width*.6; x++)
+			{
+				const i=4*(y*width+x), r=data[i], g=data[i+1], b=data[i+2];
+				if(r>205 && Math.abs(g-.8*r)<2 && Math.abs(b-84*r/255)<2) count++;
+			}
+			if(count) rows.push(count);
+		}
+		expect(rows.length).toBeGreaterThan(20);
+		return {top:rows[0],bottom:rows.at(-1)};
+	};
+	const ahead = await faceWidths(-100), behind = await faceWidths(100);
+	expect(ahead.bottom).toBeLessThan(ahead.top/2);
+	expect(behind.top).toBeLessThan(behind.bottom/2);
+	expect(ahead.top).toBeGreaterThan(1.8*behind.bottom);
+});
+
 test('a package run marks its unseen pickup and reveals the smoke when the driver looks around', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -824,10 +861,12 @@ test('a package run marks its unseen pickup and reveals the smoke when the drive
 	expect(await count(true)).toBeGreaterThan(40);
 	expect(await count(false)).toBe(0);
 	const map = page.locator('.terrain-flight-map');
-	expect(await map.evaluate(el => {
+	const markers = await map.evaluate(el => {
 		const rgba = el.getContext('2d').getImageData(0,0,el.width,el.height).data;
-		return rgba.some((value,i)=>i%4===0 && value===202 && rgba[i+1]===255 && rgba[i+2]===24);
-	})).toBe(true);
+		const has = (r,g,b) => rgba.some((v,i)=>i%4===0 && v===r && rgba[i+1]===g && rgba[i+2]===b);
+		return {pickup:has(202,255,24),depot:has(255,53,40)};
+	});
+	expect(markers).toEqual({pickup:true,depot:true});
 	await page.evaluate(()=>window.lookAtPackage());
 	await expect.poll(async()=>await count(false),{timeout:30000}).toBeGreaterThan(12);
 	expect(errors).toEqual([]);

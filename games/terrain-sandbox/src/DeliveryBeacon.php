@@ -126,6 +126,8 @@ GLSL);
 	public function smoke(array $site, Camera $eye, int $w, int $h, float $time): void
 	{
 		$p = $this->smoke;
+		// Mark a corner post so the car can park in the depot without sitting inside the emitter.
+		if($site['kind'] === 'drop') { $site['x'] += 4.; $site['z'] += 4.; }
 		$this->place($p,$site,$eye,$w,$h);
 		$f = 1/tan($eye->fov/2);
 		glUniform2f($p->location('focal'),$f*$h/$w,$f);

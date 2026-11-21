@@ -81,9 +81,9 @@ Press **L**, press **X** on a gamepad, or choose **Car headlights** in the panel
 
 ## Run packages
 
-Select **Explore → Package run** to take the car. Follow the lime arrow to a box beneath yellow-green smoke and drive through it to collect it. The arrow turns red and leads to a drop zone marked by four posts and red smoke. Drive between the posts to deliver the box and start the next pickup. The minimap uses a lime square for a box and a red ring for a drop. Markers at its edge show which way to drive to a site beyond the map.
+Select **Explore → Package run** to take the car. The red depot stands where you start. Follow the lime arrow to a box beneath yellow-green smoke and drive through it to collect it. The arrow turns red for the return trip. Drive between the four depot posts to deliver the box and start the next pickup. The minimap keeps the depot marked with a red ring throughout the run and shows the current box as a lime square. Markers at its edge show which way to drive to a site beyond the map.
 
-Sites appear outside your view, within 2.8 miles of the car. The smoke rises about 110 metres and terrain can hide it. The run keeps a delivery count until you choose **End package run** or leave the car. Ending the run restores checkpoint navigation on a course.
+On a full-size landscape the search starts 2.4–3.5 miles from the car, outside your view. It favors a dry route that bends around high ground and tries closer sites in confined valleys or on small islands. The smoke rises about 110 metres and terrain can hide it. The run keeps a delivery count until you choose **End package run** or leave the car. Ending the run restores checkpoint navigation on a course.
 
 ## Ride the water
 
@@ -113,7 +113,7 @@ The chase camera never passes through a gate. Behind a vehicle that goes through
 
 **Save file** stores the gates and their sizes with the landscape, and **Load file** brings them back. Gates in files saved before gates had sizes load at their kinds' own sizes. **Generate** starts the new landscape without gates.
 
-The amber arrow at the top of the screen points toward the next gate, starting with the start gate. The minimap shows the same target.
+The overhead arrow shows its underside. Straight ahead points down the screen, a U-turn points up, and the end nearest you appears larger. During a race it turns amber and points toward the next gate, starting with the start gate. The minimap shows the same target.
 
 ### Generate a circuit
 

@@ -97,26 +97,30 @@ export function activate({module, canvas, session})
 
 		ctx.lineJoin = 'round';
 
-		const objective = data.navigation;
-		if(objective)
+		for(const objective of chart.markers)
 		{
 			const [dx,dy] = offset(objective.x,objective.z);
-			const fit = Math.min(1,(mid-8)/Math.max(1,Math.abs(dx),Math.abs(dy)));
+			const fit = Math.min(1,(mid-10)/Math.max(1,Math.abs(dx),Math.abs(dy)));
 			const x = mid+dx*fit, y = mid+dy*fit;
 			ctx.beginPath();
 			if(objective.kind === 'pickup') ctx.rect(x-4,y-4,8,8);
-			else ctx.arc(x,y,objective.kind === 'drop' ? 5 : 4,0,2*Math.PI);
-			ctx.fillStyle = objective.color;
+			else ctx.arc(x,y,objective.kind === 'drop' ? 7 : 4,0,2*Math.PI);
 			ctx.strokeStyle = '#17241b';
-			ctx.lineWidth = 2;
-			ctx.fill();
-			ctx.stroke();
 			if(objective.kind === 'drop')
 			{
-				ctx.beginPath();
-				ctx.arc(x,y,2,0,2*Math.PI);
-				ctx.fillStyle = '#331613';
+				// The ring remains visible around the car at the depot or a box on the same map edge.
+				ctx.lineWidth = 4;
+				ctx.stroke();
+				ctx.lineWidth = 2;
+				ctx.strokeStyle = objective.color;
+				ctx.stroke();
+			}
+			else
+			{
+				ctx.fillStyle = objective.color;
+				ctx.lineWidth = 2;
 				ctx.fill();
+				ctx.stroke();
 			}
 		}
 		for(const [id,pos] of Object.entries(data.targets ?? {}))

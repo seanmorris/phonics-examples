@@ -444,7 +444,7 @@ final class Session
 	public function navigationTarget(): ?array
 	{
 		if($this->mode === 'fly') return null;
-		if($this->delivery !== null) return $this->delivery->target;
+		if($this->delivery !== null) return $this->delivery->target();
 		$gate = $this->race->nextGate($this->course);
 		return $gate === null ? null : ['kind'=>'checkpoint','color'=>DeliveryRun::COLORS['checkpoint'],
 			'x'=>$gate['x'],'y'=>$gate['y'],'z'=>$gate['z']];
@@ -697,7 +697,7 @@ final class Session
 				if($this->water->level() !== (float)$value)
 				{
 					$this->balloons->refit($this->landscape,$value);
-					$this->delivery?->relocate();
+					$this->message = $this->delivery?->refit($this->landscape,$value) ?? $this->message;
 				}
 				$this->water->setLevel($value);
 			}
@@ -1448,7 +1448,7 @@ final class Session
 		$this->circuit = null; $this->circuitVariant = null;
 		$this->releasePin();
 		$this->balloons->refit($landscape,$this->water->level());
-		$this->delivery?->relocate();
+		$this->message = $this->delivery?->refit($landscape,$this->water->level()) ?? $this->message;
 		// Gates on the edited ground stand on it again.
 		if($this->circuitCommit === null && $this->course->count() > 0)
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
@@ -1610,7 +1610,7 @@ final class Session
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
 			'delivery' => $this->delivery === null ? null : ['carrying'=>$this->delivery->carrying,
-				'delivered'=>$this->delivery->delivered, 'target'=>$this->delivery->target],
+				'delivered'=>$this->delivery->delivered, 'target'=>$this->delivery->target(), 'depot'=>$this->delivery->depot],
 			'lamps' => $this->mode === 'car' ? $this->lamps->view(1.0) : null,
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats(),
 			'course' => $this->courseStatus(),'gateSizes' => $this->gateSizes(),'circuit' => $this->circuitStatus(),

@@ -26,10 +26,11 @@ vec3 rotateHeading(vec3 p){
 }
 void main(){
 	vec3 p=rotateHeading(vertex);
-	float depth=5.+.86*p.z+.51*p.y;
-	// An oblique HUD projection keeps forward screen-up while showing the glyph from below.
-	vec2 screen=vec2(p.x,-.86*p.y+.58*p.z)*5./depth;
-	gl_Position=vec4(screen*scale+vec2(0.,anchor),(depth-5.)*.35,1.);
+	// Look up from close beneath the arrow. A point farther ahead moves down toward the horizon.
+	const float eyeDistance=2.2;
+	float depth=eyeDistance+.6*p.y+.8*p.z;
+	vec2 screen=vec2(p.x,.8*p.y-.6*p.z)*eyeDistance*scale;
+	gl_Position=vec4(screen+vec2(0.,anchor*depth),depth-1.,depth);
 	vec3 n=rotateHeading(normal);
 	shade=.33+.67*max(0.,dot(n,vec3(-.54,-.76,-.36)));
 }
@@ -52,28 +53,20 @@ GLSL);
 		};
 		foreach($outline as [$x,$z])
 		{
-			$top[] = [$x,.20,$z];
-			$rim[] = [$x,-.07,$z];
-			$bottom[] = [$x*.88,-.18,$z*.92];
+			$top[] = [$x,.14,$z];
+			$bottom[] = [$x,-.14,$z];
 		}
-		foreach([[0,1,6],[2,3,4],[2,4,5]] as [$a,$b,$c])
+		foreach([[0,1,2],[0,2,5],[0,5,6],[2,3,4],[2,4,5]] as [$a,$b,$c])
 		{
 			$triangle($top[$a],$top[$b],$top[$c]);
+			$triangle($bottom[$c],$bottom[$b],$bottom[$a]);
 		}
-		// Two sloping facets meet along the underside, readable even against smoke of the same colour.
-		$neck = [0,-.32,$bottom[2][2]]; $tail = [0,-.32,$bottom[3][2]];
-		foreach([[$bottom[0],$neck,$bottom[2]],[$bottom[0],$bottom[2],$bottom[1]],
-			[$bottom[0],$bottom[6],$bottom[5]],[$bottom[0],$bottom[5],$neck],
-			[$neck,$bottom[3],$bottom[2]],[$neck,$tail,$bottom[3]],
-			[$neck,$bottom[5],$bottom[4]],[$neck,$bottom[4],$tail],
-			[$tail,$bottom[4],$bottom[3]]] as [$a,$b,$c]) $triangle($a,$b,$c);
-		foreach([[$top,$rim],[$rim,$bottom]] as [$upper,$lower])
-			foreach($outline as $i=>$_)
-			{
-				$j = ($i+1)%count($outline);
-				$triangle($upper[$i],$lower[$i],$upper[$j]);
-				$triangle($lower[$i],$lower[$j],$upper[$j]);
-			}
+		foreach($outline as $i=>$_)
+		{
+			$j = ($i+1)%count($outline);
+			$triangle($top[$i],$bottom[$i],$top[$j]);
+			$triangle($bottom[$i],$bottom[$j],$top[$j]);
+		}
 		$this->vertices = intdiv(strlen($mesh),24);
 		glGenVertexArrays(1,$this->vao);
 		glBindVertexArray($this->vao[0]);
@@ -98,7 +91,9 @@ GLSL);
 		$angle = atan2($target['x']-$vehicle['x'],$vehicle['z']-$target['z']) - $camera->yaw;
 		if(cos($camera->pitch) < 0) $angle += M_PI;
 		$size = min(78.,$h*.087,$w*.13);
-		$top = (int)ceil(10+2*$size);
+		// A tip pointing back projects up to 1.43 radii above the pivot.
+		$pivot = 7+1.44*$size;
+		$top = (int)ceil($pivot+.65*$size+1);
 		// Clear depth only under the HUD glyph, after all world geometry and effects are complete.
 		glEnable(GL_SCISSOR_TEST);
 		glScissor(max(0,(int)($w/2-2*$size)),max(0,$h-$top),(int)ceil(4*$size),$top);
@@ -110,7 +105,7 @@ GLSL);
 		glDisable(GL_BLEND);
 		$p = $this->program;
 		$p->use();
-		glUniform1f($p->location('anchor'),1.-2*(8+$size*.95)/$h);
+		glUniform1f($p->location('anchor'),1.-2*$pivot/$h);
 		glUniform2f($p->location('scale'),2*$size/$w,2*$size/$h);
 		glUniform2f($p->location('bearing'),sin($angle),cos($angle));
 		glUniform3f($p->location('tint'),...self::rgb($target['color']));

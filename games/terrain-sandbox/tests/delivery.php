@@ -6,6 +6,7 @@ require_once dirname(__DIR__).'/autoload.php';
 
 use TerrainSandbox\DeliveryRun;
 use TerrainSandbox\Session;
+use TerrainSandbox\PickupSearch;
 
 function check(bool $valid, string $message): void
 {
@@ -24,11 +25,14 @@ $next = static function(string $kind) use ($s): array {
 	check($site !== null && $site['kind'] === $kind && $site['color'] === DeliveryRun::COLORS[$kind], 'Correct leg and dye');
 	$car = $s->car->state();
 	check(hypot($site['x']-$car['x'],$site['z']-$car['z']) <= DeliveryRun::MAX_LEG, 'Site within driving radius');
-	check(!DeliveryRun::visible($site,$s->camera,16/9), 'Entire plume outside view at spawn');
+	if($kind === 'pickup') check(!DeliveryRun::visible($site,$s->camera,16/9), 'Entire plume outside view at spawn');
 	check($site['y'] === $s->landscape->height($site['x'],$site['z']) && $site['y'] > $s->water->level(), 'Site on dry ground');
 	return $site;
 };
 $pickup = $next('pickup');
+$depot = $s->delivery->depot;
+check($depot['kind'] === 'drop' && $s->delivery->sites() === [$depot,$pickup], 'Depot and pickup both appear from the first leg');
+check(hypot($pickup['x']-$depot['x'],$pickup['z']-$depot['z']) >= .69*DeliveryRun::MAX_LEG, 'Open land uses the distant band');
 $action('pause');
 $time = $s->time;
 $s->step(1.);
@@ -41,16 +45,18 @@ $from['z'] = $to['z'] = $pickup['z'];
 $cross = static fn($a,$b) => $s->delivery->step($s->landscape,-10,$s->camera,16/9,$a,$b);
 check($cross(['y'=>20]+$from,['y'=>20]+$to) === null, 'Passing overhead leaves the box');
 check($cross($from,['recoveries'=>1]+$to) === null, 'Vehicle recovery cannot collect a box');
-check($cross($from,$to) !== null && $s->delivery->carrying && $s->navigationTarget() === null, 'Swept crossing collects exactly once');
+check($cross($from,$to) !== null && $s->delivery->carrying && $s->navigationTarget() === $depot && $s->delivery->sites() === [$depot], 'Collecting removes only the box and points straight back to the depot');
 $drop = $next('drop');
 check($drop !== $pickup, 'The drop is a distinct leg');
 $site = $s->car->checkedSite($s->landscape,-10,$drop['x'],$drop['z'],0,[]);
 $s->car->spawn($site,$s->landscape,-10);
 $s->step(1/60);
 check($s->delivery->delivered === 1 && !$s->delivery->carrying, 'Drive into the drop to complete delivery');
-$next('pickup');
+$second = $next('pickup');
+check($s->delivery->sites() === [$depot,$second] && $second !== $pickup, 'The original depot stays marked for a different second package');
 $s->input(['values'=>['waterLevel'=>2]],1/60,16/9);
 check($s->navigationTarget() === null, 'Rising water retires the submerged box immediately');
+check($s->delivery->sites() === [$depot], 'Flooding preserves the permanent depot marker');
 $action('fly');
 check($s->delivery === null && $s->navigationTarget() === null, 'Leaving the car ends the run');
 
@@ -72,4 +78,23 @@ check($s->delivery !== null && $s->navigationTarget() === null, 'Package run tak
 $action('delivery');
 check($s->delivery === null && $s->navigationTarget()['kind'] === 'checkpoint', 'Ending deliveries restores race guidance');
 $s->close();
+// On the default canyon a straight drive to these sites runs into a mesa. Valley bends make the route possible.
+$canyon = new Session;
+$canyon->input(['actions'=>[['type'=>'generate','preset'=>'canyon','seed'=>'first-light'],'car']],1/60,16/9);
+while($canyon->findingCarSite()) $canyon->input([],1/60,16/9);
+$car = $canyon->car->state();
+$car['y'] = $canyon->landscape->height($car['x'],$car['z']);
+foreach([0.,.5,1.] as $phase)
+{
+	$search = (new PickupSearch($canyon->landscape,$canyon->water->level()))->find($car,$car,$canyon->camera,16/9,$phase);
+	foreach($search as $_) {}
+	$box = $search->getReturn();
+	check($box !== null && hypot($box['x']-$car['x'],$box['z']-$car['z'])>3800, 'Distant canyon-floor pickup');
+	$peak = -INF;
+	for($i=1;$i<128;$i++)
+		$peak = max($peak,$canyon->landscape->height(round($car['x']+($box['x']-$car['x'])*$i/128),
+			round($car['z']+($box['z']-$car['z'])*$i/128)));
+	check($peak>max($car['y'],$box['y'])+90., 'The direct line climbs above the available floor route');
+}
+$canyon->close();
 echo "Delivery legs, crossings and shared checkpoint navigation passed.\n";
