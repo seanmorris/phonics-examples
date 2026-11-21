@@ -20,7 +20,7 @@ final class DeliveryRun
 	private ?array $pickup = null;
 	private ?PickupSearch $planner = null;
 	private ?\Generator $search = null;
-	private ?float $lastSlice = null;
+	private bool $parked = true;
 	private float $phase;
 	private ?array $waitingAt = null;
 
@@ -30,6 +30,17 @@ final class DeliveryRun
 	}
 
 	public function target(): ?array { return $this->carrying ? $this->depot : $this->pickup; }
+
+	public function searchPending(): bool { return $this->search !== null; }
+
+	/** Run a bounded slice. Only the simulation may publish the result against the current view and car pose. */
+	public function advanceSearch(float $budgetMs): bool
+	{
+		if($this->search === null) return false;
+		$deadline = hrtime(true) + 1e6*($this->parked ? $budgetMs : min(.9,$budgetMs));
+		for($i=0; $i<128 && $this->search->valid() && hrtime(true)<$deadline; $i++) $this->search->next();
+		return $this->search->valid();
+	}
 
 	/** Both smoke emitters and chart markers read these same world positions. */
 	public function sites(): array
@@ -69,6 +80,7 @@ final class DeliveryRun
 		$target = $this->target();
 		if($target === null)
 		{
+			$this->parked = abs($to['speed']) < .25;
 			if($this->search === null)
 			{
 				$retry = $this->waitingAt !== null;
@@ -82,18 +94,9 @@ final class DeliveryRun
 				$this->waitingAt = [$to['x'],$to['z'],$camera->yaw,$camera->pitch,$aspect];
 				$this->planner ??= new PickupSearch($land,$water,$this->depot);
 				$this->search = $this->planner->find($to,$camera,$aspect,$this->phase);
-				$this->lastSlice = null;
 				if($retry) return 'Searching for a reachable pickup…';
 			}
-			// Slow rendering can leave a parked search waiting hundreds of milliseconds between ticks.
-			// Use up to 5% of that interval, capped at 12 ms. A 60 Hz parked tick keeps its 2.5 ms budget.
-			$parked = abs($to['speed']) < .25;
-			$now = hrtime(true);
-			$elapsed = $this->lastSlice === null ? 0. : $now-$this->lastSlice;
-			$this->lastSlice = $now;
-			$deadline = $now+($parked ? min(12000000,max(2500000,.05*$elapsed)) : 900000);
-			for($i=0; $i<128 && $this->search->valid() && hrtime(true)<$deadline; $i++) $this->search->next();
-			if($this->search->valid()) return null;
+			if($this->advanceSearch(2.5)) return null;
 			$site = $this->search->getReturn();
 			$this->search = null;
 			$this->phase += 1.79;

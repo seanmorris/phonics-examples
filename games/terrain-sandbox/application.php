@@ -76,8 +76,23 @@ $hudShown = false;
 	'uses' => TerrainPhonics\TerrainAppearance::USES,
 	'presets'=>array_combine(['coast','mountain','canyon'],array_map([Session::class,'preset'],['coast','mountain','canyon']))], JSON_THROW_ON_ERROR));
 
-$engine->systems->add('terrain-sandbox.simulate', static function(Registry $registry, float $seconds) use ($session): void {
+// Slow GPU frames can be hundreds of milliseconds apart. Give a pending route short turns in the gaps.
+$window = new \Vrzno;
+$searchTimer = null;
+$stopSearchTimer = static function() use ($window, &$searchTimer): void {
+	if($searchTimer !== null) $window->clearInterval($searchTimer);
+	$searchTimer = null;
+};
+$workOnSearch = static function() use ($session, $engine, $stopSearchTimer): void {
+	if($engine->paused || $session->paused || !$session->delivery?->advanceSearch(5.))
+		$stopSearchTimer();
+};
+$engine->systems->add('terrain-sandbox.simulate', static function(Registry $registry, float $seconds) use (
+	$session, $window, &$searchTimer, $workOnSearch
+): void {
 	$session->step($seconds);
+	if($searchTimer === null && $session->delivery?->searchPending())
+		$searchTimer = $window->setInterval($workOnSearch, 10);
 });
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
@@ -308,7 +323,8 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
+	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
+		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.simulate');
 		foreach($models as $model) $model->close();
 		$tracers?->close(); $tracers = null;

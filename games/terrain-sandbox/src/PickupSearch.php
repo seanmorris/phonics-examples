@@ -135,7 +135,7 @@ final class PickupSearch
 		$seen = [];
 		foreach([1.,.72,.45,.25] as $fraction)
 		{
-			$open = [];
+			$open = []; $deferred = [];
 			for($i=0; $i<($fraction === 1. ? 48 : 24); $i++)
 			{
 				yield;
@@ -157,12 +157,14 @@ final class PickupSearch
 				}
 				if($region->isLevel() || (yield from $this->crossesObstacle($site)))
 				{
-					if(!(yield from $region->connect($id))) continue;
-					return $site;
+					if(yield from $region->connect($id,quick:true)) return $site;
+					$deferred[$id] = $site;
+					continue;
 				}
 				$open[$id] = $site;
 			}
-			foreach($open as $id=>$site)
+			// Retry harder scenic routes with the full budget before leaving this distance band.
+			foreach($deferred+$open as $id=>$site)
 			{
 				if(!(yield from $region->connect($id))) continue;
 				return $site;

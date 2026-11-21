@@ -253,9 +253,31 @@ check($message !== null && $run->target() === null, 'A fully visible island wait
 $camera->pitch = 1.35;
 check($run->step($island,1.,$camera,1.6,$start,$start) === 'Searching for a reachable pickup…',
 	'A parked camera change clears the exhausted-search message immediately');
-for($i=0; $i<5000 && $run->target() === null; $i++) $run->step($island,1.,$camera,1.6,$start,$start);
+check($run->searchPending(), 'A view retry schedules route work');
+while($run->advanceSearch(5.)) {}
+check($run->target() === null, 'Completing a search between frames leaves the displayed objective alone');
+$camera->pitch = -.12;
+$run->step($island,1.,$camera,1.6,$start,$start);
+check($run->target() === null && !$run->searchPending(), 'Turning toward the box before publication rejects it');
+$camera->pitch = 1.35;
+for($i=0; $i<5000 && $run->target() === null; $i++)
+{
+	$run->step($island,1.,$camera,1.6,$start,$start);
+	while($run->advanceSearch(5.)) {}
+}
 $box = $run->target();
 check($box !== null && $box['y']>1. && abs($box['x'])>=32 && abs($box['z'])<6,
 	'Tilting the camera while parked finds the unseen drive along the small island');
+check(!$run->searchPending() && !$run->advanceSearch(5.), 'A published pickup needs no timer work');
+$run->refit($island,1.);
+$camera->pitch = -.12;
+do {
+	$message = $run->step($island,1.,$camera,1.6,$start,$start);
+} while($message === null && $run->searchPending());
+$camera->pitch = 1.35;
+$run->step($island,1.,$camera,1.6,$start,$start);
+check($run->searchPending(), 'The camera retry is pending when the water level changes');
+$run->refit($island,4.);
+check(!$run->advanceSearch(5.) && !$run->searchPending(), 'Flooding cancels the pending route before its next slice');
 $island->close();
 echo "Delivery legs, crossings and shared checkpoint navigation passed.\n";

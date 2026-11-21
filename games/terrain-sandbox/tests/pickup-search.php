@@ -141,5 +141,12 @@ foreach([[$a,$b],[$b,$a]] as [$from,$to])
 	iterator_count($probe);
 	check(!$probe->getReturn(), 'The sharp tyre-track rise between the first-light canyon probes rejects the link');
 }
+$canyon->input(['actions'=>['delivery']],1/60,16/9);
+while($canyon->findingCarSite()) $canyon->input([],1/60,16/9);
+$start = $canyon->car->state();
+$start['y'] = $land->height($start['x'],$start['z']);
+[$box,$work] = search(new PickupSearch($land,$canyon->water->level(),$start),$start,$canyon->camera,13*M_PI/12);
+check($box !== null && hypot($box['x']-$start['x'],$box['z']-$start['z']) > 3800 && $work < 11000,
+	'A difficult first canyon bearing gives other distant routes a turn before exhausting its detours');
 $canyon->close();
 echo "Delivery search, grade, cache and spacing checks passed.\n";

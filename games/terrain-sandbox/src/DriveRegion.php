@@ -92,7 +92,7 @@ final class DriveRegion
 	}
 
 	/** A coarse flood proposes a route. Check each new span before extending the depot component. */
-	public function connect(int $goal): \Generator
+	public function connect(int $goal, bool $quick = false): \Generator
 	{
 		if(isset($this->connected[$goal])) return true;
 		if(isset($this->disconnected[$goal]) || $this->exhausted()) return false;
@@ -103,9 +103,12 @@ final class DriveRegion
 			$this->depotQueue[] = $goal;
 			return true;
 		}
-		for($attempt=0; $attempt<8; $attempt++)
+		// A first pass lets other bearings compete before committing to repeated detours for this goal.
+		$attempts = $quick ? 2 : 8;
+		$limit = $quick ? 80 : 480;
+		for($attempt=0; $attempt<$attempts; $attempt++)
 		{
-			$path = yield from $this->route($goal);
+			$path = yield from $this->route($goal,$limit);
 			if($path === null) return false;
 			[$id,$next] = $path;
 			while($id !== $goal)
@@ -204,13 +207,13 @@ final class DriveRegion
 	}
 
 	/** Search back toward the depot until the flood touches any previously verified cell. */
-	private function route(int $goal): \Generator
+	private function route(int $goal, int $limit): \Generator
 	{
 		$queue = new \SplPriorityQueue;
 		$queue->insert($goal,0.);
 		$seen = [$goal=>true];
 		$next = [];
-		for($work=0; !$queue->isEmpty() && $work<480; $work++)
+		for($work=0; !$queue->isEmpty() && $work<$limit; $work++)
 		{
 			// Give the depot a turn even if successive mainland searches hit their work cap.
 			if(++$this->candidateWork >= 64)
