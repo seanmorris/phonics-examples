@@ -48,6 +48,8 @@ final class Session
 	private ?array $circuitCommit = null;
 	/** Timed run through the course by the vehicle being driven, ridden or flown. */
 	public Race $race;
+	public ?DeliveryRun $delivery = null;
+	private float $aspect = 16/9;
 	/** Dimensions of each gate kind, for placement, crossings, car collision and drawing. */
 	public readonly GateShapes $gateShapes;
 	/** Counts vehicle boardings and respawns, so a race can tell when its vehicle was put somewhere new. */
@@ -203,6 +205,7 @@ final class Session
 	 */
 	public function input(array $input, float $seconds, float $aspect, float $pickMs = 2.0): void
 	{
+		$this->aspect = $aspect;
 		$this->keys = is_array($input['keys'] ?? null) ? $input['keys'] : [];
 		$this->pad = self::readPad($input['pad'] ?? null);
 		$switch = [$this->headlights, $this->headlightsLit()];
@@ -248,6 +251,7 @@ final class Session
 			$this->message = $error->getMessage();
 			$this->dirty = true;
 		}
+		if($this->mode !== 'car' && $this->carSearch === null) $this->delivery = null;
 		$this->showPausedHeadlights($switch);
 		$this->guardRace();
 		$look = $input['look'] ?? [0,0];
@@ -285,7 +289,7 @@ final class Session
 	public function step(float $seconds): void
 	{
 		if($this->paused) return;
-		$racing = $this->course->count() > 0 && $this->mode !== 'fly';
+		$racing = $this->delivery === null && $this->course->count() > 0 && $this->mode !== 'fly';
 		if($racing)
 		{
 			$from = $this->racePoint(); $mode = $this->mode;
@@ -319,6 +323,7 @@ final class Session
 			{
 				$this->mode = 'fly';
 				$this->clampCamera();
+				$this->delivery = null;
 				$this->message = 'The ground under the car changed. Choose Drive car to find another spot.';
 				$this->dirty = true;
 			}
@@ -327,6 +332,11 @@ final class Session
 				$after = $this->car->state();
 				if($this->chase->advance($this->camera, $before, $after, $this->landscape, $seconds))
 					$this->dirty = true;
+				if($this->delivery !== null)
+				{
+					$event = $this->delivery->step($this->landscape,$this->water->level(),$this->camera,$this->aspect,$before,$after);
+					if($event !== null) { $this->message = $event; $this->dirty = true; }
+				}
 				if($this->lamps->step($seconds, $after['braking'], $after['reversing'], $this->headlightsLit()))
 					$this->dirty = true;
 			}
@@ -429,6 +439,15 @@ final class Session
 		$this->message = $stale ? $why : trim($this->message . ' ' . $why);
 		$this->dirty = true;
 		return true;
+	}
+
+	public function navigationTarget(): ?array
+	{
+		if($this->mode === 'fly') return null;
+		if($this->delivery !== null) return $this->delivery->target;
+		$gate = $this->race->nextGate($this->course);
+		return $gate === null ? null : ['kind'=>'checkpoint','color'=>DeliveryRun::COLORS['checkpoint'],
+			'x'=>$gate['x'],'y'=>$gate['y'],'z'=>$gate['z']];
 	}
 
 	public function findingCircuit(): bool { return $this->circuitSearch !== null; }
@@ -675,7 +694,11 @@ final class Session
 		{
 			if($name === 'waterLevel')
 			{
-				if($this->water->level() !== (float)$value) $this->balloons->refit($this->landscape,$value);
+				if($this->water->level() !== (float)$value)
+				{
+					$this->balloons->refit($this->landscape,$value);
+					$this->delivery?->relocate();
+				}
 				$this->water->setLevel($value);
 			}
 			else $this->water->setWaveScale($value / 100);
@@ -840,6 +863,19 @@ final class Session
 				if($this->preparing || $this->draft !== null) throw new \RuntimeException('Wait for the terrain edit before saving.');
 				$this->download = $this->save(); break;
 			case 'load': $this->load((string)($action['json'] ?? '')); break;
+			case 'delivery':
+				if($this->delivery !== null)
+				{
+					$this->delivery = null;
+					$this->message = 'Package run ended.';
+					break;
+				}
+				if($this->race->state === 'running') break;
+				$this->delivery = new DeliveryRun;
+				$this->message = 'Finding a package site…';
+				$this->paused = false;
+				if($this->mode === 'car') break;
+				// The normal car-site search boards the driver for a package run.
 			case 'car':
 				if($this->mode !== 'car' && $this->carSearch === null)
 				{
@@ -1369,6 +1405,7 @@ final class Session
 		$this->landscape->close();
 		$this->landscape = $landscape;
 		$this->balloons = new BalloonPractice;
+		$this->delivery = null;
 		$this->launches = 0;
 		$this->setting('waterLevel', $landscape->recipe()['waterLevel']);
 		$this->flightTrails = null;
@@ -1411,6 +1448,7 @@ final class Session
 		$this->circuit = null; $this->circuitVariant = null;
 		$this->releasePin();
 		$this->balloons->refit($landscape,$this->water->level());
+		$this->delivery?->relocate();
 		// Gates on the edited ground stand on it again.
 		if($this->circuitCommit === null && $this->course->count() > 0)
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
@@ -1571,6 +1609,8 @@ final class Session
 				: ['offset' => $this->duck->offset, 'passages' => $this->duck->held()],
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,
 			'car' => $this->mode === 'car' ? $this->car->state() : null,
+			'delivery' => $this->delivery === null ? null : ['carrying'=>$this->delivery->carrying,
+				'delivered'=>$this->delivery->delivered, 'target'=>$this->delivery->target],
 			'lamps' => $this->mode === 'car' ? $this->lamps->view(1.0) : null,
 			'craft' => $this->mode === 'craft' ? $this->craft->state() : null,'surface' => $this->landscape->stats(),
 			'course' => $this->courseStatus(),'gateSizes' => $this->gateSizes(),'circuit' => $this->circuitStatus(),

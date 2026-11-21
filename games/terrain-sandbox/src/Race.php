@@ -109,7 +109,7 @@ final class Race
 		$reached = 0.0;
 		while(true)
 		{
-			$target = $this->state === 'running' ? $course->gate($this->route[$this->index]['id']) : $course->start();
+			$target = $this->nextGate($course);
 			if($target === null) break;
 			$measure = $course->measure($target);
 			$window = $measure['window'];
@@ -200,6 +200,12 @@ final class Race
 		$this->reset();
 		$this->message = $why;
 		return $why;
+	}
+
+	/** The gate used for both crossings and navigation, including the return to the start. */
+	public function nextGate(Course $course): ?array
+	{
+		return $this->state === 'running' ? $course->gate($this->route[$this->index]['id']) : $course->start();
 	}
 
 	/** Return to waiting for a start, keeping the session's times. */

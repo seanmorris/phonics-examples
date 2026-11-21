@@ -783,6 +783,56 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	expect(errors).toEqual([]);
 });
 
+test('a package run marks its unseen pickup and reveals the smoke when the driver looks around', async({page}) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	await page.setViewportSize({width:760,height:460});
+	await page.addInitScript(() => {
+		const pad = {id:'Delivery test controller',index:0,timestamp:1,mapping:'standard',connected:true,
+			axes:[0,0,0,0],buttons:Array.from({length:17},()=>({pressed:false,value:0}))};
+		Object.defineProperty(navigator,'getGamepads',{value:()=>[pad]});
+		window.lookAtPackage = () => {
+			const {delivery,car} = document.querySelector('canvas[data-terrain-sandbox]').terrainSandboxDebug.state;
+			const angle = Math.atan2(delivery.target.x-car.x,car.z-delivery.target.z)-(Math.PI-car.yaw);
+			pad.axes[2] = Math.sin(angle);
+			pad.axes[3] = -Math.cos(angle);
+			pad.timestamp++;
+		};
+	});
+	await boot(page);
+	const dry = fixture();
+	dry.landscape.recipe.worldSize = 1024;
+	dry.settings.waterLevel = -5;
+	await load(page,dry);
+	await press(page,'delivery');
+	await expect.poll(async() => (await status(page)).delivery?.target?.kind).toBe('pickup');
+	await canvas(page).focus();
+	await page.keyboard.press('h');
+
+	const lime = (r,g,b) => g>120 && g>r*1.15 && r>80 && b<g*.35;
+	const count = async(arrow) => {
+		const {width,height,data} = PNG.sync.read(await canvas(page).screenshot());
+		let match = 0;
+		for(let y=0; y<height*.48; y++) for(let x=width>>2; x<width*.75; x++)
+		{
+			if((y < height*.21 && Math.abs(x-width/2)<width*.14) !== arrow) continue;
+			const i=4*(y*width+x);
+			if(lime(data[i],data[i+1],data[i+2])) match++;
+		}
+		return match;
+	};
+	expect(await count(true)).toBeGreaterThan(40);
+	expect(await count(false)).toBe(0);
+	const map = page.locator('.terrain-flight-map');
+	expect(await map.evaluate(el => {
+		const rgba = el.getContext('2d').getImageData(0,0,el.width,el.height).data;
+		return rgba.some((value,i)=>i%4===0 && value===202 && rgba[i+1]===255 && rgba[i+2]===24);
+	})).toBe(true);
+	await page.evaluate(()=>window.lookAtPackage());
+	await expect.poll(async()=>await count(false),{timeout:30000}).toBeGreaterThan(12);
+	expect(errors).toEqual([]);
+});
+
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));

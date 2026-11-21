@@ -79,6 +79,12 @@ The red tail lamps glow brightly while you brake: **S** or the left trigger whil
 
 Press **L**, press **X** on a gamepad, or choose **Car headlights** in the panel to switch the headlights between **Auto**, **On** and **Off**. Auto lights them while the sun is below 5 degrees. When the headlights come on, the pop-up headlights open over 1.2 seconds, the front lamps glow and the tail lamps glow dimly; braking brightens them. Once the pop-up headlights rise clear of the nose, two beams light the road, the ground and the water ahead of the car; on level ground they dim with distance and fade out about 90 metres ahead. The beams shine only once the sun has set. Before then, On and Auto light the lamps and open the pop-up headlights without beams. The beams pass through hills and light neither the car nor the race gates. Water shows a faint glow from them but no reflection. The headlights keep to their switch while the car tumbles or lies on its roof, and the beams point wherever the nose points. While the game is paused, changing the switch, or moving the sun past 5 degrees with the switch on Auto, opens or closes the pop-up headlights at once. Leaving the car puts the beams out. The sandbox remembers the headlight switch in this browser. Saved landscapes do not carry it.
 
+## Run packages
+
+Select **Explore → Package run** to take the car. Follow the lime arrow to a box beneath yellow-green smoke and drive through it to collect it. The arrow turns red and leads to a drop zone marked by four posts and red smoke. Drive between the posts to deliver the box and start the next pickup. The minimap uses a lime square for a box and a red ring for a drop. Markers at its edge show which way to drive to a site beyond the map.
+
+Sites appear outside your view, within 2.8 miles of the car. The smoke rises about 110 metres and terrain can hide it. The run keeps a delivery count until you choose **End package run** or leave the car. Ending the run restores checkpoint navigation on a course.
+
 ## Ride the water
 
 Select **Board watercraft**, press **B**, or press right on a gamepad's D-pad to find nearby water deep enough for the craft. Use **W/S** or the triggers for throttle and reverse, and **A/D** or the left stick to steer. The right stick looks around the craft. The speedometer in the lower right shows your speed in mph. Hold full throttle on open water to pass 90 mph. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.
@@ -107,13 +113,15 @@ The chase camera never passes through a gate. Behind a vehicle that goes through
 
 **Save file** stores the gates and their sizes with the landscape, and **Load file** brings them back. Gates in files saved before gates had sizes load at their kinds' own sizes. **Generate** starts the new landscape without gates.
 
+The amber arrow at the top of the screen points toward the next gate, starting with the start gate. The minimap shows the same target.
+
 ### Generate a circuit
 
 In free flight, open **Shape → Circuit generator**. Set **Minimum feature height difference** to a positive value to circle high ground or a negative value to circle a lake below the road. For example, **+200 m** in the default Canyon country looks for a feature whose high point rises at least 200 m above the road. **−60 m** in the default Mountain Ridges looks for a road at least 60 m above a lake at the current water level.
 
 Leave **Start elevation** blank to put the start near the camera, or enter an absolute terrain elevation to put it on a straight within half a metre of that height. This sets the height of the start station. The rest of the road follows the route's natural elevation. Select **Find circuit near camera** to preview a match. Large height differences favour a regional search that follows connected corridors and places checkpoints after junctions where possible.
 
-The preview shows the route and gate positions. A regional course grades a 36 m road on application. It rounds off short crests and eases the grade through tight bends while carrying natural banks into the turns. The shoulders blend into the surrounding terrain. The road is one terrain edit that **Undo** can remove. Choose **Apply dry course** for the car, or **Apply flooded course** if the loop can hold enough water for the jet ski. The dry circuit has 6.1 metres of clearance under each gantry, including the start/finish line. Both variants use the same route and checkpoint order. Applying a variant replaces the current gates, sets its water level and moves the camera just before the start. Board the vehicle there and follow the line on the minimap. The bright dot marks the next gate.
+The preview shows the route and gate positions. A regional course grades a 36 m road on application. It rounds off short crests and eases the grade through tight bends while carrying natural banks into the turns. The shoulders blend into the surrounding terrain. The road is one terrain edit that **Undo** can remove. Choose **Apply dry course** for the car, or **Apply flooded course** if the loop can hold enough water for the jet ski. The dry circuit has 6.1 metres of clearance under each gantry, including the start/finish line. Both variants use the same route and checkpoint order. Applying a variant replaces the current gates, sets its water level and moves the camera just before the start. Board the vehicle there and follow the line on the minimap. The amber blip marks the next gate.
 
 Landscape files save the applied variant and both available water levels, so you can switch variants after loading. Run the search again after changing the terrain.
 

@@ -611,6 +611,8 @@ export function activate({module, canvas, session, services})
 			button('jet').hidden = state.mode === 'jet';
 			button('car').hidden = state.mode === 'car';
 			button('car').disabled = state.findingCarSite;
+			button('delivery').disabled = state.findingCarSite || state.race.state === 'running';
+			button('delivery').textContent = state.delivery ? 'End package run' : 'Package run';
 			button('fly').hidden = state.mode === 'fly' && !state.findingCarSite;
 
 			const levelsPending = state.renderer.pending;
@@ -837,7 +839,16 @@ function drawCircuit(canvas, circuit)
  */
 function updateRace(line, state)
 {
-	const {course, race} = state;
+	const {course, race, delivery} = state;
+	if(delivery)
+	{
+		line.hidden = false;
+		const leg = delivery.carrying ? 'Drop-off' : 'Pickup';
+		const distance = delivery.target && state.car
+			? ' · ' + (Math.hypot(delivery.target.x-state.car.x,delivery.target.z-state.car.z)/1609.344).toFixed(1) + ' mi' : '';
+		line.textContent = leg + distance + ' · Delivered ' + delivery.delivered;
+		return;
+	}
 	line.hidden = !course?.gates.length;
 
 	if(line.hidden) return;
@@ -1189,6 +1200,7 @@ function markup()
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--map-room:0px}
 	.terrain-sandbox.has-flight-map:has(.terrain-speedometer:not([hidden])){--map-room:calc(var(--flight-map-size) + 8px)}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])) .terrain-hud{left:calc(16px + var(--map-room));bottom:16px;max-width:calc(100% - var(--map-room) - var(--speedometer-size) - 58px)}
+	@media(max-width:640px){.terrain-sandbox:has(.terrain-panel:not([open])) .terrain-hud:has([data-race]:not([hidden])) [data-diagnostics]{display:none}}
 	</style><div class="terrain-stage"></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
 	<details class="terrain-panel" open><summary>LANDSCAPE LAB</summary><div>
 	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
@@ -1339,6 +1351,7 @@ function markup()
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
 	${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button></div>
+	<div class="terrain-row"><button data-action="delivery">Package run</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>

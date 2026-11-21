@@ -13,6 +13,9 @@ use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
 use TerrainSandbox\Car;
+use TerrainSandbox\DeliveryBeacon;
+use TerrainSandbox\DeliveryRun;
+use TerrainSandbox\NavigationArrow;
 use TerrainSandbox\GateModel;
 use TerrainPhonics\TerrainAppearance;
 use TerrainSandbox\GroundShadow;
@@ -38,6 +41,7 @@ $scene = new Scene($session->landscape, $session->water, $session->atmosphere, u
 $models = [];
 $tracers = null;
 $trailRenderer = null;
+$beacon = $arrow = $visibleSite = null;
 $shotAlpha = 1.0;
 $gates = new GateModel($session->gateShapes, __DIR__ . '/assets/gates/');
 $courseRevision = -1;
@@ -134,7 +138,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 });
 
 $shadow = null;
-$drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose): void {
+$drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSite): void {
+	if($visibleSite !== null) ($beacon ??= new DeliveryBeacon)->solid($visibleSite,$viewCamera,$width,$height);
 	// The car's shadow darkens the ground under it, so it draws after the terrain and before the car.
 	if($session->mode === 'car' && $vehiclePose !== null)
 		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape, $viewCamera, $width, $height);
@@ -182,7 +187,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$hudShown, $hud, $publish
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$visibleSite, &$hudShown, $hud, $publish
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -213,6 +218,10 @@ $engine->start(
 			$courseRevision = $course->revision;
 			$dirty = true;
 		}
+		$target = $session->navigationTarget();
+		$visibleSite = $session->delivery?->target;
+		if($visibleSite !== null && !DeliveryRun::visible($visibleSite,$viewCamera,$width/$height)) $visibleSite = null;
+		if($visibleSite !== null && $session->time !== $lastRenderedTime) $dirty = true;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
@@ -231,12 +240,14 @@ $engine->start(
 			if($session->mode === 'jet' && $session->flightTrails->active())
 				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
+			if($visibleSite !== null) $beacon->smoke($visibleSite,$viewCamera,$width,$height,$session->time);
+			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$vehiclePose,$viewCamera,$width,$height);
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
 			$craft = $session->mode === 'craft';
 			$waterRace = $craft && $session->usingFloodedCircuit();
 			$dialSize = $car || $craft ? (int)round(min(240, $width*.275, $height*.30)) : null;
-			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height] : null;
+			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height,'navigation'=>$target] : null;
 			$wide = $jet ? $session->jetWideMap : $car && $session->carWideMap;
 			$showMap = $waterRace || $wide || ($jet ? $session->jetMap : $car && $session->carMap);
 			if($showMap)
@@ -285,16 +296,17 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $gates, &$models, &$tracers, &$trailRenderer, &$shadow): void {
+	static function() use ($engine, $session, $scene, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
 		$engine->systems->remove('terrain-sandbox.simulate');
 		foreach($models as $model) $model->close();
 		$tracers?->close(); $tracers = null;
 		$trailRenderer?->close(); $trailRenderer = null;
 		$shadow?->close();
+		$beacon?->close(); $arrow?->close();
 		$gates->release();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $gates, &$models, &$tracers, &$trailRenderer, &$shadow, &$dirty): void {
+	static function() use ($scene, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -302,6 +314,8 @@ $engine->start(
 		// The lost context took the shadow's program and grid with it; the next frame that needs it builds them again.
 		$shadow?->close();
 		$shadow = null;
+		$beacon?->close(); $beacon = null;
+		$arrow?->close(); $arrow = null;
 		$gates->release();
 		$scene->restore();
 		$dirty = true;

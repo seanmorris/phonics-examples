@@ -73,15 +73,6 @@ export function activate({module, canvas, session})
 			ctx.lineWidth = 2;
 			ctx.strokeStyle = '#ffd272';
 			ctx.stroke();
-			const next = state.course.gates.find(gate => gate.id === state.race?.next?.id);
-			if(next)
-			{
-				const [x,y] = offset(next.x,next.z);
-				ctx.beginPath();
-				ctx.arc(mid+x,mid+y,3,0,2*Math.PI);
-				ctx.fillStyle = '#fffce4';
-				ctx.fill();
-			}
 		}
 		ctx.lineWidth = 1;
 		ctx.strokeStyle = '#bad5b5';
@@ -106,6 +97,28 @@ export function activate({module, canvas, session})
 
 		ctx.lineJoin = 'round';
 
+		const objective = data.navigation;
+		if(objective)
+		{
+			const [dx,dy] = offset(objective.x,objective.z);
+			const fit = Math.min(1,(mid-8)/Math.max(1,Math.abs(dx),Math.abs(dy)));
+			const x = mid+dx*fit, y = mid+dy*fit;
+			ctx.beginPath();
+			if(objective.kind === 'pickup') ctx.rect(x-4,y-4,8,8);
+			else ctx.arc(x,y,objective.kind === 'drop' ? 5 : 4,0,2*Math.PI);
+			ctx.fillStyle = objective.color;
+			ctx.strokeStyle = '#17241b';
+			ctx.lineWidth = 2;
+			ctx.fill();
+			ctx.stroke();
+			if(objective.kind === 'drop')
+			{
+				ctx.beginPath();
+				ctx.arc(x,y,2,0,2*Math.PI);
+				ctx.fillStyle = '#331613';
+				ctx.fill();
+			}
+		}
 		for(const [id,pos] of Object.entries(data.targets ?? {}))
 		{
 			const [x,y] = offset(pos[0], pos[2]);
