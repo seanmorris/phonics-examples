@@ -61,6 +61,12 @@ float coverBand(float footprint, float scale)
 	return 1.-smoothstep(.18,1.55,COVER_FREQUENCY*footprint/scale);
 }
 
+uniform float uRockSlopeDamping; // Landform damping divided by slope scale squared.
+float rockReliefWeight(float width, float smoothingWidth2)
+{
+	return width*width / (width*width + smoothingWidth2);
+}
+
 // Stretch the volume vertically, then slice it in two oblique directions.
 // Both horizontal coordinates still vary on shallow ground, so a gully ends
 // in the foothills instead of projecting a cliff streak across the meadow.

@@ -2383,8 +2383,10 @@ final class Scene
 		}
 		if(($this->layerBinding[$id] ?? null) !== $palette) {
 			$palette->bind($groundProgram);
-			$seed = crc32((string)$this->landscape->recipe()['seed']);
+			$recipe = $this->landscape->recipe();
+			$seed = crc32((string)$recipe['seed']);
 			glUniform2f($groundProgram->location('uPaletteOffset'),$seed & 65535,($seed >> 16) & 65535);
+			$this->scalar($groundProgram, 'uRockSlopeDamping', $recipe['damping'] / $recipe['slopeScale']**2);
 			$this->layerBinding[$id] = $palette;
 		}
 		$this->vector($groundProgram, 'uCraftRotation', [0,0,0]);

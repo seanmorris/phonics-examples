@@ -352,6 +352,8 @@ above it.
 
 The scree, slab and lichen fields read these settings wherever a stack uses them.
 
+Natural rock relief follows the landform’s `damping` and `slopeScale`. Fine fractures and loose stones lose their lighting contrast on steep faces before broad gullies do. At a grade equal to `slopeScale` and a damping of 1, the shader gives an eight-meter feature half its original lighting gradient. A damping of 0 gives full relief at every grade. The color layers still place granite, lichen and forest according to their own masks.
+
 | Setting | Default | Range | Effect |
 | --- | --- | --- | --- |
 | `talusAmount` | 0.5 | 0 to 1 | Share of the moderately steep ground covered by talus. 0 leaves none. |

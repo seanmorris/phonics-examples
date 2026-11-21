@@ -57,4 +57,6 @@ Use a parent mask to put one material inside another. To add ripples to a beach,
 
 Mountain Ridges exposes its meadow, forest, granite, iron stains, snow and lighting relief in the same stack. Other surfaces can use those fields. **Shared field settings** controls features that several layers sample, including gully spacing, block size and slab dimensions. **Load preset surface** copies a whole material recipe onto the current landform. An edited stack survives terrain generation. **Follow landform preset** reconnects it to the landform.
 
+To soften the rock on steep faces, raise **Steep-face detail damping** under **Landform parameters** and generate again. Fine cracks soften first, and broad gullies keep more of their shape.
+
 Brushes and roads use the five colors under **Paint inks**. Painting covers the natural color and relief at full coverage. The shoulder blends back into the natural surface. The minimap reads the same material stack and paint colors.

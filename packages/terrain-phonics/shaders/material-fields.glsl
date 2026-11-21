@@ -93,10 +93,16 @@
 	float boulders = 1. + .22*outcrop*boulderFade;
 	// Differentiate in world space. Screen differences on an oblique face can cross
 	// a projected stone in a single pixel and leave a dotted line of shaded quads.
+	// Use the geometric grade before tilting the lighting normal. As in the height
+	// generator, damping is proportional to grade squared. At the recipe slope scale
+	// and damping 1, an 8 m feature keeps half its gradient and wider forms keep more.
+	float grade2 = dot(normal.xz,normal.xz) / max(normal.y*normal.y,1e-8);
+	float smoothingWidth2 = 8.*8.*uRockSlopeDamping*grade2;
 	vec3 outcropSlope = boulderSample.yzw*MATERIAL_TURN/2.7;
 	vec3 rubbleSlope = chipSample.yzw*MATERIAL_TURN*MATERIAL_TURN + dot(chipSample.yzw,chipWarp)*outcropSlope;
 	vec3 chipSlope = .66*rubbleSlope + .25*outcropSlope - .38*(crease/rounded)*(rubbleSlope-.32*outcropSlope);
-	vec3 blockSlope = .13*chipSlope*cellFade + .17*outcropSlope*boulderFade;
+	vec3 blockSlope = .13*rockReliefWeight(sizes.y,smoothingWidth2)*chipSlope*cellFade
+		+ .17*rockReliefWeight(2.7*sizes.y,smoothingWidth2)*outcropSlope*boulderFade;
 	blockSlope -= normal*dot(normal,blockSlope);
 	vec3 blockTilt = -blockSlope/(1.+length(blockSlope));
 
@@ -125,7 +131,8 @@
 	// the dip. Sample through the rock so both continue around a change of aspect.
 	vec2 strike = mat2(.8,.6,-.6,.8)*pos.xz;
 	vec3 bedrock = vec3(strike.x/sizes.z,(pos.y+.26*strike.x-.13*strike.y)/sizes.w,strike.y/sizes.z);
-	float jointPixel = footprint/min(sizes.z,sizes.w);
+	float slabWidth = min(sizes.z,sizes.w);
+	float jointPixel = footprint/slabWidth;
 	float jointFade = 1.-smoothstep(.035,.12,jointPixel), slabFade = 1.-smoothstep(.12,.35,jointPixel);
 	float split = 0., crosscut = 0.;
 	if(slabFade > 0.) {
@@ -142,9 +149,11 @@
 	transverse *= smoothstep(-.08,.46,split - blotchNoise - .5*rill - .22*ragged);
 	float joints = mix(.035,max(longitudinal.x,transverse.x),jointFade);
 	float slabTone = (.65*split + .35*crosscut)*slabFade;
-	vec3 facet = slabFade*patternGradient(pos,normal,.075*sizes.z*split+.045*sizes.w*crosscut)
-		+ jointFade*(.08*longitudinal.y*patternGradient(pos,normal,sizes.z*downDip)
-			+ .06*transverse.y*patternGradient(pos,normal,sizes.w*acrossDip));
+	vec3 slabTilt = patternGradient(pos,normal,.075*sizes.z*split+.045*sizes.w*crosscut);
+	// A fracture's two flanks occupy 13 percent of the joint spacing.
+	vec3 jointTilt = rockReliefWeight(.13*sizes.z,smoothingWidth2)*.08*longitudinal.y*patternGradient(pos,normal,sizes.z*downDip)
+		+ rockReliefWeight(.13*sizes.w,smoothingWidth2)*.06*transverse.y*patternGradient(pos,normal,sizes.w*acrossDip);
+	vec3 facet = rockReliefWeight(slabWidth,smoothingWidth2)*slabFade*slabTilt + jointFade*jointTilt;
 	// Water leaves short dark trails down the faces.
 	float wet = patchy(0.25, streak + 0.3*rill, max(streakFade, rillFade));
 	float tone = (1.0 + .17*slabTone) * (1.0 - 0.20*joints) * (1.0 - 0.11*wet)
@@ -188,4 +197,5 @@
 	float ribRelief = gullyFade*(1.-.65*smoothstep(.025,.13,footprint/sizes.x));
 	vec3 ribSlope = 10.*groove*vec3(blotchGradient.y,0.,blotchGradient.z)/31.
 		+ (12.+10.*blotchNoise)*gullyNoise/groove*gullySlope;
-	vec3 lift = upright*(ribRelief*ribSlope + rills*rillGradient.yzw);
+	vec3 lift = upright*(rockReliefWeight(sizes.x,smoothingWidth2)*ribRelief*ribSlope
+		+ rockReliefWeight(12.,smoothingWidth2)*rills*rillGradient.yzw);
