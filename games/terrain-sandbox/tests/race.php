@@ -12,6 +12,7 @@ use TerrainSandbox\CircuitRoad;
 use TerrainSandbox\Course;
 use TerrainSandbox\GateShapes;
 use TerrainSandbox\Jet;
+use TerrainSandbox\NavigationArrow;
 use TerrainSandbox\Race;
 use TerrainSandbox\Session;
 
@@ -1094,11 +1095,17 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		$stock = $generator->gateShapes->kind('road')['size']['default'][1];
 		expect(array_unique(array_column($gates,'height')) === [2 * $stock],
 			'Every dry circuit gate has double the stock road clearance');
+		expect(array_unique(array_column($gates,'width')) === [CircuitRoad::GATE_WIDTH],
+			'All regional gantry openings span the painted road up to its outer shoulders.');
 		$legacy = json_decode($generator->save(), true, flags: JSON_THROW_ON_ERROR);
 		foreach($legacy['course']['gates'] as &$gate) $gate['height'] = $stock;
 		unset($gate);
 		$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
 		expect($copy->course->export() === $generator->course->export(), 'A saved stock-height circuit upgrades on load');
+		$oldRoute = Circuit::import($legacy['circuit']['route'], $generator->landscape->recipe()['worldSize']/2);
+		$legacy['course'] = $oldRoute->course($generator->landscape,$shapes,$generator->course->laps(),false,true)->export();
+		$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+		expect($copy->course->export() === $generator->course->export(), 'A saved 30 m circuit refits its wider gates on the same road.');
 		$legacy['course']['gates'][1]['x'] += 1;
 		try {
 			$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
@@ -1156,5 +1163,25 @@ expect($lakeCopy->settings['circuitRelief']===-60. && $lakeCopy->settings['circu
 	&& $lakeCopy->status()['circuit'] == $lakeRace->status()['circuit'], 'The signed controls and lake route survive reload');
 $lakeCopy->close();
 $lakeRace->close();
+
+$vehicle = ['x'=>12., 'z'=>10.];
+$target = ['kind'=>'checkpoint', 'x'=>0., 'z'=>0., 'yaw'=>0., 'halfWidth'=>15.];
+expect(NavigationArrow::bearing($target,$vehicle,null,0.) === 0.,
+	'An off-centre vehicle within the checkpoint span aims straight across it.');
+expect(abs(NavigationArrow::bearing($target,['x'=>19.,'z'=>4.],null,0.) + M_PI/4) < 1e-9,
+	'A vehicle outside the span aims at the near end.');
+$target['yaw'] = M_PI/3;
+$across = 11.; $along = 7.;
+$at = ['x'=>$across*cos($target['yaw'])+$along*sin($target['yaw']),
+	'z'=>-$across*sin($target['yaw'])+$along*cos($target['yaw'])];
+expect(abs(NavigationArrow::bearing($target,$at,null,0.) + $target['yaw']) < 1e-9,
+	'A rotated gate uses its own across and travel axes.');
+foreach([1.,0.,-1.] as $z)
+	expect(NavigationArrow::bearing($target,['x'=>0.,'z'=>$z],.75,.05) === .75, 'The cue holds its world bearing across a close pass.');
+$drop = ['kind'=>'drop','x'=>sin(deg2rad(-175)), 'z'=>-cos(deg2rad(-175))];
+$old = deg2rad(175); $origin = ['x'=>0.,'z'=>0.];
+$half = NavigationArrow::bearing($drop,$origin,$old,.1);
+$split = NavigationArrow::bearing($drop,$origin,NavigationArrow::bearing($drop,$origin,$old,.05),.05);
+expect(abs($half-M_PI)<1e-9 && abs($half-$split)<1e-9, 'A new target turns along the short arc by elapsed time.');
 
 echo "Landscape sandbox race: $checks checks passed\n";

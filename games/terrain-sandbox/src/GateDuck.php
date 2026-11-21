@@ -63,9 +63,10 @@ final class GateDuck
 
 	/**
 	 * @param float $lead Distance in metres before and after a gate's slab over which the eye ducks and rises again.
+	 * @param ?\Closure $ground Road or terrain elevation in metres at the final eye X and Z.
 	 * @throws \InvalidArgumentException When the lead is shorter than SIDE.
 	 */
-	public function __construct(public readonly float $lead)
+	public function __construct(public readonly float $lead, private readonly ?\Closure $ground = null)
 	{
 		if(!($lead >= self::SIDE)) throw new \InvalidArgumentException('A camera ducks over at least ' . self::SIDE . ' m');
 	}
@@ -127,9 +128,27 @@ final class GateDuck
 			$lane = self::lane($frame, $u, $this->lanes[$gate['id']] ?? null);
 			[$du, $dy, $dv] = $this->shift($frame, $passage, $lane, $u, $v, $eye[1],
 				self::share($frame, $eye[1], $from, $distance), $distance);
-			if($du == 0 && $dy == 0 && $dv == 0) continue;
-			$eye = [$eye[0] + $du * $frame['cos'] + $dv * $frame['sin'], $eye[1] + $dy,
-				$eye[2] - $du * $frame['sin'] + $dv * $frame['cos']];
+			if($du != 0 || $dy != 0 || $dv != 0)
+				$eye = [$eye[0] + $du * $frame['cos'] + $dv * $frame['sin'], $eye[1] + $dy,
+					$eye[2] - $du * $frame['sin'] + $dv * $frame['cos']];
+			if($this->ground === null || $u < $frame['low'][0] - self::SIDE - self::CLEARANCE
+				|| $u > $frame['high'][0] + self::SIDE + self::CLEARANCE) continue;
+			// A bank can rise under a sideways dodge, or between the two chase poses being interpolated.
+			$floor = ($this->ground)($eye[0], $eye[2]) + self::CLEARANCE;
+			if($eye[1] >= $floor) continue;
+			$eye[1] = $floor;
+			// If raised ground closes the opening, clear any solid the lift would put the eye inside.
+			[$across, $along] = self::local($frame, $eye);
+			foreach($frame['parts'] as [$u0, $y0, $v0, $u1, $y1, $v1])
+			{
+				if($across > $u0 - self::CLEARANCE && $across < $u1 + self::CLEARANCE
+					&& $along > $v0 - self::CLEARANCE && $along < $v1 + self::CLEARANCE
+					&& $eye[1] > $y0 - self::CLEARANCE && $eye[1] < $y1 + self::CLEARANCE)
+				{
+					$eye[1] = $frame['high'][1] + self::CLEARANCE;
+					break;
+				}
+			}
 		}
 		return $eye;
 	}
@@ -222,7 +241,7 @@ final class GateDuck
 			else $sides[0] = min($sides[0] ?? INF, $u0 - $c);
 		}
 		return ['x' => $ox, 'z' => $oz, 'cos' => $cos, 'sin' => $sin, 'low' => $low, 'high' => $high, 'clear' => $clear,
-			'sides' => $sides, 'bottom' => min($low[1], $opening['bottom'])];
+			'sides' => $sides, 'bottom' => min($low[1], $opening['bottom']), 'parts' => $parts, 'kind' => $gate['kind']];
 	}
 
 	/**
@@ -303,7 +322,7 @@ final class GateDuck
 		$c = self::CLEARANCE;
 		$clear = $frame['clear'];
 		$ranges = ['through' => $clear === null ? null : [$clear[1], $clear[3]], 'over' => [$frame['high'][1] + $c, INF],
-			'under' => [-INF, $frame['low'][1] - $c]];
+			'under' => $frame['kind'] === 'road' ? null : [-INF, $frame['low'][1] - $c]];
 		if($deep && $clear !== null && $u >= $clear[0] && $u <= $clear[2])
 			foreach($ranges as $passage => $range) if($range !== null && $eye >= $range[0] && $eye <= $range[1]) return $passage;
 		$best = 'through'; $nearest = INF;

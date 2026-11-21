@@ -1218,7 +1218,8 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 		{timeout:45_000}), {timeout:75_000}).toBe('dry');
 	const dry = await status(page);
 	expect(dry.revision).toBe(1);
-	expect(dry.course.gates.every(gate => gate.kind === 'road' && gate.height === 2 * dry.gateSizes.road.height)).toBe(true);
+	expect(dry.course.gates.every(gate => gate.kind === 'road' && gate.width === 60
+		&& gate.height === 2 * dry.gateSizes.road.height)).toBe(true);
 	// Moving the clipmap over this road must not transfer height or paint samples from PHP.
 	await expect.poll(async() => (await status(page)).renderer.roadTextureBytes).toBeGreaterThan(0);
 	const start = await status(page);

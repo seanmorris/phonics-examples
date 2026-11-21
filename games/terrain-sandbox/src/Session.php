@@ -457,7 +457,8 @@ final class Session
 		if($this->delivery !== null) return $this->delivery->target();
 		$gate = $this->race->nextGate($this->course);
 		return $gate === null ? null : ['kind'=>'checkpoint','color'=>DeliveryRun::COLORS['checkpoint'],
-			'x'=>$gate['x'],'y'=>$gate['y'],'z'=>$gate['z']];
+			'x'=>$gate['x'],'y'=>$gate['y'],'z'=>$gate['z'],'yaw'=>$gate['yaw'],
+			'halfWidth'=>$this->course->measure($gate)['window']['halfWidth']];
 	}
 
 	public function findingCircuit(): bool { return $this->circuitSearch !== null; }
@@ -1354,7 +1355,7 @@ final class Session
 		$for = $this->mode . ' ' . $this->boarding . ' ' . $this->course->revision;
 		if($this->duck === null || $for !== $this->duckFor || $this->course !== $this->duckCourse)
 		{
-			$this->duck = new GateDuck(self::DUCK_LEAD[$this->mode]);
+			$this->duck = new GateDuck(self::DUCK_LEAD[$this->mode], self::ground($this->landscape));
 			$this->duckFor = $for;
 			$this->duckCourse = $this->course;
 		}
@@ -1465,6 +1466,7 @@ final class Session
 		$this->releasePin();
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		$this->duck = null;
 		$this->balloons = new BalloonPractice;
 		$this->delivery = null;
 		$this->launches = 0;
@@ -1515,6 +1517,7 @@ final class Session
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		$this->duck = null;
 		if($this->circuitCommit !== null)
 		{
 			$this->carSearch = null;
@@ -1570,7 +1573,9 @@ final class Session
 					throw new \InvalidArgumentException('Invalid saved circuit variant.');
 				$variant = $savedCircuit['variant'];
 				$circuit = Circuit::import($savedCircuit['route'] ?? null,$candidate->recipe()['worldSize']/2);
-				$derived = $circuit->course($candidate,$this->gateShapes,$course->laps(),$variant === 'flooded');
+				// Validate older road gates at their original width. Refitting a wider span on a bank can change Y.
+				$legacyWidth = $variant === 'dry' && $circuit->featureArea !== null && ($course->start()['width'] ?? null) === 30.;
+				$derived = $circuit->course($candidate,$this->gateShapes,$course->laps(),$variant === 'flooded',$legacyWidth);
 				$expected = $derived->export();
 				$savedGates = $course->export();
 				$oldRoadHeight = $this->gateShapes->kind('road')['size']['default'][1];
@@ -1583,6 +1588,11 @@ final class Session
 				}
 				if($expected != $savedGates)
 					throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
+				if($legacyWidth)
+				{
+					try { $course = $circuit->course($candidate,$this->gateShapes,$course->laps(),false); }
+					catch(\RangeException|\OutOfBoundsException) { $course = $derived; } // Tight legacy layout or map edge.
+				}
 			}
 		}
 		catch(\RuntimeException | \InvalidArgumentException $error) { $candidate->close(); throw $error; }

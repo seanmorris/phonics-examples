@@ -9,6 +9,8 @@ final class CircuitRoad
 {
 	public const WIDTH = 36.;
 	private const SHOULDER = 16.;
+	// Overlapping grade samples carry the road material about three quarters of the way across each shoulder.
+	public const GATE_WIDTH = self::WIDTH + 1.5*self::SHOULDER;
 	private const STATION_SPACING = 40.;
 	// At 75 mph a 140 m vertical radius asks for 8.0 m/s² of downward acceleration, below gravity.
 	private const MIN_CREST_RADIUS = 140.;

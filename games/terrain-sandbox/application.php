@@ -43,6 +43,7 @@ $models = [];
 $tracers = null;
 $trailRenderer = null;
 $beacon = $arrow = null;
+$arrowBearing = null;
 $visibleSites = [];
 $shotAlpha = 1.0;
 $gates = new GateModel($session->gateShapes, __DIR__ . '/assets/gates/');
@@ -205,7 +206,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$visibleSites, &$hudShown, $hud, $publish
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -232,11 +233,16 @@ $engine->start(
 		// Placing, moving or removing a gate needs a new frame even while the view stands still.
 		if($session->course !== $course || $session->course->revision !== $courseRevision)
 		{
+			if($session->course !== $course) $arrowBearing = null;
 			$course = $session->course;
 			$courseRevision = $course->revision;
 			$dirty = true;
 		}
 		$target = $session->navigationTarget();
+		$previousBearing = $arrowBearing;
+		$arrowBearing = $target === null ? null : NavigationArrow::bearing($target, $vehiclePose, $previousBearing,
+			$session->paused ? 0.0 : $frameSeconds);
+		if($arrowBearing !== $previousBearing) $dirty = true;
 		$sites = $session->delivery?->sites() ?? [];
 		$visibleSites = [];
 		foreach($sites as $site)
@@ -269,7 +275,7 @@ $engine->start(
 				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
 			foreach($visibleSites as $site) $beacon->smoke($site,$viewCamera,$width,$height,$session->time);
-			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$vehiclePose,$viewCamera,$width,$height);
+			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
 			$craft = $session->mode === 'craft';

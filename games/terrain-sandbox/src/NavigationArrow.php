@@ -86,9 +86,31 @@ GLSL);
 		return array_map(static fn($byte) => hexdec($byte)/255, str_split(substr($hex,1),2));
 	}
 
-	public function draw(array $target, array $vehicle, Camera $camera, int $w, int $h): void
+	/** World-space heading, in camera yaw coordinates. The vehicle position is the one drawn this frame. */
+	public static function bearing(array $target, array $vehicle, ?float $previous, float $seconds): float
 	{
-		$angle = atan2($target['x']-$vehicle['x'],$vehicle['z']-$target['z']) - $camera->yaw;
+		$dx = $target['x'] - $vehicle['x'];
+		$dz = $target['z'] - $vehicle['z'];
+		if($target['kind'] === 'checkpoint')
+		{
+			// Project the vehicle onto the opening segment. Beyond an end, aim at that end.
+			$c = cos($target['yaw']); $s = sin($target['yaw']);
+			$across = max(-$target['halfWidth'], min($target['halfWidth'], -$dx*$c + $dz*$s));
+			$dx += $across*$c;
+			$dz -= $across*$s;
+			if($dx*$dx + $dz*$dz <= 1.5**2) return $previous ?? M_PI - $target['yaw'];
+		}
+		$goal = atan2($dx, -$dz);
+		if($previous === null) return $goal;
+		$turn = atan2(sin($goal - $previous), cos($goal - $previous));
+		if(abs($turn) <= .001) return $goal;
+		// A tenth-second half-life follows the shorter arc, including across the signed yaw seam.
+		return $previous + $turn * (1. - 2**(-$seconds/.10));
+	}
+
+	public function draw(array $target, float $bearing, Camera $camera, int $w, int $h): void
+	{
+		$angle = $bearing - $camera->yaw;
 		if(cos($camera->pitch) < 0) $angle += M_PI;
 		$size = min(78.,$h*.087,$w*.13);
 		// A tip pointing back projects up to 1.43 radii above the pivot.

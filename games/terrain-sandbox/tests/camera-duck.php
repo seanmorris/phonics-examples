@@ -319,6 +319,31 @@ expect($view !== $camera && $camera->position === [0.0, 3.5, -.2] && abs($view->
 	&& abs($after[0] * $towards[0] + $after[1] * $towards[1] + $after[2] * $towards[2] - $length) < 1e-9,
 	'apply() lowers a copy of the camera and turns it to the point the camera looked at');
 
+// Descend from a raised road toward a short gantry. The gate's own base cannot bound ground behind the car.
+$graded = new Session(['worldSize'=>256, 'heightScale'=>0, 'detailAmplitude'=>0, 'waterLevel'=>-20]);
+$graded->landscape->queue(['type'=>'road', 'points'=>[[0,24,-24],[0,0,0],[0,-12,24]], 'width'=>36, 'shoulder'=>2, 'crown'=>.1]);
+$graded->landscape->commit();
+$ground = $graded->landscape->height(...);
+$graded->course->place('start','road',0,0,0,0,1,36,2,$ground);
+$gates = $graded->course->obstructions();
+$raw = new GateDuck(10);
+$bounded = new GateDuck(10, $ground);
+$before = $after = $solid = INF;
+for($i = 0; $i <= 100; $i++)
+{
+	$z = -8 + $i*.1;
+	$camera->position = [0.,$ground(0,$z)+2.55,$z];
+	$vehicle = [0.,$ground(0,$z+6.7),$z+6.7];
+	$bounded->step($gates,$camera->position,$vehicle);
+	$before = min($before,$raw->place($gates,$camera->position,$vehicle)[1]-$ground(0,$z));
+	[$x,$y,$eyeZ] = $bounded->apply($camera,$vehicle,$gates)->position;
+	$after = min($after,$y-$ground($x,$eyeZ));
+	$solid = min($solid,clearance([$x,$y,$eyeZ],$gates));
+}
+expect($before < 0 && $after >= $c-1e-9 && $solid >= $c-1e-9,
+	'A duck into a descending road keeps the final eye clear of both the edited surface and the gantry.');
+$graded->close();
+
 /**
  * Drive a session through a course and test every drawn eye.
  * @param Session $session Session with the vehicle boarded.

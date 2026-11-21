@@ -119,7 +119,9 @@ The chase camera never passes through a gate. Behind a vehicle that goes through
 
 **Save file** stores the gates and their sizes with the landscape, and **Load file** brings them back. Gates in files saved before gates had sizes load at their kinds' own sizes. **Generate** starts the new landscape without gates.
 
-The overhead arrow shows its underside. Straight ahead points down the screen, a U-turn points up, and the end nearest you appears larger. During a race it turns amber and points toward the next gate, starting with the start gate. The minimap shows the same target.
+The chase camera keeps at least half a metre above the road while it dodges a gate, including on banks and crests.
+
+The overhead arrow shows its underside. Straight ahead points down the screen, a U-turn points up, and the end nearest you appears larger. During a race it turns amber and points to the nearest point along the next opening. It holds its direction within 1.5 metres and turns smoothly toward the following gate. The minimap marks the gate’s center.
 
 ### Generate a circuit
 
@@ -127,7 +129,7 @@ In free flight, open **Shape → Circuit generator**. Set **Minimum feature heig
 
 Leave **Start elevation** blank to put the start near the camera, or enter an absolute terrain elevation to put it on a straight within half a metre of that height. This sets the height of the start station. The rest of the road follows the route's natural elevation. Select **Find circuit near camera** to preview a match. Large height differences favour a regional search that follows connected corridors and places checkpoints after junctions where possible.
 
-The preview shows the route and gate positions. A regional course grades a 36 m road on application. It rounds off short crests and eases the grade through tight bends while carrying natural banks into the turns. The shoulders blend into the surrounding terrain. The road is one terrain edit that **Undo** can remove. Choose **Apply dry course** for the car, or **Apply flooded course** if the loop can hold enough water for the jet ski. The dry circuit has 6.1 metres of clearance under each gantry, including the start/finish line. Both variants use the same route and checkpoint order. Applying a variant replaces the current gates, sets its water level and moves the camera just before the start. Board the vehicle there and follow the line on the minimap. The amber blip marks the next gate.
+The preview shows the route and gate positions. A regional course grades a 36 m road on application. It rounds off short crests and eases the grade through tight bends while carrying natural banks into the turns. The shoulders blend into the surrounding terrain. The road is one terrain edit that **Undo** can remove. Choose **Apply dry course** for the car, or **Apply flooded course** if the loop can hold enough water for the jet ski. On a regional dry circuit every gantry has a 60 m opening across the road and its painted shoulders, including the start/finish line. The vertical clearance is 6.1 m. Both variants use the same route and checkpoint order. Applying a variant replaces the current gates, sets its water level and moves the camera just before the start. Board the vehicle there and follow the line on the minimap. The amber blip marks the next gate.
 
 Landscape files save the applied variant and both available water levels, so you can switch variants after loading. Run the search again after changing the terrain.
 
