@@ -20,7 +20,7 @@ final class MaterialShader
 		'joints'=>'jointTint', 'slab-tone'=>'vec3(tone)', 'lichen'=>'lichenTint', 'sand'=>'vec3(1.-.16*stipple)', 'snow'=>'vec3(1.-.35*stipple)',
 	];
 	private const RELIEF = [
-		'facets'=>'facet*slabFade*settled', 'crowns'=>'vec3(offset.x,0.,offset.y)*.5*crown*cellFade',
+		'facets'=>'facet*slabFade*settled', 'crowns'=>'vec3(offset.x,0.,offset.y)*.5*crownRelief*cellFade',
 		'blocks'=>'vec3(offset.x,0.,offset.y)*.6*block*cellFade',
 	];
 
@@ -50,8 +50,7 @@ final class MaterialShader
 		$glsl = [$head, 'float slope=1.-max(0.,normal.y);'];
 		if($fields) {
 			$glsl[] = 'vec3 weights=pow(abs(normal),vec3(4.)); weights/=dot(weights,vec3(1.));';
-			$glsl[] = 'float snowline=uSnowline.x+25.*macro; float stipple=0.;';
-			if(!$chart) $glsl[] = 'stipple=patternVisibility(footprint,1.6,STIPPLE_PATTERN)*projectedPattern(pos,weights,1.6,1.,vec2(73.37,19.81),STIPPLE_PATTERN);';
+			$glsl[] = 'float snowline=uSnowline.x+25.*macro; float stipple=stippleGrain(pos,1.6,1.,footprint);';
 			$glsl[] = file_get_contents(dirname(__DIR__).'/shaders/material-fields.glsl');
 		}
 		$glsl[] = 'float bed=pos.y-dot(pos.xz,vec2(.006,-.003)), bedPixel=fwidth(bed), masks[16];';

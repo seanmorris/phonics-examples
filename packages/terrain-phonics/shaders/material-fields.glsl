@@ -64,9 +64,16 @@
 	float block = (1.0 - smoothstep(size - 0.05, size + 0.03 + aa,
 		max(abs(offset.x), abs(offset.y) * (0.75 + 0.5*seed2)))) * within;
 	float blocks = mix(1.0, mix(0.82, 0.88 + 0.24*seed, block) / 0.91, cellFade);
-	// Crowns vary in size, and the tufts wobble their edges, so the grid does not show as a lattice.
-	float crown = (1.0 - smoothstep(0.2, 0.34 + 0.2*fract(seed * 7.7) + aa, length(offset) + 0.25*tuft)) * within;
-	float crowns = mix(1.0, mix(0.7, 1.15 + 0.2*seed2, crown) / 0.89, cellFade);
+	// From far away each crown has a single silhouette. Up close it sets the density of
+	// foliage, with leaves and gaps both inside the crown and between adjacent crowns.
+	float silhouette = (1.0 - smoothstep(0.2, 0.34 + 0.2*fract(seed * 7.7) + aa, length(offset) + 0.25*tuft)) * within;
+	float close = 1.0 - smoothstep(.10, .25, aa);
+	float leaves = smoothstep(-.36, .4, .24*(silhouette-.5) + .62*tuft - stipple);
+	float crown = mix(silhouette, leaves, close);
+	// Only the silhouette carries a cell's own tint and tilt. Both vanish at its edge.
+	float crowns = mix(1.0, (.7 + .55*crown + .2*(seed2-.5)*silhouette) / .89, cellFade);
+	float crownRelief = silhouette * mix(1.0, .3 + .7*leaves, close);
+	blocks *= 1.0 - .23*stipple;
 	// Boulders on a grid three times coarser carry the rubble's texture further out than the blocks do. Each is
 	// turned and sized at random, and the blocks show between the smaller ones and in the cells that have none. Their
 	// cells cut them off as the small cells cut the blocks.
@@ -153,7 +160,7 @@
 	float blockCover = bare*(1.-cliffFraction)/max(.000001,1.-cliffCover);
 	float graniteCover = (cliffCover-stainCover)/max(.000001,1.-stainCover);
 	vec3 lichenTint = mix(vec3(1.), vec3(.88,.94,.84)-.22*stipple,lichen);
-	vec3 jointTint = tone*lichenTint;
+	vec3 jointTint = tone*lichenTint*(1.0 - .18*stipple);
 	float shore = (1.-smoothstep(water+uHeightBlend.x,water+uHeightBlend.y,pos.y))*normal.y;
 	float snow = smoothstep(snowline,snowline+uSnowline.y,pos.y)*(1.-smoothstep(uSlopeBlend.z,uSlopeBlend.w,slope));
 	float relief = (1.0 - smoothstep(snowline, snowline + uSnowline.y, pos.y)

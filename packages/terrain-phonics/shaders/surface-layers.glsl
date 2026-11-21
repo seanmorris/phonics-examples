@@ -15,12 +15,38 @@ float layerCorner(ivec2 cell) {
 	h=(h^(h>>16))*2246822519u;
 	return float(h>>8)*(2./16777216.)-1.;
 }
-float layerValueNoise(vec2 uv) {
-	vec2 t=fract(uv);
-	t=t*t*(3.-2.*t);
-	ivec2 c=ivec2(floor(uv));
+float layerCellNoise(ivec2 c,vec2 t) {
 	return mix(mix(layerCorner(c),layerCorner(c+ivec2(1,0)),t.x),
 		mix(layerCorner(c+ivec2(0,1)),layerCorner(c+1),t.x),t.y);
+}
+float layerValueNoise(vec2 uv) {
+	vec2 t=fract(uv);
+	return layerCellNoise(ivec2(floor(uv)),t*t*(3.-2.*t));
+}
+
+// Signed volume noise gives cliffs and level ground the same grain. At the ridge's 1.6 m
+// pattern scale the five bands run from 53 cm down to 7 mm. Each returns to its mean
+// before its cells are less than two pixels wide.
+float stippleGrain(vec3 pos,float scale,float stretch,float footprint) {
+	vec3 p=vec3(pos.x,pos.y/stretch,pos.z)*(3./scale);
+	float pixel=3.*footprint/(scale*min(1.,stretch));
+	const mat3 turn=mat3(0.,.8,.6, -.8,.36,-.48, -.6,-.48,.64);
+	const ivec2 slice=ivec2(61,149);
+	float sum=0., amplitude=.65;
+	for(int octave=0;octave<5;octave++) {
+		if(pixel>=.5) break;
+		ivec3 cell=ivec3(floor(p));
+		vec3 t=fract(p);
+		t=t*t*(3.-2.*t);
+		// Salt the integer lattice so the landscape seed does not cost subpixel precision.
+		ivec2 base=cell.xz+cell.y*slice+ivec2(uPaletteOffset);
+		float band=mix(layerCellNoise(base,t.xz),layerCellNoise(base+slice,t.xz),t.y);
+		sum+=amplitude*(1.-smoothstep(.16,.5,pixel))*band;
+		p=turn*p*3.+vec3(13.7,7.1,27.9);
+		pixel*=3.;
+		amplitude*=.80;
+	}
+	return sum;
 }
 float fractalMask(vec3 pos,float scale,float stretch,float footprint,bool veins) {
 	vec3 p=vec3(pos.x+uPaletteOffset.x,pos.y/stretch,pos.z+uPaletteOffset.y)/scale;
@@ -53,13 +79,6 @@ float layerNoise(vec2 xz,float scale,float footprint) {
 }
 
 float patternMask(vec2 uv, int kind) {
-	if(kind==STIPPLE_PATTERN) {
-		ivec2 cell=ivec2(floor(uv));
-		float seed=.5+.5*layerCorner(cell+ivec2(89,13));
-		vec2 center=vec2(.5)+.25*vec2(layerCorner(cell),layerCorner(cell+ivec2(29,7)));
-		float radius=mix(.07,.18,seed);
-		return smoothstep(.10,.40,seed)*(1.-smoothstep(radius-.03,radius+.05,length(fract(uv)-center)));
-	}
 	if(kind==3) {
 		ivec2 cell=ivec2(floor(uv));
 		float grit=.5+.5*layerCorner(cell);
@@ -93,6 +112,15 @@ float layerPatternWeight(int layer,vec3 pos,vec3 normal,float footprint,float be
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
 	if(kind==0 || pattern.y<=0.) return 0.;
+	#if !defined(MATERIAL_STACK) || defined(PATTERN_STIPPLE)
+	if(kind==STIPPLE_PATTERN) {
+		float visible=patternVisibility(footprint,pattern.z*min(1.,pattern.w),kind);
+		if(visible<=0.) return 0.;
+		float grain=stippleGrain(pos,pattern.z,pattern.w,footprint);
+		float ink=clamp(.18+grain,0.,1.);
+		return pattern.y*visible*ink*ink;
+	}
+	#endif
 	#if !defined(MATERIAL_STACK) || defined(PATTERN_FRACTAL) || defined(PATTERN_VEINS)
 	if(kind==FRACTAL_PATTERN || kind==VEIN_PATTERN)
 		return pattern.y*fractalMask(pos,pattern.z,pattern.w,footprint,kind==VEIN_PATTERN);

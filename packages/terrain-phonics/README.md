@@ -124,7 +124,7 @@ $rows[] = ['id'=>'ripples', 'name'=>'Sand ripples', 'parent'=>'sand',
 $scene->layers = new SurfaceLayers($rows, $surface->fields, $surface->bounce);
 ```
 
-Patterns use world-space meters and fade with the pixel footprint. A layer can use one pattern for tint and bump, sample a shared coverage field such as scree, or add facets, crown, block and rib relief. `flatten` controls how much previous relief is removed under its coverage. Lighting normals affect presentation only. The chart samples the same stack for color. Paint inks apply last on both views. Fully painted road uses its road ink and geometric normal, with shoulders blending by coverage. `Scene::$paint` can supply a separate ink palette.
+Patterns use world-space meters and fade with the pixel footprint. Stipple has five scales of grain. At the 1.6 m scale used on Mountain Ridges, these range from about 53 cm to 7 mm. A layer can use one pattern for tint and bump, sample a shared coverage field such as scree, or add facets, crown, block and rib relief. `flatten` controls how much previous relief is removed under its coverage. Lighting normals affect presentation only. The chart samples the same stack for color. Paint inks apply last on both views. Fully painted road uses its road ink and geometric normal, with shoulders blending by coverage. `Scene::$paint` can supply a separate ink palette.
 
 
 `Water` evaluates analytic directional waves and bounded wake packets. Its shader include uses the same
