@@ -4,12 +4,18 @@ namespace TerrainPhonics;
 
 use Phonics\Render\Program;
 
-/** Ordered color masks shared by the ground and both map scales. */
+/** Ordered material masks shared by the ground and both map scales. */
 final class SurfaceLayers
 {
-	public const LIMIT = 12;
-	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins'];
+	public const LIMIT = 16;
+	public const MASKS = ['all','shrubs','tundra','lowland','trees','scree','blocks','slabs','stains','lichen','joints','gullies','crowns','facet-cover','block-cover','crown-cover','shore','snow'];
+	public const FIELDS = ['plain','meadow','shrubs','tundra','lowland','crowns','talus','blocks','joints','slab-tone','lichen','sand','snow'];
+	public const RELIEF = ['none','pattern','ribs','facets','crowns','blocks'];
+	public const CHANNELS = ['color','relief','both'];
+	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples'];
 	public const DEFAULTS = [
+		'id' => '', 'name' => '', 'mask' => 'all', 'field' => 'plain',
+		'channel' => 'color', 'relief' => 'none', 'strength' => 1., 'flatten' => 0., 'opacity' => 1.,
 		'color' => '#807355'
 		, 'low' => -1000000.
 		, 'high' => 1000000.
@@ -30,14 +36,43 @@ final class SurfaceLayers
 	];
 	public readonly array $layers;
 	private array $colors = [], $ranges = [], $blends = [], $modes = [];
-	private array $patterns = [], $patternColors = [];
+	private array $patterns = [], $patternColors = [], $effects = [];
+	/** Identical structures share a linked program. All editable numbers and colors are uniforms. */
+	public readonly string $structure;
+	public readonly array $fields;
+	private array $fieldUniforms;
+	public const INKS = ['rockColor','grassColor','sandColor','snowColor','roadColor'];
+	public const SCALES = ['gullySize'=>[48.,1.,512.], 'blockSize'=>[3.,.25,64.],
+		'jointWidth'=>[13.,.5,128.], 'jointHeight'=>[23.,.5,256.]];
+	public const FIELD_KEYS = ['rockSlopeStart','rockSlopeEnd','beachHeight','beachWidth','snowline','snowTransition',
+		'alpineStart','alpineEnd','snowSlopeStart','snowSlopeEnd','macroVariation','treeline','tundraStart',
+		'talusAmount','stainAmount','lichenAmount'];
 
-	public function __construct(array $layers)
+	public function __construct(array $layers, array $fields = [], public readonly array $bounce = [0.,0.,0.])
 	{
 		if(!array_is_list($layers) || !$layers || count($layers) > self::LIMIT)
-		throw new \InvalidArgumentException('A surface needs one to twelve color layers.');
+		throw new \InvalidArgumentException('A surface needs one to sixteen material layers.');
 
+		if(!array_is_list($bounce) || count($bounce) !== 3 || array_filter($bounce, static fn($n) =>
+			(!is_float($n) && !is_int($n)) || !is_finite($n) || $n < 0 || $n > 1))
+			throw new \InvalidArgumentException('Invalid reflected light color.');
+		$keys = array_flip(self::FIELD_KEYS);
+		if(array_diff_key($fields,$keys,self::SCALES)) throw new \InvalidArgumentException('Unknown shared material field.');
+		$appearance = new TerrainAppearance($fields);
+		$scales = [];
+		foreach(self::SCALES as $key=>[$default,$min,$max]) {
+			$value = $fields[$key] ?? $default;
+			if((!is_float($value) && !is_int($value)) || !is_finite($value) || $value < $min || $value > $max)
+				throw new \InvalidArgumentException('Invalid material field scale.');
+			$scales[$key] = (float)$value;
+		}
+		$this->fields = array_intersect_key($appearance->settings,$keys) + $scales;
+		$this->fieldUniforms = array_intersect_key($appearance->uniforms(),array_flip([
+			'uSlopeBlend','uHeightBlend','uSnowline','uMacroVariation','uMountainZones','uMountainAmounts',
+		])) + ['uFieldScale'=>array_values($scales)];
 		$rows = [];
+		$ids = [];
+		$structure = [];
 
 		foreach($layers as $i => $row)
 		{
@@ -45,6 +80,25 @@ final class SurfaceLayers
 			throw new \InvalidArgumentException('Unknown layer field.');
 
 			$row += ['patternColor' => $row['color'] ?? self::DEFAULTS['color']] + self::DEFAULTS;
+
+			$row['id'] = $row['id'] === '' ? 'layer-'.($i+1) : $row['id'];
+			$row['name'] = $row['name'] === '' ? 'Layer '.($i+1) : $row['name'];
+			if(!is_string($row['id']) || !preg_match('/^[a-z][a-z0-9-]{0,63}$/D',$row['id']) || isset($ids[$row['id']])
+				|| !is_string($row['name']) || trim($row['name']) === '' || strlen($row['name']) > 96)
+			throw new \InvalidArgumentException('Choose a unique layer ID and a short name.');
+			if(is_string($row['parent']) && !is_numeric($row['parent']))
+				$row['parent'] = $ids[$row['parent']] ?? -2;
+			$ids[$row['id']] = $i;
+			foreach(['field'=>self::FIELDS,'mask'=>self::MASKS,'relief'=>self::RELIEF,'channel'=>self::CHANNELS] as $key=>$choices)
+				if(!in_array($row[$key],$choices,true)) throw new \InvalidArgumentException('Unknown material '.$key.'.');
+			if($i === 0 && $row['channel'] === 'relief')
+				throw new \InvalidArgumentException('The base layer must supply a color.');
+			foreach(['strength' => 32., 'flatten' => 1., 'opacity' => 1.] as $key=>$limit)
+			{
+				if(!is_numeric($row[$key]) || !is_finite((float)$row[$key]) || $row[$key] < ($key === 'strength' ? -32. : 0.) || $row[$key] > $limit)
+					throw new \InvalidArgumentException('Invalid material '.$key.'.');
+				$row[$key] = (float)$row[$key];
+			}
 
 			foreach(['color', 'patternColor'] as $field)
 			if(!is_string($row[$field]) || !preg_match('/^#[0-9a-f]{6}$/iD', $row[$field]))
@@ -88,7 +142,9 @@ final class SurfaceLayers
 			throw new \InvalidArgumentException('Invalid layer bounds, noise, or parent.');
 
 			$row['parent'] = (int)$row['parent'];
-			$rows[] = $row;
+			$rows[] = array_replace(self::DEFAULTS,$row);
+			$structure[] = [$row['mask'], $row['field'], $row['channel'], $row['relief'], $row['pattern']];
+			array_push($this->effects,$row['strength'],$row['flatten'],$row['opacity'], (float)($row['low'] <= -1e6 && $row['high'] >= 1e6 && $row['slopeLow'] == 0. && $row['slopeHigh'] == 1. && $row['period'] == 0.));
 			array_push($this->colors, ...TerrainAppearance::linear($row['color']));
 			array_push($this->ranges, $row['low'], $row['high'], $row['slopeLow'], $row['slopeHigh']);
 			array_push($this->blends, $row['fade'], $row['slopeFade'], $row['noise'], $row['scale']);
@@ -97,6 +153,11 @@ final class SurfaceLayers
 			array_push($this->patternColors, ...TerrainAppearance::linear($row['patternColor']));
 		}
 
+		$ordinary = true;
+		foreach($rows as $row) if($row['mask'] !== 'all' || $row['field'] !== 'plain' || $row['channel'] !== 'color') $ordinary = false;
+		$patterns = array_values(array_unique(array_column($rows,'pattern')));
+		sort($patterns);
+		$this->structure = $ordinary ? 'color/'.implode('/',$patterns) : json_encode($structure, JSON_THROW_ON_ERROR);
 		$this->layers = $rows;
 		$this->markRepeatingSections();
 	}
@@ -104,13 +165,13 @@ final class SurfaceLayers
 	/** Blend a complete, contiguous section of sibling beds together at each contact. */
 	private function markRepeatingSections(): void
 	{
-		$fields = array_flip(['datum', 'period', 'parent', 'noise', 'scale', 'slopeLow', 'slopeHigh', 'slopeFade']);
+		$fields = array_flip(['datum', 'period', 'parent', 'noise', 'scale', 'slopeLow', 'slopeHigh', 'slopeFade', 'channel', 'field', 'mask', 'opacity', 'flatten']);
 		$count = count($this->layers);
 		for($first = 1; $first < $count; $first = $next)
 		{
 			$start = $this->layers[$first];
 			$next = $first + 1;
-			if($start['period'] <= 0) continue;
+			if($start['period'] <= 0 || $start['channel'] !== 'color' || $start['field'] !== 'plain' || $start['mask'] !== 'all' || $start['flatten'] != 0.) continue;
 
 			$mask = array_intersect_key($start, $fields);
 			$precision = $start['period'] * 1e-7;
@@ -135,28 +196,18 @@ final class SurfaceLayers
 		$s = $appearance->settings;
 		$style = ($r['preset'] ?? '') === 'limestone' ? 'limestone' : TerrainAppearance::style($r);
 		$canyon = str_starts_with($style, 'canyon');
-		$rows = match($style)
-		{
-			'canyon' => self::canyonLayers($r, $appearance),
+		if($style === 'mountain') return self::ridges($s);
+		$rows = match($style) {
+			'canyon' => self::canyonLayers($r,$appearance),
 			'canyon-v1' => self::earlyCanyonLayers($s),
-			'limestone' => self::limestoneLayers($s, ($r['baseBias'] ?? 0.) * ($r['heightScale'] ?? 0.)),
-			'mountain' => [['color' => $s['forestColor']] + self::stipple($s['forestColor'], .70)],
-			default => [['color' => $s['grassColor']]],
+			'limestone' => self::limestoneLayers($s,($r['baseBias'] ?? 0.) * ($r['heightScale'] ?? 0.)),
+			default => [['color'=>$s['grassColor']]],
 		};
-
-		if($style === 'mountain')
-		{
-			$rows[] = ['color' => $s['meadowColor'],'low' => $s['snowline'] + $s['treeline'],'fade' => 40,'noise' => 15]
-				+ self::stipple($s['meadowColor'], .70);
-			$rows[] = ['color' => $s['tundraColor'],'low' => $s['snowline'] + $s['tundraStart'],'fade' => 34,'noise' => 12]
-				+ self::stipple($s['tundraColor'], .70);
-		}
-
 		if(!$canyon && $style !== 'limestone')
 		{
-			$rock = $s[$style === 'mountain' ? 'graniteColor' : 'rockColor'];
+			$rock = $s['rockColor'];
 			$rows[] = self::exposedRock($s) + ['color' => $rock]
-				+ ($style === 'mountain' ? self::stipple($rock, .68, $s['lichenAmount']) : self::stipple($rock, .80, .60));
+				+ self::stipple($rock, .80, .60);
 		}
 
 		$rows[] = ['color' => $s['sandColor'],'high' => $s['beachHeight'],'datum' => 'water','fade' => $s['beachWidth']]
@@ -170,9 +221,48 @@ final class SurfaceLayers
 			, 'slopeHigh' => $s['snowSlopeEnd']
 			, 'slopeFade' => $s['snowSlopeEnd'] - $s['snowSlopeStart']
 			, 'noise' => 24.
-		] + ($style === 'mountain' ? self::stipple($s['snowColor'], .65) : []);
+		];
 
-		return new self($rows);
+		$names = match($style) {
+			'canyon' => ['Canyon dust','Rust beds','Shale','Ledge','Lower sandstone','Red beds','Upper sandstone','Cap rock','Sand'],
+			'canyon-v1' => ['Soil','Light strata','Dark strata','Sand'],
+			'limestone' => ['Grassland','Valley grass','Outcrops','Limestone','Mineral veins','Sand','Snow'],
+			default => ['Grass','Exposed rock','Sand','Snow'],
+		};
+		foreach($rows as $i=>&$row) {
+			$row['name'] = $names[$i];
+			$row['id'] = strtolower(str_replace(' ','-',$names[$i]));
+		}
+		unset($row);
+		if($style === 'coast') $rows[] = ['id'=>'coastal-bands','name'=>'Coastal bands','color'=>$s['rockBandColor'],
+			'parent'=>'exposed-rock','pattern'=>'bedded','period'=>$s['bandSpacing'],'low'=>0.,'high'=>.45*$s['bandSpacing'],
+			'fade'=>.08*$s['bandSpacing'],'opacity'=>0.];
+		return new self($rows,array_intersect_key($s,array_flip(self::FIELD_KEYS)),
+			$style === 'canyon' ? $appearance->canyonColors()['bounce'] : [0.,0.,0.]);
+	}
+
+	/** Every field is available to other recipes. A material can also use a different field's coverage. */
+	private static function ridges(array $s): self
+	{
+		$rows = [];
+		foreach([
+			['Meadow','meadow','all','meadow'], ['Shrubs','meadow','shrubs','shrubs'],
+			['Tundra','tundra','tundra','tundra'], ['Valley grass','grass','lowland','lowland'],
+			['Forest','forest','trees','crowns'], ['Talus fans','talus','scree','talus'],
+			['Block fields','talus','blocks','blocks'], ['Granite slabs','granite','slabs','joints'],
+			['Iron stains','stain','stains','joints'],
+		] as [$name,$color,$mask,$field]) {
+			$row = ['name'=>$name,'id'=>strtolower(str_replace(' ','-',$name)),'color'=>$s[$color.'Color'],
+				'mask'=>$mask,'field'=>$field];
+			if($field === 'shrubs') $row['patternColor'] = $s['forestColor'];
+			$rows[] = $row;
+		}
+		foreach(['Facets','Blocks','Crowns','Ribs'] as $name)
+			$rows[] = ['id'=>'relief-'.strtolower($name),'name'=>$name.' relief','channel'=>'relief','relief'=>strtolower($name),
+				'mask'=>match($name){'Facets'=>'facet-cover','Blocks'=>'block-cover','Crowns'=>'crown-cover',default=>'all'}];
+		$rows[] = ['id'=>'shore','name'=>'Sandy shore','field'=>'sand','mask'=>'shore','color'=>$s['sandColor']];
+		$rows[] = ['id'=>'snow','name'=>'Snow','field'=>'snow','mask'=>'snow','color'=>$s['snowColor']];
+		return new self($rows,array_intersect_key($s,array_flip(self::FIELD_KEYS)));
 	}
 
 	private static function stipple(string $color, float $shade, float $amount = 1., float $size = 1.6): array
@@ -303,12 +393,21 @@ final class SurfaceLayers
 
 	public function bind(Program $p): void
 	{
+		foreach($this->fieldUniforms as $name=>$values) {
+			$location = $p->location($name);
+			match(count($values)) {
+				1=>glUniform1f($location,...$values), 2=>glUniform2f($location,...$values),
+				3=>glUniform3f($location,...$values), 4=>glUniform4f($location,...$values),
+			};
+		}
+		glUniform3f($p->location('uMaterialBounce'),...$this->bounce);
 		$n = count($this->layers);
 		glUniform1i($p->location('uLayerCount'), $n);
 		glUniform3fv($p->location('uLayerColor[0]'), $n, $this->colors);
 		glUniform4fv($p->location('uLayerRange[0]'), $n, $this->ranges);
 		glUniform4fv($p->location('uLayerBlend[0]'), $n, $this->blends);
 		glUniform4fv($p->location('uLayerMode[0]'), $n, $this->modes);
+		glUniform4fv($p->location('uLayerEffect[0]'), $n, $this->effects);
 		glUniform4fv($p->location('uLayerPattern[0]'), $n, $this->patterns);
 		glUniform3fv($p->location('uLayerPatternColor[0]'), $n, $this->patternColors);
 	}

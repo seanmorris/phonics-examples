@@ -7,7 +7,8 @@ use Phonics\Render\Program;
 /** A camera-centered stack of toroidal GPU elevation textures and one world overview. */
 final class Clipmap
 {
-	private Program $generator, $chart;
+	private Program $generator;
+	private ?TerrainAppearance $chartAppearance = null;
 	private ?TriangleShadows $shadows = null;
 	private ?SurfaceLayers $chartLayers = null;
 	private array $vao = [], $framebuffer = [], $permutation = [], $levels = [], $overview = [];
@@ -41,15 +42,6 @@ final class Clipmap
 		$this->generator = new Program(
 			file_get_contents($root . 'shadows.vert')
 			, file_get_contents($root . 'elevation.frag')
-		);
-
-		$this->chart = new Program(
-			file_get_contents($root . 'shadows.vert')
-			, str_replace(
-				'// LAYERS'
-				, file_get_contents($root . 'surface-layers.glsl')
-				, file_get_contents($root . 'chart.frag')
-			)
 		);
 
 		glGenVertexArrays(1, $this->vao);
@@ -720,7 +712,8 @@ final class Clipmap
 
 	/** Return the drawn span for overlays that need the same world-to-chart scale. */
 	public function chart(
-		array $position
+		Program $p
+		, array $position
 		, float $bearing
 		, bool $wide
 		, int $w
@@ -735,11 +728,12 @@ final class Clipmap
 	): ?float {
 		if(!$this->overview) return null;
 
-		$p = $this->chart;
 		$p->use();
 
-		if($layers !== $this->chartLayers)
+		if($layers !== $this->chartLayers || $appearance !== $this->chartAppearance)
 		{
+			$appearance->bindPaint($p);
+			$this->chartAppearance = $appearance;
 			$layers->bind($p);
 			$this->chartLayers = $layers;
 		}
@@ -784,11 +778,6 @@ final class Clipmap
 		glUniform1f($p->location('uExtent'), $extent);
 		glUniform1f($p->location('uWaterLevel'), $water);
 		glUniform3f($p->location('uWaterColor'), ...$waterColor);
-		$colors = [];
-
-		foreach(['rockColor','grassColor','sandColor','snowColor','roadColor'] as $key)
-		array_push($colors, ...TerrainAppearance::linear($appearance->settings[$key]));
-		glUniform3fv($p->location('uPaintColor[0]'), 5, $colors);
 		glUniform2f($p->location('uViewportOrigin'), 10, 10);
 		$names = ['uOverview','uMapInk','uFine','uFineInk'];
 
@@ -860,7 +849,6 @@ final class Clipmap
 		glDeleteVertexArrays(1, $this->vao);
 		glDeleteFramebuffers(1, $this->framebuffer);
 		$this->generator->close();
-		$this->chart->close();
 		$this->shadows?->close();
 	}
 }

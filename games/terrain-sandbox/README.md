@@ -10,7 +10,7 @@ Run `node scripts/bench-terrain.mjs` from the examples checkout with the preview
 
 The GPU generates elevation textures in concentric levels around the camera. At each level, moving into a new grid cell refreshes only the newly exposed strips. The F5 local map uses resident detail and the wide chart uses the world overview. Both maps use the current palette and water level.
 
-Use the Landscape tab to copy a preset into the landform controls, then edit the coefficients and generate. Select a surround to extend the scenery beyond the authored area. The Surface tab can store a custom stack of color layers with height, slope, noise and parent masks. The save file carries these settings and the existing terrain edit history.
+Use the Landscape tab to copy a preset into the landform controls, then edit the coefficients and generate. Select a surround to extend the scenery beyond the authored area. The Surface tab can store an ordered stack of color and lighting-relief layers with shared fields, height, slope, noise and parent masks. Paint inks override this stack on the ground and minimap. The save file carries these settings and the existing terrain edit history.
 
 Read `state.renderer` on `document.querySelector('canvas[data-terrain-sandbox]').terrainSandboxDebug` to see the resident levels, texture bytes, texels generated and edit upload bytes. Run `node scripts/bench-terrain-stream.mjs` for whole-frame percentiles and vertex transfers, with `SOFTWARE_GL=1` to select SwiftShader.
 
@@ -20,7 +20,7 @@ The Testarossa's brake and reversing lamps follow the pedals and the handbrake, 
 
 The Testarossa has a soft contact shadow, darkest between its wheels and fainter around its bumpers and sills. Its strength depends on clearance above the local ground. It stays at full strength through 25 cm, fades to half strength at 1.625 m, and stops drawing at 3 m. The shadow follows the terrain triangles already on the GPU. While those triangles stream in, a small grid of cached terrain heights supplies the fallback.
 
-The panel's Surface tab sets the terrain package's `TerrainAppearance`: the ground's colors, banding and blending. PHP sends the settings' groups, ranges, defaults and `TerrainAppearance::USES` once through the `terrainSurface` bridge, and the page shows only the settings the current preset reads (`state.surfaceStyle`). The settings are ordinary saved settings; `Session::load()` builds the whole appearance from a file before it replaces anything.
+The Surface tab edits a PHP-owned `SurfaceLayers` recipe. PHP sends the available channels, fields, masks and parameter ranges through the `terrainSurface` bridge. Before committing a new structure, the scene links the ground, headlight and minimap shaders. Numeric edits reuse the linked programs. Version-five saves carry the committed recipe, its origin and the paint inks alongside the landscape edit history.
 
 ## Terrain streaming measurements
 

@@ -39,6 +39,7 @@ $engine->clock = new FixedStep(1 / 60, 4);
 $engine->input->bindButton(9, []);
 $engine->input->bindGamepad(9, []);
 $scene = new Scene($session->landscape, $session->water, $session->atmosphere, useClipmap: true);
+$session->prepareMaterial = $scene->prepareMaterial(...);
 $models = [];
 $tracers = null;
 $trailRenderer = null;
@@ -73,10 +74,12 @@ $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainVehicleFrame');
 $hudShown = false;
 // The panel builds its Surface tab once from the appearance settings' groups, ranges, defaults and per-style use.
-(vrzno_env('terrainSurface'))(json_encode(['groups' => TerrainPhonics\TerrainAppearance::GROUPS,
-	'ranges' => TerrainPhonics\TerrainAppearance::RANGES, 'defaults' => TerrainPhonics\TerrainAppearance::DEFAULTS,
-	'uses' => TerrainPhonics\TerrainAppearance::USES,
-	'presetSurfaces' => ['limestone' => Session::LIMESTONE_SURFACE],
+(vrzno_env('terrainSurface'))(json_encode(['masks'=>TerrainPhonics\SurfaceLayers::MASKS,'fields'=>TerrainPhonics\SurfaceLayers::FIELDS,
+	'relief'=>TerrainPhonics\SurfaceLayers::RELIEF,'channels'=>TerrainPhonics\SurfaceLayers::CHANNELS,
+	'patterns'=>TerrainPhonics\SurfaceLayers::PATTERNS,'limit'=>TerrainPhonics\SurfaceLayers::LIMIT,
+	'layerDefaults'=>TerrainPhonics\SurfaceLayers::DEFAULTS,'ranges'=>TerrainPhonics\TerrainAppearance::RANGES
+		+ array_map(static fn($v)=>array_slice($v,1),TerrainPhonics\SurfaceLayers::SCALES),
+	'inkKeys'=>TerrainPhonics\SurfaceLayers::INKS,'fieldKeys'=>[...TerrainPhonics\SurfaceLayers::FIELD_KEYS,...array_keys(TerrainPhonics\SurfaceLayers::SCALES)],
 	'presets' => array_combine(Recipe::PRESETS, array_map([Session::class, 'preset'], Recipe::PRESETS))], JSON_THROW_ON_ERROR));
 
 // Slow GPU frames can be hundreds of milliseconds apart. Give a pending route short turns in the gaps.
@@ -147,7 +150,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$scene->quality = $session->settings['quality'];
 	// The same object while nothing changes, so the scene uploads the appearance only after a change.
 	$scene->appearance = $session->terrainAppearance;
-	$scene->layers = $session->surfaceLayers;
+	$scene->layers = $session->activeLayers();
+	$scene->paint = $session->paint;
 	$scene->selectionInterval = $session->selectionInterval;
 	$scene->selectionSliceMs = $session->selectionSliceMs;
 	$engine->userPaused = $session->paused;

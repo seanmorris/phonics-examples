@@ -2,10 +2,12 @@ const int STIPPLE_PATTERN = 5;
 const int FRACTAL_PATTERN = 6;
 const int VEIN_PATTERN = 7;
 uniform int uLayerCount;
-uniform vec3 uLayerColor[12];
-uniform vec4 uLayerRange[12],uLayerBlend[12],uLayerMode[12];
-uniform vec4 uLayerPattern[12];
-uniform vec3 uLayerPatternColor[12];
+uniform vec4 uFieldScale;
+uniform vec4 uLayerEffect[16]; // relief strength, flattening, opacity, unrestricted range
+uniform vec3 uLayerColor[16];
+uniform vec4 uLayerRange[16],uLayerBlend[16],uLayerMode[16];
+uniform vec4 uLayerPattern[16];
+uniform vec3 uLayerPatternColor[16];
 uniform vec2 uPaletteOffset;
 float layerCorner(ivec2 cell) {
 	uvec2 p=uvec2(cell);
@@ -65,6 +67,7 @@ float patternMask(vec2 uv, int kind) {
 		float radius=mix(.12,.29,grit);
 		return grit*(1.-smoothstep(radius-.04,radius+.04,length(fract(uv)-center)));
 	}
+	if(kind==8) return .5+.5*sin(6.28318*(uv.x+.23*layerValueNoise(uv*.42)));
 	float noise=layerValueNoise(uv);
 	if(kind==2 || kind==4) return 1.-smoothstep(.04,.31,abs(noise));
 	return smoothstep(-.55,.55,noise);
@@ -85,16 +88,19 @@ float projectedPattern(vec3 pos,vec3 weight,float scale,float stretch,vec2 offse
 	return amount;
 }
 
-vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeight,float beddingPixel) {
-	vec3 base=uLayerColor[layer];
+float layerPatternWeight(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeight,float beddingPixel) {
+
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
-	if(kind==0 || pattern.y<=0.) return base;
+	if(kind==0 || pattern.y<=0.) return 0.;
+	#if !defined(MATERIAL_STACK) || defined(PATTERN_FRACTAL) || defined(PATTERN_VEINS)
 	if(kind==FRACTAL_PATTERN || kind==VEIN_PATTERN)
-		return mix(base,uLayerPatternColor[layer],pattern.y*fractalMask(pos,pattern.z,pattern.w,footprint,kind==VEIN_PATTERN));
+		return pattern.y*fractalMask(pos,pattern.z,pattern.w,footprint,kind==VEIN_PATTERN);
+	#endif
 
 	float visibility=patternVisibility(footprint,pattern.z,kind);
 	float partings=0.;
+	#if !defined(MATERIAL_STACK) || defined(PATTERN_BEDDED)
 	if(kind==4) {
 		// Fine sediment lines follow the dipped bed, even where the weathering streaks run across it.
 		float spacing=pattern.z*.19;
@@ -104,7 +110,8 @@ vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeig
 			partings=resolved*smoothstep(-.28,.62,grain);
 		}
 	}
-	if(visibility<=0.) return mix(base,uLayerPatternColor[layer],pattern.y*.52*partings);
+	#endif
+	if(visibility<=0.) return pattern.y*.52*partings;
 
 	// Project onto the ground and both upright planes, in world space. Blending the
 	// projections keeps the tint continuous where cliff faces turn a corner.
@@ -113,7 +120,11 @@ vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeig
 	weight/=max(.0001,dot(weight,vec3(1.)));
 	vec2 offset=uPaletteOffset+vec2(73.37,19.81);
 	float amount=projectedPattern(pos,weight,pattern.z,pattern.w,offset,kind);
-	return mix(base,uLayerPatternColor[layer],pattern.y*max(visibility*amount,.52*partings));
+	return pattern.y*max(visibility*amount,.52*partings);
+}
+
+vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeight,float beddingPixel) {
+	return mix(uLayerColor[layer],uLayerPatternColor[layer],layerPatternWeight(layer,pos,normal,footprint,beddingHeight,beddingPixel));
 }
 float repeatingMask(float height,vec2 range,float fade,float period,float footprint) {
 	float width=clamp(range.y-range.x,0.,period);
@@ -127,7 +138,7 @@ float repeatingMask(float height,vec2 range,float fade,float period,float footpr
 }
 
 vec3 layerSurface(vec3 pos,vec3 normal,float footprint,float water) {
-	float masks[12];
+	float masks[16];
 	float beddingHeight=pos.y-dot(pos.xz,vec2(.006,-.003));
 	float beddingPixel=fwidth(beddingHeight);
 	vec3 result=layerColor(0,pos,normal,footprint,beddingHeight,beddingPixel);
@@ -138,9 +149,12 @@ vec3 layerSurface(vec3 pos,vec3 normal,float footprint,float water) {
 	// Contiguous sibling beds share their elevation noise, pixel width, slope and parent.
 	bool reuseMask=false;
 	float h=0., heightPixel=0., cliffMask=0.;
-	for(int i=1;i<12;i++) {
+	for(int i=1;i<16;i++) {
 		if(i>=uLayerCount) break;
 		vec4 r=uLayerRange[i],b=uLayerBlend[i],m=uLayerMode[i];
+		#ifdef MATERIAL_STACK
+		if(uLayerEffect[i].z==0. && m.w==0.) { masks[i]=0.; reuseMask=false; continue; }
+		#endif
 		if(!reuseMask) {
 			float noise=b.z>0. ? layerNoise(pos.xz,b.w,footprint) : 0.;
 			h=(m.y==2. ? beddingHeight : pos.y-(m.y==1. ? water : 0.))+b.z*noise;
@@ -158,7 +172,12 @@ vec3 layerSurface(vec3 pos,vec3 normal,float footprint,float water) {
 			heightMask=m.z>0. ? repeatingMask(h,r.xy,fade,m.z,heightPixel)
 				: smoothstep(r.x-fade,r.x,h)*(1.-smoothstep(r.y,r.y+fade,h));
 		}
-		float mask=heightMask*cliffMask;
+		#ifdef MATERIAL_STACK
+		float coverage=cliffMask*uLayerEffect[i].z;
+		#else
+		float coverage=cliffMask;
+		#endif
+		float mask=heightMask*coverage;
 		masks[i]=mask;
 
 		if(mask>0.) {
@@ -171,10 +190,27 @@ vec3 layerSurface(vec3 pos,vec3 normal,float footprint,float water) {
 		}
 		if(m.w==2.) {
 			// A full section shares one slope and parent mask. Blend its adjacent beds before applying them.
-			if(sectionCoverage>0.) result=mix(result,sectionColor/sectionCoverage,cliffMask);
+			if(sectionCoverage>0.) result=mix(result,sectionColor/sectionCoverage,coverage);
 			sectionColor=vec3(0.);
 			sectionCoverage=0.;
 		}
 	}
 	return result;
+}
+
+// Keep screen derivatives of the scalar field independent of a layer's coverage boundary.
+vec3 patternGradient(vec3 pos,vec3 normal,float height) {
+	vec3 dx=dFdx(pos), dy=dFdy(pos), u=cross(dy,normal), v=cross(normal,dx);
+	float det=dot(dx,u);
+	vec3 gradient=(dFdx(height)*u+dFdy(height)*v)*sign(det)/max(.0001,abs(det));
+	return -gradient/(1.+length(gradient));
+}
+void materialRange(int i,vec3 pos,float slope,float footprint,float water,float bed,out float edge,out float coverage) {
+	vec4 r=uLayerRange[i],b=uLayerBlend[i],m=uLayerMode[i];
+	float h=(m.y==2. ? bed : pos.y-(m.y==1. ? water : 0.));
+	if(b.z>0.) h+=b.z*layerNoise(pos.xz,b.w,footprint);
+	float sf=max(.00001,b.y),fade=max(.0001,b.x);
+	coverage=smoothstep(r.z-sf,r.z,slope)*(1.-smoothstep(r.w,r.w+sf,slope));
+	edge=m.z>0. ? repeatingMask(h+.5*m.z,r.xy,fade,m.z,fwidth(h))
+		: smoothstep(r.x-fade,r.x,h)*(1.-smoothstep(r.y,r.y+fade,h));
 }

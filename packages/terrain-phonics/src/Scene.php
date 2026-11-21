@@ -34,9 +34,14 @@ final class Scene
 	private Lod $lod;
 	private ?Clipmap $clipmap = null;
 	public ?SurfaceLayers $layers=null;
+	public ?TerrainAppearance $paint = null;
+	private array $boundPaint = [];
 	private ?SurfaceLayers $defaultLayers=null;
 	private ?TerrainAppearance $paletteAppearance=null;
 	private array $layerBinding=[];
+	private array $materialPrograms = [];
+	private string $materialKey = '', $groundVertexSource, $groundFragmentSource;
+	private ?Program $chartProgram = null;
 	private ?Landscape $preparing = null;
 	private int $preparingRevision = -1, $preparingSourceRevision = -1;
 	private array $replacementJobs = [], $replacements = [];
@@ -152,8 +157,6 @@ final class Scene
 	 * unchanged frames must draw one after replacing it.
 	 */
 	public TerrainAppearance $appearance;
-	/** The appearance whose uniforms each ground program holds, by spl_object_id(); a missing one needs uploading. */
-	private array $boundAppearance = [];
 	/** Atmosphere uniforms last submitted to each linked scene program. */
 	private array $boundEnvironment = [];
 
@@ -196,10 +199,9 @@ final class Scene
 		$groundVertex = str_replace('// PATCH', $grid, file_get_contents($root . 'terrain.vert'));
 		$ground = str_replace(['// ATMOSPHERE','// OPTICS'], [$atmosphere,$optics]
 			, file_get_contents($root . 'terrain.frag'));
-		$patterns = ($this->useClipmap ? "#define SURFACE_LAYERS\n" : '') . file_get_contents($root.'surface-layers.glsl');
-		$ground = str_replace('// LAYERS', $patterns, $ground);
-		$this->groundProgram = new Program($groundVertex, str_replace('// SPOT LIGHTS', $dark, $ground));
-		$this->litGroundProgram = new Program($groundVertex, str_replace('// SPOT LIGHTS', $lamps, $ground));
+		$this->groundVertexSource = $groundVertex;
+		$this->groundFragmentSource = $ground;
+		$this->selectMaterial($this->palette());
 
 		$this->skyProgram = new Program(
 			file_get_contents($root . 'sky.vert')
@@ -2363,6 +2365,8 @@ final class Scene
 
 		// Both pairs of programs are linked up front, and each lit program draws once in the first frame with patches
 		// (litDrawn), so changing pair later costs no more than drawing with the same one.
+		$palette = $this->palette();
+		$this->selectMaterial($palette);
 		$lit = ($this->spotLights?->count() ?? 0) > 0;
 		$warm = $this->clipmap !== null || $this->draw !== [];
 		$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
@@ -2371,27 +2375,17 @@ final class Scene
 		$this->common($groundProgram, $camera, $width, $height, $environment);
 		$this->water->appearance->bind($groundProgram);
 
-		// A program keeps its uniforms between frames, so only a new appearance or a relinked program needs them.
-		if(($this->boundAppearance[spl_object_id($groundProgram)] ?? null) !== $this->appearance)
-		{
-			$this->appearance->bind($groundProgram);
-			$this->boundAppearance[spl_object_id($groundProgram)] = $this->appearance;
+		$id = spl_object_id($groundProgram);
+		$paint = $this->paint ?? $this->appearance;
+		if(($this->boundPaint[$id] ?? null) !== $paint) {
+			$paint->bindPaint($groundProgram);
+			$this->boundPaint[$id] = $paint;
 		}
-
-		if($this->clipmap) {
-			// The mountain preset uses its vegetation, lichen and granite shader. Explicit color layers replace it.
-			$palette = $this->layers === null && $this->landscape->recipe()['preset'] === 'mountain'
-				? false : $this->palette();
-			$id=spl_object_id($groundProgram);
-			if(($this->layerBinding[$id] ?? null)!==$palette) {
-				if($palette === false) glUniform1i($groundProgram->location('uLayerCount'), 0);
-				else
-				{
-					$palette->bind($groundProgram);
-					$this->clipmap->paletteOrigin($groundProgram);
-				}
-				$this->layerBinding[$id]=$palette;
-			}
+		if(($this->layerBinding[$id] ?? null) !== $palette) {
+			$palette->bind($groundProgram);
+			$seed = crc32((string)$this->landscape->recipe()['seed']);
+			glUniform2f($groundProgram->location('uPaletteOffset'),$seed & 65535,($seed >> 16) & 65535);
+			$this->layerBinding[$id] = $palette;
 		}
 		$this->vector($groundProgram, 'uCraftRotation', [0,0,0]);
 		$this->scalar($groundProgram, 'uCraft', 0);
@@ -2571,17 +2565,6 @@ final class Scene
 			$this->spotLights?->bind($program, $environment['nightVisibility']);
 		if($program === $this->groundProgram || $program === $this->litGroundProgram)
 		{
-			$recipe = $this->landscape->recipe();
-			$this->scalar($program, 'uTerrainStyle', match($recipe['preset'])
-			{
-				'canyon' => $recipe['version'] === 2 ? 3 : 2, 'mountain' => 1, default => 0
-			});
-			if($recipe['preset'] === 'canyon' && $recipe['version'] === 2)
-			{
-				glUniform4fv($program->location('uBedContacts[0]'), 2, CanyonBeds::CONTACTS);
-				$spacing = $recipe['terraceSpacing'] ?: max(1, $recipe['heightScale']/8);
-				glUniform3f($program->location('uBedDatum'), CanyonBeds::DIP[0], CanyonBeds::DIP[1], max(.001, $spacing));
-			}
 			$this->terrainShadows->bind($program);
 			$this->clipmap?->bindShadows($program);
 		}
@@ -2764,10 +2747,50 @@ final class Scene
 		];
 	}
 
-	/**
-	 * Rebuild graphics resources after context restoration.
-	 * @return void Recreates expired graphics-context resources.
-	 */
+	/** Link both lighting variants and the minimap before replacing a committed surface. */
+	public function prepareMaterial(SurfaceLayers $stack): void
+	{
+		$key = $stack->structure;
+		if(isset($this->materialPrograms[$key])) return;
+		$source = MaterialShader::assemble($this->groundFragmentSource,$stack,clipmap:$this->useClipmap);
+		$set = [];
+		try {
+			foreach([false,true] as $lamps)
+				$set[] = new Program($this->groundVertexSource,str_replace('// SPOT LIGHTS',SpotLights::shaderSource($lamps),$source));
+			if($this->useClipmap) {
+				$root = dirname(__DIR__).'/shaders/';
+				$set[] = new Program(file_get_contents($root.'shadows.vert'),
+					MaterialShader::assemble(file_get_contents($root.'chart.frag'),$stack,chart:true));
+			}
+		} catch(\Throwable $error) {
+			foreach($set as $program) $program->close();
+			throw $error;
+		}
+		// Bound user-authored program residency; never evict the displayed material during validation.
+		if(count($this->materialPrograms) >= 6) foreach($this->materialPrograms as $old=>$programs) {
+			if($old === $this->materialKey) continue;
+			foreach($programs as $program) {
+				$id = spl_object_id($program);
+				unset($this->boundEnvironment[$id],$this->layerBinding[$id],$this->boundPaint[$id]);
+				$program->close();
+			}
+			$this->spotLights?->forget();
+			unset($this->materialPrograms[$old]);
+			break;
+		}
+		$this->materialPrograms[$key] = $set;
+	}
+
+	private function selectMaterial(SurfaceLayers $stack): void
+	{
+		if($this->materialKey === $stack->structure) return;
+		$this->prepareMaterial($stack);
+		$this->materialKey = $stack->structure;
+		[$this->groundProgram,$this->litGroundProgram] = $this->materialPrograms[$this->materialKey];
+		$this->chartProgram = $this->materialPrograms[$this->materialKey][2] ?? null;
+		$this->litDrawn['ground'] = false;
+	}
+
 	private function palette(): SurfaceLayers
 	{
 		if($this->layers) return $this->layers;
@@ -2781,8 +2804,10 @@ final class Scene
 	public function drawChart(array $xz,float $bearing,bool $wide,int $width,int $height,array $waterColor,
 		?int $size = null, ?float $localSpan = null, bool $circular = false): ?float
 	{
-		return $this->clipmap?->chart($xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,
-			$this->palette(),$this->appearance,$size,$localSpan,$circular);
+		if(!$this->clipmap) return null;
+		$this->selectMaterial($this->palette());
+		return $this->clipmap->chart($this->chartProgram,$xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,
+			$this->palette(),$this->paint ?? $this->appearance,$size,$localSpan,$circular);
 	}
 
 	public function restore(): void
@@ -2793,9 +2818,14 @@ final class Scene
 		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
 		$this->abandonSelection();
 		if($this->clipmap) { $this->clipmap->close(); $this->clipmap = new Clipmap; }
-		$this->groundProgram->restore();
-		$this->litGroundProgram->restore();
-		$this->boundAppearance = []; $this->layerBinding=[];
+		foreach($this->materialPrograms as $key=>$set) {
+			if($key === $this->materialKey) foreach($set as $program) $program->restore();
+			else {
+				foreach($set as $program) $program->close();
+				unset($this->materialPrograms[$key]);
+			}
+		}
+		$this->boundPaint = []; $this->layerBinding=[];
 		$this->boundEnvironment = [];
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
@@ -2856,8 +2886,8 @@ final class Scene
 		$this->clearPatches();
 
 		$this->clipmap?->close();
-		$this->groundProgram->close();
-		$this->litGroundProgram->close();
+		foreach($this->materialPrograms as $set) foreach($set as $program) $program->close();
+		$this->materialPrograms = [];
 		$this->skyProgram->close();
 		$this->starsProgram->close();
 		$this->waterProgram->close();

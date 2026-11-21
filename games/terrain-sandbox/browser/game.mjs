@@ -156,116 +156,13 @@ export function activate({module, canvas, session, services})
 		/* An unreadable preference leaves the first tab open. */
 	}
 
-	// The Surface tab: PHP sends the appearance settings' groups, ranges, defaults and the settings each terrain style
-	// reads, once, and the page builds a control for each. A preset shows only the settings it reads.
-	let surface = null, surfaceStyle = '';
-	const surfaceBox = frame.querySelector('[data-surface]');
+	let surface = null;
+	const materials = materialEditor(frame, push, status);
 
 	shell.bridge('terrainSurface', json => {
 		surface = JSON.parse(json);
-		surfaceBox.innerHTML = surfaceMarkup(surface);
-
-		for(const field of surfaceBox.querySelectorAll('[data-value]'))
-		{
-			controls.set(field.dataset.value, field);
-			listen(field);
-			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
-
-			if(output) output.textContent = readout(field.value);
-		}
-
-		for(const reset of frame.querySelectorAll('[data-surface-reset]'))
-
-		reset.onclick = () => {
-			const group = reset.dataset.surfaceReset;
-			const keys = group === 'all' ? Object.keys(surface.defaults) : surface.groups[group];
-
-			const presetDefaults = surface.presetSurfaces[latest?.recipe?.preset];
-			for(const key of keys) values[key] = presetDefaults?.[key] ?? surface.defaults[key];
-		};
-
-		surfaceStyle = '';
+		materials.configure(surface);
 	});
-
-	const layerBox=frame.querySelector('[data-layer-fields]');
-	let lastLayers='';
-	function layerRow(row,i) {
-		const labels={low:'Minimum elevation',high:'Maximum elevation',fade:'Elevation fade',slopeLow:'Minimum slope',
-			slopeHigh:'Maximum slope',slopeFade:'Slope fade',noise:'Edge noise · m',scale:'Noise scale · m',
-			parent:'Parent index (−1 for none)',period:'Repeat interval · m'};
-		const fields=Object.entries(labels).map(([key,label])=>`<label class="terrain-field">${label}
-			<input data-layer-key="${key}" type="number" step="any" value="${Number(row[key])}"></label>`).join('');
-		const patterns = {none:'Solid', mottle:'Mottled', streaks:'Streaks', gravel:'Gravel', bedded:'Weathered beds', stipple:'Stipple', fractal:'Fractal noise', veins:'Mineral veins'};
-		return `<details data-layer><summary>Layer ${i} · ${row.color}</summary><div class="terrain-grid"><label class="terrain-field">Color
-			<input type="color" data-layer-key="color" value="${row.color}"></label>
-			<label class="terrain-field">Color pattern<select data-layer-key="pattern">
-			${Object.entries(patterns).map(([key,label])=>`<option value="${key}" ${key===row.pattern?'selected':''}>${label}</option>`).join('')}
-			</select></label>
-			<label class="terrain-field">Pattern color<input type="color" data-layer-key="patternColor" value="${row.patternColor}"></label>
-			<label class="terrain-field">Pattern amount<input type="number" data-layer-key="patternAmount" min="0" max="1" step="0.05" value="${row.patternAmount}"></label>
-			<label class="terrain-field">Pattern scale · m<input type="number" data-layer-key="patternScale" min="0.05" max="10000" step="any" value="${row.patternScale}"></label>
-			<label class="terrain-field">Vertical stretch<input type="number" data-layer-key="patternStretch" min="0.25" max="64" step="any" value="${row.patternStretch}"></label>${fields}
-			<label class="terrain-field">Heights relative to<select data-layer-key="datum">
-			${['absolute','water','beds'].map(k=>`<option ${k===row.datum?'selected':''}>${k}</option>`).join('')}
-			</select></label></div></details>`;
-	}
-	function formLayers() {
-		return [...layerBox.querySelectorAll('[data-layer]')].map(row=>Object.fromEntries(
-			[...row.querySelectorAll('[data-layer-key]')].map(f=>[f.dataset.layerKey,f.type==='number'?Number(f.value):f.value])));
-	}
-	frame.querySelector('[data-layer-add]').onclick=()=>{
-		const rows=formLayers();
-		if(rows.length<12) layerBox.insertAdjacentHTML('beforeend',layerRow({...rows.at(-1),parent:-1},rows.length));
-	};
-	frame.querySelector('[data-layer-remove]').onclick=()=>{
-		if(layerBox.children.length>1) layerBox.lastElementChild.remove();
-	};
-	frame.querySelector('[data-layer-apply]').onclick=()=>push({type:'surface-layers',layers:formLayers()});
-	frame.querySelector('[data-layer-reset]').onclick=()=>{ lastLayers=''; push({type:'surface-layers'}); };
-
-	const showSurface = state => {
-		if(!surface || !state.surfaceStyle) return;
-		const layerKey=JSON.stringify(state.surfaceLayers);
-		if(layerKey && layerKey!==lastLayers) {
-			layerBox.innerHTML=state.surfaceLayers.map(layerRow).join('');
-			lastLayers=layerKey;
-		}
-
-		if(state.surfaceStyle !== surfaceStyle || state.generation !== lastGeneration)
-		{
-			surfaceStyle = state.surfaceStyle;
-			const uses = new Set(surface.uses[surfaceStyle]);
-
-			for(const row of surfaceBox.querySelectorAll('[data-surface-key]'))
-			row.hidden = !uses.has(row.dataset.surfaceKey);
-
-			for(const group of surfaceBox.querySelectorAll('[data-surface-group]'))
-			group.hidden = !surface.groups[group.dataset.surfaceGroup].some(key => uses.has(key));
-
-			frame.querySelector(
-				'[data-surface-note]'
-			).textContent = `Settings the ${state.recipe.preset === 'limestone' ? 'limestone' : SURFACE_STYLES[surfaceStyle]} ground `
-				+ 'reads. The landscape file saves them.';
-		}
-
-		// Show what the session holds: it clamps values and keeps each blend's start below its end.
-		for(const key of Object.keys(surface.defaults))
-		{
-			const field = controls.get(key), value = state.settings[key];
-
-			if(!field || value === undefined || field === document.activeElement) continue;
-
-			const shown = field.type === 'color' ? field.value : Number(field.value);
-
-			if(shown === value || field.type === 'color' && shown.toLowerCase() === String(value).toLowerCase())
-			continue;
-
-			field.value = value;
-			const output = frame.querySelector(`[data-output="${key}"]`);
-
-			if(output) output.textContent = field.type === 'color' ? value : readout(field.value);
-		}
-	};
 
 	for(const field of frame.querySelectorAll('[data-action]'))
 	{
@@ -592,7 +489,7 @@ export function activate({module, canvas, session, services})
 				frame.classList.toggle('in-cockpit', cockpit);
 			}
 
-			showSurface(state);
+			materials.show(state);
 
 			// Back on a gamepad switches the handling in PHP. Show it here and remember it.
 			if(state.jetControls && jetControls.value !== state.jetControls && document.activeElement !== jetControls)
@@ -1095,34 +992,364 @@ function readout(value)
 /** Local storage key for the panel tab shown last. */
 const TAB_PREFERENCE = 'terrain-sandbox.tab';
 
-/** What the Surface tab calls each terrain style. */
-const SURFACE_STYLES = {coast: 'coastal', mountain: 'mountain', 'canyon-v1': 'early canyon', canyon: 'canyon'};
+/** Keep unapplied structural edits in the panel while the renderer uses the committed stack. */
+function materialEditor(frame, push, status)
+{
+	let surface = null;
+	const layerBox = frame.querySelector('[data-layer-fields]');
+	const fieldBox = frame.querySelector('[data-shared-fields]');
+	const inkBox = frame.querySelector('[data-paint-inks]');
+	const applyLayers = frame.querySelector('[data-layer-apply]');
+	let draft = false, materialKey = '', lastValues = '', editorGeneration = -1, serial = 0, submitted = 0;
 
-/** Headings for the appearance groups. */
-const SURFACE_GROUPS = {colors: 'Colors', banding: 'Banding', rock: 'Rock detail', blending: 'Blending'};
+	const entities = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
+
+	const escaped = value => String(value).replace(/[&<>"']/g, char => entities[char]);
+
+	const title = value => value.replace(/-/g, ' ').replace(/^./, letter => letter.toUpperCase());
+
+	const caption = (label, widget) => `<label class="terrain-field">${label}${widget}</label>`;
+
+	const select = (key, label, choices, value) => caption(
+		label
+		, `<select data-layer-key="${key}">`
+			+ choices.map(
+				([k,name]) => `<option value="${escaped(k)}" ${k===value ? 'selected' : ''}>${escaped(name)}</option>`
+			).join('') + '</select>'
+	);
+
+	const list = keys => keys.map(key => [key,title(key)]);
+	const numberLabels = {
+		opacity: 'Coverage · 0–1'
+		, low: 'Minimum elevation · m'
+		, high: 'Maximum elevation · m'
+		, fade: 'Elevation fade · m'
+		, slopeLow: 'Minimum slope'
+		, slopeHigh: 'Maximum slope'
+		, slopeFade: 'Slope fade'
+		, noise: 'Boundary noise · m'
+		, scale: 'Boundary noise scale · m'
+		, period: 'Repeat interval · m'
+		, patternAmount: 'Pattern amount'
+		, patternScale: 'Pattern scale · m'
+		, patternStretch: 'Vertical stretch'
+		, strength: 'Relief strength'
+		, flatten: 'Flatten underlying relief · 0–1'
+	};
+
+	const rowsFrom = records => records.map(row => ({
+		...row
+		, parent: typeof row.parent==='number' ? records[row.parent]?.id ?? '' : row.parent
+	}));
+
+	const structural = new Set(['channel','mask','field','pattern','relief','parent','datum']);
+
+	function layerRow(row, index, rows)
+	{
+
+		const input = (key, label, type) => caption(
+			label
+			, `<input data-layer-key="${key}" type="${type}" value="${escaped(row[key])}"`
+				+ (type==='number' ? ' step="any" required' : type==='text' ? ' maxlength="64" required' : '') + '>'
+		);
+
+		const parents = [['', 'Anywhere'], ...rows.slice(0, index).map(r => [r.id, r.name])];
+		const fields = [
+			input('name', 'Layer name', 'text')
+			, select('channel', 'Affects', list(surface.channels), row.channel)
+			, select('mask', 'Coverage field', list(surface.masks), row.mask)
+			, select('parent', 'Within layer mask', parents, row.parent)
+			, select('datum', 'Heights relative to', list(['absolute','water','beds']), row.datum)
+			, input('color', 'Color', 'color')
+			, select('field', 'Surface detail', list(surface.fields), row.field)
+			, select('pattern', 'Pattern', list(surface.patterns), row.pattern)
+			, input('patternColor', 'Pattern color', 'color')
+			, select('relief', 'Relief source', list(surface.relief), row.relief)
+			, ...Object.entries(numberLabels).map(([key,label]) => input(key, label, 'number'))
+		];
+
+		return `<details data-layer="${escaped(row.id)}"><summary>${escaped(row.name)}</summary>
+			<div class="terrain-grid">${fields.join('')}</div><div class="terrain-row">
+			<button data-move="-1" ${index ? '' : 'disabled'}>Move up</button>
+			<button data-move="1" ${index + 1 < rows.length ? '' : 'disabled'}>Move down</button>
+			<button data-remove ${rows.length === 1 ? 'disabled' : ''}>Remove layer</button></div></details>`;
+	}
+
+	function layerControls(el, index)
+	{
+
+		const field = key => el.querySelector(`[data-layer-key="${key}"]`);
+
+		const show = (keys, visible) => keys.forEach(key => { field(key).closest('label').hidden = !visible; });
+
+		const color = field('channel').value!=='relief', relief = field('channel').value!=='color';
+		const pattern = field('pattern').value!=='none';
+		show(['field','color'], color);
+		show(['relief','strength'], relief);
+		show(['patternColor'], color && (pattern || field('field').value==='shrubs'));
+		show(['patternAmount','patternScale','patternStretch'], pattern);
+
+		show(
+			['mask'
+				, 'parent'
+				, 'datum'
+				, 'opacity'
+				, 'low'
+				, 'high'
+				, 'fade'
+				, 'slopeLow'
+				, 'slopeHigh'
+				, 'slopeFade'
+				, 'noise'
+				, 'scale'
+				, 'period','flatten'
+			]
+			, index>0
+		);
+	}
+
+	function drawRows(rows)
+	{
+		const open = new Set([...layerBox.querySelectorAll('details[open]')].map(el => el.dataset.layer));
+		layerBox.innerHTML = rows.map(layerRow).join('');
+
+		for(const [index,el] of [...layerBox.children].entries())
+		{
+			el.open = open.has(el.dataset.layer);
+			layerControls(el, index);
+		}
+
+		frame.querySelector('[data-layer-add]').disabled = rows.length>=surface.limit;
+	}
+
+	function editorRows()
+	{
+		return [...layerBox.children].map(el => ({
+			id: el.dataset.layer
+			, ...Object.fromEntries(
+				[...el.querySelectorAll('[data-layer-key]')].map(field => [field.dataset.layerKey
+					, field.type==='number' ? field.valueAsNumber : field.value
+				])
+			)
+		}));
+	}
+
+	function stageLayers()
+	{
+		draft = true;
+		submitted = 0;
+		applyLayers.disabled = false;
+	}
+
+	function sendRows()
+	{
+		const rows = editorRows();
+		const invalid = layerBox.querySelector('input:invalid');
+
+		if(invalid)
+		{
+			invalid.closest('details').open = true;
+			invalid.reportValidity();
+
+			return;
+		}
+
+		submitted = ++serial;
+		push({type: 'surface-layers',request: submitted,layers: rows.map(row => ({...row,parent: row.parent || -1}))});
+	}
+
+	layerBox.addEventListener('input', event => {
+		const field = event.target, key = field.dataset.layerKey;
+
+		if(!key) return;
+
+		if(draft || structural.has(key) || key==='name')
+		{
+			stageLayers();
+			const el = field.closest('[data-layer]');
+			layerControls(el, [...layerBox.children].indexOf(el));
+		}
+		else if(field.checkValidity())
+			push({
+				type: 'surface-edit'
+				, id: field.closest('[data-layer]').dataset.layer
+				, key
+				, value: field.type==='number' ? field.valueAsNumber : field.value
+			});
+	});
+
+	layerBox.addEventListener('click', event => {
+		const button = event.target.closest('button');
+
+		if(!button) return;
+
+		const rows = editorRows(), i = rows.findIndex(row => row.id===button.closest('[data-layer]').dataset.layer);
+
+		if(button.hasAttribute('data-remove'))
+		{
+			if(rows.some(row => row.parent===rows[i].id))
+			{
+				status.textContent = 'Choose another parent for the child layers before removing this mask.';
+
+				return;
+			}
+
+			rows.splice(i, 1);
+		}
+		else
+		{
+			const j = i+Number(button.dataset.move);
+			[rows[i],rows[j]] = [rows[j],rows[i]];
+
+			if(rows.some((row, k) => row.parent && !rows.slice(0, k).some(before => before.id===row.parent)))
+			{
+				status.textContent = 'A parent mask must precede its children.';
+
+				return;
+			}
+		}
+
+		stageLayers();
+		drawRows(rows);
+	});
+
+	frame.querySelector('[data-layer-add]').onclick = () => {
+		const rows = editorRows();
+
+		if(rows.length>=surface.limit) return;
+
+		let n = rows.length+1;
+
+		while(rows.some(row => row.id==='layer-' + n)) n++;
+		rows.push({...surface.layerDefaults,id: 'layer-' + n,name: 'Layer ' + n,parent: ''});
+		stageLayers();
+		drawRows(rows);
+		layerBox.lastElementChild.open = true;
+	};
+
+	applyLayers.onclick = sendRows;
+
+	function replaceStack(preset)
+	{
+		submitted = ++serial;
+		push({type: 'surface-layers',request: submitted,...(preset ? {preset} : {})});
+	}
+
+	frame.querySelector('[data-layer-reset]').onclick = () => replaceStack(null);
+
+	const preset = frame.querySelector('[data-layer-preset]');
+
+	frame.querySelector('[data-layer-load]').onclick = () => replaceStack(preset.value);
+
+	function configure(schema)
+	{
+		surface = schema;
+
+		inkBox.innerHTML = surface.inkKeys.map(
+			key => `<label class="terrain-control"><span>${SURFACE_LABELS[key]}</span>
+			<input data-ink="${key}" type="color"></label>`
+		).join('');
+
+		fieldBox.innerHTML = surface.fieldKeys.map(key => {
+			const [min,max] = surface.ranges[key], [label,step] = SURFACE_LABELS[key];
+
+			return `<label class="terrain-control"><span>${label}</span>
+				<input data-shared="${key}" type="range" min="${min}" max="${max}" step="${step}">
+				<output></output></label>`;
+		}).join('');
+	}
+
+	inkBox.oninput = ({target}) => push({type: 'surface-ink',ink: target.dataset.ink,color: target.value});
+
+	fieldBox.oninput = ({target}) => {
+		target.nextElementSibling.textContent = readout(target.value);
+		push({type: 'surface-field',key: target.dataset.shared,value: target.valueAsNumber});
+	};
+
+	const showSurface = state => {
+		if(!surface || !state.surfaceLayers) return;
+
+		if(editorGeneration!==state.generation || (submitted && submitted===state.materialReply))
+		{
+			draft = false;
+			submitted = 0;
+			materialKey = '';
+			lastValues = '';
+			editorGeneration = state.generation;
+		}
+
+		const valuesKey = JSON.stringify(state.surfaceLayers);
+
+		if(!draft && valuesKey!==lastValues)
+		{
+			lastValues = valuesKey;
+			const rows = rowsFrom(state.surfaceLayers);
+
+			const key = JSON.stringify(
+				rows.map(
+					row => [row.id,row.name,row.parent,row.channel,row.field,row.mask,row.pattern,row.relief,row.datum]
+				)
+			);
+
+			if(key!==materialKey)
+			{
+				drawRows(rows);
+				materialKey = key;
+			}
+			else
+			for(const [i,el] of [...layerBox.children].entries())
+			{
+				for(const field of el.querySelectorAll('[data-layer-key]'))
+				{
+					if(field!==document.activeElement) field.value = rows[i][field.dataset.layerKey];
+				}
+			}
+		}
+
+		applyLayers.disabled = !draft;
+
+		frame.querySelector(
+			'[data-surface-note]'
+		).textContent = (state.surfaceOrigin==='authored' ? 'Edited surface · ' : 'Landform preset · ')+title(
+			state.surfacePreset
+		);
+
+		for(const field of inkBox.querySelectorAll('input'))
+		if(field!==document.activeElement)
+		field.value = state.paintInks[field.dataset.ink];
+
+		const usesReliefFields = state.surfaceLayers.some(
+			row => row.mask!=='all' || row.field!=='plain' || (row.channel!=='color'
+				&& !['none','pattern'].includes(row.relief)
+			)
+		);
+
+		for(const field of fieldBox.querySelectorAll('input'))
+		{
+			const key = field.dataset.shared;
+			field.closest('label').hidden = !usesReliefFields && key!=='macroVariation';
+
+			if(field!==document.activeElement)
+			{
+				field.value = state.surfaceFields[key];
+				field.nextElementSibling.textContent = readout(field.value);
+			}
+		}
+	};
+
+	return {configure, show: showSurface};
+}
 
 /** Labels and slider steps for the appearance settings. Heights relative to the snowline are negative below it. */
 const SURFACE_LABELS = {
-	grassColor: 'Grass'
-	, soilColor: 'Soil'
+	gullySize: ['Gully spacing · m',.5]
+	, blockSize: ['Block and crown spacing · m',.25]
+	, jointWidth: ['Slab width · m',.5], jointHeight: ['Slab height · m',.5]
+	, grassColor: 'Grass'
 	, rockColor: 'Rock'
-	, rockBandColor: 'Rock bands'
 	, sandColor: 'Sand'
 	, snowColor: 'Snow'
 	, roadColor: 'Road'
-	, canyonRustColor: 'Rust beds'
-	, canyonShaleColor: 'Shale'
-	, canyonSandstoneColor: 'Sandstone'
-	, canyonCapColor: 'Cap rock'
-	, forestColor: 'Forest'
-	, meadowColor: 'Meadow'
-	, tundraColor: 'Tundra'
-	, graniteColor: 'Granite'
-	, stainColor: 'Iron stain'
-	, talusColor: 'Talus'
-	, bandSpacing: ['Band spacing · m', 'any']
-	, bandContrast: ['Band contrast', .01]
-	, bandSharpness: ['Band sharpness', .1]
 	, talusAmount: ['Talus', .01]
 	, stainAmount: ['Iron stain', .01]
 	, lichenAmount: ['Lichen', .01]
@@ -1140,46 +1367,6 @@ const SURFACE_LABELS = {
 	, treeline: ['Treeline · m', 1]
 	, tundraStart: ['Tundra from · m', 1]
 };
-
-/**
- * Build the Surface tab's controls from the appearance schema PHP sends.
- * @param {{groups: Object, ranges: Object, defaults: Object}} surface The appearance settings' schema.
- * @returns {string} One group per heading, each with a reset button.
- */
-function surfaceMarkup(surface)
-{
-	let html = '';
-
-	for(const [group, keys] of Object.entries(surface.groups))
-	{
-		html += `<div class="terrain-surface-group" data-surface-group="${group}"><h2>${SURFACE_GROUPS[group]
-			?? group}</h2>`;
-
-		for(const key of keys)
-		{
-			const value = surface.defaults[key];
-			const label = SURFACE_LABELS[key];
-
-			if(typeof value === 'string')
-			{
-				html += `<label class="terrain-control" data-surface-key="${key}"><span>${label ?? key}</span>`
-					+ `<input data-value="${key}" type="color" value="${value}"></label>`;
-			}
-			else
-			{
-				const [name, step] = Array.isArray(label) ? label : [key, 'any'];
-				const [min, max] = surface.ranges[key];
-
-				html += `<div data-surface-key="${key}">${range(name, key, min, max, step, value)}</div>`;
-			}
-		}
-
-		html += `<div class="terrain-row"><button type="button" data-surface-reset="${group}">`
-			+ `Reset ${(SURFACE_GROUPS[group] ?? group).toLowerCase()}</button></div></div>`;
-	}
-
-	return html;
-}
 
 function range(label, key, min, max, step, value)
 {
@@ -1410,12 +1597,13 @@ function markup()
 	<div class="terrain-row"><button data-action="road-apply">Apply road</button><button data-action="road-clear">Clear points</button></div>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
-	<p class="terrain-note" data-surface-note>Colors, banding and blending of the generated ground. The landscape file saves them.</p>
-	<details><summary>Color layers</summary><div data-layer-fields></div>
-	<div class="terrain-row"><button data-layer-add>Add layer</button><button data-layer-remove>Remove last</button></div>
-	<div class="terrain-row"><button data-layer-apply>Apply layers</button><button data-layer-reset>Use preset colors</button></div></details>
-	<div data-surface></div>
-	<div class="terrain-row"><button data-surface-reset="all">Reset the whole surface</button></div>
+	<p class="terrain-note" data-surface-note></p>
+	<div class="terrain-row"><select data-layer-preset aria-label="Material preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="limestone">Limestone Plain</option><option value="canyon">Canyon</option><option value="canyon-v1">Early Canyon</option></select>
+	<button data-layer-load>Load preset surface</button><button data-layer-reset>Follow landform preset</button></div>
+	<h2>Material layers</h2><p class="terrain-note">The first layer covers the whole terrain. Each layer above it can add color, change the lighting normal, or do both. Apply to commit changes to the stack.</p>
+	<div data-layer-fields></div><div class="terrain-row"><button data-layer-add>Add layer</button><button data-layer-apply disabled>Apply layers</button></div>
+	<details><summary>Shared field settings</summary><div data-shared-fields></div></details>
+	<details><summary>Paint inks</summary><p class="terrain-note">Brushes and roads cover the finished surface, including its relief.</p><div data-paint-inks></div></details>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-water" aria-labelledby="terrain-tab-water" data-tab-panel="water" hidden>
 	<label class="terrain-field">Water level · m<input data-value="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>

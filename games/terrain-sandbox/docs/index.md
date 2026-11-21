@@ -4,13 +4,13 @@ Landscape Sandbox is a place to explore and edit procedural terrain. The default
 
 ## Use the Landscape Lab panel
 
-The panel on the right has six tabs. **Landscape** generates terrain and saves or loads it. **Shape** holds the editing tools, road grading and race gates. **Surface** colors the ground. **Water** and **Sky** set the water and the sun and atmosphere. **Explore** boards the vehicles and sets their controls. Click a tab, or move between tabs with the arrow keys, **Home** and **End**. The panel opens on the tab you used last. Click the **Landscape Lab** title or press **H** to collapse the panel to a round sliders button. Click the button to reopen it.
+The panel on the right has six tabs. **Landscape** generates terrain and saves or loads it. **Shape** holds the editing tools, road grading and race gates. **Surface** sets terrain colors, relief and paint inks. **Water** and **Sky** set the water and the sun and atmosphere. **Explore** boards the vehicles and sets their controls. Click a tab, or move between tabs with the arrow keys, **Home** and **End**. The panel opens on the tab you used last. Click the **Landscape Lab** title or press **H** to collapse the panel to a round sliders button. Click the button to reopen it.
 
 On the **Landscape** tab, expand **Landform parameters** to see what each setting changes. The fields sit side by side when there is room and stack on narrow screens. Select **Generate** to apply your changes.
 
 ## Color the ground
 
-The **Surface** tab sets the colors of the generated ground, the rock bands on coasts and early canyons, and where one material gives way to another: rock on steep slopes, a beach above the water, snow above the snowline and, on mountains, forest, meadow and tundra below it. Each preset reads its own settings, so the tab shows only those for the current landscape. Mountains show granite, talus and stain, and canyons show their rock beds. A blend's start stays below its end: moving one past the other moves both. **Reset** returns one group to its defaults, and **Reset the whole surface** returns them all. The surface settings travel with a saved landscape and stay when you generate a new one.
+In **Surface**, open a named material layer to edit its color, coverage or relief. Choose **Load preset surface** to use another preset’s materials on this landform. **Follow landform preset** resumes automatic selection when generating terrain. Paint inks cover the completed stack, so a painted road stays visible when the surrounding ground changes. [Shape a landscape](authoring.md#author-a-surface) includes a sand-ripple example.
 
 ## Fly over the landscape
 

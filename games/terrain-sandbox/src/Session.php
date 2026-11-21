@@ -7,6 +7,7 @@ use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 use TerrainPhonics\RayQuery;
 use TerrainPhonics\Scene;
+use TerrainPhonics\SurfaceLayers;
 use TerrainPhonics\TerrainAppearance;
 use TerrainPhonics\Water;
 use TerrainPhonics\WaterAppearance;
@@ -97,22 +98,70 @@ final class Session
 	] + self::SKY_DEFAULTS + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
 	/** The terrain's colors, banding and blending, which the scene draws with. Its settings are part of $settings. */
 	public TerrainAppearance $terrainAppearance;
-	public ?\TerrainPhonics\SurfaceLayers $surfaceLayers=null;
-	private ?\TerrainPhonics\SurfaceLayers $generatedLayers=null;
+	public ?SurfaceLayers $surfaceLayers=null;
+	public ?TerrainAppearance $paint = null;
+	public ?\Closure $prepareMaterial = null;
+	private int $materialReply = 0;
+	private ?string $materialPreset = null;
+	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1'];
+
+	private static function materialStyle(array $recipe): string
+	{
+		return $recipe['preset'] === 'limestone' ? 'limestone' : TerrainAppearance::style($recipe);
+	}
+
+	private function paintInks(): array
+	{
+		return array_intersect_key(($this->paint ?? $this->terrainAppearance)->settings,array_flip(SurfaceLayers::INKS));
+	}
+
+	private function setMaterial(array $action): void
+	{
+		$recipe = $this->landscape->recipe();
+		$origin = $this->materialPreset ?? self::materialStyle($recipe);
+		$active = $this->activeLayers();
+		if(array_key_exists('layers',$action) || array_key_exists('fields',$action)) {
+			$candidate = new SurfaceLayers($action['layers'] ?? $active->layers,
+				$action['fields'] ?? $active->fields,$active->bounce);
+			if($candidate->layers === $active->layers && $candidate->fields === $active->fields) return;
+		} elseif(isset($action['preset'])) {
+			$origin = $action['preset'];
+			if(!in_array($origin,self::SURFACES,true)) throw new \InvalidArgumentException('Unknown material preset.');
+			$name = $origin === 'canyon-v1' ? 'canyon' : $origin;
+			$recipe = (new \TerrainPhonics\Recipe(['preset'=>$name] + ($origin === 'canyon-v1' ? ['version'=>1] : [])
+				+ self::preset($name)))->values();
+			$candidate = SurfaceLayers::landscape($recipe,new TerrainAppearance($name === 'limestone' ? self::LIMESTONE_SURFACE : []));
+		} else {
+			$candidate = SurfaceLayers::landscape($recipe,$this->terrainAppearance);
+			$origin = null;
+		}
+		if($this->prepareMaterial) ($this->prepareMaterial)($candidate);
+		$this->surfaceLayers = $origin === null ? null : $candidate;
+		$this->materialPreset = $origin;
+		if($origin === null) {
+			$this->generatedLayers = $candidate;
+			$this->layerRecipe = $recipe;
+			$this->layerAppearance = $this->terrainAppearance;
+		}
+		$this->dirty = true;
+	}
+
+	private ?SurfaceLayers $generatedLayers=null;
 	private ?TerrainAppearance $layerAppearance=null;
 	private array $layerRecipe=[];
 
-	public function activeLayers(): \TerrainPhonics\SurfaceLayers
+	public function activeLayers(): SurfaceLayers
 	{
 		if($this->surfaceLayers) return $this->surfaceLayers;
 		$recipe=$this->landscape->recipe();
 		if($this->layerRecipe!==$recipe || $this->layerAppearance!==$this->terrainAppearance) {
-			$this->generatedLayers=\TerrainPhonics\SurfaceLayers::landscape($recipe,$this->terrainAppearance);
+			$this->generatedLayers=SurfaceLayers::landscape($recipe,$this->terrainAppearance);
 			$this->layerRecipe=$recipe;
 			$this->layerAppearance=$this->terrainAppearance;
 		}
 		return $this->generatedLayers;
 	}
+
 	/** Gate tool roles. Remove deletes the gate nearest the click. */
 	public const GATE_ROLES = ['start', 'checkpoint', 'finish', 'remove'];
 	/** Distance in meters a pick ray reaches when it hits no ground. */
@@ -837,8 +886,26 @@ final class Session
 				$this->message = $this->editable()->redo() ? 'Redid the terrain transaction.' : 'Nothing to redo.';
 				break;
 			case 'surface-layers':
-				$this->surfaceLayers=isset($action['layers']) ? new \TerrainPhonics\SurfaceLayers($action['layers']) : null;
-				$this->dirty=true;
+				$this->setMaterial($action);
+				$this->materialReply = (int)($action['request'] ?? 0);
+				break;
+			case 'surface-edit':
+				$rows = $this->activeLayers()->layers;
+				$index = array_search($action['id'] ?? null,array_column($rows,'id'),true);
+				if($index === false) throw new \InvalidArgumentException('The layer has changed.');
+				$key = $action['key'] ?? '';
+				if(!array_key_exists($key,SurfaceLayers::DEFAULTS) || $key === 'id') throw new \InvalidArgumentException('Unknown material property.');
+				$rows[$index][$key] = $action['value'] ?? null;
+				$this->setMaterial(['layers'=>$rows]);
+				break;
+			case 'surface-field':
+				$this->setMaterial(['fields'=>[$action['key']=>$action['value']] + $this->activeLayers()->fields]);
+				break;
+			case 'surface-ink':
+				$key = $action['ink'] ?? '';
+				if(!in_array($key,SurfaceLayers::INKS,true)) throw new \InvalidArgumentException('Unknown paint ink.');
+				$this->paint = new TerrainAppearance([$key=>$action['color'] ?? null] + $this->paintInks());
+				$this->dirty = true;
 				break;
 			case 'generate':
 				$preset=(string)($action['preset'] ?? 'coast');
@@ -853,7 +920,12 @@ final class Session
 					else $recipe[$key]=is_int($default)?(int)$action[$key]:(float)$action[$key];
 				}
 				$previous = $this->landscape->recipe()['preset'];
-				$this->replace(new Landscape($recipe));
+				$next = new Landscape($recipe);
+				if($this->prepareMaterial && !$this->surfaceLayers) {
+					try { ($this->prepareMaterial)(SurfaceLayers::landscape($next->recipe(),$this->terrainAppearance)); }
+					catch(\Throwable $error) { $next->close(); throw $error; }
+				}
+				$this->replace($next);
 				$this->switchPresetLook($previous, $preset);
 				$this->resetCamera();
 				$this->message = 'Generated ' . $recipe['preset'] . ' terrain. Detail streams in as you fly.';
@@ -1534,12 +1606,20 @@ final class Session
 	 * Version 2 added the course. Version 3 added each gate's size and renamed the gateHeight setting, the height an
 	 * air gate hangs at, to gateAltitude; gateHeight now sizes a new gate's opening. Version 1 files load as
 	 * landscapes without gates, and the gates of version 2 files take their kinds' own sizes.
-	 * Version 4 saves custom surface color layers and the expanded shape coefficients.
+	 * Version 4 adds color layers. Version 5 records a complete material stack, shared fields, origin and paint inks.
 	 * @return string Complete portable JSON save document.
 	 */
 	public function save(): string
 	{
-		$document = ['schema' => 'phonics-landscape-sandbox','version' => 4, 'layers'=>$this->surfaceLayers?->layers,
+		$stack = $this->activeLayers();
+		$rows = $stack->layers;
+		foreach($rows as &$row) if($row['parent'] >= 0) $row['parent'] = $stack->layers[$row['parent']]['id'];
+		unset($row);
+		$document = ['schema' => 'phonics-landscape-sandbox','version' => 5,
+			'surface'=>['origin'=>$this->surfaceLayers ? 'authored' : 'preset',
+				'preset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),
+				'layers'=>$rows,'fields'=>$stack->fields,'bounce'=>$stack->bounce,'paint'=>$this->paintInks(),'paintAuthored'=>$this->paint !== null],
+
 			'landscape' => json_decode($this->landscape->save(), true, flags: JSON_THROW_ON_ERROR),
 			'settings' => $this->settings,'camera' => ['position' => $this->camera->position,
 				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch],
@@ -1577,7 +1657,7 @@ final class Session
 	{
 		if(strlen($json) > 4 * 1024 * 1024) throw new \InvalidArgumentException('Landscape file exceeds 4 MiB.');
 		$data = json_decode($json, true, 64, JSON_THROW_ON_ERROR);
-		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2, 3, 4], true))
+		if(($data['schema'] ?? '') !== 'phonics-landscape-sandbox' || !in_array($data['version'] ?? 0, [1, 2, 3, 4, 5], true))
 		throw new \InvalidArgumentException('This is not a supported landscape sandbox file.');
 		$candidate = Landscape::load(json_encode($data['landscape'] ?? null, JSON_THROW_ON_ERROR));
 		$circuit = null; $variant = null;
@@ -1630,7 +1710,32 @@ final class Session
 			// file throws here, before anything changes. A file without terrain settings draws the defaults.
 			$appearance = new WaterAppearance($settings);
 			$terrain = new TerrainAppearance($settings);
-			$layers=isset($data['layers']) ? new \TerrainPhonics\SurfaceLayers($data['layers']) : null;
+			$generated = SurfaceLayers::landscape($candidate->recipe(),$terrain);
+			$style = self::materialStyle($candidate->recipe());
+			$origin = null;
+			$paint = null;
+			$layers = null;
+			if($data['version'] === 5) {
+				$surface = $data['surface'] ?? [];
+				if(!is_array($surface) || !in_array($surface['origin'] ?? null,['preset','authored'],true)
+					|| !in_array($surface['preset'] ?? null,self::SURFACES,true)
+					|| !is_array($surface['layers'] ?? null) || !is_array($surface['fields'] ?? null)
+					|| !is_array($surface['bounce'] ?? null) || !is_array($surface['paint'] ?? null)
+					|| array_diff(SurfaceLayers::INKS,array_keys($surface['paint'])) || array_diff(array_keys($surface['paint']),SurfaceLayers::INKS))
+					throw new \InvalidArgumentException('Invalid saved material stack or paint inks.');
+				$saved = new SurfaceLayers($surface['layers'],$surface['fields'],$surface['bounce']);
+				$inkPalette = new TerrainAppearance($surface['paint']);
+				$paint = ($surface['paintAuthored'] ?? true) ? $inkPalette : null;
+				if(isset($surface['paintAuthored']) && !is_bool($surface['paintAuthored']))
+					throw new \InvalidArgumentException('Invalid saved paint origin.');
+				if(!$paint && array_intersect_key($terrain->settings,$surface['paint']) != $surface['paint']) $paint=$inkPalette;
+				if($surface['origin'] === 'authored') { $origin = $surface['preset']; $layers = $saved; }
+				else $generated = $saved;
+			} elseif(isset($data['layers'])) {
+				$layers = new SurfaceLayers($data['layers'],$generated->fields,$generated->bounce);
+				$origin = $style;
+			}
+			if($this->prepareMaterial) ($this->prepareMaterial)($layers ?? $generated);
 			$settings = array_diff_key($settings, WaterAppearance::DEFAULTS, TerrainAppearance::DEFAULTS)
 				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW];
 			foreach($settings as $name => $value)
@@ -1646,12 +1751,17 @@ final class Session
 			if(!is_numeric($yaw) || !is_numeric($pitch) || !is_finite((float)$yaw) || !is_finite((float)$pitch))
 			throw new \InvalidArgumentException('Invalid saved camera direction.');
 		}
-		catch(\InvalidArgumentException $error) { $candidate->close(); throw $error; }
+		catch(\Throwable $error) { $candidate->close(); throw $error; }
 		$this->replace($candidate);
 		$this->balloons = $balloons;
 		$this->setWaterAppearance($appearance);
 		$this->setTerrainAppearance($terrain);
 		$this->surfaceLayers=$layers;
+		$this->materialPreset = $origin;
+		$this->paint = $paint;
+		$this->generatedLayers = $generated;
+		$this->layerAppearance = $this->terrainAppearance;
+		$this->layerRecipe = $candidate->recipe();
 		foreach($settings as $name => $value) $this->setting((string)$name, $value);
 		$this->course = $course;
 		$this->circuit = $circuit; $this->circuitVariant = $variant;
@@ -1684,7 +1794,10 @@ final class Session
 		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
-			'settings' => $this->settings,'surfaceLayers'=>$this->activeLayers()->layers,'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
+			'settings' => $this->settings,'surfaceLayers'=>$this->activeLayers()->layers,'materialReply'=>$this->materialReply,'surfaceOrigin'=>$this->surfaceLayers ? 'authored' : 'preset',
+			'surfacePreset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),
+			'surfaceFields'=>$this->activeLayers()->fields,'paintInks'=>$this->paintInks(),
+			'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
 			'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),

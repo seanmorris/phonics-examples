@@ -108,11 +108,24 @@ rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone
 base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at
 175 m elevation intervals form sloping benches below the summits. Existing recipes expand to the values of
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
-changing the landscape's playable extent. `SurfaceLayers` accepts an ordered list of up to twelve color
-layers with height and slope fades, spatial noise, and an optional earlier layer as a parent. Set a layer's
-`pattern` to `mottle`, `streaks`, `gravel`, `bedded`, `stipple`, `fractal` or `veins` to blend its `patternColor` into the base color. The
-`patternAmount` sets the blend from 0 to 1, `patternScale` sets the feature size in meters, and
-`patternStretch` scales the pattern vertically on cliffs. The same layer settings shade the ground and charts.
+changing the landscape's playable extent.
+
+### Surface materials
+
+`SurfaceLayers::landscape($recipe, $appearance)` returns the editable material recipe used by the ground and the minimap. Assign a replacement to `Scene::$layers`. The stack holds up to sixteen ordered layers with stable IDs. Heights, slope, water level, dipping beds, noise and an earlier layer’s mask can restrict coverage. A parent can be given by ID or by its earlier index.
+
+A layer's `channel` selects `color`, `relief` or `both`. For example, add this layer above an existing layer with ID `sand` to give that sand small directional ripples under changing light.
+
+```php
+$rows = $surface->layers;
+$rows[] = ['id'=>'ripples', 'name'=>'Sand ripples', 'parent'=>'sand',
+    'channel'=>'relief', 'relief'=>'pattern', 'pattern'=>'ripples',
+    'patternScale'=>1.4, 'strength'=>0.25];
+$scene->layers = new SurfaceLayers($rows, $surface->fields, $surface->bounce);
+```
+
+Patterns use world-space meters and fade with the pixel footprint. A layer can use one pattern for tint and bump, sample a shared coverage field such as scree, or add facets, crown, block and rib relief. `flatten` controls how much previous relief is removed under its coverage. Lighting normals affect presentation only. The chart samples the same stack for color. Paint inks apply last on both views. Fully painted road uses its road ink and geometric normal, with shoulders blending by coverage. `Scene::$paint` can supply a separate ink palette.
+
 
 `Water` evaluates analytic directional waves and bounded wake packets. Its shader include uses the same
 parameters and derivatives as PHP. `Watercraft` samples several buoyancy points and adds damping, drag,
@@ -226,10 +239,7 @@ Set `$water->appearance = new WaterAppearance([...])` to tune water rendering. U
 
 ## Terrain appearance
 
-`Scene::$appearance` holds a `TerrainAppearance`: the ground's colors, the banding of exposed rock, the slopes
-and heights where one material gives way to another, and the amounts of talus, stain and lichen on mountain rock.
-Replace it to change the look; the next `render()` uploads it. The renderer uploads an appearance once, and again only
-after a replacement or `restore()`. An application that draws only changed frames must draw one after a replacement.
+`Scene::$appearance` supplies preset parameters and default paint inks. With `Scene::$layers` set to null, replacing the appearance rebuilds the preset stack on the next render. Assigning a `SurfaceLayers` object commits its own colors and field settings. An application that draws only changed frames must request a draw after either change.
 
 ```php
 $scene->appearance = new TerrainPhonics\TerrainAppearance(['snowline' => 220, 'snowColor' => '#f4f8ff'] + $saved);
@@ -247,17 +257,7 @@ the order of `DEFAULTS`, with colors in lower case. `GROUPS` lists the settings 
 `TerrainAppearance::linear($hex)` converts one color to linear RGB and throws `InvalidArgumentException` for anything
 but a six-digit hex string.
 
-Coast and canyon terrain look as they did before these settings existed. Each of their default colors is the nearest
-8-bit sRGB value to the linear constant it replaced, and each number equals the constant it replaced. Mountain terrain
-has its own material, whose settings were tuned against photographs of granite cirques and forested ranges.
-
-The presets use the settings differently. Coast terrain has grass cover, banded rock and snow. Mountain terrain is
-granite: steep ground shows jointed slabs, iron stains and lichen streaked down the fall line, talus lies on the
-moderately steep ground, and the cover runs from forest through subalpine meadow to tundra and bare rock as the ground
-nears the snowline. Grass covers level valley floors below the treeline. Version-one canyons have soil cover and banded
-rock. Current canyons draw rock from the canyon colors and debris from their dust. Sand applies to every preset. The
-material tool's rock, grass, sand, snow and road paint use the same colors as the generated ground; mountain rock paint
-is the mountain rock: granite, mixed with talus rubble on gentle ground.
+Coast starts with grass, exposed rock, shore sand and snow. Its optional coastal bands have zero coverage. Mountain Ridges uses reusable fields for jointed slabs, iron stains, lichen, talus and forest crowns. The forest gives way to meadow and tundra as the ground approaches the snowline. Early canyons have horizontal strata, and current canyons use dipping beds. Limestone Plain blends valley vegetation into weathered outcrops. The five paint inks cover any of these surfaces.
 
 The table lists what each setting changes in each preset. A preset ignores the settings with an empty cell.
 
@@ -266,8 +266,8 @@ The table lists what each setting changes in each preset. A preset ignores the s
 | `grassColor` | Cover | Level valley floors | Paint only | Paint only |
 | `soilColor` | | | Cover | |
 | `rockColor`, `rockBandColor`, `bandSpacing` | Rock | | Rock | |
-| `bandContrast` | Rock | | Rock | Beds |
-| `bandSharpness` | Rock | | Rock | Bed contacts |
+| `bandContrast` | | | Rock | Beds |
+| `bandSharpness` | | | Rock | Bed contacts |
 | `sandColor`, `beachHeight`, `beachWidth` | Beach | Beach | Beach | Beach |
 | `snowColor` | Snow | Snow | Paint only | Paint only |
 | `roadColor` | Paint | Paint | Paint | Paint |
@@ -288,7 +288,7 @@ Colors are sRGB hex strings.
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `grassColor` | `#425b2d` | Grass cover on coast and mountain terrain, and grass paint. |
-| `soilColor` | `#815f40` | Soil cover on version-one canyons, mixed 40% toward the banded rock. |
+| `soilColor` | `#815f40` | Base soil color on version-one canyons. |
 | `rockColor` | `#867c6f` | Rock between the light bands on coast and version-one canyon terrain. |
 | `rockBandColor` | `#af957c` | The light bands in that rock. |
 | `sandColor` | `#bfaf8b` | Sand on level ground near the water, and sand paint. |
@@ -316,12 +316,9 @@ follow, so each derived channel stops at 1: red beds under a white rust are whit
 | --- | --- | --- | --- |
 | `bandSpacing` | 52.36 m (2π / 0.12) | 5 to 1000 | Height of one dark and one light band in coast and version-one canyon rock. |
 | `bandContrast` | 1 | 0 to 1 | 0 paints banded rock one color: halfway between the two rock colors, or the canyon's distant color. |
-| `bandSharpness` | 1 | 1 to 8 | 1 is a sine profile. Higher values flatten each band and narrow the transitions, and narrow the contacts between canyon beds by the same factor. |
+| `bandSharpness` | 1 | 1 to 8 | Higher values narrow the transitions between canyon beds. |
 
-Canyon beds take their spacing from the recipe's `terraceSpacing`, because the relief shares them, so `bandSpacing`
-does not apply to them. Bands fade to their average color where a pixel spans several of them. A sharpened profile
-turns back into a sine where one band covers fewer than about twice (sharpness + 2) pixels, so the harmonics that
-sharpen it have faded before they pass the pixel rate.
+Current canyon beds take their spacing from the recipe's `terraceSpacing` so material contacts align with ledges. As a pixel begins to span several beds, their colors converge to the average weighted by bed thickness.
 
 ### Blending
 
@@ -353,7 +350,7 @@ above it.
 
 ### Rock
 
-These settings apply to mountain terrain.
+The scree, slab and lichen fields read these settings wherever a stack uses them.
 
 | Setting | Default | Range | Effect |
 | --- | --- | --- | --- |

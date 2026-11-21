@@ -49,10 +49,12 @@ A save records the seed and complete recipe together with the ordered edit histo
 
 The example is offline. Reproducible local terrain and edit replay do not, by themselves, establish a multiplayer authority or synchronization protocol.
 
-## Color patterns
+## Author a surface
 
-In **Surface → Color layers**, open a layer to choose a color pattern. **Mottled** blends patches of a second color, **Streaks** follows upright faces, and **Gravel** scatters small flecks. **Weathered beds** adds thin sediment lines that follow the dipping strata and streaks that cross them. Set the pattern color and amount, then set its scale in meters. Vertical stretch lengthens the pattern on cliffs. Choose **Apply layers** to preview and save the result.
+Open **Surface** to see the material stack that draws the current landscape. Layers run from the base upward. Expand a named layer to edit it. Colors and numeric values preview immediately. Adding, moving or removing a layer, selecting a different pattern, or changing a parent starts a draft. Choose **Apply layers** to use the draft. Saving writes the last applied stack.
 
-The layer's elevation and slope masks set where its color and pattern can appear. **Edge noise** varies those mask boundaries. **Stipple** adds flecks throughout the layer, including on broad stretches of sand or rock. **Fractal noise** blends broad patches with finer flecks. **Mineral veins** adds narrow, broken seams. Limestone Plain uses the first pattern for grass and slope vegetation and stretches the veins down exposed rock faces. Color patterns use fixed world coordinates and fade as their features become too small to resolve.
+Use a parent mask to put one material inside another. To add ripples to a beach, add a layer above **Sand**, choose **Sand** under **Within layer mask**, and set **Affects** to **Relief**, **Relief source** to **Pattern**, and **Pattern** to **Ripples**. Set the scale in meters and turn the sun to see the highlights. Choose **Both** to have the same pattern tint the surface. **Flatten underlying relief** smooths the previous lighting normal where the layer covers it.
 
-Mountain Ridges uses its preset grass, lichen, and snow detail until you apply a custom layer stack. **Use preset colors** restores the mountain shading.
+Mountain Ridges exposes its meadow, forest, granite, iron stains, snow and lighting relief in the same stack. Other surfaces can use those fields. **Shared field settings** controls features that several layers sample, including gully spacing, block size and slab dimensions. **Load preset surface** copies a whole material recipe onto the current landform. An edited stack survives terrain generation. **Follow landform preset** reconnects it to the landform.
+
+Brushes and roads use the five colors under **Paint inks**. Painting covers the natural color and relief at full coverage. The shoulder blends back into the natural surface. The minimap reads the same material stack and paint colors.

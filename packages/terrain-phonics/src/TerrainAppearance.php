@@ -335,9 +335,17 @@ final class TerrainAppearance
 	 */
 	public function uniforms(): array { return $this->uniforms; }
 
+	/** Bind the five final paint inks in terrain material-ID order. */
+	public function bindPaint(Program $program): void
+	{
+		$colors = [];
+		foreach(SurfaceLayers::INKS as $key) array_push($colors,...self::linear($this->settings[$key]));
+		glUniform3fv($program->location('uPaintColor[0]'),5,$colors);
+	}
+
 	/**
 	 * Upload the appearance to the active terrain program.
-	 * @param Program $program Program in use, built from terrain.frag.
+	 * @param Program $program Program that consumes the appearance uniforms.
 	 * @return void Sets every appearance uniform.
 	 */
 	public function bind(Program $program): void

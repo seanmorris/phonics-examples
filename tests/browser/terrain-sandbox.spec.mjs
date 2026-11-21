@@ -1642,12 +1642,11 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 	await press(page, 'pause');
 	await expect.poll(async() => (await status(page)).paused).toBe(true);
 
-	// The coast reads grass and the rock strata, not the mountain granite.
 	await tab('surface').click();
-	await expect(page.locator('[data-surface-key="grassColor"]')).toBeVisible();
-	await expect(page.locator('[data-surface-key="bandSpacing"]')).toBeVisible();
-	await expect(page.locator('[data-surface-key="graniteColor"]')).toBeHidden();
-	await expect(page.locator('[data-surface-group="rock"]')).toBeHidden();
+	const grass = page.locator('[data-layer="grass"]');
+	await grass.locator('summary').click();
+	await expect(page.locator('[data-layer="coastal-bands"]')).toBeVisible();
+	await expect(page.locator('[data-layer="granite-slabs"]')).toHaveCount(0);
 
 	let frames = -1;
 	await expect.poll(async() => {
@@ -1656,26 +1655,20 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 		frames = now;
 		return still;
 	}, {timeout: 120_000, intervals: [1500]}).toBe(true);
-	await page.locator('[data-value="grassColor"]').fill('#ff0000');
-	await expect.poll(async() => (await status(page)).settings.grassColor).toBe('#ff0000');
+
+	await grass.locator('[data-layer-key="color"]').fill('#ff0000');
+	await expect.poll(async() => (await status(page)).surfaceLayers[0].color).toBe('#ff0000');
 	await expect.poll(async() => (await status(page)).renderer.frames).toBeGreaterThan(frames);
-
-	// Raising where rock starts past where it covers moves the end up with it, and the end's slider shows that.
-	await page.locator('[data-value="rockSlopeStart"]').evaluate(element => {
-		element.value = '0.6';
-		element.dispatchEvent(new Event('input', {bubbles: true}));
-	});
-	await expect.poll(async() => (await status(page)).settings.rockSlopeEnd).toBeCloseTo(.61, 9);
-	await expect(page.locator('[data-value="rockSlopeEnd"]')).toHaveValue('0.61');
+	await page.getByText('Paint inks', {exact: true}).click();
+	await page.locator('[data-ink="grassColor"]').fill('#112211');
+	await expect.poll(async() => (await status(page)).paintInks.grassColor).toBe('#112211');
 	const file = await save(page);
-	expect(file.settings.grassColor).toBe('#ff0000');
-	expect(file.settings.rockSlopeStart).toBe(.6);
-
-	// Saving opened the Landscape tab, which holds the file buttons.
+	expect(file.surface.layers[0].color).toBe('#ff0000');
+	expect(file.surface.paint.grassColor).toBe('#112211');
 	await tab('surface').click();
-	await page.locator('[data-surface-reset="all"]').click();
-	await expect.poll(async() => (await status(page)).settings.grassColor).toBe('#425b2d');
-	await expect.poll(async() => (await status(page)).settings.rockSlopeStart).toBe(.08);
+	await page.locator('[data-layer-reset]').click();
+	await expect.poll(async() => (await status(page)).surfaceLayers[0].color).toBe('#425b2d');
+	await expect.poll(async() => (await status(page)).paintInks.grassColor).toBe('#112211');
 
 	// The page opens on the tab shown last.
 	await page.reload();
@@ -1761,13 +1754,12 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	await expect.poll(async() => (await status(page)).recipe.version).toBe(2);
 
 	await page.locator('[aria-controls="terrain-section-surface"]').click();
-	await page.getByText('Color layers', {exact: true}).click();
 	const layers = page.locator('[data-layer-fields] [data-layer]');
 	const child = layers.nth(1);
 	await child.locator('summary').click();
-	await child.locator('[data-layer-key="parent"]').fill('0');
+	await child.locator('[data-layer-key="parent"]').selectOption('canyon-dust');
 	await child.locator('[data-layer-key="color"]').fill('#7e513d');
-	await child.getByRole('combobox', {name:'Color pattern'}).selectOption('streaks');
+	await child.getByRole('combobox', {name: 'Pattern',exact: true}).selectOption('streaks');
 	await child.locator('[data-layer-key="patternColor"]').fill('#2f2120');
 	await child.locator('[data-layer-key="patternAmount"]').fill('0.7');
 	await child.locator('[data-layer-key="patternScale"]').fill('18');
@@ -1776,16 +1768,23 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	await expect.poll(async() => (await status(page)).surfaceLayers[1].color).toBe('#7e513d');
 
 	const document = await save(page);
-	expect(document.version).toBe(4);
+	expect(document.version).toBe(5);
 	expect(document.landscape.recipe.wallWidth).toBe(.0085);
 	expect(document.landscape.recipe.surround).toBe('plateau');
-	expect(document.layers[1]).toMatchObject({
-		color: '#7e513d', parent: 0, pattern: 'streaks', patternColor: '#2f2120',
-		patternAmount: .7, patternScale: 18, patternStretch: 6,
+	expect(document.surface.layers[1]).toMatchObject({
+		color: '#7e513d'
+		, parent: 'canyon-dust'
+		, pattern: 'streaks'
+		, patternColor: '#2f2120'
+		, patternAmount: .7, patternScale: 18, patternStretch: 6
 	});
 	await load(page, fixture());
 	await load(page, document);
-	await expect.poll(async() => (await status(page)).surfaceLayers).toEqual(document.layers);
+
+	await expect.poll(async() => (await status(page)).surfaceLayers).toEqual(document.surface.layers.map(row => ({
+		...row
+		, parent: row.parent===-1 ? -1 : document.surface.layers.findIndex(parent => parent.id===row.parent)
+	})));
 	await expect(wall).toHaveValue('0.0085');
 });
 
@@ -1827,6 +1826,11 @@ test('the coastal palette shows inland grass and shore sand', async({page}) => {
 	Object.assign(coast.settings, {waterLevel: -40, waterChoppiness: 0, elevation: 55});
 	await load(page, coast);
 	await settled(page);
+
+	// The expanded control window can cover the previous sample point at this viewport.
+	const overlays = page.locator('.terrain-panel, .terrain-hud');
+	await overlays.evaluateAll(nodes => nodes.forEach(node => { node.style.visibility = 'hidden'; }));
+
 
 	const groundColor = async() => {
 		const image = PNG.sync.read(await canvas(page).screenshot());
@@ -1876,6 +1880,15 @@ test('Mountain Ridges shades lichen and custom layers can stipple their interior
 	await view.evaluate(el => el.terrainSandboxDebug.values({lichenAmount: 1}));
 	await expect.poll(async() => (await status(page)).settings.lichenAmount).toBe(1);
 	const withLichen = await capture();
+	const stack = (await status(page)).surfaceLayers;
+
+	await view.evaluate(
+		(el, layers) => el.terrainSandboxDebug.action({type: 'surface-layers',layers,request: 17})
+		, stack
+	);
+
+	await expect.poll(async() => (await status(page)).materialReply).toBe(17);
+	expect(Buffer.compare(withLichen, await capture())).toBe(0);
 	expect(changedFraction(withLichen, withoutLichen)).toBeGreaterThan(.01);
 
 	// One unbounded layer gives the pattern no edges to hide behind.
@@ -1991,4 +2004,69 @@ test('the wider landscape can be generated, saved, and flown beyond the original
 	await expect(page.locator('.terrain-flight-map')).toBeVisible();
 	expect(await canvas(page).evaluate(element => element.getContext('webgl2').getError())).toBe(0);
 	expect(errors).toEqual([]);
+});
+
+test('a relief-only layer changes sun shading while a painted road keeps its ink and normal', async({page}) => {
+	await page.setViewportSize({width: 480,height: 360});
+	await boot(page);
+	const road = {type: 'road',points: [[-60,0,0],[60,0,0]],width: 14,shoulder: 4,crown: 0};
+	const doc = fixture({history: [[road]],revision: 1});
+	doc.version = 4;
+	doc.layers = [{id: 'sand',name: 'Sand',color: '#9e8053'}];
+	Object.assign(doc.settings, {waterLevel: -25,waterChoppiness: 0,elevation: 27,azimuth: 100,roadColor: '#545150'});
+	doc.camera = {position: [0,45,0],yaw: 0,pitch: -1.52};
+	await load(page, doc);
+
+	const overlays = page.locator('.terrain-panel, .terrain-hud');
+	await overlays.evaluateAll(nodes => nodes.forEach(node => { node.style.visibility = 'hidden'; }));
+
+	const view = canvas(page);
+
+	const image = async() => {
+		await settled(page);
+
+		return PNG.sync.read(await view.screenshot());
+	};
+
+	const before = await image();
+	const relief = {
+		id: 'ripples'
+		, name: 'Sand ripples'
+		, parent: 'sand'
+		, channel: 'relief'
+		, relief: 'pattern'
+		, pattern: 'ripples'
+		, patternScale: 4
+		, patternAmount: 1
+		, strength: 4
+	};
+
+	await view.evaluate(
+		(e, layers) => e.terrainSandboxDebug.action({type: 'surface-layers',layers})
+		, [...doc.layers,relief]
+	);
+
+	await expect.poll(async() => (await status(page)).surfaceLayers.length).toBe(2);
+	const after = await image();
+
+	const difference = (y0, y1) => {
+		let sum = 0,count = 0;
+
+		for(let y = Math.floor(y0*before.height); y<y1*before.height; y++)
+		for(let x = 90; x<before.width-90; x++)
+		{
+			const i = 4*(y*before.width+x);
+			sum += Math.abs(before.data[i]-after.data[i]);
+			count++;
+		}
+
+		return sum/count;
+	};
+
+	expect(difference(.46, .51)).toBeLessThan(.1);
+	expect(difference(.18, .26)).toBeGreaterThan(1);
+	await view.evaluate(e => e.terrainSandboxDebug.values({azimuth: 280}));
+	await expect.poll(async() => (await status(page)).settings.azimuth).toBe(280);
+	const rotated = await image();
+	expect(rotated.data.equals(after.data)).toBe(false);
 });

@@ -1577,4 +1577,39 @@ expect($other->status()['surfaceStyle'] === 'mountain' && $other->settings['rock
 	'Generating keeps the appearance and the status follows the new style');
 $look->close(); $other->close();
 
+$materials = new Session(['preset'=>'mountain']);
+$natural = $materials->activeLayers();
+expect(in_array('relief-ribs',array_column($natural->layers,'id'),true),'Ridge relief is part of its editable stack.');
+input($materials,['actions'=>[['type'=>'surface-layers','layers'=>$natural->layers]]]);
+expect($materials->surfaceLayers===null,'An unchanged Apply keeps the pristine preset.');
+input($materials,['actions'=>[['type'=>'surface-edit','id'=>'granite-slabs','key'=>'color','value'=>'#765432'],
+	['type'=>'surface-field','key'=>'jointWidth','value'=>19], ['type'=>'surface-ink','ink'=>'roadColor','color'=>'#515151']]]);
+$edited=$materials->activeLayers();
+input($materials,['actions'=>[['type'=>'generate','preset'=>'limestone']]]);
+expect($materials->activeLayers()===$edited,'Authored relief and masks survive a change of landform.');
+$file=json_decode($materials->save(),true);
+expect($file['version']===5 && $file['surface']['origin']==='authored' && $file['surface']['preset']==='mountain',
+	'The save records the material origin independently of the landform.');
+$materials->load(json_encode($file));
+expect($materials->activeLayers()->layers===$edited->layers && $materials->activeLayers()->fields===$edited->fields
+	&& $materials->status()['paintInks']['roadColor']==='#515151','Material masks, shared fields and paint survive a reload.');
+$materials->prepareMaterial=static function() { throw new RuntimeException('Test shader failed to link'); };
+$prior=$materials->save();
+input($materials,['actions'=>[['type'=>'surface-layers','preset'=>'coast']]]);
+expect($materials->save()===$prior && $materials->status()['message']==='Test shader failed to link',
+	'A link failure keeps the complete previously committed material.');
+$materials->prepareMaterial=null;
+$file['version']=4;
+unset($file['surface']);
+$file['landscape']['recipe']['preset']='mountain';
+$file['layers']=[['color'=>'#999999']];
+$materials->load(json_encode($file));
+expect(count($materials->activeLayers()->layers)===1 && $materials->activeLayers()->layers[0]['relief']==='none',
+	'An explicit version-four mountain stack remains color-only.');
+$file['layers']=null;
+$materials->load(json_encode($file));
+expect(in_array('relief-ribs',array_column($materials->activeLayers()->layers,'id'),true),
+	'A version-four mountain with no custom layers recovers the complete preset.');
+$materials->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

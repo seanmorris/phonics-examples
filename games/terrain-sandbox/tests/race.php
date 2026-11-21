@@ -812,7 +812,7 @@ input($file, ['values' => ['gateLaps' => 3, 'gateRole' => 'checkpoint', 'gateAlt
 $file->camera->pitch = -.4;
 $saved = $file->save();
 $data = json_decode($saved, true, flags: JSON_THROW_ON_ERROR);
-expect($data['version'] === 4 && count($data['course']['gates']) === 4 && $data['course']['gates'][0]['laps'] === 3
+expect($data['version'] === 5 && count($data['course']['gates']) === 4 && $data['course']['gates'][0]['laps'] === 3
 	&& !isset($data['course']['gates'][0]['id']) && $data['course']['gates'][2]['number'] === 2
 	&& $data['course']['gates'][2]['width'] === 2 * $air['window']['halfWidth'],
 	'Version 3 files carry the course: every gate, its laps, its checkpoint numbers and its size');
@@ -838,7 +838,7 @@ expect($copy->course->count() === 0 && $copy->status()['course']['gates'] === []
 $bare = $data;
 unset($bare['course']);
 $copy->load(json_encode($bare));
-expect($copy->course->count() === 0, 'A version 4 file without a course loads without gates');
+expect($copy->course->count() === 0, 'A file without a course loads without gates');
 $copy->load($saved);
 $intact = $copy->save();
 $generation = $copy->generation;
@@ -883,8 +883,8 @@ foreach($malformed as $name => $course)
 	}
 }
 $future = $data;
-$future['version'] = 5;
-try { $copy->load(json_encode($future)); expect(false, 'A version 4 file must be refused'); }
+$future['version'] = $data['version'] + 1;
+try { $copy->load(json_encode($future)); expect(false, 'An unsupported file version must be refused'); }
 catch(InvalidArgumentException) { expect($copy->save() === $intact, 'A file from a later version is refused'); }
 // The page loads files through an action, which reports the problem instead of throwing.
 $bad = $data;
