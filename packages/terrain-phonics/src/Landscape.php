@@ -71,17 +71,35 @@ final class Landscape implements TerrainSurface
 	 */
 	public function recipe(): array { return $this->parameters; }
 
-	/** Index only committed operations. Every rectangle includes the cubic reconstruction halo. */
-	public function editIndex(): EditIndex
+	/**
+	 * Share the committed road planes with the rendering index.
+	 * @return array Normalized splines in application order.
+	 */
+	public function roads(): array
 	{
-		$extent=$this->parameters['worldSize'];
-		$half=$extent/2;
-		$pad=2*$this->parameters['spacing'];
-		$boxes=[];
+		$roads = [];
+		foreach($this->operations as $op) if($op['type'] === 'road') $roads[] = $op;
+		return $roads;
+	}
+
+	/**
+	 * Index committed edit footprints with the cubic reconstruction halo.
+	 * @param bool $includeRoads Include spline footprints when CPU reconstruction is needed there.
+	 * @return EditIndex Spatial lookup of affected rectangles in world coordinates.
+	 */
+	public function editIndex(bool $includeRoads = true): EditIndex
+	{
+		$extent = $this->parameters['worldSize'];
+		$half = $extent / 2;
+		$pad = 2 * $this->spacing;
+		$boxes = [];
 		foreach($this->operations as $operation)
-		foreach(Edits::footprints($operation,max(24.,2*$pad)) as [$x,$z,$r,$b])
-			$boxes[]=[max(-$half,$x-$pad),max(-$half,$z-$pad),min($half,$r+$pad),min($half,$b+$pad)];
-		return new EditIndex($extent,$boxes);
+		{
+			if(!$includeRoads && $operation['type'] === 'road') continue;
+			foreach(Edits::footprints($operation, max(24., 2 * $pad)) as [$x, $z, $r, $b])
+				$boxes[] = [max(-$half, $x-$pad), max(-$half, $z-$pad), min($half, $r+$pad), min($half, $b+$pad)];
+		}
+		return new EditIndex($extent, $boxes);
 	}
 
 	/**

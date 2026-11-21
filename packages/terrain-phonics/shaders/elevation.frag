@@ -1,7 +1,9 @@
 #version 300 es
 precision highp float;
 precision highp int;
-uniform highp sampler2D uPermutation;
+uniform highp sampler2D uPermutation, uRoadAtlas;
+// Directory offset (zero when absent), blocks per row, signed minimum tile and tile size.
+uniform ivec4 uRoadGrid;
 uniform vec4 uShape; // bias, rolling, rise, ridge
 uniform vec4 uProfile; // ridge rounding, wall height, floor width, wall width
 uniform vec4 uField; // scale, frequency, warp amplitude, warp frequency
@@ -177,6 +179,55 @@ float terrainHeight(vec2 world)
 	}
 	return h.x;
 }
+vec4 roadRecord(int address)
+{
+	int width = textureSize(uRoadAtlas, 0).x;
+	return texelFetch(uRoadAtlas, ivec2(address % width, address / width), 0);
+}
+
+int roadPointer(int table, int entry)
+{
+	return int(roadRecord(table + entry / 4)[entry % 4]);
+}
+
+// Evaluate the same compact planes as Edits::roadAt, in the same order at intersections.
+void gradeRoads(vec2 world, inout float height, inout float material)
+{
+	ivec2 tile = ivec2(floor(world / float(uRoadGrid.w))) - uRoadGrid.z;
+	ivec2 block = tile / 8;
+	int leaves = roadPointer(uRoadGrid.x, block.y * uRoadGrid.y + block.x);
+	if(leaves == 0) return;
+	int group = roadPointer(leaves, (tile.y % 8) * 8 + tile.x % 8);
+	while(group != 0) {
+		ivec3 header = ivec3(roadRecord(group).xyz);
+		vec4 params = roadRecord(header.x);
+		float sum = 0., target = 0., outside = 1.;
+		group++;
+		for(int i = 0; i < header.y; i += 4) {
+			ivec4 samples = ivec4(roadRecord(group++));
+			for(int j = 0; j < 4 && i+j < header.y; j++) {
+				int address = samples[j];
+				vec4 position = roadRecord(address);
+				vec2 delta = world - position.xy;
+				float q = (dot(delta,delta) - params.x) / params.y;
+				if(q >= 1.) continue;
+				float weight = fade(1. - max(q,0.));
+				vec3 plane = roadRecord(address + 1).xyz;
+				vec2 tangent = vec2(position.w,plane.x);
+				float crossSlope = dot(delta, vec2(-tangent.y,tangent.x));
+				float crown = max(0., 1. - crossSlope*crossSlope / params.x);
+				target += weight * (position.z + plane.y*dot(tangent,delta)
+					+ plane.z*crossSlope + params.z*crown*crown*crown);
+				sum += weight;
+				outside *= 1. - weight;
+			}
+		}
+		if(sum > 0.) height = mix(target / sum, height, outside);
+		if(outside <= .5) material = params.w;
+		if(header.z != 0) break;
+	}
+}
+
 void main()
 {
 	vec2 world=uWorldOffset+vec2(uOriginCell+ivec2(gl_FragCoord.xy)-uPixelOrigin)*uStep;
@@ -193,7 +244,9 @@ void main()
 		}
 		h=mix(h,target,t);
 	}
-	ink=vec4(0,0,0,1);
+	float material = 0.;
+	if(uRoadGrid.x != 0 && outside <= 0.) gradeRoads(world,h,material);
+	ink=vec4(material/255.,0,0,1);
 	uint bits=floatBitsToUint(h);
 	color=uPacked?vec4(uvec4(bits,bits>>8,bits>>16,bits>>24)&255u)/255.:vec4(h,0,0,1);
 }

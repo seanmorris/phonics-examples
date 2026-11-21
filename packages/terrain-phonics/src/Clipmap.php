@@ -12,6 +12,9 @@ final class Clipmap
 	private array $vao = [], $framebuffer = [], $permutation = [], $levels = [], $overview = [];
 	private ?Landscape $source = null;
 	private EditIndex $edits;
+	private ?EditIndex $overviewEdits = null;
+	private array $roads = [], $roadTexture = [];
+	private int $roadBytes = 0;
 	// Parent normals sample two cells beyond the drawn grid.
 	private const HALO = 2;
 	private int $revision = -1;
@@ -88,11 +91,19 @@ final class Clipmap
 		$newRecipe = $this->recipe !== $land->recipe();
 		$this->source = $land;
 		$this->revision = $land->revision();
-		$this->edits = $land->editIndex();
+		$this->edits = $land->editIndex(false);
+		$roads = $land->roads();
+		$r = $land->recipe();
+		// Only the fixed overview can sample between lattice nodes. In that case use PHP's cubic
+		// reconstruction across the complete edited footprint for this one texture.
+		$overviewStride = $r['worldSize'] / (256 * $r['spacing']);
+		$this->overviewEdits = $roads && $overviewStride !== floor($overviewStride) ? $land->editIndex() : null;
+		if($roads !== $this->roads || ($roads && $r['worldSize'] !== ($this->recipe['worldSize'] ?? null)))
+			$this->uploadRoads($roads, $r['worldSize']);
 
 		if(!$newRecipe) return;
 
-		$r = $this->recipe = $land->recipe();
+		$this->recipe = $r;
 		self::texture($this->permutation[0]);
 		$perm = (new Noise($r['seed']))->permutation();
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256, 1, 0, GL_RED, GL_UNSIGNED_BYTE, pack('C*', ...$perm));
@@ -127,6 +138,33 @@ final class Clipmap
 			$p->location('uNaturalMountains')
 			, (int)($r['ridgeHeight'] > 0 && $r['wallHeight'] == 0 && $r['directionalRise'] == 0)
 		);
+	}
+
+	/**
+	 * Replace the resident spatial index, including the empty state after undo.
+	 * @param array $roads Normalized road operations in application order.
+	 * @param float $extent Width of the editable square in metres.
+	 * @return void Updates the generator uniforms and the texture byte counters.
+	 */
+	private function uploadRoads(array $roads, float $extent): void
+	{
+		$this->roads = $roads;
+		$p = $this->generator;
+		if(!$roads)
+		{
+			glUniform4i($p->location('uRoadGrid'), 0, 0, 0, 0);
+			glDeleteTextures(1, $this->roadTexture);
+			$this->roadTexture = [];
+			$this->roadBytes = 0;
+			return;
+		}
+		$atlas = RoadAtlas::build($roads, $extent);
+		if(!$this->roadTexture) glGenTextures(1, $this->roadTexture);
+		self::texture($this->roadTexture[0]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, $atlas['width'], $atlas['height'], 0, GL_RGBA, GL_FLOAT, $atlas['bytes']);
+		$this->roadBytes = strlen($atlas['bytes']);
+		$this->uploads += $this->roadBytes;
+		glUniform4i($p->location('uRoadGrid'), $atlas['directory'], $atlas['blocksAcross'], $atlas['minTile'], (int)$atlas['cell']);
 	}
 
 	/** Left/right strips plus top/bottom strips over the shared X interval. Half-open integer rectangles. */
@@ -198,7 +236,8 @@ final class Clipmap
 		, float $step
 		, float $offset
 	): void {
-		$regions = $this->edits->intersect(
+		$index = $offset !== 0. && $this->overviewEdits ? $this->overviewEdits : $this->edits;
+		$regions = $index->intersect(
 			[$x * $step + $offset,$z * $step + $offset,($x + $w - 1) * $step + $offset,($z + $h - 1) * $step + $offset]
 		);
 
@@ -221,7 +260,7 @@ final class Clipmap
 				$wx = $i * $step + $offset;
 				$wz = $j * $step + $offset;
 				$height = $this->source->height($wx, $wz);
-				$id = array_search($this->source->material($wx, $wz), ['rock','grass','sand','snow','road'], true);
+				$id = array_search($this->source->material($wx, $wz), RoadAtlas::MATERIALS, true);
 				$heights .= $this->packed ? pack('g', $height) : pack('g4', $height, 0, 0, 1);
 				$ink .= pack('C4', $id === false?0:$id + 1, 0, 0, 255);
 			}
@@ -344,7 +383,12 @@ final class Clipmap
 
 		try
 		{
+			glActiveTexture(GL_TEXTURE0);
 			if($changed) $this->generate($land);
+			glActiveTexture(GL_TEXTURE0 + 2);
+			glBindTexture(GL_TEXTURE_2D, $this->roadTexture[0] ?? $this->permutation[0]);
+			glUniform1i($this->generator->location('uRoadAtlas'), 2);
+			glActiveTexture(GL_TEXTURE0);
 
 			if($this->spans !== $spans)
 			{
@@ -678,8 +722,9 @@ final class Clipmap
 			, 'visibleCoverage' => $coverage
 			, 'heightTexelsWritten' => $this->texels
 			, 'editUploadBytes' => $this->uploads
+			, 'roadTextureBytes' => $this->roadBytes
 			, 'meshBytes' => 0
-			, 'terrainTextureBytes' => 256 + ($this->packed ? 8 : 20) * $texels
+			, 'terrainTextureBytes' => 256 + $this->roadBytes + ($this->packed ? 8 : 20) * $texels
 			, 'proceduralVertexBytes' => 0
 			, 'packedHeight' => $this->packed
 		];
@@ -689,6 +734,7 @@ final class Clipmap
 	{
 		foreach($this->levels as $level) self::release($level);
 		self::release($this->overview);
+		if($this->roadTexture) glDeleteTextures(1, $this->roadTexture);
 		glDeleteTextures(1, $this->permutation);
 		glDeleteVertexArrays(1, $this->vao);
 		glDeleteFramebuffers(1, $this->framebuffer);

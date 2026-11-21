@@ -1023,6 +1023,22 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	const dry = await status(page);
 	expect(dry.revision).toBe(1);
 	expect(dry.course.gates.every(gate => gate.kind === 'road')).toBe(true);
+	// Moving the clipmap over this road must not transfer height or paint samples from PHP.
+	await expect.poll(async() => (await status(page)).renderer.roadTextureBytes).toBeGreaterThan(0);
+	const start = await status(page);
+	await view.evaluate(el => el.terrainSandboxDebug.keys({KeyW:true}));
+	try {
+		await expect.poll(async() => {
+			const {camera} = await status(page);
+			return Math.hypot(camera.position[0]-start.camera.position[0], camera.position[2]-start.camera.position[2]);
+		}).toBeGreaterThan(12);
+	} finally {
+		await view.evaluate(el => el.terrainSandboxDebug.keys({}));
+	}
+	const moved = await status(page);
+	expect(moved.renderer.heightTexelsWritten).toBeGreaterThan(start.renderer.heightTexelsWritten);
+	expect(moved.renderer.editUploadBytes).toBe(start.renderer.editUploadBytes);
+
 	await control(page, 'circuit-flooded').click();
 	await expect.poll(async() => (await status(page)).circuit.active).toBe('flooded');
 	const flooded = await status(page);

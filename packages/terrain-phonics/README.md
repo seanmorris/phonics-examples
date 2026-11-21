@@ -89,8 +89,11 @@ Call `update()` before `render()`. The caller owns frame presentation. Call `res
 Pass `useClipmap: false` to `Scene` for the PHP patch renderer, which uses the selection interval and work
 budget settings. Its GPU resources and update path are independent of the clipmap.
 
-Collision and picking use `Landscape::height()` and its related samplers. The clipmap's edit index finds
-committed edits that intersect each refreshed strip and uploads edited samples. `Scene::drawChart()` draws
+Collision and picking use `Landscape::height()` and its related samplers. The clipmap uploads a spatially
+indexed texture of road splines when the roads change. As the camera moves, the elevation shader reads the
+nearby spline samples to grade the surface and paint the road and shoulders. Where a brush overlaps a road,
+PHP supplies the final samples in edit order. The world overview also uses PHP reconstruction in edited
+areas when its pixels fall between terrain lattice nodes. `Scene::drawChart()` draws
 a heading-up chart at two zoom levels from the same elevation and surface layers. It keeps the vehicle centered
 and limits the wider view near the map boundary to keep the square filled where possible.
 
