@@ -57,6 +57,8 @@ $saved = $ground->save();
 $restored = TerrainPhonics\Landscape::load($saved);
 ```
 
+Road edits accept an optional `endBlend` distance in metres. Set it on overlapping spline sections to fade their grade and paint into each other. It defaults to zero.
+
 A transaction contains all operations queued before one `commit()`. Supported operations are raise, lower,
 flatten, smooth, crater, material, and road. Undo/redo works on transactions. Saved data includes the generator
 version and edit history; derived sample caches and road acceleration indexes are rebuilt on load.

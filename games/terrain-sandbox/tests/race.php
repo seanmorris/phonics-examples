@@ -5,7 +5,10 @@ $package = getenv('PHONICS_TERRAIN_ROOT') ?: dirname(__DIR__, 3) . '/packages/te
 require_once $package . '/autoload.php';
 require_once dirname(__DIR__) . '/autoload.php';
 
+use TerrainPhonics\Landscape;
 use TerrainSandbox\Car;
+use TerrainSandbox\Circuit;
+use TerrainSandbox\CircuitRoad;
 use TerrainSandbox\Course;
 use TerrainSandbox\GateShapes;
 use TerrainSandbox\Jet;
@@ -64,6 +67,28 @@ function click(Session $session, string $role, float $x, float $z, float $headin
 			$latest = $gate;
 	return $latest;
 }
+/** Check the built pavement at a finer interval than the generator, up to 4 m from either edge. */
+function highwayCrests(Session $session, Circuit $route): void
+{
+	$speed = 75 * Car::MPS_PER_MPH;
+	$maximum = 0.;
+	foreach($route->stations(range(0, (int)$route->length-1, 4)) as [$x,$z,$yaw])
+	{
+		$dx = sin($yaw);
+		$dz = cos($yaw);
+		foreach([-14.,0.,14.] as $offset)
+		{
+			$px = $x+$offset*$dz;
+			$pz = $z-$offset*$dx;
+			$middle = $session->landscape->height($px,$pz);
+			$before = $session->landscape->height($px-4*$dx,$pz-4*$dz);
+			$after = $session->landscape->height($px+4*$dx,$pz+4*$dz);
+			$maximum = max($maximum, $speed**2*(2*$middle-$before-$after)/4**2);
+		}
+	}
+	expect($maximum < 9.81, sprintf('At 75 mph the sharpest pavement crest needs %.2f m/s² of downward acceleration', $maximum));
+}
+
 /** The gates the status reports, by id. */
 function statusGates(Session $session): array { return array_column($session->status()['course']['gates'], null, 'id'); }
 
@@ -1011,6 +1036,21 @@ expect($view->message === 'Race reset. Place a start gate to race.' && $view->st
 	'Without a start gate the race has nothing to point at');
 $view->close();
 
+// One lane crests at station zero while the centreline and the approach grades remain gentle.
+$roadFixture = new Landscape(['worldSize'=>512,'heightScale'=>0,'detailAmplitude'=>0]);
+$roadFixture->queue(['type'=>'material','x'=>0,'z'=>0,'radius'=>220,'material'=>'road']);
+$roadFixture->commit();
+$loop = new Circuit([[0.,0.],[80.,0.],[80.,70.],[-80.,70.],[-80.,0.]], -10., null);
+$check = CircuitRoad::clearance($roadFixture,$loop,-10.);
+iterator_to_array($check);
+expect($check->getReturn() !== null, 'A level circuit passes the highway crest check');
+$roadFixture->queue(['type'=>'raise','x'=>0,'z'=>12,'radius'=>16,'amount'=>2]);
+$roadFixture->commit();
+$check = CircuitRoad::clearance($roadFixture,$loop,-10.);
+iterator_to_array($check);
+expect($check->getReturn() === null, 'The highway crest check catches a sharp crest in a side lane across the lap line');
+$roadFixture->close();
+
 $generator = new Session;
 input($generator, ['actions' => [['type'=>'generate','preset'=>'canyon','seed'=>'first-light']]]);
 $generator->course->place('start', 'air', 0, 0, 0, 0);
@@ -1081,6 +1121,7 @@ $record = json_decode($generator->save(),true);
 expect(count($record['landscape']['history'])===1 && $generator->landscape->revision()===1,
 	'The whole circuit is one undoable grade even after switching variants');
 $route = $record['circuit']['route'];
+highwayCrests($generator, new Circuit($route['points'],$route['dryLevel'],null));
 $distance = $preview['length']/count($gateLine[0]);
 $snapped = false;
 foreach($route['junctions'] as $fork)
@@ -1106,6 +1147,7 @@ $terrain = $lakeRace->takeCandidate();
 expect($terrain !== null, 'The lake course previews an ordinary terrain edit');
 $lakeRace->publishLandscape($terrain);
 $start = $lakeRace->course->start();
+highwayCrests($lakeRace, new Circuit($lakePreview['points'],$lakeRace->water->level(),null));
 expect(abs($lakeRace->landscape->height($start['x'],$start['z'])-100)<=.5,
 	'The dry lake route really starts at the requested height after grading');
 $lakeCopy = new Session;

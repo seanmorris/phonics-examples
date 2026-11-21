@@ -201,7 +201,7 @@ void gradeRoads(vec2 world, inout float height, inout float material)
 	while(group != 0) {
 		ivec3 header = ivec3(roadRecord(group).xyz);
 		vec4 params = roadRecord(header.x);
-		float sum = 0., target = 0., outside = 1.;
+		float sum = 0., target = 0., coverage = 0., outside = 1.;
 		group++;
 		for(int i = 0; i < header.y; i += 4) {
 			ivec4 samples = ivec4(roadRecord(group++));
@@ -212,18 +212,22 @@ void gradeRoads(vec2 world, inout float height, inout float material)
 				float q = (dot(delta,delta) - params.x) / params.y;
 				if(q >= 1.) continue;
 				float weight = fade(1. - max(q,0.));
-				vec3 plane = roadRecord(address + 1).xyz;
+				vec4 plane = roadRecord(address + 1);
 				vec2 tangent = vec2(position.w,plane.x);
 				float crossSlope = dot(delta, vec2(-tangent.y,tangent.x));
 				float crown = max(0., 1. - crossSlope*crossSlope / params.x);
 				target += weight * (position.z + plane.y*dot(tangent,delta)
 					+ plane.z*crossSlope + params.z*crown*crown*crown);
 				sum += weight;
+				coverage += weight * plane.w;
 				outside *= 1. - weight;
 			}
 		}
-		if(sum > 0.) height = mix(target / sum, height, outside);
-		if(outside <= .5) material = params.w;
+		if(sum > 0.) {
+			float influence = (1. - outside) * (coverage / sum);
+			height = mix(height, target / sum, influence);
+			if(influence >= .5) material = params.w;
+		}
 		if(header.z != 0) break;
 	}
 }

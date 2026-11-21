@@ -36,10 +36,10 @@ final class RoadAtlas
 			$material = array_search($op['material'], self::MATERIALS, true);
 			$params = intdiv(strlen($data), 16);
 			$data .= pack('g4', $inner2, $radius ** 2 - $inner2, $op['crown'], $material === false ? 0 : $material + 1);
-			foreach($road['samples'] as [$x, $y, $z, $tx, $tz, $grade, $bank])
+			foreach($road['samples'] as [$x, $y, $z, $tx, $tz, $grade, $bank, $opacity])
 			{
 				$address = intdiv(strlen($data), 16);
-				$data .= pack('g8', $x, $z, $y, $tx, $tz, $grade, $bank, 0);
+				$data .= pack('g8', $x, $z, $y, $tx, $tz, $grade, $bank, $opacity);
 				$left = max($minTile, (int)floor(($x - $radius) / $cell)) - $minTile;
 				$right = min($maxTile, (int)floor(($x + $radius) / $cell)) - $minTile;
 				$front = max($minTile, (int)floor(($z - $radius) / $cell)) - $minTile;

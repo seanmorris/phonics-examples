@@ -282,6 +282,7 @@ final class Edits
 		$width = self::number($operation['width'] ?? 8, 'road width', .5, 1024);
 		$shoulder = self::number($operation['shoulder'] ?? 2, 'road shoulder', .01, 1024);
 		$crown = self::number($operation['crown'] ?? 0, 'road crown', -1024, 1024);
+		$endBlend = self::number($operation['endBlend'] ?? 0, 'road end blend', 0, 1024);
 		$banks = $operation['banks'] ?? null;
 		if($banks !== null)
 		{
@@ -338,7 +339,26 @@ final class Edits
 				}
 
 				$bank = $banks === null ? 0. : $banks[$i] + ($banks[$i+1]-$banks[$i]) * $t;
-				$samples[] = [...$position, $tangent[0] / $length, $tangent[2] / $length, $tangent[1] / $length, $bank];
+				$samples[] = [...$position, $tangent[0] / $length, $tangent[2] / $length, $tangent[1] / $length, $bank, 1.];
+			}
+		}
+
+		// Feather each cap along the spline so overlapping sections hand over the road surface gradually.
+		if($endBlend > 0)
+		{
+			$last = count($samples) - 1;
+			foreach([1, -1] as $direction)
+			{
+				$i = $direction === 1 ? 0 : $last;
+				$distance = 0.;
+				while($distance < $endBlend)
+				{
+					$samples[$i][7] = min($samples[$i][7], 1 - self::falloff($distance / $endBlend));
+					$next = $i + $direction;
+					if($next < 0 || $next > $last) break;
+					$distance += hypot($samples[$next][0] - $samples[$i][0], $samples[$next][2] - $samples[$i][2]);
+					$i = $next;
+				}
 			}
 		}
 
@@ -371,7 +391,7 @@ final class Edits
 				array_key_exists('material', $operation) ? $operation['material'] : 'road'
 			)
 			, '_road' => compact('samples', 'grid', 'radius', 'half', 'bounds', 'range')
-		] + ($banks === null ? [] : ['banks' => $banks]);
+		] + ($banks === null ? [] : ['banks' => $banks]) + ($endBlend > 0 ? ['endBlend' => $endBlend] : []);
 	}
 
 	/**
@@ -386,14 +406,14 @@ final class Edits
 		$road = $operation['_road'];
 		$radius = $road['radius'];
 		$key = (int)floor($x / $radius) . ',' . (int)floor($z / $radius);
-		$sum = $target = 0.0;
+		$sum = $target = $coverage = 0.0;
 		$outside = 1.0;
 		$inner2 = $road['half'] ** 2;
 		$span = $radius ** 2 - $inner2;
 
 		foreach($road['grid'][$key] ?? [] as $index)
 		{
-			[$sx,$sy,$sz,$tx,$tz,$grade,$bank] = $road['samples'][$index];
+			[$sx,$sy,$sz,$tx,$tz,$grade,$bank,$opacity] = $road['samples'][$index];
 			$dx = $x - $sx;
 			$dz = $z - $sz;
 			$weight = self::falloff(($dx * $dx + $dz * $dz - $inner2) / $span);
@@ -404,9 +424,10 @@ final class Edits
 			$crown = max(0, 1 - $cross * $cross / $inner2) ** 3;
 			$target += $weight * ($sy + $grade * ($tx * $dx + $tz * $dz) + $bank * $cross + $operation['crown'] * $crown);
 			$sum += $weight;
+			$coverage += $weight * $opacity;
 			$outside *= 1 - $weight;
 		}
 
-		return $sum > 0 ? [1 - $outside, $target / $sum] : [0.0, 0.0];
+		return $sum > 0 ? [(1 - $outside) * ($coverage / $sum), $target / $sum] : [0.0, 0.0];
 	}
 }
