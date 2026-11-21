@@ -448,6 +448,29 @@ expect($springs->travel[0] > .05 && abs($springs->travel[1]) < .01 && $springs->
 for($i = 0; $i < 240; $i++) $springs->step(1/60,[0,0,0,0],false);
 expect($springs->resting && abs($springs->y-.02) < .001, 'A parked suspension settles back to its static ride height');
 
+// A one-metre drop should compress the springs and settle with little rebound.
+$springs->y += 1;
+$bottomed = false; $rise = 0.0;
+for($i = 0; $i < 240; $i++)
+{
+	$springs->step(1/120,[0,0,0,0],true);
+	if($springs->y < -.10) $bottomed = true;
+	if($bottomed) $rise = max($rise, $springs->y - .02);
+}
+expect($bottomed && $rise > 0 && $rise < .017 && $springs->contacts === 4,
+	'Landing dampers limit rebound to less than 17 mm after a one-metre drop');
+
+$landingSurface = new TerrainPhonics\Landscape($flat);
+foreach([[0,3,0,true],[0,-3,0,true],[2,0,0,true],[-2,0,0,true],[0,12,0,false],[0,3,.08,false]] as [$pitch,$roll,$clearance,$catch])
+{
+	$p = deg2rad($pitch); $r = deg2rad($roll);
+	$y = abs(sin($p))*1.26 + abs(cos($p)*sin($r))*.82 + $clearance;
+	$body = new TerrainSandbox\CarTumble(0,$y,0,0,$p,$r,8,-.08,0,0,3);
+	$body->advance(1/120,$landingSurface,-5);
+	expect($body->onWheels === $catch, "Wheel-first recovery at pitch $pitch, roll $roll and clearance $clearance");
+}
+$landingSurface->close();
+
 // A narrow ramp overturns the car. Hitting the wider ramp off centre also sends it sliding sideways.
 foreach([[0,45,16,30,true],[0,55,32,34,false],[12,55,32,34,false],[-8,55,32,34,false]] as [$x,$z,$radius,$amount,$landsOnRoof])
 {

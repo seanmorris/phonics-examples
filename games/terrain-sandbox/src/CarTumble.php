@@ -108,7 +108,11 @@ final class CarTumble
 		$this->pitch += $dt*$this->pitchRate; $this->roll += $dt*$this->rollRate;
 		$cp = cos($this->pitch); $sp = sin($this->pitch);
 		$cr = cos($this->roll); $sr = sin($this->roll);
-		$contacts = []; $wheels = 0; $upDot = 0.0;
+		// World direction from the tire soles toward the roof, opposite to suspension droop.
+		$upX = $this->cosYaw*$sr - $this->sinYaw*$sp*$cr;
+		$upY = $cp*$cr;
+		$upZ = -$this->sinYaw*$sr - $this->cosYaw*$sp*$cr;
+		$contacts = []; $wheels = 0; $wheelsInReach = 0; $upDot = 0.0;
 		foreach(self::CONTACTS as $index => [$x,$y,$z])
 		{
 			$y -= self::CG;
@@ -118,10 +122,12 @@ final class CarTumble
 			$pz = $this->z - $this->sinYaw*$side + $this->cosYaw*$ahead;
 			$surface = $land->sample($px,$pz);
 			$depth = $surface['height'] - ($this->y + $up);
-			if($depth < -.012) continue;
 			[$nx,$ny,$nz] = $surface['normal'];
+			$alignment = $upX*$nx + $upY*$ny + $upZ*$nz;
+			if($index < 4 && $alignment > 0 && $depth*$ny >= -CarSuspension::SAG*$alignment) $wheelsInReach++;
+			if($depth < -.012) continue;
 			$normal = [$this->cosYaw*$nx - $this->sinYaw*$nz,$ny,$this->sinYaw*$nx + $this->cosYaw*$nz];
-			$upDot += $sr*$normal[0] + $cp*$cr*$normal[1] - $sp*$cr*$normal[2];
+			$upDot += $alignment;
 			// Derivatives of the contact position with respect to pitch and roll.
 			$contacts[] = [$normal,[0,$ahead,-$up],[$above,-$cp*$side,$sp*$side],
 				min(3.0, max(0.0, $depth*$ny-.004)*.22/$dt)];
@@ -147,7 +153,8 @@ final class CarTumble
 		}
 		$angular = hypot($this->pitchRate,$this->rollRate);
 		$this->roofDown = $contacts && $upDot < .1*count($contacts);
-		$this->onWheels = $wheels >= 3 && !$this->roofDown && $angular < 1.1;
+		// Two tires can plant first on a tilted landing when a third can already reach the ground.
+		$this->onWheels = $wheels >= 2 && $wheelsInReach >= 3 && !$this->roofDown && $angular < 1.1;
 		$slow = $contacts && $angular < .27 && hypot($this->side,$this->ahead) < .24 && abs($this->up) < .22;
 		$this->quiet = $slow ? $this->quiet + $dt : 0;
 		$this->settled = $this->quiet >= .25;

@@ -6,7 +6,11 @@ namespace TerrainSandbox;
 final class CarSuspension
 {
 	// Static sag and extra bump travel in metres. The mesh is authored at its loaded ride height.
-	private const SAG = .13, BUMP = .14;
+	public const SAG = .13;
+	private const BUMP = .14;
+	// Extra rebound damping fades during the first stroke after all four tires leave the ground.
+	private const LANDING_SECONDS = .35;
+	private float $landingTimeLeft = 0;
 	private const ALONG = [Car::WHEELBASE/2,Car::WHEELBASE/2,-Car::WHEELBASE/2,-Car::WHEELBASE/2];
 	private const ACROSS = [-Car::FRONT_TRACK/2,Car::FRONT_TRACK/2,-Car::REAR_TRACK/2,Car::REAR_TRACK/2];
 	public float $y = 0, $pitch = 0, $roll = 0, $verticalSpeed = 0, $pitchRate = 0, $rollRate = 0;
@@ -19,6 +23,7 @@ final class CarSuspension
 	{
 		[$this->y,$this->pitch,$this->roll] = $support;
 		$this->verticalSpeed = $verticalSpeed;
+		$this->landingTimeLeft = 0;
 		$this->pitchRate = $this->rollRate = 0;
 		$this->ground = $support[4];
 		$this->measure($this->ground);
@@ -37,11 +42,14 @@ final class CarSuspension
 		// Interpolate these same four terrain samples across both substeps, including their road velocities.
 		$steps = max(1, (int)ceil($dt*120));
 		$h = $dt/$steps;
+		if($this->contacts === 0) $this->landingTimeLeft = self::LANDING_SECONDS;
 		$roadSpeed = [];
 		foreach($heights as $i => $height) $roadSpeed[$i] = ($height-$this->ground[$i])/$dt;
 
 		for($step = 0; $step < $steps; $step++)
 		{
+			$reboundDamping = 10.0 + 3.0*$this->landingTimeLeft/self::LANDING_SECONDS;
+			$this->landingTimeLeft = max(0.0, $this->landingTimeLeft - $h);
 			[$rise,$bank,$normalUp] = $this->plane();
 			$lift = -Session::DRIVING_GRAVITY; $pitchAccel = $rollAccel = 0.0;
 			foreach(self::ALONG as $i => $along)
@@ -57,7 +65,7 @@ final class CarSuspension
 				$spring = Session::DRIVING_GRAVITY*(1+$stroke/self::SAG);
 				// Progressive bump stops and stronger rebound damping. A tire can only push upward.
 				$bumpStop = 90*max(0.0, $stroke-.085);
-				$force = .25*max(0.0, $spring+$bumpStop+($rate > 0 ? 5.0 : 10.0)*$rate);
+				$force = .25*max(0.0, $spring+$bumpStop+($rate > 0 ? 5.0 : $reboundDamping)*$rate);
 				$lift += $force;
 				$pitchAccel += $force*$along*.64;
 				$rollAccel -= $force*$side*2.7;
