@@ -222,14 +222,15 @@ input($coast, ['actions' => ['craft'], 'keys' => ['KeyW' => true]]);
 $launch = $coast->craft->state();
 expect($coast->mode === 'craft' && $launch['yaw'] === $heading, 'Automatic coastal launch keeps the flight heading');
 $contacts = 0;
-for($i = 0; $i < 480; $i++)
+$distance = 0.0;
+for($i = 0; $i < 480 && $distance < 200; $i++)
 {
 	$coast->step(1 / 60);
-	$contacts += $coast->craft->state()['contacts'];
+	$run = $coast->craft->state();
+	$contacts += $run['contacts'];
+	$distance = hypot($run['x'] - $launch['x'], $run['z'] - $launch['z']);
 }
-$run = $coast->craft->state();
-expect($contacts === 0 && hypot($run['x'] - $launch['x'], $run['z'] - $launch['z']) > 150,
-	'Default coastal launch has room to accelerate straight ahead before reaching shore');
+expect($contacts === 0 && $distance >= 200, 'Default coastal launch has 200 metres of clear water ahead');
 $coast->close();
 
 $bay = new Session(['worldSize' => 128, 'waterLevel' => 5, 'heightScale' => 0, 'detailAmplitude' => 0]);
