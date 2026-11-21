@@ -991,7 +991,7 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 });
 
 test('preview, apply and switch between dry and flooded canyon circuits', async({page}) => {
-	test.setTimeout(150_000);
+	test.setTimeout(210_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width:672,height:420});
@@ -1004,24 +1004,35 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await press(page, 'pause');
 	await page.getByRole('tab', {name:'Shape', exact:true}).click();
 	await page.getByText('Circuit generator', {exact:true}).click();
+	await page.getByLabel('Minimum feature height difference').fill('200');
+	await page.getByLabel('Start elevation').fill('-360');
 	await control(page, 'circuit-find').click();
-	await expect.poll(async() => (await status(page)).circuit.preview, {timeout:75_000}).toBe(true);
+	await expect.poll(async() => (await status(page)).circuit.preview, {timeout:140_000}).toBe(true);
 	const preview = await status(page);
 	expect(preview.course.gates).toHaveLength(0);
-	expect(preview.circuit.gates.length).toBeGreaterThanOrEqual(8);
+	expect(preview.circuit.length).toBeGreaterThan(12_000);
+	expect(preview.circuit.featureArea).toBeGreaterThan(10_000_000);
+	expect(preview.circuit.heightDifference).toBeGreaterThanOrEqual(200);
+	expect(Math.abs(preview.circuit.startHeight + 360)).toBeLessThanOrEqual(.5);
+	expect(preview.revision).toBe(0);
 	await expect(page.getByRole('img', {name:'Circuit route and gates'})).toBeVisible();
 
 	await control(page, 'circuit-dry').click();
-	await expect.poll(async() => (await status(page)).circuit.active).toBe('dry');
+	await expect.poll(() => view.evaluate(element => element.terrainSandboxDebug.state.circuit.active, undefined,
+		{timeout:45_000}), {timeout:75_000}).toBe('dry');
 	const dry = await status(page);
+	expect(dry.revision).toBe(1);
 	expect(dry.course.gates.every(gate => gate.kind === 'road')).toBe(true);
 	await control(page, 'circuit-flooded').click();
 	await expect.poll(async() => (await status(page)).circuit.active).toBe('flooded');
 	const flooded = await status(page);
+	expect(flooded.revision).toBe(1);
 	expect(flooded.course.gates.every(gate => gate.kind === 'water')).toBe(true);
 	expect(flooded.settings.waterLevel).toBe(preview.circuit.floodedLevel);
 	const gateLine = ({course}) => course.gates.map(({x,z,yaw}) => [x,z,yaw]);
 	expect(gateLine(flooded)).toEqual(gateLine(dry));
+	await page.getByLabel('Start elevation').fill('');
+	await expect.poll(async() => (await status(page)).settings.circuitStartHeight).toBeNull();
 
 	await press(page, 'craft');
 	await expect.poll(async() => (await status(page)).mode).toBe('craft');

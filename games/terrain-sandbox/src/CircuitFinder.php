@@ -12,13 +12,16 @@ final class CircuitFinder
 	private const HALF_LANE = 7.;
 	private const MIN_TURN_RADIUS = 6.;
 	private array $heights = [], $open = [];
+	private array $corridorDistance = [];
 	private float $left, $top, $step;
 	private int $side;
 
 	public function __construct(
 		private readonly Landscape $landscape,
 		private readonly float $dryLevel,
-		private readonly float $swell
+		private readonly float $swell,
+		private readonly float $minimumDifference = 120.,
+		private readonly ?float $startHeight = null
 	) {}
 
 	/** Give the session a scheduling boundary throughout sampling, graph search and lane validation. */
@@ -26,17 +29,27 @@ final class CircuitFinder
 	{
 		$half = $this->landscape->recipe()['worldSize']/2-16;
 		$local = min(1408.,$half);
-		$nearby = yield from $this->scan($x,$z,$half,$local,$shapes,$laps);
-		if($nearby?->floodedLevel !== null || $local===$half) return $nearby;
-		$regional = yield from $this->scan($x,$z,$half,min(5120.,$half),$shapes,$laps);
-		return $regional?->floodedLevel !== null ? $regional : ($nearby ?? $regional);
+		if(abs($this->minimumDifference)<60.)
+		{
+			$nearby = yield from $this->scan($x,$z,$half,$local,$shapes,$laps,false);
+			if($nearby !== null) return $nearby;
+		}
+		if($half>=2400.)
+		{
+			$plateau = yield from $this->scan($x,$z,$half,min(6400.,$half),$shapes,$laps,true);
+			if($plateau !== null) return $plateau;
+		}
+		return abs($this->minimumDifference)<60. ? null
+			: (yield from $this->scan($x,$z,$half,$local,$shapes,$laps,false));
 	}
 
-	private function scan(float $x, float $z, float $half, float $radius, GateShapes $shapes, int $laps): \Generator
+	private function scan(float $x, float $z, float $half, float $radius, GateShapes $shapes, int $laps, bool $regional): \Generator
 	{
-		$this->heights = $this->open = [];
-		$bands = $radius<=1408. ? [6.,10.,14.,20.,26.,38.,65.,95.] : [32.,55.,105.,180.,320.];
-		$this->step = max(8., 2**floor(log(max(8.,$radius/80),2)));
+		$this->heights = $this->open = $this->corridorDistance = [];
+		$lake = $this->minimumDifference<0.;
+		$bands = $lake ? ($regional ? [180.,260.,360.] : [50.,90.,160.])
+			: ($regional ? [105.,150.,75.,200.,280.,55.,380.] : [6.,10.,14.,20.,26.,38.,65.,95.]);
+		$this->step = $regional ? max(16.,round($radius/134/8)*8) : max(8.,2**floor(log(max(8.,$radius/80),2)));
 		$this->side = 2*(int)floor($radius/$this->step)+1;
 		$radius = ($this->side-1)*$this->step/2;
 		$this->left = max(-$half,min($half-2*$radius,round(($x-$radius)/$this->step)*$this->step));
@@ -44,6 +57,7 @@ final class CircuitFinder
 		$total = $this->side**2;
 		$nearby = [];
 		$dry = $this->dryLevel+$this->swell+.25;
+		if($lake) $dry = max($dry,$this->dryLevel-$this->minimumDifference);
 		for($i = 0; $i<$total; $i++)
 		{
 			[$px,$pz] = $this->point($i);
@@ -55,6 +69,8 @@ final class CircuitFinder
 		if(!$nearby) return null;
 		sort($nearby,SORT_NUMERIC);
 		$floor = $nearby[(int)(.06*(count($nearby)-1))];
+		$lakes = $lake ? (yield from $this->features($this->dryLevel,$x,$z,$regional,true)) : [];
+		if($lake && !$lakes) return null;
 		// Try the low floor first, then a broader elevation range if a saddle separates nearby passages.
 		$attempts = 0;
 		$dryCircuit = null;
@@ -63,8 +79,11 @@ final class CircuitFinder
 		{
 			$ceiling = $floor+$relief;
 			$this->open = array_map(static fn(float $h): bool => $h>$dry && $h<=$ceiling,$this->heights);
-			$islands = yield from $this->islands($ceiling,$x,$z);
-			foreach(array_slice($islands,0,6) as [$island,$peak])
+			$islands = $lake ? $lakes : (yield from $this->features($ceiling,$x,$z,$regional,false));
+			$forks = [];
+			if($regional && $islands)
+				[$this->corridorDistance,$forks] = yield from CorridorGraph::trace($this->open,$this->side);
+			foreach(array_slice($islands,0,6) as [$island,$peak,,$area])
 			{
 				foreach($this->portals($island,$x,$z) as [$start,$end,$axis,$cut,$tip,$side])
 				{
@@ -73,10 +92,23 @@ final class CircuitFinder
 					if(count($path)<12) continue;
 					$points = $this->smooth($path,$x,$z);
 					if(count($points)>Circuit::MAX_POINTS || !$this->roundEnough($points)) continue;
-					$high = yield from $this->lane($points,$dry);
-					if($high === null) continue;
+					if($regional)
+					{
+						$circuit = yield from $this->gradeFeature($points,$forks,$area,$peak,$shapes,$laps,$x,$z);
+						if($circuit?->floodedLevel !== null) return $circuit;
+						$dryCircuit ??= $circuit;
+						continue;
+					}
+					$range = yield from $this->lane($points,$dry);
+					if($range === null) continue;
+					[$low,$high] = $range;
+					$reliefFound = $lake ? $this->dryLevel-$low : $peak-$high;
+					if(!$this->fitsRelief($reliefFound)) continue;
 					$wet = ceil(2*($high+2.+$this->swell))/2;
-					$circuit = new Circuit($points,$this->dryLevel,$wet<min(10000.,$peak-3.) ? $wet : null);
+					$points = yield from $this->startAtHeight($this->landscape,$points,$x,$z);
+					if($points === null) continue;
+					$circuit = new Circuit($points,$this->dryLevel,$wet<min(10000.,$lake ? INF : $peak-3.) ? $wet : null,
+						heightDifference: $reliefFound, startHeight: $this->landscape->height(...$points[0]));
 					if($circuit->length<max(180.,$this->step*12) || $circuit->length>40000.) continue;
 					try
 					{
@@ -95,15 +127,16 @@ final class CircuitFinder
 	}
 
 	/** Find hills enclosed by the search window and rank them by distance from the requested site. */
-	private function islands(float $ceiling, float $x, float $z): \Generator
+	private function features(float $threshold, float $x, float $z, bool $regional, bool $lake): \Generator
 	{
 		$seen = [];
 		$islands = [];
 		$n = $this->side;
+		$direction = $lake ? -1. : 1.;
 		foreach($this->heights as $i => $height)
 		{
 			if($i%128 === 0) yield;
-			if($height<=$ceiling || isset($seen[$i])) continue;
+			if($direction*($height-$threshold)<=0 || isset($seen[$i])) continue;
 			$queue = [$i];
 			$seen[$i] = true;
 			$peak = $i;
@@ -116,7 +149,7 @@ final class CircuitFinder
 				$col = $id%$n;
 				$row = intdiv($id,$n);
 				$boundary = $boundary || min($col,$row)===0 || max($col,$row)===$n-1;
-				if($this->heights[$id]>$this->heights[$peak]) $peak = $id;
+				if($direction*($this->heights[$id]-$this->heights[$peak])>0) $peak = $id;
 				[$px,$pz] = $this->point($id);
 				$near = min($near,hypot($x-$px,$z-$pz));
 				foreach(array_slice(self::OFFSETS,0,4) as [$dx,$dz])
@@ -124,15 +157,17 @@ final class CircuitFinder
 					$cx = $col+$dx; $cz = $row+$dz;
 					if(min($cx,$cz)<0 || max($cx,$cz)>=$n) continue;
 					$next = $cz*$n+$cx;
-					if(!isset($seen[$next]) && $this->heights[$next]>$ceiling)
+					if(!isset($seen[$next]) && $direction*($this->heights[$next]-$threshold)>0)
 					{
 						$queue[] = $next;
 						$seen[$next] = true;
 					}
 				}
 			}
-			if(!$boundary && count($queue)>=4 && $this->heights[$peak]>$ceiling+2)
-				$islands[] = [$peak,$this->heights[$peak],$near];
+			$area = count($queue)*$this->step**2;
+			if(!$boundary && count($queue)>=4 && (!$regional || $area>=($lake ? 180000. : 800000.))
+				&& $direction*($this->heights[$peak]-$threshold)>($regional && !$lake ? 65. : 2.))
+				$islands[] = [$peak,$this->heights[$peak],$near,$area];
 		}
 		usort($islands,static fn(array $a,array $b): int => $a[2]<=>$b[2] ?: $a[0]<=>$b[0]);
 		return $islands;
@@ -211,7 +246,8 @@ final class CircuitFinder
 				if(isset($closed[$next]) || !$this->edge($id,$next,$distance)) continue;
 				if($diagonal && (!$this->open[$id+$dx] || !$this->open[$id+$dz*$n])) continue;
 				$grade = ($this->heights[$next]-$this->heights[$id])/$distance;
-				$weight = $cost[$id]+$distance*(1+8*$grade**2);
+				$deviation = $this->corridorDistance ? ($this->corridorDistance[$next] ?? 5) : 0;
+				$weight = $cost[$id]+$distance*(1+8*$grade**2+.022*$deviation);
 				if($weight>=($cost[$next] ?? INF)) continue;
 				$cost[$next] = $weight;
 				$previous[$next] = $id;
@@ -219,6 +255,119 @@ final class CircuitFinder
 			}
 		}
 		return [];
+	}
+
+	/** Put gates downstream of identified forks where they can replace an evenly spaced gate. */
+	private function junctionStations(array $points, array $forks): array
+	{
+		$stations = [];
+		foreach($forks as $fork)
+		{
+			[$x,$z] = $this->point($fork);
+			$distance = 0.;
+			$nearest = 5*$this->step;
+			$station = null;
+			foreach($points as $i => [$ax,$az])
+			{
+				[$bx,$bz] = $points[($i+1)%count($points)];
+				$dx = $bx-$ax; $dz = $bz-$az;
+				$length = hypot($dx,$dz);
+				if($length<1e-6) continue;
+				$fraction = max(0.,min(1.,(($x-$ax)*$dx+($z-$az)*$dz)/$length**2));
+				$gap = hypot($x-$ax-$fraction*$dx,$z-$az-$fraction*$dz);
+				if($gap<$nearest) { $nearest = $gap; $station = $distance+$fraction*$length; }
+				$distance += $length;
+			}
+			if($station !== null && $station<$distance) $stations[] = $station;
+		}
+		sort($stations,SORT_NUMERIC);
+		$spaced = [];
+		foreach($stations as $station)
+			if(!$spaced || $station-end($spaced)>=2*$this->step) $spaced[] = $station;
+		return $spaced;
+	}
+
+	private function gradeFeature(array $points, array $forks, float $area, float $peak, GateShapes $shapes, int $laps,
+		float $x, float $z): \Generator
+	{
+		$lake = $this->minimumDifference<0.;
+		$circuit = new Circuit($points,$this->dryLevel,null);
+		if($circuit->length<($lake ? 1800. : 3000.) || $circuit->length>40000.) return null;
+		$roads = yield from CircuitRoad::grade($this->landscape,$circuit);
+		if($roads === null) return null;
+		$graded = Landscape::load($this->landscape->save());
+		try
+		{
+			foreach($roads as $road) { $graded->queue($road); yield; }
+			$graded->commit();
+			$range = yield from CircuitRoad::clearance($graded,$circuit,$this->dryLevel+$this->swell+.25);
+			if($range === null) return null;
+			[$low,$high] = $range;
+			$reliefFound = $lake ? $this->dryLevel-$low : $peak-$high;
+			if(!$this->fitsRelief($reliefFound)) return null;
+			$points = yield from $this->startAtHeight($graded,$points,$x,$z);
+			if($points === null) return null;
+			$stations = $this->junctionStations($points,$forks);
+			$wet = ceil(2*($high+3.+$this->swell))/2;
+			$circuit = new Circuit($points,$this->dryLevel,$wet<min(10000.,$lake ? INF : $peak-3.) ? $wet : null,
+				$stations,$area,$roads,$reliefFound,$graded->height(...$points[0]));
+			$road = $circuit->course($graded,$shapes,$laps,false);
+			[$sx,$sz,$heading] = $circuit->approach();
+			if((new Car)->checkedSite($graded,$this->dryLevel+$this->swell,$sx,$sz,$heading,$road->posts()) === null)
+				return null;
+			if($circuit->floodedLevel !== null) $circuit->course($graded,$shapes,$laps,true);
+			return $circuit;
+		}
+		catch(\RuntimeException | \InvalidArgumentException) { return null; }
+		finally { $graded->close(); }
+	}
+
+	private function fitsRelief(float $found): bool
+	{
+		return $this->minimumDifference<0. ? $found<=$this->minimumDifference : $found>=$this->minimumDifference;
+	}
+
+	/** Move the start to a straight at the requested elevation while keeping the circuit and its grade. */
+	private function startAtHeight(Landscape $land, array $points, float $x, float $z): \Generator
+	{
+		if($this->startHeight === null) return $points;
+		$goal = $this->startHeight;
+		$best = INF;
+		$result = null;
+		$n = count($points);
+		$car = new Car;
+		foreach($points as $i => [$ax,$az])
+		{
+			if($i%12 === 0) yield;
+			[$bx,$bz] = $points[($i+1)%$n];
+			$dx = $bx-$ax;
+			$dz = $bz-$az;
+			$length = hypot($dx,$dz);
+			if($length<26.) continue;
+			$before = 21./$length;
+			$after = 1.-4./$length;
+			$h0 = $land->height($ax+$before*$dx,$az+$before*$dz);
+			$h1 = $land->height($ax+$after*$dx,$az+$after*$dz);
+			if($goal<min($h0,$h1)-.5 || $goal>max($h0,$h1)+.5) continue;
+			$ascending = $h1>=$h0;
+			for($j=0;$j<10;$j++)
+			{
+				$mid = ($before+$after)/2;
+				$height = $land->height($ax+$mid*$dx,$az+$mid*$dz);
+				if(($height<$goal)===$ascending) $before = $mid;
+				else $after = $mid;
+			}
+			$sx = $ax+$mid*$dx;
+			$sz = $az+$mid*$dz;
+			$score = hypot($sx-$x,$sz-$z)+60*abs($height-$goal);
+			if(abs($height-$goal)>.5 || $score>=$best) continue;
+			$yaw = atan2($dx,$dz);
+			if($car->checkedSite($land,$this->dryLevel+$this->swell,$sx-20*sin($yaw),$sz-20*cos($yaw),$yaw,[]) === null)
+				continue;
+			$result = [[$sx,$sz],...array_slice($points,$i+1),...array_slice($points,0,$i+1)];
+			$best = $score;
+		}
+		return $result;
 	}
 
 	private function point(int $id): array
@@ -276,10 +425,11 @@ final class CircuitFinder
 		return true;
 	}
 
-	/** Check elevation along three lines across the lane. Return its highest point for the flooded variant. */
+	/** Check elevation along three lines across the lane and return their height range. */
 	private function lane(array $points, float $dry): \Generator
 	{
 		$highest = -INF;
+		$lowest = INF;
 		foreach($points as $i => [$x,$z])
 		{
 			[$nx,$nz] = $points[($i+1)%count($points)];
@@ -303,8 +453,9 @@ final class CircuitFinder
 						if(abs($height-$last[$k])>$length/$steps*self::MAX_GRADE) return null;
 				$last = $heights;
 				$highest = max($highest,...$heights);
+				$lowest = min($lowest,...$heights);
 			}
 		}
-		return $highest;
+		return [$lowest,$highest];
 	}
 }

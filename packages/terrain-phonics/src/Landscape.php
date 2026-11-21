@@ -78,10 +78,9 @@ final class Landscape implements TerrainSurface
 		$half=$extent/2;
 		$pad=2*$this->parameters['spacing'];
 		$boxes=[];
-		foreach($this->operations as $operation) {
-			[$x,$z,$r,$b]=Edits::bounds($operation);
+		foreach($this->operations as $operation)
+		foreach(Edits::footprints($operation,max(24.,2*$pad)) as [$x,$z,$r,$b])
 			$boxes[]=[max(-$half,$x-$pad),max(-$half,$z-$pad),min($half,$r+$pad),min($half,$b+$pad)];
-		}
 		return new EditIndex($extent,$boxes);
 	}
 

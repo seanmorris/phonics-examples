@@ -59,7 +59,8 @@ export function activate({module, canvas, session, services})
 	const focusedField = target => target instanceof HTMLElement && Boolean(target.closest('input,select,textarea'));
 
 	// These fields send nothing while their text is out of range, and return to the last value sent when left so.
-	const checked = new Set(['waterLevel', 'gateLaps', 'gateAltitude', 'gateWidth', 'gateHeight', 'balloonAltitude']);
+	const checked = new Set(['waterLevel', 'gateLaps', 'gateAltitude', 'gateWidth', 'gateHeight', 'balloonAltitude',
+		'circuitRelief', 'circuitStartHeight']);
 	const gateTool = frame.querySelector('[data-gate-tool]');
 	const circuitMap = frame.querySelector('[data-circuit-map]');
 	const circuitSummary = frame.querySelector('[data-circuit-summary]');
@@ -71,15 +72,17 @@ export function activate({module, canvas, session, services})
 	};
 
 	const listen = field => {
+		const blankStart = () => field.dataset.value === 'circuitStartHeight'
+			&& field.value === '' && !field.validity.badInput;
 		field.addEventListener('input', () => {
 			if(checked.has(field.dataset.value))
 			{
-				if(!Number.isFinite(field.valueAsNumber) || !field.validity.valid) return;
+				if(!blankStart() && (!Number.isFinite(field.valueAsNumber) || !field.validity.valid)) return;
 
 				field.defaultValue = field.value;
 			}
 
-			values[field.dataset.value] = field.type === 'checkbox'
+			values[field.dataset.value] = blankStart() ? null : field.type === 'checkbox'
 				? field.checked
 				: field.type === 'range' || field.type === 'number' ? Number(field.value) : field.value;
 
@@ -94,7 +97,7 @@ export function activate({module, canvas, session, services})
 
 		if(checked.has(field.dataset.value))
 		field.addEventListener('blur', () => {
-			if(!Number.isFinite(field.valueAsNumber) || !field.validity.valid) field.value = field.defaultValue;
+			if(!blankStart() && (!Number.isFinite(field.valueAsNumber) || !field.validity.valid)) field.value = field.defaultValue;
 		}, {signal});
 	};
 
@@ -625,10 +628,15 @@ export function activate({module, canvas, session, services})
 			const editable = state.mode === 'fly' && !state.preparing && !state.picking && !circuit.searching;
 			button('circuit-find').disabled = !editable;
 			button('circuit-cancel').hidden = !circuit.searching && !circuit.preview;
+			button('circuit-cancel').disabled = state.preparing;
 			button('circuit-dry').disabled = !editable || !circuit.points;
 			button('circuit-flooded').disabled = !editable || circuit.floodedLevel === null;
 			circuitSummary.textContent = circuit.searching ? 'Searching the surrounding terrain…'
 				: circuit.points ? `${(circuit.length/1000).toFixed(2)} km · ${circuit.gates.length} gates`
+					+ (circuit.featureArea === null ? '' : ` · ${(circuit.featureArea/1e6).toFixed(1)} km² ${circuit.heightDifference < 0 ? 'lake' : 'high ground'}`)
+					+ (circuit.heightDifference === null ? '' : ` · ${Math.abs(Math.trunc(circuit.heightDifference))} m ${circuit.heightDifference < 0 ? 'below' : 'above'} the route`)
+					+ (circuit.startHeight === null ? '' : ` · road starts at ${circuit.startHeight.toFixed(1)} m`)
+					+ (circuit.gradeWidth === null ? '' : ` · apply to grade a ${circuit.gradeWidth} m road`)
 					+ (circuit.floodedLevel === null ? '' : ` · flood level ${circuit.floodedLevel} m`) : '';
 			const circuitKey = JSON.stringify(circuit.points);
 			if(circuitKey !== lastCircuit)
@@ -683,9 +691,9 @@ export function activate({module, canvas, session, services})
 					if(!field) continue;
 
 					if(field.type === 'checkbox') field.checked = value;
-					else field.value = value;
+					else field.value = value ?? '';
 
-					if(checked.has(name)) field.defaultValue = value;
+					if(checked.has(name)) field.defaultValue = value ?? '';
 
 					const output = frame.querySelector(`[data-output="${name}"]`);
 
@@ -1238,6 +1246,9 @@ function markup()
 	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening width or height of 0 takes the gate's own. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. A gate that would overlap another is refused. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
 	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
 	<details><summary>Circuit generator</summary>
+	<label class="terrain-field">Minimum feature height difference · m<input data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="120"></label>
+	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
+	<label class="terrain-field">Start elevation · m<input data-value="circuitStartHeight" type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
 	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
 	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
 	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>

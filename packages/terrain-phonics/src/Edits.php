@@ -62,6 +62,39 @@ final class Edits
 		return [$operation['x'] - $r, $operation['z'] - $r, $operation['x'] + $r, $operation['z'] + $r];
 	}
 
+	/** Index road strips along the spline so a diagonal road never paints its entire bounding rectangle. */
+	public static function footprints(array $operation, float $minimumCell): array
+	{
+		if($operation['type'] !== 'road') return [self::bounds($operation)];
+		$road = $operation['_road'];
+		$stride = max(1,(int)ceil($minimumCell/$road['radius']));
+		$rows = [];
+		foreach(array_keys($road['grid']) as $key)
+		{
+			[$x,$z] = explode(',',$key);
+			$rows[(int)floor((int)$z/$stride)][(int)floor((int)$x/$stride)] = true;
+		}
+		$cell = $road['radius']*$stride;
+		$boxes = [];
+		foreach($rows as $z => $columns)
+		{
+			$columns = array_keys($columns);
+			sort($columns,SORT_NUMERIC);
+			$first = $last = $columns[0];
+			foreach(array_slice($columns,1) as $x)
+			{
+				if($x>$last+1)
+				{
+					$boxes[] = [$first*$cell,$z*$cell,($last+1)*$cell,($z+1)*$cell];
+					$first = $x;
+				}
+				$last = $x;
+			}
+			$boxes[] = [$first*$cell,$z*$cell,($last+1)*$cell,($z+1)*$cell];
+		}
+		return $boxes;
+	}
+
 	/**
 	 * Apply one edit to a node. The callback samples the surface before this edit. Smooth edits use a fixed lattice
 	 * step so memoized histories share their work.
@@ -249,6 +282,13 @@ final class Edits
 		$width = self::number($operation['width'] ?? 8, 'road width', .5, 1024);
 		$shoulder = self::number($operation['shoulder'] ?? 2, 'road shoulder', .01, 1024);
 		$crown = self::number($operation['crown'] ?? 0, 'road crown', -1024, 1024);
+		$banks = $operation['banks'] ?? null;
+		if($banks !== null)
+		{
+			if(!is_array($banks) || !array_is_list($banks) || count($banks) !== count($points))
+				throw new \InvalidArgumentException('A banked road requires one cross slope per control point');
+			$banks = array_map(static fn($bank): float => self::number($bank, 'road bank', -.35, .35), $banks);
+		}
 		$step = min(4, $width / 4);
 		$half = $width / 2;
 		$radius = $half + $shoulder;
@@ -297,7 +337,8 @@ final class Edits
 					$length = hypot($tangent[0], $tangent[2]);
 				}
 
-				$samples[] = [...$position, $tangent[0] / $length, $tangent[2] / $length, $tangent[1] / $length];
+				$bank = $banks === null ? 0. : $banks[$i] + ($banks[$i+1]-$banks[$i]) * $t;
+				$samples[] = [...$position, $tangent[0] / $length, $tangent[2] / $length, $tangent[1] / $length, $bank];
 			}
 		}
 
@@ -305,14 +346,14 @@ final class Edits
 		$bounds = [INF,INF,-INF,-INF];
 		$range = [INF,-INF];
 
-		foreach($samples as $index => [$x,$y,$z,$tx,$tz,$grade])
+		foreach($samples as $index => [$x,$y,$z,$tx,$tz,$grade,$bank])
 		{
 			$bounds = [
 				min($bounds[0], $x - $radius), min($bounds[1], $z - $radius)
 				, max($bounds[2], $x + $radius), max($bounds[3], $z + $radius)
 			];
 
-			$extent = abs($grade) * $radius + abs($crown);
+			$extent = hypot($grade,$bank) * $radius + abs($crown);
 			$range = [min($range[0], $y - $extent), max($range[1], $y + $extent)];
 
 			for($gx = (int)floor(($x - $radius) / $radius); $gx <= (int)floor(($x + $radius) / $radius); $gx++)
@@ -330,7 +371,7 @@ final class Edits
 				array_key_exists('material', $operation) ? $operation['material'] : 'road'
 			)
 			, '_road' => compact('samples', 'grid', 'radius', 'half', 'bounds', 'range')
-		];
+		] + ($banks === null ? [] : ['banks' => $banks]);
 	}
 
 	/**
@@ -352,7 +393,7 @@ final class Edits
 
 		foreach($road['grid'][$key] ?? [] as $index)
 		{
-			[$sx,$sy,$sz,$tx,$tz,$grade] = $road['samples'][$index];
+			[$sx,$sy,$sz,$tx,$tz,$grade,$bank] = $road['samples'][$index];
 			$dx = $x - $sx;
 			$dz = $z - $sz;
 			$weight = self::falloff(($dx * $dx + $dz * $dz - $inner2) / $span);
@@ -361,7 +402,7 @@ final class Edits
 
 			$cross = -$tz * $dx + $tx * $dz;
 			$crown = max(0, 1 - $cross * $cross / $inner2) ** 3;
-			$target += $weight * ($sy + $grade * ($tx * $dx + $tz * $dz) + $operation['crown'] * $crown);
+			$target += $weight * ($sy + $grade * ($tx * $dx + $tz * $dz) + $bank * $cross + $operation['crown'] * $crown);
 			$sum += $weight;
 			$outside *= 1 - $weight;
 		}

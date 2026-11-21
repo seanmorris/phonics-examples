@@ -45,6 +45,7 @@ final class Session
 	private ?Circuit $circuit = null, $circuitPreview = null;
 	private ?string $circuitVariant = null;
 	private ?\Generator $circuitSearch = null;
+	private ?array $circuitCommit = null;
 	/** Timed run through the course by the vehicle being driven, ridden or flown. */
 	public Race $race;
 	/** Dimensions of each gate kind, for placement, crossings, car collision and drawing. */
@@ -76,6 +77,7 @@ final class Session
 	public array $settings = [
 		'tool' => 'navigate', 'radius' => 40.0, 'amount' => 12.0, 'flattenHeight' => 0.0,
 		'material' => 'grass', 'roadWidth' => 8.0, 'roadShoulder' => 12.0, 'roadRaise' => 0.0,
+		'circuitRelief'=>120.0, 'circuitStartHeight'=>null,
 		'azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0, 'exposure' => 1.0,
 		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
@@ -239,6 +241,7 @@ final class Session
 		}
 		catch(\Throwable $error)
 		{
+			if(!$this->preparing) $this->circuitCommit = null;
 			$this->draft?->close(); $this->draft = null;
 			$this->cancelPick(); $this->carSearch = null;
 			$this->circuitSearch = null;
@@ -446,8 +449,9 @@ final class Session
 		$water->setWaveScale(3.);
 		$swell = $water->level()-$water->heightRange()[0];
 		$this->circuitPreview = null;
-		$this->circuitSearch = (new CircuitFinder($this->landscape,$dry,$swell))->find($x,$z,$this->gateShapes,
-			$this->settings['gateLaps']);
+		$this->circuitSearch = (new CircuitFinder($this->landscape,$dry,$swell,$this->settings['circuitRelief'],
+			$this->settings['circuitStartHeight']))
+			->find($x,$z,$this->gateShapes,$this->settings['gateLaps']);
 		$this->message = 'Looking for a closed route around the terrain…';
 	}
 
@@ -464,7 +468,7 @@ final class Session
 				$this->circuitPreview = $job->getReturn();
 				$this->message = $this->circuitPreview
 					? 'Circuit found. Choose a course to place its gates.'
-					: 'No drivable loop around a natural feature here. Fly toward another valley or basin and try again.';
+					: 'No loop matches those elevations here. Try another site or adjust the circuit settings.';
 				return;
 			}
 		}
@@ -477,13 +481,30 @@ final class Session
 			throw new \RuntimeException('Use free flight on the settled landscape to apply a circuit.');
 		$circuit = $this->circuitPreview ?? $this->circuit;
 		if($circuit === null) throw new \RuntimeException('Find a circuit first.');
+		$this->carSearch = null;
+		if($this->circuitPreview?->road)
+		{
+			$graded = $this->editable();
+			foreach($circuit->road as $road) $graded->queue($road);
+			$graded->commit();
+			$course = $circuit->course($graded,$this->gateShapes,$this->settings['gateLaps'],$flooded);
+			$this->circuitCommit = [$circuit,$course,$flooded];
+			$this->message = 'Preparing the graded circuit…';
+			return;
+		}
 		$course = $circuit->course($this->landscape,$this->gateShapes,$this->settings['gateLaps'],$flooded);
+		$this->activateCircuit($circuit,$course,$flooded);
+	}
+
+	private function activateCircuit(Circuit $circuit, Course $course, bool $flooded): void
+	{
 		$this->course = $course;
 		$this->race->reset();
 		$this->circuit = $circuit; $this->circuitPreview = null; $this->circuitSearch = null;
 		$this->circuitVariant = $flooded ? 'flooded' : 'dry';
 		$this->setting('waterLevel',$flooded ? $circuit->floodedLevel : $circuit->dryLevel);
 		[$x,$z,$yaw] = $circuit->approach();
+		$this->mode = 'fly';
 		$this->camera->position = [$x,max($this->landscape->height($x,$z),$this->water->level())+45,$z];
 		$this->camera->yaw = M_PI-$yaw; $this->camera->pitch = -.4;
 		$this->message = $flooded ? 'Flooded circuit ready. Board the jet ski and pass through the start arch.'
@@ -623,12 +644,13 @@ final class Session
 			return;
 		}
 		$ranges = ['radius' => [2,300],'amount' => [.1,200],'flattenHeight' => [-1000,3000],
-			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100],
+			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100], 'circuitRelief'=>[-2000,2000],
+			'circuitStartHeight'=>[-10000,10000],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
 			'quality' => [.5,2],'speed' => [5,300],'gateAltitude' => [0.0,400.0],
 			'balloonAltitude' => [12.0,1200.0], 'gateWidth' => [0.0,300.0],'gateHeight' => [0.0,150.0],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
-		if(isset($ranges[$name]))
+		if(isset($ranges[$name]) && !($name === 'circuitStartHeight' && $value === null))
 		{
 			if(!is_numeric($value) || !is_finite((float)$value)) throw new \InvalidArgumentException('Invalid control value');
 			[$min,$max] = $ranges[$name];
@@ -1352,6 +1374,7 @@ final class Session
 		$this->flightTrails = null;
 		$this->road = []; $this->generation++; $this->mode = 'fly';
 		$this->circuit = $this->circuitPreview = null; $this->circuitVariant = null; $this->circuitSearch = null;
+		$this->circuitCommit = null;
 		$this->race->reset();
 	}
 
@@ -1389,10 +1412,16 @@ final class Session
 		$this->releasePin();
 		$this->balloons->refit($landscape,$this->water->level());
 		// Gates on the edited ground stand on it again.
-		if($this->course->count() > 0)
+		if($this->circuitCommit === null && $this->course->count() > 0)
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		if($this->circuitCommit !== null)
+		{
+			$this->carSearch = null;
+			$this->activateCircuit(...$this->circuitCommit);
+			$this->circuitCommit = null;
+		}
 		if($this->carSearch !== null)
 		{
 			$this->carSearch = $this->car->findSite($landscape, $this->water, $this->camera->position,
@@ -1545,6 +1574,8 @@ final class Session
 		return ['searching'=>$this->findingCircuit(),'preview'=>$this->circuitPreview !== null,
 			'active'=>$this->circuitVariant,'points'=>$plan?->points,
 			'activePoints'=>$this->circuitPreview !== null ? $this->circuit?->points : null,'length'=>$plan?->length,
+			'featureArea'=>$plan?->featureArea,'gradeWidth'=>$this->circuitPreview?->road ? CircuitRoad::WIDTH : null,
+			'heightDifference'=>$plan?->heightDifference,'startHeight'=>$plan?->startHeight,
 			'floodedLevel'=>$plan?->floodedLevel,'dryLevel'=>$plan?->dryLevel,'gates'=>$plan?->gates()];
 	}
 

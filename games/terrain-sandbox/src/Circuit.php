@@ -15,7 +15,12 @@ final class Circuit
 	public function __construct(
 		public readonly array $points,
 		public readonly float $dryLevel,
-		public readonly ?float $floodedLevel
+		public readonly ?float $floodedLevel,
+		public readonly array $junctions = [],
+		public readonly ?float $featureArea = null,
+		public readonly array $road = [],
+		public readonly ?float $heightDifference = null,
+		public readonly ?float $startHeight = null
 	)
 	{
 		$length = 0.0;
@@ -33,7 +38,28 @@ final class Circuit
 		if($this->gatePlan !== null) return $this->gatePlan;
 		$count = min(Course::MAX_CHECKPOINTS+1, max(8, (int)ceil($this->length/240)));
 		$spacing = $this->length/$count;
-		$gates = [];
+		$stations = [0.];
+		for($i = 1; $i<$count; $i++)
+		{
+			$station = $i*$spacing;
+			$best = $station;
+			$gap = .3*$spacing;
+			foreach($this->junctions as $junction)
+			{
+				$after = $junction+30;
+				if(abs($after-$station)>=$gap) continue;
+				$best = $after;
+				$gap = abs($after-$station);
+			}
+			$stations[] = $best;
+		}
+		return $this->gatePlan = $this->stations($stations);
+	}
+
+	/** Sample X, Z and heading at ordered distances along the centreline. */
+	public function stations(array $stations): array
+	{
+		$result = [];
 		$distance = 0.0;
 		foreach($this->points as $i => [$x,$z])
 		{
@@ -42,14 +68,14 @@ final class Circuit
 			$dz = $nz-$z;
 			$segment = hypot($dx,$dz);
 			if($segment === 0.0) continue;
-			while(count($gates)<$count && count($gates)*$spacing < $distance+$segment)
+			while(isset($stations[count($result)]) && $stations[count($result)] < $distance+$segment)
 			{
-				$fraction = (count($gates)*$spacing-$distance)/$segment;
-				$gates[] = [$x+$fraction*$dx,$z+$fraction*$dz,atan2($dx,$dz)];
+				$fraction = ($stations[count($result)]-$distance)/$segment;
+				$result[] = [$x+$fraction*$dx,$z+$fraction*$dz,atan2($dx,$dz)];
 			}
 			$distance += $segment;
 		}
-		return $this->gatePlan = $gates;
+		return $result;
 	}
 
 	public function course(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded): Course
@@ -61,8 +87,10 @@ final class Circuit
 		{
 			$role = $i === 0 ? 'start' : 'checkpoint';
 			$kind = $flooded ? 'water' : 'road';
+			['width'=>$width,'height'=>$height] = $shapes->fit($kind,
+				$this->featureArea === null ? null : ($flooded ? 24. : 30.), null);
 			$placed = $course->place($role, $kind, $x, $flooded ? $this->floodedLevel : $ground($x,$z), $z, $yaw, $laps,
-				ground: $ground);
+				$width,$height,$ground);
 			if($placed['refused'] !== null) throw new \RuntimeException('The circuit needs more room between its gates.');
 		}
 		return $course;
@@ -89,14 +117,20 @@ final class Circuit
 
 	public function export(): array
 	{
-		return ['points'=>$this->points, 'dryLevel'=>$this->dryLevel, 'floodedLevel'=>$this->floodedLevel];
+		$record = ['points'=>$this->points, 'dryLevel'=>$this->dryLevel, 'floodedLevel'=>$this->floodedLevel];
+		if($this->featureArea !== null)
+			$record += ['featureArea'=>$this->featureArea, 'junctions'=>$this->junctions];
+		if($this->heightDifference !== null) $record['heightDifference'] = $this->heightDifference;
+		if($this->startHeight !== null) $record['startHeight'] = $this->startHeight;
+		return $record;
 	}
 
 	public static function import(mixed $record, float $half): self
 	{
 		$invalid = static fn() => new \InvalidArgumentException('Invalid saved circuit.');
 		$number = static fn(mixed $value): bool => (is_float($value) || is_int($value)) && is_finite((float)$value);
-		if(!is_array($record) || array_diff(array_keys($record), ['points','dryLevel','floodedLevel'])) throw $invalid();
+		if(!is_array($record) || array_diff(array_keys($record),
+			['points','dryLevel','floodedLevel','junctions','featureArea','heightDifference','startHeight'])) throw $invalid();
 		$points = $record['points'] ?? [];
 		$dry = $record['dryLevel'] ?? null;
 		$wet = $record['floodedLevel'] ?? null;
@@ -105,8 +139,18 @@ final class Circuit
 		foreach($points as $point)
 			if(!is_array($point) || !array_is_list($point) || count($point)!==2 || !$number($point[0]) || !$number($point[1])
 				|| max(abs($point[0]),abs($point[1]))>$half) throw $invalid();
-		$circuit = new self($points, (float)$dry, $wet === null ? null : (float)$wet);
+		$area = $record['featureArea'] ?? null;
+		$junctions = $record['junctions'] ?? [];
+		$relief = $record['heightDifference'] ?? null;
+		$startHeight = $record['startHeight'] ?? null;
+		if($area !== null && (!$number($area) || $area<=0 || $area>(2*$half)**2)
+			|| !is_array($junctions) || !array_is_list($junctions) || count($junctions)>self::MAX_POINTS
+			|| $area === null && $junctions || $relief !== null && !$number($relief)
+			|| $startHeight !== null && !$number($startHeight)) throw $invalid();
+		$circuit = new self($points, (float)$dry, $wet === null ? null : (float)$wet, $junctions, $area, [], $relief,$startHeight);
 		if($circuit->length<120 || $circuit->length>40000) throw $invalid();
+		foreach($junctions as $junction)
+			if(!$number($junction) || $junction<0 || $junction>=$circuit->length) throw $invalid();
 		return $circuit;
 	}
 }

@@ -1006,11 +1006,21 @@ for($i = 0; $generator->findingCircuit() && $i < 6000; $i++) input($generator, [
 $preview = $generator->status()['circuit'];
 expect($preview['preview'] && $generator->course === $original && $preview['floodedLevel'] > $preview['dryLevel'],
 	'The default canyon previews both variants without replacing a course');
+expect($preview['length']>12000 && $preview['featureArea']>10000000 && $preview['gradeWidth']===36.
+	&& $generator->landscape->revision()===0, 'Preview finds a major plateau and leaves the original ground intact');
 
 $gateLine = [];
 foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 {
 	input($generator, ['actions' => ['circuit-' . $variant]]);
+	$terrain = $generator->takeCandidate();
+	if($variant === 'dry')
+	{
+		expect($terrain !== null && $generator->course === $original && $generator->landscape->revision()===0,
+			'Road preparation leaves the original course and terrain together until publication');
+		$generator->publishLandscape($terrain);
+	}
+	else expect($terrain === null, 'Switching to water reuses the same graded route');
 	$active = $generator->status()['circuit'];
 	$gates = $generator->course->gates();
 	expect($active['active'] === $variant && !$active['preview'] && count($gates) >= 8
@@ -1030,6 +1040,42 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 	$copy->close();
 }
 expect($gateLine[0] === $gateLine[1], 'The road gates and floating arches share a line and heading');
+$record = json_decode($generator->save(),true);
+expect(count($record['landscape']['history'])===1 && $generator->landscape->revision()===1,
+	'The whole circuit is one undoable grade even after switching variants');
+$route = $record['circuit']['route'];
+$distance = $preview['length']/count($gateLine[0]);
+$snapped = false;
+foreach($route['junctions'] as $fork)
+{
+	$i = (int)round(($fork+30)/$distance);
+	if($i>0 && $i<count($gateLine[0]) && abs($fork+30-$i*$distance)<.3*$distance) $snapped = true;
+}
+expect($snapped, 'The plateau circuit places a checkpoint downstream of an identified corridor junction');
+expect(max(array_map(static fn(array $edit): float => max(array_map('abs',$edit['banks'])),
+	$record['landscape']['history'][0]))>.06, 'Natural embankments supply cross slope to the graded bends');
 $generator->close();
+
+$lakeRace = new Session;
+input($lakeRace, ['values'=>['circuitRelief'=>-60,'circuitStartHeight'=>100],
+	'actions'=>[['type'=>'generate','preset'=>'mountain','seed'=>'first-light'],'circuit-find']]);
+for($i = 0; $lakeRace->findingCircuit() && $i<6000; $i++) input($lakeRace, []);
+$lakePreview = $lakeRace->status()['circuit'];
+expect($lakePreview['preview'] && $lakePreview['heightDifference']<=-60
+	&& abs($lakePreview['startHeight']-100)<=.5 && $lakePreview['featureArea']>500000 && $lakeRace->water->level()===0.,
+	'A negative requirement finds an enclosed lake under a road with the requested start elevation');
+input($lakeRace, ['actions'=>['circuit-dry']]);
+$terrain = $lakeRace->takeCandidate();
+expect($terrain !== null, 'The lake course previews an ordinary terrain edit');
+$lakeRace->publishLandscape($terrain);
+$start = $lakeRace->course->start();
+expect(abs($lakeRace->landscape->height($start['x'],$start['z'])-100)<=.5,
+	'The dry lake route really starts at the requested height after grading');
+$lakeCopy = new Session;
+input($lakeCopy, ['actions'=>[['type'=>'load','json'=>$lakeRace->save()]]]);
+expect($lakeCopy->settings['circuitRelief']===-60. && $lakeCopy->settings['circuitStartHeight']===100.
+	&& $lakeCopy->status()['circuit'] == $lakeRace->status()['circuit'], 'The signed controls and lake route survive reload');
+$lakeCopy->close();
+$lakeRace->close();
 
 echo "Landscape sandbox race: $checks checks passed\n";
