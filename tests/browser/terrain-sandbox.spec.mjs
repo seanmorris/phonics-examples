@@ -193,6 +193,31 @@ test('the default landscape produces visible terrain while input remains respons
 	await testInfo.attach('default-landscape', {path: screenshot, contentType: 'image/png'});
 });
 
+test('local terrain shadows follow the sun and reuse stationary probes', async({page}) => {
+	test.setTimeout(120000);
+	await page.goto('/games/terrain-sandbox/');
+	const view = canvas(page);
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60000});
+	await view.evaluate(el => el.terrainSandboxDebug.action('pause'));
+	await expect.poll(async() => (await status(page)).paused).toBe(true);
+	const generation = async() => (await status(page)).renderer.triangleShadowGeneration;
+	await expect.poll(generation, {timeout:60000}).toBeGreaterThan(0);
+	const first = await generation();
+	const values = patch => view.evaluate((el,v) => el.terrainSandboxDebug.values(v),patch);
+	await values({exposure:1.25});
+	await expect.poll(async() => (await status(page)).settings.exposure).toBe(1.25);
+	expect(await generation()).toBe(first);
+	await values({azimuth:45,elevation:18});
+	await expect.poll(generation).toBeGreaterThan(first);
+	const day = await generation();
+	await values({elevation:-6});
+	await expect.poll(async() => (await status(page)).settings.elevation).toBe(-6);
+	expect(await generation()).toBe(day);
+	await values({elevation:18});
+	await expect.poll(generation).toBeGreaterThan(day);
+	expect(await view.evaluate(el => el.getContext('webgl2').getError())).toBe(0);
+});
+
 test('boarding the craft refines the ground near the camera during cold startup', async({page}) => {
 	await page.setViewportSize({width: 672, height: 420});
 	await page.goto('/games/terrain-sandbox/');

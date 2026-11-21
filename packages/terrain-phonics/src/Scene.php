@@ -2344,6 +2344,7 @@ final class Scene
 		$this->atmosphereCache->update($camera->position[1], $this->textures[0], $this->water->level());
 
 		$environment = $this->atmosphere->uniforms();
+		$this->clipmap?->updateShadows($camera->position,$environment['sunDirection'],$this->heightTextureRevision);
 		$this->terrainShadows->update(
 			$this->clipmap ? $this->clipmap->overview()[0] : (isset($this->patches['0:0:0']) ? $this->heightTexture[0] : 0)
 			, $this->lod->extent
@@ -2582,6 +2583,7 @@ final class Scene
 				glUniform3f($program->location('uBedDatum'), CanyonBeds::DIP[0], CanyonBeds::DIP[1], max(.001, $spacing));
 			}
 			$this->terrainShadows->bind($program);
+			$this->clipmap?->bindShadows($program);
 		}
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, $this->textures[0]);

@@ -120,7 +120,11 @@ control sets the amount visible.
 Sun direction, haze, and exposure have independent controls. This implementation uses single scattering;
 multiple scattering, clouds, ozone absorption, and volumetric fluid simulation are not implemented.
 Use `Atmosphere::setNightGlow($strength)` to set the blue night fill. The default is 0.5. Custom materials can read the linear RGB `nightAmbient` from `Atmosphere::uniforms()`. The glow and stars fade in between sunset and a solar elevation of −10°. The stars keep fixed directions as the camera moves.
-Terrain shadows use a coarse heightfield cache for broad mountain shadows. Water reflects the cached sky with
+Terrain shadows use the world overview for distant ridges. Around the camera the clipmap also tests sunlight
+at shared vertices on a world-aligned terrain grid. Where the vertices disagree it refines the crossing edges.
+Where they agree it checks the centre for a shadow or a sunbeam. Nearby pixels resolve the edge. Small projected triangles
+use their sunlit area. Both local passes stay cached across ordinary frames and refresh when the camera crosses
+a grid block, the terrain changes, or the sun moves by a tenth of a degree. Water reflects the cached sky with
 a lower-environment approximation; it does not reflect individual terrain objects. Distant wave normals and
 foam are filtered for their pixel footprint without changing the physical waves.
 

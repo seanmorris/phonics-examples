@@ -36,6 +36,55 @@ float mountainShadow(vec3 position)
 	if(any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 1.0;
 	return texture(uTerrainShadowMap, uv).r;
 }
+#ifdef SURFACE_LAYERS
+uniform highp sampler2D uShadowTriangles;
+uniform vec3 uShadowGrid;
+uniform float uCraft, uGridStep;
+flat in float vSunCoverage;
+
+float localSunlight(vec2 world, float footprint, float broad)
+{
+	if(uShadowGrid.z <= 0. || uCraft > .5 || broad <= 0.) return broad;
+	vec2 grid = (world-uShadowGrid.xy)/uShadowGrid.z;
+	vec2 border = min(grid,vec2(64.)-grid);
+	float edge = min(border.x,border.y);
+	if(edge <= 0.) return broad;
+	ivec2 cell = ivec2(floor(grid));
+	vec2 f = fract(grid);
+	bool upper = f.x+f.y > 1.;
+	if(upper) f = 1.-f;
+	vec4 record = texelFetch(uShadowTriangles,ivec2(2*cell.x+int(upper),cell.y),0);
+	int kind = int(round(255.*record.r));
+	float shade = float(kind);
+	if(kind >= 2)
+	{
+		vec3 w = vec3(1.-f.x-f.y,f);
+		vec3 cut = max(record.gba,vec3(1./255.));
+		float side, area;
+		bool singleLit;
+		if(kind < 8)
+		{
+			int i = (kind-2)%3;
+			side = 1.-w[(i+1)%3]/cut.x-w[(i+2)%3]/cut.y;
+			area = cut.x*cut.y;
+			singleLit = kind >= 5;
+		}
+		else
+		{
+			int lo = w.x <= min(w.y,w.z) ? 0 : (w.y <= w.z ? 1 : 2);
+			int j = (lo+1)%3, k = (lo+2)%3;
+			side = 1.-(w[j]-w[lo])/cut[j]-(w[k]-w[lo])/cut[k];
+			area = dot(cut,cut.yzx)/3.;
+			singleLit = kind == 9;
+		}
+		float pixel = footprint/uShadowGrid.z;
+		float aa = clamp(pixel,.035,.4) / max(.05,min(cut.x,cut.y));
+		shade = mix(smoothstep(-aa,aa,side),area,smoothstep(.15,.75,pixel));
+		if(!singleLit) shade = 1.-shade;
+	}
+	return mix(broad,min(broad,shade),smoothstep(0.,5.,edge));
+}
+#endif
 float grain(vec2 p)
 {
 	return sin(p.x * 1.73 + sin(p.y * 2.1)) * sin(p.y * 1.43 + sin(p.x * 1.9));
@@ -458,13 +507,21 @@ void main()
 		+ snow * vPaint1.x + uRoadColor * vPaint1.y + craft * vPaint1.z;
 	albedo *= 1.0 + 0.07 * detail * (1.0 - smoothstep(1.0,8.0,footprint));
 	vec3 direct = terrainSunlight(max(0.0,vWorld.y)) / 3.14159265;
+	float facing = max(0.0,dot(mix(lightingNormal,n,painted),uSunDirection));
 	float shadow = mountainShadow(vWorld);
+	#ifdef SURFACE_LAYERS
+	if(facing > 0. && uSunDirection.y > 0.)
+	{
+		if(vSunCoverage >= 0.) shadow = mix(shadow,vSunCoverage,smoothstep(.12,.6,footprint/uGridStep));
+		shadow = localSunlight(vWorld.xz,footprint,shadow);
+	}
+	#endif
 	// Approximate diffuse sky fill follows solar irradiance and fades through twilight.
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
 	vec3 ambient = vec3(0.08,0.13,0.20) * (0.35 + 0.65 * max(0.0,n.y)) * illumination;
 	if(uTerrainStyle > 2.5)
 		ambient += uCanyonBounce * illumination * (1.0 - max(0.0,n.y));
-	vec3 lit = albedo * (ambient + direct * max(0.0,dot(mix(lightingNormal,n,painted),uSunDirection)) * shadow);
+	vec3 lit = albedo * (ambient + direct * facing * shadow);
 	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
 	lit += albedo / 3.14159265 * terrainSpotLight(vWorld, mix(lightingNormal,n,painted), uWaterLevel, uWaterOptics.z);
 	lit = waterColumnLight(lit, vRelative, uEye.y, uWaterLevel,

@@ -8,6 +8,7 @@ use Phonics\Render\Program;
 final class Clipmap
 {
 	private Program $generator, $chart;
+	private ?TriangleShadows $shadows = null;
 	private ?SurfaceLayers $chartLayers = null;
 	private array $vao = [], $framebuffer = [], $permutation = [], $levels = [], $overview = [];
 	private ?Landscape $source = null;
@@ -471,6 +472,33 @@ final class Clipmap
 
 	public function overview(): array {return $this->overview['textures'] ?? [0,0];}
 
+	/** Use the finest resident caster grid spanning at least 1.2 km, including terrain behind the camera. */
+	public function updateShadows(array $eye, array $sun, int $revision): void
+	{
+		if($sun[1] > 0 && $this->overview)
+		{
+			foreach($this->spans as $i => $span)
+			{
+				$step = $this->recipe['spacing'] * (2 ** $i);
+				if($span*$step < 1200. && $i !== array_key_last($this->spans)) continue;
+				$level = $this->levels[$i];
+				if(!isset($level['origin'])) break;
+				$this->shadows ??= new TriangleShadows;
+				$this->shadows->update($level,$span,$eye,$sun,$this->overview['textures'][0],
+					$this->recipe['worldSize'],$this->packed,$this->recipe['surround'] === 'none' ? $this->recipe['worldSize']/2 : 0.,
+					$revision,$this->vao[0]);
+				return;
+			}
+		}
+		$this->shadows?->invalidate();
+	}
+
+	public function bindShadows(Program $program): void
+	{
+		if($this->shadows) $this->shadows->bind($program);
+		else glUniform3f($program->location('uShadowGrid'),0,0,0);
+	}
+
 	public function packed(): bool {return $this->packed === true;}
 
 	/** Draw a solid inner grid and rectangular strips around each finer level. */
@@ -749,6 +777,7 @@ final class Clipmap
 			, 'visibleCoverage' => $coverage
 			, 'heightTexelsWritten' => $this->texels
 			, 'editUploadBytes' => $this->uploads
+			, 'triangleShadowGeneration' => $this->shadows?->generation ?? 0
 			, 'roadTextureBytes' => $this->roadBytes
 			, 'meshBytes' => 0
 			, 'terrainTextureBytes' => 256 + $this->roadBytes + ($this->packed ? 8 : 20) * $texels
@@ -767,5 +796,6 @@ final class Clipmap
 		glDeleteFramebuffers(1, $this->framebuffer);
 		$this->generator->close();
 		$this->chart->close();
+		$this->shadows?->close();
 	}
 }
