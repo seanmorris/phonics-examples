@@ -13,7 +13,7 @@ use TerrainPhonics\Landscape;
  * A soft dark patch on the ground under the car, so it reads as standing on the ground, the same at any hour and from
  * any sun. A dark core lies between the wheels. A fainter skirt fills the body's outline and shows a little past the
  * bumpers and sills, which is all of the patch the chase camera behind the car can see. A car in the air leaves a
- * fainter, wider patch, and none from about 12 m up.
+ * fainter, wider patch that vanishes three metres above the ground.
  *
  * It darkens what the terrain pass drew by multiplying it, through a small world-aligned grid that takes the
  * terrain's own heights. The clipmap supplies the same GPU triangles drawn under the wheels. While that grid is
@@ -45,6 +45,8 @@ final class GroundShadow
 	 * ground's light at the body's edge and is gone 0.4 m outside it.
 	 */
 	public const SKIRT = .4, SKIRT_FADE_IN = .2, SKIRT_FADE_OUT = .4;
+	/** Tire-sole clearance in metres where the shadow starts fading and where drawing stops. */
+	private const FADE_START = .25, FADE_END = 3.0;
 	/** Grid spacing in metres. */
 	public const SPACING = .75;
 	/** Most heights kept before the cache starts again. */
@@ -152,10 +154,10 @@ final class GroundShadow
 	 */
 	public static function shape(array $pose, float $ground): array
 	{
-		// In the air the patch grows fainter and wider: gone from about 12 m up, and no wider than 4 m up makes it.
-		$lift = max(0.0, $pose['y'] - $ground - .25);
-		$spread = min(4.0, $lift);
-		$fade = exp(-$lift / 2.5);
+		$range = self::FADE_END - self::FADE_START;
+		$spread = min($range, max(0.0, $pose['y'] - $ground - self::FADE_START));
+		$t = $spread / $range;
+		$fade = (1 - $t)*(1 - $t)*(1 + 2*$t);
 		$shade = [self::STRENGTH * $fade, self::FADE_IN + .2 * $spread, self::FADE_OUT + .4 * $spread];
 		$skirt = [self::SKIRT * $fade, self::SKIRT_FADE_IN + .2 * $spread, self::SKIRT_FADE_OUT + .4 * $spread];
 		$along = self::BODY_HALF_LENGTH + $skirt[2] + .05; $across = self::BODY_HALF_WIDTH + $skirt[2] + .05;
@@ -231,8 +233,9 @@ final class GroundShadow
 			$this->land = $land;
 			$this->revision = $land->revision();
 		}
-		$shape = self::shape($pose, $land->height($pose['x'], $pose['z']));
-		if($shape['shade'][0] < .005) return 1;
+		$ground = $land->height($pose['x'], $pose['z']);
+		if($pose['y'] - $ground >= self::FADE_END) return 1;
+		$shape = self::shape($pose, $ground);
 		$bounds = self::bounds($pose, $shape['extent']);
 		glEnable(GL_BLEND);
 		glBlendFuncSeparate(GL_ZERO, GL_SRC_COLOR, GL_ZERO, GL_ONE);

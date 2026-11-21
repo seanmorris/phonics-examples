@@ -104,12 +104,17 @@ namespace
 	expect($fading, 'It only ever fades outwards');
 
 	// In the air it grows fainter and wider, measured from the ground under the car.
-	$jump = GroundShadow::shape(['y' => 4.0] + $parked, 0.0);
-	expect($dark(0, 0, $jump) < .25 * GroundShadow::STRENGTH && $jump['skirt'][2] > $standing['skirt'][2]
-		&& $jump['extent'][1] > $a1, 'A car 4 m up leaves a fainter, wider patch');
-	$high = GroundShadow::shape(['y' => 25.0] + $parked, 0.0);
-	expect($high['shade'][0] < .005 && $high['extent'][1] === GroundShadow::shape(['y' => 9.0] + $parked, 0.0)['extent'][1],
-		'High enough it is gone, and it stops widening');
+	$previous = GroundShadow::STRENGTH;
+	foreach([.25,.5,1.,1.625,2.,2.75,2.99,3.,3.01,12.] as $clearance)
+	{
+		$shape = GroundShadow::shape(['y' => -380. + $clearance] + $parked, -380.);
+		$strength = $dark(0,0,$shape);
+		expect($strength <= $previous && (($strength > 0.) === ($clearance < 3.)), "Shadow fades through clearance $clearance");
+		if($clearance === 1.625) expect(near($strength,.5*GroundShadow::STRENGTH), 'Half strength midway through the fade');
+		if($clearance === 2.75) expect($strength < .03*GroundShadow::STRENGTH && $shape['extent'][1] > $a1,
+			'Before disappearing the shadow has spread out and is barely visible');
+		$previous = $strength;
+	}
 	$hill = GroundShadow::shape(['y' => 30.1] + $parked, 30.0);
 	expect(near($dark(0, 0, $hill), GroundShadow::STRENGTH), 'On a hill top the car still stands on its patch');
 
@@ -183,13 +188,19 @@ namespace
 	foreach(['levels'=>[['origin'=>[-34,-34],'n'=>128,'step'=>1.,'textures'=>[7,8]]],
 		'spans'=>[64],'recipe'=>$land->recipe(),'vao'=>[1]] as $field=>$value)
 		(new ReflectionProperty($clip,$field))->setValue($clip,$value);
-	$air = ['y'=>$land->height($pose['x'],$pose['z'])+4] + $pose;
+	$air = ['y'=>$land->height($pose['x'],$pose['z'])+1.5] + $pose;
 	$gl['vertices'] = ''; $gl['strips'] = [];
 	expect($shadow->draw($air,$land,$camera,1280,720,$scene) === 1 && $gl['vertices'] === ''
 		&& count($gl['strips']) === 1 && $gl['strips'][0][0] === GL_TRIANGLE_STRIP,
 		'An airborne shadow uses one centre sample and draws the resident terrain with no vertex upload');
+	$above = ['y'=>$land->height($pose['x'],$pose['z'])+3] + $pose;
+	expect($shadow->draw($above,$land,$camera,1280,720,$scene) === 1 && count($gl['strips']) === 1
+		&& count($gl['draws']) === $draws && $gl['vertices'] === '',
+		'At the three-metre cutoff neither renderer submits any shadow geometry');
+	expect($shadow->draw($air,$land,$camera,1280,720,$scene) === 1 && count($gl['strips']) === 2,
+		'Descending below the cutoff brings the shadow back');
 	$edge = ['x'=>32.,'z'=>0.,'y'=>$land->height(32.,0.)+1] + $pose;
-	expect($shadow->draw($edge,$land,$camera,1280,720,$scene) > 1 && $gl['vertices'] !== '' && count($gl['strips']) === 1,
+	expect($shadow->draw($edge,$land,$camera,1280,720,$scene) > 1 && $gl['vertices'] !== '' && count($gl['strips']) === 2,
 		'A shadow crossing the resident grid boundary falls back to sampled terrain');
 
 	$shadow->close();
