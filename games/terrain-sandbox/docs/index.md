@@ -81,7 +81,7 @@ Press **L**, press **X** on a gamepad, or choose **Car headlights** in the panel
 
 ## Ride the water
 
-Select **Board watercraft**, press **B**, or press right on a gamepad's D-pad to find nearby water deep enough for the craft. Use **W/S** or the triggers for throttle and reverse, and **A/D** or the left stick to steer. The right stick looks around the craft. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.
+Select **Board watercraft**, press **B**, or press right on a gamepad's D-pad to find nearby water deep enough for the craft. Use **W/S** or the triggers for throttle and reverse, and **A/D** or the left stick to steer. The right stick looks around the craft. The speedometer in the lower right shows your speed in mph. Hold full throttle on open water to pass 90 mph. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.
 
 Select **Return to flight**, or press **F**, to explore and edit again. The craft is an arcade physics demonstration, not a complete racing game.
 

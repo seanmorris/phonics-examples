@@ -206,6 +206,33 @@ test('boarding the craft refines the ground near the camera during cold startup'
 	).toBeLessThanOrEqual(32);
 });
 
+test('the jet ski speedometer passes 90 mph on open water', async({page}) => {
+	await page.setViewportSize({width:672,height:420});
+	await boot(page);
+	const lake = fixture();
+	lake.landscape.recipe.worldSize = 1024;
+	lake.settings.waterLevel = 12;
+	lake.camera = {position:[0,30,-300],yaw:Math.PI,pitch:-.3};
+	await load(page, lake);
+	await press(page, 'craft');
+	const dial = page.locator('.terrain-speedometer');
+	await expect(dial).toBeVisible();
+	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour');
+	await canvas(page).focus();
+	await page.keyboard.down('w');
+	try {
+		await expect.poll(async() => (await status(page)).craft.speed / .44704, {timeout:90_000}).toBeGreaterThanOrEqual(90);
+		await page.keyboard.press('p');
+		await expect.poll(async() => (await status(page)).paused).toBe(true);
+		const mph = Math.round((await status(page)).craft.speed / .44704);
+		await expect(dial).toHaveAttribute('aria-label', `Speedometer, ${mph} miles per hour`);
+	} finally {
+		await page.keyboard.up('w');
+	}
+	await press(page, 'fly');
+	await expect(dial).toBeHidden();
+});
+
 test('fly the F5, pause in a bank, and return to free flight', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -808,6 +835,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 		return (Math.atan2(ySum,xSum) + 2*Math.PI) % (2*Math.PI);
 	});
 	expect(await needle()).toBeCloseTo(.75*Math.PI, 1);
+	const parkedCarDial = await dial.evaluate(element => element.toDataURL());
 	await expect(control(page, 'car')).toBeHidden();
 	await expect(control(page, 'fly')).toBeVisible();
 	await view.focus();
@@ -849,6 +877,10 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');
 	await press(page, 'craft');
 	await expect.poll(async() => (await status(page)).mode).toBe('craft');
+	await expect(dial).toBeVisible();
+	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour');
+	// Switching vehicles at the same viewport size must repaint the speed markings.
+	expect(await dial.evaluate((element, car) => element.toDataURL() === car, parkedCarDial)).toBe(false);
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).message).toContain('No dry');
 	expect((await status(page)).mode).toBe('craft');
@@ -1052,6 +1084,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 
 	await press(page, 'craft');
 	await expect.poll(async() => (await status(page)).mode).toBe('craft');
+	await expect(page.locator('.terrain-speedometer')).toBeVisible();
 	const map = page.getByRole('img', {name:'Heading-up terrain elevation map'});
 	await expect(map).toBeVisible();
 	await expect.poll(() => map.evaluate(element => {

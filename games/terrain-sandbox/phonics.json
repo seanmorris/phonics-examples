@@ -80,7 +80,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-FQuNpmXYhS8PdDZc7v/M0FsqQ0tvLMHz3hkDBxfUnwo=",
+    "application.php": "sha256-CWjN8vwEH/GiSPKjMVMSlax9XCUMb4wi1RoUdUWX7tk=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
@@ -106,7 +106,7 @@
     "browser/cockpit.mjs": "sha256-TL03wPPGeUva91NiM1oOTWku8pRT1TMZiOABsTOddCg=",
     "browser/flight-map.mjs": "sha256-lsYolS3ASexC+INr1n/gs62+08yTscYCKJVvmpVPg/4=",
     "browser/game.mjs": "sha256-zudsCZle3Rz7uVLVNoXXuxZvEm2LEqqpZrA1H474pRw=",
-    "browser/speedometer.mjs": "sha256-XmRtcA2A51U/sAXAPekxvsfCZoZrxz7aGBmHeZGfmig=",
+    "browser/speedometer.mjs": "sha256-4Uuf0Tq9KUQqmwsSY/7vTUHOjawMmnvKJ7kyFSUDhxU=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
     "src/BalloonPractice.php": "sha256-x9qU7rjd/v8tcWaet8U5cStcKWDEnVSfQtaa6D18fVA=",
     "src/Car.php": "sha256-ffZTGyrtsBT9u24/vS7f2h8E5SVNt3WrmGbLkKrdhLo=",
@@ -126,7 +126,7 @@
     "src/GroundShadow.php": "sha256-Cx/hcdJAF0kYsGe1XnFoFQJHTjNKA3M2zecl0YU2Aug=",
     "src/Jet.php": "sha256-1AxD4bc2bTgzwA8DDXwiV+Od6WEOWFpsR8DL9NmJWIk=",
     "src/Race.php": "sha256-hqPKUAhqAWWVF0OI7c5NatJNlf0+rOXO0LKcm6OAbM4=",
-    "src/Session.php": "sha256-UWz788HFLvjZcVuXn2/dt1e2Zz6i9kREPyPhdmkCnwk=",
+    "src/Session.php": "sha256-InivnF6FxtcDgCw1yoDNtlyfA3IKL+f1yVOc8i3+Tnw=",
     "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/TrailRenderer.php": "sha256-uprLo2j+J4+qA0rN6gvcVDuQm81lcDsPrR598okVHmk=",
     "src/VehicleModel.php": "sha256-iTbcDMy3BTiEeZoXfOoeNtIUeqnN2f9IxEESG+KwA+A="

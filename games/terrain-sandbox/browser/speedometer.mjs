@@ -36,10 +36,11 @@ function paintFace(ctx, size, maximum)
 	ctx.textBaseline = 'middle';
 	ctx.font = '700 12px system-ui, sans-serif';
 	ctx.fillStyle = '#fff';
-	for(let speed = 0; speed <= maximum; speed += 10)
+	for(let tick = 0; tick <= 24; tick++)
 	{
+		const speed = tick * maximum / 24;
 		const angle = dialAngle(speed, maximum), x = Math.cos(angle), y = Math.sin(angle);
-		const major = speed%30 === 0, inner = major ? 61 : 64;
+		const major = tick%3 === 0, inner = major ? 61 : 64;
 		ctx.strokeStyle = major ? '#f8f9fa' : '#a9afb4';
 		ctx.lineWidth = major ? 1.5 : 1;
 		ctx.beginPath();
@@ -63,7 +64,7 @@ export function activate({module, canvas})
 	dial.hidden = true;
 	canvas.parentElement.append(dial);
 	const sandbox = dial.closest('.terrain-sandbox');
-	let lastAngle, lastValue;
+	let lastAngle, lastValue, lastMaximum;
 
 	module.drawTerrainSpeedometer = frame => {
 		if(!frame?.speedometer)
@@ -73,10 +74,11 @@ export function activate({module, canvas})
 		}
 
 		const {mph, maximum, size} = frame.speedometer;
-		if(dial.width !== size || dial.height !== size)
+		if(dial.width !== size || dial.height !== size || lastMaximum !== maximum)
 		{
 			dial.width = dial.height = face.width = face.height = size;
 			paintFace(faceCtx, size, maximum);
+			lastMaximum = maximum;
 			sandbox.style.setProperty('--speedometer-size', size + 'px');
 			lastAngle = undefined;
 		}

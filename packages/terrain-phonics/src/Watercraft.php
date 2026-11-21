@@ -154,7 +154,9 @@ final class Watercraft
 		$this->roll = max(-.65, min(.65, $this->roll + $this->rollVelocity * $dt));
 		$thrust = $throttle >= 0 ? self::FORWARD_THRUST : self::REVERSE_THRUST;
 		$forward += $throttle * $thrust * min(1.0, $wet * 2) * $dt;
-		$forward *= exp(-(.25 + .018 * abs($forward)) * (1 - .35 * $planing) * $dt);
+		// Forward planing lifts most of the hull clear of the water at speed.
+		$dragScale = 1 - ($forward > 0 ? .76 : .35) * $planing;
+		$forward *= exp(-(.25 + .018 * abs($forward)) * $dragScale * $dt);
 		$lateral *= exp(-(1 + 3 * $wet) * $dt);
 		$previousYaw = $this->yaw;
 		// The bow faces local +Z, so turning right decreases yaw when travelling forward.

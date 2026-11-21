@@ -142,7 +142,7 @@ $drawOpaque = static function() use ($session, $gates, &$models, &$tracers, &$sh
 	{
 		$name = match($session->mode) { 'car' => 'testarossa', 'jet' => 'f5', 'craft' => 'jetski' };
 		$model = $models[$name] ??= new VehicleModel(__DIR__ . '/assets/' . $name . '/mesh.bin.gz');
-		$model->draw($vehiclePose ?? $session->craft->state(),
+		$model->draw($vehiclePose,
 			$viewCamera, $session->atmosphere, $session->water, $width, $height);
 	}
 	$projectiles = [];
@@ -233,21 +233,22 @@ $engine->start(
 					$session->atmosphere->uniforms()['nightVisibility']);
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
-			$waterRace = $session->mode === 'craft' && $session->usingFloodedCircuit();
-			$carHudSize = $car ? (int)round(min(240, $width*.275, $height*.30)) : null;
-			$frame = $jet || $car || $waterRace ? ['width'=>$width,'height'=>$height] : null;
+			$craft = $session->mode === 'craft';
+			$waterRace = $craft && $session->usingFloodedCircuit();
+			$dialSize = $car || $craft ? (int)round(min(240, $width*.275, $height*.30)) : null;
+			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height] : null;
 			$wide = $jet ? $session->jetWideMap : $car && $session->carWideMap;
 			$showMap = $waterRace || $wide || ($jet ? $session->jetMap : $car && $session->carMap);
 			if($showMap)
 			{
-				$mapPose = $vehiclePose ?? $session->craft->state();
-				$bearing = M_PI-$mapPose['yaw']+($jet && cos($mapPose['pitch']) < 0 ? M_PI : 0);
-				$position = [$mapPose['x'],$mapPose['z']];
+				$mapSize = $car ? $dialSize : null;
+				$bearing = M_PI-$vehiclePose['yaw']+($jet && cos($vehiclePose['pitch']) < 0 ? M_PI : 0);
+				$position = [$vehiclePose['x'],$vehiclePose['z']];
 				$span = $scene->drawChart($position,$bearing,$wide,$width,$height,
-					TerrainAppearance::linear($session->settings['waterColor']),$carHudSize,
+					TerrainAppearance::linear($session->settings['waterColor']),$mapSize,
 					$car || $waterRace ? $session->circuitChartSpan() : null);
 				if($span !== null)
-					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$carHudSize];
+					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize];
 			}
 			$engine->device->present();
 			if($jet)
@@ -258,8 +259,8 @@ $engine->start(
 					'contactRange'=>TerrainSandbox\BalloonPractice::CONTACT_RANGE,
 					'targets'=>$session->balloons->targets()];
 			}
-			if($car) $frame['speedometer'] = ['mph'=>abs($vehiclePose['speed'])/Car::MPS_PER_MPH,
-				'maximum'=>Car::TOP_SPEED_MPH,'size'=>$carHudSize];
+			if($car || $craft) $frame['speedometer'] = ['mph'=>abs($vehiclePose['speed'])/Car::MPS_PER_MPH,
+				'maximum'=>$car ? Car::TOP_SPEED_MPH : 120,'size'=>$dialSize];
 			if($frame !== null || $hudShown)
 			{
 				$hud($frame !== null ? json_encode($frame, JSON_THROW_ON_ERROR) : '');

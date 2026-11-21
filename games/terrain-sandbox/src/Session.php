@@ -1235,19 +1235,19 @@ final class Session
 	 * Return the camera and vehicle pose to draw at the engine's presentation time. A chase camera ducks through any
 	 * race gate it would otherwise pass through; the session's camera keeps the eye the vehicle's camera chose.
 	 * @param float $alpha Fraction of a fixed step since the last one.
-	 * @return array [Camera, car or jet pose or null]. The camera is the session's own when nothing moves it.
+	 * @return array [Camera, vehicle pose or null in free flight]. The camera is the session's own when nothing moves it.
 	 */
 	public function view(float $alpha): array
 	{
 		[$eye, $pose] = match($this->mode) {
 			'car' => $this->carView($alpha),
+			'craft' => [$this->camera, $this->craft->state()],
 			'jet' => $this->jet->view($this->camera, $this->paused ? 1.0 : $alpha),
 			default => [$this->camera, null]
 		};
 		if($this->mode === 'jet' && $this->jetView === 'cockpit') return [Jet::cockpit($pose),$pose];
 		if($this->mode === 'fly' || $this->course->count() === 0) return [$eye, $pose];
-		$target = $pose ?? $this->craft->state();
-		return [$this->duck()->apply($eye, [$target['x'], $target['y'], $target['z']], $this->nearGates($eye->position)),
+		return [$this->duck()->apply($eye, [$pose['x'], $pose['y'], $pose['z']], $this->nearGates($eye->position)),
 			$pose];
 	}
 
