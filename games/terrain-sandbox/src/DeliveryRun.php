@@ -17,6 +17,7 @@ final class DeliveryRun
 	public int $delivered = 0;
 	public ?array $depot = null;
 	private ?array $pickup = null;
+	private ?PickupSearch $planner = null;
 	private ?\Generator $search = null;
 	private float $phase;
 	private ?array $waitingAt = null;
@@ -38,6 +39,7 @@ final class DeliveryRun
 	public function refit(Landscape $land, float $water): ?string
 	{
 		$this->search = null;
+		$this->planner = null;
 		$this->pickup = null;
 		$this->waitingAt = null;
 		if($this->depot === null) return null;
@@ -72,10 +74,12 @@ final class DeliveryRun
 					return null;
 				$this->waitingAt = null;
 			}
-			$this->search ??= (new PickupSearch($land,$water))->find($this->depot,$to,$camera,$aspect,$this->phase);
-			// Work in slices while driving. The iteration cap also bounds work on flat and already-cached land.
-			$deadline = hrtime(true)+900000;
-			for($i=0; $i<48 && $this->search->valid() && hrtime(true)<$deadline; $i++) $this->search->next();
+			$this->planner ??= new PickupSearch($land,$water,$this->depot);
+			$this->search ??= $this->planner->find($to,$camera,$aspect,$this->phase);
+			// Spend more of a parked frame checking the first route. Keep moving-car slices under a millisecond.
+			$parked = abs($to['speed']) < .25;
+			$deadline = hrtime(true)+($parked ? 2500000 : 900000);
+			for($i=0; $i<128 && $this->search->valid() && hrtime(true)<$deadline; $i++) $this->search->next();
 			if($this->search->valid()) return null;
 			$site = $this->search->getReturn();
 			$this->search = null;
@@ -83,7 +87,7 @@ final class DeliveryRun
 			if($site === null)
 			{
 				$this->waitingAt = [$to['x'],$to['z'],$camera->yaw,$aspect];
-				return 'No dry site out of view here. Drive on or turn the camera to search again.';
+				return 'No reachable pickup out of view here. Drive on or turn the camera to search again.';
 			}
 			// A driver can move or look around while the route is being sampled.
 			if(self::visible($site,$camera,$aspect) || hypot($site['x']-$to['x'],$site['z']-$to['z']) > self::MAX_LEG)

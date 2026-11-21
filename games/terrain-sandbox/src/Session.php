@@ -1257,7 +1257,8 @@ final class Session
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->chase->board($this->camera, $this->car->state(), $this->landscape);
 		$this->dirty = true;
-		$this->message = 'W or RT accelerates, S or LT brakes then reverses, A/D or stick steer, Space or A handbrake, '
+		$this->message = $this->delivery !== null ? 'Finding a reachable package site…'
+			: 'W or RT accelerates, S or LT brakes then reverses, A/D or stick steer, Space or A handbrake, '
 			. 'L or X headlights. F returns to flight.';
 	}
 

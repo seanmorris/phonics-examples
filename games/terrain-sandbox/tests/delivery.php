@@ -4,7 +4,10 @@ declare(strict_types=1);
 require_once (getenv('PHONICS_TERRAIN_ROOT') ?: dirname(__DIR__, 3).'/packages/terrain-phonics').'/autoload.php';
 require_once dirname(__DIR__).'/autoload.php';
 
+use TerrainPhonics\Landscape;
+use TerrainPhonics\Recipe;
 use TerrainSandbox\DeliveryRun;
+use TerrainSandbox\DriveRegion;
 use TerrainSandbox\Session;
 use TerrainSandbox\PickupSearch;
 
@@ -78,23 +81,71 @@ check($s->delivery !== null && $s->navigationTarget() === null, 'Package run tak
 $action('delivery');
 check($s->delivery === null && $s->navigationTarget()['kind'] === 'checkpoint', 'Ending deliveries restores race guidance');
 $s->close();
+// The old 64-metre grade average accepted this level eight-metre-high shelf with a narrow vertical lip.
+$relief = new Landscape(['worldSize'=>1164,'spacing'=>1,'heightScale'=>0,'detailAmplitude'=>0,'surround'=>'none']);
+$relief->queue(['type'=>'road','points'=>[[176,8,0],[208,8,0]],'width'=>28,'shoulder'=>1,'crown'=>0]);
+$relief->commit();
+$start = ['x'=>.5,'z'=>.25,'y'=>0.];
+$region = new DriveRegion($relief,-5.,$start);
+$reachable = static function(DriveRegion $region, float $x, float $z): bool {
+	$id = $region->nearest($x,$z);
+	if($id === null) return false;
+	$probe = $region->connect($id);
+	foreach($probe as $_) {}
+	return $probe->getReturn();
+};
+check($relief->height(192,0) === 8. && !$reachable($region,192,0), 'A flat mesa beyond a short cliff is disconnected');
+check($reachable($region,384,0), 'The floor on the far side remains reachable around the shelf');
+$onShelf = $region->containsPosition(193.,1.);
+foreach($onShelf as $_) {}
+check(!$onShelf->getReturn(), 'An off-grid car on the shelf cannot borrow the depot component');
+$before = $relief->stats()['generated'];
+check($reachable($region,384,0) && $relief->stats()['generated'] === $before, 'A known route requires no terrain samples');
+$relief->queue(['type'=>'road','points'=>[[96,0,0],[176,8,0],[208,8,0]],'width'=>16,'shoulder'=>1,'crown'=>0]);
+$relief->commit();
+check($reachable(new DriveRegion($relief,-5.,$start),192,0), 'A new gentle ramp connects the previously isolated shelf');
+$relief->close();
+
+// The dry endpoints even have identical heights. A narrow submerged channel cuts all the way across the map.
+$channel = new Landscape(['worldSize'=>1164,'spacing'=>1,'heightScale'=>0,'detailAmplitude'=>0,'surround'=>'none']);
+foreach([[-582,0],[0,582]] as [$from,$to])
+	$channel->queue(['type'=>'road','points'=>[[115,-.6,$from],[115,-.6,$to]],'width'=>6,'shoulder'=>4,'crown'=>0]);
+$channel->commit();
+check(!$reachable(new DriveRegion($channel,-.5,$start),192,0), 'An edge cannot bridge a narrow flooded channel');
+check($reachable(new DriveRegion($channel,-5.,$start),192,0), 'Lowering water opens a traversable dry crossing');
+$channel->close();
+
 // On the default canyon a straight drive to these sites runs into a mesa. Valley bends make the route possible.
 $canyon = new Session;
 $canyon->input(['actions'=>[['type'=>'generate','preset'=>'canyon','seed'=>'first-light'],'car']],1/60,16/9);
 while($canyon->findingCarSite()) $canyon->input([],1/60,16/9);
 $car = $canyon->car->state();
 $car['y'] = $canyon->landscape->height($car['x'],$car['z']);
+$valley = new Recipe(['wallHeight'=>0.] + $canyon->landscape->recipe());
+$planner = new PickupSearch($canyon->landscape,$canyon->water->level(),$car);
 foreach([0.,.5,1.] as $phase)
 {
-	$search = (new PickupSearch($canyon->landscape,$canyon->water->level()))->find($car,$car,$canyon->camera,16/9,$phase);
+	$search = $planner->find($car,$canyon->camera,16/9,$phase);
 	foreach($search as $_) {}
 	$box = $search->getReturn();
 	check($box !== null && hypot($box['x']-$car['x'],$box['z']-$car['z'])>3800, 'Distant canyon-floor pickup');
+	check($box['y'] <= $valley->height($box['x'],$box['z'])+24., 'Pickup stays on the local canyon floor');
 	$peak = -INF;
 	for($i=1;$i<128;$i++)
 		$peak = max($peak,$canyon->landscape->height(round($car['x']+($box['x']-$car['x'])*$i/128),
 			round($car['z']+($box['z']-$car['z'])*$i/128)));
 	check($peak>max($car['y'],$box['y'])+90., 'The direct line climbs above the available floor route');
 }
+// Even when the driver starts on top, the local, seed-specific valley floor still governs placement.
+$rim = null;
+for($x=0; $x<=3000 && $rim === null; $x+=96)
+{
+	$y = $canyon->landscape->height($x,0);
+	if($y > $valley->height($x,0)+500.) $rim = ['x'=>(float)$x,'z'=>0.,'y'=>$y];
+}
+check($rim !== null, 'Fixture has a high natural plateau');
+$search = (new PickupSearch($canyon->landscape,$canyon->water->level(),$rim))->find($rim,$canyon->camera,16/9,0.);
+foreach($search as $_) {}
+check($search->getReturn() === null, 'Starting on the plateau never authorizes a box on its top');
 $canyon->close();
 echo "Delivery legs, crossings and shared checkpoint navigation passed.\n";
