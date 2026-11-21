@@ -27,22 +27,58 @@ float cliffNoise(vec3 p, vec2 scale, float xWeight)
 	return mix(smoothNoise(p.xy / scale), smoothNoise(p.zy / scale), xWeight);
 }
 
-// Value noise with its derivatives along both axes.
-vec3 smoothNoiseGradient(vec2 p)
+// A compact radial kernel on a triangular lattice. Its value and first derivative
+// both vanish at its rim, so a vegetation or weathering boundary can cross it freely.
+vec3 coverCorner(ivec2 cell, vec2 d)
 {
-	vec2 cell = floor(p), f = fract(p);
-	vec2 w = f * f * f * (f * (f * 6.0 - 15.0) + 10.0), slope = 30.0 * f * f * (f * (f - 2.0) + 1.0);
-	float a = hashCell(cell), b = hashCell(cell + vec2(1.0,0.0)), c = hashCell(cell + vec2(0.0,1.0));
-	float d = hashCell(cell + vec2(1.0)), k = a - b - c + d;
-	return vec3(mix(mix(a, b, w.x), mix(c, d, w.x), w.y), slope * vec2(b - a + k*w.y, c - a + k*w.x));
+	const vec2 dirs[8] = vec2[8](
+		vec2(.92388,.38268), vec2(.38268,.92388), vec2(-.38268,.92388), vec2(-.92388,.38268),
+		vec2(-.92388,-.38268), vec2(-.38268,-.92388), vec2(.38268,-.92388), vec2(.92388,-.38268));
+	vec2 g = dirs[layerHash(cell)>>29];
+	float w = max(.5-dot(d,d),0.), w2 = w*w, projection = dot(g,d);
+	return vec3(w2*w2*projection, w2*w2*g - 8.*w2*w*projection*d);
 }
 
-// cliffNoise() with its gradient in world space: the value, then its derivatives along x, y and z.
-vec4 cliffNoiseGradient(vec3 p, vec2 scale, float xWeight)
+// Signed simplex noise and its derivatives in the input coordinates. Salt the
+// lattice indices to keep neighboring samples precise even with a large palette seed.
+const float COVER_FREQUENCY = .66;
+vec3 coverNoise(vec2 p)
 {
-	vec3 front = smoothNoiseGradient(p.xy / scale), side = smoothNoiseGradient(p.zy / scale);
-	return vec4(mix(front.x, side.x, xWeight), (1.0 - xWeight) * front.y / scale.x,
-		mix(front.z, side.z, xWeight) / scale.y, xWeight * side.y / scale.x);
+	const float skew = .366025404, unskew = .211324865;
+	p *= COVER_FREQUENCY;
+	vec2 ij = floor(p + (p.x+p.y)*skew);
+	vec2 d = p - ij + (ij.x+ij.y)*unskew;
+	ivec2 cell = ivec2(ij) + ivec2(uPaletteOffset);
+	ivec2 side = d.x > d.y ? ivec2(1,0) : ivec2(0,1);
+	vec3 sampleValue = coverCorner(cell,d) + coverCorner(cell+side,d-vec2(side)+unskew)
+		+ coverCorner(cell+1,d-1.+2.*unskew);
+	return 35.*sampleValue*vec3(1.,COVER_FREQUENCY,COVER_FREQUENCY);
+}
+
+// Area-filter a band by the number of lattice intervals a pixel spans.
+float coverBand(float footprint, float scale)
+{
+	return 1.-smoothstep(.18,1.55,COVER_FREQUENCY*footprint/scale);
+}
+
+// Stretch the volume vertically, then slice it in two oblique directions.
+// Both horizontal coordinates still vary on shallow ground, so a gully ends
+// in the foothills instead of projecting a cliff streak across the meadow.
+vec4 ribSample(vec3 p, vec2 scale)
+{
+	const mat3 turn = mat3(2.,2.,1., -2.,1.,2., 1.,-2.,2.)/3.;
+	vec3 meters = scale.xyx, q = turn*(p/meters);
+	vec3 a = coverNoise(q.xy), b = coverNoise(q.yz + vec2(-13.3,9.1));
+	vec3 gradient = vec3(a.y,a.z+b.y,b.z)*turn/meters;
+	return .70710678*vec4(a.x+b.x,gradient);
+}
+
+// Vary the proportion of two materials in a transition. Its mean comes from
+// the terrain. When a noise band falls below a pixel it contributes zero bias.
+float coverFraction(float area, float variation)
+{
+	float bias = clamp(variation,-.85,.85);
+	return area*(1.+bias)/(1.+bias*(2.*area-1.));
 }
 
 // Share of the ground that a patchy material covers. The noise mostly runs from -0.5 to 0.5, peaks near -0.9 and 0.9,
@@ -53,13 +89,6 @@ float patchy(float amount, float noise, float detail)
 	float value = amount - 0.5 + noise;
 	float edge = max(mix(0.5, 0.1, detail), fwidth(value));
 	return smoothstep(-edge, edge, value);
-}
-
-// A patch whose amount must leave none at 0. The noise of patchy() reaches past 0.5, so it would still cover a few
-// percent of the ground there; below an amount of 0.1 the cover also falls with the amount.
-float sparse(float amount, float noise, float detail)
-{
-	return patchy(amount, noise, detail) * min(1.0, 10.0*amount);
 }
 
 // The dark trace and the signed slope of its shallow groove both end inside the

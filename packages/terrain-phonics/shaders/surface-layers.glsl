@@ -9,11 +9,13 @@ uniform vec4 uLayerRange[16],uLayerBlend[16],uLayerMode[16];
 uniform vec4 uLayerPattern[16];
 uniform vec3 uLayerPatternColor[16];
 uniform vec2 uPaletteOffset;
-float layerCorner(ivec2 cell) {
+uint layerHash(ivec2 cell) {
 	uvec2 p=uvec2(cell);
 	uint h=p.x*1597334677u ^ p.y*3812015801u;
-	h=(h^(h>>16))*2246822519u;
-	return float(h>>8)*(2./16777216.)-1.;
+	return (h^(h>>16))*2246822519u;
+}
+float layerCorner(ivec2 cell) {
+	return float(layerHash(cell)>>8)*(2./16777216.)-1.;
 }
 // Value and partials with respect to the two interpolation weights.
 vec3 layerCellSample(ivec2 cell,vec2 t) {
