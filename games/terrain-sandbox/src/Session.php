@@ -1232,11 +1232,12 @@ final class Session
 		$preset = $this->landscape->recipe()['preset'];
 		if($preset === 'limestone')
 		{
-			$x = min(1152., $half * .3);
-			$z = -min(2304., $half * .3);
+			$wavelength = 1 / $this->landscape->recipe()['baseFrequency'];
+			$x = min(.8 * $wavelength, $half * .3);
+			$z = -min(1.6 * $wavelength, $half * .3);
 			$this->camera->position = [$x, max(105., $this->landscape->height($x, $z) + 45., $this->water->level() + 45.), $z];
-			$this->camera->yaw = deg2rad(316);
-			$this->camera->pitch = .058;
+			$this->camera->yaw = deg2rad(305);
+			$this->camera->pitch = .10;
 		}
 		else
 		{

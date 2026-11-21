@@ -1718,7 +1718,7 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	const seed = page.locator('[name="seed"]');
 	await preset.selectOption({label: 'Limestone Plain'});
 	await expect(seed).toHaveValue('limestone-plain');
-	await expect(page.locator('[name="floorWidth"]')).toHaveValue('0.24');
+	await expect(page.locator('[name="floorWidth"]')).toHaveValue('0.18');
 	await expect(page.locator('[data-landform] :invalid')).toHaveCount(0);
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('limestone');
@@ -1727,8 +1727,9 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	const veins = surfaceLayers.find(layer => layer.pattern === 'veins');
 	expect(surfaceLayers[veins.parent].color).toBe('#777b6f');
 	const document = await save(page);
-	expect(document.landscape.recipe).toMatchObject({seed: 'limestone-plain', version: 2, heightScale: 1600, wallWidth: .56});
-	expect(document.camera.position).toEqual([1152, 105, -2304]);
+	expect(document.landscape.recipe).toMatchObject({seed: 'limestone-plain', version: 2, heightScale: 3950,
+		wallWidth: .91, terraceSpacing: 175, terraceStrength: .44});
+	expect(document.camera.position).toEqual([2440, 105, -4880]);
 	expect(document.settings).toMatchObject({grassColor: '#476239', snowline: 3000, waterLevel: -40, azimuth: 106});
 	await preset.selectOption('coast');
 	await expect(seed).toHaveValue('first-light');

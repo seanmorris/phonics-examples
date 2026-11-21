@@ -32,10 +32,10 @@ final class Recipe
 	{
 		if($preset === 'limestone')
 		return [
-			'seed' => 'limestone-plain', 'heightScale' => 1600., 'baseFrequency' => 1 / 1450, 'floorWidth' => .24, 'wallWidth' => .56,
+			'seed' => 'limestone-plain', 'heightScale' => 3950., 'baseFrequency' => 1 / 3050, 'floorWidth' => .18, 'wallWidth' => .91,
 			'wallHeight' => 1., 'rolling' => 0., 'secondary' => 0., 'directionalRise' => 0.,
 			'warpAmplitude' => 120., 'warpFrequency' => 1 / 3800, 'detailAmplitude' => 1.2, 'detailOctaves' => 4,
-			'terraceStrength' => 0., 'waterLevel' => -40., 'surround' => 'mountains'
+			'terraceSpacing' => 175., 'terraceStrength' => .44, 'waterLevel' => -40., 'surround' => 'mountains'
 		] + self::shapeDefaults('coast', $version);
 
 		$coast = $preset === 'coast';

@@ -104,8 +104,9 @@ a heading-up chart at two zoom levels from the same elevation and surface layers
 and limits the wider view near the map boundary. Pass `circular: true` to draw a disc within the chart viewport.
 
 Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
-rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone` preset uses the floor
-and wall controls to raise isolated peaks above a broad plain. Existing recipes expand to the values of
+rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone` preset uses a 3,050 m
+base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at
+175 m elevation intervals form sloping benches below the summits. Existing recipes expand to the values of
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
 changing the landscape's playable extent. `SurfaceLayers` accepts an ordered list of up to twelve colour
 layers with height and slope fades, spatial noise, and an optional earlier layer as a parent. Set a layer's

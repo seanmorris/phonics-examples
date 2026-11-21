@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/autoload.php';
 
 use TerrainSandbox\Car;
 use TerrainSandbox\CarChase;
+use TerrainSandbox\DriveRegion;
 use TerrainSandbox\Jet;
 use TerrainSandbox\Session;
 
@@ -131,8 +132,17 @@ $karst = new Session;
 input($karst, ['actions' => [['type' => 'generate', 'preset' => 'limestone']]]);
 expect($karst->landscape->recipe()['seed'] === 'limestone-plain' && $karst->water->level() === -40.,
 	'Limestone defaults supply the example seed and a dry plain.');
-expect($karst->landscape->height(-2496, -7552) > 1400 && abs($karst->landscape->height(1152, -2304)) < 3,
-	'The example peak and the flat ground at its starting viewpoint retain their relief.');
+[$x, , $z] = $karst->camera->position;
+$floor = $karst->landscape->height($x, $z);
+$summit = $karst->landscape->height(637, -3747);
+expect(abs($floor) < 3 && $summit > 1400, 'The example opens on flat ground beside a high peak.');
+foreach([[400,0], [-400,0], [0,400], [0,-400]] as [$dx,$dz])
+	expect($karst->landscape->height(637+$dx, -3747+$dz) < $summit-200, 'The summit falls away on each side.');
+$region = new DriveRegion($karst->landscape, $karst->water->level(), ['x'=>$x, 'z'=>$z, 'y'=>$floor]);
+$route = $region->containsPosition(4110., -4933.);
+foreach($route as $_) {}
+expect($route->getReturn() && $karst->landscape->height(4110., -4933.)-$floor > 350,
+	'A hillside over 350 m above the opening plain is connected by driveable grades on both tyre tracks.');
 input($karst, ['values' => ['grassColor' => '#224422', 'haze' => 2.0, 'rockSlopeStart' => .65]]);
 input($karst, ['actions' => [['type' => 'generate', 'preset' => 'limestone', 'seed' => 'second', 'wallWidth' => .7]]]);
 expect($karst->landscape->recipe()['wallWidth'] === .7 && $karst->landscape->recipe()['seed'] === 'second',
