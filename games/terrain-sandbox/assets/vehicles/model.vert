@@ -26,7 +26,8 @@ uniform vec4 uGateSize;
 // The gate board's label half width on its -X and +X sides, then the width of one checker column on each side.
 uniform vec4 uGateBoard;
 // Checker columns each side of the board shows at the mesh's own size, then the columns the mesh holds per side.
-uniform vec2 uGateColumns;
+// Z scales the lettering and checker widths. W fits the letter height to the same scale on narrow boards.
+uniform vec4 uGateColumns;
 // Heights from the gate origin of the -X and +X posts' feet, then of the ground under each post.
 uniform vec4 uGateFeet;
 // Tags 2 to 7 are the Testarossa's lamps and the covers of its pop-up headlights. Tags 2 to 6 give off uLampGlow, the
@@ -42,11 +43,12 @@ out vec2 vUv;
 flat out vec4 vPaint;
 flat out vec2 vSurface;
 flat out vec3 vGlow;
+flat out float vLabelFit;
 
 // Gate parts, from the low bits of the vertex tags that scripts/import_terrain_gates.py writes.
 const int LABEL = 1, FRAME = 2, SQUARE = 3, CAP = 4, POST = 5, BASE = 6, ARCH = 7;
 
-// Place a board vertex across a gate whose opening is uGateSize.x wider each side. The label keeps its size, the frame
+// Place a board vertex across a gate whose opening is uGateSize.x wider each side. The print scales, the frame
 // beyond each checker band moves out with the posts, and each band shows the whole columns that come nearest to
 // filling it, each stretched a little to fit. The columns it does not show fold into its outer edge.
 float boardX(float x, bool square)
@@ -54,11 +56,11 @@ float boardX(float x, bool square)
 	float side = x < 0.0 ? -1.0 : 1.0;
 	float label = x < 0.0 ? uGateBoard.x : uGateBoard.y, column = x < 0.0 ? uGateBoard.z : uGateBoard.w;
 	float along = abs(x) - label, band = uGateColumns.x * column;
-	if(along <= 0.0) return x;
+	if(along <= 0.0) return x * uGateColumns.z;
 	if(!square && along > band - .001) return x + side * uGateSize.x;
-	float width = band + uGateSize.x;
-	float shown = clamp(floor(width / column + .5), 1.0, uGateColumns.y);
-	return side * (label + min(along, shown * column) * width / (shown * column));
+	float width = band + uGateSize.x - label * (uGateColumns.z - 1.0);
+	float shown = clamp(floor(width / (column * uGateColumns.z) + .5), 1.0, uGateColumns.y);
+	return side * (label * uGateColumns.z + min(along, shown * column) * width / (shown * column));
 }
 
 void main()
@@ -66,6 +68,7 @@ void main()
 	vec3 position = aPosition, normal = aNormal;
 	int tag = int(aSurface.y * 255.0 + .5);
 	bool gate = uGateSize.z > 0.0 && tag >= 128 && tag < 224;
+	vLabelFit = 1.0;
 	if(gate)
 	{
 		int part = tag & 63;
@@ -92,7 +95,12 @@ void main()
 		{
 			// The board, its label and the tabs on its ends rise with the top of the opening.
 			if(part == CAP) position.x += side * uGateSize.x;
-			else if(part != LABEL) position.x = boardX(position.x, part == SQUARE);
+			else if(part == LABEL)
+			{
+				position.x *= uGateColumns.z;
+				vLabelFit = uGateColumns.w;
+			}
+			else position.x = boardX(position.x, part == SQUARE);
 			position.y += uGateSize.y;
 		}
 	}

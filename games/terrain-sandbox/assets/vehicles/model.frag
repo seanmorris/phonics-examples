@@ -10,6 +10,8 @@ flat in vec4 vPaint;
 flat in vec2 vSurface;
 // Light a lamp gives off, zero on every other surface.
 flat in vec3 vGlow;
+flat in float vLabelFit;
+uniform vec2 uUvOffset;
 uniform sampler2D uDashboard;
 uniform vec3 uSunDirection, uSunlight, uNightAmbient;
 uniform float uDaylight, uExposure, uEngineThrust;
@@ -27,7 +29,17 @@ void main()
 	vec3 normal = normalize(gl_FrontFacing ? vNormal : -vNormal);
 	vec3 view = normalize(-vRelative);
 	vec3 base = linearColor(vPaint.rgb);
-	if(vSurface.y > .5) base *= linearColor(texture(uDashboard, vUv).rgb);
+	if(vSurface.y > .5)
+	{
+		vec2 uv = vUv;
+		if(vLabelFit > 1.0)
+		{
+			// Sample solid label background above and below smaller type, within this role's atlas band.
+			float middle = uUvOffset.y + .125;
+			uv.y = middle + clamp((uv.y - middle) * vLabelFit, -.109375, .109375);
+		}
+		base *= linearColor(texture(uDashboard, uv).rgb);
+	}
 
 	float roughness = max(vPaint.a, .08);
 	float metallic = vSurface.x;

@@ -2,7 +2,7 @@
 export function activate({module, canvas, session, services})
 {
 	const shell = new services.GameShell({module, canvas, session, title: 'Landscape Sandbox'});
-	const gl = shell.context({alpha: false, antialias: false, depth: true, stencil: false});
+	const gl = shell.context({alpha: false, antialias: true, depth: true, stencil: false});
 	const {signal} = shell;
 	const frame = document.createElement('div');
 	frame.className = 'terrain-sandbox';

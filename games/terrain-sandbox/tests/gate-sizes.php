@@ -73,8 +73,8 @@ catch(InvalidArgumentException) { expect(true, 'Course::place() refuses a size o
 
 // The shader. These lines of model.vert are the ones tests/support/gate-mesh.php repeats.
 $vertex = file_get_contents(dirname(__DIR__) . '/assets/vehicles/model.vert');
-foreach(['float shown = clamp(floor(width / column + .5), 1.0, uGateColumns.y);',
-	'return side * (label + min(along, shown * column) * width / (shown * column));',
+foreach(['float shown = clamp(floor(width / (column * uGateColumns.z) + .5), 1.0, uGateColumns.y);',
+	'return side * (label * uGateColumns.z + min(along, shown * column) * width / (shown * column));',
 	'if(!square && along > band - .001) return x + side * uGateSize.x;',
 	'bool gate = uGateSize.z > 0.0 && tag >= 128 && tag < 224;',
 	'vec3 scale = vec3(uGateSize.z, position.y > 0.0 ? uGateSize.w : 1.0, sqrt(uGateSize.z * uGateSize.w));',
@@ -149,23 +149,33 @@ foreach($sizes as $kind => $list) foreach($list as [$width, $height])
 		expect(max($across / $up, $up / $across) <= 2 + 1e-9, "$name stretches its arch and lettering at most twice");
 		continue;
 	}
-	// The label keeps its size and rises with the board, which sits on top of the opening.
+	// Remove the horizontal print scale to compare the label panels at different opening sizes.
 	$labelLow = $found['parts'][GATE_LABEL]['low']; $labelHigh = $found['parts'][GATE_LABEL]['high'];
 	$label = [$labelHigh[0] - $labelLow[0], $labelHigh[1] - $labelLow[1], $labelLow[1] - $height];
+	$printScale = $uniforms['uGateColumns'][2];
+	$label[0] /= $printScale;
 	$ownLabel[$kind] ??= $label;
+	if($kind === 'road') expect(near($printScale * $uniforms['uGateColumns'][3], 2.0)
+		&& ($width >= 13 ? $printScale === 2.0 : $printScale < 2.0),
+		"$name scales both text axes equally, fitting the type to a narrow board");
 	expect(near($label[0], $ownLabel[$kind][0]) && near($label[1], $ownLabel[$kind][1]) && near($label[2], $ownLabel[$kind][2]),
-		"$name keeps its label's size and height above the opening");
+		"$name keeps its label panel aligned above the opening");
 	// The board reaches past the opening's sides by as much as at its own size.
 	$frame = $found['parts'][GATE_FRAME];
 	$overhang = max(-$frame['low'][0], $frame['high'][0]) - $width / 2;
 	$ownOverhang[$kind] ??= $overhang;
 	expect(near($frame['low'][1], $height, .001) && near($overhang, $ownOverhang[$kind], 1e-4),
 		"$name sits its board on top of the opening, spanning its width");
-	// Whole checker columns fill each band, each within a sixth of its own width.
-	$column = $shapes->kind($kind)['board']['column'][1];
-	expect($found['squares'] !== [] && min($found['squares']) > $column * 5 / 6 - 1e-6 && max($found['squares']) < $column * 7 / 6 + 1e-6,
-		sprintf("$name shows whole checker columns %.3f to %.3f m wide, for %.3f m at its own size",
-			min($found['squares']), max($found['squares']), $column));
+	// Each side fits the nearest whole number of columns into the space left by the enlarged type.
+	$board = $shapes->kind($kind)['board'];
+	$columns = [];
+	foreach($board['column'] as $side => $column)
+	{
+		$room = $board['columns'] * $column + $uniforms['uGateSize'][0] - $board['label'][$side] * ($printScale - 1);
+		$columns[] = $room / max(1, round($room / ($printScale * $column)));
+	}
+	expect($found['squares'] !== [] && min($found['squares']) > .97 * min($columns)
+		&& max($found['squares']) < 1.03 * max($columns), "$name fits the nearest whole checker columns");
 	if($kind === 'road')
 	{
 		expect(near($frame['high'][1] - $frame['low'][1], 1.991, .001) && near($label[1], 1.762, .001),

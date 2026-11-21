@@ -34,18 +34,18 @@ function readGateMesh(string $file): array
 function gateBoardX(float $x, bool $square, array $uniforms): float
 {
 	[$labelLeft, $labelRight, $columnLeft, $columnRight] = $uniforms['uGateBoard'];
-	[$columns, $baked] = $uniforms['uGateColumns'];
+	[$columns, $baked, $scale] = $uniforms['uGateColumns'];
 	$added = $uniforms['uGateSize'][0];
 	$side = $x < 0 ? -1.0 : 1.0;
 	$label = $x < 0 ? $labelLeft : $labelRight;
 	$column = $x < 0 ? $columnLeft : $columnRight;
 	$along = abs($x) - $label;
 	$band = $columns * $column;
-	if($along <= 0) return $x;
+	if($along <= 0) return $x * $scale;
 	if(!$square && $along > $band - .001) return $x + $side * $added;
-	$width = $band + $added;
-	$shown = max(1.0, min($baked, floor($width / $column + .5)));
-	return $side * ($label + min($along, $shown * $column) * $width / ($shown * $column));
+	$width = $band + $added - $label * ($scale - 1);
+	$shown = max(1.0, min($baked, floor($width / ($column * $scale) + .5)));
+	return $side * ($label * $scale + min($along, $shown * $column) * $width / ($shown * $column));
 }
 
 /**
@@ -67,7 +67,8 @@ function resizeGateVertex(array $position, int $tag, array $uniforms): array
 	if($part === GATE_POST) return [$x + $side * $added, $y > 0 ? $y + $raised : ($side < 0 ? $feet[0] : $feet[1]), $z];
 	if($part === GATE_BASE) return [$x + $side * $added, $y + ($side < 0 ? $feet[2] : $feet[3]), $z];
 	if($part === GATE_CAP) $x += $side * $added;
-	elseif($part !== GATE_LABEL) $x = gateBoardX($x, $part === GATE_SQUARE, $uniforms);
+	elseif($part === GATE_LABEL) $x *= $uniforms['uGateColumns'][2];
+	else $x = gateBoardX($x, $part === GATE_SQUARE, $uniforms);
 	return [$x, $y + $raised, $z];
 }
 

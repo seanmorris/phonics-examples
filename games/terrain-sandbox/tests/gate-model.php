@@ -138,7 +138,7 @@ namespace
 		'Each gate shows its role print through the atlas offset');
 	$resized = values('uGateSize', $since);
 	expect(count($resized) === 4 && $resized[0] === [0.0, 0.0, 1.0, 1.0] && count(values('uGateFeet', $since)) === 4
-		&& values('uGateColumns', $since)[0] === [14.0, (float)$shapes->kind('road')['board']['baked']]
+		&& values('uGateColumns', $since)[0] === [14.0, (float)$shapes->kind('road')['board']['baked'], 2.0, 1.0]
 		&& values('uGateBoard', $since)[2] === [...$shapes->kind('air')['board']['label'], ...$shapes->kind('air')['board']['column']],
 		'Each drawn gate sets the uniforms model.vert resizes it with; a gate at its own size adds nothing');
 	$rotation = values('uRotation', $since);

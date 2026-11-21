@@ -65,10 +65,10 @@ foreach($gates['kinds'] as $name => $kind)
 	expect($otherTags === 0, "Every $name vertex carries a gate part tag, clear of the wheel and hinge tags");
 	$corners = $mesh['corners'];
 	expect(max($corners) < $header['vertices'], "Every $name index names a vertex");
-	// At its own size the mesh draws as baked, except the spare checker columns, which fold into the end of each band.
+	// Check the imported geometry at unit print scale. Gate sizing tests cover the road print as drawn.
 	$own = ['uGateSize' => [0.0, 0.0, 1.0, 1.0],
 		'uGateBoard' => isset($kind['board']) ? [...$kind['board']['label'], ...$kind['board']['column']] : [1e9, 1e9, 1.0, 1.0],
-		'uGateColumns' => isset($kind['board']) ? [$kind['board']['columns'], $kind['board']['baked']] : [1.0, 1.0],
+		'uGateColumns' => isset($kind['board']) ? [$kind['board']['columns'], $kind['board']['baked'], 1.0, 1.0] : [1.0, 1.0, 1.0, 1.0],
 		'uGateFeet' => [$kind['posts'][0]['bottom'] ?? 0.0, $kind['posts'][1]['bottom'] ?? 0.0, 0.0, 0.0]];
 	$points = [];
 	$spares = 0;
@@ -83,7 +83,7 @@ foreach($gates['kinds'] as $name => $kind)
 		if(($vertex['tag'] & 63) === GATE_SQUARE && abs(abs($at[0]) - $band) < 1e-6) $spares++;
 		elseif(max(array_map(fn($a, $b) => abs($a - $b), $at, $vertex['position'])) > 1e-6) $moved++;
 	}
-	expect($moved === 0, "At its own size the $name mesh draws where it was baked ($moved vertices move)");
+	expect($moved === 0, "At unit print scale the $name mesh matches its baked geometry ($moved vertices move)");
 	if(isset($kind['board']))
 		expect($spares > 0 && $kind['board']['baked'] > $kind['board']['columns'],
 			"The $name mesh folds $spares spare checker vertices into the ends of its bands");

@@ -118,7 +118,7 @@ final class GateModel
 					[$resize, $layout, $count, $base] = $placed['resize'];
 					glUniform4f($size, ...$resize);
 					glUniform4f($board, ...$layout);
-					glUniform2f($columns, ...$count);
+					glUniform4f($columns, ...$count);
 					glUniform4f($feet, ...$base);
 					$mesh->draw();
 					$this->drawn++;
@@ -174,10 +174,22 @@ final class GateModel
 	{
 		$measure = $course->measure($gate);
 		$layout = $this->shapes->kind($gate['kind'])['board'];
+		// Keep two checker columns on either side of the lettering even on the narrowest road gate.
+		$printScale = $heightScale = $gate['kind'] === 'road' && $layout !== null ? 2.0 : 1.0;
+		if($heightScale > 1.0)
+		{
+			foreach($layout['label'] as $side => $label)
+			{
+				$column = $layout['column'][$side];
+				$room = $label + $layout['columns'] * $column + $measure['resize'][0];
+				$printScale = min($printScale, $room / ($label + 2 * $column));
+			}
+		}
 		return ['uGateSize' => $measure['resize'],
 			// A board without a layout keeps its width: its label reaches past every vertex.
 			'uGateBoard' => $layout === null ? [1e9, 1e9, 1.0, 1.0] : [...$layout['label'], ...$layout['column']],
-			'uGateColumns' => $layout === null ? [1.0, 1.0] : [(float)$layout['columns'], (float)$layout['baked']],
+			'uGateColumns' => [(float)($layout['columns'] ?? 1), (float)($layout['baked'] ?? 1),
+				$printScale, $heightScale / $printScale],
 			'uGateFeet' => $measure['feet']];
 	}
 
