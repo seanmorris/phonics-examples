@@ -650,7 +650,7 @@ $crash = new Session($dry);
 $crash->landscape->queue(['type' => 'raise', 'x' => 0, 'z' => 45, 'radius' => 16, 'amount' => 30]);
 $crash->landscape->commit();
 $s = click($crash, 'start', 0, 31, M_PI);
-$crash->camera->position = [0, 30, -40]; $crash->camera->yaw = M_PI;
+$crash->camera->position = [0, 30, -54]; $crash->camera->yaw = M_PI;
 enterCar($crash);
 drive($crash, ['KeyW' => true], 500, fn(Session $session): bool => $session->car->state()['motion'] !== 'driving');
 drive($crash, [], 1300, fn(Session $session): bool => $session->car->state()['motion'] !== 'tumbling');

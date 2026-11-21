@@ -111,6 +111,8 @@ layers with height and slope fades, spatial noise, and an optional earlier layer
 `Water` evaluates analytic directional waves and bounded wake packets. Its shader include uses the same
 parameters and derivatives as PHP. `Watercraft` samples several buoyancy points and adds damping, drag,
 steering, planing, and shoreline contacts. It is an arcade test craft, not a full rigid-body engine.
+The optional `gravity` constructor argument defaults to 9.81 m/s². Increasing it shortens free fall
+and adjusts buoyancy to keep the resting hull at the same waterline.
 
 Above 2 m/s, a hull in contact with the water emits a wake about every 0.2 seconds.
 Foam follows the stern and spreads as the trail ages. The sandbox’s **Shore and wake foam**

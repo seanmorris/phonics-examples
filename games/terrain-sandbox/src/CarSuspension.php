@@ -6,7 +6,7 @@ namespace TerrainSandbox;
 final class CarSuspension
 {
 	// Static sag and extra bump travel in metres. The mesh is authored at its loaded ride height.
-	private const SAG = .13, BUMP = .14, GRAVITY = 9.81;
+	private const SAG = .13, BUMP = .14;
 	private const ALONG = [Car::WHEELBASE/2,Car::WHEELBASE/2,-Car::WHEELBASE/2,-Car::WHEELBASE/2];
 	private const ACROSS = [-Car::FRONT_TRACK/2,Car::FRONT_TRACK/2,-Car::REAR_TRACK/2,Car::REAR_TRACK/2];
 	public float $y = 0, $pitch = 0, $roll = 0, $verticalSpeed = 0, $pitchRate = 0, $rollRate = 0;
@@ -43,7 +43,7 @@ final class CarSuspension
 		for($step = 0; $step < $steps; $step++)
 		{
 			[$rise,$bank,$normalUp] = $this->plane();
-			$lift = -self::GRAVITY; $pitchAccel = $rollAccel = 0.0;
+			$lift = -Session::DRIVING_GRAVITY; $pitchAccel = $rollAccel = 0.0;
 			foreach(self::ALONG as $i => $along)
 			{
 				$side = self::ACROSS[$i];
@@ -54,7 +54,7 @@ final class CarSuspension
 					- $side*(1/($normalUp*max(.18,cos($this->roll))))*$this->rollRate;
 				$rate = ($roadSpeed[$i]-$bodySpeed)*$normalUp;
 				$stroke = min($compression,self::BUMP);
-				$spring = self::GRAVITY*(1+$stroke/self::SAG);
+				$spring = Session::DRIVING_GRAVITY*(1+$stroke/self::SAG);
 				// Progressive bump stops and stronger rebound damping. A tire can only push upward.
 				$bumpStop = 90*max(0.0, $stroke-.085);
 				$force = .25*max(0.0, $spring+$bumpStop+($rate > 0 ? 5.0 : 10.0)*$rate);

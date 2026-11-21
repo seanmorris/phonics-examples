@@ -86,7 +86,7 @@ final class CarTumble
 
 	private function integrate(float $dt, Landscape $land, float $water): void
 	{
-		$this->up -= 9.81*$dt;
+		$this->up -= Session::DRIVING_GRAVITY*$dt;
 		$vx = $this->cosYaw*$this->side + $this->sinYaw*$this->ahead;
 		$vz = -$this->sinYaw*$this->side + $this->cosYaw*$this->ahead;
 		$edge = $land->recipe()['worldSize']/2 - 2.6;

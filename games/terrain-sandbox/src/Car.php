@@ -190,7 +190,7 @@ final class Car
 		// Steering tightens at parking speeds. Swapping pedals brakes before engaging reverse.
 		$speed = abs($this->speed);
 		$target = -$turn * .52 / (1 + .035 * $speed);
-		$gravitySide = 9.81*sin($this->roadRoll);
+		$gravitySide = Session::DRIVING_GRAVITY*sin($this->roadRoll);
 		// Approximate steering pull as a small downhill curvature. Fade it in while rolling and out when the
 		// front axle loses contact. The speed term keeps the lateral acceleration bounded at highway speeds.
 		if($this->suspension->frontContacts > 0)
@@ -202,7 +202,7 @@ final class Car
 		{
 			$grade = sin($this->roadPitch);
 			if($throttle == 0 && ($this->speed != 0 || abs($grade) > .18))
-				$this->speed -= 9.81*$grade*$dt*$gripFraction;
+				$this->speed -= Session::DRIVING_GRAVITY*$grade*$dt*$gripFraction;
 			$speed = abs($this->speed);
 			$drag = self::AERO_DRAG*$speed**2 + self::ROAD_DRAG*min($speed, self::ROAD_DRAG_LIMIT)**2;
 			if($throttle == 0)
@@ -210,14 +210,16 @@ final class Car
 			else
 			{
 				$braking = $throttle*$this->speed < 0;
+				// A landing can send the car backwards faster than reverse gear can drive it.
+				$reverseLimit = min(-8.0, $this->speed);
 				$power = $braking ? 13 : ($throttle > 0 ? 9 : 4);
 				$traction = $braking ? $gripFraction : $rear;
-				$this->speed += ($throttle*$power*$traction - (($this->speed <=> 0)*$drag+9.81*$grade)*$gripFraction)*$dt;
+				$this->speed += ($throttle*$power*$traction - (($this->speed <=> 0)*$drag+Session::DRIVING_GRAVITY*$grade)*$gripFraction)*$dt;
 				$pedal = abs($throttle);
 				// A light pedal leaves some of the rolling resistance a released one would meet.
 				if($pedal < 1)
 					$this->speed = ($this->speed <=> 0)*max(0.0, abs($this->speed) - 1.7*(1 - $pedal)*$gripFraction*$dt);
-				$this->speed = max(-8, $this->speed);
+				$this->speed = max($reverseLimit, $this->speed);
 			}
 			$this->speed = min(self::TOP_SPEED, $this->speed);
 		}
@@ -233,7 +235,7 @@ final class Car
 		if($this->speed == 0 && $this->suspension->resting) return true;
 		$distance = $this->speed * $dt;
 		// An inward bank supplies some centripetal acceleration. Only the remainder needs tire grip.
-		$grip = 9.81*cos($this->roadRoll)*cos($this->roadPitch);
+		$grip = Session::DRIVING_GRAVITY*cos($this->roadRoll)*cos($this->roadPitch);
 		$demand = $this->speed**2*tan($this->steering)/self::WHEELBASE;
 		$direction = $demand <=> 0;
 		$lateral = $direction*min(abs($demand), max(0.0, $grip+$direction*$gravitySide))*$this->suspension->frontContacts/2;
@@ -281,8 +283,8 @@ final class Car
 		}
 		[,$pitch,$roll] = $support;
 		// Downhill gravity and outward cornering load act together on an adverse camber.
-		$sideLoad = 9.81*sin($roll) - $lateral*cos($roll);
-		$normalLoad = 9.81*cos($pitch)*cos($roll) + $lateral*sin($roll);
+		$sideLoad = Session::DRIVING_GRAVITY*sin($roll) - $lateral*cos($roll);
+		$normalLoad = Session::DRIVING_GRAVITY*cos($pitch)*cos($roll) + $lateral*sin($roll);
 		$tipSide = abs($roll) > .40 && abs($sideLoad) > 1.32*max(0,$normalLoad);
 		$tipEnd = abs($pitch) > 1.02;
 		$springs = $this->suspension;

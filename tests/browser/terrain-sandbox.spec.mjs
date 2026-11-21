@@ -1231,7 +1231,7 @@ test('a rollover settles on the roof before the Testarossa recovers', async({pag
 	const ramp = fixture({history:[[{type:'raise',x:0,z:45,radius:16,amount:30}]],revision:1});
 	Object.assign(ramp.landscape.recipe, {worldSize:512,spacing:1});
 	ramp.settings.waterLevel = -100;
-	ramp.camera = {position:[0,30,-40],yaw:Math.PI,pitch:-.4};
+	ramp.camera = {position:[0,30,-25],yaw:Math.PI,pitch:-.4};
 	await load(page,ramp);
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');

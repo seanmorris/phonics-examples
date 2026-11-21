@@ -241,6 +241,11 @@ input($bay, ['values' => ['waterLevel' => 10, 'waterChoppiness' => 0]]);
 for($i = 0; $i < 240; $i++) $bay->step(1 / 60);
 expect($bay->mode === 'craft' && $bay->craft->state()['y'] > $launch['y'] + 4,
 	'The boarded jet ski floats up when the lake rises');
+$verticalSpeed = $bay->craft->state()['velocity'][1];
+input($bay, ['values' => ['waterLevel' => 5]]);
+for($i = 0; $i < 15; $i++) $bay->step(1 / 60);
+expect(abs($bay->craft->state()['velocity'][1] - $verticalSpeed + .25 * Session::DRIVING_GRAVITY) < 1e-8,
+	'The boarded jet ski falls at the driving gravity when the water drops away');
 $bay->close();
 
 function enterCar(Session $session): void
@@ -331,7 +336,7 @@ $frameError = 0.0; $landingPitch = null;
 for($i = 1; $i <= 360; $i++)
 {
 	$time = $i/60;
-	$y = max(.02, 16.02 - .5*9.81*$time**2);
+	$y = max(.02, 16.02 - .5*Session::DRIVING_GRAVITY*$time**2);
 	$next = ['y'=>$y,'z'=>-.3 + 2*$time,'motion'=>$y > .02 ? 'airborne' : 'driving'] + $pose;
 	$chase->advance($drop->camera, $pose, $next, $drop->landscape, 1/60);
 	foreach([.5,1.0] as $alpha)
@@ -415,7 +420,7 @@ foreach([false,true] as $fast)
 			$peakGap = max($peakGap, $pose['y']-$jump->landscape->height($pose['x'],$pose['z']));
 			if($flying && $older['motion'] === 'airborne')
 			{
-				$gravityError = max($gravityError,abs(3600*($pose['y']-2*$previous['y']+$older['y'])+9.81));
+				$gravityError = max($gravityError,abs(3600*($pose['y']-2*$previous['y']+$older['y'])+Session::DRIVING_GRAVITY));
 				$drift = max($drift,abs($pose['yaw']-$previous['yaw']),abs($pose['speed']-$previous['speed']),
 					abs($pose['z']-2*$previous['z']+$older['z']));
 			}

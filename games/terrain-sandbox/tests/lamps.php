@@ -296,7 +296,7 @@ namespace
 	$wreck = new Session(['worldSize' => 256, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5]);
 	$wreck->landscape->queue(['type' => 'raise', 'x' => 0, 'z' => 45, 'radius' => 16, 'amount' => 30]);
 	$wreck->landscape->commit();
-	$wreck->camera->position = [0, 30, -40]; $wreck->camera->yaw = M_PI;
+	$wreck->camera->position = [0, 30, -25]; $wreck->camera->yaw = M_PI;
 	input($wreck, ['actions' => ['car']]);
 	for($i = 0; $wreck->findingCarSite() && $i < 2000; $i++) input($wreck, []);
 

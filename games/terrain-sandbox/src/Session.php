@@ -20,6 +20,8 @@ use TerrainPhonics\Watercraft;
  */
 final class Session
 {
+	/** Downward acceleration in m/s² for driving and riding. */
+	public const DRIVING_GRAVITY = 12.0;
 	/** Current authoritative landscape; replaced by generation or loading. */
 	public Landscape $landscape;
 	/** Shared render and physics environment. */
@@ -185,7 +187,7 @@ final class Session
 		$this->settings['waterLevel'] = $this->water->level();
 		$this->atmosphere = new Atmosphere;
 		$this->camera = new Camera;
-		$this->craft = new Watercraft;
+		$this->craft = new Watercraft(gravity: self::DRIVING_GRAVITY);
 		$this->car = new Car;
 		$this->lamps = new CarLamps;
 		$this->jet = new Jet;

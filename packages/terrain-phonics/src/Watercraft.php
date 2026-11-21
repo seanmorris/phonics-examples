@@ -9,6 +9,9 @@ final class Watercraft
 	private const WIDTH = .65, LENGTH = 1.25, KEEL = .32;
 	/** Full-throttle acceleration in m/s² with the jet intake in the water. */
 	private const FORWARD_THRUST = 16.0, REVERSE_THRUST = 8.0;
+	/** Gravity at which the hull probe forces were tuned, in m/s². */
+	private const REFERENCE_GRAVITY = 9.81;
+	private float $buoyancyTrim;
 	/** World position, heading, hull angles, and their velocities. */
 	private float $x, $y, $z, $yaw;
 	private float $pitch = 0, $roll = 0, $vx = 0, $vy = 0, $vz = 0;
@@ -22,13 +25,17 @@ final class Watercraft
 	 * @param float $z World Z in metres.
 	 * @param float $yaw Heading in radians; zero faces positive Z.
 	 * @param float $y Hull centre height in metres.
+	 * @param float $gravity Downward acceleration in m/s². Buoyancy compensates for the hull's weight at rest.
 	 * @return void Creates a craft with zero linear and angular velocity.
 	 */
-	public function __construct(float $x = 0, float $z = 0, float $yaw = 0, float $y = .232)
+	public function __construct(float $x = 0, float $z = 0, float $yaw = 0, float $y = .232,
+		private float $gravity = self::REFERENCE_GRAVITY)
 	{
 		foreach([$x,$y,$z,$yaw] as $value)
 		if(!is_finite($value)) throw new \InvalidArgumentException('Craft pose must be finite');
+		if(!is_finite($gravity) || $gravity <= 0) throw new \InvalidArgumentException('Craft gravity must be finite and positive');
 
+		$this->buoyancyTrim = $gravity - self::REFERENCE_GRAVITY;
 		$this->x = $x;
 		$this->y = $y;
 		$this->z = $z;
@@ -136,15 +143,16 @@ final class Watercraft
 			$probeY = $this->y + sin($this->pitch) * $pz - sin($this->roll) * $px;
 			$submerged = max(0.0, min(1.0, ($sample['height'] - $probeY + .5) / .5));
 			$relative = $this->vy + $this->pitchVelocity * $pz - $this->rollVelocity * $px - $sample['velocity'];
-			$force = max(0.0, min(50.0, 45 * ($sample['height'] + .45 + .1 * $planing - $probeY) - 9 * $relative));
-			$force *= min(1.0, $submerged * 2);
+			// Balance the extra weight at rest while retaining the hull's response to a passing crest.
+			$force = min(50.0, 45 * ($sample['height'] + .45 + .1 * $planing - $probeY) - 9 * $relative);
+			$force = max(0.0, $force + $this->buoyancyTrim) * min(1.0, $submerged * 2);
 			$lift += $force / 4;
 			$pitchForce += $force * $pz / 4;
 			$rollForce -= $force * $px / 4;
 			$wet += $submerged / 4;
 		}
 
-		$this->vy += ($lift - 9.81) * $dt;
+		$this->vy += ($lift - $this->gravity) * $dt;
 		$this->y += $this->vy * $dt;
 		$this->pitchVelocity += ($pitchForce * .8 - $this->pitch * 2 + .4 * $planing * $throttle) * $dt;
 		$this->rollVelocity += ($rollForce * 1.5 - $this->roll * 3 - $steer * abs($forward) * .05) * $dt;
