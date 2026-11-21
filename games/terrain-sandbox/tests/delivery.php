@@ -10,6 +10,7 @@ use TerrainSandbox\DeliveryRun;
 use TerrainSandbox\DriveRegion;
 use TerrainSandbox\Session;
 use TerrainSandbox\PickupSearch;
+use TerrainSandbox\PickupCover;
 
 function check(bool $valid, string $message): void
 {
@@ -18,6 +19,9 @@ function check(bool $valid, string $message): void
 
 $s = new Session(['worldSize'=>16384,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-10,'surround'=>'none']);
 $s->camera->position = [0,25,0];
+for($i=0; $i<8; $i++)
+	$s->landscape->queue(['type'=>'raise','x'=>96*cos($i*M_PI/4),'z'=>96*sin($i*M_PI/4),'radius'=>84,'amount'=>7]);
+$s->landscape->commit();
 $action = static fn($name) => $s->input(['actions'=>[$name]],1/60,16/9);
 $action('delivery');
 while($s->findingCarSite()) $s->input([],1/60,16/9);
@@ -28,7 +32,12 @@ $next = static function(string $kind) use ($s): array {
 	check($site !== null && $site['kind'] === $kind && $site['color'] === DeliveryRun::COLORS[$kind], 'Correct leg and dye');
 	$car = $s->car->state();
 	check(hypot($site['x']-$car['x'],$site['z']-$car['z']) <= DeliveryRun::MAX_LEG, 'Site within driving radius');
-	if($kind === 'pickup') check(!DeliveryRun::visible($site,$s->camera,16/9), 'Entire plume outside view at spawn');
+	if($kind === 'pickup')
+	{
+		$ray = PickupCover::find($s->landscape,$car,$site);
+		iterator_count($ray);
+		check($ray->getReturn() !== null, 'Terrain conceals the crate at spawn');
+	}
 	check($site['y'] === $s->landscape->height($site['x'],$site['z']) && $site['y'] > $s->water->level(), 'Site on dry ground');
 	return $site;
 };
@@ -45,7 +54,7 @@ $action('pause');
 $from = $to = $s->car->state();
 $from['x'] = $pickup['x']-12; $to['x'] = $pickup['x']+12;
 $from['z'] = $to['z'] = $pickup['z'];
-$cross = static fn($a,$b) => $s->delivery->step($s->landscape,-10,$s->camera,16/9,$a,$b);
+$cross = static fn($a,$b) => $s->delivery->step($s->landscape,-10,$a,$b);
 check($cross(['y'=>20]+$from,['y'=>20]+$to) === null, 'Passing overhead leaves the box');
 check($cross($from,['recoveries'=>1]+$to) === null, 'Vehicle recovery cannot collect a box');
 check($cross($from,$to) !== null && $s->delivery->carrying && $s->navigationTarget() === $depot && $s->delivery->sites() === [$depot], 'Collecting removes only the box and points straight back to the depot');
@@ -171,7 +180,7 @@ $valley = new Recipe(['wallHeight'=>0.] + $canyon->landscape->recipe());
 $planner = new PickupSearch($canyon->landscape,$canyon->water->level(),$car);
 foreach([0.,.5,1.] as $phase)
 {
-	$search = $planner->find($car,$canyon->camera,16/9,$phase);
+	$search = $planner->find($car,$phase);
 	foreach($search as $_) {}
 	$box = $search->getReturn();
 	check($box !== null && hypot($box['x']-$car['x'],$box['z']-$car['z'])>3800, 'Distant canyon-floor pickup');
@@ -190,7 +199,7 @@ for($x=0; $x<=3000 && $rim === null; $x+=96)
 	if($y > $valley->height($x,0)+500.) $rim = ['x'=>(float)$x,'z'=>0.,'y'=>$y];
 }
 check($rim !== null, 'Fixture has a high natural plateau');
-$search = (new PickupSearch($canyon->landscape,$canyon->water->level(),$rim))->find($rim,$canyon->camera,16/9,0.);
+$search = (new PickupSearch($canyon->landscape,$canyon->water->level(),$rim))->find($rim,0.);
 foreach($search as $_) {}
 check($search->getReturn() === null, 'Starting on the plateau never authorizes a box on its top');
 $canyon->close();
@@ -220,7 +229,9 @@ foreach([false,true] as $alreadyDriving)
 	$site = $river->navigationTarget();
 	check($site !== null && $floor($depot['x'],$depot['z'],$depot['y']) && $floor($site['x'],$site['z'],$site['y']),
 		'River canyon starts a playable floor-to-floor run');
-	check(!DeliveryRun::visible($site,$river->camera,16/9), 'River pickup spawns outside the view');
+	$ray = PickupCover::find($river->landscape,$river->car->state(),$site);
+	iterator_count($ray);
+	check($ray->getReturn() !== null, 'River pickup is screened by terrain');
 	$river->close();
 }
 
@@ -229,10 +240,10 @@ $mountain->input(['actions'=>[['type'=>'generate','preset'=>'mountain','seed'=>'
 while($mountain->findingCarSite()) $mountain->input([],1/60,16/9);
 $start = $mountain->car->state();
 $start['y'] = $mountain->landscape->height($start['x'],$start['z']);
-$find = (new PickupSearch($mountain->landscape,$mountain->water->level(),$start))->find($start,$mountain->camera,16/9,0.);
+$find = (new PickupSearch($mountain->landscape,$mountain->water->level(),$start))->find($start,0.);
 foreach($find as $_) {}
 $box = $find->getReturn();
-check($box !== null && !DeliveryRun::visible($box,$mountain->camera,16/9)
+check($box !== null && PickupCover::blocks($mountain->landscape,$start,$box,$box['cover'])
 	&& hypot($box['x']-$start['x'],$box['z']-$start['z'])>500., 'Mountain roads continue inside the innermost distance band');
 $mountain->close();
 
@@ -241,43 +252,41 @@ $island = new Landscape(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0
 $island->queue(['type'=>'road','points'=>[[-58,3,0],[58,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
 $island->commit();
 $start = ['x'=>0.,'z'=>0.,'y'=>3.,'motion'=>'driving','speed'=>0.,'recoveries'=>0];
-$camera = new TerrainPhonics\Camera;
-$camera->position = [0.,40.,300.]; $camera->yaw = 0.; $camera->pitch = -.12;
 $run = new DeliveryRun;
 for($i=0; $i<5000; $i++)
 {
-	$message = $run->step($island,1.,$camera,1.6,$start,$start);
+	$message = $run->step($island,1.,$start,$start);
 	if($message !== null) break;
 }
-check($message !== null && $run->target() === null, 'A fully visible island waits for the view to change');
-$camera->pitch = 1.35;
-check($run->step($island,1.,$camera,1.6,$start,$start) === 'Searching for a reachable pickup…',
-	'A parked camera change clears the exhausted-search message immediately');
-check($run->searchPending(), 'A view retry schedules route work');
+check(str_contains($message ?? '', 'behind terrain') && $run->target() === null, 'The open island has no concealed pickup');
+$turned = ['yaw'=>M_PI]+$start;
+check($run->step($island,1.,$start,$turned) === null && !$run->searchPending(), 'Turning in place cannot create cover');
+// A short crest is traversable on the island and rises above the box.
+$island->queue(['type'=>'road','points'=>[[0,3,0],[24,7,0],[48,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
+$island->commit();
+$run->refit($island,1.);
+$high = ['y'=>30.]+$start;
+do {
+	$message = $run->step($island,1.,$high,$high);
+	while($run->advanceSearch(5.)) {}
+} while($message === null && $run->searchPending());
+check($run->target() === null, 'From above the crest the box is exposed');
+check($run->step($island,1.,$high,$start) === 'Searching for a reachable pickup…', 'Landing retries the search');
 while($run->advanceSearch(5.)) {}
-check($run->target() === null, 'Completing a search between frames leaves the displayed objective alone');
-$camera->pitch = -.12;
-$run->step($island,1.,$camera,1.6,$start,$start);
-check($run->target() === null && !$run->searchPending(), 'Turning toward the box before publication rejects it');
-$camera->pitch = 1.35;
+check($run->target() === null, 'Between-frame work leaves publication to the simulation');
+$run->step($island,1.,$start,$high);
+check($run->target() === null && !$run->searchPending(), 'Clearing the crest before publication rejects stale cover');
 for($i=0; $i<5000 && $run->target() === null; $i++)
 {
-	$run->step($island,1.,$camera,1.6,$start,$start);
+	$run->step($island,1.,$start,$start);
 	while($run->advanceSearch(5.)) {}
 }
 $box = $run->target();
-check($box !== null && $box['y']>1. && abs($box['x'])>=32 && abs($box['z'])<6,
-	'Tilting the camera while parked finds the unseen drive along the small island');
+check($box !== null && $box['x']>=32 && abs($box['z'])<6, 'The local search finds the screened end of the island');
 check(!$run->searchPending() && !$run->advanceSearch(5.), 'A published pickup needs no timer work');
 $run->refit($island,1.);
-$camera->pitch = -.12;
-do {
-	$message = $run->step($island,1.,$camera,1.6,$start,$start);
-} while($message === null && $run->searchPending());
-$camera->pitch = 1.35;
-$run->step($island,1.,$camera,1.6,$start,$start);
-check($run->searchPending(), 'The camera retry is pending when the water level changes');
-$run->refit($island,4.);
-check(!$run->advanceSearch(5.) && !$run->searchPending(), 'Flooding cancels the pending route before its next slice');
+$run->step($island,1.,$start,$start);
+$run->refit($island,12.);
+check(!$run->advanceSearch(5.) && !$run->searchPending(), 'Flooding cancels outstanding search work');
 $island->close();
 echo "Delivery legs, crossings and shared checkpoint navigation passed.\n";

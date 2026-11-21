@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once (getenv('PHONICS_TERRAIN_ROOT') ?: dirname(__DIR__,3).'/packages/terrain-phonics').'/autoload.php';
 require_once dirname(__DIR__).'/autoload.php';
 
-use TerrainPhonics\Camera;
+use TerrainSandbox\PickupCover;
 use TerrainPhonics\Landscape;
 use TerrainSandbox\DeliveryRun;
 use TerrainSandbox\DriveRegion;
@@ -16,35 +16,36 @@ function check(bool $ok, string $message): void
 	if(!$ok) throw new RuntimeException($message);
 }
 
-function search(PickupSearch $planner, array $start, Camera $camera, float $phase = 0.): array
+function search(PickupSearch $planner, array $start, float $phase = 0.): array
 {
-	$find = $planner->find($start,$camera,16/9,$phase);
+	$find = $planner->find($start,$phase);
 	$work = iterator_count($find);
 	return [$find->getReturn(),$work];
 }
 
 $flat = ['worldSize'=>16384,'spacing'=>1,'heightScale'=>0.,'detailAmplitude'=>0.];
 $origin = ['x'=>0.,'z'=>0.,'y'=>0.];
-$camera = new Camera;
-$camera->position = [0.,3.,0.];
+
 
 $land = new Landscape($flat);
-$start = fn() => search(new PickupSearch($land,-2.,$origin),$origin,$camera);
+$start = fn() => search(new PickupSearch($land,-2.,$origin),$origin);
 $plain = $start();
 $land->queue(['type'=>'material','x'=>0,'z'=>0,'radius'=>6000,'material'=>'grass']);
 $land->commit();
-check($plain[0] !== null && $plain === $start(), 'Painting flat ground keeps the same pickup and the same search work');
+check($plain === [null,0] && $plain === $start(), 'Paint cannot hide a package on flat ground or trigger extra route work');
 $land->undo();
 check($plain === $start(), 'An undone edit leaves the flat-ground shortcut available');
 
+// A low, driveable ridge around the depot offers real cover in all directions.
+for($i=0; $i<8; $i++)
+	$land->queue(['type'=>'raise','x'=>96*cos($i*M_PI/4),'z'=>96*sin($i*M_PI/4),'radius'=>84,'amount'=>7]);
+$land->commit();
 $planner = new PickupSearch($land,-2.,$origin);
-$above = new Camera;
-$above->position = [0.,5.,0.]; $above->pitch = 1.4;
 $sites = []; $quadrants = [];
 for($i=0; $i<8; $i++)
 {
-	[$site] = search($planner,$origin,$above,0.); // Even the same starting phase must distribute published boxes.
-	check($site !== null && !DeliveryRun::visible($site,$above,16/9), 'Every delivery has a hidden pickup');
+	[$site] = search($planner,$origin,0.); // Even the same starting phase must distribute published boxes.
+	check($site !== null && PickupCover::blocks($land,$origin,$site,$site['cover']), 'Every delivery has a terrain-hidden pickup');
 	$angle = atan2($site['x'],$site['z']);
 	if($sites) check(cos($angle-$priorAngle) <= .5+1e-9, 'Consecutive open-country legs turn at least sixty degrees');
 	foreach(array_slice($sites,-3) as $old)
@@ -58,10 +59,28 @@ for($i=0; $i<8; $i++)
 check(count($quadrants)===4, 'A sequence of deliveries explores all four quadrants');
 $land->queue(['type'=>'material','x'=>0,'z'=>0,'radius'=>300,'material'=>'grass']);
 $land->commit();
-[$refittedSite] = search($planner->refitted($land,-2.,$origin),$origin,$above,0.);
+[$refittedSite] = search($planner->refitted($land,-2.,$origin),$origin,0.);
 foreach(array_slice($sites,-3) as $old)
 	check($refittedSite !== null && hypot($refittedSite['x']-$old['x'],$refittedSite['z']-$old['z']) >= .30*DeliveryRun::MAX_LEG,
 		'Refitting the route after a terrain edit preserves the spacing from published boxes');
+$land->close();
+
+// A low, narrow berm falls between the broad sight probes. Smoke can clear it while the crate is hidden.
+$land = new Landscape($flat);
+$land->queue(['type'=>'raise','x'=>0,'z'=>121,'radius'=>8,'amount'=>5]);
+$land->commit();
+$behind = ['x'=>0.,'y'=>0.,'z'=>1024.];
+$clear = ['x'=>0.,'y'=>0.,'z'=>-1024.];
+$testCover = static function(array $car,array $site) use ($land): ?array {
+	$ray = PickupCover::find($land,$car,$site);
+	iterator_count($ray);
+	return $ray->getReturn();
+};
+$ridge = $testCover($origin,$behind);
+check($ridge !== null && PickupCover::blocks($land,$origin,$behind,$ridge), 'A thin intervening berm hides the crate lid');
+check($testCover($origin,$clear) === null && $testCover(['y'=>60.]+$origin,$behind) === null,
+	'An open rear sight line and a view from above the berm both expose the crate');
+check(!PickupCover::blocks($land,['z'=>140.]+$origin,$behind,$ridge), 'Passing the berm invalidates the saved sight lines');
 $land->close();
 
 // A genuinely undulating surface with a small global relief can also certify a link without dense sampling.
@@ -74,40 +93,44 @@ $gentle->close();
 // Most of the map is dry mainland. Only the inside of this flooded ring connects to the depot.
 $moat = ['type'=>'road','points'=>[[-64,-10,-64],[64,-10,-64],[64,-10,64],[-64,-10,64],[-64,-10,-64]],
 	'width'=>12,'shoulder'=>1,'crown'=>0];
-$land = new Landscape($flat); $land->queue($moat); $land->commit();
+$land = new Landscape($flat);
+$land->queue(['type'=>'road','points'=>[[-48,0,0],[-24,4,0],[0,0,0],[24,4,0],[48,0,0]],
+	'width'=>10,'shoulder'=>2,'crown'=>0]);
+$land->queue($moat); $land->commit();
 $planner = new PickupSearch($land,-5.,$origin);
-[$box,$work] = search($planner,$origin,$camera);
-check($box !== null && max(abs($box['x']),abs($box['z']))<=64 && $work<2500,
-	'The search exhausts the small depot component before repeatedly exploring the mainland');
+[$box,$work] = search($planner,$origin);
+check($box !== null && max(abs($box['x']),abs($box['z']))<=64 && $work<3000,
+	'The search exhausts the small depot component and verifies cover behind its road crest');
 $planner->placed($box);
-[$next,$work] = search($planner,$origin,$camera,1.79);
+[$next,$work] = search($planner,$origin,1.79);
 check($next !== null && $work<350 && hypot($next['x']-$box['x'],$next['z']-$box['z'])>32,
 	'A second island leg reuses the depot component and picks a distinct destination');
 $land->close();
 
 $land = new Landscape(['worldSize'=>1536]+$flat); $land->queue($moat); $land->commit();
 $planner = new PickupSearch($land,-5.,$origin);
-[$box] = search($planner,['x'=>512.,'z'=>0.,'y'=>0.],$camera);
+[$box] = search($planner,['x'=>512.,'z'=>0.,'y'=>0.]);
 $regions = (new ReflectionProperty(PickupSearch::class,'regions'))->getValue($planner);
 check($box === null && count($regions)===2 && isset($regions[64],$regions[16]),
 	'A separated car checks each actual grid once when two caps round to 64 metres');
 $land->close();
 
-// The bend is on a 96 m row halfway between two 192 m rows. The road before it is visible.
+// The bend is between two coarse rows. A hill screens the distant island across the bend.
 $land = new Landscape($flat);
+$land->queue(['type'=>'raise','x'=>1750,'z'=>-720,'radius'=>600,'amount'=>200]);
 $land->queue(['type'=>'flatten','x'=>3600,'z'=>-1440,'height'=>4,'radius'=>1050]);
 foreach([[[0,4,0],[0,4,-1440]],[[0,4,-1440],[1440,4,-1440]],
 	[[1440,4,-1440],[2880,4,-1440]],[[2880,4,-1440],[3600,4,-1440]]] as $points)
 	$land->queue(['type'=>'road','points'=>$points,'width'=>22,'shoulder'=>3,'crown'=>0]);
 $land->commit();
 $start = ['x'=>0.,'z'=>0.,'y'=>4.];
-$camera->position = [0.,6.55,6.7]; $camera->pitch = -.20;
+
 $planner = new PickupSearch($land,1.,$start);
-[$box] = search($planner,$start,$camera);
-check($box !== null && $box['x']>2700 && !DeliveryRun::visible($box,$camera,16/9),
+[$box] = search($planner,$start);
+check($box !== null && $box['x']>2700 && PickupCover::blocks($land,$start,$box,$box['cover']),
 	'The finer grid follows the distant bend to a hidden box on the island');
 $planner->placed($box);
-[$second] = search($planner,$start,$camera);
+[$second] = search($planner,$start);
 check($second !== null && hypot($second['x']-$box['x'],$second['z']-$box['z'])>200,
 	'A single reachable heading offers separated boxes even when the preferred bearing is over water');
 $land->close();
@@ -125,7 +148,7 @@ foreach($region->nearby(384.) as $point) if($point !== null) $points[] = $point;
 check(count($points)>10 && $points[0] === $first && count(array_unique(array_column($points,0)))>1,
 	'The paused walk retains its first site and explores the island');
 check(iterator_to_array($region->nearby(384.),false) === $points,
-	'A camera retry enumerates only the discovered sites with no flood work');
+	'A repeated search enumerates only the discovered sites with no flood work');
 $land->close();
 
 $canyon = new Session;
@@ -145,8 +168,15 @@ $canyon->input(['actions'=>['delivery']],1/60,16/9);
 while($canyon->findingCarSite()) $canyon->input([],1/60,16/9);
 $start = $canyon->car->state();
 $start['y'] = $land->height($start['x'],$start['z']);
-[$box,$work] = search(new PickupSearch($land,$canyon->water->level(),$start),$start,$canyon->camera,13*M_PI/12);
-check($box !== null && hypot($box['x']-$start['x'],$box['z']-$start['z']) > 3800 && $work < 11000,
+[$box,$work] = search(new PickupSearch($land,$canyon->water->level(),$start),$start,13*M_PI/12);
+check($box !== null && hypot($box['x']-$start['x'],$box['z']-$start['z']) > 2000 && $work < 11000,
 	'A difficult first canyon bearing gives other distant routes a turn before exhausting its detours');
+// The original default canyon sent every phase down the same rear branch. This phase prefers the fork ahead.
+[$front] = search(new PickupSearch($land,$canyon->water->level(),$start),$start,5*M_PI/4);
+check($front !== null && ($front['x']-$start['x'])*sin($start['yaw'])+($front['z']-$start['z'])*cos($start['yaw']) > 500,
+	'A covered box can be more than half a kilometre ahead of the driver on the default canyon floor');
+$turned = ['yaw'=>$start['yaw']+M_PI]+$start;
+[$same] = search(new PickupSearch($land,$canyon->water->level(),$start),$turned,5*M_PI/4);
+check($same === $front && PickupCover::blocks($land,$turned,$front,$front['cover']), 'Reversing heading leaves a fixed-phase hidden site eligible');
 $canyon->close();
 echo "Delivery search, grade, cache and spacing checks passed.\n";

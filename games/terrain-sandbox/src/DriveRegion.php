@@ -169,7 +169,7 @@ final class DriveRegion
 		$this->expanded++;
 	}
 
-	/** Replay discovered sites for a new view, then resume the radius-limited walk where it last yielded. */
+	/** Replay discovered sites from the new driver position, then resume the radius-limited walk where it last yielded. */
 	public function nearby(float $radius): \Generator
 	{
 		$key = (string)$radius;

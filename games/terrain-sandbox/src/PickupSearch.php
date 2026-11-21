@@ -2,7 +2,6 @@
 declare(strict_types=1);
 namespace TerrainSandbox;
 
-use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 use TerrainPhonics\Recipe;
 
@@ -14,6 +13,7 @@ final class PickupSearch
 	private float $range;
 	private const GOLDEN_ANGLE = 2.39996323;
 	private array $recent = [];
+	private array $observer = [], $sightLines = [];
 
 	public function __construct(private Landscape $land, private float $water, private array $depot)
 	{
@@ -82,21 +82,36 @@ final class PickupSearch
 		return $gap*(.5+.5*$turn);
 	}
 
-	public function find(array $car, Camera $camera, float $aspect, float $phase): \Generator
+	public function find(array $car, float $phase): \Generator
 	{
 		if($this->floor !== null && !($this->floor)($this->depot['x'],$this->depot['z'],$this->depot['y'])) return null;
+		// Without elevation relief there is nowhere to hide the crate on any grid.
+		if($this->region(192.)->isLevel()) return null;
+		$observer = [$car['x'],$car['y'],$car['z']];
+		if($observer !== $this->observer)
+		{
+			$this->observer = $observer;
+			$this->sightLines = [];
+		}
 		// Different caps can round to the same terrain lattice. Check the car once per actual grid.
 		$access = []; $alternates = [];
 		$phase = $this->searchPhase($phase);
-		foreach([192.,96.] as $cap)
+		// Try both route resolutions in the chosen sector before accepting a long leg elsewhere.
+		// A coarse grid commonly misses the bend into a narrower branch of the canyon.
+		foreach([[true,[1.,.70,.45]], [true,[.25,.12]], [false,[1.,.72,.45,.25]]] as [$sector,$bands])
 		{
-			$region = $this->region($cap);
-			$key = spl_object_id($region);
-			if(isset($access[$key])) continue;
-			$access[$key] = yield from $region->containsPosition($car['x'],$car['z']);
-			if(!$access[$key]) continue;
-			$site = yield from $this->distantSite($region,$car,$camera,$aspect,$phase,$alternates);
-			if($site !== null) return $site;
+			$visited = [];
+			foreach([192.,96.] as $cap)
+			{
+				$region = $this->region($cap);
+				$key = spl_object_id($region);
+				if(isset($visited[$key])) continue;
+				$visited[$key] = true;
+				$access[$key] ??= yield from $region->containsPosition($car['x'],$car['z']);
+				if(!$access[$key]) continue;
+				$site = yield from $this->distantSite($region,$car,$phase,$alternates,$sector,$bands);
+				if($site !== null) return $site;
+			}
 		}
 		foreach([[96.,1200.],[16.,384.]] as [$cap,$radius])
 		{
@@ -105,14 +120,14 @@ final class PickupSearch
 			$access[$key] ??= yield from $region->containsPosition($car['x'],$car['z']);
 			if(!$access[$key]) continue;
 			$radius = min($radius,$this->range);
-			$site = yield from $this->choosePoint($region->nearby($radius),$radius,$car,$camera,$aspect,$alternates);
+			$site = yield from $this->choosePoint($region->nearby($radius),$radius,$car,$alternates);
 			if($site !== null) return $site;
 		}
 		// A thin, winding road can fall between radial probes. Its already verified bends are pickup sites too.
 		foreach($this->regions as $region)
 		{
 			if(!$access[spl_object_id($region)]) continue;
-			$site = yield from $this->choosePoint($region->remainingPoints(),$this->range,$car,$camera,$aspect,$alternates);
+			$site = yield from $this->choosePoint($region->remainingPoints(),$this->range,$car,$alternates);
 			if($site !== null) return $site;
 		}
 		// A narrow valley may offer only one heading. Take the best separated reachable alternative.
@@ -128,37 +143,40 @@ final class PickupSearch
 		return $this->regions[$key] ??= new DriveRegion($this->land,$this->water,$this->depot,$cap);
 	}
 
-	private function distantSite(DriveRegion $region, array $car, Camera $camera, float $aspect, float $phase, array &$alternates): \Generator
+	private function distantSite(DriveRegion $region, array $car, float $phase, array &$alternates, bool $sector, array $bands): \Generator
 	{
 		if(!(yield from $region->hasDestinations())) return null;
 		$attempt = 0;
 		$seen = [];
-		foreach([1.,.72,.45,.25] as $fraction)
+		foreach($bands as $fraction)
 		{
 			$open = []; $deferred = [];
-			for($i=0; $i<($fraction === 1. ? 48 : 24); $i++)
+			$count = $sector ? 16 : ($fraction === 1. ? 48 : 24);
+			for($i=0; $i<$count; $i++)
 			{
 				yield;
 				$attempt++;
-				$angle = $phase+self::GOLDEN_ANGLE*$attempt;
+				$angle = $sector
+					? $phase+self::GOLDEN_ANGLE+1.5*(2*fmod($i*.61803399+.5,1.)-1.)
+					: $phase+self::GOLDEN_ANGLE*$attempt;
 				$distance = $this->range*$fraction*(.70+.30*fmod($attempt*.75487767,1.));
 				$id = $region->nearest($car['x']+sin($angle)*$distance,$car['z']+cos($angle)*$distance,true);
 				if($id === null || isset($seen[$id])) continue;
 				$seen[$id] = true;
 				$point = $region->point($id);
 				if(abs($point[2]-$this->depot['y'])>min(140.,max(24.,$distance*.12))) continue;
-				$site = $this->site($point,$car,$camera,$aspect);
+				$site = yield from $this->site($point,$car);
 				if($site === null) continue;
 				$score = $this->spread($site);
 				if($score < 1.)
 				{
-					$alternates[] = [$score,$site,$region,$id];
+					if(!$sector) $alternates[] = [$score,$site,$region,$id];
 					continue;
 				}
-				if($region->isLevel() || (yield from $this->crossesObstacle($site)))
+				if($sector || (yield from $this->crossesObstacle($site)))
 				{
 					if(yield from $region->connect($id,quick:true)) return $site;
-					$deferred[$id] = $site;
+					if(!$sector) $deferred[$id] = $site;
 					continue;
 				}
 				$open[$id] = $site;
@@ -173,19 +191,24 @@ final class PickupSearch
 		return null;
 	}
 
-	private function site(array $point, array $car, Camera $camera, float $aspect): ?array
+	private function site(array $point, array $car): \Generator
 	{
 		[$x,$z,$y] = $point;
 		$distance = hypot($x-$car['x'],$z-$car['z']);
 		if($distance<12 || $distance>DeliveryRun::MAX_LEG || hypot($x-$this->depot['x'],$z-$this->depot['z'])<12
 			|| $y<$this->water+1) return null;
 		$site = ['x'=>$x,'z'=>$z,'y'=>$y,'kind'=>'pickup','color'=>DeliveryRun::COLORS['pickup']];
-		if(DeliveryRun::visible($site,$camera,$aspect) || ($this->floor !== null && !($this->floor)($x,$z,$y))) return null;
+		if($this->floor !== null && !($this->floor)($x,$z,$y)) return null;
 		$s = $this->land->sample($x,$z);
-		return hypot($s['dx'],$s['dz']) <= .25 ? $site : null;
+		if(hypot($s['dx'],$s['dz']) > .25) return null;
+		$key = "$x:$z";
+		if(!array_key_exists($key,$this->sightLines))
+			$this->sightLines[$key] = yield from PickupCover::find($this->land,$car,$site);
+		$cover = $this->sightLines[$key];
+		return $cover === null ? null : $site+['cover'=>$cover];
 	}
 
-	private function choosePoint(\Generator $points, float $radius, array $car, Camera $camera, float $aspect, array &$alternates): \Generator
+	private function choosePoint(\Generator $points, float $radius, array $car, array &$alternates): \Generator
 	{
 		$alternate = null;
 		$best = null;
@@ -196,7 +219,7 @@ final class PickupSearch
 			if($point === null) continue;
 			$distance = hypot($point[0]-$car['x'],$point[1]-$car['z']);
 			if($distance <= $bestDistance) continue;
-			$site = $this->site($point,$car,$camera,$aspect);
+			$site = yield from $this->site($point,$car);
 			if($site === null) continue;
 			$score = $this->spread($site);
 			if($score < 1.)

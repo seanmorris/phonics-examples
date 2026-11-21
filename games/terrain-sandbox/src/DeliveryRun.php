@@ -5,7 +5,7 @@ namespace TerrainSandbox;
 use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
 
-/** Out-and-back deliveries from a single depot. Each new box appears outside the driver's view. */
+/** Out-and-back deliveries from a single depot. Terrain screens each new box from the driver. */
 final class DeliveryRun
 {
 	public const HEIGHT = 108.0;
@@ -33,7 +33,7 @@ final class DeliveryRun
 
 	public function searchPending(): bool { return $this->search !== null; }
 
-	/** Run a bounded slice. Only the simulation may publish the result against the current view and car pose. */
+	/** Run a bounded slice. Only the simulation may publish the result against the current car position. */
 	public function advanceSearch(float $budgetMs): bool
 	{
 		if($this->search === null) return false;
@@ -61,14 +61,15 @@ final class DeliveryRun
 		return $this->carrying ? 'Return to the red depot.' : 'Finding a package site…';
 	}
 
-	public static function visible(array $site, Camera $camera, float $aspect): bool
+	/** Frustum culling for rendering the box and its smoke column. */
+	public static function beaconInView(array $site, Camera $camera, float $aspect): bool
 	{
 		$r = self::RADIUS + ($site['kind'] === 'drop' ? 4. : 0.);
 		return Camera::inView($camera->clipPlanes(max(1,(int)ceil(4096*$aspect)),4096), $camera->position,
 			['x'=>$site['x']-$r,'z'=>$site['z']-$r,'size'=>2*$r], $site['y']-2, $site['y']+self::HEIGHT+$r);
 	}
 
-	public function step(Landscape $land, float $water, Camera $camera, float $aspect, array $from, array $to): ?string
+	public function step(Landscape $land, float $water, array $from, array $to): ?string
 	{
 		if($this->depot === null)
 		{
@@ -86,25 +87,24 @@ final class DeliveryRun
 				$retry = $this->waitingAt !== null;
 				if($retry)
 				{
-					[$x,$z,$yaw,$pitch,$oldAspect] = $this->waitingAt;
-					if(hypot($to['x']-$x,$to['z']-$z) < 4 && cos($camera->yaw-$yaw) > .999
-						&& abs($camera->pitch-$pitch)<.04 && $oldAspect === $aspect) return null;
+					[$x,$y,$z] = $this->waitingAt;
+					if(hypot($to['x']-$x,$to['z']-$z) < 4 && abs($to['y']-$y)<1) return null;
 				}
-				// Retry when the view changes during a search, even if the driver is parked by the time it finishes.
-				$this->waitingAt = [$to['x'],$to['z'],$camera->yaw,$camera->pitch,$aspect];
+				$this->waitingAt = [$to['x'],$to['y'],$to['z']];
 				$this->planner ??= new PickupSearch($land,$water,$this->depot);
-				$this->search = $this->planner->find($to,$camera,$aspect,$this->phase);
+				$this->search = $this->planner->find($to,$this->phase);
 				if($retry) return 'Searching for a reachable pickup…';
 			}
 			if($this->advanceSearch(2.5)) return null;
 			$site = $this->search->getReturn();
 			$this->search = null;
 			$this->phase += 1.79;
-			if($site === null) return 'No hidden pickup found on reachable ground. Turn the camera or drive on to search again.';
+			if($site === null) return 'No reachable pickup behind terrain here. Drive on or reshape the terrain to search again.';
 			$this->waitingAt = null;
-			// A driver can move or look around while the route is being sampled.
-			if(self::visible($site,$camera,$aspect) || hypot($site['x']-$to['x'],$site['z']-$to['z']) > self::MAX_LEG)
+			// The driver may have crested the ridge while the route was being checked.
+			if(!PickupCover::blocks($land,$to,$site,$site['cover']) || hypot($site['x']-$to['x'],$site['z']-$to['z']) > self::MAX_LEG)
 				return null;
+			unset($site['cover']);
 			$this->planner->placed($site);
 			$this->pickup = $site;
 			return 'Drive into the box under the lime smoke.';

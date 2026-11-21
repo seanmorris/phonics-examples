@@ -336,7 +336,7 @@ final class Session
 					$this->dirty = true;
 				if($this->delivery !== null && $this->carSearch === null)
 				{
-					$event = $this->delivery->step($this->landscape,$this->water->level(),$this->camera,$this->aspect,$before,$after);
+					$event = $this->delivery->step($this->landscape,$this->water->level(),$before,$after);
 					if($event !== null) { $this->message = $event; $this->dirty = true; }
 				}
 				if($this->lamps->step($seconds, $after['braking'], $after['reversing'], $this->headlightsLit()))

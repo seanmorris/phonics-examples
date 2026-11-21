@@ -238,7 +238,7 @@ $engine->start(
 		$sites = $session->delivery?->sites() ?? [];
 		$visibleSites = [];
 		foreach($sites as $site)
-			if(DeliveryRun::visible($site,$viewCamera,$width/$height)) $visibleSites[] = $site;
+			if(DeliveryRun::beaconInView($site,$viewCamera,$width/$height)) $visibleSites[] = $site;
 		if(count($visibleSites) === 2)
 		{
 			[$a,$b] = $visibleSites;

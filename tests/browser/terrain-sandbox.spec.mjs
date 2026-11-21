@@ -820,7 +820,7 @@ test('the overhead checkpoint arrow points down for forward and enlarges its nea
 	expect(ahead.top).toBeGreaterThan(1.8*behind.bottom);
 });
 
-test('a package run marks its unseen pickup and reveals the smoke when the driver looks around', async({page}) => {
+test('a package run marks its terrain-hidden pickup and reveals smoke above the ridge', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width:760,height:460});
@@ -839,7 +839,8 @@ test('a package run marks its unseen pickup and reveals the smoke when the drive
 	await boot(page);
 	// A short dry causeway makes the two possible sight lines pass clear of the red depot smoke.
 	// The distant search bands all land in water. The local search must follow the causeway.
-	const road = {type:'road',points:[[-192,5,0],[192,5,0]],width:22,shoulder:2,crown:0};
+	const road = {type:'road',points:[[-192,5,0],[-96,5,0],[-64,11,0],[0,5,0],[64,11,0],[96,5,0],[192,5,0]],width:22,shoulder:2,crown:0};
+	// Both exits cross a gentle crest above the crate. Its smoke clears the crest.
 	const dry = fixture({history:[[road]],revision:1});
 	dry.landscape.recipe.worldSize = 8192;
 	dry.settings.waterLevel = 1;

@@ -83,11 +83,11 @@ Press **L**, press **X** on a gamepad, or choose **Car headlights** in the panel
 
 Select **Explore → Package run** to take the car. The red depot stays where the run starts. If you start on a canyon mesa, the game boards the car on a nearby dry valley floor first. Follow the lime arrow to a box beneath yellow-green smoke and drive through it to collect it. The arrow turns red for the return trip. Drive between the four depot posts to deliver the box and start the next pickup. You can also jump over the box or depot and score up to 8 metres above the site's ground level. The minimap keeps the depot marked with a red ring throughout the run and shows the current box as a lime square. Markers at its edge show which way to drive to a site beyond the map.
 
-On a full-size landscape the search starts 2.4–3.5 miles from the car, outside your view. Each delivery favors a new direction from the depot and some distance from the last three boxes. In a canyon the box goes on the valley floor, with preference for a drive around high ground. On an island or in a narrow valley you can get another box along the same road.
+On a full-size landscape the search starts 2.4–3.5 miles from the car. Ground between the car and the box must hide the crate. Smoke can still rise above a low ridge. Each delivery favors a new direction from the depot and some distance from the last three boxes. A shorter leg can take you into a different canyon branch. In a canyon the box goes on the valley floor, with preference for a drive around high ground. On an island or in a narrow valley you can get another box along the same road.
 
-Pickups need a dry, car-width route to the depot. The search tries 192 m links, then retries at 96 m to catch distant bends and at a finer scale near the depot. Where the height bounds establish a dry, gentle crossing, the search can skip detailed sampling. Elsewhere it checks both tire tracks and the centre every 2 m. Turning the camera reuses the ground already explored. Editing the terrain or changing the water level triggers a fresh route check.
+Pickups need a dry, car-width route to the depot. The search tries 192 m links, then retries at 96 m to catch distant bends and at a finer scale near the depot. Where the height bounds establish a dry, gentle crossing, the search can skip detailed sampling. Elsewhere it checks both tire tracks and the centre every 2 m. If there is no reachable cover, drive to another position to search again. Editing the terrain or changing the water level triggers a fresh route check.
 
-The smoke rises about 110 metres and terrain can hide it. The run keeps a delivery count until you choose **End package run** or leave the car. Ending the run restores checkpoint navigation on a course.
+The smoke rises about 110 metres. The run keeps a delivery count until you choose **End package run** or leave the car. Ending the run restores checkpoint navigation on a course.
 
 ## Ride the water
 
