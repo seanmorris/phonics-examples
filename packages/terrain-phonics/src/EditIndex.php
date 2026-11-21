@@ -37,6 +37,8 @@ final class EditIndex
 		}
 	}
 
+	public function isEmpty(): bool { return !$this->root; }
+
 	/** Return only overlaps in the requested tile. */
 	public function intersect(array $tile): array
 	{

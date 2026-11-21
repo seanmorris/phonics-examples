@@ -31,6 +31,7 @@ final class Landscape implements TerrainSurface
 	private array $stencils = [];
 	/** Edit transaction history, current applied prefix, and staged transaction. */
 	private array $history = [], $operations = [], $pending = [];
+	private ?EditIndex $heightEdits = null;
 	private int $cursor = 0, $version = 0;
 	/** Residency leases refer to tile keys and survive geometry revisions. */
 	private array $leases = [];
@@ -100,6 +101,22 @@ final class Landscape implements TerrainSurface
 				$boxes[] = [max(-$half, $x-$pad), max(-$half, $z-$pad), min($half, $r+$pad), min($half, $b+$pad)];
 		}
 		return new EditIndex($extent, $boxes);
+	}
+
+	/** Conservative footprints of active edits that can change elevation, shared until the next commit. */
+	public function heightEditIndex(): EditIndex
+	{
+		if($this->heightEdits !== null) return $this->heightEdits;
+		$pad = 2*$this->spacing;
+		$boxes = [];
+		foreach($this->operations as $op)
+		{
+			if($op['type'] === 'material' || ($op['amount'] ?? 1.) == 0.) continue;
+			// Use the precomputed road bounds. This lookup costs at most one rectangle per edit.
+			[$x,$z,$right,$back] = Edits::bounds($op);
+			$boxes[] = [$x-$pad,$z-$pad,$right+$pad,$back+$pad];
+		}
+		return $this->heightEdits = new EditIndex($this->parameters['worldSize'],$boxes);
 	}
 
 	/**
@@ -639,6 +656,7 @@ final class Landscape implements TerrainSurface
 	 */
 	public function close(): void
 	{
+		$this->heightEdits = null;
 		$this->tiles = $this->leases = $this->history = $this->operations = $this->pending = $this->memo = [];
 		$this->blockBounds = $this->meshNodes = $this->cellRows = $this->queueX = $this->queueZ = [];
 		$this->queueNext = $this->queueCount = 0;
@@ -1293,6 +1311,7 @@ final class Landscape implements TerrainSurface
 		$this->recentKey = -1;
 		$this->recentTile = null;
 		$this->operations = $operations;
+		$this->heightEdits = null;
 		$this->range = $range;
 		$this->version = $version;
 		$this->tiles = $tiles;

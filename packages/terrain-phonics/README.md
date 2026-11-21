@@ -42,6 +42,10 @@ committed revision. A body that only has to stay above the ground can compare it
 and take an exact `height()` sample only when that test fails. The sandbox's jet does this with blocks from 2 to
 256 cells, so it generates no nodes while it cruises.
 
+`heightEditIndex()` returns a shared index for the current revision. Use `isEmpty()` to check whether any active
+edit can change elevation, or `intersect([$minX, $minZ, $maxX, $maxZ])` to check one area. The bounds include
+the interpolation border. Each road uses its enclosing rectangle, and material paint contributes no footprint.
+
 ## Edit and preserve a landscape
 
 ```php

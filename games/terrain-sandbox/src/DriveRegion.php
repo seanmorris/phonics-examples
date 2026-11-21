@@ -9,24 +9,33 @@ use TerrainPhonics\Landscape;
 final class DriveRegion
 {
 	private const GRADE = .38;
-	// Use the footprint at driving resolution only where the broad samples approach a driving limit.
-	private const REFINE_GRADE = .16;
-	private const COARSE_STEP = 64., SCREEN_STEP = 32., FINE_STEP = 2.;
+	private const COARSE_STEP = 64., FINE_STEP = 2.;
 	private const NEIGHBORS = [[-1,0],[1,0],[0,-1],[0,1]];
 	private float $cell, $limit, $baseX, $baseZ;
 	private int $radius, $side, $origin;
 	private array $nodes = [], $edges = [], $connected = [];
 	private array $disconnected = [];
-	private bool $level;
+	// Every verified node is queued once. The cursor separates expanded nodes from the depot frontier.
+	private array $depotQueue = [];
+	private int $expanded = 0, $candidateWork = 0;
+	private array $nearbyWalks = [];
+	private bool $level, $flatBase;
+	private float $dryRelief;
 	private EditIndex $edits;
-	private bool $fineNoise;
+
+	public static function cellSize(array $recipe, float $cap): float
+	{
+		$limit = $recipe['worldSize']/2-6;
+		$spacing = $recipe['spacing'];
+		return max(1.,round(min($cap,max(4.,$limit/12))/$spacing))*$spacing;
+	}
 
 	public function __construct(private Landscape $land, private float $water, private array $start, float $maxCell = 192.)
 	{
 		$recipe = $land->recipe();
 		$this->limit = $recipe['worldSize']/2-6;
 		$spacing = $recipe['spacing'];
-		$this->cell = max(1.,round(min($maxCell,max(4.,$this->limit/12))/$spacing))*$spacing;
+		$this->cell = self::cellSize($recipe,$maxCell);
 		$this->baseX = round($start['x']/$spacing)*$spacing;
 		$this->baseZ = round($start['z']/$spacing)*$spacing;
 		$this->radius = (int)ceil(min(1.4*DeliveryRun::MAX_LEG,2*$this->limit)/$this->cell)+1;
@@ -34,27 +43,30 @@ final class DriveRegion
 		$this->origin = $this->radius*($this->side+1);
 		$this->nodes[$this->origin] = [$start['x'],$start['z'],$start['y']];
 		$this->connected[$this->origin] = true;
-		$this->edits = $land->editIndex();
-		// A tall, short-wavelength feature can hide entirely between broad probes.
-		$frequency = 8*$recipe['baseFrequency']; $amplitude = $recipe['detailAmplitude'];
-		$this->fineNoise = $recipe['heightScale'] > 0 && $recipe['baseFrequency']*self::SCREEN_STEP >= .5;
-		for($i=0; $i<$recipe['detailOctaves'] && !$this->fineNoise; $i++)
-		{
-			$this->fineNoise = $frequency*self::SCREEN_STEP >= .5 && $amplitude >= .30
-				&& $amplitude*$frequency >= self::REFINE_GRADE;
-			$amplitude *= $recipe['persistence']; $frequency *= $recipe['lacunarity'];
-		}
-		$this->level = $recipe['heightScale'] == 0 && $recipe['detailAmplitude'] == 0 && $land->revision() === 0;
+		$this->depotQueue[] = $this->origin;
+		$this->edits = $land->heightEditIndex();
+		$bounds = $land->bounds();
+		$this->dryRelief = $bounds['minY'] > $water+.12 ? $bounds['maxY']-$bounds['minY'] : INF;
+		$this->flatBase = $recipe['heightScale'] == 0 && ($recipe['detailAmplitude'] == 0 || $recipe['detailOctaves'] === 0);
+		$this->level = $this->flatBase && $this->edits->isEmpty();
 	}
 
 	public function isLevel(): bool { return $this->level; }
 
-	public function nearest(float $x, float $z): ?int
+	/** On sculpted flat maps, test the depot exits before tracing long sight lines across an island or moat. */
+	public function hasDestinations(): \Generator
+	{
+		if($this->flatBase && !$this->level && $this->expanded === 0) yield from $this->expandDepot();
+		return !$this->exhausted() || count($this->depotQueue)>1;
+	}
+
+	public function nearest(float $x, float $z, bool $reachableOnly = false): ?int
 	{
 		$col = (int)round(($x-$this->baseX)/$this->cell);
 		$row = (int)round(($z-$this->baseZ)/$this->cell);
 		if(max(abs($col),abs($row)) > $this->radius) return null;
 		$id = $this->origin+$row*$this->side+$col;
+		if($reachableOnly && $this->exhausted() && !isset($this->connected[$id])) return null;
 		return $this->point($id) === null ? null : $id;
 	}
 
@@ -83,8 +95,14 @@ final class DriveRegion
 	public function connect(int $goal): \Generator
 	{
 		if(isset($this->connected[$goal])) return true;
-		if(isset($this->disconnected[$goal])) return false;
-		if($this->level) return $this->start['y'] > $this->water+.12;
+		if(isset($this->disconnected[$goal]) || $this->exhausted()) return false;
+		if($this->level)
+		{
+			if($this->start['y'] <= $this->water+.12) return false;
+			$this->connected[$goal] = true;
+			$this->depotQueue[] = $goal;
+			return true;
+		}
 		for($attempt=0; $attempt<8; $attempt++)
 		{
 			$path = yield from $this->route($goal);
@@ -93,13 +111,7 @@ final class DriveRegion
 			while($id !== $goal)
 			{
 				$to = $next[$id];
-				$key = $this->edgeKey($id,$to);
-				if(!(yield from $this->driveEdge($this->point($id),$this->point($to))))
-				{
-					$this->edges[$key] = false;
-					break;
-				}
-				$this->connected[$to] = true;
+				if(!(yield from $this->extend($id,$to))) break;
 				$id = $to;
 			}
 			if($id === $goal) return true;
@@ -107,39 +119,81 @@ final class DriveRegion
 		return false;
 	}
 
-	/** Flood outward from the depot when point samples have missed a pocket or a winding strip of road. */
+	/** Verified cells can grow from either end of a candidate search. Exhaustion rules out all other cells. */
+	private function exhausted(): bool { return $this->expanded === count($this->depotQueue); }
+
+	/** Verified bends beyond the confined walks can also supply a hidden box. */
+	public function remainingPoints(): \Generator
+	{
+		foreach($this->nearbyWalks as $walk)
+			if(count($walk['seen']) === count($this->depotQueue)) return;
+		foreach($this->depotQueue as $i=>$id)
+		{
+			if(($i & 63) === 0) yield;
+			if($id === $this->origin) continue;
+			foreach($this->nearbyWalks as $walk) if(isset($walk['seen'][$id])) continue 2;
+			yield $this->point($id);
+		}
+	}
+
+	private function extend(int $from, int $to): \Generator
+	{
+		if(isset($this->connected[$to])) return true;
+		$key = $this->edgeKey($from,$to);
+		if(($this->edges[$key] ?? true) === false) return false;
+		$b = $this->point($to);
+		if($b === null || !(yield from $this->driveEdge($this->point($from),$b)))
+		{
+			$this->edges[$key] = false;
+			return false;
+		}
+		$this->connected[$to] = true;
+		$this->depotQueue[] = $to;
+		return true;
+	}
+
+	private function expandDepot(): \Generator
+	{
+		$id = $this->depotQueue[$this->expanded];
+		$col = $id%$this->side; $row = intdiv($id,$this->side);
+		foreach(self::NEIGHBORS as [$dx,$dz])
+		{
+			$x = $col+$dx; $z = $row+$dz;
+			if(min($x,$z)<0 || max($x,$z)>=$this->side) continue;
+			yield;
+			yield from $this->extend($id,$z*$this->side+$x);
+		}
+		$this->expanded++;
+	}
+
+	/** Replay discovered sites for a new view, then resume the radius-limited walk where it last yielded. */
 	public function nearby(float $radius): \Generator
 	{
-		$queue = [$this->origin];
-		$seen = [$this->origin=>true];
-		for($i=0; $i<count($queue); $i++)
+		$key = (string)$radius;
+		$this->nearbyWalks[$key] ??= ['queue'=>[$this->origin], 'seen'=>[$this->origin=>true], 'head'=>0, 'direction'=>0];
+		$walk = &$this->nearbyWalks[$key];
+		for($i=1; $i<count($walk['queue']); $i++) yield $this->point($walk['queue'][$i]);
+		while($walk['head'] < count($walk['queue']))
 		{
-			$id = $queue[$i];
-			$col = $id%$this->side; $row = intdiv($id,$this->side);
-			foreach(self::NEIGHBORS as [$dx,$dz])
+			yield;
+			$id = $walk['queue'][$walk['head']];
+			[$dx,$dz] = self::NEIGHBORS[$walk['direction']];
+			$x = $id%$this->side+$dx;
+			$z = intdiv($id,$this->side)+$dz;
+			$n = $z*$this->side+$x;
+			$added = min($x,$z)>=0 && max($x,$z)<$this->side && !isset($walk['seen'][$n])
+				&& hypot($x-$this->radius,$z-$this->radius)*$this->cell <= $radius
+				&& (yield from $this->extend($id,$n));
+			if(++$walk['direction'] === count(self::NEIGHBORS))
 			{
-				yield;
-				$x = $col+$dx; $z = $row+$dz;
-				if(hypot($x-$this->radius,$z-$this->radius)*$this->cell > $radius
-					|| min($x,$z)<0 || max($x,$z)>=$this->side) continue;
-				$n = $z*$this->side+$x;
-				if(isset($seen[$n])) continue;
-				$point = $this->point($n);
-				if($point === null) continue;
-				if(!isset($this->connected[$n]))
-				{
-					$key = $this->edgeKey($id,$n);
-					if(($this->edges[$key] ?? true) === false) continue;
-					if(!$this->level && !(yield from $this->driveEdge($this->point($id),$point)))
-					{
-						$this->edges[$key] = false;
-						continue;
-					}
-					$this->connected[$n] = true;
-				}
-				$seen[$n] = true;
-				$queue[] = $n;
-				yield $point;
+				$walk['direction'] = 0;
+				$walk['head']++;
+			}
+			if($added)
+			{
+				$walk['seen'][$n] = true;
+				$walk['queue'][] = $n;
+				yield $this->point($n);
 			}
 		}
 	}
@@ -158,6 +212,14 @@ final class DriveRegion
 		$next = [];
 		for($work=0; !$queue->isEmpty() && $work<480; $work++)
 		{
+			// Give the depot a turn even if successive mainland searches hit their work cap.
+			if(++$this->candidateWork >= 64)
+			{
+				$this->candidateWork = 0;
+				yield from $this->expandDepot();
+				if(isset($this->connected[$goal])) return [$goal,[]];
+				if($this->exhausted()) return null;
+			}
 			$id = $queue->extract();
 			if(isset($this->connected[$id])) return [$id,$next];
 			$col = $id%$this->side; $row = intdiv($id,$this->side);
@@ -224,56 +286,28 @@ final class DriveRegion
 		return max(abs($a[0]-$b[0]),abs($a[1]-$b[1]),abs($a[2]-$b[2]));
 	}
 
-	/** Recheck the interior of one uncertain span, reusing its two sampled ends. */
-	private function fineSpan(float $x, float $z, float $dx, float $dz, float $length,
-		float $sideX, float $sideZ, array $previous, array $last): \Generator
-	{
-		$steps = (int)ceil($length/self::FINE_STEP);
-		$limit = self::GRADE*$length/$steps;
-		for($i=1; $i<$steps; $i++)
-		{
-			yield;
-			$section = $this->footprint($x+$dx*$i/$steps,$z+$dz*$i/$steps,$sideX,$sideZ);
-			if(!$this->supports($section) || self::rise($previous,$section) > $limit) return false;
-			$previous = $section;
-		}
-		return self::rise($previous,$last) <= $limit;
-	}
-
-	/** Screen a proposed route at wide intervals. Recheck steep, wet or edited spans at tyre scale. */
+	/** Check both tyre tracks and the centre at driving resolution wherever relief could exceed a driving limit. */
 	private function driveEdge(array $a, array $b): \Generator
 	{
 		$dx = $b[0]-$a[0]; $dz = $b[1]-$a[1]; $length = hypot($dx,$dz);
-		if($length == 0.) return $a[2] > $this->water+.12;
+		if(min($a[2],$b[2]) <= $this->water+.12 || abs($b[2]-$a[2]) > self::GRADE*$length) return false;
+		if($length == 0.) return true;
+		$steps = (int)ceil($length/self::FINE_STEP);
+		$limit = self::GRADE*$length/$steps;
+		// The full height interval bounds every rise, side slope and centre deviation in a dry swath.
+		if($this->dryRelief <= min(.30,$limit)) return true;
+		if($this->flatBase && !$this->edits->intersect([
+			min($a[0],$b[0])-1,min($a[1],$b[1])-1,max($a[0],$b[0])+1,max($a[1],$b[1])+1,
+		])) return true;
 		$sideX = $dz/$length; $sideZ = -$dx/$length;
-		$steps = max(1,(int)ceil($length/self::SCREEN_STEP));
-		$span = $length/$steps;
-		$x = $a[0]; $z = $a[1];
-		$previous = $this->footprint($x,$z,$sideX,$sideZ);
+		$previous = $this->footprint($a[0],$a[1],$sideX,$sideZ);
 		if(!$this->supports($previous)) return false;
 		for($i=1; $i<=$steps; $i++)
 		{
 			yield;
-			$nx = $a[0]+$dx*$i/$steps; $nz = $a[1]+$dz*$i/$steps;
-			$section = $this->footprint($nx,$nz,$sideX,$sideZ);
-			$rise = self::rise($previous,$section);
-			if(!$this->supports($section) || $rise > self::GRADE*$span) return false;
-			if($length <= self::FINE_STEP) return true;
-			$nearLimit = $this->fineNoise || $rise > self::REFINE_GRADE*$span
-				|| max(abs($previous[2]-$previous[0]),abs($section[2]-$section[0])) > 2*self::REFINE_GRADE
-				|| min(min($previous),min($section)) <= $this->water+.12+self::GRADE*$span/2
-				|| $this->edits->intersect([min($x,$nx)-1,min($z,$nz)-1,max($x,$nx)+1,max($z,$nz)+1]);
-			if(!$nearLimit)
-			{
-				// Test the midpoint and a metre inward from both ends. Opposing slopes can average to zero.
-				$middle = $this->land->height(($x+$nx)/2,($z+$nz)/2);
-				$nearLimit = max(abs($middle-$previous[1]),abs($section[1]-$middle)) > self::REFINE_GRADE*$span/2
-					|| abs($this->land->height($x-$sideZ,$z+$sideX)-$previous[1]) > self::REFINE_GRADE
-					|| abs($this->land->height($nx+$sideZ,$nz-$sideX)-$section[1]) > self::REFINE_GRADE;
-			}
-			if($nearLimit && !(yield from $this->fineSpan($x,$z,$nx-$x,$nz-$z,$span,$sideX,$sideZ,$previous,$section)))
-				return false;
-			$x = $nx; $z = $nz; $previous = $section;
+			$section = $this->footprint($a[0]+$dx*$i/$steps,$a[1]+$dz*$i/$steps,$sideX,$sideZ);
+			if(!$this->supports($section) || self::rise($previous,$section)>$limit) return false;
+			$previous = $section;
 		}
 		return true;
 	}

@@ -20,6 +20,7 @@ final class DeliveryRun
 	private ?array $pickup = null;
 	private ?PickupSearch $planner = null;
 	private ?\Generator $search = null;
+	private ?float $lastSlice = null;
 	private float $phase;
 	private ?array $waitingAt = null;
 
@@ -40,11 +41,11 @@ final class DeliveryRun
 	public function refit(Landscape $land, float $water): ?string
 	{
 		$this->search = null;
-		$this->planner = null;
 		$this->pickup = null;
 		$this->waitingAt = null;
 		if($this->depot === null) return null;
 		$this->depot['y'] = $land->height($this->depot['x'],$this->depot['z']);
+		$this->planner = $this->planner?->refitted($land,$water,$this->depot);
 		if($this->depot['y'] < $water+.12) return 'The depot is flooded. Lower the water to resume deliveries.';
 		return $this->carrying ? 'Return to the red depot.' : 'Finding a package site…';
 	}
@@ -81,11 +82,16 @@ final class DeliveryRun
 				$this->waitingAt = [$to['x'],$to['z'],$camera->yaw,$camera->pitch,$aspect];
 				$this->planner ??= new PickupSearch($land,$water,$this->depot);
 				$this->search = $this->planner->find($to,$camera,$aspect,$this->phase);
+				$this->lastSlice = null;
 				if($retry) return 'Searching for a reachable pickup…';
 			}
-			// Spend more of a parked frame checking the first route. Keep moving-car slices under a millisecond.
+			// Slow rendering can leave a parked search waiting hundreds of milliseconds between ticks.
+			// Use up to 5% of that interval, capped at 12 ms. A 60 Hz parked tick keeps its 2.5 ms budget.
 			$parked = abs($to['speed']) < .25;
-			$deadline = hrtime(true)+($parked ? 2500000 : 900000);
+			$now = hrtime(true);
+			$elapsed = $this->lastSlice === null ? 0. : $now-$this->lastSlice;
+			$this->lastSlice = $now;
+			$deadline = $now+($parked ? min(12000000,max(2500000,.05*$elapsed)) : 900000);
 			for($i=0; $i<128 && $this->search->valid() && hrtime(true)<$deadline; $i++) $this->search->next();
 			if($this->search->valid()) return null;
 			$site = $this->search->getReturn();
@@ -96,6 +102,7 @@ final class DeliveryRun
 			// A driver can move or look around while the route is being sampled.
 			if(self::visible($site,$camera,$aspect) || hypot($site['x']-$to['x'],$site['z']-$to['z']) > self::MAX_LEG)
 				return null;
+			$this->planner->placed($site);
 			$this->pickup = $site;
 			return 'Drive into the box under the lime smoke.';
 		}
