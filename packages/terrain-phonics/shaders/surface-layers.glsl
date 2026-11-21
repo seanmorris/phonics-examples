@@ -15,13 +15,31 @@ float layerCorner(ivec2 cell) {
 	h=(h^(h>>16))*2246822519u;
 	return float(h>>8)*(2./16777216.)-1.;
 }
-float layerCellNoise(ivec2 c,vec2 t) {
-	return mix(mix(layerCorner(c),layerCorner(c+ivec2(1,0)),t.x),
-		mix(layerCorner(c+ivec2(0,1)),layerCorner(c+1),t.x),t.y);
+// Value and partials with respect to the two interpolation weights.
+vec3 layerCellSample(ivec2 cell,vec2 t) {
+	float a=layerCorner(cell), b=layerCorner(cell+ivec2(1,0));
+	float c=layerCorner(cell+ivec2(0,1)), d=layerCorner(cell+1);
+	float lower=mix(a,b,t.x), upper=mix(c,d,t.x);
+	return vec3(mix(lower,upper,t.y),mix(b-a,d-c,t.y),upper-lower);
 }
 float layerValueNoise(vec2 uv) {
 	vec2 t=fract(uv);
-	return layerCellNoise(ivec2(floor(uv)),t*t*(3.-2.*t));
+	return layerCellSample(ivec2(floor(uv)),t*t*(3.-2.*t)).x;
+}
+const mat3 MATERIAL_TURN=mat3(0.,.8,.6, -.8,.36,-.48, -.6,-.48,.64);
+// Value and spatial gradient from the same eight corners, including on an upright face.
+vec4 materialVolumeSample(vec3 p) {
+	const ivec2 slice=ivec2(61,149);
+	ivec3 cell=ivec3(floor(p));
+	vec3 f=fract(p), t=f*f*(3.-2.*f);
+	// Salt the integer lattice so the landscape seed does not cost subpixel precision.
+	ivec2 base=cell.xz+cell.y*slice+ivec2(uPaletteOffset);
+	vec3 lower=layerCellSample(base,t.xz), upper=layerCellSample(base+slice,t.xz);
+	vec3 sampleValue=mix(lower,upper,t.y);
+	return vec4(sampleValue.x,6.*f*(1.-f)*vec3(sampleValue.y,upper.x-lower.x,sampleValue.z));
+}
+float materialVolumeNoise(vec3 p) {
+	return materialVolumeSample(p).x;
 }
 
 // Signed volume noise gives cliffs and level ground the same grain. At the ridge's 1.6 m
@@ -30,19 +48,11 @@ float layerValueNoise(vec2 uv) {
 float stippleGrain(vec3 pos,float scale,float stretch,float footprint) {
 	vec3 p=vec3(pos.x,pos.y/stretch,pos.z)*(3./scale);
 	float pixel=3.*footprint/(scale*min(1.,stretch));
-	const mat3 turn=mat3(0.,.8,.6, -.8,.36,-.48, -.6,-.48,.64);
-	const ivec2 slice=ivec2(61,149);
 	float sum=0., amplitude=.65;
 	for(int octave=0;octave<5;octave++) {
 		if(pixel>=.5) break;
-		ivec3 cell=ivec3(floor(p));
-		vec3 t=fract(p);
-		t=t*t*(3.-2.*t);
-		// Salt the integer lattice so the landscape seed does not cost subpixel precision.
-		ivec2 base=cell.xz+cell.y*slice+ivec2(uPaletteOffset);
-		float band=mix(layerCellNoise(base,t.xz),layerCellNoise(base+slice,t.xz),t.y);
-		sum+=amplitude*(1.-smoothstep(.16,.5,pixel))*band;
-		p=turn*p*3.+vec3(13.7,7.1,27.9);
+		sum+=amplitude*(1.-smoothstep(.16,.5,pixel))*materialVolumeNoise(p);
+		p=MATERIAL_TURN*p*3.+vec3(13.7,7.1,27.9);
 		pixel*=3.;
 		amplitude*=.80;
 	}

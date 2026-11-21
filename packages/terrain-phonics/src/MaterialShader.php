@@ -20,8 +20,8 @@ final class MaterialShader
 		'joints'=>'jointTint', 'slab-tone'=>'vec3(tone)', 'lichen'=>'lichenTint', 'sand'=>'vec3(1.-.16*stipple)', 'snow'=>'vec3(1.-.35*stipple)',
 	];
 	private const RELIEF = [
-		'facets'=>'facet*slabFade*settled', 'crowns'=>'vec3(offset.x,0.,offset.y)*.5*crownRelief*cellFade',
-		'blocks'=>'vec3(offset.x,0.,offset.y)*.6*block*cellFade',
+		'facets'=>'facet', 'crowns'=>'vec3(offset.x,0.,offset.y)*.5*crownRelief*cellFade',
+		'blocks'=>'blockTilt',
 	];
 
 	public static function assemble(string $source, SurfaceLayers $stack, bool $chart = false, bool $clipmap = false): string

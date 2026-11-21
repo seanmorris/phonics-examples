@@ -46,24 +46,18 @@
 	// Soil holds on steeper ground low down.
 	float steep = smoothstep(uSlopeBlend.x, uSlopeBlend.y, slope + 0.15*rib - 0.07*lowland);
 
-	// One staggered grid of cells holds tree crowns and talus blocks, each block turned and sized at random.
+	// The forest crown silhouette supplies density and tilt to the close foliage.
 	vec2 grid = mat2(0.8,0.6,-0.6,0.8) * pos.xz / sizes.y;
 	vec2 cell = floor(grid);
 	float seed = hashCell(cell), seed2 = hashCell(cell + 41.7);
 	vec2 offset = fract(grid) - 0.5 - 0.25*(vec2(seed, seed2) - 0.5);
 	float turn = 6.2832 * seed2;
 	offset = mat2(cos(turn), sin(turn), -sin(turn), cos(turn)) * offset;
-	// The pixel has a floor because smoothstep() is undefined for two equal edges. Crowns, blocks and boulders fade out
-	// before a cell spans three pixels.
+	// Fade individual crowns before a cell spans three pixels.
 	float pixel = max(footprint, 0.001), aa = footprint / sizes.y, cellFade = 1.0 - smoothstep(0.4, 1.0, 3.*aa);
-	// Large blocks and crowns reach past their cell, which cuts them off. The cut fades over a pixel, so it is no
-	// hard step between two cells.
+	// Fade a crown's silhouette over a pixel where it reaches the edge of its cell.
 	vec2 inside = min(fract(grid), 1.0 - fract(grid));
 	float within = smoothstep(0.0, pixel / sizes.y, min(inside.x, inside.y));
-	float size = 0.28 + 0.12*seed;
-	float block = (1.0 - smoothstep(size - 0.05, size + 0.03 + aa,
-		max(abs(offset.x), abs(offset.y) * (0.75 + 0.5*seed2)))) * within;
-	float blocks = mix(1.0, mix(0.82, 0.88 + 0.24*seed, block) / 0.91, cellFade);
 	// From far away each crown has a single silhouette. Up close it sets the density of
 	// foliage, with leaves and gaps both inside the crown and between adjacent crowns.
 	float silhouette = (1.0 - smoothstep(0.2, 0.34 + 0.2*fract(seed * 7.7) + aa, length(offset) + 0.25*tuft)) * within;
@@ -73,21 +67,33 @@
 	// Only the silhouette carries a cell's own tint and tilt. Both vanish at its edge.
 	float crowns = mix(1.0, (.7 + .55*crown + .2*(seed2-.5)*silhouette) / .89, cellFade);
 	float crownRelief = silhouette * mix(1.0, .3 + .7*leaves, close);
-	blocks *= 1.0 - .23*stipple;
-	// Boulders on a grid three times coarser carry the rubble's texture further out than the blocks do. Each is
-	// turned and sized at random, and the blocks show between the smaller ones and in the cells that have none. Their
-	// cells cut them off as the small cells cut the blocks.
-	vec2 boulderGrid = grid / 2.7 + 0.37;
-	float boulderSeed = hashCell(floor(boulderGrid) + 17.3);
-	float boulderPlace = fract(boulderSeed * 29.3);
-	float boulderTurn = 6.2832 * fract(boulderSeed * 13.7);
-	vec2 boulderOffset = abs(mat2(cos(boulderTurn), sin(boulderTurn), -sin(boulderTurn), cos(boulderTurn))
-		* (fract(boulderGrid) - 0.5 - 0.3*(vec2(boulderPlace, fract(boulderSeed * 7.3)) - 0.5)));
-	vec2 boulderInside = min(fract(boulderGrid), 1.0 - fract(boulderGrid));
-	float boulder = (1.0 - smoothstep(0.1 + 0.2*boulderSeed, 0.16 + 0.2*boulderSeed + footprint / (2.7*sizes.y),
-		max(boulderOffset.x, boulderOffset.y * (0.7 + 0.5*fract(boulderSeed * 3.1))))) * step(0.4, boulderPlace)
-		* smoothstep(0.0, pixel / (2.7*sizes.y), min(boulderInside.x, boulderInside.y));
-	float boulders = mix(1.0, mix(0.84, 0.98 + 0.3*boulderSeed, boulder) / 0.88, 1.0 - smoothstep(1.2, 3.0, 3.*aa));
+
+	// Coarse outcrops bend the smaller fragments. A rounded crease in their
+	// height gives the scree uneven facets, with grains of finer rubble between them.
+	vec3 stonePosition = MATERIAL_TURN * pos / sizes.y;
+	float boulderFade = 1.0 - smoothstep(.4,1.,aa);
+	vec4 boulderSample = vec4(0.), chipSample = vec4(0.);
+	const vec3 chipWarp = vec3(.86,-.65,.47);
+	vec3 chips = MATERIAL_TURN*stonePosition;
+	float fragmentFade = 1.-smoothstep(.18,.5,2.4*aa);
+	if(boulderFade > 0.) boulderSample = materialVolumeSample(stonePosition/2.7 + vec3(11.3,5.1,17.3));
+	float outcrop = boulderSample.x;
+	if(cellFade > 0.) chipSample = materialVolumeSample(chips + chipWarp*outcrop);
+	float rubbleNoise = chipSample.x, fragments = 0.;
+	if(fragmentFade > 0.) fragments = materialVolumeNoise(2.4*MATERIAL_TURN*chips + vec3(-6.3,4.7,12.1) + .45*rubbleNoise);
+	float crease = rubbleNoise - .32*outcrop;
+	float rounded = sqrt(crease*crease+.014);
+	float chip = .66*rubbleNoise + .25*outcrop - .38*(rounded-.30);
+	float blocks = (1. + .26*chip*cellFade + .18*fragments*fragmentFade) * (1. - .23*stipple);
+	float boulders = 1. + .22*outcrop*boulderFade;
+	// Differentiate in world space. Screen differences on an oblique face can cross
+	// a projected stone in a single pixel and leave a dotted line of shaded quads.
+	vec3 outcropSlope = boulderSample.yzw*MATERIAL_TURN/2.7;
+	vec3 rubbleSlope = chipSample.yzw*MATERIAL_TURN*MATERIAL_TURN + dot(chipSample.yzw,chipWarp)*outcropSlope;
+	vec3 chipSlope = .66*rubbleSlope + .25*outcropSlope - .38*(crease/rounded)*(rubbleSlope-.32*outcropSlope);
+	vec3 blockSlope = .13*chipSlope*cellFade + .17*outcropSlope*boulderFade;
+	blockSlope -= normal*dot(normal,blockSlope);
+	vec3 blockTilt = -blockSlope/(1.+length(blockSlope));
 
 	// Shrubs mottle the meadow, tundra keeps meadow green in its hollows, and wet grass fills level floors. Shrubs
 	// blend into the meadow over a few meters rather than ending at a line, and they fill most openings in the forest.
@@ -110,38 +116,39 @@
 	// The sign of the gully noise places the tongues. The gullies themselves, where the noise is near zero, outline
 	// each region of one sign, and tongues placed in them would close into rings. Broad variation breaks the talus
 	// into separate fans along a slope.
-	float scree = sparse(talusShare, 0.5*rill - 0.9*gully + 0.3*ragged + 0.3*(seed - 0.5)*cellFade + 0.8*macro,
+	float rubbleCover = .30*rubbleNoise*cellFade + .18*outcrop*boulderFade + .12*fragments*fragmentFade;
+	float scree = sparse(talusShare, 0.5*rill - 0.9*gully + 0.3*ragged + rubbleCover + 0.8*macro,
 		0.6*max(rillFade, max(raggedDetail, gullyFade)));
-	// Granite slabs: columns across the face, each broken by joints that cross it diagonally at its own angle and
-	// irregular spacing.
-	vec2 face = (xWeight > 0.5 ? facePosition.zy : facePosition.xy) + vec2(3.0*gully, 0.0);
-	float column = floor(face.x / sizes.z), across = fract(face.x / sizes.z);
-	// Neighboring columns share the direction in which their joints dip.
-	float lean = hashCell(vec2(column, 5.3));
-	float tilt = (0.15 + 0.45*lean) * sign(hashCell(vec2(floor(column / 4.0), 8.9)) - 0.5);
-	float along = (face.y + tilt * across * sizes.z) / sizes.w + hashCell(vec2(column, 1.9));
-	vec2 slabCell = vec2(column, floor(along));
-	float slab = hashCell(slabCell);
-	// Each slab steps down over the one below it, so a joint shades the foot of the slab above it. `riser` is the
-	// distance up from the joint below and `below` the distance down from the joint above, in meters.
-	float rise = sizes.w * inversesqrt(1.0 + tilt*tilt);
-	float riser = fract(along) * rise, below = (1.0 - fract(along)) * rise, side = min(across, 1.0 - across) * sizes.z;
-	float jointFade = 1.0 - smoothstep(0.4, 1.5, footprint), slabFade = 1.0 - smoothstep(1.5, 4.5, footprint);
-	// The two upright planes give different slabs. Where the choice changes, and at every edge of a slab, the slab's
-	// own tone, stain, facet and joints fade to their mean over about a pixel, so no edge is a hard step.
-	float seam = smoothstep(0.5, 1.5, abs(xWeight - 0.5) / max(fwidth(xWeight), 0.0001));
-	float settled = smoothstep(0.0, pixel, min(side, min(riser, below))) * seam;
-	// The shaded foot starts over a pixel across the joint, and joints show in broken lengths.
-	float foot = smoothstep(-pixel, pixel, riser < below ? riser : -below)
-		* (1.0 - smoothstep(0.15, 0.9 + 0.7*footprint, riser < below ? riser : 0.0));
-	float line = max(1.0 - smoothstep(0.15, 0.9 + 0.7*footprint, side), foot);
-	float joints = mix(0.07, line * smoothstep(-0.1, 0.1, ragged), jointFade * seam);
+	// One family of granite fractures follows the face down, the other cuts across
+	// the dip. Sample through the rock so both continue around a change of aspect.
+	vec2 strike = mat2(.8,.6,-.6,.8)*pos.xz;
+	vec3 bedrock = vec3(strike.x/sizes.z,(pos.y+.26*strike.x-.13*strike.y)/sizes.w,strike.y/sizes.z);
+	float jointPixel = footprint/min(sizes.z,sizes.w);
+	float jointFade = 1.-smoothstep(.035,.12,jointPixel), slabFade = 1.-smoothstep(.12,.35,jointPixel);
+	float split = 0., crosscut = 0.;
+	if(slabFade > 0.) {
+		split = materialVolumeNoise(bedrock*vec3(1.,.48,1.21) + vec3(17.4,2.9,-9.3));
+		vec2 across = mat2(.6,-.8,.8,.6)*bedrock.xz;
+		crosscut = materialVolumeNoise(vec3(.55*across.x,1.4*bedrock.y+.37*split,.62*across.y));
+	}
+	float chipOffset = .014*abs(rubbleNoise+.45*outcrop)*cellFade;
+	float downDip = .85*bedrock.x + .32*bedrock.z + .19*bedrock.y + .14*abs(split+.4*crosscut) + chipOffset;
+	float acrossDip = bedrock.y - .28*bedrock.x + .21*bedrock.z + .17*abs(crosscut-.3*split) - chipOffset;
+	vec2 longitudinal = fractureProfile(downDip,73);
+	vec2 transverse = fractureProfile(acrossDip,197);
+	longitudinal *= smoothstep(-.25,.32,crosscut + blotchNoise + .6*rill + .22*ragged);
+	transverse *= smoothstep(-.08,.46,split - blotchNoise - .5*rill - .22*ragged);
+	float joints = mix(.035,max(longitudinal.x,transverse.x),jointFade);
+	float slabTone = (.65*split + .35*crosscut)*slabFade;
+	vec3 facet = slabFade*patternGradient(pos,normal,.075*sizes.z*split+.045*sizes.w*crosscut)
+		+ jointFade*(.08*longitudinal.y*patternGradient(pos,normal,sizes.z*downDip)
+			+ .06*transverse.y*patternGradient(pos,normal,sizes.w*acrossDip));
 	// Water leaves short dark trails down the faces.
 	float wet = patchy(0.25, streak + 0.3*rill, max(streakFade, rillFade));
-	float tone = (1.0 + 0.2*(slab - 0.5)*slabFade*settled) * (1.0 - 0.20*joints) * (1.0 - 0.11*wet)
+	float tone = (1.0 + .17*slabTone) * (1.0 - 0.20*joints) * (1.0 - 0.11*wet)
 		* (1.0 + 0.12*blotch + 0.1*macro) * hollows;
 	// Iron stains broad sheets of the faces and runs down them in streaks; lichen tints the rock gray-green in patches.
-	float sheets = sparse(0.6*uMountainAmounts.y, 0.4*blotch - 0.8*gully + 0.3*(slab - 0.5)*slabFade*settled,
+	float sheets = sparse(0.6*uMountainAmounts.y, 0.4*blotch - 0.8*gully + .42*slabTone + .16*rill + .12*ragged,
 		max(blotchFade, gullyFade));
 	float lichen = uMountainAmounts.z * patchy(0.55, blotch + ragged + 0.26*streak, max(raggedDetail, blotchFade));
 	// Bare rock covers the steep ground and, nearing the snowline, the ridges. Rock follows the ribs and vegetation the
@@ -166,7 +173,6 @@
 	float relief = (1.0 - smoothstep(snowline, snowline + uSnowline.y, pos.y)
 		* (1.0 - smoothstep(uSlopeBlend.z, uSlopeBlend.w, slope)))
 		* smoothstep(0.06, 0.25, abs(dot(normalize(relative), normal))) * (1.0 - smoothstep(3.0, 10.0, footprint));
-	vec3 facet = (vec3(hashCell(slabCell + 31.7), slab, hashCell(slabCell + 63.1)) - 0.5) * vec3(0.18, 0.05, 0.18);
 	// Light the shallower ribs with the world-space gradient of (12 + 10 * blotch) * groove + 1.6 * rill.
 	// The relief takes the gully and blotch noise before the
 	// footprint fades them, since the footprint jumps at triangle edges. Each gully bottom is rounded by the view
