@@ -11,6 +11,7 @@ float sampleHeight(ivec2 c) {
 }
 uniform float uTerrainShadowExtent;
 uniform float uTerrainShadowSize;
+uniform vec2 uShadowHeightRange; // Minimum terrain elevation and encoded span, in metres.
 uniform vec3 uShadowSunDirection;
 out vec4 color;
 
@@ -36,19 +37,28 @@ void main()
 		return;
 	}
 	vec2 position = (gl_FragCoord.xy / uTerrainShadowSize - 0.5) * uTerrainShadowExtent;
-	vec3 origin = vec3(position.x, coarseHeight(position) + 3.0, position.y);
-	float visibility = 1.0;
-	float spacing = uTerrainShadowExtent / 32.0;
-	// This bounded coarse march resolves broad mountains, not small objects or local relief.
+	float horizontal = length(uShadowSunDirection.xz);
+	vec2 direction = uShadowSunDirection.xz / max(horizontal,.00001);
+	float grade = uShadowSunDirection.y / max(horizontal,.00001);
+	float stride = uTerrainShadowExtent / float(textureSize(uTerrainHeights,0).x - 1);
+	float run = stride, ceiling = uShadowHeightRange.x, softness = 2.;
+	// Start one overview texel away so a near rim cannot fall between kilometre-long steps.
+	// Widen the spacing after the nearby samples to retain coverage to the far side of the map.
 	for(int i = 1; i <= 32; ++i)
 	{
-		float distanceAlong = spacing * float(i);
-		vec3 probe = origin + uShadowSunDirection * distanceAlong;
-		if(any(greaterThan(abs(probe.xz), vec2(uTerrainShadowExtent * 0.5)))) break;
-		float difference = probe.y - coarseHeight(probe.xz);
-		// Fade only below an occluder: an unobstructed flat plane must remain fully sunlit at low sun angles.
-		visibility = min(visibility, smoothstep(-max(2.0, distanceAlong * 0.004675), 0.0, difference));
-		if(visibility <= 0.0) break;
+		if(uShadowHeightRange.x + uShadowHeightRange.y - grade*run <= ceiling) break;
+		vec2 probe = position + direction*run;
+		if(any(greaterThan(abs(probe), vec2(uTerrainShadowExtent * 0.5)))) break;
+		float projected = coarseHeight(probe) - grade*run;
+		if(projected > ceiling)
+		{
+			ceiling = projected;
+			softness = max(2.,run*.004675);
+		}
+		if(i >= 12) stride *= 1.25;
+		run += stride;
 	}
-	color = vec4(vec3(visibility), 1.0);
+	float visibility = smoothstep(-softness,0.,coarseHeight(position)+3.-ceiling);
+	int code = int(round(clamp((ceiling-uShadowHeightRange.x)/uShadowHeightRange.y,0.,1.)*65535.));
+	color = vec4(visibility,vec2(code >> 8,code & 255)/255.,1.);
 }

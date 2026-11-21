@@ -47,7 +47,7 @@ final class TriangleShadows
 		$grid = [($cx-$half)*$step,($cz-$half)*$step,$cell*$step];
 		$key = [$grid,$step,$reach,$extent,$playHalf,$level['textures'][0],$overview,$revision];
 		// Allow at most 0.1 degree of drift while the clock runs.
-		if($key === $this->key && $sun[0]*$this->direction[0]+$sun[1]*$this->direction[1]+$sun[2]*$this->direction[2] >= .999998477)
+		if($key === $this->key && $sun[0]*$this->direction[0]+$sun[1]*$this->direction[1]+$sun[2]*$this->direction[2] >= TerrainShadows::SUN_COSINE)
 			return;
 
 		$this->invalidate();

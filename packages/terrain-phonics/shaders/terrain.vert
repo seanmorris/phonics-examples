@@ -13,7 +13,7 @@ uniform float uCraft;
 out vec3 vRelative, vWorld, vNormal;
 out vec3 vPaint0, vPaint1;
 #ifdef CLIPMAP
-uniform sampler2D uTerrainShadowMap;
+uniform highp sampler2D uTerrainShadowMap;
 uniform float uTerrainShadowExtent;
 uniform vec3 uSunDirection;
 uniform int uTerrainShadowReady;

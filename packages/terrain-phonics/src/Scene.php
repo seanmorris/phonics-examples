@@ -2344,12 +2344,13 @@ final class Scene
 		$this->atmosphereCache->update($camera->position[1], $this->textures[0], $this->water->level());
 
 		$environment = $this->atmosphere->uniforms();
+		$bounds = $this->landscape->bounds();
 		$this->clipmap?->updateShadows($camera->position,$environment['sunDirection'],$this->heightTextureRevision);
 		$this->terrainShadows->update(
 			$this->clipmap ? $this->clipmap->overview()[0] : (isset($this->patches['0:0:0']) ? $this->heightTexture[0] : 0)
 			, $this->lod->extent
 			, $environment['sunDirection']
-			, $this->heightTextureRevision, $this->clipmap?->packed() ?? false
+			, $this->heightTextureRevision, $this->clipmap?->packed() ?? false, $bounds['minY'], $bounds['maxY']
 		);
 
 		glViewport(0, 0, $width, $height);
@@ -2403,7 +2404,6 @@ final class Scene
 		$uEdges = $groundProgram->location('uEdges');
 		$uCorners = $groundProgram->location('uCorners');
 		if($this->clipmap) {
-			$bounds = $this->landscape->bounds();
 			$recipe = $this->landscape->recipe();
 			$floor = $bounds['minY'];
 			$ceiling = $bounds['maxY'];

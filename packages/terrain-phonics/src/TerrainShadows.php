@@ -6,18 +6,20 @@ use Phonics\Render\Program;
 use Phonics\Render\RenderTarget;
 
 /**
- * Cached broad mountain visibility from the scene's coarse 33-by-33 height field.
+ * Cached broad mountain visibility and projected blocker elevation from the scene's height overview.
  *
  * A bounded directional march runs only when height revision, world extent or sun direction changes. The
  * resulting RGBA8 map replaces per-fragment marching with one filtered lookup; it cannot resolve local detail.
  */
 final class TerrainShadows
 {
+	public const SUN_COSINE = .999998477; // cos(0.1 degree), measured from the last completed map.
 	private ?Program $program = null;
 	private ?RenderTarget $target = null;
 	private array $vao = [];
 	private string $key = '';
 	private float $extent = 0;
+	private array $sun = [], $heightRange = [0.,1.];
 	private int $generation = 0;
 	private bool $closed = false;
 
@@ -52,19 +54,25 @@ final class TerrainShadows
 
 	/**
 	 * Refresh broad visibility after the authoritative coarse height field or illumination direction changes.
-	 * @param int $heightTexture Scene-owned 33-by-33 R32F height texture; zero disables caching until ready.
+	 * @param int $heightTexture Scene-owned overview texture. Zero disables caching until ready.
 	 * @param float $extent Width and depth of the centered square world, in metres.
 	 * @param array $sunDirection Direction toward the sun as [x,y,z]; normalized before use.
 	 * @param int $revision Revision represented by the uploaded height field.
+	 * @param bool $packed Whether height samples are stored in RGBA8.
+	 * @param float $minHeight Conservative minimum elevation of the sampled terrain, in metres.
+	 * @param float $maxHeight Conservative maximum elevation of the sampled terrain, in metres.
 	 * @return bool True if the map was regenerated. The parent framebuffer is restored; the caller resets viewport,
 	 * program, VAO, textures, depth mask and depth/cull/blend/scissor enables before rendering its scene.
 	 */
-	public function update(int $heightTexture, float $extent, array $sunDirection, int $revision, bool $packed = false): bool
+	public function update(int $heightTexture, float $extent, array $sunDirection, int $revision, bool $packed = false,
+		float $minHeight = -32768., float $maxHeight = 32767.): bool
 	{
 		if($this->closed) throw new \LogicException('Terrain shadows are closed');
 
 		if($heightTexture < 0 || !is_finite($extent) || $extent <= 0 || count($sunDirection) !== 3)
 		throw new \InvalidArgumentException('Terrain shadows require a valid texture, extent and sun direction');
+		if(!is_finite($minHeight) || !is_finite($maxHeight) || $minHeight > $maxHeight)
+		throw new \InvalidArgumentException('Invalid terrain elevation bounds');
 
 		foreach($sunDirection as $value)
 		if(!is_numeric($value) || !is_finite((float)$value))
@@ -87,15 +95,17 @@ final class TerrainShadows
 			return false;
 		}
 
-		$key = json_encode([$heightTexture,$extent,$sun,$revision], JSON_THROW_ON_ERROR);
-
-		if($key === $this->key) return false;
+		$range = [$minHeight,max(1.,$maxHeight-$minHeight)];
+		$key = json_encode([$heightTexture,$extent,$revision,$packed,$range,$sun[1]>0.], JSON_THROW_ON_ERROR);
+		if($key === $this->key && ($sun[1] <= 0. ||
+			$sun[0]*$this->sun[0]+$sun[1]*$this->sun[1]+$sun[2]*$this->sun[2] >= self::SUN_COSINE)) return false;
 
 		$this->key = '';
 		glDisable(GL_DEPTH_TEST);
 		glDisable(GL_CULL_FACE);
 		glDisable(GL_BLEND);
 		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_DITHER);
 		glDepthMask(false);
 		$this->program->use();
 		glBindVertexArray($this->vao[0]);
@@ -105,6 +115,7 @@ final class TerrainShadows
 		glUniform1i($this->program->location('uPacked'),(int)$packed);
 		glUniform1f($this->program->location('uTerrainShadowExtent'), $extent);
 		glUniform1f($this->program->location('uTerrainShadowSize'), $this->resolution);
+		glUniform2f($this->program->location('uShadowHeightRange'), ...$range);
 		glUniform3f($this->program->location('uShadowSunDirection'), ...$sun);
 		$this->target->bind();
 
@@ -119,6 +130,8 @@ final class TerrainShadows
 
 		$this->key = $key;
 		$this->extent = $extent;
+		$this->heightRange = $range;
+		$this->sun = $sun;
 		$this->generation++;
 
 		return true;
@@ -140,6 +153,7 @@ final class TerrainShadows
 		glBindTexture(GL_TEXTURE_2D, $this->target->texture());
 		glUniform1i($program->location('uTerrainShadowMap'), $textureUnit);
 		glUniform1f($program->location('uTerrainShadowExtent'), $this->extent);
+		glUniform2f($program->location('uShadowHeightRange'), ...$this->heightRange);
 		glUniform1i($program->location('uTerrainShadowReady'), $this->key !== '' ? 1 : 0);
 	}
 

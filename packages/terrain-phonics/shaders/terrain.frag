@@ -11,7 +11,8 @@ uniform vec3 uEye;
 uniform float uWaterLevel, uWorldSize, uTerrainStyle;
 uniform vec4 uBedContacts[2];
 uniform vec3 uBedDatum; // X/Z dip and vertical spacing in metres.
-uniform sampler2D uTerrainShadowMap;
+uniform highp sampler2D uTerrainShadowMap;
+uniform vec2 uShadowHeightRange;
 uniform float uTerrainShadowExtent;
 uniform int uTerrainShadowReady;
 // TerrainAppearance. Colours are linear. The canyon palette runs rust, shale, ledge, sandstone, red beds, cap, dust,
@@ -34,7 +35,9 @@ float mountainShadow(vec3 position)
 	if(uTerrainShadowReady == 0) return 1.0;
 	vec2 uv = position.xz / uTerrainShadowExtent + 0.5;
 	if(any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 1.0;
-	return texture(uTerrainShadowMap, uv).r;
+	vec2 bytes = texture(uTerrainShadowMap, uv).gb;
+	float ceiling = uShadowHeightRange.x + uShadowHeightRange.y * dot(bytes,vec2(256.,1.)/257.);
+	return smoothstep(-max(2.,.0001*uTerrainShadowExtent),0.,position.y+3.-ceiling);
 }
 #ifdef SURFACE_LAYERS
 uniform highp sampler2D uShadowTriangles;
@@ -512,7 +515,7 @@ void main()
 	#ifdef SURFACE_LAYERS
 	if(facing > 0. && uSunDirection.y > 0.)
 	{
-		if(vSunCoverage >= 0.) shadow = mix(shadow,vSunCoverage,smoothstep(.12,.6,footprint/uGridStep));
+		if(vSunCoverage >= 0.) shadow = min(shadow,mix(shadow,vSunCoverage,smoothstep(.12,.6,footprint/uGridStep)));
 		shadow = localSunlight(vWorld.xz,footprint,shadow);
 	}
 	#endif
