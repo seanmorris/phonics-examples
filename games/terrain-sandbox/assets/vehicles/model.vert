@@ -26,7 +26,7 @@ uniform vec4 uGateSize;
 // The gate board's label half width on its -X and +X sides, then the width of one checker column on each side.
 uniform vec4 uGateBoard;
 // Checker columns each side of the board shows at the mesh's own size, then the columns the mesh holds per side.
-// Z scales the lettering and checker widths. W fits the letter height to the same scale on narrow boards.
+// Z is the fitted label scale. W is the full print scale used for the checker pattern and board height.
 uniform vec4 uGateColumns;
 // Heights from the gate origin of the -X and +X posts' feet, then of the ground under each post.
 uniform vec4 uGateFeet;
@@ -59,7 +59,7 @@ float boardX(float x, bool square)
 	if(along <= 0.0) return x * uGateColumns.z;
 	if(!square && along > band - .001) return x + side * uGateSize.x;
 	float width = band + uGateSize.x - label * (uGateColumns.z - 1.0);
-	float shown = clamp(floor(width / (column * uGateColumns.z) + .5), 1.0, uGateColumns.y);
+	float shown = clamp(floor(width / (column * uGateColumns.w) + .5), 1.0, uGateColumns.y);
 	return side * (label * uGateColumns.z + min(along, shown * column) * width / (shown * column));
 }
 
@@ -98,7 +98,7 @@ void main()
 			else if(part == LABEL)
 			{
 				position.x *= uGateColumns.z;
-				vLabelFit = uGateColumns.w;
+				vLabelFit = uGateColumns.w / uGateColumns.z;
 			}
 			else position.x = boardX(position.x, part == SQUARE);
 			position.y += uGateSize.y;

@@ -182,14 +182,14 @@ final class GateModel
 			{
 				$column = $layout['column'][$side];
 				$room = $label + $layout['columns'] * $column + $measure['resize'][0];
-				$printScale = min($printScale, $room / ($label + 2 * $column));
+				$printScale = min($printScale, ($room - 2 * $heightScale * $column) / $label);
 			}
 		}
 		return ['uGateSize' => $measure['resize'],
 			// A board without a layout keeps its width: its label reaches past every vertex.
 			'uGateBoard' => $layout === null ? [1e9, 1e9, 1.0, 1.0] : [...$layout['label'], ...$layout['column']],
 			'uGateColumns' => [(float)($layout['columns'] ?? 1), (float)($layout['baked'] ?? 1),
-				$printScale, $heightScale / $printScale],
+				$printScale, $heightScale],
 			'uGateFeet' => $measure['feet']];
 	}
 

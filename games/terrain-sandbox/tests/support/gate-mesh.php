@@ -34,7 +34,7 @@ function readGateMesh(string $file): array
 function gateBoardX(float $x, bool $square, array $uniforms): float
 {
 	[$labelLeft, $labelRight, $columnLeft, $columnRight] = $uniforms['uGateBoard'];
-	[$columns, $baked, $scale] = $uniforms['uGateColumns'];
+	[$columns, $baked, $scale, $fullScale] = $uniforms['uGateColumns'];
 	$added = $uniforms['uGateSize'][0];
 	$side = $x < 0 ? -1.0 : 1.0;
 	$label = $x < 0 ? $labelLeft : $labelRight;
@@ -44,7 +44,7 @@ function gateBoardX(float $x, bool $square, array $uniforms): float
 	if($along <= 0) return $x * $scale;
 	if(!$square && $along > $band - .001) return $x + $side * $added;
 	$width = $band + $added - $label * ($scale - 1);
-	$shown = max(1.0, min($baked, floor($width / ($column * $scale) + .5)));
+	$shown = max(1.0, min($baked, floor($width / ($column * $fullScale) + .5)));
 	return $side * ($label * $scale + min($along, $shown * $column) * $width / ($shown * $column));
 }
 

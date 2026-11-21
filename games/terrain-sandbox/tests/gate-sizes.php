@@ -73,7 +73,7 @@ catch(InvalidArgumentException) { expect(true, 'Course::place() refuses a size o
 
 // The shader. These lines of model.vert are the ones tests/support/gate-mesh.php repeats.
 $vertex = file_get_contents(dirname(__DIR__) . '/assets/vehicles/model.vert');
-foreach(['float shown = clamp(floor(width / (column * uGateColumns.z) + .5), 1.0, uGateColumns.y);',
+foreach(['vLabelFit = uGateColumns.w / uGateColumns.z;', 'float shown = clamp(floor(width / (column * uGateColumns.w) + .5), 1.0, uGateColumns.y);',
 	'return side * (label * uGateColumns.z + min(along, shown * column) * width / (shown * column));',
 	'if(!square && along > band - .001) return x + side * uGateSize.x;',
 	'bool gate = uGateSize.z > 0.0 && tag >= 128 && tag < 224;',
@@ -155,7 +155,7 @@ foreach($sizes as $kind => $list) foreach($list as [$width, $height])
 	$printScale = $uniforms['uGateColumns'][2];
 	$label[0] /= $printScale;
 	$ownLabel[$kind] ??= $label;
-	if($kind === 'road') expect(near($printScale * $uniforms['uGateColumns'][3], 2.0)
+	if($kind === 'road') expect(near($uniforms['uGateColumns'][3], 2.0) && $printScale > 0
 		&& ($width >= 13 ? $printScale === 2.0 : $printScale < 2.0),
 		"$name scales both text axes equally, fitting the type to a narrow board");
 	expect(near($label[0], $ownLabel[$kind][0]) && near($label[1], $ownLabel[$kind][1]) && near($label[2], $ownLabel[$kind][2]),
@@ -172,7 +172,7 @@ foreach($sizes as $kind => $list) foreach($list as [$width, $height])
 	foreach($board['column'] as $side => $column)
 	{
 		$room = $board['columns'] * $column + $uniforms['uGateSize'][0] - $board['label'][$side] * ($printScale - 1);
-		$columns[] = $room / max(1, round($room / ($printScale * $column)));
+		$columns[] = $room / max(1, round($room / ($uniforms['uGateColumns'][3] * $column)));
 	}
 	expect($found['squares'] !== [] && min($found['squares']) > .97 * min($columns)
 		&& max($found['squares']) < 1.03 * max($columns), "$name fits the nearest whole checker columns");
