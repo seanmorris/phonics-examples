@@ -116,6 +116,7 @@ export function activate({module, canvas, session, services})
 			frame.querySelector(`#${other.getAttribute('aria-controls')}`).hidden = !selected;
 		}
 
+		frame.querySelector('.lab-pages').scrollTop = 0;
 		if(moveFocus) tab.focus();
 
 		try
@@ -194,7 +195,7 @@ export function activate({module, canvas, session, services})
 		const fields=Object.entries(labels).map(([key,label])=>`<label class="terrain-field">${label}
 			<input data-layer-key="${key}" type="number" step="any" value="${Number(row[key])}"></label>`).join('');
 		const patterns = {none:'Solid', mottle:'Mottled', streaks:'Streaks', gravel:'Gravel', bedded:'Weathered beds', stipple:'Stipple'};
-		return `<details data-layer><summary>Layer ${i} · ${row.color}</summary><label class="terrain-field">Colour
+		return `<details data-layer><summary>Layer ${i} · ${row.color}</summary><div class="terrain-grid"><label class="terrain-field">Colour
 			<input type="color" data-layer-key="color" value="${row.color}"></label>
 			<label class="terrain-field">Colour pattern<select data-layer-key="pattern">
 			${Object.entries(patterns).map(([key,label])=>`<option value="${key}" ${key===row.pattern?'selected':''}>${label}</option>`).join('')}
@@ -205,7 +206,7 @@ export function activate({module, canvas, session, services})
 			<label class="terrain-field">Vertical stretch<input type="number" data-layer-key="patternStretch" min="0.25" max="64" step="any" value="${row.patternStretch}"></label>${fields}
 			<label class="terrain-field">Heights relative to<select data-layer-key="datum">
 			${['absolute','water','beds'].map(k=>`<option ${k===row.datum?'selected':''}>${k}</option>`).join('')}
-			</select></label></details>`;
+			</select></label></div></details>`;
 	}
 	function formLayers() {
 		return [...layerBox.querySelectorAll('[data-layer]')].map(row=>Object.fromEntries(
@@ -1183,28 +1184,100 @@ function range(label, key, min, max, step, value)
 			+ `<output data-output="${key}">${value}</output></label>`;
 }
 
+let labCount = 0;
+
 function markup()
 {
+	const hintPrefix = `landform-${++labCount}`;
 	return `<style>
-	.terrain-sandbox{position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
-	.terrain-sandbox:has(.terrain-instruments:not([hidden])){--radar-room:min(20%,18vw)}.terrain-flight-map{position:absolute;left:10px;bottom:10px;pointer-events:none}.terrain-sandbox.has-flight-map .terrain-hud{bottom:calc(var(--flight-map-size) + 18px)}.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
+	.terrain-sandbox{container:terrain-view / size;--lab-inset:12px;--lab-width:min(660px,max(49%,520px),calc(100% - 24px));--lab-height:calc(100cqh - 26px - var(--radar-room,0px));position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
+	.terrain-sandbox:has(.terrain-instruments:not([hidden])){--radar-room:min(20cqh,18cqw)}.terrain-flight-map{position:absolute;left:10px;bottom:10px;pointer-events:none}.terrain-sandbox.has-flight-map .terrain-hud{bottom:calc(var(--flight-map-size) + 18px)}.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--radar-room:var(--speedometer-size)}.terrain-speedometer{position:absolute;right:10px;bottom:10px;pointer-events:none}
-	.in-cockpit .terrain-panel:not([open]){width:auto;top:auto;right:50%;bottom:4px;transform:translateX(50%)}.in-cockpit .terrain-panel:not([open])>summary{padding:3px 8px;font-size:11px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud{display:none}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud:has([data-race]:not([hidden])){display:block;bottom:43px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud>:not([data-race]){display:none}.terrain-note a{color:inherit}.terrain-stage{position:absolute;inset:0}.terrain-panel{position:absolute;right:14px;top:14px;max-height:calc(100% - 28px - var(--radar-room,0px));width:300px;overflow:auto;border:1px solid #aec8bb65;border-radius:12px;background:#102822eb;box-shadow:0 8px 30px #0006;backdrop-filter:blur(10px)}
-	.terrain-panel>summary{padding:12px 15px;cursor:pointer;letter-spacing:.07em;font-weight:700}.terrain-panel>div{padding:0 14px 14px}.terrain-panel h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a8cfbd;margin:20px 0 8px}.terrain-panel h2:first-child{margin-top:3px}
-	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #779d8970;border-radius:5px;min-height:32px;padding:5px 8px;font:inherit}
+	.in-cockpit .terrain-panel:not([open]){top:auto;right:50%;bottom:4px;transform:translateX(50%)}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud{display:none}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud:has([data-race]:not([hidden])){display:block;bottom:52px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud>:not([data-race]){display:none}.terrain-note a{color:inherit}.terrain-stage{position:absolute;inset:0}
+	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #658271;border-radius:6px;min-height:34px;padding:5px 9px;font:inherit}
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}
-	.terrain-row{display:flex;gap:6px;margin:6px 0}.terrain-row>*{flex:1;min-width:0}.terrain-field{display:grid;gap:4px;margin:8px 0}.terrain-control{display:grid;grid-template-columns:90px 1fr 36px;gap:6px;align-items:center;margin:7px 0}.terrain-control output{font-variant-numeric:tabular-nums;text-align:right;color:#e5bc75;font-size:12px}
-	.terrain-note{font-size:12px;color:#bdd2c7;margin:8px 0}.terrain-check{display:flex;align-items:center;gap:8px;margin:10px 0}.terrain-hud{position:absolute;left:16px;bottom:16px;max-width:calc(100% - 355px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
-	.terrain-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:0 0 10px}.terrain-tabs [role=tab]{min-height:32px;padding:4px 6px;font-size:12px;letter-spacing:.04em;background:#183428;color:#c7dccf;border-color:#779d8950}.terrain-tabs [role=tab][aria-selected=true]{background:#2f5a46;color:#fff;border-color:#e5bc75;box-shadow:inset 0 -2px #e5bc75}.terrain-section>h2:first-child,.terrain-section>:first-child{margin-top:3px}.terrain-surface-group{display:grid;gap:0}.terrain-surface-group[hidden]{display:none}
-	@media(max-width:700px){.terrain-panel{width:260px;right:8px;top:8px;max-height:min(70%,calc(100% - 16px - var(--radar-room,0px)))}.terrain-hud{max-width:calc(100% - 56px);font-size:12px;bottom:8px}.terrain-panel:not([open]){width:auto}.terrain-panel>div{padding:0 10px 10px}}
+	.terrain-note{color:#bdd2c7}.terrain-check{display:flex;align-items:center;gap:8px}.terrain-hud{position:absolute;left:16px;bottom:16px;box-sizing:border-box;max-width:calc(100% - 32px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
+	.terrain-panel{
+		position:absolute;z-index:1;top:var(--lab-inset);right:var(--lab-inset);width:var(--lab-width);
+		box-sizing:border-box;container:terrain-lab / inline-size;overflow:hidden;
+		color:#edf4ee;background:#112a24f7;border:1px solid #668477;border-radius:14px;
+		box-shadow:0 6px 24px #07171366;backdrop-filter:blur(10px)
+	}
+	.terrain-panel>summary{
+		box-sizing:border-box;height:48px;display:flex;align-items:center;gap:12px;padding:0 16px;
+		list-style:none;cursor:pointer;background:#19382f;color:#fff7de;font-size:17px;font-weight:650
+	}
+	.terrain-panel>summary::-webkit-details-marker{display:none}
+	.terrain-panel>summary:hover{background:#254737}
+	.terrain-panel[open]>summary::after{content:"";margin-left:auto;width:13px;height:2px;background:#d9e7d7}
+	.terrain-panel:not([open]){width:44px;border-radius:50%}
+	.terrain-panel:not([open])>summary{height:42px;padding:0;justify-content:center}
+	.terrain-panel:not([open]) .lab-title{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+	.terrain-panel>summary:focus-visible{outline-offset:-4px;border-radius:inherit}
+	.lab-sliders{display:grid;gap:4px;width:19px;color:#edcb82}
+	.lab-sliders i{position:relative;height:2px;background:currentColor;border-radius:2px}
+	.lab-sliders i::after{content:"";position:absolute;left:3px;top:-2px;width:4px;height:6px;border-radius:2px;background:currentColor;box-shadow:0 0 0 1px #19382f}
+	.lab-sliders i:nth-child(2)::after{left:12px}
+	.lab-workspace{display:flex;flex-direction:column;max-height:calc(var(--lab-height) - 50px)}
+	.lab-pages{overflow:auto;overscroll-behavior:contain;min-height:0;padding:16px;scrollbar-color:#677f70 #162e27}
+	.terrain-tabs{display:grid;flex:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:4px 8px;background:#0e231d;border-block:1px solid #446050}
+	.terrain-tabs [role=tab]{min-height:32px;padding:4px 0;font-size:13px;border-color:transparent;background:transparent;color:#c9d6cb}
+	.terrain-tabs [role=tab][aria-selected=true]{background:#304c3e;color:#fff4d3;box-shadow:inset 0 -2px #e5bc75}
+	.terrain-section,.terrain-grid,.terrain-surface-group{display:grid;grid-template-columns:minmax(0,1fr);gap:12px 18px;align-items:start}
+	.terrain-section>*,.terrain-grid>*,.terrain-surface-group>*{min-width:0}
+	.terrain-section>:is(h2,p,details,.terrain-row,div),.terrain-grid>:is(p,canvas,.terrain-row),.terrain-surface-group>:is(h2,.terrain-row){grid-column:1/-1}
+	.terrain-panel h2,.terrain-landform-group legend{font-size:13px;font-weight:700;color:#d6e6cf;letter-spacing:.025em;margin:0}
+	.terrain-panel h2{padding-top:7px}
+	.terrain-section details{min-width:0;border:1px solid #425e50;border-radius:8px;background:#152f27}
+	.terrain-section details>summary{cursor:pointer;padding:10px 12px;color:#f1e9d4;font-weight:650}
+	.terrain-section details[open]>summary{border-bottom:1px solid #425e50}
+	.terrain-section details>:is(.terrain-grid,.terrain-row,.terrain-note,[data-layer-fields]){margin:12px}
+	.terrain-landform-group{margin:14px 12px 16px;padding:9px 0 0;border:0;border-top:1px solid #3a5448;min-width:0}
+	.terrain-landform-group legend{padding:0 8px 0 0}
+	.landform-field small{display:block;margin-top:4px;color:#bdcfc3;font-size:12px;line-height:1.45}
+	.terrain-panel .terrain-field{display:grid;gap:5px;align-content:start;color:#e8f0e7;font-weight:550}
+	.terrain-panel :is(input[type=number],input[type=text],select){width:100%;min-width:0;font-weight:400}
+	.terrain-surface-group{padding-block:12px;border-bottom:1px solid #3a5448}
+	.terrain-section [data-layer]+[data-layer]{margin-top:6px}
+	.terrain-control{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 8px}
+	.terrain-control>input[type=range]{grid-row:2;grid-column:1/-1}
+	.terrain-control>output{grid-row:1;grid-column:2;font-variant-numeric:tabular-nums;color:#eed194;font-size:13px}
+	.terrain-row{display:flex;flex-wrap:wrap;gap:7px}
+	.terrain-row>*{flex:1 1 104px;min-width:0}
+	.lab-pages:has([data-tab-panel=landscape]:not([hidden])){scroll-padding-bottom:66px}
+	.terrain-file-actions{position:sticky;bottom:-16px;margin:0 -16px -16px;padding:10px 16px;background:#19362b;border-top:1px solid #496352}
+	.terrain-section>.terrain-wide{grid-column:1/-1}
+	.terrain-panel .terrain-note{font-size:13px;line-height:1.5;margin:0}
+	.terrain-panel details>.terrain-note{margin:10px 12px}
+	.terrain-panel button[data-action=generate]{background:#dfbd79;color:#18271e;border-color:#e9cd94;font-weight:700}
+	.terrain-panel button[data-action=generate]:hover{background:#edd095}
+	@container terrain-lab (min-width:350px){
+		[data-tab-panel=landscape]{grid-template-columns:repeat(2,minmax(0,1fr))}
+	}
+	@container terrain-lab (min-width:490px){
+		.terrain-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}
+		.terrain-section,.terrain-grid,.terrain-surface-group{grid-template-columns:repeat(2,minmax(0,1fr))}
+	}
+	@container terrain-view (max-width:560px){
+		.terrain-panel{--lab-inset:8px;--lab-width:calc(100% - 16px);--lab-height:min(75cqh,calc(100cqh - 16px - var(--radar-room,0px)))}
+		.lab-pages{padding:12px}
+		.lab-pages:has([data-tab-panel=landscape]:not([hidden])){scroll-padding-bottom:100px}
+		.terrain-file-actions{bottom:-12px;margin:0 -12px -12px;padding:8px 12px}
+		.terrain-file-actions>*{flex-basis:calc(50% - 7px)}
+	}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--map-room:0px}
 	.terrain-sandbox.has-flight-map:has(.terrain-speedometer:not([hidden])){--map-room:calc(var(--flight-map-size) + 8px)}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])) .terrain-hud{left:calc(16px + var(--map-room));bottom:16px;max-width:calc(100% - var(--map-room) - var(--speedometer-size) - 58px)}
+	@container terrain-view (min-width:960px){
+		.terrain-panel[open]~.terrain-hud{max-width:calc(100% - var(--lab-width) - 48px)}
+	}
 	@media(max-width:640px){.terrain-sandbox:has(.terrain-panel:not([open])) .terrain-hud:has([data-race]:not([hidden])) [data-diagnostics]{display:none}}
 	</style><div class="terrain-stage"></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
-	<details class="terrain-panel" open><summary>LANDSCAPE LAB</summary><div>
+	<details class="terrain-panel" open>
+	<summary title="Landscape Lab (H)"><span class="lab-sliders" aria-hidden="true"><i></i><i></i><i></i></span><span class="lab-title">Landscape Lab</span></summary>
+	<div class="lab-workspace">
 	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
-	<section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
+	<div class="lab-pages"><section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
 	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option></select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
 	<label class="terrain-field">World size<select name="worldSize">
@@ -1212,43 +1285,79 @@ function markup()
 		<option value="65536">65.5 km per side</option>
 		<option data-loaded-size hidden></option>
 	</select></label>
+	<label class="terrain-field">Rendering detail<select data-value="quality"><option value="0.5">Economical</option><option value="1" selected>Balanced</option><option value="2">Detailed</option></select></label>
 	<details data-landform><summary>Landform parameters</summary>
-	<label class="terrain-field">Height scale · m<input name="heightScale" type="number" min="0" max="10000" value="420"></label>
-	<label class="terrain-field">Fine detail · m<input name="detailAmplitude" type="number" min="0" max="1000" value="28"></label>
-	<label class="terrain-field">Slope scale<input name="slopeScale" type="number" min="0.001" max="100" step="0.001" value="0.45"></label>
-	<label class="terrain-field">Steep-face detail damping<input name="damping" type="number" min="0" max="100" step="0.1" value="2"></label>
-	<label class="terrain-field">Starting water level · m<input name="waterLevel" type="number" min="-10000" max="10000" value="0"></label>
-	<label class="terrain-field">Domain warp · m<input name="warpAmplitude" type="number" min="0" max="5000" value="200"></label>
-	<label class="terrain-field">Terrace spacing · m<input name="terraceSpacing" type="number" min="0" max="1000" value="0"></label>
-	<label class="terrain-field">Base frequency<input name="baseFrequency" type="number" step="any"></label>
-	<label class="terrain-field">Base bias<input name="baseBias" type="number" step="any"></label>
-	<label class="terrain-field">Rolling<input name="rolling" type="number" step="any"></label>
-	<label class="terrain-field">Directional rise<input name="directionalRise" type="number" step="any"></label>
-	<label class="terrain-field">Ridge height<input name="ridgeHeight" type="number" step="any"></label>
-	<label class="terrain-field">Ridge roundness<input name="ridgeRoundness" type="number" step="any"></label>
-	<label class="terrain-field">Wall height<input name="wallHeight" type="number" step="any"></label>
-	<label class="terrain-field">Floor width<input name="floorWidth" type="number" step="any"></label>
-	<label class="terrain-field">Wall width<input name="wallWidth" type="number" step="any"></label>
-	<label class="terrain-field">Secondary<input name="secondary" type="number" step="any"></label>
-	<label class="terrain-field">Bedding<input name="bedding" type="number" step="any"></label>
-	<label class="terrain-field">Terrace strength<input name="terraceStrength" type="number" step="any"></label>
-	<label class="terrain-field">Warp frequency<input name="warpFrequency" type="number" step="any"></label>
-	<label class="terrain-field">Detail octaves<input name="detailOctaves" type="number" step="any"></label>
-	<label class="terrain-field">Lacunarity<input name="lacunarity" type="number" step="any"></label>
-	<label class="terrain-field">Persistence<input name="persistence" type="number" step="any"></label>
-	<label class="terrain-field">Transition width<input name="transitionWidth" type="number" step="any"></label>
-	<label class="terrain-field">Surround<select name="surround"><option value="sea">Open sea</option><option value="plateau">Desert plateau</option><option value="mountains">Continuing terrain</option><option value="none">None</option></select></label>
-	<p class="terrain-note">Domain warp bends the landforms. Terrace spacing creates smooth ledges; zero turns terraces off.</p>
-	<p class="terrain-note">Higher damping smooths steep faces by reducing fine-noise amplitude. These values apply when you generate.</p></details>
-	<div class="terrain-row"><button data-action="generate">Generate</button><button data-action="reset-camera">Home view</button></div>
-	<label class="terrain-field">Detail<select data-value="quality"><option value="0.5">Economical</option><option value="1" selected>Balanced</option><option value="2">Detailed</option></select></label>
-	<div class="terrain-row"><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
+	<p class="terrain-note">Select Generate to apply these values.</p>
+	<fieldset class="terrain-landform-group"><legend>Elevation and hills</legend><div class="terrain-grid">
+	<div class="landform-field"><label class="terrain-field">Height scale · m<input aria-describedby="${hintPrefix}-heightScale" name="heightScale" type="number" min="0" max="10000" value="420"></label>
+		<small id="${hintPrefix}-heightScale">Scales the broad terrain vertically. Increase it for more relief between lowlands and peaks.</small></div>
+	<div class="landform-field"><label class="terrain-field">Base bias<input aria-describedby="${hintPrefix}-baseBias" name="baseBias" type="number" step="any"></label>
+		<small id="${hintPrefix}-baseBias">Raises or lowers the whole landform before fine detail is added.</small></div>
+	<div class="landform-field"><label class="terrain-field">Base frequency<input aria-describedby="${hintPrefix}-baseFrequency" name="baseFrequency" type="number" step="any"></label>
+		<small id="${hintPrefix}-baseFrequency">Sets the horizontal scale of the terrain. Lower values make broader hills and valleys.</small></div>
+	<div class="landform-field"><label class="terrain-field">Rolling<input aria-describedby="${hintPrefix}-rolling" name="rolling" type="number" step="any"></label>
+		<small id="${hintPrefix}-rolling">Adds broad, rolling hills to the base terrain. Zero removes this contribution.</small></div>
+	<div class="landform-field"><label class="terrain-field">Secondary<input aria-describedby="${hintPrefix}-secondary" name="secondary" type="number" step="any"></label>
+		<small id="${hintPrefix}-secondary">Adds a second set of hills at half the width of the main hills.</small></div>
+	<div class="landform-field"><label class="terrain-field">Directional rise<input aria-describedby="${hintPrefix}-directionalRise" name="directionalRise" type="number" step="any"></label>
+		<small id="${hintPrefix}-directionalRise">Tilts the land from west to east. Positive values raise the eastern side.</small></div>
+	</div></fieldset>
+	<fieldset class="terrain-landform-group"><legend>Ridges and canyon walls</legend><div class="terrain-grid">
+	<div class="landform-field"><label class="terrain-field">Ridge height<input aria-describedby="${hintPrefix}-ridgeHeight" name="ridgeHeight" type="number" step="any"></label>
+		<small id="${hintPrefix}-ridgeHeight">Deepens the valleys between ridge crests. Increase it for more pronounced ridgelines.</small></div>
+	<div class="landform-field"><label class="terrain-field">Ridge roundness<input aria-describedby="${hintPrefix}-ridgeRoundness" name="ridgeRoundness" type="number" step="any"></label>
+		<small id="${hintPrefix}-ridgeRoundness">Rounds off ridge crests. Smaller values leave a sharper spine.</small></div>
+	<div class="landform-field"><label class="terrain-field">Floor width<input aria-describedby="${hintPrefix}-floorWidth" name="floorWidth" type="number" step="any"></label>
+		<small id="${hintPrefix}-floorWidth">Widens the valley floor before the canyon walls start to rise.</small></div>
+	<div class="landform-field"><label class="terrain-field">Wall width<input aria-describedby="${hintPrefix}-wallWidth" name="wallWidth" type="number" step="any"></label>
+		<small id="${hintPrefix}-wallWidth">Spreads the climb from floor to rim. Smaller values make steeper walls.</small></div>
+	<div class="landform-field"><label class="terrain-field">Wall height<input aria-describedby="${hintPrefix}-wallHeight" name="wallHeight" type="number" step="any"></label>
+		<small id="${hintPrefix}-wallHeight">Sets how far the plateau rises above the canyon floor, relative to the height scale.</small></div>
+	</div></fieldset>
+	<fieldset class="terrain-landform-group"><legend>Terraces and rock beds</legend><div class="terrain-grid">
+	<div class="landform-field"><label class="terrain-field">Terrace spacing · m<input aria-describedby="${hintPrefix}-terraceSpacing" name="terraceSpacing" type="number" min="0" max="1000" value="0"></label>
+		<small id="${hintPrefix}-terraceSpacing">Sets the vertical interval between ledges. Zero disables terracing.</small></div>
+	<div class="landform-field"><label class="terrain-field">Terrace strength<input aria-describedby="${hintPrefix}-terraceStrength" name="terraceStrength" type="number" step="any"></label>
+		<small id="${hintPrefix}-terraceStrength">Sets how strongly the slope breaks into benches and risers.</small></div>
+	<div class="landform-field"><label class="terrain-field">Bedding<input aria-describedby="${hintPrefix}-bedding" name="bedding" type="number" step="any"></label>
+		<small id="${hintPrefix}-bedding">Shapes terraces into irregular rock beds with eroded channels. Requires terrace spacing and strength above zero.</small></div>
+	</div></fieldset>
+	<fieldset class="terrain-landform-group"><legend>Fine detail</legend><div class="terrain-grid">
+	<div class="landform-field"><label class="terrain-field">Fine detail · m<input aria-describedby="${hintPrefix}-detailAmplitude" name="detailAmplitude" type="number" min="0" max="1000" value="28"></label>
+		<small id="${hintPrefix}-detailAmplitude">Sets the height of the first layer of small bumps on the terrain.</small></div>
+	<div class="landform-field"><label class="terrain-field">Detail octaves<input aria-describedby="${hintPrefix}-detailOctaves" name="detailOctaves" type="number" step="any"></label>
+		<small id="${hintPrefix}-detailOctaves">Sets how many progressively finer layers of bumps are added.</small></div>
+	<div class="landform-field"><label class="terrain-field">Lacunarity<input aria-describedby="${hintPrefix}-lacunarity" name="lacunarity" type="number" step="any"></label>
+		<small id="${hintPrefix}-lacunarity">Sets the frequency multiplier per layer. At 2, each new layer has features half as wide.</small></div>
+	<div class="landform-field"><label class="terrain-field">Persistence<input aria-describedby="${hintPrefix}-persistence" name="persistence" type="number" step="any"></label>
+		<small id="${hintPrefix}-persistence">Sets how much height each finer layer retains. At 0.5, each layer is half as tall.</small></div>
+	<div class="landform-field"><label class="terrain-field">Slope scale<input aria-describedby="${hintPrefix}-slopeScale" name="slopeScale" type="number" min="0.001" max="100" step="0.001" value="0.45"></label>
+		<small id="${hintPrefix}-slopeScale">Sets how steep the ground can get before fine detail fades. Increase it to keep roughness on steeper slopes.</small></div>
+	<div class="landform-field"><label class="terrain-field">Steep-face detail damping<input aria-describedby="${hintPrefix}-damping" name="damping" type="number" min="0" max="100" step="0.1" value="2"></label>
+		<small id="${hintPrefix}-damping">Smooths small bumps on steep ground. Higher values suppress the finest layers most.</small></div>
+	</div></fieldset>
+	<fieldset class="terrain-landform-group"><legend>Terrain bends</legend><div class="terrain-grid">
+	<div class="landform-field"><label class="terrain-field">Domain warp · m<input aria-describedby="${hintPrefix}-warpAmplitude" name="warpAmplitude" type="number" min="0" max="5000" value="200"></label>
+		<small id="${hintPrefix}-warpAmplitude">Shifts the terrain pattern sideways. Larger shifts make valleys and ridges meander more.</small></div>
+	<div class="landform-field"><label class="terrain-field">Warp frequency<input aria-describedby="${hintPrefix}-warpFrequency" name="warpFrequency" type="number" step="any"></label>
+		<small id="${hintPrefix}-warpFrequency">Sets how frequently the bends change direction. Lower values produce longer, gentler bends.</small></div>
+	</div></fieldset>
+	<fieldset class="terrain-landform-group"><legend>Water and world edge</legend><div class="terrain-grid">
+	<div class="landform-field"><label class="terrain-field">Starting water level · m<input aria-describedby="${hintPrefix}-waterLevel" name="waterLevel" type="number" min="-10000" max="10000" value="0"></label>
+		<small id="${hintPrefix}-waterLevel">Sets the water elevation on generation. Ground below this level is flooded.</small></div>
+	<div class="landform-field"><label class="terrain-field">Surround<select aria-describedby="${hintPrefix}-surround" name="surround"><option value="sea">Open sea</option><option value="plateau">Desert plateau</option><option value="mountains">Continuing terrain</option><option value="none">None</option></select></label>
+		<small id="${hintPrefix}-surround">Chooses the scenery beyond the playable area.</small></div>
+	<div class="landform-field"><label class="terrain-field">Transition width · m<input aria-describedby="${hintPrefix}-transitionWidth" name="transitionWidth" type="number" step="any"></label>
+		<small id="${hintPrefix}-transitionWidth">Sets how far beyond the boundary the terrain takes to blend into the surrounding scenery.</small></div>
+	</div></fieldset>
+	</details>
+	<div class="terrain-row terrain-file-actions"><button data-action="generate">Generate</button><button data-action="reset-camera">Home view</button><button data-action="save">Save file</button><button data-action="load">Load file</button></div><input data-file type="file" accept=".json,application/json" hidden>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-shape" aria-labelledby="terrain-tab-shape" data-tab-panel="shape" hidden>
-	<label class="terrain-field">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option><option value="balloon">Balloon</option></select></label>
-	<div data-balloon-tool hidden><label class="terrain-field">Balloon tool<select data-value="balloonTool"><option value="place">Place</option><option value="remove">Remove</option></select></label>
+	<label class="terrain-field terrain-wide">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option><option value="balloon">Balloon</option></select></label>
+	<div class="terrain-grid" data-balloon-tool hidden><label class="terrain-field">Balloon tool<select data-value="balloonTool"><option value="place">Place</option><option value="remove">Remove</option></select></label>
 	<label class="terrain-field">Height above surface · m<input data-value="balloonAltitude" type="number" min="12" max="1200" value="100"></label></div>
-	<div data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
+	<div class="terrain-grid" data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
 	<label class="terrain-field">Laps · start / finish courses only<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
 	<p class="terrain-note" data-gate-laps>Laps count when the start gate is also the finish.</p>
 	<label class="terrain-field">Height above ground · m<input data-value="gateAltitude" type="number" min="0" max="400" step="any" value="0"></label>
@@ -1257,15 +1366,15 @@ function markup()
 	<p class="terrain-note terrain-sizes" data-gate-sizes></p>
 	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening width or height of 0 takes the gate's own. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. A gate that would overlap another is refused. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
 	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
-	<details><summary>Circuit generator</summary>
+	<details><summary>Circuit generator</summary><div class="terrain-grid">
 	<label class="terrain-field">Minimum feature height difference · m<input data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="120"></label>
-	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
 	<label class="terrain-field">Start elevation · m<input data-value="circuitStartHeight" type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
+	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
 	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
 	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
 	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
 	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button></div>
-	</details>
+	</div></details>
 	${range('Radius · m', 'radius', 2, 300, 1, 40)}${range('Strength · m', 'amount', .1, 200, .1, 12)}
 	<label class="terrain-field">Flatten elevation · m<input data-value="flattenHeight" type="number" min="-1000" max="3000" value="0"></label>
 	<label class="terrain-field">Paint<select data-value="material"><option value="grass">Grass</option><option value="rock">Rock</option><option value="sand">Sand</option><option value="snow">Snow</option><option value="road">Road</option></select></label>
@@ -1349,20 +1458,19 @@ function markup()
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
-	${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
-	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button></div>
-	<div class="terrain-row"><button data-action="delivery">Package run</button></div>
+	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
 	<p class="terrain-note">Space / A launches · hold G / X for Vulcan · T / D-pad ↑ cycles balloons · V / Y+B changes view.</p></div>
-	<label class="terrain-field">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
-	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
+	${range('Flight · m/s', 'speed', 5, 300, 5, 100)}
 	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on when the sun is low</option><option value="on">On</option><option value="off">Off</option></select></label>
-	<p class="terrain-note">Press M or click the left stick to show or hide the car or F5 minimap. Press N or tap D-pad ↓ to change its zoom.</p>
+	<label class="terrain-field terrain-wide">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
+	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
+	<details><summary>Driving and flight controls</summary><p class="terrain-note">Press M or click the left stick to show or hide the car or F5 minimap. Press N or tap D-pad ↓ to change its zoom.</p>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: 300 m/s · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Start pauses.</p>
-	<p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p>
+	</details><details><summary>Credits</summary><p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p></details>
 	</section>
-	</div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
+	</div></div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

@@ -18,7 +18,12 @@ const control = (page, action) => page.locator(`.terrain-sandbox [data-action="$
 const field = async (page, selector) => {
 	const section = await page.locator(selector).first().evaluate(element => element.closest('[role="tabpanel"]')?.id ?? '');
 
-	if(section) await page.locator(`.terrain-sandbox [aria-controls="${section}"]`).click();
+	if(section)
+	{
+		const collapsed = page.locator('.terrain-panel:not([open]) > summary');
+		if(await collapsed.count()) await collapsed.click();
+		await page.locator(`.terrain-sandbox [aria-controls="${section}"]`).click();
+	}
 
 	return page.locator(selector);
 };
@@ -151,6 +156,7 @@ async function stroke(page, tool, x = .5, y = .5)
 	await (await field(page, '[data-value="tool"]')).selectOption(tool);
 	await expect.poll(async() => (await status(page)).settings.tool).toBe(tool);
 	const before = (await status(page)).revision;
+	await page.locator('.terrain-panel > summary').click();
 	const box = await canvas(page).boundingBox();
 	await page.mouse.click(box.x + box.width * x, box.y + box.height * y);
 	await expect.poll(async() => (await status(page)).revision, {timeout: 90_000}).toBeGreaterThan(before);
@@ -1467,6 +1473,7 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	await stroke(page, 'lower', .5, .5);
 	await (await field(page, '[data-value="tool"]')).selectOption('road');
 	await expect.poll(async() => (await status(page)).settings.tool).toBe('road');
+	await page.locator('.terrain-panel > summary').click();
 	const box = await canvas(page).boundingBox();
 
 	for(const x of [.3,.6]) await page.mouse.click(box.x + box.width * x, box.y + box.height * .5);
@@ -1552,6 +1559,58 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	await press(page, 'pause');
 	await settled(page);
 	expect(errors).toEqual([]);
+});
+
+test('the Landscape Lab explains each parameter, reflows, and folds to one round control', async({page}) => {
+	await page.setViewportSize({width: 1180, height: 760});
+	await page.goto('/games/terrain-sandbox/');
+	const panel = page.locator('.terrain-panel');
+	const toggle = panel.locator(':scope > summary');
+	const landform = panel.locator('[data-landform]');
+	const pages = panel.locator('.lab-pages');
+	await landform.locator('summary').click();
+
+	const fields = landform.locator('input,select');
+	const descriptions = await fields.evaluateAll(nodes => nodes.map(field =>
+		document.getElementById(field.getAttribute('aria-describedby'))?.textContent.trim() || ''
+	));
+	expect(descriptions).toHaveLength(25);
+	expect(descriptions).not.toContain('');
+	expect(new Set(descriptions).size).toBe(descriptions.length);
+
+	const height = landform.locator('[name=heightScale]');
+	const bias = landform.locator('[name=baseBias]');
+	const first = await height.boundingBox(), second = await bias.boundingBox();
+	expect(second.y).toBe(first.y);
+	expect(second.x).toBeGreaterThanOrEqual(first.x + first.width);
+
+	const navigation = panel.getByRole('tablist');
+	const tabsBefore = await navigation.boundingBox();
+	await landform.getByRole('combobox', {name: 'Surround', exact: true}).scrollIntoViewIfNeeded();
+	expect(await navigation.boundingBox()).toEqual(tabsBefore);
+	expect(await pages.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+	await expect(panel.getByRole('button', {name: 'Generate', exact: true})).toBeInViewport();
+
+	await toggle.focus();
+	await page.keyboard.press('Enter');
+	await expect(toggle).toHaveAccessibleName('Landscape Lab');
+	await expect(navigation).toBeHidden();
+	const circle = await panel.boundingBox();
+	expect(circle.width).toBe(44);
+	expect(circle.height).toBe(circle.width);
+	expect(await panel.evaluate(el => getComputedStyle(el).borderRadius)).toBe('50%');
+	await page.keyboard.press('Space');
+	await expect(navigation).toBeVisible();
+	await expect(landform).toHaveAttribute('open', '');
+
+	await page.setViewportSize({width: 375, height: 680});
+	const narrowHeight = await height.boundingBox(), narrowBias = await bias.boundingBox();
+	expect(narrowBias.x).toBe(narrowHeight.x);
+	expect(narrowBias.y).toBeGreaterThan(narrowHeight.y + narrowHeight.height);
+	expect(await pages.evaluate(el => el.scrollWidth)).toBe(await pages.evaluate(el => el.clientWidth));
+	await panel.getByRole('tab', {name: 'Water', exact: true}).click();
+	await expect(panel.getByLabel('Water level · m', {exact: true})).toBeInViewport();
+	expect(await pages.evaluate(el => el.scrollTop)).toBe(0);
 });
 
 test('the panel tabs work from the keyboard and the Surface tab changes the ground', async({page}) => {
