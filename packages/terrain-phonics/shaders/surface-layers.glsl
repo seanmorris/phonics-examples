@@ -85,13 +85,12 @@ vec3 layerColor(int layer,vec3 pos,vec3 normal,float footprint,float beddingHeig
 	float amount=projectedPattern(pos,weight,pattern.z,pattern.w,offset,kind);
 	return mix(base,uLayerPatternColor[layer],pattern.y*max(visibility*amount,.52*partings));
 }
-float repeatingMask(float height,vec2 range,float fade,float period) {
+float repeatingMask(float height,vec2 range,float fade,float period,float footprint) {
 	float width=clamp(range.y-range.x,0.,period);
 	if(width==period) return 1.;
 	float center=.5*(range.x+range.y);
 	float distanceToCenter=abs(mod(height-center+.5*period,period)-.5*period);
 	// Use the unwrapped height derivative. A pixel that straddles the wrap still sees an ordinary bed contact.
-	float footprint=fwidth(height);
 	float edge=max(fade,.65*footprint);
 	float mask=1.-smoothstep(.5*width-edge,.5*width+edge,distanceToCenter);
 	return mix(mask,width/period,smoothstep(.16,.55,footprint/period));
@@ -106,17 +105,29 @@ vec3 layerSurface(vec3 pos,vec3 normal,float footprint,float water) {
 	vec3 sectionColor=vec3(0.);
 	float sectionCoverage=0.;
 	masks[0]=1.;
+	// Contiguous sibling beds share their elevation noise, pixel width, slope and parent.
+	bool reuseMask=false;
+	float h=0., heightPixel=0., cliffMask=0.;
 	for(int i=1;i<12;i++) {
 		if(i>=uLayerCount) break;
 		vec4 r=uLayerRange[i],b=uLayerBlend[i],m=uLayerMode[i];
-		float noise=b.z>0. ? layerNoise(pos.xz,b.w,footprint) : 0.;
-		float h=(m.y==2. ? beddingHeight : pos.y-(m.y==1. ? water : 0.))+b.z*noise;
-		float fade=max(.0001,b.x), sf=max(.00001,b.y);
-		// Repeating elevations were authored relative to the midpoint of the cycle.
-		float heightMask=m.z>0. ? repeatingMask(h+.5*m.z,r.xy,fade,m.z)
-			: smoothstep(r.x-fade,r.x,h)*(1.-smoothstep(r.y,r.y+fade,h));
-		float cliffMask=smoothstep(r.z-sf,r.z,slope)*(1.-smoothstep(r.w,r.w+sf,slope));
-		if(m.x>=0.) cliffMask*=masks[int(m.x)];
+		if(!reuseMask) {
+			float noise=b.z>0. ? layerNoise(pos.xz,b.w,footprint) : 0.;
+			h=(m.y==2. ? beddingHeight : pos.y-(m.y==1. ? water : 0.))+b.z*noise;
+			if(m.z>0.) {
+				h+=.5*m.z;
+				heightPixel=fwidth(h);
+			}
+			float sf=max(.00001,b.y);
+			cliffMask=smoothstep(r.z-sf,r.z,slope)*(1.-smoothstep(r.w,r.w+sf,slope));
+			if(m.x>=0.) cliffMask*=masks[int(m.x)];
+		}
+		reuseMask=m.w==1.;
+		float fade=max(.0001,b.x), heightMask=0.;
+		if(cliffMask>0.) {
+			heightMask=m.z>0. ? repeatingMask(h,r.xy,fade,m.z,heightPixel)
+				: smoothstep(r.x-fade,r.x,h)*(1.-smoothstep(r.y,r.y+fade,h));
+		}
 		float mask=heightMask*cliffMask;
 		masks[i]=mask;
 

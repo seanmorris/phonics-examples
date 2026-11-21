@@ -45,9 +45,10 @@ vec3 terrainAtmosphere(vec3 ray, float eyeAltitude, float distanceMeters, vec3 s
 	float lowDistance = 100.0 * (exp(float(low) / (uAerialCacheGrid.z - 1.0) * logRange) - 1.0);
 	float highDistance = 100.0 * (exp(float(high) / (uAerialCacheGrid.z - 1.0) * logRange) - 1.0);
 	float weight = clamp((distanceMeters - lowDistance) / max(1e-5, highDistance - lowDistance), 0.0, 1.0);
-	vec3 transmittance = mix(terrainAerialSlice(uAerialCacheTransmittance, pixel, low, false),
+	// At distance zero the integrated ray transmits all light and scatters none.
+	vec3 transmittance = mix(low == 0 ? vec3(1.) : terrainAerialSlice(uAerialCacheTransmittance, pixel, low, false),
 		terrainAerialSlice(uAerialCacheTransmittance, pixel, high, false), weight);
-	vec3 radiance = mix(terrainAerialSlice(uAerialCacheRadiance, pixel, low, true),
+	vec3 radiance = mix(low == 0 ? vec3(0.) : terrainAerialSlice(uAerialCacheRadiance, pixel, low, true),
 		terrainAerialSlice(uAerialCacheRadiance, pixel, high, true), weight);
 	return mix(terrainNightSky(normalize(ray).y), max(vec3(0.0), sceneLinear), transmittance) + radiance;
 }

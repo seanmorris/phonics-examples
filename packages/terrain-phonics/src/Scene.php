@@ -154,6 +154,8 @@ final class Scene
 	public TerrainAppearance $appearance;
 	/** The appearance whose uniforms each ground program holds, by spl_object_id(); a missing one needs uploading. */
 	private array $boundAppearance = [];
+	/** Atmosphere uniforms last submitted to each linked scene program. */
+	private array $boundEnvironment = [];
 
 	/**
 	 * Create an incremental terrain scene with independent simulation surfaces.
@@ -2364,7 +2366,7 @@ final class Scene
 		$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
 		$waterProgram = $lit || $warm && !$this->litDrawn['water'] ? $this->litWaterProgram : $this->waterProgram;
 		$groundProgram->use();
-		$this->common($groundProgram, $camera, $width, $height);
+		$this->common($groundProgram, $camera, $width, $height, $environment);
 		$this->water->appearance->bind($groundProgram);
 
 		// A program keeps its uniforms between frames, so only a new appearance or a relinked program needs them.
@@ -2464,7 +2466,7 @@ final class Scene
 		glDepthFunc(GL_LEQUAL);
 		glDepthMask(false);
 		$this->skyProgram->use();
-		$this->common($this->skyProgram, $camera, $width, $height);
+		$this->common($this->skyProgram, $camera, $width, $height, $environment);
 		glBindVertexArray($this->vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		if($environment['nightVisibility'] > 0)
@@ -2484,7 +2486,7 @@ final class Scene
 		glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 		$waterProgram->use();
 		$this->water->appearance->bind($waterProgram);
-		$this->common($waterProgram, $camera, $width, $height);
+		$this->common($waterProgram, $camera, $width, $height, $environment);
 		[$wakeCount, $wakeBounds] = $this->waterUniforms($waterProgram, $time);
 		$lastCount = $lastBoundary = null;
 		$wakeLocation = $waterProgram->location('uFrameWakeCount');
@@ -2533,9 +2535,10 @@ final class Scene
 	 * @param Camera $camera Current viewing camera.
 	 * @param int $width Viewport width in pixels.
 	 * @param int $height Viewport height in pixels.
+	 * @param array $environment Atmosphere parameters for this frame.
 	 * @return void Updates shared draw uniforms.
 	 */
-	private function common(Program $program, Camera $camera, int $width, int $height): void
+	private function common(Program $program, Camera $camera, int $width, int $height, array $environment): void
 	{
 		$this->vector($program, 'uEye', $camera->position);
 		if($program === $this->skyProgram)
@@ -2547,15 +2550,19 @@ final class Scene
 			glUniform2f($program->location('uScreen'), $width / max(1, $height), tan($camera->fov / 2));
 		}
 		else glUniformMatrix4fv($program->location('uViewProjection'), 1, false, $camera->viewProjection($width, $height));
-		$environment = $this->atmosphere->uniforms();
-
-		foreach($environment as $name => $value)
+		$id = spl_object_id($program);
+		$previous = $this->boundEnvironment[$id] ?? [];
+		if($previous !== $environment)
 		{
-			$key = str_starts_with($name, 'u') ? $name : 'u' . ucfirst($name);
-
-			if(is_array($value) && count($value) === 3) $this->vector($program, $key, $value);
-			elseif(is_array($value) && count($value) === 2) glUniform2f($program->location($key), ...$value);
-			elseif(is_numeric($value)) $this->scalar($program, $key, $value);
+			foreach($environment as $name => $value)
+			{
+				if(($previous[$name] ?? null) === $value) continue;
+				$key = str_starts_with($name, 'u') ? $name : 'u' . ucfirst($name);
+				if(is_array($value) && count($value) === 3) $this->vector($program, $key, $value);
+				elseif(is_array($value) && count($value) === 2) glUniform2f($program->location($key), ...$value);
+				elseif(is_numeric($value)) $this->scalar($program, $key, $value);
+			}
+			$this->boundEnvironment[$id] = $environment;
 		}
 
 		if($program !== $this->skyProgram) $this->scalar($program, 'uWaterLevel', $this->water->level());
@@ -2775,6 +2782,7 @@ final class Scene
 		$this->groundProgram->restore();
 		$this->litGroundProgram->restore();
 		$this->boundAppearance = []; $this->layerBinding=[];
+		$this->boundEnvironment = [];
 		$this->skyProgram->restore();
 		$this->starsProgram->restore();
 		$this->waterProgram->restore();

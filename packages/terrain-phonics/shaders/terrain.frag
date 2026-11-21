@@ -401,11 +401,17 @@ void main()
 	vec3 weights = pow(abs(n), vec3(4.0)); weights /= dot(weights, vec3(1.0));
 	float detail = dot(weights, vec3(grain(vWorld.yz * 0.3), grain(vWorld.xz * 0.3), grain(vWorld.xy * 0.3)));
 	float footprint = max(length(dFdx(vWorld)), length(dFdy(vWorld)));
-	float macro = landVariation(vWorld.xz, footprint) * uMacroVariation;
+	// Only uniform pavement can skip the underlying palette. Triangles that blend a
+	// shoulder still evaluate its noise and derivatives all the way to the road edge.
+	float roadGradient = fwidth(vPaint1.y);
+	bool pavement = vPaint1.y >= .999999 && roadGradient <= .000001;
+	float macro = pavement ? 0. : landVariation(vWorld.xz, footprint) * uMacroVariation;
 	float slope = 1.0 - max(0.0, n.y);
 	vec3 grass = uGrassColor * (0.85 + 0.15 * macro);
 	vec3 rock = uRockColor, sand = uSandColor, snow = uSnowColor, lightingNormal = n;
 	vec3 albedo;
+	if(pavement) albedo = uRoadColor;
+	else
 #ifdef SURFACE_LAYERS
 	if(uLayerCount > 0) albedo = layerSurface(vWorld,n,footprint,uWaterLevel)*(1.+.07*macro);
 	else

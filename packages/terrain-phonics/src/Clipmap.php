@@ -506,19 +506,7 @@ final class Clipmap
 			}
 
 			$inner = [intdiv($x, 2),intdiv($z, 2),intdiv($r, 2),intdiv($b, 2)];
-			glUniform2i($p->location('uRingMin'), $x, $z);
-			glUniform1i($p->location('uSpan'), $span);
-			glUniform1i($p->location('uHasParent'), (int)isset($this->levels[$index + 1]['origin']));
-			glUniform2f($p->location('uEyeCell'), $camera->position[0] / $s, $camera->position[2] / $s);
-			glUniform1f($p->location('uMorphWidth'), self::transition($span));
-			glUniform1f($p->location('uGridStep'), $s);
-			glUniform1i($p->location('uTextureMask'), $level['n'] - 1);
-
-			foreach($level['textures'] as $i => $tex)
-			{
-				glActiveTexture(GL_TEXTURE0 + 7 + $i);
-				glBindTexture(GL_TEXTURE_2D, $tex);
-			}
+			$visible = [];
 
 			foreach($rects as [$left,$top,$right,$bottom])
 			{
@@ -543,42 +531,81 @@ final class Clipmap
 
 				if($this->recipe['wallHeight'] <= 0 && $span <= 120)
 				{
-					glUniform2i($p->location('uDrawCell'), $left, $top);
-					glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($width + 1), $rows);
-					$count++;
+					$visible[] = [$left,$top,$right,$bottom];
 					continue;
 				}
 
 				// World-aligned blocks reuse conservative bounds as the clipmap moves across them.
 				$blockSize = 64;
 				$stride = 2 ** $index;
+				$previous = [];
 				for($front = (int)floor($top / $blockSize) * $blockSize; $front < $bottom; $front += $blockSize)
-				for($west = (int)floor($left / $blockSize) * $blockSize; $west < $right; $west += $blockSize)
 				{
-					$x0 = max($west, $left);
 					$z0 = max($front, $top);
-					$columns = min($west + $blockSize, $right) - $x0;
 					$lines = min($front + $blockSize, $bottom) - $z0;
-					$block = ['x' => $x0 * $s, 'z' => $z0 * $s, 'size' => $columns * $s, 'depth' => $lines * $s];
-					[$low,$high] = $vertical;
-					if($this->source !== null && $blockSize * $s <= 512
-						&& (min($west, $front) - 2) * $s >= -$halfWorld
-						&& (max($west, $front) + $blockSize + 2) * $s <= $halfWorld)
+					$row = [];
+					$run = null;
+					for($west = (int)floor($left / $blockSize) * $blockSize; $west < $right; $west += $blockSize)
 					{
-						[$groundMin,$groundMax] = $this->source->renderBlockRange(
-							$west * $stride, $front * $stride, $blockSize * $stride, 2 * $stride
-						);
-						// Allow for the float elevation shader's rounding relative to the PHP field.
-						if($water && $groundMin > $high + .05) continue;
-						if(!$water) [$low,$high] = [$groundMin - .05, $groundMax + .05];
-					}
-					if(Camera::rejectingPlane($planes, $camera->position, $block, $low, $high) >= 0) continue;
+						$x0 = max($west, $left);
+						$columns = min($west + $blockSize, $right) - $x0;
+						$block = ['x' => $x0 * $s, 'z' => $z0 * $s, 'size' => $columns * $s, 'depth' => $lines * $s];
+						[$low,$high] = $vertical;
+						if($this->source !== null && $blockSize * $s <= 512
+							&& (min($west, $front) - 2) * $s >= -$halfWorld
+							&& (max($west, $front) + $blockSize + 2) * $s <= $halfWorld)
+						{
+							[$groundMin,$groundMax] = $this->source->renderBlockRange(
+								$west * $stride, $front * $stride, $blockSize * $stride, 2 * $stride
+							);
+							// Allow for the float elevation shader's rounding relative to the PHP field.
+							if($water && $groundMin > $high + .05) continue;
+							if(!$water) [$low,$high] = [$groundMin - .05, $groundMax + .05];
+						}
+						if(Camera::rejectingPlane($planes, $camera->position, $block, $low, $high) >= 0) continue;
 
-					glUniform2i($p->location('uDrawCell'), $x0, $z0);
-					glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($columns + 1), $lines);
-					$count++;
+						// Collect continuous visible columns, then join equal spans in adjacent rows.
+						if($run !== null && $row[$run] === $x0) $row[$run] += $columns;
+						else
+						{
+							$run = $x0;
+							$row[$run] = $x0 + $columns;
+						}
+					}
+					foreach($row as $x0 => $x1)
+					{
+						$above = $previous[$x0] ?? null;
+						if($above !== null && $visible[$above][2] === $x1 && $visible[$above][3] === $z0)
+							$visible[$above][3] = $z0 + $lines;
+						else
+						{
+							$previous[$x0] = count($visible);
+							$visible[] = [$x0, $z0, $x1, $z0 + $lines];
+						}
+					}
 				}
 			}
+			if(!$visible) continue;
+			glUniform2i($p->location('uRingMin'), $x, $z);
+			glUniform1i($p->location('uSpan'), $span);
+			glUniform1i($p->location('uHasParent'), (int)isset($this->levels[$index + 1]['origin']));
+			glUniform2f($p->location('uEyeCell'), $camera->position[0] / $s, $camera->position[2] / $s);
+			glUniform1f($p->location('uMorphWidth'), self::transition($span));
+			glUniform1f($p->location('uGridStep'), $s);
+			glUniform1i($p->location('uTextureMask'), $level['n'] - 1);
+
+			foreach($level['textures'] as $i => $tex)
+			{
+				glActiveTexture(GL_TEXTURE0 + 7 + $i);
+				glBindTexture(GL_TEXTURE_2D, $tex);
+			}
+
+			foreach($visible as [$left,$top,$right,$bottom])
+			{
+				glUniform2i($p->location('uDrawCell'), $left, $top);
+				glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 2 * ($right - $left + 1), $bottom - $top);
+			}
+			$count += count($visible);
 		}
 
 		return $count;
