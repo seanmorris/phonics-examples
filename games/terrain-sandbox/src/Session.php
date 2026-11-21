@@ -1549,6 +1549,25 @@ final class Session
 		return json_encode($document, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
 	}
 
+	/** A circuit's derived coordinates can round differently in native and WASM math libraries. */
+	private static function sameCircuitGates(array $expected, array $saved): bool
+	{
+		if(count($expected) !== count($saved)) return false;
+		foreach($expected as $i => $gate)
+		{
+			$other = $saved[$i];
+			foreach(['x', 'y', 'z', 'yaw'] as $axis)
+			{
+				$delta = abs($gate[$axis] - $other[$axis]);
+				if($axis === 'yaw') $delta = min($delta, abs(2 * M_PI - $delta));
+				if($delta > 1e-9) return false;
+				unset($gate[$axis], $other[$axis]);
+			}
+			if($gate !== $other) return false;
+		}
+		return true;
+	}
+
 	/**
 	 * Load a complete save only after validating its terrain and authoring settings.
 	 * @param string $json UTF-8 saved sandbox document.
@@ -1584,10 +1603,10 @@ final class Session
 					// Older generated circuits used the stock road height for every gate.
 					foreach($expected['gates'] as &$gate) $gate['height'] = $oldRoadHeight;
 					unset($gate);
-					$course = $derived;
 				}
-				if($expected != $savedGates)
+				if(!self::sameCircuitGates($expected['gates'],$savedGates['gates']))
 					throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
+				$course = $derived;
 				if($legacyWidth)
 				{
 					try { $course = $circuit->course($candidate,$this->gateShapes,$course->laps(),false); }

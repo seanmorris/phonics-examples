@@ -1106,6 +1106,11 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		$legacy['course'] = $oldRoute->course($generator->landscape,$shapes,$generator->course->laps(),false,true)->export();
 		$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
 		expect($copy->course->export() === $generator->course->export(), 'A saved 30 m circuit refits its wider gates on the same road.');
+		// Native and WASM hypot/atan2 can differ by a last bit on the same imported racing line.
+		$legacy['course']['gates'][4]['z'] += 2.3e-13;
+		$legacy['course']['gates'][24]['yaw'] -= 4.4e-16;
+		$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+		expect($copy->course->export() === $generator->course->export(), 'Roundoff in a saved gate pose restores the canonical layout.');
 		$legacy['course']['gates'][1]['x'] += 1;
 		try {
 			$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
