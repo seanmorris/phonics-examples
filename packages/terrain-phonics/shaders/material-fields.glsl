@@ -10,18 +10,20 @@
 	float streakFade = 1.0 - smoothstep(1.0, 2.5, footprint), blotchFade = coverBand(footprint,31.);
 	float clumpFade = coverBand(footprint,17.), tuftFade = coverBand(footprint,4.6);
 	vec3 blotchGradient = coverNoise(pos.xz / 31.0 + 5.17);
-	// Let nearby gullies bend differently across the face as they descend. Carry the warp's derivative through
-	// the noise so diffuse relief follows the same bends as the color.
+	// Water stains wander on the exposed faces. The wider drainage channels follow
+	// the local fall line, whose horizontal perpendicular points across the slope.
 	float phase = pos.y / 64.0 + 2.8*(.5+blotchGradient.x);
 	float meander = 7.0*sin(phase);
 	vec3 facePosition = pos + vec3(meander, 0.0, -meander);
+	vec2 crossSlope = vec2(-normal.z, normal.x) * inversesqrt(dot(normal.xz,normal.xz) + .04);
 	vec4 gullyGradient = vec4(0.), rillGradient = vec4(0.);
 	if(gullyFade > 0.) {
-		vec3 meanderSlope = 7.*cos(phase)*vec3(2.8*blotchGradient.y/31., 1./64., 2.8*blotchGradient.z/31.);
-		gullyGradient = ribSample(facePosition, sizes.x*vec2(1.,2.4));
-		gullyGradient.yzw += (gullyGradient.y - gullyGradient.w)*meanderSlope;
+		gullyGradient = ribSample(pos, sizes.x, crossSlope);
+		// Patchy weathering interrupts the cuts. Carry its gradient into the
+		// lighting as well, so exposed flanks and their tints stay together.
+		gullyGradient += .14 * blotchFade * vec4(blotchGradient.x, blotchGradient.y/31., 0., blotchGradient.z/31.);
 	}
-	if(rillFade > 0.) rillGradient = ribSample(pos + 71.3, vec2(12.,20.));
+	if(rillFade > 0.) rillGradient = ribSample(pos + 71.3, 12., crossSlope);
 	float gullyNoise = gullyGradient.x, blotchNoise = blotchGradient.x;
 	float gully = gullyNoise * gullyFade, rill = rillGradient.x * rillFade;
 	float blotch = blotchNoise * blotchFade;
@@ -34,14 +36,12 @@
 	if(clumpFade > 0.) clump = clumpFade*coverNoise(mat2(.8,.6,-.6,.8)*pos.xz/17. + vec2(-21.4,8.7) + vec2(1.4,-.8)*stand).x;
 	if(tuftFade > 0.) tuft = tuftFade*coverNoise(mat2(.6,-.8,.8,.6)*pos.xz/4.6 + vec2(5.2,9.7) + vec2(-.6,1.2)*clump).x;
 	float ragged = .72*clump + .32*tuft, raggedDetail = max(clumpFade, tuftFade);
-	// Gullies follow the zero crossings of the noise. Their rounded bottoms wind between wider ribs.
-	// Round the bottom over a few pixels. The mean absolute height of the two
-	// combined noise slices is about .156. Recenter as they fade to keep the treeline stable.
-	// Rock ribs give way to soil cover on shallow ground.
+	// The two sides of a cut share the same weathering. Recenter their unsigned
+	// variation as it fades to keep the treeline stable. Soil takes over on gentle ground.
 	float upright = smoothstep(.035, .20, slope);
 	float bottom = 0.01 + 0.012*footprint;
 	float cut = sqrt(gully*gully + bottom*bottom);
-	float rib = mix(blotch, 1.5*(cut - sqrt(.0243*gullyFade*gullyFade + bottom*bottom)) + 0.5*rill, upright);
+	float rib = mix(blotch, 1.5*(cut - sqrt(.0243*gullyFade*gullyFade + bottom*bottom)) + .35*rill, upright);
 
 	// Height above the snowline, raised on ribs and lowered in gullies. The broad variation keeps distant boundaries,
 	// where the finer noise has faded, off the contours.
@@ -183,19 +183,20 @@
 	float relief = (1.0 - smoothstep(snowline, snowline + uSnowline.y, pos.y)
 		* (1.0 - smoothstep(uSlopeBlend.z, uSlopeBlend.w, slope)))
 		* smoothstep(0.06, 0.25, abs(dot(normalize(relative), normal))) * (1.0 - smoothstep(3.0, 10.0, footprint));
-	// Light the shallower ribs with the world-space gradient of (12 + 10 * blotch) * groove + 1.6 * rill.
-	// The relief takes the gully and blotch noise before the
-	// footprint fades them, since the footprint jumps at triangle edges. Each gully bottom is rounded by the view
-	// distance and over at least a pixel and a half across the gully; the footprint, measured along the ground seen
-	// edge-on, is far longer than a pixel across the gully there. The rills fade with the footprint and the distance.
+	// A cut is deepest on its centerline and meets the surrounding face at zero slope.
+	// Round the bottom over at least a pixel and a half across the cut. The footprint
+	// measured along an edge-on face can be much longer than a pixel across it.
 	float viewDistance = length(relative);
 	vec3 gullySlope = gullyGradient.yzw;
 	float gullyPixel = abs(dot(gullySlope, dFdx(pos))) + abs(dot(gullySlope, dFdy(pos)));
 	float groove = sqrt(gullyNoise*gullyNoise + pow(max(0.01 + 0.00004*viewDistance, 1.5*gullyPixel), 2.0));
-	float rills = 1.6 * (1.-smoothstep(2.4,6.,footprint)) * (1.0 - smoothstep(200.0, 700.0, viewDistance));
+	const float cutWidth = .17;
+	float flank = max(0., 1.-groove/cutWidth);
+	float depth = 1.1 + .8*blotchNoise;
+	vec3 ribSlope = (2.*depth/cutWidth)*flank*(gullyNoise/groove)*gullySlope
+		- (.8/31.)*flank*flank*vec3(blotchGradient.y,0.,blotchGradient.z);
+	float rills = .7 * (1.-smoothstep(2.4,6.,footprint)) * (1.0 - smoothstep(200.0, 700.0, viewDistance));
 	// Narrow flanks lose lighting contrast before their broad color pattern disappears.
 	float ribRelief = gullyFade*(1.-.65*smoothstep(.025,.13,footprint/sizes.x));
-	vec3 ribSlope = 10.*groove*vec3(blotchGradient.y,0.,blotchGradient.z)/31.
-		+ (12.+10.*blotchNoise)*gullyNoise/groove*gullySlope;
 	vec3 lift = upright*(rockReliefWeight(sizes.x,smoothingWidth2)*ribRelief*ribSlope
 		+ rockReliefWeight(12.,smoothingWidth2)*rills*rillGradient.yzw);

@@ -67,16 +67,49 @@ float rockReliefWeight(float width, float smoothingWidth2)
 	return width*width / (width*width + smoothingWidth2);
 }
 
-// Stretch the volume vertically, then slice it in two oblique directions.
-// Both horizontal coordinates still vary on shallow ground, so a gully ends
-// in the foothills instead of projecting a cliff streak across the meadow.
-vec4 ribSample(vec3 p, vec2 scale)
+// Within each patch the cuts run down the fall line. Measure across it from a
+// nearby world anchor so turning a hillside cannot swing a world-sized lever arm.
+void gullyCorner(ivec2 cell, vec2 d, float height, vec2 across, inout vec4 field, inout vec3 weights)
 {
-	const mat3 turn = mat3(2.,2.,1., -2.,1.,2., 1.,-2.,2.)/3.;
-	vec3 meters = scale.xyx, q = turn*(p/meters);
-	vec3 a = coverNoise(q.xy), b = coverNoise(q.yz + vec2(-13.3,9.1));
-	vec3 gradient = vec3(a.y,a.z+b.y,b.z)*turn/meters;
-	return .70710678*vec4(a.x+b.x,gradient);
+	uint bits = layerHash(cell);
+	vec3 seed = vec3(uvec3(bits, bits>>10, bits>>20) & 1023u)/1023.;
+	// Each change of sign marks a cut. Vary the spacing and bearing within
+	// the overlapping patches to let one cut die out while another develops.
+	float frequency = mix(6.4,10.9,seed.x);
+	vec2 along = vec2(-across.y,across.x);
+	across += .48*(seed.z-.5)*along;
+	float bend = 3.8*dot(d,along) + 1.7*height + 6.28318*seed.z;
+	float drift = .8*(seed.x-.5);
+	float phase = frequency*dot(d,across) + 6.28318*seed.y + drift*height + .85*sin(bend);
+	float bendSlope = .85*cos(bend);
+	vec2 lateral = frequency*across + 3.8*bendSlope*along;
+	vec3 phaseSlope = vec3(lateral.x,drift + 1.7*bendSlope,lateral.y);
+
+	float w = max(.5-dot(d,d),0.), weight = w*w*w;
+	vec2 dw = -6.*w*w*d;
+	float wave = sin(phase);
+	field += vec4(weight*wave, weight*cos(phase)*phaseSlope + wave*vec3(dw.x,0.,dw.y));
+	weights += vec3(weight,dw);
+}
+
+vec4 ribSample(vec3 p, float spacing, vec2 across)
+{
+	float span = 2.7*spacing;
+	vec3 q = p/span;
+	const float skew = .366025404, unskew = .211324865;
+	vec2 ij = floor(q.xz + (q.x+q.z)*skew);
+	vec2 d = q.xz-ij + (ij.x+ij.y)*unskew;
+	ivec2 cell = ivec2(ij) + ivec2(uPaletteOffset);
+	ivec2 side = d.x>d.y ? ivec2(1,0) : ivec2(0,1);
+	vec4 field = vec4(0.);
+	vec3 weights = vec3(0.);
+	gullyCorner(cell,d,q.y,across,field,weights);
+	gullyCorner(cell+side,d-vec2(side)+unskew,q.y,across,field,weights);
+	gullyCorner(cell+1,d-1.+2.*unskew,q.y,across,field,weights);
+	// Normalize the overlapping kernels so their lattice never outlines the cuts.
+	float value = field.x/weights.x;
+	vec3 gradient = (field.yzw-value*vec3(weights.y,0.,weights.z))/(span*weights.x);
+	return .29*vec4(value,gradient);
 }
 
 // Vary the proportion of two materials in a transition. Its mean comes from

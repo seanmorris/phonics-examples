@@ -352,6 +352,8 @@ above it.
 
 The scree, slab and lichen fields read these settings wherever a stack uses them.
 
+The `ribs` relief source shades shallow cuts that run in the local downhill direction. Their spacing and course vary across a hillside. `gullySize` sets the typical spacing in meters. The cuts taper into the face at their shoulders and fade into the meadow as the ground levels out.
+
 Natural rock relief follows the landform’s `damping` and `slopeScale`. Fine fractures and loose stones lose their lighting contrast on steep faces before broad gullies do. At a grade equal to `slopeScale` and a damping of 1, the shader gives an eight-meter feature half its original lighting gradient. A damping of 0 gives full relief at every grade. The color layers still place granite, lichen and forest according to their own masks.
 
 | Setting | Default | Range | Effect |
