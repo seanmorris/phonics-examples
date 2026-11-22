@@ -1614,6 +1614,76 @@ test('the Landscape Lab explains each parameter, reflows, and folds to one round
 	expect(await pages.evaluate(el => el.scrollTop)).toBe(0);
 });
 
+test('Surface keeps field help with its control and column widths steady when scrolling', async({page}) => {
+	await page.setViewportSize({width: 1180, height: 1280});
+	await boot(page);
+	const panel = page.locator('.terrain-panel');
+	await panel.getByRole('tab', {name: 'Surface', exact: true}).click();
+	const layers = [{id: 'base'}, {id: 'ribs', channel: 'relief', relief: 'ribs'}, {id: 'top'}];
+
+	await canvas(page).evaluate(
+		(el, rows) => el.terrainSandboxDebug.action({type: 'surface-layers', layers: rows})
+		, layers
+	);
+
+	const base = panel.locator('[data-layer="base"]'), ribs = panel.locator('[data-layer="ribs"]');
+	await base.locator('summary').click();
+	const name = base.getByRole('textbox', {name: 'Layer name', exact: true});
+	await expect(name).toHaveAccessibleDescription(/choosing this layer as a mask/);
+	const pages = panel.locator('.lab-pages');
+	await expect(pages).toHaveCSS('scrollbar-gutter', 'stable');
+	await expect(pages).toHaveCSS('scrollbar-width', 'thin');
+
+	const layout = () => name.evaluate(field => {
+		const pages = field.closest('.lab-pages');
+		const hint = document.getElementById(field.getAttribute('aria-describedby'));
+		const box = hint.getBoundingClientRect();
+
+		return {
+			overflow: pages.scrollHeight > pages.clientHeight
+			, horizontal: pages.scrollWidth - pages.clientWidth
+			, column: [box.x, box.width, box.height, field.getBoundingClientRect().width]
+		};
+	});
+
+	// Keep the first layer in view while opening the second makes the page scroll.
+	for(const [width, height] of [[1180, 1280], [375, 2048]])
+	{
+		await page.setViewportSize({width, height});
+		const before = await layout();
+		expect(before.overflow).toBe(false);
+		expect(before.horizontal).toBe(0);
+		await ribs.locator('summary').click();
+		expect(await layout()).toEqual({...before, overflow: true, horizontal: 0});
+		await ribs.locator('summary').click();
+		expect(await layout()).toEqual(before);
+	}
+
+	await ribs.locator('summary').click();
+	const source = ribs.getByRole('combobox', {name: 'Relief source', exact: true});
+	const pattern = ribs.getByRole('combobox', {name: 'Pattern', exact: true});
+	await expect(source).toHaveAccessibleDescription(/Gully spacing under Shared field settings/);
+	await expect(pattern).toHaveAccessibleDescription(/Choose Pattern as the relief source/);
+
+	await source.selectOption('pattern');
+	await expect(pattern).toHaveAccessibleDescription(/shapes the bumps/);
+	await pattern.selectOption('ripples');
+	await expect(ribs.getByLabel('Pattern scale · m', {exact: true})).toHaveAccessibleDescription(/wider texture/);
+	await ribs.getByRole('button', {name: 'Move down'}).click();
+	await expect(pattern).toHaveAccessibleDescription(/shapes the bumps/);
+	await panel.getByRole('button', {name: 'Apply layers', exact: true}).click();
+	await expect.poll(async() => (await status(page)).surfaceLayers[2].pattern).toBe('ripples');
+
+	const bindings = await panel.locator('[data-layer-key],[data-shared]').evaluateAll(fields => fields.map(field => {
+		const id = field.getAttribute('aria-describedby'), help = document.getElementById(id);
+
+		return help?.textContent.trim() && help.closest('.surface-field')===field.closest('.surface-field') ? id : null;
+	}));
+
+	expect(bindings).not.toContain(null);
+	expect(new Set(bindings).size).toBe(bindings.length);
+});
+
 test('the panel tabs work from the keyboard and the Surface tab changes the ground', async({page}) => {
 	await page.goto('/games/terrain-sandbox/');
 	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});

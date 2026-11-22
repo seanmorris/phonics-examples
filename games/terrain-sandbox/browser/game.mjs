@@ -992,6 +992,46 @@ function readout(value)
 /** Local storage key for the panel tab shown last. */
 const TAB_PREFERENCE = 'terrain-sandbox.tab';
 
+const LAYER_FIELDS = {
+	name: ['Layer name', 'Use a name you can recognize when choosing this layer as a mask.']
+	, channel: ['Affects', 'Color tints the surface. Relief shades bumps. Both combines the two.']
+	, mask: ['Coverage field', 'Choose a feature to cover, such as scree. All uses the whole area within your limits.']
+	, parent: ['Within layer mask', 'Use an earlier layer’s coverage, for example to put ripples only on sand.']
+	, datum: ['Heights relative to', 'Measure from world zero, the water level, or the tilted rock beds.']
+
+	, color: ['Color', 'The base tint of this layer before its surface detail and pattern are applied.']
+	, field: ['Surface detail', 'Varies the tint. Try Joints for fractured rock or Crowns for a leafy canopy.']
+	, pattern: ['Pattern']
+	, patternColor: ['Pattern color', 'Second tint mixed in by the pattern. Shrubs also uses it for foliage.']
+	, relief: ['Relief source']
+
+	, opacity: ['Coverage · 0–1', 'At 0 the layer disappears. At 1 it has full effect wherever its masks allow.']
+	, low: ['Minimum elevation · m', 'Lower edge of the height band. Raise it to leave lower ground exposed.']
+	, high: ['Maximum elevation · m', 'Upper edge of the height band. Lower it to leave higher ground exposed.']
+	, fade: ['Elevation fade · m', 'Distance over which the layer blends out at its height limits.']
+	, slopeLow: ['Minimum slope', 'Raise to keep the layer on steeper ground. Level ground is 0. A 60° slope is 0.5.']
+	, slopeHigh: ['Maximum slope', 'Lower this to keep the layer off cliffs. A vertical face is 1.']
+	, slopeFade: ['Slope fade', 'Width of the blend at each slope limit. Small values give sharper edges.']
+	, noise: ['Boundary noise · m', 'Shifts an elevation edge up and down where that edge crosses the terrain.']
+	, scale: ['Boundary noise scale · m', 'Widens bends along elevation edges when Boundary noise is above zero.']
+	, period: ['Repeat interval · m', 'Repeats the height band at this spacing. Use 0 for a single band.']
+
+	, patternAmount: ['Pattern amount', 'Increase for a stronger tint or bump pattern. Zero removes the pattern.']
+	, patternScale: ['Pattern scale · m', 'Increase for wider texture features, such as patches or ripples.']
+	, patternStretch: ['Vertical stretch', 'Values above 1 stretch the texture upward on cliff faces.']
+	, strength: ['Relief strength', 'Sets bump intensity. Zero removes these bumps. Negative values invert them.']
+	, flatten: ['Flatten underlying relief · 0–1', 'At 1, full coverage smooths away all bumps from earlier layers.']
+};
+
+const RELIEF_HELP = {
+	none: 'Keeps the lighting from earlier layers, subject to Flatten underlying relief.'
+	, pattern: 'Uses the selected texture for bumps. Pattern scale sets their size and Relief strength their intensity.'
+	, ribs: 'Lights the shoulders of winding gullies. Set their width with Gully spacing under Shared field settings.'
+	, facets: 'Lights rock slabs and cracks. Set Slab width and Slab height under Shared field settings.'
+	, crowns: 'Gives tree crowns rounded highlights. Block and crown spacing in Shared field settings sets their size.'
+	, blocks: 'Lights loose stones and boulders. Block and crown spacing in Shared field settings sets their size.'
+};
+
 /** Keep unapplied structural edits in the panel while the renderer uses the committed stack. */
 function materialEditor(frame, push, status)
 {
@@ -1008,34 +1048,7 @@ function materialEditor(frame, push, status)
 
 	const title = value => value.replace(/-/g, ' ').replace(/^./, letter => letter.toUpperCase());
 
-	const caption = (label, widget) => `<label class="terrain-field">${label}${widget}</label>`;
-
-	const select = (key, label, choices, value) => caption(
-		label
-		, `<select data-layer-key="${key}">`
-			+ choices.map(
-				([k,name]) => `<option value="${escaped(k)}" ${k===value ? 'selected' : ''}>${escaped(name)}</option>`
-			).join('') + '</select>'
-	);
-
 	const list = keys => keys.map(key => [key,title(key)]);
-	const numberLabels = {
-		opacity: 'Coverage · 0–1'
-		, low: 'Minimum elevation · m'
-		, high: 'Maximum elevation · m'
-		, fade: 'Elevation fade · m'
-		, slopeLow: 'Minimum slope'
-		, slopeHigh: 'Maximum slope'
-		, slopeFade: 'Slope fade'
-		, noise: 'Boundary noise · m'
-		, scale: 'Boundary noise scale · m'
-		, period: 'Repeat interval · m'
-		, patternAmount: 'Pattern amount'
-		, patternScale: 'Pattern scale · m'
-		, patternStretch: 'Vertical stretch'
-		, strength: 'Relief strength'
-		, flatten: 'Flatten underlying relief · 0–1'
-	};
 
 	const rowsFrom = records => records.map(row => ({
 		...row
@@ -1043,30 +1056,44 @@ function materialEditor(frame, push, status)
 	}));
 
 	const structural = new Set(['channel','mask','field','pattern','relief','parent','datum']);
+	const inputTypes = {name: 'type="text" maxlength="64" required',color: 'type="color"',patternColor: 'type="color"'};
 
 	function layerRow(row, index, rows)
 	{
+		const menus = {
+			channel: list(surface.channels)
+			, mask: list(surface.masks)
+			, parent: [['', 'Anywhere'], ...rows.slice(0, index).map(r => [r.id, r.name])]
+			, datum: list(['absolute','water','beds'])
+			, field: list(surface.fields)
+			, pattern: list(surface.patterns)
+			, relief: list(surface.relief)
+		};
 
-		const input = (key, label, type) => caption(
-			label
-			, `<input data-layer-key="${key}" type="${type}" value="${escaped(row[key])}"`
-				+ (type==='number' ? ' step="any" required' : type==='text' ? ' maxlength="64" required' : '') + '>'
-		);
+		const fields = Object.entries(LAYER_FIELDS).map(([key, [label, help = '']]) => {
+			const id = `${layerBox.id}-row-${index}-${key}`;
+			const attrs = `data-layer-key="${key}" aria-describedby="${id}"`;
+			let widget;
 
-		const parents = [['', 'Anywhere'], ...rows.slice(0, index).map(r => [r.id, r.name])];
-		const fields = [
-			input('name', 'Layer name', 'text')
-			, select('channel', 'Affects', list(surface.channels), row.channel)
-			, select('mask', 'Coverage field', list(surface.masks), row.mask)
-			, select('parent', 'Within layer mask', parents, row.parent)
-			, select('datum', 'Heights relative to', list(['absolute','water','beds']), row.datum)
-			, input('color', 'Color', 'color')
-			, select('field', 'Surface detail', list(surface.fields), row.field)
-			, select('pattern', 'Pattern', list(surface.patterns), row.pattern)
-			, input('patternColor', 'Pattern color', 'color')
-			, select('relief', 'Relief source', list(surface.relief), row.relief)
-			, ...Object.entries(numberLabels).map(([key,label]) => input(key, label, 'number'))
-		];
+			if(menus[key])
+			{
+				const options = menus[key].map(([value, name]) => {
+					const selected = value===row[key] ? ' selected' : '';
+
+					return `<option value="${escaped(value)}"${selected}>${escaped(name)}</option>`;
+				});
+
+				widget = `<select ${attrs}>${options.join('')}</select>`;
+			}
+			else
+			{
+				const type = inputTypes[key] ?? 'type="number" step="any" required';
+				widget = `<input ${attrs} ${type} value="${escaped(row[key])}">`;
+			}
+
+			return `<div class="surface-field"><label class="terrain-field">${label}${widget}</label>
+				<small id="${id}">${help}</small></div>`;
+		});
 
 		return `<details data-layer="${escaped(row.id)}"><summary>${escaped(row.name)}</summary>
 			<div class="terrain-grid">${fields.join('')}</div><div class="terrain-row">
@@ -1080,10 +1107,24 @@ function materialEditor(frame, push, status)
 
 		const field = key => el.querySelector(`[data-layer-key="${key}"]`);
 
-		const show = (keys, visible) => keys.forEach(key => { field(key).closest('label').hidden = !visible; });
+		const group = key => field(key).closest('.surface-field');
+
+		const show = (keys, visible) => keys.forEach(key => { group(key).hidden = !visible; });
 
 		const color = field('channel').value!=='relief', relief = field('channel').value!=='color';
 		const pattern = field('pattern').value!=='none';
+		const source = field('relief').value;
+		group('relief').querySelector('small').textContent = RELIEF_HELP[source];
+		const patternHelp = group('pattern').querySelector('small');
+
+		if(!color && source!=='pattern')
+			patternHelp.textContent = 'Choose Pattern as the relief source to use this texture on a relief-only layer.';
+		else if(relief && source==='pattern')
+			patternHelp.textContent = color
+				? 'The same texture tints this layer and shapes its lighting bumps.'
+				: 'The texture shapes the bumps that catch the light. Try Ripples on sand.';
+		else patternHelp.textContent = 'Blends the pattern color into the base tint. Try Gravel for scattered flecks.';
+
 		show(['field','color'], color);
 		show(['relief','strength'], relief);
 		show(['patternColor'], color && (pattern || field('field').value==='shrubs'));
@@ -1246,16 +1287,17 @@ function materialEditor(frame, push, status)
 		surface = schema;
 
 		inkBox.innerHTML = surface.inkKeys.map(
-			key => `<label class="terrain-control"><span>${SURFACE_LABELS[key]}</span>
-			<input data-ink="${key}" type="color"></label>`
+			key => `<label class="terrain-control"><span>${INK_LABELS[key]}</span>
+			<input data-ink="${key}" type="color" aria-describedby="${layerBox.id}-paint"></label>`
 		).join('');
 
 		fieldBox.innerHTML = surface.fieldKeys.map(key => {
-			const [min,max] = surface.ranges[key], [label,step] = SURFACE_LABELS[key];
+			const [min,max] = surface.ranges[key], [label,step,help] = SHARED_FIELDS[key];
+			const id = `${layerBox.id}-shared-${key}`;
 
-			return `<label class="terrain-control"><span>${label}</span>
-				<input data-shared="${key}" type="range" min="${min}" max="${max}" step="${step}">
-				<output></output></label>`;
+			return `<div class="surface-field"><label class="terrain-control"><span>${label}</span>
+				<input data-shared="${key}" aria-describedby="${id}" type="range" min="${min}" max="${max}" step="${step}">
+				<output aria-hidden="true"></output></label><small id="${id}">${help}</small></div>`;
 		}).join('');
 	}
 
@@ -1327,7 +1369,7 @@ function materialEditor(frame, push, status)
 		for(const field of fieldBox.querySelectorAll('input'))
 		{
 			const key = field.dataset.shared;
-			field.closest('label').hidden = !usesReliefFields && key!=='macroVariation';
+			field.closest('.surface-field').hidden = !usesReliefFields && key!=='macroVariation';
 
 			if(field!==document.activeElement)
 			{
@@ -1340,32 +1382,33 @@ function materialEditor(frame, push, status)
 	return {configure, show: showSurface};
 }
 
-/** Labels and slider steps for the appearance settings. Heights relative to the snowline are negative below it. */
-const SURFACE_LABELS = {
-	gullySize: ['Gully spacing · m',.5]
-	, blockSize: ['Block and crown spacing · m',.25]
-	, jointWidth: ['Slab width · m',.5], jointHeight: ['Slab height · m',.5]
-	, grassColor: 'Grass'
-	, rockColor: 'Rock'
-	, sandColor: 'Sand'
-	, snowColor: 'Snow'
-	, roadColor: 'Road'
-	, talusAmount: ['Talus', .01]
-	, stainAmount: ['Iron stain', .01]
-	, lichenAmount: ['Lichen', .01]
-	, rockSlopeStart: ['Rock starts · slope', .01]
-	, rockSlopeEnd: ['Rock covers · slope', .01]
-	, beachHeight: ['Beach top · m', 1]
-	, beachWidth: ['Beach fade · m', .5]
-	, snowline: ['Snowline · m', 1]
-	, snowTransition: ['Snow fade · m', 1]
-	, alpineStart: ['Alpine rock from · m', 1]
-	, alpineEnd: ['Alpine rock to · m', 1]
-	, snowSlopeStart: ['Snow thins · slope', .01]
-	, snowSlopeEnd: ['Snow gone · slope', .01]
-	, macroVariation: ['Variation', .05]
-	, treeline: ['Treeline · m', 1]
-	, tundraStart: ['Tundra from · m', 1]
+const INK_LABELS = {grassColor: 'Grass', rockColor: 'Rock', sandColor: 'Sand', snowColor: 'Snow', roadColor: 'Road'};
+
+/** Labels, slider steps and inline help for fields sampled by multiple layers. */
+const SHARED_FIELDS = {
+	gullySize: ['Gully spacing · m', .5, 'Wider spacing spreads out the ribs and the color bands that follow them.']
+	, blockSize: ['Block and crown spacing · m', .25, 'Increase for larger, more widely spaced rocks and tree crowns.']
+	, jointWidth: ['Slab width · m', .5, 'Horizontal spacing between fractures. Increase for wider rock slabs.']
+	, jointHeight: ['Slab height · m', .5, 'Vertical spacing between fractures. Increase for taller rock faces.']
+
+	, talusAmount: ['Talus', .01, 'Sets the share of moderately steep ground covered by fans of loose rock.']
+	, stainAmount: ['Iron stain', .01, 'Increase to cover more of the exposed rock with iron stains.']
+	, lichenAmount: ['Lichen', .01, 'Strengthens the gray-green patches on weathered rock.']
+
+	, rockSlopeStart: ['Rock starts · slope', .01, 'Lower this threshold to expose rock on gentler slopes.']
+	, rockSlopeEnd: ['Rock covers · slope', .01, 'Slope where the transition from soil to exposed rock finishes.']
+	, beachHeight: ['Beach top · m', 1, 'Height above the water where shore sand begins to thin.']
+	, beachWidth: ['Beach fade · m', .5, 'Vertical distance over which sand blends out above the beach top.']
+	, snowline: ['Snowline · m', 1, 'World elevation where snow starts. Alpine and vegetation zones follow it.']
+	, snowTransition: ['Snow fade · m', 1, 'Climb above the snowline needed for full snow cover on gentle ground.']
+	, alpineStart: ['Alpine rock from · m', 1, 'Bare rock starts at this height relative to the snowline.']
+	, alpineEnd: ['Alpine rock to · m', 1, 'Height from the snowline where bare rock replaces the last alpine meadow.']
+	, snowSlopeStart: ['Snow thins · slope', .01, 'Slope where snow begins to give way to the material underneath.']
+	, snowSlopeEnd: ['Snow gone · slope', .01, 'Raise this threshold to keep snow on steeper faces.']
+
+	, macroVariation: ['Variation', .05, 'Varies tint across broad areas and makes snow and vegetation edges wander.']
+	, treeline: ['Treeline · m', 1, 'Height of the forest edge relative to the snowline. Negative values lie below it.']
+	, tundraStart: ['Tundra from · m', 1, 'Height relative to the snowline where tundra begins to replace meadow.']
 };
 
 function range(label, key, min, max, step, value)
@@ -1380,6 +1423,8 @@ let labCount = 0;
 function markup()
 {
 	const hintPrefix = `landform-${++labCount}`;
+	const surfaceId = `surface-${labCount}`;
+
 	return `<style>
 	.terrain-sandbox{container:terrain-view / size;--lab-inset:12px;--lab-width:min(660px,max(49%,520px),calc(100% - 24px));--lab-height:calc(100cqh - 26px - var(--radar-room,0px));position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
 	.terrain-sandbox:has(.terrain-instruments:not([hidden])){--radar-room:min(20cqh,18cqw)}.terrain-flight-map{position:absolute;left:10px;bottom:10px;pointer-events:none}.terrain-sandbox.has-flight-map .terrain-hud{bottom:calc(var(--flight-map-size) + 18px)}.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
@@ -1410,7 +1455,7 @@ function markup()
 	.lab-sliders i::after{content:"";position:absolute;left:3px;top:-2px;width:4px;height:6px;border-radius:2px;background:currentColor;box-shadow:0 0 0 1px #19382f}
 	.lab-sliders i:nth-child(2)::after{left:12px}
 	.lab-workspace{display:flex;flex-direction:column;max-height:calc(var(--lab-height) - 50px)}
-	.lab-pages{overflow:auto;overscroll-behavior:contain;min-height:0;padding:16px;scrollbar-color:#677f70 #162e27}
+	.lab-pages{overflow:auto;overscroll-behavior:contain;min-height:0;padding:16px;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#819a8b transparent}
 	.terrain-tabs{display:grid;flex:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:4px 8px;background:#0e231d;border-block:1px solid #446050}
 	.terrain-tabs [role=tab]{min-height:32px;padding:4px 0;font-size:13px;border-color:transparent;background:transparent;color:#c9d6cb}
 	.terrain-tabs [role=tab][aria-selected=true]{background:#304c3e;color:#fff4d3;box-shadow:inset 0 -2px #e5bc75}
@@ -1425,7 +1470,7 @@ function markup()
 	.terrain-section details>:is(.terrain-grid,.terrain-row,.terrain-note,[data-layer-fields]){margin:12px}
 	.terrain-landform-group{margin:14px 12px 16px;padding:9px 0 0;border:0;border-top:1px solid #3a5448;min-width:0}
 	.terrain-landform-group legend{padding:0 8px 0 0}
-	.landform-field small{display:block;margin-top:4px;color:#bdcfc3;font-size:12px;line-height:1.45}
+	.landform-field small,.surface-field small{display:block;margin-top:4px;color:#bdcfc3;font-size:12px;line-height:1.45}
 	.terrain-panel .terrain-field{display:grid;gap:5px;align-content:start;color:#e8f0e7;font-weight:550}
 	.terrain-panel :is(input[type=number],input[type=text],select){width:100%;min-width:0;font-weight:400}
 	.terrain-surface-group{padding-block:12px;border-bottom:1px solid #3a5448}
@@ -1598,12 +1643,13 @@ function markup()
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
-	<div class="terrain-row"><select data-layer-preset aria-label="Material preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="limestone">Limestone Plain</option><option value="canyon">Canyon</option><option value="canyon-v1">Early Canyon</option></select>
+	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="limestone">Limestone Plain</option><option value="canyon">Canyon</option><option value="canyon-v1">Early Canyon</option></select>
 	<button data-layer-load>Load preset surface</button><button data-layer-reset>Follow landform preset</button></div>
-	<h2>Material layers</h2><p class="terrain-note">The first layer covers the whole terrain. Each layer above it can add color, change the lighting normal, or do both. Apply to commit changes to the stack.</p>
-	<div data-layer-fields></div><div class="terrain-row"><button data-layer-add>Add layer</button><button data-layer-apply disabled>Apply layers</button></div>
-	<details><summary>Shared field settings</summary><div data-shared-fields></div></details>
-	<details><summary>Paint inks</summary><p class="terrain-note">Brushes and roads cover the finished surface, including its relief.</p><div data-paint-inks></div></details>
+	<p class="terrain-note" id="${surfaceId}-preset">Load preset surface replaces the stack. Follow landform preset restores the materials for the current landform.</p>
+	<h2>Material layers</h2><p class="terrain-note">The base layer covers the terrain. Colors and numbers preview as you edit an applied stack. After changing the layer order, a source, or a mask, choose Apply layers to preview the draft.</p>
+	<div id="${surfaceId}" data-layer-fields></div><div class="terrain-row"><button data-layer-add>Add layer</button><button data-layer-apply disabled>Apply layers</button></div>
+	<details><summary>Shared field settings</summary><p class="terrain-note">Each setting changes every layer that uses that feature.</p><div class="terrain-grid" data-shared-fields></div></details>
+	<details><summary>Paint inks</summary><p class="terrain-note" id="${surfaceId}-paint">These colors apply to existing and new paint strokes and roads. At full coverage, paint covers the natural color and relief.</p><div class="terrain-grid" data-paint-inks></div></details>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-water" aria-labelledby="terrain-tab-water" data-tab-panel="water" hidden>
 	<label class="terrain-field">Water level · m<input data-value="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
