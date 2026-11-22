@@ -37,6 +37,7 @@ export function activate({module, canvas, session, services})
 
 	// Hold the fine window still while dragging it. Only a coarse edit or a
 	// restored landscape recenters the window on the nearest coarse tick.
+
 	const setFineFogWindow = value => {
 		const center = coarseFog.valueAsNumber;
 		fineFog.min = Math.max(0, center - .005).toFixed(4);
@@ -59,8 +60,15 @@ export function activate({module, canvas, session, services})
 	const focusedField = target => target instanceof HTMLElement && Boolean(target.closest('input,select,textarea'));
 
 	// These fields send nothing while their text is out of range, and return to the last value sent when left so.
-	const checked = new Set(['waterLevel', 'gateLaps', 'gateAltitude', 'gateWidth', 'gateHeight', 'balloonAltitude',
-		'circuitRelief', 'circuitStartHeight']);
+	const checked = new Set(['waterLevel'
+		, 'gateLaps'
+		, 'gateAltitude'
+		, 'gateWidth'
+		, 'gateHeight'
+		, 'balloonAltitude'
+		, 'circuitRelief', 'circuitStartHeight'
+	]);
+
 	const gateTool = frame.querySelector('[data-gate-tool]');
 	const circuitMap = frame.querySelector('[data-circuit-map]');
 	const circuitSummary = frame.querySelector('[data-circuit-summary]');
@@ -72,8 +80,10 @@ export function activate({module, canvas, session, services})
 	};
 
 	const listen = field => {
+
 		const blankStart = () => field.dataset.value === 'circuitStartHeight'
 			&& field.value === '' && !field.validity.badInput;
+
 		field.addEventListener('input', () => {
 			if(checked.has(field.dataset.value))
 			{
@@ -82,9 +92,11 @@ export function activate({module, canvas, session, services})
 				field.defaultValue = field.value;
 			}
 
-			values[field.dataset.value] = blankStart() ? null : field.type === 'checkbox'
-				? field.checked
-				: field.type === 'range' || field.type === 'number' ? Number(field.value) : field.value;
+			values[field.dataset.value] = blankStart()
+				? null
+				: field.type === 'checkbox'
+					? field.checked
+					: field.type === 'range' || field.type === 'number' ? Number(field.value) : field.value;
 
 			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
 
@@ -97,7 +109,8 @@ export function activate({module, canvas, session, services})
 
 		if(checked.has(field.dataset.value))
 		field.addEventListener('blur', () => {
-			if(!blankStart() && (!Number.isFinite(field.valueAsNumber) || !field.validity.valid)) field.value = field.defaultValue;
+			if(!blankStart() && (!Number.isFinite(field.valueAsNumber) || !field.validity.valid))
+			field.value = field.defaultValue;
 		}, {signal});
 	};
 
@@ -117,6 +130,7 @@ export function activate({module, canvas, session, services})
 		}
 
 		frame.querySelector('.lab-pages').scrollTop = 0;
+
 		if(moveFocus) tab.focus();
 
 		try
@@ -186,10 +200,14 @@ export function activate({module, canvas, session, services})
 	const presetField = frame.querySelector('[name="preset"]');
 	const seedField = frame.querySelector('[name="seed"]');
 	let presetSeed = seedField.defaultValue;
+
 	presetField.addEventListener('change', () => {
 		const {seed, ...parameters} = surface.presets[presetField.value];
+
 		if(seedField.value === '' || seedField.value === presetSeed) seedField.value = seed;
+
 		presetSeed = seed;
+
 		for(const [name, value] of Object.entries(parameters)) frame.querySelector(`[name="${name}"]`).value = value;
 	}, {signal});
 
@@ -511,6 +529,7 @@ export function activate({module, canvas, session, services})
 			if(state.car?.motion === 'overturned') status.textContent = 'Car overturned. Recovering…';
 			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';
 			else status.textContent = state.message;
+
 			button('pause').textContent = state.paused ? 'Resume · P' : 'Pause · P';
 			button('craft').hidden = state.mode === 'craft';
 			button('jet').hidden = state.mode === 'jet';
@@ -526,7 +545,11 @@ export function activate({module, canvas, session, services})
 			if(state.preparing) pending.textContent = 'Preparing terrain edit…';
 			else if(state.findingCarSite) pending.textContent = 'Looking for level ground…';
 			else if(state.picking) pending.textContent = 'Finding the ground…';
-			else if(state.renderer.visible) pending.textContent = `Refining terrain · ${levelsPending} ${levelsPending === 1 ? 'level' : 'levels'} remaining`;
+			else if(state.renderer.visible)
+			pending.textContent = `Refining terrain · ${levelsPending} ${levelsPending
+				=== 1
+				? 'level'
+				: 'levels'} remaining`;
 			else pending.textContent = 'Preparing terrain…';
 
 			for(const name of ['undo','redo','generate','road-apply','load','save'])
@@ -538,19 +561,36 @@ export function activate({module, canvas, session, services})
 			button('circuit-cancel').disabled = state.preparing;
 			button('circuit-dry').disabled = !editable || !circuit.points;
 			button('circuit-flooded').disabled = !editable || circuit.floodedLevel === null;
-			circuitSummary.textContent = circuit.searching ? 'Searching the surrounding terrain…'
-				: circuit.points ? `${(circuit.length/1000).toFixed(2)} km · ${circuit.gates.length} gates`
-					+ (circuit.featureArea === null ? '' : ` · ${(circuit.featureArea/1e6).toFixed(1)} km² ${circuit.heightDifference < 0 ? 'lake' : 'high ground'}`)
-					+ (circuit.heightDifference === null ? '' : ` · ${Math.abs(Math.trunc(circuit.heightDifference))} m ${circuit.heightDifference < 0 ? 'below' : 'above'} the route`)
+
+			circuitSummary.textContent = circuit.searching
+				? 'Searching the surrounding terrain…'
+				: circuit.points
+					? `${(circuit.length/1000).toFixed(2)} km · ${circuit.gates.length} gates`
+					+ (circuit.featureArea === null
+						? ''
+						: ` · ${(circuit.featureArea/1e6).toFixed(
+							1
+						)} km² ${circuit.heightDifference < 0 ? 'lake' : 'high ground'}`
+					)
+					+ (circuit.heightDifference === null
+						? ''
+						: ` · ${Math.abs(
+							Math.trunc(circuit.heightDifference)
+						)} m ${circuit.heightDifference < 0 ? 'below' : 'above'} the route`
+					)
 					+ (circuit.startHeight === null ? '' : ` · road starts at ${circuit.startHeight.toFixed(1)} m`)
 					+ (circuit.gradeWidth === null ? '' : ` · apply to grade a ${circuit.gradeWidth} m road`)
-					+ (circuit.floodedLevel === null ? '' : ` · flood level ${circuit.floodedLevel} m`) : '';
+					+ (circuit.floodedLevel === null ? '' : ` · flood level ${circuit.floodedLevel} m`)
+					: '';
+
 			const circuitKey = JSON.stringify(circuit.points);
+
 			if(circuitKey !== lastCircuit)
 			{
-				drawCircuit(circuitMap,circuit);
+				drawCircuit(circuitMap, circuit);
 				lastCircuit = circuitKey;
 			}
+
 			frame.querySelector('[data-road-count]').textContent = `${state.roadPoints.length} control points`;
 			const projection = JSON.stringify([state.roadPoints, state.camera, state.viewport]);
 
@@ -581,11 +621,17 @@ export function activate({module, canvas, session, services})
 				const worldSize = frame.querySelector('[name="worldSize"]');
 				const customSize = worldSize.querySelector('[data-loaded-size]');
 				const size = String(state.recipe.worldSize);
-				customSize.hidden = [...worldSize.options].some(option => option !== customSize && option.value === size);
-				if(!customSize.hidden) {
+
+				customSize.hidden = [...worldSize.options].some(
+					option => option !== customSize && option.value === size
+				);
+
+				if(!customSize.hidden)
+				{
 					customSize.value = size;
 					customSize.textContent = size + ' m per side';
 				}
+
 				worldSize.value = size;
 
 				for(const key of Object.keys(surface.presets[state.recipe.preset]))
@@ -715,22 +761,28 @@ function updateRoadPreview(svg, state)
 function drawCircuit(canvas, circuit)
 {
 	canvas.hidden = !circuit.points;
+
 	if(canvas.hidden) return;
+
 	const xs = circuit.points.map(point => point[0]), zs = circuit.points.map(point => point[1]);
 	const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
 	const w = canvas.width, h = canvas.height;
-	const scale = Math.min((w-24)/Math.max(1,maxX-minX),(h-24)/Math.max(1,maxZ-minZ));
-	const point = (x,z) => [w/2+(x-(minX+maxX)/2)*scale,h/2+(z-(minZ+maxZ)/2)*scale];
+	const scale = Math.min((w-24)/Math.max(1, maxX-minX), (h-24)/Math.max(1, maxZ-minZ));
+
+	const point = (x, z) => [w/2+(x-(minX+maxX)/2)*scale,h/2+(z-(minZ+maxZ)/2)*scale];
 	const ctx = canvas.getContext('2d');
-	ctx.clearRect(0,0,w,h);
+	ctx.clearRect(0, 0, w, h);
 	ctx.beginPath();
-	circuit.points.forEach(([x,z],i) => i ? ctx.lineTo(...point(x,z)) : ctx.moveTo(...point(x,z)));
+	circuit.points.forEach(([x,z], i) => i ? ctx.lineTo(...point(x, z)) : ctx.moveTo(...point(x, z)));
 	ctx.closePath();
-	ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.strokeStyle = '#efc275';
+	ctx.lineWidth = 3;
+	ctx.lineJoin = 'round';
+	ctx.strokeStyle = '#efc275';
 	ctx.stroke();
-	circuit.gates.forEach(([x,z],i) => {
+
+	circuit.gates.forEach(([x,z], i) => {
 		ctx.beginPath();
-		ctx.arc(...point(x,z),i ? 2 : 4,0,2*Math.PI);
+		ctx.arc(...point(x, z), i ? 2 : 4, 0, 2*Math.PI);
 		ctx.fillStyle = i ? '#eadbb8' : '#fff';
 		ctx.fill();
 	});
@@ -745,15 +797,21 @@ function drawCircuit(canvas, circuit)
 function updateRace(line, state)
 {
 	const {course, race, delivery} = state;
+
 	if(delivery)
 	{
 		line.hidden = false;
 		const leg = delivery.carrying ? 'Drop-off' : 'Pickup';
 		const distance = delivery.target && state.car
-			? ' · ' + (Math.hypot(delivery.target.x-state.car.x,delivery.target.z-state.car.z)/1609.344).toFixed(1) + ' mi' : '';
+			? ' · ' + (Math.hypot(delivery.target.x-state.car.x, delivery.target.z-state.car.z)/1609.344).toFixed(1)
+				+ ' mi'
+			: '';
+
 		line.textContent = leg + distance + ' · Delivered ' + delivery.delivered;
+
 		return;
 	}
+
 	line.hidden = !course?.gates.length;
 
 	if(line.hidden) return;
@@ -892,7 +950,7 @@ function generationValues(frame)
 	};
 
 	for(const field of frame.querySelectorAll('[data-landform] [name]'))
-		result[field.name]=field.tagName==='SELECT'?field.value:Number(field.value);
+		result[field.name] = field.tagName==='SELECT' ? field.value : Number(field.value);
 
 	return result;
 }
@@ -1006,8 +1064,12 @@ const LAYER_FIELDS = {
 	, field: ['Surface detail', 'Varies the tint. Try Joints for fractured rock or Crowns for a leafy canopy.']
 	, pattern: ['Pattern']
 	, patternColor: ['Pattern color', 'Second tint mixed in by the pattern. Shrubs also uses it for foliage.']
-	, reflectivity: ['Reflection strength · 0–1', 'Adds a clear reflective coating. At 1, polished ice catches the sky most strongly at a grazing angle.']
-	, roughness: ['Reflection roughness · 0–1', 'Lower values sharpen the reflected sun. Higher values spread the highlight across a frosted surface.']
+	, reflectivity: ['Reflection strength · 0–1'
+		, 'Adds a clear reflective coating. At 1, polished ice catches the sky most strongly at a grazing angle.'
+	]
+	, roughness: ['Reflection roughness · 0–1'
+		, 'Lower values sharpen the reflected sun. Higher values spread the highlight across a frosted surface.'
+	]
 	, relief: ['Relief source']
 
 	, opacity: ['Coverage · 0–1', 'At 0 the layer disappears. At 1 it has full effect wherever its masks allow.']
@@ -1039,6 +1101,7 @@ const RELIEF_HELP = {
 
 /** Keep unapplied structural edits in the panel while the renderer uses the committed stack. */
 // Changes are committed on blur or selection. Keep unfinished number edits across ordinary status updates.
+
 function atmosphereEditor(frame, push)
 {
 	const list = frame.querySelector('[data-air-list]');
@@ -1047,58 +1110,82 @@ function atmosphereEditor(frame, push)
 	const preset = frame.querySelector('[data-air-preset]');
 	let schema, generation = -1, serial = 0, pending = 0, accepted = '';
 
-	function row(values) {
+	function row(values)
+	{
 		const el = template.content.firstElementChild.cloneNode(true);
-		for(const input of el.querySelectorAll('[data-air-key]')) {
+
+		for(const input of el.querySelectorAll('[data-air-key]'))
+		{
 			const key = input.dataset.airKey;
+
 			if(key==='top' || key==='bottom') input.max = schema.ceiling;
+
 			if(key==='density') input.max = schema.maxDensity;
+
 			if(key==='enabled') input.checked = values[key];
 			else input.value = values[key];
 		}
+
 		el.querySelector('legend').textContent = values.name;
+
 		return el;
 	}
 
-	function submit() {
+	function submit()
+	{
 		const rows = [];
-		for(const el of list.children) {
+
+		for(const el of list.children)
+		{
 			const record = {};
 			const top = el.querySelector('[data-air-key=top]');
 			const base = el.querySelector('[data-air-key=bottom]');
 			top.setCustomValidity(top.valueAsNumber <= base.valueAsNumber ? 'Top must be above the base.' : '');
-			for(const input of el.querySelectorAll('[data-air-key]')) {
+
+			for(const input of el.querySelectorAll('[data-air-key]'))
+			{
 				if(!input.reportValidity()) return;
-				record[input.dataset.airKey] = input.type==='checkbox' ? input.checked
+
+				record[input.dataset.airKey] = input.type==='checkbox'
+					? input.checked
 					: input.type==='number' ? input.valueAsNumber : input.value.trim();
 			}
+
 			el.querySelector('legend').textContent = record.name;
 			rows.push(record);
 		}
+
 		pending = ++serial;
-		push({type:'atmosphere-layers', layers:rows, request:pending});
+		push({type: 'atmosphere-layers', layers: rows, request: pending});
 		add.disabled = rows.length >= schema.limit;
 	}
 
 	add.onclick = () => {
 		if(!schema || list.children.length >= schema.limit) return;
+
 		const names = new Set(Array.from(list.querySelectorAll('[data-air-key=name]'), el => el.value));
 		const first = schema.defaults.name;
 		let name = first;
-		for(let i=2; names.has(name); ++i) name = first + ' ' + i;
+
+		for(let i = 2; names.has(name); ++i) name = first + ' ' + i;
 		const el = row({...schema.defaults,name});
 		list.append(el);
 		submit();
 		el.querySelector('[data-air-key=name]').focus();
 	};
+
 	preset.onclick = () => {
 		pending = ++serial;
-		push({type:'atmosphere-preset', request:pending});
+		push({type: 'atmosphere-preset', request: pending});
 	};
+
 	list.onchange = submit;
+
 	list.onclick = ({target}) => {
 		const remove = target.closest('[data-air-remove]');
-		if(remove) {
+
+		if(remove)
+		{
 			remove.closest('fieldset').remove();
 			submit();
 			add.focus();
@@ -1106,27 +1193,42 @@ function atmosphereEditor(frame, push)
 	};
 
 	return {
-		configure(value) { schema = value; add.disabled = false; },
-		show(state) {
+
+		configure(value) { schema = value; add.disabled = false; }
+
+
+		, show(state) {
 			if(!schema || !state.atmosphereLayers) return;
+
 			const replaced = generation !== state.generation;
+
 			if(!replaced && pending > state.atmosphereReply) return;
+
 			preset.disabled = state.atmosphereOrigin === 'preset';
 			const key = JSON.stringify(state.atmosphereLayers);
+
 			if(!replaced && !pending && key===accepted) return;
+
 			generation = state.generation;
 			pending = 0;
 			accepted = key;
 			const rows = state.atmosphereLayers;
+
 			if(replaced || rows.length !== list.children.length) list.replaceChildren(...rows.map(row));
-			else for(const [i,el] of Array.from(list.children).entries()) {
+			else
+			for(const [i,el] of Array.from(list.children).entries())
+			{
 				el.querySelector('legend').textContent = rows[i].name;
-				for(const input of el.querySelectorAll('[data-air-key]')) {
+
+				for(const input of el.querySelectorAll('[data-air-key]'))
+				{
 					const value = rows[i][input.dataset.airKey];
+
 					if(input.type==='checkbox') input.checked = value;
 					else if(input!==document.activeElement) input.value = value;
 				}
 			}
+
 			add.disabled = rows.length >= schema.limit;
 		}
 	};
@@ -1156,8 +1258,13 @@ function materialEditor(frame, push, status)
 
 	const structural = new Set(['channel','mask','field','pattern','relief','parent','datum']);
 	const fraction = 'type="number" min="0" max="1" step="any" required';
-	const inputTypes = {name: 'type="text" maxlength="64" required',color: 'type="color"',patternColor: 'type="color"',
-		reflectivity: fraction, roughness: fraction};
+	const inputTypes = {
+		name: 'type="text" maxlength="64" required'
+		, color: 'type="color"'
+		, patternColor: 'type="color"'
+		, reflectivity: fraction
+		, roughness: fraction
+	};
 
 	function layerRow(row, index, rows)
 	{
