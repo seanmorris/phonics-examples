@@ -316,10 +316,12 @@ final class Clipmap
 	{
 		// Each turn paints at most this many texels; at about 40 microseconds a texel that is under 1.5 ms.
 		$batch = 32;
-		$painted = false;
+		$painted = $visited = false;
 
-		while($this->paintQueue !== [] && ($deadline === null || microtime(true) < $deadline))
+		while($this->paintQueue !== [] && (!$visited || $deadline === null || microtime(true) < $deadline))
 		{
+			// WebGL setup may already have spent the frame budget. Still advance one bounded queue entry.
+			$visited = true;
 			$k = array_key_first($this->paintQueue);
 			[$key,$x,$z,$w,$h,$step,$offset,$regions] = $this->paintQueue[$k];
 			$level = $key < 0 ? $this->overview : ($this->levels[$key] ?? []);
@@ -458,8 +460,8 @@ final class Clipmap
 			];
 		}
 
-		if(!$changed && !$this->pending && $this->spans === $spans && $origins === array_column($this->levels, 'origin'))
-		return false;
+		$gridChanged = $this->spans !== $spans || $origins !== array_column($this->levels, 'origin');
+		if(!$changed && !$this->pending && !$gridChanged) return false;
 
 		$previous = glGetIntegerv(GL_FRAMEBUFFER_BINDING);
 		glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffer[0]);
@@ -547,14 +549,18 @@ final class Clipmap
 			// The finest level surrounds the camera, so its edits come first; the overview goes last.
 			usort($this->paintQueue, static fn(array $a, array $b) => ($a[0] < 0 ? PHP_INT_MAX : $a[0])
 				<=> ($b[0] < 0 ? PHP_INT_MAX : $b[0]));
+			$firstLevel = $this->paintQueue[0][0] ?? null;
 			$this->drainPaint($deadline);
+			$nextLevel = $this->paintQueue[array_key_first($this->paintQueue)][0] ?? null;
 			if($this->paintQueue !== []) $this->pending = true;
 		} finally
 		{
 			glBindFramebuffer(GL_FRAMEBUFFER, is_array($previous) ? $previous[0] : $previous);
 		}
 
-		return true;
+		// A paused camera can keep displaying its last frame between completed levels. Rendering the whole scene
+		// for each 32-texel upload makes software GPUs starve the very queue that is preparing the new view.
+		return $changed || $gridChanged || $firstLevel !== $nextLevel || !$this->pending;
 	}
 
 	private function refresh(
