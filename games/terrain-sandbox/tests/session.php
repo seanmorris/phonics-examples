@@ -397,6 +397,28 @@ for($i = 0; $i < 100; $i++) $drive->step(1/60);
 $reverse = $drive->car->state();
 $drive->step(1/60);
 expect($reverse['speed'] < -2 && $drive->car->state()['yaw'] > $reverse['yaw'], 'Braking engages reverse and reverses the turn');
+// At 240 mph a steep face is a crash, not a ramp: only the old 36 m/s top speed rides up it. Before, a 30 m raise
+// threw the car about 400 m high.
+$face = new Session(['worldSize' => 8192, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -50]);
+$face->landscape->queue(['type' => 'raise', 'x' => 0, 'z' => 1500, 'radius' => 16, 'amount' => 30]);
+$face->landscape->commit();
+$face->camera->position = [0, 30, -2500];
+$face->camera->yaw = M_PI;
+input($face, ['actions' => ['car']]);
+for($i = 0; $face->findingCarSite() && $i < 4000; $i++) input($face, []);
+$fastest = $highest = 0.0;
+for($i = 0; $i < 3600; $i++)
+{
+	input($face, ['keys' => ['KeyW' => true]]);
+	$face->step(1/60);
+	$c = $face->car->state();
+	$fastest = max($fastest, $c['speed']);
+	if(abs($c['z'] - 1500) < 300) $highest = max($highest, $c['y'] - $face->landscape->height($c['x'], $c['z']));
+	if($c['z'] > 2200) break;
+}
+expect($fastest > 100 && $highest < 60,
+	sprintf('At %.0f m/s a steep raise throws the car %.1f m up, not hundreds of meters', $fastest, $highest));
+$face->close();
 // Rolling backward faster than reverse gear, as after a landing, the car slows while S is held instead of keeping its
 // speed: the pedal once added reverse power and the clamp held whatever speed the car had.
 (function() { $this->speed = -20.0; })->call($drive->car);

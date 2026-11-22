@@ -41,6 +41,14 @@ final class Car
 	 * which takes speed along the face in proportion to the speed into it.
 	 */
 	private const POST_BOUNCE = .25, POST_FRICTION = .5;
+	/**
+	 * The sharpest upward bend in meters a second squared, about 6 g, that the suspension gives the car's path while the
+	 * ground turns up under it. Where the ground turns up faster, the car crashes into the new slope: it loses its speed
+	 * into the slope and FACE_LOSS times that from its speed along it, for crushing and friction. FACE_SPEED is the old
+	 * 36 m/s top speed. Up to it the car still rides up a steep face and rolls over as it always did; only speed beyond
+	 * it is lost in the crash. At 240 mph a 30 m raise now throws the car about 47 m up instead of about 400 m.
+	 */
+	private const BEND_LIMIT = 60.0, FACE_LOSS = 1.5, FACE_SPEED = 36.0;
 	private CarSuspension $suspension;
 	private float $roadPitch = 0, $roadRoll = 0;
 	private ?CarTumble $tumble = null;
@@ -265,8 +273,10 @@ final class Car
 		}
 		$x = $this->x + sin($heading)*$distance*cos($this->roadPitch);
 		$z = $this->z + cos($heading)*$distance*cos($this->roadPitch);
+		$struck = false;
 		if($posts && ($blocked = $this->avoidPosts($posts, $x, $z, $yaw)) !== null)
 		{
+			$struck = true;
 			[$x,$z,$yaw,$normalX,$normalZ] = $blocked;
 			// The tires keep the car on its heading, so only the speed along it changes. Its part into the post
 			// bounces back and its part along the post's face loses what friction takes.
@@ -287,6 +297,23 @@ final class Car
 			if($support === null) return false;
 		}
 		[,$pitch,$roll] = $support;
+		// The suspension bends the car's path upward by at most BEND_LIMIT. Where the ground turns up more sharply at
+		// this speed, as at the foot of a steep face, the rest of the turn is a crash for the speed above FACE_SPEED:
+		// it loses its part into the new slope, and FACE_LOSS times that from its part along it. The car then moves only as far as the slowed speed takes it, so the suspension meets only the rise it
+		// really makes. Before this, a car at 240 mph kept all its speed up a steep face and flew about 400 m high.
+		$turn = ($pitch - $this->roadPitch)*($this->speed <=> 0);
+		$allowed = self::BEND_LIMIT*$dt/max(1.0, abs($this->speed));
+		if($gripFraction > 0 && !$struck && $turn > $allowed && abs($this->speed) > self::FACE_SPEED)
+		{
+			$excess = min(M_PI/2, $turn - $allowed);
+			$kept = max(0.0, cos($excess) - self::FACE_LOSS*sin($excess));
+			$factor = (self::FACE_SPEED + (abs($this->speed) - self::FACE_SPEED)*$kept)/abs($this->speed);
+			$this->speed *= $factor;
+			$distance *= $factor;
+			$x = $this->x + sin($heading)*$distance*cos($this->roadPitch);
+			$z = $this->z + cos($heading)*$distance*cos($this->roadPitch);
+			if(($slowed = $this->support($land, $waterLevel, $x, $z, $yaw)) !== null) [,$pitch,$roll] = $support = $slowed;
+		}
 		// Downhill gravity and outward cornering load act together on an adverse camber.
 		$sideLoad = Session::DRIVING_GRAVITY*sin($roll) - $lateral*cos($roll);
 		$normalLoad = Session::DRIVING_GRAVITY*cos($pitch)*cos($roll) + $lateral*sin($roll);
