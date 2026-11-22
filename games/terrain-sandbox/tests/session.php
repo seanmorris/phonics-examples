@@ -77,6 +77,27 @@ $legacy = json_decode($saved, true, flags: JSON_THROW_ON_ERROR);
 unset($legacy['settings']['nightGlow']);
 $session->load(json_encode($legacy, JSON_THROW_ON_ERROR));
 expect($session->settings['nightGlow'] === TerrainPhonics\Atmosphere::DEFAULT_NIGHT_GLOW, 'Legacy saves restore the default night glow');
+input($session, ['values' => ['skyColor' => '#2C4FA8', 'hazeColor' => '#d9b380', 'skyLight' => 7]]);
+expect($session->settings['skyColor'] === '#2c4fa8' && $session->atmosphere->skyColor() === '#2c4fa8'
+	&& $session->atmosphere->hazeColor() === '#d9b380' && $session->settings['skyLight'] === 3.0
+	&& $session->atmosphere->uniforms()['skyLight'] === 3.0, 'Sky color, haze color and sky light reach the atmosphere');
+$skyFile = $session->save();
+input($session, ['values' => ['skyColor' => TerrainPhonics\Atmosphere::DEFAULT_SKY_COLOR, 'skyLight' => 1]]);
+$session->load($skyFile);
+expect($session->atmosphere->skyColor() === '#2c4fa8' && $session->atmosphere->uniforms()['skyLight'] === 3.0,
+	'Save/load preserves the sky controls');
+input($session, ['values' => ['skyColor' => 'navy']]);
+expect($session->settings['skyColor'] === '#2c4fa8' && $session->atmosphere->skyColor() === '#2c4fa8'
+	&& $session->message === 'Invalid control value', 'A named sky color is refused and reported');
+$badSky = json_decode($skyFile, true, flags: JSON_THROW_ON_ERROR);
+$badSky['settings']['hazeColor'] = 'dusty';
+try { $session->load(json_encode($badSky, JSON_THROW_ON_ERROR)); expect(false, 'A file with a bad haze color must be refused'); }
+catch(InvalidArgumentException) { expect($session->atmosphere->hazeColor() === '#d9b380', 'A file with a bad haze color changes nothing'); }
+unset($badSky['settings']['skyColor'], $badSky['settings']['hazeColor'], $badSky['settings']['skyLight']);
+$session->load(json_encode($badSky, JSON_THROW_ON_ERROR));
+expect($session->atmosphere->skyColor() === TerrainPhonics\Atmosphere::DEFAULT_SKY_COLOR
+	&& $session->atmosphere->hazeColor() === TerrainPhonics\Atmosphere::DEFAULT_HAZE_COLOR
+	&& $session->settings['skyLight'] === TerrainPhonics\Atmosphere::DEFAULT_SKY_LIGHT, 'Older saves restore the default sky');
 $before = $session->save();
 try { $session->load('{"version":999}'); expect(false, 'Malformed save must be rejected'); }
 catch(InvalidArgumentException) { expect($session->save() === $before, 'Rejected save cannot alter the active scene'); }
@@ -152,6 +173,11 @@ expect($karst->settings['snowline'] === 460.0 && $karst->settings['azimuth'] ===
 	&& $karst->settings['grassColor'] === '#224422' && $karst->settings['haze'] === 2.0
 	&& $karst->settings['rockSlopeStart'] === .65 && $karst->settings['rockSlopeEnd'] === .73,
 	'Leaving Limestone for Mountain Ridges applies its snowline and the ordinary sun while preserving authored settings.');
+expect($karst->settings['skyColor'] === '#41659a' && $karst->atmosphere->skyColor() === '#41659a',
+	'Mountain Ridges brings its deeper alpine sky');
+input($karst, ['actions' => [['type' => 'generate', 'preset' => 'coast']]]);
+expect($karst->atmosphere->skyColor() === TerrainPhonics\Atmosphere::DEFAULT_SKY_COLOR
+	&& $karst->atmosphere->hazeColor() === TerrainPhonics\Atmosphere::DEFAULT_HAZE_COLOR, 'Coast returns to the standard sky');
 $karst->close();
 
 $showcase = new Session;

@@ -1730,6 +1730,14 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	await nightGlow.press('End');
 	await expect.poll(async() => (await status(page)).settings.nightGlow).toBe(1);
 
+	await (await field(page, '[data-value="skyColor"]')).fill('#2c4fa8');
+	await expect.poll(async() => (await status(page)).settings.skyColor).toBe('#2c4fa8');
+	const skyLight = page.getByRole('slider', {name: /Sky light/});
+	await skyLight.focus();
+	await skyLight.press('End');
+	await expect.poll(async() => (await status(page)).settings.skyLight).toBe(3);
+	expect((await save(page)).settings).toMatchObject({skyColor: '#2c4fa8', skyLight: 3});
+
 	await field(page, '[data-value="waterFogDensity"]');
 	const coarseFog = page.getByRole('slider', {name: /Fog density · coarse/});
 	const fineFog = page.getByRole('slider', {name: /Fog density · fine/});

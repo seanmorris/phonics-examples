@@ -81,7 +81,9 @@ final class Session
 	public string $mode = 'fly';
 	/** Simulation clock in seconds. */
 	public float $time = 0;
-	private const SKY_DEFAULTS = ['azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0];
+	private const SKY_DEFAULTS = ['azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0,
+		'skyColor' => Atmosphere::DEFAULT_SKY_COLOR, 'hazeColor' => Atmosphere::DEFAULT_HAZE_COLOR,
+		'skyLight' => Atmosphere::DEFAULT_SKY_LIGHT];
 	private const LIMESTONE_SKY = ['azimuth' => 106.0, 'elevation' => 36.0, 'haze' => .7];
 	/** Aerosol layers above sea level in meters, with optical depth per kilometer. */
 	private const PRESET_AIR = [
@@ -95,21 +97,24 @@ final class Session
 		'tidal-lagoon' => ['name'=>'Humid marine air', 'top'=>640., 'density'=>.046, 'color'=>'#dae3e3'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
+	// Sky colors: deeper blues over dry or clean air, a paler northern sky over the fjords, and dust in the desert haze.
 	private const PRESET_LOOK = [
 		'coast' => TerrainAppearance::PRESET_DEFAULTS['coast'],
-		'mountain' => TerrainAppearance::PRESET_DEFAULTS['mountain'],
+		'mountain' => TerrainAppearance::PRESET_DEFAULTS['mountain'] + ['skyColor'=>'#41659a'],
+		'canyon' => ['skyColor'=>'#3f6496', 'hazeColor'=>'#ead4b6'],
 		'limestone' => self::LIMESTONE_SURFACE + self::LIMESTONE_SKY,
 		'basalt-fjords' => TerrainAppearance::PRESET_DEFAULTS['basalt-fjords'] + [
-			'azimuth'=>82., 'elevation'=>32., 'haze'=>.72, 'waterColor'=>'#1c5965',
+			'azimuth'=>82., 'elevation'=>32., 'haze'=>.72, 'skyColor'=>'#5f7891', 'waterColor'=>'#1c5965',
 			'waterTransparency'=>.78, 'waterReflectivity'=>.72, 'waterFogDensity'=>.04, 'waterChoppiness'=>55.,
 		],
-		'amber-dunes' => TerrainAppearance::PRESET_DEFAULTS['amber-dunes'] + ['azimuth'=>146., 'elevation'=>18., 'haze'=>.85],
+		'amber-dunes' => TerrainAppearance::PRESET_DEFAULTS['amber-dunes']
+			+ ['azimuth'=>146., 'elevation'=>18., 'haze'=>.85, 'hazeColor'=>'#e6c79e'],
 		'arctic-meltwater' => TerrainAppearance::PRESET_DEFAULTS['arctic-meltwater'] + [
-			'azimuth'=>112., 'elevation'=>22., 'haze'=>.55, 'waterColor'=>'#345b69',
+			'azimuth'=>112., 'elevation'=>22., 'haze'=>.55, 'skyColor'=>'#395e99', 'waterColor'=>'#345b69',
 			'waterTransparency'=>.80, 'waterReflectivity'=>.68, 'waterFogDensity'=>.070, 'waterChoppiness'=>32.,
 		],
 		'tidal-lagoon' => TerrainAppearance::PRESET_DEFAULTS['tidal-lagoon'] + [
-			'azimuth'=>103., 'elevation'=>37., 'haze'=>.70, 'waterColor'=>'#1e7475',
+			'azimuth'=>103., 'elevation'=>37., 'haze'=>.70, 'skyColor'=>'#4672a6', 'waterColor'=>'#1e7475',
 			'waterTransparency'=>.90, 'waterReflectivity'=>.51, 'waterFogDensity'=>.070, 'waterChoppiness'=>27.,
 		],
 	];
@@ -806,6 +811,7 @@ final class Session
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100], 'circuitRelief'=>[-2000,2000],
 			'circuitStartHeight'=>[-10000,10000],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
+			'skyLight' => [0.,3.],
 			'quality' => [.5,2],'speed' => [5,300],'gateAltitude' => [0.0,400.0],
 			'balloonAltitude' => [12.0,1200.0], 'gateWidth' => [0.0,300.0],'gateHeight' => [0.0,150.0],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
@@ -816,6 +822,11 @@ final class Session
 			$value = max($min, min($max, (float)$value));
 		}
 		elseif($name === 'clock') $value = (bool)$value;
+		elseif($name === 'skyColor' || $name === 'hazeColor')
+		{
+			if(!is_string($value) || !preg_match('/^#[0-9a-fA-F]{6}$/', $value)) throw new \InvalidArgumentException('Invalid control value');
+			$value = strtolower($value);
+		}
 		elseif($name === 'tool' && !in_array($value, ['navigate','raise','lower','flatten','smooth','crater','material','road','gate','balloon'], true)) return;
 		elseif($name === 'material' && !in_array($value, ['grass','rock','sand','snow','road'], true)) return;
 		elseif($name === 'balloonTool' && !in_array($value,['place','remove'],true)) return;
@@ -848,9 +859,13 @@ final class Session
 		$this->settings[$name] = $value;
 		if($name === 'haze') $this->atmosphere->setHaze($value);
 		if($name === 'nightGlow') $this->atmosphere->setNightGlow($value);
+		if($name === 'skyColor') $this->atmosphere->setSkyColor($value);
+		if($name === 'hazeColor') $this->atmosphere->setHazeColor($value);
+		if($name === 'skyLight') $this->atmosphere->setSkyLight($value);
 		if($name === 'exposure') $this->atmosphere->setExposure($value);
 		if($name === 'azimuth' || $name === 'elevation') $this->sun();
-		$this->dirty = $this->dirty || in_array($name,['quality','exposure','nightGlow','haze','azimuth','elevation','clock'],true);
+		$this->dirty = $this->dirty || in_array($name,['quality','exposure','nightGlow','haze','azimuth','elevation','clock',
+			'skyColor','hazeColor','skyLight'],true);
 	}
 
 	/**
@@ -1936,6 +1951,9 @@ final class Session
 			if(isset($this->settings[$name]) && is_numeric($this->settings[$name])
 				&& !($value === null && array_key_exists($name, $defaults) && $defaults[$name] === null)
 				&& (!is_numeric($value) || !is_finite((float)$value)))
+			throw new \InvalidArgumentException('Invalid saved control value.');
+			foreach(['skyColor','hazeColor'] as $name)
+			if(array_key_exists($name, $settings) && (!is_string($settings[$name]) || !preg_match('/^#[0-9a-fA-F]{6}$/', $settings[$name])))
 			throw new \InvalidArgumentException('Invalid saved control value.');
 			$balloons = BalloonPractice::load(array_key_exists('balloons',$data) ? $data['balloons'] : [],
 				$candidate,$candidate->recipe()['waterLevel']);

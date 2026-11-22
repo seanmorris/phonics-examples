@@ -7,6 +7,7 @@ uniform vec3 uRayleigh;
 uniform float uMie;
 uniform float uMieAlbedo;
 uniform float uMieG;
+uniform vec3 uHazeColor; // Fraction of each channel aerosol haze scatters; its extinction stays gray.
 uniform float uHaze;
 uniform float uExposure;
 uniform vec3 uNightAmbient;
@@ -189,7 +190,7 @@ void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanc
 		vec3 view = terrainAtmosphereAttenuation(opticalDepth + density * 0.5) * exp(-airDepth);
 		float weight = layerDepth > .001 ? (1.0 - exp(-layerDepth)) / layerDepth : 1.0 - .5 * layerDepth;
 		radiance += view * weight * light * uSunIntensity * (density.x * uRayleigh * phaseR
-			+ density.y * vec3(uMie * uHaze * phaseM) + layerScatter / (4.0 * TERRAIN_PI));
+			+ density.y * uMie * uHaze * phaseM * uHazeColor + layerScatter / (4.0 * TERRAIN_PI));
 		airDepth += layerDepth;
 		opticalDepth += density;
 	}

@@ -1903,6 +1903,10 @@ function markup()
 		, .1
 		, 1
 	)}
+	${range('Sky light', 'skyLight', 0, 3, .05, 1)}
+	<label class="terrain-control"><span>Sky color</span><input data-value="skyColor" type="color" value="#4b698a"></label>
+	<label class="terrain-control"><span>Haze color</span><input data-value="hazeColor" type="color" value="#ffffff"></label>
+	<p class="terrain-note">Sky color is the zenith with the sun 35° up; it also tints distant land and reddens a low sun. Haze color sets only the hue of the haze; the Haze slider sets its strength. Sky light is the sky's fill on shaded ground.</p>
 	${range('Night glow', 'nightGlow', 0, 1, .01, .5)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
 	<h2>Atmospheric layers</h2>

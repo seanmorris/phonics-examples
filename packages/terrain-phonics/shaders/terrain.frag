@@ -24,6 +24,7 @@ uniform vec2 uSnowline; // Mean snowline and the height over which snow becomes 
 uniform float uMacroVariation;
 uniform vec2 uMountainZones; // Treeline and the foot of the tundra, in meters from the snowline.
 uniform vec3 uMountainAmounts; // Talus, stain and lichen.
+uniform vec3 uSkyAmbient; // The sky's light on level ground over pi, already scaled by the sky-light setting.
 out vec4 color;
 float mountainShadow(vec3 position)
 {
@@ -191,7 +192,7 @@ void main()
 	#endif
 	// Approximate diffuse sky fill follows solar irradiance and fades through twilight.
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
-	vec3 ambient = vec3(0.08,0.13,0.20) * (0.35 + 0.65 * max(0.0,n.y)) * illumination;
+	vec3 ambient = uSkyAmbient * (0.35 + 0.65 * max(0.0,n.y));
 	ambient += uMaterialBounce * illumination * (1.0-max(0.,n.y));
 	vec3 lit = albedo * (ambient + direct * facing * shadow);
 	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
