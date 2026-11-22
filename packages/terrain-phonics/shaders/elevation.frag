@@ -208,7 +208,8 @@ void gradeRoads(vec2 world, inout float height, inout float material)
 			for(int j = 0; j < 4 && i+j < header.y; j++) {
 				int address = samples[j];
 				vec4 position = roadRecord(address);
-				vec2 delta = world - position.xy;
+				// World positions here are exact; subtracting the sample's high part first keeps the difference exact.
+				vec2 delta = (world - position.xy) - roadRecord(address + 2).xy;
 				float q = (dot(delta,delta) - params.x) / params.y;
 				if(q >= 1.) continue;
 				float weight = fade(1. - max(q,0.));

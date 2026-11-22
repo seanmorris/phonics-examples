@@ -8,7 +8,8 @@ final class RoadAtlas
 	public const MATERIALS = ['rock', 'grass', 'sand', 'snow', 'road'];
 
 	/**
-	 * Pack normalized road operations in application order. All pointers address RGBA texels.
+	 * Pack normalized road operations in application order. All pointers address RGBA texels. A sample takes three:
+	 * the high parts of X and Z, height and tangent X; tangent Z, grade, bank and opacity; the low parts of X and Z.
 	 * @param array $roads Committed splines with their derived sample planes.
 	 * @param float $extent Width of the editable square in meters.
 	 * @return array Float texture bytes, dimensions and spatial directory coordinates.
@@ -38,8 +39,13 @@ final class RoadAtlas
 			$data .= pack('g4', $inner2, $radius ** 2 - $inner2, $op['crown'], $material === false ? 0 : $material + 1);
 			foreach($road['samples'] as [$x, $y, $z, $tx, $tz, $grade, $bank, $opacity])
 			{
+				// A 32-bit float rounds an absolute coordinate by up to 1 mm at 30 km, and the kernel weights turn that
+				// into centimetres of height. Store each of X and Z as the float nearest to it plus the remainder, so
+				// the shader can subtract both and stay within a micron of PHP anywhere in a 65.5 km world.
+				[, $xHigh] = unpack('g', pack('g', $x));
+				[, $zHigh] = unpack('g', pack('g', $z));
 				$address = intdiv(strlen($data), 16);
-				$data .= pack('g8', $x, $z, $y, $tx, $tz, $grade, $bank, $opacity);
+				$data .= pack('g12', $xHigh, $zHigh, $y, $tx, $tz, $grade, $bank, $opacity, $x - $xHigh, $z - $zHigh, 0, 0);
 				$left = max($minTile, (int)floor(($x - $radius) / $cell)) - $minTile;
 				$right = min($maxTile, (int)floor(($x + $radius) / $cell)) - $minTile;
 				$front = max($minTile, (int)floor(($z - $radius) / $cell)) - $minTile;

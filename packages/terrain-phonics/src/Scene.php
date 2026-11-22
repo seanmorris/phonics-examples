@@ -471,7 +471,7 @@ final class Scene
 			$lut=$this->atmosphere->transmittanceLut(64,16,24);
 			$lighting=$lut['generation'] !== $this->textureGeneration;
 			if($lighting) $this->createTextures();
-			$this->changed=$this->clipmap->update($this->landscape,$camera,$this->quality) || $lighting;
+			$this->changed=$this->clipmap->update($this->landscape,$camera,$this->quality,$deadline) || $lighting;
 			if($this->revision !== $this->landscape->revision()) $this->heightTextureRevision++;
 			$this->revision=$this->landscape->revision();
 			$this->lastUpdateMs=(microtime(true)-$started)*1000;

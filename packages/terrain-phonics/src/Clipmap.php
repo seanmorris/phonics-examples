@@ -32,6 +32,14 @@ final class Clipmap
 
 	private ?bool $packed = null;
 	private array $recipe = [];
+	/**
+	 * Edited texels waiting for PHP's heights and paint ink, finest level first: [level key, first cell X, first
+	 * cell Z, width, height, step, offset, regions left]. update() spends at most its deadline on them, so driving
+	 * over sculpted ground cannot stall a frame; the level reports pending until they are done.
+	 */
+	private array $paintQueue = [];
+	/** Running estimate of the seconds one painted texel takes, so a turn that would pass the deadline waits. */
+	private float $texelSeconds = 40e-6;
 	public bool $pending = true;
 	public int $texels = 0, $uploads = 0;
 
@@ -183,7 +191,7 @@ final class Clipmap
 		return $rects;
 	}
 
-	private function fill(array $level, array $rects, float $step, float $offset): void
+	private function fill(array $level, array $rects, float $step, float $offset, int $key): void
 	{
 		if(!$rects) return;
 
@@ -214,74 +222,163 @@ final class Clipmap
 				glUniform2i($p->location('uPixelOrigin'), $u, $v);
 				glDrawArrays(GL_TRIANGLES, 0, 3);
 				$this->texels += $w * $h;
-				$this->paint($level['textures'], $x, $z, $u, $v, $w, $h, $step, $offset);
+				$this->paintQueue[] = [$key, $x, $z, $w, $h, $step, $offset, null];
 			}
 		}
 	}
 
-	private function paint(
-		array $textures
-		, int $x
-		, int $z
-		, int $u
-		, int $v
-		, int $w
-		, int $h
-		, float $step
-		, float $offset
-	): void {
+	/**
+	 * Edited cell rectangles inside a filled block, in cell indices: [left, front, right, back], inclusive.
+	 * @param int $x First cell X of the block.
+	 * @param int $z First cell Z of the block.
+	 * @param int $w Block width in cells.
+	 * @param int $h Block height in cells.
+	 * @param float $step Cell spacing in meters.
+	 * @param float $offset World offset of cell zero.
+	 * @return array Rectangles whose texels need PHP's heights and ink.
+	 */
+	private function editedCells(int $x, int $z, int $w, int $h, float $step, float $offset): array
+	{
 		$index = $offset !== 0. && $this->overviewEdits ? $this->overviewEdits : $this->edits;
-		$regions = $index->intersect(
+		$cells = [];
+
+		foreach($index->intersect(
 			[$x * $step + $offset,$z * $step + $offset,($x + $w - 1) * $step + $offset,($z + $h - 1) * $step + $offset]
-		);
-
-		if(!$regions) return;
-
-		foreach($regions as [$left,$front,$right,$back])
+		) as [$left,$front,$right,$back])
 		{
 			$l = (int)ceil(($left - $offset) / $step);
 			$r = (int)floor(($right - $offset) / $step);
 			$f = (int)ceil(($front - $offset) / $step);
 			$b = (int)floor(($back - $offset) / $step);
 
-			if($l > $r || $f > $b) continue;
+			if($l <= $r && $f <= $b) $cells[] = [$l,$f,$r,$b];
+		}
 
-			$heights = $ink = '';
+		return $cells;
+	}
 
-			for($j = $f; $j <= $b; $j++)
-			for($i = $l; $i <= $r; $i++)
+	/**
+	 * Replace the generated heights and ink of some cells with PHP's, which include every edit.
+	 * @param array $textures Height and ink textures of the level.
+	 * @param int $n Level storage size, which wraps cell indices to texels.
+	 * @param array $cells [left, front, right, back] cell indices, inclusive, inside one wrap of the storage.
+	 * @param float $step Cell spacing in meters.
+	 * @param float $offset World offset of cell zero.
+	 * @return void Uploads the cells' heights and ink.
+	 */
+	private function paint(array $textures, int $n, array $cells, float $step, float $offset): void
+	{
+		[$l,$f,$r,$b] = $cells;
+		$heights = $ink = '';
+
+		for($j = $f; $j <= $b; $j++)
+		for($i = $l; $i <= $r; $i++)
+		{
+			$wx = $i * $step + $offset;
+			$wz = $j * $step + $offset;
+			$height = $this->source->height($wx, $wz);
+			$id = array_search($this->source->material($wx, $wz), RoadAtlas::MATERIALS, true);
+			$heights .= $this->packed ? pack('g', $height) : pack('g4', $height, 0, 0, 1);
+			$ink .= pack('C4', $id === false?0:$id + 1, 0, 0, 255);
+		}
+
+		glActiveTexture(GL_TEXTURE0 + 1);
+
+		foreach([$heights,$ink] as $k => $bytes)
+		{
+			glBindTexture(GL_TEXTURE_2D, $textures[$k]);
+
+			glTexSubImage2D(
+				GL_TEXTURE_2D
+				, 0
+				, (($l % $n) + $n) % $n
+				, (($f % $n) + $n) % $n
+				, $r - $l + 1
+				, $b - $f + 1
+				, GL_RGBA
+				, $k === 0 && !$this->packed ? GL_FLOAT : GL_UNSIGNED_BYTE
+				, $bytes
+			);
+
+			$this->uploads += strlen($bytes);
+		}
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glActiveTexture(GL_TEXTURE0);
+	}
+
+	/**
+	 * Paint queued edited cells until the deadline, a few rows at a time, finest level first. A queued block that
+	 * has scrolled out of its level's window is clipped to what remains, so recycled texels never get stale heights.
+	 * @param float|null $deadline microtime(true) to stop at, or null to paint everything.
+	 * @return void Leaves whatever did not fit queued for the next update.
+	 */
+	private function drainPaint(?float $deadline): void
+	{
+		// Each turn paints at most this many texels; at about 40 microseconds a texel that is under 1.5 ms.
+		$batch = 32;
+		$painted = false;
+
+		while($this->paintQueue !== [] && ($deadline === null || microtime(true) < $deadline))
+		{
+			$k = array_key_first($this->paintQueue);
+			[$key,$x,$z,$w,$h,$step,$offset,$regions] = $this->paintQueue[$k];
+			$level = $key < 0 ? $this->overview : ($this->levels[$key] ?? []);
+
+			if(!$level || ($level['step'] ?? null) !== $step || $level['origin'] === null)
 			{
-				$wx = $i * $step + $offset;
-				$wz = $j * $step + $offset;
-				$height = $this->source->height($wx, $wz);
-				$id = array_search($this->source->material($wx, $wz), RoadAtlas::MATERIALS, true);
-				$heights .= $this->packed ? pack('g', $height) : pack('g4', $height, 0, 0, 1);
-				$ink .= pack('C4', $id === false?0:$id + 1, 0, 0, 255);
+				unset($this->paintQueue[$k]);
+				continue;
 			}
 
-			glActiveTexture(GL_TEXTURE0 + 1);
+			// Clip the block to the level's current window; cells that left it now hold other cells' texels.
+			[$ox,$oz] = $level['origin'];
+			$n = $level['n'];
+			$l = max($x, $ox); $r = min($x + $w, $ox + $n) - 1;
+			$f = max($z, $oz); $b = min($z + $h, $oz + $n) - 1;
 
-			foreach([$heights,$ink] as $k => $bytes)
+			if($l > $r || $f > $b)
 			{
-				glBindTexture(GL_TEXTURE_2D, $textures[$k]);
-
-				glTexSubImage2D(
-					GL_TEXTURE_2D
-					, 0
-					, $u + $l - $x
-					, $v + $f - $z
-					, $r - $l + 1
-					, $b - $f + 1
-					, GL_RGBA
-					, $k === 0 && !$this->packed ? GL_FLOAT : GL_UNSIGNED_BYTE
-					, $bytes
-				);
-
-				$this->uploads += strlen($bytes);
+				unset($this->paintQueue[$k]);
+				continue;
 			}
 
-			glBindTexture(GL_TEXTURE_2D, 0);
-			glActiveTexture(GL_TEXTURE0);
+			if($regions === null)
+			{
+				// Split wide rectangles into column chunks so a turn never paints more than one batch.
+				$regions = [];
+				foreach($this->editedCells($l, $f, $r - $l + 1, $b - $f + 1, $step, $offset) as [$cl,$cf,$cr,$cb])
+				for($c = $cl; $c <= $cr; $c += $batch) $regions[] = [$c,$cf,min($cr, $c + $batch - 1),$cb];
+			}
+
+			if($regions === [])
+			{
+				unset($this->paintQueue[$k]);
+				continue;
+			}
+
+			[$rl,$rf,$rr,$rb] = $regions[0];
+			$rl = max($rl, $l); $rr = min($rr, $r);
+			$rf = max($rf, $f); $rb = min($rb, $b);
+
+			if($rl <= $rr && $rf <= $rb)
+			{
+				$rows = max(1, intdiv($batch, $rr - $rl + 1));
+				$last = min($rb, $rf + $rows - 1);
+				$texels = ($rr - $rl + 1) * ($last - $rf + 1);
+				// Leave a turn that would overrun the deadline for the next update, but always paint at least one.
+				if($painted && $deadline !== null && microtime(true) + $texels * $this->texelSeconds > $deadline) break;
+				$started = microtime(true);
+				$this->paint($level['textures'], $n, [$rl,$rf,$rr,$last], $step, $offset);
+				$this->texelSeconds = .8 * $this->texelSeconds + .2 * (microtime(true) - $started) / $texels;
+				$painted = true;
+				$regions[0][1] = $last + 1;
+				if($last < $rb) { $this->paintQueue[$k][7] = $regions; continue; }
+			}
+
+			array_shift($regions);
+			if($regions === []) unset($this->paintQueue[$k]);
+			else $this->paintQueue[$k][7] = $regions;
 		}
 	}
 
@@ -341,7 +438,7 @@ final class Clipmap
 	}
 
 	/** Refresh only cells newly exposed to the camera or changed by committed edits. */
-	public function update(Landscape $land, Camera $camera, float $quality): bool
+	public function update(Landscape $land, Camera $camera, float $quality, ?float $deadline = null): bool
 	{
 		$changed = $this->source !== $land || $this->revision !== $land->revision();
 		$region = $this->dirtyRegion;
@@ -400,6 +497,9 @@ final class Clipmap
 			glUniform1i($this->generator->location('uRoadAtlas'), 2);
 			glActiveTexture(GL_TEXTURE0);
 
+			// A full rebuild queues every edited texel again, so earlier entries would only repeat the work.
+			if($this->spans !== $spans || ($changed && $region === null)) $this->paintQueue = [];
+
 			if($this->spans !== $spans)
 			{
 				foreach($this->levels as $level) self::release($level);
@@ -413,7 +513,7 @@ final class Clipmap
 			{
 				if(!$this->overview) $this->overview = $this->allocate(257);
 
-				$this->refresh($this->overview, [0,0], $half / 128, -$half, $changed, $region);
+				$this->refresh($this->overview, [0,0], $half / 128, -$half, $changed, $region, -1);
 			}
 
 			$this->pending = false;
@@ -442,8 +542,14 @@ final class Clipmap
 
 				$newLevel = $newLevel || $needsFull;
 				$s = $step * (2 ** $l);
-				$this->refresh($this->levels[$l], $origins[$l], $s, 0., $changed, $region);
+				$this->refresh($this->levels[$l], $origins[$l], $s, 0., $changed, $region, $l);
 			}
+
+			// The finest level surrounds the camera, so its edits come first; the overview goes last.
+			usort($this->paintQueue, static fn(array $a, array $b) => ($a[0] < 0 ? PHP_INT_MAX : $a[0])
+				<=> ($b[0] < 0 ? PHP_INT_MAX : $b[0]));
+			$this->drainPaint($deadline);
+			if($this->paintQueue !== []) $this->pending = true;
 		} finally
 		{
 			glBindFramebuffer(GL_FRAMEBUFFER, is_array($previous) ? $previous[0] : $previous);
@@ -459,6 +565,7 @@ final class Clipmap
 		, float $offset
 		, bool $changed
 		, ?array $region
+		, int $key
 	): void {
 		[$x,$z] = $origin;
 		$n = $level['n'];
@@ -474,9 +581,9 @@ final class Clipmap
 			if($l < $r && $f < $b) $rects[] = [$l,$f,$r,$b];
 		}
 
-		$this->fill($level, $rects, $step, $offset);
 		$level['origin'] = $origin;
 		$level['step'] = $step;
+		$this->fill($level, $rects, $step, $offset, $key);
 	}
 
 	public function overview(): array {return $this->overview['textures'] ?? [0,0];}
