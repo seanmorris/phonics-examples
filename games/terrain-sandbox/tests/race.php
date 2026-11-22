@@ -419,6 +419,8 @@ expect($running['state'] === 'running' && $before['z'] < $s['z'] && $after['z'] 
 	&& abs($running['time'] - (1 - $share) / 60) < 1e-9 && $running['lap'] === 1 && $running['vehicle'] === 'car'
 	&& $running['next']['id'] === $c['id'] && $sprint->message === 'Race started. Next: checkpoint 1.',
 	'Driving through the start gate at speed starts the clock at the crossing, part way through the step');
+input($sprint, ['actions'=>['pad-y']]);
+expect($race($sprint) === $running, 'Plain Y leaves a running race alone');
 $times = [];
 drive($sprint, ['KeyW' => true], 900, function(Session $session) use (&$times, $state): bool {
 	$times[] = $session->race->status($session->course, $session->time)['time'];
@@ -443,16 +445,20 @@ input($sprint, ['actions' => ['pause']]);
 input($sprint, ['actions' => ['fly']]);
 $sprint->camera->position = [0, 30, -10]; $sprint->camera->yaw = M_PI;
 enterCar($sprint);
-expect($race($sprint)['state'] === 'finished', 'A finished result stays on show until the next start');
+expect($race($sprint)['state'] === 'finished' && !$race($sprint)['guidance'] && $sprint->navigationTarget() === null,
+	'A finished result is retained when reboarding without bringing back the HUD');
 $pad = [0, 0, 0, 0, 0, .6, 0];
 for($i = 0; $i < 2400 && $sprint->race->state !== 'running'; $i++) { input($sprint, ['pad' => $pad]); $sprint->step(1 / 60); }
-expect($race($sprint)['state'] === 'running' && $race($sprint)['best'] === $t && $race($sprint)['splits'] === [],
+expect($race($sprint)['state'] === 'running' && $race($sprint)['best'] === $t && $race($sprint)['splits'] === [] && $race($sprint)['guidance'] && $sprint->navigationTarget() !== null,
 	'Passing the start gate again starts a new race');
 for($i = 0; $i < 2400 && $sprint->race->state !== 'finished'; $i++) { input($sprint, ['pad' => $pad]); $sprint->step(1 / 60); }
 $slow = $race($sprint);
 expect($slow['state'] === 'finished' && $slow['time'] > $t && $slow['best'] === $t && $slow['last'] === $slow['time']
 	&& $sprint->message === 'Finished in ' . Race::clock($slow['time']) . '. Best ' . Race::clock($t) . '.',
 	'A slower run keeps the earlier best and says so');
+input($sprint, ['actions'=>['pad-y']]);
+expect($race($sprint)['state'] === 'idle' && !$race($sprint)['guidance'] && $race($sprint)['best'] === $t,
+	'Y after finishing resets the clock and keeps guidance hidden until a new start');
 // Pausing stops the clock.
 input($sprint, ['actions' => ['fly']]);
 $sprint->camera->position = [0, 30, -10]; $sprint->camera->yaw = M_PI;
@@ -483,6 +489,54 @@ expect($race($sprint)['state'] === 'idle' && str_ends_with($sprint->message, 'Th
 	&& $race($sprint)['laps'] === 2 && $race($sprint)['best'] === null,
 	'Removing the finish gate mid-race stops the race; the course then runs its two laps with a best time of its own');
 $sprint->close();
+
+// One authored road with two gates. Start with the car off to one side beyond its checkpoint.
+$rescue = new Session($open);
+$rescue->landscape->queue(['type'=>'road','points'=>[[0,0,-90],[0,0,0],[0,0,90]],'width'=>12,'shoulder'=>2,'material'=>'road']);
+$rescue->landscape->commit();
+$rescue->course->place('start','road',0,0,-50,0);
+$rescue->course->place('checkpoint','road',0,0,50,0);
+$rescue->camera->position = [25,20,65]; $rescue->camera->yaw = M_PI;
+enterCar($rescue);
+$pose = $rescue->car->state();
+input($rescue,['actions'=>['pad-rs']]);
+expect($rescue->car->state() === $pose,'Stick click leaves an off-road car alone outside a race');
+$rescue->race->advance($rescue->course,[0,0,-51],[0,0,-49],0.,1/60,'car',1);
+input($rescue,['actions'=>['pad-rs']]);
+$placed = $rescue->car->state();
+expect(abs($placed['x']) < .001 && abs($placed['z']-40) < .001 && abs($placed['yaw']) < .001
+	&& $placed['roadHold'] === 1.5 && $placed['speed'] === 0. && $race($rescue)['splits'] === [],
+	'Stick click resets the car facing forward ten meters upstream without crossing the gate');
+input($rescue,['actions'=>['pause','pad-rs']]); $rescue->step(.2);
+expect($rescue->car->state() === $placed,'Pausing freezes the recovery penalty');
+input($rescue,['actions'=>['pause'],'keys'=>['KeyW'=>true,'ShiftLeft'=>true]]);
+for($i=0;$i<90;$i++) $rescue->step(1/60);
+$ready = $rescue->car->state();
+expect($ready['roadHold'] === 0. && $ready['z'] === $placed['z'] && $ready['nitrous'] === $placed['nitrous']
+	&& $race($rescue)['time'] > 1.4 && $race($rescue)['splits'] === [],'Recovery costs race time and holds the car even at full boost');
+$rescue->step(1/60);
+$moving = $rescue->car->state();
+input($rescue,['actions'=>['pad-rs']]);
+expect($moving['speed'] > 0. && $moving === $rescue->car->state(),'Held pedals work after the delay and right click does nothing on pavement');
+$rescue->close();
+
+// The last leg crosses the spline seam. A car beside a later part of the lap must recover on the approach.
+$track = new Circuit([[0.,0.],[0.,100.],[80.,100.],[80.,-60.],[0.,-60.]],-5.,null);
+$ground = new Landscape($open);
+$gates = new Course;
+$gates->place('start','road',0,0,20,0);
+$gates->place('checkpoint','road',80,0,60,M_PI);
+$run = new Race;
+$run->advance($gates,[0,0,19],[0,0,21],0.,1.,'car',1);
+$run->advance($gates,[80,0,61],[80,0,59],1.,1.,'car',1);
+$testCar = new Car;
+foreach([[60.,10.],[-10.,-10.]] as [$beside,$expected]) {
+	$testCar->spawn($testCar->checkedSite($ground,-5,-15,$beside,0.,[]),$ground,-5);
+	$site = TerrainSandbox\RoadRecovery::site($testCar,$ground,-5,$gates,$run,$track);
+	expect($site !== null && abs($site[0])<.001 && abs($site[1]-$expected)<.001 && abs($site[2])<.001,
+		'The wraparound leg picks the closest eligible point, including the interior of a straight');
+}
+$ground->close();
 
 // A loop with a finish gate and the lap setting at 2, which a course with a finish gate leaves aside: the race runs
 // once. The car passes the finish gate early in the lap and the start gate late in it, and neither counts out of
@@ -1029,7 +1083,7 @@ $status = $view->status();
 expect(array_keys($status['course']) === ['revision', 'laps', 'gates']
 	&& array_keys($status['course']['gates'][0]) === ['id', 'role', 'kind', 'print', 'number', 'laps', 'x', 'y', 'z', 'yaw',
 		'width', 'height']
-	&& array_keys($status['race']) === ['state', 'time', 'lap', 'laps', 'vehicle', 'next', 'remaining', 'splits', 'lastSplit',
+	&& array_keys($status['race']) === ['state', 'guidance', 'time', 'lap', 'laps', 'vehicle', 'next', 'remaining', 'splits', 'lastSplit',
 		'lapTimes', 'last', 'best', 'message', 'reach'] && is_string(json_encode($status, JSON_THROW_ON_ERROR))
 	&& array_keys($status['gateSizes']) === ['road', 'water', 'air'],
 	'The status reports the course and the race');
@@ -1237,6 +1291,26 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		$copy->step(1/60);
 	expect($copy->mode === $vehicle && $copy->race->status($copy->course,$copy->time)['state'] === 'running',
 		'The generated launch pose lets the vehicle go straight through the first gate');
+	if($vehicle === 'car') {
+		$gate = $copy->race->nextGate($copy->course);
+		$left = [cos($gate['yaw']),-sin($gate['yaw'])];
+		// Walk off the asphalt on either side of the real canyon gate until all tires can stand safely.
+		$offRoad = null;
+		foreach([35.,-35.,50.,-50.,70.,-70.] as $offset) {
+			$x = $gate['x']+$left[0]*$offset; $z = $gate['z']+$left[1]*$offset;
+			if($copy->landscape->material($x,$z) === 'road') continue;
+			$offRoad = $copy->car->checkedSite($copy->landscape,$copy->water->level(),$x,$z,$gate['yaw'],[]);
+			if($offRoad !== null) break;
+		}
+		expect($offRoad !== null,'An off-road test pose exists beside the generated checkpoint');
+		$copy->car->spawn($offRoad,$copy->landscape,$copy->water->level());
+		input($copy,['actions'=>['pad-rs']]);
+		$back = $copy->car->state();
+		$material = $copy->landscape->material($back['x'],$back['z'],$centerOffset,$mark);
+		expect($back['roadHold'] > 0 && $material === 'road' && abs($mark[0]) < .1
+			&& $copy->race->nextGate($copy->course)['id'] === $gate['id'],
+			'Recovery on the saved default canyon finds the paved centerline and retains the outstanding gate');
+	}
 	$copy->close();
 }
 foreach($gateLine[0] as $i => [$x,$z,$yaw]) {

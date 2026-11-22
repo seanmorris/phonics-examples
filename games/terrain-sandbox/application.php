@@ -308,7 +308,8 @@ $engine->start(
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
 			$craft = $session->mode === 'craft';
-			$waterRace = $craft && $session->usingFloodedCircuit();
+			$raceGuidance = $session->race->showGuidance($session->course);
+			$waterRace = $craft && $raceGuidance && $session->usingFloodedCircuit();
 			$dialSize = $car || $craft ? (int)round(min(240, $width*.275, $height*.30)) : null;
 			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height] : null;
 			$wide = $jet ? $session->jetWideMap : $car && $session->carWideMap;
@@ -323,7 +324,7 @@ $engine->start(
 					$car || $waterRace ? $session->circuitChartSpan() : null, circular: $car);
 				if($span !== null)
 					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize,'circular'=>$car,
-						'markers'=>$session->delivery?->sites() ?: ($target === null ? [] : [$target])];
+						'showRoute'=>$raceGuidance, 'markers'=>$session->delivery?->sites() ?: ($target === null ? [] : [$target])];
 			}
 			$engine->device->present();
 			if($jet)
@@ -336,6 +337,7 @@ $engine->start(
 			}
 			if($car || $craft) $frame['speedometer'] = ['mph'=>abs($vehiclePose['speed'])/Car::MPS_PER_MPH,
 				'maximum'=>$car ? Car::TOP_SPEED_MPH : 120,'size'=>$dialSize];
+			if($car) $frame['speedometer']['nitrous'] = $vehiclePose['nitrous'];
 			if($frame !== null || $hudShown)
 			{
 				$hud($frame !== null ? json_encode($frame, JSON_THROW_ON_ERROR) : '');

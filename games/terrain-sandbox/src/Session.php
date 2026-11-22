@@ -498,7 +498,7 @@ final class Session
 			if(!$this->car->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
 				$this->blend('KeyA', 'KeyD', $this->pad['x']), $this->landscape, $this->water->level(),
 				$this->held('Space') === 1 || ($this->pad['buttons'] & self::PAD_A) !== 0,
-				$this->course->posts()))
+				$this->course->posts(), $this->held('ShiftLeft') || $this->held('ShiftRight') || ($this->pad['buttons'] & self::PAD_LB)))
 			{
 				$this->mode = 'fly';
 				$this->clampCamera();
@@ -626,6 +626,7 @@ final class Session
 	{
 		if($this->mode === 'fly') return null;
 		if($this->delivery !== null) return $this->delivery->target();
+		if(!$this->race->showGuidance($this->course)) return null;
 		$gate = $this->race->nextGate($this->course);
 		return $gate === null ? null : ['kind'=>'checkpoint','color'=>DeliveryRun::COLORS['checkpoint'],
 			'x'=>$gate['x'],'y'=>$gate['y'],'z'=>$gate['z'],'yaw'=>$gate['yaw'],
@@ -1106,9 +1107,10 @@ final class Session
 		$jet = $this->mode === 'jet';
 		$type = match($action['type'] ?? '')
 		{
+			'pad-rs' => $jet ? 'jet-view' : 'recover-road',
 			'pad-up' => $jet ? 'jet-target' : 'jet',
 			'pad-down' => $jet || $this->mode === 'car' ? 'vehicle-wide-map' : 'fly',
-			'pad-y' => $jet ? '' : 'race-reset',
+			'pad-y' => !$jet && $this->race->state === 'finished' ? 'race-reset' : '',
 			default => $action['type'] ?? ''
 		};
 		switch($type)
@@ -1206,6 +1208,15 @@ final class Session
 			case 'circuit-dry':
 			case 'circuit-flooded':
 				$this->applyCircuit($type === 'circuit-flooded');
+				break;
+			case 'recover-road':
+				if($this->mode !== 'car' || $this->paused || $this->race->state !== 'running') break;
+				$site = RoadRecovery::site($this->car,$this->landscape,$this->water->level(),$this->course,$this->race,$this->circuit);
+				if($site !== null) {
+					$this->car->recoverToRoad($site,$this->landscape,$this->water->level());
+					$this->chase->board($this->camera,$this->car->state(),$this->landscape);
+					$this->dirty = true;
+				}
 				break;
 			case 'race-reset':
 				$this->race->reset();
@@ -1671,7 +1682,7 @@ final class Session
 		$this->dirty = true;
 		$this->message = $this->delivery !== null ? 'Finding a reachable package site…'
 			: 'W or RT accelerates, S or LT brakes then reverses, A/D or stick steer, Space or A handbrake, '
-			. 'L or X headlights. F returns to flight.';
+			. 'Shift or LB nitrous, L or X headlights. F returns to flight.';
 	}
 
 	/** Return the matched camera and car pose at the engine's presentation time. */

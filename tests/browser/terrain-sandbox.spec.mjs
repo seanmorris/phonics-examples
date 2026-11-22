@@ -934,18 +934,43 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	expect(errors).toEqual([]);
 });
 
+async function installCarPad(page)
+{
+	await page.addInitScript(() => {
+		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false}));
+		const pad = {
+			id: 'Car test controller'
+			, index: 0
+			, timestamp: 1
+			, mapping: 'standard'
+			, connected: true
+			, axes: [0,0,0,0]
+			, buttons
+		};
+
+		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+
+		window.testCarButton = (n, pressed) => {
+			buttons[n] = {value: Number(pressed), pressed};
+			pad.timestamp++;
+		};
+	});
+}
+
 test('the local racer records checkpoint and finish splits in the packaged sandbox', async({page}) => {
-	await page.setViewportSize({width: 640, height: 400});
+	await page.setViewportSize({width: 480, height: 300});
+	await installCarPad(page);
 	await boot(page);
 
-	const doc = fixture();
+	const road = {type: 'road',points: [[0,0,-48],[0,0,48]],width: 6,shoulder: 2,material: 'road'};
+	const doc = fixture({history: [[road]], revision: 1});
 	doc.settings.waterLevel = -5;
-	doc.camera = {position: [0, 15, 0], yaw: Math.PI, pitch: -.35};
+	doc.camera = {position: [10, 15, 0], yaw: Math.PI, pitch: -.35};
 	doc.course = {
 		gates: [
-			{role: 'start', kind: 'road', x: 0, y: 0, z: 8, yaw: 0, laps: 1}
-			, {role: 'checkpoint', kind: 'road', x: 0, y: 0, z: 16, yaw: 0, number: 1}
-			, {role: 'finish', kind: 'road', x: 0, y: 0, z: 24, yaw: 0}
+			{role: 'start', kind: 'road', x: 0, y: 0, z: 8, yaw: 0, width: 32, height: 4, laps: 1}
+			, {role: 'checkpoint', kind: 'road', x: 0, y: 0, z: 32, yaw: 0, number: 1}
+			, {role: 'finish', kind: 'road', x: 0, y: 0, z: 46, yaw: 0}
 		]
 	};
 
@@ -957,15 +982,26 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 
 	try
 	{
-		await expect.poll(async() => (await status(page)).race.state, {timeout: 60_000}).toBe('finished');
+		await expect.poll(async() => (await status(page)).race.state).toBe('running');
+		await page.evaluate(() => window.testCarButton(3, true));
+		await expect(page.locator('[data-race]')).toContainText('Lap 1');
+		await page.evaluate(() => window.testCarButton(3, false));
+		await page.evaluate(() => window.testCarButton(11, true));
+		await expect.poll(async() => (await status(page)).car.recoveries).toBe(1);
+		await page.evaluate(() => window.testCarButton(11, false));
+		await page.keyboard.down('Shift');
+		await expect.poll(async() => (await status(page)).race.state, {timeout: 90_000}).toBe('finished');
 	}
 	finally
 	{
+		await page.keyboard.up('Shift');
 		await page.keyboard.up('w');
 	}
 
 	const {race} = await status(page);
 	expect(race.vehicle).toBe('car');
+	await expect(page.locator('[data-race]')).toBeHidden();
+	await expect(page.locator('[data-status]')).toBeHidden();
 	expect(race.splits.map(split => split.role)).toEqual(['checkpoint', 'finish']);
 	expect(race.time).toBeGreaterThan(race.splits[0].time);
 });
@@ -1109,25 +1145,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 900, height: 600});
 
-	await page.addInitScript(() => {
-		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false}));
-		const pad = {
-			id: 'Car test controller'
-			, index: 0
-			, timestamp: 1
-			, mapping: 'standard'
-			, connected: true
-			, axes: [0,0,0,0]
-			, buttons
-		};
-
-		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
-
-		window.testCarButton = (n, pressed) => {
-			buttons[n] = {value: Number(pressed), pressed};
-			pad.timestamp++;
-		};
-	});
+	await installCarPad(page);
 
 	await boot(page);
 	const dry = fixture();
@@ -1202,7 +1220,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await expect.poll(async() => (await status(page)).renderer.visibleCoverage[0]?.[2]).toBeGreaterThan(cameraWidth);
 	const map = page.locator('.terrain-flight-map'), dial = page.locator('.terrain-speedometer');
 	await expect(map).toBeVisible();
-	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour');
+	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour, nitrous 100%');
 	await expect(page.locator('.terrain-instruments')).toBeHidden();
 	const viewport = await view.boundingBox(), mapBox = await map.boundingBox(), dialBox = await dial.boundingBox();
 	expect(mapBox.width).toBeGreaterThan(1.25*dialBox.width);
@@ -1230,6 +1248,19 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	const needle = () => dial.evaluate(element => {
 		const size = element.width, ctx = element.getContext('2d');
 		const pixels = ctx.getImageData(0, 0, size, size).data;
+		let cx = 0, cy = 0, count = 0;
+
+		for(let i = 0; i < pixels.length; i += 4)
+		{
+			if(pixels[i] !== 217 || pixels[i+1] !== 53 || pixels[i+2] !== 46) continue;
+
+			cx += i/4 % size;
+			cy += Math.floor(i/4/size);
+			count++;
+		}
+
+		cx /= count;
+		cy /= count;
 		let xSum = 0, ySum = 0;
 
 		for(let y = 0; y < size; y++)
@@ -1237,10 +1268,10 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 		{
 			const i = 4*(y*size+x);
 
-			if(Math.hypot(x-size/2, y-size/2) < .13*size || pixels[i] < 200 || pixels[i+1] > 90) continue;
+			if(Math.hypot(x-cx, y-cy) < .13*size || pixels[i] < 200 || pixels[i+1] > 90) continue;
 
-			xSum += x-size/2;
-			ySum += y-size/2;
+			xSum += x-cx;
+			ySum += y-cy;
 		}
 
 		return (Math.atan2(ySum, xSum) + 2*Math.PI) % (2*Math.PI);
@@ -1267,6 +1298,10 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await expect.poll(async() => (await status(page)).carWideMap).toBe(false);
 	await page.keyboard.down('w');
 	await page.keyboard.down('d');
+	await setButton(4, true);
+	await expect.poll(async() => (await status(page)).car.nitrous).toBeLessThan(.99);
+	await expect(dial).toHaveAttribute('aria-label', /nitrous \d{1,2}%/);
+	await setButton(4, false);
 	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
 	await expect.poll(needle).toBeGreaterThan(.75*Math.PI + .15);
 	await expect.poll(() => view.evaluate(element => element.splitFrontSteering)).toBe(true);

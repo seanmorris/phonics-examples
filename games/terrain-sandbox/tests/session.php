@@ -643,6 +643,14 @@ expect($springs->travel[0] > .05 && abs($springs->travel[1]) < .01 && $springs->
 for($i = 0; $i < 240; $i++) $springs->step(1/60,[0,0,0,0],false);
 expect($springs->resting && abs($springs->y-.02) < .001, 'A parked suspension settles back to its static ride height');
 
+$high = new TerrainSandbox\CarSuspension;
+$high->reset([2.02,0.,0.,0.,[0.,0.,0.,0.]]);
+$ballistic = clone $high;
+$high->step(1/60,[0.,0.,0.,0.],true,7.5);
+$ballistic->step(1/60,[0.,0.,0.,0.],true);
+expect($high->contacts === 0 && $high->y === $ballistic->y && $high->verticalSpeed === $ballistic->verticalSpeed,
+	'Boost cannot pull a high airborne car down to the road');
+
 // A one-meter drop should compress the springs and settle with little rebound.
 $springs->y += 1;
 $bottomed = false; $rise = 0.0;
@@ -1618,6 +1626,31 @@ $half = hold($light, pad(rt: .5), 60, $car);
 expect(end($half)['speed'] > end($full)['speed'] / 3 && end($half)['speed'] < end($full)['speed'] / 2,
 	'Half the right trigger accelerates more gently');
 $light->close(); $floored->close();
+$boosted = $park(); $shift = $park(); $unassisted = $park();
+$boost = pad(rt: 1, buttons: Session::PAD_LB);
+$first = hold($boosted,$boost,60,$car);
+expect($first === hold($shift,pad(),60,$car,['KeyW'=>true,'ShiftRight'=>true]),
+	'Shift and LB draw from the same full bottle');
+expect(abs(end($first)['nitrous']-.75)<1e-9 && end($first)['speed'] > end($full)['speed']+10
+	&& min(end($first)['wheelTravel'])>.06, 'One second of boost consumes a quarter bottle, pulls harder and loads all four tires');
+hold($boosted,$boost,190,$car);
+expect($car($boosted)['nitrous'] === 0., 'Holding the button after the fourth second leaves the bottle empty');
+hold($boosted,pad(),720,$car);
+expect(abs($car($boosted)['nitrous']-1.)<1e-8, 'Twelve seconds of released rolling refills the bottle');
+$boosted->close(); $shift->close();
+
+$assisted = $park();
+foreach([$assisted,$unassisted] as $session) {
+	hold($session,pad(rt: 1),150,$car);
+	hold($session,pad(x: 1,buttons: Session::PAD_A),40,$car);
+}
+$skid = abs($car($assisted)['drift']);
+hold($assisted,pad(x: 1,rt: 1,buttons: Session::PAD_LB),8,$car);
+hold($unassisted,pad(x: 1,rt: 1),8,$car);
+expect(abs($car($assisted)['drift']) > 0. && abs($car($assisted)['drift']) < abs($car($unassisted)['drift'])
+	&& abs($car($unassisted)['drift']) < $skid, 'Boost helps a sliding car track the steered heading progressively');
+$assisted->close(); $unassisted->close();
+
 $feathered = $park(); $released = $park();
 hold($feathered, pad(rt: 1), 60, $car);
 hold($released, pad(rt: 1), 60, $car);

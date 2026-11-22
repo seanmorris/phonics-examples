@@ -211,6 +211,18 @@ final class Race
 		return $this->state === 'running' ? $course->gate($this->route[$this->index]['id']) : $course->start();
 	}
 
+	/** Gate at the beginning of the current leg, including the start on a new lap. */
+	public function previousGate(Course $course): ?array
+	{
+		if($this->state !== 'running') return null;
+		return $this->index === 0 ? $course->start() : $course->gate($this->route[$this->index-1]['id']);
+	}
+
+	public function showGuidance(Course $course): bool
+	{
+		return $this->state === 'running' || !isset($this->records->latest[$course->signature()]);
+	}
+
 	/** Return to waiting for a start, keeping the session's times. */
 	public function reset(): void
 	{
@@ -240,6 +252,7 @@ final class Race
 		$start = $course->start();
 		$target = $next !== null ? $course->gate($next['id']) : $start;
 		return ['state' => $this->state,
+			'guidance' => $this->showGuidance($course),
 			'time' => $running ? $now - $this->startedAt : $this->result,
 			'lap' => $running ? $next['lap'] : ($this->state === 'finished' ? $this->laps : null),
 			'laps' => $this->state === 'idle' ? $course->laps() : $this->laps,

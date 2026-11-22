@@ -110,11 +110,11 @@ check($s->navigationTarget()['z'] === 80.0, 'Crossing the start points to checkp
 $s->race->advance($s->course,[0,0,79],[0,0,81],1,1/60,'car',2);
 check($s->navigationTarget()['z'] === 160.0, 'The arrow and map target advances to the finish');
 $s->race->advance($s->course,[0,0,159],[0,0,161],2,1/60,'car',2);
-check($s->race->state === 'finished' && $s->navigationTarget()['z'] === 0.0, 'Finished course leads to its restart');
+check($s->race->state === 'finished' && $s->navigationTarget() === null, 'Finishing clears the checkpoint arrow and map marker');
 $action('delivery');
 check($s->delivery !== null && $s->navigationTarget() === null, 'Package run takes over the navigation');
 $action('delivery');
-check($s->delivery === null && $s->navigationTarget()['kind'] === 'checkpoint', 'Ending deliveries restores race guidance');
+check($s->delivery === null && $s->navigationTarget() === null, 'Ending deliveries keeps the completed course out of the HUD');
 $s->close();
 // Keep this a work-count test so host load cannot hide a return to scanning entire gentle routes.
 $gentle = new Landscape(['worldSize'=>8192,'spacing'=>1,'heightScale'=>0,'detailAmplitude'=>0]);

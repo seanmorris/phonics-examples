@@ -69,7 +69,7 @@ export function activate({module, canvas, session})
 		const circuit = state?.circuit;
 		const route = circuit?.preview ? circuit.activePoints : circuit?.active && circuit.points;
 
-		if(route)
+		if(route && chart.showRoute !== false)
 		{
 			ctx.beginPath();
 

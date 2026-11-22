@@ -1,9 +1,23 @@
 const dialAngle = (speed, maximum) => Math.PI*(.75 + 1.5*speed/maximum);
 
-/** Cache the trim, carbon weave and lettering so a moving needle only repaints the composite. */
-function paintFace(ctx, size, maximum)
+/** The bottle spans 120 degrees around the upper-left rim. A zero charge leaves only the track. */
+function nitrousArc(ctx, fraction, width, color)
 {
-	ctx.setTransform(size/160, 0, 0, size/160, size/2, size/2);
+	if(fraction <= 0) return;
+
+	const start = Math.PI * 11/12;
+	ctx.lineCap = 'round';
+	ctx.lineWidth = width;
+	ctx.strokeStyle = color;
+	ctx.beginPath();
+	ctx.arc(0, 0, 85, start, start + fraction * Math.PI * 2/3);
+	ctx.stroke();
+}
+
+/** Cache the trim, carbon weave and lettering so a moving needle only repaints the composite. */
+function paintFace(ctx, size, maximum, padding)
+{
+	ctx.setTransform(size/160, 0, 0, size/160, padding + size/2, padding + size/2);
 	const rim = ctx.createLinearGradient(0, -78, 0, 78);
 	rim.addColorStop(0, '#6b7075');
 	rim.addColorStop(.42, '#292d31');
@@ -56,6 +70,8 @@ function paintFace(ctx, size, maximum)
 
 	ctx.font = '600 10px system-ui, sans-serif';
 	ctx.fillText('MPH', 0, 33);
+
+	if(padding) nitrousArc(ctx, 1, 6, '#202629');
 }
 
 export function activate({module, canvas})
@@ -69,7 +85,7 @@ export function activate({module, canvas})
 	dial.hidden = true;
 	canvas.parentElement.append(dial);
 	const sandbox = dial.closest('.terrain-sandbox');
-	let lastAngle, lastValue, lastMaximum;
+	let lastAngle, lastValue, lastMaximum, lastCharge;
 
 	module.drawTerrainSpeedometer = frame => {
 		if(!frame?.speedometer)
@@ -79,35 +95,44 @@ export function activate({module, canvas})
 			return;
 		}
 
-		const {mph, maximum, size} = frame.speedometer;
+		const {mph, maximum, size, nitrous} = frame.speedometer;
+		const charge = nitrous === undefined ? null : Math.round(100 * nitrous);
+		// Add space to the top and left only, keeping the dial's size and lower-right anchor.
+		const padding = charge === null ? 0 : Math.ceil(size * 9/160);
+		const extent = size + padding;
 
-		if(dial.width !== size || dial.height !== size || lastMaximum !== maximum)
+		if(dial.width !== extent || dial.height !== extent || lastMaximum !== maximum)
 		{
-			dial.width = dial.height = face.width = face.height = size;
-			paintFace(faceCtx, size, maximum);
+			dial.width = dial.height = face.width = face.height = extent;
+			paintFace(faceCtx, size, maximum, padding);
 			lastMaximum = maximum;
-			sandbox.style.setProperty('--speedometer-size', size + 'px');
+			sandbox.style.setProperty('--speedometer-size', extent + 'px');
 			lastAngle = undefined;
 		}
 
 		dial.hidden = false;
 		const value = Math.round(mph);
 
-		if(lastValue !== value)
+		if(lastValue !== value || lastCharge !== charge)
 		{
-			dial.setAttribute('aria-label', `Speedometer, ${value} miles per hour`);
+			const bottle = charge === null ? '' : `, nitrous ${charge}%`;
+			dial.setAttribute('aria-label', `Speedometer, ${value} miles per hour${bottle}`);
 			lastValue = value;
 		}
 
 		const angle = dialAngle(Math.min(mph, maximum), maximum);
 
-		if(lastAngle === angle) return;
+		if(lastAngle === angle && lastCharge === charge) return;
 
 		lastAngle = angle;
+		lastCharge = charge;
 		ctx.setTransform(1, 0, 0, 1, 0, 0);
-		ctx.clearRect(0, 0, size, size);
+		ctx.clearRect(0, 0, extent, extent);
 		ctx.drawImage(face, 0, 0);
-		ctx.setTransform(size/160, 0, 0, size/160, size/2, size/2);
+		ctx.setTransform(size/160, 0, 0, size/160, padding + size/2, padding + size/2);
+
+		if(charge !== null) nitrousArc(ctx, charge/100, 4, '#caff18');
+
 		ctx.save();
 		ctx.rotate(angle);
 		ctx.beginPath();

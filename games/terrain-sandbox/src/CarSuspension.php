@@ -8,6 +8,10 @@ final class CarSuspension
 	// Static sag and extra bump travel in meters. The mesh is authored at its loaded ride height.
 	public const SAG = .13;
 	private const BUMP = .14;
+	/** The boost can pull a drooping wheel toward ground within this many meters of full extension. */
+	public const BOOST_REACH = .65;
+	/** Smallest gap from a fully extended wheel to the road. */
+	public float $clearance = 0.;
 	// Extra rebound damping fades during the first stroke after all four tires leave the ground.
 	private const LANDING_SECONDS = .35;
 	private float $landingTimeLeft = 0;
@@ -36,9 +40,9 @@ final class CarSuspension
 		$this->resting = false;
 	}
 
-	public function step(float $dt, array $heights, bool $moving): void
+	public function step(float $dt, array $heights, bool $moving, float $downforce = 0.): void
 	{
-		if(!$moving && $this->resting && $this->ground === $heights) return;
+		if(!$moving && $downforce === 0. && $this->resting && $this->ground === $heights) return;
 		// Interpolate these same four terrain samples across both substeps, including their road velocities.
 		$steps = max(1, (int)ceil($dt*120));
 		$h = $dt/$steps;
@@ -57,6 +61,16 @@ final class CarSuspension
 				$side = self::ACROSS[$i];
 				$road = $this->ground[$i] + $roadSpeed[$i]*$step*$h;
 				$compression = ($road+.02 - ($this->y+$along*$rise+$side*$bank))*$normalUp;
+				if($downforce > 0.)
+				{
+					// Load each corner independently. A briefly unloaded wheel still feels the pull,
+					// which falls continuously to zero as it moves beyond suspension reach.
+					$gap = max(0., -$compression-self::SAG);
+					$pull = .25*$downforce*max(0., 1.-$gap/self::BOOST_REACH);
+					$lift -= $pull;
+					$pitchAccel -= $pull*$along*.64;
+					$rollAccel += $pull*$side*2.7;
+				}
 				if($compression <= -self::SAG) continue;
 				$bodySpeed = $this->verticalSpeed + ($along*(1+$rise*$rise)+$side*$bank*$rise)*$this->pitchRate
 					- $side*(1/($normalUp*max(.18,cos($this->roll))))*$this->rollRate;
@@ -80,7 +94,7 @@ final class CarSuspension
 		}
 		$this->ground = $heights;
 		$this->measure($heights);
-		$this->resting = !$moving && $this->contacts >= 2 && abs($this->verticalSpeed) < .0002
+		$this->resting = !$moving && $downforce === 0. && $this->contacts >= 2 && abs($this->verticalSpeed) < .0002
 			&& abs($this->pitchRate)+abs($this->rollRate) < .0002 && abs($lift)+abs($pitchAccel)+abs($rollAccel) < .003;
 		if($this->resting) $this->verticalSpeed = $this->pitchRate = $this->rollRate = 0.0;
 	}
@@ -128,9 +142,11 @@ final class CarSuspension
 	{
 		[$rise,$bank,$normalUp] = $this->plane();
 		$this->contacts = $this->frontContacts = 0;
+		$this->clearance = INF;
 		foreach($heights as $i => $height)
 		{
 			$compression = ($height+.02 - ($this->y+self::ALONG[$i]*$rise+self::ACROSS[$i]*$bank))*$normalUp;
+			$this->clearance = min($this->clearance, max(0., -$compression-self::SAG));
 			if($compression > -self::SAG)
 			{
 				$this->contacts++;
