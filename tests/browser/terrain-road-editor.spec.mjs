@@ -247,3 +247,47 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	await expect(page.locator('[data-road-picker]')).toHaveValue('0');
 	expect((await status()).course.gates.length).toBeGreaterThanOrEqual(8);
 });
+
+test('a 24 km spline applies and saves as one road through the editor', async({page}) => {
+	test.setTimeout(180_000);
+	await page.setViewportSize({width: 900, height: 540});
+	await page.goto('/games/terrain-sandbox/');
+	const canvas = page.locator('canvas[data-terrain-sandbox]');
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
+	const generation = (await status()).generation;
+	await canvas.focus();
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status()).paused).toBe(true);
+
+	const doc = structuredClone(fixture);
+	doc.landscape.recipe = {...recipe, worldSize: 32768, spacing: 4};
+	doc.landscape.history = [[{...road, points: [[-100,1,0],[100,1,0]]}]];
+	doc.settings.quality = .5;
+	await page.locator('[data-file]').setInputFiles({
+		name: 'highway.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc))
+	});
+	await expect.poll(async() => (await status()).generation).toBe(generation+1);
+	const closed = page.locator('.terrain-panel:not([open]) > summary');
+	if(await closed.count()) await closed.click();
+	await page.getByRole('tab', {name: 'Roads', exact: true}).click();
+	const picker = page.locator('[data-road-picker]');
+	await picker.selectOption('0');
+	const x = page.locator('[data-road-field=x]'), point = page.locator('[data-road-point]');
+	for(const [i, before, after] of [['0','-100','-12000'],['1','100','12000']]) {
+		await point.selectOption({value: i});
+		await expect(x).toHaveValue(before);
+		await x.fill(after);
+		await x.press('Tab');
+	}
+	await page.getByRole('button', {name: 'Apply road'}).click();
+	await expect.poll(async() => (await status()).revision, {timeout: 90_000}).toBe(2);
+	await expect(picker.locator('option')).toHaveCount(2); // New road and the single 24 km highway.
+	await expect(picker).toHaveValue('0');
+	await page.getByRole('tab', {name: 'Landscape', exact: true}).click();
+	const download = page.waitForEvent('download');
+	await page.locator('[data-action=save]').click();
+	const saved = JSON.parse(await fs.readFile(await (await download).path(), 'utf8'));
+	expect(saved.landscape.history.at(-1)).toHaveLength(1);
+	expect(saved.landscape.history.at(-1)[0]).toMatchObject({replaceAt: 0, points: [[-12000,1,0],[12000,1,0]]});
+});

@@ -257,7 +257,8 @@ final class Edits
 		)
 		throw new \InvalidArgumentException("Invalid terrain edit $name");
 
-		return (float)$value;
+		// JSON editors write negative zero as zero. Give identical road geometry one cache key.
+		return $value == 0 ? 0.0 : (float)$value;
 	}
 
 	/**

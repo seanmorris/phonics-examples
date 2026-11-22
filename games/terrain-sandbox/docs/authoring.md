@@ -49,10 +49,9 @@ Select a numbered point to drag it or enter its coordinates. Dragging preserves 
 
 The elevation profile shows the selected span, the full route length and maximum grade. Bank tilts the road across its width. **Apply road** commits the changes in the original road's place, including its charcoal pavement and 40 cm ochre centerline. The stripe alternates 10 feet of paint with a 10-foot gap along the curve. Undo and redo are under **Shape**. Saving the landscape preserves the points, handles and edit history.
 
-Place at least three points and choose **Close loop and create circuit** to grade the road and place a lap start and ordered checkpoints. The first control point marks the start. You can also select a saved road, reshape it, and use the same button to update its circuit. Long roads prepare over successive frames and stay together as one edit when you save or undo.
+For a manual race, place at least three points along a loop 120 m to 40 km long. Choose **Close loop and create circuit** to grade the road and place the start/finish gate at the first point, followed by ordered checkpoints. You can also select a saved road, reshape it, and use the same button to update its circuit. Long roads prepare over successive frames and stay together as one edit when you save or undo.
 
 Open **Circuit generator** in Roads to find a route around a natural feature. Its banked control points appear immediately in the road picker as numbered circuit sections. You can adjust points, curves and banks before applying the dry or flooded course. **Apply road** grades the generated sections together if you only want the pavement.
-
 
 Roads modify the heightfield. Bridges, tunnels, and overhangs require separate geometry and are outside this sandbox.
 
