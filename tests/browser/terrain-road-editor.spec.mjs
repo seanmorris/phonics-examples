@@ -241,9 +241,14 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 		await map.click({position:{x:frame.width/2+x*scale,y:frame.height/2+z*scale}});
 		await expect(page.locator('[data-road-point] option')).toHaveCount(i+1);
 	}
+	// The first span bows one sixteenth of the way away from the third point at t = 0.5.
+	await map.click({position:{x:frame.width/2,y:frame.height/2-219.375*scale}});
+	const point = page.locator('[data-road-point]');
+	await expect(point.locator('option')).toHaveCount(5);
+	await expect(point).toHaveValue('1');
 	await page.getByRole('button',{name:'Close loop and create circuit'}).click();
 	await expect.poll(async() => (await status()).circuit.active,{timeout:60_000}).toBe('dry');
-	await expect(page.locator('[data-road-point] option')).toHaveCount(5);
+	await expect(point.locator('option')).toHaveCount(6);
 	await expect(page.locator('[data-road-picker]')).toHaveValue('0');
 	expect((await status()).course.gates.length).toBeGreaterThanOrEqual(8);
 });

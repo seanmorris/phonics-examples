@@ -1458,9 +1458,13 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 
 	const sections = page.locator('[data-road-picker]');
 	await expect(sections).toHaveValue('-1');
-	await expect.poll(() => page.locator('[data-road-point] option').count()).toBeGreaterThan(20);
+	const options = await sections.locator('option').allTextContents();
+	const counts = options.filter(s => s.startsWith('Circuit section')).map(s => Number(/(\d+) points/.exec(s)[1]));
+	expect(counts.reduce((a,b) => a+b,0)).toBeLessThan(253); // This lap previously displayed 506 points.
+	const controls = page.locator('[data-road-point] option');
+	await expect(controls).toHaveCount(counts[0]);
 	await sections.selectOption('-2');
-	await expect.poll(() => page.locator('[data-road-point] option').count()).toBeGreaterThan(20);
+	await expect(controls).toHaveCount(counts[1]);
 
 	await control(page, 'circuit-dry').click();
 
@@ -1472,7 +1476,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	const dry = await status(page);
 	expect(dry.revision).toBe(1);
 	await expect(sections).toHaveValue('1');
-	await expect.poll(() => page.locator('[data-road-point] option').count()).toBeGreaterThan(20);
+	await expect(controls).toHaveCount(counts[1]);
 
 
 	expect(

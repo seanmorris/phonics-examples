@@ -9,6 +9,7 @@ use TerrainPhonics\Landscape;
 use TerrainSandbox\Car;
 use TerrainSandbox\Circuit;
 use TerrainSandbox\CircuitRoad;
+use TerrainSandbox\CircuitCurves;
 use TerrainSandbox\Course;
 use TerrainSandbox\GateShapes;
 use TerrainSandbox\Jet;
@@ -1037,6 +1038,48 @@ expect($view->message === 'Race reset. Place a start gate to race.' && $view->st
 	'Without a start gate the race has nothing to point at');
 $view->close();
 
+// Compare the fitted cubics with the original cyclic Catmull–Rom road between its survey stations.
+$points = $banks = [];
+for($i=0; $i<180; $i++) {
+	$a = 2*M_PI*$i/180;
+	$points[] = [900*cos($a)+80*sin(3*$a),30*cos(4*$a),650*sin($a)];
+	$banks[] = .12*sin(5*$a);
+}
+$fit = CircuitCurves::sections($points,$banks);
+foreach($fit as $_) {}
+$curves = $fit->getReturn();
+$fitted = array_sum(array_map(fn($r) => count($r['points']),$curves));
+expect($fitted<90, 'Smooth, banked laps need fewer than half their original controls');
+$cubic = static fn($a,$out,$b,$in,$t) => array_map(static fn($x,$dx,$y,$dy) =>
+	(1-$t)**3*$x + 3*$t*(1-$t)**2*($x+$dx) + 3*$t**2*(1-$t)*($y+$dy) + $t**3*$y,$a,$out,$b,$in);
+$maxSide = $maxHeight = $maxBank = 0.;
+$visited = [];
+foreach($curves as $road) {
+	for($i=0; $i+1<count($road['points']); $i++) {
+		$a = $road['points'][$i]; $b = $road['points'][$i+1];
+		$start = array_search($a,$points,true); $end = array_search($b,$points,true);
+		$length = ($end-$start+180)%180;
+		for($j=0; $j<$length; $j++) {
+			$at = ($start+$j)%180; $next = ($at+1)%180;
+			$visited[] = $at;
+			$out = array_map(fn($p,$q)=>($q-$p)/6,$points[($at+179)%180],$points[$next]);
+			$in = array_map(fn($p,$q)=>($p-$q)/6,$points[$at],$points[($next+1)%180]);
+			foreach([0.,.25,.5,.75] as $u) {
+				$t = ($j+$u)/$length;
+				$old = $cubic($points[$at],$out,$points[$next],$in,$u);
+				$new = $cubic($a,$road['handles'][$i]['out'],$b,$road['handles'][$i+1]['in'],$t);
+				$maxSide = max($maxSide,hypot($old[0]-$new[0],$old[2]-$new[2]));
+				$maxHeight = max($maxHeight,abs($old[1]-$new[1]));
+				$maxBank = max($maxBank,abs((1-$u)*$banks[$at]+$u*$banks[$next]
+					-(1-$t)*$road['banks'][$i]-$t*$road['banks'][$i+1]));
+			}
+		}
+	}
+}
+sort($visited);
+expect($visited === range(0,179) && $maxSide<=3. && $maxHeight<=.5 && $maxBank<=.025,
+	'Each source span, including the lap closure, fits the horizontal, vertical and banking limits');
+
 // One lane crests at station zero while the centerline and the approach grades remain gentle.
 $roadFixture = new Landscape(['worldSize'=>512,'heightScale'=>0,'detailAmplitude'=>0]);
 $roadFixture->queue(['type'=>'material','x'=>0,'z'=>0,'radius'=>220,'material'=>'road']);
@@ -1081,6 +1124,16 @@ $plan = (fn() => $this->circuitPreview)->call($generator);
 $sections = $generator->roadEditor->circuitRoads();
 $edited->roadEditor->circuitDrafts($sections);
 input($edited,['actions'=>[['type'=>'road-editor','op'=>'open']]]);
+$controlCount = array_sum(array_map(fn($r) => count($r['points']),$sections));
+expect($controlCount < 253, 'The real canyon lap uses less than half its former 506 visible controls');
+[$jx,$jy,$jz] = $sections[0]['points'][0];
+input($edited,['actions'=>[['type'=>'road-editor','op'=>'point','generation'=>$edited->generation,
+	'revision'=>0,'id'=>-1,'index'=>0,'x'=>$jx+2,'y'=>$jy,'z'=>$jz]]]);
+$joined = $edited->roadEditor->circuitRoads();
+$lastSection = end($joined);
+expect($joined[0]['points'][0] === end($lastSection['points']), 'Moving the lap junction keeps the next section attached');
+input($edited,['actions'=>[['type'=>'road-editor','op'=>'revert','generation'=>$edited->generation,'revision'=>0,'id'=>-1]]]);
+expect($edited->roadEditor->circuitRoads() === $sections, 'Reverting the junction restores both ends');
 [$px,$py,$pz] = $sections[0]['points'][10];
 input($edited,['actions'=>[['type'=>'road-editor','op'=>'point','generation'=>$edited->generation,
 	'revision'=>0,'id'=>-1,'index'=>10,'x'=>$px+30,'y'=>$py,'z'=>$pz+20]]]);

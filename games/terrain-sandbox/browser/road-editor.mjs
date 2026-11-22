@@ -590,26 +590,39 @@ export function activate({canvas, module, session})
 
 		if(result) return result;
 
-		for(let i = 0; i+1<current.points.length; i++)
+		function nearest(i, [a,b,c,d], start, end)
 		{
-			const curve = span(current, i);
-			let a = project(curve[0]);
-
-			for(let j = 1; j<=32; j++)
+			for(let axis = 0; axis<2; axis++)
 			{
-				const b = project(sample(curve, j/32)), dx = b[0]-a[0],dy = b[1]-a[1];
-				const t = clamp(((position[0]-a[0])*dx+(position[1]-a[1])*dy)/Math.max(.001, dx*dx+dy*dy), 0, 1);
-				const d = distance(position, [a[0]+t*dx,a[1]+t*dy]);
+				const coords = [a[axis], b[axis], c[axis], d[axis]];
 
-				if(d<best)
-				{
-					result = {kind: 'span',index: i,t: clamp((j-1+t)/32, .001, .999)};
-					best = d;
-				}
+				if(position[axis] < Math.min(...coords)-best || position[axis] > Math.max(...coords)+best) return;
+			}
 
-				a = b;
+			// Bound screen-space error for position AND parameter, even for a straight cubic with unequal handles.
+			if(distance(b, mix(a, d, 1/3))>.5 || distance(c, mix(a, d, 2/3))>.5)
+			{
+				const ab = mix(a, b, .5), bc = mix(b, c, .5), cd = mix(c, d, .5);
+				const abc = mix(ab, bc, .5), bcd = mix(bc, cd, .5), mid = mix(abc, bcd, .5);
+				const half = (start+end)/2;
+				nearest(i, [a,ab,abc,mid], start, half);
+				nearest(i, [mid,bcd,cd,d], half, end);
+
+				return;
+			}
+
+			const dx = d[0]-a[0], dy = d[1]-a[1];
+			const t = clamp(((position[0]-a[0])*dx+(position[1]-a[1])*dy)/Math.max(.000001, dx*dx+dy*dy), 0, 1);
+			const gap = distance(position, mix(a, d, t));
+
+			if(gap<best)
+			{
+				result = {kind: 'span',index: i,t: clamp(start+(end-start)*t, .000001, .999999)};
+				best = gap;
 			}
 		}
+
+		for(let i = 0; i+1<current.points.length; i++) nearest(i, span(current, i).map(project), 0, 1);
 
 		return result;
 	}
@@ -686,7 +699,11 @@ export function activate({canvas, module, session})
 		else if(moved && target?.kind==='handle')
 		send('handle', {index: selected,side,vector: handles(current, selected)[side]});
 
-		else if(!moved && target?.kind==='span') choose(target.index, target.index, target.t);
+		else if(!moved && target?.kind==='span')
+		{
+			if(mode==='add') send('insert', {index: target.index,t: target.t});
+			else choose(target.index, target.index, target.t);
+		}
 		else if(!moved && !target && mode==='add')
 		{
 			const [x,z] = world(location(event));
@@ -739,7 +756,7 @@ export function activate({canvas, module, session})
 
 			map.style.cursor = mode==='add' ? 'crosshair' : 'grab';
 			el('[data-road-help]').textContent = mode==='add'
-				? 'Click open ground to append a point at terrain height.'
+				? 'Click the road to insert a point. Click open ground to append one at terrain height.'
 				: 'Drag a point or its square curve handles. Drag empty ground to pan.';
 
 			return;

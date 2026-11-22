@@ -67,16 +67,9 @@ final class CircuitRoad
 			}
 			$points[] = [$x,$ground[$i]+$change/max(1.,$weight),$z];
 		}
-		$banks = self::smooth($banks);
-		$edits = [];
-		// The two extra stations at each end let a section fade onto the fully graded neighboring spline.
-		for($start = 0; $start<$count; $start+=64)
-		{
-			$end = min($start+64,$count);
-			$ids = array_map(static fn(int $i): int => ($i+$count)%$count,range($start-2,$end+2));
-			$edits[] = ['type'=>'road','points'=>array_map(fn(int $i): array => $points[$i],$ids),
-				'banks'=>array_map(fn(int $i): float => $banks[$i],$ids),'width'=>self::WIDTH,
-				'shoulder'=>self::SHOULDER,'endBlend'=>1.5*self::STATION_SPACING,'crown'=>.08,'material'=>'road'];
+		$edits = yield from CircuitCurves::sections($points,self::smooth($banks));
+		foreach($edits as &$edit) {
+			$edit += ['type'=>'road','width'=>self::WIDTH,'shoulder'=>self::SHOULDER,'crown'=>.08,'material'=>'road'];
 		}
 		return $edits;
 	}
@@ -117,15 +110,8 @@ final class CircuitRoad
 	{
 		$line = [];
 		foreach(array_slice($graded->roads(),-$sectionCount) as $road) {
-			$points = $road['points'];
-			// Each generated section has two overlapping stations at either end for shoulder blending.
-			if(count($points)<6) throw new \RuntimeException('A circuit section needs two end overlaps and at least two route points.');
 			$samples = $road['_road']['samples'];
-			$start = $points[2]; $end = $points[count($points)-3];
-			$first = 0; $last = count($samples)-1;
-			while($first < $last && hypot($samples[$first][0]-$start[0],$samples[$first][2]-$start[2])>.001) $first++;
-			while($last > $first && hypot($samples[$last][0]-$end[0],$samples[$last][2]-$end[2])>.001) $last--;
-			for($i=$first; $i<$last; $i++) $line[] = [$samples[$i][0],$samples[$i][2]];
+			for($i=0,$n=count($samples)-1; $i<$n; $i++) $line[] = [$samples[$i][0],$samples[$i][2]];
 		}
 		return self::raceLine($graded,$line,$plan->points[0],$plan->dryLevel,$plan->floodedLevel,$plan->featureArea);
 	}
@@ -160,8 +146,27 @@ final class CircuitRoad
 	}
 
 	/** Measure the prepared road's grade and width, and return its height range. */
-	public static function clearance(Landscape $land, Circuit $circuit, float $dry): \Generator
+	public static function clearance(Landscape $land, Circuit $circuit, float $dry, int $sections = 0): \Generator
 	{
+		// A section's rounded cap can affect either lane between the regular 10 m probes.
+		// Check the finished pavement near each join at the finer road sampling interval.
+		if($sections>1) foreach(array_slice($land->roads(),-$sections) as $road) {
+			$path = $road['_road'];
+			$last = count($path['samples'])-1;
+			foreach([0,$last] as $end) {
+				for($i=$end; $i>=0 && $i<=$last; $i+=($end===0 ? 1 : -1)) {
+					if(abs($path['stations'][$i]-$path['stations'][$end])>$path['radius']+8.) break;
+					if($i%8===0) yield;
+					[$x,,$z,$tx,$tz] = $path['samples'][$i];
+					foreach([-14.,0.,14.] as $lane) {
+						$px = $x-$tz*$lane; $pz = $z+$tx*$lane;
+						$rise = 2*$land->height($px,$pz)-$land->height($px-4*$tx,$pz-4*$tz)
+							-$land->height($px+4*$tx,$pz+4*$tz);
+						if($rise > 16/self::MIN_CREST_RADIUS) return null;
+					}
+				}
+			}
+		}
 		$count = (int)ceil($circuit->length/10);
 		$line = $circuit->stations(array_map(fn(int $i): float => $i*$circuit->length/$count,range(0,$count-1)));
 		$high = -INF;

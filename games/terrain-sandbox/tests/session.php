@@ -1817,12 +1817,28 @@ expect($lab->roadEditor->packet($lab)['roads'] === [] && $lab->roadEditor->packe
 foreach([[-40,0],[0,-20],[40,0]] as [$x,$z]) $command('add',['x'=>$x,'z'=>$z]);
 $command('handle',['index'=>0,'side'=>'out','vector'=>[8,3,12]]);
 $command('bank',['index'=>0,'value'=>10]);
+$unsplit = $lab->roadEditor->packet($lab)['road'];
 $command('insert',['index'=>0,'t'=>.5]);
 $split = $lab->roadEditor->packet($lab)['road'];
 expect(count($split['points'])===4 && abs($split['banks'][1]-.05)<1e-8,'Splitting interpolates the bank');
 $expected = [-40*.125 + (-40+8)*.375 + (-80/6)*.375, $lab->settings['roadRaise']+1.125,
 	12*.375 - 20*.375 -20*.125];
 foreach($expected as $axis=>$v) expect(abs($split['points'][1][$axis]-$v)<1e-8,'Split lands exactly on the existing cubic');
+$position = static function(array $road,int $i,float $t): array {
+	$points = $road['points']; $handles = $road['handles'] ?? [];
+	$out = TerrainPhonics\Edits::roadHandles($points,$handles,$i)['out'];
+	$in = TerrainPhonics\Edits::roadHandles($points,$handles,$i+1)['in'];
+	return array_map(static fn($a,$b,$d,$c) => (1-$t)**3*$a+3*$t*(1-$t)**2*($a+$b)
+		+3*$t*$t*(1-$t)*($d+$c)+$t**3*$d,$points[$i],$out,$points[$i+1],$in);
+};
+$error = 0.;
+foreach([0,1] as $i) for($j=0; $j<=20; $j++) {
+	$t = $j/20; $secondHalf = $t>=.5;
+	$before = $position($unsplit,$i,$t);
+	$after = $i === 1 ? $position($split,2,$t) : $position($split,(int)$secondHalf,2*$t-(int)$secondHalf);
+	foreach($before as $axis=>$value) $error = max($error,abs($value-$after[$axis]));
+}
+expect($error<1e-10,'Inserting a control preserves both halves of the cubic and its adjoining span in three dimensions');
 input($lab,['actions'=>[['type'=>'road-editor','op'=>'apply','id'=>null,'generation'=>$lab->generation,
 	'revision'=>$lab->landscape->revision()],['type'=>'load','json'=>'{']]]);
 expect($lab->takeCandidate() === null && $lab->roadEditor->packet($lab)['road']['points'] === $split['points'],

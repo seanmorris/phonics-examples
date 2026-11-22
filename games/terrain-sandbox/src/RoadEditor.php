@@ -38,6 +38,18 @@ final class RoadEditor
 		if($this->target !== null) {
 			$this->draft = $road;
 			if($this->target < 0) {
+				// Adjacent draft sections share a station, including across the start/finish line.
+				$n = count($this->proposed);
+				if($n > 1) {
+					$section = -1-$this->target;
+					foreach([-1,1] as $direction) {
+						$id = -1-(($section+$direction+$n)%$n);
+						$source = $direction < 0 ? 0 : array_key_last($road['points']);
+						$dest = $direction < 0 ? array_key_last($this->proposed[$id]['points']) : 0;
+						$this->proposed[$id]['points'][$dest] = $road['points'][$source];
+						$this->proposed[$id]['banks'][$dest] = $road['banks'][$source];
+					}
+				}
 				$this->proposed[$this->target] = $road;
 				$this->catalog = true;
 			}
@@ -239,22 +251,33 @@ final class RoadEditor
 			} elseif($op === 'add') {
 				if($count >= 128) throw new \LengthException('A road can have up to 128 points.');
 				[$x,$z] = self::mapPoint($s,$a);
-				$road['points'][] = [$x,$s->landscape->height($x,$z)+$s->settings['roadRaise'],$z];
-				if(isset($road['handles'])) $road['handles'][] = null;
-				if(isset($road['banks'])) $road['banks'][] = 0.;
-				$this->selection = $count;
+				$this->selection = $closed ? $count-1 : $count;
+				$point = [$x,$s->landscape->height($x,$z)+$s->settings['roadRaise'],$z];
+				array_splice($road['points'],$this->selection,0,[$point]);
+				if(isset($road['handles'])) array_splice($road['handles'],$this->selection,0,[null]);
+				if(isset($road['banks'])) array_splice($road['banks'],$this->selection,0,[0.]);
 			} else {
 				if(!is_int($i) || $i < 0 || $i >= $count) throw new \InvalidArgumentException('Select a point on the road.');
 				$this->selection = $i;
 				switch($op) {
 					case 'insert':
 						if($i+1 >= $count || $count >= 128) throw new \InvalidArgumentException('Select a span with room for another point.');
-						self::split($road,$i,self::number($a['t'] ?? .5,.001,.999));
+						self::split($road,$i,self::number($a['t'] ?? .5,.000001,.999999));
 						$this->selection = $i+1;
 						break;
 					case 'remove':
-						foreach(['points','handles','banks'] as $key) if(isset($road[$key])) array_splice($road[$key],$i,1);
-						$this->selection = min($i,$count-2);
+						if($this->onCircuit() && $count <= ($closed ? 4 : 2))
+							throw new \InvalidArgumentException('Keep the circuit section connected.');
+						if($closed && $count>4 && ($i===0 || $i===$count-1)) {
+							foreach(['points','handles','banks'] as $key) if(isset($road[$key])) {
+								array_shift($road[$key]);
+								$road[$key][$count-2] = $road[$key][0];
+							}
+							$this->selection = 0;
+						} else {
+							foreach(['points','handles','banks'] as $key) if(isset($road[$key])) array_splice($road[$key],$i,1);
+							$this->selection = min($i,$count-2);
+						}
 						break;
 					case 'point':
 						[$x,$z] = self::mapPoint($s,$a);

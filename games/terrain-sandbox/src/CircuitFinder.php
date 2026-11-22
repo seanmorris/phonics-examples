@@ -300,7 +300,7 @@ final class CircuitFinder
 		{
 			foreach($roads as $road) { $graded->queue($road); yield; }
 			$graded->commit();
-			$range = yield from CircuitRoad::clearance($graded,$circuit,$this->dryLevel+$this->swell+.25);
+			$range = yield from CircuitRoad::clearance($graded,$circuit,$this->dryLevel+$this->swell+.25,count($roads));
 			if($range === null) return null;
 			[$low,$high] = $range;
 			$reliefFound = $lake ? $this->dryLevel-$low : $peak-$high;
