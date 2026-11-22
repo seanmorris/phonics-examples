@@ -1846,6 +1846,8 @@ function markup()
 	<label class="terrain-field">Minimum feature height difference · m<input data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="120"></label>
 	<label class="terrain-field">Start elevation · m<input data-value="circuitStartHeight" type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
 	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
+	<label class="terrain-check"><input data-value="circuitCauseways" type="checkbox">Allow causeways</label>
+	<p class="terrain-note">Raise the road across water up to 30 m deep while keeping the current water level.</p>
 	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
 	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
 	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>

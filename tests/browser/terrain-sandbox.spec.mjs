@@ -1468,6 +1468,39 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 	expect(errors).toEqual([]);
 });
 
+test('Arctic Meltwater can place an editable causeway circuit at its original water level', async({page}) => {
+	test.setTimeout(480_000);
+	await page.setViewportSize({width: 672, height: 420});
+	await page.goto('/games/terrain-sandbox/');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+
+	await (await field(page, '[name="preset"]')).selectOption('arctic-meltwater');
+	await (await field(page, '[data-value="quality"]')).selectOption('0.5');
+	await press(page, 'generate');
+	await expect.poll(async() => (await status(page)).recipe.preset).toBe('arctic-meltwater');
+	await press(page, 'pause');
+	const water = (await status(page)).settings.waterLevel;
+
+	await page.getByRole('tab', {name: 'Roads', exact: true}).click();
+	await page.getByText('Circuit generator', {exact: true}).click();
+	const causeways = page.getByRole('checkbox', {name: 'Allow causeways'});
+
+	await expect(causeways).not.toBeChecked();
+	await causeways.check();
+	await control(page, 'circuit-find').click();
+	await expect.poll(async() => (await status(page)).circuit.preview, {timeout: 340_000}).toBe(true);
+	expect((await status(page)).revision).toBe(0);
+
+	await control(page, 'circuit-dry').click();
+	await expect.poll(async() => (await status(page)).circuit.active, {timeout: 80_000}).toBe('dry');
+	const applied = await status(page);
+
+	expect(applied.settings.waterLevel).toBe(water);
+	expect(applied.settings.circuitCauseways).toBe(true);
+	expect(applied.course.gates.length).toBeGreaterThanOrEqual(8);
+	await expect(page.locator('[data-road-picker] option').nth(1)).toContainText(/Road/i);
+});
+
 test('preview, apply and switch between dry and flooded canyon circuits', async({page}) => {
 	test.setTimeout(330_000);
 	const errors = [];

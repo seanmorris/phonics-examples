@@ -1279,6 +1279,52 @@ expect($lakeCopy->settings['circuitStartHeight'] === null,
 $lakeCopy->close();
 $lakeRace->close();
 
+// From the preset home, cross Arctic Meltwater without draining the channels.
+$arctic = new Session;
+input($arctic,['actions'=>[['type'=>'generate','preset'=>'arctic-meltwater','seed'=>'arctic-meltwater']]]);
+expect($arctic->settings['circuitCauseways'] === false,'Causeways are opt-in');
+$natural = $arctic->landscape->fork();
+$level = $arctic->water->level();
+$waves = clone $arctic->water; $waves->setWaveScale(3.);
+input($arctic,['values'=>['circuitCauseways'=>true],'actions'=>['circuit-find']]);
+while($arctic->findingCircuit()) input($arctic,[]);
+$found = $arctic->status()['circuit'];
+expect($found['preview'] && $arctic->landscape->revision() === 0 && $found['heightDifference'] >= 120.,
+	'The default Arctic relief produces an editable causeway preview before altering the terrain');
+input($arctic,['actions'=>['circuit-dry']]);
+while($arctic->preparingRoad()) input($arctic,[]);
+$arctic->publishLandscape($arctic->takeCandidate());
+expect($arctic->water->level() === $level && $arctic->status()['circuit']['active'] === 'dry',
+	'Applying the drivable variant preserves the Arctic sea level');
+$overWater = $onLand = false;
+$lowestEdge = INF; $deepest = $level;
+foreach($arctic->landscape->roads() as $road) {
+	$half = $road['width']/2;
+	foreach($road['_road']['samples'] as $i=>[$x,,$z,$tx,$tz]) {
+		if($i%3 !== 0) continue;
+		$bed = $natural->height($x,$z);
+		$overWater = $overWater || $bed < $level-3.;
+		$onLand = $onLand || $bed > $level+3.;
+		$deepest = min($deepest,$bed);
+		foreach([-$half,0.,$half] as $across)
+			$lowestEdge = min($lowestEdge,$arctic->landscape->height($x-$tz*$across,$z+$tx*$across));
+	}
+}
+expect($overWater && $onLand && $deepest >= $level-30. && $lowestEdge > $waves->heightRange()[1],
+	'The Arctic circuit travels on land and on an embankment with both shoulders above maximum swell');
+$natural->close();
+$arcticCopy = new Session;
+$arcticCopy->load($arctic->save());
+expect($arcticCopy->settings['circuitCauseways'] === true && $arcticCopy->course->export() === $arctic->course->export(),
+	'Saved causeways retain their setting, graded road and gates');
+$legacy = json_decode($blankFile,true);
+unset($legacy['settings']['circuitCauseways']);
+$arcticCopy->load(json_encode($legacy));
+expect($arcticCopy->settings['circuitCauseways'] === false,'An older landscape restores the dry-ground default');
+$arcticCopy->close();
+enterCar($arctic);
+$arctic->close();
+
 $vehicle = ['x'=>12., 'z'=>10.];
 $target = ['kind'=>'checkpoint', 'x'=>0., 'z'=>0., 'yaw'=>0., 'halfWidth'=>15.];
 expect(NavigationArrow::bearing($target,$vehicle,null,0.) === 0.,

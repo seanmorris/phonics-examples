@@ -135,7 +135,7 @@ final class Session
 	public array $settings = [
 		'tool' => 'navigate', 'radius' => 40.0, 'amount' => 12.0, 'flattenHeight' => 0.0,
 		'material' => 'grass', 'roadWidth' => 8.0, 'roadShoulder' => 12.0, 'roadRaise' => 0.0,
-		'circuitRelief'=>120.0, 'circuitStartHeight'=>null,
+		'circuitRelief'=>120.0, 'circuitStartHeight'=>null, 'circuitCauseways'=>false,
 		'exposure' => 1.0,
 		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
@@ -619,14 +619,14 @@ final class Session
 		if($this->preparing || $this->picking || $this->draft !== null)
 			throw new \RuntimeException('Wait for the terrain edit before finding a circuit.');
 		[$x,,$z] = $this->camera->position;
-		$dry = $this->circuitVariant === 'flooded' ? $this->circuit->dryLevel : $this->water->level();
+		$dry = !$this->settings['circuitCauseways'] && $this->circuitVariant === 'flooded' ? $this->circuit->dryLevel : $this->water->level();
 		$water = clone $this->water;
 		$water->setWaveScale(3.);
 		$swell = $water->level()-$water->heightRange()[0];
 		$this->circuitPreview = null;
 		$this->roadEditor->circuitDrafts([]);
 		$this->circuitSearch = (new CircuitFinder($this->landscape,$dry,$swell,$this->settings['circuitRelief'],
-			$this->settings['circuitStartHeight']))
+			$this->settings['circuitStartHeight'],$this->settings['circuitCauseways']))
 			->find($x,$z,$this->gateShapes,$this->settings['gateLaps']);
 		$this->message = 'Looking for a closed route around the terrain…';
 	}
@@ -929,6 +929,7 @@ final class Session
 			[$min,$max] = $ranges[$name];
 			$value = max($min, min($max, (float)$value));
 		}
+		elseif($name === 'circuitCauseways' && !is_bool($value)) throw new \InvalidArgumentException('Expected a causeway checkbox value.');
 		elseif($name === 'clock') $value = (bool)$value;
 		elseif($name === 'skyColor' || $name === 'hazeColor')
 		{
@@ -2051,7 +2052,8 @@ final class Session
 			}
 			if($this->prepareMaterial) ($this->prepareMaterial)($layers ?? $generated);
 			$settings = array_diff_key($settings, WaterAppearance::DEFAULTS, TerrainAppearance::DEFAULTS)
-				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW];
+				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'circuitCauseways'=>false];
+			if(!is_bool($settings['circuitCauseways'])) throw new \InvalidArgumentException('Invalid saved causeway setting.');
 			// Check each value against its setting's default, not the value now in use: a setting that defaults to
 			// null, such as circuitStartHeight, may hold a number now and be blank in the file.
 			$defaults = (new \ReflectionProperty(self::class, 'settings'))->getDefaultValue();

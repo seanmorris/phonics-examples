@@ -16,7 +16,7 @@ final class CircuitRoad
 	private const MIN_CREST_RADIUS = 140.;
 
 	/** @return \Generator The road edit records for a validated centerline. */
-	public static function grade(Landscape $land, Circuit $circuit): \Generator
+	public static function grade(Landscape $land, Circuit $circuit, ?float $causewayDeck = null): \Generator
 	{
 		$count = (int)ceil($circuit->length/self::STATION_SPACING);
 		$line = $circuit->stations(array_map(fn(int $i): float => $i*$circuit->length/$count,range(0,$count-1)));
@@ -24,7 +24,8 @@ final class CircuitRoad
 		foreach($line as $i => [$x,$z])
 		{
 			if($i%16 === 0) yield;
-			$ground[] = $land->height($x,$z);
+			$height = $land->height($x,$z);
+			$ground[] = $causewayDeck === null ? $height : max($height,$causewayDeck);
 		}
 		// Ease the vertical alignment over roughly 55 m on either side, including at the lap line.
 		for($pass = 0; $pass < 4; $pass++) $ground = self::smooth($ground);
@@ -49,6 +50,10 @@ final class CircuitRoad
 			$bends[] = max(0.,min(1.,2*(1.-$cosine)));
 			$left = $land->height($x+14*$leftX,$z+14*$leftZ);
 			$right = $land->height($x-14*$leftX,$z-14*$leftZ);
+			if($causewayDeck !== null) {
+				$left = max($left,$causewayDeck);
+				$right = max($right,$causewayDeck);
+			}
 			$bank = max(-.18,min(.18,($left-$right)/28));
 			// Carry the existing bank into a corner when the outside wall already rises.
 			$banks[] = $bank*$turn<0 ? $bank*min(1.,abs($turn)/140) : 0.;
@@ -67,7 +72,15 @@ final class CircuitRoad
 			}
 			$points[] = [$x,$ground[$i]+$change/max(1.,$weight),$z];
 		}
-		$edits = yield from CircuitCurves::sections($points,self::smooth($banks));
+		$banks = self::smooth($banks);
+		if($causewayDeck !== null) {
+			// The low edge of a banked turn needs the same wave clearance as the straight deck.
+			foreach($points as $i=>[, $y]) {
+				$limit = max(0.,($y-$causewayDeck)/(self::WIDTH/2));
+				$banks[$i] = max(-$limit,min($banks[$i],$limit));
+			}
+		}
+		$edits = yield from CircuitCurves::sections($points,$banks);
 		foreach($edits as &$edit) {
 			$edit += ['type'=>'road','width'=>self::WIDTH,'shoulder'=>self::SHOULDER,'crown'=>.08,'material'=>'road'];
 		}
