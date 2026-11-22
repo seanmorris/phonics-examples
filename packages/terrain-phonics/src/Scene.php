@@ -443,11 +443,13 @@ final class Scene
 	 * position in world meters, a nonzero direction, linear color, intensity in candela, range in meters, and inner
 	 * and outer cone half-angles in radians. Lamp light gets SpotLights::NIGHT_GAIN at night.
 	 * @param array $lights List of at most SpotLights::MAX lights.
+	 * @param float $adaptation Gain for eyes adapted to a shadow around the lamps by day, from one up; see
+	 * Atmosphere::shadeAdaptation(). The larger of it and the night gain applies.
 	 * @return void Replaces the lights, or throws InvalidArgumentException and keeps the previous ones.
 	 */
-	public function setSpotLights(array $lights): void
+	public function setSpotLights(array $lights, float $adaptation = 1.0): void
 	{
-		($this->spotLights ??= new SpotLights)->set($lights);
+		($this->spotLights ??= new SpotLights)->set($lights, $adaptation);
 	}
 
 	/**

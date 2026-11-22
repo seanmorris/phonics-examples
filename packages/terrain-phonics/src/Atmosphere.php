@@ -120,7 +120,10 @@ final class Atmosphere
 	{
 		$next = new AtmosphereLayers($rows, $this->parameters['atmosphereHeight']);
 		if(!isset($this->air) || $this->air->bands !== $next->bands) $this->lut = null;
-		if(!isset($this->air) || $this->air->bands !== $next->bands || $this->air->colors !== $next->colors) $this->skyFill = [];
+
+		if(!isset($this->air) || $this->air->bands !== $next->bands || $this->air->colors !== $next->colors)
+		$this->skyFill = [];
+
 		$this->air = $next;
 	}
 
@@ -183,26 +186,39 @@ final class Atmosphere
 		// Spectral positions that give the default coefficients a fourth-power law around green.
 		$x = [log($beta[0] / $beta[1]) / 4, 0.0, log($beta[2] / $beta[1]) / 4];
 		$y = [];
+
 		foreach($target as $c => $radiance) $y[] = log(max(1e-6, $radiance) / $reference[$c]);
 		$mx = array_sum($x) / 3;
 		$my = array_sum($y) / 3;
 		$covariance = $variance = 0.0;
-		for($c = 0; $c < 3; $c++) {
+
+		for($c = 0; $c < 3; $c++)
+		{
 			$covariance += ($x[$c] - $mx) * ($y[$c] - $my);
 			$variance += ($x[$c] - $mx) ** 2;
 		}
+
 		$slope = max(-1.0, min(1.0, $covariance / $variance));
 		$density = exp($my - $slope * $mx);
 		$rayleigh = [];
+
 		foreach($beta as $c => $value) $rayleigh[] = $value * $density * exp($slope * $x[$c]);
+
 		if(strtolower($hex) === self::DEFAULT_SKY_COLOR) $rayleigh = self::DEFAULT_RAYLEIGH;
+
 		$this->skyColor = strtolower($hex);
+
 		if($rayleigh === $this->parameters['rayleigh']) return;
+
 		$this->parameters['rayleigh'] = $rayleigh;
 		$this->lut = null;
 		$this->skyFill = [];
 	}
 
+	/**
+	 * Read the sky color last set.
+	 * @return string Lower-case six-digit hex color; DEFAULT_SKY_COLOR until setSkyColor() is called.
+	 */
 	public function skyColor(): string { return $this->skyColor; }
 
 	/**
@@ -216,13 +232,23 @@ final class Atmosphere
 	{
 		$linear = self::linearColor($hex);
 		$peak = max($linear);
-		$tint = $peak > 0 ? array_map(static fn(float $c): float => $c / $peak, $linear) : [0.0,0.0,0.0];
+		$tint = [0.0,0.0,0.0];
+
+		if($peak > 0)
+		foreach($linear as $c => $value) $tint[$c] = $value / $peak;
+
 		$this->hazeColor = strtolower($hex);
+
 		if($tint === $this->parameters['hazeColor']) return;
+
 		$this->parameters['hazeColor'] = $tint;
 		$this->skyFill = [];
 	}
 
+	/**
+	 * Read the haze color last set.
+	 * @return string Lower-case six-digit hex color; DEFAULT_HAZE_COLOR until setHazeColor() is called.
+	 */
 	public function hazeColor(): string { return $this->hazeColor; }
 
 	/**
@@ -233,6 +259,7 @@ final class Atmosphere
 	public function setSkyLight(float $strength): void
 	{
 		if(!is_finite($strength) || $strength < 0) throw new \InvalidArgumentException('Sky light must be nonnegative');
+
 		$this->parameters['skyLight'] = $strength;
 	}
 
@@ -262,26 +289,38 @@ final class Atmosphere
 	public function uniforms(): array
 	{
 		$fill = $this->skyIrradiance($this->parameters['sunDirection'][1]);
+
+		foreach($fill as $c => $value) $fill[$c] = $value * $this->parameters['skyLight'];
+
 		return [
 			'nightVisibility' => $this->nightVisibility()
 			, 'nightAmbient' => $this->nightAmbient()
-			, 'skyAmbient' => array_map(fn(float $value): float => $value * $this->parameters['skyLight'], $fill)
+			, 'skyAmbient' => $fill
 		] + $this->parameters + $this->air->uniforms + [
 			'transmittanceSize' => [$this->lut['width'] ?? 0,$this->lut['height'] ?? 0]
 			, 'lutGeneration' => $this->lutGeneration
 		];
 	}
 
-	/** Smooth dusk from the horizon to ten degrees below. Star visibility is independent of the fill dimmer. */
+	/**
+	 * Smooth dusk from the horizon to ten degrees below. Star visibility is independent of the fill dimmer.
+	 * @return float Zero while the sun is up, rising to one with the sun ten degrees below the horizon.
+	 */
 	private function nightVisibility(): float
 	{
 		$t = min(1.0, max(0.0, -$this->parameters['sunDirection'][1] / 0.17364818));
+
 		return $t * $t * (3 - 2 * $t);
 	}
 
+	/**
+	 * Blue night fill, scaled by the night glow along the dusk curve.
+	 * @return array Linear RGB in scene units.
+	 */
 	private function nightAmbient(): array
 	{
 		$strength = $this->nightVisibility() * $this->parameters['nightGlow'];
+
 		return [.075 * $strength, .15 * $strength, .60 * $strength];
 	}
 
@@ -298,50 +337,109 @@ final class Atmosphere
 		$low = (int)floor($degrees);
 		$t = $degrees - $low;
 		$a = $this->skyFillAt($low);
+
 		if($t <= 0) return $a;
+
 		$b = $this->skyFillAt($low + 1);
+
 		return [$a[0] + ($b[0] - $a[0]) * $t, $a[1] + ($b[1] - $a[1]) * $t, $a[2] + ($b[2] - $a[2]) * $t];
 	}
 
+	/**
+	 * Integrate and cache the sky's light on level ground for one whole degree of sun elevation.
+	 * @param int $degrees Sun elevation in whole degrees; values past the zenith or nadir are clamped.
+	 * @return array Linear RGB over pi, before the sky-light scale.
+	 */
 	private function skyFillAt(int $degrees): array
 	{
 		if(isset($this->skyFill[$degrees])) return $this->skyFill[$degrees];
+
 		$sun = $this->parameters['sunDirection'];
 		$elevation = deg2rad(max(-90, min(90, $degrees)));
 		$this->parameters['sunDirection'] = [cos($elevation), sin($elevation), 0.0];
 		$sum = [0.0,0.0,0.0];
-		try {
+
+		try
+		{
 			// Three 30-degree rings and six azimuths; mirrored azimuths share one evaluation.
-			foreach([15, 45, 75] as $ring) {
+			foreach([15, 45, 75] as $ring)
+			{
 				$zenith = deg2rad(90 - $ring);
 				$weight = cos($zenith) * sin($zenith) * deg2rad(30) * M_PI / 3;
-				foreach([0 => 1, 60 => 2, 120 => 2, 180 => 1] as $azimuth => $count) {
+
+				foreach([0 => 1, 60 => 2, 120 => 2, 180 => 1] as $azimuth => $count)
+				{
 					$phi = deg2rad($azimuth);
-					$radiance = $this->radiance([sin($zenith) * cos($phi), cos($zenith), sin($zenith) * sin($phi)], 0.0, 12, false);
+
+					$radiance = $this->radiance(
+						[sin($zenith) * cos($phi), cos($zenith), sin($zenith) * sin($phi)]
+						, 0.0
+						, 12
+						, false
+					);
+
 					for($c = 0; $c < 3; $c++) $sum[$c] += $radiance[$c] * $weight * $count;
 				}
 			}
 		}
-		finally { $this->parameters['sunDirection'] = $sun; }
+		finally
+		{
+			$this->parameters['sunDirection'] = $sun;
+		}
+
 		return $this->skyFill[$degrees] = [$sum[0] / M_PI, $sum[1] / M_PI, $sum[2] / M_PI];
 	}
 
-	/** Linear channels of a six-digit hex color. */
+	/**
+	 * How much brighter sunlit level ground is than shaded level ground, for eyes that adapt to a shadow by day.
+	 * @return float The sun's and sky's light on level ground over the sky's alone, in green, at sea level; one once
+	 * the sun has set. About 11 with the sun 35 degrees up, falling to one as it sets, where the night gain takes over.
+	 */
+	public function shadeAdaptation(): float
+	{
+		$sine = $this->parameters['sunDirection'][1];
+
+		if($sine <= 0) return 1.0;
+
+		$sky = $this->skyIrradiance($sine)[1] * $this->parameters['skyLight'];
+		$sun = $this->parameters['sunIntensity'] * $this->transmittance(0.0, $sine, 32)[1] * $sine / M_PI;
+
+		return $sky > 0 ? max(1.0, min(SpotLights::NIGHT_GAIN, ($sun + $sky) / $sky)) : 1.0;
+	}
+
+	/**
+	 * Convert a six-digit hex color to linear channels.
+	 * @param string $hex Color with a leading #.
+	 * @return array Red, green and blue from 0 to 1.
+	 */
 	private static function linearColor(string $hex): array
 	{
-		if(!preg_match('/^#[0-9a-fA-F]{6}$/', $hex)) throw new \InvalidArgumentException('Colors must be six-digit hex');
+		if(!preg_match('/^#[0-9a-fA-F]{6}$/', $hex))
+		throw new \InvalidArgumentException('Colors must be six-digit hex');
+
 		$rgb = [];
-		foreach(str_split(substr($hex, 1), 2) as $channel) {
+
+		foreach(str_split(substr($hex, 1), 2) as $channel)
+		{
 			$c = hexdec($channel) / 255;
 			$rgb[] = $c <= .04045 ? $c / 12.92 : (($c + .055) / 1.055) ** 2.4;
 		}
+
 		return $rgb;
 	}
 
-	/** Radiance that displays as a hex color at exposure 1, inverting toneMap(); bright channels stop at 99%. */
+	/**
+	 * Find the radiance that displays as a color at exposure 1, inverting toneMap().
+	 * @param string $hex Six-digit hex color; channels above 99% count as 99%.
+	 * @return array Linear RGB radiance.
+	 */
 	private static function displayedRadiance(string $hex): array
 	{
-		return array_map(static fn(float $c): float => -log(1 - min(.99, $c)), self::linearColor($hex));
+		$radiance = [];
+
+		foreach(self::linearColor($hex) as $c) $radiance[] = -log(1 - min(.99, $c));
+
+		return $radiance;
 	}
 
 	/**
@@ -385,7 +483,9 @@ final class Atmosphere
 
 		// Ozone lies far above any view of the terrain, so only sunlight paths cross it.
 		$light = $this->attenuation($dr, $dm, $layers ? $airDepth : 0.);
+
 		foreach($this->parameters['ozone'] as $c => $absorption) $light[$c] *= exp(-$absorption * $do);
+
 		return $light;
 	}
 
@@ -446,7 +546,14 @@ final class Atmosphere
 		return $this->radiance($direction, $altitude, $samples, true);
 	}
 
-	/** Single scattering along a view ray; the solar disk and night glow are added only with $extras. */
+	/**
+	 * Integrate single scattering along a view ray.
+	 * @param array $direction Viewing direction as [x,y,z].
+	 * @param float $altitude Viewer height above sea level, in meters.
+	 * @param int $samples View-ray integration samples, clamped between eight and 128.
+	 * @param bool $extras Whether to add the attenuated solar disk and the night glow.
+	 * @return array Linear HDR RGB.
+	 */
 	private function radiance(array $direction, float $altitude, int $samples, bool $extras): array
 	{
 		$ray = self::direction($direction);
@@ -499,7 +606,9 @@ final class Atmosphere
 			for($channel = 0; $channel < 3; $channel++)
 			$rgb[$channel] += $view[$channel] * $light[$channel] * $this->parameters['sunIntensity']
 				* $weight * ($r * $this->parameters['rayleigh'][$channel] * $phaseR
-					+ $m * $this->parameters['mie'] * $this->parameters['haze'] * $this->parameters['hazeColor'][$channel] * $phaseM
+					+ $m * $this->parameters['mie'] * $this->parameters['haze'] * $this->parameters['hazeColor'][
+						$channel
+					] * $phaseM
 					+ $scatter[$channel] / (4 * M_PI)
 				);
 
@@ -520,7 +629,9 @@ final class Atmosphere
 
 		$gradient = max(0.0, min(1.0, $ray[1]));
 		$glow = exp(-$airDepth) * (.27 - .17 * $gradient * (2 - $gradient));
+
 		foreach($this->nightAmbient() as $channel => $fill) $rgb[$channel] += $fill * $glow;
+
 		return $rgb;
 	}
 

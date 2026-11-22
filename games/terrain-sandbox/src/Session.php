@@ -241,14 +241,36 @@ final class Session
 	/** Whether pushing the stick forward raises the jet's nose instead of lowering it. */
 	public bool $invertPitch = false;
 	/**
-	 * The car's headlight switch: 'auto' lights them while the sun is lower than AUTO_HEADLIGHTS, and 'on' and 'off'
-	 * keep them lit or dark. Like the jet controls it belongs to the player, so no file stores it.
+	 * The car's headlight switch: 'auto' lights them while the sun is lower than AUTO_HEADLIGHTS or terrain hides it
+	 * from the car, and 'on' and 'off' keep them lit or dark. Like the jet controls it belongs to the player, so no file
+	 * stores it.
 	 */
 	public string $headlights = 'auto';
 	/** Headlight switch positions in the order L and the X button step through them. */
 	public const HEADLIGHTS = ['auto', 'on', 'off'];
 	/** Sun elevation in degrees below which Auto lights the headlights. */
 	public const AUTO_HEADLIGHTS = 5.0;
+	/** Seconds Auto's light sensor must see the sun before it turns the headlights off, so a shadow's edge cannot flicker them. */
+	public const SHADE_RELEASE = 2.0;
+	/** Seconds between the light sensor's looks toward the sun. */
+	private const SHADE_INTERVAL = .25;
+	/** Seconds for eyes to adapt to the light around the car, as a time constant. */
+	private const LAMP_ADAPTATION_SECONDS = .8;
+	/**
+	 * Gain on the beams in a deep shadow by day, a tenth of the terrain package's night gain. Physically a lamp adds
+	 * little to daylit shade: its beam meets the road at a grazing angle, so ten meters ahead it gives about 1% of the
+	 * sky's light. Like the night gain this stands for eyes adapted to the dark, so the beams show 30 to 40 m ahead.
+	 */
+	public const SHADE_LAMP_GAIN = 1000.0;
+	/** Gain on the beams for eyes adapted to a shadow by day; one in the sun. */
+	private float $lampAdaptation = 1.0;
+	/** The light sensor: a ray from just above the car toward the sun, run a little each frame. */
+	private ?RayQuery $sunQuery = null;
+	private float $sunCheckIn = 0.0;
+	/** Whether terrain hides the sun from the car, held for SHADE_RELEASE seconds after the sun returns. */
+	private bool $carShaded = false;
+	private bool $sunSeen = false;
+	private float $sunlitFor = 0.0;
 	/** Buttons the page reports in the last element of a pad packet, one bit each, while they are held. */
 	public const PAD_A = 1, PAD_B = 2, PAD_X = 4, PAD_Y = 8, PAD_LB = 16, PAD_RB = 32, PAD_LS = 64, PAD_RS = 128;
 	/** A gamepad at rest: both sticks centered, both triggers released and no buttons held. */
@@ -421,6 +443,8 @@ final class Session
 	{
 		if($this->paused) return;
 		$mode = $this->mode;
+		// Shade belongs to one drive: leaving the car clears the light sensor.
+		if($mode !== 'car' && ($this->carShaded || $this->sunQuery !== null || $this->lampAdaptation !== 1.0)) $this->resetShade();
 		$racing = $this->delivery === null && $this->course->count() > 0 && isset($this->vehicles[$mode]);
 		if($this->mode === 'craft')
 		{
@@ -466,6 +490,8 @@ final class Session
 					$event = $this->delivery->step($this->landscape,$this->water->level(),$before,$after);
 					if($event !== null) { $this->message = $event; $this->dirty = true; }
 				}
+				$this->senseShade($seconds, $after);
+				$this->adaptLamps($seconds);
 				if($this->lamps->step($seconds, $after['braking'], $after['reversing'], $this->headlightsLit()))
 					$this->dirty = true;
 			}
@@ -766,17 +792,99 @@ final class Session
 	private function headlightMessage(): string
 	{
 		return match($this->headlights) {
-			'auto' => 'Headlights on Auto: lit while the sun is below ' . self::AUTO_HEADLIGHTS . '°.',
+			'auto' => 'Headlights on Auto: lit while the sun is below ' . self::AUTO_HEADLIGHTS . '° or hidden by terrain.',
 			'on' => 'Headlights on.',
 			'off' => 'Headlights off.',
 		};
 	}
 
-	/** Whether the switch lights the headlights now: on, or on Auto with the sun low. */
+	/** Whether the switch lights the headlights now: on, or on Auto with the sun low or hidden by terrain. */
 	public function headlightsLit(): bool
 	{
 		return $this->headlights === 'on'
-			|| $this->headlights === 'auto' && $this->settings['elevation'] < self::AUTO_HEADLIGHTS;
+			|| $this->headlights === 'auto' && ($this->settings['elevation'] < self::AUTO_HEADLIGHTS || $this->carShaded);
+	}
+
+	/** Gain for the beams by day, for eyes adapted to the shadow the car stands in; one in sun and at night. */
+	public function lampAdaptation(): float { return $this->lampAdaptation; }
+
+	/**
+	 * The beams' gain for eyes adapted to the car's shadow: SHADE_LAMP_GAIN scaled by how much of the light the shadow
+	 * takes away, from Atmosphere::shadeAdaptation(). With the sun 35 degrees up the shade keeps a twelfth of the light
+	 * and the gain is about 915; it falls to one as the sun sets, where the night gain takes over.
+	 */
+	public function shadeLampGain(): float
+	{
+		return 1 + (self::SHADE_LAMP_GAIN - 1) * (1 - 1 / $this->atmosphere->shadeAdaptation());
+	}
+
+	/** Ease the beams' gain toward shadeLampGain() while the car is shaded, and back to one in the sun. */
+	private function adaptLamps(float $seconds): void
+	{
+		$target = $this->carShaded ? $this->shadeLampGain() : 1.0;
+		$blend = 1 - exp(-$seconds / self::LAMP_ADAPTATION_SECONDS);
+		$this->lampAdaptation = max(1.0, exp(log($this->lampAdaptation) + (log($target) - log($this->lampAdaptation)) * $blend));
+		if(abs($this->lampAdaptation - $target) < .001) $this->lampAdaptation = $target;
+	}
+
+	/**
+	 * Run the light sensor while the headlights can light and the sun is up. A ray from 1.5 m above the car toward the
+	 * sun looks for terrain every SHADE_INTERVAL seconds, within half a millisecond of work a frame. Shade lights Auto's
+	 * headlights at once and adapts the beams to it; SHADE_RELEASE seconds of sun undo both.
+	 * @param float $seconds Simulated time since the last frame.
+	 * @param array $car The car's state after this frame.
+	 * @return void Updates whether the car is shaded.
+	 */
+	private function senseShade(float $seconds, array $car): void
+	{
+		if($this->headlights === 'off' || $this->settings['elevation'] <= 0)
+		{
+			$this->resetShade();
+			return;
+		}
+		if($this->carShaded && $this->sunSeen)
+		{
+			$this->sunlitFor += $seconds;
+			if($this->sunlitFor >= self::SHADE_RELEASE) $this->carShaded = false;
+		}
+		$this->sunCheckIn -= $seconds;
+		if($this->sunQuery === null)
+		{
+			if($this->sunCheckIn > 0) return;
+			$a = deg2rad($this->settings['azimuth']); $e = deg2rad($this->settings['elevation']);
+			$this->sunQuery = $this->landscape->rayQuery([$car['x'], $car['y'] + 1.5, $car['z']],
+				[sin($a) * cos($e), sin($e), cos($a) * cos($e)], 6000);
+			$this->sunCheckIn = self::SHADE_INTERVAL;
+		}
+		try
+		{
+			if(!$this->sunQuery->advance(.5, 256)) return;
+			$shaded = $this->sunQuery->result() !== null;
+		}
+		catch(\LogicException)
+		{
+			// The terrain changed under the query; look again next interval.
+			$this->sunQuery = null;
+			return;
+		}
+		$this->sunQuery = null;
+		if($shaded)
+		{
+			$this->carShaded = true;
+			$this->sunSeen = false;
+			$this->sunlitFor = 0.0;
+		}
+		else $this->sunSeen = true;
+	}
+
+	private function resetShade(): void
+	{
+		$this->sunQuery?->cancel();
+		$this->sunQuery = null;
+		$this->sunCheckIn = 0.0;
+		$this->carShaded = $this->sunSeen = false;
+		$this->sunlitFor = 0.0;
+		$this->lampAdaptation = 1.0;
 	}
 
 	/** Describe the jet's controls for the current handling. */
@@ -2019,7 +2127,7 @@ final class Session
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
-			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),
+			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),'lampAdaptation' => $this->lampAdaptation,
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
 			'duck' => $this->mode === 'fly' || $this->duck === null ? null

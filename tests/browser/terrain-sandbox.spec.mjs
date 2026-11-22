@@ -1336,11 +1336,11 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 	await expect(headlights).toHaveValue('on');
 	expect((await status(page)).message).toBe('Headlights on.');
 	await expect.poll(async() => (await status(page)).lamps.pods, {timeout: 60_000}).toBe(1);
-	// By day the beams would make no visible difference, so the renderer gets no spot lights.
-	expect((await status(page)).renderer.spotLights).toBe(0);
+	// By day the beams keep their physical brightness, so each open headlamp is already a spot light.
+	await expect.poll(async() => (await status(page)).renderer.spotLights, {timeout: 30_000}).toBe(2);
 	expect(await page.evaluate(() => localStorage.getItem('terrain-sandbox.car'))).toBe('{"headlights":"on"}');
 
-	// Below the horizon each open headlamp lights the ground as one of the renderer's spot lights.
+	// After sunset they stay the same two lights; only the night gain changes.
 	await page.locator('.terrain-sandbox [data-value="elevation"]').evaluate(element => {
 		element.value = -12;
 		element.dispatchEvent(new Event('input', {bubbles: true}));

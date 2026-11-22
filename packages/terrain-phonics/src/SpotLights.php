@@ -48,6 +48,8 @@ final class SpotLights
 	];
 	/** Twelve floats for each light, in the layout of uSpotLights, with color in scene units before the gain. */
 	private array $values = [];
+	/** Gain for eyes adapted to shade by day; the larger of it and the night gain applies. */
+	private float $adaptation = 1.0;
 	/** The floats each program last received, by the spl_object_id() of its Program. */
 	private array $sent = [];
 
@@ -58,18 +60,25 @@ final class SpotLights
 	 * scaling the intensity per channel; intensity in candela along the axis; range in meters, at least 0.01,
 	 * where the light fades out; inner and outer, half-angles of the cone in radians, with 0 <= inner <= outer
 	 * and 0 < outer <= pi/2. The light is full inside inner and absent outside outer.
+	 * @param float $adaptation Gain for eyes adapted to the light around the lamps, at least one; for example
+	 * Atmosphere::shadeAdaptation() while the lamps stand in a shadow by day. The larger of it and the night gain
+	 * applies.
 	 * @return void Stores the packed lights. An empty list clears them.
 	 */
-	public function set(array $lights): void
+	public function set(array $lights, float $adaptation = 1.0): void
 	{
 		if(!array_is_list($lights) || count($lights) > self::MAX)
 		throw new \InvalidArgumentException('Spot lights must be a list of at most ' . self::MAX . ' lights');
+
+		if(!is_finite($adaptation) || $adaptation < 1 || $adaptation > self::NIGHT_GAIN)
+		throw new \InvalidArgumentException('Lamp adaptation must be from one to the night gain');
 
 		$values = [];
 
 		foreach($lights as $index => $light) $values = [...$values, ...self::pack($light, $index)];
 
 		$this->values = $values;
+		$this->adaptation = $adaptation;
 	}
 
 	/**
@@ -83,11 +92,12 @@ final class SpotLights
 	 * @param float $night Atmosphere::uniforms()['nightVisibility'], from zero by day to one at full night.
 	 * @return array uSpotLightCount, and uSpotLights[0] with twelve floats per light: world position and the inverse
 	 * square of the range; unit axis and cone scale; irradiance on the axis at one meter in scene units, including
-	 * the night gain, and cone offset. The cone factor is the square of clamp(cos θ * scale + offset, 0, 1).
+	 * the night gain or the adaptation given to set(), whichever is larger, and cone offset. The cone factor is the
+	 * square of clamp(cos θ * scale + offset, 0, 1).
 	 */
 	public function uniforms(float $night): array
 	{
-		$gain = 1 + (self::NIGHT_GAIN - 1) * max(0.0, min(1.0, $night));
+		$gain = max($this->adaptation, 1 + (self::NIGHT_GAIN - 1) * max(0.0, min(1.0, $night)));
 		$values = $this->values;
 
 		for($i = 8; $i < count($values); $i += 12)

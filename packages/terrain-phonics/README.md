@@ -206,6 +206,11 @@ the night fill. The default fill lights level ground as about 4,200 lux of sunli
 ground seen by eyes adapted to the dark. Under the same gain it matches about 0.4 lux; a full moon on a clear night
 gives 0.05 to 0.3 lux.
 
+A second argument, `Scene::setSpotLights($lights, $adaptation)`, gives the gain for eyes adapted to a shadow around
+the lamps by day; the larger of it and the night gain applies. `Atmosphere::shadeAdaptation()` measures how dark a
+shadow is: the sun's and sky's light on level ground over the sky's alone, about 11 with the sun 35° up and 1 once it
+sets. The terrain sandbox scales its shade gain from that ratio.
+
 On level ground a low lamp's irradiance falls with the cube of distance, so the ground 3 m ahead of a car receives
 hundreds of times what the ground 50 m ahead does, more than the tone map can show without turning the near ground
 white. The shaders therefore compress the lamps' summed irradiance above `SpotLights::KNEE`, 1 scene unit after the
