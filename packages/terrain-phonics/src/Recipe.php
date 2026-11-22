@@ -171,6 +171,10 @@ final class Recipe
 			throw new \InvalidArgumentException('Invalid terrain ' . $key);
 		}
 
+		// Landscape keys its tile cache by row and column within Landscape::TILE_REACH of the origin.
+		if($values['worldSize'] / 2 / ($values['spacing'] * $values['tileSize']) > Landscape::TILE_REACH)
+		throw new \InvalidArgumentException('Terrain tiles are too fine for this world size; raise spacing or tileSize');
+
 		$this->layered = $values['bedding'] > 0 && $values['terraceSpacing'] > 0 && $values['terraceStrength'] > 0;
 		$this->wallWidth = $values['wallWidth'];
 		$this->wallStart = $values['floorWidth'];

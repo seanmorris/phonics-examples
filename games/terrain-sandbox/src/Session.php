@@ -977,6 +977,11 @@ final class Session
 						throw new \InvalidArgumentException('Invalid terrain generation parameter.');
 					else $recipe[$key]=is_int($default)?(int)$action[$key]:(float)$action[$key];
 				}
+				// A fine lattice from a loaded file can be too fine for a wider world: Landscape keys its tile cache
+				// within TILE_REACH tiles of the origin. Take larger tiles rather than refuse the world.
+				while($recipe['tileSize'] < 32
+					&& $recipe['worldSize'] / 2 / ($recipe['spacing'] * $recipe['tileSize']) > Landscape::TILE_REACH)
+					$recipe['tileSize'] = min(32, $recipe['tileSize'] * 2);
 				$previous = $this->landscape->recipe()['preset'];
 				$next = new Landscape($recipe);
 				if($this->prepareMaterial && !$this->surfaceLayers) {

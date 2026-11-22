@@ -1769,4 +1769,13 @@ expect($sky->atmosphere->layers()===$profiles['coast'] && $sky->settings['haze']
 	'The next landscape supplies its own layers while preserving manually adjusted sunlight and haze.');
 $sky->close();
 
+// A fine lattice kept from a loaded file still generates a 65.5 km world, with tiles large enough for the cache keys.
+$fine = new Session(['worldSize' => 512, 'spacing' => .25, 'tileSize' => 4]);
+$fine->input(['actions' => [['type' => 'generate', 'preset' => 'mountain', 'seed' => 'first-light', 'worldSize' => 65536]]],
+	1 / 60, 16 / 9);
+$wideRecipe = $fine->landscape->recipe();
+expect($wideRecipe['worldSize'] === 65536.0 && $wideRecipe['spacing'] === .25 && $wideRecipe['tileSize'] === 8,
+	'Generating a 65.5 km world from a fine lattice takes larger tiles instead of failing');
+$fine->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

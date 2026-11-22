@@ -9,11 +9,14 @@ namespace TerrainPhonics;
 final class Landscape implements TerrainSurface
 {
 	/**
-	 * A tile key is (row + TILE_BIAS) * TILE_SPAN + column + TILE_BIAS. The largest legal world reaches tile
-	 * 16385 on either side of the origin, and the largest key stays below 2^31 for the 32-bit browser build.
+	 * A tile key is (row + TILE_BIAS) * TILE_SPAN + column + TILE_BIAS, and the largest key stays below 2^31 for the
+	 * 32-bit browser build. Rows and columns must therefore stay within TILE_BIAS of the origin, or two tiles share a
+	 * key. Recipe refuses a world whose edge tile lies beyond TILE_REACH, which leaves room for the halo and
+	 * neighbour tiles the stencils read one or two tiles past the edge.
 	 */
 	private const TILE_BIAS = 20000;
 	private const TILE_SPAN = 40000;
+	public const TILE_REACH = 19990;
 	/** Names of the sixteen stencil nodes in row-major order, as HeightTile::layout() assigns them. */
 	private const SLOTS = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p'];
 	/** Immutable procedural recipe and normalized parameters. */
