@@ -300,7 +300,8 @@ namespace
 	input($wreck, ['actions' => ['car']]);
 	for($i = 0; $wreck->findingCarSite() && $i < 2000; $i++) input($wreck, []);
 
-	$launch = hold($wreck, 500, ['KeyW' => true], untilMotion: 'tumbling');
+	// Keep W held for half a second of the tumble, so the check below sees W on many tumbling states, not one.
+	$launch = [...hold($wreck, 500, ['KeyW' => true], untilMotion: 'tumbling'), ...hold($wreck, 30, ['KeyW' => true])];
 	$crash = hold($wreck, 1500, ['KeyS' => true], untilMotion: 'overturned');
 	$after = hold($wreck, 300);
 
@@ -311,6 +312,8 @@ namespace
 		&& in_array('overturned', array_column($held, 'motion'), true),
 		'Over the ramp the car tumbles and lies overturned, rolling both ways while S is held');
 
+	$tumblingOnW = count(array_filter($launch, $down));
+	expect($tumblingOnW >= 20, "W stays held through $tumblingOnW tumbling states");
 	expect(!array_filter($launch, static fn(array $s): bool => $down($s) && ($s['braking'] || $s['reversing']))
 		&& !array_filter($held, static fn(array $s): bool => !$s['braking'] || $s['reversing']),
 		'While the car tumbles or lies overturned, W lights neither rear lamp and S lights the brake lamps alone');

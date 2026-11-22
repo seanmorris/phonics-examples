@@ -57,7 +57,8 @@ namespace
 		$GLOBALS['gl']['strips'][] = [$mode,$vertices,$instances];
 	}
 	function glDrawElements(int $mode, int $count, int $type, int $offset): void { $GLOBALS['gl']['draws'][] = $count; }
-	foreach(['glUniform1i','glUniform2i','glUniform1f','glBindTexture','glActiveTexture','glBindVertexArray', 'glDeleteVertexArrays', 'glBindBuffer', 'glEnableVertexAttribArray',
+	function glUniform2i(int $l, int ...$v): void { $GLOBALS['gl']['uniforms'][$GLOBALS['names'][$l]] = $v; }
+	foreach(['glUniform1i','glUniform1f','glBindTexture','glActiveTexture','glBindVertexArray', 'glDeleteVertexArrays', 'glBindBuffer', 'glEnableVertexAttribArray',
 		'glVertexAttribPointer', 'glDeleteBuffers', 'glBlendFuncSeparate'] as $name)
 		eval("function $name(...\$arguments): void {}");
 
@@ -193,6 +194,17 @@ namespace
 	expect($shadow->draw($air,$land,$camera,1280,720,$scene) === 1 && $gl['vertices'] === ''
 		&& count($gl['strips']) === 1 && $gl['strips'][0][0] === GL_TRIANGLE_STRIP,
 		'An airborne shadow uses one center sample and draws the resident terrain with no vertex upload');
+	// The resident-terrain draw covers exactly the patch's extent, skirt included, and shades it with the patch's own
+	// core, skirt and eye. Dropping the skirt or the eye once still passed the checks above.
+	$airShape = GroundShadow::shape($air, $land->height($air['x'], $air['z']));
+	[$b0, $b1, $b2, $b3] = (new ReflectionMethod(GroundShadow::class, 'bounds'))->invoke(null, $air, $airShape['extent']);
+	[$mode, $vertices, $instances] = $gl['strips'][0];
+	expect($gl['uniforms']['uDrawCell'] === [(int)floor($b0), (int)floor($b1)]
+		&& $vertices === 2 * ((int)ceil($b2) - (int)floor($b0) + 1) && $instances === (int)ceil($b3) - (int)floor($b1),
+		'The resident-terrain shadow covers the whole patch, skirt included');
+	expect($gl['uniforms']['uSkirt'] === $airShape['skirt'] && $gl['uniforms']['uShade'] === $airShape['shade']
+		&& $gl['uniforms']['uEye'] === array_map('floatval', $camera->position),
+		'The resident-terrain shadow gets the patch\'s core, skirt and the eye');
 	$above = ['y'=>$land->height($pose['x'],$pose['z'])+3] + $pose;
 	expect($shadow->draw($above,$land,$camera,1280,720,$scene) === 1 && count($gl['strips']) === 1
 		&& count($gl['draws']) === $draws && $gl['vertices'] === '',
