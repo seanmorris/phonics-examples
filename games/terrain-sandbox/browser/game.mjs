@@ -1044,6 +1044,7 @@ function atmosphereEditor(frame, push)
 	const list = frame.querySelector('[data-air-list]');
 	const template = frame.querySelector('[data-air-template]');
 	const add = frame.querySelector('[data-air-add]');
+	const preset = frame.querySelector('[data-air-preset]');
 	let schema, generation = -1, serial = 0, pending = 0, accepted = '';
 
 	function row(values) {
@@ -1090,6 +1091,10 @@ function atmosphereEditor(frame, push)
 		submit();
 		el.querySelector('[data-air-key=name]').focus();
 	};
+	preset.onclick = () => {
+		pending = ++serial;
+		push({type:'atmosphere-preset', request:pending});
+	};
 	list.onchange = submit;
 	list.onclick = ({target}) => {
 		const remove = target.closest('[data-air-remove]');
@@ -1106,6 +1111,7 @@ function atmosphereEditor(frame, push)
 			if(!schema || !state.atmosphereLayers) return;
 			const replaced = generation !== state.generation;
 			if(!replaced && pending > state.atmosphereReply) return;
+			preset.disabled = state.atmosphereOrigin === 'preset';
 			const key = JSON.stringify(state.atmosphereLayers);
 			if(!replaced && !pending && key===accepted) return;
 			generation = state.generation;
@@ -1790,8 +1796,9 @@ function markup()
 	${range('Night glow', 'nightGlow', 0, 1, .01, .5)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
 	<h2>Atmospheric layers</h2>
-	<p class="terrain-note">Tint the air between two altitudes. A longer path through a layer gives it more color.</p>
-	<div data-air-list></div><div class="terrain-row"><button type="button" data-air-add disabled>Add atmosphere layer</button></div>
+	<p class="terrain-note">Layers follow the landform preset until you edit them. Looking along a layer shows more haze than looking through it from above.</p>
+	<div data-air-list></div><div class="terrain-row"><button type="button" data-air-add disabled>Add atmosphere layer</button>
+	<button type="button" data-air-preset disabled>Use preset layers</button></div>
 	<template data-air-template><fieldset class="terrain-landform-group"><legend></legend>
 	<div class="terrain-grid">
 	<label class="terrain-field">Layer name<input type="text" maxlength="40" required data-air-key="name"></label>

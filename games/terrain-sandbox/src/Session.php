@@ -77,6 +77,17 @@ final class Session
 	public float $time = 0;
 	private const SKY_DEFAULTS = ['azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0];
 	private const LIMESTONE_SKY = ['azimuth' => 106.0, 'elevation' => 36.0, 'haze' => .7];
+	/** Aerosol layers above sea level in meters, with optical depth per kilometer. */
+	private const PRESET_AIR = [
+		'coast' => ['name'=>'Sea spray', 'top'=>340., 'density'=>.065, 'color'=>'#d9e2e5'],
+		'mountain' => ['name'=>'Valley haze', 'top'=>540., 'density'=>.037, 'color'=>'#cfdbe4'],
+		'canyon' => ['name'=>'Canyon dust', 'top'=>620., 'density'=>.038, 'color'=>'#d9c6ac'],
+		'limestone' => ['name'=>'Lowland mist', 'top'=>210., 'density'=>.063, 'color'=>'#d9dfd6'],
+		'basalt-fjords' => ['name'=>'Fjord mist', 'top'=>195., 'density'=>.072, 'color'=>'#cdd9e0'],
+		'amber-dunes' => ['name'=>'Suspended sand', 'top'=>440., 'density'=>.057, 'color'=>'#e0c9a9'],
+		'arctic-meltwater' => ['name'=>'Ice haze', 'top'=>225., 'density'=>.020, 'color'=>'#dce5eb'],
+		'tidal-lagoon' => ['name'=>'Humid marine air', 'top'=>640., 'density'=>.046, 'color'=>'#dae3e3'],
+	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
 	private const PRESET_LOOK = [
 		'mountain' => TerrainAppearance::PRESET_DEFAULTS['mountain'],
@@ -126,6 +137,7 @@ final class Session
 	public ?\Closure $prepareMaterial = null;
 	private int $materialReply = 0;
 	private int $atmosphereReply = 0;
+	private string $atmosphereOrigin = 'preset';
 	private ?string $materialPreset = null;
 	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon'];
 
@@ -843,9 +855,17 @@ final class Session
 		$this->dirty = true;
 	}
 
+	private function usePresetAtmosphere(string $preset): void
+	{
+		$this->atmosphere->setLayers([self::PRESET_AIR[$preset]]);
+		$this->atmosphereOrigin = 'preset';
+		$this->dirty = true;
+	}
+
 	/** Keep authored colors and lighting when moving between preset defaults. */
 	private function switchPresetLook(string $previous, string $next): void
 	{
+		if($this->atmosphereOrigin === 'preset') $this->usePresetAtmosphere($next);
 		$from = self::PRESET_LOOK[$previous] ?? [];
 		$to = self::PRESET_LOOK[$next] ?? [];
 		if($from === $to) return;
@@ -916,7 +936,12 @@ final class Session
 				$this->atmosphereReply = (int)($action['request'] ?? 0);
 				if(!is_array($action['layers'] ?? null)) throw new \InvalidArgumentException('Expected a list of atmosphere layers.');
 				$this->atmosphere->setLayers($action['layers']);
+				$this->atmosphereOrigin = 'authored';
 				$this->dirty = true;
+				break;
+			case 'atmosphere-preset':
+				$this->atmosphereReply = (int)($action['request'] ?? 0);
+				$this->usePresetAtmosphere($this->landscape->recipe()['preset']);
 				break;
 			case 'surface-layers':
 				$this->setMaterial($action);
@@ -1652,6 +1677,7 @@ final class Session
 		unset($row);
 		$document = ['schema' => 'phonics-landscape-sandbox','version' => 5,
 			'atmosphereLayers'=>$this->atmosphere->layers(),
+			'atmosphereOrigin'=>$this->atmosphereOrigin,
 			'surface'=>['origin'=>$this->surfaceLayers ? 'authored' : 'preset',
 				'preset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),
 				'layers'=>$rows,'fields'=>$stack->fields,'bounce'=>$stack->bounce,'paint'=>$this->paintInks(),'paintAuthored'=>$this->paint !== null],
@@ -1747,6 +1773,10 @@ final class Session
 			if(array_key_exists('atmosphereLayers',$data) && !is_array($data['atmosphereLayers']))
 				throw new \InvalidArgumentException('Invalid saved atmosphere layers.');
 			$air = new AtmosphereLayers($data['atmosphereLayers'] ?? [], $this->atmosphere->uniforms()['atmosphereHeight']);
+			// Earlier saves used one fixed sky across landforms, including saves with clear air.
+			$airOrigin = array_key_exists('atmosphereOrigin', $data) ? $data['atmosphereOrigin'] : 'authored';
+			if(!in_array($airOrigin, ['preset', 'authored'], true))
+				throw new \InvalidArgumentException('Invalid saved atmosphere origin.');
 			$appearance = new WaterAppearance($settings);
 			$terrain = new TerrainAppearance($settings);
 			$generated = SurfaceLayers::landscape($candidate->recipe(),$terrain);
@@ -1794,6 +1824,7 @@ final class Session
 		$this->replace($candidate);
 		$this->balloons = $balloons;
 		$this->atmosphere->setLayers($air->rows);
+		$this->atmosphereOrigin = $airOrigin;
 		$this->setWaterAppearance($appearance);
 		$this->setTerrainAppearance($terrain);
 		$this->surfaceLayers=$layers;
@@ -1834,7 +1865,7 @@ final class Session
 		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
-			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereReply'=>$this->atmosphereReply,
+			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,
 			'settings' => $this->settings,'surfaceLayers'=>$this->activeLayers()->layers,'materialReply'=>$this->materialReply,'surfaceOrigin'=>$this->surfaceLayers ? 'authored' : 'preset',
 			'surfacePreset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),
 			'surfaceFields'=>$this->activeLayers()->fields,'paintInks'=>$this->paintInks(),

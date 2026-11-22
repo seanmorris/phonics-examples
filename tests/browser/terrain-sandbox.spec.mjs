@@ -1320,6 +1320,7 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 	await settled(page);
 	await page.getByRole('tab', {name:'Sky',exact:true}).click();
 	const add = page.getByRole('button', {name:'Add atmosphere layer',exact:true});
+	const preset = page.getByRole('button', {name:'Use preset layers',exact:true});
 	const groups = page.locator('[data-air-list] fieldset');
 	await add.click();
 	await expect.poll(async()=>(await status(page)).atmosphereLayers.length).toBe(1);
@@ -1343,6 +1344,7 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 	expect((await status(page)).renderer.frames).toBe(stable.renderer.frames);
 	const saved = await save(page);
 	expect(saved.atmosphereLayers).toEqual(stable.atmosphereLayers);
+	expect(saved.atmosphereOrigin).toBe('authored');
 	await load(page,fixture());
 	await expect(groups).toHaveCount(0);
 	await load(page,saved);
@@ -1351,6 +1353,15 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 	await expect(groups.nth(1).getByLabel('Visible')).not.toBeChecked();
 	await first.getByRole('button',{name:'Remove atmosphere layer'}).click();
 	await expect.poll(async()=>(await status(page)).atmosphereLayers.length).toBe(1);
+	await preset.click();
+	await expect(first.getByLabel('Layer name')).toHaveValue('Sea spray');
+	await expect(preset).toBeDisabled();
+	await (await field(page,'[name="preset"]')).selectOption('arctic-meltwater');
+	await press(page,'generate');
+	await page.getByRole('tab',{name:'Sky',exact:true}).click();
+	await expect(first.getByLabel('Layer name')).toHaveValue('Ice haze');
+	await first.getByLabel('Visible').uncheck();
+	await expect(preset).toBeEnabled();
 	expect(errors).toEqual([]);
 });
 

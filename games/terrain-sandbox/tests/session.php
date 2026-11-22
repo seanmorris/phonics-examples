@@ -1707,7 +1707,22 @@ $materials->close();
 
 $sky = new Session;
 $original = json_decode($sky->save(),true);
-unset($original['atmosphereLayers']);
+unset($original['atmosphereLayers'], $original['atmosphereOrigin']);
+$profiles = $optics = [];
+foreach(TerrainPhonics\Recipe::PRESETS as $preset) {
+	$initial = new Session(['preset'=>$preset]);
+	input($sky,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
+	$profile = $sky->atmosphere->layers();
+	expect($profile === $initial->atmosphere->layers() && $sky->status()['atmosphereOrigin'] === 'preset',
+		"Starting and generating $preset apply the same preset atmosphere.");
+	$uniforms = $sky->atmosphere->uniforms();
+	expect($uniforms['airLayerCount'] > 0, "$preset sends its active atmosphere to the renderer.");
+	$optics[] = json_encode([$uniforms['airBand[0]'], $uniforms['airColor[0]']]);
+	$profiles[$preset] = $profile;
+	$initial->close();
+}
+expect(count(array_unique($optics)) === count($profiles), 'Every landform has a distinct optical profile.');
+$stock = $sky->save();
 $rows = [['name'=>'Sea fog','top'=>400.,'color'=>'#a1c3cc'], ['name'=>'Dust','bottom'=>1400.,'top'=>2400.,'enabled'=>false]];
 input($sky,['actions'=>[['type'=>'atmosphere-layers','layers'=>$rows,'request'=>11]]]);
 $authored = $sky->status()['atmosphereLayers'];
@@ -1718,13 +1733,40 @@ expect($sky->atmosphere->layers()===$authored,'Generating another landform prese
 $file = $sky->save();
 $sky->load(json_encode($original));
 expect($sky->atmosphere->layers()===[],'An earlier save restores clear air over its own landscape.');
+input($sky,['actions'=>[['type'=>'generate','preset'=>'arctic-meltwater']]]);
+expect($sky->atmosphere->layers()===[], 'An old landscape keeps its clear air until the author chooses preset layers.');
 $sky->load($file);
-expect($sky->atmosphere->layers()===$authored,'Atmosphere layers round-trip with their titles, heights, densities, colors and visibility.');
+expect($sky->atmosphere->layers()===$authored && $sky->status()['atmosphereOrigin'] === 'authored',
+	'Atmosphere layers round-trip with their titles, heights, densities, colors, visibility and authored status.');
 $bad = json_decode($file,true);
 $bad['atmosphereLayers'][1]['top']=100.;
 $beforeFailure = $sky->save();
 try { $sky->load(json_encode($bad)); expect(false,'Reject inverted atmosphere bounds'); }
 catch(InvalidArgumentException) { expect($sky->save()===$beforeFailure,'A malformed layer leaves the complete live session intact.'); }
+$bad = json_decode($file,true);
+$bad['atmosphereOrigin'] = 'other';
+try { $sky->load(json_encode($bad)); expect(false,'Reject unknown atmosphere origin'); }
+catch(InvalidArgumentException) { expect($sky->save()===$beforeFailure,'A bad atmosphere origin leaves the session intact.'); }
+unset($bad['atmosphereOrigin']);
+$sky->load(json_encode($bad));
+input($sky,['actions'=>[['type'=>'generate','preset'=>'mountain']]]);
+expect($sky->atmosphere->layers()===$authored,'Earlier saves with custom layers keep them when generating a different landscape.');
+
+$sky->load($stock);
+input($sky,['actions'=>[['type'=>'generate','preset'=>'mountain']]]);
+expect($sky->atmosphere->layers()===$profiles['mountain'],'A saved preset atmosphere resumes following the landform.');
+input($sky,['actions'=>[['type'=>'atmosphere-layers','layers'=>[]]]]);
+$sky->load($sky->save());
+input($sky,['actions'=>[['type'=>'generate','preset'=>'limestone']]]);
+expect($sky->atmosphere->layers()===[], 'A deliberately cleared stack survives saving, loading and changing landform.');
+input($sky,['values'=>['haze'=>.42,'elevation'=>17.],'actions'=>[['type'=>'atmosphere-preset','request'=>15]]]);
+expect($sky->atmosphere->layers()===$profiles['limestone'] && $sky->status()['atmosphereReply']===15,
+	'Restoring preset layers applies the current landform and acknowledges the request.');
+input($sky,['actions'=>[['type'=>'atmosphere-layers','layers'=>[['density'=>-1.]]]]]);
+expect($sky->status()['atmosphereOrigin']==='preset','An invalid layer edit preserves preset following.');
+input($sky,['actions'=>[['type'=>'generate','preset'=>'coast']]]);
+expect($sky->atmosphere->layers()===$profiles['coast'] && $sky->settings['haze']===.42 && $sky->settings['elevation']===17.,
+	'The next landscape supplies its own layers while preserving manually adjusted sunlight and haze.');
 $sky->close();
 
 echo "Landscape sandbox session: $checks checks passed\n";
