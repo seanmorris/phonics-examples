@@ -1,5 +1,6 @@
 /** Transparent navigation symbols over the GPU-rendered terrain chart. */
-const headings=['N','NE','E','SE','S','SW','W','NW'];
+const headings = ['N','NE','E','SE','S','SW','W','NW'];
+
 export function activate({module, canvas, session})
 {
 	const map = document.createElement('canvas');
@@ -52,9 +53,10 @@ export function activate({module, canvas, session})
 			return [c*dx+s*dz, -s*dx+c*dz];
 		}
 
-		const edgeDistance = (x, y) => circular ? Math.hypot(x,y) : Math.max(Math.abs(x),Math.abs(y));
+		const edgeDistance = (x, y) => circular ? Math.hypot(x, y) : Math.max(Math.abs(x), Math.abs(y));
 
-		ctx.clearRect(0,0,size,size);
+		ctx.clearRect(0, 0, size, size);
+
 		if(circular)
 		{
 			ctx.save();
@@ -62,18 +64,23 @@ export function activate({module, canvas, session})
 			ctx.arc(mid, mid, mid, 0, 2*Math.PI);
 			ctx.clip();
 		}
+
 		const state = session.terrainSandbox?.state;
 		const circuit = state?.circuit;
 		const route = circuit?.preview ? circuit.activePoints : circuit?.active && circuit.points;
+
 		if(route)
 		{
 			ctx.beginPath();
+
 			for(const [i,[x,z]] of route.entries())
 			{
-				const [px,py] = offset(x,z);
-				if(i) ctx.lineTo(mid+px,mid+py);
-				else ctx.moveTo(mid+px,mid+py);
+				const [px,py] = offset(x, z);
+
+				if(i) ctx.lineTo(mid+px, mid+py);
+				else ctx.moveTo(mid+px, mid+py);
 			}
+
 			ctx.closePath();
 			ctx.lineJoin = 'round';
 			ctx.lineWidth = 4;
@@ -83,8 +90,10 @@ export function activate({module, canvas, session})
 			ctx.strokeStyle = '#ffd272';
 			ctx.stroke();
 		}
+
 		ctx.lineWidth = 1;
 		ctx.strokeStyle = '#bad5b5';
+
 		if(circular)
 		{
 			ctx.beginPath();
@@ -106,7 +115,7 @@ export function activate({module, canvas, session})
 		const barCenter = circular ? mid : size-6-bar/2;
 		const barY = circular ? size-Math.ceil(size*.10) : size-5;
 		ctx.font = 'bold 10px monospace';
-		const scaleWidth = circular ? Math.max(bar,ctx.measureText(label).width)+10 : bar+10;
+		const scaleWidth = circular ? Math.max(bar, ctx.measureText(label).width)+10 : bar+10;
 		ctx.fillStyle = '#10201edc';
 		ctx.fillRect(headingX-10, headingTop, 20, 15);
 		ctx.fillRect(barCenter-scaleWidth/2, barY-14, scaleWidth, 18);
@@ -124,13 +133,16 @@ export function activate({module, canvas, session})
 
 		for(const objective of chart.markers)
 		{
-			const [dx,dy] = offset(objective.x,objective.z);
-			const fit = Math.min(1,(mid-10)/Math.max(1,edgeDistance(dx,dy)));
+			const [dx,dy] = offset(objective.x, objective.z);
+			const fit = Math.min(1, (mid-10)/Math.max(1, edgeDistance(dx, dy)));
 			const x = mid+dx*fit, y = mid+dy*fit;
 			ctx.beginPath();
-			if(objective.kind === 'pickup') ctx.rect(x-4,y-4,8,8);
-			else ctx.arc(x,y,objective.kind === 'drop' ? 7 : 4,0,2*Math.PI);
+
+			if(objective.kind === 'pickup') ctx.rect(x-4, y-4, 8, 8);
+			else ctx.arc(x, y, objective.kind === 'drop' ? 7 : 4, 0, 2*Math.PI);
+
 			ctx.strokeStyle = '#17241b';
+
 			if(objective.kind === 'drop')
 			{
 				// The ring remains visible around the car at the depot or a box on the same map edge.
@@ -148,10 +160,11 @@ export function activate({module, canvas, session})
 				ctx.stroke();
 			}
 		}
+
 		for(const [id,pos] of Object.entries(data.targets ?? {}))
 		{
 			const [x,y] = offset(pos[0], pos[2]);
-			const edge = (mid-7)/Math.max(1,edgeDistance(x,y));
+			const edge = (mid-7)/Math.max(1, edgeDistance(x, y));
 
 			ctx.save();
 			ctx.translate(mid+x*Math.min(1, edge), mid+y*Math.min(1, edge));
@@ -200,6 +213,7 @@ export function activate({module, canvas, session})
 		ctx.fill();
 		ctx.stroke();
 		ctx.restore();
+
 		if(circular) ctx.restore();
 	};
 

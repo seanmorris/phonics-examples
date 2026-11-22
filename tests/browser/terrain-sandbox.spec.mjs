@@ -16,12 +16,15 @@ const control = (page, action) => page.locator(`.terrain-sandbox [data-action="$
  * @returns {Promise<import('@playwright/test').Locator>} The control.
  */
 const field = async (page, selector) => {
-	const section = await page.locator(selector).first().evaluate(element => element.closest('[role="tabpanel"]')?.id ?? '');
+	const control = page.locator(selector).first();
+	const section = await control.evaluate(element => element.closest('[role="tabpanel"]')?.id ?? '');
 
 	if(section)
 	{
 		const collapsed = page.locator('.terrain-panel:not([open]) > summary');
+
 		if(await collapsed.count()) await collapsed.click();
+
 		await page.locator(`.terrain-sandbox [aria-controls="${section}"]`).click();
 	}
 
@@ -203,23 +206,25 @@ test('local terrain shadows follow the sun and reuse stationary probes', async({
 	test.setTimeout(120000);
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60000});
 	await view.evaluate(el => el.terrainSandboxDebug.action('pause'));
 	await expect.poll(async() => (await status(page)).paused).toBe(true);
+
 	const generation = async() => (await status(page)).renderer.triangleShadowGeneration;
-	await expect.poll(generation, {timeout:60000}).toBeGreaterThan(0);
+	await expect.poll(generation, {timeout: 60000}).toBeGreaterThan(0);
 	const first = await generation();
-	const values = patch => view.evaluate((el,v) => el.terrainSandboxDebug.values(v),patch);
-	await values({exposure:1.25});
+
+	const values = patch => view.evaluate((el, v) => el.terrainSandboxDebug.values(v), patch);
+	await values({exposure: 1.25});
 	await expect.poll(async() => (await status(page)).settings.exposure).toBe(1.25);
 	expect(await generation()).toBe(first);
-	await values({azimuth:45,elevation:18});
+	await values({azimuth: 45,elevation: 18});
 	await expect.poll(generation).toBeGreaterThan(first);
 	const day = await generation();
-	await values({elevation:-6});
+	await values({elevation: -6});
 	await expect.poll(async() => (await status(page)).settings.elevation).toBe(-6);
 	expect(await generation()).toBe(day);
-	await values({elevation:18});
+	await values({elevation: 18});
 	await expect.poll(generation).toBeGreaterThan(day);
 	expect(await view.evaluate(el => el.getContext('webgl2').getError())).toBe(0);
 });
@@ -238,12 +243,12 @@ test('boarding the craft refines the ground near the camera during cold startup'
 });
 
 test('the jet ski speedometer passes 90 mph on open water', async({page}) => {
-	await page.setViewportSize({width:672,height:420});
+	await page.setViewportSize({width: 672,height: 420});
 	await boot(page);
 	const lake = fixture();
 	lake.landscape.recipe.worldSize = 1024;
 	lake.settings.waterLevel = 12;
-	lake.camera = {position:[0,30,-300],yaw:Math.PI,pitch:-.3};
+	lake.camera = {position: [0,30,-300],yaw: Math.PI,pitch: -.3};
 	await load(page, lake);
 	await press(page, 'craft');
 	const dial = page.locator('.terrain-speedometer');
@@ -251,15 +256,24 @@ test('the jet ski speedometer passes 90 mph on open water', async({page}) => {
 	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour');
 	await canvas(page).focus();
 	await page.keyboard.down('w');
-	try {
-		await expect.poll(async() => (await status(page)).craft.speed / .44704, {timeout:90_000}).toBeGreaterThanOrEqual(90);
+
+	try
+	{
+		await expect.poll(
+			async() => (await status(page)).craft.speed / .44704
+			, {timeout: 90_000}
+		).toBeGreaterThanOrEqual(90);
+
 		await page.keyboard.press('p');
 		await expect.poll(async() => (await status(page)).paused).toBe(true);
 		const mph = Math.round((await status(page)).craft.speed / .44704);
 		await expect(dial).toHaveAttribute('aria-label', `Speedometer, ${mph} miles per hour`);
-	} finally {
+	}
+	finally
+	{
 		await page.keyboard.up('w');
 	}
+
 	await press(page, 'fly');
 	await expect(dial).toBeHidden();
 });
@@ -318,24 +332,33 @@ test('fly the F5, pause in a bank, and return to free flight', async({page}) => 
 
 test('the heading-up map and altitude radar agree in chase and cockpit views', async({page}) => {
 	await page.setViewportSize({width: 960, height: 760});
+
 	await page.addInitScript(() => {
 		const proto = CanvasRenderingContext2D.prototype;
 		const fillText = proto.fillText;
 		const gl = WebGL2RenderingContext.prototype;
 		const headings = new WeakSet(), charts = new WeakSet();
 		const getUniformLocation = gl.getUniformLocation, uniform2f = gl.uniform2f, uniform4f = gl.uniform4f;
+
 		gl.getUniformLocation = function(program, name) {
 			const location = getUniformLocation.call(this, program, name);
+
 			if(location && name === 'uHeading') headings.add(location);
+
 			if(location && name === 'uChart') charts.add(location);
+
 			return location;
 		};
+
 		gl.uniform2f = function(location, cosine, sine) {
 			if(headings.has(location)) window.terrainChartHeading = [cosine, sine];
+
 			return uniform2f.call(this, location, cosine, sine);
 		};
+
 		gl.uniform4f = function(location, x, z, span, side) {
 			if(charts.has(location)) window.terrainChart = [x,z,span,side];
+
 			return uniform4f.call(this, location, x, z, span, side);
 		};
 
@@ -367,9 +390,10 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 	const map = page.locator('.terrain-flight-map'), radar = page.locator('.terrain-instruments');
 
 	// Group the actual blip pixels from left to right and compare the top and bottom rows of each glyph.
+
 	const blips = el => {
 		const isMap = el.matches('.terrain-flight-map'), w = el.width, h = el.height;
-		const pixels = el.getContext('2d').getImageData(0,0,w,h).data;
+		const pixels = el.getContext('2d').getImageData(0, 0, w, h).data;
 		const groups = [];
 		let last = -2;
 
@@ -379,9 +403,11 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 			const i = (w*y+x)*4;
 			const amber = pixels[i+1] === (isMap ? 220 : 202) && pixels[i+2] === (isMap ? 105 : 81);
 			const red = pixels[i+1] === (isMap ? 99 : 81) && pixels[i+2] === (isMap ? 87 : 72);
+
 			if(pixels[i] !== 255 || pixels[i+3] < 250 || !(amber || red)) continue;
 
 			if(x > last+1) groups.push(new Map());
+
 			const rows = groups.at(-1);
 			rows.set(y, (rows.get(y) ?? 0)+1);
 			last = x;
@@ -397,6 +423,7 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 	for(const view of ['chase','cockpit'])
 	{
 		if(view === 'cockpit') await page.keyboard.press('v');
+
 		await expect.poll(async() => (await status(page)).jetView).toBe(view);
 		await expect(radar).toBeVisible();
 		await expect(map).toBeVisible();
@@ -425,38 +452,60 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 	await page.keyboard.press('n');
 	await expect.poll(async() => (await chart())[2]).toBeGreaterThan(local[2]);
 	const wide = await chart();
-	expect(wide.slice(0,2)).toEqual(local.slice(0,2));
+	expect(wide.slice(0, 2)).toEqual(local.slice(0, 2));
 	expect(wide[2]).toBeLessThanOrEqual(8192/Math.SQRT2 + .001);
 	await page.keyboard.press('n');
 	await expect.poll(chart).toEqual(local);
 });
 
 test('cockpit cues show the nearest balloon and the diamond meets the selected balloon at lock', async({page}) => {
-	const source = await fs.readFile(new URL('../../games/terrain-sandbox/browser/cockpit.mjs', import.meta.url), 'utf8');
+	const source = await fs.readFile(
+		new URL('../../games/terrain-sandbox/browser/cockpit.mjs', import.meta.url)
+		, 'utf8'
+	);
+
 	await page.setContent('<div><canvas></canvas></div>');
 
 	const states = await page.evaluate(async source => {
 		const url = URL.createObjectURL(new Blob([source], {type: 'text/javascript'}));
 		const {activate} = await import(url);
 		URL.revokeObjectURL(url);
-		const module = {drawTerrainMap() {}, drawTerrainSpeedometer() {}};
+		const module = {
+
+			drawTerrainMap() {}
+
+			, drawTerrainSpeedometer() {}
+		};
+
 		activate({module, canvas: document.querySelector('canvas')});
 		const ctx = document.querySelector('.terrain-instruments').getContext('2d');
 		const frame = {
-			width: 800, height: 720, cockpit: true, ring: .285, contactRange: 4000, fov: Math.PI/2
-			, eye: [0,0,0], basis: [[0,0,-1],[1,0,0],[0,1,0]]
+			width: 800
+			, height: 720
+			, cockpit: true
+			, ring: .285
+			, contactRange: 4000
+			, fov: Math.PI/2
+			, eye: [0,0,0]
+			, basis: [[0,0,-1],[1,0,0],[0,1,0]]
 			, jet: {x: 0, y: 0, z: 0, yaw: Math.PI, pitch: 0, vx: -20, vy: 15, vz: -120, speed: 120}
-			, thrust: 75, targets: {1: [250,125,-1000], 2: [400,400,-400]}
+			, thrust: 75
+			, targets: {1: [250,125,-1000], 2: [400,400,-400]}
 			, range: {selected: 1, visible: true, locked: false, elapsed: 5, ground: 0, ready: 2}
 		};
 
 		// The winged marker is at (-60,-45). Check ink at diamond tips, clear of the target box and pitch ladder.
+
 		function ink(x, y, red = false)
 		{
-			const pixels = ctx.getImageData(399+x,359+y,3,3).data;
+			const pixels = ctx.getImageData(399+x, 359+y, 3, 3).data;
 
-			for(let i = 0; i<pixels.length; i+=4)
-				if(pixels[i+3] > 120 && (red ? pixels[i] > 200 && pixels[i+1] < 100 : pixels[i+1] > 200 && pixels[i] < 140))
+			for(let i = 0; i<pixels.length; i += 4)
+				if(pixels[i+3] > 120 && (red
+					? pixels[i] > 200 && pixels[i+1] < 100
+					: pixels[i+1] > 200
+					&& pixels[i] < 140
+				))
 					return true;
 
 			return false;
@@ -469,42 +518,61 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 			frame.range.locked = progress === 1;
 			module.terrainVehicleFrame(JSON.stringify(frame));
 
-			return [ink(-60,-50), ink(15,-52), ink(6,-52), ink(72,-54,true), ink(72,-58,true)];
+			return [ink(-60, -50), ink(15, -52), ink(6, -52), ink(72, -54, true), ink(72, -58, true)];
 		}
 
-		sample(5,0);
-		const waiting = sample(9,0), nearestRight = ink(150,-150), underRim = ink(142,-142);
+		sample(5, 0);
+		const waiting = sample(9, 0), nearestRight = ink(150, -150), underRim = ink(142, -142);
 		// Move the nearest balloon across the rim with a farther contact still outside on the opposite side.
 		frame.targets[3] = [-700,-700,-600];
 		frame.targets[2] = [161,161,-400];
-		sample(9.04,0);
-		const inside = ink(150,-150) || ink(-150,150);
+		sample(9.04, 0);
+		const inside = ink(150, -150) || ink(-150, 150);
 		frame.targets[2] = [162,162,-400];
-		sample(9.08,0);
-		const outsideAgain = ink(150,-150);
+		sample(9.08, 0);
+		const outsideAgain = ink(150, -150);
 		frame.targets[2] = [-10,-10,400];
-		const moving = sample(9.15,.5), nearestBehind = ink(-150,150);
-		const paused = sample(9.15,.5);
+		const moving = sample(9.15, .5), nearestBehind = ink(-150, 150);
+		const paused = sample(9.15, .5);
 		frame.targets[1][0] = 200;
-		const follows = sample(9.16,.5);
-		const contact = sample(9.3,1), pausedContact = sample(9.3,1), locked = sample(9.33,1);
-		const interrupted = sample(10,0);
+		const follows = sample(9.16, .5);
+		const contact = sample(9.3, 1), pausedContact = sample(9.3, 1), locked = sample(9.33, 1);
+		const interrupted = sample(10, 0);
 		frame.range.visible = false;
-		const hidden = sample(10.2,0);
+		const hidden = sample(10.2, 0);
 		frame.targets = {2: [5000,5000,0]};
-		sample(10.3,0);
-		const distant = ink(150,-150) || ink(-150,150);
+		sample(10.3, 0);
+		const distant = ink(150, -150) || ink(-150, 150);
 		frame.range.visible = true;
 		frame.range.selected = 2;
-		const cycle = sample(10.4,0);
+		const cycle = sample(10.4, 0);
 		frame.cockpit = false;
-		const chase = sample(10.5,.5);
+		const chase = sample(10.5, .5);
 
-		return {waiting,moving,paused,follows,contact,pausedContact,locked,interrupted,hidden,cycle,chase,
-			nearestRight,underRim,inside,outsideAgain,nearestBehind,distant};
-	}, source);
+		return {
+			waiting
+			, moving
+			, paused
+			, follows
+			, contact
+			, pausedContact
+			, locked
+			, interrupted
+			, hidden
+			, cycle
+			, chase
+			, nearestRight
+			, underRim
+			, inside
+			, outsideAgain
+			, nearestBehind
+			, distant
+		};
+	}, source
+	);
 
 	const origin = [true,false,false,false,false];
+
 	for(const state of ['waiting','interrupted','hidden','cycle']) expect(states[state]).toEqual(origin);
 	expect(states.moving).toEqual([true,true,false,false,false]);
 	expect(states.paused).toEqual(states.moving);
@@ -525,15 +593,26 @@ test('the cockpit flight-path diamond projects ground track through the banked p
 	await page.addInitScript(() => {
 		const axes = [0,0,0,0];
 		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false, touched: false}));
-		const pad = {id: 'Flight-path test', index: 0, mapping: 'standard', timestamp: 1, connected: true, axes, buttons};
+		const pad = {
+			id: 'Flight-path test'
+			, index: 0
+			, mapping: 'standard'
+			, timestamp: 1
+			, connected: true
+			, axes
+			, buttons
+		};
+
 		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
-		window.flightStick = (x,y) => {
+
+		window.flightStick = (x, y) => {
 			axes[0] = x;
 			axes[1] = y;
 			pad.timestamp++;
 		};
 
 		const lineTo = CanvasRenderingContext2D.prototype.lineTo;
+
 		CanvasRenderingContext2D.prototype.lineTo = function(x, y) {
 			if(this.canvas.className === 'terrain-instruments' && x === 0 && y === -5)
 			{
@@ -557,7 +636,7 @@ test('the cockpit flight-path diamond projects ground track through the banked p
 	await expect.poll(async() => (await status(page)).jetView).toBe('cockpit');
 	await expect.poll(() => page.evaluate(() => Math.hypot(...(window.pathOffset ?? [Infinity])))).toBeLessThan(.01);
 
-	await page.evaluate(() => window.flightStick(.5,.35));
+	await page.evaluate(() => window.flightStick(.5, .35));
 	await expect.poll(async() => (await status(page)).jet.pitch).toBeGreaterThan(.14);
 	await page.keyboard.press('p');
 	await expect.poll(async() => (await status(page)).paused).toBe(true);
@@ -569,10 +648,10 @@ test('the cockpit flight-path diamond projects ground track through the banked p
 	const up = jet.vy*Math.cos(jet.pitch) - along*Math.sin(jet.pitch);
 	const depth = along*Math.cos(jet.pitch) + jet.vy*Math.sin(jet.pitch);
 	const [x,y] = await page.evaluate(() => window.pathOffset);
-	expect(Math.hypot(x,y)).toBeGreaterThan(12);
+	expect(Math.hypot(x, y)).toBeGreaterThan(12);
 	expect(x).toBeCloseTo(focal*(-left*Math.cos(jet.roll) + up*Math.sin(jet.roll))/depth, 3);
 	expect(y).toBeCloseTo(-focal*(left*Math.sin(jet.roll) + up*Math.cos(jet.roll))/depth, 3);
-	await page.evaluate(() => window.flightStick(0,0));
+	await page.evaluate(() => window.flightStick(0, 0));
 	await page.keyboard.press('p');
 	await expect.poll(() => page.evaluate(() => Math.hypot(...window.pathOffset))).toBeLessThan(1);
 });
@@ -583,36 +662,51 @@ test('both F5 exhausts brighten as the engine spools through cruise and afterbur
 	airspace.landscape.recipe.worldSize = 8192;
 	airspace.camera = {position: [0,500,0], yaw: 0, pitch: 0};
 	await load(page, airspace);
-	const indexCount = gunzipSync(await fs.readFile(new URL('../../games/terrain-sandbox/assets/f5/mesh.bin.gz', import.meta.url))).readUInt32LE(4);
+
+	const indexCount = gunzipSync(
+		await fs.readFile(new URL('../../games/terrain-sandbox/assets/f5/mesh.bin.gz', import.meta.url))
+	).readUInt32LE(4);
+
 	const view = canvas(page);
+
 	await view.evaluate((el, count) => {
 		const gl = el.getContext('webgl2'), draw = gl.drawElements.bind(gl);
 		el.exhausts = {};
+
 		gl.drawElements = (...args) => {
 			draw(...args);
+
 			if(args[1] !== count) return;
+
 			const pg = gl.getParameter(gl.CURRENT_PROGRAM);
+
 			const uniform = key => gl.getUniform(pg, gl.getUniformLocation(pg, key));
 			const level = uniform('uEngineThrust');
 			const state = level < .32 ? 'idle' : Math.abs(level-.75) < .005 ? 'cruise' : level > 1.38 ? 'full' : '';
+
 			if(!state || el.exhausts[state]) return;
 
 			const origin = uniform('uOrigin'), basis = uniform('uRotation'), projection = uniform('uViewProjection');
+
 			el.exhausts[state] = [-.296,.290].map(x => {
 				const local = [x,-.233,-6.13];
-				const point = [0,1,2].map(i => origin[i]+local.reduce((v,n,j) => v+n*basis[3*j+i], 0));
+				const point = [0,1,2].map(i => origin[i]+local.reduce((v, n, j) => v+n*basis[3*j+i], 0));
 				point.push(1);
-				const clip = [0,1,2,3].map(i => point.reduce((v,n,j) => v+n*projection[4*j+i], 0));
+				const clip = [0,1,2,3].map(i => point.reduce((v, n, j) => v+n*projection[4*j+i], 0));
 				const px = Math.floor((1+clip[0]/clip[3])*gl.drawingBufferWidth/2);
 				const py = Math.floor((1+clip[1]/clip[3])*gl.drawingBufferHeight/2);
 				const pixels = new Uint8Array(36);
-				gl.readPixels(px-1,py-1,3,3,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
-				return pixels.reduce((sum,v,i) => sum+(i%4 < 2 ? v : 0), 0)/9;
+				gl.readPixels(px-1, py-1, 3, 3, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+				return pixels.reduce((sum, v, i) => sum+(i%4 < 2 ? v : 0), 0)/9;
 			});
 		};
-	}, indexCount);
+	}, indexCount
+	);
+
 	await view.focus();
 	await page.keyboard.press('j');
+
 	const light = state => view.evaluate((el, name) => el.exhausts[name], state);
 	await expect.poll(() => light('cruise')).toBeTruthy();
 	await page.keyboard.down('w');
@@ -622,6 +716,7 @@ test('both F5 exhausts brighten as the engine spools through cruise and afterbur
 	await expect.poll(() => light('idle')).toBeTruthy();
 	await page.keyboard.up('s');
 	const [idle,cruise,full] = await Promise.all(['idle','cruise','full'].map(light));
+
 	for(let nozzle = 0; nozzle<2; nozzle++)
 	{
 		expect(cruise[nozzle]).toBeGreaterThan(idle[nozzle]+10);
@@ -635,25 +730,42 @@ test('F5 underwing models leave and refill on their own wings', async({page}) =>
 	airspace.landscape.recipe.worldSize = 8192;
 	airspace.camera = {position: [0,1500,0], yaw: 0, pitch: 0};
 	await load(page, airspace);
-	const counts = await Promise.all(['f5','projectile'].map(async name =>
-		gunzipSync(await fs.readFile(new URL(`../../games/terrain-sandbox/assets/${name}/mesh.bin.gz`, import.meta.url))).readUInt32LE(4)));
+
+	const counts = await Promise.all(
+		['f5','projectile'].map(
+			async name => gunzipSync(
+				await fs.readFile(new URL(`../../games/terrain-sandbox/assets/${name}/mesh.bin.gz`, import.meta.url))
+			).readUInt32LE(4)
+		)
+	);
+
 	const view = canvas(page);
-	await view.evaluate((el,[jetCount,projectileCount]) => {
+
+	await view.evaluate((el, [jetCount,projectileCount]) => {
 		const gl = el.getContext('webgl2'), draw = gl.drawElements.bind(gl);
 		let body;
 		el.mounted = [];
+
 		gl.drawElements = (...args) => {
 			if(args[1] === jetCount || args[1] === projectileCount)
 			{
 				const p = gl.getParameter(gl.CURRENT_PROGRAM);
-				const origin = gl.getUniform(p,gl.getUniformLocation(p,'uOrigin'));
-				if(args[1] === jetCount) { body = origin; el.mounted = []; }
+				const origin = gl.getUniform(p, gl.getUniformLocation(p, 'uOrigin'));
+
+				if(args[1] === jetCount)
+				{
+					body = origin;
+					el.mounted = [];
+				}
 				else if(body && Math.abs(origin[2]-body[2]) < 1 && origin[1] < body[1])
 					el.mounted.push(origin[0] < body[0] ? 'left' : 'right');
 			}
+
 			return draw(...args);
 		};
-	}, counts);
+	}, counts
+	);
+
 	const wings = () => view.evaluate(el => el.mounted);
 	await press(page, 'jet');
 	await expect.poll(wings).toEqual(['left','right']);
@@ -664,7 +776,7 @@ test('F5 underwing models leave and refill on their own wings', async({page}) =>
 	await expect.poll(async() => (await status(page)).balloons.elapsed-firstLaunch).toBeGreaterThan(.8);
 	await page.keyboard.press('Space');
 	await expect.poll(wings).toEqual([]);
-	await expect.poll(wings, {intervals:[75]}).toEqual(['left']);
+	await expect.poll(wings, {intervals: [75]}).toEqual(['left']);
 	await expect.poll(wings).toEqual(['left','right']);
 });
 
@@ -676,8 +788,16 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 
 	await page.addInitScript(() => {
 		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false}));
-		const pad = {id: 'F5 test controller', index: 0, timestamp: 1, mapping: 'standard', connected: true,
-			axes: [0,0,0,0], buttons};
+		const pad = {
+			id: 'F5 test controller'
+			, index: 0
+			, timestamp: 1
+			, mapping: 'standard'
+			, connected: true
+			, axes: [0,0,0,0]
+			, buttons
+		};
+
 		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
 
 		window.testF5Button = (n, on) => {
@@ -702,38 +822,61 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	await expect(page.locator('.terrain-instruments')).toBeVisible();
 	await expect(page.locator('.terrain-panel')).not.toHaveAttribute('open', '');
 	const map = page.locator('.terrain-flight-map');
+
 	await expect.poll(() => map.evaluate(el => {
-		const pixels = el.getContext('2d').getImageData(0,0,el.width,el.height).data;
+		const pixels = el.getContext('2d').getImageData(0, 0, el.width, el.height).data;
+
 		for(let i = 0; i < pixels.length; i += 4)
 		{
 			const x = (i/4)%el.width;
+
 			if(Math.abs(x-el.width/2) > .12*el.width
-				&& pixels[i] === 255 && pixels[i+1] === 99 && pixels[i+2] === 87) return true;
+				&& pixels[i] === 255 && pixels[i+1] === 99 && pixels[i+2] === 87
+			) return true;
 		}
+
 		return false;
 	})).toBe(true);
+
 	expect((await status(page)).balloons.locked).toBe(false);
 	// Cycle from the distant practice blip to the first of two authored balloons on this flight path.
 	await canvas(page).focus();
 	await page.keyboard.press('t');
 	await expect.poll(async() => (await status(page)).balloons.locked).toBe(true);
+
 	// The authored balloon is straight ahead. Read the rendered impact at the center of the 3D canvas,
 	// before the cockpit overlay, and compare the same pixels immediately before the effect draw.
 	await canvas(page).evaluate(el => {
 		const gl = el.getContext('webgl2'), draw = gl.drawArraysInstanced.bind(gl);
 		const before = new Uint8Array(48*48*4), after = new Uint8Array(before.length);
-		const read = pixels => gl.readPixels(Math.floor(gl.drawingBufferWidth/2)-24,Math.floor(gl.drawingBufferHeight/2)-24,
-			48,48,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
+
+		const read = pixels => gl.readPixels(
+			Math.floor(gl.drawingBufferWidth/2)-24
+			, Math.floor(gl.drawingBufferHeight/2)-24
+			, 48
+			, 48
+			, gl.RGBA
+			, gl.UNSIGNED_BYTE
+			, pixels
+		);
+
 		gl.drawArraysInstanced = (...args) => {
 			if(el.sawBurst || args[1] !== 0 || args[2] !== 72 || !JSON.parse(el.dataset.terrainSandbox).balloons.hit)
 				return draw(...args);
+
 			read(before);
 			draw(...args);
 			read(after);
+
 			for(let i = 0; i < after.length; i += 4)
-				if(after[i] > 190 && after[i] > after[i+2]+70 && after[i] > before[i]+35) { el.sawBurst = true; break; }
+				if(after[i] > 190 && after[i] > after[i+2]+70 && after[i] > before[i]+35)
+				{
+					el.sawBurst = true;
+					break;
+				}
 		};
 	});
+
 	await setButton(0, true);
 	await expect.poll(async() => (await status(page)).balloons.hits, {timeout: 60_000}).toBe(1);
 	await setButton(0, false);
@@ -764,8 +907,10 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	const color = async() => {
 		const image = PNG.sync.read(await map.screenshot());
 		const offset = 4 * (24 * image.width + 23);
+
 		return Array.from(image.data.subarray(offset, offset + 4));
 	};
+
 	await canvas(page).evaluate(el => el.terrainSandboxDebug.values({waterColor: '#247dd1', waterLevel: 25}));
 	await expect.poll(async() => { const [r,g,b] = await color(); return b > g && g > r+40; }).toBe(true);
 	await canvas(page).evaluate(el => el.terrainSandboxDebug.values({waterLevel: -1, sandColor: '#d38129'}));
@@ -790,36 +935,43 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 });
 
 test('the overhead checkpoint arrow points down for forward and enlarges its near end', async({page}) => {
-	await page.setViewportSize({width:760,height:460});
+	await page.setViewportSize({width: 760,height: 460});
 	await boot(page);
 	const doc = fixture();
 	doc.settings.waterLevel = -5;
-	doc.camera = {position:[0,15,0],yaw:0,pitch:-.35};
+	doc.camera = {position: [0,15,0],yaw: 0,pitch: -.35};
 	doc.landscape.recipe.worldSize = 512;
 	await canvas(page).focus();
 	await page.keyboard.press('h');
 
 	const faceWidths = async z => {
-		doc.course = {gates:[{role:'start',kind:'road',x:0,y:0,z,yaw:Math.PI,laps:1}]};
-		await load(page,doc);
+		doc.course = {gates: [{role: 'start',kind: 'road',x: 0,y: 0,z,yaw: Math.PI,laps: 1}]};
+		await load(page, doc);
 		await canvas(page).focus();
 		await page.keyboard.press('c');
-		await expect.poll(async()=>(await status(page)).mode).toBe('car');
+		await expect.poll(async() => (await status(page)).mode).toBe('car');
 		const {width,height,data} = PNG.sync.read(await canvas(page).screenshot());
 		const rows = [];
-		for(let y=0; y<height*.22; y++)
+
+		for(let y = 0; y<height*.22; y++)
 		{
 			let count = 0;
-			for(let x=Math.floor(width*.4); x<width*.6; x++)
+
+			for(let x = Math.floor(width*.4); x<width*.6; x++)
 			{
-				const i=4*(y*width+x), r=data[i], g=data[i+1], b=data[i+2];
+				const i = 4*(y*width+x), r = data[i], g = data[i+1], b = data[i+2];
+
 				if(r>205 && Math.abs(g-.8*r)<2 && Math.abs(b-84*r/255)<2) count++;
 			}
+
 			if(count) rows.push(count);
 		}
+
 		expect(rows.length).toBeGreaterThan(20);
-		return {top:rows[0],bottom:rows.at(-1)};
+
+		return {top: rows[0],bottom: rows.at(-1)};
 	};
+
 	const ahead = await faceWidths(-100), behind = await faceWidths(100);
 	expect(ahead.bottom).toBeLessThan(ahead.top/2);
 	expect(behind.top).toBeLessThan(behind.bottom/2);
@@ -829,29 +981,47 @@ test('the overhead checkpoint arrow points down for forward and enlarges its nea
 test('a package run marks its terrain-hidden pickup and reveals smoke above the ridge', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
-	await page.setViewportSize({width:760,height:460});
+	await page.setViewportSize({width: 760,height: 460});
+
 	await page.addInitScript(() => {
-		const pad = {id:'Delivery test controller',index:0,timestamp:1,mapping:'standard',connected:true,
-			axes:[0,0,0,0],buttons:Array.from({length:17},()=>({pressed:false,value:0}))};
-		Object.defineProperty(navigator,'getGamepads',{value:()=>[pad]});
+		const pad = {
+			id: 'Delivery test controller'
+			, index: 0
+			, timestamp: 1
+			, mapping: 'standard'
+			, connected: true
+			, axes: [0,0,0,0]
+			, buttons: Array.from({length: 17}, () => ({pressed: false,value: 0}))
+		};
+
+		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+
 		window.lookAtPackage = () => {
 			const {delivery,car} = document.querySelector('canvas[data-terrain-sandbox]').terrainSandboxDebug.state;
-			const angle = Math.atan2(delivery.target.x-car.x,car.z-delivery.target.z)-(Math.PI-car.yaw);
+			const angle = Math.atan2(delivery.target.x-car.x, car.z-delivery.target.z)-(Math.PI-car.yaw);
 			pad.axes[2] = Math.sin(angle);
 			pad.axes[3] = -Math.cos(angle);
 			pad.timestamp++;
 		};
 	});
+
 	await boot(page);
 	// A short dry causeway makes the two possible sight lines pass clear of the red depot smoke.
 	// The distant search bands all land in water. The local search must follow the causeway.
-	const road = {type:'road',points:[[-192,5,0],[-96,5,0],[-64,11,0],[0,5,0],[64,11,0],[96,5,0],[192,5,0]],width:22,shoulder:2,crown:0};
+	const road = {
+		type: 'road'
+		, points: [[-192,5,0],[-96,5,0],[-64,11,0],[0,5,0],[64,11,0],[96,5,0],[192,5,0]]
+		, width: 22
+		, shoulder: 2
+		, crown: 0
+	};
+
 	// Both exits cross a gentle crest above the crate. Its smoke clears the crest.
-	const dry = fixture({history:[[road]],revision:1});
+	const dry = fixture({history: [[road]],revision: 1});
 	dry.landscape.recipe.worldSize = 8192;
 	dry.settings.waterLevel = 1;
-	await load(page,dry);
-	await press(page,'delivery');
+	await load(page, dry);
+	await press(page, 'delivery');
 	await expect.poll(async() => (await status(page)).delivery?.target?.kind).toBe('pickup');
 	const {target,depot} = (await status(page)).delivery;
 	expect(Math.abs(target.x-depot.x)).toBeGreaterThanOrEqual(96);
@@ -859,29 +1029,40 @@ test('a package run marks its terrain-hidden pickup and reveals smoke above the 
 	await canvas(page).focus();
 	await page.keyboard.press('h');
 
-	const lime = (r,g,b) => g>120 && g>r*1.15 && r>80 && b<g*.35;
+	const lime = (r, g, b) => g>120 && g>r*1.15 && r>80 && b<g*.35;
+
 	const count = async(arrow) => {
 		const {width,height,data} = PNG.sync.read(await canvas(page).screenshot());
 		let match = 0;
-		for(let y=0; y<height*.48; y++) for(let x=width>>2; x<width*.75; x++)
+
+		for(let y = 0; y<height*.48; y++)
+		for(let x = width>>2; x<width*.75; x++)
 		{
 			if((y < height*.21 && Math.abs(x-width/2)<width*.14) !== arrow) continue;
-			const i=4*(y*width+x);
-			if(lime(data[i],data[i+1],data[i+2])) match++;
+
+			const i = 4*(y*width+x);
+
+			if(lime(data[i], data[i+1], data[i+2])) match++;
 		}
+
 		return match;
 	};
+
 	expect(await count(true)).toBeGreaterThan(40);
 	expect(await count(false)).toBe(0);
 	const map = page.locator('.terrain-flight-map');
+
 	const markers = await map.evaluate(el => {
-		const rgba = el.getContext('2d').getImageData(0,0,el.width,el.height).data;
-		const has = (r,g,b) => rgba.some((v,i)=>i%4===0 && v===r && rgba[i+1]===g && rgba[i+2]===b);
-		return {pickup:has(202,255,24),depot:has(255,53,40)};
+		const rgba = el.getContext('2d').getImageData(0, 0, el.width, el.height).data;
+
+		const has = (r, g, b) => rgba.some((v, i) => i%4===0 && v===r && rgba[i+1]===g && rgba[i+2]===b);
+
+		return {pickup: has(202, 255, 24),depot: has(255, 53, 40)};
 	});
-	expect(markers).toEqual({pickup:true,depot:true});
-	await page.evaluate(()=>window.lookAtPackage());
-	await expect.poll(async()=>await count(false),{timeout:30000}).toBeGreaterThan(12);
+
+	expect(markers).toEqual({pickup: true,depot: true});
+	await page.evaluate(() => window.lookAtPackage());
+	await expect.poll(async() => await count(false), {timeout: 30000}).toBeGreaterThan(12);
 	expect(errors).toEqual([]);
 });
 
@@ -889,53 +1070,80 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 900, height: 600});
+
 	await page.addInitScript(() => {
 		const buttons = Array.from({length: 17}, () => ({value: 0, pressed: false}));
-		const pad = {id: 'Car test controller', index: 0, timestamp: 1, mapping: 'standard', connected: true,
-			axes: [0,0,0,0], buttons};
+		const pad = {
+			id: 'Car test controller'
+			, index: 0
+			, timestamp: 1
+			, mapping: 'standard'
+			, connected: true
+			, axes: [0,0,0,0]
+			, buttons
+		};
+
 		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+
 		window.testCarButton = (n, pressed) => {
 			buttons[n] = {value: Number(pressed), pressed};
 			pad.timestamp++;
 		};
 	});
+
 	await boot(page);
 	const dry = fixture();
 	dry.settings.waterLevel = -4;
 	dry.camera = {position: [0,30,0], yaw: Math.PI, pitch: -.4};
 	await load(page, dry);
 	const view = canvas(page);
-	const mesh = await fs.readFile(new URL('../../games/terrain-sandbox/assets/testarossa/mesh.bin.gz', import.meta.url));
+
+	const mesh = await fs.readFile(
+		new URL('../../games/terrain-sandbox/assets/testarossa/mesh.bin.gz', import.meta.url)
+	);
+
 	await view.evaluate((element, count) => {
 		const gl = element.getContext('webgl2'), draw = gl.drawElements.bind(gl);
 		const viewport = gl.viewport.bind(gl);
 		const triangle = gl.drawArrays.bind(gl);
 		let chartDraw = false;
 		element.carDraws = 0;
-		gl.viewport = (x,y,w,h) => {
+
+		gl.viewport = (x, y, w, h) => {
 			chartDraw = x === 10 && y === 10;
+
 			if(chartDraw) element.chartSize = [w,h];
-			return viewport(x,y,w,h);
+
+			return viewport(x, y, w, h);
 		};
+
 		gl.drawArrays = (...args) => {
 			if(!chartDraw || element.chartSamples) return triangle(...args);
+
 			const [size] = element.chartSize;
+
 			const pixels = () => {
 				const data = new Uint8Array(size*size*4);
-				gl.readPixels(10,10,size,size,gl.RGBA,gl.UNSIGNED_BYTE,data);
+				gl.readPixels(10, 10, size, size, gl.RGBA, gl.UNSIGNED_BYTE, data);
+
 				return new Uint32Array(data.buffer);
 			};
+
 			const before = pixels();
 			triangle(...args);
 			const after = pixels(), mid = Math.floor(size/2);
+
 			// The center and four cardinal points get terrain. All four corners keep the driving scene.
-			element.chartSamples = [[mid,mid],[mid,3],[mid,size-4],[3,mid],[size-4,mid],
-				[3,3],[3,size-4],[size-4,3],[size-4,size-4]].map(([x,y]) => before[y*size+x] !== after[y*size+x]);
+			element.chartSamples = [[mid,mid],[mid,3],[mid,size-4],[3,mid],[size-4,mid]
+				, [3,3],[3,size-4],[size-4,3],[size-4,size-4]
+			].map(([x,y]) => before[y*size+x] !== after[y*size+x]);
 		};
+
 		gl.drawElements = (...args) => {
 			if(args[1] === count)
 			{
 				element.carDraws++;
+
 				if(!element.splitFrontSteering)
 				{
 					const program = gl.getParameter(gl.CURRENT_PROGRAM);
@@ -944,9 +1152,11 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 					element.splitFrontSteering = angles?.length === 3 && angles[1] < angles[2] && angles[2] < 0;
 				}
 			}
+
 			return draw(...args);
 		};
 	}, gunzipSync(mesh).readUInt32LE(4));
+
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(0);
@@ -958,34 +1168,44 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	expect(mapBox.width).toBeGreaterThan(1.25*dialBox.width);
 	expect(mapBox.width).toBe(mapBox.height);
 	expect(await view.evaluate(el => el.chartSamples)).toEqual([true,true,true,true,true,false,false,false,false]);
+
 	const outline = await map.evaluate(el => {
 		const ctx = el.getContext('2d'), mid = Math.floor(el.width/2);
-		return [[2,2],[el.width-3,el.height-3],[mid,1]].map(([x,y]) => ctx.getImageData(x,y,1,1).data[3]);
+
+		return [[2,2],[el.width-3,el.height-3],[mid,1]].map(([x,y]) => ctx.getImageData(x, y, 1, 1).data[3]);
 	});
-	expect(outline.slice(0,2)).toEqual([0,0]);
+
+	expect(outline.slice(0, 2)).toEqual([0,0]);
 	expect(outline[2]).toBeGreaterThan(200);
 	await expect.poll(() => view.evaluate(element => element.chartSize)).toEqual([mapBox.width,mapBox.height]);
 	expect(mapBox.x-viewport.x).toBeCloseTo(10);
 	expect(viewport.x+viewport.width-dialBox.x-dialBox.width).toBeCloseTo(10);
+
 	for(const box of [mapBox,dialBox])
 		expect(viewport.y+viewport.height-box.y-box.height).toBeCloseTo(10);
 	const statusBox = await page.locator('.terrain-hud').boundingBox();
 	expect(statusBox.x).toBeGreaterThan(mapBox.x+mapBox.width);
 	expect(statusBox.x+statusBox.width).toBeLessThan(dialBox.x);
+
 	const needle = () => dial.evaluate(element => {
 		const size = element.width, ctx = element.getContext('2d');
-		const pixels = ctx.getImageData(0,0,size,size).data;
+		const pixels = ctx.getImageData(0, 0, size, size).data;
 		let xSum = 0, ySum = 0;
+
 		for(let y = 0; y < size; y++)
 		for(let x = 0; x < size; x++)
 		{
 			const i = 4*(y*size+x);
-			if(Math.hypot(x-size/2,y-size/2) < .13*size || pixels[i] < 200 || pixels[i+1] > 90) continue;
+
+			if(Math.hypot(x-size/2, y-size/2) < .13*size || pixels[i] < 200 || pixels[i+1] > 90) continue;
+
 			xSum += x-size/2;
 			ySum += y-size/2;
 		}
-		return (Math.atan2(ySum,xSum) + 2*Math.PI) % (2*Math.PI);
+
+		return (Math.atan2(ySum, xSum) + 2*Math.PI) % (2*Math.PI);
 	});
+
 	expect(await needle()).toBeCloseTo(.75*Math.PI, 1);
 	const parkedCarDial = await dial.evaluate(element => element.toDataURL());
 	await expect(control(page, 'car')).toBeHidden();
@@ -994,6 +1214,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await page.keyboard.press('m');
 	await expect(map).toBeHidden();
 	await expect(dial).toBeVisible();
+
 	const setButton = (n, on) => page.evaluate(([n,on]) => window.testCarButton(n, on), [n,on]);
 	await setButton(10, true);
 	await expect(map).toBeVisible();
@@ -1120,67 +1341,89 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 test('the default canyon lets all four wheels leave the ground and touch down again', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
-	await page.setViewportSize({width:672,height:420});
+	await page.setViewportSize({width: 672,height: 420});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60000});
 	await (await field(page, '[name="preset"]')).selectOption('canyon');
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
+
 	await view.evaluate(el => {
 		const gl = el.getContext('webgl2');
 		const use = gl.useProgram.bind(gl), draw = gl.drawElements.bind(gl), strip = gl.drawArraysInstanced.bind(gl);
 		const locations = new Map();
 		let program = null;
-		el.suspensionDraw = {drooped:false,compressed:false,terrainShadow:false};
+		el.suspensionDraw = {drooped: false,compressed: false,terrainShadow: false};
+
 		gl.useProgram = next => {
 			program = next;
-			if(next && !locations.has(next)) locations.set(next,{
-				travel:gl.getUniformLocation(next,'uWheelTravel'), shade:gl.getUniformLocation(next,'uShade')
+
+			if(next && !locations.has(next))
+			locations.set(next, {
+				travel: gl.getUniformLocation(next, 'uWheelTravel')
+				, shade: gl.getUniformLocation(next, 'uShade')
 			});
+
 			return use(next);
 		};
+
 		gl.drawArraysInstanced = (...args) => {
 			if(locations.get(program)?.shade && args[0] === gl.TRIANGLE_STRIP && args[3] > 0)
 				el.suspensionDraw.terrainShadow = true;
+
 			return strip(...args);
 		};
+
 		gl.drawElements = (...args) => {
 			const location = locations.get(program)?.travel;
-			if(location) {
-				const travel = gl.getUniform(program,location);
+
+			if(location)
+			{
+				const travel = gl.getUniform(program, location);
 				el.suspensionDraw.drooped ||= travel.every(v => v < -.12);
 				el.suspensionDraw.compressed ||= travel.some(v => v > .04);
 			}
+
 			return draw(...args);
 		};
+
 		new MutationObserver(() => {
 			if(el.landedCar) return;
+
 			const {car, camera} = JSON.parse(el.dataset.terrainSandbox);
+
 			if(car?.motion === 'airborne' && car.wheelContacts === 0)
 			{
 				el.airborneCar ??= car;
 				const [x,y,z] = camera.position;
-				const focus = Math.atan2(car.y+.65-y, Math.hypot(car.x-x,car.z-z));
+				const focus = Math.atan2(car.y+.65-y, Math.hypot(car.x-x, car.z-z));
 				const frameY = Math.tan(focus-camera.pitch)/Math.tan(camera.fov/2);
 				el.airborneFrameError = Math.max(el.airborneFrameError ?? 0, Math.abs(frameY));
 			}
+
 			if(el.airborneCar && car?.wheelContacts === 4) el.landedCar = car;
-		}).observe(el, {attributes:true,attributeFilter:['data-terrain-sandbox']});
+		}).observe(el, {attributes: true,attributeFilter: ['data-terrain-sandbox']});
 	});
+
 	await view.focus();
 	await page.keyboard.down('w');
-	await expect.poll(() => view.evaluate(el => !!el.landedCar), {timeout:90000}).toBe(true);
+	await expect.poll(() => view.evaluate(el => !!el.landedCar), {timeout: 90000}).toBe(true);
 	await page.keyboard.up('w');
+
 	const {airborneCar, landedCar, suspensionDraw, airborneFrameError, glError} = await view.evaluate(el => ({
-		airborneCar: el.airborneCar, landedCar: el.landedCar, suspensionDraw: el.suspensionDraw,
-		airborneFrameError: el.airborneFrameError, glError: el.getContext('webgl2').getError()
+		airborneCar: el.airborneCar
+		, landedCar: el.landedCar
+		, suspensionDraw: el.suspensionDraw
+		, airborneFrameError: el.airborneFrameError
+		, glError: el.getContext('webgl2').getError()
 	}));
+
 	expect(landedCar.z).toBeGreaterThan(airborneCar.z);
 	expect(landedCar.recoveries).toBe(0);
-	expect(suspensionDraw).toEqual({drooped:true,compressed:true,terrainShadow:true});
+	expect(suspensionDraw).toEqual({drooped: true,compressed: true,terrainShadow: true});
 	expect(airborneFrameError).toBeLessThan(.51);
 	expect(glError).toBe(0);
 	expect(errors).toEqual([]);
@@ -1190,20 +1433,20 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	test.setTimeout(210_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
-	await page.setViewportSize({width:672,height:420});
+	await page.setViewportSize({width: 672,height: 420});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
 	await (await field(page, '[name="preset"]')).selectOption('canyon');
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
 	await press(page, 'pause');
-	await page.getByRole('tab', {name:'Shape', exact:true}).click();
-	await page.getByText('Circuit generator', {exact:true}).click();
+	await page.getByRole('tab', {name: 'Shape', exact: true}).click();
+	await page.getByText('Circuit generator', {exact: true}).click();
 	await page.getByLabel('Minimum feature height difference').fill('200');
 	await page.getByLabel('Start elevation').fill('-360');
 	await control(page, 'circuit-find').click();
-	await expect.poll(async() => (await status(page)).circuit.preview, {timeout:140_000}).toBe(true);
+	await expect.poll(async() => (await status(page)).circuit.preview, {timeout: 140_000}).toBe(true);
 	const preview = await status(page);
 	expect(preview.course.gates).toHaveLength(0);
 	expect(preview.circuit.length).toBeGreaterThan(12_000);
@@ -1211,27 +1454,42 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	expect(preview.circuit.heightDifference).toBeGreaterThanOrEqual(200);
 	expect(Math.abs(preview.circuit.startHeight + 360)).toBeLessThanOrEqual(.5);
 	expect(preview.revision).toBe(0);
-	await expect(page.getByRole('img', {name:'Circuit route and gates'})).toBeVisible();
+	await expect(page.getByRole('img', {name: 'Circuit route and gates'})).toBeVisible();
 
 	await control(page, 'circuit-dry').click();
-	await expect.poll(() => view.evaluate(element => element.terrainSandboxDebug.state.circuit.active, undefined,
-		{timeout:45_000}), {timeout:75_000}).toBe('dry');
+
+	await expect.poll(
+		() => view.evaluate(element => element.terrainSandboxDebug.state.circuit.active, undefined, {timeout: 45_000})
+		, {timeout: 75_000}
+	).toBe('dry');
+
 	const dry = await status(page);
 	expect(dry.revision).toBe(1);
-	expect(dry.course.gates.every(gate => gate.kind === 'road' && gate.width === 60
-		&& gate.height === 2 * dry.gateSizes.road.height)).toBe(true);
+
+	expect(
+		dry.course.gates.every(
+			gate => gate.kind === 'road' && gate.width === 60 && gate.height === 2 * dry.gateSizes.road.height
+		)
+	).toBe(true);
+
 	// Moving the clipmap over this road must not transfer height or paint samples from PHP.
 	await expect.poll(async() => (await status(page)).renderer.roadTextureBytes).toBeGreaterThan(0);
 	const start = await status(page);
-	await view.evaluate(el => el.terrainSandboxDebug.keys({KeyW:true}));
-	try {
+	await view.evaluate(el => el.terrainSandboxDebug.keys({KeyW: true}));
+
+	try
+	{
 		await expect.poll(async() => {
 			const {camera} = await status(page);
+
 			return Math.hypot(camera.position[0]-start.camera.position[0], camera.position[2]-start.camera.position[2]);
 		}).toBeGreaterThan(12);
-	} finally {
+	}
+	finally
+	{
 		await view.evaluate(el => el.terrainSandboxDebug.keys({}));
 	}
+
 	const moved = await status(page);
 	expect(moved.renderer.heightTexelsWritten).toBeGreaterThan(start.renderer.heightTexelsWritten);
 	expect(moved.renderer.editUploadBytes).toBe(start.renderer.editUploadBytes);
@@ -1242,6 +1500,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	expect(flooded.revision).toBe(1);
 	expect(flooded.course.gates.every(gate => gate.kind === 'water')).toBe(true);
 	expect(flooded.settings.waterLevel).toBe(preview.circuit.floodedLevel);
+
 	const gateLine = ({course}) => course.gates.map(({x,z,yaw}) => [x,z,yaw]);
 	expect(gateLine(flooded)).toEqual(gateLine(dry));
 	await page.getByLabel('Start elevation').fill('');
@@ -1250,20 +1509,24 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await press(page, 'craft');
 	await expect.poll(async() => (await status(page)).mode).toBe('craft');
 	await expect(page.locator('.terrain-speedometer')).toBeVisible();
-	const map = page.getByRole('img', {name:'Heading-up terrain elevation map'});
+	const map = page.getByRole('img', {name: 'Heading-up terrain elevation map'});
 	await expect(map).toBeVisible();
+
 	await expect.poll(() => map.evaluate(element => {
-		const colors = element.getContext('2d').getImageData(0,0,element.width,element.height).data;
+		const colors = element.getContext('2d').getImageData(0, 0, element.width, element.height).data;
 		let left = Infinity, right = -Infinity;
+
 		for(let i = 0; i < colors.length; i += 4)
 			if(colors[i] === 255 && colors[i+1] === 210 && colors[i+2] === 114 && colors[i+3] > 200)
 			{
 				const x = (i/4)%element.width;
-				left = Math.min(left,x);
-				right = Math.max(right,x);
+				left = Math.min(left, x);
+				right = Math.max(right, x);
 			}
+
 		return right-left;
 	})).toBeGreaterThan(12);
+
 	expect(errors).toEqual([]);
 });
 
@@ -1271,27 +1534,27 @@ test('a rollover settles on the roof before the Testarossa recovers', async({pag
 	test.setTimeout(360_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
-	await page.setViewportSize({width:672,height:420});
+	await page.setViewportSize({width: 672,height: 420});
 	await boot(page);
-	const ramp = fixture({history:[[{type:'raise',x:0,z:45,radius:16,amount:30}]],revision:1});
-	Object.assign(ramp.landscape.recipe, {worldSize:512,spacing:1});
+	const ramp = fixture({history: [[{type: 'raise',x: 0,z: 45,radius: 16,amount: 30}]],revision: 1});
+	Object.assign(ramp.landscape.recipe, {worldSize: 512,spacing: 1});
 	ramp.settings.waterLevel = -100;
-	ramp.camera = {position:[0,30,-25],yaw:Math.PI,pitch:-.4};
-	await load(page,ramp);
+	ramp.camera = {position: [0,30,-25],yaw: Math.PI,pitch: -.4};
+	await load(page, ramp);
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await canvas(page).focus();
 	await page.keyboard.down('w');
 	// The software renderer simulates well below real time, and slower still on a loaded machine.
-	await expect.poll(async() => (await status(page)).car.motion, {timeout:60000}).toBe('tumbling');
+	await expect.poll(async() => (await status(page)).car.motion, {timeout: 60000}).toBe('tumbling');
 	await page.keyboard.up('w');
-	await expect.poll(async() => (await status(page)).car.motion, {timeout:120000}).toBe('overturned');
+	await expect.poll(async() => (await status(page)).car.motion, {timeout: 120000}).toBe('overturned');
 	const landed = (await status(page)).car;
 	expect(Math.cos(landed.pitch)*Math.cos(landed.roll)).toBeLessThan(-.8);
-	await expect.poll(async() => (await status(page)).car.recoveries, {timeout:60000}).toBe(1);
+	await expect.poll(async() => (await status(page)).car.recoveries, {timeout: 60000}).toBe(1);
 	const righted = (await status(page)).car;
 	expect(righted.motion).toBe('driving');
-	expect(Math.hypot(righted.x-landed.x,righted.z-landed.z)).toBeLessThan(.1);
+	expect(Math.hypot(righted.x-landed.x, righted.z-landed.z)).toBeLessThan(.1);
 	expect(Math.abs(righted.roll)+Math.abs(righted.pitch)).toBeLessThan(.1);
 	expect(errors).toEqual([]);
 });
@@ -1318,47 +1581,54 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 	page.on('pageerror', e => errors.push(e.message));
 	await boot(page);
 	await settled(page);
-	await page.getByRole('tab', {name:'Sky',exact:true}).click();
-	const add = page.getByRole('button', {name:'Add atmosphere layer',exact:true});
-	const preset = page.getByRole('button', {name:'Use preset layers',exact:true});
+	await page.getByRole('tab', {name: 'Sky',exact: true}).click();
+	const add = page.getByRole('button', {name: 'Add atmosphere layer',exact: true});
+	const preset = page.getByRole('button', {name: 'Use preset layers',exact: true});
 	const groups = page.locator('[data-air-list] fieldset');
 	await add.click();
-	await expect.poll(async()=>(await status(page)).atmosphereLayers.length).toBe(1);
+	await expect.poll(async() => (await status(page)).atmosphereLayers.length).toBe(1);
 	const first = groups.nth(0);
 	await first.getByLabel('Layer name').fill('Sea mist');
 	await first.getByLabel('Layer name').press('Tab');
 	await first.getByLabel('Scattered light').fill('#6688aa');
-	await first.getByLabel('Top (m above sea level)',{exact:true}).fill('450');
-	await first.getByLabel('Top (m above sea level)',{exact:true}).press('Tab');
+	await first.getByLabel('Top (m above sea level)', {exact: true}).fill('450');
+	await first.getByLabel('Top (m above sea level)', {exact: true}).press('Tab');
 	await first.getByLabel('Density per km').fill('0.4');
 	await first.getByLabel('Density per km').press('Tab');
-	await expect.poll(async()=>(await status(page)).atmosphereLayers[0]).toMatchObject({
-		name:'Sea mist',color:'#6688aa',bottom:0,top:450,density:.4,enabled:true
+
+	await expect.poll(async() => (await status(page)).atmosphereLayers[0]).toMatchObject({
+		name: 'Sea mist'
+		, color: '#6688aa'
+		, bottom: 0
+		, top: 450
+		, density: .4
+		, enabled: true
 	});
+
 	await add.click();
-	await expect.poll(async()=>(await status(page)).atmosphereLayers.length).toBe(2);
+	await expect.poll(async() => (await status(page)).atmosphereLayers.length).toBe(2);
 	await groups.nth(1).getByLabel('Visible').uncheck();
-	await expect.poll(async()=>(await status(page)).atmosphereLayers[1].enabled).toBe(false);
+	await expect.poll(async() => (await status(page)).atmosphereLayers[1].enabled).toBe(false);
 	const stable = await settled(page);
 	await page.waitForTimeout(500);
 	expect((await status(page)).renderer.frames).toBe(stable.renderer.frames);
 	const saved = await save(page);
 	expect(saved.atmosphereLayers).toEqual(stable.atmosphereLayers);
 	expect(saved.atmosphereOrigin).toBe('authored');
-	await load(page,fixture());
+	await load(page, fixture());
 	await expect(groups).toHaveCount(0);
-	await load(page,saved);
-	await page.getByRole('tab',{name:'Sky',exact:true}).click();
+	await load(page, saved);
+	await page.getByRole('tab', {name: 'Sky',exact: true}).click();
 	await expect(first.getByLabel('Layer name')).toHaveValue('Sea mist');
 	await expect(groups.nth(1).getByLabel('Visible')).not.toBeChecked();
-	await first.getByRole('button',{name:'Remove atmosphere layer'}).click();
-	await expect.poll(async()=>(await status(page)).atmosphereLayers.length).toBe(1);
+	await first.getByRole('button', {name: 'Remove atmosphere layer'}).click();
+	await expect.poll(async() => (await status(page)).atmosphereLayers.length).toBe(1);
 	await preset.click();
 	await expect(first.getByLabel('Layer name')).toHaveValue('Sea spray');
 	await expect(preset).toBeDisabled();
-	await (await field(page,'[name="preset"]')).selectOption('arctic-meltwater');
-	await press(page,'generate');
-	await page.getByRole('tab',{name:'Sky',exact:true}).click();
+	await (await field(page, '[name="preset"]')).selectOption('arctic-meltwater');
+	await press(page, 'generate');
+	await page.getByRole('tab', {name: 'Sky',exact: true}).click();
 	await expect(first.getByLabel('Layer name')).toHaveValue('Ice haze');
 	await first.getByLabel('Visible').uncheck();
 	await expect(preset).toBeEnabled();
@@ -1379,14 +1649,18 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	now = await status(page);
 	expect(now.renderer.frames).toBe(frame);
 	expect(now.time).toBe(time);
+
 	const idleUpdates = await canvas(page).evaluate(async element => {
 		let updates = 0;
 		const observer = new MutationObserver(records => { updates += records.length; });
-		observer.observe(element, {attributes:true, attributeFilter:['data-terrain-sandbox']});
+
+		observer.observe(element, {attributes: true, attributeFilter: ['data-terrain-sandbox']});
 		await new Promise(resolve => setTimeout(resolve, 600));
 		observer.disconnect();
+
 		return updates;
 	});
+
 	expect(idleUpdates).toBe(0);
 
 	// A water edit redraws a paused scene and is included in the portable save.
@@ -1434,8 +1708,11 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	const sea = await save(page);
 	expect(sea.settings.waterLevel).toBe(6.5);
 	expect(sea.settings.waterFogDensity).toBe(.9999);
+
 	// The file buttons open the Landscape tab. The Water and Sky fields still hold the loaded values while hidden.
-	const chopField = page.locator('[data-value="waterChoppiness"]'), glowField = page.locator('[data-value="nightGlow"]');
+	const chopField = page.locator('[data-value="waterChoppiness"]');
+	const glowField = page.locator('[data-value="nightGlow"]');
+
 	const levelField = page.locator('[data-value="waterLevel"]'), fineField = page.locator('[data-fine-fog]');
 	await load(page, fixture());
 	await expect(chopField).toHaveValue('100');
@@ -1569,15 +1846,20 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	await settled(page);
 	const mesh = await fs.readFile(new URL('../../games/terrain-sandbox/assets/jetski/mesh.bin.gz', import.meta.url));
 	const indexCount = gunzipSync(mesh).readUInt32LE(4);
+
 	await canvas(page).evaluate((element, count) => {
 		const gl = element.getContext('webgl2');
 		const draw = gl.drawElements.bind(gl);
 		element.craftDraws = 0;
+
 		gl.drawElements = (...args) => {
 			if(args[1] === count) element.craftDraws++;
+
 			return draw(...args);
 		};
-	}, indexCount);
+	}, indexCount
+	);
+
 	await press(page, 'craft');
 	await expect.poll(async() => (await status(page)).mode).toBe('craft');
 	expect((await status(page)).paused).toBe(false);
@@ -1601,8 +1883,10 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	{
 		const heading = (await status(page)).camera.yaw;
 		await page.keyboard.down(key);
+
 		await expect.poll(async() => direction * Math.sin((await status(page)).camera.yaw - heading))
 			.toBeGreaterThan(.05);
+
 		await page.keyboard.up(key);
 	}
 
@@ -1624,9 +1908,13 @@ test('the Landscape Lab explains each parameter, reflows, and folds to one round
 	await landform.locator('summary').click();
 
 	const fields = landform.locator('input,select');
-	const descriptions = await fields.evaluateAll(nodes => nodes.map(field =>
-		document.getElementById(field.getAttribute('aria-describedby'))?.textContent.trim() || ''
-	));
+
+	const descriptions = await fields.evaluateAll(
+		nodes => nodes.map(
+			field => document.getElementById(field.getAttribute('aria-describedby'))?.textContent.trim() || ''
+		)
+	);
+
 	expect(descriptions).toHaveLength(25);
 	expect(descriptions).not.toContain('');
 	expect(new Set(descriptions).size).toBe(descriptions.length);
@@ -1739,6 +2027,7 @@ test('Surface keeps field help with its control and column widths steady when sc
 test('the panel tabs work from the keyboard and the Surface tab changes the ground', async({page}) => {
 	await page.goto('/games/terrain-sandbox/');
 	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+
 	const tab = name => page.locator(`.terrain-sandbox #terrain-tab-${name}`);
 	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(7);
 	await expect(tab('landscape')).toHaveAttribute('aria-selected', 'true');
@@ -1771,10 +2060,12 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 	await expect(page.locator('[data-layer="granite-slabs"]')).toHaveCount(0);
 
 	let frames = -1;
+
 	await expect.poll(async() => {
 		const now = (await status(page)).renderer.frames;
 		const still = now === frames;
 		frames = now;
+
 		return still;
 	}, {timeout: 120_000, intervals: [1500]}).toBe(true);
 
@@ -1811,7 +2102,7 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 	await restoreContext(page);
 	await expect.poll(async() => (await status(page)).renderer.frames).toBeGreaterThan(before.renderer.frames);
 	const restored = await settled(page);
-		expect(restored.renderer.frames - before.renderer.frames).toBeLessThanOrEqual(restored.renderer.visible + 2);
+	expect(restored.renderer.frames - before.renderer.frames).toBeLessThanOrEqual(restored.renderer.visible + 2);
 	expect(restored.renderer.pending).toBe(0);
 	expect(restored.revision).toBe(before.revision);
 	expect(restored.surface.operations).toBe(before.surface.operations);
@@ -1826,6 +2117,7 @@ test('terrain restores a lost WebGL context and releases page ownership on navig
 	await expect(page.locator('.terrain-sandbox')).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
+
 test('Limestone Plain generates its skyline and round-trips as a named preset', async({page}) => {
 	await page.setViewportSize({width: 720, height: 460});
 	await page.goto('/games/terrain-sandbox/');
@@ -1843,8 +2135,16 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	const veins = surfaceLayers.find(layer => layer.pattern === 'veins');
 	expect(surfaceLayers[veins.parent].color).toBe('#8a9193');
 	const document = await save(page);
-	expect(document.landscape.recipe).toMatchObject({seed: 'limestone-plain', version: 2, heightScale: 3950,
-		wallWidth: .91, terraceSpacing: 175, terraceStrength: .44});
+
+	expect(document.landscape.recipe).toMatchObject({
+		seed: 'limestone-plain'
+		, version: 2
+		, heightScale: 3950
+		, wallWidth: .91
+		, terraceSpacing: 175
+		, terraceStrength: .44
+	});
+
 	expect(document.camera.position).toEqual([2440, 105, -4880]);
 	expect(document.settings).toMatchObject({grassColor: '#3e624e', snowline: 3000, waterLevel: -40, azimuth: 106});
 	await preset.selectOption('coast');
@@ -1858,36 +2158,47 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	await expect(seed).toHaveValue('limestone-plain');
 	await seed.fill('another-plain');
 	await press(page, 'generate');
-	await expect.poll(async() => (await status(page)).recipe).toEqual({...document.landscape.recipe, seed: 'another-plain'});
+
+	const reseeded = {...document.landscape.recipe, seed: 'another-plain'};
+
+	await expect.poll(async() => (await status(page)).recipe).toEqual(reseeded);
 });
 
 for(const [first, second] of [
-	[{label: 'Basalt Fjords', name: 'basalt-fjords', layer: 'basalt-faces'},
-	 {label: 'Amber Dunes', name: 'amber-dunes', layer: 'wind-ripples'}],
-	[{label: 'Arctic Meltwater', name: 'arctic-meltwater', layer: 'glacier-ice'},
-	 {label: 'Tidal Lagoon', name: 'tidal-lagoon', layer: 'seagrass-beds'}],
+	[{label: 'Basalt Fjords', name: 'basalt-fjords', layer: 'basalt-faces'}
+		, {label: 'Amber Dunes', name: 'amber-dunes', layer: 'wind-ripples'}
+	]
+	, [{label: 'Arctic Meltwater', name: 'arctic-meltwater', layer: 'glacier-ice'}
+		, {label: 'Tidal Lagoon', name: 'tidal-lagoon', layer: 'seagrass-beds'}
+	]
 ]) {
-	test(`${first.label} and ${second.label} are available as landscapes and as independent surface presets`, async({page}) => {
-		await page.setViewportSize({width: 700, height: 440});
-		await page.goto('/games/terrain-sandbox/');
-		await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
-		const picker = page.locator('[name="preset"]');
-		for(const {label, name, layer} of [first, second]) {
-			await picker.selectOption({label});
-			await expect(page.locator('[name="seed"]')).toHaveValue(name);
-			await expect(page.locator('[data-landform] :invalid')).toHaveCount(0);
-			await press(page, 'generate');
-			await expect.poll(async() => (await status(page)).surfacePreset).toBe(name);
-			const doc = await save(page);
-			expect(doc.landscape.recipe).toMatchObject({preset: name, seed: name});
-			expect(doc.surface.layers.map(row => row.id)).toContain(layer);
+	test(
+		`${first.label} and ${second.label} are available as landscapes and as independent surface presets`
+		, async({page}) => {
+			await page.setViewportSize({width: 700, height: 440});
+			await page.goto('/games/terrain-sandbox/');
+			await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+			const picker = page.locator('[name="preset"]');
+
+			for(const {label, name, layer} of [first, second])
+			{
+				await picker.selectOption({label});
+				await expect(page.locator('[name="seed"]')).toHaveValue(name);
+				await expect(page.locator('[data-landform] :invalid')).toHaveCount(0);
+				await press(page, 'generate');
+				await expect.poll(async() => (await status(page)).surfacePreset).toBe(name);
+				const doc = await save(page);
+				expect(doc.landscape.recipe).toMatchObject({preset: name, seed: name});
+				expect(doc.surface.layers.map(row => row.id)).toContain(layer);
+			}
+
+			await page.getByRole('tab', {name: 'Surface', exact: true}).click();
+			await page.getByLabel('Material preset', {exact: true}).selectOption({label: first.label});
+			await page.getByRole('button', {name: 'Load preset surface', exact: true}).click();
+			await expect.poll(async() => (await status(page)).surfacePreset).toBe(first.name);
+			expect((await status(page)).recipe.preset).toBe(second.name);
 		}
-		await page.getByRole('tab', {name: 'Surface', exact: true}).click();
-		await page.getByLabel('Material preset', {exact: true}).selectOption({label: first.label});
-		await page.getByRole('button', {name: 'Load preset surface', exact: true}).click();
-		await expect.poll(async() => (await status(page)).surfacePreset).toBe(first.name);
-		expect((await status(page)).recipe.preset).toBe(second.name);
-	});
+	);
 }
 
 test('landform parameters and nested colors survive a save and reload', async({page}) => {
@@ -1924,13 +2235,19 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	expect(document.version).toBe(5);
 	expect(document.landscape.recipe.wallWidth).toBe(.0085);
 	expect(document.landscape.recipe.surround).toBe('plateau');
+
 	expect(document.surface.layers[1]).toMatchObject({
 		color: '#7e513d'
 		, parent: 'canyon-dust'
 		, pattern: 'streaks'
 		, patternColor: '#2f2120'
-		, patternAmount: .7, patternScale: 18, patternStretch: 6, reflectivity: .8, roughness: .22
+		, patternAmount: .7
+		, patternScale: 18
+		, patternStretch: 6
+		, reflectivity: .8
+		, roughness: .22
 	});
+
 	await load(page, fixture());
 	await load(page, document);
 
@@ -1938,6 +2255,7 @@ test('landform parameters and nested colors survive a save and reload', async({p
 		...row
 		, parent: row.parent===-1 ? -1 : document.surface.layers.findIndex(parent => parent.id===row.parent)
 	})));
+
 	await expect(wall).toHaveValue('0.0085');
 });
 
@@ -1953,7 +2271,8 @@ test('the signed clipmap grid covers the ground after relocation', async({page})
 	doc.version = 4;
 	doc.layers = [{color: '#da492b'}];
 
-	for(const position of [[-701, 550, -703], [709, 550, 717]]) {
+	for(const position of [[-701, 550, -703], [709, 550, 717]])
+	{
 		doc.camera = {position, yaw: .71, pitch: -1.52};
 		await load(page, doc);
 		const result = await settled(page);
@@ -1961,13 +2280,17 @@ test('the signed clipmap grid covers the ground after relocation', async({page})
 		expect(result.renderer.proceduralVertexBytes).toBe(0);
 		const image = PNG.sync.read(await canvas(page).screenshot());
 		let sky = 0;
+
 		// Left-hand crop is clear of the controls. A missing triangle in this down-facing
 		// view shows the sky's blue or the blue clear color through the red ground.
 		for(let y = 45; y < image.height - 110; ++y)
-		for(let x = 35; x < 265; ++x) {
+		for(let x = 35; x < 265; ++x)
+		{
 			const index = 4 * (y * image.width + x);
+
 			if(image.data[index + 2] > image.data[index] + 5) ++sky;
 		}
+
 		expect(sky).toBe(0);
 	}
 });
@@ -1988,6 +2311,7 @@ test('the coastal palette shows inland grass and shore sand', async({page}) => {
 	const groundColor = async() => {
 		const image = PNG.sync.read(await canvas(page).screenshot());
 		const offset = 4 * (Math.floor(image.height * .42) * image.width + Math.floor(image.width * .3));
+
 		return [...image.data.subarray(offset, offset + 3)];
 	};
 
@@ -2007,28 +2331,42 @@ test('Mountain Ridges shades lichen and custom layers can stipple their interior
 	await page.setViewportSize({width: 520, height: 360});
 	await boot(page);
 	const mountain = fixture();
+
 	Object.assign(mountain.landscape.recipe, {
-		preset: 'mountain', seed: 'visual-mountain', worldSize: 8192,
-		spacing: 2, heightScale: 1400, baseFrequency: 1/2200, surround: 'mountains',
+		preset: 'mountain'
+		, seed: 'visual-mountain'
+		, worldSize: 8192
+		, spacing: 2
+		, heightScale: 1400
+		, baseFrequency: 1/2200
+		, surround: 'mountains'
 	});
+
 	Object.assign(mountain.settings, {lichenAmount: 0, waterLevel: 0, elevation: 45, azimuth: 140});
 	mountain.camera = {position: [-1880,235,-1328], yaw: -2.02, pitch: -.42};
 	await load(page, mountain);
+
 	await page.locator('.terrain-panel, .terrain-hud').evaluateAll(nodes => nodes.forEach(node => {
 		node.style.visibility = 'hidden';
 	}));
 
 	const view = canvas(page);
+
 	const capture = async() => {
 		await settled(page);
+
 		return PNG.sync.read(await view.screenshot()).data;
 	};
+
 	const changedFraction = (first, second) => {
 		let changed = 0;
+
 		for(let i = 0; i < first.length; i += 4)
 			if(Math.abs(first[i+1]-second[i+1]) > 2) changed++;
+
 		return changed/(first.length/4);
 	};
+
 	const withoutLichen = await capture();
 	await view.evaluate(el => el.terrainSandboxDebug.values({lichenAmount: 1}));
 	await expect.poll(async() => (await status(page)).settings.lichenAmount).toBe(1);
@@ -2045,30 +2383,47 @@ test('Mountain Ridges shades lichen and custom layers can stipple their interior
 	expect(changedFraction(withLichen, withoutLichen)).toBeGreaterThan(.01);
 
 	// One unbounded layer gives the pattern no edges to hide behind.
+
 	const setStipple = async amount => {
-		await view.evaluate((el, patternAmount) => el.terrainSandboxDebug.action({type:'surface-layers',
-			layers:[{color:'#aa906f',pattern:'stipple',patternColor:'#514431',patternScale:1.6,patternAmount}]}), amount);
-		await expect.poll(async() => (await status(page)).surfaceLayers[0]).toMatchObject({pattern:'stipple',patternAmount:amount});
+		await view.evaluate(
+			(el, patternAmount) => el.terrainSandboxDebug.action({
+				type: 'surface-layers'
+				, layers: [{
+					color: '#aa906f'
+					, pattern: 'stipple'
+					, patternColor: '#514431'
+					, patternScale: 1.6
+					, patternAmount
+				}]
+			})
+			, amount
+		);
+
+		const stippled = {pattern: 'stipple', patternAmount: amount};
+
+		await expect.poll(async() => (await status(page)).surfaceLayers[0]).toMatchObject(stippled);
+
 		return capture();
 	};
+
 	const solidRock = await setStipple(0);
 	const stippledRock = await setStipple(.8);
 	expect(changedFraction(solidRock, stippledRock)).toBeGreaterThan(.02);
-	await view.evaluate(el => el.terrainSandboxDebug.action({type:'surface-layers'}));
+	await view.evaluate(el => el.terrainSandboxDebug.action({type: 'surface-layers'}));
 	await expect.poll(async() => (await status(page)).surfaceLayers[0].color).not.toBe('#aa906f');
 	expect(changedFraction(await capture(), withLichen)).toBeLessThan(.005);
 });
 
 test('the distant face in the default canyon stays sunlit at the starting viewpoint', async({page}) => {
 	test.setTimeout(150_000);
-	await page.setViewportSize({width:960,height:600});
+	await page.setViewportSize({width: 960,height: 600});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
-	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
-	await (await field(page,'[name="preset"]')).selectOption('canyon');
-	await press(page,'generate');
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await (await field(page, '[name="preset"]')).selectOption('canyon');
+	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
-	await press(page,'pause');
+	await press(page, 'pause');
 	await settled(page);
 
 	// This sunlit sandstone band is about six kilometers away. The coarse mesh used
@@ -2076,9 +2431,12 @@ test('the distant face in the default canyon stays sunlit at the starting viewpo
 	const image = PNG.sync.read(await view.screenshot());
 	const cx = Math.round(image.width/2 - image.height*11/561);
 	const cy = Math.round(image.height*203/561);
-	for(let y=cy-1;y<=cy+1;y++) {
+
+	for(let y = cy-1; y<=cy+1; y++)
+	{
 		const adjacent = image.data[4*(image.width*y+cx-6)];
-		for(let x=cx-1;x<=cx+1;x++)
+
+		for(let x = cx-1; x<=cx+1; x++)
 			expect(Math.abs(image.data[4*(image.width*y+x)]-adjacent)).toBeLessThan(28);
 	}
 });
@@ -2092,17 +2450,26 @@ test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joi
 
 	const canyon = fixture();
 	canyon.landscape.recipe = {
-		preset: 'canyon', version: 2, seed: 'visual-canyon', heightScale: 650,
-		baseFrequency: 1/4000, terraceSpacing: 80, waterLevel: -450,
+		preset: 'canyon'
+		, version: 2
+		, seed: 'visual-canyon'
+		, heightScale: 650
+		, baseFrequency: 1/4000
+		, terraceSpacing: 80
+		, waterLevel: -450
 	};
+
 	canyon.settings.quality = 1;
 	canyon.camera = {position: [791,570,-1771], yaw: .09, pitch: -.38};
 	await load(page, canyon);
 
 	// This wall is about 1.5 km from the starting camera. The old 64 m mesh smoothed
 	// the ledges and changed their shape as the aircraft advanced.
-	const wallSpacing = ({renderer}) => renderer.visibleCoverage.find(([left,front,size]) =>
-		left <= 1867 && 1867 < left+size && front <= -3217 && -3217 < front+size)?.[3];
+
+	const wallSpacing = ({renderer}) => renderer.visibleCoverage.find(
+		([left,front,size]) => left <= 1867 && 1867 < left+size && front <= -3217 && -3217 < front+size
+	)?.[3];
+
 	const before = await settled(page);
 	expect(wallSpacing(before)).toBeLessThanOrEqual(16);
 
@@ -2113,7 +2480,7 @@ test('the F5 keeps the canyon wall in the fine grid as it flies past clipmap joi
 	await expect.poll(async() => (await status(page)).jetView).toBe('cockpit');
 
 	const initial = await status(page);
-	await expect.poll(async() => (await status(page)).jet.z, {timeout:90_000}).toBeLessThan(initial.jet.z - 65);
+	await expect.poll(async() => (await status(page)).jet.z, {timeout: 90_000}).toBeLessThan(initial.jet.z - 65);
 	const moving = await status(page);
 	expect(moving.renderer.pending).toBe(0);
 	expect(moving.renderer.visible).toBe(before.renderer.visible);
