@@ -1983,18 +1983,33 @@ expect(count($longLab->landscape->roadRecords())===1 && $longLab->landscape->hei
 $longLab->close();
 $lab->close();
 
-// A touchscreen gets the touch hint and a mouse the keyboard hint; other messages stay.
+// The controls shown follow the input family the page reports, one device at a time.
 $hint = new Session(['worldSize'=>256,'heightScale'=>0,'detailAmplitude'=>0]);
-expect($hint->message === Session::FLY_HINT && $hint->status()['touch'] === false, 'A new session opens with the keyboard hint');
-input($hint, ['values' => ['touch' => true]]);
-expect($hint->message === Session::TOUCH_HINT && $hint->status()['touch'] === true, 'A touchscreen swaps in the touch hint');
-input($hint, ['values' => ['touch' => false]]);
-expect($hint->message === Session::FLY_HINT, 'A mouse brings the keyboard hint back');
-$other = $hint->message = 'Generated coast terrain.';
-input($hint, ['values' => ['touch' => true]]);
-expect($other !== Session::FLY_HINT && $hint->message === $other && $hint->touch, 'Touch leaves other messages alone');
-input($hint, ['values' => ['touch' => 'yes']]);
-expect($hint->message === 'Touch must be true or false' && $hint->touch, 'A touch flag that is not a boolean is refused');
+expect($hint->inputTheme === 'keyboard' && $hint->message === '' && $hint->status()['hint'] === $hint->hint()
+	&& $hint->hint() === ['⬲ Fly', '❹ ❺ Down, up', '❷ Fast', 'Right-drag Look'], 'A new session shows keyboard flight controls');
+input($hint, ['values' => ['inputTheme' => 'xbox']]);
+expect(array_slice($hint->hint(), 0, 2) === ['⬲ Fly', '▦ Look'] && $hint->status()['inputTheme'] === 'xbox', 'A pad shows its sticks');
+input($hint, ['values' => ['inputTheme' => 'touch']]);
+expect($hint->hint() === ['Drag to look', 'Tap the ground to use the tool'], 'A touchscreen shows touch controls');
+input($hint, ['values' => ['inputTheme' => 'nintendo']]);
+expect($hint->message === 'Unknown input theme' && $hint->inputTheme === 'touch', 'An unknown input theme is refused');
 $hint->close();
+foreach(['fly', 'car', 'craft', 'jet'] as $mode)
+foreach(TerrainSandbox\ControlHints::THEMES as $theme)
+foreach(['novice', 'expert'] as $handling)
+{
+	$entries = TerrainSandbox\ControlHints::entries($mode, $theme, $handling, true);
+	expect($entries !== [] && !array_filter($entries, static fn(string $e): bool => str_contains($e, ' / ') || str_contains($e, ' or ')),
+		"$mode controls on $theme name one device's buttons, with no slash lists");
+}
+$keys = TerrainSandbox\ControlHints::entries('car', 'keyboard');
+$pad = TerrainSandbox\ControlHints::entries('car', 'playstation');
+expect(in_array('L Lights', $keys, true) && in_array('⓿ Handbrake', $keys, true) && in_array('❷ Lights', $pad, true)
+	&& in_array('❼ Accelerate', $pad, true) && $pad === TerrainSandbox\ControlHints::entries('car', 'xbox'),
+	'The car uses L and the X button for lights; every pad shares one list in its own art');
+expect(in_array('❸ ❶ Speed', TerrainSandbox\ControlHints::entries('jet', 'xbox', 'expert'), true)
+	&& !in_array('↑ Next balloon', TerrainSandbox\ControlHints::entries('jet', 'xbox'), true)
+	&& in_array('↑ Next balloon', TerrainSandbox\ControlHints::entries('jet', 'xbox', 'novice', true), true),
+	'Expert F5 speed is on Y and B, and balloon cycling shows only when there are balloons');
 
 echo "Landscape sandbox session: $checks checks passed\n";

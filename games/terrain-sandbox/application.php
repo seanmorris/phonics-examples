@@ -14,6 +14,7 @@ use TerrainPhonics\Scene;
 use TerrainPhonics\AtmosphereLayers;
 use TerrainPhonics\Recipe;
 use TerrainSandbox\Car;
+use TerrainSandbox\ControlHints;
 use TerrainSandbox\DeliveryBeacon;
 use TerrainSandbox\DeliveryRun;
 use TerrainSandbox\NavigationArrow;
@@ -55,6 +56,7 @@ $viewCamera = $session->camera;
 $vehiclePose = null;
 $carLamps = null;
 $spotLights = [[], 1.0]; // The lights given to the scene and their adaptation gain.
+$controlHints = null; // Button hints, created on the first frame that shows any.
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
@@ -215,7 +217,8 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture,
+		&$controlHints
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -326,6 +329,9 @@ $engine->start(
 					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize,'circular'=>$car,
 						'showRoute'=>$raceGuidance, 'markers'=>$session->delivery?->sites() ?: ($target === null ? [] : [$target])];
 			}
+			// The controls for what the player is doing, in the button art of the device in use. The cockpit has its own.
+			if(!($jet && $session->jetView === 'cockpit'))
+				($controlHints ??= new ControlHints)->draw($session->hint(), $session->inputTheme, $width, $height);
 			$engine->device->present();
 			if($jet)
 			{
@@ -362,7 +368,7 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
+	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$controlHints): void {
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
 		foreach($models as $model) $model->close();
@@ -370,10 +376,11 @@ $engine->start(
 		$trailRenderer?->close(); $trailRenderer = null;
 		$shadow?->close();
 		$beacon?->close(); $arrow?->close();
+		$controlHints?->close();
 		$gates->release();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $session, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty): void {
+	static function() use ($scene, $session, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$controlHints, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -383,6 +390,7 @@ $engine->start(
 		$shadow = null;
 		$beacon?->close(); $beacon = null;
 		$arrow?->close(); $arrow = null;
+		$controlHints?->close(); $controlHints = null;
 		$gates->release();
 		$scene->restore();
 		$session->roadEditor->captured = null;

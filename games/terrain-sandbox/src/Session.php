@@ -243,13 +243,10 @@ final class Session
 	/** Uncommitted road control points in [x,y,z] meters. */
 	public array $road = [];
 	public RoadEditor $roadEditor;
-	/** Free flight's opening hint for a mouse and keyboard, and for a touchscreen. */
-	public const FLY_HINT = 'Right-drag to look. WASD to fly, Q/E down/up. Choose a tool to edit.';
-	public const TOUCH_HINT = 'Drag to look around. Tap the ground to use the chosen tool. A gamepad or keyboard flies.';
-	/** Last operation result shown in the authoring panel. */
-	public string $message = self::FLY_HINT;
-	/** Whether the player last used a touchscreen, which has no right button or keys. The page reports it. */
-	public bool $touch = false;
+	/** Last operation result shown in the authoring panel. The controls appear separately, as hint(). */
+	public string $message = '';
+	/** Input family the player last used, one of ControlHints::THEMES. The page reports it. */
+	public string $inputTheme = 'keyboard';
 	/** Whether input or simulation changed the visible scene. */
 	public bool $dirty = true;
 	/** Incremented for whole landscape replacement; staged edits preserve this generation. */
@@ -400,16 +397,11 @@ final class Session
 					if(!is_bool($value)) throw new \InvalidArgumentException('Invert pitch must be true or false');
 					$this->invertPitch = $value;
 				}
-				elseif($name === 'touch')
+				elseif($name === 'inputTheme')
 				{
-					if(!is_bool($value)) throw new \InvalidArgumentException('Touch must be true or false');
-					$this->touch = $value;
-					// The opening hint follows the device in use; any other message stays.
-					if(in_array($this->message, [self::FLY_HINT, self::TOUCH_HINT], true))
-					{
-						$this->message = $value ? self::TOUCH_HINT : self::FLY_HINT;
-						$this->dirty = true;
-					}
+					if(!in_array($value, ControlHints::THEMES, true)) throw new \InvalidArgumentException('Unknown input theme');
+					$this->dirty = $this->dirty || $this->inputTheme !== $value;
+					$this->inputTheme = $value;
 				}
 				else $this->setting((string)$name, $value);
 			}
@@ -930,12 +922,21 @@ final class Session
 		$this->lampAdaptation = 1.0;
 	}
 
-	/** Describe the jet's controls for the current handling. */
+	/** Name the jet's handling; hint() lists its controls. */
 	private function jetMessage(): string
 	{
 		return $this->jetControls === 'expert'
-			? 'Expert · A/D or stick roll, E/Q or stick pitch, LT/RT or Z/X rudder, hold Y/B or W/S for speed. F leaves the jet.'
-			: 'Novice · A/D or stick turn, E/Q or stick climb and dive, hold W/S or RT/LT for speed. F leaves the jet.';
+			? 'Expert handling · roll, pitch and rudder.'
+			: 'Novice handling · bank to turn, levels itself.';
+	}
+
+	/**
+	 * List the controls for the current mode on the input family in use.
+	 * @return list<string> ControlHints entries; free flight's include the editing look and tool hints.
+	 */
+	public function hint(): array
+	{
+		return ControlHints::entries($this->mode, $this->inputTheme, $this->jetControls, (bool)$this->balloons->targets());
 	}
 
 	/**
@@ -1696,9 +1697,7 @@ final class Session
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->chase->board($this->camera, $this->car->state(), $this->landscape);
 		$this->dirty = true;
-		$this->message = $this->delivery !== null ? 'Finding a reachable package site…'
-			: 'W or RT accelerates, S or LT brakes then reverses, A/D or stick steer, Space or A handbrake, '
-			. 'Shift or LB nitrous, L or X headlights. F returns to flight.';
+		$this->message = $this->delivery !== null ? 'Finding a reachable package site…' : '';
 	}
 
 	/** Return the matched camera and car pose at the engine's presentation time. */
@@ -1804,7 +1803,7 @@ final class Session
 		$this->craft->spawn($launch[0], $launch[1], $yaw, $this->water, $this->landscape, $this->time);
 		$this->mode = 'craft'; $this->paused = false; $this->reserveCraft(); $this->boarding++;
 		$this->craftLook = 0.0;
-		$this->message = 'W or RT throttle, S or LT reverse, A/D or stick steer. Return to flight to edit the landscape.';
+		$this->message = 'Return to flight to edit the landscape.';
 	}
 
 	/**
@@ -2185,7 +2184,7 @@ final class Session
 			'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),
-			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,'touch' => $this->touch,
+			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,'inputTheme' => $this->inputTheme,'hint' => $this->hint(),
 			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),'lampAdaptation' => $this->lampAdaptation,
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],

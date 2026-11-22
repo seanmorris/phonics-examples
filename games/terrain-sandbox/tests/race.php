@@ -853,7 +853,7 @@ $pending = $late->picking;
 $late->input(['actions' => ['craft']], 1 / 60, 16 / 9, .0001);
 for($i = 0; $i < 100; $i++) input($late, []);
 expect($pending && $late->mode === 'craft' && !$late->picking && $late->course->count() === 0
-	&& str_starts_with($late->message, 'W or RT throttle'), 'Boarding the jet ski drops a gate click still in progress');
+	&& $late->message === 'Return to flight to edit the landscape.', 'Boarding the jet ski drops a gate click still in progress');
 $late->close();
 
 // Courses save with the landscape.

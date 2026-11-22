@@ -31,6 +31,17 @@ export function activate({module, canvas, session, services})
 
 	const controls = new Map([...frame.querySelectorAll('[data-value]')].map(field => [field.dataset.value, field]));
 
+	// The controls shown are for the device used last: the keyboard and mouse, a touchscreen, or a pad by its maker.
+	let inputTheme = globalThis.matchMedia?.('(pointer: coarse)').matches ? 'touch' : 'keyboard';
+	values.inputTheme = inputTheme;
+
+	const useTheme = theme => {
+		if(theme === inputTheme) return;
+
+		inputTheme = theme;
+		values.inputTheme = theme;
+	};
+
 	// Fog density spans four orders of magnitude, so its slider is logarithmic: position 0 is clear water, 1 is one per
 	// meter, and the usual 0.035 sits near the middle.
 	const fog = frame.querySelector('[data-fog]');
@@ -253,6 +264,8 @@ export function activate({module, canvas, session, services})
 	frame.addEventListener('keydown', event => {
 		if(focusedField(event.target)) return;
 
+		useTheme('keyboard');
+
 		// Space still presses a focused button or link rather than the handbrake.
 		const activates = event.code === 'Space' && event.target instanceof HTMLElement
 			&& Boolean(event.target.closest('button,summary,a,label'));
@@ -298,8 +311,6 @@ export function activate({module, canvas, session, services})
 	// A finger has no right button: a touch drag looks around, and a touch that ends without moving is a click.
 	let tap = null;
 
-	// A touchscreen with no mouse opens with the touch hint before the first tap.
-	if(globalThis.matchMedia?.('(pointer: coarse)').matches) values.touch = true;
 
 	const click = (x, y) => {
 		const box = canvas.getBoundingClientRect();
@@ -309,8 +320,7 @@ export function activate({module, canvas, session, services})
 	canvas.addEventListener('pointerdown', event => {
 		focus();
 		const touch = event.pointerType === 'touch';
-
-		if(touch !== latest?.touch) values.touch = touch;
+		useTheme(touch ? 'touch' : 'keyboard');
 
 		if(event.button === 2 || touch)
 		{
@@ -468,6 +478,9 @@ export function activate({module, canvas, session, services})
 		const held = Object.keys(keys).filter(key => keys[key]).join(',');
 		// Browsers stop updating gamepads in a background page, so a stick held at blur must not stay held.
 		const gamepad = document.hidden || !document.hasFocus() ? null : readGamepads();
+
+		if(gamepad?.active) useTheme(padTheme(gamepad.active));
+
 		const buttons = gamepad?.buttons ?? new Set();
 
 		if(buttons.has(8) && !padButtons.has(8)) backShortcut = false;
@@ -1056,12 +1069,12 @@ function stick(x, y)
 /**
  * Read every connected gamepad in the standard layout as one: the stick or trigger pushed furthest wins, and a
  * button counts while any pad holds it.
- * @returns {{axes: number[], buttons: Set<number>}|null} Left X and Y, right X and Y, left and right trigger,
- * and the held button indices; null when no such pad is connected.
+ * @returns {{axes: number[], buttons: Set<number>, active: ?string}|null} Left X and Y, right X and Y, left and right
+ * trigger, the held button indices, and the id of a pad being used this poll; null when no such pad is connected.
  */
 function readGamepads()
 {
-	let found = false;
+	let found = false, active = null;
 	const axes = [0,0,0,0,0,0];
 	const buttons = new Set();
 
@@ -1085,9 +1098,25 @@ function readGamepads()
 		values.forEach((value, index) => { if(Math.abs(value) > Math.abs(axes[index])) axes[index] = value; });
 
 		pad.buttons.forEach((button, index) => { if(button.pressed) buttons.add(index); });
+
+		if(values.some(value => Math.abs(value) > .3) || pad.buttons.some(button => button.pressed)) active = pad.id;
 	}
 
-	return found ? {axes, buttons} : null;
+	return found ? {axes, buttons, active} : null;
+}
+
+/**
+ * Pick a pad's button art from its name, as SdlInput::padTheme() does.
+ * @param {string} id The pad's id from the Gamepad API.
+ * @returns {string} playstation, xbox or generic.
+ */
+function padTheme(id)
+{
+	if(/playstation|dualshock|dualsense|sony|054c/i.test(id)) return 'playstation';
+
+	if(/xbox|xinput|microsoft|045e/i.test(id)) return 'xbox';
+
+	return 'generic';
 }
 
 /**
@@ -1971,7 +2000,7 @@ function markup()
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
-	<p class="terrain-note">Space / A launches · hold G / X for Vulcan · T / D-pad ↑ cycles balloons · V / Y+B changes view.</p></div>
+	<p class="terrain-note">The F5's launch, Vulcan, balloon and view buttons show at the top left of the view for the controller or keyboard you are using.</p></div>
 	${range('Flight speed · m/s', 'speed', 5, 300, 5, 100)}
 	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on in low light</option><option value="on">On</option><option value="off">Off</option></select></label>
 	<label class="terrain-field terrain-wide">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>

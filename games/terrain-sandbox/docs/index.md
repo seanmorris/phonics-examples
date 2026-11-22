@@ -6,7 +6,9 @@ Landscape Sandbox is a place to explore and edit procedural terrain. The default
 
 The panel on the right has seven tabs. **Landscape** generates terrain and saves or loads it. **Shape** holds the editing tools, road placement and race gates. **Roads** opens a zoomable terrain map for editing the route, its curves and its elevation profile. **Surface** sets terrain colors, relief and paint inks. **Water** and **Sky** set the water and the sun and atmosphere. **Explore** boards the vehicles and sets their controls. Click a tab, or move between tabs with the arrow keys, **Home** and **End**. The panel opens on the tab you used last. Click the **Landscape Lab** title or press **H** to collapse the panel to a round sliders button. Click the button to reopen it.
 
-On a touchscreen, drag a finger across the view to look around and tap the ground to use the chosen tool. Flying and driving still need a gamepad or keyboard.
+The top left of the view lists the controls for what you are doing, drawn as the buttons of the device you used last: the keyboard, an Xbox, PlayStation or other gamepad, or a touchscreen. Switching devices switches the list. The F5's cockpit view hides it behind its own instruments.
+
+On a touchscreen, drag a finger across the view to look around and tap the ground to use the chosen tool. Flying and driving need a gamepad or keyboard.
 
 On the **Landscape** tab, expand **Landform parameters** to see what each setting changes. The fields sit side by side when there is room and stack on narrow screens. Select **Generate** to apply your changes.
 

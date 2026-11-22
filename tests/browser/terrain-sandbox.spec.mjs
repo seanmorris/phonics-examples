@@ -1522,9 +1522,8 @@ test.describe('on a touchscreen', () => {
 		await touch('touchEnd', []);
 		await expect.poll(async() => (await status(page)).camera.yaw).not.toBe(before.camera.yaw);
 		expect((await status(page)).revision).toBe(before.revision);
-		await expect.poll(async() => (await status(page)).touch).toBe(true);
-		const hint = 'Drag to look around. Tap the ground to use the chosen tool. A gamepad or keyboard flies.';
-		await expect(page.locator('[data-status]')).toHaveText(hint);
+		await expect.poll(async() => (await status(page)).inputTheme).toBe('touch');
+		expect((await status(page)).hint).toEqual(['Drag to look', 'Tap the ground to use the tool']);
 
 		await touch('touchStart', [{x, y}]);
 		await touch('touchEnd', []);
