@@ -116,7 +116,7 @@
     "autoload.php": "sha256-PniKSq1posI89wy+V+5wVK6GJL6x290N4sTpz3FxlJ4=",
     "browser/cockpit.mjs": "sha256-XOIk6sMosvnEbCOMIXnXs2Rbz3ltW8BX26UxP5KQ52c=",
     "browser/flight-map.mjs": "sha256-z2wkWS0XRmCdNgdKAQgA/e2Uz8LIOQHeD1AyfQCxQl8=",
-    "browser/game.mjs": "sha256-ZlJhWvLBu5VyLsz9/XijpnssWbzaWarVvquCaLDOymg=",
+    "browser/game.mjs": "sha256-usKu47aaiSCO2h1KEnhpvDdQbNtdnmIHctRfBEADsp4=",
     "browser/road-editor.mjs": "sha256-oNdlUh6F7eF9UDwBNAholLDc2dBayfUciIHXjCglvAk=",
     "browser/speedometer.mjs": "sha256-MFRHM8PqjygGALKZbUj0JnVysB72e+LCuSE+sD+i4aQ=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",

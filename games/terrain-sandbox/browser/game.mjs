@@ -1787,7 +1787,7 @@ function markup()
 		<small id="${hintPrefix}-warpFrequency">Sets how frequently the bends change direction. Lower values produce longer, gentler bends.</small></div>
 	</div></fieldset>
 	<fieldset class="terrain-landform-group"><legend>Water and world edge</legend><div class="terrain-grid">
-	<div class="landform-field"><label class="terrain-field">Starting water level · m<input aria-describedby="${hintPrefix}-waterLevel" name="waterLevel" type="number" min="-10000" max="10000" value="0"></label>
+	<div class="landform-field"><label class="terrain-field">Starting water level · m<input aria-describedby="${hintPrefix}-waterLevel" name="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
 		<small id="${hintPrefix}-waterLevel">Sets the water elevation on generation. Ground below this level is flooded.</small></div>
 	<div class="landform-field"><label class="terrain-field">Surround<select aria-describedby="${hintPrefix}-surround" name="surround"><option value="sea">Open sea</option><option value="plateau">Desert plateau</option><option value="mountains">Continuing terrain</option><option value="none">None</option></select></label>
 		<small id="${hintPrefix}-surround">Chooses the scenery beyond the playable area.</small></div>
