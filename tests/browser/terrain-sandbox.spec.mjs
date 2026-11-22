@@ -2094,7 +2094,7 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 	expect(file.surface.paint.grassColor).toBe('#112211');
 	await tab('surface').click();
 	await page.locator('[data-layer-reset]').click();
-	await expect.poll(async() => (await status(page)).surfaceLayers[0].color).toBe('#425b2d');
+	await expect.poll(async() => (await status(page)).surfaceLayers[0].color).toBe('#55693a');
 	await expect.poll(async() => (await status(page)).paintInks.grassColor).toBe('#112211');
 
 	// The page opens on the tab shown last.
@@ -2145,7 +2145,7 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('limestone');
 	const {surfaceLayers} = await status(page);
-	expect(surfaceLayers[0]).toMatchObject({color: '#3e624e', pattern: 'fractal'});
+	expect(surfaceLayers[0]).toMatchObject({color: '#566b40', pattern: 'fractal'});
 	const veins = surfaceLayers.find(layer => layer.pattern === 'veins');
 	expect(surfaceLayers[veins.parent].color).toBe('#8a9193');
 	const document = await save(page);
@@ -2160,7 +2160,7 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	});
 
 	expect(document.camera.position).toEqual([2440, 105, -4880]);
-	expect(document.settings).toMatchObject({grassColor: '#3e624e', snowline: 3000, waterLevel: -40, azimuth: 106});
+	expect(document.settings).toMatchObject({grassColor: '#566b40', snowline: 3000, waterLevel: -40, azimuth: 106});
 	await preset.selectOption('coast');
 	await expect(seed).toHaveValue('first-light');
 	await seed.fill('my-karst');

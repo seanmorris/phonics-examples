@@ -325,7 +325,7 @@ final class SurfaceLayers
 	{
 		$grass = $s['grassColor'];
 		$rock = $s['rockColor'];
-		$deepGrass = self::tint($grass, .18, .32, .47);
+		$deepGrass = self::tint($grass, .22, .32, .32);
 		$dryGrass = self::tint($grass, 1.14, 1.01, .93);
 		$weathering = self::tint($rock, .25, .30, .33);
 		$exposure = self::exposedRock($s);

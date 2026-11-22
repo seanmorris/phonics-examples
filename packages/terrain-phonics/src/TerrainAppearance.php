@@ -14,10 +14,10 @@ final class TerrainAppearance
 {
 	/** Coast and canyon terrain as it looked before these settings existed, and the mountain material as tuned. */
 	public const DEFAULTS = [
-		'grassColor' => '#425b2d', 'soilColor' => '#815f40', 'rockColor' => '#867c6f', 'rockBandColor' => '#af957c',
+		'grassColor' => '#55693a', 'soilColor' => '#815f40', 'rockColor' => '#867c6f', 'rockBandColor' => '#af957c',
 		'sandColor' => '#bfaf8b', 'snowColor' => '#eaf1f8', 'roadColor' => '#373b3d',
-		'canyonRustColor' => '#794944', 'canyonShaleColor' => '#5f484c', 'canyonSandstoneColor' => '#906356',
-		'canyonCapColor' => '#a38775',
+		'canyonRustColor' => '#8a4f35', 'canyonShaleColor' => '#6b5546', 'canyonSandstoneColor' => '#b07a4f',
+		'canyonCapColor' => '#c2aa86',
 		'forestColor' => '#1d291b', 'meadowColor' => '#48581f', 'tundraColor' => '#484230', 'graniteColor' => '#565a5c',
 		'stainColor' => '#74605a', 'talusColor' => '#7b7b77',
 
@@ -32,18 +32,21 @@ final class TerrainAppearance
 	];
 	/** Starting colors and material thresholds for the named landscapes. */
 	public const PRESET_DEFAULTS = [
+		// Stronger broad variation gives open pasture drier and lusher patches without another noise pattern.
+		'coast' => ['macroVariation'=>2.6],
 		'mountain' => [
-			'forestColor'=>'#25352e', 'meadowColor'=>'#52654d', 'tundraColor'=>'#5a5a4d', 'grassColor'=>'#4a6547',
+			'forestColor'=>'#22301f', 'meadowColor'=>'#5a6943', 'tundraColor'=>'#5d5a47', 'grassColor'=>'#53663e',
 			'graniteColor'=>'#616b76', 'talusColor'=>'#80847f', 'stainColor'=>'#70615b', 'snowColor'=>'#eaf1f8',
+			'snowline'=>460., 'snowTransition'=>80., 'beachHeight'=>1.2, 'beachWidth'=>4.,
 		],
 		'limestone' => [
-			'grassColor'=>'#3e624e', 'rockColor'=>'#8a9193', 'rockBandColor'=>'#a3a8a5', 'sandColor'=>'#a69e87',
+			'grassColor'=>'#566b40', 'rockColor'=>'#8a9193', 'rockBandColor'=>'#a3a8a5', 'sandColor'=>'#a69e87',
 			'snowline'=>3000., 'rockSlopeStart'=>.25, 'rockSlopeEnd'=>.73,
 		],
 		'basalt-fjords' => [
-			'grassColor'=>'#4d504a', 'soilColor'=>'#454643', 'rockColor'=>'#283039', 'rockBandColor'=>'#454d54',
+			'grassColor'=>'#57603f', 'soilColor'=>'#4a463c', 'rockColor'=>'#283039', 'rockBandColor'=>'#454d54',
 			'sandColor'=>'#424951', 'snowColor'=>'#dce6e8', 'snowline'=>820., 'snowTransition'=>140.,
-			'rockSlopeStart'=>.050, 'rockSlopeEnd'=>.24, 'beachHeight'=>1.2, 'beachWidth'=>5.,
+			'rockSlopeStart'=>.14, 'rockSlopeEnd'=>.32, 'beachHeight'=>1.2, 'beachWidth'=>5.,
 		],
 		'arctic-meltwater' => [
 			'soilColor'=>'#4c5459', 'rockColor'=>'#404c56', 'rockBandColor'=>'#537f95',
@@ -152,8 +155,8 @@ final class TerrainAppearance
 	 * cap rock and red beds the rust. Dust, beds too fine to resolve and the light the walls throw into shadow follow
 	 * the beds' average weighted by thickness. Each derived channel stops at 1.
 	 */
-	private const LEDGE = [.285, .196, .148], RED_BEDS = [.235, .082, .067], DUST = [.275, .163, .104],
-		DISTANT = [.246, .133, .106], BOUNCE = [.11, .066, .048];
+	private const LEDGE = [.42, .32, .19], RED_BEDS = [.31, .10, .045], DUST = [.396, .252, .112],
+		DISTANT = [.354, .206, .115], BOUNCE = [.158, .102, .052];
 	/** Validated settings with the keys and order of DEFAULTS. Colors are lower case. */
 	public readonly array $settings;
 	/** Shader uniform values by uniform name. */

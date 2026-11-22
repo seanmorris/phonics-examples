@@ -308,17 +308,17 @@ Colors are sRGB hex strings.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `grassColor` | `#425b2d` | Grass cover on coast and mountain terrain, and grass paint. |
+| `grassColor` | `#55693a` | Grass cover on coast and mountain terrain, and grass paint. |
 | `soilColor` | `#815f40` | Base soil color on version-one canyons. |
 | `rockColor` | `#867c6f` | Exposed rock, and the rock between the light bands on version-one canyon terrain. |
 | `rockBandColor` | `#af957c` | The light bands in version-one canyon rock, and the coast's optional bands, which have zero coverage by default. |
 | `sandColor` | `#bfaf8b` | Sand on level ground near the water, and sand paint. |
 | `snowColor` | `#eaf1f8` | Snow on coast and mountain terrain, and snow paint. |
 | `roadColor` | `#373b3d` | Road paint. |
-| `canyonRustColor` | `#794944` | The lowest bed of each canyon section. The red beds are a brighter shade of it. |
-| `canyonShaleColor` | `#5f484c` | The soft shale above the rust. |
-| `canyonSandstoneColor` | `#906356` | Both sandstone cliffs. |
-| `canyonCapColor` | `#a38775` | The pale cap rock at the top of the section. The ledges are a darker shade of it. |
+| `canyonRustColor` | `#8a4f35` | The lowest bed of each canyon section. The red beds are a brighter shade of it. |
+| `canyonShaleColor` | `#6b5546` | The soft shale above the rust. |
+| `canyonSandstoneColor` | `#b07a4f` | Both sandstone cliffs. |
+| `canyonCapColor` | `#c2aa86` | The pale cap rock at the top of the section. The ledges are a darker shade of it. |
 | `forestColor` | `#1d291b` | Spruce-fir forest below the mountain treeline. |
 | `meadowColor` | `#48581f` | Subalpine shrubs and meadow above the treeline. Shrub clumps mix it about halfway to the forest color. |
 | `tundraColor` | `#484230` | Tundra between the meadow and the snow. |
@@ -360,7 +360,7 @@ A slope is 1 minus the upward component of the surface normal: 0 on level ground
 | `tundraStart` | −90 m | −2000 to 0 | Height relative to the snowline where the meadow gives way to tundra. At least 1 m above the treeline. |
 | `snowSlopeStart` | 0.25 | 0 to 1 | Slope where snow starts to thin. |
 | `snowSlopeEnd` | 0.65 | 0 to 1 | Slope beyond which ground stays bare. At least 0.01 above the start. |
-| `macroVariation` | 1 | 0 to 3 | Strength of the broad noise that varies grass brightness, soil cover, canyon dust and debris, granite brightness, mountain talus, the snowline and the mountain zones. At 1 the snowline moves up to 25 m either way. 0 removes the variation. |
+| `macroVariation` | 1 | 0 to 3 | Strength of the broad noise that varies the brightness and warmth of grass and plain layers, soil cover, canyon dust and debris, granite brightness, mountain talus, the snowline and the mountain zones. At 1 the snowline moves up to 25 m either way. 0 removes the variation. |
 
 On mountains, winding ribs and patchy noise lower the treeline, the foot of the tundra and the start of bare rock
 locally. Gullies raise those boundaries, so rock runs down the ribs and vegetation climbs the gullies.

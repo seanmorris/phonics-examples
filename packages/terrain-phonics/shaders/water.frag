@@ -37,11 +37,17 @@ vec4 waterVisualSample(vec2 position, float time, vec2 pixelX, vec2 pixelY)
 	return vec4(result.xyz + wake.xyz,wake.w);
 }
 
-float waterFoamIntegral(float depth)
+float waterFoamIntegral(float depth, float width)
 {
-	// Antiderivative of the shoreline's 1-smoothstep(0,1.2,depth) coverage.
-	float x = clamp(depth / 1.2,0.0,1.0);
-	return min(depth,0.0) + 1.2 * (x - x*x*x + 0.5*x*x*x*x);
+	// Antiderivative of the shoreline's 1-smoothstep(0,width,depth) coverage.
+	float x = clamp(depth / width,0.0,1.0);
+	return min(depth,0.0) + width * (x - x*x*x + 0.5*x*x*x*x);
+}
+
+float waterShoreCoverage(float depth, float footprint, float width)
+{
+	// Box-filter the coverage over the pixel's depth range.
+	return (waterFoamIntegral(depth + 0.5 * footprint,width) - waterFoamIntegral(depth - 0.5 * footprint,width)) / footprint;
 }
 
 vec3 waterFacingNormal(vec3 normal, vec3 view)
@@ -80,10 +86,15 @@ void main()
 	vec3 reflection = waterEnvironmentReflection(reflected,max(0.0,wave.x),reflectionFootprint,body,illumination);
 	float shoreDepth = wave.x - vGround;
 	float shoreFootprint = max(0.001,fwidth(shoreDepth));
-	float shoreCoverage = (waterFoamIntegral(shoreDepth + 0.5 * shoreFootprint)
-		- waterFoamIntegral(shoreDepth - 0.5 * shoreFootprint)) / shoreFootprint;
-	float foamWeight = waterPhaseFilter(pixelX.x + pixelX.y,pixelY.x + pixelY.y);
-	float foam = shoreCoverage * (0.65 + 0.35 * foamWeight * sin(vWorld.x + vWorld.z + uWaterTime * 2.0));
+	// Swash along the waterline, then thin surf lines that follow the depth contours over the shallows and run
+	// ashore. A slow ripple in their phase breaks them along the beach. Lines too fine for the pixel become their mean.
+	float swash = waterShoreCoverage(shoreDepth,shoreFootprint,0.3);
+	float shallows = waterShoreCoverage(shoreDepth,shoreFootprint,1.2);
+	float surfWeight = waterPhaseFilter(7.0 * dFdx(shoreDepth),7.0 * dFdy(shoreDepth));
+	float crest = 0.5 + 0.5 * sin(7.0 * shoreDepth + uWaterTime * 1.6 + 1.7 * sin(0.045 * vWorld.x + 0.6 * sin(0.031 * vWorld.z)));
+	crest *= crest;
+	crest *= crest;
+	float foam = max(0.9 * swash,0.8 * shallows * mix(0.273,crest,surfWeight));
 	float wash = wave.w;
 	if(wash > 0.0)
 	{
