@@ -1438,6 +1438,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	const view = canvas(page);
 	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
 	await (await field(page, '[name="preset"]')).selectOption('canyon');
+	await (await field(page, '[data-value="quality"]')).selectOption('0.5');
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
 	await press(page, 'pause');

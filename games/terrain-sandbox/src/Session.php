@@ -333,7 +333,8 @@ final class Session
 			if($wasPicking) $this->advancePick($pickMs);
 			if($this->carSearch !== null) $this->advanceCarSearch();
 			if($this->circuitSearch !== null && $this->draft === null && !$this->preparing)
-				$this->advanceCircuit(min(3.0,$pickMs));
+				// A paused editor can spend the stationary input allowance on the route.
+				$this->advanceCircuit(min($this->paused ? 7.5 : 3.0,$pickMs));
 			if($wasJet && $this->mode !== 'jet')
 			{
 				$this->balloons->reset();
