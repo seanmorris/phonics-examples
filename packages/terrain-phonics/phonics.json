@@ -135,7 +135,7 @@
     "shaders/triangle-shadows.frag": "sha256-/v45KRO08ZNSxt0qXqmBPZqE2zzoK3t/H2UlVBgQv3c=",
     "shaders/water-functions.glsl": "sha256-5ZmtI2UbPYyvsEufMkX7E1LCbcEjjVyKfWIPwDkRuPo=",
     "shaders/water-optics.glsl": "sha256-42MQ3XCXTgheD6xu2mcRMl3qMBtrK+DGHpx2cIyuPts=",
-    "shaders/water.frag": "sha256-SWQnm0uFUtCP0ROfpYwACLO7Gm95EQRqa+8UMLvc+ak=",
+    "shaders/water.frag": "sha256-oHFF9EuhA76mvuxByxkvD1Fl7MnuoTxVGc3E1tJbwic=",
     "shaders/water.vert": "sha256-eJ3adiIHgTVT/F2O/nB7wfqwnC71a6u9LugTVh8jmzs=",
     "src/Atmosphere.php": "sha256-LBXL+9ZyH4ZBE0fCo2Wv58SwLWRKn0hS/pQoQxSw7WE=",
     "src/AtmosphereLayers.php": "sha256-QfaGLg4YYIwauVvmhf8dbFjIQzoYNABTT+JeaFxivPM=",
