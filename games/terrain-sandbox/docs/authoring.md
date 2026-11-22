@@ -41,7 +41,7 @@ Select **Road control points**, then click at least two points on the ground. Ea
 
 Numbered points and a connecting line preview the route in the view. They move with the camera and disappear when behind it; the overlay does not intercept clicks.
 
-Width sets the road surface width. Shoulder sets how far the cut or fill blends into the surrounding ground. **Apply road** grades the route and paints its surface. **Clear points** abandons the uncommitted route.
+Width sets the painted pavement edge. Shoulder sets how far the cut or fill blends into the surrounding ground outside that edge. **Apply road** grades the route and paints its surface. **Clear points** abandons the uncommitted route.
 
 Open **Roads** or choose **Edit on map** from Shape to see the route on a north-up terrain map. Select a saved road or choose **New road** and **Place points**. Drag empty ground to pan, scroll to zoom around the pointer, or choose **Fit road**. **Whole map** fits the entire editable landscape, including distant canyon branches. Other roads stay visible for reference.
 

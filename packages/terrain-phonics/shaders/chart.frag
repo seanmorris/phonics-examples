@@ -23,10 +23,14 @@ float elevation(sampler2D tex,ivec2 c) {
 	uvec4 b=uvec4(t*255.+.5);
 	return uintBitsToFloat(b.x|(b.y<<8)|(b.z<<16)|(b.w<<24));
 }
-vec4 inkSample(sampler2D tex,ivec2 at,float roadMask) {
-	int index=int(texelFetch(tex,at,0).r*255.+.5);
-	if(index<1 || index>5) return vec4(0.);
-	return vec4(uPaintColor[index-1],1.)*(index==5 ? roadMask : 1.);
+ivec2 chartInk(sampler2D tex,ivec2 at) {
+	ivec4 ink=ivec4(texelFetch(tex,at,0)*255.+.5);
+	return ivec2(ink.r,(ink.g<<16)|(ink.b<<8)|ink.a);
+}
+vec4 inkSample(ivec2 ink,float roadMask,float splineMask) {
+	if(ink.x<1 || ink.x>5) return vec4(0.);
+	float coverage=ink.x==5 ? roadMask*(ink.y==0 ? 1. : splineMask) : 1.;
+	return vec4(uPaintColor[ink.x-1],1.)*coverage;
 }
 vec4 chartCell(sampler2D heights,sampler2D inks,ivec2 a,ivec2 b,vec2 f,float stepSize,out vec4 ink) {
 	ivec2 ab=ivec2(a.x,b.y), ba=ivec2(b.x,a.y);
@@ -34,8 +38,14 @@ vec4 chartCell(sampler2D heights,sampler2D inks,ivec2 a,ivec2 b,vec2 f,float ste
 	// The clipmap splits a cell between its (1,0) and (0,1) corners.
 	vec2 rise = f.x+f.y <= 1. ? vec2(h10-h00,h01-h00) : vec2(h11-h01,h11-h10);
 	float roadMask = roadSlopeMask(vec3(rise.x,stepSize,rise.y));
-	ink=mix(mix(inkSample(inks,a,roadMask),inkSample(inks,ba,roadMask),f.x),
-		mix(inkSample(inks,ab,roadMask),inkSample(inks,b,roadMask),f.x),f.y);
+	ivec2 i00=chartInk(inks,a), i10=chartInk(inks,ba), i01=chartInk(inks,ab), i11=chartInk(inks,b);
+	ivec4 codes=ivec4(i00.y,i10.y,i01.y,i11.y);
+	vec4 weights=vec4(1.-f.x,f.x,1.-f.x,f.x)*vec4(1.-f.y,1.-f.y,f.y,f.y);
+	vec4 marked=weights*vec4(notEqual(codes,ivec4(0)));
+	float lateral=dot(marked,vec4((codes>>11)-4096)/2048.)/max(.0001,dot(marked,vec4(1.)));
+	float edge=splinePavement(lateral,fwidth(lateral));
+	ink=inkSample(i00,roadMask,edge)*weights.x+inkSample(i10,roadMask,edge)*weights.y
+		+inkSample(i01,roadMask,edge)*weights.z+inkSample(i11,roadMask,edge)*weights.w;
 	float h=mix(mix(h00,h10,f.x),mix(h01,h11,f.x),f.y);
 	return vec4(normalize(vec3(mix(h00-h10,h01-h11,f.y),stepSize,mix(h00-h01,h10-h11,f.x))),h);
 }

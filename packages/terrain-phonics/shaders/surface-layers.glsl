@@ -21,6 +21,10 @@ float roadSlopeMask(vec3 face) {
 	float up = squaredLength > 0. ? abs(face.y)*inversesqrt(squaredLength) : 1.;
 	return smoothstep(cos(radians(75.)),cos(radians(60.)),up);
 }
+// The road half-width and the grading shoulder are separate. Pixel-filter the authored pavement edge.
+float splinePavement(float lateral,float pixel) {
+	return clamp(.5+(1.-abs(lateral))/max(.00001,pixel),0.,1.);
+}
 uint layerHash(ivec2 cell) {
 	uvec2 p=uvec2(cell);
 	uint h=p.x*1597334677u ^ p.y*3812015801u;

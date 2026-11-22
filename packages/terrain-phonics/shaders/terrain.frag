@@ -8,6 +8,7 @@ precision highp int;
 in vec3 vRelative, vWorld, vNormal;
 in vec3 vPaint0, vPaint1;
 in vec4 vRoadMark;
+in float vSplinePaint;
 // Area of the painted half of every repeating dash-and-gap pair.
 float dashIntegral(float x) { return .5*floor(x)+min(fract(x),.5); }
 // Fraction of a pixel covered by a stripe, including stripes narrower than one pixel.
@@ -154,7 +155,13 @@ void main()
 	vec3 worldDx = dFdx(vWorld), worldDy = dFdy(vWorld);
 	float footprint = max(length(worldDx), length(worldDy));
 	float slopeMask = roadSlopeMask(cross(worldDx,worldDy));
-	float road = vPaint1.y*slopeMask;
+	// Lateral coordinates are in road half-widths. Convert meters of paint into that coordinate
+	// using its world-space gradient, so both narrow streets and wide circuits get the same paint.
+	float crossTrack = vRoadMark.x/max(vRoadMark.w,.0001);
+	vec2 dx=worldDx.xz, dy=worldDy.xz;
+	vec2 lateralPixel=vec2(dFdx(crossTrack),dFdy(crossTrack));
+	float roadEdge = splinePavement(crossTrack,max(abs(lateralPixel.x)+abs(lateralPixel.y),.00001));
+	float road = (vPaint1.y-vSplinePaint*(1.-roadEdge))*slopeMask;
 	// Only uniform pavement can skip the underlying palette. Triangles that blend a
 	// shoulder still evaluate its noise and derivatives all the way to the road edge.
 	float roadGradient = fwidth(vPaint1.y);
@@ -173,11 +180,6 @@ void main()
 	vec3 craft = mix(vec3(0.06,0.12,0.17), vec3(0.95,0.28,0.03), step(0.15,vWorld.y - uWaterLevel));
 	albedo = albedo*(1.-painted) + uPaintColor[0]*vPaint0.x + uPaintColor[1]*vPaint0.y + uPaintColor[2]*vPaint0.z
 		+ uPaintColor[3]*vPaint1.x + uPaintColor[4]*road + craft*vPaint1.z;
-	// Lateral coordinates are in road half-widths. Convert meters of paint into that coordinate
-	// using its world-space gradient, so both narrow streets and wide circuits get the same paint.
-	float crossTrack = vRoadMark.x/max(vRoadMark.w,.0001);
-	vec2 dx=worldDx.xz, dy=worldDy.xz;
-	vec2 lateralPixel=vec2(dFdx(crossTrack),dFdy(crossTrack));
 	vec3 markingGlow=vec3(0.);
 	if(vRoadMark.w > .65 && road > 0.) {
 		float area=dx.x*dy.y-dx.y*dy.x;
@@ -192,7 +194,7 @@ void main()
 		float phase = atan(direction.y,direction.x)*cycles;
 		float pixel = max(.002,cycles*(abs(dot(tangent,dFdx(direction)))+abs(dot(tangent,dFdy(direction)))));
 		float dash = (dashIntegral(phase+.5*pixel)-dashIntegral(phase-.5*pixel))/pixel;
-		float marked = smoothstep(.65,.98,vRoadMark.w)*smoothstep(.05,.6,vPaint1.y)*slopeMask*(1.-smoothstep(1.,5.,footprint));
+		float marked = smoothstep(.65,.98,vRoadMark.w)*smoothstep(.05,.6,vPaint1.y)*roadEdge*slopeMask*(1.-smoothstep(1.,5.,footprint));
 		float centerPaint=line*clamp(dash,0.,1.)*marked, edgePaint=edge*marked;
 		vec3 ochre=vec3(.72,.47,.09), white=vec3(.88);
 		albedo=mix(mix(albedo,ochre,centerPaint),white,edgePaint);
