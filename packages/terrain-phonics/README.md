@@ -142,9 +142,12 @@ Above 2 m/s, a hull in contact with the water emits a wake about every 0.2 secon
 Foam follows the stern and spreads as the trail ages. The sandbox’s **Shore and wake foam**
 control sets the amount visible.
 
-`Atmosphere` supplies a spherical exponential Rayleigh/Mie model with a cached transmittance texture.
-Sun direction, haze, and exposure have independent controls. This implementation uses single scattering;
-multiple scattering, clouds, ozone absorption, and volumetric fluid simulation are not implemented.
+`Atmosphere` models Rayleigh and Mie single scattering. The default sun disc has an angular radius of 0.00935 radians (0.536°). Changing its radius spreads the same total sunlight over a different solid angle.
+
+Pass a list to `Atmosphere::setLayers()` to add up to six colored aerosol layers. For example, `[['name'=>'Sea mist', 'bottom'=>0, 'top'=>350, 'density'=>0.2, 'color'=>'#b5ccd4']]` adds a low coastal mist. Base and top are meters above sea level. Density is optical depth per kilometer and color is the sRGB tint of scattered sunlight. A one-kilometer path at density 0.2 transmits about 82% of its direct light. Overlapping layers contribute together, and sight lines cross them in altitude order. Set `enabled` to false to hide a layer and keep its settings.
+
+The sky, reflected sky and distant terrain use cached scattering. Editing a color rebuilds the scattering caches. Changing an active layer's bounds or density also updates the sunlight transmittance texture. Camera rotation and repeated draws at a fixed altitude reuse the caches.
+
 Use `Atmosphere::setNightGlow($strength)` to set the blue night fill. The default is 0.5. Custom materials can read the linear RGB `nightAmbient` from `Atmosphere::uniforms()`. The glow and stars fade in between sunset and a solar elevation of −10°. The stars keep fixed directions as the camera moves.
 The world shadow map stores the elevation below which a ridge blocks the sun and the sunlit fraction of the
 terrain overview. Nearby ledges compare their own elevation against the ridge. As the mesh loses detail,

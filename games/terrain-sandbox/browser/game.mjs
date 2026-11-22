@@ -158,10 +158,12 @@ export function activate({module, canvas, session, services})
 
 	let surface = null;
 	const materials = materialEditor(frame, push, status);
+	const air = atmosphereEditor(frame, push);
 
 	shell.bridge('terrainSurface', json => {
 		surface = JSON.parse(json);
 		materials.configure(surface);
+		air.configure(surface.air);
 	});
 
 	for(const field of frame.querySelectorAll('[data-action]'))
@@ -490,6 +492,7 @@ export function activate({module, canvas, session, services})
 			}
 
 			materials.show(state);
+			air.show(state);
 
 			// Back on a gamepad switches the handling in PHP. Show it here and remember it.
 			if(state.jetControls && jetControls.value !== state.jetControls && document.activeElement !== jetControls)
@@ -1033,6 +1036,94 @@ const RELIEF_HELP = {
 };
 
 /** Keep unapplied structural edits in the panel while the renderer uses the committed stack. */
+// Changes are committed on blur or selection. Keep unfinished number edits across ordinary status updates.
+function atmosphereEditor(frame, push)
+{
+	const list = frame.querySelector('[data-air-list]');
+	const template = frame.querySelector('[data-air-template]');
+	const add = frame.querySelector('[data-air-add]');
+	let schema, generation = -1, serial = 0, pending = 0, accepted = '';
+
+	function row(values) {
+		const el = template.content.firstElementChild.cloneNode(true);
+		for(const input of el.querySelectorAll('[data-air-key]')) {
+			const key = input.dataset.airKey;
+			if(key==='top' || key==='bottom') input.max = schema.ceiling;
+			if(key==='density') input.max = schema.maxDensity;
+			if(key==='enabled') input.checked = values[key];
+			else input.value = values[key];
+		}
+		el.querySelector('legend').textContent = values.name;
+		return el;
+	}
+
+	function submit() {
+		const rows = [];
+		for(const el of list.children) {
+			const record = {};
+			const top = el.querySelector('[data-air-key=top]');
+			const base = el.querySelector('[data-air-key=bottom]');
+			top.setCustomValidity(top.valueAsNumber <= base.valueAsNumber ? 'Top must be above the base.' : '');
+			for(const input of el.querySelectorAll('[data-air-key]')) {
+				if(!input.reportValidity()) return;
+				record[input.dataset.airKey] = input.type==='checkbox' ? input.checked
+					: input.type==='number' ? input.valueAsNumber : input.value.trim();
+			}
+			el.querySelector('legend').textContent = record.name;
+			rows.push(record);
+		}
+		pending = ++serial;
+		push({type:'atmosphere-layers', layers:rows, request:pending});
+		add.disabled = rows.length >= schema.limit;
+	}
+
+	add.onclick = () => {
+		if(!schema || list.children.length >= schema.limit) return;
+		const names = new Set(Array.from(list.querySelectorAll('[data-air-key=name]'), el => el.value));
+		const first = schema.defaults.name;
+		let name = first;
+		for(let i=2; names.has(name); ++i) name = first + ' ' + i;
+		const el = row({...schema.defaults,name});
+		list.append(el);
+		submit();
+		el.querySelector('[data-air-key=name]').focus();
+	};
+	list.onchange = submit;
+	list.onclick = ({target}) => {
+		const remove = target.closest('[data-air-remove]');
+		if(remove) {
+			remove.closest('fieldset').remove();
+			submit();
+			add.focus();
+		}
+	};
+
+	return {
+		configure(value) { schema = value; add.disabled = false; },
+		show(state) {
+			if(!schema || !state.atmosphereLayers) return;
+			const replaced = generation !== state.generation;
+			if(!replaced && pending > state.atmosphereReply) return;
+			const key = JSON.stringify(state.atmosphereLayers);
+			if(!replaced && !pending && key===accepted) return;
+			generation = state.generation;
+			pending = 0;
+			accepted = key;
+			const rows = state.atmosphereLayers;
+			if(replaced || rows.length !== list.children.length) list.replaceChildren(...rows.map(row));
+			else for(const [i,el] of Array.from(list.children).entries()) {
+				el.querySelector('legend').textContent = rows[i].name;
+				for(const input of el.querySelectorAll('[data-air-key]')) {
+					const value = rows[i][input.dataset.airKey];
+					if(input.type==='checkbox') input.checked = value;
+					else if(input!==document.activeElement) input.value = value;
+				}
+			}
+			add.disabled = rows.length >= schema.limit;
+		}
+	};
+}
+
 function materialEditor(frame, push, status)
 {
 	let surface = null;
@@ -1694,6 +1785,20 @@ function markup()
 	)}
 	${range('Night glow', 'nightGlow', 0, 1, .01, .5)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
+	<h2>Atmospheric layers</h2>
+	<p class="terrain-note">Tint the air between two altitudes. A longer path through a layer gives it more color.</p>
+	<div data-air-list></div><div class="terrain-row"><button type="button" data-air-add disabled>Add atmosphere layer</button></div>
+	<template data-air-template><fieldset class="terrain-landform-group"><legend></legend>
+	<div class="terrain-grid">
+	<label class="terrain-field">Layer name<input type="text" maxlength="40" required data-air-key="name"></label>
+	<label class="terrain-field">Scattered light<input type="color" data-air-key="color"></label>
+	<label class="terrain-field">Base (m above sea level)<input type="number" min="0" step="any" required data-air-key="bottom"></label>
+	<label class="terrain-field">Top (m above sea level)<input type="number" min="0" step="any" required data-air-key="top"></label>
+	<div class="surface-field"><label class="terrain-field">Density per km<input type="number" min="0" step="any" required data-air-key="density"></label>
+	<small>At 0.1, about 90% of direct light crosses one kilometer. At 1, about 37% gets through.</small></div>
+	<label class="terrain-check"><input type="checkbox" data-air-key="enabled">Visible</label>
+	<div class="terrain-row"><button type="button" data-air-remove>Remove atmosphere layer</button></div>
+	</div></fieldset></template>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>

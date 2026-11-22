@@ -2481,6 +2481,13 @@ final class Scene
 			$this->scalar($this->starsProgram, 'uPixelScale', min(3.0, max(.8, $height / 720)));
 			$this->scalar($this->starsProgram, 'uNightVisibility', $environment['nightVisibility']);
 			$this->scalar($this->starsProgram, 'uExposure', $environment['exposure']);
+			$this->scalar($this->starsProgram, 'uAirLayerCount', $environment['airLayerCount']);
+			if($environment['airLayerCount']) {
+				$this->scalar($this->starsProgram, 'uStarLutHeight', sqrt(max(0.,min(1.,$camera->position[1]/$environment['atmosphereHeight']))));
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D,$this->textures[0]);
+				glUniform1i($this->starsProgram->location('uTransmittance'),0);
+			}
 			glEnable(GL_BLEND);
 			glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ZERO, GL_ONE);
 			glDrawArrays(GL_POINTS, 0, 2400);

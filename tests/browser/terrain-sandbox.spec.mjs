@@ -1313,6 +1313,47 @@ test('terrain without a mesh worker still renders and settles', async({page}) =>
 	expect((await settled(page)).renderer.visible).toBeGreaterThan(0);
 });
 
+test('atmospheric layers tint the scene, retain edits and settle while paused', async({page}) => {
+	const errors = [];
+	page.on('pageerror', e => errors.push(e.message));
+	await boot(page);
+	await settled(page);
+	await page.getByRole('tab', {name:'Sky',exact:true}).click();
+	const add = page.getByRole('button', {name:'Add atmosphere layer',exact:true});
+	const groups = page.locator('[data-air-list] fieldset');
+	await add.click();
+	await expect.poll(async()=>(await status(page)).atmosphereLayers.length).toBe(1);
+	const first = groups.nth(0);
+	await first.getByLabel('Layer name').fill('Sea mist');
+	await first.getByLabel('Layer name').press('Tab');
+	await first.getByLabel('Scattered light').fill('#6688aa');
+	await first.getByLabel('Top (m above sea level)',{exact:true}).fill('450');
+	await first.getByLabel('Top (m above sea level)',{exact:true}).press('Tab');
+	await first.getByLabel('Density per km').fill('0.4');
+	await first.getByLabel('Density per km').press('Tab');
+	await expect.poll(async()=>(await status(page)).atmosphereLayers[0]).toMatchObject({
+		name:'Sea mist',color:'#6688aa',bottom:0,top:450,density:.4,enabled:true
+	});
+	await add.click();
+	await expect.poll(async()=>(await status(page)).atmosphereLayers.length).toBe(2);
+	await groups.nth(1).getByLabel('Visible').uncheck();
+	await expect.poll(async()=>(await status(page)).atmosphereLayers[1].enabled).toBe(false);
+	const stable = await settled(page);
+	await page.waitForTimeout(500);
+	expect((await status(page)).renderer.frames).toBe(stable.renderer.frames);
+	const saved = await save(page);
+	expect(saved.atmosphereLayers).toEqual(stable.atmosphereLayers);
+	await load(page,fixture());
+	await expect(groups).toHaveCount(0);
+	await load(page,saved);
+	await page.getByRole('tab',{name:'Sky',exact:true}).click();
+	await expect(first.getByLabel('Layer name')).toHaveValue('Sea mist');
+	await expect(groups.nth(1).getByLabel('Visible')).not.toBeChecked();
+	await first.getByRole('button',{name:'Remove atmosphere layer'}).click();
+	await expect.poll(async()=>(await status(page)).atmosphereLayers.length).toBe(1);
+	expect(errors).toEqual([]);
+});
+
 test('terrain controls preserve input focus and return paused rendering to idle', async({page}) => {
 	test.setTimeout(240_000);
 	const errors = [];

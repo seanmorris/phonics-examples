@@ -14,6 +14,7 @@ final class Atmosphere
 
 	/** Physical and display parameters, separate from the cached optical-depth integration. */
 	private array $parameters;
+	private AtmosphereLayers $air;
 	/** Most recently requested transmittance texture; bounded to one resolution per instance. */
 	private ?array $lut = null;
 	/** Signature and generation of the last numerical texture. */
@@ -27,6 +28,8 @@ final class Atmosphere
 	 */
 	public function __construct(array $options = [])
 	{
+		$layers = $options['layers'] ?? [];
+		unset($options['layers']);
 		$this->parameters = array_replace([
 			'planetRadius' => 6371000.0
 			, 'atmosphereHeight' => 80000.0
@@ -39,7 +42,7 @@ final class Atmosphere
 			, 'haze' => 1.0
 			, 'sunDirection' => [.3,.8,.2]
 			, 'sunIntensity' => 20.0
-			, 'angularRadius' => .004675
+			, 'angularRadius' => .00935
 			, 'exposure' => 1.0
 			, 'nightGlow' => self::DEFAULT_NIGHT_GLOW
 		], $options
@@ -74,7 +77,18 @@ final class Atmosphere
 		throw new \InvalidArgumentException('Invalid Rayleigh coefficient');
 
 		$this->parameters['sunDirection'] = self::direction($this->parameters['sunDirection']);
+		$this->setLayers($layers);
 	}
+
+	/** Replace the authored aerosol shells together. Only a change to extinction invalidates sunlight. */
+	public function setLayers(array $rows): void
+	{
+		$next = new AtmosphereLayers($rows, $this->parameters['atmosphereHeight']);
+		if(!isset($this->air) || $this->air->bands !== $next->bands) $this->lut = null;
+		$this->air = $next;
+	}
+
+	public function layers(): array { return $this->air->rows; }
 
 	/**
 	 * Move the sun without rebuilding the transmittance texture, which does not depend on sunlight.
@@ -142,7 +156,7 @@ final class Atmosphere
 		return [
 			'nightVisibility' => $night
 			, 'nightAmbient' => [.075 * $strength, .15 * $strength, .60 * $strength]
-		] + $this->parameters + [
+		] + $this->parameters + $this->air->uniforms + [
 			'transmittanceSize' => [$this->lut['width'] ?? 0,$this->lut['height'] ?? 0]
 			, 'lutGeneration' => $this->lutGeneration
 		];
@@ -157,10 +171,22 @@ final class Atmosphere
 	 */
 	public function transmittance(float $altitude, float $cosZenith, int $samples = 48): array
 	{
+		$airTransmission = 1.;
+		return $this->traceTransmission($altitude,$cosZenith,$samples,$airTransmission);
+	}
+
+	private function traceTransmission(float $altitude, float $cosZenith, int $samples, float &$airTransmission): array
+	{
 		[$altitude,$cosZenith] = $this->coordinates($altitude, $cosZenith);
 		$samples = max(8, min(256, $samples));
 		[$distance,$ground] = $this->boundary($altitude, $cosZenith);
 
+		$airDepth = 0.;
+		if($this->air->bands) {
+			$spans = $this->air->spans($this->parameters['planetRadius'],$altitude,$cosZenith);
+			$airDepth = $this->air->opticalDepth($spans,$distance);
+		}
+		$airTransmission = exp(-$airDepth);
 		if($ground) return [0.0,0.0,0.0];
 
 		$dr = $dm = 0.0;
@@ -173,7 +199,7 @@ final class Atmosphere
 			$dm += exp(-$h / $this->parameters['mieHeight']) * $step;
 		}
 
-		return $this->attenuation($dr, $dm);
+		return $this->attenuation($dr, $dm, $airDepth);
 	}
 
 	/**
@@ -182,6 +208,7 @@ final class Atmosphere
 	 * @param int $height Altitude samples, between two and 256.
 	 * @param int $samples Optical-depth samples per texel, between eight and 256.
 	 * @return array Width/height, RGB float data, RGBA32F little-endian bytes, RGBA8 bytes, and generation.
+	 * Alpha carries transmission through the authored layers for the night sky and stars.
 	 * Texel X encodes sign(mu)*sqrt(abs(mu)); texel Y encodes sqrt(altitude/atmosphereHeight).
 	 */
 	public function transmittanceLut(int $width = 128, int $height = 32, int $samples = 48): array
@@ -201,13 +228,14 @@ final class Atmosphere
 		{
 			$altitude = ($y / ($height - 1)) ** 2 * $this->parameters['atmosphereHeight'];
 			$u = 2 * $x / ($width - 1) - 1;
-			$rgb = $this->transmittance($altitude, $u * abs($u), $samples);
+			$airTransmission = 1.;
+			$rgb = $this->traceTransmission($altitude, $u * abs($u), $samples, $airTransmission);
 			array_push($data, ...$rgb);
-			$bytes .= pack('g4', ...[...$rgb,1.0]);
+			$bytes .= pack('g4', ...[...$rgb,$airTransmission]);
 
 			foreach($rgb as $channel) $rgba8 .= chr((int)round(255 * $channel));
 
-			$rgba8 .= chr(255);
+			$rgba8 .= chr((int)round(255 * $airTransmission));
 		}
 
 		$this->lutKey = $key;
@@ -240,9 +268,27 @@ final class Atmosphere
 		$rgb = [0.0,0.0,0.0];
 		$radius = $this->parameters['planetRadius'] + $altitude;
 
-		for($i = 0; $i < $samples; $i++)
-		{
-			$d = ($i + .5) * $step;
+		// Split the molecular quadrature at every shell crossing. Even a thin layer gets its own segment.
+		$spans = $this->air->spans($this->parameters['planetRadius'],$altitude,$mu);
+		$ends = [];
+		for($i = 1; $i <= $samples; ++$i) $ends[] = $i * $step;
+		foreach($spans as $span)
+			foreach($span as $crossing) if($crossing > 0 && $crossing < $distance) $ends[] = $crossing;
+		if($spans) sort($ends,SORT_NUMERIC);
+		$start = $airDepth = 0.;
+		foreach($ends as $end) {
+			$step = $end - $start;
+			if($step <= 0) continue;
+			$d = $start + .5 * $step;
+			$start = $end;
+			$depth = 0.;
+			$scatter = [0.,0.,0.];
+			foreach($spans as $j => [$enter,$exit,$innerEnter,$innerExit]) {
+				if($d < $enter || $d >= $exit || ($d >= $innerEnter && $d < $innerExit)) continue;
+				$tau = $this->air->bands[$j][2] * $step;
+				$depth += $tau;
+				foreach($this->air->colors[$j] as $c=>$tint) $scatter[$c] += $tau * $tint;
+			}
 			$h = $this->rayAltitude($altitude, $mu, $d);
 			$r = exp(-$h / $this->parameters['rayleighHeight']) * $step;
 			$m = exp(-$h / $this->parameters['mieHeight']) * $step;
@@ -251,14 +297,17 @@ final class Atmosphere
 			) / ($this->parameters['planetRadius'] + $h);
 
 			$light = $this->transmittance($h, $sunMu, 32);
-			$view = $this->attenuation($dr + .5 * $r, $dm + .5 * $m);
+			$view = $this->attenuation($dr + .5 * $r, $dm + .5 * $m, $airDepth);
+			// Average Beer-Lambert transmission within this constant-density segment.
+			$weight = $depth > .001 ? (1 - exp(-$depth)) / $depth : 1 - .5 * $depth;
 
 			for($channel = 0; $channel < 3; $channel++)
 			$rgb[$channel] += $view[$channel] * $light[$channel] * $this->parameters['sunIntensity']
-				* ($r * $this->parameters['rayleigh'][$channel] * $phaseR
-					+ $m * $this->parameters['mie'] * $this->parameters['haze'] * $phaseM
+				* $weight * ($r * $this->parameters['rayleigh'][$channel] * $phaseR
+					+ $m * $this->parameters['mie'] * $this->parameters['haze'] * $phaseM + $scatter[$channel] / (4 * M_PI)
 				);
 
+			$airDepth += $depth;
 			$dr += $r;
 			$dm += $m;
 		}
@@ -266,13 +315,13 @@ final class Atmosphere
 		if(!$ground && $nu >= cos($this->parameters['angularRadius']))
 		{
 			$disk = $this->parameters['sunIntensity'] / (2 * M_PI * (1 - cos($this->parameters['angularRadius'])));
-			$view = $this->attenuation($dr, $dm);
+			$view = $this->attenuation($dr, $dm, $airDepth);
 
 			for($channel = 0; $channel < 3; $channel++) $rgb[$channel] += $view[$channel] * $disk;
 		}
 
 		$gradient = max(0.0, min(1.0, $ray[1]));
-		$glow = .27 - .17 * $gradient * (2 - $gradient);
+		$glow = exp(-$airDepth) * (.27 - .17 * $gradient * (2 - $gradient));
 		foreach($this->uniforms()['nightAmbient'] as $channel => $fill) $rgb[$channel] += $fill * $glow;
 		return $rgb;
 	}
@@ -309,13 +358,13 @@ final class Atmosphere
 	 * @param float $mie Integrated aerosol density in meters.
 	 * @return array Three Beer-Lambert transmittances.
 	 */
-	private function attenuation(float $rayleigh, float $mie): array
+	private function attenuation(float $rayleigh, float $mie, float $airDepth = 0.): array
 	{
 		$extinction = $this->parameters['mie'] * $this->parameters['haze'] / $this->parameters['mieAlbedo'];
 
 		$result = [];
 
-		foreach($this->parameters['rayleigh'] as $beta) $result[] = exp(-$beta * $rayleigh - $extinction * $mie);
+		foreach($this->parameters['rayleigh'] as $beta) $result[] = exp(-$beta * $rayleigh - $extinction * $mie - $airDepth);
 
 		return $result;
 	}

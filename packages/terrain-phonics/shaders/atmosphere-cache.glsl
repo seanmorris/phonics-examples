@@ -40,7 +40,7 @@ vec3 skyRadiance(vec3 ray, float altitude, float angularFootprint, bool includeS
 	else radiance = terrainSkyCacheSample(uSkyCacheWater, ray);
 	if(includeSolarDisk)
 		radiance += terrainSolarDisk(ray,altitude,terrainTransmittance(altitude,ray.y),angularFootprint);
-	return radiance + terrainNightSky(ray.y);
+	return radiance + terrainNightSkyThroughLayers(altitude,ray.y);
 }
 
 vec3 skyRadiance(vec3 ray, float altitude, float angularFootprint)

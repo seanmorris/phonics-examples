@@ -12,6 +12,7 @@ use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
+use TerrainPhonics\AtmosphereLayers;
 use TerrainPhonics\Recipe;
 use TerrainSandbox\Car;
 use TerrainSandbox\DeliveryBeacon;
@@ -77,6 +78,8 @@ $hudShown = false;
 (vrzno_env('terrainSurface'))(json_encode(['masks'=>TerrainPhonics\SurfaceLayers::MASKS,'fields'=>TerrainPhonics\SurfaceLayers::FIELDS,
 	'relief'=>TerrainPhonics\SurfaceLayers::RELIEF,'channels'=>TerrainPhonics\SurfaceLayers::CHANNELS,
 	'patterns'=>TerrainPhonics\SurfaceLayers::PATTERNS,'limit'=>TerrainPhonics\SurfaceLayers::LIMIT,
+	'air'=>['defaults'=>AtmosphereLayers::DEFAULTS,'limit'=>AtmosphereLayers::LIMIT,'maxDensity'=>AtmosphereLayers::MAX_DENSITY,
+		'ceiling'=>$session->atmosphere->uniforms()['atmosphereHeight']],
 	'layerDefaults'=>TerrainPhonics\SurfaceLayers::DEFAULTS,'ranges'=>TerrainPhonics\TerrainAppearance::RANGES
 		+ array_map(static fn($v)=>array_slice($v,1),TerrainPhonics\SurfaceLayers::SCALES),
 	'inkKeys'=>TerrainPhonics\SurfaceLayers::INKS,'fieldKeys'=>[...TerrainPhonics\SurfaceLayers::FIELD_KEYS,...array_keys(TerrainPhonics\SurfaceLayers::SCALES)],

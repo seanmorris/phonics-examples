@@ -1673,4 +1673,26 @@ expect(in_array('relief-ribs',array_column($materials->activeLayers()->layers,'i
 	'A version-four mountain with no custom layers recovers the complete preset.');
 $materials->close();
 
+$sky = new Session;
+$original = json_decode($sky->save(),true);
+unset($original['atmosphereLayers']);
+$rows = [['name'=>'Sea fog','top'=>400.,'color'=>'#a1c3cc'], ['name'=>'Dust','bottom'=>1400.,'top'=>2400.,'enabled'=>false]];
+input($sky,['actions'=>[['type'=>'atmosphere-layers','layers'=>$rows,'request'=>11]]]);
+$authored = $sky->status()['atmosphereLayers'];
+expect(count($authored)===2 && $sky->status()['atmosphereReply']===11 && $authored[1]['enabled']===false,
+	'Sky controls retain disabled layers and acknowledge committed edits.');
+input($sky,['actions'=>[['type'=>'generate','preset'=>'basalt-fjords']]]);
+expect($sky->atmosphere->layers()===$authored,'Generating another landform preserves the authored atmosphere.');
+$file = $sky->save();
+$sky->load(json_encode($original));
+expect($sky->atmosphere->layers()===[],'An earlier save restores clear air over its own landscape.');
+$sky->load($file);
+expect($sky->atmosphere->layers()===$authored,'Atmosphere layers round-trip with their titles, heights, densities, colors and visibility.');
+$bad = json_decode($file,true);
+$bad['atmosphereLayers'][1]['top']=100.;
+$beforeFailure = $sky->save();
+try { $sky->load(json_encode($bad)); expect(false,'Reject inverted atmosphere bounds'); }
+catch(InvalidArgumentException) { expect($sky->save()===$beforeFailure,'A malformed layer leaves the complete live session intact.'); }
+$sky->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

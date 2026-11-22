@@ -14,6 +14,10 @@ uniform float uPlanetRadius;
 uniform float uAtmosphereHeight;
 uniform float uRayleighHeight;
 uniform float uMieHeight;
+// Bounds in meters, extinction per meter, and single-scattering albedo in linear RGB.
+const int TERRAIN_AIR_LAYERS = 6;
+uniform float uAirLayerCount;
+uniform vec3 uAirBand[TERRAIN_AIR_LAYERS], uAirColor[TERRAIN_AIR_LAYERS];
 uniform sampler2D uTransmittance;
 uniform vec2 uTransmittanceSize;
 const float TERRAIN_PI = 3.141592653589793;
@@ -49,23 +53,34 @@ float terrainAtmosphereBoundary(float altitude, float mu, out bool ground)
 	return terrainAtmosphereExit(altitude, mu);
 }
 
-vec3 terrainTransmittance(float altitude, float mu)
+vec4 terrainOpticalLookup(float altitude, float mu)
 {
 	altitude = clamp(altitude, 0.0, uAtmosphereHeight);
 	mu = clamp(mu, -1.0, 1.0);
-	bool ground;
-	terrainAtmosphereBoundary(altitude, mu, ground);
-	if(ground) return vec3(0.0);
 	vec2 uv = vec2(0.5 + 0.5 * sign(mu) * sqrt(abs(mu)), sqrt(altitude / uAtmosphereHeight));
 	vec2 pixel = uv * (uTransmittanceSize - 1.0);
 	ivec2 low = ivec2(floor(pixel));
 	ivec2 high = min(low + ivec2(1), ivec2(uTransmittanceSize) - ivec2(1));
 	vec2 weight = fract(pixel);
-	vec3 a = mix(texelFetch(uTransmittance, low, 0).rgb,
-		texelFetch(uTransmittance, ivec2(high.x, low.y), 0).rgb, weight.x);
-	vec3 b = mix(texelFetch(uTransmittance, ivec2(low.x, high.y), 0).rgb,
-		texelFetch(uTransmittance, high, 0).rgb, weight.x);
+	vec4 a = mix(texelFetch(uTransmittance, low, 0),
+		texelFetch(uTransmittance, ivec2(high.x, low.y), 0), weight.x);
+	vec4 b = mix(texelFetch(uTransmittance, ivec2(low.x, high.y), 0),
+		texelFetch(uTransmittance, high, 0), weight.x);
 	return mix(a, b, weight.y);
+}
+
+vec3 terrainTransmittance(float altitude, float mu)
+{
+	bool ground;
+	terrainAtmosphereBoundary(clamp(altitude,0.0,uAtmosphereHeight), clamp(mu,-1.0,1.0), ground);
+	return ground ? vec3(0.0) : terrainOpticalLookup(altitude,mu).rgb;
+}
+
+vec3 terrainNightSkyThroughLayers(float altitude, float mu)
+{
+	vec3 glow = terrainNightSky(mu);
+	if(uAirLayerCount > 0.0 && uNightAmbient.b > 0.0) glow *= terrainOpticalLookup(altitude,mu).a;
+	return glow;
 }
 
 vec3 terrainSunlight(float altitude)
@@ -78,6 +93,16 @@ vec3 terrainAtmosphereAttenuation(vec2 opticalDepth)
 	return exp(-uRayleigh * opticalDepth.x - vec3(uMie * uHaze / uMieAlbedo * opticalDepth.y));
 }
 
+// Forward interval inside a sphere, using factored roots to preserve low-altitude precision.
+vec2 terrainInsideSphere(float eye, float projection, float height)
+{
+	float delta = (height - eye) * (2.0 * uPlanetRadius + height + eye);
+	float discriminant = projection * projection + delta;
+	if(discriminant <= 0.0) return vec2(0.0);
+	float q = abs(projection) + sqrt(discriminant);
+	return projection >= 0.0 ? vec2(0.0, max(0.0, delta / q)) : vec2(max(0.0, -delta / q), q);
+}
+
 void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanceMeters, bool visibleSurface,
 	out vec3 transmittance, out vec3 radiance)
 {
@@ -87,28 +112,63 @@ void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanc
 	// The depth-tested terrain or water is the endpoint of a visible scene ray, including inside canyons.
 	float distanceToBoundary = visibleSurface ? terrainAtmosphereExit(altitude, ray.y)
 		: terrainAtmosphereBoundary(altitude, ray.y, ground);
-	float stepSize = min(max(0.0, distanceMeters), distanceToBoundary) / 12.0;
+	float distanceToEnd = min(max(0.0, distanceMeters), distanceToBoundary);
+	float stepSize = distanceToEnd / 12.0;
 	float radius = uPlanetRadius + altitude;
+	int count = int(uAirLayerCount);
+	vec4 spans[TERRAIN_AIR_LAYERS];
+	for(int j = 0; j < count; ++j) {
+		spans[j] = vec4(terrainInsideSphere(altitude,radius*ray.y,uAirBand[j].y),
+			terrainInsideSphere(altitude,radius*ray.y,uAirBand[j].x));
+	}
 	float nu = clamp(dot(ray, uSunDirection), -1.0, 1.0);
 	float phaseR = 3.0 * (1.0 + nu * nu) / (16.0 * TERRAIN_PI);
 	float phaseM = (1.0 - uMieG * uMieG)
 		/ (4.0 * TERRAIN_PI * pow(1.0 + uMieG * uMieG - 2.0 * uMieG * nu, 1.5));
 	vec2 opticalDepth = vec2(0.0);
 	radiance = vec3(0.0);
-	for(int i = 0; i < 12; ++i)
-	{
-		float distanceAlong = (float(i) + 0.5) * stepSize;
+	float start = 0.0;
+	float airDepth = 0.0;
+	int sampleEnd = 1;
+	// A ray may enter and leave a shell twice. Split at its boundaries so narrow or overlapping
+	// bands are integrated in viewing order, even when an entire band fits between two regular samples.
+	for(int i = 0; i < 12 + 4 * TERRAIN_AIR_LAYERS && start < distanceToEnd; ++i) {
+		float regular = sampleEnd < 12 ? float(sampleEnd) * stepSize : distanceToEnd;
+		float end = regular;
+		for(int j = 0; j < count; ++j) {
+			vec4 span = spans[j];
+			if(span.x > start) end = min(end,span.x);
+			if(span.y > start) end = min(end,span.y);
+			if(span.z > start) end = min(end,span.z);
+			if(span.w > start) end = min(end,span.w);
+		}
+		if(end == regular) ++sampleEnd;
+		float lengthMeters = end - start;
+		float distanceAlong = start + .5 * lengthMeters;
+		start = end;
+		float layerDepth = 0.0;
+		vec3 layerScatter = vec3(0.0);
+		for(int j = 0; j < count; ++j) {
+			vec4 span = spans[j];
+			if(distanceAlong < span.x || distanceAlong >= span.y ||
+				(distanceAlong >= span.z && distanceAlong < span.w)) continue;
+			float tau = lengthMeters * uAirBand[j].z;
+			layerDepth += tau;
+			layerScatter += tau * uAirColor[j];
+		}
 		float height = terrainAtmosphereAltitude(altitude, ray.y, distanceAlong);
-		vec2 density = exp(-height / vec2(uRayleighHeight, uMieHeight)) * stepSize;
+		vec2 density = exp(-height / vec2(uRayleighHeight, uMieHeight)) * lengthMeters;
 		vec3 position = vec3(ray.x * distanceAlong, radius + ray.y * distanceAlong, ray.z * distanceAlong);
 		float sunMu = dot(position, uSunDirection) / (uPlanetRadius + height);
 		vec3 light = terrainTransmittance(height, sunMu);
-		vec3 view = terrainAtmosphereAttenuation(opticalDepth + density * 0.5);
-		radiance += view * light * uSunIntensity
-			* (density.x * uRayleigh * phaseR + density.y * vec3(uMie * uHaze * phaseM));
+		vec3 view = terrainAtmosphereAttenuation(opticalDepth + density * 0.5) * exp(-airDepth);
+		float weight = layerDepth > .001 ? (1.0 - exp(-layerDepth)) / layerDepth : 1.0 - .5 * layerDepth;
+		radiance += view * weight * light * uSunIntensity * (density.x * uRayleigh * phaseR
+			+ density.y * vec3(uMie * uHaze * phaseM) + layerScatter / (4.0 * TERRAIN_PI));
+		airDepth += layerDepth;
 		opticalDepth += density;
 	}
-	transmittance = terrainAtmosphereAttenuation(opticalDepth);
+	transmittance = terrainAtmosphereAttenuation(opticalDepth) * exp(-airDepth);
 }
 
 vec3 terrainSolarDisk(vec3 ray, float altitude, vec3 transmittance, float angularFootprint)
@@ -141,7 +201,7 @@ vec3 skyRadiance(vec3 ray, float altitude, float angularFootprint, bool includeS
 	vec3 radiance;
 	terrainIntegrateAtmosphere(ray, altitude, 1e20, false, transmittance, radiance);
 	if(includeSolarDisk) radiance += terrainSolarDisk(ray,altitude,transmittance,angularFootprint);
-	return radiance + terrainNightSky(ray.y);
+	return radiance + terrainNightSkyThroughLayers(altitude,ray.y);
 }
 
 vec3 skyRadiance(vec3 ray, float altitude, float angularFootprint)

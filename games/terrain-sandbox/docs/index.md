@@ -59,7 +59,9 @@ A projectile follows the balloon selected at launch if you have a lock. Otherwis
 
 ## Watch the atmosphere
 
-Sun azimuth moves the sun around the horizon; elevation raises or lowers it. Haze controls aerosols, and Exposure adjusts the displayed brightness. Enable **Animate the sun** to see the light move over time.
+**Sun azimuth** moves the sun around the horizon. **Sun elevation** raises or lowers it. **Haze** adjusts aerosol scattering throughout the atmosphere, and **Exposure** adjusts display brightness. Enable **Animate the sun** to watch the light move.
+
+In **Sky**, choose **Add atmosphere layer** to tint a band of air. Set its base and top in meters above sea level, then choose the color of the scattered light. A low mist can soften the far shore while leaving summits clear. Looking along a layer shows more color than looking through it from above. **Density per km** controls how quickly the effect builds with distance. Uncheck **Visible** to compare the scene. Layers are saved with the landscape.
 
 As the sun drops below the horizon, stars appear and a blue ambient light picks out the terrain, water, and jet ski. **Night glow** sets the strength of the sky glow and this reflected light. At zero you can see the stars against a dark sky. Set **Sun elevation** to −12° for a quick night preview. The glow setting travels with the saved landscape.
 

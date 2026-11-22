@@ -8,6 +8,7 @@ use TerrainPhonics\Landscape;
 use TerrainPhonics\RayQuery;
 use TerrainPhonics\Scene;
 use TerrainPhonics\SurfaceLayers;
+use TerrainPhonics\AtmosphereLayers;
 use TerrainPhonics\TerrainAppearance;
 use TerrainPhonics\Water;
 use TerrainPhonics\WaterAppearance;
@@ -114,6 +115,7 @@ final class Session
 	public ?TerrainAppearance $paint = null;
 	public ?\Closure $prepareMaterial = null;
 	private int $materialReply = 0;
+	private int $atmosphereReply = 0;
 	private ?string $materialPreset = null;
 	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes'];
 
@@ -899,6 +901,12 @@ final class Session
 			case 'redo':
 				$this->message = $this->editable()->redo() ? 'Redid the terrain transaction.' : 'Nothing to redo.';
 				break;
+			case 'atmosphere-layers':
+				$this->atmosphereReply = (int)($action['request'] ?? 0);
+				if(!is_array($action['layers'] ?? null)) throw new \InvalidArgumentException('Expected a list of atmosphere layers.');
+				$this->atmosphere->setLayers($action['layers']);
+				$this->dirty = true;
+				break;
 			case 'surface-layers':
 				$this->setMaterial($action);
 				$this->materialReply = (int)($action['request'] ?? 0);
@@ -1632,6 +1640,7 @@ final class Session
 		foreach($rows as &$row) if($row['parent'] >= 0) $row['parent'] = $stack->layers[$row['parent']]['id'];
 		unset($row);
 		$document = ['schema' => 'phonics-landscape-sandbox','version' => 5,
+			'atmosphereLayers'=>$this->atmosphere->layers(),
 			'surface'=>['origin'=>$this->surfaceLayers ? 'authored' : 'preset',
 				'preset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),
 				'layers'=>$rows,'fields'=>$stack->fields,'bounce'=>$stack->bounce,'paint'=>$this->paintInks(),'paintAuthored'=>$this->paint !== null],
@@ -1724,6 +1733,9 @@ final class Session
 		{
 			// Both appearances come from the whole file at once, so a blend's start and end apply together, and a bad
 			// file throws here, before anything changes. A file without terrain settings draws the defaults.
+			if(array_key_exists('atmosphereLayers',$data) && !is_array($data['atmosphereLayers']))
+				throw new \InvalidArgumentException('Invalid saved atmosphere layers.');
+			$air = new AtmosphereLayers($data['atmosphereLayers'] ?? [], $this->atmosphere->uniforms()['atmosphereHeight']);
 			$appearance = new WaterAppearance($settings);
 			$terrain = new TerrainAppearance($settings);
 			$generated = SurfaceLayers::landscape($candidate->recipe(),$terrain);
@@ -1770,6 +1782,7 @@ final class Session
 		catch(\Throwable $error) { $candidate->close(); throw $error; }
 		$this->replace($candidate);
 		$this->balloons = $balloons;
+		$this->atmosphere->setLayers($air->rows);
 		$this->setWaterAppearance($appearance);
 		$this->setTerrainAppearance($terrain);
 		$this->surfaceLayers=$layers;
@@ -1810,6 +1823,7 @@ final class Session
 		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
+			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereReply'=>$this->atmosphereReply,
 			'settings' => $this->settings,'surfaceLayers'=>$this->activeLayers()->layers,'materialReply'=>$this->materialReply,'surfaceOrigin'=>$this->surfaceLayers ? 'authored' : 'preset',
 			'surfacePreset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),
 			'surfaceFields'=>$this->activeLayers()->fields,'paintInks'=>$this->paintInks(),
