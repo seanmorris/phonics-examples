@@ -262,9 +262,9 @@ the order of `DEFAULTS`, with colors in lower case. `GROUPS` lists the settings 
 `TerrainAppearance::linear($hex)` converts one color to linear RGB and throws `InvalidArgumentException` for anything
 but a six-digit hex string.
 
-Coast starts with grass, exposed rock, shore sand and snow. Its optional coastal bands have zero coverage. Mountain Ridges uses reusable fields for jointed slabs, iron stains, lichen, talus and forest crowns. On Mountain Ridges, dark conifers give way to straw-colored meadow, cool granite and blue-white snow. Early canyons have horizontal strata, and current canyons use dipping beds. Limestone Plain sets jade-green valleys against warm ivory karst and pale calcite veins.
+Coast starts with grass, exposed rock, shore sand and snow. Its optional coastal bands have zero coverage. Mountain Ridges uses reusable fields for jointed slabs, iron stains, lichen, talus and forest crowns. On Mountain Ridges, dark conifers give way to sage-green meadow, cool granite and blue-white snow. Early canyons have horizontal strata, and current canyons use dipping beds. Limestone Plain sets deep green valleys against silver-gray karst and pale calcite veins.
 
-Basalt Fjords pairs copper-brown heath with charcoal-blue lava faces, dark tidal gravel and green-blue water. Weathered flow contacts break across the cliffs. Amber Dunes puts fine wind ripples on sand and flattens them where gravel or salt covers the basin floor. Each preset has an editable surface stack, and the five paint inks cover any of these surfaces.
+Basalt Fjords pairs smoky olive heath with charcoal-blue lava faces, dark tidal gravel and green-blue water. Weathered flow contacts break across the cliffs. Amber Dunes puts fine wind ripples on sand and flattens them where gravel or salt covers the basin floor. Each preset has an editable surface stack, and the five paint inks cover any of these surfaces.
 
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 

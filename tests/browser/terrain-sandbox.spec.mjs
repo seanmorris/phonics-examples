@@ -1787,14 +1787,14 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('limestone');
 	const {surfaceLayers} = await status(page);
-	expect(surfaceLayers[0]).toMatchObject({color: '#427648', pattern: 'fractal'});
+	expect(surfaceLayers[0]).toMatchObject({color: '#3e624e', pattern: 'fractal'});
 	const veins = surfaceLayers.find(layer => layer.pattern === 'veins');
-	expect(surfaceLayers[veins.parent].color).toBe('#c7b58f');
+	expect(surfaceLayers[veins.parent].color).toBe('#8a9193');
 	const document = await save(page);
 	expect(document.landscape.recipe).toMatchObject({seed: 'limestone-plain', version: 2, heightScale: 3950,
 		wallWidth: .91, terraceSpacing: 175, terraceStrength: .44});
 	expect(document.camera.position).toEqual([2440, 105, -4880]);
-	expect(document.settings).toMatchObject({grassColor: '#427648', snowline: 3000, waterLevel: -40, azimuth: 106});
+	expect(document.settings).toMatchObject({grassColor: '#3e624e', snowline: 3000, waterLevel: -40, azimuth: 106});
 	await preset.selectOption('coast');
 	await expect(seed).toHaveValue('first-light');
 	await seed.fill('my-karst');

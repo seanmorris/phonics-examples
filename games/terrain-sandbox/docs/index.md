@@ -12,7 +12,7 @@ On the **Landscape** tab, expand **Landform parameters** to see what each settin
 
 In **Surface**, open a named material layer to edit its color, coverage or relief. Choose **Load preset surface** to use another preset’s materials on this landform. **Follow landform preset** resumes automatic selection when generating terrain. Paint inks cover the completed stack, so a painted road stays visible when the surrounding ground changes. [Shape a landscape](authoring.md#author-a-surface) includes a sand-ripple example.
 
-**Basalt Fjords** pairs copper-brown heath with blue-black cliffs and dark tidal gravel. **Limestone Plain** has jade-green valleys and ivory karst. **Mountain Ridges** grades from spruce forest through straw-colored meadow to blue-gray granite and snow.
+**Basalt Fjords** pairs smoky olive heath with blue-black cliffs and dark tidal gravel. **Limestone Plain** has deep green valleys and silver-gray karst. **Mountain Ridges** grades from spruce forest through sage-green meadow to blue-gray granite and snow.
 
 ## Fly over the landscape
 
