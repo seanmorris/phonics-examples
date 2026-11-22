@@ -151,7 +151,7 @@ control sets the amount visible.
 
 Pass a list to `Atmosphere::setLayers()` to add up to six colored aerosol layers. For example, `[['name'=>'Sea mist', 'bottom'=>0, 'top'=>350, 'density'=>0.2, 'color'=>'#b5ccd4']]` adds a low coastal mist. Base and top are meters above sea level. Density is optical depth per kilometer and color is the sRGB tint of scattered sunlight. A one-kilometer path at density 0.2 transmits about 82% of its direct light. Overlapping layers contribute together, and sight lines cross them in altitude order. Set `enabled` to false to hide a layer and keep its settings.
 
-The sky, reflected sky and distant terrain use cached scattering. Editing a color rebuilds the scattering caches. Changing an active layer's bounds or density also updates the sunlight transmittance texture. Camera rotation and repeated draws at a fixed altitude reuse the caches.
+The sky, reflected sky and distant terrain use cached scattering. Editing a color rebuilds the scattering caches. The sunlight transmittance texture holds clear air only; the shaders add each active layer's extinction exactly, because the texture's altitude rows are too far apart for sub-kilometer layers. Changing a layer's bounds or density still rebuilds the texture, whose alpha keeps the layers' transmission. Camera rotation and repeated draws at a fixed altitude reuse the caches.
 
 Use `Atmosphere::setNightGlow($strength)` to set the blue night fill. The default is 0.5. Custom materials can read the linear RGB `nightAmbient` from `Atmosphere::uniforms()`. The glow and stars fade in between sunset and a solar elevation of −10°. The stars keep fixed directions as the camera moves.
 The world shadow map stores the elevation below which a ridge blocks the sun and the sunlit fraction of the
@@ -308,8 +308,8 @@ Colors are sRGB hex strings.
 | --- | --- | --- |
 | `grassColor` | `#425b2d` | Grass cover on coast and mountain terrain, and grass paint. |
 | `soilColor` | `#815f40` | Base soil color on version-one canyons. |
-| `rockColor` | `#867c6f` | Rock between the light bands on coast and version-one canyon terrain. |
-| `rockBandColor` | `#af957c` | The light bands in that rock. |
+| `rockColor` | `#867c6f` | Exposed rock, and the rock between the light bands on version-one canyon terrain. |
+| `rockBandColor` | `#af957c` | The light bands in version-one canyon rock, and the coast's optional bands, which have zero coverage by default. |
 | `sandColor` | `#bfaf8b` | Sand on level ground near the water, and sand paint. |
 | `snowColor` | `#eaf1f8` | Snow on coast and mountain terrain, and snow paint. |
 | `roadColor` | `#373b3d` | Road paint. |
@@ -333,7 +333,7 @@ follow, so each derived channel stops at 1: red beds under a white rust are whit
 
 | Setting | Default | Range | Effect |
 | --- | --- | --- | --- |
-| `bandSpacing` | 52.36 m (2π / 0.12) | 5 to 1000 | Height of one dark and one light band in coast and version-one canyon rock. |
+| `bandSpacing` | 52.36 m (2π / 0.12) | 5 to 1000 | Height of one dark and one light band in version-one canyon rock, and in the coast's optional bands. |
 | `bandContrast` | 1 | 0 to 1 | 0 paints banded rock one color: halfway between the two rock colors, or the canyon's distant color. |
 | `bandSharpness` | 1 | 1 to 8 | Higher values narrow the transitions between canyon beds. |
 
