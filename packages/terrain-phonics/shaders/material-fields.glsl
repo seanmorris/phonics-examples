@@ -129,20 +129,16 @@
 	float scree = coverFraction(talusShare, .8*rill - 1.5*gully + .65*ragged + 1.4*rubbleCover + 1.3*macro);
 	// One family of granite fractures follows the face down, the other cuts across
 	// the dip. Sample through the rock so both continue around a change of aspect.
-	vec2 strike = mat2(.8,.6,-.6,.8)*pos.xz;
-	vec3 bedrock = vec3(strike.x/sizes.z,(pos.y+.26*strike.x-.13*strike.y)/sizes.w,strike.y/sizes.z);
+	vec3 bedrock = slabCoordinates(pos,sizes.zw);
 	float slabWidth = min(sizes.z,sizes.w);
 	float jointPixel = footprint/slabWidth;
 	float jointFade = 1.-smoothstep(.035,.12,jointPixel), slabFade = 1.-smoothstep(.12,.35,jointPixel);
-	float split = 0., crosscut = 0.;
-	if(slabFade > 0.) {
-		split = materialVolumeNoise(bedrock*vec3(1.,.48,1.21) + vec3(17.4,2.9,-9.3));
-		vec2 across = mat2(.6,-.8,.8,.6)*bedrock.xz;
-		crosscut = materialVolumeNoise(vec3(.55*across.x,1.4*bedrock.y+.37*split,.62*across.y));
-	}
+	vec2 breakup = vec2(0.);
+	if(slabFade > 0.) breakup = slabBreakup(bedrock);
+	float split = breakup.x, crosscut = breakup.y;
 	float chipOffset = .014*abs(rubbleNoise+.45*outcrop)*cellFade;
-	float downDip = .85*bedrock.x + .32*bedrock.z + .19*bedrock.y + .14*abs(split+.4*crosscut) + chipOffset;
-	float acrossDip = bedrock.y - .28*bedrock.x + .21*bedrock.z + .17*abs(crosscut-.3*split) - chipOffset;
+	vec2 phases = slabJoints(bedrock,breakup) + vec2(chipOffset,-chipOffset);
+	float downDip = phases.x, acrossDip = phases.y;
 	vec2 longitudinal = fractureProfile(downDip,73);
 	vec2 transverse = fractureProfile(acrossDip,197);
 	longitudinal *= smoothstep(-.25,.32,crosscut + blotchNoise + .6*rill + .22*ragged);

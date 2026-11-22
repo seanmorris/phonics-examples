@@ -1580,6 +1580,16 @@ $look->close(); $other->close();
 $materials = new Session(['preset'=>'mountain']);
 $natural = $materials->activeLayers();
 expect(array_column($natural->layers,'strength','id')['relief-ribs'] === .5,'Mountain Ridges starts with half-strength rib relief.');
+$granite = array_column($natural->layers,null,'id')['granite-slabs'];
+expect($granite['pattern'] === 'jointed' && $granite['channel'] === 'color' && $granite['color'] !== $granite['patternColor']
+	&& $granite['patternScale'] === $natural->fields['jointWidth']
+	&& abs($granite['patternScale']*$granite['patternStretch']-$natural->fields['jointHeight']) < .00001,
+	'Fresh and weathered granite share the default joint spacing.');
+foreach([['coast',1],['limestone',2],['canyon',1],['canyon',2]] as [$preset,$version]) {
+	$recipe = (new TerrainPhonics\Recipe(['preset'=>$preset,'version'=>$version]))->values();
+	$otherLayers = TerrainPhonics\SurfaceLayers::landscape($recipe,$materials->terrainAppearance);
+	expect(!in_array('jointed',array_column($otherLayers->layers,'pattern'),true),"$preset version $version keeps its own rock texture.");
+}
 input($materials,['actions'=>[['type'=>'surface-layers','layers'=>$natural->layers]]]);
 expect($materials->surfaceLayers===null,'An unchanged Apply keeps the pristine preset.');
 input($materials,['actions'=>[['type'=>'surface-edit','id'=>'granite-slabs','key'=>'color','value'=>'#765432'],

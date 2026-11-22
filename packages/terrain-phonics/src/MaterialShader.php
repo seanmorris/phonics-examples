@@ -63,8 +63,11 @@ final class MaterialShader
 				if(mode.x>=0.) coverage*=masks[int(mode.x)];';
 			$glsl[] = $i === 0 ? 'float amount=1.; masks[i]=1.;'
 				: "coverage*=($mask)*effect.z; float amount=edge*coverage; masks[i]=amount;";
-			$pattern = $row['pattern'] !== 'none';
-			$glsl[] = $pattern ? 'float pattern=layerPatternWeight(i,pos,normal,footprint,bed,bedPixel);' : 'float pattern=0.;';
+			if($fields && $row['pattern'] === 'jointed')
+				$glsl[] = 'float pattern=jointedPigment(pos,normal,footprint,uLayerPattern[i],sizes.zw,breakup);';
+			elseif($row['pattern'] !== 'none')
+				$glsl[] = 'float pattern=layerPatternWeight(i,pos,normal,footprint,bed,bedPixel);';
+			else $glsl[] = 'float pattern=0.;';
 			if($row['channel'] !== 'relief') {
 				$base = $row['field'] === 'shrubs' ? 'mix(uLayerColor[i],uLayerPatternColor[i],.55)' : 'uLayerColor[i]';
 				$tint = self::SHADE[$row['field']];

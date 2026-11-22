@@ -1,6 +1,7 @@
 const int STIPPLE_PATTERN = 5;
 const int FRACTAL_PATTERN = 6;
 const int VEIN_PATTERN = 7;
+const int JOINTED_PATTERN = 9;
 uniform int uLayerCount;
 uniform vec4 uFieldScale;
 uniform vec4 uLayerEffect[16]; // relief strength, flattening, opacity, unrestricted range
@@ -43,6 +44,65 @@ vec4 materialVolumeSample(vec3 p) {
 float materialVolumeNoise(vec3 p) {
 	return materialVolumeSample(p).x;
 }
+
+// The two intersecting sets of joints have a common strike and dip through the rock.
+vec3 slabCoordinates(vec3 pos,vec2 spacing) {
+	vec2 strike=mat2(.8,.6,-.6,.8)*pos.xz;
+	return vec3(strike.x/spacing.x,(pos.y+.26*strike.x-.13*strike.y)/spacing.y,strike.y/spacing.x);
+}
+vec2 slabBreakup(vec3 bedrock) {
+	float split=materialVolumeNoise(bedrock*vec3(1.,.48,1.21)+vec3(17.4,2.9,-9.3));
+	vec2 across=mat2(.6,-.8,.8,.6)*bedrock.xz;
+	return vec2(split,materialVolumeNoise(vec3(.55*across.x,1.4*bedrock.y+.37*split,.62*across.y)));
+}
+vec2 slabJoints(vec3 bedrock,vec2 breakup) {
+	return vec2(.85*bedrock.x+.32*bedrock.z+.19*bedrock.y+.14*abs(breakup.x+.4*breakup.y),
+		bedrock.y-.28*bedrock.x+.21*bedrock.z+.17*abs(breakup.y-.3*breakup.x));
+}
+float fractureOffset(float phase,int family) {
+	float center=.5+.32*layerCorner(ivec2(int(floor(phase)),family)+ivec2(uPaletteOffset));
+	return fract(phase)-center;
+}
+
+#if !defined(MATERIAL_STACK) || defined(PATTERN_JOINTED)
+// Fresh and weathered stone extend through the rock. Only exposed portions of a joint
+// interrupt the mineral color. Unresolved features return to their local mean.
+float jointedPigment(vec3 pos,vec3 normal,float footprint,vec4 pattern,vec2 sharedSpacing,vec2 breakup) {
+	if(pattern.y<=0.) return 0.;
+	vec2 spacing=pattern.z*vec2(1.,pattern.w);
+	float pixel=footprint/min(spacing.x,spacing.y);
+	float steep=smoothstep(.06,.36,1.-normal.y);
+	float exposure=.36+.22*steep;
+	if(pixel>=2.) return pattern.y*exposure;
+	vec3 bedrock=slabCoordinates(pos,spacing);
+	float weathering=materialVolumeNoise(MATERIAL_TURN*bedrock*.23+vec3(-17.4,6.1,31.8));
+	exposure+=.43*weathering*(1.-smoothstep(.45,2.,pixel));
+	if(pixel<.35) {
+		// A landscape with relief has already sampled these joints at the shared spacing.
+		if(any(greaterThan(abs(spacing-sharedSpacing),vec2(.00001)))) breakup=slabBreakup(bedrock);
+		vec2 phase=slabJoints(bedrock,breakup);
+		vec2 offset=vec2(fractureOffset(phase.x,73),fractureOffset(phase.y,197));
+		float edge=min(.16,.02+.65*pixel);
+		vec2 freshEdge=smoothstep(-edge,edge,offset)-smoothstep(-.17,.17,offset);
+		vec2 openJoint=smoothstep(vec2(.04),vec2(.64),vec2(breakup.y,-breakup.x)+.35*weathering);
+		float pigment=.30*breakup.x-.21*breakup.y+dot(freshEdge,openJoint*vec2(.42,.26));
+		if(pixel<.12) {
+			// Elongated inclusions change direction with the host rock. Close up,
+			// individual light and dark grains break up the larger mineral patches.
+			vec3 grain=MATERIAL_TURN*bedrock+.42*vec3(breakup,weathering);
+			float mineral=materialVolumeNoise(grain*vec3(3.,5.,3.4));
+			float pale=smoothstep(.10,.56,mineral);
+			pigment+=(.21*mineral+.16*(pale-.25))*(1.-smoothstep(.035,.12,pixel));
+			if(pixel<.018) {
+				float crystals=materialVolumeNoise((MATERIAL_TURN*grain)*vec3(32.,57.,39.)+vec3(.6*mineral));
+				pigment+=mix(.34,.24,steep)*crystals*(1.-smoothstep(.004,.018,pixel));
+			}
+		}
+		exposure+=pigment*(1.-smoothstep(.09,.35,pixel));
+	}
+	return pattern.y*clamp(exposure,0.,1.);
+}
+#endif
 
 // Signed volume noise gives cliffs and level ground the same grain. At the ridge's 1.6 m
 // pattern scale the five bands run from 53 cm down to 7 mm. Each returns to its mean
@@ -124,6 +184,9 @@ float layerPatternWeight(int layer,vec3 pos,vec3 normal,float footprint,float be
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
 	if(kind==0 || pattern.y<=0.) return 0.;
+	#if !defined(MATERIAL_STACK) || defined(PATTERN_JOINTED)
+	if(kind==JOINTED_PATTERN) return jointedPigment(pos,normal,footprint,pattern,vec2(0.),vec2(0.));
+	#endif
 	#if !defined(MATERIAL_STACK) || defined(PATTERN_STIPPLE)
 	if(kind==STIPPLE_PATTERN) {
 		float visible=patternVisibility(footprint,pattern.z*min(1.,pattern.w),kind);

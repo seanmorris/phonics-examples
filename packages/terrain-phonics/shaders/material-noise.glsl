@@ -134,8 +134,7 @@ float patchy(float amount, float noise, float detail)
 // band. Fade the slope once the two sides of the groove fall in the same pixel.
 vec2 fractureProfile(float phase, int family)
 {
-	float center = .5 + .32*layerCorner(ivec2(int(floor(phase)),family) + ivec2(uPaletteOffset));
-	float offset = fract(phase) - center;
+	float offset = fractureOffset(phase,family);
 	float aa = clamp(.5*fwidth(phase), .003, .13);
 	const float width = .009;
 	float trace = (1.-smoothstep(max(0.,width-aa),width+aa,abs(offset))) * min(1.,width/aa);

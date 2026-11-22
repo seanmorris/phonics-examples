@@ -12,7 +12,7 @@ final class SurfaceLayers
 	public const FIELDS = ['plain','meadow','shrubs','tundra','lowland','crowns','talus','blocks','joints','slab-tone','lichen','sand','snow'];
 	public const RELIEF = ['none','pattern','ribs','facets','crowns','blocks'];
 	public const CHANNELS = ['color','relief','both'];
-	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples'];
+	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples', 'jointed'];
 	public const DEFAULTS = [
 		'id' => '', 'name' => '', 'mask' => 'all', 'field' => 'plain',
 		'channel' => 'color', 'relief' => 'none', 'strength' => 1., 'flatten' => 0., 'opacity' => 1.,
@@ -255,6 +255,12 @@ final class SurfaceLayers
 			$row = ['name'=>$name,'id'=>strtolower(str_replace(' ','-',$name)),'color'=>$s[$color.'Color'],
 				'mask'=>$mask,'field'=>$field];
 			if($field === 'shrubs') $row['patternColor'] = $s['forestColor'];
+			if($mask === 'slabs') {
+				$row['color'] = self::tint($s['graniteColor'],.70,.50,.39);
+				$row += ['pattern'=>'jointed','patternColor'=>self::tint($s['graniteColor'],1.84,1.88,1.88),
+					'patternAmount'=>1.,'patternScale'=>self::SCALES['jointWidth'][0],
+					'patternStretch'=>self::SCALES['jointHeight'][0]/self::SCALES['jointWidth'][0]];
+			}
 			$rows[] = $row;
 		}
 		foreach([
