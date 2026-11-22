@@ -139,7 +139,7 @@ The chase camera never passes through a gate. Behind a vehicle that goes through
 
 The chase camera keeps at least half a meter above the road while it dodges a gate, including on banks and crests.
 
-The overhead arrow shows its underside. Straight ahead points down the screen, a U-turn points up, and the end nearest you appears larger. During a race it turns amber and points to the nearest point along the next opening. It holds its direction within 1.5 meters and turns smoothly toward the following gate. The minimap marks the gate’s center. Crossing the finish clears the arrow, checkpoint marker, route overlay and race readout. Crossing the start again brings them back.
+The overhead arrow shows its underside. Straight ahead points down the screen, a U-turn points up, and the end nearest you appears larger. During a race it turns amber and points to the nearest point along the next opening. It holds its direction within 1.5 meters and turns smoothly toward the following gate. The minimap marks the gate’s center. Crossing the finish clears the arrow, checkpoint marker and route overlay. Your final time pulses three times, then stays steady until the readout clears four seconds after the finish. With reduced motion enabled, the time stays steady throughout. Crossing the start again brings them back.
 
 During a road race, click the right stick if you leave the road. The car returns to the nearest safe point on the current leg, facing forward with at least 10 meters of road before the next checkpoint. The race clock keeps running while the car waits 1.5 seconds for control to return.
 

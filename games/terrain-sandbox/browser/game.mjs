@@ -28,6 +28,12 @@ export function activate({module, canvas, session, services})
 	const pending = frame.querySelector('[data-pending]');
 	const roadPreview = frame.querySelector('[data-road-preview]');
 	const race = frame.querySelector('[data-race]');
+	let finishTimer = null;
+
+	const dismissFinish = () => {
+		finishTimer = null;
+		updateRace(race, latest);
+	};
 
 	const controls = new Map([...frame.querySelectorAll('[data-value]')].map(field => [field.dataset.value, field]));
 
@@ -554,6 +560,22 @@ export function activate({module, canvas, session, services})
 	shell.status('terrainStatus', {
 		dataset: 'terrainSandbox'
 		, handler: state => {
+
+			// A vehicle retains its result on reboarding. Celebrate the crossing once, on the ride that made it.
+			const finished = state.race.state === 'finished' && !state.delivery && state.mode === state.race.vehicle
+				&& latest?.mode === state.mode && latest.generation === state.generation;
+
+			if(finished && (latest.race.state !== 'finished' || latest.race.time !== state.race.time))
+			{
+				clearTimeout(finishTimer);
+				finishTimer = setTimeout(dismissFinish, 4000);
+			}
+			else if(!finished && finishTimer !== null)
+			{
+				clearTimeout(finishTimer);
+				finishTimer = null;
+			}
+
 			latest = state;
 
 			if(jetView !== state.jetView)
@@ -728,7 +750,7 @@ export function activate({module, canvas, session, services})
 				lastGeneration = state.generation;
 			}
 
-			updateRace(race, state);
+			updateRace(race, state, finishTimer !== null);
 			updateGateTool(gateTool, state);
 		}
 	});
@@ -754,6 +776,7 @@ export function activate({module, canvas, session, services})
 	focus();
 
 	return async () => {
+		clearTimeout(finishTimer);
 		clearInput();
 
 		if(session.terrainSandbox === api) delete session.terrainSandbox;
@@ -862,10 +885,21 @@ function drawCircuit(canvas, circuit)
  * vehicle cannot reach the next gate's opening.
  * @param {HTMLElement} line The HUD line under the status message.
  * @param {object} state Latest status from PHP.
+ * @param {boolean} showFinish Show the recorded crossing time during the post-race display.
  */
-function updateRace(line, state)
+function updateRace(line, state, showFinish = false)
 {
 	const {course, race, delivery} = state;
+	line.classList.toggle('terrain-finish', showFinish);
+
+	if(showFinish)
+	{
+		line.hidden = false;
+
+		if(line.textContent !== race.message) line.textContent = race.message;
+
+		return;
+	}
 
 	if(delivery)
 	{
@@ -1806,6 +1840,8 @@ function markup()
 	@container terrain-view (min-width:960px){
 		.terrain-panel[open]~.terrain-hud{max-width:calc(100% - var(--lab-width) - 48px)}
 	}
+	@keyframes terrain-finish-pulse{50%{opacity:.4}}
+	@media(prefers-reduced-motion:no-preference){.terrain-finish{animation:terrain-finish-pulse .8s ease-in-out 3}}
 	@media(max-width:640px){.terrain-sandbox:has(.terrain-panel:not([open])) .terrain-hud:has([data-race]:not([hidden])) [data-diagnostics]{display:none}}
 	</style><div class="terrain-stage"></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
 	<details class="terrain-panel" open>

@@ -980,17 +980,28 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 	await canvas(page).focus();
 	await page.keyboard.down('w');
 
+	const readout = page.locator('[data-race]');
+
 	try
 	{
 		await expect.poll(async() => (await status(page)).race.state).toBe('running');
 		await page.evaluate(() => window.testCarButton(3, true));
-		await expect(page.locator('[data-race]')).toContainText('Lap 1');
+		await expect(readout).toContainText('Lap 1');
 		await page.evaluate(() => window.testCarButton(3, false));
 		await page.evaluate(() => window.testCarButton(11, true));
 		await expect.poll(async() => (await status(page)).car.recoveries).toBe(1);
 		await page.evaluate(() => window.testCarButton(11, false));
 		await page.keyboard.down('Shift');
-		await expect.poll(async() => (await status(page)).race.state, {timeout: 90_000}).toBe('finished');
+		await expect(readout).toHaveText(/^Finished in /, {timeout: 90_000});
+		const {race} = await status(page);
+
+		expect(race.state).toBe('finished');
+		expect(race.guidance).toBe(false);
+		await expect(readout).toBeVisible();
+		await expect(readout).toHaveText(race.message);
+		await expect(readout).toHaveCSS('animation-name', 'terrain-finish-pulse');
+		await page.emulateMedia({reducedMotion: 'reduce'});
+		await expect(readout).toHaveCSS('animation-name', 'none');
 	}
 	finally
 	{
@@ -1000,7 +1011,7 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 
 	const {race} = await status(page);
 	expect(race.vehicle).toBe('car');
-	await expect(page.locator('[data-race]')).toBeHidden();
+	await expect(readout).toBeHidden({timeout: 10_000});
 	await expect(page.locator('[data-status]')).toBeHidden();
 	expect(race.splits.map(split => split.role)).toEqual(['checkpoint', 'finish']);
 	expect(race.time).toBeGreaterThan(race.splits[0].time);
