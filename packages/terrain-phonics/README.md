@@ -108,7 +108,8 @@ rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone
 base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at
 175 m elevation intervals form sloping benches below the summits. `basalt-fjords` cuts flooded valleys
 between rolling headlands. Terracing starts at zero on this preset. `amber-dunes` uses narrow ridges and rolling relief to give the
-two faces of a dune different slopes. Existing recipes expand to the values of
+two faces of a dune different slopes. `arctic-meltwater` raises broad shelves above flooded channels.
+`tidal-lagoon` brings low, curving ridges just above sea level to form chains of sand cays. Existing recipes expand to the values of
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
 changing the landscape's playable extent.
 
@@ -268,6 +269,10 @@ but a six-digit hex string.
 Coast starts with grass, exposed rock, shore sand and snow. Its optional coastal bands have zero coverage. Mountain Ridges uses reusable fields for jointed slabs, iron stains, lichen, talus and forest crowns. On Mountain Ridges, dark conifers give way to sage-green meadow, cool granite and blue-white snow. Early canyons have horizontal strata, and current canyons use dipping beds. Limestone Plain sets deep green valleys against silver-gray karst and pale calcite veins.
 
 Basalt Fjords pairs smoky olive heath with charcoal-blue lava faces, dark tidal gravel and green-blue water. Weathered flow contacts break across the cliffs. Amber Dunes puts fine wind ripples on sand and flattens them where gravel or salt covers the basin floor. Each preset has an editable surface stack, and the five paint inks cover any of these surfaces.
+
+In Arctic Meltwater, snow collects on gentler ground and its coverage controls the wind ripples. Steeper banks expose veined ice and rock. Tidal Lagoon measures the height of its shoals, seagrass, beaches and scrub from the waterline. Changing the water level moves those material boundaries with it.
+
+Set `reflectivity` on a color layer to give it a clear dielectric coating. The range is 0 (matte) to 1 (fully coated). `roughness` ranges from 0 (polished) to 1 (frosted). The shader samples the atmosphere in the reflected view direction and filters the solar highlight by roughness and pixel size. Snow, rock and paint cover the finish with the same masks as the layer color. The minimap shows the underlying tint. The Arctic ice uses an air-to-ice refractive index of about 1.31. [Warren and Brandt’s optical constants of ice](https://atmos.washington.edu/ice_optical_constants/)
 
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 

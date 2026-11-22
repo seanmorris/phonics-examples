@@ -12,10 +12,11 @@ final class SurfaceLayers
 	public const FIELDS = ['plain','meadow','shrubs','tundra','lowland','crowns','talus','blocks','joints','slab-tone','lichen','sand','snow'];
 	public const RELIEF = ['none','pattern','ribs','facets','crowns','blocks'];
 	public const CHANNELS = ['color','relief','both'];
-	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples', 'jointed', 'contacts'];
+	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples', 'jointed', 'contacts', 'fractures'];
 	public const DEFAULTS = [
 		'id' => '', 'name' => '', 'mask' => 'all', 'field' => 'plain',
 		'channel' => 'color', 'relief' => 'none', 'strength' => 1., 'flatten' => 0., 'opacity' => 1.,
+		'reflectivity' => 0., 'roughness' => .35,
 		'color' => '#807355'
 		, 'low' => -1000000.
 		, 'high' => 1000000.
@@ -36,7 +37,8 @@ final class SurfaceLayers
 	];
 	public readonly array $layers;
 	private array $colors = [], $ranges = [], $blends = [], $modes = [];
-	private array $patterns = [], $patternColors = [], $effects = [];
+	private array $patterns = [], $patternColors = [], $effects = [], $finishes = [];
+	public readonly bool $reflective;
 	/** Identical structures share a linked program. All editable numbers and colors are uniforms. */
 	public readonly string $structure;
 	public readonly array $fields;
@@ -73,6 +75,7 @@ final class SurfaceLayers
 		$rows = [];
 		$ids = [];
 		$structure = [];
+		$reflective = false;
 
 		foreach($layers as $i => $row)
 		{
@@ -93,7 +96,7 @@ final class SurfaceLayers
 				if(!in_array($row[$key],$choices,true)) throw new \InvalidArgumentException('Unknown material '.$key.'.');
 			if($i === 0 && $row['channel'] === 'relief')
 				throw new \InvalidArgumentException('The base layer must supply a color.');
-			foreach(['strength' => 32., 'flatten' => 1., 'opacity' => 1.] as $key=>$limit)
+			foreach(['strength' => 32., 'flatten' => 1., 'opacity' => 1., 'reflectivity' => 1., 'roughness' => 1.] as $key=>$limit)
 			{
 				if(!is_numeric($row[$key]) || !is_finite((float)$row[$key]) || $row[$key] < ($key === 'strength' ? -32. : 0.) || $row[$key] > $limit)
 					throw new \InvalidArgumentException('Invalid material '.$key.'.');
@@ -144,6 +147,9 @@ final class SurfaceLayers
 			$row['parent'] = (int)$row['parent'];
 			$rows[] = array_replace(self::DEFAULTS,$row);
 			$structure[] = [$row['mask'], $row['field'], $row['channel'], $row['relief'], $row['pattern']];
+			$reflective = $reflective || ($row['channel'] !== 'relief' && $row['reflectivity'] > 0.);
+			// Premultiply the roughness by coating coverage so opaque snow can cleanly cover reflective ice.
+			array_push($this->finishes, $row['reflectivity'], $row['reflectivity']*$row['roughness']**2);
 			array_push($this->effects,$row['strength'],$row['flatten'],$row['opacity'], (float)($row['low'] <= -1e6 && $row['high'] >= 1e6 && $row['slopeLow'] == 0. && $row['slopeHigh'] == 1. && $row['period'] == 0.));
 			array_push($this->colors, ...TerrainAppearance::linear($row['color']));
 			array_push($this->ranges, $row['low'], $row['high'], $row['slopeLow'], $row['slopeHigh']);
@@ -153,11 +159,13 @@ final class SurfaceLayers
 			array_push($this->patternColors, ...TerrainAppearance::linear($row['patternColor']));
 		}
 
-		$ordinary = true;
+		$this->reflective = $reflective;
+		$ordinary = !$reflective;
 		foreach($rows as $row) if($row['mask'] !== 'all' || $row['field'] !== 'plain' || $row['channel'] !== 'color') $ordinary = false;
 		$patterns = array_values(array_unique(array_column($rows,'pattern')));
 		sort($patterns);
-		$this->structure = $ordinary ? 'color/'.implode('/',$patterns) : json_encode($structure, JSON_THROW_ON_ERROR);
+		$this->structure = $ordinary ? 'color/'.implode('/',$patterns)
+			: ($reflective ? 'reflective/' : '').json_encode($structure, JSON_THROW_ON_ERROR);
 		$this->layers = $rows;
 		$this->markRepeatingSections();
 	}
@@ -203,6 +211,8 @@ final class SurfaceLayers
 			'limestone' => self::limestoneLayers($s,($r['baseBias'] ?? 0.) * ($r['heightScale'] ?? 0.)),
 			'basalt-fjords' => self::fjordLayers($s),
 			'amber-dunes' => self::duneLayers($s,$r),
+			'arctic-meltwater' => self::arcticLayers($s),
+			'tidal-lagoon' => self::lagoonLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -212,14 +222,15 @@ final class SurfaceLayers
 				+ self::stipple($rock, .80, .60);
 		}
 
-		if($style !== 'amber-dunes') {
+		$standardShore = in_array($style, ['coast','limestone','basalt-fjords','canyon','canyon-v1'], true);
+		if($standardShore) {
 			$shore = ['color' => $s['sandColor'],'high' => $s['beachHeight'],'datum' => 'water','fade' => $s['beachWidth']]
 				+ self::stipple($s['sandColor'], .80, .55, .70);
 			if($style === 'basalt-fjords') $shore += ['slopeHigh'=>.10,'slopeFade'=>.08];
 			$rows[] = $shore;
 		}
 
-		if(!$canyon && $style !== 'amber-dunes')
+		if($standardShore && !$canyon)
 		$rows[] = [
 			'color' => $s['snowColor']
 			, 'low' => $s['snowline']
@@ -234,6 +245,8 @@ final class SurfaceLayers
 			'canyon-v1' => ['Soil','Light strata','Dark strata','Sand'],
 			'limestone' => ['Grassland','Valley grass','Outcrops','Limestone','Mineral veins','Sand','Snow'],
 			'basalt-fjords' => ['Moss heath','Scree','Basalt faces','Lava beds','Seep stains','Tidal gravel','Summit snow'],
+			'arctic-meltwater' => ['Moraine gravel','Glacier ice','Rock outcrops','Wind-packed snow','Snow ripples'],
+			'tidal-lagoon' => ['Reef floor','Shoal sand','Seagrass beds','Shell beach','Salt grass','Cay scrub','Sand ripples'],
 			'amber-dunes' => ['Dune sand','Slip faces','Crest sand','Wind ripples','Desert pavement','Salt crust'],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
@@ -363,6 +376,54 @@ final class SurfaceLayers
 		];
 	}
 
+	/** Debris and blue ice show through where the wind or slope leaves little snow. */
+	private static function arcticLayers(array $s): array
+	{
+		$ice = $s['rockBandColor'];
+		$snow = $s['snowColor'];
+		return [
+			['color'=>$s['soilColor'], 'pattern'=>'gravel', 'patternColor'=>$s['sandColor'],
+				'patternScale'=>1.3, 'patternStretch'=>1., 'patternAmount'=>.85],
+			['color'=>$ice, 'low'=>8., 'fade'=>14., 'datum'=>'water', 'noise'=>21., 'scale'=>85.,
+				'reflectivity'=>1., 'roughness'=>.28,
+				'pattern'=>'fractures', 'patternColor'=>self::tint($ice,2.15,1.80,1.55),
+				'patternScale'=>24., 'patternStretch'=>1.7, 'patternAmount'=>.83],
+			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'fractal', 'patternColor'=>$s['soilColor'],
+				'patternScale'=>24., 'patternStretch'=>1.5, 'patternAmount'=>.72],
+			['color'=>$snow, 'low'=>$s['snowline'], 'fade'=>$s['snowTransition'], 'noise'=>29., 'scale'=>105.,
+				'slopeHigh'=>$s['snowSlopeStart'], 'slopeFade'=>$s['snowSlopeEnd']-$s['snowSlopeStart'],
+				'pattern'=>'fractal', 'patternColor'=>self::tint($snow,.74,.84,.89),
+				'patternScale'=>17., 'patternStretch'=>1.6, 'patternAmount'=>.55],
+			['parent'=>3, 'channel'=>'relief', 'relief'=>'pattern', 'strength'=>.028,
+				'pattern'=>'ripples', 'patternScale'=>1.6, 'patternStretch'=>1., 'patternAmount'=>.80],
+		];
+	}
+
+	/** The seabed grades into sand flats and scrub as it rises through the waterline. */
+	private static function lagoonLayers(array $s): array
+	{
+		$sand = $s['sandColor'];
+		return [
+			['color'=>$s['rockColor'], 'pattern'=>'gravel', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>4.5, 'patternStretch'=>1., 'patternAmount'=>.82],
+			['color'=>self::tint($sand,.60,.74,.74), 'datum'=>'water', 'low'=>-8., 'fade'=>5.,
+				'noise'=>3., 'scale'=>55.] + self::stipple($sand,.51,.65,1.1),
+			['color'=>self::tint($sand,.67,.78,.72), 'datum'=>'water', 'low'=>-8., 'high'=>-2.,
+				'fade'=>1.7, 'noise'=>3.3, 'scale'=>36., 'pattern'=>'fractal', 'patternColor'=>$s['soilColor'],
+				'patternScale'=>23., 'patternStretch'=>1.2, 'patternAmount'=>.89],
+			['color'=>$sand, 'datum'=>'water', 'low'=>$s['beachHeight'], 'fade'=>$s['beachWidth'], 'noise'=>.6, 'scale'=>28.]
+				+ self::stipple($sand,.78,.61,.9),
+			['color'=>self::tint($sand,.48,.60,.40), 'datum'=>'water', 'low'=>$s['beachHeight']+.55*$s['beachWidth'],
+				'fade'=>.55*$s['beachWidth'], 'noise'=>1.7, 'scale'=>42., 'pattern'=>'fractal',
+				'patternColor'=>$s['grassColor'], 'patternScale'=>4.2, 'patternAmount'=>.78],
+			['color'=>$s['grassColor'], 'datum'=>'water', 'low'=>$s['beachHeight']+1.35*$s['beachWidth'],
+				'fade'=>.70*$s['beachWidth'], 'noise'=>3.0, 'scale'=>54., 'pattern'=>'fractal',
+				'patternColor'=>self::tint($s['grassColor'],.62,.73,.72), 'patternAmount'=>.92, 'patternScale'=>8.5],
+			['parent'=>1, 'datum'=>'water', 'high'=>.7, 'fade'=>.7, 'channel'=>'relief', 'relief'=>'pattern',
+				'strength'=>.023, 'pattern'=>'ripples', 'patternScale'=>.64, 'patternStretch'=>1., 'patternAmount'=>.72],
+		];
+	}
+
 	private static function duneLayers(array $s, array $recipe): array
 	{
 		$sand = $s['sandColor'];
@@ -467,6 +528,7 @@ final class SurfaceLayers
 		glUniform4fv($p->location('uLayerBlend[0]'), $n, $this->blends);
 		glUniform4fv($p->location('uLayerMode[0]'), $n, $this->modes);
 		glUniform4fv($p->location('uLayerEffect[0]'), $n, $this->effects);
+		if($this->reflective) glUniform2fv($p->location('uLayerFinish[0]'), $n, $this->finishes);
 		glUniform4fv($p->location('uLayerPattern[0]'), $n, $this->patterns);
 		glUniform3fv($p->location('uLayerPatternColor[0]'), $n, $this->patternColors);
 	}

@@ -1006,6 +1006,8 @@ const LAYER_FIELDS = {
 	, field: ['Surface detail', 'Varies the tint. Try Joints for fractured rock or Crowns for a leafy canopy.']
 	, pattern: ['Pattern']
 	, patternColor: ['Pattern color', 'Second tint mixed in by the pattern. Shrubs also uses it for foliage.']
+	, reflectivity: ['Reflection strength · 0–1', 'Adds a clear reflective coating. At 1, polished ice catches the sky most strongly at a grazing angle.']
+	, roughness: ['Reflection roughness · 0–1', 'Lower values sharpen the reflected sun. Higher values spread the highlight across a frosted surface.']
 	, relief: ['Relief source']
 
 	, opacity: ['Coverage · 0–1', 'At 0 the layer disappears. At 1 it has full effect wherever its masks allow.']
@@ -1147,7 +1149,9 @@ function materialEditor(frame, push, status)
 	}));
 
 	const structural = new Set(['channel','mask','field','pattern','relief','parent','datum']);
-	const inputTypes = {name: 'type="text" maxlength="64" required',color: 'type="color"',patternColor: 'type="color"'};
+	const fraction = 'type="number" min="0" max="1" step="any" required';
+	const inputTypes = {name: 'type="text" maxlength="64" required',color: 'type="color"',patternColor: 'type="color"',
+		reflectivity: fraction, roughness: fraction};
 
 	function layerRow(row, index, rows)
 	{
@@ -1216,7 +1220,7 @@ function materialEditor(frame, push, status)
 				: 'The texture shapes the bumps that catch the light. Try Ripples on sand.';
 		else patternHelp.textContent = 'Blends the pattern color into the base tint. Try Gravel for scattered flecks.';
 
-		show(['field','color'], color);
+		show(['field','color','reflectivity','roughness'], color);
 		show(['relief','strength'], relief);
 		show(['patternColor'], color && (pattern || field('field').value==='shrubs'));
 		show(['patternAmount','patternScale','patternStretch'], pattern);
@@ -1605,7 +1609,7 @@ function markup()
 	<div class="lab-workspace">
 	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
 	<div class="lab-pages"><section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
-	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option><option value="limestone">Limestone Plain</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option></select></label>
+	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option><option value="limestone">Limestone Plain</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option><option value="arctic-meltwater">Arctic Meltwater</option><option value="tidal-lagoon">Tidal Lagoon</option></select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
 	<label class="terrain-field">World size<select name="worldSize">
 		<option value="32768">32.8 km per side</option>
@@ -1734,7 +1738,7 @@ function markup()
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
-	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="limestone">Limestone Plain</option><option value="canyon">Canyon</option><option value="canyon-v1">Early Canyon</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option></select>
+	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="limestone">Limestone Plain</option><option value="canyon">Canyon</option><option value="canyon-v1">Early Canyon</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option><option value="arctic-meltwater">Arctic Meltwater</option><option value="tidal-lagoon">Tidal Lagoon</option></select>
 	<button data-layer-load>Load preset surface</button><button data-layer-reset>Follow landform preset</button></div>
 	<p class="terrain-note" id="${surfaceId}-preset">Load preset surface replaces the stack. Follow landform preset restores the materials for the current landform.</p>
 	<h2>Material layers</h2><p class="terrain-note">The base layer covers the terrain. Colors and numbers preview as you edit an applied stack. After changing the layer order, a source, or a mask, choose Apply layers to preview the draft.</p>

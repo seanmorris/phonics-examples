@@ -12,6 +12,10 @@ The canyon preset lowers water to −450 meters and starts inside the valley, ex
 
 **Amber Dunes** has sharp sand crests, darker slip faces, and salt on the lowest basin floors. Fly close to a gentle slope to see the wind ripples catch the low sun. On the **Surface** tab, change **Pattern scale** on **Wind ripples** to set the distance between ripples. It starts at 0.78 m.
 
+In **Arctic Meltwater**, fly low along a blue ice bank and turn toward the sun to catch its reflection. Under **Surface → Glacier ice**, lower **Reflection roughness** for a sharp glint or raise it for a frosted finish. **Reflection strength** controls how much of the exposed ice carries that finish. Snow and gravel above the ice cover its sheen.
+
+In **Tidal Lagoon**, the channels are deep enough to launch the jet ski. Follow the darker water around the pale sandbars. The waterline sets where seagrass, salt grass and scrub can grow.
+
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 

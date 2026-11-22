@@ -6,7 +6,7 @@ namespace TerrainPhonics;
 final class Recipe
 {
 	/** Named sets of coefficients for the shared terrain field. */
-	public const PRESETS = ['coast', 'mountain', 'canyon', 'limestone', 'basalt-fjords', 'amber-dunes'];
+	public const PRESETS = ['coast', 'mountain', 'canyon', 'limestone', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon'];
 
 	/** Parameters are immutable after normalization. */
 	private array $values;
@@ -44,6 +44,21 @@ final class Recipe
 			'ridgeHeight' => 1.12, 'ridgeRoundness' => .018, 'rolling' => .38, 'secondary' => .28,
 			'directionalRise' => 0., 'warpAmplitude' => 105., 'warpFrequency' => 1 / 2400,
 			'detailAmplitude' => 2., 'detailOctaves' => 4, 'waterLevel' => -600., 'surround' => 'mountains',
+		] + self::shapeDefaults('coast', $version);
+		if($preset === 'arctic-meltwater')
+		return [
+			'seed' => 'arctic-meltwater', 'baseFrequency' => 1 / 1550, 'heightScale' => 340., 'baseBias' => -.052,
+			'wallHeight' => .47, 'floorWidth' => .075, 'wallWidth' => .18, 'rolling' => .11,
+			'ridgeHeight' => .12, 'ridgeRoundness' => .07, 'secondary' => .17, 'directionalRise' => .035,
+			'warpAmplitude' => 305., 'warpFrequency' => 1 / 2600, 'detailAmplitude' => 9., 'detailOctaves' => 5,
+			'terraceStrength' => 0., 'surround' => 'mountains',
+		] + self::shapeDefaults('coast', $version);
+		if($preset === 'tidal-lagoon')
+		return [
+			'seed' => 'tidal-lagoon', 'baseFrequency' => 1 / 740, 'heightScale' => 70., 'baseBias' => .093,
+			'ridgeHeight' => .82, 'ridgeRoundness' => .035, 'rolling' => .12, 'secondary' => .32,
+			'directionalRise' => .045, 'warpAmplitude' => 125., 'warpFrequency' => 1 / 1650,
+			'detailAmplitude' => 1.2, 'detailOctaves' => 4, 'persistence' => .45, 'terraceStrength' => 0.,
 		] + self::shapeDefaults('coast', $version);
 		if($preset === 'limestone')
 		return [

@@ -92,6 +92,49 @@ float grain(vec2 p)
 }
 // MATERIAL NOISE
 // MATERIAL STACK
+#ifdef MATERIAL_REFLECTION
+vec3 dielectricReflection(vec3 diffuse,vec3 normal,vec2 finish,float painted,vec3 direct,float shadow)
+{
+	vec3 view=normalize(-vRelative);
+	normal=normalize(normal+view*max(0.,.001-dot(normal,view)));
+	float nv=clamp(dot(normal,view),0.,1.);
+	vec3 ray=reflect(-view,normal);
+	// Use the geometric normal for the pixel cone. The bump normal already contains screen derivatives.
+	vec3 geometricRay=reflect(-view,normalize(vNormal));
+	float pixelCone=max(length(dFdx(geometricRay)),length(dFdy(geometricRay)));
+	float cover=finish.x*(1.-painted)*smoothstep(-.1,.2,vWorld.y-uWaterLevel);
+	if(cover<=0.) return diffuse;
+	float rough=finish.y/max(finish.x,.00001);
+	// Air to ice has an index ratio near 1.31, giving 0.018 normal-incidence reflectance.
+	float fresnel=.018+(1.-.018)*(1.-rough)*pow(1.-nv,5.);
+	vec3 broadRay=normalize(mix(ray,normal,.65*rough));
+	vec3 upper=normalize(vec3(broadRay.x,max(.003,broadRay.y),broadRay.z));
+	float altitude=max(0.,vWorld.y);
+	vec3 sky=skyRadiance(upper,altitude,0.,false);
+	float horizon=smoothstep(-.05-.45*rough,.03+.45*rough,broadRay.y);
+	vec3 surface=mix(diffuse,mix(diffuse,sky,horizon),cover*fresnel);
+	float nl=dot(normal,uSunDirection);
+	if(shadow<=0. || nl<=0. || uSunDirection.y<=0.) return surface;
+	// Smooth ice resolves the solar disc. Frost spreads the same directional light through a GGX lobe.
+	float frosted=smoothstep(.006,.035,rough);
+	vec3 solar=vec3(0.);
+	if(frosted<1.) {
+		vec3 transmittance=direct*(TERRAIN_PI/max(.0001,uSunIntensity));
+		solar=(1.-frosted)*fresnel*terrainSolarDisk(ray,altitude,transmittance,pixelCone);
+	}
+	if(frosted>0.) {
+		vec3 halfVector=normalize(view+uSunDirection);
+		float nh=clamp(dot(normal,halfVector),0.,1.);
+		float vh=clamp(dot(view,halfVector),0.,1.);
+		float a2=min(1.,rough*rough+.25*(pixelCone*pixelCone+uAngularRadius*uAngularRadius));
+		float den=(1.-nh*nh)+nh*nh*a2;
+		float distribution=a2/(den*den);
+		float visibility=.5/max(.0001,nl*sqrt(a2+(1.-a2)*nv*nv)+nv*sqrt(a2+(1.-a2)*nl*nl));
+		solar+=frosted*direct*nl*distribution*visibility*(.018+.982*pow(1.-vh,5.));
+	}
+	return surface+cover*shadow*solar;
+}
+#endif
 uniform float uPlayHalf;
 uniform vec3 uPaintColor[5], uMaterialBounce;
 void main()
@@ -108,7 +151,12 @@ void main()
 	float macro = pavement ? 0. : landVariation(vWorld.xz, footprint) * uMacroVariation;
 	vec3 lightingNormal=n;
 	vec3 albedo=uPaintColor[4];
+	#ifdef MATERIAL_REFLECTION
+	vec2 finish=vec2(0.);
+	if(!pavement) albedo=materialSurface(vWorld,n,vRelative,footprint,uWaterLevel,macro,lightingNormal,finish);
+	#else
 	if(!pavement) albedo=materialSurface(vWorld,n,vRelative,footprint,uWaterLevel,macro,lightingNormal);
+	#endif
 	// Blend material weights, never categorical identifiers: a rock/road boundary must not become snow.
 	float painted = clamp(dot(vPaint0 + vPaint1, vec3(1.0)), 0.0, 1.0);
 	vec3 craft = mix(vec3(0.06,0.12,0.17), vec3(0.95,0.28,0.03), step(0.15,vWorld.y - uWaterLevel));
@@ -131,6 +179,9 @@ void main()
 	vec3 lit = albedo * (ambient + direct * facing * shadow);
 	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
 	lit += albedo / 3.14159265 * terrainSpotLight(vWorld, mix(lightingNormal,n,painted), uWaterLevel, uWaterOptics.z);
+	#ifdef MATERIAL_REFLECTION
+	lit=dielectricReflection(lit,lightingNormal,finish,painted,direct,shadow);
+	#endif
 	lit = waterColumnLight(lit, vRelative, uEye.y, uWaterLevel,
 		vec3(illumination) + uNightAmbient + terrainSpotWaterColumn(uEye, vWorld, uWaterLevel));
 	vec3 aerial = terrainAtmosphere(normalize(vRelative), uEye.y, length(vRelative), lit);

@@ -3,9 +3,13 @@ const int FRACTAL_PATTERN = 6;
 const int VEIN_PATTERN = 7;
 const int JOINTED_PATTERN = 9;
 const int CONTACT_PATTERN = 10;
+const int FRACTURE_PATTERN = 11;
 uniform int uLayerCount;
 uniform vec4 uFieldScale;
 uniform vec4 uLayerEffect[16]; // relief strength, flattening, opacity, unrestricted range
+#ifdef MATERIAL_REFLECTION
+uniform vec2 uLayerFinish[16]; // coating coverage, coverage times squared roughness
+#endif
 uniform vec3 uLayerColor[16];
 uniform vec4 uLayerRange[16],uLayerBlend[16],uLayerMode[16];
 uniform vec4 uLayerPattern[16];
@@ -65,6 +69,26 @@ float fractureOffset(float phase,int family) {
 	float center=.5+.32*layerCorner(ivec2(int(floor(phase)),family)+ivec2(uPaletteOffset));
 	return fract(phase)-center;
 }
+
+#if !defined(MATERIAL_STACK) || defined(PATTERN_FRACTURES)
+float fracturePigment(vec3 pos,float footprint,vec4 pattern) {
+	vec2 spacing=pattern.z*vec2(1.,pattern.w);
+	float pixel=footprint/min(spacing.x,spacing.y);
+	if(pixel>=.6) return pattern.y*.15;
+	vec3 p=slabCoordinates(pos,spacing);
+	vec2 breakup=slabBreakup(p);
+	vec2 phase=slabJoints(p,breakup);
+	vec2 offset=abs(vec2(fractureOffset(phase.x,37),fractureOffset(phase.y,163)));
+	// Fractures open in short runs along two warped planes. A widening pixel integrates the
+	// hairline's covered fraction, keeping distant cracks from becoming dotted outlines.
+	vec2 open=smoothstep(vec2(-.46),vec2(.38),breakup);
+	vec2 width=vec2(.006,.004)+vec2(.013,.008)*open;
+	float radius=max(.003,.55*pixel);
+	vec2 lines=(clamp(width-offset+radius,0.,2.*radius)-clamp(-width-offset+radius,0.,2.*radius))/(2.*radius);
+	float pigment=.13+.10*breakup.x+dot(open*lines,vec2(.64,.37));
+	return pattern.y*mix(clamp(pigment,0.,1.),.15,smoothstep(.12,.6,pixel));
+}
+#endif
 
 #if !defined(MATERIAL_STACK) || defined(PATTERN_JOINTED)
 // Fresh and weathered stone extend through the rock. Only exposed portions of a joint
@@ -216,6 +240,9 @@ float layerPatternWeight(int layer,vec3 pos,vec3 normal,float footprint,float be
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
 	if(kind==0 || pattern.y<=0.) return 0.;
+	#if !defined(MATERIAL_STACK) || defined(PATTERN_FRACTURES)
+	if(kind==FRACTURE_PATTERN) return fracturePigment(pos,footprint,pattern);
+	#endif
 	#if !defined(MATERIAL_STACK) || defined(PATTERN_CONTACTS)
 	if(kind==CONTACT_PATTERN) return contactPigment(pos,footprint,pattern);
 	#endif

@@ -28,6 +28,7 @@ final class MaterialShader
 	{
 		$path = dirname(__DIR__).'/shaders/';
 		$features = "#define MATERIAL_STACK\n";
+		if($stack->reflective && !$chart) $features .= "#define MATERIAL_REFLECTION\n";
 		foreach(array_unique(array_column($stack->layers,'pattern')) as $pattern)
 			$features .= '#define PATTERN_'.strtoupper($pattern)."\n";
 		$patterns = $features.($clipmap ? "#define SURFACE_LAYERS\n" : '').file_get_contents($path.'surface-layers.glsl');
@@ -39,13 +40,15 @@ final class MaterialShader
 	private static function compose(SurfaceLayers $stack, bool $chart): string
 	{
 		$fields = false;
-		$advanced = false;
+		$reflective = $stack->reflective && !$chart;
+		$advanced = $reflective;
 		foreach($stack->layers as $row) {
 			$fields = $fields || $row['mask'] !== 'all' || $row['field'] !== 'plain'
 				|| (!$chart && !in_array($row['relief'],['pattern','none'],true));
 			$advanced = $advanced || $fields || $row['channel'] !== 'color';
 		}
-		$head = 'vec3 materialSurface(vec3 pos,vec3 normal,vec3 relative,float footprint,float water,float macro,inout vec3 litNormal){';
+		$head = 'vec3 materialSurface(vec3 pos,vec3 normal,vec3 relative,float footprint,float water,float macro,inout vec3 litNormal'
+			.($reflective ? ',out vec2 finish' : '').'){';
 		if(!$advanced) return $head.'return layerSurface(pos,normal,footprint,water)*(1.+.07*macro);}';
 		$glsl = [$head, 'float slope=1.-max(0.,normal.y);'];
 		if($fields) {
@@ -55,6 +58,7 @@ final class MaterialShader
 		}
 		$glsl[] = 'float bed=pos.y-dot(pos.xz,vec2(.006,-.003)), bedPixel=fwidth(bed), masks[16];';
 		$glsl[] = 'vec3 result=vec3(0.), delta=vec3(0.), section=vec3(0.); float sectionSum=0.;';
+		if($reflective) $glsl[] = 'vec2 sectionFinish=vec2(0.);';
 		foreach($stack->layers as $i=>$row) {
 			$glsl[] = "{ const int i=$i; vec4 effect=uLayerEffect[i], mode=uLayerMode[i];";
 			$mask = self::MASK[$row['mask']];
@@ -72,9 +76,18 @@ final class MaterialShader
 				$base = $row['field'] === 'shrubs' ? 'mix(uLayerColor[i],uLayerPatternColor[i],.55)' : 'uLayerColor[i]';
 				$tint = self::SHADE[$row['field']];
 				$glsl[] = "vec3 shade=mix($base,uLayerPatternColor[i],pattern)*$tint;";
-				$glsl[] = $i === 0 ? 'result=shade;' : 'if(mode.w==0.) result=mix(result,shade,amount);
-					else { section+=shade*edge; sectionSum+=edge;
-					if(mode.w==2.) { if(sectionSum>0.) result=mix(result,section/sectionSum,coverage); sectionSum=0.; section=vec3(0.); } }';
+				if($i === 0) $glsl[] = 'result=shade;'.($reflective ? 'finish=uLayerFinish[i];' : '');
+				else {
+					$glsl[] = 'if(mode.w==0.) { result=mix(result,shade,amount);';
+					if($reflective) $glsl[] = 'finish=mix(finish,uLayerFinish[i],amount);';
+					$glsl[] = '} else { section+=shade*edge; sectionSum+=edge;';
+					if($reflective) $glsl[] = 'sectionFinish+=uLayerFinish[i]*edge;';
+					$glsl[] = 'if(mode.w==2.) { if(sectionSum>0.) { result=mix(result,section/sectionSum,coverage);';
+					if($reflective) $glsl[] = 'finish=mix(finish,sectionFinish/sectionSum,coverage);';
+					$glsl[] = '} sectionSum=0.; section=vec3(0.);';
+					if($reflective) $glsl[] = 'sectionFinish=vec2(0.);';
+					$glsl[] = '} }';
+				}
 			}
 			if(!$chart) {
 				$glsl[] = 'delta*=1.-amount*effect.y;';

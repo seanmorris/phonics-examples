@@ -45,6 +45,16 @@ final class TerrainAppearance
 			'sandColor'=>'#424951', 'snowColor'=>'#dce6e8', 'snowline'=>820., 'snowTransition'=>140.,
 			'rockSlopeStart'=>.050, 'rockSlopeEnd'=>.24, 'beachHeight'=>1.2, 'beachWidth'=>5.,
 		],
+		'arctic-meltwater' => [
+			'soilColor'=>'#4c5459', 'rockColor'=>'#404c56', 'rockBandColor'=>'#537f95',
+			'sandColor'=>'#60625d', 'snowColor'=>'#c7d2d5', 'grassColor'=>'#555e51',
+			'rockSlopeStart'=>.21, 'rockSlopeEnd'=>.43, 'snowline'=>33., 'snowTransition'=>20.,
+			'snowSlopeStart'=>.075, 'snowSlopeEnd'=>.22,
+		],
+		'tidal-lagoon' => [
+			'grassColor'=>'#364f40', 'soilColor'=>'#485e53', 'rockColor'=>'#4e625d', 'rockBandColor'=>'#6c776f',
+			'sandColor'=>'#a29880', 'beachHeight'=>2.2, 'beachWidth'=>2.4,
+		],
 		'amber-dunes' => [
 			'sandColor'=>'#c59053', 'soilColor'=>'#a1663f', 'rockColor'=>'#765941', 'rockBandColor'=>'#d7c8a4',
 		],
@@ -117,6 +127,14 @@ final class TerrainAppearance
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'snowline', 'snowTransition',
 			'snowSlopeStart', 'snowSlopeEnd', 'macroVariation',
+		],
+		'arctic-meltwater' => [
+			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
+			'rockSlopeStart', 'rockSlopeEnd', 'snowline', 'snowTransition', 'snowSlopeStart', 'snowSlopeEnd',
+		],
+		'tidal-lagoon' => [
+			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
+			'beachHeight', 'beachWidth',
 		],
 		'amber-dunes' => [
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor', 'macroVariation',
@@ -225,7 +243,7 @@ final class TerrainAppearance
 		return match($recipe['preset'] ?? null)
 		{
 			'canyon' => ($recipe['version'] ?? 0) === 2 ? 'canyon' : 'canyon-v1',
-			'mountain', 'basalt-fjords', 'amber-dunes' => $recipe['preset'],
+			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon' => $recipe['preset'],
 			default => 'coast'
 		};
 	}

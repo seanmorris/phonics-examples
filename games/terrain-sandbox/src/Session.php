@@ -86,12 +86,22 @@ final class Session
 			'waterTransparency'=>.78, 'waterReflectivity'=>.72, 'waterFogDensity'=>.04, 'waterChoppiness'=>55.,
 		],
 		'amber-dunes' => TerrainAppearance::PRESET_DEFAULTS['amber-dunes'] + ['azimuth'=>146., 'elevation'=>18., 'haze'=>.85],
+		'arctic-meltwater' => TerrainAppearance::PRESET_DEFAULTS['arctic-meltwater'] + [
+			'azimuth'=>112., 'elevation'=>22., 'haze'=>.55, 'waterColor'=>'#345b69',
+			'waterTransparency'=>.80, 'waterReflectivity'=>.68, 'waterFogDensity'=>.070, 'waterChoppiness'=>32.,
+		],
+		'tidal-lagoon' => TerrainAppearance::PRESET_DEFAULTS['tidal-lagoon'] + [
+			'azimuth'=>103., 'elevation'=>37., 'haze'=>.70, 'waterColor'=>'#1e7475',
+			'waterTransparency'=>.90, 'waterReflectivity'=>.51, 'waterFogDensity'=>.070, 'waterChoppiness'=>27.,
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
 		'limestone' => ['x'=>.8, 'z'=>-1.6, 'heading'=>305., 'pitch'=>.10, 'clearance'=>45., 'minimum'=>105.],
 		'basalt-fjords' => ['x'=>-1.2, 'z'=>.225, 'heading'=>307., 'pitch'=>-.16, 'clearance'=>275., 'minimum'=>0.],
 		'amber-dunes' => ['x'=>.75, 'z'=>.5, 'heading'=>165., 'pitch'=>-.19, 'clearance'=>95., 'minimum'=>0.],
+		'arctic-meltwater' => ['x'=>1., 'z'=>.5, 'heading'=>135., 'pitch'=>-.19, 'clearance'=>160., 'minimum'=>0.],
+		'tidal-lagoon' => ['x'=>-.875, 'z'=>-.25, 'heading'=>165., 'pitch'=>-.29, 'clearance'=>85., 'minimum'=>0.],
 	];
 
 	/**
@@ -117,7 +127,7 @@ final class Session
 	private int $materialReply = 0;
 	private int $atmosphereReply = 0;
 	private ?string $materialPreset = null;
-	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes'];
+	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon'];
 
 	private static function materialStyle(array $recipe): string
 	{
@@ -847,6 +857,7 @@ final class Session
 		}
 		// The two endpoints belong to the same blend. Keep an authored range together.
 		if(!isset($changes['rockSlopeStart'], $changes['rockSlopeEnd'])) unset($changes['rockSlopeStart'], $changes['rockSlopeEnd']);
+		if(!isset($changes['snowSlopeStart'], $changes['snowSlopeEnd'])) unset($changes['snowSlopeStart'], $changes['snowSlopeEnd']);
 		$this->setTerrainAppearance(new TerrainAppearance($changes + $this->settings));
 		$this->setWaterAppearance(new WaterAppearance($changes + $this->settings));
 		foreach(array_diff_key($changes, TerrainAppearance::DEFAULTS, WaterAppearance::DEFAULTS) as $key => $value)

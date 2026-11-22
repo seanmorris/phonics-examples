@@ -14,6 +14,8 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 
 **Basalt Fjords** pairs smoky olive heath with blue-black cliffs and dark tidal gravel. **Limestone Plain** has deep green valleys and silver-gray karst. **Mountain Ridges** grades from spruce forest through sage-green meadow to blue-gray granite and snow.
 
+**Arctic Meltwater** opens over a channel between snow-covered shelves. Look along the banks for exposed blue ice and dark moraine gravel. **Tidal Lagoon** has low sand cays with scrub on their crests. Board the watercraft from either opening view. In the lagoon, the clear shallows reveal pale sand and patches of seagrass.
+
 ## Fly over the landscape
 
 Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and **Q/E** to descend or climb. Hold **Shift** to fly at 300 meters per second. The Flight slider changes the ordinary movement speed.

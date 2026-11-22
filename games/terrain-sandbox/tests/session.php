@@ -191,6 +191,38 @@ expect($showcase->landscape->recipe()['preset'] === 'coast' && $showcase->status
 	'The dune material can be applied separately to a coastal landform.');
 $showcase->close();
 
+$waterways = new Session;
+foreach(['arctic-meltwater'=>'glacier-ice','tidal-lagoon'=>'seagrass-beds'] as $preset=>$layer) {
+	input($waterways,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
+	[$x,$eye,$z] = $waterways->camera->position;
+	$level = $waterways->water->level();
+	expect($waterways->landscape->recipe()['seed'] === $preset && $eye > $level
+		&& $waterways->landscape->height($x,$z) < $level-2
+		&& in_array($layer,array_column($waterways->activeLayers()->layers,'id'),true),
+		"$preset starts over a navigable channel with its terrain and materials selected together.");
+	for($ahead = 25; $ahead <= 100; $ahead += 25) {
+		$heading = $waterways->camera->yaw;
+		expect($waterways->landscape->height($x+$ahead*sin($heading),$z-$ahead*cos($heading)) < $level-2,
+			"The $preset channel has open water ahead of the starting craft.");
+	}
+	$copy = new Session;
+	$copy->load($waterways->save());
+	expect($copy->activeLayers()->layers === $waterways->activeLayers()->layers
+		&& $copy->settings == $waterways->settings && $copy->camera->position === $waterways->camera->position,
+		"$preset restores its layers, water, sun and home viewpoint from a save.");
+	$copy->close();
+	input($waterways,['actions'=>['craft']]);
+	$craft = $waterways->craft->state();
+	expect($waterways->mode === 'craft' && abs($craft['x']-$x) < .01 && abs($craft['z']-$z) < .01,
+		"The jet ski boards directly at the $preset starting site.");
+}
+input($waterways,['values'=>['waterColor'=>'#315468','snowSlopeStart'=>.30]]);
+input($waterways,['actions'=>[['type'=>'generate','preset'=>'arctic-meltwater']]]);
+expect($waterways->settings['waterColor'] === '#315468' && $waterways->settings['snowSlopeStart'] === .30
+	&& $waterways->settings['snowSlopeEnd'] === TerrainPhonics\TerrainAppearance::DEFAULTS['snowSlopeEnd'],
+	'Generating Arctic Meltwater preserves authored water color and the snow slope range.');
+$waterways->close();
+
 $palette = new Session;
 foreach(['basalt-fjords'=>'moss-heath', 'limestone'=>'grassland', 'mountain'=>'meadow'] as $preset=>$cover) {
 	input($palette,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
