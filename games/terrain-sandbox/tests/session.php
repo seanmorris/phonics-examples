@@ -169,7 +169,7 @@ foreach(['basalt-fjords','amber-dunes'] as $preset) {
 	$copy->close();
 	if($preset === 'basalt-fjords') {
 		expect($showcase->water->level() > $showcase->landscape->height($x,$z)
-			&& $showcase->water->appearance->settings['waterColor'] === '#245567',
+			&& $showcase->water->appearance->settings['waterColor'] === '#1c5965',
 			'The fjord opens on a flooded channel with its own water optics.');
 		input($showcase, ['actions' => ['craft']]);
 		expect($showcase->mode === 'craft', 'The starting inlet has enough water to board the jet ski.');
@@ -190,6 +190,20 @@ expect($showcase->landscape->recipe()['preset'] === 'coast' && $showcase->status
 	&& in_array('wind-ripples',array_column($showcase->activeLayers()->layers,'id'),true),
 	'The dune material can be applied separately to a coastal landform.');
 $showcase->close();
+
+$palette = new Session;
+foreach(['basalt-fjords'=>'moss-heath', 'limestone'=>'grassland', 'mountain'=>'meadow'] as $preset=>$cover) {
+	input($palette,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
+	$ground = array_column($palette->activeLayers()->layers,'color','id')[$cover];
+	$defaults = TerrainPhonics\TerrainAppearance::PRESET_DEFAULTS[$preset];
+	expect($ground === ($defaults['meadowColor'] ?? $defaults['grassColor']),
+		"$preset generates its vegetation from its own palette.");
+	input($palette,['actions'=>[['type'=>'surface-layers','preset'=>$preset]]]);
+	expect(array_column($palette->activeLayers()->layers,'color','id')[$cover] === $ground,
+		"Loading the $preset surface independently uses the same vegetation.");
+	input($palette,['actions'=>[['type'=>'surface-layers']]]);
+}
+$palette->close();
 
 $far = new Session;
 expect(array_map('floatval', $far->camera->position) === [3600.0,300.0,1800.0] && $far->camera->yaw === .7,

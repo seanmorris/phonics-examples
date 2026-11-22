@@ -76,14 +76,12 @@ final class Session
 	public float $time = 0;
 	private const SKY_DEFAULTS = ['azimuth' => 125.0, 'elevation' => 35.0, 'haze' => 1.0];
 	private const LIMESTONE_SKY = ['azimuth' => 106.0, 'elevation' => 36.0, 'haze' => .7];
-	public const LIMESTONE_SURFACE = [
-		'snowline' => 3000.0, 'grassColor' => '#476239', 'rockColor' => '#777b6f',
-		'rockBandColor' => '#85897c', 'rockSlopeStart' => .25, 'rockSlopeEnd' => .73,
-	];
+	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
 	private const PRESET_LOOK = [
+		'mountain' => TerrainAppearance::PRESET_DEFAULTS['mountain'],
 		'limestone' => self::LIMESTONE_SURFACE + self::LIMESTONE_SKY,
 		'basalt-fjords' => TerrainAppearance::PRESET_DEFAULTS['basalt-fjords'] + [
-			'azimuth'=>82., 'elevation'=>32., 'haze'=>.72, 'waterColor'=>'#245567',
+			'azimuth'=>82., 'elevation'=>32., 'haze'=>.72, 'waterColor'=>'#1c5965',
 			'waterTransparency'=>.78, 'waterReflectivity'=>.72, 'waterFogDensity'=>.04, 'waterChoppiness'=>55.,
 		],
 		'amber-dunes' => TerrainAppearance::PRESET_DEFAULTS['amber-dunes'] + ['azimuth'=>146., 'elevation'=>18., 'haze'=>.85],

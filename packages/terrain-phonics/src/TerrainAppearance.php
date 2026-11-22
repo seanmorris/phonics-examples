@@ -32,9 +32,17 @@ final class TerrainAppearance
 	];
 	/** Starting colors and material thresholds for the named landscapes. */
 	public const PRESET_DEFAULTS = [
+		'mountain' => [
+			'forestColor'=>'#263d38', 'meadowColor'=>'#827846', 'tundraColor'=>'#71634e', 'grassColor'=>'#64774c',
+			'graniteColor'=>'#687587', 'talusColor'=>'#91918b', 'stainColor'=>'#765f5b', 'snowColor'=>'#e9f3ff',
+		],
+		'limestone' => [
+			'grassColor'=>'#427648', 'rockColor'=>'#c7b58f', 'rockBandColor'=>'#ddceb0', 'sandColor'=>'#b9aa81',
+			'snowline'=>3000., 'rockSlopeStart'=>.25, 'rockSlopeEnd'=>.73,
+		],
 		'basalt-fjords' => [
-			'grassColor'=>'#435f38', 'soilColor'=>'#514b40', 'rockColor'=>'#29343a', 'rockBandColor'=>'#535a59',
-			'sandColor'=>'#4c514e', 'snowColor'=>'#dce6e8', 'snowline'=>820., 'snowTransition'=>140.,
+			'grassColor'=>'#885c42', 'soilColor'=>'#594a43', 'rockColor'=>'#252d37', 'rockBandColor'=>'#46525d',
+			'sandColor'=>'#424951', 'snowColor'=>'#dce6e8', 'snowline'=>820., 'snowTransition'=>140.,
 			'rockSlopeStart'=>.050, 'rockSlopeEnd'=>.24, 'beachHeight'=>1.2, 'beachWidth'=>5.,
 		],
 		'amber-dunes' => [

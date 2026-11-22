@@ -12,6 +12,8 @@ On the **Landscape** tab, expand **Landform parameters** to see what each settin
 
 In **Surface**, open a named material layer to edit its color, coverage or relief. Choose **Load preset surface** to use another preset’s materials on this landform. **Follow landform preset** resumes automatic selection when generating terrain. Paint inks cover the completed stack, so a painted road stays visible when the surrounding ground changes. [Shape a landscape](authoring.md#author-a-surface) includes a sand-ripple example.
 
+**Basalt Fjords** pairs copper-brown heath with blue-black cliffs and dark tidal gravel. **Limestone Plain** has jade-green valleys and ivory karst. **Mountain Ridges** grades from spruce forest through straw-colored meadow to blue-gray granite and snow.
+
 ## Fly over the landscape
 
 Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and **Q/E** to descend or climb. Hold **Shift** to fly at 300 meters per second. The Flight slider changes the ordinary movement speed.
