@@ -151,11 +151,14 @@ void main()
 	vec3 n = normalize(vNormal);
 	vec3 weights = pow(abs(n), vec3(4.0)); weights /= dot(weights, vec3(1.0));
 	float detail = dot(weights, vec3(grain(vWorld.yz * 0.3), grain(vWorld.xz * 0.3), grain(vWorld.xy * 0.3)));
-	float footprint = max(length(dFdx(vWorld)), length(dFdy(vWorld)));
+	vec3 worldDx = dFdx(vWorld), worldDy = dFdy(vWorld);
+	float footprint = max(length(worldDx), length(worldDy));
+	float slopeMask = roadSlopeMask(cross(worldDx,worldDy));
+	float road = vPaint1.y*slopeMask;
 	// Only uniform pavement can skip the underlying palette. Triangles that blend a
 	// shoulder still evaluate its noise and derivatives all the way to the road edge.
 	float roadGradient = fwidth(vPaint1.y);
-	bool pavement = vPaint1.y >= .999999 && roadGradient <= .000001;
+	bool pavement = road >= .999999 && roadGradient <= .000001;
 	float macro = pavement ? 0. : landVariation(vWorld.xz, footprint) * uMacroVariation;
 	vec3 lightingNormal=n;
 	vec3 albedo=uPaintColor[4];
@@ -166,17 +169,17 @@ void main()
 	if(!pavement) albedo=materialSurface(vWorld,n,vRelative,footprint,uWaterLevel,macro,lightingNormal);
 	#endif
 	// Blend material weights, never categorical identifiers: a rock/road boundary must not become snow.
-	float painted = clamp(dot(vPaint0 + vPaint1, vec3(1.0)), 0.0, 1.0);
+	float painted = clamp(dot(vPaint0,vec3(1.)) + vPaint1.x + road + vPaint1.z, 0.0, 1.0);
 	vec3 craft = mix(vec3(0.06,0.12,0.17), vec3(0.95,0.28,0.03), step(0.15,vWorld.y - uWaterLevel));
 	albedo = albedo*(1.-painted) + uPaintColor[0]*vPaint0.x + uPaintColor[1]*vPaint0.y + uPaintColor[2]*vPaint0.z
-		+ uPaintColor[3]*vPaint1.x + uPaintColor[4]*vPaint1.y + craft*vPaint1.z;
+		+ uPaintColor[3]*vPaint1.x + uPaintColor[4]*road + craft*vPaint1.z;
 	// Lateral coordinates are in road half-widths. Convert meters of paint into that coordinate
 	// using its world-space gradient, so both narrow streets and wide circuits get the same paint.
 	float crossTrack = vRoadMark.x/max(vRoadMark.w,.0001);
-	vec2 dx=dFdx(vWorld.xz), dy=dFdy(vWorld.xz);
+	vec2 dx=worldDx.xz, dy=worldDy.xz;
 	vec2 lateralPixel=vec2(dFdx(crossTrack),dFdy(crossTrack));
 	vec3 markingGlow=vec3(0.);
-	if(vRoadMark.w > .65 && vPaint1.y > 0.) {
+	if(vRoadMark.w > .65 && road > 0.) {
 		float area=dx.x*dy.y-dx.y*dy.x;
 		float unitsPerMeter=length(lateralPixel.x*dy-lateralPixel.y*dx)/max(abs(area),1e-10);
 		float pixelAcross=max(.00001,abs(lateralPixel.x)+abs(lateralPixel.y));
@@ -189,7 +192,7 @@ void main()
 		float phase = atan(direction.y,direction.x)*cycles;
 		float pixel = max(.002,cycles*(abs(dot(tangent,dFdx(direction)))+abs(dot(tangent,dFdy(direction)))));
 		float dash = (dashIntegral(phase+.5*pixel)-dashIntegral(phase-.5*pixel))/pixel;
-		float marked = smoothstep(.65,.98,vRoadMark.w)*smoothstep(.05,.6,vPaint1.y)*(1.-smoothstep(1.,5.,footprint));
+		float marked = smoothstep(.65,.98,vRoadMark.w)*smoothstep(.05,.6,vPaint1.y)*slopeMask*(1.-smoothstep(1.,5.,footprint));
 		float centerPaint=line*clamp(dash,0.,1.)*marked, edgePaint=edge*marked;
 		vec3 ochre=vec3(.72,.47,.09), white=vec3(.88);
 		albedo=mix(mix(albedo,ochre,centerPaint),white,edgePaint);

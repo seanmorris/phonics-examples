@@ -23,35 +23,32 @@ float elevation(sampler2D tex,ivec2 c) {
 	uvec4 b=uvec4(t*255.+.5);
 	return uintBitsToFloat(b.x|(b.y<<8)|(b.z<<16)|(b.w<<24));
 }
-vec4 inkSample(sampler2D tex,ivec2 at) {
+vec4 inkSample(sampler2D tex,ivec2 at,float roadMask) {
 	int index=int(texelFetch(tex,at,0).r*255.+.5);
 	if(index<1 || index>5) return vec4(0.);
-	return vec4(uPaintColor[index-1],1.);
+	return vec4(uPaintColor[index-1],1.)*(index==5 ? roadMask : 1.);
 }
-vec4 paintAt(sampler2D tex,ivec2 a,ivec2 b,vec2 f) {
-	return mix(mix(inkSample(tex,a),inkSample(tex,ivec2(b.x,a.y)),f.x),
-		mix(inkSample(tex,ivec2(a.x,b.y)),inkSample(tex,b),f.x),f.y);
-}
-vec4 chartSample(vec2 pos,out vec4 ink) {
-	vec2 q=(pos/uExtent+.5)*256.;
-	ivec2 a=ivec2(floor(q)),b=a+1;
-	vec2 f=fract(q);
-	float stepSize=uExtent/256.;
-	float h00,h10,h01,h11;
-	if(all(greaterThanEqual(pos,uLocal.xy)) && all(lessThan(pos,uLocal.xy+(uLocal.w-1.)*uLocal.z))) {
-		q=pos/uLocal.z; a=ivec2(floor(q)); b=a+1; f=fract(q);
-		int mask=textureSize(uFine,0).x-1;
-
-		a=a&mask; b=b&mask; ink=paintAt(uFineInk,a,b,f);
-		h00=elevation(uFine,a); h10=elevation(uFine,ivec2(b.x,a.y)); h01=elevation(uFine,ivec2(a.x,b.y)); h11=elevation(uFine,b);
-		stepSize=uLocal.z;
-	} else {
-		a=clamp(a,0,256); b=clamp(b,0,256);
-		ink=paintAt(uMapInk,a,b,f);
-		h00=elevation(uOverview,a); h10=elevation(uOverview,ivec2(b.x,a.y)); h01=elevation(uOverview,ivec2(a.x,b.y)); h11=elevation(uOverview,b);
-	}
+vec4 chartCell(sampler2D heights,sampler2D inks,ivec2 a,ivec2 b,vec2 f,float stepSize,out vec4 ink) {
+	ivec2 ab=ivec2(a.x,b.y), ba=ivec2(b.x,a.y);
+	float h00=elevation(heights,a), h10=elevation(heights,ba), h01=elevation(heights,ab), h11=elevation(heights,b);
+	// The clipmap splits a cell between its (1,0) and (0,1) corners.
+	vec2 rise = f.x+f.y <= 1. ? vec2(h10-h00,h01-h00) : vec2(h11-h01,h11-h10);
+	float roadMask = roadSlopeMask(vec3(rise.x,stepSize,rise.y));
+	ink=mix(mix(inkSample(inks,a,roadMask),inkSample(inks,ba,roadMask),f.x),
+		mix(inkSample(inks,ab,roadMask),inkSample(inks,b,roadMask),f.x),f.y);
 	float h=mix(mix(h00,h10,f.x),mix(h01,h11,f.x),f.y);
 	return vec4(normalize(vec3(mix(h00-h10,h01-h11,f.y),stepSize,mix(h00-h01,h10-h11,f.x))),h);
+}
+vec4 chartSample(vec2 pos,out vec4 ink) {
+	if(all(greaterThanEqual(pos,uLocal.xy)) && all(lessThan(pos,uLocal.xy+(uLocal.w-1.)*uLocal.z))) {
+		vec2 q=pos/uLocal.z;
+		ivec2 a=ivec2(floor(q));
+		int mask=textureSize(uFine,0).x-1;
+		return chartCell(uFine,uFineInk,a&mask,(a+1)&mask,fract(q),uLocal.z,ink);
+	}
+	vec2 q=(pos/uExtent+.5)*256.;
+	ivec2 a=ivec2(floor(q));
+	return chartCell(uOverview,uMapInk,clamp(a,0,256),clamp(a+1,0,256),fract(q),uExtent/256.,ink);
 }
 void main() {
 	vec2 uv=((gl_FragCoord.xy-uViewportOrigin)/uChart.w-.5)*vec2(1.,-1.);

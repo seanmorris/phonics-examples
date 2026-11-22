@@ -79,4 +79,4 @@ On **Granite slabs**, the base color is weathered rock and the pattern color is 
 
 To soften the rock on steep faces, raise **Steep-face detail damping** under **Landform parameters** and generate again. Fine cracks soften first, and broad gullies keep more of their shape.
 
-Brushes and roads use the five colors under **Paint inks**. Painting covers the natural color and relief at full coverage. The shoulder blends back into the natural surface. The minimap reads the same material stack and paint colors.
+Brushes and roads use the five colors under **Paint inks**. Painting covers the natural color and relief at full coverage. The shoulder blends back into the natural surface. Road paint and markings start to fade on slopes above 60° and give way entirely to the landscape at 75°. The minimap reads the same material stack and paint colors.

@@ -15,6 +15,12 @@ uniform vec4 uLayerRange[16],uLayerBlend[16],uLayerMode[16];
 uniform vec4 uLayerPattern[16];
 uniform vec3 uLayerPatternColor[16];
 uniform vec2 uPaletteOffset;
+// Fade pavement between 60 and 75 degrees from level. Both views use the actual terrain face.
+float roadSlopeMask(vec3 face) {
+	float squaredLength = dot(face,face);
+	float up = squaredLength > 0. ? abs(face.y)*inversesqrt(squaredLength) : 1.;
+	return smoothstep(cos(radians(75.)),cos(radians(60.)),up);
+}
 uint layerHash(ivec2 cell) {
 	uvec2 p=uvec2(cell);
 	uint h=p.x*1597334677u ^ p.y*3812015801u;
