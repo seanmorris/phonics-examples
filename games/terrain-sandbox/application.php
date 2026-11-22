@@ -166,7 +166,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 
 $shadow = null;
 $drawOpaque = static function() use ($scene, $session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
-	foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
+	foreach($visibleSites as $site)
+		if($site['kind'] !== 'smoke') ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
 	// The car's shadow darkens the ground under it, so it draws after the terrain and before the car.
 	if($session->mode === 'car' && $vehiclePose !== null)
 		($shadow ??= new GroundShadow)->draw($vehiclePose, $session->landscape, $viewCamera, $width, $height, $scene);
@@ -252,19 +253,18 @@ $engine->start(
 		$arrowBearing = $target === null ? null : NavigationArrow::bearing($target, $vehiclePose, $previousBearing,
 			$session->paused ? 0.0 : $frameSeconds);
 		if($arrowBearing !== $previousBearing) $dirty = true;
-		$sites = $session->delivery?->sites() ?? [];
+		$hadVisibleSmoke = (bool)$visibleSites;
 		$visibleSites = [];
-		foreach($sites as $site)
+		foreach($session->delivery?->beacons($session->time) ?? [] as $site)
 			if(DeliveryRun::beaconInView($site,$viewCamera,$width/$height)) $visibleSites[] = $site;
-		if(count($visibleSites) === 2)
+		if(count($visibleSites) > 1)
 		{
-			[$a,$b] = $visibleSites;
 			[$forward] = $viewCamera->basis();
-			// Composite the farther plume first when both signals lie along the same bearing.
-			if(($b['x']-$a['x'])*$forward[0]+($b['y']-$a['y'])*$forward[1]+($b['z']-$a['z'])*$forward[2] > 0)
-				$visibleSites = [$b,$a];
+			// Blend all visible columns back to front, including smoke left by collected boxes.
+			usort($visibleSites, static fn($a,$b) => (($b['x']-$a['x'])*$forward[0]
+				+ ($b['y']-$a['y'])*$forward[1] + ($b['z']-$a['z'])*$forward[2]) <=> 0.);
 		}
-		if($visibleSites && $session->time !== $lastRenderedTime) $dirty = true;
+		if(($hadVisibleSmoke || $visibleSites) && $session->time !== $lastRenderedTime) $dirty = true;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
@@ -303,7 +303,7 @@ $engine->start(
 			if($session->mode === 'jet' && $session->flightTrails->active())
 				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
-			foreach($visibleSites as $site) $beacon->smoke($site,$viewCamera,$width,$height,$session->time);
+			foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->smoke($site,$viewCamera,$width,$height,$session->time);
 			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
@@ -323,7 +323,7 @@ $engine->start(
 					$car || $waterRace ? $session->circuitChartSpan() : null, circular: $car);
 				if($span !== null)
 					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize,'circular'=>$car,
-						'markers'=>$sites ?: ($target === null ? [] : [$target])];
+						'markers'=>$session->delivery?->sites() ?: ($target === null ? [] : [$target])];
 			}
 			$engine->device->present();
 			if($jet)

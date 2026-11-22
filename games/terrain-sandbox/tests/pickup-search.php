@@ -99,20 +99,40 @@ $land->queue(['type'=>'road','points'=>[[-48,0,0],[-24,4,0],[0,0,0],[24,4,0],[48
 $land->queue($moat); $land->commit();
 $planner = new PickupSearch($land,-5.,$origin);
 [$box,$work] = search($planner,$origin);
-check($box !== null && max(abs($box['x']),abs($box['z']))<=64 && $work<3000,
-	'The search exhausts the small depot component and verifies cover behind its road crest');
-$planner->placed($box);
+check($box === null && $work<3000, 'Hidden sites on the small depot island fall inside the one-mile exclusion');
 [$next,$work] = search($planner,$origin,1.79);
-check($next !== null && $work<350 && hypot($next['x']-$box['x'],$next['z']-$box['z'])>32,
-	'A second island leg reuses the depot component and picks a distinct destination');
+check($next === null && $work<350, 'Retrying reuses the exhausted depot component');
 $land->close();
 
 $land = new Landscape(['worldSize'=>1536]+$flat); $land->queue($moat); $land->commit();
 $planner = new PickupSearch($land,-5.,$origin);
 [$box] = search($planner,['x'=>512.,'z'=>0.,'y'=>0.]);
+check($box === null && (new ReflectionProperty(PickupSearch::class,'regions'))->getValue($planner) === [],
+	'A small map with no point a mile from its depot skips the flood entirely');
+// A corner depot in the same world can reach a mile, but the observer is isolated inside the moat.
+$planner = new PickupSearch($land,-5.,['x'=>700.,'z'=>700.,'y'=>0.]);
+[$box] = search($planner,$origin);
 $regions = (new ReflectionProperty(PickupSearch::class,'regions'))->getValue($planner);
 check($box === null && count($regions)===2 && isset($regions[64],$regions[16]),
 	'A separated car checks each actual grid once when two caps round to 64 meters');
+$land->close();
+
+// The driver is fifty meters west of the depot. A box at x=1600 would be over a mile
+// from the driver, but still nine meters too close to the goal.
+$land = new Landscape(['worldSize'=>4096]+$flat);
+$land->queue(['type'=>'road','points'=>[[-80,3,0],[1600,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
+$land->queue(['type'=>'raise','x'=>96,'z'=>0,'radius'=>54,'amount'=>5]);
+$land->commit();
+$depot = ['x'=>0.,'y'=>3.,'z'=>0.];
+$driver = ['x'=>-50.]+$depot;
+$planner = new PickupSearch($land,1.,$depot);
+[$box] = search($planner,$driver);
+check($box === null, 'A hidden, reachable road end just inside one mile from the depot is excluded');
+$land->queue(['type'=>'road','points'=>[[1590,3,0],[1620,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
+$land->commit();
+[$box] = search($planner->refitted($land,1.,$depot),$driver);
+check($box !== null && $box['x'] === 1616.0 && $box['z'] === 0.0,
+	'The fine fallback accepts the first reachable grid point beyond one mile');
 $land->close();
 
 // The bend is between two coarse rows. A hill screens the distant island across the bend.

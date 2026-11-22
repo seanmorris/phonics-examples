@@ -1042,25 +1042,27 @@ test('a package run marks its terrain-hidden pickup and reveals smoke above the 
 	});
 
 	await boot(page);
-	// A short dry causeway makes the two possible sight lines pass clear of the red depot smoke.
-	// The distant search bands all land in water. The local search must follow the causeway.
+	// A mile of dry causeway on either side puts both possible pickup plumes clear of the red depot smoke.
+	// Water surrounds the causeway, so each qualifying box must lie on the same narrow road.
 	const road = {
 		type: 'road'
-		, points: [[-192,5,0],[-96,5,0],[-64,11,0],[0,5,0],[64,11,0],[96,5,0],[192,5,0]]
+		, points: [[-1920,5,0],[0,5,0],[1920,5,0]]
 		, width: 22
 		, shoulder: 2
 		, crown: 0
 	};
 
 	// Both exits cross a gentle crest above the crate. Its smoke clears the crest.
-	const dry = fixture({history: [[road]],revision: 1});
+	const crests = [-96, 96].map(x => ({type: 'raise', x, z: 0, radius: 44, amount: 6}));
+	const dry = fixture({history: [[road, ...crests]], revision: 1});
+
 	dry.landscape.recipe.worldSize = 8192;
 	dry.settings.waterLevel = 1;
 	await load(page, dry);
 	await press(page, 'delivery');
 	await expect.poll(async() => (await status(page)).delivery?.target?.kind).toBe('pickup');
 	const {target,depot} = (await status(page)).delivery;
-	expect(Math.abs(target.x-depot.x)).toBeGreaterThanOrEqual(96);
+	expect(Math.abs(target.x-depot.x)).toBeGreaterThanOrEqual(1609.344);
 	expect(target.z).toBe(depot.z);
 	await canvas(page).focus();
 	await page.keyboard.press('h');

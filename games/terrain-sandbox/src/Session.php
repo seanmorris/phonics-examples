@@ -513,7 +513,7 @@ final class Session
 					$this->dirty = true;
 				if($this->delivery !== null && $this->carSearch === null)
 				{
-					$event = $this->delivery->step($this->landscape,$this->water->level(),$before,$after);
+					$event = $this->delivery->step($this->landscape,$this->water->level(),$before,$after,$this->time + $seconds);
 					if($event !== null) { $this->message = $event; $this->dirty = true; }
 				}
 				$this->senseShade($seconds, $after);

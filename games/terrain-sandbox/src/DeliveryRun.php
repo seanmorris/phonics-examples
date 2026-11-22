@@ -10,7 +10,9 @@ final class DeliveryRun
 {
 	public const HEIGHT = 108.0;
 	public const RADIUS = 18.0;
+	public const MIN_LEG = 1609.344; // One statute mile, measured from the depot.
 	public const MAX_LEG = 5600.;
+	public const PUFF_COUNT = 36, PUFFS_PER_SECOND = 4;
 	private const JUMP_CLEARANCE = 8.0;
 	public const COLORS = ['pickup'=>'#caff18', 'drop'=>'#ff3528', 'checkpoint'=>'#ffcc54'];
 
@@ -18,6 +20,7 @@ final class DeliveryRun
 	public int $delivered = 0;
 	public ?array $depot = null;
 	private ?array $pickup = null;
+	private array $collectedSmoke = [];
 	private ?PickupSearch $planner = null;
 	private ?\Generator $search = null;
 	private bool $parked = true;
@@ -42,11 +45,25 @@ final class DeliveryRun
 		return $this->search->valid();
 	}
 
-	/** Both smoke emitters and chart markers read these same world positions. */
+	/** Active delivery sites shown on the map. */
 	public function sites(): array
 	{
 		if($this->depot === null) return [];
 		return $this->pickup === null ? [$this->depot] : [$this->depot,$this->pickup];
+	}
+
+	/** Airborne smoke stays at each collection site until its last puff reaches the top. */
+	public function beacons(float $time): array
+	{
+		$beacons = $this->sites();
+		$cycle = (int)floor($time * self::PUFFS_PER_SECOND);
+		foreach($this->collectedSmoke as $i => [$site, $lastEmission])
+		{
+			$count = self::PUFF_COUNT - ($cycle - $lastEmission);
+			if($count > 0) $beacons[] = ['kind'=>'smoke','puffs'=>$count] + $site;
+			else unset($this->collectedSmoke[$i]);
+		}
+		return $beacons;
 	}
 
 	public function refit(Landscape $land, float $water): ?string
@@ -69,7 +86,7 @@ final class DeliveryRun
 			['x'=>$site['x']-$r,'z'=>$site['z']-$r,'size'=>2*$r], $site['y']-2, $site['y']+self::HEIGHT+$r);
 	}
 
-	public function step(Landscape $land, float $water, array $from, array $to): ?string
+	public function step(Landscape $land, float $water, array $from, array $to, float $time): ?string
 	{
 		if($this->depot === null)
 		{
@@ -99,7 +116,7 @@ final class DeliveryRun
 			$site = $this->search->getReturn();
 			$this->search = null;
 			$this->phase += 1.79;
-			if($site === null) return 'No reachable pickup behind terrain here. Drive on or reshape the terrain to search again.';
+			if($site === null) return 'No reachable pickup behind terrain at least one mile from the depot. Drive on or reshape the terrain to search again.';
 			$this->waitingAt = null;
 			// The driver may have crested the ridge while the route was being checked.
 			if(!PickupCover::blocks($land,$to,$site,$site['cover'])
@@ -115,6 +132,7 @@ final class DeliveryRun
 		if($from['recoveries'] !== $to['recoveries']
 			|| !self::crossesSite($from,$to,$target,$this->carrying ? 6.0 : 3.0)) return null;
 		if($this->carrying) $this->delivered++;
+		else $this->collectedSmoke[] = [$this->pickup, (int)floor($time * self::PUFFS_PER_SECOND)];
 		$this->carrying = !$this->carrying;
 		$this->pickup = null;
 		return $this->carrying ? 'Box collected. Return to the red depot.' : 'Delivered! Finding the next box…';

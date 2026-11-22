@@ -59,15 +59,16 @@ GLSL);
 uniform mat4 vp;
 uniform vec3 origin;
 uniform vec2 focal;
-uniform float clock, plumeHeight;
+uniform float plumeHeight;
+uniform vec3 puffClock; // Fraction of a birth interval, wrapped emission index, full column count.
 out vec2 disk;
 out float seed, life;
 const vec2 quad[6] = vec2[6](vec2(-1,-1),vec2(1,-1),vec2(1,1),vec2(-1,-1),vec2(1,1),vec2(-1,1));
 void main(){
 	// Sorted layers rise together. Each new puff keeps its own shape all the way to the top.
-	float rank = float(35-gl_InstanceID), cycles = clock*4.;
-	life = (rank+fract(cycles))/36.;
-	seed = mod(rank-floor(cycles),97.);
+	float rank = puffClock.z - 1. - float(gl_InstanceID);
+	life = (rank+puffClock.x)/puffClock.z;
+	seed = mod(rank-puffClock.y,97.);
 	float spin = seed*2.39996+life*3.;
 	float width = mix(1.35,13.5,sqrt(life));
 	vec3 p = origin + vec3(cos(spin)*width*.31, 1.+life*plumeHeight, sin(spin)*width*.31);
@@ -131,7 +132,9 @@ GLSL);
 		$this->place($p,$site,$eye,$w,$h);
 		$f = 1/tan($eye->fov/2);
 		glUniform2f($p->location('focal'),$f*$h/$w,$f);
-		glUniform1f($p->location('clock'),fmod($time,873.));
+		$cycles = $time * DeliveryRun::PUFFS_PER_SECOND;
+		$latest = floor($cycles);
+		glUniform3f($p->location('puffClock'),$cycles-$latest,fmod($latest,97.),DeliveryRun::PUFF_COUNT);
 		glUniform1f($p->location('plumeHeight'),DeliveryRun::HEIGHT);
 		glUniform3f($p->location('tint'),...NavigationArrow::rgb($site['color']));
 		glEnable(GL_DEPTH_TEST);
@@ -139,7 +142,8 @@ GLSL);
 		glDisable(GL_CULL_FACE);
 		glEnable(GL_BLEND);
 		glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE);
-		glDrawArraysInstanced(GL_TRIANGLES,0,6,36);
+		// Highest puffs draw first. A stopped emitter omits new births at the bottom.
+		glDrawArraysInstanced(GL_TRIANGLES,0,6,$site['puffs'] ?? DeliveryRun::PUFF_COUNT);
 		glDisable(GL_BLEND);
 		glDepthMask(true);
 		glBindVertexArray(0);

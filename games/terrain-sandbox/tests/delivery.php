@@ -54,10 +54,17 @@ $action('pause');
 $from = $to = $s->car->state();
 $from['x'] = $pickup['x']-12; $to['x'] = $pickup['x']+12;
 $from['z'] = $to['z'] = $pickup['z'];
-$cross = static fn($a,$b) => $s->delivery->step($s->landscape,-10,$a,$b);
+$cross = static fn($a,$b) => $s->delivery->step($s->landscape,-10,$a,$b,$s->time);
 check($cross(['y'=>20]+$from,['y'=>20]+$to) === null, 'Passing overhead leaves the box');
 check($cross($from,['recoveries'=>1]+$to) === null, 'Vehicle recovery cannot collect a box');
 check($cross($from,$to) !== null && $s->delivery->carrying && $s->navigationTarget() === $depot && $s->delivery->sites() === [$depot], 'Collecting removes only the box and points straight back to the depot');
+$beacons = $s->delivery->beacons($s->time);
+check($beacons === [$depot,['kind'=>'smoke','puffs'=>36]+$pickup], 'At collection the complete plume stays at the missing box');
+$action('pause');
+$s->step(2.);
+check($s->delivery->beacons($s->time) === $beacons, 'Pause freezes the rising smoke');
+$action('pause');
+$collectedAt = $s->time;
 $drop = $next('drop');
 check($drop !== $pickup, 'The drop is a distinct leg');
 $site = $s->car->checkedSite($s->landscape,-10,$drop['x'],$drop['z'],0,[]);
@@ -79,7 +86,12 @@ check($cross($air($depot,-12,6,6.1),$air($depot,12,6,6.1)) === null, 'A low jump
 check($cross($air($depot,5,12,0),$air($depot,5,8.01,0)) === null, 'Crossing above the depot keeps the box on board');
 check($cross($air($depot,5,10,0),$air($depot,5,8,0)) !== null && $s->delivery->delivered === 2 && !$s->delivery->carrying,
 	'Descending onto the eight-meter ceiling inside the depot completes the delivery');
-$next('pickup');
+$third = $next('pickup');
+$beacons = $s->delivery->beacons($s->time);
+check(count($beacons) === 4 && $beacons[2]['x'] === $pickup['x'] && $beacons[3]['x'] === $second['x'],
+	'Rapid deliveries leave independent airborne columns beside the new live sites');
+check($s->delivery->beacons($collectedAt+4.5)[2]['puffs'] === 18, 'Halfway through the rise only the upper eighteen puffs remain');
+check($s->delivery->beacons($s->time+9.) === [$depot,$third], 'Each plume expires after its last puff leaves the top');
 $s->input(['values'=>['waterLevel'=>2]],1/60,16/9);
 check($s->navigationTarget() === null, 'Rising water retires the submerged box immediately');
 check($s->delivery->sites() === [$depot], 'Flooding preserves the permanent depot marker');
@@ -244,10 +256,10 @@ $find = (new PickupSearch($mountain->landscape,$mountain->water->level(),$start)
 foreach($find as $_) {}
 $box = $find->getReturn();
 check($box !== null && PickupCover::blocks($mountain->landscape,$start,$box,$box['cover'])
-	&& hypot($box['x']-$start['x'],$box['z']-$start['z'])>500., 'Mountain roads continue inside the innermost distance band');
+	&& hypot($box['x']-$start['x'],$box['z']-$start['z'])>=DeliveryRun::MIN_LEG, 'Mountain pickups clear the one-mile depot radius');
 $mountain->close();
 
-// Only the local grid can leave this 120-meter island. No coarse-grid neighbor of the depot is dry.
+// A short island cannot host a delivery. Extending the dry causeway beyond one mile makes the run possible.
 $island = new Landscape(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0]);
 $island->queue(['type'=>'road','points'=>[[-58,3,0],[58,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
 $island->commit();
@@ -255,37 +267,38 @@ $start = ['x'=>0.,'z'=>0.,'y'=>3.,'motion'=>'driving','speed'=>0.,'recoveries'=>
 $run = new DeliveryRun;
 for($i=0; $i<5000; $i++)
 {
-	$message = $run->step($island,1.,$start,$start);
+	$message = $run->step($island,1.,$start,$start,0.);
 	if($message !== null) break;
 }
 check(str_contains($message ?? '', 'behind terrain') && $run->target() === null, 'The open island has no concealed pickup');
 $turned = ['yaw'=>M_PI]+$start;
-check($run->step($island,1.,$start,$turned) === null && !$run->searchPending(), 'Turning in place cannot create cover');
+check($run->step($island,1.,$start,$turned,0.) === null && !$run->searchPending(), 'Turning in place cannot create cover');
 // A short crest is traversable on the island and rises above the box.
-$island->queue(['type'=>'road','points'=>[[0,3,0],[24,7,0],[48,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
+$island->queue(['type'=>'road','points'=>[[40,3,0],[1808,3,0]],'width'=>10,'shoulder'=>1,'crown'=>0]);
+$island->queue(['type'=>'raise','x'=>76,'z'=>0,'radius'=>40,'amount'=>5]);
 $island->commit();
 $run->refit($island,1.);
 $high = ['y'=>30.]+$start;
 do {
-	$message = $run->step($island,1.,$high,$high);
+	$message = $run->step($island,1.,$high,$high,0.);
 	while($run->advanceSearch(5.)) {}
 } while($message === null && $run->searchPending());
 check($run->target() === null, 'From above the crest the box is exposed');
-check($run->step($island,1.,$high,$start) === 'Searching for a reachable pickup…', 'Landing retries the search');
+check($run->step($island,1.,$high,$start,0.) === 'Searching for a reachable pickup…', 'Landing retries the search');
 while($run->advanceSearch(5.)) {}
 check($run->target() === null, 'Between-frame work leaves publication to the simulation');
-$run->step($island,1.,$start,$high);
+$run->step($island,1.,$start,$high,0.);
 check($run->target() === null && !$run->searchPending(), 'Clearing the crest before publication rejects stale cover');
 for($i=0; $i<5000 && $run->target() === null; $i++)
 {
-	$run->step($island,1.,$start,$start);
+	$run->step($island,1.,$start,$start,0.);
 	while($run->advanceSearch(5.)) {}
 }
 $box = $run->target();
-check($box !== null && $box['x']>=32 && abs($box['z'])<6, 'The local search finds the screened end of the island');
+check($box !== null && $box['x']>=DeliveryRun::MIN_LEG && abs($box['z'])<6, 'The search finds the screened end of the mile-long causeway');
 check(!$run->searchPending() && !$run->advanceSearch(5.), 'A published pickup needs no timer work');
 $run->refit($island,1.);
-$run->step($island,1.,$start,$start);
+$run->step($island,1.,$start,$start,0.);
 $run->refit($island,12.);
 check(!$run->advanceSearch(5.) && !$run->searchPending(), 'Flooding cancels outstanding search work');
 $island->close();

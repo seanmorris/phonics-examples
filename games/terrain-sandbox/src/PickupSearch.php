@@ -19,7 +19,9 @@ final class PickupSearch
 	public function __construct(private Landscape $land, private float $water, private array $depot)
 	{
 		$r = $land->recipe();
-		$this->range = min(DeliveryRun::MAX_LEG,($r['worldSize']/2-6)*.91);
+		$half = $r['worldSize']/2-6;
+		$farthestCorner = hypot($half+abs($depot['x']),$half+abs($depot['z']));
+		$this->range = min(DeliveryRun::MAX_LEG,$farthestCorner,max(1.25*DeliveryRun::MIN_LEG,$half*.91));
 		$this->floor = self::floorTest($land);
 		// Tall, steep-sided valley walls can screen an entire plume and force a drive around the mesa.
 		$relief = $r['wallHeight']*$r['heightScale'];
@@ -89,11 +91,12 @@ final class PickupSearch
 
 	public function find(array $car, float $phase): \Generator
 	{
+		if($this->range < DeliveryRun::MIN_LEG) return null;
 		if($this->plateauRise > 0.) {
 			$site = yield from $this->search($car,$phase,true);
 			if($site !== null) return $site;
 		}
-		// An enclosed branch may have no route around a plateau. It can still support a local delivery.
+		// An enclosed branch may have no route around a plateau. Lower terrain can still conceal a full-length delivery.
 		return yield from $this->search($car,$phase,false);
 	}
 
@@ -115,7 +118,7 @@ final class PickupSearch
 		// Try both route resolutions in the chosen sector before accepting a long leg elsewhere.
 		// A coarse grid commonly misses the bend into a narrower branch of the canyon.
 		$passes = $mesa ? [[true,[1.]], [false,[1.]]]
-			: [[true,[1.,.70,.45]], [true,[.25,.12]], [false,[1.,.72,.45,.25]]];
+			: [[true,[1.,.70,.45]], [false,[1.,.72,.45]]];
 		foreach($passes as [$sector,$bands])
 		{
 			$visited = [];
@@ -137,15 +140,17 @@ final class PickupSearch
 				}
 			}
 		}
-		$nearby = $mesa ? [] : [[96.,1200.],[16.,384.]];
-		foreach($nearby as [$cap,$radius])
+		// Walk narrow branches past the one-mile boundary. Keep the fine-grid work bounded
+		// to the number of sites its old 384 m disk could visit on open ground.
+		$nearby = $mesa ? [] : [[96.,2400.,null],[16.,1920.,1800]];
+		foreach($nearby as [$cap,$radius,$limit])
 		{
 			$region = $this->region($cap);
 			$key = spl_object_id($region);
 			$access[$key] ??= yield from $region->containsPosition($car['x'],$car['z']);
 			if(!$access[$key]) continue;
 			$radius = min($radius,$this->range);
-			$site = yield from $this->choosePoint($region->nearby($radius),$radius,$car,$alternates,$mesa);
+			$site = yield from $this->choosePoint($region->nearby($radius),$radius,$car,$alternates,$mesa,limit:$limit);
 			if($site !== null) return $site;
 		}
 		// A thin, winding road can fall between radial probes. Its already verified bends are pickup sites too.
@@ -175,6 +180,9 @@ final class PickupSearch
 		$seen = [];
 		foreach($bands as $fraction)
 		{
+			$outer = $this->range*$fraction*($mesa ? .98 : 1.);
+			if($outer < DeliveryRun::MIN_LEG) continue;
+			$inner = max(DeliveryRun::MIN_LEG,$this->range*$fraction*($mesa ? .77 : .70));
 			$open = []; $deferred = [];
 			$count = $sector ? 16 : ($fraction === 1. ? 48 : 24);
 			for($i=0; $i<$count; $i++)
@@ -185,9 +193,8 @@ final class PickupSearch
 					? $phase+self::GOLDEN_ANGLE+1.5*(2*fmod($i*.61803399+.5,1.)-1.)
 					: $phase+self::GOLDEN_ANGLE*$attempt;
 				$radial = fmod($attempt*.75487767,1.);
-				$from = $mesa ? $this->depot : $car;
-				$distance = $this->range*$fraction*($mesa ? .77+.21*$radial : .70+.30*$radial);
-				$id = $region->nearest($from['x']+sin($angle)*$distance,$from['z']+cos($angle)*$distance,true);
+				$distance = $inner+($outer-$inner)*$radial;
+				$id = $region->nearest($this->depot['x']+sin($angle)*$distance,$this->depot['z']+cos($angle)*$distance,true);
 				if($id === null || isset($seen[$id])) continue;
 				$seen[$id] = true;
 				$point = $region->point($id);
@@ -228,7 +235,7 @@ final class PickupSearch
 		$distance = hypot($x-$car['x'],$z-$car['z']);
 		$leg = hypot($x-$this->depot['x'],$z-$this->depot['z']);
 		if($mesa && ($leg < .75*$this->range || $leg > $this->range)) return null;
-		if($distance<12 || $distance>DeliveryRun::MAX_LEG || $leg<12
+		if($distance<12 || $distance>DeliveryRun::MAX_LEG || $leg<DeliveryRun::MIN_LEG
 			|| $y<$this->water+1) return null;
 		$site = ['x'=>$x,'z'=>$z,'y'=>$y,'kind'=>'pickup','color'=>DeliveryRun::COLORS['pickup']];
 		if($this->floor !== null && !($this->floor)($x,$z,$y)) return null;
@@ -249,7 +256,7 @@ final class PickupSearch
 		return $site+['cover'=>$cover];
 	}
 
-	private function choosePoint(\Generator $points, float $radius, array $car, array &$alternates, bool $mesa, ?float $bearing = null): \Generator
+	private function choosePoint(\Generator $points, float $radius, array $car, array &$alternates, bool $mesa, ?float $bearing = null, ?int $limit = null): \Generator
 	{
 		$alternate = null;
 		$best = null;
@@ -258,6 +265,7 @@ final class PickupSearch
 		{
 			yield;
 			if($point === null) continue;
+			if($limit !== null && $limit-- <= 0) break;
 			$distance = hypot($point[0]-$car['x'],$point[1]-$car['z']);
 			if($distance <= $bestDistance) continue;
 			if($bearing !== null && cos(atan2($point[0]-$this->depot['x'],$point[1]-$this->depot['z'])-$bearing)<.35) continue;
