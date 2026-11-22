@@ -1074,6 +1074,29 @@ $laps = (int)$generator->settings['gateLaps'];
 expect(in_array("dry:$laps", $placed, true) && in_array("flooded:$laps", $placed, true),
 	'The search keeps the gates it placed for applying either variant');
 
+// A second author edits one generated section before applying the preview.
+$edited = new Session($generator->landscape->recipe());
+$plan = (fn() => $this->circuitPreview)->call($generator);
+(function($plan) { $this->circuitPreview = $plan; })->call($edited,$plan);
+$sections = $generator->roadEditor->circuitRoads();
+$edited->roadEditor->circuitDrafts($sections);
+input($edited,['actions'=>[['type'=>'road-editor','op'=>'open']]]);
+[$px,$py,$pz] = $sections[0]['points'][10];
+input($edited,['actions'=>[['type'=>'road-editor','op'=>'point','generation'=>$edited->generation,
+	'revision'=>0,'id'=>-1,'index'=>10,'x'=>$px+30,'y'=>$py,'z'=>$pz+20]]]);
+input($edited,['actions'=>['circuit-dry']]);
+while($edited->preparingRoad()) input($edited,[]);
+$changed = $edited->takeCandidate();
+expect($changed !== null && $changed->roadRecords()[0]['points'][10] === [$px+30,$py,$pz+20],
+	'Editing a generated section grades the exact control point the editor shows');
+$edited->publishLandscape($changed);
+$savedEdit = json_decode($edited->save(),true,flags:JSON_THROW_ON_ERROR);
+$editedLine = $savedEdit['circuit']['route']['points'];
+$gap = min(array_map(static fn($p) => hypot($p[0]-($px+30),$p[1]-($pz+20)),$editedLine));
+expect($gap<12 && $savedEdit['course'] !== $original->export(),
+	'The saved race line follows the modified section and publishes its own gates');
+$edited->close();
+
 $gateLine = [];
 foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 {

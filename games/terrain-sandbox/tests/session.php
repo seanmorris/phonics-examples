@@ -1845,6 +1845,35 @@ input($lab,['actions'=>['undo']]); publish($lab);
 expect($lab->roadEditor->packet($lab)['road']['points'][1] === $split['points'][1], 'Undo restores the prior shape in the open editor');
 $command('close');
 expect($lab->roadEditor->packet($lab) === null && $lab->roadEditor->view === null, 'Closing the editor releases pending chart work');
+// Make a race directly from hand-placed editor points, including a saved road replacement.
+$manual = new Session(['worldSize'=>2048,'heightScale'=>0.,'detailAmplitude'=>0.]);
+input($manual,['values'=>['waterLevel'=>-10.,'gateLaps'=>3]]);
+$edit = static function(string $op,array $values=[]) use ($manual) {
+	input($manual,['actions'=>[['type'=>'road-editor','op'=>$op,'generation'=>$manual->generation,
+		'revision'=>$manual->landscape->revision()]+$values]]);
+};
+$edit('open');
+foreach([[-250,-180],[250,-180],[250,180],[-250,180]] as [$x,$z]) $edit('add',['x'=>$x,'z'=>$z]);
+$edit('circuit'); while($manual->preparingRoad()) input($manual,[]); publish($manual);
+$made = $manual->status()['circuit']; $roads = $manual->landscape->roadRecords();
+expect($made['active']==='dry' && count($manual->course->gates())>=8 && $manual->course->laps()===3,'Manually drawn circuit has a lap start and checkpoints');
+expect($roads[0]['points'][0]===end($roads[0]['points']) && $manual->roadEditor->packet($manual)['id']===0,'The closed road is selected for further editing');
+$edit('point',['id'=>0,'index'=>1,'x'=>300,'y'=>3,'z'=>-180]);
+$edit('circuit',['id'=>0]); while($manual->preparingRoad()) input($manual,[]); publish($manual);
+expect(count($manual->landscape->roads())===1 && $manual->status()['circuit']['points']!==$made['points'],'Editing a saved circuit road moves the race line without adding another road');
+$manualReload = new Session; $manualReload->load($manual->save());
+expect($manualReload->course->export()==$manual->course->export() && $manualReload->landscape->roadRecords()==$manual->landscape->roadRecords(),
+	'The manual course, laps and road control points survive a save round trip');
+$manualReload->close(); $manual->close();
+
+$longLab = new Session(['worldSize'=>32768,'heightScale'=>0.,'detailAmplitude'=>0.]);
+$longLab->road = [[-11500.,2.,0.],[11500.,2.,0.]];
+input($longLab,['actions'=>['road-apply']]);
+expect($longLab->preparingRoad() && $longLab->takeCandidate()===null,'A long authored road spans input frames without early publication');
+while($longLab->preparingRoad()) input($longLab,[]);
+publish($longLab);
+expect(count($longLab->landscape->roadRecords())===1 && $longLab->landscape->height(0,0)>1.9,'All long-road chunks publish as one operation');
+$longLab->close();
 $lab->close();
 
 echo "Landscape sandbox session: $checks checks passed\n";

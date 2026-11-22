@@ -11,6 +11,8 @@ final class RoadEditor
 	public bool $open = false;
 	public ?array $view = null;
 	private ?int $target = null;
+	private array $proposed = [], $generated = []; // Negative selection IDs address unpublished circuit sections.
+	private ?int $publishingSection = null;
 	private array $draft = [], $original = [], $sketchOptions = [];
 	private int $selection = -1, $generation = -1, $revision = -1, $sequence = 0, $sent = -1;
 	private bool $catalog = true, $applying = false;
@@ -33,7 +35,14 @@ final class RoadEditor
 
 	private function store(Session $s, array $road): void
 	{
-		if($this->target !== null) { $this->draft = $road; return; }
+		if($this->target !== null) {
+			$this->draft = $road;
+			if($this->target < 0) {
+				$this->proposed[$this->target] = $road;
+				$this->catalog = true;
+			}
+			return;
+		}
 		$s->road = $road['points'];
 		unset($road['points']);
 		foreach(['width'=>'roadWidth','shoulder'=>'roadShoulder'] as $key=>$setting)
@@ -63,7 +72,8 @@ final class RoadEditor
 	/** A new file or recipe has its own edit indices, camera and map extent. */
 	public function reset(): void
 	{
-		$this->target = null;
+		$this->target = $this->publishingSection = null;
+		$this->proposed = $this->generated = [];
 		$this->original = $this->draft = $this->sketchOptions = [];
 		$this->selection = -1;
 		$this->captured = $this->view = null;
@@ -73,16 +83,48 @@ final class RoadEditor
 		$this->sequence++;
 	}
 
+	public function circuitDrafts(array $sections): void
+	{
+		$keepManual = $this->target !== null && $this->target >= 0 && $this->draft !== $this->original;
+		if($this->target !== null && $this->target < 0) $this->select([],null);
+		$this->generated = $this->proposed = [];
+		foreach($sections as $i=>$road) $this->proposed[-1-$i] = $road;
+		$this->generated = $this->proposed;
+		if($sections && !$keepManual) $this->select($this->proposed,-1);
+		$this->catalog = true;
+		$this->sequence++;
+	}
+
+	public function circuitRoads(): array { return array_values($this->proposed); }
+	public function circuitEdited(): bool { return $this->proposed !== $this->generated; }
+	public function onCircuit(): bool { return $this->target !== null && $this->target < 0; }
+
+	public function publishingCircuit(): void
+	{
+		$this->publishingSection = $this->onCircuit() ? -1-$this->target : 0;
+	}
+
 	private function select(array $records, ?int $index): void
 	{
 		if($index !== null && !isset($records[$index])) throw new \InvalidArgumentException('This road has changed.');
 		$this->target = $index;
-		$this->original = $this->draft = $index === null ? [] : $records[$index];
+		$this->draft = $index === null ? [] : $records[$index];
+		$this->original = $this->generated[$index] ?? $this->draft;
 		$this->selection = $index === null ? -1 : 0;
 	}
 
 	public function published(Session $s): void
 	{
+		if($this->proposed) {
+			$id = null;
+			if($this->publishingSection !== null) {
+				$added = array_slice(array_keys($s->landscape->roadRecords()),-count($this->proposed));
+				$id = $added[$this->publishingSection] ?? null;
+			}
+			$this->publishingSection = null;
+			$this->circuitDrafts([]);
+			if($id !== null) $this->select($s->landscape->roadRecords(),$id);
+		}
 		if($this->applying) $this->sync($s);
 	}
 
@@ -93,7 +135,7 @@ final class RoadEditor
 		$this->generation = $s->generation;
 		$this->revision = $revision;
 		$this->catalog = true;
-		if($this->target !== null || $this->applying) {
+		if(!$this->onCircuit() && ($this->target !== null || $this->applying)) {
 			$records = $s->landscape->roadRecords();
 			$id = $this->applying && $this->target === null ? array_key_last($records) : $this->target;
 			if($this->applying && $this->target === null) { $s->road = []; $this->clearSketch(); }
@@ -162,22 +204,31 @@ final class RoadEditor
 			}
 			if($this->applying || $s->preparing || $s->picking) throw new \RuntimeException('Wait for the terrain edit to finish.');
 			if($op === 'select') {
-				$this->select($s->landscape->roadRecords(),$a['id'] ?? null);
+				$this->select($s->landscape->roadRecords()+$this->proposed,$a['id'] ?? null);
 				$this->message = '';
 				return null;
 			}
 			if(($a['id'] ?? null) !== $this->target) throw new \RuntimeException('This road has changed.');
 			$road = $this->working($s);
 			$count = count($road['points']);
+			$closed = $count>=4 && $road['points'][0] === $road['points'][$count-1];
 			$i = $a['index'] ?? -1;
 			$this->message = '';
+			if($op === 'circuit') {
+				if($this->onCircuit() || $s->mode !== 'fly') throw new \RuntimeException('Choose a road in free flight to create a circuit.');
+				$road = CircuitRoad::closeLoop($road);
+				return $road + ($this->target === null ? [] : ['replaceAt'=>$this->target]);
+			}
 			if($op === 'apply') {
 				if($count < 2) throw new \RuntimeException('Place at least two road points.');
-				return $road + ($this->target === null ? [] : ['replaceAt'=>$this->target]);
+				return $road + ($this->target === null || $this->onCircuit() ? [] : ['replaceAt'=>$this->target]);
 			}
 			if($op === 'revert') {
 				if($this->target === null) { $s->road = []; $this->clearSketch(); }
-				else $this->select($s->landscape->roadRecords(),$this->target);
+				elseif($this->onCircuit()) {
+					$this->store($s,$this->original);
+					$this->select($this->proposed,$this->target);
+				} else $this->select($s->landscape->roadRecords(),$this->target);
 				return null;
 			}
 			if($op === 'section') {
@@ -236,6 +287,11 @@ final class RoadEditor
 					default: throw new \InvalidArgumentException('Unknown road editor action.');
 				}
 			}
+			if($closed && ($i===0 || $i===$count-1)) {
+				$other = $i===0 ? $count-1 : 0;
+				if($op==='point' || $op==='ground') $road['points'][$other] = $road['points'][$i];
+				if($op==='bank') $road['banks'][$other] = $road['banks'][$i];
+			}
 			$this->store($s,$road);
 		} catch(\Throwable $error) {
 			$this->message = $error->getMessage();
@@ -254,6 +310,7 @@ final class RoadEditor
 	/** An error in another action in the same transaction discards the entire terrain candidate. */
 	public function cancelPending(string $error): void
 	{
+		$this->publishingSection = null;
 		if($this->applying) $this->applyResult($error);
 	}
 
@@ -266,12 +323,12 @@ final class RoadEditor
 		if(!$this->catalog && $this->sent === $this->sequence && $this->lastSketch === $s->road && $this->lastDefaults === $defaults) return null;
 		$road = $this->working($s);
 		$packet = ['id'=>$this->target,'road'=>$road,'selection'=>min($this->selection,count($road['points'])-1),
-			'changed'=>$this->target === null ? (bool)$s->road : $road !== $this->original,
+			'changed'=>$this->target === null ? (bool)$s->road : $road !== $this->original, 'proposed'=>$this->onCircuit(),
 			'generation'=>$s->generation,'revision'=>$s->landscape->revision(),'extent'=>$s->landscape->recipe()['worldSize'],
 			'camera'=>[$s->camera->position[0],$s->camera->position[2]],'message'=>$this->message];
 		if($this->catalog) {
 			$packet['roads'] = [];
-			foreach($s->landscape->roadRecords() as $id=>$record) $packet['roads'][] = ['id'=>$id,'road'=>$record];
+			foreach($s->landscape->roadRecords()+$this->proposed as $id=>$record) $packet['roads'][] = ['id'=>$id,'road'=>$record];
 		}
 		$this->sent = $this->sequence; $this->lastSketch = $s->road; $this->lastDefaults = $defaults; $this->catalog = false;
 		return $packet;

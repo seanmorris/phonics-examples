@@ -295,7 +295,7 @@ final class CircuitFinder
 		if($circuit->length<($lake ? 1800. : 3000.) || $circuit->length>40000.) return null;
 		$roads = yield from CircuitRoad::grade($this->landscape,$circuit);
 		if($roads === null) return null;
-		$graded = Landscape::load($this->landscape->save());
+		$graded = $this->landscape->fork();
 		try
 		{
 			foreach($roads as $road) { $graded->queue($road); yield; }

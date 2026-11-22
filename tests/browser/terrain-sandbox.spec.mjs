@@ -1430,7 +1430,7 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 });
 
 test('preview, apply and switch between dry and flooded canyon circuits', async({page}) => {
-	test.setTimeout(210_000);
+	test.setTimeout(330_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 672,height: 420});
@@ -1441,7 +1441,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await press(page, 'generate');
 	await expect.poll(async() => (await status(page)).recipe.preset).toBe('canyon');
 	await press(page, 'pause');
-	await page.getByRole('tab', {name: 'Shape', exact: true}).click();
+	await page.getByRole('tab', {name: 'Roads', exact: true}).click();
 	await page.getByText('Circuit generator', {exact: true}).click();
 	await page.getByLabel('Minimum feature height difference').fill('200');
 	await page.getByLabel('Start elevation').fill('-360');
@@ -1456,6 +1456,12 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	expect(preview.revision).toBe(0);
 	await expect(page.getByRole('img', {name: 'Circuit route and gates'})).toBeVisible();
 
+	const sections = page.locator('[data-road-picker]');
+	await expect(sections).toHaveValue('-1');
+	await expect.poll(() => page.locator('[data-road-point] option').count()).toBeGreaterThan(20);
+	await sections.selectOption('-2');
+	await expect.poll(() => page.locator('[data-road-point] option').count()).toBeGreaterThan(20);
+
 	await control(page, 'circuit-dry').click();
 
 	await expect.poll(
@@ -1465,6 +1471,9 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 
 	const dry = await status(page);
 	expect(dry.revision).toBe(1);
+	await expect(sections).toHaveValue('1');
+	await expect.poll(() => page.locator('[data-road-point] option').count()).toBeGreaterThan(20);
+
 
 	expect(
 		dry.course.gates.every(

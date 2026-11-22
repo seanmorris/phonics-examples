@@ -250,6 +250,8 @@ final class Session
 	private ?Landscape $draft = null;
 	/** Whether a complete edited revision is awaiting its matching GPU representation. */
 	public bool $preparing = false;
+	private ?\Generator $roadWork = null;
+	public function preparingRoad(): bool { return $this->roadWork !== null; }
 	/** Whether exact terrain picking is progressing without blocking a frame. */
 	public bool $picking = false;
 	/** Diagnostics for the last confirmed hit or completed miss. */
@@ -327,6 +329,7 @@ final class Session
 			}
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
+			if($this->roadWork !== null) $this->advanceRoad(min(4.,$pickMs));
 			if($wasPicking) $this->advancePick($pickMs);
 			if($this->carSearch !== null) $this->advanceCarSearch();
 			if($this->circuitSearch !== null && $this->draft === null && !$this->preparing)
@@ -569,6 +572,7 @@ final class Session
 		$water->setWaveScale(3.);
 		$swell = $water->level()-$water->heightRange()[0];
 		$this->circuitPreview = null;
+		$this->roadEditor->circuitDrafts([]);
 		$this->circuitSearch = (new CircuitFinder($this->landscape,$dry,$swell,$this->settings['circuitRelief'],
 			$this->settings['circuitStartHeight']))
 			->find($x,$z,$this->gateShapes,$this->settings['gateLaps']);
@@ -586,6 +590,15 @@ final class Session
 			{
 				$this->circuitSearch = null;
 				$this->circuitPreview = $job->getReturn();
+				if($this->circuitPreview !== null) {
+					$sections = $this->circuitPreview->road;
+					if(!$sections) {
+						$grade = CircuitRoad::grade($this->landscape,$this->circuitPreview);
+						foreach($grade as $_) {}
+						$sections = $grade->getReturn() ?? [];
+					}
+					$this->roadEditor->circuitDrafts($sections);
+				}
 				$this->message = $this->circuitPreview
 					? 'Circuit found. Choose a course to place its gates.'
 					: 'No loop matches those elevations here. Try another site or adjust the circuit settings.';
@@ -602,17 +615,19 @@ final class Session
 		$circuit = $this->circuitPreview ?? $this->circuit;
 		if($circuit === null) throw new \RuntimeException('Find a circuit first.');
 		$this->carSearch = null;
-		if($this->circuitPreview?->road)
+		$roads = $this->roadEditor->circuitRoads() ?: $circuit->road;
+		if($this->circuitPreview !== null && $roads)
 		{
-			$graded = $this->editable();
-			foreach($circuit->road as $road) $graded->queue($road);
-			$graded->commit();
-			// The search placed these gates on an identical graded copy of this landscape; reuse them when the laps match.
-			$placed = $circuit->placed[($flooded ? 'flooded' : 'dry') . ':' . $this->settings['gateLaps']] ?? null;
-			$course = $placed !== null ? clone $placed
-				: $circuit->course($graded,$this->gateShapes,$this->settings['gateLaps'],$flooded);
-			$this->circuitCommit = [$circuit,$course,$flooded];
 			$this->message = 'Preparing the graded circuit…';
+			$this->prepareRoads($roads,function(Landscape $graded) use ($roads,$circuit,$flooded) {
+				if($this->roadEditor->circuitEdited())
+					$circuit = CircuitRoad::editedCircuit($graded,$circuit,count($roads));
+				$placed = $circuit->placed[($flooded ? 'flooded' : 'dry') . ':' . $this->settings['gateLaps']] ?? null;
+				$course = $placed !== null ? clone $placed
+					: yield from $circuit->placing($graded,$this->gateShapes,$this->settings['gateLaps'],$flooded);
+				$this->roadEditor->publishingCircuit();
+				$this->circuitCommit = [$circuit,$course,$flooded];
+			});
 			return;
 		}
 		$course = $circuit->course($this->landscape,$this->gateShapes,$this->settings['gateLaps'],$flooded);
@@ -1014,6 +1029,7 @@ final class Session
 			case 'circuit-find': $this->findCircuit(); break;
 			case 'circuit-cancel':
 				$this->circuitSearch = null; $this->circuitPreview = null;
+				$this->roadEditor->circuitDrafts([]);
 				$this->message = 'Circuit search cleared.';
 				break;
 			case 'circuit-dry':
@@ -1028,23 +1044,28 @@ final class Session
 			case 'road-editor':
 				$road = $this->roadEditor->action($this,$action);
 				if($road !== null) {
-					try {
-						$this->editable()->queue($road);
-						$this->roadEditor->applyResult(null);
+					$proposal = $this->roadEditor->onCircuit();
+					$roads = $proposal ? $this->roadEditor->circuitRoads() : [$road];
+					$this->roadEditor->applyResult(null);
+					$this->prepareRoads($roads,function(Landscape $graded) use ($action,$road,$proposal) {
+						if(($action['op'] ?? '') === 'circuit') {
+							$id = $road['replaceAt'] ?? array_key_last($graded->roadRecords());
+							$circuit = CircuitRoad::manualCircuit($graded,$id,$this->water->level());
+							$course = yield from $circuit->placing($graded,$this->gateShapes,$this->settings['gateLaps'],false);
+							$this->circuitCommit = [$circuit,$course,false];
+						} elseif($proposal) $this->roadEditor->publishingCircuit();
 						$this->message = 'Applied the edited road.';
-					} catch(\Throwable $error) {
-						$this->roadEditor->applyResult($error->getMessage());
-						throw $error;
-					}
+					});
 				}
 				break;
 			case 'road-clear': $this->cancelPick(); $this->road = []; $this->roadEditor->clearSketch(); $this->message = 'Road control points cleared.'; break;
 			case 'road-apply':
 				if(count($this->road) < 2) throw new \RuntimeException('Place at least two road points on the terrain.');
-				$this->editable()->queue($this->roadEditor->sketch($this));
-				$this->message = 'Graded a road through ' . count($this->road) . ' control points.';
-				$this->road = [];
-				$this->roadEditor->clearSketch();
+				$this->prepareRoads([$this->roadEditor->sketch($this)],function() {
+					$this->message = 'Graded a road through ' . count($this->road) . ' control points.';
+					$this->road = [];
+					$this->roadEditor->clearSketch();
+				});
 				break;
 			case 'save':
 				if($this->preparing || $this->draft !== null) throw new \RuntimeException('Wait for the terrain edit before saving.');
@@ -1645,7 +1666,45 @@ final class Session
 	private function editable(): Landscape
 	{
 		if($this->preparing) throw new \RuntimeException('Preparing the previous terrain edit. Please wait.');
-		return $this->draft ??= Landscape::load($this->landscape->save());
+		return $this->draft ??= $this->landscape->fork();
+	}
+
+	/** A whole road batch becomes visible in one revision after its final section and gate are ready. */
+	private function prepareRoads(array $roads, \Closure $ready): void
+	{
+		$candidate = $this->editable();
+		$this->draft = null;
+		$this->preparing = true;
+		$this->message = 'Grading the road…';
+		$this->roadWork = (function() use ($roads,$ready,$candidate) {
+			try {
+				foreach($roads as $road) yield from $candidate->queueSteps($road);
+				$candidate->commit();
+				$completion = $ready($candidate);
+				if($completion instanceof \Generator) yield from $completion;
+				$this->draft = $candidate;
+			} finally {
+				if($this->draft !== $candidate) $candidate->close();
+			}
+		})();
+		// Ordinary short roads complete on the original action. Long jobs resume through the input clock.
+		$this->advanceRoad(0.);
+	}
+
+	private function advanceRoad(float $budget): void
+	{
+		$deadline = hrtime(true)+$budget*1e6;
+		try {
+			while($this->roadWork->valid() && hrtime(true)<$deadline) $this->roadWork->next();
+			if($this->roadWork->valid()) return;
+		} catch(\Throwable $error) {
+			$this->roadWork = null;
+			$this->preparing = false;
+			$this->roadEditor->applyResult($error->getMessage());
+			throw $error;
+		}
+		$this->roadWork = null;
+		$this->preparing = false;
 	}
 
 	/**
@@ -1977,6 +2036,7 @@ final class Session
 	 */
 	public function close(): void
 	{
+		$this->roadWork = null;
 		$this->cancelPick(); $this->carSearch = null;
 		$this->circuitSearch = null;
 		$this->releasePin(); $this->landscape->close(); $this->draft?->close(); $this->draft = null;

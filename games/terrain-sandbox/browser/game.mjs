@@ -1810,15 +1810,7 @@ function markup()
 	<p class="terrain-note terrain-sizes" data-gate-sizes></p>
 	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening width or height of 0 takes the gate's own. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. A gate that would overlap another is refused. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
 	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
-	<details><summary>Circuit generator</summary><div class="terrain-grid">
-	<label class="terrain-field">Minimum feature height difference · m<input data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="120"></label>
-	<label class="terrain-field">Start elevation · m<input data-value="circuitStartHeight" type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
-	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
-	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
-	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
-	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
-	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button></div>
-	</div></details>
+
 	${range('Radius · m', 'radius', 2, 300, 1, 40)}${range('Strength · m', 'amount', .1, 200, .1, 12)}
 	<label class="terrain-field">Flatten elevation · m<input data-value="flattenHeight" type="number" min="-1000" max="3000" value="0"></label>
 	<label class="terrain-field">Paint<select data-value="material"><option value="grass">Grass</option><option value="rock">Rock</option><option value="sand">Sand</option><option value="snow">Snow</option><option value="road">Road</option></select></label>
@@ -1849,7 +1841,17 @@ function markup()
 	<p class="terrain-note">Choose Road control points, then click along a route. Offset raises or cuts each new point.</p><p class="terrain-note" data-road-count>0 control points</p>
 	<div class="terrain-row"><button data-action="road-apply">Apply road</button><button data-action="road-clear">Clear points</button><button type="button" data-open-roads>Edit on map</button></div>
 	</section>
-	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden></section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden>
+	<details><summary>Circuit generator</summary><div class="terrain-grid">
+	<label class="terrain-field">Minimum feature height difference · m<input data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="120"></label>
+	<label class="terrain-field">Start elevation · m<input data-value="circuitStartHeight" type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
+	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
+	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
+	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
+	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
+	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button></div>
+	</div></details>
+	<div class="terrain-section" data-road-workspace></div></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
 	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="limestone">Limestone Plain</option><option value="canyon">Canyon</option><option value="canyon-v1">Early Canyon</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option><option value="arctic-meltwater">Arctic Meltwater</option><option value="tidal-lagoon">Tidal Lagoon</option></select>

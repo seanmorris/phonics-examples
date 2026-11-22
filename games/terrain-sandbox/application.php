@@ -132,7 +132,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	if($keysChanged) $heldKeys = $input['keys'];
 	// The page sends the pad only when it changes; a pad at rest arrives as an empty list.
 	if(isset($input['pad'])) $heldPad = is_array($input['pad']) && array_filter($input['pad']) ? $input['pad'] : [];
-	if($packet !== '' || $heldKeys || $heldPad || $wasPicking || $wasSearching || $wasFindingCircuit)
+	if($packet !== '' || $heldKeys || $heldPad || $wasPicking || $wasSearching || $wasFindingCircuit || $session->preparingRoad())
 	{
 		$input['keys'] = $heldKeys;
 		$input['pad'] = $heldPad;

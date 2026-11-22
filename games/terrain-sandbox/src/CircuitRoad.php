@@ -81,6 +81,74 @@ final class CircuitRoad
 		return $edits;
 	}
 
+	/** Close an editor road with a continuous default tangent at the start gate. */
+	public static function closeLoop(array $road): array
+	{
+		$points = $road['points']; $last = count($points)-1;
+		if($last < 2) throw new \RuntimeException('Place at least three distinct circuit points.');
+		if(hypot($points[$last][0]-$points[0][0],$points[$last][2]-$points[0][2]) < .001) {
+			if($last < 3) throw new \RuntimeException('Place at least three distinct circuit points.');
+			return $road;
+		}
+		if(count($points)>=128) throw new \RuntimeException('Use the first point as the last point to close a 128-point road.');
+		$tangent = array_map(static fn($b,$a) => ($b-$a)/6.,$points[1],$points[$last]);
+		$handles = $road['handles'] ?? array_fill(0,count($points),null);
+		$handles[0]['out'] ??= $tangent;
+		$handles[] = ['in'=>array_map(static fn($v) => -$v,$tangent)];
+		$road['points'][] = $points[0]; $road['handles'] = $handles;
+		if(isset($road['banks'])) $road['banks'][] = $road['banks'][0];
+		return $road;
+	}
+
+	/** Place the race line on the actual graded spline, including its closing span. */
+	public static function manualCircuit(Landscape $graded, int $index, float $dry): Circuit
+	{
+		$keys = array_keys($graded->roadRecords());
+		$road = $graded->roads()[array_search($index,$keys,true)];
+		$line = []; $high = $dry;
+		foreach($road['_road']['samples'] as [$x,$y,$z]) { $line[] = [$x,$z]; $high = max($high,$y); }
+		array_pop($line); // The spline ends at the first point.
+		$wet = ceil(2*($high+4.))/2;
+		return self::raceLine($graded,$line,$line[0],$dry,$wet<=10000. ? $wet : null,null);
+	}
+
+	/** Follow the authored splines after a preview edit, retaining the start nearest the generator's original gate. */
+	public static function editedCircuit(Landscape $graded, Circuit $plan, int $sectionCount): Circuit
+	{
+		$line = [];
+		foreach(array_slice($graded->roads(),-$sectionCount) as $road) {
+			$points = $road['points'];
+			// Each generated section has two overlapping stations at either end for shoulder blending.
+			if(count($points)<6) throw new \RuntimeException('A circuit section needs two end overlaps and at least two route points.');
+			$samples = $road['_road']['samples'];
+			$start = $points[2]; $end = $points[count($points)-3];
+			$first = 0; $last = count($samples)-1;
+			while($first < $last && hypot($samples[$first][0]-$start[0],$samples[$first][2]-$start[2])>.001) $first++;
+			while($last > $first && hypot($samples[$last][0]-$end[0],$samples[$last][2]-$end[2])>.001) $last--;
+			for($i=$first; $i<$last; $i++) $line[] = [$samples[$i][0],$samples[$i][2]];
+		}
+		return self::raceLine($graded,$line,$plan->points[0],$plan->dryLevel,$plan->floodedLevel,$plan->featureArea);
+	}
+
+	private static function raceLine(Landscape $graded, array $line, array $origin, float $dry, ?float $wet, ?float $area): Circuit
+	{
+		if(count($line)<3) throw new \RuntimeException('The edited circuit needs a closed route.');
+		$trace = new Circuit($line,$dry,null);
+		if($trace->length < 120. || $trace->length > 40000.) throw new \RuntimeException('A circuit must be between 120 m and 40 km long.');
+		$count = min(Circuit::MAX_POINTS,max(24,(int)ceil($trace->length/12.)));
+		$route = []; $nearest = INF; $start = 0;
+		$half = $graded->recipe()['worldSize']/2;
+		foreach($trace->stations(array_map(static fn($i) => $i*$trace->length/$count,range(0,$count-1))) as [$x,$z]) {
+			if(max(abs($x),abs($z))>$half) throw new \RuntimeException('Keep the circuit curves inside the editable map.');
+			$distance = hypot($x-$origin[0],$z-$origin[1]);
+			if($distance<$nearest) { $start = count($route); $nearest = $distance; }
+			$route[] = [$x,$z];
+		}
+		$route = array_merge(array_slice($route,$start),array_slice($route,0,$start));
+		return new Circuit($route,$dry,$wet,featureArea:$area,
+			startHeight:$graded->height(...$route[0]));
+	}
+
 	/** Smooth evenly spaced stations using the same neighbors on both sides of the lap line. */
 	private static function smooth(array $values): array
 	{

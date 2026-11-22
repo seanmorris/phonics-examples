@@ -13,6 +13,7 @@ const fixture = {
 };
 
 test('a saved road can be inspected, reshaped and reopened on the terrain map', async({page}) => {
+	test.setTimeout(270_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 
@@ -60,7 +61,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	if(output)
 	{
 		await fs.mkdir(output, {recursive: true});
-		await expect.poll(async() => (await status()).renderer.pending).toBe(0);
+		await expect.poll(async() => (await status()).renderer.pending, {timeout: 90_000}).toBe(0);
 
 		await canvas.screenshot({
 			path: path.join(output, 'road-centerline.jpg')
@@ -77,11 +78,14 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	await expect(map).toHaveAttribute('data-chart', 'ready');
 	await expect(section.locator('[data-road-grade]')).toContainText('Maximum sampled grade');
 
-	const scale = section.locator('[data-map-scale]'), original = await scale.innerText();
+	// The first capture can still be the full extent from opening the tab.
+	const captureSpan = () => map.evaluate(el => Number(el.dataset.chartSpan));
+	await expect.poll(captureSpan).toBeLessThan(recipe.worldSize);
+	const fitted = await captureSpan();
 	await section.getByRole('button', {name: 'Zoom in'}).click();
-	await expect(scale).not.toHaveText(original);
+	await expect.poll(captureSpan).toBeCloseTo(fitted/2, 2);
 	await section.getByRole('button', {name: 'Fit road'}).click();
-	await expect(scale).toHaveText(original);
+	await expect.poll(captureSpan).toBeCloseTo(fitted, 2);
 
 
 	await points.selectOption({value: '1'});
@@ -89,7 +93,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	await section.getByRole('button', {name: 'Whole map'}).click();
 	await map.scrollIntoViewIfNeeded();
 	const chart = await map.boundingBox();
-	const unit = chart.width / recipe.worldSize;
+	const unit = Math.min(chart.width, chart.height) / recipe.worldSize;
 	const x = chart.x + chart.width/2 - 8*unit, y = chart.y + chart.height/2 - 12*unit;
 
 	await page.mouse.move(x, y);
@@ -148,14 +152,98 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	await map.click({position: {x: .66*box.width,y: .45*box.height}});
 	await expect(points.locator('option')).toHaveCount(2);
 
+	const rebuilds = async() => (await status()).renderer.roadOverlayBuilds;
+	const initialBuilds = await rebuilds();
 	await section.getByRole('button', {name: 'Apply road'}).click();
 	await expect(picker.locator('option')).toHaveCount(3);
+	await expect.poll(rebuilds).toBe(initialBuilds+1);
+
+	// Change only the new road's elevation. Its neighbor retains its GPU overlay.
+	await altitude.fill('4.5');
+	await altitude.press('Tab');
+	await section.getByRole('button', {name: 'Apply road'}).click();
+	await expect.poll(rebuilds).toBe(initialBuilds+2);
 
 	await tab('shape');
 	await page.locator('[data-action=undo]').click();
-	await expect.poll(async() => (await status()).revision).toBe(4);
+	await expect.poll(async() => (await status()).revision).toBe(5);
+	await expect.poll(async() => (await status()).preparing).toBe(false);
+	await page.locator('[data-action=undo]').click();
+	await expect.poll(async() => (await status()).revision).toBe(6);
 	await tab('roads');
 	await expect(picker.locator('option')).toHaveCount(2);
 
 	expect(errors).toEqual([]);
+});
+
+test('the canyon remains legible at full extent in the Roads editor', async({page}) => {
+	await page.setViewportSize({width: 1150,height: 760});
+	await page.goto('/games/terrain-sandbox/');
+	const canvas = page.locator('canvas[data-terrain-sandbox]');
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await canvas.focus(); await page.keyboard.press('p');
+	await page.locator('[name=preset]').selectOption('canyon');
+	await page.locator('[data-action=generate]').click();
+	await expect.poll(() => canvas.evaluate(el => {
+		const {recipe, renderer} = JSON.parse(el.dataset.terrainSandbox);
+		return recipe.preset === 'canyon' && !renderer.pending;
+	}), {timeout: 90_000}).toBe(true);
+	await page.getByRole('tab', {name: 'Roads',exact: true}).click();
+	const map = page.locator('[data-road-map]');
+	await expect(map).toHaveAttribute('data-chart', 'ready', {timeout: 90_000});
+	await page.locator('[data-map=world]').click();
+	await expect(map).toHaveAttribute('data-chart-span', '32768');
+	const edgeFraction = () => map.evaluate(el => {
+		// Compare the same ground distance regardless of editor size and device pixel ratio.
+		const chart = document.createElement('canvas'), size = 240, side = Math.min(el.width, el.height);
+		chart.width = chart.height = size;
+		const ctx = chart.getContext('2d');
+		ctx.drawImage(el, (el.width-side)/2, (el.height-side)/2, side, side, 0, 0, size, size);
+		const ink = ctx.getImageData(0,0,size,size).data;
+		let edges = 0, samples = 0;
+		for(let y=16; y<size-16; y++)
+		for(let x=16; x<size-16; x++) {
+			const i = (size*y+x)*4;
+			const delta = Math.abs(ink[i]-ink[i+4])+Math.abs(ink[i+1]-ink[i+5])+Math.abs(ink[i+2]-ink[i+6]);
+			if(delta>30) edges++;
+			samples++;
+		}
+		return edges/samples;
+	});
+	await expect.poll(edgeFraction).toBeGreaterThan(.03);
+	if(process.env.TERRAIN_ROAD_CAPTURES) {
+		await fs.mkdir(process.env.TERRAIN_ROAD_CAPTURES, {recursive: true});
+		await map.screenshot({path: path.join(process.env.TERRAIN_ROAD_CAPTURES, 'canyon-whole-map.png')});
+	}
+});
+
+test('draw a manual lap circuit with the editor controls', async({page}) => {
+	await page.setViewportSize({width: 1150,height: 760});
+	await page.goto('/games/terrain-sandbox/');
+	const canvas = page.locator('canvas[data-terrain-sandbox]');
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	const doc = structuredClone(fixture);
+	doc.landscape = {...doc.landscape,recipe: {...recipe,worldSize: 2048},history: [],cursor: 0,revision: 0};
+	await page.locator('[data-file]').setInputFiles({name: 'manual.json',mimeType: 'application/json',buffer: Buffer.from(JSON.stringify(doc))});
+	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
+	await expect.poll(async() => (await status()).recipe.worldSize).toBe(2048);
+	await canvas.focus(); await page.keyboard.press('p');
+	await page.getByRole('tab', {name: 'Roads',exact: true}).click();
+	const map = page.locator('[data-road-map]');
+	await expect(map).toHaveAttribute('data-chart', 'ready');
+	await page.locator('[data-map=world]').click();
+	await expect(map).toHaveAttribute('data-chart-span','2048');
+	await page.locator('[data-mode=add]').click();
+	await map.scrollIntoViewIfNeeded();
+	const frame = await map.boundingBox(), scale = Math.min(frame.width,frame.height)/2048;
+	const points = [[-270,-195],[270,-195],[270,195],[-270,195]];
+	for(const [i,[x,z]] of points.entries()) {
+		await map.click({position:{x:frame.width/2+x*scale,y:frame.height/2+z*scale}});
+		await expect(page.locator('[data-road-point] option')).toHaveCount(i+1);
+	}
+	await page.getByRole('button',{name:'Close loop and create circuit'}).click();
+	await expect.poll(async() => (await status()).circuit.active,{timeout:60_000}).toBe('dry');
+	await expect(page.locator('[data-road-point] option')).toHaveCount(5);
+	await expect(page.locator('[data-road-picker]')).toHaveValue('0');
+	expect((await status()).course.gates.length).toBeGreaterThanOrEqual(8);
 });

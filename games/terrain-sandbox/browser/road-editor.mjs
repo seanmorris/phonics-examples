@@ -43,7 +43,7 @@ function markup()
 	[data-tab-panel=roads] .road-tools button{min-height:30px;padding:3px 9px}
 	[data-tab-panel=roads] .road-tools button[aria-pressed=true]{color:#183328;background:#e5bf79;border-color:#e5bf79}
 	[data-tab-panel=roads] .road-map-wrap{overflow:hidden;border:1px solid #739285;border-radius:7px;background:#142927}
-	[data-tab-panel=roads] .road-map{display:block;width:100%;height:clamp(165px,36cqh,330px);touch-action:none}
+	[data-tab-panel=roads] .road-map{display:block;width:100%;height:clamp(210px,46cqh,400px);touch-action:none}
 	[data-tab-panel=roads] .road-map:focus-visible{outline-offset:-3px}
 	[data-tab-panel=roads] .road-readout{display:flex;justify-content:space-between;gap:6px;align-items:center;
 		border-top:1px solid #527368;padding:5px 9px;color:#d6e8de;font:12px/1.4 ui-monospace,monospace}
@@ -59,7 +59,7 @@ function markup()
 	<button type="button" data-mode="add" aria-pressed="false">Place points</button>
 	<button type="button" data-map="out" aria-label="Zoom out">−</button>
 	<button type="button" data-map="in" aria-label="Zoom in">+</button>
-	<button type="button" data-map="fit">Fit road</button><button type="button" data-map="world">Whole map</button></div>
+	<button type="button" data-map="fit">Fit road</button><button type="button" data-map="circuit" hidden>Fit circuit</button><button type="button" data-map="world">Whole map</button></div>
 	<div class="road-map-wrap"><canvas class="road-map" data-road-map tabindex="0" aria-label="Road editing map"
 		aria-description="Drag points or curve handles. Drag empty ground to pan. Use the wheel or plus and minus to zoom."></canvas>
 	<div class="road-readout"><span data-map-scale></span><span data-road-length></span></div></div>
@@ -125,7 +125,7 @@ function markup()
 		, 1024
 	)}
 	</div></div></details>
-	<div class="terrain-row"><button type="button" data-road-apply>Apply road</button>
+	<div class="terrain-row"><button type="button" data-road-circuit>Close loop and create circuit</button><button type="button" data-road-apply>Apply road</button>
 	<button type="button" data-road-revert>Discard edits</button></div>
 	<p class="terrain-note road-message" role="status" aria-live="polite" data-road-message></p>`;
 }
@@ -134,7 +134,7 @@ export function activate({canvas, module, session})
 {
 	const frame = canvas.closest('.terrain-sandbox'), panel = frame.querySelector('.terrain-panel');
 	const tab = frame.querySelector('[data-tab-panel="roads"]');
-	tab.innerHTML = markup();
+	tab.querySelector('[data-road-workspace]').innerHTML = markup();
 
 	const el = selector => tab.querySelector(selector);
 	const map = el('[data-road-map]'), ctx = map.getContext('2d');
@@ -147,6 +147,8 @@ export function activate({canvas, module, session})
 
 	const dispose = new AbortController(), {signal} = dispose;
 	let state, roads = [], current, chartView, view, active = false, drag = null, requestTimer, paintFrame;
+	const overlays = new Map();
+	let overlayView, wholeMap = false;
 	let selected = -1, selectedSpan = -1, splitAt = .5, side = 'out', mode = 'select';
 
 	const api = () => session.terrainSandbox;
@@ -193,43 +195,62 @@ export function activate({canvas, module, session})
 		return c;
 	}
 
+	// Span is the width of the editor in meters. At full zoom both axes must fit the editable square.
+
+	const maxSpan = () => state.extent * Math.max(1, width()/height());
+
 	function setView(x, z, meters)
 	{
-		const extent = state.extent;
-		view = {
-			x: clamp(x, -extent/2, extent/2)
-			, z: clamp(z, -extent/2, extent/2)
-			, span: clamp(meters, Math.min(8, extent), extent)
-		};
+		const extent = state.extent, max = maxSpan();
+		const span = clamp(meters, Math.min(8, extent), max);
+		const tall = span*height()/width();
+		const xRoom = Math.max(0, (extent-span)/2), zRoom = Math.max(0, (extent-tall)/2);
+		view = {x: clamp(x, -xRoom, xRoom), z: clamp(z, -zRoom, zRoom), span};
+		wholeMap = span >= max;
 
+		// The GPU capture is square. Keep it entirely on the editable terrain, then draw
+		// it using its own world bounds so the handles and the image agree at every zoom.
+		const capture = Math.min(extent, Math.max(span, tall));
+		const room = (extent-capture)/2;
+		const request = {x: clamp(view.x, -room, room), z: clamp(view.z, -room, room), span: capture};
 		schedulePaint();
 		clearTimeout(requestTimer);
-		requestTimer = setTimeout(() => { if(active) send('view', view); }, 100);
+		requestTimer = setTimeout(() => { if(active) send('view', request); }, 100);
 	}
 
-	function fit()
+	function fit(routes = [current])
 	{
-		if(!current.points.length)
+		const corners = [];
+		let roadWidth = 0;
+
+		for(const road of routes)
+		{
+			corners.push(...road.points);
+			roadWidth = Math.max(roadWidth, road.width);
+
+			for(let i = 0; i+1<road.points.length; i++) corners.push(...span(road, i).slice(1, 3));
+		}
+
+		if(!corners.length)
 		{
 			setView(...state.camera, Math.min(800, state.extent));
 
 			return;
 		}
 
-		const corners = current.points.slice();
-
-		for(let i = 0; i+1<current.points.length; i++) corners.push(...span(current, i).slice(1, 3));
 		const xs = corners.map(p => p[0]), zs = corners.map(p => p[2]);
 		const l = Math.min(...xs), r = Math.max(...xs), t = Math.min(...zs), b = Math.max(...zs);
-		setView((l+r)/2, (t+b)/2, Math.max(40, 1.35*(r-l+current.width), 1.35*(b-t+current.width)*width()/height()));
+		setView((l+r)/2, (t+b)/2, Math.max(40, 1.35*(r-l+roadWidth), 1.35*(b-t+roadWidth)*width()/height()));
 	}
+
+	const circuitRoads = () => roads.filter(record => record.id<0).map(record => record.road);
 
 	function zoom(factor, at = [width()/2,height()/2])
 	{
 		if(!view) return;
 
 		const [x,z] = world(at);
-		const next = clamp(view.span*factor, Math.min(8, state.extent), state.extent);
+		const next = clamp(view.span*factor, Math.min(8, state.extent), maxSpan());
 		setView(x+(view.x-x)*next/view.span, z+(view.z-z)*next/view.span, next);
 	}
 
@@ -240,25 +261,69 @@ export function activate({canvas, module, session})
 		paintFrame = requestAnimationFrame(() => { paintFrame = 0; paint(); });
 	}
 
-	function drawCurve(road, color, lineWidth, chosen = -1)
+	function drawCurve(road, color, lineWidth, chosen = -1, brush = ctx)
 	{
 		if(road.points.length < 2) return;
 
-		ctx.strokeStyle = color;
-		ctx.lineWidth = lineWidth;
-		ctx.lineCap = 'round';
-		ctx.lineJoin = 'round';
-		ctx.beginPath();
+		brush.strokeStyle = color;
+		brush.lineWidth = lineWidth;
+		brush.lineCap = 'round';
+		brush.lineJoin = 'round';
+		brush.beginPath();
 		const start = chosen < 0 ? 0 : chosen, end = chosen < 0 ? road.points.length-1 : chosen+1;
-		ctx.moveTo(...project(road.points[start]));
+		brush.moveTo(...project(road.points[start]));
 
 		for(let i = start; i<end; i++)
 		{
 			const [,a,b,c] = span(road, i);
-			ctx.bezierCurveTo(...project(a), ...project(b), ...project(c));
+			brush.bezierCurveTo(...project(a), ...project(b), ...project(c));
 		}
 
-		ctx.stroke();
+		brush.stroke();
+	}
+
+	// Rasterize the visible bounds of each unselected road once at the editor's current scale.
+
+	function drawOverlay(record)
+	{
+		let entry = overlays.get(record.id);
+
+		if(entry?.key !== record.geometry)
+		{
+			const corners = record.road.points.slice();
+
+			for(let i = 0; i+1<record.road.points.length; i++) corners.push(...span(record.road, i).slice(1, 3));
+			const pixels = corners.map(project);
+			const left = Math.max(0, Math.floor(Math.min(...pixels.map(p => p[0]))-2));
+			const top = Math.max(0, Math.floor(Math.min(...pixels.map(p => p[1]))-2));
+			const right = Math.min(width(), Math.ceil(Math.max(...pixels.map(p => p[0]))+2));
+			const bottom = Math.min(height(), Math.ceil(Math.max(...pixels.map(p => p[1]))+2));
+			entry = {key: record.geometry, left, top, w: right-left, h: bottom-top};
+
+			if(entry.w>0 && entry.h>0)
+			{
+				const sheet = document.createElement('canvas'), ratio = map.width/width();
+				sheet.width = Math.ceil(entry.w*ratio);
+				sheet.height = Math.ceil(entry.h*ratio);
+				const ink = sheet.getContext('2d');
+
+				ink.setTransform(
+					sheet.width/entry.w
+					, 0
+					, 0
+					, sheet.height/entry.h
+					, -left*sheet.width/entry.w
+					, -top*sheet.height/entry.h
+				);
+
+				drawCurve(record.road, '#e8ecdaae', 2, -1, ink);
+				entry.sheet = sheet;
+			}
+
+			overlays.set(record.id, entry);
+		}
+
+		if(entry.sheet) ctx.drawImage(entry.sheet, entry.left, entry.top, entry.w, entry.h);
 	}
 
 	function handlePoints()
@@ -317,7 +382,15 @@ export function activate({canvas, module, session})
 		ctx.strokeStyle = '#e1efe529';
 		ctx.stroke();
 
-		for(const record of roads) if(record.id !== state.id) drawCurve(record.road, '#e8ecdaae', 2);
+		const base = [view.x,view.z,view.span,w,h,map.width,map.height].join(',');
+
+		if(base !== overlayView)
+		{
+			overlays.clear();
+			overlayView = base;
+		}
+
+		for(const record of roads) if(record.id !== state.id) drawOverlay(record);
 		drawCurve(current, '#182a2ce6', clamp(current.width*scale(), 4, 100));
 		drawCurve(current, colors.route, 2);
 
@@ -429,7 +502,8 @@ export function activate({canvas, module, session})
 		el('[data-point-action=auto]').disabled = !current.handles?.[selected]?.[side];
 
 		const busy = api()?.state?.preparing;
-		el('[data-road-apply]').disabled = busy || !state.changed || n<2;
+		el('[data-road-circuit]').disabled = busy || state.proposed || n<3;
+		el('[data-road-apply]').disabled = busy || (!state.changed && !state.proposed) || n<2;
 		el('[data-road-revert]').disabled = busy || !state.changed;
 		const c = resize(profile), w = profile.clientWidth, h = profile.clientHeight;
 		c.clearRect(0, 0, w, h);
@@ -674,7 +748,8 @@ export function activate({canvas, module, session})
 		if(command)
 		{
 			if(command==='fit') fit();
-			else if(command==='world') setView(0, 0, state.extent);
+			else if(command==='circuit') fit(circuitRoads());
+			else if(command==='world') setView(0, 0, maxSpan());
 			else zoom(command==='in' ? .5 : 2);
 
 			return;
@@ -682,6 +757,7 @@ export function activate({canvas, module, session})
 
 		if(pointAction==='insert') send('insert', {index: selectedSpan,t: splitAt});
 		else if(pointAction) send(pointAction, {index: selected,side});
+		else if(button.hasAttribute('data-road-circuit')) send('circuit');
 		else if(button.hasAttribute('data-road-apply')) send('apply');
 		else if(button.hasAttribute('data-road-revert')) send('revert');
 	}, {signal});
@@ -693,7 +769,7 @@ export function activate({canvas, module, session})
 
 		if(input===picker)
 		{
-			if(state.id!==null && state.changed && !window.confirm('Discard your edits to this road?'))
+			if(state.id!==null && state.id>=0 && state.changed && !window.confirm('Discard your edits to this road?'))
 			{
 				picker.value = String(state.id);
 
@@ -743,15 +819,25 @@ export function activate({canvas, module, session})
 		if(replaced) chartView = null;
 
 		const count = current?.points.length;
+		const hadCircuit = roads.some(record => record.id<0);
 
 		if(next.roads)
 		{
 			roads = next.roads;
+			el('[data-map=circuit]').hidden = !roads.some(record => record.id<0);
+			const activeIds = new Set(roads.map(record => record.id));
+
+			for(const id of overlays.keys()) if(!activeIds.has(id)) overlays.delete(id);
+
+			for(const record of roads) record.geometry = JSON.stringify([record.road.points,record.road.handles]);
 
 			picker.replaceChildren(
 				new Option('New road', '')
 				, ...roads.map(
-					({id,road}, i) => new Option('Road ' + (i+1) + ' · ' + road.points.length + ' points', String(id))
+					({id,road}, i) => new Option(
+						(id<0 ? 'Circuit section ' + (-id) : 'Road ' + (i+1)) + ' · ' + road.points.length + ' points'
+						, String(id)
+					)
 				)
 			);
 		}
@@ -775,7 +861,8 @@ export function activate({canvas, module, session})
 
 		el('[data-road-message]').textContent = next.message;
 
-		if(switched || !view) fit();
+		if(next.proposed && !hadCircuit) fit(circuitRoads());
+		else if(switched || !view) fit();
 		else if(next.roads) setView(view.x, view.z, view.span);
 
 		inspect();
@@ -788,6 +875,7 @@ export function activate({canvas, module, session})
 		chart.getContext('2d').drawImage(canvas, 10, canvas.height-10-size, size, size, 0, 0, size, size);
 		chartView = {x,z,span: meters};
 		map.dataset.chart = 'ready';
+		map.dataset.chartSpan = String(meters);
 		schedulePaint();
 	};
 
@@ -811,7 +899,12 @@ export function activate({canvas, module, session})
 	const roadTabButton = frame.querySelector('[data-tab=roads]');
 	frame.querySelector('[data-open-roads]').addEventListener('click', () => roadTabButton.click(), {signal});
 
-	const resizeObserver = new ResizeObserver(() => {if(active && current) inspect();});
+	const resizeObserver = new ResizeObserver(() => {
+		if(!active || !current || !view) return;
+
+		setView(view.x, view.z, wholeMap ? maxSpan() : view.span);
+		inspect();
+	});
 
 	resizeObserver.observe(map);
 	resizeObserver.observe(profile);

@@ -43,11 +43,16 @@ Numbered points and a connecting line preview the route in the view. They move w
 
 Width sets the road surface width. Shoulder sets how far the cut or fill blends into the surrounding ground. **Apply road** grades the route and paints its surface. **Clear points** abandons the uncommitted route.
 
-Open **Roads** or choose **Edit on map** from Shape to see the route on a north-up terrain map. Select a saved road or choose **New road** and **Place points**. Drag empty ground to pan, scroll to zoom around the pointer, or choose **Fit road**. Other roads stay visible for reference.
+Open **Roads** or choose **Edit on map** from Shape to see the route on a north-up terrain map. Select a saved road or choose **New road** and **Place points**. Drag empty ground to pan, scroll to zoom around the pointer, or choose **Fit road**. **Whole map** fits the entire editable landscape, including distant canyon branches. Other roads stay visible for reference.
 
 Select a numbered point to drag it or enter its coordinates. Dragging preserves elevation. **Set to ground** samples the terrain at the point. The square handles control the incoming and outgoing curve. Under **Curve handles**, change their horizontal or vertical offsets to shape a bend, crest or dip. **Use automatic handle** restores the tangent on that side. Select a spot on a span and choose **Split curve** to insert a point without changing the path.
 
-The elevation profile shows the selected span, the full route length and maximum grade. Bank tilts the road across its width. **Apply road** commits the changes in the original road's place, including its charcoal pavement and painted centerline. Undo and redo are under **Shape**. Saving the landscape preserves the points, handles and edit history.
+The elevation profile shows the selected span, the full route length and maximum grade. Bank tilts the road across its width. **Apply road** commits the changes in the original road's place, including its charcoal pavement and 40 cm ochre centerline. The stripe alternates 10 feet of paint with a 10-foot gap along the curve. Undo and redo are under **Shape**. Saving the landscape preserves the points, handles and edit history.
+
+Place at least three points and choose **Close loop and create circuit** to grade the road and place a lap start and ordered checkpoints. The first control point marks the start. You can also select a saved road, reshape it, and use the same button to update its circuit. Long roads prepare over successive frames and stay together as one edit when you save or undo.
+
+Open **Circuit generator** in Roads to find a route around a natural feature. Its banked control points appear immediately in the road picker as numbered circuit sections. You can adjust points, curves and banks before applying the dry or flooded course. **Apply road** grades the generated sections together if you only want the pavement.
+
 
 Roads modify the heightfield. Bridges, tunnels, and overhangs require separate geometry and are outside this sandbox.
 
