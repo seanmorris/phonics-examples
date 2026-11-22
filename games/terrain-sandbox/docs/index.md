@@ -14,7 +14,7 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 
 **Basalt Fjords** pairs smoky olive heath with blue-black cliffs and dark tidal gravel. **Limestone Plain** has deep green valleys and silver-gray karst. **Mountain Ridges** grades from spruce forest through sage-green meadow to blue-gray granite and snow.
 
-**Arctic Meltwater** opens over a channel between snow-covered shelves. Look along the banks for exposed blue ice and dark moraine gravel. **Tidal Lagoon** has low sand cays with scrub on their crests. Board the watercraft from either opening view. In the lagoon, the clear shallows reveal pale sand and patches of seagrass.
+**Arctic Meltwater** opens over a channel between snow-covered shelves. Look along the banks for exposed blue ice and dark moraine gravel. **Tidal Lagoon** has low sand cays with scrub on their crests. Board the watercraft from either opening view. In the lagoon, the clear shallows reveal pale sand and patches of seagrass. **Red Mesas** opens on a red sand plain facing a long flat-topped mesa in low side light, with more buttes on the horizon. Its walls rise 340 m in soft red bands. **Heather Moor** looks down on a peat lochan from a heather ridge. Straw grass fills the hollows, rust bracken patches the steeper slopes and granite shows where the ground steepens most.
 
 ## Fly over the landscape
 
@@ -65,7 +65,7 @@ A projectile follows the balloon selected at launch if you have a lock. Otherwis
 
 **Sky light** sets how strongly the sky lights ground the sun misses. The light comes from the sky itself, so it is blue at midday and dimmer and warmer near sunset. **Sky color** picks the blue of the sky overhead with the sun 35° up. A deeper blue also keeps distant land clearer. A paler blue thickens the air and deepens the sunset. The sandbox keeps the sky's colors physically plausible, so an unusual choice lands on the nearest sky it can make. **Haze color** tints the haze. Its effect shows most in the glow around the sun and along the horizon. Each landform starts with its own sky. Mountain Ridges, Canyon, Arctic Meltwater and Tidal Lagoon have deeper blues. Basalt Fjords has a paler northern sky. Canyon and Amber Dunes have dusty haze.
 
-Each landform starts with its own atmosphere. In **Basalt Fjords**, mist softens distant headlands while their tops stay clear. In **Amber Dunes**, suspended sand warms the low horizon. **Arctic Meltwater** has just a trace of ice haze across the water. Open **Sky** and toggle the layer’s **Visible** checkbox to compare the view from the same spot.
+Each landform starts with its own atmosphere. In **Basalt Fjords**, mist softens distant headlands while their tops stay clear. In **Amber Dunes**, suspended sand warms the low horizon. **Arctic Meltwater** has just a trace of ice haze across the water. Open **Sky** and toggle the layer’s **Visible** checkbox to compare the view from the same spot. Fine dust hangs over **Red Mesas**, and a low mist fills the hollows of **Heather Moor**.
 
 To shape the air yourself, edit a layer or choose **Add atmosphere layer**. Set its base and top in meters above sea level and choose the color of the scattered light. **Density per km** controls how quickly haze builds with distance. Looking along a layer shows more color than looking through it from above. Your edits carry over when you generate another landform and are saved with the landscape. **Use preset layers** restores the current landform’s air and follows future preset selections.
 

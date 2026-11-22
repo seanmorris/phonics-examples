@@ -16,6 +16,8 @@ In **Arctic Meltwater**, fly low along a blue ice bank and turn toward the sun t
 
 In **Tidal Lagoon**, the channels are deep enough to launch the jet ski. Follow the darker water around the pale sandbars. The waterline sets where seagrass, salt grass and scrub can grow.
 
+In **Red Mesas**, the mesa walls use the canyon's bedded rock layers, so editing those layers under **Surface** recolors every butte. Lower **Floor width** under **Landscape** for more and larger mesas. In **Heather Moor**, raise the water level to flood more lochans; the peat banks and straw grass follow the new waterline.
+
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 

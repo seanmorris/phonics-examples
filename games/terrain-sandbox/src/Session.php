@@ -95,6 +95,8 @@ final class Session
 		'amber-dunes' => ['name'=>'Suspended sand', 'top'=>440., 'density'=>.057, 'color'=>'#e0c9a9'],
 		'arctic-meltwater' => ['name'=>'Ice haze', 'top'=>225., 'density'=>.020, 'color'=>'#dce5eb'],
 		'tidal-lagoon' => ['name'=>'Humid marine air', 'top'=>640., 'density'=>.046, 'color'=>'#dae3e3'],
+		'red-mesas' => ['name'=>'Desert dust', 'top'=>520., 'density'=>.032, 'color'=>'#e0c0a0'],
+		'heather-moor' => ['name'=>'Moor mist', 'top'=>110., 'density'=>.075, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
 	// Sky colors: deeper blues over dry or clean air, a paler northern sky over the fjords, and dust in the desert haze.
@@ -117,6 +119,15 @@ final class Session
 			'azimuth'=>103., 'elevation'=>37., 'haze'=>.70, 'skyColor'=>'#4672a6', 'waterColor'=>'#1e7475',
 			'waterTransparency'=>.90, 'waterReflectivity'=>.51, 'waterFogDensity'=>.070, 'waterChoppiness'=>27.,
 		],
+		// Low light from the side of the opening view, so the butte walls glow and their benches cast shadows.
+		'red-mesas' => TerrainAppearance::PRESET_DEFAULTS['red-mesas'] + [
+			'azimuth'=>140., 'elevation'=>18., 'haze'=>.75, 'skyColor'=>'#3d6398', 'hazeColor'=>'#e8c9a4',
+		],
+		// A pale northern sky, mist in the hollows, and dark peaty lochans that mirror it.
+		'heather-moor' => TerrainAppearance::PRESET_DEFAULTS['heather-moor'] + [
+			'azimuth'=>120., 'elevation'=>30., 'haze'=>1.1, 'skyColor'=>'#5d7590', 'waterColor'=>'#2c2619',
+			'waterTransparency'=>.35, 'waterReflectivity'=>.78, 'waterFogDensity'=>.25, 'waterChoppiness'=>20.,
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
@@ -125,6 +136,8 @@ final class Session
 		'amber-dunes' => ['x'=>.75, 'z'=>.5, 'heading'=>165., 'pitch'=>-.19, 'clearance'=>95., 'minimum'=>0.],
 		'arctic-meltwater' => ['x'=>1., 'z'=>.5, 'heading'=>135., 'pitch'=>-.19, 'clearance'=>160., 'minimum'=>0.],
 		'tidal-lagoon' => ['x'=>-.875, 'z'=>-.25, 'heading'=>165., 'pitch'=>-.29, 'clearance'=>85., 'minimum'=>0.],
+		'red-mesas' => ['x'=>1.031, 'z'=>1.406, 'heading'=>255., 'pitch'=>.03, 'clearance'=>30., 'minimum'=>0.],
+		'heather-moor' => ['x'=>.115, 'z'=>.346, 'heading'=>225., 'pitch'=>-.10, 'clearance'=>30., 'minimum'=>0.],
 	];
 
 	/**
@@ -151,11 +164,12 @@ final class Session
 	private int $atmosphereReply = 0;
 	private string $atmosphereOrigin = 'preset';
 	private ?string $materialPreset = null;
-	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon'];
+	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor'];
 
 	private static function materialStyle(array $recipe): string
 	{
-		return $recipe['preset'] === 'limestone' ? 'limestone' : TerrainAppearance::style($recipe);
+		// These landforms draw with another style's program but keep their own colors, so their surfaces carry their names.
+		return in_array($recipe['preset'], ['limestone', 'red-mesas'], true) ? $recipe['preset'] : TerrainAppearance::style($recipe);
 	}
 
 	private function paintInks(): array

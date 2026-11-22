@@ -121,6 +121,31 @@ final class TerrainAppearance
 			, 'rockColor' => '#765941'
 			, 'rockBandColor' => '#d7c8a4'
 		]
+		// Red siltstone and pale caps over a red sand plain.
+		, 'red-mesas' => [
+			'canyonRustColor' => '#8f3f24'
+			, 'canyonShaleColor' => '#6e4231'
+			, 'canyonSandstoneColor' => '#b4552f'
+			, 'canyonCapColor' => '#b98a63'
+			, 'sandColor' => '#c27f52'
+			, 'macroVariation' => 2.
+			, 'bandContrast' => .45
+		]
+		// Heather over peat, straw grass in the hollows, rust bracken on the flanks and lichened granite.
+		, 'heather-moor' => [
+			'meadowColor' => '#433d33'
+			, 'grassColor' => '#6f6c4a'
+			, 'forestColor' => '#76533a'
+			, 'soilColor' => '#3b3026'
+			, 'rockColor' => '#87837a'
+			, 'rockBandColor' => '#a6a58c'
+			, 'sandColor' => '#6b5e48'
+			, 'rockSlopeStart' => .024
+			, 'rockSlopeEnd' => .036
+			, 'beachHeight' => 1.6
+			, 'beachWidth' => 1.8
+			, 'macroVariation' => .6
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -166,49 +191,138 @@ final class TerrainAppearance
 	 */
 	public const USES = [
 		'coast' => [
-			'grassColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
-			'bandSpacing', 'bandContrast', 'bandSharpness',
-			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'snowline', 'snowTransition',
-			'snowSlopeStart', 'snowSlopeEnd', 'macroVariation',
-		],
-
-		'mountain' => [
-			'grassColor', 'sandColor', 'snowColor', 'roadColor',
-			'forestColor', 'meadowColor', 'tundraColor', 'graniteColor', 'stainColor', 'talusColor',
-			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'snowline', 'snowTransition',
-			'alpineStart', 'alpineEnd', 'snowSlopeStart', 'snowSlopeEnd', 'macroVariation', 'treeline', 'tundraStart',
-			'talusAmount', 'stainAmount', 'lichenAmount',
-		],
-
-		'canyon-v1' => [
-			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
-			'bandSpacing', 'bandContrast', 'bandSharpness',
-			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'macroVariation',
-		],
-
-		'basalt-fjords' => [
-			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
-			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'snowline', 'snowTransition',
-			'snowSlopeStart', 'snowSlopeEnd', 'macroVariation',
-		],
-		'arctic-meltwater' => [
-			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
-			'rockSlopeStart', 'rockSlopeEnd', 'snowline', 'snowTransition', 'snowSlopeStart', 'snowSlopeEnd',
-		],
-		'tidal-lagoon' => [
-			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
-			'beachHeight', 'beachWidth',
-		],
-		'amber-dunes' => [
-			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor', 'macroVariation',
-		],
-
-		'canyon' => [
-			'grassColor', 'sandColor', 'snowColor', 'roadColor',
-			'canyonRustColor', 'canyonShaleColor', 'canyonSandstoneColor', 'canyonCapColor',
-			'bandContrast', 'bandSharpness',
-			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'macroVariation',
-		],
+			'grassColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'bandSpacing', 'bandContrast', 'bandSharpness'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'snowTransition'
+			, 'snowSlopeStart', 'snowSlopeEnd', 'macroVariation'
+		]
+		, 'mountain' => [
+			'grassColor', 'sandColor', 'snowColor', 'roadColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'tundraColor'
+			, 'graniteColor'
+			, 'stainColor'
+			, 'talusColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'snowTransition'
+			, 'alpineStart'
+			, 'alpineEnd'
+			, 'snowSlopeStart'
+			, 'snowSlopeEnd'
+			, 'macroVariation'
+			, 'treeline'
+			, 'tundraStart'
+			, 'talusAmount', 'stainAmount', 'lichenAmount'
+		]
+		, 'canyon-v1' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'bandSpacing', 'bandContrast', 'bandSharpness'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'macroVariation'
+		]
+		, 'basalt-fjords' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'snowTransition'
+			, 'snowSlopeStart', 'snowSlopeEnd', 'macroVariation'
+		]
+		, 'arctic-meltwater' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'snowline'
+			, 'snowTransition'
+			, 'snowSlopeStart'
+			, 'snowSlopeEnd'
+		]
+		, 'tidal-lagoon' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'beachHeight', 'beachWidth'
+		]
+		, 'amber-dunes' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'macroVariation'
+		]
+		, 'heather-moor' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'forestColor', 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'macroVariation'
+		]
+		, 'canyon' => [
+			'grassColor', 'sandColor', 'snowColor', 'roadColor'
+			, 'canyonRustColor'
+			, 'canyonShaleColor'
+			, 'canyonSandstoneColor'
+			, 'canyonCapColor'
+			, 'bandContrast', 'bandSharpness'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'macroVariation'
+		]
 	];
 	/**
 	 * Linear canyon shades in the default palette. Each keeps its ratio to the color it follows: ledges follow the
@@ -306,7 +420,11 @@ final class TerrainAppearance
 		return match($recipe['preset'] ?? null)
 		{
 			'canyon' => ($recipe['version'] ?? 0) === 2 ? 'canyon' : 'canyon-v1',
-			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon' => $recipe['preset'],
+			// Mesas are canyon country seen from the floor: the same bedded walls and dust.
+			'red-mesas' => 'canyon',
+			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon', 'heather-moor' => $recipe[
+				'preset'
+			],
 			default => 'coast'
 		};
 	}

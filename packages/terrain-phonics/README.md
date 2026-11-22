@@ -115,7 +115,10 @@ base wavelength and a wide wall transition to give isolated peaks broad foothill
 175 m elevation intervals form sloping benches below the summits. `basalt-fjords` cuts flooded valleys
 between rolling headlands. Terracing starts at zero on this preset. `amber-dunes` uses narrow ridges and rolling relief to give the
 two faces of a dune different slopes. `arctic-meltwater` raises broad shelves above flooded channels.
-`tidal-lagoon` brings low, curving ridges just above sea level to form chains of sand cays. Existing recipes expand to the values of
+`tidal-lagoon` brings low, curving ridges just above sea level to form chains of sand cays. `red-mesas` turns the canyon
+wall inside out. A floor width of 0.35 leaves most of the plain low, and a narrow, bedded wall lifts about 9% of the ground
+into flat-topped buttes 340 m high. `heather-moor` rolls rounded ridges over a broad swell, from about 50 m below its water
+level to 210 m above it, so peat lochans fill the lowest 9% or so. Existing recipes expand to the values of
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
 changing the landscape's playable extent.
 
@@ -290,6 +293,8 @@ Coast starts with grass, exposed rock, shore sand and snow. Its optional coastal
 Basalt Fjords pairs smoky olive heath with charcoal-blue lava faces, dark tidal gravel and green-blue water. Weathered flow contacts break across the cliffs. Amber Dunes puts fine wind ripples on sand and flattens them where gravel or salt covers the basin floor. Each preset has an editable surface stack, and the five paint inks cover any of these surfaces.
 
 In Arctic Meltwater, snow collects on gentler ground and its coverage controls the wind ripples. Steeper banks expose veined ice and rock. Tidal Lagoon measures the height of its shoals, seagrass, beaches and scrub from the waterline. Changing the water level moves those material boundaries with it.
+
+Red Mesas draws with the canyon program and its own bed colors, with lower band contrast, over a red sand plain. Heather Moor lays olive-brown heather with muted purple bloom over the uplands. Straw grass fills the hollows within about 30 m of the lochans. Rust bracken patches the steeper flanks, dark peat and moss edge the water, and lichened granite marks the steepest 2% of the ground. Moor slopes are gentle: half the ground is under 6° and the steepest is near 18°, so its slope thresholds are small.
 
 Set `reflectivity` on a color layer to give it a clear dielectric coating. The range is 0 (matte) to 1 (fully coated). `roughness` ranges from 0 (polished) to 1 (frosted). The shader samples the atmosphere in the reflected view direction and filters the solar highlight by roughness and pixel size. Snow, rock and paint cover the finish with the same masks as the layer color. The minimap shows the underlying tint. The Arctic ice uses an air-to-ice refractive index of about 1.31. [Warren and Brandt’s optical constants of ice](https://atmos.washington.edu/ice_optical_constants/)
 

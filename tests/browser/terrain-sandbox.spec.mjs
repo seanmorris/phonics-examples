@@ -2269,6 +2269,9 @@ for(const [first, second] of [
 	, [{label: 'Arctic Meltwater', name: 'arctic-meltwater', layer: 'glacier-ice'}
 		, {label: 'Tidal Lagoon', name: 'tidal-lagoon', layer: 'seagrass-beds'}
 	]
+	, [{label: 'Red Mesas', name: 'red-mesas', layer: 'cap-rock'}
+		, {label: 'Heather Moor', name: 'heather-moor', layer: 'peat-banks'}
+	]
 ]) {
 	test(
 		`${first.label} and ${second.label} are available as landscapes and as independent surface presets`

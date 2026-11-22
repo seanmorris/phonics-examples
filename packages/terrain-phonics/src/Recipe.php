@@ -6,7 +6,17 @@ namespace TerrainPhonics;
 final class Recipe
 {
 	/** Named sets of coefficients for the shared terrain field. */
-	public const PRESETS = ['coast', 'mountain', 'canyon', 'limestone', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon'];
+	public const PRESETS = [
+		'coast'
+		, 'mountain'
+		, 'canyon'
+		, 'limestone'
+		, 'basalt-fjords'
+		, 'amber-dunes'
+		, 'arctic-meltwater'
+		, 'tidal-lagoon'
+		, 'red-mesas', 'heather-moor'
+	];
 
 	/** Parameters are immutable after normalization. */
 	private array $values;
@@ -45,6 +55,56 @@ final class Recipe
 			'directionalRise' => 0., 'warpAmplitude' => 105., 'warpFrequency' => 1 / 2400,
 			'detailAmplitude' => 2., 'detailOctaves' => 4, 'waterLevel' => -600., 'surround' => 'mountains',
 		] + self::shapeDefaults('coast', $version);
+
+		// The canyon's wall turned inside out: a wide floor leaves the plain low, and only the contour field's highest
+		// and lowest values rise past a narrow wall to flat, bedded tops, about 9% of the ground.
+		if($preset === 'red-mesas')
+		return [
+			'seed' => 'red-mesas'
+			, 'baseFrequency' => 1 / 3200
+			, 'heightScale' => 340.
+			, 'baseBias' => 0.
+			, 'rolling' => 0.
+			, 'ridgeHeight' => 0.
+			, 'wallHeight' => 1.
+			, 'floorWidth' => .35
+			, 'wallWidth' => .033
+			, 'secondary' => .06
+			, 'directionalRise' => 0.
+			, 'warpAmplitude' => 380.
+			, 'warpFrequency' => 1 / 2600
+			, 'terraceSpacing' => 42.
+			, 'terraceStrength' => .9
+			, 'bedding' => 1.
+			, 'detailAmplitude' => 3.
+			, 'detailOctaves' => 5
+			, 'waterLevel' => -500.
+			, 'surround' => 'plateau'
+		] + self::shapeDefaults('coast', $version);
+
+		// Rounded upland ridges over a broad swell, with peat lochans in the lowest hollows.
+		if($preset === 'heather-moor')
+		return [
+			'seed' => 'heather-moor'
+			, 'baseFrequency' => 1 / 2600
+			, 'heightScale' => 300.
+			, 'baseBias' => .12
+			, 'rolling' => .6
+			, 'ridgeHeight' => .25
+			, 'ridgeRoundness' => .08
+			, 'wallHeight' => 0.
+			, 'secondary' => .5
+			, 'directionalRise' => 0.
+			, 'warpAmplitude' => 260.
+			, 'warpFrequency' => 1 / 3000
+			, 'terraceStrength' => 0.
+			, 'detailAmplitude' => 7.
+			, 'detailOctaves' => 6
+			, 'persistence' => .5
+			, 'waterLevel' => -50.
+			, 'surround' => 'mountains'
+		] + self::shapeDefaults('coast', $version);
+
 		if($preset === 'arctic-meltwater')
 		return [
 			'seed' => 'arctic-meltwater', 'baseFrequency' => 1 / 1550, 'heightScale' => 340., 'baseBias' => -.052,

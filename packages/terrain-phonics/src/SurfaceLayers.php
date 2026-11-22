@@ -213,6 +213,7 @@ final class SurfaceLayers
 			'amber-dunes' => self::duneLayers($s,$r),
 			'arctic-meltwater' => self::arcticLayers($s),
 			'tidal-lagoon' => self::lagoonLayers($s),
+			'heather-moor' => self::moorLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -248,6 +249,7 @@ final class SurfaceLayers
 			'arctic-meltwater' => ['Moraine gravel','Glacier ice','Rock outcrops','Wind-packed snow','Snow ripples'],
 			'tidal-lagoon' => ['Reef floor','Shoal sand','Seagrass beds','Shell beach','Salt grass','Cay scrub','Sand ripples'],
 			'amber-dunes' => ['Dune sand','Slip faces','Crest sand','Wind ripples','Desert pavement','Salt crust'],
+			'heather-moor' => ['Heather','Moor grass','Bracken','Peat banks','Granite tors'],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
 		foreach($rows as $i=>&$row) {
@@ -373,6 +375,77 @@ final class SurfaceLayers
 			['color'=>self::tint($s['rockBandColor'],.65,.68,.68), 'parent'=>2, 'opacity'=>.34,
 				'pattern'=>'veins', 'patternColor'=>self::tint($rock,.42,.47,.50),
 				'patternAmount'=>.89, 'patternScale'=>45., 'patternStretch'=>3.3],
+		];
+	}
+
+	/**
+	 * Build the moor: heather flowering in patches, straw grass in the hollows below a wavering line, rust bracken on
+	 * the moderate flanks, dark peat banks with moss at the lochans' edges, and lichened granite where the tors steepen.
+	 * @param array $s Validated appearance settings.
+	 * @return array Material rows from the bottom up.
+	 */
+	private static function moorLayers(array $s): array
+	{
+		$heather = $s['meadowColor'];
+		$grass = $s['grassColor'];
+		$bracken = $s['forestColor'];
+
+		return [
+			[
+				'color' => $heather
+				, 'pattern' => 'fractal'
+				, 'patternColor' => '#4c3d4a'
+				, 'patternScale' => 18.
+				, 'patternAmount' => .3
+			]
+			, [
+				'color' => $grass
+				, 'datum' => 'water'
+				, 'high' => 30.
+				, 'fade' => 12.
+				, 'noise' => 22.
+				, 'scale' => 260.
+				, 'pattern' => 'mottle'
+				, 'patternColor' => self::tint($grass, .78, .84, .70)
+				, 'patternScale' => 6.
+				, 'patternAmount' => .45
+			],
+			// Moor slopes are gentle: half the ground is under 6 degrees and the steepest near 18.
+			[
+				'color' => $bracken
+				, 'slopeLow' => .016
+				, 'slopeHigh' => .026
+				, 'slopeFade' => .004
+				, 'high' => 90.
+				, 'fade' => 25.
+				, 'noise' => 40.
+				, 'scale' => 200.
+				, 'opacity' => .8
+				, 'pattern' => 'mottle'
+				, 'patternColor' => self::tint($bracken, .70, .74, .60)
+				, 'patternScale' => 4.
+				, 'patternAmount' => .5
+			]
+			, [
+				'color' => $s['soilColor']
+				, 'datum' => 'water'
+				, 'high' => $s['beachHeight']
+				, 'fade' => $s['beachWidth']
+				, 'noise' => 1.2
+				, 'scale' => 25.
+				, 'pattern' => 'mottle'
+				, 'patternColor' => '#6f7a3a'
+				, 'patternScale' => 3.5
+				, 'patternAmount' => .45
+			]
+			, [
+				'color' => $s['rockColor']
+				, 'pattern' => 'jointed'
+				, 'patternColor' => $s['rockBandColor']
+				, 'patternAmount' => .8
+				, 'patternScale' => 4.
+				, 'patternStretch' => 1.6
+			] + self::exposedRock($s)
 		];
 	}
 
