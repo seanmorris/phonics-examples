@@ -269,7 +269,8 @@ $engine->start(
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
-		$prepared = $work && $scene->update($frameSeconds, $viewCamera);
+		$prepared = $work && $scene->update($frameSeconds, $viewCamera,
+			$session->mode === 'car' ? Car::terrainFocus($vehiclePose) : null);
 		$wavesChanged = $scene->showsWater() && $session->time !== $lastRenderedTime;
 		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
 		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;

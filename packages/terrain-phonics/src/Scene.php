@@ -454,9 +454,10 @@ final class Scene
 	 * Advance generation work without spending an unbounded frame on a terrain tile.
 	 * @param float $seconds Elapsed display seconds.
 	 * @param Camera $camera Current viewing camera.
+	 * @param ?array $detailFocus Optional world [x,z] target for a wider, forward-shifted fine clipmap grid.
 	 * @return bool Whether rendering state changed or transitions remain active.
 	 */
-	public function update(float $seconds, Camera $camera): bool
+	public function update(float $seconds, Camera $camera, ?array $detailFocus = null): bool
 	{
 		if($this->closed) return false;
 
@@ -471,7 +472,7 @@ final class Scene
 			$lut=$this->atmosphere->transmittanceLut(64,16,24);
 			$lighting=$lut['generation'] !== $this->textureGeneration;
 			if($lighting) $this->createTextures();
-			$this->changed=$this->clipmap->update($this->landscape,$camera,$this->quality,$deadline) || $lighting;
+			$this->changed=$this->clipmap->update($this->landscape,$camera,$this->quality,$deadline,$detailFocus) || $lighting;
 			if($this->revision !== $this->landscape->revision()) $this->heightTextureRevision++;
 			$this->revision=$this->landscape->revision();
 			$this->lastUpdateMs=(microtime(true)-$started)*1000;

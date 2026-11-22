@@ -1096,6 +1096,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	dry.settings.waterLevel = -4;
 	dry.camera = {position: [0,30,0], yaw: Math.PI, pitch: -.4};
 	await load(page, dry);
+	const cameraWidth = (await settled(page)).renderer.visibleCoverage[0][2];
 	const view = canvas(page);
 
 	const mesh = await fs.readFile(
@@ -1160,6 +1161,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(0);
+	await expect.poll(async() => (await status(page)).renderer.visibleCoverage[0]?.[2]).toBeGreaterThan(cameraWidth);
 	const map = page.locator('.terrain-flight-map'), dial = page.locator('.terrain-speedometer');
 	await expect(map).toBeVisible();
 	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour');
@@ -1244,6 +1246,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await setButton(8, false);
 	await expect(map).toBeHidden();
 	await expect(dial).toBeHidden();
+	await expect.poll(async() => (await status(page)).renderer.visibleCoverage[0]?.[2]).toBe(cameraWidth);
 	await page.keyboard.press('c');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await (await field(page, '[data-value="waterLevel"]')).fill('10');

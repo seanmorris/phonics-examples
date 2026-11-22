@@ -452,6 +452,15 @@ for($i = 0; $i < 600; $i++) $road->step(1/60);
 $s = $road->car->state();
 expect($s['wheelContacts'] === 4 && abs($s['speed']) < .01 && $road->landscape->height($s['x'],$s['z']) > 1
 	&& $road->landscape->height($s['x'],$s['z'] + Car::WHEELBASE) <= 1.12, 'Car stops on its tires at the waterline');
+// A driver's right-stick view can turn independently of the road. Detail follows the signed tire path.
+$pose = ['x'=>10.,'z'=>20.,'pitch'=>0.,'yaw'=>M_PI/2,'drift'=>M_PI/6,'motion'=>'driving','speed'=>24.];
+[$fx,$fz] = Car::terrainFocus($pose);
+expect(abs($fx-10.-18.*sin(M_PI/3))<1e-8 && abs($fz-29.)<1e-8, 'Terrain leads both shoulders into a skid');
+$pose['speed'] = -8.;
+[$fx,$fz] = Car::terrainFocus($pose);
+expect(abs($fx-10.+6.*sin(M_PI/3))<1e-8 && abs($fz-17.)<1e-8, 'Reversing prepares the ground behind the car');
+$pose['motion'] = 'tumbling';
+expect(Car::terrainFocus($pose) === [10.,20.], 'A tumbling body keeps its detail around the landing site');
 $road->close();
 
 $ledge = new Session($flat);

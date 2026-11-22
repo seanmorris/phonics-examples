@@ -89,7 +89,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-i5VkWgGdIugXeqbnVcAljarhr5T7Dyg6lW57meyXmBk=",
+    "application.php": "sha256-jKzd+2rkD6v3FXcRuiL1Zfe8mGcHJZ446bcK4mlF4Es=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
@@ -119,7 +119,7 @@
     "browser/speedometer.mjs": "sha256-MFRHM8PqjygGALKZbUj0JnVysB72e+LCuSE+sD+i4aQ=",
     "src/BakedMesh.php": "sha256-YaX/AyIktLamEwfzsCwtVpHYoTMAvJBm2BNufUu+KWs=",
     "src/BalloonPractice.php": "sha256-FaVk4W9RTvS41HmHP89q6cFi+IvG1R4525qxUwhVT68=",
-    "src/Car.php": "sha256-UxRD1sgJtdGKqUaKaRmI63QY40Xq01B+y2TIwQaCnQQ=",
+    "src/Car.php": "sha256-H0xEjPtsOoS0mLEHQ2bjHAh71JKc85TnueFyq0khXx4=",
     "src/CarChase.php": "sha256-tpXY9t6KTxSIXgPMg4LpFFsT5JpxCxeZhb2vz45iRdI=",
     "src/CarLamps.php": "sha256-JYkzwYHRQLhNADA8fg9umnvLGqelK4hZzq68VNac0fs=",
     "src/CarSuspension.php": "sha256-LfjCezGp+IXsrnj9mDghEBKLCWXx2TSJLmFvFPy6RoA=",

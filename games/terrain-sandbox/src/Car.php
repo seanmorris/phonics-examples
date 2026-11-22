@@ -573,6 +573,14 @@ final class Car
 		return [atan($tangent/(1 + $offset)), atan($tangent/(1 - $offset))];
 	}
 
+	/** Aim terrain detail three quarters of a second along the car's signed path, including a skid or reverse. */
+	public static function terrainFocus(array $pose): array
+	{
+		$heading = $pose['yaw'] - $pose['drift'];
+		$lead = in_array($pose['motion'], ['driving','airborne'], true) ? .75 * $pose['speed'] * cos($pose['pitch']) : 0.;
+		return [$pose['x'] + $lead*sin($heading), $pose['z'] + $lead*cos($heading)];
+	}
+
 	public function state(): array
 	{
 		return ['x'=>$this->x,'y'=>$this->y,'z'=>$this->z,'yaw'=>$this->yaw,'pitch'=>$this->pitch,'roll'=>$this->roll,

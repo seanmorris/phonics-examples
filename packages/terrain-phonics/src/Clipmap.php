@@ -20,6 +20,9 @@ final class Clipmap
 	private int $roadBytes = 0;
 	// Parent normals sample two cells beyond the drawn grid.
 	private const HALO = 2;
+	// Maximum displacement of the fine grid as a fraction of its width.
+	private const LEAD_FRACTION = 1 / 6;
+	private ?array $fineFocus = null;
 	private int $revision = -1;
 	private array $spans = [];
 	private array $shadowReceiverRange = [0.,0.];
@@ -352,8 +355,9 @@ final class Clipmap
 			// Clip the block to the level's current window; cells that left it now hold other cells' texels.
 			[$ox,$oz] = $level['origin'];
 			$n = $level['n'];
-			$l = max($x, $ox); $r = min($x + $w, $ox + $n) - 1;
-			$f = max($z, $oz); $b = min($z + $h, $oz + $n) - 1;
+			$cells = $level['cells'];
+			$l = max($x, $ox); $r = min($x + $w, $ox + $cells) - 1;
+			$f = max($z, $oz); $b = min($z + $h, $oz + $cells) - 1;
 
 			if($l > $r || $f > $b)
 			{
@@ -406,7 +410,7 @@ final class Clipmap
 	}
 
 	/** Grid widths, from the near field to the horizon, in cells of their own level. */
-	public static function spans(array $recipe, float $quality): array
+	public static function spans(array $recipe, float $quality, bool $focused = false): array
 	{
 		$base = $quality < .75 ? 24 : ($quality > 1.5 ? 120 : 56);
 		$peak = $quality < .75 ? 120 : 248;
@@ -431,15 +435,23 @@ final class Clipmap
 				elseif($level > 0 && $level < $start) $span = max($base, $peak === 120 ? 56 : 120);
 			}
 
-			// Keep the inner ring and its snap margin away from this ring's outer blend.
-			while($span / 2 - self::transition($span) < $inner / 4 + 4) $span += 4;
+			if($focused && $level === 0) $span = 4 * (int)ceil($base / 3);
+			// In parent cells, allow for the fine grid's maximum lead as well as its snap margin.
+			$lead = $focused && $level === 1 ? $inner * self::LEAD_FRACTION / 2 : 0.;
+			while($span / 2 - self::transition($span) < $inner / 4 + $lead + 4) $span += 4;
 			$spans[] = $inner = $span;
-			if(($span / 2 - 2) * $step >= $reach) break;
+			if((self::centeredSpan($span, $focused && $level === 0) / 2 - 2) * $step >= $reach) break;
 			$step *= 2;
 		}
 		while(true);
 
 		return $spans;
+	}
+
+	/** Width guaranteed around the eye even when the fine grid leads at its maximum offset. */
+	private static function centeredSpan(int $span, bool $focused): int
+	{
+		return $focused ? $span - 2*(int)ceil($span*self::LEAD_FRACTION) : $span;
 	}
 
 	public static function transition(int $span): float
@@ -456,29 +468,41 @@ final class Clipmap
 	}
 
 	/** Refresh only cells newly exposed to the camera or changed by committed edits. */
-	public function update(Landscape $land, Camera $camera, float $quality, ?float $deadline = null): bool
+	public function update(Landscape $land, Camera $camera, float $quality, ?float $deadline = null, ?array $detailFocus = null): bool
 	{
 		$changed = $this->source !== $land || $this->revision !== $land->revision();
 		$region = $this->dirtyRegion;
 		$this->dirtyRegion = null;
 		$recipe = $land->recipe();
 		$step = $recipe['spacing'];
-		$spans = self::spans($recipe, $quality);
+		$spans = self::spans($recipe, $quality, $detailFocus !== null);
+		$previousFocus = $this->fineFocus;
+		$this->fineFocus = null;
+		if($detailFocus !== null) {
+			$dx = $detailFocus[0] - $camera->position[0];
+			$dz = $detailFocus[1] - $camera->position[2];
+			$distance = hypot($dx,$dz);
+			$limit = $spans[0] * $step * self::LEAD_FRACTION;
+			$scale = $distance > $limit ? $limit / $distance : 1.;
+			$this->fineFocus = [$camera->position[0] + $scale*$dx, $camera->position[2] + $scale*$dz];
+		}
 		$count = count($spans);
 		$origins = [];
 
 		foreach($spans as $l => $span)
 		{
 			$s = $step * (2 ** $l);
+			$centerX = $l === 0 ? ($this->fineFocus[0] ?? $camera->position[0]) : $camera->position[0];
+			$centerZ = $l === 0 ? ($this->fineFocus[1] ?? $camera->position[2]) : $camera->position[2];
 			$margin = intdiv($span, 2) + self::HALO;
 			$origins[$l] = [
-				2 * (int)floor($camera->position[0] / (2 * $s)) - $margin
-				, 2 * (int)floor($camera->position[2] / (2 * $s)) - $margin
+				2 * (int)floor($centerX / (2 * $s)) - $margin
+				, 2 * (int)floor($centerZ / (2 * $s)) - $margin
 			];
 		}
 
 		$gridChanged = $this->spans !== $spans || $origins !== array_column($this->levels, 'origin');
-		if(!$changed && !$this->pending && !$gridChanged) return false;
+		if(!$changed && !$this->pending && !$gridChanged) return $this->fineFocus !== $previousFocus;
 
 		$previous = glGetIntegerv(GL_FRAMEBUFFER_BINDING);
 		glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffer[0]);
@@ -505,7 +529,8 @@ final class Clipmap
 				{
 					$spacing = $step*(2 ** $i);
 					if($spacing > $texel/2.) break;
-					$far = ($span/2-self::transition($span)-3)*$spacing;
+					$centered = self::centeredSpan($span,$i === 0 && $detailFocus !== null);
+					$far = ($centered/2-self::transition($span)-3)*$spacing;
 					if($spacing <= $texel/8.) $near = $far;
 				}
 				$this->shadowReceiverRange = [$near,max($near+$step,$far)];
@@ -516,12 +541,21 @@ final class Clipmap
 			glActiveTexture(GL_TEXTURE0);
 
 			// A full rebuild queues every edited texel again, so earlier entries would only repeat the work.
-			if($this->spans !== $spans || ($changed && $region === null)) $this->paintQueue = [];
+			if($changed && $region === null) $this->paintQueue = [];
 
 			if($this->spans !== $spans)
 			{
-				foreach($this->levels as $level) self::release($level);
-				$this->levels = array_fill(0, $count, []);
+				// Changing the near footprint can usually reuse every other toroidal texture.
+				// Keep pending paint for those levels and for the fixed overview.
+				$resident = array_fill(0, $count, []);
+				foreach($this->levels as $i=>$level) {
+					if($level && isset($spans[$i]) && self::storageSize($spans[$i]) === $level['n'])
+						$resident[$i] = $level;
+					else self::release($level);
+				}
+				$this->paintQueue = array_values(array_filter($this->paintQueue,
+					static fn($entry) => $entry[0] === -1 || !empty($resident[$entry[0]])));
+				$this->levels = $resident;
 				$this->spans = $spans;
 			}
 
@@ -531,7 +565,7 @@ final class Clipmap
 			{
 				if(!$this->overview) $this->overview = $this->allocate(257);
 
-				$this->refresh($this->overview, [0,0], $half / 128, -$half, $changed, $region, -1);
+				$this->refresh($this->overview, [0,0], $half / 128, -$half, $changed, $region, -1, $this->overview['n']);
 			}
 
 			$this->pending = false;
@@ -541,11 +575,15 @@ final class Clipmap
 			{
 				$level = $this->levels[$l];
 				$n = $level['n'] ?? self::storageSize($spans[$l]);
+				// The expanded near grid can straddle a power-of-two allocation boundary. Generate
+				// just its vertices and normal halo; the remaining texture padding is never sampled.
+				$cells = $l === 0 && $detailFocus !== null ? $spans[$l] + 1 + 2*self::HALO : $n;
 				$origin = $level['origin'] ?? null;
 				$needsFull = $origin === null
 					|| ($changed && $region === null)
-					|| abs($origin[0] - $origins[$l][0]) >= $n
-					|| abs($origin[1] - $origins[$l][1]) >= $n;
+					|| $level['cells'] !== $cells
+					|| abs($origin[0] - $origins[$l][0]) >= $cells
+					|| abs($origin[1] - $origins[$l][1]) >= $cells;
 
 				if($needsFull && $newLevel)
 				{
@@ -560,7 +598,7 @@ final class Clipmap
 
 				$newLevel = $newLevel || $needsFull;
 				$s = $step * (2 ** $l);
-				$this->refresh($this->levels[$l], $origins[$l], $s, 0., $changed, $region, $l);
+				$this->refresh($this->levels[$l], $origins[$l], $s, 0., $changed, $region, $l, $cells);
 			}
 
 			// The finest level surrounds the camera, so its edits come first; the overview goes last.
@@ -588,23 +626,25 @@ final class Clipmap
 		, bool $changed
 		, ?array $region
 		, int $key
+		, int $cells
 	): void {
 		[$x,$z] = $origin;
-		$n = $level['n'];
-		$rects = self::exposed($x, $z, $n, $changed && $region === null ? null : $level['origin']);
+		$refill = ($changed && $region === null) || ($level['cells'] ?? null) !== $cells;
+		$rects = self::exposed($x, $z, $cells, $refill ? null : $level['origin']);
 
-		if($changed && $region && $level['origin'] !== null)
+		if(!$refill && $changed && $region && $level['origin'] !== null)
 		{
 			$l = max($x, (int)ceil(($region[0] - $offset) / $step));
-			$r = min($x + $n, (int)floor(($region[2] - $offset) / $step) + 1);
+			$r = min($x + $cells, (int)floor(($region[2] - $offset) / $step) + 1);
 			$f = max($z, (int)ceil(($region[1] - $offset) / $step));
-			$b = min($z + $n, (int)floor(($region[3] - $offset) / $step) + 1);
+			$b = min($z + $cells, (int)floor(($region[3] - $offset) / $step) + 1);
 
 			if($l < $r && $f < $b) $rects[] = [$l,$f,$r,$b];
 		}
 
 		$level['origin'] = $origin;
 		$level['step'] = $step;
+		$level['cells'] = $cells;
 		$this->fill($level, $rects, $step, $offset, $key);
 	}
 
@@ -618,6 +658,7 @@ final class Clipmap
 			foreach($this->spans as $i => $span)
 			{
 				$step = $this->recipe['spacing'] * (2 ** $i);
+				$span = self::centeredSpan($span,$i === 0 && $this->fineFocus !== null);
 				if($span*$step < 1200. && $i !== array_key_last($this->spans)) continue;
 				$level = $this->levels[$i];
 				if(!isset($level['origin'])) break;
@@ -654,7 +695,9 @@ final class Clipmap
 		glUniform2i($p->location('uRingMin'), $x, $z);
 		glUniform1i($p->location('uSpan'), $span);
 		glUniform1i($p->location('uHasParent'), (int)isset($this->levels[$index + 1]['origin']));
-		glUniform2f($p->location('uEyeCell'), $camera->position[0] / $s, $camera->position[2] / $s);
+		// Morph around the same continuous center used to snap this ring, including terrain overlays.
+		$focus = $index === 0 ? $this->fineFocus : null;
+		glUniform2f($p->location('uEyeCell'), ($focus[0] ?? $camera->position[0]) / $s, ($focus[1] ?? $camera->position[2]) / $s);
 		glUniform1f($p->location('uMorphWidth'), self::transition($span));
 		glUniform1f($p->location('uGridStep'), $s);
 		glUniform1i($p->location('uTextureMask'), $level['n'] - 1);
