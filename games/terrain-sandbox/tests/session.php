@@ -148,10 +148,10 @@ input($karst, ['actions' => [['type' => 'generate', 'preset' => 'limestone', 'se
 expect($karst->landscape->recipe()['wallWidth'] === .7 && $karst->landscape->recipe()['seed'] === 'second',
 	'Limestone uses authored shape coefficients and seeds.');
 input($karst, ['actions' => [['type' => 'generate', 'preset' => 'mountain']]]);
-expect($karst->settings['snowline'] === 340.0 && $karst->settings['azimuth'] === 125.0
+expect($karst->settings['snowline'] === 460.0 && $karst->settings['azimuth'] === 125.0
 	&& $karst->settings['grassColor'] === '#224422' && $karst->settings['haze'] === 2.0
 	&& $karst->settings['rockSlopeStart'] === .65 && $karst->settings['rockSlopeEnd'] === .73,
-	'Leaving Limestone restores the ordinary palette and sun while preserving authored settings.');
+	'Leaving Limestone for Mountain Ridges applies its snowline and the ordinary sun while preserving authored settings.');
 $karst->close();
 
 $showcase = new Session;
@@ -1637,9 +1637,10 @@ $stick->close();
 
 // The terrain's colors, banding and blending are saved settings that the session hands the renderer.
 $look = new Session(['worldSize'=>256,'heightScale'=>0,'detailAmplitude'=>0]);
-expect(array_intersect_key($look->settings, TerrainPhonics\TerrainAppearance::DEFAULTS) == TerrainPhonics\TerrainAppearance::DEFAULTS
-	&& $look->terrainAppearance->settings === TerrainPhonics\TerrainAppearance::DEFAULTS,
-	'A new session draws the default terrain appearance');
+$coastLook = array_replace(TerrainPhonics\TerrainAppearance::DEFAULTS, TerrainPhonics\TerrainAppearance::PRESET_DEFAULTS['coast']);
+expect(array_intersect_key($look->settings, TerrainPhonics\TerrainAppearance::DEFAULTS) == $coastLook
+	&& $look->terrainAppearance->settings === $coastLook,
+	'A new session draws the coast preset\'s terrain appearance');
 expect($look->status()['surfaceStyle'] === 'coast', 'Status names the terrain style the Surface tab shows');
 $before = $look->terrainAppearance;
 input($look, ['values' => ['grassColor' => '#FF0000', 'bandSpacing' => 2]]);
@@ -1666,15 +1667,15 @@ expect($other->terrainAppearance->settings === $look->terrainAppearance->setting
 $plain = $file;
 foreach(TerrainPhonics\TerrainAppearance::DEFAULTS as $name => $value) unset($plain['settings'][$name]);
 $other->load(json_encode($plain, JSON_THROW_ON_ERROR));
-expect($other->terrainAppearance->settings === TerrainPhonics\TerrainAppearance::DEFAULTS,
-	'A file without terrain appearance settings draws the defaults');
+expect($other->terrainAppearance->settings === $coastLook,
+	'A coast file without terrain appearance settings draws the coast preset\'s look');
 $generation = $other->generation;
 $hostile = $file;
 $hostile['settings']['grassColor'] = 'red';
 try { $other->load(json_encode($hostile, JSON_THROW_ON_ERROR)); expect(false, 'A file with a bad color must be refused'); }
 catch(InvalidArgumentException)
 {
-	expect($other->generation === $generation && $other->terrainAppearance->settings === TerrainPhonics\TerrainAppearance::DEFAULTS,
+	expect($other->generation === $generation && $other->terrainAppearance->settings === $coastLook,
 		'A file with a bad terrain color changes nothing');
 }
 $order = $file;

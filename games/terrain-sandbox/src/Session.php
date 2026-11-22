@@ -90,6 +90,7 @@ final class Session
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
 	private const PRESET_LOOK = [
+		'coast' => TerrainAppearance::PRESET_DEFAULTS['coast'],
 		'mountain' => TerrainAppearance::PRESET_DEFAULTS['mountain'],
 		'limestone' => self::LIMESTONE_SURFACE + self::LIMESTONE_SKY,
 		'basalt-fjords' => TerrainAppearance::PRESET_DEFAULTS['basalt-fjords'] + [
@@ -289,7 +290,8 @@ final class Session
 		$this->jet = new Jet;
 		$this->balloons = new BalloonPractice;
 		$this->chase = new CarChase;
-		$this->switchPresetLook('coast', $this->landscape->recipe()['preset']);
+		// Settings start at the standard values, which no preset look claims.
+		$this->switchPresetLook('', $this->landscape->recipe()['preset']);
 		$this->resetCamera();
 		$this->sun();
 	}
