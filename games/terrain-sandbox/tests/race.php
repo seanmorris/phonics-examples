@@ -1143,14 +1143,15 @@ expect(count($record['landscape']['history'])===1 && $generator->landscape->revi
 	'The whole circuit is one undoable grade even after switching variants');
 $route = $record['circuit']['route'];
 highwayCrests($generator, new Circuit($route['points'],$route['dryLevel'],null));
-$distance = $preview['length']/count($gateLine[0]);
+// A placed gate stands where the route passes 30 m beyond a fork, not just near where one could.
+$routeLine = new Circuit($route['points'],$route['dryLevel'],null);
 $snapped = false;
 foreach($route['junctions'] as $fork)
 {
-	$i = (int)round(($fork+30)/$distance);
-	if($i>0 && $i<count($gateLine[0]) && abs($fork+30-$i*$distance)<.3*$distance) $snapped = true;
+	[[$sx,$sz]] = $routeLine->stations([$fork+30]);
+	foreach($gateLine[0] as [$gx,$gz]) if(hypot($gx-$sx,$gz-$sz) < 1.) $snapped = true;
 }
-expect($snapped, 'The plateau circuit places a checkpoint downstream of an identified corridor junction');
+expect($snapped, 'The plateau circuit places a checkpoint 30 m downstream of an identified corridor junction');
 expect(max(array_map(static fn(array $edit): float => max(array_map('abs',$edit['banks'])),
 	$record['landscape']['history'][0]))>.06, 'Natural embankments supply cross slope to the graded bends');
 $generator->close();
