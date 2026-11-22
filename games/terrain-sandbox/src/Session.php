@@ -243,8 +243,13 @@ final class Session
 	/** Uncommitted road control points in [x,y,z] meters. */
 	public array $road = [];
 	public RoadEditor $roadEditor;
+	/** Free flight's opening hint for a mouse and keyboard, and for a touchscreen. */
+	public const FLY_HINT = 'Right-drag to look. WASD to fly, Q/E down/up. Choose a tool to edit.';
+	public const TOUCH_HINT = 'Drag to look around. Tap the ground to use the chosen tool. A gamepad or keyboard flies.';
 	/** Last operation result shown in the authoring panel. */
-	public string $message = 'Right-drag to look. WASD to fly, Q/E down/up. Choose a tool to edit.';
+	public string $message = self::FLY_HINT;
+	/** Whether the player last used a touchscreen, which has no right button or keys. The page reports it. */
+	public bool $touch = false;
 	/** Whether input or simulation changed the visible scene. */
 	public bool $dirty = true;
 	/** Incremented for whole landscape replacement; staged edits preserve this generation. */
@@ -394,6 +399,17 @@ final class Session
 				{
 					if(!is_bool($value)) throw new \InvalidArgumentException('Invert pitch must be true or false');
 					$this->invertPitch = $value;
+				}
+				elseif($name === 'touch')
+				{
+					if(!is_bool($value)) throw new \InvalidArgumentException('Touch must be true or false');
+					$this->touch = $value;
+					// The opening hint follows the device in use; any other message stays.
+					if(in_array($this->message, [self::FLY_HINT, self::TOUCH_HINT], true))
+					{
+						$this->message = $value ? self::TOUCH_HINT : self::FLY_HINT;
+						$this->dirty = true;
+					}
 				}
 				else $this->setting((string)$name, $value);
 			}
@@ -2169,7 +2185,7 @@ final class Session
 			'selectionInterval' => $this->selectionInterval,
 			'selectionSliceMs' => $this->selectionSliceMs,
 			'jetView' => $this->jetView, 'jetMap' => $this->jetMap, 'jetWideMap' => $this->jetWideMap, 'balloons' => $this->balloons->status(),
-			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,
+			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,'touch' => $this->touch,
 			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),'lampAdaptation' => $this->lampAdaptation,
 			'roadPoints' => $this->road,'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],

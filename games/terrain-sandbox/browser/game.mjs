@@ -14,7 +14,7 @@ export function activate({module, canvas, session, services})
 
 	canvas.setAttribute(
 		'aria-label'
-		, 'Landscape Sandbox. Right-drag to look; WASD to fly; Q and E down and up. A gamepad also flies and drives.'
+		, 'Landscape Sandbox. Right-drag, or drag a finger, to look; WASD to fly; Q and E down and up. A gamepad also flies and drives.'
 	);
 
 	const view = shell.measure({observe: stage, dprCap: 1, skipEmpty: true, initial: '[1280,720,1]'});
@@ -31,24 +31,22 @@ export function activate({module, canvas, session, services})
 
 	const controls = new Map([...frame.querySelectorAll('[data-value]')].map(field => [field.dataset.value, field]));
 
-	const coarseFog = controls.get('waterFogDensity');
-	const fineFog = frame.querySelector('[data-fine-fog]');
-	const fineOutput = fineFog.parentElement.querySelector('output');
+	// Fog density spans four orders of magnitude, so its slider is logarithmic: position 0 is clear water, 1 is one per
+	// meter, and the usual 0.035 sits near the middle.
+	const fog = frame.querySelector('[data-fog]');
+	const fogOutput = frame.querySelector('[data-fog-output]');
 
-	// Hold the fine window still while dragging it. Only a coarse edit or a
-	// restored landscape recenters the window on the nearest coarse tick.
+	const fogDensity = position => (1000 ** position - 1) / 999;
 
-	const setFineFogWindow = value => {
-		const center = coarseFog.valueAsNumber;
-		fineFog.min = Math.max(0, center - .005).toFixed(4);
-		fineFog.max = Math.min(1, center + .005).toFixed(4);
-		fineFog.value = value;
-		fineOutput.value = String(value);
+	const fogPosition = density => Math.log1p(999 * density) / Math.log(1000);
+
+	const showFog = density => {
+		fogOutput.textContent = density.toFixed(density < .01 ? 4 : density < .1 ? 3 : 2);
 	};
 
-	fineFog.addEventListener('input', () => {
-		values.waterFogDensity = fineFog.valueAsNumber;
-		fineOutput.value = fineFog.value;
+	fog.addEventListener('input', () => {
+		values.waterFogDensity = Number(fogDensity(fog.valueAsNumber).toPrecision(3));
+		showFog(values.waterFogDensity);
 	}, {signal});
 
 	const button = name => frame.querySelector(`[data-action="${name}"]`);
@@ -77,6 +75,7 @@ export function activate({module, canvas, session, services})
 	const showToolControls = () => {
 		gateTool.hidden = controls.get('tool').value !== 'gate';
 		frame.querySelector('[data-balloon-tool]').hidden = controls.get('tool').value !== 'balloon';
+		frame.querySelector('[data-road-tool]').hidden = controls.get('tool').value !== 'road';
 	};
 
 	const listen = field => {
@@ -101,8 +100,6 @@ export function activate({module, canvas, session, services})
 			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
 
 			if(output) output.textContent = readout(field.value);
-
-			if(field === coarseFog) setFineFogWindow(field.valueAsNumber);
 
 			if(field.dataset.value === 'tool') showToolControls();
 		}, {signal});
@@ -298,21 +295,32 @@ export function activate({module, canvas, session, services})
 	document.addEventListener('visibilitychange', () => { if(document.hidden) clearInput(); }, {signal});
 	frame.addEventListener('focusin', event => { if(focusedField(event.target)) clearInput(); }, {signal});
 
+	// A finger has no right button: a touch drag looks around, and a touch that ends without moving is a click.
+	let tap = null;
+
+	// A touchscreen with no mouse opens with the touch hint before the first tap.
+	if(globalThis.matchMedia?.('(pointer: coarse)').matches) values.touch = true;
+
+	const click = (x, y) => {
+		const box = canvas.getBoundingClientRect();
+		clicks.push([(x - box.left) / box.width,(y - box.top) / box.height]);
+	};
+
 	canvas.addEventListener('pointerdown', event => {
 		focus();
+		const touch = event.pointerType === 'touch';
 
-		if(event.button === 2)
+		if(touch !== latest?.touch) values.touch = touch;
+
+		if(event.button === 2 || touch)
 		{
 			dragging = event.pointerId;
 			lastPointer = [event.clientX,event.clientY];
 			canvas.setPointerCapture(event.pointerId);
 		}
 
-		if(event.button === 0)
-		{
-			const box = canvas.getBoundingClientRect();
-			clicks.push([(event.clientX - box.left) / box.width,(event.clientY - box.top) / box.height]);
-		}
+		if(touch) tap = {id: event.pointerId, x: event.clientX, y: event.clientY};
+		else if(event.button === 0) click(event.clientX, event.clientY);
 
 		event.preventDefault();
 	}, {signal});
@@ -326,6 +334,12 @@ export function activate({module, canvas, session, services})
 	}, {signal});
 
 	const release = event => {
+		const still = tap?.id === event.pointerId && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) < 10;
+
+		if(event.type === 'pointerup' && still) click(tap.x, tap.y);
+
+		if(tap?.id === event.pointerId) tap = null;
+
 		if(dragging !== event.pointerId) return;
 
 		dragging = null;
@@ -336,6 +350,48 @@ export function activate({module, canvas, session, services})
 
 	canvas.addEventListener('pointerup', release, {signal});
 	canvas.addEventListener('pointercancel', release, {signal});
+
+	// The renderer's statistics under the HUD are for developers: off unless this browser asked for them.
+	const diagnostics = frame.querySelector('[data-show-diagnostics]');
+	let lastDetail = null;
+
+	const showDetail = (...args) => {
+		lastDetail = args;
+		const [state, mode, x, y, z] = args;
+
+		const statistics = `\n${state.renderer.visible} terrain levels · `
+			+ `${(state.renderer.terrainTextureBytes / 1048576).toFixed(1)} MiB elevation textures · `
+			+ `${state.renderer.generationMs.toFixed(1)} ms generation · revision ${state.revision}\n`
+			+ `${state.renderMs.toFixed(1)} ms render submission · `
+			+ `${state.drawIntervalMs?.toFixed(1) ?? '—'} ms between draws`;
+
+		detail.textContent = `${mode} · ${Math.round(x)}, ${Math.round(z)} m`
+			+ ` · altitude ${Math.round(state.jet?.y ?? y)} m`
+			+ (state.jet ? ` · ${Math.round(state.jet.speed)} m/s` : '')
+			+ (diagnostics.checked ? statistics : '');
+	};
+
+	try
+	{
+		diagnostics.checked = localStorage.getItem(DIAGNOSTICS_PREFERENCE) === '1';
+	}
+	catch
+	{
+		/* Without storage the statistics stay hidden. */
+	}
+
+	diagnostics.addEventListener('change', () => {
+		if(lastDetail) showDetail(...lastDetail);
+
+		try
+		{
+			localStorage.setItem(DIAGNOSTICS_PREFERENCE, diagnostics.checked ? '1' : '0');
+		}
+		catch
+		{
+			/* The choice then lasts for this visit. */
+		}
+	}, {signal});
 
 	// Jet handling is the player's preference, so it is remembered in this browser rather than in landscape files.
 	const jetControls = controls.get('jetControls');
@@ -558,8 +614,8 @@ export function activate({module, canvas, session, services})
 				: 'levels'} remaining`;
 			else pending.textContent = 'Preparing terrain…';
 
-			for(const name of ['undo','redo','generate','road-apply','load','save'])
-		button(name).disabled = state.preparing || state.picking && ['undo','redo','road-apply','save'].includes(name);
+			for(const name of ['undo','redo','generate','load','save'])
+		button(name).disabled = state.preparing || state.picking && ['undo','redo','save'].includes(name);
 			const circuit = state.circuit;
 			const editable = state.mode === 'fly' && !state.preparing && !state.picking && !circuit.searching;
 			button('circuit-find').disabled = !editable;
@@ -611,14 +667,7 @@ export function activate({module, canvas, session, services})
 
 			const mode = {fly: 'FLIGHT', craft: 'WATERCRAFT', car: 'CAR', jet: 'F5'}[state.mode];
 
-			detail.textContent = `${mode} · ${Math.round(x)}, ${Math.round(z)} m`
-			+ ` · altitude ${Math.round(state.jet?.y ?? y)} m`
-			+ (state.jet ? ` · ${Math.round(state.jet.speed)} m/s` : '')
-			+ `\n${state.renderer.visible} terrain levels · `
-			+ `${(state.renderer.terrainTextureBytes / 1048576).toFixed(1)} MiB elevation textures · `
-			+ `${state.renderer.generationMs.toFixed(1)} ms generation · revision ${state.revision}\n`
-			+ `${state.renderMs.toFixed(1)} ms render submission · `
-			+ `${state.drawIntervalMs?.toFixed(1) ?? '—'} ms between draws`;
+			showDetail(state, mode, x, y, z);
 
 			if(state.generation !== lastGeneration)
 			{
@@ -656,10 +705,11 @@ export function activate({module, canvas, session, services})
 
 					const output = frame.querySelector(`[data-output="${name}"]`);
 
-					if(output) output.textContent = field === coarseFog ? field.value : readout(value);
-
-					if(field === coarseFog) setFineFogWindow(value);
+					if(output) output.textContent = readout(value);
 				}
+
+				fog.value = String(fogPosition(state.settings.waterFogDensity));
+				showFog(state.settings.waterFogDensity);
 
 				showToolControls();
 				lastGeneration = state.generation;
@@ -962,6 +1012,8 @@ function generationValues(frame)
 
 /** Local storage key for the jet handling preference. */
 const JET_PREFERENCE = 'terrain-sandbox.jet';
+/** localStorage key for whether this browser shows the renderer's statistics under the HUD. */
+const DIAGNOSTICS_PREFERENCE = 'terrain-sandbox.diagnostics';
 
 /** Local storage key for the car's headlight switch, and the positions PHP accepts. */
 const CAR_PREFERENCE = 'terrain-sandbox.car';
@@ -1639,7 +1691,7 @@ function markup()
 	const surfaceId = `surface-${labCount}`;
 
 	return `<style>
-	.terrain-sandbox{container:terrain-view / size;--lab-inset:12px;--lab-width:min(660px,max(49%,520px),calc(100% - 24px));--lab-height:calc(100cqh - 26px - var(--radar-room,0px));position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
+	.terrain-sandbox{container:terrain-view / size;--lab-inset:12px;--lab-width:min(620px,max(44%,400px),calc(100% - 24px));--lab-height:calc(100cqh - 26px - var(--radar-room,0px));position:relative;width:100%;height:100%;min-height:320px;overflow:hidden;background:#101f28;color:#edf4ee;font:14px/1.4 system-ui,sans-serif}
 	.terrain-sandbox:has(.terrain-instruments:not([hidden])){--radar-room:min(20cqh,18cqw)}.terrain-flight-map{position:absolute;left:10px;bottom:10px;pointer-events:none}.terrain-sandbox.has-flight-map .terrain-hud{bottom:calc(var(--flight-map-size) + 18px)}.terrain-road-preview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:hidden}.terrain-road-preview path{stroke:#efc275;stroke-width:3;fill:none;filter:drop-shadow(0 1px 2px #000);vector-effect:non-scaling-stroke}.terrain-road-preview circle{fill:#102822;stroke:#efc275;stroke-width:2}.terrain-road-preview text{fill:#fff;font:700 12px system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--radar-room:var(--speedometer-size)}.terrain-speedometer{position:absolute;right:10px;bottom:10px;pointer-events:none}
 	.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud{display:none}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud:has([data-race]:not([hidden])){display:block;bottom:52px}.in-cockpit:not(:has(.terrain-panel[open])) .terrain-hud>:not([data-race]){display:none}.terrain-note a{color:inherit}.terrain-stage{position:absolute;inset:0}
@@ -1703,12 +1755,17 @@ function markup()
 	@container terrain-lab (min-width:350px){
 		[data-tab-panel=landscape]{grid-template-columns:repeat(2,minmax(0,1fr))}
 	}
-	@container terrain-lab (min-width:490px){
-		.terrain-tabs{grid-template-columns:repeat(7,minmax(0,1fr))}
+	@container terrain-lab (min-width:380px){
 		.terrain-section,.terrain-grid,.terrain-surface-group{grid-template-columns:repeat(2,minmax(0,1fr))}
 	}
+	@container terrain-lab (min-width:440px){
+		.terrain-tabs{grid-template-columns:repeat(7,minmax(0,1fr))}
+	}
 	@container terrain-view (max-width:560px){
-		.terrain-panel{--lab-inset:8px;--lab-width:calc(100% - 16px);--lab-height:min(75cqh,calc(100cqh - 16px - var(--radar-room,0px)))}
+		.terrain-panel{--lab-inset:8px;--lab-width:calc(100% - 16px);--lab-height:min(62cqh,calc(100cqh - 16px - var(--radar-room,0px)))}
+		.terrain-panel>summary{height:40px;font-size:15px}
+		.lab-workspace{max-height:calc(var(--lab-height) - 42px)}
+		.terrain-tabs [role=tab]{min-height:30px}
 		.lab-pages{padding:12px}
 		.lab-pages:has([data-tab-panel=landscape]:not([hidden])){scroll-padding-bottom:100px}
 		.terrain-file-actions{bottom:-12px;margin:0 -12px -12px;padding:8px 12px}
@@ -1821,30 +1878,8 @@ function markup()
 	<label class="terrain-field">Paint<select data-value="material"><option value="grass">Grass</option><option value="rock">Rock</option><option value="sand">Sand</option><option value="snow">Snow</option><option value="road">Road</option></select></label>
 	<p class="terrain-note">Click the ground to apply one brush stroke. Ctrl+Z undoes; Ctrl+Shift+Z redoes.</p>
 	<div class="terrain-row"><button data-action="undo">Undo</button><button data-action="redo">Redo</button></div>
-	<h2>Road grading</h2>${range(
-		'Width · m'
-		, 'roadWidth'
-		, 2
-		, 80
-		, 1
-		, 8
-	)}${range(
-		'Shoulder · m'
-		, 'roadShoulder'
-		, 1
-		, 120
-		, 1
-		, 12
-	)}${range(
-		'Offset · m'
-		, 'roadRaise'
-		, -100
-		, 100
-		, 1
-		, 0
-	)}
-	<p class="terrain-note">Choose Road control points, then click along a route. Offset raises or cuts each new point.</p><p class="terrain-note" data-road-count>0 control points</p>
-	<div class="terrain-row"><button data-action="road-apply">Apply road</button><button data-action="road-clear">Clear points</button><button type="button" data-open-roads>Edit on map</button></div>
+	<div class="terrain-row" data-road-tool hidden><p class="terrain-note" data-road-count>0 control points</p>
+	<button type="button" data-open-roads>Shape and apply in Roads</button></div>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden>
 	<details><summary>Circuit generator</summary><div class="terrain-grid">
@@ -1875,8 +1910,7 @@ function markup()
 	<label class="terrain-control"><span>Water color</span><input data-value="waterColor" type="color" value="#287276"></label>
 	${range('Transparency', 'waterTransparency', 0, 1, .01, .85)}
 	${range('Reflectivity', 'waterReflectivity', 0, 1, .01, .85)}
-	${range('Fog density · coarse', 'waterFogDensity', 0, 1, .005, .035)}
-	<label class="terrain-control"><span>Fog density · fine</span><input data-fine-fog type="range" min=".030" max=".040" step=".0001" value=".035"><output>0.035</output></label>
+	<label class="terrain-control"><span>Fog density</span><input data-fog type="range" min="0" max="1" step=".005" value=".52" aria-label="Fog density per meter"><output data-fog-output>0.035</output></label>
 	${range('Shore and wake foam', 'waterFoam', 0, 1, .01, .65)}
 	<p class="terrain-note">Lower fog density to see the bottom in deeper water.</p>
 	</section>
@@ -1933,15 +1967,16 @@ function markup()
 	</div></fieldset></template>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
-	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Board watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>
+	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
 	<p class="terrain-note">Space / A launches · hold G / X for Vulcan · T / D-pad ↑ cycles balloons · V / Y+B changes view.</p></div>
 	${range('Flight speed · m/s', 'speed', 5, 300, 5, 100)}
-	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on when the sun is low</option><option value="on">On</option><option value="off">Off</option></select></label>
+	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on in low light</option><option value="on">On</option><option value="off">Off</option></select></label>
 	<label class="terrain-field terrain-wide">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
+	<label class="terrain-check"><input data-show-diagnostics type="checkbox">Show diagnostics</label>
 	<details><summary>Driving and flight controls</summary><p class="terrain-note">Press M or click the left stick to show or hide the car or F5 minimap. Press N or tap D-pad ↓ to change its zoom.</p>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: fast flight · Shift / LB: car nitrous · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Click the right stick to recover an off-road race car. Start pauses.</p>

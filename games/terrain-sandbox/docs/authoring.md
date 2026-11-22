@@ -41,13 +41,13 @@ Picking distant ground can take a moment. The exact intersection search runs in 
 
 ## Grade a road
 
-Select **Road control points**, then click at least two points on the ground. Each point captures its ground elevation plus the current Offset. Positive offsets build embankments; negative offsets cut into the ground. You can change the offset before placing the next point to shape the road's grade.
+Under **Shape**, select **Road control points**, then click at least two points on the ground. Each point captures its ground elevation. The points become the **New road** on the **Roads** tab; choose **Shape and apply in Roads** to set their heights, curves, banks and dimensions there.
 
 Numbered points and a connecting line preview the route in the view. They move with the camera and disappear when behind it; the overlay does not intercept clicks.
 
-Width sets the painted pavement edge. Shoulder sets how far the cut or fill blends into the surrounding ground outside that edge. **Apply road** grades the route and paints its surface. **Clear points** abandons the uncommitted route.
+On **Roads**, **Road dimensions** sets the width, the painted pavement edge, and the shoulder, how far the cut or fill blends into the surrounding ground outside that edge. **Apply road** grades the route and paints its surface. **Discard edits** abandons the uncommitted route.
 
-Open **Roads** or choose **Edit on map** from Shape to see the route on a north-up terrain map. Select a saved road or choose **New road** and **Place points**. Drag empty ground to pan, scroll to zoom around the pointer, or choose **Fit road**. **Whole map** fits the entire editable landscape, including distant canyon branches. Other roads stay visible for reference.
+Open **Roads** to see the route on a north-up terrain map. Select a saved road or choose **New road** and **Place points**. Drag empty ground to pan, scroll to zoom around the pointer, or choose **Fit road**. **Whole map** fits the entire editable landscape, including distant canyon branches. Other roads stay visible for reference.
 
 Select a numbered point to drag it or enter its coordinates. Dragging preserves elevation. **Set to ground** samples the terrain at the point. The square handles control the incoming and outgoing curve. Under **Curve handles**, change their horizontal or vertical offsets to shape a bend, crest or dip. **Use automatic handle** restores the tangent on that side. In **Place points**, click a curve to insert a control point at that spot, or click open ground to extend the road. Splitting preserves the bend, elevation and bank. In **Select / pan**, click the curve and choose **Split curve** for the same result.
 

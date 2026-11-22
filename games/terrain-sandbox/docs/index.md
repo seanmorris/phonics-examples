@@ -6,6 +6,8 @@ Landscape Sandbox is a place to explore and edit procedural terrain. The default
 
 The panel on the right has seven tabs. **Landscape** generates terrain and saves or loads it. **Shape** holds the editing tools, road placement and race gates. **Roads** opens a zoomable terrain map for editing the route, its curves and its elevation profile. **Surface** sets terrain colors, relief and paint inks. **Water** and **Sky** set the water and the sun and atmosphere. **Explore** boards the vehicles and sets their controls. Click a tab, or move between tabs with the arrow keys, **Home** and **End**. The panel opens on the tab you used last. Click the **Landscape Lab** title or press **H** to collapse the panel to a round sliders button. Click the button to reopen it.
 
+On a touchscreen, drag a finger across the view to look around and tap the ground to use the chosen tool. Flying and driving still need a gamepad or keyboard.
+
 On the **Landscape** tab, expand **Landform parameters** to see what each setting changes. The fields sit side by side when there is room and stack on narrow screens. Select **Generate** to apply your changes.
 
 ## Color the ground
@@ -77,7 +79,7 @@ As the sun drops below the horizon, stars appear and a blue ambient light picks 
 
 **Water level** raises or lowers the surface immediately, in meters. **Choppiness** controls the height and steepness of the waves the jet ski rides. At 0% the surface is calm between wakes, 100% gives the original swell, and 300% triples its height. Both controls work while paused and are included in saved landscapes.
 
-Use **Water color** to tint the surface and underwater haze. Raise **Transparency** to see through the surface. Lower the fog density for a longer view through the water, or raise it for a murkier lake. **Fog density · coarse** covers the full range from 0 to 1 per meter. **Fog density · fine** adjusts within 0.005 of the coarse setting in increments of 0.0001 per meter. **Reflectivity** controls sky and sun reflections, strongest toward the horizon. **Shore foam** controls the white fringe in the shallows. These settings take effect while riding or paused and travel with a saved landscape.
+Use **Water color** to tint the surface and underwater haze. Raise **Transparency** to see through the surface. Lower the fog density for a longer view through the water, or raise it for a murkier lake. **Fog density** runs from clear water at the left end to 1 per meter at the right. Its scale is logarithmic, so the low densities of clear lakes get most of the slider's travel. **Reflectivity** controls sky and sun reflections, strongest toward the horizon. **Shore foam** controls the white fringe in the shallows. These settings take effect while riding or paused and travel with a saved landscape.
 
 ## Drive on land
 
@@ -107,7 +109,7 @@ The smoke rises about 110 meters. The run keeps a delivery count until you choos
 
 ## Ride the water
 
-Select **Board watercraft**, press **B**, or press right on a gamepad's D-pad to find nearby water deep enough for the craft. Use **W/S** or the triggers for throttle and reverse, and **A/D** or the left stick to steer. The right stick looks around the craft. The speedometer in the lower right shows your speed in mph. Hold full throttle on open water to pass 90 mph. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.
+Select **Watercraft**, press **B**, or press right on a gamepad's D-pad to find nearby water deep enough for the craft. Use **W/S** or the triggers for throttle and reverse, and **A/D** or the left stick to steer. The right stick looks around the craft. The speedometer in the lower right shows your speed in mph. Hold full throttle on open water to pass 90 mph. The craft responds to the same large waves shown by the renderer and leaves local wake disturbances.
 
 Select **Return to flight**, or press **F**, to explore and edit again. The craft is an arcade physics demonstration, not a complete racing game.
 
@@ -163,7 +165,7 @@ The sandbox reads gamepads that the browser maps to the standard layout, such as
 
 ## Choose detail
 
-Economical, Balanced, and Detailed adjust terrain mesh density. They do not change collision heights or saved terrain. The diagnostic display reports rendered patches, mesh memory, generation time, and render submission time. Render submission measures how long the application spends issuing the scene and presenting it. The interval between draws includes the rest of the frame and any idle time. During continuous animation, 16.7 ms between draws corresponds to 60 frames per second.
+Economical, Balanced, and Detailed adjust terrain mesh density. They do not change collision heights or saved terrain. Check **Show diagnostics** under **Explore** to add renderer statistics below the status line: rendered patches, mesh memory, generation time, and render submission time. This browser remembers the choice. Render submission measures how long the application spends issuing the scene and presenting it. The interval between draws includes the rest of the frame and any idle time. During continuous animation, 16.7 ms between draws corresponds to 60 frames per second.
 
 The sandbox gives terrain generation an eight-millisecond work budget while the view is stationary and reduces it to two milliseconds while flying, looking, or driving. Work stops when the requested terrain is ready; this budget does not make settled paused views redraw.
 

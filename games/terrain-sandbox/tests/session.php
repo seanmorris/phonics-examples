@@ -1983,4 +1983,18 @@ expect(count($longLab->landscape->roadRecords())===1 && $longLab->landscape->hei
 $longLab->close();
 $lab->close();
 
+// A touchscreen gets the touch hint and a mouse the keyboard hint; other messages stay.
+$hint = new Session(['worldSize'=>256,'heightScale'=>0,'detailAmplitude'=>0]);
+expect($hint->message === Session::FLY_HINT && $hint->status()['touch'] === false, 'A new session opens with the keyboard hint');
+input($hint, ['values' => ['touch' => true]]);
+expect($hint->message === Session::TOUCH_HINT && $hint->status()['touch'] === true, 'A touchscreen swaps in the touch hint');
+input($hint, ['values' => ['touch' => false]]);
+expect($hint->message === Session::FLY_HINT, 'A mouse brings the keyboard hint back');
+$other = $hint->message = 'Generated coast terrain.';
+input($hint, ['values' => ['touch' => true]]);
+expect($other !== Session::FLY_HINT && $hint->message === $other && $hint->touch, 'Touch leaves other messages alone');
+input($hint, ['values' => ['touch' => 'yes']]);
+expect($hint->message === 'Touch must be true or false' && $hint->touch, 'A touch flag that is not a boolean is refused');
+$hint->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

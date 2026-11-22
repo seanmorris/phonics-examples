@@ -1499,6 +1499,39 @@ test('both taillights brighten visibly in daylight for running lights and brakin
 	}
 });
 
+test.describe('on a touchscreen', () => {
+	test.use({hasTouch: true, viewport: {width: 390, height: 844}});
+
+	test('a finger drags to look, taps to use the tool, and reads a touch hint', async({page}) => {
+		await page.goto('/games/terrain-sandbox/');
+		await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+		await (await field(page, '[data-value="tool"]')).selectOption('raise');
+		await page.locator('.terrain-panel > summary').click();
+		const box = await canvas(page).boundingBox();
+		const x = box.x + box.width / 2, y = box.y + box.height * .6;
+		const cdp = await page.context().newCDPSession(page);
+
+		const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', {type, touchPoints: points});
+
+		const before = await status(page);
+
+		await touch('touchStart', [{x, y}]);
+
+		for(let step = 1; step <= 6; step++) await touch('touchMove', [{x: x + step * 20, y}]);
+
+		await touch('touchEnd', []);
+		await expect.poll(async() => (await status(page)).camera.yaw).not.toBe(before.camera.yaw);
+		expect((await status(page)).revision).toBe(before.revision);
+		await expect.poll(async() => (await status(page)).touch).toBe(true);
+		const hint = 'Drag to look around. Tap the ground to use the chosen tool. A gamepad or keyboard flies.';
+		await expect(page.locator('[data-status]')).toHaveText(hint);
+
+		await touch('touchStart', [{x, y}]);
+		await touch('touchEnd', []);
+		await expect.poll(async() => (await status(page)).revision, {timeout: 90_000}).toBeGreaterThan(before.revision);
+	});
+});
+
 test('the default canyon lets all four wheels leave the ground and touch down again', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
@@ -1897,21 +1930,26 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	await expect.poll(async() => (await status(page)).settings.skyLight).toBe(3);
 	expect((await save(page)).settings).toMatchObject({skyColor: '#2c4fa8', skyLight: 3});
 
-	await field(page, '[data-value="waterFogDensity"]');
-	const coarseFog = page.getByRole('slider', {name: /Fog density · coarse/});
-	const fineFog = page.getByRole('slider', {name: /Fog density · fine/});
-	await coarseFog.focus();
-	await coarseFog.press('Home');
-	await expect(fineFog).toHaveAttribute('min', '0.0000');
-	await fineFog.focus();
-	await fineFog.press('ArrowRight');
-	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(.0001);
-	await coarseFog.focus();
-	await coarseFog.press('End');
-	await expect(fineFog).toHaveAttribute('max', '1.0000');
-	await fineFog.focus();
-	await fineFog.press('ArrowLeft');
-	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(.9999);
+	// Renderer statistics stay off the HUD until this browser asks for them.
+	const diagnostics = page.locator('[data-diagnostics]');
+	await expect(diagnostics).toContainText('altitude');
+	await expect(diagnostics).not.toContainText('terrain levels');
+	await (await field(page, '[data-show-diagnostics]')).check();
+	await expect(diagnostics).toContainText('terrain levels');
+	expect(await page.evaluate(() => localStorage.getItem('terrain-sandbox.diagnostics'))).toBe('1');
+
+	// Fog density is one logarithmic slider from clear water to one per meter: (1000^p - 1) / 999, to 3 digits.
+	await field(page, '[data-fog]');
+	const fog = page.getByRole('slider', {name: /Fog density/});
+	await fog.focus();
+	await fog.press('Home');
+	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(0);
+	await fog.press('ArrowRight');
+	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(0.0000352);
+	await fog.press('End');
+	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(1);
+	await fog.press('ArrowLeft');
+	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(0.966);
 
 	const level = page.getByLabel('Water level · m', {exact: true});
 	const chop = page.getByRole('slider', {name: /Choppiness/});
@@ -1927,13 +1965,13 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	expect(rough.generation).toBe(now.generation);
 	const sea = await save(page);
 	expect(sea.settings.waterLevel).toBe(6.5);
-	expect(sea.settings.waterFogDensity).toBe(.9999);
+	expect(sea.settings.waterFogDensity).toBe(0.966);
 
 	// The file buttons open the Landscape tab. The Water and Sky fields still hold the loaded values while hidden.
 	const chopField = page.locator('[data-value="waterChoppiness"]');
 	const glowField = page.locator('[data-value="nightGlow"]');
 
-	const levelField = page.locator('[data-value="waterLevel"]'), fineField = page.locator('[data-fine-fog]');
+	const levelField = page.locator('[data-value="waterLevel"]'), fogField = page.locator('[data-fog]');
 	await load(page, fixture());
 	await expect(chopField).toHaveValue('100');
 	await expect(glowField).toHaveValue('0.5');
@@ -1941,8 +1979,8 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	await expect(levelField).toHaveValue('6.5');
 	await expect(chopField).toHaveValue('300');
 	await expect(glowField).toHaveValue('1');
-	await expect(fineField).toHaveValue('0.9999');
-	await expect(page.locator('[data-value="waterFogDensity"]')).toHaveValue('1');
+	await expect(fogField).toHaveValue('0.995');
+	await expect(page.locator('[data-fog-output]')).toHaveText('0.97');
 
 	// Native fields keep WASD and pause shortcuts as text while focused.
 	const position = now.camera.position;
@@ -2048,7 +2086,8 @@ test('terrain brushes, undo, roads, files, and craft share complete terrain revi
 	await page.mouse.up({button: 'right'});
 	await expect(page.locator('[data-road-marker]')).toHaveCount(2);
 
-	await press(page, 'road-apply');
+	// Points placed on the terrain are the Roads tab's new road, and that tab applies them.
+	await (await field(page, '[data-road-apply]')).click();
 	await expect.poll(async() => (await status(page)).surface.operations, {timeout: 90_000}).toBe(7);
 	await settled(page);
 
