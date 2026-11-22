@@ -79,7 +79,7 @@ final class Circuit
 	}
 
 	/** Place the circuit's gates in one go; placing() spreads the same work out. */
-	public function course(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, bool $legacyWidth = false): Course
+	public function course(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, ?float $legacyWidth = null): Course
 	{
 		$placing = $this->placing($landscape, $shapes, $laps, $flooded, $legacyWidth);
 		foreach($placing as $_) {}
@@ -97,26 +97,26 @@ final class Circuit
 	 * Placing a graded circuit's gates took 0.7 s in one step.
 	 * @return \Generator Returns the Course.
 	 */
-	public function placing(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, bool $legacyWidth = false): \Generator
+	public function placing(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, ?float $legacyWidth = null): \Generator
 	{
 		if($flooded && $this->floodedLevel === null) throw new \RuntimeException('This circuit has no flooded variant.');
 		$course = new Course($shapes);
 		$ground = $landscape->height(...);
 		$kind = $flooded ? 'water' : 'road';
-		['width'=>$width,'height'=>$height] = $shapes->fit($kind,
-			$this->featureArea === null ? null : ($flooded ? 24. : ($legacyWidth ? 30. : CircuitRoad::GATE_WIDTH)),
-			$flooded ? null : 2 * $shapes->kind('road')['size']['default'][1]);
+		$width = $this->featureArea === null ? null : ($flooded ? 24. : $legacyWidth);
+		$height = $flooded ? null : 2 * $shapes->kind('road')['size']['default'][1];
 		foreach($this->gates() as $i => [$x,$z,$yaw])
 		{
+			if(!$flooded && $this->featureArea !== null && $legacyWidth === null)
+				[$x,$z,$width] = CircuitRoad::gateSpan($landscape,$x,$z,$yaw);
+			$size = $shapes->fit($kind,$width,$height);
 			$role = $i === 0 ? 'start' : 'checkpoint';
 			$base = $flooded ? $this->floodedLevel : $ground($x,$z);
-			// A circuit gantry spans the deck and most of both shoulders. It stands on the road: ground beyond the deck
-			// counts no higher than the centerline, so a bend against a canyon wall cannot lift the banner off the
-			// road, while the posts still reach down to lower ground beside it.
+			// High ground outside the deck must not lift the banner off a road that cuts into a wall.
 			$deck = (CircuitRoad::WIDTH/2 + 1)**2;
 			$fit = $flooded ? $ground : static fn(float $px, float $pz): float
 				=> ($px-$x)**2 + ($pz-$z)**2 <= $deck ? $ground($px,$pz) : min($ground($px,$pz), $base);
-			$placed = $course->place($role, $kind, $x, $base, $z, $yaw, $laps, $width,$height,$fit);
+			$placed = $course->place($role, $kind, $x, $base, $z, $yaw, $laps, $size['width'],$size['height'],$fit);
 			if($placed['refused'] !== null) throw new \RangeException('The circuit needs more room between its gates.');
 			yield;
 		}

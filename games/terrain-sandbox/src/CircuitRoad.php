@@ -9,11 +9,39 @@ final class CircuitRoad
 {
 	public const WIDTH = 36.;
 	private const SHOULDER = 16.;
-	// Overlapping grade samples carry the road material about three quarters of the way across each shoulder.
-	public const GATE_WIDTH = self::WIDTH + 1.5*self::SHOULDER;
+	// Distance from the asphalt edge to the inner face of a checkpoint post, in meters.
+	public const POST_CLEARANCE = .75;
 	private const STATION_SPACING = 40.;
 	// At 75 mph a 140 m vertical radius asks for 8.0 m/s² of downward acceleration, below gravity.
 	private const MIN_CREST_RADIUS = 140.;
+
+	/** Fit both posts to the painted spline along the original checkpoint crossing plane. */
+	public static function gateSpan(Landscape $land, float $x, float $z, float $yaw): array
+	{
+		$acrossX = cos($yaw);
+		$acrossZ = -sin($yaw);
+		$material = $land->material($x,$z,$offset,$center);
+		if($material !== 'road' || $center === null || abs($center[0]) > $center[2])
+			return [$x,$z,self::WIDTH + 2*self::POST_CLEARANCE];
+		$half = $center[2] + self::POST_CLEARANCE;
+		$edges = [];
+		foreach([-1,1] as $side) {
+			$distance = $half;
+			// On a bend the fitted spline can sit to one side of the racing line or cross it at an angle.
+			// Correct along the gate span until the post clears the local pavement edge.
+			for($i = 0; $i < 6; $i++) {
+				$land->material($x+$side*$distance*$acrossX,$z+$side*$distance*$acrossZ,$offset,$mark);
+				if($mark === null) break;
+				$error = $mark[2] + self::POST_CLEARANCE - abs($mark[0]);
+				if(abs($error) < .001) break;
+				$distance += $error;
+			}
+			$edges[] = $side*$distance;
+		}
+		[$left,$right] = $edges;
+		$shift = round(($right+$left)/2,3);
+		return [$x+$shift*$acrossX,$z+$shift*$acrossZ,round($right-$left,3)];
+	}
 
 	/** @return \Generator The road edit records for a validated centerline. */
 	public static function grade(Landscape $land, Circuit $circuit, ?float $causewayDeck = null): \Generator

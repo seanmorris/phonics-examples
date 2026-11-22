@@ -1191,11 +1191,17 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		'Save and load preserve the applied circuit and its gate positions');
 	if($variant === 'dry')
 	{
+		$dryGates = $gates;
 		$stock = $generator->gateShapes->kind('road')['size']['default'][1];
 		expect(array_unique(array_column($gates,'height')) === [2 * $stock],
 			'Every dry circuit gate has double the stock road clearance');
-		expect(array_unique(array_column($gates,'width')) === [CircuitRoad::GATE_WIDTH],
-			'All regional gantry openings span the painted road up to its outer shoulders.');
+		foreach($gates as $gate) foreach([-1,1] as $side) {
+			$innerFace = $side*$generator->course->measure($gate)['window']['halfWidth'];
+			$generator->landscape->material($gate['x']+$innerFace*cos($gate['yaw']),
+				$gate['z']-$innerFace*sin($gate['yaw']),$offset,$mark);
+			expect($mark !== null && abs(abs($mark[0])-$mark[2]-CircuitRoad::POST_CLEARANCE)<.01,
+				'Both inner post faces clear the painted pavement by 0.75 m, including on bends.');
+		}
 		// The gantries stand on the road. Against a wall the highest ground across the 60 m span once lifted a banner
 		// over 20 m above the deck; only the deck's own bank may raise one now.
 		$lift = max(array_map(fn(array $g): float => $g['y'] - $generator->landscape->height($g['x'], $g['z']), $gates));
@@ -1206,9 +1212,11 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
 		expect($copy->course->export() === $generator->course->export(), 'A saved stock-height circuit upgrades on load');
 		$oldRoute = Circuit::import($legacy['circuit']['route'], $generator->landscape->recipe()['worldSize']/2);
-		$legacy['course'] = $oldRoute->course($generator->landscape,$shapes,$generator->course->laps(),false,true)->export();
-		$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
-		expect($copy->course->export() === $generator->course->export(), 'A saved 30 m circuit refits its wider gates on the same road.');
+		foreach([30.,60.] as $oldWidth) {
+			$legacy['course'] = $oldRoute->course($generator->landscape,$shapes,$generator->course->laps(),false,$oldWidth)->export();
+			$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+			expect($copy->course->export() === $generator->course->export(), "A saved $oldWidth m circuit refits to the pavement.");
+		}
 		// Native and WASM hypot/atan2 can differ by a last bit on the same imported racing line.
 		$legacy['course']['gates'][4]['z'] += 2.3e-13;
 		$legacy['course']['gates'][24]['yaw'] -= 4.4e-16;
@@ -1231,7 +1239,11 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		'The generated launch pose lets the vehicle go straight through the first gate');
 	$copy->close();
 }
-expect($gateLine[0] === $gateLine[1], 'The road gates and floating arches share a line and heading');
+foreach($gateLine[0] as $i => [$x,$z,$yaw]) {
+	[$wx,$wz,$heading] = $gateLine[1][$i];
+	expect($yaw === $heading && abs(($wx-$x)*sin($yaw)+($wz-$z)*cos($yaw)) < 1e-8,
+		'The road gates and water arches cross the route at the same station and heading.');
+}
 $record = json_decode($generator->save(),true);
 expect(count($record['landscape']['history'])===1 && $generator->landscape->revision()===1,
 	'The whole circuit is one undoable grade even after switching variants');
@@ -1243,7 +1255,11 @@ $snapped = false;
 foreach($route['junctions'] as $fork)
 {
 	[[$sx,$sz]] = $routeLine->stations([$fork+30]);
-	foreach($gateLine[0] as [$gx,$gz]) if(hypot($gx-$sx,$gz-$sz) < 1.) $snapped = true;
+	foreach($gateLine[0] as $i => [$gx,$gz,$yaw]) {
+		$along = ($sx-$gx)*sin($yaw)+($sz-$gz)*cos($yaw);
+		$across = ($sx-$gx)*cos($yaw)-($sz-$gz)*sin($yaw);
+		if(abs($along) < 1. && abs($across) < $dryGates[$i]['width']/2) $snapped = true;
+	}
 }
 expect($snapped, 'The plateau circuit places a checkpoint 30 m downstream of an identified corridor junction');
 expect(max(array_map(static fn(array $edit): float => max(array_map('abs',$edit['banks'])),

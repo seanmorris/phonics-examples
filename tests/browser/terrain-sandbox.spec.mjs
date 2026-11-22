@@ -1554,7 +1554,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 
 	expect(
 		dry.course.gates.every(
-			gate => gate.kind === 'road' && gate.width === 60 && gate.height === 2 * dry.gateSizes.road.height
+			gate => gate.kind === 'road' && gate.width >= 37 && gate.width < 40 && gate.height === 2 * dry.gateSizes.road.height
 		)
 	).toBe(true);
 
@@ -1587,8 +1587,12 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	expect(flooded.course.gates.every(gate => gate.kind === 'water')).toBe(true);
 	expect(flooded.settings.waterLevel).toBe(preview.circuit.floodedLevel);
 
-	const gateLine = ({course}) => course.gates.map(({x,z,yaw}) => [x,z,yaw]);
-	expect(gateLine(flooded)).toEqual(gateLine(dry));
+	expect(flooded.course.gates).toHaveLength(dry.course.gates.length);
+	flooded.course.gates.forEach(({x,z,yaw}, i) => {
+		const road = dry.course.gates[i];
+		expect(yaw).toBe(road.yaw);
+		expect((x-road.x)*Math.sin(yaw)+(z-road.z)*Math.cos(yaw)).toBeCloseTo(0,8);
+	});
 	await page.getByLabel('Start elevation').fill('');
 	await expect.poll(async() => (await status(page)).settings.circuitStartHeight).toBeNull();
 

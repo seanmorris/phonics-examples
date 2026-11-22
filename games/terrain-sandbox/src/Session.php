@@ -1980,26 +1980,30 @@ final class Session
 					throw new \InvalidArgumentException('Invalid saved circuit variant.');
 				$variant = $savedCircuit['variant'];
 				$circuit = Circuit::import($savedCircuit['route'] ?? null,$candidate->recipe()['worldSize']/2);
-				// Validate older road gates at their original width. Refitting a wider span on a bank can change Y.
-				$legacyWidth = $variant === 'dry' && $circuit->featureArea !== null && ($course->start()['width'] ?? null) === 30.;
-				$derived = $circuit->course($candidate,$this->gateShapes,$course->laps(),$variant === 'flooded',$legacyWidth);
-				$expected = $derived->export();
-				$savedGates = $course->export();
+				$saved = $course->export()['gates'];
 				$oldRoadHeight = $this->gateShapes->kind('road')['size']['default'][1];
-				if($variant === 'dry' && ($course->start()['height'] ?? null) === $oldRoadHeight)
-				{
-					// Older generated circuits used the stock road height for every gate.
-					foreach($expected['gates'] as &$gate) $gate['height'] = $oldRoadHeight;
-					unset($gate);
+				$matches = static function(Course $layout) use ($saved,$variant,$oldRoadHeight): bool {
+					$expected = $layout->export()['gates'];
+					if($variant === 'dry' && ($saved[0]['height'] ?? null) === $oldRoadHeight) {
+						// Older generated circuits used the stock road height for every gate.
+						foreach($expected as &$gate) $gate['height'] = $oldRoadHeight;
+					}
+					return self::sameCircuitGates($expected,$saved);
+				};
+				$laps = $course->laps();
+				$legacy = null;
+				$widths = array_values(array_unique(array_column($saved,'width')));
+				if($variant === 'dry' && $circuit->featureArea !== null && ($widths === [30.] || $widths === [60.])) {
+					// Validate the entire historical layout before allowing an upgrade or keeping a tight legacy fit.
+					try {
+						$old = $circuit->course($candidate,$this->gateShapes,$laps,false,$widths[0]);
+						if($matches($old)) $legacy = $old;
+					} catch(\RangeException|\OutOfBoundsException) {}
 				}
-				if(!self::sameCircuitGates($expected['gates'],$savedGates['gates']))
+				try { $course = $circuit->course($candidate,$this->gateShapes,$laps,$variant === 'flooded'); }
+				catch(\RangeException|\OutOfBoundsException $error) { $course = $legacy ?? throw $error; }
+				if($legacy === null && !$matches($course))
 					throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
-				$course = $derived;
-				if($legacyWidth)
-				{
-					try { $course = $circuit->course($candidate,$this->gateShapes,$course->laps(),false); }
-					catch(\RangeException|\OutOfBoundsException) { $course = $derived; } // Tight legacy layout or map edge.
-				}
 			}
 		}
 		catch(\RuntimeException | \InvalidArgumentException $error) { $candidate->close(); throw $error; }
