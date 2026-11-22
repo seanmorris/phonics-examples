@@ -84,7 +84,8 @@ void main()
 	float reflectionFootprint = max(length(dFdx(reflected)),length(dFdy(reflected)));
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
 	vec3 reflection = waterEnvironmentReflection(reflected,max(0.0,wave.x),reflectionFootprint,body,illumination);
-	float shoreDepth = wave.x - vGround;
+	// Use the displaced triangle that participates in the depth test for shoreline coverage.
+	float shoreDepth = vWorld.y - vGround;
 	float shoreFootprint = max(0.001,fwidth(shoreDepth));
 	// Swash along the waterline, then thin surf lines that follow the depth contours over the shallows and run
 	// ashore. A slow ripple in their phase breaks them along the beach. Lines too fine for the pixel become their mean.
@@ -111,5 +112,8 @@ void main()
 	surfaceLight += terrainSpotLight(vWorld, n, uWaterLevel, 0.0) / 20.0;
 	vec3 lit = (foam * mix(vec3(0.65),vec3(1.6,1.85,1.95),wash) * surfaceLight + reflectionWeight * reflection
 		+ tintWeight * body * surfaceLight) / max(alpha, 0.00001);
-	color = vec4(terrainToneMap(terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit)),alpha);
+	// A thin film gives way to the bed before the two surfaces intersect. Widen that
+	// transition when a pixel spans more depth than the near-field film.
+	float wet = smoothstep(0.0,max(0.18,2.0 * shoreFootprint),shoreDepth);
+	color = vec4(terrainToneMap(terrainAtmosphere(normalize(vRelative),uEye.y,length(vRelative),lit)),alpha * wet);
 }
