@@ -203,21 +203,27 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 		vec4 params = roadRecord(header.x);
 		float sum = 0., target = 0., coverage = 0., outside = 1.;
 		float closest = 1e30;
-		vec2 offset = vec2(0.);
+		int nearest = 0;
+		vec3 mark = vec3(0.);
 		group++;
 		for(int i = 0; i < header.y; i += 4) {
 			ivec4 samples = ivec4(roadRecord(group++));
 			for(int j = 0; j < 4 && i+j < header.y; j++) {
-				int address = samples[j];
+				int address = header.x+samples[j];
 				vec4 position = roadRecord(address);
 				// World positions here are exact; subtracting the sample's high part first keeps the difference exact.
 				vec4 segment = roadRecord(address + 2);
 				vec2 delta = (world - position.xy) - segment.xy;
 				float q = (dot(delta,delta) - params.x) / params.y;
 				if(q >= 1.) continue;
-				vec2 toLine = delta - segment.zw * clamp(dot(delta,segment.zw)/max(1e-12,dot(segment.zw,segment.zw)),0.,1.);
+				float t = clamp(dot(delta,segment.zw)/max(1e-12,dot(segment.zw,segment.zw)),0.,1.);
+				vec2 toLine = delta - segment.zw*t;
 				float d2 = dot(toLine,toLine);
-				if(d2 < closest) { closest = d2; offset = toLine; }
+				if(d2 < closest) {
+					closest = d2; nearest = address;
+					float side = segment.z*toLine.y-segment.w*toLine.x;
+					mark = vec3((side < 0. ? -1. : 1.)*sqrt(d2),t,dot(toLine,segment.zw));
+				}
 				float weight = fade(1. - max(q,0.));
 				vec4 plane = roadRecord(address + 1);
 				vec2 tangent = vec2(position.w,plane.x);
@@ -235,8 +241,19 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 			height = mix(height, target / sum, influence);
 			if(influence >= .5) {
 				material = params.w;
-				ivec2 code = ivec2(clamp(floor(offset*32.+.5)+2048.,1.,4095.));
-				marking = material == 5. ? vec3(code.x>>4,code.y>>4,((code.x&15)<<4)|(code.y&15))/255. : vec3(0.);
+				marking = vec3(0.);
+				if(material == 5.) {
+					vec4 station = roadRecord(nearest+3);
+					int caps = int(station.z);
+					bool pastEnd = (caps&4)!=0 || ((caps&1)!=0 && mark.y==0. && mark.z<0.)
+						|| ((caps&2)!=0 && mark.y==1. && mark.z>0.);
+					if(!pastEnd) {
+						int crossCode = int(clamp(floor(mark.x*32.+.5)+1024.,1.,2047.));
+						int phase = int(floor(mod(station.x+mark.y*station.y,390.144)*(8192./390.144)+.5))&8191;
+						int code = (crossCode<<13)|phase;
+						marking = vec3(code>>16,(code>>8)&255,code&255)/255.;
+					}
+				}
 			}
 		}
 		if(header.z != 0) break;

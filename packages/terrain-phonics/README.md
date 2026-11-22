@@ -71,7 +71,7 @@ For distant pointer picking, use `rayQuery()` and advance it with a time budget 
 The picker skips blocks whose full height range misses the ray, including the effects of edits and cubic
 interpolation. It solves the remaining cells in front-to-back order. Both picking APIs return the same first hit.
 
-A visible application should prepare a candidate with `Landscape::load($ground->save())`, edit that candidate,
+A visible application should prepare a candidate with `$ground->fork()`, edit that candidate,
 and call `Scene::prepareLandscape()`. Continue simulating and drawing the old surface while preparation runs.
 At a fixed-update boundary, `takePreparedLandscape()` publishes the prepared mesh revision and returns the
 surface to install in physics. New operations must wait until the pending transaction completes.
@@ -81,7 +81,9 @@ A road stores ordered control points as `[x,y,z]` in meters. The default tangent
 
 `roadRecords()` lists the active roads by their position in the edit sequence. Queue a revised record with `replaceAt` set to that position to move the original road and preserve any later paint or grading. Version 2 saves retain these edits and handles through undo and redo. Roads with automatic handles and ordinary append-only history still save as version 1.
 
-At a junction, operations apply in authoring order. Roads should agree on their crossing elevation. Both terrain renderers draw a 20 cm ochre centerline along graded pavement. A road-color brush paints solid pavement.
+For interactive grading, advance `queueSteps($road)` within the frame budget. It yields while sampling and indexing a long spline and queues the entire road once it finishes. Call `commit()` to publish the edit. One landscape supports 65,536 active road samples across all its roads.
+
+At a junction, operations apply in authoring order. Roads should agree on their crossing elevation. Both terrain renderers draw a 40 cm ochre centerline along graded pavement, with alternating 10-foot dashes and 10-foot gaps measured along the curve. A road-color brush paints solid pavement.
 Bridges remain separate meshes. There is one ground height at each X/Z position, so this representation
 cannot describe caves or overhangs.
 
@@ -100,7 +102,7 @@ Pass `useClipmap: false` to `Scene` for the PHP patch renderer, which uses the s
 budget settings. Its GPU resources and update path are independent of the clipmap.
 
 Collision and picking use `Landscape::height()` and its related samplers. The clipmap uploads a spatially
-indexed texture of road splines when the roads change. As the camera moves, the elevation shader reads the
+indexed texture of road splines when the roads change. It retains each road's packed grade and paint overlay, composites them in edit order, and uploads changed texture rows when the atlas dimensions stay the same. As the camera moves, the elevation shader reads the
 nearby spline samples to grade the surface and paint the road and shoulders. Where a brush overlaps a road,
 PHP supplies the final samples in edit order. The world overview also uses PHP reconstruction in edited
 areas when its pixels fall between terrain lattice nodes. `Scene::drawChart()` draws

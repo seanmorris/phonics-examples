@@ -12,14 +12,17 @@ uniform float uCraft;
 // PATCH
 out vec3 vRelative, vWorld, vNormal;
 out vec3 vPaint0, vPaint1;
-out vec3 vRoadOffset;
-vec3 roadOffset(ivec2 code) { return vec3((vec2(code)-2048.)/32.,1.); }
+out vec4 vRoadMark;
+vec4 roadMark(int code) {
+	float angle = float(code&8191)*(6.28318530718/8192.);
+	return vec4(float((code>>13)-1024)/32.,cos(angle),sin(angle),1.);
+}
 void main()
 {
 	vec3 p = aPosition;
 	vec3 normal = aNormal;
 	float material=aMaterial;
-	vRoadOffset=vec3(0.);
+	vRoadMark=vec4(0.);
 	if(uCraft < 0.5)
 	{
 		#ifdef CLIPMAP
@@ -32,14 +35,13 @@ void main()
 		ivec4 ink=ivec4(texelFetch(uInk,texelAt(cell),0)*255.+.5);
 		material=float(ink.r)-1.;
 		if(ink.r==5 && any(notEqual(ink.gba,ivec3(0)))) {
-			ivec2 code=ivec2((ink.g<<4)|(ink.a>>4),(ink.b<<4)|(ink.a&15));
-			vRoadOffset=roadOffset(code);
+			vRoadMark=roadMark((ink.g<<16)|(ink.b<<8)|ink.a);
 		}
 #else
-		// Patch meshes store both offsets in the otherwise categorical material attribute.
+		// Patch meshes store the road coordinates in the otherwise categorical material attribute.
 		if(material < -1.) {
 			int code = int(-material);
-			vRoadOffset = roadOffset(ivec2(code >> 12, code & 4095));
+			vRoadMark = roadMark(code);
 			material = 4.;
 		}
 		ivec2 cell = patchCell();

@@ -15,7 +15,8 @@ final class Clipmap
 	private ?Landscape $source = null;
 	private EditIndex $edits;
 	private ?EditIndex $overviewEdits = null;
-	private array $roads = [], $roadTexture = [];
+	private array $roads = [], $roadTexture = [], $roadOverlays = [], $lastAtlas = [];
+	private int $roadOverlayBuilds = 0;
 	private int $roadBytes = 0;
 	// Parent normals sample two cells beyond the drawn grid.
 	private const HALO = 2;
@@ -156,16 +157,32 @@ final class Clipmap
 		{
 			glUniform4i($p->location('uRoadGrid'), 0, 0, 0, 0);
 			glDeleteTextures(1, $this->roadTexture);
-			$this->roadTexture = [];
+			$this->roadTexture = $this->lastAtlas = $this->roadOverlays = [];
 			$this->roadBytes = 0;
 			return;
 		}
-		$atlas = RoadAtlas::build($roads, $extent);
+		$atlas = RoadAtlas::build($roads, $extent, $this->roadOverlays);
+		$this->roadOverlayBuilds += $atlas['rebuilt'];
 		if(!$this->roadTexture) glGenTextures(1, $this->roadTexture);
 		self::texture($this->roadTexture[0]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, $atlas['width'], $atlas['height'], 0, GL_RGBA, GL_FLOAT, $atlas['bytes']);
-		$this->roadBytes = strlen($atlas['bytes']);
-		$this->uploads += $this->roadBytes;
+		$width = $atlas['width']; $height = $atlas['height']; $data = $atlas['bytes'];
+		if(($this->lastAtlas['width'] ?? 0) !== $width || $this->lastAtlas['height'] !== $height) {
+			glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA32F,$width,$height,0,GL_RGBA,GL_FLOAT,$data);
+			$this->uploads += strlen($data);
+		} else {
+			// Retain identical rows of the composed GPU atlas, including unmodified road overlays.
+			$row = 16*$width; $start = null;
+			for($y=0; $y<=$height; $y++) {
+				$changed = $y<$height && substr($data,$y*$row,$row) !== substr($this->lastAtlas['bytes'],$y*$row,$row);
+				if($changed) { $start ??= $y; continue; }
+				if($start === null) continue;
+				$bytes = substr($data,$start*$row,($y-$start)*$row);
+				glTexSubImage2D(GL_TEXTURE_2D,0,0,$start,$width,$y-$start,GL_RGBA,GL_FLOAT,$bytes);
+				$this->uploads += strlen($bytes); $start = null;
+			}
+		}
+		$this->lastAtlas = $atlas;
+		$this->roadBytes = strlen($data);
 		glUniform4i($p->location('uRoadGrid'), $atlas['directory'], $atlas['blocksAcross'], $atlas['minTile'], (int)$atlas['cell']);
 	}
 
@@ -869,6 +886,9 @@ final class Clipmap
 		{
 			if(!isset($resident['origin'])) continue;
 
+			// Outside a resident patch the chart samples the fixed overview. A coarser ring
+			// cannot improve on that map, even when it covers the entire requested view.
+			if($resident['step'] >= $this->overview['step']) break;
 			$level = $resident;
 			$localSpan = $this->spans[$index];
 
@@ -946,6 +966,7 @@ final class Clipmap
 			, 'heightTexelsWritten' => $this->texels
 			, 'editUploadBytes' => $this->uploads
 			, 'triangleShadowGeneration' => $this->shadows?->generation ?? 0
+			, 'roadOverlayBuilds' => $this->roadOverlayBuilds
 			, 'roadTextureBytes' => $this->roadBytes
 			, 'meshBytes' => 0
 			, 'terrainTextureBytes' => 256 + $this->roadBytes + ($this->packed ? 8 : 20) * $texels

@@ -5,6 +5,7 @@ namespace TerrainPhonics;
 /** Validated, ordered terrain edits with compact smooth influence fields. */
 final class Edits
 {
+	public const MAX_ROAD_SAMPLES = 65536;
 
 	/**
 	 * Normalize one serializable edit and rebuild its bounded road acceleration data.
@@ -12,6 +13,14 @@ final class Edits
 	 * @return array Validated operation with bounded derived acceleration data.
 	 */
 	public static function normalize(array $operation): array
+	{
+		$work = self::normalizeSteps($operation);
+		foreach($work as $_) {}
+		return $work->getReturn();
+	}
+
+	/** The same operation, with scheduling points while a long spline and its footprint are prepared. */
+	public static function normalizeSteps(array $operation): \Generator
 	{
 		$type = $operation['type'] ?? null;
 
@@ -21,9 +30,9 @@ final class Edits
 		if(array_key_exists('replaceAt', $operation)) {
 			if($type !== 'road' || !is_int($operation['replaceAt']) || $operation['replaceAt'] < 0)
 				throw new \InvalidArgumentException('A road replacement needs an existing edit index.');
-			return self::road($operation) + ['replaceAt'=>$operation['replaceAt']];
+			return (yield from self::road($operation)) + ['replaceAt'=>$operation['replaceAt']];
 		}
-		if($type === 'road') return self::road($operation);
+		if($type === 'road') return yield from self::road($operation);
 
 		$result = [
 			'type' => $type
@@ -159,9 +168,10 @@ final class Edits
 	 * @param array $operations Committed edits in application order.
 	 * @return ?string Painted material identifier, or null for procedural classification.
 	 */
-	public static function material(float $x, float $z, array $operations, ?array &$centerOffset = null): ?string
+	public static function material(float $x, float $z, array $operations, ?array &$centerOffset = null, ?array &$mark = null): ?string
 	{
-		$withMark = func_num_args() === 4;
+		$withMark = func_num_args() >= 4;
+		$mark = null;
 		$centerOffset = null;
 		for($i = count($operations) - 1; $i >= 0; $i--)
 		{
@@ -178,7 +188,7 @@ final class Edits
 
 			if($weight >= .5) {
 				if($withMark && $operation['type'] === 'road' && $operation['material'] === 'road')
-					$centerOffset = self::centerOffset($x,$z,$operation['_road']);
+					$centerOffset = self::centerOffset($x,$z,$operation['_road'],$mark);
 				return $operation['material'];
 			}
 		}
@@ -280,7 +290,7 @@ final class Edits
 	 * @param array $operation Validated edit record, including derived road data when applicable.
 	 * @return array Normalized road and bounded spatially indexed spline samples.
 	 */
-	private static function road(array $operation): array
+	private static function road(array $operation): \Generator
 	{
 		$points = $operation['points'] ?? null;
 
@@ -329,6 +339,9 @@ final class Edits
 		$half = $width / 2;
 		$radius = $half + $shoulder;
 		$samples = [];
+		$totalChord = 0.;
+		foreach($points as $i=>$p) if($i) $totalChord += hypot($p[0]-$points[$i-1][0],$p[2]-$points[$i-1][2]);
+		$chunked = $totalChord/$step > 2048.;
 
 		for($i = 0; $i < count($points) - 1; $i++)
 		{
@@ -348,11 +361,25 @@ final class Edits
 			$dz = abs($coefficients[2][1]) + 2 * abs($coefficients[2][2]) + 3 * abs($coefficients[2][3]);
 			$steps = max(1, (int)ceil(hypot($dx, $dz) / $step));
 
-			if(count($samples) + $steps + 1 > 4096)
-			throw new \InvalidArgumentException('Road exceeds 4096 samples; split it into shorter edits');
+			if(count($samples)+$steps+1 > 4096) {
+				// A cubic derivative lies inside the convex hull of its three Bézier derivative controls.
+				$speeds = [];
+				foreach([0,1,2] as $control) {
+					$axes = [];
+					foreach([0,2] as $axis) {
+						[, $b,$c,$d] = $coefficients[$axis];
+						$axes[] = match($control) { 0=>$b, 1=>$b+$c, 2=>$b+2*$c+3*$d };
+					}
+					$speeds[] = hypot(...$axes);
+				}
+				$steps = max(1,(int)ceil(max($speeds)/$step));
+			}
+			if(count($samples)+$steps+1 > self::MAX_ROAD_SAMPLES)
+				throw new \OverflowException('Road exceeds the landscape sample budget');
 
 			for($j = ($i ? 1 : 0); $j <= $steps; $j++)
 			{
+				if(($chunked || count($samples)>=4096) && (count($samples)&255)===255) yield;
 				$t = $j / $steps;
 				$position = $tangent = [];
 
@@ -394,12 +421,18 @@ final class Edits
 			}
 		}
 
+		$stations = [0.];
 		$grid = [];
 		$bounds = [INF,INF,-INF,-INF];
 		$range = [INF,-INF];
 
 		foreach($samples as $index => [$x,$y,$z,$tx,$tz,$grade,$bank])
 		{
+			if($index > 0) {
+				if(($chunked || count($samples)>4096) && ($index & 255) === 0) yield;
+				[$px,$py,$pz] = $samples[$index-1];
+				$stations[] = $stations[$index-1]+hypot(hypot($x-$px,$z-$pz),$y-$py);
+			}
 			$bounds = [
 				min($bounds[0], $x - $radius), min($bounds[1], $z - $radius)
 				, max($bounds[2], $x + $radius), max($bounds[3], $z + $radius)
@@ -422,7 +455,7 @@ final class Edits
 			, 'material' => self::materialName(
 				array_key_exists('material', $operation) ? $operation['material'] : 'road'
 			)
-			, '_road' => compact('samples', 'grid', 'radius', 'half', 'bounds', 'range')
+			, '_road' => compact('samples', 'stations', 'grid', 'radius', 'half', 'bounds', 'range')
 		] + ($banks === null ? [] : ['banks' => $banks]) + ($endBlend > 0 ? ['endBlend' => $endBlend] : [])
 			+ (array_filter($handles) ? ['handles'=>$handles] : []);
 	}
@@ -464,11 +497,11 @@ final class Edits
 		return $sum > 0 ? [(1 - $outside) * ($coverage / $sum), $target / $sum] : [0.0, 0.0];
 	}
 
-	private static function centerOffset(float $x, float $z, array $road): ?array
+	private static function centerOffset(float $x, float $z, array $road, ?array &$mark): ?array
 	{
 		$r = $road['radius'];
 		$key = (int)floor($x/$r) . ',' . (int)floor($z/$r);
-		$nearest = INF; $offset = null;
+		$nearest = INF; $offset = null; $last = count($road['samples'])-1;
 		foreach($road['grid'][$key] ?? [] as $i) {
 			[$ax,,$az] = $road['samples'][$i];
 			$dx = $x-$ax; $dz = $z-$az;
@@ -478,7 +511,16 @@ final class Edits
 			$t = max(0.,min(1.,($dx*$vx+$dz*$vz)/max(1e-12,$vx*$vx+$vz*$vz)));
 			$dx -= $t*$vx; $dz -= $t*$vz;
 			$d = $dx*$dx+$dz*$dz;
-			if($d < $nearest) { $nearest = $d; $offset = [$dx,$dz]; }
+			if($d >= $nearest) continue;
+			$nearest = $d; $offset = [$dx,$dz];
+			$dot = $dx*$vx+$dz*$vz;
+			if($i === $last || ($i === 0 && $t === 0. && $dot < 0.) || ($i+1 === $last && $t === 1. && $dot > 0.)) {
+				$mark = null;
+				continue;
+			}
+			$arc = $road['stations'][$i];
+			$mark = [($vx*$dz-$vz*$dx < 0. ? -1. : 1.)*sqrt($d),
+				$arc+$t*($road['stations'][$i+1]-$arc)];
 		}
 		return $offset;
 	}

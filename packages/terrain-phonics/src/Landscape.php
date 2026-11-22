@@ -257,21 +257,22 @@ final class Landscape implements TerrainSurface
 	 * @param float $x World horizontal X coordinate in meters.
 	 * @param float $z World horizontal Z coordinate in meters.
 	 * @param array|null $centerOffset Optional offset in meters from the nearest point on a graded pavement centerline.
+	 * @param array|null $mark Optional signed lateral distance and distance traveled along the spline, both in meters.
 	 * @return string|null Most recent covering material, or null for recipe shading.
 	 */
-	public function material(float $x, float $z, ?array &$centerOffset = null): ?string
+	public function material(float $x, float $z, ?array &$centerOffset = null, ?array &$mark = null): ?string
 	{
 		$this->coordinates($x, $z);
 
-		if(func_num_args() === 3) return Edits::material($x, $z, $this->operations, $centerOffset);
+		if(func_num_args() >= 3) return Edits::material($x, $z, $this->operations, $centerOffset, $mark);
 		return Edits::material($x, $z, $this->operations);
 	}
 
 	/** Encoded paint sample for areas where later brush edits supersede GPU road grading. */
 	public function paintTexel(float $x, float $z): string
 	{
-		$material = $this->material($x,$z,$offset);
-		return RoadAtlas::paintTexel($material,$offset);
+		$material = $this->material($x,$z,$offset,$mark);
+		return RoadAtlas::paintTexel($material,$mark);
 	}
 
 	/**
@@ -281,11 +282,17 @@ final class Landscape implements TerrainSurface
 	 */
 	public function queue(array $operation): void
 	{
+		foreach($this->queueSteps($operation) as $_) {}
+	}
+
+	/** Stage only a fully prepared edit. Dropping the generator leaves the pending batch untouched. */
+	public function queueSteps(array $operation): \Generator
+	{
 		$this->open();
 
 		if(($operation['type'] ?? null) === 'smooth') $operation['sampleStep'] ??= $this->parameters['spacing'];
 
-		$operation = Edits::normalize($operation);
+		$operation = yield from Edits::normalizeSteps($operation);
 		$box = Edits::bounds($operation);
 		$half = $this->parameters['worldSize'] / 2;
 
@@ -371,8 +378,7 @@ final class Landscape implements TerrainSurface
 
 	/**
 	 * Return the conservative dirty rectangle relative to another committed surface. Null means the recipe changed
-	 * globally; an empty array means identical edits. Include every operator after the common prefix because later
-	 * smoothing/roads can depend on an earlier edit, then add the reconstruction's two-node halo.
+	 * globally; an empty array means identical edits. Include overlapping downstream smoothing and the reconstruction's two-node halo.
 	 * @param self $other Committed surface used as the comparison baseline.
 	 * @return array|null Dirty rectangle, empty array for no change, or null for a changed recipe.
 	 */
@@ -383,27 +389,25 @@ final class Landscape implements TerrainSurface
 
 		if($this->parameters !== $other->parameters) return null;
 
-		$index = 0;
-		$limit = min(count($this->operations), count($other->operations));
-
-		while($index < $limit && Edits::serialize($this->operations[$index]) === Edits::serialize($other->operations[
-			$index
-		]))
-		$index++;
-		$changed = [...array_slice($this->operations, $index), ...array_slice($other->operations, $index)];
-
-		if(!$changed) return [];
-
-		$bounds = [INF,INF,-INF,-INF];
-
-		foreach($changed as $operation)
-		{
-			$box = Edits::bounds($operation);
-			$bounds = [
-				min($bounds[0], $box[0]), min($bounds[1], $box[1])
-				, max($bounds[2], $box[2]), max($bounds[3], $box[3])
-			];
+		$bounds = null;
+		for($i=0,$n=max(count($this->operations),count($other->operations)); $i<$n; $i++) {
+			$a = $this->operations[$i] ?? null;
+			$b = $other->operations[$i] ?? null;
+			if($a && $b && Edits::serialize($a) === Edits::serialize($b)) {
+				// All other edits are pointwise. A later smoothing brush may read its changed neighbor.
+				if($bounds === null || $a['type'] !== 'smooth') continue;
+				$reach = $a['sampleStep'];
+				$box = Edits::bounds($a);
+				if($box[2]+$reach<$bounds[0] || $box[0]-$reach>$bounds[2]
+					|| $box[3]+$reach<$bounds[1] || $box[1]-$reach>$bounds[3]) continue;
+			}
+			foreach([$a,$b] as $op) if($op !== null) {
+				$box = Edits::bounds($op);
+				$bounds = $bounds === null ? $box : [min($bounds[0],$box[0]),min($bounds[1],$box[1]),
+					max($bounds[2],$box[2]),max($bounds[3],$box[3])];
+			}
 		}
+		if($bounds === null) return [];
 
 		$halo = 2 * $this->parameters['spacing'];
 		$half = $this->parameters['worldSize'] / 2;
@@ -412,6 +416,20 @@ final class Landscape implements TerrainSurface
 			max(-$half, $bounds[0] - $halo), max(-$half, $bounds[1] - $halo)
 			, min($half, $bounds[2] + $halo), min($half, $bounds[3] + $halo)
 		];
+	}
+
+	/** Start an independent editing transaction, sharing immutable road samples and history by copy-on-write. */
+	public function fork(): self
+	{
+		$this->open();
+		if($this->pending) throw new \LogicException('Commit or discard queued edits before forking');
+		$child = new self($this->parameters);
+		$child->history = $this->history;
+		$child->operations = $this->operations;
+		$child->range = $this->range;
+		$child->cursor = $this->cursor;
+		$child->version = $this->version;
+		return $child;
 	}
 
 	/**
@@ -1332,7 +1350,11 @@ final class Landscape implements TerrainSurface
 		$result = [];
 
 		foreach(array_slice($this->history, 0, $cursor) as $batch) $result = self::replay($result,$batch);
-		return array_map([Edits::class, 'normalize'], $result);
+		foreach($result as $i=>$record) {
+			$active = $this->operations[$i] ?? null;
+			$result[$i] = $active !== null && Edits::serialize($active) === $record ? $active : Edits::normalize($record);
+		}
+		return $result;
 	}
 
 	/** Resolve replacements at the original position so later brushes retain their effect. */
@@ -1373,7 +1395,7 @@ final class Landscape implements TerrainSurface
 
 		if($smooth > 8) throw new \OverflowException('Terrain v1 supports at most eight smoothing operations');
 
-		if($kernels > 16384) throw new \OverflowException('Road history exceeds 16384 total kernels');
+		if($kernels > Edits::MAX_ROAD_SAMPLES) throw new \OverflowException('Active roads exceed the landscape sample budget');
 	}
 
 	/**

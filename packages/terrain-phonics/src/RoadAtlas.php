@@ -8,13 +8,13 @@ final class RoadAtlas
 	public const MATERIALS = ['rock', 'grass', 'sand', 'snow', 'road'];
 
 	/**
-	 * Pack normalized road operations in application order. All pointers address RGBA texels. A sample takes three:
-	 * the high parts of X and Z, height and tangent X; tangent Z, grade, bank and opacity; the low parts of X and Z.
+	 * Pack normalized road operations in application order. All pointers address RGBA texels. Each sample stores
+	 * the high parts of X and Z, height and tangent X; tangent Z, grade, bank and opacity; the low parts of X and Z and the segment vector; then the start station, arc length and end flags.
 	 * @param array $roads Committed splines with their derived sample planes.
 	 * @param float $extent Width of the editable square in meters.
 	 * @return array Float texture bytes, dimensions and spatial directory coordinates.
 	 */
-	public static function build(array $roads, float $extent): array
+	public static function build(array $roads, float $extent, array &$cache = []): array
 	{
 		// A sample reaches at most nine tiles. Only occupied 8-by-8 tile blocks need leaves.
 		$cell = 64.;
@@ -29,38 +29,25 @@ final class RoadAtlas
 		$data = str_repeat("\0", 16); // Zero is the absent pointer at both levels.
 		$blocks = [];
 
-		foreach($roads as $op)
-		{
-			$road = $op['_road'];
-			$radius = $road['radius'];
-			$inner2 = $road['half'] ** 2;
-			$material = array_search($op['material'], self::MATERIALS, true);
-			$params = intdiv(strlen($data), 16);
-			$data .= pack('g4', $inner2, $radius ** 2 - $inner2, $op['crown'], $material === false ? 0 : $material + 1);
-			foreach($road['samples'] as $i => [$x, $y, $z, $tx, $tz, $grade, $bank, $opacity])
-			{
-				// A 32-bit float rounds an absolute coordinate by up to 1 mm at 30 km, and the kernel weights turn that
-				// into centimetres of height. Store each of X and Z as the float nearest to it plus the remainder, so
-				// the shader can subtract both and stay within a micron of PHP anywhere in a 65.5 km world.
-				[, $xHigh] = unpack('g', pack('g', $x));
-				[, $zHigh] = unpack('g', pack('g', $z));
-				$address = intdiv(strlen($data), 16);
-				$next = $road['samples'][$i+1] ?? $road['samples'][$i];
-				$data .= pack('g12', $xHigh, $zHigh, $y, $tx, $tz, $grade, $bank, $opacity,
-					$x - $xHigh, $z - $zHigh, $next[0]-$x, $next[2]-$z);
-				$left = max($minTile, (int)floor(($x - $radius) / $cell)) - $minTile;
-				$right = min($maxTile, (int)floor(($x + $radius) / $cell)) - $minTile;
-				$front = max($minTile, (int)floor(($z - $radius) / $cell)) - $minTile;
-				$back = min($maxTile, (int)floor(($z + $radius) / $cell)) - $minTile;
-				for($j = $front; $j <= $back; $j++)
-				for($i = $left; $i <= $right; $i++)
-				{
-					$block = intdiv($j, 8) * $blocksAcross + intdiv($i, 8);
-					$tile = ($j % 8) * 8 + $i % 8;
-					$blocks[$block][$tile][$params][] = $address;
-				}
+		$used = []; $rebuilt = 0;
+		foreach($roads as $op) {
+			$key = hash('sha256',serialize(Edits::serialize($op)));
+			if(!isset($cache[$key]) && !isset($used[$key])) {
+				$cache[$key] = ['bytes'=>self::overlay($op)];
+				$rebuilt++;
 			}
+			$overlay = $used[$key] ?? $cache[$key];
+			if(($overlay['grid'] ?? null) !== [$cell,$minTile,$maxTile]) {
+				$overlay['tiles'] = self::coverageTiles($op['_road'],$cell,$minTile,$maxTile,$blocksAcross);
+				$overlay['grid'] = [$cell,$minTile,$maxTile];
+			}
+			$used[$key] = $overlay;
+			$base = intdiv(strlen($data),16);
+			$data .= $overlay['bytes'];
+			foreach($overlay['tiles'] as $block=>$tiles)
+				foreach($tiles as $tile=>$addresses) $blocks[$block][$tile][$base] = $addresses;
 		}
+		$cache = $used;
 
 		$directory = array_fill(0, $blocksAcross ** 2, 0);
 		foreach($blocks as $block => $tiles)
@@ -83,31 +70,79 @@ final class RoadAtlas
 		}
 		$directoryStart = intdiv(strlen($data), 16);
 		$data .= pack('g*', ...$directory);
-		// Even at the terrain format's 16,384 kernel limit this fits the WebGL 2 minimum texture size.
+		// Even at the active road sample limit this fits the WebGL 2 minimum texture size.
 		$width = min(1024, (int)ceil(strlen($data) / 16));
 		$height = (int)ceil(strlen($data) / ($width * 16));
 		return [
 			'bytes' => str_pad($data, $width * $height * 16, "\0"), 'width' => $width, 'height' => $height,
-			'directory' => $directoryStart, 'blocksAcross' => $blocksAcross, 'minTile' => $minTile, 'cell' => $cell,
+			'rebuilt' => $rebuilt, 'directory' => $directoryStart, 'blocksAcross' => $blocksAcross, 'minTile' => $minTile, 'cell' => $cell,
 		];
 	}
 
-	/** A pair of signed 12-bit offsets fits exactly in one float vertex attribute. Zero means unmarked. */
-	public static function centerCode(array $offset): int
+	/** Cache each road's grade, paint and dash data with tile references relative to its own first texel. */
+	private static function overlay(array $op): string
 	{
-		[$x,$z] = array_map(static fn($v) => max(1,min(4095,(int)floor($v*32+.5)+2048)), $offset);
-		return ($x << 12) | $z;
+		$data = '';
+		$road = $op['_road'];
+		$radius = $road['radius'];
+		$inner2 = $road['half'] ** 2;
+		$material = array_search($op['material'], self::MATERIALS, true);
+		$data .= pack('g4', $inner2, $radius ** 2 - $inner2, $op['crown'], $material === false ? 0 : $material + 1);
+		foreach($road['samples'] as $i => [$x, $y, $z, $tx, $tz, $grade, $bank, $opacity])
+		{
+			// A 32-bit float rounds an absolute coordinate by up to 1 mm at 30 km, and the kernel weights turn that
+			// into centimetres of height. Store each of X and Z as the float nearest to it plus the remainder, so
+			// the shader can subtract both and stay within a micron of PHP anywhere in a 65.5 km world.
+			[, $xHigh] = unpack('g', pack('g', $x));
+			[, $zHigh] = unpack('g', pack('g', $z));
+			$next = $road['samples'][$i+1] ?? $road['samples'][$i];
+			$station = $road['stations'][$i];
+			$length = ($road['stations'][$i+1] ?? $station)-$station;
+			$last = count($road['samples'])-1;
+			$caps = ($i === 0 ? 1 : 0) | ($i+1 === $last ? 2 : 0) | ($i === $last ? 4 : 0);
+			$data .= pack('g16', $xHigh, $zHigh, $y, $tx, $tz, $grade, $bank, $opacity,
+				$x - $xHigh, $z - $zHigh, $next[0]-$x, $next[2]-$z, fmod($station,self::MARK_CYCLE), $length, $caps, 0.);
+		}
+		return $data;
 	}
 
-	/** Material ID plus two signed 12-bit offsets to the centerline, at 1/32 m precision. */
-	public static function paintTexel(?string $material, ?array $offset): string
+	private static function coverageTiles(array $road, float $cell, int $minTile, int $maxTile, int $blocksAcross): array
+	{
+		$tiles = []; $radius = $road['radius'];
+		foreach($road['samples'] as $i=>[$x,,$z]) {
+			$address = 1+4*$i;
+			$left = max($minTile, (int)floor(($x - $radius) / $cell)) - $minTile;
+			$right = min($maxTile, (int)floor(($x + $radius) / $cell)) - $minTile;
+			$front = max($minTile, (int)floor(($z - $radius) / $cell)) - $minTile;
+			$back = min($maxTile, (int)floor(($z + $radius) / $cell)) - $minTile;
+			for($j = $front; $j <= $back; $j++)
+			for($col = $left; $col <= $right; $col++)
+			{
+				$block = intdiv($j, 8) * $blocksAcross + intdiv($col, 8);
+				$tile = ($j % 8) * 8 + $col % 8;
+				$tiles[$block][$tile][] = $address;
+			}
+		}
+		return $tiles;
+	}
+
+	// 64 pairs of 10-foot dashes and gaps. The slow phase interpolates through wraparound on the GPU.
+	public const MARK_CYCLE = 64*2*3.048;
+
+	/** Pack signed lateral distance at 1/32 m and cyclic distance along the road into an exact float attribute. */
+	public static function markCode(array $mark): int
+	{
+		[$cross,$station] = $mark;
+		$lateral = max(1,min(2047,(int)floor($cross*32+.5)+1024));
+		$phase = (int)floor(fmod($station,self::MARK_CYCLE)*(8192/self::MARK_CYCLE)+.5) & 8191;
+		return ($lateral << 13) | $phase;
+	}
+
+	public static function paintTexel(?string $material, ?array $mark): string
 	{
 		$id = array_search($material,self::MATERIALS,true);
 		$id = $id === false ? 0 : $id+1;
-		if($offset === null) return pack('C4',$id,0,0,0);
-		$code = self::centerCode($offset);
-		$x = $code >> 12;
-		$z = $code & 4095;
-		return pack('C4',$id,$x>>4,$z>>4,(($x&15)<<4)|($z&15));
+		$code = $mark === null ? 0 : self::markCode($mark);
+		return pack('C4',$id,$code>>16,($code>>8)&255,$code&255);
 	}
 }
