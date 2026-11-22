@@ -1579,7 +1579,7 @@ $look->close(); $other->close();
 
 $materials = new Session(['preset'=>'mountain']);
 $natural = $materials->activeLayers();
-expect(in_array('relief-ribs',array_column($natural->layers,'id'),true),'Ridge relief is part of its editable stack.');
+expect(array_column($natural->layers,'strength','id')['relief-ribs'] === .5,'Mountain Ridges starts with half-strength rib relief.');
 input($materials,['actions'=>[['type'=>'surface-layers','layers'=>$natural->layers]]]);
 expect($materials->surfaceLayers===null,'An unchanged Apply keeps the pristine preset.');
 input($materials,['actions'=>[['type'=>'surface-edit','id'=>'granite-slabs','key'=>'color','value'=>'#765432'],

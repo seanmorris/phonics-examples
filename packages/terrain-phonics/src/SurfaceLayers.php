@@ -257,9 +257,12 @@ final class SurfaceLayers
 			if($field === 'shrubs') $row['patternColor'] = $s['forestColor'];
 			$rows[] = $row;
 		}
-		foreach(['Facets','Blocks','Crowns','Ribs'] as $name)
+		foreach([
+			['Facets','facet-cover',1.], ['Blocks','block-cover',1.],
+			['Crowns','crown-cover',1.], ['Ribs','all',.5],
+		] as [$name,$mask,$strength])
 			$rows[] = ['id'=>'relief-'.strtolower($name),'name'=>$name.' relief','channel'=>'relief','relief'=>strtolower($name),
-				'mask'=>match($name){'Facets'=>'facet-cover','Blocks'=>'block-cover','Crowns'=>'crown-cover',default=>'all'}];
+				'mask'=>$mask,'strength'=>$strength];
 		$rows[] = ['id'=>'shore','name'=>'Sandy shore','field'=>'sand','mask'=>'shore','color'=>$s['sandColor']];
 		$rows[] = ['id'=>'snow','name'=>'Snow','field'=>'snow','mask'=>'snow','color'=>$s['snowColor']];
 		return new self($rows,array_intersect_key($s,array_flip(self::FIELD_KEYS)));
