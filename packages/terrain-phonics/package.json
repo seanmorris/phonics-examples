@@ -31,6 +31,7 @@
     "src/RayQuery.php",
     "src/Recipe.php",
     "src/RoadAtlas.php",
+    "src/RoadsideDetail.php",
     "src/Scene.php",
     "src/SpotLights.php",
     "src/TerrainAppearance.php",

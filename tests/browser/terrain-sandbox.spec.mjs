@@ -1140,6 +1140,34 @@ test('a package run marks its terrain-hidden pickup and reveals smoke above the 
 	expect(errors).toEqual([]);
 });
 
+test('the car extends the fine clipmap beside a graded road and drops the extension off road', async({page}) => {
+	await page.setViewportSize({width:720,height:460});
+	await boot(page);
+	const cut = fixture({history:[[{type:'road',points:[[0,-8,-180],[0,-8,180]],width:18,shoulder:6}]],revision:1});
+	Object.assign(cut.landscape.recipe,{worldSize:1024,spacing:1});
+	Object.assign(cut.settings,{waterLevel:-40,quality:1});
+	cut.camera = {position:[0,8,0],yaw:0,pitch:-.25};
+	await load(page,cut);
+	expect((await settled(page)).renderer.roadsideCoverage).toBeNull();
+	await press(page,'car');
+	await expect.poll(async()=>(await status(page)).renderer.roadsideCoverage).not.toBeNull();
+	const near = (await status(page)).renderer;
+	const [x,z,span] = near.visibleCoverage[0];
+	const [left,top,right,bottom] = near.roadsideCoverage;
+	expect(left).toBeLessThanOrEqual(x);
+	expect(right).toBeGreaterThanOrEqual(x+span);
+	expect(Math.max(x-left,z-top,right-x-span,bottom-z-span)).toBeGreaterThan(0);
+	await press(page,'fly');
+	await expect.poll(async()=>(await status(page)).renderer.roadsideCoverage).toBeNull();
+
+	cut.camera.position = [350,8,0];
+	await load(page,cut);
+	await press(page,'car');
+	await expect.poll(async()=>(await status(page)).mode).toBe('car');
+	await expect.poll(async()=>(await status(page)).renderer.visibleCoverage[0]?.[2]).toBe(span);
+	expect((await status(page)).renderer.roadsideCoverage).toBeNull();
+});
+
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));

@@ -1,4 +1,7 @@
-uniform ivec2 uDrawCell, uRingMin;
+uniform ivec2 uDrawCell, uRingMin, uRingMax;
+uniform float uRoadsidePad;
+uniform vec3 uRoadsideUV, uParentSafe;
+uniform highp sampler2D uRoadsideMask;
 uniform int uSpan, uTextureMask;
 uniform float uGridStep, uMorphWidth;
 uniform vec2 uEyeCell;
@@ -17,7 +20,8 @@ ivec2 clipCell() {
 // Collapse unmatched edge midpoints to the exact same integer coordinates as the parent.
 ivec2 clipStitchedCell(ivec2 c) {
 	if(!uHasParent) return c;
-	ivec2 d = min(c-uRingMin, uRingMin+ivec2(uSpan)-c);
+	ivec2 hi = uRoadsidePad>0. ? uRingMax : uRingMin+ivec2(uSpan);
+	ivec2 d = min(c-uRingMin, hi-c);
 	if(d.x == 0) c.y -= c.y & 1;
 	if(d.y == 0) c.x -= c.x & 1;
 	return c;
@@ -42,7 +46,23 @@ float clipMorph(ivec2 c) {
 	// The integer grid moves in pairs. Its joining strip is already fully on the
 	// parent surface when the ring advances. Include the interior vertices of triangles
 	// that change when odd edge vertices are collapsed.
-	return smoothstep(edge-uMorphWidth,edge,max(distanceToEye.x,distanceToEye.y));
+	float radius=max(distanceToEye.x,distanceToEye.y);
+	float base=smoothstep(edge-uMorphWidth,edge,radius);
+	if(uRoadsidePad<=0. || base<=0.) return base;
+	// The mask stays fixed to the spline as the window scrolls. Its outermost triangles
+	// are already on the parent plane before either grid moves to its next pair of cells.
+	float outer=edge+uRoadsidePad;
+	float width=uMorphWidth+.35*uRoadsidePad;
+	vec2 parentDistance=abs(vec2(c)-uParentSafe.xy);
+	float safe=uParentSafe.z-5.;
+	float extended=max(smoothstep(outer-width,outer,radius),
+		smoothstep(safe-width,safe,max(parentDistance.x,parentDistance.y)));
+	if(extended>=base) return base;
+	float roadside=textureLod(uRoadsideMask,vec2(c)*uGridStep*uRoadsideUV.z+uRoadsideUV.xy,0.).r;
+	if(roadside<=0.) return base;
+	// Roughly 14% to 55% grade. The level pavement and open valley use their ordinary morph.
+	float bank=smoothstep(.01,.125,1.-clipNormalAt(c,1).y);
+	return mix(base,extended,roadside*bank);
 }
 float clipHeight(ivec2 c,float morph) {
 	ivec2 odd=c&ivec2(1), edge=ivec2(odd.x,-odd.y);
