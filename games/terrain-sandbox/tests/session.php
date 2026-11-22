@@ -1778,4 +1778,45 @@ expect($wideRecipe['worldSize'] === 65536.0 && $wideRecipe['spacing'] === .25 &&
 	'Generating a 65.5 km world from a fine lattice takes larger tiles instead of failing');
 $fine->close();
 
+// Exercise road authoring through the same queued actions used by the browser.
+$lab = new Session(['worldSize'=>256, 'heightScale'=>0, 'detailAmplitude'=>0]);
+$command = static function(string $op, array $fields = []) use ($lab): void {
+	input($lab,['actions'=>[['type'=>'road-editor','op'=>$op,'generation'=>$lab->generation,
+		'revision'=>$lab->landscape->revision()] + $fields]]);
+};
+$command('open');
+expect($lab->roadEditor->packet($lab)['roads'] === [] && $lab->roadEditor->packet($lab) === null, 'An unchanged map sends no additional road packet');
+foreach([[-40,0],[0,-20],[40,0]] as [$x,$z]) $command('add',['x'=>$x,'z'=>$z]);
+$command('handle',['index'=>0,'side'=>'out','vector'=>[8,3,12]]);
+$command('bank',['index'=>0,'value'=>10]);
+$command('insert',['index'=>0,'t'=>.5]);
+$split = $lab->roadEditor->packet($lab)['road'];
+expect(count($split['points'])===4 && abs($split['banks'][1]-.05)<1e-8,'Splitting interpolates the bank');
+$expected = [-40*.125 + (-40+8)*.375 + (-80/6)*.375, $lab->settings['roadRaise']+1.125,
+	12*.375 - 20*.375 -20*.125];
+foreach($expected as $axis=>$v) expect(abs($split['points'][1][$axis]-$v)<1e-8,'Split lands exactly on the existing cubic');
+input($lab,['actions'=>[['type'=>'road-editor','op'=>'apply','id'=>null,'generation'=>$lab->generation,
+	'revision'=>$lab->landscape->revision()],['type'=>'load','json'=>'{']]]);
+expect($lab->takeCandidate() === null && $lab->roadEditor->packet($lab)['road']['points'] === $split['points'],
+	'A rejected transaction keeps the entire working road available to retry');
+$command('apply');
+$command('close');
+publish($lab);
+expect($lab->road === [],'Publishing a road while the map is closed clears the shared sketch');
+$command('open');
+$review = $lab->roadEditor->packet($lab);
+expect($review['id'] === 0 && !$review['changed'] && count($review['roads']) === 1,'A new road becomes an editable saved road');
+$command('point',['id'=>0,'index'=>1,'x'=>-20,'y'=>9,'z'=>8]);
+$command('view',['x'=>20,'z'=>-6,'span'=>44.]);
+expect($lab->roadEditor->view === [20.,-6.,44.],'The independent editor camera uses the requested chart span');
+$command('apply',['id'=>0]);
+publish($lab);
+$review = $lab->roadEditor->packet($lab);
+expect(count($review['roads']) === 1 && $review['road']['points'][1] === [-20.,9.,8.], 'Editing replaces the selected road once');
+input($lab,['actions'=>['undo']]); publish($lab);
+expect($lab->roadEditor->packet($lab)['road']['points'][1] === $split['points'][1], 'Undo restores the prior shape in the open editor');
+$command('close');
+expect($lab->roadEditor->packet($lab) === null && $lab->roadEditor->view === null, 'Closing the editor releases pending chart work');
+$lab->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

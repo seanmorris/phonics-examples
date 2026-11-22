@@ -1740,7 +1740,7 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 	await page.goto('/games/terrain-sandbox/');
 	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
 	const tab = name => page.locator(`.terrain-sandbox #terrain-tab-${name}`);
-	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(6);
+	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(7);
 	await expect(tab('landscape')).toHaveAttribute('aria-selected', 'true');
 
 	// Arrow keys, Home and End move between tabs and wrap round; Home on a tab does not reset the camera.

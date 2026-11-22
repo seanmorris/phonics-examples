@@ -12,11 +12,13 @@ uniform float uCraft;
 // PATCH
 out vec3 vRelative, vWorld, vNormal;
 out vec3 vPaint0, vPaint1;
+out vec3 vRoadOffset;
 void main()
 {
 	vec3 p = aPosition;
 	vec3 normal = aNormal;
 	float material=aMaterial;
+	vRoadOffset=vec3(0.);
 	if(uCraft < 0.5)
 	{
 		#ifdef CLIPMAP
@@ -26,7 +28,12 @@ void main()
 		vWorld=vec3(xz.x,clipHeight(cell,morph),xz.y);
 		vRelative=vWorld-uEye;
 		normal=clipNormal(cell,morph);
-		material=texelFetch(uInk,texelAt(cell),0).r*255.-1.;
+		ivec4 ink=ivec4(texelFetch(uInk,texelAt(cell),0)*255.+.5);
+		material=float(ink.r)-1.;
+		if(ink.r==5 && any(notEqual(ink.gba,ivec3(0)))) {
+			ivec2 code=ivec2((ink.g<<4)|(ink.a>>4),(ink.b<<4)|(ink.a&15));
+			vRoadOffset=vec3((vec2(code)-2048.)/32.,1.);
+		}
 #else
 		ivec2 cell = patchCell();
 		vec2 xz = patchWorld(cell);

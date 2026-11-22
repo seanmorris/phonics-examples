@@ -86,6 +86,14 @@ final class Landscape implements TerrainSurface
 		return $roads;
 	}
 
+	/** Portable active roads keyed by their position in the terrain edit order. */
+	public function roadRecords(): array
+	{
+		$records = [];
+		foreach($this->operations as $i=>$op) if($op['type'] === 'road') $records[$i] = Edits::serialize($op);
+		return $records;
+	}
+
 	/**
 	 * Index committed edit footprints with the cubic reconstruction halo.
 	 * @param bool $includeRoads Include spline footprints when CPU reconstruction is needed there.
@@ -257,6 +265,14 @@ final class Landscape implements TerrainSurface
 		return Edits::material($x, $z, $this->operations);
 	}
 
+	/** Encoded paint sample for areas where later brush edits supersede GPU road grading. */
+	public function paintTexel(float $x, float $z): string
+	{
+		$this->coordinates($x,$z);
+		$material = Edits::material($x,$z,$this->operations,$offset);
+		return RoadAtlas::paintTexel($material,$offset);
+	}
+
 	/**
 	 * Validate and stage one operation. A failed enqueue never alters committed geometry.
 	 * @param array $operation Validated brush or road parameters to stage.
@@ -275,7 +291,7 @@ final class Landscape implements TerrainSurface
 		if($box[0] > $half || $box[2] < -$half || $box[1] > $half || $box[3] < -$half)
 		throw new \OutOfBoundsException('Edit does not intersect the world');
 
-		$candidate = [...$this->operations, ...$this->pending, $operation];
+		$candidate = self::replay($this->operations, [...$this->pending, $operation]);
 		$this->operationLimit($candidate);
 		$this->pending[] = $operation;
 	}
@@ -290,10 +306,10 @@ final class Landscape implements TerrainSurface
 
 		if(!$this->pending) return false;
 
-		$operations = [...$this->operations, ...$this->pending];
+		$operations = self::replay($this->operations, $this->pending);
 		$range = $this->editedBounds($operations);
 		$history = array_slice($this->history, 0, $this->cursor);
-		$history[] = $this->pending;
+		$history[] = array_map([Edits::class, 'serialize'], $this->pending);
 		$this->history = $history;
 		$this->cursor = count($history);
 		$this->pending = [];
@@ -407,30 +423,15 @@ final class Landscape implements TerrainSurface
 
 		if($this->pending) throw new \LogicException('Commit or discard queued edits before saving');
 
-		$history = [];
-
-		foreach($this->history as $batch)
-		{
-			$history[] = array_map(
-				/** Strip derived acceleration fields from a persistent operation.
-			 * @param array $operation Normalized edit parameters.
-			 * @return array Portable edit parameters without cache data.
-			 */
-				static function(array $operation): array {
-					foreach(array_keys($operation) as $key)
-					if(is_string($key) && str_starts_with($key, '_')) unset($operation[$key]);
-
-					return $operation;
-				}
-				, $batch
-			);
-		}
+		$format = 1;
+		foreach($this->history as $batch) foreach($batch as $edit)
+			if(isset($edit['replaceAt']) || isset($edit['handles'])) { $format = 2; break 2; }
 
 		return json_encode([
 			'format' => 'terrain-phonics'
-			, 'version' => 1
+			, 'version' => $format
 			, 'recipe' => $this->parameters
-			, 'history' => $history
+			, 'history' => $this->history
 			, 'cursor' => $this->cursor
 			, 'revision' => $this->version
 		], JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION
@@ -448,7 +449,7 @@ final class Landscape implements TerrainSurface
 
 		$value = json_decode($json, true, 32, JSON_THROW_ON_ERROR);
 
-		if(!is_array($value) || ($value['format'] ?? null) !== 'terrain-phonics' || ($value['version'] ?? null) !== 1
+		if(!is_array($value) || ($value['format'] ?? null) !== 'terrain-phonics' || !in_array($value['version'] ?? null,[1,2],true)
 			|| !is_array($value['recipe'] ?? null) || !is_array($value['history'] ?? null)
 			|| !is_int($value['cursor'] ?? null) || !is_int($value['revision'] ?? null)
 			|| $value['cursor'] < 0 || $value['cursor'] > count($value['history']) || $value['revision'] < 0
@@ -471,14 +472,14 @@ final class Landscape implements TerrainSurface
 				$normalized[] = Edits::normalize($operation);
 			}
 
-			$all = [...$all, ...$normalized];
+			$all = self::replay($all, $normalized);
 			$result->operationLimit($all);
-			$result->history[] = $normalized;
+			$result->history[] = array_map([Edits::class, 'serialize'], $normalized);
+			if(count($result->history) === $value['cursor']) $result->operations = $all;
 		}
 
 		$result->cursor = $value['cursor'];
 		$result->version = $value['revision'];
-		$result->operations = $result->prefix($result->cursor);
 		$result->range = $result->editedBounds($result->operations);
 
 		return $result;
@@ -1329,9 +1330,22 @@ final class Landscape implements TerrainSurface
 	{
 		$result = [];
 
-		foreach(array_slice($this->history, 0, $cursor) as $batch) $result = [...$result, ...$batch];
+		foreach(array_slice($this->history, 0, $cursor) as $batch) $result = self::replay($result,$batch);
+		return array_map([Edits::class, 'normalize'], $result);
+	}
 
-		return $result;
+	/** Resolve replacements at the original position so later brushes retain their effect. */
+	private static function replay(array $operations, array $batch): array
+	{
+		foreach($batch as $edit) {
+			if(!isset($edit['replaceAt'])) { $operations[] = $edit; continue; }
+			$i = $edit['replaceAt'];
+			if(($operations[$i]['type'] ?? null) !== 'road')
+				throw new \InvalidArgumentException('The road to replace does not exist.');
+			unset($edit['replaceAt']);
+			$operations[$i] = $edit;
+		}
+		return $operations;
 	}
 
 	/**

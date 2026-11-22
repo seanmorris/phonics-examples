@@ -2819,12 +2819,12 @@ final class Scene
 	}
 
 	public function drawChart(array $xz,float $bearing,bool $wide,int $width,int $height,array $waterColor,
-		?int $size = null, ?float $localSpan = null, bool $circular = false): ?float
+		?int $size = null, ?float $localSpan = null, bool $circular = false, ?float $fixedSpan = null): ?float
 	{
 		if(!$this->clipmap) return null;
 		$this->selectMaterial($this->palette());
 		return $this->clipmap->chart($this->chartProgram,$xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,
-			$this->palette(),$this->paint ?? $this->appearance,$size,$localSpan,$circular);
+			$this->palette(),$this->paint ?? $this->appearance,$size,$localSpan,$circular,$fixedSpan);
 	}
 
 	public function restore(): void

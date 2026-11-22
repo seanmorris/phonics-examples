@@ -277,9 +277,8 @@ final class Clipmap
 			$wx = $i * $step + $offset;
 			$wz = $j * $step + $offset;
 			$height = $this->source->height($wx, $wz);
-			$id = array_search($this->source->material($wx, $wz), RoadAtlas::MATERIALS, true);
 			$heights .= $this->packed ? pack('g', $height) : pack('g4', $height, 0, 0, 1);
-			$ink .= pack('C4', $id === false?0:$id + 1, 0, 0, 255);
+			$ink .= $this->source->paintTexel($wx, $wz);
 		}
 
 		glActiveTexture(GL_TEXTURE0 + 1);
@@ -832,6 +831,7 @@ final class Clipmap
 		, ?int $size = null
 		, ?float $localView = null
 		, bool $circular = false
+		, ?float $fixedSpan = null
 	): ?float {
 		if(!$this->overview) return null;
 
@@ -854,7 +854,8 @@ final class Clipmap
 		$s = sin($bearing);
 		$extent = $this->recipe['worldSize'];
 		$span = self::chartSpan($extent, $position, $bearing, $wide);
-		if(!$wide && $localView !== null) $span = max(1.,min($span,$localView));
+		if($fixedSpan !== null) $span = max(1., min($extent, $fixedSpan));
+		elseif(!$wide && $localView !== null) $span = max(1.,min($span,$localView));
 		$level = $this->overview;
 		$localSpan = 0;
 

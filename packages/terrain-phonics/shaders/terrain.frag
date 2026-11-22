@@ -7,6 +7,7 @@ precision highp int;
 // LAYERS
 in vec3 vRelative, vWorld, vNormal;
 in vec3 vPaint0, vPaint1;
+in vec3 vRoadOffset;
 uniform vec3 uEye;
 uniform float uWaterLevel;
 uniform highp sampler2D uTerrainShadowMap;
@@ -162,6 +163,11 @@ void main()
 	vec3 craft = mix(vec3(0.06,0.12,0.17), vec3(0.95,0.28,0.03), step(0.15,vWorld.y - uWaterLevel));
 	albedo = albedo*(1.-painted) + uPaintColor[0]*vPaint0.x + uPaintColor[1]*vPaint0.y + uPaintColor[2]*vPaint0.z
 		+ uPaintColor[3]*vPaint1.x + uPaintColor[4]*vPaint1.y + craft*vPaint1.z;
+	// Filter a 20 cm painted stripe in world meters, including at grazing angles.
+	vec2 lineOffset=vRoadOffset.xy/max(.001,vRoadOffset.z);
+	float pixel=max(.015,max(length(dFdx(lineOffset)),length(dFdy(lineOffset))));
+	float line=clamp((.10+.5*pixel-length(lineOffset))/pixel,0.,min(1.,.20/pixel));
+	albedo=mix(albedo,vec3(.72,.47,.09),line*smoothstep(.65,.98,vRoadOffset.z)*vPaint1.y*(1.-smoothstep(1.,5.,footprint)));
 	albedo *= 1.0 + 0.07 * detail * (1.0 - smoothstep(1.0,8.0,footprint));
 	vec3 direct = terrainSunlight(max(0.0,vWorld.y)) / 3.14159265;
 	float facing = max(0.0,dot(mix(lightingNormal,n,painted),uSunDirection));

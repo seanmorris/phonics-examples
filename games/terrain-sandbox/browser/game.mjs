@@ -1557,7 +1557,7 @@ function markup()
 	.lab-sliders i:nth-child(2)::after{left:12px}
 	.lab-workspace{display:flex;flex-direction:column;max-height:calc(var(--lab-height) - 50px)}
 	.lab-pages{overflow:auto;overscroll-behavior:contain;min-height:0;padding:16px;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#819a8b transparent}
-	.terrain-tabs{display:grid;flex:none;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;padding:4px 8px;background:#0e231d;border-block:1px solid #446050}
+	.terrain-tabs{display:grid;flex:none;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:4px 8px;background:#0e231d;border-block:1px solid #446050}
 	.terrain-tabs [role=tab]{min-height:32px;padding:4px 0;font-size:13px;border-color:transparent;background:transparent;color:#c9d6cb}
 	.terrain-tabs [role=tab][aria-selected=true]{background:#304c3e;color:#fff4d3;box-shadow:inset 0 -2px #e5bc75}
 	.terrain-section,.terrain-grid,.terrain-surface-group{display:grid;grid-template-columns:minmax(0,1fr);gap:12px 18px;align-items:start}
@@ -1592,7 +1592,7 @@ function markup()
 		[data-tab-panel=landscape]{grid-template-columns:repeat(2,minmax(0,1fr))}
 	}
 	@container terrain-lab (min-width:490px){
-		.terrain-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}
+		.terrain-tabs{grid-template-columns:repeat(7,minmax(0,1fr))}
 		.terrain-section,.terrain-grid,.terrain-surface-group{grid-template-columns:repeat(2,minmax(0,1fr))}
 	}
 	@container terrain-view (max-width:560px){
@@ -1613,7 +1613,7 @@ function markup()
 	<details class="terrain-panel" open>
 	<summary title="Landscape Lab (H)"><span class="lab-sliders" aria-hidden="true"><i></i><i></i><i></i></span><span class="lab-title">Landscape Lab</span></summary>
 	<div class="lab-workspace">
-	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
+	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-roads" aria-controls="terrain-section-roads" data-tab="roads" aria-selected="false" tabindex="-1">Roads</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
 	<div class="lab-pages"><section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
 	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coastal mountains</option><option value="mountain">Mountain ridges</option><option value="canyon">Canyon country</option><option value="limestone">Limestone Plain</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option><option value="arctic-meltwater">Arctic Meltwater</option><option value="tidal-lagoon">Tidal Lagoon</option></select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
@@ -1740,8 +1740,9 @@ function markup()
 		, 0
 	)}
 	<p class="terrain-note">Choose Road control points, then click along a route. Offset raises or cuts each new point.</p><p class="terrain-note" data-road-count>0 control points</p>
-	<div class="terrain-row"><button data-action="road-apply">Apply road</button><button data-action="road-clear">Clear points</button></div>
+	<div class="terrain-row"><button data-action="road-apply">Apply road</button><button data-action="road-clear">Clear points</button><button type="button" data-open-roads>Edit on map</button></div>
 	</section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
 	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="limestone">Limestone Plain</option><option value="canyon">Canyon</option><option value="canyon-v1">Early Canyon</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option><option value="arctic-meltwater">Arctic Meltwater</option><option value="tidal-lagoon">Tidal Lagoon</option></select>

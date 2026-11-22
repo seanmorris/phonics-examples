@@ -18,6 +18,11 @@ final class Edits
 		if(!in_array($type, ['raise','lower','flatten','smooth','crater','material','road'], true))
 		throw new \InvalidArgumentException('Unknown terrain edit type');
 
+		if(array_key_exists('replaceAt', $operation)) {
+			if($type !== 'road' || !is_int($operation['replaceAt']) || $operation['replaceAt'] < 0)
+				throw new \InvalidArgumentException('A road replacement needs an existing edit index.');
+			return self::road($operation) + ['replaceAt'=>$operation['replaceAt']];
+		}
 		if($type === 'road') return self::road($operation);
 
 		$result = [
@@ -154,8 +159,10 @@ final class Edits
 	 * @param array $operations Committed edits in application order.
 	 * @return ?string Painted material identifier, or null for procedural classification.
 	 */
-	public static function material(float $x, float $z, array $operations): ?string
+	public static function material(float $x, float $z, array $operations, ?array &$centerOffset = null): ?string
 	{
+		$withMark = func_num_args() === 4;
+		$centerOffset = null;
 		for($i = count($operations) - 1; $i >= 0; $i--)
 		{
 			$operation = $operations[$i];
@@ -169,7 +176,11 @@ final class Edits
 				$weight = self::falloff($q);
 			}
 
-			if($weight >= .5) return $operation['material'];
+			if($weight >= .5) {
+				if($withMark && $operation['type'] === 'road' && $operation['material'] === 'road')
+					$centerOffset = self::centerOffset($x,$z,$operation['_road']);
+				return $operation['material'];
+			}
 		}
 
 		return null;
@@ -254,8 +265,17 @@ final class Edits
 		return $value;
 	}
 
+	/** Cubic handles relative to a control point. Automatic handles reproduce the uniform Catmull-Rom curve. */
+	public static function roadHandles(array $points, array $handles, int $i): array
+	{
+		$prev = $points[max(0, $i-1)];
+		$next = $points[min(count($points)-1, $i+1)];
+		$out = array_map(static fn($a,$b) => ($b-$a)/6., $prev, $next);
+		return ['in'=>$handles[$i]['in'] ?? array_map(static fn($x) => -$x, $out), 'out'=>$handles[$i]['out'] ?? $out];
+	}
+
 	/**
-	 * Sample a Catmull-Rom centerline into overlapping smooth local road planes. Compact kernels avoid
+	 * Sample the cubic centerline into overlapping smooth local road planes. Compact kernels avoid
 	 * nearest-segment changes at bends, ends and junctions.
 	 * @param array $operation Validated edit record, including derived road data when applicable.
 	 * @return array Normalized road and bounded spatially indexed spline samples.
@@ -290,6 +310,21 @@ final class Edits
 				throw new \InvalidArgumentException('A banked road requires one cross slope per control point');
 			$banks = array_map(static fn($bank): float => self::number($bank, 'road bank', -.35, .35), $banks);
 		}
+		$handles = $operation['handles'] ?? [];
+		if(!is_array($handles) || !array_is_list($handles) || ($handles && count($handles) !== count($points)))
+			throw new \InvalidArgumentException('Road handles must correspond to the control points.');
+		foreach($handles as $i => $pair) {
+			if($pair === null) continue;
+			if(!is_array($pair) || array_diff_key($pair, ['in'=>1,'out'=>1]))
+				throw new \InvalidArgumentException('Expected incoming or outgoing road handles.');
+			foreach($pair as $side => $vector) {
+				if(!is_array($vector) || !array_is_list($vector) || count($vector) !== 3)
+					throw new \InvalidArgumentException('Road handles must be [dx, dy, dz] in meters.');
+				$handles[$i][$side] = array_map(static fn($v) => self::number($v,'handle offset',-1e6,1e6), $vector);
+			}
+		}
+		$tangents = [];
+		foreach(array_keys($points) as $i) $tangents[] = self::roadHandles($points, $handles, $i);
 		$step = min(4, $width / 4);
 		$half = $width / 2;
 		$radius = $half + $shoulder;
@@ -299,18 +334,15 @@ final class Edits
 		{
 			$p1 = $points[$i];
 			$p2 = $points[$i + 1];
-			$p0 = $points[max(0, $i - 1)];
-			$p3 = $points[min(count($points) - 1, $i + 2)];
 			// Derivative bounds bound each segment's arc length, including spline overshoot.
 			$coefficients = [];
 
-			for($axis = 0; $axis < 3; $axis++)
-			$coefficients[$axis] = [
-				$p1[$axis]
-				, .5 * (-$p0[$axis] + $p2[$axis])
-				, .5 * (2 * $p0[$axis] - 5 * $p1[$axis] + 4 * $p2[$axis] - $p3[$axis])
-				, .5 * (-$p0[$axis] + 3 * $p1[$axis] - 3 * $p2[$axis] + $p3[$axis])
-			];
+			for($axis = 0; $axis < 3; $axis++) {
+				$start = 3 * $tangents[$i]['out'][$axis];
+				$end = -3 * $tangents[$i+1]['in'][$axis];
+				$delta = $p2[$axis] - $p1[$axis];
+				$coefficients[$axis] = [$p1[$axis], $start, 3*$delta-2*$start-$end, $start+$end-2*$delta];
+			}
 
 			$dx = abs($coefficients[0][1]) + 2 * abs($coefficients[0][2]) + 3 * abs($coefficients[0][3]);
 			$dz = abs($coefficients[2][1]) + 2 * abs($coefficients[2][2]) + 3 * abs($coefficients[2][3]);
@@ -391,7 +423,8 @@ final class Edits
 				array_key_exists('material', $operation) ? $operation['material'] : 'road'
 			)
 			, '_road' => compact('samples', 'grid', 'radius', 'half', 'bounds', 'range')
-		] + ($banks === null ? [] : ['banks' => $banks]) + ($endBlend > 0 ? ['endBlend' => $endBlend] : []);
+		] + ($banks === null ? [] : ['banks' => $banks]) + ($endBlend > 0 ? ['endBlend' => $endBlend] : [])
+			+ (array_filter($handles) ? ['handles'=>$handles] : []);
 	}
 
 	/**
@@ -429,5 +462,24 @@ final class Edits
 		}
 
 		return $sum > 0 ? [(1 - $outside) * ($coverage / $sum), $target / $sum] : [0.0, 0.0];
+	}
+
+	private static function centerOffset(float $x, float $z, array $road): ?array
+	{
+		$r = $road['radius'];
+		$key = (int)floor($x/$r) . ',' . (int)floor($z/$r);
+		$nearest = INF; $offset = null;
+		foreach($road['grid'][$key] ?? [] as $i) {
+			[$ax,,$az] = $road['samples'][$i];
+			$dx = $x-$ax; $dz = $z-$az;
+			if($dx*$dx+$dz*$dz >= $r*$r) continue;
+			[$bx,,$bz] = $road['samples'][$i+1] ?? $road['samples'][$i];
+			$vx = $bx-$ax; $vz = $bz-$az;
+			$t = max(0.,min(1.,($dx*$vx+$dz*$vz)/max(1e-12,$vx*$vx+$vz*$vz)));
+			$dx -= $t*$vx; $dz -= $t*$vz;
+			$d = $dx*$dx+$dz*$dz;
+			if($d < $nearest) { $nearest = $d; $offset = [$dx,$dz]; }
+		}
+		return $offset;
 	}
 }

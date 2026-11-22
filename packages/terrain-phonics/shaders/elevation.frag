@@ -191,7 +191,7 @@ int roadPointer(int table, int entry)
 }
 
 // Evaluate the same compact planes as Edits::roadAt, in the same order at intersections.
-void gradeRoads(vec2 world, inout float height, inout float material)
+void gradeRoads(vec2 world, inout float height, inout float material, inout vec3 marking)
 {
 	ivec2 tile = ivec2(floor(world / float(uRoadGrid.w))) - uRoadGrid.z;
 	ivec2 block = tile / 8;
@@ -202,6 +202,8 @@ void gradeRoads(vec2 world, inout float height, inout float material)
 		ivec3 header = ivec3(roadRecord(group).xyz);
 		vec4 params = roadRecord(header.x);
 		float sum = 0., target = 0., coverage = 0., outside = 1.;
+		float closest = 1e30;
+		vec2 offset = vec2(0.);
 		group++;
 		for(int i = 0; i < header.y; i += 4) {
 			ivec4 samples = ivec4(roadRecord(group++));
@@ -209,9 +211,13 @@ void gradeRoads(vec2 world, inout float height, inout float material)
 				int address = samples[j];
 				vec4 position = roadRecord(address);
 				// World positions here are exact; subtracting the sample's high part first keeps the difference exact.
-				vec2 delta = (world - position.xy) - roadRecord(address + 2).xy;
+				vec4 segment = roadRecord(address + 2);
+				vec2 delta = (world - position.xy) - segment.xy;
 				float q = (dot(delta,delta) - params.x) / params.y;
 				if(q >= 1.) continue;
+				vec2 toLine = delta - segment.zw * clamp(dot(delta,segment.zw)/max(1e-12,dot(segment.zw,segment.zw)),0.,1.);
+				float d2 = dot(toLine,toLine);
+				if(d2 < closest) { closest = d2; offset = toLine; }
 				float weight = fade(1. - max(q,0.));
 				vec4 plane = roadRecord(address + 1);
 				vec2 tangent = vec2(position.w,plane.x);
@@ -227,7 +233,11 @@ void gradeRoads(vec2 world, inout float height, inout float material)
 		if(sum > 0.) {
 			float influence = (1. - outside) * (coverage / sum);
 			height = mix(height, target / sum, influence);
-			if(influence >= .5) material = params.w;
+			if(influence >= .5) {
+				material = params.w;
+				ivec2 code = ivec2(clamp(floor(offset*32.+.5)+2048.,1.,4095.));
+				marking = material == 5. ? vec3(code.x>>4,code.y>>4,((code.x&15)<<4)|(code.y&15))/255. : vec3(0.);
+			}
 		}
 		if(header.z != 0) break;
 	}
@@ -250,8 +260,9 @@ void main()
 		h=mix(h,target,t);
 	}
 	float material = 0.;
-	if(uRoadGrid.x != 0 && outside <= 0.) gradeRoads(world,h,material);
-	ink=vec4(material/255.,0,0,1);
+	vec3 marking = vec3(0.);
+	if(uRoadGrid.x != 0 && outside <= 0.) gradeRoads(world,h,material,marking);
+	ink=vec4(material/255.,marking);
 	uint bits=floatBitsToUint(h);
 	color=uPacked?vec4(uvec4(bits,bits>>8,bits>>16,bits>>24)&255u)/255.:vec4(h,0,0,1);
 }

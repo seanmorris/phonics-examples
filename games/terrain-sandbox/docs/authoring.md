@@ -43,6 +43,12 @@ Numbered points and a connecting line preview the route in the view. They move w
 
 Width sets the road surface width. Shoulder sets how far the cut or fill blends into the surrounding ground. **Apply road** grades the route and paints its surface. **Clear points** abandons the uncommitted route.
 
+Open **Roads** or choose **Edit on map** from Shape to see the route on a north-up terrain map. Select a saved road or choose **New road** and **Place points**. Drag empty ground to pan, scroll to zoom around the pointer, or choose **Fit road**. Other roads stay visible for reference.
+
+Select a numbered point to drag it or enter its coordinates. Dragging preserves elevation. **Set to ground** samples the terrain at the point. The square handles control the incoming and outgoing curve. Under **Curve handles**, change their horizontal or vertical offsets to shape a bend, crest or dip. **Use automatic handle** restores the tangent on that side. Select a spot on a span and choose **Split curve** to insert a point without changing the path.
+
+The elevation profile shows the selected span, the full route length and maximum grade. Bank tilts the road across its width. **Apply road** commits the changes in the original road's place, including its charcoal pavement and painted centerline. Undo and redo are under **Shape**. Saving the landscape preserves the points, handles and edit history.
+
 Roads modify the heightfield. Bridges, tunnels, and overhangs require separate geometry and are outside this sandbox.
 
 ## Place practice balloons

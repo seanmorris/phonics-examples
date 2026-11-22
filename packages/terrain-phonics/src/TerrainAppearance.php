@@ -15,7 +15,7 @@ final class TerrainAppearance
 	/** Coast and canyon terrain as it looked before these settings existed, and the mountain material as tuned. */
 	public const DEFAULTS = [
 		'grassColor' => '#425b2d', 'soilColor' => '#815f40', 'rockColor' => '#867c6f', 'rockBandColor' => '#af957c',
-		'sandColor' => '#bfaf8b', 'snowColor' => '#eaf1f8', 'roadColor' => '#65615b',
+		'sandColor' => '#bfaf8b', 'snowColor' => '#eaf1f8', 'roadColor' => '#373b3d',
 		'canyonRustColor' => '#794944', 'canyonShaleColor' => '#5f484c', 'canyonSandstoneColor' => '#906356',
 		'canyonCapColor' => '#a38775',
 		'forestColor' => '#1d291b', 'meadowColor' => '#48581f', 'tundraColor' => '#484230', 'graniteColor' => '#565a5c',

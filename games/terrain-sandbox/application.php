@@ -29,6 +29,7 @@ use TerrainSandbox\Session;
 
 $app = new Context;
 $app->browser(__DIR__ . '/browser/game.mjs');
+$app->browser(__DIR__ . '/browser/road-editor.mjs');
 $app->browser(__DIR__ . '/browser/flight-map.mjs');
 $app->browser(__DIR__ . '/browser/speedometer.mjs');
 $app->browser(__DIR__ . '/browser/cockpit.mjs');
@@ -73,6 +74,8 @@ $pickFrame = false;
 $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainVehicleFrame');
+$roadStatus = vrzno_env('terrainRoadEditor');
+$roadCapture = vrzno_env('terrainRoadCapture');
 $hudShown = false;
 // The panel builds its Surface tab once from the appearance settings' groups, ranges, defaults and per-style use.
 (vrzno_env('terrainSurface'))(json_encode(['masks'=>TerrainPhonics\SurfaceLayers::MASKS,'fields'=>TerrainPhonics\SurfaceLayers::FIELDS,
@@ -213,7 +216,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -270,11 +273,30 @@ $engine->start(
 		$wavesChanged = $scene->showsWater() && $session->time !== $lastRenderedTime;
 		$statusPending = $statusPending || $work || $wavesChanged || !$session->paused;
 		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;
+		$editor = $session->roadEditor;
+		if(($packet = $editor->packet($session)) !== null) $roadStatus(json_encode($packet, JSON_THROW_ON_ERROR));
+		$chartKey = $editor->open && $editor->view !== null
+			? [$session->generation, $session->landscape->revision(), $editor->view, $width, $height,
+				$session->settings['waterLevel'], $session->settings['waterColor'], $scene->layers, $scene->paint,
+				$scene->appearance, $scene->dirty()] : null;
+		$captureChart = $chartKey !== null && $chartKey !== $editor->captured;
+		$dirty = $dirty || $captureChart;
 		$now = microtime(true);
 		if($dirty)
 		{
 			$start = microtime(true);
 			$engine->device->resize($width, $height);
+			if($captureChart)
+			{
+				[$x,$z,$meters] = $editor->view;
+				$size = min(512, $width-10, $height-10);
+				if($size > 0 && $scene->drawChart([$x,$z], 0., false, $width, $height,
+					TerrainAppearance::linear($session->settings['waterColor']), $size, fixedSpan: $meters) !== null)
+				{
+					$roadCapture($x, $z, $meters, $size);
+					$editor->captured = $chartKey;
+				}
+			}
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
 				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$session->balloons->targets() ? null : $drawOpaque);
@@ -349,7 +371,7 @@ $engine->start(
 		$gates->release();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty): void {
+	static function() use ($scene, $session, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -361,6 +383,7 @@ $engine->start(
 		$arrow?->close(); $arrow = null;
 		$gates->release();
 		$scene->restore();
+		$session->roadEditor->captured = null;
 		$dirty = true;
 	}
 );

@@ -204,6 +204,7 @@ final class Session
 	private const PICK_RANGE = 6000.0;
 	/** Uncommitted road control points in [x,y,z] meters. */
 	public array $road = [];
+	public RoadEditor $roadEditor;
 	/** Last operation result shown in the authoring panel. */
 	public string $message = 'Right-drag to look. WASD to fly, Q/E down/up. Choose a tool to edit.';
 	/** Whether input or simulation changed the visible scene. */
@@ -266,6 +267,7 @@ final class Session
 	 */
 	public function __construct(array $recipe = [], ?GateShapes $gateShapes = null)
 	{
+		$this->roadEditor = new RoadEditor;
 		$this->terrainAppearance = new TerrainAppearance;
 		$this->gateShapes = $gateShapes ?? GateShapes::packaged();
 		$this->course = new Course($this->gateShapes);
@@ -339,7 +341,10 @@ final class Session
 		}
 		catch(\Throwable $error)
 		{
-			if(!$this->preparing) $this->circuitCommit = null;
+			if(!$this->preparing) {
+				$this->circuitCommit = null;
+				$this->roadEditor->cancelPending($error->getMessage());
+			}
 			$this->draft?->close(); $this->draft = null;
 			$this->cancelPick(); $this->carSearch = null;
 			$this->circuitSearch = null;
@@ -1017,13 +1022,26 @@ final class Session
 				$this->message = $this->course->start() === null ? 'Race reset. Place a start gate to race.'
 					: 'Race reset. Pass through the start gate to start the clock.';
 				break;
-			case 'road-clear': $this->cancelPick(); $this->road = []; $this->message = 'Road control points cleared.'; break;
+			case 'road-editor':
+				$road = $this->roadEditor->action($this,$action);
+				if($road !== null) {
+					try {
+						$this->editable()->queue($road);
+						$this->roadEditor->applyResult(null);
+						$this->message = 'Applied the edited road.';
+					} catch(\Throwable $error) {
+						$this->roadEditor->applyResult($error->getMessage());
+						throw $error;
+					}
+				}
+				break;
+			case 'road-clear': $this->cancelPick(); $this->road = []; $this->roadEditor->clearSketch(); $this->message = 'Road control points cleared.'; break;
 			case 'road-apply':
 				if(count($this->road) < 2) throw new \RuntimeException('Place at least two road points on the terrain.');
-				$this->editable()->queue(['type' => 'road','points' => $this->road,'width' => $this->settings['roadWidth'],
-					'shoulder' => $this->settings['roadShoulder'],'crown' => .12,'material' => 'road']);
+				$this->editable()->queue($this->roadEditor->sketch($this));
 				$this->message = 'Graded a road through ' . count($this->road) . ' control points.';
 				$this->road = [];
+				$this->roadEditor->clearSketch();
 				break;
 			case 'save':
 				if($this->preparing || $this->draft !== null) throw new \RuntimeException('Wait for the terrain edit before saving.');
@@ -1229,6 +1247,7 @@ final class Session
 		{
 			if(count($this->road) >= 64) throw new \RuntimeException('Apply or clear this road before adding more points.');
 			$this->road[] = [$wx,$wy + $settings['roadRaise'],$wz];
+			$this->roadEditor->sketchPointAdded();
 			$this->message = count($this->road) . ' road points. Apply road when the route is ready.';
 			return;
 		}
@@ -1610,6 +1629,7 @@ final class Session
 		$this->setting('waterLevel', $landscape->recipe()['waterLevel']);
 		$this->flightTrails = null;
 		$this->road = []; $this->generation++; $this->mode = 'fly';
+		$this->roadEditor->reset();
 		$this->circuit = $this->circuitPreview = null; $this->circuitVariant = null; $this->circuitSearch = null;
 		$this->circuitCommit = null;
 		$this->race->reset();
@@ -1663,6 +1683,7 @@ final class Session
 		}
 		if($this->carSearch !== null) $this->startCarSearch();
 		$this->preparing = false;
+		$this->roadEditor->published($this);
 		$this->dirty = true;
 	}
 

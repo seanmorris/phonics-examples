@@ -37,7 +37,7 @@ final class RoadAtlas
 			$material = array_search($op['material'], self::MATERIALS, true);
 			$params = intdiv(strlen($data), 16);
 			$data .= pack('g4', $inner2, $radius ** 2 - $inner2, $op['crown'], $material === false ? 0 : $material + 1);
-			foreach($road['samples'] as [$x, $y, $z, $tx, $tz, $grade, $bank, $opacity])
+			foreach($road['samples'] as $i => [$x, $y, $z, $tx, $tz, $grade, $bank, $opacity])
 			{
 				// A 32-bit float rounds an absolute coordinate by up to 1 mm at 30 km, and the kernel weights turn that
 				// into centimetres of height. Store each of X and Z as the float nearest to it plus the remainder, so
@@ -45,7 +45,9 @@ final class RoadAtlas
 				[, $xHigh] = unpack('g', pack('g', $x));
 				[, $zHigh] = unpack('g', pack('g', $z));
 				$address = intdiv(strlen($data), 16);
-				$data .= pack('g12', $xHigh, $zHigh, $y, $tx, $tz, $grade, $bank, $opacity, $x - $xHigh, $z - $zHigh, 0, 0);
+				$next = $road['samples'][$i+1] ?? $road['samples'][$i];
+				$data .= pack('g12', $xHigh, $zHigh, $y, $tx, $tz, $grade, $bank, $opacity,
+					$x - $xHigh, $z - $zHigh, $next[0]-$x, $next[2]-$z);
 				$left = max($minTile, (int)floor(($x - $radius) / $cell)) - $minTile;
 				$right = min($maxTile, (int)floor(($x + $radius) / $cell)) - $minTile;
 				$front = max($minTile, (int)floor(($z - $radius) / $cell)) - $minTile;
@@ -88,5 +90,15 @@ final class RoadAtlas
 			'bytes' => str_pad($data, $width * $height * 16, "\0"), 'width' => $width, 'height' => $height,
 			'directory' => $directoryStart, 'blocksAcross' => $blocksAcross, 'minTile' => $minTile, 'cell' => $cell,
 		];
+	}
+
+	/** Material ID plus two signed 12-bit offsets to the centerline, at 1/32 m precision. */
+	public static function paintTexel(?string $material, ?array $offset): string
+	{
+		$id = array_search($material,self::MATERIALS,true);
+		$id = $id === false ? 0 : $id+1;
+		if($offset === null) return pack('C4',$id,0,0,0);
+		[$x,$z] = array_map(static fn($v) => max(1,min(4095,(int)floor($v*32+.5)+2048)), $offset);
+		return pack('C4',$id,$x>>4,$z>>4,(($x&15)<<4)|($z&15));
 	}
 }

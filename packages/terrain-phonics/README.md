@@ -77,7 +77,11 @@ At a fixed-update boundary, `takePreparedLandscape()` publishes the prepared mes
 surface to install in physics. New operations must wait until the pending transaction completes.
 
 Roads grade terrain using smoothly blended sampled spline kernels, including their shoulders and ends.
-At a junction, operations apply in explicit authoring order; roads should agree on their crossing elevation.
+A road stores ordered control points as `[x,y,z]` in meters. The default tangents follow a Catmull-Rom curve. To shape a bend or a crest, supply a `handles` list alongside `points`. Each entry can set `in` and `out` to cubic Bézier control offsets `[dx,dy,dz]`. Omit either side to calculate it automatically.
+
+`roadRecords()` lists the active roads by their position in the edit sequence. Queue a revised record with `replaceAt` set to that position to move the original road and preserve any later paint or grading. Version 2 saves retain these edits and handles through undo and redo. Roads with automatic handles and ordinary append-only history still save as version 1.
+
+At a junction, operations apply in authoring order. Roads should agree on their crossing elevation. The clipmap draws a 20 cm ochre centerline along graded pavement. A road-color brush paints solid pavement.
 Bridges remain separate meshes. There is one ground height at each X/Z position, so this representation
 cannot describe caves or overhangs.
 
@@ -308,7 +312,7 @@ Colors are sRGB hex strings.
 | `rockBandColor` | `#af957c` | The light bands in that rock. |
 | `sandColor` | `#bfaf8b` | Sand on level ground near the water, and sand paint. |
 | `snowColor` | `#eaf1f8` | Snow on coast and mountain terrain, and snow paint. |
-| `roadColor` | `#65615b` | Road paint. |
+| `roadColor` | `#373b3d` | Road paint. |
 | `canyonRustColor` | `#794944` | The lowest bed of each canyon section. The red beds are a brighter shade of it. |
 | `canyonShaleColor` | `#5f484c` | The soft shale above the rust. |
 | `canyonSandstoneColor` | `#906356` | Both sandstone cliffs. |
