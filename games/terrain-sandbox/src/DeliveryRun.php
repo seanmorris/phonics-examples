@@ -102,9 +102,11 @@ final class DeliveryRun
 			if($site === null) return 'No reachable pickup behind terrain here. Drive on or reshape the terrain to search again.';
 			$this->waitingAt = null;
 			// The driver may have crested the ridge while the route was being checked.
-			if(!PickupCover::blocks($land,$to,$site,$site['cover']) || hypot($site['x']-$to['x'],$site['z']-$to['z']) > self::MAX_LEG)
+			if(!PickupCover::blocks($land,$to,$site,$site['cover'])
+				|| (isset($site['plumeCover']) && !PickupCover::hidesPlume($land,$to,$site,$site['plumeCover']))
+				|| hypot($site['x']-$to['x'],$site['z']-$to['z']) > self::MAX_LEG)
 				return null;
-			unset($site['cover']);
+			unset($site['cover'],$site['plumeCover']);
 			$this->planner->placed($site);
 			$this->pickup = $site;
 			return 'Drive into the box under the lime smoke.';

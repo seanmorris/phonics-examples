@@ -125,6 +125,37 @@ final class DriveRegion
 	/** Verified cells can grow from either end of a candidate search. Exhaustion rules out all other cells. */
 	private function exhausted(): bool { return $this->expanded === count($this->depotQueue); }
 
+	/** Grow verified ground toward a distant candidate, so the reverse search can meet it around either end of a mesa. */
+	public function approach(int $goal, int $budget): \Generator
+	{
+		if(isset($this->connected[$goal])) return true;
+		$gx = $goal%$this->side; $gz = intdiv($goal,$this->side);
+		$open = new \SplPriorityQueue;
+		$queued = $this->connected;
+		foreach($queued as $id=>$_) $open->insert($id,-hypot($id%$this->side-$gx,intdiv($id,$this->side)-$gz));
+		while($budget-- > 0 && !$open->isEmpty()) {
+			$id = $open->extract();
+			$x = $id%$this->side; $z = intdiv($id,$this->side);
+			foreach(self::NEIGHBORS as [$dx,$dz]) {
+				$col = $x+$dx; $row = $z+$dz;
+				if(min($col,$row)<0 || max($col,$row)>=$this->side) continue;
+				$n = $row*$this->side+$col;
+				if(isset($queued[$n])) continue;
+				$key = $this->edgeKey($id,$n);
+				if(!isset($this->edges[$key])) {
+					$point = $this->point($n);
+					$this->edges[$key] = $point !== null && (yield from $this->coarseEdge($this->point($id),$point));
+				}
+				if(!$this->edges[$key] || !(yield from $this->extend($id,$n))) continue;
+				if($n === $goal) return true;
+				$queued[$n] = true;
+				$open->insert($n,-hypot($col-$gx,$row-$gz));
+			}
+			yield;
+		}
+		return false;
+	}
+
 	/** Verified bends beyond the confined walks can also supply a hidden box. */
 	public function remainingPoints(): \Generator
 	{
@@ -307,7 +338,8 @@ final class DriveRegion
 		if(!$this->supports($previous)) return false;
 		for($i=1; $i<=$steps; $i++)
 		{
-			yield;
+			// Keep every two-meter grade check. Four footprints fit in one scheduling slice.
+			if(($i & 3) === 1) yield;
 			$section = $this->footprint($a[0]+$dx*$i/$steps,$a[1]+$dz*$i/$steps,$sideX,$sideZ);
 			if(!$this->supports($section) || self::rise($previous,$section)>$limit) return false;
 			$previous = $section;

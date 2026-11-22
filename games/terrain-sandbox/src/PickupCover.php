@@ -11,6 +11,46 @@ final class PickupCover
 	private const LID = 1.5; // The rendered crate reaches 1.33 m, independently of the smoke above it.
 	private const POINTS = [[0.,0.],[-1.05,-.83],[1.05,-.83],[1.05,.83],[-1.05,.83]];
 
+	/** Find a broad section of high ground between the valley-floor endpoints. */
+	public static function plateau(Landscape $land, array $from, array $site, float $rise): \Generator
+	{
+		$dx = $site['x']-$from['x']; $dz = $site['z']-$from['z'];
+		$length = hypot($dx,$dz);
+		if($length < 288.) return null;
+		$minimum = max($from['y'],$site['y'])+$rise;
+		$eye = $from['y']+self::EYE;
+		$slope = $site['y']+DeliveryRun::HEIGHT+DeliveryRun::RADIUS-$eye;
+		// Sample opposite shoulders of the same 288 m chord and its interior before accepting a crest.
+		$half = 144./$length;
+		for($n=2; $n<=32; $n*=2)
+		for($i=1; $i<$n; $i+=2)
+		{
+			$t = $i/$n;
+			if($t <= $half || $t >= 1.-$half) continue;
+			foreach([0.,-1.,1.,-.5,.5] as $step) {
+				yield;
+				$k = $t+$step*$half;
+				$height = $land->height($from['x']+$dx*$k,$from['z']+$dz*$k);
+				if($height <= max($minimum,$eye+$slope*$k+24.)) continue 2;
+			}
+			if(self::hidesPlume($land,$from,$site,$t)) return $t;
+		}
+		return null;
+	}
+
+	/** The top and both sides of the smoke column must stay behind the intervening rock. */
+	public static function hidesPlume(Landscape $land, array $from, array $site, float $t): bool
+	{
+		$dx = $site['x']-$from['x']; $dz = $site['z']-$from['z'];
+		$length = max(1.,hypot($dx,$dz));
+		$x = $from['x']+$dx*$t; $z = $from['z']+$dz*$t;
+		$eye = $from['y']+self::EYE;
+		$line = $eye+$t*($site['y']+DeliveryRun::HEIGHT+DeliveryRun::RADIUS-$eye);
+		foreach([0.,-DeliveryRun::RADIUS,DeliveryRun::RADIUS] as $edge)
+			if($land->height($x-$dz/$length*$edge*$t,$z+$dx/$length*$edge*$t) <= $line) return false;
+		return true;
+	}
+
 	/** Save a point on each sight line where the ground stands above the crate. */
 	public static function find(Landscape $land, array $car, array $site): \Generator
 	{

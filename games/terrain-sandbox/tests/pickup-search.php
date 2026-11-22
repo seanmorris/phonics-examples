@@ -178,5 +178,26 @@ check($front !== null && ($front['x']-$start['x'])*sin($start['yaw'])+($front['z
 $turned = ['yaw'=>$start['yaw']+M_PI]+$start;
 [$same] = search(new PickupSearch($land,$canyon->water->level(),$start),$turned,5*M_PI/4);
 check($same === $front && PickupCover::blocks($land,$turned,$front,$front['cover']), 'Reversing heading leaves a fixed-phase hidden site eligible');
+$deliveries = new PickupSearch($land,$canyon->water->level(),$start);
+$sectors = []; $last = null;
+for($leg=0; $leg<9; $leg++) {
+	[$box] = search($deliveries,$start,1.79*$leg);
+	check($box !== null && isset($box['plumeCover']), 'Successive default canyon deliveries hide the complete plume');
+	$dx = $box['x']-$start['x']; $dz = $box['z']-$start['z'];
+	$distance = hypot($dx,$dz);
+	check($distance>=4200 && $distance<=5600 && PickupCover::hidesPlume($land,$start,$box,$box['plumeCover']),
+		'Every default canyon leg lies in the distant depot annulus behind a plateau');
+	$run = $best = 0.;
+	for($i=1; $i<128; $i++) {
+		$t = $i/128; $ground = $land->height($start['x']+$t*$dx,$start['z']+$t*$dz);
+		$run = $ground>max($start['y'],$box['y'])+195. ? $run+$distance/128 : 0.;
+		$best = max($best,$run);
+	}
+	check($best>230.,'The direct route crosses a broad section of elevated rock');
+	if($last) check(hypot($box['x']-$last['x'],$box['z']-$last['z'])>1000.,'Successive destinations stay apart');
+	$sectors[(int)floor((atan2($dx,$dz)+M_PI)/(M_PI/2))%4] = true;
+	$last = $box; $deliveries->placed($box);
+}
+check(count($sectors)>=3,'Deliveries explore multiple branches around the mesas');
 $canyon->close();
 echo "Delivery search, grade, cache and spacing checks passed.\n";
