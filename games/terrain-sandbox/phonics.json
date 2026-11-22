@@ -91,7 +91,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-XnmD18ceBB9SRiI9xK5lUvRaPvHAVd/HskZerO6p3Uw=",
+    "application.php": "sha256-0fQqDskOOSZfLQfnaT9HX5OLYvksziPS/0BDpjrQjL4=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
     "assets/f5/license.txt": "sha256-VQtyoqZCHHgAMXDSh1b6E9ZT1R7Ol8DoaRgdoBwiEEQ=",
@@ -148,9 +148,9 @@
     "src/RaceRecords.php": "sha256-ybgY7/n2+Lri25UAM9jmrd0goNuBXpHx8DOBGMzf+iA=",
     "src/RacerMotion.php": "sha256-pkNpfSlnI7olp4PE+66MMqeRQOEMAMmrI82pJGHkvEo=",
     "src/RoadEditor.php": "sha256-UGHqoOSEayvSI8enSilBudif871DRC03o7ALubohs8I=",
-    "src/Session.php": "sha256-t48ffUSlOYuKHKFJqSGMIznnS1cD8SrzNvqy+4M2h/c=",
+    "src/Session.php": "sha256-/6qZojwx1j+NwHjdmykOtGraQggQDwmLroRXx0JH3SY=",
     "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/TrailRenderer.php": "sha256-EtQqM0AlEjjYPWlIrYoO6gCCsrHHu+KK4//+O1QNOCg=",
-    "src/VehicleModel.php": "sha256-XsApWKZz6DZYjrgKU5mpm+UAC2GSStgx7FrAP8P/GpI="
+    "src/VehicleModel.php": "sha256-YB/ZcOdPLtvFwFW5rBTm+ue/KhqGrw8rZnsogjVVdTE="
   }
 }
