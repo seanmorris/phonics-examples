@@ -25,10 +25,9 @@ final class Race
 	private int $index = 0, $laps = 0;
 	/** The course revision, vehicle and boarding the race began with. A change to any of them ends it. */
 	private int $courseRevision = -1, $boarding = -1;
+	private ?Course $course = null;
 	private string $vehicle = '', $signature = '';
 	private array $splits = [], $lapTimes = [];
-	/** Latest and best finishing times this session, by course signature. */
-	private array $latest = [], $best = [];
 	private const VEHICLES = ['car' => 'the car', 'craft' => 'the jet ski', 'jet' => 'the F5'];
 	/**
 	 * How far a vehicle must go from the start gate after passing through it, in half widths of the gate's frame,
@@ -64,6 +63,8 @@ final class Race
 	 */
 	private int $startGate = 0;
 	private float $startX = 0.0, $startZ = 0.0, $farthest = 0.0;
+
+	public function __construct(private readonly RaceRecords $records = new RaceRecords) {}
 
 	/**
 	 * Find where a step's segment passes forward through a gate's window.
@@ -143,6 +144,7 @@ final class Race
 		$this->index = 0;
 		$this->laps = (int)$course->laps();
 		$this->courseRevision = $course->revision;
+		$this->course = $course;
 		$this->signature = $course->signature();
 		$this->vehicle = $vehicle;
 		$this->boarding = $boarding;
@@ -169,9 +171,9 @@ final class Race
 				. $this->describe($course, $this->route[$this->index]) . '.';
 		$this->state = 'finished';
 		$this->result = $elapsed;
-		$previous = $this->best[$this->signature] ?? null;
-		$this->latest[$this->signature] = $elapsed;
-		if($previous === null || $elapsed < $previous) $this->best[$this->signature] = $elapsed;
+		$previous = $this->records->best[$this->signature] ?? null;
+		$this->records->latest[$this->signature] = $elapsed;
+		if($previous === null || $elapsed < $previous) $this->records->best[$this->signature] = $elapsed;
 		if($previous === null) return 'Finished in ' . self::clock($elapsed) . '.';
 		return $elapsed < $previous ? 'Finished in ' . self::clock($elapsed) . ', a new best by '
 			. self::clock($previous - $elapsed) . '.'
@@ -187,13 +189,14 @@ final class Race
 	 */
 	public function guard(Course $course, string $mode, int $boarding): ?string
 	{
-		if($this->state === 'finished' && $course->revision !== $this->courseRevision) $this->reset();
+		$changed = $course !== $this->course || $course->revision !== $this->courseRevision;
+		if($this->state === 'finished' && $changed) $this->reset();
 		if($this->state !== 'running') return null;
 		$why = match(true) {
-			$course->revision !== $this->courseRevision => 'The race stopped because the course changed.',
-			$mode !== $this->vehicle => 'The race stopped when you left ' . self::VEHICLES[$this->vehicle] . '.',
+			$changed => 'The race stopped because the course changed.',
+			$mode !== $this->vehicle => 'The race stopped when you left ' . (self::VEHICLES[$this->vehicle] ?? $this->vehicle) . '.',
 			$boarding !== $this->boarding
-				=> 'The race stopped because ' . self::VEHICLES[$this->vehicle] . ' moved to a new spot.',
+				=> 'The race stopped because ' . (self::VEHICLES[$this->vehicle] ?? $this->vehicle) . ' moved to a new spot.',
 			default => null,
 		};
 		if($why === null) return null;
@@ -216,6 +219,7 @@ final class Race
 		$this->index = 0;
 		$this->result = null;
 		$this->courseRevision = -1;
+		$this->course = null;
 		$this->message = '';
 	}
 
@@ -245,7 +249,7 @@ final class Race
 			'remaining' => $running ? count($this->route) - $this->index : null,
 			'splits' => $this->splits, 'lastSplit' => $this->splits ? end($this->splits)['time'] : null,
 			'lapTimes' => $this->lapTimes,
-			'last' => $this->latest[$signature] ?? null, 'best' => $this->best[$signature] ?? null,
+			'last' => $this->records->latest[$signature] ?? null, 'best' => $this->records->best[$signature] ?? null,
 			'message' => $this->message,
 			'reach' => $target === null || $vehicle === null || !isset(self::VEHICLES[$vehicle]) ? null
 				: $this->reach($course, $target, $vehicle, $water, $next)];

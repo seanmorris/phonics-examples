@@ -7,7 +7,6 @@ require_once $archive . 'dependencies/terrain-phonics/autoload.php';
 require_once __DIR__ . '/autoload.php';
 
 use Phonics\Application\Context;
-use Phonics\Ecs\Registry;
 use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
@@ -33,8 +32,8 @@ $app->browser(__DIR__ . '/browser/road-editor.mjs');
 $app->browser(__DIR__ . '/browser/flight-map.mjs');
 $app->browser(__DIR__ . '/browser/speedometer.mjs');
 $app->browser(__DIR__ . '/browser/cockpit.mjs');
-$session = new Session;
 $engine = new Engine(new Device(1280, 720, 'Landscape Sandbox'));
+$session = new Session(systems: $engine->systems);
 $engine->clock = new FixedStep(1 / 60, 4);
 // The authoring bridge owns pause, avoiding a second toggle from SDL's default P/Escape and Start mappings.
 // The page reads gamepads itself and sends Start as the sandbox's own pause action.
@@ -99,13 +98,12 @@ $workOnSearch = static function() use ($session, $engine, $stopSearchTimer): voi
 	if($engine->paused || $session->paused || !$session->delivery?->advanceSearch(5.))
 		$stopSearchTimer();
 };
-$engine->systems->add('terrain-sandbox.simulate', static function(Registry $registry, float $seconds) use (
+$engine->systems->add('terrain-sandbox.delivery-search', static function() use (
 	$session, $window, &$searchTimer, $workOnSearch
 ): void {
-	$session->step($seconds);
 	if($searchTimer === null && $session->delivery?->searchPending())
 		$searchTimer = $window->setInterval($workOnSearch, 10);
-});
+}, ['terrain-sandbox.simulate']);
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds,
@@ -363,7 +361,7 @@ $engine->start(
 	},
 	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
 		$stopSearchTimer();
-		$engine->systems->remove('terrain-sandbox.simulate');
+		$engine->systems->remove('terrain-sandbox.delivery-search');
 		foreach($models as $model) $model->close();
 		$tracers?->close(); $tracers = null;
 		$trailRenderer?->close(); $trailRenderer = null;

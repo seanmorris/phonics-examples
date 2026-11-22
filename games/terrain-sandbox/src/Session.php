@@ -2,6 +2,9 @@
 declare(strict_types=1);
 namespace TerrainSandbox;
 
+use Phonics\Ecs\Query;
+use Phonics\Ecs\Registry;
+use Phonics\Ecs\Scheduler;
 use TerrainPhonics\Atmosphere;
 use TerrainPhonics\Camera;
 use TerrainPhonics\Landscape;
@@ -52,6 +55,9 @@ final class Session
 	private ?array $circuitCommit = null;
 	/** Timed run through the course by the vehicle being driven, ridden or flown. */
 	public Race $race;
+	private readonly Scheduler $systems;
+	/** Entity IDs of the local driver's vehicles. Each holds its authoritative physics object. */
+	private array $vehicles = [];
 	public ?DeliveryRun $delivery = null;
 	private float $aspect = 16/9;
 	/** Dimensions of each gate kind, for placement, crossings, car collision and drawing. */
@@ -266,15 +272,17 @@ final class Session
 	 * Create a complete offline authoring session.
 	 * @param array $recipe Optional terrain recipe; coastal terrain is the sandbox default.
 	 * @param GateShapes|null $gateShapes Gate dimensions; the package's gates.json, or its defaults, when omitted.
+	 * @param Scheduler|null $systems Engine scheduler, or a private scheduler for a standalone session.
+	 * @param list<string> $movementSystems Additional movement systems that publish racer segments before scoring.
 	 * @return void Creates a flyable landscape with explicit physical swells.
 	 */
-	public function __construct(array $recipe = [], ?GateShapes $gateShapes = null)
+	public function __construct(array $recipe = [], ?GateShapes $gateShapes = null, ?Scheduler $systems = null,
+		array $movementSystems = [])
 	{
 		$this->roadEditor = new RoadEditor;
 		$this->terrainAppearance = new TerrainAppearance;
 		$this->gateShapes = $gateShapes ?? GateShapes::packaged();
 		$this->course = new Course($this->gateShapes);
-		$this->race = new Race;
 		$this->landscape = new Landscape($recipe + ['preset' => 'coast']);
 		$this->water = new Water($this->landscape->recipe()['waterLevel'], [
 			['amplitude' => .48,'wavelength' => 34,'direction' => [1,.35]],
@@ -294,6 +302,13 @@ final class Session
 		$this->switchPresetLook('', $this->landscape->recipe()['preset']);
 		$this->resetCamera();
 		$this->sun();
+		$this->systems = $systems ?? new Scheduler(new Registry);
+		$records = new RaceRecords;
+		foreach(['car' => $this->car, 'craft' => $this->craft, 'jet' => $this->jet] as $kind => $vehicle)
+			$this->vehicles[$kind] = $this->systems->registry->create($vehicle, new RacerMotion($kind), new Race($records));
+		$this->race = $this->systems->registry->get($this->vehicles['car'], Race::class);
+		$this->systems->add('terrain-sandbox.simulate', fn(Registry $registry, float $dt) => $this->simulate($dt));
+		$this->systems->add('terrain-sandbox.race', $this->scoreRacers(...), ['terrain-sandbox.simulate', ...$movementSystems]);
 	}
 
 	/**
@@ -394,28 +409,31 @@ final class Session
 	 */
 	public function step(float $seconds): void
 	{
+		$this->systems->update($seconds);
+	}
+
+	private function simulate(float $seconds): void
+	{
 		if($this->paused) return;
-		$racing = $this->delivery === null && $this->course->count() > 0 && $this->mode !== 'fly';
-		if($racing)
-		{
-			$from = $this->racePoint(); $mode = $this->mode;
-			$recoveries = $this->car->state()['recoveries'];
-		}
+		$mode = $this->mode;
+		$racing = $this->delivery === null && $this->course->count() > 0 && isset($this->vehicles[$mode]);
 		if($this->mode === 'craft')
 		{
 			$this->reserveCraft();
+			if($racing) $before = $this->craft->state();
 			$this->craft->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
 				$this->blend('KeyA', 'KeyD', $this->pad['x']), $this->water, $this->landscape, $this->time);
-			$s = $this->craft->state();
+			$after = $this->craft->state();
 			$look = $this->lookAngle();
+			$yaw = $after['yaw'];
 			if($look != 0 || $this->craftLook != 0)
 			{
 				$gap = atan2(sin($look - $this->craftLook), cos($look - $this->craftLook));
 				$this->craftLook = abs($gap) < 1e-4 ? $look : $this->craftLook + $gap * (1 - exp(-$seconds / .15));
-				$s['yaw'] -= $this->craftLook;
+				$yaw -= $this->craftLook;
 			}
-			$this->camera->position = [$s['x'] - sin($s['yaw']) * 9,$s['y'] + 4,$s['z'] - cos($s['yaw']) * 9];
-			$this->camera->yaw = M_PI - $s['yaw'];
+			$this->camera->position = [$after['x'] - sin($yaw) * 9,$after['y'] + 4,$after['z'] - cos($yaw) * 9];
+			$this->camera->yaw = M_PI - $yaw;
 			$this->camera->pitch = -.27;
 		}
 		if($this->mode === 'car')
@@ -474,22 +492,27 @@ final class Session
 			}
 			else
 			{
-				$pose = $this->jet->state();
-				$this->flightTrails->step($seconds,$before,$pose);
-				$this->balloons->step($seconds,$pose,$this->launches > 0,
+				$after = $this->jet->state();
+				$this->flightTrails->step($seconds,$before,$after);
+				$this->balloons->step($seconds,$after,$this->launches > 0,
 					(bool)($this->held('KeyG') || ($pad['buttons'] & self::PAD_X)), $this->landscape,$this->water->level(), $this->jetView === 'cockpit',$this->flightTrails,$before);
 			}
 			$this->launches = max(0,$this->launches-1);
 			$this->dirty = true;
 		}
-		$start = $this->time;
 		$this->time += $seconds;
 		$this->water->update($this->time);
 		// The application redraws for wave time whenever water shows, which covers the gates that float on it.
 		if($this->course->floats()) $this->course->float($this->water, $this->time);
 		if($this->mode !== 'fly' && !($this->mode === 'jet' && $this->jetView === 'cockpit'))
-			$this->duck()->step($this->nearGates($this->camera->position), $this->camera->position, $this->racePoint());
-		if($racing) $this->advanceRace($from, $mode, $recoveries, $start, $seconds);
+			$this->duck()->step($this->nearGates($this->camera->position), $this->camera->position,
+				[$after['x'], $after['y'], $after['z']]);
+		if($mode !== $this->mode) $this->guardRace();
+		elseif($racing)
+		{
+			$motion = $this->systems->registry->get($this->vehicles[$mode], RacerMotion::class);
+			$motion->publish($before, $after);
+		}
 		if($this->settings['clock'])
 		{
 			$this->settings['azimuth'] = fmod($this->settings['azimuth'] + $seconds * .2, 360);
@@ -501,50 +524,45 @@ final class Session
 		$this->dirty = $this->dirty || $this->mode === 'craft' || $this->settings['clock'];
 	}
 
-	/**
-	 * Find the point of the active vehicle that passes through gates.
-	 * @return array [x, y, z] in meters, or an empty list in free flight.
-	 */
-	private function racePoint(): array
+	/** Score each published segment against the same course and simulation clock. */
+	private function scoreRacers(Registry $entities, float $seconds): void
 	{
-		$pose = match($this->mode) {
-			'car' => $this->car->state(), 'craft' => $this->craft->state(), 'jet' => $this->jet->state(),
-			default => null
-		};
-		return $pose === null ? [] : [$pose['x'], $pose['y'], $pose['z']];
-	}
-
-	/**
-	 * Test the step just taken against the race, unless the vehicle was put somewhere rather than driven there.
-	 * @param array $from Vehicle position before the step.
-	 * @param string $mode Mode before the step.
-	 * @param int $recoveries Car recoveries before the step. Righting a wreck can move the car to its last safe spot.
-	 * @param float $start Simulation time at the start of the step.
-	 * @param float $seconds Step length.
-	 * @return void Updates the race and shows its latest event.
-	 */
-	private function advanceRace(array $from, string $mode, int $recoveries, float $start, float $seconds): void
-	{
-		if($this->guardRace() || $this->mode !== $mode) return;
-		if($mode === 'car' && $this->car->state()['recoveries'] !== $recoveries) return;
-		$event = $this->race->advance($this->course, $from, $this->racePoint(), $start, $seconds, $mode,
-			$this->boarding);
-		if($event !== null) { $this->message = $event; $this->dirty = true; }
+		foreach($entities->query(Query::all(Race::class, RacerMotion::class)) as $id)
+		{
+			$motion = $entities->get($id, RacerMotion::class);
+			$race = $entities->get($id, Race::class);
+			$segment = $motion->take();
+			if($segment === null && $race->state === 'idle') continue;
+			$event = $race->guard($this->course, $motion->vehicle, $motion->boarding);
+			if($event === null && !$this->paused && $segment !== null)
+				$event = $race->advance($this->course, $segment[0], $segment[1], $this->time - $seconds,
+					$seconds, $motion->vehicle, $motion->boarding);
+			if($event !== null && $id === ($this->vehicles[$this->mode] ?? null))
+			{
+				$this->message = $event;
+				$this->dirty = true;
+			}
+		}
 	}
 
 	/**
 	 * Stop a running race whose course, vehicle or ride has changed since it started.
-	 * @return bool Whether a race stopped.
+	 * @return void Keeps the HUD on the local driver's current or most recent racer.
 	 */
-	private function guardRace(): bool
+	private function guardRace(): void
 	{
 		// A message still showing the race's last event is out of date once the race stops, so the reason replaces it.
 		$stale = $this->message === $this->race->message;
 		$why = $this->race->guard($this->course, $this->mode, $this->boarding);
-		if($why === null) return false;
+		$id = $this->vehicles[$this->mode] ?? null;
+		if($id !== null)
+		{
+			$this->systems->registry->get($id, RacerMotion::class)->boarding = $this->boarding;
+			$this->race = $this->systems->registry->get($id, Race::class);
+		}
+		if($why === null) return;
 		$this->message = $stale ? $why : trim($this->message . ' ' . $why);
 		$this->dirty = true;
-		return true;
 	}
 
 	public function navigationTarget(): ?array
@@ -640,7 +658,7 @@ final class Session
 	private function activateCircuit(Circuit $circuit, Course $course, bool $flooded): void
 	{
 		$this->course = $course;
-		$this->race->reset();
+		$this->resetCourseRaces();
 		$this->circuit = $circuit; $this->circuitPreview = null; $this->circuitSearch = null;
 		$this->circuitVariant = $flooded ? 'flooded' : 'dry';
 		$this->setting('waterLevel',$flooded ? $circuit->floodedLevel : $circuit->dryLevel);
@@ -1659,7 +1677,18 @@ final class Session
 		$this->roadEditor->reset();
 		$this->circuit = $this->circuitPreview = null; $this->circuitVariant = null; $this->circuitSearch = null;
 		$this->circuitCommit = null;
-		$this->race->reset();
+		$this->resetCourseRaces();
+	}
+
+	/** A new course retires all pending crossings and runs. Personal records survive a reload. */
+	private function resetCourseRaces(): void
+	{
+		$entities = $this->systems->registry;
+		foreach($entities->query(Query::all(Race::class, RacerMotion::class)) as $id)
+		{
+			$entities->get($id, Race::class)->reset();
+			$entities->get($id, RacerMotion::class)->take();
+		}
 	}
 
 	/**
@@ -2039,6 +2068,11 @@ final class Session
 	 */
 	public function close(): void
 	{
+		$this->systems->remove('terrain-sandbox.race');
+		$this->systems->remove('terrain-sandbox.simulate');
+		foreach($this->vehicles as $id)
+			if($this->systems->registry->alive($id)) $this->systems->registry->destroy($id);
+		$this->vehicles = [];
 		$this->roadWork = null;
 		$this->cancelPick(); $this->carSearch = null;
 		$this->circuitSearch = null;

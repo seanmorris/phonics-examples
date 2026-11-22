@@ -934,6 +934,42 @@ test('F5 cockpit, charge and Vulcan controls work in balloon practice', async({p
 	expect(errors).toEqual([]);
 });
 
+test('the local racer records checkpoint and finish splits in the packaged sandbox', async({page}) => {
+	await page.setViewportSize({width: 640, height: 400});
+	await boot(page);
+
+	const doc = fixture();
+	doc.settings.waterLevel = -5;
+	doc.camera = {position: [0, 15, 0], yaw: Math.PI, pitch: -.35};
+	doc.course = {
+		gates: [
+			{role: 'start', kind: 'road', x: 0, y: 0, z: 8, yaw: 0, laps: 1}
+			, {role: 'checkpoint', kind: 'road', x: 0, y: 0, z: 16, yaw: 0, number: 1}
+			, {role: 'finish', kind: 'road', x: 0, y: 0, z: 24, yaw: 0}
+		]
+	};
+
+	await load(page, doc);
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await canvas(page).focus();
+	await page.keyboard.down('w');
+
+	try
+	{
+		await expect.poll(async() => (await status(page)).race.state, {timeout: 60_000}).toBe('finished');
+	}
+	finally
+	{
+		await page.keyboard.up('w');
+	}
+
+	const {race} = await status(page);
+	expect(race.vehicle).toBe('car');
+	expect(race.splits.map(split => split.role)).toEqual(['checkpoint', 'finish']);
+	expect(race.time).toBeGreaterThan(race.splits[0].time);
+});
+
 test('the overhead checkpoint arrow points down for forward and enlarges its near end', async({page}) => {
 	await page.setViewportSize({width: 760,height: 460});
 	await boot(page);

@@ -6,6 +6,8 @@ See [the controls guide](docs/index.md) and [landscape authoring](docs/authoring
 
 The terrain, camera, editing, and simulation run in PHP. Browser code provides accessible authoring controls, file dialogs, input collection, and lifecycle integration. The example does not require Tiled or a network connection.
 
+Each vehicle is a Phonics entity holding its physics object, `RacerMotion`, and its own `Race`. To add another racer, register those components together and pass its movement system’s name in the session’s `movementSystems` list. On each fixed step, call `RacerMotion::publish($before, $after)` with the two vehicle poses. Pass `relocated: true` for a teleport. A change in the car’s recovery counter also skips the crossing. The race system runs after movement and times every racer against the shared course. The HUD follows the local driver.
+
 Run `node scripts/bench-terrain.mjs` from the examples checkout with the preview running to measure cold and warm road clicks and flight frame intervals. The report includes the GPU, drawing-buffer size, time to each confirmed marker, and time spent in the picker. Set `TERRAIN_URL` for another preview or `VIEW_WIDTH` and `VIEW_HEIGHT` for a different browser viewport.
 
 The GPU generates elevation textures in concentric levels around the camera. At each level, moving into a new grid cell refreshes only the newly exposed strips. The F5 local map uses resident detail and the wide chart uses the world overview. Both maps use the current palette and water level.

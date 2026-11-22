@@ -1,0 +1,95 @@
+<?php
+declare(strict_types=1);
+
+$package = getenv('PHONICS_TERRAIN_ROOT') ?: dirname(__DIR__, 3) . '/packages/terrain-phonics';
+require_once $package . '/autoload.php';
+require_once dirname(__DIR__) . '/autoload.php';
+
+use Phonics\Ecs\Registry;
+use Phonics\Ecs\Scheduler;
+use TerrainSandbox\Car;
+use TerrainSandbox\Race;
+use TerrainSandbox\RacerMotion;
+use TerrainSandbox\Session;
+
+function check(bool $condition, string $reason): void
+{
+	if(!$condition) throw new RuntimeException($reason);
+}
+
+$entities = new Registry;
+$systems = new Scheduler($entities);
+$session = new Session(['worldSize' => 512, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5],
+	systems: $systems, movementSystems: ['rival.drive']);
+$course = $session->course;
+$course->place('start', 'road', 0, 0, 10, 0);
+$gate = $course->place('checkpoint', 'road', 0, 0, 50, 0)['gate']['id'];
+$finish = $course->place('finish', 'road', 0, 0, 100, 0)['gate']['id'];
+[$local] = $entities->query(Car::class);
+check($entities->get($local, Car::class) === $session->car, 'The entity holds the car that the sandbox drives.');
+$session->camera->position = [0, 30, 0];
+$session->camera->yaw = M_PI;
+$session->input(['actions' => ['car']], 1/60, 1.);
+for($i = 0; $i < 2000 && $session->findingCarSite(); $i++) $session->input([], 1/60, 1.);
+check($session->mode === 'car' && $session->race === $entities->get($local, Race::class), 'Boarding selects the local race.');
+
+$rival = $entities->create(new Car, new RacerMotion('car'), new Race);
+$place = function(Car $car, float $z) use ($session): void {
+	$site = $car->checkedSite($session->landscape, -5, 2, $z, 0, $session->course->posts());
+	check($site !== null, 'The rival has a dry landing site.');
+	$car->spawn($site, $session->landscape, -5);
+};
+$place($entities->get($rival, Car::class), -10);
+$recoverTo = null;
+$driveRival = true;
+// Register after the race system to exercise the declared ordering, including a crossing on this very tick.
+$systems->add('rival.drive', function(Registry $registry, float $dt) use ($rival, $session, $place, &$recoverTo, &$driveRival): void {
+	if($session->paused || (!$driveRival && $recoverTo === null)) return;
+	$car = $registry->get($rival, Car::class);
+	$before = $car->state();
+	$relocated = $recoverTo !== null;
+	if($relocated) { $place($car, $recoverTo); $recoverTo = null; }
+	else $car->step($dt, 1., 0., $session->landscape, -5, false, $session->course->posts());
+	$registry->get($rival, RacerMotion::class)->publish($before, $car->state(), $relocated);
+}, ['terrain-sandbox.simulate']);
+$dt = 1/60;
+$session->input(['keys' => ['KeyW' => true]], $dt, 1.);
+$rivalRace = $entities->get($rival, Race::class);
+for($i = 0; $i < 900 && $session->car->state()['z'] < 50; $i++) $systems->update($dt);
+$localSplit = $session->race->status($course, $session->time)['splits'];
+check(array_column($localSplit, 'gate') === [$gate], 'The local car earns its split on the crossing tick.');
+check($rivalRace->state === 'running' && $rivalRace->nextGate($course)['id'] === $gate,
+	'The second car started its own clock and still owes the same gate.');
+$localMessage = $session->message;
+$recoverTo = 55.;
+$systems->update($dt);
+check($rivalRace->status($course, $session->time)['splits'] === [], 'Recovering across the gate earns no split.');
+$motion = $entities->get($rival, RacerMotion::class);
+$before = ['x' => 2., 'y' => 0., 'z' => 46., 'recoveries' => 0];
+$after = ['x' => 2., 'y' => 0., 'z' => 55., 'recoveries' => 1];
+$motion->publish($before, $after);
+check($motion->take() === null, 'A changed chassis recovery counter also suppresses the segment.');
+$recoverTo = 45.;
+$systems->update($dt);
+for($i = 0; $i < 300 && $entities->get($rival, Car::class)->state()['z'] < 50; $i++) $systems->update($dt);
+$rivalSplit = $rivalRace->status($course, $session->time)['splits'];
+check(array_column($rivalSplit, 'gate') === [$gate] && $rivalSplit[0]['time'] !== $localSplit[0]['time'],
+	'Driving back through the gate records the second car’s own split time.');
+check($session->race->status($course, $session->time)['splits'] === $localSplit && $session->message === $localMessage,
+	'The rival crossing leaves the local splits and HUD alone.');
+$driveRival = false;
+for($i = 0; $i < 600 && $session->race->state !== 'finished'; $i++) $systems->update($dt);
+check($session->race->state === 'finished' && $rivalRace->nextGate($course)['id'] === $finish
+	&& $rivalRace->status($course, $session->time)['best'] === null, 'Only the finisher records a result.');
+$session->input(['actions' => ['fly']], $dt, 1.);
+$systems->update($dt);
+check($rivalRace->state === 'running' && $rivalRace->nextGate($course)['id'] === $finish,
+	'Leaving the local car keeps the other driver racing.');
+// Replacing the course with an identical revision must still retire the old run.
+$session->course = clone $course;
+$systems->update($dt);
+check($rivalRace->state === 'idle' && $session->race->state === 'idle', 'A replacement course invalidates both runs.');
+$systems->remove('rival.drive');
+$session->close();
+check($entities->query(Car::class) === [$rival], 'Closing the session removes only the vehicles it owns.');
+echo "Two-racer checkpoint, recovery, clock, HUD and lifecycle checks passed.\n";
