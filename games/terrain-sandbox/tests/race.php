@@ -1097,6 +1097,10 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 			'Every dry circuit gate has double the stock road clearance');
 		expect(array_unique(array_column($gates,'width')) === [CircuitRoad::GATE_WIDTH],
 			'All regional gantry openings span the painted road up to its outer shoulders.');
+		// The gantries stand on the road. Against a wall the highest ground across the 60 m span once lifted a banner
+		// over 20 m above the deck; only the deck's own bank may raise one now.
+		$lift = max(array_map(fn(array $g): float => $g['y'] - $generator->landscape->height($g['x'], $g['z']), $gates));
+		expect($lift < 3, "Every dry circuit gantry stands on its road deck ($lift m at most above the centerline)");
 		$legacy = json_decode($generator->save(), true, flags: JSON_THROW_ON_ERROR);
 		foreach($legacy['course']['gates'] as &$gate) $gate['height'] = $stock;
 		unset($gate);

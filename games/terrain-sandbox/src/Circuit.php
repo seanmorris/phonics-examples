@@ -90,8 +90,14 @@ final class Circuit
 		foreach($this->gates() as $i => [$x,$z,$yaw])
 		{
 			$role = $i === 0 ? 'start' : 'checkpoint';
-			$placed = $course->place($role, $kind, $x, $flooded ? $this->floodedLevel : $ground($x,$z), $z, $yaw, $laps,
-				$width,$height,$ground);
+			$base = $flooded ? $this->floodedLevel : $ground($x,$z);
+			// A circuit gantry spans the deck and most of both shoulders. It stands on the road: ground beyond the deck
+			// counts no higher than the centerline, so a bend against a canyon wall cannot lift the banner off the
+			// road, while the posts still reach down to lower ground beside it.
+			$deck = (CircuitRoad::WIDTH/2 + 1)**2;
+			$fit = $flooded ? $ground : static fn(float $px, float $pz): float
+				=> ($px-$x)**2 + ($pz-$z)**2 <= $deck ? $ground($px,$pz) : min($ground($px,$pz), $base);
+			$placed = $course->place($role, $kind, $x, $base, $z, $yaw, $laps, $width,$height,$fit);
 			if($placed['refused'] !== null) throw new \RangeException('The circuit needs more room between its gates.');
 		}
 		return $course;

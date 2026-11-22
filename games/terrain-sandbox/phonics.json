@@ -123,7 +123,7 @@
     "src/CarLamps.php": "sha256-JYkzwYHRQLhNADA8fg9umnvLGqelK4hZzq68VNac0fs=",
     "src/CarSuspension.php": "sha256-LfjCezGp+IXsrnj9mDghEBKLCWXx2TSJLmFvFPy6RoA=",
     "src/CarTumble.php": "sha256-euwSYxiPWQG8ZiaEvnw/VTNLM+d70PteBrBq6C3T1m4=",
-    "src/Circuit.php": "sha256-7ESl5Tm/6uAkZcNp2edY/oXS75YV+bM1VHy6NXOlazE=",
+    "src/Circuit.php": "sha256-90SrV/DTQIq3HpMfQYOHaIx+Av9GnqVv32gMwCTCqnU=",
     "src/CircuitFinder.php": "sha256-53IZpSAvN5B8s3oEJwWoKkrEf56hNwZoUu2nQbSuBUo=",
     "src/CircuitRoad.php": "sha256-13XM3XfRyT9lHDSiKY71b+B9vdICYnfSGKsWPkI7UU8=",
     "src/CorridorGraph.php": "sha256-pl9bT/ujR+rFxq0ygZzlwjAXq3bY/qIoWGS38lhlCJM=",
@@ -142,7 +142,7 @@
     "src/PickupSearch.php": "sha256-4iDVATtmIZnYZ4qNjcuuNj0JbAxCBvsgcNiW24lCDgo=",
     "src/Race.php": "sha256-ZxClX+DJJNsgjOGfOZjAIVdrfpeQB+ybUOTaPPT6bxY=",
     "src/RoadEditor.php": "sha256-Ty0BU8vAy8EwViP5RHV/gkkJ/7dtWOnN7p0eb5Z4G2M=",
-    "src/Session.php": "sha256-q7IXizO1u98Boz3yAarFj/0VY1mxPtKru5Xwehldakk=",
+    "src/Session.php": "sha256-rJBS9VCiBwSfKaigvOyB3wHLmBXvAtk1TelP4MCYQ5c=",
     "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/TrailRenderer.php": "sha256-EtQqM0AlEjjYPWlIrYoO6gCCsrHHu+KK4//+O1QNOCg=",
     "src/VehicleModel.php": "sha256-XsApWKZz6DZYjrgKU5mpm+UAC2GSStgx7FrAP8P/GpI="

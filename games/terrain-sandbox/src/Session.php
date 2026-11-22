@@ -1751,8 +1751,10 @@ final class Session
 		$circuit = null; $variant = null;
 		try
 		{
+			// A circuit's gates are checked as saved against the circuit's own placement below, which then replaces
+			// them; refitting them here by the general rule would lift circuit gantries onto walls beside the road.
 			$course = Course::import($data['course'] ?? null, $candidate->recipe()['worldSize'] / 2,
-				self::ground($candidate), $this->gateShapes);
+				isset($data['circuit']) ? null : self::ground($candidate), $this->gateShapes);
 			if(isset($data['circuit']))
 			{
 				$savedCircuit = $data['circuit'];
