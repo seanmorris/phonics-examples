@@ -12,7 +12,7 @@ final class SurfaceLayers
 	public const FIELDS = ['plain','meadow','shrubs','tundra','lowland','crowns','talus','blocks','joints','slab-tone','lichen','sand','snow'];
 	public const RELIEF = ['none','pattern','ribs','facets','crowns','blocks'];
 	public const CHANNELS = ['color','relief','both'];
-	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples', 'jointed'];
+	public const PATTERNS = ['none', 'mottle', 'streaks', 'gravel', 'bedded', 'stipple', 'fractal', 'veins', 'ripples', 'jointed', 'contacts'];
 	public const DEFAULTS = [
 		'id' => '', 'name' => '', 'mask' => 'all', 'field' => 'plain',
 		'channel' => 'color', 'relief' => 'none', 'strength' => 1., 'flatten' => 0., 'opacity' => 1.,
@@ -201,7 +201,7 @@ final class SurfaceLayers
 			'canyon' => self::canyonLayers($r,$appearance),
 			'canyon-v1' => self::earlyCanyonLayers($s),
 			'limestone' => self::limestoneLayers($s,($r['baseBias'] ?? 0.) * ($r['heightScale'] ?? 0.)),
-			'basalt-fjords' => self::fjordLayers($s,$r['terraceSpacing'] ?? Recipe::shapeDefaults($style)['terraceSpacing']),
+			'basalt-fjords' => self::fjordLayers($s),
 			'amber-dunes' => self::duneLayers($s,$r),
 			default => [['color'=>$s['grassColor']]],
 		};
@@ -233,7 +233,7 @@ final class SurfaceLayers
 			'canyon' => ['Canyon dust','Rust beds','Shale','Ledge','Lower sandstone','Red beds','Upper sandstone','Cap rock','Sand'],
 			'canyon-v1' => ['Soil','Light strata','Dark strata','Sand'],
 			'limestone' => ['Grassland','Valley grass','Outcrops','Limestone','Mineral veins','Sand','Snow'],
-			'basalt-fjords' => ['Moss heath','Scree','Basalt faces','Lava beds','Tidal gravel','Summit snow'],
+			'basalt-fjords' => ['Moss heath','Scree','Basalt faces','Lava beds','Seep stains','Tidal gravel','Summit snow'],
 			'amber-dunes' => ['Dune sand','Slip faces','Crest sand','Wind ripples','Desert pavement','Salt crust'],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
@@ -341,7 +341,7 @@ final class SurfaceLayers
 		return self::hex([min(1., $red * $base[0]), min(1., $green * $base[1]), min(1., $blue * $base[2])]);
 	}
 
-	private static function fjordLayers(array $s, float $bedSpacing): array
+	private static function fjordLayers(array $s): array
 	{
 		$grass = $s['grassColor'];
 		$rock = $s['rockColor'];
@@ -352,13 +352,14 @@ final class SurfaceLayers
 			['color'=>$s['soilColor'], 'slopeLow'=>$s['rockSlopeStart']+.29*$exposed['slopeFade'],
 				'slopeFade'=>.34*$exposed['slopeFade'], 'opacity'=>.64,
 				'pattern'=>'stipple', 'patternColor'=>$rock, 'patternScale'=>2.2, 'patternAmount'=>.8],
-			['color'=>$rock, 'pattern'=>'jointed', 'patternColor'=>$s['rockBandColor'], 'patternAmount'=>.78,
-				'patternScale'=>10., 'patternStretch'=>2.5] + $exposed,
-			// Exposed cliffs reveal the stacked flows. Zero bed spacing disables this tint.
-			['color'=>self::tint($rock,.65,.65,.74), 'parent'=>2, 'period'=>$bedSpacing,
-				'low'=>.64*$bedSpacing, 'high'=>.83*$bedSpacing, 'fade'=>.06*$bedSpacing,
-				'noise'=>.15*$bedSpacing, 'scale'=>85., 'opacity'=>$bedSpacing > 0. ? .28 : 0.,
-				'pattern'=>'fractal', 'patternColor'=>$rock, 'patternScale'=>35., 'patternAmount'=>.8],
+			['color'=>$rock, 'pattern'=>'jointed', 'patternColor'=>$s['rockBandColor'], 'patternAmount'=>.95,
+				'patternScale'=>14., 'patternStretch'=>2.7] + $exposed,
+			['color'=>self::tint($rock,1.38,1.32,1.24), 'parent'=>2, 'opacity'=>.45,
+				'pattern'=>'contacts', 'patternColor'=>self::tint($s['soilColor'],.87,.61,.57),
+				'patternAmount'=>1., 'patternScale'=>84., 'patternStretch'=>.30],
+			['color'=>self::tint($s['rockBandColor'],.65,.68,.68), 'parent'=>2, 'opacity'=>.34,
+				'pattern'=>'veins', 'patternColor'=>self::tint($rock,.42,.47,.50),
+				'patternAmount'=>.89, 'patternScale'=>45., 'patternStretch'=>3.3],
 		];
 	}
 

@@ -106,8 +106,8 @@ and limits the wider view near the map boundary. Pass `circular: true` to draw a
 Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
 rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone` preset uses a 3,050 m
 base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at
-175 m elevation intervals form sloping benches below the summits. `basalt-fjords` combines flooded valleys
-with 76 m terraces and rolling headlands. `amber-dunes` uses narrow ridges and rolling relief to give the
+175 m elevation intervals form sloping benches below the summits. `basalt-fjords` cuts flooded valleys
+between rolling headlands. Terracing starts at zero on this preset. `amber-dunes` uses narrow ridges and rolling relief to give the
 two faces of a dune different slopes. Existing recipes expand to the values of
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
 changing the landscape's playable extent.
@@ -130,6 +130,7 @@ Patterns use world-space meters and fade with the pixel footprint. Stipple has f
 
 The `jointed` pattern blends weathered stone into freshly exposed rock across patches of a face. Its scale sets horizontal joint spacing in meters. Vertical stretch multiplies that spacing along the dip. Mountain Ridges uses 13 m by 23 m to match its granite fractures. Smaller mineral inclusions and grains become visible as you approach.
 
+The `contacts` pattern marks thin boundaries between rock units. Each boundary dips, varies in thickness and gradually disappears along the face. `patternScale` sets the horizontal scale of exposed patches. Multiplying it by `patternStretch` gives the mean vertical spacing. Basalt Fjords uses 84 m and 0.30 for flows averaging about 25 m apart. These controls affect the material independently of geometric terraces.
 
 `Water` evaluates analytic directional waves and bounded wake packets. Its shader include uses the same
 parameters and derivatives as PHP. `Watercraft` samples several buoyancy points and adds damping, drag,
@@ -263,7 +264,7 @@ but a six-digit hex string.
 
 Coast starts with grass, exposed rock, shore sand and snow. Its optional coastal bands have zero coverage. Mountain Ridges uses reusable fields for jointed slabs, iron stains, lichen, talus and forest crowns. The forest gives way to meadow and tundra as the ground approaches the snowline. Early canyons have horizontal strata, and current canyons use dipping beds. Limestone Plain blends valley vegetation into weathered outcrops.
 
-Basalt Fjords exposes dark lava beds on steep faces, with moss on gentler slopes and gravel along the shore. Amber Dunes puts fine wind ripples on sand and flattens them where gravel or salt covers the basin floor. Each preset has an editable surface stack, and the five paint inks cover any of these surfaces.
+Basalt Fjords shows weathered flow contacts on exposed basalt, with moss on gentler slopes and gravel along the shore. Amber Dunes puts fine wind ripples on sand and flattens them where gravel or salt covers the basin floor. Each preset has an editable surface stack, and the five paint inks cover any of these surfaces.
 
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 

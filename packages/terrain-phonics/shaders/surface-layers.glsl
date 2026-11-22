@@ -2,6 +2,7 @@ const int STIPPLE_PATTERN = 5;
 const int FRACTAL_PATTERN = 6;
 const int VEIN_PATTERN = 7;
 const int JOINTED_PATTERN = 9;
+const int CONTACT_PATTERN = 10;
 uniform int uLayerCount;
 uniform vec4 uFieldScale;
 uniform vec4 uLayerEffect[16]; // relief strength, flattening, opacity, unrestricted range
@@ -25,10 +26,11 @@ vec3 layerCellSample(ivec2 cell,vec2 t) {
 	float lower=mix(a,b,t.x), upper=mix(c,d,t.x);
 	return vec3(mix(lower,upper,t.y),mix(b-a,d-c,t.y),upper-lower);
 }
-float layerValueNoise(vec2 uv) {
+float layerValueNoise(vec2 uv,ivec2 salt) {
 	vec2 t=fract(uv);
-	return layerCellSample(ivec2(floor(uv)),t*t*(3.-2.*t)).x;
+	return layerCellSample(ivec2(floor(uv))+salt,t*t*(3.-2.*t)).x;
 }
+float layerValueNoise(vec2 uv) { return layerValueNoise(uv,ivec2(0)); }
 const mat3 MATERIAL_TURN=mat3(0.,.8,.6, -.8,.36,-.48, -.6,-.48,.64);
 // Value and spatial gradient from the same eight corners, including on an upright face.
 vec4 materialVolumeSample(vec3 p) {
@@ -150,6 +152,36 @@ float layerNoise(vec2 xz,float scale,float footprint) {
 	return (1.-smoothstep(.3,1.,footprint/scale))*layerValueNoise((xz+uPaletteOffset)/scale);
 }
 
+#if !defined(MATERIAL_STACK) || defined(PATTERN_CONTACTS)
+// Each rock contact has its own elevation and exposure. The slow dip and undulation
+// are shared through the rock, so the same contact can be seen on opposing cliffs.
+float contactPigment(vec3 pos,float footprint,vec4 pattern) {
+	float spacing=pattern.z*pattern.w;
+	float pixel=footprint/spacing;
+	float resolved=1.-smoothstep(.10,.42,pixel);
+	if(resolved<=0.) return 0.;
+	vec2 strike=mat2(.8,.6,-.6,.8)*pos.xz/pattern.z;
+	ivec2 salt=ivec2(uPaletteOffset);
+	float bend=layerValueNoise(.32*strike,salt);
+	float phase=(pos.y+dot(pos.xz,vec2(.035,-.022)))/spacing+.24*bend;
+	int bed=int(floor(phase));
+	float center=.49+.23*layerCorner(salt+ivec2(bed,127));
+	float above=fract(phase)-center;
+	if(abs(above)>.25) return 0.;
+	ivec2 bedSalt=salt+ivec2(23,61)*bed;
+	float weathering=layerValueNoise(strike,bedSalt);
+	float rubble=layerValueNoise(3.7*strike,bedSalt+ivec2(19,-31));
+	float exposure=smoothstep(-.04,.55,.68*weathering+.32*rubble+.26*layerCorner(bedSalt));
+	// An exposed flow top weathers back into the core over a few meters. Both
+	// the length of the exposure and the thickness of its rind vary along the face.
+	above-=.040*weathering+.018*rubble;
+	float thickness=exposure*(.077+.042*layerCorner(salt+ivec2(bed,53)));
+	float edge=clamp(.5*pixel,.012,.065);
+	float rind=smoothstep(-edge,edge,above)*(1.-smoothstep(-edge,thickness+edge,above));
+	return pattern.y*resolved*exposure*rind;
+}
+#endif
+
 float patternMask(vec2 uv, int kind) {
 	if(kind==3) {
 		ivec2 cell=ivec2(floor(uv));
@@ -184,6 +216,9 @@ float layerPatternWeight(int layer,vec3 pos,vec3 normal,float footprint,float be
 	vec4 pattern=uLayerPattern[layer]; // kind, amount, horizontal scale, vertical stretch
 	int kind=int(pattern.x);
 	if(kind==0 || pattern.y<=0.) return 0.;
+	#if !defined(MATERIAL_STACK) || defined(PATTERN_CONTACTS)
+	if(kind==CONTACT_PATTERN) return contactPigment(pos,footprint,pattern);
+	#endif
 	#if !defined(MATERIAL_STACK) || defined(PATTERN_JOINTED)
 	if(kind==JOINTED_PATTERN) return jointedPigment(pos,normal,footprint,pattern,vec2(0.),vec2(0.));
 	#endif

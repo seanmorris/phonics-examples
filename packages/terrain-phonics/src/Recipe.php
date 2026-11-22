@@ -35,7 +35,8 @@ final class Recipe
 			'seed' => 'basalt-fjords', 'baseFrequency' => 1 / 2600, 'heightScale' => 1160., 'baseBias' => .055,
 			'wallHeight' => .70, 'floorWidth' => .038, 'wallWidth' => .40, 'rolling' => .67,
 			'secondary' => .43, 'directionalRise' => .25, 'warpAmplitude' => 445., 'warpFrequency' => 1 / 3450,
-			'terraceSpacing' => 76., 'terraceStrength' => .19, 'detailAmplitude' => 30., 'detailOctaves' => 6,
+			'terraceSpacing' => 76., 'terraceStrength' => 0., 'detailAmplitude' => 42., 'detailOctaves' => 6,
+			'slopeScale' => .60,
 		] + self::shapeDefaults('coast', $version);
 		if($preset === 'amber-dunes')
 		return [

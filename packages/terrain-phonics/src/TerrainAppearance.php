@@ -33,7 +33,7 @@ final class TerrainAppearance
 	/** Starting colors and material thresholds for the named landscapes. */
 	public const PRESET_DEFAULTS = [
 		'basalt-fjords' => [
-			'grassColor'=>'#435f38', 'soilColor'=>'#514b40', 'rockColor'=>'#343e46', 'rockBandColor'=>'#5a6265',
+			'grassColor'=>'#435f38', 'soilColor'=>'#514b40', 'rockColor'=>'#29343a', 'rockBandColor'=>'#535a59',
 			'sandColor'=>'#4c514e', 'snowColor'=>'#dce6e8', 'snowline'=>820., 'snowTransition'=>140.,
 			'rockSlopeStart'=>.050, 'rockSlopeEnd'=>.24, 'beachHeight'=>1.2, 'beachWidth'=>5.,
 		],
