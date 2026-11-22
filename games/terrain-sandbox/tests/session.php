@@ -397,6 +397,12 @@ for($i = 0; $i < 100; $i++) $drive->step(1/60);
 $reverse = $drive->car->state();
 $drive->step(1/60);
 expect($reverse['speed'] < -2 && $drive->car->state()['yaw'] > $reverse['yaw'], 'Braking engages reverse and reverses the turn');
+// Rolling backward faster than reverse gear, as after a landing, the car slows while S is held instead of keeping its
+// speed: the pedal once added reverse power and the clamp held whatever speed the car had.
+(function() { $this->speed = -20.0; })->call($drive->car);
+for($i = 0; $i < 60; $i++) $drive->step(1/60);
+$backward = $drive->car->state()['speed'];
+expect($backward > -19.8 && $backward < -8, "Reverse gear does not hold a backward speed beyond its own ($backward m/s)");
 input($drive, ['values'=>['tool'=>'raise'],'clicks'=>[[.5,.5]]]);
 expect(!$drive->picking && $drive->takeCandidate() === null, 'Clicks while driving cannot edit terrain');
 input($drive, ['values'=>['waterLevel'=>10]]);

@@ -215,6 +215,9 @@ final class Car
 				// A landing can send the car backward faster than reverse gear can drive it.
 				$reverseLimit = min(-8.0, $this->speed);
 				$power = $braking ? self::SERVICE_BRAKE : ($throttle > 0 ? 9 : 4);
+				// Reverse gear drives up to 8 m/s backward. Faster than that the pedal adds nothing, so drag and grade
+				// slow the car instead of the clamp below holding its speed.
+				if(!$braking && $throttle < 0 && $this->speed <= -8.0) $power = 0;
 				$traction = $braking ? $gripFraction : $rear;
 				$this->speed += ($throttle*$power*$traction - (($this->speed <=> 0)*$drag+Session::DRIVING_GRAVITY*$grade)*$gripFraction)*$dt;
 				$pedal = abs($throttle);
