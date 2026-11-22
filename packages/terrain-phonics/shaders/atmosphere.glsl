@@ -69,17 +69,42 @@ vec4 terrainOpticalLookup(float altitude, float mu)
 	return mix(a, b, weight.y);
 }
 
+vec2 terrainInsideSphere(float eye, float projection, float height);
+
+// Optical depth through the authored layers along a ray, clipped at a distance, as AtmosphereLayers::opticalDepth()
+// computes it: the path inside each layer's top sphere less the path inside its bottom sphere.
+float terrainAirDepth(float altitude, float mu, float distanceMeters)
+{
+	float depth = 0.0;
+	float projection = (uPlanetRadius + altitude) * mu;
+	int count = int(uAirLayerCount);
+	for(int j = 0; j < count; ++j) {
+		vec2 outer = min(vec2(distanceMeters), terrainInsideSphere(altitude, projection, uAirBand[j].y));
+		vec2 inner = min(vec2(distanceMeters), terrainInsideSphere(altitude, projection, uAirBand[j].x));
+		depth += max(0.0, (outer.y - outer.x) - (inner.y - inner.x)) * uAirBand[j].z;
+	}
+	return depth;
+}
+
+// Clear air comes from the lookup texture; the authored layers, too thin for its altitude rows, are added exactly.
 vec3 terrainTransmittance(float altitude, float mu)
 {
 	bool ground;
-	terrainAtmosphereBoundary(clamp(altitude,0.0,uAtmosphereHeight), clamp(mu,-1.0,1.0), ground);
-	return ground ? vec3(0.0) : terrainOpticalLookup(altitude,mu).rgb;
+	float clamped = clamp(altitude, 0.0, uAtmosphereHeight), cosine = clamp(mu, -1.0, 1.0);
+	float distanceMeters = terrainAtmosphereBoundary(clamped, cosine, ground);
+	if(ground) return vec3(0.0);
+	vec3 clear = terrainOpticalLookup(altitude, mu).rgb;
+	return uAirLayerCount > 0.0 ? clear * exp(-terrainAirDepth(clamped, cosine, distanceMeters)) : clear;
 }
 
 vec3 terrainNightSkyThroughLayers(float altitude, float mu)
 {
 	vec3 glow = terrainNightSky(mu);
-	if(uAirLayerCount > 0.0 && uNightAmbient.b > 0.0) glow *= terrainOpticalLookup(altitude,mu).a;
+	if(uAirLayerCount > 0.0 && uNightAmbient.b > 0.0) {
+		bool ground;
+		float clamped = clamp(altitude, 0.0, uAtmosphereHeight), cosine = clamp(mu, -1.0, 1.0);
+		glow *= exp(-terrainAirDepth(clamped, cosine, terrainAtmosphereBoundary(clamped, cosine, ground)));
+	}
 	return glow;
 }
 

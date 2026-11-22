@@ -175,7 +175,8 @@ final class Atmosphere
 		return $this->traceTransmission($altitude,$cosZenith,$samples,$airTransmission);
 	}
 
-	private function traceTransmission(float $altitude, float $cosZenith, int $samples, float &$airTransmission): array
+	private function traceTransmission(float $altitude, float $cosZenith, int $samples, float &$airTransmission,
+		bool $layers = true): array
 	{
 		[$altitude,$cosZenith] = $this->coordinates($altitude, $cosZenith);
 		$samples = max(8, min(256, $samples));
@@ -199,7 +200,7 @@ final class Atmosphere
 			$dm += exp(-$h / $this->parameters['mieHeight']) * $step;
 		}
 
-		return $this->attenuation($dr, $dm, $airDepth);
+		return $this->attenuation($dr, $dm, $layers ? $airDepth : 0.);
 	}
 
 	/**
@@ -208,7 +209,9 @@ final class Atmosphere
 	 * @param int $height Altitude samples, between two and 256.
 	 * @param int $samples Optical-depth samples per texel, between eight and 256.
 	 * @return array Width/height, RGB float data, RGBA32F little-endian bytes, RGBA8 bytes, and generation.
-	 * Alpha carries transmission through the authored layers for the night sky and stars.
+	 * RGB is clear air only. The shaders add the authored layers exactly (terrainAirDepth in atmosphere.glsl): the
+	 * texture's 16 or so altitude rows sit hundreds of meters apart near the ground, too coarse for sub-kilometer layers.
+	 * Alpha still carries transmission through the authored layers.
 	 * Texel X encodes sign(mu)*sqrt(abs(mu)); texel Y encodes sqrt(altitude/atmosphereHeight).
 	 */
 	public function transmittanceLut(int $width = 128, int $height = 32, int $samples = 48): array
@@ -229,7 +232,7 @@ final class Atmosphere
 			$altitude = ($y / ($height - 1)) ** 2 * $this->parameters['atmosphereHeight'];
 			$u = 2 * $x / ($width - 1) - 1;
 			$airTransmission = 1.;
-			$rgb = $this->traceTransmission($altitude, $u * abs($u), $samples, $airTransmission);
+			$rgb = $this->traceTransmission($altitude, $u * abs($u), $samples, $airTransmission, false);
 			array_push($data, ...$rgb);
 			$bytes .= pack('g4', ...[...$rgb,$airTransmission]);
 
