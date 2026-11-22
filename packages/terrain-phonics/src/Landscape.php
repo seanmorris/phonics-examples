@@ -289,10 +289,13 @@ final class Landscape implements TerrainSurface
 	public function queueSteps(array $operation): \Generator
 	{
 		$this->open();
+		$revision = $this->version;
 
 		if(($operation['type'] ?? null) === 'smooth') $operation['sampleStep'] ??= $this->parameters['spacing'];
 
 		$operation = yield from Edits::normalizeSteps($operation);
+		$this->open();
+		if($this->version !== $revision) throw new \LogicException('The landscape changed while preparing the edit.');
 		$box = Edits::bounds($operation);
 		$half = $this->parameters['worldSize'] / 2;
 

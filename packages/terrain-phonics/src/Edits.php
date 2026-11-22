@@ -374,7 +374,7 @@ final class Edits
 				}
 				$steps = max(1,(int)ceil(max($speeds)/$step));
 			}
-			if(count($samples)+$steps+1 > self::MAX_ROAD_SAMPLES)
+			if(count($samples)+$steps+($i === 0 ? 1 : 0) > self::MAX_ROAD_SAMPLES)
 				throw new \OverflowException('Road exceeds the landscape sample budget');
 
 			for($j = ($i ? 1 : 0); $j <= $steps; $j++)
