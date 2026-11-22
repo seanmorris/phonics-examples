@@ -92,13 +92,22 @@ final class RoadAtlas
 		];
 	}
 
+	/** A pair of signed 12-bit offsets fits exactly in one float vertex attribute. Zero means unmarked. */
+	public static function centerCode(array $offset): int
+	{
+		[$x,$z] = array_map(static fn($v) => max(1,min(4095,(int)floor($v*32+.5)+2048)), $offset);
+		return ($x << 12) | $z;
+	}
+
 	/** Material ID plus two signed 12-bit offsets to the centerline, at 1/32 m precision. */
 	public static function paintTexel(?string $material, ?array $offset): string
 	{
 		$id = array_search($material,self::MATERIALS,true);
 		$id = $id === false ? 0 : $id+1;
 		if($offset === null) return pack('C4',$id,0,0,0);
-		[$x,$z] = array_map(static fn($v) => max(1,min(4095,(int)floor($v*32+.5)+2048)), $offset);
+		$code = self::centerCode($offset);
+		$x = $code >> 12;
+		$z = $code & 4095;
 		return pack('C4',$id,$x>>4,$z>>4,(($x&15)<<4)|($z&15));
 	}
 }

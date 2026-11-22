@@ -81,7 +81,7 @@ A road stores ordered control points as `[x,y,z]` in meters. The default tangent
 
 `roadRecords()` lists the active roads by their position in the edit sequence. Queue a revised record with `replaceAt` set to that position to move the original road and preserve any later paint or grading. Version 2 saves retain these edits and handles through undo and redo. Roads with automatic handles and ordinary append-only history still save as version 1.
 
-At a junction, operations apply in authoring order. Roads should agree on their crossing elevation. The clipmap draws a 20 cm ochre centerline along graded pavement. A road-color brush paints solid pavement.
+At a junction, operations apply in authoring order. Roads should agree on their crossing elevation. Both terrain renderers draw a 20 cm ochre centerline along graded pavement. A road-color brush paints solid pavement.
 Bridges remain separate meshes. There is one ground height at each X/Z position, so this representation
 cannot describe caves or overhangs.
 

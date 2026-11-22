@@ -13,6 +13,7 @@ uniform float uCraft;
 out vec3 vRelative, vWorld, vNormal;
 out vec3 vPaint0, vPaint1;
 out vec3 vRoadOffset;
+vec3 roadOffset(ivec2 code) { return vec3((vec2(code)-2048.)/32.,1.); }
 void main()
 {
 	vec3 p = aPosition;
@@ -32,9 +33,15 @@ void main()
 		material=float(ink.r)-1.;
 		if(ink.r==5 && any(notEqual(ink.gba,ivec3(0)))) {
 			ivec2 code=ivec2((ink.g<<4)|(ink.a>>4),(ink.b<<4)|(ink.a&15));
-			vRoadOffset=vec3((vec2(code)-2048.)/32.,1.);
+			vRoadOffset=roadOffset(code);
 		}
 #else
+		// Patch meshes store both offsets in the otherwise categorical material attribute.
+		if(material < -1.) {
+			int code = int(-material);
+			vRoadOffset = roadOffset(ivec2(code >> 12, code & 4095));
+			material = 4.;
+		}
 		ivec2 cell = patchCell();
 		vec2 xz = patchWorld(cell);
 		float morph = patchMorph(cell);

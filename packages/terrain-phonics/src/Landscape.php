@@ -256,20 +256,21 @@ final class Landscape implements TerrainSurface
 	 * Query painted surface material without generating height or normal samples.
 	 * @param float $x World horizontal X coordinate in meters.
 	 * @param float $z World horizontal Z coordinate in meters.
+	 * @param array|null $centerOffset Optional offset in meters from the nearest point on a graded pavement centerline.
 	 * @return string|null Most recent covering material, or null for recipe shading.
 	 */
-	public function material(float $x, float $z): ?string
+	public function material(float $x, float $z, ?array &$centerOffset = null): ?string
 	{
 		$this->coordinates($x, $z);
 
+		if(func_num_args() === 3) return Edits::material($x, $z, $this->operations, $centerOffset);
 		return Edits::material($x, $z, $this->operations);
 	}
 
 	/** Encoded paint sample for areas where later brush edits supersede GPU road grading. */
 	public function paintTexel(float $x, float $z): string
 	{
-		$this->coordinates($x,$z);
-		$material = Edits::material($x,$z,$this->operations,$offset);
+		$material = $this->material($x,$z,$offset);
 		return RoadAtlas::paintTexel($material,$offset);
 	}
 

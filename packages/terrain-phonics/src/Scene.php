@@ -2242,7 +2242,7 @@ final class Scene
 			}
 		}
 
-		$material = array_search($source->material($wx, $wz), ['rock','grass','sand','snow','road'], true);
+		$material = array_search($source->material($wx, $wz, $centerOffset), RoadAtlas::MATERIALS, true);
 		if($material !== false)
 		{
 			$job['materials'] ??= str_repeat("\0", $vertices);
@@ -2265,7 +2265,7 @@ final class Scene
 			, $z * $step
 			, ...$normal
 			, $parent
-			, $material === false ? -1 : $material, ...$parentNormal
+			, $centerOffset === null ? ($material === false ? -1 : $material) : -RoadAtlas::centerCode($centerOffset), ...$parentNormal
 		]);
 
 		if($job['index'] === $vertices) unset($job['halo']);
