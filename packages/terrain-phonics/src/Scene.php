@@ -38,6 +38,8 @@ final class Scene
 	private array $boundPaint = [];
 	private ?SurfaceLayers $defaultLayers=null;
 	private ?TerrainAppearance $paletteAppearance=null;
+	/** The palette supplied by the scene until the application assigns its own appearance. */
+	private TerrainAppearance $presetAppearance;
 	private array $layerBinding=[];
 	private array $materialPrograms = [];
 	private string $materialKey = '', $groundVertexSource, $groundFragmentSource;
@@ -177,7 +179,7 @@ final class Scene
 		if($useClipmap) $this->clipmap = new Clipmap;
 		$this->indices = $useClipmap ? '' : GpuPatch::indices(Lod::CELLS);
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
-		$this->appearance = new TerrainAppearance;
+		$this->appearance = $this->presetAppearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$landscape->recipe()['preset']] ?? []);
 
 		$this->create();
 	}
@@ -419,6 +421,12 @@ final class Scene
 	{
 		$this->clearPatches();
 		$this->clipmap?->invalidate();
+		if($this->appearance === $this->presetAppearance) {
+			$defaults = TerrainAppearance::PRESET_DEFAULTS;
+			$next = $defaults[$landscape->recipe()['preset']] ?? [];
+			if($next !== ($defaults[$this->landscape->recipe()['preset']] ?? []))
+				$this->appearance = $this->presetAppearance = new TerrainAppearance($next);
+		}
 		$this->landscape = $landscape;
 		$this->defaultLayers=null; $this->layerBinding=[];
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);

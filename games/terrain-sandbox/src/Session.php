@@ -80,6 +80,20 @@ final class Session
 		'snowline' => 3000.0, 'grassColor' => '#476239', 'rockColor' => '#777b6f',
 		'rockBandColor' => '#85897c', 'rockSlopeStart' => .25, 'rockSlopeEnd' => .73,
 	];
+	private const PRESET_LOOK = [
+		'limestone' => self::LIMESTONE_SURFACE + self::LIMESTONE_SKY,
+		'basalt-fjords' => TerrainAppearance::PRESET_DEFAULTS['basalt-fjords'] + [
+			'azimuth'=>82., 'elevation'=>32., 'haze'=>.72, 'waterColor'=>'#245567',
+			'waterTransparency'=>.78, 'waterReflectivity'=>.72, 'waterFogDensity'=>.04, 'waterChoppiness'=>55.,
+		],
+		'amber-dunes' => TerrainAppearance::PRESET_DEFAULTS['amber-dunes'] + ['azimuth'=>146., 'elevation'=>18., 'haze'=>.85],
+	];
+	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
+	private const PRESET_VIEWS = [
+		'limestone' => ['x'=>.8, 'z'=>-1.6, 'heading'=>305., 'pitch'=>.10, 'clearance'=>45., 'minimum'=>105.],
+		'basalt-fjords' => ['x'=>-1.2, 'z'=>.225, 'heading'=>307., 'pitch'=>-.16, 'clearance'=>275., 'minimum'=>0.],
+		'amber-dunes' => ['x'=>.75, 'z'=>.5, 'heading'=>165., 'pitch'=>-.19, 'clearance'=>95., 'minimum'=>0.],
+	];
 
 	/**
 	 * UI configuration, serialized alongside the terrain. gateAltitude hangs a gate placed on land that many meters
@@ -103,7 +117,7 @@ final class Session
 	public ?\Closure $prepareMaterial = null;
 	private int $materialReply = 0;
 	private ?string $materialPreset = null;
-	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1'];
+	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes'];
 
 	private static function materialStyle(array $recipe): string
 	{
@@ -130,7 +144,7 @@ final class Session
 			$name = $origin === 'canyon-v1' ? 'canyon' : $origin;
 			$recipe = (new \TerrainPhonics\Recipe(['preset'=>$name] + ($origin === 'canyon-v1' ? ['version'=>1] : [])
 				+ self::preset($name)))->values();
-			$candidate = SurfaceLayers::landscape($recipe,new TerrainAppearance($name === 'limestone' ? self::LIMESTONE_SURFACE : []));
+			$candidate = SurfaceLayers::landscape($recipe,new TerrainAppearance(self::PRESET_LOOK[$name] ?? []));
 		} else {
 			$candidate = SurfaceLayers::landscape($recipe,$this->terrainAppearance);
 			$origin = null;
@@ -822,19 +836,21 @@ final class Session
 	/** Keep authored colors and lighting when moving between preset defaults. */
 	private function switchPresetLook(string $previous, string $next): void
 	{
-		if($previous === $next || ($previous !== 'limestone' && $next !== 'limestone')) return;
-		$standard = TerrainAppearance::DEFAULTS + self::SKY_DEFAULTS;
-		$limestone = self::LIMESTONE_SURFACE + self::LIMESTONE_SKY;
+		$from = self::PRESET_LOOK[$previous] ?? [];
+		$to = self::PRESET_LOOK[$next] ?? [];
+		if($from === $to) return;
+		$standard = TerrainAppearance::DEFAULTS + WaterAppearance::DEFAULTS + self::SKY_DEFAULTS + ['waterChoppiness'=>100.];
 		$changes = [];
-		foreach($limestone as $key => $value)
+		foreach($from + $to as $key => $_)
 		{
-			$old = $previous === 'limestone' ? $value : $standard[$key];
-			if($this->settings[$key] === $old) $changes[$key] = $next === 'limestone' ? $value : $standard[$key];
+			if($this->settings[$key] === ($from[$key] ?? $standard[$key])) $changes[$key] = $to[$key] ?? $standard[$key];
 		}
 		// The two endpoints belong to the same blend. Keep an authored range together.
 		if(!isset($changes['rockSlopeStart'], $changes['rockSlopeEnd'])) unset($changes['rockSlopeStart'], $changes['rockSlopeEnd']);
 		$this->setTerrainAppearance(new TerrainAppearance($changes + $this->settings));
-		foreach(array_intersect_key($changes, self::SKY_DEFAULTS) as $key => $value) $this->setting($key, $value);
+		$this->setWaterAppearance(new WaterAppearance($changes + $this->settings));
+		foreach(array_diff_key($changes, TerrainAppearance::DEFAULTS, WaterAppearance::DEFAULTS) as $key => $value)
+			$this->setting($key, $value);
 	}
 
 	/** Values the Landscape tab fills when a preset is selected. */
@@ -1303,14 +1319,16 @@ final class Session
 	{
 		$half = $this->landscape->recipe()['worldSize'] / 2;
 		$preset = $this->landscape->recipe()['preset'];
-		if($preset === 'limestone')
+		if(isset(self::PRESET_VIEWS[$preset]))
 		{
+			$view = self::PRESET_VIEWS[$preset];
 			$wavelength = 1 / $this->landscape->recipe()['baseFrequency'];
-			$x = min(.8 * $wavelength, $half * .3);
-			$z = -min(1.6 * $wavelength, $half * .3);
-			$this->camera->position = [$x, max(105., $this->landscape->height($x, $z) + 45., $this->water->level() + 45.), $z];
-			$this->camera->yaw = deg2rad(305);
-			$this->camera->pitch = .10;
+			$x = max(-.3*$half,min(.3*$half,$view['x']*$wavelength));
+			$z = max(-.3*$half,min(.3*$half,$view['z']*$wavelength));
+			$ground = max($this->landscape->height($x,$z),$this->water->level());
+			$this->camera->position = [$x,max($view['minimum'],$ground+$view['clearance']),$z];
+			$this->camera->yaw = deg2rad($view['heading']);
+			$this->camera->pitch = $view['pitch'];
 		}
 		else
 		{
@@ -1697,7 +1715,7 @@ final class Session
 		catch(\RuntimeException | \InvalidArgumentException $error) { $candidate->close(); throw $error; }
 		$settings = $data['settings'] ?? [];
 		if(!is_array($settings)) throw new \InvalidArgumentException('Invalid saved settings.');
-		if($candidate->recipe()['preset'] === 'limestone') $settings += self::LIMESTONE_SURFACE + self::LIMESTONE_SKY;
+		$settings += (self::PRESET_LOOK[$candidate->recipe()['preset']] ?? []) + self::SKY_DEFAULTS;
 		// Before version 3, gateHeight was the height an air gate hangs at.
 		if($data['version'] < 3 && array_key_exists('gateHeight', $settings))
 		{

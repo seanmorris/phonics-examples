@@ -154,6 +154,43 @@ expect($karst->settings['snowline'] === 340.0 && $karst->settings['azimuth'] ===
 	'Leaving Limestone restores the ordinary palette and sun while preserving authored settings.');
 $karst->close();
 
+$showcase = new Session;
+foreach(['basalt-fjords','amber-dunes'] as $preset) {
+	input($showcase,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
+	$recipe = $showcase->landscape->recipe();
+	[$x,$eye,$z] = $showcase->camera->position;
+	expect($recipe['seed'] === $preset && $showcase->status()['surfacePreset'] === $preset
+		&& $eye > max($showcase->landscape->height($x,$z),$showcase->water->level()),
+		"$preset opens above its land and water with its own editable surface.");
+	$copy = new Session;
+	$copy->load($showcase->save());
+	expect($copy->activeLayers()->layers === $showcase->activeLayers()->layers && $copy->settings == $showcase->settings
+		&& $copy->landscape->recipe() === $recipe, "$preset restores its material, environment and shape from a save.");
+	$copy->close();
+	if($preset === 'basalt-fjords') {
+		expect($showcase->water->level() > $showcase->landscape->height($x,$z)
+			&& $showcase->water->appearance->settings['waterColor'] === '#245567',
+			'The fjord opens on a flooded channel with its own water optics.');
+		input($showcase, ['actions' => ['craft']]);
+		expect($showcase->mode === 'craft', 'The starting inlet has enough water to board the jet ski.');
+		input($showcase,['values'=>['haze'=>1.6,'waterColor'=>'#103948']]);
+	} else {
+		enterCar($showcase);
+		expect($showcase->mode === 'car', 'The starting dune has a nearby drivable slope.');
+	}
+}
+expect($showcase->settings['waterChoppiness'] === 100. && $showcase->settings['waterColor'] === '#103948'
+	&& $showcase->settings['haze'] === 1.6 && $showcase->water->level() < $showcase->landscape->height($x,$z),
+	'Leaving the fjord restores standard swells and keeps authored water and sky over dry dunes.');
+input($showcase,['actions'=>[['type'=>'generate','preset'=>'coast']]]);
+expect($showcase->settings['sandColor'] === TerrainPhonics\TerrainAppearance::DEFAULTS['sandColor']
+	&& $showcase->settings['elevation'] === 35.,'Leaving the dunes restores the coastal sand and daylight.');
+input($showcase,['actions'=>[['type'=>'surface-layers','preset'=>'amber-dunes']]]);
+expect($showcase->landscape->recipe()['preset'] === 'coast' && $showcase->status()['surfaceOrigin'] === 'authored'
+	&& in_array('wind-ripples',array_column($showcase->activeLayers()->layers,'id'),true),
+	'The dune material can be applied separately to a coastal landform.');
+$showcase->close();
+
 $far = new Session;
 expect(array_map('floatval', $far->camera->position) === [3600.0,300.0,1800.0] && $far->camera->yaw === .7,
 	'The coastal home view faces editable land and its shoreline');

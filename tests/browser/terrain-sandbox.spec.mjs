@@ -1809,6 +1809,30 @@ test('Limestone Plain generates its skyline and round-trips as a named preset', 
 	await expect.poll(async() => (await status(page)).recipe).toEqual({...document.landscape.recipe, seed: 'another-plain'});
 });
 
+test('Basalt Fjords and Amber Dunes are available as landscapes and as independent surface presets', async({page}) => {
+	await page.setViewportSize({width: 700, height: 440});
+	await page.goto('/games/terrain-sandbox/');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	const picker = page.locator('[name="preset"]');
+	for(const [label, name, layer] of [
+		['Basalt Fjords','basalt-fjords','basalt-faces'], ['Amber Dunes','amber-dunes','wind-ripples'],
+	]) {
+		await picker.selectOption({label});
+		await expect(page.locator('[name="seed"]')).toHaveValue(name);
+		await expect(page.locator('[data-landform] :invalid')).toHaveCount(0);
+		await press(page, 'generate');
+		await expect.poll(async() => (await status(page)).surfacePreset).toBe(name);
+		const doc = await save(page);
+		expect(doc.landscape.recipe).toMatchObject({preset: name, seed: name});
+		expect(doc.surface.layers.map(row => row.id)).toContain(layer);
+	}
+	await page.getByRole('tab', {name: 'Surface', exact: true}).click();
+	await page.getByLabel('Material preset', {exact: true}).selectOption({label: 'Basalt Fjords'});
+	await page.getByRole('button', {name: 'Load preset surface', exact: true}).click();
+	await expect.poll(async() => (await status(page)).surfacePreset).toBe('basalt-fjords');
+	expect((await status(page)).recipe.preset).toBe('amber-dunes');
+});
+
 test('landform parameters and nested colors survive a save and reload', async({page}) => {
 	await page.setViewportSize({width: 720, height: 460});
 	await boot(page);

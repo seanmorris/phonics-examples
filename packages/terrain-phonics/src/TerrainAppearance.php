@@ -30,6 +30,17 @@ final class TerrainAppearance
 
 		'talusAmount' => .5, 'stainAmount' => .3, 'lichenAmount' => .5,
 	];
+	/** Starting colors and material thresholds for the named landscapes. */
+	public const PRESET_DEFAULTS = [
+		'basalt-fjords' => [
+			'grassColor'=>'#435f38', 'soilColor'=>'#514b40', 'rockColor'=>'#343e46', 'rockBandColor'=>'#5a6265',
+			'sandColor'=>'#4c514e', 'snowColor'=>'#dce6e8', 'snowline'=>820., 'snowTransition'=>140.,
+			'rockSlopeStart'=>.050, 'rockSlopeEnd'=>.24, 'beachHeight'=>1.2, 'beachWidth'=>5.,
+		],
+		'amber-dunes' => [
+			'sandColor'=>'#c59053', 'soilColor'=>'#a1663f', 'rockColor'=>'#765941', 'rockBandColor'=>'#d7c8a4',
+		],
+	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
 		'bandSpacing' => [5.0, 1000.0], 'bandContrast' => [0.0, 1.0], 'bandSharpness' => [1.0, 8.0],
@@ -92,6 +103,15 @@ final class TerrainAppearance
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'bandSpacing', 'bandContrast', 'bandSharpness',
 			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'macroVariation',
+		],
+
+		'basalt-fjords' => [
+			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
+			'rockSlopeStart', 'rockSlopeEnd', 'beachHeight', 'beachWidth', 'snowline', 'snowTransition',
+			'snowSlopeStart', 'snowSlopeEnd', 'macroVariation',
+		],
+		'amber-dunes' => [
+			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor', 'macroVariation',
 		],
 
 		'canyon' => [
@@ -190,14 +210,14 @@ final class TerrainAppearance
 	/**
 	 * Name the terrain style a recipe draws with, as Scene chooses its material.
 	 * @param array $recipe Landscape recipe with its preset and version.
-	 * @return string A key of USES: coast, mountain, canyon-v1 or canyon.
+	 * @return string The key in USES for this recipe.
 	 */
 	public static function style(array $recipe): string
 	{
 		return match($recipe['preset'] ?? null)
 		{
 			'canyon' => ($recipe['version'] ?? 0) === 2 ? 'canyon' : 'canyon-v1',
-			'mountain' => 'mountain',
+			'mountain', 'basalt-fjords', 'amber-dunes' => $recipe['preset'],
 			default => 'coast'
 		};
 	}

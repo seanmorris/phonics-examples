@@ -8,6 +8,10 @@ The canyon preset lowers water to −450 meters and starts inside the valley, ex
 
 **Limestone Plain** rises from a grassy valley into broad foothills and pointed summits. The lower slopes have routes a car can climb, and sloping benches break up the longer faces. **Terrace spacing** sets the height between benches (175 m by default). Lower **Terrace strength** to soften their edges, or increase **Floor width** for more open ground between peaks.
 
+**Basalt Fjords** floods winding valleys between mossy headlands. Dark bands mark successive lava flows where cliffs expose the rock. Lower **Water level** to expose more of the gravel shoreline, or raise it to submerge the low shelves.
+
+**Amber Dunes** has sharp sand crests, darker slip faces, and salt on the lowest basin floors. Fly close to a gentle slope to see the wind ripples catch the low sun. On the **Surface** tab, change **Pattern scale** on **Wind ripples** to set the distance between ripples. It starts at 0.78 m.
+
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 

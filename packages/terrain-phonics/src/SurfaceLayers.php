@@ -201,19 +201,25 @@ final class SurfaceLayers
 			'canyon' => self::canyonLayers($r,$appearance),
 			'canyon-v1' => self::earlyCanyonLayers($s),
 			'limestone' => self::limestoneLayers($s,($r['baseBias'] ?? 0.) * ($r['heightScale'] ?? 0.)),
+			'basalt-fjords' => self::fjordLayers($s,$r['terraceSpacing'] ?? Recipe::shapeDefaults($style)['terraceSpacing']),
+			'amber-dunes' => self::duneLayers($s,$r),
 			default => [['color'=>$s['grassColor']]],
 		};
-		if(!$canyon && $style !== 'limestone')
+		if($style === 'coast')
 		{
 			$rock = $s['rockColor'];
 			$rows[] = self::exposedRock($s) + ['color' => $rock]
 				+ self::stipple($rock, .80, .60);
 		}
 
-		$rows[] = ['color' => $s['sandColor'],'high' => $s['beachHeight'],'datum' => 'water','fade' => $s['beachWidth']]
-			+ self::stipple($s['sandColor'], .80, .55, .70);
+		if($style !== 'amber-dunes') {
+			$shore = ['color' => $s['sandColor'],'high' => $s['beachHeight'],'datum' => 'water','fade' => $s['beachWidth']]
+				+ self::stipple($s['sandColor'], .80, .55, .70);
+			if($style === 'basalt-fjords') $shore += ['slopeHigh'=>.10,'slopeFade'=>.08];
+			$rows[] = $shore;
+		}
 
-		if(!$canyon)
+		if(!$canyon && $style !== 'amber-dunes')
 		$rows[] = [
 			'color' => $s['snowColor']
 			, 'low' => $s['snowline']
@@ -227,6 +233,8 @@ final class SurfaceLayers
 			'canyon' => ['Canyon dust','Rust beds','Shale','Ledge','Lower sandstone','Red beds','Upper sandstone','Cap rock','Sand'],
 			'canyon-v1' => ['Soil','Light strata','Dark strata','Sand'],
 			'limestone' => ['Grassland','Valley grass','Outcrops','Limestone','Mineral veins','Sand','Snow'],
+			'basalt-fjords' => ['Moss heath','Scree','Basalt faces','Lava beds','Tidal gravel','Summit snow'],
+			'amber-dunes' => ['Dune sand','Slip faces','Crest sand','Wind ripples','Desert pavement','Salt crust'],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
 		foreach($rows as $i=>&$row) {
@@ -331,6 +339,47 @@ final class SurfaceLayers
 	{
 		$base = TerrainAppearance::linear($color);
 		return self::hex([min(1., $red * $base[0]), min(1., $green * $base[1]), min(1., $blue * $base[2])]);
+	}
+
+	private static function fjordLayers(array $s, float $bedSpacing): array
+	{
+		$grass = $s['grassColor'];
+		$rock = $s['rockColor'];
+		$exposed = self::exposedRock($s);
+		return [
+			['color'=>$grass, 'pattern'=>'fractal', 'patternColor'=>self::tint($grass,.44,.52,.40),
+				'patternScale'=>49., 'patternAmount'=>.84],
+			['color'=>$s['soilColor'], 'slopeLow'=>$s['rockSlopeStart']+.29*$exposed['slopeFade'],
+				'slopeFade'=>.34*$exposed['slopeFade'], 'opacity'=>.64,
+				'pattern'=>'stipple', 'patternColor'=>$rock, 'patternScale'=>2.2, 'patternAmount'=>.8],
+			['color'=>$rock, 'pattern'=>'jointed', 'patternColor'=>$s['rockBandColor'], 'patternAmount'=>.78,
+				'patternScale'=>10., 'patternStretch'=>2.5] + $exposed,
+			// Exposed cliffs reveal the stacked flows. Zero bed spacing disables this tint.
+			['color'=>self::tint($rock,.65,.65,.74), 'parent'=>2, 'period'=>$bedSpacing,
+				'low'=>.64*$bedSpacing, 'high'=>.83*$bedSpacing, 'fade'=>.06*$bedSpacing,
+				'noise'=>.15*$bedSpacing, 'scale'=>85., 'opacity'=>$bedSpacing > 0. ? .28 : 0.,
+				'pattern'=>'fractal', 'patternColor'=>$rock, 'patternScale'=>35., 'patternAmount'=>.8],
+		];
+	}
+
+	private static function duneLayers(array $s, array $recipe): array
+	{
+		$sand = $s['sandColor'];
+		$height = $recipe['heightScale'] ?? Recipe::shapeDefaults('amber-dunes')['heightScale'];
+		$crest = ($recipe['baseBias'] ?? Recipe::shapeDefaults('amber-dunes')['baseBias'])*$height;
+		return [
+			['color'=>$sand, 'pattern'=>'fractal', 'patternColor'=>$s['soilColor'], 'patternScale'=>85., 'patternAmount'=>.32],
+			['color'=>$s['soilColor'], 'slopeLow'=>.105, 'slopeFade'=>.067, 'opacity'=>.52,
+				'pattern'=>'fractal', 'patternColor'=>$sand, 'patternScale'=>34., 'patternAmount'=>.40],
+			['color'=>self::tint($sand,1.13,1.21,1.24), 'low'=>$crest-.12*$height, 'fade'=>.08*$height,
+				'noise'=>.027*$height, 'scale'=>72.] + self::stipple($sand,.86,.40,1.1),
+			['channel'=>'relief', 'relief'=>'pattern', 'strength'=>.028, 'pattern'=>'ripples', 'patternAmount'=>1.,
+				'patternScale'=>.78, 'patternStretch'=>1., 'slopeHigh'=>.065, 'slopeFade'=>.045],
+			['color'=>$s['rockColor'], 'high'=>$crest-.49*$height, 'fade'=>.10*$height, 'noise'=>.035*$height,
+				'scale'=>90., 'slopeHigh'=>.030, 'slopeFade'=>.035, 'flatten'=>1.] + self::stipple($s['soilColor'],.90,.65,.65),
+			['color'=>$s['rockBandColor'], 'high'=>$crest-.61*$height, 'fade'=>.045*$height, 'noise'=>.019*$height,
+				'scale'=>44., 'slopeHigh'=>.009, 'slopeFade'=>.018, 'flatten'=>1.] + self::stipple($s['rockBandColor'],.79,.65,1.4),
+		];
 	}
 
 	/** Recover all seven exposed beds from the same dipping contacts as the elevation field. */

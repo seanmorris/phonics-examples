@@ -6,7 +6,7 @@ namespace TerrainPhonics;
 final class Recipe
 {
 	/** Named sets of coefficients for the shared terrain field. */
-	public const PRESETS = ['coast', 'mountain', 'canyon', 'limestone'];
+	public const PRESETS = ['coast', 'mountain', 'canyon', 'limestone', 'basalt-fjords', 'amber-dunes'];
 
 	/** Parameters are immutable after normalization. */
 	private array $values;
@@ -30,6 +30,20 @@ final class Recipe
 	/** Shape coefficients copied by preset selection and by the legacy recipe loader. */
 	public static function shapeDefaults(string $preset, int $version = 2): array
 	{
+		if($preset === 'basalt-fjords')
+		return [
+			'seed' => 'basalt-fjords', 'baseFrequency' => 1 / 2600, 'heightScale' => 1160., 'baseBias' => .055,
+			'wallHeight' => .70, 'floorWidth' => .038, 'wallWidth' => .40, 'rolling' => .67,
+			'secondary' => .43, 'directionalRise' => .25, 'warpAmplitude' => 445., 'warpFrequency' => 1 / 3450,
+			'terraceSpacing' => 76., 'terraceStrength' => .19, 'detailAmplitude' => 30., 'detailOctaves' => 6,
+		] + self::shapeDefaults('coast', $version);
+		if($preset === 'amber-dunes')
+		return [
+			'seed' => 'amber-dunes', 'baseFrequency' => 1 / 950, 'heightScale' => 435., 'baseBias' => .50,
+			'ridgeHeight' => 1.12, 'ridgeRoundness' => .018, 'rolling' => .38, 'secondary' => .28,
+			'directionalRise' => 0., 'warpAmplitude' => 105., 'warpFrequency' => 1 / 2400,
+			'detailAmplitude' => 2., 'detailOctaves' => 4, 'waterLevel' => -600., 'surround' => 'mountains',
+		] + self::shapeDefaults('coast', $version);
 		if($preset === 'limestone')
 		return [
 			'seed' => 'limestone-plain', 'heightScale' => 3950., 'baseFrequency' => 1 / 3050, 'floorWidth' => .18, 'wallWidth' => .91,
@@ -60,7 +74,7 @@ final class Recipe
 	{
 		$preset = array_key_exists('preset', $values) ? $values['preset'] : 'mountain';
 		$canyon = $preset === 'canyon';
-		$version = array_key_exists('version', $values) ? $values['version'] : ($canyon || $preset === 'limestone' ? 2 : 1);
+		$version = array_key_exists('version', $values) ? $values['version'] : (in_array($preset, ['mountain','coast'], true) ? 1 : 2);
 		$defaults = [
 			'version' => $version
 			, 'seed' => 'first-light'

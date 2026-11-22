@@ -106,7 +106,9 @@ and limits the wider view near the map boundary. Pass `circular: true` to draw a
 Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
 rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone` preset uses a 3,050 m
 base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at
-175 m elevation intervals form sloping benches below the summits. Existing recipes expand to the values of
+175 m elevation intervals form sloping benches below the summits. `basalt-fjords` combines flooded valleys
+with 76 m terraces and rolling headlands. `amber-dunes` uses narrow ridges and rolling relief to give the
+two faces of a dune different slopes. Existing recipes expand to the values of
 their versioned preset. `surround` can be `none`, `sea`, `plateau` or `mountains`. It extends the scenery without
 changing the landscape's playable extent.
 
@@ -259,9 +261,11 @@ the order of `DEFAULTS`, with colors in lower case. `GROUPS` lists the settings 
 `TerrainAppearance::linear($hex)` converts one color to linear RGB and throws `InvalidArgumentException` for anything
 but a six-digit hex string.
 
-Coast starts with grass, exposed rock, shore sand and snow. Its optional coastal bands have zero coverage. Mountain Ridges uses reusable fields for jointed slabs, iron stains, lichen, talus and forest crowns. The forest gives way to meadow and tundra as the ground approaches the snowline. Early canyons have horizontal strata, and current canyons use dipping beds. Limestone Plain blends valley vegetation into weathered outcrops. The five paint inks cover any of these surfaces.
+Coast starts with grass, exposed rock, shore sand and snow. Its optional coastal bands have zero coverage. Mountain Ridges uses reusable fields for jointed slabs, iron stains, lichen, talus and forest crowns. The forest gives way to meadow and tundra as the ground approaches the snowline. Early canyons have horizontal strata, and current canyons use dipping beds. Limestone Plain blends valley vegetation into weathered outcrops.
 
-The table lists what each setting changes in each preset. A preset ignores the settings with an empty cell.
+Basalt Fjords exposes dark lava beds on steep faces, with moss on gentler slopes and gravel along the shore. Amber Dunes puts fine wind ripples on sand and flattens them where gravel or salt covers the basin floor. Each preset has an editable surface stack, and the five paint inks cover any of these surfaces.
+
+The table lists the appearance settings for the coastal, mountain and canyon recipes.
 
 | Setting | Coast | Mountain | Version-one canyon | Canyon |
 | --- | --- | --- | --- | --- |
