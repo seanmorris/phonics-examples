@@ -14,16 +14,17 @@ final class RoadsideDetail
 		foreach($roads as $road) {
 			$samples = $road['_road']['samples'];
 			[$ax,,$az] = $samples[0];
+			// Include the whole authored grading shoulder, even on a wide embankment.
+			$inner = max($road['width']/2+24.,$road['_road']['radius']);
+			$outer = $inner+24.;
 			// Short chords follow bends without indexing every grading kernel.
 			$last = array_key_last($samples);
 			foreach($samples as $i => [$bx,,$bz]) {
 				$dx = $bx-$ax; $dz = $bz-$az;
 				$squared = $dx*$dx+$dz*$dz;
 				if($squared == 0. || ($squared < 12**2 && $i !== $last)) continue;
-				$half = $road['width']/2;
-				$outer = $half+48.;
 				$segment = count($this->segments);
-				$this->segments[] = [$ax,$az,$dx,$dz,1./$squared,$half+24.,$outer];
+				$this->segments[] = [$ax,$az,$dx,$dz,1./$squared,$inner,$outer];
 				$scale = self::CELL*self::TILE;
 				$x0 = (int)floor((min($ax,$bx)-$outer)/$scale);
 				$x1 = (int)floor((max($ax,$bx)+$outer)/$scale);
@@ -72,22 +73,29 @@ final class RoadsideDetail
 	public function sampleWindow(array $window): array
 	{
 		[$x,$z,$size] = $window;
-		$bytes = str_repeat("\0",$size*$size);
+		$bytes = '';
 		$left = $top = $size; $right = $bottom = -1;
+		$empty = str_repeat("\0",$size);
+		// Copy the cached tiles a row at a time. A midrange window can cover a kilometer,
+		// most of which contains no road.
 		for($j=0; $j<$size; $j++) {
 			$row = $z+$j;
 			$tz = (int)floor($row/self::TILE);
-			if(!isset($this->buckets[$tz])) continue;
-			for($i=0; $i<$size; $i++) {
+			if(!isset($this->buckets[$tz])) { $bytes .= $empty; continue; }
+			for($i=0; $i<$size; $i+=$count) {
 				$col = $x+$i;
 				$tx = (int)floor($col/self::TILE);
-				if(!isset($this->buckets[$tz][$tx])) continue;
+				$offset = $col-$tx*self::TILE;
+				$count = min(self::TILE-$offset,$size-$i);
+				if(!isset($this->buckets[$tz][$tx])) { $bytes .= str_repeat("\0",$count); continue; }
 				$tile = $this->tiles[$tz][$tx] ??= $this->tile($tx,$tz);
-				$v = $tile[($row-$tz*self::TILE)*self::TILE+($col-$tx*self::TILE)];
-				if($v === "\0") continue;
-				$bytes[$j*$size+$i] = $v;
-				$left = min($left,$i); $right = max($right,$i);
-				$top = min($top,$j); $bottom = max($bottom,$j);
+				$strip = substr($tile,($row-$tz*self::TILE)*self::TILE+$offset,$count);
+				$bytes .= $strip;
+				$first = strspn($strip,"\0");
+				if($first === $count) continue;
+				$left = min($left,$i+$first);
+				$right = max($right,$i+strlen(rtrim($strip,"\0"))-1);
+				$top = min($top,$j); $bottom = $j;
 			}
 		}
 		return [$bytes,$right<0 ? null : [($x+$left-1)*self::CELL,($z+$top-1)*self::CELL,

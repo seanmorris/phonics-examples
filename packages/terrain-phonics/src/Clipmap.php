@@ -18,10 +18,9 @@ final class Clipmap
 	private array $roads = [], $roadTexture = [], $roadOverlays = [], $lastAtlas = [];
 	private int $roadOverlayBuilds = 0;
 	private ?RoadsideDetail $roadside = null;
-	private array $roadsideTexture = [], $roadsideWindow = [];
-	private ?array $roadsideBounds = null, $roadsideRect = null;
-	private int $finePad = 0, $roadsideSize = 0;
-	private float $parentRadius = 0.;
+	// Road mask windows and their occupied bounds are cached independently at each spacing.
+	private array $roadsideTextures = [], $roadsideSizes = [], $roadsideWindows = [], $roadsideBounds = [];
+	private array $roadsideRects = [], $capacities = [];
 	private int $roadBytes = 0;
 	// Parent normals sample two cells beyond the drawn grid.
 	private const HALO = 2;
@@ -165,9 +164,9 @@ final class Clipmap
 		{
 			glUniform4i($p->location('uRoadGrid'), 0, 0, 0, 0);
 			glDeleteTextures(1, $this->roadTexture);
-			if($this->roadsideTexture) glDeleteTextures(1,$this->roadsideTexture);
-			$this->roadsideTexture = $this->roadTexture = $this->lastAtlas = $this->roadOverlays = [];
-			$this->roadBytes = $this->roadsideSize = 0;
+			foreach($this->roadsideTextures as $texture) glDeleteTextures(1,$texture);
+			$this->roadsideTextures = $this->roadsideSizes = $this->roadTexture = $this->lastAtlas = $this->roadOverlays = [];
+			$this->roadBytes = 0;
 			return;
 		}
 		$atlas = RoadAtlas::build($roads, $extent, $this->roadOverlays);
@@ -196,20 +195,23 @@ final class Clipmap
 	}
 
 	/** Left/right strips plus top/bottom strips over the shared X interval. Half-open integer rectangles. */
-	public static function exposed(int $x, int $z, int $n, ?array $old, ?int $oldSize = null): array
+	public static function exposed(int $x, int $z, int $n, ?array $old, ?int $oldSize = null,
+		?int $rows = null, ?int $oldRows = null): array
 	{
-		if($old === null) return [[$x,$z,$x+$n,$z+$n]];
+		$rows ??= $n;
+		if($old === null) return [[$x,$z,$x+$n,$z+$rows]];
 		$oldSize ??= $n;
+		$oldRows ??= $oldSize;
 		[$ox,$oz] = $old;
 		$l = max($x,$ox); $t = max($z,$oz);
-		$r = min($x+$n,$ox+$oldSize); $b = min($z+$n,$oz+$oldSize);
-		if($r <= $l || $b <= $t) return [[$x,$z,$x+$n,$z+$n]];
+		$r = min($x+$n,$ox+$oldSize); $b = min($z+$rows,$oz+$oldRows);
+		if($r <= $l || $b <= $t) return [[$x,$z,$x+$n,$z+$rows]];
 
 		$rects = [];
-		if($x < $l) $rects[] = [$x,$z,$l,$z+$n];
-		if($r < $x+$n) $rects[] = [$r,$z,$x+$n,$z+$n];
+		if($x < $l) $rects[] = [$x,$z,$l,$z+$rows];
+		if($r < $x+$n) $rects[] = [$r,$z,$x+$n,$z+$rows];
 		if($z < $t) $rects[] = [$l,$z,$r,$t];
-		if($b < $z+$n) $rects[] = [$l,$b,$r,$z+$n];
+		if($b < $z+$rows) $rects[] = [$l,$b,$r,$z+$rows];
 		return $rects;
 	}
 
@@ -359,7 +361,7 @@ final class Clipmap
 			$n = $level['n'];
 			$cells = $level['cells'];
 			$l = max($x, $ox); $r = min($x + $w, $ox + $cells) - 1;
-			$f = max($z, $oz); $b = min($z + $h, $oz + $cells) - 1;
+			$f = max($z, $oz); $b = min($z + $h, $oz + $level['rows']) - 1;
 
 			if($l > $r || $f > $b)
 			{
@@ -469,11 +471,10 @@ final class Clipmap
 		return $size;
 	}
 
-	/** Extra fine cells on each side, within the texture already allocated at the driving quality. */
+	/** Maximum roadside extension in cells. The four driving rings share the same world-space mask. */
 	public static function roadsidePad(int $span, float $step): int
 	{
-		$spare = self::storageSize($span)-$span-1-2*self::HALO;
-		return 2*(int)floor(min(24./$step,$spare/2)/2);
+		return $step > 8. ? 0 : 2*(int)floor(min($span/2,48.,384./$step)/2);
 	}
 
 	/** Grow the fine draw rectangle only into road coverage and the parent's unmorphed interior.
@@ -506,9 +507,8 @@ final class Clipmap
 		$roads = $changed ? $land->roads() : $this->roads;
 		if($changed && $roads !== $this->roads) {
 			$this->roadside = null;
-			$this->roadsideWindow = []; $this->roadsideBounds = null;
+			$this->roadsideWindows = $this->roadsideBounds = [];
 		}
-		$this->finePad = 0;
 		$previousFocus = $this->fineFocus;
 		$this->fineFocus = null;
 		if($detailFocus !== null) {
@@ -520,44 +520,46 @@ final class Clipmap
 			$this->fineFocus = [$camera->position[0] + $scale*$dx, $camera->position[2] + $scale*$dz];
 		}
 		$count = count($spans);
-		$origins = [];
+		$origins = $coverage = $sizes = $capacities = $masks = [];
+		$previousRects = $this->roadsideRects;
+		$this->roadsideRects = [];
 
 		foreach($spans as $l => $span)
 		{
 			$s = $step * (2 ** $l);
-			$centerX = $l === 0 ? ($this->fineFocus[0] ?? $camera->position[0]) : $camera->position[0];
-			$centerZ = $l === 0 ? ($this->fineFocus[1] ?? $camera->position[2]) : $camera->position[2];
-			$margin = intdiv($span, 2) + self::HALO;
-			$origins[$l] = [
-				2 * (int)floor($centerX / (2 * $s)) - $margin
-				, 2 * (int)floor($centerZ / (2 * $s)) - $margin
-			];
-		}
+			$focus = $l === 0 && $this->fineFocus ? $this->fineFocus : [$camera->position[0],$camera->position[2]];
+			$x = 2*(int)floor($focus[0]/(2*$s))-intdiv($span,2);
+			$z = 2*(int)floor($focus[1]/(2*$s))-intdiv($span,2);
+			$coverage[$l] = [$x,$z];
+			$origins[$l] = [$x-self::HALO,$z-self::HALO];
+			$pad = $detailFocus !== null && $roads && $l < 4 && isset($spans[$l+1]) ? self::roadsidePad($span,$s) : 0;
+			$parentSpace = isset($spans[$l+1]) ? 2*($spans[$l+1]/2-self::transition($spans[$l+1])-3) : 0.;
+			// Reserve storage at boarding, so driving into a cut never discards a resident level.
+			// The parent lattice bounds the maximum rectangle even with the fine grid's forward lead.
+			$maxSpan = $pad ? max($span,min($span+2*$pad,(int)ceil(2*$parentSpace)+2)) : $span;
+			$capacities[$l] = self::storageSize($maxSpan);
+			$regular = $pad || ($l === 0 && $detailFocus !== null) ? $span+1+2*self::HALO : $capacities[$l];
+			$sizes[$l] = [$regular,$regular];
+			if(!$pad) continue;
 
-		$previousRect = $this->roadsideRect;
-		$this->roadsideRect = null;
-		$mask = null;
-		$pad = $detailFocus !== null && $roads && isset($spans[1]) ? self::roadsidePad($spans[0],$step) : 0;
-		if($pad > 0) {
 			$this->roadside ??= new RoadsideDetail($roads);
-			$window = RoadsideDetail::window($this->fineFocus,($spans[0]/2+$pad+2)*$step);
-			if($window !== $this->roadsideWindow) {
-				[$mask,$this->roadsideBounds] = $this->roadside->sampleWindow($window);
-				$this->roadsideWindow = $window;
+			$window = RoadsideDetail::window($focus,($span/2+$pad+2)*$s);
+			if($window !== ($this->roadsideWindows[$l] ?? null)) {
+				[$bytes,$this->roadsideBounds[$l]] = $this->roadside->sampleWindow($window);
+				if($this->roadsideBounds[$l] !== null) $masks[$l] = $bytes;
+				$this->roadsideWindows[$l] = $window;
 			}
-			$this->parentRadius = 2*($spans[1]/2-self::transition($spans[1])-3);
-			if($this->roadsideBounds !== null)
-				$this->roadsideRect = self::roadsideRect($origins[0],$spans[0],$pad,$step,
-					$this->roadsideBounds,$camera->position,$this->parentRadius);
-			if($this->roadsideRect !== null) {
-				$this->finePad = $pad;
-				$origins[0][0] -= $pad;
-				$origins[0][1] -= $pad;
-			}
+			if($this->roadsideBounds[$l] === null) continue;
+			$rect = self::roadsideRect($origins[$l],$span,$pad,$s,$this->roadsideBounds[$l],$camera->position,$parentSpace);
+			if($rect === null) continue;
+			$this->roadsideRects[$l] = $rect;
+			[$left,$top,$right,$bottom] = $rect;
+			$origins[$l] = [$left-self::HALO,$top-self::HALO];
+			$sizes[$l] = [$right-$left+1+2*self::HALO,$bottom-$top+1+2*self::HALO];
 		}
-		$gridChanged = $this->spans !== $spans || $origins !== array_column($this->levels, 'origin');
-		if(!$changed && !$this->pending && !$gridChanged && $mask === null)
-			return $this->fineFocus !== $previousFocus || $this->roadsideRect !== $previousRect;
+		$gridChanged = $this->spans !== $spans || $this->roadsideRects !== $previousRects
+			|| $origins !== array_column($this->levels, 'origin') || $coverage !== array_column($this->levels,'base');
+		if(!$changed && !$this->pending && !$gridChanged && !$masks) return $this->fineFocus !== $previousFocus;
 
 		$previous = glGetIntegerv(GL_FRAMEBUFFER_BINDING);
 		glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffer[0]);
@@ -572,17 +574,21 @@ final class Clipmap
 		try
 		{
 			glActiveTexture(GL_TEXTURE0);
-			if($mask !== null && $this->roadsideBounds !== null) {
-				if(!$this->roadsideTexture) glGenTextures(1,$this->roadsideTexture);
-				self::texture($this->roadsideTexture[0]);
-				glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-				$n = $this->roadsideWindow[2];
-				if($n === $this->roadsideSize)
+			foreach($masks as $l=>$mask) {
+				if(!isset($this->roadsideTextures[$l])) {
+					$ids = [];
+					glGenTextures(1,$ids);
+					$this->roadsideTextures[$l] = $ids;
+					self::texture($ids[0]);
+					glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+					glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+				} else glBindTexture(GL_TEXTURE_2D,$this->roadsideTextures[$l][0]);
+				$n = $this->roadsideWindows[$l][2];
+				if($n === ($this->roadsideSizes[$l] ?? 0))
 					glTexSubImage2D(GL_TEXTURE_2D,0,0,0,$n,$n,GL_RED,GL_UNSIGNED_BYTE,$mask);
 				else {
 					glTexImage2D(GL_TEXTURE_2D,0,GL_R8,$n,$n,0,GL_RED,GL_UNSIGNED_BYTE,$mask);
-					$this->roadsideSize = $n;
+					$this->roadsideSizes[$l] = $n;
 				}
 			}
 			if($changed) $this->generate($land);
@@ -611,13 +617,13 @@ final class Clipmap
 			// A full rebuild queues every edited texel again, so earlier entries would only repeat the work.
 			if($changed && $region === null) $this->paintQueue = [];
 
-			if($this->spans !== $spans)
+			if($this->spans !== $spans || $this->capacities !== $capacities)
 			{
 				// Changing the near footprint can usually reuse every other toroidal texture.
 				// Keep pending paint for those levels and for the fixed overview.
 				$resident = array_fill(0, $count, []);
 				foreach($this->levels as $i=>$level) {
-					if($level && isset($spans[$i]) && self::storageSize($spans[$i]) === $level['n'])
+					if($level && isset($capacities[$i]) && $capacities[$i] === $level['n'])
 						$resident[$i] = $level;
 					else self::release($level);
 				}
@@ -625,6 +631,7 @@ final class Clipmap
 					static fn($entry) => $entry[0] === -1 || !empty($resident[$entry[0]])));
 				$this->levels = $resident;
 				$this->spans = $spans;
+				$this->capacities = $capacities;
 			}
 
 			$half = $this->recipe['worldSize'] / 2;
@@ -642,15 +649,13 @@ final class Clipmap
 			for($l = $count - 1; $l >= 0; $l--)
 			{
 				$level = $this->levels[$l];
-				$n = $level['n'] ?? self::storageSize($spans[$l]);
-				// The expanded near grid can straddle a power-of-two allocation boundary. Generate
-				// just its vertices and normal halo; the remaining texture padding is never sampled.
-				$cells = $l === 0 && $detailFocus !== null ? $spans[$l] + 1 + 2*(self::HALO+$this->finePad) : $n;
+				$n = $capacities[$l];
+				[$cells,$rows] = $sizes[$l];
 				$origin = $level['origin'] ?? null;
 				$needsFull = $origin === null
 					|| ($changed && $region === null)
 					|| abs($origin[0] - $origins[$l][0]) >= $cells
-					|| abs($origin[1] - $origins[$l][1]) >= $cells;
+					|| abs($origin[1] - $origins[$l][1]) >= $rows;
 
 				if($needsFull && $newLevel)
 				{
@@ -665,7 +670,8 @@ final class Clipmap
 
 				$newLevel = $newLevel || $needsFull;
 				$s = $step * (2 ** $l);
-				$this->refresh($this->levels[$l], $origins[$l], $s, 0., $changed, $region, $l, $cells);
+				$this->refresh($this->levels[$l], $origins[$l], $s, 0., $changed, $region, $l, $cells, $rows);
+				$this->levels[$l]['base'] = $coverage[$l];
 			}
 
 			// The finest level surrounds the camera, so its edits come first; the overview goes last.
@@ -694,17 +700,19 @@ final class Clipmap
 		, ?array $region
 		, int $key
 		, int $cells
+		, ?int $rows = null
 	): void {
+		$rows ??= $cells;
 		[$x,$z] = $origin;
 		$refill = $changed && $region === null;
-		$rects = self::exposed($x, $z, $cells, $refill ? null : $level['origin'], $level['cells'] ?? null);
+		$rects = self::exposed($x, $z, $cells, $refill ? null : $level['origin'], $level['cells'] ?? null, $rows, $level['rows'] ?? null);
 
 		if(!$refill && $changed && $region && $level['origin'] !== null)
 		{
 			$l = max($x, (int)ceil(($region[0] - $offset) / $step));
 			$r = min($x + $cells, (int)floor(($region[2] - $offset) / $step) + 1);
 			$f = max($z, (int)ceil(($region[1] - $offset) / $step));
-			$b = min($z + $cells, (int)floor(($region[3] - $offset) / $step) + 1);
+			$b = min($z + $rows, (int)floor(($region[3] - $offset) / $step) + 1);
 
 			if($l < $r && $f < $b) $rects[] = [$l,$f,$r,$b];
 		}
@@ -712,6 +720,7 @@ final class Clipmap
 		$level['origin'] = $origin;
 		$level['step'] = $step;
 		$level['cells'] = $cells;
+		$level['rows'] = $rows;
 		$this->fill($level, $rects, $step, $offset, $key);
 	}
 
@@ -759,18 +768,17 @@ final class Clipmap
 		[$ox,$oz] = $level['origin'];
 		$x = $ox + self::HALO; $z = $oz + self::HALO;
 		$s = $level['step']; $span = $this->spans[$index];
-		$flank = $index === 0 ? $this->roadsideRect : null;
-		glUniform1f($p->location('uRoadsidePad'),$flank ? $this->finePad : 0.);
+		$flank = $this->roadsideRects[$index] ?? null;
+		glUniform1f($p->location('uRoadsidePad'),$flank ? self::roadsidePad($span,$s) : 0.);
 		if($flank) {
 			[$x,$z,$right,$bottom] = $flank;
 			glUniform2i($p->location('uRingMax'),$right,$bottom);
-			[$ox,$oz,$n] = $this->roadsideWindow;
+			[$ox,$oz,$n] = $this->roadsideWindows[$index];
 			glUniform3f($p->location('uRoadsideUV'),(.5-$ox)/$n,(.5-$oz)/$n,1./($n*RoadsideDetail::CELL));
-			glUniform3f($p->location('uParentSafe'),$camera->position[0]/$s,$camera->position[2]/$s,$this->parentRadius);
+			glUniform3f($p->location('uParentSafe'),$camera->position[0]/$s,$camera->position[2]/$s,
+				2*($this->spans[$index+1]/2-self::transition($this->spans[$index+1])-3));
 			glActiveTexture(GL_TEXTURE0 + 10);
-			glBindTexture(GL_TEXTURE_2D,$this->roadsideTexture[0]);
-		} elseif($index === 0) {
-			$x += $this->finePad; $z += $this->finePad;
+			glBindTexture(GL_TEXTURE_2D,$this->roadsideTextures[$index][0]);
 		}
 		glUniform1i($p->location('uRoadsideMask'),$flank ? 10 : 7);
 		glUniform2i($p->location('uRingMin'), $x, $z);
@@ -801,8 +809,8 @@ final class Clipmap
 		$s = $level['step'];
 		$left = (int)floor($bounds[0]/$s); $top = (int)floor($bounds[1]/$s);
 		$right = (int)ceil($bounds[2]/$s); $bottom = (int)ceil($bounds[3]/$s);
-		$x = $level['origin'][0] + self::HALO + $this->finePad; $z = $level['origin'][1] + self::HALO + $this->finePad;
-		[$l,$t,$r,$b] = $this->roadsideRect ?? [$x,$z,$x+$this->spans[0],$z+$this->spans[0]];
+		$x = $level['origin'][0] + self::HALO; $z = $level['origin'][1] + self::HALO;
+		[$l,$t,$r,$b] = $this->roadsideRects[0] ?? [$x,$z,$x+$this->spans[0],$z+$this->spans[0]];
 		if($left < $l || $top < $t || $right > $r || $bottom > $b) return false;
 		if($this->recipe['surround'] === 'none')
 		{
@@ -841,12 +849,12 @@ final class Clipmap
 
 			[$ox,$oz] = $level['origin'];
 			$span = $this->spans[$index];
-			$offset = self::HALO + ($index === 0 ? $this->finePad : 0);
+			$offset = self::HALO;
 			$x = $ox + $offset;
 			$z = $oz + $offset;
 			$r = $x + $span;
 			$b = $z + $span;
-			if($index === 0 && $this->roadsideRect) [$x,$z,$r,$b] = $this->roadsideRect;
+			if(isset($this->roadsideRects[$index])) [$x,$z,$r,$b] = $this->roadsideRects[$index];
 			$s = $level['step'];
 
 			if($inner === null) $rects = [[$x,$z,$r,$b]];
@@ -1007,7 +1015,7 @@ final class Clipmap
 		if($fixedSpan !== null) $span = max(1., min($extent, $fixedSpan));
 		elseif(!$wide && $localView !== null) $span = max(1.,min($span,$localView));
 		$level = $this->overview;
-		$localSpan = 0; $localPad = 0;
+		$localSpan = 0;
 
 		foreach($this->levels as $index => $resident)
 		{
@@ -1018,7 +1026,6 @@ final class Clipmap
 			if($resident['step'] >= $this->overview['step']) break;
 			$level = $resident;
 			$localSpan = $this->spans[$index];
-			$localPad = $index === 0 ? $this->finePad : 0;
 
 			if($level['step'] * $localSpan >= $span * 1.5) break;
 		}
@@ -1030,8 +1037,8 @@ final class Clipmap
 
 		glUniform4f(
 			$p->location('uLocal')
-			, ($level['origin'][0] + self::HALO + $localPad) * $step
-			, ($level['origin'][1] + self::HALO + $localPad) * $step
+			, ($level['base'][0] ?? $level['origin'][0]+self::HALO) * $step
+			, ($level['base'][1] ?? $level['origin'][1]+self::HALO) * $step
 			, $step
 			, $localSpan
 		);
@@ -1075,13 +1082,13 @@ final class Clipmap
 		$texels = ($this->overview['n'] ?? 0) ** 2;
 
 		foreach($this->levels as $level) $texels += ($level['n'] ?? 0) ** 2;
-		$coverage = [];
+		$coverage = $roadside = [];
 		foreach($live as $index => $level)
 		{
-			[$left,$front] = $level['origin'];
+			[$left,$front] = $level['base'];
 			$step = $level['step'];
-			$offset = self::HALO + ($index === 0 ? $this->finePad : 0);
-			$coverage[] = [($left + $offset) * $step, ($front + $offset) * $step, $this->spans[$index] * $step, $step];
+			if(isset($this->roadsideRects[$index])) $roadside[$index] = array_map(static fn($v) => $v*$step,$this->roadsideRects[$index]);
+			$coverage[] = [$left * $step, $front * $step, $this->spans[$index] * $step, $step];
 		}
 
 		return [
@@ -1092,15 +1099,15 @@ final class Clipmap
 			, 'cameraSpacing' => $spacing
 			, 'finestVisibleSpacing' => $spacing
 			, 'visibleCoverage' => $coverage
-			, 'roadsideCoverage' => $spacing !== null && isset($live[0]) && $this->roadsideRect
-				? array_map(static fn($v) => $v*$spacing,$this->roadsideRect) : null
+			, 'roadsideCoverage' => $roadside[0] ?? null
+			, 'roadsideRings' => $roadside
 			, 'heightTexelsWritten' => $this->texels
 			, 'editUploadBytes' => $this->uploads
 			, 'triangleShadowGeneration' => $this->shadows?->generation ?? 0
 			, 'roadOverlayBuilds' => $this->roadOverlayBuilds
 			, 'roadTextureBytes' => $this->roadBytes
 			, 'meshBytes' => 0
-			, 'terrainTextureBytes' => 256 + $this->roadBytes + $this->roadsideSize**2 + ($this->packed ? 8 : 20) * $texels
+			, 'terrainTextureBytes' => 256 + $this->roadBytes + array_sum(array_map(static fn($size) => $size**2,$this->roadsideSizes)) + ($this->packed ? 8 : 20) * $texels
 			, 'proceduralVertexBytes' => 0
 			, 'packedHeight' => $this->packed
 		];
@@ -1108,7 +1115,7 @@ final class Clipmap
 
 	public function close(): void
 	{
-		if($this->roadsideTexture) glDeleteTextures(1,$this->roadsideTexture);
+		foreach($this->roadsideTextures as $texture) glDeleteTextures(1,$texture);
 		foreach($this->levels as $level) self::release($level);
 		self::release($this->overview);
 		if($this->roadTexture) glDeleteTextures(1, $this->roadTexture);

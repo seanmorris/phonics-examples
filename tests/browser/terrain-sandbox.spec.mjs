@@ -1140,11 +1140,11 @@ test('a package run marks its terrain-hidden pickup and reveals smoke above the 
 	expect(errors).toEqual([]);
 });
 
-test('the car extends the fine clipmap beside a graded road and drops the extension off road', async({page}) => {
+test('the car refines roadside banks through the middle rings and releases the near grid off road', async({page}) => {
 	await page.setViewportSize({width:720,height:460});
 	await boot(page);
-	const cut = fixture({history:[[{type:'road',points:[[0,-8,-180],[0,-8,180]],width:18,shoulder:6}]],revision:1});
-	Object.assign(cut.landscape.recipe,{worldSize:1024,spacing:1});
+	const cut = fixture({history:[[{type:'road',points:[[0,-8,-900],[0,-8,900]],width:18,shoulder:6}]],revision:1});
+	Object.assign(cut.landscape.recipe,{worldSize:2048,spacing:1});
 	Object.assign(cut.settings,{waterLevel:-40,quality:1});
 	cut.camera = {position:[0,8,0],yaw:0,pitch:-.25};
 	await load(page,cut);
@@ -1152,6 +1152,18 @@ test('the car extends the fine clipmap beside a graded road and drops the extens
 	await press(page,'car');
 	await expect.poll(async()=>(await status(page)).renderer.roadsideCoverage).not.toBeNull();
 	const near = (await status(page)).renderer;
+	expect(near.roadsideRings).toHaveLength(4);
+	for(const i of [1,2,3]) {
+		const [baseX,baseZ,width,spacing] = near.visibleCoverage[i];
+		const [left,top,right,bottom] = near.roadsideRings[i];
+		expect(spacing).toBe(2**i);
+		expect(top).toBeLessThan(baseZ);
+		expect(bottom).toBeGreaterThan(baseZ+width);
+		if(i>=2) { // The straight road extends north/south. Its banks fit inside the regular width.
+			expect(left).toBe(baseX);
+			expect(right).toBe(baseX+width);
+		}
+	}
 	const [x,z,span] = near.visibleCoverage[0];
 	const [left,top,right,bottom] = near.roadsideCoverage;
 	expect(left).toBeLessThanOrEqual(x);

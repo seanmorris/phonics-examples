@@ -96,7 +96,7 @@ levels. Coarse levels draw first after a jump or context restore, and finer leve
 wider midrange grids to hold detail on visible cliffs. Transition weights follow the continuous camera
 position. The fine and coarse grids share interpolated heights and normals where their coverage meets.
 
-Call `update()` before `render()`. For a ground vehicle, pass a world-space `[x, z]` look-ahead point as the third argument to `update()`. This widens the finest grid by about a third and shifts its center toward the point by up to one sixth of the new width. Beside a graded road, the finest grid reaches up to 24 meters farther on steep banks. The transition tapers with distance from the pavement and meets the next grid at its ordinary height. Level ground follows the usual distance transition.
+Call `update()` before `render()`. For a ground vehicle, pass a world-space `[x, z]` look-ahead point as the third argument to `update()`. This widens the finest grid by about a third and shifts its center toward the point by up to one sixth of the new width. Beside a graded road, the four nearest driving grids with spacing up to eight meters retain steep banks and cut lips farther into the approach. Each transition spreads over the available distance to the next grid. The expanded rectangles follow the bounds of nearby roads, and only newly exposed rows or columns need new height samples. Level ground follows the usual distance transition.
 
 The caller owns frame presentation. Call `restore()` after context loss and
 `close()` when unloading. `stats()` reports resident levels, pending work, texture bytes, and edit uploads.

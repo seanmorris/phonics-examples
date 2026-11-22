@@ -39,6 +39,13 @@ vec3 clipNormal(ivec2 c, float morph) {
 	if(any(notEqual(odd,ivec2(0)))) parent=.5*(parent+clipNormalAt(c+edge,2));
 	return morph>=1. ? parent : mix(clipNormalAt(c,1),parent,morph);
 }
+// Linear through the middle of the approach, with a quadratic ease over each end eighth.
+float roadsideFade(float start,float end,float distanceToEye) {
+	float t=clamp((distanceToEye-start)/(end-start),0.,1.);
+	float q=min(t,1.-t);
+	float halfRamp=(q<.125 ? 4.*q*q : q-.0625)/.875;
+	return t<.5 ? halfRamp : 1.-halfRamp;
+}
 float clipMorph(ivec2 c) {
 	if(!uHasParent) return 0.;
 	vec2 distanceToEye=abs(vec2(c)-uEyeCell);
@@ -52,16 +59,24 @@ float clipMorph(ivec2 c) {
 	// The mask stays fixed to the spline as the window scrolls. Its outermost triangles
 	// are already on the parent plane before either grid moves to its next pair of cells.
 	float outer=edge+uRoadsidePad;
-	float width=uMorphWidth+.35*uRoadsidePad;
+	// Spread the height change across the approach, including the 2, 4 and 8 m rings.
+	// Each ramp still finishes before the draw boundary exchanges any triangles.
+	float start=edge;
 	vec2 parentDistance=abs(vec2(c)-uParentSafe.xy);
 	float safe=uParentSafe.z-5.;
-	float extended=max(smoothstep(outer-width,outer,radius),
-		smoothstep(safe-width,safe,max(parentDistance.x,parentDistance.y)));
+	float extended=max(roadsideFade(start,outer,radius),
+		roadsideFade(min(start,safe-uMorphWidth),safe,max(parentDistance.x,parentDistance.y)));
 	if(extended>=base) return base;
 	float roadside=textureLod(uRoadsideMask,vec2(c)*uGridStep*uRoadsideUV.z+uRoadsideUV.xy,0.).r;
 	if(roadside<=0.) return base;
 	// Roughly 14% to 55% grade. The level pavement and open valley use their ordinary morph.
 	float bank=smoothstep(.01,.125,1.-clipNormalAt(c,1).y);
+	// A cut lip can have a level tangent while lying far from its coarse triangle.
+	ivec2 edgeOffset=ivec2(c.x&1,-(c.y&1));
+	if(bank<1. && any(notEqual(edgeOffset,ivec2(0)))) {
+		float residual=abs(heightAt(c)-.5*(heightAt(c-edgeOffset)+heightAt(c+edgeOffset)));
+		bank=max(bank,smoothstep(.03,.25,residual/uGridStep));
+	}
 	return mix(base,extended,roadside*bank);
 }
 float clipHeight(ivec2 c,float morph) {
