@@ -9,7 +9,7 @@ final class RoadAtlas
 
 	/**
 	 * Pack normalized road operations in application order. All pointers address RGBA texels. Each sample stores
-	 * the high parts of X and Z, height and tangent X; tangent Z, grade, bank and opacity; the low parts of X and Z and the segment vector; then the start station, arc length and end flags.
+	 * the high parts of X and Z, height and tangent X; tangent Z, grade, bank and opacity; the low parts of X and Z and the segment vector; then the dash phase, phase increment, end flags and optional continuation table address.
 	 * @param array $roads Committed splines with their derived sample planes.
 	 * @param float $extent Width of the editable square in meters.
 	 * @return array Float texture bytes, dimensions and spatial directory coordinates.
@@ -31,7 +31,7 @@ final class RoadAtlas
 
 		$used = []; $rebuilt = 0;
 		foreach($roads as $op) {
-			$key = hash('sha256',serialize(Edits::serialize($op)));
+			$key = hash('sha256',serialize([Edits::serialize($op),$op['_road']['ink'] ?? null]));
 			if(!isset($cache[$key]) && !isset($used[$key])) {
 				$cache[$key] = ['bytes'=>self::overlay($op)];
 				$rebuilt++;
@@ -88,6 +88,19 @@ final class RoadAtlas
 		$inner2 = $road['half'] ** 2;
 		$material = array_search($op['material'], self::MATERIALS, true);
 		$data .= pack('g4', $inner2, $radius ** 2 - $inner2, $op['crown'], $material === false ? 0 : $material + 1);
+		// Only end samples address this table. Interior texels use the normal projection without a second search.
+		$extra = ''; $pointers = [];
+		$ends = 1 + 4*count($road['samples']);
+		foreach($road['ink']['ends'] ?? [] as $end=>$segments) {
+			$pointers[$end] = $ends + 1 + intdiv(strlen($extra),16);
+			$extra .= pack('g4',count($segments),0,0,0);
+			foreach($segments as [$x,$z,$vx,$vz,$phase,$length,$cap]) {
+				[, $hx] = unpack('g',pack('g',$x));
+				[, $hz] = unpack('g',pack('g',$z));
+				$extra .= pack('g8',$hx,$hz,$vx,$vz,$x-$hx,$z-$hz,fmod($phase,self::MARK_CYCLE),$length);
+				$extra .= pack('g4',$cap,0,0,0);
+			}
+		}
 		foreach($road['samples'] as $i => [$x, $y, $z, $tx, $tz, $grade, $bank, $opacity])
 		{
 			// A 32-bit float rounds an absolute coordinate by up to 1 mm at 30 km, and the kernel weights turn that
@@ -96,14 +109,14 @@ final class RoadAtlas
 			[, $xHigh] = unpack('g', pack('g', $x));
 			[, $zHigh] = unpack('g', pack('g', $z));
 			$next = $road['samples'][$i+1] ?? $road['samples'][$i];
-			$station = $road['stations'][$i];
-			$length = ($road['stations'][$i+1] ?? $station)-$station;
+			$station = RoadMarkings::station($road,$i);
+			$length = isset($road['stations'][$i+1]) ? RoadMarkings::station($road,$i+1)-$station : 0.;
 			$last = count($road['samples'])-1;
 			$caps = ($i === 0 ? 1 : 0) | ($i+1 === $last ? 2 : 0) | ($i === $last ? 4 : 0);
 			$data .= pack('g16', $xHigh, $zHigh, $y, $tx, $tz, $grade, $bank, $opacity,
-				$x - $xHigh, $z - $zHigh, $next[0]-$x, $next[2]-$z, fmod($station,self::MARK_CYCLE), $length, $caps, 0.);
+				$x - $xHigh, $z - $zHigh, $next[0]-$x, $next[2]-$z, fmod($station,self::MARK_CYCLE), $length, $caps, $caps && $pointers ? $ends : 0.);
 		}
-		return $data;
+		return $pointers ? $data.pack('g4',$pointers[0] ?? 0,$pointers[1] ?? 0,0,0).$extra : $data;
 	}
 
 	private static function coverageTiles(array $road, float $cell, int $minTile, int $maxTile, int $blocksAcross): array
@@ -127,7 +140,7 @@ final class RoadAtlas
 	}
 
 	// Sixteen pairs of 10-foot dashes and gaps, interpolated as an angle across wraparound.
-	public const MARK_CYCLE = 16*2*3.048;
+	public const MARK_CYCLE = 16*2*RoadMarkings::DASH_METERS;
 
 	/** Pack lateral position in half-widths and cyclic distance along the road into 24 exact bits. */
 	public static function markCode(array $mark): int
@@ -135,7 +148,7 @@ final class RoadAtlas
 		[$cross,$station] = $mark;
 		$half = $mark[2] ?? 4.;
 		$lateral = max(1,min(8191,(int)floor(($cross/$half)*2048+.5)+4096));
-		$phase = (int)floor(fmod($station,self::MARK_CYCLE)*(2048/self::MARK_CYCLE)+.5) & 2047;
+		$phase = (int)floor(fmod($mark[3] ?? $station,self::MARK_CYCLE)*(2048/self::MARK_CYCLE)+.5) & 2047;
 		return ($lateral << 11) | $phase;
 	}
 

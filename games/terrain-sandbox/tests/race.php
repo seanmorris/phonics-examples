@@ -1160,6 +1160,24 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		expect($terrain !== null && $generator->course === $original && $generator->landscape->revision()===0,
 			'Road preparation leaves the original course and terrain together until publication');
 		$generator->publishLandscape($terrain);
+		// Each fitted section ends in a rounded earthwork cap. Check the markings on the
+		// actual centerline and both road edges, on either side of every default canyon join.
+		foreach($terrain->roads() as $section) {
+			$samples = $section['_road']['samples'];
+			[$x,,$z,$tx,$tz] = $samples[0];
+			$terrain->material($x-.1*$tx,$z-.1*$tz,$offset,$before);
+			$terrain->material($x+.1*$tx,$z+.1*$tz,$offset,$after);
+			expect($before !== null && $after !== null,'The dash crosses the join, including the lap closure');
+			$phaseStep = abs((TerrainPhonics\RoadAtlas::markCode($after)&2047) - (TerrainPhonics\RoadAtlas::markCode($before)&2047));
+			expect(min($phaseStep,2048-$phaseStep) <= 6,'Dash phase is continuous across the section boundary');
+			foreach([...array_slice($samples,0,4), ...array_slice($samples,-4)] as [$x,,$z,$tx,$tz]) {
+				foreach([-21.,-17.65,0.,17.65,21.] as $lane) {
+					$terrain->material($x-$tz*$lane,$z+$tx*$lane,$offset,$mark);
+					expect($mark !== null && abs($mark[0]-$lane)<.15,
+						"The joined section carries the correct lateral paint coordinate at ($x, $z), lane $lane");
+				}
+			}
+		}
 	}
 	else expect($terrain === null, 'Switching to water reuses the same graded route');
 	$active = $generator->status()['circuit'];

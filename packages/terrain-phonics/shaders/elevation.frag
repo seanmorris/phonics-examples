@@ -251,11 +251,41 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 		if(params.w == 5. && (influence >= .5 || !painted) && closest <= markReach*markReach) {
 			vec4 station = roadRecord(nearest+3);
 			int caps = int(station.z);
-			bool pastEnd = (caps&4)!=0 || ((caps&1)!=0 && mark.y==0. && mark.z<0.)
-				|| ((caps&2)!=0 && mark.y==1. && mark.z>0.);
+			int end = (caps&1)!=0 && mark.y==0. ? 0 :
+				((caps&4)!=0 || ((caps&2)!=0 && mark.y==1.) ? 1 : -1);
+			bool pastEnd = (caps&4)!=0 || (end==0 && mark.z<0.) || (end==1 && mark.z>0.);
+			float along = station.x+mark.y*station.y;
+			if(end>=0 && station.w!=0.) {
+				int continuation = int(roadRecord(header.x+int(station.w))[end]);
+				if(continuation!=0) {
+					pastEnd = false;
+					if((caps&4)!=0) {
+						vec4 pos = roadRecord(nearest);
+						vec2 v = (world-pos.xy)-roadRecord(nearest+2).xy;
+						if(pos.w*v.y-roadRecord(nearest+1).x*v.x<0.) mark.x = -mark.x;
+					}
+					int ptr = header.x+continuation;
+					int count = int(roadRecord(ptr++).x);
+					for(int k=0; k<count; k++) {
+						vec4 segment = roadRecord(ptr++);
+						vec4 phase = roadRecord(ptr++);
+						int cap = int(roadRecord(ptr++).x);
+						vec2 v = (world-segment.xy)-phase.xy;
+						float f = dot(v,segment.zw)/max(1e-12,dot(segment.zw,segment.zw));
+						float t = clamp(f,0.,1.);
+						v -= t*segment.zw;
+						float d2 = dot(v,v);
+						if(d2 >= closest) continue;
+						closest = d2;
+						mark.x = (segment.z*v.y-segment.w*v.x<0. ? -1. : 1.)*sqrt(d2);
+						along = phase.z+t*phase.w;
+						pastEnd = (cap==1 && f<0.) || (cap==2 && f>1.);
+					}
+				}
+			}
 			if(!pastEnd) {
 				int crossCode = int(clamp(floor(mark.x/halfWidth*2048.+.5)+4096.,1.,8191.));
-				int phase = int(floor(mod(station.x+mark.y*station.y,97.536)*(2048./97.536)+.5))&2047;
+				int phase = int(floor(mod(along,97.536)*(2048./97.536)+.5))&2047;
 				int code = (crossCode<<11)|phase;
 				marking = vec3(code>>16,(code>>8)&255,code&255)/255.;
 			}

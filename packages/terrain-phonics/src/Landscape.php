@@ -396,7 +396,8 @@ final class Landscape implements TerrainSurface
 		for($i=0,$n=max(count($this->operations),count($other->operations)); $i<$n; $i++) {
 			$a = $this->operations[$i] ?? null;
 			$b = $other->operations[$i] ?? null;
-			if($a && $b && Edits::serialize($a) === Edits::serialize($b)) {
+			if($a && $b && Edits::serialize($a) === Edits::serialize($b)
+				&& ($a['_road']['ink'] ?? null) === ($b['_road']['ink'] ?? null)) {
 				// All other edits are pointwise. A later smoothing brush may read its changed neighbor.
 				if($bounds === null || $a['type'] !== 'smooth') continue;
 				$reach = $a['sampleStep'];
@@ -501,7 +502,7 @@ final class Landscape implements TerrainSurface
 			$all = self::replay($all, $normalized);
 			$result->operationLimit($all);
 			$result->history[] = array_map([Edits::class, 'serialize'], $normalized);
-			if(count($result->history) === $value['cursor']) $result->operations = $all;
+			if(count($result->history) === $value['cursor']) $result->operations = RoadMarkings::connect($all);
 		}
 
 		$result->cursor = $value['cursor'];
@@ -1340,7 +1341,7 @@ final class Landscape implements TerrainSurface
 		$this->queueNext = $this->queueCount = 0;
 		$this->recentKey = -1;
 		$this->recentTile = null;
-		$this->operations = $operations;
+		$this->operations = RoadMarkings::connect($operations);
 		$this->heightEdits = null;
 		$this->range = $range;
 		$this->version = $version;

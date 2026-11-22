@@ -522,17 +522,44 @@ final class Edits
 			$dx -= $t*$vx; $dz -= $t*$vz;
 			$d = $dx*$dx+$dz*$dz;
 			if($d >= $nearest) continue;
-			$nearest = $d; $offset = [$dx,$dz];
-			$dot = $dx*$vx+$dz*$vz;
-			if($i === $last || ($i === 0 && $t === 0. && $dot < 0.) || ($i+1 === $last && $t === 1. && $dot > 0.)) {
-				$mark = null;
-				continue;
-			}
-			$arc = $road['stations'][$i];
-			$mark = [($vx*$dz-$vz*$dx < 0. ? -1. : 1.)*sqrt($d),
-				$arc+$t*($road['stations'][$i+1]-$arc), $road['half']];
+			$nearest = $d; $offset = [$dx,$dz]; $index = $i; $fraction = $t;
+			$side = $vx*$dz-$vz*$dx; $dot = $dx*$vx+$dz*$vz;
 		}
-		if($nearest > $road['markReach']**2) $mark = null;
+		$mark = null;
+		if($offset === null || $nearest > $road['markReach']**2) return $offset;
+		$end = $index === 0 && $fraction === 0. ? 0 :
+			($index === $last || ($index+1 === $last && $fraction === 1.) ? 1 : null);
+		$extension = $road['ink']['ends'][$end] ?? [];
+		if(!$extension && ($index === $last || ($end === 0 && $dot < 0.) || ($end === 1 && $dot > 0.))) return $offset;
+		$after = min($last,$index+1);
+		$station = $road['stations'][$index];
+		$along = $station+$fraction*($road['stations'][$after]-$station);
+		if(isset($road['ink'])) {
+			$phase = RoadMarkings::station($road,$index);
+			$phase += $fraction*(RoadMarkings::station($road,$after)-$phase);
+		}
+		if($index === $last) {
+			[, , ,$tx,$tz] = $road['samples'][$last];
+			$side = $tx*$offset[1]-$tz*$offset[0];
+		}
+		// A grading cap can overlap its neighbor by the full shoulder. Project its paint
+		// onto the continuing segments, leaving the cap's height influence intact.
+		$past = false;
+		foreach($extension as [$ax,$az,$vx,$vz,$start,$length,$cap,$arc,$run]) {
+			$dx = $x-$ax; $dz = $z-$az;
+			$t = ($dx*$vx+$dz*$vz)/max(1e-12,$vx*$vx+$vz*$vz);
+			$f = max(0.,min(1.,$t));
+			$dx -= $f*$vx; $dz -= $f*$vz;
+			$d = $dx*$dx+$dz*$dz;
+			if($d >= $nearest) continue;
+			$nearest = $d; $offset = [$dx,$dz]; $side = $vx*$dz-$vz*$dx;
+			$along = $arc+$f*$run; $phase = $start+$f*$length;
+			$past = ($cap === 1 && $t < 0.) || ($cap === 2 && $t > 1.);
+		}
+		if(!$past) {
+			$mark = [($side < 0. ? -1. : 1.)*sqrt($nearest),$along,$road['half']];
+			if(isset($road['ink'])) $mark[] = $phase;
+		}
 		return $offset;
 	}
 }
