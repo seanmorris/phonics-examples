@@ -16,6 +16,8 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 
 **Arctic Meltwater** opens over a channel between snow-covered shelves. Look along the banks for exposed blue ice and dark moraine gravel. **Tidal Lagoon** has low sand cays with scrub on their crests. Board the watercraft from either opening view. In the lagoon, the clear shallows reveal pale sand and patches of seagrass. **Red Mesas** opens on a red sand plain facing a long flat-topped mesa in low side light, with more buttes on the horizon. Its walls rise 340 m in soft red bands. **Heather Moor** looks down on a peat lochan from a heather ridge. Straw grass fills the hollows, rust bracken patches the steeper slopes and granite shows where the ground steepens most.
 
+**Salt Pans** opens on a pale salt flat with shallow brine pools and a distant rim of dusty foothills. **Cinder Highlands** faces a volcanic cone across a charcoal lava field. Look for lichen and pale ash on the lower ground, then rusty scoria on the upper slopes.
+
 ## Fly over the landscape
 
 Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and **Q/E** to descend or climb. Hold **Shift** to fly at 300 meters per second. The Flight slider changes the ordinary movement speed.

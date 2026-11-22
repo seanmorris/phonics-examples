@@ -2272,6 +2272,9 @@ for(const [first, second] of [
 	, [{label: 'Red Mesas', name: 'red-mesas', layer: 'cap-rock'}
 		, {label: 'Heather Moor', name: 'heather-moor', layer: 'peat-banks'}
 	]
+	, [{label: 'Salt Pans', name: 'salt-pans', layer: 'salt-crust'}
+		, {label: 'Cinder Highlands', name: 'cinder-highlands', layer: 'oxidized-scoria'}
+	]
 ]) {
 	test(
 		`${first.label} and ${second.label} are available as landscapes and as independent surface presets`

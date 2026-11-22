@@ -214,6 +214,8 @@ final class SurfaceLayers
 			'arctic-meltwater' => self::arcticLayers($s),
 			'tidal-lagoon' => self::lagoonLayers($s),
 			'heather-moor' => self::moorLayers($s),
+			'salt-pans' => self::saltLayers($s,$r),
+			'cinder-highlands' => self::cinderLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -250,6 +252,8 @@ final class SurfaceLayers
 			'tidal-lagoon' => ['Reef floor','Shoal sand','Seagrass beds','Shell beach','Salt grass','Cay scrub','Sand ripples'],
 			'amber-dunes' => ['Dune sand','Slip faces','Crest sand','Wind ripples','Desert pavement','Salt crust'],
 			'heather-moor' => ['Heather','Moor grass','Bracken','Peat banks','Granite tors'],
+			'salt-pans' => ['Alluvial fans','Rim outcrops','Lake clay','Salt crust','Silt stains','Brine margin'],
+			'cinder-highlands' => ['Lava clinker','Lichen islands','Ash drifts','Oxidized scoria','Lava ribs'],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
 		foreach($rows as $i=>&$row) {
@@ -446,6 +450,47 @@ final class SurfaceLayers
 				, 'patternScale' => 4.
 				, 'patternStretch' => 1.6
 			] + self::exposedRock($s)
+		];
+	}
+
+	/** Dry salt follows the basin floor. Only the wet margin follows the water when it rises. */
+	private static function saltLayers(array $s, array $recipe): array
+	{
+		$recipe += Recipe::shapeDefaults('salt-pans');
+		$floor = $recipe['baseBias']*$recipe['heightScale'];
+		return [
+			['color'=>$s['sandColor'], 'pattern'=>'fractal', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>72., 'patternAmount'=>.74, 'patternStretch'=>1.25],
+			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'gravel', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>3., 'patternAmount'=>.52],
+			['color'=>$s['soilColor'], 'high'=>$floor+12., 'fade'=>10., 'noise'=>4., 'scale'=>62.,
+				'pattern'=>'fractal', 'patternColor'=>$s['sandColor'], 'patternScale'=>52., 'patternAmount'=>.68],
+			['color'=>$s['snowColor'], 'high'=>$floor+3., 'fade'=>3.5, 'noise'=>2.8, 'scale'=>68.,
+				'slopeHigh'=>.002, 'slopeFade'=>.004, 'pattern'=>'fractures', 'patternColor'=>$s['soilColor'],
+				'patternScale'=>2.5, 'patternStretch'=>.35, 'patternAmount'=>.83],
+			['parent'=>'salt-crust', 'color'=>$s['snowColor'], 'pattern'=>'fractal', 'patternColor'=>$s['sandColor'],
+				'patternScale'=>36., 'patternStretch'=>1., 'patternAmount'=>.86, 'opacity'=>.38],
+			['color'=>self::tint($s['soilColor'],.76,.85,.86), 'datum'=>'water', 'high'=>.30, 'fade'=>.95,
+				'noise'=>.45, 'scale'=>32., 'slopeHigh'=>.009, 'slopeFade'=>.016, 'reflectivity'=>.25,
+				'roughness'=>.37, 'pattern'=>'fractal', 'patternColor'=>$s['sandColor'], 'patternScale'=>7., 'patternAmount'=>.42],
+		];
+	}
+
+	/** Dark clinker on the apron, pockets of ash and lichen, and rusty cinders on the cone flanks. */
+	private static function cinderLayers(array $s): array
+	{
+		return [
+			['color'=>$s['rockColor'], 'pattern'=>'gravel', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>1.4, 'patternStretch'=>1., 'patternAmount'=>.90],
+			['color'=>$s['grassColor'], 'high'=>130., 'fade'=>35., 'noise'=>170., 'scale'=>105.,
+				'slopeHigh'=>.012, 'slopeFade'=>.024, 'opacity'=>.45, 'pattern'=>'fractal',
+				'patternColor'=>$s['rockColor'], 'patternScale'=>6., 'patternAmount'=>.85],
+			['color'=>$s['sandColor'], 'high'=>152., 'fade'=>48., 'noise'=>135., 'scale'=>84.,
+				'slopeHigh'=>.028, 'slopeFade'=>.038, 'opacity'=>.36] + self::stipple($s['sandColor'],.61,.58,.85),
+			['color'=>$s['soilColor'], 'low'=>190., 'fade'=>90., 'noise'=>77., 'scale'=>140.,
+				'pattern'=>'fractal', 'patternColor'=>$s['rockBandColor'], 'patternScale'=>43., 'patternAmount'=>.78],
+			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'jointed', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>6., 'patternStretch'=>1.45, 'patternAmount'=>.61, 'opacity'=>.85],
 		];
 	}
 

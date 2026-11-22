@@ -146,6 +146,14 @@ final class TerrainAppearance
 			, 'beachWidth' => 1.8
 			, 'macroVariation' => .6
 		]
+		, 'salt-pans' => [
+			'snowColor'=>'#d1ceca', 'sandColor'=>'#b79e82', 'soilColor'=>'#867068',
+			'rockColor'=>'#756462', 'rockBandColor'=>'#a18e80', 'rockSlopeStart'=>.042, 'rockSlopeEnd'=>.14,
+		]
+		, 'cinder-highlands' => [
+			'rockColor'=>'#323438', 'rockBandColor'=>'#504b48', 'soilColor'=>'#754833',
+			'sandColor'=>'#807570', 'grassColor'=>'#686b52', 'rockSlopeStart'=>.105, 'rockSlopeEnd'=>.25,
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -295,6 +303,14 @@ final class TerrainAppearance
 			, 'roadColor'
 			, 'macroVariation'
 		]
+		, 'salt-pans' => [
+			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
+			'rockSlopeStart', 'rockSlopeEnd',
+		]
+		, 'cinder-highlands' => [
+			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
+			'rockSlopeStart', 'rockSlopeEnd',
+		]
 		, 'heather-moor' => [
 			'grassColor'
 			, 'soilColor'
@@ -422,9 +438,8 @@ final class TerrainAppearance
 			'canyon' => ($recipe['version'] ?? 0) === 2 ? 'canyon' : 'canyon-v1',
 			// Mesas are canyon country seen from the floor: the same bedded walls and dust.
 			'red-mesas' => 'canyon',
-			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon', 'heather-moor' => $recipe[
-				'preset'
-			],
+			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon',
+			'heather-moor', 'salt-pans', 'cinder-highlands' => $recipe['preset'],
 			default => 'coast'
 		};
 	}

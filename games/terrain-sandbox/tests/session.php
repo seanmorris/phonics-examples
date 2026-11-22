@@ -218,7 +218,10 @@ expect($showcase->landscape->recipe()['preset'] === 'coast' && $showcase->status
 $showcase->close();
 
 $fresh = new Session;
-foreach(['red-mesas'=>['cap-rock','Desert dust'],'heather-moor'=>['peat-banks','Moor mist']] as $preset=>[$layer,$air]) {
+foreach([
+	'red-mesas'=>['cap-rock','Desert dust'], 'heather-moor'=>['peat-banks','Moor mist'],
+	'salt-pans'=>['salt-crust','Playa dust'], 'cinder-highlands'=>['oxidized-scoria','Highland haze'],
+] as $preset=>[$layer,$air]) {
 	input($fresh,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
 	[$x,$eye,$z] = $fresh->camera->position;
 	expect($fresh->landscape->recipe()['seed'] === $preset && $eye > $fresh->landscape->height($x,$z) + 20
@@ -226,6 +229,14 @@ foreach(['red-mesas'=>['cap-rock','Desert dust'],'heather-moor'=>['peat-banks','
 		&& $fresh->status()['surfacePreset'] === $preset && $fresh->atmosphere->layers()[0]['name'] === $air,
 		"$preset opens above its own ground with its materials, surface name and air.");
 }
+input($fresh,['actions'=>[['type'=>'surface-layers','preset'=>'salt-pans']]]);
+$reload = new Session;
+$reload->load($fresh->save());
+expect($reload->landscape->recipe()['preset'] === 'cinder-highlands' && $reload->status()['surfacePreset'] === 'salt-pans'
+	&& $reload->activeLayers()->layers === $fresh->activeLayers()->layers
+	&& $reload->atmosphere->layers() === $fresh->atmosphere->layers(),
+	'A saved cinder landscape keeps its imported salt surface and its highland atmosphere.');
+$reload->close();
 $fresh->close();
 
 $waterways = new Session;

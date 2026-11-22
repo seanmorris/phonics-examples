@@ -96,6 +96,8 @@ final class Session
 		'arctic-meltwater' => ['name'=>'Ice haze', 'top'=>225., 'density'=>.020, 'color'=>'#dce5eb'],
 		'tidal-lagoon' => ['name'=>'Humid marine air', 'top'=>640., 'density'=>.046, 'color'=>'#dae3e3'],
 		'red-mesas' => ['name'=>'Desert dust', 'top'=>520., 'density'=>.032, 'color'=>'#e0c0a0'],
+		'salt-pans' => ['name'=>'Playa dust', 'top'=>180., 'density'=>.034, 'color'=>'#dfcfc1'],
+		'cinder-highlands' => ['name'=>'Highland haze', 'top'=>390., 'density'=>.027, 'color'=>'#c0c8ce'],
 		'heather-moor' => ['name'=>'Moor mist', 'top'=>110., 'density'=>.075, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
@@ -128,6 +130,14 @@ final class Session
 			'azimuth'=>120., 'elevation'=>30., 'haze'=>1.1, 'skyColor'=>'#5d7590', 'waterColor'=>'#2c2619',
 			'waterTransparency'=>.35, 'waterReflectivity'=>.78, 'waterFogDensity'=>.25, 'waterChoppiness'=>20.,
 		],
+		'salt-pans' => TerrainAppearance::PRESET_DEFAULTS['salt-pans'] + [
+			'azimuth'=>232., 'elevation'=>25., 'haze'=>.65, 'skyColor'=>'#4874a1', 'hazeColor'=>'#e6d8ca',
+			'waterColor'=>'#668481', 'waterChoppiness'=>7., 'waterTransparency'=>.80,
+			'waterReflectivity'=>.74, 'waterFogDensity'=>.23,
+		],
+		'cinder-highlands' => TerrainAppearance::PRESET_DEFAULTS['cinder-highlands'] + [
+			'azimuth'=>45., 'elevation'=>31., 'haze'=>.67, 'skyColor'=>'#59728b', 'hazeColor'=>'#d1d5d3',
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
@@ -137,6 +147,8 @@ final class Session
 		'arctic-meltwater' => ['x'=>1., 'z'=>.5, 'heading'=>135., 'pitch'=>-.19, 'clearance'=>160., 'minimum'=>0.],
 		'tidal-lagoon' => ['x'=>-.875, 'z'=>-.25, 'heading'=>165., 'pitch'=>-.29, 'clearance'=>85., 'minimum'=>0.],
 		'red-mesas' => ['x'=>1.031, 'z'=>1.406, 'heading'=>255., 'pitch'=>.03, 'clearance'=>30., 'minimum'=>0.],
+		'salt-pans' => ['x'=>.452, 'z'=>.568, 'heading'=>70., 'pitch'=>-.07, 'clearance'=>28., 'minimum'=>0.],
+		'cinder-highlands' => ['x'=>1.32, 'z'=>-1.54, 'heading'=>245., 'pitch'=>.06, 'clearance'=>55., 'minimum'=>0.],
 		'heather-moor' => ['x'=>.115, 'z'=>.346, 'heading'=>225., 'pitch'=>-.10, 'clearance'=>30., 'minimum'=>0.],
 	];
 
@@ -164,7 +176,7 @@ final class Session
 	private int $atmosphereReply = 0;
 	private string $atmosphereOrigin = 'preset';
 	private ?string $materialPreset = null;
-	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor'];
+	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor','salt-pans','cinder-highlands'];
 
 	private static function materialStyle(array $recipe): string
 	{

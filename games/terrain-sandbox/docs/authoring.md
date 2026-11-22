@@ -18,6 +18,8 @@ In **Tidal Lagoon**, the channels are deep enough to launch the jet ski. Follow 
 
 In **Red Mesas**, the mesa walls use the canyon's bedded rock layers, so editing those layers under **Surface** recolors every butte. Lower **Floor width** under **Landscape** for more and larger mesas. In **Heather Moor**, raise the water level to flood more lochans; the peat banks and straw grass follow the new waterline.
 
+In **Salt Pans**, lower **Water level** to drain the shallow pools. The **Brine margin** layer follows the shoreline, while **Salt crust** follows the basin floor. In **Cinder Highlands**, edit **Oxidized scoria** to change the rusty flanks. Adjust the slope limits on **Lava ribs** to expose more dark rock through them.
+
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 

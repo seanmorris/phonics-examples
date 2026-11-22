@@ -15,7 +15,7 @@ final class Recipe
 		, 'amber-dunes'
 		, 'arctic-meltwater'
 		, 'tidal-lagoon'
-		, 'red-mesas', 'heather-moor'
+		, 'red-mesas', 'heather-moor', 'salt-pans', 'cinder-highlands'
 	];
 
 	/** Parameters are immutable after normalization. */
@@ -103,6 +103,26 @@ final class Recipe
 			, 'persistence' => .5
 			, 'waterLevel' => -50.
 			, 'surround' => 'mountains'
+		] + self::shapeDefaults('coast', $version);
+
+		// A wide, nearly level basin floor gives way to alluvial fans and a distant rim.
+		if($preset === 'salt-pans')
+		return [
+			'seed'=>'salt-pans', 'baseFrequency'=>1 / 3450, 'heightScale'=>1300., 'baseBias'=>.004,
+			'floorWidth'=>.24, 'wallWidth'=>.55, 'wallHeight'=>.70, 'rolling'=>.012, 'secondary'=>.009,
+			'directionalRise'=>0., 'warpAmplitude'=>430., 'warpFrequency'=>1 / 1475,
+			'detailAmplitude'=>.95, 'detailOctaves'=>4, 'persistence'=>.43, 'terraceStrength'=>0.,
+			'waterLevel'=>1.8, 'surround'=>'mountains',
+		] + self::shapeDefaults('coast', $version);
+
+		// Rounded cones and long spurs rise through a broken volcanic apron.
+		if($preset === 'cinder-highlands')
+		return [
+			'seed'=>'cinder-highlands', 'baseFrequency'=>1 / 2000, 'heightScale'=>1110., 'baseBias'=>.10,
+			'floorWidth'=>.09, 'wallWidth'=>.74, 'wallHeight'=>.86, 'rolling'=>.32, 'secondary'=>.16,
+			'directionalRise'=>.075, 'warpAmplitude'=>305., 'warpFrequency'=>1 / 1750,
+			'detailAmplitude'=>15., 'detailOctaves'=>6, 'persistence'=>.47, 'terraceStrength'=>0.,
+			'waterLevel'=>-210., 'surround'=>'mountains',
 		] + self::shapeDefaults('coast', $version);
 
 		if($preset === 'arctic-meltwater')
