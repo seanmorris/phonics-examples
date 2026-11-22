@@ -14,53 +14,113 @@ final class TerrainAppearance
 {
 	/** Coast and canyon terrain as it looked before these settings existed, and the mountain material as tuned. */
 	public const DEFAULTS = [
-		'grassColor' => '#55693a', 'soilColor' => '#815f40', 'rockColor' => '#867c6f', 'rockBandColor' => '#af957c',
-		'sandColor' => '#bfaf8b', 'snowColor' => '#eaf1f8', 'roadColor' => '#373b3d',
-		'canyonRustColor' => '#8a4f35', 'canyonShaleColor' => '#6b5546', 'canyonSandstoneColor' => '#b07a4f',
-		'canyonCapColor' => '#c2aa86',
-		'forestColor' => '#1d291b', 'meadowColor' => '#48581f', 'tundraColor' => '#484230', 'graniteColor' => '#565a5c',
-		'stainColor' => '#74605a', 'talusColor' => '#7b7b77',
-
-		'bandSpacing' => 2 * M_PI / .12, 'bandContrast' => 1.0, 'bandSharpness' => 1.0,
-
-		'rockSlopeStart' => .08, 'rockSlopeEnd' => .38, 'beachHeight' => 3.0, 'beachWidth' => 15.0,
-		'snowline' => 340.0, 'snowTransition' => 65.0, 'alpineStart' => -110.0, 'alpineEnd' => -30.0,
-		'snowSlopeStart' => .25, 'snowSlopeEnd' => .65, 'macroVariation' => 1.0, 'treeline' => -150.0,
-		'tundraStart' => -90.0,
-
-		'talusAmount' => .5, 'stainAmount' => .3, 'lichenAmount' => .5,
+		'grassColor' => '#55693a'
+		, 'soilColor' => '#815f40'
+		, 'rockColor' => '#867c6f'
+		, 'rockBandColor' => '#af957c'
+		, 'sandColor' => '#bfaf8b'
+		, 'snowColor' => '#eaf1f8'
+		, 'roadColor' => '#373b3d'
+		, 'canyonRustColor' => '#8a4f35'
+		, 'canyonShaleColor' => '#6b5546'
+		, 'canyonSandstoneColor' => '#b07a4f'
+		, 'canyonCapColor' => '#c2aa86'
+		, 'forestColor' => '#1d291b'
+		, 'meadowColor' => '#48581f'
+		, 'tundraColor' => '#484230'
+		, 'graniteColor' => '#565a5c'
+		, 'stainColor' => '#74605a'
+		, 'talusColor' => '#7b7b77'
+		, 'bandSpacing' => 2 * M_PI / .12
+		, 'bandContrast' => 1.0
+		, 'bandSharpness' => 1.0
+		, 'rockSlopeStart' => .08
+		, 'rockSlopeEnd' => .38
+		, 'beachHeight' => 3.0
+		, 'beachWidth' => 15.0
+		, 'snowline' => 340.0
+		, 'snowTransition' => 65.0
+		, 'alpineStart' => -110.0
+		, 'alpineEnd' => -30.0
+		, 'snowSlopeStart' => .25
+		, 'snowSlopeEnd' => .65
+		, 'macroVariation' => 1.0
+		, 'treeline' => -150.0
+		, 'tundraStart' => -90.0
+		, 'talusAmount' => .5
+		, 'stainAmount' => .3
+		, 'lichenAmount' => .5
 	];
 	/** Starting colors and material thresholds for the named landscapes. */
 	public const PRESET_DEFAULTS = [
 		// Stronger broad variation gives open pasture drier and lusher patches without another noise pattern.
-		'coast' => ['macroVariation'=>2.6],
-		'mountain' => [
-			'forestColor'=>'#22301f', 'meadowColor'=>'#5a6943', 'tundraColor'=>'#5d5a47', 'grassColor'=>'#53663e',
-			'graniteColor'=>'#616b76', 'talusColor'=>'#80847f', 'stainColor'=>'#70615b', 'snowColor'=>'#eaf1f8',
-			'snowline'=>460., 'snowTransition'=>80., 'beachHeight'=>1.2, 'beachWidth'=>4.,
-		],
-		'limestone' => [
-			'grassColor'=>'#566b40', 'rockColor'=>'#8a9193', 'rockBandColor'=>'#a3a8a5', 'sandColor'=>'#a69e87',
-			'snowline'=>3000., 'rockSlopeStart'=>.25, 'rockSlopeEnd'=>.73,
-		],
-		'basalt-fjords' => [
-			'grassColor'=>'#57603f', 'soilColor'=>'#4a463c', 'rockColor'=>'#283039', 'rockBandColor'=>'#454d54',
-			'sandColor'=>'#424951', 'snowColor'=>'#dce6e8', 'snowline'=>820., 'snowTransition'=>140.,
-			'rockSlopeStart'=>.14, 'rockSlopeEnd'=>.32, 'beachHeight'=>1.2, 'beachWidth'=>5.,
-		],
-		'arctic-meltwater' => [
-			'soilColor'=>'#4c5459', 'rockColor'=>'#404c56', 'rockBandColor'=>'#537f95',
-			'sandColor'=>'#60625d', 'snowColor'=>'#c7d2d5', 'grassColor'=>'#555e51',
-			'rockSlopeStart'=>.21, 'rockSlopeEnd'=>.43, 'snowline'=>33., 'snowTransition'=>20.,
-			'snowSlopeStart'=>.075, 'snowSlopeEnd'=>.22,
-		],
-		'tidal-lagoon' => [
-			'grassColor'=>'#364f40', 'soilColor'=>'#485e53', 'rockColor'=>'#4e625d', 'rockBandColor'=>'#6c776f',
-			'sandColor'=>'#a29880', 'beachHeight'=>2.2, 'beachWidth'=>2.4,
-		],
-		'amber-dunes' => [
-			'sandColor'=>'#c59053', 'soilColor'=>'#a1663f', 'rockColor'=>'#765941', 'rockBandColor'=>'#d7c8a4',
-		],
+		'coast' => ['macroVariation' => 2.6]
+		, 'mountain' => [
+			'forestColor' => '#22301f'
+			, 'meadowColor' => '#5a6943'
+			, 'tundraColor' => '#5d5a47'
+			, 'grassColor' => '#53663e'
+			, 'graniteColor' => '#616b76'
+			, 'talusColor' => '#80847f'
+			, 'stainColor' => '#70615b'
+			, 'snowColor' => '#eaf1f8'
+			, 'snowline' => 460.
+			, 'snowTransition' => 80.
+			, 'beachHeight' => 1.2
+			, 'beachWidth' => 4.
+		]
+		, 'limestone' => [
+			'grassColor' => '#566b40'
+			, 'rockColor' => '#8a9193'
+			, 'rockBandColor' => '#a3a8a5'
+			, 'sandColor' => '#a69e87'
+			, 'snowline' => 3000.
+			, 'rockSlopeStart' => .25
+			, 'rockSlopeEnd' => .73
+		]
+		, 'basalt-fjords' => [
+			'grassColor' => '#57603f'
+			, 'soilColor' => '#4a463c'
+			, 'rockColor' => '#283039'
+			, 'rockBandColor' => '#454d54'
+			, 'sandColor' => '#424951'
+			, 'snowColor' => '#dce6e8'
+			, 'snowline' => 820.
+			, 'snowTransition' => 140.
+			, 'rockSlopeStart' => .14
+			, 'rockSlopeEnd' => .32
+			, 'beachHeight' => 1.2
+			, 'beachWidth' => 5.
+		]
+		, 'arctic-meltwater' => [
+			'soilColor' => '#4c5459'
+			, 'rockColor' => '#404c56'
+			, 'rockBandColor' => '#537f95'
+			, 'sandColor' => '#60625d'
+			, 'snowColor' => '#c7d2d5'
+			, 'grassColor' => '#555e51'
+			, 'rockSlopeStart' => .21
+			, 'rockSlopeEnd' => .43
+			, 'snowline' => 33.
+			, 'snowTransition' => 20.
+			, 'snowSlopeStart' => .075
+			, 'snowSlopeEnd' => .22
+		]
+		, 'tidal-lagoon' => [
+			'grassColor' => '#364f40'
+			, 'soilColor' => '#485e53'
+			, 'rockColor' => '#4e625d'
+			, 'rockBandColor' => '#6c776f'
+			, 'sandColor' => '#a29880'
+			, 'beachHeight' => 2.2
+			, 'beachWidth' => 2.4
+		]
+		, 'amber-dunes' => [
+			'sandColor' => '#c59053'
+			, 'soilColor' => '#a1663f'
+			, 'rockColor' => '#765941'
+			, 'rockBandColor' => '#d7c8a4'
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [

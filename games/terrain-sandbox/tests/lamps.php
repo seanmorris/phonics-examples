@@ -329,6 +329,43 @@ namespace
 		'A wreck with the pedal released shows neither, and the car back on its wheels follows its speed again');
 	$wreck->close();
 
+	// In daylight, Auto also lights the headlights where terrain hides the sun from the car. A 60 m mound 45 m toward
+	// the sun (35 degrees up, azimuth 125) stands above the ray from the car, which passes it about 34 m up.
+	$shade = new Session(['worldSize' => 1024, 'heightScale' => 0, 'detailAmplitude' => 0, 'waterLevel' => -5]);
+	$toward = [sin(deg2rad(125.)), cos(deg2rad(125.))];
+	$shade->landscape->queue(['type' => 'raise', 'x' => 45 * $toward[0], 'z' => -300 + 45 * $toward[1], 'radius' => 25, 'amount' => 60]);
+	$shade->landscape->commit();
+	$shade->camera->position = [0, 50, -300]; $shade->camera->yaw = M_PI;
+	input($shade, ['actions' => ['car']]);
+	for($i = 0; $shade->findingCarSite() && $i < 2000; $i++) input($shade, []);
+	$parked = $shade->car->state();
+	expect($shade->mode === 'car' && hypot($parked['x'], $parked['z'] + 300) < 3 && !$shade->headlightsLit(),
+		'The car parks beside the mound with its headlights still off');
+	$lit = null;
+	for($i = 0; $i < 40 && $lit === null; $i++) { hold($shade, 1); if($shade->headlightsLit()) $lit = $i; }
+	expect($lit !== null && $lit < 20 && $shade->status()['headlightsLit'], 'Auto lights the headlights in the mound\'s shadow within a third of a second');
+	// Eyes adapt to the shadow over about a second, so the beams light the ground as they would at dusk.
+	$target = $shade->shadeLampGain();
+	$early = $shade->lampAdaptation();
+	hold($shade, 240);
+	expect($target > 800 && $target < Session::SHADE_LAMP_GAIN && $early < .5 * $target && abs(log($shade->lampAdaptation() / $target)) < .1
+		&& $shade->status()['lampAdaptation'] === $shade->lampAdaptation(),
+		'In the shadow the beams\' gain rises to the shade adaptation over a few seconds');
+	input($shade, ['values' => ['azimuth' => 305]]);
+	hold($shade, 90);
+	expect($shade->headlightsLit(), 'Back in the sun, the headlights stay on for the sensor\'s two-second delay');
+	hold($shade, 60);
+	expect(!$shade->headlightsLit(), 'After two seconds of sun, Auto turns them off');
+	hold($shade, 240);
+	expect($shade->lampAdaptation() < 1.1, 'In the sun the beams\' gain falls back to one');
+	input($shade, ['values' => ['azimuth' => 125, 'headlights' => 'on']]);
+	hold($shade, 240);
+	expect(abs(log($shade->lampAdaptation() / $target)) < .1, 'Switched on, the beams adapt to the shadow too');
+	input($shade, ['values' => ['headlights' => 'off']]);
+	hold($shade, 2);
+	expect(!$shade->headlightsLit() && $shade->lampAdaptation() === 1.0, 'Off keeps them dark in the shadow and drops the gain');
+	$shade->close();
+
 	// Auto lights the headlights while the sun is below 5 degrees. The pods open over 1.2 seconds.
 	$night = park();
 	input($night, ['values' => ['elevation' => 5]]);
@@ -386,7 +423,7 @@ namespace
 	$dark = $night->carLamps(1.0);
 	expect($dark['pods'] === 1.0 && $dark['headlamps'] === 1.0
 		&& count(VehicleModel::spotLights(VehicleModel::lamps(dirname(__DIR__) . '/assets/testarossa/mesh.bin.gz'),
-			$night->carView(1.0)[1] + ['lamps' => $dark], $night->atmosphere->uniforms()['nightVisibility'])) === 2,
+			$night->carView(1.0)[1] + ['lamps' => $dark])) === 2,
 		'On Auto, setting the sun below the horizon while paused opens the pods and lights both beams at once');
 
 	input($night, ['actions' => ['pause']]);
@@ -405,7 +442,7 @@ namespace
 			"L or X steps the switch to $expected");
 		$messages[] = $switch->message;
 	}
-	expect($messages === ['Headlights on.', 'Headlights off.', 'Headlights on Auto: lit while the sun is below 5°.'],
+	expect($messages === ['Headlights on.', 'Headlights off.', 'Headlights on Auto: lit while the sun is below 5° or hidden by terrain.'],
 		'Each step says what the switch now does');
 	input($switch, ['values' => ['headlights' => 'on']]);
 	expect($switch->headlights === 'on' && $switch->headlightsLit() && $switch->message === 'Headlights on.',
@@ -570,7 +607,7 @@ namespace
 		'With the pods closed the headlamps face down into the body and give no beam');
 
 	// The beams become the terrain package's spot lights.
-	$lights = VehicleModel::spotLights($data, $level, night: 1.0);
+	$lights = VehicleModel::spotLights($data, $level);
 	$spots = new TerrainPhonics\SpotLights;
 	$spots->set($lights);
 	expect(count($lights) === 2 && $spots->count() === 2 && $lights[1]['position'] === $beams[1]['position']
@@ -585,7 +622,7 @@ namespace
 		'The nose stops every ray of both beams with the pods open to the first of BEAM_CLEAR, and almost none at the '
 		. 'second');
 	$rising = static fn(float $pods): array => VehicleModel::spotLights($data,
-		['lamps' => ['headlamps' => 1.0, 'pods' => $pods] + $level['lamps']] + $level, night: 1.0);
+		['lamps' => ['headlamps' => 1.0, 'pods' => $pods] + $level['lamps']] + $level);
 	expect($rising(.5) === [] && $rising($hidden) === [],
 		'Half-open pods give no spot lights: the headlamps still face into the nose');
 
@@ -595,40 +632,38 @@ namespace
 
 	$dim = ['lamps' => ['headlamps' => .5, 'pods' => $clear] + $level['lamps']] + $level;
 	$dimBeams = VehicleModel::beams($data, $dim);
-	$dimLights = VehicleModel::spotLights($data, $dim, night: 1.0);
+	$dimLights = VehicleModel::spotLights($data, $dim);
 	expect(abs($dimLights[0]['intensity'] - VehicleModel::BEAM_INTENSITY * .5) < 1e-9
 		&& $dimLights[0]['direction'] === $dimBeams[0]['direction']
 		&& $dimBeams[0]['direction'] !== $beams[0]['direction'],
 		'Clear of the nose, a beam\'s intensity follows the headlamps, and its aim swings with the pods');
 
 	foreach(['dark headlamps' => ['headlamps' => 0.0], 'shut pods' => ['pods' => 0.0]] as $case => $levels)
-		expect(VehicleModel::spotLights($data, ['lamps' => $levels + $level['lamps']] + $level, night: 1.0) === [],
+		expect(VehicleModel::spotLights($data, ['lamps' => $levels + $level['lamps']] + $level) === [],
 			"With $case the car gives no spot lights, so the application clears them");
 	$session->close();
 
-	// The beams make no visible difference in sunlight, so the car sets spot lights only once the sun has set.
+	// Switched-on beams light the ground day and night. By day they keep their physical brightness: about 3,200 lux
+	// five meters ahead, faint beside sunlight and plain in a shadow. Only the night gain changes with the sun.
 	$dusk = park();
 	input($dusk, ['values' => ['headlights' => 'on']]);
 	$beamsAt = static function(float $elevation) use ($dusk, $data): array {
 		input($dusk, ['values' => ['elevation' => $elevation]]);
 		$lamps = hold($dusk, 80)[79]['lamps'];
-		$night = $dusk->atmosphere->uniforms()['nightVisibility'];
-		return [$lamps, $night, VehicleModel::spotLights($data, $dusk->carView(1.0)[1] + ['lamps' => $lamps], $night)];
+		return [$lamps, VehicleModel::spotLights($data, $dusk->carView(1.0)[1] + ['lamps' => $lamps])];
 	};
 
-	[$lamps, $night, $day] = $beamsAt(35);
-	expect($lamps['headlamps'] === 1.0 && $lamps['pods'] === 1.0 && $night === 0.0 && $day === [],
-		'By day the switched-on headlamps glow with the pods open, and the car sets no spot lights');
-	[, $night, $horizon] = $beamsAt(0);
-	expect($night === 0.0 && $horizon === [], 'Nor with the sun on the horizon');
-
-	[, $night, $sunset] = $beamsAt(-.5);
-	expect($night > 0 && count($sunset) === 2, 'Once the sun is below it, both beams light the ground');
+	[$lamps, $day] = $beamsAt(35);
+	expect($lamps['headlamps'] === 1.0 && $lamps['pods'] === 1.0 && count($day) === 2
+		&& $day[0]['intensity'] === VehicleModel::BEAM_INTENSITY,
+		'By day the switched-on headlamps glow with the pods open, and both beams light the ground at full strength');
+	[, $sunset] = $beamsAt(-.5);
+	expect($sunset === $day, 'After sunset the beams are the same lights; only the night gain brightens them');
 
 	input($dusk, ['values' => ['headlights' => 'auto']]);
-	[$lamps, , $low] = $beamsAt(3);
-	expect($dusk->headlightsLit() && $lamps['pods'] === 1.0 && $low === [],
-		'Auto with the sun at 3 degrees opens the pods and lights the headlamps without beams');
+	[$lamps, $low] = $beamsAt(3);
+	expect($dusk->headlightsLit() && $lamps['pods'] === 1.0 && count($low) === 2,
+		'Auto with the sun at 3 degrees opens the pods and lights both beams');
 	$dusk->close();
 
 	echo "Landscape sandbox lamps: $checks checks passed\n";

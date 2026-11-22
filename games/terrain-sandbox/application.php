@@ -54,7 +54,7 @@ $course = null;
 $viewCamera = $session->camera;
 $vehiclePose = null;
 $carLamps = null;
-$spotLights = [];
+$spotLights = [[], 1.0]; // The lights given to the scene and their adaptation gain.
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
@@ -221,14 +221,15 @@ $engine->start(
 		[$viewCamera,$vehiclePose] = $session->view($alpha);
 		// Lamp levels blend between steps like the pose, and a change in either redraws the frame below.
 		if($session->mode === 'car') $vehiclePose['lamps'] = $session->carLamps($alpha);
-		// Lit headlamps light the ground and water from this frame's pose once the sun has set. Daylight, dark lamps
-		// and other modes clear the lights.
-		$lights = $session->mode === 'car' ? VehicleModel::spotLights(
-			$carLamps ??= VehicleModel::lamps(__DIR__ . '/assets/testarossa/mesh.bin.gz'), $vehiclePose,
-			$session->atmosphere->uniforms()['nightVisibility']) : [];
+		// Lit headlamps light the ground and water from this frame's pose, day or night. Dark lamps and other modes
+		// clear the lights.
+		// In a shadow by day, eyes adapted to it see the beams brighter, as they do at night.
+		$lights = $session->mode === 'car' ? [VehicleModel::spotLights(
+			$carLamps ??= VehicleModel::lamps(__DIR__ . '/assets/testarossa/mesh.bin.gz'), $vehiclePose),
+			$session->lampAdaptation()] : [[], 1.0];
 		if($lights !== $spotLights)
 		{
-			$scene->setSpotLights($spotLights = $lights);
+			$scene->setSpotLights(...($spotLights = $lights));
 			$dirty = true;
 		}
 		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->roll,$viewCamera->fov];
@@ -350,7 +351,7 @@ $engine->start(
 		{
 			$status = $session->status() + ['renderer' => $scene->stats() + ($session->course->count() > 0
 					? ['gateDraws' => $gates->drawn, 'gateMs' => $gates->ms] : ['gateDraws' => 0, 'gateMs' => 0.0])
-					+ ['spotLights' => count($spotLights)],
+					+ ['spotLights' => count($spotLights[0])],
 				'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];

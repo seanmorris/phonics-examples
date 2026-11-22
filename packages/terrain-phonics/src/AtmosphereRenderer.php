@@ -137,7 +137,8 @@ final class AtmosphereRenderer
 
 		$physical = $parameters;
 		unset($physical['exposure'], $physical['angularRadius'], $physical['nightGlow'],
-			$physical['nightAmbient'], $physical['nightVisibility'], $physical['skyAmbient'], $physical['skyLight']);
+			$physical['nightAmbient'], $physical['nightVisibility'], $physical['skyAmbient'], $physical['skyLight']
+		);
 		$signature = json_encode($physical, JSON_THROW_ON_ERROR);
 		$changed = false;
 

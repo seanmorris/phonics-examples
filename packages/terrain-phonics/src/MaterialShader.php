@@ -13,11 +13,19 @@ final class MaterialShader
 		'stains'=>'stainCover', 'shore'=>'shore', 'snow'=>'snow',
 	];
 	private const SHADE = [
-		'plain'=>'vec3(1.+.16*macro,1.+.12*macro,1.+.05*macro)', 'meadow'=>'vec3((1.+.5*tuft)*meadowShade)',
-		'shrubs'=>'vec3(mix(1.,crowns,.6)*meadowShade)', 'tundra'=>'vec3((1.+.3*clump+.4*tuft+.3*rill)*groundShade)',
-		'lowland'=>'vec3((1.+.2*blotch+.3*tuft)*groundShade)', 'crowns'=>'vec3(crowns*(1.+.3*blotch+.3*clump)*groundShade)',
-		'talus'=>'vec3(blocks*boulders*(1.+.15*blotch))', 'blocks'=>'vec3(blocks*boulders)',
-		'joints'=>'jointTint', 'slab-tone'=>'vec3(tone)', 'lichen'=>'lichenTint', 'sand'=>'vec3(1.-.16*stipple)', 'snow'=>'vec3(1.-.35*stipple)',
+		'plain' => 'vec3(1.+.16*macro,1.+.12*macro,1.+.05*macro)'
+		, 'meadow' => 'vec3((1.+.5*tuft)*meadowShade)'
+		, 'shrubs' => 'vec3(mix(1.,crowns,.6)*meadowShade)'
+		, 'tundra' => 'vec3((1.+.3*clump+.4*tuft+.3*rill)*groundShade)'
+		, 'lowland' => 'vec3((1.+.2*blotch+.3*tuft)*groundShade)'
+		, 'crowns' => 'vec3(crowns*(1.+.3*blotch+.3*clump)*groundShade)'
+		, 'talus' => 'vec3(blocks*boulders*(1.+.15*blotch))'
+		, 'blocks' => 'vec3(blocks*boulders)'
+		, 'joints' => 'jointTint'
+		, 'slab-tone' => 'vec3(tone)'
+		, 'lichen' => 'lichenTint'
+		, 'sand' => 'vec3(1.-.16*stipple)'
+		, 'snow' => 'vec3(1.-.35*stipple)'
 	];
 	private const RELIEF = [
 		'facets'=>'facet', 'crowns'=>'vec3(offset.x,0.,offset.y)*.5*crownRelief*cellFade',
@@ -47,9 +55,14 @@ final class MaterialShader
 				|| (!$chart && !in_array($row['relief'],['pattern','none'],true));
 			$advanced = $advanced || $fields || $row['channel'] !== 'color';
 		}
-		$head = 'vec3 materialSurface(vec3 pos,vec3 normal,vec3 relative,float footprint,float water,float macro,inout vec3 litNormal'
-			.($reflective ? ',out vec2 finish' : '').'){';
-		if(!$advanced) return $head.'return layerSurface(pos,normal,footprint,water)*vec3(1.+.16*macro,1.+.12*macro,1.+.05*macro);}';
+
+		$head =
+			'vec3 materialSurface(vec3 pos,vec3 normal,vec3 relative,float footprint,float water,float macro,inout vec3 litNormal'
+			. ($reflective ? ',out vec2 finish' : '') . '){';
+
+		if(!$advanced)
+		return $head . 'return layerSurface(pos,normal,footprint,water)*vec3(1.+.16*macro,1.+.12*macro,1.+.05*macro);}';
+
 		$glsl = [$head, 'float slope=1.-max(0.,normal.y);'];
 		if($fields) {
 			$glsl[] = 'vec3 weights=pow(abs(normal),vec3(4.)); weights/=dot(weights,vec3(1.));';

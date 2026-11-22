@@ -221,14 +221,12 @@ final class VehicleModel
 	 * Build the spot lights for Scene::setSpotLights() from a car's headlamps.
 	 * @param array $lamps The car's pods and headlamps from lamps().
 	 * @param array $pose Pose as draw() takes it, with the levels from Session::carLamps() under 'lamps'.
-	 * @param float $night Atmosphere::uniforms()['nightVisibility'], zero while the sun is at or above the horizon.
-	 * The beams make no visible difference in sunlight, so a sky without night gets no spot lights.
-	 * @return list<array> One light per beam from beams(), its intensity scaled by the beam's level. Empty by day,
-	 * while the headlamps are dark, or while the nose still hides them.
+	 * @return list<array> One light per beam from beams(), its intensity scaled by the beam's level. Empty while the
+	 * headlamps are dark or the nose still hides them. By day the beams keep their physical brightness: they barely
+	 * show in sunlight but light the ground in a shadow.
 	 */
-	public static function spotLights(array $lamps, array $pose, float $night): array
+	public static function spotLights(array $lamps, array $pose): array
 	{
-		if($night <= 0) return [];
 		$beams = self::beams($lamps, $pose);
 		if(!$beams || $beams[0]['level'] <= 0) return [];
 
