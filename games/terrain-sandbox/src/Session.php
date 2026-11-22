@@ -607,7 +607,10 @@ final class Session
 			$graded = $this->editable();
 			foreach($circuit->road as $road) $graded->queue($road);
 			$graded->commit();
-			$course = $circuit->course($graded,$this->gateShapes,$this->settings['gateLaps'],$flooded);
+			// The search placed these gates on an identical graded copy of this landscape; reuse them when the laps match.
+			$placed = $circuit->placed[($flooded ? 'flooded' : 'dry') . ':' . $this->settings['gateLaps']] ?? null;
+			$course = $placed !== null ? clone $placed
+				: $circuit->course($graded,$this->gateShapes,$this->settings['gateLaps'],$flooded);
 			$this->circuitCommit = [$circuit,$course,$flooded];
 			$this->message = 'Preparing the graded circuit…';
 			return;

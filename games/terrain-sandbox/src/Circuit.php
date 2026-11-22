@@ -78,7 +78,26 @@ final class Circuit
 		return $result;
 	}
 
+	/** Place the circuit's gates in one go; placing() spreads the same work out. */
 	public function course(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, bool $legacyWidth = false): Course
+	{
+		$placing = $this->placing($landscape, $shapes, $laps, $flooded, $legacyWidth);
+		foreach($placing as $_) {}
+		return $placing->getReturn();
+	}
+
+	/**
+	 * Courses the search placed on its graded copy, keyed by variant and laps, so applying the circuit can take them
+	 * rather than place every gate again.
+	 */
+	public array $placed = [];
+
+	/**
+	 * Place the circuit's gates one at a time, yielding after each, so a search or a frame can pause between them.
+	 * Placing a graded circuit's gates took 0.7 s in one step.
+	 * @return \Generator Returns the Course.
+	 */
+	public function placing(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, bool $legacyWidth = false): \Generator
 	{
 		if($flooded && $this->floodedLevel === null) throw new \RuntimeException('This circuit has no flooded variant.');
 		$course = new Course($shapes);
@@ -99,6 +118,7 @@ final class Circuit
 				=> ($px-$x)**2 + ($pz-$z)**2 <= $deck ? $ground($px,$pz) : min($ground($px,$pz), $base);
 			$placed = $course->place($role, $kind, $x, $base, $z, $yaw, $laps, $width,$height,$fit);
 			if($placed['refused'] !== null) throw new \RangeException('The circuit needs more room between its gates.');
+			yield;
 		}
 		return $course;
 	}

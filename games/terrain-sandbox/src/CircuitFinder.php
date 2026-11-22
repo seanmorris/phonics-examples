@@ -311,11 +311,13 @@ final class CircuitFinder
 			$wet = ceil(2*($high+3.+$this->swell))/2;
 			$circuit = new Circuit($points,$this->dryLevel,$wet<min(10000.,$lake ? INF : $peak-3.) ? $wet : null,
 				$stations,$area,$roads,$reliefFound,$graded->height(...$points[0]));
-			$road = $circuit->course($graded,$shapes,$laps,false);
+			$road = yield from $circuit->placing($graded,$shapes,$laps,false);
 			[$sx,$sz,$heading] = $circuit->approach();
 			if((new Car)->checkedSite($graded,$this->dryLevel+$this->swell,$sx,$sz,$heading,$road->posts()) === null)
 				return null;
-			if($circuit->floodedLevel !== null) $circuit->course($graded,$shapes,$laps,true);
+			$circuit->placed["dry:$laps"] = $road;
+			if($circuit->floodedLevel !== null)
+				$circuit->placed["flooded:$laps"] = yield from $circuit->placing($graded,$shapes,$laps,true);
 			return $circuit;
 		}
 		catch(\RuntimeException | \InvalidArgumentException) { return null; }

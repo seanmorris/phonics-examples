@@ -1068,6 +1068,11 @@ expect($preview['preview'] && $generator->course === $original && $preview['floo
 	'The default canyon previews both variants without replacing a course');
 expect($preview['length']>12000 && $preview['featureArea']>10000000 && $preview['gradeWidth']===36.
 	&& $generator->landscape->revision()===0, 'Preview finds a major plateau and leaves the original ground intact');
+// The search places both variants' gates on its graded copy, a gate at a time, and keeps them for apply to reuse.
+$placed = array_keys((fn() => $this->circuitPreview->placed)->call($generator));
+$laps = (int)$generator->settings['gateLaps'];
+expect(in_array("dry:$laps", $placed, true) && in_array("flooded:$laps", $placed, true),
+	'The search keeps the gates it placed for applying either variant');
 
 $gateLine = [];
 foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
