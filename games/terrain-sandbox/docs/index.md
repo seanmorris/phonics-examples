@@ -137,7 +137,7 @@ The overhead arrow shows its underside. Straight ahead points down the screen, a
 
 ### Generate a circuit
 
-In free flight, open **Roads → Circuit generator**. Set **Minimum feature height difference** to a positive value to circle high ground or a negative value to circle a lake below the road. For example, **+200 m** in the default Canyon country looks for a feature whose high point rises at least 200 m above the road. **−60 m** in the default Mountain Ridges looks for a road at least 60 m above a lake at the current water level.
+In free flight, open **Roads → Circuit generator**. Set **Minimum feature height difference** to a positive value to circle high ground or a negative value to circle a lake below the road. For example, **+200 m** in the default Canyon looks for a feature whose high point rises at least 200 m above the road. **−60 m** in the default Mountain Ridges looks for a road at least 60 m above a lake at the current water level.
 
 Leave **Start elevation** blank to put the start near the camera, or enter an absolute terrain elevation to put it on a straight within half a meter of that height. This sets the height of the start station. The rest of the road follows the route's natural elevation. Select **Find circuit near camera** to preview a match. Large height differences favor a regional search that follows connected corridors and places checkpoints after junctions where possible.
 

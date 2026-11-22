@@ -12,6 +12,31 @@ export function activate({module, canvas})
 	const green = '#59ff86', red = '#ff5148';
 	let acquiringId = null, contactFrame = null;
 
+	/**
+	 * Locate the collapsed Landscape Lab button in the top corner, in layout units from the center.
+	 * @return {?{left: number, bottom: number}} Its left edge less 10 CSS pixels, and its bottom edge plus 10;
+	 * null when no collapsed button shares the top of the frame.
+	 */
+	function labButton()
+	{
+		const sandbox = screen.closest('.terrain-sandbox') ?? screen.parentElement;
+		const button = sandbox?.querySelector('.terrain-panel:not([open])');
+
+		if(!button) return null;
+
+		const box = screen.getBoundingClientRect(), place = button.getBoundingClientRect();
+
+		if(!box.width || place.top - box.top > box.height/4) return null;
+
+		const unit = Math.min(screen.width/800, screen.height/720);
+		const sx = screen.width/box.width, sy = screen.height/box.height;
+
+		return {
+			left: ((place.left - box.left - 10)*sx - screen.width/2)/unit
+			, bottom: ((place.bottom - box.top + 10)*sy - screen.height/2)/unit
+		};
+	}
+
 	function draw(frame)
 	{
 		if(!frame)
@@ -231,16 +256,23 @@ export function activate({module, canvas})
 
 			const seconds = Math.floor(range.elapsed);
 
+			// The collapsed Landscape Lab button keeps its corner. The clock ends just left of it when it clears the
+			// compass tape, which reaches 180 units from the center, and otherwise drops below the button.
+			const lab = labButton();
+			const beside = lab !== null && Math.min(end, lab.left) - 125 > 180;
+			const clock = beside ? Math.min(end, lab.left) : end;
+			const clockTop = lab === null || beside ? top : Math.max(top, lab.bottom + 14);
+
 			text(
 				String(Math.floor(seconds/60)).padStart(2, '0') + "' " + String(seconds%60).padStart(2, '0') + '"'
-				, end
-				, top
+				, clock
+				, clockTop
 				, 27
 				, green
 				, 'right'
 			);
 
-			text('FLIGHT TIME', end, top+22, 12, green, 'right');
+			text('FLIGHT TIME', clock, clockTop+22, 12, green, 'right');
 
 			for(let i = 0; i<2; i++)
 			{
