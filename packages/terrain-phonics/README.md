@@ -83,7 +83,7 @@ A road stores ordered control points as `[x,y,z]` in meters. The default tangent
 
 For interactive grading, advance `queueSteps($road)` within the frame budget. It yields while sampling and indexing a long spline and queues the entire road once it finishes. Call `commit()` to publish the edit. One landscape supports 65,536 active road samples across all its roads.
 
-At a junction, operations apply in authoring order. Roads should agree on their crossing elevation. Both terrain renderers draw a 40 cm ochre centerline along graded pavement, with alternating 10-foot dashes and 10-foot gaps measured along the curve. A road-color brush paints solid pavement.
+At a junction, operations apply in authoring order. Roads should agree on their crossing elevation. Both terrain renderers draw a 40 cm ochre centerline along graded pavement, with alternating 10-foot dashes and 10-foot gaps measured along the curve. A solid white stripe 24 cm wide runs along each side, centered 35 cm inside the authored road edge. The markings narrow to fit very small roads and glow faintly in their own colors after sunset. A road-color brush paints solid pavement.
 Bridges remain separate meshes. There is one ground height at each X/Z position, so this representation
 cannot describe caves or overhangs.
 

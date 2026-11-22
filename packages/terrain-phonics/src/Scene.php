@@ -2260,13 +2260,15 @@ final class Scene
 		$job['minY'] = min($job['minY'] ?? INF,$h,$parent);
 		$job['maxY'] = max($job['maxY'] ?? -INF,$h,$parent);
 
+		$vertexMaterial = $material === false ? -1 : $material;
+		if($mark !== null) $vertexMaterial = ($material === false ? 1 : -1)*RoadAtlas::markCode($mark);
 		$job['bytes'] .= pack('f*', ...[
 			$x * $step
 			, $h
 			, $z * $step
 			, ...$normal
 			, $parent
-			, $mark === null ? ($material === false ? -1 : $material) : -RoadAtlas::markCode($mark), ...$parentNormal
+			, $vertexMaterial, ...$parentNormal
 		]);
 
 		if($job['index'] === $vertices) unset($job['halo']);

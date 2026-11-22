@@ -257,7 +257,7 @@ final class Landscape implements TerrainSurface
 	 * @param float $x World horizontal X coordinate in meters.
 	 * @param float $z World horizontal Z coordinate in meters.
 	 * @param array|null $centerOffset Optional offset in meters from the nearest point on a graded pavement centerline.
-	 * @param array|null $mark Optional signed lateral distance and distance traveled along the spline, both in meters.
+	 * @param array|null $mark Optional signed lateral distance, distance along the spline and road half-width, in meters.
 	 * @return string|null Most recent covering material, or null for recipe shading.
 	 */
 	public function material(float $x, float $z, ?array &$centerOffset = null, ?array &$mark = null): ?string
@@ -406,6 +406,10 @@ final class Landscape implements TerrainSurface
 			}
 			foreach([$a,$b] as $op) if($op !== null) {
 				$box = Edits::bounds($op);
+				if($op['type'] === 'road') {
+					$pad = $op['_road']['markReach'] - $op['_road']['radius'];
+					$box = [$box[0]-$pad,$box[1]-$pad,$box[2]+$pad,$box[3]+$pad];
+				}
 				$bounds = $bounds === null ? $box : [min($bounds[0],$box[0]),min($bounds[1],$box[1]),
 					max($bounds[2],$box[2]),max($bounds[3],$box[3])];
 			}

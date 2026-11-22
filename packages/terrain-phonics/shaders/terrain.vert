@@ -14,8 +14,8 @@ out vec3 vRelative, vWorld, vNormal;
 out vec3 vPaint0, vPaint1;
 out vec4 vRoadMark;
 vec4 roadMark(int code) {
-	float angle = float(code&8191)*(6.28318530718/8192.);
-	return vec4(float((code>>13)-1024)/32.,cos(angle),sin(angle),1.);
+	float angle = float(code&2047)*(6.28318530718/2048.);
+	return vec4(float((code>>11)-4096)/2048.,cos(angle),sin(angle),1.);
 }
 void main()
 {
@@ -34,15 +34,14 @@ void main()
 		normal=clipNormal(cell,morph);
 		ivec4 ink=ivec4(texelFetch(uInk,texelAt(cell),0)*255.+.5);
 		material=float(ink.r)-1.;
-		if(ink.r==5 && any(notEqual(ink.gba,ivec3(0)))) {
+		if(any(notEqual(ink.gba,ivec3(0)))) {
 			vRoadMark=roadMark((ink.g<<16)|(ink.b<<8)|ink.a);
 		}
 #else
 		// Patch meshes store the road coordinates in the otherwise categorical material attribute.
-		if(material < -1.) {
-			int code = int(-material);
-			vRoadMark = roadMark(code);
-			material = 4.;
+		if(material < -1. || material >= 2048.) {
+			vRoadMark = roadMark(int(abs(material)));
+			material = material < 0. ? 4. : -1.;
 		}
 		ivec2 cell = patchCell();
 		vec2 xz = patchWorld(cell);

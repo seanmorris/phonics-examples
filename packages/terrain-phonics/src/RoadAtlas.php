@@ -20,7 +20,7 @@ final class RoadAtlas
 		$cell = 64.;
 		foreach($roads as $op)
 		{
-			while($cell < $op['_road']['radius']) $cell *= 2;
+			while($cell < $op['_road']['gridSize']) $cell *= 2;
 		}
 		$half = $extent / 2;
 		$minTile = (int)floor(-$half / $cell);
@@ -108,7 +108,7 @@ final class RoadAtlas
 
 	private static function coverageTiles(array $road, float $cell, int $minTile, int $maxTile, int $blocksAcross): array
 	{
-		$tiles = []; $radius = $road['radius'];
+		$tiles = []; $radius = $road['gridSize'];
 		foreach($road['samples'] as $i=>[$x,,$z]) {
 			$address = 1+4*$i;
 			$left = max($minTile, (int)floor(($x - $radius) / $cell)) - $minTile;
@@ -126,16 +126,17 @@ final class RoadAtlas
 		return $tiles;
 	}
 
-	// 64 pairs of 10-foot dashes and gaps. The slow phase interpolates through wraparound on the GPU.
-	public const MARK_CYCLE = 64*2*3.048;
+	// Sixteen pairs of 10-foot dashes and gaps, interpolated as an angle across wraparound.
+	public const MARK_CYCLE = 16*2*3.048;
 
-	/** Pack signed lateral distance at 1/32 m and cyclic distance along the road into an exact float attribute. */
+	/** Pack lateral position in half-widths and cyclic distance along the road into 24 exact bits. */
 	public static function markCode(array $mark): int
 	{
 		[$cross,$station] = $mark;
-		$lateral = max(1,min(2047,(int)floor($cross*32+.5)+1024));
-		$phase = (int)floor(fmod($station,self::MARK_CYCLE)*(8192/self::MARK_CYCLE)+.5) & 8191;
-		return ($lateral << 13) | $phase;
+		$half = $mark[2] ?? 4.;
+		$lateral = max(1,min(8191,(int)floor(($cross/$half)*2048+.5)+4096));
+		$phase = (int)floor(fmod($station,self::MARK_CYCLE)*(2048/self::MARK_CYCLE)+.5) & 2047;
+		return ($lateral << 11) | $phase;
 	}
 
 	public static function paintTexel(?string $material, ?array $mark): string

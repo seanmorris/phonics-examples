@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import {PNG} from 'pngjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -295,4 +296,66 @@ test('a 24 km spline applies and saves as one road through the editor', async({p
 	const saved = JSON.parse(await fs.readFile(await (await download).path(), 'utf8'));
 	expect(saved.landscape.history.at(-1)).toHaveLength(1);
 	expect(saved.landscape.history.at(-1)[0]).toMatchObject({replaceAt: 0, points: [[-12000,1,0],[12000,1,0]]});
+});
+
+
+test('diagonal road edges stay continuous and only the markings glow in darkness', async({page}) => {
+	await page.setViewportSize({width:800,height:550});
+	await page.goto('/games/terrain-sandbox/');
+	const canvas = page.locator('canvas[data-terrain-sandbox]');
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	const status = () => canvas.evaluate(el => el.terrainSandboxDebug.state);
+	await canvas.focus();
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status()).paused).toBe(true);
+
+	for(const night of [false,true]) {
+		const angled = {...road,points:[[-10.2,0,-60],[11,0,60]],width:8,shoulder:.01};
+		const document = {...fixture,
+			landscape:{...fixture.landscape,history:[[angled]]},
+			settings:{...fixture.settings,quality:1,elevation:night ? -28 : 45,skyLight:night ? 0 : 1,nightGlow:0},
+			camera:{position:[0,18,0],yaw:0,pitch:-1.52},
+		};
+		const generation = (await status()).generation;
+		await page.locator('[data-file]').setInputFiles({
+			name:'diagonal-road.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(document)),
+		});
+		await expect.poll(async() => (await status()).generation).toBe(generation+1);
+		await expect.poll(async() => (await status()).renderer.pending,{timeout:70_000}).toBe(0);
+		const {width,height,data} = PNG.sync.read(await canvas.screenshot({
+			style:'.terrain-panel,.terrain-hud{visibility:hidden!important}',
+		}));
+
+		let dashedRows = 0, gapRows = 0;
+		for(let y = Math.floor(height*.20); y < height*.80; y += 4) {
+			const edges = [];
+			// Separating the runs also checks that the road surface between them stays dark.
+			let inStripe = false;
+			for(let x = Math.floor(width*.2); x < width*.8; x++) {
+				const i = 4*(y*width+x);
+				const neutral = Math.max(data[i],data[i+1],data[i+2])-Math.min(data[i],data[i+1],data[i+2]);
+				const white = night ? data[i]>=8 && neutral<=2 : data[i]>=190 && neutral<15;
+				if(white && !inStripe) edges.push(x);
+				inStripe = white;
+			}
+			expect(edges, 'two distinct white lines at row '+y).toHaveLength(2);
+			if(!night) continue;
+			const span = edges[1]-edges[0];
+			const quarter = 4*(y*width+Math.round(edges[0]+.25*span));
+			expect(data[quarter], 'unlit pavement').toBeLessThan(3);
+			const stripe = 4*(y*width+edges[0]+2);
+			expect(data[stripe], 'faint shoulder glow').toBeLessThan(25);
+			let warm = false;
+			for(let x = Math.round(edges[0]+.4*span); x < edges[0]+.6*span; x++) {
+				const i = 4*(y*width+x);
+				if(data[i]>8 && data[i]<25 && data[i]>data[i+2]*2) warm = true;
+			}
+			if(warm) dashedRows++;
+			else gapRows++;
+		}
+		if(night) {
+			expect(dashedRows).toBeGreaterThan(10);
+			expect(gapRows).toBeGreaterThan(10);
+		}
+	}
 });

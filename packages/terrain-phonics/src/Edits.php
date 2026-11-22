@@ -81,14 +81,14 @@ final class Edits
 	{
 		if($operation['type'] !== 'road') return [self::bounds($operation)];
 		$road = $operation['_road'];
-		$stride = max(1,(int)ceil($minimumCell/$road['radius']));
+		$stride = max(1,(int)ceil($minimumCell/$road['gridSize']));
 		$rows = [];
 		foreach(array_keys($road['grid']) as $key)
 		{
 			[$x,$z] = explode(',',$key);
 			$rows[(int)floor((int)$z/$stride)][(int)floor((int)$x/$stride)] = true;
 		}
-		$cell = $road['radius']*$stride;
+		$cell = $road['gridSize']*$stride;
 		$boxes = [];
 		foreach($rows as $z => $columns)
 		{
@@ -173,6 +173,7 @@ final class Edits
 		$withMark = func_num_args() >= 4;
 		$mark = null;
 		$centerOffset = null;
+		$apron = null;
 		for($i = count($operations) - 1; $i >= 0; $i--)
 		{
 			$operation = $operations[$i];
@@ -191,8 +192,12 @@ final class Edits
 					$centerOffset = self::centerOffset($x,$z,$operation['_road'],$mark);
 				return $operation['material'];
 			}
+			// Interpolate spline coordinates across edge triangles even when a corner is bare terrain.
+			if($withMark && $apron === null && $operation['type'] === 'road' && $operation['material'] === 'road')
+				self::centerOffset($x,$z,$operation['_road'],$apron);
 		}
 
+		$mark = $apron;
 		return null;
 	}
 
@@ -339,6 +344,10 @@ final class Edits
 		$step = min(4, $width / 4);
 		$half = $width / 2;
 		$radius = $half + $shoulder;
+		// Include candidate segment starts for interpolating markings across the outermost pavement cells.
+		$apron = (!array_key_exists('material',$operation) || $operation['material'] === 'road') ? min(4., .75*$half) : 0.;
+		$markReach = max($radius, $half + $apron);
+		$gridSize = $apron > 0. ? max($radius, $half + $apron + $step) : $radius;
 		$samples = [];
 		$totalChord = 0.;
 		foreach($points as $i=>$p) if($i) $totalChord += hypot($p[0]-$points[$i-1][0],$p[2]-$points[$i-1][2]);
@@ -442,8 +451,8 @@ final class Edits
 			$extent = hypot($grade,$bank) * $radius + abs($crown);
 			$range = [min($range[0], $y - $extent), max($range[1], $y + $extent)];
 
-			for($gx = (int)floor(($x - $radius) / $radius); $gx <= (int)floor(($x + $radius) / $radius); $gx++)
-			for($gz = (int)floor(($z - $radius) / $radius); $gz <= (int)floor(($z + $radius) / $radius); $gz++)
+			for($gx = (int)floor(($x - $gridSize) / $gridSize); $gx <= (int)floor(($x + $gridSize) / $gridSize); $gx++)
+			for($gz = (int)floor(($z - $gridSize) / $gridSize); $gz <= (int)floor(($z + $gridSize) / $gridSize); $gz++)
 			$grid["$gx,$gz"][] = $index;
 		}
 
@@ -456,7 +465,7 @@ final class Edits
 			, 'material' => self::materialName(
 				array_key_exists('material', $operation) ? $operation['material'] : 'road'
 			)
-			, '_road' => compact('samples', 'stations', 'grid', 'radius', 'half', 'bounds', 'range')
+			, '_road' => compact('samples', 'stations', 'grid', 'gridSize', 'markReach', 'radius', 'half', 'bounds', 'range')
 		] + ($banks === null ? [] : ['banks' => $banks]) + ($endBlend > 0 ? ['endBlend' => $endBlend] : [])
 			+ (array_filter($handles) ? ['handles'=>$handles] : []);
 	}
@@ -472,7 +481,7 @@ final class Edits
 	{
 		$road = $operation['_road'];
 		$radius = $road['radius'];
-		$key = (int)floor($x / $radius) . ',' . (int)floor($z / $radius);
+		$key = (int)floor($x / $road['gridSize']) . ',' . (int)floor($z / $road['gridSize']);
 		$sum = $target = $coverage = 0.0;
 		$outside = 1.0;
 		$inner2 = $road['half'] ** 2;
@@ -500,7 +509,7 @@ final class Edits
 
 	private static function centerOffset(float $x, float $z, array $road, ?array &$mark): ?array
 	{
-		$r = $road['radius'];
+		$r = $road['gridSize'];
 		$key = (int)floor($x/$r) . ',' . (int)floor($z/$r);
 		$nearest = INF; $offset = null; $last = count($road['samples'])-1;
 		foreach($road['grid'][$key] ?? [] as $i) {
@@ -521,8 +530,9 @@ final class Edits
 			}
 			$arc = $road['stations'][$i];
 			$mark = [($vx*$dz-$vz*$dx < 0. ? -1. : 1.)*sqrt($d),
-				$arc+$t*($road['stations'][$i+1]-$arc)];
+				$arc+$t*($road['stations'][$i+1]-$arc), $road['half']];
 		}
+		if($nearest > $road['markReach']**2) $mark = null;
 		return $offset;
 	}
 }

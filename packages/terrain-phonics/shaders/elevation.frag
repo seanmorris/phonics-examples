@@ -198,10 +198,14 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 	int leaves = roadPointer(uRoadGrid.x, block.y * uRoadGrid.y + block.x);
 	if(leaves == 0) return;
 	int group = roadPointer(leaves, (tile.y % 8) * 8 + tile.x % 8);
+	bool painted = false;
 	while(group != 0) {
 		ivec3 header = ivec3(roadRecord(group).xyz);
 		vec4 params = roadRecord(header.x);
 		float sum = 0., target = 0., coverage = 0., outside = 1.;
+		float halfWidth = sqrt(params.x), radius = sqrt(params.x+params.y);
+		float markReach = max(radius,halfWidth+min(4.,.75*halfWidth));
+		float searchRadius = params.w == 5. ? max(radius,halfWidth+min(4.,.75*halfWidth)+min(4.,halfWidth*.5)) : radius;
 		float closest = 1e30;
 		int nearest = 0;
 		vec3 mark = vec3(0.);
@@ -215,7 +219,7 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 				vec4 segment = roadRecord(address + 2);
 				vec2 delta = (world - position.xy) - segment.xy;
 				float q = (dot(delta,delta) - params.x) / params.y;
-				if(q >= 1.) continue;
+				if(dot(delta,delta) >= searchRadius*searchRadius) continue;
 				float t = clamp(dot(delta,segment.zw)/max(1e-12,dot(segment.zw,segment.zw)),0.,1.);
 				vec2 toLine = delta - segment.zw*t;
 				float d2 = dot(toLine,toLine);
@@ -224,6 +228,7 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 					float side = segment.z*toLine.y-segment.w*toLine.x;
 					mark = vec3((side < 0. ? -1. : 1.)*sqrt(d2),t,dot(toLine,segment.zw));
 				}
+				if(q >= 1.) continue;
 				float weight = fade(1. - max(q,0.));
 				vec4 plane = roadRecord(address + 1);
 				vec2 tangent = vec2(position.w,plane.x);
@@ -236,24 +241,23 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 				outside *= 1. - weight;
 			}
 		}
-		if(sum > 0.) {
-			float influence = (1. - outside) * (coverage / sum);
-			height = mix(height, target / sum, influence);
-			if(influence >= .5) {
-				material = params.w;
-				marking = vec3(0.);
-				if(material == 5.) {
-					vec4 station = roadRecord(nearest+3);
-					int caps = int(station.z);
-					bool pastEnd = (caps&4)!=0 || ((caps&1)!=0 && mark.y==0. && mark.z<0.)
-						|| ((caps&2)!=0 && mark.y==1. && mark.z>0.);
-					if(!pastEnd) {
-						int crossCode = int(clamp(floor(mark.x*32.+.5)+1024.,1.,2047.));
-						int phase = int(floor(mod(station.x+mark.y*station.y,390.144)*(8192./390.144)+.5))&8191;
-						int code = (crossCode<<13)|phase;
-						marking = vec3(code>>16,(code>>8)&255,code&255)/255.;
-					}
-				}
+		float influence = sum > 0. ? (1. - outside)*(coverage/sum) : 0.;
+		if(sum > 0.) height = mix(height,target/sum,influence);
+		if(influence >= .5) {
+			material = params.w;
+			marking = vec3(0.);
+			painted = true;
+		}
+		if(params.w == 5. && (influence >= .5 || !painted) && closest <= markReach*markReach) {
+			vec4 station = roadRecord(nearest+3);
+			int caps = int(station.z);
+			bool pastEnd = (caps&4)!=0 || ((caps&1)!=0 && mark.y==0. && mark.z<0.)
+				|| ((caps&2)!=0 && mark.y==1. && mark.z>0.);
+			if(!pastEnd) {
+				int crossCode = int(clamp(floor(mark.x/halfWidth*2048.+.5)+4096.,1.,8191.));
+				int phase = int(floor(mod(station.x+mark.y*station.y,97.536)*(2048./97.536)+.5))&2047;
+				int code = (crossCode<<11)|phase;
+				marking = vec3(code>>16,(code>>8)&255,code&255)/255.;
 			}
 		}
 		if(header.z != 0) break;

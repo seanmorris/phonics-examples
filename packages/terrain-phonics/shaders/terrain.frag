@@ -10,6 +10,10 @@ in vec3 vPaint0, vPaint1;
 in vec4 vRoadMark;
 // Area of the painted half of every repeating dash-and-gap pair.
 float dashIntegral(float x) { return .5*floor(x)+min(fract(x),.5); }
+// Fraction of a pixel covered by a stripe, including stripes narrower than one pixel.
+float stripeCoverage(float distanceToLine,float halfWidth,float pixel) {
+	return clamp((halfWidth+.5*pixel-abs(distanceToLine))/pixel,0.,min(1.,2.*halfWidth/pixel));
+}
 uniform vec3 uEye;
 uniform float uWaterLevel;
 uniform highp sampler2D uTerrainShadowMap;
@@ -166,19 +170,30 @@ void main()
 	vec3 craft = mix(vec3(0.06,0.12,0.17), vec3(0.95,0.28,0.03), step(0.15,vWorld.y - uWaterLevel));
 	albedo = albedo*(1.-painted) + uPaintColor[0]*vPaint0.x + uPaintColor[1]*vPaint0.y + uPaintColor[2]*vPaint0.z
 		+ uPaintColor[3]*vPaint1.x + uPaintColor[4]*vPaint1.y + craft*vPaint1.z;
-	// A 40 cm stripe, with 10 feet each of paint and pavement measured along the spline.
+	// Lateral coordinates are in road half-widths. Convert meters of paint into that coordinate
+	// using its world-space gradient, so both narrow streets and wide circuits get the same paint.
+	float crossTrack = vRoadMark.x/max(vRoadMark.w,.0001);
+	vec2 dx=dFdx(vWorld.xz), dy=dFdy(vWorld.xz);
+	vec2 lateralPixel=vec2(dFdx(crossTrack),dFdy(crossTrack));
+	vec3 markingGlow=vec3(0.);
 	if(vRoadMark.w > .65 && vPaint1.y > 0.) {
-		float crossTrack = vRoadMark.x/vRoadMark.w;
-		float width = max(.015,fwidth(crossTrack));
-		float line = clamp((.20+.5*width-abs(crossTrack))/width,0.,min(1.,.40/width));
+		float area=dx.x*dy.y-dx.y*dy.x;
+		float unitsPerMeter=length(lateralPixel.x*dy-lateralPixel.y*dx)/max(abs(area),1e-10);
+		float pixelAcross=max(.00001,abs(lateralPixel.x)+abs(lateralPixel.y));
+		float line = stripeCoverage(crossTrack,min(.20*unitsPerMeter,.35),pixelAcross);
+		float edgeCenter = 1.-min(.35*unitsPerMeter,.30);
+		float edge = stripeCoverage(abs(crossTrack)-edgeCenter,min(.12*unitsPerMeter,.20),pixelAcross);
 		vec2 direction = vRoadMark.yz/max(length(vRoadMark.yz),.0001);
 		vec2 tangent = vec2(-direction.y,direction.x);
-		float cycles = 64./6.28318530718;
+		float cycles = 16./6.28318530718;
 		float phase = atan(direction.y,direction.x)*cycles;
 		float pixel = max(.002,cycles*(abs(dot(tangent,dFdx(direction)))+abs(dot(tangent,dFdy(direction)))));
 		float dash = (dashIntegral(phase+.5*pixel)-dashIntegral(phase-.5*pixel))/pixel;
-		albedo=mix(albedo,vec3(.72,.47,.09),line*clamp(dash,0.,1.)*smoothstep(.65,.98,vRoadMark.w)
-			*vPaint1.y*(1.-smoothstep(1.,5.,footprint)));
+		float marked = smoothstep(.65,.98,vRoadMark.w)*smoothstep(.05,.6,vPaint1.y)*(1.-smoothstep(1.,5.,footprint));
+		float centerPaint=line*clamp(dash,0.,1.)*marked, edgePaint=edge*marked;
+		vec3 ochre=vec3(.72,.47,.09), white=vec3(.88);
+		albedo=mix(mix(albedo,ochre,centerPaint),white,edgePaint);
+		markingGlow=mix(ochre*centerPaint,white,edgePaint)*.006*smoothstep(0.,.17364818,-uSunDirection.y);
 	}
 	albedo *= 1.0 + 0.07 * detail * (1.0 - smoothstep(1.0,8.0,footprint));
 	vec3 direct = terrainSunlight(max(0.0,vWorld.y)) / 3.14159265;
@@ -194,7 +209,7 @@ void main()
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
 	vec3 ambient = uSkyAmbient * (0.35 + 0.65 * max(0.0,n.y));
 	ambient += uMaterialBounce * illumination * (1.0-max(0.,n.y));
-	vec3 lit = albedo * (ambient + direct * facing * shadow);
+	vec3 lit = albedo * (ambient + direct * facing * shadow) + markingGlow;
 	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
 	lit += albedo / 3.14159265 * terrainSpotLight(vWorld, mix(lightingNormal,n,painted), uWaterLevel, uWaterOptics.z);
 	#ifdef MATERIAL_REFLECTION
