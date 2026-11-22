@@ -18,6 +18,7 @@
   "files": [
     "autoload.php",
     "src/Atmosphere.php",
+    "src/AtmosphereLayers.php",
     "src/AtmosphereRenderer.php",
     "src/Camera.php",
     "src/CanyonBeds.php",
