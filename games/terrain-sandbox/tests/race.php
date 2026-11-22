@@ -1166,6 +1166,12 @@ $lakeCopy = new Session;
 input($lakeCopy, ['actions'=>[['type'=>'load','json'=>$lakeRace->save()]]]);
 expect($lakeCopy->settings['circuitRelief']===-60. && $lakeCopy->settings['circuitStartHeight']===100.
 	&& $lakeCopy->status()['circuit'] == $lakeRace->status()['circuit'], 'The signed controls and lake route survive reload');
+$blank = new Session;
+$blankFile = $blank->save();
+$blank->close();
+$lakeCopy->load($blankFile);
+expect($lakeCopy->settings['circuitStartHeight'] === null,
+	'A file with the default blank start height loads over a session that has a numeric one');
 $lakeCopy->close();
 $lakeRace->close();
 

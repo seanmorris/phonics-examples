@@ -1807,8 +1807,13 @@ final class Session
 			if($this->prepareMaterial) ($this->prepareMaterial)($layers ?? $generated);
 			$settings = array_diff_key($settings, WaterAppearance::DEFAULTS, TerrainAppearance::DEFAULTS)
 				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW];
+			// Check each value against its setting's default, not the value now in use: a setting that defaults to
+			// null, such as circuitStartHeight, may hold a number now and be blank in the file.
+			$defaults = (new \ReflectionProperty(self::class, 'settings'))->getDefaultValue();
 			foreach($settings as $name => $value)
-			if(isset($this->settings[$name]) && is_numeric($this->settings[$name]) && (!is_numeric($value) || !is_finite((float)$value)))
+			if(isset($this->settings[$name]) && is_numeric($this->settings[$name])
+				&& !($value === null && array_key_exists($name, $defaults) && $defaults[$name] === null)
+				&& (!is_numeric($value) || !is_finite((float)$value)))
 			throw new \InvalidArgumentException('Invalid saved control value.');
 			$balloons = BalloonPractice::load(array_key_exists('balloons',$data) ? $data['balloons'] : [],
 				$candidate,$candidate->recipe()['waterLevel']);
