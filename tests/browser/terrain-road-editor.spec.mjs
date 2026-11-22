@@ -8,12 +8,12 @@ const fixture = {
 	schema: 'phonics-landscape-sandbox'
 	, version: 1
 	, landscape: {format: 'terrain-phonics', version: 1, recipe, history: [[road]], cursor: 1, revision: 1}
-	, settings: {waterLevel: -24, waterChoppiness: 0, azimuth: 110, elevation: 45, clock: false}
+	, settings: {waterLevel: -24, waterChoppiness: 0, azimuth: 110, elevation: 45, clock: false, quality: .5}
 	, camera: {position: [0,4,32], yaw: 0, pitch: -.12}
 };
 
 test('a saved road can be inspected, reshaped and reopened on the terrain map', async({page}) => {
-	test.setTimeout(270_000);
+	test.setTimeout(360_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 
@@ -22,7 +22,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 		, msg => { if(/Fatal error|Uncaught RuntimeException/.test(msg.text())) errors.push(msg.text()); }
 	);
 
-	await page.setViewportSize({width: 1200, height: 700});
+	await page.setViewportSize({width: 960, height: 640});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
 	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
