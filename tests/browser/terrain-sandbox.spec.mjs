@@ -1454,6 +1454,51 @@ test('the Testarossa lights its lamps and the page keeps the headlight switch', 
 	expect(errors).toEqual([]);
 });
 
+test('both taillights brighten visibly in daylight for running lights and braking', async({page}) => {
+	await page.setViewportSize({width: 820, height: 510});
+	await page.goto('/games/terrain-sandbox/');
+	const view = canvas(page);
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	const dry = fixture();
+	Object.assign(dry.landscape.recipe, {worldSize: 256, spacing: 2});
+	Object.assign(dry.settings, {waterLevel: -10, elevation: 30, azimuth: 180, clock: false});
+	dry.camera = {position: [0,15,0], yaw: Math.PI, pitch: -.3};
+	await load(page, dry);
+	await view.evaluate(el => el.terrainSandboxDebug.action({type: 'car'}));
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await page.addStyleTag({content: '.terrain-panel, .terrain-hud { visibility: hidden !important; }'});
+
+	async function rearLights(headlights, brake)
+	{
+		await view.evaluate((el, settings) => {
+			el.terrainSandboxDebug.keys({Space: settings.brake});
+			el.terrainSandboxDebug.values({headlights: settings.headlights});
+		}, {headlights, brake});
+		await expect.poll(async() => {
+			const {lamps} = await status(page);
+			return [lamps.headlamps, lamps.brake];
+		}).toEqual([Number(headlights === 'on'), Number(brake)]);
+		return PNG.sync.read(await page.screenshot({scale: 'css'}));
+	}
+
+	const dark = await rearLights('off', false);
+	const running = await rearLights('on', false);
+	const braking = await rearLights('on', true);
+	// Compare each rear strip on the stationary car. Isolated bright lens pixels can disappear behind the grille.
+	for(const [before, after] of [[dark, running], [running, braking]])
+	for(const left of [330, 440])
+	{
+		let brighter = 0;
+		for(let y = 340; y < 360; ++y)
+		for(let x = left; x < left + 50; ++x)
+		{
+			const i = 4 * (y * after.width + x);
+			if(after.data[i] - before.data[i] > 15) ++brighter;
+		}
+		expect(brighter).toBeGreaterThan(60);
+	}
+});
+
 test('the default canyon lets all four wheels leave the ground and touch down again', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));

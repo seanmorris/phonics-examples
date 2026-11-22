@@ -112,8 +112,8 @@
     "assets/testarossa/lamps.json": "sha256-F/h+F49bvHxxpbngDRN4a3Pyw0uoA8ovZ0YjnHgO8j4=",
     "assets/testarossa/license.txt": "sha256-/9ZQt2jc5NTX9mZTSd3OGLgMWNIQHyBLpSc3HI88iNU=",
     "assets/testarossa/mesh.bin.gz": "sha256-bjunAeyco1CrY+rtykEIEbYda2PO82nic9NcoQ2eaZI=",
-    "assets/vehicles/model.frag": "sha256-WHTpJQcoR5caQa7Zw1GgFbqQWz3zwGh+lyde+TpDn64=",
-    "assets/vehicles/model.vert": "sha256-m/rv/miD17Z0zjiEkseytmZlpy7wPjnohs+knjvCbNY=",
+    "assets/vehicles/model.frag": "sha256-U4AyDjEVUWvKbV0nzRskrHndaYA4n0BWXQvtWN+x3z4=",
+    "assets/vehicles/model.vert": "sha256-aGLYAr7MTXkzu6z8D79rWK7WlMl71Q7y1MrlF9Z7bc4=",
     "autoload.php": "sha256-PniKSq1posI89wy+V+5wVK6GJL6x290N4sTpz3FxlJ4=",
     "browser/cockpit.mjs": "sha256-qg4uPn+YOnxy0o9a2bSm1ZVvrwppGKEBuV3eauj5zho=",
     "browser/flight-map.mjs": "sha256-gR4VoRHNBvb5E99ReWoZ3QE286iohO7z5Dxk4jvrJP4=",
@@ -153,6 +153,6 @@
     "src/Session.php": "sha256-BUWXiBYnm2RyhgWBfGkKcnLU9V5EUfWm1HjleP4jEkw=",
     "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/TrailRenderer.php": "sha256-EtQqM0AlEjjYPWlIrYoO6gCCsrHHu+KK4//+O1QNOCg=",
-    "src/VehicleModel.php": "sha256-YB/ZcOdPLtvFwFW5rBTm+ue/KhqGrw8rZnsogjVVdTE="
+    "src/VehicleModel.php": "sha256-/I+WXXibJ9ma9UoHXH7B2vnvqtufjqsgQIeT260HhBE="
   }
 }

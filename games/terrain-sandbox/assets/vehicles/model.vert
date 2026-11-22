@@ -141,6 +141,8 @@ void main()
 	vNormal = uRotation * normal;
 	vUv = aUv + uUvOffset;
 	vPaint = aPaint;
+	// Deep red lens plastic in reflected light. The bulbs supply their own radiance.
+	if(tag == FIRST_LAMP || tag == FIRST_LAMP+1) vPaint.rgb *= .48;
 	// model.frag samples the atlas for a surface above one half. Bit 6 of a gate tag says whether its part does.
 	vSurface = gate ? vec2(aSurface.x, (tag & 64) != 0 ? 1.0 : 0.0) : aSurface;
 	gl_Position = uViewProjection * vec4(vRelative, 1.0);

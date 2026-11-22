@@ -22,12 +22,12 @@ final class VehicleModel
 	 */
 	public const FIRST_LAMP = 2, LAMPS = 5;
 	/** Linear colors of the lamps' light: red lenses, and halogen bulbs behind clear ones. */
-	public const RED = [1.0, .008, .004], WHITE = [1.0, .88, .7];
+	public const RED = [1.0, .018, .005], WHITE = [1.0, .88, .7];
 	/**
 	 * Radiance of each lamp at full brightness in the shader's linear units, in which full sunlight on a white surface
 	 * facing it gives up to 20 / π. A tail lamp glows at TAIL while the headlights are on, and at BRAKE while braking.
 	 */
-	public const BRAKE = 6.0, TAIL = .7, REVERSE = 2.5, HEADLAMP = 3.5;
+	public const BRAKE = 8.0, TAIL = 1.15, REVERSE = 2.5, HEADLAMP = 3.5;
 	/**
 	 * Each headlamp's beam on the ground and water, in the units of the terrain package's SpotLights: candela on the
 	 * axis at full brightness, the range in meters, and the cone's inner and outer half-angles in radians.
