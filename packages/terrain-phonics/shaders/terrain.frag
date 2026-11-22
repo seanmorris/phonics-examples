@@ -11,6 +11,15 @@ in vec4 vRoadMark;
 in float vSplinePaint;
 // Area of the painted half of every repeating dash-and-gap pair.
 float dashIntegral(float x) { return .5*floor(x)+min(fract(x),.5); }
+float dashCoverage(vec2 phaseVector, float pixelCycles)
+{
+	// One 10-foot dash per 20-foot cycle. Beyond one cycle per pixel only the mean ink is resolvable.
+	if(pixelCycles >= 1. || dot(phaseVector,phaseVector) < 1e-8) return .5;
+	float phase = atan(phaseVector.y,phaseVector.x)*(16./6.28318530718);
+	float width = max(pixelCycles,.002);
+	float ink = (dashIntegral(phase+.5*width)-dashIntegral(phase-.5*width))/width;
+	return mix(clamp(ink,0.,1.),.5,smoothstep(.5,1.,width));
+}
 // Fraction of a pixel covered by a stripe, including stripes narrower than one pixel.
 float stripeCoverage(float distanceToLine,float halfWidth,float pixel) {
 	return clamp((halfWidth+.5*pixel-abs(distanceToLine))/pixel,0.,min(1.,2.*halfWidth/pixel));
@@ -183,19 +192,19 @@ void main()
 	vec3 markingGlow=vec3(0.);
 	if(vRoadMark.w > .65 && road > 0.) {
 		float area=dx.x*dy.y-dx.y*dy.x;
-		float unitsPerMeter=length(lateralPixel.x*dy-lateralPixel.y*dx)/max(abs(area),1e-10);
+		// This vector follows the line of constant crossTrack through this pixel, even on a bend.
+		vec2 alongRoad=lateralPixel.x*dy-lateralPixel.y*dx;
+		float alongLength=length(alongRoad);
+		float unitsPerMeter=alongLength/max(abs(area),1e-10);
 		float pixelAcross=max(.00001,abs(lateralPixel.x)+abs(lateralPixel.y));
 		float line = stripeCoverage(crossTrack,min(.20*unitsPerMeter,.35),pixelAcross);
 		float edgeCenter = 1.-min(.35*unitsPerMeter,.30);
 		float edge = stripeCoverage(abs(crossTrack)-edgeCenter,min(.12*unitsPerMeter,.20),pixelAcross);
-		vec2 direction = vRoadMark.yz/max(length(vRoadMark.yz),.0001);
-		vec2 tangent = vec2(-direction.y,direction.x);
-		float cycles = 16./6.28318530718;
-		float phase = atan(direction.y,direction.x)*cycles;
-		float pixel = max(.002,cycles*(abs(dot(tangent,dFdx(direction)))+abs(dot(tangent,dFdy(direction)))));
-		float dash = (dashIntegral(phase+.5*pixel)-dashIntegral(phase-.5*pixel))/pixel;
-		float marked = smoothstep(.65,.98,vRoadMark.w)*smoothstep(.05,.6,vPaint1.y)*roadEdge*slopeMask*(1.-smoothstep(1.,5.,footprint));
-		float centerPaint=line*clamp(dash,0.,1.)*marked, edgePaint=edge*marked;
+		vec2 tangent=alongRoad/max(alongLength,1e-10);
+		float pixelCycles=(abs(dot(dx,tangent))+abs(dot(dy,tangent)))/6.096;
+		float marked = smoothstep(.65,.98,vRoadMark.w)*smoothstep(.05,.6,vPaint1.y)*roadEdge*slopeMask;
+		float centerPaint=line*dashCoverage(vRoadMark.yz,pixelCycles)*marked;
+		float edgePaint=edge*marked*(1.-smoothstep(1.,5.,footprint));
 		vec3 ochre=vec3(.72,.47,.09), white=vec3(.88);
 		albedo=mix(mix(albedo,ochre,centerPaint),white,edgePaint);
 		markingGlow=mix(ochre*centerPaint,white,edgePaint)*.006*smoothstep(0.,.17364818,-uSunDirection.y);
