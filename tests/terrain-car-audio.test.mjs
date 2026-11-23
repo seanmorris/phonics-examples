@@ -65,7 +65,7 @@ test('a browser awaiting an audio gesture receives one resume request across dri
 
 	const stop = activate({module, canvas, archive, signal: controller.signal});
 
-	for(let i = 0; i<90; i++) module.terrainCarSound(8+i, .1, 700, .01, 80, 0, 1);
+	for(let i = 0; i<90; i++) module.terrainCarSound(8+i, .1, 700, .01, 80, 0, 1, .15);
 	assert.equal(attempts, 1);
 	doc.dispatchEvent(new Event('keydown'));
 	assert.equal(attempts, 2);

@@ -115,6 +115,8 @@ check($pull[0] === 30. && $coast[0] === $pull[0] && 12*$pull[0]*$voice['exhaustP
 	&& $pull[1] > $coast[1] && $pull[2] > 3*$coast[2],
 	'At 3600 RPM the exhaust sounds at 180 Hz under any load; open throttle brightens it.');
 check($coast[5] === 0. && $pull[5] === .08,'Full tire gain is capped and rolling contact is silent.');
+check(CarEngineSound::controls(CarGearbox::IDLE,1.,0.)[7] === 0. && $pull[7] > $coast[7] && $coast[7] > 0.,
+	'Block vibration rises off idle and carries less weight on overrun.');
 
 $car = board($land,16.);
 $car->step($dt,0.,0.,$land,-5.,nitrousHeld:true);

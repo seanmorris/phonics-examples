@@ -44,7 +44,7 @@ The watercraft uses “Jetski” by Futurealiti. The sandbox uses a simplified m
 
 ## Car model
 
-PHP generates twelve cylinder firings over two crank revolutions. The exhaust sounds one octave below that firing rate, rising in pitch with gearbox RPM and brightening under load. Dry pavement adds tire squeal in proportion to how fast the tread slips across it. [Tire recording and credits](assets/car-audio/license.txt)
+PHP generates twelve cylinder firings over two crank revolutions. The exhaust sounds one octave below that firing rate, rising in pitch with gearbox RPM and brightening under load. As the firing note climbs, vibration from the engine block carries the bass and eases off when you lift the throttle. Dry pavement adds tire squeal in proportion to how fast the tread slips across it. [Tire recording and credits](assets/car-audio/license.txt)
 
 The car uses “Ferrari-Testarossa-84-low-poly” by XGLOL235. The sandbox scales the model to 4.48 meters, bakes its materials, and animates the wheels while driving. The importer also tags the tail, brake, reversing, bumper and head lamps and the covers of the pop-up headlights, so the shaders can light the lamps and open the pods, and writes the pods' hinge, the 55-degree opening that the model's own animation gives them and the headlamp beams to `assets/testarossa/lamps.json`. Rebuild it with `python3 scripts/import_terrain_vehicle.py --vehicle testarossa /path/to/ferrari-testarossa-84-low-poly.zip` and gltfpack 0.18. [Original model](https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a) · [Author](https://sketchfab.com/XGLOL235) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 

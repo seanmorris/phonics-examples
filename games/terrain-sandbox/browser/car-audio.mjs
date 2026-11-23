@@ -9,13 +9,21 @@ export function prepareEngine(context, definition)
 		)
 	);
 
+	const harmonics = Float32Array.from(definition.block);
+
+	const block = context.createPeriodicWave(
+		new Float32Array(harmonics.length)
+		, harmonics
+		, {disableNormalization: true}
+	);
+
 	const bytes = atob(definition.flowNoise);
 	const noise = context.createBuffer(1, bytes.length, definition.noiseRate);
 	const samples = noise.getChannelData(0);
 
 	for(let i = 0; i < samples.length; i++) samples[i] = bytes.charCodeAt(i)/127.5 - 1;
 
-	return {waves, noise, pitch: definition.exhaustPitch};
+	return {waves, block, noise, pitch: definition.exhaustPitch};
 }
 
 export function startEngine(context, instrument, tone)
@@ -24,10 +32,13 @@ export function startEngine(context, instrument, tone)
 	const muffler = context.createBiquadFilter(), body = context.createBiquadFilter(), volume = context.createGain();
 	const flutter = context.createBiquadFilter(), jitter = context.createGain();
 	const breath = context.createBiquadFilter(), flow = context.createGain(), pulses = context.createGain();
-	const sources = [clock, noise], nodes = [muffler,body,volume,flutter,jitter,breath,flow,pulses];
+	const block = context.createOscillator(), lowCut = context.createBiquadFilter(), blockGain = context.createGain();
+
+	const sources = [clock, noise, block];
+	const nodes = [muffler,body,volume,flutter,jitter,breath,flow,pulses,lowCut,blockGain];
 	const pitch = instrument.pitch;
 
-	clock.offset.value = tone.cycle*pitch;
+	clock.offset.value = tone.cycle;
 	noise.buffer = instrument.noise;
 	noise.playbackRate.value = pitch;
 	noise.loop = true;
@@ -41,6 +52,18 @@ export function startEngine(context, instrument, tone)
 	body.gain.value = 2.5;
 	volume.gain.value = 0;
 	muffler.connect(body).connect(volume).connect(context.destination);
+
+	// Chassis vibration shares the crank phase and sits outside the exhaust pipes and their reflections.
+	block.setPeriodicWave(instrument.block);
+	block.frequency.value = 0;
+	block.detune.value = -1200; // Four crank revolutions per vibration pattern.
+	clock.connect(block.frequency);
+	jitter.connect(block.detune);
+	lowCut.type = 'highpass';
+	lowCut.frequency.value = 36;
+	lowCut.Q.value = -3;
+	blockGain.gain.value = tone.blockGain;
+	block.connect(lowCut).connect(blockGain).connect(volume);
 
 	// The same small irregularity reaches both banks. Opening the throttle admits more pulsed exhaust noise.
 	flutter.frequency.value = 11*pitch;
@@ -60,6 +83,7 @@ export function startEngine(context, instrument, tone)
 		const reflection = context.createDelay(.01/pitch), echo = context.createGain();
 		exhaust.setPeriodicWave(wave);
 		exhaust.frequency.value = 0;
+		exhaust.detune.value = 1200*Math.log2(pitch);
 		clock.connect(exhaust.frequency);
 		jitter.connect(exhaust.detune);
 
@@ -84,7 +108,7 @@ export function startEngine(context, instrument, tone)
 		update(next) {
 			const at = context.currentTime;
 
-			if(next.cycle !== tone.cycle) clock.offset.setTargetAtTime(next.cycle*pitch, at, .018);
+			if(next.cycle !== tone.cycle) clock.offset.setTargetAtTime(next.cycle, at, .018);
 
 			if(next.level !== tone.level) volume.gain.setTargetAtTime(next.level, at, .033);
 
@@ -93,6 +117,8 @@ export function startEngine(context, instrument, tone)
 			if(next.flow !== tone.flow) flow.gain.setTargetAtTime(next.flow, at, .035);
 
 			if(next.jitter !== tone.jitter) jitter.gain.setTargetAtTime(next.jitter, at, .045);
+
+			if(next.blockGain !== tone.blockGain) blockGain.gain.setTargetAtTime(next.blockGain, at, .045);
 
 			tone = next;
 		}
@@ -279,8 +305,8 @@ export function activate({module, canvas, archive, signal})
 
 	module.terrainEngineVoice = json => { definition = JSON.parse(json); };
 
-	module.terrainCarSound = (cycle, level, cutoff, flow, jitter, skid, rate) => {
-		tone = {cycle, level, cutoff, flow, jitter};
+	module.terrainCarSound = (cycle, level, cutoff, flow, jitter, skid, rate, blockGain) => {
+		tone = {cycle, level, cutoff, flow, jitter, blockGain};
 		tireLevel = skid;
 		tireRate = rate;
 		update();

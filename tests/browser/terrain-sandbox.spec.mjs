@@ -3037,7 +3037,7 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).car?.rpm).toBe(950);
 	await expect.poll(() => page.evaluate(() => window.driveAudio.buffers)).toBe(1);
-	await expect.poll(() => page.evaluate(() => window.driveAudio.starts)).toBe(2);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.starts)).toBe(3);
 
 	const firingHz = () => page.evaluate(() => {
 		const analyser = window.driveAudio.analyser;
@@ -3060,7 +3060,7 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 	await page.keyboard.down('Shift');
 	await expect.poll(() => view.evaluate(element => element.dustPixels)).toBeGreaterThan(30);
 	await expect.poll(firingHz).toBeGreaterThan(107);
-	expect(await page.evaluate(() => window.driveAudio.starts)).toBe(2);
+	expect(await page.evaluate(() => window.driveAudio.starts)).toBe(3);
 	await page.keyboard.down('d');
 	await expect.poll(async() => (await status(page)).car.roll).toBeGreaterThan(.025);
 	await page.screenshot({path: testInfo.outputPath('tire-dust.png')});
@@ -3118,7 +3118,7 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 		, `
 		require $argv[1];
 		use TerrainSandbox\\CarEngineSound;
-		$states = [[2500,1],[2500,0],[7400,1],[5650,0],[5650,1]];
+		$states = [[2500,1],[2500,0],[7400,1],[5650,0],[5650,1],[8000,1]];
 		echo json_encode([CarEngineSound::voice(), array_map(fn($s) => CarEngineSound::controls($s[0],$s[1],0), $states)]);
 	`
 		, autoload
@@ -3126,11 +3126,20 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 
 	const measured = await page.evaluate(async({module, definition: [voice, targets]}) => {
 		const {prepareEngine, startEngine} = await import(module);
-		const sampleRate = 44100, context = new OfflineAudioContext(1, 4*sampleRate, sampleRate);
+		const sampleRate = 44100, context = new OfflineAudioContext(1, 5*sampleRate, sampleRate);
 		const instrument = prepareEngine(context, voice);
-		const tones = targets.map(([cycle,level,cutoff,flow,jitter]) => ({cycle,level,cutoff,flow,jitter}));
+
+		const tones = targets.map(([cycle,level,cutoff,flow,jitter,,,blockGain]) => ({
+			cycle
+			, level
+			, cutoff
+			, flow
+			, jitter
+			, blockGain
+		}));
+
 		const engine = startEngine(context, instrument, tones[0]);
-		const stops = [.9,1.6,2.45,3.05,3.65].map(t => context.suspend(t));
+		const stops = [.9,1.6,2.45,3.05,3.65,4.45].map(t => context.suspend(t));
 		const rendered = context.startRendering();
 
 		for(const [i, stop] of stops.entries())
@@ -3152,15 +3161,16 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 
 		const rms = wave => Math.sqrt(wave.reduce((sum, x) => sum+x*x, 0)/wave.length);
 
-		// Find the loudest spectral line, including the upper harmonics that can mask the intended pitch.
-		function exhaustPeak(time)
+		function spectrum(time)
 		{
 			const samples = section(time, .36);
 			const wave = samples.map((v, i) => v*(.5-.5*Math.cos(2*Math.PI*i/(samples.length-1))));
 			const binHz = sampleRate/wave.length;
-			let loudest = 0, peak = 0;
+			// Parseval's identity gives total one-sided power with the same normalization as the bins below.
+			const total = wave.reduce((sum, x) => sum+x*x, 0)*wave.length/2;
+			let loudest = 0, peak = 0, bass = 0, overtones = 0;
 
-			for(let bin = Math.ceil(30/binHz); bin*binHz <= 2000; bin++)
+			for(let bin = Math.ceil(30/binHz); bin*binHz <= 5000; bin++)
 			{
 				// Goertzel power for this frequency bin.
 				const coefficient = 2*Math.cos(2*Math.PI*bin/wave.length);
@@ -3174,30 +3184,44 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 				}
 
 				const energy = previous*previous + older*older - coefficient*previous*older;
+				const hz = bin*binHz;
+
+				if(hz >= 40 && hz < 160) bass += energy;
+
+				if(hz >= 1000) overtones += energy;
 
 				if(energy > loudest)
 				{
 					loudest = energy;
-					peak = bin*binHz;
+					peak = hz;
 				}
 			}
 
-			return peak;
+			return {peak, bass: bass/total, overtones: overtones/total};
 		}
 
 		const levels = Array.from({length: 13}, (_, i) => rms(section(.2+i*.05, .05))).sort((a, b) => a-b);
 
 		return {
-			notes: [.3,1.1,1.9,2.66,3.22].map(exhaustPeak)
+			spectra: [.3,1.1,1.9,2.66,3.22,3.92].map(spectrum)
 			, variation: 20*Math.log10(levels.at(-2)/levels[1])
 			, pull: rms(section(.3, .5))
 			, coast: rms(section(1.1, .4))
-			, stopped: rms(section(3.8, .15))
+			, stopped: rms(section(4.65, .15))
 		};
 	}, {module, definition});
 
-	for(const [i, expected] of [125,125,370,282.5,282.5].entries())
-	expect(Math.abs(measured.notes[i]-expected)).toBeLessThan(5);
+	for(const [i, expected] of [125,125,370,282.5,282.5,400].entries())
+	expect(Math.abs(measured.spectra[i].peak-expected)).toBeLessThan(5);
+
+	for(const i of [2,4,5])
+	{
+		expect(measured.spectra[i].bass).toBeGreaterThan(.18);
+		expect(measured.spectra[i].bass).toBeLessThan(.55);
+		expect(measured.spectra[i].overtones).toBeGreaterThan(.055);
+	}
+
+	expect(measured.spectra[3].bass).toBeGreaterThan(.09);
 	expect(measured.variation).toBeLessThan(1.5);
 	expect(measured.pull).toBeGreaterThan(1.3*measured.coast);
 	expect(measured.coast).toBeGreaterThan(.005);

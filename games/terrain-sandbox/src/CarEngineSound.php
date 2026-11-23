@@ -43,17 +43,22 @@ final class CarEngineSound
 			$state = (25173*$state + 13849) & 65535;
 			$noise .= chr($state >> 8);
 		}
-		// Voice the exhaust one octave below the crank-derived firing note.
-		return ['banks'=>$banks,'flowNoise'=>base64_encode($noise),'noiseRate'=>16000,'exhaustPitch'=>.5];
+		// One vibration pattern spans four crank revolutions. Orders 2 and 4 give the four-stroke cycle
+		// and shaft rotation. Order 3 adds a lower collector tone, one quarter of the audible exhaust note.
+		$block = array_replace(array_fill(0,16,0.), [2=>.37, 3=>.72, 4=>.61, 6=>.33, 8=>.16, 9=>.19, 15=>.08]);
+		return ['banks'=>$banks,'flowNoise'=>base64_encode($noise),'noiseRate'=>16000,'exhaustPitch'=>.5,'block'=>$block];
 	}
 
-	/** Audio-clock targets: four-stroke cycle Hz, exhaust gain, muffler Hz, flow gain, jitter cents, tire gain and rate. */
+	/** Four-stroke cycle Hz, exhaust gain, muffler Hz, exhaust flow gain, jitter cents, tire gain/rate and block gain. */
 	public static function controls(float $rpm, float $load, float $slip): array
 	{
 		$revs = max(0., min(1., ($rpm-CarGearbox::IDLE)/(CarGearbox::REDLINE-CarGearbox::IDLE)));
 		$load = max(0., min(1.,$load));
 		$slip = max(0., min(1.,$slip));
+		// Bring in the block as the main firing note leaves the bass. Backing off the throttle unloads it.
+		$rise = max(0., min(1., ($rpm-1500.)/2400.));
+		$blockGain = (.18 + .12*$load)*$rise*$rise*(3.-2.*$rise);
 		return [$rpm/120., .085 + .060*$load + .030*$revs, 560. + 920.*$revs + $load*(1900. + 2300.*$revs),
-			.012 + .075*$load + .025*$revs, 125. - 102.*$revs, .08*$slip, .92 + .14*$slip];
+			.012 + .075*$load + .025*$revs, 125. - 102.*$revs, .08*$slip, .92 + .14*$slip, $blockGain];
 	}
 }
