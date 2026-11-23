@@ -38,6 +38,7 @@ final class Session
 	/** Controllable physical watercraft. */
 	public Watercraft $craft;
 	public Car $car;
+	public TireDust $tireDust;
 	/** The car's lamp levels and how far its pop-up headlights stand open. */
 	private CarLamps $lamps;
 	public Jet $jet;
@@ -371,6 +372,7 @@ final class Session
 		$this->camera = new Camera;
 		$this->craft = new Watercraft(gravity: self::DRIVING_GRAVITY);
 		$this->car = new Car;
+		$this->tireDust = new TireDust;
 		$this->lamps = new CarLamps;
 		$this->jet = new Jet;
 		$this->balloons = new BalloonPractice;
@@ -542,6 +544,9 @@ final class Session
 			else
 			{
 				$after = $this->car->state();
+				$hadDust = $this->tireDust->active();
+				$this->tireDust->step($seconds,$this->car->dustContacts,$after);
+				if($hadDust || $this->tireDust->active()) $this->dirty = true;
 				if($this->chase->advance($this->camera, $before, $after, $this->landscape, $seconds))
 					$this->dirty = true;
 				if($this->delivery !== null && $this->carSearch === null)
@@ -1722,6 +1727,7 @@ final class Session
 			$site = $this->car->shoreSite($this->landscape,$water,$this->course->posts());
 		if($site === null) return false;
 		$this->car->recoverToRoad($site,$this->landscape,$water,$flooded);
+		$this->tireDust = new TireDust;
 		if(!$flooded) $this->chase->board($this->camera,$this->car->state(),$this->landscape);
 		$this->dirty = true;
 		return true;
@@ -1747,6 +1753,7 @@ final class Session
 		}
 		$this->releasePin();
 		$this->car->spawn($site, $this->landscape, $this->water->level());
+		$this->tireDust = new TireDust;
 		$this->lamps->reset();
 		$this->mode = 'car'; $this->paused = false; $this->boarding++;
 		$this->chase->board($this->camera, $this->car->state(), $this->landscape);

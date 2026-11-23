@@ -1,0 +1,15 @@
+Car audio recordings — Creative Commons Attribution 3.0 Unported
+https://creativecommons.org/licenses/by/3.0/
+
+Aventador engine and exhaust
+Super Cars for you, Erwin Lindsen, and ePic eXhaust recorded the three sources.
+Their original titles, URLs and preparation credits are listed in manifest.json
+alongside the loops. The ready-made RPM and throttle layers come from
+https://github.com/justinagaudelli-eng/supercar-engine-sound/tree/b6dc7d5ef3492a0a42cdd52639eb9bfab2c08a4c/public/samples/svj
+The sandbox ships those WAVs as supplied and varies pitch and gain during playback.
+
+Car tire squeal / skid loop
+Recording by Tom Haigh (audible-edge), loop edit by qubodup.
+https://freesound.org/people/audible-edge/sounds/71739/
+https://opengameart.org/content/car-tire-squeal-skid-loop
+The sandbox ships tires_squal_loop.wav as supplied.

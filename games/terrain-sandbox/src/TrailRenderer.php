@@ -5,13 +5,13 @@ namespace TerrainSandbox;
 use Phonics\Render\Program;
 use TerrainPhonics\Camera;
 
-/** One transparent draw for the F5's smoke, condensation and impact bursts. */
+/** One instanced transparent draw for the active vehicle's airborne particles. */
 final class TrailRenderer
 {
 	private const PUFFS = 12;
 	private Program $program;
 	private array $vao = [], $buffers = [];
-	private ?FlightTrails $source = null;
+	private FlightTrails|TireDust|null $source = null;
 	private int $revision = -1, $count = 0;
 
 	public function __construct()
@@ -21,7 +21,7 @@ final class TrailRenderer
 layout(location=0) in vec3 sampleCorner;
 layout(location=1) in vec4 startPoint;
 layout(location=2) in vec4 endPoint;
-layout(location=3) in vec3 style; // vapor, smoke or burst; lifetime; density
+layout(location=3) in vec3 style; // vapor, smoke, burst or dust; lifetime; density
 uniform mat4 viewProjection;
 uniform vec3 eye;
 uniform vec2 projectionScale;
@@ -31,12 +31,25 @@ out float opacity;
 out float pattern;
 out float burstLife;
 void main() {
-	vec4 point = mix(startPoint, endPoint, sampleCorner.z);
+	bool dust = style.x > 2.5;
+	vec4 point = dust ? startPoint : mix(startPoint, endPoint, sampleCorner.z);
 	float age = clock - point.w;
 	if (age < 0.0 || age >= style.y) { gl_Position = vec4(2.,2.,2.,1.); return; }
 	float life = age / style.y;
 	disk = sampleCorner.xy;
 	burstLife = -1.;
+	if (dust) {
+		pattern = 6.283 * fract(dot(point.xz,vec2(.137,.153)) + point.w*.73);
+		vec3 drift = endPoint.xyz * (1. - exp(-2.*age)) * .5;
+		drift.y += .55*age;
+		vec4 p = viewProjection * vec4(point.xyz-eye + drift,1.);
+		float radius = (.26 + .95*life + .26*style.z) * (1. + .14*sin(pattern));
+		p.xy += disk * projectionScale * radius * vec2(1.17,.84);
+		gl_Position = p;
+		burstLife = -2.;
+		opacity = .54*style.z * smoothstep(0.,.07,life) * (1.-smoothstep(.14,1.,life));
+		return;
+	}
 	if (style.x > 1.5) {
 		// The same twelve quads form a central flash and an expanding shell of smoke puffs.
 		float part = floor(sampleCorner.z * 12.);
@@ -79,6 +92,10 @@ void main() {
 	float d = length(disk);
 	float r = d + .065*sin(5.*disk.x+pattern)*sin(4.*disk.y-pattern);
 	vec3 ink = tint;
+	if (burstLife < -1.5) {
+		ink *= mix(vec3(.55,.43,.31),vec3(.82,.73,.59),.5+.5*sin(pattern));
+		r += .08*sin(8.*disk.y+pattern)*cos(7.*disk.x-pattern);
+	}
 	if (burstLife >= 0.) {
 		float heat = burstLife + .21*d;
 		ink = mix(vec3(1.,.98,.75),vec3(1.,.40,.055),smoothstep(.04,.28,heat));
@@ -114,7 +131,7 @@ GLSL);
 		glBindVertexArray(0);
 	}
 
-	public function draw(FlightTrails $trails, float $alpha, Camera $camera, int $width, int $height, float $night): void
+	public function draw(FlightTrails|TireDust $trails, float $alpha, Camera $camera, int $width, int $height, float $night): void
 	{
 		glBindVertexArray($this->vao[0]);
 		if($trails !== $this->source || $this->revision !== $trails->revision)
@@ -139,7 +156,7 @@ GLSL);
 		glDepthMask(false);
 		glEnable(GL_BLEND);
 		glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE);
-		glDrawArraysInstanced(GL_TRIANGLES,0,6*self::PUFFS,$this->count);
+		glDrawArraysInstanced(GL_TRIANGLES,0,$trails instanceof TireDust ? 6 : 6*self::PUFFS,$this->count);
 		glDisable(GL_BLEND);
 		glDepthMask(true);
 		glBindVertexArray(0);

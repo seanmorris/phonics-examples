@@ -271,7 +271,8 @@ final class VehicleModel
 		if(isset($pose['wheelSpin']))
 		{
 			glUniform4f($p->location('uWheelTravel'), ...$pose['wheelTravel']);
-			glUniform3f($p->location('uWheelAngles'), $pose['wheelSpin'], ...Car::frontWheelAngles($pose['steering']));
+			[$left,$right] = Car::frontWheelAngles($pose['steering']);
+			glUniform4f($p->location('uWheelAngles'), $pose['wheelSpin'], $left, $right, $pose['rearWheelSpin']);
 			glUniform4f($p->location('uWheelLayout'), Car::FRONT_TRACK / 2, Car::REAR_TRACK / 2, Car::WHEELBASE / 2, Car::TIRE_RADIUS);
 		}
 		if($this->controls)

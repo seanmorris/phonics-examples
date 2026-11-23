@@ -8,6 +8,8 @@ final class CarSuspension
 	// Static sag and extra bump travel in meters. The mesh is authored at its loaded ride height.
 	public const SAG = .13;
 	private const BUMP = .14;
+	// Effective suspension roll axis above the tire soles (m), and mass / roll inertia (m⁻²).
+	private const ROLL_CENTER_HEIGHT = .22, INVERSE_ROLL_INERTIA = 2.7;
 	/** The boost can pull a drooping wheel toward ground within this many meters of full extension. */
 	public const BOOST_REACH = .65;
 	/** Smallest gap from a fully extended wheel to the road. */
@@ -40,15 +42,17 @@ final class CarSuspension
 		$this->resting = false;
 	}
 
-	public function step(float $dt, array $heights, bool $moving, float $downforce = 0.): void
+	public function step(float $dt, array $heights, bool $moving, float $downforce = 0., float $cornerLoad = 0.): void
 	{
-		if(!$moving && $downforce === 0. && $this->resting && $this->ground === $heights) return;
+		if(!$moving && $downforce === 0. && $cornerLoad === 0. && $this->resting && $this->ground === $heights) return;
 		// Interpolate these same four terrain samples across both substeps, including their road velocities.
 		$steps = max(1, (int)ceil($dt*120));
 		$h = $dt/$steps;
 		if($this->contacts === 0) $this->landingTimeLeft = self::LANDING_SECONDS;
 		$roadSpeed = [];
 		foreach($heights as $i => $height) $roadSpeed[$i] = ($height-$this->ground[$i])/$dt;
+		// Lateral tire force acts below the mass center. Each supporting corner supplies its share of the moment.
+		$rollMoment = .25*$cornerLoad*(Car::CENTER_OF_MASS_HEIGHT - self::ROLL_CENTER_HEIGHT);
 
 		for($step = 0; $step < $steps; $step++)
 		{
@@ -69,7 +73,7 @@ final class CarSuspension
 					$pull = .25*$downforce*max(0., 1.-$gap/self::BOOST_REACH);
 					$lift -= $pull;
 					$pitchAccel -= $pull*$along*.64;
-					$rollAccel += $pull*$side*2.7;
+					$rollAccel += $pull*$side*self::INVERSE_ROLL_INERTIA;
 				}
 				if($compression <= -self::SAG) continue;
 				$bodySpeed = $this->verticalSpeed + ($along*(1+$rise*$rise)+$side*$bank*$rise)*$this->pitchRate
@@ -82,7 +86,7 @@ final class CarSuspension
 				$force = .25*max(0.0, $spring+$bumpStop+($rate > 0 ? 5.0 : $reboundDamping)*$rate);
 				$lift += $force;
 				$pitchAccel += $force*$along*.64;
-				$rollAccel -= $force*$side*2.7;
+				$rollAccel += ($rollMoment - $force*$side)*self::INVERSE_ROLL_INERTIA;
 			}
 			$this->y += $h*($this->verticalSpeed+.5*$lift*$h);
 			$this->pitch += $h*($this->pitchRate+.5*$pitchAccel*$h);
@@ -121,13 +125,14 @@ final class CarSuspension
 			}
 			if($weight === 0.0) break;
 			$pitchArm /= $weight; $rollArm /= $weight;
-			$effectiveMass = 1/(1+.64*$pitchArm**2+2.7*$rollArm**2);
+			$effectiveMass = 1/(1+.64*$pitchArm**2+self::INVERSE_ROLL_INERTIA*$rollArm**2);
 			$correction = $depth/$weight*$effectiveMass;
 			$closing = $groundSpeed/$weight-($this->verticalSpeed+$this->pitchRate*$pitchArm+$this->rollRate*$rollArm);
 			$impulse = max(0.0,$closing)*$effectiveMass;
 			$this->y += $correction; $this->verticalSpeed += $impulse;
 			$this->pitch += .64*$pitchArm*$correction; $this->pitchRate += .64*$pitchArm*$impulse;
-			$this->roll += 2.7*$rollArm*$correction; $this->rollRate += 2.7*$rollArm*$impulse;
+			$this->roll += self::INVERSE_ROLL_INERTIA*$rollArm*$correction;
+			$this->rollRate += self::INVERSE_ROLL_INERTIA*$rollArm*$impulse;
 		}
 	}
 

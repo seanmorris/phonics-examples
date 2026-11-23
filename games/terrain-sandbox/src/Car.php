@@ -25,7 +25,11 @@ final class Car
 	private const BOOST_ACCEL = 13., BOOST_DOWNFORCE = 7.5; // m/s² at full flow.
 	private float $nitrous = 1.;
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
-	private float $speed = 0, $steering = 0, $spin = 0;
+	private float $speed = 0, $steering = 0, $spin = 0, $rearSpin = 0;
+	private CarGearbox $gearbox;
+	private float $squeal = 0.;
+	/** Dry, loose tire contacts this step: world x/y/z, outward side, emission strength. */
+	public array $dustContacts = [];
 	/** Angle in radians from the direction of travel to the way the body points, while the tail slides out. */
 	private float $drift = 0;
 	/** Deceleration in meters a second squared from locked rear tires carrying all the rear load. */
@@ -71,7 +75,7 @@ final class Car
 	/** Whether the brake lamps and the reversing lamps are switched on after the last step. */
 	private bool $braking = false, $reversing = false;
 
-	public function __construct() { $this->suspension = new CarSuspension; }
+	public function __construct() { $this->suspension = new CarSuspension; $this->gearbox = new CarGearbox; }
 
 	/**
 	 * Search the camera position first, then progressively wider rings. Each yield permits a frame boundary.
@@ -198,7 +202,10 @@ final class Car
 	{
 		[$this->x,$this->z,$this->yaw,$support] = $site;
 		$this->restOnWheels($support);
-		$this->speed = $this->steering = $this->spin = $this->drift = 0;
+		$this->speed = $this->steering = $this->spin = $this->rearSpin = $this->drift = 0;
+		$this->gearbox = new CarGearbox;
+		$this->squeal = 0.;
+		$this->dustContacts = [];
 		$this->tumble = null; $this->recoveryTime = 0;
 		$this->braking = $this->reversing = false;
 		$this->lastSafe = [$this->x,$this->z,$this->yaw];
@@ -244,6 +251,8 @@ final class Car
 		bool $handbrake, array $posts, bool $nitrousHeld): bool
 	{
 		if($dt <= 0) return true;
+		$this->squeal = 0.;
+		$this->dustContacts = [];
 		if($this->revision !== $land->revision() || $this->waterLevel !== $waterLevel)
 		{
 			$support = $this->support($land, $this->x, $this->z, $this->yaw);
@@ -285,26 +294,28 @@ final class Car
 		$this->steering += max(-2.5*$dt, min(2.5*$dt, $target - $this->steering));
 		$gripFraction = $this->suspension->contacts/4;
 		$rear = ($this->suspension->contacts - $this->suspension->frontContacts)/2;
+		$driveAccel = $this->gearbox->step($dt,$this->speed,$throttle,$rear > 0.);
+		$braking = $throttle*$this->speed < 0;
 		if($gripFraction > 0)
 		{
 			$grade = sin($this->roadPitch);
 			if($throttle == 0 && ($this->speed != 0 || abs($grade) > .18))
 				$this->speed -= Session::DRIVING_GRAVITY*$grade*$dt*$gripFraction;
 			$speed = abs($this->speed);
-			$drag = self::AERO_DRAG*$speed**2 + self::ROAD_DRAG*min($speed, self::ROAD_DRAG_LIMIT)**2;
+			// The low-speed handling curve gives way to aerodynamic drag on a long straight.
+			$rolling = min($speed,self::ROAD_DRAG_LIMIT)*min(1.,40./max(1.,$speed));
+			$drag = self::AERO_DRAG*$speed**2 + self::ROAD_DRAG*$rolling**2;
 			if($throttle == 0)
 				$this->speed = ($this->speed <=> 0)*max(0.0, $speed - (1.7 + $drag)*$gripFraction*$dt);
 			else
 			{
-				$braking = $throttle*$this->speed < 0;
 				// A landing can send the car backward faster than reverse gear can drive it.
 				$reverseLimit = min(-8.0, $this->speed);
-				$power = $braking ? self::SERVICE_BRAKE : ($throttle > 0 ? 9 : 4);
+				$accel = $braking ? $throttle*self::SERVICE_BRAKE*$gripFraction : $driveAccel*$rear;
 				// Reverse gear drives up to 8 m/s backward. Faster than that the pedal adds nothing, so drag and grade
 				// slow the car instead of the clamp below holding its speed.
-				if(!$braking && $throttle < 0 && $this->speed <= -8.0) $power = 0;
-				$traction = $braking ? $gripFraction : $rear;
-				$this->speed += ($throttle*$power*$traction - (($this->speed <=> 0)*$drag+Session::DRIVING_GRAVITY*$grade)*$gripFraction)*$dt;
+				if(!$braking && $throttle < 0 && $this->speed <= -8.0) $accel = 0.;
+				$this->speed += ($accel - (($this->speed <=> 0)*$drag+Session::DRIVING_GRAVITY*$grade)*$gripFraction)*$dt;
 				$pedal = abs($throttle);
 				// A light pedal leaves some of the rolling resistance a released one would meet.
 				if($pedal < 1)
@@ -411,6 +422,8 @@ final class Car
 		$tipEnd = abs($pitch) > 1.02;
 		$springs = $this->suspension;
 		$this->spin = fmod($this->spin + $distance/self::TIRE_RADIUS, 2*M_PI);
+		$spinSlip = ($throttle <=> 0)*$this->gearbox->wheelSlip;
+		if(!$handbrake) $this->rearSpin = fmod($this->rearSpin + ($distance + $spinSlip*$dt)/self::TIRE_RADIUS, 2*M_PI);
 		// A steep face below a flying car cannot apply torque until a tire actually touches it.
 		$bodyTipped = abs($this->pitch) > 1.22 || abs($this->roll) > 1.22;
 		if($bodyTipped || $gripFraction > 0 && ($tipSide || $tipEnd))
@@ -422,11 +435,14 @@ final class Car
 			$slip = $heading - $this->yaw;
 			$this->tumble = new CarTumble($this->x,$this->y,$this->z,$this->yaw,$this->pitch,$this->roll,
 				$horizontal*cos($slip),$springs->verticalSpeed,$pitchRate,$rollRate,$horizontal*sin($slip));
+			$this->gearbox = new CarGearbox;
 			$this->drift = 0;
 			return $this->stepTumble($dt,$land,$waterLevel,$posts);
 		}
 		$this->x = $x; $this->z = $z; $this->yaw = atan2(sin($yaw), cos($yaw));
-		$springs->step($dt,$support[4],$distance != 0,$downforce);
+		// The slope already sets the resting chassis attitude. Apply the unbalanced side load as the tires corner.
+		$cornerLoad = $sideLoad*min(1.,abs($lateral)/2.);
+		$springs->step($dt,$support[4],$distance != 0,$downforce,$cornerLoad);
 		$this->y = $springs->y; $this->pitch = $springs->pitch; $this->roll = $springs->roll;
 		if($springs->contacts > 0)
 		{
@@ -434,8 +450,41 @@ final class Car
 			$this->roadPitch = $pitch; $this->roadRoll = $roll;
 			if($springs->contacts === 4 && $support[5] > $waterLevel + .12 && self::safe($support)
 				&& !self::nearPost($posts,$x,$z,$this->yaw,$support[0])) $this->lastSafe = [$x,$z,$this->yaw];
+			$frontSlip = max(0.,abs($demand) - max(0.,$grip + $direction*$gravitySide))/12.;
+			$brakeSlip = $braking ? max(0.,abs($throttle)*self::SERVICE_BRAKE - $grip)/7. : 0.;
+			$rolling = min(1.,abs($this->speed)/8.);
+			$rearSlip = max(abs($this->speed*sin($this->drift))/8., $handbrake ? $rolling : abs($spinSlip)/4.);
+			$this->tireEffects($land,$waterLevel,$support[4],max($frontSlip,$brakeSlip)*$rolling,
+				max($rearSlip,$brakeSlip*$rolling),$boost);
 		}
 		return true;
+	}
+
+	private function tireEffects(Landscape $land, float $water, array $heights, float $front, float $rear, float $boost): void
+	{
+		if(max($front,$rear,$boost) < .04) return;
+		$sin = sin($this->yaw); $cos = cos($this->yaw);
+		foreach($heights as $i => $height)
+		{
+			if($height <= $water || $this->suspension->travel[$i] <= -CarSuspension::SAG) continue;
+			$slip = min(1.,$i < 2 ? $front : $rear);
+			$dust = $i < 2 ? $slip : max($slip,.8*$boost);
+			if($dust < .04) continue;
+			$along = ($i < 2 ? .5 : -.5)*self::WHEELBASE;
+			$side = $i % 2 ? 1 : -1;
+			$across = .5*$side*($i < 2 ? self::FRONT_TRACK : self::REAR_TRACK);
+			$x = $this->x + $along*$sin + $across*$cos;
+			$z = $this->z + $along*$cos - $across*$sin;
+			if(self::onPavement($land,$x,$z)) $this->squeal = max($this->squeal,$slip);
+			else $this->dustContacts[] = [$x,$height,$z,$side,$dust];
+		}
+	}
+
+	/** A road brush paints its whole footprint. A graded spline paints only its pavement width. */
+	public static function onPavement(Landscape $land, float $x, float $z): bool
+	{
+		return $land->material($x,$z,$offset,$mark) === 'road'
+			&& ($mark === null ? $offset === null : abs($mark[0]) <= $mark[2]);
 	}
 
 	/** Grounded, drivable locations retained as a fallback if a wreck settles on a cliff. */
@@ -509,6 +558,7 @@ final class Car
 		}
 		$this->restOnWheels($support);
 		$this->speed = $this->steering = $this->recoveryTime = 0;
+		$this->gearbox = new CarGearbox;
 		$this->tumble = null;
 		$this->recoveries++;
 		return true;
@@ -692,6 +742,8 @@ final class Car
 	{
 		return ['x'=>$this->x,'y'=>$this->y,'z'=>$this->z,'yaw'=>$this->yaw,'pitch'=>$this->pitch,'roll'=>$this->roll,
 			'speed'=>$this->speed,'nitrous'=>$this->nitrous,'steering'=>$this->steering,'drift'=>$this->drift,'wheelSpin'=>$this->spin,'terrainRevision'=>$this->revision,
+			'rearWheelSpin'=>$this->rearSpin,'gear'=>$this->gearbox->gear,'rpm'=>$this->gearbox->rpm,
+			'engineLoad'=>$this->gearbox->load,'tireSqueal'=>$this->squeal,
 			'wheelTravel'=>$this->tumble === null ? $this->suspension->travel : [0.0,0.0,0.0,0.0],
 			'wheelContacts'=>$this->tumble === null ? $this->suspension->contacts : 0,
 			'motion'=>$this->tumble === null ? ($this->suspension->contacts ? 'driving' : 'airborne') : ($this->recoveryTime > 0 ? 'overturned' : 'tumbling'),

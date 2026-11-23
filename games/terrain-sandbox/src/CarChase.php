@@ -101,11 +101,11 @@ final class CarChase
 		foreach($old->position as $i => $value) $eye->position[$i] = $value + $alpha*($camera->position[$i] - $value);
 		$eye->yaw = $old->yaw + $alpha*self::angle($camera->yaw - $old->yaw);
 		$eye->pitch = $old->pitch + $alpha*($camera->pitch - $old->pitch);
-		foreach(['pitch','roll','steering','yaw','wheelSpin','speed'] as $key)
+		foreach(['pitch','roll','steering','yaw','wheelSpin','rearWheelSpin','speed'] as $key)
 		{
 			$previous = $this->previousCar[$key];
 			$delta = $pose[$key] - $previous;
-			if(in_array($key,['yaw','pitch','roll','wheelSpin'],true)) $delta = self::angle($delta);
+			if(in_array($key,['yaw','pitch','roll','wheelSpin','rearWheelSpin'],true)) $delta = self::angle($delta);
 			$pose[$key] = $previous + $alpha*$delta;
 		}
 		// Carry the mass along its path between ticks. The tire-sole origin swings around it as the car rotates.

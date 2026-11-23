@@ -1297,7 +1297,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 					const program = gl.getParameter(gl.CURRENT_PROGRAM);
 					const location = gl.getUniformLocation(program, 'uWheelAngles');
 					const angles = location && gl.getUniform(program, location);
-					element.splitFrontSteering = angles?.length === 3 && angles[1] < angles[2] && angles[2] < 0;
+					element.splitFrontSteering = angles?.length === 4 && angles[1] < angles[2] && angles[2] < 0;
 				}
 			}
 
@@ -2938,4 +2938,146 @@ test('a relief-only layer changes sun shading while a painted road keeps its ink
 	await expect.poll(async() => (await status(page)).settings.azimuth).toBe(280);
 	const rotated = await image();
 	expect(rotated.data.equals(after.data)).toBe(false);
+});
+
+test('car plays the recorded engine and skid, and draws dust from loose ground', async({page}, testInfo) => {
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	page.on('console', message => { if(message.type() === 'error') errors.push(message.text()); });
+
+	await page.setViewportSize({width: 760, height: 480});
+
+	await page.addInitScript(() => {
+		// Observe the real Web Audio graph, including samples actually reaching a running mixer.
+		const probe = window.driveAudio = {buffers: 0, live: new Set(), skid: false, pitched: false, analyser: null};
+		const decode = BaseAudioContext.prototype.decodeAudioData;
+
+		BaseAudioContext.prototype.decodeAudioData = async function(...args) {
+			const buffer = await decode.apply(this, args);
+			probe.buffers++;
+
+			return buffer;
+		};
+
+		const connect = AudioNode.prototype.connect;
+
+		AudioNode.prototype.connect = function(destination, ...args) {
+			if(destination instanceof AudioDestinationNode && this instanceof GainNode)
+			{
+				probe.analyser ??= this.context.createAnalyser();
+				connect.call(this, probe.analyser);
+			}
+
+			return connect.call(this, destination, ...args);
+		};
+
+		const start = AudioBufferSourceNode.prototype.start;
+
+		AudioBufferSourceNode.prototype.start = function(...args) {
+			if(this.loop && this.buffer)
+			{
+				probe.live.add(this);
+
+				if(Math.abs(this.buffer.duration - 3) < .01) probe.skid = true;
+
+				if(Math.abs(this.playbackRate.value - 1) > .01) probe.pitched = true;
+
+				this.addEventListener('ended', () => probe.live.delete(this), {once: true});
+			}
+
+			return start.apply(this, args);
+		};
+	});
+
+	await boot(page);
+	const dry = fixture();
+	dry.landscape.recipe.worldSize = 512;
+	dry.settings.waterLevel = -5;
+	dry.camera = {position: [0,30,0],yaw: Math.PI,pitch: -.4};
+	await load(page, dry);
+	const view = canvas(page);
+
+	await view.evaluate(element => {
+		const gl = element.getContext('webgl2'), draw = gl.drawArraysInstanced.bind(gl);
+		element.dustPixels = 0;
+
+		gl.drawArraysInstanced = (mode, first, count, instances) => {
+			const isDust = count === 6 && instances >= 6 && element.dustPixels < 30
+				&& gl.getUniformLocation(gl.getParameter(gl.CURRENT_PROGRAM), 'clock') !== null;
+
+			if(!isDust) return draw(mode, first, count, instances);
+
+			const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+
+			const pixels = () => {
+				const bytes = new Uint8Array(w*h*4);
+				gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+
+				return new Uint32Array(bytes.buffer);
+			};
+
+			const before = pixels();
+			draw(mode, first, count, instances);
+			element.dustPixels = pixels().reduce((sum, color, i) => sum + Number(color !== before[i]), 0);
+		};
+	});
+
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).car?.rpm).toBe(950);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.buffers)).toBe(15);
+
+	await expect.poll(() => page.evaluate(() => {
+		const analyser = window.driveAudio.analyser;
+
+		if(!analyser) return 0;
+
+		const samples = new Float32Array(analyser.fftSize);
+		analyser.getFloatTimeDomainData(samples);
+
+		return Math.max(...samples);
+	})).toBeGreaterThan(.001);
+
+	await page.locator('.terrain-panel[open] > summary').click();
+	await view.focus();
+	await page.keyboard.down('w');
+	await page.keyboard.down('Shift');
+	await expect.poll(() => view.evaluate(element => element.dustPixels)).toBeGreaterThan(30);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.pitched)).toBe(true);
+	await page.keyboard.down('d');
+	await expect.poll(async() => (await status(page)).car.roll).toBeGreaterThan(.025);
+	await page.screenshot({path: testInfo.outputPath('tire-dust.png')});
+
+	await page.keyboard.up('d');
+	await page.keyboard.up('Shift');
+	await page.keyboard.up('w');
+	await page.keyboard.press('p');
+	await expect.poll(() => page.evaluate(() => window.driveAudio.live.size)).toBe(0);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.analyser.context.state)).toBe('suspended');
+
+	await page.keyboard.press('p');
+	await expect.poll(() => page.evaluate(() => window.driveAudio.live.size)).toBeGreaterThan(0);
+
+	const road = fixture(
+		{history: [[{type: 'road',points: [[0,0,-90],[0,0,90]],width: 10,shoulder: 1,crown: 0}]],revision: 1}
+	);
+
+	road.landscape.recipe.worldSize = 512;
+	road.settings.waterLevel = -5;
+	road.camera = dry.camera;
+	await load(page, road);
+	await press(page, 'car');
+	await view.focus();
+
+	await page.keyboard.down('w');
+	await expect.poll(async() => (await status(page)).car?.speed ?? 0).toBeGreaterThan(6);
+	await page.keyboard.up('w');
+	await page.keyboard.down('Space');
+	await expect.poll(() => page.evaluate(() => window.driveAudio.skid)).toBe(true);
+	await page.keyboard.up('Space');
+
+	await page.keyboard.press('f');
+	await expect.poll(async() => (await status(page)).mode).toBe('fly');
+	await expect.poll(() => page.evaluate(() => window.driveAudio.live.size)).toBe(0);
+	expect(await page.evaluate(() => window.driveAudio.buffers)).toBe(15);
+	expect(errors).toEqual([]);
 });

@@ -14,8 +14,7 @@ final class RoadRecovery
 	{
 		$pose = $car->state();
 		$x = $pose['x']; $z = $pose['z'];
-		if(!$flooded && $land->material($x,$z,$offset,$mark) === 'road' && ($mark === null ? $offset === null : abs($mark[0]) <= $mark[2]))
-			return null;
+		if(!$flooded && Car::onPavement($land,$x,$z)) return null;
 
 		$next = $race->nextGate($course);
 		$previous = $race->previousGate($course);

@@ -29,6 +29,7 @@ use TerrainSandbox\Session;
 
 $app = new Context;
 $app->browser(__DIR__ . '/browser/game.mjs');
+$app->browser(__DIR__ . '/browser/car-audio.mjs');
 $app->browser(__DIR__ . '/browser/screen-awake.mjs');
 $app->browser(__DIR__ . '/browser/control-hints.mjs');
 $app->browser(__DIR__ . '/browser/road-editor.mjs');
@@ -76,6 +77,8 @@ $pickFrame = false;
 $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainVehicleFrame');
+$carSound = vrzno_env('terrainCarSound');
+$lastSound = [0,0,0];
 $roadStatus = vrzno_env('terrainRoadEditor');
 $roadCapture = vrzno_env('terrainRoadCapture');
 $roadCamera = vrzno_env('terrainRoadCamera');
@@ -238,11 +241,14 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
 		[$viewCamera,$vehiclePose] = $session->view($alpha);
+		$sound = $session->mode === 'car' && !$session->paused && !$vehiclePose['floodedHold']
+			? [(int)round($vehiclePose['rpm']), round($vehiclePose['engineLoad'],3), round($vehiclePose['tireSqueal'],3)] : [0,0,0];
+		if($sound !== $lastSound) $carSound(...($lastSound = $sound));
 		// Lamp levels blend between steps like the pose, and a change in either redraws the frame below.
 		if($session->mode === 'car') $vehiclePose['lamps'] = $session->carLamps($alpha);
 		// Lit headlamps light the ground and water from this frame's pose, day or night. Dark lamps and other modes
@@ -330,8 +336,9 @@ $engine->start(
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
 				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$session->balloons->targets() ? null : $drawOpaque);
-			if($session->mode === 'jet' && $session->flightTrails->active())
-				($trailRenderer ??= new TrailRenderer)->draw($session->flightTrails,$shotAlpha,$viewCamera,$width,$height,
+			$trails = match($session->mode) { 'jet' => $session->flightTrails, 'car' => $session->tireDust, default => null };
+			if($trails?->active())
+				($trailRenderer ??= new TrailRenderer)->draw($trails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
 			foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->smoke($site,$viewCamera,$width,$height,$session->time);
 			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
