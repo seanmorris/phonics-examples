@@ -10,6 +10,9 @@ use Phonics\Ecs\Scheduler;
 use TerrainSandbox\Car;
 use TerrainSandbox\Circuit;
 use TerrainSandbox\CircuitDriver;
+use TerrainSandbox\CircuitRoad;
+use TerrainSandbox\Course;
+use TerrainSandbox\RacingLine;
 use TerrainSandbox\Race;
 use TerrainSandbox\RacerMotion;
 use TerrainSandbox\Session;
@@ -177,3 +180,62 @@ foreach([false,true] as $chicane) {
 	check($pedal === 1. && $boost, 'Keep accelerating with a full bottle at 160 mph on a clear straight.');
 }
 echo "CPU exhibition laps, drift exits, records, pause and restart passed.\n";
+
+// Drive the same authored S-bends at two widths. The wide grading shoulder is outside the asphalt.
+$points = [[-140,-80],[-140,55],[-130,84],[-104,100],[-40,100],[-22,88],[-14,66],[-5,47],
+	[22,40],[90,40],[110,26],[118,0],[110,-40],[75,-100],[-40,-132],[-100,-120]];
+$apexCuts = [];
+foreach([6,36] as $width) {
+	$table = new Session(['worldSize'=>512,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12]);
+	$table->landscape->queue(CircuitRoad::closeLoop(['type'=>'road','material'=>'road','width'=>$width,'shoulder'=>15.,
+		'points'=>array_map(static fn($p)=>[$p[0],0.,$p[1]],$points)]));
+	$table->landscape->commit();
+	$loop = CircuitRoad::manualCircuit($table->landscape,0,-12.);
+	$save = json_decode($table->save(),true);
+	$save['course'] = $loop->course($table->landscape,$table->gateShapes,2,false)->export();
+	$save['circuit'] = ['route'=>$loop->export(),'variant'=>'dry'];
+	$table->load(json_encode($save));
+	$table->input(['actions'=>['cpu-demo']],1/60,1.);
+	$cut = 0.;
+	for($i = 0; $i < 7000 && $table->race->state !== 'finished'; $i++) {
+		$table->step(1/60);
+		$p = $table->car->state();
+		$sin = sin($p['yaw']); $cos = cos($p['yaw']);
+		foreach([Car::WHEELBASE/2,-Car::WHEELBASE/2] as $along) {
+			$track = $along > 0. ? Car::FRONT_TRACK : Car::REAR_TRACK;
+			foreach([-$track/2,$track/2] as $across) {
+				$x = $p['x']+$along*$sin+$across*$cos;
+				$z = $p['z']+$along*$cos-$across*$sin;
+				$material = $table->landscape->material($x,$z,$offset,$mark);
+				check($material === 'road' && $mark !== null && abs($mark[0])+.12 < $mark[2],
+					"All four tires must clear the actual $width m pavement edge through both laps.");
+				if($x < -65. && $z > 65.) $cut = max($cut,-$mark[0]);
+			}
+		}
+	}
+	check($table->race->state === 'finished' && $table->car->state()['recoveries'] === 0, 'Finish through every gate on both widths.');
+	$apexCuts[$width] = $cut;
+	if($width === 36) {
+		// A narrow gate on this broad apex must still admit the full car.
+		$count = (int)ceil($loop->length/6.);
+		$spacing = $loop->length/$count;
+		$stations = $loop->stations(array_map(static fn($i) => $i*$spacing,range(0,$count-1)));
+		$gates = new Course($table->gateShapes);
+		$apex = 34;
+		[$x,$z,$yaw] = $stations[$apex];
+		$gates->place('start','road',$x,0.,$z,$yaw,width:8.,pavementSpan:true);
+		$line = RacingLine::fit($stations,$spacing,$table->landscape,$gates);
+		$across = ($line[$apex][0]-$x)*cos($yaw) - ($line[$apex][1]-$z)*sin($yaw);
+		check(abs($across)+Car::BODY_HALF_WIDTH < 4., 'A narrow gate limits the cut across a wide apex.');
+		$open = new Course($table->gateShapes);
+		$before = RacingLine::fit($stations,$spacing,$table->landscape,$open)[$apex];
+		$table->landscape->queue(['type'=>'material','x'=>$before[0],'z'=>$before[1],'radius'=>6.,'material'=>'grass']);
+		$table->landscape->commit();
+		$after = RacingLine::fit($stations,$spacing,$table->landscape,$open)[$apex];
+		check($table->landscape->material(...$after) === 'road' && hypot($after[0]-$before[0],$after[1]-$before[1]) > 3.,
+			'Repainting the inside edge pulls the apex back onto asphalt.');
+	}
+	$table->close();
+}
+check($apexCuts[36] > $apexCuts[6]+8., 'The wider road permits a deeper cut on the same right-hand apex.');
+echo "Width-aware racing lines and tire clearance passed.\n";

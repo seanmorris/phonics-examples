@@ -776,7 +776,7 @@ final class Session
 		$car = new Car;
 		$site = $this->startingCarSite($car,$this->course->start());
 		if($site === null) { $this->message = 'The CPU racer needs dry, clear ground behind the start gate.'; return; }
-		$driver = new CircuitDriver($this->circuit,$this->course);
+		$driver = new CircuitDriver($this->circuit,$this->course,$this->landscape);
 		$driver->restart($site[0],$site[1]);
 		$car->spawn($site,$this->landscape,$this->water->level());
 		$race = new Race;

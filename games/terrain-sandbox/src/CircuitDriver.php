@@ -2,10 +2,12 @@
 declare(strict_types=1);
 namespace TerrainSandbox;
 
+use TerrainPhonics\Landscape;
+
 /** Drives a closed circuit with the same four controls available to a player. */
 final class CircuitDriver
 {
-	private array $line, $speedLimit = [];
+	private array $line, $speedLimit = [], $sight = [];
 	private array $bends = [], $nextBend = [];
 	private int $count, $segment;
 	private ?int $activeBend = null;
@@ -13,7 +15,7 @@ final class CircuitDriver
 	public string $phase = 'Driving';
 	public readonly int $revision;
 
-	public function __construct(public readonly Circuit $circuit, public readonly Course $course)
+	public function __construct(public readonly Circuit $circuit, public readonly Course $course, ?Landscape $landscape = null)
 	{
 		$this->revision = $course->revision;
 		// Equal-distance samples bound the work per decision even on endurance circuits.
@@ -21,6 +23,13 @@ final class CircuitDriver
 		$this->spacing = $circuit->length / $this->count;
 		$distances = array_map(fn($i) => $i * $this->spacing, range(0, $this->count - 1));
 		$this->line = $circuit->stations($distances);
+		$hasPavement = $landscape !== null && $landscape->roads();
+		if($hasPavement) {
+			$path = new Circuit(RacingLine::fit($this->line,$this->spacing,$landscape,$course),$circuit->dryLevel,null);
+			// The inside line changes the distance around the lap. Braking and lookahead both use driven meters.
+			$this->spacing = $path->length / $this->count;
+			$this->line = $path->stations(array_map(fn($i) => $i*$this->spacing, range(0,$this->count-1)));
+		}
 		$this->segment = 0;
 
 		// Measure the change in heading over about 10 meters on either side of each bend.
@@ -32,8 +41,12 @@ final class CircuitDriver
 			$angle = atan2($bx - $x, $bz - $z) - atan2($x - $ax, $z - $az);
 			$curvature = self::angle($angle) / ($span * $this->spacing);
 			$curvatures[] = $curvature;
-			// Carry nearly one g through bends. On a straight the gearbox and drag set the pace.
-			$this->speedLimit[] = min(Car::TOP_SPEED_MPH * Car::MPS_PER_MPH, sqrt(9.2 / max(.0001, abs($curvature))));
+			$margin = $hasPavement ? max(.25,RacingLine::edgeDistance($landscape,$x,$z) - Car::BODY_HALF_WIDTH - .8) : INF;
+			// Limit the shortcut made by steering at a point ahead: chord sagitta is about curvature * length² / 8.
+			$k = max(.0001,abs($curvature));
+			$this->sight[] = max(4.,min(36.,sqrt(6.*$margin/$k)));
+			$grip = min(9.2,7.2+.65*$margin);
+			$this->speedLimit[] = min(Car::TOP_SPEED_MPH * Car::MPS_PER_MPH, sqrt($grip/$k));
 		}
 		$this->planBends($curvatures);
 		// Work back from each bend using 12 m/s² of service braking. The second pass covers the lap seam.
@@ -127,7 +140,7 @@ final class CircuitDriver
 		if($entry !== null) {
 			$bend = $this->bends[$entry];
 			$along = fmod($at - $entry + $this->count, $this->count) * $this->spacing;
-			if($along >= $bend['length']) $along -= $this->circuit->length;
+			if($along >= $bend['length']) $along -= $this->spacing * $this->count;
 			$near = $along >= -max(7., min(32., .65*$speed));
 			$pastApex = $along >= $bend['apex'];
 			if($near && !$pastApex && $this->activeBend !== $entry && $speed > 7. && $error*$bend['side'] > .045) {
@@ -169,7 +182,9 @@ final class CircuitDriver
 		}
 		if($this->phase === 'Coasting') $this->phase = 'Driving';
 		$at = $this->locate($car['x'], $car['z']);
-		$look = max(6., min(36., 6. + .58*$speed));
+		$look = max(6.,min(36.,6. + .58*$speed));
+		$probe = $this->wrap((int)round($at + .5*$look/$this->spacing));
+		$look = min($look,$this->sight[$this->segment],$this->sight[$probe]);
 		$ahead = $at + $look / $this->spacing;
 		$i = (int)floor($ahead);
 		[$ax, $az] = $this->line[$this->wrap($i)];
