@@ -68,7 +68,7 @@ final class GateDuck
 	 */
 	public function __construct(public readonly float $lead, private readonly ?\Closure $ground = null)
 	{
-		if(!($lead >= self::SIDE)) throw new \InvalidArgumentException('A camera ducks over at least ' . self::SIDE . ' m');
+		if(!($lead >= self::SIDE)) throw new \InvalidArgumentException('A camera ducks over at least ' . DisplayUnits::feet(self::SIDE) . ' ft');
 	}
 
 	/**

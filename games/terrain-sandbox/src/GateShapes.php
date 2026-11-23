@@ -225,7 +225,7 @@ final class GateShapes
 			if($value === null) return $default;
 			$held = max($range[0], min($range[1], $value));
 			if($held !== $value)
-				$limits[] = "$name is " . ($held < $value ? 'at most ' : 'at least ') . self::meters($held) . " m $wide";
+				$limits[] = "$name is " . ($held < $value ? 'at most ' : 'at least ') . DisplayUnits::feet($held) . " ft $wide";
 			return $held;
 		};
 		[$defaultWidth, $defaultHeight] = $size['default'];
@@ -238,8 +238,8 @@ final class GateShapes
 			$high = min($size['height'][1], $defaultHeight * $across * $size['stretch']);
 			$held = max($low, min($high, $height));
 			if(abs($held - $height) > 1e-9)
-				$limits[] = "$name " . self::meters($width) . ' m wide is ' . ($held < $height ? 'at most ' : 'at least ')
-					. self::meters($held) . ' m tall';
+				$limits[] = "$name " . DisplayUnits::feet($width) . ' ft wide is ' . ($held < $height ? 'at most ' : 'at least ')
+					. DisplayUnits::feet($held) . ' ft tall';
 			$height = $held;
 		}
 		return ['width' => $width, 'height' => $height, 'limits' => $limits];
@@ -255,13 +255,6 @@ final class GateShapes
 	{
 		$fitted = $this->fit($kind, $width, $height);
 		return abs($fitted['width'] - $width) < 1e-6 && abs($fitted['height'] - $height) < 1e-6;
-	}
-
-	/** Write a length for a message: whole meters, or one decimal place under 100 m. */
-	public static function meters(float $meters): string
-	{
-		$rounded = round($meters, $meters < 100 ? 1 : 0);
-		return $rounded == floor($rounded) ? (string)(int)$rounded : sprintf('%.1f', $rounded);
 	}
 
 	/** Report the shapes in the layout of gates.json, with each post's vertical reach filled in. */

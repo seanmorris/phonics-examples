@@ -174,21 +174,21 @@ $start = click($edit, 'start', 10, 20, M_PI / 2);
 expect($start !== null && $start['kind'] === 'road' && abs($start['x'] - 10) < .1 && abs($start['z'] - 20) < .1
 	&& abs($start['y']) < 1e-6 && abs($start['yaw'] - M_PI / 2) < 1e-9 && $start['laps'] === 1,
 	'A click on land at zero height places a road gate on the ground facing the camera heading');
-expect($edit->message === 'Placed the start gate at 10, 20 m, its opening 13.3 by 3.1 m.',
+expect($edit->message === 'Placed the start gate at 33, 66 ft, its opening 43.7 by 10.1 ft.',
 	'Placing a gate says what, where and how big: ' . $edit->message);
 $gates = statusGates($edit);
 expect(count($gates) === 1 && $gates[$start['id']]['print'] === 'start-finish' && $gates[$start['id']]['laps'] === 1,
 	'A start gate without a finish gate shows the START / FINISH print');
 $moved = click($edit, 'start', -30, 40, -2.5);
 expect($edit->course->count() === 1 && $moved['id'] === $start['id'] && abs($moved['x'] + 30) < .1
-	&& abs($moved['yaw'] + 2.5) < 1e-9 && str_starts_with($edit->message, 'Moved the start gate to -30, 40 m'),
+	&& abs($moved['yaw'] + 2.5) < 1e-9 && str_starts_with($edit->message, 'Moved the start gate to -99, 131 ft'),
 	'Placing a second start gate moves the first');
 $facing = click($edit, 'checkpoint', 0, 0, 7.5);
 expect($facing['number'] === 1 && $facing['yaw'] >= -M_PI && $facing['yaw'] <= M_PI && abs($facing['yaw'] - (7.5 - 2 * M_PI)) < 1e-9,
 	'A gate heading is kept within -pi to pi');
 for($i = 2; $i <= 4; $i++) click($edit, 'checkpoint', 50 * $i, 0);
 $numbers = array_column(array_filter($edit->course->gates(), fn($g) => $g['role'] === 'checkpoint'), 'number');
-expect(array_values($numbers) === [1, 2, 3, 4] && $edit->message === 'Placed checkpoint 4 at 200, 0 m, its opening 13.3 by 3.1 m.',
+expect(array_values($numbers) === [1, 2, 3, 4] && $edit->message === 'Placed checkpoint 4 at 656, 0 ft, its opening 43.7 by 10.1 ft.',
 	'Checkpoints are numbered in placement order');
 $finish = click($edit, 'finish', 0, -100);
 $gates = statusGates($edit);
@@ -215,7 +215,7 @@ expect($edit->course->gate($far['id']) === null && $edit->course->gate($near['id
 	'Of two gates within reach, Remove takes the nearer');
 $high = click($edit, 'checkpoint', 150, 150, 0, 60);
 expect($high['kind'] === 'air' && abs($high['y'] - 60) < 1e-9
-	&& str_ends_with($edit->message, ', 60 m above the ground, its opening 40 by 8.8 m.'),
+	&& str_ends_with($edit->message, ', 197 ft above the ground, its opening 131 by 28.9 ft.'),
 	'With a height above zero a click on land places an air gate that far above the ground');
 // The camera looks along +Z, 550 m short of a gate 60 m above the ground. The ray through the gate's window meets the
 // ground about 145 m beyond it.
@@ -784,7 +784,7 @@ $bay = new Session($lake);
 $s = click($bay, 'start', 0, -100);
 $c = click($bay, 'checkpoint', 0, 0);
 $f = click($bay, 'finish', 0, 100);
-expect($s['kind'] === 'water' && $bay->message === 'Placed the finish gate at 0, 100 m, floating on the water, its opening 8.9 by 3.6 m.'
+expect($s['kind'] === 'water' && $bay->message === 'Placed the finish gate at 0, 328 ft, floating on the water, its opening 29.3 by 11.8 ft.'
 	&& abs($c['y'] - $bay->water->sample($c['x'], $c['z'], $bay->time)['height']) < 1e-12
 	&& $bay->course->export()['gates'][1]['y'] === 5.0,
 	'A click on water places a gate that floats on the surface and saves the water level');

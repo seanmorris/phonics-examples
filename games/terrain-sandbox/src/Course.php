@@ -109,7 +109,7 @@ final class Course
 		[$defaultWidth, $defaultHeight] = $this->shapes->kind($kind)['size']['default'];
 		$width ??= $defaultWidth; $height ??= $defaultHeight;
 		if(!$this->shapes->fits($kind, $width, $height))
-			throw new \InvalidArgumentException("A $kind gate cannot be $width by $height meters");
+			throw new \InvalidArgumentException("A $kind gate cannot be " . DisplayUnits::feet($width) . " by " . DisplayUnits::feet($height) . " ft");
 		if($role === 'checkpoint' && count($this->checkpoints) >= self::MAX_CHECKPOINTS)
 			return ['refused' => 'full'] + $result;
 		$existing = $role === 'start' ? $this->start : ($role === 'finish' ? $this->finish : null);

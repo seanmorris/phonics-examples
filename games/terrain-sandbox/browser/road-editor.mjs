@@ -36,13 +36,18 @@ function markup()
 {
 
 	const number = (name, label, min, max) => `<label class="terrain-field">${label}
-		<input type="number" step="any" min="${min}" max="${max}" data-road-field="${name}"></label>`;
+		<input type="number" step="any" min="${min}" max="${max}" data-road-field="${name}" data-unit="ft"></label>`;
 
 	return `<style>
 	[data-tab-panel=roads] .road-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 	[data-tab-panel=roads] .road-tools button{min-height:30px;padding:3px 9px}
 	[data-tab-panel=roads] .road-tools button[aria-pressed=true]{color:#183328;background:#e5bf79;border-color:#e5bf79}
 	[data-tab-panel=roads] .road-map-wrap{overflow:hidden;border:1px solid #739285;border-radius:7px;background:#142927}
+	[data-tab-panel=roads] .road-map-surface{position:relative;overflow:hidden}
+	[data-tab-panel=roads] .road-camera{position:absolute;top:0;left:0;width:9px;height:9px;box-sizing:border-box;pointer-events:none;
+		border:1.5px solid #10242a;border-radius:50%;background:#8ff5ff;filter:drop-shadow(0 0 1px #07151b)}
+	[data-tab-panel=roads] .road-camera::before{content:"";position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+		border:4px solid transparent;border-top:0;border-bottom:8px solid #8ff5ff}
 	[data-tab-panel=roads] .road-map{display:block;width:100%;height:clamp(210px,46cqh,400px);touch-action:none}
 	[data-tab-panel=roads] .road-map:focus-visible{outline-offset:-3px}
 	[data-tab-panel=roads] .road-readout{display:flex;justify-content:space-between;gap:6px;align-items:center;
@@ -60,8 +65,9 @@ function markup()
 	<button type="button" data-map="out" aria-label="Zoom out">−</button>
 	<button type="button" data-map="in" aria-label="Zoom in">+</button>
 	<button type="button" data-map="fit">Fit road</button><button type="button" data-map="circuit" hidden>Fit circuit</button><button type="button" data-map="world">Whole map</button></div>
-	<div class="road-map-wrap"><canvas class="road-map" data-road-map tabindex="0" aria-label="Road editing map"
-		aria-description="Drag points or curve handles. Drag empty ground to pan. Use the wheel or plus and minus to zoom."></canvas>
+	<div class="road-map-wrap"><div class="road-map-surface"><canvas class="road-map" data-road-map tabindex="0" aria-label="Road editing map"
+		aria-description="The cyan marker shows the camera and its heading. Drag points or curve handles. Drag empty ground to pan. Use the wheel or plus and minus to zoom."></canvas>
+	<span class="road-camera" data-road-camera hidden aria-hidden="true"></span></div>
 	<div class="road-readout"><span data-map-scale></span><span data-road-length></span></div></div>
 	<p class="terrain-note" data-road-help>Drag a point or its square curve handles. Drag empty ground to pan.</p>
 	<div class="road-tools"><label>Control point <select data-road-point aria-label="Control point"></select></label>
@@ -69,17 +75,17 @@ function markup()
 	<button type="button" data-point-action="remove">Remove point</button></div>
 	<div class="road-fields">${number(
 		'x'
-		, 'X (m)'
+		, 'X (ft)'
 		, -1e6
 		, 1e6
 	)}${number(
 		'z'
-		, 'Z (m)'
+		, 'Z (ft)'
 		, -1e6
 		, 1e6
 	)}${number(
 		'y'
-		, 'Elevation (m)'
+		, 'Elevation (ft)'
 		, -1e6
 		, 1e6
 	)}</div>
@@ -90,17 +96,17 @@ function markup()
 	<p class="terrain-note">Offsets are measured from the selected point. A handle’s height changes the vertical grade.</p>
 	<div class="road-fields">${number(
 		'dx'
-		, 'ΔX (m)'
+		, 'ΔX (ft)'
 		, -1e6
 		, 1e6
 	)}${number(
 		'dz'
-		, 'ΔZ (m)'
+		, 'ΔZ (ft)'
 		, -1e6
 		, 1e6
 	)}${number(
 		'dy'
-		, 'Δ height (m)'
+		, 'Δ height (ft)'
 		, -1e6
 		, 1e6
 	)}</div>
@@ -110,17 +116,17 @@ function markup()
 	<details><summary>Road dimensions</summary><div class="terrain-grid"><div class="road-fields">
 	${number(
 		'width'
-		, 'Width (m)'
+		, 'Width (ft)'
 		, .5
 		, 1024
 	)}${number(
 		'shoulder'
-		, 'Shoulder (m)'
+		, 'Shoulder (ft)'
 		, .01
 		, 1024
 	)}${number(
 		'crown'
-		, 'Crown (m)'
+		, 'Crown (ft)'
 		, -1024
 		, 1024
 	)}
@@ -136,8 +142,12 @@ export function activate({canvas, module, session})
 	const tab = frame.querySelector('[data-tab-panel="roads"]');
 	tab.querySelector('[data-road-workspace]').innerHTML = markup();
 
+	const {FOOT, distanceLabel, configureUnits, setFieldValue, metricValue} = module.terrainUnits;
+	configureUnits(tab);
+
 	const el = selector => tab.querySelector(selector);
 	const map = el('[data-road-map]'), ctx = map.getContext('2d');
+	const marker = el('[data-road-camera]');
 	const profile = el('[data-road-profile]'), chart = document.createElement('canvas');
 	const picker = el('[data-road-picker]'), pointPicker = el('[data-road-point]'), sidePicker = el('[data-road-side]');
 
@@ -148,7 +158,7 @@ export function activate({canvas, module, session})
 	const dispose = new AbortController(), {signal} = dispose;
 	let state, roads = [], current, chartView, view, active = false, drag = null, requestTimer, paintFrame;
 	const overlays = new Map();
-	let overlayView, wholeMap = false;
+	let overlayView, cameraPose, wholeMap = false;
 	let selected = -1, selectedSpan = -1, splitAt = .5, side = 'out', mode = 'select';
 
 	const api = () => session.terrainSandbox;
@@ -195,6 +205,18 @@ export function activate({canvas, module, session})
 		return c;
 	}
 
+	function placeCamera()
+	{
+		if(!active || !view || !cameraPose) return;
+
+		const [x, z, heading] = cameraPose;
+		const [px, py] = project([x, 0, z]);
+		marker.hidden = px < 0 || py < 0 || px > width() || py > height();
+
+		if(!marker.hidden)
+		marker.style.transform = `translate(${px}px, ${py}px) translate(-50%, -50%) rotate(${heading}rad)`;
+	}
+
 	// Span is the width of the editor in meters. At full zoom both axes must fit the editable square.
 
 	const maxSpan = () => state.extent * Math.max(1, width()/height());
@@ -207,6 +229,7 @@ export function activate({canvas, module, session})
 		const xRoom = Math.max(0, (extent-span)/2), zRoom = Math.max(0, (extent-tall)/2);
 		view = {x: clamp(x, -xRoom, xRoom), z: clamp(z, -zRoom, zRoom), span};
 		wholeMap = span >= max;
+		placeCamera();
 
 		// The GPU capture is square. Keep it entirely on the editable terrain, then draw
 		// it using its own world bounds so the handles and the image agree at every zoom.
@@ -359,8 +382,8 @@ export function activate({canvas, module, session})
 			ctx.fillRect(0, 0, w, h);
 		}
 
-		const spacing = 10 ** Math.floor(Math.log10(view.span/4));
-		const grid = view.span/spacing > 12 ? spacing*5 : spacing;
+		const spacing = 10 ** Math.floor(Math.log10(view.span/FOOT/4));
+		const grid = spacing * FOOT * (view.span/(spacing*FOOT) > 12 ? 5 : 1);
 		const [left,top] = world([0,0]);
 		ctx.beginPath();
 
@@ -455,7 +478,7 @@ export function activate({canvas, module, session})
 		ctx.fillRect(6, h-13, bar+12, 9);
 		ctx.fillStyle = '#dfecdf';
 		ctx.fillRect(12, h-9, bar, 2);
-		el('[data-map-scale]').textContent = meters>=1000 ? (meters/1000) + ' km' : meters + ' m';
+		el('[data-map-scale]').textContent = Math.round(meters/FOOT) + ' ft';
 	}
 
 	function inspect()
@@ -493,7 +516,7 @@ export function activate({canvas, module, session})
 		{
 			input.disabled = values[key]==null;
 
-			if(input!==document.activeElement) input.value = input.disabled ? '' : String(+values[key].toFixed(4));
+			if(input!==document.activeElement) setFieldValue(input, values[key]);
 		}
 
 		el('[data-point-action=insert]').disabled = selectedSpan<0 || n>=128;
@@ -526,7 +549,7 @@ export function activate({canvas, module, session})
 			}
 		}
 
-		el('[data-road-length]').textContent = run>=1000 ? (run/1000).toFixed(2) + ' km' : Math.round(run) + ' m';
+		el('[data-road-length]').textContent = distanceLabel(run, 2);
 		el('[data-road-grade]').textContent = n>1
 			? 'Maximum sampled grade ' + (100*maxGrade).toFixed(1) + '%'
 			: 'Place two points to inspect the grade.';
@@ -548,7 +571,9 @@ export function activate({canvas, module, session})
 				c.stroke();
 			}
 
-			el('[data-road-grade]').textContent += ' · ' + low.toFixed(1) + ' to ' + high.toFixed(1) + ' m elevation';
+			el(
+				'[data-road-grade]'
+			).textContent += ' · ' + (low/FOOT).toFixed(1) + ' to ' + (high/FOOT).toFixed(1) + ' ft elevation';
 		}
 
 		schedulePaint();
@@ -817,15 +842,15 @@ export function activate({canvas, module, session})
 
 		if(!key || !Number.isFinite(input.valueAsNumber) || !input.reportValidity()) return;
 
-		if(['width','shoulder','crown'].includes(key)) send('section', {key,value: input.valueAsNumber});
-		else if(key==='bank') send('bank', {index: selected,value: input.valueAsNumber});
+		if(['width','shoulder','crown'].includes(key)) send('section', {key,value: metricValue(input)});
+		else if(key==='bank') send('bank', {index: selected,value: metricValue(input)});
 		else if(key.startsWith('d'))
 		send(
 			'handle'
-			, {index: selected,side,vector: [fields.dx.valueAsNumber,fields.dy.valueAsNumber,fields.dz.valueAsNumber]}
+			, {index: selected,side,vector: [metricValue(fields.dx),metricValue(fields.dy),metricValue(fields.dz)]}
 		);
 		else
-		send('point', {index: selected,x: fields.x.valueAsNumber,y: fields.y.valueAsNumber,z: fields.z.valueAsNumber});
+		send('point', {index: selected,x: metricValue(fields.x),y: metricValue(fields.y),z: metricValue(fields.z)});
 	}, {signal});
 
 	module.terrainRoadEditor = json => {
@@ -885,6 +910,11 @@ export function activate({canvas, module, session})
 		inspect();
 	};
 
+	module.terrainRoadCamera = (x, z, heading) => {
+		cameraPose = [x, z, heading];
+		placeCamera();
+	};
+
 	module.terrainRoadCapture = (x, z, meters, size) => {
 		if(!active) return;
 
@@ -935,5 +965,6 @@ export function activate({canvas, module, session})
 		cancelAnimationFrame(paintFrame);
 		delete module.terrainRoadEditor;
 		delete module.terrainRoadCapture;
+		delete module.terrainRoadCamera;
 	};
 }

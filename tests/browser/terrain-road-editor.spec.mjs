@@ -90,18 +90,30 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 
 
 	await points.selectOption({value: '1'});
-	await expect(section.locator('[data-road-field=x]')).toHaveValue('-8');
+	await expect.poll(async() => Number(await section.locator('[data-road-field=x]').inputValue())).toBeCloseTo(-8/.3048, 4);
 	await section.getByRole('button', {name: 'Whole map'}).click();
 	await map.scrollIntoViewIfNeeded();
 	const chart = await map.boundingBox();
 	const unit = Math.min(chart.width, chart.height) / recipe.worldSize;
+	const camera = section.locator('[data-road-camera]');
+	await expect(camera).toBeVisible();
+	const center = await camera.boundingBox();
+	expect(center.x + center.width/2).toBeCloseTo(chart.x + chart.width/2, 0);
+	expect(center.y + center.height/2).toBeCloseTo(chart.y + chart.height/2 + 32*unit, 0);
+	expect(await camera.evaluate(el => new DOMMatrix(getComputedStyle(el).transform).a)).toBeCloseTo(1);
+	const stage = await canvas.boundingBox();
+	await page.mouse.move(stage.x+25, stage.y+100);
+	await page.mouse.down({button: 'right'});
+	await page.mouse.move(stage.x+125, stage.y+100);
+	await page.mouse.up({button: 'right'});
+	await expect.poll(() => camera.evaluate(el => new DOMMatrix(getComputedStyle(el).transform).b)).toBeCloseTo(Math.sin(.3), 2);
 	const x = chart.x + chart.width/2 - 8*unit, y = chart.y + chart.height/2 - 12*unit;
 
 	await page.mouse.move(x, y);
 	await page.mouse.down();
 	await page.mouse.move(x+4*unit, y+2*unit, {steps: 3});
 	await page.mouse.up();
-	await expect.poll(async() => Number(await section.locator('[data-road-field=x]').inputValue())).toBeCloseTo(-4, 0);
+	await expect.poll(async() => Number(await section.locator('[data-road-field=x]').inputValue())).toBeCloseTo(-4/.3048, 0);
 
 	await section.locator('summary').filter({hasText: /curve handles/i}).click();
 	const dy = section.locator('[data-road-field=dy]');
@@ -135,7 +147,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	const saved = JSON.parse(await fs.readFile(await (await download).path(), 'utf8'));
 	expect(saved.landscape.version).toBe(2);
 	expect(saved.landscape.history.at(-1)[0].replaceAt).toBe(0);
-	expect(saved.landscape.history.at(-1)[0].points[2][1]).toBe(5.25);
+	expect(saved.landscape.history.at(-1)[0].points[2][1]).toBeCloseTo(5.25*.3048, 9);
 	expect(saved.landscape.history.at(-1)[0].handles[1].out).toBeDefined();
 
 	await load(saved);
@@ -282,8 +294,8 @@ test('a 24 km spline applies and saves as one road through the editor', async({p
 	const x = page.locator('[data-road-field=x]'), point = page.locator('[data-road-point]');
 	for(const [i, before, after] of [['0','-100','-12000'],['1','100','12000']]) {
 		await point.selectOption({value: i});
-		await expect(x).toHaveValue(before);
-		await x.fill(after);
+		await expect.poll(async() => Number(await x.inputValue())*.3048).toBeCloseTo(Number(before), 4);
+		await x.fill(String(Number(after)/.3048));
 		await x.press('Tab');
 	}
 	await page.getByRole('button', {name: 'Apply road'}).click();

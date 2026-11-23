@@ -24,7 +24,7 @@ function paintFace(ctx, size, maximum, padding)
 	rim.addColorStop(1, '#141719');
 	ctx.fillStyle = rim;
 	ctx.beginPath();
-	ctx.arc(0, 0, 78, 0, 2*Math.PI);
+	ctx.arc(0, 0, 80, 0, 2*Math.PI);
 	ctx.fill();
 
 	ctx.save();

@@ -3,6 +3,7 @@ const headings = ['N','NE','E','SE','S','SW','W','NW'];
 
 export function activate({module, canvas, session})
 {
+	const {FOOT} = module.terrainUnits;
 	const map = document.createElement('canvas');
 	map.className = 'terrain-flight-map';
 	map.setAttribute('role', 'img');
@@ -107,9 +108,10 @@ export function activate({module, canvas, session})
 		}
 		else ctx.strokeRect(.5, .5, size-1, size-1);
 
-		const meters = span >= 20000 ? 5000 : span >= 4000 ? 1000 : span >= 1000 ? 250 : span >= 400 ? 100 : 25;
-		const label = meters >= 1000 ? (meters/1000) + ' km' : meters + ' m';
-		const bar = meters*scale;
+		// Use the longest labeled interval that fits in a quarter of this chart.
+		const feet = [10560, 5280, 1320, 500, 100, 50, 10, 1].find(length => length*FOOT <= span/4) ?? 1;
+		const label = feet >= 1320 ? (feet/5280) + ' mi' : feet + ' ft';
+		const bar = feet*FOOT*scale;
 		const headingX = circular ? mid : 11;
 		const headingTop = circular ? Math.round(size*.06) : 1;
 		const barCenter = circular ? mid : size-6-bar/2;

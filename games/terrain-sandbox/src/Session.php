@@ -1479,7 +1479,7 @@ final class Session
 		if($tool === 'flatten') $operation['height'] = $settings['flattenHeight'];
 		if($tool === 'material') $operation['material'] = $settings['material'];
 		$this->editable()->queue($operation);
-		$this->message = ucfirst($tool) . ' at ' . round($wx) . ', ' . round($wz) . ' m.';
+		$this->message = ucfirst($tool) . ' at ' . DisplayUnits::feet($wx, 0) . ', ' . DisplayUnits::feet($wz, 0) . ' ft.';
 	}
 
 	/**
@@ -1553,14 +1553,14 @@ final class Session
 		}
 		if($kind === 'water') $this->course->float($this->water, $this->time);
 		$gate = $placed['gate'];
-		$where = ' at ' . (int)round($gate['x']) . ', ' . (int)round($gate['z']) . ' m';
+		$where = ' at ' . DisplayUnits::feet($gate['x'], 0) . ', ' . DisplayUnits::feet($gate['z'], 0) . ' ft';
 		$this->message = ($placed['moved'] ? 'Moved ' . self::gateName($gate) . ' to' . substr($where, 3)
 			: 'Placed ' . self::gateName($gate) . $where) . match($kind) {
 				'water' => ', floating on the water',
-				'air' => ', ' . round($settings['gateAltitude']) . ' m above the ground',
+				'air' => ', ' . DisplayUnits::feet($settings['gateAltitude']) . ' ft above the ground',
 				'road' => ''
-			} . ', its opening ' . GateShapes::meters($size['width']) . ' by ' . GateShapes::meters($size['height'])
-			. ' m.' . ($size['limits'] ? ' ' . ucfirst(implode(', and ', $size['limits'])) . '.' : '')
+			} . ', its opening ' . DisplayUnits::feet($size['width']) . ' by ' . DisplayUnits::feet($size['height'])
+			. ' ft.' . ($size['limits'] ? ' ' . ucfirst(implode(', and ', $size['limits'])) . '.' : '')
 			. ($placed['merged'] ? ' The finish gate stood within one gate width, so the start gate now also finishes.'
 				: '');
 	}

@@ -14,7 +14,6 @@ use TerrainPhonics\Scene;
 use TerrainPhonics\AtmosphereLayers;
 use TerrainPhonics\Recipe;
 use TerrainSandbox\Car;
-use TerrainSandbox\ControlHints;
 use TerrainSandbox\DeliveryBeacon;
 use TerrainSandbox\DeliveryRun;
 use TerrainSandbox\NavigationArrow;
@@ -29,6 +28,8 @@ use TerrainSandbox\Session;
 
 $app = new Context;
 $app->browser(__DIR__ . '/browser/game.mjs');
+$app->browser(__DIR__ . '/browser/screen-awake.mjs');
+$app->browser(__DIR__ . '/browser/control-hints.mjs');
 $app->browser(__DIR__ . '/browser/road-editor.mjs');
 $app->browser(__DIR__ . '/browser/flight-map.mjs');
 $app->browser(__DIR__ . '/browser/speedometer.mjs');
@@ -56,7 +57,6 @@ $viewCamera = $session->camera;
 $vehiclePose = null;
 $carLamps = null;
 $spotLights = [[], 1.0]; // The lights given to the scene and their adaptation gain.
-$controlHints = null; // Button hints, created on the first frame that shows any.
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
@@ -77,6 +77,8 @@ $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainVehicleFrame');
 $roadStatus = vrzno_env('terrainRoadEditor');
 $roadCapture = vrzno_env('terrainRoadCapture');
+$roadCamera = vrzno_env('terrainRoadCamera');
+$lastRoadCamera = null;
 $hudShown = false;
 // The panel builds its Surface tab once from the appearance settings' groups, ranges, defaults and per-style use.
 (vrzno_env('terrainSurface'))(json_encode(['masks'=>TerrainPhonics\SurfaceLayers::MASKS,'fields'=>TerrainPhonics\SurfaceLayers::FIELDS,
@@ -217,8 +219,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture,
-		&$controlHints
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -278,6 +279,13 @@ $engine->start(
 		$dirty = $dirty || $prepared || $session->dirty || $wavesChanged;
 		$editor = $session->roadEditor;
 		if(($packet = $editor->packet($session)) !== null) $roadStatus(json_encode($packet, JSON_THROW_ON_ERROR));
+		$mapCamera = $editor->open ? [$viewCamera->position[0], $viewCamera->position[2],
+			$viewCamera->yaw + (cos($viewCamera->pitch) < 0 ? M_PI : 0)] : null;
+		if($mapCamera !== $lastRoadCamera)
+		{
+			$lastRoadCamera = $mapCamera;
+			if($mapCamera !== null) $roadCamera(...$mapCamera);
+		}
 		$chartKey = $editor->open && $editor->view !== null
 			? [$session->generation, $session->landscape->revision(), $editor->view, $width, $height,
 				$session->settings['waterLevel'], $session->settings['waterColor'], $scene->layers, $scene->paint,
@@ -313,25 +321,21 @@ $engine->start(
 			$craft = $session->mode === 'craft';
 			$raceGuidance = $session->race->showGuidance($session->course);
 			$waterRace = $craft && $raceGuidance && $session->usingFloodedCircuit();
-			$dialSize = $car || $craft ? (int)round(min(240, $width*.275, $height*.30)) : null;
+			$instrumentSize = $car || $craft ? (int)round(min(320, $width*.36, $height*.40)) : null;
 			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height] : null;
 			$wide = $jet ? $session->jetWideMap : $car && $session->carWideMap;
 			$showMap = $waterRace || $wide || ($jet ? $session->jetMap : $car && $session->carMap);
 			if($showMap)
 			{
-				$mapSize = $car ? (int)round(min(320, $width*.36, $height*.40)) : null;
 				$bearing = M_PI-$vehiclePose['yaw']+($jet && cos($vehiclePose['pitch']) < 0 ? M_PI : 0);
 				$position = [$vehiclePose['x'],$vehiclePose['z']];
 				$span = $scene->drawChart($position,$bearing,$wide,$width,$height,
-					TerrainAppearance::linear($session->settings['waterColor']),$mapSize,
+					TerrainAppearance::linear($session->settings['waterColor']),$instrumentSize,
 					$car || $waterRace ? $session->circuitChartSpan() : null, circular: $car);
 				if($span !== null)
-					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$mapSize,'circular'=>$car,
+					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$instrumentSize,'circular'=>$car,
 						'showRoute'=>$raceGuidance, 'markers'=>$session->delivery?->sites() ?: ($target === null ? [] : [$target])];
 			}
-			// The controls for what the player is doing, in the button art of the device in use. The cockpit has its own.
-			if(!($jet && $session->jetView === 'cockpit'))
-				($controlHints ??= new ControlHints)->draw($session->hint(), $session->inputTheme, $width, $height);
 			$engine->device->present();
 			if($jet)
 			{
@@ -342,7 +346,7 @@ $engine->start(
 					'targets'=>$session->balloons->targets()];
 			}
 			if($car || $craft) $frame['speedometer'] = ['mph'=>abs($vehiclePose['speed'])/Car::MPS_PER_MPH,
-				'maximum'=>$car ? Car::TOP_SPEED_MPH : 120,'size'=>$dialSize];
+				'maximum'=>$car ? Car::TOP_SPEED_MPH : 120,'size'=>$instrumentSize];
 			if($car) $frame['speedometer']['nitrous'] = $vehiclePose['nitrous'];
 			if($frame !== null || $hudShown)
 			{
@@ -368,7 +372,7 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$controlHints): void {
+	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
 		foreach($models as $model) $model->close();
@@ -376,11 +380,10 @@ $engine->start(
 		$trailRenderer?->close(); $trailRenderer = null;
 		$shadow?->close();
 		$beacon?->close(); $arrow?->close();
-		$controlHints?->close();
 		$gates->release();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $session, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$controlHints, &$dirty): void {
+	static function() use ($scene, $session, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -390,7 +393,6 @@ $engine->start(
 		$shadow = null;
 		$beacon?->close(); $beacon = null;
 		$arrow?->close(); $arrow = null;
-		$controlHints?->close(); $controlHints = null;
 		$gates->release();
 		$scene->restore();
 		$session->roadEditor->captured = null;

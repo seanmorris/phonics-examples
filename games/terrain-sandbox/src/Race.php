@@ -298,9 +298,9 @@ final class Race
 			// The opening's bottom edge stands at the gate's origin on every kind.
 			$needed = ceil($floor + self::JET_ROOM - $origin);
 			return ['gate' => $gate['id'], 'needed' => $needed,
-				'message' => "$name is out of reach for the F5, which keeps " . (int)self::JET_FLOOR
-					. ' m above the ground and the water. It needs an opening at least ' . GateShapes::meters($needed)
-					. ' m tall.'];
+				'message' => "$name is out of reach for the F5, which keeps " . DisplayUnits::feet(self::JET_FLOOR)
+					. ' ft above the ground and the water. It needs an opening at least ' . DisplayUnits::feet($needed)
+					. ' ft tall.'];
 		}
 		if($vehicle === 'car')
 		{
@@ -314,12 +314,12 @@ final class Race
 					'message' => "$name stands in the water, out of reach for the car."];
 			if($bottom <= $high + self::CAR_REACH && $top >= $low) return null;
 			return ['gate' => $gate['id'], 'needed' => null, 'message' => "$name hangs "
-				. GateShapes::meters($bottom - $high) . ' m above the ground, out of reach for the car.'];
+				. DisplayUnits::feet($bottom - $high) . ' ft above the ground, out of reach for the car.'];
 		}
 		if($floating || $bottom <= $water + self::CRAFT_REACH && $top >= $water - self::CRAFT_REACH
 			&& $gate['y'] + $ground[0] < $water) return null;
 		$where = $gate['y'] + $ground[0] >= $water ? 'stands over land'
-			: 'hangs ' . GateShapes::meters($bottom - $water) . ' m above the water';
+			: 'hangs ' . DisplayUnits::feet($bottom - $water) . ' ft above the water';
 		return ['gate' => $gate['id'], 'needed' => null, 'message' => "$name $where, out of reach for the jet ski."];
 	}
 

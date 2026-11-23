@@ -1274,7 +1274,15 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await expect(dial).toHaveAttribute('aria-label', 'Speedometer, 0 miles per hour, nitrous 100%');
 	await expect(page.locator('.terrain-instruments')).toBeHidden();
 	const viewport = await view.boundingBox(), mapBox = await map.boundingBox(), dialBox = await dial.boundingBox();
-	expect(mapBox.width).toBeGreaterThan(1.25*dialBox.width);
+	// The car's nitrous arc adds top/left padding outside the matching instrument faces.
+	expect(dialBox.width).toBe(mapBox.width + Math.ceil(mapBox.width*9/160));
+	const diameter = await dial.evaluate((el, size) => {
+		// Across the lower rim, the solid face fills the full diameter, including the lower-right tangent.
+		const pad = el.width-size, y = pad+Math.floor(size/2);
+		const rgba = el.getContext('2d').getImageData(pad, y, size, 1).data;
+		return rgba.filter((value, i) => i%4 === 3 && value > 100).length;
+	}, mapBox.width);
+	expect(diameter).toBe(mapBox.width);
 	expect(mapBox.width).toBe(mapBox.height);
 	expect(await view.evaluate(el => el.chartSamples)).toEqual([true,true,true,true,true,false,false,false,false]);
 
@@ -1681,8 +1689,8 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await press(page, 'pause');
 	await page.getByRole('tab', {name: 'Roads', exact: true}).click();
 	await page.getByText('Circuit generator', {exact: true}).click();
-	await page.getByLabel('Minimum feature height difference').fill('200');
-	await page.getByLabel('Start elevation').fill('-360');
+	await page.getByLabel('Minimum feature height difference').fill(String(200/.3048));
+	await page.getByLabel('Start elevation').fill(String(-360/.3048));
 	await control(page, 'circuit-find').click();
 	await expect.poll(async() => (await status(page)).circuit.preview, {timeout: 140_000}).toBe(true);
 	const preview = await status(page);
@@ -1766,6 +1774,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await expect(page.locator('.terrain-speedometer')).toBeVisible();
 	const map = page.getByRole('img', {name: 'Heading-up terrain elevation map'});
 	await expect(map).toBeVisible();
+	expect((await map.boundingBox()).width).toBe((await page.locator('.terrain-speedometer').boundingBox()).width);
 
 	await expect.poll(() => map.evaluate(element => {
 		const colors = element.getContext('2d').getImageData(0, 0, element.width, element.height).data;
@@ -1846,16 +1855,16 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 	await first.getByLabel('Layer name').fill('Sea mist');
 	await first.getByLabel('Layer name').press('Tab');
 	await first.getByLabel('Scattered light').fill('#6688aa');
-	await first.getByLabel('Top (m above sea level)', {exact: true}).fill('450');
-	await first.getByLabel('Top (m above sea level)', {exact: true}).press('Tab');
-	await first.getByLabel('Density per km').fill('0.4');
-	await first.getByLabel('Density per km').press('Tab');
+	await first.getByLabel('Top (ft above sea level)', {exact: true}).fill('450');
+	await first.getByLabel('Top (ft above sea level)', {exact: true}).press('Tab');
+	await first.getByLabel('Density per mile').fill('0.6437376');
+	await first.getByLabel('Density per mile').press('Tab');
 
 	await expect.poll(async() => (await status(page)).atmosphereLayers[0]).toMatchObject({
 		name: 'Sea mist'
 		, color: '#6688aa'
 		, bottom: 0
-		, top: 450
+		, top: 137.16
 		, density: .4
 		, enabled: true
 	});
@@ -1961,7 +1970,7 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	await fog.press('ArrowLeft');
 	await expect.poll(async() => (await status(page)).settings.waterFogDensity).toBe(0.966);
 
-	const level = page.getByLabel('Water level · m', {exact: true});
+	const level = page.getByLabel('Water level · ft', {exact: true});
 	const chop = page.getByRole('slider', {name: /Choppiness/});
 	await level.fill('-10');
 	await expect.poll(async() => (await status(page)).renderer.waterDraws).toBe(0);
@@ -1974,7 +1983,7 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	expect(rough.time).toBe(time);
 	expect(rough.generation).toBe(now.generation);
 	const sea = await save(page);
-	expect(sea.settings.waterLevel).toBe(6.5);
+	expect(sea.settings.waterLevel).toBeCloseTo(6.5*.3048, 10);
 	expect(sea.settings.waterFogDensity).toBe(0.966);
 
 	// The file buttons open the Landscape tab. The Water and Sky fields still hold the loaded values while hidden.
@@ -1990,7 +1999,7 @@ test('terrain controls preserve input focus and return paused rendering to idle'
 	await expect(chopField).toHaveValue('300');
 	await expect(glowField).toHaveValue('1');
 	await expect(fogField).toHaveValue('0.995');
-	await expect(page.locator('[data-fog-output]')).toHaveText('0.97');
+	await expect(page.locator('[data-fog-output]')).toHaveText('0.294');
 
 	// Native fields keep WASD and pause shortcuts as text while focused.
 	const position = now.camera.position;
@@ -2219,7 +2228,7 @@ test('the Landscape Lab explains each parameter, reflows, and folds to one round
 	expect(narrowBias.y).toBeGreaterThan(narrowHeight.y + narrowHeight.height);
 	expect(await pages.evaluate(el => el.scrollWidth)).toBe(await pages.evaluate(el => el.clientWidth));
 	await panel.getByRole('tab', {name: 'Water', exact: true}).click();
-	await expect(panel.getByLabel('Water level · m', {exact: true})).toBeInViewport();
+	await expect(panel.getByLabel('Water level · ft', {exact: true})).toBeInViewport();
 	expect(await pages.evaluate(el => el.scrollTop)).toBe(0);
 });
 
@@ -2277,7 +2286,7 @@ test('Surface keeps field help with its control and column widths steady when sc
 	await source.selectOption('pattern');
 	await expect(pattern).toHaveAccessibleDescription(/shapes the bumps/);
 	await pattern.selectOption('ripples');
-	await expect(ribs.getByLabel('Pattern scale · m', {exact: true})).toHaveAccessibleDescription(/wider texture/);
+	await expect(ribs.getByLabel('Pattern scale · ft', {exact: true})).toHaveAccessibleDescription(/wider texture/);
 	await ribs.getByRole('button', {name: 'Move down'}).click();
 	await expect(pattern).toHaveAccessibleDescription(/shapes the bumps/);
 	await panel.getByRole('button', {name: 'Apply layers', exact: true}).click();
@@ -2482,6 +2491,10 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	await page.getByRole('tab', {name: 'Landscape', exact: true}).click();
 	await page.locator('[name="preset"]').selectOption('canyon');
 	await page.getByText('Landform parameters', {exact: true}).click();
+	const frequency = page.getByLabel('Base frequency · cycles/mi');
+	expect(Number(await frequency.inputValue())).toBeCloseTo(1609.344/4000, 7);
+	const terrace = page.getByLabel('Terrace spacing · ft');
+	expect(Number(await terrace.inputValue())).toBeCloseTo(80/.3048, 4);
 	const wall = page.getByLabel('Wall width', {exact: true});
 	await expect(wall).toHaveValue('0.006');
 	await wall.fill('0.0085');
@@ -2509,6 +2522,8 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	const document = await save(page);
 	expect(document.version).toBe(5);
 	expect(document.landscape.recipe.wallWidth).toBe(.0085);
+	expect(document.landscape.recipe.terraceSpacing).toBe(80);
+	expect(document.landscape.recipe.baseFrequency).toBe(1/4000);
 	expect(document.landscape.recipe.surround).toBe('plateau');
 
 	expect(document.surface.layers[1]).toMatchObject({
@@ -2517,7 +2532,7 @@ test('landform parameters and nested colors survive a save and reload', async({p
 		, pattern: 'streaks'
 		, patternColor: '#2f2120'
 		, patternAmount: .7
-		, patternScale: 18
+		, patternScale: 5.4864
 		, patternStretch: 6
 		, reflectivity: .8
 		, roughness: .22

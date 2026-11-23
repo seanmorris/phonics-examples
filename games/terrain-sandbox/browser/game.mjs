@@ -1,3 +1,70 @@
+// Internal terrain coordinates and saved files use SI. These conversions apply at the UI boundary.
+const FOOT = .3048, MILE = 5280 * FOOT, MPH = .44704;
+const metricPerUnit = {ft: FOOT, mph: MPH, cyclesPerMile: 1/MILE, densityPerMile: 1000/MILE};
+const exactValues = new WeakMap();
+const fieldBounds = new WeakMap();
+
+function distanceLabel(meters, digits = 1)
+{
+	return Math.abs(meters) < MILE/4 ? Math.round(meters/FOOT) + ' ft' : (meters/MILE).toFixed(digits) + ' mi';
+}
+
+function displayNumber(value, unit)
+{
+	return Number((value / metricPerUnit[unit]).toPrecision(7));
+}
+
+function setFieldValue(field, value)
+{
+	const unit = field.dataset.unit;
+
+	if(!unit || value == null || value === '')
+	{
+		field.value = value ?? '';
+
+		return;
+	}
+
+	field.value = displayNumber(value, unit);
+	// Reapplying a preset or editing a sibling field must preserve the exact authored value.
+	exactValues.set(field, {display: field.value, metric: value});
+}
+
+function metricValue(field)
+{
+	const unit = field.dataset.unit;
+
+	if(!unit) return Number(field.value);
+
+	const original = exactValues.get(field);
+
+	if(original?.display === field.value) return original.metric;
+
+	const bounds = fieldBounds.get(field);
+
+	if(bounds && field.value === field.min) return bounds.min;
+
+	if(bounds && field.value === field.max) return bounds.max;
+
+	return Number((field.valueAsNumber * metricPerUnit[unit]).toPrecision(14));
+}
+
+function configureUnits(container)
+{
+	for(const field of container.querySelectorAll('input[data-unit]:not([data-unit=""])'))
+	{
+		const unit = field.dataset.unit, value = field.getAttribute('value');
+		fieldBounds.set(field, {min: Number(field.min), max: Number(field.max)});
+		field.step = 'any';
+
+		if(field.min !== '') field.min = displayNumber(field.min, unit);
+
+		if(field.max !== '') field.max = displayNumber(field.max, unit);
+
+		if(value !== null) setFieldValue(field, Number(value));
+	}
+}
+
 /** Authoring UI and lifecycle bridge; PHP owns terrain, camera, edits and simulation. */
 export function activate({module, canvas, session, services})
 {
@@ -7,6 +74,8 @@ export function activate({module, canvas, session, services})
 	const frame = document.createElement('div');
 	frame.className = 'terrain-sandbox';
 	frame.innerHTML = markup();
+	configureUnits(frame);
+	module.terrainUnits = {FOOT, MPH, distanceLabel, configureUnits, setFieldValue, metricValue};
 
 	const stage = frame.querySelector('.terrain-stage');
 	shell.mount(frame, {screen: stage});
@@ -58,7 +127,8 @@ export function activate({module, canvas, session, services})
 	const fogPosition = density => Math.log1p(999 * density) / Math.log(1000);
 
 	const showFog = density => {
-		fogOutput.textContent = density.toFixed(density < .01 ? 4 : density < .1 ? 3 : 2);
+		fogOutput.textContent = String(Number((density * FOOT).toPrecision(3)));
+		fog.setAttribute('aria-valuetext', fogOutput.textContent + ' per foot');
 	};
 
 	fog.addEventListener('input', () => {
@@ -112,7 +182,7 @@ export function activate({module, canvas, session, services})
 				? null
 				: field.type === 'checkbox'
 					? field.checked
-					: field.type === 'range' || field.type === 'number' ? Number(field.value) : field.value;
+					: field.type === 'range' || field.type === 'number' ? metricValue(field) : field.value;
 
 			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
 
@@ -222,7 +292,8 @@ export function activate({module, canvas, session, services})
 
 		presetSeed = seed;
 
-		for(const [name, value] of Object.entries(parameters)) frame.querySelector(`[name="${name}"]`).value = value;
+		for(const [name, value] of Object.entries(parameters))
+		setFieldValue(frame.querySelector(`[name="${name}"]`), value);
 	}, {signal});
 
 	frame.querySelector('[data-file]').addEventListener('change', async event => {
@@ -381,9 +452,9 @@ export function activate({module, canvas, session, services})
 			+ `${state.renderMs.toFixed(1)} ms render submission · `
 			+ `${state.drawIntervalMs?.toFixed(1) ?? '—'} ms between draws`;
 
-		detail.textContent = `${mode} · ${Math.round(x)}, ${Math.round(z)} m`
-			+ ` · altitude ${Math.round(state.jet?.y ?? y)} m`
-			+ (state.jet ? ` · ${Math.round(state.jet.speed)} m/s` : '')
+		detail.textContent = `${mode} · ${Math.round(x/FOOT)}, ${Math.round(z/FOOT)} ft`
+			+ ` · altitude ${Math.round((state.jet?.y ?? y)/FOOT)} ft`
+			+ (state.jet ? ` · ${Math.round(state.jet.speed/MPH)} mph` : '')
 			+ (diagnostics.checked ? statistics : '');
 	};
 
@@ -577,6 +648,7 @@ export function activate({module, canvas, session, services})
 			}
 
 			latest = state;
+			module.updateTerrainHints(state);
 
 			if(jetView !== state.jetView)
 			{
@@ -662,22 +734,35 @@ export function activate({module, canvas, session, services})
 			circuitSummary.textContent = circuit.searching
 				? 'Searching the surrounding terrain…'
 				: circuit.points
-					? `${(circuit.length/1000).toFixed(2)} km · ${circuit.gates.length} gates`
+					? `${(circuit.length/MILE).toFixed(2)} mi · ${circuit.gates.length} gates`
 					+ (circuit.featureArea === null
 						? ''
-						: ` · ${(circuit.featureArea/1e6).toFixed(
+						: ` · ${(circuit.featureArea/(MILE*MILE)).toFixed(
 							1
-						)} km² ${circuit.heightDifference < 0 ? 'lake' : 'high ground'}`
+						)} mi² ${circuit.heightDifference < 0 ? 'lake' : 'high ground'}`
 					)
 					+ (circuit.heightDifference === null
 						? ''
 						: ` · ${Math.abs(
-							Math.trunc(circuit.heightDifference)
-						)} m ${circuit.heightDifference < 0 ? 'below' : 'above'} the route`
+							Math.round(circuit.heightDifference/FOOT)
+						)} ft ${circuit.heightDifference < 0 ? 'below' : 'above'} the route`
 					)
-					+ (circuit.startHeight === null ? '' : ` · road starts at ${circuit.startHeight.toFixed(1)} m`)
-					+ (circuit.gradeWidth === null ? '' : ` · apply to grade a ${circuit.gradeWidth} m road`)
-					+ (circuit.floodedLevel === null ? '' : ` · flood level ${circuit.floodedLevel} m`)
+					+ (circuit.startHeight === null
+						? ''
+						: ` · road starts at ${(circuit.startHeight/FOOT).toFixed(
+							1
+						)} ft`
+					)
+					+ (circuit.gradeWidth === null
+						? ''
+						: ` · apply to grade a ${Math.round(circuit.gradeWidth/FOOT)} ft road`
+					)
+					+ (circuit.floodedLevel === null
+						? ''
+						: ` · flood level ${Math.round(
+							circuit.floodedLevel/FOOT
+						)} ft`
+					)
 					: '';
 
 			const circuitKey = JSON.stringify(circuit.points);
@@ -719,13 +804,13 @@ export function activate({module, canvas, session, services})
 				if(!customSize.hidden)
 				{
 					customSize.value = size;
-					customSize.textContent = size + ' m per side';
+					customSize.textContent = distanceLabel(Number(size), 2) + ' per side';
 				}
 
 				worldSize.value = size;
 
 				for(const key of Object.keys(surface.presets[state.recipe.preset]))
-				frame.querySelector(`[name="${key}"]`).value = state.recipe[key];
+				setFieldValue(frame.querySelector(`[name="${key}"]`), state.recipe[key]);
 
 				for(const [name, value] of Object.entries(state.settings))
 				{
@@ -734,13 +819,13 @@ export function activate({module, canvas, session, services})
 					if(!field) continue;
 
 					if(field.type === 'checkbox') field.checked = value;
-					else field.value = value ?? '';
+					else setFieldValue(field, value);
 
-					if(checked.has(name)) field.defaultValue = value ?? '';
+					if(checked.has(name)) field.defaultValue = field.value;
 
 					const output = frame.querySelector(`[data-output="${name}"]`);
 
-					if(output) output.textContent = readout(value);
+					if(output) output.textContent = readout(field.value);
 				}
 
 				fog.value = String(fogPosition(state.settings.waterFogDensity));
@@ -781,6 +866,7 @@ export function activate({module, canvas, session, services})
 
 		if(session.terrainSandbox === api) delete session.terrainSandbox;
 
+		delete module.terrainUnits;
 		delete canvas.terrainSandboxDebug;
 		await shell.close();
 	};
@@ -906,7 +992,7 @@ function updateRace(line, state, showFinish = false)
 		line.hidden = false;
 		const leg = delivery.carrying ? 'Drop-off' : 'Pickup';
 		const distance = delivery.target && state.car
-			? ' · ' + (Math.hypot(delivery.target.x-state.car.x, delivery.target.z-state.car.z)/1609.344).toFixed(1)
+			? ' · ' + (Math.hypot(delivery.target.x-state.car.x, delivery.target.z-state.car.z)/MILE).toFixed(1)
 				+ ' mi'
 			: '';
 
@@ -932,7 +1018,7 @@ function updateRace(line, state, showFinish = false)
 		const from = state.car ?? state.craft ?? state.jet;
 		const [x, y, z] = from ? [from.x, from.y, from.z] : state.camera.position;
 		const meters = Math.hypot(next.x - x, next.y - y, next.z - z);
-		const away = meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
+		const away = distanceLabel(meters);
 		parts.push(`Next: ${gateName(race.next, race)}, ${away}`);
 	}
 
@@ -968,28 +1054,28 @@ function updateGateTool(tool, state)
  * @param {string} kind road, water or air.
  * @param {{width: number, height: number, widths: number[], heights: number[], stretch: ?number}} size Its own size
  * and ranges in meters, from the status's gateSizes.
- * @returns {string} For example Road: 6 to 60 m wide, 2 to 40 m tall, its own 13.3 by 3.1 m.
+ * @returns {string} For example The dimensions in feet and the maximum stretch ratio, if applicable.
  */
 function gateSizeLine(kind, size)
 {
 	const name = kind[0].toUpperCase() + kind.slice(1);
-	const wide = `${roundMeters(size.widths[0])} to ${roundMeters(size.widths[1])} m wide`;
-	const tall = `${roundMeters(size.heights[0])} to ${roundMeters(size.heights[1])} m tall`;
-	const own = `its own ${roundMeters(size.width)} by ${roundMeters(size.height)} m`;
+	const wide = `${roundFeet(size.widths[0])} to ${roundFeet(size.widths[1])} ft wide`;
+	const tall = `${roundFeet(size.heights[0])} to ${roundFeet(size.heights[1])} ft tall`;
+	const own = `its own ${roundFeet(size.width)} by ${roundFeet(size.height)} ft`;
 
 	if(!size.stretch) return `${name}: ${wide}, ${tall}, ${own}.`;
 
-	return `${name}: ${wide}, ${tall}, ${own}, stretching at most ${roundMeters(size.stretch)} times more one way.`;
+	return `${name}: ${wide}, ${tall}, ${own}, stretching at most ${readout(size.stretch)} times more one way.`;
 }
 
 /**
  * Round a length for the gate tool's notes.
  * @param {number} value Meters.
- * @returns {string} The length to a tenth of a meter, without a trailing zero.
+ * @returns {string} The length to a tenth of a foot, without a trailing zero.
  */
-function roundMeters(value)
+function roundFeet(value)
 {
-	return String(Number(value.toFixed(1)));
+	return String(Number((value/FOOT).toFixed(1)));
 }
 
 /**
@@ -1052,7 +1138,7 @@ function generationValues(frame)
 	};
 
 	for(const field of frame.querySelectorAll('[data-landform] [name]'))
-		result[field.name] = field.tagName==='SELECT' ? field.value : Number(field.value);
+		result[field.name] = field.tagName==='SELECT' ? field.value : metricValue(field);
 
 	return result;
 }
@@ -1193,18 +1279,21 @@ const LAYER_FIELDS = {
 	, relief: ['Relief source']
 
 	, opacity: ['Coverage · 0–1', 'At 0 the layer disappears. At 1 it has full effect wherever its masks allow.']
-	, low: ['Minimum elevation · m', 'Lower edge of the height band. Raise it to leave lower ground exposed.']
-	, high: ['Maximum elevation · m', 'Upper edge of the height band. Lower it to leave higher ground exposed.']
-	, fade: ['Elevation fade · m', 'Distance over which the layer blends out at its height limits.']
+	, low: ['Minimum elevation · ft', 'Lower edge of the height band. Raise it to leave lower ground exposed.', 'ft']
+	, high: ['Maximum elevation · ft', 'Upper edge of the height band. Lower it to leave higher ground exposed.', 'ft']
+	, fade: ['Elevation fade · ft', 'Distance over which the layer blends out at its height limits.', 'ft']
 	, slopeLow: ['Minimum slope', 'Raise to keep the layer on steeper ground. Level ground is 0. A 60° slope is 0.5.']
 	, slopeHigh: ['Maximum slope', 'Lower this to keep the layer off cliffs. A vertical face is 1.']
 	, slopeFade: ['Slope fade', 'Width of the blend at each slope limit. Small values give sharper edges.']
-	, noise: ['Boundary noise · m', 'Shifts an elevation edge up and down where that edge crosses the terrain.']
-	, scale: ['Boundary noise scale · m', 'Widens bends along elevation edges when Boundary noise is above zero.']
-	, period: ['Repeat interval · m', 'Repeats the height band at this spacing. Use 0 for a single band.']
+	, noise: ['Boundary noise · ft', 'Shifts an elevation edge up and down where that edge crosses the terrain.', 'ft']
+	, scale: ['Boundary noise scale · ft'
+		, 'Widens bends along elevation edges when Boundary noise is above zero.'
+		, 'ft'
+	]
+	, period: ['Repeat interval · ft', 'Repeats the height band at this spacing. Use 0 for a single band.', 'ft']
 
 	, patternAmount: ['Pattern amount', 'Increase for a stronger tint or bump pattern. Zero removes the pattern.']
-	, patternScale: ['Pattern scale · m', 'Increase for wider texture features, such as patches or ripples.']
+	, patternScale: ['Pattern scale · ft', 'Increase for wider texture features, such as patches or ripples.', 'ft']
 	, patternStretch: ['Vertical stretch', 'Values above 1 stretch the texture upward on cliff faces.']
 	, strength: ['Relief strength', 'Sets bump intensity. Zero removes these bumps. Negative values invert them.']
 	, flatten: ['Flatten underlying relief · 0–1', 'At 1, full coverage smooths away all bumps from earlier layers.']
@@ -1241,9 +1330,16 @@ function atmosphereEditor(frame, push)
 			if(key==='top' || key==='bottom') input.max = schema.ceiling;
 
 			if(key==='density') input.max = schema.maxDensity;
+		}
+
+		configureUnits(el);
+
+		for(const input of el.querySelectorAll('[data-air-key]'))
+		{
+			const key = input.dataset.airKey;
 
 			if(key==='enabled') input.checked = values[key];
-			else input.value = values[key];
+			else setFieldValue(input, values[key]);
 		}
 
 		el.querySelector('legend').textContent = values.name;
@@ -1268,7 +1364,7 @@ function atmosphereEditor(frame, push)
 
 				record[input.dataset.airKey] = input.type==='checkbox'
 					? input.checked
-					: input.type==='number' ? input.valueAsNumber : input.value.trim();
+					: input.type==='number' ? metricValue(input) : input.value.trim();
 			}
 
 			el.querySelector('legend').textContent = record.name;
@@ -1345,7 +1441,7 @@ function atmosphereEditor(frame, push)
 					const value = rows[i][input.dataset.airKey];
 
 					if(input.type==='checkbox') input.checked = value;
-					else if(input!==document.activeElement) input.value = value;
+					else if(input!==document.activeElement) setFieldValue(input, value);
 				}
 			}
 
@@ -1398,9 +1494,9 @@ function materialEditor(frame, push, status)
 			, relief: list(surface.relief)
 		};
 
-		const fields = Object.entries(LAYER_FIELDS).map(([key, [label, help = '']]) => {
+		const fields = Object.entries(LAYER_FIELDS).map(([key, [label, help = '', unit = '']]) => {
 			const id = `${layerBox.id}-row-${index}-${key}`;
-			const attrs = `data-layer-key="${key}" aria-describedby="${id}"`;
+			const attrs = `data-layer-key="${key}" data-unit="${unit}" aria-describedby="${id}"`;
 			let widget;
 
 			if(menus[key])
@@ -1481,6 +1577,7 @@ function materialEditor(frame, push, status)
 	{
 		const open = new Set([...layerBox.querySelectorAll('details[open]')].map(el => el.dataset.layer));
 		layerBox.innerHTML = rows.map(layerRow).join('');
+		configureUnits(layerBox);
 
 		for(const [index,el] of [...layerBox.children].entries())
 		{
@@ -1497,7 +1594,7 @@ function materialEditor(frame, push, status)
 			id: el.dataset.layer
 			, ...Object.fromEntries(
 				[...el.querySelectorAll('[data-layer-key]')].map(field => [field.dataset.layerKey
-					, field.type==='number' ? field.valueAsNumber : field.value
+					, field.type==='number' ? metricValue(field) : field.value
 				])
 			)
 		}));
@@ -1543,7 +1640,7 @@ function materialEditor(frame, push, status)
 				type: 'surface-edit'
 				, id: field.closest('[data-layer]').dataset.layer
 				, key
-				, value: field.type==='number' ? field.valueAsNumber : field.value
+				, value: field.type==='number' ? metricValue(field) : field.value
 			});
 	});
 
@@ -1620,20 +1717,22 @@ function materialEditor(frame, push, status)
 		).join('');
 
 		fieldBox.innerHTML = surface.fieldKeys.map(key => {
-			const [min,max] = surface.ranges[key], [label,step,help] = SHARED_FIELDS[key];
+			const [min,max] = surface.ranges[key], [label,step,help,unit = ''] = SHARED_FIELDS[key];
 			const id = `${layerBox.id}-shared-${key}`;
 
 			return `<div class="surface-field"><label class="terrain-control"><span>${label}</span>
-				<input data-shared="${key}" aria-describedby="${id}" type="range" min="${min}" max="${max}" step="${step}">
+				<input data-shared="${key}" data-unit="${unit}" aria-describedby="${id}" type="range" min="${min}" max="${max}" step="${step}">
 				<output aria-hidden="true"></output></label><small id="${id}">${help}</small></div>`;
 		}).join('');
+
+		configureUnits(fieldBox);
 	}
 
 	inkBox.oninput = ({target}) => push({type: 'surface-ink',ink: target.dataset.ink,color: target.value});
 
 	fieldBox.oninput = ({target}) => {
 		target.nextElementSibling.textContent = readout(target.value);
-		push({type: 'surface-field',key: target.dataset.shared,value: target.valueAsNumber});
+		push({type: 'surface-field',key: target.dataset.shared,value: metricValue(target)});
 	};
 
 	const showSurface = state => {
@@ -1671,7 +1770,7 @@ function materialEditor(frame, push, status)
 			{
 				for(const field of el.querySelectorAll('[data-layer-key]'))
 				{
-					if(field!==document.activeElement) field.value = rows[i][field.dataset.layerKey];
+					if(field!==document.activeElement) setFieldValue(field, rows[i][field.dataset.layerKey]);
 				}
 			}
 		}
@@ -1701,7 +1800,7 @@ function materialEditor(frame, push, status)
 
 			if(field!==document.activeElement)
 			{
-				field.value = state.surfaceFields[key];
+				setFieldValue(field, state.surfaceFields[key]);
 				field.nextElementSibling.textContent = readout(field.value);
 			}
 		}
@@ -1714,10 +1813,18 @@ const INK_LABELS = {grassColor: 'Grass', rockColor: 'Rock', sandColor: 'Sand', s
 
 /** Labels, slider steps and inline help for fields sampled by multiple layers. */
 const SHARED_FIELDS = {
-	gullySize: ['Gully spacing · m', .5, 'Wider spacing spreads out the ribs and the color bands that follow them.']
-	, blockSize: ['Block and crown spacing · m', .25, 'Increase for larger, more widely spaced rocks and tree crowns.']
-	, jointWidth: ['Slab width · m', .5, 'Horizontal spacing between fractures. Increase for wider rock slabs.']
-	, jointHeight: ['Slab height · m', .5, 'Vertical spacing between fractures. Increase for taller rock faces.']
+	gullySize: ['Gully spacing · ft'
+		, .5
+		, 'Wider spacing spreads out the ribs and the color bands that follow them.'
+		, 'ft'
+	]
+	, blockSize: ['Block and crown spacing · ft'
+		, .25
+		, 'Increase for larger, more widely spaced rocks and tree crowns.'
+		, 'ft'
+	]
+	, jointWidth: ['Slab width · ft', .5, 'Horizontal spacing between fractures. Increase for wider rock slabs.', 'ft']
+	, jointHeight: ['Slab height · ft', .5, 'Vertical spacing between fractures. Increase for taller rock faces.', 'ft']
 
 	, talusAmount: ['Talus', .01, 'Sets the share of moderately steep ground covered by fans of loose rock.']
 	, stainAmount: ['Iron stain', .01, 'Increase to cover more of the exposed rock with iron stains.']
@@ -1725,24 +1832,40 @@ const SHARED_FIELDS = {
 
 	, rockSlopeStart: ['Rock starts · slope', .01, 'Lower this threshold to expose rock on gentler slopes.']
 	, rockSlopeEnd: ['Rock covers · slope', .01, 'Slope where the transition from soil to exposed rock finishes.']
-	, beachHeight: ['Beach top · m', 1, 'Height above the water where shore sand begins to thin.']
-	, beachWidth: ['Beach fade · m', .5, 'Vertical distance over which sand blends out above the beach top.']
-	, snowline: ['Snowline · m', 1, 'World elevation where snow starts. Alpine and vegetation zones follow it.']
-	, snowTransition: ['Snow fade · m', 1, 'Climb above the snowline needed for full snow cover on gentle ground.']
-	, alpineStart: ['Alpine rock from · m', 1, 'Bare rock starts at this height relative to the snowline.']
-	, alpineEnd: ['Alpine rock to · m', 1, 'Height from the snowline where bare rock replaces the last alpine meadow.']
+	, beachHeight: ['Beach top · ft', 1, 'Height above the water where shore sand begins to thin.', 'ft']
+	, beachWidth: ['Beach fade · ft', .5, 'Vertical distance over which sand blends out above the beach top.', 'ft']
+	, snowline: ['Snowline · ft', 1, 'World elevation where snow starts. Alpine and vegetation zones follow it.', 'ft']
+	, snowTransition: ['Snow fade · ft'
+		, 1
+		, 'Climb above the snowline needed for full snow cover on gentle ground.'
+		, 'ft'
+	]
+	, alpineStart: ['Alpine rock from · ft', 1, 'Bare rock starts at this height relative to the snowline.', 'ft']
+	, alpineEnd: ['Alpine rock to · ft'
+		, 1
+		, 'Height from the snowline where bare rock replaces the last alpine meadow.'
+		, 'ft'
+	]
 	, snowSlopeStart: ['Snow thins · slope', .01, 'Slope where snow begins to give way to the material underneath.']
 	, snowSlopeEnd: ['Snow gone · slope', .01, 'Raise this threshold to keep snow on steeper faces.']
 
 	, macroVariation: ['Variation', .05, 'Varies tint across broad areas and makes snow and vegetation edges wander.']
-	, treeline: ['Treeline · m', 1, 'Height of the forest edge relative to the snowline. Negative values lie below it.']
-	, tundraStart: ['Tundra from · m', 1, 'Height relative to the snowline where tundra begins to replace meadow.']
+	, treeline: ['Treeline · ft'
+		, 1
+		, 'Height of the forest edge relative to the snowline. Negative values lie below it.'
+		, 'ft'
+	]
+	, tundraStart: ['Tundra from · ft'
+		, 1
+		, 'Height relative to the snowline where tundra begins to replace meadow.'
+		, 'ft'
+	]
 };
 
-function range(label, key, min, max, step, value)
+function range(label, key, min, max, step, value, unit = '')
 {
-	return `<label class="terrain-control"><span>${label}</span><input data-value="${key}" type="range"`
-		+ ` min="${min}" max="${max}" step="${step}" value="${value}">`
+	return `<label class="terrain-control"><span>${label}</span><input data-value="${key}"`
+		+ ` data-unit="${unit}" type="range" min="${min}" max="${max}" step="${step}" value="${value}">`
 			+ `<output data-output="${key}">${value}</output></label>`;
 }
 
@@ -1840,10 +1963,12 @@ function markup()
 	@container terrain-view (min-width:960px){
 		.terrain-panel[open]~.terrain-hud{max-width:calc(100% - var(--lab-width) - 48px)}
 	}
+	.terrain-control-hints{position:absolute;top:12px;left:12px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;box-sizing:border-box;max-width:min(max(220px,34%),calc(100% - 24px));padding:7px 10px;background:#102822ad;border-radius:6px;color:#edf4ee;pointer-events:none}
+	.terrain-hint-button{display:inline-block;vertical-align:middle;background-image:var(--hint-buttons);background-repeat:no-repeat}
 	@keyframes terrain-finish-pulse{50%{opacity:.4}}
 	@media(prefers-reduced-motion:no-preference){.terrain-finish{animation:terrain-finish-pulse .8s ease-in-out 3}}
 	@media(max-width:640px){.terrain-sandbox:has(.terrain-panel:not([open])) .terrain-hud:has([data-race]:not([hidden])) [data-diagnostics]{display:none}}
-	</style><div class="terrain-stage"></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
+	</style><div class="terrain-stage"></div><div class="terrain-control-hints" hidden></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
 	<details class="terrain-panel" open>
 	<summary title="Landscape Lab (H)"><span class="lab-sliders" aria-hidden="true"><i></i><i></i><i></i></span><span class="lab-title">Landscape Lab</span></summary>
 	<div class="lab-workspace">
@@ -1852,19 +1977,19 @@ function markup()
 	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="canyon">Canyon</option><option value="limestone">Limestone Plain</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option><option value="arctic-meltwater">Arctic Meltwater</option><option value="tidal-lagoon">Tidal Lagoon</option><option value="red-mesas">Red Mesas</option><option value="heather-moor">Heather Moor</option><option value="salt-pans">Salt Pans</option><option value="cinder-highlands">Cinder Highlands</option></select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
 	<label class="terrain-field">World size<select name="worldSize">
-		<option value="32768">32.8 km per side</option>
-		<option value="65536">65.5 km per side</option>
+		<option value="32768">20.4 mi per side</option>
+		<option value="65536">40.7 mi per side</option>
 		<option data-loaded-size hidden></option>
 	</select></label>
 	<label class="terrain-field">Rendering detail<select data-value="quality"><option value="0.5">Economical</option><option value="1" selected>Balanced</option><option value="2">Detailed</option></select></label>
 	<details data-landform><summary>Landform parameters</summary>
 	<p class="terrain-note">Select Generate to apply these values.</p>
 	<fieldset class="terrain-landform-group"><legend>Elevation and hills</legend><div class="terrain-grid">
-	<div class="landform-field"><label class="terrain-field">Height scale · m<input aria-describedby="${hintPrefix}-heightScale" name="heightScale" type="number" min="0" max="10000" value="420"></label>
+	<div class="landform-field"><label class="terrain-field">Height scale · ft<input data-unit="ft" aria-describedby="${hintPrefix}-heightScale" name="heightScale" type="number" min="0" max="10000" value="420"></label>
 		<small id="${hintPrefix}-heightScale">Scales the broad terrain vertically. Increase it for more relief between lowlands and peaks.</small></div>
 	<div class="landform-field"><label class="terrain-field">Base bias<input aria-describedby="${hintPrefix}-baseBias" name="baseBias" type="number" step="any"></label>
 		<small id="${hintPrefix}-baseBias">Raises or lowers the whole landform before fine detail is added.</small></div>
-	<div class="landform-field"><label class="terrain-field">Base frequency<input aria-describedby="${hintPrefix}-baseFrequency" name="baseFrequency" type="number" step="any"></label>
+	<div class="landform-field"><label class="terrain-field">Base frequency · cycles/mi<input data-unit="cyclesPerMile" aria-describedby="${hintPrefix}-baseFrequency" name="baseFrequency" type="number" step="any"></label>
 		<small id="${hintPrefix}-baseFrequency">Sets the horizontal scale of the terrain. Lower values make broader hills and valleys.</small></div>
 	<div class="landform-field"><label class="terrain-field">Rolling<input aria-describedby="${hintPrefix}-rolling" name="rolling" type="number" step="any"></label>
 		<small id="${hintPrefix}-rolling">Adds broad, rolling hills to the base terrain. Zero removes this contribution.</small></div>
@@ -1886,7 +2011,7 @@ function markup()
 		<small id="${hintPrefix}-wallHeight">Sets how far the plateau rises above the canyon floor, relative to the height scale.</small></div>
 	</div></fieldset>
 	<fieldset class="terrain-landform-group"><legend>Terraces and rock beds</legend><div class="terrain-grid">
-	<div class="landform-field"><label class="terrain-field">Terrace spacing · m<input aria-describedby="${hintPrefix}-terraceSpacing" name="terraceSpacing" type="number" min="0" max="1000" value="0"></label>
+	<div class="landform-field"><label class="terrain-field">Terrace spacing · ft<input data-unit="ft" aria-describedby="${hintPrefix}-terraceSpacing" name="terraceSpacing" type="number" min="0" max="1000" value="0"></label>
 		<small id="${hintPrefix}-terraceSpacing">Sets the vertical interval between ledges. Zero disables terracing.</small></div>
 	<div class="landform-field"><label class="terrain-field">Terrace strength<input aria-describedby="${hintPrefix}-terraceStrength" name="terraceStrength" type="number" step="any"></label>
 		<small id="${hintPrefix}-terraceStrength">Sets how strongly the slope breaks into benches and risers.</small></div>
@@ -1894,7 +2019,7 @@ function markup()
 		<small id="${hintPrefix}-bedding">Shapes terraces into irregular rock beds with eroded channels. Requires terrace spacing and strength above zero.</small></div>
 	</div></fieldset>
 	<fieldset class="terrain-landform-group"><legend>Fine detail</legend><div class="terrain-grid">
-	<div class="landform-field"><label class="terrain-field">Fine detail · m<input aria-describedby="${hintPrefix}-detailAmplitude" name="detailAmplitude" type="number" min="0" max="1000" step="any" value="28"></label>
+	<div class="landform-field"><label class="terrain-field">Fine detail · ft<input data-unit="ft" aria-describedby="${hintPrefix}-detailAmplitude" name="detailAmplitude" type="number" min="0" max="1000" step="any" value="28"></label>
 		<small id="${hintPrefix}-detailAmplitude">Sets the height of the first layer of small bumps on the terrain.</small></div>
 	<div class="landform-field"><label class="terrain-field">Detail octaves<input aria-describedby="${hintPrefix}-detailOctaves" name="detailOctaves" type="number" step="any"></label>
 		<small id="${hintPrefix}-detailOctaves">Sets how many progressively finer layers of bumps are added.</small></div>
@@ -1908,17 +2033,17 @@ function markup()
 		<small id="${hintPrefix}-damping">Smooths small bumps on steep ground. Higher values suppress the finest layers most.</small></div>
 	</div></fieldset>
 	<fieldset class="terrain-landform-group"><legend>Terrain bends</legend><div class="terrain-grid">
-	<div class="landform-field"><label class="terrain-field">Domain warp · m<input aria-describedby="${hintPrefix}-warpAmplitude" name="warpAmplitude" type="number" min="0" max="5000" value="200"></label>
+	<div class="landform-field"><label class="terrain-field">Domain warp · ft<input data-unit="ft" aria-describedby="${hintPrefix}-warpAmplitude" name="warpAmplitude" type="number" min="0" max="5000" value="200"></label>
 		<small id="${hintPrefix}-warpAmplitude">Shifts the terrain pattern sideways. Larger shifts make valleys and ridges meander more.</small></div>
-	<div class="landform-field"><label class="terrain-field">Warp frequency<input aria-describedby="${hintPrefix}-warpFrequency" name="warpFrequency" type="number" step="any"></label>
+	<div class="landform-field"><label class="terrain-field">Warp frequency · cycles/mi<input data-unit="cyclesPerMile" aria-describedby="${hintPrefix}-warpFrequency" name="warpFrequency" type="number" step="any"></label>
 		<small id="${hintPrefix}-warpFrequency">Sets how frequently the bends change direction. Lower values produce longer, gentler bends.</small></div>
 	</div></fieldset>
 	<fieldset class="terrain-landform-group"><legend>Water and world edge</legend><div class="terrain-grid">
-	<div class="landform-field"><label class="terrain-field">Starting water level · m<input aria-describedby="${hintPrefix}-waterLevel" name="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
+	<div class="landform-field"><label class="terrain-field">Starting water level · ft<input data-unit="ft" aria-describedby="${hintPrefix}-waterLevel" name="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
 		<small id="${hintPrefix}-waterLevel">Sets the water elevation on generation. Ground below this level is flooded.</small></div>
 	<div class="landform-field"><label class="terrain-field">Surround<select aria-describedby="${hintPrefix}-surround" name="surround"><option value="sea">Open sea</option><option value="plateau">Desert plateau</option><option value="mountains">Continuing terrain</option><option value="none">None</option></select></label>
 		<small id="${hintPrefix}-surround">Chooses the scenery beyond the playable area.</small></div>
-	<div class="landform-field"><label class="terrain-field">Transition width · m<input aria-describedby="${hintPrefix}-transitionWidth" name="transitionWidth" type="number" step="any"></label>
+	<div class="landform-field"><label class="terrain-field">Transition width · ft<input data-unit="ft" aria-describedby="${hintPrefix}-transitionWidth" name="transitionWidth" type="number" step="any"></label>
 		<small id="${hintPrefix}-transitionWidth">Sets how far beyond the boundary the terrain takes to blend into the surrounding scenery.</small></div>
 	</div></fieldset>
 	</details>
@@ -1927,19 +2052,19 @@ function markup()
 	<section class="terrain-section" role="tabpanel" id="terrain-section-shape" aria-labelledby="terrain-tab-shape" data-tab-panel="shape" hidden>
 	<label class="terrain-field terrain-wide">Tool<select data-value="tool"><option value="navigate">Navigate</option><option value="raise">Raise</option><option value="lower">Lower</option><option value="flatten">Flatten</option><option value="smooth">Smooth</option><option value="crater">Crater</option><option value="material">Paint material</option><option value="road">Road control points</option><option value="gate">Race gate</option><option value="balloon">Balloon</option></select></label>
 	<div class="terrain-grid" data-balloon-tool hidden><label class="terrain-field">Balloon tool<select data-value="balloonTool"><option value="place">Place</option><option value="remove">Remove</option></select></label>
-	<label class="terrain-field">Height above surface · m<input data-value="balloonAltitude" type="number" min="12" max="1200" value="100"></label></div>
+	<label class="terrain-field">Height above surface · ft<input data-unit="ft" data-value="balloonAltitude" type="number" min="12" max="1200" value="100"></label></div>
 	<div class="terrain-grid" data-gate-tool hidden><label class="terrain-field">Gate role<select data-value="gateRole"><option value="start" selected>Start</option><option value="checkpoint">Checkpoint</option><option value="finish">Finish</option><option value="remove">Remove</option></select></label>
 	<label class="terrain-field">Laps · start / finish courses only<input data-value="gateLaps" type="number" min="1" max="20" step="1" value="1"></label>
 	<p class="terrain-note" data-gate-laps>Laps count when the start gate is also the finish.</p>
-	<label class="terrain-field">Height above ground · m<input data-value="gateAltitude" type="number" min="0" max="400" step="any" value="0"></label>
-	<label class="terrain-field">Opening width · m<input data-value="gateWidth" type="number" min="0" max="300" step="any" value="0"></label>
-	<label class="terrain-field">Opening height · m<input data-value="gateHeight" type="number" min="0" max="150" step="any" value="0"></label>
+	<label class="terrain-field">Height above ground · ft<input data-unit="ft" data-value="gateAltitude" type="number" min="0" max="400" step="any" value="0"></label>
+	<label class="terrain-field">Opening width · ft<input data-unit="ft" data-value="gateWidth" type="number" min="0" max="300" step="any" value="0"></label>
+	<label class="terrain-field">Opening height · ft<input data-unit="ft" data-value="gateHeight" type="number" min="0" max="150" step="any" value="0"></label>
 	<p class="terrain-note terrain-sizes" data-gate-sizes></p>
 	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening width or height of 0 takes the gate's own. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. A gate that would overlap another is refused. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
 	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
 
-	${range('Radius · m', 'radius', 2, 300, 1, 40)}${range('Strength · m', 'amount', .1, 200, .1, 12)}
-	<label class="terrain-field">Flatten elevation · m<input data-value="flattenHeight" type="number" min="-1000" max="3000" value="0"></label>
+	${range('Radius · ft', 'radius', 2, 300, 1, 40, 'ft')}${range('Strength · ft', 'amount', .1, 200, .1, 12, 'ft')}
+	<label class="terrain-field">Flatten elevation · ft<input data-unit="ft" data-value="flattenHeight" type="number" min="-1000" max="3000" value="0"></label>
 	<label class="terrain-field">Paint<select data-value="material"><option value="grass">Grass</option><option value="rock">Rock</option><option value="sand">Sand</option><option value="snow">Snow</option><option value="road">Road</option></select></label>
 	<p class="terrain-note">Click the ground to apply one brush stroke. Ctrl+Z undoes; Ctrl+Shift+Z redoes.</p>
 	<div class="terrain-row"><button data-action="undo">Undo</button><button data-action="redo">Redo</button></div>
@@ -1948,11 +2073,11 @@ function markup()
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden>
 	<details><summary>Circuit generator</summary><div class="terrain-grid">
-	<label class="terrain-field">Minimum feature height difference · m<input data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="120"></label>
-	<label class="terrain-field">Start elevation · m<input data-value="circuitStartHeight" type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
+	<label class="terrain-field">Minimum feature height difference · ft<input data-unit="ft" data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="120"></label>
+	<label class="terrain-field">Start elevation · ft<input data-unit="ft" data-value="circuitStartHeight" type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
 	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
 	<label class="terrain-check"><input data-value="circuitCauseways" type="checkbox">Allow causeways</label>
-	<p class="terrain-note">Raise the road across water up to 30 m deep while keeping the current water level.</p>
+	<p class="terrain-note">Raise the road across water up to 98 ft deep while keeping the current water level.</p>
 	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
 	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
 	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
@@ -1970,12 +2095,12 @@ function markup()
 	<details><summary>Paint inks</summary><p class="terrain-note" id="${surfaceId}-paint">These colors apply to existing and new paint strokes and roads. At full coverage, paint covers the natural color and relief.</p><div class="terrain-grid" data-paint-inks></div></details>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-water" aria-labelledby="terrain-tab-water" data-tab-panel="water" hidden>
-	<label class="terrain-field">Water level · m<input data-value="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
+	<label class="terrain-field">Water level · ft<input data-unit="ft" data-value="waterLevel" type="number" min="-10000" max="10000" step="any" value="0"></label>
 	${range('Choppiness · %', 'waterChoppiness', 0, 300, 1, 100)}
 	<label class="terrain-control"><span>Water color</span><input data-value="waterColor" type="color" value="#287276"></label>
 	${range('Transparency', 'waterTransparency', 0, 1, .01, .85)}
 	${range('Reflectivity', 'waterReflectivity', 0, 1, .01, .85)}
-	<label class="terrain-control"><span>Fog density</span><input data-fog type="range" min="0" max="1" step=".005" value=".52" aria-label="Fog density per meter"><output data-fog-output>0.035</output></label>
+	<label class="terrain-control"><span>Fog density · per foot</span><input data-fog type="range" min="0" max="1" step=".005" value=".52" aria-label="Fog density per foot"><output data-fog-output>0.0107</output></label>
 	${range('Shore and wake foam', 'waterFoam', 0, 1, .01, .65)}
 	<p class="terrain-note">Lower fog density to see the bottom in deeper water.</p>
 	</section>
@@ -2023,10 +2148,10 @@ function markup()
 	<div class="terrain-grid">
 	<label class="terrain-field">Layer name<input type="text" maxlength="40" required data-air-key="name"></label>
 	<label class="terrain-field">Scattered light<input type="color" data-air-key="color"></label>
-	<label class="terrain-field">Base (m above sea level)<input type="number" min="0" step="any" required data-air-key="bottom"></label>
-	<label class="terrain-field">Top (m above sea level)<input type="number" min="0" step="any" required data-air-key="top"></label>
-	<div class="surface-field"><label class="terrain-field">Density per km<input type="number" min="0" step="any" required data-air-key="density"></label>
-	<small>At 0.1, about 90% of direct light crosses one kilometer. At 1, about 37% gets through.</small></div>
+	<label class="terrain-field">Base (ft above sea level)<input data-unit="ft" type="number" min="0" step="any" required data-air-key="bottom"></label>
+	<label class="terrain-field">Top (ft above sea level)<input data-unit="ft" type="number" min="0" step="any" required data-air-key="top"></label>
+	<div class="surface-field"><label class="terrain-field">Density per mile<input data-unit="densityPerMile" type="number" min="0" step="any" required data-air-key="density"></label>
+	<small>At 0.1, about 90% of direct light crosses one mile. At 1, about 37% gets through.</small></div>
 	<label class="terrain-check"><input type="checkbox" data-air-key="enabled">Visible</label>
 	<div class="terrain-row"><button type="button" data-air-remove>Remove atmosphere layer</button></div>
 	</div></fieldset></template>
@@ -2037,7 +2162,7 @@ function markup()
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
 	<p class="terrain-note">The F5's launch, Vulcan, balloon and view buttons show at the top left of the view for the controller or keyboard you are using.</p></div>
-	${range('Flight speed · m/s', 'speed', 5, 300, 5, 100)}
+	${range('Flight speed · mph', 'speed', 5, 300, 5, 100, 'mph')}
 	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on in low light</option><option value="on">On</option><option value="off">Off</option></select></label>
 	<label class="terrain-field terrain-wide">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>

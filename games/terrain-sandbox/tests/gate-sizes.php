@@ -12,6 +12,7 @@ require __DIR__ . '/support/gate-mesh.php';
 
 use TerrainSandbox\Car;
 use TerrainSandbox\Course;
+use TerrainSandbox\DisplayUnits;
 use TerrainSandbox\GateModel;
 use TerrainSandbox\GateShapes;
 use TerrainSandbox\Race;
@@ -57,11 +58,11 @@ expect($fit === ['width' => 2 * $road['window']['halfWidth'], 'height' => $road[
 	'No size asks for the kind\'s own');
 $fit = $shapes->fit('road', 80, 1);
 expect($fit['width'] === 60.0 && $fit['height'] === 2.0
-	&& $fit['limits'] === ['a road gate is at most 60 m wide', 'a road gate is at least 2 m tall'],
+	&& $fit['limits'] === ['a road gate is at most 197 ft wide', 'a road gate is at least 6.6 ft tall'],
 	'A size beyond the range takes the nearest the range allows, and says which limit held it');
 $fit = $shapes->fit('water', 60, 4);
 expect(near($fit['height'], 60 / (2 * $water['window']['halfWidth']) * $water['window']['top'] / 2)
-	&& $fit['limits'] === ['a water arch 60 m wide is at least 12.1 m tall'],
+	&& $fit['limits'] === ['a water arch 197 ft wide is at least 39.7 ft tall'],
 	'A water arch 60 m wide grows at least half as tall as it widens, so it stretches at most twice its shape');
 $fit = $shapes->fit('water', 4.5, 40);
 expect(near($fit['height'], 4.5 / (2 * $water['window']['halfWidth']) * $water['window']['top'] * 2),
@@ -233,7 +234,7 @@ expect($wall->mode === 'car' && $stopped['z'] < 400 && $stopped['z'] > 390 && $o
 	sprintf('The car stops at a post of a 40 m gate without passing into it (at z %.2f)', $stopped['z']));
 $wall->close();
 
-// The F5 keeps 8 m above the ground, so a road gate at its own size is out of reach. The status says so, with the
+// The F5 keeps 26.2 ft above the ground, so a road gate at its own size is out of reach. The status says so, with the
 // height of opening it would need; a road gate 12 m tall lets the F5 through and starts the race.
 $plain = ['worldSize' => 8192, 'heightScale' => 0, 'detailAmplitude' => 0];
 $flight = new Session($plain);
@@ -244,7 +245,7 @@ $reach = $flight->status()['race']['reach'];
 $level = max(0.0, $flight->water->level());
 $needed = ceil($level + Race::JET_FLOOR + Race::JET_ROOM);
 expect($reach !== null && $reach['needed'] === $needed && $reach['gate'] === $flight->course->start()['id']
-	&& $reach['message'] === "The start gate is out of reach for the F5, which keeps 8 m above the ground and the water. It needs an opening at least $needed m tall.",
+	&& $reach['message'] === "The start gate is out of reach for the F5, which keeps 26.2 ft above the ground and the water. It needs an opening at least " . DisplayUnits::feet($needed) . " ft tall.",
 	'A road gate under the F5\'s floor is out of reach, and the status gives the height it needs: ' . json_encode($reach));
 input($flight, ['actions' => ['fly']]);
 click($flight, 'start', 0, 1500, 0, ['gateHeight' => 12]);
@@ -280,7 +281,7 @@ $waterLevel = $reacher->water->level();
 expect($race->reach($course, $roadGate, 'car', $waterLevel) === null && $race->reach($course, $lowAir, 'car', $waterLevel) === null,
 	'The car reaches a road gate and an air gate hanging within half a meter of the ground');
 expect($race->reach($course, $floating, 'car', $waterLevel)['message'] === 'Checkpoint 1 floats on the water, out of reach for the car.'
-	&& $race->reach($course, $hanging, 'car', $waterLevel)['message'] === 'Checkpoint 2 hangs 20 m above the ground, out of reach for the car.',
+	&& $race->reach($course, $hanging, 'car', $waterLevel)['message'] === 'Checkpoint 2 hangs 65.6 ft above the ground, out of reach for the car.',
 	'The car cannot reach a floating gate or one hanging 20 m up');
 expect($race->reach($course, $floating, 'craft', $waterLevel) === null
 	&& $race->reach($course, $roadGate, 'craft', $waterLevel)['message'] === 'The start gate stands over land, out of reach for the jet ski.',
@@ -350,11 +351,11 @@ expect($edit->settings['gateWidth'] === 300.0 && $edit->settings['gateHeight'] =
 click($edit, 'checkpoint', 0, 0, 0, ['gateWidth' => 30, 'gateHeight' => 12]);
 $sized = $edit->course->gates()[0];
 expect($sized['width'] === 30.0 && $sized['height'] === 12.0
-	&& $edit->message === 'Placed checkpoint 1 at 0, 0 m, its opening 30 by 12 m.'
+	&& $edit->message === 'Placed checkpoint 1 at 0, 0 ft, its opening 98.4 by 39.4 ft.'
 	&& $edit->status()['course']['gates'][0]['width'] === 30.0, 'A click places a gate of the size set');
 click($edit, 'checkpoint', 0, 100, 0, ['gateWidth' => 90]);
 expect($edit->course->gates()[1]['width'] === 60.0
-	&& $edit->message === 'Placed checkpoint 2 at 0, 100 m, its opening 60 by 3.1 m. A road gate is at most 60 m wide.',
+	&& $edit->message === 'Placed checkpoint 2 at 0, 328 ft, its opening 197 by 10.1 ft. A road gate is at most 197 ft wide.',
 	'A size beyond the range is held to it, and the message says so');
 click($edit, 'checkpoint', 0, 200, 0, ['gateWidth' => 250, 'gateHeight' => 100, 'gateAltitude' => 50]);
 expect($edit->course->gates()[2]['kind'] === 'air' && $edit->course->gates()[2]['width'] === 250.0
