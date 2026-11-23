@@ -9,8 +9,16 @@ final class Circuit
 {
 	public const MIN_LENGTH = 120.;
 	public const MAX_POINTS = 1024;
+	private const MIN_GATE_SPACING = 150 * DisplayUnits::FOOT;
+	private const MIN_WAYPOINT_SPACING = 100 * DisplayUnits::FOOT;
 	public readonly float $length;
+	private array $vertexStations = [];
+	private ?array $stationDistances = null;
+	private array $forkStations = [];
+	private ?array $waypoints = null;
 	private ?array $gatePlan = null;
+	/** Guidance points in travel order for each numbered gate's approach, with zero for the lap line. */
+	private array $guideLegs = [];
 
 	/** @param list<array{float,float}> $points Ordered X/Z points without a duplicate closing point. */
 	public function __construct(
@@ -27,16 +35,17 @@ final class Circuit
 		$length = 0.0;
 		foreach($points as $i => [$x,$z])
 		{
+			$this->vertexStations[] = $length;
 			[$nx,$nz] = $points[($i+1)%count($points)];
 			$length += hypot($nx-$x,$nz-$z);
 		}
 		$this->length = $length;
 	}
 
-	/** @return list<array{float,float,float}> X, Z and the heading through each gate in race order. */
-	public function gates(): array
+	/** Distances along the former full gate layout, including its adjustments for corridor forks. */
+	private function waypointStations(): array
 	{
-		if($this->gatePlan !== null) return $this->gatePlan;
+		if($this->stationDistances !== null) return $this->stationDistances;
 		$count = min(Course::MAX_CHECKPOINTS+1, max(8, (int)ceil($this->length/240)));
 		$spacing = $this->length/$count;
 		$stations = [0.];
@@ -51,10 +60,122 @@ final class Circuit
 				if(abs($after-$station)>=$gap) continue;
 				$best = $after;
 				$gap = abs($after-$station);
+				$this->forkStations[$i] = true;
 			}
 			$stations[] = $best;
 		}
-		return $this->gatePlan = $this->stations($stations);
+		return $this->stationDistances = $stations;
+	}
+
+	/** Original route stations, used as waypoint anchors and to validate historical saves. */
+	public function waypoints(): array
+	{
+		return $this->waypoints ??= $this->stations($this->waypointStations());
+	}
+
+	/** Keep roughly one station in three. Prefer a nearby fork and leave room either side of the lap line. */
+	public function gateWaypointIndices(): array
+	{
+		if($this->length <= 0.) return [];
+		$stations = $this->waypointStations();
+		$count = count($stations);
+		$gates = max(1, min((int)round($count/3), (int)floor($this->length/self::MIN_GATE_SPACING)));
+		$spacing = $this->length/$gates;
+		$indices = [0];
+		$last = 0.;
+		for($i = 1; $i < $gates; $i++) {
+			$best = null; $bestGap = INF; $bestFork = false;
+			foreach($stations as $index=>$at) {
+				$gap = abs($at-$i*$spacing);
+				if($gap > .45*$spacing || $at-$last < self::MIN_GATE_SPACING || $this->length-$at < self::MIN_GATE_SPACING) continue;
+				$fork = isset($this->forkStations[$index]);
+				if(($bestFork && !$fork) || ($fork === $bestFork && $gap >= $bestGap)) continue;
+				$best = $index; $bestGap = $gap; $bestFork = $fork;
+			}
+			if($best === null) continue;
+			$indices[] = $best;
+			$last = $stations[$best];
+		}
+		return $indices;
+	}
+
+	/** @return list<array{float,float,float}> X, Z and the heading through each scored gate in race order. */
+	public function gates(): array
+	{
+		if($this->gatePlan !== null) return $this->gatePlan;
+		$points = $this->waypoints();
+		return $this->gatePlan = array_map(static fn(int $i): array => $points[$i], $this->gateWaypointIndices());
+	}
+
+	private function guideLeg(int $nextGate): array
+	{
+		$indices = $this->gateWaypointIndices();
+		$stations = $this->waypointStations();
+		$first = $indices[$nextGate === 0 ? count($indices)-1 : $nextGate-1];
+		$end = $nextGate === 0 ? count($stations) : $indices[$nextGate];
+		$stations[] = $this->length;
+		$from = $stations[$first]; $to = $stations[$end];
+		$points = $this->waypoints();
+		$line = [[$from, $points[$first][0], $points[$first][1]]];
+		foreach($this->vertexStations as $i=>$at) {
+			if($at >= $to) break;
+			if($at > $from) $line[] = [$at, ...$this->points[$i]];
+		}
+		$finish = $points[$indices[$nextGate]];
+		$line[] = [$to, $finish[0], $finish[1]];
+
+		// Target 600 ft at one mile and 200 ft at ten miles. Store each interval's spacing so even
+		// an endurance lap needs no per-waypoint meshes, terrain probes or large lookup tables.
+		$miles = $this->length/(5280*DisplayUnits::FOOT);
+		$spacing = (600.-400.*max(0.,min(1.,($miles-1.)/9.)))*DisplayUnits::FOOT;
+		$spans = [];
+		for($i = $first+1; $i <= $end; $i++) {
+			$at = $stations[$i];
+			$span = $at-$from;
+			if($i < $end && min($span,$to-$at) < self::MIN_WAYPOINT_SPACING) continue;
+			$pieces = max(1, min((int)round($span/$spacing), (int)floor($span/self::MIN_WAYPOINT_SPACING)));
+			$spans[] = [$from, $at, $span/$pieces];
+			$from = $at;
+		}
+		return [$line,$spans];
+	}
+
+	/** Aim ahead on the current leg. A missed waypoint or a recovery immediately rejoins at the nearest segment. */
+	public function waypointAhead(int $nextGate, float $x, float $z): ?array
+	{
+		[$line,$spans] = $this->guideLegs[$nextGate] ??= $this->guideLeg($nextGate);
+		$last = count($line)-1;
+		$nearest = INF;
+		$segment = 0; $progress = $line[0][0];
+		for($i = 0; $i < $last; $i++) {
+			[$a,$ax,$az] = $line[$i];
+			[$b,$bx,$bz] = $line[$i+1];
+			$dx = $bx-$ax; $dz = $bz-$az;
+			$length2 = $dx*$dx+$dz*$dz;
+			if($length2 < 1e-12) continue;
+			$t = max(0., min(1., (($x-$ax)*$dx+($z-$az)*$dz)/$length2));
+			$distance2 = ($ax+$t*$dx-$x)**2+($az+$t*$dz-$z)**2;
+			if($distance2 >= $nearest) continue;
+			$nearest = $distance2;
+			$segment = $i;
+			$progress = $a+$t*($b-$a);
+		}
+		// Hand off just before the waypoint so the arrow never swings back as the vehicle passes it.
+		$ahead = $progress+12.;
+		foreach($spans as [$from,$to,$step]) {
+			if($ahead >= $to) continue;
+			$at = min($to, $from+(floor(($ahead-$from)/$step)+1)*$step);
+			if($at >= $line[$last][0]-1e-8) return null;
+			for($i = $segment; $i < $last; $i++) {
+				[$a,$ax,$az] = $line[$i];
+				[$b,$bx,$bz] = $line[$i+1];
+				if($b < $at || $b <= $a) continue;
+				$t = ($at-$a)/($b-$a);
+				return [$ax+$t*($bx-$ax), $az+$t*($bz-$az)];
+			}
+			break;
+		}
+		return null;
 	}
 
 	/** Sample X, Z and heading at ordered distances along the centerline. */
@@ -81,9 +202,9 @@ final class Circuit
 
 	/** Place the circuit's gates in one go; placing() spreads the same work out. */
 	public function course(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, ?float $legacyWidth = null,
-		bool $legacyPavementFit = false): Course
+		bool $legacyPavementFit = false, bool $legacyDensity = false): Course
 	{
-		$placing = $this->placing($landscape, $shapes, $laps, $flooded, $legacyWidth, $legacyPavementFit);
+		$placing = $this->placing($landscape, $shapes, $laps, $flooded, $legacyWidth, $legacyPavementFit, $legacyDensity);
 		foreach($placing as $_) {}
 		return $placing->getReturn();
 	}
@@ -100,7 +221,7 @@ final class Circuit
 	 * @return \Generator Returns the Course.
 	 */
 	public function placing(Landscape $landscape, GateShapes $shapes, int $laps, bool $flooded, ?float $legacyWidth = null,
-		bool $legacyPavementFit = false): \Generator
+		bool $legacyPavementFit = false, bool $legacyDensity = false): \Generator
 	{
 		if($flooded && $this->floodedLevel === null) throw new \RuntimeException('This circuit has no flooded variant.');
 		$course = new Course($shapes);
@@ -110,7 +231,7 @@ final class Circuit
 		$width = $flooded ? ($regional ? 24. : null) : $legacyWidth;
 		$fitPavement = !$flooded && $legacyWidth === null;
 		$height = $flooded ? null : 2 * $shapes->kind('road')['size']['default'][1];
-		foreach($this->gates() as $i => [$x,$z,$yaw])
+		foreach(($legacyDensity ? $this->waypoints() : $this->gates()) as $i => [$x,$z,$yaw])
 		{
 			if($fitPavement)
 				[$x,$z,$width] = CircuitRoad::gateSpan($landscape,$x,$z,$yaw,$regional,$pavement);

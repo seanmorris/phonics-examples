@@ -1800,7 +1800,7 @@ test('Arctic Meltwater can place an editable causeway circuit at its original wa
 
 	expect(applied.settings.waterLevel).toBe(water);
 	expect(applied.settings.circuitCauseways).toBe(true);
-	expect(applied.course.gates.length).toBeGreaterThanOrEqual(8);
+	expect(applied.course.gates).toHaveLength(Math.round(Math.min(33,Math.max(8,Math.ceil(applied.circuit.length/240)))/3));
 	await expect(page.locator('[data-road-picker] option').nth(1)).toContainText(/Road/i);
 });
 
@@ -1826,6 +1826,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	const preview = await status(page);
 	expect(preview.course.gates).toHaveLength(0);
 	expect(preview.circuit.length).toBeGreaterThan(12_000);
+	expect(preview.circuit.gates).toHaveLength(11);
 	expect(preview.circuit.featureArea).toBeGreaterThan(10_000_000);
 	expect(preview.circuit.heightDifference).toBeGreaterThanOrEqual(200);
 	expect(Math.abs(preview.circuit.startHeight + 360)).toBeLessThanOrEqual(.5);
@@ -1851,6 +1852,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 
 	const dry = await status(page);
 	expect(dry.revision).toBe(1);
+	expect(dry.course.gates).toHaveLength(preview.circuit.gates.length);
 	await expect(sections).toHaveValue('1');
 	await expect(controls).toHaveCount(counts[1]);
 

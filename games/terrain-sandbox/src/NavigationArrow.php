@@ -91,7 +91,11 @@ GLSL);
 	{
 		$dx = $target['x'] - $vehicle['x'];
 		$dz = $target['z'] - $vehicle['z'];
-		if($target['kind'] === 'checkpoint')
+		if(isset($target['waypoint'])) {
+			[$x,$z] = $target['waypoint'];
+			$dx = $x-$vehicle['x']; $dz = $z-$vehicle['z'];
+		}
+		elseif($target['kind'] === 'checkpoint')
 		{
 			// Project the vehicle onto the opening segment. Beyond an end, aim at that end.
 			$c = cos($target['yaw']); $s = sin($target['yaw']);

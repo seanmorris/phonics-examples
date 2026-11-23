@@ -268,7 +268,7 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	await expect.poll(async() => (await status()).circuit.active,{timeout:60_000}).toBe('dry');
 	await expect.poll(() => point.locator('option').count()).toBeGreaterThan(6);
 	await expect(page.locator('[data-road-picker]')).toHaveValue('1');
-	expect((await status()).course.gates.length).toBeGreaterThanOrEqual(8);
+	expect((await status()).course.gates).toHaveLength(3);
 	await page.getByText('Road dimensions',{exact:true}).click();
 	const width = page.locator('[data-road-field=width]');
 	for(const feet of [12,150]) {

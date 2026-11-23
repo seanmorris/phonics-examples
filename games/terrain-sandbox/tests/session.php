@@ -2195,7 +2195,7 @@ $edit('open');
 foreach([[-10000,-6500],[10000,-6500],[10000,6500],[-10000,6500]] as [$x,$z]) $edit('add',['x'=>$x,'z'=>$z]);
 $edit('circuit'); while($manual->preparingRoad()) input($manual,[]); publish($manual);
 $made = $manual->status()['circuit']; $roads = $manual->landscape->roadRecords();
-expect($made['active']==='dry' && $made['length']>60000. && count($manual->course->gates())>=8 && $manual->course->laps()===3,'Manually drawn circuit has a lap start and checkpoints');
+expect($made['active']==='dry' && $made['length']>60000. && count($manual->course->gates())===11 && $manual->course->laps()===3,'The long hand-drawn circuit gets a start and ten scored checkpoints');
 expect($roads[0]['points'][0]===end($roads[0]['points']) && $manual->roadEditor->packet($manual)['id']===0,'The closed road is selected for further editing');
 // Measure each inner post against the same painted edge the driver sees, including the closing bend.
 $checkRoadGates = static function(Session $session, float $roadWidth): void {

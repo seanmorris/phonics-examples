@@ -1255,6 +1255,70 @@ $surveyLand->undo();
 expect($readSurvey($surveyLand,-24.)[1] === $natural, 'Undo is reflected in the next survey.');
 $surveyLand->close();
 
+// Short and long loops keep the original stations as waypoints and evenly spread the scored gates around the seam.
+foreach(range(8,33) as $count) {
+	$side = 60.*$count;
+	$loop = new Circuit([[0.,0.],[0.,$side],[$side,$side],[$side,0.]],-5.,null);
+	$indices = $loop->gateWaypointIndices();
+	$gaps = [];
+	foreach($indices as $i=>$index) $gaps[] = ($indices[$i+1] ?? $count)-$index;
+	expect(count($loop->waypoints()) === $count && count($loop->gates()) === (int)round($count/3)
+		&& $indices[0] === 0 && max($gaps)-min($gaps) <= 1, 'Gate density includes the closing leg at every route size');
+}
+$loop = new Circuit([[0.,0.],[0.,240.],[240.,240.],[240.,0.]],-5.,null);
+expect($loop->gates() === array_map(fn($i) => $loop->waypoints()[$i], [0,3,5]), 'The short loop keeps three of its eight stations');
+expect($loop->waypointAhead(1,0.,4.) === [0.,120.] && $loop->waypointAhead(1,0.,160.) === [0.,240.]
+	&& $loop->waypointAhead(1,115.,240.) === null, 'Guidance follows a bend, rejoins ahead of skipped waypoints and hands off to the gate');
+expect($loop->waypointAhead(0,180.,0.) === [120.,0.] && $loop->waypointAhead(0,9.,0.) === null,
+	'The closing leg guides back to the start');
+$flat = new Landscape(['worldSize'=>1024,'heightScale'=>0.,'detailAmplitude'=>0.]);
+$course = $loop->course($flat,$shapes,1,false);
+$gates = $course->gates();
+$timer = new Race;
+$cross = static function(array $gate, float $time) use ($timer,$course): void {
+	$x = $gate['x']; $z = $gate['z']; $y = $gate['y']+1.;
+	$dx = sin($gate['yaw']); $dz = cos($gate['yaw']);
+	$timer->advance($course,[$x-$dx,$y,$z-$dz],[$x+$dx,$y,$z+$dz],$time,.1,'car',1);
+};
+$cross($gates[0],0.);
+$cross(['x'=>0.,'y'=>0.,'z'=>120.,'yaw'=>0.],1.);
+expect($timer->status($course,2.)['splits'] === [] && count($course->posts()) === 2*count($gates),
+	'Crossing a guidance waypoint earns no split and it has no collision posts');
+foreach([1,2,0] as $i=>$gate) $cross($gates[$gate],3.+$i);
+expect($timer->state === 'finished' && count($timer->status($course,6.)['splits']) === 3,
+	'A driver can finish by passing only the visible gates');
+$flat->close();
+
+// Follow the arrow's actual targets along square laps, measuring every gap, including the one back to start.
+$perMile = [];
+foreach([120.,1609.344,19312.128,160934.4] as $length) {
+	$side = $length/4;
+	$loop = new Circuit([[0.,0.],[0.,$side],[$side,$side],[$side,0.]],-5.,null);
+	$station = static function(float $x, float $z) use ($side): float {
+		if(abs($x)<1e-6) return $z;
+		if(abs($z-$side)<1e-6) return $side+$x;
+		if(abs($x-$side)<1e-6) return 3*$side-$z;
+		return 4*$side-$x;
+	};
+	$gates = $loop->gates();
+	$at = $lastGate = 0.; $x = $z = 0.; $count = 0;
+	foreach([...array_keys(array_slice($gates,1,null,true)),0] as $nextGate) {
+		while(($point = $loop->waypointAhead($nextGate,$x,$z)) !== null) {
+			[$x,$z] = $point;
+			$next = $station($x,$z);
+			expect($next-$at >= 100*TerrainSandbox\DisplayUnits::FOOT-1e-6, 'Unmarked waypoints keep at least 100 ft of road between them');
+			$at = $next; $count++;
+		}
+		[$x,$z] = $gates[$nextGate];
+		$next = $nextGate === 0 ? $length : $station($x,$z);
+		expect($next-$at >= 100*TerrainSandbox\DisplayUnits::FOOT-1e-6 && $next-$lastGate >= 150*TerrainSandbox\DisplayUnits::FOOT-1e-6,
+			'Every approach and the lap seam respect both spacing floors');
+		$at = $lastGate = $next; $count++;
+	}
+	$perMile[] = $count*1609.344/$length;
+}
+expect($perMile[2] > 2*$perMile[1] && $perMile[3] >= .9*$perMile[2], 'Endurance laps get more waypoints per mile even far beyond 33 stations');
+
 $generator = new Session;
 input($generator, ['actions' => [['type'=>'generate','preset'=>'canyon','seed'=>'first-light']]]);
 $generator->course->place('start', 'air', 0, 0, 0, 0);
@@ -1363,13 +1427,20 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 	else expect($terrain === null, 'Switching to water reuses the same graded route');
 	$active = $generator->status()['circuit'];
 	$gates = $generator->course->gates();
-	expect($active['active'] === $variant && !$active['preview'] && count($gates) >= 8
+	expect($active['active'] === $variant && !$active['preview'] && count($gates) === 11 && count($preview['gates']) === 11
 		&& $generator->course->finish() === null, 'Apply places a start/finish and ordered checkpoints');
 	$gateLine[] = array_map(fn(array $g): array => [$g['x'],$g['z'],$g['yaw']], $gates);
 	$copy = new Session;
 	input($copy, ['actions' => [['type'=>'load','json'=>$generator->save()]]]);
 	expect($copy->status()['circuit'] == $active && $copy->course->export() == $generator->course->export(),
 		'Save and load preserve the applied circuit and its gate positions');
+	$legacy = json_decode($generator->save(), true, flags: JSON_THROW_ON_ERROR);
+	$oldRoute = Circuit::import($legacy['circuit']['route'], $generator->landscape->recipe()['worldSize']/2);
+	$legacy['course'] = $oldRoute->course($generator->landscape,$shapes,$generator->course->laps(),
+		$variant === 'flooded',legacyDensity:true)->export();
+	expect(count($legacy['course']['gates']) === 33, 'The original layout held a gate at every waypoint');
+	$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
+	expect($copy->course->gates(false) === $generator->course->gates(false), 'Dense saved courses upgrade to the same numbered gates');
 	if($variant === 'dry')
 	{
 		$dryGates = $gates;
@@ -1387,14 +1458,12 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		// over 20 m above the deck; only the deck's own bank may raise one now.
 		$lift = max(array_map(fn(array $g): float => $g['y'] - $generator->landscape->height($g['x'], $g['z']), $gates));
 		expect($lift < 3, "Every dry circuit gantry stands on its road deck ($lift m at most above the centerline)");
-		$legacy = json_decode($generator->save(), true, flags: JSON_THROW_ON_ERROR);
 		foreach($legacy['course']['gates'] as &$gate) $gate['height'] = $stock;
 		unset($gate);
 		$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
 		expect($copy->course->export() === $generator->course->export(), 'A saved stock-height circuit upgrades on load');
-		$oldRoute = Circuit::import($legacy['circuit']['route'], $generator->landscape->recipe()['worldSize']/2);
 		foreach([30.,60.] as $oldWidth) {
-			$legacy['course'] = $oldRoute->course($generator->landscape,$shapes,$generator->course->laps(),false,$oldWidth)->export();
+			$legacy['course'] = $oldRoute->course($generator->landscape,$shapes,$generator->course->laps(),false,$oldWidth,legacyDensity:true)->export();
 			$copy->load(json_encode($legacy, JSON_THROW_ON_ERROR));
 			expect($copy->course->export() === $generator->course->export(), "A saved $oldWidth m circuit refits to the pavement.");
 		}
@@ -1418,6 +1487,12 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 		$copy->step(1/60);
 	expect($copy->mode === $vehicle && $copy->race->status($copy->course,$copy->time)['state'] === 'running',
 		'The generated launch pose lets the vehicle go straight through the first gate');
+	$pose = $copy->$vehicle->state();
+	$target = $copy->navigationTarget($pose);
+	$next = $copy->race->nextGate($copy->course);
+	expect(isset($target['waypoint']) && [$target['x'],$target['z']] === [$next['x'],$next['z']]
+		&& abs(wrap(NavigationArrow::bearing($target,$pose,null,0.)-atan2($target['waypoint'][0]-$pose['x'],
+			$pose['z']-$target['waypoint'][1]))) < 1e-9, 'The map targets the scored gate while the arrow guides along its approach');
 	if($vehicle === 'car') {
 		$gate = $copy->race->nextGate($copy->course);
 		$left = [cos($gate['yaw']),-sin($gate['yaw'])];

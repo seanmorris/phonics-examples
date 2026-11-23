@@ -679,15 +679,20 @@ final class Session
 		$this->dirty = true;
 	}
 
-	public function navigationTarget(): ?array
+	public function navigationTarget(?array $vehicle = null): ?array
 	{
 		if($this->mode === 'fly') return null;
 		if($this->delivery !== null) return $this->delivery->target();
 		if(!$this->race->showGuidance($this->course)) return null;
 		$gate = $this->race->nextGate($this->course);
-		return $gate === null ? null : ['kind'=>'checkpoint','color'=>DeliveryRun::COLORS['checkpoint'],
+		if($gate === null) return null;
+		$target = ['kind'=>'checkpoint','color'=>DeliveryRun::COLORS['checkpoint'],
 			'x'=>$gate['x'],'y'=>$gate['y'],'z'=>$gate['z'],'yaw'=>$gate['yaw'],
 			'halfWidth'=>$this->course->measure($gate)['window']['halfWidth']];
+		// The map marks the scored gate. The arrow can follow the bends between gates.
+		if($vehicle !== null && $this->circuit !== null && $this->race->state === 'running')
+			$target['waypoint'] = $this->circuit->waypointAhead($gate['number'] ?? 0, $vehicle['x'], $vehicle['z']);
+		return $target;
 	}
 
 	public function findingCircuit(): bool { return $this->circuitSearch !== null; }
@@ -2129,6 +2134,44 @@ final class Session
 		return true;
 	}
 
+	/** Validate every saved gate, including waypoints that carried physical gates in older circuits. */
+	private function restoreCircuitCourse(Circuit $circuit, Landscape $land, Course $savedCourse, bool $flooded): Course
+	{
+		$saved = $savedCourse->export()['gates'];
+		$laps = $savedCourse->laps();
+		$dense = count($saved) === count($circuit->waypoints());
+		if($laps === null || (!$dense && count($saved) !== count($circuit->gates())))
+			throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
+
+		$fits = [[null,false]];
+		$road = $this->gateShapes->kind('road')['size'];
+		if(!$flooded) {
+			$widths = array_values(array_unique(array_column($saved,'width')));
+			$oldWidths = $circuit->featureArea !== null ? [30.,60.] : [$road['default'][0]];
+			if(count($widths) === 1 && in_array($widths[0],$oldWidths,true)) $fits[] = [$widths[0],false];
+			if($circuit->featureArea !== null || in_array($road['width'][0],$widths,true)) $fits[] = [null,true];
+		}
+		$current = null;
+		foreach($fits as [$width,$oldFit]) {
+			try { $layout = $circuit->course($land,$this->gateShapes,$laps,$flooded,$width,$oldFit,$dense); }
+			catch(\RangeException|\OutOfBoundsException) { continue; }
+			if($width === null && !$oldFit) $current = $layout;
+			$expected = $layout->export()['gates'];
+			if(!$flooded && $saved[0]['height'] === $road['default'][1]) {
+				foreach($expected as &$gate) $gate['height'] = $road['default'][1];
+				unset($gate);
+			}
+			if(!self::sameCircuitGates($expected,$saved)) continue;
+			if(!$dense) return $current ?? $layout;
+			// Removing two of three gates may also clear an old overlap and allow the current pavement fit.
+			try { return $circuit->course($land,$this->gateShapes,$laps,$flooded); }
+			catch(\RangeException|\OutOfBoundsException) {
+				return $circuit->course($land,$this->gateShapes,$laps,$flooded,$width,$oldFit);
+			}
+		}
+		throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
+	}
+
 	/**
 	 * Load a complete save only after validating its terrain and authoring settings.
 	 * @param string $json UTF-8 saved sandbox document.
@@ -2155,39 +2198,7 @@ final class Session
 					throw new \InvalidArgumentException('Invalid saved circuit variant.');
 				$variant = $savedCircuit['variant'];
 				$circuit = Circuit::import($savedCircuit['route'] ?? null,$candidate->recipe()['worldSize']/2);
-				$saved = $course->export()['gates'];
-				$oldRoadHeight = $this->gateShapes->kind('road')['size']['default'][1];
-				$matches = static function(Course $layout) use ($saved,$variant,$oldRoadHeight): bool {
-					$expected = $layout->export()['gates'];
-					if($variant === 'dry' && ($saved[0]['height'] ?? null) === $oldRoadHeight) {
-						// Older generated circuits used the stock road height for every gate.
-						foreach($expected as &$gate) $gate['height'] = $oldRoadHeight;
-					}
-					return self::sameCircuitGates($expected,$saved);
-				};
-				$laps = $course->laps();
-				$legacy = null;
-				$widths = array_values(array_unique(array_column($saved,'width')));
-				$legacyWidths = $circuit->featureArea !== null ? [30.,60.] : [$this->gateShapes->kind('road')['size']['default'][0]];
-				if($variant === 'dry' && count($widths) === 1 && in_array($widths[0],$legacyWidths,true)) {
-					// Validate the entire historical layout before allowing an upgrade or keeping a tight legacy fit.
-					try {
-						$old = $circuit->course($candidate,$this->gateShapes,$laps,false,$widths[0]);
-						if($matches($old)) $legacy = $old;
-					} catch(\RangeException|\OutOfBoundsException) {}
-				}
-				try { $course = $circuit->course($candidate,$this->gateShapes,$laps,$variant === 'flooded'); }
-				catch(\RangeException|\OutOfBoundsException) { $course = null; }
-				if($legacy === null && ($course === null || !$matches($course))) {
-					// Older builds kept a minimum gantry width and capped regional circuits at the stock maximum.
-					$oldMinimum = $this->gateShapes->kind('road')['size']['width'][0];
-					if($variant === 'dry' && ($circuit->featureArea !== null || in_array($oldMinimum,$widths,true))) {
-						$old = $circuit->course($candidate,$this->gateShapes,$laps,false,legacyPavementFit:true);
-						if($matches($old)) $legacy = $old;
-					}
-					if($legacy === null) throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
-				}
-				$course ??= $legacy;
+				$course = $this->restoreCircuitCourse($circuit,$candidate,$course,$variant === 'flooded');
 			}
 		}
 		catch(\RuntimeException | \InvalidArgumentException $error) { $candidate->close(); throw $error; }

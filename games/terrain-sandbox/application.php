@@ -282,7 +282,7 @@ $engine->start(
 			$courseRevision = $course->revision;
 			$dirty = true;
 		}
-		$target = $session->navigationTarget();
+		$target = $session->navigationTarget($vehiclePose);
 		$previousBearing = $arrowBearing;
 		$arrowBearing = $target === null ? null : NavigationArrow::bearing($target, $vehiclePose, $previousBearing,
 			$session->paused ? 0.0 : $frameSeconds);
