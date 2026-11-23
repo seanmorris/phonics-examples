@@ -19,6 +19,7 @@ use TerrainSandbox\DeliveryBeacon;
 use TerrainSandbox\DeliveryRun;
 use TerrainSandbox\NavigationArrow;
 use TerrainSandbox\GateModel;
+use TerrainSandbox\CurveSignModel;
 use TerrainPhonics\TerrainAppearance;
 use TerrainSandbox\GroundShadow;
 use TerrainSandbox\Jet;
@@ -54,6 +55,7 @@ $arrowBearing = null;
 $visibleSites = [];
 $shotAlpha = 1.0;
 $gates = new GateModel($session->gateShapes, __DIR__ . '/assets/gates/');
+$curveSigns = new CurveSignModel;
 $courseRevision = -1;
 $course = null;
 $viewCamera = $session->camera;
@@ -192,7 +194,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 });
 
 $shadow = null;
-$drawOpaque = static function() use ($scene, $session, $gates, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
+$drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
+	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
 	foreach($visibleSites as $site)
 		if($site['kind'] !== 'smoke') ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
 	// The car's shadow darkens the ground under it, so it draws after the terrain and before the car.
@@ -240,7 +243,7 @@ $drawOpaque = static function() use ($scene, $session, $gates, &$models, &$trace
 
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		$session, $scene, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
 		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound
 	): void {
@@ -299,6 +302,7 @@ $engine->start(
 				+ ($b['y']-$a['y'])*$forward[1] + ($b['z']-$a['z'])*$forward[2]) <=> 0.);
 		}
 		if(($hadVisibleSmoke || $visibleSites) && $session->time !== $lastRenderedTime) $dirty = true;
+		$dirty = $curveSigns->update($session->landscape) || $dirty;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
@@ -340,7 +344,7 @@ $engine->start(
 			}
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
-				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$session->balloons->targets() ? null : $drawOpaque);
+				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !$session->balloons->targets() ? null : $drawOpaque);
 			$trails = match($session->mode) { 'jet' => $session->flightTrails, 'car' => $session->tireDust, default => null };
 			if($trails?->active())
 				($trailRenderer ??= new TrailRenderer)->draw($trails,$shotAlpha,$viewCamera,$width,$height,
@@ -394,7 +398,7 @@ $engine->start(
 		{
 			$status = $session->status() + ['renderer' => $scene->stats() + ($session->course->count() > 0
 					? ['gateDraws' => $gates->drawn, 'gateMs' => $gates->ms] : ['gateDraws' => 0, 'gateMs' => 0.0])
-					+ ['spotLights' => count($spotLights[0])],
+					+ ['spotLights' => count($spotLights[0]),'curveSigns'=>$curveSigns->count,'curveSignsDrawn'=>$curveSigns->drawn],
 				'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];
@@ -403,7 +407,7 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
+	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
 		foreach($models as $model) $model->close();
@@ -412,9 +416,10 @@ $engine->start(
 		$shadow?->close();
 		$beacon?->close(); $arrow?->close();
 		$gates->release();
+		$curveSigns->close();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $session, $gates, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty): void {
+	static function() use ($scene, $session, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -425,6 +430,7 @@ $engine->start(
 		$beacon?->close(); $beacon = null;
 		$arrow?->close(); $arrow = null;
 		$gates->release();
+		$curveSigns->close();
 		$scene->restore();
 		$session->roadEditor->captured = null;
 		$dirty = true;

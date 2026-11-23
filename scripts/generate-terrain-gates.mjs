@@ -450,7 +450,21 @@ for(const [name, kind] of Object.entries(contract.kinds))
 	}
 }
 
-if(stale.length) throw Error(`Gate prints are stale: ${stale.join(', ')}. Run node scripts/generate-terrain-gates.mjs`);
+// Preserve the supplied chevron's aspect, rounded corners and black ink in a mipmapped RGBA texture.
+const sign = new URL('../roads/curve-hazard-sign.svg', assets);
+const face = new Resvg(await fs.readFile(sign), {fitTo: {mode: 'width', value: 256}}).render();
+const header = Buffer.alloc(8);
+header.writeUInt32LE(face.width);
+header.writeUInt32LE(face.height, 4);
+const texture = Buffer.concat([header, face.pixels]);
+const output = new URL('curve-hazard-sign.rgba.gz', sign);
+const previous = await fs.readFile(output).catch(error => { if(error.code !== 'ENOENT') throw error; });
+if(!previous || !texture.equals(zlib.gunzipSync(previous))) {
+	if(check) stale.push('curve-hazard-sign.rgba.gz');
+	else await fs.writeFile(output, zlib.gzipSync(texture, {level: 9}));
+}
+
+if(stale.length) throw Error(`Road artwork is stale: ${stale.join(', ')}. Run node scripts/generate-terrain-gates.mjs`);
 
 console.log(
 	check
