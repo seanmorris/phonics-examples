@@ -10,6 +10,8 @@ final class Car
 {
 	// Meters, measured from the baked Testarossa. Its origin is midway between the axles.
 	public const WHEELBASE = 2.515, FRONT_TRACK = 1.57, REAR_TRACK = 1.644, TIRE_RADIUS = .297;
+	/** Height of the simulated center of mass above the model's tire-sole origin, in meters. */
+	public const CENTER_OF_MASS_HEIGHT = .50;
 	public const TOP_SPEED_MPH = 240, MPS_PER_MPH = .44704;
 	private const TOP_SPEED = self::TOP_SPEED_MPH * self::MPS_PER_MPH;
 	// Keep the low-speed resistance while allowing a long straight to reach the speed governor.
@@ -660,6 +662,22 @@ final class Car
 		$tangent = tan($steering);
 		$offset = $tangent*self::FRONT_TRACK/(2*self::WHEELBASE);
 		return [atan($tangent/(1 + $offset)), atan($tangent/(1 - $offset))];
+	}
+
+	/** World-space offset from the tire soles to the center of mass at this attitude. */
+	public static function massOffset(float $yaw, float $pitch, float $roll): array
+	{
+		$sinYaw = sin($yaw); $cosYaw = cos($yaw); $cosRoll = cos($roll);
+		$side = self::CENTER_OF_MASS_HEIGHT*sin($roll);
+		$forward = -self::CENTER_OF_MASS_HEIGHT*sin($pitch)*$cosRoll;
+		return [$cosYaw*$side + $sinYaw*$forward, self::CENTER_OF_MASS_HEIGHT*cos($pitch)*$cosRoll,
+			-$sinYaw*$side + $cosYaw*$forward];
+	}
+
+	public static function centerOfMass(array $pose): array
+	{
+		[$dx,$dy,$dz] = self::massOffset($pose['yaw'], $pose['pitch'], $pose['roll']);
+		return [$pose['x'] + $dx, $pose['y'] + $dy, $pose['z'] + $dz];
 	}
 
 	/** Aim terrain detail three quarters of a second along the car's signed path, including a skid or reverse. */

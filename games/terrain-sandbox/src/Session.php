@@ -596,7 +596,7 @@ final class Session
 		if($this->course->floats()) $this->course->float($this->water, $this->time);
 		if($this->mode !== 'fly' && !($this->mode === 'jet' && $this->jetView === 'cockpit'))
 			$this->duck()->step($this->nearGates($this->camera->position), $this->camera->position,
-				[$after['x'], $after['y'], $after['z']]);
+				$this->chaseTarget($after));
 		if($mode !== $this->mode) $this->guardRace();
 		elseif($racing)
 		{
@@ -1776,8 +1776,13 @@ final class Session
 		};
 		if($this->mode === 'jet' && $this->jetView === 'cockpit') return [Jet::cockpit($pose),$pose];
 		if($this->mode === 'fly' || $this->course->count() === 0) return [$eye, $pose];
-		return [$this->duck()->apply($eye, [$pose['x'], $pose['y'], $pose['z']], $this->nearGates($eye->position)),
-			$pose];
+		return [$this->duck()->apply($eye, $this->chaseTarget($pose), $this->nearGates($eye->position)), $pose];
+	}
+
+	/** Point to keep in view while the chase camera moves around a gate. */
+	private function chaseTarget(array $pose): array
+	{
+		return $this->mode === 'car' ? Car::centerOfMass($pose) : [$pose['x'], $pose['y'], $pose['z']];
 	}
 
 	/** Return the camera ducking for the current vehicle, boarding and course, starting a fresh one when any changed. */

@@ -19,6 +19,15 @@ function expect(bool $condition, string $message): void
 	if(!$condition) throw new RuntimeException($message);
 }
 function input(Session $session, array $value): void { $session->input($value, 1 / 60, 16 / 9); }
+
+/** Place the mass center as the vertex shader draws a point in the Testarossa mesh. */
+function drawnCarCenter(array $pose): array
+{
+	$basis = TerrainSandbox\VehicleModel::basis($pose);
+	$h = Car::CENTER_OF_MASS_HEIGHT;
+	return [$pose['x'] + $h*$basis[3], $pose['y'] + $h*$basis[4], $pose['z'] + $h*$basis[5]];
+}
+
 function finishPicking(Session $session): void
 {
 	for($i = 0; $session->picking && $i < 1000; $i++) input($session, []);
@@ -338,7 +347,8 @@ expect($clearance >= 1.349 && $frameError < .55, 'The camera clears the ground a
 [$previousEye,$previousCar] = $canyon->carView(0);
 [$halfEye,$halfCar] = $canyon->carView(.5);
 expect(abs(2*$halfEye->position[2] - $previousEye->position[2] - $camera->position[2]) < 1e-8
-	&& abs(2*$halfCar['z'] - $previousCar['z'] - $car['z']) < 1e-8 && $previousCar['z'] < $halfCar['z'],
+	&& abs(2*drawnCarCenter($halfCar)[2] - drawnCarCenter($previousCar)[2] - drawnCarCenter($car)[2]) < 1e-8
+	&& $previousCar['z'] < $halfCar['z'],
 	'The rendered car and eye advance through the same fraction of the physics step');
 input($canyon, ['actions'=>['pause']]);
 expect($canyon->carView(0) === [$camera,$car], 'Pausing flushes both interpolation histories');
@@ -707,6 +717,45 @@ expect($bottomed && $rise > 0 && $rise < .017 && $springs->contacts === 4,
 	'Landing dampers limit rebound to less than 17 mm after a one-meter drop');
 
 $landingSurface = new TerrainPhonics\Landscape($flat);
+
+// Compare two seconds of free flight with and without a complete barrel roll on the same trajectory.
+function freeRoll(TerrainPhonics\Landscape $land, int $direction): array
+{
+	$yaw = .83;
+	$template = ['yaw'=>$yaw, 'motion'=>'tumbling'] + (new Car)->state();
+	$body = new TerrainSandbox\CarTumble(2,30,4,$yaw,.16,0,6,4,.45*$direction,M_PI*$direction,1.7);
+	$pose = static function() use ($body,$template): array {
+		[$x,$y,$z,$pitch,$roll,$speed] = $body->pose();
+		return compact('x','y','z','pitch','roll','speed') + $template;
+	};
+	$eye = new TerrainPhonics\Camera;
+	$chase = new CarChase;
+	$from = $pose();
+	$chase->board($eye,$from,$land);
+	$trace = [];
+	for($step = 0; $step < 120; $step++)
+	{
+		$body->advance(1/60,$land,-100);
+		$to = $pose();
+		$chase->advance($eye,$from,$to,$land,1/60);
+		foreach([.5,1.] as $alpha)
+		{
+			[$camera,$model] = $chase->view($eye,$to,$alpha);
+			$trace[] = [...$camera->position, $camera->pitch, ...drawnCarCenter($model)];
+		}
+		$from = $to;
+	}
+	return $trace;
+}
+$straight = freeRoll($landingSurface,0);
+foreach([-1,1] as $direction)
+{
+	$error = 0.;
+	foreach(freeRoll($landingSurface,$direction) as $frame => $sample)
+		foreach($sample as $i => $value) $error = max($error, abs($value - $straight[$frame][$i]));
+	expect($error < 1e-9, "A full roll ($direction) keeps the drawn mass and the chase eye on their paths between ticks");
+}
+
 foreach([[0,3,0,true],[0,-3,0,true],[2,0,0,true],[-2,0,0,true],[0,12,0,false],[0,3,.08,false]] as [$pitch,$roll,$clearance,$catch])
 {
 	$p = deg2rad($pitch); $r = deg2rad($roll);

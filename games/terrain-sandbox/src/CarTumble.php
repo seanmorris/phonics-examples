@@ -7,7 +7,6 @@ use TerrainPhonics\Landscape;
 /** Free translation, pitch and roll about the center of mass after the tires lose support. */
 final class CarTumble
 {
-	private const CG = .50;
 	// Ground contacts at the tires, bumpers and roof, in model coordinates measured from the tire soles.
 	private const CONTACTS = [
 		[-.80,0,1.26],[.80,0,1.26],[-.82,0,-1.26],[.82,0,-1.26],
@@ -21,28 +20,20 @@ final class CarTumble
 	private float $quiet = 0;
 	public bool $onWheels = false, $settled = false, $roofDown = false;
 
-	public function __construct(float $x, float $y, float $z, float $yaw,
+	public function __construct(float $x, float $y, float $z, private readonly float $yaw,
 		public float $pitch, public float $roll, float $horizontalSpeed, float $verticalSpeed,
 		private float $pitchRate, private float $rollRate, private float $side = 0)
 	{
 		$this->sinYaw = sin($yaw); $this->cosYaw = cos($yaw);
-		[$ox,$oy,$oz] = $this->offsetToCG();
+		[$ox,$oy,$oz] = Car::massOffset($yaw, $pitch, $roll);
 		$this->x = $x + $ox; $this->y = $y + $oy; $this->z = $z + $oz;
 		$this->ahead = $horizontalSpeed; $this->up = $verticalSpeed;
-	}
-
-	private function offsetToCG(): array
-	{
-		$side = self::CG*sin($this->roll);
-		$forward = -self::CG*sin($this->pitch)*cos($this->roll);
-		return [$this->cosYaw*$side + $this->sinYaw*$forward, self::CG*cos($this->pitch)*cos($this->roll),
-			-$this->sinYaw*$side + $this->cosYaw*$forward];
 	}
 
 	/** Tire-sole origin, pitch and roll, then forward and sideways velocity in the original yaw frame. */
 	public function pose(): array
 	{
-		[$ox,$oy,$oz] = $this->offsetToCG();
+		[$ox,$oy,$oz] = Car::massOffset($this->yaw, $this->pitch, $this->roll);
 		return [$this->x-$ox,$this->y-$oy,$this->z-$oz,$this->pitch,$this->roll,$this->ahead,$this->side];
 	}
 
@@ -94,7 +85,7 @@ final class CarTumble
 		$z = max(-$edge, min($edge, $this->z+$dt*$vz));
 		if(abs($x) === $edge) $vx = 0;
 		if(abs($z) === $edge) $vz = 0;
-		$depth = max(0., $water - ($this->y - self::CG));
+		$depth = max(0., $water - ($this->y - Car::CENTER_OF_MASS_HEIGHT));
 		$drag = 1. + Car::WATER_RESISTANCE*$depth*$dt;
 		$this->side = ($this->cosYaw*$vx - $this->sinYaw*$vz) / $drag;
 		$this->ahead = ($this->sinYaw*$vx + $this->cosYaw*$vz) / $drag;
@@ -110,7 +101,7 @@ final class CarTumble
 		$contacts = []; $wheels = 0; $wheelsInReach = 0; $upDot = 0.0;
 		foreach(self::CONTACTS as $index => [$x,$y,$z])
 		{
-			$y -= self::CG;
+			$y -= Car::CENTER_OF_MASS_HEIGHT;
 			$side = $cr*$x + $sr*$y; $above = -$sr*$x + $cr*$y;
 			$ahead = $cp*$z - $sp*$above; $up = $cp*$above + $sp*$z;
 			$px = $this->x + $this->cosYaw*$side + $this->sinYaw*$ahead;
