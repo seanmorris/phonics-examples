@@ -1,10 +1,17 @@
 <?php
 declare(strict_types=1);
 
-// A four-stroke flat twelve with separate left and right collectors. Sample pressure in crank
-// angle so the browser can follow the gearbox continuously at any audio device's sample rate.
+// A four-stroke flat twelve with a collector per bank. Pressure is sampled in crank angle, so the browser can follow
+// the gearbox continuously at any audio device's sample rate. The exhaust pipes and muffler live in the browser's
+// audio graph instead, where their resonances stay fixed in hertz as the revs change.
 const CYCLES = 64, SAMPLES_PER_CYCLE = 512, SAMPLE_RATE = 32768;
-$cylinders = [1.00, .94, .92, 1.02, .98, .89, .88, .97, 1.04, .92, .95, 1.00];
+// Blowdown: the exhaust valve cracks open in a fraction of a degree, then the cylinder empties over a few degrees.
+const RISE = .6, DECAY = 7., TAIL = 64;
+// Cylinders 0–11 fire 60° apart and alternate banks. Each has its own charge and primary pipe length, so the
+// firings differ slightly in strength and arrival time. That gives the note its half orders. Both banks carry the
+// same total charge, so neither bank's own firing rate stands out an octave below the note.
+$charge = [1.03, .93, .96, 1.06, .94, 1.02, 1.08, .96, .99, 1.04, 1.00, .99];
+$primary = [.0, 1.6, -1.1, .7, 1.9, -.4, -1.5, .3, .9, -1.8, -.6, 1.2];
 $length = CYCLES*SAMPLES_PER_CYCLE;
 $tracks = array_fill(0,3,array_fill(0,$length,0.));
 $seed = 17493;
@@ -15,30 +22,28 @@ $random = static function() use (&$seed): float {
 
 for($cycle = 0; $cycle < CYCLES; $cycle++)
 {
-	foreach($cylinders as $i => $trim)
+	foreach($charge as $i => $trim)
 	{
-		// Each firing has its own pressure, valve timing and discharge duration.
-		$at = ($cycle + $i/12.)*SAMPLES_PER_CYCLE + 3.*($random()-.5);
-		$pressure = $trim*(.79 + .42*$random());
-		$duration = 6.1 + 5.3*$random();
-		$lever = .66*cos($i*M_PI/3.) + .34*cos($i*M_PI/6. + .8);
+		// Combustion varies a little from one cycle to the next. Firings sit mid-slot, so the loop joins between them.
+		$at = ($cycle + ($i + .5)/12.)*SAMPLES_PER_CYCLE + $primary[$i] + .8*($random()-.5);
+		$pressure = $trim*(.94 + .12*$random());
 		$bank = $i % 2;
 		$first = (int)ceil($at);
-		for($j = 0; $j < 80; $j++)
+		for($j = 0; $j < TAIL; $j++)
 		{
-			$age = ($first + $j - $at)/$duration;
-			$flow = $pressure*$age*exp(1.-$age);
+			$age = $first + $j - $at;
 			// Wrap the last firing's tail into the start of the next pass.
 			$index = ($first + $j + $length) % $length;
-			$tracks[$bank][$index] += .63*$flow*(1.85 - .72*$age);
-			// The force reaching the mounts depends on where the crank is during the same firing.
-			$tracks[2][$index] += .70*$lever*$flow;
+			$tracks[$bank][$index] += .38*$pressure*(1. - exp(-$age/RISE))*exp(-$age/DECAY);
+			// Gas speed through the collectors. The browser gates turbulent noise with it.
+			$tracks[2][$index] += .22*$pressure*exp(-$age/(2.*DECAY));
 		}
 	}
 }
 
-// Four discrete PCM channels: both collectors, mount excitation, and independently played flow noise.
-$means = array_map(static fn(array $track): float => array_sum($track)/$length,$tracks);
+// Four discrete PCM channels: both collectors, collector flow, and independently played noise.
+// Pressure is heard relative to its mean; flow is a speed and keeps its sign.
+$means = [array_sum($tracks[0])/$length, array_sum($tracks[1])/$length, 0.];
 $pcm = '';
 for($i=0; $i<$length; $i++)
 {

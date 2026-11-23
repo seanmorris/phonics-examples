@@ -7,18 +7,36 @@ export function prepareEngine(context, recording)
 	return {pressure: recording, rate: 64/recording.duration, noise};
 }
 
+/** Turbulent flow noise centers this far into the muffler's passband. */
+const HISS = .40;
+
+/**
+ * Feed the collectors into a pipe whose open end reflects pressure back inverted. The round trip is fixed in time,
+ * so its resonances stay put while the firing harmonics sweep through them with the revs.
+ */
+function pipe(context, nodes, input, output, roundTrip, reflection)
+{
+	const sum = context.createGain(), delay = context.createDelay(.02), damping = context.createBiquadFilter();
+	const back = context.createGain();
+	delay.delayTime.value = roundTrip;
+	damping.frequency.value = 2600;
+	damping.Q.value = -3;
+	back.gain.value = reflection;
+	input.connect(sum).connect(output);
+	sum.connect(delay).connect(damping).connect(back).connect(sum);
+	nodes.push(sum, delay, damping, back);
+}
+
 export function startEngine(context, instrument, tone)
 {
 	const crank = context.createBufferSource(), noise = context.createBufferSource();
 	const banks = context.createChannelSplitter(4), volume = context.createGain();
-	const muffler = context.createBiquadFilter(), collector = context.createBiquadFilter();
-	const mount = context.createBiquadFilter(), mountGain = context.createGain();
-	const casework = context.createBiquadFilter(), casingGain = context.createGain(), opposite = context.createGain();
-	const intake = context.createBiquadFilter(), breath = context.createGain(), flow = context.createGain();
-	const scatter = context.createBiquadFilter(), scatterGain = context.createGain(), port = context.createGain();
-
-	const nodes = [banks,volume,muffler,collector,mount,mountGain,casework,casingGain,opposite];
-	nodes.push(intake, breath, flow, scatter, scatterGain, port);
+	const collector = context.createGain(), port = context.createGain(), tailpipes = context.createGain();
+	const body = context.createBiquadFilter(), rumble = context.createBiquadFilter();
+	const muffler = context.createBiquadFilter(), turbulence = context.createBiquadFilter();
+	const gate = context.createGain(), flow = context.createGain();
+	const scatter = context.createBiquadFilter(), scatterGain = context.createGain();
+	const nodes = [banks,volume,collector,port,tailpipes,body,rumble,muffler,turbulence,gate,flow,scatter,scatterGain];
 
 	crank.buffer = instrument.pressure;
 	crank.playbackRate.value = tone.cycle/instrument.rate;
@@ -28,61 +46,45 @@ export function startEngine(context, instrument, tone)
 	noise.playbackRate.value = .5;
 	noise.loop = true;
 
-	volume.gain.value = 0;
-	muffler.frequency.value = tone.cutoff;
-	muffler.Q.value = -3;
-	collector.type = 'peaking';
-	collector.frequency.value = 238;
-	collector.Q.value = .78;
-	collector.gain.value = 2.5;
-	muffler.connect(collector).connect(volume).connect(context.destination);
+	// Both banks reach the listener at the same level,
+	// so their interleaved firings sum to the full twelve-cylinder note.
+	banks.connect(collector, 0);
+	banks.connect(collector, 1);
 
-	// Both tailpipes carry the firing order of a six-cylinder bank. Their paths have different
-	// lengths. Pressure reflected at the open end returns with opposite polarity.
-	for(const [bank, level, delay] of [[0,1,.0041],[1,.42,.0057]])
-	{
-		const direct = context.createGain(), reflection = context.createDelay(.01), echo = context.createGain();
-		direct.gain.value = level;
-		reflection.delayTime.value = delay;
-		echo.gain.value = -.34;
+	// Turbulent gas rushes through the collectors with each discharge. Faster gas hisses higher.
+	turbulence.type = 'bandpass';
+	turbulence.frequency.value = HISS*tone.cutoff;
+	turbulence.Q.value = .55;
+	gate.gain.value = .12;
+	banks.connect(gate.gain, 2);
+	flow.gain.value = tone.flow;
+	noise.connect(turbulence).connect(gate).connect(flow).connect(collector);
 
-		banks.connect(direct, bank);
-		direct.connect(port);
-		direct.connect(reflection).connect(echo).connect(port);
-		nodes.push(direct, reflection, echo);
-	}
-
-	// The two flat banks push the case in opposite directions. Its damped motion carries
-	// the lower bank firing note even as the airborne exhaust builds higher harmonics.
-	opposite.gain.value = -1;
-	banks.connect(casework, 0);
-	banks.connect(opposite, 1);
-	opposite.connect(casework);
-	casework.frequency.value = 465;
-	casework.Q.value = 0;
-	casingGain.gain.value = .90;
-	casework.connect(casingGain).connect(volume);
-
-	// Airflow varies the pressure at the pipes and rushes through the intake in time with the valves.
+	// Airflow varies the pressure at the pipes from one firing to the next.
 	scatter.frequency.value = 220;
 	scatter.Q.value = -3;
 	scatterGain.gain.value = tone.scatter;
 	noise.connect(scatter).connect(scatterGain).connect(port.gain);
-	port.connect(muffler);
+	collector.connect(port);
 
-	intake.type = 'bandpass';
-	intake.frequency.value = 545;
-	intake.Q.value = .6;
-	breath.gain.value = .40;
-	flow.gain.value = tone.flow;
-	banks.connect(breath.gain, 0);
-	noise.connect(intake).connect(breath).connect(flow).connect(muffler);
+	// Left and right tailpipes of different lengths, heard together.
+	pipe(context, nodes, port, tailpipes, .0053, -.42);
+	pipe(context, nodes, port, tailpipes, .0069, -.34);
+	// Sets the exhaust's loudness against the tire recordings.
+	tailpipes.gain.value = 1.7;
 
-	mount.frequency.value = 155;
-	mount.Q.value = -3;
-	mountGain.gain.value = tone.mountGain;
-	banks.connect(mount, 2);
-	mount.connect(mountGain).connect(volume);
+	// The muffler shell rings in the low mids, and subsonic pressure drift stays out of the speakers.
+	body.type = 'peaking';
+	body.frequency.value = 420;
+	body.Q.value = .9;
+	body.gain.value = 3;
+	rumble.type = 'highpass';
+	rumble.frequency.value = 45;
+	rumble.Q.value = -3;
+	muffler.frequency.value = tone.cutoff;
+	muffler.Q.value = -3;
+	volume.gain.value = 0;
+	tailpipes.connect(body).connect(rumble).connect(muffler).connect(volume).connect(context.destination);
 
 	const now = context.currentTime;
 	crank.start(now);
@@ -98,13 +100,15 @@ export function startEngine(context, instrument, tone)
 
 			if(next.level !== tone.level) volume.gain.setTargetAtTime(next.level, at, .033);
 
-			if(next.cutoff !== tone.cutoff) muffler.frequency.setTargetAtTime(next.cutoff, at, .035);
+			if(next.cutoff !== tone.cutoff)
+			{
+				muffler.frequency.setTargetAtTime(next.cutoff, at, .035);
+				turbulence.frequency.setTargetAtTime(HISS*next.cutoff, at, .035);
+			}
 
 			if(next.flow !== tone.flow) flow.gain.setTargetAtTime(next.flow, at, .035);
 
 			if(next.scatter !== tone.scatter) scatterGain.gain.setTargetAtTime(next.scatter, at, .045);
-
-			if(next.mountGain !== tone.mountGain) mountGain.gain.setTargetAtTime(next.mountGain, at, .045);
 
 			tone = next;
 		}
@@ -301,8 +305,8 @@ export function activate({module, canvas, archive, signal})
 	canvas.addEventListener('webglcontextlost', () => { contextLost = true; update(); }, {signal});
 	canvas.addEventListener('webglcontextrestored', () => { contextLost = false; update(); }, {signal});
 
-	module.terrainCarSound = (cycle, level, cutoff, flow, scatter, skid, rate, mountGain) => {
-		tone = {cycle, level, cutoff, flow, scatter, mountGain};
+	module.terrainCarSound = (cycle, level, cutoff, flow, scatter, skid, rate) => {
+		tone = {cycle, level, cutoff, flow, scatter};
 		tireLevel = skid;
 		tireRate = rate;
 		update();
