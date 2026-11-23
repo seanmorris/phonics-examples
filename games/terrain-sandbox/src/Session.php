@@ -553,8 +553,11 @@ final class Session
 				$this->mode = 'fly';
 				$this->clampCamera();
 				$this->delivery = null;
-				$this->message = $flooded ? 'Engine flooded. Choose Drive car to find dry ground.'
-					: 'The ground under the car changed. Choose Drive car to find another spot.';
+				$this->message = match(true) {
+					!$flooded => 'The ground under the car changed. Choose Drive car to find another spot.',
+					$this->race->state === 'running' => 'Engine flooded. No safe, dry restart on this course.',
+					default => 'Engine flooded. Choose Drive car to find dry ground.',
+				};
 				$this->dirty = true;
 			}
 			else
@@ -1733,14 +1736,14 @@ final class Session
 
 	public function findingCarSite(): bool { return $this->carSearch !== null; }
 
-	/** Recover on the current race approach, or retrace a water entry when no race road is available. */
+	/** A racing car recovers on its course. In free driving a flooded car retraces its water entry. */
 	private function recoverCar(bool $flooded): bool
 	{
 		$water = $this->water->level();
 		$site = null;
 		if($this->race->state === 'running')
 			$site = RoadRecovery::site($this->car,$this->landscape,$water,$this->course,$this->race,$this->circuit,$flooded);
-		if($site === null && $flooded)
+		elseif($flooded)
 			$site = $this->car->shoreSite($this->landscape,$water,$this->course->posts());
 		if($site === null) return false;
 		$this->car->recoverToRoad($site,$this->landscape,$water,$flooded);

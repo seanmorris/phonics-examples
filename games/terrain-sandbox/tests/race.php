@@ -538,6 +538,65 @@ expect($back['floodedHold'] && $back['roadHold'] === $placed['roadHold']
 	'A flooded race car returns to the stick-click site with the same penalty and no checkpoint credit');
 $ford->close();
 
+// The road ends before the lake. The next gate is on the far side and the last dry shore is bare dirt.
+foreach([true,false] as $paved) {
+	$lake = new Session($open);
+	if($paved) $lake->landscape->queue(['type'=>'road','points'=>[[0,0,-60],[0,0,-20]],'width'=>10,'shoulder'=>2]);
+	$lake->landscape->queue(['type'=>'lower','x'=>0,'z'=>20,'radius'=>20,'amount'=>5]);
+	$lake->landscape->commit();
+	input($lake,['values'=>['waterLevel'=>-1.]]);
+	$lake->course->place('start','road',0,0,-35,0);
+	if($paved) $lake->course->place('checkpoint','road',25,0,42,0);
+	$lake->camera->position = [0,20,-48]; $lake->camera->yaw = M_PI;
+	enterCar($lake);
+	drive($lake,['KeyW'=>true],600,fn(Session $s): bool => $s->car->state()['floodedHold']);
+	$back = $lake->car->state();
+	expect($lake->mode === 'car' && $lake->race->state === 'running' && $back['floodedHold'] && $back['roadHold'] === 1.5
+		&& $race($lake)['splits'] === [], 'Driving off the course into a lake restarts the same race without scoring the relocation');
+	if($paved) expect(Car::onPavement($lake->landscape,$back['x'],$back['z']) && $back['z'] <= -20 && abs($back['yaw']) < .01,
+		'A disconnected checkpoint approach returns the car to the road it raced, facing forward');
+	else expect(abs($back['x']) < .01 && $back['z'] <= -45 && abs($back['yaw']) < .01,
+		'A gates-only lap restarts on the start approach at least ten meters before the pending gate');
+	$lake->close();
+}
+
+// Rising water covers the entire current leg. Dry pavement still exists upstream of the last checkpoint.
+$wetLeg = new Session($open);
+$wetLeg->landscape->queue(['type'=>'road','points'=>[[0,4,-100],[0,4,-60],[0,0,-30],[0,0,90]],'width'=>12,'shoulder'=>2]);
+$wetLeg->landscape->commit();
+$wetLeg->course->place('start','road',0,4,-70,0);
+$wetLeg->course->place('checkpoint','road',0,0,0,0);
+$wetLeg->course->place('finish','road',0,0,60,0);
+$wetLeg->camera->position = [24,20,18]; $wetLeg->camera->yaw = M_PI;
+enterCar($wetLeg);
+$wetLeg->race->advance($wetLeg->course,[0,4,-71],[0,4,-69],0.,1/60,'car',1);
+$wetLeg->race->advance($wetLeg->course,[0,0,-1],[0,0,1],.1,1/60,'car',1);
+input($wetLeg,['values'=>['waterLevel'=>1.]]);
+$wetLeg->step(1/60);
+$back = $wetLeg->car->state();
+expect($wetLeg->mode === 'car' && $back['floodedHold'] && $back['z'] < -30 && $back['y'] > 1.
+	&& Car::onPavement($wetLeg->landscape,$back['x'],$back['z']) && abs($back['yaw']) < .01
+	&& $race($wetLeg)['next']['role'] === 'finish' && count($race($wetLeg)['splits']) === 1,
+	'A submerged leg rolls back to dry road on a completed leg and retains the split and pending finish');
+$wetLeg->close();
+
+// This dry hill is reachable from shore, but the race road itself is entirely underwater.
+$submerged = new Session($open);
+$submerged->landscape->queue(['type'=>'road','points'=>[[0,0,-70],[0,0,70]],'width'=>10,'shoulder'=>2]);
+$submerged->landscape->queue(['type'=>'raise','x'=>80,'z'=>0,'radius'=>40,'amount'=>4]);
+$submerged->landscape->commit();
+$submerged->course->place('start','road',0,0,-35,0);
+$submerged->course->place('finish','road',0,0,45,0);
+$submerged->camera->position = [80,20,0]; $submerged->camera->yaw = M_PI;
+enterCar($submerged);
+$submerged->race->advance($submerged->course,[0,0,-36],[0,0,-34],0.,1/60,'car',1);
+input($submerged,['values'=>['waterLevel'=>1.]]);
+drive($submerged,['KeyW'=>true],600,fn(Session $s): bool => $s->mode === 'fly');
+expect($submerged->mode === 'fly' && str_contains($submerged->message,'No safe, dry restart on this course')
+	&& $submerged->car->shoreSite($submerged->landscape,1.,[]) !== null,
+	'A wholly submerged road reports why the race stopped even when there is a safe shore');
+$submerged->close();
+
 // The last leg crosses the spline seam. A car beside a later part of the lap must recover on the approach.
 $track = new Circuit([[0.,0.],[0.,100.],[80.,100.],[80.,-60.],[0.,-60.]],-5.,null);
 $ground = new Landscape($open);

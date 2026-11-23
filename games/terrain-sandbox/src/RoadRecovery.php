@@ -18,11 +18,10 @@ final class RoadRecovery
 
 		$next = $race->nextGate($course);
 		$previous = $race->previousGate($course);
-		if($previous === null || $next['kind'] !== 'road') return null;
+		if($previous === null || $next === null) return null;
 		$previous['halfWidth'] = $course->measure($previous)['window']['halfWidth'];
 		$next['halfWidth'] = $course->measure($next)['window']['halfWidth'];
 
-		$candidates = [];
 		$paths = [];
 		foreach($land->roads() as $road) {
 			$line = [];
@@ -34,16 +33,68 @@ final class RoadRecovery
 				array_push($paths[$last], ...array_slice($line,1));
 			else $paths[] = $line;
 		}
-		foreach($paths as $line) self::approach($line,$previous,$next,$x,$z,$candidates);
-		if(!$candidates && $circuit !== null && (!$paths || $circuit->featureArea === null)) {
-			// Unpaved natural circuits have a driving corridor as wide as the gate.
-			$line = [...$circuit->points,$circuit->points[0]];
-			if(!$flooded && self::withinLane($line,$x,$z,$next['halfWidth'])) return null;
-			self::approach($line,$previous,$next,$x,$z,$candidates);
-		}
-		sort($candidates);
+		$groups = ['roads'=>$paths];
+		if($circuit !== null) $groups['circuit'] = [[...$circuit->points,$circuit->points[0]]];
 		$posts = $course->posts();
+		$passed = null;
+		foreach($groups as $group => $paths) {
+			// The stored circuit can also describe a natural, unpaved course with no matching authored road.
+			if($group === 'circuit' && !$flooded && self::withinLane($paths[0],$x,$z,$next['halfWidth'])) return null;
+			$stations = $candidates = [];
+			$matched = false;
+			foreach($paths as $i => $line) {
+				$stations[$i] = self::stations($line);
+				if(self::approach($line,$stations[$i],$previous,$next,$x,$z,$candidates)) $matched = true;
+			}
+			$site = self::drySite($candidates,$car,$land,$water,$posts);
+			if($site !== null) return $site;
+
+			// A flooded or disconnected leg may have usable road behind an earlier crossing.
+			$passed ??= iterator_to_array($race->passedGates($course),false);
+			foreach($passed as $gate) {
+				if(!$paths) break;
+				$candidates = [];
+				$gate['halfWidth'] = $course->measure($gate)['window']['halfWidth'];
+				foreach($paths as $i => $line) {
+					if(self::approach($line,$stations[$i],null,$gate,$gate['x'],$gate['z'],$candidates)) {
+						$matched = true;
+						// Rewinding from this gate checks the whole loop once.
+						if(self::joined($line[0],end($line))) unset($paths[$i]);
+					}
+				}
+				$site = self::drySite($candidates,$car,$land,$water,$posts,$next);
+				if($site !== null) return $site;
+			}
+			// A dry chord of the saved racing line can cut across dirt beside a flooded spline.
+			if($matched) return null;
+		}
+		if(!$flooded) return null;
+
+		// Hand-placed gates can define a course without a spline. Restart in a cleared gate's approach.
+		foreach($passed as $gate) {
+			$candidates = [];
+			foreach([0.,self::GATE_CLEARANCE,2*self::GATE_CLEARANCE] as $back)
+				$candidates[] = [$back,$gate['x']-$back*sin($gate['yaw']),$gate['z']-$back*cos($gate['yaw']),$gate['yaw']];
+			$site = self::drySite($candidates,$car,$land,$water,$posts,$next);
+			if($site !== null) return $site;
+		}
+		return null;
+	}
+
+	private static function drySite(array $candidates, Car $car, Landscape $land, float $water, array $posts,
+		?array $pending = null): ?array
+	{
+		sort($candidates);
+		$half = $land->recipe()['worldSize']/2;
+		if($pending !== null) { $s = sin($pending['yaw']); $c = cos($pending['yaw']); }
 		foreach($candidates as [,$px,$pz,$yaw]) {
+			if($pending !== null) {
+				// Older legs can pass close to the open gate on a hairpin or a short lap.
+				$dx = $px-$pending['x']; $dz = $pz-$pending['z'];
+				$side = max(0.,abs($dx*$c-$dz*$s)-$pending['halfWidth']);
+				if(($dx*$s+$dz*$c)**2+$side**2 < self::GATE_CLEARANCE**2-1e-8) continue;
+			}
+			if(max(abs($px),abs($pz)) > $half || $land->height($px,$pz) <= $water) continue;
 			$site = $car->checkedSite($land,$water,$px,$pz,$yaw,$posts);
 			if($site !== null) return $site;
 		}
@@ -86,29 +137,40 @@ final class RoadRecovery
 		return $best;
 	}
 
-	/** Clip each road segment to the traveled leg, then project the car onto its eligible portion. */
-	private static function approach(array $line, array $previous, array $next, float $x, float $z, array &$candidates): void
+	private static function stations(array $line): array
 	{
-		$stations = [0.]; $length = 0.;
-		for($i = 1; $i < count($line); $i++) {
-			$length += hypot($line[$i][0]-$line[$i-1][0],$line[$i][1]-$line[$i-1][1]);
-			$stations[] = $length;
-		}
+		$stations = [0.];
+		for($i = 1; $i < count($line); $i++)
+			$stations[] = $stations[$i-1]+hypot($line[$i][0]-$line[$i-1][0],$line[$i][1]-$line[$i-1][1]);
+		return $stations;
+	}
+
+	/** Project onto the active leg, or search upstream in road order when rewinding from a cleared gate. */
+	private static function approach(array $line, array $stations, ?array $previous, array $next, float $x, float $z,
+		array &$candidates): bool
+	{
 		$end = self::crossing($line,$stations,$next);
-		if($end === null) return;
-		[$at,$dir] = $end;
+		$length = end($stations);
 		$closed = self::joined($line[0],end($line));
-		$start = self::crossing($line,$stations,$previous);
+		$start = $previous === null ? null : self::crossing($line,$stations,$previous);
+		$partial = $end === null;
+		if($partial) {
+			// A hand-laid road can leave the cleared gate and end short of the next one.
+			if($start === null || $closed) return false;
+			$dir = $start[1]; $at = $dir > 0 ? $length : 0.;
+			$s = sin($next['yaw']); $c = cos($next['yaw']);
+		} else [$at,$dir] = $end;
 		$leg = $closed ? $length : ($dir > 0 ? $at : $length-$at);
 		if($start !== null && $start[1] === $dir) {
 			$leg = ($at-$start[0])*$dir;
 			if($leg <= 0. && $closed) $leg += $length;
 		}
 		// If this leg crosses the lap seam it occupies two intervals in the stored spline.
-		if($leg < 0.) return;
+		if($leg < 0.) return true;
 		// Very close gates can put the ten-meter line just before the previous checkpoint.
-		$a = $at-$dir*max(self::GATE_CLEARANCE,$leg);
-		$b = $at-$dir*self::GATE_CLEARANCE;
+		$clearance = $previous === null || $partial ? 0. : self::GATE_CLEARANCE;
+		$a = $at-$dir*max($clearance,$leg);
+		$b = $at-$dir*$clearance;
 		$lo = min($a,$b); $hi = max($a,$b);
 		$ranges = [[$lo,$hi]];
 		if($lo < 0. && $closed) $ranges[] = [$lo+$length,$hi+$length];
@@ -120,10 +182,26 @@ final class RoadRecovery
 				if($from > $to || $span < 1e-8) continue;
 				[$ax,$az] = $line[$i-1]; [$bx,$bz] = $line[$i];
 				$ux = ($bx-$ax)/$span; $uz = ($bz-$az)/$span;
-				$d = max($from-$stations[$i-1],min($to-$stations[$i-1],($x-$ax)*$ux+($z-$az)*$uz));
-				$px = $ax+$d*$ux; $pz = $az+$d*$uz;
-				$candidates[] = [($x-$px)**2+($z-$pz)**2,$px,$pz,atan2($dir*$ux,$dir*$uz)];
+				$yaw = atan2($dir*$ux,$dir*$uz);
+				$projected = $stations[$i-1]+($x-$ax)*$ux+($z-$az)*$uz;
+				// An unpaved circuit can have a dry stretch between distant vertices.
+				$pieces = max(1,(int)ceil(($to-$from)/4.));
+				for($j = 0; $j < $pieces; $j++) {
+					$low = $from+($to-$from)*$j/$pieces;
+					$high = $from+($to-$from)*($j+1)/$pieces;
+					$station = $previous !== null ? max($low,min($high,$projected)) : ($dir > 0 ? $high : $low);
+					$d = $station-$stations[$i-1];
+					$px = $ax+$d*$ux; $pz = $az+$d*$uz;
+					if($partial && ($px-$next['x'])*$s+($pz-$next['z'])*$c > -self::GATE_CLEARANCE) continue;
+					$rank = ($x-$px)**2+($z-$pz)**2;
+					if($previous === null) {
+						$rank = $dir*($at-$station);
+						if($rank < 0.) $rank += $length;
+					}
+					$candidates[] = [$rank,$px,$pz,$yaw];
+				}
 			}
 		}
+		return true;
 	}
 }

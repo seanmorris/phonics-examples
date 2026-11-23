@@ -1233,6 +1233,42 @@ test('a shoreline wipeout restarts the car on its approach', async({page}) => {
 	await expect(page.locator('[data-status]')).toContainText('Engine flooded');
 });
 
+test('a racing water wipeout restarts on the course road across the dirt from the shore', async({page}) => {
+	await page.setViewportSize({width: 480,height: 300});
+	await boot(page);
+	const road = {type:'road',points:[[0,0,-60],[0,0,-20]],width:10,shoulder:2};
+	const lake = {type:'lower',x:0,z:20,radius:20,amount:5};
+	const doc = fixture({history:[[road,lake]],revision:1});
+	Object.assign(doc.landscape.recipe,{spacing:1,waterLevel:-1});
+	Object.assign(doc.settings,{waterLevel:-1,waterChoppiness:0});
+	doc.camera = {position:[0,20,-48],yaw:Math.PI,pitch:-.4};
+	doc.course = {gates:[
+		{role:'start',kind:'road',x:0,y:0,z:-35,yaw:0,laps:1},
+		{role:'checkpoint',kind:'road',x:25,y:0,z:42,yaw:0,number:1}
+	]};
+	await load(page,doc);
+	await press(page,'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await canvas(page).focus();
+	await page.keyboard.down('w');
+	try {
+		await expect.poll(async() => (await status(page)).race.state).toBe('running');
+		await expect.poll(async() => (await status(page)).car.z,{timeout:60_000}).toBeGreaterThan(0);
+		await expect.poll(async() => (await status(page)).car.floodedHold,{timeout:60_000}).toBe(true);
+	} finally {
+		await page.keyboard.up('w');
+	}
+	const {car,race} = await status(page);
+	expect(car.x).toBeCloseTo(0);
+	expect(car.z).toBeGreaterThanOrEqual(-60);
+	expect(car.z).toBeLessThanOrEqual(-20);
+	expect(car.yaw).toBeCloseTo(0);
+	expect(car.roadHold).toBeGreaterThan(0);
+	expect(race.state).toBe('running');
+	expect(race.next.number).toBe(1);
+	expect(race.splits).toEqual([]);
+});
+
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
 	test.setTimeout(180_000);
 	const errors = [];

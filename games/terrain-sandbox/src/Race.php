@@ -218,6 +218,19 @@ final class Race
 		return $this->index === 0 ? $course->start() : $course->gate($this->route[$this->index-1]['id']);
 	}
 
+	/** Cleared gates in reverse race order, including the start. Each physical gate appears once. */
+	public function passedGates(Course $course): \Generator
+	{
+		if($this->state !== 'running') return;
+		$seen = [];
+		for($i = $this->index-1; $i >= -1; $i--) {
+			$id = $i < 0 ? $this->startGate : $this->route[$i]['id'];
+			if(isset($seen[$id])) break;
+			$seen[$id] = true;
+			yield $course->gate($id);
+		}
+	}
+
 	public function showGuidance(Course $course): bool
 	{
 		return $this->state === 'running' || !isset($this->records->latest[$course->signature()]);
