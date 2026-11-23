@@ -574,6 +574,8 @@ export function activate({canvas, module, session})
 			el(
 				'[data-road-grade]'
 			).textContent += ' · ' + (low/FOOT).toFixed(1) + ' to ' + (high/FOOT).toFixed(1) + ' ft elevation';
+
+			if(state.fitOnApply) el('[data-road-grade]').textContent += ' · Ground spans are fitted on Apply.';
 		}
 
 		schedulePaint();
@@ -847,10 +849,10 @@ export function activate({canvas, module, session})
 		else if(key.startsWith('d'))
 		send(
 			'handle'
-			, {index: selected,side,vector: [metricValue(fields.dx),metricValue(fields.dy),metricValue(fields.dz)]}
+			, {index: selected,side,vertical: key==='dy',vector: [metricValue(fields.dx),metricValue(fields.dy),metricValue(fields.dz)]}
 		);
 		else
-		send('point', {index: selected,x: metricValue(fields.x),y: metricValue(fields.y),z: metricValue(fields.z)});
+		send('point', {index: selected,vertical: key==='y',x: metricValue(fields.x),y: metricValue(fields.y),z: metricValue(fields.z)});
 	}, {signal});
 
 	module.terrainRoadEditor = json => {

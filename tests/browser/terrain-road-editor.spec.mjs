@@ -236,7 +236,9 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
 	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
 	const doc = structuredClone(fixture);
-	doc.landscape = {...doc.landscape,recipe: {...recipe,worldSize: 2048},history: [],cursor: 0,revision: 0};
+	// The west (closing) span crosses a ridge, with both of its hand-placed endpoints on the plain.
+	const ridge = {type:'raise',x:-337,z:0,radius:125,amount:32};
+	doc.landscape = {...doc.landscape,recipe: {...recipe,worldSize: 2048},history: [[ridge]],cursor: 1,revision: 1};
 	await page.locator('[data-file]').setInputFiles({name: 'manual.json',mimeType: 'application/json',buffer: Buffer.from(JSON.stringify(doc))});
 	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
 	await expect.poll(async() => (await status()).recipe.worldSize).toBe(2048);
@@ -259,11 +261,20 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	const point = page.locator('[data-road-point]');
 	await expect(point.locator('option')).toHaveCount(5);
 	await expect(point).toHaveValue('1');
+	await expect(page.locator('[data-road-grade]')).toContainText('Ground spans are fitted on Apply');
 	await page.getByRole('button',{name:'Close loop and create circuit'}).click();
 	await expect.poll(async() => (await status()).circuit.active,{timeout:60_000}).toBe('dry');
-	await expect(point.locator('option')).toHaveCount(6);
-	await expect(page.locator('[data-road-picker]')).toHaveValue('0');
+	await expect.poll(() => point.locator('option').count()).toBeGreaterThan(6);
+	await expect(page.locator('[data-road-picker]')).toHaveValue('1');
 	expect((await status()).course.gates.length).toBeGreaterThanOrEqual(8);
+
+	await page.getByRole('tab', {name: 'Landscape', exact:true}).click();
+	const download = page.waitForEvent('download');
+	await page.locator('[data-action=save]').click();
+	const saved = JSON.parse(await fs.readFile(await (await download).path(), 'utf8'));
+	const graded = saved.landscape.history.at(-1)[0];
+	expect(graded.points.at(-1)).toEqual(graded.points[0]);
+	expect(graded.points.some(([x,y,z]) => x < -270 && Math.abs(z) < 65 && y > 26)).toBe(true);
 });
 
 test('a 24 km spline applies and saves as one road through the editor', async({page}) => {

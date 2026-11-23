@@ -1983,6 +1983,67 @@ expect(count($longLab->landscape->roadRecords())===1 && $longLab->landscape->hei
 $longLab->close();
 $lab->close();
 
+// Sketch across a ridge and a hollow from Shape and Roads, then pin the grade by hand.
+$grading = new Session(['worldSize'=>2048,'spacing'=>2,'heightScale'=>0.,'detailAmplitude'=>0.]);
+foreach([['raise',-160.,35.],['lower',90.,22.],['raise',230.,24.]] as [$type,$x,$amount])
+	$grading->landscape->queue(['type'=>$type,'x'=>$x,'z'=>0.,'amount'=>$amount,'radius'=>90.+$amount]);
+$grading->landscape->commit();
+$before = $grading->landscape->fork();
+$draw = static function(string $op,array $fields=[]) use ($grading): void {
+	input($grading,['actions'=>[['type'=>'road-editor','op'=>$op,'generation'=>$grading->generation,
+		'revision'=>$grading->landscape->revision()] + $fields]]);
+};
+$draw('open');
+$grading->camera->position = [-400.,70.,0.]; $grading->camera->pitch = -M_PI/2;
+input($grading,['values'=>['tool'=>'road','roadWidth'=>12.,'roadRaise'=>1.5],'clicks'=>[[.5,.5]]]);
+finishPicking($grading);
+$draw('add',['x'=>420.,'z'=>0.]);
+input($grading,['actions'=>['road-apply']]);
+while($grading->preparingRoad()) input($grading,[]);
+publish($grading);
+$road = array_values($grading->landscape->roadRecords())[0];
+expect(count($road['points'])>2 && count($road['points'])<=128 && !isset($road['_ground']),
+	'Ground fitting bakes ordinary editable knots in one road');
+$worst = 0.;
+for($x=-400; $x<=420; $x+=2)
+	$worst = max($worst,abs($grading->landscape->height($x,0)-$before->height($x,0)-1.5));
+expect($worst<3.5 && $grading->landscape->height(-160.,0.)>33. && $grading->landscape->height(90.,0.)<-18.,
+	'The surveyed deck follows the ridge and the hollow between two sparse clicks, retaining the road offset');
+$copy = new Session; $copy->load($grading->save());
+expect($copy->landscape->roadRecords()==$grading->landscape->roadRecords(), 'Reloading keeps the exact fitted curves');
+$copy->close();
+input($grading,['actions'=>['undo']]); publish($grading);
+expect(!$grading->landscape->roads() && $grading->landscape->height(-160.,0.)===$before->height(-160.,0.),
+	'Undo restores the original hillside in one step');
+$draw('select',['id'=>null]);
+foreach([[-400.,0.],[0.,0.],[420.,0.]] as [$x,$z]) $draw('add',compact('x','z'));
+$draw('handle',['index'=>0,'side'=>'out','vector'=>[50.,-10.,0.]]);
+$draw('bank',['index'=>1,'value'=>10.]);
+$draw('apply'); while($grading->preparingRoad()) input($grading,[]); publish($grading);
+$road = array_values($grading->landscape->roadRecords())[0];
+expect($road['points'][1][0]===0. && $road['handles'][0]['out']===[50.,-10.,0.] && $road['banks'][1]===.1
+	&& count($road['points'])>3 && $grading->landscape->height(-160.,0.)<4.,
+	'A manual vertical handle keeps that span cut through the ridge while the next span still follows the ground');
+input($grading,['actions'=>['undo']]); publish($grading);
+$draw('select',['id'=>null]);
+foreach([-400.,420.] as $x) $draw('add',['x'=>$x,'z'=>0.]);
+$draw('point',['index'=>0,'x'=>-400.,'y'=>-6.,'z'=>0.]);
+$draw('apply'); while($grading->preparingRoad()) input($grading,[]); publish($grading);
+$road = array_values($grading->landscape->roadRecords())[0];
+expect(count($road['points'])===2 && $road['points'][0][1]===-6. && $grading->landscape->height(-160.,0.)<0.,
+	'An explicitly lowered point keeps its authored grade');
+// A nearly full open road can still be closed and split after fitting.
+$points = [[-400.,0.,0.],[420.,0.,0.]];
+for($i=1; $i<=123; $i++) $points[] = [420.,0.,3.*$i];
+$ground = ['in'=>true,'out'=>true,'offset'=>0.];
+$survey = TerrainSandbox\RoadGrading::fit($before,['type'=>'road','points'=>$points,'_ground'=>[$ground,$ground]]);
+foreach($survey as $_) {}
+$open = $survey->getReturn();
+$closed = TerrainSandbox\CircuitRoad::closeLoop($open);
+expect(count($open['points'])===126 && count($closed['points'])===127,
+	'The fitter spends the available knot on terrain relief and leaves room for closing and splitting');
+$grading->close(); $before->close();
+
 // The controls shown follow the input family the page reports, one device at a time.
 $hint = new Session(['worldSize'=>256,'heightScale'=>0,'detailAmplitude'=>0]);
 expect($hint->inputTheme === 'keyboard' && $hint->message === '' && $hint->status()['hint'] === $hint->hint()

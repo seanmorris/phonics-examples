@@ -68,8 +68,15 @@ final class RoadEditor
 		return ['points'=>$s->road] + $this->sketchOptions + $this->defaults($s);
 	}
 
-	public function sketchPointAdded(): void
+	private static function groundPoint(float $offset): array
 	{
+		return ['offset'=>$offset,'in'=>true,'out'=>true];
+	}
+
+	public function sketchPointAdded(int $count, float $offset): void
+	{
+		$this->sketchOptions['_ground'] ??= array_fill(0,$count-1,null);
+		$this->sketchOptions['_ground'][] = self::groundPoint($offset);
 		if(isset($this->sketchOptions['handles'])) $this->sketchOptions['handles'][] = null;
 		if(isset($this->sketchOptions['banks'])) $this->sketchOptions['banks'][] = 0.;
 	}
@@ -252,7 +259,23 @@ final class RoadEditor
 				if($count >= 128) throw new \LengthException('A road can have up to 128 points.');
 				[$x,$z] = self::mapPoint($s,$a);
 				$this->selection = $closed ? $count-1 : $count;
-				$point = [$x,$s->landscape->height($x,$z)+$s->settings['roadRaise'],$z];
+				$offset = $s->settings['roadRaise'];
+				$point = [$x,$s->landscape->height($x,$z)+$offset,$z];
+				if(!$this->onCircuit()) {
+					// A newly extended saved road meets its old deck at the existing end.
+					if(!isset($road['_ground'])) {
+						$road['_ground'] = array_fill(0,$count,null);
+						$ends = $closed ? [$count-2=>'out',$count-1=>'in'] : [$count-1=>'out'];
+						$half = $s->landscape->recipe()['worldSize']/2;
+						foreach($ends as $end=>$side) {
+							if(!isset($road['points'][$end])) continue;
+							[$px,$py,$pz] = $road['points'][$end];
+							if(max(abs($px),abs($pz))<=$half)
+								$road['_ground'][$end] = [$side=>true,'offset'=>$py-$s->landscape->height($px,$pz)];
+						}
+					}
+					array_splice($road['_ground'],$this->selection,0,[self::groundPoint($offset)]);
+				}
 				array_splice($road['points'],$this->selection,0,[$point]);
 				if(isset($road['handles'])) array_splice($road['handles'],$this->selection,0,[null]);
 				if(isset($road['banks'])) array_splice($road['banks'],$this->selection,0,[0.]);
@@ -262,30 +285,55 @@ final class RoadEditor
 				switch($op) {
 					case 'insert':
 						if($i+1 >= $count || $count >= 128) throw new \InvalidArgumentException('Select a span with room for another point.');
-						self::split($road,$i,self::number($a['t'] ?? .5,.000001,.999999));
+						$t = self::number($a['t'] ?? .5,.000001,.999999);
+						self::split($road,$i,$t);
+						if(isset($road['_ground'])) {
+							$mark = null;
+							if(isset($road['_ground'][$i]['out'],$road['_ground'][$i+1]['in'])) {
+								$offset = (1-$t)*$road['_ground'][$i]['offset']+$t*$road['_ground'][$i+1]['offset'];
+								[$x,,$z] = $road['points'][$i+1];
+								$half = $s->landscape->recipe()['worldSize']/2;
+								if(max(abs($x),abs($z))<=$half) {
+									$road['points'][$i+1][1] = $s->landscape->height($x,$z)+$offset;
+									$mark = self::groundPoint($offset);
+								}
+							}
+							array_splice($road['_ground'],$i+1,0,[$mark]);
+						}
 						$this->selection = $i+1;
 						break;
 					case 'remove':
 						if($this->onCircuit() && $count <= ($closed ? 4 : 2))
 							throw new \InvalidArgumentException('Keep the circuit section connected.');
 						if($closed && $count>4 && ($i===0 || $i===$count-1)) {
-							foreach(['points','handles','banks'] as $key) if(isset($road[$key])) {
+							foreach(['points','handles','banks','_ground'] as $key) if(isset($road[$key])) {
 								array_shift($road[$key]);
 								$road[$key][$count-2] = $road[$key][0];
 							}
 							$this->selection = 0;
 						} else {
-							foreach(['points','handles','banks'] as $key) if(isset($road[$key])) array_splice($road[$key],$i,1);
+							foreach(['points','handles','banks','_ground'] as $key) if(isset($road[$key])) array_splice($road[$key],$i,1);
 							$this->selection = min($i,$count-2);
 						}
 						break;
 					case 'point':
 						[$x,$z] = self::mapPoint($s,$a);
-						$road['points'][$i] = [$x,self::number($a['y'] ?? $road['points'][$i][1],-1e6,1e6),$z];
+						[$px,$py,$pz] = $road['points'][$i];
+						$y = self::number($a['y'] ?? $py,-1e6,1e6);
+						if(isset($road['_ground'][$i])) {
+							if(($a['vertical'] ?? false) || abs($y-$py)>1e-7) $road['_ground'][$i] = null;
+							elseif($x!=$px || $z!=$pz) $y = $s->landscape->height($x,$z)+$road['_ground'][$i]['offset'];
+						}
+						$road['points'][$i] = [$x,$y,$z];
 						break;
 					case 'ground':
 						[$x,,$z] = $road['points'][$i];
-						$road['points'][$i][1] = $s->landscape->height($x,$z)+$s->settings['roadRaise'];
+						$offset = $s->settings['roadRaise'];
+						$road['points'][$i][1] = $s->landscape->height($x,$z)+$offset;
+						if(!$this->onCircuit()) {
+							$road['_ground'] ??= array_fill(0,$count,null);
+							$road['_ground'][$i] = self::groundPoint($offset);
+						}
 						break;
 					case 'bank':
 						$road['banks'] ??= array_fill(0,$count,0.);
@@ -297,12 +345,18 @@ final class RoadEditor
 						if(!(($side === 'in' && $i > 0) || ($side === 'out' && $i+1 < $count)))
 							throw new \InvalidArgumentException('Choose a handle on a connected span.');
 						$road['handles'] ??= array_fill(0,$count,null);
-						if($op === 'auto') unset($road['handles'][$i][$side]);
+						if($op === 'auto') {
+							unset($road['handles'][$i][$side]);
+							if(isset($road['_ground'][$i])) $road['_ground'][$i][$side] = true;
+						}
 						else {
 							$vector = $a['vector'] ?? null;
 							if(!is_array($vector) || !array_is_list($vector) || count($vector) !== 3)
 								throw new \InvalidArgumentException('A curve handle needs three offsets.');
-							$road['handles'][$i][$side] = array_map(static fn($v) => self::number($v,-1e6,1e6),$vector);
+							$vector = array_map(static fn($v) => self::number($v,-1e6,1e6),$vector);
+							$old = Edits::roadHandles($road['points'],$road['handles'],$i)[$side];
+							if(($a['vertical'] ?? false) || abs($vector[1]-$old[1])>1e-7) unset($road['_ground'][$i][$side]);
+							$road['handles'][$i][$side] = $vector;
 						}
 						if(empty($road['handles'][$i])) $road['handles'][$i] = null;
 						if(!array_filter($road['handles'])) unset($road['handles']);
@@ -312,7 +366,11 @@ final class RoadEditor
 			}
 			if($closed && ($i===0 || $i===$count-1)) {
 				$other = $i===0 ? $count-1 : 0;
-				if($op==='point' || $op==='ground') $road['points'][$other] = $road['points'][$i];
+				if($op==='point' || $op==='ground') {
+					$road['points'][$other] = $road['points'][$i];
+					if(isset($road['_ground']) && ($op==='ground' || $road['_ground'][$i]===null))
+						$road['_ground'][$other] = $road['_ground'][$i];
+				}
 				if($op==='bank') $road['banks'][$other] = $road['banks'][$i];
 			}
 			$this->store($s,$road);
@@ -345,8 +403,16 @@ final class RoadEditor
 		$defaults = $this->defaults($s);
 		if(!$this->catalog && $this->sent === $this->sequence && $this->lastSketch === $s->road && $this->lastDefaults === $defaults) return null;
 		$road = $this->working($s);
+		$changed = $this->target === null ? (bool)$s->road : $road !== $this->original;
+		$fit = false;
+		if(isset($road['_ground']) && RoadGrading::availableKnots($road['points'])) {
+			foreach($road['_ground'] as $i=>$point) {
+				if(isset($point['out'],$road['_ground'][$i+1]['in'])) { $fit = true; break; }
+			}
+		}
+		unset($road['_ground']);
 		$packet = ['id'=>$this->target,'road'=>$road,'selection'=>min($this->selection,count($road['points'])-1),
-			'changed'=>$this->target === null ? (bool)$s->road : $road !== $this->original, 'proposed'=>$this->onCircuit(),
+			'changed'=>$changed,'fitOnApply'=>$fit,'proposed'=>$this->onCircuit(),
 			'generation'=>$s->generation,'revision'=>$s->landscape->revision(),'extent'=>$s->landscape->recipe()['worldSize'],
 			'camera'=>[$s->camera->position[0],$s->camera->position[2]],'message'=>$this->message];
 		if($this->catalog) {

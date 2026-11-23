@@ -1470,7 +1470,7 @@ final class Session
 		{
 			if(count($this->road) >= 64) throw new \RuntimeException('Apply or clear this road before adding more points.');
 			$this->road[] = [$wx,$wy + $settings['roadRaise'],$wz];
-			$this->roadEditor->sketchPointAdded();
+			$this->roadEditor->sketchPointAdded(count($this->road),$settings['roadRaise']);
 			$this->message = count($this->road) . ' road points. Apply road when the route is ready.';
 			return;
 		}
@@ -1886,7 +1886,10 @@ final class Session
 		$this->message = 'Grading the road…';
 		$this->roadWork = (function() use ($roads,$ready,$candidate) {
 			try {
-				foreach($roads as $road) yield from $candidate->queueSteps($road);
+				foreach($roads as $road) {
+					if(isset($road['_ground'])) $road = yield from RoadGrading::fit($candidate,$road);
+					yield from $candidate->queueSteps($road);
+				}
 				$candidate->commit();
 				$completion = $ready($candidate);
 				if($completion instanceof \Generator) yield from $completion;

@@ -131,6 +131,7 @@ final class CircuitRoad
 		$handles[] = ['in'=>array_map(static fn($v) => -$v,$tangent)];
 		$road['points'][] = $points[0]; $road['handles'] = $handles;
 		if(isset($road['banks'])) $road['banks'][] = $road['banks'][0];
+		if(isset($road['_ground'])) $road['_ground'][] = $road['_ground'][0];
 		return $road;
 	}
 
