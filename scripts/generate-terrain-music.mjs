@@ -29,9 +29,14 @@ for(const name of fs.readFileSync(path.join(media, 'playlist.txt'), 'utf8').trim
 	);
 
 	const tags = Object.fromEntries(Object.entries(format.tags ?? {}).map(([k,v]) => [k.toLowerCase(),v.trim()]));
-	const id = name.split('_')[0];
-	const stem = path.basename(name, '.mp3').replace(/^\d+_/, '');
-	const parts = stem.split('---').map(part => part.replace(/[-_]+/g, ' ').trim());
+	const stem = path.parse(name).name;
+	const numbered = /^(\d+)_(.+)$/.exec(stem);
+	const id = numbered?.[1] ?? stem;
+	if(tracks.some(track => track.id === id)) throw Error('Duplicate soundtrack ID: ' + id);
+	// Numbered exports use triple hyphens. A conventional "Artist - Title" keeps the rest of its title intact.
+	const parts = numbered
+		? numbered[2].split('---').map(part => part.replace(/[-_]+/g, ' ').trim())
+		: stem.split(/ - (.+)/, 2);
 	const track = {id, src: 'music/' + encodeURIComponent(name), title: tags.title || parts.at(-1)};
 	const duration = Number(format.duration);
 	if(duration > 0 && Number.isFinite(duration)) track.duration = duration;
@@ -46,7 +51,8 @@ for(const name of fs.readFileSync(path.join(media, 'playlist.txt'), 'utf8').trim
 
 	if(picture)
 	{
-		track.cover = 'music/covers/' + id + '.jpg';
+		const coverName = id + '.jpg';
+		track.cover = 'music/covers/' + encodeURIComponent(coverName);
 
 		const image = execFileSync('ffmpeg', ['-v'
 			, 'error'
@@ -76,7 +82,7 @@ for(const name of fs.readFileSync(path.join(media, 'playlist.txt'), 'utf8').trim
 			, 'pipe:1'
 		]);
 
-		output(path.join(game, track.cover), image);
+		output(path.join(media, 'covers', coverName), image);
 	}
 
 	tracks.push(track);
