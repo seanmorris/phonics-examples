@@ -14,6 +14,7 @@ final class CarChase
 	private array $previousCenter = [], $currentCenter = [];
 	private const DISTANCE = 6.7;
 	private const LOOK_AHEAD = 2.0;
+	private const PITCH_OFFSET = 2 * M_PI / 180;
 	private const LOWER_FROM = 40 * Car::MPS_PER_MPH, LOWER_BY = 120 * Car::MPS_PER_MPH;
 	private const MAX_BOOM_DROP_ANGLE = 4.5 * M_PI / 180;
 	private const MAX_FOV_WIDENING = 30 * M_PI / 180;
@@ -103,7 +104,7 @@ final class CarChase
 		$height = max($floor, $predicted + $lift*($desiredHeight - $predicted));
 		if(abs($desiredHeight - $height) <= .001) $height = $desiredHeight;
 		$pitchHeight = $airTravel === null ? $desiredHeight : $height;
-		$desiredPitch = atan2($lookHeight - $pitchHeight, self::DISTANCE + self::LOOK_AHEAD);
+		$desiredPitch = atan2($lookHeight - $pitchHeight, self::DISTANCE + self::LOOK_AHEAD) + self::PITCH_OFFSET;
 		// The ground can hold the eye above a ledge while the car falls. Allow it to tilt ahead of the damper
 		// in that case, keeping the car's center within the middle half of the frame.
 		$focus = atan2($focusHeight - $height, self::DISTANCE);

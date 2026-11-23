@@ -1865,6 +1865,8 @@ function speedChaseCurve(Session $parked, int $hz): array
 	expect($highwayDrop > 0. && $highwayDrop < 2.25 && abs($parkedAngle-$boomAngle()-2.25) < .01,
 		'The chase is halfway down at 80 mph');
 	$cruise = $holdSpeed(120.,4*$hz);
+	expect(abs(rad2deg($parkedPitch) + 10.00) < .01 && abs(rad2deg($eye->pitch) + 5.38) < .01,
+		'On level ground the camera looks 10 degrees below the horizon at rest and about 5.4 degrees below it at speed');
 	expect(abs($parkedAngle-$boomAngle()-4.5) < .01 && abs(rad2deg($eye->pitch-$parkedPitch)-4.5) < .5,
 		'At 120 mph the boom has lowered 4.5 degrees with a flatter view ahead');
 	$cruiseHeight = $eye->position[1];
