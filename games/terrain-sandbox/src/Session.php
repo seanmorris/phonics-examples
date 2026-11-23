@@ -2257,7 +2257,8 @@ final class Session
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,'inputTheme' => $this->inputTheme,'hint' => $this->hint(),
 			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),'lampAdaptation' => $this->lampAdaptation,
 			'roadPoints' => $this->road,'message' => $this->message,
-			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,'fov' => $this->camera->fov],
+			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,
+				'fov' => $this->mode === 'car' ? $this->chase->fieldOfView($this->camera) : $this->camera->fov],
 			'duck' => $this->mode === 'fly' || $this->duck === null ? null
 				: ['offset' => $this->duck->offset, 'passages' => $this->duck->held()],
 			'jet' => $this->mode === 'jet' ? $this->jet->state() : null,

@@ -1299,6 +1299,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 					const program = gl.getParameter(gl.CURRENT_PROGRAM);
 					const location = gl.getUniformLocation(program, 'uWheelAngles');
 					const angles = location && gl.getUniform(program, location);
+					element.carProgram = program;
 					element.splitFrontSteering = angles?.length === 4 && angles[1] < angles[2] && angles[2] < 0;
 				}
 			}
@@ -1422,13 +1423,25 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	});
 
 	const chargeMotion = () => dial.evaluate(element => element.fractionalCharge);
+
+	const renderedFov = () => view.evaluate(element => {
+		const gl = element.getContext('webgl2'), program = element.carProgram;
+		const matrix = gl.getUniform(program, gl.getUniformLocation(program, 'uViewProjection'));
+
+		return 2 * Math.atan(1 / Math.hypot(matrix[1], matrix[5], matrix[9])) * 180 / Math.PI;
+	});
+
+	expect(await renderedFov()).toBeCloseTo(60, 3);
 	await page.keyboard.down('w');
 	await page.keyboard.down('d');
 	await setButton(4, true);
 	await expect.poll(async() => (await status(page)).car.nitrous).toBeLessThan(.99);
 	await expect(dial).toHaveAttribute('aria-label', /nitrous \d{1,2}%/);
+	await expect.poll(renderedFov).toBeGreaterThan(68);
+
 	await setButton(4, false);
 	await expect.poll(chargeMotion).toEqual({draining: true, filling: true});
+	await expect.poll(renderedFov).toBeLessThan(61);
 	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
 	await expect.poll(needle).toBeGreaterThan(.75*Math.PI + .15);
 	await expect.poll(() => view.evaluate(element => element.splitFrontSteering)).toBe(true);

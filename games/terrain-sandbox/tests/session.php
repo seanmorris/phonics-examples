@@ -1727,13 +1727,30 @@ expect(abs(end($first)['nitrous']-.75)<1e-9 && end($first)['speed'] > end($full)
 	&& min(end($first)['wheelTravel'])>.06, 'One second of boost consumes a quarter bottle, pulls harder and loads all four tires');
 $halfway = $boosted->carView(.5)[1]['nitrous'];
 expect(abs($halfway - ($first[58]['nitrous']+$first[59]['nitrous'])/2)<1e-12, 'The gauge interpolates a draining bottle between steps');
-hold($boosted,$boost,190,$car);
-expect($car($boosted)['nitrous'] === 0., 'Holding the button after the fourth second leaves the bottle empty');
+$normalFov = $shift->camera->fov;
+$wideFov = $shift->view(1.)[0]->fov;
+expect(abs($wideFov-$normalFov-deg2rad(10))<1e-10 && $boosted->view(1.)[0]->fov === $wideFov,
+	'Keyboard and controller boost both widen the chase lens by ten degrees');
+input($shift,['actions'=>['pause']]);
+$shift->step(.1);
+expect($shift->view(0.)[0]->fov === $wideFov, 'Pausing a boost freezes the widened view');
+input($shift,['actions'=>['fly']]);
+expect($shift->view(1.)[0]->fov === $normalFov, 'Free flight immediately uses its own normal lens');
+enterCar($shift);
+expect($shift->view(0.)[0]->fov === $normalFov, 'A new drive begins with the normal lens');
+hold($boosted,$boost,180,$car);
+$emptyFov = $boosted->view(1.)[0]->fov;
+expect($car($boosted)['nitrous'] === 0. && $emptyFov < $wideFov && $emptyFov > $normalFov+deg2rad(9),
+	'The lens starts easing back on the step the bottle runs dry with the button still held');
+hold($boosted,$boost,10,$car);
+expect($boosted->view(1.)[0]->fov < $emptyFov, 'Holding an empty bottle keeps releasing the lens');
 $rolling = hold($boosted,pad(),5,$car);
 $trickle = end($rolling)['nitrous'];
 expect($trickle > 0. && $trickle < .03 && abs($boosted->carView(.5)[1]['nitrous'] - ($rolling[3]['nitrous']+$trickle)/2)<1e-12,
 	'Even the small initial refill is visible between simulation steps');
+$beforePress = $boosted->view(1.)[0]->fov;
 $blocked = hold($boosted,$boost,6,$car);
+expect($boosted->view(1.)[0]->fov < $beforePress, 'Pressing below the restart charge cannot widen the view');
 expect(min(array_column($blocked,'nitrous')) === $trickle && max(array_column($blocked,'nitrous')) === $trickle,
 	'A fresh press after depletion cannot spend a charge below the restart threshold');
 for($i = 0; $i < 60 && $car($boosted)['nitrous'] < .03; $i++) hold($boosted,pad(),1,$car);
@@ -1742,6 +1759,38 @@ $burst = hold($boosted,$boost,12,$car);
 expect($available >= .03 && abs($burst[0]['nitrous'] - ($available-1/240))<1e-12 && $burst[1]['nitrous'] < $burst[0]['nitrous']
 	&& end($burst)['nitrous'] === 0., 'At 3% a fresh burst starts and runs all the way back to empty');
 $boosted->close(); $shift->close();
+
+// Isolate the lens with a stationary pose so settling can be checked independently of car motion.
+function boostLensCurve(Session $parked, int $hz): array
+{
+	$lens = new CarChase;
+	$eye = new TerrainPhonics\Camera;
+	$eye->fov = deg2rad(64);
+	$pose = $parked->car->state();
+	$land = $parked->landscape;
+	$lens->board($eye,$pose,$land);
+	for($i = 0; $i < $hz/6; $i++)
+	{
+		$from = $pose;
+		$pose['nitrous'] -= 1/(4*$hz);
+		$lens->advance($eye,$from,$pose,$land,1/$hz);
+	}
+	$offset = fn(float $alpha): float => rad2deg($lens->view($eye,$pose,$alpha)[0]->fov - $eye->fov);
+	$attack = $offset(1.);
+	expect($attack > 9. && $attack < 9.1 && abs(2*$offset(.5)-$attack-$offset(0.))<1e-9,
+		'Boost opens the lens quickly and interpolates the angle between camera ticks');
+	for($i = 0; $i < $hz/2; $i++) $lens->advance($eye,$pose,$pose,$land,1/$hz);
+	$release = $offset(1.);
+	expect($release > 2. && $release < 2.3, 'The released lens closes more gradually while the car stands still');
+	for($i = 0; $i < 3*$hz; $i++) $lens->advance($eye,$pose,$pose,$land,1/$hz);
+	expect($offset(1.) === 0. && !$lens->advance($eye,$pose,$pose,$land,1/$hz),
+		'The lens returns exactly to the original field of view, then the stationary camera goes idle');
+	return [$attack,$release];
+}
+[$attack30,$release30] = boostLensCurve($unassisted,30);
+[$attack120,$release120] = boostLensCurve($unassisted,120);
+expect(abs($attack30-$attack120)<1e-9 && abs($release30-$release120)<1e-9,
+	'The nitrous lens follows the same attack and release at 30 and 120 steps per second');
 
 $assisted = $park();
 foreach([$assisted,$unassisted] as $session) {
