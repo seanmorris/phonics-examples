@@ -239,10 +239,11 @@ final class Car
 			$this->reversing = false;
 			return $supported;
 		}
-		// The brake lamps light while the pedal opposes the motion or the handbrake is held, whether or not the tires
-		// grip. The reversing lamps light while the car rolls backward or the pedal holds reverse at a standstill.
+		// The brake lamps follow an opposing pedal or the handbrake, even when the tires lose grip.
 		$this->braking = $handbrake || $throttle * $this->speed < 0;
-		$this->reversing = $this->speed < 0 || $this->speed == 0 && $throttle < 0;
+		// Only the reverse pedal can start the white lamps. Keep them on through the same backward coast.
+		$coastingInReverse = $this->reversing && $this->speed < 0;
+		$this->reversing = $this->gearbox->gear < 0 && ($coastingInReverse || $throttle < 0 && $this->speed <= 0);
 		return $supported;
 	}
 

@@ -124,12 +124,12 @@ namespace
 		expect($session->mode === 'car', 'The car boards on open ground');
 		return $session;
 	}
-	/** Whether every state's brake and reversing switches agree with its speed and the pedal. */
+	/** Check the switches through a commanded drive, brake, reverse and coast. */
 	function switchesFollow(array $states, int $pedal, bool $handbrake = false): bool
 	{
 		foreach($states as $s)
 			if($s['braking'] !== ($handbrake || $pedal * $s['speed'] < 0)
-				|| $s['reversing'] !== ($s['speed'] < 0 || $s['speed'] == 0 && $pedal < 0)) return false;
+				|| $s['reversing'] !== ($s['gear'] < 0 && ($s['speed'] < 0 || $s['speed'] == 0 && $pedal < 0))) return false;
 		return true;
 	}
 	/**
@@ -227,7 +227,40 @@ namespace
 		};
 	}
 
-	// Brake lamps light while the pedal opposes the motion, reversing lamps while the car rolls backward.
+	// A checkpoint can send the car backward while the transmission is still in first.
+	$post = park();
+	$start = $post->car->state();
+	$post->course->place('checkpoint', 'road', $start['x'], $start['y'], $start['z'] + 32, M_PI/2);
+	for($i = 0; $i < 240; $i++)
+	{
+		$hit = hold($post, 1, ['KeyW' => true])[0];
+		if($hit['speed'] < -1) break;
+	}
+	expect($hit['speed'] < -1 && $hit['gear'] > 0 && !$hit['reversing'] && $hit['lamps']['reverse'] === 0.0,
+		'The nose rebounds from a checkpoint post in a forward gear with the reversing lamps dark');
+	$rebound = hold($post, 9);
+	expect(end($rebound)['speed'] < -1 && max(array_column(array_column($rebound, 'lamps'), 'reverse')) === 0.0,
+		'Coasting backward after the impact never lights the white lamps');
+	$away = hold($post, 12, ['KeyS' => true]);
+	expect(end($away)['gear'] === -1 && end($away)['reversing'] && end($away)['lamps']['reverse'] === 1.0,
+		'Selecting reverse to back away from the post lights the white lamps');
+	$coastAway = hold($post, 8);
+	expect(end($coastAway)['speed'] < 0 && end($coastAway)['lamps']['reverse'] === 1.0,
+		'The lamps stay lit when the driver lifts the pedal during that reverse');
+	$post->close();
+
+	$hill = park();
+	$hill->landscape->queue(['type' => 'road', 'points' => [[0,-6,-320], [0,6,-280]], 'width' => 12, 'shoulder' => 1, 'crown' => 0]);
+	$hill->landscape->commit();
+	hold($hill, 12, ['KeyS' => true]);
+	$parked = hold($hill, 45, ['Space' => true]);
+	$rollback = hold($hill, 30);
+	expect(end($parked)['speed'] == 0 && end($parked)['gear'] === -1 && end($rollback)['speed'] < -.1
+		&& max(array_column(array_column($rollback, 'lamps'), 'reverse')) === 0.0,
+		'Releasing the handbrake on a hill after stopping in reverse leaves the white lamps dark');
+	$hill->close();
+
+	// Braking into reverse, then coasting to a stop.
 	$keys = park();
 	$status = $keys->status();
 	expect($status['headlights'] === 'auto' && !$status['headlightsLit'] && $status['lamps'] === ['brake' => 0.0,
@@ -246,11 +279,13 @@ namespace
 	$braking = hold($keys, 300, ['KeyS' => true]);
 	$stopped = 0;
 	while($braking[$stopped]['speed'] > 0) $stopped++;
-	expect(switchesFollow($braking, -1) && $stopped > 20 && $braking[$stopped - 1]['braking']
-		&& !$braking[$stopped]['braking'] && $braking[$stopped]['reversing'] && end($braking)['speed'] < -2,
+	$selected = array_search(-1, array_column($braking, 'gear'), true);
+	expect($selected !== false && $selected >= $stopped && switchesFollow($braking, -1) && $stopped > 20
+		&& $braking[$stopped - 1]['braking'] && !$braking[$stopped]['braking']
+		&& $braking[$selected]['reversing'] && end($braking)['speed'] < -2,
 		"S lights the brake lamps until the car stops after $stopped steps, then the reversing lamps as it backs up");
 	expect($braking[5]['lamps']['brake'] > .99 && $braking[3]['lamps']['brake'] > .6 && $braking[3]['lamps']['brake'] < .9
-		&& abs($braking[$stopped + 5]['lamps']['reverse'] - 1) < 1e-9 && $braking[$stopped + 6]['lamps']['brake'] === 0.0,
+		&& abs($braking[$selected + 5]['lamps']['reverse'] - 1) < 1e-9 && $braking[$stopped + 6]['lamps']['brake'] === 0.0,
 		'A lamp takes a tenth of a second to light or go dark');
 	$forward = hold($keys, 30, ['KeyW' => true]);
 	expect(switchesFollow($forward, 1) && $forward[0]['braking'] && $forward[0]['reversing'],
