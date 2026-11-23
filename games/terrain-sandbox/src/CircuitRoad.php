@@ -161,7 +161,8 @@ final class CircuitRoad
 	{
 		if(count($line)<3) throw new \RuntimeException('The edited circuit needs a closed route.');
 		$trace = new Circuit($line,$dry,null);
-		if($trace->length < 120. || $trace->length > 40000.) throw new \RuntimeException('A circuit must be between 394 ft and 24.85 mi long.');
+		if($trace->length < Circuit::MIN_LENGTH)
+			throw new \RuntimeException('A circuit must be at least ' . DisplayUnits::feet(Circuit::MIN_LENGTH) . ' ft long.');
 		$count = min(Circuit::MAX_POINTS,max(24,(int)ceil($trace->length/12.)));
 		$route = []; $nearest = INF; $start = 0;
 		$half = $graded->recipe()['worldSize']/2;

@@ -1952,20 +1952,20 @@ input($lab,['actions'=>['undo']]); publish($lab);
 expect($lab->roadEditor->packet($lab)['road']['points'][1] === $split['points'][1], 'Undo restores the prior shape in the open editor');
 $command('close');
 expect($lab->roadEditor->packet($lab) === null && $lab->roadEditor->view === null, 'Closing the editor releases pending chart work');
-// Make a race directly from hand-placed editor points, including a saved road replacement.
-$manual = new Session(['worldSize'=>2048,'heightScale'=>0.,'detailAmplitude'=>0.]);
-input($manual,['values'=>['waterLevel'=>-10.,'gateLaps'=>3]]);
+// Make a lap beyond the former 40 km limit directly from editor points, then edit and reload it.
+$manual = new Session(['worldSize'=>32768,'heightScale'=>0.,'detailAmplitude'=>0.]);
+input($manual,['values'=>['waterLevel'=>-10.,'gateLaps'=>3,'roadWidth'=>24.]]);
 $edit = static function(string $op,array $values=[]) use ($manual) {
 	input($manual,['actions'=>[['type'=>'road-editor','op'=>$op,'generation'=>$manual->generation,
 		'revision'=>$manual->landscape->revision()]+$values]]);
 };
 $edit('open');
-foreach([[-250,-180],[250,-180],[250,180],[-250,180]] as [$x,$z]) $edit('add',['x'=>$x,'z'=>$z]);
+foreach([[-10000,-6500],[10000,-6500],[10000,6500],[-10000,6500]] as [$x,$z]) $edit('add',['x'=>$x,'z'=>$z]);
 $edit('circuit'); while($manual->preparingRoad()) input($manual,[]); publish($manual);
 $made = $manual->status()['circuit']; $roads = $manual->landscape->roadRecords();
-expect($made['active']==='dry' && count($manual->course->gates())>=8 && $manual->course->laps()===3,'Manually drawn circuit has a lap start and checkpoints');
+expect($made['active']==='dry' && $made['length']>60000. && count($manual->course->gates())>=8 && $manual->course->laps()===3,'Manually drawn circuit has a lap start and checkpoints');
 expect($roads[0]['points'][0]===end($roads[0]['points']) && $manual->roadEditor->packet($manual)['id']===0,'The closed road is selected for further editing');
-$edit('point',['id'=>0,'index'=>1,'x'=>300,'y'=>3,'z'=>-180]);
+$edit('point',['id'=>0,'index'=>1,'x'=>10500,'y'=>3,'z'=>-6500]);
 $edit('circuit',['id'=>0]); while($manual->preparingRoad()) input($manual,[]); publish($manual);
 expect(count($manual->landscape->roads())===1 && $manual->status()['circuit']['points']!==$made['points'],'Editing a saved circuit road moves the race line without adding another road');
 $manualReload = new Session; $manualReload->load($manual->save());

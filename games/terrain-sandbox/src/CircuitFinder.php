@@ -123,7 +123,7 @@ final class CircuitFinder
 					if($points === null) continue;
 					$circuit = new Circuit($points,$this->dryLevel,$wet<min(10000.,$lake ? INF : $peak-3.) ? $wet : null,
 						heightDifference: $reliefFound, startHeight: $this->landscape->height(...$points[0]));
-					if($circuit->length<max(180.,$this->step*12) || $circuit->length>40000.) continue;
+					if($circuit->length<max(180.,$this->step*12)) continue;
 					try
 					{
 						$road = $circuit->course($this->landscape,$shapes,$laps,false);
@@ -306,7 +306,7 @@ final class CircuitFinder
 	{
 		$lake = $this->minimumDifference<0.;
 		$circuit = new Circuit($points,$this->dryLevel,null);
-		if($circuit->length<($regional ? ($lake ? 1800. : 3000.) : 400.) || $circuit->length>40000.) return null;
+		if($circuit->length<($regional ? ($lake ? 1800. : 3000.) : 400.)) return null;
 		$roads = yield from CircuitRoad::grade($this->landscape,$circuit,$this->causewayDeck);
 		if($roads === null) return null;
 		$graded = $this->landscape->fork();

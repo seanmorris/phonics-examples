@@ -7,6 +7,7 @@ use TerrainPhonics\Landscape;
 /** A closed horizontal racing line, shared by the road gates and floating arches. */
 final class Circuit
 {
+	public const MIN_LENGTH = 120.;
 	public const MAX_POINTS = 1024;
 	public readonly float $length;
 	private ?array $gatePlan = null;
@@ -175,7 +176,7 @@ final class Circuit
 			|| $area === null && $junctions || $relief !== null && !$number($relief)
 			|| $startHeight !== null && !$number($startHeight)) throw $invalid();
 		$circuit = new self($points, (float)$dry, $wet === null ? null : (float)$wet, $junctions, $area, [], $relief,$startHeight);
-		if($circuit->length<120 || $circuit->length>40000) throw $invalid();
+		if($circuit->length<self::MIN_LENGTH) throw $invalid();
 		foreach($junctions as $junction)
 			if(!$number($junction) || $junction<0 || $junction>=$circuit->length) throw $invalid();
 		return $circuit;
