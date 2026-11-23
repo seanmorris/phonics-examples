@@ -13,7 +13,7 @@ final class CarChase
 	private array $previousCar = [];
 	private array $previousCenter = [], $currentCenter = [];
 	private const DISTANCE = 6.7;
-	private const MAX_FOV_WIDENING = 30 * M_PI / 180;
+	private const MAX_FOV_WIDENING = 50 * M_PI / 180;
 	private const FOV_HALF_LIFE = .35;
 	private float $fovWidening = 0.;
 	/**
@@ -33,9 +33,9 @@ final class CarChase
 
 	public function advance(Camera $camera, array $from, array $to, Landscape $land, float $dt): bool
 	{
-		// Give road speeds a visible change in angle, then taper the widening toward the speed governor.
+		// A cubic ease-out puts most of the widening into road speeds and levels off at the governor.
 		$speedFraction = min(1., abs($to['speed']) / (Car::TOP_SPEED_MPH * Car::MPS_PER_MPH));
-		$targetWidening = self::MAX_FOV_WIDENING * $speedFraction * (2. - $speedFraction);
+		$targetWidening = self::MAX_FOV_WIDENING * (1. - (1. - $speedFraction)**3);
 		if($from === $to && !$this->settling && $this->look === $this->looked && $this->fovWidening === $targetWidening)
 		{
 			$this->previousEye = null;

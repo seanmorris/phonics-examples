@@ -1435,25 +1435,25 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 
 	expect(await renderedFov()).toBeCloseTo(60, 3);
 	await page.keyboard.down('w');
-	await expect.poll(renderedFov, {timeout: 30_000}).toBeGreaterThan(64.5);
+	await expect.poll(renderedFov, {timeout: 30_000}).toBeGreaterThan(71);
 	expect((await status(page)).car.nitrous).toBe(1);
 
 	await page.keyboard.down('d');
 	await setButton(4, true);
 	await expect.poll(async() => (await status(page)).car.nitrous).toBeLessThan(.99);
 	await expect(dial).toHaveAttribute('aria-label', /nitrous \d{1,2}%/);
-	await expect.poll(renderedFov, {timeout: 30_000}).toBeGreaterThan(70.5);
+	await expect.poll(renderedFov, {timeout: 30_000}).toBeGreaterThan(83);
 
 	await setButton(4, false);
 	await expect.poll(chargeMotion).toEqual({draining: true, filling: true});
-	expect(await renderedFov()).toBeGreaterThan(69);
+	expect(await renderedFov()).toBeGreaterThan(81);
 	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
 	await expect.poll(needle).toBeGreaterThan(.75*Math.PI + .15);
 	await expect.poll(() => view.evaluate(element => element.splitFrontSteering)).toBe(true);
 	await page.keyboard.up('d');
 	await page.keyboard.up('w');
 	await page.keyboard.down('s');
-	await expect.poll(renderedFov, {timeout: 30_000}).toBeLessThan(66);
+	await expect.poll(renderedFov, {timeout: 30_000}).toBeLessThan(72);
 	await page.keyboard.up('s');
 
 	const beforeRestore = await view.evaluate(element => element.carDraws);

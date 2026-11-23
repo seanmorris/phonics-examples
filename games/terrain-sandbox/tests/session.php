@@ -1740,7 +1740,7 @@ expect(abs(end($first)['nitrous']-.75)<1e-9 && end($first)['speed'] > end($full)
 $halfway = $boosted->carView(.5)[1]['nitrous'];
 expect(abs($halfway - ($first[58]['nitrous']+$first[59]['nitrous'])/2)<1e-12, 'The gauge interpolates a draining bottle between steps');
 $wideFov = $shift->view(1.)[0]->fov;
-expect($wideFov > $ordinaryFov && $wideFov < $normalFov+deg2rad(12) && $boosted->view(1.)[0]->fov === $wideFov,
+expect($wideFov > $ordinaryFov && $wideFov < $normalFov+deg2rad(25) && $boosted->view(1.)[0]->fov === $wideFov,
 	'The faster launch on keyboard and controller opens the lens equally and leaves room for further speed');
 input($shift,['actions'=>['pause']]);
 $shift->step(.1);
@@ -1751,7 +1751,7 @@ enterCar($shift);
 expect($shift->view(0.)[0]->fov === $normalFov, 'A new drive begins with the normal lens');
 hold($boosted,$boost,180,$car);
 $emptyFov = $boosted->view(1.)[0]->fov;
-expect($car($boosted)['nitrous'] === 0. && $emptyFov > $wideFov && $emptyFov > $normalFov+deg2rad(21),
+expect($car($boosted)['nitrous'] === 0. && $emptyFov > $wideFov && $emptyFov > $normalFov+deg2rad(40),
 	'The high-speed view is still wide when the last nitrous burns');
 hold($boosted,$boost,10,$car);
 expect($boosted->view(1.)[0]->fov >= $emptyFov, 'Continued acceleration keeps opening the lens after depletion');
@@ -1796,21 +1796,23 @@ function speedLensCurve(Session $parked, int $hz): array
 	$rise = $holdSpeed(120.,intdiv($hz,6));
 	$previous = $lens->view($eye,$pose,0.)[0]->fov;
 	$middle = $lens->view($eye,$pose,.5)[0]->fov;
-	expect($rise > 6. && $rise < 6.5 && abs(2*$middle-$previous-$lens->fieldOfView($eye)) < 1e-9,
-		'Even a sudden jump in speed widens gradually and blends across render frames');
+	expect(abs(2*$middle-$previous-$lens->fieldOfView($eye)) < 1e-9, 'The lens blends between fixed steps');
+	$street = $holdSpeed(30.,4*$hz);
 	$highway = $holdSpeed(60.,4*$hz);
 	$cruise = $holdSpeed(120.,4*$hz);
-	expect(abs($highway-13.125) < 1e-9 && abs($cruise-22.5) < 1e-9, '60 and 120 mph widen the lens by 13.125 and 22.5 degrees');
+	expect(abs($street-16.50) < .01 && abs($highway-28.91) < .01 && abs($cruise-43.75) < .01,
+		'The view opens early at 30 and 60 mph and continues widening at 120 mph');
+	expect($rise > .27*$cruise && $rise < .30*$cruise, 'A sudden jump in speed eases into the new angle');
 	expect($holdSpeed(120.,1,.1) === $cruise && $holdSpeed(120.,1,0.) === $cruise && $holdSpeed(120.,1) === $cruise,
 		'At a constant speed the view holds through burning, emptying, and refilling the bottle');
 	$fast = $holdSpeed(Car::TOP_SPEED_MPH,4*$hz);
-	expect(abs($fast-30.) < 1e-9 && $holdSpeed(Car::TOP_SPEED_MPH+20,1) === $fast, 'The governor reaches the widest lens and overspeed is capped');
+	expect(abs($fast-50.) < 1e-9 && $holdSpeed(Car::TOP_SPEED_MPH+20,1) === $fast, 'The governor reaches the widest lens and overspeed is capped');
 	$fall = $holdSpeed(0.,intdiv($hz,2));
-	expect($fall > 11. && $fall < 11.5, 'Even a sudden stop eases the camera back toward its base angle');
+	expect($fall > .36*$fast && $fall < .38*$fast, 'Even a sudden stop eases the camera back toward its base angle');
 	expect($holdSpeed(0.,4*$hz) === 0. && !$lens->advance($eye,$pose,$pose,$land,1/$hz),
 		'The lens returns exactly to the original field of view and the parked camera goes idle');
 	$reverse = $holdSpeed(-12.,4*$hz);
-	expect(abs($reverse-2.925) < 1e-9 && $holdSpeed(12.,1) === $reverse, 'Equal forward and reverse road speeds use the same angle');
+	expect(abs($reverse-7.13) < .01 && $holdSpeed(12.,1) === $reverse, 'Equal forward and reverse road speeds use the same angle');
 	return [$rise,$fall];
 }
 [$rise30,$fall30] = speedLensCurve($unassisted,30);
