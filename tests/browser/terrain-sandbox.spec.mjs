@@ -2975,22 +2975,14 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 			return connect.call(this, destination, ...args);
 		};
 
-		const fire = OscillatorNode.prototype.start;
-
-		OscillatorNode.prototype.start = function(...args) {
-			probe.starts++;
-			probe.live.add(this);
-			this.addEventListener('ended', () => probe.live.delete(this), {once: true});
-
-			return fire.apply(this, args);
-		};
-
 		const start = AudioBufferSourceNode.prototype.start;
 
 		AudioBufferSourceNode.prototype.start = function(...args) {
 			if(this.loop && this.buffer)
 			{
 				probe.live.add(this);
+
+				if(this.buffer.numberOfChannels === 4) probe.starts++;
 
 				if(Math.abs(this.buffer.duration - 2.92) < .001) probe.skids++;
 
@@ -3036,8 +3028,8 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).car?.rpm).toBe(950);
-	await expect.poll(() => page.evaluate(() => window.driveAudio.buffers)).toBe(1);
-	await expect.poll(() => page.evaluate(() => window.driveAudio.starts)).toBe(3);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.buffers)).toBe(2);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.starts)).toBe(1);
 
 	const firingHz = () => page.evaluate(() => {
 		const analyser = window.driveAudio.analyser;
@@ -3060,7 +3052,7 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 	await page.keyboard.down('Shift');
 	await expect.poll(() => view.evaluate(element => element.dustPixels)).toBeGreaterThan(30);
 	await expect.poll(firingHz).toBeGreaterThan(107);
-	expect(await page.evaluate(() => window.driveAudio.starts)).toBe(3);
+	expect(await page.evaluate(() => window.driveAudio.starts)).toBe(1);
 	await page.keyboard.down('d');
 	await expect.poll(async() => (await status(page)).car.roll).toBeGreaterThan(.025);
 	await page.screenshot({path: testInfo.outputPath('tire-dust.png')});
@@ -3105,7 +3097,7 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 	await page.keyboard.press('f');
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');
 	await expect.poll(() => page.evaluate(() => window.driveAudio.live.size)).toBe(0);
-	expect(await page.evaluate(() => window.driveAudio.buffers)).toBe(1);
+	expect(await page.evaluate(() => window.driveAudio.buffers)).toBe(2);
 	expect(errors).toEqual([]);
 });
 
@@ -3114,28 +3106,32 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 	const module = 'data:text/javascript;base64,' + (await fs.readFile(synth)).toString('base64');
 	const autoload = fileURLToPath(new URL('../../games/terrain-sandbox/autoload.php', import.meta.url));
 
-	const definition = JSON.parse(execFileSync('php', ['-r'
+	const file = new URL('../../games/terrain-sandbox/assets/car-audio/flat-twelve.wav', import.meta.url);
+	const wav = await fs.readFile(file);
+
+	const targets = JSON.parse(execFileSync('php', ['-r'
 		, `
 		require $argv[1];
 		use TerrainSandbox\\CarEngineSound;
 		$states = [[2500,1],[2500,0],[7400,1],[5650,0],[5650,1],[8000,1]];
-		echo json_encode([CarEngineSound::voice(), array_map(fn($s) => CarEngineSound::controls($s[0],$s[1],0), $states)]);
+		echo json_encode(array_map(fn($s) => CarEngineSound::controls($s[0],$s[1],0), $states));
 	`
 		, autoload
 	], {encoding: 'utf8'}));
 
-	const measured = await page.evaluate(async({module, definition: [voice, targets]}) => {
+	const measured = await page.evaluate(async({module, wav, targets}) => {
 		const {prepareEngine, startEngine} = await import(module);
 		const sampleRate = 44100, context = new OfflineAudioContext(1, 5*sampleRate, sampleRate);
-		const instrument = prepareEngine(context, voice);
+		const recording = await context.decodeAudioData(Uint8Array.from(atob(wav), char => char.charCodeAt(0)).buffer);
+		const instrument = prepareEngine(context, recording);
 
-		const tones = targets.map(([cycle,level,cutoff,flow,jitter,,,blockGain]) => ({
+		const tones = targets.map(([cycle,level,cutoff,flow,scatter,,,mountGain]) => ({
 			cycle
 			, level
 			, cutoff
 			, flow
-			, jitter
-			, blockGain
+			, scatter
+			, mountGain
 		}));
 
 		const engine = startEngine(context, instrument, tones[0]);
@@ -3161,14 +3157,14 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 
 		const rms = wave => Math.sqrt(wave.reduce((sum, x) => sum+x*x, 0)/wave.length);
 
-		function spectrum(time)
+		function spectrum(time, shaftHz)
 		{
 			const samples = section(time, .36);
 			const wave = samples.map((v, i) => v*(.5-.5*Math.cos(2*Math.PI*i/(samples.length-1))));
 			const binHz = sampleRate/wave.length;
 			// Parseval's identity gives total one-sided power with the same normalization as the bins below.
 			const total = wave.reduce((sum, x) => sum+x*x, 0)*wave.length/2;
-			let loudest = 0, peak = 0, bass = 0, overtones = 0;
+			let loudest = 0, peak = 0, bass = 0, overtones = 0, mid = 0, betweenOrders = 0;
 
 			for(let bin = Math.ceil(30/binHz); bin*binHz <= 5000; bin++)
 			{
@@ -3190,6 +3186,14 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 
 				if(hz >= 1000) overtones += energy;
 
+				if(hz >= 350 && hz <= 3200)
+				{
+					mid += energy;
+					const order = hz/shaftHz;
+
+					if(Math.abs(order-Math.round(order)) > .15) betweenOrders += energy;
+				}
+
 				if(energy > loudest)
 				{
 					loudest = energy;
@@ -3197,19 +3201,19 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 				}
 			}
 
-			return {peak, bass: bass/total, overtones: overtones/total};
+			return {peak, bass: bass/total, overtones: overtones/total, betweenOrders: betweenOrders/mid};
 		}
 
 		const levels = Array.from({length: 13}, (_, i) => rms(section(.2+i*.05, .05))).sort((a, b) => a-b);
 
 		return {
-			spectra: [.3,1.1,1.9,2.66,3.22,3.92].map(spectrum)
+			spectra: [.3,1.1,1.9,2.66,3.22,3.92].map((time, i) => spectrum(time, 2*tones[i].cycle))
 			, variation: 20*Math.log10(levels.at(-2)/levels[1])
 			, pull: rms(section(.3, .5))
 			, coast: rms(section(1.1, .4))
 			, stopped: rms(section(4.65, .15))
 		};
-	}, {module, definition});
+	}, {module, wav: wav.toString('base64'), targets});
 
 	for(const [i, expected] of [125,125,370,282.5,282.5,400].entries())
 	expect(Math.abs(measured.spectra[i].peak-expected)).toBeLessThan(5);
@@ -3222,6 +3226,9 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 	}
 
 	expect(measured.spectra[3].bass).toBeGreaterThan(.09);
+
+	for(const i of [2,5]) expect(measured.spectra[i].betweenOrders).toBeGreaterThan(.085);
+
 	expect(measured.variation).toBeLessThan(1.5);
 	expect(measured.pull).toBeGreaterThan(1.3*measured.coast);
 	expect(measured.coast).toBeGreaterThan(.005);

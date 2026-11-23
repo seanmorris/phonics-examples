@@ -79,7 +79,6 @@ $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainVehicleFrame');
 $carSound = vrzno_env('terrainCarSound');
-$carVoiceReady = false;
 $lastSound = [0,0,0];
 $roadStatus = vrzno_env('terrainRoadEditor');
 $roadCapture = vrzno_env('terrainRoadCapture');
@@ -243,7 +242,7 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound, &$carVoiceReady
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -252,11 +251,6 @@ $engine->start(
 			? [(int)round($vehiclePose['rpm']), round($vehiclePose['engineLoad'],3), round($vehiclePose['tireSqueal'],3)] : [0,0,0];
 		if($sound !== $lastSound)
 		{
-			if(!$carVoiceReady && $sound[0] > 0)
-			{
-				(vrzno_env('terrainEngineVoice'))(json_encode(CarEngineSound::voice(),JSON_THROW_ON_ERROR));
-				$carVoiceReady = true;
-			}
 			$carSound(...CarEngineSound::controls(...$sound));
 			$lastSound = $sound;
 		}

@@ -10,6 +10,36 @@ function buffer(channels, length, sampleRate)
 	return {numberOfChannels: channels, length, sampleRate, getChannelData: channel => data[channel]};
 }
 
+test('each collector receives six distinct firings per cycle and the pressure wraps continuously', () => {
+	const file = readFileSync(new URL('../games/terrain-sandbox/assets/car-audio/flat-twelve.wav', import.meta.url));
+	const start = file.indexOf('data') + 8;
+	const frames = file.readUInt32LE(start-4)/8;
+	assert.equal(file.readUInt16LE(22), 4);
+	assert.equal(frames, 64*512);
+
+	const pressure = (frame, channel) => file.readInt16LE(start + ((frame+frames)%frames)*8 + 2*channel)/32768;
+
+	for(let cylinder = 0; cylinder < 12; cylinder++)
+	{
+		const strengths = [];
+
+		for(let cycle = 0; cycle < 64; cycle++)
+		{
+			const at = Math.round((cycle + cylinder/12)*512);
+			const bank = cylinder%2;
+
+			const surge = channel => Math.max(...Array.from({length: 19}, (_, i) => pressure(at+i, channel)));
+			const peak = surge(bank);
+			assert.ok(peak > surge(1-bank)+.45);
+			strengths.push(peak);
+		}
+
+		assert.ok(Math.max(...strengths)-Math.min(...strengths) > .18);
+	}
+
+	for(let channel = 0; channel < 3; channel++) assert.ok(Math.abs(pressure(0, channel)-pressure(-1, channel)) < .15);
+});
+
 test('the real skid recording wraps across adjacent samples and retains its level through the overlap', () => {
 	const wav = readFileSync(
 		new URL('../games/terrain-sandbox/assets/car-audio/tires_squal_loop.wav', import.meta.url)

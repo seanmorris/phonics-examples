@@ -1,106 +1,92 @@
-/** Web Audio renders the crank-angle pressure waves supplied by PHP on its own audio clock. */
-export function prepareEngine(context, definition)
+/** The PHP-generated recording contains 64 four-stroke cycles at its reference speed. */
+export function prepareEngine(context, recording)
 {
-	const waves = definition.banks.map(
-		({real, imag}) => context.createPeriodicWave(
-			Float32Array.from(real)
-			, Float32Array.from(imag)
-			, {disableNormalization: true}
-		)
-	);
+	const noise = context.createBuffer(1, recording.length, recording.sampleRate);
+	noise.copyToChannel(recording.getChannelData(3), 0);
 
-	const harmonics = Float32Array.from(definition.block);
-
-	const block = context.createPeriodicWave(
-		new Float32Array(harmonics.length)
-		, harmonics
-		, {disableNormalization: true}
-	);
-
-	const bytes = atob(definition.flowNoise);
-	const noise = context.createBuffer(1, bytes.length, definition.noiseRate);
-	const samples = noise.getChannelData(0);
-
-	for(let i = 0; i < samples.length; i++) samples[i] = bytes.charCodeAt(i)/127.5 - 1;
-
-	return {waves, block, noise, pitch: definition.exhaustPitch};
+	return {pressure: recording, rate: 64/recording.duration, noise};
 }
 
 export function startEngine(context, instrument, tone)
 {
-	const clock = context.createConstantSource(), noise = context.createBufferSource();
-	const muffler = context.createBiquadFilter(), body = context.createBiquadFilter(), volume = context.createGain();
-	const flutter = context.createBiquadFilter(), jitter = context.createGain();
-	const breath = context.createBiquadFilter(), flow = context.createGain(), pulses = context.createGain();
-	const block = context.createOscillator(), lowCut = context.createBiquadFilter(), blockGain = context.createGain();
+	const crank = context.createBufferSource(), noise = context.createBufferSource();
+	const banks = context.createChannelSplitter(4), volume = context.createGain();
+	const muffler = context.createBiquadFilter(), collector = context.createBiquadFilter();
+	const mount = context.createBiquadFilter(), mountGain = context.createGain();
+	const casework = context.createBiquadFilter(), casingGain = context.createGain(), opposite = context.createGain();
+	const intake = context.createBiquadFilter(), breath = context.createGain(), flow = context.createGain();
+	const scatter = context.createBiquadFilter(), scatterGain = context.createGain(), port = context.createGain();
 
-	const sources = [clock, noise, block];
-	const nodes = [muffler,body,volume,flutter,jitter,breath,flow,pulses,lowCut,blockGain];
-	const pitch = instrument.pitch;
+	const nodes = [banks,volume,muffler,collector,mount,mountGain,casework,casingGain,opposite];
+	nodes.push(intake, breath, flow, scatter, scatterGain, port);
 
-	clock.offset.value = tone.cycle;
+	crank.buffer = instrument.pressure;
+	crank.playbackRate.value = tone.cycle/instrument.rate;
+	crank.loop = true;
+	crank.connect(banks);
 	noise.buffer = instrument.noise;
-	noise.playbackRate.value = pitch;
+	noise.playbackRate.value = .5;
 	noise.loop = true;
 
-	// Transpose the collector resonances with the pressure wave so the upper harmonics keep their balance.
-	muffler.frequency.value = tone.cutoff*pitch;
-	muffler.Q.value = .63;
-	body.type = 'peaking';
-	body.frequency.value = 245*pitch;
-	body.Q.value = .8;
-	body.gain.value = 2.5;
 	volume.gain.value = 0;
-	muffler.connect(body).connect(volume).connect(context.destination);
+	muffler.frequency.value = tone.cutoff;
+	muffler.Q.value = -3;
+	collector.type = 'peaking';
+	collector.frequency.value = 238;
+	collector.Q.value = .78;
+	collector.gain.value = 2.5;
+	muffler.connect(collector).connect(volume).connect(context.destination);
 
-	// Chassis vibration shares the crank phase and sits outside the exhaust pipes and their reflections.
-	block.setPeriodicWave(instrument.block);
-	block.frequency.value = 0;
-	block.detune.value = -1200; // Four crank revolutions per vibration pattern.
-	clock.connect(block.frequency);
-	jitter.connect(block.detune);
-	lowCut.type = 'highpass';
-	lowCut.frequency.value = 36;
-	lowCut.Q.value = -3;
-	blockGain.gain.value = tone.blockGain;
-	block.connect(lowCut).connect(blockGain).connect(volume);
-
-	// The same small irregularity reaches both banks. Opening the throttle admits more pulsed exhaust noise.
-	flutter.frequency.value = 11*pitch;
-	flutter.Q.value = .55;
-	jitter.gain.value = tone.jitter;
-	noise.connect(flutter).connect(jitter);
-	breath.type = 'bandpass';
-	breath.frequency.value = 1450*pitch;
-	breath.Q.value = .65;
-	pulses.gain.value = .38;
-	flow.gain.value = tone.flow;
-	noise.connect(breath).connect(pulses).connect(flow).connect(muffler);
-
-	for(const [bank, wave] of instrument.waves.entries())
+	// Both tailpipes carry the firing order of a six-cylinder bank. Their paths have different
+	// lengths. Pressure reflected at the open end returns with opposite polarity.
+	for(const [bank, level, delay] of [[0,1,.0041],[1,.42,.0057]])
 	{
-		const exhaust = context.createOscillator(), direct = context.createGain();
-		const reflection = context.createDelay(.01/pitch), echo = context.createGain();
-		exhaust.setPeriodicWave(wave);
-		exhaust.frequency.value = 0;
-		exhaust.detune.value = 1200*Math.log2(pitch);
-		clock.connect(exhaust.frequency);
-		jitter.connect(exhaust.detune);
+		const direct = context.createGain(), reflection = context.createDelay(.01), echo = context.createGain();
+		direct.gain.value = level;
+		reflection.delayTime.value = delay;
+		echo.gain.value = -.34;
 
-		direct.gain.value = bank === 0 ? 1 : .78;
-		reflection.delayTime.value = (bank === 0 ? .0027 : .0038)/pitch;
-		echo.gain.value = .24;
-		exhaust.connect(direct).connect(muffler);
-		direct.connect(reflection).connect(echo).connect(muffler);
-		direct.connect(pulses.gain);
-		sources.push(exhaust);
+		banks.connect(direct, bank);
+		direct.connect(port);
+		direct.connect(reflection).connect(echo).connect(port);
 		nodes.push(direct, reflection, echo);
 	}
 
+	// The two flat banks push the case in opposite directions. Its damped motion carries
+	// the lower bank firing note even as the airborne exhaust builds higher harmonics.
+	opposite.gain.value = -1;
+	banks.connect(casework, 0);
+	banks.connect(opposite, 1);
+	opposite.connect(casework);
+	casework.frequency.value = 465;
+	casework.Q.value = 0;
+	casingGain.gain.value = .90;
+	casework.connect(casingGain).connect(volume);
+
+	// Airflow varies the pressure at the pipes and rushes through the intake in time with the valves.
+	scatter.frequency.value = 220;
+	scatter.Q.value = -3;
+	scatterGain.gain.value = tone.scatter;
+	noise.connect(scatter).connect(scatterGain).connect(port.gain);
+	port.connect(muffler);
+
+	intake.type = 'bandpass';
+	intake.frequency.value = 545;
+	intake.Q.value = .6;
+	breath.gain.value = .40;
+	flow.gain.value = tone.flow;
+	banks.connect(breath.gain, 0);
+	noise.connect(intake).connect(breath).connect(flow).connect(muffler);
+
+	mount.frequency.value = 155;
+	mount.Q.value = -3;
+	mountGain.gain.value = tone.mountGain;
+	banks.connect(mount, 2);
+	mount.connect(mountGain).connect(volume);
+
 	const now = context.currentTime;
-
-	for(const source of sources) source.start(now);
-
+	crank.start(now);
+	noise.start(now);
 	volume.gain.setTargetAtTime(tone.level, now, .018);
 
 	return {
@@ -108,17 +94,17 @@ export function startEngine(context, instrument, tone)
 		update(next) {
 			const at = context.currentTime;
 
-			if(next.cycle !== tone.cycle) clock.offset.setTargetAtTime(next.cycle, at, .018);
+			if(next.cycle !== tone.cycle) crank.playbackRate.setTargetAtTime(next.cycle/instrument.rate, at, .018);
 
 			if(next.level !== tone.level) volume.gain.setTargetAtTime(next.level, at, .033);
 
-			if(next.cutoff !== tone.cutoff) muffler.frequency.setTargetAtTime(next.cutoff*pitch, at, .035);
+			if(next.cutoff !== tone.cutoff) muffler.frequency.setTargetAtTime(next.cutoff, at, .035);
 
 			if(next.flow !== tone.flow) flow.gain.setTargetAtTime(next.flow, at, .035);
 
-			if(next.jitter !== tone.jitter) jitter.gain.setTargetAtTime(next.jitter, at, .045);
+			if(next.scatter !== tone.scatter) scatterGain.gain.setTargetAtTime(next.scatter, at, .045);
 
-			if(next.blockGain !== tone.blockGain) blockGain.gain.setTargetAtTime(next.blockGain, at, .045);
+			if(next.mountGain !== tone.mountGain) mountGain.gain.setTargetAtTime(next.mountGain, at, .045);
 
 			tone = next;
 		}
@@ -128,9 +114,10 @@ export function startEngine(context, instrument, tone)
 			const at = context.currentTime;
 			volume.gain.setTargetAtTime(0, at, .012);
 
-			clock.onended = () => { for(const node of [...sources,...nodes]) node.disconnect(); };
+			crank.onended = () => { for(const node of [crank,noise,...nodes]) node.disconnect(); };
 
-			for(const source of sources) source.stop(at + .075);
+			crank.stop(at + .075);
+			noise.stop(at + .075);
 		}
 	};
 }
@@ -163,13 +150,15 @@ export function activate({module, canvas, archive, signal})
 	const doc = canvas.ownerDocument, page = doc.defaultView;
 	const Context = page.AudioContext ?? page.webkitAudioContext;
 	const resources = archive.store.scope(signal);
-	let context, definition, instrument, engine, tireBuffer, tireLoading, tire, parkTimer;
+	let context, instrument, engine, tireBuffer, tire, parkTimer, loading;
 	let closed = false, contextLost = false, pageHidden = false, parked = false;
 	let tone = {cycle: 0}, tireLevel = 0, tireRate = 1;
 
-	async function loadTire()
+	async function loadSound(file, ready)
 	{
-		const url = new URL('assets/car-audio/tires_squal_loop.wav', archive.applicationUrl).href;
+		if(closed) return;
+
+		const url = new URL('assets/car-audio/' + file, archive.applicationUrl).href;
 		let bytes;
 
 		try
@@ -189,7 +178,7 @@ export function activate({module, canvas, archive, signal})
 
 		if(closed) return;
 
-		tireBuffer = joinSkid(context, buffer);
+		ready(buffer);
 		update();
 	}
 
@@ -231,17 +220,26 @@ export function activate({module, canvas, archive, signal})
 
 		if(!context || parked && context.state === 'suspended') unlock();
 
-		if(context?.state !== 'running' || !definition) return;
+		if(context?.state !== 'running') return;
 
-		instrument ??= prepareEngine(context, definition);
+		// Start archive reads after the PHP frame returns. Either sound can start as soon as it is ready.
+		if(!loading)
+		{
+			loading = true;
+
+			const sounds = [
+				['flat-twelve.wav', buffer => { instrument = prepareEngine(context, buffer); }]
+				, ['tires_squal_loop.wav', buffer => { tireBuffer = joinSkid(context, buffer); }]
+			];
+
+			for(const [file, ready] of sounds)
+			Promise.resolve().then(() => loadSound(file, ready)).catch(error => {
+				if(!closed) console.error('Car audio could not load ' + file, error);
+			});
+		}
 
 		if(engine) engine.update(tone);
-		else engine = startEngine(context, instrument, tone);
-
-		// Archive reads must start after returning from the current PHP frame.
-		tireLoading ??= Promise.resolve().then(loadTire).catch(error => {
-			if(!closed) console.error('Car tire audio could not be loaded', error);
-		});
+		else if(instrument) engine = startEngine(context, instrument, tone);
 
 		if(!tireBuffer || tireLevel < .00025)
 		{
@@ -303,10 +301,8 @@ export function activate({module, canvas, archive, signal})
 	canvas.addEventListener('webglcontextlost', () => { contextLost = true; update(); }, {signal});
 	canvas.addEventListener('webglcontextrestored', () => { contextLost = false; update(); }, {signal});
 
-	module.terrainEngineVoice = json => { definition = JSON.parse(json); };
-
-	module.terrainCarSound = (cycle, level, cutoff, flow, jitter, skid, rate, blockGain) => {
-		tone = {cycle, level, cutoff, flow, jitter, blockGain};
+	module.terrainCarSound = (cycle, level, cutoff, flow, scatter, skid, rate, mountGain) => {
+		tone = {cycle, level, cutoff, flow, scatter, mountGain};
 		tireLevel = skid;
 		tireRate = rate;
 		update();
@@ -316,7 +312,6 @@ export function activate({module, canvas, archive, signal})
 		closed = true;
 		page.clearTimeout(parkTimer);
 		delete module.terrainCarSound;
-		delete module.terrainEngineVoice;
 		engine?.stop();
 		stopTire();
 		resources.close();

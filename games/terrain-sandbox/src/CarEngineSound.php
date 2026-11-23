@@ -2,63 +2,19 @@
 declare(strict_types=1);
 namespace TerrainSandbox;
 
-/** Exhaust pressure over two crank revolutions of an even-firing twelve-cylinder engine. */
+/** Translate gearbox and tire telemetry into targets for the audio clock. */
 final class CarEngineSound
 {
-	/** The two collectors alternate firings. Small cylinder differences leave some bank order in the exhaust. */
-	private const BANKS = [
-		[1.00, .92, .98, .88, 1.04, .95],
-		[.94, 1.02, .89, .97, .92, 1.00],
-	];
-
-	public static function voice(): array
-	{
-		$banks = [];
-		foreach(self::BANKS as $bank => $cylinders)
-		{
-			$real = $imag = [0.]; // No DC pressure at the tailpipe.
-			for($order = 1; $order <= 240; $order++)
-			{
-				// A short pressure rise, a longer decay and a negative scavenging pulse.
-				// Work in crank angle so these coefficients describe the same firing at every RPM.
-				$angle = 2.*M_PI*$order;
-				$decay = atan($order/19.);
-				$amplitude = .021*exp(-.5*($order/145.)**2)/hypot(1.,$order/19.);
-				$cosine = $sine = 0.;
-				foreach($cylinders as $i => $pressure)
-				{
-					$phase = $angle*(2*$i+$bank)/12. + $decay;
-					$cosine += $pressure*(cos($phase) - .42*cos($phase + .026*$angle));
-					$sine += $pressure*(sin($phase) - .42*sin($phase + .026*$angle));
-				}
-				$real[] = round($amplitude*$cosine,6);
-				$imag[] = round($amplitude*$sine,6);
-			}
-			$banks[] = ['real'=>$real,'imag'=>$imag];
-		}
-		// Broadband excitation for exhaust flow and slight common crank jitter. Make it once on boarding.
-		$noise = ''; $state = 17493;
-		for($i = 0; $i < 32768; $i++)
-		{
-			$state = (25173*$state + 13849) & 65535;
-			$noise .= chr($state >> 8);
-		}
-		// One vibration pattern spans four crank revolutions. Orders 2 and 4 give the four-stroke cycle
-		// and shaft rotation. Order 3 adds a lower collector tone, one quarter of the audible exhaust note.
-		$block = array_replace(array_fill(0,16,0.), [2=>.37, 3=>.72, 4=>.61, 6=>.33, 8=>.16, 9=>.19, 15=>.08]);
-		return ['banks'=>$banks,'flowNoise'=>base64_encode($noise),'noiseRate'=>16000,'exhaustPitch'=>.5,'block'=>$block];
-	}
-
-	/** Four-stroke cycle Hz, exhaust gain, muffler Hz, exhaust flow gain, jitter cents, tire gain/rate and block gain. */
+	/** Four-stroke cycle Hz, output gain, exhaust cutoff Hz, flow, pressure scatter, tire gain/rate and mount gain. */
 	public static function controls(float $rpm, float $load, float $slip): array
 	{
-		$revs = max(0., min(1., ($rpm-CarGearbox::IDLE)/(CarGearbox::REDLINE-CarGearbox::IDLE)));
-		$load = max(0., min(1.,$load));
-		$slip = max(0., min(1.,$slip));
-		// Bring in the block as the main firing note leaves the bass. Backing off the throttle unloads it.
-		$rise = max(0., min(1., ($rpm-1500.)/2400.));
-		$blockGain = (.18 + .12*$load)*$rise*$rise*(3.-2.*$rise);
-		return [$rpm/120., .085 + .060*$load + .030*$revs, 560. + 920.*$revs + $load*(1900. + 2300.*$revs),
-			.012 + .075*$load + .025*$revs, 125. - 102.*$revs, .08*$slip, .92 + .14*$slip, $blockGain];
+		$revs = max(0.,min(1.,($rpm-CarGearbox::IDLE)/(CarGearbox::REDLINE-CarGearbox::IDLE)));
+		$load = max(0.,min(1.,$load));
+		$slip = max(0.,min(1.,$slip));
+		$rise = max(0.,min(1.,($rpm-1500.)/2400.));
+		// Rotating imbalance loads the mounts more strongly as the square of shaft speed.
+		$mount = (1.14 + (.32 + 1.20*$revs*$revs)*$load)*$rise*$rise*(3.-2.*$rise);
+		return [$rpm/120., .030 + .050*$load + .014*$revs, 570. + 650.*$revs + $load*(1700. + 1900.*$revs),
+			.24 + (1.00 + .68*$revs)*$load + .65*$revs, .14 + .13*(1.-$load), .08*$slip, .92 + .14*$slip, $mount];
 	}
 }
