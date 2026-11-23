@@ -182,6 +182,27 @@ for($i=0;$i<400;$i++)
 }
 check($air > 4,'The boosted car clears the crest.');
 
+// From this run-up the car reaches the foot of the shallow crest at about 59 mph.
+$crest = new Landscape(['worldSize'=>512,'spacing'=>2,'heightScale'=>0,'detailAmplitude'=>0]);
+$crest->queue(['type'=>'raise','x'=>0.,'z'=>0.,'radius'=>22.,'amount'=>.65]);
+$crest->commit();
+foreach([30,60,120] as $hz)
+{
+	$car = new Car;
+	$car->spawn($car->checkedSite($crest,-10.,0.,-75.,0.,[]),$crest,-10.);
+	$fewestContacts = 4;
+	for($i = 0; $i < 8*$hz; $i++)
+	{
+		$car->step(1/$hz,1.,0.,$crest,-10.);
+		$pose = $car->state();
+		$fewestContacts = min($fewestContacts,$pose['wheelContacts']);
+		if($pose['z'] > 35.) break;
+	}
+	check($pose['z'] > 35. && $fewestContacts >= 2 && $pose['wheelContacts'] === 4,
+		"At $hz Hz the unboosted car keeps tire contact across a shallow crest and settles on all four wheels.");
+}
+$crest->close();
+
 // Measure roll relative to the local road plane on the same corner, with and without banking.
 function corner(float $steer, float $grade = 0.): array
 {

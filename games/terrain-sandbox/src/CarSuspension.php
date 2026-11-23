@@ -2,12 +2,14 @@
 declare(strict_types=1);
 namespace TerrainSandbox;
 
-/** Four unilateral springs and dampers support the chassis in heave, pitch and roll. */
+/** Four sprung wheels support the chassis in heave, pitch and roll. */
 final class CarSuspension
 {
 	// Static sag and extra bump travel in meters. The mesh is authored at its loaded ride height.
 	public const SAG = .13;
 	private const BUMP = .14;
+	// Peak downward acceleration (m/s²) when all four wheels are halfway through their droop travel.
+	private const DROOP_PULL = 1.8;
 	// Effective suspension roll axis above the tire soles (m), and mass / roll inertia (m⁻²).
 	private const ROLL_CENTER_HEIGHT = .22, INVERSE_ROLL_INERTIA = 2.7;
 	/** The boost can pull a drooping wheel toward ground within this many meters of full extension. */
@@ -83,9 +85,12 @@ final class CarSuspension
 				$rate = ($roadSpeed[$i]-$bodySpeed)*$normalUp;
 				$stroke = min($compression,self::BUMP);
 				$spring = Session::DRIVING_GRAVITY*(1+$stroke/self::SAG);
-				// Progressive bump stops and stronger rebound damping. A tire can only push upward.
+				// Let the rebound damper pull an unloading tire toward a crest. Its allowance peaks
+				// halfway through droop and fades to zero at ride height and full extension.
+				$droop = max(0., -$stroke/self::SAG);
+				$pullLimit = self::DROOP_PULL*4*$droop*(1-$droop);
 				$bumpStop = 90*max(0.0, $stroke-.085);
-				$force = .25*max(0.0, $spring+$bumpStop+($rate > 0 ? 5.0 : $reboundDamping)*$rate);
+				$force = .25*max(-$pullLimit, $spring+$bumpStop+($rate > 0 ? 5.0 : $reboundDamping)*$rate);
 				$lift += $force;
 				$pitchAccel += $force*$along*.64;
 				$rollAccel += ($rollMoment - $force*$side)*self::INVERSE_ROLL_INERTIA;
