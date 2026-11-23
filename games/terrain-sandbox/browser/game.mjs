@@ -2042,6 +2042,7 @@ function markup()
 	@container terrain-lab (max-width:350px){
 		.terrain-panel[open]>summary{width:calc(100% - 147px);gap:6px;padding-inline:8px 2px}
 		.terrain-panel[open]>summary::after{width:32px}
+		.terrain-panel[open] .lab-title{font-size:14px}
 		.lab-music{right:32px;gap:1px}.lab-music button{width:28px}
 	}
 	.lab-sliders{display:grid;gap:4px;width:19px;color:#edcb82}
@@ -2111,6 +2112,12 @@ function markup()
 	.terrain-music-credit img{width:96px;height:96px;object-fit:contain;flex:none}
 	.terrain-music-credit div{min-width:0}.terrain-music-credit strong,.terrain-music-credit span,.terrain-music-credit small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.25}
 	.terrain-music-credit strong{font-size:28px}.terrain-music-credit span{font-size:26px}.terrain-music-credit small{font-size:22px;color:#c2d2c8}
+	@container music-credit (min-width:256px) and (max-width:330px){
+		.terrain-music-credit{gap:8px;padding-inline:10px}
+		.terrain-music-credit img{width:80px;height:80px}
+		.terrain-music-credit strong{font-size:22px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+		.terrain-music-credit span{font-size:20px}.terrain-music-credit small{font-size:16px}
+	}
 	@container music-credit (max-width:255px){
 		.terrain-music-credit{flex-direction:column;justify-content:center;gap:4px;padding:6px 8px}
 		.terrain-music-credit img{width:56px;height:56px}.terrain-music-credit div{max-width:100%;text-align:center}

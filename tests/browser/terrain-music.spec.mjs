@@ -192,9 +192,16 @@ test('the Lab title bar plays, pauses and steps through the soundtrack independe
 	const headerBox = await heading.boundingBox(), buttons = await group.boundingBox();
 	expect(headerBox.x+headerBox.width).toBeLessThanOrEqual(buttons.x+1);
 	expect(buttons.y).toBeCloseTo(headerBox.y);
+	expect(await heading.locator('.lab-title').evaluate(el => el.scrollWidth <= el.clientWidth+1)).toBe(true);
 	await heading.click();
 	await expect(group).toBeHidden();
 	await heading.click();
 	await expect(group).toBeVisible();
+	await previous.click();
+	await expect(title).toHaveText(catalog.at(-1).title);
+	await next.click();
+	await expect(title).toHaveText(catalog[0].title);
+	await expect(title).toBeVisible();
+	expect(await title.evaluate(el => el.scrollHeight <= el.clientHeight+1)).toBe(true);
 	await testInfo.attach('music-transport', {body: await page.screenshot(), contentType: 'image/png'});
 });
