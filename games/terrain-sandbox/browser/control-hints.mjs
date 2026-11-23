@@ -11,7 +11,7 @@ export async function activate({archive, canvas, module})
 	{
 		const p = Object.fromEntries(tile.properties.map(({name, value}) => [name, value]));
 		// The keyboard tiles include lettering inside each key, and WASD shares one tile.
-		const scale = p['glyph.theme'] === 'keyboard' ? 2.5 : 1.75;
+		const scale = p['glyph.theme'] === 'keyboard' ? 1.75 : 1.5;
 		const unit = scale / p['glyph.pixelRatio'];
 		const x = tile.id % sheet.columns * sheet.tilewidth + (p['glyph.cropX'] ?? 0);
 		const y = Math.floor(tile.id / sheet.columns) * sheet.tileheight + (p['glyph.cropY'] ?? 0);
