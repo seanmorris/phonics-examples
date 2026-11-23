@@ -292,7 +292,7 @@ final class Car
 		$downforce = self::BOOST_DOWNFORCE*$boost;
 		// Steering tightens at parking speeds. Swapping pedals brakes before engaging reverse.
 		$speed = abs($this->speed);
-		$target = -$turn * .52 / (1 + .035 * $speed);
+		$target = -$turn * self::steeringLimit($speed);
 		$gravitySide = Session::DRIVING_GRAVITY*sin($this->roadRoll);
 		// Approximate steering pull as a small downhill curvature. Fade it in while rolling and out when the
 		// front axle loses contact. The speed term keeps the lateral acceleration bounded at highway speeds.
@@ -778,6 +778,8 @@ final class Car
 		$lead = in_array($pose['motion'], ['driving','airborne'], true) ? .75 * $pose['speed'] * cos($pose['pitch']) : 0.;
 		return [$pose['x'] + $lead*sin($heading), $pose['z'] + $lead*cos($heading)];
 	}
+
+	public static function steeringLimit(float $speed): float { return .52 / (1 + .035 * abs($speed)); }
 
 	public function state(): array
 	{

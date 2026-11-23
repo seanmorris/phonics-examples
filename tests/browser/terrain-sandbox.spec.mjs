@@ -1161,6 +1161,15 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 	expect(parked).toBeDefined();
 	expect(resumed?.at).toBeCloseTo(parked.at, 0);
 	expect(resumed.others.some(src => src.endsWith('/race-finish.wav'))).toBe(true);
+
+	await canvas(page).focus();
+	await page.keyboard.press('r');
+	await expect.poll(async() => (await status(page)).race.state).toBe('idle');
+	const restarted = await status(page);
+	expect(restarted.car.z).toBeLessThan(doc.course.gates[0].z);
+	expect(restarted.car.speed).toBe(0);
+	expect(restarted.race.splits).toEqual([]);
+	expect(restarted.race.best).toBe(race.best);
 });
 
 test('the rendered arrow keeps an outside lane straight past an invisible waypoint', async({page}) => {
@@ -2117,8 +2126,36 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	expect(moved.renderer.heightTexelsWritten).toBeGreaterThan(start.renderer.heightTexelsWritten);
 	expect(moved.renderer.editUploadBytes).toBe(start.renderer.editUploadBytes);
 
+	// Start the CPU, then freeze and reset it to inspect its grid position before it accelerates again.
+	const demo = control(page, 'cpu-demo');
+	await expect(demo).toHaveText('Watch CPU racer');
+	await demo.click();
+	await expect(demo).toHaveText('Stop CPU demo');
+	await expect.poll(async() => (await status(page)).car?.speed ?? 0).toBeGreaterThan(3);
+
+	await view.focus();
+	await page.keyboard.press('p');
+	await expect.poll(async() => (await status(page)).paused).toBe(true);
+	const rolling = await status(page);
+	await page.keyboard.press('r');
+	await expect.poll(async() => (await status(page)).car.speed).toBe(0);
+
+	const restarted = await status(page);
+	expect(restarted.race.state).toBe('idle');
+	expect(Math.hypot(rolling.car.x-restarted.car.x, rolling.car.z-restarted.car.z)).toBeGreaterThan(.25);
+	const line = restarted.course.gates.find(gate => gate.role === 'start');
+	const behind = (line.x-restarted.car.x)*Math.sin(line.yaw) + (line.z-restarted.car.z)*Math.cos(line.yaw);
+	expect(behind).toBeGreaterThan(1);
+	expect(behind).toBeLessThanOrEqual(21);
+	expect(restarted.car.speed).toBe(0);
+	expect(restarted.race.splits).toEqual([]);
+
+	await demo.click();
+	await expect.poll(async() => (await status(page)).mode).toBe('fly');
+
 	await control(page, 'circuit-flooded').click();
 	await expect.poll(async() => (await status(page)).circuit.active).toBe('flooded');
+	await expect(demo).toBeHidden();
 	const flooded = await status(page);
 	expect(flooded.revision).toBe(1);
 	expect(flooded.course.gates.every(gate => gate.kind === 'water')).toBe(true);

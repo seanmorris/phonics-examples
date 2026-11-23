@@ -93,3 +93,58 @@ $systems->remove('rival.drive');
 $session->close();
 check($entities->query(Car::class) === [$rival], 'Closing the session removes only the vehicles it owns.');
 echo "Two-racer checkpoint, recovery, clock, HUD and lifecycle checks passed.\n";
+
+// A saved closed circuit uses exactly the same action and scorer as a freshly generated dry circuit.
+foreach([-1,1] as $direction) {
+	$demo = new Session(['worldSize'=>512,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-5]);
+	$line = [[-60,0],[-60,55],[-45,70],[45,70],[60,55],[60,-55],[45,-70],[-45,-70],[-60,-55]];
+	$circuit = new TerrainSandbox\Circuit(array_map(fn($p)=>[$direction*$p[0],$p[1]],$line),-5.,10.);
+	$file = json_decode($demo->save(),true);
+	$file['circuit'] = ['route'=>$circuit->export(),'variant'=>'dry'];
+	$file['course'] = $circuit->course($demo->landscape,$demo->gateShapes,2,false)->export();
+	$demo->load(json_encode($file));
+	$humanCar = $demo->car;
+	$humanRace = $demo->race;
+	$act = fn($name) => $demo->input(['actions'=>[$name]],1/60,1.);
+	$act('cpu-demo');
+	check($demo->watchingDriver() && $humanCar !== $demo->car && $humanRace !== $demo->race,'Demo has its own chassis and race.');
+	$act('pause');
+	$parked = $demo->car->state();
+	$demo->step(1/60);
+	check($parked === $demo->car->state(), 'Pausing freezes the driver and car.');
+	$act('pause');
+	$slide = $exit = false;
+	for($i=0;$i<7000 && $demo->race->state !== 'finished';$i++) {
+		$demo->step(1/60);
+		$car = $demo->car->state();
+		$slide = $slide || abs($car['drift'])>.01;
+		$exit = $exit || ($slide && $car['nitrous'] < .99);
+	}
+	$result = $demo->race->status($demo->course,$demo->time);
+	check($demo->race->state==='finished' && count($result['lapTimes'])===2 && $slide && $exit,
+		'The CPU slides, spends nitrous on exit and earns two complete laps in either direction.');
+	check($humanRace->status($demo->course,$demo->time)['best'] === null,'Demo finishes leave player records alone.');
+	$beforeRestart = $demo->car->state();
+	$demo->input(['values'=>['waterLevel'=>100.]],1/60,1.);
+	$act('race-reset');
+	check($demo->car->state() === $beforeRestart && $demo->race->state === 'finished',
+		'An unusable starting grid preserves both the result and the car.');
+	$demo->input(['values'=>['waterLevel'=>-5.]],1/60,1.);
+	$menu = new TerrainSandbox\SandboxMenu(static fn($key) => $key === 'tracks' ? '["Off"]' : 0,
+		static fn() => true, static fn() => null);
+	$menu->open($demo);
+	$menu->menu->select('race');
+	$menu->menu->activate();
+	$menu->finish($demo);
+	$demo->input($menu->takePending(),1/60,1.);
+	check($demo->watchingDriver() && $demo->race->state === 'idle' && $demo->car->state()['speed'] === 0.
+		&& $demo->car->state()['nitrous'] === 1. && $demo->car->state()['z'] < 0 && $demo->race->status($demo->course,$demo->time)['best'] === $result['best'],
+		'Restart stages the CPU before the line with a fresh bottle and retains its own record.');
+	$act('cpu-demo');
+	check($demo->mode==='fly' && !$demo->watchingDriver() && $demo->car===$humanCar && $demo->race===$humanRace,
+		'Stopping the demo returns the player to free flight with their own racer.');
+	$act('circuit-flooded'); $act('cpu-demo');
+	check(!$demo->watchingDriver(),'The CPU car is unavailable on a flooded course.');
+	$demo->close();
+}
+echo "CPU exhibition laps, drift exits, records, pause and restart passed.\n";

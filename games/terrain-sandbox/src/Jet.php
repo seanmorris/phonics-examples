@@ -52,7 +52,7 @@ final class Jet
 	/** Last terrain block consulted for the fuselage and for the chase eye. */
 	private array $body = [], $eye = [];
 
-	public function board(Camera $camera, Landscape $land, float $water): void
+	public function board(Camera $camera, Landscape $land, float $water, float $clearance = 75.): void
 	{
 		$this->survey($land);
 		[$x,$y,$z] = $camera->position;
@@ -61,7 +61,7 @@ final class Jet
 		$z = max(-$half,min($half,$z));
 		$yaw = M_PI - $camera->yaw;
 		$this->flightDirection = $this->chase = self::axes($yaw, 0.0, 0.0)[2];
-		$this->pose = ['x'=>$x, 'y'=>max($y, max($water,$land->height($x,$z)) + 75), 'z'=>$z,
+		$this->pose = ['x'=>$x, 'y'=>max($y, max($water,$land->height($x,$z)) + $clearance), 'z'=>$z,
 			'yaw'=>$yaw, 'pitch'=>0.0, 'roll'=>0.0, 'speed'=>self::CRUISE, 'power'=>self::CRUISE_POWER,
 			'vx'=>self::CRUISE*$this->chase[0], 'vy'=>0.0, 'vz'=>self::CRUISE*$this->chase[2],
 			'aileron'=>0.0, 'stabilator'=>0.0, 'rudder'=>0.0];

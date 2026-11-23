@@ -472,6 +472,10 @@ input($sprint, ['actions' => ['pause', 'race-reset']]);
 expect($race($sprint)['state'] === 'idle' && $race($sprint)['best'] === $t
 	&& $sprint->message === 'Race reset. Pass through the start gate to start the clock.',
 	'Race reset returns to waiting for a start and keeps the best time');
+$onGrid = $sprint->car->state();
+expect($s['z'] - $onGrid['z'] > 2 && $s['z'] - $onGrid['z'] <= 20.01 && abs($onGrid['x']-$s['x']) < .01
+	&& $onGrid['speed'] === 0. && $sprint->race->status($sprint->course,$sprint->time)['splits'] === [],
+	'Restart parks a car on the approach facing the line and clears only the current splits.');
 // Changing the course mid-race stops the race.
 input($sprint, ['actions' => ['fly']]);
 $sprint->camera->position = [0, 30, -10]; $sprint->camera->yaw = M_PI;
@@ -841,6 +845,12 @@ $flown = $race($flight);
 expect($flown['state'] === 'finished' && array_column($flown['splits'], 'gate') === [$c['id'], $f['id']]
 	&& abs($flown['time'] - 2500 / Jet::FASTEST) < 1e-6 && $flown['vehicle'] === 'jet',
 	'The jet finishes 2500 m on in 2500 / 260 seconds');
+input($flight,['actions'=>['race-reset']]);
+$gridJet = $flight->jet->state();
+expect($gridJet['z'] < $s['z'] && $gridJet['z'] >= $s['z']-21 && $flight->race->state === 'idle'
+	&& $race($flight)['best'] === $flown['best'], 'Restart stages the F5 on the approach and retains its record.');
+drive($flight,[],120,$state('running'));
+expect($race($flight)['splits'] === [], 'Takeoff through the start cannot also score another gate.');
 // Board again on the same line: the race starts afresh at the start gate. The jet then climbs over the other gates
 // and flies on to the map edge, which ends the race.
 input($flight, ['actions' => ['fly']]);
@@ -912,6 +922,10 @@ input($bay, ['actions' => ['pause'], 'values' => ['waterLevel' => 9, 'waterChopp
 expect($bay->course->gate($c['id'])['y'] === 9.0 && $bay->status()['course']['gates'][1]['y'] === 9.0,
 	'A paused water level change moves the floating gates at once');
 input($bay, ['actions' => ['pause', 'race-reset']]);
+$gridCraft = $bay->craft->state();
+expect($gridCraft['speed'] === 0. && $gridCraft['z'] < $s['z'] && $gridCraft['z'] >= $s['z']-21
+	&& $bay->race->state === 'idle' && $race($bay)['best'] === $ridden['best'],
+	'The watercraft is staged in water upstream of its start with its previous time intact.');
 // Board again behind the start gate and race, then board again mid-race.
 input($bay, ['values' => ['waterChoppiness' => 100]]);
 $bay->camera->position = [0, 20, -150]; $bay->camera->yaw = M_PI;

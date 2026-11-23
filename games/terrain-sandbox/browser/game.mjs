@@ -942,6 +942,8 @@ export function activate({module, canvas, session, services})
 			}
 			else if(state.car?.motion === 'overturned') status.textContent = 'Car overturned. Recovering…';
 			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';
+			else if(state.cpuDriver && state.race.state !== 'finished')
+			status.textContent = 'CPU racer · ' + state.cpuDriver;
 			else status.textContent = state.message;
 
 			status.hidden = state.race.state === 'finished' && status.textContent === state.race.message;
@@ -951,7 +953,13 @@ export function activate({module, canvas, session, services})
 			button('jet').hidden = state.mode === 'jet';
 			button('car').hidden = state.mode === 'car';
 			button('car').disabled = state.findingCarSite;
-			button('delivery').disabled = state.findingCarSite || state.race.state === 'running';
+			button('cpu-demo').hidden = !state.canWatchDriver && !state.cpuDriver;
+			button('cpu-demo').textContent = state.cpuDriver ? 'Stop CPU demo' : 'Watch CPU racer';
+
+			button(
+				'delivery'
+			).disabled = Boolean(state.cpuDriver) || state.findingCarSite || state.race.state === 'running';
+
 			button('delivery').textContent = state.delivery ? 'End package run' : 'Package run';
 			button('fly').hidden = state.mode === 'fly' && !state.findingCarSite;
 
@@ -2415,7 +2423,7 @@ function markup()
 	<label class="terrain-field">Opening height · ft<input data-unit="ft" data-value="gateHeight" data-increment=".1" type="number" min="0" max="150" step="any" value="0"></label>
 	<p class="terrain-note terrain-sizes" data-gate-sizes></p>
 	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening width or height of 0 takes the gate's own. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. A gate that would overlap another is refused. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
-	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
+	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Restart race · R</button></div></div>
 
 	${range(
 		'Radius · ft'
@@ -2451,7 +2459,7 @@ function markup()
 	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
 	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
 	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
-	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button></div>
+	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button><button data-action="cpu-demo" hidden>Watch CPU racer</button></div>
 	</div></details>
 	<div class="terrain-section" data-road-workspace></div></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>

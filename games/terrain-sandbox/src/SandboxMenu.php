@@ -113,7 +113,7 @@ final class SandboxMenu
 			}
 		];
 
-		if($session->mode === 'car' && $session->race->state !== 'idle') $items['race'] = $act('Restart race', 'race-reset');
+		if($session->mode !== 'fly' && $session->race->state !== 'idle') $items['race'] = $act('Restart race', 'race-reset');
 
 		if($session->mode === 'fly')
 		{
@@ -123,7 +123,9 @@ final class SandboxMenu
 		}
 		else $items['fly'] = $act('Return to flight', 'fly');
 
-		if(in_array($session->mode, ['fly', 'car'], true)) $items['delivery'] = $act('Package run', 'delivery');
+		if($session->watchingDriver() || $session->canWatchDriver())
+			$items['cpu-demo'] = $act($session->watchingDriver() ? 'Stop CPU demo' : 'Watch CPU racer', 'cpu-demo');
+		if(!$session->watchingDriver() && in_array($session->mode, ['fly', 'car'], true)) $items['delivery'] = $act('Package run', 'delivery');
 
 		if($session->mode === 'jet')
 		{
