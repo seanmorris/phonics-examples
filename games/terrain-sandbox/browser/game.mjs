@@ -2005,7 +2005,8 @@ function markup()
 	@container terrain-view (min-width:960px){
 		.terrain-panel[open]~.terrain-hud{max-width:calc(100% - var(--lab-width) - 48px)}
 	}
-	.terrain-control-hints{position:absolute;top:12px;left:12px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;box-sizing:border-box;max-width:min(max(220px,34%),calc(100% - 24px));padding:7px 10px;background:#102822ad;border-radius:6px;color:#edf4ee;pointer-events:none}
+	.terrain-control-hints{position:absolute;top:12px;left:12px;display:flex;flex-wrap:wrap;align-items:center;gap:3px 14px;box-sizing:border-box;max-width:min(max(250px,38%),calc(100% - 24px));padding:7px 10px;font-size:16px;background:#102822d9;border-radius:6px;color:#edf4ee;pointer-events:none}
+	.terrain-control-hints>span{max-width:100%}
 	.terrain-hint-button{display:inline-block;vertical-align:middle;background-image:var(--hint-buttons);background-repeat:no-repeat}
 	@keyframes terrain-finish-pulse{50%{opacity:.4}}
 	@media(prefers-reduced-motion:no-preference){.terrain-finish{animation:terrain-finish-pulse .8s ease-in-out 3}}

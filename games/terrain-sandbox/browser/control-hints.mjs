@@ -10,7 +10,9 @@ export async function activate({archive, canvas, module})
 	for(const tile of sheet.tiles)
 	{
 		const p = Object.fromEntries(tile.properties.map(({name, value}) => [name, value]));
-		const unit = 1.25 / p['glyph.pixelRatio'];
+		// The keyboard tiles include lettering inside each key, and WASD shares one tile.
+		const scale = p['glyph.theme'] === 'keyboard' ? 2.5 : 1.75;
+		const unit = scale / p['glyph.pixelRatio'];
 		const x = tile.id % sheet.columns * sheet.tilewidth + (p['glyph.cropX'] ?? 0);
 		const y = Math.floor(tile.id / sheet.columns) * sheet.tileheight + (p['glyph.cropY'] ?? 0);
 		const icon = document.createElement('span');
