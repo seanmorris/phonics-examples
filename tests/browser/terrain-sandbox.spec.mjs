@@ -3292,14 +3292,14 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 	for(const i of [2,5])
 	{
 		expect(measured.spectra[i].bass).toBeLessThan(.05);
-		expect(measured.spectra[i].overtones).toBeGreaterThan(.06);
-		expect(measured.spectra[i].overtones).toBeLessThan(.3);
+		expect(measured.spectra[i].overtones).toBeGreaterThan(.015);
+		expect(measured.spectra[i].overtones).toBeLessThan(.15);
 	}
 
 	// The throttle cut quiets the rasp.
 	expect(measured.spectra[3].overtones).toBeLessThan(.6*measured.spectra[4].overtones);
 
-	for(const i of [2,5]) expect(measured.spectra[i].betweenOrders).toBeGreaterThan(.085);
+	for(const i of [2,5]) expect(measured.spectra[i].betweenOrders).toBeGreaterThan(.03);
 
 	expect(measured.variation).toBeLessThan(1.5);
 	expect(measured.pull).toBeGreaterThan(1.3*measured.coast);

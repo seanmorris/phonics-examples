@@ -85,7 +85,7 @@ export function startEngine(context, instrument, tone)
 	// The muffler's volume booms below the note, and subsonic pressure drift stays out of the speakers.
 	body.type = 'lowshelf';
 	body.frequency.value = 180;
-	body.gain.value = 15;
+	body.gain.value = 17;
 	rumble.type = 'highpass';
 	rumble.frequency.value = 30;
 	rumble.Q.value = -3;
