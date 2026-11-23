@@ -19,6 +19,8 @@ final class Circuit
 	private ?array $gatePlan = null;
 	/** Guidance points in travel order for each numbered gate's approach, with zero for the lap line. */
 	private array $guideLegs = [];
+	/** Only the active waypoint needs a pavement fit as the vehicle moves inside its lane. */
+	private ?\WeakMap $waypointRoadFits = null;
 
 	/** @param list<array{float,float}> $points Ordered X/Z points without a duplicate closing point. */
 	public function __construct(
@@ -124,8 +126,8 @@ final class Circuit
 		$finish = $points[$indices[$nextGate]];
 		$line[] = [$to, $finish[0], $finish[1]];
 
-		// Target 600 ft at one mile and 200 ft at ten miles. Store each interval's spacing so even
-		// an endurance lap needs no per-waypoint meshes, terrain probes or large lookup tables.
+		// Target 600 ft at one mile and 200 ft at ten miles. One spacing per interval lets even
+		// an endurance lap locate its next waypoint without precomputing every opening.
 		$miles = $this->length/(5280*DisplayUnits::FOOT);
 		$spacing = (600.-400.*max(0.,min(1.,($miles-1.)/9.)))*DisplayUnits::FOOT;
 		$spans = [];
@@ -140,7 +142,7 @@ final class Circuit
 		return [$line,$spans];
 	}
 
-	/** Aim ahead on the current leg. A missed waypoint or a recovery immediately rejoins at the nearest segment. */
+	/** Next unscored station as [x, z, approach yaw]. A recovery can rejoin ahead of skipped stations. */
 	public function waypointAhead(int $nextGate, float $x, float $z): ?array
 	{
 		[$line,$spans] = $this->guideLegs[$nextGate] ??= $this->guideLeg($nextGate);
@@ -160,8 +162,8 @@ final class Circuit
 			$segment = $i;
 			$progress = $a+$t*($b-$a);
 		}
-		// Hand off just before the waypoint so the arrow never swings back as the vehicle passes it.
-		$ahead = $progress+12.;
+		// Hand off at the crossing. The tolerance covers roundoff when projecting a station back onto its segment.
+		$ahead = $progress+1e-7;
 		foreach($spans as [$from,$to,$step]) {
 			if($ahead >= $to) continue;
 			$at = min($to, $from+(floor(($ahead-$from)/$step)+1)*$step);
@@ -171,11 +173,34 @@ final class Circuit
 				[$b,$bx,$bz] = $line[$i+1];
 				if($b < $at || $b <= $a) continue;
 				$t = ($at-$a)/($b-$a);
-				return [$ax+$t*($bx-$ax), $az+$t*($bz-$az)];
+				return [$ax+$t*($bx-$ax), $az+$t*($bz-$az), atan2($bx-$ax,$bz-$az)];
 			}
 			break;
 		}
 		return null;
+	}
+
+	/** Fit the horizontal crossing plane to the local road, shared by scored gates and unmarked waypoints. */
+	private function roadSpan(Landscape $land, float $x, float $z, float $yaw, bool $legacyPavementFit = false): array
+	{
+		$regional = $this->featureArea !== null;
+		[$x,$z,$width] = CircuitRoad::gateSpan($land,$x,$z,$yaw,$regional,$pavement);
+		$fitted = $pavement !== null && (!$regional || (!$legacyPavementFit && $pavement !== CircuitRoad::WIDTH));
+		return [$x,$z,$width,$fitted];
+	}
+
+	/** Return the fitted center and half-width a road checkpoint would have at this waypoint. */
+	public function waypointRoadSpan(array $station, Landscape $land, GateShapes $shapes): array
+	{
+		$this->waypointRoadFits ??= new \WeakMap;
+		$key = [$land->revision(),$station,$shapes];
+		$last = $this->waypointRoadFits[$land] ?? null;
+		if($last !== null && $last[0] === $key) return $last[1];
+		[$x,$z,$width,$fitted] = $this->roadSpan($land,...$station);
+		$size = $shapes->fit('road',$width,null,$fitted);
+		$span = [$x,$z,$size['width']/2];
+		$this->waypointRoadFits[$land] = [$key,$span];
+		return $span;
 	}
 
 	/** Sample X, Z and heading at ordered distances along the centerline. */
@@ -233,11 +258,10 @@ final class Circuit
 		$height = $flooded ? null : 2 * $shapes->kind('road')['size']['default'][1];
 		foreach(($legacyDensity ? $this->waypoints() : $this->gates()) as $i => [$x,$z,$yaw])
 		{
-			if($fitPavement)
-				[$x,$z,$width] = CircuitRoad::gateSpan($landscape,$x,$z,$yaw,$regional,$pavement);
 			// Keep the original footing over a stock generated road. An edited section uses its own pavement span.
-			$fittedSpan = $fitPavement && isset($pavement)
-				&& (!$regional || (!$legacyPavementFit && $pavement !== CircuitRoad::WIDTH));
+			$fittedSpan = false;
+			if($fitPavement)
+				[$x,$z,$width,$fittedSpan] = $this->roadSpan($landscape,$x,$z,$yaw,$legacyPavementFit);
 			$opening = $legacyPavementFit && $fittedSpan ? max($width,$shapes->kind('road')['size']['width'][0]) : $width;
 			$size = $shapes->fit($kind,$opening,$height,$fittedSpan);
 			$role = $i === 0 ? 'start' : 'checkpoint';

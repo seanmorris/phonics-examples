@@ -1088,6 +1088,56 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 	expect(race.time).toBeGreaterThan(race.splits[0].time);
 });
 
+test('the rendered arrow keeps an outside lane straight past an invisible waypoint', async({page}) => {
+	await page.setViewportSize({width: 480, height: 300});
+	await page.addInitScript(() => {
+		const gl = WebGL2RenderingContext.prototype, bearings = new WeakSet();
+		const getLocation = gl.getUniformLocation, uniform = gl.uniform2f;
+		window.waypointPass = [];
+		gl.getUniformLocation = function(program, name) {
+			const location = getLocation.call(this,program,name);
+			if(location && name === 'bearing') bearings.add(location);
+			return location;
+		};
+		gl.uniform2f = function(location, sine, cosine) {
+			if(bearings.has(location)) {
+				const state = this.canvas.terrainSandboxDebug?.state;
+				if(state?.race?.state === 'running' && state.car.z >= 70 && state.car.z <= 145)
+					window.waypointPass.push([state.car.x,state.car.z,Math.atan2(sine,cosine)]);
+			}
+			return uniform.call(this,location,sine,cosine);
+		};
+	});
+	await boot(page);
+	const road = {type:'road',points:[[4,0,-40],[4,0,280]],width:36,shoulder:12};
+	const doc = fixture({history:[[road]],revision:1});
+	doc.landscape.recipe.worldSize = 1024;
+	doc.settings.waterLevel = -5;
+	doc.camera = {position:[18,5,-20],yaw:Math.PI,pitch:0};
+	doc.circuit = {variant:'dry',route:{points:[[0,0],[0,240],[240,240],[240,0]],dryLevel:-5,floodedLevel:null}};
+	const gate = {kind:'road',y:0,width:13.324,height:6.146};
+	doc.course = {gates:[
+		{...gate,role:'start',x:4,z:0,yaw:0,laps:1,width:37.5},
+		{...gate,role:'checkpoint',x:120,z:240,yaw:Math.PI/2,number:1},
+		{...gate,role:'checkpoint',x:240,z:120,yaw:Math.PI,number:2}
+	]};
+	await load(page,doc);
+	await press(page,'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await canvas(page).focus();
+	await page.keyboard.down('w');
+	try {
+		await expect.poll(async() => (await status(page)).car.z,{timeout:90_000}).toBeGreaterThan(145);
+	} finally {
+		await page.keyboard.up('w');
+	}
+	const pass = await page.evaluate(() => window.waypointPass);
+	expect(pass.some(([,z]) => z<108)).toBe(true);
+	expect(pass.some(([,z]) => z>120)).toBe(true);
+	expect(pass.every(([x,,angle]) => Math.abs(x-18)<.1 && Math.abs(angle)<.02)).toBe(true);
+	expect((await status(page)).race.splits).toEqual([]);
+});
+
 test('the overhead checkpoint arrow points down for forward and enlarges its near end', async({page}) => {
 	await page.setViewportSize({width: 760,height: 460});
 	await boot(page);

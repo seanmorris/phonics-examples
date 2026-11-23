@@ -89,20 +89,17 @@ GLSL);
 	/** World-space heading, in camera yaw coordinates. The vehicle position is the one drawn this frame. */
 	public static function bearing(array $target, array $vehicle, ?float $previous, float $seconds): float
 	{
-		$dx = $target['x'] - $vehicle['x'];
-		$dz = $target['z'] - $vehicle['z'];
-		if(isset($target['waypoint'])) {
-			[$x,$z] = $target['waypoint'];
-			$dx = $x-$vehicle['x']; $dz = $z-$vehicle['z'];
-		}
-		elseif($target['kind'] === 'checkpoint')
+		$aim = $target['waypoint'] ?? $target;
+		$dx = $aim['x'] - $vehicle['x'];
+		$dz = $aim['z'] - $vehicle['z'];
+		if($target['kind'] === 'checkpoint')
 		{
 			// Project the vehicle onto the opening segment. Beyond an end, aim at that end.
-			$c = cos($target['yaw']); $s = sin($target['yaw']);
-			$across = max(-$target['halfWidth'], min($target['halfWidth'], -$dx*$c + $dz*$s));
+			$c = cos($aim['yaw']); $s = sin($aim['yaw']);
+			$across = max(-$aim['halfWidth'], min($aim['halfWidth'], -$dx*$c + $dz*$s));
 			$dx += $across*$c;
 			$dz -= $across*$s;
-			if($dx*$dx + $dz*$dz <= 1.5**2) return $previous ?? M_PI - $target['yaw'];
+			if($dx*$dx + $dz*$dz <= 1.5**2) return $previous ?? M_PI - $aim['yaw'];
 		}
 		$goal = atan2($dx, -$dz);
 		if($previous === null) return $goal;

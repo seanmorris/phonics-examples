@@ -690,8 +690,16 @@ final class Session
 			'x'=>$gate['x'],'y'=>$gate['y'],'z'=>$gate['z'],'yaw'=>$gate['yaw'],
 			'halfWidth'=>$this->course->measure($gate)['window']['halfWidth']];
 		// The map marks the scored gate. The arrow can follow the bends between gates.
-		if($vehicle !== null && $this->circuit !== null && $this->race->state === 'running')
-			$target['waypoint'] = $this->circuit->waypointAhead($gate['number'] ?? 0, $vehicle['x'], $vehicle['z']);
+		if($vehicle !== null && $this->circuit !== null && $this->race->state === 'running') {
+			$station = $this->circuit->waypointAhead($gate['number'] ?? 0, $vehicle['x'], $vehicle['z']);
+			if($station !== null) {
+				[$x,$z,$yaw] = $station;
+				$halfWidth = $target['halfWidth'];
+				if($gate['kind'] === 'road')
+					[$x,$z,$halfWidth] = $this->circuit->waypointRoadSpan($station,$this->landscape,$this->gateShapes);
+				$target['waypoint'] = compact('x','z','yaw','halfWidth');
+			}
+		}
 		return $target;
 	}
 

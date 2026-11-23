@@ -1267,9 +1267,9 @@ foreach(range(8,33) as $count) {
 }
 $loop = new Circuit([[0.,0.],[0.,240.],[240.,240.],[240.,0.]],-5.,null);
 expect($loop->gates() === array_map(fn($i) => $loop->waypoints()[$i], [0,3,5]), 'The short loop keeps three of its eight stations');
-expect($loop->waypointAhead(1,0.,4.) === [0.,120.] && $loop->waypointAhead(1,0.,160.) === [0.,240.]
+expect($loop->waypointAhead(1,0.,4.) === [0.,120.,0.] && $loop->waypointAhead(1,0.,160.) === [0.,240.,0.]
 	&& $loop->waypointAhead(1,115.,240.) === null, 'Guidance follows a bend, rejoins ahead of skipped waypoints and hands off to the gate');
-expect($loop->waypointAhead(0,180.,0.) === [120.,0.] && $loop->waypointAhead(0,9.,0.) === null,
+expect($loop->waypointAhead(0,180.,0.) === [120.,0.,-M_PI/2] && $loop->waypointAhead(0,9.,0.) === null,
 	'The closing leg guides back to the start');
 $flat = new Landscape(['worldSize'=>1024,'heightScale'=>0.,'detailAmplitude'=>0.]);
 $course = $loop->course($flat,$shapes,1,false);
@@ -1288,6 +1288,56 @@ foreach([1,2,0] as $i=>$gate) $cross($gates[$gate],3.+$i);
 expect($timer->state === 'finished' && count($timer->status($course,6.)['splits']) === 3,
 	'A driver can finish by passing only the visible gates');
 $flat->close();
+
+// The next scored gate is around a corner. The active waypoint crosses an offset, resizable stretch of asphalt.
+$guide = new Session(['worldSize'=>1024,'heightScale'=>0.,'detailAmplitude'=>0.]);
+$road = ['type'=>'road','points'=>[[4.,0.,-40.],[4.,0.,280.]],'width'=>36.,'shoulder'=>12.];
+$guide->landscape->queue($road); $guide->landscape->commit();
+$guideFile = json_decode($guide->save(),true);
+$guideFile['course'] = $loop->course($guide->landscape,$shapes,1,false)->export();
+$guideFile['circuit'] = ['route'=>$loop->export(),'variant'=>'dry'];
+$guideFile['settings']['waterLevel'] = -5.;
+$guide->load(json_encode($guideFile));
+enterCar($guide);
+$guide->race->advance($guide->course,[4.,1.,-1.],[4.,1.,1.],0.,1/60,'car',1);
+foreach([-14.,4.,22.] as $lane) {
+	$previous = M_PI;
+	foreach([90.,106.,107.99,108.01,118.,119.5,120.,120.5,125.] as $z) {
+		$pose = ['x'=>$lane,'z'=>$z];
+		$target = $guide->navigationTarget($pose);
+		$window = $target['waypoint'];
+		expect(abs($window['x']-4.)<.001 && $window['z']===($z<120. ? 120. : 240.) && $window['halfWidth']===18.75,
+			'The waypoint spans the local pavement through the crossing and keeps the driver in the same lane');
+		$previous = NavigationArrow::bearing($target,$pose,$previous,1/60);
+		expect(abs(wrap($previous-M_PI))<1e-9,'The overhead arrow holds steady through a waypoint in either edge lane');
+	}
+}
+$outside = ['x'=>26.75,'z'=>116.];
+$target = $guide->navigationTarget($outside);
+expect(abs(wrap(NavigationArrow::bearing($target,$outside,null,0.) - (M_PI+M_PI/4)))<1e-9,
+	'Outside the waypoint, the arrow aims at its nearer end');
+$close = ['x'=>22.,'z'=>119.5];
+expect(NavigationArrow::bearing($guide->navigationTarget($close),$close,2.7,1/60)===2.7,
+	'An off-center close pass holds the previous bearing all the way to the waypoint plane');
+$pose = ['x'=>0.,'z'=>241.];
+$target = $guide->navigationTarget($pose);
+$next = NavigationArrow::bearing($target,$pose,null,0.);
+expect(abs(wrap(NavigationArrow::bearing($target,$pose,M_PI,.1) - (M_PI+wrap($next-M_PI)/2)))<1e-9,
+	'Turning from the last invisible opening toward the scored gate eases over the shorter arc');
+$station = $loop->waypointAhead(1,4.,90.);
+$referenceLoop = new Circuit([[0.,120.],[0.,240.],[240.,240.],[240.,0.],[0.,0.]],-5.,null);
+foreach([36.,84.] as $width) {
+	if($width !== 36.) {
+		$road['width'] = $width;
+		$guide->landscape->queue($road); $guide->landscape->commit();
+	}
+	$referenceCourse = $referenceLoop->course($guide->landscape,$shapes,1,false);
+	$physical = $referenceCourse->start();
+	expect($loop->waypointRoadSpan($station,$guide->landscape,$shapes) ===
+		[$physical['x'],$physical['z'],$referenceCourse->measure($physical)['window']['halfWidth']],
+		'A waypoint has the same center and opening as a physical checkpoint after a road resize');
+}
+$guide->close();
 
 // Follow the arrow's actual targets along square laps, measuring every gap, including the one back to start.
 $perMile = [];
@@ -1490,9 +1540,11 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 	$pose = $copy->$vehicle->state();
 	$target = $copy->navigationTarget($pose);
 	$next = $copy->race->nextGate($copy->course);
-	expect(isset($target['waypoint']) && [$target['x'],$target['z']] === [$next['x'],$next['z']]
-		&& abs(wrap(NavigationArrow::bearing($target,$pose,null,0.)-atan2($target['waypoint'][0]-$pose['x'],
-			$pose['z']-$target['waypoint'][1]))) < 1e-9, 'The map targets the scored gate while the arrow guides along its approach');
+	$window = $target['waypoint'];
+	expect([$target['x'],$target['z']] === [$next['x'],$next['z']] && $window['halfWidth']>0
+		&& NavigationArrow::bearing($target,$pose,null,0.) === NavigationArrow::bearing(['kind'=>'checkpoint']+$window,$pose,null,0.),
+		'The map targets the scored gate while the arrow aims at the opening along its approach');
+	if($vehicle === 'craft') expect($window['halfWidth'] === $target['halfWidth'], 'Flooded waypoints span the water arch opening');
 	if($vehicle === 'car') {
 		$gate = $copy->race->nextGate($copy->course);
 		$left = [cos($gate['yaw']),-sin($gate['yaw'])];
