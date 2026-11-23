@@ -8,6 +8,7 @@ use TerrainPhonics\Landscape;
 use TerrainSandbox\Car;
 use TerrainSandbox\CarEngineSound;
 use TerrainSandbox\CarGearbox;
+use TerrainSandbox\DisplayUnits;
 use TerrainSandbox\FlightTrails;
 use TerrainSandbox\TireDust;
 
@@ -46,6 +47,48 @@ for($i = 0; $i < 4200; $i++)
 check($gears === [1,2,3,4,5] && $i < 4200,'The car drives through every gear and reaches the governor.');
 foreach($shifts as [$before,$after,$load]) check($before > 7000 && $after < $before && $load === 0.,'Upshifts cut torque and drop RPM.');
 check($launch && !$car->dustContacts,'Wheelspin throws rear-tire dust at launch and clears in straight-line cruise.');
+
+// The same stretch of ground earns the same charge at different road speeds and simulation rates.
+$quarterMile = 1320 * DisplayUnits::FOOT;
+$refillTimes = [];
+foreach([[30,.4], [120,1.]] as [$hz,$pedal])
+{
+	$car = board($land);
+	$step = 1/$hz;
+	for($i = 0; $i < 4*$hz; $i++) $car->step($step,1.,0.,$land,-5.,nitrousHeld:true);
+	check($car->state()['nitrous'] === 0.,'A full bottle lasts four seconds at either step rate.');
+	$site = $car->checkedSite($land,-5.,0.,-800.,0.,[]);
+	$car->recoverToRoad($site,$land,-5.);
+	for($i = 0; $i < 3*$hz; $i++) $car->step($step,0.,0.,$land,-5.);
+	check($car->state()['nitrous'] === 0.,'Road recovery and idling earn no distance.');
+	for($i = 0; $i < $hz; $i++) $car->step($step,-1.,0.,$land,-5.);
+	check($car->state()['z'] < $site[1] && $car->state()['nitrous'] === 0., 'Backing up earns no charge.');
+	$car->recoverToRoad($site,$land,-5.);
+	for($i = 0; $i < 60*$hz; $i++)
+	{
+		$car->step($step,$pedal,0.,$land,-5.);
+		$pose = $car->state();
+		$expected = min(1., ($pose['z']-$site[1])/$quarterMile);
+		check(abs($pose['nitrous']-$expected) < 1e-10,'Each forward step earns its share of a quarter mile.');
+		if($expected === 1.) break;
+	}
+	check($pose['nitrous'] === 1.,'A quarter mile restores the whole bottle.');
+	$refillTimes[] = $i/$hz;
+}
+check($refillTimes[0] > 1.25*$refillTimes[1], 'Driving faster fills the bottle sooner over the same distance.');
+
+$car = board($land);
+for($i = 0; $i < 60; $i++) $car->step($dt,1.,0.,$land,-5.,nitrousHeld:true);
+$start = $car->state();
+$post = [[0.,$start['z']+12.,.2,1.,0.,-1.,4.]];
+for($i = 0; $i < 90; $i++)
+{
+	$car->step($dt,1.,0.,$land,-5.,posts:$post);
+	$hit = $car->state();
+	if($hit['speed'] < 0.) break;
+}
+check($hit['speed'] < 0. && abs(($hit['nitrous']-$start['nitrous'])*$quarterMile - ($hit['z']-$start['z'])) < 1e-9,
+	'On hitting a post, the bottle credits only the distance covered up to impact.');
 
 $light = new CarGearbox; $full = new CarGearbox;
 for($i=0;$i<180;$i++) { $light->step($dt,56.,.35,true); $full->step($dt,56.,1.,true); }
@@ -125,7 +168,10 @@ $jump = board($land,16.);
 $air = 0;
 for($i=0;$i<400;$i++)
 {
-	$jump->step($dt,1.,0.,$land,-5.,nitrousHeld:true);
+	$before = $jump->state();
+	$inAir = $before['motion'] === 'airborne';
+	$jump->step($dt,1.,0.,$land,-5.,nitrousHeld:!$inAir);
+	if($inAir) check($jump->state()['nitrous'] === $before['nitrous'], 'Air travel earns no nitrous when the button is released.');
 	if($jump->state()['motion'] === 'airborne')
 	{
 		$air++;

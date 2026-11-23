@@ -1725,10 +1725,22 @@ expect($first === hold($shift,pad(),60,$car,['KeyW'=>true,'ShiftRight'=>true]),
 	'Shift and LB draw from the same full bottle');
 expect(abs(end($first)['nitrous']-.75)<1e-9 && end($first)['speed'] > end($full)['speed']+10
 	&& min(end($first)['wheelTravel'])>.06, 'One second of boost consumes a quarter bottle, pulls harder and loads all four tires');
+$halfway = $boosted->carView(.5)[1]['nitrous'];
+expect(abs($halfway - ($first[58]['nitrous']+$first[59]['nitrous'])/2)<1e-12, 'The gauge interpolates a draining bottle between steps');
 hold($boosted,$boost,190,$car);
 expect($car($boosted)['nitrous'] === 0., 'Holding the button after the fourth second leaves the bottle empty');
-hold($boosted,pad(),720,$car);
-expect(abs($car($boosted)['nitrous']-1.)<1e-8, 'Twelve seconds of released rolling refills the bottle');
+$rolling = hold($boosted,pad(),5,$car);
+$trickle = end($rolling)['nitrous'];
+expect($trickle > 0. && $trickle < .03 && abs($boosted->carView(.5)[1]['nitrous'] - ($rolling[3]['nitrous']+$trickle)/2)<1e-12,
+	'Even the small initial refill is visible between simulation steps');
+$blocked = hold($boosted,$boost,6,$car);
+expect(min(array_column($blocked,'nitrous')) === $trickle && max(array_column($blocked,'nitrous')) === $trickle,
+	'A fresh press after depletion cannot spend a charge below the restart threshold');
+for($i = 0; $i < 60 && $car($boosted)['nitrous'] < .03; $i++) hold($boosted,pad(),1,$car);
+$available = $car($boosted)['nitrous'];
+$burst = hold($boosted,$boost,12,$car);
+expect($available >= .03 && abs($burst[0]['nitrous'] - ($available-1/240))<1e-12 && $burst[1]['nitrous'] < $burst[0]['nitrous']
+	&& end($burst)['nitrous'] === 0., 'At 3% a fresh burst starts and runs all the way back to empty');
 $boosted->close(); $shift->close();
 
 $assisted = $park();

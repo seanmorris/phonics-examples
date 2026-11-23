@@ -20,10 +20,10 @@ final class Car
 	private const SERVICE_BRAKE = 15.0;
 	/** Share of downhill acceleration that pulls the steering downhill on a bank. */
 	private const BANK_PULL = .16;
-	// A full bottle gives four seconds of thrust and recharges in twelve seconds of forward driving.
-	private const BOOST_SECONDS = 4., REFILL_SECONDS = 12.;
+	private const BOOST_SECONDS = 4., REFILL_DISTANCE = 1320 * DisplayUnits::FOOT, RESTART_CHARGE = .03;
 	private const BOOST_ACCEL = 13., BOOST_DOWNFORCE = 7.5; // m/s² at full flow.
 	private float $nitrous = 1.;
+	private bool $nitrousDepleted = false;
 	private float $x = 0, $y = 0, $z = 0, $yaw = 0, $pitch = 0, $roll = 0;
 	private float $speed = 0, $steering = 0, $spin = 0, $rearSpin = 0;
 	private CarGearbox $gearbox;
@@ -154,6 +154,7 @@ final class Car
 	{
 		$this->place($site,$land,$waterLevel);
 		$this->nitrous = 1.;
+		$this->nitrousDepleted = false;
 		$this->recoveries = 0;
 		$this->roadHold = 0.;
 	}
@@ -274,15 +275,18 @@ final class Car
 		}
 		if($this->tumble !== null) return $this->stepTumble($dt,$land,$waterLevel,$posts);
 		$boost = 0.;
-		if($nitrousHeld && $this->nitrous > 0. && $throttle >= 0. && $this->speed >= 0.
+		if($nitrousHeld && !$this->nitrousDepleted && $throttle >= 0. && $this->speed >= 0.
 			&& $this->suspension->clearance < CarSuspension::BOOST_REACH)
 		{
 			$burn = min($this->nitrous, $dt/self::BOOST_SECONDS);
 			$this->nitrous -= $burn;
 			$boost = $burn*self::BOOST_SECONDS/$dt;
+			if($this->nitrous < 1e-12)
+			{
+				$this->nitrous = 0.;
+				$this->nitrousDepleted = true;
+			}
 		}
-		elseif(!$nitrousHeld && $this->speed > 1. && $this->suspension->contacts > 0)
-			$this->nitrous = min(1., $this->nitrous + $dt/self::REFILL_SECONDS);
 		$downforce = self::BOOST_DOWNFORCE*$boost;
 		// Steering tightens at parking speeds. Swapping pedals brakes before engaging reverse.
 		$speed = abs($this->speed);
@@ -443,6 +447,18 @@ final class Car
 			$this->gearbox = new CarGearbox;
 			$this->drift = 0;
 			return $this->stepTumble($dt,$land,$waterLevel,$posts);
+		}
+		if(!$nitrousHeld && $gripFraction > 0. && $distance > 0. && $this->nitrous < 1.)
+		{
+			$travel = $distance;
+			if($struck)
+			{
+				// A post can stop the step early or push the body aside. Count only forward progress.
+				$forward = ($x-$this->x)*sin($heading) + ($z-$this->z)*cos($heading);
+				$travel = max(0., min($distance, $forward/cos($this->roadPitch)));
+			}
+			$this->nitrous = min(1., $this->nitrous + $travel/self::REFILL_DISTANCE);
+			if($this->nitrous >= self::RESTART_CHARGE) $this->nitrousDepleted = false;
 		}
 		$this->x = $x; $this->z = $z; $this->yaw = atan2(sin($yaw), cos($yaw));
 		// The slope already sets the resting chassis attitude. Apply the unbalanced side load as the tires corner.

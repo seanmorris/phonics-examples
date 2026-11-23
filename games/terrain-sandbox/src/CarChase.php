@@ -101,7 +101,7 @@ final class CarChase
 		foreach($old->position as $i => $value) $eye->position[$i] = $value + $alpha*($camera->position[$i] - $value);
 		$eye->yaw = $old->yaw + $alpha*self::angle($camera->yaw - $old->yaw);
 		$eye->pitch = $old->pitch + $alpha*($camera->pitch - $old->pitch);
-		foreach(['pitch','roll','steering','yaw','wheelSpin','rearWheelSpin','speed'] as $key)
+		foreach(['pitch','roll','steering','yaw','wheelSpin','rearWheelSpin','speed','nitrous'] as $key)
 		{
 			$previous = $this->previousCar[$key];
 			$delta = $pose[$key] - $previous;

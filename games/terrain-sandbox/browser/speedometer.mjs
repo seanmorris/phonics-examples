@@ -5,12 +5,13 @@ function nitrousArc(ctx, fraction, width, color)
 {
 	if(fraction <= 0) return;
 
-	const start = Math.PI * 11/12;
+	const radius = 85, start = Math.PI * 11/12, sweep = fraction * Math.PI * 2/3;
 	ctx.lineCap = 'round';
-	ctx.lineWidth = width;
+	// Let the round cap shrink away when the remaining arc is shorter than a stroke width.
+	ctx.lineWidth = Math.min(width, radius * sweep);
 	ctx.strokeStyle = color;
 	ctx.beginPath();
-	ctx.arc(0, 0, 85, start, start + fraction * Math.PI * 2/3);
+	ctx.arc(0, 0, radius, start, start + sweep);
 	ctx.stroke();
 }
 
@@ -85,7 +86,7 @@ export function activate({module, canvas})
 	dial.hidden = true;
 	canvas.parentElement.append(dial);
 	const sandbox = dial.closest('.terrain-sandbox');
-	let lastAngle, lastValue, lastMaximum, lastCharge;
+	let lastAngle, lastValue, lastMaximum, lastCharge, lastPercent;
 
 	module.drawTerrainSpeedometer = frame => {
 		if(!frame?.speedometer)
@@ -95,8 +96,7 @@ export function activate({module, canvas})
 			return;
 		}
 
-		const {mph, maximum, size, nitrous} = frame.speedometer;
-		const charge = nitrous === undefined ? null : Math.round(100 * nitrous);
+		const {mph, maximum, size, nitrous: charge = null} = frame.speedometer;
 		// Add space to the top and left only, keeping the dial's size and lower-right anchor.
 		const padding = charge === null ? 0 : Math.ceil(size * 9/160);
 		const extent = size + padding;
@@ -112,12 +112,14 @@ export function activate({module, canvas})
 
 		dial.hidden = false;
 		const value = Math.round(mph);
+		const percent = charge === null ? null : Math.round(100 * charge);
 
-		if(lastValue !== value || lastCharge !== charge)
+		if(lastValue !== value || lastPercent !== percent)
 		{
-			const bottle = charge === null ? '' : `, nitrous ${charge}%`;
+			const bottle = percent === null ? '' : `, nitrous ${percent}%`;
 			dial.setAttribute('aria-label', `Speedometer, ${value} miles per hour${bottle}`);
 			lastValue = value;
+			lastPercent = percent;
 		}
 
 		const angle = dialAngle(Math.min(mph, maximum), maximum);
@@ -131,7 +133,7 @@ export function activate({module, canvas})
 		ctx.drawImage(face, 0, 0);
 		ctx.setTransform(size/160, 0, 0, size/160, padding + size/2, padding + size/2);
 
-		if(charge !== null) nitrousArc(ctx, charge/100, 4, '#caff18');
+		if(charge !== null) nitrousArc(ctx, charge, 4, '#caff18');
 
 		ctx.save();
 		ctx.rotate(angle);

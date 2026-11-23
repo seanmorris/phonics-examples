@@ -1397,12 +1397,38 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	await setButton(13, false);
 	await page.keyboard.press('n');
 	await expect.poll(async() => (await status(page)).carWideMap).toBe(false);
+
+	await dial.evaluate(element => {
+		const ctx = element.getContext('2d'), arc = ctx.arc.bind(ctx);
+		let previous = 100;
+		element.fractionalCharge = {draining: false, filling: false};
+
+		ctx.arc = (...args) => {
+			if(ctx.strokeStyle === '#caff18' && args[2] === 85)
+			{
+				const percent = 100 * (args[4] - args[3]) / (Math.PI * 2/3);
+
+				if(Math.abs(percent - Math.round(percent)) > 1e-6)
+				{
+					if(percent < previous) element.fractionalCharge.draining = true;
+					else if(percent > previous) element.fractionalCharge.filling = true;
+				}
+
+				previous = percent;
+			}
+
+			return arc(...args);
+		};
+	});
+
+	const chargeMotion = () => dial.evaluate(element => element.fractionalCharge);
 	await page.keyboard.down('w');
 	await page.keyboard.down('d');
 	await setButton(4, true);
 	await expect.poll(async() => (await status(page)).car.nitrous).toBeLessThan(.99);
 	await expect(dial).toHaveAttribute('aria-label', /nitrous \d{1,2}%/);
 	await setButton(4, false);
+	await expect.poll(chargeMotion).toEqual({draining: true, filling: true});
 	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
 	await expect.poll(needle).toBeGreaterThan(.75*Math.PI + .15);
 	await expect.poll(() => view.evaluate(element => element.splitFrontSteering)).toBe(true);
