@@ -11,9 +11,11 @@ final class CarEngineSound
 		$revs = max(0.,min(1.,($rpm-CarGearbox::IDLE)/(CarGearbox::REDLINE-CarGearbox::IDLE)));
 		$load = max(0.,min(1.,$load));
 		$slip = max(0.,min(1.,$slip));
-		// Open throttle fills the cylinders: louder discharges and faster, raspier gas through the pipes.
+		// Open throttle fills the cylinders: louder discharges and faster gas through the pipes. The rasp and the
+		// pressure wobble stay low so the note sounds clean.
+		$level = .037 + .109*$load + (.081 + .137*$load)*$revs + (.136 + .075*$load)*$revs*$revs;
 		// The muffler passes the note, rpm/20, and rounds off what lies above it. Idle keeps enough to be heard.
-		return [$rpm/120., .047 + .069*$load + .113*$revs, max(350., (1.3 + .2*$load)*$rpm/20.),
-			(1.1 + 2.0*$load)*(.6 + .4*$revs), .10 + .12*(1.-$load), .08*$slip, .92 + .14*$slip];
+		return [$rpm/120., $level, max(350., (1.3 + .2*$load)*$rpm/20.),
+			(.33 + .60*$load)*(.6 + .4*$revs), .04 + .048*(1.-$load), .08*$slip, .92 + .14*$slip];
 	}
 }

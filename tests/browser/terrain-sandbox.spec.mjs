@@ -3288,11 +3288,12 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 		expect(spectrum.shaft).toBeLessThan(-18);
 	}
 
-	// Under load at high revs the tailpipes rasp above the note.
+	// Under load at high revs the tailpipes rasp a little above the note, kept low so the note sounds clean.
 	for(const i of [2,5])
 	{
 		expect(measured.spectra[i].bass).toBeLessThan(.05);
-		expect(measured.spectra[i].overtones).toBeGreaterThan(.3);
+		expect(measured.spectra[i].overtones).toBeGreaterThan(.06);
+		expect(measured.spectra[i].overtones).toBeLessThan(.3);
 	}
 
 	// The throttle cut quiets the rasp.
