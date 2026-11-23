@@ -8,6 +8,8 @@ require_once dirname(__DIR__) . '/autoload.php';
 use Phonics\Ecs\Registry;
 use Phonics\Ecs\Scheduler;
 use TerrainSandbox\Car;
+use TerrainSandbox\Circuit;
+use TerrainSandbox\CircuitDriver;
 use TerrainSandbox\Race;
 use TerrainSandbox\RacerMotion;
 use TerrainSandbox\Session;
@@ -96,7 +98,8 @@ echo "Two-racer checkpoint, recovery, clock, HUD and lifecycle checks passed.\n"
 
 // A saved closed circuit uses exactly the same action and scorer as a freshly generated dry circuit.
 foreach([-1,1] as $direction) {
-	$demo = new Session(['worldSize'=>512,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-5]);
+	$exhibition = new Registry;
+	$demo = new Session(['worldSize'=>512,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-5], systems: new Scheduler($exhibition));
 	$line = [[-60,0],[-60,55],[-45,70],[45,70],[60,55],[60,-55],[45,-70],[-45,-70],[-60,-55]];
 	$circuit = new TerrainSandbox\Circuit(array_map(fn($p)=>[$direction*$p[0],$p[1]],$line),-5.,10.);
 	$file = json_decode($demo->save(),true);
@@ -113,15 +116,20 @@ foreach([-1,1] as $direction) {
 	$demo->step(1/60);
 	check($parked === $demo->car->state(), 'Pausing freezes the driver and car.');
 	$act('pause');
-	$slide = $exit = false;
+	$exit = false;
+	$lastSlide = -1000;
+	$charge = $parked['nitrous'];
+	[$driverEntity] = $exhibition->query(CircuitDriver::class);
+	$driver = $exhibition->get($driverEntity,CircuitDriver::class);
 	for($i=0;$i<7000 && $demo->race->state !== 'finished';$i++) {
 		$demo->step(1/60);
 		$car = $demo->car->state();
-		$slide = $slide || abs($car['drift'])>.01;
-		$exit = $exit || ($slide && $car['nitrous'] < .99);
+		if($driver->phase === 'Handbraking' && abs($car['drift']) > .01) $lastSlide = $i;
+		if($driver->phase === 'Boosting' && $i-$lastSlide < 180 && $car['nitrous'] < $charge) $exit = true;
+		$charge = $car['nitrous'];
 	}
 	$result = $demo->race->status($demo->course,$demo->time);
-	check($demo->race->state==='finished' && count($result['lapTimes'])===2 && $slide && $exit,
+	check($demo->race->state==='finished' && count($result['lapTimes'])===2 && $exit,
 		'The CPU slides, spends nitrous on exit and earns two complete laps in either direction.');
 	check($humanRace->status($demo->course,$demo->time)['best'] === null,'Demo finishes leave player records alone.');
 	$beforeRestart = $demo->car->state();
@@ -146,5 +154,26 @@ foreach([-1,1] as $direction) {
 	$act('circuit-flooded'); $act('cpu-demo');
 	check(!$demo->watchingDriver(),'The CPU car is unavailable on a flooded course.');
 	$demo->close();
+}
+// Both bends have the same entry. Only the first has enough road after the apex to spend the bottle.
+foreach([false,true] as $chicane) {
+	$exitLeg = $chicane ? [[45,30],[50,25],[50,0],[800,0]] : [[800,30]];
+	$route = new Circuit([[0,-1000],[0,0],[4,15],[15,26],[30,30],...$exitLeg,[800,-1000]],-2.,null);
+	$driver = new CircuitDriver($route,$course);
+	$driver->restart(0.,-50.);
+	$pose = ['motion'=>'driving','roadHold'=>0.,'drift'=>0.,'speed'=>17.,'nitrous'=>.65];
+	$slide = $boostedAfterSlide = false;
+	foreach($route->stations(range(950,1075)) as [$x,$z,$yaw]) {
+		[,,$handbrake,$boost] = $driver->controls($pose + compact('x','z','yaw'),1./$pose['speed'],false);
+		$boostedAfterSlide = $boostedAfterSlide || ($slide && $boost);
+		$slide = $slide || $handbrake;
+	}
+	check($slide && $boostedAfterSlide === !$chicane, 'Slide into both bends and spend nitrous only on the open exit.');
+
+	$driver->restart(0.,-700.);
+	$pose['speed'] = 160. * Car::MPS_PER_MPH;
+	$pose['nitrous'] = 1.;
+	[$pedal,,,$boost] = $driver->controls($pose + ['x'=>0.,'z'=>-700.,'yaw'=>0.],1/60,false);
+	check($pedal === 1. && $boost, 'Keep accelerating with a full bottle at 160 mph on a clear straight.');
 }
 echo "CPU exhibition laps, drift exits, records, pause and restart passed.\n";
