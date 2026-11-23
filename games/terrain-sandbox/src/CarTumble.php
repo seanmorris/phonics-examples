@@ -92,18 +92,13 @@ final class CarTumble
 		$edge = $land->recipe()['worldSize']/2 - 2.6;
 		$x = max(-$edge, min($edge, $this->x+$dt*$vx));
 		$z = max(-$edge, min($edge, $this->z+$dt*$vz));
-		if($land->height($x,$z) <= $water+.12)
-		{
-			$this->side = $this->ahead = 0;
-		}
-		else
-		{
-			if(abs($x) === $edge) $vx = 0;
-			if(abs($z) === $edge) $vz = 0;
-			$this->side = $this->cosYaw*$vx - $this->sinYaw*$vz;
-			$this->ahead = $this->sinYaw*$vx + $this->cosYaw*$vz;
-			$this->x = $x; $this->z = $z;
-		}
+		if(abs($x) === $edge) $vx = 0;
+		if(abs($z) === $edge) $vz = 0;
+		$depth = max(0., $water - ($this->y - self::CG));
+		$drag = 1. + Car::WATER_RESISTANCE*$depth*$dt;
+		$this->side = ($this->cosYaw*$vx - $this->sinYaw*$vz) / $drag;
+		$this->ahead = ($this->sinYaw*$vx + $this->cosYaw*$vz) / $drag;
+		$this->x = $x; $this->z = $z;
 		$this->y += $dt*$this->up;
 		$this->pitch += $dt*$this->pitchRate; $this->roll += $dt*$this->rollRate;
 		$cp = cos($this->pitch); $sp = sin($this->pitch);

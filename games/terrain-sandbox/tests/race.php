@@ -520,6 +520,24 @@ input($rescue,['actions'=>['pad-rs']]);
 expect($moving['speed'] > 0. && $moving === $rescue->car->state(),'Held pedals work after the delay and right click does nothing on pavement');
 $rescue->close();
 
+// Flood an off-road car during the same leg. The raised pavement stays dry.
+$ford = new Session($open);
+$ford->landscape->queue(['type'=>'road','points'=>[[0,2,-90],[0,2,0],[0,2,90]],'width'=>12,'shoulder'=>2,'material'=>'road']);
+$ford->landscape->commit();
+$ford->course->place('start','road',0,2,-50,0);
+$ford->course->place('checkpoint','road',0,2,50,0);
+$ford->camera->position = [25,20,65]; $ford->camera->yaw = M_PI;
+enterCar($ford);
+$ford->race->advance($ford->course,[0,2,-51],[0,2,-49],0.,1/60,'car',1);
+input($ford, ['values'=>['waterLevel'=>1.]]);
+$ford->step(1/60);
+$back = $ford->car->state();
+expect($back['floodedHold'] && $back['roadHold'] === $placed['roadHold']
+	&& abs($back['x']-$placed['x']) < .001 && abs($back['z']-$placed['z']) < .001
+	&& $ford->race->state === 'running' && $race($ford)['splits'] === [],
+	'A flooded race car returns to the stick-click site with the same penalty and no checkpoint credit');
+$ford->close();
+
 // The last leg crosses the spline seam. A car beside a later part of the lap must recover on the approach.
 $track = new Circuit([[0.,0.],[0.,100.],[80.,100.],[80.,-60.],[0.,-60.]],-5.,null);
 $ground = new Landscape($open);

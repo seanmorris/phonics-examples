@@ -1208,6 +1208,29 @@ test('the car refines roadside banks through the middle rings and releases the n
 	expect((await status(page)).renderer.roadsideCoverage).toBeNull();
 });
 
+test('a shoreline wipeout restarts the car on its approach', async({page}) => {
+	await page.setViewportSize({width: 640, height: 400});
+	await boot(page);
+	const road = {type: 'road', points: [[0,8,-45],[0,0,45]], width: 10, shoulder: 1, crown: 0};
+	const shore = fixture({history: [[road]], revision: 1});
+	Object.assign(shore.landscape.recipe, {spacing: 1, waterLevel: 1});
+	Object.assign(shore.settings, {waterLevel: 1, waterChoppiness: 0});
+	shore.camera = {position: [0,20,0], yaw: Math.PI, pitch: -.4};
+	await load(page, shore);
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	if((await status(page)).paused) await press(page, 'pause');
+	await canvas(page).focus();
+	await page.keyboard.down('w');
+	await expect.poll(async() => (await status(page)).car.recoveries, {timeout: 60_000}).toBeGreaterThan(0);
+	await page.keyboard.up('w');
+	const state = await status(page);
+	expect(state.mode).toBe('car');
+	expect(state.car.z).toBeGreaterThan(0);
+	expect(state.car.y).toBeGreaterThan(1);
+	await expect(page.locator('[data-status]')).toContainText('Engine flooded');
+});
+
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));

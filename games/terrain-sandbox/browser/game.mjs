@@ -728,7 +728,8 @@ export function activate({module, canvas, session, services})
 
 			if(state.car?.roadHold > 0)
 			{
-				status.textContent = `Back on the road · controls in ${state.car.roadHold.toFixed(1)} s`;
+				const reason = state.car.floodedHold ? 'Engine flooded' : 'Back on the road';
+				status.textContent = `${reason} · controls in ${state.car.roadHold.toFixed(1)} s`;
 			}
 			else if(state.car?.motion === 'overturned') status.textContent = 'Car overturned. Recovering…';
 			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';

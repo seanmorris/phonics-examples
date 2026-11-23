@@ -496,10 +496,45 @@ expect($road->mode === 'car' && abs($s['x']) < 5 && abs($s['pitch']) > .04 && ab
 	'Search relocates from water to the gently graded dry road');
 expect(abs($s['y'] - $road->landscape->height($s['x'],$s['z']) - .02) < .02, 'Car rests on the edited road elevation');
 input($road, ['keys'=>['KeyW'=>true]]);
-for($i = 0; $i < 600; $i++) $road->step(1/60);
-$s = $road->car->state();
-expect($s['wheelContacts'] === 4 && abs($s['speed']) < .01 && $road->landscape->height($s['x'],$s['z']) > 1
-	&& $road->landscape->height($s['x'],$s['z'] + Car::WHEELBASE) <= 1.12, 'Car stops on its tires at the waterline');
+$lastDry = $furthest = $s['z'];
+for($i = 0; $i < 600; $i++) {
+	$road->step(1/60);
+	$s = $road->car->state();
+	if($s['recoveries']) break;
+	$furthest = max($furthest,$s['z']);
+	if($road->car->checkedSite($road->landscape,1.,$s['x'],$s['z'],$s['yaw'],[]) !== null && $s['wheelContacts'] === 4)
+		$lastDry = $s['z'];
+}
+expect($furthest > $lastDry + 3 && $s['z'] === $lastDry && $s['floodedHold'] && $s['speed'] === 0.
+	&& $road->mode === 'car', 'The car wades past the shoreline and a flooded intake returns it to its dry approach');
+
+// Enter the same ford in reverse. The dry pose must be uphill of the flooded car.
+$reverse = new Car;
+$site = $reverse->checkedSite($road->landscape,1.,0.,15.,M_PI,[]);
+$reverse->spawn($site,$road->landscape,1.);
+for($i = 0; $i < 600 && $reverse->step(1/60,-1.,0.,$road->landscape,1.); $i++) {}
+$bank = $reverse->shoreSite($road->landscape,1.,[]);
+expect($reverse->engineFlooded(1.) && $bank !== null && $bank[1] > 15. && $bank[1] < $reverse->state()['z']
+	&& $bank[2] === M_PI, 'Reversing into water recovers along the traveled path with the original heading');
+
+// Identical cars wade across a flat bed, so only the submerged tire depth varies.
+$speeds = [];
+$wadingLand = new TerrainPhonics\Landscape($flat);
+foreach([-.1,.15,.35] as $water) {
+	$car = new Car;
+	$site = $car->checkedSite($wadingLand,-5.,0.,0.,0.,[]);
+	$car->spawn($site,$wadingLand,-5.);
+	for($i=0; $i<90; ++$i) {
+		if(!$car->step(1/60,1.,0.,$wadingLand,$water)) break;
+	}
+	expect($i === 90, 'Tire immersion alone keeps the engine running');
+	$speeds[] = $car->state()['speed'];
+}
+expect($speeds[0] > $speeds[1] && $speeds[1] > $speeds[2] && $speeds[2] > 0., 'Deeper water progressively slows travel');
+$air = new TerrainSandbox\CarTumble(0.,3.,0.,0.,0.,0.,8.,0.,0.,0.);
+$air->advance(.05,$wadingLand,1.);
+expect($air->pose()[2] > .39 && $air->pose()[5] === 8., 'An airborne chassis carries its momentum over a flooded bed');
+$wadingLand->close();
 // A driver's right-stick view can turn independently of the road. Detail follows the signed tire path.
 $pose = ['x'=>10.,'z'=>20.,'pitch'=>0.,'yaw'=>M_PI/2,'drift'=>M_PI/6,'motion'=>'driving','speed'=>24.];
 [$fx,$fz] = Car::terrainFocus($pose);

@@ -503,15 +503,18 @@ final class Session
 		{
 			$before = $this->car->state();
 			$this->chase->look = $this->lookAngle();
-			if(!$this->car->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
+			$drivable = $this->car->step($seconds, $this->blend('KeyS', 'KeyW', $this->pad['rt'] - $this->pad['lt']),
 				$this->blend('KeyA', 'KeyD', $this->pad['x']), $this->landscape, $this->water->level(),
 				$this->held('Space') === 1 || ($this->pad['buttons'] & self::PAD_A) !== 0,
-				$this->course->posts(), $this->held('ShiftLeft') || $this->held('ShiftRight') || ($this->pad['buttons'] & self::PAD_LB)))
+				$this->course->posts(), $this->held('ShiftLeft') || $this->held('ShiftRight') || ($this->pad['buttons'] & self::PAD_LB));
+			$flooded = !$drivable && $this->car->engineFlooded($this->water->level());
+			if(!$drivable && !($flooded && $this->recoverCar(true)))
 			{
 				$this->mode = 'fly';
 				$this->clampCamera();
 				$this->delivery = null;
-				$this->message = 'The ground under the car changed. Choose Drive car to find another spot.';
+				$this->message = $flooded ? 'Engine flooded. Choose Drive car to find dry ground.'
+					: 'The ground under the car changed. Choose Drive car to find another spot.';
 				$this->dirty = true;
 			}
 			else
@@ -1232,12 +1235,7 @@ final class Session
 				break;
 			case 'recover-road':
 				if($this->mode !== 'car' || $this->paused || $this->race->state !== 'running') break;
-				$site = RoadRecovery::site($this->car,$this->landscape,$this->water->level(),$this->course,$this->race,$this->circuit);
-				if($site !== null) {
-					$this->car->recoverToRoad($site,$this->landscape,$this->water->level());
-					$this->chase->board($this->camera,$this->car->state(),$this->landscape);
-					$this->dirty = true;
-				}
+				$this->recoverCar(false);
 				break;
 			case 'race-reset':
 				$this->race->reset();
@@ -1676,6 +1674,22 @@ final class Session
 	}
 
 	public function findingCarSite(): bool { return $this->carSearch !== null; }
+
+	/** Recover on the current race approach, or retrace a water entry when no race road is available. */
+	private function recoverCar(bool $flooded): bool
+	{
+		$water = $this->water->level();
+		$site = null;
+		if($this->race->state === 'running')
+			$site = RoadRecovery::site($this->car,$this->landscape,$water,$this->course,$this->race,$this->circuit,$flooded);
+		if($site === null && $flooded)
+			$site = $this->car->shoreSite($this->landscape,$water,$this->course->posts());
+		if($site === null) return false;
+		$this->car->recoverToRoad($site,$this->landscape,$water,$flooded);
+		if(!$flooded) $this->chase->board($this->camera,$this->car->state(),$this->landscape);
+		$this->dirty = true;
+		return true;
+	}
 
 	/** Limit cold collision queries to a small slice of each input frame. */
 	private function advanceCarSearch(): void

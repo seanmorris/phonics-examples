@@ -4,16 +4,17 @@ namespace TerrainSandbox;
 
 use TerrainPhonics\Landscape;
 
-/** Locate an off-road car on the approach it is currently racing. Only runs on a stick click. */
+/** Locate an off-road car on the approach it is currently racing. Used for stick-click recovery and flooded engines. */
 final class RoadRecovery
 {
 	private const GATE_CLEARANCE = 10.;
 
-	public static function site(Car $car, Landscape $land, float $water, Course $course, Race $race, ?Circuit $circuit): ?array
+	public static function site(Car $car, Landscape $land, float $water, Course $course, Race $race, ?Circuit $circuit,
+		bool $flooded = false): ?array
 	{
 		$pose = $car->state();
 		$x = $pose['x']; $z = $pose['z'];
-		if($land->material($x,$z,$offset,$mark) === 'road' && ($mark === null ? $offset === null : abs($mark[0]) <= $mark[2]))
+		if(!$flooded && $land->material($x,$z,$offset,$mark) === 'road' && ($mark === null ? $offset === null : abs($mark[0]) <= $mark[2]))
 			return null;
 
 		$next = $race->nextGate($course);
@@ -27,7 +28,7 @@ final class RoadRecovery
 		foreach($land->roads() as $road) {
 			$line = [];
 			foreach($road['_road']['samples'] as [$px,,$pz]) $line[] = [$px,$pz];
-			if($road['material'] !== 'road' && self::withinLane($line,$x,$z,$road['width']/2)) return null;
+			if(!$flooded && $road['material'] !== 'road' && self::withinLane($line,$x,$z,$road['width']/2)) return null;
 			// Generated circuits are stored in contiguous spline sections. Separate roads stay separate.
 			$last = array_key_last($paths);
 			if($last !== null && self::joined(end($paths[$last]),$line[0]))
@@ -38,7 +39,7 @@ final class RoadRecovery
 		if(!$candidates && $circuit !== null && (!$paths || $circuit->featureArea === null)) {
 			// Unpaved natural circuits have a driving corridor as wide as the gate.
 			$line = [...$circuit->points,$circuit->points[0]];
-			if(self::withinLane($line,$x,$z,$next['halfWidth'])) return null;
+			if(!$flooded && self::withinLane($line,$x,$z,$next['halfWidth'])) return null;
 			self::approach($line,$previous,$next,$x,$z,$candidates);
 		}
 		sort($candidates);

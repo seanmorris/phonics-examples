@@ -35,6 +35,10 @@ final class Car
 	 */
 	private const DRIFT = .6, DRIFT_IN = .35, DRIFT_OUT = .3, DRIFT_SETTLE = .3;
 	private const RECOVERY_DELAY = 1.5;
+	// Approximate Testarossa intake, two feet above the tire soles and aft of the axle midpoint.
+	private const INTAKE_HEIGHT = 2 * DisplayUnits::FOOT, INTAKE_AFT = .8;
+	// Horizontal drag rate per meter of mean tire immersion.
+	public const WATER_RESISTANCE = 2.4;
 	/**
 	 * The body's footprint and height in meters, measured from the baked Testarossa: half its width, and how far it
 	 * reaches ahead of and behind the midpoint between the axles. Gate posts collide with this box.
@@ -59,6 +63,7 @@ final class Car
 	private float $recoveryTime = 0, $roadHold = 0;
 	private array $lastSafe = [];
 	private int $recoveries = 0;
+	private bool $floodedHold = false;
 	private int $revision = -1;
 	private float $waterLevel = 0;
 	/** Whether the brake lamps and the reversing lamps are switched on after the last step. */
@@ -133,8 +138,8 @@ final class Car
 	/** Check tire support, clearances and stability at a precise boarding pose. */
 	public function checkedSite(Landscape $land, float $highWater, float $x, float $z, float $yaw, array $posts): ?array
 	{
-		$support = $this->support($land, $highWater, $x, $z, $yaw);
-		return $support !== null && self::safe($support) && !self::nearPost($posts, $x, $z, $yaw, $support[0])
+		$support = $this->support($land, $x, $z, $yaw);
+		return $support !== null && $support[5] > $highWater + .12 && self::safe($support) && !self::nearPost($posts, $x, $z, $yaw, $support[0])
 			? [$x,$z,$yaw,$support] : null;
 	}
 
@@ -148,11 +153,43 @@ final class Car
 	}
 
 	/** Put the same car back in the race, retaining its bottle and charging the delay to the race clock. */
-	public function recoverToRoad(array $site, Landscape $land, float $water): void
+	public function recoverToRoad(array $site, Landscape $land, float $water, bool $flooded = false): void
 	{
 		$this->place($site,$land,$water);
 		$this->recoveries++;
 		$this->roadHold = self::RECOVERY_DELAY;
+		$this->floodedHold = $flooded;
+	}
+
+	/** The last grounded, dry pose on the actual approach, including a reverse entry or skid. */
+	public function shoreSite(Landscape $land, float $water, array $posts): ?array
+	{
+		[$x,$z,$yaw] = $this->lastSafe;
+		return $this->checkedSite($land,$water,$x,$z,$yaw,$posts);
+	}
+
+	public function engineFlooded(float $water): bool
+	{
+		if($this->y > $water + self::INTAKE_HEIGHT + self::INTAKE_AFT) return false;
+		$intake = $this->y + self::INTAKE_HEIGHT*cos($this->pitch)*cos($this->roll) - self::INTAKE_AFT*sin($this->pitch);
+		return $water >= $intake;
+	}
+
+	/** Mean submerged tire depth in meters, including partially wet axles and free suspension travel. */
+	private function immersion(float $water): float
+	{
+		if($this->y > $water + 2.) return 0.;
+		$cp = cos($this->pitch);
+		$bank = -$cp*sin($this->roll);
+		$axle = .5*self::WHEELBASE*sin($this->pitch);
+		$up = $cp*cos($this->roll);
+		$travel = $this->suspension->travel;
+		$front = $water - $this->y - $axle;
+		$rear = $water - $this->y + $axle;
+		return .25 * (max(0., $front + .5*self::FRONT_TRACK*$bank - $travel[0]*$up)
+			+ max(0., $front - .5*self::FRONT_TRACK*$bank - $travel[1]*$up)
+			+ max(0., $rear + .5*self::REAR_TRACK*$bank - $travel[2]*$up)
+			+ max(0., $rear - .5*self::REAR_TRACK*$bank - $travel[3]*$up));
 	}
 
 	private function place(array $site, Landscape $land, float $waterLevel): void
@@ -173,16 +210,18 @@ final class Car
 	 * @param float $throttle -1 to 1. Positive drives forward. Negative brakes while rolling forward, then reverses.
 	 * @param float $turn -1 to 1. Positive steers right.
 	 * @param Landscape $land Ground under the wheels.
-	 * @param float $waterLevel Water the car may not drive into.
+	 * @param float $waterLevel Water surface elevation in meters.
 	 * @param bool $handbrake Lock the rear wheels.
 	 * @param array $posts Solid posts as Course::posts() lists them. The body cannot pass through one.
 	 * @param bool $nitrousHeld Hold to boost while driving forward.
-	 * @return bool False when the ground under the car changed and no support remains.
+	 * @return bool False when the engine floods or the ground no longer supports the car.
 	 */
 	public function step(float $dt, float $throttle, float $turn, Landscape $land, float $waterLevel,
 		bool $handbrake = false, array $posts = [], bool $nitrousHeld = false): bool
 	{
+		if($this->engineFlooded($waterLevel)) return false;
 		$supported = $this->drive($dt, $throttle, $turn, $land, $waterLevel, $handbrake, $posts, $nitrousHeld);
+		if($this->engineFlooded($waterLevel)) return false;
 		if($this->tumble !== null)
 		{
 			// A tumbling or overturned wreck rocks about zero speed, so the rule below would swap its rear lamps.
@@ -205,7 +244,7 @@ final class Car
 		if($dt <= 0) return true;
 		if($this->revision !== $land->revision() || $this->waterLevel !== $waterLevel)
 		{
-			$support = $this->support($land, $waterLevel, $this->x, $this->z, $this->yaw);
+			$support = $this->support($land, $this->x, $this->z, $this->yaw);
 			if($support === null) return false;
 			if($this->tumble === null && $this->revision !== $land->revision())
 				$this->suspension->changeGround($support[4]);
@@ -280,6 +319,8 @@ final class Car
 			$scrub = 3.0*abs(sin($this->drift))*$gripFraction*$dt;
 			$this->speed = ($this->speed <=> 0)*max(0.0, abs($this->speed) - $scrub);
 		}
+		$depth = $this->immersion($waterLevel);
+		if($depth > 0.) $this->speed /= 1. + self::WATER_RESISTANCE*$depth*$dt;
 		if($this->speed == 0) $this->drift = 0;
 		if($this->speed == 0 && $this->suspension->resting) return true;
 		$distance = $this->speed * $dt;
@@ -335,12 +376,12 @@ final class Car
 				$this->speed *= $slide*$along - self::POST_BOUNCE*$into*$into;
 			}
 		}
-		$support = $this->support($land, $waterLevel, $x, $z, $yaw);
+		$support = $this->support($land, $x, $z, $yaw);
 		if($support === null)
 		{
 			$this->speed = $distance = 0;
 			$x = $this->x; $z = $this->z; $yaw = $this->yaw;
-			$support = $this->support($land,$waterLevel,$x,$z,$yaw);
+			$support = $this->support($land,$x,$z,$yaw);
 			if($support === null) return false;
 		}
 		[,$pitch,$roll] = $support;
@@ -359,7 +400,7 @@ final class Car
 			$distance *= $factor;
 			$x = $this->x + sin($heading)*$distance*cos($this->roadPitch);
 			$z = $this->z + cos($heading)*$distance*cos($this->roadPitch);
-			if(($slowed = $this->support($land, $waterLevel, $x, $z, $yaw)) !== null) [,$pitch,$roll] = $support = $slowed;
+			if(($slowed = $this->support($land, $x, $z, $yaw)) !== null) [,$pitch,$roll] = $support = $slowed;
 		}
 		// Downhill gravity and outward cornering load act together on an adverse camber.
 		$sideLoad = Session::DRIVING_GRAVITY*sin($roll) - $lateral*cos($roll);
@@ -389,7 +430,8 @@ final class Car
 		{
 			if($gripFraction == 0) $this->speed *= cos($this->roadPitch)/cos($pitch);
 			$this->roadPitch = $pitch; $this->roadRoll = $roll;
-			if($springs->contacts === 4 && self::safe($support)) $this->lastSafe = [$x,$z,$this->yaw];
+			if($springs->contacts === 4 && $support[5] > $waterLevel + .12 && self::safe($support)
+				&& !self::nearPost($posts,$x,$z,$this->yaw,$support[0])) $this->lastSafe = [$x,$z,$this->yaw];
 		}
 		return true;
 	}
@@ -435,7 +477,7 @@ final class Car
 		// A half somersault plus a half barrel roll lands facing the other way.
 		$reversed = cos($this->pitch) < 0;
 		$heading = $reversed ? $this->yaw + M_PI : $this->yaw;
-		$support = $this->support($land,$water,$this->x,$this->z,$heading);
+		$support = $this->support($land,$this->x,$this->z,$heading);
 		// Leave a margin below the tipping load so the same bank cannot immediately start another tumble.
 		if($support !== null && abs($support[1]) < .98 && abs(tan($support[2])) < 1.22*cos($support[1]))
 		{
@@ -456,11 +498,11 @@ final class Car
 
 	private function rightCar(Landscape $land, float $water): bool
 	{
-		$support = $this->support($land,$water,$this->x,$this->z,$this->yaw);
+		$support = $this->support($land,$this->x,$this->z,$this->yaw);
 		if($support === null || !self::safe($support))
 		{
 			[$this->x,$this->z,$this->yaw] = $this->lastSafe;
-			$support = $this->support($land,$water,$this->x,$this->z,$this->yaw);
+			$support = $this->support($land,$this->x,$this->z,$this->yaw);
 			if($support === null || !self::safe($support)) return false;
 		}
 		$this->restOnWheels($support);
@@ -576,15 +618,17 @@ final class Car
 	{
 		foreach($posts as $post)
 		{
-			if($y + self::BODY_HEIGHT <= $post[5] || $y >= $post[6]) continue;
+			$reach = self::BODY_FRONT + self::BODY_HALF_WIDTH + 1.5*($post[2]+.5);
+			if(abs($x-$post[0]) > $reach || abs($z-$post[1]) > $reach
+				|| $y + self::BODY_HEIGHT <= $post[5] || $y >= $post[6]) continue;
 			$post[2] += .5;
 			if(self::penetration($x, $z, $yaw, $post) !== null) return true;
 		}
 		return false;
 	}
 
-	/** Fit a plane through both axles. Water and the edge of the heightfield bound travel. */
-	private function support(Landscape $land, float $waterLevel, float $x, float $z, float $yaw): ?array
+	/** Fit a plane through both axles and retain the lowest footprint sample for dry recovery sites. */
+	private function support(Landscape $land, float $x, float $z, float $yaw): ?array
 	{
 		$limit = $land->recipe()['worldSize'] / 2 - 2.6;
 		if(abs($x) > $limit || abs($z) > $limit) return null;
@@ -597,7 +641,6 @@ final class Car
 			{
 				$across = $side * $track;
 				$h = $land->height($x + $along*$sin + $across*$cos, $z + $along*$cos - $across*$sin);
-				if($h <= $waterLevel + .12) return null;
 				$heights[] = $h;
 			}
 		}
@@ -608,8 +651,7 @@ final class Car
 		$bank = ($frontBank+$rearBank) / 2;
 		$y = array_sum($heights) / 4;
 		$center = $land->height($x, $z);
-		if($center <= $waterLevel + .12) return null;
-		return [max($y,$center-.14) + .02,atan($rise),-atan($bank/sqrt(1+$rise*$rise)),max(abs($frontBank-$rearBank),abs($center-$y)),$heights];
+		return [max($y,$center-.14) + .02,atan($rise),-atan($bank/sqrt(1+$rise*$rise)),max(abs($frontBank-$rearBank),abs($center-$y)),$heights,min($center,$fl,$fr,$rl,$rr)];
 	}
 
 	/** Ackermann angles at the front -X and +X wheels for the simulated centerline steering angle. */
@@ -635,6 +677,6 @@ final class Car
 			'wheelTravel'=>$this->tumble === null ? $this->suspension->travel : [0.0,0.0,0.0,0.0],
 			'wheelContacts'=>$this->tumble === null ? $this->suspension->contacts : 0,
 			'motion'=>$this->tumble === null ? ($this->suspension->contacts ? 'driving' : 'airborne') : ($this->recoveryTime > 0 ? 'overturned' : 'tumbling'),
-			'roadHold'=>$this->roadHold,'recoveries'=>$this->recoveries,'braking'=>$this->braking,'reversing'=>$this->reversing];
+			'roadHold'=>$this->roadHold,'floodedHold'=>$this->roadHold > 0 && $this->floodedHold,'recoveries'=>$this->recoveries,'braking'=>$this->braking,'reversing'=>$this->reversing];
 	}
 }
