@@ -2502,6 +2502,12 @@ for(const [first, second] of [
 	, [{label: 'Salt Pans', name: 'salt-pans', layer: 'salt-crust'}
 		, {label: 'Cinder Highlands', name: 'cinder-highlands', layer: 'oxidized-scoria'}
 	]
+	, [{label: 'Rolling Prairie', name: 'rolling-prairie', layer: 'green-swales'}
+		, {label: 'River Valley & Floodplain', name: 'river-valley', layer: 'gravel-bars'}
+	]
+	, [{label: 'Wooded Foothills', name: 'wooded-foothills', layer: 'woodland-canopy'}
+		, {label: 'High Desert Steppe', name: 'high-desert-steppe', layer: 'sagebrush'}
+	]
 ]) {
 	test(
 		`${first.label} and ${second.label} are available as landscapes and as independent surface presets`

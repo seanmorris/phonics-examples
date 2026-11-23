@@ -22,6 +22,11 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 
 **Salt Pans** opens on a pale salt flat with shallow brine pools and a distant rim of dusty foothills. **Cinder Highlands** faces a volcanic cone across a charcoal lava field. Look for lichen and pale ash on the lower ground, then rusty scoria on the upper slopes.
 
+- **Rolling Prairie** opens in tallgrass. Green swales alternate with straw-colored rises, with occasional buttes breaking the horizon.
+- **River Valley & Floodplain** starts on a dry bank overlooking a bend. Drive along the meadow and gravel terraces, or board the watercraft to follow the channel.
+- **Wooded Foothills** looks across spurs patched with dark woodland canopy. Meadow clearings and exposed rock mark the changes in slope.
+- **High Desert Steppe** opens on a sagebrush and gravel apron. Dry washes lead between long benches of rim rock.
+
 ## Fly over the landscape
 
 Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and **Q/E** to descend or climb. Hold **Shift** to fly at 671 mph. The Flight slider changes the ordinary movement speed.

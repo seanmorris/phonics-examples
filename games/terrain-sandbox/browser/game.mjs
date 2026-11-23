@@ -1916,6 +1916,26 @@ let labCount = 0;
 function markup()
 {
 	const hintPrefix = `landform-${++labCount}`;
+	const landscapeOptions = [
+		['coast', 'Coast'],
+		['mountain', 'Mountain Ridges'],
+		['canyon', 'Canyon'],
+		['limestone', 'Limestone Plain'],
+		['basalt-fjords', 'Basalt Fjords'],
+		['amber-dunes', 'Amber Dunes'],
+		['arctic-meltwater', 'Arctic Meltwater'],
+		['tidal-lagoon', 'Tidal Lagoon'],
+		['red-mesas', 'Red Mesas'],
+		['heather-moor', 'Heather Moor'],
+		['salt-pans', 'Salt Pans'],
+		['cinder-highlands', 'Cinder Highlands'],
+		['rolling-prairie', 'Rolling Prairie'],
+		['river-valley', 'River Valley &amp; Floodplain'],
+		['wooded-foothills', 'Wooded Foothills'],
+		['high-desert-steppe', 'High Desert Steppe'],
+	];
+	const option = ([value, label]) => `<option value="${value}">${label}</option>`;
+	const surfaceOptions = landscapeOptions.flatMap(row => row[0] === 'canyon' ? [row, ['canyon-v1', 'Early Canyon']] : [row]);
 	const surfaceId = `surface-${labCount}`;
 
 	return `<style>
@@ -2017,7 +2037,7 @@ function markup()
 	<div class="lab-workspace">
 	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-roads" aria-controls="terrain-section-roads" data-tab="roads" aria-selected="false" tabindex="-1">Roads</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
 	<div class="lab-pages"><section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
-	<label class="terrain-field">Preset<select name="preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="canyon">Canyon</option><option value="limestone">Limestone Plain</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option><option value="arctic-meltwater">Arctic Meltwater</option><option value="tidal-lagoon">Tidal Lagoon</option><option value="red-mesas">Red Mesas</option><option value="heather-moor">Heather Moor</option><option value="salt-pans">Salt Pans</option><option value="cinder-highlands">Cinder Highlands</option></select></label>
+	<label class="terrain-field">Preset<select name="preset">${landscapeOptions.map(option).join('')}</select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
 	<label class="terrain-field">World size<select name="worldSize">
 		<option value="32768">20.4 mi per side</option>
@@ -2129,7 +2149,7 @@ function markup()
 	<div class="terrain-section" data-road-workspace></div></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
-	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset"><option value="coast">Coast</option><option value="mountain">Mountain Ridges</option><option value="limestone">Limestone Plain</option><option value="canyon">Canyon</option><option value="canyon-v1">Early Canyon</option><option value="basalt-fjords">Basalt Fjords</option><option value="amber-dunes">Amber Dunes</option><option value="arctic-meltwater">Arctic Meltwater</option><option value="tidal-lagoon">Tidal Lagoon</option><option value="red-mesas">Red Mesas</option><option value="heather-moor">Heather Moor</option><option value="salt-pans">Salt Pans</option><option value="cinder-highlands">Cinder Highlands</option></select>
+	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset">${surfaceOptions.map(option).join('')}</select>
 	<button data-layer-load>Load preset surface</button><button data-layer-reset>Follow landform preset</button></div>
 	<p class="terrain-note" id="${surfaceId}-preset">Load preset surface replaces the stack. Follow landform preset restores the materials for the current landform.</p>
 	<h2>Material layers</h2><p class="terrain-note">The base layer covers the terrain. Colors and numbers preview as you edit an applied stack. After changing the layer order, a source, or a mask, choose Apply layers to preview the draft.</p>

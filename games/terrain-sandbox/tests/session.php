@@ -220,6 +220,8 @@ $showcase->close();
 $fresh = new Session;
 foreach([
 	'red-mesas'=>['cap-rock','Desert dust'], 'heather-moor'=>['peat-banks','Moor mist'],
+	'rolling-prairie'=>['green-swales','Prairie haze'], 'river-valley'=>['gravel-bars','River mist'],
+	'wooded-foothills'=>['woodland-canopy','Foothill haze'], 'high-desert-steppe'=>['sagebrush','Basin dust'],
 	'salt-pans'=>['salt-crust','Playa dust'], 'cinder-highlands'=>['oxidized-scoria','Highland haze'],
 ] as $preset=>[$layer,$air]) {
 	input($fresh,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
@@ -228,6 +230,12 @@ foreach([
 		&& in_array($layer,array_column($fresh->activeLayers()->layers,'id'),true)
 		&& $fresh->status()['surfacePreset'] === $preset && $fresh->atmosphere->layers()[0]['name'] === $air,
 		"$preset opens above its own ground with its materials, surface name and air.");
+	$restored = new Session;
+	$restored->load($fresh->save());
+	expect($restored->landscape->recipe() === $fresh->landscape->recipe()
+		&& $restored->activeLayers()->layers === $fresh->activeLayers()->layers
+		&& $restored->atmosphere->layers() === $fresh->atmosphere->layers(), "$preset survives a save and reload.");
+	$restored->close();
 }
 input($fresh,['actions'=>[['type'=>'surface-layers','preset'=>'salt-pans']]]);
 $reload = new Session;

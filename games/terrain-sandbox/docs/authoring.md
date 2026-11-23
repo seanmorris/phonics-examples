@@ -22,6 +22,10 @@ In **Red Mesas**, the mesa walls use the canyon's bedded rock layers, so editing
 
 In **Salt Pans**, lower **Water level** to drain the shallow pools. The **Brine margin** layer follows the shoreline, while **Salt crust** follows the basin floor. In **Cinder Highlands**, edit **Oxidized scoria** to change the rusty flanks. Adjust the slope limits on **Lava ribs** to expose more dark rock through them.
 
+In **Rolling Prairie**, adjust **Green swales** and **Cured grass** to shift the balance between the hollows and crests. In **River Valley & Floodplain**, raise the water to see **Wet silt** and **Gravel bars** move inland. The channel shares the landscape’s level water surface.
+
+In **Wooded Foothills**, toggle **Woodland canopy** to isolate its color and relief. In **High Desert Steppe**, toggle **Dry washes** to see where the gravel apron shows through the sagebrush.
+
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 

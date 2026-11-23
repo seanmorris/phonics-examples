@@ -216,6 +216,10 @@ final class SurfaceLayers
 			'heather-moor' => self::moorLayers($s),
 			'salt-pans' => self::saltLayers($s,$r),
 			'cinder-highlands' => self::cinderLayers($s),
+			'rolling-prairie' => self::prairieLayers($s,$r),
+			'river-valley' => self::riverLayers($s),
+			'wooded-foothills' => self::foothillLayers($s),
+			'high-desert-steppe' => self::steppeLayers($s,$r),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -254,6 +258,10 @@ final class SurfaceLayers
 			'heather-moor' => ['Heather','Moor grass','Bracken','Peat banks','Granite tors'],
 			'salt-pans' => ['Alluvial fans','Rim outcrops','Lake clay','Salt crust','Silt stains','Brine margin'],
 			'cinder-highlands' => ['Lava clinker','Lichen islands','Ash drifts','Oxidized scoria','Lava ribs'],
+			'rolling-prairie' => ['Tallgrass','Green swales','Cured grass','Butte outcrops'],
+			'river-valley' => ['Flood meadow','Alluvial terraces','Wet silt','Gravel bars'],
+			'wooded-foothills' => ['Glades','Fern slopes','Woodland canopy','Spur outcrops'],
+			'high-desert-steppe' => ['Gravel apron','Sagebrush','Dry washes','Rim rock'],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
 		foreach($rows as $i=>&$row) {
@@ -491,6 +499,69 @@ final class SurfaceLayers
 				'pattern'=>'fractal', 'patternColor'=>$s['rockBandColor'], 'patternScale'=>43., 'patternAmount'=>.78],
 			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'jointed', 'patternColor'=>$s['rockBandColor'],
 				'patternScale'=>6., 'patternStretch'=>1.45, 'patternAmount'=>.61, 'opacity'=>.85],
+		];
+	}
+
+	private static function prairieLayers(array $s, array $recipe): array
+	{
+		$recipe += Recipe::shapeDefaults('rolling-prairie');
+		$plain = $recipe['heightScale']*$recipe['baseBias'];
+		return [
+			['color'=>$s['grassColor'], 'field'=>'meadow', 'pattern'=>'fractal', 'patternColor'=>$s['sandColor'],
+				'patternAmount'=>.46, 'patternScale'=>45.],
+			['color'=>$s['meadowColor'], 'high'=>$plain-8., 'fade'=>20., 'noise'=>16., 'scale'=>240.,
+				'field'=>'meadow'] + self::stipple($s['meadowColor'],.83,.38),
+			['color'=>$s['sandColor'], 'low'=>$plain+14., 'fade'=>27., 'noise'=>26., 'scale'=>170.,
+				'opacity'=>.62, 'pattern'=>'fractal', 'patternColor'=>$s['grassColor'], 'patternAmount'=>.52, 'patternScale'=>13.],
+			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'jointed',
+				'patternColor'=>$s['rockBandColor'], 'patternAmount'=>.48, 'patternScale'=>3.],
+		];
+	}
+
+	private static function riverLayers(array $s): array
+	{
+		return [
+			['color'=>$s['grassColor'], 'field'=>'meadow', 'pattern'=>'fractal', 'patternColor'=>$s['meadowColor'],
+				'patternAmount'=>.68, 'patternScale'=>27.],
+			['color'=>$s['meadowColor'], 'datum'=>'water', 'low'=>6., 'high'=>34., 'fade'=>8., 'noise'=>4.,
+				'scale'=>95., 'field'=>'meadow'] + self::stipple($s['meadowColor'],.80,.4),
+			['color'=>$s['soilColor'], 'datum'=>'water', 'high'=>$s['beachHeight'], 'fade'=>$s['beachWidth'],
+				'noise'=>.6, 'scale'=>28., 'pattern'=>'fractal', 'patternColor'=>$s['rockColor'], 'patternAmount'=>.42,
+				'patternScale'=>4., 'roughness'=>.55, 'reflectivity'=>.12],
+			['color'=>$s['sandColor'], 'datum'=>'water', 'low'=>-.7, 'high'=>3., 'fade'=>1.5, 'noise'=>1.4,
+				'scale'=>43., 'slopeHigh'=>.013, 'slopeFade'=>.02, 'pattern'=>'gravel',
+				'patternColor'=>$s['rockColor'], 'patternScale'=>1.2, 'patternAmount'=>.82],
+		];
+	}
+
+	private static function foothillLayers(array $s): array
+	{
+		return [
+			['color'=>$s['grassColor'], 'field'=>'meadow', 'pattern'=>'fractal', 'patternColor'=>$s['meadowColor'],
+				'patternAmount'=>.54, 'patternScale'=>30.],
+			['mask'=>'shrubs', 'field'=>'shrubs', 'color'=>$s['meadowColor'], 'patternColor'=>$s['soilColor']],
+			['mask'=>'trees', 'field'=>'crowns', 'channel'=>'both', 'relief'=>'crowns', 'strength'=>.48,
+				'color'=>$s['forestColor'], 'pattern'=>'fractal', 'patternColor'=>$s['meadowColor'],
+				'patternScale'=>29., 'patternAmount'=>.34],
+			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'jointed',
+				'patternColor'=>$s['rockBandColor'], 'patternScale'=>3.2, 'patternAmount'=>.68],
+		];
+	}
+
+	private static function steppeLayers(array $s, array $recipe): array
+	{
+		$recipe += Recipe::shapeDefaults('high-desert-steppe');
+		$apron = $recipe['heightScale']*$recipe['baseBias'];
+		return [
+			['color'=>$s['soilColor'], 'pattern'=>'gravel', 'patternColor'=>$s['rockBandColor'],
+				'patternAmount'=>.65, 'patternScale'=>1.7],
+			['color'=>$s['grassColor'], 'mask'=>'shrubs', 'field'=>'shrubs', 'patternColor'=>$s['soilColor'],
+				'slopeHigh'=>.038, 'slopeFade'=>.045],
+			['color'=>$s['sandColor'], 'high'=>$apron+10., 'fade'=>32., 'slopeHigh'=>.004, 'slopeFade'=>.009,
+				'noise'=>16., 'scale'=>180., 'pattern'=>'gravel', 'patternColor'=>$s['rockBandColor'],
+				'patternAmount'=>.59, 'patternScale'=>1.2],
+			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'fractures', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>3.5, 'patternStretch'=>1.2, 'patternAmount'=>.64],
 		];
 	}
 

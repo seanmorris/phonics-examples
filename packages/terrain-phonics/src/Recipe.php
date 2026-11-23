@@ -16,6 +16,7 @@ final class Recipe
 		, 'arctic-meltwater'
 		, 'tidal-lagoon'
 		, 'red-mesas', 'heather-moor', 'salt-pans', 'cinder-highlands'
+		, 'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe'
 	];
 
 	/** Parameters are immutable after normalization. */
@@ -123,6 +124,45 @@ final class Recipe
 			'directionalRise'=>.075, 'warpAmplitude'=>305., 'warpFrequency'=>1 / 1750,
 			'detailAmplitude'=>15., 'detailOctaves'=>6, 'persistence'=>.47, 'terraceStrength'=>0.,
 			'waterLevel'=>-210., 'surround'=>'mountains',
+		] + self::shapeDefaults('coast', $version);
+
+		// A high contour threshold leaves occasional buttes standing above the grass swells.
+		if($preset === 'rolling-prairie')
+		return [
+			'seed'=>'rolling-prairie', 'baseFrequency'=>1 / 2100, 'heightScale'=>152.4, 'baseBias'=>.60,
+			'rolling'=>.82, 'secondary'=>.17, 'directionalRise'=>.06,
+			'wallHeight'=>.64, 'floorWidth'=>.46, 'wallWidth'=>.14,
+			'warpAmplitude'=>121.92, 'warpFrequency'=>1 / 3100, 'detailAmplitude'=>1.524,
+			'detailOctaves'=>4, 'persistence'=>.40, 'waterLevel'=>-30.48, 'surround'=>'none',
+		] + self::shapeDefaults('coast', $version);
+
+		// Flood the lowest part of the contour field. Gentle terraces form the banks above it.
+		if($preset === 'river-valley')
+		return [
+			'seed'=>'river-valley', 'baseFrequency'=>1 / 1950, 'heightScale'=>304.8, 'baseBias'=>-.017,
+			'rolling'=>.12, 'secondary'=>.012, 'directionalRise'=>0.,
+			'wallHeight'=>.85, 'floorWidth'=>.03, 'wallWidth'=>.52,
+			'warpAmplitude'=>487.68, 'warpFrequency'=>1 / 2300, 'terraceSpacing'=>9.144, 'terraceStrength'=>.32,
+			'detailAmplitude'=>.6096, 'detailOctaves'=>4, 'persistence'=>.40, 'waterLevel'=>0., 'surround'=>'none',
+		] + self::shapeDefaults('coast', $version);
+
+		if($preset === 'wooded-foothills')
+		return [
+			'seed'=>'wooded-foothills', 'baseFrequency'=>1 / 2250, 'heightScale'=>518.16, 'baseBias'=>.85,
+			'rolling'=>.78, 'secondary'=>.26, 'ridgeHeight'=>.48, 'ridgeRoundness'=>.12, 'directionalRise'=>.24,
+			'wallHeight'=>.55, 'floorWidth'=>.20, 'wallWidth'=>.54,
+			'warpAmplitude'=>365.76, 'warpFrequency'=>1 / 2700, 'detailAmplitude'=>6.096,
+			'detailOctaves'=>5, 'persistence'=>.45, 'waterLevel'=>0., 'surround'=>'mountains',
+		] + self::shapeDefaults('coast', $version);
+
+		// An elevated apron cut by dry washes, with gravel benches on the climb to the rim.
+		if($preset === 'high-desert-steppe')
+		return [
+			'seed'=>'high-desert-steppe', 'baseFrequency'=>1 / 2750, 'heightScale'=>609.6, 'baseBias'=>1.25,
+			'rolling'=>.28, 'secondary'=>.12, 'directionalRise'=>.15,
+			'wallHeight'=>.52, 'floorWidth'=>.14, 'wallWidth'=>.49,
+			'warpAmplitude'=>274.32, 'warpFrequency'=>1 / 2400, 'terraceSpacing'=>18.288, 'terraceStrength'=>.24,
+			'detailAmplitude'=>3.048, 'detailOctaves'=>5, 'persistence'=>.43, 'waterLevel'=>0., 'surround'=>'none',
 		] + self::shapeDefaults('coast', $version);
 
 		if($preset === 'arctic-meltwater')

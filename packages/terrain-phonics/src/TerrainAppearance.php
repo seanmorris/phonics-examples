@@ -154,6 +154,23 @@ final class TerrainAppearance
 			'rockColor'=>'#323438', 'rockBandColor'=>'#504b48', 'soilColor'=>'#754833',
 			'sandColor'=>'#807570', 'grassColor'=>'#686b52', 'rockSlopeStart'=>.105, 'rockSlopeEnd'=>.25,
 		]
+		, 'rolling-prairie' => [
+			'grassColor'=>'#797a43', 'meadowColor'=>'#55683e', 'sandColor'=>'#aa965e',
+			'rockColor'=>'#8b8572', 'rockBandColor'=>'#a19882', 'rockSlopeStart'=>.027, 'rockSlopeEnd'=>.09,
+		]
+		, 'river-valley' => [
+			'grassColor'=>'#647745', 'meadowColor'=>'#768050', 'soilColor'=>'#665947',
+			'rockColor'=>'#87857a', 'sandColor'=>'#a5987d', 'beachHeight'=>1.524, 'beachWidth'=>2.4384,
+		]
+		, 'wooded-foothills' => [
+			'grassColor'=>'#747d4e', 'meadowColor'=>'#576c43', 'forestColor'=>'#344b3a',
+			'soilColor'=>'#655b46', 'rockColor'=>'#787a72', 'rockBandColor'=>'#63665d',
+			'rockSlopeStart'=>.085, 'rockSlopeEnd'=>.20, 'snowline'=>1219.2, 'treeline'=>-121.92,
+		]
+		, 'high-desert-steppe' => [
+			'grassColor'=>'#777b62', 'soilColor'=>'#a38465', 'sandColor'=>'#bdad8e',
+			'rockColor'=>'#796c62', 'rockBandColor'=>'#9b8974', 'rockSlopeStart'=>.023, 'rockSlopeEnd'=>.08,
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -303,6 +320,19 @@ final class TerrainAppearance
 			, 'roadColor'
 			, 'macroVariation'
 		]
+		, 'rolling-prairie' => [
+			'grassColor','rockColor','rockBandColor','sandColor','roadColor','meadowColor','rockSlopeStart','rockSlopeEnd',
+		]
+		, 'river-valley' => [
+			'grassColor','soilColor','rockColor','sandColor','roadColor','meadowColor','beachHeight','beachWidth',
+		]
+		, 'wooded-foothills' => [
+			'grassColor','soilColor','rockColor','rockBandColor','roadColor','forestColor','meadowColor',
+			'rockSlopeStart','rockSlopeEnd','snowline','treeline',
+		]
+		, 'high-desert-steppe' => [
+			'grassColor','soilColor','rockColor','rockBandColor','sandColor','roadColor','rockSlopeStart','rockSlopeEnd',
+		]
 		, 'salt-pans' => [
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'rockSlopeStart', 'rockSlopeEnd',
@@ -439,7 +469,8 @@ final class TerrainAppearance
 			// Mesas are canyon country seen from the floor: the same bedded walls and dust.
 			'red-mesas' => 'canyon',
 			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon',
-			'heather-moor', 'salt-pans', 'cinder-highlands' => $recipe['preset'],
+			'heather-moor', 'salt-pans', 'cinder-highlands',
+			'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe' => $recipe['preset'],
 			default => 'coast'
 		};
 	}

@@ -300,6 +300,8 @@ Red Mesas draws with the canyon program and its own bed colors, with lower band 
 
 Salt Pans layers pale, fractured salt over lake clay. The crust follows the elevation of the basin floor. A separate wet margin follows the waterline, so draining a pool exposes the deposits underneath. Cinder Highlands layers charcoal clinker, lichen and pockets of pale ash on low ground. The upper flanks carry rusty scoria with dark lava exposed on steep faces.
 
+Four road-trip presets use the same height field and editable material layers. `rolling-prairie` places green swales between straw-colored rises and reserves rock for steep outcrops. `river-valley` floods winding low contours at a single water level. Its silt and gravel track the waterline. `wooded-foothills` breaks rolling spurs into meadow, fern slopes and patches of canopy relief. `high-desert-steppe` raises a dry gravel apron above sea level and cuts washes between benches of rim rock.
+
 Set `reflectivity` on a color layer to give it a clear dielectric coating. The range is 0 (matte) to 1 (fully coated). `roughness` ranges from 0 (polished) to 1 (frosted). The shader samples the atmosphere in the reflected view direction and filters the solar highlight by roughness and pixel size. Snow, rock and paint cover the finish with the same masks as the layer color. The minimap shows the underlying tint. The Arctic ice uses an air-to-ice refractive index of about 1.31. [Warren and Brandt’s optical constants of ice](https://atmos.washington.edu/ice_optical_constants/)
 
 The table lists the appearance settings for the coastal, mountain and canyon recipes.

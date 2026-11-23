@@ -98,6 +98,10 @@ final class Session
 		'red-mesas' => ['name'=>'Desert dust', 'topFt'=>1700, 'densityPerMile'=>.05, 'color'=>'#e0c0a0'],
 		'salt-pans' => ['name'=>'Playa dust', 'topFt'=>600, 'densityPerMile'=>.055, 'color'=>'#dfcfc1'],
 		'cinder-highlands' => ['name'=>'Highland haze', 'topFt'=>1300, 'densityPerMile'=>.045, 'color'=>'#c0c8ce'],
+		'rolling-prairie' => ['name'=>'Prairie haze', 'topFt'=>1400, 'densityPerMile'=>.055, 'color'=>'#dfd7bf'],
+		'river-valley' => ['name'=>'River mist', 'topFt'=>400, 'densityPerMile'=>.09, 'color'=>'#cddcd7'],
+		'wooded-foothills' => ['name'=>'Foothill haze', 'topFt'=>2200, 'densityPerMile'=>.07, 'color'=>'#c3d1d7'],
+		'high-desert-steppe' => ['name'=>'Basin dust', 'topFt'=>3200, 'densityPerMile'=>.035, 'color'=>'#ddcbbd'],
 		'heather-moor' => ['name'=>'Moor mist', 'topFt'=>350, 'densityPerMile'=>.12, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
@@ -138,6 +142,19 @@ final class Session
 		'cinder-highlands' => TerrainAppearance::PRESET_DEFAULTS['cinder-highlands'] + [
 			'azimuth'=>45., 'elevation'=>31., 'haze'=>.67, 'skyColor'=>'#59728b', 'hazeColor'=>'#d1d5d3',
 		],
+		'rolling-prairie' => TerrainAppearance::PRESET_DEFAULTS['rolling-prairie'] + [
+			'azimuth'=>169., 'elevation'=>26., 'haze'=>.76, 'skyColor'=>'#5478a1', 'hazeColor'=>'#e3d7ba',
+		],
+		'river-valley' => TerrainAppearance::PRESET_DEFAULTS['river-valley'] + [
+			'azimuth'=>208., 'elevation'=>31., 'haze'=>.85, 'skyColor'=>'#567a99', 'waterColor'=>'#426965',
+			'waterTransparency'=>.68, 'waterReflectivity'=>.65, 'waterFogDensity'=>.10, 'waterChoppiness'=>12.,
+		],
+		'wooded-foothills' => TerrainAppearance::PRESET_DEFAULTS['wooded-foothills'] + [
+			'azimuth'=>129., 'elevation'=>34., 'haze'=>.9, 'skyColor'=>'#536f91', 'hazeColor'=>'#ccd7df',
+		],
+		'high-desert-steppe' => TerrainAppearance::PRESET_DEFAULTS['high-desert-steppe'] + [
+			'azimuth'=>96., 'elevation'=>30., 'haze'=>.64, 'skyColor'=>'#4a709a', 'hazeColor'=>'#ded0be',
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
@@ -150,6 +167,10 @@ final class Session
 		'salt-pans' => ['x'=>.452, 'z'=>.568, 'heading'=>70., 'pitch'=>-.07, 'clearance'=>28., 'minimum'=>0.],
 		'cinder-highlands' => ['x'=>1.32, 'z'=>-1.54, 'heading'=>245., 'pitch'=>.06, 'clearance'=>55., 'minimum'=>0.],
 		'heather-moor' => ['x'=>.115, 'z'=>.346, 'heading'=>225., 'pitch'=>-.10, 'clearance'=>30., 'minimum'=>0.],
+		'rolling-prairie' => ['x'=>-.1524, 'z'=>1.341, 'heading'=>261., 'pitch'=>-.14, 'clearance'=>48., 'minimum'=>0.],
+		'river-valley' => ['x'=>-2.068, 'z'=>1.346, 'heading'=>284., 'pitch'=>-.18, 'clearance'=>34., 'minimum'=>0.],
+		'wooded-foothills' => ['x'=>1.508, 'z'=>-.341, 'heading'=>43., 'pitch'=>-.12, 'clearance'=>58., 'minimum'=>0.],
+		'high-desert-steppe' => ['x'=>.884, 'z'=>.047, 'heading'=>2., 'pitch'=>-.12, 'clearance'=>45., 'minimum'=>0.],
 	];
 
 	/**
@@ -176,7 +197,8 @@ final class Session
 	private int $atmosphereReply = 0;
 	private string $atmosphereOrigin = 'preset';
 	private ?string $materialPreset = null;
-	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor','salt-pans','cinder-highlands'];
+	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor','salt-pans','cinder-highlands',
+		'rolling-prairie','river-valley','wooded-foothills','high-desert-steppe'];
 
 	private static function materialStyle(array $recipe): string
 	{
