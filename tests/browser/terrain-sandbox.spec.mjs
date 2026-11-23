@@ -3094,8 +3094,8 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 		return peak*analyser.context.sampleRate/analyser.fftSize;
 	});
 
-	/** At idle all twelve cylinders fire at 95 Hz. That note or its octave leads, not one bank's 47.5 Hz. */
-	const firing = hz => [95, 190].some(note => Math.abs(hz - note) < 9);
+	/** At idle each bank fires at 47.5 Hz. That note or its octave leads. */
+	const firing = hz => [47.5, 95].some(note => Math.abs(hz - note) < 7);
 	await expect.poll(async() => firing(await firingHz())).toBe(true);
 
 	await page.locator('.terrain-panel[open] > summary').click();
@@ -3103,7 +3103,7 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 	await page.keyboard.down('w');
 	await page.keyboard.down('Shift');
 	await expect.poll(() => view.evaluate(element => element.dustPixels)).toBeGreaterThan(30);
-	await expect.poll(firingHz).toBeGreaterThan(214);
+	await expect.poll(firingHz).toBeGreaterThan(107);
 	expect(await page.evaluate(() => window.driveAudio.starts)).toBe(1);
 	await page.keyboard.down('d');
 	await expect.poll(async() => (await status(page)).car.roll).toBeGreaterThan(.025);
@@ -3210,8 +3210,8 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 			// Parseval's identity gives total one-sided power with the same normalization as the bins below.
 			const total = wave.reduce((sum, x) => sum+x*x, 0)*wave.length/2;
 			let loudest = 0, peak = 0, bass = 0, overtones = 0, mid = 0, betweenOrders = 0;
-			// Strongest bin within one bin of the shaft rate, one bank's firing rate and all twelve cylinders' rate.
-			const lines = {shaft: 0, bank: 0, firing: 0};
+			// Strongest bin within one bin of the shaft rate, the growl, the note (one bank's firings) and its octave.
+			const lines = {shaft: 0, growl: 0, note: 0, octave: 0};
 
 			/** Whether a bin lies within one bin of an engine order. */
 			const near = (hz, order) => Math.abs(hz - order*shaftHz) <= binHz;
@@ -3234,7 +3234,7 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 
 				if(hz >= 40 && hz < 160) bass += energy;
 
-				for(const [line, order] of [['shaft', 1], ['bank', 3], ['firing', 6]])
+				for(const [line, order] of [['shaft', 1], ['growl', 1.5], ['note', 3], ['octave', 6]])
 				if(near(hz, order)) lines[line] = Math.max(lines[line], energy);
 
 				if(hz >= 1000) overtones += energy;
@@ -3256,12 +3256,13 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 
 			return {
 				peak
-				, note: peak/(6*shaftHz)
+				, note: peak/(3*shaftHz)
 				, bass: bass/total
 				, overtones: overtones/total
 				, betweenOrders: betweenOrders/mid
-				, bank: 10*Math.log10(lines.bank/lines.firing)
-				, shaft: 10*Math.log10(lines.shaft/lines.firing)
+				, growl: 10*Math.log10(lines.growl/lines.note)
+				, octave: 10*Math.log10(lines.octave/lines.note)
+				, shaft: 10*Math.log10(lines.shaft/lines.note)
 			};
 		}
 
@@ -3276,22 +3277,25 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 		};
 	}, {module, wav: wav.toString('base64'), targets});
 
-	// Every state sounds all twelve cylinders' firing note, far above one bank's rate and the shaft's.
+	// Every state sounds one bank's firings as the note, with a growl an octave below, a quieter octave above, and no
+	// hum at the shaft's rotation rate.
 	for(const spectrum of measured.spectra)
 	{
 		expect(Math.abs(spectrum.note-1)).toBeLessThan(.01);
-		expect(spectrum.bank).toBeLessThan(-25);
-		expect(spectrum.shaft).toBeLessThan(-28);
+		expect(spectrum.growl).toBeGreaterThan(-10);
+		expect(spectrum.growl).toBeLessThan(0);
+		expect(spectrum.octave).toBeLessThan(-4);
+		expect(spectrum.shaft).toBeLessThan(-18);
 	}
 
-	// Under load at high revs the exhaust is bright, with no motor hum below 160 Hz.
-	for(const i of [2,4,5])
+	// Under load at high revs the tailpipes rasp above the note.
+	for(const i of [2,5])
 	{
-		expect(measured.spectra[i].bass).toBeLessThan(.02);
-		expect(measured.spectra[i].overtones).toBeGreaterThan(.25);
+		expect(measured.spectra[i].bass).toBeLessThan(.05);
+		expect(measured.spectra[i].overtones).toBeGreaterThan(.3);
 	}
 
-	// The throttle cut closes the muffler down.
+	// The throttle cut quiets the rasp.
 	expect(measured.spectra[3].overtones).toBeLessThan(.6*measured.spectra[4].overtones);
 
 	for(const i of [2,5]) expect(measured.spectra[i].betweenOrders).toBeGreaterThan(.085);

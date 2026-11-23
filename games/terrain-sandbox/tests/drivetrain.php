@@ -145,11 +145,12 @@ check($hardBrake > 0 && $hardBrake < .1*$lock && $hardTurn > 0 && $hardTurn < .3
 	'Heavy brake scrub and understeer stay quieter than a sideways or locked-wheel slide.');
 
 $coast = CarEngineSound::controls(3600.,0.,0.); $pull = CarEngineSound::controls(3600.,1.,1.);
-check(count($pull) === 7 && $pull[0] === 30. && $coast[0] === $pull[0] && 12*$pull[0] === 360.
-	&& $pull[1] > $coast[1] && $pull[2] > 2*$coast[2],
-	'At 3600 RPM all twelve cylinders fire at 360 Hz under any load; open throttle brightens the muffler.');
+check(count($pull) === 7 && $pull[0] === 30. && $coast[0] === $pull[0] && 6*$pull[0] === 180. && $pull[1] > $coast[1],
+	'At 3600 RPM the exhaust note is one bank\'s six firings, 180 Hz, under any load; open throttle is louder.');
 check($coast[5] === 0. && $pull[5] === .08,'Full tire gain is capped and rolling contact is silent.');
-check($pull[3] > 1.5*$coast[3] && $pull[4] < $coast[4],'Opening the throttle raises airflow and steadies discharge pressure.');
+check($pull[3] > 2*$coast[3] && $pull[4] < $coast[4],'Opening the throttle raises the tailpipe rasp and steadies discharge pressure.');
+check(CarEngineSound::controls(7000.,1.,0.)[2] > CarEngineSound::controls(7000.,0.,0.)[2] && $pull[2] >= 350.,
+	'Open throttle opens the muffler above the note, and idle keeps enough of it to be heard.');
 check(CarEngineSound::controls(7000.,1.,0.)[2] > $pull[2] && CarEngineSound::controls(7000.,1.,0.)[3] > $pull[3],
 	'Higher revs open the muffler further and speed up the gas.');
 

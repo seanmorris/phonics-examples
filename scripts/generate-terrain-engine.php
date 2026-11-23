@@ -5,12 +5,13 @@ declare(strict_types=1);
 // the gearbox continuously at any audio device's sample rate. The exhaust pipes and muffler live in the browser's
 // audio graph instead, where their resonances stay fixed in hertz as the revs change.
 const CYCLES = 64, SAMPLES_PER_CYCLE = 512, SAMPLE_RATE = 32768;
-// Blowdown: the exhaust valve cracks open in a fraction of a degree, then the cylinder empties over a few degrees.
-const RISE = .6, DECAY = 7., TAIL = 64;
+// Blowdown: pressure builds over a couple of degrees as the exhaust valve opens, then the cylinder empties over about
+// seven. The rounded pulse keeps the note full; the browser adds the tailpipe rasp as noise.
+const RISE = 3., DECAY = 10., TAIL = 96;
 // Cylinders 0–11 fire 60° apart and alternate banks. Each has its own charge and primary pipe length, so the
-// firings differ slightly in strength and arrival time. That gives the note its half orders. Both banks carry the
-// same total charge, so neither bank's own firing rate stands out an octave below the note.
-$charge = [1.03, .93, .96, 1.06, .94, 1.02, 1.08, .96, .99, 1.04, 1.00, .99];
+// firings differ in strength and arrival time. Within a bank, cylinders alternate richer and leaner, so every other
+// discharge is stronger: that growl sits an octave below the bank's note. Both banks carry the same total charge.
+$charge = [1.18, 1.15, .82, .85, 1.16, 1.18, .84, .82, 1.17, 1.16, .83, .84];
 $primary = [.0, 1.6, -1.1, .7, 1.9, -.4, -1.5, .3, .9, -1.8, -.6, 1.2];
 $length = CYCLES*SAMPLES_PER_CYCLE;
 $tracks = array_fill(0,3,array_fill(0,$length,0.));

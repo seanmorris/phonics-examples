@@ -7,8 +7,11 @@ export function prepareEngine(context, recording)
 	return {pressure: recording, rate: 64/recording.duration, noise};
 }
 
-/** Turbulent flow noise centers this far into the muffler's passband. */
-const HISS = .40;
+/** The far bank's share of the note. Each bank's six firings set the pitch; the near pipe carries most of it. */
+const FAR_BANK = .15;
+
+/** Center of the tailpipe rasp for a four-stroke cycle rate in hertz. */
+const raspHz = cycle => 500 + 12*cycle;
 
 /**
  * Feed the collectors into a pipe whose open end reflects pressure back inverted. The round trip is fixed in time,
@@ -31,12 +34,14 @@ export function startEngine(context, instrument, tone)
 {
 	const crank = context.createBufferSource(), noise = context.createBufferSource();
 	const banks = context.createChannelSplitter(4), volume = context.createGain();
-	const collector = context.createGain(), port = context.createGain(), tailpipes = context.createGain();
-	const body = context.createBiquadFilter(), rumble = context.createBiquadFilter();
-	const muffler = context.createBiquadFilter(), turbulence = context.createBiquadFilter();
+	const collector = context.createGain(), far = context.createGain(), port = context.createGain();
+	const tailpipes = context.createGain(), body = context.createBiquadFilter(), rumble = context.createBiquadFilter();
+	const muffler = context.createBiquadFilter(), baffle = context.createBiquadFilter();
+	const rasp = context.createBiquadFilter(), tear = context.createBiquadFilter();
 	const gate = context.createGain(), flow = context.createGain();
 	const scatter = context.createBiquadFilter(), scatterGain = context.createGain();
-	const nodes = [banks,volume,collector,port,tailpipes,body,rumble,muffler,turbulence,gate,flow,scatter,scatterGain];
+	const nodes = [banks,volume,collector,far,port,tailpipes,body,rumble,muffler,baffle];
+	nodes.push(rasp, tear, gate, flow, scatter, scatterGain);
 
 	crank.buffer = instrument.pressure;
 	crank.playbackRate.value = tone.cycle/instrument.rate;
@@ -46,19 +51,23 @@ export function startEngine(context, instrument, tone)
 	noise.playbackRate.value = .5;
 	noise.loop = true;
 
-	// Both banks reach the listener at the same level,
-	// so their interleaved firings sum to the full twelve-cylinder note.
+	// The near bank's pipe carries the note: its six firings per cycle, rpm/20. The far bank's firings fall between
+	// them and add the octave above.
 	banks.connect(collector, 0);
-	banks.connect(collector, 1);
+	far.gain.value = FAR_BANK;
+	banks.connect(far, 1).connect(collector);
 
-	// Turbulent gas rushes through the collectors with each discharge. Faster gas hisses higher.
-	turbulence.type = 'bandpass';
-	turbulence.frequency.value = HISS*tone.cutoff;
-	turbulence.Q.value = .55;
+	// Gas tears out of the tailpipes with each discharge.
+	// The rasp leaves after the muffler, and faster gas rasps higher.
+	rasp.type = 'bandpass';
+	rasp.frequency.value = raspHz(tone.cycle);
+	rasp.Q.value = .7;
+	tear.frequency.value = 3200;
+	tear.Q.value = -3;
 	gate.gain.value = .12;
 	banks.connect(gate.gain, 2);
 	flow.gain.value = tone.flow;
-	noise.connect(turbulence).connect(gate).connect(flow).connect(collector);
+	noise.connect(rasp).connect(tear).connect(gate).connect(flow).connect(volume);
 
 	// Airflow varies the pressure at the pipes from one firing to the next.
 	scatter.frequency.value = 220;
@@ -73,18 +82,24 @@ export function startEngine(context, instrument, tone)
 	// Sets the exhaust's loudness against the tire recordings.
 	tailpipes.gain.value = 1.7;
 
-	// The muffler shell rings in the low mids, and subsonic pressure drift stays out of the speakers.
-	body.type = 'peaking';
-	body.frequency.value = 420;
-	body.Q.value = .9;
-	body.gain.value = 3;
+	// The muffler's volume booms below the note, and subsonic pressure drift stays out of the speakers.
+	body.type = 'lowshelf';
+	body.frequency.value = 180;
+	body.gain.value = 10;
 	rumble.type = 'highpass';
-	rumble.frequency.value = 45;
+	rumble.frequency.value = 30;
 	rumble.Q.value = -3;
-	muffler.frequency.value = tone.cutoff;
-	muffler.Q.value = -3;
+
+	// Two baffles round the note off steeply above its cutoff.
+	for(const stage of [muffler, baffle])
+	{
+		stage.frequency.value = tone.cutoff;
+		stage.Q.value = -3;
+	}
+
 	volume.gain.value = 0;
-	tailpipes.connect(body).connect(rumble).connect(muffler).connect(volume).connect(context.destination);
+	tailpipes.connect(body).connect(rumble).connect(muffler);
+	muffler.connect(baffle).connect(volume).connect(context.destination);
 
 	const now = context.currentTime;
 	crank.start(now);
@@ -96,15 +111,16 @@ export function startEngine(context, instrument, tone)
 		update(next) {
 			const at = context.currentTime;
 
-			if(next.cycle !== tone.cycle) crank.playbackRate.setTargetAtTime(next.cycle/instrument.rate, at, .018);
+			if(next.cycle !== tone.cycle)
+			{
+				crank.playbackRate.setTargetAtTime(next.cycle/instrument.rate, at, .018);
+				rasp.frequency.setTargetAtTime(raspHz(next.cycle), at, .035);
+			}
 
 			if(next.level !== tone.level) volume.gain.setTargetAtTime(next.level, at, .033);
 
 			if(next.cutoff !== tone.cutoff)
-			{
-				muffler.frequency.setTargetAtTime(next.cutoff, at, .035);
-				turbulence.frequency.setTargetAtTime(HISS*next.cutoff, at, .035);
-			}
+			for(const stage of [muffler, baffle]) stage.frequency.setTargetAtTime(next.cutoff, at, .035);
 
 			if(next.flow !== tone.flow) flow.gain.setTargetAtTime(next.flow, at, .035);
 
