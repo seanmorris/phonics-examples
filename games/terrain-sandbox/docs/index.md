@@ -96,7 +96,9 @@ Use **Water color** to tint the surface and underwater haze. Raise **Transparenc
 
 Select **Drive car**, press **C**, or press left on a gamepad's D-pad to take the Testarossa. The sandbox checks the ground below you first, then searches nearby for a dry, gently sloping patch with room to pull away. Graded roads use the same ground surface. If you start over water or a cliff and the search finds nothing, fly closer to land and try again.
 
-The round minimap in the lower left keeps the car's heading at the top. Press **M** or click the left stick to show or hide it. Press **N** or tap **D-pad down** to change the zoom. The speedometer in the lower right reads in mph. The chase camera's vertical field of view opens from 60° while parked to about 70° at a steady 30 mph, 77° at 60 mph and 86° at 120 mph. It reaches 90° at the car's 240 mph top speed and eases back as you slow down.
+The round minimap in the lower left keeps the car's heading at the top. Press **M** or click the left stick to show or hide it. Press **N** or tap **D-pad down** to change the zoom. The speedometer in the lower right reads in mph.
+
+Above 40 mph the chase camera moves closer to the road. On level ground it follows from 9° lower at 120 mph and above, then rises as you slow down. The vertical field of view opens from 60° while parked to about 70° at 30 mph, 77° at 60 mph and 86° at 120 mph. It reaches 90° at the car's 240 mph top speed.
 
 The automatic gearbox shifts through five forward gears. A light pedal shifts earlier. Full throttle holds each gear longer, and you can hear the revs drop as the next gear engages. Sliding tires squeal on pavement. On dry, unpaved ground, a hard launch, a skid, or nitrous throws dust from the tires touching the ground.
 

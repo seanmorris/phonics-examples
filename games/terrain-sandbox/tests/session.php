@@ -615,6 +615,13 @@ for($i = 1; $i <= 360; $i++)
 }
 expect($frameError < .52 && $landingPitch !== null && $landingPitch < -.8 && $drop->camera->pitch > $landingPitch + .4,
 	'The chase camera tilts with a falling car through interpolated frames and lifts after clearing the ledge');
+$belowLedge = ['y'=>.02, 'z'=>-.3, 'speed'=>0.] + $drop->car->state();
+$chase->board($drop->camera,$belowLedge,$drop->landscape);
+$blockedEye = clone $drop->camera;
+$belowLedge['speed'] = Car::TOP_SPEED_MPH * Car::MPS_PER_MPH;
+$chase->board($drop->camera,$belowLedge,$drop->landscape);
+expect($blockedEye->position[1] >= 17.34 && $drop->camera->position === $blockedEye->position
+	&& $drop->camera->pitch === $blockedEye->pitch, 'A ledge that blocks the high-speed drop also keeps its original sightline');
 $drop->close();
 
 foreach([-1,0,1] as $downhill)
@@ -1819,15 +1826,20 @@ expect($car($boosted)['speed'] < end($burst)['speed'] && $boosted->view(1.)[0]->
 	'Service braking narrows the view as the car sheds speed');
 $boosted->close(); $shift->close();
 
-// Hold known speeds to measure the lens independently of gearbox shifts and terrain.
-function speedLensCurve(Session $parked, int $hz): array
+// Hold known speeds on level ground to measure the chase boom and lens independently of the drivetrain.
+function speedChaseCurve(Session $parked, int $hz): array
 {
 	$lens = new CarChase;
 	$eye = new TerrainPhonics\Camera;
 	$eye->fov = deg2rad(64);
 	$pose = $parked->car->state();
 	$land = $parked->landscape;
+	$pose['y'] = $land->height($pose['x'],$pose['z']);
 	$lens->board($eye,$pose,$land);
+	$boomAngle = static fn() => rad2deg(atan2($eye->position[1] - $pose['y'] - .65,
+		hypot($eye->position[0]-$pose['x'],$eye->position[2]-$pose['z'])));
+	$parkedAngle = $boomAngle();
+	$parkedPitch = $eye->pitch;
 	$holdSpeed = function(float $mph, int $steps, float $charge = 1.) use (&$pose,$lens,$eye,$land,$hz): float {
 		for($i = 0; $i < $steps; $i++)
 		{
@@ -1840,12 +1852,22 @@ function speedLensCurve(Session $parked, int $hz): array
 	};
 	expect($holdSpeed(0.,1,.5) === 0., 'Fuel use alone at rest leaves the lens at its base angle');
 	$rise = $holdSpeed(120.,intdiv($hz,6));
-	$previous = $lens->view($eye,$pose,0.)[0]->fov;
-	$middle = $lens->view($eye,$pose,.5)[0]->fov;
-	expect(abs(2*$middle-$previous-$lens->fieldOfView($eye)) < 1e-9, 'The lens blends between fixed steps');
+	$earlyDrop = $parkedAngle - $boomAngle();
+	$previousEye = $lens->view($eye,$pose,0.)[0]; $middleEye = $lens->view($eye,$pose,.5)[0];
+	expect(abs(2*$middleEye->fov-$previousEye->fov-$lens->fieldOfView($eye)) < 1e-9, 'The lens blends between fixed steps');
+	expect($earlyDrop > 0. && $earlyDrop < 9. && abs(2*$middleEye->position[1]-$previousEye->position[1]-$eye->position[1]) < 1e-9
+		&& abs(2*$middleEye->pitch-$previousEye->pitch-$eye->pitch) < 1e-9, 'The lowering camera and its pitch blend between ticks');
 	$street = $holdSpeed(30.,4*$hz);
+	expect($boomAngle() === $parkedAngle && $eye->pitch === $parkedPitch, 'At street speeds the chase keeps its parked angle');
 	$highway = $holdSpeed(60.,4*$hz);
+	$highwayDrop = $parkedAngle - $boomAngle();
+	$holdSpeed(80.,4*$hz);
+	expect($highwayDrop > 0. && $highwayDrop < 4.5 && abs($parkedAngle-$boomAngle()-4.5) < .01,
+		'The chase is halfway down at 80 mph');
 	$cruise = $holdSpeed(120.,4*$hz);
+	expect(abs($parkedAngle-$boomAngle()-9.) < .01 && abs(rad2deg($eye->pitch-$parkedPitch)-9.) < 1.,
+		'At 120 mph the boom has lowered nine degrees with a flatter view ahead');
+	$cruiseHeight = $eye->position[1];
 	expect(abs($street-9.90) < .01 && abs($highway-17.34) < .01 && abs($cruise-26.25) < .01,
 		'The view opens early at 30 and 60 mph and continues widening at 120 mph');
 	expect($rise > .27*$cruise && $rise < .30*$cruise, 'A sudden jump in speed eases into the new angle');
@@ -1853,18 +1875,21 @@ function speedLensCurve(Session $parked, int $hz): array
 		'At a constant speed the view holds through burning, emptying, and refilling the bottle');
 	$fast = $holdSpeed(Car::TOP_SPEED_MPH,4*$hz);
 	expect(abs($fast-30.) < 1e-9 && $holdSpeed(Car::TOP_SPEED_MPH+20,1) === $fast, 'The governor reaches the widest lens and overspeed is capped');
+	expect($eye->position[1] === $cruiseHeight, 'The camera holds its low chase angle up to and beyond top speed');
 	$fall = $holdSpeed(0.,intdiv($hz,2));
+	$returnDrop = $parkedAngle - $boomAngle();
+	expect($returnDrop > 0. && $returnDrop < $earlyDrop, 'Braking eases the camera back up');
 	expect($fall > .36*$fast && $fall < .38*$fast, 'Even a sudden stop eases the camera back toward its base angle');
 	expect($holdSpeed(0.,4*$hz) === 0. && !$lens->advance($eye,$pose,$pose,$land,1/$hz),
 		'The lens returns exactly to the original field of view and the parked camera goes idle');
 	$reverse = $holdSpeed(-12.,4*$hz);
 	expect(abs($reverse-4.28) < .01 && $holdSpeed(12.,1) === $reverse, 'Equal forward and reverse road speeds use the same angle');
-	return [$rise,$fall];
+	return [$rise,$fall,$earlyDrop,$returnDrop];
 }
-[$rise30,$fall30] = speedLensCurve($unassisted,30);
-[$rise120,$fall120] = speedLensCurve($unassisted,120);
-expect(abs($rise30-$rise120)<1e-9 && abs($fall30-$fall120)<1e-9,
-	'The speed-dependent lens eases in and out at the same rate at 30 and 120 steps per second');
+$curve30 = speedChaseCurve($unassisted,30);
+$curve120 = speedChaseCurve($unassisted,120);
+foreach($curve30 as $i=>$value) expect(abs($value-$curve120[$i]) < 1e-9,
+	'The chase angle and lens ease in and out at the same rate at 30 and 120 steps per second');
 
 $assisted = $park();
 foreach([$assisted,$unassisted] as $session) {
