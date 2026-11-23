@@ -13,9 +13,9 @@ final class CarChase
 	private array $previousCar = [];
 	private array $previousCenter = [], $currentCenter = [];
 	private const DISTANCE = 6.7;
-	private const BOOST_FOV = 10 * M_PI / 180;
-	private const BOOST_IN_HALF_LIFE = .05, BOOST_OUT_HALF_LIFE = .24;
-	private float $boostFov = 0.;
+	private const MAX_FOV_WIDENING = 10 * M_PI / 180;
+	private const FOV_HALF_LIFE = .35;
+	private float $fovWidening = 0.;
 	/**
 	 * Angle in radians the driver looks away from straight ahead; positive looks right and half a turn looks back.
 	 * The boom swings round to it through the same damping that follows the car's heading.
@@ -27,15 +27,16 @@ final class CarChase
 	public function board(Camera $camera, array $pose, Landscape $land): void
 	{
 		$this->previousEye = null;
-		$this->boostFov = 0.;
+		$this->fovWidening = 0.;
 		$this->follow($camera, $pose, Car::centerOfMass($pose), $land, 1.0, 1.0, 1.0, 0.0);
 	}
 
 	public function advance(Camera $camera, array $from, array $to, Landscape $land, float $dt): bool
 	{
-		// Fuel spent this step distinguishes a firing bottle from a held button below the restart charge.
-		$targetFov = $to['nitrous'] < $from['nitrous'] && $to['nitrous'] > 0. ? self::BOOST_FOV : 0.;
-		if($from === $to && !$this->settling && $this->look === $this->looked && $this->boostFov === $targetFov)
+		// Give road speeds a visible change in angle, then taper the widening toward the speed governor.
+		$speedFraction = min(1., abs($to['speed']) / (Car::TOP_SPEED_MPH * Car::MPS_PER_MPH));
+		$targetWidening = self::MAX_FOV_WIDENING * $speedFraction * (2. - $speedFraction);
+		if($from === $to && !$this->settling && $this->look === $this->looked && $this->fovWidening === $targetWidening)
 		{
 			$this->previousEye = null;
 			return false;
@@ -49,11 +50,10 @@ final class CarChase
 		}
 		$this->previousEye = clone $camera;
 		$this->previousEye->fov = $this->fieldOfView($camera);
-		if($this->boostFov !== $targetFov)
+		if($this->fovWidening !== $targetWidening)
 		{
-			$halfLife = $targetFov > $this->boostFov ? self::BOOST_IN_HALF_LIFE : self::BOOST_OUT_HALF_LIFE;
-			$remaining = ($targetFov - $this->boostFov) * 2**(-$dt/$halfLife);
-			$this->boostFov = abs($remaining) < .0002 ? $targetFov : $targetFov - $remaining;
+			$remaining = ($targetWidening - $this->fovWidening) * 2**(-$dt/self::FOV_HALF_LIFE);
+			$this->fovWidening = abs($remaining) < .0002 ? $targetWidening : $targetWidening - $remaining;
 		}
 		$landed = $to['motion'] === 'driving' && in_array($from['motion'],['overturned','tumbling'],true);
 		$this->previousCar = $landed ? $to : $from;
@@ -107,13 +107,13 @@ final class CarChase
 	public function resetInterpolation(): void { $this->previousEye = null; }
 
 	/** Vertical field of view for the car at the latest fixed step, in radians. */
-	public function fieldOfView(Camera $camera): float { return $camera->fov + $this->boostFov; }
+	public function fieldOfView(Camera $camera): float { return $camera->fov + $this->fovWidening; }
 
 	public function view(Camera $camera, array $pose, float $alpha): array
 	{
 		$old = $this->previousEye;
 		$interpolate = $old !== null && $alpha < 1.;
-		if(!$interpolate && $this->boostFov === 0.) return [$camera,$pose];
+		if(!$interpolate && $this->fovWidening === 0.) return [$camera,$pose];
 		$eye = clone $camera;
 		$eye->fov = $this->fieldOfView($camera);
 		if(!$interpolate) return [$eye,$pose];

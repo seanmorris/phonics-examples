@@ -1234,6 +1234,7 @@ test('a shoreline wipeout restarts the car on its approach', async({page}) => {
 });
 
 test('drive the Testarossa from a dry clearing and switch vehicles', async({page}) => {
+	test.setTimeout(180_000);
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await page.setViewportSize({width: 900, height: 600});
@@ -1242,6 +1243,7 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 
 	await boot(page);
 	const dry = fixture();
+	dry.landscape.recipe.worldSize = 512;
 	dry.settings.waterLevel = -4;
 	dry.camera = {position: [0,30,0], yaw: Math.PI, pitch: -.4};
 	await load(page, dry);
@@ -1433,20 +1435,27 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 
 	expect(await renderedFov()).toBeCloseTo(60, 3);
 	await page.keyboard.down('w');
+	await expect.poll(renderedFov, {timeout: 30_000}).toBeGreaterThan(61.5);
+	expect((await status(page)).car.nitrous).toBe(1);
+
 	await page.keyboard.down('d');
 	await setButton(4, true);
 	await expect.poll(async() => (await status(page)).car.nitrous).toBeLessThan(.99);
 	await expect(dial).toHaveAttribute('aria-label', /nitrous \d{1,2}%/);
-	await expect.poll(renderedFov).toBeGreaterThan(68);
+	await expect.poll(renderedFov, {timeout: 30_000}).toBeGreaterThan(63.5);
 
 	await setButton(4, false);
 	await expect.poll(chargeMotion).toEqual({draining: true, filling: true});
-	await expect.poll(renderedFov).toBeLessThan(61);
+	expect(await renderedFov()).toBeGreaterThan(63);
 	await expect.poll(async() => (await status(page)).car.x).toBeLessThan(-.2);
 	await expect.poll(needle).toBeGreaterThan(.75*Math.PI + .15);
 	await expect.poll(() => view.evaluate(element => element.splitFrontSteering)).toBe(true);
 	await page.keyboard.up('d');
 	await page.keyboard.up('w');
+	await page.keyboard.down('s');
+	await expect.poll(renderedFov, {timeout: 30_000}).toBeLessThan(62);
+	await page.keyboard.up('s');
+
 	const beforeRestore = await view.evaluate(element => element.carDraws);
 	await restoreContext(page);
 	await expect.poll(() => view.evaluate(element => element.carDraws)).toBeGreaterThan(beforeRestore);

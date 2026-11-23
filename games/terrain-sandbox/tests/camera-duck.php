@@ -373,7 +373,9 @@ function race(Session $session, array $keys, int $steps, bool $draw = true): arr
 			$least = min($least, clearance($view->position, $gates));
 		}
 		[$view] = $session->view(1.0);
-		if($view === $session->camera) $still++;
+		// The unducked car view includes the lens angle for its current speed.
+		$unducked = $session->mode === 'car' ? $session->carView(1.0)[0] : $session->camera;
+		if($view == $unducked) $still++;
 		$offset = distance($view->position, $session->camera->position);
 		$duck = max($duck, $offset);
 		if($offset > 0) $ducked++;
@@ -415,8 +417,8 @@ expect($drive['ducked'] > 20 && $drive['duck'] > .5 && $drive['least'] >= $c - 1
 	&& $drive['still'] > 100,
 	sprintf('Under a 2.3 m road gate the drawn car eye ducks %.2f m over %d steps, stays %.3f m clear and steps at most %.3f m beyond the chase eye',
 		$drive['duck'], $drive['ducked'], $drive['least'], $drive['jump']));
-expect($session->status()['duck']['offset'] === [0.0, 0.0, 0.0] && $session->view(1.0)[0] === $session->camera,
-	'Past the gate the drawn eye is the chase eye again');
+expect($session->status()['duck']['offset'] === [0.0, 0.0, 0.0] && $session->view(1.0)[0] == $session->carView(1.0)[0],
+	'Past the gate the drawn eye matches the unducked chase pose and field of view');
 // Leaving the car while its eye ducks under the board starts free flight from the ducked eye, raised to the free
 // camera's 2 m above the ground, which still leaves it outside the board.
 $session = new Session($open);

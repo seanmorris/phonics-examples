@@ -333,9 +333,8 @@ for($i = 0; $i < 600; $i++)
 {
 	$lastPitch = $canyon->camera->pitch;
 	$canyon->step(1/60);
-	$camera = $canyon->camera;
+	[$camera,$car] = $canyon->carView(1.);
 	[$x,$y,$z] = $camera->position;
-	$car = $canyon->car->state();
 	$maxPitchStep = max($maxPitchStep, abs($camera->pitch - $lastPitch));
 	$clearance = min($clearance, $y - $canyon->landscape->height($x,$z));
 	$angle = atan2($car['y'] + .65 - $y, hypot($car['x']-$x, $car['z']-$z)) - $camera->pitch;
@@ -351,7 +350,8 @@ expect(abs(2*$halfEye->position[2] - $previousEye->position[2] - $camera->positi
 	&& $previousCar['z'] < $halfCar['z'],
 	'The rendered car and eye advance through the same fraction of the physics step');
 input($canyon, ['actions'=>['pause']]);
-expect($canyon->carView(0) === [$camera,$car], 'Pausing flushes both interpolation histories');
+[$pausedEye,$pausedCar] = $canyon->carView(0);
+expect($pausedEye == $camera && $pausedCar === $car, 'Pausing holds the last camera and car poses at every render fraction');
 $canyon->close();
 
 $roads = new Session(['worldSize' => 256,'heightScale' => 0,'detailAmplitude' => 0]);
@@ -1717,6 +1717,10 @@ $half = hold($light, pad(rt: .5), 60, $car);
 // Half the pedal gives half the drive and leaves half the rolling resistance a released pedal meets.
 expect(end($half)['speed'] > end($full)['speed'] / 3 && end($half)['speed'] < end($full)['speed'] / 2,
 	'Half the right trigger accelerates more gently');
+$normalFov = $floored->camera->fov;
+$ordinaryFov = $floored->view(1.)[0]->fov;
+expect($light->view(1.)[0]->fov > $normalFov && $ordinaryFov > $light->view(1.)[0]->fov && $car($floored)['nitrous'] === 1.,
+	'A normal launch opens the lens progressively with the speed gained on each pedal');
 $light->close(); $floored->close();
 $boosted = $park(); $shift = $park(); $unassisted = $park();
 $boost = pad(rt: 1, buttons: Session::PAD_LB);
@@ -1727,30 +1731,27 @@ expect(abs(end($first)['nitrous']-.75)<1e-9 && end($first)['speed'] > end($full)
 	&& min(end($first)['wheelTravel'])>.06, 'One second of boost consumes a quarter bottle, pulls harder and loads all four tires');
 $halfway = $boosted->carView(.5)[1]['nitrous'];
 expect(abs($halfway - ($first[58]['nitrous']+$first[59]['nitrous'])/2)<1e-12, 'The gauge interpolates a draining bottle between steps');
-$normalFov = $shift->camera->fov;
 $wideFov = $shift->view(1.)[0]->fov;
-expect(abs($wideFov-$normalFov-deg2rad(10))<1e-10 && $boosted->view(1.)[0]->fov === $wideFov,
-	'Keyboard and controller boost both widen the chase lens by ten degrees');
+expect($wideFov > $ordinaryFov && $wideFov < $normalFov+deg2rad(4) && $boosted->view(1.)[0]->fov === $wideFov,
+	'The faster launch on keyboard and controller opens the lens equally and leaves room for further speed');
 input($shift,['actions'=>['pause']]);
 $shift->step(.1);
-expect($shift->view(0.)[0]->fov === $wideFov, 'Pausing a boost freezes the widened view');
+expect($shift->view(0.)[0]->fov === $wideFov, 'Pausing freezes the current driving view');
 input($shift,['actions'=>['fly']]);
 expect($shift->view(1.)[0]->fov === $normalFov, 'Free flight immediately uses its own normal lens');
 enterCar($shift);
 expect($shift->view(0.)[0]->fov === $normalFov, 'A new drive begins with the normal lens');
 hold($boosted,$boost,180,$car);
 $emptyFov = $boosted->view(1.)[0]->fov;
-expect($car($boosted)['nitrous'] === 0. && $emptyFov < $wideFov && $emptyFov > $normalFov+deg2rad(9),
-	'The lens starts easing back on the step the bottle runs dry with the button still held');
+expect($car($boosted)['nitrous'] === 0. && $emptyFov > $wideFov && $emptyFov > $normalFov+deg2rad(7),
+	'The high-speed view is still wide when the last nitrous burns');
 hold($boosted,$boost,10,$car);
-expect($boosted->view(1.)[0]->fov < $emptyFov, 'Holding an empty bottle keeps releasing the lens');
+expect($boosted->view(1.)[0]->fov >= $emptyFov, 'Continued acceleration keeps opening the lens after depletion');
 $rolling = hold($boosted,pad(),5,$car);
 $trickle = end($rolling)['nitrous'];
 expect($trickle > 0. && $trickle < .03 && abs($boosted->carView(.5)[1]['nitrous'] - ($rolling[3]['nitrous']+$trickle)/2)<1e-12,
 	'Even the small initial refill is visible between simulation steps');
-$beforePress = $boosted->view(1.)[0]->fov;
 $blocked = hold($boosted,$boost,6,$car);
-expect($boosted->view(1.)[0]->fov < $beforePress, 'Pressing below the restart charge cannot widen the view');
 expect(min(array_column($blocked,'nitrous')) === $trickle && max(array_column($blocked,'nitrous')) === $trickle,
 	'A fresh press after depletion cannot spend a charge below the restart threshold');
 for($i = 0; $i < 60 && $car($boosted)['nitrous'] < .03; $i++) hold($boosted,pad(),1,$car);
@@ -1758,10 +1759,14 @@ $available = $car($boosted)['nitrous'];
 $burst = hold($boosted,$boost,12,$car);
 expect($available >= .03 && abs($burst[0]['nitrous'] - ($available-1/240))<1e-12 && $burst[1]['nitrous'] < $burst[0]['nitrous']
 	&& end($burst)['nitrous'] === 0., 'At 3% a fresh burst starts and runs all the way back to empty');
+$beforeBrake = $boosted->view(1.)[0]->fov;
+hold($boosted,pad(lt: 1),120,$car);
+expect($car($boosted)['speed'] < end($burst)['speed'] && $boosted->view(1.)[0]->fov < $beforeBrake-deg2rad(1),
+	'Service braking narrows the view as the car sheds speed');
 $boosted->close(); $shift->close();
 
-// Isolate the lens with a stationary pose so settling can be checked independently of car motion.
-function boostLensCurve(Session $parked, int $hz): array
+// Hold known speeds to measure the lens independently of gearbox shifts and terrain.
+function speedLensCurve(Session $parked, int $hz): array
 {
 	$lens = new CarChase;
 	$eye = new TerrainPhonics\Camera;
@@ -1769,28 +1774,41 @@ function boostLensCurve(Session $parked, int $hz): array
 	$pose = $parked->car->state();
 	$land = $parked->landscape;
 	$lens->board($eye,$pose,$land);
-	for($i = 0; $i < $hz/6; $i++)
-	{
-		$from = $pose;
-		$pose['nitrous'] -= 1/(4*$hz);
-		$lens->advance($eye,$from,$pose,$land,1/$hz);
-	}
-	$offset = fn(float $alpha): float => rad2deg($lens->view($eye,$pose,$alpha)[0]->fov - $eye->fov);
-	$attack = $offset(1.);
-	expect($attack > 9. && $attack < 9.1 && abs(2*$offset(.5)-$attack-$offset(0.))<1e-9,
-		'Boost opens the lens quickly and interpolates the angle between camera ticks');
-	for($i = 0; $i < $hz/2; $i++) $lens->advance($eye,$pose,$pose,$land,1/$hz);
-	$release = $offset(1.);
-	expect($release > 2. && $release < 2.3, 'The released lens closes more gradually while the car stands still');
-	for($i = 0; $i < 3*$hz; $i++) $lens->advance($eye,$pose,$pose,$land,1/$hz);
-	expect($offset(1.) === 0. && !$lens->advance($eye,$pose,$pose,$land,1/$hz),
-		'The lens returns exactly to the original field of view, then the stationary camera goes idle');
-	return [$attack,$release];
+	$holdSpeed = function(float $mph, int $steps, float $charge = 1.) use (&$pose,$lens,$eye,$land,$hz): float {
+		for($i = 0; $i < $steps; $i++)
+		{
+			$from = $pose;
+			$pose['speed'] = $mph*Car::MPS_PER_MPH;
+			$pose['nitrous'] = $charge;
+			$lens->advance($eye,$from,$pose,$land,1/$hz);
+		}
+		return rad2deg($lens->fieldOfView($eye) - $eye->fov);
+	};
+	expect($holdSpeed(0.,1,.5) === 0., 'Fuel use alone at rest leaves the lens at its base angle');
+	$rise = $holdSpeed(120.,intdiv($hz,6));
+	$previous = $lens->view($eye,$pose,0.)[0]->fov;
+	$middle = $lens->view($eye,$pose,.5)[0]->fov;
+	expect($rise > 1.9 && $rise < 2.3 && abs(2*$middle-$previous-$lens->fieldOfView($eye)) < 1e-9,
+		'Even a sudden jump in speed widens gradually and blends across render frames');
+	$highway = $holdSpeed(60.,4*$hz);
+	$cruise = $holdSpeed(120.,4*$hz);
+	expect(abs($highway-4.375) < 1e-9 && abs($cruise-7.5) < 1e-9, 'Steady highway speeds have distinct intermediate views');
+	expect($holdSpeed(120.,1,.1) === $cruise && $holdSpeed(120.,1,0.) === $cruise && $holdSpeed(120.,1) === $cruise,
+		'At a constant speed the view holds through burning, emptying, and refilling the bottle');
+	$fast = $holdSpeed(Car::TOP_SPEED_MPH,4*$hz);
+	expect(abs($fast-10.) < 1e-9 && $holdSpeed(Car::TOP_SPEED_MPH+20,1) === $fast, 'The governor reaches the widest lens and overspeed is capped');
+	$fall = $holdSpeed(0.,intdiv($hz,2));
+	expect($fall > 3.5 && $fall < 4., 'Even a sudden stop eases the camera back toward its base angle');
+	expect($holdSpeed(0.,4*$hz) === 0. && !$lens->advance($eye,$pose,$pose,$land,1/$hz),
+		'The lens returns exactly to the original field of view and the parked camera goes idle');
+	$reverse = $holdSpeed(-12.,4*$hz);
+	expect($reverse > 0. && $reverse < 1. && $holdSpeed(12.,1) === $reverse, 'Equal forward and reverse road speeds use the same angle');
+	return [$rise,$fall];
 }
-[$attack30,$release30] = boostLensCurve($unassisted,30);
-[$attack120,$release120] = boostLensCurve($unassisted,120);
-expect(abs($attack30-$attack120)<1e-9 && abs($release30-$release120)<1e-9,
-	'The nitrous lens follows the same attack and release at 30 and 120 steps per second');
+[$rise30,$fall30] = speedLensCurve($unassisted,30);
+[$rise120,$fall120] = speedLensCurve($unassisted,120);
+expect(abs($rise30-$rise120)<1e-9 && abs($fall30-$fall120)<1e-9,
+	'The speed-dependent lens eases in and out at the same rate at 30 and 120 steps per second');
 
 $assisted = $park();
 foreach([$assisted,$unassisted] as $session) {
