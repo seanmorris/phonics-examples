@@ -4,6 +4,8 @@ An offline authoring and flight sandbox for the optional `terrain-phonics` packa
 
 See [the controls guide](docs/index.md) and [landscape authoring](docs/authoring.md).
 
+The soundtrack streams from the `music/` directory next to `game.phar`. To change the rotation, edit `music/playlist.txt` and run `node scripts/generate-terrain-music.mjs` from the repository root. The generator uses FFmpeg and ffprobe to read the MP3s’ ID3 credits and embedded pictures. The application and site builds copy the streams and thumbnails alongside the archive.
+
 The terrain, camera, editing, and simulation run in PHP. Browser code provides accessible authoring controls, file dialogs, input collection, and lifecycle integration. The example does not require Tiled or a network connection.
 
 Each vehicle is a Phonics entity holding its physics object, `RacerMotion`, and its own `Race`. To add another racer, register those components together and pass its movement system’s name in the session’s `movementSystems` list. On each fixed step, call `RacerMotion::publish($before, $after)` with the two vehicle poses. Pass `relocated: true` for a teleport. A change in the car’s recovery counter also skips the crossing. The race system runs after movement and times every racer against the shared course. The HUD follows the local driver.

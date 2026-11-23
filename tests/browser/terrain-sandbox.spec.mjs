@@ -1037,6 +1037,28 @@ test('tight road bends and checkpoint banners return the headlight beam at night
 
 test('the local racer records checkpoint and finish splits in the packaged sandbox', async({page}) => {
 	await page.setViewportSize({width: 480, height: 300});
+
+	await page.addInitScript(() => {
+		const tracks = [], createSource = AudioContext.prototype.createMediaElementSource;
+		window.finishMusic = [];
+
+		AudioContext.prototype.createMediaElementSource = function(media) {
+			tracks.push(media);
+
+			const snapshot = () => window.finishMusic.push({
+				type: media.paused ? 'pause' : 'play'
+				, source: media.currentSrc
+				, at: media.currentTime
+				, others: tracks.filter(other => other !== media && !other.paused).map(other => other.currentSrc)
+			});
+
+			media.addEventListener('playing', snapshot);
+			media.addEventListener('pause', snapshot);
+
+			return createSource.call(this, media);
+		};
+	});
+
 	await installCarPad(page);
 	await boot(page);
 
@@ -1094,6 +1116,15 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 	await expect(page.locator('[data-status]')).toBeHidden();
 	expect(race.splits.map(split => split.role)).toEqual(['checkpoint', 'finish']);
 	expect(race.time).toBeGreaterThan(race.splits[0].time);
+	const events = await page.evaluate(() => window.finishMusic);
+	const cue = events.findIndex(e => e.type === 'play' && e.source.endsWith('/race-finish.wav'));
+	expect(cue).toBeGreaterThan(-1);
+	expect(events[cue].others.some(src => src.endsWith('.mp3'))).toBe(true);
+	const parked = events.slice(cue+1).find(e => e.type === 'pause' && e.source.endsWith('.mp3'));
+	const resumed = events.slice(cue+1).find(e => e.type === 'play' && e.source === parked?.source);
+	expect(parked).toBeDefined();
+	expect(resumed?.at).toBeCloseTo(parked.at, 0);
+	expect(resumed.others.some(src => src.endsWith('/race-finish.wav'))).toBe(true);
 });
 
 test('the rendered arrow keeps an outside lane straight past an invisible waypoint', async({page}) => {

@@ -135,6 +135,35 @@ export function activate({module, canvas, session, services})
 	const roadPreview = frame.querySelector('[data-road-preview]');
 	const race = frame.querySelector('[data-race]');
 	let finishTimer = null;
+	const credit = frame.querySelector('[data-music-credit]');
+	const cover = credit.querySelector('img');
+	let creditTimer;
+	cover.addEventListener('error', () => { cover.hidden = true; }, {signal});
+
+	canvas.addEventListener('phonics-music-track', ({detail: track}) => {
+		clearTimeout(creditTimer);
+		credit.querySelector('strong').textContent = track.title || track.id;
+		credit.querySelector('[data-artist]').textContent = track.artist || '';
+		credit.querySelector('[data-album]').textContent = track.album || '';
+		cover.hidden = !track.cover;
+
+		if(track.cover) cover.src = track.cover;
+		else cover.removeAttribute('src');
+
+		credit.hidden = false;
+		creditTimer = setTimeout(() => { credit.hidden = true; }, 6000);
+	}, {signal});
+
+	const musicLevel = frame.querySelector('[data-music-level]');
+	musicLevel.value = String(Math.round(session.backgroundMusic.volume*100));
+
+	musicLevel.addEventListener(
+		'input'
+		, () => session.backgroundMusic.setVolume(musicLevel.valueAsNumber/100)
+		, {signal}
+	);
+
+	frame.querySelector('[data-music-next]').addEventListener('click', () => session.backgroundMusic.next(), {signal});
 
 	const dismissFinish = () => {
 		finishTimer = null;
@@ -677,12 +706,15 @@ export function activate({module, canvas, session, services})
 			{
 				clearTimeout(finishTimer);
 				finishTimer = setTimeout(dismissFinish, 4000);
+				session.backgroundMusic.push({id: 'terrain-race-finish', src: 'music/race-finish.wav', credit: false});
 			}
 			else if(!finished && finishTimer !== null)
 			{
 				clearTimeout(finishTimer);
 				finishTimer = null;
 			}
+
+			if(state.paused !== latest?.paused) session.backgroundMusic.pause(state.paused);
 
 			latest = state;
 			module.updateTerrainHints(state);
@@ -901,6 +933,7 @@ export function activate({module, canvas, session, services})
 
 	return async () => {
 		clearTimeout(finishTimer);
+		clearTimeout(creditTimer);
 		clearInput();
 
 		if(session.terrainSandbox === api) delete session.terrainSandbox;
@@ -2023,6 +2056,14 @@ function markup()
 	}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--map-room:0px}
 	.terrain-sandbox.has-flight-map:has(.terrain-speedometer:not([hidden])){--map-room:calc(var(--flight-map-size) + 8px)}
+	.terrain-sandbox{--credit-left:12px}
+	.terrain-sandbox.has-flight-map{--credit-left:calc(10px + var(--flight-map-size) + 8px)}
+	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--credit-right:calc(var(--speedometer-size) + 16px)}
+	.terrain-music-credit{position:absolute;pointer-events:none;left:var(--credit-left);bottom:10px;max-width:min(290px,calc(100% - var(--credit-left) - var(--credit-right,12px)));box-sizing:border-box;display:flex;align-items:center;gap:9px;height:64px;padding:6px 10px 6px 7px;border-radius:7px;background:#102822ed;color:#edf4ee}
+	.terrain-music-credit img{width:48px;height:48px;object-fit:contain;flex:none}
+	.terrain-music-credit div{min-width:0}.terrain-music-credit strong,.terrain-music-credit span,.terrain-music-credit small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.25}
+	.terrain-music-credit strong{font-size:14px}.terrain-music-credit span{font-size:13px}.terrain-music-credit small{font-size:11px;color:#c2d2c8}
+	.terrain-sandbox:has(.terrain-music-credit:not([hidden])) .terrain-hud{margin-bottom:70px}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])) .terrain-hud{left:calc(16px + var(--map-room));bottom:16px;max-width:calc(100% - var(--map-room) - var(--speedometer-size) - 58px)}
 	@container terrain-view (min-width:960px){
 		.terrain-panel[open]~.terrain-hud{max-width:calc(100% - var(--lab-width) - 48px)}
@@ -2034,6 +2075,7 @@ function markup()
 	@media(prefers-reduced-motion:no-preference){.terrain-finish{animation:terrain-finish-pulse .8s ease-in-out 3}}
 	@media(max-width:640px){.terrain-sandbox:has(.terrain-panel:not([open])) .terrain-hud:has([data-race]:not([hidden])) [data-diagnostics]{display:none}}
 	</style><div class="terrain-stage"></div><div class="terrain-control-hints" hidden></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
+	<aside class="terrain-music-credit" data-music-credit role="status" aria-live="polite" aria-atomic="true" hidden><img alt="" hidden><div><strong></strong><span data-artist></span><small data-album></small></div></aside>
 	<details class="terrain-panel" open>
 	<summary title="Landscape Lab (H)"><span class="lab-sliders" aria-hidden="true"><i></i><i></i><i></i></span><span class="lab-title">Landscape Lab</span></summary>
 	<div class="lab-workspace">
@@ -2232,6 +2274,7 @@ function markup()
 	<label class="terrain-field terrain-wide">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
 	<label class="terrain-check"><input data-show-diagnostics type="checkbox">Show diagnostics</label>
+	<div class="terrain-row"><label class="terrain-field">Music volume<input type="range" min="0" max="100" step="1" data-music-level></label><button type="button" data-music-next>Next track</button></div>
 	<details><summary>Driving and flight controls</summary><p class="terrain-note">Press M or click the left stick to show or hide the car or F5 minimap. Press N or tap D-pad ↓ to change its zoom.</p>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: fast flight · Shift / LB: car nitrous · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Click the right stick to recover an off-road race car. Start pauses.</p>

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "1588229",
+    "src": "music/1588229_Peak-Shiawase-Remix.mp3",
+    "title": "Peak Shiawase Remix",
+    "artist": "NayzeeGD",
+    "cover": "music/covers/1588229.jpg"
+  },
+  {
+    "id": "709578",
+    "src": "music/709578_Dimension.mp3",
+    "title": "Dimension",
+    "artist": "Creo",
+    "cover": "music/covers/709578.jpg"
+  },
+  {
+    "id": "1562043",
+    "src": "music/1562043_Exzy-amp-Zjony---Tokyo-Dri.mp3",
+    "title": "Tokyo Drift 東京ドリフト",
+    "artist": "EXZEN-sama & Zjongelas",
+    "cover": "music/covers/1562043.jpg"
+  },
+  {
+    "id": "621134",
+    "src": "music/621134_TheFatRat---Unity.mp3",
+    "title": "Unity",
+    "artist": "TheFatRat",
+    "cover": "music/covers/621134.jpg"
+  },
+  {
+    "id": "1136538",
+    "src": "music/1136538_Ghost-Nova.mp3",
+    "title": "Ghost Nova",
+    "artist": "JAMATAR",
+    "album": "Midorisuki",
+    "cover": "music/covers/1136538.jpg"
+  }
+]

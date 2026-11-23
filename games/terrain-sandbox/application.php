@@ -4,9 +4,11 @@ declare(strict_types=1);
 $archive = 'phar://' . Phar::running(false) . '/';
 require_once $archive . 'core/autoload.php';
 require_once $archive . 'dependencies/terrain-phonics/autoload.php';
+require_once $archive . 'dependencies/phonics-bgm/src/BackgroundMusic.php';
 require_once __DIR__ . '/autoload.php';
 
 use Phonics\Application\Context;
+use PhonicsBgm\BackgroundMusic;
 use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
@@ -30,7 +32,10 @@ use TerrainSandbox\DisplayUnits;
 use TerrainSandbox\Session;
 
 $app = new Context;
+$music = new BackgroundMusic($app);
 $app->browser(__DIR__ . '/browser/game.mjs');
+$music->playlist(json_decode(file_get_contents(__DIR__.'/assets/soundtrack.json'), true, flags: JSON_THROW_ON_ERROR),
+	'terrain-sandbox.music.next.v1');
 $app->browser(__DIR__ . '/browser/car-audio.mjs');
 $app->browser(__DIR__ . '/browser/screen-awake.mjs');
 $app->browser(__DIR__ . '/browser/control-hints.mjs');

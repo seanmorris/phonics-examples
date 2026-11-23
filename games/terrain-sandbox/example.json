@@ -5,6 +5,7 @@
   "description": "Fly across editable procedural landscapes, grade roads, move the sun, and ride physical waves.",
   "controls": "Right-drag to look · WASD to fly or drive · Q/E down/up · Shift for fast flight · P to pause · H for controls",
   "application": "dist/game.phar",
+  "mediaDirectory": "music",
   "poster": "assets/poster.png",
   "canvas": {"width": 1280, "height": 720},
   "aspectRatio": "16/9",

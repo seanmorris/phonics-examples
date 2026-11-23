@@ -74,10 +74,12 @@
   "application": {
     "entry": "application.php",
     "dependencies": {
-      "terrain": "../../packages/terrain-phonics/phonics.json"
+      "terrain": "../../packages/terrain-phonics/phonics.json",
+      "music": "../../packages/phonics-bgm/phonics.json"
     },
     "assets": [
       "assets/poster.png",
+      "assets/soundtrack.json",
       "LICENSE",
       "assets/jetski/license.txt",
       "assets/jetski/mesh.bin.gz",
@@ -110,7 +112,7 @@
   },
   "integrity": {
     "LICENSE": "sha256-vs3gOjyLmy49WMe2XKf/2eGOmBYjlsw3QFKYPB+qpHw=",
-    "application.php": "sha256-RDYDR51Hu8a04VY0IP5YFTVVGwZ8lEuxfqk4CMJA3Ac=",
+    "application.php": "sha256-qc22l/D3Q29HqB7Z0FstxGWUFskKfvh0+jatAYq9DA8=",
     "assets/balloon/license.txt": "sha256-ob++2jsdjl/L1b12yi+FN1gI07TOsaCfqxkXGCWoox8=",
     "assets/balloon/mesh.bin.gz": "sha256-uznxgVVl2Wu+cWyCZUJaAZw1kFLmykiPAjkngfIgJSM=",
     "assets/car-audio/flat-twelve.wav": "sha256-VL0h/8JIMUjgFFHWnxBe2KpL7nVMB44V/WWQ8brK0wI=",
@@ -134,6 +136,7 @@
     "assets/roads/chevron.vert": "sha256-AV7O4OGh/Zh1n+Svv5UrkZ82wuL7CYl6i1W9zXtIXCs=",
     "assets/roads/curve-hazard-sign.rgba.gz": "sha256-n7RhtJzkz+Nzompb45bupIXqrKCANPv5l0Jw1Ia+fuc=",
     "assets/roads/retroreflection.glsl": "sha256-0GUsRIjlVbUaH9ZTCW5Utz5XZWj56Yy1zOombhLzYwo=",
+    "assets/soundtrack.json": "sha256-3T70nsxw9MqmSmbDhMmbRZSnSiTKasIZfirgK3nZ9qo=",
     "assets/testarossa/lamps.json": "sha256-F/h+F49bvHxxpbngDRN4a3Pyw0uoA8ovZ0YjnHgO8j4=",
     "assets/testarossa/license.txt": "sha256-/9ZQt2jc5NTX9mZTSd3OGLgMWNIQHyBLpSc3HI88iNU=",
     "assets/testarossa/mesh.bin.gz": "sha256-bjunAeyco1CrY+rtykEIEbYda2PO82nic9NcoQ2eaZI=",
@@ -144,7 +147,7 @@
     "browser/cockpit.mjs": "sha256-UjidQomNpmnf15mx5cqQO8XPVCQ6bWSAQobyGeNnrUk=",
     "browser/control-hints.mjs": "sha256-Cz5c3dvF1kVKlSFNc1LQAY1GA9Fvw3fPWCL9XoY//dE=",
     "browser/flight-map.mjs": "sha256-lIgsSivX3gxLP1DLHKw4loEw4HSA+P/krywzuKKxM+o=",
-    "browser/game.mjs": "sha256-19CW0Paq9Su6xRrInFrCajoKKLXId50L9xq+zWxgeC8=",
+    "browser/game.mjs": "sha256-pLP+Mdlq70Vm4CkKUVnsne3THIRSIQd5cUIavS/7xPQ=",
     "browser/road-editor.mjs": "sha256-qTrfbj3G0AUWEyOLHjoijGzwWqqyjHfQZWmxIJoLYyo=",
     "browser/screen-awake.mjs": "sha256-g+CdRS2UqKtPfuG+y20Jlo0dt27ap7IZ8VDGE+oD4Sg=",
     "browser/speedometer.mjs": "sha256-utcsbB3z+QuWu/v8jMpT5gTFOqoaS1VNlRyoQUyZHPo=",

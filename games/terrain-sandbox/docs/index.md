@@ -10,6 +10,8 @@ The top left of the view lists the controls for what you are doing, drawn as the
 
 On a touchscreen, drag a finger across the view to look around and tap the ground to use the chosen tool. Flying and driving need a gamepad or keyboard.
 
+The five-song soundtrack starts after your first input. **Explore** has a music volume slider and **Next track**. The lower-left credit shows the title, artist and available cover art beside the minimap. A race finish briefly crossfades to a jingle, then resumes the song where it paused. Opening the sandbox again starts the next song in the rotation.
+
 On the **Landscape** tab, expand **Landform parameters** to see what each setting changes. The fields sit side by side when there is room and stack on narrow screens. Select **Generate** to apply your changes.
 
 ## Color the ground
@@ -152,7 +154,7 @@ The overhead arrow shows its underside. Straight ahead points down the screen, a
 
 During a road race, click the right stick if you leave the road. Right-stick recovery and a flooded engine both return the car to a dry, safe point on the current leg, facing forward with at least 32.8 ft of road before the next checkpoint. If that leg is submerged, recovery works back from the last gate you passed. On a course built with gates alone, a flooded car restarts on a cleared gate’s approach. You keep your splits, and the clock runs through the 1.5-second restart.
 
-Yellow chevrons mark paved bends that turn at least 30° with a radius of 300 ft or less. The signs stand about six yards apart along the outside shoulder and point into the bend from either direction. At night the yellow face reflects the car’s headlights back toward the driver. You can drive straight through the signs and their posts.
+Yellow chevrons mark paved bends that turn at least 30° with a radius of 300 ft or less. Their faces measure about 13 by 16 ft. The signs stand about six yards apart along the outside shoulder and point into the bend from either direction. At night the faces and the printed checkpoint banners reflect the car’s headlights back toward the driver. You can drive straight through the signs and their posts.
 
 ### Generate a circuit
 

@@ -19,4 +19,7 @@ for(const entry of (await fs.readdir(games, {withFileTypes: true}))
 
 	const {stdout} = await execute(binary, ['pack',game], {cwd: root});
 	process.stdout.write(stdout);
+	const metadata = JSON.parse(await fs.readFile(path.join(game,'example.json'),'utf8'));
+	if(metadata.mediaDirectory) await fs.cp(path.join(game,metadata.mediaDirectory),
+		path.join(game,path.dirname(metadata.application),metadata.mediaDirectory),{recursive:true});
 }
