@@ -111,8 +111,9 @@ foreach([6,12] as $order)
 	check($order === 6 ? $alignment < -.99 : $alignment > .99,'The banks alternate at half firing order and reinforce the full firing order.');
 }
 $coast = CarEngineSound::controls(3600.,0.,0.); $pull = CarEngineSound::controls(3600.,1.,1.);
-check($pull[0] === 30. && $coast[0] === $pull[0] && $pull[1] > $coast[1] && $pull[2] > 3*$coast[2],
-	'At 3600 RPM the twelve-cylinder firing note is 360 Hz at every load; open throttle brightens the exhaust.');
+check($pull[0] === 30. && $coast[0] === $pull[0] && 12*$pull[0]*$voice['exhaustPitch'] === 180.
+	&& $pull[1] > $coast[1] && $pull[2] > 3*$coast[2],
+	'At 3600 RPM the exhaust sounds at 180 Hz under any load; open throttle brightens it.');
 check($coast[5] === 0. && $pull[5] === .08,'Full tire gain is capped and rolling contact is silent.');
 
 $car = board($land,16.);

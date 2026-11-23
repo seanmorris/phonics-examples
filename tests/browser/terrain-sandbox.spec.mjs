@@ -3051,15 +3051,15 @@ test('car sounds both exhaust banks, skids on pavement and raises dust', async({
 		return peak*analyser.context.sampleRate/analyser.fftSize;
 	});
 
-	await expect.poll(firingHz).toBeGreaterThan(89);
-	expect(await firingHz()).toBeLessThan(102);
+	await expect.poll(firingHz).toBeGreaterThan(42);
+	expect(await firingHz()).toBeLessThan(54);
 
 	await page.locator('.terrain-panel[open] > summary').click();
 	await view.focus();
 	await page.keyboard.down('w');
 	await page.keyboard.down('Shift');
 	await expect.poll(() => view.evaluate(element => element.dustPixels)).toBeGreaterThan(30);
-	await expect.poll(firingHz).toBeGreaterThan(215);
+	await expect.poll(firingHz).toBeGreaterThan(107);
 	expect(await page.evaluate(() => window.driveAudio.starts)).toBe(2);
 	await page.keyboard.down('d');
 	await expect.poll(async() => (await status(page)).car.roll).toBeGreaterThan(.025);
@@ -3152,43 +3152,43 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 
 		const rms = wave => Math.sqrt(wave.reduce((sum, x) => sum+x*x, 0)/wave.length);
 
-		function firingPeak(time, expected)
+		// Find the loudest spectral line, including the upper harmonics that can mask the intended pitch.
+		function exhaustPeak(time)
 		{
-			const wave = section(time, .36);
+			const samples = section(time, .36);
+			const wave = samples.map((v, i) => v*(.5-.5*Math.cos(2*Math.PI*i/(samples.length-1))));
+			const binHz = sampleRate/wave.length;
 			let loudest = 0, peak = 0;
 
-			for(let hz = expected-14; hz <= expected+14; hz++)
+			for(let bin = Math.ceil(30/binHz); bin*binHz <= 2000; bin++)
 			{
-				let real = 0, imag = 0;
+				// Goertzel power for this frequency bin.
+				const coefficient = 2*Math.cos(2*Math.PI*bin/wave.length);
+				let previous = 0, older = 0;
 
-				for(let i = 0; i<wave.length; i += 2)
+				for(let i = 0; i < wave.length; i++)
 				{
-					const phase = 2*Math.PI*i*hz/sampleRate;
-					real += wave[i]*Math.cos(phase);
-					imag += wave[i]*Math.sin(phase);
+					const next = wave[i] + coefficient*previous - older;
+					older = previous;
+					previous = next;
 				}
 
-				const energy = real*real+imag*imag;
+				const energy = previous*previous + older*older - coefficient*previous*older;
 
 				if(energy > loudest)
 				{
 					loudest = energy;
-					peak = hz;
+					peak = bin*binHz;
 				}
 			}
 
-			return 4*Math.sqrt(loudest)/wave.length > .25*rms(wave) ? peak : 0;
+			return peak;
 		}
 
 		const levels = Array.from({length: 13}, (_, i) => rms(section(.2+i*.05, .05))).sort((a, b) => a-b);
 
 		return {
-			notes: [firingPeak(.3, 250)
-				, firingPeak(1.1, 250)
-				, firingPeak(1.9, 740)
-				, firingPeak(2.66, 565)
-				, firingPeak(3.22, 565)
-			]
+			notes: [.3,1.1,1.9,2.66,3.22].map(exhaustPeak)
 			, variation: 20*Math.log10(levels.at(-2)/levels[1])
 			, pull: rms(section(.3, .5))
 			, coast: rms(section(1.1, .4))
@@ -3196,7 +3196,7 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 		};
 	}, {module, definition});
 
-	for(const [i, expected] of [250,250,740,565,565].entries())
+	for(const [i, expected] of [125,125,370,282.5,282.5].entries())
 	expect(Math.abs(measured.notes[i]-expected)).toBeLessThan(5);
 	expect(measured.variation).toBeLessThan(1.5);
 	expect(measured.pull).toBeGreaterThan(1.3*measured.coast);

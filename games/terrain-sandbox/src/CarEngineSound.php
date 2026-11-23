@@ -43,7 +43,8 @@ final class CarEngineSound
 			$state = (25173*$state + 13849) & 65535;
 			$noise .= chr($state >> 8);
 		}
-		return ['banks'=>$banks,'flowNoise'=>base64_encode($noise),'noiseRate'=>16000];
+		// Voice the exhaust one octave below the crank-derived firing note.
+		return ['banks'=>$banks,'flowNoise'=>base64_encode($noise),'noiseRate'=>16000,'exhaustPitch'=>.5];
 	}
 
 	/** Audio-clock targets: four-stroke cycle Hz, exhaust gain, muffler Hz, flow gain, jitter cents, tire gain and rate. */

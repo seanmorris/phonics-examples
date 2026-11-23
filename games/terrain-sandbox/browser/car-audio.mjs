@@ -15,7 +15,7 @@ export function prepareEngine(context, definition)
 
 	for(let i = 0; i < samples.length; i++) samples[i] = bytes.charCodeAt(i)/127.5 - 1;
 
-	return {waves, noise};
+	return {waves, noise, pitch: definition.exhaustPitch};
 }
 
 export function startEngine(context, instrument, tone)
@@ -25,27 +25,30 @@ export function startEngine(context, instrument, tone)
 	const flutter = context.createBiquadFilter(), jitter = context.createGain();
 	const breath = context.createBiquadFilter(), flow = context.createGain(), pulses = context.createGain();
 	const sources = [clock, noise], nodes = [muffler,body,volume,flutter,jitter,breath,flow,pulses];
+	const pitch = instrument.pitch;
 
-	clock.offset.value = tone.cycle;
+	clock.offset.value = tone.cycle*pitch;
 	noise.buffer = instrument.noise;
+	noise.playbackRate.value = pitch;
 	noise.loop = true;
 
-	muffler.frequency.value = tone.cutoff;
+	// Transpose the collector resonances with the pressure wave so the upper harmonics keep their balance.
+	muffler.frequency.value = tone.cutoff*pitch;
 	muffler.Q.value = .63;
 	body.type = 'peaking';
-	body.frequency.value = 245;
+	body.frequency.value = 245*pitch;
 	body.Q.value = .8;
 	body.gain.value = 2.5;
 	volume.gain.value = 0;
 	muffler.connect(body).connect(volume).connect(context.destination);
 
 	// The same small irregularity reaches both banks. Opening the throttle admits more pulsed exhaust noise.
-	flutter.frequency.value = 11;
+	flutter.frequency.value = 11*pitch;
 	flutter.Q.value = .55;
 	jitter.gain.value = tone.jitter;
 	noise.connect(flutter).connect(jitter);
 	breath.type = 'bandpass';
-	breath.frequency.value = 1450;
+	breath.frequency.value = 1450*pitch;
 	breath.Q.value = .65;
 	pulses.gain.value = .38;
 	flow.gain.value = tone.flow;
@@ -54,14 +57,14 @@ export function startEngine(context, instrument, tone)
 	for(const [bank, wave] of instrument.waves.entries())
 	{
 		const exhaust = context.createOscillator(), direct = context.createGain();
-		const reflection = context.createDelay(.01), echo = context.createGain();
+		const reflection = context.createDelay(.01/pitch), echo = context.createGain();
 		exhaust.setPeriodicWave(wave);
 		exhaust.frequency.value = 0;
 		clock.connect(exhaust.frequency);
 		jitter.connect(exhaust.detune);
 
 		direct.gain.value = bank === 0 ? 1 : .78;
-		reflection.delayTime.value = bank === 0 ? .0027 : .0038;
+		reflection.delayTime.value = (bank === 0 ? .0027 : .0038)/pitch;
 		echo.gain.value = .24;
 		exhaust.connect(direct).connect(muffler);
 		direct.connect(reflection).connect(echo).connect(muffler);
@@ -81,11 +84,11 @@ export function startEngine(context, instrument, tone)
 		update(next) {
 			const at = context.currentTime;
 
-			if(next.cycle !== tone.cycle) clock.offset.setTargetAtTime(next.cycle, at, .018);
+			if(next.cycle !== tone.cycle) clock.offset.setTargetAtTime(next.cycle*pitch, at, .018);
 
 			if(next.level !== tone.level) volume.gain.setTargetAtTime(next.level, at, .033);
 
-			if(next.cutoff !== tone.cutoff) muffler.frequency.setTargetAtTime(next.cutoff, at, .035);
+			if(next.cutoff !== tone.cutoff) muffler.frequency.setTargetAtTime(next.cutoff*pitch, at, .035);
 
 			if(next.flow !== tone.flow) flow.gain.setTargetAtTime(next.flow, at, .035);
 
