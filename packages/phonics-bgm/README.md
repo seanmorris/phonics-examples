@@ -17,4 +17,6 @@ Only the current song streams at startup. During its last 20 seconds the player 
 
 A pushed cue crossfades over the current cue and pauses it after the fade. Near the end of the new cue, the previous one fades back in from its paused position. Push more cues to nest them. Pass `true` as the second argument to loop a cue until `pop()`. Fades last up to 650 milliseconds and shorten for short sounds.
 
-Browser modules can use `session.backgroundMusic`. It exposes `push(track, loop)`, `pop()`, `next()`, `pause(boolean)`, `setVolume(0…1)`, and the current `track`, `depth` and `volume`. On a new track the canvas emits `phonics-music-track` with its credits and resolved cover URL. A cue with `credit: false` and a resumed song both leave the current credit display alone.
+Browser modules can use `session.backgroundMusic`. Both `next()` and `previous()` wrap at the ends and return the selected song's credits, or `null` for an empty playlist. A skip during a jingle selects the song that follows it. `setPlaybackPaused(boolean)` controls the listener's pause and `playbackPaused` reports it. `pause(boolean)` handles the game's independent pause. Playback resumes from its parked position when both pauses clear.
+
+The service also exposes `push(track, loop)`, `pop()`, `setVolume(0…1)` and the current `track`, `depth` and `volume`. On a new track the canvas emits `phonics-music-track` with its credits and resolved cover URL. A cue with `credit: false` and a resumed song both leave the current credit display alone.

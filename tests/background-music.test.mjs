@@ -142,6 +142,53 @@ test('only the immediate successor buffers near the end and playback claims that
 	assert.equal(timers.size, 0);
 });
 
+test('previous wraps, discards the wrong preload and keeps the saved rotation moving forward', async() => {
+	const {music, advance, voices, credits, storage} = player();
+	music.hold('gesture', false);
+	await tick();
+	await advance(160_000);
+	const queued = voices[1];
+
+	music.previous();
+	await tick();
+	assert.ok(queued.closed);
+	assert.deepEqual(credits, ['a','c']);
+	assert.equal(storage.get('rotation'), 'a');
+	music.previous();
+	await tick();
+	assert.equal(music.current.id, 'b');
+
+	voices.at(-1).media.onended();
+	await tick();
+	assert.equal(music.current.id, 'c');
+	music.close();
+});
+
+test('a previous selection stays parked during a manual pause or jingle, and skips broken tracks backward', async() => {
+	const {music, voices, credits} = player(new Map(), new Map([['c', Error('unavailable')]]));
+	music.hold('gesture', false);
+	await tick();
+	music.hold('listener', true);
+	music.previous();
+	music.hold('game', true);
+	music.hold('game', false);
+	assert.equal(voices.length, 1);
+	assert.ok(voices[0].media.paused);
+	music.hold('listener', false);
+	await tick();
+	assert.deepEqual(credits, ['a','b']);
+
+	music.push({id: 'finish', src: 'finish.wav', credit: false});
+	await tick();
+	music.previous();
+	assert.equal(music.current.id, 'finish');
+	assert.deepEqual(credits, ['a','b']);
+	music.pop();
+	await tick();
+	assert.deepEqual(credits, ['a','b','a']);
+	music.close();
+});
+
 test('interruption and pause cancel incomplete speculative downloads and retry only when needed', async() => {
 	const {music,advance,voices} = player();
 	music.hold('gesture', false);

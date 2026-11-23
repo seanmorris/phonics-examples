@@ -20,7 +20,7 @@
     ]
   },
   "integrity": {
-    "browser/BackgroundMusic.mjs": "sha256-CpSYc5Z5gygl4Gpq8+YfPh5WuJCHyLjB46mWZNYCGcs=",
+    "browser/BackgroundMusic.mjs": "sha256-3wWC2CliatvdjXMKt4syHfDX0TJV8saFw2M8Dp4/hmU=",
     "src/BackgroundMusic.php": "sha256-9szoO9VQN6KKVFHjSW8N2Vl3nIbYBUdj+w2haA1Ta4g="
   }
 }

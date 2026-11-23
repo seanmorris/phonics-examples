@@ -58,7 +58,7 @@ for(const name of fs.readFileSync(path.join(media, 'playlist.txt'), 'utf8').trim
 			, '-map'
 			, '0:' + picture.index
 			, '-vf'
-			, 'scale=144:144:force_original_aspect_ratio=decrease'
+			, 'scale=288:288:force_original_aspect_ratio=decrease'
 			, '-frames:v'
 			, '1'
 			, '-map_metadata'

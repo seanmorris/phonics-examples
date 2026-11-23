@@ -141,7 +141,8 @@ export function activate({module, canvas, session, services})
 	let creditTimer;
 	cover.addEventListener('error', () => { cover.hidden = true; }, {signal});
 
-	canvas.addEventListener('phonics-music-track', ({detail: track}) => {
+	function showCredit(track)
+	{
 		clearTimeout(creditTimer);
 		credit.querySelector('strong').textContent = track.title || track.id;
 		credit.querySelector('[data-artist]').textContent = track.artist || '';
@@ -153,18 +154,42 @@ export function activate({module, canvas, session, services})
 
 		credit.hidden = false;
 		creditTimer = setTimeout(() => { credit.hidden = true; }, 6000);
-	}, {signal});
+	}
 
+	canvas.addEventListener('phonics-music-track', ({detail}) => showCredit(detail), {signal});
+
+	const music = session.backgroundMusic;
 	const musicLevel = frame.querySelector('[data-music-level]');
-	musicLevel.value = String(Math.round(session.backgroundMusic.volume*100));
+	musicLevel.value = String(Math.round(music.volume*100));
 
-	musicLevel.addEventListener(
-		'input'
-		, () => session.backgroundMusic.setVolume(musicLevel.valueAsNumber/100)
-		, {signal}
-	);
+	musicLevel.addEventListener('input', () => music.setVolume(musicLevel.valueAsNumber/100), {signal});
 
-	frame.querySelector('[data-music-next]').addEventListener('click', () => session.backgroundMusic.next(), {signal});
+	const playMusic = frame.querySelector('[data-music-play]');
+	const pauseMusic = frame.querySelector('[data-music-pause]');
+
+	const showMusicState = () => {
+		playMusic.setAttribute('aria-pressed', String(!music.playbackPaused));
+		pauseMusic.setAttribute('aria-pressed', String(music.playbackPaused));
+	};
+
+	for(const [button, paused] of [[playMusic, false], [pauseMusic, true]])
+	{
+		button.addEventListener('click', () => {
+			music.setPlaybackPaused(paused);
+			showMusicState();
+		}, {signal});
+	}
+
+	showMusicState();
+
+	for(const [selector, skip] of [['[data-music-prev]', music.previous], ['[data-music-next]', music.next]])
+	{
+		frame.querySelector(selector).addEventListener('click', () => {
+			const track = skip();
+
+			if(music.playbackPaused && track && track.credit !== false) showCredit(track);
+		}, {signal});
+	}
 
 	const dismissFinish = () => {
 		finishTimer = null;
@@ -1984,22 +2009,41 @@ function markup()
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}@media(pointer:coarse){.terrain-sandbox input[type=range]{min-height:32px}}
 	.terrain-note{color:#bdd2c7}.terrain-check{display:flex;align-items:center;gap:8px}.terrain-hud{position:absolute;left:16px;bottom:16px;box-sizing:border-box;max-width:calc(100% - 32px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
 	.terrain-panel{
+		--header-height:48px;
 		position:absolute;z-index:1;top:var(--lab-inset);right:var(--lab-inset);width:var(--lab-width);
 		box-sizing:border-box;container:terrain-lab / inline-size;overflow:hidden;
 		color:#edf4ee;background:#112a24f7;border:1px solid #668477;border-radius:14px;
 		box-shadow:0 6px 24px #07171366;backdrop-filter:blur(10px)
 	}
 	.terrain-panel>summary{
-		box-sizing:border-box;height:48px;display:flex;align-items:center;gap:12px;padding:0 16px;
+		box-sizing:border-box;height:var(--header-height);display:flex;align-items:center;gap:12px;padding:0 16px;
 		list-style:none;cursor:pointer;background:#19382f;color:#fff7de;font-size:17px;font-weight:650
 	}
 	.terrain-panel>summary::-webkit-details-marker{display:none}
 	.terrain-panel>summary:hover{background:#254737}
-	.terrain-panel[open]>summary::after{content:"";margin-left:auto;width:13px;height:2px;background:#d9e7d7}
+	.terrain-panel[open]{background:linear-gradient(#19382f,#19382f) 0 0/100% var(--header-height) no-repeat,#112a24f7}
+	.terrain-panel[open]>summary{width:calc(100% - 182px)}
+	.terrain-panel[open]>summary::after{content:"";position:absolute;top:0;right:0;width:45px;height:var(--header-height);background:linear-gradient(#d9e7d7,#d9e7d7) center/13px 2px no-repeat}
+	.terrain-panel[open] .lab-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 	.terrain-panel:not([open]){width:44px;border-radius:50%}
 	.terrain-panel:not([open])>summary{height:42px;padding:0;justify-content:center}
 	.terrain-panel:not([open]) .lab-title{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-panel>summary:focus-visible{outline-offset:-4px;border-radius:inherit}
+	.lab-music{position:absolute;top:0;right:45px;height:var(--header-height);display:flex;align-items:center;gap:3px}
+	.terrain-panel:not([open]) .lab-music{display:none}
+	.lab-music button{display:grid;place-items:center;width:32px;min-height:32px;padding:0;border-color:transparent;background:transparent;color:#e2ebe1}
+	.lab-music button:hover{background:#355747}
+	.lab-music button[aria-pressed=true]{color:#f2cc82;background:#304c3e}
+	.lab-music i{display:block;width:15px;height:14px;background:currentColor}
+	[data-music-play] i{clip-path:polygon(15% 0,95% 50%,15% 100%)}
+	[data-music-pause] i{background:linear-gradient(to right,transparent 6%,currentColor 6% 38%,transparent 38% 62%,currentColor 62% 94%,transparent 94%)}
+	[data-music-prev] i,[data-music-next] i{clip-path:polygon(0 0,20% 0,20% 47%,100% 0,100% 100%,20% 53%,20% 100%,0 100%)}
+	[data-music-next] i{transform:scaleX(-1)}
+	@container terrain-lab (max-width:350px){
+		.terrain-panel[open]>summary{width:calc(100% - 147px);gap:6px;padding-inline:8px 2px}
+		.terrain-panel[open]>summary::after{width:32px}
+		.lab-music{right:32px;gap:1px}.lab-music button{width:28px}
+	}
 	.lab-sliders{display:grid;gap:4px;width:19px;color:#edcb82}
 	.lab-sliders i{position:relative;height:2px;background:currentColor;border-radius:2px}
 	.lab-sliders i::after{content:"";position:absolute;left:3px;top:-2px;width:4px;height:6px;border-radius:2px;background:currentColor;box-shadow:0 0 0 1px #19382f}
@@ -2048,7 +2092,8 @@ function markup()
 	}
 	@container terrain-view (max-width:560px){
 		.terrain-panel{--lab-inset:8px;--lab-width:calc(100% - 16px);--lab-height:min(62cqh,calc(100cqh - 16px - var(--radar-room,0px)))}
-		.terrain-panel>summary{height:40px;font-size:15px}
+		.terrain-panel{--header-height:40px}
+		.terrain-panel>summary{font-size:15px}
 		.lab-workspace{max-height:calc(var(--lab-height) - 42px)}
 		.terrain-tabs [role=tab]{min-height:30px}
 		.lab-pages{padding:12px}
@@ -2061,11 +2106,21 @@ function markup()
 	.terrain-sandbox{--credit-left:12px}
 	.terrain-sandbox.has-flight-map{--credit-left:calc(10px + var(--flight-map-size) + 8px)}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])){--credit-right:calc(var(--speedometer-size) + 16px)}
-	.terrain-music-credit{position:absolute;pointer-events:none;left:var(--credit-left);bottom:10px;max-width:min(290px,calc(100% - var(--credit-left) - var(--credit-right,12px)));box-sizing:border-box;display:flex;align-items:center;gap:9px;height:64px;padding:6px 10px 6px 7px;border-radius:7px;background:#102822ed;color:#edf4ee}
-	.terrain-music-credit img{width:48px;height:48px;object-fit:contain;flex:none}
+	.terrain-credit-space{position:absolute;z-index:2;left:var(--credit-left);bottom:10px;width:min(580px,calc(100% - var(--credit-left) - var(--credit-right,12px)));container:music-credit / inline-size;pointer-events:none}
+	.terrain-music-credit{box-sizing:border-box;display:flex;align-items:center;width:max-content;max-width:100%;height:128px;gap:18px;padding:12px 20px 12px 14px;border-radius:14px;background:#102822ed;color:#edf4ee}
+	.terrain-music-credit img{width:96px;height:96px;object-fit:contain;flex:none}
 	.terrain-music-credit div{min-width:0}.terrain-music-credit strong,.terrain-music-credit span,.terrain-music-credit small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.25}
-	.terrain-music-credit strong{font-size:14px}.terrain-music-credit span{font-size:13px}.terrain-music-credit small{font-size:11px;color:#c2d2c8}
-	.terrain-sandbox:has(.terrain-music-credit:not([hidden])) .terrain-hud{margin-bottom:70px}
+	.terrain-music-credit strong{font-size:28px}.terrain-music-credit span{font-size:26px}.terrain-music-credit small{font-size:22px;color:#c2d2c8}
+	@container music-credit (max-width:255px){
+		.terrain-music-credit{flex-direction:column;justify-content:center;gap:4px;padding:6px 8px}
+		.terrain-music-credit img{width:56px;height:56px}.terrain-music-credit div{max-width:100%;text-align:center}
+		.terrain-music-credit strong{font-size:18px}.terrain-music-credit span{font-size:16px}.terrain-music-credit small{font-size:14px}
+	}
+	@container music-credit (max-width:108px){
+		.terrain-music-credit{position:absolute;bottom:calc(var(--speedometer-size,0px) + 8px);flex-direction:row;height:96px;gap:8px;max-width:calc(100cqw + var(--credit-right,12px) - 12px)}
+		.terrain-music-credit div{text-align:left}
+	}
+	.terrain-sandbox:has(.terrain-music-credit:not([hidden])) .terrain-hud{margin-bottom:134px}
 	.terrain-sandbox:has(.terrain-speedometer:not([hidden])) .terrain-hud{left:calc(16px + var(--map-room));bottom:16px;max-width:calc(100% - var(--map-room) - var(--speedometer-size) - 58px)}
 	@container terrain-view (min-width:960px){
 		.terrain-panel[open]~.terrain-hud{max-width:calc(100% - var(--lab-width) - 48px)}
@@ -2077,9 +2132,15 @@ function markup()
 	@media(prefers-reduced-motion:no-preference){.terrain-finish{animation:terrain-finish-pulse .8s ease-in-out 3}}
 	@media(max-width:640px){.terrain-sandbox:has(.terrain-panel:not([open])) .terrain-hud:has([data-race]:not([hidden])) [data-diagnostics]{display:none}}
 	</style><div class="terrain-stage"></div><div class="terrain-control-hints" hidden></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
-	<aside class="terrain-music-credit" data-music-credit role="status" aria-live="polite" aria-atomic="true" hidden><img alt="" hidden><div><strong></strong><span data-artist></span><small data-album></small></div></aside>
+	<div class="terrain-credit-space"><aside class="terrain-music-credit" data-music-credit role="status" aria-live="polite" aria-atomic="true" hidden><img alt="" hidden><div><strong></strong><span data-artist></span><small data-album></small></div></aside></div>
 	<details class="terrain-panel" open>
 	<summary title="Landscape Lab (H)"><span class="lab-sliders" aria-hidden="true"><i></i><i></i><i></i></span><span class="lab-title">Landscape Lab</span></summary>
+	<div class="lab-music" role="group" aria-label="Soundtrack controls">
+	<button type="button" data-music-prev aria-label="Previous track" title="Previous track"><i aria-hidden="true"></i></button>
+	<button type="button" data-music-play aria-label="Play music" title="Play music"><i aria-hidden="true"></i></button>
+	<button type="button" data-music-pause aria-label="Pause music" title="Pause music"><i aria-hidden="true"></i></button>
+	<button type="button" data-music-next aria-label="Next track" title="Next track"><i aria-hidden="true"></i></button>
+	</div>
 	<div class="lab-workspace">
 	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-roads" aria-controls="terrain-section-roads" data-tab="roads" aria-selected="false" tabindex="-1">Roads</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
 	<div class="lab-pages"><section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
@@ -2276,7 +2337,7 @@ function markup()
 	<label class="terrain-field terrain-wide">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
 	<label class="terrain-check"><input data-show-diagnostics type="checkbox">Show diagnostics</label>
-	<div class="terrain-row"><label class="terrain-field">Music volume<input type="range" min="0" max="100" step="1" data-music-level></label><button type="button" data-music-next>Next track</button></div>
+	<label class="terrain-field terrain-wide">Music volume<input type="range" min="0" max="100" step="1" data-music-level></label>
 	<details><summary>Driving and flight controls</summary><p class="terrain-note">Press M or click the left stick to show or hide the car or F5 minimap. Press N or tap D-pad ↓ to change its zoom.</p>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: fast flight · Shift / LB: car nitrous · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
 	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Click the right stick to recover an off-road race car. Start pauses.</p>

@@ -10,7 +10,7 @@ The top left of the view lists the controls for what you are doing, drawn as the
 
 On a touchscreen, drag a finger across the view to look around and tap the ground to use the chosen tool. Flying and driving need a gamepad or keyboard.
 
-The soundtrack starts after your first input. **Explore** has a music volume slider and **Next track**. The lower-left credit shows the title, artist and available cover art beside the minimap. The player buffers the next song shortly before the current one ends. A race finish briefly crossfades to a jingle, then resumes the song where it paused. Opening the sandbox again starts the next song in the rotation.
+The soundtrack starts after your first input. The Landscape Lab title bar has **Previous track**, **Play music**, **Pause music** and **Next track**. These work from every tab. Pausing the music lets you keep driving. **Explore** has the music volume slider. The lower-left credit shows the title, artist and available cover art beside the minimap. The player buffers the next song shortly before the current one ends. A race finish briefly crossfades to a jingle, then resumes the song where it paused. Opening the sandbox again starts the next song in the rotation.
 
 On the **Landscape** tab, expand **Landform parameters** to see what each setting changes. The fields sit side by side when there is room and stack on narrow screens. Select **Generate** to apply your changes.
 

@@ -87,5 +87,41 @@
     "duration": 208.64,
     "artist": "Creo",
     "cover": "music/covers/1095883.jpg"
+  },
+  {
+    "id": "1615164",
+    "src": "music/1615164_knockout-lemonade.mp3",
+    "title": "knockout lemonade",
+    "duration": 140.256
+  },
+  {
+    "id": "1606287",
+    "src": "music/1606287_cupcake.mp3",
+    "title": "cupcake",
+    "duration": 115.248
+  },
+  {
+    "id": "1610560",
+    "src": "music/1610560_Comet.mp3",
+    "title": "Comet",
+    "duration": 97.46285
+  },
+  {
+    "id": "1622618",
+    "src": "music/1622618_Mecha-Gurgle.mp3",
+    "title": "Mecha Gurgle",
+    "duration": 145.502041
+  },
+  {
+    "id": "1637335",
+    "src": "music/1637335_REBORN.mp3",
+    "title": "REBORN",
+    "duration": 158.19755
+  },
+  {
+    "id": "1619135",
+    "src": "music/1619135_surrendrr--my-lt3.mp3",
+    "title": "surrendrr my lt3",
+    "duration": 230.426122
   }
 ]

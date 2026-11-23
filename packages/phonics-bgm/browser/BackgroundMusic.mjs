@@ -59,16 +59,14 @@ export class BackgroundMusic
 		this.sync(seconds);
 	}
 
-	next()
-	{
-		if(!this.tracks.length) return;
+	next() { return this.advance(1, true); }
 
-		this.failed.clear();
-		this.advance();
-	}
+	previous() { return this.advance(-1, true); }
 
-	advance()
+	advance(step = 1, retry = false)
 	{
+		if(!this.tracks.length) return null;
+		if(retry) this.failed.clear();
 		if(this.base) this.stack.shift();
 
 		this.base = null;
@@ -77,16 +75,19 @@ export class BackgroundMusic
 		{
 			do
 			{
-				this.index = (this.index+1)%this.tracks.length;
+				this.index = (this.index+step+this.tracks.length)%this.tracks.length;
 			}
 			while(this.failed.has(this.tracks[this.index].id));
 
 			this.base = this.entry(this.tracks[this.index]);
+			this.base.step = step;
 			this.stack.unshift(this.base);
 		}
 
 		if(this.queued && this.queued.track !== this.base?.track) this.releaseQueued();
 		this.sync();
+
+		return this.base?.track ?? null;
 	}
 
 	hold(reason, held)
@@ -194,7 +195,7 @@ export class BackgroundMusic
 		if(entry === this.base)
 		{
 			this.failed.add(entry.track.id);
-			this.advance();
+			this.advance(entry.step);
 		}
 		else this.pop();
 	}
@@ -392,6 +393,7 @@ export function activate({module,session,canvas,archive,services,signal,options}
 	let context, master, closed = false;
 
 	const resolve = url => new URL(url, archive.url).href;
+	const credits = track => track && {...track, cover: track.cover ? resolve(track.cover) : null};
 
 	const music = new BackgroundMusic({
 		storage
@@ -399,8 +401,7 @@ export function activate({module,session,canvas,archive,services,signal,options}
 		, voice: (track, loop) => streamingVoice(context, master, page, resolve(track.src), loop)
 
 		, announce(track) {
-			const detail = {...track,cover: track.cover ? resolve(track.cover) : null};
-			canvas.dispatchEvent(new page.CustomEvent('phonics-music-track', {detail}));
+			canvas.dispatchEvent(new page.CustomEvent('phonics-music-track', {detail: credits(track)}));
 		}
 	});
 
@@ -443,6 +444,7 @@ export function activate({module,session,canvas,archive,services,signal,options}
 		get track() { return music.current; }
 		, get depth() { return music.depth; }
 		, get volume() { return volume; }
+		, get playbackPaused() { return music.holds.has('listener'); }
 
 		, setVolume(value) {
 			if(!Number.isFinite(value)) return;
@@ -454,7 +456,12 @@ export function activate({module,session,canvas,archive,services,signal,options}
 
 			music.hold('muted', Boolean(options?.muted) || !volume);
 		}
-		, next: () => music.next()
+		, next: () => credits(music.next())
+		, previous: () => credits(music.previous())
+		, setPlaybackPaused(paused) {
+			music.hold('listener', paused);
+			if(!paused) unlock();
+		}
 		, push: (track, loop) => music.push(track, loop)
 		, pop: () => music.pop()
 		, pause: paused => music.hold('game', paused)
