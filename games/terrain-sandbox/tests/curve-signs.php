@@ -11,13 +11,13 @@ use TerrainSandbox\Session;
 
 function check(bool $ok, string $why): void { if(!$ok) throw new RuntimeException($why); }
 
-// A cubic quarter-circle, mirrored about the incoming lane for the opposite turn.
-function bend(float $radius, int $turn, float $width = 12., string $material = 'road'): array
+// A circular arc, mirrored about the incoming lane for the opposite turn.
+function bend(float $radius, int $turn, float $width = 12., string $material = 'road', float $angle = M_PI/2): array
 {
-	$handle = 4/3*tan(M_PI/8)*$radius;
+	$handle = 4/3*tan($angle/4)*$radius;
 	return ['type'=>'road','width'=>$width,'shoulder'=>6.,'material'=>$material,
-		'points'=>[[0.,0.,0.],[-$turn*$radius,0.,$radius]],
-		'handles'=>[['out'=>[0.,0.,$handle]],['in'=>[$turn*$handle,0.,0.]]]];
+		'points'=>[[0.,0.,0.],[-$turn*$radius*(1.-cos($angle)),0.,$radius*sin($angle)]],
+		'handles'=>[['out'=>[0.,0.,$handle]],['in'=>[$turn*$handle*sin($angle),0.,-$handle*cos($angle)]]]];
 }
 function sites(Landscape $land): array
 {
@@ -27,14 +27,15 @@ foreach([-1,1] as $turn) foreach([12.,36.] as $width) {
 	$land = new Landscape(['worldSize'=>1024,'heightScale'=>0,'detailAmplitude'=>0]);
 	$land->queue(bend(60.,$turn,$width)); $land->commit();
 	$row = sites($land);
-	check(count($row)>30,'A tight bend has a continuous row of warnings');
+	$outsideArc = M_PI/2*(60.+$width/2+2.);
+	check(count($row)===(int)round($outsideArc/(6*.9144)),'A quarter turn has one sign per six yards of outside shoulder');
 	$previous = null;
 	foreach($row as [$x,$z,$tx,$tz,$sign]) {
 		check(abs(hypot($x+$turn*60.,$z)-(60.+$width/2+2.)) < .10,'The post stands on the outside of the resized pavement');
 		check($sign === $turn && abs(hypot($tx,$tz)-1.)<1e-8, 'The panel faces along the lane and the chevron points into the turn');
 		if($previous !== null) {
 			$gap = hypot($x-$previous[0],$z-$previous[1])/.9144;
-			check($gap>=2 && $gap<=4,'Successive posts are two to four yards apart on the outside edge');
+			check(abs($gap-6.)<.3,'Successive posts are about six yards apart on the outside edge');
 		}
 		$previous = [$x,$z];
 	}
@@ -48,10 +49,12 @@ foreach([-1,1] as $turn) foreach([12.,36.] as $width) {
 	$model->close(); $land->close();
 }
 $land = new Landscape(['worldSize'=>2048]);
-$land->queue(bend(400.,1)); $land->queue(bend(60.,-1,12.,'grass'));
+$land->queue(bend(120.,1)); // A sustained sweeper that used to qualify.
+$land->queue(bend(60.,-1,angle:deg2rad(22))); // A tight but brief kink.
+$land->queue(bend(60.,-1,12.,'grass'));
 $land->queue(['type'=>'road','width'=>12.,'shoulder'=>4.,'points'=>[[-300.,0.,0.],[-300.,0.,220.]]]);
 $land->commit();
-check(sites($land)===[],'Straight roads, broad turns and unpaved edits get no signs');
+check(sites($land)===[],'Straights, broad sweepers, brief kinks and unpaved bends get no signs');
 $land->close();
 
 // Drive the real session car directly through a post. A reference car gets identical ground and no obstacles.

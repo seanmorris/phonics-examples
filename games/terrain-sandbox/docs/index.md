@@ -152,7 +152,7 @@ The overhead arrow shows its underside. Straight ahead points down the screen, a
 
 During a road race, click the right stick if you leave the road. Right-stick recovery and a flooded engine both return the car to a dry, safe point on the current leg, facing forward with at least 32.8 ft of road before the next checkpoint. If that leg is submerged, recovery works back from the last gate you passed. On a course built with gates alone, a flooded car restarts on a cleared gate’s approach. You keep your splits, and the clock runs through the 1.5-second restart.
 
-Tight paved turns have yellow chevrons along the outside shoulder, about three yards apart. The arrows point into the bend from either direction. At night the yellow face reflects the car’s headlights back toward the driver. You can drive straight through the signs and their posts.
+Yellow chevrons mark paved bends that turn at least 30° with a radius of 300 ft or less. The signs stand about six yards apart along the outside shoulder and point into the bend from either direction. At night the yellow face reflects the car’s headlights back toward the driver. You can drive straight through the signs and their posts.
 
 ### Generate a circuit
 
