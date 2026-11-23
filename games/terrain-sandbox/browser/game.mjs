@@ -1,5 +1,5 @@
 // Internal terrain coordinates and saved files use SI. These conversions apply at the UI boundary.
-const FOOT = .3048, MILE = 5280 * FOOT, MPH = .44704;
+const FOOT = .3048, YARD = 3 * FOOT, MILE = 5280 * FOOT, MPH = .44704;
 const metricPerUnit = {ft: FOOT, mph: MPH, cyclesPerMile: 1/MILE, densityPerMile: 1000/MILE};
 const exactValues = new WeakMap();
 const fieldBounds = new WeakMap();
@@ -7,6 +7,11 @@ const fieldBounds = new WeakMap();
 function distanceLabel(meters, digits = 1)
 {
 	return Math.abs(meters) < MILE/4 ? Math.round(meters/FOOT) + ' ft' : (meters/MILE).toFixed(digits) + ' mi';
+}
+
+function rangeYards(meters)
+{
+	return Math.round(meters/YARD) + ' yd';
 }
 
 function displayNumber(value, unit)
@@ -65,6 +70,8 @@ function configureUnits(container)
 	}
 }
 
+export const terrainUnits = {FOOT, MPH, distanceLabel, rangeYards, configureUnits, setFieldValue, metricValue};
+
 /** Authoring UI and lifecycle bridge; PHP owns terrain, camera, edits and simulation. */
 export function activate({module, canvas, session, services})
 {
@@ -75,7 +82,7 @@ export function activate({module, canvas, session, services})
 	frame.className = 'terrain-sandbox';
 	frame.innerHTML = markup();
 	configureUnits(frame);
-	module.terrainUnits = {FOOT, MPH, distanceLabel, configureUnits, setFieldValue, metricValue};
+	module.terrainUnits = terrainUnits;
 
 	const stage = frame.querySelector('.terrain-stage');
 	shell.mount(frame, {screen: stage});
@@ -992,8 +999,7 @@ function updateRace(line, state, showFinish = false)
 		line.hidden = false;
 		const leg = delivery.carrying ? 'Drop-off' : 'Pickup';
 		const distance = delivery.target && state.car
-			? ' · ' + (Math.hypot(delivery.target.x-state.car.x, delivery.target.z-state.car.z)/MILE).toFixed(1)
-				+ ' mi'
+			? ' · ' + rangeYards(Math.hypot(delivery.target.x-state.car.x, delivery.target.z-state.car.z))
 			: '';
 
 		line.textContent = leg + distance + ' · Delivered ' + delivery.delivered;
@@ -1018,7 +1024,7 @@ function updateRace(line, state, showFinish = false)
 		const from = state.car ?? state.craft ?? state.jet;
 		const [x, y, z] = from ? [from.x, from.y, from.z] : state.camera.position;
 		const meters = Math.hypot(next.x - x, next.y - y, next.z - z);
-		const away = distanceLabel(meters);
+		const away = rangeYards(meters);
 		parts.push(`Next: ${gateName(race.next, race)}, ${away}`);
 	}
 

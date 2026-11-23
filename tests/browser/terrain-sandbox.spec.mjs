@@ -459,26 +459,31 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 });
 
 test('cockpit cues show the nearest balloon and the diamond meets the selected balloon at lock', async({page}) => {
-	const source = await fs.readFile(
-		new URL('../../games/terrain-sandbox/browser/cockpit.mjs', import.meta.url)
-		, 'utf8'
-	);
+	const sources = await Promise.all(['game','cockpit'].map(async name => {
+		const path = new URL(`../../games/terrain-sandbox/browser/${name}.mjs`, import.meta.url);
+		return 'data:text/javascript;base64,' + (await fs.readFile(path)).toString('base64');
+	}));
 
 	await page.setContent('<div><canvas></canvas></div>');
 
-	const states = await page.evaluate(async source => {
-		const url = URL.createObjectURL(new Blob([source], {type: 'text/javascript'}));
-		const {activate} = await import(url);
-		URL.revokeObjectURL(url);
+	const states = await page.evaluate(async ([game, cockpit]) => {
+		const {terrainUnits} = await import(game);
+		const {activate} = await import(cockpit);
 		const module = {
-
-			drawTerrainMap() {}
+			terrainUnits
+			, drawTerrainMap() {}
 
 			, drawTerrainSpeedometer() {}
 		};
 
 		activate({module, canvas: document.querySelector('canvas')});
 		const ctx = document.querySelector('.terrain-instruments').getContext('2d');
+		let rangeText;
+		const fillText = ctx.fillText.bind(ctx);
+		ctx.fillText = (text, ...args) => {
+			if(String(text).endsWith(' yd')) rangeText = text;
+			fillText(text, ...args);
+		};
 		const frame = {
 			width: 800
 			, height: 720
@@ -522,6 +527,7 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 		}
 
 		sample(5, 0);
+		const farRange = rangeText;
 		const waiting = sample(9, 0), nearestRight = ink(150, -150), underRim = ink(142, -142);
 		// Move the nearest balloon across the rim with a farther contact still outside on the opposite side.
 		frame.targets[3] = [-700,-700,-600];
@@ -546,11 +552,16 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 		frame.range.visible = true;
 		frame.range.selected = 2;
 		const cycle = sample(10.4, 0);
+		frame.targets[2] = [0,0,-91.44];
+		sample(10.45, 0);
+		const nearRange = rangeText;
 		frame.cockpit = false;
 		const chase = sample(10.5, .5);
 
 		return {
-			waiting
+			farRange
+			, nearRange
+			, waiting
 			, moving
 			, paused
 			, follows
@@ -568,9 +579,11 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 			, nearestBehind
 			, distant
 		};
-	}, source
+	}, sources
 	);
 
+	expect(states.farRange).toBe(Math.round(Math.hypot(250,125,1000)/.9144) + ' yd');
+	expect(states.nearRange).toBe('100 yd');
 	const origin = [true,false,false,false,false];
 
 	for(const state of ['waiting','interrupted','hidden','cycle']) expect(states[state]).toEqual(origin);
@@ -987,6 +1000,7 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 		await expect.poll(async() => (await status(page)).race.state).toBe('running');
 		await page.evaluate(() => window.testCarButton(3, true));
 		await expect(readout).toContainText('Lap 1');
+		await expect(readout).toHaveText(/Next: .*?, \d+ yd/);
 		await page.evaluate(() => window.testCarButton(3, false));
 		await page.evaluate(() => window.testCarButton(11, true));
 		await expect.poll(async() => (await status(page)).car.recoveries).toBe(1);
@@ -1108,7 +1122,10 @@ test('a package run marks its terrain-hidden pickup and reveals smoke above the 
 	await load(page, dry);
 	await press(page, 'delivery');
 	await expect.poll(async() => (await status(page)).delivery?.target?.kind).toBe('pickup');
-	const {target,depot} = (await status(page)).delivery;
+	const {delivery,car} = await status(page);
+	const {target,depot} = delivery;
+	const yards = Math.round(Math.hypot(target.x-car.x, target.z-car.z)/.9144);
+	await expect(page.locator('[data-race]')).toContainText(`Pickup · ${yards} yd`);
 	expect(Math.abs(target.x-depot.x)).toBeGreaterThanOrEqual(1609.344);
 	expect(target.z).toBe(depot.z);
 	await canvas(page).focus();
