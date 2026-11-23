@@ -972,7 +972,7 @@ async function installCarPad(page)
 	});
 }
 
-test('tight road bends draw the supplied yellow chevrons and return the headlight beam at night', async({page}, testInfo) => {
+test('tight road bends and checkpoint banners return the headlight beam at night', async({page}, testInfo) => {
 	test.setTimeout(180_000);
 	await page.setViewportSize({width: 720,height: 420});
 	const errors = [];
@@ -987,6 +987,7 @@ test('tight road bends draw the supplied yellow chevrons and return the headligh
 	doc.landscape.recipe.worldSize = 512;
 	doc.settings.waterLevel = -5;
 	doc.camera = {position:[0,5,-55],yaw:Math.PI,pitch:-.035};
+	doc.course = {gates:[{role:'checkpoint',kind:'road',x:0,y:0,z:15,yaw:0,width:20,height:4,number:1}]};
 	await load(page,doc);
 	const view = canvas(page);
 	await expect.poll(async() => (await status(page)).renderer.curveSignsDrawn).toBeGreaterThan(12);
@@ -1012,6 +1013,13 @@ test('tight road bends draw the supplied yellow chevrons and return the headligh
 	await view.evaluate(el => el.terrainSandboxDebug.values({headlights:'on'}));
 	await expect.poll(async() => (await status(page)).renderer.spotLights).toBe(2);
 	const lit = await frame('night-on');
+	// The printed center of the checkpoint crosses the straight approach, inside the two rows of signs.
+	let banner = 0;
+	for(let y = Math.floor(day.height*.25); y < day.height*.58; y++) for(let x = Math.floor(day.width*.46); x < day.width*.54; x++) {
+		const i = (y*day.width+x)*4;
+		if(lit.data[i]>dark.data[i]+55 && lit.data[i+1]>dark.data[i+1]+55 && lit.data[i+2]>dark.data[i+2]+45) banner++;
+	}
+	expect(banner).toBeGreaterThan(22);
 	// Count the face pixels that are yellow by day, dark without the beam, and bright yellow under headlamps.
 	let yellow = 0, returned = 0;
 	for(let y = Math.floor(day.height*.25); y < day.height*.65; y++) for(let x = Math.floor(day.width*.18); x < day.width*.82; x++) {

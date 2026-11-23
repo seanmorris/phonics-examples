@@ -55,7 +55,7 @@ final class CurveSignModel
 				[$x,$z] = $site;
 				$col = (int)floor($x/self::CELL); $row = (int)floor($z/self::CELL);
 				$key = "$col,$row";
-				$cells[$key] ??= ['box'=>['x'=>$col*self::CELL-1.,'z'=>$row*self::CELL-1.,'size'=>self::CELL+2.],'bytes'=>''];
+				$cells[$key] ??= ['box'=>['x'=>$col*self::CELL-2.,'z'=>$row*self::CELL-2.,'size'=>self::CELL+4.],'bytes'=>''];
 				$cells[$key]['bytes'] .= pack('g*',...$site);
 			}
 			yield;
@@ -65,7 +65,8 @@ final class CurveSignModel
 
 	private function loadArtwork(): void
 	{
-		$this->program = new Program(file_get_contents(self::ASSETS.'chevron.vert'),file_get_contents(self::ASSETS.'chevron.frag'));
+		$vertex = str_replace('// RETROREFLECTION',file_get_contents(self::ASSETS.'retroreflection.glsl'),file_get_contents(self::ASSETS.'chevron.vert'));
+		$this->program = new Program($vertex,file_get_contents(self::ASSETS.'chevron.frag'));
 		$data = gzdecode(file_get_contents(self::ASSETS.'curve-hazard-sign.rgba.gz'));
 		[$w,$h] = array_values(unpack('Vwidth/Vheight',$data));
 		glGenTextures(1,$this->texture);
@@ -106,7 +107,7 @@ final class CurveSignModel
 			$site = unpack('gx/gz',$bytes,$i);
 			$y = $this->land->height($site['x'],$site['z']);
 			$fitted .= substr($bytes,$i,4).pack('g',$y).substr($bytes,$i+4,16);
-			$low = min($low,$y-.3); $high = max($high,$y+3.75);
+			$low = min($low,$y-.3); $high = max($high,$y+6.15);
 			yield;
 		}
 		return [$fitted,$low,$high];
@@ -124,7 +125,7 @@ final class CurveSignModel
 		foreach($this->cells as $key=>$cell) {
 			$fitted = isset($this->meshes[$key]);
 			$low = $fitted ? $cell['low'] : $bounds['minY']-.3;
-			$high = $fitted ? $cell['high'] : $bounds['maxY']+3.75;
+			$high = $fitted ? $cell['high'] : $bounds['maxY']+6.15;
 			if($high < $water) continue;
 			$box = $cell['box'];
 			$dx = max(0.,$box['x']-$eye[0],$eye[0]-$box['x']-$box['size']);

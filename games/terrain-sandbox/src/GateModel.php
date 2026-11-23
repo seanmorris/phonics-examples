@@ -6,6 +6,7 @@ namespace TerrainSandbox;
 use Phonics\Render\Program;
 use TerrainPhonics\Atmosphere;
 use TerrainPhonics\Camera;
+use TerrainPhonics\SpotLights;
 use TerrainPhonics\Water;
 
 /**
@@ -24,6 +25,7 @@ final class GateModel
 	 */
 	public const RANGE = ['road' => 1500.0, 'water' => 1500.0, 'air' => 4500.0];
 	private ?Program $program = null;
+	private SpotLights $lamps;
 	/** Meshes by kind, uploaded on first use. */
 	private array $meshes = [];
 	/** Kinds of the gates in $course at $revision, as keys. */
@@ -43,7 +45,7 @@ final class GateModel
 	 * @param GateShapes $shapes Gate dimensions and the texture offset of each print.
 	 * @param string $folder Directory that holds the meshes gates.json names.
 	 */
-	public function __construct(private readonly GateShapes $shapes, private readonly string $folder) {}
+	public function __construct(private readonly GateShapes $shapes, private readonly string $folder) { $this->lamps = new SpotLights; }
 
 	/**
 	 * Draw every gate of a course that is in range and in view.
@@ -53,9 +55,10 @@ final class GateModel
 	 * @param Water $water Water level and appearance.
 	 * @param int $width Viewport width in pixels.
 	 * @param int $height Viewport height in pixels.
+	 * @param array $lights Headlight beams and their exposure gain for the banner sheeting.
 	 * @return void Submits at most one draw per gate, grouped by kind.
 	 */
-	public function draw(Course $course, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height): void
+	public function draw(Course $course, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height, array $lights = [[],1.]): void
 	{
 		$started = hrtime(true);
 		$this->drawn = 0;
@@ -101,6 +104,9 @@ final class GateModel
 		{
 			$p = $this->program;
 			VehicleModel::light($p, $camera, $sky, $water, $width, $height, $altitude);
+			glUniform3f($p->location('uEyeWorld'),...$eye);
+			$this->lamps->set(...$lights);
+			$this->lamps->bind($p,$sky->uniforms()['nightVisibility']);
 			$rotation = $p->location('uRotation');
 			$origin = $p->location('uOrigin');
 			$offset = $p->location('uUvOffset');
@@ -198,6 +204,7 @@ final class GateModel
 	{
 		foreach($this->meshes as $mesh) $mesh->close();
 		$this->program?->close();
+		$this->lamps->forget();
 		$this->meshes = [];
 		$this->program = null;
 	}

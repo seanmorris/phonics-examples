@@ -238,7 +238,7 @@ $drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$sp
 	if($streaks) ($tracers ??= new TracerBatch)->draw($streaks,$viewCamera,$width,$height);
 	// Gates draw in free flight too, where the course is edited.
 	if($session->course->count() > 0)
-		$gates->draw($session->course, $viewCamera, $session->atmosphere, $session->water, $width, $height);
+		$gates->draw($session->course, $viewCamera, $session->atmosphere, $session->water, $width, $height, $spotLights);
 };
 
 $engine->start(

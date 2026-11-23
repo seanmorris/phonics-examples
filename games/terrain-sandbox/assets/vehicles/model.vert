@@ -44,6 +44,7 @@ flat out vec4 vPaint;
 flat out vec2 vSurface;
 flat out vec3 vGlow;
 flat out float vLabelFit;
+out float vBanner;
 
 // Gate parts, from the low bits of the vertex tags that scripts/import_terrain_gates.py writes.
 const int LABEL = 1, FRAME = 2, SQUARE = 3, CAP = 4, POST = 5, BASE = 6, ARCH = 7;
@@ -69,9 +70,13 @@ void main()
 	int tag = int(aSurface.y * 255.0 + .5);
 	bool gate = uGateSize.z > 0.0 && tag >= 128 && tag < 224;
 	vLabelFit = 1.0;
+	vBanner = -1.;
 	if(gate)
 	{
 		int part = tag & 63;
+		if(part == LABEL || part == SQUARE) vBanner = .5;
+		// Coordinate in the printed water banner before stretching the arch to the gate size.
+		if(part == ARCH) vBanner = (aPosition.y - (3.596+.15))/1.6;
 		float side = position.x < 0.0 ? -1.0 : 1.0;
 		if(part == ARCH)
 		{

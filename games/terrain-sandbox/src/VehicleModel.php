@@ -79,8 +79,9 @@ final class VehicleModel
 	public static function program(): Program
 	{
 		$root = dirname(__DIR__) . '/assets/vehicles/';
-		$fragment = str_replace(['// OPTICS','// NIGHT LIGHT'],
-			[WaterAppearance::shaderSource(), AtmosphereRenderer::nightLightingSource()], file_get_contents($root . 'model.frag'));
+		$fragment = str_replace(['// OPTICS','// NIGHT LIGHT','// RETROREFLECTION'],
+			[WaterAppearance::shaderSource(), AtmosphereRenderer::nightLightingSource(), file_get_contents($root.'../roads/retroreflection.glsl')],
+			file_get_contents($root . 'model.frag'));
 		return new Program(file_get_contents($root . 'model.vert'), $fragment);
 	}
 

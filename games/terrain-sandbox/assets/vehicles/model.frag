@@ -2,7 +2,9 @@
 precision highp float;
 // OPTICS
 // NIGHT LIGHT
+// RETROREFLECTION
 uniform vec2 uEyeAndWaterHeight;
+uniform vec3 uEyeWorld;
 
 in vec3 vRelative, vNormal;
 in vec2 vUv;
@@ -12,6 +14,7 @@ flat in vec2 vSurface;
 flat in vec3 vGlow;
 uniform vec3 uLampGlow[5];
 flat in float vLabelFit;
+in float vBanner;
 uniform vec2 uUvOffset;
 uniform sampler2D uDashboard;
 uniform vec3 uSunDirection, uSunlight, uNightAmbient;
@@ -94,6 +97,11 @@ void main()
 		float boost = smoothstep(1.0, 1.4, uEngineThrust);
 		light += throat * (vec3(1.5,.25,.035) * power*power +
 			vec3(4.8,1.8,.58) * boost * (.32 + .68*core));
+	}
+	if(vBanner >= 0. && vBanner <= 1. && abs(dot(normal,uRotation[2])) > .5)
+	{
+		float returned = retroreflection(vRelative+uEyeWorld,uEyeWorld,normal,uSunDirection,uDaylight);
+		light += 4.*returned*base;
 	}
 	light = waterColumnLight(light, vRelative, uEyeAndWaterHeight.x, uEyeAndWaterHeight.y, vec3(uDaylight) + uNightAmbient);
 	vec3 exposed = 1.0 - exp(-light * uExposure);
