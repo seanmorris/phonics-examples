@@ -1869,6 +1869,11 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 	await add.click();
 	await expect.poll(async() => (await status(page)).atmosphereLayers.length).toBe(1);
 	const first = groups.nth(0);
+	await expect(first.getByLabel('Top (ft above sea level)')).toHaveValue('3000');
+	const density = first.getByLabel('Density per mile');
+	await expect(density).toHaveValue('0.3');
+	await density.press('ArrowUp');
+	await expect(density).toHaveValue('0.301');
 	await first.getByLabel('Layer name').fill('Sea mist');
 	await first.getByLabel('Layer name').press('Tab');
 	await first.getByLabel('Scattered light').fill('#6688aa');
@@ -2511,11 +2516,13 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	await page.locator('[name="preset"]').selectOption('canyon');
 	await page.getByText('Landform parameters', {exact: true}).click();
 	const frequency = page.getByLabel('Base frequency · cycles/mi');
-	expect(Number(await frequency.inputValue())).toBeCloseTo(1609.344/4000, 7);
+	await expect(frequency).toHaveValue('0.402');
 	const terrace = page.getByLabel('Terrace spacing · ft');
-	expect(Number(await terrace.inputValue())).toBeCloseTo(80/.3048, 4);
+	await expect(terrace).toHaveValue('262');
 	const wall = page.getByLabel('Wall width', {exact: true});
 	await expect(wall).toHaveValue('0.006');
+	await wall.press('ArrowUp');
+	await expect(wall).toHaveValue('0.0061');
 	await wall.fill('0.0085');
 	await page.getByRole('combobox', {name: 'Surround', exact: true}).selectOption('plateau');
 	await press(page, 'generate');

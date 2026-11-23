@@ -24,6 +24,7 @@ use TerrainSandbox\Jet;
 use TerrainSandbox\VehicleModel;
 use TerrainSandbox\TracerBatch;
 use TerrainSandbox\TrailRenderer;
+use TerrainSandbox\DisplayUnits;
 use TerrainSandbox\Session;
 
 $app = new Context;
@@ -84,7 +85,7 @@ $hudShown = false;
 (vrzno_env('terrainSurface'))(json_encode(['masks'=>TerrainPhonics\SurfaceLayers::MASKS,'fields'=>TerrainPhonics\SurfaceLayers::FIELDS,
 	'relief'=>TerrainPhonics\SurfaceLayers::RELIEF,'channels'=>TerrainPhonics\SurfaceLayers::CHANNELS,
 	'patterns'=>TerrainPhonics\SurfaceLayers::PATTERNS,'limit'=>TerrainPhonics\SurfaceLayers::LIMIT,
-	'air'=>['defaults'=>AtmosphereLayers::DEFAULTS,'limit'=>AtmosphereLayers::LIMIT,'maxDensity'=>AtmosphereLayers::MAX_DENSITY,
+	'air'=>['defaults'=>['top'=>3000 * DisplayUnits::FOOT,'density'=>.3 / DisplayUnits::KM_PER_MILE] + AtmosphereLayers::DEFAULTS,'limit'=>AtmosphereLayers::LIMIT,'maxDensity'=>AtmosphereLayers::MAX_DENSITY,
 		'ceiling'=>$session->atmosphere->uniforms()['atmosphereHeight']],
 	'layerDefaults'=>TerrainPhonics\SurfaceLayers::DEFAULTS,'ranges'=>TerrainPhonics\TerrainAppearance::RANGES
 		+ array_map(static fn($v)=>array_slice($v,1),TerrainPhonics\SurfaceLayers::SCALES),

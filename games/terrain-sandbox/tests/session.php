@@ -294,7 +294,7 @@ input($far, ['values' => ['amount' => 199]]);
 finishPicking($far);
 publish($far);
 $farSave = json_decode($far->save(), true, flags: JSON_THROW_ON_ERROR);
-expect($farSave['landscape']['history'][0][0]['amount'] === 12, 'A delayed pick retains the brush settings from its click');
+expect($farSave['landscape']['history'][0][0]['amount'] === 40 * TerrainSandbox\DisplayUnits::FOOT, 'A delayed pick retains the brush settings from its click');
 input($far, ['clicks' => [[.45,.5]]]);
 expect($far->picking, 'Another distant click starts incremental picking');
 input($far, ['actions' => [['type' => 'generate','preset' => 'coast','seed' => 'cancel-pick']]]);
@@ -1842,7 +1842,11 @@ foreach(TerrainPhonics\Recipe::PRESETS as $preset) {
 }
 expect(count(array_unique($optics)) === count($profiles), 'Every landform has a distinct optical profile.');
 $stock = $sky->save();
-expect($profiles['canyon'][0]['bottom'] < -380., 'The preset dust reaches the default canyon floor.');
+$foot = TerrainSandbox\DisplayUnits::FOOT;
+expect($profiles['canyon'][0]['bottom'] === -2000 * $foot && $profiles['canyon'][0]['top'] === 2000 * $foot,
+	'The default canyon dust spans two thousand feet on either side of sea level');
+expect($sky->settings['roadWidth'] === 25 * $foot && $sky->settings['roadShoulder'] === 40 * $foot,
+	'New roads start with round imperial pavement and shoulder widths');
 $rows = [['name'=>'Sea fog','bottom'=>-420.,'top'=>-120.,'color'=>'#a1c3cc'], ['name'=>'Dust','bottom'=>1400.,'top'=>2400.,'enabled'=>false]];
 input($sky,['actions'=>[['type'=>'atmosphere-layers','layers'=>$rows,'request'=>11]]]);
 $authored = $sky->status()['atmosphereLayers'];

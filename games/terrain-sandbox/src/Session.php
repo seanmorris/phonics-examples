@@ -85,20 +85,20 @@ final class Session
 		'skyColor' => Atmosphere::DEFAULT_SKY_COLOR, 'hazeColor' => Atmosphere::DEFAULT_HAZE_COLOR,
 		'skyLight' => Atmosphere::DEFAULT_SKY_LIGHT];
 	private const LIMESTONE_SKY = ['azimuth' => 106.0, 'elevation' => 36.0, 'haze' => .7];
-	/** Aerosol layers above sea level in meters, with optical depth per kilometer. */
+	/** Editor defaults in feet above sea level and optical depth per mile. */
 	private const PRESET_AIR = [
-		'coast' => ['name'=>'Sea spray', 'top'=>340., 'density'=>.065, 'color'=>'#d9e2e5'],
-		'mountain' => ['name'=>'Valley haze', 'top'=>540., 'density'=>.037, 'color'=>'#cfdbe4'],
-		'canyon' => ['name'=>'Canyon dust', 'bottom'=>-600., 'top'=>620., 'density'=>.038, 'color'=>'#d9c6ac'],
-		'limestone' => ['name'=>'Lowland mist', 'top'=>210., 'density'=>.063, 'color'=>'#d9dfd6'],
-		'basalt-fjords' => ['name'=>'Fjord mist', 'top'=>195., 'density'=>.072, 'color'=>'#cdd9e0'],
-		'amber-dunes' => ['name'=>'Suspended sand', 'top'=>440., 'density'=>.057, 'color'=>'#e0c9a9'],
-		'arctic-meltwater' => ['name'=>'Ice haze', 'top'=>225., 'density'=>.020, 'color'=>'#dce5eb'],
-		'tidal-lagoon' => ['name'=>'Humid marine air', 'top'=>640., 'density'=>.046, 'color'=>'#dae3e3'],
-		'red-mesas' => ['name'=>'Desert dust', 'top'=>520., 'density'=>.032, 'color'=>'#e0c0a0'],
-		'salt-pans' => ['name'=>'Playa dust', 'top'=>180., 'density'=>.034, 'color'=>'#dfcfc1'],
-		'cinder-highlands' => ['name'=>'Highland haze', 'top'=>390., 'density'=>.027, 'color'=>'#c0c8ce'],
-		'heather-moor' => ['name'=>'Moor mist', 'top'=>110., 'density'=>.075, 'color'=>'#dfe3e2'],
+		'coast' => ['name'=>'Sea spray', 'topFt'=>1100, 'densityPerMile'=>.105, 'color'=>'#d9e2e5'],
+		'mountain' => ['name'=>'Valley haze', 'topFt'=>1750, 'densityPerMile'=>.06, 'color'=>'#cfdbe4'],
+		'canyon' => ['name'=>'Canyon dust', 'bottomFt'=>-2000, 'topFt'=>2000, 'densityPerMile'=>.06, 'color'=>'#d9c6ac'],
+		'limestone' => ['name'=>'Lowland mist', 'topFt'=>700, 'densityPerMile'=>.10, 'color'=>'#d9dfd6'],
+		'basalt-fjords' => ['name'=>'Fjord mist', 'topFt'=>650, 'densityPerMile'=>.115, 'color'=>'#cdd9e0'],
+		'amber-dunes' => ['name'=>'Suspended sand', 'topFt'=>1450, 'densityPerMile'=>.09, 'color'=>'#e0c9a9'],
+		'arctic-meltwater' => ['name'=>'Ice haze', 'topFt'=>750, 'densityPerMile'=>.03, 'color'=>'#dce5eb'],
+		'tidal-lagoon' => ['name'=>'Humid marine air', 'topFt'=>2100, 'densityPerMile'=>.075, 'color'=>'#dae3e3'],
+		'red-mesas' => ['name'=>'Desert dust', 'topFt'=>1700, 'densityPerMile'=>.05, 'color'=>'#e0c0a0'],
+		'salt-pans' => ['name'=>'Playa dust', 'topFt'=>600, 'densityPerMile'=>.055, 'color'=>'#dfcfc1'],
+		'cinder-highlands' => ['name'=>'Highland haze', 'topFt'=>1300, 'densityPerMile'=>.045, 'color'=>'#c0c8ce'],
+		'heather-moor' => ['name'=>'Moor mist', 'topFt'=>350, 'densityPerMile'=>.12, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
 	// Sky colors: deeper blues over dry or clean air, a paler northern sky over the fjords, and dust in the desert haze.
@@ -158,13 +158,13 @@ final class Session
 	 * 0 takes the size of the kind the click places; a size outside that kind's range takes the nearest it allows.
 	 */
 	public array $settings = [
-		'tool' => 'navigate', 'radius' => 40.0, 'amount' => 12.0, 'flattenHeight' => 0.0,
-		'material' => 'grass', 'roadWidth' => 8.0, 'roadShoulder' => 12.0, 'roadRaise' => 0.0,
-		'circuitRelief'=>120.0, 'circuitStartHeight'=>null, 'circuitCauseways'=>false,
+		'tool' => 'navigate', 'radius' => 130 * DisplayUnits::FOOT, 'amount' => 40 * DisplayUnits::FOOT, 'flattenHeight' => 0.0,
+		'material' => 'grass', 'roadWidth' => 25 * DisplayUnits::FOOT, 'roadShoulder' => 40 * DisplayUnits::FOOT, 'roadRaise' => 0.0,
+		'circuitRelief'=>400 * DisplayUnits::FOOT, 'circuitStartHeight'=>null, 'circuitCauseways'=>false,
 		'exposure' => 1.0,
-		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 100.0,
+		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 225 * DisplayUnits::MILES_PER_HOUR,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
-		'balloonAltitude' => 100.0, 'balloonTool' => 'place',
+		'balloonAltitude' => 325 * DisplayUnits::FOOT, 'balloonTool' => 'place',
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
 	] + self::SKY_DEFAULTS + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
 	/** The terrain's colors, banding and blending, which the scene draws with. Its settings are part of $settings. */
@@ -1069,7 +1069,11 @@ final class Session
 
 	private function usePresetAtmosphere(string $preset): void
 	{
-		$this->atmosphere->setLayers([self::PRESET_AIR[$preset]]);
+		$air = self::PRESET_AIR[$preset];
+		$this->atmosphere->setLayers([[
+			'name'=>$air['name'], 'color'=>$air['color'], 'bottom'=>($air['bottomFt'] ?? 0) * DisplayUnits::FOOT,
+			'top'=>$air['topFt'] * DisplayUnits::FOOT, 'density'=>$air['densityPerMile'] / DisplayUnits::KM_PER_MILE,
+		]]);
 		$this->atmosphereOrigin = 'preset';
 		$this->dirty = true;
 	}

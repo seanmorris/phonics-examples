@@ -23,7 +23,7 @@ final class RoadEditor
 	private function defaults(Session $s): array
 	{
 		return ['type'=>'road', 'width'=>$s->settings['roadWidth'], 'shoulder'=>$s->settings['roadShoulder'],
-			'crown'=>.12, 'material'=>'road'];
+			'crown'=>.4 * DisplayUnits::FOOT, 'material'=>'road'];
 	}
 
 	private function working(Session $s): array

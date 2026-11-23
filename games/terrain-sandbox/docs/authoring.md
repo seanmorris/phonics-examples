@@ -2,6 +2,8 @@
 
 Choose a tool under **Shape the ground**, then click the terrain. Each click creates one transaction, allowing deliberate edits without filling history with a brush operation every frame. Right-drag still looks around.
 
+Preset landform measurements display rounded imperial values. Generate uses the original recipe for every field you leave untouched.
+
 Before generating, open **Landform parameters** to change the height scale, fine detail, slope damping, or starting water level. Stronger damping removes more fine detail from steep faces. Domain warp bends the landforms. Terrace spacing creates smooth ledges; set it to zero to turn terraces off. In Canyon the spacing controls the thickness of the whole sequence of rock beds. At the default setting of 262 ft, look for a pale shelf below the salmon cliffs. Exposed faces show fractures and fine red layers, while loose debris softens the boundaries on gentler slopes.
 
 The canyon preset lowers water to −1,476 ft and starts inside the valley, exposing both its floor and steep walls. After generation, use **Water level** in the **Water** section to flood or expose the existing ground.
