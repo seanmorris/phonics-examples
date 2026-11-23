@@ -2,9 +2,9 @@
 export class BackgroundMusic
 {
 
-	constructor({voice, storage, announce = () => {}, clock = globalThis, fade = .65})
+	constructor({voice, storage, announce = () => {}, clock = globalThis, fade = .65, lookAhead = 20})
 	{
-		Object.assign(this, {voice,storage,announce,clock,fade});
+		Object.assign(this, {voice,storage,announce,clock,fade,lookAhead});
 		this.tracks = [];
 		this.stack = [];
 		this.live = new Set();
@@ -25,6 +25,7 @@ export class BackgroundMusic
 			ids.add(track.id);
 		}
 
+		this.releaseQueued();
 		this.tracks = [...tracks];
 		this.key = key;
 		const saved = this.storage?.get(key);
@@ -45,6 +46,7 @@ export class BackgroundMusic
 	{
 		if(this.closed || !track?.src) return;
 
+		this.releaseQueued(true);
 		this.stack.push(this.entry(track, loop));
 		this.sync();
 	}
@@ -83,6 +85,7 @@ export class BackgroundMusic
 			this.stack.unshift(this.base);
 		}
 
+		if(this.queued && this.queued.track !== this.base?.track) this.releaseQueued();
 		this.sync();
 	}
 
@@ -101,6 +104,36 @@ export class BackgroundMusic
 	{
 		this.clock.clearTimeout(entry[name]);
 		entry[name] = undefined;
+	}
+
+	// Only the successor of the audible song can occupy this slot. Playback takes over the same element.
+	prepareNext(owner)
+	{
+		owner.triedPreload = true;
+		const track = this.tracks[(this.index+1)%this.tracks.length];
+		try
+		{
+			const voice = this.voice(track, false);
+			this.queued = {track, owner, voice};
+			voice.media.onerror = () => {
+				if(this.queued?.voice === voice) this.releaseQueued();
+			};
+			voice.media.preload = 'auto';
+			voice.media.load();
+		}
+		catch { this.releaseQueued(); } // Playback can retry this song on demand.
+	}
+
+	releaseQueued(keepComplete = false)
+	{
+		if(!this.queued) return;
+		const {voice, owner} = this.queued;
+		const {buffered, duration} = voice.media;
+		if(keepComplete && buffered?.length === 1 && buffered.start(0) <= .05 && buffered.end(0) >= duration-.05) return;
+		this.queued = null;
+		voice.close();
+		// Interruptions free the connection for the jingle. Reconsider the successor when its song resumes.
+		if(keepComplete) owner.triedPreload = false;
 	}
 
 	park(entry)
@@ -122,7 +155,12 @@ export class BackgroundMusic
 	{
 		if(entry.voice) return;
 
-		entry.voice = this.voice(entry.track, entry.loop);
+		if(entry === this.base && this.queued?.track === entry.track)
+		{
+			entry.voice = this.queued.voice;
+			this.queued = null;
+		}
+		else entry.voice = this.voice(entry.track, entry.loop);
 		this.live.add(entry);
 		const audio = entry.voice.media;
 
@@ -140,9 +178,13 @@ export class BackgroundMusic
 		};
 
 		audio.onerror = () => this.failure(entry);
-		audio.onplaying = audio.onseeked = audio.ondurationchange = () => this.tail(entry);
+		audio.onplaying = audio.onseeked = audio.onratechange = audio.ondurationchange = () => this.tail(entry);
 
-		audio.onwaiting = () => this.clearTimer(entry, 'tail');
+		audio.onseeking = () => this.clearTimer(entry, 'tail');
+		audio.onwaiting = () => {
+			this.clearTimer(entry, 'tail');
+			if(this.focus === entry && entry === this.base) this.releaseQueued(true);
+		};
 	}
 
 	failure(entry)
@@ -157,24 +199,28 @@ export class BackgroundMusic
 		else this.pop();
 	}
 
-	// Start bringing the interrupted cue back during the last part of the jingle. Recheck the media clock
-	// when the timer fires: a stalled or seeking stream can be behind wall time.
-
+	// Use the media clock to prepare the next song or crossfade back before a jingle runs out.
 	tail(entry)
 	{
 		this.clearTimer(entry, 'tail');
 
-		if(this.focus !== entry || this.wanted !== entry || entry.loop || this.stack.length < 2) return;
+		if(this.focus !== entry || this.wanted !== entry || entry.loop) return;
 
 		const media = entry.voice.media;
 
-		if(media.paused || !Number.isFinite(media.duration) || media.duration <= 0) return;
+		const duration = Number.isFinite(media.duration) && media.duration > 0 ? media.duration : entry.track.duration;
+		if(media.paused || media.seeking || !Number.isFinite(duration) || duration <= 0) return;
 
-		const left = Math.max(0, media.duration-media.currentTime);
-		const fade = Math.min(this.fade, media.duration/3);
-
-		if(left <= fade+.012) this.pop(Math.min(left, fade));
-		else entry.tail = this.clock.setTimeout(() => this.tail(entry), 1000*(left-fade));
+		const rate = media.playbackRate ?? 1;
+		if(rate <= 0) return;
+		const left = Math.max(0, duration-media.currentTime)/rate;
+		const song = entry === this.base;
+		if(song && (!this.lookAhead || this.tracks.length < 2 || this.queued || entry.triedPreload)) return;
+		if(!song && this.stack.length < 2) return;
+		const lead = Math.min(song ? this.lookAhead : this.fade, duration/(3*rate));
+		if(left > lead+.012) entry.tail = this.clock.setTimeout(() => this.tail(entry), 1000*(left-lead));
+		else if(song) this.prepareNext(entry);
+		else this.pop(Math.min(left, lead));
 	}
 
 	sync(seconds = this.fade)
@@ -185,6 +231,7 @@ export class BackgroundMusic
 
 		if(!next)
 		{
+			this.releaseQueued(true);
 			this.revision++;
 			this.wanted = this.focus = null;
 
@@ -282,6 +329,7 @@ export class BackgroundMusic
 	close()
 	{
 		this.closed = true;
+		this.releaseQueued();
 		this.revision++;
 		this.stack = [];
 		this.base = null;
@@ -299,6 +347,7 @@ function streamingVoice(context, destination, page, url, loop)
 	gain.gain.value = 0;
 	source.connect(gain).connect(destination);
 	media.crossOrigin = 'anonymous';
+	media.preload = 'none';
 	media.loop = loop;
 	media.src = url;
 	let from = 0, to = 0, start = 0, end = 0;
@@ -321,8 +370,8 @@ function streamingVoice(context, destination, page, url, loop)
 
 
 		, close() {
-			media.onended = media.onerror = media.onplaying = media.onwaiting = media.onseeked = media
-				.ondurationchange = null;
+			media.onended = media.onerror = media.onplaying = media.onwaiting = null;
+			media.onseeking = media.onseeked = media.onratechange = media.ondurationchange = null;
 
 			media.removeAttribute('src');
 			media.load();

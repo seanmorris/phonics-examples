@@ -63,6 +63,7 @@ function player(storage = new Map(), errors = new Map())
 			let elapsed = 0, playingSince = null;
 			const media = {
 				duration: track.duration ?? 180
+				, load() { this.loads = (this.loads ?? 0)+1; }
 				, get paused() { return playingSince === null; }
 				, get currentTime() { return elapsed + (this.paused ? 0 : (now-playingSince)/1000); }
 
@@ -118,6 +119,87 @@ test('rotation remembers the next song only once playback succeeds and wraps at 
 	await tick();
 	assert.deepEqual(second.credits, ['c']);
 	assert.equal(storage.get('rotation'), 'a');
+});
+
+test('only the immediate successor buffers near the end and playback claims that same stream', async() => {
+	const {music,advance,voices,credits,storage,timers} = player();
+	music.hold('gesture', false);
+	await tick();
+	await advance(159_000);
+	assert.deepEqual(voices.map(v => v.id), ['a']);
+	await advance(1000);
+	assert.deepEqual(voices.map(v => v.id), ['a','b']);
+	assert.equal(voices[1].media.loads, 1);
+	assert.ok(voices[1].media.paused);
+	assert.deepEqual(credits, ['a']);
+	assert.equal(storage.get('rotation'), 'b');
+	voices[0].media.onended();
+	await tick();
+	assert.deepEqual(credits, ['a','b']);
+	assert.equal(voices.length, 2);
+	assert.ok(!voices[1].media.paused);
+	music.close();
+	assert.equal(timers.size, 0);
+});
+
+test('interruption and pause cancel incomplete speculative downloads and retry only when needed', async() => {
+	const {music,advance,voices} = player();
+	music.hold('gesture', false);
+	await tick();
+	await advance(160_000);
+	const first = voices[1];
+	music.push({id: 'cue',src:'cue.wav',credit:false});
+	assert.ok(first.closed);
+	await tick();
+	await advance(4000);
+	assert.deepEqual(voices.map(v => v.id), ['a','b','cue']);
+	music.pop();
+	await tick();
+	const second = voices.at(-1);
+	assert.equal(second.id, 'b');
+	assert.ok(second.media.paused);
+	music.hold('hidden', true);
+	assert.ok(second.closed);
+	await advance(60_000);
+	assert.equal(voices.length, 4);
+	music.hold('hidden', false);
+	await tick();
+	const third = voices.at(-1);
+	third.media.buffered = {length:1,start:() => 0,end:() => third.media.duration};
+	music.hold('game', true);
+	assert.ok(!third.closed);
+	music.hold('game', false);
+	music.next();
+	await tick();
+	assert.equal(voices.length, 5);
+	assert.ok(!third.media.paused);
+	music.close();
+});
+
+test('a sequential stream with unknown browser duration schedules from the catalog and yields to buffering', async() => {
+	const {music,advance,voices} = player();
+	music.playlist(tracks.map(track => ({...track,duration:120})), 'rotation');
+	music.hold('gesture', false);
+	await tick();
+	const media = voices[0].media;
+	media.duration = Infinity;
+	media.ondurationchange();
+	await advance(100_000);
+	assert.equal(voices.length, 2);
+	media.onwaiting();
+	assert.ok(voices[1].closed);
+	await advance(1000);
+	assert.equal(voices.length, 2);
+	media.onplaying();
+	assert.equal(voices.length, 3);
+	voices[2].media.onerror();
+	media.onplaying();
+	assert.equal(voices.length, 3);
+	media.onended();
+	await tick();
+	assert.equal(music.current.id, 'b');
+	assert.ok(!voices.at(-1).media.paused);
+	music.close();
 });
 
 test('nested jingles crossfade, freeze covered playheads and start the return before their last sample', async() => {

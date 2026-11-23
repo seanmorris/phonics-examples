@@ -29,9 +29,15 @@ for(const name of fs.readFileSync(path.join(media, 'playlist.txt'), 'utf8').trim
 	);
 
 	const tags = Object.fromEntries(Object.entries(format.tags ?? {}).map(([k,v]) => [k.toLowerCase(),v.trim()]));
-	const id = name.split('_')[0], track = {id,src: 'music/' + name,title: tags.title || path.basename(name, '.mp3')};
+	const id = name.split('_')[0];
+	const stem = path.basename(name, '.mp3').replace(/^\d+_/, '');
+	const parts = stem.split('---').map(part => part.replace(/[-_]+/g, ' ').trim());
+	const track = {id, src: 'music/' + encodeURIComponent(name), title: tags.title || parts.at(-1)};
+	const duration = Number(format.duration);
+	if(duration > 0 && Number.isFinite(duration)) track.duration = duration;
 
-	if(tags.artist || tags.album_artist) track.artist = tags.artist || tags.album_artist;
+	const artist = tags.artist || tags.album_artist || (parts.length === 2 ? parts[0] : '');
+	if(artist) track.artist = artist;
 
 	if(tags.album) track.album = tags.album;
 

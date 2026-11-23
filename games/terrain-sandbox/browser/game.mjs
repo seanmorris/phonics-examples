@@ -135,6 +135,7 @@ export function activate({module, canvas, session, services})
 	const roadPreview = frame.querySelector('[data-road-preview]');
 	const race = frame.querySelector('[data-race]');
 	let finishTimer = null;
+
 	const credit = frame.querySelector('[data-music-credit]');
 	const cover = credit.querySelector('img');
 	let creditTimer;
@@ -706,6 +707,7 @@ export function activate({module, canvas, session, services})
 			{
 				clearTimeout(finishTimer);
 				finishTimer = setTimeout(dismissFinish, 4000);
+
 				session.backgroundMusic.push({id: 'terrain-race-finish', src: 'music/race-finish.wav', credit: false});
 			}
 			else if(!finished && finishTimer !== null)

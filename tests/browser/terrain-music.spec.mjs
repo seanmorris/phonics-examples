@@ -1,4 +1,7 @@
 import {expect, test} from '@playwright/test';
+import {readFileSync} from 'node:fs';
+
+const catalog = JSON.parse(readFileSync(new URL('../../games/terrain-sandbox/assets/soundtrack.json', import.meta.url)));
 
 test('streamed songs show their ID3 credits, clear the minimap, and remember the next title', async({page}, testInfo) => {
 	test.setTimeout(150_000);
@@ -68,6 +71,18 @@ test('streamed songs show their ID3 credits, clear the minimap, and remember the
 	await expect(credit).toContainText('JAMATAR');
 	await expect(credit).toContainText('Midorisuki');
 	expect(requested.size).toBe(5);
+	await explore.click();
+	for(const track of catalog.slice(5)) {
+		await next.click();
+		await expect(credit.locator('strong')).toHaveText(track.title);
+		await expect(credit.locator('[data-artist]')).toHaveText(track.artist ?? '');
+		if(track.cover) await expect.poll(() => credit.locator('img').evaluate((img, path) =>
+			img.currentSrc.endsWith(path) && img.complete && img.naturalWidth > 0, track.cover)).toBe(true);
+		else await expect(credit.locator('img')).toBeHidden();
+	}
+	expect(requested.size).toBe(catalog.length);
+	await next.click();
+	await expect(credit.locator('strong')).toHaveText(catalog[0].title);
 	await view.evaluate(el => el.dispatchEvent(new CustomEvent('phonics-music-track', {
 		detail: {id: 'encore', title: 'Encore', artist: 'Soloist'}
 	})));
@@ -75,4 +90,34 @@ test('streamed songs show their ID3 credits, clear the minimap, and remember the
 	await expect(credit.locator('img')).toBeHidden();
 	await expect(credit.locator('[data-album]')).toBeEmpty();
 	expect(errors).toEqual([]);
+});
+
+test('the browser buffers one song ahead and plays the prepared media element at the handoff', async({page}) => {
+	await page.setViewportSize({width:480,height:320});
+	await page.addInitScript(() => {
+		const create = AudioContext.prototype.createMediaElementSource;
+		window.streams = [];
+		AudioContext.prototype.createMediaElementSource = function(media) {
+			window.streams.push(media);
+			return create.call(this,media);
+		};
+	});
+	const requests = new Set();
+	page.on('request',r => { if(r.url().endsWith('.mp3')) requests.add(r.url()); });
+	await page.goto('/games/terrain-sandbox/');
+	const view = page.locator('canvas[data-terrain-sandbox]');
+	const title = page.locator('[data-music-credit] strong');
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	await view.focus();
+	await page.keyboard.press('Control');
+	await expect(title).toHaveText(catalog[0].title);
+	expect(requests.size).toBe(1);
+	// Play through even on a sequential HTTP stream whose server does not advertise seekable byte ranges.
+	await page.evaluate(() => { window.streams[0].playbackRate = 12; });
+	await expect.poll(() => requests.size, {timeout:45_000}).toBe(2);
+	await expect(title).toHaveText(catalog[0].title);
+	expect(await page.evaluate(() => window.streams[1].paused)).toBe(true);
+	await expect(title).toHaveText(catalog[1].title, {timeout:35_000});
+	expect(await page.evaluate(() => window.streams.length === 2 && !window.streams[1].paused)).toBe(true);
+	expect(requests.size).toBe(2);
 });

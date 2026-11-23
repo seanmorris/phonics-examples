@@ -3,6 +3,7 @@
     "id": "1588229",
     "src": "music/1588229_Peak-Shiawase-Remix.mp3",
     "title": "Peak Shiawase Remix",
+    "duration": 244.532245,
     "artist": "NayzeeGD",
     "cover": "music/covers/1588229.jpg"
   },
@@ -10,6 +11,7 @@
     "id": "709578",
     "src": "music/709578_Dimension.mp3",
     "title": "Dimension",
+    "duration": 192.026122,
     "artist": "Creo",
     "cover": "music/covers/709578.jpg"
   },
@@ -17,6 +19,7 @@
     "id": "1562043",
     "src": "music/1562043_Exzy-amp-Zjony---Tokyo-Dri.mp3",
     "title": "Tokyo Drift 東京ドリフト",
+    "duration": 104.933856,
     "artist": "EXZEN-sama & Zjongelas",
     "cover": "music/covers/1562043.jpg"
   },
@@ -24,6 +27,7 @@
     "id": "621134",
     "src": "music/621134_TheFatRat---Unity.mp3",
     "title": "Unity",
+    "duration": 249.312653,
     "artist": "TheFatRat",
     "cover": "music/covers/621134.jpg"
   },
@@ -31,8 +35,57 @@
     "id": "1136538",
     "src": "music/1136538_Ghost-Nova.mp3",
     "title": "Ghost Nova",
+    "duration": 214.752653,
     "artist": "JAMATAR",
     "album": "Midorisuki",
     "cover": "music/covers/1136538.jpg"
+  },
+  {
+    "id": "510853",
+    "src": "music/510853_Dr-Phonics---Code-Red%20(2).mp3",
+    "title": "Code-Red",
+    "duration": 199.1085,
+    "artist": "Dr-Phonics",
+    "cover": "music/covers/510853.jpg"
+  },
+  {
+    "id": "1000934",
+    "src": "music/1000934_Trailer-Park-Boys---The-Ki.mp3",
+    "title": "The Kittyman Sea Shanty (RMX)",
+    "duration": 82.550125,
+    "artist": "Irishtoner",
+    "cover": "music/covers/1000934.jpg"
+  },
+  {
+    "id": "1048360",
+    "src": "music/1048360_Creo---Drift.mp3",
+    "title": "Drift",
+    "duration": 210.207347,
+    "artist": "Creo",
+    "cover": "music/covers/1048360.jpg"
+  },
+  {
+    "id": "1090039",
+    "src": "music/1090039_Slaughterhouse.mp3",
+    "title": "Slaughterhouse",
+    "duration": 337.3485,
+    "artist": "HypercubeRecords",
+    "cover": "music/covers/1090039.jpg"
+  },
+  {
+    "id": "1298724",
+    "src": "music/1298724_TIDAL-WAVE-Dion-Timmer---S.mp3",
+    "title": "Shiawase VIP (Vorlex Remix)",
+    "duration": 184.064089,
+    "artist": "Vorlexium / Dion Timmer",
+    "cover": "music/covers/1298724.jpg"
+  },
+  {
+    "id": "1095883",
+    "src": "music/1095883_Creo---We-Can-Dream.mp3",
+    "title": "We Can Dream",
+    "duration": 208.64,
+    "artist": "Creo",
+    "cover": "music/covers/1095883.jpg"
   }
 ]

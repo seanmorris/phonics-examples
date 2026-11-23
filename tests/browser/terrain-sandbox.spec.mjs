@@ -978,59 +978,90 @@ test('tight road bends and checkpoint banners return the headlight beam at night
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	await boot(page);
-	const arc = Array.from({length: 7}, (_,i) => {
+
+	const arc = Array.from({length: 7}, (_, i) => {
 		const angle = i*Math.PI/12;
+
 		return [60*(Math.cos(angle)-1),0,60*Math.sin(angle)];
 	});
-	const road = {type:'road',points:[[0,0,-110],[0,0,-52],...arc,[-115,0,60]],width:12,shoulder:5,material:'road'};
-	const doc = fixture({history:[[road]],revision:1});
+
+	const road = {
+		type: 'road'
+		, points: [[0,0,-110],[0,0,-52],...arc,[-115,0,60]]
+		, width: 12
+		, shoulder: 5
+		, material: 'road'
+	};
+
+	const doc = fixture({history: [[road]],revision: 1});
 	doc.landscape.recipe.worldSize = 512;
 	doc.settings.waterLevel = -5;
-	doc.camera = {position:[0,5,-55],yaw:Math.PI,pitch:-.035};
-	doc.course = {gates:[{role:'checkpoint',kind:'road',x:0,y:0,z:15,yaw:0,width:20,height:4,number:1}]};
-	await load(page,doc);
+	doc.camera = {position: [0,5,-55],yaw: Math.PI,pitch: -.035};
+	doc.course = {gates: [{role: 'checkpoint',kind: 'road',x: 0,y: 0,z: 15,yaw: 0,width: 20,height: 4,number: 1}]};
+	await load(page, doc);
 	const view = canvas(page);
 	await expect.poll(async() => (await status(page)).renderer.curveSignsDrawn).toBeGreaterThan(12);
-	await press(page,'car');
+	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await view.focus();
 	await page.keyboard.press('p');
 	await expect.poll(async() => (await status(page)).paused).toBe(true);
 	const panel = page.locator('.terrain-panel');
+
 	if(await panel.evaluate(el => el.open)) await panel.locator('summary').first().click();
-	async function frame(name) {
+
+	async function frame(name)
+	{
 		const bytes = await view.screenshot();
-		await testInfo.attach(name,{body:bytes,contentType:'image/png'});
+		await testInfo.attach(name, {body: bytes,contentType: 'image/png'});
+
 		return PNG.sync.read(bytes);
 	}
+
 	const day = await frame('day');
-	await view.evaluate(el => el.terrainSandboxDebug.values({elevation:-12,headlights:'off'}));
+	await view.evaluate(el => el.terrainSandboxDebug.values({elevation: -12,headlights: 'off'}));
+
 	await expect.poll(async() => {
 		const s = await status(page);
+
 		return [s.settings.elevation,s.headlights,s.renderer.spotLights];
 	}).toEqual([-12,'off',0]);
+
 	const dark = await frame('night-off');
-	await view.evaluate(el => el.terrainSandboxDebug.values({headlights:'on'}));
+	await view.evaluate(el => el.terrainSandboxDebug.values({headlights: 'on'}));
 	await expect.poll(async() => (await status(page)).renderer.spotLights).toBe(2);
 	const lit = await frame('night-on');
 	// The printed center of the checkpoint crosses the straight approach, inside the two rows of signs.
 	let banner = 0;
-	for(let y = Math.floor(day.height*.25); y < day.height*.58; y++) for(let x = Math.floor(day.width*.46); x < day.width*.54; x++) {
+
+	for(let y = Math.floor(day.height*.25); y < day.height*.58; y++)
+	for(let x = Math.floor(day.width*.46); x < day.width*.54; x++)
+	{
 		const i = (y*day.width+x)*4;
+
 		if(lit.data[i]>dark.data[i]+55 && lit.data[i+1]>dark.data[i+1]+55 && lit.data[i+2]>dark.data[i+2]+45) banner++;
 	}
+
 	expect(banner).toBeGreaterThan(22);
 	// Count the face pixels that are yellow by day, dark without the beam, and bright yellow under headlamps.
 	let yellow = 0, returned = 0;
-	for(let y = Math.floor(day.height*.25); y < day.height*.65; y++) for(let x = Math.floor(day.width*.18); x < day.width*.82; x++) {
+
+	for(let y = Math.floor(day.height*.25); y < day.height*.65; y++)
+	for(let x = Math.floor(day.width*.18); x < day.width*.82; x++)
+	{
 		const i = (y*day.width+x)*4;
+
 		if(day.data[i]<140 || day.data[i+1]<115 || day.data[i+2]>.55*day.data[i+1]) continue;
+
 		yellow++;
-		if(lit.data[i] > dark.data[i]+75 && lit.data[i+1] > dark.data[i+1]+60 && lit.data[i+2] < lit.data[i+1]) returned++;
+
+		if(lit.data[i] > dark.data[i]+75 && lit.data[i+1] > dark.data[i+1]+60 && lit.data[i+2] < lit.data[i+1])
+		returned++;
 	}
+
 	expect(yellow).toBeGreaterThan(40);
 	expect(returned).toBeGreaterThan(25);
-	await load(page,fixture());
+	await load(page, fixture());
 	await expect.poll(async() => (await status(page)).renderer.curveSigns).toBe(0);
 	expect(errors).toEqual([]);
 });
