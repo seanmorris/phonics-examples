@@ -119,6 +119,7 @@ final class CarTumble
 				min(3.0, max(0.0, $depth*$ny-.004)*.22/$dt)];
 			if($index < 4) $wheels++;
 		}
+		if(!$contacts) Car::dampAirborneSpin($this->pitchRate,$this->rollRate,$dt);
 		// Reuse the sampled contacts for both passes so simultaneous roof/tire contacts share the load.
 		for($i = 0; $i < 2; $i++)
 		{

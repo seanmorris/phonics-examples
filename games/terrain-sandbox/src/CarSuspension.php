@@ -60,6 +60,7 @@ final class CarSuspension
 			$this->landingTimeLeft = max(0.0, $this->landingTimeLeft - $h);
 			[$rise,$bank,$normalUp] = $this->plane();
 			$lift = -Session::DRIVING_GRAVITY; $pitchAccel = $rollAccel = 0.0;
+			$supported = false;
 			foreach(self::ALONG as $i => $along)
 			{
 				$side = self::ACROSS[$i];
@@ -76,6 +77,7 @@ final class CarSuspension
 					$rollAccel += $pull*$side*self::INVERSE_ROLL_INERTIA;
 				}
 				if($compression <= -self::SAG) continue;
+				$supported = true;
 				$bodySpeed = $this->verticalSpeed + ($along*(1+$rise*$rise)+$side*$bank*$rise)*$this->pitchRate
 					- $side*(1/($normalUp*max(.18,cos($this->roll))))*$this->rollRate;
 				$rate = ($roadSpeed[$i]-$bodySpeed)*$normalUp;
@@ -94,6 +96,7 @@ final class CarSuspension
 			$this->verticalSpeed += $h*$lift;
 			$this->pitchRate += $h*$pitchAccel;
 			$this->rollRate += $h*$rollAccel;
+			if(!$supported) Car::dampAirborneSpin($this->pitchRate,$this->rollRate,$h);
 			$this->bottomOut($roadSpeed,($step+1)*$h);
 		}
 		$this->ground = $heights;

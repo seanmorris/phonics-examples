@@ -480,18 +480,21 @@ $face->camera->position = [0, 30, -2500];
 $face->camera->yaw = M_PI;
 input($face, ['actions' => ['car']]);
 for($i = 0; $face->findingCarSite() && $i < 4000; $i++) input($face, []);
-$fastest = $highest = 0.0;
+$fastest = $highest = $widest = 0.0;
 for($i = 0; $i < 3600; $i++)
 {
 	input($face, ['keys' => ['KeyW' => true]]);
 	$face->step(1/60);
-	$c = $face->car->state();
+	[$eye,$c] = $face->carView(1.);
 	$fastest = max($fastest, $c['speed']);
+	$widest = max($widest, rad2deg($eye->fov));
 	if(abs($c['z'] - 1500) < 300) $highest = max($highest, $c['y'] - $face->landscape->height($c['x'], $c['z']));
 	if($c['z'] > 2200) break;
 }
 expect($fastest > 100 && $highest < 60,
 	sprintf('At %.0f m/s a steep raise throws the car %.1f m up, not hundreds of meters', $fastest, $highest));
+expect(abs($fastest/Car::MPS_PER_MPH-240.) < .01 && abs($widest-90.) < .02,
+	'The driving camera reaches 90 degrees on the full-throttle run to 240 mph');
 $face->close();
 // Rolling backward faster than reverse gear, as after a landing, the car slows while S is held instead of keeping its
 // speed: the pedal once added reverse power and the clamp held whatever speed the car had.
@@ -654,6 +657,27 @@ foreach(['KeyD','KeyA'] as $steer)
 }
 expect($turns['KeyD'] < -2*$turns['KeyA'] && $turns['KeyA'] > 0, 'Banking into the turn provides more cornering grip than adverse camber');
 
+// Approach a cross-slope from level ground so the tires take up the load gradually.
+foreach([-1.40,1.40,1.55] as $grade)
+{
+	$land = new TerrainPhonics\Landscape($dry);
+	$land->queue(['type'=>'road','points'=>[[-65,-65*$grade,0],[65,65*$grade,0]],'width'=>190,'shoulder'=>40,'crown'=>0]);
+	$land->commit();
+	$vehicle = new Car;
+	$vehicle->spawn($vehicle->checkedSite($land,-150.,0.,-155.,0.,[]),$land,-150.);
+	for($i = 0; $i < 240; $i++)
+	{
+		$vehicle->step(1/60,1.,0.,$land,-150.);
+		$pose = $vehicle->state();
+		if($pose['motion'] === 'tumbling') break;
+	}
+	if(abs($grade) < 1.5)
+		expect($pose['motion'] === 'driving' && $pose['wheelContacts'] >= 2 && abs($pose['roll']) > deg2rad(50),
+			'A 54-degree bank supports the moving car in either direction');
+	else expect($pose['motion'] === 'tumbling', 'A 57-degree bank still overloads the outside tires');
+	$land->close();
+}
+
 // Cross exactly the same crest at low speed and at full throttle.
 foreach([false,true] as $fast)
 {
@@ -726,12 +750,33 @@ expect($bottomed && $rise > 0 && $rise < .017 && $springs->contacts === 4,
 
 $landingSurface = new TerrainPhonics\Landscape($flat);
 
+// Start both airborne motion models with the same bank and spin, far above tire contact.
+foreach([30,120] as $hz) foreach([-1,1] as $direction)
+{
+	$springs = new TerrainSandbox\CarSuspension;
+	$springs->reset([30.,.1,.2,0.,[0.,0.,0.,0.]]);
+	$springs->rollRate = .8*$direction;
+	$springs->pitchRate = .4*$direction;
+	$body = new TerrainSandbox\CarTumble(0.,30.,0.,0.,.1,.2,8.,0.,$springs->pitchRate,$springs->rollRate);
+	for($i = 0; $i < $hz; $i++)
+	{
+		$springs->step(1/$hz,[0.,0.,0.,0.],true);
+		$body->advance(1/$hz,$landingSurface,-5.);
+	}
+	$rollTravel = ($springs->roll-.2)*$direction;
+	$pitchTravel = ($springs->pitch-.1)*$direction;
+	expect($springs->contacts === 0 && $rollTravel > .71 && $rollTravel < .74 && $pitchTravel > .39 && $pitchTravel < .4,
+		'An unsupported car keeps turning in its launch direction with mild resistance to spin');
+	expect(abs($body->roll-$springs->roll) < 1e-9 && abs($body->pitch-$springs->pitch) < 1e-9,
+		'A jump and a tumble lose the same angular speed in free flight at either step rate');
+}
+
 // Compare two seconds of free flight with and without a complete barrel roll on the same trajectory.
 function freeRoll(TerrainPhonics\Landscape $land, int $direction): array
 {
 	$yaw = .83;
 	$template = ['yaw'=>$yaw, 'motion'=>'tumbling'] + (new Car)->state();
-	$body = new TerrainSandbox\CarTumble(2,30,4,$yaw,.16,0,6,4,.45*$direction,M_PI*$direction,1.7);
+	$body = new TerrainSandbox\CarTumble(2,30,4,$yaw,.16,0,6,4,.45*$direction,4.*$direction,1.7);
 	$pose = static function() use ($body,$template): array {
 		[$x,$y,$z,$pitch,$roll,$speed] = $body->pose();
 		return compact('x','y','z','pitch','roll','speed') + $template;
@@ -753,6 +798,7 @@ function freeRoll(TerrainPhonics\Landscape $land, int $direction): array
 		}
 		$from = $to;
 	}
+	expect($direction === 0 || $body->roll*$direction > 2*M_PI, 'A hard launch can still complete a barrel roll');
 	return $trace;
 }
 $straight = freeRoll($landingSurface,0);
@@ -1740,7 +1786,7 @@ expect(abs(end($first)['nitrous']-.75)<1e-9 && end($first)['speed'] > end($full)
 $halfway = $boosted->carView(.5)[1]['nitrous'];
 expect(abs($halfway - ($first[58]['nitrous']+$first[59]['nitrous'])/2)<1e-12, 'The gauge interpolates a draining bottle between steps');
 $wideFov = $shift->view(1.)[0]->fov;
-expect($wideFov > $ordinaryFov && $wideFov < $normalFov+deg2rad(25) && $boosted->view(1.)[0]->fov === $wideFov,
+expect($wideFov > $ordinaryFov && $wideFov < $normalFov+deg2rad(15) && $boosted->view(1.)[0]->fov === $wideFov,
 	'The faster launch on keyboard and controller opens the lens equally and leaves room for further speed');
 input($shift,['actions'=>['pause']]);
 $shift->step(.1);
@@ -1751,7 +1797,7 @@ enterCar($shift);
 expect($shift->view(0.)[0]->fov === $normalFov, 'A new drive begins with the normal lens');
 hold($boosted,$boost,180,$car);
 $emptyFov = $boosted->view(1.)[0]->fov;
-expect($car($boosted)['nitrous'] === 0. && $emptyFov > $wideFov && $emptyFov > $normalFov+deg2rad(40),
+expect($car($boosted)['nitrous'] === 0. && $emptyFov > $wideFov && $emptyFov > $normalFov+deg2rad(24),
 	'The high-speed view is still wide when the last nitrous burns');
 hold($boosted,$boost,10,$car);
 expect($boosted->view(1.)[0]->fov >= $emptyFov, 'Continued acceleration keeps opening the lens after depletion');
@@ -1800,19 +1846,19 @@ function speedLensCurve(Session $parked, int $hz): array
 	$street = $holdSpeed(30.,4*$hz);
 	$highway = $holdSpeed(60.,4*$hz);
 	$cruise = $holdSpeed(120.,4*$hz);
-	expect(abs($street-16.50) < .01 && abs($highway-28.91) < .01 && abs($cruise-43.75) < .01,
+	expect(abs($street-9.90) < .01 && abs($highway-17.34) < .01 && abs($cruise-26.25) < .01,
 		'The view opens early at 30 and 60 mph and continues widening at 120 mph');
 	expect($rise > .27*$cruise && $rise < .30*$cruise, 'A sudden jump in speed eases into the new angle');
 	expect($holdSpeed(120.,1,.1) === $cruise && $holdSpeed(120.,1,0.) === $cruise && $holdSpeed(120.,1) === $cruise,
 		'At a constant speed the view holds through burning, emptying, and refilling the bottle');
 	$fast = $holdSpeed(Car::TOP_SPEED_MPH,4*$hz);
-	expect(abs($fast-50.) < 1e-9 && $holdSpeed(Car::TOP_SPEED_MPH+20,1) === $fast, 'The governor reaches the widest lens and overspeed is capped');
+	expect(abs($fast-30.) < 1e-9 && $holdSpeed(Car::TOP_SPEED_MPH+20,1) === $fast, 'The governor reaches the widest lens and overspeed is capped');
 	$fall = $holdSpeed(0.,intdiv($hz,2));
 	expect($fall > .36*$fast && $fall < .38*$fast, 'Even a sudden stop eases the camera back toward its base angle');
 	expect($holdSpeed(0.,4*$hz) === 0. && !$lens->advance($eye,$pose,$pose,$land,1/$hz),
 		'The lens returns exactly to the original field of view and the parked camera goes idle');
 	$reverse = $holdSpeed(-12.,4*$hz);
-	expect(abs($reverse-7.13) < .01 && $holdSpeed(12.,1) === $reverse, 'Equal forward and reverse road speeds use the same angle');
+	expect(abs($reverse-4.28) < .01 && $holdSpeed(12.,1) === $reverse, 'Equal forward and reverse road speeds use the same angle');
 	return [$rise,$fall];
 }
 [$rise30,$fall30] = speedLensCurve($unassisted,30);

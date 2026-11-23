@@ -13,7 +13,7 @@ final class CarChase
 	private array $previousCar = [];
 	private array $previousCenter = [], $currentCenter = [];
 	private const DISTANCE = 6.7;
-	private const MAX_FOV_WIDENING = 50 * M_PI / 180;
+	private const MAX_FOV_WIDENING = 30 * M_PI / 180;
 	private const FOV_HALF_LIFE = .35;
 	private float $fovWidening = 0.;
 	/**

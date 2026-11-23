@@ -41,6 +41,8 @@ final class Car
 	 */
 	private const DRIFT = .6, DRIFT_IN = .35, DRIFT_OUT = .3, DRIFT_SETTLE = .3;
 	private const RECOVERY_DELAY = 1.5;
+	// Lateral load in multiples of tire normal load, and fore-aft slope in radians at tip-over.
+	private const SIDE_TIP_LOAD = 1.45, END_TIP_PITCH = 1.02;
 	// Approximate Testarossa intake, two feet above the tire soles and aft of the axle midpoint.
 	private const INTAKE_HEIGHT = 2 * DisplayUnits::FOOT, INTAKE_AFT = .8;
 	// Horizontal drag rate per meter of mean tire immersion.
@@ -423,8 +425,8 @@ final class Car
 		// Downhill gravity and outward cornering load act together on an adverse camber.
 		$sideLoad = Session::DRIVING_GRAVITY*sin($roll) - $lateral*cos($roll);
 		$normalLoad = (Session::DRIVING_GRAVITY+$downforce)*cos($pitch)*cos($roll) + $lateral*sin($roll);
-		$tipSide = abs($roll) > .40 && abs($sideLoad) > 1.32*max(0,$normalLoad);
-		$tipEnd = abs($pitch) > 1.02;
+		$tipSide = abs($roll) > .40 && abs($sideLoad) > self::SIDE_TIP_LOAD*max(0,$normalLoad);
+		$tipEnd = abs($pitch) > self::END_TIP_PITCH;
 		$springs = $this->suspension;
 		// Under heavy service braking a rolling tire runs slightly slower than the road.
 		// Use the same lost tread travel for the visible wheel rotation and the contact sound.
@@ -561,7 +563,8 @@ final class Car
 		$heading = $reversed ? $this->yaw + M_PI : $this->yaw;
 		$support = $this->support($land,$this->x,$this->z,$heading);
 		// Leave a margin below the tipping load so the same bank cannot immediately start another tumble.
-		if($support !== null && abs($support[1]) < .98 && abs(tan($support[2])) < 1.22*cos($support[1]))
+		if($support !== null && abs($support[1]) < self::END_TIP_PITCH-.04
+			&& abs(tan($support[2])) < (self::SIDE_TIP_LOAD-.10)*cos($support[1]))
 		{
 			$forward = $reversed ? -$this->speed : $this->speed;
 			if($reversed) $side = -$side;
@@ -743,6 +746,13 @@ final class Car
 		$tangent = tan($steering);
 		$offset = $tangent*self::FRONT_TRACK/(2*self::WHEELBASE);
 		return [atan($tangent/(1 + $offset)), atan($tangent/(1 - $offset))];
+	}
+
+	/** Airborne roll speed halves in 3.5 seconds. Pitch carries longer through a jump. */
+	public static function dampAirborneSpin(float &$pitchRate, float &$rollRate, float $dt): void
+	{
+		$pitchRate *= 2 ** (-$dt/28.);
+		$rollRate *= 2 ** (-$dt/3.5);
 	}
 
 	/** World-space offset from the tire soles to the center of mass at this attitude. */
