@@ -161,7 +161,9 @@ void main()
 	vec3 n = normalize(vNormal);
 	vec3 weights = pow(abs(n), vec3(4.0)); weights /= dot(weights, vec3(1.0));
 	float detail = dot(weights, vec3(grain(vWorld.yz * 0.3), grain(vWorld.xz * 0.3), grain(vWorld.xy * 0.3)));
-	vec3 worldDx = dFdx(vWorld), worldDy = dFdy(vWorld);
+	// Neighboring fragments can be millimeters apart many kilometers from the origin.
+	// Differentiate the camera-relative position to retain those small ground distances.
+	vec3 worldDx = dFdx(vRelative), worldDy = dFdy(vRelative);
 	float footprint = max(length(worldDx), length(worldDy));
 	float slopeMask = roadSlopeMask(cross(worldDx,worldDy));
 	// Lateral coordinates are in road half-widths. Convert meters of paint into that coordinate
