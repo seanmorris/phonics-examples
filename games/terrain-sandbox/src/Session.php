@@ -432,9 +432,9 @@ final class Session
 			if($this->roadWork !== null) $this->advanceRoad(min(4.,$pickMs));
 			if($wasPicking) $this->advancePick($pickMs);
 			if($this->carSearch !== null) $this->advanceCarSearch();
-			if($this->circuitSearch !== null && $this->draft === null && !$this->preparing)
-				// A paused editor can spend the stationary input allowance on the route.
-				$this->advanceCircuit(min($this->paused ? 7.5 : 3.0,$pickMs));
+			if($this->circuitSearch !== null)
+				// The host gives a stationary editor more time and keeps moving frames on a short slice.
+				$this->advanceCircuit(min(7.5,$pickMs));
 			if($wasJet && $this->mode !== 'jet')
 			{
 				$this->balloons->reset();
@@ -691,7 +691,21 @@ final class Session
 		$this->message = 'Looking for a closed route around the terrain…';
 	}
 
-	private function advanceCircuit(float $budgetMs): void
+	/** Advance the editor search from input or from a short timer slice between frames. */
+	public function advanceCircuit(float $budgetMs): void
+	{
+		if($this->circuitSearch === null || $this->draft !== null || $this->preparing) return;
+		try { $this->stepCircuit($budgetMs); }
+		catch(\Throwable $error)
+		{
+			$this->circuitSearch = null;
+			$this->circuitPreview = null;
+			$this->message = $error->getMessage();
+			$this->dirty = true;
+		}
+	}
+
+	private function stepCircuit(float $budgetMs): void
 	{
 		$deadline = hrtime(true)+(int)($budgetMs*1e6);
 		$job = $this->circuitSearch;

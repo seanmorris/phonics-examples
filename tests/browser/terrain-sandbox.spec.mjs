@@ -1701,6 +1701,10 @@ test('Arctic Meltwater can place an editable causeway circuit at its original wa
 	await expect(causeways).not.toBeChecked();
 	await causeways.check();
 	await control(page, 'circuit-find').click();
+	await expect(control(page, 'circuit-cancel')).toBeVisible();
+	await control(page, 'circuit-cancel').click();
+	await expect.poll(async() => (await status(page)).circuit).toMatchObject({searching: false, preview: false});
+	await control(page, 'circuit-find').click();
 	await expect.poll(async() => (await status(page)).circuit.preview, {timeout: 340_000}).toBe(true);
 	expect((await status(page)).revision).toBe(0);
 

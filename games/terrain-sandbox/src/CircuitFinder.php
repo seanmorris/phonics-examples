@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace TerrainSandbox;
 
 use TerrainPhonics\Landscape;
+use TerrainPhonics\Recipe;
 
 /** Searches a bounded map of the canyon floor for a navigable cycle around high ground. */
 final class CircuitFinder
@@ -15,6 +16,8 @@ final class CircuitFinder
 	private readonly ?float $causewayDeck;
 	private const MAX_WATER_DEPTH = 30.;
 	private array $corridorDistance = [], $fillCost = [];
+	/** One local and one regional survey per live landscape. Only completed surveys are shared. */
+	private static ?\WeakMap $surveys = null;
 	private float $left, $top, $step;
 	private int $side;
 
@@ -64,11 +67,11 @@ final class CircuitFinder
 		$nearby = [];
 		$dry = $this->dryLevel+$this->swell+.25;
 		if($lake) $dry = max($dry,$this->dryLevel-$this->minimumDifference);
+		$this->heights = yield from $this->survey($regional);
 		for($i = 0; $i<$total; $i++)
 		{
 			[$px,$pz] = $this->point($i);
-			$height = $this->landscape->height($px,$pz);
-			$this->heights[] = $height;
+			$height = $this->heights[$i];
 			$deck = $height;
 			if($this->causewayDeck !== null) {
 				// Keep the original elevations for finding the enclosed feature. Drive across the proposed deck.
@@ -138,6 +141,43 @@ final class CircuitFinder
 			}
 		}
 		return $dryCircuit;
+	}
+
+	/** The elevation grid is independent of water, wave height, the chosen feature and the start height. */
+	private function survey(bool $regional): \Generator
+	{
+		self::$surveys ??= new \WeakMap;
+		$land = $this->landscape;
+		$key = [$land->revision(),$this->left,$this->top,$this->step,$this->side];
+		$cached = self::$surveys[$land][(int)$regional] ?? null;
+		if($cached !== null && $cached[0] === $key) return $cached[1];
+
+		$parameters = $land->recipe();
+		$spacing = $parameters['spacing'];
+		$natural = $land->heightEditIndex()->isEmpty() ? new Recipe($parameters) : null;
+		$heights = [];
+		for($row=0; $row<$this->side; $row++)
+		{
+			$z = $this->top + $row*$this->step;
+			$iz = $z/$spacing;
+			$latticeRow = $natural !== null && $iz === floor($iz);
+			for($col=0; $col<$this->side; $col++)
+			{
+				if(($col & 15) === 0) yield;
+				$x = $this->left + $col*$this->step;
+				$ix = $x/$spacing;
+				// A natural lattice node is the recipe itself. These widely spaced probes have no tile locality.
+				$heights[] = $latticeRow && $ix === floor($ix) ? $natural->height($ix*$spacing,$iz*$spacing)
+					: $land->meshHeight($x,$z,$this->step);
+			}
+		}
+		if($land->revision() === $key[0])
+		{
+			$windows = self::$surveys[$land] ?? [];
+			$windows[(int)$regional] = [$key,$heights];
+			self::$surveys[$land] = $windows;
+		}
+		return $heights;
 	}
 
 	/** Find hills enclosed by the search window and rank them by distance from the requested site. */

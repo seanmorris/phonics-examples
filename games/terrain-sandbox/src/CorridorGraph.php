@@ -12,32 +12,54 @@ final class CorridorGraph
 	public static function trace(array $open, int $side): \Generator
 	{
 		$cells = array_filter($open);
-		do
+		// A fully surrounded cell cannot be removed in either half-pass. Once an edge
+		// is tested, only a deletion in its eight neighbors can change that decision.
+		$edge = [];
+		$visited = 0;
+		foreach($cells as $id => $_)
 		{
-			$changed = false;
-			foreach([false,true] as $reverse)
+			if(++$visited%256 === 0) yield;
+			$x = $id%$side;
+			if($id < $side || $id >= $side*($side-1) || $x === 0 || $x === $side-1) continue;
+			if(!isset($cells[$id-$side],$cells[$id+1],$cells[$id+$side],$cells[$id-1])) $edge[$id] = true;
+		}
+		$pending = [$edge,$edge];
+		unset($edge);
+		$neighbors = [-$side,-$side+1,1,$side+1,$side,$side-1,-1,-$side-1];
+		while($pending[0] || $pending[1])
+		{
+			foreach([0,1] as $pass)
 			{
 				$remove = [];
 				$visited = 0;
-				foreach($cells as $id => $_)
+				foreach($pending[$pass] as $id => $_)
 				{
 					if(++$visited%256 === 0) yield;
-					$x = $id%$side;
-					$z = intdiv($id,$side);
-					if($x === 0 || $z === 0 || $x === $side-1 || $z === $side-1) continue;
+					if(!isset($cells[$id])) continue;
 					$ring = self::ring($cells,$id,$side);
 					$degree = array_sum($ring);
 					if($degree<2 || $degree>6 || self::branches($ring)!==1) continue;
 					[$n,,$e,,$s,,$w] = $ring;
-					if($reverse ? ($n && $e && $w || $n && $s && $w)
+					if($pass ? ($n && $e && $w || $n && $s && $w)
 						: ($n && $e && $s || $e && $s && $w)) continue;
 					$remove[] = $id;
 				}
+				$pending[$pass] = [];
 				foreach($remove as $id) unset($cells[$id]);
-				$changed = $changed || $remove !== [];
+				foreach($remove as $id)
+				{
+					if(++$visited%256 === 0) yield;
+					foreach($neighbors as $offset)
+					{
+						$next = $id + $offset;
+						if(!isset($cells[$next]) || $next < $side || $next >= $side*($side-1)) continue;
+						$x = $next%$side;
+						if($x === 0 || $x === $side-1) continue;
+						$pending[0][$next] = $pending[1][$next] = true;
+					}
+				}
 			}
 		}
-		while($changed);
 
 		$junctions = [];
 		$distance = [];

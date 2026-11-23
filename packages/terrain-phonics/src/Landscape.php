@@ -35,6 +35,8 @@ final class Landscape implements TerrainSurface
 	/** Edit transaction history, current applied prefix, and staged transaction. */
 	private array $history = [], $operations = [], $pending = [];
 	private ?EditIndex $heightEdits = null;
+	/** Smoothing is the only edit that reads neighboring nodes from an earlier edit stage. */
+	private bool $hasSmoothing = false;
 	private int $cursor = 0, $version = 0;
 	/** Residency leases refer to tile keys and survive geometry revisions. */
 	private array $leases = [];
@@ -434,6 +436,7 @@ final class Landscape implements TerrainSurface
 		$child = new self($this->parameters);
 		$child->history = $this->history;
 		$child->operations = $this->operations;
+		$child->hasSmoothing = $this->hasSmoothing;
 		$child->range = $this->range;
 		$child->cursor = $this->cursor;
 		$child->version = $this->version;
@@ -502,7 +505,7 @@ final class Landscape implements TerrainSurface
 			$all = self::replay($all, $normalized);
 			$result->operationLimit($all);
 			$result->history[] = array_map([Edits::class, 'serialize'], $normalized);
-			if(count($result->history) === $value['cursor']) $result->operations = RoadMarkings::connect($all);
+			if(count($result->history) === $value['cursor']) $result->setOperations($all);
 		}
 
 		$result->cursor = $value['cursor'];
@@ -1258,27 +1261,25 @@ final class Landscape implements TerrainSurface
 	 */
 	private function generateNode(int $x, int $z): float
 	{
-		if(!$this->operations)
-		$value = $this->generator->height($x * $this->parameters['spacing'], $z * $this->parameters['spacing']);
-		else
+		$wx = $x * $this->spacing;
+		$wz = $z * $this->spacing;
+		if(!$this->hasSmoothing)
 		{
-			$this->memo = [];
-
-			try
-			{
-				$value = $this->edited(
-					$x * $this->parameters['spacing']
-					, $z * $this->parameters['spacing']
-					, count($this->operations)
-				);
-			}
-			finally
-			{
-				$this->memo = [];
-			}
+			$value = $this->generator->height($wx,$wz);
+			foreach($this->operations as $operation) $value = Edits::apply($wx,$wz,$value,$operation);
+			return $value;
 		}
 
-		return $value;
+		$this->memo = [];
+
+		try
+		{
+			return $this->edited($wx,$wz,count($this->operations));
+		}
+		finally
+		{
+			$this->memo = [];
+		}
 	}
 
 	/**
@@ -1341,11 +1342,17 @@ final class Landscape implements TerrainSurface
 		$this->queueNext = $this->queueCount = 0;
 		$this->recentKey = -1;
 		$this->recentTile = null;
-		$this->operations = RoadMarkings::connect($operations);
+		$this->setOperations($operations);
 		$this->heightEdits = null;
 		$this->range = $range;
 		$this->version = $version;
 		$this->tiles = $tiles;
+	}
+
+	private function setOperations(array $operations): void
+	{
+		$this->operations = RoadMarkings::connect($operations);
+		$this->hasSmoothing = in_array('smooth',array_column($operations,'type'),true);
 	}
 
 	/**

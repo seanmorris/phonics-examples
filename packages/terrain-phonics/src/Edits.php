@@ -116,10 +116,10 @@ final class Edits
 	 * @param float $z World Z coordinate in meters.
 	 * @param float $height Previous height in meters.
 	 * @param array $operation Validated edit record, including derived road data when applicable.
-	 * @param callable $before Height evaluator for the surface before this edit, used by smoothing.
+	 * @param callable|null $before Height evaluator for the previous edit stage, required for smoothing.
 	 * @return float Edited lattice height in meters.
 	 */
-	public static function apply(float $x, float $z, float $height, array $operation, callable $before): float
+	public static function apply(float $x, float $z, float $height, array $operation, ?callable $before = null): float
 	{
 		$type = $operation['type'];
 
@@ -153,6 +153,7 @@ final class Edits
 			return $height + $amount * $weight * (2 * $q - 1);
 		}
 
+		if($before === null) throw new \LogicException('Smoothing requires a previous-stage height evaluator.');
 		$step = $operation['sampleStep'];
 		$target = ($height + $before($x - $step, $z) + $before($x + $step, $z)
 			+ $before($x, $z - $step) + $before($x, $z + $step)
@@ -480,6 +481,8 @@ final class Edits
 	private static function roadAt(float $x, float $z, array $operation): array
 	{
 		$road = $operation['_road'];
+		[$left,$top,$right,$bottom] = $road['bounds'];
+		if($x < $left || $x > $right || $z < $top || $z > $bottom) return [0.,0.];
 		$radius = $road['radius'];
 		$key = (int)floor($x / $road['gridSize']) . ',' . (int)floor($z / $road['gridSize']);
 		$sum = $target = $coverage = 0.0;
@@ -492,7 +495,9 @@ final class Edits
 			[$sx,$sy,$sz,$tx,$tz,$grade,$bank,$opacity] = $road['samples'][$index];
 			$dx = $x - $sx;
 			$dz = $z - $sz;
-			$weight = self::falloff(($dx * $dx + $dz * $dz - $inner2) / $span);
+			$q = ($dx * $dx + $dz * $dz - $inner2) / $span;
+			if($q >= 1.) continue;
+			$weight = $q <= 0. ? 1. : self::falloff($q);
 
 			if($weight <= 0) continue;
 

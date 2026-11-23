@@ -1167,6 +1167,35 @@ iterator_to_array($check);
 expect($check->getReturn() === null, 'The highway crest check catches a sharp crest in a side lane across the lap line');
 $roadFixture->close();
 
+// Reusing a finished survey must preserve edited elevations, fractional lattice positions and cancellation.
+$surveyLand = new Landscape(['worldSize'=>256,'spacing'=>3.,'seed'=>'survey-test']);
+$survey = function(Landscape $land, float $left): \Generator {
+	$finder = new TerrainSandbox\CircuitFinder($land,-1000.,0.);
+	return (function() use ($left) {
+		$this->side = 9; $this->step = 8.; $this->left = $left; $this->top = -24.;
+		return $this->survey(false);
+	})->call($finder);
+};
+$readSurvey = function(Landscape $land, float $left) use ($survey): array {
+	$job = $survey($land,$left);
+	$slices = iterator_count($job);
+	$expected = [];
+	for($row=0;$row<9;$row++) for($col=0;$col<9;$col++) $expected[] = $land->height($left+8*$col,-24.+8*$row);
+	expect($job->getReturn() === $expected, 'Every survey elevation matches physical terrain.');
+	return [$slices,$job->getReturn()];
+};
+$partial = $survey($surveyLand,-24.); $partial->next(); unset($partial);
+[$cold,$natural] = $readSurvey($surveyLand,-24.);
+expect($cold > 0 && $readSurvey($surveyLand,-24.)[0] === 0, 'Only completed surveys are reused at the same snapped position.');
+[$moved,$beforeEdit] = $readSurvey($surveyLand,-16.);
+expect($moved > 0, 'Moving the survey window resamples the grid.');
+$surveyLand->queue(['type'=>'raise','x'=>0,'z'=>0,'radius'=>18,'amount'=>20]); $surveyLand->commit();
+[$changed,$raised] = $readSurvey($surveyLand,-16.);
+expect($changed > 0 && $raised !== $beforeEdit, 'A committed elevation edit invalidates the previous survey.');
+$surveyLand->undo();
+expect($readSurvey($surveyLand,-24.)[1] === $natural, 'Undo is reflected in the next survey.');
+$surveyLand->close();
+
 $generator = new Session;
 input($generator, ['actions' => [['type'=>'generate','preset'=>'canyon','seed'=>'first-light']]]);
 $generator->course->place('start', 'air', 0, 0, 0, 0);

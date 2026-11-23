@@ -99,20 +99,33 @@ $stopSearchTimer = static function() use ($window, &$searchTimer): void {
 	if($searchTimer !== null) $window->clearInterval($searchTimer);
 	$searchTimer = null;
 };
-$workOnSearch = static function() use ($session, $engine, $stopSearchTimer): void {
-	if($engine->paused || $session->paused || !$session->delivery?->advanceSearch(5.))
-		$stopSearchTimer();
-};
-$engine->systems->add('terrain-sandbox.delivery-search', static function() use (
-	$session, $window, &$searchTimer, $workOnSearch
+$lastCircuitFrame = 0;
+$workOnSearch = static function() use (
+	$session, $engine, $stopSearchTimer, &$lastCircuitFrame, &$statusPending, &$urgentStatus
 ): void {
-	if($searchTimer === null && $session->delivery?->searchPending())
-		$searchTimer = $window->setInterval($workOnSearch, 10);
+	if($engine->paused) { $stopSearchTimer(); return; }
+	if($session->findingCircuit())
+	{
+		// At normal frame rates input already services the editor. Reclaim a short slice only between slow frames.
+		if(hrtime(true)-$lastCircuitFrame >= 16_000_000)
+		{
+			$session->advanceCircuit(5.);
+			if(!$session->findingCircuit()) $urgentStatus = $statusPending = true;
+		}
+	}
+	$deliveryPending = !$session->paused && $session->delivery?->advanceSearch(5.);
+	if(!$deliveryPending && !$session->findingCircuit()) $stopSearchTimer();
+};
+$startSearchTimer = static function() use ($window, &$searchTimer, $workOnSearch): void {
+	if($searchTimer === null) $searchTimer = $window->setInterval($workOnSearch, 10);
+};
+$engine->systems->add('terrain-sandbox.delivery-search', static function() use ($session, $startSearchTimer): void {
+	if($session->delivery?->searchPending()) $startSearchTimer();
 }, ['terrain-sandbox.simulate']);
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds,
-	&$heldKeys, &$heldPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput
+	&$heldKeys, &$heldPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastCircuitFrame
 ): bool {
 	$frameSeconds = max(0.0, $elapsed);
 	$started = hrtime(true);
@@ -141,6 +154,11 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		$input['pad'] = $heldPad;
 		$moving = $heldKeys || $heldPad || in_array($session->mode, ['craft','jet'], true) || !empty($input['look'][0]) || !empty($input['look'][1]);
 		$session->input($input, min(.1, $frameSeconds), $width / $height, $moving ? 1.0 : 7.5);
+		if($session->findingCircuit())
+		{
+			$lastCircuitFrame = hrtime(true);
+			$startSearchTimer();
+		}
 	}
 	$urgentStatus = $urgentStatus || $keysChanged || isset($input['clicks'][0]) || $wasPicking !== $session->picking
 		|| $previousRoadPoints !== count($session->road) || $wasSearching !== $session->findingCarSite()
