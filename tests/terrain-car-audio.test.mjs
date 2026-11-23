@@ -10,7 +10,7 @@ function buffer(channels, length, sampleRate)
 	return {numberOfChannels: channels, length, sampleRate, getChannelData: channel => data[channel]};
 }
 
-test('each collector receives six distinct firings per cycle and the pressure wraps continuously', () => {
+test('each collector receives its own six firings per cycle, flow gates both, and the loop wraps continuously', () => {
 	const file = readFileSync(new URL('../games/terrain-sandbox/assets/car-audio/flat-twelve.wav', import.meta.url));
 	const start = file.indexOf('data') + 8;
 	const frames = file.readUInt32LE(start-4)/8;
@@ -19,25 +19,41 @@ test('each collector receives six distinct firings per cycle and the pressure wr
 
 	const pressure = (frame, channel) => file.readInt16LE(start + ((frame+frames)%frames)*8 + 2*channel)/32768;
 
+	const strengths = Array.from({length: 12}, () => []);
+
 	for(let cylinder = 0; cylinder < 12; cylinder++)
+	for(let cycle = 0; cycle < 64; cycle++)
 	{
-		const strengths = [];
+		// Firings sit mid-slot. Unequal primaries move each by up to two samples either side.
+		const at = Math.round((cycle + (cylinder+.5)/12)*512) - 3;
+		const bank = cylinder%2;
 
-		for(let cycle = 0; cycle < 64; cycle++)
-		{
-			const at = Math.round((cycle + cylinder/12)*512);
-			const bank = cylinder%2;
-
-			const surge = channel => Math.max(...Array.from({length: 19}, (_, i) => pressure(at+i, channel)));
-			const peak = surge(bank);
-			assert.ok(peak > surge(1-bank)+.45);
-			strengths.push(peak);
-		}
-
-		assert.ok(Math.max(...strengths)-Math.min(...strengths) > .18);
+		const surge = channel => Math.max(...Array.from({length: 12}, (_, i) => pressure(at+i, channel)));
+		const peak = surge(bank);
+		assert.ok(peak > 4*surge(1-bank), `cylinder ${cylinder}, cycle ${cycle}`);
+		assert.ok(surge(2) > .15);
+		strengths[cylinder].push(peak);
 	}
 
-	for(let channel = 0; channel < 3; channel++) assert.ok(Math.abs(pressure(0, channel)-pressure(-1, channel)) < .15);
+	const mean = values => values.reduce((sum, value) => sum+value, 0)/values.length;
+
+	for(const cylinder of strengths)
+	{
+		// Combustion varies a few percent from cycle to cycle.
+		const spread = (Math.max(...cylinder)-Math.min(...cylinder))/mean(cylinder);
+		assert.ok(spread > .04 && spread < .25, String(spread));
+	}
+
+	/** Mean firing strength on one bank. */
+	const bank = side => mean(strengths.filter((_, cylinder) => cylinder%2 === side).flat());
+
+	// The banks balance, so their interleaved firings sum to the twelve-cylinder note, not one bank's.
+	assert.ok(Math.abs(bank(0)/bank(1)-1) < .03);
+
+	// Collector flow is a speed. It never reverses.
+	for(let frame = 0; frame < frames; frame += 7) assert.ok(pressure(frame, 2) >= 0);
+
+	for(let channel = 0; channel < 3; channel++) assert.ok(Math.abs(pressure(0, channel)-pressure(-1, channel)) < .05);
 });
 
 test('the real skid recording wraps across adjacent samples and retains its level through the overlap', () => {
@@ -95,7 +111,7 @@ test('a browser awaiting an audio gesture receives one resume request across dri
 
 	const stop = activate({module, canvas, archive, signal: controller.signal});
 
-	for(let i = 0; i<90; i++) module.terrainCarSound(8+i, .1, 700, .01, 80, 0, 1, .15);
+	for(let i = 0; i<90; i++) module.terrainCarSound(8+i, .1, 700, .01, 80, 0, 1);
 	assert.equal(attempts, 1);
 	doc.dispatchEvent(new Event('keydown'));
 	assert.equal(attempts, 2);
