@@ -238,6 +238,7 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	const doc = structuredClone(fixture);
 	// The west (closing) span crosses a ridge, with both of its hand-placed endpoints on the plain.
 	const ridge = {type:'raise',x:-337,z:0,radius:125,amount:32};
+	doc.settings.roadWidth = 24;
 	doc.landscape = {...doc.landscape,recipe: {...recipe,worldSize: 2048},history: [[ridge]],cursor: 1,revision: 1};
 	await page.locator('[data-file]').setInputFiles({name: 'manual.json',mimeType: 'application/json',buffer: Buffer.from(JSON.stringify(doc))});
 	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
@@ -273,6 +274,10 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	await page.locator('[data-action=save]').click();
 	const saved = JSON.parse(await fs.readFile(await (await download).path(), 'utf8'));
 	const graded = saved.landscape.history.at(-1)[0];
+	expect(graded.width).toBe(24);
+	const openings = saved.course.gates.map(gate => gate.width);
+	// The narrowest crossing is perpendicular. Gates across bends can be wider.
+	expect(Math.min(...openings)).toBeCloseTo(graded.width + 1.5, 1);
 	expect(graded.points.at(-1)).toEqual(graded.points[0]);
 	expect(graded.points.some(([x,y,z]) => x < -270 && Math.abs(z) < 65 && y > 26)).toBe(true);
 });

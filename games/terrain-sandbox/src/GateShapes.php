@@ -212,11 +212,12 @@ final class GateShapes
 	 * @param string $kind road, water or air.
 	 * @param float|null $width Opening width in meters, or null for the kind's own.
 	 * @param float|null $height Opening height in meters, or null for the kind's own.
+	 * @param bool $pavementSpan Allow a measured road crossing to exceed the standalone gantry width.
 	 * @return array{width:float,height:float,limits:list<string>} The size within the kind's ranges, and a phrase
 	 * for each limit that changed it, such as "a road gate is at most 60 m wide". A water arch also keeps its scale
 	 * up within its stretch of its scale across, by changing the height.
 	 */
-	public function fit(string $kind, ?float $width, ?float $height): array
+	public function fit(string $kind, ?float $width, ?float $height, bool $pavementSpan = false): array
 	{
 		$size = $this->kinds[$kind]['size'];
 		$name = ['road' => 'a road gate', 'water' => 'a water arch', 'air' => 'an air gate'][$kind];
@@ -229,7 +230,10 @@ final class GateShapes
 			return $held;
 		};
 		[$defaultWidth, $defaultHeight] = $size['default'];
-		$width = $clamp($width, $size['width'], $defaultWidth, 'wide');
+		$widthRange = $size['width'];
+		// A circuit gantry can cross the full 1024 m editor road, including a skew crossing and post clearance.
+		if($pavementSpan && $kind === 'road') $widthRange[1] = max($widthRange[1], CircuitRoad::MAX_GATE_SPAN);
+		$width = $clamp($width, $widthRange, $defaultWidth, 'wide');
 		$height = $clamp($height, $size['height'], $defaultHeight, 'tall');
 		if($size['stretch'] !== null)
 		{
@@ -250,10 +254,11 @@ final class GateShapes
 	 * @param string $kind road, water or air.
 	 * @param float $width Opening width in meters.
 	 * @param float $height Opening height in meters.
+	 * @param bool $pavementSpan Use the circuit road span limits.
 	 */
-	public function fits(string $kind, float $width, float $height): bool
+	public function fits(string $kind, float $width, float $height, bool $pavementSpan = false): bool
 	{
-		$fitted = $this->fit($kind, $width, $height);
+		$fitted = $this->fit($kind, $width, $height, $pavementSpan);
 		return abs($fitted['width'] - $width) < 1e-6 && abs($fitted['height'] - $height) < 1e-6;
 	}
 

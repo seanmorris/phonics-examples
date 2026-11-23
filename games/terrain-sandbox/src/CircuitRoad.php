@@ -11,25 +11,28 @@ final class CircuitRoad
 	private const SHOULDER = 16.;
 	// Distance from the asphalt edge to the inner face of a checkpoint post, in meters.
 	public const POST_CLEARANCE = .75;
+	private const EDGE_REFINEMENTS = 6;
+	// Each correction can add at most one more half-width to either side of a skew crossing.
+	public const MAX_GATE_SPAN = (1 + self::EDGE_REFINEMENTS) * (1024. + 2*self::POST_CLEARANCE);
 	private const STATION_SPACING = 40.;
 	// At 75 mph a 140 m vertical radius asks for 8.0 m/s² of downward acceleration, below gravity.
 	private const MIN_CREST_RADIUS = 140.;
 
 	/** Fit both posts to the painted spline along the original checkpoint crossing plane. */
-	public static function gateSpan(Landscape $land, float $x, float $z, float $yaw): array
+	public static function gateSpan(Landscape $land, float $x, float $z, float $yaw, bool $regional = true): array
 	{
 		$acrossX = cos($yaw);
 		$acrossZ = -sin($yaw);
 		$material = $land->material($x,$z,$offset,$center);
 		if($material !== 'road' || $center === null || abs($center[0]) > $center[2])
-			return [$x,$z,self::WIDTH + 2*self::POST_CLEARANCE];
+			return [$x,$z,$regional ? self::WIDTH + 2*self::POST_CLEARANCE : null];
 		$half = $center[2] + self::POST_CLEARANCE;
 		$edges = [];
 		foreach([-1,1] as $side) {
 			$distance = $half;
 			// On a bend the fitted spline can sit to one side of the racing line or cross it at an angle.
 			// Correct along the gate span until the post clears the local pavement edge.
-			for($i = 0; $i < 6; $i++) {
+			for($i = 0; $i < self::EDGE_REFINEMENTS; $i++) {
 				$land->material($x+$side*$distance*$acrossX,$z+$side*$distance*$acrossZ,$offset,$mark);
 				if($mark === null) break;
 				$error = $mark[2] + self::POST_CLEARANCE - abs($mark[0]);

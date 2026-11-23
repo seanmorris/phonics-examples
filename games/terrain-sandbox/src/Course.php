@@ -93,6 +93,7 @@ final class Course
 	 * and a water arch's within its stretch, as GateShapes::fit() leaves it.
 	 * @param \Closure|null $ground fn(float $x, float $z): float giving the ground height anywhere on the landscape.
 	 * Without it the ground under each gate counts as level with the gate's origin.
+	 * @param bool $pavementSpan Allow a measured road crossing to exceed the standalone gantry width.
 	 * @return array{gate:?array,moved:bool,merged:bool,removed:?array,refused:?string,with:?array} The placed gate,
 	 * or on a merge the start gate; whether it moved an existing gate; whether a finish gate merged into the start
 	 * gate, and the finish gate that went. A refused gate leaves the course unchanged, with refused 'full' when 32
@@ -100,7 +101,7 @@ final class Course
 	 * @throws \InvalidArgumentException For an unknown role or kind, or a size outside the kind's range.
 	 */
 	public function place(string $role, string $kind, float $x, float $y, float $z, float $yaw, int $laps = 1,
-		?float $width = null, ?float $height = null, ?\Closure $ground = null): array
+		?float $width = null, ?float $height = null, ?\Closure $ground = null, bool $pavementSpan = false): array
 	{
 		$result = ['gate' => null, 'moved' => false, 'merged' => false, 'removed' => null, 'refused' => null,
 			'with' => null];
@@ -108,7 +109,7 @@ final class Course
 			throw new \InvalidArgumentException('Unknown gate role or kind');
 		[$defaultWidth, $defaultHeight] = $this->shapes->kind($kind)['size']['default'];
 		$width ??= $defaultWidth; $height ??= $defaultHeight;
-		if(!$this->shapes->fits($kind, $width, $height))
+		if(!$this->shapes->fits($kind, $width, $height, $pavementSpan))
 			throw new \InvalidArgumentException("A $kind gate cannot be " . DisplayUnits::feet($width) . " by " . DisplayUnits::feet($height) . " ft");
 		if($role === 'checkpoint' && count($this->checkpoints) >= self::MAX_CHECKPOINTS)
 			return ['refused' => 'full'] + $result;
@@ -676,6 +677,9 @@ final class Course
 			$saved = [];
 			foreach([...self::SAVED, 'laps', 'number', 'width', 'height'] as $key)
 				if(array_key_exists($key, $gate)) $saved[$key] = $gate[$key];
+			// Keep oversized fitted road gates loadable if subsequent edits detach the course from its circuit.
+			if($gate['kind'] === 'road' && $gate['width'] > $this->shapes->kind('road')['size']['width'][1])
+				$saved['pavementSpan'] = true;
 			$gates[] = $saved;
 		}
 		return ['gates' => $gates];
@@ -730,6 +734,8 @@ final class Course
 				...match($role) { 'start' => ['laps'], 'checkpoint' => ['number'], 'finish' => [] }];
 			$sized = array_key_exists('width', $gate) || array_key_exists('height', $gate);
 			if($sized) $keys = [...$keys, 'width', 'height'];
+			$pavementSpan = ($gate['pavementSpan'] ?? null) === true && $kind === 'road' && $sized;
+			if($pavementSpan) $keys[] = 'pavementSpan';
 			$present = array_keys($gate);
 			sort($present); sort($keys);
 			if($present !== $keys) throw $fail("a $role gate must hold exactly " . implode(', ', $keys));
@@ -742,7 +748,8 @@ final class Course
 			if($sized)
 			{
 				[$width, $height] = [(float)$gate['width'], (float)$gate['height']];
-				if(!$course->shapes->fits($kind, $width, $height)) throw $fail("a $kind gate's size is out of range");
+				if(($pavementSpan && $width <= $course->shapes->kind('road')['size']['width'][1])
+					|| !$course->shapes->fits($kind, $width, $height, $pavementSpan)) throw $fail("a $kind gate's size is out of range");
 			}
 			if($role === 'start' && (!is_int($gate['laps']) || $gate['laps'] < 1 || $gate['laps'] > self::MAX_LAPS))
 				throw $fail('laps must be a whole number from 1 to 20');

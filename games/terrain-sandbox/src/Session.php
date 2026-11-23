@@ -2048,7 +2048,8 @@ final class Session
 				$laps = $course->laps();
 				$legacy = null;
 				$widths = array_values(array_unique(array_column($saved,'width')));
-				if($variant === 'dry' && $circuit->featureArea !== null && ($widths === [30.] || $widths === [60.])) {
+				$legacyWidths = $circuit->featureArea !== null ? [30.,60.] : [$this->gateShapes->kind('road')['size']['default'][0]];
+				if($variant === 'dry' && count($widths) === 1 && in_array($widths[0],$legacyWidths,true)) {
 					// Validate the entire historical layout before allowing an upgrade or keeping a tight legacy fit.
 					try {
 						$old = $circuit->course($candidate,$this->gateShapes,$laps,false,$widths[0]);

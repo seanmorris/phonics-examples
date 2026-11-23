@@ -1965,12 +1965,42 @@ $edit('circuit'); while($manual->preparingRoad()) input($manual,[]); publish($ma
 $made = $manual->status()['circuit']; $roads = $manual->landscape->roadRecords();
 expect($made['active']==='dry' && $made['length']>60000. && count($manual->course->gates())>=8 && $manual->course->laps()===3,'Manually drawn circuit has a lap start and checkpoints');
 expect($roads[0]['points'][0]===end($roads[0]['points']) && $manual->roadEditor->packet($manual)['id']===0,'The closed road is selected for further editing');
+// Measure each inner post against the same painted edge the driver sees, including the closing bend.
+$checkRoadGates = static function(Session $session, float $roadWidth): void {
+	foreach($session->course->gates() as $gate) {
+		expect($gate['width'] >= $roadWidth + 1.49,'The full road fits inside the race opening');
+		foreach([-1,1] as $side) {
+			$half = $side * $session->course->measure($gate)['window']['halfWidth'];
+			$session->landscape->material($gate['x']+$half*cos($gate['yaw']),$gate['z']-$half*sin($gate['yaw']),$offset,$mark);
+			expect($mark !== null && abs(abs($mark[0])-$mark[2]-TerrainSandbox\CircuitRoad::POST_CLEARANCE)<.01,
+				'Each inner post face clears its local pavement edge');
+		}
+	}
+};
+$checkRoadGates($manual,24.);
+$legacy = json_decode($manual->save(),true,flags:JSON_THROW_ON_ERROR);
+$route = TerrainSandbox\Circuit::import($legacy['circuit']['route'],16384.);
+$stock = $manual->gateShapes->kind('road')['size']['default'][0];
+$legacy['course'] = $route->course($manual->landscape,$manual->gateShapes,3,false,$stock)->export();
+$oldSave = new Session;
+$oldSave->load(json_encode($legacy,JSON_THROW_ON_ERROR));
+expect($oldSave->course->export()===$manual->course->export(),'A saved stock-width circuit refits the start and checkpoints when loaded');
+$legacy['course']['gates'][1]['x'] += 1;
+try { $oldSave->load(json_encode($legacy,JSON_THROW_ON_ERROR)); expect(false,'A mismatched historical circuit must be rejected'); }
+catch(InvalidArgumentException) { expect($oldSave->course->export()===$manual->course->export(),'A bad historical checkpoint leaves the race intact'); }
+$oldSave->close();
+$edit('section',['id'=>0,'key'=>'width','value'=>80.]);
 $edit('point',['id'=>0,'index'=>1,'x'=>10500,'y'=>3,'z'=>-6500]);
 $edit('circuit',['id'=>0]); while($manual->preparingRoad()) input($manual,[]); publish($manual);
 expect(count($manual->landscape->roads())===1 && $manual->status()['circuit']['points']!==$made['points'],'Editing a saved circuit road moves the race line without adding another road');
+$checkRoadGates($manual,80.);
 $manualReload = new Session; $manualReload->load($manual->save());
 expect($manualReload->course->export()==$manual->course->export() && $manualReload->landscape->roadRecords()==$manual->landscape->roadRecords(),
 	'The manual course, laps and road control points survive a save round trip');
+$detached = json_decode($manual->save(),true,flags:JSON_THROW_ON_ERROR);
+unset($detached['circuit']);
+$manualReload->load(json_encode($detached,JSON_THROW_ON_ERROR));
+$checkRoadGates($manualReload,80.);
 $manualReload->close(); $manual->close();
 
 $longLab = new Session(['worldSize'=>32768,'heightScale'=>0.,'detailAmplitude'=>0.]);

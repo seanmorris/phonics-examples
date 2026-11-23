@@ -104,20 +104,25 @@ final class Circuit
 		$course = new Course($shapes);
 		$ground = $landscape->height(...);
 		$kind = $flooded ? 'water' : 'road';
-		$width = $this->featureArea === null ? null : ($flooded ? 24. : $legacyWidth);
+		$regional = $this->featureArea !== null;
+		$width = $flooded ? ($regional ? 24. : null) : $legacyWidth;
+		$fitPavement = !$flooded && $legacyWidth === null;
 		$height = $flooded ? null : 2 * $shapes->kind('road')['size']['default'][1];
 		foreach($this->gates() as $i => [$x,$z,$yaw])
 		{
-			if(!$flooded && $this->featureArea !== null && $legacyWidth === null)
-				[$x,$z,$width] = CircuitRoad::gateSpan($landscape,$x,$z,$yaw);
-			$size = $shapes->fit($kind,$width,$height);
+			if($fitPavement)
+				[$x,$z,$width] = CircuitRoad::gateSpan($landscape,$x,$z,$yaw,$regional);
+			// Regional roads retain their original model limits and footing radius for saved courses.
+			$manualSpan = $fitPavement && !$regional && $width !== null;
+			$size = $shapes->fit($kind,$width,$height,$manualSpan);
 			$role = $i === 0 ? 'start' : 'checkpoint';
 			$base = $flooded ? $this->floodedLevel : $ground($x,$z);
 			// High ground outside the deck must not lift the banner off a road that cuts into a wall.
-			$deck = (CircuitRoad::WIDTH/2 + 1)**2;
+			$pavementHalfWidth = $manualSpan ? $width/2 - CircuitRoad::POST_CLEARANCE : CircuitRoad::WIDTH/2;
+			$deck = ($pavementHalfWidth + 1)**2;
 			$fit = $flooded ? $ground : static fn(float $px, float $pz): float
 				=> ($px-$x)**2 + ($pz-$z)**2 <= $deck ? $ground($px,$pz) : min($ground($px,$pz), $base);
-			$placed = $course->place($role, $kind, $x, $base, $z, $yaw, $laps, $size['width'],$size['height'],$fit);
+			$placed = $course->place($role, $kind, $x, $base, $z, $yaw, $laps, $size['width'], $size['height'], $fit, $manualSpan);
 			if($placed['refused'] !== null) throw new \RangeException('The circuit needs more room between its gates.');
 			yield;
 		}
