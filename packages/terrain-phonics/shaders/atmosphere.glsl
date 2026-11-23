@@ -29,11 +29,17 @@ vec3 terrainNightSky(float elevation)
 	return uNightAmbient * (0.27 - 0.17 * h * (2.0 - h));
 }
 
+float terrainSamplingAltitude(float height)
+{
+	float floorHeight = uAirLayerCount > 0. ? -min(uAtmosphereHeight,uPlanetRadius*(1.-1e-6)) : 0.;
+	return clamp(height,floorHeight,uAtmosphereHeight);
+}
+
 float terrainAtmosphereAltitude(float altitude, float mu, float distanceMeters)
 {
 	float radius = uPlanetRadius + altitude;
 	float delta = distanceMeters * distanceMeters + 2.0 * radius * mu * distanceMeters;
-	return max(0.0, altitude + delta / (sqrt(max(0.0, radius * radius + delta)) + radius));
+	return altitude + delta / (sqrt(max(0.0, radius * radius + delta)) + radius);
 }
 
 float terrainAtmosphereExit(float altitude, float mu)
@@ -47,6 +53,7 @@ float terrainAtmosphereExit(float altitude, float mu)
 float terrainAtmosphereBoundary(float altitude, float mu, out bool ground)
 {
 	float radius = uPlanetRadius + altitude;
+	if(altitude <= 0. && mu < 0.) { ground = true; return 0.; }
 	float groundDelta = altitude * (2.0 * uPlanetRadius + altitude);
 	float groundRoot = radius * radius * mu * mu - groundDelta;
 	ground = mu < 0.0 && groundRoot >= 0.0;
@@ -72,8 +79,24 @@ vec4 terrainOpticalLookup(float altitude, float mu)
 
 vec2 terrainInsideSphere(float eye, float projection, float height);
 
-// Optical depth through the authored layers along a ray, clipped at a distance, as AtmosphereLayers::opticalDepth()
-// computes it: the path inside each layer's top sphere less the path inside its bottom sphere.
+// Normalized squared radius h runs from zero at the base to one at the top.
+// For h(t) quadratic in ray distance, integrate 6h(1-h) exactly over a clipped segment.
+vec3 terrainAirProfile(float eye, float projection, vec2 band)
+{
+	float scale = 1. / ((band.y-band.x)*(2.*uPlanetRadius+band.y+band.x));
+	return vec3((eye-band.x)*(2.*uPlanetRadius+eye+band.x)*scale,projection,scale);
+}
+
+float terrainAirColumn(vec3 profile, float start, float end)
+{
+	if(end <= start) return 0.;
+	float mid = .5*(start+end), halfLength = .5*(end-start);
+	float b = 2.*halfLength*(profile.y+mid)*profile.z;
+	float c = halfLength*halfLength*profile.z;
+	float mean = profile.x + mid*(2.*profile.y+mid)*profile.z + c/3.;
+	return (end-start)*6.*max(0.,mean*(1.-mean)-b*b/3.-4.*c*c/45.);
+}
+
 float terrainAirDepth(float altitude, float mu, float distanceMeters)
 {
 	float depth = 0.0;
@@ -82,7 +105,9 @@ float terrainAirDepth(float altitude, float mu, float distanceMeters)
 	for(int j = 0; j < count; ++j) {
 		vec2 outer = min(vec2(distanceMeters), terrainInsideSphere(altitude, projection, uAirBand[j].y));
 		vec2 inner = min(vec2(distanceMeters), terrainInsideSphere(altitude, projection, uAirBand[j].x));
-		depth += max(0.0, (outer.y - outer.x) - (inner.y - inner.x)) * uAirBand[j].z;
+		vec3 profile = terrainAirProfile(altitude,projection,uAirBand[j].xy);
+		depth += uAirBand[j].z * (terrainAirColumn(profile,outer.x,min(outer.y,inner.x))
+			+ terrainAirColumn(profile,max(outer.x,inner.y),outer.y));
 	}
 	return depth;
 }
@@ -91,7 +116,7 @@ float terrainAirDepth(float altitude, float mu, float distanceMeters)
 vec3 terrainTransmittance(float altitude, float mu)
 {
 	bool ground;
-	float clamped = clamp(altitude, 0.0, uAtmosphereHeight), cosine = clamp(mu, -1.0, 1.0);
+	float clamped = terrainSamplingAltitude(altitude), cosine = clamp(mu, -1.0, 1.0);
 	float distanceMeters = terrainAtmosphereBoundary(clamped, cosine, ground);
 	if(ground) return vec3(0.0);
 	vec3 clear = terrainOpticalLookup(altitude, mu).rgb;
@@ -103,7 +128,7 @@ vec3 terrainNightSkyThroughLayers(float altitude, float mu)
 	vec3 glow = terrainNightSky(mu);
 	if(uAirLayerCount > 0.0 && uNightAmbient.b > 0.0) {
 		bool ground;
-		float clamped = clamp(altitude, 0.0, uAtmosphereHeight), cosine = clamp(mu, -1.0, 1.0);
+		float clamped = terrainSamplingAltitude(altitude), cosine = clamp(mu, -1.0, 1.0);
 		glow *= exp(-terrainAirDepth(clamped, cosine, terrainAtmosphereBoundary(clamped, cosine, ground)));
 	}
 	return glow;
@@ -133,7 +158,7 @@ void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanc
 	out vec3 transmittance, out vec3 radiance)
 {
 	vec3 ray = normalize(direction);
-	float altitude = clamp(eyeAltitude, 0.0, uAtmosphereHeight);
+	float altitude = terrainSamplingAltitude(eyeAltitude);
 	bool ground;
 	// The depth-tested terrain or water is the endpoint of a visible scene ray, including inside canyons.
 	float distanceToBoundary = visibleSurface ? terrainAtmosphereExit(altitude, ray.y)
@@ -143,7 +168,9 @@ void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanc
 	float radius = uPlanetRadius + altitude;
 	int count = int(uAirLayerCount);
 	vec4 spans[TERRAIN_AIR_LAYERS];
+	vec3 profiles[TERRAIN_AIR_LAYERS];
 	for(int j = 0; j < count; ++j) {
+		profiles[j] = terrainAirProfile(altitude,radius*ray.y,uAirBand[j].xy);
 		spans[j] = vec4(terrainInsideSphere(altitude,radius*ray.y,uAirBand[j].y),
 			terrainInsideSphere(altitude,radius*ray.y,uAirBand[j].x));
 	}
@@ -171,19 +198,19 @@ void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanc
 		if(end == regular) ++sampleEnd;
 		float lengthMeters = end - start;
 		float distanceAlong = start + .5 * lengthMeters;
-		start = end;
 		float layerDepth = 0.0;
 		vec3 layerScatter = vec3(0.0);
 		for(int j = 0; j < count; ++j) {
 			vec4 span = spans[j];
 			if(distanceAlong < span.x || distanceAlong >= span.y ||
 				(distanceAlong >= span.z && distanceAlong < span.w)) continue;
-			float tau = lengthMeters * uAirBand[j].z;
+			float tau = terrainAirColumn(profiles[j],start,end) * uAirBand[j].z;
 			layerDepth += tau;
 			layerScatter += tau * uAirColor[j];
 		}
+		start = end;
 		float height = terrainAtmosphereAltitude(altitude, ray.y, distanceAlong);
-		vec2 density = exp(-height / vec2(uRayleighHeight, uMieHeight)) * lengthMeters;
+		vec2 density = exp(-max(0.,height) / vec2(uRayleighHeight, uMieHeight)) * lengthMeters;
 		vec3 position = vec3(ray.x * distanceAlong, radius + ray.y * distanceAlong, ray.z * distanceAlong);
 		float sunMu = dot(position, uSunDirection) / (uPlanetRadius + height);
 		vec3 light = terrainTransmittance(height, sunMu);
@@ -200,7 +227,7 @@ void terrainIntegrateAtmosphere(vec3 direction, float eyeAltitude, float distanc
 vec3 terrainSolarDisk(vec3 ray, float altitude, vec3 transmittance, float angularFootprint)
 {
 	bool ground;
-	terrainAtmosphereBoundary(clamp(altitude,0.0,uAtmosphereHeight),ray.y,ground);
+	terrainAtmosphereBoundary(terrainSamplingAltitude(altitude),ray.y,ground);
 	if(ground) return vec3(0.0);
 	// Chord distance avoids subtracting nearly equal cosine values at the sun's small angular radius.
 	float radius = 2.0 * sin(0.5 * uAngularRadius);

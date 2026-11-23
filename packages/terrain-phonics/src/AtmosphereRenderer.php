@@ -144,7 +144,7 @@ final class AtmosphereRenderer
 
 		foreach([$eyeAltitude,$waterAltitude] as $slot => $altitude)
 		{
-			$altitude = min($parameters['atmosphereHeight'], round(max(0, $altitude) * 2) / 2);
+			$altitude = round($this->atmosphere->samplingAltitude($altitude) * 2) / 2;
 			$key = $signature . ':' . $altitude;
 
 			if($this->keys[$slot] === $key) continue;

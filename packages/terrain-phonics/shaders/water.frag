@@ -83,7 +83,7 @@ void main()
 	vec3 body = uWaterTint;
 	float reflectionFootprint = max(length(dFdx(reflected)),length(dFdy(reflected)));
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
-	vec3 reflection = waterEnvironmentReflection(reflected,max(0.0,wave.x),reflectionFootprint,body,illumination);
+	vec3 reflection = waterEnvironmentReflection(reflected,wave.x,reflectionFootprint,body,illumination);
 	// Use the displaced triangle that participates in the depth test for shoreline coverage.
 	float shoreDepth = vWorld.y - vGround;
 	float shoreFootprint = max(0.001,fwidth(shoreDepth));

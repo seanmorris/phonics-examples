@@ -1842,7 +1842,8 @@ foreach(TerrainPhonics\Recipe::PRESETS as $preset) {
 }
 expect(count(array_unique($optics)) === count($profiles), 'Every landform has a distinct optical profile.');
 $stock = $sky->save();
-$rows = [['name'=>'Sea fog','top'=>400.,'color'=>'#a1c3cc'], ['name'=>'Dust','bottom'=>1400.,'top'=>2400.,'enabled'=>false]];
+expect($profiles['canyon'][0]['bottom'] < -380., 'The preset dust reaches the default canyon floor.');
+$rows = [['name'=>'Sea fog','bottom'=>-420.,'top'=>-120.,'color'=>'#a1c3cc'], ['name'=>'Dust','bottom'=>1400.,'top'=>2400.,'enabled'=>false]];
 input($sky,['actions'=>[['type'=>'atmosphere-layers','layers'=>$rows,'request'=>11]]]);
 $authored = $sky->status()['atmosphereLayers'];
 expect(count($authored)===2 && $sky->status()['atmosphereReply']===11 && $authored[1]['enabled']===false,

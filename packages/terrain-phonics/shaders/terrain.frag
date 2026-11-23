@@ -127,7 +127,7 @@ vec3 dielectricReflection(vec3 diffuse,vec3 normal,vec2 finish,float painted,vec
 	float fresnel=.018+(1.-.018)*(1.-rough)*pow(1.-nv,5.);
 	vec3 broadRay=normalize(mix(ray,normal,.65*rough));
 	vec3 upper=normalize(vec3(broadRay.x,max(.003,broadRay.y),broadRay.z));
-	float altitude=max(0.,vWorld.y);
+	float altitude=vWorld.y;
 	vec3 sky=skyRadiance(upper,altitude,0.,false);
 	float horizon=smoothstep(-.05-.45*rough,.03+.45*rough,broadRay.y);
 	vec3 surface=mix(diffuse,mix(diffuse,sky,horizon),cover*fresnel);
@@ -212,7 +212,7 @@ void main()
 		markingGlow=mix(ochre*centerPaint,white,edgePaint)*.006*smoothstep(0.,.17364818,-uSunDirection.y);
 	}
 	albedo *= 1.0 + 0.07 * detail * (1.0 - smoothstep(1.0,8.0,footprint));
-	vec3 direct = terrainSunlight(max(0.0,vWorld.y)) / 3.14159265;
+	vec3 direct = terrainSunlight(vWorld.y) / 3.14159265;
 	float facing = max(0.0,dot(mix(lightingNormal,n,painted),uSunDirection));
 	float shadow = mountainShadow(vWorld);
 	#ifdef SURFACE_LAYERS

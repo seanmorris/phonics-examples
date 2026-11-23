@@ -27,7 +27,7 @@ final class AtmosphereLayers
 					throw new \InvalidArgumentException('Layer heights and density must be finite numbers.');
 				$row[$key] = (float)$row[$key];
 			}
-			if($row['bottom'] < 0 || $row['top'] > $ceiling || $row['bottom'] >= $row['top']
+			if($row['bottom'] < -$ceiling || $row['top'] > $ceiling || $row['bottom'] >= $row['top']
 				|| $row['density'] < 0 || $row['density'] > self::MAX_DENSITY)
 				throw new \InvalidArgumentException('Layer top must exceed its base inside the atmosphere, with density from 0 to 10 per km.');
 			$row['color'] = strtolower($row['color']);
@@ -61,17 +61,39 @@ final class AtmosphereLayers
 	{
 		$projection = ($planet + $eye) * $mu;
 		$result = [];
-		foreach($this->bands as [$bottom, $top])
-			$result[] = [...self::sphere($planet,$eye,$projection,$top), ...self::sphere($planet,$eye,$projection,$bottom)];
+		foreach($this->bands as [$bottom, $top]) {
+			$scale = 1 / (($top-$bottom)*(2*$planet+$top+$bottom));
+			// Normalized squared radius along the ray is quadratic in distance.
+			$profile = [($eye-$bottom)*(2*$planet+$eye+$bottom)*$scale, $projection, $scale];
+			$result[] = [...self::sphere($planet,$eye,$projection,$top), ...self::sphere($planet,$eye,$projection,$bottom), 'profile'=>$profile];
+		}
 		return $result;
+	}
+
+	/** Integrated density over a segment entirely in the layer. The parabolic profile 6h(1-h)
+	 * fades to zero at each boundary and keeps the authored mean density through the column. */
+	public static function column(array $profile, float $start, float $end): float
+	{
+		if($end <= $start) return 0.;
+		[$origin,$projection,$scale] = $profile;
+		$mid = .5*($start+$end);
+		$half = .5*($end-$start);
+		$b = 2*$half*($projection+$mid)*$scale;
+		$c = $half*$half*$scale;
+		$mean = $origin + $mid*(2*$projection+$mid)*$scale + $c/3;
+		// E[h(1-h)] = E[h](1-E[h]) - Var[h] for a uniform distance along the segment.
+		return ($end-$start)*6*max(0., $mean*(1-$mean) - $b*$b/3 - 4*$c*$c/45);
 	}
 
 	public function opticalDepth(array $spans, float $distance): float
 	{
 		$depth = 0.;
-		foreach($spans as $i => [$enter,$exit,$innerEnter,$innerExit]) {
-			$length = (min($distance,$exit) - min($distance,$enter)) - (min($distance,$innerExit) - min($distance,$innerEnter));
-			$depth += max(0.,$length) * $this->bands[$i][2];
+		foreach($spans as $i => $span) {
+			[$enter,$exit,$innerEnter,$innerExit] = $span;
+			$exit = min($distance,$exit);
+			$length = self::column($span['profile'],$enter,min($exit,$innerEnter))
+				+ self::column($span['profile'],max($enter,$innerExit),$exit);
+			$depth += $length * $this->bands[$i][2];
 		}
 		return $depth;
 	}

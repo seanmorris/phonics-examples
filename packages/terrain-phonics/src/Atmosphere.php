@@ -119,6 +119,10 @@ final class Atmosphere
 	public function setLayers(array $rows): void
 	{
 		$next = new AtmosphereLayers($rows, $this->parameters['atmosphereHeight']);
+		foreach($next->rows as $layer) {
+			if($layer['bottom'] <= -$this->parameters['planetRadius'])
+				throw new \InvalidArgumentException('Layer base must be above the planet center.');
+		}
 		if(!isset($this->air) || $this->air->bands !== $next->bands) $this->lut = null;
 
 		if(!isset($this->air) || $this->air->bands !== $next->bands || $this->air->colors !== $next->colors)
@@ -460,12 +464,13 @@ final class Atmosphere
 	{
 		[$altitude,$cosZenith] = $this->coordinates($altitude, $cosZenith);
 		$samples = max(8, min(256, $samples));
-		[$distance,$ground] = $this->boundary($altitude, $cosZenith);
+		[$distance,$ground] = $this->boundary(max(0.,$altitude), $cosZenith);
 
 		$airDepth = 0.;
 		if($this->air->bands) {
 			$spans = $this->air->spans($this->parameters['planetRadius'],$altitude,$cosZenith);
-			$airDepth = $this->air->opticalDepth($spans,$distance);
+			[$airDistance] = $this->boundary($altitude,$cosZenith);
+			$airDepth = $this->air->opticalDepth($spans,$airDistance);
 		}
 		$airTransmission = exp(-$airDepth);
 		if($ground) return [0.0,0.0,0.0];
@@ -475,7 +480,7 @@ final class Atmosphere
 
 		for($i = 0; $i < $samples; $i++)
 		{
-			$h = $this->rayAltitude($altitude, $cosZenith, ($i + .5) * $step);
+			$h = max(0.,$this->rayAltitude(max(0.,$altitude), $cosZenith, ($i + .5) * $step));
 			$dr += exp(-$h / $this->parameters['rayleighHeight']) * $step;
 			$dm += exp(-$h / $this->parameters['mieHeight']) * $step;
 			$do += max(0.0, 1 - abs($h - 25000) / 15000) * $step;
@@ -575,25 +580,25 @@ final class Atmosphere
 		$ends = [];
 		for($i = 1; $i <= $samples; ++$i) $ends[] = $i * $step;
 		foreach($spans as $span)
-			foreach($span as $crossing) if($crossing > 0 && $crossing < $distance) $ends[] = $crossing;
+			foreach(array_slice($span,0,4) as $crossing) if($crossing > 0 && $crossing < $distance) $ends[] = $crossing;
 		if($spans) sort($ends,SORT_NUMERIC);
 		$start = $airDepth = 0.;
 		foreach($ends as $end) {
 			$step = $end - $start;
 			if($step <= 0) continue;
 			$d = $start + .5 * $step;
-			$start = $end;
 			$depth = 0.;
 			$scatter = [0.,0.,0.];
 			foreach($spans as $j => [$enter,$exit,$innerEnter,$innerExit]) {
 				if($d < $enter || $d >= $exit || ($d >= $innerEnter && $d < $innerExit)) continue;
-				$tau = $this->air->bands[$j][2] * $step;
+				$tau = $this->air->bands[$j][2] * AtmosphereLayers::column($spans[$j]['profile'],$start,$end);
 				$depth += $tau;
 				foreach($this->air->colors[$j] as $c=>$tint) $scatter[$c] += $tau * $tint;
 			}
+			$start = $end;
 			$h = $this->rayAltitude($altitude, $mu, $d);
-			$r = exp(-$h / $this->parameters['rayleighHeight']) * $step;
-			$m = exp(-$h / $this->parameters['mieHeight']) * $step;
+			$r = exp(-max(0.,$h) / $this->parameters['rayleighHeight']) * $step;
+			$m = exp(-max(0.,$h) / $this->parameters['mieHeight']) * $step;
 			$sunMu = ($d * $ray[0] * $sun[0] + ($radius + $d * $ray[1]) * $sun[1]
 				+ $d * $ray[2] * $sun[2]
 			) / ($this->parameters['planetRadius'] + $h);
@@ -686,6 +691,7 @@ final class Atmosphere
 	 */
 	private function boundary(float $altitude, float $mu): array
 	{
+		if($altitude <= 0 && $mu < 0) return [0.,true];
 		$planet = $this->parameters['planetRadius'];
 		$radius = $planet + $altitude;
 		$groundDelta = $altitude * (2 * $planet + $altitude);
@@ -706,14 +712,14 @@ final class Atmosphere
 	 * @param float $altitude Starting altitude.
 	 * @param float $mu Starting zenith cosine.
 	 * @param float $distance Distance along the ray.
-	 * @return float Nonnegative sample altitude.
+	 * @return float Signed sample altitude.
 	 */
 	private function rayAltitude(float $altitude, float $mu, float $distance): float
 	{
 		$radius = $this->parameters['planetRadius'] + $altitude;
 		$delta = $distance * $distance + 2 * $radius * $mu * $distance;
 
-		return max(0.0, $altitude + $delta / (sqrt(max(0.0, $radius * $radius + $delta)) + $radius));
+		return $altitude + $delta / (sqrt(max(0.0, $radius * $radius + $delta)) + $radius);
 	}
 
 	/**
@@ -726,7 +732,15 @@ final class Atmosphere
 	{
 		if(!is_finite($altitude) || !is_finite($mu)) throw new \InvalidArgumentException('Invalid atmospheric ray');
 
-		return [max(0.0, min($this->parameters['atmosphereHeight'], $altitude)),max(-1.0, min(1.0, $mu))];
+		return [$this->samplingAltitude($altitude),max(-1.0, min(1.0, $mu))];
+	}
+
+	/** Clear air uses sea-level density in depressions. Active aerosol shells use true scene height. */
+	public function samplingAltitude(float $altitude): float
+	{
+		$ceiling = $this->parameters['atmosphereHeight'];
+		$floor = $this->air->bands ? -min($ceiling,$this->parameters['planetRadius']*(1.-1e-6)) : 0.;
+		return max($floor,min($ceiling,$altitude));
 	}
 
 	/**

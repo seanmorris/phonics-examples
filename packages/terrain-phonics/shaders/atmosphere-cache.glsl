@@ -33,7 +33,7 @@ vec3 skyRadiance(vec3 ray, float altitude, float angularFootprint, bool includeS
 {
 	if(uSkyCacheReady == 0) return terrainUncachedSkyRadiance(ray,altitude,angularFootprint,includeSolarDisk);
 	ray = normalize(ray);
-	altitude = clamp(altitude, 0.0, uAtmosphereHeight);
+	altitude = terrainSamplingAltitude(altitude);
 	vec3 radiance;
 	if(abs(altitude - uSkyCacheAltitudes.x) <= abs(altitude - uSkyCacheAltitudes.y))
 		radiance = terrainSkyCacheSample(uSkyCacheEye, ray);

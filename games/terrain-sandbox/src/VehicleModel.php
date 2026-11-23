@@ -100,7 +100,7 @@ final class VehicleModel
 	{
 		$environment = $sky->uniforms();
 		$sun = $environment['sunDirection'];
-		$transmission = $sky->transmittance(max(0.0, $altitude), $sun[1], 8);
+		$transmission = $sky->transmittance($altitude, $sun[1], 8);
 		$intensity = $environment['sunIntensity'] / M_PI;
 		$p->use();
 		$water->appearance->bind($p);

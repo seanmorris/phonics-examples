@@ -123,7 +123,7 @@
     "browser/cockpit.mjs": "sha256-UjidQomNpmnf15mx5cqQO8XPVCQ6bWSAQobyGeNnrUk=",
     "browser/control-hints.mjs": "sha256-rR1n3KPDLHblQPevnIIsBW3XMtTyrCFJdDgcEV/FW5w=",
     "browser/flight-map.mjs": "sha256-lIgsSivX3gxLP1DLHKw4loEw4HSA+P/krywzuKKxM+o=",
-    "browser/game.mjs": "sha256-337bVyFKq9cJUKOJmgySd/fKAnG1URUnj3j2urjEgAY=",
+    "browser/game.mjs": "sha256-wxxYKxnOthct5fIigSKD2APOoaLvRzOMBlCaJTsCWIY=",
     "browser/road-editor.mjs": "sha256-qTrfbj3G0AUWEyOLHjoijGzwWqqyjHfQZWmxIJoLYyo=",
     "browser/screen-awake.mjs": "sha256-g+CdRS2UqKtPfuG+y20Jlo0dt27ap7IZ8VDGE+oD4Sg=",
     "browser/speedometer.mjs": "sha256-OekAlOtoXwwMtZVmhpPgabg+W13q3bUG0yiLoL4ciDQ=",
@@ -160,9 +160,9 @@
     "src/RoadEditor.php": "sha256-UPBI/4UxKgDYfZy8zaA5yCrbigLMqTNKxMcxZQ2mNkM=",
     "src/RoadGrading.php": "sha256-sKLUtczt77R8QdXr7WCd1yXz97hpSElArBSGk3PHlfA=",
     "src/RoadRecovery.php": "sha256-4D585EakVR2cb7sUgyVZzHFQII7p5D2OesIxYNqSQ+I=",
-    "src/Session.php": "sha256-Azj+cg0apCbBunuebgOAUk+NvxbeBVTPjZCT3enwll0=",
+    "src/Session.php": "sha256-Wxze0IRkSBEWu1SlO0x7nmSFczltg/O1OPJEaaRn9oc=",
     "src/TracerBatch.php": "sha256-Zrq0Y4693qBmRRpWuc4QICiByrh8TdYkX/ua7OLmWr8=",
     "src/TrailRenderer.php": "sha256-EtQqM0AlEjjYPWlIrYoO6gCCsrHHu+KK4//+O1QNOCg=",
-    "src/VehicleModel.php": "sha256-/I+WXXibJ9ma9UoHXH7B2vnvqtufjqsgQIeT260HhBE="
+    "src/VehicleModel.php": "sha256-FheUyrW5O/fsGZ00j2lrbOhQEIIvLnxl29GycyObNCA="
   }
 }

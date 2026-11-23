@@ -89,7 +89,7 @@ final class Session
 	private const PRESET_AIR = [
 		'coast' => ['name'=>'Sea spray', 'top'=>340., 'density'=>.065, 'color'=>'#d9e2e5'],
 		'mountain' => ['name'=>'Valley haze', 'top'=>540., 'density'=>.037, 'color'=>'#cfdbe4'],
-		'canyon' => ['name'=>'Canyon dust', 'top'=>620., 'density'=>.038, 'color'=>'#d9c6ac'],
+		'canyon' => ['name'=>'Canyon dust', 'bottom'=>-600., 'top'=>620., 'density'=>.038, 'color'=>'#d9c6ac'],
 		'limestone' => ['name'=>'Lowland mist', 'top'=>210., 'density'=>.063, 'color'=>'#d9dfd6'],
 		'basalt-fjords' => ['name'=>'Fjord mist', 'top'=>195., 'density'=>.072, 'color'=>'#cdd9e0'],
 		'amber-dunes' => ['name'=>'Suspended sand', 'top'=>440., 'density'=>.057, 'color'=>'#e0c9a9'],

@@ -2,9 +2,8 @@
 precision highp float;
 precision highp int;
 uniform mat4 uViewProjection;
-uniform float uPixelScale, uNightVisibility, uExposure;
-uniform float uAirLayerCount, uStarLutHeight;
-uniform sampler2D uTransmittance;
+// ATMOSPHERE
+uniform float uPixelScale, uNightVisibility, uStarAltitude;
 out vec3 vColor;
 out float vOpacity;
 
@@ -34,13 +33,5 @@ void main()
 	vec3 tint = mix(vec3(0.72,0.82,1.0), vec3(1.0,0.89,0.76), randomUnit(id + 3u));
 	vColor = sqrt(1.0 - exp(-uExposure * tint * (0.10 + 2.0 * magnitude)));
 	vOpacity = uNightVisibility * smoothstep(0.012,0.19,height);
-	if(uAirLayerCount > 0.0) {
-		vec2 last = vec2(textureSize(uTransmittance,0) - ivec2(1));
-		vec2 pixel = vec2(0.5 + 0.5 * sqrt(height), uStarLutHeight) * last;
-		ivec2 lo = ivec2(floor(pixel)), hi = min(lo + ivec2(1),ivec2(last));
-		vec2 w = fract(pixel);
-		float a = mix(texelFetch(uTransmittance,lo,0).a,texelFetch(uTransmittance,ivec2(hi.x,lo.y),0).a,w.x);
-		float b = mix(texelFetch(uTransmittance,ivec2(lo.x,hi.y),0).a,texelFetch(uTransmittance,hi,0).a,w.x);
-		vOpacity *= mix(a,b,w.y);
-	}
+	if(uAirLayerCount > 0.) vOpacity *= exp(-terrainAirDepth(uStarAltitude,height,1e20));
 }

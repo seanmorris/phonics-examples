@@ -1333,7 +1333,10 @@ function atmosphereEditor(frame, push)
 		{
 			const key = input.dataset.airKey;
 
-			if(key==='top' || key==='bottom') input.max = schema.ceiling;
+			if(key==='top' || key==='bottom') {
+				input.min = -schema.ceiling;
+				input.max = schema.ceiling;
+			}
 
 			if(key==='density') input.max = schema.maxDensity;
 		}
@@ -2147,17 +2150,17 @@ function markup()
 	${range('Night glow', 'nightGlow', 0, 1, .01, .5)}
 	<label class="terrain-check"><input data-value="clock" type="checkbox">Animate the sun</label>
 	<h2>Atmospheric layers</h2>
-	<p class="terrain-note">Layers follow the landform preset until you edit them. Looking along a layer shows more haze than looking through it from above.</p>
+	<p class="terrain-note">Layers follow the landform preset until you edit them. Use negative heights below sea level. Haze thins at both boundaries and builds with distance through the layer.</p>
 	<div data-air-list></div><div class="terrain-row"><button type="button" data-air-add disabled>Add atmosphere layer</button>
 	<button type="button" data-air-preset disabled>Use preset layers</button></div>
 	<template data-air-template><fieldset class="terrain-landform-group"><legend></legend>
 	<div class="terrain-grid">
 	<label class="terrain-field">Layer name<input type="text" maxlength="40" required data-air-key="name"></label>
 	<label class="terrain-field">Scattered light<input type="color" data-air-key="color"></label>
-	<label class="terrain-field">Base (ft above sea level)<input data-unit="ft" type="number" min="0" step="any" required data-air-key="bottom"></label>
-	<label class="terrain-field">Top (ft above sea level)<input data-unit="ft" type="number" min="0" step="any" required data-air-key="top"></label>
+	<label class="terrain-field">Base (ft above sea level)<input data-unit="ft" type="number" step="any" required data-air-key="bottom"></label>
+	<label class="terrain-field">Top (ft above sea level)<input data-unit="ft" type="number" step="any" required data-air-key="top"></label>
 	<div class="surface-field"><label class="terrain-field">Density per mile<input data-unit="densityPerMile" type="number" min="0" step="any" required data-air-key="density"></label>
-	<small>At 0.1, about 90% of direct light crosses one mile. At 1, about 37% gets through.</small></div>
+	<small>Mean density through the layer. Across a one-mile-thick layer at 0.1, about 90% of direct light gets through.</small></div>
 	<label class="terrain-check"><input type="checkbox" data-air-key="enabled">Visible</label>
 	<div class="terrain-row"><button type="button" data-air-remove>Remove atmosphere layer</button></div>
 	</div></fieldset></template>

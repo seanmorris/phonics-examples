@@ -31,7 +31,7 @@ vec3 terrainAtmosphere(vec3 ray, float eyeAltitude, float distanceMeters, vec3 s
 {
 	if(distanceMeters <= 0.0) return max(vec3(0.0), sceneLinear);
 	if(uAerialCacheReady == 0 || distanceMeters > uAerialCacheMaxDistance
-		|| abs(clamp(eyeAltitude, 0.0, uAtmosphereHeight) - uAerialCacheAltitude) > 0.251)
+		|| abs(terrainSamplingAltitude(eyeAltitude) - uAerialCacheAltitude) > 0.251)
 		return terrainUncachedAtmosphere(ray, eyeAltitude, distanceMeters, sceneLinear);
 	ray = normalize(ray);
 	float latitude = asin(clamp(ray.y, -1.0, 1.0)) / (TERRAIN_PI * 0.5);

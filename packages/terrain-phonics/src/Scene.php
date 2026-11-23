@@ -210,7 +210,10 @@ final class Scene
 			, str_replace('// ATMOSPHERE', $atmosphere, file_get_contents($root . 'sky.frag'))
 		);
 
-		$this->starsProgram = new Program(file_get_contents($root . 'stars.vert'), file_get_contents($root . 'stars.frag'));
+		$this->starsProgram = new Program(
+			str_replace('// ATMOSPHERE', file_get_contents($root . 'atmosphere.glsl'), file_get_contents($root . 'stars.vert')),
+			file_get_contents($root . 'stars.frag')
+		);
 
 		$waterVertex = str_replace(['// PATCH','// WATER'], [$grid,$water], file_get_contents($root . 'water.vert'));
 		$surface = str_replace(['// ATMOSPHERE','// WATER','// OPTICS'], [$atmosphere,$water,$optics]
@@ -2488,10 +2491,10 @@ final class Scene
 			$this->scalar($this->starsProgram, 'uExposure', $environment['exposure']);
 			$this->scalar($this->starsProgram, 'uAirLayerCount', $environment['airLayerCount']);
 			if($environment['airLayerCount']) {
-				$this->scalar($this->starsProgram, 'uStarLutHeight', sqrt(max(0.,min(1.,$camera->position[1]/$environment['atmosphereHeight']))));
-				glActiveTexture(GL_TEXTURE0);
-				glBindTexture(GL_TEXTURE_2D,$this->textures[0]);
-				glUniform1i($this->starsProgram->location('uTransmittance'),0);
+				$this->scalar($this->starsProgram, 'uStarAltitude', $this->atmosphere->samplingAltitude($camera->position[1]));
+				$this->scalar($this->starsProgram, 'uPlanetRadius', $environment['planetRadius']);
+				for($i = 0; $i < $environment['airLayerCount']; $i++)
+					$this->vector($this->starsProgram, "uAirBand[$i]", $environment["airBand[$i]"]);
 			}
 			glEnable(GL_BLEND);
 			glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE, GL_ZERO, GL_ONE);

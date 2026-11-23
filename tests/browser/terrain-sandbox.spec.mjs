@@ -1872,7 +1872,9 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 	await first.getByLabel('Layer name').fill('Sea mist');
 	await first.getByLabel('Layer name').press('Tab');
 	await first.getByLabel('Scattered light').fill('#6688aa');
-	await first.getByLabel('Top (ft above sea level)', {exact: true}).fill('450');
+	await first.getByLabel('Base (ft above sea level)', {exact: true}).fill('-1250');
+	await first.getByLabel('Base (ft above sea level)', {exact: true}).press('Tab');
+	await first.getByLabel('Top (ft above sea level)', {exact: true}).fill('-450');
 	await first.getByLabel('Top (ft above sea level)', {exact: true}).press('Tab');
 	await first.getByLabel('Density per mile').fill('0.6437376');
 	await first.getByLabel('Density per mile').press('Tab');
@@ -1880,8 +1882,8 @@ test('atmospheric layers tint the scene, retain edits and settle while paused', 
 	await expect.poll(async() => (await status(page)).atmosphereLayers[0]).toMatchObject({
 		name: 'Sea mist'
 		, color: '#6688aa'
-		, bottom: 0
-		, top: 137.16
+		, bottom: -381
+		, top: -137.16
 		, density: .4
 		, enabled: true
 	});
