@@ -212,7 +212,7 @@ final class GateShapes
 	 * @param string $kind road, water or air.
 	 * @param float|null $width Opening width in meters, or null for the kind's own.
 	 * @param float|null $height Opening height in meters, or null for the kind's own.
-	 * @param bool $pavementSpan Allow a measured road crossing to exceed the standalone gantry width.
+	 * @param bool $pavementSpan Fit the full range of painted road widths, including skew crossings.
 	 * @return array{width:float,height:float,limits:list<string>} The size within the kind's ranges, and a phrase
 	 * for each limit that changed it, such as "a road gate is at most 60 m wide". A water arch also keeps its scale
 	 * up within its stretch of its scale across, by changing the height.
@@ -231,8 +231,8 @@ final class GateShapes
 		};
 		[$defaultWidth, $defaultHeight] = $size['default'];
 		$widthRange = $size['width'];
-		// A circuit gantry can cross the full 1024 m editor road, including a skew crossing and post clearance.
-		if($pavementSpan && $kind === 'road') $widthRange[1] = max($widthRange[1], CircuitRoad::MAX_GATE_SPAN);
+		if($pavementSpan && $kind === 'road')
+			$widthRange = [min($widthRange[0], CircuitRoad::MIN_GATE_SPAN), max($widthRange[1], CircuitRoad::MAX_GATE_SPAN)];
 		$width = $clamp($width, $widthRange, $defaultWidth, 'wide');
 		$height = $clamp($height, $size['height'], $defaultHeight, 'tall');
 		if($size['stretch'] !== null)

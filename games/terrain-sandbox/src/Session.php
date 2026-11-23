@@ -54,6 +54,8 @@ final class Session
 	private ?string $circuitVariant = null;
 	private ?\Generator $circuitSearch = null;
 	private ?array $circuitCommit = null;
+	/** The gate layout and whether its circuit still follows the same road centerlines after a width edit. */
+	private ?array $roadGateCommit = null;
 	/** Timed run through the course by the vehicle being driven, ridden or flown. */
 	public Race $race;
 	private readonly Scheduler $systems;
@@ -462,6 +464,7 @@ final class Session
 		{
 			if(!$this->preparing) {
 				$this->circuitCommit = null;
+				$this->roadGateCommit = null;
 				$this->roadEditor->cancelPending($error->getMessage());
 			}
 			$this->draft?->close(); $this->draft = null;
@@ -1199,12 +1202,13 @@ final class Session
 				$this->chase->resetInterpolation();
 				break;
 			case 'reset-camera': $this->mode = 'fly'; $this->resetCamera(); break;
-			case 'undo':
-				$this->editable()->commit();
-				$this->message = $this->editable()->undo() ? 'Undid the last terrain transaction.' : 'Nothing to undo.';
-				break;
-			case 'redo':
-				$this->message = $this->editable()->redo() ? 'Redid the terrain transaction.' : 'Nothing to redo.';
+			case 'undo': case 'redo':
+				$candidate = $this->editable();
+				if($type === 'undo') $candidate->commit();
+				$moved = $type === 'undo' ? $candidate->undo() : $candidate->redo();
+				if($moved && $this->course->count()) $this->prepareRoads([]);
+				$this->message = !$moved ? "Nothing to $type." : ($type === 'undo'
+					? 'Undid the last terrain transaction.' : 'Redid the terrain transaction.');
 				break;
 			case 'atmosphere-layers':
 				$this->atmosphereReply = (int)($action['request'] ?? 0);
@@ -1932,6 +1936,7 @@ final class Session
 		$this->roadEditor->reset();
 		$this->circuit = $this->circuitPreview = null; $this->circuitVariant = null; $this->circuitSearch = null;
 		$this->circuitCommit = null;
+		$this->roadGateCommit = null;
 		$this->resetCourseRaces();
 	}
 
@@ -1957,7 +1962,7 @@ final class Session
 	}
 
 	/** A whole road batch becomes visible in one revision after its final section and gate are ready. */
-	private function prepareRoads(array $roads, \Closure $ready): void
+	private function prepareRoads(array $roads, ?\Closure $ready = null): void
 	{
 		$candidate = $this->editable();
 		$this->draft = null;
@@ -1970,8 +1975,10 @@ final class Session
 					yield from $candidate->queueSteps($road);
 				}
 				$candidate->commit();
-				$completion = $ready($candidate);
+				$completion = $ready === null ? null : $ready($candidate);
 				if($completion instanceof \Generator) yield from $completion;
+				if($this->circuitCommit === null && $this->course->count())
+					yield from $this->refitResizedRoads($candidate);
 				$this->draft = $candidate;
 			} finally {
 				if($this->draft !== $candidate) $candidate->close();
@@ -1979,6 +1986,32 @@ final class Session
 		})();
 		// Ordinary short roads complete on the original action. Long jobs resume through the input clock.
 		$this->advanceRoad(0.);
+	}
+
+	private function refitResizedRoads(Landscape $candidate): \Generator
+	{
+		$before = $this->landscape->roadRecords();
+		$after = $candidate->roadRecords();
+		$sameRoute = array_keys($before) === array_keys($after);
+		$resized = false;
+		foreach($before as $id=>$old) {
+			$new = $after[$id] ?? null;
+			if($new === null) continue;
+			$sameRoute = $sameRoute && $old['points'] === $new['points'] && ($old['handles'] ?? []) === ($new['handles'] ?? []);
+			if($old['material'] === 'road' && $new['material'] === 'road' && $old['width'] !== $new['width']) $resized = true;
+		}
+		if(!$resized) return;
+		$keepCircuit = $this->circuit !== null && $sameRoute;
+		if($keepCircuit) {
+			// Keep the crossing planes fixed, so successive width edits cannot walk a checkpoint around a bend.
+			$course = $this->circuitVariant === 'flooded' ? $this->course :
+				yield from $this->circuit->placing($candidate,$this->gateShapes,$this->course->laps(),false);
+		} else {
+			$course = clone $this->course;
+			yield from $course->refitting(self::ground($candidate),$candidate->changedRegion($this->landscape),
+				fn(array $gate) => CircuitRoad::resizedSpan($this->landscape,$candidate,$gate));
+		}
+		$this->roadGateCommit = [$course->gates(false) === $this->course->gates(false) ? $this->course : $course, $keepCircuit];
 	}
 
 	private function advanceRoad(float $budget): void
@@ -2017,12 +2050,17 @@ final class Session
 	public function publishLandscape(Landscape $landscape): void
 	{
 		$this->circuitSearch = null; $this->circuitPreview = null;
-		$this->circuit = null; $this->circuitVariant = null;
+		if($this->course->count() === 0) $this->roadGateCommit = null;
+		if(!($this->roadGateCommit[1] ?? false)) { $this->circuit = null; $this->circuitVariant = null; }
 		$this->releasePin();
 		$this->balloons->refit($landscape,$this->water->level());
 		$this->message = $this->delivery?->refit($landscape,$this->water->level()) ?? $this->message;
 		// Gates on the edited ground stand on it again.
-		if($this->circuitCommit === null && $this->course->count() > 0)
+		if($this->roadGateCommit !== null) {
+			if(($laps = $this->course->start()['laps'] ?? null) !== null) $this->roadGateCommit[0]->setLaps($laps);
+			$this->course = $this->roadGateCommit[0];
+			$this->roadGateCommit = null;
+		} elseif($this->circuitCommit === null && $this->course->count() > 0)
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
 		$this->landscape->close();
 		$this->landscape = $landscape;
@@ -2136,9 +2174,17 @@ final class Session
 					} catch(\RangeException|\OutOfBoundsException) {}
 				}
 				try { $course = $circuit->course($candidate,$this->gateShapes,$laps,$variant === 'flooded'); }
-				catch(\RangeException|\OutOfBoundsException $error) { $course = $legacy ?? throw $error; }
-				if($legacy === null && !$matches($course))
-					throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
+				catch(\RangeException|\OutOfBoundsException) { $course = null; }
+				if($legacy === null && ($course === null || !$matches($course))) {
+					// Older builds kept a minimum gantry width and capped regional circuits at the stock maximum.
+					$oldMinimum = $this->gateShapes->kind('road')['size']['width'][0];
+					if($variant === 'dry' && ($circuit->featureArea !== null || in_array($oldMinimum,$widths,true))) {
+						$old = $circuit->course($candidate,$this->gateShapes,$laps,false,legacyPavementFit:true);
+						if($matches($old)) $legacy = $old;
+					}
+					if($legacy === null) throw new \InvalidArgumentException('The saved circuit and its gates disagree.');
+				}
+				$course ??= $legacy;
 			}
 		}
 		catch(\RuntimeException | \InvalidArgumentException $error) { $candidate->close(); throw $error; }

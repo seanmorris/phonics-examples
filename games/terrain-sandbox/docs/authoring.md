@@ -63,6 +63,8 @@ The elevation profile shows the draft before you apply it and the fitted grade a
 
 For a manual race, place at least three points along a loop at least 394 ft long. The lap can wind anywhere inside the editable map. Choose **Close loop and create circuit** to grade the road and place the start/finish gate at the first point, followed by ordered checkpoints. Each gate follows the pavement width at its crossing, with about 2.5 ft between each post and the asphalt. You can also select a saved road, reshape it, and use the same button to update its circuit. Long roads prepare over successive frames and stay together as one edit when you save or undo.
 
+To resize a paved road, select its section, change **Width**, and choose **Apply road**. Gates across that section follow the painted edges, including on bends. Undo and redo restore the road and its gate widths together.
+
 Open **Circuit generator** in Roads to find a route around a natural feature. The generator fits longer curves through the surveyed route and keeps more points where the direction, elevation or bank changes sharply. The road picker lists those curves in numbered sections. You can adjust points, curves and banks before applying the dry or flooded course. **Apply road** grades the generated sections together if you only want the pavement.
 
 Roads modify the heightfield. Bridges, tunnels, and overhangs require separate geometry and are outside this sandbox.

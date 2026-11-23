@@ -231,6 +231,7 @@ test('the canyon remains legible at full extent in the Roads editor', async({pag
 });
 
 test('draw a manual lap circuit with the editor controls', async({page}) => {
+	test.setTimeout(180_000);
 	await page.setViewportSize({width: 1150,height: 760});
 	await page.goto('/games/terrain-sandbox/');
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
@@ -268,13 +269,23 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	await expect.poll(() => point.locator('option').count()).toBeGreaterThan(6);
 	await expect(page.locator('[data-road-picker]')).toHaveValue('1');
 	expect((await status()).course.gates.length).toBeGreaterThanOrEqual(8);
+	await page.getByText('Road dimensions',{exact:true}).click();
+	const width = page.locator('[data-road-field=width]');
+	for(const feet of [12,150]) {
+		await width.fill(String(feet));
+		await width.press('Tab');
+		await page.getByRole('button', {name:'Apply road',exact:true}).click();
+		await expect.poll(async() => Math.min(...(await status()).course.gates.map(gate => gate.width)),
+			{timeout:60_000}).toBeCloseTo(feet*.3048+1.5,1);
+		expect((await status()).circuit.active).toBe('dry');
+	}
 
 	await page.getByRole('tab', {name: 'Landscape', exact:true}).click();
 	const download = page.waitForEvent('download');
 	await page.locator('[data-action=save]').click();
 	const saved = JSON.parse(await fs.readFile(await (await download).path(), 'utf8'));
 	const graded = saved.landscape.history.at(-1)[0];
-	expect(graded.width).toBe(24);
+	expect(graded.width).toBeCloseTo(150*.3048);
 	const openings = saved.course.gates.map(gate => gate.width);
 	// The narrowest crossing is perpendicular. Gates across bends can be wider.
 	expect(Math.min(...openings)).toBeCloseTo(graded.width + 1.5, 1);

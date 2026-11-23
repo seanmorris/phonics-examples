@@ -11,6 +11,7 @@ final class CircuitRoad
 	private const SHOULDER = 16.;
 	// Distance from the asphalt edge to the inner face of a checkpoint post, in meters.
 	public const POST_CLEARANCE = .75;
+	public const MIN_GATE_SPAN = .5 + 2*self::POST_CLEARANCE;
 	private const EDGE_REFINEMENTS = 6;
 	// Each correction can add at most one more half-width to either side of a skew crossing.
 	public const MAX_GATE_SPAN = (1 + self::EDGE_REFINEMENTS) * (1024. + 2*self::POST_CLEARANCE);
@@ -19,13 +20,15 @@ final class CircuitRoad
 	private const MIN_CREST_RADIUS = 140.;
 
 	/** Fit both posts to the painted spline along the original checkpoint crossing plane. */
-	public static function gateSpan(Landscape $land, float $x, float $z, float $yaw, bool $regional = true): array
+	public static function gateSpan(Landscape $land, float $x, float $z, float $yaw, bool $regional = true, ?float &$pavement = null): array
 	{
+		$pavement = null;
 		$acrossX = cos($yaw);
 		$acrossZ = -sin($yaw);
 		$material = $land->material($x,$z,$offset,$center);
 		if($material !== 'road' || $center === null || abs($center[0]) > $center[2])
 			return [$x,$z,$regional ? self::WIDTH + 2*self::POST_CLEARANCE : null];
+		$pavement = 2 * $center[2];
 		$half = $center[2] + self::POST_CLEARANCE;
 		$edges = [];
 		foreach([-1,1] as $side) {
@@ -44,6 +47,15 @@ final class CircuitRoad
 		[$left,$right] = $edges;
 		$shift = round(($right+$left)/2,3);
 		return [$x+$shift*$acrossX,$z+$shift*$acrossZ,round($right-$left,3)];
+	}
+
+	/** Use the old crossing center so narrowing a road still finds it beneath an off-center gate. */
+	public static function resizedSpan(Landscape $before, Landscape $after, array $gate): ?array
+	{
+		[$x,$z] = self::gateSpan($before,$gate['x'],$gate['z'],$gate['yaw'],false,$oldWidth);
+		if($oldWidth === null) return null;
+		$span = self::gateSpan($after,$x,$z,$gate['yaw'],false,$newWidth);
+		return $newWidth !== null && $newWidth !== $oldWidth ? $span : null;
 	}
 
 	/** @return \Generator The road edit records for a validated centerline. */

@@ -93,7 +93,7 @@ final class Course
 	 * and a water arch's within its stretch, as GateShapes::fit() leaves it.
 	 * @param \Closure|null $ground fn(float $x, float $z): float giving the ground height anywhere on the landscape.
 	 * Without it the ground under each gate counts as level with the gate's origin.
-	 * @param bool $pavementSpan Allow a measured road crossing to exceed the standalone gantry width.
+	 * @param bool $pavementSpan Fit the measured pavement crossing.
 	 * @return array{gate:?array,moved:bool,merged:bool,removed:?array,refused:?string,with:?array} The placed gate,
 	 * or on a merge the start gate; whether it moved an existing gate; whether a finish gate merged into the start
 	 * gate, and the finish gate that went. A refused gate leaves the course unchanged, with refused 'full' when 32
@@ -243,22 +243,45 @@ final class Course
 	 */
 	public function refit(\Closure $ground, ?array $region = null): bool
 	{
+		$work = $this->refitting($ground,$region);
+		foreach($work as $_) {}
+		return $work->getReturn();
+	}
+
+	/** Refit a private course one gate at a time while a resized road is being prepared. */
+	public function refitting(\Closure $ground, ?array $region, ?\Closure $roadSpan = null): \Generator
+	{
 		if($region === []) return false;
 		$changed = false;
-		$refit = function(?array $gate) use ($ground, $region, &$changed): ?array {
-			if($gate === null || $gate['kind'] === 'water') return $gate;
+		$resized = [];
+		foreach($this->gates(false) as $gate) {
+			if($gate['kind'] === 'water') continue;
 			$extent = $this->measure($gate)['extent'];
 			$reach = hypot($extent['halfWidth'], $extent['halfDepth']);
 			if($region !== null && ($gate['x'] + $reach < $region[0] || $gate['x'] - $reach > $region[2]
-				|| $gate['z'] + $reach < $region[1] || $gate['z'] - $reach > $region[3])) return $gate;
+				|| $gate['z'] + $reach < $region[1] || $gate['z'] - $reach > $region[3])) continue;
+			$original = $gate;
+			if($roadSpan !== null && $gate['kind'] === 'road' && ($span = $roadSpan($gate)) !== null) {
+				[$gate['x'],$gate['z'],$width] = $span;
+				$gate['width'] = $this->shapes->fit('road',$width,$gate['height'],true)['width'];
+				$resized[$gate['id']] = true;
+			}
 			$fitted = $this->fit($gate, $ground);
-			$changed = $changed || $fitted !== $gate;
-			return $fitted;
-		};
-		$this->start = $refit($this->start);
-		$this->finish = $refit($this->finish);
-		foreach($this->checkpoints as $index => $gate) $this->checkpoints[$index] = $refit($gate);
+			$changed = $changed || $fitted !== $original;
+			if($gate['role'] === 'start') $this->start = $fitted;
+			elseif($gate['role'] === 'finish') $this->finish = $fitted;
+			else $this->checkpoints[$gate['number']-1] = $fitted;
+			yield;
+		}
 		if($changed) $this->revision++;
+		if($resized) {
+			$gates = $this->gates(false);
+			foreach($gates as $i=>$gate) {
+				foreach(array_slice($gates,$i+1) as $other)
+					if((isset($resized[$gate['id']]) || isset($resized[$other['id']])) && $this->overlap($gate,$other))
+						throw new \RangeException('The wider road would make two gates overlap.');
+			}
+		}
 		return $changed;
 	}
 
@@ -671,14 +694,15 @@ final class Course
 	public function export(): array
 	{
 		$gates = [];
+		[$minWidth,$maxWidth] = $this->shapes->kind('road')['size']['width'];
 		foreach([$this->start, ...$this->checkpoints, $this->finish] as $gate)
 		{
 			if($gate === null) continue;
 			$saved = [];
 			foreach([...self::SAVED, 'laps', 'number', 'width', 'height'] as $key)
 				if(array_key_exists($key, $gate)) $saved[$key] = $gate[$key];
-			// Keep oversized fitted road gates loadable if subsequent edits detach the course from its circuit.
-			if($gate['kind'] === 'road' && $gate['width'] > $this->shapes->kind('road')['size']['width'][1])
+			// A fitted gate outside the standalone range also needs to reload after its circuit is detached.
+			if($gate['kind'] === 'road' && ($gate['width'] < $minWidth || $gate['width'] > $maxWidth))
 				$saved['pavementSpan'] = true;
 			$gates[] = $saved;
 		}
@@ -748,7 +772,7 @@ final class Course
 			if($sized)
 			{
 				[$width, $height] = [(float)$gate['width'], (float)$gate['height']];
-				if(($pavementSpan && $width <= $course->shapes->kind('road')['size']['width'][1])
+				if(($pavementSpan && $course->shapes->fits($kind,$width,$height))
 					|| !$course->shapes->fits($kind, $width, $height, $pavementSpan)) throw $fail("a $kind gate's size is out of range");
 			}
 			if($role === 'start' && (!is_int($gate['laps']) || $gate['laps'] < 1 || $gate['laps'] > self::MAX_LAPS))

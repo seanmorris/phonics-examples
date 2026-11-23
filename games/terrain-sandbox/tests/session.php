@@ -2173,6 +2173,21 @@ $legacy['course']['gates'][1]['x'] += 1;
 try { $oldSave->load(json_encode($legacy,JSON_THROW_ON_ERROR)); expect(false,'A mismatched historical circuit must be rejected'); }
 catch(InvalidArgumentException) { expect($oldSave->course->export()===$manual->course->export(),'A bad historical checkpoint leaves the race intact'); }
 $oldSave->close();
+$originalCourse = $manual->course->export();
+$originalCamera = clone $manual->camera;
+$edit('section',['id'=>0,'key'=>'width','value'=>42.]);
+$edit('apply',['id'=>0]);
+while($manual->preparingRoad()) input($manual,[]);
+expect($manual->course->export() === $originalCourse, 'Resized gates wait for their pavement to publish');
+publish($manual);
+$checkRoadGates($manual,42.);
+$wideCourse = $manual->course->export();
+expect($manual->status()['circuit']['points'] === $made['points'] && $manual->camera == $originalCamera
+	&& $manual->course->laps() === 3, 'Apply road keeps the racing line, camera and lap count');
+foreach(['undo'=>$originalCourse,'redo'=>$wideCourse] as $action=>$expected) {
+	input($manual,['actions'=>[$action]]); while($manual->preparingRoad()) input($manual,[]); publish($manual);
+	expect($manual->course->export() === $expected, "$action restores the matching crossing planes and post positions");
+}
 $edit('section',['id'=>0,'key'=>'width','value'=>80.]);
 $edit('point',['id'=>0,'index'=>1,'x'=>10500,'y'=>3,'z'=>-6500]);
 $edit('circuit',['id'=>0]); while($manual->preparingRoad()) input($manual,[]); publish($manual);
@@ -2185,7 +2200,34 @@ $detached = json_decode($manual->save(),true,flags:JSON_THROW_ON_ERROR);
 unset($detached['circuit']);
 $manualReload->load(json_encode($detached,JSON_THROW_ON_ERROR));
 $checkRoadGates($manualReload,80.);
-$manualReload->close(); $manual->close();
+$editDetached = static function(string $op,array $fields=[]) use ($manualReload) {
+	input($manualReload,['actions'=>[['type'=>'road-editor','op'=>$op,'generation'=>$manualReload->generation,
+		'revision'=>$manualReload->landscape->revision(),'id'=>0]+$fields]]);
+};
+$editDetached('open'); $editDetached('select');
+$editDetached('section',['key'=>'width','value'=>32.]); $editDetached('apply');
+while($manualReload->preparingRoad()) input($manualReload,[]); publish($manualReload);
+$checkRoadGates($manualReload,32.);
+$manualReload->close();
+// A short loop can use the smallest permitted road without exhausting its terrain sampling budget.
+$edit('select',['id'=>null]);
+foreach([[-90.,-80.],[90.,-80.],[90.,80.],[-90.,80.]] as [$x,$z]) $edit('add',['x'=>$x,'z'=>$z]);
+$edit('circuit'); while($manual->preparingRoad()) input($manual,[]); publish($manual);
+$shortRoad = array_key_last($manual->landscape->roadRecords());
+$edit('section',['id'=>$shortRoad,'key'=>'width','value'=>.5]);
+$edit('apply',['id'=>$shortRoad]); while($manual->preparingRoad()) input($manual,[]); publish($manual);
+$checkRoadGates($manual,.5);
+$narrow = json_decode($manual->save(),true,flags:JSON_THROW_ON_ERROR);
+expect(abs(min(array_column($narrow['course']['gates'],'width'))-2.) < .01, 'The narrowest road brings both posts in to its edges');
+$narrowLoad = new Session;
+$narrowLoad->load($manual->save());
+expect($narrowLoad->course->export() === $manual->course->export(), 'Narrow fitted gates survive a save and reload');
+$shortRoute = TerrainSandbox\Circuit::import($narrow['circuit']['route'],16384.);
+$narrow['course'] = $shortRoute->course($manual->landscape,$manual->gateShapes,3,false,legacyPavementFit:true)->export();
+$narrowLoad->load(json_encode($narrow,JSON_THROW_ON_ERROR));
+expect($narrowLoad->course->export() === $manual->course->export(), 'Older minimum-width road gates refit when loaded');
+$narrowLoad->close();
+$manual->close();
 
 $longLab = new Session(['worldSize'=>32768,'heightScale'=>0.,'detailAmplitude'=>0.]);
 $longLab->road = [[-11500.,2.,0.],[11500.,2.,0.]];

@@ -1249,6 +1249,27 @@ $editedLine = $savedEdit['circuit']['route']['points'];
 $gap = min(array_map(static fn($p) => hypot($p[0]-($px+30),$p[1]-($pz+20)),$editedLine));
 expect($gap<12 && $savedEdit['course'] !== $original->export(),
 	'The saved race line follows the modified section and publishes its own gates');
+$resizeSection = static function(string $op,array $fields=[]) use ($edited) {
+	input($edited,['actions'=>[['type'=>'road-editor','op'=>$op,'id'=>0,'generation'=>$edited->generation,
+		'revision'=>$edited->landscape->revision()]+$fields]]);
+};
+$resizeSection('select');
+$resizeSection('section',['key'=>'width','value'=>75.]);
+$resizeSection('apply');
+while($edited->preparingRoad()) input($edited,[]);
+$edited->publishLandscape($edited->takeCandidate());
+$widened = json_decode($edited->save(),true,flags:JSON_THROW_ON_ERROR);
+expect($widened['circuit'] === $savedEdit['circuit'] && max(array_column($widened['course']['gates'],'width')) > 75.,
+	'Widening a generated section keeps the circuit and spans pavement beyond the old 60 m limit');
+$widthCopy = new Session;
+$widthCopy->load($edited->save());
+expect($widthCopy->course->export() === $edited->course->export(), 'A resized regional road reloads with the same gates');
+$regionalRoute = Circuit::import($widened['circuit']['route'],$edited->landscape->recipe()['worldSize']/2);
+$widened['course'] = $regionalRoute->course($edited->landscape,$edited->gateShapes,$edited->course->laps(),false,
+	legacyPavementFit:true)->export();
+$widthCopy->load(json_encode($widened,JSON_THROW_ON_ERROR));
+expect($widthCopy->course->export() === $edited->course->export(), 'Historical capped gates on a widened section upgrade on load');
+$widthCopy->close();
 $edited->close();
 
 $gateLine = [];
