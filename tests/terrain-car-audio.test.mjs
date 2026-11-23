@@ -87,9 +87,16 @@ test('the real skid recording wraps across adjacent samples and retains its leve
 test('a browser awaiting an audio gesture receives one resume request across driving frames', () => {
 	let attempts = 0;
 
+	/** A gain node that accepts levels and connections without producing sound. */
+	const silentGain = () => ({gain: {value: 1, setTargetAtTime: () => {}}, connect: () => {}});
+
 	class LockedContext extends EventTarget
 	{
 		state = 'suspended';
+
+		destination = {};
+
+		createGain() { return silentGain(); }
 
 		async resume() { attempts++; }
 

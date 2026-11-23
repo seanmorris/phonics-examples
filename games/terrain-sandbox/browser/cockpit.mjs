@@ -1,7 +1,7 @@
 /** Synchronized aircraft instruments. PHP supplies the same interpolated eye used to draw this frame. */
 export function activate({module, canvas})
 {
-	const {FOOT, MPH, rangeYards} = module.terrainUnits;
+	const {FOOT, KNOT, rangeYards} = module.terrainUnits;
 	const screen = document.createElement('canvas');
 	screen.className = 'terrain-instruments';
 	screen.setAttribute('aria-hidden', 'true');
@@ -223,7 +223,7 @@ export function activate({module, canvas})
 				line(x-side*12, 0, x, 0);
 			}
 
-			tape(jet.speed/MPH, 20, -1, 'MPH', 'SPD');
+			tape(jet.speed/KNOT, 20, -1, 'KTS', 'SPD');
 			tape(Math.max(0, jet.y-range.ground)/FOOT, 100, 1, 'FT AGL', 'ALT');
 
 			const percent = frame.thrust, hot = Math.max(0, (percent-100)/40);

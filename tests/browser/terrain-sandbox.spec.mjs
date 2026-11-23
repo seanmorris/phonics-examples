@@ -3306,3 +3306,159 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 	expect(measured.coast).toBeGreaterThan(.005);
 	expect(measured.stopped).toBeLessThan(.00001);
 });
+
+test('the pause menu opens from Escape, Start and its button and acts through the session', async({page}) => {
+	test.setTimeout(360_000);
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	page.on('console', message => { if(message.type() === 'error') errors.push(message.text()); });
+
+	await page.addInitScript(() => {
+		const buttons = Array.from({length: 17}, () => ({pressed: false, touched: false, value: 0}));
+		const pad = {
+			id: 'Menu test controller'
+			, index: 0
+			, timestamp: 1
+			, mapping: 'standard'
+			, connected: true
+			, axes: [0,0,0,0]
+			, buttons
+		};
+
+		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+
+		window.testMenuButton = (n, on) => {
+			pad.timestamp++;
+			buttons[n] = {pressed: on, touched: on, value: on ? 1 : 0};
+		};
+	});
+
+	await boot(page);
+	await settled(page);
+	const view = canvas(page);
+	const KNOT = 1852 / 3600;
+
+	/** Resolve once the canvas status shows a menu state, checked every frame so a held key cannot repeat past it. */
+	const until = (check, arg) => page.waitForFunction(({check, arg}) => {
+		const state = JSON.parse(document.querySelector('canvas[data-terrain-sandbox]').dataset.terrainSandbox);
+
+		return new Function('state', 'arg', 'return ' + check)(state, arg);
+	}, {check, arg}, {polling: 'raf', timeout: 60_000});
+
+	/** Wait until the menu stops redrawing, so the frames have seen the last release before the next press. */
+	const idle = async() => {
+		let frames = -1;
+
+		while(frames !== (frames = (await status(page)).renderer.frames)) await page.waitForTimeout(600);
+	};
+
+	/** Hold a key until the menu selects a row, then let go. */
+	const key = async(name, row) => {
+		await page.keyboard.down(name);
+		await until('state.menuRow?.id === arg', row);
+		await page.keyboard.up(name);
+		await idle();
+	};
+
+	/** Hold a key until the menu opens or closes, then let go. */
+	const toggle = async(name, open) => {
+		await page.keyboard.down(name);
+		await until('state.menu === arg', open);
+		await page.keyboard.up(name);
+		await idle();
+	};
+
+	await view.focus();
+	await toggle('Escape', true);
+	let state = await status(page);
+	expect(state.paused).toBe(true);
+	expect(state.menuRow).toEqual({page: 'PAUSED', id: 'resume', label: 'Resume'});
+	await expect(page.locator('.terrain-sandbox')).toHaveClass(/terrain-menu-open/);
+	await expect(page.locator('.terrain-hud')).toBeHidden();
+	await expect(page.locator('.terrain-panel')).not.toHaveAttribute('open', '');
+	await expect(page.locator('[data-menu-live]')).toHaveText('PAUSED: Resume');
+
+	// Escape on the top page resumes and gives the Landscape Lab back.
+	await toggle('Escape', false);
+	expect((await status(page)).paused).toBe(false);
+	await expect(page.locator('.terrain-panel')).toHaveAttribute('open', '');
+
+	/** Hold a pad button until the menu reaches a state, then let go. */
+	const pad = async(button, check, arg) => {
+		await page.evaluate(n => window.testMenuButton(n, true), button);
+		await until(check, arg);
+		await page.evaluate(n => window.testMenuButton(n, false), button);
+	};
+
+	// Start opens the menu, and the press that opened it does not close it again. B closes it from the top page.
+	await pad(9, 'state.menu === arg', true);
+	await idle();
+	expect((await status(page)).menu).toBe(true);
+	await pad(1, 'state.menu === arg', false);
+
+	// The D-pad moves the selection, and Start closes the menu.
+	await pad(9, 'state.menu === arg', true);
+	await idle();
+	await pad(13, 'state.menuRow?.id === arg', 'car');
+	await pad(9, 'state.menu === arg', false);
+
+	// The pause button opens it too. Settings sets the flight speed in knots, and the Explore slider follows.
+	await control(page, 'menu').click();
+	await until('state.menu === arg', true);
+	await view.focus();
+
+	// End jumps to Quit at the foot of the page, and Up walks back to Settings.
+	await key('End', 'quit');
+	await key('ArrowUp', 'lab');
+	await key('ArrowUp', 'settings');
+	await key('Enter', 'headlights');
+	await key('End', '@back');
+	await key('ArrowUp', 'speed');
+
+	await page.keyboard.down('ArrowRight');
+	await until('state.settings.speed > arg', 202 * KNOT);
+	await page.keyboard.up('ArrowRight');
+	state = await status(page);
+	const knots = state.settings.speed / KNOT;
+	expect(Math.abs(knots - Math.round(knots / 5) * 5)).toBeLessThan(1e-6);
+	await expect(page.locator('[data-value="speed"]')).toHaveValue(String(Math.round(knots)));
+
+	// Audio sets the car's levels and remembers them in this browser. The soundtrack answers for the music rows.
+	await key('Escape', 'settings');
+	await key('ArrowUp', 'audio');
+	await key('Enter', 'track');
+	await key('ArrowDown', 'music');
+	await key('ArrowDown', 'engine');
+	await page.keyboard.down('ArrowLeft');
+
+	/** The engine level this browser remembers. */
+	const engineLevel = async() => {
+		const saved = await page.evaluate(() => localStorage.getItem('terrain-sandbox.audio'));
+
+		return JSON.parse(saved ?? '{}').engine;
+	};
+
+	await expect.poll(engineLevel).toBeLessThan(100);
+	await page.keyboard.up('ArrowLeft');
+	expect((await engineLevel()) % 5).toBe(0);
+	await idle();
+
+
+	// The Landscape Lab row closes the menu, keeps the world frozen and opens the editor.
+	await key('Escape', 'audio');
+	await key('End', 'quit');
+	await key('ArrowUp', 'lab');
+	await toggle('Enter', false);
+	expect((await status(page)).paused).toBe(true);
+	await expect(page.locator('.terrain-panel')).toHaveAttribute('open', '');
+	expect(errors).toEqual([]);
+
+	// Quit asks first, then leaves for the examples index.
+	await view.focus();
+	await toggle('Escape', true);
+	await key('ArrowUp', 'quit');
+	await key('Enter', 'leave');
+	await page.keyboard.down('Enter');
+	await page.waitForURL(url => !url.pathname.includes('terrain-sandbox'), {timeout: 30_000});
+	expect(new URL(page.url()).pathname).toBe('/');
+});

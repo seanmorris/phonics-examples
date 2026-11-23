@@ -30,7 +30,7 @@ function pipe(context, nodes, input, output, roundTrip, reflection)
 	nodes.push(sum, delay, damping, back);
 }
 
-export function startEngine(context, instrument, tone)
+export function startEngine(context, instrument, tone, output = context.destination)
 {
 	const crank = context.createBufferSource(), noise = context.createBufferSource();
 	const banks = context.createChannelSplitter(4), volume = context.createGain();
@@ -99,7 +99,7 @@ export function startEngine(context, instrument, tone)
 
 	volume.gain.value = 0;
 	tailpipes.connect(body).connect(rumble).connect(muffler);
-	muffler.connect(baffle).connect(volume).connect(context.destination);
+	muffler.connect(baffle).connect(volume).connect(output);
 
 	const now = context.currentTime;
 	crank.start(now);
@@ -142,6 +142,28 @@ export function startEngine(context, instrument, tone)
 	};
 }
 
+/** Car audio levels in percent. The player's choice, remembered in this browser. */
+export const AUDIO_DEFAULTS = {master: 80, engine: 100, tires: 100};
+
+/** Settings the soundtrack owns. The pause menu reaches them through the same bridge. */
+const MUSIC_SETTINGS = ['tracks', 'track', 'music'];
+
+const AUDIO_PREFERENCE = 'terrain-sandbox.audio';
+
+/** A level's gain. Squaring gives the lower half of a slider the quiet end, where ears tell levels apart. */
+const fader = percent => (percent/100)**2;
+
+/**
+ * Check a stored or requested car audio level.
+ * @param {string} name master, engine or tires.
+ * @param {*} value Percent from 0 to 100.
+ * @returns {boolean} Whether the value is valid for that level.
+ */
+export function audioSetting(name, value)
+{
+	return name in AUDIO_DEFAULTS && Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
 /** Join the end of the skid to its beginning over 80 ms. The loop wraps between consecutive original samples. */
 export function joinSkid(context, buffer)
 {
@@ -170,9 +192,31 @@ export function activate({module, canvas, archive, signal})
 	const doc = canvas.ownerDocument, page = doc.defaultView;
 	const Context = page.AudioContext ?? page.webkitAudioContext;
 	const resources = archive.store.scope(signal);
-	let context, instrument, engine, tireBuffer, tire, parkTimer, loading;
+	let context, instrument, engine, tireBuffer, tire, parkTimer, loading, buses;
 	let closed = false, contextLost = false, pageHidden = false, parked = false;
 	let tone = {cycle: 0}, tireLevel = 0, tireRate = 1;
+	const mix = {...AUDIO_DEFAULTS};
+
+	try
+	{
+		const saved = JSON.parse(page.localStorage?.getItem(AUDIO_PREFERENCE) ?? 'null') ?? {};
+
+		for(const [name, value] of Object.entries(saved)) if(audioSetting(name, value)) mix[name] = value;
+	}
+	catch
+	{
+		/* Without storage the defaults play for this visit. */
+	}
+
+	/** Set each bus to its level. The engine and tires pass through the master. */
+	function level()
+	{
+		if(!buses) return;
+
+		const at = context.currentTime;
+
+		for(const name of ['master', 'engine', 'tires']) buses[name].gain.setTargetAtTime(fader(mix[name]), at, .03);
+	}
 
 	async function loadSound(file, ready)
 	{
@@ -259,7 +303,7 @@ export function activate({module, canvas, archive, signal})
 		}
 
 		if(engine) engine.update(tone);
-		else if(instrument) engine = startEngine(context, instrument, tone);
+		else if(instrument) engine = startEngine(context, instrument, tone, buses.engine);
 
 		if(!tireBuffer || tireLevel < .00025)
 		{
@@ -275,7 +319,7 @@ export function activate({module, canvas, archive, signal})
 			source.loop = true;
 			source.playbackRate.value = tireRate;
 			gain.gain.value = 0;
-			source.connect(gain).connect(context.destination);
+			source.connect(gain).connect(buses.tires);
 
 			source.onended = () => { source.disconnect(); gain.disconnect(); };
 
@@ -299,6 +343,15 @@ export function activate({module, canvas, archive, signal})
 		{
 			context = new Context();
 			context.addEventListener('statechange', update, {signal});
+			// The engine and tires each have a level, and both pass through the master.
+			buses = {};
+
+			for(const name of ['master', 'engine', 'tires'])
+			{
+				buses[name] = context.createGain();
+				buses[name].gain.value = fader(mix[name]);
+				buses[name].connect(name === 'master' ? context.destination : buses.master);
+			}
 		}
 
 		parked = false;
@@ -328,10 +381,47 @@ export function activate({module, canvas, archive, signal})
 		update();
 	};
 
+	/**
+	 * The pause menu reads levels through this. The soundtrack answers for the track list, the track and the music
+	 * level through module.terrainMusic, {get(name), set(name, value)}.
+	 */
+	module.terrainAudioGet = name => {
+		if(MUSIC_SETTINGS.includes(name))
+		return module.terrainMusic?.get(name) ?? {tracks: '["Off"]', track: 'Off', music: 0}[name];
+
+		return mix[name];
+	};
+
+	/** The pause menu sets levels through this. The soundtrack also hears the master level. */
+	module.terrainAudioSet = (name, value) => {
+		if(MUSIC_SETTINGS.includes(name)) return Boolean(module.terrainMusic?.set(name, value));
+
+		if(!audioSetting(name, value)) return false;
+
+		mix[name] = value;
+
+		try
+		{
+			page.localStorage?.setItem(AUDIO_PREFERENCE, JSON.stringify(mix));
+		}
+		catch
+		{
+			/* Storage can be unavailable; the levels then last for this visit. */
+		}
+
+		if(name === 'master') module.terrainMusic?.set('master', value);
+
+		level();
+
+		return true;
+	};
+
 	return () => {
 		closed = true;
 		page.clearTimeout(parkTimer);
 		delete module.terrainCarSound;
+		delete module.terrainAudioGet;
+		delete module.terrainAudioSet;
 		engine?.stop();
 		stopTire();
 		resources.close();

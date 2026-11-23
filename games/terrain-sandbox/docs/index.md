@@ -31,9 +31,9 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 
 ## Fly over the landscape
 
-Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and **Q/E** to descend or climb. Hold **Shift** to fly at 671 mph. The Flight slider changes the ordinary movement speed.
+Right-drag on the view to look around. Use **W/A/S/D** to move horizontally and **Q/E** to descend or climb. Hold **Shift** to fly at 583 kts. The **Flight speed** slider, in knots, changes the ordinary movement speed.
 
-With a gamepad, the left stick moves, the right stick looks around, and the right and left triggers climb and descend. Hold the left stick pressed in to fly at 671 mph.
+With a gamepad, the left stick moves, the right stick looks around, and the right and left triggers climb and descend. Hold the left stick pressed in to fly at 583 kts.
 
 **Home view** returns to the starting viewpoint. **H** folds or opens the controls. On supported browsers the sandbox keeps the screen awake while its tab is visible, including during gamepad play. **Fullscreen** enlarges the whole sandbox, including its controls.
 
@@ -47,7 +47,7 @@ Press **J**, choose **Fly F5**, or press up on a gamepad's D-pad to start airbor
 
 **Expert** turns the jet about its own axes and holds whatever attitude you leave it in, so it can roll inverted and loop. **A/D** or the left stick rolls the jet. **E/Q** or the left stick controls pitch. **LT/RT** works the rudder left/right, as does **Z/X** or the horizontal right stick. In a bank the wings support only part of the jet's weight unless you pull, so a banked jet turns slowly and one on its side slides toward the ground. Switching back to Novice keeps the jet's orientation and then levels it.
 
-Hold **RT** in Novice or **Y** in Expert to speed up. Hold **LT** in Novice or **B** in Expert to slow down. On the keyboard, **W/S** controls speed in either mode. Airspeed ranges from 123 to 582 mph and returns to 313 mph on release. ENG reads 30% at minimum power, 75% at cruise and 140% at full power. Above 100% the dial warms from green through amber to red as the engine spools up. Novice trigger travel sets the requested power proportionally. Pulling the left stick back raises the nose. **Push the stick forward to climb** reverses pitch. The browser remembers handling and pitch preferences.
+Hold **RT** in Novice or **Y** in Expert to speed up. Hold **LT** in Novice or **B** in Expert to slow down. On the keyboard, **W/S** controls speed in either mode. Airspeed ranges from 107 to 506 kts and returns to 272 kts on release. ENG reads 30% at minimum power, 75% at cruise and 140% at full power. Above 100% the dial warms from green through amber to red as the engine spools up. Novice trigger travel sets the requested power proportionally. Pulling the left stick back raises the nose. **Push the stick forward to climb** reverses pitch. The browser remembers handling and pitch preferences.
 
 Both chase cameras keep the horizon level. The Novice camera looks along the jet's heading. The Expert camera swings in behind the nose, so it follows loops. It turns round quickly as the nose passes straight up or down. **P** or **Start** pauses the flight. Press **F**, or hold **Back** and press **D-pad down**, to leave the jet and explore from the current camera position. Reaching the map edge also returns you to free flight.
 
@@ -168,9 +168,22 @@ Landscape files save the applied variant and both available water levels, so you
 
 The sandbox reads gamepads that the browser maps to the standard layout, such as Xbox and PlayStation controllers. Browsers report a pad only after you press one of its buttons with the page open. Outside the F5, the D-pad chooses your vehicle: up for the jet, left for the car, right for the watercraft and down for free flight. **Start** pauses, **Back + Y** resets a race and **X** switches the car headlights or fires the F5’s Vulcan. The gamepad keeps working while a panel control has focus, and stops while the page is in the background.
 
-## Pause and save
+## Pause menu
 
-**P** pauses waves, the moving sun, and vehicle motion. Camera movement and authoring remain available. Once terrain preparation settles, an unchanged paused view stops submitting rendered frames.
+Press **Escape**, press **Start** on a gamepad, or select the pause button beside the Landscape Lab button to open the pause menu. It freezes the world. Choose **Resume**, or press Escape, Start or **B** again, to carry on. The menu lists what you can do from where you are:
+
+- In free flight: **Drive car**, **Watercraft**, **Fly F5** and **Package run**. In a vehicle: **Return to flight**, plus **Restart race** during a race, and **Balloon practice** and **Reset balloons** in the F5.
+- **Controls** lists the buttons for what you are doing, drawn for the keyboard or gamepad you used last.
+- **Audio** chooses a song from the soundtrack, or turns music off, and sets the music, engine, tire and master levels. The browser remembers them.
+- **Settings** sets the car headlights, jet handling, pitch direction and flight speed in knots.
+- **Landscape Lab** closes the menu and opens the editor with the world still frozen.
+- **Quit to examples** asks first, because unsaved landscape edits are lost.
+
+Use the arrow keys or **W/S**, the D-pad or the left stick to move, and **Enter**, **Space** or **A** to choose. You can also click or tap a row.
+
+## Freeze and save
+
+**P** freezes waves, the moving sun, and vehicle motion without opening the menu. Camera movement and authoring remain available. Once terrain preparation settles, an unchanged paused view stops submitting rendered frames.
 
 **Save file** downloads a JSON document containing the landscape recipe, committed edits, environment controls, camera and race gates. **Load file** opens a file picker. Files are local to your device; the sandbox does not upload them.
 
