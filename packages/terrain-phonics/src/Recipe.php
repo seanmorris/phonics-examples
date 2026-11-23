@@ -17,6 +17,7 @@ final class Recipe
 		, 'tidal-lagoon'
 		, 'red-mesas', 'heather-moor', 'salt-pans', 'cinder-highlands'
 		, 'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe'
+		, 'alaska-range', 'chalk-headlands'
 	];
 
 	/** Parameters are immutable after normalization. */
@@ -41,6 +42,27 @@ final class Recipe
 	/** Shape coefficients copied by preset selection and by the legacy recipe loader. */
 	public static function shapeDefaults(string $preset, int $version = 2): array
 	{
+		// A sharp divide is cut by crossing spurs. Lift the outer valley flanks to leave open troughs between divides.
+		if($preset === 'alaska-range')
+		return [
+			'seed'=>'alaska-range', 'baseFrequency'=>1 / 4270, 'heightScale'=>3048., 'baseBias'=>.62,
+			'ridgeHeight'=>1.65, 'ridgeRoundness'=>.014, 'rolling'=>.14, 'secondary'=>.74,
+			'wallHeight'=>.25, 'floorWidth'=>.21, 'wallWidth'=>.46, 'directionalRise'=>.045,
+			'warpAmplitude'=>609.6, 'warpFrequency'=>1 / 2750,
+			'detailAmplitude'=>195.072, 'detailOctaves'=>6, 'persistence'=>.36, 'slopeScale'=>1.35, 'damping'=>.48,
+			'terraceStrength'=>0., 'waterLevel'=>0., 'surround'=>'mountains',
+		] + self::shapeDefaults('coast', $version);
+
+		// The sea floods the foot of a narrow scarp. The rolling upper surface continues inland as chalk downs.
+		if($preset === 'chalk-headlands')
+		return [
+			'seed'=>'chalk-headlands', 'baseFrequency'=>1 / 1850, 'heightScale'=>121.92, 'baseBias'=>-.16,
+			'wallHeight'=>.95, 'floorWidth'=>.19, 'wallWidth'=>.058, 'rolling'=>.38, 'secondary'=>.18,
+			'directionalRise'=>.28, 'warpAmplitude'=>228.6, 'warpFrequency'=>1 / 2400,
+			'detailAmplitude'=>2.4384, 'detailOctaves'=>5, 'persistence'=>.44, 'terraceStrength'=>0.,
+			'waterLevel'=>0., 'surround'=>'sea',
+		] + self::shapeDefaults('coast', $version);
+
 		if($preset === 'basalt-fjords')
 		return [
 			'seed' => 'basalt-fjords', 'baseFrequency' => 1 / 2600, 'heightScale' => 1160., 'baseBias' => .055,

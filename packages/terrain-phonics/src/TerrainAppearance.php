@@ -171,6 +171,17 @@ final class TerrainAppearance
 			'grassColor'=>'#777b62', 'soilColor'=>'#a38465', 'sandColor'=>'#bdad8e',
 			'rockColor'=>'#796c62', 'rockBandColor'=>'#9b8974', 'rockSlopeStart'=>.023, 'rockSlopeEnd'=>.08,
 		]
+		, 'alaska-range' => [
+			'grassColor'=>'#77714e', 'meadowColor'=>'#514f3e', 'sandColor'=>'#888783',
+			'talusColor'=>'#737778', 'rockColor'=>'#525b65', 'rockBandColor'=>'#83888b',
+			'snowColor'=>'#d3dce0', 'snowline'=>1280.16, 'snowTransition'=>152.4,
+			'rockSlopeStart'=>.11, 'rockSlopeEnd'=>.27, 'snowSlopeStart'=>.12, 'snowSlopeEnd'=>.37,
+		]
+		, 'chalk-headlands' => [
+			'grassColor'=>'#526742', 'meadowColor'=>'#728258', 'rockColor'=>'#bfc1b8',
+			'rockBandColor'=>'#818582', 'soilColor'=>'#7b837e', 'sandColor'=>'#a29988',
+			'rockSlopeStart'=>.065, 'rockSlopeEnd'=>.18, 'beachHeight'=>2.4384, 'beachWidth'=>2.1336,
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -333,6 +344,14 @@ final class TerrainAppearance
 		, 'high-desert-steppe' => [
 			'grassColor','soilColor','rockColor','rockBandColor','sandColor','roadColor','rockSlopeStart','rockSlopeEnd',
 		]
+		, 'alaska-range' => [
+			'grassColor','rockColor','rockBandColor','sandColor','snowColor','roadColor','meadowColor','talusColor',
+			'rockSlopeStart','rockSlopeEnd','snowline','snowTransition','snowSlopeStart','snowSlopeEnd',
+		]
+		, 'chalk-headlands' => [
+			'grassColor','soilColor','rockColor','rockBandColor','sandColor','roadColor','meadowColor',
+			'rockSlopeStart','rockSlopeEnd','beachHeight','beachWidth',
+		]
 		, 'salt-pans' => [
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'rockSlopeStart', 'rockSlopeEnd',
@@ -470,7 +489,8 @@ final class TerrainAppearance
 			'red-mesas' => 'canyon',
 			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon',
 			'heather-moor', 'salt-pans', 'cinder-highlands',
-			'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe' => $recipe['preset'],
+			'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe',
+			'alaska-range', 'chalk-headlands' => $recipe['preset'],
 			default => 'coast'
 		};
 	}

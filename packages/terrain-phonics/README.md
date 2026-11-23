@@ -304,6 +304,8 @@ Four road-trip presets use the same height field and editable material layers. `
 
 Set `reflectivity` on a color layer to give it a clear dielectric coating. The range is 0 (matte) to 1 (fully coated). `roughness` ranges from 0 (polished) to 1 (frosted). The shader samples the atmosphere in the reflected view direction and filters the solar highlight by roughness and pixel size. Snow, rock and paint cover the finish with the same masks as the layer color. The minimap shows the underlying tint. The Arctic ice uses an air-to-ice refractive index of about 1.31. [Warren and Brandt’s optical constants of ice](https://atmos.washington.edu/ice_optical_constants/)
 
+In `alaska-range`, the broad floor of the shared contour field carries tundra and outwash gravel. Snow accumulates above the snowline and thins on steep schist faces. In `chalk-headlands`, the same field has a narrow wall transition. The sea floods the low side of the scarp, flint nodules follow the exposed chalk, and wet chalk and shingle follow the waterline.
+
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 
 | Setting | Coast | Mountain | Version-one canyon | Canyon |

@@ -231,6 +231,7 @@ foreach([
 	'red-mesas'=>['cap-rock','Desert dust'], 'heather-moor'=>['peat-banks','Moor mist'],
 	'rolling-prairie'=>['green-swales','Prairie haze'], 'river-valley'=>['gravel-bars','River mist'],
 	'wooded-foothills'=>['woodland-canopy','Foothill haze'], 'high-desert-steppe'=>['sagebrush','Basin dust'],
+	'alaska-range'=>['firn-snowfields','Glacial valley haze'], 'chalk-headlands'=>['flint-nodules','Channel mist'],
 	'salt-pans'=>['salt-crust','Playa dust'], 'cinder-highlands'=>['oxidized-scoria','Highland haze'],
 ] as $preset=>[$layer,$air]) {
 	input($fresh,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
@@ -244,6 +245,13 @@ foreach([
 	expect($restored->landscape->recipe() === $fresh->landscape->recipe()
 		&& $restored->activeLayers()->layers === $fresh->activeLayers()->layers
 		&& $restored->atmosphere->layers() === $fresh->atmosphere->layers(), "$preset survives a save and reload.");
+	if($preset === 'alaska-range') {
+		enterCar($restored);
+		expect($restored->mode === 'car', 'The opening Alaskan bench supports the car.');
+	} elseif($preset === 'chalk-headlands') {
+		input($restored,['actions'=>['craft']]);
+		expect($restored->mode === 'craft', 'The cove below the chalk headlands is navigable.');
+	}
 	$restored->close();
 }
 input($fresh,['actions'=>[['type'=>'surface-layers','preset'=>'salt-pans']]]);

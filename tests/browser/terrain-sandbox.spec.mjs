@@ -2562,6 +2562,9 @@ for(const [first, second] of [
 	, [{label: 'Wooded Foothills', name: 'wooded-foothills', layer: 'woodland-canopy'}
 		, {label: 'High Desert Steppe', name: 'high-desert-steppe', layer: 'sagebrush'}
 	]
+	, [{label: 'Alaska Range', name: 'alaska-range', layer: 'firn-snowfields'}
+		, {label: 'Chalk Headlands', name: 'chalk-headlands', layer: 'flint-nodules'}
+	]
 ]) {
 	test(
 		`${first.label} and ${second.label} are available as landscapes and as independent surface presets`

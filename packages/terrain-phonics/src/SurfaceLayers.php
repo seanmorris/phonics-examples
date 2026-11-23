@@ -220,6 +220,8 @@ final class SurfaceLayers
 			'river-valley' => self::riverLayers($s),
 			'wooded-foothills' => self::foothillLayers($s),
 			'high-desert-steppe' => self::steppeLayers($s,$r),
+			'alaska-range' => self::alaskaLayers($s),
+			'chalk-headlands' => self::chalkLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -262,6 +264,8 @@ final class SurfaceLayers
 			'river-valley' => ['Flood meadow','Alluvial terraces','Wet silt','Gravel bars'],
 			'wooded-foothills' => ['Glades','Fern slopes','Woodland canopy','Spur outcrops'],
 			'high-desert-steppe' => ['Gravel apron','Sagebrush','Dry washes','Rim rock'],
+			'alaska-range' => ['Tussock tundra','Outwash gravel','Moraine talus','Schist headwalls','Firn snowfields'],
+			'chalk-headlands' => ['Downland turf','Chalk faces','Flint nodules','Wet chalk','Shingle beach'],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
 		foreach($rows as $i=>&$row) {
@@ -562,6 +566,43 @@ final class SurfaceLayers
 				'patternAmount'=>.59, 'patternScale'=>1.2],
 			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'fractures', 'patternColor'=>$s['rockBandColor'],
 				'patternScale'=>3.5, 'patternStretch'=>1.2, 'patternAmount'=>.64],
+		];
+	}
+
+	private static function alaskaLayers(array $s): array
+	{
+		return [
+			['color'=>$s['grassColor'], 'pattern'=>'fractal', 'patternColor'=>$s['meadowColor'],
+				'patternScale'=>36., 'patternStretch'=>1.4, 'patternAmount'=>.78],
+			['color'=>$s['sandColor'], 'high'=>.43*$s['snowline'], 'fade'=>45., 'noise'=>65., 'scale'=>170.,
+				'slopeHigh'=>.012, 'slopeFade'=>.028, 'pattern'=>'gravel', 'patternColor'=>$s['talusColor'],
+				'patternScale'=>1.4, 'patternAmount'=>.8],
+			['color'=>$s['talusColor'], 'low'=>.65*$s['snowline'], 'fade'=>105., 'noise'=>95., 'scale'=>210.,
+				'pattern'=>'gravel', 'patternColor'=>$s['rockColor'], 'patternScale'=>3., 'patternAmount'=>.64],
+			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'jointed', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>6., 'patternStretch'=>1.8, 'patternAmount'=>.76],
+			['color'=>$s['snowColor'], 'low'=>$s['snowline'], 'fade'=>$s['snowTransition'], 'noise'=>195., 'scale'=>180.,
+				'slopeHigh'=>$s['snowSlopeStart'], 'slopeFade'=>$s['snowSlopeEnd']-$s['snowSlopeStart'],
+				'pattern'=>'fractal', 'patternColor'=>self::tint($s['snowColor'],.71,.81,.90),
+				'patternScale'=>26., 'patternStretch'=>1.7, 'patternAmount'=>.62],
+		];
+	}
+
+	private static function chalkLayers(array $s): array
+	{
+		return [
+			['color'=>$s['grassColor'], 'field'=>'meadow', 'pattern'=>'fractal', 'patternColor'=>$s['meadowColor'],
+				'patternScale'=>30., 'patternStretch'=>1.4, 'patternAmount'=>.68],
+			self::exposedRock($s) + ['color'=>$s['rockColor'], 'pattern'=>'fractures', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>4.2, 'patternStretch'=>1.6, 'patternAmount'=>.42],
+			['parent'=>'chalk-faces', 'color'=>$s['rockColor'], 'period'=>15.24, 'low'=>3., 'high'=>4.2, 'fade'=>.7,
+				'noise'=>3.4, 'scale'=>44., 'opacity'=>.5, 'pattern'=>'gravel', 'patternColor'=>$s['rockBandColor'],
+				'patternScale'=>.85, 'patternAmount'=>1.],
+			['color'=>$s['soilColor'], 'datum'=>'water', 'high'=>$s['beachHeight'], 'fade'=>$s['beachWidth'],
+				'noise'=>.65, 'scale'=>32., 'roughness'=>.55, 'reflectivity'=>.13],
+			['color'=>$s['sandColor'], 'datum'=>'water', 'low'=>-1.2, 'high'=>$s['beachHeight']+1.5,
+				'fade'=>$s['beachWidth'], 'noise'=>1.2, 'scale'=>47., 'slopeHigh'=>.024, 'slopeFade'=>.034,
+				'pattern'=>'gravel', 'patternColor'=>$s['rockBandColor'], 'patternScale'=>.70, 'patternAmount'=>.9],
 		];
 	}
 

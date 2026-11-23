@@ -1933,6 +1933,8 @@ function markup()
 		['river-valley', 'River Valley &amp; Floodplain'],
 		['wooded-foothills', 'Wooded Foothills'],
 		['high-desert-steppe', 'High Desert Steppe'],
+		['alaska-range', 'Alaska Range'],
+		['chalk-headlands', 'Chalk Headlands'],
 	];
 	const option = ([value, label]) => `<option value="${value}">${label}</option>`;
 	const surfaceOptions = landscapeOptions.flatMap(row => row[0] === 'canyon' ? [row, ['canyon-v1', 'Early Canyon']] : [row]);

@@ -26,6 +26,8 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 - **River Valley & Floodplain** starts on a dry bank overlooking a bend. Drive along the meadow and gravel terraces, or board the watercraft to follow the channel.
 - **Wooded Foothills** looks across spurs patched with dark woodland canopy. Meadow clearings and exposed rock mark the changes in slope.
 - **High Desert Steppe** opens on a sagebrush and gravel apron. Dry washes lead between long benches of rim rock.
+- **Alaska Range** looks across a tundra valley toward snowfields broken by dark schist. Follow the low gravel floor to see the mountains from below.
+- **Chalk Headlands** overlooks a cove between grass-topped white cliffs. Follow the shore by water to see the flint in the chalk and the shingle at its foot.
 
 ## Fly over the landscape
 

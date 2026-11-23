@@ -26,6 +26,8 @@ In **Rolling Prairie**, adjust **Green swales** and **Cured grass** to shift the
 
 In **Wooded Foothills**, toggle **Woodland canopy** to isolate its color and relief. In **High Desert Steppe**, toggle **Dry washes** to see where the gravel apron shows through the sagebrush.
 
+In **Alaska Range**, change the minimum elevation of **Firn snowfields** to bring the snow farther down the mountains. Its upper slope limit controls which rock faces show through. In **Chalk Headlands**, **Flint nodules** inherits the coverage of **Chalk faces**. Raising the water level moves **Wet chalk** and **Shingle beach** up the coast.
+
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 
