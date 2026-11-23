@@ -849,10 +849,24 @@ export function activate({canvas, module, session})
 		else if(key.startsWith('d'))
 		send(
 			'handle'
-			, {index: selected,side,vertical: key==='dy',vector: [metricValue(fields.dx),metricValue(fields.dy),metricValue(fields.dz)]}
+			, {
+				index: selected
+				, side
+				, vertical: key==='dy'
+				, vector: [metricValue(fields.dx), metricValue(fields.dy), metricValue(fields.dz)]
+			}
 		);
 		else
-		send('point', {index: selected,vertical: key==='y',x: metricValue(fields.x),y: metricValue(fields.y),z: metricValue(fields.z)});
+		send(
+			'point'
+			, {
+				index: selected
+				, vertical: key==='y'
+				, x: metricValue(fields.x)
+				, y: metricValue(fields.y)
+				, z: metricValue(fields.z)
+			}
+		);
 	}, {signal});
 
 	module.terrainRoadEditor = json => {

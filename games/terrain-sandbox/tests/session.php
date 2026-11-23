@@ -2404,4 +2404,75 @@ expect(in_array('❸ ❶ Speed', TerrainSandbox\ControlHints::entries('jet', 'xb
 	&& in_array('↑ Next balloon', TerrainSandbox\ControlHints::entries('jet', 'xbox', 'novice', true), true),
 	'Expert F5 speed is on Y and B, and balloon cycling shows only when there are balloons');
 
+// The pause menu offers what suits the mode, sends choices through the session's checks, and hands the world back.
+$audio = ['master' => 80, 'music' => 40, 'engine' => 100, 'tires' => 100, 'track' => 'Off'];
+$pageCommands = [];
+$paused = new Session(['worldSize'=>256,'heightScale'=>0,'detailAmplitude'=>0]);
+$pauseMenu = new TerrainSandbox\SandboxMenu(
+	static function(string $name) use (&$audio): mixed { return $name === 'tracks' ? json_encode(['Off', 'Drive']) : $audio[$name]; },
+	static function(string $name, mixed $value) use (&$audio): bool { $audio[$name] = $value; return true; },
+	static function(string $command) use (&$pageCommands): void { $pageCommands[] = $command; }
+);
+input($paused, ['actions' => ['menu']]);
+expect($paused->menuRequested && !$paused->menu && !$paused->paused, 'Escape or Start asks for the menu');
+$pauseMenu->open($paused);
+$rows = array_keys($pauseMenu->menu->rows());
+expect($paused->menu && $paused->paused && $paused->status()['menu'] === true && $rows[0] === 'resume'
+	&& array_intersect(['car', 'craft', 'jet', 'delivery'], $rows) === ['car', 'craft', 'jet', 'delivery']
+	&& !in_array('fly', $rows, true) && !in_array('race', $rows, true) && array_slice($rows, -5) === ['controls', 'audio', 'settings', 'lab', 'quit'],
+	'In free flight the menu offers the vehicles and a package run, then controls, audio, settings, the Lab and Quit');
+$paused->mode = 'jet';
+$jetRows = array_keys($pauseMenu->items($paused));
+expect(in_array('fly', $jetRows, true) && in_array('balloons', $jetRows, true) && !in_array('car', $jetRows, true)
+	&& !in_array('delivery', $jetRows, true), 'In the F5 the menu returns to flight and offers balloon practice');
+$paused->mode = 'fly';
+$controls = $pauseMenu->controlsPage($paused);
+expect($controls[0] === ['heading' => 'Free flight'] && in_array(['name' => 'Fly', 'value' => '⬲'], $controls, true)
+	&& in_array(['name' => 'Look', 'value' => 'Right-drag'], $controls, true)
+	&& in_array(['name' => 'Pause menu', 'value' => 'Esc'], $controls, true), 'Controls pair each action with its keys');
+$paused->inputTheme = 'xbox';
+expect(in_array(['name' => 'Down, up', 'value' => '❻ ❼'], $pauseMenu->controlsPage($paused), true)
+	&& in_array(['name' => 'Pause menu', 'value' => '❾'], $pauseMenu->controlsPage($paused), true), 'A pad sees its own buttons');
+$paused->inputTheme = 'keyboard';
+$pauseMenu->menu->select('settings');
+$pauseMenu->menu->activate();
+$pauseMenu->menu->setValue('headlights', 'On');
+$pauseMenu->menu->setValue('jetControls', 'Expert');
+$pauseMenu->menu->setValue('invertPitch', true);
+$pauseMenu->menu->setValue('speed', 250);
+input($paused, $pauseMenu->takePending());
+expect($paused->headlights === 'on' && $paused->jetControls === 'expert' && $paused->invertPitch
+	&& abs($paused->settings['speed'] - 250 * TerrainSandbox\DisplayUnits::KNOT) < 1e-9 && $pauseMenu->takePending() === [],
+	'Settings reach the session as values, with flight speed set in knots');
+$pauseMenu->menu->back();
+$pauseMenu->menu->select('audio');
+$pauseMenu->menu->activate();
+$pauseMenu->menu->setValue('track', 'Drive');
+$pauseMenu->menu->setValue('engine', 55);
+expect($audio['track'] === 'Drive' && $audio['engine'] == 55 && $pauseMenu->menu->value('music') === 40,
+	'Audio rows read and set the page\'s levels and track');
+$pauseMenu->menu->back();
+$pauseMenu->menu->select('lab');
+$pauseMenu->menu->activate();
+expect($pageCommands === ['lab'] && $pauseMenu->finish($paused) && !$paused->menu && $paused->paused,
+	'The Landscape Lab row opens the editor and leaves the world frozen');
+$pauseMenu->open($paused);
+expect($pauseMenu->menu->selected === 'resume', 'Opening the menu again starts on Resume');
+$pauseMenu->menu->select('car');
+$pauseMenu->menu->activate();
+expect($pauseMenu->finish($paused) && !$paused->paused && $pauseMenu->takePending() === ['actions' => ['car']],
+	'A vehicle row closes the menu and boards through the session');
+$pauseMenu->open($paused);
+$pauseMenu->menu->select('quit');
+$pauseMenu->menu->activate();
+expect(array_keys($pauseMenu->menu->rows()) === ['leave', '@back'] && $pauseMenu->menu->selected === 'leave',
+	'Quit asks first, with Quit selected and Back below');
+$pauseMenu->menu->select('leave');
+$pauseMenu->menu->activate();
+expect($pageCommands === ['lab', 'quit'], 'Quit leaves for the examples');
+$pauseMenu->menu->back();
+$pauseMenu->menu->back();
+expect($pauseMenu->finish($paused) && !$paused->menu && !$paused->paused, 'Back from the top page resumes');
+$paused->close();
+
 echo "Landscape sandbox session: $checks checks passed\n";

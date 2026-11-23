@@ -26,6 +26,10 @@ The Testarossa has a soft contact shadow, darkest between its wheels and fainter
 
 The Surface tab edits a PHP-owned `SurfaceLayers` recipe. PHP sends the available channels, fields, masks and parameter ranges through the `terrainSurface` bridge. Before committing a new structure, the scene links the ground, headlight and minimap shaders. Numeric edits reuse the linked programs. Version-five saves carry the committed recipe, its origin and the paint inks alongside the landscape edit history.
 
+## Pause menu
+
+Escape, Start or the pause button opens `SandboxMenu`, which drives the engine's `Menu`, `MenuInput` and `MenuRenderer` from the sandbox's own input hook. The engine's `PauseMenu` adapter would take over that hook, which already carries the page's input bridge. Menu rows send the same actions and values the page does, so Session checks them. The Audio page reads and sets levels through `terrainAudioGet` and `terrainAudioSet` in `browser/car-audio.mjs`, which keeps the master, engine and tire buses and remembers their levels in the browser. The soundtrack answers for the song list, the song and the music level through `module.terrainMusic`, an object with `get(name)` and `set(name, value)`, and also hears the master level.
+
 ## Terrain streaming measurements
 
 Initial clipmap comparison, before the wider canyon grids. Chromium with SwiftShader, a 640 × 400 viewport,

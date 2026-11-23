@@ -1,6 +1,6 @@
 // Internal terrain coordinates and saved files use SI. These conversions apply at the UI boundary.
-const FOOT = .3048, YARD = 3 * FOOT, MILE = 5280 * FOOT, MPH = .44704;
-const metricPerUnit = {ft: FOOT, mph: MPH, cyclesPerMile: 1/MILE, densityPerMile: 1000/MILE};
+const FOOT = .3048, YARD = 3 * FOOT, MILE = 5280 * FOOT, MPH = .44704, KNOT = 1852 / 3600;
+const metricPerUnit = {ft: FOOT, mph: MPH, kts: KNOT, cyclesPerMile: 1/MILE, densityPerMile: 1000/MILE};
 const exactValues = new WeakMap();
 const fieldBounds = new WeakMap();
 
@@ -20,13 +20,18 @@ function displayNumber(value, unit)
 }
 
 // Give native keyboard and spinner controls a useful increment while accepting finer authored numbers.
+
 function updateIncrement(field)
 {
 	const increment = Number(field.dataset.increment);
+
 	if(field.type !== 'number' || !increment) return;
+
 	field.step = increment;
+
 	for(let n = 1; field.validity.stepMismatch && n <= 7; n++)
 		field.step = Number((increment / 10 ** n).toPrecision(10));
+
 	if(field.validity.stepMismatch) field.step = 'any';
 }
 
@@ -45,12 +50,19 @@ function setFieldValue(field, value, preset = false)
 	const imperial = displayNumber(value, unit);
 	field.value = imperial;
 	field.removeAttribute('title');
-	if(preset) {
-		field.value = unit === 'ft' && Math.abs(imperial) >= 10 ? Math.round(imperial) : Number(imperial.toPrecision(3));
+
+	if(preset)
+	{
+		field.value = unit === 'ft' && Math.abs(imperial) >= 10
+			? Math.round(imperial)
+			: Number(imperial.toPrecision(3));
+
 		if(field.validity.rangeUnderflow || field.validity.rangeOverflow) field.value = imperial;
+
 		if(field.valueAsNumber !== imperial)
 			field.title = `Preset value ≈ ${imperial} ${unit === 'cyclesPerMile' ? 'cycles/mi' : unit}`;
 	}
+
 	updateIncrement(field);
 	// Reapplying a preset or editing a sibling field must preserve the exact authored value.
 	exactValues.set(field, {display: field.value, metric: value});
@@ -77,7 +89,9 @@ function metricValue(field)
 
 function configureUnits(container, preset = false)
 {
-	for(const field of container.querySelectorAll('input[type=number][data-increment]:not([data-unit]), input[type=number][data-increment][data-unit=""]'))
+	for(const field of container.querySelectorAll(
+		'input[type=number][data-increment]:not([data-unit]), input[type=number][data-increment][data-unit=""]'
+	))
 		updateIncrement(field);
 
 	for(const field of container.querySelectorAll('input[data-unit]:not([data-unit=""])'))
@@ -94,7 +108,67 @@ function configureUnits(container, preset = false)
 	}
 }
 
-export const terrainUnits = {FOOT, MPH, distanceLabel, rangeYards, configureUnits, setFieldValue, metricValue};
+export const terrainUnits = {FOOT, MPH, KNOT, distanceLabel, rangeYards, configureUnits, setFieldValue, metricValue};
+
+/** The SDL menu selects by display title. The shared playlist identifies each recording by its ID. */
+function musicMenu(music)
+{
+	const choices = new Map([['Off', null]]);
+
+	function trackChoices()
+	{
+		if(choices.size === 1)
+		{
+			for(const track of music.tracks)
+			{
+				let title = track.title || track.id;
+
+				while(choices.has(title)) title += ' (' + track.id + ')';
+
+				choices.set(title, track.id);
+			}
+		}
+
+		return choices;
+	}
+
+	return {
+
+		get(name) {
+			if(name === 'music') return Math.round(music.volume*100);
+
+			if(name === 'tracks') return JSON.stringify([...trackChoices().keys()]);
+
+			if(name === 'track' && !music.playbackPaused)
+			{
+				const id = music.playlistTrack?.id;
+
+				for(const [title, trackId] of trackChoices()) if(trackId === id) return title;
+			}
+
+			return name === 'track' ? 'Off' : null;
+		}
+
+		, set(name, value) {
+			if(name === 'track')
+			{
+				if(value !== 'Off' && !music.select(trackChoices().get(value))) return false;
+
+				music.setPlaybackPaused(value === 'Off');
+
+				return true;
+			}
+
+			if(!Number.isFinite(value) || value < 0 || value > 100) return false;
+
+			if(name === 'master') music.setMasterVolume((value/100)**2);
+			else if(name === 'music') music.setVolume(value/100);
+			else return false;
+
+			return true;
+		}
+	};
+}
 
 /** Authoring UI and lifecycle bridge; PHP owns terrain, camera, edits and simulation. */
 export function activate({module, canvas, session, services})
@@ -106,12 +180,15 @@ export function activate({module, canvas, session, services})
 	frame.className = 'terrain-sandbox';
 	frame.innerHTML = markup();
 	configureUnits(frame);
+
 	frame.addEventListener('input', ({target}) => {
 		if(target.type !== 'number') return;
+
 		exactValues.delete(target);
 		target.removeAttribute('title');
 		updateIncrement(target);
 	}, {capture: true, signal});
+
 	module.terrainUnits = terrainUnits;
 
 	const stage = frame.querySelector('.terrain-stage');
@@ -159,8 +236,14 @@ export function activate({module, canvas, session, services})
 	canvas.addEventListener('phonics-music-track', ({detail}) => showCredit(detail), {signal});
 
 	const music = session.backgroundMusic;
+	module.terrainMusic = musicMenu(music);
+	const musicPreferences = new services.SafeStorage();
+	const musicOffKey = 'terrain-sandbox.music.off';
+	let rememberedPause = musicPreferences.get(musicOffKey) === '1';
+
+	if(rememberedPause) music.setPlaybackPaused(true);
+
 	const musicLevel = frame.querySelector('[data-music-level]');
-	musicLevel.value = String(Math.round(music.volume*100));
 
 	musicLevel.addEventListener('input', () => music.setVolume(musicLevel.valueAsNumber/100), {signal});
 
@@ -168,16 +251,22 @@ export function activate({module, canvas, session, services})
 	const pauseMusic = frame.querySelector('[data-music-pause]');
 
 	const showMusicState = () => {
+		musicLevel.value = String(Math.round(music.volume*100));
 		playMusic.setAttribute('aria-pressed', String(!music.playbackPaused));
 		pauseMusic.setAttribute('aria-pressed', String(music.playbackPaused));
+
+		if(rememberedPause !== music.playbackPaused)
+		{
+			rememberedPause = music.playbackPaused;
+			musicPreferences.set(musicOffKey, rememberedPause ? '1' : '0');
+		}
 	};
+
+	canvas.addEventListener('phonics-music-controls', showMusicState, {signal});
 
 	for(const [button, paused] of [[playMusic, false], [pauseMusic, true]])
 	{
-		button.addEventListener('click', () => {
-			music.setPlaybackPaused(paused);
-			showMusicState();
-		}, {signal});
+		button.addEventListener('click', () => music.setPlaybackPaused(paused), {signal});
 	}
 
 	showMusicState();
@@ -415,7 +504,7 @@ export function activate({module, canvas, session, services})
 
 	const commands = {
 		KeyP: 'pause'
-		, Escape: 'pause'
+		, Escape: 'menu'
 		, KeyF: 'fly'
 		, KeyB: 'craft'
 		, KeyC: 'car'
@@ -546,7 +635,7 @@ export function activate({module, canvas, session, services})
 
 		detail.textContent = `${mode} · ${Math.round(x/FOOT)}, ${Math.round(z/FOOT)} ft`
 			+ ` · altitude ${Math.round((state.jet?.y ?? y)/FOOT)} ft`
-			+ (state.jet ? ` · ${Math.round(state.jet.speed/MPH)} mph` : '')
+			+ (state.jet ? ` · ${Math.round(state.jet.speed/KNOT)} kts` : '')
 			+ (diagnostics.checked ? statistics : '');
 	};
 
@@ -578,7 +667,8 @@ export function activate({module, canvas, session, services})
 
 	let jetView = 'chase';
 	const panel = frame.querySelector('.terrain-panel');
-	let panelBeforeCockpit = true;
+	let panelBeforeCockpit = true, panelBeforeMenu = false, menuPanel = false;
+	const menuLive = frame.querySelector('[data-menu-live]');
 
 	const rememberJet = () => {
 		try
@@ -640,6 +730,7 @@ export function activate({module, canvas, session, services})
 	headlights.addEventListener('change', rememberHeadlights, {signal});
 
 	let previousViewport, previousKeys = '', previousPad = '', padButtons = new Set(), viewChord = false;
+	let previousMenuPad = '';
 	let backShortcut = false;
 
 	shell.bridge('terrainInput', () => {
@@ -688,7 +779,16 @@ export function activate({module, canvas, session, services})
 
 		const padKey = pad.join(',');
 
-		if(viewport === previousViewport && held === previousKeys && padKey === previousPad && !actions.length
+		// The pause menu reads the pad from here too.
+		// The D-pad or left stick moves, A chooses, B goes back and Start leaves.
+		const [x, y] = gamepad?.axes ?? [0, 0];
+		const up = buttons.has(12) || y < -.5, down = buttons.has(13) || y > .5;
+		const left = buttons.has(14) || x < -.5, right = buttons.has(15) || x > .5;
+		const menuPad = [up, down, left, right, buttons.has(0), buttons.has(1), buttons.has(9)].map(Number);
+		const menuPadKey = menuPad.join(',');
+		const padsSame = padKey === previousPad && menuPadKey === previousMenuPad;
+
+		if(viewport === previousViewport && held === previousKeys && padsSame && !actions.length
 			&& !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
 		) return '';
 
@@ -698,7 +798,10 @@ export function activate({module, canvas, session, services})
 
 		if(padKey !== previousPad) packet.pad = pad.some(value => value !== 0) ? pad : [];
 
+		if(menuPadKey !== previousMenuPad) packet.menuPad = menuPad;
+
 		previousPad = padKey;
+		previousMenuPad = menuPadKey;
 		previousKeys = held;
 		previousViewport = viewport;
 		values = {};
@@ -707,6 +810,16 @@ export function activate({module, canvas, session, services})
 		look = [0,0];
 
 		return JSON.stringify(packet);
+	});
+
+	// The pause menu's Landscape Lab row opens the panel; Quit leaves for the examples index the header links to.
+	shell.bridge('terrainPage', command => {
+		if(command === 'lab')
+		{
+			menuPanel = true;
+			panel.open = true;
+		}
+		else if(command === 'quit') location.assign(new URL('../../', location.href));
 	});
 
 	shell.bridge('terrainDownload', json => {
@@ -741,7 +854,9 @@ export function activate({module, canvas, session, services})
 				finishTimer = null;
 			}
 
-			if(state.paused !== latest?.paused) session.backgroundMusic.pause(state.paused);
+			const quietPause = Boolean(state.paused && !state.menu);
+
+			if(quietPause !== Boolean(latest?.paused && !latest.menu)) music.pause(quietPause);
 
 			latest = state;
 			module.updateTerrainHints(state);
@@ -770,6 +885,41 @@ export function activate({module, canvas, session, services})
 
 			materials.show(state);
 			air.show(state);
+
+			// The pause menu draws in the canvas, so screen readers hear its selected row from here.
+			const menuRow = state.menuRow ? state.menuRow.page + ': ' + state.menuRow.label : '';
+
+			if(menuLive.textContent !== menuRow) menuLive.textContent = menuRow;
+
+			// The page's own overlays step aside while the menu is open.
+			if(Boolean(state.menu) !== frame.classList.contains('terrain-menu-open'))
+			{
+				frame.classList.toggle('terrain-menu-open', Boolean(state.menu));
+
+				if(state.menu)
+				{
+					panelBeforeMenu = panel.open;
+					menuPanel = false;
+					panel.open = false;
+				}
+				else if(!menuPanel) panel.open = panelBeforeMenu;
+			}
+
+			if(typeof state.invertPitch === 'boolean' && invertPitch.checked !== state.invertPitch
+				&& document.activeElement !== invertPitch
+			){
+				invertPitch.checked = state.invertPitch;
+				rememberJet();
+			}
+
+			const speed = controls.get('speed');
+
+			// The pause menu can set flight speed too. Within half a slider step the field already shows it.
+			if(state.settings?.speed && document.activeElement !== speed
+				&& Math.abs(metricValue(speed) - state.settings.speed) > 2.5 * KNOT
+			){
+				setFieldValue(speed, state.settings.speed);
+			}
 
 			// Back on a gamepad switches the handling in PHP. Show it here and remember it.
 			if(state.jetControls && jetControls.value !== state.jetControls && document.activeElement !== jetControls)
@@ -907,8 +1057,13 @@ export function activate({module, canvas, session, services})
 				worldSize.value = size;
 
 				const defaults = surface.presets[state.recipe.preset];
+
 				for(const key of Object.keys(defaults))
-				setFieldValue(frame.querySelector(`[name="${key}"]`), state.recipe[key], state.recipe[key] === defaults[key]);
+				setFieldValue(
+					frame.querySelector(`[name="${key}"]`)
+					, state.recipe[key]
+					, state.recipe[key] === defaults[key]
+				);
 
 				for(const [name, value] of Object.entries(state.settings))
 				{
@@ -966,6 +1121,7 @@ export function activate({module, canvas, session, services})
 		if(session.terrainSandbox === api) delete session.terrainSandbox;
 
 		delete module.terrainUnits;
+		delete module.terrainMusic;
 		delete canvas.terrainSandboxDebug;
 		await shell.close();
 	};
@@ -1252,7 +1408,7 @@ const HEADLIGHTS = ['auto', 'on', 'off'];
 
 /** Gamepad buttons in the standard layout that issue a command when pressed. */
 const PAD_COMMANDS = new Map([
-	[9, 'pause'], [12, 'pad-up'], [14, 'car'], [15, 'craft']
+	[9, 'menu'], [12, 'pad-up'], [14, 'car'], [15, 'craft']
 	, [13, 'pad-down']
 	, [3, 'pad-y']
 	, [2, 'pad-x']
@@ -1425,7 +1581,8 @@ function atmosphereEditor(frame, push)
 		{
 			const key = input.dataset.airKey;
 
-			if(key==='top' || key==='bottom') {
+			if(key==='top' || key==='bottom')
+			{
 				input.min = -schema.ceiling;
 				input.max = schema.ceiling;
 			}
@@ -1598,7 +1755,9 @@ function materialEditor(frame, push, status)
 		const fields = Object.entries(LAYER_FIELDS).map(([key, [label, help = '', unit = '']]) => {
 			const id = `${layerBox.id}-row-${index}-${key}`;
 			const increment = unit === 'ft' || key === 'patternStretch' ? .01 : .001;
-			const attrs = `data-increment="${increment}" data-layer-key="${key}" data-unit="${unit}" aria-describedby="${id}"`;
+			const attrs
+				= `data-increment="${increment}" data-layer-key="${key}" data-unit="${unit}" aria-describedby="${id}"`;
+
 			let widget;
 
 			if(menus[key])
@@ -1872,7 +2031,8 @@ function materialEditor(frame, push, status)
 			{
 				for(const field of el.querySelectorAll('[data-layer-key]'))
 				{
-					if(field!==document.activeElement) setFieldValue(field, rows[i][field.dataset.layerKey], state.surfaceOrigin === 'preset');
+					if(field!==document.activeElement)
+					setFieldValue(field, rows[i][field.dataset.layerKey], state.surfaceOrigin === 'preset');
 				}
 			}
 		}
@@ -1977,27 +2137,32 @@ function markup()
 {
 	const hintPrefix = `landform-${++labCount}`;
 	const landscapeOptions = [
-		['coast', 'Coast'],
-		['mountain', 'Mountain Ridges'],
-		['canyon', 'Canyon'],
-		['limestone', 'Limestone Plain'],
-		['basalt-fjords', 'Basalt Fjords'],
-		['amber-dunes', 'Amber Dunes'],
-		['arctic-meltwater', 'Arctic Meltwater'],
-		['tidal-lagoon', 'Tidal Lagoon'],
-		['red-mesas', 'Red Mesas'],
-		['heather-moor', 'Heather Moor'],
-		['salt-pans', 'Salt Pans'],
-		['cinder-highlands', 'Cinder Highlands'],
-		['rolling-prairie', 'Rolling Prairie'],
-		['river-valley', 'River Valley &amp; Floodplain'],
-		['wooded-foothills', 'Wooded Foothills'],
-		['high-desert-steppe', 'High Desert Steppe'],
-		['alaska-range', 'Alaska Range'],
-		['chalk-headlands', 'Chalk Headlands'],
+		['coast', 'Coast']
+		, ['mountain', 'Mountain Ridges']
+		, ['canyon', 'Canyon']
+		, ['limestone', 'Limestone Plain']
+		, ['basalt-fjords', 'Basalt Fjords']
+		, ['amber-dunes', 'Amber Dunes']
+		, ['arctic-meltwater', 'Arctic Meltwater']
+		, ['tidal-lagoon', 'Tidal Lagoon']
+		, ['red-mesas', 'Red Mesas']
+		, ['heather-moor', 'Heather Moor']
+		, ['salt-pans', 'Salt Pans']
+		, ['cinder-highlands', 'Cinder Highlands']
+		, ['rolling-prairie', 'Rolling Prairie']
+		, ['river-valley', 'River Valley &amp; Floodplain']
+		, ['wooded-foothills', 'Wooded Foothills']
+		, ['high-desert-steppe', 'High Desert Steppe']
+		, ['alaska-range', 'Alaska Range']
+		, ['chalk-headlands', 'Chalk Headlands']
 	];
+
 	const option = ([value, label]) => `<option value="${value}">${label}</option>`;
-	const surfaceOptions = landscapeOptions.flatMap(row => row[0] === 'canyon' ? [row, ['canyon-v1', 'Early Canyon']] : [row]);
+
+	const surfaceOptions = landscapeOptions.flatMap(
+		row => row[0] === 'canyon' ? [row, ['canyon-v1', 'Early Canyon']] : [row]
+	);
+
 	const surfaceId = `surface-${labCount}`;
 
 	return `<style>
@@ -2026,6 +2191,16 @@ function markup()
 	.terrain-panel[open]>summary::after{content:"";position:absolute;top:0;right:0;width:45px;height:var(--header-height);background:linear-gradient(#d9e7d7,#d9e7d7) center/13px 2px no-repeat}
 	.terrain-panel[open] .lab-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 	.terrain-panel:not([open]){width:44px;border-radius:50%}
+	.terrain-menu-button{
+		position:absolute;z-index:1;top:var(--lab-inset);right:calc(var(--lab-inset) + 52px);width:44px;height:44px;
+		display:flex;align-items:center;justify-content:center;gap:5px;padding:0;cursor:pointer;
+		background:#19382f;border:1px solid #668477;border-radius:50%;box-shadow:0 6px 24px #07171366
+	}
+	.terrain-menu-button:hover{background:#254737}
+	.terrain-menu-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+	.terrain-menu-button i{width:4px;height:15px;border-radius:1px;background:#fff7de}
+	.terrain-sandbox:has(.terrain-panel[open]) .terrain-menu-button{right:calc(var(--lab-inset) + var(--lab-width) + 8px)}
+	.terrain-menu-open :is(.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-panel,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
 	.terrain-panel:not([open])>summary{height:42px;padding:0;justify-content:center}
 	.terrain-panel:not([open]) .lab-title{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-panel>summary:focus-visible{outline-offset:-4px;border-radius:inherit}
@@ -2095,6 +2270,7 @@ function markup()
 		.terrain-panel{--lab-inset:8px;--lab-width:calc(100% - 16px);--lab-height:min(62cqh,calc(100cqh - 16px - var(--radar-room,0px)))}
 		.terrain-panel{--header-height:40px}
 		.terrain-panel>summary{font-size:15px}
+		.terrain-sandbox:has(.terrain-panel[open]) .terrain-menu-button{display:none}
 		.lab-workspace{max-height:calc(var(--lab-height) - 42px)}
 		.terrain-tabs [role=tab]{min-height:30px}
 		.lab-pages{padding:12px}
@@ -2140,6 +2316,7 @@ function markup()
 	@media(max-width:640px){.terrain-sandbox:has(.terrain-panel:not([open])) .terrain-hud:has([data-race]:not([hidden])) [data-diagnostics]{display:none}}
 	</style><div class="terrain-stage"></div><div class="terrain-control-hints" hidden></div><svg class="terrain-road-preview" data-road-preview aria-label="Pending road route" aria-hidden="true" focusable="false"></svg>
 	<div class="terrain-credit-space"><aside class="terrain-music-credit" data-music-credit role="status" aria-live="polite" aria-atomic="true" hidden><img alt="" hidden><div><strong></strong><span data-artist></span><small data-album></small></div></aside></div>
+	<button type="button" class="terrain-menu-button" data-action="menu" title="Pause menu (Esc)" aria-label="Pause menu"><i></i><i></i></button>
 	<details class="terrain-panel" open>
 	<summary title="Landscape Lab (H)"><span class="lab-sliders" aria-hidden="true"><i></i><i></i><i></i></span><span class="lab-title">Landscape Lab</span></summary>
 	<div class="lab-music" role="group" aria-label="Soundtrack controls">
@@ -2240,7 +2417,23 @@ function markup()
 	<p class="terrain-note">Click the ground to place a gate facing the way you look. A gate on water floats. On land a gate stands on the ground at height 0, or hangs that high for the F5. An opening width or height of 0 takes the gate's own. Placing a second start or finish gate moves it, and a finish within one gate width of the start makes the start gate a start / finish gate. A gate that would overlap another is refused. Checkpoints count in the order you place them, and Remove takes away the gate you click.</p>
 	<div class="terrain-row"><button data-action="gates-clear">Clear gates</button><button data-action="race-reset">Reset race · R</button></div></div>
 
-	${range('Radius · ft', 'radius', 2, 300, 1, 130 * FOOT, 'ft')}${range('Strength · ft', 'amount', .1, 200, .1, 40 * FOOT, 'ft')}
+	${range(
+		'Radius · ft'
+		, 'radius'
+		, 2
+		, 300
+		, 1
+		, 130 * FOOT
+		, 'ft'
+	)}${range(
+		'Strength · ft'
+		, 'amount'
+		, .1
+		, 200
+		, .1
+		, 40 * FOOT
+		, 'ft'
+	)}
 	<label class="terrain-field">Flatten elevation · ft<input data-unit="ft" data-value="flattenHeight" data-increment=".1" type="number" min="-1000" max="3000" value="0"></label>
 	<label class="terrain-field">Paint<select data-value="material"><option value="grass">Grass</option><option value="rock">Rock</option><option value="sand">Sand</option><option value="snow">Snow</option><option value="road">Road</option></select></label>
 	<p class="terrain-note">Click the ground to apply one brush stroke. Ctrl+Z undoes; Ctrl+Shift+Z redoes.</p>
@@ -2263,7 +2456,11 @@ function markup()
 	<div class="terrain-section" data-road-workspace></div></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
-	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset">${surfaceOptions.map(option).join('')}</select>
+	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset">${surfaceOptions.map(
+		option
+	).join(
+		''
+	)}</select>
 	<button data-layer-load>Load preset surface</button><button data-layer-reset>Follow landform preset</button></div>
 	<p class="terrain-note" id="${surfaceId}-preset">Load preset surface replaces the stack. Follow landform preset restores the materials for the current landform.</p>
 	<h2>Material layers</h2><p class="terrain-note">The base layer covers the terrain. Colors and numbers preview as you edit an applied stack. After changing the layer order, a source, or a mask, choose Apply layers to preview the draft.</p>
@@ -2339,16 +2536,16 @@ function markup()
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
 	<div class="terrain-row"><button data-action="balloons-reset">Reset balloons</button></div>
 	<p class="terrain-note">The F5's launch, Vulcan, balloon and view buttons show at the top left of the view for the controller or keyboard you are using.</p></div>
-	${range('Flight speed · mph', 'speed', 5, 300, 5, 225 * MPH, 'mph')}
+	${range('Flight speed · kts', 'speed', 10, 300, 5, 200 * KNOT, 'kts')}
 	<label class="terrain-field">Car headlights · L<select data-value="headlights"><option value="auto" selected>Auto · on in low light</option><option value="on">On</option><option value="off">Off</option></select></label>
 	<label class="terrain-field terrain-wide">Jet controls<select data-value="jetControls"><option value="novice" selected>Novice · bank to turn, levels itself</option><option value="expert">Expert · roll, pitch and rudder</option></select></label>
 	<label class="terrain-check"><input data-value="invertPitch" type="checkbox">Push the stick forward to climb</label>
 	<label class="terrain-check"><input data-show-diagnostics type="checkbox">Show diagnostics</label>
 	<label class="terrain-field terrain-wide">Music volume<input type="range" min="0" max="100" step="1" data-music-level></label>
 	<details><summary>Driving and flight controls</summary><p class="terrain-note">Press M or click the left stick to show or hide the car or F5 minimap. Press N or tap D-pad ↓ to change its zoom.</p>
-	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: fast flight · Shift / LB: car nitrous · Space: handbrake · L: headlights · R: reset the race · H: hide controls. Pause freezes waves and physics; editing remains available.</p>
-	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Click the right stick to recover an off-road race car. Start pauses.</p>
+	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: fast flight · Shift / LB: car nitrous · Space: handbrake · L: headlights · R: reset the race · H: hide controls · Esc: pause menu. P freezes waves and physics and leaves editing available.</p>
+	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Click the right stick to recover an off-road race car. Start opens the pause menu.</p>
 	</details><details><summary>Credits</summary><p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p></details>
 	</section>
-	</div></div></details><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
+	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

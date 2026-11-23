@@ -17,6 +17,7 @@ use TerrainPhonics\AtmosphereLayers;
 use TerrainPhonics\Recipe;
 use TerrainSandbox\Car;
 use TerrainSandbox\CarEngineSound;
+use TerrainSandbox\SandboxMenu;
 use TerrainSandbox\DeliveryBeacon;
 use TerrainSandbox\DeliveryRun;
 use TerrainSandbox\NavigationArrow;
@@ -34,9 +35,9 @@ use TerrainSandbox\Session;
 $app = new Context;
 $music = new BackgroundMusic($app);
 $app->browser(__DIR__ . '/browser/game.mjs');
+$app->browser(__DIR__ . '/browser/car-audio.mjs');
 $music->playlist(json_decode(file_get_contents(__DIR__.'/assets/soundtrack.json'), true, flags: JSON_THROW_ON_ERROR),
 	'terrain-sandbox.music.next.v1');
-$app->browser(__DIR__ . '/browser/car-audio.mjs');
 $app->browser(__DIR__ . '/browser/screen-awake.mjs');
 $app->browser(__DIR__ . '/browser/control-hints.mjs');
 $app->browser(__DIR__ . '/browser/road-editor.mjs');
@@ -78,6 +79,7 @@ $frameSeconds = 0.0;
 $lastBudgetPose = null;
 $heldKeys = [];
 $heldPad = [];
+$menuPad = []; // The page's pad as menu buttons: up, down, left, right, confirm, back, pause.
 $statusPending = true;
 $urgentStatus = false;
 $inputMs = 0.0;
@@ -86,6 +88,8 @@ $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainVehicleFrame');
 $carSound = vrzno_env('terrainCarSound');
+// The pause menu reads and sets audio in the page, and asks it to open the Landscape Lab or leave.
+$pauseMenu = new SandboxMenu(vrzno_env('terrainAudioGet'), vrzno_env('terrainAudioSet'), vrzno_env('terrainPage'));
 $lastSound = [0,0,0];
 $roadStatus = vrzno_env('terrainRoadEditor');
 $roadCapture = vrzno_env('terrainRoadCapture');
@@ -136,7 +140,8 @@ $engine->systems->add('terrain-sandbox.delivery-search', static function() use (
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds,
-	&$heldKeys, &$heldPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastCircuitFrame
+	&$heldKeys, &$heldPad, &$menuPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastCircuitFrame,
+	$pauseMenu
 ): bool {
 	$frameSeconds = max(0.0, $elapsed);
 	$started = hrtime(true);
@@ -159,10 +164,15 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	if($keysChanged) $heldKeys = $input['keys'];
 	// The page sends the pad only when it changes; a pad at rest arrives as an empty list.
 	if(isset($input['pad'])) $heldPad = is_array($input['pad']) && array_filter($input['pad']) ? $input['pad'] : [];
+	// The page sends the pause menu's pad buttons only when they change.
+	if(isset($input['menuPad']) && is_array($input['menuPad'])) $menuPad = $input['menuPad'];
+	// The open pause menu takes the keys, pad and pointer itself. Only page values, such as the input device, pass.
+	$menuOpen = $pauseMenu->menu->isOpen;
+	if($menuOpen) $input = isset($input['values']) ? ['values' => $input['values']] : [];
 	if($packet !== '' || $heldKeys || $heldPad || $wasPicking || $wasSearching || $wasFindingCircuit || $session->preparingRoad())
 	{
-		$input['keys'] = $heldKeys;
-		$input['pad'] = $heldPad;
+		$input['keys'] = $menuOpen ? [] : $heldKeys;
+		$input['pad'] = $menuOpen ? [] : $heldPad;
 		$moving = $heldKeys || $heldPad || in_array($session->mode, ['craft','jet'], true) || !empty($input['look'][0]) || !empty($input['look'][1]);
 		$session->input($input, min(.1, $frameSeconds), $width / $height, $moving ? 1.0 : 7.5);
 		if($session->findingCircuit())
@@ -170,6 +180,23 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 			$lastCircuitFrame = hrtime(true);
 			$startSearchTimer();
 		}
+	}
+	if($session->menuRequested)
+	{
+		$session->menuRequested = false;
+		$pauseMenu->open($session);
+		// Escape or Start opened the menu and is still down. It must not also close it.
+		$engine->input->suppressHeldUi();
+		$dirty = $urgentStatus = true;
+	}
+	$menuShown = $pauseMenu->menu->isOpen;
+	if($pauseMenu->update($engine, $session, $frameSeconds, $menuPad)) $dirty = $statusPending = true;
+	if($menuShown && !$pauseMenu->menu->isOpen) $urgentStatus = true;
+	// Choices made in the menu reach the session as the page's would, through its checks.
+	if(($chosen = $pauseMenu->takePending()) !== [])
+	{
+		$session->input($chosen + ['keys' => [], 'pad' => []], 0., $width / $height);
+		$urgentStatus = true;
 	}
 	$urgentStatus = $urgentStatus || $keysChanged || isset($input['clicks'][0]) || $wasPicking !== $session->picking
 		|| $previousRoadPoints !== count($session->road) || $wasSearching !== $session->findingCarSite()
@@ -250,7 +277,8 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
+		$pauseMenu
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -376,6 +404,8 @@ $engine->start(
 					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$instrumentSize,'circular'=>$car,
 						'showRoute'=>$raceGuidance, 'markers'=>$session->delivery?->sites() ?: ($target === null ? [] : [$target])];
 			}
+			// The pause menu draws last, over the frozen frame and its charts.
+			$pauseMenu->render($width, $height, $session->inputTheme);
 			$engine->device->present();
 			if($jet)
 			{
@@ -412,7 +442,7 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow): void {
+	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, $pauseMenu): void {
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
 		foreach($models as $model) $model->close();
@@ -420,11 +450,12 @@ $engine->start(
 		$trailRenderer?->close(); $trailRenderer = null;
 		$shadow?->close();
 		$beacon?->close(); $arrow?->close();
+		$pauseMenu->release();
 		$gates->release();
 		$curveSigns->close();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $session, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty): void {
+	static function() use ($scene, $session, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty, $pauseMenu): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -434,6 +465,7 @@ $engine->start(
 		$shadow = null;
 		$beacon?->close(); $beacon = null;
 		$arrow?->close(); $arrow = null;
+		$pauseMenu->release();
 		$gates->release();
 		$curveSigns->close();
 		$scene->restore();

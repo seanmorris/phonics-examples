@@ -80,6 +80,12 @@ final class Session
 	private ?\Generator $carSearch = null;
 	/** Whether simulation is paused; authoring remains available. */
 	public bool $paused = false;
+	/** Whether the pause menu is open. It pauses the world and takes the input; SandboxMenu opens and closes it. */
+	public bool $menu = false;
+	/** Whether Escape, Start or the menu button asked for the pause menu since the application last looked. */
+	public bool $menuRequested = false;
+	/** The pause menu's page and selected row, which the page announces because the menu is drawn in the canvas. */
+	public ?array $menuRow = null;
 	/** Current interaction mode: fly, craft, car or jet. */
 	public string $mode = 'fly';
 	/** Simulation clock in seconds. */
@@ -199,7 +205,7 @@ final class Session
 		'material' => 'grass', 'roadWidth' => 25 * DisplayUnits::FOOT, 'roadShoulder' => 40 * DisplayUnits::FOOT, 'roadRaise' => 0.0,
 		'circuitRelief'=>400 * DisplayUnits::FOOT, 'circuitStartHeight'=>null, 'circuitCauseways'=>false,
 		'exposure' => 1.0,
-		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 225 * DisplayUnits::MILES_PER_HOUR,
+		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 200 * DisplayUnits::KNOT,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
 		'balloonAltitude' => 325 * DisplayUnits::FOOT, 'balloonTool' => 'place',
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
@@ -1215,6 +1221,11 @@ final class Session
 			case 'pause':
 				$this->launches = 0;
 				$this->paused = !$this->paused;
+				$this->chase->resetInterpolation();
+				break;
+			case 'menu':
+				$this->launches = 0;
+				$this->menuRequested = !$this->menu;
 				$this->chase->resetInterpolation();
 				break;
 			case 'reset-camera': $this->mode = 'fly'; $this->resetCamera(); break;
@@ -2324,7 +2335,7 @@ final class Session
 	 */
 	public function status(): array
 	{
-		return ['mode' => $this->mode,'paused' => $this->paused,'time' => $this->time,'generation' => $this->generation,
+		return ['mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,

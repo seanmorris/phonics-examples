@@ -164,6 +164,27 @@ test('previous wraps, discards the wrong preload and keeps the saved rotation mo
 	music.close();
 });
 
+test('selecting a song by ID preserves the jingle and opens only the selected stream', async() => {
+	const {music, voices, storage} = player();
+	music.hold('gesture', false);
+	await tick();
+	music.push({id: 'finish', src: 'finish.wav'});
+	await tick();
+
+	assert.equal(music.select('c'), tracks[2]);
+	assert.equal(music.select('missing'), null);
+	assert.equal(music.current.id, 'finish');
+	assert.deepEqual(voices.map(v => v.id), ['a', 'finish']);
+	assert.equal(storage.get('rotation'), 'b');
+
+	music.pop();
+	await tick();
+	assert.equal(music.select('c'), tracks[2]);
+	assert.deepEqual(voices.map(v => v.id), ['a', 'finish', 'c']);
+	assert.equal(storage.get('rotation'), 'a');
+	music.close();
+});
+
 test('a previous selection stays parked during a manual pause or jingle, and skips broken tracks backward', async() => {
 	const {music, voices, credits} = player(new Map(), new Map([['c', Error('unavailable')]]));
 	music.hold('gesture', false);

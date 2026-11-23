@@ -463,6 +463,7 @@ test('the heading-up map and altitude radar agree in chase and cockpit views', a
 test('cockpit cues show the nearest balloon and the diamond meets the selected balloon at lock', async({page}) => {
 	const sources = await Promise.all(['game','cockpit'].map(async name => {
 		const path = new URL(`../../games/terrain-sandbox/browser/${name}.mjs`, import.meta.url);
+
 		return 'data:text/javascript;base64,' + (await fs.readFile(path)).toString('base64');
 	}));
 
@@ -473,6 +474,7 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 		const {activate} = await import(cockpit);
 		const module = {
 			terrainUnits
+
 			, drawTerrainMap() {}
 
 			, drawTerrainSpeedometer() {}
@@ -482,10 +484,13 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 		const ctx = document.querySelector('.terrain-instruments').getContext('2d');
 		let rangeText;
 		const fillText = ctx.fillText.bind(ctx);
+
 		ctx.fillText = (text, ...args) => {
 			if(String(text).endsWith(' yd')) rangeText = text;
+
 			fillText(text, ...args);
 		};
+
 		const frame = {
 			width: 800
 			, height: 720
@@ -584,7 +589,7 @@ test('cockpit cues show the nearest balloon and the diamond meets the selected b
 	}, sources
 	);
 
-	expect(states.farRange).toBe(Math.round(Math.hypot(250,125,1000)/.9144) + ' yd');
+	expect(states.farRange).toBe(Math.round(Math.hypot(250, 125, 1000)/.9144) + ' yd');
 	expect(states.nearRange).toBe('100 yd');
 	const origin = [true,false,false,false,false];
 
@@ -1160,47 +1165,64 @@ test('the local racer records checkpoint and finish splits in the packaged sandb
 
 test('the rendered arrow keeps an outside lane straight past an invisible waypoint', async({page}) => {
 	await page.setViewportSize({width: 480, height: 300});
+
 	await page.addInitScript(() => {
 		const gl = WebGL2RenderingContext.prototype, bearings = new WeakSet();
 		const getLocation = gl.getUniformLocation, uniform = gl.uniform2f;
 		window.waypointPass = [];
+
 		gl.getUniformLocation = function(program, name) {
-			const location = getLocation.call(this,program,name);
+			const location = getLocation.call(this, program, name);
+
 			if(location && name === 'bearing') bearings.add(location);
+
 			return location;
 		};
+
 		gl.uniform2f = function(location, sine, cosine) {
-			if(bearings.has(location)) {
+			if(bearings.has(location))
+			{
 				const state = this.canvas.terrainSandboxDebug?.state;
+
 				if(state?.race?.state === 'running' && state.car.z >= 70 && state.car.z <= 145)
-					window.waypointPass.push([state.car.x,state.car.z,Math.atan2(sine,cosine)]);
+					window.waypointPass.push([state.car.x,state.car.z,Math.atan2(sine, cosine)]);
 			}
-			return uniform.call(this,location,sine,cosine);
+
+			return uniform.call(this, location, sine, cosine);
 		};
 	});
+
 	await boot(page);
-	const road = {type:'road',points:[[4,0,-40],[4,0,280]],width:36,shoulder:12};
-	const doc = fixture({history:[[road]],revision:1});
+	const road = {type: 'road',points: [[4,0,-40],[4,0,280]],width: 36,shoulder: 12};
+	const doc = fixture({history: [[road]],revision: 1});
 	doc.landscape.recipe.worldSize = 1024;
 	doc.settings.waterLevel = -5;
-	doc.camera = {position:[18,5,-20],yaw:Math.PI,pitch:0};
-	doc.circuit = {variant:'dry',route:{points:[[0,0],[0,240],[240,240],[240,0]],dryLevel:-5,floodedLevel:null}};
-	const gate = {kind:'road',y:0,width:13.324,height:6.146};
-	doc.course = {gates:[
-		{...gate,role:'start',x:4,z:0,yaw:0,laps:1,width:37.5},
-		{...gate,role:'checkpoint',x:120,z:240,yaw:Math.PI/2,number:1},
-		{...gate,role:'checkpoint',x:240,z:120,yaw:Math.PI,number:2}
-	]};
-	await load(page,doc);
-	await press(page,'car');
+	doc.camera = {position: [18,5,-20],yaw: Math.PI,pitch: 0};
+	doc.circuit = {variant: 'dry',route: {points: [[0,0],[0,240],[240,240],[240,0]],dryLevel: -5,floodedLevel: null}};
+	const gate = {kind: 'road',y: 0,width: 13.324,height: 6.146};
+	doc.course = {
+		gates: [
+			{...gate,role: 'start',x: 4,z: 0,yaw: 0,laps: 1,width: 37.5}
+			, {...gate,role: 'checkpoint',x: 120,z: 240,yaw: Math.PI/2,number: 1}
+			, {...gate,role: 'checkpoint',x: 240,z: 120,yaw: Math.PI,number: 2}
+		]
+	};
+
+	await load(page, doc);
+	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await canvas(page).focus();
 	await page.keyboard.down('w');
-	try {
-		await expect.poll(async() => (await status(page)).car.z,{timeout:90_000}).toBeGreaterThan(145);
-	} finally {
+
+	try
+	{
+		await expect.poll(async() => (await status(page)).car.z, {timeout: 90_000}).toBeGreaterThan(145);
+	}
+	finally
+	{
 		await page.keyboard.up('w');
 	}
+
 	const pass = await page.evaluate(() => window.waypointPass);
 	expect(pass.some(([,z]) => z<108)).toBe(true);
 	expect(pass.some(([,z]) => z>120)).toBe(true);
@@ -1346,42 +1368,52 @@ test('a package run marks its terrain-hidden pickup and reveals smoke above the 
 });
 
 test('the car refines roadside banks through the middle rings and releases the near grid off road', async({page}) => {
-	await page.setViewportSize({width:720,height:460});
+	await page.setViewportSize({width: 720,height: 460});
 	await boot(page);
-	const cut = fixture({history:[[{type:'road',points:[[0,-8,-900],[0,-8,900]],width:18,shoulder:6}]],revision:1});
-	Object.assign(cut.landscape.recipe,{worldSize:2048,spacing:1});
-	Object.assign(cut.settings,{waterLevel:-40,quality:1});
-	cut.camera = {position:[0,8,0],yaw:0,pitch:-.25};
-	await load(page,cut);
+
+	const cut = fixture(
+		{history: [[{type: 'road',points: [[0,-8,-900],[0,-8,900]],width: 18,shoulder: 6}]],revision: 1}
+	);
+
+	Object.assign(cut.landscape.recipe, {worldSize: 2048,spacing: 1});
+	Object.assign(cut.settings, {waterLevel: -40,quality: 1});
+	cut.camera = {position: [0,8,0],yaw: 0,pitch: -.25};
+	await load(page, cut);
 	expect((await settled(page)).renderer.roadsideCoverage).toBeNull();
-	await press(page,'car');
-	await expect.poll(async()=>(await status(page)).renderer.roadsideCoverage).not.toBeNull();
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).renderer.roadsideCoverage).not.toBeNull();
 	const near = (await status(page)).renderer;
 	expect(near.roadsideRings).toHaveLength(4);
-	for(const i of [1,2,3]) {
+
+	for(const i of [1,2,3])
+	{
 		const [baseX,baseZ,width,spacing] = near.visibleCoverage[i];
 		const [left,top,right,bottom] = near.roadsideRings[i];
 		expect(spacing).toBe(2**i);
 		expect(top).toBeLessThan(baseZ);
 		expect(bottom).toBeGreaterThan(baseZ+width);
-		if(i>=2) { // The straight road extends north/south. Its banks fit inside the regular width.
+
+		if(i>=2)
+		{
+			// The straight road extends north/south. Its banks fit inside the regular width.
 			expect(left).toBe(baseX);
 			expect(right).toBe(baseX+width);
 		}
 	}
+
 	const [x,z,span] = near.visibleCoverage[0];
 	const [left,top,right,bottom] = near.roadsideCoverage;
 	expect(left).toBeLessThanOrEqual(x);
 	expect(right).toBeGreaterThanOrEqual(x+span);
-	expect(Math.max(x-left,z-top,right-x-span,bottom-z-span)).toBeGreaterThan(0);
-	await press(page,'fly');
-	await expect.poll(async()=>(await status(page)).renderer.roadsideCoverage).toBeNull();
+	expect(Math.max(x-left, z-top, right-x-span, bottom-z-span)).toBeGreaterThan(0);
+	await press(page, 'fly');
+	await expect.poll(async() => (await status(page)).renderer.roadsideCoverage).toBeNull();
 
 	cut.camera.position = [350,8,0];
-	await load(page,cut);
-	await press(page,'car');
-	await expect.poll(async()=>(await status(page)).mode).toBe('car');
-	await expect.poll(async()=>(await status(page)).renderer.visibleCoverage[0]?.[2]).toBe(span);
+	await load(page, cut);
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await expect.poll(async() => (await status(page)).renderer.visibleCoverage[0]?.[2]).toBe(span);
 	expect((await status(page)).renderer.roadsideCoverage).toBeNull();
 });
 
@@ -1396,7 +1428,9 @@ test('a shoreline wipeout restarts the car on its approach', async({page}) => {
 	await load(page, shore);
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
+
 	if((await status(page)).paused) await press(page, 'pause');
+
 	await canvas(page).focus();
 	await page.keyboard.down('w');
 	await expect.poll(async() => (await status(page)).car.recoveries, {timeout: 60_000}).toBeGreaterThan(0);
@@ -1411,28 +1445,36 @@ test('a shoreline wipeout restarts the car on its approach', async({page}) => {
 test('a racing water wipeout restarts on the course road across the dirt from the shore', async({page}) => {
 	await page.setViewportSize({width: 480,height: 300});
 	await boot(page);
-	const road = {type:'road',points:[[0,0,-60],[0,0,-20]],width:10,shoulder:2};
-	const lake = {type:'lower',x:0,z:20,radius:20,amount:5};
-	const doc = fixture({history:[[road,lake]],revision:1});
-	Object.assign(doc.landscape.recipe,{spacing:1,waterLevel:-1});
-	Object.assign(doc.settings,{waterLevel:-1,waterChoppiness:0});
-	doc.camera = {position:[0,20,-48],yaw:Math.PI,pitch:-.4};
-	doc.course = {gates:[
-		{role:'start',kind:'road',x:0,y:0,z:-35,yaw:0,laps:1},
-		{role:'checkpoint',kind:'road',x:25,y:0,z:42,yaw:0,number:1}
-	]};
-	await load(page,doc);
-	await press(page,'car');
+	const road = {type: 'road',points: [[0,0,-60],[0,0,-20]],width: 10,shoulder: 2};
+	const lake = {type: 'lower',x: 0,z: 20,radius: 20,amount: 5};
+	const doc = fixture({history: [[road,lake]],revision: 1});
+	Object.assign(doc.landscape.recipe, {spacing: 1,waterLevel: -1});
+	Object.assign(doc.settings, {waterLevel: -1,waterChoppiness: 0});
+	doc.camera = {position: [0,20,-48],yaw: Math.PI,pitch: -.4};
+	doc.course = {
+		gates: [
+			{role: 'start',kind: 'road',x: 0,y: 0,z: -35,yaw: 0,laps: 1}
+			, {role: 'checkpoint',kind: 'road',x: 25,y: 0,z: 42,yaw: 0,number: 1}
+		]
+	};
+
+	await load(page, doc);
+	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).mode).toBe('car');
 	await canvas(page).focus();
 	await page.keyboard.down('w');
-	try {
+
+	try
+	{
 		await expect.poll(async() => (await status(page)).race.state).toBe('running');
-		await expect.poll(async() => (await status(page)).car.z,{timeout:60_000}).toBeGreaterThan(0);
-		await expect.poll(async() => (await status(page)).car.floodedHold,{timeout:60_000}).toBe(true);
-	} finally {
+		await expect.poll(async() => (await status(page)).car.z, {timeout: 60_000}).toBeGreaterThan(0);
+		await expect.poll(async() => (await status(page)).car.floodedHold, {timeout: 60_000}).toBe(true);
+	}
+	finally
+	{
 		await page.keyboard.up('w');
 	}
+
 	const {car,race} = await status(page);
 	expect(car.x).toBeCloseTo(0);
 	expect(car.z).toBeGreaterThanOrEqual(-60);
@@ -1532,12 +1574,16 @@ test('drive the Testarossa from a dry clearing and switch vehicles', async({page
 	const viewport = await view.boundingBox(), mapBox = await map.boundingBox(), dialBox = await dial.boundingBox();
 	// The car's nitrous arc adds top/left padding outside the matching instrument faces.
 	expect(dialBox.width).toBe(mapBox.width + Math.ceil(mapBox.width*9/160));
+
 	const diameter = await dial.evaluate((el, size) => {
 		// Across the lower rim, the solid face fills the full diameter, including the lower-right tangent.
 		const pad = el.width-size, y = pad+Math.floor(size/2);
 		const rgba = el.getContext('2d').getImageData(pad, y, size, 1).data;
+
 		return rgba.filter((value, i) => i%4 === 3 && value > 100).length;
-	}, mapBox.width);
+	}, mapBox.width
+	);
+
 	expect(diameter).toBe(mapBox.width);
 	expect(mapBox.width).toBe(mapBox.height);
 	expect(await view.evaluate(el => el.chartSamples)).toEqual([true,true,true,true,true,false,false,false,false]);
@@ -1794,27 +1840,34 @@ test('both taillights brighten visibly in daylight for running lights and brakin
 			el.terrainSandboxDebug.keys({Space: settings.brake});
 			el.terrainSandboxDebug.values({headlights: settings.headlights});
 		}, {headlights, brake});
+
 		await expect.poll(async() => {
 			const {lamps} = await status(page);
+
 			return [lamps.headlamps, lamps.brake];
 		}).toEqual([Number(headlights === 'on'), Number(brake)]);
+
 		return PNG.sync.read(await page.screenshot({scale: 'css'}));
 	}
 
 	const dark = await rearLights('off', false);
 	const running = await rearLights('on', false);
 	const braking = await rearLights('on', true);
+
 	// Compare each rear strip on the stationary car. Isolated bright lens pixels can disappear behind the grille.
 	for(const [before, after] of [[dark, running], [running, braking]])
 	for(const left of [330, 440])
 	{
 		let brighter = 0;
+
 		for(let y = 340; y < 360; ++y)
 		for(let x = left; x < left + 50; ++x)
 		{
 			const i = 4 * (y * after.width + x);
+
 			if(after.data[i] - before.data[i] > 15) ++brighter;
 		}
+
 		expect(brighter).toBeGreaterThan(60);
 	}
 });
@@ -1975,7 +2028,10 @@ test('Arctic Meltwater can place an editable causeway circuit at its original wa
 
 	expect(applied.settings.waterLevel).toBe(water);
 	expect(applied.settings.circuitCauseways).toBe(true);
-	expect(applied.course.gates).toHaveLength(Math.round(Math.min(33,Math.max(8,Math.ceil(applied.circuit.length/240)))/3));
+
+	const waypointCount = Math.min(33, Math.max(8, Math.ceil(applied.circuit.length/240)));
+	expect(applied.course.gates).toHaveLength(Math.round(waypointCount/3));
+
 	await expect(page.locator('[data-road-picker] option').nth(1)).toContainText(/Road/i);
 });
 
@@ -2012,7 +2068,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	await expect(sections).toHaveValue('-1');
 	const options = await sections.locator('option').allTextContents();
 	const counts = options.filter(s => s.startsWith('Circuit section')).map(s => Number(/(\d+) points/.exec(s)[1]));
-	expect(counts.reduce((a,b) => a+b,0)).toBeLessThan(253); // This lap previously displayed 506 points.
+	expect(counts.reduce((a, b) => a+b, 0)).toBeLessThan(253); // This lap previously displayed 506 points.
 	const controls = page.locator('[data-road-point] option');
 	await expect(controls).toHaveCount(counts[0]);
 	await sections.selectOption('-2');
@@ -2034,7 +2090,8 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 
 	expect(
 		dry.course.gates.every(
-			gate => gate.kind === 'road' && gate.width >= 37 && gate.width < 40 && gate.height === 2 * dry.gateSizes.road.height
+			gate => gate.kind === 'road' && gate.width >= 37 && gate.width < 40
+				&& gate.height === 2 * dry.gateSizes.road.height
 		)
 	).toBe(true);
 
@@ -2068,11 +2125,13 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	expect(flooded.settings.waterLevel).toBe(preview.circuit.floodedLevel);
 
 	expect(flooded.course.gates).toHaveLength(dry.course.gates.length);
+
 	flooded.course.gates.forEach(({x,z,yaw}, i) => {
 		const road = dry.course.gates[i];
 		expect(yaw).toBe(road.yaw);
-		expect((x-road.x)*Math.sin(yaw)+(z-road.z)*Math.cos(yaw)).toBeCloseTo(0,8);
+		expect((x-road.x)*Math.sin(yaw)+(z-road.z)*Math.cos(yaw)).toBeCloseTo(0, 8);
 	});
+
 	await page.getByLabel('Start elevation').fill('');
 	await expect.poll(async() => (await status(page)).settings.circuitStartHeight).toBeNull();
 
@@ -3518,4 +3577,189 @@ test('rendered exhaust holds a steady note and follows an upshift through the th
 	expect(measured.pull).toBeGreaterThan(1.3*measured.coast);
 	expect(measured.coast).toBeGreaterThan(.005);
 	expect(measured.stopped).toBeLessThan(.00001);
+});
+
+test('the pause menu opens from Escape, Start and its button and acts through the session', async({page}) => {
+	test.setTimeout(360_000);
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
+	page.on('console', message => { if(message.type() === 'error') errors.push(message.text()); });
+
+	await page.addInitScript(() => {
+		localStorage.setItem('terrain-sandbox.music.off', '1');
+		const buttons = Array.from({length: 17}, () => ({pressed: false, touched: false, value: 0}));
+		const pad = {
+			id: 'Menu test controller'
+			, index: 0
+			, timestamp: 1
+			, mapping: 'standard'
+			, connected: true
+			, axes: [0,0,0,0]
+			, buttons
+		};
+
+		Object.defineProperty(navigator, 'getGamepads', {value: () => [pad]});
+
+		window.testMenuButton = (n, on) => {
+			pad.timestamp++;
+			buttons[n] = {pressed: on, touched: on, value: on ? 1 : 0};
+		};
+	});
+
+	await boot(page);
+	await settled(page);
+	const view = canvas(page);
+	const KNOT = 1852 / 3600;
+
+	/** Resolve once the canvas status shows a menu state, checked every frame so a held key cannot repeat past it. */
+	const until = (check, arg) => page.waitForFunction(({check, arg}) => {
+		const state = JSON.parse(document.querySelector('canvas[data-terrain-sandbox]').dataset.terrainSandbox);
+
+		return new Function('state', 'arg', 'return ' + check)(state, arg);
+	}, {check, arg}, {polling: 'raf', timeout: 60_000});
+
+	/** Wait until the menu stops redrawing, so the frames have seen the last release before the next press. */
+	const idle = async() => {
+		let frames = -1;
+
+		while(frames !== (frames = (await status(page)).renderer.frames)) await page.waitForTimeout(600);
+	};
+
+	/** Hold a key until the menu selects a row, then let go. */
+	const key = async(name, row) => {
+		await page.keyboard.down(name);
+		await until('state.menuRow?.id === arg', row);
+		await page.keyboard.up(name);
+		await idle();
+	};
+
+	/** Hold a key until the menu opens or closes, then let go. */
+	const toggle = async(name, open) => {
+		await page.keyboard.down(name);
+		await until('state.menu === arg', open);
+		await page.keyboard.up(name);
+		await idle();
+	};
+
+	await view.focus();
+	await toggle('Escape', true);
+	let state = await status(page);
+	expect(state.paused).toBe(true);
+	expect(state.menuRow).toEqual({page: 'PAUSED', id: 'resume', label: 'Resume'});
+	await expect(page.locator('.terrain-sandbox')).toHaveClass(/terrain-menu-open/);
+	await expect(page.locator('.terrain-hud')).toBeHidden();
+	await expect(page.locator('.terrain-panel')).not.toHaveAttribute('open', '');
+	await expect(page.locator('[data-menu-live]')).toHaveText('PAUSED: Resume');
+
+	// Escape on the top page resumes and gives the Landscape Lab back.
+	await toggle('Escape', false);
+	expect((await status(page)).paused).toBe(false);
+	await expect(page.locator('.terrain-panel')).toHaveAttribute('open', '');
+
+	/** Hold a pad button until the menu reaches a state, then let go. */
+	const pad = async(button, check, arg) => {
+		await page.evaluate(n => window.testMenuButton(n, true), button);
+		await until(check, arg);
+		await page.evaluate(n => window.testMenuButton(n, false), button);
+	};
+
+	// Start opens the menu, and the press that opened it does not close it again. B closes it from the top page.
+	await pad(9, 'state.menu === arg', true);
+	await idle();
+	expect((await status(page)).menu).toBe(true);
+	await pad(1, 'state.menu === arg', false);
+
+	// The D-pad moves the selection, and Start closes the menu.
+	await pad(9, 'state.menu === arg', true);
+	await idle();
+	await pad(13, 'state.menuRow?.id === arg', 'car');
+	await pad(9, 'state.menu === arg', false);
+
+	// The pause button opens it too. Settings sets the flight speed in knots, and the Explore slider follows.
+	await control(page, 'menu').click();
+	await until('state.menu === arg', true);
+	await view.focus();
+
+	// End jumps to Quit at the foot of the page, and Up walks back to Settings.
+	await key('End', 'quit');
+	await key('ArrowUp', 'lab');
+	await key('ArrowUp', 'settings');
+	await key('Enter', 'headlights');
+	await key('End', '@back');
+	await key('ArrowUp', 'speed');
+
+	await page.keyboard.down('ArrowRight');
+	await until('state.settings.speed > arg', 202 * KNOT);
+	await page.keyboard.up('ArrowRight');
+	state = await status(page);
+	const knots = state.settings.speed / KNOT;
+	expect(Math.abs(knots - Math.round(knots / 5) * 5)).toBeLessThan(1e-6);
+	await expect(page.locator('[data-value="speed"]')).toHaveValue(String(Math.round(knots)));
+
+	// The menu can audition a song while the simulation is paused. Both surfaces share transport and volume.
+	await key('Escape', 'settings');
+	await key('ArrowUp', 'audio');
+	await key('Enter', 'track');
+	const pauseMusic = page.locator('[data-music-pause]');
+	await expect(pauseMusic).toHaveAttribute('aria-pressed', 'true');
+
+	await page.keyboard.down('ArrowRight');
+	await expect(pauseMusic).toHaveAttribute('aria-pressed', 'false');
+	await page.keyboard.up('ArrowRight');
+	await expect(page.locator('[data-music-credit] strong')).toHaveText('Peak Shiawase Remix');
+	expect((await status(page)).paused).toBe(true);
+	await idle();
+
+	await page.keyboard.down('ArrowLeft');
+	await expect(pauseMusic).toHaveAttribute('aria-pressed', 'true');
+	await page.keyboard.up('ArrowLeft');
+	expect(await page.evaluate(() => localStorage.getItem('terrain-sandbox.music.off'))).toBe('1');
+	await idle();
+
+	await key('ArrowDown', 'music');
+	const volume = page.locator('[data-music-level]');
+	const initialVolume = Number(await volume.inputValue());
+	await page.keyboard.down('ArrowRight');
+
+	await page.waitForFunction(
+		initial => document.querySelector('[data-music-level]').valueAsNumber > initial
+		, initialVolume
+	);
+
+	await page.keyboard.up('ArrowRight');
+	expect(Number(await volume.inputValue())).toBe(Math.round((initialVolume+5)/5)*5);
+	await idle();
+
+	await key('ArrowDown', 'engine');
+	await page.keyboard.down('ArrowLeft');
+
+	/** The engine level this browser remembers. */
+	const engineLevel = async() => {
+		const saved = await page.evaluate(() => localStorage.getItem('terrain-sandbox.audio'));
+
+		return JSON.parse(saved ?? '{}').engine;
+	};
+
+	await expect.poll(engineLevel).toBeLessThan(100);
+	await page.keyboard.up('ArrowLeft');
+	expect((await engineLevel()) % 5).toBe(0);
+	await idle();
+
+	// The Landscape Lab row closes the menu, keeps the world frozen and opens the editor.
+	await key('Escape', 'audio');
+	await key('End', 'quit');
+	await key('ArrowUp', 'lab');
+	await toggle('Enter', false);
+	expect((await status(page)).paused).toBe(true);
+	await expect(page.locator('.terrain-panel')).toHaveAttribute('open', '');
+	expect(errors).toEqual([]);
+
+	// Quit asks first, then leaves for the examples index.
+	await view.focus();
+	await toggle('Escape', true);
+	await key('ArrowUp', 'quit');
+	await key('Enter', 'leave');
+	await page.keyboard.down('Enter');
+	await page.waitForURL(url => !url.pathname.includes('terrain-sandbox'), {timeout: 30_000});
+	expect(new URL(page.url()).pathname).toBe('/');
 });

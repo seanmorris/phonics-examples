@@ -63,23 +63,48 @@ export class BackgroundMusic
 
 	previous() { return this.advance(-1, true); }
 
+	select(id)
+	{
+		const index = this.tracks.findIndex(track => track.id === id);
+
+		if(index < 0) return null;
+
+		if(this.base?.track === this.tracks[index]) return this.base.track;
+
+		this.failed.clear();
+
+		return this.setBase(index);
+	}
+
 	advance(step = 1, retry = false)
 	{
 		if(!this.tracks.length) return null;
+
 		if(retry) this.failed.clear();
+
+		if(this.failed.size === this.tracks.length) return this.setBase(-1);
+
+		let index = this.index;
+
+		do
+		{
+			index = (index+step+this.tracks.length)%this.tracks.length;
+		}
+		while(this.failed.has(this.tracks[index].id));
+
+		return this.setBase(index, step);
+	}
+
+	setBase(index, step = 1)
+	{
 		if(this.base) this.stack.shift();
 
 		this.base = null;
 
-		if(this.failed.size < this.tracks.length)
+		if(index >= 0)
 		{
-			do
-			{
-				this.index = (this.index+step+this.tracks.length)%this.tracks.length;
-			}
-			while(this.failed.has(this.tracks[this.index].id));
-
-			this.base = this.entry(this.tracks[this.index]);
+			this.index = index;
+			this.base = this.entry(this.tracks[index]);
 			this.base.step = step;
 			this.stack.unshift(this.base);
 		}
@@ -390,6 +415,7 @@ export function activate({module,session,canvas,archive,services,signal,options}
 	const volumeKey = archive.id + '.bgm.volume';
 	const stored = storage.get(volumeKey);
 	let volume = stored !== null && Number.isFinite(Number(stored)) ? Math.max(0, Math.min(1, Number(stored))) : .38;
+	let masterVolume = 1;
 	let context, master, closed = false;
 
 	const resolve = url => new URL(url, archive.url).href;
@@ -413,7 +439,7 @@ export function activate({module,session,canvas,archive,services,signal,options}
 		{
 			context = new Context();
 			master = context.createGain();
-			master.gain.value = volume;
+			master.gain.value = volume*masterVolume;
 			master.connect(context.destination);
 		}
 
@@ -430,8 +456,17 @@ export function activate({module,session,canvas,archive,services,signal,options}
 		else if(!hidden && context) unlock();
 	}
 
+	function applyVolume()
+	{
+		const gain = volume*masterVolume;
+
+		if(master) master.gain.setTargetAtTime(gain, context.currentTime, .025);
+
+		music.hold('muted', Boolean(options?.muted) || !gain);
+	}
+
 	music.hold('hidden', doc.hidden);
-	music.hold('muted', Boolean(options?.muted) || volume === 0);
+	applyVolume();
 
 	for(const type of ['pointerdown','keydown','touchend'])
 		doc.addEventListener(type, unlock, {capture: true,signal});
@@ -442,6 +477,8 @@ export function activate({module,session,canvas,archive,services,signal,options}
 	canvas.addEventListener('webglcontextrestored', () => music.hold('context', false), {signal});
 	session.backgroundMusic = {
 		get track() { return music.current; }
+		, get tracks() { return music.tracks.map(credits); }
+		, get playlistTrack() { return music.base?.track ?? null; }
 		, get depth() { return music.depth; }
 		, get volume() { return volume; }
 		, get playbackPaused() { return music.holds.has('listener'); }
@@ -451,16 +488,27 @@ export function activate({module,session,canvas,archive,services,signal,options}
 
 			volume = Math.max(0, Math.min(1, value));
 			storage.set(volumeKey, String(volume));
-
-			if(master) master.gain.setTargetAtTime(volume, context.currentTime, .025);
-
-			music.hold('muted', Boolean(options?.muted) || !volume);
+			applyVolume();
+			canvas.dispatchEvent(new page.Event('phonics-music-controls'));
 		}
+
+		, setMasterVolume(value) {
+			if(!Number.isFinite(value)) return;
+
+			masterVolume = Math.max(0, Math.min(1, value));
+			applyVolume();
+		}
+		, select: id => credits(music.select(id))
 		, next: () => credits(music.next())
 		, previous: () => credits(music.previous())
+
 		, setPlaybackPaused(paused) {
+			const changed = music.holds.has('listener') !== paused;
 			music.hold('listener', paused);
+
 			if(!paused) unlock();
+
+			if(changed) canvas.dispatchEvent(new page.Event('phonics-music-controls'));
 		}
 		, push: (track, loop) => music.push(track, loop)
 		, pop: () => music.pop()

@@ -24,6 +24,8 @@ const ignores = [
 	, 'games/*/browser/mental-poker.mjs'
 	, 'games/*/dist/**'
 	, 'site/dist/**'
+	// The site build unpacks the external PHP runtime and its type declarations here.
+	, '.cache/**'
 	, '.worktrees/**'
 ];
 

@@ -459,7 +459,9 @@ header.writeUInt32LE(face.height, 4);
 const texture = Buffer.concat([header, face.pixels]);
 const output = new URL('curve-hazard-sign.rgba.gz', sign);
 const previous = await fs.readFile(output).catch(error => { if(error.code !== 'ENOENT') throw error; });
-if(!previous || !texture.equals(zlib.gunzipSync(previous))) {
+
+if(!previous || !texture.equals(zlib.gunzipSync(previous)))
+{
 	if(check) stale.push('curve-hazard-sign.rgba.gz');
 	else await fs.writeFile(output, zlib.gzipSync(texture, {level: 9}));
 }

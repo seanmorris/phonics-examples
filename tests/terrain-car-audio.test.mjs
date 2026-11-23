@@ -87,9 +87,16 @@ test('the real skid recording wraps across adjacent samples and retains its leve
 test('a browser awaiting an audio gesture receives one resume request across driving frames', () => {
 	let attempts = 0;
 
+	/** A gain node that accepts levels and connections without producing sound. */
+	const silentGain = () => ({gain: {value: 1, setTargetAtTime: () => {}}, connect: () => {}});
+
 	class LockedContext extends EventTarget
 	{
 		state = 'suspended';
+
+		destination = {};
+
+		createGain() { return silentGain(); }
 
 		async resume() { attempts++; }
 
@@ -115,6 +122,48 @@ test('a browser awaiting an audio gesture receives one resume request across dri
 	assert.equal(attempts, 1);
 	doc.dispatchEvent(new Event('keydown'));
 	assert.equal(attempts, 2);
+	stop();
+	controller.abort();
+});
+
+test('the saved master reaches the soundtrack at startup and when the listener adjusts it', () => {
+	const saved = new Map([['terrain-sandbox.audio', '{"master":65,"engine":75}']]);
+
+	const page = Object.assign(new EventTarget(), {
+		clearTimeout
+		, localStorage: {
+			getItem: key => saved.get(key)
+			, setItem: (key, value) => saved.set(key, value)
+		}
+	});
+
+	const canvas = Object.assign(
+		new EventTarget()
+		, {ownerDocument: Object.assign(new EventTarget(), {defaultView: page})}
+	);
+
+	const writes = [];
+	const module = {terrainMusic: {set: (name, value) => { writes.push([name, value]); return true; }}};
+	const controller = new AbortController();
+	const archive = {
+		store: {
+			scope: () => ({
+
+				close() {}
+			})
+		}
+	};
+
+	const stop = activate({module, canvas, archive, signal: controller.signal});
+	assert.deepEqual(writes, [['master', 65]]);
+	assert.equal(module.terrainAudioGet('engine'), 75);
+
+	assert.equal(module.terrainAudioSet('master', 40), true);
+	assert.equal(module.terrainAudioSet('master', -1), false);
+	assert.equal(module.terrainAudioSet('engine', 55), true);
+	assert.deepEqual(writes, [['master', 65], ['master', 40]]);
+	assert.deepEqual(JSON.parse(saved.get('terrain-sandbox.audio')), {master: 40, engine: 55, tires: 100});
+
 	stop();
 	controller.abort();
 });
