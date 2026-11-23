@@ -1,6 +1,8 @@
 import {test, expect} from '@playwright/test';
 import {PNG} from 'pngjs';
 import fs from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {gunzipSync} from 'node:zlib';
 
 const canvas = page => page.locator('canvas[data-terrain-sandbox]');
@@ -2940,7 +2942,7 @@ test('a relief-only layer changes sun shading while a painted road keeps its ink
 	expect(rotated.data.equals(after.data)).toBe(false);
 });
 
-test('car plays the recorded engine and skid, and draws dust from loose ground', async({page}, testInfo) => {
+test('car sounds both exhaust banks, skids on pavement and raises dust', async({page}, testInfo) => {
 	const errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	page.on('console', message => { if(message.type() === 'error') errors.push(message.text()); });
@@ -2948,8 +2950,8 @@ test('car plays the recorded engine and skid, and draws dust from loose ground',
 	await page.setViewportSize({width: 760, height: 480});
 
 	await page.addInitScript(() => {
-		// Observe the real Web Audio graph, including samples actually reaching a running mixer.
-		const probe = window.driveAudio = {buffers: 0, live: new Set(), skid: false, pitched: false, analyser: null};
+		// Observe the PHAR's running audio graph, including PCM at the output.
+		const probe = window.driveAudio = {buffers: 0, live: new Set(), starts: 0, skids: 0, analyser: null};
 		const decode = BaseAudioContext.prototype.decodeAudioData;
 
 		BaseAudioContext.prototype.decodeAudioData = async function(...args) {
@@ -2965,10 +2967,22 @@ test('car plays the recorded engine and skid, and draws dust from loose ground',
 			if(destination instanceof AudioDestinationNode && this instanceof GainNode)
 			{
 				probe.analyser ??= this.context.createAnalyser();
+				probe.analyser.fftSize = 8192;
+				probe.analyser.smoothingTimeConstant = 0;
 				connect.call(this, probe.analyser);
 			}
 
 			return connect.call(this, destination, ...args);
+		};
+
+		const fire = OscillatorNode.prototype.start;
+
+		OscillatorNode.prototype.start = function(...args) {
+			probe.starts++;
+			probe.live.add(this);
+			this.addEventListener('ended', () => probe.live.delete(this), {once: true});
+
+			return fire.apply(this, args);
 		};
 
 		const start = AudioBufferSourceNode.prototype.start;
@@ -2978,9 +2992,7 @@ test('car plays the recorded engine and skid, and draws dust from loose ground',
 			{
 				probe.live.add(this);
 
-				if(Math.abs(this.buffer.duration - 3) < .01) probe.skid = true;
-
-				if(Math.abs(this.playbackRate.value - 1) > .01) probe.pitched = true;
+				if(Math.abs(this.buffer.duration - 2.92) < .001) probe.skids++;
 
 				this.addEventListener('ended', () => probe.live.delete(this), {once: true});
 			}
@@ -3024,25 +3036,31 @@ test('car plays the recorded engine and skid, and draws dust from loose ground',
 
 	await press(page, 'car');
 	await expect.poll(async() => (await status(page)).car?.rpm).toBe(950);
-	await expect.poll(() => page.evaluate(() => window.driveAudio.buffers)).toBe(15);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.buffers)).toBe(1);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.starts)).toBe(2);
 
-	await expect.poll(() => page.evaluate(() => {
+	const firingHz = () => page.evaluate(() => {
 		const analyser = window.driveAudio.analyser;
 
 		if(!analyser) return 0;
 
-		const samples = new Float32Array(analyser.fftSize);
-		analyser.getFloatTimeDomainData(samples);
+		const bins = new Float32Array(analyser.frequencyBinCount);
+		analyser.getFloatFrequencyData(bins);
+		const peak = bins.indexOf(Math.max(...bins));
 
-		return Math.max(...samples);
-	})).toBeGreaterThan(.001);
+		return peak*analyser.context.sampleRate/analyser.fftSize;
+	});
+
+	await expect.poll(firingHz).toBeGreaterThan(89);
+	expect(await firingHz()).toBeLessThan(102);
 
 	await page.locator('.terrain-panel[open] > summary').click();
 	await view.focus();
 	await page.keyboard.down('w');
 	await page.keyboard.down('Shift');
 	await expect.poll(() => view.evaluate(element => element.dustPixels)).toBeGreaterThan(30);
-	await expect.poll(() => page.evaluate(() => window.driveAudio.pitched)).toBe(true);
+	await expect.poll(firingHz).toBeGreaterThan(215);
+	expect(await page.evaluate(() => window.driveAudio.starts)).toBe(2);
 	await page.keyboard.down('d');
 	await expect.poll(async() => (await status(page)).car.roll).toBeGreaterThan(.025);
 	await page.screenshot({path: testInfo.outputPath('tire-dust.png')});
@@ -3071,13 +3089,117 @@ test('car plays the recorded engine and skid, and draws dust from loose ground',
 	await page.keyboard.down('w');
 	await expect.poll(async() => (await status(page)).car?.speed ?? 0).toBeGreaterThan(6);
 	await page.keyboard.up('w');
+
+	// Launch can scrub the rear tires. Wait for it to finish so the lock must start its own voice.
+	await expect.poll(
+		() => page.evaluate(
+			() => [...window.driveAudio.live].some(node => node.buffer && Math.abs(node.buffer.duration - 2.92) < .001)
+		)
+	).toBe(false);
+
+	const previousSkids = await page.evaluate(() => window.driveAudio.skids);
 	await page.keyboard.down('Space');
-	await expect.poll(() => page.evaluate(() => window.driveAudio.skid)).toBe(true);
+	await expect.poll(() => page.evaluate(() => window.driveAudio.skids)).toBeGreaterThan(previousSkids);
 	await page.keyboard.up('Space');
 
 	await page.keyboard.press('f');
 	await expect.poll(async() => (await status(page)).mode).toBe('fly');
 	await expect.poll(() => page.evaluate(() => window.driveAudio.live.size)).toBe(0);
-	expect(await page.evaluate(() => window.driveAudio.buffers)).toBe(15);
+	expect(await page.evaluate(() => window.driveAudio.buffers)).toBe(1);
 	expect(errors).toEqual([]);
+});
+
+test('rendered exhaust holds a steady note and follows an upshift through the throttle cut', async({page}) => {
+	const synth = new URL('../../games/terrain-sandbox/browser/car-audio.mjs', import.meta.url);
+	const module = 'data:text/javascript;base64,' + (await fs.readFile(synth)).toString('base64');
+	const autoload = fileURLToPath(new URL('../../games/terrain-sandbox/autoload.php', import.meta.url));
+
+	const definition = JSON.parse(execFileSync('php', ['-r'
+		, `
+		require $argv[1];
+		use TerrainSandbox\\CarEngineSound;
+		$states = [[2500,1],[2500,0],[7400,1],[5650,0],[5650,1]];
+		echo json_encode([CarEngineSound::voice(), array_map(fn($s) => CarEngineSound::controls($s[0],$s[1],0), $states)]);
+	`
+		, autoload
+	], {encoding: 'utf8'}));
+
+	const measured = await page.evaluate(async({module, definition: [voice, targets]}) => {
+		const {prepareEngine, startEngine} = await import(module);
+		const sampleRate = 44100, context = new OfflineAudioContext(1, 4*sampleRate, sampleRate);
+		const instrument = prepareEngine(context, voice);
+		const tones = targets.map(([cycle,level,cutoff,flow,jitter]) => ({cycle,level,cutoff,flow,jitter}));
+		const engine = startEngine(context, instrument, tones[0]);
+		const stops = [.9,1.6,2.45,3.05,3.65].map(t => context.suspend(t));
+		const rendered = context.startRendering();
+
+		for(const [i, stop] of stops.entries())
+		{
+			await stop;
+
+			if(i+1 < tones.length) engine.update(tones[i+1]);
+			else engine.stop();
+
+			await context.resume();
+		}
+
+		const pcm = (await rendered).getChannelData(0);
+
+		const section = (time, duration) => pcm.subarray(
+			Math.round(time*sampleRate)
+			, Math.round((time+duration)*sampleRate)
+		);
+
+		const rms = wave => Math.sqrt(wave.reduce((sum, x) => sum+x*x, 0)/wave.length);
+
+		function firingPeak(time, expected)
+		{
+			const wave = section(time, .36);
+			let loudest = 0, peak = 0;
+
+			for(let hz = expected-14; hz <= expected+14; hz++)
+			{
+				let real = 0, imag = 0;
+
+				for(let i = 0; i<wave.length; i += 2)
+				{
+					const phase = 2*Math.PI*i*hz/sampleRate;
+					real += wave[i]*Math.cos(phase);
+					imag += wave[i]*Math.sin(phase);
+				}
+
+				const energy = real*real+imag*imag;
+
+				if(energy > loudest)
+				{
+					loudest = energy;
+					peak = hz;
+				}
+			}
+
+			return 4*Math.sqrt(loudest)/wave.length > .25*rms(wave) ? peak : 0;
+		}
+
+		const levels = Array.from({length: 13}, (_, i) => rms(section(.2+i*.05, .05))).sort((a, b) => a-b);
+
+		return {
+			notes: [firingPeak(.3, 250)
+				, firingPeak(1.1, 250)
+				, firingPeak(1.9, 740)
+				, firingPeak(2.66, 565)
+				, firingPeak(3.22, 565)
+			]
+			, variation: 20*Math.log10(levels.at(-2)/levels[1])
+			, pull: rms(section(.3, .5))
+			, coast: rms(section(1.1, .4))
+			, stopped: rms(section(3.8, .15))
+		};
+	}, {module, definition});
+
+	for(const [i, expected] of [250,250,740,565,565].entries())
+	expect(Math.abs(measured.notes[i]-expected)).toBeLessThan(5);
+	expect(measured.variation).toBeLessThan(1.5);
+	expect(measured.pull).toBeGreaterThan(1.3*measured.coast);
+	expect(measured.coast).toBeGreaterThan(.005);
+	expect(measured.stopped).toBeLessThan(.00001);
 });

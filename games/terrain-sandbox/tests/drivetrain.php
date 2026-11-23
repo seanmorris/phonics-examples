@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/autoload.php';
 
 use TerrainPhonics\Landscape;
 use TerrainSandbox\Car;
+use TerrainSandbox\CarEngineSound;
 use TerrainSandbox\CarGearbox;
 use TerrainSandbox\FlightTrails;
 use TerrainSandbox\TireDust;
@@ -63,6 +64,7 @@ check($full->wheelSlip === 0.,'Steady reversing at the governor does not keep sp
 $land->queue(['type'=>'road','points'=>[[0,0,-100],[0,0,100]],'width'=>8,'shoulder'=>8,'crown'=>0]);
 $land->commit();
 $edge = 4.; // Half the width of the paved strip. Its graded shoulder is unpaved.
+$patchLevels = [];
 check($land->material($edge+1.,0.) === 'road' && !Car::onPavement($land,$edge+1.,0.),'Grading outside the pavement stays dusty.');
 foreach([0.,$edge,16.] as $x)
 {
@@ -71,7 +73,8 @@ foreach([0.,$edge,16.] as $x)
 	$car->step($dt,0.,0.,$land,-5.,true);
 	$pose = $car->state();
 	$expected = $x === 0. ? 0 : ($x === $edge ? 1 : 2);
-	check(count($car->dustContacts) === $expected && ($pose['tireSqueal'] > .5) === ($expected < 2),
+	$patchLevels[] = $pose['tireSqueal'];
+	check(count($car->dustContacts) === $expected && ($pose['tireSqueal'] > 0.) === ($expected < 2),
 		'Each locked rear tire contributes the effect for its own surface.');
 	foreach($car->dustContacts as [$px,$py,$pz,$side,$strength])
 		check($py === 0. && abs($pz-($pose['z']-.5*Car::WHEELBASE)) < 1.e-6
@@ -79,6 +82,38 @@ foreach([0.,$edge,16.] as $x)
 	$car->step($dt,0.,0.,$land,.1,true);
 	check(!$car->dustContacts && $car->state()['tireSqueal'] === 0.,'Submerged contacts suppress dust and asphalt squeal.');
 }
+check(abs($patchLevels[1]*sqrt(2.) - $patchLevels[0]) < .00001,'A single paved tire contributes half as much acoustic power as two.');
+function slideLevel(Landscape $land, int $run, float $pedal, float $steering, bool $lock = false): float
+{
+	$car = board($land);
+	for($i=0;$i<$run;$i++) $car->step(1/60,1.,0.,$land,-5.);
+	for($i=0;$i<7;$i++) $car->step(1/60,$pedal,$steering,$land,-5.,$lock);
+	return $car->state()['tireSqueal'];
+}
+$creep = slideLevel($land,20,0.,0.,true);
+$lock = slideLevel($land,160,0.,0.,true);
+$hardBrake = slideLevel($land,160,-1.,0.);
+$hardTurn = slideLevel($land,160,.2,1.);
+check($creep < .02 && $creep < slideLevel($land,50,0.,0.,true) && $patchLevels[0] < $lock,
+	'Locked tires get louder with actual sliding speed, from parking speed through highway speed.');
+check(slideLevel($land,160,.2,.12) === 0. && slideLevel($land,160,-.4,0.) === 0.,
+	'Rolling through a gentle turn or braking within available grip produces no squeal.');
+check($hardBrake > 0 && $hardBrake < .1*$lock && $hardTurn > 0 && $hardTurn < .3*$lock,
+	'Heavy brake scrub and understeer stay quieter than a sideways or locked-wheel slide.');
+
+$voice = CarEngineSound::voice();
+check(count($voice['banks']) === 2 && strlen(base64_decode($voice['flowNoise'],true)) === 32768,'Both exhaust collectors and their turbulence are available.');
+[$left,$right] = $voice['banks'];
+foreach([6,12] as $order)
+{
+	$energy = hypot($left['real'][$order],$left['imag'][$order]) * hypot($right['real'][$order],$right['imag'][$order]);
+	$alignment = ($left['real'][$order]*$right['real'][$order] + $left['imag'][$order]*$right['imag'][$order])/$energy;
+	check($order === 6 ? $alignment < -.99 : $alignment > .99,'The banks alternate at half firing order and reinforce the full firing order.');
+}
+$coast = CarEngineSound::controls(3600.,0.,0.); $pull = CarEngineSound::controls(3600.,1.,1.);
+check($pull[0] === 30. && $coast[0] === $pull[0] && $pull[1] > $coast[1] && $pull[2] > 3*$coast[2],
+	'At 3600 RPM the twelve-cylinder firing note is 360 Hz at every load; open throttle brightens the exhaust.');
+check($coast[5] === 0. && $pull[5] === .08,'Full tire gain is capped and rolling contact is silent.');
 
 $car = board($land,16.);
 $car->step($dt,0.,0.,$land,-5.,nitrousHeld:true);

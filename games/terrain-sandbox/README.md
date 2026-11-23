@@ -44,7 +44,7 @@ The watercraft uses “Jetski” by Futurealiti. The sandbox uses a simplified m
 
 ## Car model
 
-The car uses recorded Aventador V12 throttle and overrun loops and Tom Haigh's tire recording, looped by qubodup. Engine RPM and load come from the fixed-step gearbox. [Audio sources and CC BY 3.0 credits](assets/car-audio/license.txt)
+PHP generates twelve cylinder firings over two crank revolutions. The gearbox sets their pitch, and engine load opens the exhaust tone as you accelerate. Dry pavement adds tire squeal in proportion to how fast the tread slips across it. [Tire recording and credits](assets/car-audio/license.txt)
 
 The car uses “Ferrari-Testarossa-84-low-poly” by XGLOL235. The sandbox scales the model to 4.48 meters, bakes its materials, and animates the wheels while driving. The importer also tags the tail, brake, reversing, bumper and head lamps and the covers of the pop-up headlights, so the shaders can light the lamps and open the pods, and writes the pods' hinge, the 55-degree opening that the model's own animation gives them and the headlamp beams to `assets/testarossa/lamps.json`. Rebuild it with `python3 scripts/import_terrain_vehicle.py --vehicle testarossa /path/to/ferrari-testarossa-84-low-poly.zip` and gltfpack 0.18. [Original model](https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a) · [Author](https://sketchfab.com/XGLOL235) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 

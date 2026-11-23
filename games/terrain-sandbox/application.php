@@ -14,6 +14,7 @@ use TerrainPhonics\Scene;
 use TerrainPhonics\AtmosphereLayers;
 use TerrainPhonics\Recipe;
 use TerrainSandbox\Car;
+use TerrainSandbox\CarEngineSound;
 use TerrainSandbox\DeliveryBeacon;
 use TerrainSandbox\DeliveryRun;
 use TerrainSandbox\NavigationArrow;
@@ -78,6 +79,7 @@ $readInput = vrzno_env('terrainInput');
 $publish = vrzno_env('terrainStatus');
 $hud = vrzno_env('terrainVehicleFrame');
 $carSound = vrzno_env('terrainCarSound');
+$carVoiceReady = false;
 $lastSound = [0,0,0];
 $roadStatus = vrzno_env('terrainRoadEditor');
 $roadCapture = vrzno_env('terrainRoadCapture');
@@ -241,14 +243,23 @@ $engine->start(
 	static function(Engine $engine, float $alpha) use (
 		$session, $scene, $drawOpaque, $gates, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
-		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound
+		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound, &$carVoiceReady
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
 		[$viewCamera,$vehiclePose] = $session->view($alpha);
 		$sound = $session->mode === 'car' && !$session->paused && !$vehiclePose['floodedHold']
 			? [(int)round($vehiclePose['rpm']), round($vehiclePose['engineLoad'],3), round($vehiclePose['tireSqueal'],3)] : [0,0,0];
-		if($sound !== $lastSound) $carSound(...($lastSound = $sound));
+		if($sound !== $lastSound)
+		{
+			if(!$carVoiceReady && $sound[0] > 0)
+			{
+				(vrzno_env('terrainEngineVoice'))(json_encode(CarEngineSound::voice(),JSON_THROW_ON_ERROR));
+				$carVoiceReady = true;
+			}
+			$carSound(...CarEngineSound::controls(...$sound));
+			$lastSound = $sound;
+		}
 		// Lamp levels blend between steps like the pose, and a change in either redraws the frame below.
 		if($session->mode === 'car') $vehiclePose['lamps'] = $session->carLamps($alpha);
 		// Lit headlamps light the ground and water from this frame's pose, day or night. Dark lamps and other modes

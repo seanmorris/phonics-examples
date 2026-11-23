@@ -421,9 +421,13 @@ final class Car
 		$tipSide = abs($roll) > .40 && abs($sideLoad) > 1.32*max(0,$normalLoad);
 		$tipEnd = abs($pitch) > 1.02;
 		$springs = $this->suspension;
-		$this->spin = fmod($this->spin + $distance/self::TIRE_RADIUS, 2*M_PI);
+		// Under heavy service braking a rolling tire runs slightly slower than the road.
+		// Use the same lost tread travel for the visible wheel rotation and the contact sound.
+		$brakeRatio = $braking && $gripFraction > 0. ? .4*max(0.,1.-$grip/(abs($throttle)*self::SERVICE_BRAKE)) : 0.;
+		$treadTravel = $distance*(1.-$brakeRatio);
+		$this->spin = fmod($this->spin + $treadTravel/self::TIRE_RADIUS, 2*M_PI);
 		$spinSlip = ($throttle <=> 0)*$this->gearbox->wheelSlip;
-		if(!$handbrake) $this->rearSpin = fmod($this->rearSpin + ($distance + $spinSlip*$dt)/self::TIRE_RADIUS, 2*M_PI);
+		if(!$handbrake) $this->rearSpin = fmod($this->rearSpin + ($treadTravel + $spinSlip*$dt)/self::TIRE_RADIUS, 2*M_PI);
 		// A steep face below a flying car cannot apply torque until a tire actually touches it.
 		$bodyTipped = abs($this->pitch) > 1.22 || abs($this->roll) > 1.22;
 		if($bodyTipped || $gripFraction > 0 && ($tipSide || $tipEnd))
@@ -450,34 +454,44 @@ final class Car
 			$this->roadPitch = $pitch; $this->roadRoll = $roll;
 			if($springs->contacts === 4 && $support[5] > $waterLevel + .12 && self::safe($support)
 				&& !self::nearPost($posts,$x,$z,$this->yaw,$support[0])) $this->lastSafe = [$x,$z,$this->yaw];
-			$frontSlip = max(0.,abs($demand) - max(0.,$grip + $direction*$gravitySide))/12.;
-			$brakeSlip = $braking ? max(0.,abs($throttle)*self::SERVICE_BRAKE - $grip)/7. : 0.;
-			$rolling = min(1.,abs($this->speed)/8.);
-			$rearSlip = max(abs($this->speed*sin($this->drift))/8., $handbrake ? $rolling : abs($spinSlip)/4.);
-			$this->tireEffects($land,$waterLevel,$support[4],max($frontSlip,$brakeSlip)*$rolling,
-				max($rearSlip,$brakeSlip*$rolling),$boost);
+			// Ground velocity across the rear axle and across the steered front wheels (m/s).
+			// In a gripping bicycle turn, yaw rate supplies exactly the sideways travel the steering calls for.
+			$along = $this->speed*cos($this->drift);
+			$side = -$this->speed*sin($this->drift);
+			$frontSide = ($side + $rotation/$dt*self::WHEELBASE)*cos($this->steering) - $along*sin($this->steering);
+			$brakeSlip = $this->speed*$brakeRatio;
+			$this->tireEffects($land,$waterLevel,$support[4],hypot($frontSide,$brakeSlip),
+				hypot($side,$handbrake ? $along : $spinSlip-$brakeSlip),$boost);
 		}
 		return true;
 	}
 
 	private function tireEffects(Landscape $land, float $water, array $heights, float $front, float $rear, float $boost): void
 	{
-		if(max($front,$rear,$boost) < .04) return;
+		if(max($front,$rear) < .16 && $boost < .05) return;
 		$sin = sin($this->yaw); $cos = cos($this->yaw);
+		$power = 0.;
 		foreach($heights as $i => $height)
 		{
 			if($height <= $water || $this->suspension->travel[$i] <= -CarSuspension::SAG) continue;
-			$slip = min(1.,$i < 2 ? $front : $rear);
-			$dust = $i < 2 ? $slip : max($slip,.8*$boost);
+			$slip = $i < 2 ? $front : $rear;
+			$dust = min(1.,max($slip/4.,$i < 2 ? 0. : .8*$boost));
 			if($dust < .04) continue;
 			$along = ($i < 2 ? .5 : -.5)*self::WHEELBASE;
 			$side = $i % 2 ? 1 : -1;
 			$across = .5*$side*($i < 2 ? self::FRONT_TRACK : self::REAR_TRACK);
 			$x = $this->x + $along*$sin + $across*$cos;
 			$z = $this->z + $along*$cos - $across*$sin;
-			if(self::onPavement($land,$x,$z)) $this->squeal = max($this->squeal,$slip);
+			if(self::onPavement($land,$x,$z))
+			{
+				// Quiet tire scrub below 1 m/s; a fast locked wheel reaches full voice at 17 m/s.
+				$t = max(0.,min(1.,($slip-1.)/16.));
+				$level = $t*$t*(3.-2.*$t);
+				$power += $level*$level;
+			}
 			else $this->dustContacts[] = [$x,$height,$z,$side,$dust];
 		}
+		$this->squeal = sqrt($power/4.);
 	}
 
 	/** A road brush paints its whole footprint. A graded spline paints only its pavement width. */

@@ -1,158 +1,247 @@
-const tireFile = 'tires_squal_loop.wav';
-
-/** Blend neighboring recordings at their native RPM. Both throttle banks share the idle recording. */
-export function carAudioMix(banks, rpm, load, skid)
+/** Web Audio renders the crank-angle pressure waves supplied by PHP on its own audio clock. */
+export function prepareEngine(context, definition)
 {
-	const mix = new Map();
+	const waves = definition.banks.map(
+		({real, imag}) => context.createPeriodicWave(
+			Float32Array.from(real)
+			, Float32Array.from(imag)
+			, {disableNormalization: true}
+		)
+	);
 
-	function voice(loop, weight)
-	{
-		if(weight < .001) return;
+	const bytes = atob(definition.flowNoise);
+	const noise = context.createBuffer(1, bytes.length, definition.noiseRate);
+	const samples = noise.getChannelData(0);
 
-		const previous = mix.get(loop.file)?.gain ?? 0;
-		const gain = weight * loop.gain * (.29 + .14*load);
-		mix.set(loop.file, {gain: Math.hypot(previous, gain), rate: rpm/loop.rpm});
-	}
+	for(let i = 0; i < samples.length; i++) samples[i] = bytes.charCodeAt(i)/127.5 - 1;
 
-	function blend(bank, volume)
-	{
-		const hi = bank.findIndex(loop => loop.rpm >= rpm);
-
-		if(hi <= 0)
-		{
-			voice(hi === 0 ? bank[0] : bank.at(-1), volume);
-
-			return;
-		}
-
-		const a = bank[hi-1], b = bank[hi];
-		const angle = Math.log(rpm/a.rpm)/Math.log(b.rpm/a.rpm) * Math.PI/2;
-		voice(a, volume*Math.cos(angle));
-		voice(b, volume*Math.sin(angle));
-	}
-
-	blend(banks.on, Math.sin(load*Math.PI/2));
-	blend(banks.off, Math.cos(load*Math.PI/2));
-
-	if(skid > .01) mix.set(tireFile, {gain: .30*skid, rate: .92 + .14*skid});
-
-	return mix;
+	return {waves, noise};
 }
 
-/** The engine, gearbox and contact forces live in PHP. This bridge only plays their current sound. */
+export function startEngine(context, instrument, tone)
+{
+	const clock = context.createConstantSource(), noise = context.createBufferSource();
+	const muffler = context.createBiquadFilter(), body = context.createBiquadFilter(), volume = context.createGain();
+	const flutter = context.createBiquadFilter(), jitter = context.createGain();
+	const breath = context.createBiquadFilter(), flow = context.createGain(), pulses = context.createGain();
+	const sources = [clock, noise], nodes = [muffler,body,volume,flutter,jitter,breath,flow,pulses];
+
+	clock.offset.value = tone.cycle;
+	noise.buffer = instrument.noise;
+	noise.loop = true;
+
+	muffler.frequency.value = tone.cutoff;
+	muffler.Q.value = .63;
+	body.type = 'peaking';
+	body.frequency.value = 245;
+	body.Q.value = .8;
+	body.gain.value = 2.5;
+	volume.gain.value = 0;
+	muffler.connect(body).connect(volume).connect(context.destination);
+
+	// The same small irregularity reaches both banks. Opening the throttle admits more pulsed exhaust noise.
+	flutter.frequency.value = 11;
+	flutter.Q.value = .55;
+	jitter.gain.value = tone.jitter;
+	noise.connect(flutter).connect(jitter);
+	breath.type = 'bandpass';
+	breath.frequency.value = 1450;
+	breath.Q.value = .65;
+	pulses.gain.value = .38;
+	flow.gain.value = tone.flow;
+	noise.connect(breath).connect(pulses).connect(flow).connect(muffler);
+
+	for(const [bank, wave] of instrument.waves.entries())
+	{
+		const exhaust = context.createOscillator(), direct = context.createGain();
+		const reflection = context.createDelay(.01), echo = context.createGain();
+		exhaust.setPeriodicWave(wave);
+		exhaust.frequency.value = 0;
+		clock.connect(exhaust.frequency);
+		jitter.connect(exhaust.detune);
+
+		direct.gain.value = bank === 0 ? 1 : .78;
+		reflection.delayTime.value = bank === 0 ? .0027 : .0038;
+		echo.gain.value = .24;
+		exhaust.connect(direct).connect(muffler);
+		direct.connect(reflection).connect(echo).connect(muffler);
+		direct.connect(pulses.gain);
+		sources.push(exhaust);
+		nodes.push(direct, reflection, echo);
+	}
+
+	const now = context.currentTime;
+
+	for(const source of sources) source.start(now);
+
+	volume.gain.setTargetAtTime(tone.level, now, .018);
+
+	return {
+
+		update(next) {
+			const at = context.currentTime;
+
+			if(next.cycle !== tone.cycle) clock.offset.setTargetAtTime(next.cycle, at, .018);
+
+			if(next.level !== tone.level) volume.gain.setTargetAtTime(next.level, at, .033);
+
+			if(next.cutoff !== tone.cutoff) muffler.frequency.setTargetAtTime(next.cutoff, at, .035);
+
+			if(next.flow !== tone.flow) flow.gain.setTargetAtTime(next.flow, at, .035);
+
+			if(next.jitter !== tone.jitter) jitter.gain.setTargetAtTime(next.jitter, at, .045);
+
+			tone = next;
+		}
+
+
+		, stop() {
+			const at = context.currentTime;
+			volume.gain.setTargetAtTime(0, at, .012);
+
+			clock.onended = () => { for(const node of [...sources,...nodes]) node.disconnect(); };
+
+			for(const source of sources) source.stop(at + .075);
+		}
+	};
+}
+
+/** Join the end of the skid to its beginning over 80 ms. The loop wraps between consecutive original samples. */
+export function joinSkid(context, buffer)
+{
+	const overlap = Math.min(Math.round(.08*buffer.sampleRate), Math.floor(buffer.length/2));
+	const length = buffer.length - overlap;
+	const loop = context.createBuffer(buffer.numberOfChannels, length, buffer.sampleRate);
+
+	for(let c = 0; c < loop.numberOfChannels; c++)
+	{
+		const original = buffer.getChannelData(c), joined = loop.getChannelData(c);
+		joined.set(original.subarray(0, length));
+
+		for(let i = 0; i < overlap; i++)
+		{
+			const t = i/Math.max(1, overlap-1);
+			const angle = t*t*(3-2*t)*Math.PI/2;
+			joined[i] = original[length+i]*Math.cos(angle) + original[i]*Math.sin(angle);
+		}
+	}
+
+	return loop;
+}
+
 export function activate({module, canvas, archive, signal})
 {
 	const doc = canvas.ownerDocument, page = doc.defaultView;
 	const Context = page.AudioContext ?? page.webkitAudioContext;
 	const resources = archive.store.scope(signal);
-	const directory = new URL('assets/car-audio/', archive.applicationUrl);
-	const voices = new Map(), buffers = new Map();
-	let context, banks, loading, closed = false, contextLost = false, pageHidden = false;
-	let parkTimer, parked = false;
-	let rpm = 0, load = 0, skid = 0;
+	let context, definition, instrument, engine, tireBuffer, tireLoading, tire, parkTimer;
+	let closed = false, contextLost = false, pageHidden = false, parked = false;
+	let tone = {cycle: 0}, tireLevel = 0, tireRate = 1;
 
-	function retire(file)
+	async function loadTire()
 	{
-		const {source, gain} = voices.get(file);
-		voices.delete(file);
-		const now = context.currentTime;
-		gain.gain.setTargetAtTime(0, now, .012);
-		source.stop(now + .07);
+		const url = new URL('assets/car-audio/tires_squal_loop.wav', archive.applicationUrl).href;
+		let bytes;
+
+		try
+		{
+			bytes = await resources.read(url);
+		}
+		finally
+		{
+			resources.release(url);
+		}
+
+		if(closed) return;
+
+		const buffer = await context.decodeAudioData(
+			bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength)
+		);
+
+		if(closed) return;
+
+		tireBuffer = joinSkid(context, buffer);
+		update();
+	}
+
+	function stopTire()
+	{
+		if(!tire) return;
+
+		const at = context.currentTime;
+		tire.gain.gain.setTargetAtTime(0, at, .018);
+		tire.source.stop(at + .09);
+		tire = undefined;
 	}
 
 	function update()
 	{
-		const audible = rpm > 0 && !contextLost && !pageHidden && !doc.hidden && !closed;
+		if(closed || !Context) return;
 
-		if(audible && Context)
+		if(!tone.cycle || pageHidden || doc.hidden || contextLost)
 		{
-			page.clearTimeout(parkTimer);
-			parkTimer = undefined;
+			engine?.stop();
+			engine = undefined;
+			stopTire();
 
-			if(!context || parked && context.state === 'suspended') unlock();
-
-			if(context && !loading)
+			if(context?.state === 'running' && parkTimer === undefined)
 			{
-				// Read archive members between PHP frames, after the driving callback returns.
-				loading = Promise.resolve().then(loadSamples).catch(error => {
-					if(!closed) console.error('Car audio samples could not be loaded', error);
-				});
+				parkTimer = page.setTimeout(() => {
+					parkTimer = undefined;
+					parked = true;
+					void context.suspend().catch(() => {});
+				}, 125
+				);
 			}
-		}
-		else if(!closed && context?.state === 'running' && parkTimer === undefined)
-		{
-			// Stop the audio device once the retiring voices have faded, even if animation frames have stopped.
-			parkTimer = page.setTimeout(() => {
-				parkTimer = undefined;
-				parked = true;
-				void context.suspend().catch(() => {});
-			}, 100
-			);
+
+			return;
 		}
 
-		const mix = audible && banks && context?.state === 'running' ? carAudioMix(banks, rpm, load, skid) : new Map();
+		page.clearTimeout(parkTimer);
+		parkTimer = undefined;
 
-		for(const file of voices.keys()) if(!mix.has(file)) retire(file);
+		if(!context || parked && context.state === 'suspended') unlock();
 
-		for(const [file, sound] of mix)
+		if(context?.state !== 'running' || !definition) return;
+
+		instrument ??= prepareEngine(context, definition);
+
+		if(engine) engine.update(tone);
+		else engine = startEngine(context, instrument, tone);
+
+		// Archive reads must start after returning from the current PHP frame.
+		tireLoading ??= Promise.resolve().then(loadTire).catch(error => {
+			if(!closed) console.error('Car tire audio could not be loaded', error);
+		});
+
+		if(!tireBuffer || tireLevel < .00025)
 		{
-			let voice = voices.get(file);
-			const now = context.currentTime;
+			stopTire();
 
-			if(!voice)
-			{
-				const source = context.createBufferSource(), gain = context.createGain();
-				source.buffer = buffers.get(file);
-				source.loop = true;
-				source.playbackRate.value = sound.rate;
-				gain.gain.value = 0;
-				source.connect(gain).connect(context.destination);
-
-				source.onended = () => { source.disconnect(); gain.disconnect(); };
-
-				source.start();
-				voice = {source, gain};
-				voices.set(file, voice);
-			}
-
-			voice.gain.gain.setTargetAtTime(sound.gain, now, .024);
-			voice.source.playbackRate.setTargetAtTime(sound.rate, now, .024);
+			return;
 		}
-	}
 
-	async function loadSamples()
-	{
+		if(!tire)
+		{
+			const source = context.createBufferSource(), gain = context.createGain();
+			source.buffer = tireBuffer;
+			source.loop = true;
+			source.playbackRate.value = tireRate;
+			gain.gain.value = 0;
+			source.connect(gain).connect(context.destination);
 
-		const read = async name => {
-			const url = new URL(name, directory).href;
+			source.onended = () => { source.disconnect(); gain.disconnect(); };
 
-			try
-			{
-				return await resources.read(url);
-			}
-			finally
-			{
-				resources.release(url);
-			}
-		};
+			source.start();
+			tire = {source, gain};
+		}
 
-		const {loops} = JSON.parse(new TextDecoder().decode(await read('manifest.json')));
-		const on = loops.filter(loop => loop.layer === 'on'), off = loops.filter(loop => loop.layer === 'off');
-
-		await Promise.all([...loops.map(loop => loop.file),tireFile].map(async file => {
-			const bytes = await read(file);
-
-			const buffer = await context.decodeAudioData(
-				bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset+bytes.byteLength)
-			);
-
-			if(!closed) buffers.set(file, buffer);
-		}));
-
-		if(closed) return;
-
-		banks = {on, off: [on[0],...off]};
-		update();
+		if(tire.level !== tireLevel)
+		{
+			tire.gain.gain.setTargetAtTime(tireLevel, context.currentTime, .045);
+			tire.source.playbackRate.setTargetAtTime(tireRate, context.currentTime, .045);
+			tire.level = tireLevel;
+		}
 	}
 
 	function unlock()
@@ -172,7 +261,9 @@ export function activate({module, canvas, archive, signal})
 
 	function gesture(event)
 	{
-		if(rpm || event.code === 'KeyC' || event.target?.closest?.('[data-action="car"],[data-action="delivery"]'))
+		if(tone.cycle || event.code === 'KeyC'
+			|| event.target?.closest?.('[data-action="car"],[data-action="delivery"]')
+		)
 		unlock();
 	}
 
@@ -183,10 +274,12 @@ export function activate({module, canvas, archive, signal})
 	canvas.addEventListener('webglcontextlost', () => { contextLost = true; update(); }, {signal});
 	canvas.addEventListener('webglcontextrestored', () => { contextLost = false; update(); }, {signal});
 
-	module.terrainCarSound = (engineRpm, engineLoad, tireSlip) => {
-		rpm = engineRpm;
-		load = engineLoad;
-		skid = tireSlip;
+	module.terrainEngineVoice = json => { definition = JSON.parse(json); };
+
+	module.terrainCarSound = (cycle, level, cutoff, flow, jitter, skid, rate) => {
+		tone = {cycle, level, cutoff, flow, jitter};
+		tireLevel = skid;
+		tireRate = rate;
 		update();
 	};
 
@@ -194,17 +287,10 @@ export function activate({module, canvas, archive, signal})
 		closed = true;
 		page.clearTimeout(parkTimer);
 		delete module.terrainCarSound;
-
-		for(const {source, gain} of voices.values())
-		{
-			source.stop();
-			source.disconnect();
-			gain.disconnect();
-		}
-
-		voices.clear();
+		delete module.terrainEngineVoice;
+		engine?.stop();
+		stopTire();
 		resources.close();
-		buffers.clear();
 
 		if(context) void context.close().catch(() => {});
 	};
