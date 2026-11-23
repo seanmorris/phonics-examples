@@ -1855,18 +1855,18 @@ function speedChaseCurve(Session $parked, int $hz): array
 	$earlyDrop = $parkedAngle - $boomAngle();
 	$previousEye = $lens->view($eye,$pose,0.)[0]; $middleEye = $lens->view($eye,$pose,.5)[0];
 	expect(abs(2*$middleEye->fov-$previousEye->fov-$lens->fieldOfView($eye)) < 1e-9, 'The lens blends between fixed steps');
-	expect($earlyDrop > 0. && $earlyDrop < 9. && abs(2*$middleEye->position[1]-$previousEye->position[1]-$eye->position[1]) < 1e-9
+	expect($earlyDrop > 0. && $earlyDrop < 4.5 && abs(2*$middleEye->position[1]-$previousEye->position[1]-$eye->position[1]) < 1e-9
 		&& abs(2*$middleEye->pitch-$previousEye->pitch-$eye->pitch) < 1e-9, 'The lowering camera and its pitch blend between ticks');
 	$street = $holdSpeed(30.,4*$hz);
 	expect($boomAngle() === $parkedAngle && $eye->pitch === $parkedPitch, 'At street speeds the chase keeps its parked angle');
 	$highway = $holdSpeed(60.,4*$hz);
 	$highwayDrop = $parkedAngle - $boomAngle();
 	$holdSpeed(80.,4*$hz);
-	expect($highwayDrop > 0. && $highwayDrop < 4.5 && abs($parkedAngle-$boomAngle()-4.5) < .01,
+	expect($highwayDrop > 0. && $highwayDrop < 2.25 && abs($parkedAngle-$boomAngle()-2.25) < .01,
 		'The chase is halfway down at 80 mph');
 	$cruise = $holdSpeed(120.,4*$hz);
-	expect(abs($parkedAngle-$boomAngle()-9.) < .01 && abs(rad2deg($eye->pitch-$parkedPitch)-9.) < 1.,
-		'At 120 mph the boom has lowered nine degrees with a flatter view ahead');
+	expect(abs($parkedAngle-$boomAngle()-4.5) < .01 && abs(rad2deg($eye->pitch-$parkedPitch)-4.5) < .5,
+		'At 120 mph the boom has lowered 4.5 degrees with a flatter view ahead');
 	$cruiseHeight = $eye->position[1];
 	expect(abs($street-9.90) < .01 && abs($highway-17.34) < .01 && abs($cruise-26.25) < .01,
 		'The view opens early at 30 and 60 mph and continues widening at 120 mph');

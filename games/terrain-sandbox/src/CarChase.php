@@ -15,7 +15,7 @@ final class CarChase
 	private const DISTANCE = 6.7;
 	private const LOOK_AHEAD = 2.0;
 	private const LOWER_FROM = 40 * Car::MPS_PER_MPH, LOWER_BY = 120 * Car::MPS_PER_MPH;
-	private const MAX_BOOM_DROP_ANGLE = 9 * M_PI / 180;
+	private const MAX_BOOM_DROP_ANGLE = 4.5 * M_PI / 180;
 	private const MAX_FOV_WIDENING = 30 * M_PI / 180;
 	private const FOV_HALF_LIFE = .35;
 	private float $fovWidening = 0.;
