@@ -1529,8 +1529,8 @@ foreach(['dry'=>'car','flooded'=>'craft'] as $variant => $vehicle)
 			$terrain->material($x-.1*$tx,$z-.1*$tz,$offset,$before);
 			$terrain->material($x+.1*$tx,$z+.1*$tz,$offset,$after);
 			expect($before !== null && $after !== null,'The dash crosses the join, including the lap closure');
-			$phaseStep = abs((TerrainPhonics\RoadAtlas::markCode($after)&2047) - (TerrainPhonics\RoadAtlas::markCode($before)&2047));
-			expect(min($phaseStep,2048-$phaseStep) <= 6,'Dash phase is continuous across the section boundary');
+			$phaseStep = abs((TerrainPhonics\RoadAtlas::markCode($after)&1023) - (TerrainPhonics\RoadAtlas::markCode($before)&1023));
+			expect(min($phaseStep,1024-$phaseStep) <= 3,'Dash phase is continuous across the section boundary');
 			foreach([...array_slice($samples,0,4), ...array_slice($samples,-4)] as [$x,,$z,$tx,$tz]) {
 				foreach([-21.,-17.65,0.,17.65,21.] as $lane) {
 					$terrain->material($x-$tz*$lane,$z+$tx*$lane,$offset,$mark);

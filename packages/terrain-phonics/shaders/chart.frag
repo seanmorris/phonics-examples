@@ -46,9 +46,11 @@ vec4 chartCell(sampler2D heights,sampler2D inks,ivec2 a,ivec2 b,vec2 f,float ste
 	vec4 marked=weights*vec4(notEqual(codes,ivec4(0)));
 	// A change of nearest arm can reverse the signed offset across the grass
 	// between roads. Interpolate the union distance there without crossing zero.
-	vec4 fork=vec4(equal(codes>>11,ivec4(8191)));
-	float lateral=(abs(dot(marked*(1.-fork),vec4((codes>>11)-4096)/2048.))
-		+dot(marked*fork,vec4(codes&2047)/1024.))/max(.0001,dot(marked,vec4(1.)));
+	ivec4 channels=(codes>>10)&3;
+	vec4 offsets=marked*vec4((codes>>12)-2048)/1024.;
+	float lateral=0.;
+	for(int arm=0;arm<4;arm++) lateral+=abs(dot(offsets,vec4(equal(channels,ivec4(arm)))));
+	lateral/=max(.0001,dot(marked,vec4(1.)));
 	float edge=splinePavement(lateral,fwidth(lateral));
 	ink=inkSample(i00,roadMask,edge)*weights.x+inkSample(i10,roadMask,edge)*weights.y
 		+inkSample(i01,roadMask,edge)*weights.z+inkSample(i11,roadMask,edge)*weights.w;

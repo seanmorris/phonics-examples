@@ -14,21 +14,22 @@ out vec3 vRelative, vWorld, vNormal;
 out vec3 vPaint0, vPaint1;
 out vec4 vRoadMark;
 out float vSplinePaint;
-out vec2 vForkMark;
-vec4 roadMark(int code,out vec2 fork) {
-	fork=vec2(0.);
+out vec4 vRoadArms;
+vec4 roadMark(int code,out vec4 arms) {
+	arms=vec4(0.);
 	if(code==0) return vec4(0.);
-	if((code>>11)==8191) { fork=vec2(float(code&2047)/1024.,1.); return vec4(0.); }
-	float angle = float(code&2047)*(6.28318530718/2048.);
-	return vec4(float((code>>11)-4096)/2048.,cos(angle),sin(angle),1.);
+	float lateral=float((code>>12)-2048)/1024.;
+	arms[(code>>10)&3]=lateral;
+	float angle=float(code&1023)*(6.28318530718/1024.);
+	return vec4(abs(lateral),cos(angle),sin(angle),1.);
 }
 #ifdef CLIPMAP
-void clipPaint(ivec2 cell,out vec3 paint0,out vec4 paint1,out vec4 mark,out vec2 fork) {
+void clipPaint(ivec2 cell,out vec3 paint0,out vec4 paint1,out vec4 mark,out vec4 arms) {
 	ivec4 ink=ivec4(texelFetch(uInk,texelAt(cell),0)*255.+.5);
 	paint0=vec3(equal(ivec3(ink.r),ivec3(1,2,3)));
 	int code=(ink.g<<16)|(ink.b<<8)|ink.a;
 	paint1=vec4(float(ink.r==4),float(ink.r==5),0.,float(ink.r==5 && code!=0));
-	mark=roadMark(code,fork);
+	mark=roadMark(code,arms);
 }
 #endif
 void meshPaint(float material) {
@@ -42,7 +43,7 @@ void main()
 	float material=aMaterial;
 	vRoadMark=vec4(0.);
 	vSplinePaint=0.;
-	vForkMark=vec2(0.);
+	vRoadArms=vec4(0.);
 	if(uCraft < 0.5)
 	{
 		#ifdef CLIPMAP
@@ -53,25 +54,25 @@ void main()
 		vRelative=vWorld-uEye;
 		normal=clipNormal(cell,morph);
 		vec4 paint;
-		clipPaint(cell,vPaint0,paint,vRoadMark,vForkMark);
+		clipPaint(cell,vPaint0,paint,vRoadMark,vRoadArms);
 		ivec2 odd=cell&1;
 		if(morph>0. && any(notEqual(odd,ivec2(0)))) {
 			// Match the same parent triangle as clipHeight. Decode categories and cyclic dash phase before mixing.
 			ivec2 edge=ivec2(odd.x,-odd.y);
-			vec3 a0,b0; vec4 a1,b1,ma,mb; vec2 fa,fb;
+			vec3 a0,b0; vec4 a1,b1,ma,mb,fa,fb;
 			clipPaint(cell-edge,a0,a1,ma,fa);
 			clipPaint(cell+edge,b0,b1,mb,fb);
 			vPaint0=mix(vPaint0,.5*(a0+b0),morph);
 			paint=mix(paint,.5*(a1+b1),morph);
 			vRoadMark=mix(vRoadMark,.5*(ma+mb),morph);
-			vForkMark=mix(vForkMark,.5*(fa+fb),morph);
+			vRoadArms=mix(vRoadArms,.5*(fa+fb),morph);
 		}
 		vPaint1=paint.xyz;
 		vSplinePaint=paint.w;
 #else
 		// Patch meshes store the road coordinates in the otherwise categorical material attribute.
 		if(material < -1. || material >= 2048.) {
-			vRoadMark = roadMark(int(abs(material)),vForkMark);
+			vRoadMark = roadMark(int(abs(material)),vRoadArms);
 			vSplinePaint = float(material < 0.);
 			material = material < 0. ? 4. : -1.;
 		}

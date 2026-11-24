@@ -44,7 +44,7 @@ final class RoadAtlas
 			$used[$key] = $overlay;
 			$base = intdiv(strlen($data),16);
 			$data .= $overlay['bytes'];
-			$paths[$base]=[$op['_road']['ink']['arm']??0,$op['_road']['ink']['network']??0];
+			$paths[$base]=[$op['_road']['ink']['network']??0,$op['_road']['ink']['stripeRole']??0];
 			foreach($overlay['tiles'] as $block=>$tiles)
 				foreach($tiles as $tile=>$addresses) $blocks[$block][$tile][$base] = $addresses;
 		}
@@ -62,8 +62,8 @@ final class RoadAtlas
 				{
 					// Each group starts with its parameters, kernel count and last-group flag.
 					$count = count($addresses);
-					[$arm,$network]=$paths[$params];
-					$data .= pack('g4', $params, $count, 2*$arm+(int)($params === $lastRoad), $network);
+					[$network,$role]=$paths[$params];
+					$data .= pack('g4', $params, $count, 2*$role+(int)($params === $lastRoad), $network);
 					$data .= pack('g*', ...$addresses) . str_repeat("\0", (4 - $count % 4) % 4 * 4);
 				}
 			}
@@ -151,11 +151,12 @@ final class RoadAtlas
 	{
 		[$cross,$station] = $mark;
 		$half = $mark[2] ?? 4.;
-		// The reserved outer code stores unsigned distance across overlapping arms.
-		if($mark[4]??false) return (8191<<11)|min(2047,(int)floor(abs($cross)/$half*1024.+.5));
-		$lateral = max(1,min(8190,(int)floor(($cross/$half)*2048+.5)+4096));
-		$phase = (int)floor(fmod($mark[3] ?? $station,self::MARK_CYCLE)*(2048/self::MARK_CYCLE)+.5) & 2047;
-		return ($lateral << 11) | $phase;
+		// Twelve lateral bits, ten cyclic station bits and two bits for the arm channel.
+		$role=$mark[4]??0;
+		if($role&1) $cross=-$cross;
+		$lateral = max(1,min(4095,(int)floor(($cross/$half)*1024+.5)+2048));
+		$phase = (int)floor(fmod($mark[3] ?? $station,self::MARK_CYCLE)*(1024/self::MARK_CYCLE)+.5) & 1023;
+		return ($lateral << 12) | (($role >> 1) << 10) | $phase;
 	}
 
 	public static function paintTexel(?string $material, ?array $mark): string

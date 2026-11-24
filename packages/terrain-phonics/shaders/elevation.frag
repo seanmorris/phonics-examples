@@ -358,8 +358,8 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 	int leaves = roadPointer(uRoadGrid.x, block.y * uRoadGrid.y + block.x);
 	if(leaves == 0) return;
 	int group = roadPointer(leaves, (tile.y % 8) * 8 + tile.x % 8);
-	bool painted = false, junction = false;
-	int network=0, arm=0;
+	bool painted = false;
+	int network=0, bestRole=0;
 	float bestDistance=0.;
 	while(group != 0) {
 		ivec4 header = ivec4(roadRecord(group));
@@ -452,15 +452,17 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 			}
 			if(!pastEnd) {
 				float lateral=mark.x/halfWidth;
-				junction=joins && (junction || arm!=(header.z>>1));
-				bestDistance=joins ? min(bestDistance,abs(lateral)) : abs(lateral);
-				if(junction || abs(lateral)<=bestDistance) {
-					int crossCode = int(clamp(floor(lateral*2048.+.5)+4096.,1.,8190.));
-					int phase = int(floor(mod(along,97.536)*(2048./97.536)+.5))&2047;
-					int code = junction ? (8191<<11)|int(min(2047.,floor(bestDistance*1024.+.5))) : (crossCode<<11)|phase;
-					marking = vec3(code>>16,(code>>8)&255,code&255)/255.;
+				int role=header.z>>1;
+				float distanceToArm=abs(lateral);
+				if(!joins || distanceToArm<bestDistance || (distanceToArm==bestDistance && role<=bestRole)) {
+					bestDistance=distanceToArm; bestRole=role;
+					if((role&1)!=0) lateral=-lateral;
+					int crossCode=int(clamp(floor(lateral*1024.+.5)+2048.,1.,4095.));
+					int phase=int(floor(mod(along,97.536)*(1024./97.536)+.5))&1023;
+					int code=(crossCode<<12)|((role>>1)<<10)|phase;
+					marking=vec3(code>>16,(code>>8)&255,code&255)/255.;
 				}
-				network=header.w; arm=header.z>>1;
+				network=header.w;
 				projected=true;
 			}
 		}

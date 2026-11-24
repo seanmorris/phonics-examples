@@ -456,3 +456,64 @@ test('diagonal road edges stay continuous and only the markings glow in darkness
 		}
 	}
 });
+
+test('a fork carries dashed centerlines in both directions and shoulders stay at the pavement edge', async({page}) => {
+	test.setTimeout(150_000);
+	await page.setViewportSize({width:900,height:560});
+	await page.goto('/games/terrain-sandbox/');
+	const canvas=page.locator('canvas[data-terrain-sandbox]');
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	const origin=[.35,0,-.4], eye=[8,48,2], pitch=-1.52;
+	const endpoints=[[-110,0,-4],[110,0,-32],[110,0,29]];
+	const roads=endpoints.map((end,i)=>({...road,width:20,shoulder:14,crown:0,
+		points:i===1 ? [origin,end] : [end,origin]}));
+	const doc={...fixture,landscape:{...fixture.landscape,history:[roads],recipe:{...recipe,seed:'fork-stripes'}},
+		settings:{...fixture.settings,quality:1,elevation:-28,nightGlow:0,skyLight:0},
+		camera:{position:eye,yaw:0,pitch}};
+	await page.locator('[data-file]').setInputFiles({name:'fork.json',mimeType:'application/json',
+		buffer:Buffer.from(JSON.stringify(doc))});
+	await expect.poll(() => canvas.evaluate(el=>{const s=el.terrainSandboxDebug.state;
+		return s.recipe.seed==='fork-stripes' && s.renderer.roadTextureBytes>0 && !s.renderer.pending;
+	}),{timeout:85_000}).toBe(true);
+	const capture=await canvas.screenshot({style:'body *{visibility:hidden!important} canvas[data-terrain-sandbox]{visibility:visible!important}'});
+	if(process.env.TERRAIN_ROAD_CAPTURES) {
+		await fs.mkdir(process.env.TERRAIN_ROAD_CAPTURES,{recursive:true});
+		await fs.writeFile(path.join(process.env.TERRAIN_ROAD_CAPTURES,'fork-stripes.png'),capture);
+	}
+	const {width,height,data}=PNG.sync.read(capture);
+
+	// Project each painted pixel onto the known flat road. Distances are
+	// measured against the three authored segments, independently of the paint shader.
+	const arms=endpoints.map(([x,,z])=>{const dx=x-origin[0],dz=z-origin[2],len=Math.hypot(dx,dz);
+		return [dx/len,dz/len];});
+	const seen=arms.map(()=>new Set());
+	const scale=Math.tan(Math.PI/6)*2/height, sp=Math.sin(pitch), cp=Math.cos(pitch);
+	let white=0, misplacedWhite=0, misplacedYellow=0;
+	for(let y=3;y<height-3;y++) for(let x=3;x<width-3;x++) {
+		const i=4*(y*width+x);
+		const r=data[i],g=data[i+1],b=data[i+2];
+		const shoulder=r>=8 && Math.max(r,g,b)-Math.min(r,g,b)<=2;
+		const dash=r>=8 && r>2*b && r>g;
+		if(!shoulder && !dash) continue;
+		const up=(height/2-y-.5)*scale, t=-eye[1]/(sp+up*cp);
+		const wx=eye[0]+(x+.5-width/2)*scale*t-origin[0], wz=eye[2]+(-cp+up*sp)*t-origin[2];
+		let nearest=Infinity;
+		for(const [arm,[dx,dz]] of arms.entries()) {
+			const along=Math.max(0,wx*dx+wz*dz);
+			const distance=Math.hypot(wx-along*dx,wz-along*dz);
+			nearest=Math.min(nearest,distance);
+			if(dash && distance<.6 && along<30) seen[arm].add(Math.floor(along));
+		}
+		if(shoulder) {
+			white++;
+			// Sampled pavement can round the median tip by one grid cell.
+			if(Math.abs(nearest-10)>1) misplacedWhite++;
+		}
+		if(dash && nearest>.65) misplacedYellow++;
+	}
+	expect(white).toBeGreaterThan(450);
+	expect(misplacedWhite,'stray white pixels among '+white+' shoulder pixels').toBeLessThan(5);
+	expect(misplacedYellow).toBeLessThan(5);
+	for(const bins of seen) for(let start=0;start<26;start++)
+		expect([0,1,2,3,4].some(n=>bins.has(start+n)), 'missing dash near '+start+' m').toBe(true);
+});

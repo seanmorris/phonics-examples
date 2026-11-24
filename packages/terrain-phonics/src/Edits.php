@@ -179,8 +179,8 @@ final class Edits
 		$withMark = func_num_args() >= 4;
 		$mark = null;
 		$centerOffset = null;
-		$apron=null; $apronNetwork=$apronArm=0;
-		$network=$arm=0; $junction=false;
+		$apron=null; $apronNetwork=0;
+		$network=0;
 		for($i = count($operations) - 1; $i >= 0; $i--)
 		{
 			$operation = $operations[$i];
@@ -204,11 +204,9 @@ final class Edits
 					$mark=$candidate; $centerOffset=$offset;
 					$network=$ink['network']??0;
 					if(!$network || $mark===null) return 'road';
-					$arm=$ink['arm'];
 				} else {
 					if($candidate===null) break;
-					$junction=$junction || $arm!==$ink['arm'];
-					if(abs($candidate[0])/$candidate[2]<abs($mark[0])/$mark[2]) {
+					if(self::nearerMark($candidate,$mark)) {
 						$mark=$candidate; $centerOffset=$offset;
 					}
 				}
@@ -220,21 +218,24 @@ final class Edits
 				if($candidate===null) continue;
 				$ink=$operation['_road']['ink']??[];
 				if($apron===null) {
-					$apron=$candidate; $apronNetwork=$ink['network']??0; $apronArm=$ink['arm']??0;
+					$apron=$candidate; $apronNetwork=$ink['network']??0;
 				} elseif($apronNetwork===($ink['network']??0)) {
-					$mixed=($apron[4]??false) || $apronArm!==$ink['arm'];
-					if(abs($candidate[0])/$candidate[2]<abs($apron[0])/$apron[2]) $apron=$candidate;
-					if($mixed) $apron[4]=true;
+					if(self::nearerMark($candidate,$apron)) $apron=$candidate;
 				} else $apronNetwork=0;
 			}
 		}
 
-		if($network) {
-			if($junction) $mark[4]=true;
-			return 'road';
-		}
+		if($network) return 'road';
 		$mark = $apron;
 		return null;
+	}
+
+	/** Break projection ties consistently when overlapping arms are reordered. */
+	private static function nearerMark(array $candidate,array $current): bool
+	{
+		$distance=abs($candidate[0])/$candidate[2];
+		$previous=abs($current[0])/$current[2];
+		return $distance<$previous || ($distance==$previous && ($candidate[4]??0)<($current[4]??0));
 	}
 
 	/**
@@ -611,7 +612,10 @@ final class Edits
 		}
 		if(!$past) {
 			$mark = [($side < 0. ? -1. : 1.)*sqrt($nearest),$along,$road['half']];
-			if(isset($road['ink'])) $mark[] = $phase;
+			if(isset($road['ink'])) {
+				$mark[]=$phase;
+				$mark[]=$road['ink']['stripeRole']??0;
+			}
 		}
 		return $offset;
 	}

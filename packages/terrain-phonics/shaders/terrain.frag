@@ -23,7 +23,7 @@ in vec3 vRelative, vWorld, vNormal;
 in vec3 vPaint0, vPaint1;
 in vec4 vRoadMark;
 in float vSplinePaint;
-in vec2 vForkMark;
+in vec4 vRoadArms;
 // Area of the painted half of every repeating dash-and-gap pair.
 float dashIntegral(float x) { return .5*floor(x)+min(fract(x),.5); }
 float dashCoverage(vec2 phaseVector, float pixelCycles)
@@ -204,12 +204,18 @@ void main()
 	float slopeMask = roadSlopeMask(cross(worldDx,worldDy));
 	// Lateral coordinates are in road half-widths. Convert meters of paint into that coordinate
 	// using its world-space gradient, so both narrow streets and wide circuits get the same paint.
-	float crossTrack = vRoadMark.x/max(vRoadMark.w,.0001);
+	float markWeight=vRoadMark.w;
+	float weight=max(markWeight,.0001);
+	float crossTrack = dot(vRoadArms,vec4(1.))/weight;
+	float outline=dot(abs(vRoadArms),vec4(1.))/weight;
 	vec2 dx=worldDx.xz, dy=worldDy.xz;
 	vec2 lateralPixel=vec2(dFdx(crossTrack),dFdy(crossTrack));
-	float markWeight=vRoadMark.w+vForkMark.y;
-	float outline=(abs(vRoadMark.x)+vForkMark.x)/max(markWeight,.0001);
-	vec2 outlinePixel=vec2(dFdx(outline),dFdy(outline));
+	// Outside a centerline crossing, differentiate the unsigned distance from
+	// the vertices. Taking abs after extrapolation into GPU helper pixels can
+	// otherwise drag the shoulder stripe several meters into the pavement.
+	float unsignedTrack=vRoadMark.x/weight;
+	vec2 unsignedPixel=vec2(dFdx(unsignedTrack),dFdy(unsignedTrack));
+	vec2 outlinePixel=unsignedTrack-outline>.00001 ? lateralPixel : unsignedPixel;
 	float roadEdge = splinePavement(outline,max(abs(outlinePixel.x)+abs(outlinePixel.y),.00001));
 	float road = (vPaint1.y-vSplinePaint*(1.-roadEdge))*slopeMask;
 	// Only uniform pavement can skip the underlying palette. Triangles that blend a
@@ -254,7 +260,10 @@ void main()
 	if(markWeight > .65 && road > 0.) {
 		float area=dx.x*dy.y-dx.y*dy.x;
 		// This vector follows the line of constant crossTrack through this pixel, even on a bend.
-		vec2 stripeGradient=vForkMark.y>0. ? outlinePixel : lateralPixel;
+		// A change of arm can flip the signed offset without crossing a
+		// centerline. Its derivative must not widen the dash at the split.
+		vec2 centerPixel=outline-abs(crossTrack)>.00001 ? unsignedPixel : lateralPixel;
+		vec2 stripeGradient=outline>.5 ? outlinePixel : centerPixel;
 		vec2 alongRoad=stripeGradient.x*dy-stripeGradient.y*dx;
 		float alongLength=length(alongRoad);
 		float unitsPerMeter=alongLength/max(abs(area),1e-10);
@@ -265,7 +274,7 @@ void main()
 		vec2 tangent=alongRoad/max(alongLength,1e-10);
 		float pixelCycles=(abs(dot(dx,tangent))+abs(dot(dy,tangent)))/6.096;
 		float marked = smoothstep(.65,.98,markWeight)*smoothstep(.05,.6,vPaint1.y)*roadEdge*slopeMask;
-		float centerPaint=line*dashCoverage(vRoadMark.yz,pixelCycles)*marked*smoothstep(.05,.95,vRoadMark.w);
+		float centerPaint=line*dashCoverage(vRoadMark.yz,pixelCycles)*marked;
 		float edgePaint=edge*marked*(1.-smoothstep(1.,5.,footprint));
 		vec3 ochre=vec3(.72,.47,.09), white=vec3(.88);
 		albedo=mix(mix(albedo,ochre,centerPaint),white,edgePaint);
