@@ -323,7 +323,14 @@ final class SurfaceLayers
 			'namib-coast' => ['Red dune sand', 'Slip faces', 'Wind ripples', 'Gravel flats', 'Wet beach'],
 			'black-sand-coast' => ['Moss heath', 'Basalt scree', 'Black sand', 'Lyme grass', 'Gully snow'],
 			'yardang-desert' => ['Corridor sand', 'Wind ripples', 'Clay flanks', 'Pale caps'],
-			'rice-terraces' => ['Rice paddies', 'Earth risers', 'Crown forest'],
+			'rice-terraces' => [
+				'Rice paddies'
+				, 'Rice stalks'
+				, 'Flooded paddies'
+				, 'Earth bunds'
+				, 'Crown forest'
+				, 'Ravine forest'
+			],
 			'boreal-lakes' => ['Lichen heath', 'Spruce forest', 'Granite outcrops', 'Bare knobs', 'Bog margins'],
 			'emerald-ridges' => [
 				'Fern slopes'
@@ -1055,48 +1062,76 @@ final class SurfaceLayers
 	}
 
 	/**
-	 * Wet young rice fills the terrace flats and forest crowns the hills. The earth risers repeat with the 3.5 m
-	 * terrace steps as height bands, so every terrace edge draws as a crisp contour line.
+	 * Paddies of young and yellowing rice make a field-sized patchwork, with some still flooded and reflecting the
+	 * sky. Grassy earth bunds repeat with the 3.5 m terrace steps as height bands. Noise varies their thickness and
+	 * line, and they draw only where the ground steps, so they read as hand-built edges rather than contour lines.
+	 * Forest crowns the hills and fills the ravines too steep to terrace.
 	 */
 	private static function riceLayers(array $s): array
 	{
 		$step = Recipe::shapeDefaults('rice-terraces')['terraceSpacing'];
+		$forest = [
+			'mask' => 'trees'
+			, 'field' => 'crowns'
+			, 'channel' => 'both'
+			, 'relief' => 'crowns'
+			, 'strength' => .5
+			, 'color' => $s['forestColor']
+			, 'pattern' => 'fractal'
+			, 'patternColor' => $s['grassColor']
+			, 'patternScale' => 24.
+			, 'patternAmount' => .25
+		];
 
 		return [
 			[
 				'color' => $s['grassColor']
-				, 'roughness' => .3
-				, 'reflectivity' => .15
-				, 'pattern' => 'fractal'
+				, 'pattern' => 'mottle'
 				, 'patternColor' => $s['meadowColor']
-				, 'patternScale' => 18.
-				, 'patternAmount' => .5
+				, 'patternScale' => 55.
+				, 'patternAmount' => .7
+			]
+
+			// Rows of stalks give the paddies a matte grain instead of a smooth sheen.
+			, [
+				'color' => self::tint($s['grassColor'], .78, .8, .72)
+				, 'opacity' => .5
+				, 'pattern' => 'stipple'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 1.2
+				, 'patternStretch' => 1.
+				, 'patternAmount' => .8
+			]
+
+			, [
+				'color' => self::tint($s['grassColor'], 1.5, 1.7, 2.1)
+				, 'opacity' => .45
+				, 'roughness' => .55
+				, 'reflectivity' => .2
+				, 'slopeHigh' => .04
+				, 'slopeFade' => .03
+				, 'pattern' => 'mottle'
+				, 'patternColor' => $s['grassColor']
+				, 'patternScale' => 40.
+				, 'patternAmount' => 1.
 			]
 
 			, [
 				'color' => $s['soilColor']
 				, 'period' => $step
-				, 'low' => .42 * $step
-				, 'high' => .58 * $step
-				, 'fade' => .05 * $step
-			] + self::stipple($s['soilColor'], .8, .6, .7)
+				, 'low' => .38 * $step
+				, 'high' => .62 * $step
+				, 'fade' => .1 * $step
+				, 'noise' => .12 * $step
+				, 'scale' => 18.
+				, 'slopeLow' => .04
+				, 'slopeFade' => .04
+				, 'opacity' => .8
+			] + self::stipple($s['grassColor'], .7, .7, .9)
 
-			, [
-				'mask' => 'trees'
-				, 'field' => 'crowns'
-				, 'channel' => 'both'
-				, 'relief' => 'crowns'
-				, 'strength' => .5
-				, 'low' => 95.
-				, 'fade' => 15.
-				, 'noise' => 10.
-				, 'scale' => 80.
-				, 'color' => $s['forestColor']
-				, 'pattern' => 'fractal'
-				, 'patternColor' => $s['grassColor']
-				, 'patternScale' => 24.
-				, 'patternAmount' => .25
-			]
+			, $forest + ['low' => 95., 'fade' => 15., 'noise' => 10., 'scale' => 80.]
+
+			, $forest + ['slopeLow' => .45, 'slopeFade' => .1]
 		];
 	}
 
