@@ -376,6 +376,13 @@ gullies. `yardang-desert` stretches narrow contour walls ten times along the win
 clay hulls about 45 m high with flat sand corridors between them. Their flanks streak down the fall line and pale toward
 their caps.
 
+`rice-terraces` steps steep rolling hills every 3.5 m from the valley floor to the crowns. Wet young rice covers the
+flats. The earth risers repeat as height bands with the same period, so every terrace edge draws as a contour line even
+where the mesh is coarser than a step. Forest crowns the hills above 95 m. `boreal-lakes` stretches low knobs 2.5
+times along a bearing of 150 degrees, the direction of the old ice flow. About 60% of the ground stands above the
+water, as long islands and knobs up to about 45 m high. Dark spruce and lichen heath cover it, pinkish granite breaks
+out on the steeper faces and knob crowns, and yellow-green sedge bog rings every lake.
+
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 
 | Setting | Coast | Mountain | Version-one canyon | Canyon |

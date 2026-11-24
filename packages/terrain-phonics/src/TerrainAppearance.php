@@ -309,6 +309,32 @@ final class TerrainAppearance
 			, 'rockSlopeStart' => .06
 			, 'rockSlopeEnd' => .16
 		]
+		// Young rice on wet terrace flats, bare earth on the risers and forest on the hill crowns.
+		, 'rice-terraces' => [
+			'grassColor' => '#58903a'
+			, 'meadowColor' => '#7ea648'
+			, 'soilColor' => '#6a4e32'
+			, 'forestColor' => '#2c4a26'
+
+			, 'rockSlopeStart' => .18
+			, 'rockSlopeEnd' => .32
+			, 'snowline' => 2000.
+			, 'treeline' => -1000.
+		]
+		// Lichen heath and dark spruce over pinkish granite, with sedge bog at the lake margins.
+		, 'boreal-lakes' => [
+			'grassColor' => '#33402a'
+			, 'meadowColor' => '#7a7a5e'
+			, 'soilColor' => '#8a8a4a'
+			, 'rockColor' => '#7d7470'
+			, 'rockBandColor' => '#5c5552'
+			, 'forestColor' => '#1f3324'
+
+			, 'rockSlopeStart' => .10
+			, 'rockSlopeEnd' => .22
+			, 'snowline' => 1500.
+			, 'treeline' => -1000.
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -581,6 +607,30 @@ final class TerrainAppearance
 			, 'rockSlopeStart'
 			, 'rockSlopeEnd'
 		]
+		, 'rice-terraces' => [
+			'grassColor'
+			, 'soilColor'
+			, 'roadColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'snowline'
+			, 'treeline'
+		]
+		, 'boreal-lakes' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'roadColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'snowline'
+			, 'treeline'
+		]
 		, 'salt-pans' => [
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'rockSlopeStart', 'rockSlopeEnd',
@@ -720,7 +770,7 @@ final class TerrainAppearance
 			'heather-moor', 'salt-pans', 'cinder-highlands',
 			'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe',
 			'alaska-range', 'chalk-headlands', 'karst-bay', 'tepui-highlands', 'emerald-ridges', 'autumn-folds',
-			'namib-coast', 'black-sand-coast', 'yardang-desert' => $recipe['preset'],
+			'namib-coast', 'black-sand-coast', 'yardang-desert', 'rice-terraces', 'boreal-lakes' => $recipe['preset'],
 			default => 'coast'
 		};
 	}

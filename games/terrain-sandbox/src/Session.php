@@ -127,6 +127,9 @@ final class Session
 		'namib-coast' => ['name'=>'Atlantic fog', 'topFt'=>400, 'densityPerMile'=>.2, 'color'=>'#e3e6e6'],
 		'black-sand-coast' => ['name'=>'North Atlantic haze', 'topFt'=>2500, 'densityPerMile'=>.08, 'color'=>'#d4dde2'],
 		'yardang-desert' => ['name'=>'Dust haze', 'topFt'=>1500, 'densityPerMile'=>.07, 'color'=>'#e6d2b2'],
+		// Morning mist settles in the valleys below the terraced crowns.
+		'rice-terraces' => ['name'=>'Valley mist', 'topFt'=>600, 'densityPerMile'=>.12, 'color'=>'#dfe6e0'],
+		'boreal-lakes' => ['name'=>'Clear northern air', 'topFt'=>2000, 'densityPerMile'=>.03, 'color'=>'#dfe8ef'],
 		'heather-moor' => ['name'=>'Moor mist', 'topFt'=>350, 'densityPerMile'=>.12, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
@@ -233,6 +236,18 @@ final class Session
 		'yardang-desert' => TerrainAppearance::PRESET_DEFAULTS['yardang-desert'] + [
 			'azimuth'=>225., 'elevation'=>18., 'haze'=>.60, 'skyColor'=>'#4f7fb8', 'hazeColor'=>'#e8d6ba',
 		],
+		// Soft light across the terraces and murky green paddy water in the valleys.
+		'rice-terraces' => TerrainAppearance::PRESET_DEFAULTS['rice-terraces'] + [
+			'azimuth'=>265., 'elevation'=>30., 'haze'=>.72, 'skyColor'=>'#7ea3c9', 'hazeColor'=>'#d8e2dc',
+			'waterColor'=>'#4b6a52', 'waterTransparency'=>.45, 'waterReflectivity'=>.55,
+			'waterFogDensity'=>.25, 'waterChoppiness'=>8.,
+		],
+		// Clear air and dark, still lakes that mirror the islands.
+		'boreal-lakes' => TerrainAppearance::PRESET_DEFAULTS['boreal-lakes'] + [
+			'azimuth'=>225., 'elevation'=>30., 'haze'=>.55, 'skyColor'=>'#4f86c6', 'hazeColor'=>'#d6e2ea',
+			'waterColor'=>'#1d3a4c', 'waterTransparency'=>.55, 'waterReflectivity'=>.70,
+			'waterFogDensity'=>.15, 'waterChoppiness'=>4.,
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
@@ -264,6 +279,10 @@ final class Session
 		'black-sand-coast' => ['x'=>-.5778, 'z'=>.1667, 'heading'=>60., 'pitch'=>.08, 'clearance'=>30., 'minimum'=>0.],
 		// Down a corridor along the wind, between hulls on both sides.
 		'yardang-desert' => ['x'=>-4.5, 'z'=>-1., 'heading'=>110., 'pitch'=>-.02, 'clearance'=>22., 'minimum'=>-200.],
+		// On a terraced slope, looking across the valley at the next terraced hill.
+		'rice-terraces' => ['x'=>.7003, 'z'=>3.0345, 'heading'=>20., 'pitch'=>-.06, 'clearance'=>25., 'minimum'=>0.],
+		// From floatplane height over the maze of lakes and long islands.
+		'boreal-lakes' => ['x'=>-1.4, 'z'=>4.2, 'heading'=>340., 'pitch'=>-.28, 'clearance'=>160., 'minimum'=>0.],
 	];
 
 	/**
@@ -295,7 +314,8 @@ final class Session
 	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor','salt-pans','cinder-highlands',
 		'rolling-prairie','river-valley','wooded-foothills','high-desert-steppe','alaska-range','chalk-headlands',
 		'karst-bay','tepui-highlands','painted-badlands','emerald-ridges',
-		'autumn-folds','namib-coast','black-sand-coast','yardang-desert'];
+		'autumn-folds','namib-coast','black-sand-coast','yardang-desert',
+		'rice-terraces','boreal-lakes'];
 
 	private static function materialStyle(array $recipe): string
 	{

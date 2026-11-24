@@ -2525,6 +2525,8 @@ function markup(journeyMarkup)
 		, ['namib-coast', 'Namib Coast']
 		, ['black-sand-coast', 'Black Sand Coast']
 		, ['yardang-desert', 'Yardang Desert']
+		, ['rice-terraces', 'Rice Terraces']
+		, ['boreal-lakes', 'Boreal Lakes']
 	];
 
 	const option = ([value, label]) => `<option value="${value}">${label}</option>`;
