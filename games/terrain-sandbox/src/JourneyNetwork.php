@@ -7,7 +7,7 @@ use TerrainPhonics\{JoinedTerrain,Landscape,Recipe};
 /** Named landscape squares with up to two onward roads. Only the current junction needs terrain assets. */
 final class JourneyNetwork
 {
-	public readonly array $nodes;
+	public readonly array $nodes, $parents;
 	public readonly string $start;
 
 	public function __construct(public readonly string $plan)
@@ -23,9 +23,11 @@ final class JourneyNetwork
 		if(!$nodes || !$nodes[array_key_first($nodes)]['exits']) throw new \InvalidArgumentException('The first square needs an onward road.');
 		$this->start=array_key_first($nodes);
 		$incoming=array_fill_keys(array_keys($nodes),0);
-		foreach($nodes as $node) foreach($node['exits'] as $child) {
+		$parents=array_fill_keys(array_keys($nodes),[]);
+		foreach($nodes as $id=>$node) foreach($node['exits'] as $child) {
 			if(!isset($nodes[$child])) throw new \InvalidArgumentException("Unknown destination square $child.");
 			$incoming[$child]++;
+			$parents[$child][]=$id;
 		}
 		$order=[$this->start];
 		for($i=0;$i<count($order);$i++) foreach($nodes[$order[$i]]['exits'] as $child)
@@ -33,11 +35,17 @@ final class JourneyNetwork
 		if(count($order)!==count($nodes) || $incoming[$this->start]!==0)
 			throw new \InvalidArgumentException('Every square must be reachable from the first one, with exits leading onward.');
 		$this->nodes=$nodes;
+		$this->parents=$parents;
 	}
 
 	public function recipe(string $id,int $span): array
 	{
 		$n=$this->nodes[$id];
+		if(!$n['exits']) {
+			$recipe=['preset'=>$n['preset'],'worldSize'=>$span]+Session::preset($n['preset']);
+			$recipe['seed'].='/'.$id;
+			return $recipe;
+		}
 		$destinations=array_map(fn($child)=>$this->nodes[$child]['preset'],$n['exits']);
 		$recipe=JourneyRoad::recipe($n['preset'],$destinations,$span);
 		$recipe['seed'].='/'.$id;
@@ -72,8 +80,8 @@ final class JourneyNetwork
 			if($p[0] >= $edge && ($end===null || abs($p[2]+$dz)<abs($end[2]+$dz))) $end=$p;
 		}
 		$keep=[]; $at=$end;
-		// Include the approach far enough behind the handoff that scenery and minimap stay continuous.
-		while($at!==null && $at[0]>$half-$r['join']['span']*.5) {
+		// Carry the highway across the whole named square, including its western entrance.
+		while($at!==null && $at[0]>$half-$r['join']['span']) {
 			$next=null;
 			foreach($records as $id=>$road) {
 				if($road['points'][array_key_last($road['points'])]!=$at) continue;

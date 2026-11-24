@@ -12,12 +12,14 @@ final class JourneyAtlas
 	private bool $live = false, $departure = false;
 	public bool $needsChart = false;
 	private int $id = 0;
+	private ?string $plan=null;
 
 	public function cancel(): void
 	{
 		$this->work = null;
 		$this->draft?->close();
 		$this->draft = null;
+		$this->plan=null;
 		$this->needsChart = $this->live = $this->departure = false;
 	}
 
@@ -31,16 +33,17 @@ final class JourneyAtlas
 			if(!$this->live) {
 				$span = $request['span'];
 				if(!is_int($span)) throw new \InvalidArgumentException('Choose a landscape width.');
+				$highways=null;
 				if(isset($request['plan'])) {
-					$network = new JourneyNetwork($request['plan']);
-					$id = $request['stage'];
-					$this->departure = $id === $network->start;
-					$node = $network->nodes[$id] ?? throw new \InvalidArgumentException('Choose a stage in this route.');
-					if($node['exits']) $recipe = $network->recipe($id,$span);
-					else {
-						$recipe = ['preset'=>$node['preset'],'worldSize'=>$span]+Session::preset($node['preset']);
-						$recipe['seed'] .= '/'.$id;
-					}
+					$network=new JourneyNetwork($request['plan']);
+					$this->plan=$network->plan;
+					$id=$request['stage'];
+					if(!isset($network->nodes[$id])) throw new \InvalidArgumentException('Choose a stage in this route.');
+					$this->departure=$id===$network->start;
+					$active=$session->journeyPlan()===$this->plan && ($session->landscape->recipe()['join']['span'] ?? null)===$span;
+					$version=$active ? ($session->landscape->recipe()['join']['version'] ?? 1) : 2;
+					$highways=$session->highways($network,$span,$version);
+					$recipe=$highways->recipe($id);
 				} else {
 					$this->departure = true;
 					$from = $request['west']; $to = $request['destinations'];
@@ -49,10 +52,13 @@ final class JourneyAtlas
 					$recipe = JourneyRoad::recipe($from,$to,$span);
 				}
 				$this->draft = new Landscape($recipe);
-				if(!empty($request['survey']) && isset($recipe['join'])) {
-					$this->work = JourneyRoad::build($this->draft,report:function(string $phase) use ($result) {
+				if(!empty($request['survey'])) {
+					$report=function(string $phase) use ($result) {
 						$result($this->id,json_encode(['phase'=>$phase],JSON_THROW_ON_ERROR));
-					});
+					};
+					$this->work=$highways ? $highways->build($this->draft,$id,$report,
+						$active ? $session->journeySquare() : null,$active ? $session->landscape : null)
+						: JourneyRoad::build($this->draft,report:$report);
 					return;
 				}
 			}
@@ -72,7 +78,7 @@ final class JourneyAtlas
 			if($this->work->valid()) return;
 			$result($this->id,json_encode(['roads'=>self::roads($this->draft)],JSON_THROW_ON_ERROR));
 			if($this->departure) {
-				$session->rememberJourneySurvey($this->draft,$this->work->getReturn());
+				$session->rememberJourneySurvey($this->draft,$this->work->getReturn(),$this->plan);
 				$this->draft = null;
 			}
 		} catch(\RuntimeException|\InvalidArgumentException $error) {

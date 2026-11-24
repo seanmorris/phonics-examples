@@ -471,6 +471,8 @@ final class Session
 	private ?\Generator $roadWork = null;
 	private ?Landscape $journeyReady = null, $surveyedDeparture = null;
 	private array $surveyedViews = [];
+	private ?string $surveyedPlan = null;
+	private ?JourneyHighways $highways = null;
 	private array $journeyEntrances = [], $journeyViews = [], $preparedViews = [];
 	private ?string $journeyBuildPhase = null;
 	private ?JourneyNetwork $network = null, $buildingNetwork = null;
@@ -480,13 +482,22 @@ final class Session
 	private bool $transfer = false;
 
 	/** Retain one completed departure survey so Build can board the exact highway shown on its map. */
-	public function rememberJourneySurvey(Landscape $land, array $views): void
+	public function rememberJourneySurvey(Landscape $land, array $views, ?string $plan=null): void
 	{
 		$this->surveyedDeparture?->close();
 		$this->surveyedDeparture = $land;
 		$this->surveyedViews = $views;
+		$this->surveyedPlan = $plan;
 	}
 
+	public function highways(JourneyNetwork $network,int $span,int $version=2): JourneyHighways
+	{
+		if($this->highways?->network->plan!==$network->plan || $this->highways->span!==$span || $this->highways->version!==$version)
+			$this->highways=new JourneyHighways($network,$span,$version);
+		return $this->highways;
+	}
+
+	public function journeySquare(): ?string { return $this->square; }
 	public function journeyPlan(): ?string { return $this->network?->plan; }
 	public function journeyNodes(): array { return $this->network?->nodes ?? []; }
 	public function preparingRoad(): bool { return $this->roadWork !== null || $this->journeyReady !== null || $this->onwardWork !== null || $this->transfer; }
@@ -1675,7 +1686,7 @@ final class Session
 				$span=$action['span'] ?? 16384;
 				$next = new Landscape($network ? $network->recipe($network->start,$span) : JourneyRoad::recipe($west,$east,$span));
 				$this->buildingNetwork=$network;
-				if($this->surveyedDeparture && $this->surveyedDeparture->recipe() === $next->recipe()) {
+				if($this->surveyedDeparture && $this->surveyedPlan===$network?->plan && $this->surveyedDeparture->recipe() === $next->recipe()) {
 					$next->close();
 					$this->journeyReady = $this->surveyedDeparture;
 					$this->preparedViews = $this->surveyedViews;
@@ -1685,11 +1696,13 @@ final class Session
 				}
 				$this->message = $this->journeyBuildPhase = 'Surveying the highway…';
 				$this->preparing = true;
-				$this->roadWork = (function() use ($next) {
+				$this->roadWork = (function() use ($next,$network,$span) {
 					try {
-						$this->preparedViews=yield from JourneyRoad::build($next,report:function(string $phase) {
+						$report=function(string $phase) {
 							$this->message=$this->journeyBuildPhase=$phase; $this->dirty=true;
-						});
+						};
+						$this->preparedViews=yield from ($network ? $this->highways($network,$span)->build($next,$network->start,$report)
+							: JourneyRoad::build($next,report:$report));
 						$this->journeyReady = $next;
 					} finally {
 						if($this->journeyReady !== $next) $next->close();
@@ -2205,14 +2218,11 @@ final class Session
 				$this->dirty=true;
 				return;
 			}
-			$shift=$this->network->translation($this->square,$child,$r);
-			$nextRecipe=$this->network->recipe($child,$span);
-			if(!isset($r['join']['version'])) unset($nextRecipe['join']['version']);
-			$next=new Landscape($nextRecipe);
-			$this->onwardWork=(function() use($next,$shift) {
+			$highways=$this->highways($this->network,$span,$r['join']['version'] ?? 1);
+			$next=new Landscape($highways->recipe($child));
+			$this->onwardWork=(function() use($next,$highways,$child) {
 				try {
-					$arrival=JourneyNetwork::arrival($this->landscape,$shift);
-					$this->preparedViews=yield from JourneyRoad::build($next,$arrival);
+					$this->preparedViews=yield from $highways->build($next,$child,from:$this->square,active:$this->landscape);
 					$this->onwardReady=$next;
 				} finally { if($this->onwardReady!==$next) $next->close(); }
 			})();
@@ -3096,7 +3106,7 @@ final class Session
 		$this->roadWork = null;
 		$this->discardOnward();
 		$this->journeyReady?->close(); $this->journeyReady = null;
-		$this->surveyedDeparture?->close(); $this->surveyedDeparture = null;
+		$this->surveyedDeparture?->close(); $this->surveyedDeparture = null; $this->highways=null;
 		$this->cancelPick(); $this->carSearch = null;
 		$this->circuitSearch = null;
 		$this->releasePin(); $this->landscape->close(); $this->draft?->close(); $this->draft = null;

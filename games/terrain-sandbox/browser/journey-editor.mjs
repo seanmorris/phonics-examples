@@ -122,8 +122,10 @@ function mount(frame, canvas, signal, roadMap) {
 	const outline = el('[data-outline]'), outlineBox = el('[data-journey-outline]'), pages=frame.querySelector('.lab-pages'), remove = el('[data-delete-stage]'), undo = el('[data-undo-edit]');
 	const rename = el('[data-rename-stage]'), stageName = el('[data-stage-name]');
 	const origins=el('[data-stage-origins]');
-	const cache = new Map(), history = [], thumbnails = [];
+	const cache = new Map(), sharedRoads = new Map(), history = [], thumbnails = [];
+	let roadRevision=0;
 	let serial=0, thumbnailJob=null, thumbnailTimer;
+	let planText=null,planRevision=0;
 	let nodes = {}, stage = 'A', lastGraphicPlan = null, valid = null, stageOrder = [], state, activeNetwork;
 	let pending = null, id = 0, timer, key = '', current, request, lastRoadMap, surveying = false, visible = false, busy = false;
 	const on = (node,event,fn)=>node.addEventListener(event,fn,{signal});
@@ -258,6 +260,7 @@ function mount(frame, canvas, signal, roadMap) {
 	});
 	function validated(result) {
 		valid=result?.nodes ?? null;
+		if(planText!==source.value) {planText=source.value;planRevision++;}
 		// A graphical edit already drew these controls. Preserve scroll and focus
 		// when PHP acknowledges it. Typed or loaded plans still need new controls.
 		if(valid && result.plan!==lastGraphicPlan) {
@@ -281,29 +284,62 @@ function mount(frame, canvas, signal, roadMap) {
 		if(live)params.generation=state.generation;
 		const version=live?[state.generation,state.revision,state.settings.waterColor,state.settings.waterLevel,
 			state.hiddenSurfaceLayers,state.surfaceLayers,state.surfaceFields,state.paintInks,roadMap()?.hidden]:null;
-		return {params,west,exits,destinations,live,signature:JSON.stringify([span,network()?which:null,west,exits,destinations,version])};
+		const active=network() && activeNetwork?.plan===source.value && state.recipe.join?.span===span;
+		const scope=network()?JSON.stringify([planRevision,span,active?[state.generation,state.revision,roadMap()?.hidden]:null]):null;
+		return {params,west,exits,destinations,live,scope,signature:JSON.stringify([span,network()?which:null,west,exits,destinations,version,scope])};
 	}
 
-	function drawMap(target, entry, path) {
+	function squares(entry,route) {
+		if(!entry || !route?.scope)return [];
+		const ids=[route.params.stage,...route.exits];
+		return entry.pins.map(([u,v],i)=>({id:ids[i],x:(u-.5)*entry.extent,z:(v-.5)*entry.extent}));
+	}
+	function rememberRoads(entry,route,path) {
+		if(!entry || !route?.scope || !path || entry.recordedPath===path)return;
+		entry.recordedPath=path;
+		for(const square of squares(entry,route)) {
+			sharedRoads.delete(square.id);
+			sharedRoads.set(square.id,{...square,scope:route.scope,path});
+		}
+		while(sharedRoads.size>36)sharedRoads.delete(sharedRoads.keys().next().value);
+		roadRevision++;
+	}
+	function drawMap(target,entry,route,path) {
 		const ctx=target.getContext('2d'), size=target.width;
 		ctx.clearRect(0,0,size,size);
 		if(!entry) return;
 		ctx.drawImage(entry.image,0,0,size,size);
-		if(!path) return;
+		const scale=size/entry.extent, span=route.params.span;
 		ctx.save();
-		ctx.translate(size/2,size/2);
-		const scale=size/entry.extent;
-		ctx.scale(scale,scale);
+		ctx.translate(size/2,size/2);ctx.scale(scale,scale);
 		ctx.lineJoin=ctx.lineCap='round';
-		ctx.strokeStyle='#362c1c';ctx.lineWidth=(size<100?1.8:3.4)/scale;ctx.stroke(path);
-		ctx.strokeStyle='#ffd272';ctx.lineWidth=(size<100?1:1.8)/scale;ctx.stroke(path);
+		const stroke=road=>{
+			ctx.strokeStyle='#362c1c';ctx.lineWidth=(size<100?1.8:3.4)/scale;ctx.stroke(road);
+			ctx.strokeStyle='#ffd272';ctx.lineWidth=(size<100?1:1.8)/scale;ctx.stroke(road);
+		};
+		for(const square of squares(entry,route)) {
+			const x=square.x-span/2,z=square.z-span/2;
+			if(size>=100 && entry.pins.length>1) {
+				ctx.save();ctx.strokeStyle='rgba(246,247,221,.55)';ctx.lineWidth=.8/scale;
+				ctx.setLineDash([4/scale,4/scale]);ctx.strokeRect(x,z,span,span);ctx.restore();
+			}
+			const known=sharedRoads.get(square.id);
+			if(!path && known?.scope===route.scope) {
+				ctx.save();ctx.beginPath();ctx.rect(x,z,span,span);ctx.clip();
+				ctx.translate(square.x-known.x,square.z-known.z);stroke(known.path);ctx.restore();
+			}
+		}
+		if(path)stroke(path);
 		ctx.restore();
 	}
 	function pathFor(entry, route) {
 		const highway=roadMap();
 		return route?.live && highway?.generation===state.generation ? highway.path : entry?.path;
 	}
-	function draw() { drawMap(map,current,pathFor(current,request)); }
+	function draw() {
+		const path=pathFor(current,request);
+		rememberRoads(current,request,path);drawMap(map,current,request,path);
+	}
 	function storeChart(signature, data) {
 		const image=document.createElement('canvas');
 		image.width=image.height=data.size;
@@ -328,11 +364,11 @@ function mount(frame, canvas, signal, roadMap) {
 				continue;
 			}
 			const path=pathFor(entry,route);
-			if(card.key===route.signature && card.path===path)continue;
+			if(card.key===route.signature && card.path===path && card.revision===roadRevision)continue;
 			const thumbnail=document.createElement('canvas');
 			thumbnail.width=thumbnail.height=72;
-			drawMap(thumbnail,entry,path);
-			card.thumb.replaceChildren(thumbnail);card.key=route.signature;card.path=path;
+			drawMap(thumbnail,entry,route,path);
+			card.thumb.replaceChildren(thumbnail);card.key=route.signature;card.path=path;card.revision=roadRevision;
 		}
 		if(missing && !thumbnailJob && (state?.mode==='fly' || state?.paused)) {
 			thumbnailJob={id:++serial,key:missing.signature};
@@ -346,10 +382,11 @@ function mount(frame, canvas, signal, roadMap) {
 
 	function describe() {
 		el('[data-map-width]').textContent=current?(current.extent/1609.344).toFixed(1)+' mi across':'';
-		survey.hidden=!current || !request?.exits.length || request.live || Boolean(current.path);
+		const carried=squares(current,request).some(s=>sharedRoads.get(s.id)?.scope===request.scope);
+		survey.hidden=!current || !request || request.live || Boolean(current.path) || (carried && !request.exits.length);
 		survey.textContent=surveying?'Cancel preview':'Preview roads';
 		info.textContent=!request?'Choose a valid route to see its map.':!current?'Drawing terrain…':surveying?'Surveying road contours…'
-			:request.live?'Current highway':current.path?'Surveyed highway':request.exits.length?'Terrain before road survey':'End of route';
+			:request.live?'Current highway':current.path?'Surveyed highway':carried?(request.exits.length?'Known roads · preview onward roads':'End of route · arriving roads'):request.exits.length?'Terrain before road survey':'End of route';
 	}
 	function placePins(next) {
 		pins.replaceChildren();
@@ -423,7 +460,7 @@ function mount(frame, canvas, signal, roadMap) {
 		queueThumbnails();
 	});
 	pages.addEventListener('scroll',queueThumbnails,{signal,passive:true});
-	signal.addEventListener('abort',()=>{observer.disconnect();clearTimeout(timer);clearTimeout(thumbnailTimer);cache.clear();},{once:true});
+	signal.addEventListener('abort',()=>{observer.disconnect();clearTimeout(timer);clearTimeout(thumbnailTimer);cache.clear();sharedRoads.clear();},{once:true});
 	on(el('[data-edit-flight]'),'click',()=>frame.querySelector('[data-action=fly]').click());
 	// Published state changes only touch the editor when its map or location can have changed.
 	function sync(next,plan,building) {

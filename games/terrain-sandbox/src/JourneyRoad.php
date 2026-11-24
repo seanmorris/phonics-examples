@@ -21,7 +21,7 @@ final class JourneyRoad
 		return ['preset'=>$west,'worldSize'=>$span,'join'=>['version'=>2,'span'=>$span,'destinations'=>$destinations]] + Session::preset($west);
 	}
 
-	public static function build(Landscape $land, array $arrival = [], ?callable $report = null): \Generator
+	public static function build(Landscape $land, array $arrival = [], ?callable $report = null, ?array $entry = null): \Generator
 	{
 		$r = $land->recipe();
 		$half = $r['worldSize']/2;
@@ -29,10 +29,10 @@ final class JourneyRoad
 		$origins = JoinedTerrain::origins($span,count($r['join']['destinations']));
 		$split = count($origins) === 3;
 		$survey = new JourneySurvey($r);
-		$entry = null;
-		foreach($arrival as $road) {
-			yield from $land->queueSteps($road);
-			$entry = $road['points'][array_key_last($road['points'])];
+		foreach($arrival as $road) yield from $land->queueSteps($road);
+		if($entry===null && $arrival) {
+			$last=end($arrival)['points'];
+			$entry=end($last);
 		}
 		if($report) $report('Surveying valley entrances and exits…');
 		$tailX = $half-1536.;
@@ -83,8 +83,7 @@ final class JourneyRoad
 				}
 				if($i>0) {
 					$run=hypot($x-$path[$i-1][0],$z-$path[$i-1][1]);
-					$rise=abs($height[$key]-$height[$route[$i-1]]);
-					$cost=max(.075*$run,min(.105*$run,$rise));
+					$cost=self::gradeLimit($run,$height[$key]-$height[$route[$i-1]]);
 					$graph[$route[$i-1]][$key] = $cost;
 					$graph[$key][$route[$i-1]] = $cost;
 				}
@@ -114,15 +113,9 @@ final class JourneyRoad
 		// through a different parent must give the same merge pavement and departure height.
 		$anchors=[];
 		foreach($tails as $leg) {
-			$keys=$routes[$leg]; $local=[];
-			for($i=1;$i<count($keys);$i++) {
-				$a=$keys[$i-1]; $b=$keys[$i];
-				$local[$a][$b]=$local[$b][$a]=$graph[$a][$b];
-			}
-			$raw=array_intersect_key($height,$local);
-			$lo=self::envelope($local,$raw);
-			$hi=self::envelope($local,array_map(static fn($h)=>-$h,$raw));
-			foreach($raw as $k=>$_) $anchors[$k]=max($r['waterLevel']+6.,.5*($lo[$k]-$hi[$k]));
+			$keys=$routes[$leg];
+			$raw=array_map(static fn($key)=>$height[$key],$keys);
+			$anchors+=array_combine($keys,self::landingProfile($paths[$leg],$raw));
 		}
 		if($entry!==null) $anchors[$routes[0][0]]=$entry[1];
 		// Share excess grade locally before enforcing the final grade bound. This minimizes
@@ -190,6 +183,42 @@ final class JourneyRoad
 		}
 		$land->commit();
 		return $views;
+	}
+
+	/** The end of a destination's highway depends only on its own terrain. A distant stage
+	 * preview can start here without building every junction between it and the departure. */
+	public static function landing(Landscape $land,int $destination): \Generator
+	{
+		$r=$land->recipe(); $half=$r['worldSize']/2;
+		$origins=JoinedTerrain::origins($r['join']['span'],count($r['join']['destinations']));
+		$survey=new JourneySurvey($r);
+		$path=yield from $survey->arrivalRoad($half-1536.,$half,$origins[$destination+1][1]);
+		$raw=array_map(static fn($p)=>max($r['waterLevel']+6.,$land->height(...$p)),$path);
+		$profile=self::landingProfile($path,$raw);
+		[$x,$z]=end($path);
+		return [$x,end($profile),$z];
+	}
+
+	private static function gradeLimit(float $run,float $rise): float
+	{
+		return max(.075*$run,min(.105*$run,abs($rise)));
+	}
+
+	/** Upper and lower grade envelopes on the shared landing, with level tangents at each end. */
+	private static function landingProfile(array $path,array $raw): array
+	{
+		$low=$high=$raw; $last=count($path)-1; $cost=[];
+		for($i=1;$i<=$last;$i++) {
+			$run=hypot($path[$i][0]-$path[$i-1][0],$path[$i][1]-$path[$i-1][1]);
+			$cost[$i]=($i===1 || $i===$last) ? 0. : self::gradeLimit($run,$raw[$i]-$raw[$i-1]);
+			$low[$i]=min($low[$i],$low[$i-1]+$cost[$i]);
+			$high[$i]=max($high[$i],$high[$i-1]-$cost[$i]);
+		}
+		for($i=$last;$i>0;$i--) {
+			$low[$i-1]=min($low[$i-1],$low[$i]+$cost[$i]);
+			$high[$i-1]=max($high[$i-1],$high[$i]-$cost[$i]);
+		}
+		return array_map(static fn($a,$b)=>.5*($a+$b),$low,$high);
 	}
 
 	private static function envelope(array $graph,array $values): array
