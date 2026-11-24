@@ -109,7 +109,7 @@ final class SandboxMenu
 			'resume' => ['label' => 'Resume', 'callback' => fn() => $this->close()],
 			'screenshot' => [
 				'label' => self::SCREENSHOT,
-				'subtext' => 'Hide the interface. Esc, B or a tap returns here.',
+				'subtext' => 'Hide this menu and the Lab. Esc, B or a tap returns here.',
 				'children' => [],
 			],
 		];
@@ -423,7 +423,7 @@ final class SandboxMenu
 		return true;
 	}
 
-	/** The screenshot page keeps menu input and the simulation pause while showing only the scene. */
+	/** The screenshot page keeps the world paused and its HUD visible. */
 	public function screenshotView(): bool { return $this->menu->isOpen && $this->menu->title === self::SCREENSHOT; }
 
 	/**

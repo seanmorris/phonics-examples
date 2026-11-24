@@ -184,6 +184,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	if(isset($input['menuPad']) && is_array($input['menuPad'])) $menuPad = $input['menuPad'];
 	// The open pause menu takes the keys, pad and pointer itself. Only page values, such as the input device, pass.
 	$menuOpen = $pauseMenu->menu->isOpen;
+	if($pauseMenu->screenshotView() && in_array('menu-back',array_column($input['actions'] ?? [],'type'),true))
+		$pauseMenu->menu->back();
 	if($menuOpen) $input = isset($input['values']) ? ['values' => $input['values']] : [];
 	if($packet !== '' || $heldKeys || $heldPad || $wasPicking || $wasSearching || $wasFindingCircuit || $session->preparingRoad())
 	{
@@ -406,11 +408,10 @@ $engine->start(
 				($trailRenderer ??= new TrailRenderer)->draw($trails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
 			foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->smoke($site,$viewCamera,$width,$height,$session->time);
-			$showHud = !$pauseMenu->screenshotView();
-			if($showHud && $target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
-			$jet = $showHud && $session->mode === 'jet';
-			$car = $showHud && $session->mode === 'car';
-			$craft = $showHud && $session->mode === 'craft';
+			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
+			$jet = $session->mode === 'jet';
+			$car = $session->mode === 'car';
+			$craft = $session->mode === 'craft';
 			$raceGuidance = $session->race->showGuidance($session->course);
 			$waterRace = $craft && $raceGuidance && $session->usingFloodedCircuit();
 			$instrumentSize = $car || $craft ? (int)round(min(320, $width*.36, $height*.40)) : null;

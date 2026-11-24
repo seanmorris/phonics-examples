@@ -3922,6 +3922,13 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 	expect((await status(page)).menu).toBe(true);
 	await pad(1, 'state.menu === arg', false);
 
+	await view.evaluate(el => el.terrainSandboxDebug.values({waterLevel: -5}));
+	await press(page, 'car');
+	await until('state.mode === arg', 'car');
+	const dial = page.locator('.terrain-speedometer'), map = page.locator('.terrain-flight-map');
+	await expect(dial).toBeVisible();
+	await expect(map).toBeVisible();
+
 	// The D-pad moves the selection, and Start closes the menu.
 	await pad(9, 'state.menu === arg', true);
 	await idle();
@@ -3929,15 +3936,20 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 	const menuPicture = await view.screenshot();
 	await pad(0, 'state.screenshotView === arg', true);
 	const frozen = await status(page);
-	await expect(page.locator('.terrain-stage canvas').first()).toHaveCSS('cursor', 'none');
-	await expect(page.locator('[data-road-preview]')).toBeHidden();
-	await expect(page.locator('.terrain-control-hints')).toBeHidden();
+	await expect(view).toHaveCSS('cursor', 'grab');
+	await expect(page.locator('[data-road-preview]')).toHaveCSS('visibility', 'visible');
+	await expect(page.locator('.terrain-control-hints')).toBeVisible();
+	await expect(page.locator('.terrain-hud')).toBeVisible();
+	await expect(dial).toBeVisible();
+	await expect(map).toBeVisible();
 	await expect(page.locator('.terrain-panel')).toBeHidden();
-	await expect(page.locator('[data-music-credit]')).toBeHidden();
+	await expect(page.locator('.terrain-credit-space')).toHaveCSS('visibility', 'visible');
+	// The screenshot shortcut switches the visible button hints from the pad to the keyboard.
+	await page.keyboard.down('Control');
+	await until('state.inputTheme === arg', 'keyboard');
 	await idle();
 	const picture = await view.screenshot();
 	expect(picture.equals(menuPicture)).toBe(false);
-	await page.keyboard.down('Control');
 	await page.keyboard.press('Shift+s');
 	await page.keyboard.up('Control');
 	await page.keyboard.press('w');
@@ -3946,11 +3958,17 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 	expect((await view.screenshot()).equals(picture)).toBe(true);
 	await pad(1, 'state.screenshotView === arg', false);
 	expect((await status(page)).paused).toBe(true);
+	await expect(dial).toBeHidden();
+	await key('Enter', '@back');
+	await control(page, 'menu').click();
+	await until('state.menuRow?.id === arg', 'screenshot');
 	await key('Enter', '@back');
 	await view.click({position: {x: 20, y: 20}});
 	await until('state.menuRow?.id === arg', 'screenshot');
 	expect((await status(page)).paused).toBe(true);
 	await pad(9, 'state.menu === arg', false);
+	await press(page, 'fly');
+	await until('state.mode === arg', 'fly');
 
 	// The pause button opens it too. Settings sets the flight speed in knots, and the Explore slider follows.
 	await control(page, 'menu').click();

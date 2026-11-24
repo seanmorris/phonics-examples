@@ -497,6 +497,7 @@ export function activate({module, canvas, session, services})
 				push({type, west: value('west'), destinations, span: Number(value('span')), ...network});
 			}
 			else if(type === 'load') frame.querySelector('[data-file]').click();
+			else if(type === 'menu' && latest?.screenshotView) push('menu-back');
 			else if(type === 'fullscreen')
 			void fullscreen.toggle().catch(error => {
 				status.textContent = error.message;
@@ -1032,7 +1033,8 @@ export function activate({module, canvas, session, services})
 
 			if(menuLive.textContent !== menuRow) menuLive.textContent = menuRow;
 
-			// The page's own overlays step aside while the menu is open.
+			// Keep the Lab closed until the menu releases input, including while taking a screenshot.
+			frame.classList.toggle('terrain-screenshot-view', state.screenshotView);
 			if(Boolean(state.menu) !== frame.classList.contains('terrain-menu-open'))
 			{
 				frame.classList.toggle('terrain-menu-open', Boolean(state.menu));
@@ -1215,8 +1217,7 @@ export function activate({module, canvas, session, services})
 				lastRoadProjection = projection;
 			}
 
-			canvas.style.cursor = state.screenshotView ? 'none'
-				: state.mode === 'fly' && state.settings.tool !== 'navigate' ? 'crosshair' : 'grab';
+			canvas.style.cursor = state.mode === 'fly' && state.settings.tool !== 'navigate' ? 'crosshair' : 'grab';
 			const [x,y,z] = state.camera.position;
 
 			const mode = {fly: 'FLIGHT', craft: 'WATERCRAFT', car: 'CAR', jet: 'F5'}[state.mode];
@@ -2464,7 +2465,8 @@ function markup()
 	.terrain-menu-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-menu-button i{width:4px;height:15px;border-radius:1px;background:#fff7de}
 	.terrain-sandbox:has(.terrain-panel[open]) .terrain-menu-button{right:calc(var(--lab-inset) + var(--lab-width) + 8px)}
-	.terrain-menu-open :is(.terrain-road-preview,.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-panel,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
+	.terrain-menu-open .terrain-panel,
+	.terrain-menu-open:not(.terrain-screenshot-view) :is(.terrain-road-preview,.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
 	.terrain-panel:not([open])>summary{height:42px;padding:0;justify-content:center}
 	.terrain-panel:not([open]) .lab-title{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-panel>summary:focus-visible{outline-offset:-4px;border-radius:inherit}

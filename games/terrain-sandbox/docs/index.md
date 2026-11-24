@@ -214,7 +214,7 @@ The sandbox reads gamepads that the browser maps to the standard layout, such as
 
 ## Pause menu
 
-Press **Escape**, press **Start** on a gamepad, or select the pause button beside the Landscape Lab button to open the pause menu. It freezes the world. Choose **Resume**, or press Escape, Start or **B** again, to carry on. Choose **Screenshot view** to hide the menu, HUD, and cursor while the scene stays frozen. Take a screenshot with your usual shortcut. Press **Escape** or **B**, or tap the scene, to return to the pause menu. **Start** resumes play directly.
+Press **Escape**, press **Start** on a gamepad, or select the pause button beside the Landscape Lab button to open the pause menu. It freezes the world. Choose **Resume**, or press Escape, Start or **B** again, to carry on. Choose **Screenshot view** to hide the pause menu and Landscape Lab. The scene stays frozen with its usual HUD, including vehicle instruments and race guidance. Take a screenshot with your usual shortcut. Press **Escape** or **B**, or tap the scene, to return to the pause menu. **Start** resumes play directly.
 
 The menu also offers these actions:
 
