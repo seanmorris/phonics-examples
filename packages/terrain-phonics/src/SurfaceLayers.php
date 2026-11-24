@@ -231,6 +231,8 @@ final class SurfaceLayers
 			'high-desert-steppe' => self::steppeLayers($s,$r),
 			'alaska-range' => self::alaskaLayers($s),
 			'chalk-headlands' => self::chalkLayers($s),
+			'karst-bay' => self::karstLayers($s),
+			'tepui-highlands' => self::tepuiLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -275,6 +277,22 @@ final class SurfaceLayers
 			'high-desert-steppe' => ['Gravel apron','Sagebrush','Dry washes','Rim rock'],
 			'alaska-range' => ['Tussock tundra','Outwash gravel','Moraine talus','Schist headwalls','Firn snowfields'],
 			'chalk-headlands' => ['Downland turf','Chalk faces','Flint nodules','Wet chalk','Shingle beach'],
+			'karst-bay' => [
+				'Jungle understory'
+				, 'Forest canopy'
+				, 'Limestone faces'
+				, 'Rain streaks'
+				, 'Tidal notch'
+				, 'Cove sand'
+			],
+			'tepui-highlands' => [
+				'Rainforest canopy'
+				, 'Tree crowns'
+				, 'Summit scrub'
+				, 'Sandstone walls'
+				, 'Algae streaks'
+				, 'Quartz sand'
+			],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
 		foreach($rows as $i=>&$row) {
@@ -612,6 +630,170 @@ final class SurfaceLayers
 			['color'=>$s['sandColor'], 'datum'=>'water', 'low'=>-1.2, 'high'=>$s['beachHeight']+1.5,
 				'fade'=>$s['beachWidth'], 'noise'=>1.2, 'scale'=>47., 'slopeHigh'=>.024, 'slopeFade'=>.034,
 				'pattern'=>'gravel', 'patternColor'=>$s['rockBandColor'], 'patternScale'=>.70, 'patternAmount'=>.9],
+		];
+	}
+
+	/** Forest holds every ledge of the towers. Rain streaks the bare limestone, and the tide cuts a dark notch. */
+	private static function karstLayers(array $s): array
+	{
+		$rock = $s['rockColor'];
+
+		return [
+			[
+				'color' => $s['grassColor']
+				, 'field' => 'meadow'
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 26.
+				, 'patternStretch' => 1.3
+				, 'patternAmount' => .6
+			]
+
+			, [
+				'mask' => 'trees'
+				, 'field' => 'crowns'
+				, 'channel' => 'both'
+				, 'relief' => 'crowns'
+				, 'strength' => .48
+				, 'color' => $s['forestColor']
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 24.
+				, 'patternAmount' => .34
+			]
+
+			, self::exposedRock($s) + [
+				'color' => $rock
+				, 'pattern' => 'fractures'
+				, 'patternColor' => self::tint($rock, .80, .81, .78)
+				, 'patternScale' => 5.
+				, 'patternStretch' => 1.8
+				, 'patternAmount' => .5
+			]
+
+			, [
+				'parent' => 'limestone-faces'
+				, 'color' => $rock
+				, 'opacity' => .9
+				, 'pattern' => 'streaks'
+				, 'patternColor' => $s['rockBandColor']
+				, 'patternScale' => 9.
+				, 'patternStretch' => 8.
+				, 'patternAmount' => .9
+			]
+
+			, [
+				'color' => self::tint($s['rockBandColor'], .62, .66, .64)
+				, 'datum' => 'water'
+				, 'low' => -3.
+				, 'high' => 2.5
+				, 'fade' => 1.2
+				, 'noise' => .6
+				, 'scale' => 14.
+				, 'slopeLow' => .25
+				, 'slopeFade' => .1
+				, 'roughness' => .35
+				, 'reflectivity' => .15
+			]
+
+			, [
+				'color' => $s['sandColor']
+				, 'datum' => 'water'
+				, 'low' => -1.
+				, 'high' => $s['beachHeight']
+				, 'fade' => $s['beachWidth']
+				, 'noise' => .8
+				, 'scale' => 30.
+				, 'slopeHigh' => .05
+				, 'slopeFade' => .05
+				, 'pattern' => 'gravel'
+				, 'patternColor' => $s['soilColor']
+				, 'patternScale' => .8
+				, 'patternAmount' => .5
+			]
+		];
+	}
+
+	/**
+	 * Rainforest fills the floor to the foot of the walls and scrub covers the summits above the treeline. The walls'
+	 * joints and algae streaks are drawn tens of meters wide so they still read from the next table.
+	 */
+	private static function tepuiLayers(array $s): array
+	{
+		$rock = $s['rockColor'];
+		$sand = $s['sandColor'];
+
+		return [
+			[
+				'color' => $s['forestColor']
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 22.
+				, 'patternStretch' => 1.
+				, 'patternAmount' => .55
+			]
+
+			, [
+				'mask' => 'trees'
+				, 'field' => 'crowns'
+				, 'channel' => 'both'
+				, 'relief' => 'crowns'
+				, 'strength' => .55
+				, 'color' => self::tint($s['forestColor'], .80, .85, .80)
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 31.
+				, 'patternAmount' => .3
+			]
+
+			, [
+				'color' => $s['grassColor']
+				, 'field' => 'meadow'
+				, 'low' => $s['snowline'] + $s['treeline']
+				, 'fade' => 90.
+				, 'noise' => 40.
+				, 'scale' => 260.
+				, 'pattern' => 'fractal'
+				, 'patternColor' => self::tint($s['grassColor'], .62, .70, .58)
+				, 'patternScale' => 34.
+				, 'patternStretch' => 1.2
+				, 'patternAmount' => .7
+			]
+
+			, self::exposedRock($s) + [
+				'color' => $rock
+				, 'pattern' => 'jointed'
+				, 'patternColor' => $s['rockBandColor']
+				, 'patternScale' => 30.
+				, 'patternAmount' => .6
+			]
+
+			, [
+				'parent' => 'sandstone-walls'
+				, 'color' => $rock
+				, 'opacity' => .9
+				, 'pattern' => 'streaks'
+				, 'patternColor' => self::tint($rock, .30, .31, .33)
+				, 'patternScale' => 40.
+				, 'patternStretch' => 10.
+				, 'patternAmount' => .9
+			]
+
+			, [
+				'color' => $sand
+				, 'datum' => 'water'
+				, 'low' => -1.2
+				, 'high' => $s['beachHeight'] + 1.
+				, 'fade' => $s['beachWidth']
+				, 'noise' => 1.
+				, 'scale' => 40.
+				, 'slopeHigh' => .03
+				, 'slopeFade' => .04
+				, 'pattern' => 'gravel'
+				, 'patternColor' => self::tint($sand, .80, .78, .72)
+				, 'patternScale' => .8
+				, 'patternAmount' => .6
+			]
 		];
 	}
 

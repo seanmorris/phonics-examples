@@ -232,6 +232,8 @@ foreach([
 	'rolling-prairie'=>['green-swales','Prairie haze'], 'river-valley'=>['gravel-bars','River mist'],
 	'wooded-foothills'=>['woodland-canopy','Foothill haze'], 'high-desert-steppe'=>['sagebrush','Basin dust'],
 	'alaska-range'=>['firn-snowfields','Glacial valley haze'], 'chalk-headlands'=>['flint-nodules','Channel mist'],
+	'karst-bay'=>['rain-streaks','Bay mist'], 'tepui-highlands'=>['algae-streaks','Cloud forest'],
+	'painted-badlands'=>['cap-rock','Clay dust'],
 	'salt-pans'=>['salt-crust','Playa dust'], 'cinder-highlands'=>['oxidized-scoria','Highland haze'],
 ] as $preset=>[$layer,$air]) {
 	input($fresh,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
@@ -251,6 +253,12 @@ foreach([
 	} elseif($preset === 'chalk-headlands') {
 		input($restored,['actions'=>['craft']]);
 		expect($restored->mode === 'craft', 'The cove below the chalk headlands is navigable.');
+	} elseif($preset === 'karst-bay') {
+		input($restored,['actions'=>['craft']]);
+		expect($restored->mode === 'craft', 'The bay between the karst towers is navigable.');
+	} elseif($preset === 'painted-badlands') {
+		enterCar($restored);
+		expect($restored->mode === 'car', 'The dusty floor between the badland mounds supports the car.');
 	}
 	$restored->close();
 }

@@ -2901,6 +2901,12 @@ for(const [first, second] of [
 	, [{label: 'Alaska Range', name: 'alaska-range', layer: 'firn-snowfields'}
 		, {label: 'Chalk Headlands', name: 'chalk-headlands', layer: 'flint-nodules'}
 	]
+	, [{label: 'Karst Bay', name: 'karst-bay', layer: 'rain-streaks'}
+		, {label: 'Tepui Highlands', name: 'tepui-highlands', layer: 'algae-streaks'}
+	]
+	, [{label: 'Painted Badlands', name: 'painted-badlands', layer: 'cap-rock'}
+		, {label: 'Red Mesas', name: 'red-mesas', layer: 'cap-rock'}
+	]
 ]) {
 	test(
 		`${first.label} and ${second.label} are available as landscapes and as independent surface presets`

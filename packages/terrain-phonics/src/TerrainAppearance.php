@@ -182,6 +182,55 @@ final class TerrainAppearance
 			'rockBandColor'=>'#818582', 'soilColor'=>'#7b837e', 'sandColor'=>'#a29988',
 			'rockSlopeStart'=>.065, 'rockSlopeEnd'=>.18, 'beachHeight'=>2.4384, 'beachWidth'=>2.1336,
 		]
+		// Grey limestone streaked dark by rain, with forest clinging to every ledge it can hold.
+		, 'karst-bay' => [
+			'grassColor' => '#4f6a3b'
+			, 'meadowColor' => '#3c5732'
+			, 'forestColor' => '#253d25'
+			, 'soilColor' => '#5f5a4a'
+			, 'rockColor' => '#8a8a82'
+			, 'rockBandColor' => '#43473f'
+			, 'sandColor' => '#b2aa91'
+
+			, 'rockSlopeStart' => .30
+			, 'rockSlopeEnd' => .55
+			, 'beachHeight' => 1.5
+			, 'beachWidth' => 1.5
+			, 'snowline' => 1219.2
+			, 'treeline' => -600.
+		]
+		// Rainforest covers the floor to the foot of the walls. Dark sandstone, black algae streaks, and scrub on
+		// the summits.
+		, 'tepui-highlands' => [
+			'grassColor' => '#6b7448'
+			, 'meadowColor' => '#3f5a33'
+			, 'forestColor' => '#1f3a22'
+			, 'soilColor' => '#6a4a34'
+			, 'rockColor' => '#5d4b43'
+			, 'rockBandColor' => '#94694f'
+			, 'sandColor' => '#cdbd98'
+
+			, 'rockSlopeStart' => .20
+			, 'rockSlopeEnd' => .38
+			, 'beachHeight' => 1.2
+			, 'beachWidth' => 2.
+			, 'snowline' => 2000.
+			, 'treeline' => -1150.
+		]
+		// Maroon and gold clays, lavender ash and cream tuff, bare on every slope above the dust.
+		, 'painted-badlands' => [
+			'canyonRustColor' => '#76372a'
+			, 'canyonShaleColor' => '#544a52'
+			, 'canyonSandstoneColor' => '#a07a42'
+			, 'canyonCapColor' => '#a38b6d'
+			, 'sandColor' => '#b09276'
+			, 'grassColor' => '#7d7a55'
+
+			, 'rockSlopeStart' => .04
+			, 'rockSlopeEnd' => .12
+			, 'bandContrast' => .65
+			, 'macroVariation' => 1.
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -352,6 +401,38 @@ final class TerrainAppearance
 			'grassColor','soilColor','rockColor','rockBandColor','sandColor','roadColor','meadowColor',
 			'rockSlopeStart','rockSlopeEnd','beachHeight','beachWidth',
 		]
+		, 'karst-bay' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'treeline'
+		]
+		, 'tepui-highlands' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'treeline'
+		]
 		, 'salt-pans' => [
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'rockSlopeStart', 'rockSlopeEnd',
@@ -485,12 +566,12 @@ final class TerrainAppearance
 		return match($recipe['preset'] ?? null)
 		{
 			'canyon' => ($recipe['version'] ?? 0) === 2 ? 'canyon' : 'canyon-v1',
-			// Mesas are canyon country seen from the floor: the same bedded walls and dust.
-			'red-mesas' => 'canyon',
+			// Mesas and badlands are canyon country seen from the floor: the same bedded walls and dust.
+			'red-mesas', 'painted-badlands' => 'canyon',
 			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon',
 			'heather-moor', 'salt-pans', 'cinder-highlands',
 			'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe',
-			'alaska-range', 'chalk-headlands' => $recipe['preset'],
+			'alaska-range', 'chalk-headlands', 'karst-bay', 'tepui-highlands' => $recipe['preset'],
 			default => 'coast'
 		};
 	}

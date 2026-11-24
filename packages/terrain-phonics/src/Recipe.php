@@ -18,6 +18,7 @@ final class Recipe
 		, 'red-mesas', 'heather-moor', 'salt-pans', 'cinder-highlands'
 		, 'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe'
 		, 'alaska-range', 'chalk-headlands'
+		, 'karst-bay', 'tepui-highlands', 'painted-badlands'
 	];
 
 	/** Parameters are immutable after normalization. */
@@ -61,6 +62,89 @@ final class Recipe
 			'directionalRise'=>.28, 'warpAmplitude'=>228.6, 'warpFrequency'=>1 / 2400,
 			'detailAmplitude'=>2.4384, 'detailOctaves'=>5, 'persistence'=>.44, 'terraceStrength'=>0.,
 			'waterLevel'=>0., 'surround'=>'sea',
+		] + self::shapeDefaults('coast', $version);
+
+		// Narrow walls close the contour rings into steep towers. The sea floods the floor between them.
+		if($preset === 'karst-bay')
+		return [
+			'seed' => 'karst-bay'
+			, 'baseFrequency' => 1 / 300
+			, 'heightScale' => 260.
+			, 'baseBias' => 0.
+			, 'rolling' => 0.
+
+			, 'wallHeight' => 1.
+			, 'floorWidth' => .32
+			, 'wallWidth' => .10
+			, 'secondary' => .25
+			, 'directionalRise' => 0.
+
+			, 'warpAmplitude' => 120.
+			, 'warpFrequency' => 1 / 900
+
+			, 'detailAmplitude' => 18.
+			, 'detailOctaves' => 6
+			, 'terraceStrength' => 0.
+
+			, 'waterLevel' => 18.
+			, 'surround' => 'sea'
+		] + self::shapeDefaults('coast', $version);
+
+		// Broad contour rings with sheer walls leave flat-topped tables a kilometer above a forest floor.
+		if($preset === 'tepui-highlands')
+		return [
+			'seed' => 'tepui-highlands'
+			, 'baseFrequency' => 1 / 4000
+			, 'heightScale' => 1000.
+			, 'baseBias' => 0.
+			, 'rolling' => 0.
+
+			, 'wallHeight' => 1.
+			, 'floorWidth' => .22
+			, 'wallWidth' => .02
+			, 'secondary' => .12
+			, 'directionalRise' => 0.
+
+			, 'warpAmplitude' => 700.
+			, 'warpFrequency' => 1 / 3300
+
+			, 'detailAmplitude' => 30.
+			, 'detailOctaves' => 6
+			, 'terraceStrength' => 0.
+
+			, 'waterLevel' => -30.
+			, 'surround' => 'plateau'
+		] + self::shapeDefaults('coast', $version);
+
+		// Wide, gentle walls round the contour rings into close mounds. Thin beds band them like the mesa walls.
+		if($preset === 'painted-badlands')
+		return [
+			'seed' => 'painted-badlands'
+			, 'baseFrequency' => 1 / 300
+			, 'heightScale' => 90.
+			, 'baseBias' => 0.
+			, 'rolling' => 0.
+
+			, 'wallHeight' => 1.
+			, 'floorWidth' => .18
+			, 'wallWidth' => .40
+			, 'secondary' => .25
+			, 'directionalRise' => 0.
+
+			, 'warpAmplitude' => 100.
+			, 'warpFrequency' => 1 / 550
+
+			, 'detailAmplitude' => 4.
+			, 'detailOctaves' => 7
+			, 'persistence' => .55
+			, 'slopeScale' => 1.
+			, 'damping' => 0.
+			, 'terraceSpacing' => 8.
+			, 'terraceStrength' => .35
+			, 'bedding' => 1.
+
+			, 'waterLevel' => -300.
+			, 'surround' => 'plateau'
 		] + self::shapeDefaults('coast', $version);
 
 		if($preset === 'basalt-fjords')

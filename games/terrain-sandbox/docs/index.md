@@ -30,6 +30,9 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 - **High Desert Steppe** opens on a sagebrush and gravel apron. Dry washes lead between long benches of rim rock.
 - **Alaska Range** looks across a tundra valley toward snowfields broken by dark schist. Follow the low gravel floor to see the mountains from below.
 - **Chalk Headlands** overlooks a cove between grass-topped white cliffs. Follow the shore by water to see the flint in the chalk and the shingle at its foot.
+- **Karst Bay** starts on the water among sheer limestone towers. Forest clings to their ledges, rain streaks the bare rock, and the tide cuts a dark notch at the foot of each tower. Board the watercraft to weave between them.
+- **Tepui Highlands** looks across a rainforest floor at flat-topped sandstone tables about 1,000 m high. Fly up through the cloud to land on a summit, where scrub replaces the forest.
+- **Painted Badlands** opens among bare clay mounds banded maroon, lavender, gold and cream. Drive between them on the dusty floor.
 
 ## Fly over the landscape
 

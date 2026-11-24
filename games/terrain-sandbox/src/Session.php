@@ -115,6 +115,10 @@ final class Session
 		'high-desert-steppe' => ['name'=>'Basin dust', 'topFt'=>3200, 'densityPerMile'=>.035, 'color'=>'#ddcbbd'],
 		'alaska-range' => ['name'=>'Glacial valley haze', 'topFt'=>3400, 'densityPerMile'=>.05, 'color'=>'#c7d4df'],
 		'chalk-headlands' => ['name'=>'Channel mist', 'topFt'=>750, 'densityPerMile'=>.085, 'color'=>'#d3dedf'],
+		'karst-bay' => ['name'=>'Bay mist', 'topFt'=>900, 'densityPerMile'=>.11, 'color'=>'#d4dfdc'],
+		// The cloud bank tops out a few hundred meters below the table rims, so the summits stand clear of it.
+		'tepui-highlands' => ['name'=>'Cloud forest', 'topFt'=>2300, 'densityPerMile'=>.16, 'color'=>'#e2e7e6'],
+		'painted-badlands' => ['name'=>'Clay dust', 'topFt'=>1200, 'densityPerMile'=>.04, 'color'=>'#e4cfb4'],
 		'heather-moor' => ['name'=>'Moor mist', 'topFt'=>350, 'densityPerMile'=>.12, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
@@ -177,6 +181,22 @@ final class Session
 			'waterColor'=>'#487578', 'waterTransparency'=>.73, 'waterReflectivity'=>.59,
 			'waterFogDensity'=>.14, 'waterChoppiness'=>38.,
 		],
+		// Soft side light across the towers and a calm emerald bay.
+		'karst-bay' => TerrainAppearance::PRESET_DEFAULTS['karst-bay'] + [
+			'azimuth'=>160., 'elevation'=>28., 'haze'=>.82, 'skyColor'=>'#7896ad', 'hazeColor'=>'#d9e2dc',
+			'waterColor'=>'#2f7a68', 'waterTransparency'=>.82, 'waterReflectivity'=>.48,
+			'waterFogDensity'=>.09, 'waterChoppiness'=>16.,
+		],
+		// Tannin-dark rivers on the forest floor.
+		'tepui-highlands' => TerrainAppearance::PRESET_DEFAULTS['tepui-highlands'] + [
+			'azimuth'=>25., 'elevation'=>40., 'haze'=>.74, 'skyColor'=>'#5a82a8', 'hazeColor'=>'#dde4e0',
+			'waterColor'=>'#3b2616', 'waterTransparency'=>.50, 'waterReflectivity'=>.62,
+			'waterFogDensity'=>.30, 'waterChoppiness'=>10.,
+		],
+		// A low sun picks out the bands on the mounds.
+		'painted-badlands' => TerrainAppearance::PRESET_DEFAULTS['painted-badlands'] + [
+			'azimuth'=>165., 'elevation'=>20., 'haze'=>.50, 'skyColor'=>'#3f6ea6', 'hazeColor'=>'#e2cfb8',
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
@@ -195,6 +215,10 @@ final class Session
 		'high-desert-steppe' => ['x'=>.884, 'z'=>.047, 'heading'=>2., 'pitch'=>-.12, 'clearance'=>45., 'minimum'=>0.],
 		'alaska-range' => ['x'=>.497424, 'z'=>.018501, 'heading'=>35., 'pitch'=>.055, 'clearance'=>155., 'minimum'=>0.],
 		'chalk-headlands' => ['x'=>.8865, 'z'=>-.0432, 'heading'=>103., 'pitch'=>-.18, 'clearance'=>42., 'minimum'=>0.],
+		'karst-bay' => ['x'=>1.3333, 'z'=>-5.7778, 'heading'=>275., 'pitch'=>-.05, 'clearance'=>45., 'minimum'=>0.],
+		// On a summit rim, looking across the cloud-filled floor at the next table.
+		'tepui-highlands' => ['x'=>-.8030, 'z'=>-.1138, 'heading'=>255., 'pitch'=>-.12, 'clearance'=>25., 'minimum'=>0.],
+		'painted-badlands' => ['x'=>.2778, 'z'=>-2.5, 'heading'=>280., 'pitch'=>-.04, 'clearance'=>22., 'minimum'=>0.],
 	];
 
 	/**
@@ -222,12 +246,13 @@ final class Session
 	private string $atmosphereOrigin = 'preset';
 	private ?string $materialPreset = null;
 	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor','salt-pans','cinder-highlands',
-		'rolling-prairie','river-valley','wooded-foothills','high-desert-steppe','alaska-range','chalk-headlands'];
+		'rolling-prairie','river-valley','wooded-foothills','high-desert-steppe','alaska-range','chalk-headlands',
+		'karst-bay','tepui-highlands','painted-badlands'];
 
 	private static function materialStyle(array $recipe): string
 	{
 		// These landforms draw with another style's program but keep their own colors, so their surfaces carry their names.
-		return in_array($recipe['preset'], ['limestone', 'red-mesas'], true) ? $recipe['preset'] : TerrainAppearance::style($recipe);
+		return in_array($recipe['preset'], ['limestone', 'red-mesas', 'painted-badlands'], true) ? $recipe['preset'] : TerrainAppearance::style($recipe);
 	}
 
 	private function paintInks(): array

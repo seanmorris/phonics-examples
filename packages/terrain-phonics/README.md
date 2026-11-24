@@ -325,6 +325,14 @@ Set `reflectivity` on a color layer to give it a clear dielectric coating. The r
 
 In `alaska-range`, the broad floor of the shared contour field carries tundra and outwash gravel. Snow accumulates above the snowline and thins on steep schist faces. In `chalk-headlands`, the same field has a narrow wall transition. The sea floods the low side of the scarp, flint nodules follow the exposed chalk, and wet chalk and shingle follow the waterline.
 
+Three presets close the contour rings into isolated landforms. In `karst-bay`, a wavelength of 300 m and narrow walls
+raise limestone towers up to about 290 m straight out of a bay about 20 m deep. Forest holds the ledges and tops, rain
+streaks the bare faces, and the water cuts a dark notch at the foot of each tower. `tepui-highlands` uses a 4 km
+wavelength and walls only a few tens of meters wide, so sandstone tables stand about 1,000 m above a rainforest floor.
+The treeline sits about 850 m up, which leaves scrub and mats on the summits, and black algae streaks run down the walls.
+`painted-badlands` uses wide walls on a 300 m wavelength to round the rings into mounds up to about 90 m high. Its
+8 m beds draw with the canyon program, like `red-mesas`, in maroon, lavender, gold and cream clays.
+
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 
 | Setting | Coast | Mountain | Version-one canyon | Canyon |

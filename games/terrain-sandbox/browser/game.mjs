@@ -2298,6 +2298,9 @@ function markup()
 		, ['high-desert-steppe', 'High Desert Steppe']
 		, ['alaska-range', 'Alaska Range']
 		, ['chalk-headlands', 'Chalk Headlands']
+		, ['karst-bay', 'Karst Bay']
+		, ['tepui-highlands', 'Tepui Highlands']
+		, ['painted-badlands', 'Painted Badlands']
 	];
 
 	const option = ([value, label]) => `<option value="${value}">${label}</option>`;
