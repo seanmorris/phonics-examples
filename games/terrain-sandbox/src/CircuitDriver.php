@@ -62,7 +62,10 @@ final class CircuitDriver
 			$slideGrip = min(15.,8.+2.*$margin);
 			$shortTurn = max(0., 1. - $turn / .90);
 			$slideGrip = min($slideGrip, 9.1 + $shortTurn * ($slideGrip - 9.1));
-			$grip = $steadyGrip + $widthAllowance*($slideGrip-$steadyGrip);
+			// A high-speed sweeper keeps the front tires loaded well past the handbrake window.
+			// Blend in the slide allowance as the radius tightens from about 870 m to 435 m.
+			$slideEntry = max(0., min(1., ($k - .00115) / .00115));
+			$grip = $steadyGrip + $widthAllowance * $slideEntry * ($slideGrip - $steadyGrip);
 			if($crestCount > 0) {
 				$sample = $i * $crestCount / $this->count;
 				$j = (int)$sample;

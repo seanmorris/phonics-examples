@@ -207,6 +207,26 @@ foreach([false,true] as $chicane) {
 }
 echo "CPU exhibition laps, drift exits, records, pause and restart passed.\n";
 
+// A high-speed sweeper lasts much longer than a handbrake slide. Test both sides of its grip limit.
+$table = new Session(['worldSize'=>4096,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12]);
+$ring = [];
+for($i = 0; $i < 96; $i++) {
+	$angle = 2 * M_PI * $i / 96;
+	$ring[] = [800*cos($angle), 0., 800*sin($angle)];
+}
+$table->landscape->queue(CircuitRoad::closeLoop(['type'=>'road','material'=>'road','width'=>24.,'shoulder'=>10.,'points'=>$ring]));
+$table->landscape->commit();
+$loop = CircuitRoad::manualCircuit($table->landscape,0,-12.);
+$driver = new CircuitDriver($loop,$table->course,$table->landscape);
+[[$x,$z,$yaw]] = $loop->stations([.125*$loop->length]);
+$driver->restart($x,$z);
+$pose = compact('x','z','yaw') + ['motion'=>'driving','roadHold'=>0.,'drift'=>0.,'nitrous'=>.5];
+[$pedal,,,$boost] = $driver->controls($pose + ['speed'=>60.],1/60,false);
+check($pedal === 1. && $boost, 'Keep accelerating into a sweeper while tire grip is available.');
+[$pedal,,$handbrake,$boost] = $driver->controls($pose + ['speed'=>100.],1/60,false);
+check($pedal < 0. && !$handbrake && !$boost, 'Brake for sustained lateral load on a broad high-speed curve.');
+$table->close();
+
 // Drive the same authored S-bends at several widths. The wide grading shoulder is outside the asphalt.
 $points = [[-140,-80],[-140,55],[-130,84],[-104,100],[-40,100],[-22,88],[-14,66],[-5,47],
 	[22,40],[90,40],[110,26],[118,0],[110,-40],[75,-100],[-40,-132],[-100,-120]];
