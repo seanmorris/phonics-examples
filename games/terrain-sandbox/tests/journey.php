@@ -4,11 +4,27 @@ require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
 
 use TerrainPhonics\{JoinedTerrain,Landscape,Recipe};
-use TerrainSandbox\{Car,JourneyNetwork,JourneyRoad,Session};
+use TerrainSandbox\{Car,JourneyNetwork,JourneyRoad,JourneySurvey,Session};
 
 function expectJourney(bool $ok,string $reason): void {
 	if(!$ok) throw new RuntimeException($reason);
 }
+
+// A smooth hillside rises roughly 20% straight across. The road can gain the
+// very same elevation on longer traverses between two fixed endpoints.
+$form=['preset'=>'coast','heightScale'=>900.,'baseBias'=>0.,'rolling'=>0.,'secondary'=>0.,
+	'ridgeHeight'=>0.,'wallHeight'=>0.,'detailAmplitude'=>0.,'directionalRise'=>1.,'waterLevel'=>-2000.];
+$slope=new Landscape($form+['join'=>['span'=>16384,'destinations'=>[$form]]]);
+$ties=[[-10940.,0.],[-9540.,0.]];
+$survey=new JourneySurvey($slope->recipe());
+$search=$survey->route($ties);
+foreach($search as $_) {}
+$alignment=$search->getReturn(); $run=0.;
+foreach($alignment as $i=>[$x,$z]) if($i) $run+=hypot($x-$alignment[$i-1][0],$z-$alignment[$i-1][1]);
+$rise=$slope->height(...$ties[1])-$slope->height(...$ties[0]);
+expectJourney($alignment[0]===$ties[0] && end($alignment)===$ties[1]
+	&& $rise/1400.>.18 && $rise/$run<.105,'Traverse a steep hillside at road grade between the fixed landings.');
+$slope->close();
 
 // A nearer flooded road and two separate dry branches exercise the stick click between junctions.
 $flat = ['preset'=>'coast','spacing'=>2.,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-5.];
@@ -174,4 +190,25 @@ $network=new JourneyNetwork("A rolling-prairie -> B,C\nB canyon -> F\nC mountain
 $land=new Landscape($network->recipe('A',32768));
 foreach(JourneyRoad::build($land) as $_) {}
 checkForkEarthworks($land,10.,50.);
+$land->close();
+
+// The eastern Canyon arrival used to run along a disconnected plateau with a
+// 300 m cut. Measure the finished spline and both edges, including the fork.
+$land=new Landscape(JourneyRoad::recipe('rolling-prairie',['canyon'],16384));
+$bare=new JoinedTerrain($land->recipe());
+foreach(JourneyRoad::build($land) as $_) {}
+$length=$highEdges=0.;
+foreach($land->roads() as $road) {
+	$last=null;
+	foreach($road['_road']['samples'] as $i=>[$x,$y,$z,$tx,$tz]) {
+		if($i%4) continue;
+		$run=$last ? hypot($x-$last[0],$z-$last[1]) : 0.;
+		$length+=$run; $last=[$x,$z];
+		$error=0.;
+		foreach([-14.,0.,14.] as $offset)
+			$error=max($error,abs($y-$bare->height($x-$tz*$offset,$z+$tx*$offset)));
+		if($error>30.48) $highEdges+=$run;
+	}
+}
+expectJourney($length>32768. && $highEdges<$length*.02,'Keep 100-foot cuts and fills below two percent of the Rolling Prairie to Canyon pavement.');
 $land->close();

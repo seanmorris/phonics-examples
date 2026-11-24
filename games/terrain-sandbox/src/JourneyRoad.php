@@ -9,6 +9,7 @@ use TerrainPhonics\Landscape;
 /** Survey a west-to-east highway. Its stretches are ordinary editable roads with coincident junction knots. */
 final class JourneyRoad
 {
+	public const WIDTH = 28.;
 	public const FORK = -.34 * JoinedTerrain::GAP;
 
 	public static function recipe(string $west, array $east, int $span): array
@@ -46,7 +47,13 @@ final class JourneyRoad
 			yield from $land->queueSteps($road);
 			$entry = $road['points'][array_key_last($road['points'])];
 		}
-		[$forkZ,$ends] = yield from $survey->portals($split,$entry[2] ?? null);
+		if($report) $report('Surveying valley entrances and exits…');
+		$tailX = $half-1536.;
+		$arrivals = [];
+		foreach(array_slice($origins,1) as [, $cz]) {
+			$arrivals[]=[$cz,yield from $survey->arrivalRoad($tailX,$half,$cz)];
+		}
+		[$forkZ,$ends] = yield from $survey->portals($split,$entry[2] ?? null,$arrivals);
 		$first = $entry ? [$entry[0],$entry[2]] : [-$half,0.];
 		if($report) $report('Following terrain through the departure square…');
 		$approach = yield from $survey->route([$first,[self::FORK-192.,$forkZ]],!$entry,!$entry);
@@ -69,17 +76,15 @@ final class JourneyRoad
 			$forks[] = count($paths);
 			$paths[] = yield from $survey->branch($guides[$side],$side,$divider);
 			if(!$split && $side<0) continue;
-			[, $center] = $origins[$split && $side>0 ? 2 : 1];
 			// Both parents use the same final approach on a shared destination square.
-			$tailX = $half-1536.;
-			$tailZ = yield from $survey->landing($tailX,$center,1280);
-			$edgeZ = yield from $survey->landing($half,$center,1280);
+			[, $tail]=$arrivals[$split && $side>0 ? 1 : 0];
+			$tailZ = $tail[0][1];
 			if($report) $report('Finding an overlook and a road through '.($split ? ($side<0 ? 'the northern' : 'the southern') : 'the'). ' destination…');
 			$onward = yield from $survey->route([[$throatEnd+192.,$z],[$tailX,$tailZ]],scenic:true,divider:$split ? $forkZ : null);
 			$squares[count($paths)]=$origins[$split && $side>0 ? 2 : 1];
 			$paths[] = [[$throatEnd,$z],[$throatEnd+96.,$z],...$onward];
 			$tails[]=count($paths);
-			$paths[] = yield from $survey->route([[$tailX,$tailZ],[$half,$edgeZ]]);
+			$paths[] = $tail;
 		}
 
 		if($report) $report('Fitting the pavement to the surveyed ground…');
@@ -196,7 +201,7 @@ final class JourneyRoad
 			}
 			// Slice the fitted spline with its original handles so adjacent road records meet tangentially.
 			for($i=0;$i<$last;$i+=96) {
-				yield from $land->queueSteps(['type'=>'road','material'=>'road','width'=>28.,'shoulder'=>18.,'stationSpacing'=>7.,
+				yield from $land->queueSteps(['type'=>'road','material'=>'road','width'=>self::WIDTH,'shoulder'=>18.,'stationSpacing'=>7.,
 					'points'=>array_slice($points,$i,97),'handles'=>array_slice($handles,$i,97)]);
 				yield;
 			}
