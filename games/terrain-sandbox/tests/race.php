@@ -1269,6 +1269,58 @@ $surveyLand->undo();
 expect($readSurvey($surveyLand,-24.)[1] === $natural, 'Undo is reflected in the next survey.');
 $surveyLand->close();
 
+// A hill on a flat plain exercises the local search independently of the regional presets.
+$hill = new Landscape(['worldSize'=>768,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-5]);
+$hill->queue(['type'=>'raise','x'=>0,'z'=>0,'radius'=>120,'amount'=>50]);
+$hill->commit();
+$findHill = function(array $controls = [], ?float $start = null, bool $causeways = false) use ($hill): ?Circuit {
+	$finder = new TerrainSandbox\CircuitFinder($hill,$causeways ? 5. : -5.,0.,4.,$start,$causeways,$controls);
+	$job = $finder->find(-155.,20.,GateShapes::packaged(),1);
+	iterator_count($job);
+	return $job->getReturn();
+};
+$automatic = $findHill();
+expect($automatic !== null && $findHill(['circuitMinLap'=>3000.]) === null && $findHill(['circuitMinArea'=>60000.]) === null,
+	'Explicit lap and area minimums also apply to a local search');
+$wider = $findHill(['circuitTurnRadius'=>10.]);
+expect($wider !== null && $wider->points !== $automatic->points, 'Increasing the radius reshapes the bends on the same hill');
+expect($findHill([], -2.) === null && $findHill(['circuitStartTolerance'=>3.], -2.)?->startHeight === 0.,
+	'A wider elevation tolerance admits a level start outside the original band');
+$preciseHeight = $hill->height(-103.1234567,0.);
+$precise = new TerrainSandbox\CircuitFinder($hill,-5.,0.,startHeight:$preciseHeight,controls:['circuitStartTolerance'=>1e-8]);
+$job = (fn() => $this->startAtHeight($hill,[[-140.,0.],[-70.,0.],[-70.,160.],[-140.,160.]],-104.,0.))->call($precise);
+iterator_count($job);
+$line = $job->getReturn();
+expect($line !== null && abs($hill->height(...$line[0])-$preciseHeight)<=1e-8,
+	'Fine elevation tolerances refine the height crossing beyond the original ten bisections');
+foreach([0.,10.] as $depth) {
+	$crossing = $findHill(['circuitCausewayDepth'=>$depth],null,true);
+	expect($crossing !== null && $crossing->road !== [], 'The raised road has a graded route at either depth limit');
+	$fitted = $hill->fork();
+	foreach($crossing->road as $edit) $fitted->queue($edit);
+	$fitted->commit();
+	$deepest = 0.;
+	foreach($fitted->roads() as $road) foreach($road['_road']['samples'] as [$x,,$z])
+		$deepest = max($deepest,5.-$hill->height($x,$z));
+	expect($deepest<=$depth && ($depth===0. || $deepest>0.), 'Fitted causeways respect the depth limit between routing cells');
+	$fitted->close();
+}
+$crossSlope = function(float $preference) use ($hill): array {
+	$finder = new TerrainSandbox\CircuitFinder($hill,-5.,0.,controls:['circuitGradePreference'=>$preference]);
+	$job = (function() {
+		$this->side = 7; $this->step = 10.;
+		$this->open = array_fill(0,49,true);
+		$this->routeHeights = array_fill(0,49,0.);
+		[$this->routeHeights[23],$this->routeHeights[24],$this->routeHeights[25]] = [3.,6.,3.];
+		return $this->route(22,26,0,0,0,-1);
+	})->call($finder);
+	iterator_count($job);
+	return $job->getReturn();
+};
+expect($crossSlope(0.) === [22,23,24,25,26] && !in_array(24,$crossSlope(16.),true),
+	'Raising the grade preference takes a longer, gentler path around a hill');
+$hill->close();
+
 // Short and long loops keep the original stations as waypoints and evenly spread the scored gates around the seam.
 foreach(range(8,33) as $count) {
 	$side = 60.*$count;
@@ -1675,10 +1727,18 @@ $arcticCopy = new Session;
 $arcticCopy->load($arctic->save());
 expect($arcticCopy->settings['circuitCauseways'] === true && $arcticCopy->course->export() === $arctic->course->export(),
 	'Saved causeways retain their setting, graded road and gates');
+$custom = ['circuitMinLap'=>3000., 'circuitMinArea'=>12000., 'circuitGradePreference'=>12.,
+	'circuitCausewayDepth'=>5., 'circuitStartTolerance'=>2., 'circuitTurnRadius'=>10.];
+input($arcticCopy,['values'=>$custom]);
+$arcticCopy->load($arcticCopy->save());
+expect(array_intersect_key($arcticCopy->settings,$custom) == $custom,'All six circuit controls survive a save and reload');
 $legacy = json_decode($blankFile,true);
+$legacy['settings'] = array_diff_key($legacy['settings'],$custom);
 unset($legacy['settings']['circuitCauseways']);
 $arcticCopy->load(json_encode($legacy));
-expect($arcticCopy->settings['circuitCauseways'] === false,'An older landscape restores the dry-ground default');
+expect($arcticCopy->settings['circuitCauseways'] === false
+	&& array_intersect_key($arcticCopy->settings,$custom) === TerrainSandbox\CircuitFinder::DEFAULTS,
+	'An older save restores the original circuit defaults over a customized session');
 $arcticCopy->close();
 enterCar($arctic);
 $arctic->close();

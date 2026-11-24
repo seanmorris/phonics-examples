@@ -27,6 +27,7 @@ final class Session
 {
 	/** Downward acceleration in m/s² for driving and riding. */
 	public const DRIVING_GRAVITY = 9.81;
+	private const OPTIONAL_NUMBERS = ['circuitStartHeight','circuitMinLap','circuitMinArea'];
 	/** Current authoritative landscape; replaced by generation or loading. */
 	public Landscape $landscape;
 	/** Shared render and physics environment. */
@@ -235,7 +236,7 @@ final class Session
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
 		'balloonAltitude' => 325 * DisplayUnits::FOOT, 'balloonTool' => 'place',
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
-	] + self::SKY_DEFAULTS + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
+	] + CircuitFinder::DEFAULTS + self::SKY_DEFAULTS + WaterAppearance::DEFAULTS + TerrainAppearance::DEFAULTS;
 	/** The terrain's colors, banding and blending, which the scene draws with. Its settings are part of $settings. */
 	public TerrainAppearance $terrainAppearance;
 	public ?SurfaceLayers $surfaceLayers=null;
@@ -940,7 +941,7 @@ final class Session
 		$this->circuitPreview = null;
 		$this->roadEditor->circuitDrafts([]);
 		$this->circuitSearch = (new CircuitFinder($this->landscape,$dry,$swell,$this->settings['circuitRelief'],
-			$this->settings['circuitStartHeight'],$this->settings['circuitCauseways']))
+			$this->settings['circuitStartHeight'],$this->settings['circuitCauseways'],$this->settings))
 			->find($x,$z,$this->gateShapes,$this->settings['gateLaps']);
 		$this->message = 'Looking for a closed route around the terrain…';
 	}
@@ -1255,13 +1256,15 @@ final class Session
 		}
 		$ranges = ['radius' => [2,300],'amount' => [.1,200],'flattenHeight' => [-1000,3000],
 			'roadWidth' => [2,80],'roadShoulder' => [1,120],'roadRaise' => [-100,100], 'circuitRelief'=>[-2000,2000],
-			'circuitStartHeight'=>[-10000,10000],
+			'circuitStartHeight'=>[-10000,10000], 'circuitMinLap'=>[Circuit::MIN_LENGTH,INF], 'circuitMinArea'=>[0,INF],
+			'circuitGradePreference'=>[0,100], 'circuitCausewayDepth'=>[0,20000],
+			'circuitStartTolerance'=>[0,20000], 'circuitTurnRadius'=>[1,INF],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
 			'skyLight' => [0.,3.],
 			'quality' => [.5,2],'speed' => [5,300],'gateAltitude' => [0.0,400.0],
 			'balloonAltitude' => [12.0,1200.0], 'gateWidth' => [0.0,300.0],'gateHeight' => [0.0,150.0],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
-		if(isset($ranges[$name]) && !($name === 'circuitStartHeight' && $value === null))
+		if(isset($ranges[$name]) && !($value === null && in_array($name,self::OPTIONAL_NUMBERS,true)))
 		{
 			if(!is_numeric($value) || !is_finite((float)$value)) throw new \InvalidArgumentException('Invalid control value');
 			[$min,$max] = $ranges[$name];
@@ -2619,16 +2622,16 @@ final class Session
 			}
 			if($this->prepareMaterial) ($this->prepareMaterial)($layers ?? $generated);
 			$settings = array_diff_key($settings, WaterAppearance::DEFAULTS, TerrainAppearance::DEFAULTS)
-				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'circuitCauseways'=>false];
+				+ ['waterChoppiness' => 100.0, 'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'circuitCauseways'=>false] + CircuitFinder::DEFAULTS;
 			if(!is_bool($settings['circuitCauseways'])) throw new \InvalidArgumentException('Invalid saved causeway setting.');
-			// Check each value against its setting's default, not the value now in use: a setting that defaults to
-			// null, such as circuitStartHeight, may hold a number now and be blank in the file.
 			$defaults = (new \ReflectionProperty(self::class, 'settings'))->getDefaultValue();
 			foreach($settings as $name => $value)
-			if(isset($this->settings[$name]) && is_numeric($this->settings[$name])
-				&& !($value === null && array_key_exists($name, $defaults) && $defaults[$name] === null)
-				&& (!is_numeric($value) || !is_finite((float)$value)))
-			throw new \InvalidArgumentException('Invalid saved control value.');
+			{
+				$optional = in_array($name,self::OPTIONAL_NUMBERS,true);
+				if(($optional || is_numeric($defaults[$name] ?? null)) && !($optional && $value === null)
+					&& (!is_numeric($value) || !is_finite((float)$value)))
+					throw new \InvalidArgumentException('Invalid saved control value.');
+			}
 			foreach(['skyColor','hazeColor'] as $name)
 			if(array_key_exists($name, $settings) && (!is_string($settings[$name]) || !preg_match('/^#[0-9a-fA-F]{6}$/', $settings[$name])))
 			throw new \InvalidArgumentException('Invalid saved control value.');

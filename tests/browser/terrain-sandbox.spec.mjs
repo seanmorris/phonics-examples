@@ -2078,6 +2078,49 @@ test('the default canyon lets all four wheels leave the ground and touch down ag
 	expect(errors).toEqual([]);
 });
 
+test('circuit search controls preserve automatic minima and convert editor units', async({page}) => {
+	await page.setViewportSize({width: 800,height: 600});
+	await page.goto('/games/terrain-sandbox/');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await press(page, 'pause');
+	const lap = await field(page, '[data-value="circuitMinLap"]');
+	await page.getByText('Circuit generator', {exact: true}).click();
+	const area = page.getByLabel('Minimum feature area');
+	const grade = page.getByLabel('Grade preference');
+	const radius = page.getByLabel('Minimum turn radius');
+	const start = page.getByLabel('Start elevation');
+	const tolerance = page.getByLabel('Elevation tolerance');
+	const depth = page.getByLabel('Maximum causeway depth');
+	const causeways = page.getByLabel('Allow causeways');
+
+	await expect(lap).toHaveValue('');
+	await expect(area).toHaveValue('');
+	await expect(grade).toHaveValue('32');
+	await expect(tolerance).toBeDisabled();
+	await expect(depth).toBeDisabled();
+	await lap.fill('3');
+	await area.fill('100');
+	await grade.fill('64');
+	await radius.fill('40');
+	await start.fill('200');
+	await tolerance.fill('5');
+	await causeways.check();
+	await depth.fill('0');
+	await expect.poll(async() => (await status(page)).settings).toMatchObject({
+		circuitMinLap: 4828.032, circuitMinArea: 404685.64224, circuitGradePreference: 16,
+		circuitTurnRadius: 12.192, circuitStartTolerance: 1.524, circuitCausewayDepth: 0
+	});
+	await lap.fill('');
+	await area.fill('');
+	await start.fill('');
+	await causeways.uncheck();
+	await expect(tolerance).toBeDisabled();
+	await expect(depth).toBeDisabled();
+	await expect.poll(async() => (await status(page)).settings).toMatchObject({
+		circuitMinLap: null, circuitMinArea: null, circuitStartHeight: null
+	});
+});
+
 test('Arctic Meltwater can place an editable causeway circuit at its original water level', async({page}) => {
 	test.setTimeout(480_000);
 	await page.setViewportSize({width: 672, height: 420});

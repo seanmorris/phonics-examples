@@ -1,6 +1,6 @@
 // Internal terrain coordinates and saved files use SI. These conversions apply at the UI boundary.
 const FOOT = .3048, YARD = 3 * FOOT, MILE = 5280 * FOOT, MPH = .44704, KNOT = 1852 / 3600;
-const metricPerUnit = {ft: FOOT, mph: MPH, kts: KNOT, cyclesPerMile: 1/MILE, densityPerMile: 1000/MILE};
+const metricPerUnit = {ft: FOOT, mi: MILE, acres: 43560*FOOT*FOOT, gradeCostAt20: .25, mph: MPH, kts: KNOT, cyclesPerMile: 1/MILE, densityPerMile: 1000/MILE};
 const exactValues = new WeakMap();
 const fieldBounds = new WeakMap();
 
@@ -331,7 +331,8 @@ export function activate({module, canvas, session, services})
 		, 'gateWidth'
 		, 'gateHeight'
 		, 'balloonAltitude'
-		, 'circuitRelief', 'circuitStartHeight'
+		, 'circuitRelief', 'circuitStartHeight', 'circuitMinLap', 'circuitMinArea'
+		, 'circuitGradePreference', 'circuitCausewayDepth', 'circuitStartTolerance', 'circuitTurnRadius'
 	]);
 
 	const gateTool = frame.querySelector('[data-gate-tool]');
@@ -345,20 +346,25 @@ export function activate({module, canvas, session, services})
 		frame.querySelector('[data-road-tool]').hidden = controls.get('tool').value !== 'road';
 	};
 
+	const updateCircuitFields = () => {
+		controls.get('circuitCausewayDepth').disabled = !controls.get('circuitCauseways').checked;
+		controls.get('circuitStartTolerance').disabled = controls.get('circuitStartHeight').value === '';
+	};
+
 	const listen = field => {
 
-		const blankStart = () => field.dataset.value === 'circuitStartHeight'
+		const automatic = () => field.hasAttribute('data-automatic')
 			&& field.value === '' && !field.validity.badInput;
 
 		field.addEventListener('input', () => {
 			if(checked.has(field.dataset.value))
 			{
-				if(!blankStart() && (!Number.isFinite(field.valueAsNumber) || !field.validity.valid)) return;
+				if(!automatic() && (!Number.isFinite(field.valueAsNumber) || !field.validity.valid)) return;
 
 				field.defaultValue = field.value;
 			}
 
-			values[field.dataset.value] = blankStart()
+			values[field.dataset.value] = automatic()
 				? null
 				: field.type === 'checkbox'
 					? field.checked
@@ -369,11 +375,14 @@ export function activate({module, canvas, session, services})
 			if(output) output.textContent = readout(field.value);
 
 			if(field.dataset.value === 'tool') showToolControls();
+
+			if(field.dataset.value === 'circuitCauseways' || field.dataset.value === 'circuitStartHeight')
+				updateCircuitFields();
 		}, {signal});
 
 		if(checked.has(field.dataset.value))
 		field.addEventListener('blur', () => {
-			if(!blankStart() && (!Number.isFinite(field.valueAsNumber) || !field.validity.valid))
+			if(!automatic() && (!Number.isFinite(field.valueAsNumber) || !field.validity.valid))
 			field.value = field.defaultValue;
 		}, {signal});
 	};
@@ -1245,6 +1254,7 @@ export function activate({module, canvas, session, services})
 				showFog(state.settings.waterFogDensity);
 
 				showToolControls();
+				updateCircuitFields();
 				lastGeneration = state.generation;
 			}
 
@@ -2622,10 +2632,18 @@ function markup()
 	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden>
 	<details><summary>Circuit generator</summary><div class="terrain-grid">
 	<label class="terrain-field">Minimum feature height difference · ft<input data-unit="ft" data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="${400 * FOOT}"></label>
-	<label class="terrain-field">Start elevation · ft<input data-unit="ft" data-value="circuitStartHeight" type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
 	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
+	<label class="terrain-field">Minimum lap length · mi<input data-unit="mi" data-value="circuitMinLap" data-automatic type="number" min="120" step="any" placeholder="Automatic"></label>
+	<label class="terrain-field">Minimum feature area · acres<input data-unit="acres" data-value="circuitMinArea" data-automatic type="number" min="0" step="any" placeholder="Automatic"></label>
+	<p class="terrain-note">Leave the minimums blank to use the usual limits for the feature and search area.</p>
+	<label class="terrain-field">Grade preference · %<input data-unit="gradeCostAt20" data-value="circuitGradePreference" type="number" min="0" max="100" value="8"></label>
+	<label class="terrain-field">Minimum turn radius · ft<input data-unit="ft" data-value="circuitTurnRadius" type="number" min="1" value="6"></label>
+	<p class="terrain-note">Grade preference adds this much travel cost on a 20% slope. Increase it to favor gentler routes. Larger turn radii round bends more broadly.</p>
+	<label class="terrain-field">Start elevation · ft<input data-unit="ft" data-value="circuitStartHeight" data-automatic type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
+	<label class="terrain-field">Elevation tolerance · ft<input data-unit="ft" data-value="circuitStartTolerance" type="number" min="0" max="20000" value=".5" disabled></label>
 	<label class="terrain-check"><input data-value="circuitCauseways" type="checkbox">Allow causeways</label>
-	<p class="terrain-note">Raise the road across water up to 98 ft deep while keeping the current water level.</p>
+	<label class="terrain-field">Maximum causeway depth · ft<input data-unit="ft" data-value="circuitCausewayDepth" type="number" min="0" max="20000" value="30" disabled></label>
+	<p class="terrain-note">A causeway raises the road across shallow water while preserving the water level.</p>
 	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
 	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>
 	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
