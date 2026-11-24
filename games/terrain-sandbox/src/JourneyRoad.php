@@ -21,21 +21,6 @@ final class JourneyRoad
 		return ['preset'=>$west,'worldSize'=>$span,'join'=>['version'=>2,'span'=>$span,'destinations'=>$destinations]] + Session::preset($west);
 	}
 
-	/** The signed side is negative for the northern fork. Both branches have horizontal tangents at the junctions. */
-	private static function forkGuide(float $from,float $to,float $z0,float $z1,float $swing): array
-	{
-		$n = (int)ceil(($to-$from)/96.);
-		$points = [];
-		for($i=0;$i<=$n;$i++) {
-			$t = $i/$n;
-			$x = $i===$n ? $to : $from+($to-$from)*$t;
-			$shape = sin(M_PI*$t)**2;
-			$z = $z0+($z1-$z0)*$t*$t*(3.-2.*$t)+$swing*$shape;
-			$points[] = [$x,$i===$n ? $z1 : $z];
-		}
-		return $points;
-	}
-
 	public static function build(Landscape $land, array $arrival = [], ?callable $report = null): \Generator
 	{
 		$r = $land->recipe();
@@ -55,7 +40,7 @@ final class JourneyRoad
 		foreach(array_slice($origins,1) as [, $cz]) {
 			$arrivals[]=[$cz,yield from $survey->arrivalRoad($tailX,$half,$cz)];
 		}
-		[$forkX,$forkZ,$ends] = yield from $survey->portals($split,$entry,$arrivals);
+		[$forkX,$forkZ] = yield from $survey->junction($entry,$arrivals);
 		$first = $entry ? [$entry[0],$entry[2]] : [-$half,0.];
 		if($report) $report('Following terrain through the departure square…');
 		$approach = yield from $survey->route([$first,[$forkX-192.,$forkZ]],!$entry,!$entry);
@@ -63,17 +48,6 @@ final class JourneyRoad
 		$paths=[$approach];
 		$forks=$tails=[];
 		$squares=$entry ? [] : [0=>$origins[0]];
-		if($report) $report('Following the contours through the fork…');
-		if(!$split) {
-			$guides=[];
-			foreach([-1,1] as $side)
-				$guides[$side]=self::forkGuide($forkX,-self::FORK,$forkZ,$ends[0],$side*485.);
-			$divider=array_map(static fn($n,$s)=>.5*($n[1]+$s[1]),$guides[-1],$guides[1]);
-			foreach([-1,1] as $side) {
-				$forks[]=count($paths);
-				$paths[]=yield from $survey->branch($guides[$side],$side,$divider);
-			}
-		}
 		foreach($arrivals as $i=>[, $tail]) {
 			$side=$i===0 ? -1 : 1;
 			$tailZ=$tail[0][1];
@@ -87,9 +61,8 @@ final class JourneyRoad
 					[$forkX+80.,$forkZ+$side*16.],[$forkX+120.,$forkZ+$side*34.],...$onward];
 				$forks[]=count($paths);
 			} else {
-				$x=-self::FORK; $z=$ends[0];
-				$onward=yield from $survey->route([[$x+192.,$z],[$tailX,$tailZ]],scenic:true);
-				$path=[[$x,$z],[$x+96.,$z],...$onward];
+				$onward=yield from $survey->route([[$forkX+96.,$forkZ],[$tailX,$tailZ]],scenic:true);
+				$path=[[$forkX,$forkZ],...$onward];
 			}
 			$squares[count($paths)]=$origins[$i+1];
 			$paths[]=$path;
@@ -124,16 +97,14 @@ final class JourneyRoad
 			}
 			$routes[] = $route;
 		}
-		// Close branches share a road plane until their shoulders separate.
-		[$north,$south] = $forks;
-		foreach($paths[$north] as $i=>[$x,$z]) {
-			if($split && $x>=$forkX+self::SPLIT_RUN) break;
-			if(abs($z-$paths[$south][$i][1])>95.) continue;
-			$a=$routes[$north][$i]; $b=$routes[$south][$i];
-			$graph[$a][$b]=$graph[$b][$a]=0.;
-			$end=$i<count($paths[$north])/2 ? 0 : array_key_last($paths[$north]);
-			if(!$split || $end===0) {
-				$joint=$routes[$north][$end];
+		// The two arms of a fork share a road plane until their shoulders separate.
+		if($split) {
+			[$north,$south]=$forks;
+			foreach($paths[$north] as $i=>[$x,$z]) {
+				if($x >= $forkX+self::SPLIT_RUN) break;
+				if(abs($z-$paths[$south][$i][1])>95.) continue;
+				$a=$routes[$north][$i]; $b=$routes[$south][$i]; $joint=$routes[$north][0];
+				$graph[$a][$b]=$graph[$b][$a]=0.;
 				$graph[$a][$joint]=$graph[$joint][$a]=0.;
 			}
 		}

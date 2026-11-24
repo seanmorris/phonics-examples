@@ -26,6 +26,7 @@ function markup(options) {
 		padding:2px 5px;font:600 11px/1.35 system-ui;pointer-events:none}
 	.journey-north{top:6px;right:6px}.journey-scale{bottom:6px;left:6px}
 	.journey-stops{display:grid;align-content:center;gap:10px;padding:14px;min-width:0}
+	.journey-origins{display:flex;align-items:center;flex-wrap:wrap;gap:5px;font-size:12px;color:#d3e1d5}.journey-origins>span{flex-basis:100%}.journey-origins button{display:inline-flex;align-items:center;gap:5px;padding:3px 7px 3px 3px}
 	.journey-stops .terrain-field small{display:block;color:#bdd1c2;font-size:11px}
 	.journey-sheet footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
 		border-top:1px solid #405e4e;padding:7px 10px;min-height:30px;color:#d3e1d5;font-size:12px}
@@ -35,8 +36,8 @@ function markup(options) {
 	.journey-level>span{font-size:12px;color:#b8cbbd}.journey-level>div{display:flex;gap:5px;flex-wrap:wrap}
 	.journey-rename{display:flex;align-items:end;gap:8px;margin:10px}.journey-rename label{flex:1}.journey-outline button{display:grid;grid-template-columns:42px 1fr;align-items:center;text-align:left;gap:1px 6px}
 	.journey-outline button>span,.journey-outline button>small{grid-column:2}
-	.journey-outline .journey-thumb{grid-column:1;grid-row:1/3;width:42px;height:42px;display:grid;place-items:center;
-		overflow:hidden;border-radius:3px;background:#19352a;color:#c0cfbd}.journey-thumb canvas{width:100%;height:100%}.journey-outline button small{color:#c3d5c8;font-size:11px}.journey-outline [aria-current=location] small{color:#ffdc95}
+	.journey-thumb{width:30px;height:30px;flex:none;display:grid;place-items:center;
+		overflow:hidden;border-radius:3px;background:#19352a;color:#c0cfbd}.journey-thumb:empty::before{content:attr(data-stage)}.journey-outline .journey-thumb{grid-column:1;grid-row:1/3;width:42px;height:42px}.journey-thumb canvas{width:100%;height:100%}.journey-outline button small{color:#c3d5c8;font-size:11px}.journey-outline [aria-current=location] small{color:#ffdc95}
 	.journey-outline [aria-pressed=true]{border-color:#e6bb73;color:#ffe0a5}
 	.journey-planner .journey-source{padding:10px}.journey-source textarea{box-sizing:border-box;width:100%;resize:vertical;
 		background:#12271f;color:#e7f0df;font:13px/1.5 ui-monospace,monospace;border:1px solid #60796b;border-radius:4px;padding:8px}
@@ -51,7 +52,7 @@ function markup(options) {
 	@container terrain-lab (max-width:330px){.journey-planner .journey-bar{grid-template-columns:1fr}}
 	</style><div class="journey-planner">
 	<div class="journey-bar"><label class="terrain-field">Route layout<select data-journey="fork">
-	<option value="rejoin">Fork and rejoin</option><option value="divide">Two destinations</option><option value="network">Multi-stage network</option></select></label>
+	<option value="network">Multi-stage network</option><option value="direct">One destination</option><option value="divide">Two destinations</option></select></label>
 	<label class="terrain-field">Landscape width<select data-journey="span"><option value="16384">10.2 mi</option>
 	<option value="32768">20.4 mi</option><option value="65536">40.7 mi</option></select></label></div>
 	<div class="journey-stage-picker" data-network-only hidden><label class="terrain-field">Inspect stage<select data-stage-picker></select></label>
@@ -63,8 +64,9 @@ function markup(options) {
 	<label class="terrain-field" data-simple><span data-east-label>Destination</span><select data-journey="east">${options('mountain')}</select></label>
 	<label class="terrain-field" data-south hidden>Right fork<select data-journey="south">${options('coast')}</select></label>
 	<label class="terrain-field" data-network-only hidden>Stage landscape<select data-stage-preset>${options('rolling-prairie')}</select></label>
-	<label class="terrain-field" data-network-only hidden>Left fork<select data-exit="0"></select></label>
-	<label class="terrain-field" data-network-only hidden>Right fork<select data-exit="1"></select></label></div></div>
+	<div class="journey-origins" data-stage-origins hidden></div>
+	<label class="terrain-field" data-network-only hidden><span data-first-exit>Destination</span><select data-exit="0"></select></label>
+	<label class="terrain-field" data-network-only hidden><span data-second-exit>Second destination</span><select data-exit="1"></select></label></div></div>
 	<footer><span data-map-status role="status"></span><button type="button" data-survey-road hidden>Preview roads</button></footer></div>
 	<p class="terrain-note" data-journey-error role="status"></p>
 
@@ -119,7 +121,8 @@ function mount(frame, canvas, signal, roadMap) {
 	const map = el('[data-journey-map]'), pins = el('[data-pins]'), info = el('[data-map-status]'), survey = el('[data-survey-road]');
 	const outline = el('[data-outline]'), outlineBox = el('[data-journey-outline]'), pages=frame.querySelector('.lab-pages'), remove = el('[data-delete-stage]'), undo = el('[data-undo-edit]');
 	const rename = el('[data-rename-stage]'), stageName = el('[data-stage-name]');
-	const cache = new Map(), history = [], thumbnails = new Map();
+	const origins=el('[data-stage-origins]');
+	const cache = new Map(), history = [], thumbnails = [];
 	let serial=0, thumbnailJob=null, thumbnailTimer;
 	let nodes = {}, stage = 'A', lastGraphicPlan = null, valid = null, stageOrder = [], state, activeNetwork;
 	let pending = null, id = 0, timer, key = '', current, request, lastRoadMap, surveying = false, visible = false, busy = false;
@@ -134,25 +137,47 @@ function mount(frame, canvas, signal, roadMap) {
 		stage=next; renderNetwork(); refresh();queueThumbnails();
 	}
 
+	function thumbnail(which,inOutline) {
+		const thumb=document.createElement('span');
+		thumb.className='journey-thumb';thumb.ariaHidden='true';thumb.dataset.stage=which;
+		thumbnails.push({which,thumb,inOutline,key:null,path:null});
+		return thumb;
+	}
 	function renderNetwork() {
 		if(!network()) return;
+		thumbnails.length=0;
 		if(!Object.hasOwn(nodes,stage)) stage=Object.keys(nodes)[0];
 		const node=nodes[stage], layers=routeLayers(nodes);
+		const parents=new Map();
+		for(const [parent,n] of Object.entries(nodes)) for(const exit of new Set(n.exits)) {
+			if(!parents.has(exit)) parents.set(exit,[]);
+			parents.get(exit).push(parent);
+		}
+		const incoming=parents.get(stage) ?? [];
+		origins.replaceChildren();
+		origins.hidden=incoming.length<2;
+		if(incoming.length>=2) {
+			const label=document.createElement('span');label.textContent='Rejoin from';origins.append(label);
+			for(const parent of incoming) {
+				const link=button('',()=>selectStage(parent));link.dataset.origin=parent;
+				link.append(thumbnail(parent,false),name(parent));origins.append(link);
+			}
+		}
 		stageOrder=layers.flat();
-		picker.replaceChildren(); outline.replaceChildren(); thumbnails.clear();
+		picker.replaceChildren(); outline.replaceChildren();
 		layers.forEach((ids,i)=>{
 			const group=document.createElement('optgroup'); group.label='Layer '+(i+1); picker.append(group);
 			const row=document.createElement('div'), heading=document.createElement('span'), links=document.createElement('div');
 			row.className='journey-level'; heading.textContent=group.label; row.append(heading,links); outline.append(row);
 			for(const id of ids) {
 				group.append(new Option(name(id),id));
-				const hop=button('',()=>selectStage(id)), thumb=document.createElement('span'), label=document.createElement('span');
-				hop.dataset.square=id; thumb.className='journey-thumb';thumb.ariaHidden='true';thumb.textContent=id;
-				label.textContent=name(id);hop.append(thumb,label);
-				thumbnails.set(id,{thumb,key:null,path:null});
+				const hop=button('',()=>selectStage(id)), label=document.createElement('span');
+				hop.dataset.square=id;label.textContent=name(id);hop.append(thumbnail(id,true),label);
 				hop.setAttribute('aria-pressed',String(id===stage));
 				const exits=document.createElement('small');
-				exits.textContent=nodes[id].exits.length?'→ '+[...new Set(nodes[id].exits)].join(' / '):'End of route';
+				const sources=parents.get(id) ?? [];
+				const onward=nodes[id].exits.length?'→ '+nodes[id].exits.join(' / '):'End of route';
+				exits.textContent=sources.length>1?'Rejoin from '+sources.join(' + ')+' · '+onward:onward;
 				hop.append(exits);
 				if(activeNetwork?.plan===source.value && (state?.journeyArrival ?? state?.journeySquare)===id)
 					{hop.setAttribute('aria-current','location');exits.textContent+=' · You are here';}
@@ -167,27 +192,28 @@ function mount(frame, canvas, signal, roadMap) {
 		undo.disabled=!history.length;
 		preset.disabled=!node; preset.value=node?.preset ?? '';
 		// Linking back to any ancestor would introduce a cycle. Other branches may share a destination.
-		const parents=new Map();
-		for(const [id,n] of Object.entries(nodes)) for(const exit of n.exits) {
-			if(!parents.has(exit)) parents.set(exit,[]);
-			parents.get(exit).push(id);
-		}
+		const split=node?.exits.length===2;
+		el('[data-first-exit]').textContent=split?'Left fork':'Destination';
+		el('[data-second-exit]').textContent=split?'Right fork':'Second destination';
 		const blocked=new Set(), todo=[stage];
 		while(todo.length) {const id=todo.pop();if(blocked.has(id))continue;blocked.add(id);todo.push(...(parents.get(id)??[]));}
 		for(const [i,field] of forks.entries()) {
-			field.replaceChildren(new Option(i?'Rejoin left fork':'End route here',''));
-			for(const id of stageOrder) if(!blocked.has(id)) field.add(new Option(name(id),id));
+			field.replaceChildren(new Option(i?'No second exit':'End route here',''));
+			for(const id of stageOrder) if(!blocked.has(id) && id!==node?.exits[1-i]) field.add(new Option(name(id),id));
 			field.add(new Option('+ New stage…','+'));
 			field.disabled=!node || (i===1&&!node.exits.length);
 			field.value=node?.exits[i] ?? '';
 		}
 	}
 
+	function publishEdit(plan) {
+		lastGraphicPlan=source.value=plan;
+		renderNetwork();
+		source.dispatchEvent(new Event('input',{bubbles:true}));
+	}
 	function change(edit) {
 		history.push({plan:source.value,stage,nodes:structuredClone(nodes)}); if(history.length>30) history.shift();
-		edit();
-		lastGraphicPlan=source.value=serialize(nodes);
-		source.dispatchEvent(new Event('input',{bubbles:true})); renderNetwork();
+		edit();publishEdit(serialize(nodes));
 	}
 	on(picker,'change',()=>selectStage(picker.value));
 	on(stepBack,'click',()=>selectStage(stageOrder[stageOrder.indexOf(stage)-1]));
@@ -203,7 +229,6 @@ function mount(frame, canvas, signal, roadMap) {
 		}
 		const exits=nodes[stage].exits;
 		if(exit) exits[i]=exit; else exits.splice(i);
-		if(exits[1]===exits[0]) exits.splice(1);
 		if(adding) {stage=exit;preset.focus();}
 	}));
 	on(stageName,'input',()=>{
@@ -228,14 +253,19 @@ function mount(frame, canvas, signal, roadMap) {
 	}));
 	on(undo,'click',()=>{
 		const previous=history.pop(); if(!previous)return;
-		stage=previous.stage;nodes=previous.nodes;lastGraphicPlan=source.value=previous.plan;source.dispatchEvent(new Event('input',{bubbles:true}));
+		stage=previous.stage;nodes=previous.nodes;publishEdit(previous.plan);
 		undo.disabled=!history.length;
 	});
 	function validated(result) {
 		valid=result?.nodes ?? null;
-		if(valid) {nodes=structuredClone(valid);lastGraphicPlan=result.plan;}
-		else if(lastGraphicPlan!==source.value) nodes={};
-		renderNetwork(); refresh();queueThumbnails();
+		// A graphical edit already drew these controls. Preserve scroll and focus
+		// when PHP acknowledges it. Typed or loaded plans still need new controls.
+		if(valid && result.plan!==lastGraphicPlan) {
+			nodes=structuredClone(valid);lastGraphicPlan=result.plan;renderNetwork();
+		} else if(!valid && lastGraphicPlan!==source.value) {
+			nodes={};lastGraphicPlan=null;renderNetwork();
+		}
+		refresh();queueThumbnails();
 	}
 
 	function spec(which=stage) {
@@ -283,15 +313,16 @@ function mount(frame, canvas, signal, roadMap) {
 		if(cache.size>18)cache.delete(cache.keys().next().value);
 		return entry;
 	}
-	// Fill only visible outline cards. A foreground inspection or survey always takes priority.
+	// Fill only visible stage and origin cards. A foreground inspection or survey always takes priority.
 	function fillThumbnails() {
-		if(!visible || !network() || !valid || !current || !outlineBox.open || busy || surveying || pending) return;
+		if(!visible || !network() || !valid || !current || busy || surveying || pending) return;
 		const viewport=pages.getBoundingClientRect();
 		let missing=null;
-		for(const [which,card] of thumbnails) {
+		for(const card of thumbnails) {
+			if(card.inOutline && !outlineBox.open)continue;
 			const bounds=card.thumb.getBoundingClientRect();
 			if(!bounds.height || bounds.bottom<viewport.top || bounds.top>viewport.bottom)continue;
-			const route=spec(which), entry=cache.get(route.signature);
+			const route=spec(card.which), entry=cache.get(route.signature);
 			if(!entry) {
 				if(card.key!==route.signature) missing ??= route;
 				continue;
@@ -310,7 +341,7 @@ function mount(frame, canvas, signal, roadMap) {
 	}
 	function queueThumbnails() {
 		clearTimeout(thumbnailTimer);
-		if(outlineBox.open) thumbnailTimer=setTimeout(fillThumbnails,160);
+		if(visible && network() && (outlineBox.open || !origins.hidden)) thumbnailTimer=setTimeout(fillThumbnails,160);
 	}
 
 	function describe() {
@@ -356,7 +387,7 @@ function mount(frame, canvas, signal, roadMap) {
 			const data=JSON.parse(json), signature=thumbnailJob.key;
 			thumbnailJob=null;
 			if(data.size) storeChart(signature,data);
-			else if(data.error) {for(const [which,card] of thumbnails) if(spec(which)?.signature===signature)card.key=signature;}
+			else if(data.error) {for(const card of thumbnails) if(spec(card.which)?.signature===signature)card.key=signature;}
 			queueThumbnails();return;
 		}
 		if(token!==id)return;
@@ -376,7 +407,7 @@ function mount(frame, canvas, signal, roadMap) {
 		draw();placePins(request);describe();queueThumbnails();
 	}
 	function layoutChanged() {
-		show('[data-network-only]',network());show('[data-simple]',!network());show('[data-south]',layout.value==='divide');
+		show('[data-network-only]',network());if(!network())origins.hidden=true;show('[data-simple]',!network());show('[data-south]',layout.value==='divide');
 		el('[data-east-label]').textContent=layout.value==='divide'?'Left fork':'Destination';
 		renderNetwork();refresh();
 	}
@@ -412,7 +443,7 @@ function mount(frame, canvas, signal, roadMap) {
 			if(roadsChanged && request?.live) draw();
 		}
 	}
-	return {validated,layoutChanged,sync,receive,adopt(id){history.length=0;stage=id;},takeRequest(){const item=pending;pending=null;return item;},hasRequest:()=>pending!==null};
+	return {validated,layoutChanged,sync,receive,adopt(id){history.length=0;stage=id;lastGraphicPlan=null;},takeRequest(){const item=pending;pending=null;return item;},hasRequest:()=>pending!==null};
 }
 
 export function activate({module}) {

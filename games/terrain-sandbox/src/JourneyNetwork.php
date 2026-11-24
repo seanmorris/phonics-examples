@@ -18,7 +18,7 @@ final class JourneyNetwork
 			if(!preg_match('/^\s*([A-Za-z][\w-]*)\s+([\w-]+)(?:\s*->\s*([A-Za-z][\w-]*)(?:\s*,\s*([A-Za-z][\w-]*))?)?\s*$/D',$line,$m)
 				|| isset($nodes[$m[1]]) || !in_array($m[2],Recipe::PRESETS,true))
 				throw new \InvalidArgumentException('Each row needs a unique square name, a landscape preset, and optionally one or two exits.');
-			$nodes[$m[1]]=['preset'=>$m[2],'exits'=>array_slice($m,3)];
+			$nodes[$m[1]]=['preset'=>$m[2],'exits'=>array_values(array_unique(array_slice($m,3)))];
 		}
 		if(!$nodes || !$nodes[array_key_first($nodes)]['exits']) throw new \InvalidArgumentException('The first square needs an onward road.');
 		$this->start=array_key_first($nodes);
@@ -38,10 +38,10 @@ final class JourneyNetwork
 	public function recipe(string $id,int $span): array
 	{
 		$n=$this->nodes[$id];
-		$destinations=array_map(fn($child)=>$this->nodes[$child]['preset'],array_values(array_unique($n['exits'])));
+		$destinations=array_map(fn($child)=>$this->nodes[$child]['preset'],$n['exits']);
 		$recipe=JourneyRoad::recipe($n['preset'],$destinations,$span);
 		$recipe['seed'].='/'.$id;
-		foreach(array_values(array_unique($n['exits'])) as $i=>$child) $recipe['join']['destinations'][$i]['seed'].='/'.$child;
+		foreach($n['exits'] as $i=>$child) $recipe['join']['destinations'][$i]['seed'].='/'.$child;
 		return $recipe;
 	}
 
@@ -54,7 +54,7 @@ final class JourneyNetwork
 
 	public function translation(string $id,string $child,array $recipe): array
 	{
-		$exits=array_values(array_unique($this->nodes[$id]['exits']));
+		$exits=$this->nodes[$id]['exits'];
 		$i=array_search($child,$exits,true);
 		$origins=JoinedTerrain::origins($recipe['join']['span'],count($exits));
 		return [$origins[0][0]-$origins[$i+1][0],$recipe['join']['destinations'][$i]['waterLevel']-$recipe['waterLevel'],-$origins[$i+1][1]];

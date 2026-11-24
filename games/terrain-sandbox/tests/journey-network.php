@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
+use TerrainPhonics\JoinedTerrain;
 use TerrainSandbox\{JourneyAtlas,JourneyNetwork,JourneyRoad,Session};
 
 function networkCheck(bool $ok,string $message): void { if(!$ok) throw new RuntimeException($message); }
@@ -14,6 +15,12 @@ networkCheck(count((new JourneyNetwork($chain))->nodes)===200,'Long networks ret
 foreach(["A coast -> F","A coast -> B\nB mountain -> A","A coast -> B\nB coast\nC canyon"] as $bad) {
 	try { new JourneyNetwork($bad); throw new RuntimeException('Invalid topology accepted'); } catch(InvalidArgumentException) {}
 }
+$duplicate=new JourneyNetwork("A coast -> B,B\nB mountain");
+networkCheck($duplicate->nodes['A']['exits']===['B'] && count($duplicate->recipe('A',16384)['join']['destinations'])===1,
+	'Repeating one edge in an older plan is one road from one origin.');
+$twins=new JourneyNetwork("A coast -> B,C\nB mountain\nC mountain");
+[$b,$c]=$twins->recipe('A',16384)['join']['destinations'];
+networkCheck($b['seed']!==$c['seed'],'Distinct stage IDs with the same preset still produce separate landscapes.');
 $s=new Session;
 $original=$s->landscape;
 $atlas=new JourneyAtlas;
@@ -80,13 +87,17 @@ function onward(Session $s,int $branch,string $target): void {
 	$h=$s->landscape->height($old['x'],$old['z']); $material=$s->landscape->material($old['x'],$old['z']);
 	$s->input([],0.,1.,8.);
 	$new=$s->car->state();
+	if(!$network->nodes[$target]['exits']) {
+		networkCheck($s->status()['journeyArrival']===$target && $s->status()['journeyBranch']===$target,'A direct road reports arrival at its final destination.');
+		return;
+	}
 	networkCheck($s->status()['journeySquare']===$target && $s->mode==='car',"Entered shared node $target: ".$s->message);
 	networkCheck(abs($new['speed']-$old['speed'])<1.e-8 && $new['speed']>.1,'Handoff preserves a moving car.');
 	networkCheck(abs($new['x']-$old['x']-$shift[0])<1.e-6 && abs($new['z']-$old['z']-$shift[2])<1.e-6,'Continuous local position.');
 	networkCheck(abs($s->landscape->height($new['x'],$new['z'])-$h-$shift[1])<.01 && $material==='road'
 		&& $s->landscape->material($new['x'],$new['z'])==='road','Same pavement and tire-contact height after the rebase.');
 }
-$shared=null;
+$shared=$sharedPavement=null;
 foreach([[0,'B',1],[1,'C',0]] as [$branch,$parent,$toF]) {
 	$s->load($initial); $s->input(['actions'=>['journey-fork']],0.,1.);
 	onward($s,$branch,$parent);
@@ -94,8 +105,24 @@ foreach([[0,'B',1],[1,'C',0]] as [$branch,$parent,$toF]) {
 	$r=$s->landscape->recipe();
 	networkCheck($r['join']['span']===16384,'Streamed squares keep the selected map width.');
 	if($shared!==null) networkCheck($shared===$r,'Both entries reach the same F landscape and onward destinations.');
-	$shared=$r; $file=$s->save(); $s->load($file);
-	networkCheck($s->status()['journeySquare']==='F' && $s->status()['journeyExits']===['H'],'Save and load keep the shared onward route.');
+	// Each origin streams its own approach. Compare the actual road where the two
+	// approaches meet, in the coordinate system of their common destination.
+	$approach=null;
+	foreach($s->landscape->roadRecords() as $road) {
+		$last=end($road['points']);
+		if(abs($last[0]+JoinedTerrain::GAP/2)<1.e-6) $approach=$road['points'];
+	}
+	networkCheck(count($approach ?? [])>=8,'Carried the shared arrival pavement into F.');
+	if($sharedPavement!==null) {
+		networkCheck(count($sharedPavement)===count($approach),'Both origins reach the same road in F.');
+		foreach($approach as $i=>$point) foreach($point as $axis=>$v)
+			networkCheck(abs($v-$sharedPavement[$i][$axis])<.01,'The roads from B and C meet on the same pavement within one centimeter.');
+	}
+	$sharedPavement=$approach; $shared=$r; $file=$s->save(); $s->load($file);
+	networkCheck($s->status()['journeySquare']==='F' && $s->status()['journeyExits']===['H'] && !$s->status()['journeyHasFork'],
+		'Save and load keep one onward road from the shared destination.');
+	$s->input(['actions'=>['journey-drive']],0.,1.);
+	onward($s,0,'H');
 }
 $s->close();
 echo "Shared F reached through B and C with continuous car motion and pavement.\n";

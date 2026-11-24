@@ -118,8 +118,11 @@ foreach([[16384,['mountain']],[32768,['mountain']],[65536,['canyon','coast']]] a
 	expectJourney(count($views)===1+count($destinations),'One overlook on each full landscape square.');
 	foreach($views as [$vx,$vz,$drop]) expectJourney($land->material($vx,$vz)==='road' && $drop>0.,'A roadside overlook above its surroundings.');
 	$roads=$land->roads();
+	$split=count($destinations)===2;
+	$entrances=JourneyRoad::entrances($land);
+	expectJourney(isset($entrances['fork'])===$split && $s->status()['journeyHasFork']===$split,'Only two distinct exits create a fork.');
 	$ends=[];
-	foreach([false,true] as $south) {
+	foreach($split ? [false,true] : [false] as $south) {
 		$path=throughRoute($roads,$half,$south);
 		$ends[]=end($path);
 		foreach($path as $i=>[$x,$z]) if($i%48===0) {
@@ -128,7 +131,7 @@ foreach([[16384,['mountain']],[32768,['mountain']],[65536,['canyon','coast']]] a
 		}
 		driveStrip($s,$path);
 	}
-	expectJourney(($ends[0]===$ends[1]) === (count($destinations)===1),'Branches rejoin or reach distinct destinations.');
+	if($split) expectJourney($ends[0]!==$ends[1],'Both arms reach their respective landscapes.');
 	$origins=JoinedTerrain::origins($span,count($destinations));
 	foreach($r['join']['destinations'] as $i=>$form) {
 		[$x,$z]=$origins[$i+1];
@@ -136,11 +139,13 @@ foreach([[16384,['mountain']],[32768,['mountain']],[65536,['canyon','coast']]] a
 		expectJourney(abs($land->height($x+105.,$z+601.)-$height)<1.e-6,'Destination keeps its local noise coordinates above the common sea.');
 	}
 	$records=$land->roadRecords();
-	[$forkX,$forkZ]=JourneyRoad::entrances($land)['junction'];
-	foreach($records as $id=>$road) if($road['points'][0][0]===$forkX && $road['points'][0][2]===$forkZ) break;
+	$first=reset($records);
+	$joint=end($first['points']);
+	[$knotX,$knotZ]=$split ? $entrances['junction'] : [$joint[0],$joint[2]];
+	foreach($records as $id=>$road) if($road['points'][0][0]===$knotX && $road['points'][0][2]===$knotZ) break;
 	$road['replaceAt']=$id; $road['points'][0][0]+=120.; $road['points'][0][2]+=12.;
 	$updates=JourneyRoad::connectedEdits($land,$road);
-	expectJourney(count($updates)===3,'Moving a fork knot edits all three incident roads.');
+	expectJourney(count($updates)===($split ? 3 : 2),'Moving a joint edits each incident road.');
 	foreach($updates as $update) foreach($land->queueSteps($update) as $_) {}
 	$land->commit();
 	$moved=$land->roadRecords();
@@ -151,12 +156,13 @@ foreach([[16384,['mountain']],[32768,['mountain']],[65536,['canyon','coast']]] a
 	$file=$s->save();
 	$s->load($file);
 	expectJourney($s->landscape->roadRecords()===$moved && $s->landscape->recipe()===$r && $s->status()['journeyViews']==$views,'Recipes, junctions and edited splines survive reload.');
-	$s->input(['actions'=>['journey-fork']],0,1.);
-	expectJourney($s->mode==='car' && $s->status()['journeyForkAhead'] && abs($s->car->state()['x']-$road['points'][0][0]+140.)<6.,'Drive from the saved fork.');
+	$s->input(['actions'=>[$split ? 'journey-fork' : 'journey-drive']],0,1.);
+	expectJourney($s->mode==='car' && $s->status()['journeyForkAhead']===$split,'The saved highway offers its actual entrances.');
+	if($split) expectJourney(abs($s->car->state()['x']-$road['points'][0][0]+140.)<6.,'Drive from the saved fork.');
 	$s->input(['actions'=>[['type'=>'generate','preset'=>'coast']]],0,1.);
 	expectJourney(!isset($s->landscape->recipe()['join']) && $s->landscape->recipe()['worldSize']==$span,'Ordinary generation exits the journey.');
 	$s->close();
-	echo "Both branches passed on the $span m journey.\n";
+	echo count($destinations)." destination(s) passed on the $span m journey.\n";
 }
 
 // Compare finished pavement with untouched Canyon ground at fixed distance intervals.

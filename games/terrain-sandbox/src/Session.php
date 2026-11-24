@@ -1683,7 +1683,7 @@ final class Session
 					$this->surveyedViews = [];
 					break;
 				}
-				$this->message = $this->journeyBuildPhase = 'Surveying the highway and its forks…';
+				$this->message = $this->journeyBuildPhase = 'Surveying the highway…';
 				$this->preparing = true;
 				$this->roadWork = (function() use ($next) {
 					try {
@@ -2985,22 +2985,25 @@ final class Session
 	{
 		$nearFork = false;
 		$branch = $arrival = null;
-		if($this->mode === 'car' && isset($this->journeyEntrances['junction'])) {
-			[$x,$z,$heading] = $this->journeyEntrances['junction'];
+		$junction = $this->journeyEntrances['junction'] ?? null;
+		if($this->mode === 'car' && ($junction || $this->network)) {
 			$car = $this->car->state();
-			$dx = $x - $car['x']; $dz = $z - $car['z'];
-			$ahead = $dx*sin($heading) + $dz*cos($heading);
-			$side = $dx*cos($heading) - $dz*sin($heading);
+			$divide = 0.;
+			if($junction) {
+				[$x,$z,$heading] = $junction;
+				$dx = $x - $car['x']; $dz = $z - $car['z'];
+				$ahead = $dx*sin($heading) + $dz*cos($heading);
+				$side = $dx*cos($heading) - $dz*sin($heading);
+				$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
+			}
 			if($this->network && $car['x'] >= -JourneyRoad::FORK) {
-				// Opposite arms of an off-center fork can still be on the same side
-				// of map zero while they round a headland.
-				$divide=JourneySurvey::branchLimit($car['x'],$x+JourneyRoad::SPLIT_RUN,$z,0,$this->landscape->recipe()['join']['span']);
+				// The arms of an off-center fork can still be on the same side of map zero.
+				if($junction) $divide=JourneySurvey::branchLimit($car['x'],$x+JourneyRoad::SPLIT_RUN,$z,0,$this->landscape->recipe()['join']['span']);
 				$branch = $this->network->destination($this->square,$car,$divide);
 				if($branch === $this->nextSquare && !$this->network->nodes[$branch]['exits']) $arrival = $branch;
 			}
-			$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
 		}
-		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
+		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyHasFork'=>$junction!==null,'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
 			'demo'=>$this->demoStatus(),'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),

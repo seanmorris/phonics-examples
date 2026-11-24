@@ -1198,7 +1198,7 @@ export function activate({module, canvas, session, services})
 			{
 				const [north, south] = state.recipe.join.destinations.map((form, i) =>
 					[state.journeyExits?.[i], destinationNames.get(form.preset)].filter(Boolean).join(' · '));
-				status.textContent = south ? `Left · ${north}   /   Right · ${south}` : `Both branches rejoin toward ${north}.`;
+				status.textContent = south ? `Left · ${north}   /   Right · ${south}` : `Continue to ${north}.`;
 			}
 			else status.textContent = state.message;
 
@@ -1214,7 +1214,7 @@ export function activate({module, canvas, session, services})
 				if(state.journeyArrival) text = 'Arrived at ' + name(state.journeyArrival) + ' · End of route';
 				else if(state.journeyBranch) text = here + ' → ' + name(state.journeyBranch);
 				else if(right) text = here + ' — Left to ' + name(left) + ' / Right to ' + name(right);
-				else text = here + ' — Both roads to ' + name(left);
+				else text = here + ' → ' + name(left);
 				if(sign.textContent !== text) sign.textContent = text;
 			}
 
@@ -1265,7 +1265,7 @@ export function activate({module, canvas, session, services})
 			button('journey-build').disabled = !editable || Boolean(journeyRequest) || (junction.value === 'network' && !preview?.nodes);
 			for(const key of ['journey-drive','journey-fork'])
 			{
-				button(key).hidden = !state.recipe.join;
+				button(key).hidden = !state.recipe.join || (key === 'journey-fork' && !state.journeyHasFork);
 				button(key).disabled = Boolean(journeyRequest) || state.preparing || state.picking;
 			}
 			button('circuit-cancel').hidden = !circuit.searching && !circuit.preview;
@@ -1339,7 +1339,7 @@ export function activate({module, canvas, session, services})
 					const {span, destinations} = state.recipe.join;
 					journeyField('west').value = state.recipe.preset;
 					journeyField('span').value = String(span);
-					junction.value = state.journeySquare ? 'network' : destinations.length === 2 ? 'divide' : 'rejoin';
+					junction.value = state.journeySquare ? 'network' : destinations.length === 2 ? 'divide' : 'direct';
 					journeyField('east').value = destinations[0].preset;
 					if(destinations[1]) journeyField('south').value = destinations[1].preset;
 					updateJunction();
