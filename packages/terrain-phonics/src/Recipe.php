@@ -19,7 +19,7 @@ final class Recipe
 		, 'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe'
 		, 'alaska-range', 'chalk-headlands'
 		, 'karst-bay', 'tepui-highlands', 'painted-badlands', 'emerald-ridges'
-		, 'autumn-folds', 'namib-coast'
+		, 'autumn-folds', 'namib-coast', 'black-sand-coast', 'yardang-desert'
 	];
 
 	/** Parameters are immutable after normalization. */
@@ -263,6 +263,76 @@ final class Recipe
 
 			, 'waterLevel' => 0.
 			, 'surround' => 'sea'
+		] + self::shapeDefaults('coast', $version);
+
+		// Ridged detail makes the crests jagged, and deep gullies at 80 m flute every slope. A coastal rise 1.5 km wide
+		// lifts the peaks out of a sea that floods the valleys between them.
+		if($preset === 'black-sand-coast')
+		return [
+			'seed' => 'black-sand-coast'
+			, 'baseFrequency' => 1 / 1800
+			, 'heightScale' => 700.
+			, 'baseBias' => .2
+			, 'rolling' => .15
+
+			, 'ridgeHeight' => 1.5
+			, 'ridgeRoundness' => .004
+			, 'wallHeight' => 0.
+			, 'secondary' => .3
+
+			, 'directionalRise' => 1.
+			, 'coastBearing' => 0.
+			, 'coastWidth' => 1500.
+			, 'warpAmplitude' => 250.
+			, 'warpFrequency' => 1 / 2500
+
+			, 'detailShape' => .8
+			, 'detailAmplitude' => 40.
+			, 'detailOctaves' => 6
+			, 'persistence' => .5
+			, 'slopeScale' => 1.
+			, 'damping' => .3
+			, 'gullyDepth' => 30.
+			, 'gullySpacing' => 80.
+			, 'terraceStrength' => 0.
+
+			, 'waterLevel' => 0.
+			, 'surround' => 'sea'
+		] + self::shapeDefaults('coast', $version);
+
+		// Narrow contour walls stretched ten times along the wind turn the rings into streamlined hulls about
+		// 45 m high, with flat sand corridors between them.
+		if($preset === 'yardang-desert')
+		return [
+			'seed' => 'yardang-desert'
+			, 'baseFrequency' => 1 / 200
+			, 'heightScale' => 45.
+			, 'baseBias' => 0.
+			, 'rolling' => 0.
+
+			, 'wallHeight' => 1.
+			, 'floorWidth' => .08
+			, 'wallWidth' => .12
+			, 'ridgeHeight' => .3
+			, 'ridgeRoundness' => .03
+			, 'ridgeStretch' => 10.
+			, 'ridgeBearing' => 20.
+			, 'secondary' => .1
+			, 'directionalRise' => 0.
+
+			, 'warpAmplitude' => 40.
+			, 'warpFrequency' => 1 / 1600
+
+			, 'detailShape' => -.5
+			, 'detailAmplitude' => 1.5
+			, 'detailOctaves' => 5
+			, 'persistence' => .45
+			, 'slopeScale' => 1.
+			, 'damping' => 1.
+			, 'terraceStrength' => 0.
+
+			, 'waterLevel' => -200.
+			, 'surround' => 'plateau'
 		] + self::shapeDefaults('coast', $version);
 
 		if($preset === 'basalt-fjords')

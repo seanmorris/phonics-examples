@@ -50,7 +50,7 @@ final class SurfaceLayers
 	 * Gully spacing in meters for presets whose rib relief needs its own scale. Badland rills sit a few meters apart
 	 * on slopes tens of meters high; the flutes of the emerald ridges run down walls hundreds of meters high.
 	 */
-	private const PRESET_GULLIES = ['painted-badlands' => 14., 'emerald-ridges' => 60.];
+	private const PRESET_GULLIES = ['painted-badlands' => 14., 'emerald-ridges' => 60., 'black-sand-coast' => 40.];
 	public const FIELD_KEYS = ['rockSlopeStart','rockSlopeEnd','beachHeight','beachWidth','snowline','snowTransition',
 		'alpineStart','alpineEnd','snowSlopeStart','snowSlopeEnd','macroVariation','treeline','tundraStart',
 		'talusAmount','stainAmount','lichenAmount'];
@@ -259,6 +259,8 @@ final class SurfaceLayers
 			'emerald-ridges' => self::emeraldLayers($s),
 			'autumn-folds' => self::autumnLayers($s),
 			'namib-coast' => self::namibLayers($s),
+			'black-sand-coast' => self::blackSandLayers($s),
+			'yardang-desert' => self::yardangLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -317,6 +319,8 @@ final class SurfaceLayers
 			],
 			'autumn-folds' => ['Valley fields', 'Autumn canopy', 'Hemlock stands', 'Ridge sandstone'],
 			'namib-coast' => ['Red dune sand', 'Slip faces', 'Wind ripples', 'Gravel flats', 'Wet beach'],
+			'black-sand-coast' => ['Moss heath', 'Basalt scree', 'Black sand', 'Lyme grass', 'Gully snow'],
+			'yardang-desert' => ['Corridor sand', 'Wind ripples', 'Clay flanks', 'Pale caps'],
 			'emerald-ridges' => [
 				'Fern slopes'
 				, 'Rainforest canopy'
@@ -975,6 +979,113 @@ final class SurfaceLayers
 				, 'patternScale' => 6.
 				, 'patternAmount' => .6
 			]
+		];
+	}
+
+	/**
+	 * Moss and olive heath hold the gentle ground. Black basalt scree covers the slopes, streaked down the fall
+	 * line and tilted into flutes. Black sand lines the shore, yellow lyme grass binds it, and snow lies in the
+	 * high gullies.
+	 */
+	private static function blackSandLayers(array $s): array
+	{
+		return [
+			[
+				'color' => $s['grassColor']
+				, 'field' => 'meadow'
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 30.
+				, 'patternStretch' => 1.3
+				, 'patternAmount' => .55
+			]
+
+			, self::exposedRock($s) + [
+				'color' => $s['rockColor']
+				, 'channel' => 'both'
+				, 'relief' => 'rib-tilt'
+				, 'strength' => 24.
+				, 'pattern' => 'fall-line'
+				, 'patternColor' => $s['rockBandColor']
+				, 'patternScale' => 12.
+				, 'patternAmount' => .7
+			]
+
+			, [
+				'color' => $s['sandColor']
+				, 'datum' => 'water'
+				, 'low' => -2.
+				, 'high' => $s['beachHeight']
+				, 'fade' => $s['beachWidth']
+				, 'slopeHigh' => .10
+				, 'slopeFade' => .08
+				, 'roughness' => .45
+				, 'reflectivity' => .08
+				, 'pattern' => 'gravel'
+				, 'patternColor' => self::tint($s['sandColor'], 1.7, 1.7, 1.7)
+				, 'patternScale' => .8
+				, 'patternAmount' => .4
+			]
+
+			, [
+				'color' => $s['meadowColor']
+				, 'datum' => 'water'
+				, 'low' => 2.
+				, 'high' => $s['beachHeight'] + 12.
+				, 'fade' => 6.
+				, 'slopeHigh' => .05
+				, 'slopeFade' => .05
+				, 'opacity' => .6
+			] + self::stipple($s['sandColor'], 1., .7, 1.4)
+
+			, [
+				'color' => $s['snowColor']
+				, 'low' => $s['snowline']
+				, 'fade' => $s['snowTransition']
+				, 'slopeHigh' => $s['snowSlopeEnd']
+				, 'slopeFade' => $s['snowSlopeEnd'] - $s['snowSlopeStart']
+				, 'noise' => 30.
+				, 'scale' => 90.
+			]
+		];
+	}
+
+	/** Rippled sand floors the corridors. The clay hulls streak down their flanks and pale toward their caps. */
+	private static function yardangLayers(array $s): array
+	{
+		return [
+			[
+				'color' => $s['sandColor']
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['soilColor']
+				, 'patternScale' => 60.
+				, 'patternAmount' => .35
+			]
+
+			, [
+				'channel' => 'relief'
+				, 'relief' => 'pattern'
+				, 'strength' => .028
+				, 'pattern' => 'ripples'
+				, 'patternAmount' => 1.
+				, 'patternScale' => .78
+				, 'patternStretch' => 1.
+				, 'slopeHigh' => .065
+				, 'slopeFade' => .045
+			]
+
+			, self::exposedRock($s) + [
+				'color' => $s['rockColor']
+				, 'channel' => 'both'
+				, 'relief' => 'rib-tilt'
+				, 'strength' => 12.
+				, 'pattern' => 'fall-line'
+				, 'patternColor' => $s['rockBandColor']
+				, 'patternScale' => 5.
+				, 'patternAmount' => .6
+			]
+
+			, ['color' => $s['snowColor'], 'low' => 30., 'fade' => 8., 'noise' => 4., 'scale' => 60., 'opacity' => .8]
 		];
 	}
 

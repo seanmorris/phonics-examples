@@ -353,6 +353,13 @@ crests along a bearing of 70 degrees into linear dunes. A 900 m coastal rise lif
 straight shore. Billowed detail keeps the red sand smooth, with darker slip faces, wind ripples, gravel flats and a
 wet beach.
 
+`black-sand-coast` sharpens its crests with ridged detail and cuts 30 m gullies at 80 m spacing into every slope,
+behind a coastal rise 1.5 km wide. Its peaks reach about 880 m. Black basalt scree streaks down the fall line and tilts
+into flutes, over moss and olive heath. Black sand lines the shore, with yellow lyme grass, and snow lies in the high
+gullies. `yardang-desert` stretches narrow contour walls ten times along the wind, turning the rings into streamlined
+clay hulls about 45 m high with flat sand corridors between them. Their flanks streak down the fall line and pale toward
+their caps.
+
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 
 | Setting | Coast | Mountain | Version-one canyon | Canyon |
