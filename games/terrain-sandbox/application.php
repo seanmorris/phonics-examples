@@ -20,6 +20,7 @@ use TerrainSandbox\CarEngineSound;
 use TerrainSandbox\SandboxMenu;
 use TerrainSandbox\DeliveryBeacon;
 use TerrainSandbox\DeliveryRun;
+use TerrainSandbox\DemoPlayback;
 use TerrainSandbox\NavigationArrow;
 use TerrainSandbox\GateModel;
 use TerrainSandbox\CurveSignModel;
@@ -122,7 +123,7 @@ $lastAuthoringFrame = 0;
 $workOnSearch = static function() use (
 	$session, $engine, $stopSearchTimer, &$lastAuthoringFrame, &$statusPending, &$urgentStatus
 ): void {
-	if($engine->paused || $session->menu) { $stopSearchTimer(); return; }
+	if($engine->paused || $session->menu || $session->demo->playhead !== null) { $stopSearchTimer(); return; }
 	if($session->findingCircuit() || $session->preparingRoad())
 	{
 		// At normal frame rates input already services the editor. Reclaim a short slice only between slow frames.
@@ -165,7 +166,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		$height = max(1, min(2160, (int)$h));
 		$dirty = true;
 	}
-	$prepared = $session->menu && $pendingEdit !== null ? null : $scene->takePreparedLandscape();
+	$prepared = ($session->menu || $session->demo->playhead !== null) && $pendingEdit !== null ? null : $scene->takePreparedLandscape();
 	if($prepared !== null) {
 		if($pendingEdit !== null) $session->publishLandscape($pendingEdit);
 		$pendingEdit = null;
@@ -245,13 +246,13 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$scene->selectionInterval = $session->selectionInterval;
 	$scene->selectionSliceMs = $session->selectionSliceMs;
 	$engine->userPaused = $session->paused;
-	if(($download = $session->download()) !== null) (vrzno_env('terrainDownload'))($download);
+	if(($download = $session->download()) !== null) (vrzno_env('terrainDownload'))($download,$session->downloadName);
 	$dirty = $dirty || $session->dirty;
 	return false;
 });
 
 $shadow = null;
-$drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$hiddenGates, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
+$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use ($gates, $curveSigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
 	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
 	foreach($visibleSites as $site)
 		if($site['kind'] !== 'smoke') ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
@@ -268,24 +269,29 @@ $drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$hi
 	$projectiles = [];
 	if($session->mode === 'jet' && $session->jetView === 'chase')
 	{
-		foreach($session->balloons->readySlots() as $slot)
+		foreach($events['slots'] ?? $session->balloons->readySlots() as $slot)
 			$projectiles[] = Jet::projectileMount($vehiclePose,$slot);
 	}
-	foreach($session->balloons->targets() as [$x,$y,$z])
+	foreach($events['balloons'] ?? $session->balloons->targets() as [$x,$y,$z])
 	{
 		$model = $models['balloon'] ??= new VehicleModel(__DIR__ . '/assets/balloon/mesh.bin.gz');
 		$model->draw(['x'=>$x,'y'=>$y,'z'=>$z,'yaw'=>0,'pitch'=>0,'roll'=>0],
 			$viewCamera,$session->atmosphere,$session->water,$width,$height);
 	}
 	$streaks = [];
-	foreach($session->balloons->shots as $shot)
+	foreach($events['shots'] ?? $session->balloons->shots as $shot)
 	{
-		$position = [];
-		foreach($shot['previous'] as $i=>$from) $position[] = $from+($shot['position'][$i]-$from)*$shotAlpha;
-		$dir = $shot['direction'];
-		if($shot['tracer']) { $streaks[] = [$position,$dir]; continue; }
+		if(isset($events['shots'])) {
+			[$tracer,$x,$y,$z,$dx,$dy,$dz,$roll] = $shot;
+			$position = [$x,$y,$z]; $dir = [$dx,$dy,$dz];
+		} else {
+			$position = [];
+			foreach($shot['previous'] as $i=>$from) $position[] = $from+($shot['position'][$i]-$from)*$shotAlpha;
+			$dir = $shot['direction']; $roll = $shot['roll']; $tracer = $shot['tracer'];
+		}
+		if($tracer) { $streaks[] = [$position,$dir]; continue; }
 		$projectiles[] = ['x'=>$position[0],'y'=>$position[1],'z'=>$position[2],'yaw'=>atan2($dir[0],$dir[2]),
-			'pitch'=>asin(max(-1,min(1,$dir[1]))),'roll'=>$shot['roll']];
+			'pitch'=>asin(max(-1,min(1,$dir[1]))),'roll'=>$roll];
 	}
 	if($projectiles)
 	{
@@ -298,16 +304,58 @@ $drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$hi
 		$gates->draw($session->course, $viewCamera, $session->atmosphere, $session->water, $width, $height, $spotLights, $hiddenGates);
 };
 
+$liveSession = $session;
+$liveScene = $scene;
+$playback = null;
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
 		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
 		$pauseMenu, &$displayTerrain
 	): void {
+		$tape = $liveSession->demo;
+		$events = [];
+		$session = $liveSession;
+		$scene = $liveScene;
+		$sample = null;
+		if($playback && $playback->ready && !$liveSession->menu && $tape->playhead !== null && $playback->shown >= $tape->duration())
+			$liveSession->endPlayback();
+		if($tape->playhead !== null) {
+			try {
+				$playback ??= new DemoPlayback($tape);
+				if($playback->ready && !$liveSession->menu)
+					$tape->playhead = min($tape->duration(),$tape->playhead + min(.25,$frameSeconds));
+				$sample = $tape->frame($tape->playhead);
+				$playback->apply($tape,$sample);
+			} catch(\Exception $error) {
+				$liveSession->endPlayback();
+				$liveSession->message = 'Could not play demo. ' . $error->getMessage();
+				$sample = null;
+			}
+		}
+		if($sample !== null) {
+			$events = $sample['events'];
+			$dirty = $dirty || !$playback->ready || $playback->shown !== $tape->playhead;
+			$playback->shown = $tape->playhead;
+			$session = $playback->world;
+			$scene = $playback->scene;
+			$session->paused = $liveSession->menu;
+			$session->inputTheme = $liveSession->inputTheme;
+		} elseif($playback) {
+			$playback->close();
+			$playback = null;
+			$dirty = $urgentStatus = true;
+		}
+		$tape->capture($liveSession);
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
-		[$viewCamera,$vehiclePose] = $session->view($shotAlpha);
+		[$viewCamera,$vehiclePose] = $sample === null ? $session->view($shotAlpha)
+			: [$sample['camera'],$sample['mode'] === 'fly' ? null : $sample['vehicle']];
+		if($sample && $vehiclePose !== null) {
+			$vehiclePose['motion'] = 'driving';
+			$vehiclePose['floodedHold'] = false;
+		}
 		$sound = $session->mode === 'car' && !$session->paused && !$vehiclePose['floodedHold']
 			? [(int)round($vehiclePose['rpm']), round($vehiclePose['engineLoad'],3), round($vehiclePose['tireSqueal'],3)] : [0,0,0];
 		if($sound !== $lastSound)
@@ -316,7 +364,7 @@ $engine->start(
 			$lastSound = $sound;
 		}
 		// Lamp levels blend between steps like the pose, and a change in either redraws the frame below.
-		if($session->mode === 'car') $vehiclePose['lamps'] = $session->carLamps($alpha);
+		if(!$sample && $session->mode === 'car') $vehiclePose['lamps'] = $session->carLamps($alpha);
 		// Lit headlamps light the ground and water from this frame's pose, day or night. Dark lamps and other modes
 		// clear the lights.
 		// In a shadow by day, eyes adapted to it see the beams brighter, as they do at night.
@@ -343,14 +391,14 @@ $engine->start(
 			$courseRevision = $course->revision;
 			$dirty = true;
 		}
-		$target = $session->navigationTarget($vehiclePose);
+		$target = $vehiclePose === null ? null : ($sample ? ($events['target'] ?? null) : $session->navigationTarget($vehiclePose));
 		$previousBearing = $arrowBearing;
 		$arrowBearing = $target === null ? null : NavigationArrow::bearing($target, $vehiclePose, $previousBearing,
 			$session->paused ? 0.0 : $frameSeconds);
 		if($arrowBearing !== $previousBearing) $dirty = true;
 		$hadVisibleSmoke = (bool)$visibleSites;
 		$visibleSites = [];
-		foreach($session->delivery?->beacons($session->time) ?? [] as $site)
+		foreach($events['sites'] ?? $session->delivery?->beacons($session->time) ?? [] as $site)
 			if(DeliveryRun::beaconInView($site,$viewCamera,$width/$height)) $visibleSites[] = $site;
 		if(count($visibleSites) > 1)
 		{
@@ -360,7 +408,7 @@ $engine->start(
 				+ ($b['y']-$a['y'])*$forward[1] + ($b['z']-$a['z'])*$forward[2]) <=> 0.);
 		}
 		if(($hadVisibleSmoke || $visibleSites) && $session->time !== $lastRenderedTime) $dirty = true;
-		$dirty = $curveSigns->update($displayTerrain) || $dirty;
+		$dirty = $curveSigns->update($sample ? $playback->terrain : $displayTerrain) || $dirty;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;
@@ -402,7 +450,8 @@ $engine->start(
 			}
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
-				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !$session->balloons->targets() ? null : $drawOpaque);
+				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !($events['balloons'] ?? $session->balloons->targets()) ? null
+					: fn() => $drawOpaque($session,$scene,$sample ? $playback->hiddenGates : $hiddenGates,$events));
 			$trails = match($session->mode) { 'jet' => $session->flightTrails, 'car' => $session->tireDust, default => null };
 			if($trails?->active())
 				($trailRenderer ??= new TrailRenderer)->draw($trails,$shotAlpha,$viewCamera,$width,$height,
@@ -412,7 +461,7 @@ $engine->start(
 			$jet = $session->mode === 'jet';
 			$car = $session->mode === 'car';
 			$craft = $session->mode === 'craft';
-			$raceGuidance = $session->race->showGuidance($session->course);
+			$raceGuidance = $events['race']['guidance'] ?? $session->race->showGuidance($session->course);
 			$waterRace = $craft && $raceGuidance && $session->usingFloodedCircuit();
 			$instrumentSize = $car || $craft ? (int)round(min(320, $width*.36, $height*.40)) : null;
 			$frame = $jet || $car || $craft ? ['width'=>$width,'height'=>$height] : null;
@@ -427,18 +476,19 @@ $engine->start(
 					$car || $waterRace ? $session->circuitChartSpan() : null, circular: $car);
 				if($span !== null)
 					$frame['map'] = ['position'=>$position,'bearing'=>$bearing,'span'=>$span,'size'=>$instrumentSize,'circular'=>$car,
-						'showRoute'=>$raceGuidance, 'markers'=>$session->delivery?->sites() ?: ($target === null ? [] : [$target])];
+						'showRoute'=>$raceGuidance, 'markers'=>($events['sites'] ?? $session->delivery?->sites()) ?: ($target === null ? [] : [$target])];
 			}
 			// The pause menu draws last, over the frozen frame and its charts.
 			$pauseMenu->render($width, $height, $session->inputTheme);
 			$engine->device->present();
+			if($sample && !$playback->ready) $playback->ready = $scene->stats()['visible'] > 0;
 			if($jet)
 			{
 				$frame += ['eye'=>$viewCamera->position,'basis'=>$viewCamera->basis(),
 					'fov'=>$viewCamera->fov,'jet'=>$vehiclePose,'thrust'=>TerrainSandbox\Jet::thrustPercent($vehiclePose['power']),'cockpit'=>$session->jetView === 'cockpit',
-					'range'=>$session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
+					'range'=>$events['range'] ?? $session->balloons->status(),'ring'=>TerrainSandbox\BalloonPractice::RING,
 					'contactRange'=>TerrainSandbox\BalloonPractice::CONTACT_RANGE,
-					'targets'=>$session->balloons->targets()];
+					'targets'=>$events['balloons'] ?? $session->balloons->targets()];
 			}
 			if($car || $craft) $frame['speedometer'] = ['mph'=>abs($vehiclePose['speed'])/Car::MPS_PER_MPH,
 				'maximum'=>$car ? Car::TOP_SPEED_MPH : 120,'size'=>$instrumentSize];
@@ -462,6 +512,16 @@ $engine->start(
 				'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];
+			if($sample) {
+				$status['demo'] = $tape->status() + ['world'=>$sample['world']];
+				$status['menu'] = $liveSession->menu;
+				$status['menuRow'] = $liveSession->menuRow;
+				$status['message'] = 'Playing demo';
+				$status['race'] = ($events['race'] ?? []) + $status['race'];
+				$status['delivery'] = $events['delivery'] ?? null;
+				$status['balloons'] = ($events['range'] ?? []) + $status['balloons'];
+				if($vehiclePose !== null) $status[$sample['mode']] = $vehiclePose;
+			}
 			// A large route graph crosses the UI bridge only when the active plan changes.
 			if($session->journeyPlan() !== $lastJourneyPlan) {
 				$lastJourneyPlan = $session->journeyPlan();
@@ -473,7 +533,7 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, $pauseMenu): void {
+	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, $pauseMenu): void {
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
 		foreach($models as $model) $model->close();
@@ -484,9 +544,10 @@ $engine->start(
 		$pauseMenu->release();
 		$gates->release();
 		$curveSigns->close();
+		$playback?->close();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $session, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty, $pauseMenu): void {
+	static function() use ($scene, $session, &$playback, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty, $pauseMenu): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -500,6 +561,7 @@ $engine->start(
 		$gates->release();
 		$curveSigns->close();
 		$scene->restore();
+		$playback?->scene->restore();
 		$session->roadEditor->captured = null;
 		$dirty = true;
 	}

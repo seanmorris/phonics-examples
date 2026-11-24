@@ -497,6 +497,7 @@ export function activate({module, canvas, session, services})
 				push({type, west: value('west'), destinations, span: Number(value('span')), ...network});
 			}
 			else if(type === 'load') frame.querySelector('[data-file]').click();
+			else if(type === 'demo-file') frame.querySelector('[data-demo-file]').click();
 			else if(type === 'menu' && latest?.screenshotView) push('menu-back');
 			else if(type === 'fullscreen')
 			void fullscreen.toggle().catch(error => {
@@ -504,7 +505,7 @@ export function activate({module, canvas, session, services})
 			});
 			else push(type);
 
-			if(type !== 'load') focus();
+			if(type !== 'load' && type !== 'demo-file') focus();
 		}, {signal});
 	}
 
@@ -579,18 +580,19 @@ export function activate({module, canvas, session, services})
 		setFieldValue(frame.querySelector(`[name="${name}"]`), value, true);
 	}, {signal});
 
-	frame.querySelector('[data-file]').addEventListener('change', async event => {
+	for(const [selector, type, limit] of [['[data-file]', 'load', 4], ['[data-demo-file]', 'demo-open', 24]])
+	frame.querySelector(selector).addEventListener('change', async event => {
 		const file = event.target.files?.[0];
 
 		if(!file) return;
 
 		try
 		{
-			if(file.size > 4 * 1024 * 1024) throw Error('Landscape file exceeds 4 MiB.');
+			if(file.size > limit * 1024 * 1024) throw Error(`File exceeds ${limit} MiB.`);
 
 			const json = await file.text();
 
-			if(!shell.closed) push({type: 'load', json});
+			if(!shell.closed) push({type, json});
 		}
 		catch(error)
 		{
@@ -945,11 +947,11 @@ export function activate({module, canvas, session, services})
 		else if(command === 'quit') location.assign(new URL('../../', location.href));
 	});
 
-	shell.bridge('terrainDownload', json => {
+	shell.bridge('terrainDownload', (json, filename) => {
 		const url = URL.createObjectURL(new Blob([json], {type: 'application/json'}));
 		const link = document.createElement('a');
 		link.href = url;
-		link.download = 'landscape.json';
+		link.download = filename;
 		document.body.append(link);
 		link.click();
 		link.remove();
@@ -961,7 +963,7 @@ export function activate({module, canvas, session, services})
 		, handler: state => {
 
 			// A vehicle retains its result on reboarding. Celebrate the crossing once, on the ride that made it.
-			const finished = state.race.state === 'finished' && !state.delivery && state.mode === state.race.vehicle
+			const finished = state.demo.playhead === null && (latest?.demo.playhead ?? null) === null && state.race.state === 'finished' && !state.delivery && state.mode === state.race.vehicle
 				&& latest?.mode === state.mode && latest.generation === state.generation;
 
 			if(finished && (latest.race.state !== 'finished' || latest.race.time !== state.race.time))
@@ -985,6 +987,7 @@ export function activate({module, canvas, session, services})
 				|| state.settings.circuitCauseways !== latest.settings.circuitCauseways)
 				showCircuitDefaults(state.circuit.defaults);
 
+			if(latest && state.demo.world !== latest.demo.world) lastGeneration = -1;
 			latest = state;
 			if('journeyNetwork' in state) activeNetwork = state.journeyNetwork;
 			if(activeNetwork && state.journeySquare && state.generation !== lastGeneration) {
@@ -1000,12 +1003,24 @@ export function activate({module, canvas, session, services})
 					? guideBody.querySelector('[data-square="' + CSS.escape(location) + '"]') : null;
 				currentRow?.setAttribute('aria-current','location');
 			}
+			const demo = state.demo, playing = demo.playhead !== null;
+			button('demo-record').hidden = playing || demo.recording;
+			button('demo-stop').hidden = !playing && !demo.recording;
+			button('demo-stop').textContent = playing ? 'Stop playback' : 'Stop recording';
+			button('demo-play').disabled = playing || demo.recording || !demo.available;
+			button('demo-save').disabled = playing || demo.recording || !demo.available;
+			button('demo-file').disabled = playing || demo.recording;
+			const demoStatus = frame.querySelector('[data-demo-status]');
+			demoStatus.hidden = !demo.recording && !playing;
+			const seconds = Math.floor(playing ? demo.playhead : demo.duration);
+			demoStatus.textContent = (playing ? 'Replay' : 'Recording') + ' · ' + Math.floor(seconds/60)
+				+ ':' + String(seconds%60).padStart(2, '0');
 			module.updateTerrainHints(state);
 
 			if(jetView !== state.jetView)
 			{
 				jetView = state.jetView;
-				rememberJet();
+				if(!playing) rememberJet();
 			}
 
 			frame.querySelector('[data-jet-actions]').hidden = state.mode !== 'jet';
@@ -1052,7 +1067,7 @@ export function activate({module, canvas, session, services})
 				&& document.activeElement !== invertPitch
 			){
 				invertPitch.checked = state.invertPitch;
-				rememberJet();
+				if(!playing) rememberJet();
 			}
 
 			const speed = controls.get('speed');
@@ -1068,14 +1083,14 @@ export function activate({module, canvas, session, services})
 			if(state.jetControls && jetControls.value !== state.jetControls && document.activeElement !== jetControls)
 			{
 				jetControls.value = state.jetControls;
-				rememberJet();
+				if(!playing) rememberJet();
 			}
 
 			// L and X switch the headlights in PHP. Show and remember that too.
 			if(state.headlights && headlights.value !== state.headlights && document.activeElement !== headlights)
 			{
 				headlights.value = state.headlights;
-				rememberHeadlights();
+				if(!playing) rememberHeadlights();
 			}
 
 			if(state.car?.roadHold > 0)
@@ -2461,12 +2476,13 @@ function markup()
 		display:flex;align-items:center;justify-content:center;gap:5px;padding:0;cursor:pointer;
 		background:#19382f;border:1px solid #668477;border-radius:50%;box-shadow:0 6px 24px #07171366
 	}
+	.terrain-demo-status{position:absolute;top:10px;left:50%;transform:translateX(-50%);padding:4px 9px;border-radius:5px;background:#102822d9;color:#fff7de;font-variant-numeric:tabular-nums;pointer-events:none}
 	.terrain-menu-button:hover{background:#254737}
 	.terrain-menu-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-menu-button i{width:4px;height:15px;border-radius:1px;background:#fff7de}
 	.terrain-sandbox:has(.terrain-panel[open]) .terrain-menu-button{right:calc(var(--lab-inset) + var(--lab-width) + 8px)}
 	.terrain-menu-open .terrain-panel,
-	.terrain-menu-open:not(.terrain-screenshot-view) :is(.terrain-road-preview,.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
+	.terrain-menu-open:not(.terrain-screenshot-view) :is(.terrain-demo-status,.terrain-road-preview,.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
 	.terrain-panel:not([open])>summary{height:42px;padding:0;justify-content:center}
 	.terrain-panel:not([open]) .lab-title{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-panel>summary:focus-visible{outline-offset:-4px;border-radius:inherit}
@@ -2833,6 +2849,7 @@ G coast</textarea><small>One square per line. Enter its name, preset ID, and up 
 	</div></fieldset></template>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
+	<fieldset><legend>Demos</legend><div class="terrain-row"><button data-action="demo-record">Record run</button><button data-action="demo-stop" hidden>Stop recording</button><button data-action="demo-play" disabled>Play last demo</button><button data-action="demo-save" disabled>Save demo</button><button data-action="demo-file">Open demo</button><input type="file" data-demo-file accept=".json,application/json" hidden></div></fieldset>
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>
@@ -2849,5 +2866,5 @@ G coast</textarea><small>One square per line. Enter its name, preset ID, and up 
 	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Hold Back and tap L1/LB for the previous track or R1/RB for the next. Click the right stick to return to the road during a race or landscape journey. Start opens the pause menu.</p>
 	</details><details><summary>Credits</summary><p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p></details>
 	</section>
-	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><div class="terrain-hud"><p data-journey-sign hidden></p><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
+	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><output class="terrain-demo-status" data-demo-status aria-live="off" hidden></output><div class="terrain-hud"><p data-journey-sign hidden></p><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

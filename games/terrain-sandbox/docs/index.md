@@ -227,6 +227,12 @@ The menu also offers these actions:
 
 Use the arrow keys or **W/S**, the D-pad or the left stick to move, and **Enter**, **Space** or **A** to choose. You can also click or tap a row.
 
+### Record and replay a demo
+
+Choose **Pause → Demos → Record run** to start at your current position, even partway through a drive or flight. Choose **Stop recording**, then **Play last demo**. **Landscape Lab → Explore → Demos** has the same controls, plus **Save demo** and **Open demo** for sharing a `terrain-demo.json` file. Save a take before starting another one or leaving the page.
+
+The demo includes the landscape, camera and vehicle motion, race progress and delivery markers. The engine interpolates between recorded poses during playback. Time spent in the pause menu adds no recording time. During playback, **Escape** or **Start** opens the playback menu. Resume from that frame or choose **Stop playback**. When the demo ends, your original session is waiting, paused where you left it.
+
 ## Freeze and save
 
 **P** freezes waves, the moving sun, and vehicle motion without opening the menu. Camera movement and authoring remain available. Once terrain preparation settles, an unchanged paused view stops submitting rendered frames.

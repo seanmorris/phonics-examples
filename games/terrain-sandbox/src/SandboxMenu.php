@@ -121,6 +121,15 @@ final class SandboxMenu
 			}
 		];
 
+		if($session->demo->playhead !== null) {
+			$items['resume']['label'] = 'Resume playback';
+			$items['demo-stop'] = $act('Stop playback','demo-stop');
+			return $items;
+		}
+		$demos = $session->demo->recording ? ['demo-stop'=>$act('Stop recording','demo-stop')]
+			: ['demo-record'=>$act('Record run','demo-record')];
+		if(!$session->demo->recording && $session->demo->count()) $demos['demo-play'] = $act('Play last demo','demo-play');
+		$items['demos'] = ['label'=>'Demos','children'=>$demos];
 		if($session->mode !== 'fly' && $session->race->state !== 'idle') $items['race'] = $act('Restart race', 'race-reset');
 
 		if($session->mode === 'fly')
@@ -416,7 +425,7 @@ final class SandboxMenu
 		if($this->menu->isOpen || !$session->menu) return false;
 
 		$session->menu = false;
-		$session->paused = $this->keepPaused;
+		$session->paused = $this->keepPaused || $session->demo->playhead !== null;
 		$this->keepPaused = false;
 		$this->show($session);
 

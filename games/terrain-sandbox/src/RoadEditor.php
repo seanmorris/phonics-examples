@@ -175,6 +175,12 @@ final class RoadEditor
 		$this->applying = false;
 	}
 
+	/** Applied road layers omitted from the current view. */
+	public function hiddenRoads(): array
+	{
+		return array_values(array_filter(array_keys($this->hidden),static fn($id)=>is_int($id) && $id>=0));
+	}
+
 	public function sketchVisible(): bool { return !isset($this->hidden['new']); }
 
 	/** Only the renderer uses the preview. Picking, driving, editing and saving keep the authored landscape. */

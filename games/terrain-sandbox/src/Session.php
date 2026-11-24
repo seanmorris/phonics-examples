@@ -405,6 +405,8 @@ final class Session
 	/** How far the jet ski's camera has swung round to the right stick's look direction, in radians. */
 	private float $craftLook = 0.0;
 	private ?string $download = null;
+	public string $downloadName = 'landscape.json';
+	public DemoTape $demo;
 	private ?Landscape $draft = null;
 	/** Whether a complete edited revision is awaiting its matching GPU representation. */
 	public bool $preparing = false;
@@ -448,6 +450,7 @@ final class Session
 	public function __construct(array $recipe = [], ?GateShapes $gateShapes = null, ?Scheduler $systems = null,
 		array $movementSystems = [])
 	{
+		$this->demo = new DemoTape;
 		$this->roadEditor = new RoadEditor;
 		$this->terrainAppearance = new TerrainAppearance;
 		$this->gateShapes = $gateShapes ?? GateShapes::packaged();
@@ -491,6 +494,14 @@ final class Session
 	 */
 	public function input(array $input, float $seconds, float $aspect, float $pickMs = 2.0): void
 	{
+		if($this->demo->playhead !== null) {
+			foreach($input['actions'] ?? [] as $action) {
+				$type = is_array($action) ? ($action['type'] ?? '') : $action;
+				if($type === 'demo-stop') $this->endPlayback();
+				elseif($type === 'menu' || $type === 'pause') $this->menuRequested = !$this->menu;
+			}
+			return;
+		}
 		$this->aspect = $aspect;
 		$this->keys = is_array($input['keys'] ?? null) ? $input['keys'] : [];
 		$this->pad = self::readPad($input['pad'] ?? null);
@@ -522,6 +533,7 @@ final class Session
 			}
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
 			// A pending survey or boarding search can move the camera and resume the simulation.
+			if($this->demo->playhead !== null) return;
 			if($this->menu) { $this->showPausedHeadlights($switch); return; }
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($this->roadWork !== null) $this->advanceRoad(min(4.,$pickMs));
@@ -1457,6 +1469,37 @@ final class Session
 		};
 		switch($type)
 		{
+			case 'demo-record':
+				$this->demo->start($this);
+				$this->paused = false;
+				break;
+			case 'demo-stop':
+				if($this->demo->recording) {
+					$this->demo->capture($this,true);
+					if($this->demo->recording) $this->demo->finish();
+					$this->message = $this->demo->notice;
+				}
+				break;
+			case 'demo-open':
+				if($this->demo->recording) throw new \RuntimeException('Stop recording before opening a demo.');
+				try {
+					$this->demo = DemoTape::import($action['json'] ?? '');
+				} catch(\Exception | \TypeError $error) {
+					$this->message = 'Could not open demo. ' . $error->getMessage();
+					$this->dirty = true;
+					break;
+				}
+				// A file opens in the same viewer as the most recent recording.
+			case 'demo-play':
+				if($this->demo->recording || !$this->demo->count()) throw new \RuntimeException('Finish a recording or open a demo first.');
+				$this->demo->playhead = 0.;
+				$this->paused = true;
+				$this->dirty = true;
+				break;
+			case 'demo-save':
+				$this->download = $this->demo->export();
+				$this->downloadName = 'terrain-demo.json';
+				break;
 			case 'pause':
 				$this->launches = 0;
 				$this->paused = !$this->paused;
@@ -1636,6 +1679,7 @@ final class Session
 				});
 				break;
 			case 'save':
+				$this->downloadName = 'landscape.json';
 				if($this->preparing || $this->draft !== null) throw new \RuntimeException('Wait for the terrain edit before saving.');
 				$this->download = $this->save(); break;
 			case 'load': $this->load((string)($action['json'] ?? '')); break;
@@ -2499,7 +2543,7 @@ final class Session
 	 * Version 4 adds color layers. Version 5 records a complete material stack, shared fields, origin and paint inks.
 	 * @return string Complete portable JSON save document.
 	 */
-	public function save(): string
+	public function save(bool $demo = false): string
 	{
 		$stack = $this->activeLayers();
 		$rows = $stack->layers;
@@ -2516,6 +2560,7 @@ final class Session
 			'settings' => $this->settings,'camera' => ['position' => $this->camera->position,
 				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch],
 			'balloons' => $this->balloons->export(), 'course' => $this->course->export()];
+		if($demo) $document['demoPreview'] = ['roads'=>$this->roadEditor->hiddenRoads(),'layers'=>$this->hiddenLayerIds];
 		if($this->journeyViews) $document['journeyViews']=$this->journeyViews;
 		if($this->network) $document['journeyNetwork']=['plan'=>$this->network->plan,'square'=>$this->square];
 		if($this->circuit !== null)
@@ -2736,6 +2781,13 @@ final class Session
 	 */
 	public function download(): ?string { $value = $this->download; $this->download = null; return $value; }
 
+	public function endPlayback(): void
+	{
+		$this->demo->playhead = null;
+		$this->paused = $this->dirty = true;
+		$this->message = 'Demo ended. Resume to continue your session.';
+	}
+
 	/**
 	 * Report UI state without serializing the terrain cache.
 	 * @return array Authoring, camera and simulation diagnostics.
@@ -2757,7 +2809,8 @@ final class Session
 			}
 			$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
 		}
-		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,'time' => $this->time,'generation' => $this->generation,
+		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
+			'demo'=>$this->demo->status(),'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,
