@@ -13,6 +13,15 @@ final class CarGearbox
 	public float $rpm = self::IDLE, $load = 0., $wheelSlip = 0.;
 	private float $shiftLeft = 0.;
 
+	public function motion(): array { return [$this->gear,$this->wheelSlip,$this->shiftLeft]; }
+
+	public function resume(array $state, float $rpm, float $load): void
+	{
+		[$gear,$this->wheelSlip,$this->shiftLeft] = $state;
+		$this->gear = isset(self::RATIOS[(int)$gear]) ? (int)$gear : 1;
+		$this->rpm = $rpm; $this->load = $load;
+	}
+
 	/** Automatic shift map. Use wheel speed so flaring the engine cannot cause an upshift. */
 	private function select(float $wheelRpm, float $pedal): int
 	{

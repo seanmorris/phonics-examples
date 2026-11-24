@@ -30,6 +30,19 @@ final class CarTumble
 		$this->ahead = $horizontalSpeed; $this->up = $verticalSpeed;
 	}
 
+	public function motion(): array
+	{
+		return [$this->ahead,$this->up,$this->pitchRate,$this->rollRate,$this->side,$this->quiet];
+	}
+
+	public static function resume(array $p,array $motion): self
+	{
+		[$ahead,$up,$pitchRate,$rollRate,$side,$quiet]=$motion;
+		$t=new self($p['x'],$p['y'],$p['z'],$p['yaw'],$p['pitch'],$p['roll'],$ahead,$up,$pitchRate,$rollRate,$side);
+		$t->quiet=$quiet;
+		return $t;
+	}
+
 	public function translate(float $dx,float $dy,float $dz): void
 	{
 		$this->x+=$dx; $this->y+=$dy; $this->z+=$dz;

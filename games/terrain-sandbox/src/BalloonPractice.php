@@ -331,6 +331,34 @@ final class BalloonPractice
 		return array_keys(array_filter($this->readyAt,fn($time)=>$time <= $this->elapsed));
 	}
 
+	public function timers(): array
+	{
+		return [...$this->readyAt,$this->nextSlot,$this->gunAt,$this->hitUntil,$this->respawn,$this->practiceId];
+	}
+
+	public function resume(array $events): void
+	{
+		$r=$events['range'] ?? null;
+		if(!$r) return;
+		$this->elapsed=$r['elapsed']; $this->ground=$r['ground']; $this->hits=(int)($r['hits'] ?? 0);
+		$this->practice=(bool)($r['practice'] ?? false); $this->selected=$r['selected'] ?? null;
+		$this->visible=(bool)($r['visible'] ?? false); $this->dwell=$r['lockProgress']*self::LOCK_SECONDS;
+		[$a,$b,$slot,$this->gunAt,$this->hitUntil,$this->respawn,$id]=$events['rangeTimers'] ?? [0,0,0,0,0,0,0];
+		$this->nextSlot=(int)$slot & 1; $this->readyAt=[$a,$b]; $this->practiceId=(int)$id;
+		$points=$events['balloons'] ?? []; $this->practicePoint=null;
+		if($this->practice && isset($points[$this->practiceId])) {
+			$this->practicePoint=$points[$this->practiceId]; unset($points[$this->practiceId]);
+		}
+		$this->popped=array_diff_key($this->positions,$points);
+		$this->positions=$points+$this->positions;
+		$this->shots=[];
+		foreach($events['shots'] ?? [] as $shot) {
+			$point=array_slice($shot,1,3);
+			$this->shots[]=['previous'=>$point,'position'=>$point,'direction'=>array_slice($shot,4,3),'tracer'=>(bool)$shot[0],
+				'roll'=>$shot[7],'speed'=>$shot[8] ?? 600.,'expires'=>$shot[9] ?? $this->elapsed+.3,'target'=>($shot[10] ?? -1)<0 ? null : (int)$shot[10]];
+		}
+	}
+
 	public function status(): array
 	{
 		return ['selected'=>$this->selected,'visible'=>$this->visible,'locked'=>$this->dwell >= self::LOCK_SECONDS,

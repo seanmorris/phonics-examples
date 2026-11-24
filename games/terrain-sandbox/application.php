@@ -225,6 +225,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$inputMs = (hrtime(true) - $started) / 1e6;
 	if($generation !== $session->generation)
 	{
+		$pendingEdit = null;
 		$displayTerrain = $session->landscape;
 		$scene->setLandscape($displayTerrain);
 		$generation = $session->generation;
@@ -319,12 +320,12 @@ $engine->start(
 		$session = $liveSession;
 		$scene = $liveScene;
 		$sample = null;
-		if($playback && $playback->ready && !$liveSession->menu && $tape->playhead !== null && $playback->shown >= $tape->duration())
+		if($playback && $playback->ready && !$tape->held && !$liveSession->menu && $tape->playhead !== null && $tape->playhead >= $tape->duration() && $playback->shown >= $tape->duration())
 			$liveSession->endPlayback();
 		if($tape->playhead !== null) {
 			try {
 				$playback ??= new DemoPlayback($tape);
-				if($playback->ready && !$liveSession->menu)
+				if($playback->ready && !$tape->held && !$liveSession->menu)
 					$tape->playhead = min($tape->duration(),$tape->playhead + min(.25,$frameSeconds));
 				$sample = $tape->frame($tape->playhead);
 				$playback->apply($tape,$sample);
@@ -340,7 +341,7 @@ $engine->start(
 			$playback->shown = $tape->playhead;
 			$session = $playback->world;
 			$scene = $playback->scene;
-			$session->paused = $liveSession->menu;
+			$session->paused = $liveSession->menu || $tape->held;
 			$session->inputTheme = $liveSession->inputTheme;
 		} elseif($playback) {
 			$playback->close();
@@ -513,7 +514,7 @@ $engine->start(
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];
 			if($sample) {
-				$status['demo'] = $tape->status() + ['world'=>$sample['world']];
+				$status['demo'] = $liveSession->demoStatus() + ['world'=>$sample['world']];
 				$status['menu'] = $liveSession->menu;
 				$status['menuRow'] = $liveSession->menuRow;
 				$status['message'] = 'Playing demo';

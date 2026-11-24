@@ -263,6 +263,17 @@ final class Watercraft
 		return $height;
 	}
 
+	public function angularMotion(): array { return [$this->pitchVelocity,$this->rollVelocity,$this->wakeClock]; }
+
+	/** Set the hull pose and momentum at a simulation boundary. */
+	public function resume(array $pose,array $velocity,array $angular): void
+	{
+		foreach(['x','y','z','yaw','roll','pitch'] as $key) $this->$key=$pose[$key];
+		[$this->vx,$this->vy,$this->vz]=$velocity;
+		[$this->pitchVelocity,$this->rollVelocity,$this->wakeClock]=$angular;
+		$this->contacts=0;
+	}
+
 	/**
 	 * Read simulation state for rendering.
 	 * @return array Pose, speed, velocity, and collision diagnostics.

@@ -23,6 +23,7 @@ final class DemoTape
 	private float $end = 0.;
 	public bool $recording = false;
 	public ?float $playhead = null;
+	public bool $held = false;
 	public string $notice = '';
 
 	public function __construct() { $this->events = new DemoEvents; }
@@ -33,7 +34,7 @@ final class DemoTape
 
 	public function status(): array
 	{
-		return ['recording'=>$this->recording,'available'=>$this->count()>0,'duration'=>$this->end,'playhead'=>$this->playhead,'notice'=>$this->notice];
+		return ['recording'=>$this->recording,'available'=>$this->count()>0,'duration'=>$this->end,'playhead'=>$this->playhead,'held'=>$this->held,'notice'=>$this->notice];
 	}
 
 	public function start(Session $session): void
@@ -51,19 +52,28 @@ final class DemoTape
 		$this->end = 0.;
 		$this->recording = true;
 		$this->playhead = null;
+		$this->held = false;
 		$this->notice = '';
 	}
+
+	private static function worldKey(Session $s): array
+	{
+		$settings = $s->settings;
+		unset($settings['azimuth'],$settings['elevation']);
+		return [$s->generation,$s->landscape->revision(),$s->course,$s->course->revision,$settings,
+			$s->roadEditor->hiddenRoads(),$s->displayedLayers(),$s->atmosphere->layers(),$s->paint];
+	}
+
+	public function continueWorld(Session $s): void { $this->worldKey=self::worldKey($s); }
 
 	public function capture(Session $s, bool $force = false): void
 	{
 		if(!$this->recording) return;
 		$this->origin ??= $s->time;
-		$t = round($s->time-$this->origin,6);
+		// Use the file's timestamp precision when deciding whether a forced capture replaces the cut frame.
+		$t = unpack('g',pack('g',round($s->time-$this->origin,6)))[1];
 		if(!$force && ($s->paused || $t-$this->end < 1/30-.00001)) return;
-		$settings = $s->settings;
-		unset($settings['azimuth'],$settings['elevation']);
-		$key = [$s->generation,$s->landscape->revision(),$s->course,$s->course->revision,$settings,
-			$s->roadEditor->hiddenRoads(),$s->displayedLayers(),$s->atmosphere->layers(),$s->paint];
+		$key = self::worldKey($s);
 		$document = $key !== $this->worldKey ? $s->save(true) : null;
 		$worldSize = strlen($document ?? '');
 		$budget = self::MAX_BYTES - $this->worldBytes - $worldSize - (strlen($this->samples)+self::STRIDE)*2 - 4096;
@@ -84,6 +94,7 @@ final class DemoTape
 			| ((int)($s->mode === 'car' ? $s->carWideMap : $s->jetWideMap) << 2);
 		$row = [$t,array_key_last($this->worlds),array_search($s->mode,self::MODES,true),$flags,$s->time,
 			$s->settings['azimuth'],$s->settings['elevation'],...$eye->position,$eye->yaw,$eye->pitch,$eye->roll,$eye->fov];
+		if($s->mode === 'craft') [$vehicle['vx'],$vehicle['vy'],$vehicle['vz']] = $vehicle['velocity'];
 		foreach(self::VEHICLE as $name) $row[] = $vehicle[$name] ?? 0.;
 		array_push($row,...($vehicle['wheelTravel'] ?? [0.,0.,0.,0.]));
 		$lamps = $s->mode === 'car' ? $s->carLamps(1.) : [];
@@ -104,7 +115,7 @@ final class DemoTape
 	public function export(): string
 	{
 		if(!$this->count()) throw new \RuntimeException('Record or open a demo first.');
-		return json_encode(['format'=>'terrain-sandbox-demo','version'=>1,
+		return json_encode(['format'=>'terrain-sandbox-demo','version'=>2,
 			'worlds'=>array_map(static fn($world)=>json_decode($world,true,64,JSON_THROW_ON_ERROR),$this->worlds),
 			'cues'=>$this->events->export(),'samples'=>base64_encode($this->samples)], JSON_THROW_ON_ERROR|JSON_UNESCAPED_SLASHES);
 	}
@@ -114,7 +125,7 @@ final class DemoTape
 	{
 		if(strlen($json)>self::MAX_BYTES) throw new \LengthException('Demo exceeds 24 MiB.');
 		$data = json_decode($json,true,72,JSON_THROW_ON_ERROR);
-		if(($data['format'] ?? null) !== 'terrain-sandbox-demo' || ($data['version'] ?? null) !== 1
+		if(($data['format'] ?? null) !== 'terrain-sandbox-demo' || !in_array($data['version'] ?? null,[1,2],true)
 			|| !is_array($data['worlds'] ?? null) || !array_is_list($data['worlds']) || !$data['worlds'] || count($data['worlds'])>256
 			|| !is_string($data['samples'] ?? null)) throw new \InvalidArgumentException('Unsupported terrain demo.');
 		$tape = new self;
@@ -157,8 +168,7 @@ final class DemoTape
 		return array_values(unpack('g'.self::VALUES,$this->samples,$i*self::STRIDE));
 	}
 
-	/** Interpolate at presentation time. Cuts between maps, vehicles and viewpoints stay instantaneous. */
-	public function frame(float $time): array
+	private function sampleIndex(float $time): int
 	{
 		$lo = 0; $hi = $this->count()-1;
 		while($lo<$hi) {
@@ -166,6 +176,46 @@ final class DemoTape
 			if(unpack('g',$this->samples,$middle*self::STRIDE)[1] <= $time) $lo=$middle;
 			else $hi=$middle-1;
 		}
+		return $lo;
+	}
+
+	public function seek(float $seconds): void
+	{
+		if(!$this->count() || $this->recording || !is_finite($seconds)) return;
+		$this->playhead = max(0.,min($this->end,$seconds));
+		$this->held = true;
+	}
+
+	public function stepSample(int $direction): void
+	{
+		$time = $this->playhead ?? 0.;
+		$i = $this->sampleIndex($time);
+		if($direction>0) $i++;
+		elseif($this->row($i)[0] >= $time-.000001) $i--;
+		$this->seek($this->row(max(0,min($this->count()-1,$i)))[0]);
+	}
+
+	/** The recorded prefix is independent of the original take. New captures continue its time axis. */
+	public function branch(): self
+	{
+		if($this->playhead === null) throw new \LogicException('Select a demo frame first.');
+		$i = $this->sampleIndex($this->playhead);
+		[$time,$world,,,$clock] = $this->row($i);
+		$child = new self;
+		$child->end = $time;
+		$child->origin = $clock-$time;
+		$child->worlds = array_slice($this->worlds,0,(int)$world+1);
+		$child->worldBytes = array_sum(array_map('strlen',$child->worlds));
+		$child->samples = substr($this->samples,0,($i+1)*self::STRIDE);
+		$child->events = $this->events->through($i);
+		$child->recording = true;
+		return $child;
+	}
+
+	/** Interpolate at presentation time. Cuts between maps, vehicles and viewpoints stay instantaneous. */
+	public function frame(float $time): array
+	{
+		$lo = $this->sampleIndex($time);
 		$a = $this->row($lo);
 		if($lo+1 < $this->count()) {
 			$b = $this->row($lo+1);

@@ -504,6 +504,21 @@ final class Jet
 		return $p;
 	}
 
+	public function motion(): array { return [(int)$this->expert,...$this->rates,...$this->flightDirection,...$this->chase]; }
+
+	public function resume(array $p,array $motion,Camera $camera,Landscape $land,float $water): void
+	{
+		$this->survey($land);
+		$this->previous=[];
+		$this->pose=array_intersect_key($p,array_flip(['x','y','z','yaw','pitch','roll','speed','power','vx','vy','vz','aileron','stabilator','rudder']));
+		$this->expert=(bool)($motion[0] ?? $this->expert);
+		$this->rates=$motion ? array_slice($motion,1,3) : [0.,0.,0.];
+		$speed=max(.001,sqrt($p['vx']**2+$p['vy']**2+$p['vz']**2));
+		$this->flightDirection=$motion ? array_slice($motion,4,3) : [$p['vx']/$speed,$p['vy']/$speed,$p['vz']/$speed];
+		$this->chase=$motion ? array_slice($motion,7,3) : $this->flightDirection;
+		$this->follow(0.,$camera,$land,$water);
+	}
+
 	public function state(): array { return $this->pose; }
 
 	/** Interpolate jet and camera together without sampling terrain between simulation ticks. */

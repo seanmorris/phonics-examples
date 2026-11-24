@@ -27,6 +27,20 @@ final class CarSuspension
 	public bool $resting = true;
 	private array $ground = [];
 
+	public function motion(): array
+	{
+		return [$this->verticalSpeed,$this->pitchRate,$this->rollRate,$this->landingTimeLeft,(int)$this->resting];
+	}
+
+	public function resume(array $pose, array $support, array $motion): void
+	{
+		[$this->verticalSpeed,$this->pitchRate,$this->rollRate,$this->landingTimeLeft,$resting] = $motion;
+		$this->y=$pose['y']; $this->pitch=$pose['pitch']; $this->roll=$pose['roll'];
+		$this->ground=$support[4];
+		$this->measure($this->ground);
+		$this->resting=(bool)$resting;
+	}
+
 	public function reset(array $support, float $verticalSpeed = 0): void
 	{
 		[$this->y,$this->pitch,$this->roll] = $support;

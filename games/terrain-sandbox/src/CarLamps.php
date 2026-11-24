@@ -18,6 +18,13 @@ final class CarLamps
 	/** Levels at the latest step and the one before it. */
 	private array $now = self::DARK, $before = self::DARK;
 
+	public function resume(array $levels): void
+	{
+		// view() applies smoothstep to the pod position. Recover the linear actuator travel for the next step.
+		$levels['pods']=.5-sin(asin(max(-1.,min(1.,1.-2.*$levels['pods'])))/3.);
+		$this->before=$this->now=array_intersect_key($levels,self::DARK);
+	}
+
 	/** Put every lamp out and close the pods, as for a car just boarded. */
 	public function reset(): void { $this->now = $this->before = self::DARK; }
 

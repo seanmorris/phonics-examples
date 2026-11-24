@@ -56,5 +56,79 @@ check($game->demo===$tape && str_contains($game->message,'Invalid demo event'),'
 $file['samples']=base64_encode(substr(base64_decode($file['samples']),0,-1));
 $action(['type'=>'demo-open','json'=>json_encode($file)]);
 check($game->demo===$tape && str_contains($game->message,'Incomplete'),'A damaged import preserves the last playable demo');
+// Editing an imported take retains the prefix and parks on either endpoint when scrubbing.
+$parent=$game->demo->export();
+$action(['type'=>'demo-open','json'=>$parent]);
+$action(['type'=>'demo-seek','seconds'=>1000.]);
+check($game->demo->held && $game->demo->playhead===$game->demo->duration(),'Seeking past the end holds the last frame');
+$action('demo-step-back');
+$cut=$game->demo->playhead;
+check($cut<$game->demo->duration(),'Single-frame rewind moves backward');
+$action('demo-step-forward'); $action('demo-step-back');
+check($cut===$game->demo->playhead,'Frame stepping is reversible');
+$selected=$game->demo->frame($cut);
+$action('demo-take-control');
+check(!$game->paused && $game->demo->recording && $game->mode==='jet' && abs($game->jet->state()['z']-$selected['vehicle']['z'])<.01,'Taking control restores a mid-flight sample');
+$game->input(['keys'=>['KeyA'=>1]],.01,1.);
+for($i=0;$i<8;$i++){ $game->step(1/60); $game->view(.25); $game->demo->capture($game); }
+$action('demo-stop');
+$newTake=$game->demo->export();
+$legacy=json_decode($parent,true,64,JSON_THROW_ON_ERROR);
+$legacy['version']=1;
+foreach($legacy['cues'] as &$change) {
+	$delta=json_decode($change[1],true,32,JSON_THROW_ON_ERROR);
+	unset($delta['motion'],$delta['raceDistance'],$delta['rangeTimers']);
+	$change[1]=json_encode($delta,JSON_THROW_ON_ERROR);
+}
+unset($change);
+$old=DemoTape::import(json_encode($legacy,JSON_THROW_ON_ERROR));
+$old->seek($cut);
+check($old->branch()->frame($cut)['mode']==='jet','Earlier presentation-only files still seek and fork');
+check($newTake!==$parent && $game->demo->duration()>$cut,'Live controls append a divergent ending');
+$action('demo-swap');
+check($game->demo->export()===$parent,'The original take is still available byte for byte');
+$action('demo-stop'); $action('demo-swap');
+check($game->demo->export()===$newTake,'Both takes can be selected again');
+$action('demo-stop');
+$action(['type'=>'demo-seek','seconds'=>-5]);
+check($game->demo->playhead===0.,'Negative times clamp to the beginning');
+$action('demo-take-control');
+check($game->mode==='fly' && !$game->paused && $game->demo->recording,'Free flight can branch at frame zero');
 $game->close();
-echo "Terrain demo capture, interpolation, file validation and isolation passed.\n";
+// Check a fork after a real physics step in both surface vehicles, including sideways hull momentum.
+foreach(['car'=>-10.,'craft'=>10.] as $mode=>$water) {
+	$s=new Session(['worldSize'=>1024,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>$water]);
+	$s->camera->position=[0.,20.,0.];
+	$s->input(['actions'=>[$mode]],.01,1.);
+	for($i=0;$i<100 && $s->mode!==$mode;$i++) $s->input([],.01,1.);
+	check($s->mode===$mode,'Board the '.$mode);
+	if($mode==='car') {
+		$s->course->place('start','road',0.,0.,-50.,0.);
+		$s->course->place('checkpoint','road',0.,0.,50.,0.);
+		$s->race->advance($s->course,[0.,0.,-51.],[0.,0.,-49.],0.,1/60,'car',1);
+	}
+	$s->input(['actions'=>['demo-record'],'keys'=>['KeyW'=>1,'KeyD'=>1]],.01,1.);
+	for($i=0;$i<90;$i++) { $s->step(1/60); $s->demo->capture($s); }
+	$s->input(['actions'=>['demo-stop']],0.,1.);
+	$file=$s->demo->export();
+	$s->input(['actions'=>[['type'=>'demo-open','json'=>$file]]],0.,1.);
+	$s->input(['actions'=>[['type'=>'demo-seek','seconds'=>.7]]],0.,1.);
+	$selected=$s->demo->branch(); $snap=$selected->frame($selected->duration());
+	$s->input(['actions'=>['demo-take-control']],0.,1.);
+	$p=$s->$mode->state();
+	check($s->demo->recording && $s->mode===$mode && abs($p['x']-$snap['vehicle']['x'])<.001
+		&& abs($p['speed']-$snap['vehicle']['speed'])<.001 && $p['speed']>.01,'Restore moving '.$mode.' at the selected sample');
+	if($mode==='car') {
+		$race=$s->race->status($s->course,$s->time);
+		check($race['state']==='running' && $race['remaining']===$snap['events']['race']['remaining']
+			&& abs($race['time']-$snap['events']['race']['time'])<.001,'A branch keeps the race clock and next gate');
+	}
+	if($mode==='car') {
+		$s->input(['actions'=>['demo-stop']],0.,1.);
+		$immediate=DemoTape::import($s->demo->export());
+		check($immediate->count()===$selected->count(),'Stopping on the cut keeps a single portable sample at that time');
+	}
+	if($mode==='craft') check(abs($p['velocity'][1]-$snap['vehicle']['vy'])<.00001,'Restore vertical watercraft velocity');
+	$s->step(1/60); $s->view(.5); $s->demo->capture($s); $s->close();
+}
+echo "Terrain demo capture, scrubbing, branching, vehicle momentum and file isolation passed.\n";

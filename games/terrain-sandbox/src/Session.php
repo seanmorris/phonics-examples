@@ -407,6 +407,7 @@ final class Session
 	private ?string $download = null;
 	public string $downloadName = 'landscape.json';
 	public DemoTape $demo;
+	private ?DemoTape $alternateTake = null;
 	private ?Landscape $draft = null;
 	/** Whether a complete edited revision is awaiting its matching GPU representation. */
 	public bool $preparing = false;
@@ -498,6 +499,12 @@ final class Session
 			foreach($input['actions'] ?? [] as $action) {
 				$type = is_array($action) ? ($action['type'] ?? '') : $action;
 				if($type === 'demo-stop') $this->endPlayback();
+				elseif($type === 'demo-take-control') {
+					try { $this->takeControl(); }
+					catch(\Exception | \TypeError $error) { $this->message='Could not take control. '.$error->getMessage(); }
+					break;
+				}
+				elseif(str_starts_with((string)$type,'demo-')) $this->demoTransport($type,is_array($action) ? $action : []);
 				elseif($type === 'menu' || $type === 'pause') $this->menuRequested = !$this->menu;
 			}
 			return;
@@ -1469,6 +1476,20 @@ final class Session
 		};
 		switch($type)
 		{
+			case 'demo-seek':
+			case 'demo-back':
+			case 'demo-forward':
+			case 'demo-step-back':
+			case 'demo-step-forward':
+				$this->demoTransport($type,is_array($action) ? $action : []);
+				break;
+			case 'demo-swap':
+				if($this->alternateTake && !$this->demo->recording) {
+					[$this->demo,$this->alternateTake]=[$this->alternateTake,$this->demo];
+					$this->demo->seek(0.);
+					$this->paused=$this->dirty=true;
+				}
+				break;
 			case 'demo-record':
 				$this->demo->start($this);
 				$this->paused = false;
@@ -1493,6 +1514,7 @@ final class Session
 			case 'demo-play':
 				if($this->demo->recording || !$this->demo->count()) throw new \RuntimeException('Finish a recording or open a demo first.');
 				$this->demo->playhead = 0.;
+				$this->demo->held = false;
 				$this->paused = true;
 				$this->dirty = true;
 				break;
@@ -2781,6 +2803,86 @@ final class Session
 	 */
 	public function download(): ?string { $value = $this->download; $this->download = null; return $value; }
 
+	public function demoStatus(): array { return $this->demo->status()+['alternate'=>$this->alternateTake!==null]; }
+
+	private function demoTransport(string $type,array $action): void
+	{
+		$tape=$this->demo;
+		if(!$tape->count() || $tape->recording) return;
+		$t=$tape->playhead ?? 0.;
+		switch($type) {
+			case 'demo-seek':
+				if(!is_numeric($action['seconds'] ?? null)) return;
+				$tape->seek((float)$action['seconds']); break;
+			case 'demo-step-back': case 'demo-step-forward':
+				$tape->stepSample($type==='demo-step-back' ? -1 : 1); break;
+			case 'demo-back': case 'demo-forward': $tape->seek($t+($type==='demo-back' ? -5 : 5)); break;
+			case 'demo-hold':
+				if($tape->held && $t >= $tape->duration()) $tape->playhead=0.;
+				$tape->held=!$tape->held; break;
+			default: return;
+		}
+		$this->paused=$this->dirty=true;
+	}
+
+	/** Commit the selected world and sample to the local driver's physics, keeping the complete source take. */
+	private function takeControl(): void
+	{
+		$source=$this->demo;
+		$child=$source->branch();
+		$frame=$child->frame($child->duration());
+		$world=$child->world($frame['world']);
+		$p=$frame['vehicle']; $events=$frame['events'];
+		$motion=array_values(unpack('g*',base64_decode($events['motion'] ?? '',true)));
+		$counts=match($frame['mode']) { 'car'=>[0,20,26], 'jet'=>[0,10], 'craft'=>[0,3], default=>[0] };
+		if(!in_array(count($motion),$counts,true) || max(abs($p['speed']),abs($p['vx']),abs($p['vy']),abs($p['vz']))>2000.)
+			throw new \InvalidArgumentException('Invalid vehicle momentum.');
+		if($frame['mode']!=='fly') {
+			$size=json_decode($world,true,64,JSON_THROW_ON_ERROR)['landscape']['recipe']['worldSize'];
+			$margin=$frame['mode']==='car' ? 2.6 : 0.;
+			if(max(abs($p['x']),abs($p['z']))>$size/2-$margin+.00001) throw new \InvalidArgumentException('Vehicle is outside the landscape.');
+		}
+		$at=$source->playhead;
+		$source->playhead=null;
+		try { DemoPlayback::restoreWorld($this,$world); }
+		finally { $source->playhead=$at; }
+		$this->time=$frame['time']; $this->water->update($this->time);
+		$this->settings['azimuth']=$frame['azimuth']; $this->settings['elevation']=$frame['elevation']; $this->sun();
+		$this->mode=$frame['mode']; $this->boarding++;
+		$this->camera=clone $frame['camera'];
+		$this->jetView=($frame['flags'] & 1) ? 'cockpit' : 'chase';
+		$this->jetMap=$this->carMap=(bool)($frame['flags'] & 2);
+		$this->jetWideMap=$this->carWideMap=(bool)($frame['flags'] & 4);
+		if($this->mode==='car') {
+			$this->car->resume($p,$motion,$this->landscape,$this->water->level());
+			$this->chase=new CarChase;
+			$this->chase->board($this->camera,$this->car->state(),$this->landscape);
+			$this->camera=clone $frame['camera']; $this->camera->fov=(new Camera)->fov;
+			$this->chase->resume($this->camera,$frame['camera']->fov);
+			$this->lamps->resume($p['lamps']); $this->tireDust=new TireDust;
+			if(isset($events['delivery'])) $this->delivery=DeliveryRun::resume($events['delivery'],$events['sites']);
+		} elseif($this->mode==='jet') {
+			$this->jet->resume($p,$motion,$this->camera,$this->landscape,$this->water->level());
+			$this->jetControls=$this->jet->expert() ? 'expert' : 'novice';
+			$this->flightTrails=new FlightTrails;
+		} elseif($this->mode==='craft') {
+			$v=[$p['vx'],$p['vy'],$p['vz']];
+			if(!$motion && $p['speed'] && !$p['vx'] && !$p['vz']) $v=[$p['speed']*sin($p['yaw']),0.,$p['speed']*cos($p['yaw'])];
+			$this->craft->resume($p,$v,$motion ?: [0.,0.,0.]);
+		}
+		$this->balloons->resume($events);
+		$this->guardRace();
+		if($this->mode!=='fly' && isset($events['race']))
+			$this->race->resume($this->course,$events['race'],$this->time,$this->mode,$this->boarding,$events['raceDistance'] ?? 0.);
+		$source->playhead=null; $source->held=false;
+		$this->alternateTake=$source;
+		$child->continueWorld($this);
+		$this->demo=$child;
+		$this->keys=[]; $this->pad=self::NO_PAD;
+		$this->paused=false; $this->dirty=true;
+		$this->message='Recording a new take from the selected frame.';
+	}
+
 	public function endPlayback(): void
 	{
 		$this->demo->playhead = null;
@@ -2810,7 +2912,7 @@ final class Session
 			$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
 		}
 		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
-			'demo'=>$this->demo->status(),'time' => $this->time,'generation' => $this->generation,
+			'demo'=>$this->demoStatus(),'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,

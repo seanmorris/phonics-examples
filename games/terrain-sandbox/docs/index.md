@@ -233,6 +233,10 @@ Choose **Pause → Demos → Record run** to start at your current position, eve
 
 The demo includes the landscape, camera and vehicle motion, race progress and delivery markers. The engine interpolates between recorded poses during playback. Time spent in the pause menu adds no recording time. During playback, **Escape** or **Start** opens the playback menu. Resume from that frame or choose **Stop playback**. When the demo ends, your original session is waiting, paused where you left it.
 
+To redo a section, open **Landscape Lab → Explore → Demos**. Drag **Timeline** or enter a **Time in seconds** to hold the view there. **Previous frame** and **Next frame** step between recorded samples. The five-second buttons move farther through the run.
+
+Choose **Take control & record** to drive or fly from the recorded sample at or immediately before the selected time. The new take includes everything up to that frame and records your new ending. After stopping, **Save demo** downloads the whole edited run. **Switch takes** returns you to the previous version. Save any versions you want to keep before branching again or closing the page.
+
 ## Freeze and save
 
 **P** freezes waves, the moving sun, and vehicle motion without opening the menu. Camera movement and authoring remain available. Once terrain preparation settles, an unchanged paused view stops submitting rendered frames.

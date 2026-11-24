@@ -509,6 +509,17 @@ export function activate({module, canvas, session, services})
 		}, {signal});
 	}
 
+	const timeline = frame.querySelector('[data-demo-timeline]');
+	const demoTime = frame.querySelector('[data-demo-time]');
+	const seekDemo = seconds => {
+		if(!Number.isFinite(seconds)) return;
+		// Dragging can send several pointer events before the next engine tick.
+		if(actions.at(-1)?.type === 'demo-seek') actions.pop();
+		push({type:'demo-seek',seconds});
+	};
+	timeline.addEventListener('input', () => seekDemo(timeline.valueAsNumber), {signal});
+	demoTime.addEventListener('change', () => seekDemo(demoTime.valueAsNumber), {signal});
+
 	const journeyField = key => frame.querySelector(`[data-journey="${key}"]`);
 	const junction = journeyField('fork');
 	const destinationNames = new Map([...journeyField('east').options].map(option => [option.value, option.text]));
@@ -1010,6 +1021,14 @@ export function activate({module, canvas, session, services})
 			button('demo-play').disabled = playing || demo.recording || !demo.available;
 			button('demo-save').disabled = playing || demo.recording || !demo.available;
 			button('demo-file').disabled = playing || demo.recording;
+			const position = playing ? demo.playhead : 0;
+			frame.querySelector('[data-demo-transport]').hidden = !demo.available || demo.recording;
+			timeline.max = demoTime.max = demo.duration;
+			if(!timeline.matches(':active')) timeline.value = position;
+			if(document.activeElement !== demoTime) demoTime.value = position.toFixed(2);
+			button('demo-hold').hidden = button('demo-take-control').hidden = !playing;
+			button('demo-hold').textContent = demo.held ? 'Continue playback' : 'Hold frame';
+			button('demo-swap').hidden = !demo.alternate || playing || demo.recording;
 			const demoStatus = frame.querySelector('[data-demo-status]');
 			demoStatus.hidden = !demo.recording && !playing;
 			const seconds = Math.floor(playing ? demo.playhead : demo.duration);
@@ -2849,7 +2868,11 @@ G coast</textarea><small>One square per line. Enter its name, preset ID, and up 
 	</div></fieldset></template>
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-explore" aria-labelledby="terrain-tab-explore" data-tab-panel="explore" hidden>
-	<fieldset><legend>Demos</legend><div class="terrain-row"><button data-action="demo-record">Record run</button><button data-action="demo-stop" hidden>Stop recording</button><button data-action="demo-play" disabled>Play last demo</button><button data-action="demo-save" disabled>Save demo</button><button data-action="demo-file">Open demo</button><input type="file" data-demo-file accept=".json,application/json" hidden></div></fieldset>
+	<fieldset><legend>Demos</legend><div class="terrain-row"><button data-action="demo-record">Record run</button><button data-action="demo-stop" hidden>Stop recording</button><button data-action="demo-play" disabled>Play last demo</button><button data-action="demo-save" disabled>Save demo</button><button data-action="demo-file">Open demo</button><button data-action="demo-swap" hidden>Switch takes</button><input type="file" data-demo-file accept=".json,application/json" hidden></div>
+	<div data-demo-transport hidden><label class="terrain-field">Timeline<input data-demo-timeline type="range" min="0" max="0" step="any"></label>
+	<label class="terrain-field">Time in seconds<input data-demo-time type="number" min="0" max="0" step="0.01" value="0"></label>
+	<div class="terrain-row"><button data-action="demo-back">−5 seconds</button><button data-action="demo-step-back">Previous frame</button><button data-action="demo-step-forward">Next frame</button><button data-action="demo-forward">+5 seconds</button>
+	<button data-action="demo-hold" hidden>Hold frame</button><button data-action="demo-take-control" hidden>Take control &amp; record</button></div></div></fieldset>
 	<div class="terrain-row"><button data-action="car">Drive car · C</button><button data-action="craft">Watercraft · B</button><button data-action="jet">Fly F5 · J</button><button data-action="fly" hidden>Return to flight · F</button><button data-action="delivery">Package run</button></div>
 	<div class="terrain-row"><button data-action="pause">Pause · P</button><button data-action="fullscreen">Fullscreen</button></div>
 	<div data-jet-actions hidden><div class="terrain-row"><button data-action="jet-view">Cockpit · V</button><button data-action="balloon-practice">Balloon practice</button></div>

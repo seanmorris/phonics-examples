@@ -123,6 +123,13 @@ final class CarChase
 	/** Pause and boarding are exact boundaries. Never blend from an earlier mode or paused frame. */
 	public function resetInterpolation(): void { $this->previousEye = null; }
 
+	public function resume(Camera $camera,float $recordedFov): void
+	{
+		$this->resetInterpolation();
+		$this->fovWidening=max(0.,min(self::MAX_FOV_WIDENING,$recordedFov-$camera->fov));
+		$this->settling=true;
+	}
+
 	/** Vertical field of view for the car at the latest fixed step, in radians. */
 	public function fieldOfView(Camera $camera): float { return $camera->fov + $this->fovWidening; }
 

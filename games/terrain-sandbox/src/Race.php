@@ -236,6 +236,28 @@ final class Race
 		return $this->state === 'running' || !isset($this->records->latest[$course->signature()]);
 	}
 
+	public function distanceFromStart(): float { return $this->state==='running' ? $this->farthest : 0.; }
+
+	public function resume(Course $course,array $state,float $now,string $vehicle,int $boarding,float $distance): void
+	{
+		$this->reset();
+		$start=$course->start();
+		if(!$start || !$course->route() || ($state['state'] ?? 'idle')==='idle') return;
+		$this->begin($course,$now-max(0.,(float)$state['time']),$vehicle,$boarding);
+		$this->splits=is_array($state['splits'] ?? null) ? $state['splits'] : [];
+		$this->lapTimes=array_values(array_filter((array)($state['lapTimes'] ?? []),'is_numeric'));
+		$this->index=count($this->splits);
+		$this->lapStartedAt=$this->startedAt+array_sum($this->lapTimes);
+		$this->startGate=$start['id']; $this->startX=$start['x']; $this->startZ=$start['z']; $this->farthest=$distance;
+		$this->message=(string)($state['message'] ?? '');
+		foreach(['last'=>'latest','best'=>'best'] as $key=>$record) {
+			if(is_numeric($state[$key] ?? null)) $this->records->{$record}[$this->signature]=(float)$state[$key];
+			else unset($this->records->{$record}[$this->signature]);
+		}
+		if($state['state']==='finished') { $this->state='finished'; $this->result=$state['time']; }
+		elseif(!isset($this->route[$this->index])) $this->reset();
+	}
+
 	/** Return to waiting for a start, keeping the session's times. */
 	public function reset(): void
 	{

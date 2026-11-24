@@ -27,9 +27,8 @@ final class DemoPlayback
 		$this->appearance();
 	}
 
-	private function loadWorld(string $document): void
+	public static function restoreWorld(Session $s,string $document): void
 	{
-		$s = $this->world;
 		$s->load($document);
 		$preview = json_decode($document,true,64,JSON_THROW_ON_ERROR)['demoPreview'] ?? [];
 		$actions = [];
@@ -41,6 +40,12 @@ final class DemoPlayback
 			$actions[] = $editor + ['op'=>'close'];
 		}
 		if($actions) $s->input(['actions'=>$actions],0.,1.);
+	}
+
+	private function loadWorld(string $document): void
+	{
+		$s=$this->world;
+		self::restoreWorld($s,$document);
 		$this->terrain = $s->roadEditor->displayedLandscape($s->landscape);
 		$this->hiddenGates = $s->roadEditor->hiddenGates($s->landscape,$s->course,$s->usingFloodedCircuit());
 	}

@@ -793,6 +793,32 @@ final class Car
 
 	public static function steeringLimit(float $speed): float { return .52 / (1 + .035 * abs($speed)); }
 
+	/** Rates and timers that a picture of the car cannot describe, for a controllable demo branch. */
+	public function motion(): array
+	{
+		return [$this->roadPitch,$this->roadRoll,$this->recoveryTime,$this->roadHold,(int)$this->floodedHold,
+			$this->recoveries,(int)$this->nitrousDepleted,(int)$this->braking,(int)$this->reversing,
+			...($this->lastSafe ?: [$this->x,$this->z,$this->yaw]),...$this->gearbox->motion(),
+			...$this->suspension->motion(),...($this->tumble?->motion() ?? [])];
+	}
+
+	public function resume(array $p,array $motion,Landscape $land,float $water): void
+	{
+		$support=$this->support($land,$p['x'],$p['z'],$p['yaw']);
+		if($support===null) throw new \InvalidArgumentException('Recorded car is outside this landscape.');
+		foreach(['x','y','z','yaw','pitch','roll','speed','steering','drift','nitrous'] as $k) $this->$k=$p[$k];
+		$this->spin=$p['wheelSpin']; $this->rearSpin=$p['rearWheelSpin']; $this->squeal=$p['tireSqueal'];
+		$motion = $motion ?: [$p['pitch'],$p['roll'],0,0,0,0,0,0,0,$p['x'],$p['z'],$p['yaw'],1,0,0,0,0,0,0,0];
+		[$this->roadPitch,$this->roadRoll,$this->recoveryTime,$this->roadHold,$flooded,$recoveries,$depleted,$brake,$reverse]=$motion;
+		$this->floodedHold=(bool)$flooded; $this->recoveries=(int)$recoveries; $this->nitrousDepleted=(bool)$depleted;
+		$this->braking=(bool)$brake; $this->reversing=(bool)$reverse;
+		$this->lastSafe=array_slice($motion,9,3);
+		$this->gearbox->resume(array_slice($motion,12,3),$p['rpm'],$p['engineLoad']);
+		$this->suspension->resume($p,$support,array_slice($motion,15,5));
+		$this->tumble=count($motion)===26 ? CarTumble::resume($p,array_slice($motion,20)) : null;
+		$this->dustContacts=[]; $this->revision=$land->revision(); $this->waterLevel=$water;
+	}
+
 	public function state(): array
 	{
 		return ['x'=>$this->x,'y'=>$this->y,'z'=>$this->z,'yaw'=>$this->yaw,'pitch'=>$this->pitch,'roll'=>$this->roll,

@@ -45,6 +45,17 @@ final class DeliveryRun
 		return $this->search->valid();
 	}
 
+	public static function resume(array $state,array $sites): self
+	{
+		$run=new self;
+		$run->delivered=$state['delivered']; $run->carrying=$state['carrying'];
+		foreach($sites as $p) {
+			if($p['kind']==='drop') $run->depot=$p;
+			if($p['kind']==='pickup') $run->pickup=$p;
+		}
+		return $run;
+	}
+
 	/** Active delivery sites shown on the map. */
 	public function sites(): array
 	{

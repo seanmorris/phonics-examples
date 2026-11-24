@@ -123,12 +123,17 @@ final class SandboxMenu
 
 		if($session->demo->playhead !== null) {
 			$items['resume']['label'] = 'Resume playback';
+			$items['demo-hold'] = $act($session->demo->held ? 'Continue from frame' : 'Hold this frame','demo-hold');
+			$items['rewind'] = $act('Back 5 seconds','demo-back');
+			$items['advance'] = $act('Forward 5 seconds','demo-forward');
+			$items['demo-take-control'] = $act('Take control and record','demo-take-control');
 			$items['demo-stop'] = $act('Stop playback','demo-stop');
 			return $items;
 		}
 		$demos = $session->demo->recording ? ['demo-stop'=>$act('Stop recording','demo-stop')]
 			: ['demo-record'=>$act('Record run','demo-record')];
 		if(!$session->demo->recording && $session->demo->count()) $demos['demo-play'] = $act('Play last demo','demo-play');
+		if(!$session->demo->recording && $session->demoStatus()['alternate']) $demos['swap']=$act('Switch takes','demo-swap');
 		$items['demos'] = ['label'=>'Demos','children'=>$demos];
 		if($session->mode !== 'fly' && $session->race->state !== 'idle') $items['race'] = $act('Restart race', 'race-reset');
 
