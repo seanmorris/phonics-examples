@@ -19,7 +19,12 @@ final class Recipe
 		, 'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe'
 		, 'alaska-range', 'chalk-headlands'
 		, 'karst-bay', 'tepui-highlands', 'painted-badlands', 'emerald-ridges'
-		, 'autumn-folds', 'namib-coast', 'black-sand-coast', 'yardang-desert'
+		, 'autumn-folds'
+		, 'namib-coast'
+		, 'black-sand-coast'
+		, 'yardang-desert'
+		, 'rice-terraces'
+		, 'boreal-lakes'
 	];
 
 	/** Parameters are immutable after normalization. */
@@ -332,6 +337,68 @@ final class Recipe
 			, 'terraceStrength' => 0.
 
 			, 'waterLevel' => -200.
+			, 'surround' => 'plateau'
+		] + self::shapeDefaults('coast', $version);
+
+		// Steep rolling hills stepped every 3.5 m into narrow terraces from the valley floor to the crowns.
+		if($preset === 'rice-terraces')
+		return [
+			'seed' => 'rice-terraces'
+			, 'baseFrequency' => 1 / 714
+			, 'heightScale' => 380.
+			, 'baseBias' => .3
+			, 'rolling' => .5
+
+			, 'ridgeHeight' => 1.
+			, 'ridgeRoundness' => .1
+			, 'wallHeight' => 0.
+			, 'secondary' => .3
+			, 'directionalRise' => 0.
+
+			, 'warpAmplitude' => 200.
+			, 'warpFrequency' => 1 / 2000
+
+			, 'detailAmplitude' => .4
+			, 'detailOctaves' => 4
+			, 'persistence' => .4
+			, 'slopeScale' => 1.
+			, 'damping' => 2.
+			, 'terraceSpacing' => 3.5
+			, 'terraceStrength' => .92
+			, 'bedding' => 0.
+
+			, 'waterLevel' => -40.
+			, 'surround' => 'mountains'
+		] + self::shapeDefaults('coast', $version);
+
+		// Low knobs stretched along the old ice flow leave a maze of lakes, long islands and bare granite.
+		if($preset === 'boreal-lakes')
+		return [
+			'seed' => 'boreal-lakes'
+			, 'baseFrequency' => 1 / 625
+			, 'heightScale' => 70.
+			, 'baseBias' => .05
+			, 'rolling' => .7
+
+			, 'ridgeHeight' => 0.
+			, 'ridgeStretch' => 2.5
+			, 'ridgeBearing' => 150.
+			, 'wallHeight' => 0.
+			, 'secondary' => .6
+			, 'directionalRise' => 0.
+
+			, 'warpAmplitude' => 150.
+			, 'warpFrequency' => 1 / 1250
+
+			, 'detailShape' => .3
+			, 'detailAmplitude' => 5.
+			, 'detailOctaves' => 6
+			, 'persistence' => .5
+			, 'slopeScale' => 1.
+			, 'damping' => 1.
+			, 'terraceStrength' => 0.
+
+			, 'waterLevel' => 0.
 			, 'surround' => 'plateau'
 		] + self::shapeDefaults('coast', $version);
 

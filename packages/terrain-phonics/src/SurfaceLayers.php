@@ -261,6 +261,8 @@ final class SurfaceLayers
 			'namib-coast' => self::namibLayers($s),
 			'black-sand-coast' => self::blackSandLayers($s),
 			'yardang-desert' => self::yardangLayers($s),
+			'rice-terraces' => self::riceLayers($s),
+			'boreal-lakes' => self::borealLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -321,6 +323,8 @@ final class SurfaceLayers
 			'namib-coast' => ['Red dune sand', 'Slip faces', 'Wind ripples', 'Gravel flats', 'Wet beach'],
 			'black-sand-coast' => ['Moss heath', 'Basalt scree', 'Black sand', 'Lyme grass', 'Gully snow'],
 			'yardang-desert' => ['Corridor sand', 'Wind ripples', 'Clay flanks', 'Pale caps'],
+			'rice-terraces' => ['Rice paddies', 'Earth risers', 'Crown forest'],
+			'boreal-lakes' => ['Lichen heath', 'Spruce forest', 'Granite outcrops', 'Bare knobs', 'Bog margins'],
 			'emerald-ridges' => [
 				'Fern slopes'
 				, 'Rainforest canopy'
@@ -1046,6 +1050,115 @@ final class SurfaceLayers
 				, 'slopeFade' => $s['snowSlopeEnd'] - $s['snowSlopeStart']
 				, 'noise' => 30.
 				, 'scale' => 90.
+			]
+		];
+	}
+
+	/**
+	 * Wet young rice fills the terrace flats and forest crowns the hills. The earth risers repeat with the 3.5 m
+	 * terrace steps as height bands, so every terrace edge draws as a crisp contour line.
+	 */
+	private static function riceLayers(array $s): array
+	{
+		$step = Recipe::shapeDefaults('rice-terraces')['terraceSpacing'];
+
+		return [
+			[
+				'color' => $s['grassColor']
+				, 'roughness' => .3
+				, 'reflectivity' => .15
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 18.
+				, 'patternAmount' => .5
+			]
+
+			, [
+				'color' => $s['soilColor']
+				, 'period' => $step
+				, 'low' => .42 * $step
+				, 'high' => .58 * $step
+				, 'fade' => .05 * $step
+			] + self::stipple($s['soilColor'], .8, .6, .7)
+
+			, [
+				'mask' => 'trees'
+				, 'field' => 'crowns'
+				, 'channel' => 'both'
+				, 'relief' => 'crowns'
+				, 'strength' => .5
+				, 'low' => 95.
+				, 'fade' => 15.
+				, 'noise' => 10.
+				, 'scale' => 80.
+				, 'color' => $s['forestColor']
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['grassColor']
+				, 'patternScale' => 24.
+				, 'patternAmount' => .25
+			]
+		];
+	}
+
+	/**
+	 * Lichen heath covers the open ground under dark spruce. Pinkish granite breaks out on the steeper faces and the
+	 * knob crowns, and yellow-green sedge bog rings every lake.
+	 */
+	private static function borealLayers(array $s): array
+	{
+		return [
+			[
+				'color' => $s['grassColor']
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 14.
+				, 'patternAmount' => .3
+			]
+
+			, [
+				'mask' => 'trees'
+				, 'field' => 'crowns'
+				, 'channel' => 'both'
+				, 'relief' => 'crowns'
+				, 'strength' => .5
+				, 'color' => $s['forestColor']
+				, 'pattern' => 'fractal'
+				, 'patternColor' => self::tint($s['forestColor'], 1.4, 1.5, 1.3)
+				, 'patternScale' => 22.
+				, 'patternAmount' => .3
+			]
+
+			, self::exposedRock($s) + [
+				'color' => $s['rockColor']
+				, 'pattern' => 'jointed'
+				, 'patternColor' => $s['rockBandColor']
+				, 'patternScale' => 5.
+				, 'patternAmount' => .6
+			]
+
+			, [
+				'color' => $s['rockColor']
+				, 'low' => 35.
+				, 'fade' => 8.
+				, 'noise' => 8.
+				, 'scale' => 80.
+				, 'opacity' => .6
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 6.
+				, 'patternAmount' => .4
+			]
+
+			, [
+				'color' => $s['soilColor']
+				, 'datum' => 'water'
+				, 'low' => -.5
+				, 'high' => 1.5
+				, 'fade' => 3.
+				, 'noise' => 1.
+				, 'scale' => 30.
+				, 'slopeHigh' => .08
+				, 'slopeFade' => .06
 			]
 		];
 	}

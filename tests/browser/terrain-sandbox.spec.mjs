@@ -3114,6 +3114,9 @@ for(const [first, second] of [
 	, [{label: 'Black Sand Coast', name: 'black-sand-coast', layer: 'basalt-scree'}
 		, {label: 'Yardang Desert', name: 'yardang-desert', layer: 'clay-flanks'}
 	]
+	, [{label: 'Rice Terraces', name: 'rice-terraces', layer: 'earth-risers'}
+		, {label: 'Boreal Lakes', name: 'boreal-lakes', layer: 'bog-margins'}
+	]
 ]) {
 	test(
 		`${first.label} and ${second.label} are available as landscapes and as independent surface presets`

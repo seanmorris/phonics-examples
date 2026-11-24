@@ -38,6 +38,8 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 - **Namib Coast** opens offshore, where red linear dunes meet a cold Atlantic shore under a low bank of fog. Land on the beach and drive up between the dunes.
 - **Black Sand Coast** opens on a cold sea below dark, fluted peaks with snow in their high gullies. Sail in to the black sand and yellow lyme grass at their foot.
 - **Yardang Desert** opens in a sand corridor between streamlined clay hulls carved by the wind. Drive down the corridors, or fly up to see the hulls lined up across the desert.
+- **Rice Terraces** opens on a terraced hillside above a valley lake. Every slope is stepped into narrow paddies of young rice, and forest crowns the hills.
+- **Boreal Lakes** opens at floatplane height over a maze of dark lakes and long spruce islands with yellow bog rims. Descend to the water to explore by watercraft.
 
 ## Fly over the landscape
 
