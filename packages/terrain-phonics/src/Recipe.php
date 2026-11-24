@@ -18,7 +18,7 @@ final class Recipe
 		, 'red-mesas', 'heather-moor', 'salt-pans', 'cinder-highlands'
 		, 'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe'
 		, 'alaska-range', 'chalk-headlands'
-		, 'karst-bay', 'tepui-highlands', 'painted-badlands'
+		, 'karst-bay', 'tepui-highlands', 'painted-badlands', 'emerald-ridges'
 	];
 
 	/** Parameters are immutable after normalization. */
@@ -116,35 +116,68 @@ final class Recipe
 			, 'surround' => 'plateau'
 		] + self::shapeDefaults('coast', $version);
 
-		// Wide, gentle walls round the contour rings into close mounds. Thin beds band them like the mesa walls.
+		// Sharp crests follow the zero contours of the base field and wind over clusters of low mounds, which leaves
+		// flat washes between them. Thin beds band every slope like the mesa walls.
 		if($preset === 'painted-badlands')
 		return [
 			'seed' => 'painted-badlands'
-			, 'baseFrequency' => 1 / 300
-			, 'heightScale' => 90.
+			, 'baseFrequency' => 1 / 222
+			, 'heightScale' => 120.
 			, 'baseBias' => 0.
-			, 'rolling' => 0.
+			, 'rolling' => .15
 
-			, 'wallHeight' => 1.
-			, 'floorWidth' => .18
-			, 'wallWidth' => .40
-			, 'secondary' => .25
+			, 'ridgeHeight' => 1.6
+			, 'ridgeRoundness' => .008
+			, 'wallHeight' => .6
+			, 'floorWidth' => .12
+			, 'wallWidth' => .45
+			, 'secondary' => .35
 			, 'directionalRise' => 0.
 
-			, 'warpAmplitude' => 100.
-			, 'warpFrequency' => 1 / 550
+			, 'warpAmplitude' => 60.
+			, 'warpFrequency' => 1 / 300
 
-			, 'detailAmplitude' => 4.
+			, 'detailAmplitude' => 3.
 			, 'detailOctaves' => 7
-			, 'persistence' => .55
+			, 'persistence' => .6
 			, 'slopeScale' => 1.
 			, 'damping' => 0.
 			, 'terraceSpacing' => 8.
-			, 'terraceStrength' => .35
+			, 'terraceStrength' => .3
 			, 'bedding' => 1.
 
 			, 'waterLevel' => -300.
 			, 'surround' => 'plateau'
+		] + self::shapeDefaults('coast', $version);
+
+		// Knife-edged crests follow the zero contours of the base field. The land falls toward negative x, so the sea
+		// floods the valleys between the ridges and leaves steep green walls standing in it.
+		if($preset === 'emerald-ridges')
+		return [
+			'seed' => 'emerald-ridges'
+			, 'baseFrequency' => 1 / 1100
+			, 'heightScale' => 1000.
+			, 'baseBias' => .35
+			, 'rolling' => .1
+
+			, 'ridgeHeight' => 1.6
+			, 'ridgeRoundness' => .003
+			, 'wallHeight' => 0.
+			, 'secondary' => .4
+			, 'directionalRise' => .5
+
+			, 'warpAmplitude' => 250.
+			, 'warpFrequency' => 1 / 2000
+
+			, 'detailAmplitude' => 12.
+			, 'detailOctaves' => 6
+			, 'persistence' => .45
+			, 'slopeScale' => 1.
+			, 'damping' => .5
+			, 'terraceStrength' => 0.
+
+			, 'waterLevel' => 0.
+			, 'surround' => 'sea'
 		] + self::shapeDefaults('coast', $version);
 
 		if($preset === 'basalt-fjords')
