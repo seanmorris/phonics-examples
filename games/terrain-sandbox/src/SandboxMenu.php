@@ -202,6 +202,12 @@ final class SandboxMenu
 			$blocks[] = ['name' => 'Landscape Lab', 'value' => 'H'];
 		}
 
+		elseif($theme !== 'touch')
+		{
+			$blocks[] = ['name' => 'Previous track', 'value' => '❽ + ❹'];
+			$blocks[] = ['name' => 'Next track', 'value' => '❽ + ❺'];
+		}
+
 		return $blocks;
 	}
 
@@ -387,6 +393,10 @@ final class SandboxMenu
 
 			if($value >= .5) $held[$name] = true;
 		}
+
+		// SDL also maps the shoulders to page navigation. A soundtrack chord consumes that press.
+		if(!empty($pad[7])) $buttons['pageUp'] = 0;
+		if(!empty($pad[8])) $buttons['pageDown'] = 0;
 
 		$this->blocked ??= $held;
 		$this->blocked = array_intersect_key($this->blocked, $held);

@@ -271,14 +271,13 @@ export function activate({module, canvas, session, services})
 
 	showMusicState();
 
-	for(const [selector, skip] of [['[data-music-prev]', music.previous], ['[data-music-next]', music.next]])
-	{
-		frame.querySelector(selector).addEventListener('click', () => {
-			const track = skip();
+	const skipTrack = skip => {
+		const track = skip();
+		if(music.playbackPaused && track && track.credit !== false) showCredit(track);
+	};
 
-			if(music.playbackPaused && track && track.credit !== false) showCredit(track);
-		}, {signal});
-	}
+	for(const [selector, skip] of [['[data-music-prev]', music.previous], ['[data-music-next]', music.next]])
+		frame.querySelector(selector).addEventListener('click', () => skipTrack(skip), {signal});
 
 	const dismissFinish = () => {
 		finishTimer = null;
@@ -802,7 +801,7 @@ export function activate({module, canvas, session, services})
 
 	let previousViewport, previousKeys = '', previousPad = '', padButtons = new Set(), viewChord = false;
 	let previousMenuPad = '';
-	let backShortcut = false;
+	let backShortcut = false, musicShoulders = 0;
 
 	shell.bridge('terrainInput', () => {
 		const viewport = view.viewport();
@@ -828,6 +827,20 @@ export function activate({module, canvas, session, services})
 			else push(command);
 		}
 
+		let heldMask = PAD_HELD.reduce((mask, [index, bit]) => buttons.has(index) ? mask | bit : mask, 0);
+		const shoulders = heldMask & (LEFT_SHOULDER | RIGHT_SHOULDER);
+		// After a skip, the shoulder belongs to music until its own release, even if Back comes up first.
+		musicShoulders &= shoulders;
+		if(buttons.has(8) && shoulders)
+		{
+			const pressed = padButtons.has(8) ? shoulders & ~musicShoulders : shoulders;
+			if(pressed === LEFT_SHOULDER) skipTrack(music.previous);
+			if(pressed === RIGHT_SHOULDER) skipTrack(music.next);
+			musicShoulders = shoulders;
+			backShortcut = true;
+		}
+		heldMask &= ~musicShoulders;
+
 		if(gamepad && !buttons.has(8) && padButtons.has(8) && !backShortcut) push('jet-controls');
 
 		// Y+B changes perspective once, including when the second button arrives a poll later.
@@ -841,7 +854,6 @@ export function activate({module, canvas, session, services})
 		}
 
 		padButtons = buttons;
-		const heldMask = PAD_HELD.reduce((mask, [index, bit]) => buttons.has(index) ? mask | bit : mask, 0);
 		const pad = gamepad
 			? [...gamepad.axes.map(value => Math.round(value * 1000) / 1000)
 				, viewChord || buttons.has(8) ? heldMask & ~SPEED_BUTTONS : heldMask
@@ -855,7 +867,8 @@ export function activate({module, canvas, session, services})
 		const [x, y] = gamepad?.axes ?? [0, 0];
 		const up = buttons.has(12) || y < -.5, down = buttons.has(13) || y > .5;
 		const left = buttons.has(14) || x < -.5, right = buttons.has(15) || x > .5;
-		const menuPad = [up, down, left, right, buttons.has(0), buttons.has(1), buttons.has(9)].map(Number);
+		const menuPad = [up, down, left, right, buttons.has(0), buttons.has(1), buttons.has(9),
+			Boolean(musicShoulders & LEFT_SHOULDER), Boolean(musicShoulders & RIGHT_SHOULDER)].map(Number);
 		const menuPadKey = menuPad.join(',');
 		const padsSame = padKey === previousPad && menuPadKey === previousMenuPad;
 
@@ -1564,8 +1577,10 @@ const PAD_COMMANDS = new Map([
 	, [11, 'pad-rs']
 ]);
 
+const LEFT_SHOULDER = 16, RIGHT_SHOULDER = 32;
+
 /** Gamepad buttons PHP reads while held: A, B, X, Y, LB, RB and the two stick clicks, with their bits in the packet. */
-const PAD_HELD = [[0, 1], [1, 2], [2, 4], [3, 8], [4, 16], [5, 32], [10, 64], [11, 128]];
+const PAD_HELD = [[0, 1], [1, 2], [2, 4], [3, 8], [4, LEFT_SHOULDER], [5, RIGHT_SHOULDER], [10, 64], [11, 128]];
 
 /** Y and B share speed control with the view chord in flight. */
 const SPEED_BUTTONS = 8 | 2;
@@ -2726,7 +2741,7 @@ G coast</textarea><small>One square per line. Enter its name, preset ID, and up 
 	<label class="terrain-field terrain-wide">Music volume<input type="range" min="0" max="100" step="1" data-music-level></label>
 	<details><summary>Driving and flight controls</summary><p class="terrain-note">Press M or click the left stick to show or hide the car or F5 minimap. Press N or tap D-pad ↓ to change its zoom.</p>
 	<p class="terrain-note">Right-drag: look · WASD: fly or drive · Q/E: down/up · Shift: fast flight · Shift / LB: car nitrous · Space: handbrake · L: headlights · R: reset the race · H: hide controls · Esc: pause menu. P freezes waves and physics and leaves editing available.</p>
-	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Click the right stick to return to the road during a race or landscape journey. Start opens the pause menu.</p>
+	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Hold Back and tap L1/LB for the previous track or R1/RB for the next. Click the right stick to return to the road during a race or landscape journey. Start opens the pause menu.</p>
 	</details><details><summary>Credits</summary><p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p></details>
 	</section>
 	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><div class="terrain-hud"><p data-journey-sign hidden></p><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;

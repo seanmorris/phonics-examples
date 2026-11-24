@@ -977,6 +977,53 @@ async function installCarPad(page)
 	});
 }
 
+test('Back and the shoulders step the soundtrack without using nitrous or changing handling', async({page}) => {
+	await page.setViewportSize({width: 600,height: 400});
+	await page.addInitScript(() => localStorage.setItem('terrain-sandbox.music.off', '1'));
+	await installCarPad(page);
+	await boot(page);
+	const doc = fixture();
+	doc.settings.waterLevel = -5;
+	await load(page, doc);
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await canvas(page).focus();
+	const title = page.locator('[data-music-credit] strong');
+	const buttons = (...changes) => page.evaluate(changes => {
+		for(const [index, pressed] of changes) window.testCarButton(index, pressed);
+	}, changes);
+	// Wait for multiple input polls even on a slow renderer.
+	const drive = async() => {
+		const {time} = await status(page);
+		await expect.poll(async() => (await status(page)).time).toBeGreaterThan(time + .25);
+	};
+
+	await buttons([8,true],[5,true]);
+	await expect(title).toHaveText('Dimension');
+	await drive();
+	await expect(title).toHaveText('Dimension');
+	await buttons([5,false]);
+	await drive();
+	await buttons([5,true]);
+	await expect(title).toHaveText('Tokyo Drift 東京ドリフト');
+	await buttons([5,false],[4,true]);
+	await expect(title).toHaveText('Dimension');
+	await buttons([8,false]);
+	await drive();
+	expect((await status(page)).jetControls).toBe('novice');
+	expect((await status(page)).car.nitrous).toBe(1);
+	await expect(page.locator('[data-music-pause]')).toHaveAttribute('aria-pressed', 'true');
+
+	await buttons([4,false]);
+	await drive();
+	await buttons([4,true]);
+	await expect.poll(async() => (await status(page)).car.nitrous).toBeLessThan(1);
+	await buttons([4,false],[8,true]);
+	await drive();
+	await buttons([8,false]);
+	await expect.poll(async() => (await status(page)).jetControls).toBe('expert');
+});
+
 test('right-stick recovery on a landscape journey returns the car to the highway', async({page}) => {
 	await page.setViewportSize({width: 600,height: 400});
 	await installCarPad(page);

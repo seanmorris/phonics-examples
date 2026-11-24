@@ -2449,6 +2449,10 @@ expect($controls[0] === ['heading' => 'Free flight'] && in_array(['name' => 'Fly
 $paused->inputTheme = 'xbox';
 expect(in_array(['name' => 'Down, up', 'value' => '❻ ❼'], $pauseMenu->controlsPage($paused), true)
 	&& in_array(['name' => 'Pause menu', 'value' => '❾'], $pauseMenu->controlsPage($paused), true), 'A pad sees its own buttons');
+$pageButtons = ['pageUp'=>1, 'pageDown'=>1];
+expect($pauseMenu->withPad($pageButtons, [7=>1]) === ['pageUp'=>0, 'pageDown'=>1]
+	&& $pauseMenu->withPad($pageButtons, [8=>1]) === ['pageUp'=>1, 'pageDown'=>0]
+	&& $pauseMenu->withPad($pageButtons, []) === $pageButtons, 'Track changes consume only the matching menu shoulder');
 $paused->inputTheme = 'keyboard';
 $pauseMenu->menu->select('settings');
 $pauseMenu->menu->activate();
