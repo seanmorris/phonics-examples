@@ -2536,6 +2536,8 @@ function markup()
 		, ['emerald-ridges', 'Emerald Ridges']
 		, ['autumn-folds', 'Autumn Folds']
 		, ['namib-coast', 'Namib Coast']
+		, ['black-sand-coast', 'Black Sand Coast']
+		, ['yardang-desert', 'Yardang Desert']
 	];
 
 	const option = ([value, label]) => `<option value="${value}">${label}</option>`;

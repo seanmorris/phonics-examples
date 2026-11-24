@@ -125,6 +125,8 @@ final class Session
 		'autumn-folds' => ['name'=>'Blue ridge haze', 'topFt'=>4000, 'densityPerMile'=>.12, 'color'=>'#b8c8da'],
 		// A cold sea fog banks low along the shore at the foot of the dunes.
 		'namib-coast' => ['name'=>'Atlantic fog', 'topFt'=>400, 'densityPerMile'=>.2, 'color'=>'#e3e6e6'],
+		'black-sand-coast' => ['name'=>'North Atlantic haze', 'topFt'=>2500, 'densityPerMile'=>.08, 'color'=>'#d4dde2'],
+		'yardang-desert' => ['name'=>'Dust haze', 'topFt'=>1500, 'densityPerMile'=>.07, 'color'=>'#e6d2b2'],
 		'heather-moor' => ['name'=>'Moor mist', 'topFt'=>350, 'densityPerMile'=>.12, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
@@ -221,6 +223,16 @@ final class Session
 			'waterColor'=>'#2c6b7e', 'waterTransparency'=>.70, 'waterReflectivity'=>.55,
 			'waterFogDensity'=>.10, 'waterChoppiness'=>40.,
 		],
+		// Low northern light across the fluted peaks and a dark, cold sea.
+		'black-sand-coast' => TerrainAppearance::PRESET_DEFAULTS['black-sand-coast'] + [
+			'azimuth'=>305., 'elevation'=>22., 'haze'=>.70, 'skyColor'=>'#6a8fb5', 'hazeColor'=>'#cfd8de',
+			'waterColor'=>'#22414e', 'waterTransparency'=>.60, 'waterReflectivity'=>.60,
+			'waterFogDensity'=>.12, 'waterChoppiness'=>36.,
+		],
+		// A low side sun throws the hulls' shadows across the corridors.
+		'yardang-desert' => TerrainAppearance::PRESET_DEFAULTS['yardang-desert'] + [
+			'azimuth'=>225., 'elevation'=>18., 'haze'=>.60, 'skyColor'=>'#4f7fb8', 'hazeColor'=>'#e8d6ba',
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
@@ -248,6 +260,10 @@ final class Session
 		'autumn-folds' => ['x'=>2.1818, 'z'=>.8392, 'heading'=>220., 'pitch'=>.05, 'clearance'=>25., 'minimum'=>0.],
 		// Offshore, looking up the coast with the dunes on the right.
 		'namib-coast' => ['x'=>-.56, 'z'=>1.2, 'heading'=>10., 'pitch'=>-.05, 'clearance'=>60., 'minimum'=>0.],
+		// Offshore, facing the highest peaks across the water.
+		'black-sand-coast' => ['x'=>-.5778, 'z'=>.1667, 'heading'=>60., 'pitch'=>.08, 'clearance'=>30., 'minimum'=>0.],
+		// Down a corridor along the wind, between hulls on both sides.
+		'yardang-desert' => ['x'=>-4.5, 'z'=>-1., 'heading'=>110., 'pitch'=>-.02, 'clearance'=>22., 'minimum'=>-200.],
 	];
 
 	/**
@@ -279,7 +295,7 @@ final class Session
 	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor','salt-pans','cinder-highlands',
 		'rolling-prairie','river-valley','wooded-foothills','high-desert-steppe','alaska-range','chalk-headlands',
 		'karst-bay','tepui-highlands','painted-badlands','emerald-ridges',
-		'autumn-folds','namib-coast'];
+		'autumn-folds','namib-coast','black-sand-coast','yardang-desert'];
 
 	private static function materialStyle(array $recipe): string
 	{

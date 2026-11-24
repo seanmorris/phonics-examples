@@ -36,6 +36,8 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 - **Emerald Ridges** opens over a deep bay below knife-edged green ridges. Moss-covered flutes run down their steep faces, and black sand lines the coves. Board the watercraft to explore the inlets between them.
 - **Autumn Folds** opens on a lake between long parallel ridges in rust and gold, patched with dark hemlock. Board the watercraft to follow the flooded valleys, or fly across the folds as they fade into blue haze.
 - **Namib Coast** opens offshore, where red linear dunes meet a cold Atlantic shore under a low bank of fog. Land on the beach and drive up between the dunes.
+- **Black Sand Coast** opens on a cold sea below dark, fluted peaks with snow in their high gullies. Sail in to the black sand and yellow lyme grass at their foot.
+- **Yardang Desert** opens in a sand corridor between streamlined clay hulls carved by the wind. Drive down the corridors, or fly up to see the hulls lined up across the desert.
 
 ## Fly over the landscape
 

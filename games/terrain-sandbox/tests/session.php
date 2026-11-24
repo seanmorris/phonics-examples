@@ -235,6 +235,7 @@ foreach([
 	'karst-bay'=>['rain-streaks','Bay mist'], 'tepui-highlands'=>['algae-streaks','Cloud forest'],
 	'painted-badlands'=>['cap-rock','Clay dust'], 'emerald-ridges'=>['mossy-cliffs','Trade-wind haze'],
 	'autumn-folds'=>['hemlock-stands','Blue ridge haze'], 'namib-coast'=>['wind-ripples','Atlantic fog'],
+	'black-sand-coast'=>['basalt-scree','North Atlantic haze'], 'yardang-desert'=>['clay-flanks','Dust haze'],
 	'salt-pans'=>['salt-crust','Playa dust'], 'cinder-highlands'=>['oxidized-scoria','Highland haze'],
 ] as $preset=>[$layer,$air]) {
 	input($fresh,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
@@ -257,7 +258,10 @@ foreach([
 	} elseif($preset === 'karst-bay') {
 		input($restored,['actions'=>['craft']]);
 		expect($restored->mode === 'craft', 'The bay between the karst towers is navigable.');
-	} elseif(in_array($preset, ['autumn-folds', 'namib-coast'], true)) {
+	} elseif($preset === 'yardang-desert') {
+		enterCar($restored);
+		expect($restored->mode === 'car', 'The corridor between the yardangs supports the car.');
+	} elseif(in_array($preset, ['autumn-folds', 'namib-coast', 'black-sand-coast'], true)) {
 		input($restored,['actions'=>['craft']]);
 		expect($restored->mode === 'craft', "The water at the $preset opening view is navigable.");
 	} elseif($preset === 'emerald-ridges') {

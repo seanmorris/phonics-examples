@@ -278,6 +278,37 @@ final class TerrainAppearance
 			, 'beachHeight' => 2.
 			, 'beachWidth' => 6.
 		]
+		// Black basalt scree streaked downhill, moss and yellow lyme grass on the low ground, black sand at the sea
+		// and a little snow in the high gullies.
+		, 'black-sand-coast' => [
+			'grassColor' => '#4a5236'
+			, 'meadowColor' => '#a8975a'
+			, 'soilColor' => '#3a3a3c'
+			, 'rockColor' => '#1e1e22'
+			, 'rockBandColor' => '#3a3a3f'
+			, 'sandColor' => '#262628'
+			, 'snowColor' => '#e8ecee'
+
+			, 'rockSlopeStart' => .07
+			, 'rockSlopeEnd' => .18
+			, 'beachHeight' => 8.
+			, 'beachWidth' => 10.
+			, 'snowline' => 600.
+			, 'snowTransition' => 80.
+			, 'snowSlopeStart' => .30
+			, 'snowSlopeEnd' => .55
+		]
+		// Wind-scoured tan clay streaked down its flanks, pale caps and rippled sand in the corridors.
+		, 'yardang-desert' => [
+			'sandColor' => '#d6bf95'
+			, 'rockColor' => '#b89770'
+			, 'rockBandColor' => '#8a6a4c'
+			, 'soilColor' => '#c4a880'
+			, 'snowColor' => '#e2d6be'
+
+			, 'rockSlopeStart' => .06
+			, 'rockSlopeEnd' => .16
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -522,6 +553,34 @@ final class TerrainAppearance
 			, 'beachHeight'
 			, 'beachWidth'
 		]
+		, 'black-sand-coast' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'snowTransition'
+			, 'snowSlopeStart'
+			, 'snowSlopeEnd'
+		]
+		, 'yardang-desert' => [
+			'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'snowColor'
+			, 'roadColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+		]
 		, 'salt-pans' => [
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'rockSlopeStart', 'rockSlopeEnd',
@@ -661,7 +720,7 @@ final class TerrainAppearance
 			'heather-moor', 'salt-pans', 'cinder-highlands',
 			'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe',
 			'alaska-range', 'chalk-headlands', 'karst-bay', 'tepui-highlands', 'emerald-ridges', 'autumn-folds',
-			'namib-coast' => $recipe['preset'],
+			'namib-coast', 'black-sand-coast', 'yardang-desert' => $recipe['preset'],
 			default => 'coast'
 		};
 	}
