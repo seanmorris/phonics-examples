@@ -2739,7 +2739,7 @@ test('the Landscape Lab explains each parameter, reflows, and folds to one round
 		)
 	);
 
-	expect(descriptions).toHaveLength(25);
+	expect(descriptions).toHaveLength(27);
 	expect(descriptions).not.toContain('');
 	expect(new Set(descriptions).size).toBe(descriptions.length);
 
@@ -3118,6 +3118,12 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	await page.getByText('Landform parameters', {exact: true}).click();
 	const frequency = page.getByLabel('Base frequency · cycles/mi');
 	await expect(frequency).toHaveValue('0.402');
+	const offsetX = page.getByLabel('X noise offset · mi');
+	const offsetZ = page.getByLabel('Z noise offset · mi');
+	await expect(offsetX).toHaveValue('0');
+	await expect(offsetZ).toHaveValue('0');
+	await offsetX.fill('1.25');
+	await offsetZ.fill('-0.5');
 	const terrace = page.getByLabel('Terrace spacing · ft');
 	await expect(terrace).toHaveValue('262');
 	const wall = page.getByLabel('Wall width', {exact: true});
@@ -3149,6 +3155,8 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	const document = await save(page);
 	expect(document.version).toBe(5);
 	expect(document.landscape.recipe.wallWidth).toBe(.0085);
+	expect(document.landscape.recipe.noiseOffsetX).toBeCloseTo(2011.68, 9);
+	expect(document.landscape.recipe.noiseOffsetZ).toBeCloseTo(-804.672, 9);
 	expect(document.landscape.recipe.terraceSpacing).toBe(80);
 	expect(document.landscape.recipe.baseFrequency).toBe(1/4000);
 	expect(document.landscape.recipe.surround).toBe('plateau');
@@ -3174,6 +3182,8 @@ test('landform parameters and nested colors survive a save and reload', async({p
 	})));
 
 	await expect(wall).toHaveValue('0.0085');
+	await expect(offsetX).toHaveValue('1.25');
+	await expect(offsetZ).toHaveValue('-0.5');
 });
 
 test('the signed clipmap grid covers the ground after relocation', async({page}) => {

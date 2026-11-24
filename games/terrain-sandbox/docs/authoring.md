@@ -4,6 +4,8 @@ Choose a tool under **Shape the ground**, then click the terrain. Each click cre
 
 Preset landform measurements display rounded imperial values. Generate uses the original recipe for every field you leave untouched.
 
+Under **Noise position and bends**, use **X noise offset** and **Z noise offset** to explore another part of the same seed. For example, set X to **1 mi**, leave Z at **0**, and select **Generate**. The feature previously one mile east of home now lies at home. Positive Z brings terrain from the south. Both offsets default to zero for every preset.
+
 Before generating, open **Landform parameters** to change the height scale, fine detail, slope damping, or starting water level. Stronger damping removes more fine detail from steep faces. Domain warp bends the landforms. Terrace spacing creates smooth ledges; set it to zero to turn terraces off. In Canyon the spacing controls the thickness of the whole sequence of rock beds. At the default setting of 262 ft, look for a pale shelf below the salmon cliffs. Exposed faces show fractures and fine red layers, while loose debris softens the boundaries on gentler slopes.
 
 The canyon preset lowers water to −1,476 ft and starts inside the valley, exposing both its floor and steep walls. After generation, use **Water level** in the **Water** section to flood or expose the existing ground.

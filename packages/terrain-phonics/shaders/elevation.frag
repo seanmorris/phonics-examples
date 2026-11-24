@@ -16,6 +16,8 @@ uniform vec4 uProfileSet[3];
 #define uProfile uProfileSet[formIndex]
 uniform vec4 uFieldSet[3];
 #define uField uFieldSet[formIndex]
+uniform vec4 uNoiseOffsetSet[3];
+#define uNoiseOffset uNoiseOffsetSet[formIndex]
 uniform vec2 uFieldResidualSet[3];
 #define uFieldResidual uFieldResidualSet[formIndex]
 uniform vec2 uErosionSet[3];
@@ -32,6 +34,7 @@ uniform int uOctavesSet[3];
 uniform vec4 uShape; // bias, rolling, rise, ridge
 uniform vec4 uProfile; // ridge rounding, wall height, floor width, wall width
 uniform vec4 uField; // scale, frequency, warp amplitude, warp frequency
+uniform vec4 uNoiseOffset; // integer X/Z and sub-meter X/Z
 uniform vec2 uFieldResidual;
 uniform vec2 uErosion; // drainage frequency and its float rounding residual
 uniform vec4 uRock; // secondary, terrace spacing, strength, bedding
@@ -132,6 +135,8 @@ float preciseContour(vec2 world,vec2 warp)
 float terrainHeight(vec2 world,vec4 profile,vec2 subcell)
 {
 	if(uField.x==0. && (uDetail.x==0. || uOctaves==0)) return 0.;
+	world+=uNoiseOffset.xy;
+	subcell+=uNoiseOffset.zw;
 	vec2 displacement=subcell, p=world+subcell;
 	vec2 wx=vec2(0), wz=vec2(0);
 	float f=uField.y;
@@ -379,12 +384,13 @@ void main()
 #else
 	float h=terrainHeight(world,uProfile,vec2(0));
 	if(outside>0. && uRegion.y>0. && !(uRegion.y==3. && uNaturalMountains)) {
-		float broad=sampleNoise(world,vec2(0),.0005,0.,ivec2(31,7),vec2(0)).x;
+		vec2 field=world+uNoiseOffset.xy;
+		float broad=sampleNoise(field,uNoiseOffset.zw,.0005,0.,ivec2(31,7),vec2(0)).x;
 		float t=smoothstep(0.,uRegion.z*(1.+.35*broad),outside);
 		float target=uField.x*(.45+.09*broad);
 		if(uRegion.y==1.) target=uRegion.w-100.-abs(broad)*45.;
 		if(uRegion.y==3.) {
-			float ridges=sampleNoise(world,vec2(0),.00031,0.,ivec2(-38,119),vec2(.17,.26)).x;
+			float ridges=sampleNoise(field,uNoiseOffset.zw,.00031,0.,ivec2(-38,119),vec2(.17,.26)).x;
 			target=uField.x*(.42-length(vec2(ridges,.04))+.24*broad);
 		}
 		h=mix(h,target,t);

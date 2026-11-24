@@ -49,6 +49,7 @@ The guide never feeds back from an already attenuated surface. Rounded mountain 
 Surface normals differentiate the final reconstructed height, including all terrain edits.
 Optional domain warps and quintic terraces retain continuous derivatives; the guide includes their full derivative chain.
 `warpAmplitude` bends the larger landforms, while `terraceSpacing` and `terraceStrength` add smooth terrace-like steps.
+`noiseOffsetX` and `noiseOffsetZ` select the point in the seeded landscape that appears at the world origin. Both default to zero and use signed meters. Heights, slopes and procedural surface patterns at `(x, z)` sample `(x + noiseOffsetX, z + noiseOffsetZ)`. The playable square and authored edits keep their world coordinates.
 In new canyon recipes, exposed rock and physical ledges share a sequence of dipping beds. Terrace spacing scales the thickness of the sequence in meters. Resistant beds form cliffs above shelves, and softer beds form debris slopes. Version-one recipes retain their original canyon geometry for replay.
 Smooth joins preserve derivatives; a heightfield still cannot represent an exactly vertical face or an overhang.
 

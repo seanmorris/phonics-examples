@@ -154,7 +154,7 @@
     "browser/cockpit.mjs": "sha256-WCTNaMZbfyb80T0TT94V/bg2JDI4mT2JjXPPH+Gxs3Q=",
     "browser/control-hints.mjs": "sha256-Cz5c3dvF1kVKlSFNc1LQAY1GA9Fvw3fPWCL9XoY//dE=",
     "browser/flight-map.mjs": "sha256-WNHWVmtSgL6RYS0M808KmDkUU7aLNl8rnkl7kpG9WMA=",
-    "browser/game.mjs": "sha256-h1qD2r4HmYvIVKPO0kjfyYatulK6Wqn+Y0vXtZSEfhg=",
+    "browser/game.mjs": "sha256-khz6wTZtq21p71mxne5/Nne1EVRbW1yHecHKs1Dw55I=",
     "browser/road-editor.mjs": "sha256-weMESVap8yCLNTcu8xSOhRE3cUfUBLJ+OuPyLDiQOV0=",
     "browser/screen-awake.mjs": "sha256-g+CdRS2UqKtPfuG+y20Jlo0dt27ap7IZ8VDGE+oD4Sg=",
     "browser/speedometer.mjs": "sha256-utcsbB3z+QuWu/v8jMpT5gTFOqoaS1VNlRyoQUyZHPo=",

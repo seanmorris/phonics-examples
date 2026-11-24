@@ -329,6 +329,8 @@ final class Recipe
 			, 'waterLevel' => 0.0
 			, 'heightScale' => 420.0
 			, 'baseFrequency' => 1 / 6000
+			, 'noiseOffsetX' => 0.0
+			, 'noiseOffsetZ' => 0.0
 
 			, 'detailOctaves' => 8
 			, 'detailAmplitude' => 28.0
@@ -370,6 +372,8 @@ final class Recipe
 			, 'waterLevel' => [-10000,10000]
 			, 'heightScale' => [0,10000]
 			, 'baseFrequency' => [1 / 1000000,1]
+			, 'noiseOffsetX' => [-64373.76,64373.76]
+			, 'noiseOffsetZ' => [-64373.76,64373.76]
 
 			, 'detailAmplitude' => [0,1000]
 			, 'lacunarity' => [1.1,4]
@@ -433,6 +437,12 @@ final class Recipe
 	 * @return array Coarse height and world-space derivatives [height,dx,dz].
 	 */
 	public function coarse(float $x, float $z, ?array $profile = null): array
+	{
+		return $this->coarseAt($x + $this->values['noiseOffsetX'], $z + $this->values['noiseOffsetZ'], $profile);
+	}
+
+	/** Evaluate at coordinates already translated into the seeded field. */
+	private function coarseAt(float $x, float $z, ?array $profile): array
 	{
 		$r = $this->values;
 		$f = $r['baseFrequency'];
@@ -757,7 +767,9 @@ final class Recipe
 	public function height(float $x, float $z, ?array $profile = null): float
 	{
 		$r = $this->values;
-		[$height,$dx,$dz] = $this->coarse($x, $z, $profile);
+		$x += $r['noiseOffsetX'];
+		$z += $r['noiseOffsetZ'];
+		[$height,$dx,$dz] = $this->coarseAt($x, $z, $profile);
 		$slope = ($dx * $dx + $dz * $dz) / ($r['slopeScale'] * $r['slopeScale']);
 		$frequency = $r['baseFrequency'] * 8;
 		$amplitude = $r['detailAmplitude'];
@@ -817,8 +829,8 @@ final class Recipe
 	public function regionalBounds(array $box, ?array $profileRange = null): array
 	{
 		$r = $this->values;
-		$x = ($box[0] + $box[2]) / 2;
-		$z = ($box[1] + $box[3]) / 2;
+		$x = ($box[0] + $box[2]) / 2 + $r['noiseOffsetX'];
+		$z = ($box[1] + $box[3]) / 2 + $r['noiseOffsetZ'];
 		$rx = ($box[2] - $box[0]) / 2 + 1e-9;
 		$rz = ($box[3] - $box[1]) / 2 + 1e-9;
 		$wx = $x; $wz = $z; $hx = $rx; $hz = $rz;

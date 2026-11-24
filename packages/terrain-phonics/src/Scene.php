@@ -189,14 +189,14 @@ final class Scene
 	private function regionalMaterials(?SurfaceLayers $westPalette = null): array
 	{
 		$r = $this->landscape->recipe();
-		$west = [$westPalette ?? $this->palette(),$r,[0.,0.,0.]];
+		$west = [$westPalette ?? $this->palette(),$r,[-$r['noiseOffsetX'],0.,-$r['noiseOffsetZ']]];
 		if(!isset($r['join'])) return [$west];
 		$origins = JoinedTerrain::origins($r['join']['span'],count($r['join']['destinations']));
-		$west[2][0] = $origins[0][0];
+		$west[2][0] += $origins[0][0];
 		if(!$this->destinations) foreach($r['join']['destinations'] as $i=>$form) {
 			$appearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$form['preset']] ?? []);
 			$this->destinations[] = [SurfaceLayers::landscape($form,$appearance),$form,
-				[$origins[$i+1][0],$r['waterLevel']-$form['waterLevel'],$origins[$i+1][1]]];
+				[$origins[$i+1][0]-$form['noiseOffsetX'],$r['waterLevel']-$form['waterLevel'],$origins[$i+1][1]-$form['noiseOffsetZ']]];
 		}
 		return [$west,...$this->destinations];
 	}
@@ -2423,6 +2423,7 @@ final class Scene
 		if(!$joined && ($this->layerBinding[$id] ?? null) !== $palette) {
 			$palette->bind($groundProgram);
 			$seed = crc32((string)$form['seed']);
+			glUniform3f($groundProgram->location('uMaterialOrigin'),...$materials[0][2]);
 			glUniform2f($groundProgram->location('uPaletteOffset'),$seed & 65535,($seed >> 16) & 65535);
 			$this->scalar($groundProgram, 'uRockSlopeDamping', $form['damping'] / $form['slopeScale']**2);
 			$this->layerBinding[$id] = $palette;
@@ -2882,7 +2883,7 @@ final class Scene
 			$this->bindJourney($this->chartProgram,$materials);
 		}
 		return $this->clipmap->chart($this->chartProgram,$xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,
-			$materials[0][0],$this->paint ?? $this->appearance,$size,$localSpan,$circular,$fixedSpan,sharedPalette:$joined);
+			$materials[0][0],$this->paint ?? $this->appearance,$size,$localSpan,$circular,$fixedSpan,origin:$materials[0][2],sharedPalette:$joined);
 	}
 
 	public function restore(): void

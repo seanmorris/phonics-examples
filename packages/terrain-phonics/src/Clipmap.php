@@ -171,6 +171,8 @@ final class Clipmap
 		] as $uniform => $fields) glUniform4f($p->location($uniform.$suffix), ...array_map(static fn($key) => $r[$key], $fields));
 
 		$residual = static fn(float $f): float => $f - unpack('g', pack('g', $f))[1];
+		$x = $r['noiseOffsetX']; $z = $r['noiseOffsetZ'];
+		glUniform4f($p->location('uNoiseOffset'.$suffix), floor($x), floor($z), $x-floor($x), $z-floor($z));
 		glUniform2f($p->location('uFieldResidual'.$suffix), $residual($r['baseFrequency']), $residual($r['warpFrequency']));
 		// Rounding the already-converted base frequency times 22 moves the drainage
 		// contours at large coordinates. Pass the exact recipe product and its residual.

@@ -2646,7 +2646,11 @@ function markup()
 	<div class="landform-field"><label class="terrain-field">Steep-face detail damping<input aria-describedby="${hintPrefix}-damping" name="damping" data-increment="0.01" type="number" min="0" max="100" step="0.1" value="2"></label>
 		<small id="${hintPrefix}-damping">Smooths small bumps on steep ground. Higher values suppress the finest layers most.</small></div>
 	</div></fieldset>
-	<fieldset class="terrain-landform-group"><legend>Terrain bends</legend><div class="terrain-grid">
+	<fieldset class="terrain-landform-group"><legend>Noise position and bends</legend><div class="terrain-grid">
+	<div class="landform-field"><label class="terrain-field">X noise offset · mi<input data-unit="mi" aria-describedby="${hintPrefix}-noiseOffsetX" name="noiseOffsetX" data-increment="0.01" type="number" min="-64373.76" max="64373.76" value="0"></label>
+		<small id="${hintPrefix}-noiseOffsetX">Choose which part of the seed falls inside the map. Positive values bring terrain from the east toward home.</small></div>
+	<div class="landform-field"><label class="terrain-field">Z noise offset · mi<input data-unit="mi" aria-describedby="${hintPrefix}-noiseOffsetZ" name="noiseOffsetZ" data-increment="0.01" type="number" min="-64373.76" max="64373.76" value="0"></label>
+		<small id="${hintPrefix}-noiseOffsetZ">Positive values bring terrain from the south toward home. Use a negative value to bring in terrain from the north.</small></div>
 	<div class="landform-field"><label class="terrain-field">Domain warp · ft<input data-unit="ft" aria-describedby="${hintPrefix}-warpAmplitude" name="warpAmplitude" data-increment="0.1" type="number" min="0" max="5000" value="200"></label>
 		<small id="${hintPrefix}-warpAmplitude">Shifts the terrain pattern sideways. Larger shifts make valleys and ridges meander more.</small></div>
 	<div class="landform-field"><label class="terrain-field">Warp frequency · cycles/mi<input data-unit="cyclesPerMile" aria-describedby="${hintPrefix}-warpFrequency" name="warpFrequency" data-increment="0.0001" type="number" step="any"></label>
