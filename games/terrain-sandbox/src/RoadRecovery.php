@@ -4,7 +4,7 @@ namespace TerrainSandbox;
 
 use TerrainPhonics\Landscape;
 
-/** Locate an off-road car on the approach it is currently racing. Used for stick-click recovery and flooded engines. */
+/** Find a safe restart on the active race leg or the current journey highway. */
 final class RoadRecovery
 {
 	private const GATE_CLEARANCE = 10.;
@@ -77,6 +77,49 @@ final class RoadRecovery
 				$candidates[] = [$back,$gate['x']-$back*sin($gate['yaw']),$gate['z']-$back*cos($gate['yaw']),$gate['yaw']];
 			$site = self::drySite($candidates,$car,$land,$water,$posts,$next);
 			if($site !== null) return $site;
+		}
+		return null;
+	}
+
+	/** Journey splines run toward their destination. Search their separate sections by distance
+	 * so a click beside a fork can use either branch without scanning the whole highway first. */
+	public static function journeySite(Car $car, Landscape $land, float $water, array $posts): ?array
+	{
+		$pose = $car->state();
+		$x = $pose['x']; $z = $pose['z'];
+		if(Car::onPavement($land,$x,$z) || $land->bounds()['maxY'] <= $water) return null;
+
+		$half = $land->recipe()['worldSize']/2;
+		$roads = $land->roads();
+		$queue = new \SplPriorityQueue;
+		foreach($roads as $i => $road) {
+			if($road['material'] !== 'road') continue;
+			[$left,$top,$right,$bottom] = $road['_road']['bounds'];
+			$dx = max($left-$x,0.,$x-$right); $dz = max($top-$z,0.,$z-$bottom);
+			$queue->insert($i,-($dx*$dx+$dz*$dz));
+		}
+		while(!$queue->isEmpty()) {
+			$item = $queue->extract();
+			if(is_int($item)) {
+				$samples = $roads[$item]['_road']['samples'];
+				[$ax,,$az] = $samples[0];
+				for($i=1;$i<count($samples);$i++) {
+					[$bx,,$bz] = $samples[$i];
+					$dx = $bx-$ax; $dz = $bz-$az;
+					$span = $dx*$dx+$dz*$dz;
+					if($span > 0.) {
+						$t = max(0.,min(1.,(($x-$ax)*$dx+($z-$az)*$dz)/$span));
+						$px = $ax+$t*$dx; $pz = $az+$t*$dz;
+						$queue->insert([$px,$pz,$dx,$dz],-(($px-$x)**2+($pz-$z)**2));
+					}
+					$ax = $bx; $az = $bz;
+				}
+				continue;
+			}
+			[$px,$pz,$dx,$dz] = $item;
+			if(max(abs($px),abs($pz)) > $half || $land->height($px,$pz) <= $water) continue;
+			$site = $car->checkedSite($land,$water,$px,$pz,atan2($dx,$dz),$posts);
+			if($site !== null && Car::onPavement($land,$px,$pz)) return $site;
 		}
 		return null;
 	}

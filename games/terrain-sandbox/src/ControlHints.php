@@ -21,9 +21,11 @@ final class ControlHints
 	 * @param string $theme One of THEMES.
 	 * @param string $handling The F5's novice or expert handling.
 	 * @param bool $balloons Whether there are balloons to cycle through.
+	 * @param bool $roadRecovery Whether a car can return to a highway or race course.
 	 * @return list<string> Entries, each a button or key followed by its action.
 	 */
-	public static function entries(string $mode, string $theme, string $handling = 'novice', bool $balloons = false): array
+	public static function entries(string $mode, string $theme, string $handling = 'novice', bool $balloons = false,
+		bool $roadRecovery = false): array
 	{
 		if($theme === 'touch')
 		return match($mode)
@@ -41,7 +43,7 @@ final class ControlHints
 				? ['⬲ Fly', '▦ Look', '❻ ❼ Down, up', '❿ Fast']
 				: ['⬲ Fly', '❹ ❺ Down, up', '❷ Fast', 'Right-drag Look'],
 			'car' => $pad
-				? ['❼ Accelerate', '❻ Brake, reverse', '⬲ Steer', '⓿ Handbrake', '❹ Nitrous', '❷ Lights', '❽ ↓ Fly']
+				? ['❼ Accelerate', '❻ Brake, reverse', '⬲ Steer', '⓿ Handbrake', '❹ Nitrous', '❷ Lights', ...($roadRecovery ? ['⓫ Return to road'] : []), '❽ ↓ Fly']
 				: ['🡩 Accelerate', '🡫 Brake, reverse', '🡨 🡪 Steer', '⓿ Handbrake', '❷ Nitrous', 'L Lights', 'F Fly'],
 			'craft' => $pad
 				? ['❼ Throttle', '❻ Reverse', '⬲ Steer', '↓ Fly']

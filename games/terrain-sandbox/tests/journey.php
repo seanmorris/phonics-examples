@@ -10,6 +10,33 @@ function expectJourney(bool $ok,string $reason): void {
 	if(!$ok) throw new RuntimeException($reason);
 }
 
+// A nearer flooded road and two separate dry branches exercise the stick click between junctions.
+$flat = ['preset'=>'coast','spacing'=>2.,'heightScale'=>0.,'detailAmplitude'=>0.,'waterLevel'=>-5.];
+$recovery = new Session($flat + ['join'=>['version'=>2,'span'=>32768,'destinations'=>[$flat]]]);
+foreach([[[100,0,-36],[-100,0,-36]], [[-100,-12,0],[100,-12,0]], [[-100,0,80],[100,0,80]]] as $points) {
+	$recovery->landscape->queue(['type'=>'road','points'=>$points,'width'=>10,'shoulder'=>2,'material'=>'road']);
+}
+$recovery->landscape->commit();
+$recovery->mode = 'car';
+foreach([[12.,-36.,-M_PI/2],[60.,80.,M_PI/2]] as [$startZ,$roadZ,$yaw]) {
+	$x = 24.35;
+	$site = $recovery->car->checkedSite($recovery->landscape,-5.,$x,$startZ,0.,[]);
+	expectJourney($site !== null && !Car::onPavement($recovery->landscape,$x,$startZ),'Start off the journey pavement.');
+	$recovery->car->spawn($site,$recovery->landscape,-5.);
+	$before = $recovery->car->state();
+	$recovery->input(['actions'=>['pause','pad-rs']],0,1.);
+	expectJourney($recovery->car->state() === $before,'Recovery waits until driving resumes.');
+	$recovery->input(['actions'=>['pause','pad-rs']],0,1.);
+	$after = $recovery->car->state();
+	expectJourney(abs($after['x']-$x)<.001 && abs($after['z']-$roadZ)<.001 && abs($after['yaw']-$yaw)<.001,
+		'Choose the closest safe branch and face its forward tangent.');
+	expectJourney($after['recoveries']===1 && $after['roadHold']===1.5 && $after['speed']===0. && $after['nitrous']===$before['nitrous'],
+		'Journey recovery uses the circuit delay and keeps the bottle.');
+	$recovery->input(['actions'=>['pad-rs']],0,1.);
+	expectJourney($recovery->car->state() === $after,'A click on the pavement leaves the car alone.');
+}
+$recovery->close();
+
 /** Follow connected asphalt from the actual west edge, choosing a branch by its surveyed centerline. */
 function throughRoute(array $roads,float $edge,bool $south): array {
 	$at = null;

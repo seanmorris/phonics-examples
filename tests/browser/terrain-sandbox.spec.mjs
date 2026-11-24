@@ -977,6 +977,33 @@ async function installCarPad(page)
 	});
 }
 
+test('right-stick recovery on a landscape journey returns the car to the highway', async({page}) => {
+	await page.setViewportSize({width: 600,height: 400});
+	await installCarPad(page);
+	await boot(page);
+	const road = {type: 'road',points: [[0,0,-120],[0,0,120]],width: 10,shoulder: 2,material: 'road'};
+	const doc = fixture({history: [[road]],revision: 1});
+	const recipe = doc.landscape.recipe;
+	recipe.waterLevel = doc.settings.waterLevel = -5;
+	recipe.join = {version: 2,span: 32768,destinations: [{...recipe}]};
+	doc.camera = {position: [24,15,0],yaw: Math.PI,pitch: -.35};
+	await load(page, doc);
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	const before = await status(page);
+	expect(before.race.state).toBe('idle');
+	expect(Math.abs(before.car.x)).toBeGreaterThan(5);
+	await canvas(page).focus();
+	await page.evaluate(() => window.testCarButton(11, true));
+	await expect.poll(async() => (await status(page)).car.recoveries).toBe(1);
+	await page.evaluate(() => window.testCarButton(11, false));
+	const after = await status(page);
+	expect(after.car.x).toBeCloseTo(0, 3);
+	expect(after.car.yaw).toBeCloseTo(0, 3);
+	expect(after.race.state).toBe('idle');
+	expect(after.hint).toContain('⓫ Return to road');
+});
+
 test('tight road bends and checkpoint banners return the headlight beam at night', async({page}, testInfo) => {
 	test.setTimeout(180_000);
 	await page.setViewportSize({width: 720,height: 420});

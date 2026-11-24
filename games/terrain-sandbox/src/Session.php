@@ -1202,7 +1202,8 @@ final class Session
 	 */
 	public function hint(): array
 	{
-		return ControlHints::entries($this->mode, $this->inputTheme, $this->jetControls, (bool)$this->balloons->targets());
+		return ControlHints::entries($this->mode, $this->inputTheme, $this->jetControls, (bool)$this->balloons->targets(),
+			$this->race->state === 'running' || isset($this->landscape->recipe()['join']));
 	}
 
 	/**
@@ -1535,7 +1536,7 @@ final class Session
 				$this->applyCircuit($type === 'circuit-flooded');
 				break;
 			case 'recover-road':
-				if($this->mode !== 'car' || $this->paused || $this->race->state !== 'running') break;
+				if($this->mode !== 'car' || $this->paused) break;
 				$this->recoverCar(false);
 				break;
 			case 'race-reset':
@@ -2069,13 +2070,15 @@ final class Session
 
 	public function findingCarSite(): bool { return $this->carSearch !== null; }
 
-	/** A racing car recovers on its course. In free driving a flooded car retraces its water entry. */
+	/** Recover on the active race leg, on the journey highway by request, or at the last shore after flooding. */
 	private function recoverCar(bool $flooded): bool
 	{
 		$water = $this->water->level();
 		$site = null;
 		if($this->race->state === 'running')
 			$site = RoadRecovery::site($this->car,$this->landscape,$water,$this->course,$this->race,$this->circuit,$flooded);
+		elseif(!$flooded && isset($this->landscape->recipe()['join']))
+			$site = RoadRecovery::journeySite($this->car,$this->landscape,$water,$this->course->posts());
 		elseif($flooded)
 			$site = $this->car->shoreSite($this->landscape,$water,$this->course->posts());
 		if($site === null) return false;
