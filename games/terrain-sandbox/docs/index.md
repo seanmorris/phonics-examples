@@ -191,7 +191,7 @@ In free flight, open **Roads → Circuit generator**. Set **Minimum feature heig
 
 Leave **Start elevation** blank to put the start near the camera, or enter an absolute terrain elevation to put it on a straight near that height. **Elevation tolerance** sets how close it must be and defaults to 1.64 ft. This sets the height of the start station. The rest of the road follows the route's natural elevation. Select **Find circuit near camera** to preview a match. Large height differences favor a regional search that follows connected corridors and places waypoints after junctions where possible.
 
-**Minimum lap length** sets the shortest lap in miles. **Minimum feature area** sets the smallest hill, plateau, or lake to circle in acres. Leave either blank for the original automatic thresholds. For example, a regional plateau search normally requires a 1.86 mi lap and about 198 enclosed acres. A regional lake search normally requires 1.12 mi and about 44 acres.
+**Minimum lap length** sets the shortest lap in miles. **Minimum feature area** sets the smallest hill, plateau, or lake to circle in acres. Each field shows the first search’s default and lists the fallback below it. Clear an entry to restore automatic selection. For example, a regional plateau search normally requires a 1.86 mi lap and about 198 enclosed acres. A regional lake search normally requires 1.12 mi and about 44 acres.
 
 **Grade preference** is the extra travel cost the planner assigns to a 20% slope. The default is 32%. Increase it to favor longer, gentler routes. **Minimum turn radius** defaults to 19.7 ft. A larger radius rounds the corners farther back and rejects bends that are still too tight.
 

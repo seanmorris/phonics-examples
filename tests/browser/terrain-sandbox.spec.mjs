@@ -2093,11 +2093,24 @@ test('circuit search controls preserve automatic minima and convert editor units
 	const depth = page.getByLabel('Maximum causeway depth');
 	const causeways = page.getByLabel('Allow causeways');
 
+	const relief = page.getByLabel('Minimum feature height difference');
 	await expect(lap).toHaveValue('');
-	await expect(area).toHaveValue('');
+	await expect(lap).toHaveAttribute('placeholder', '1.86');
+	await expect(area).toHaveAttribute('placeholder', '197.68');
+	await expect(lap).toHaveAccessibleDescription('Default 1.86 mi (regional), then 0.12 mi (local)');
+	await expect(area).toHaveAccessibleDescription('Default 197.68 acres (regional), then 0.25 acres (local)');
 	await expect(grade).toHaveValue('32');
+	await expect(radius).toHaveValue('19.69');
+	await expect(depth).toHaveValue('98.43');
+	await expect(tolerance).toHaveValue('1.64');
 	await expect(tolerance).toBeDisabled();
 	await expect(depth).toBeDisabled();
+	await relief.fill('-400');
+	await expect(lap).toHaveAttribute('placeholder', '1.12');
+	await expect(area).toHaveAttribute('placeholder', '44.48');
+	await relief.fill('100');
+	await expect(lap).toHaveAttribute('placeholder', '0.12');
+	await expect(area).toHaveAttribute('placeholder', '0.25');
 	await lap.fill('3');
 	await area.fill('100');
 	await grade.fill('64');
@@ -2105,6 +2118,9 @@ test('circuit search controls preserve automatic minima and convert editor units
 	await start.fill('200');
 	await tolerance.fill('5');
 	await causeways.check();
+	await expect(lap).toHaveValue('3');
+	await expect(lap).toHaveAccessibleDescription('Default 0.25 mi (local), then 1.86 mi (regional)');
+	await expect(radius).toHaveAccessibleDescription('Default 19.69 ft');
 	await depth.fill('0');
 	await expect.poll(async() => (await status(page)).settings).toMatchObject({
 		circuitMinLap: 4828.032, circuitMinArea: 404685.64224, circuitGradePreference: 16,
@@ -2119,6 +2135,9 @@ test('circuit search controls preserve automatic minima and convert editor units
 	await expect.poll(async() => (await status(page)).settings).toMatchObject({
 		circuitMinLap: null, circuitMinArea: null, circuitStartHeight: null
 	});
+	await load(page, fixture());
+	await expect(lap).toHaveAccessibleDescription('Default 0.11 mi (local)');
+	await expect(area).toHaveAccessibleDescription('Default 0.06 acres (local)');
 });
 
 test('Arctic Meltwater can place an editable causeway circuit at its original water level', async({page}) => {

@@ -19,6 +19,11 @@ function displayNumber(value, unit)
 	return Number((value / metricPerUnit[unit]).toPrecision(7));
 }
 
+function circuitDisplay(value, unit)
+{
+	return Number(displayNumber(value, unit).toFixed(2));
+}
+
 // Give native keyboard and spinner controls a useful increment while accepting finer authored numbers.
 
 function updateIncrement(field)
@@ -48,7 +53,8 @@ function setFieldValue(field, value, preset = false)
 	}
 
 	const imperial = displayNumber(value, unit);
-	field.value = imperial;
+	field.value = field.hasAttribute('data-circuit-initial') && Number(field.dataset.circuitInitial) === value
+		? circuitDisplay(value, unit) : imperial;
 	field.removeAttribute('title');
 
 	if(preset)
@@ -349,6 +355,19 @@ export function activate({module, canvas, session, services})
 	const updateCircuitFields = () => {
 		controls.get('circuitCausewayDepth').disabled = !controls.get('circuitCauseways').checked;
 		controls.get('circuitStartTolerance').disabled = controls.get('circuitStartHeight').value === '';
+	};
+
+	const showCircuitDefaults = windows => {
+		for(const [control, key] of [['circuitMinLap','minLap'], ['circuitMinArea','minArea']])
+		{
+			const field = controls.get(control);
+			const limits = Object.entries(windows).map(([kind, values]) => ({
+				kind, value: circuitDisplay(values[key], field.dataset.unit)
+			}));
+			field.placeholder = String(limits[0].value);
+			const note = frame.querySelector(`[data-circuit-default="${control}"]`);
+			note.textContent = 'Default ' + limits.map(({kind, value}) => `${value} ${field.dataset.unit} (${kind})`).join(', then ');
+		}
 	};
 
 	const listen = field => {
@@ -955,6 +974,10 @@ export function activate({module, canvas, session, services})
 			const quietPause = Boolean(state.paused && !state.menu);
 
 			if(quietPause !== Boolean(latest?.paused && !latest.menu)) music.pause(quietPause);
+
+			if(!latest || state.generation !== latest.generation || state.settings.circuitRelief !== latest.settings.circuitRelief
+				|| state.settings.circuitCauseways !== latest.settings.circuitCauseways)
+				showCircuitDefaults(state.circuit.defaults);
 
 			latest = state;
 			if('journeyNetwork' in state) activeNetwork = state.journeyNetwork;
@@ -2308,6 +2331,16 @@ let labCount = 0;
 function markup()
 {
 	const hintPrefix = `landform-${++labCount}`;
+	const circuitNumber = (key, label, unit, initial, bounds, automatic = '') => {
+		const hint = `${hintPrefix}-${key}`;
+		const suffix = unit === 'gradeCostAt20' ? '%' : unit;
+		const attrs = initial === null ? `data-automatic placeholder="${automatic}"` : `data-circuit-initial="${initial}" value="${initial}"`;
+		const caption = initial === null ? (automatic ? `Default ${automatic.toLowerCase()}` : '')
+			: `Default ${circuitDisplay(initial, unit)}${suffix === '%' ? '' : ' '}${suffix}`;
+		return `<div class="landform-field"><label class="terrain-field">${label} · ${suffix}
+			<input data-value="${key}" data-unit="${unit}" aria-describedby="${hint}" type="number" ${bounds} ${attrs}></label>
+			<small id="${hint}" data-circuit-default="${key}">${caption}</small></div>`;
+	};
 	const landscapeOptions = [
 		['coast', 'Coast']
 		, ['mountain', 'Mountain Ridges']
@@ -2631,18 +2664,19 @@ function markup()
 	</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-roads" aria-labelledby="terrain-tab-roads" data-tab-panel="roads" hidden>
 	<details><summary>Circuit generator</summary><div class="terrain-grid">
-	<label class="terrain-field">Minimum feature height difference · ft<input data-unit="ft" data-value="circuitRelief" type="number" min="-2000" max="2000" step="1" value="${400 * FOOT}"></label>
+	${circuitNumber('circuitRelief','Minimum feature height difference','ft',400*FOOT,'min="-2000" max="2000" step="1"')}
 	<p class="terrain-note">Use a positive height for a mountain or plateau, or a negative height to circle water below the road.</p>
-	<label class="terrain-field">Minimum lap length · mi<input data-unit="mi" data-value="circuitMinLap" data-automatic type="number" min="120" step="any" placeholder="Automatic"></label>
-	<label class="terrain-field">Minimum feature area · acres<input data-unit="acres" data-value="circuitMinArea" data-automatic type="number" min="0" step="any" placeholder="Automatic"></label>
-	<p class="terrain-note">Leave the minimums blank to use the usual limits for the feature and search area.</p>
-	<label class="terrain-field">Grade preference · %<input data-unit="gradeCostAt20" data-value="circuitGradePreference" type="number" min="0" max="100" value="8"></label>
-	<label class="terrain-field">Minimum turn radius · ft<input data-unit="ft" data-value="circuitTurnRadius" type="number" min="1" value="6"></label>
+	${circuitNumber('circuitMinLap','Minimum lap length','mi',null,'min="120" step="any"')}
+	${circuitNumber('circuitMinArea','Minimum feature area','acres',null,'min="0" step="any"')}
+	<p class="terrain-note">Clear either minimum to use the defaults for each search.</p>
+	${circuitNumber('circuitGradePreference','Grade preference','gradeCostAt20',8,'min="0" max="100"')}
+	${circuitNumber('circuitTurnRadius','Minimum turn radius','ft',6,'min="1"')}
 	<p class="terrain-note">Grade preference adds this much travel cost on a 20% slope. Increase it to favor gentler routes. Larger turn radii round bends more broadly.</p>
-	<label class="terrain-field">Start elevation · ft<input data-unit="ft" data-value="circuitStartHeight" data-automatic type="number" min="-10000" max="10000" step="any" placeholder="Automatic"></label>
-	<label class="terrain-field">Elevation tolerance · ft<input data-unit="ft" data-value="circuitStartTolerance" type="number" min="0" max="20000" value=".5" disabled></label>
-	<label class="terrain-check"><input data-value="circuitCauseways" type="checkbox">Allow causeways</label>
-	<label class="terrain-field">Maximum causeway depth · ft<input data-unit="ft" data-value="circuitCausewayDepth" type="number" min="0" max="20000" value="30" disabled></label>
+	${circuitNumber('circuitStartHeight','Start elevation','ft',null,'min="-10000" max="10000" step="any"','Near the camera')}
+	${circuitNumber('circuitStartTolerance','Elevation tolerance','ft',.5,'min="0" max="20000" disabled')}
+	<div class="landform-field"><label class="terrain-check"><input data-value="circuitCauseways" aria-describedby="${hintPrefix}-causeways" type="checkbox">Allow causeways</label>
+	<small id="${hintPrefix}-causeways">Default off</small></div>
+	${circuitNumber('circuitCausewayDepth','Maximum causeway depth','ft',30,'min="0" max="20000" disabled')}
 	<p class="terrain-note">A causeway raises the road across shallow water while preserving the water level.</p>
 	<div class="terrain-row"><button data-action="circuit-find">Find circuit near camera</button><button data-action="circuit-cancel" hidden>Cancel</button></div>
 	<p class="terrain-note" data-circuit-summary aria-live="polite"></p>

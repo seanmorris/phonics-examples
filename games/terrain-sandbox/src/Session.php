@@ -2754,6 +2754,8 @@ final class Session
 	{
 		$plan = $this->circuitPreview ?? $this->circuit;
 		return ['searching'=>$this->findingCircuit(),'preview'=>$this->circuitPreview !== null,
+			'defaults'=>CircuitFinder::searchWindows($this->landscape->recipe()['worldSize'],
+				$this->settings['circuitRelief'],$this->settings['circuitCauseways']),
 			'active'=>$this->circuitVariant,'points'=>$plan?->points,
 			'activePoints'=>$this->circuitPreview !== null ? $this->circuit?->points : null,'length'=>$plan?->length,
 			'featureArea'=>$plan?->featureArea,'gradeWidth'=>$this->circuitPreview?->road ? CircuitRoad::WIDTH : null,

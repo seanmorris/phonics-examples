@@ -39,33 +39,45 @@ final class CircuitFinder
 		$this->causewayDeck = $causeways ? $dryLevel+$swell+1.5 : null;
 	}
 
+	/** Automatic minima in search order, shared with the Roads panel. Lengths are meters, areas are square meters. */
+	public static function searchWindows(float $worldSize, float $difference, bool $causeways): array
+	{
+		$half = $worldSize/2-16;
+		$radius = min(1408.,$half);
+		$step = max(8.,2**floor(log(max(8.,$radius/80),2)));
+		$local = ['local'=>['radius'=>$radius,'step'=>$step,
+			'minLap'=>$causeways ? 400. : max(180.,$step*12),'minArea'=>4*$step**2]];
+		if($half<2400.) return $local;
+
+		$radius = min(6400.,$half);
+		$regional = ['regional'=>['radius'=>$radius,'step'=>max(16.,round($radius/134/8)*8),
+			'minLap'=>$difference<0. ? 1800. : 3000.,'minArea'=>$difference<0. ? 180000. : 800000.]];
+		return abs($difference)<60. ? $local + $regional : $regional + $local;
+	}
+
 	/** Give the session a scheduling boundary throughout sampling, graph search and lane validation. */
 	public function find(float $x, float $z, GateShapes $shapes, int $laps): \Generator
 	{
-		$half = $this->landscape->recipe()['worldSize']/2-16;
-		$local = min(1408.,$half);
-		if(abs($this->minimumDifference)<60.)
+		$size = $this->landscape->recipe()['worldSize'];
+		foreach(self::searchWindows($size,$this->minimumDifference,$this->causewayDeck !== null) as $kind=>$window)
 		{
-			$nearby = yield from $this->scan($x,$z,$half,$local,$shapes,$laps,false);
-			if($nearby !== null) return $nearby;
+			$circuit = yield from $this->scan($x,$z,$size/2-16,$window,$shapes,$laps,$kind === 'regional');
+			if($circuit !== null) return $circuit;
 		}
-		if($half>=2400.)
-		{
-			$plateau = yield from $this->scan($x,$z,$half,min(6400.,$half),$shapes,$laps,true);
-			if($plateau !== null) return $plateau;
-		}
-		return abs($this->minimumDifference)<60. ? null
-			: (yield from $this->scan($x,$z,$half,$local,$shapes,$laps,false));
+		return null;
 	}
 
-	private function scan(float $x, float $z, float $half, float $radius, GateShapes $shapes, int $laps, bool $regional): \Generator
+	private function scan(float $x, float $z, float $half, array $window, GateShapes $shapes, int $laps, bool $regional): \Generator
 	{
+		$minimumLap = $this->controls['circuitMinLap'] ?? $window['minLap'];
+		$minimumArea = $this->controls['circuitMinArea'] ?? $window['minArea'];
 		$this->heights = $this->routeHeights = $this->open = $this->corridorDistance = $this->fillCost = [];
 		$lake = $this->minimumDifference<0.;
 		$bands = $lake ? ($regional ? [180.,260.,360.] : [50.,90.,160.])
 			: ($regional ? [105.,150.,75.,200.,280.,55.,380.] : [6.,10.,14.,20.,26.,38.,65.,95.]);
 		if($regional && !$lake && $this->causewayDeck !== null) array_unshift($bands,28.);
-		$this->step = $regional ? max(16.,round($radius/134/8)*8) : max(8.,2**floor(log(max(8.,$radius/80),2)));
+		$this->step = $window['step'];
+		$radius = $window['radius'];
 		$this->side = 2*(int)floor($radius/$this->step)+1;
 		$radius = ($this->side-1)*$this->step/2;
 		$this->left = max(-$half,min($half-2*$radius,round(($x-$radius)/$this->step)*$this->step));
@@ -93,7 +105,7 @@ final class CircuitFinder
 		if(!$nearby) return null;
 		sort($nearby,SORT_NUMERIC);
 		$floor = $nearby[(int)(.06*(count($nearby)-1))];
-		$lakes = $lake ? (yield from $this->features($this->dryLevel,$x,$z,$regional,true)) : [];
+		$lakes = $lake ? (yield from $this->features($this->dryLevel,$x,$z,$regional,true,$minimumArea)) : [];
 		if($lake && !$lakes) return null;
 		// Try the low floor first, then a broader elevation range if a saddle separates nearby passages.
 		$attempts = 0;
@@ -103,7 +115,7 @@ final class CircuitFinder
 		{
 			$ceiling = $floor+$relief;
 			$this->open = array_map(static fn(float $h): bool => $h>$dry && $h<=$ceiling,$this->routeHeights);
-			$islands = $lake ? $lakes : (yield from $this->features($ceiling,$x,$z,$regional,false));
+			$islands = $lake ? $lakes : (yield from $this->features($ceiling,$x,$z,$regional,false,$minimumArea));
 			$forks = [];
 			if($regional && $islands)
 				[$this->corridorDistance,$forks] = yield from CorridorGraph::trace($this->open,$this->side);
@@ -118,7 +130,7 @@ final class CircuitFinder
 					if(count($points)>Circuit::MAX_POINTS || !$this->roundEnough($points)) continue;
 					if($regional || $this->causewayDeck !== null)
 					{
-						$circuit = yield from $this->gradeFeature($points,$forks,$area,$peak,$shapes,$laps,$x,$z,$regional);
+						$circuit = yield from $this->gradeFeature($points,$forks,$area,$peak,$shapes,$laps,$x,$z,$minimumLap);
 						if($circuit?->floodedLevel !== null) return $circuit;
 						$dryCircuit ??= $circuit;
 						continue;
@@ -133,7 +145,7 @@ final class CircuitFinder
 					if($points === null) continue;
 					$circuit = new Circuit($points,$this->dryLevel,$wet<min(10000.,$lake ? INF : $peak-3.) ? $wet : null,
 						heightDifference: $reliefFound, startHeight: $this->landscape->height(...$points[0]));
-					if($circuit->length<($this->controls['circuitMinLap'] ?? max(180.,$this->step*12))) continue;
+					if($circuit->length<$minimumLap) continue;
 					try
 					{
 						$road = $circuit->course($this->landscape,$shapes,$laps,false);
@@ -188,13 +200,12 @@ final class CircuitFinder
 	}
 
 	/** Find hills enclosed by the search window and rank them by distance from the requested site. */
-	private function features(float $threshold, float $x, float $z, bool $regional, bool $lake): \Generator
+	private function features(float $threshold, float $x, float $z, bool $regional, bool $lake, float $minimumArea): \Generator
 	{
 		$seen = [];
 		$islands = [];
 		$n = $this->side;
 		$direction = $lake ? -1. : 1.;
-		$minimumArea = $this->controls['circuitMinArea'] ?? ($regional ? ($lake ? 180000. : 800000.) : 0.);
 		foreach($this->heights as $i => $height)
 		{
 			if($i%128 === 0) yield;
@@ -351,11 +362,11 @@ final class CircuitFinder
 	}
 
 	private function gradeFeature(array $points, array $forks, float $area, float $peak, GateShapes $shapes, int $laps,
-		float $x, float $z, bool $regional): \Generator
+		float $x, float $z, float $minimumLap): \Generator
 	{
 		$lake = $this->minimumDifference<0.;
 		$circuit = new Circuit($points,$this->dryLevel,null);
-		if($circuit->length<($this->controls['circuitMinLap'] ?? ($regional ? ($lake ? 1800. : 3000.) : 400.))) return null;
+		if($circuit->length<$minimumLap) return null;
 		$roads = yield from CircuitRoad::grade($this->landscape,$circuit,$this->causewayDeck);
 		if($roads === null) return null;
 		$graded = $this->landscape->fork();
