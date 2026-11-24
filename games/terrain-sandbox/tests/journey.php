@@ -63,7 +63,7 @@ function throughRoute(array $roads,float $edge,bool $south): array {
 		expectJourney(count($next)===1 || count($next)===2,'Continuous road at each joint.');
 		if(count($next)===2) usort($next,static fn($a,$b)=>$a['points'][1][2]<=>$b['points'][1][2]);
 		$road=$next[$south ? count($next)-1 : 0];
-		foreach($road['_road']['samples'] as $sample) $path[]=[$sample[0],$sample[2],atan2($sample[3],$sample[4])];
+		foreach($road['_road']['samples'] as $sample) $path[]=[$sample[0],$sample[2],atan2($sample[3],$sample[4]),$sample[1]];
 		$at=end($road['points']);
 	}
 	expectJourney($at !== null && $at[0]===$edge,'Drive a full map to its outer edge.');
@@ -78,7 +78,13 @@ function driveStrip(Session $s,array $path): void {
 	$site=$s->car->checkedSite($s->landscape,$s->water->heightRange()[1],$x,$z,$yaw,[]);
 	expectJourney($site!==null,'Dry road at the western seam.');
 	$s->car->spawn($site,$s->landscape,$water);
-	for($i=0;$i<13000;$i++) {
+	// A fork can now begin in the departure square and take a long traverse
+	// along the shore. Allow driving time in proportion to the surveyed distance.
+	$length=0.;
+	for($j=$index;$path[$j][0]<=JoinedTerrain::GAP/2+100.;$j++)
+		$length+=hypot($path[$j+1][0]-$path[$j][0],$path[$j+1][1]-$path[$j][1]);
+	$frames=(int)ceil(30.*(20.+$length/15.));
+	for($i=0;$i<$frames;$i++) {
 		$c=$s->car->state();
 		if($c['x']>JoinedTerrain::GAP/2+100.) return;
 		// Track distance along the surveyed road, including bends that turn back west.
@@ -130,7 +136,8 @@ foreach([[16384,['mountain']],[32768,['mountain']],[65536,['canyon','coast']]] a
 		expectJourney(abs($land->height($x+105.,$z+601.)-$height)<1.e-6,'Destination keeps its local noise coordinates above the common sea.');
 	}
 	$records=$land->roadRecords();
-	foreach($records as $id=>$road) if($road['points'][0][0]===JourneyRoad::FORK) break;
+	[$forkX,$forkZ]=JourneyRoad::entrances($land)['junction'];
+	foreach($records as $id=>$road) if($road['points'][0][0]===$forkX && $road['points'][0][2]===$forkZ) break;
 	$road['replaceAt']=$id; $road['points'][0][0]+=120.; $road['points'][0][2]+=12.;
 	$updates=JourneyRoad::connectedEdits($land,$road);
 	expectJourney(count($updates)===3,'Moving a fork knot edits all three incident roads.');
@@ -211,4 +218,36 @@ foreach($land->roads() as $road) {
 	}
 }
 expectJourney($length>32768. && $highEdges<$length*.02,'Keep 100-foot cuts and fills below two percent of the Rolling Prairie to Canyon pavement.');
+$land->close();
+
+// The former fixed split sent the Canyon arm into a shoreline dogleg of 137 degrees
+// in 100 m. Check the drivable spline from the actual junction to the far bank.
+$land=new Landscape(JourneyRoad::recipe('rolling-prairie',['canyon','basalt-fjords'],16384));
+$bare=new JoinedTerrain($land->recipe());
+$build=JourneyRoad::build($land);
+foreach($build as $_) {}
+expectJourney(count($build->getReturn())===3,'Keep an overlook in each square of the Prairie/Canyon/Fjords journey.');
+[$forkX,$forkZ]=JourneyRoad::entrances($land)['junction'];
+foreach([false,true] as $south) {
+	$path=throughRoute($land->roads(),$land->recipe()['worldSize']/2,$south);
+	$active=false; $last=null; $history=[]; $run=$rise=$fall=$bend=$cut=0.;
+	foreach($path as [$x,$z,$yaw,$y]) {
+		if($x===$forkX && $z===$forkZ) $active=true;
+		if(!$active) continue;
+		if($last) {
+			$run+=hypot($x-$last[0],$z-$last[1]);
+			$rise+=max(0.,$y-$last[2]); $fall+=max(0.,$last[2]-$y);
+		}
+		$last=[$x,$z,$y];
+		while($history && $history[0][0]<$run-100.) array_shift($history);
+		foreach($history as [, $heading]) $bend=max($bend,abs(atan2(sin($yaw-$heading),cos($yaw-$heading))));
+		$history[]=[$run,$yaw];
+		$cut=max($cut,abs($y-$bare->height($x,$z)));
+		if($x>=JoinedTerrain::GAP/2) break;
+	}
+	expectJourney($active && $x>=JoinedTerrain::GAP/2 && $bend<deg2rad(60.),
+		'Both destination roads round the headland without a shoreline hairpin.');
+	expectJourney(min($rise,$fall)<80. && $cut<20.,
+		'Both fork arms use accessible passes without climbing and descending the intervening mountain.');
+}
 $land->close();

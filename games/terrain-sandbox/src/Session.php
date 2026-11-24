@@ -2934,8 +2934,10 @@ final class Session
 			$ahead = $dx*sin($heading) + $dz*cos($heading);
 			$side = $dx*cos($heading) - $dz*sin($heading);
 			if($this->network && $car['x'] >= -JourneyRoad::FORK) {
-				// Beyond the connector the two roads occupy separate destination squares.
-				$branch = $this->network->destination($this->square,$car);
+				// Opposite arms of an off-center fork can still be on the same side
+				// of map zero while they round a headland.
+				$divide=JourneySurvey::branchLimit($car['x'],$x+JourneyRoad::SPLIT_RUN,$z,0,$this->landscape->recipe()['join']['span']);
+				$branch = $this->network->destination($this->square,$car,$divide);
 				if($branch === $this->nextSquare && !$this->network->nodes[$branch]['exits']) $arrival = $branch;
 			}
 			$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;

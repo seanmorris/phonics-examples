@@ -46,10 +46,10 @@ final class JourneyNetwork
 	}
 
 	/** The two ends of a split occupy separate squares in the eastern part of the window. */
-	public function destination(string $id,array $pose): string
+	public function destination(string $id,array $pose,float $divide=0.): string
 	{
 		$exits=$this->nodes[$id]['exits'];
-		return $exits[$pose['z']>0 && count($exits)>1 ? 1 : 0];
+		return $exits[$pose['z']>$divide && count($exits)>1 ? 1 : 0];
 	}
 
 	public function translation(string $id,string $child,array $recipe): array

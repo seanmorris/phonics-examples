@@ -14,14 +14,13 @@ final class JourneySurvey
 	private JoinedTerrain $ground;
 	private float $sea;
 	private int $span;
-	private bool $split;
 	private array $cache = [];
 
 	public function __construct(array $recipe)
 	{
 		$this->ground = new JoinedTerrain($recipe);
 		$this->sea = $recipe['waterLevel'];
-		$this->span=$recipe['join']['span']; $this->split=count($recipe['join']['destinations'])===2;
+		$this->span=$recipe['join']['span'];
 	}
 
 	private function height(float $x, float $z): float
@@ -51,7 +50,7 @@ final class JourneySurvey
 				if(($k&3)===0) yield;
 				$x=$cx-$uz*$k*$lateral; $z=$cz+$ux*$k*$lateral;
 				if($x<$minX-.001 || $x>$maxX+.001 || abs($z)>$half) continue;
-				if($divider!==null && $side*($z-$this->branchLimit($x,$minX,$divider,$side))<0.) continue;
+				if($divider!==null && $side*($z-self::branchLimit($x,$minX,$divider,$side,$this->span))<0.) continue;
 				$h=$this->height($x,$z);
 				$row[$k]=[$x,$z,$h];
 				if(!$i) {
@@ -108,45 +107,57 @@ final class JourneySurvey
 	/** Cost of reaching each exit lane from the far edge of a square. A flat mesa top
 	 * scores well locally even when every road to it must climb a cliff. Share this
 	 * coarse survey between all candidate mouths, then survey the chosen road finely. */
-	private function access(float $from,float $to,float $center,?float $entry=null): \Generator
+	private function accessProfiles(float $from,float $to,float $center,array $stations,?float $entry=null,?float $endCenter=null): \Generator
 	{
 		$radius=min(72,(int)ceil($this->span/600.));
-		$dz=$this->span/(2*$radius); $n=max(1,(int)ceil(abs($to-$from)/$dz)); $dx=($to-$from)/$n;
-		$previous=$cost=[];
+		$dz=$this->span/(2*$radius);
+		// Hit each requested cross section exactly, including when surveying east to west.
+		$stops=array_unique([...$stations,$to],SORT_REGULAR);
+		if($to<$from) rsort($stops,SORT_NUMERIC); else sort($stops,SORT_NUMERIC);
+		$xs=[$from]; $a=$from;
+		foreach($stops as $stop) {
+			$n=(int)ceil(abs($stop-$a)/$dz);
+			for($j=1;$j<=$n;$j++) $xs[]=$j===$n ? $stop : $a+($stop-$a)*$j/$n;
+			$a=$stop;
+		}
+		$previous=$cost=$profiles=[];
+		$drift=$to===$from ? 0. : (($endCenter??$center)-$center)/($to-$from);
 		$entryLane=$entry===null ? null : (int)round(($entry-$center)/$dz);
 		$entryHeight=$entry===null ? 0. : $this->height($from,$entry);
-		for($i=0;$i<=$n;$i++) {
-			$x=round($from+$dx*$i); $midX=round($from+$dx*($i-.5));
+		foreach($xs as $i=>$at) {
+			$dx=$i ? $at-$xs[$i-1] : 0.;
+			$x=round($at); $midX=round($at-.5*$dx); $shift=$drift*$dx;
+			$rowCenter=$center+$drift*($at-$from);
 			$heights=$next=$across=$midpoints=[];
 			for($k=-$radius;$k<=$radius;$k++) {
-				$z=$center+$k*$dz; $h=$heights[$k]=$this->ground->height($x,round($z));
+				$z=$rowCenter+$k*$dz; $h=$heights[$k]=$this->ground->height($x,round($z));
 				if(!$i) {
 					$next[$k]=0.;
 					if($entry!==null) $next[$k]=$k===$entryLane ? self::climb($h-$entryHeight,max(1.,abs($z-$entry))) : INF;
 				} else {
 					$next[$k]=INF;
 					for($j=max(-$radius,$k-1);$j<=min($radius,$k+1);$j++) {
-						$run=hypot($dx,($k-$j)*$dz);
-						$m=$midpoints[$k+$j] ??= $this->ground->height($midX,round($center+.5*($j+$k)*$dz));
-						$next[$k]=min($next[$k],$cost[$j]+$this->accessEdge($previous[$j],$m,$h,$run));
+						$run=hypot($dx,$shift+($k-$j)*$dz);
+						$m=$midpoints[$k+$j] ??= $this->ground->height($midX,round($rowCenter-.5*$shift+.5*($j+$k)*$dz));
+						$next[$k]=min($next[$k],$cost[$j]+$this->accessEdge($previous[$j],$m,$h,$run,$endCenter!==null));
 					}
 				}
-				if($k>-$radius) $across[$k]=$this->accessEdge($heights[$k-1],$this->ground->height($x,round($z-.5*$dz)),$h,$dz);
+				if($k>-$radius) $across[$k]=$this->accessEdge($heights[$k-1],$this->ground->height($x,round($z-.5*$dz)),$h,$dz,$endCenter!==null);
 				if(($k&3)===0) yield;
 			}
 			for($k=1-$radius;$k<=$radius;$k++) $next[$k]=min($next[$k],$next[$k-1]+$across[$k]);
 			for($k=$radius-1;$k>=-$radius;$k--) $next[$k]=min($next[$k],$next[$k+1]+$across[$k+1]);
 			$cost=$next; $previous=$heights;
+			$id=array_search($at,$stations,true);
+			if($id!==false) $profiles[$id]=[$rowCenter,$dz,$cost];
 		}
-		$floor=min($cost);
-		foreach($cost as &$value) $value-=$floor;
-		unset($value);
-		return [$center,$dz,$cost];
+		return $profiles;
 	}
 
-	private function accessEdge(float $a,float $mid,float $b,float $run): float
+	private function accessEdge(float $a,float $mid,float $b,float $run,bool $divided): float
 	{
-		return $run*(1.+.004*max(0.,$mid-$this->sea)+.25*max(0.,$this->sea+6.-min($a,$mid,$b)))
+		$depth=max(0.,$this->sea+6.-min($a,$mid,$b));
+		return $run*(1.+.004*max(0.,$mid-$this->sea)+.25*$depth+($divided ? .012*$depth*$depth : 0.))
 			+self::climb($mid-$a,.5*$run)+self::climb($b-$mid,.5*$run);
 	}
 
@@ -163,7 +174,7 @@ final class JourneySurvey
 	public function arrivalRoad(float $from,float $to,float $center): \Generator
 	{
 		// Screen the full edge first: the valley mouth can be miles from the map center.
-		$access=yield from $this->access(JoinedTerrain::GAP*.5,$from,$center);
+		[$access]=yield from $this->accessProfiles(JoinedTerrain::GAP*.5,$from,$center,[$from]);
 		$best=INF; $landing=$center;
 		$reach=$this->span/2-1024.;
 		for($offset=-$reach;$offset<=$reach;$offset+=128.) {
@@ -208,13 +219,13 @@ final class JourneySurvey
 	}
 
 	/** Estimate earthworks across an entire fork, including the shared elevation change. */
-	private function crossingCost(float $start,float $end,array $arms,int $steps): float
+	private function crossingCost(float $start,float $end,int $steps): float
 	{
 		$f=JourneyRoad::FORK; $score=0.;
 		$run=hypot(2.*$f,$end-$start);
 		$rise=$this->height(-$f+384.,$end)-$this->height($f-384.,$start);
 		$score+=12.*self::climb($rise,$run+768.);
-		foreach($arms as $arm) {
+		foreach([-485.,485.] as $arm) {
 			$px=$f; $pz=$start; $old=$this->height($px,$pz);
 			for($j=1;$j<=$steps;$j++) {
 				$t=$j/$steps; $x=$f*(1.-2.*$t);
@@ -229,47 +240,59 @@ final class JourneySurvey
 
 	/** Pick both fork landings together. Screen a wide area at low resolution before
 	 * surveying the best crossings and their straight approaches at road scale. */
-	public function portals(bool $split,?float $incoming,array $arrivals): \Generator
+	public function portals(bool $split,?array $entry,array $arrivals): \Generator
 	{
-		$f=JourneyRoad::FORK; $center=$incoming ?? 0.;
+		$f=JourneyRoad::FORK; $incoming=$entry[2]??null; $center=$incoming??0.;
 		$reach=$this->span/2-512.;
 		if($split) $reach=min($reach,1.5*JoinedTerrain::GAP);
 		if($incoming!==null) $reach=128.;
 		$half=$this->span+JoinedTerrain::GAP*.5;
-		$west=$incoming===null ? yield from $this->access(-$half,$f,0.) : null;
-		$east=[];
-		foreach($arrivals as [$cz,$route]) {
-			[$tailX,$tailZ]=$route[0];
-			$east[]=yield from $this->access($tailX,-$f,$cz,$tailZ);
+		if($split) {
+			// Survey the shared approach and both exits on the same strip. Counting the
+			// incoming road once lets the arms split earlier when their passes lie far apart.
+			$earliest=$entry ? max($f-2560.,$entry[0]+320.) : $f-2560.;
+			$xs=[$earliest,($earliest+$f)*.5,$f];
+			$approach=yield from $this->accessProfiles($entry[0]??-$half,$f,$center,$xs,$incoming,$center);
+			$exits=[];
+			foreach($arrivals as [$cz,$route]) {
+				[$tailX,$tailZ]=$route[0];
+				$exits[]=yield from $this->accessProfiles($tailX,$earliest,$cz,$xs,$tailZ,$center);
+			}
+			$best=INF; $junction=[];
+			foreach($xs as $i=>$x) for($z=$center-$reach;$z<=$center+$reach;$z+=128.) {
+				$cost=$this->approachCost($x,$z,-1)+$this->shelfCost($x,$z,-1);
+				$cost+=self::accessCost($approach[$i],$z);
+				foreach($exits as $arm) $cost+=self::accessCost($arm[$i],$z);
+				if($cost<$best) { $best=$cost; $junction=[$x,$z,[]]; }
+				yield;
+			}
+			return $junction;
 		}
-		$step=$incoming!==null || !$split && $this->span<=32768 ? 128 : 256;
+		$west=$incoming===null ? (yield from $this->accessProfiles(-$half,$f,0.,[$f]))[0] : null;
+		[[$cz,$route]]=$arrivals;
+		[$tailX,$tailZ]=$route[0];
+		[$east]=yield from $this->accessProfiles($tailX,-$f,$cz,[-$f],$tailZ);
+		$step=$incoming!==null || $this->span<=32768 ? 128 : 256;
 		$exits=[]; $best=INF; $chosen=[];
 		for($start=$center-$reach;$start<=$center+$reach;$start+=$step) {
-			$total=$this->approachCost($f,$start,-1)+$this->shelfCost($f,$start,-1)+($west ? self::accessCost($west,$start) : 0.); $ends=[];
+			$approach=$this->approachCost($f,$start,-1)+$this->shelfCost($f,$start,-1)+($west ? self::accessCost($west,$start) : 0.);
 			yield;
-			if($total>=$best) continue;
-			foreach($split ? [-1,1] : [0] as $side) {
-				$mid=$split ? $side*max(3072.,abs($start)) : max(-$this->span/2+256.,min($this->span/2-256.,$start));
-				$extent=$split ? 2048. : 3072.;
-				$arms=$split ? [$side*160.] : [-485.,485.];
-				$candidates=[];
-				for($end=$mid-$extent;$end<=$mid+$extent;$end+=256.) {
-					if(!$split && abs($end)>$this->span/2-256.) continue;
-					$key=(int)round($end);
-					$exit=$exits[$side][$key] ??= $this->approachCost(-$f,$end,1)+$this->shelfCost(-$f,$end,1)+self::accessCost($east[$side>0 ? 1 : 0],$end);
-					$candidates[]=[$exit+$this->crossingCost($start,$end,$arms,4),$end,$exit];
-					yield;
-				}
-				sort($candidates);
-				$minimum=INF;
-				foreach(array_slice($candidates,0,4) as [, $end,$exit]) {
-					$score=$exit+$this->crossingCost($start,$end,$arms,20);
-					if($score<$minimum) { $minimum=$score; $landing=$end; }
-					yield;
-				}
-				$total+=$minimum; $ends[]=$landing;
+			if($approach>=$best) continue;
+			$mid=max(-$this->span/2+256.,min($this->span/2-256.,$start));
+			$candidates=[];
+			for($end=$mid-3072.;$end<=$mid+3072.;$end+=256.) {
+				if(abs($end)>$this->span/2-256.) continue;
+				$key=(int)round($end);
+				$exit=$exits[$key] ??= $this->approachCost(-$f,$end,1)+$this->shelfCost(-$f,$end,1)+self::accessCost($east,$end);
+				$candidates[]=[$exit+$this->crossingCost($start,$end,4),$end,$exit];
+				yield;
 			}
-			if($total<$best) { $best=$total; $chosen=[$start,$ends]; }
+			sort($candidates);
+			foreach(array_slice($candidates,0,4) as [, $end,$exit]) {
+				$score=$approach+$exit+$this->crossingCost($start,$end,20);
+				if($score<$best) { $best=$score; $chosen=[$f,$start,[$end]]; }
+				yield;
+			}
 		}
 		return $chosen;
 	}
@@ -313,11 +336,11 @@ final class JourneySurvey
 
 	/** Move an off-center fork toward the divide gradually. Both branch searches
 	 * must agree on this boundary even when the incoming road is miles off-center. */
-	private function branchLimit(float $x,float $from,float $divider,int $side): float
+	public static function branchLimit(float $x,float $from,float $divider,int $side,int $span): float
 	{
-		$transition=min(.5*$this->span,max(JoinedTerrain::GAP*.5-$from,2.*abs($divider)));
+		$transition=min(.5*$span,max(JoinedTerrain::GAP*.5-$from,2.*abs($divider)));
 		$t=max(0.,min(1.,($x-$from)/$transition));
-		return $divider*(1.-$t*$t*(3.-2.*$t))+$side*(100.+284.*$t);
+		return $divider*(1.-$t*$t*(3.-2.*$t))+$side*(JourneyRoad::SPLIT_OFFSET+(384.-JourneyRoad::SPLIT_OFFSET)*$t);
 	}
 
 	/** Flood in eight directions so a valley can double back around the end of a wall. */
@@ -341,7 +364,7 @@ final class JourneySurvey
 			$c=$z0+($z1-$z0)*$i/$n;
 			$side=$z1<0 ? -1 : 1;
 			if($divider!==null) {
-				$limit=$this->branchLimit($x,$from,$divider,$side);
+				$limit=self::branchLimit($x,$from,$divider,$side,$this->span);
 				if($side*($c-$limit)<0.) $c=$limit;
 			}
 			for($k=0;$k<$width;$k++) {
@@ -360,8 +383,9 @@ final class JourneySurvey
 					[$a,$b,$old]=$nodes[$j];
 					$run=hypot($x-$a,$z-$b);
 					$mid=$this->height(($x+$a)*.5,($z+$b)*.5);
+					$depth=max(0.,$this->sea+5.-min($h,$old,$mid));
 					$cost=$run*(1.+.001*max(0.,min($h,$mid,$old)-$this->sea))+self::climb($h-$mid,$run*.5)+self::climb($mid-$old,$run*.5)
-						+.20*$run*max(0.,$this->sea+5.-min($h,$old,$mid));
+						+$run*(.20*$depth+($divider!==null ? .012*$depth*$depth : 0.));
 					$edges[$id][$j]=$edges[$j][$id]=$cost;
 				}
 				if(($k&3)===0) yield;

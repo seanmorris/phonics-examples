@@ -11,6 +11,8 @@ final class JourneyRoad
 {
 	public const WIDTH = 28.;
 	public const FORK = -.34 * JoinedTerrain::GAP;
+	public const SPLIT_RUN = 160.;
+	public const SPLIT_OFFSET = 2.*self::WIDTH;
 
 	public static function recipe(string $west, array $east, int $span): array
 	{
@@ -53,38 +55,46 @@ final class JourneyRoad
 		foreach(array_slice($origins,1) as [, $cz]) {
 			$arrivals[]=[$cz,yield from $survey->arrivalRoad($tailX,$half,$cz)];
 		}
-		[$forkZ,$ends] = yield from $survey->portals($split,$entry[2] ?? null,$arrivals);
+		[$forkX,$forkZ,$ends] = yield from $survey->portals($split,$entry,$arrivals);
 		$first = $entry ? [$entry[0],$entry[2]] : [-$half,0.];
 		if($report) $report('Following terrain through the departure square…');
-		$approach = yield from $survey->route([$first,[self::FORK-192.,$forkZ]],!$entry,!$entry);
-		$approach[]=[self::FORK-96.,$forkZ]; $approach[]=[self::FORK,$forkZ];
+		$approach = yield from $survey->route([$first,[$forkX-192.,$forkZ]],!$entry,!$entry);
+		$approach[]=[$forkX-96.,$forkZ]; $approach[]=[$forkX,$forkZ];
 		$paths=[$approach];
 		$forks=$tails=[];
 		$squares=$entry ? [] : [0=>$origins[0]];
-		// A divided highway needs a shared throat, but no fixed landing at the far edge
-		// of the connector. Survey each branch all the way into its destination.
-		$throatEnd=$split ? self::FORK+672. : -self::FORK;
-		$guides=[];
-		foreach([-1,1] as $side) {
-			$end=$split ? $forkZ+$side*240. : $ends[0];
-			$guides[$side]=self::forkGuide(self::FORK,$throatEnd,$forkZ,$end,$side*($split ? 0. : 485.));
-		}
-		$divider=array_map(static fn($n,$s)=>.5*($n[1]+$s[1]),$guides[-1],$guides[1]);
 		if($report) $report('Following the contours through the fork…');
-		foreach([-1,1] as $side) {
-			$z = $guides[$side][array_key_last($guides[$side])][1];
-			$forks[] = count($paths);
-			$paths[] = yield from $survey->branch($guides[$side],$side,$divider);
-			if(!$split && $side<0) continue;
-			// Both parents use the same final approach on a shared destination square.
-			[, $tail]=$arrivals[$split && $side>0 ? 1 : 0];
-			$tailZ = $tail[0][1];
-			if($report) $report('Finding an overlook and a road through '.($split ? ($side<0 ? 'the northern' : 'the southern') : 'the'). ' destination…');
-			$onward = yield from $survey->route([[$throatEnd+192.,$z],[$tailX,$tailZ]],scenic:true,divider:$split ? $forkZ : null);
-			$squares[count($paths)]=$origins[$split && $side>0 ? 2 : 1];
-			$paths[] = [[$throatEnd,$z],[$throatEnd+96.,$z],...$onward];
+		if(!$split) {
+			$guides=[];
+			foreach([-1,1] as $side)
+				$guides[$side]=self::forkGuide($forkX,-self::FORK,$forkZ,$ends[0],$side*485.);
+			$divider=array_map(static fn($n,$s)=>.5*($n[1]+$s[1]),$guides[-1],$guides[1]);
+			foreach([-1,1] as $side) {
+				$forks[]=count($paths);
+				$paths[]=yield from $survey->branch($guides[$side],$side,$divider);
+			}
+		}
+		foreach($arrivals as $i=>[, $tail]) {
+			$side=$i===0 ? -1 : 1;
+			$tailZ=$tail[0][1];
+			if($report) $report('Finding an overlook and a road through '.($split ? ($side<0 ? 'the northern' : 'the southern') : 'the').' destination…');
+			if($split) {
+				// Only the shared pavement fixes the shape. Survey a single continuous
+				// alignment from the diverging lanes all the way to each destination.
+				$x=$forkX+self::SPLIT_RUN; $z=$forkZ+$side*self::SPLIT_OFFSET;
+				$onward=yield from $survey->route([[$x,$z],[$tailX,$tailZ]],scenic:true,divider:$forkZ);
+				$path=[[$forkX,$forkZ],[$forkX+40.,$forkZ+$side*4.],
+					[$forkX+80.,$forkZ+$side*16.],[$forkX+120.,$forkZ+$side*34.],...$onward];
+				$forks[]=count($paths);
+			} else {
+				$x=-self::FORK; $z=$ends[0];
+				$onward=yield from $survey->route([[$x+192.,$z],[$tailX,$tailZ]],scenic:true);
+				$path=[[$x,$z],[$x+96.,$z],...$onward];
+			}
+			$squares[count($paths)]=$origins[$i+1];
+			$paths[]=$path;
 			$tails[]=count($paths);
-			$paths[] = $tail;
+			$paths[]=$tail;
 		}
 
 		if($report) $report('Fitting the pavement to the surveyed ground…');
@@ -117,6 +127,7 @@ final class JourneyRoad
 		// Close branches share a road plane until their shoulders separate.
 		[$north,$south] = $forks;
 		foreach($paths[$north] as $i=>[$x,$z]) {
+			if($split && $x>=$forkX+self::SPLIT_RUN) break;
 			if(abs($z-$paths[$south][$i][1])>95.) continue;
 			$a=$routes[$north][$i]; $b=$routes[$south][$i];
 			$graph[$a][$b]=$graph[$b][$a]=0.;

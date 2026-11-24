@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
-use TerrainSandbox\{JourneyNetwork,Session};
+use TerrainSandbox\{JourneyNetwork,JourneyRoad,Session};
 
 function networkCheck(bool $ok,string $message): void { if(!$ok) throw new RuntimeException($message); }
 function settleNetwork(Session $s): void { while($s->preparingRoad()) $s->input([],0.,1.,9.); }
@@ -19,6 +19,28 @@ $s->input(['actions'=>[['type'=>'journey-build','network'=>$plan]]],0.,1.);
 settleNetwork($s);
 networkCheck($s->landscape->recipe()['join']['span']===16384,'A new network defaults to 16,384 meters per square.');
 $initial=$s->save();
+
+// Read the route sign on each actual branch as it leaves the connector, even if
+// the off-center fork has not yet carried the car across the map's central axis.
+[$fx,$fz]=JourneyRoad::entrances($s->landscape)['junction'];
+$roads=$s->landscape->roads();
+$branches=array_values(array_filter($roads,static fn($r)=>$r['points'][0][0]===$fx && $r['points'][0][2]===$fz));
+usort($branches,static fn($a,$b)=>$a['points'][1][2]<=>$b['points'][1][2]);
+networkCheck(count($branches)===2,'Two paved exits at the network fork.');
+foreach($branches as $i=>$road) {
+	while(end($road['points'])[0]<-JourneyRoad::FORK+50.) {
+		$end=end($road['points']);
+		$next=array_values(array_filter($roads,static fn($r)=>$r['points'][0]===$end));
+		networkCheck(count($next)===1,'The branch continues to its destination.');
+		$road=$next[0];
+	}
+	foreach($road['_road']['samples'] as [$x,,$z,$tx,$tz]) if($x>=-JourneyRoad::FORK+50.) break;
+	$site=$s->car->checkedSite($s->landscape,$s->water->heightRange()[1],$x,$z,atan2($tx,$tz),[]);
+	networkCheck($site!==null,'Dry road at the branch sign.');
+	$s->car->spawn($site,$s->landscape,$s->water->level());
+	networkCheck($s->status()['journeyBranch']===($i===0 ? 'B' : 'C'),'The network sign identifies the selected arm.');
+}
+
 
 /** Start on the actual incoming pavement with the car moving and cross the streaming handoff. */
 function onward(Session $s,int $branch,string $target): void {
