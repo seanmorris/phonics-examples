@@ -143,6 +143,18 @@ final class Car
 		return null;
 	}
 
+	/** Change the local map origin while retaining speed, drivetrain and contact forces. */
+	public function translate(array $shift,Landscape $land,float $water): void
+	{
+		[$dx,$dy,$dz]=$shift;
+		$this->x+=$dx; $this->y+=$dy; $this->z+=$dz;
+		if($this->lastSafe) { $this->lastSafe[0]+=$dx; $this->lastSafe[1]+=$dz; }
+		$this->suspension->translate($dy);
+		$this->tumble?->translate($dx,$dy,$dz);
+		$this->dustContacts=[];
+		$this->revision=$land->revision(); $this->waterLevel=$water;
+	}
+
 	/** Check tire support, clearances and stability at a precise boarding pose. */
 	public function checkedSite(Landscape $land, float $highWater, float $x, float $z, float $yaw, array $posts): ?array
 	{

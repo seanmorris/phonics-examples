@@ -882,6 +882,17 @@ export function activate({canvas, module, session})
 		if(next.roads)
 		{
 			roads = next.roads;
+			if(next.journeyPlan && replaced) frame.querySelector('[data-journey="network"]').value = next.journeyPlan;
+			const highway = new Path2D();
+			for(const {id, road} of roads) {
+				if(id < 0 || !road.points.length) continue;
+				highway.moveTo(road.points[0][0], road.points[0][2]);
+				for(let i = 0; i < road.points.length - 1; i++) {
+					const [, b, c, d] = span(road, i);
+					highway.bezierCurveTo(b[0], b[2], c[0], c[2], d[0], d[2]);
+				}
+			}
+			module.journeyMap = {generation: next.generation, path: highway};
 			el('[data-map=circuit]').hidden = !roads.some(record => record.id<0);
 			const activeIds = new Set(roads.map(record => record.id));
 
@@ -979,6 +990,7 @@ export function activate({canvas, module, session})
 		resizeObserver.disconnect();
 		clearTimeout(requestTimer);
 		cancelAnimationFrame(paintFrame);
+		delete module.journeyMap;
 		delete module.terrainRoadEditor;
 		delete module.terrainRoadCapture;
 		delete module.terrainRoadCamera;

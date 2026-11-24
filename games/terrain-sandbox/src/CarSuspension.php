@@ -38,6 +38,12 @@ final class CarSuspension
 		$this->resting = $verticalSpeed === 0.0 && max(array_map('abs',$this->travel)) < .0001;
 	}
 
+	public function translate(float $dy): void
+	{
+		$this->y+=$dy;
+		foreach($this->ground as &$height) $height+=$dy;
+	}
+
 	public function changeGround(array $heights): void
 	{
 		$this->ground = $heights;

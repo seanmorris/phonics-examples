@@ -70,6 +70,33 @@ export function activate({module, canvas, session})
 		const circuit = state?.circuit;
 		const route = circuit?.preview ? circuit.activePoints : circuit?.active && circuit.points;
 
+		if(state?.recipe?.join && state.mode === 'car' && module.journeyMap?.generation === state.generation)
+		{
+			ctx.save();
+			ctx.translate(mid, mid);
+			ctx.transform(c*scale, -s*scale, s*scale, c*scale, 0, 0);
+			ctx.translate(-centerX, -centerZ);
+			ctx.lineJoin = 'round';
+			for(const [width, color] of [[4, '#162a23'], [2, '#ffd272']]) {
+				ctx.strokeStyle = color;
+				ctx.lineWidth = width/scale;
+				ctx.stroke(module.journeyMap.path);
+			}
+			ctx.restore();
+			for(const [x, z] of state.journeyViews ?? []) {
+				const [px, py] = offset(x, z);
+				if(edgeDistance(px, py) > mid-5) continue;
+				ctx.beginPath();
+				ctx.moveTo(mid+px, mid+py-4);
+				ctx.lineTo(mid+px+4, mid+py);
+				ctx.lineTo(mid+px, mid+py+4);
+				ctx.lineTo(mid+px-4, mid+py);
+				ctx.closePath();
+				ctx.fillStyle = '#eff8e6'; ctx.fill();
+				ctx.lineWidth = 1; ctx.strokeStyle = '#162a23'; ctx.stroke();
+			}
+		}
+
 		if(route && chart.showRoute !== false)
 		{
 			ctx.beginPath();

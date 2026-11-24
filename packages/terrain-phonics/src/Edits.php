@@ -342,7 +342,8 @@ final class Edits
 		}
 		$tangents = [];
 		foreach(array_keys($points) as $i) $tangents[] = self::roadHandles($points, $handles, $i);
-		$step = min(4, $width / 4);
+		$spacing = isset($operation['stationSpacing']) ? self::number($operation['stationSpacing'], 'road station spacing', 1., 8.) : 4.;
+		$step = min($spacing, $width / 4);
 		$half = $width / 2;
 		$radius = $half + $shoulder;
 		// Include candidate segment starts for interpolating markings across the outermost pavement cells.
@@ -372,7 +373,7 @@ final class Edits
 			$dz = abs($coefficients[2][1]) + 2 * abs($coefficients[2][2]) + 3 * abs($coefficients[2][3]);
 			$steps = max(1, (int)ceil(hypot($dx, $dz) / $step));
 
-			if(count($samples)+$steps+1 > 4096) {
+			if(isset($operation['stationSpacing']) || count($samples)+$steps+1 > 4096) {
 				// A cubic derivative lies inside the convex hull of its three Bézier derivative controls.
 				$speeds = [];
 				foreach([0,1,2] as $control) {
@@ -467,7 +468,7 @@ final class Edits
 				array_key_exists('material', $operation) ? $operation['material'] : 'road'
 			)
 			, '_road' => compact('samples', 'stations', 'grid', 'gridSize', 'markReach', 'radius', 'half', 'bounds', 'range')
-		] + ($banks === null ? [] : ['banks' => $banks]) + ($endBlend > 0 ? ['endBlend' => $endBlend] : [])
+		] + (isset($operation['stationSpacing']) ? ['stationSpacing'=>$spacing] : []) + ($banks === null ? [] : ['banks' => $banks]) + ($endBlend > 0 ? ['endBlend' => $endBlend] : [])
 			+ (array_filter($handles) ? ['handles'=>$handles] : []);
 	}
 

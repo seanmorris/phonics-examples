@@ -164,6 +164,22 @@ In free flight, open **Roads → Landscape journey**. Choose a departure landsca
 
 Choose **Build new journey** to generate a new landscape and start the car at its western edge. Each map contributes its full width of 20.4 or 40.7 miles. Between them, a separate 2.55-mile stretch blends the land and its surface colors around a common sea level. **Drive from fork** places the car just before the split so you can try either route immediately.
 
+The road survey searches valleys and passes in eight directions, including bends that lead briefly back west. It weighs steep climbs and water crossings against extra mileage. Within each full square it looks for a reachable overlook. The car minimap shows the highway and both fork arms in gold, with a white diamond at the selected overlook. Mountain crossings can still require earthworks.
+
+Choose **Linked landscape network** to author a longer drive. Give each square a name, a preset ID and up to two exits. For example:
+
+```text
+A rolling-prairie -> B,C
+B canyon -> E,F
+C mountain -> F,G
+E limestone
+F river-valley -> H
+G coast
+H rolling-prairie
+```
+
+B and C both reach the same F and continue to H. A single exit gives two local roads that rejoin on the way to that destination. A row without exits is a destination where the journey ends. Add named squares to extend the drive. While driving east the next junction is surveyed ahead of the car, and the car carries its speed across the handoff. Save files keep the network and the active stretch of highway.
+
 Return to free flight to reshape the highway with the road editor. Edits to a shared endpoint move the adjoining roads together. Use **Landscape → Save file** to keep the terrain, roads and forks together.
 
 ### Generate a circuit

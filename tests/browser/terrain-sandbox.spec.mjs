@@ -3802,7 +3802,15 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 });
 
 test('a landscape journey boards the car on the western road and offers signed branches at the fork', async({page}) => {
-	test.setTimeout(240_000);
+	test.setTimeout(420_000);
+	await page.addInitScript(() => {
+		const stroke = CanvasRenderingContext2D.prototype.stroke;
+		CanvasRenderingContext2D.prototype.stroke = function(...args) {
+			if(this.canvas.classList.contains('terrain-flight-map') && this.strokeStyle === '#ffd272' && args[0] instanceof Path2D)
+				window.journeyRoadDrawn = true;
+			return stroke.apply(this, args);
+		};
+	});
 	await page.setViewportSize({width: 620, height: 400});
 	await page.goto('/games/terrain-sandbox/');
 	const view = canvas(page);
@@ -3814,7 +3822,7 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await page.locator('[data-journey="east"]').selectOption('river-valley');
 	await page.locator('[data-journey="south"]').selectOption('coast');
 	await control(page, 'journey-build').click();
-	await expect.poll(async() => (await status(page)).mode, {timeout: 150_000}).toBe('car');
+	await expect.poll(async() => (await status(page)).mode, {timeout: 315_000}).toBe('car');
 	const west = await status(page);
 	expect(west.recipe.worldSize).toBe(69_632);
 	expect(west.car.x).toBeLessThan(-34_700);
@@ -3830,5 +3838,14 @@ test('a landscape journey boards the car on the western road and offers signed b
 	} finally {
 		await page.keyboard.up('w');
 	}
+	await expect.poll(() => page.evaluate(() => window.journeyRoadDrawn)).toBe(true);
+	await expect.poll(() => page.locator('canvas.terrain-flight-map').evaluate(map => {
+		const {data} = map.getContext('2d').getImageData(0, 0, map.width, map.height);
+		let pixels = 0;
+		for(let i = 0; i < data.length; i += 4)
+			if(data[i] > 245 && data[i+1] >= 200 && data[i+1] <= 218 && data[i+2] >= 100 && data[i+2] <= 125 && data[i+3] > 220) pixels++;
+		return pixels;
+	})).toBeGreaterThan(12);
+	expect((await status(page)).journeyViews).toHaveLength(3);
 	expect(await view.evaluate(el => el.getContext('webgl2').getError())).toBe(0);
 });

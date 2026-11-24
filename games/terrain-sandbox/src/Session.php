@@ -360,12 +360,19 @@ final class Session
 	public bool $preparing = false;
 	private ?\Generator $roadWork = null;
 	private ?Landscape $journeyReady = null;
-	private array $journeyEntrances = [];
-	public function preparingRoad(): bool { return $this->roadWork !== null || $this->journeyReady !== null; }
+	private array $journeyEntrances = [], $journeyViews = [], $preparedViews = [];
+	private ?JourneyNetwork $network = null, $buildingNetwork = null;
+	private ?string $square = null, $nextSquare = null;
+	private ?\Generator $onwardWork = null;
+	private ?Landscape $onwardReady = null;
+	private bool $transfer = false;
+
+	public function journeyPlan(): ?string { return $this->network?->plan; }
+	public function preparingRoad(): bool { return $this->roadWork !== null || $this->journeyReady !== null || $this->onwardWork !== null || $this->transfer; }
 
 	public function advanceRoadBetweenFrames(): void
 	{
-		if($this->roadWork === null) return;
+		if($this->roadWork === null) { $this->advanceOnward(4.); return; }
 		try { $this->advanceRoad(4.); }
 		catch(\Throwable $error) { $this->message = $error->getMessage(); $this->dirty = true; }
 	}
@@ -464,12 +471,18 @@ final class Session
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($this->roadWork !== null) $this->advanceRoad(min(4.,$pickMs));
+			else $this->advanceOnward(min(4.,$pickMs));
+			if($this->transfer && $this->onwardReady !== null) $this->enterSquare();
 			// Publish a completed survey only at an input boundary, before the scene adopts the new world.
 			if($this->journeyReady !== null) {
 				$next = $this->journeyReady;
 				$this->journeyReady = null;
+				$network=$this->buildingNetwork;
+				$this->buildingNetwork=null;
 				$previous = $this->landscape->recipe()['preset'];
 				$this->replace($next);
+				$this->network=$network; $this->square=$network?->start;
+				$this->journeyViews=$this->preparedViews;
 				$this->course = new Course($this->gateShapes);
 				$this->surfaceLayers = $this->materialPreset = $this->paint = null;
 				$this->switchPresetLook($previous,$next->recipe()['preset']);
@@ -596,6 +609,7 @@ final class Session
 			else
 			{
 				$after = $this->car->state();
+				if($this->network && !$racing && !$this->delivery) $this->approachSquare($after);
 				$hadDust = $this->tireDust->active();
 				$this->tireDust->step($seconds,$this->car->dustContacts,$after);
 				if($hadDust || $this->tireDust->active()) $this->dirty = true;
@@ -1444,12 +1458,17 @@ final class Session
 				if(!is_string($west) || !is_array($east) || !array_is_list($east)
 					|| count($east)<1 || count($east)>2 || count(array_filter($east,'is_string'))!==count($east))
 					throw new \InvalidArgumentException('Select a departure and one or two destinations.');
-				$next = new Landscape(JourneyRoad::recipe($west,$east,$action['span'] ?? 32768));
+				$network=isset($action['network']) ? new JourneyNetwork($action['network']) : null;
+				$span=$action['span'] ?? 32768;
+				$next = new Landscape($network ? $network->recipe($network->start,$span) : JourneyRoad::recipe($west,$east,$span));
+				$this->buildingNetwork=$network;
 				$this->message = 'Surveying the highway and its forks…';
 				$this->preparing = true;
 				$this->roadWork = (function() use ($next) {
 					try {
-						yield from JourneyRoad::build($next);
+						$this->preparedViews=yield from JourneyRoad::build($next,report:function(string $phase) {
+							$this->message=$phase; $this->dirty=true;
+						});
 						$this->journeyReady = $next;
 					} finally {
 						if($this->journeyReady !== $next) $next->close();
@@ -1931,6 +1950,78 @@ final class Session
 		$this->camera->position[1] = max($ground + 2, min(15000, $this->camera->position[1]));
 	}
 
+	private function discardOnward(): void
+	{
+		$this->onwardWork=null;
+		$this->onwardReady?->close(); $this->onwardReady=null;
+		$this->nextSquare=null; $this->transfer=false;
+	}
+
+	private function advanceOnward(float $ms): void
+	{
+		if($this->onwardWork===null) return;
+		$deadline=hrtime(true)+$ms*1e6;
+		try {
+			while($this->onwardWork->valid() && hrtime(true)<$deadline) $this->onwardWork->next();
+			if(!$this->onwardWork->valid()) $this->onwardWork=null;
+		} catch(\Throwable $error) {
+			$this->onwardWork=null; $this->transfer=false;
+			$this->message=$error->getMessage(); $this->dirty=true;
+		}
+	}
+
+	private function approachSquare(array $pose): void
+	{
+		$r=$this->landscape->recipe(); $half=$r['worldSize']/2; $span=$r['join']['span'];
+		if($pose['x']<$half-.45*$span) { if($this->nextSquare!==null) $this->discardOnward(); return; }
+		$child=$this->network->destination($this->square,$pose);
+		if($child!==$this->nextSquare) {
+			$this->discardOnward();
+			$this->nextSquare=$child;
+			if(!$this->network->nodes[$child]['exits']) {
+				$this->message="Reached $child, the final square on this route.";
+				$this->dirty=true;
+				return;
+			}
+			$shift=$this->network->translation($this->square,$child,$r);
+			$next=new Landscape($this->network->recipe($child,$span));
+			$this->onwardWork=(function() use($next,$shift) {
+				try {
+					$arrival=JourneyNetwork::arrival($this->landscape,$shift);
+					$this->preparedViews=yield from JourneyRoad::build($next,$arrival);
+					$this->onwardReady=$next;
+				} finally { if($this->onwardReady!==$next) $next->close(); }
+			})();
+		}
+		$this->transfer=$this->onwardReady!==null && $pose['x']>$half-min(3000.,.1*$span);
+	}
+
+	private function enterSquare(): void
+	{
+		if($this->mode!=='car') { $this->discardOnward(); return; }
+		$next=$this->onwardReady; $this->onwardReady=null;
+		$network=$this->network; $child=$this->nextSquare;
+		$before=$this->landscape->recipe();
+		$shift=$network->translation($this->square,$child,$before);
+		$views=$this->preparedViews;
+		foreach($this->journeyViews as [$x,$z,$relief]) {
+			$x+=$shift[0]; $z+=$shift[2];
+			if(abs($x)<= $next->recipe()['worldSize']/2 && abs($z)<=$next->recipe()['worldSize']/2 && $next->material($x,$z)==='road')
+				$views[]=[$x,$z,$relief];
+		}
+		$this->replace($next);
+		$this->journeyViews=$views;
+		$this->network=$network; $this->square=$child; $this->mode='car';
+		$this->course=new Course($this->gateShapes);
+		$this->surfaceLayers=$this->materialPreset=$this->paint=null;
+		$this->switchPresetLook($before['preset'],$next->recipe()['preset']);
+		$this->car->translate($shift,$next,$this->water->level());
+		foreach($shift as $axis=>$d) $this->camera->position[$axis]+=$d;
+		$this->chase->resetInterpolation();
+		$this->tireDust=new TireDust;
+		$this->message="Driving through $child."; $this->dirty=true;
+	}
+
 	private function driveJourney(bool $fork): void
 	{
 		$pose = $this->journeyEntrances[$fork ? 'fork' : 'west'] ?? null;
@@ -2162,6 +2253,7 @@ final class Session
 	 */
 	private function replace(Landscape $landscape): void
 	{
+		$this->discardOnward(); $this->network=null; $this->square=null; $this->journeyViews=[];
 		$this->cancelPick(); $this->carSearch = null;
 		$this->draft?->close(); $this->draft = null;
 		$this->releasePin();
@@ -2292,6 +2384,7 @@ final class Session
 	 */
 	public function publishLandscape(Landscape $landscape): void
 	{
+		$this->discardOnward();
 		$this->circuitSearch = null; $this->circuitPreview = null;
 		if($this->course->count() === 0) $this->roadGateCommit = null;
 		if(!($this->roadGateCommit[1] ?? false)) { $this->circuit = null; $this->circuitVariant = null; }
@@ -2346,6 +2439,8 @@ final class Session
 			'settings' => $this->settings,'camera' => ['position' => $this->camera->position,
 				'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch],
 			'balloons' => $this->balloons->export(), 'course' => $this->course->export()];
+		if($this->journeyViews) $document['journeyViews']=$this->journeyViews;
+		if($this->network) $document['journeyNetwork']=['plan'=>$this->network->plan,'square'=>$this->square];
 		if($this->circuit !== null)
 			$document['circuit'] = ['route'=>$this->circuit->export(),'variant'=>$this->circuitVariant];
 		return json_encode($document, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
@@ -2502,6 +2597,23 @@ final class Session
 			throw new \InvalidArgumentException('Invalid saved control value.');
 			$balloons = BalloonPractice::load(array_key_exists('balloons',$data) ? $data['balloons'] : [],
 				$candidate,$candidate->recipe()['waterLevel']);
+			$views=$data['journeyViews'] ?? [];
+			if(!is_array($views) || !array_is_list($views) || count($views)>3) throw new \InvalidArgumentException('Invalid saved overlooks.');
+			foreach($views as $view) {
+				if(!is_array($view) || !array_is_list($view) || count($view)!==3 || count(array_filter($view,'is_numeric'))!==3
+					|| max(abs($view[0]),abs($view[1]))>$candidate->recipe()['worldSize']/2 || !is_finite((float)$view[2]))
+					throw new \InvalidArgumentException('Invalid saved overlook coordinates.');
+			}
+			$network=null; $square=null;
+			if(isset($data['journeyNetwork'])) {
+				$network=new JourneyNetwork($data['journeyNetwork']['plan'] ?? '');
+				$square=$data['journeyNetwork']['square'] ?? '';
+				$r=$candidate->recipe();
+				if(!isset($r['join'],$network->nodes[$square]) || !$network->nodes[$square]['exits']
+					|| $network->recipe($square,$r['join']['span'])['preset']!==$r['preset']
+					|| array_column($r['join']['destinations'],'preset')!==array_column($network->recipe($square,$r['join']['span'])['join']['destinations'],'preset'))
+					throw new \InvalidArgumentException('Saved road network and active square disagree.');
+			}
 			$position = $data['camera']['position'] ?? [0,600,1200];
 			if(!is_array($position) || !array_is_list($position) || count($position) !== 3 || count(array_filter($position, 'is_numeric')) !== 3
 				|| count(array_filter(array_map('floatval', $position), 'is_finite')) !== 3)
@@ -2512,6 +2624,7 @@ final class Session
 		}
 		catch(\Throwable $error) { $candidate->close(); throw $error; }
 		$this->replace($candidate);
+		$this->network=$network; $this->square=$square; $this->journeyViews=$views;
 		$this->balloons = $balloons;
 		$this->atmosphere->setLayers($air->rows);
 		$this->atmosphereOrigin = $airOrigin;
@@ -2561,7 +2674,7 @@ final class Session
 			$side = $dx*cos($heading) - $dz*sin($heading);
 			$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
 		}
-		return ['journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,'time' => $this->time,'generation' => $this->generation,
+		return ['journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,
@@ -2649,6 +2762,7 @@ final class Session
 			if($this->systems->registry->alive($id)) $this->systems->registry->destroy($id);
 		$this->vehicles = [];
 		$this->roadWork = null;
+		$this->discardOnward();
 		$this->journeyReady?->close(); $this->journeyReady = null;
 		$this->cancelPick(); $this->carSearch = null;
 		$this->circuitSearch = null;

@@ -38,15 +38,25 @@ function driveStrip(Session $s,array $path): void {
 	for($i=0;$i<13000;$i++) {
 		$c=$s->car->state();
 		if($c['x']>JoinedTerrain::GAP/2+100.) return;
-		while($path[$index][0]<$c['x']+17.) $index++;
-		[$tx,$tz]=$path[$index];
+		// Track distance along the surveyed road, including bends that turn back west.
+		while($index+1<count($path) && hypot($path[$index+1][0]-$c['x'],$path[$index+1][1]-$c['z'])
+			<=hypot($path[$index][0]-$c['x'],$path[$index][1]-$c['z'])) $index++;
+		$target=$index;
+		while($target+1<count($path) && hypot($path[$target][0]-$c['x'],$path[$target][1]-$c['z'])<14.) $target++;
+		[$tx,$tz]=$path[$target];
 		$error=atan2($tx-$c['x'],$tz-$c['z'])-$c['yaw'];
 		$steer=-atan2(2*Car::WHEELBASE*sin($error),hypot($tx-$c['x'],$tz-$c['z']))/Car::steeringLimit($c['speed']);
-		$pedal=max(-1.,min(1.,(26.-$c['speed'])*.4));
+		$bend=0.;
+		for($j=$index+1;$j<min(count($path),$index+20);$j++) {
+			$delta=$path[$j][2]-$path[$j-1][2];
+			$bend=max($bend,abs(atan2(sin($delta),cos($delta)))/max(.1,hypot($path[$j][0]-$path[$j-1][0],$path[$j][1]-$path[$j-1][1])));
+		}
+		$speed=min(26.,sqrt(5./max(.001,$bend)));
+		$pedal=max(-1.,min(1.,($speed-$c['speed'])*.4));
 		expectJourney($s->car->step(1/30,$pedal,max(-1.,min(1.,$steer)),$s->landscape,$water,false,[],false),'Car keeps driving across the connector.');
 		expectJourney($c['motion']==='driving' && $s->landscape->material($c['x'],$c['z'])==='road',"Stay on the paved branch at ({$c['x']}, {$c['z']}), {$c['motion']}, aiming for ($tx,$tz).");
 	}
-	throw new RuntimeException('The car did not reach the next landscape.');
+	throw new RuntimeException("The car did not reach the next landscape at ($c[x],$c[z]), speed $c[speed], station $index, target ($tx,$tz), desired $speed.");
 }
 
 foreach([[32768,['mountain']],[65536,['canyon','coast']]] as [$span,$destinations]) {
@@ -55,6 +65,9 @@ foreach([[32768,['mountain']],[65536,['canyon','coast']]] as [$span,$destination
 	while($s->preparingRoad()) $s->input([],0,1.,6.);
 	$land=$s->landscape; $r=$land->recipe(); $half=$r['worldSize']/2;
 	expectJourney($s->mode==='car' && $s->car->state()['x']<-$half+55.,'West-edge boarding.');
+	$views=$s->status()['journeyViews'];
+	expectJourney(count($views)===1+count($destinations),'One overlook on each full landscape square.');
+	foreach($views as [$vx,$vz,$drop]) expectJourney($land->material($vx,$vz)==='road' && $drop>0.,'A roadside overlook above its surroundings.');
 	$roads=$land->roads();
 	$ends=[];
 	foreach([false,true] as $south) {
@@ -87,7 +100,7 @@ foreach([[32768,['mountain']],[65536,['canyon','coast']]] as [$span,$destination
 	expectJourney($land->redo() && $land->roadRecords()===$moved,'One redo reapplies the whole junction.');
 	$file=$s->save();
 	$s->load($file);
-	expectJourney($s->landscape->roadRecords()===$moved && $s->landscape->recipe()===$r,'Recipes, junctions and edited splines survive reload.');
+	expectJourney($s->landscape->roadRecords()===$moved && $s->landscape->recipe()===$r && $s->status()['journeyViews']==$views,'Recipes, junctions and edited splines survive reload.');
 	$s->input(['actions'=>['journey-fork']],0,1.);
 	expectJourney($s->mode==='car' && $s->status()['journeyForkAhead'] && abs($s->car->state()['x']-$road['points'][0][0]+140.)<6.,'Drive from the saved fork.');
 	$s->input(['actions'=>[['type'=>'generate','preset'=>'coast']]],0,1.);
@@ -95,3 +108,24 @@ foreach([[32768,['mountain']],[65536,['canyon','coast']]] as [$span,$destination
 	$s->close();
 	echo "Both branches passed on the $span m journey.\n";
 }
+
+// Compare finished pavement with untouched Canyon ground at fixed distance intervals.
+$land=new Landscape(JourneyRoad::recipe('canyon',['mountain'],32768));
+$ground=new JoinedTerrain($land->recipe());
+foreach(JourneyRoad::build($land) as $_) {}
+$errors=[];
+foreach($land->roads() as $road) {
+	$distance=0.;
+	foreach($road['_road']['samples'] as $i=>[$x,$y,$z]) {
+		if(!$i || $x>=-JoinedTerrain::GAP/2) continue;
+		$prev=$road['_road']['samples'][$i-1];
+		$distance+=hypot($x-$prev[0],$z-$prev[2]);
+		if($distance<32.) continue;
+		$distance-=32.;
+		$errors[]=abs($ground->height($x,$z)-$y);
+	}
+}
+sort($errors,SORT_NUMERIC);
+expectJourney(count($errors)>900 && array_sum($errors)/count($errors)<50. && $errors[intdiv(count($errors),2)]<8.,
+	'The Canyon highway must detour around escarpments and stay near natural ground for most of the crossing.');
+$land->close();

@@ -19,49 +19,75 @@ final class JourneyRoad
 	}
 
 	/** The signed side is negative for the northern fork. Both branches have horizontal tangents at the junctions. */
-	private static function path(float $from,float $to,float $z0,float $z1,float $swing,bool $highway): array
+	private static function forkGuide(float $from,float $to,float $z0,float $z1,float $swing): array
 	{
-		$n = (int)ceil(($to-$from)/($highway ? 256. : 96.));
+		$n = (int)ceil(($to-$from)/96.);
 		$points = [];
 		for($i=0;$i<=$n;$i++) {
 			$t = $i/$n;
 			$x = $i===$n ? $to : $from+($to-$from)*$t;
 			$shape = sin(M_PI*$t)**2;
-			$wave = $highway ? sin(($x-$from)/2300.)+.35*sin(($x-$from)/790.) : 1.;
-			$z = $z0+($z1-$z0)*$t*$t*(3.-2.*$t)+$swing*$shape*$wave;
+			$z = $z0+($z1-$z0)*$t*$t*(3.-2.*$t)+$swing*$shape;
 			$points[] = [$x,$i===$n ? $z1 : $z];
 		}
 		return $points;
 	}
 
-	public static function build(Landscape $land): \Generator
+	public static function build(Landscape $land, array $arrival = [], ?callable $report = null): \Generator
 	{
 		$r = $land->recipe();
 		$half = $r['worldSize']/2;
 		$span = $r['join']['span'];
-		$split = count($r['join']['destinations']) === 2;
-		$paths = [self::path(-$half,self::FORK,0.,0.,800.,true)];
-		foreach([-1,1] as $side) {
-			$endZ = $split ? $side*.60*JoinedTerrain::GAP : 0.;
-			$paths[] = self::path(self::FORK,-self::FORK,0.,$endZ,$side*($split ? 100. : 420.),false);
-			if($split) $paths[] = self::path(-self::FORK,$half,$endZ,$side*($span+JoinedTerrain::GAP)/2,750.,true);
+		$origins = JoinedTerrain::origins($span,count($r['join']['destinations']));
+		$split = count($origins) === 3;
+		$survey = new JourneySurvey($r);
+		$entry = null;
+		foreach($arrival as $road) {
+			yield from $land->queueSteps($road);
+			$entry = $road['points'][array_key_last($road['points'])];
 		}
-		if(!$split) $paths[] = self::path(-self::FORK,$half,0.,0.,-720.,true);
+		[$forkZ,$ends] = yield from $survey->portals($split,$entry[2] ?? null);
+		$first = $entry ? [$entry[0],$entry[2]] : [-$half,0.];
+		if($report) $report('Following terrain through the departure square…');
+		$approach = yield from $survey->route([$first,[self::FORK-192.,$forkZ]],!$entry,!$entry);
+		$approach[]=[self::FORK-96.,$forkZ]; $approach[]=[self::FORK,$forkZ];
+		$paths=[$approach];
+		$forks=$tails=[];
+		$squares=$entry ? [] : [0=>$origins[0]];
+		foreach([-1,1] as $side) {
+			$z = $ends[$split && $side>0 ? 1 : 0];
+			$forks[] = count($paths);
+			$guide = self::forkGuide(self::FORK,-self::FORK,$forkZ,$z,$side*($split ? 160. : 485.));
+			$paths[] = yield from $survey->branch($guide,$side);
+			if(!$split && $side<0) continue;
+			[, $center] = $origins[$split && $side>0 ? 2 : 1];
+			// Both parents use the same final approach on a shared destination square.
+			$tailX = $half-1536.;
+			$tailZ = yield from $survey->landing($tailX,$center,1280);
+			$edgeZ = yield from $survey->landing($half,$center,1280);
+			if($report) $report('Finding an overlook and a road through '.($split ? ($side<0 ? 'the northern' : 'the southern') : 'the'). ' destination…');
+			$onward = yield from $survey->route([[-self::FORK+192.,$z],[$tailX,$tailZ]],scenic:true);
+			$squares[count($paths)]=$origins[$split && $side>0 ? 2 : 1];
+			$paths[] = [[-self::FORK,$z],[-self::FORK+96.,$z],...$onward];
+			$tails[]=count($paths);
+			$paths[] = yield from $survey->route([[$tailX,$tailZ],[$half,$edgeZ]]);
+		}
 
+		if($report) $report('Fitting the pavement to the surveyed ground…');
 		// Each knot has one elevation, even when several branches meet there. Cap the grade in both
 		// directions along every incident stretch; a third leg must not introduce a step at the fork.
 		$graph = $height = $routes = [];
-		$queue = new \SplPriorityQueue;
 		foreach($paths as $path) {
 			$route = [];
 			foreach($path as $i=>[$x,$z]) {
 				$key = $i===0 || $i===array_key_last($path) ? "junction:$x:$z" : count($routes).":$i";
 				if(!isset($height[$key])) {
 					$height[$key] = max($r['waterLevel']+6., $land->height($x,$z));
-					$queue->insert($key,-$height[$key]);
 				}
 				if($i>0) {
-					$cost = .075*hypot($x-$path[$i-1][0],$z-$path[$i-1][1]);
+					$run=hypot($x-$path[$i-1][0],$z-$path[$i-1][1]);
+					$rise=abs($height[$key]-$height[$route[$i-1]]);
+					$cost=max(.075*$run,min(.105*$run,$rise));
 					$graph[$route[$i-1]][$key] = $cost;
 					$graph[$key][$route[$i-1]] = $cost;
 				}
@@ -72,34 +98,82 @@ final class JourneyRoad
 			foreach([[0,1],[$last-1,$last]] as [$a,$b]) {
 				$graph[$route[$a]][$route[$b]] = $graph[$route[$b]][$route[$a]] = 0.;
 			}
-			// While the two forks still share asphalt or a graded shoulder, both road planes
-			// must have the same elevation. Otherwise the upper road can cut a lip in the lower one.
-			if($path[0][0] === self::FORK) {
-				$last = count($route)-1;
-				foreach($path as $i=>[$x,$z]) {
-					if(abs($z)>90.) continue;
-					$end = $i <= $last/2 ? 0 : $last;
-					if($end===$last && $split) continue;
-					$graph[$route[$end]][$route[$i]] = 0.;
-					$graph[$route[$i]][$route[$end]] = 0.;
-				}
-			}
 			$routes[] = $route;
 		}
-		$queue->setExtractFlags(\SplPriorityQueue::EXTR_BOTH);
-		while(!$queue->isEmpty()) {
-			['data'=>$key,'priority'=>$priority] = $queue->extract();
-			if(-$priority > $height[$key]) continue;
-			foreach($graph[$key] as $neighbor=>$cost) {
-				$limit = $height[$key]+$cost;
-				if($height[$neighbor] <= $limit) continue;
-				$height[$neighbor] = $limit;
-				$queue->insert($neighbor,-$limit);
+		// Close branches share a road plane until their shoulders separate.
+		[$north,$south] = $forks;
+		foreach($paths[$north] as $i=>[$x,$z]) {
+			if(abs($z-$paths[$south][$i][1])>95.) continue;
+			$a=$routes[$north][$i]; $b=$routes[$south][$i];
+			$graph[$a][$b]=$graph[$b][$a]=0.;
+			$end=$i<count($paths[$north])/2 ? 0 : array_key_last($paths[$north]);
+			if(!$split || $end===0) {
+				$joint=$routes[$north][$end];
+				$graph[$a][$joint]=$graph[$joint][$a]=0.;
 			}
 		}
+		// Center the road between the upper and lower feasible profiles. A short hollow
+		// should not force a trench for miles, and a sharp summit should not force a high fill.
+		// Anchor the last mile of each square solely to its own natural ground. Arriving
+		// through a different parent must give the same merge pavement and departure height.
+		$anchors=[];
+		foreach($tails as $leg) {
+			$keys=$routes[$leg]; $local=[];
+			for($i=1;$i<count($keys);$i++) {
+				$a=$keys[$i-1]; $b=$keys[$i];
+				$local[$a][$b]=$local[$b][$a]=$graph[$a][$b];
+			}
+			$raw=array_intersect_key($height,$local);
+			$lo=self::envelope($local,$raw);
+			$hi=self::envelope($local,array_map(static fn($h)=>-$h,$raw));
+			foreach($raw as $k=>$_) $anchors[$k]=max($r['waterLevel']+6.,.5*($lo[$k]-$hi[$k]));
+		}
+		if($entry!==null) $anchors[$routes[0][0]]=$entry[1];
+		// Share excess grade locally before enforcing the final grade bound. This minimizes
+		// squared cut and fill, so one narrow ravine does not drag down an entire plateau.
+		$links=[];
+		foreach($graph as $a=>$neighbors) foreach($neighbors as $b=>$cost)
+			if(strcmp((string)$a,(string)$b)<0) $links[]=[$a,$b,$cost,0.];
+		for($pass=0;$pass<100;$pass++) {
+			$change=0.;
+			foreach($links as &$link) {
+				[$a,$b,$cap,$residual]=$link;
+				$d=$height[$a]-$height[$b]+2.*$residual;
+				$correction=.5*($d-max(-$cap,min($cap,$d)));
+				$delta=$residual-$correction;
+				$height[$a]+=$delta; $height[$b]-=$delta;
+				$link[3]=$correction; $change=max($change,abs($delta));
+			}
+			unset($link);
+			yield;
+			if($change<.01) break;
+		}
+		$low = self::envelope($graph,$height);
+		$high = self::envelope($graph,array_map(static fn($h)=>-$h,$height));
+		foreach($height as $key=>$_) $height[$key]=max($r['waterLevel']+6.,($low[$key]-$high[$key])*.5);
+		for($pass=0;$pass<4;$pass++) {
+			$smooth=$height;
+			foreach($routes as $route) for($i=1;$i<count($route)-1;$i++) {
+				$a=$route[$i-1]; $b=$route[$i]; $c=$route[$i+1];
+				$l=$graph[$a][$b]; $h=$graph[$b][$c];
+				if($l>0. && $h>0.) $smooth[$b]=.5*($height[$b]+($height[$a]*$h+$height[$c]*$l)/($l+$h));
+			}
+			$height=$smooth;
+		}
+		$low=self::envelope($graph,$height); $high=self::envelope($graph,array_map(static fn($h)=>-$h,$height));
+		foreach($height as $key=>$_) $height[$key]=.5*($low[$key]-$high[$key]);
+		$upper=self::envelope($graph,$anchors);
+		$lower=self::envelope($graph,array_map(static fn($h)=>-$h,$anchors));
+		foreach($height as $key=>$h) $height[$key]=max(-$lower[$key],min($upper[$key],$h));
+
+		$views=[];
 		foreach($paths as $leg=>$path) {
 			$points = [];
 			foreach($path as $i=>[$x,$z]) $points[] = [$x,$height[$routes[$leg][$i]],$z];
+			if(isset($squares[$leg])) {
+				$site=yield from $survey->roadsideView($points,$squares[$leg]);
+				if($site!==null) $views[]=$site;
+			}
 			$last = count($points)-1;
 			$handles = [];
 			foreach($points as $i=>$p) {
@@ -113,12 +187,31 @@ final class JourneyRoad
 			}
 			// Slice the fitted spline with its original handles so adjacent road records meet tangentially.
 			for($i=0;$i<$last;$i+=96) {
-				yield from $land->queueSteps(['type'=>'road','material'=>'road','width'=>28.,'shoulder'=>18.,
+				yield from $land->queueSteps(['type'=>'road','material'=>'road','width'=>28.,'shoulder'=>18.,'stationSpacing'=>7.,
 					'points'=>array_slice($points,$i,97),'handles'=>array_slice($handles,$i,97)]);
 				yield;
 			}
 		}
 		$land->commit();
+		return $views;
+	}
+
+	private static function envelope(array $graph,array $values): array
+	{
+		$queue = new \SplPriorityQueue;
+		foreach($values as $key=>$value) $queue->insert($key,-$value);
+		$queue->setExtractFlags(\SplPriorityQueue::EXTR_BOTH);
+		while(!$queue->isEmpty()) {
+			['data'=>$key,'priority'=>$priority]=$queue->extract();
+			if(-$priority>$values[$key]) continue;
+			foreach($graph[$key] as $neighbor=>$cost) {
+				$limit=$values[$key]+$cost;
+				if($limit>=($values[$neighbor]??INF)) continue;
+				$values[$neighbor]=$limit;
+				$queue->insert($neighbor,-$limit);
+			}
+		}
+		return $values;
 	}
 
 	/** Moving a shared endpoint in the road editor moves every incident road in the same undo transaction. */

@@ -30,6 +30,11 @@ final class CarTumble
 		$this->ahead = $horizontalSpeed; $this->up = $verticalSpeed;
 	}
 
+	public function translate(float $dx,float $dy,float $dz): void
+	{
+		$this->x+=$dx; $this->y+=$dy; $this->z+=$dz;
+	}
+
 	/** Tire-sole origin, pitch and roll, then forward and sideways velocity in the original yaw frame. */
 	public function pose(): array
 	{

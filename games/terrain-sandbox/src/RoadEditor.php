@@ -398,7 +398,7 @@ final class RoadEditor
 	/** Send road records at revision boundaries and working geometry only when an editor input changes it. */
 	public function packet(Session $s): ?array
 	{
-		if(!$this->open) return null;
+		if(!$this->open && !isset($s->landscape->recipe()['join'])) return null;
 		$this->sync($s);
 		$defaults = $this->defaults($s);
 		if(!$this->catalog && $this->sent === $this->sequence && $this->lastSketch === $s->road && $this->lastDefaults === $defaults) return null;
@@ -416,6 +416,7 @@ final class RoadEditor
 			'generation'=>$s->generation,'revision'=>$s->landscape->revision(),'extent'=>$s->landscape->recipe()['worldSize'],
 			'camera'=>[$s->camera->position[0],$s->camera->position[2]],'message'=>$this->message];
 		if($this->catalog) {
+			$packet['journeyPlan']=$s->journeyPlan();
 			$packet['roads'] = [];
 			foreach($s->landscape->roadRecords()+$this->proposed as $id=>$record) $packet['roads'][] = ['id'=>$id,'road'=>$record];
 		}

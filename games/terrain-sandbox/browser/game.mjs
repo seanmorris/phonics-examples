@@ -456,7 +456,8 @@ export function activate({module, canvas, session, services})
 				const value = key => journeyField(key).value;
 				const destinations = [value('east')];
 				if(value('fork') === 'divide') destinations.push(value('south'));
-				push({type, west: value('west'), destinations, span: Number(value('span'))});
+				const network = value('fork') === 'network' ? {network: value('network')} : {};
+				push({type, west: value('west'), destinations, span: Number(value('span')), ...network});
 			}
 			else if(type === 'load') frame.querySelector('[data-file]').click();
 			else if(type === 'fullscreen')
@@ -472,7 +473,11 @@ export function activate({module, canvas, session, services})
 	const journeyField = key => frame.querySelector(`[data-journey="${key}"]`);
 	const junction = journeyField('fork');
 	const destinationNames = new Map([...journeyField('east').options].map(option => [option.value, option.text]));
-	const updateJunction = () => { frame.querySelector('[data-journey-south]').hidden = junction.value !== 'divide'; };
+	const updateJunction = () => {
+		frame.querySelector('[data-journey-south]').hidden = junction.value !== 'divide';
+		frame.querySelector('[data-journey-network]').hidden = junction.value !== 'network';
+		for(const field of ['west', 'east']) journeyField(field).closest('label').hidden = junction.value === 'network';
+	};
 	junction.addEventListener('change', updateJunction, {signal});
 	updateJunction();
 
@@ -960,7 +965,8 @@ export function activate({module, canvas, session, services})
 			status.textContent = 'CPU racer · ' + state.cpuDriver;
 			else if(state.mode === 'car' && state.journeyForkAhead && !state.delivery && state.race.state === 'idle')
 			{
-				const [north, south] = state.recipe.join.destinations.map(form => destinationNames.get(form.preset));
+				const [north, south] = state.recipe.join.destinations.map((form, i) =>
+					[state.journeyExits?.[i], destinationNames.get(form.preset)].filter(Boolean).join(' · '));
 				status.textContent = south ? `Left · ${north}   /   Right · ${south}` : `Both branches rejoin toward ${north}.`;
 			}
 			else status.textContent = state.message;
@@ -1076,7 +1082,7 @@ export function activate({module, canvas, session, services})
 					const {span, destinations} = state.recipe.join;
 					journeyField('west').value = state.recipe.preset;
 					journeyField('span').value = String(span);
-					junction.value = destinations.length === 2 ? 'divide' : 'rejoin';
+					junction.value = state.journeySquare ? 'network' : destinations.length === 2 ? 'divide' : 'rejoin';
 					journeyField('east').value = destinations[0].preset;
 					if(destinations[1]) journeyField('south').value = destinations[1].preset;
 					updateJunction();
@@ -2504,9 +2510,17 @@ function markup()
 	<p class="terrain-note">Build a new landscape with an editable highway from the western edge to the eastern edge. Both maps keep their full width.</p>
 	<div class="terrain-row"><label class="terrain-field">Departure<select data-journey="west">${journeyOptions('rolling-prairie')}</select></label>
 	<label class="terrain-field">Map width<select data-journey="span"><option value="32768">20.4 mi (32 km class)</option><option value="65536">40.7 mi (64 km class)</option></select></label></div>
-	<div class="terrain-row"><label class="terrain-field">Fork layout<select data-journey="fork"><option value="rejoin">Rejoin the highway</option><option value="divide">Separate destinations</option></select></label>
+	<div class="terrain-row"><label class="terrain-field">Fork layout<select data-journey="fork"><option value="rejoin">Rejoin the highway</option><option value="divide">Separate destinations</option><option value="network">Linked landscape network</option></select></label>
 	<label class="terrain-field">Destination<select data-journey="east">${journeyOptions('mountain')}</select></label>
 	<label class="terrain-field" data-journey-south hidden>South branch destination<select data-journey="south">${landscapeOptions.map(option).join('')}</select></label></div>
+	<label class="terrain-field" data-journey-network hidden>Route network
+	<textarea data-journey="network" rows="7" spellcheck="false">A rolling-prairie -> B,C
+B canyon -> E,F
+C mountain -> F,G
+E limestone
+F river-valley
+G coast</textarea><small>One square per line. Enter its name, preset ID, and up to two exits. Reuse a name as an exit to rejoin. A row without exits ends the drive.</small>
+	<small>Preset IDs: ${landscapeOptions.map(([id]) => id).join(', ')}</small></label>
 	<div class="terrain-row"><button data-action="journey-build">Build new journey</button><button data-action="journey-drive" hidden>Drive from west edge</button><button data-action="journey-fork" hidden>Drive from fork</button></div></details>
 	<div class="terrain-section" data-road-workspace></div></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
