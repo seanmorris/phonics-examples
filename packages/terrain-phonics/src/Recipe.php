@@ -19,6 +19,7 @@ final class Recipe
 		, 'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe'
 		, 'alaska-range', 'chalk-headlands'
 		, 'karst-bay', 'tepui-highlands', 'painted-badlands', 'emerald-ridges'
+		, 'autumn-folds', 'namib-coast'
 	];
 
 	/** Parameters are immutable after normalization. */
@@ -188,6 +189,76 @@ final class Recipe
 			, 'persistence' => .45
 			, 'slopeScale' => 1.
 			, 'damping' => .5
+			, 'terraceStrength' => 0.
+
+			, 'waterLevel' => 0.
+			, 'surround' => 'sea'
+		] + self::shapeDefaults('coast', $version);
+
+		// Stretched along a bearing, the ridge crests run as long parallel folds about 400 m above their valleys. The
+		// deepest valley floors flood into long lakes, and gullies cut the flanks at one scale.
+		if($preset === 'autumn-folds')
+		return [
+			'seed' => 'autumn-folds'
+			, 'baseFrequency' => 1 / 1430
+			, 'heightScale' => 800.
+			, 'baseBias' => .45
+			, 'rolling' => .1
+
+			, 'ridgeHeight' => 1.6
+			, 'ridgeRoundness' => .02
+			, 'ridgeStretch' => 6.
+			, 'ridgeBearing' => 35.
+			, 'wallHeight' => 0.
+			, 'secondary' => .12
+			, 'directionalRise' => 0.
+
+			, 'warpAmplitude' => 250.
+			, 'warpFrequency' => 1 / 3300
+
+			, 'detailShape' => .3
+			, 'detailAmplitude' => 12.
+			, 'detailOctaves' => 6
+			, 'persistence' => .45
+			, 'slopeScale' => 1.
+			, 'damping' => .5
+			, 'gullyDepth' => 16.
+			, 'gullySpacing' => 120.
+			, 'terraceStrength' => 0.
+
+			, 'waterLevel' => 0.
+			, 'surround' => 'mountains'
+		] + self::shapeDefaults('coast', $version);
+
+		// Linear dunes run on a bearing to a straight coast. A narrow coastal rise lifts the dune field out of the sea,
+		// and billowed detail keeps the sand smooth.
+		if($preset === 'namib-coast')
+		return [
+			'seed' => 'namib-coast'
+			, 'baseFrequency' => 1 / 1250
+			, 'heightScale' => 220.
+			, 'baseBias' => .7
+			, 'rolling' => .1
+
+			, 'ridgeHeight' => 1.6
+			, 'ridgeRoundness' => .01
+			, 'ridgeStretch' => 6.
+			, 'ridgeBearing' => 70.
+			, 'wallHeight' => 0.
+			, 'secondary' => .1
+
+			, 'directionalRise' => 1.2
+			, 'coastBearing' => 0.
+			, 'coastWidth' => 900.
+			, 'warpAmplitude' => 300.
+			, 'warpFrequency' => 1 / 4000
+
+			, 'detailShape' => -.6
+			, 'detailAmplitude' => 2.
+			, 'detailOctaves' => 5
+			, 'persistence' => .4
+			, 'slopeScale' => 1.
+			, 'damping' => 1.
 			, 'terraceStrength' => 0.
 
 			, 'waterLevel' => 0.

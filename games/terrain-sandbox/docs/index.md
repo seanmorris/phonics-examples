@@ -34,6 +34,8 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 - **Tepui Highlands** looks across a rainforest floor at flat-topped sandstone tables about 1,000 m high. Fly up through the cloud to land on a summit, where scrub replaces the forest.
 - **Painted Badlands** opens in a dry wash below a maze of knife-edged clay ridges banded maroon, lavender, gold and cream. Rills run down every bare slope. Drive the grassy washes between them.
 - **Emerald Ridges** opens over a deep bay below knife-edged green ridges. Moss-covered flutes run down their steep faces, and black sand lines the coves. Board the watercraft to explore the inlets between them.
+- **Autumn Folds** opens on a lake between long parallel ridges in rust and gold, patched with dark hemlock. Board the watercraft to follow the flooded valleys, or fly across the folds as they fade into blue haze.
+- **Namib Coast** opens offshore, where red linear dunes meet a cold Atlantic shore under a low bank of fog. Land on the beach and drive up between the dunes.
 
 ## Fly over the landscape
 

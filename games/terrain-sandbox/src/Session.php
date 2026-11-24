@@ -121,6 +121,10 @@ final class Session
 		'tepui-highlands' => ['name'=>'Cloud forest', 'topFt'=>2300, 'densityPerMile'=>.16, 'color'=>'#e2e7e6'],
 		'painted-badlands' => ['name'=>'Clay dust', 'topFt'=>1200, 'densityPerMile'=>.04, 'color'=>'#e4cfb4'],
 		'emerald-ridges' => ['name'=>'Trade-wind haze', 'topFt'=>3000, 'densityPerMile'=>.06, 'color'=>'#dde7ea'],
+		// Blue haze stacks the folds into fading ridgelines.
+		'autumn-folds' => ['name'=>'Blue ridge haze', 'topFt'=>4000, 'densityPerMile'=>.12, 'color'=>'#b8c8da'],
+		// A cold sea fog banks low along the shore at the foot of the dunes.
+		'namib-coast' => ['name'=>'Atlantic fog', 'topFt'=>400, 'densityPerMile'=>.2, 'color'=>'#e3e6e6'],
 		'heather-moor' => ['name'=>'Moor mist', 'topFt'=>350, 'densityPerMile'=>.12, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
@@ -205,6 +209,18 @@ final class Session
 			'waterColor'=>'#1b5e86', 'waterTransparency'=>.85, 'waterReflectivity'=>.50,
 			'waterFogDensity'=>.06, 'waterChoppiness'=>34.,
 		],
+		// Late-afternoon light across the folds.
+		'autumn-folds' => TerrainAppearance::PRESET_DEFAULTS['autumn-folds'] + [
+			'azimuth'=>105., 'elevation'=>28., 'haze'=>.75, 'skyColor'=>'#6d93c4', 'hazeColor'=>'#c3d0dd',
+			'waterColor'=>'#2e4c56', 'waterTransparency'=>.70, 'waterReflectivity'=>.60,
+			'waterFogDensity'=>.12, 'waterChoppiness'=>14.,
+		],
+		// Low morning sun on the dunes and a cold Atlantic.
+		'namib-coast' => TerrainAppearance::PRESET_DEFAULTS['namib-coast'] + [
+			'azimuth'=>125., 'elevation'=>25., 'haze'=>.60, 'skyColor'=>'#5c8fc8', 'hazeColor'=>'#e8d9c6',
+			'waterColor'=>'#2c6b7e', 'waterTransparency'=>.70, 'waterReflectivity'=>.55,
+			'waterFogDensity'=>.10, 'waterChoppiness'=>40.,
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
@@ -228,6 +244,10 @@ final class Session
 		'tepui-highlands' => ['x'=>-.8030, 'z'=>-.1138, 'heading'=>255., 'pitch'=>-.12, 'clearance'=>25., 'minimum'=>0.],
 		'painted-badlands' => ['x'=>1.8769, 'z'=>5.6306, 'heading'=>115., 'pitch'=>.02, 'clearance'=>40., 'minimum'=>-300.],
 		'emerald-ridges' => ['x'=>-1.5584, 'z'=>.9351, 'heading'=>40., 'pitch'=>-.02, 'clearance'=>150., 'minimum'=>0.],
+		// On a flooded valley, facing the next fold with more behind it.
+		'autumn-folds' => ['x'=>2.1818, 'z'=>.8392, 'heading'=>220., 'pitch'=>.05, 'clearance'=>25., 'minimum'=>0.],
+		// Offshore, looking up the coast with the dunes on the right.
+		'namib-coast' => ['x'=>-.56, 'z'=>1.2, 'heading'=>10., 'pitch'=>-.05, 'clearance'=>60., 'minimum'=>0.],
 	];
 
 	/**
@@ -258,7 +278,8 @@ final class Session
 	private ?string $materialPreset = null;
 	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor','salt-pans','cinder-highlands',
 		'rolling-prairie','river-valley','wooded-foothills','high-desert-steppe','alaska-range','chalk-headlands',
-		'karst-bay','tepui-highlands','painted-badlands','emerald-ridges'];
+		'karst-bay','tepui-highlands','painted-badlands','emerald-ridges',
+		'autumn-folds','namib-coast'];
 
 	private static function materialStyle(array $recipe): string
 	{

@@ -341,6 +341,14 @@ the valleys between ridges that rise to over 600 m. Fern and rainforest cover th
 steep faces, where 60 m rib relief draws vertical flutes. Red earth shows on the steepest faces, and black sand at the
 waterline.
 
+Two presets use the oriented terrain controls. `autumn-folds` stretches sharp ridge crests six times along a bearing of
+35 degrees, so long parallel folds stand about 400 m above their valleys, and the deepest valleys flood into lakes.
+Ridged detail and 16 m gullies at 120 m spacing cut the flanks. Rust and gold crowns cover the slopes, with dark
+hemlock in patches hundreds of meters across, over harvest fields on the valley floors. `namib-coast` stretches its
+crests along a bearing of 70 degrees into linear dunes. A 900 m coastal rise lifts the dune field out of the sea along a
+straight shore. Billowed detail keeps the red sand smooth, with darker slip faces, wind ripples, gravel flats and a
+wet beach.
+
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 
 | Setting | Coast | Mountain | Version-one canyon | Canyon |

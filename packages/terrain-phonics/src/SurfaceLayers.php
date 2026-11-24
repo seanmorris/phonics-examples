@@ -257,6 +257,8 @@ final class SurfaceLayers
 			'karst-bay' => self::karstLayers($s),
 			'tepui-highlands' => self::tepuiLayers($s),
 			'emerald-ridges' => self::emeraldLayers($s),
+			'autumn-folds' => self::autumnLayers($s),
+			'namib-coast' => self::namibLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -313,6 +315,8 @@ final class SurfaceLayers
 				, 'Tidal notch'
 				, 'Cove sand'
 			],
+			'autumn-folds' => ['Valley fields', 'Autumn canopy', 'Hemlock stands', 'Ridge sandstone'],
+			'namib-coast' => ['Red dune sand', 'Slip faces', 'Wind ripples', 'Gravel flats', 'Wet beach'],
 			'emerald-ridges' => [
 				'Fern slopes'
 				, 'Rainforest canopy'
@@ -914,6 +918,114 @@ final class SurfaceLayers
 				, 'strength' => 3.
 				, 'slopeLow' => $s['rockSlopeStart']
 				, 'slopeFade' => .1
+			]
+		];
+	}
+
+	/**
+	 * Harvest fields hold the flat valley floors. Stands of rust and gold crowns cover every slope, and dark hemlock
+	 * tints them green in patches. The patches are hundreds of meters across, the scale at which fall color reads
+	 * from the next fold. Sandstone breaks through where the crests steepen.
+	 */
+	private static function autumnLayers(array $s): array
+	{
+		$hemlock = self::tint($s['grassColor'], .22, .32, .28);
+
+		return [
+			[
+				'color' => $s['grassColor']
+				, 'pattern' => 'fractal'
+				, 'patternColor' => self::tint($s['grassColor'], .70, .72, .62)
+				, 'patternScale' => 45.
+				, 'patternStretch' => 3.
+				, 'patternAmount' => .5
+			]
+
+			, [
+				'mask' => 'trees'
+				, 'field' => 'crowns'
+				, 'channel' => 'both'
+				, 'relief' => 'crowns'
+				, 'strength' => .4
+				, 'slopeLow' => .03
+				, 'slopeFade' => .03
+				, 'color' => $s['forestColor']
+				, 'pattern' => 'mottle'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 120.
+				, 'patternAmount' => .9
+			]
+
+			// Where the mottle draws the canopy's own rust, the hemlock tint vanishes, so green shows in patches.
+			, [
+				'color' => $hemlock
+				, 'opacity' => .4
+				, 'slopeLow' => .03
+				, 'slopeFade' => .03
+				, 'pattern' => 'mottle'
+				, 'patternColor' => $s['forestColor']
+				, 'patternScale' => 230.
+				, 'patternAmount' => 1.
+			]
+
+			, self::exposedRock($s) + [
+				'color' => $s['rockColor']
+				, 'pattern' => 'jointed'
+				, 'patternColor' => $s['rockBandColor']
+				, 'patternScale' => 6.
+				, 'patternAmount' => .6
+			]
+		];
+	}
+
+	/** Red sand darkens on slip faces and ripples on gentle ground. Gravel floors the flats; the beach is wet. */
+	private static function namibLayers(array $s): array
+	{
+		$sand = $s['sandColor'];
+
+		return [
+			[
+				'color' => $sand
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['soilColor']
+				, 'patternScale' => 85.
+				, 'patternAmount' => .3
+			]
+
+			, [
+				'color' => $s['soilColor']
+				, 'slopeLow' => .10
+				, 'slopeFade' => .07
+				, 'opacity' => .55
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $sand
+				, 'patternScale' => 34.
+				, 'patternAmount' => .4
+			]
+
+			, [
+				'channel' => 'relief'
+				, 'relief' => 'pattern'
+				, 'strength' => .028
+				, 'pattern' => 'ripples'
+				, 'patternAmount' => 1.
+				, 'patternScale' => .78
+				, 'patternStretch' => 1.
+				, 'slopeHigh' => .065
+				, 'slopeFade' => .045
+			]
+
+			, ['color' => $s['rockColor'], 'slopeHigh' => .012, 'slopeFade' => .02]
+				+ self::stipple($s['rockBandColor'], .85, .6, .7)
+
+			, [
+				'color' => self::tint($s['rockColor'], .55, .55, .58)
+				, 'datum' => 'water'
+				, 'low' => -1.
+				, 'high' => $s['beachHeight']
+				, 'fade' => $s['beachWidth']
+				, 'roughness' => .3
+				, 'reflectivity' => .2
 			]
 		];
 	}

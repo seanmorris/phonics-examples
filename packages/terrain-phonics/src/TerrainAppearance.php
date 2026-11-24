@@ -249,6 +249,35 @@ final class TerrainAppearance
 			, 'snowline' => 1500.
 			, 'treeline' => -1000.
 		]
+		// Rust maples and gold birches with dark hemlock on the folds, harvest fields in the valleys and pale
+		// sandstone where the crests break through.
+		, 'autumn-folds' => [
+			'grassColor' => '#8f8a4c'
+			, 'meadowColor' => '#8e6420'
+			, 'forestColor' => '#6a3020'
+			, 'soilColor' => '#6b5038'
+			, 'rockColor' => '#8c8577'
+			, 'rockBandColor' => '#6e685c'
+			, 'sandColor' => '#a89a7c'
+
+			, 'rockSlopeStart' => .30
+			, 'rockSlopeEnd' => .50
+			, 'beachHeight' => 1.
+			, 'beachWidth' => 2.
+			, 'snowline' => 2500.
+			, 'treeline' => -1500.
+		]
+		// Red dune sand with darker slip faces, pale gravel between the dunes and a wet beach where they meet the sea.
+		, 'namib-coast' => [
+			'sandColor' => '#c86a3a'
+			, 'soilColor' => '#9e4a2a'
+			, 'rockColor' => '#b5a184'
+			, 'rockBandColor' => '#7d6a55'
+			, 'grassColor' => '#8a8660'
+
+			, 'beachHeight' => 2.
+			, 'beachWidth' => 6.
+		]
 	];
 	/** Inclusive range of each numeric setting. A value outside it is clamped. */
 	public const RANGES = [
@@ -467,6 +496,32 @@ final class TerrainAppearance
 			, 'snowline'
 			, 'treeline'
 		]
+		, 'autumn-folds' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'forestColor'
+			, 'meadowColor'
+			, 'rockSlopeStart'
+			, 'rockSlopeEnd'
+			, 'beachHeight'
+			, 'beachWidth'
+			, 'snowline'
+			, 'treeline'
+		]
+		, 'namib-coast' => [
+			'grassColor'
+			, 'soilColor'
+			, 'rockColor'
+			, 'rockBandColor'
+			, 'sandColor'
+			, 'roadColor'
+			, 'beachHeight'
+			, 'beachWidth'
+		]
 		, 'salt-pans' => [
 			'grassColor', 'soilColor', 'rockColor', 'rockBandColor', 'sandColor', 'snowColor', 'roadColor',
 			'rockSlopeStart', 'rockSlopeEnd',
@@ -605,7 +660,8 @@ final class TerrainAppearance
 			'mountain', 'basalt-fjords', 'amber-dunes', 'arctic-meltwater', 'tidal-lagoon',
 			'heather-moor', 'salt-pans', 'cinder-highlands',
 			'rolling-prairie', 'river-valley', 'wooded-foothills', 'high-desert-steppe',
-			'alaska-range', 'chalk-headlands', 'karst-bay', 'tepui-highlands', 'emerald-ridges' => $recipe['preset'],
+			'alaska-range', 'chalk-headlands', 'karst-bay', 'tepui-highlands', 'emerald-ridges', 'autumn-folds',
+			'namib-coast' => $recipe['preset'],
 			default => 'coast'
 		};
 	}
