@@ -1081,7 +1081,7 @@ export function activate({module, canvas, session, services})
 			const networkChanged = 'journeyNetwork' in state && state.journeyNetwork?.plan !== activeNetwork?.plan;
 			if('journeyNetwork' in state) activeNetwork = state.journeyNetwork;
 			if(activeNetwork && state.journeySquare && (networkChanged || loaded)) {
-				if(loaded || networkField.value!==activeNetwork.plan) planner.adopt(state.journeySquare);
+				if(loaded || networkField.value!==activeNetwork.plan) planner.adopt(state.journeySquare,loaded);
 				networkField.value = activeNetwork.plan;
 				junction.value = 'network';
 				showRoute(activeNetwork);

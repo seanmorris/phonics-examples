@@ -7,9 +7,13 @@ use TerrainPhonics\{JoinedTerrain,Landscape};
 /** Compose adjacent map windows from the same surveyed road curves in each named square. */
 final class JourneyHighways
 {
-	private array $surveys=[], $landings=[];
+	private array $surveys=[], $landings=[], $windows=[];
+	private \WeakMap $generated;
 
-	public function __construct(public readonly JourneyNetwork $network,public readonly int $span,public readonly int $version=2) {}
+	public function __construct(public readonly JourneyNetwork $network,public readonly int $span,public readonly int $version=2)
+	{
+		$this->generated=new \WeakMap;
+	}
 
 	public function recipe(string $id): array
 	{
@@ -81,6 +85,23 @@ final class JourneyHighways
 		return $roads;
 	}
 
+	/** An edited arrival only describes the route reached through that particular landscape revision. */
+	private function customSource(string $id,?string $from,?Landscape $active): ?Landscape
+	{
+		if(!$active || !in_array($from,$this->network->parents[$id],true)) return null;
+		return ($this->generated[$active] ?? null)===$active->revision() ? null : $active;
+	}
+
+	/** The map can draw a completed window directly from its control points, without grading it again. */
+	public function completedRoads(string $id,?string $from=null,?Landscape $active=null): ?array
+	{
+		$window=$this->windows[$id] ?? null;
+		if($window===null) return null;
+		$custom=$this->customSource($id,$from,$active);
+		if($window['source']===null) return $custom===null ? $window['roads'] : null;
+		return $custom && $window['source']->get()===$custom && $window['revision']===$custom->revision() ? $window['roads'] : null;
+	}
+
 	/** A live incoming window carries the player's actual pavement, including applied road edits. */
 	public function build(Landscape $land,string $id,?callable $report=null,?string $from=null,?Landscape $active=null): \Generator
 	{
@@ -113,6 +134,11 @@ final class JourneyHighways
 			}
 		}
 		$land->commit();
+		$custom=$this->customSource($id,$from,$active);
+		if(!$custom) $this->generated[$land]=$land->revision();
+		unset($this->windows[$id]);
+		$this->windows[$id]=['roads'=>$land->roadRecords(),'source'=>$custom ? \WeakReference::create($custom) : null,'revision'=>$custom?->revision()];
+		if(count($this->windows)>6) unset($this->windows[array_key_first($this->windows)]);
 		return $base['views'];
 	}
 }

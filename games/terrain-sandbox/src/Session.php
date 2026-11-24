@@ -498,6 +498,10 @@ final class Session
 	}
 
 	public function journeySquare(): ?string { return $this->square; }
+	public function preparedJourneyRoads(string $stage): ?array
+	{
+		return $this->nextSquare===$stage ? $this->onwardReady?->roadRecords() : null;
+	}
 	public function journeyPlan(): ?string { return $this->network?->plan; }
 	public function journeyNodes(): array { return $this->network?->nodes ?? []; }
 	public function preparingRoad(): bool { return $this->roadWork !== null || $this->journeyReady !== null || $this->onwardWork !== null || $this->transfer; }
@@ -3013,7 +3017,8 @@ final class Session
 				if($branch === $this->nextSquare && !$this->network->nodes[$branch]['exits']) $arrival = $branch;
 			}
 		}
-		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyHasFork'=>$junction!==null,'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
+		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeySurveying'=>$this->onwardWork ? $this->nextSquare : null,
+			'journeyReady'=>$this->onwardReady ? $this->nextSquare : null,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyHasFork'=>$junction!==null,'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,
 			'demo'=>$this->demoStatus(),'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),

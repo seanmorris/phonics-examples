@@ -124,6 +124,7 @@ function mount(frame, canvas, signal, roadMap) {
 	const origins=el('[data-stage-origins]');
 	const cache = new Map(), sharedRoads = new Map(), history = [], thumbnails = [];
 	let roadRevision=0;
+	let sharedLive=null;
 	let serial=0, thumbnailJob=null, thumbnailTimer;
 	let planText=null,planRevision=0;
 	let nodes = {}, stage = 'A', lastGraphicPlan = null, valid = null, stageOrder = [], state, activeNetwork;
@@ -285,8 +286,9 @@ function mount(frame, canvas, signal, roadMap) {
 		const version=live?[state.generation,state.revision,state.settings.waterColor,state.settings.waterLevel,
 			state.hiddenSurfaceLayers,state.surfaceLayers,state.surfaceFields,state.paintInks,roadMap()?.hidden]:null;
 		const active=network() && activeNetwork?.plan===source.value && state.recipe.join?.span===span;
-		const scope=network()?JSON.stringify([planRevision,span,active?[state.generation,state.revision,roadMap()?.hidden]:null]):null;
-		return {params,west,exits,destinations,live,scope,signature:JSON.stringify([span,network()?which:null,west,exits,destinations,version,scope])};
+		const scope=network()?JSON.stringify([planRevision,span,active?(state.recipe.join.version ?? 1):2]):null;
+		const progress=active && !live ? (state.journeyReady===which?'ready':state.journeySurveying===which?'building':null) : null;
+		return {params,west,exits,destinations,live,scope,progress,signature:JSON.stringify([span,network()?which:null,west,exits,destinations,version,scope,progress])};
 	}
 
 	function squares(entry,route) {
@@ -303,6 +305,19 @@ function mount(frame, canvas, signal, roadMap) {
 		}
 		while(sharedRoads.size>36)sharedRoads.delete(sharedRoads.keys().next().value);
 		roadRevision++;
+	}
+	// The driver already has all the curves in the current junction, even if its map was never opened.
+	function shareBuiltRoads() {
+		const highway=roadMap(), id=state?.journeySquare, join=state?.recipe.join;
+		if(!id || !join || !valid || !network() || activeNetwork?.plan!==source.value ||
+			!nodes[id] || join.span!==Number(extent.value) || highway?.generation!==state.generation)return;
+		if(sharedLive?.path===highway.path && sharedLive.revision===planRevision)return;
+		const route=spec(id), extentMeters=state.recipe.worldSize;
+		const margin=join.span/(2*extentMeters), split=route.exits.length===2;
+		const pins=[[margin,.5],...route.exits.map((_,i)=>[1-margin,split?(i?1-margin:margin):.5])];
+		rememberRoads({pins,extent:extentMeters},route,highway.path);
+		sharedLive={path:highway.path,revision:planRevision};
+		return true;
 	}
 	function drawMap(target,entry,route,path) {
 		const ctx=target.getContext('2d'), size=target.width;
@@ -345,9 +360,18 @@ function mount(frame, canvas, signal, roadMap) {
 		image.width=image.height=data.size;
 		image.getContext('2d').drawImage(canvas,10,canvas.height-10-data.size,data.size,data.size,0,0,data.size,data.size);
 		const entry={image,extent:data.extent,pins:data.pins};
+		if(data.roads) entry.path=roadPath(data.roads);
 		cache.set(signature,entry);
 		if(cache.size>18)cache.delete(cache.keys().next().value);
 		return entry;
+	}
+	function roadPath(roads) {
+		const path=new Path2D();
+		for(const [start,...curves] of roads) {
+			path.moveTo(...start);
+			for(const curve of curves) path.bezierCurveTo(...curve);
+		}
+		return path;
 	}
 	// Fill only visible stage and origin cards. A foreground inspection or survey always takes priority.
 	function fillThumbnails() {
@@ -383,10 +407,10 @@ function mount(frame, canvas, signal, roadMap) {
 	function describe() {
 		el('[data-map-width]').textContent=current?(current.extent/1609.344).toFixed(1)+' mi across':'';
 		const carried=squares(current,request).some(s=>sharedRoads.get(s.id)?.scope===request.scope);
-		survey.hidden=!current || !request || request.live || Boolean(current.path) || (carried && !request.exits.length);
-		survey.textContent=surveying?'Cancel preview':'Preview roads';
+		survey.hidden=!current || !request || request.live || request.progress==='building' || Boolean(current.path) || (carried && !request.exits.length);
+		survey.textContent=surveying?'Cancel preview':carried && request.exits.length?'Preview onward roads':'Preview roads';
 		info.textContent=!request?'Choose a valid route to see its map.':!current?'Drawing terrain…':surveying?'Surveying road contours…'
-			:request.live?'Current highway':current.path?'Surveyed highway':carried?(request.exits.length?'Known roads · preview onward roads':'End of route · arriving roads'):request.exits.length?'Terrain before road survey':'End of route';
+			:request.live?'Current highway':current.path?'Surveyed highway':request.progress==='building'?'Building this junction for the drive…':carried?(request.exits.length?'Known roads · preview onward roads':'End of route · arriving roads'):request.exits.length?'Terrain before road survey':'End of route';
 	}
 	function placePins(next) {
 		pins.replaceChildren();
@@ -433,12 +457,7 @@ function mount(frame, canvas, signal, roadMap) {
 		if(data.error) {surveying=false;describe();info.textContent=data.error;return;}
 		if(data.size) current=storeChart(key,data);
 		if(current && data.roads) {
-			const path=new Path2D();
-			for(const [start,...curves] of data.roads) {
-				path.moveTo(...start);
-				for(const curve of curves) path.bezierCurveTo(...curve);
-			}
-			current.path=path;
+			if(!data.size) current.path=roadPath(data.roads);
 			surveying=false;
 		}
 		draw();placePins(request);describe();queueThumbnails();
@@ -466,21 +485,26 @@ function mount(frame, canvas, signal, roadMap) {
 	function sync(next,plan,building) {
 		const previous=state, oldPlan=activeNetwork, wasBusy=busy;
 		state=next;activeNetwork=plan;busy=Boolean(building);
+		const roads=roadMap(), roadsChanged=roads!==lastRoadMap;
+		const sameWindow=plan && oldPlan?.plan===plan.plan && previous?.generation===next.generation;
+		if(sameWindow && (previous.revision!==next.revision || (roadsChanged && roads?.generation===lastRoadMap?.generation &&
+			(roads?.hidden ?? []).join(',')!==(lastRoadMap?.hidden ?? []).join(',')))) planRevision++;
+		const shared=shareBuiltRoads();
 		const location=next.journeyArrival ?? next.journeySquare;
 		if(location && plan?.plan===source.value && (oldPlan?.plan!==plan.plan ||
 			stage===(previous?.journeyArrival ?? previous?.journeySquare))) stage=location;
 		if(previous?.mode!==next.mode)el('[data-edit-flight]').hidden=next.mode==='fly';
 		if(previous?.generation!==next.generation || previous?.journeyArrival!==next.journeyArrival || oldPlan!==plan)renderNetwork();
-		const roads=roadMap(), roadsChanged=roads!==lastRoadMap;
 		lastRoadMap=roads;
-		if(!tab.hidden && (roadsChanged || wasBusy!==busy || previous?.generation!==next.generation || previous?.revision!==next.revision
+		if(!tab.hidden && (shared || roadsChanged || wasBusy!==busy || previous?.generation!==next.generation || previous?.revision!==next.revision
+			|| previous?.journeyReady!==next.journeyReady || previous?.journeySurveying!==next.journeySurveying
 			|| previous?.settings.waterLevel!==next.settings.waterLevel || previous?.settings.waterColor!==next.settings.waterColor
 			|| previous?.materialReply!==next.materialReply || previous?.surfaceOrigin!==next.surfaceOrigin || oldPlan!==plan)) {
 			refresh();
-			if(roadsChanged && request?.live) draw();
+			if(shared || (roadsChanged && request?.live)) {draw();describe();queueThumbnails();}
 		}
 	}
-	return {validated,layoutChanged,sync,receive,adopt(id){history.length=0;stage=id;lastGraphicPlan=null;},takeRequest(){const item=pending;pending=null;return item;},hasRequest:()=>pending!==null};
+	return {validated,layoutChanged,sync,receive,adopt(id,loaded){history.length=0;stage=id;lastGraphicPlan=null;if(loaded)planRevision++;},takeRequest(){const item=pending;pending=null;return item;},hasRequest:()=>pending!==null};
 }
 
 export function activate({module}) {

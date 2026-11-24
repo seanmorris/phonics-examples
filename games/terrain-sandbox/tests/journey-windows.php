@@ -3,7 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
 use TerrainPhonics\{Landscape,JoinedTerrain};
-use TerrainSandbox\{JourneyHighways,JourneyNetwork,JourneyPavement};
+use TerrainSandbox\{JourneyAtlas,JourneyHighways,JourneyNetwork,JourneyPavement,Session};
 function checkWindow(bool $ok,string $message): void { if(!$ok) throw new RuntimeException($message); }
 function surveyWindow(JourneyHighways $planner,string $id,?string $from=null,?Landscape $active=null,?callable $report=null): Landscape {
 	$land=new Landscape($planner->recipe($id));
@@ -27,8 +27,15 @@ checkWindow(abs($piece['points'][0][0]+50.)<.001 && abs($piece['banks'][0]+.1)<1
 
 $span=16384;
 $net=new JourneyNetwork("A rolling-prairie -> B,C\nB canyon -> E,F\nC mountain -> F,G\nE limestone\nF river-valley\nG coast");
-$routes=new JourneyHighways($net,$span);
+$session=new Session;
+$routes=$session->highways($net,$span);
 $a=surveyWindow($routes,'A');
+$replies=[];
+$atlas=new JourneyAtlas;
+$atlas->request(['id'=>7,'span'=>$span,'plan'=>$net->plan,'stage'=>'A','survey'=>true],$session,
+	static function(int $id,string $json) use (&$replies): void { $replies[]=json_decode($json,true,flags:JSON_THROW_ON_ERROR); });
+checkWindow(count($replies)===1 && count($replies[0]['roads'] ?? [])===count($a->roads()) && !$atlas->needsChart,
+	'An already built junction must return all its road curves without a survey tick.');
 // Start with a fresh survey cache and inspect the downstream junction first.
 $downstream=new JourneyHighways($net,$span);
 $approaches=[];
@@ -66,5 +73,10 @@ foreach($a->roadRecords() as $index=>$road) {
 $driven=surveyWindow($routes,'C','A',$a);
 $edited=pavement($a,$inA,$span);
 checkWindow($edited!==$cRoads && $edited===pavement($driven,$inC,$span),'The handoff must preserve edits to the incoming road.');
+checkWindow($routes->completedRoads('C','A',$a)===$driven->roadRecords() && $routes->completedRoads('C')===null,
+	'An edited approach previews instantly for the drive that reached it.');
+$a->undo();
+checkWindow($routes->completedRoads('C','A',$a)===null,'Changing the incoming road invalidates its prepared preview.');
 foreach([$a,$b,$c,$f,$driven] as $land) $land->close();
+$session->close();
 echo "C matched across $hits road samples. Both incoming windows agreed on F and an edited approach carried through.\n";

@@ -13,6 +13,7 @@ final class JourneyAtlas
 	public bool $needsChart = false;
 	private int $id = 0;
 	private ?string $plan=null;
+	private ?array $completedRoads=null;
 
 	public function cancel(): void
 	{
@@ -20,6 +21,7 @@ final class JourneyAtlas
 		$this->draft?->close();
 		$this->draft = null;
 		$this->plan=null;
+		$this->completedRoads=null;
 		$this->needsChart = $this->live = $this->departure = false;
 	}
 
@@ -44,6 +46,14 @@ final class JourneyAtlas
 					$version=$active ? ($session->landscape->recipe()['join']['version'] ?? 1) : 2;
 					$highways=$session->highways($network,$span,$version);
 					$recipe=$highways->recipe($id);
+					$from=$active ? $session->journeySquare() : null;
+					$previous=$active ? $session->landscape : null;
+					$this->completedRoads=($active ? $session->preparedJourneyRoads($id) : null) ?? $highways->completedRoads($id,$from,$previous);
+					if($this->completedRoads!==null && !empty($request['survey'])) {
+						$result($this->id,json_encode(['roads'=>self::roads($this->completedRoads)],JSON_THROW_ON_ERROR));
+						$this->cancel();
+						return;
+					}
 				} else {
 					$this->departure = true;
 					$from = $request['west']; $to = $request['destinations'];
@@ -56,8 +66,7 @@ final class JourneyAtlas
 					$report=function(string $phase) use ($result) {
 						$result($this->id,json_encode(['phase'=>$phase],JSON_THROW_ON_ERROR));
 					};
-					$this->work=$highways ? $highways->build($this->draft,$id,$report,
-						$active ? $session->journeySquare() : null,$active ? $session->landscape : null)
+					$this->work=$highways ? $highways->build($this->draft,$id,$report,$from,$previous)
 						: JourneyRoad::build($this->draft,report:$report);
 					return;
 				}
@@ -76,7 +85,7 @@ final class JourneyAtlas
 			$deadline = hrtime(true)+($stationary ? 4500000 : 1200000);
 			while($this->work->valid() && hrtime(true)<$deadline) $this->work->next();
 			if($this->work->valid()) return;
-			$result($this->id,json_encode(['roads'=>self::roads($this->draft)],JSON_THROW_ON_ERROR));
+			$result($this->id,json_encode(['roads'=>self::roads($this->draft->roadRecords())],JSON_THROW_ON_ERROR));
 			if($this->departure) {
 				$session->rememberJourneySurvey($this->draft,$this->work->getReturn(),$this->plan);
 				$this->draft = null;
@@ -111,15 +120,16 @@ final class JourneyAtlas
 		if($span === null) return;
 		$origins = isset($r['join']) ? JoinedTerrain::origins($r['join']['span'],count($r['join']['destinations'])) : [[0.,0.]];
 		$map = ['size'=>$size,'extent'=>$span,'pins'=>array_map(static fn($p)=>[.5+$p[0]/$span,.5+$p[1]/$span],$origins)];
+		if($this->completedRoads!==null) $map['roads']=self::roads($this->completedRoads);
 		$result($this->id,json_encode($map,JSON_THROW_ON_ERROR));
 		$this->cancel();
 	}
 
 	/** Cubic control points in chart coordinates, preserving road edits and shared endpoints. */
-	private static function roads(Landscape $land): array
+	private static function roads(array $records): array
 	{
 		$paths = [];
-		foreach($land->roadRecords() as $road) {
+		foreach($records as $road) {
 			$points = $road['points'];
 			if(count($points)<2) continue;
 			$handles = $road['handles'] ?? [];
