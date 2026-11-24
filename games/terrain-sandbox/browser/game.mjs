@@ -116,6 +116,10 @@ function configureUnits(container, preset = false)
 
 export const terrainUnits = {FOOT, MPH, KNOT, distanceLabel, rangeYards, configureUnits, setFieldValue, metricValue};
 
+const eyeIcon = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+	<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>
+	<path class="eye-slash" d="m3 3 18 18"/></svg>`;
+
 /** The SDL menu selects by display title. The shared playlist identifies each recording by its ID. */
 function musicMenu(music)
 {
@@ -196,6 +200,7 @@ export function activate({module, canvas, session, services})
 	}, {capture: true, signal});
 
 	module.terrainUnits = terrainUnits;
+	module.terrainEyeIcon = eyeIcon;
 
 	const stage = frame.querySelector('.terrain-stage');
 	shell.mount(frame, {screen: stage});
@@ -1202,7 +1207,7 @@ export function activate({module, canvas, session, services})
 			}
 
 			frame.querySelector('[data-road-count]').textContent = `${state.roadPoints.length} control points`;
-			const projection = JSON.stringify([state.roadPoints, state.camera, state.viewport]);
+			const projection = JSON.stringify([state.roadPoints, state.sketchVisible, state.camera, state.viewport]);
 
 			if(projection !== lastRoadProjection)
 			{
@@ -1314,6 +1319,7 @@ export function activate({module, canvas, session, services})
 		if(session.terrainSandbox === api) delete session.terrainSandbox;
 
 		delete module.terrainUnits;
+		delete module.terrainEyeIcon;
 		delete module.terrainMusic;
 		delete canvas.terrainSandboxDebug;
 		await shell.close();
@@ -1342,8 +1348,11 @@ function updateRoadPreview(svg, state)
 {
 	const [width,height] = state.viewport;
 	svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-	svg.setAttribute('aria-hidden', state.roadPoints.length ? 'false' : 'true');
+	svg.setAttribute('aria-hidden', state.roadPoints.length && state.sketchVisible ? 'false' : 'true');
 	svg.replaceChildren();
+
+	if(!state.sketchVisible) return;
+
 	let path = '', connected = false;
 	const points = state.roadPoints.map(point => roadProjection(point, state.camera, width, height));
 
@@ -1979,15 +1988,13 @@ function materialEditor(frame, push, status)
 				<small id="${id}">${help}</small></div>`;
 		});
 
-		return `<div class="surface-layer-row"><details data-layer="${escaped(row.id)}"><summary>${escaped(row.name)}</summary>
+		return `<div class="terrain-layer-row"><details data-layer="${escaped(row.id)}"><summary>${escaped(row.name)}</summary>
 			<div class="terrain-grid">${fields.join('')}</div><div class="terrain-row">
 			<button data-move="-1" ${index ? '' : 'disabled'}>Move up</button>
 			<button data-move="1" ${index + 1 < rows.length ? '' : 'disabled'}>Move down</button>
 			<button data-remove ${rows.length === 1 ? 'disabled' : ''}>Remove layer</button></div></details>
 			<button type="button" class="layer-eye" data-layer-eye aria-label="${escaped(row.name)} visibility">
-			<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
-			<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>
-			<path class="eye-slash" d="m3 3 18 18"/></svg></button></div>`;
+			${eyeIcon}</button></div>`;
 	}
 
 	function layerControls(el, index)
@@ -2500,8 +2507,8 @@ function markup()
 	.terrain-panel .terrain-field{display:grid;gap:5px;align-content:start;color:#e8f0e7;font-weight:550}
 	.terrain-panel :is(input[type=number],input[type=text],select){width:100%;min-width:0;font-weight:400}
 	.terrain-surface-group{padding-block:12px;border-bottom:1px solid #3a5448}
-	.surface-layer-row{position:relative}.surface-layer-row+.surface-layer-row{margin-top:6px}
-	.terrain-section .surface-layer-row summary{padding-right:48px;overflow-wrap:anywhere}
+	.terrain-layer-row{position:relative}.terrain-layer-row+.terrain-layer-row{margin-top:6px}
+	.terrain-section .terrain-layer-row>details>summary{padding-right:48px;overflow-wrap:anywhere}
 	.terrain-panel .layer-eye{position:absolute;right:5px;top:4px;display:grid;place-items:center;width:32px;height:32px;min-height:32px;padding:5px;background:transparent;border-color:transparent;color:#e2ebe1}
 	.terrain-panel .layer-eye:hover{background:#355747}.layer-eye svg{width:20px;height:20px}
 	.layer-eye .eye-slash{display:none}.layer-eye[aria-pressed=false] .eye-slash{display:block;stroke-width:2.4}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace TerrainSandbox;
 
 use TerrainPhonics\Edits;
+use TerrainPhonics\Landscape;
 
 /** A working road in the Lab. Only Apply publishes a terrain transaction. */
 final class RoadEditor
@@ -16,6 +17,8 @@ final class RoadEditor
 	private array $draft = [], $original = [], $sketchOptions = [];
 	private int $selection = -1, $generation = -1, $revision = -1, $sequence = 0, $sent = -1;
 	private bool $catalog = true, $applying = false;
+	private array $hidden = [];
+	private ?Landscape $previewSource = null, $preview = null;
 	private array $lastSketch = [], $lastDefaults = [];
 	public ?array $captured = null;
 	private string $message = '';
@@ -83,6 +86,7 @@ final class RoadEditor
 
 	public function clearSketch(): void
 	{
+		unset($this->hidden['new']);
 		$this->sketchOptions = [];
 		if($this->target === null) $this->selection = -1;
 		$this->sequence++;
@@ -91,6 +95,8 @@ final class RoadEditor
 	/** A new file or recipe has its own edit indices, camera and map extent. */
 	public function reset(): void
 	{
+		$this->hidden = [];
+		$this->previewSource = $this->preview = null;
 		$this->target = $this->publishingSection = null;
 		$this->proposed = $this->generated = [];
 		$this->original = $this->draft = $this->sketchOptions = [];
@@ -104,6 +110,7 @@ final class RoadEditor
 
 	public function circuitDrafts(array $sections): void
 	{
+		foreach($this->proposed as $id=>$_) unset($this->hidden[$id]);
 		$keepManual = $this->target !== null && $this->target >= 0 && $this->draft !== $this->original;
 		if($this->target !== null && $this->target < 0) $this->select([],null);
 		$this->generated = $this->proposed = [];
@@ -134,6 +141,7 @@ final class RoadEditor
 
 	public function published(Session $s): void
 	{
+		if($this->hidden) $this->hidden = array_intersect_key($this->hidden,$s->landscape->roadRecords()+$this->proposed+['new'=>true]);
 		if($this->proposed) {
 			$id = null;
 			if($this->publishingSection !== null) {
@@ -161,8 +169,25 @@ final class RoadEditor
 			if($this->applying || ($records[$id] ?? []) !== $this->original)
 				$this->select($records, isset($records[$id]) ? $id : null);
 		}
-		if($this->applying) $this->message = 'Road applied.';
+		if($this->applying) $this->message = $this->target === null ? 'Road deleted.' : 'Road applied.';
 		$this->applying = false;
+	}
+
+	public function sketchVisible(): bool { return !isset($this->hidden['new']); }
+
+	/** Only the renderer uses the preview. Picking, driving, editing and saving keep the authored landscape. */
+	public function displayedLandscape(Landscape $source): Landscape
+	{
+		if(!$this->hidden) {
+			$this->previewSource = $this->preview = null;
+			return $source;
+		}
+		if($this->previewSource !== $source) {
+			$ids = array_filter(array_keys($this->hidden),static fn($id) => is_int($id) && $id >= 0);
+			$this->preview = $ids ? $source->previewWithoutRoads($ids) : $source;
+			$this->previewSource = $source;
+		}
+		return $this->preview;
 	}
 
 	private static function number(mixed $value, float $min, float $max): float
@@ -222,6 +247,19 @@ final class RoadEditor
 				return null;
 			}
 			if($this->applying || $s->preparing || $s->picking) throw new \RuntimeException('Wait for the terrain edit to finish.');
+			if($op === 'visibility') {
+				$id = $a['id'] ?? null;
+				$visible = $a['visible'] ?? null;
+				$records = $this->proposed + $s->landscape->roadRecords();
+				if(!is_bool($visible) || ($id !== null && (!is_int($id) || !isset($records[$id]))))
+					throw new \InvalidArgumentException('Unknown road layer or visibility.');
+				$key = $id ?? 'new';
+				if($visible) unset($this->hidden[$key]);
+				else $this->hidden[$key] = true;
+				if(is_int($id) && $id >= 0) $this->previewSource = $this->preview = null;
+				$s->dirty = true;
+				return null;
+			}
 			if($op === 'select') {
 				$this->select($s->landscape->roadRecords()+$this->proposed,$a['id'] ?? null);
 				$this->message = '';
@@ -233,6 +271,10 @@ final class RoadEditor
 			$closed = $count>=4 && $road['points'][0] === $road['points'][$count-1];
 			$i = $a['index'] ?? -1;
 			$this->message = '';
+			if($op === 'delete') {
+				if($this->target === null || $this->onCircuit()) throw new \RuntimeException('Select an applied road to delete.');
+				return ['type'=>'delete-road','id'=>$this->target];
+			}
 			if($op === 'circuit') {
 				if($this->onCircuit() || $s->mode !== 'fly') throw new \RuntimeException('Choose a road in free flight to create a circuit.');
 				$road = CircuitRoad::closeLoop($road);
@@ -412,6 +454,7 @@ final class RoadEditor
 		}
 		unset($road['_ground']);
 		$packet = ['id'=>$this->target,'road'=>$road,'selection'=>min($this->selection,count($road['points'])-1),
+			'hidden'=>array_keys($this->hidden), 'sketchPoints'=>count($s->road),
 			'changed'=>$changed,'fitOnApply'=>$fit,'proposed'=>$this->onCircuit(),
 			'generation'=>$s->generation,'revision'=>$s->landscape->revision(),'extent'=>$s->landscape->recipe()['worldSize'],
 			'camera'=>[$s->camera->position[0],$s->camera->position[2]],'message'=>$this->message];

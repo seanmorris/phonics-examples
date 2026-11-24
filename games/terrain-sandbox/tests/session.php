@@ -2225,6 +2225,16 @@ $review = $lab->roadEditor->packet($lab);
 expect(count($review['roads']) === 1 && $review['road']['points'][1] === [-20.,9.,8.], 'Editing replaces the selected road once');
 input($lab,['actions'=>['undo']]); publish($lab);
 expect($lab->roadEditor->packet($lab)['road']['points'][1] === $split['points'][1], 'Undo restores the prior shape in the open editor');
+$document = $lab->landscape->save();
+$command('visibility',['id'=>0,'visible'=>false]);
+$preview = $lab->roadEditor->displayedLandscape($lab->landscape);
+expect(!$preview->roads() && $lab->landscape->save() === $document && $lab->roadEditor->packet($lab)['id'] === 0,
+	'Hiding the selected road preserves its selection, saved edits and collision surface');
+$command('delete',['id'=>0]); publish($lab);
+expect(!$lab->landscape->roads() && $lab->roadEditor->packet($lab)['id'] === null, 'Deleting a hidden road clears its editor');
+input($lab,['actions'=>['undo']]); publish($lab);
+expect($lab->roadEditor->displayedLandscape($lab->landscape) === $lab->landscape && count($lab->landscape->roads()) === 1,
+	'Undo restores the removed road as a visible layer');
 $command('close');
 expect($lab->roadEditor->packet($lab) === null && $lab->roadEditor->view === null, 'Closing the editor releases pending chart work');
 // Make a lap beyond the former 40 km limit directly from editor points, then edit and reload it.

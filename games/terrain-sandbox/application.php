@@ -70,6 +70,8 @@ $carLamps = null;
 $spotLights = [[], 1.0]; // The lights given to the scene and their adaptation gain.
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
+$displayTerrain = $session->landscape;
+$pendingEdit = null;
 $lastStatus = 0.0;
 $lastJourneyPlan = null;
 $lastRender = null;
@@ -141,7 +143,7 @@ $engine->systems->add('terrain-sandbox.delivery-search', static function() use (
 }, ['terrain-sandbox.simulate']);
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
-	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds,
+	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds, &$displayTerrain, &$pendingEdit,
 	&$heldKeys, &$heldPad, &$menuPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastAuthoringFrame,
 	$pauseMenu
 ): bool {
@@ -162,8 +164,13 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		$height = max(1, min(2160, (int)$h));
 		$dirty = true;
 	}
-	$prepared = $session->menu ? null : $scene->takePreparedLandscape();
-	if($prepared !== null) $session->publishLandscape($prepared);
+	$prepared = $session->menu && $pendingEdit !== null ? null : $scene->takePreparedLandscape();
+	if($prepared !== null) {
+		if($pendingEdit !== null) $session->publishLandscape($pendingEdit);
+		$pendingEdit = null;
+		$session->roadEditor->captured = null;
+		$dirty = true;
+	}
 	$wasPicking = $session->picking;
 	$wasSearching = $session->findingCarSite();
 	$wasFindingCircuit = $session->findingCircuit();
@@ -214,12 +221,17 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$inputMs = (hrtime(true) - $started) / 1e6;
 	if($generation !== $session->generation)
 	{
-		$scene->setLandscape($session->landscape);
+		$displayTerrain = $session->landscape;
+		$scene->setLandscape($displayTerrain);
 		$generation = $session->generation;
 		$dirty = true;
 	}
-	$candidate = $session->takeCandidate();
-	if($candidate !== null) $scene->prepareLandscape($candidate);
+	$pendingEdit ??= $session->takeCandidate();
+	$preview = $session->roadEditor->displayedLandscape($pendingEdit ?? $session->landscape);
+	if($displayTerrain !== $preview) {
+		$scene->prepareLandscape($preview);
+		$displayTerrain = $preview;
+	}
 	$scene->quality = $session->settings['quality'];
 	// The same object while nothing changes, so the scene uploads the appearance only after a change.
 	$scene->appearance = $session->terrainAppearance;
@@ -286,7 +298,7 @@ $engine->start(
 		$session, $scene, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
 		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
-		$pauseMenu
+		$pauseMenu, &$displayTerrain
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
@@ -343,7 +355,7 @@ $engine->start(
 				+ ($b['y']-$a['y'])*$forward[1] + ($b['z']-$a['z'])*$forward[2]) <=> 0.);
 		}
 		if(($hadVisibleSmoke || $visibleSites) && $session->time !== $lastRenderedTime) $dirty = true;
-		$dirty = $curveSigns->update($session->landscape) || $dirty;
+		$dirty = $curveSigns->update($displayTerrain) || $dirty;
 		$work = $scene->dirty() || $moving || $dirty || $session->dirty;
 		// A stationary click gets the generation slice until its confirmed marker is published.
 		if($pickFrame && !$moving && !$dirty) $work = false;

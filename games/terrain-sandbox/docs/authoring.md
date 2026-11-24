@@ -55,6 +55,8 @@ Under **Shape**, select **Road control points**, then click at least two points 
 
 Numbered points and a connecting line preview the route in the view. They move with the camera and disappear when behind it; the overlay does not intercept clicks.
 
+On **Roads**, open a road’s title to edit it. Collapse it to put the controls away. Its eye previews the terrain and maps with that road hidden, including its cut or fill and painted lines. You can compare several roads this way. Visibility is temporary. Driving and picking still use the applied road. To remove an applied road from the landscape, open its row and choose **Delete road**. **Shape → Undo** restores it, including after saving and reloading.
+
 On **Roads**, **Road dimensions** sets the width, the painted pavement edge, and the shoulder, how far the cut or fill blends into the surrounding ground outside that edge. **Apply road** surveys the ground between newly placed points, smooths out small bumps, and fits the pavement over broad crests and dips. Where the grade needs to bend, the editor adds ordinary control points that you can adjust. Within the road’s 128-point limit, the largest departures get fitted first. The fitter leaves room to split a span and to close an open road into a circuit. **Discard edits** abandons the uncommitted route.
 
 Open **Roads** to see the route on a north-up terrain map. The cyan dot marks the camera, and its arrow shows which way you are looking. Select a saved road or choose **New road** and **Place points**. Drag empty ground to pan, scroll to zoom around the pointer, or choose **Fit road**. **Whole map** fits the entire editable landscape, including distant canyon branches. Other roads stay visible for reference.
@@ -67,7 +69,7 @@ For a manual race, place at least three points along a loop at least 394 ft long
 
 To resize a paved road, select its section, change **Width**, and choose **Apply road**. Gates across that section follow the painted edges, including on bends. Undo and redo restore the road and its gate widths together.
 
-Open **Circuit generator** in Roads to find a route around a natural feature. The generator fits longer curves through the surveyed route and keeps more points where the direction, elevation or bank changes sharply. The road picker lists those curves in numbered sections. You can adjust points, curves and banks before applying the dry or flooded course. **Apply road** grades the generated sections together if you only want the pavement.
+Open **Circuit generator** in Roads to find a route around a natural feature. The generator fits longer curves through the surveyed route and keeps more points where the direction, elevation or bank changes sharply. Open a numbered circuit section to edit its fitted curves. You can adjust points, curves and banks before applying the dry or flooded course. **Apply road** grades the generated sections together if you only want the pavement.
 
 Roads modify the heightfield. Bridges, tunnels, and overhangs require separate geometry and are outside this sandbox.
 

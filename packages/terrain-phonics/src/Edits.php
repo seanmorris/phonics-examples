@@ -23,6 +23,11 @@ final class Edits
 	public static function normalizeSteps(array $operation): \Generator
 	{
 		$type = $operation['type'] ?? null;
+		if($type === 'delete-road') {
+			$id = $operation['id'] ?? null;
+			if(!is_int($id) || $id < 0) throw new \InvalidArgumentException('A road deletion needs an existing road ID.');
+			return ['type'=>$type,'id'=>$id];
+		}
 
 		if(!in_array($type, ['raise','lower','flatten','smooth','crater','material','road'], true))
 		throw new \InvalidArgumentException('Unknown terrain edit type');

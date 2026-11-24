@@ -57,9 +57,9 @@ function markup()
 	[data-tab-panel=roads] .road-fields label{font-size:12px}
 	[data-tab-panel=roads] .road-profile{width:100%;height:64px;display:block;background:#112720;border-radius:5px}
 	[data-tab-panel=roads] .road-message:empty{display:none}
+	[data-road-controls]{display:grid;gap:12px;padding:12px}
 	[data-tab-panel=roads] [data-road-apply]{background:#dfbd79;color:#18271e;border-color:#e9cd94;font-weight:700}
 	</style>
-	<label class="terrain-field terrain-wide">Road<select data-road-picker><option>New road</option></select></label>
 	<div class="road-tools"><button type="button" data-mode="select" aria-pressed="true">Select / pan</button>
 	<button type="button" data-mode="add" aria-pressed="false">Place points</button>
 	<button type="button" data-map="out" aria-label="Zoom out">−</button>
@@ -70,6 +70,7 @@ function markup()
 	<span class="road-camera" data-road-camera hidden aria-hidden="true"></span></div>
 	<div class="road-readout"><span data-map-scale></span><span data-road-length></span></div></div>
 	<p class="terrain-note" data-road-help>Drag a point or its square curve handles. Drag empty ground to pan.</p>
+	<div data-road-layers></div><div data-road-controls>
 	<div class="road-tools"><label>Control point <select data-road-point aria-label="Control point"></select></label>
 	<button type="button" data-point-action="insert">Split curve</button>
 	<button type="button" data-point-action="remove">Remove point</button></div>
@@ -132,7 +133,8 @@ function markup()
 	)}
 	</div></div></details>
 	<div class="terrain-row"><button type="button" data-road-circuit>Close loop and create circuit</button><button type="button" data-road-apply>Apply road</button>
-	<button type="button" data-road-revert>Discard edits</button></div>
+	<button type="button" data-road-revert>Discard edits</button>
+	<button type="button" data-road-delete hidden>Delete road</button></div></div>
 	<p class="terrain-note road-message" role="status" aria-live="polite" data-road-message></p>`;
 }
 
@@ -149,7 +151,8 @@ export function activate({canvas, module, session})
 	const map = el('[data-road-map]'), ctx = map.getContext('2d');
 	const marker = el('[data-road-camera]');
 	const profile = el('[data-road-profile]'), chart = document.createElement('canvas');
-	const picker = el('[data-road-picker]'), pointPicker = el('[data-road-point]'), sidePicker = el('[data-road-side]');
+	const layers = el('[data-road-layers]'), controls = el('[data-road-controls]');
+	const pointPicker = el('[data-road-point]'), sidePicker = el('[data-road-side]');
 
 	const fields = Object.fromEntries(
 		[...tab.querySelectorAll('[data-road-field]')].map(i => [i.dataset.roadField, i])
@@ -158,6 +161,8 @@ export function activate({canvas, module, session})
 	const dispose = new AbortController(), {signal} = dispose;
 	let state, roads = [], current, chartView, view, active = false, drag = null, requestTimer, paintFrame;
 	const overlays = new Map();
+	const rows = new Map();
+	let hidden = new Set();
 	let overlayView, cameraPose, wholeMap = false;
 	let selected = -1, selectedSpan = -1, splitAt = .5, side = 'out', mode = 'select';
 
@@ -413,7 +418,33 @@ export function activate({canvas, module, session})
 			overlayView = base;
 		}
 
-		for(const record of roads) if(record.id !== state.id) drawOverlay(record);
+		for(const record of roads) if(record.id !== state.id && !hidden.has(record.id)) drawOverlay(record);
+
+		if(!hidden.has(state.id ?? 'new')) drawSelection();
+
+		ctx.fillStyle = '#10231ed9';
+		ctx.fillRect(6, 6, 25, 35);
+		ctx.fillStyle = '#e5f2e9';
+		ctx.font = 'bold 11px system-ui';
+		ctx.fillText('N', 14, 20);
+
+		ctx.beginPath();
+		ctx.moveTo(18, 23);
+		ctx.lineTo(13.5, 34);
+		ctx.lineTo(18, 31);
+		ctx.lineTo(22.5, 34);
+		ctx.fill();
+
+		const meters = grid/(grid*scale()>w*.24 ? 2 : 1), bar = meters*scale();
+		ctx.fillStyle = '#112720d9';
+		ctx.fillRect(6, h-13, bar+12, 9);
+		ctx.fillStyle = '#dfecdf';
+		ctx.fillRect(12, h-9, bar, 2);
+		el('[data-map-scale]').textContent = Math.round(meters/FOOT) + ' ft';
+	}
+
+	function drawSelection()
+	{
 		drawCurve(current, '#182a2ce6', clamp(current.width*scale(), 4, 100));
 		drawCurve(current, colors.route, 2);
 
@@ -459,26 +490,6 @@ export function activate({canvas, module, session})
 				ctx.fillText(String(i+1), x+12, y-2);
 			}
 		}
-
-		ctx.fillStyle = '#10231ed9';
-		ctx.fillRect(6, 6, 25, 35);
-		ctx.fillStyle = '#e5f2e9';
-		ctx.font = 'bold 11px system-ui';
-		ctx.fillText('N', 14, 20);
-
-		ctx.beginPath();
-		ctx.moveTo(18, 23);
-		ctx.lineTo(13.5, 34);
-		ctx.lineTo(18, 31);
-		ctx.lineTo(22.5, 34);
-		ctx.fill();
-
-		const meters = grid/(grid*scale()>w*.24 ? 2 : 1), bar = meters*scale();
-		ctx.fillStyle = '#112720d9';
-		ctx.fillRect(6, h-13, bar+12, 9);
-		ctx.fillStyle = '#dfecdf';
-		ctx.fillRect(12, h-9, bar, 2);
-		el('[data-map-scale]').textContent = Math.round(meters/FOOT) + ' ft';
 	}
 
 	function inspect()
@@ -528,6 +539,8 @@ export function activate({canvas, module, session})
 		el('[data-road-circuit]').disabled = busy || state.proposed || n<3;
 		el('[data-road-apply]').disabled = busy || (!state.changed && !state.proposed) || n<2;
 		el('[data-road-revert]').disabled = busy || !state.changed;
+		el('[data-road-delete]').hidden = state.id === null || state.proposed;
+		el('[data-road-delete]').disabled = busy;
 		const c = resize(profile), w = profile.clientWidth, h = profile.clientHeight;
 		c.clearRect(0, 0, w, h);
 		let run = 0, maxGrade = 0, previous = points[0];
@@ -591,6 +604,8 @@ export function activate({canvas, module, session})
 
 	function hit(position)
 	{
+		if(hidden.has(state.id ?? 'new')) return null;
+
 		let result = null, best = 10;
 
 		for(const [i,p] of current.points.entries())
@@ -731,7 +746,7 @@ export function activate({canvas, module, session})
 			if(mode==='add') send('insert', {index: target.index,t: target.t});
 			else choose(target.index, target.index, target.t);
 		}
-		else if(!moved && !target && mode==='add')
+		else if(!moved && !target && mode==='add' && !hidden.has(state.id ?? 'new'))
 		{
 			const [x,z] = world(location(event));
 			send('add', {x,z});
@@ -768,9 +783,38 @@ export function activate({canvas, module, session})
 	}, {signal});
 
 	tab.addEventListener('click', event => {
+		const summary = event.target.closest('[data-road-layer] > summary');
+
+		if(summary && state)
+		{
+			const key = summary.parentElement.dataset.roadLayer;
+			const id = key === 'new' ? null : Number(key);
+
+			if(id !== state.id)
+			{
+				event.preventDefault();
+
+				if(state.id === null || state.id < 0 || !state.changed
+					|| window.confirm('Discard your edits to this road?')
+				)
+					send('select', {id});
+			}
+
+			return;
+		}
+
 		const button = event.target.closest('button');
 
 		if(!button || !state) return;
+
+		if(button.hasAttribute('data-road-eye'))
+		{
+			const key = button.previousElementSibling.dataset.roadLayer;
+			const visible = button.getAttribute('aria-pressed') !== 'true';
+			send('visibility', {id: key === 'new' ? null : Number(key), visible});
+
+			return;
+		}
 
 		const {map: command,mode: newMode,pointAction} = button.dataset;
 
@@ -804,26 +848,13 @@ export function activate({canvas, module, session})
 		else if(button.hasAttribute('data-road-circuit')) send('circuit');
 		else if(button.hasAttribute('data-road-apply')) send('apply');
 		else if(button.hasAttribute('data-road-revert')) send('revert');
+		else if(button.hasAttribute('data-road-delete')) send('delete');
 	}, {signal});
 
 	tab.addEventListener('change', event => {
 		const input = event.target;
 
 		if(!state) return;
-
-		if(input===picker)
-		{
-			if(state.id!==null && state.id>=0 && state.changed && !window.confirm('Discard your edits to this road?'))
-			{
-				picker.value = String(state.id);
-
-				return;
-			}
-
-			send('select', {id: picker.value==='' ? null : Number(picker.value)});
-
-			return;
-		}
 
 		if(input===pointPicker)
 		{
@@ -869,6 +900,37 @@ export function activate({canvas, module, session})
 		);
 	}, {signal});
 
+	// A single editor follows the selected road, keeping its draft and inputs when its disclosure closes.
+
+	function updateLayer(id, name, count, switched, index)
+	{
+		let row = rows.get(id);
+
+		if(!row)
+		{
+			const wrap = document.createElement('div');
+			wrap.className = 'terrain-layer-row';
+			wrap.innerHTML = `<details><summary></summary></details>
+				<button type="button" class="layer-eye" data-road-eye>${module.terrainEyeIcon}</button>`;
+
+			row = wrap.firstElementChild;
+			row.dataset.roadLayer = id;
+			layers.insertBefore(wrap, layers.children[index] ?? null);
+			rows.set(id, row);
+		}
+
+		const eye = row.nextElementSibling, visible = !hidden.has(id);
+		row.firstElementChild.textContent = count ? `${name} · ${count} ${count === 1 ? 'point' : 'points'}` : name;
+		eye.disabled = !count;
+		eye.setAttribute('aria-label', name + ' visibility');
+		eye.setAttribute('aria-pressed', String(visible));
+		eye.title = (visible ? 'Hide ' : 'Show ') + name;
+
+		if(switched) row.open = id === (state.id ?? 'new');
+
+		if(id === (state.id ?? 'new') && controls.parentElement !== row) row.append(controls);
+	}
+
 	module.terrainRoadEditor = json => {
 		const next = JSON.parse(json);
 		const replaced = !state || state.generation!==next.generation;
@@ -879,20 +941,14 @@ export function activate({canvas, module, session})
 		const count = current?.points.length;
 		const hadCircuit = roads.some(record => record.id<0);
 
+		const visibilityChanged = next.hidden.length !== hidden.size || next.hidden.some(id => !hidden.has(id));
+		hidden = new Set(next.hidden);
+
 		if(next.roads)
 		{
 			roads = next.roads;
 			if(next.journeyPlan && replaced) frame.querySelector('[data-journey="network"]').value = next.journeyPlan;
-			const highway = new Path2D();
-			for(const {id, road} of roads) {
-				if(id < 0 || !road.points.length) continue;
-				highway.moveTo(road.points[0][0], road.points[0][2]);
-				for(let i = 0; i < road.points.length - 1; i++) {
-					const [, b, c, d] = span(road, i);
-					highway.bezierCurveTo(b[0], b[2], c[0], c[2], d[0], d[2]);
-				}
-			}
-			module.journeyMap = {generation: next.generation, path: highway};
+
 			el('[data-map=circuit]').hidden = !roads.some(record => record.id<0);
 			const activeIds = new Set(roads.map(record => record.id));
 
@@ -900,19 +956,42 @@ export function activate({canvas, module, session})
 
 			for(const record of roads) record.geometry = JSON.stringify([record.road.points,record.road.handles]);
 
-			picker.replaceChildren(
-				new Option('New road', '')
-				, ...roads.map(
-					({id,road}, i) => new Option(
-						(id<0 ? 'Circuit section ' + (-id) : 'Road ' + (i+1)) + ' · ' + road.points.length + ' points'
-						, String(id)
-					)
-				)
-			);
+			for(const [id, row] of rows)
+			if(id !== 'new' && !activeIds.has(id))
+			{
+				row.parentElement.remove();
+				rows.delete(id);
+			}
+		}
+
+		if(next.roads || visibilityChanged)
+		{
+			const highway = new Path2D();
+			for(const {id, road} of roads) {
+				if(id < 0 || hidden.has(id) || !road.points.length) continue;
+
+				highway.moveTo(road.points[0][0], road.points[0][2]);
+				for(let i = 0; i < road.points.length - 1; i++) {
+					const [, b, c, d] = span(road, i);
+					highway.bezierCurveTo(b[0], b[2], c[0], c[2], d[0], d[2]);
+				}
+			}
+			module.journeyMap = {generation: next.generation, path: highway};
 		}
 
 		state = next;
-		picker.value = next.id===null ? '' : String(next.id);
+
+		if(next.roads || switched || visibilityChanged || count !== next.road.points.length)
+		{
+			updateLayer('new', 'New road', next.sketchPoints, switched, 0);
+
+			for(const [index, {id, road}] of roads.entries())
+			{
+				const name = id < 0 ? 'Circuit section ' + (-id) : 'Road ' + (id + 1);
+				const pointCount = id === next.id ? next.road.points.length : road.points.length;
+				updateLayer(id, name, pointCount, switched, index + 1);
+			}
+		}
 
 		if(drag && (switched || !active)) drag = null;
 

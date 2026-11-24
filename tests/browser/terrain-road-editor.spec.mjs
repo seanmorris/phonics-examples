@@ -13,6 +13,49 @@ const fixture = {
 	, camera: {position: [0,4,32], yaw: 0, pitch: -.12}
 };
 
+test('road eyes, disclosure, deletion and undo are independent', async({page}) => {
+	await page.setViewportSize({width: 800, height: 600});
+	await page.goto('/games/terrain-sandbox/');
+	const canvas = page.locator('canvas[data-terrain-sandbox]');
+	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
+	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await page.locator('[data-file]').setInputFiles({
+		name:'two-roads.json', mimeType:'application/json', buffer:Buffer.from(JSON.stringify({
+			...fixture, landscape:{...fixture.landscape, history:[[road,{...road,points:[[30,4,-30],[30,4,30]]}]]}
+		}))
+	});
+	await expect.poll(async()=>(await status()).recipe.seed).toBe('road-lab');
+	await page.getByRole('tab',{name:'Roads',exact:true}).click();
+	const first = page.locator('[data-road-layer="0"]'), second = page.locator('[data-road-layer="1"]');
+	const eye = page.getByRole('button',{name:'Road 1 visibility',exact:true});
+	await second.locator('summary').click();
+	await expect(second).toHaveAttribute('open','');
+	await eye.click();
+	await expect(eye).toHaveAttribute('aria-pressed','false');
+	await expect(first).not.toHaveAttribute('open','');
+	await expect(second).toHaveAttribute('open','');
+	const otherEye = page.getByRole('button',{name:'Road 2 visibility',exact:true});
+	await otherEye.click();
+	await expect.poll(async()=>(await status()).renderer.roadTextureBytes).toBe(0);
+	expect((await status()).revision).toBe(1);
+	await second.locator(':scope > summary').click();
+	await expect(second).not.toHaveAttribute('open','');
+	await expect(otherEye).toHaveAttribute('aria-pressed','false');
+	await otherEye.click();
+	await expect.poll(async()=>(await status()).renderer.roadTextureBytes).toBeGreaterThan(0);
+	await first.locator('summary').click();
+	await first.getByRole('button',{name:'Delete road'}).click();
+	await expect(first).toHaveCount(0);
+	await expect(second).toBeVisible();
+	expect((await status()).revision).toBe(2);
+	await page.getByRole('tab',{name:'Shape',exact:true}).click();
+	await page.locator('[data-action=undo]').click();
+	await expect.poll(async()=>(await status()).revision).toBe(3);
+	await page.getByRole('tab',{name:'Roads',exact:true}).click();
+	await expect(eye).toHaveAttribute('aria-pressed','true');
+	await expect(second).toBeVisible();
+});
+
 test('a saved road can be inspected, reshaped and reopened on the terrain map', async({page}) => {
 	test.setTimeout(360_000);
 	const errors = [];
@@ -70,11 +113,11 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 		});
 	}
 
-	const map = page.locator('[data-road-map]'), picker = page.locator('[data-road-picker]');
+	const map = page.locator('[data-road-map]'), layers = page.locator('[data-road-layers]');
 	const points = page.locator('[data-road-point]'), section = page.locator('[data-tab-panel=roads]');
 	await tab('roads');
-	await expect(picker.locator('option')).toHaveCount(2);
-	await picker.selectOption('0');
+	await expect(layers.locator('[data-road-layer]')).toHaveCount(2);
+	await layers.locator('[data-road-layer="0"] > summary').click();
 	await expect(points.locator('option')).toHaveCount(3);
 	await expect(map).toHaveAttribute('data-chart', 'ready');
 	await expect(section.locator('[data-road-grade]')).toContainText('Maximum sampled grade');
@@ -130,7 +173,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 
 	await section.getByRole('button', {name: 'Apply road'}).click();
 	await expect.poll(async() => (await status()).revision).toBe(2);
-	await expect(picker.locator('option:checked')).toContainText('4 points');
+	await expect(layers.locator('details[open] > summary').first()).toContainText('4 points');
 
 
 	if(output)
@@ -152,10 +195,10 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 
 	await load(saved);
 	await tab('roads');
-	await picker.selectOption('0');
+	await layers.locator('[data-road-layer="0"] > summary').click();
 	await expect(points.locator('option')).toHaveCount(4);
 
-	await picker.selectOption('');
+	await layers.locator('[data-road-layer="new"] > summary').click();
 	await expect(points.locator('option')).toHaveCount(0);
 	await section.getByRole('button', {name: 'Place points'}).click();
 
@@ -168,7 +211,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	const rebuilds = async() => (await status()).renderer.roadOverlayBuilds;
 	const initialBuilds = await rebuilds();
 	await section.getByRole('button', {name: 'Apply road'}).click();
-	await expect(picker.locator('option')).toHaveCount(3);
+	await expect(layers.locator('[data-road-layer]')).toHaveCount(3);
 	await expect.poll(rebuilds).toBe(initialBuilds+1);
 
 	// Change only the new road's elevation. Its neighbor retains its GPU overlay.
@@ -184,7 +227,7 @@ test('a saved road can be inspected, reshaped and reopened on the terrain map', 
 	await page.locator('[data-action=undo]').click();
 	await expect.poll(async() => (await status()).revision).toBe(6);
 	await tab('roads');
-	await expect(picker.locator('option')).toHaveCount(2);
+	await expect(layers.locator('[data-road-layer]')).toHaveCount(2);
 
 	expect(errors).toEqual([]);
 });
@@ -267,7 +310,7 @@ test('draw a manual lap circuit with the editor controls', async({page}) => {
 	await page.getByRole('button',{name:'Close loop and create circuit'}).click();
 	await expect.poll(async() => (await status()).circuit.active,{timeout:60_000}).toBe('dry');
 	await expect.poll(() => point.locator('option').count()).toBeGreaterThan(6);
-	await expect(page.locator('[data-road-picker]')).toHaveValue('1');
+	await expect(page.locator('[data-road-layer="1"]')).toHaveAttribute('open','');
 	expect((await status()).course.gates).toHaveLength(3);
 	await page.getByText('Road dimensions',{exact:true}).click();
 	const width = page.locator('[data-road-field=width]');
@@ -316,8 +359,8 @@ test('a 24 km spline applies and saves as one road through the editor', async({p
 	const closed = page.locator('.terrain-panel:not([open]) > summary');
 	if(await closed.count()) await closed.click();
 	await page.getByRole('tab', {name: 'Roads', exact: true}).click();
-	const picker = page.locator('[data-road-picker]');
-	await picker.selectOption('0');
+	const layers = page.locator('[data-road-layers]');
+	await layers.locator('[data-road-layer="0"] > summary').click();
 	const x = page.locator('[data-road-field=x]'), point = page.locator('[data-road-point]');
 	for(const [i, before, after] of [['0','-100','-12000'],['1','100','12000']]) {
 		await point.selectOption({value: i});
@@ -327,8 +370,8 @@ test('a 24 km spline applies and saves as one road through the editor', async({p
 	}
 	await page.getByRole('button', {name: 'Apply road'}).click();
 	await expect.poll(async() => (await status()).revision, {timeout: 90_000}).toBe(2);
-	await expect(picker.locator('option')).toHaveCount(2); // New road and the single 24 km highway.
-	await expect(picker).toHaveValue('0');
+	await expect(layers.locator('[data-road-layer]')).toHaveCount(2); // New road and the single 24 km highway.
+	await expect(layers.locator('[data-road-layer="0"]')).toHaveAttribute('open','');
 	await page.getByRole('tab', {name: 'Landscape', exact: true}).click();
 	const download = page.waitForEvent('download');
 	await page.locator('[data-action=save]').click();

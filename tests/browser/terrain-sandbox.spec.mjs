@@ -2177,7 +2177,7 @@ test('Arctic Meltwater can place an editable causeway circuit at its original wa
 	const waypointCount = Math.min(33, Math.max(8, Math.ceil(applied.circuit.length/240)));
 	expect(applied.course.gates).toHaveLength(Math.round(waypointCount/3));
 
-	await expect(page.locator('[data-road-picker] option').nth(1)).toContainText(/Road/i);
+	await expect(page.locator('[data-road-layer] > summary').nth(1)).toContainText(/Road/i);
 });
 
 test('preview, apply and switch between dry and flooded canyon circuits', async({page}) => {
@@ -2209,14 +2209,14 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	expect(preview.revision).toBe(0);
 	await expect(page.getByRole('img', {name: 'Circuit route and gates'})).toBeVisible();
 
-	const sections = page.locator('[data-road-picker]');
-	await expect(sections).toHaveValue('-1');
-	const options = await sections.locator('option').allTextContents();
+	const sections = page.locator('[data-road-layers]');
+	await expect(sections.locator('[data-road-layer="-1"]')).toHaveAttribute('open','');
+	const options = await sections.locator('[data-road-layer] > summary').allTextContents();
 	const counts = options.filter(s => s.startsWith('Circuit section')).map(s => Number(/(\d+) points/.exec(s)[1]));
 	expect(counts.reduce((a, b) => a+b, 0)).toBeLessThan(253); // This lap previously displayed 506 points.
 	const controls = page.locator('[data-road-point] option');
 	await expect(controls).toHaveCount(counts[0]);
-	await sections.selectOption('-2');
+	await sections.locator('[data-road-layer="-2"] > summary').click();
 	await expect(controls).toHaveCount(counts[1]);
 
 	await control(page, 'circuit-dry').click();
@@ -2229,7 +2229,7 @@ test('preview, apply and switch between dry and flooded canyon circuits', async(
 	const dry = await status(page);
 	expect(dry.revision).toBe(1);
 	expect(dry.course.gates).toHaveLength(preview.circuit.gates.length);
-	await expect(sections).toHaveValue('1');
+	await expect(sections.locator('[data-road-layer="1"]')).toHaveAttribute('open','');
 	await expect(controls).toHaveCount(counts[1]);
 
 

@@ -1614,7 +1614,7 @@ final class Session
 							$course = yield from $circuit->placing($graded,$this->gateShapes,$this->settings['gateLaps'],false);
 							$this->circuitCommit = [$circuit,$course,false];
 						} elseif($proposal) $this->roadEditor->publishingCircuit();
-						$this->message = 'Applied the edited road.';
+						$this->message = $road['type'] === 'delete-road' ? 'Road deleted.' : 'Applied the edited road.';
 					});
 				}
 				break;
@@ -2763,7 +2763,7 @@ final class Session
 			'jetControls' => $this->jetControls,'invertPitch' => $this->invertPitch,'inputTheme' => $this->inputTheme,'hint' => $this->hint(),
 			'cpuDriver' => $this->driver?->phase, 'canWatchDriver' => $this->canWatchDriver(),
 			'carMap' => $this->carMap,'carWideMap' => $this->carWideMap,'headlights' => $this->headlights,'headlightsLit' => $this->headlightsLit(),'lampAdaptation' => $this->lampAdaptation,
-			'roadPoints' => $this->road,'message' => $this->message,
+			'roadPoints' => $this->road,'sketchVisible'=>$this->roadEditor->sketchVisible(),'message' => $this->message,
 			'camera' => ['position' => $this->camera->position,'yaw' => $this->camera->yaw,'pitch' => $this->camera->pitch,
 				'fov' => $this->mode === 'car' ? $this->chase->fieldOfView($this->camera) : $this->camera->fov],
 			'duck' => $this->mode === 'fly' || $this->duck === null ? null
