@@ -3742,7 +3742,31 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 	// The D-pad moves the selection, and Start closes the menu.
 	await pad(9, 'state.menu === arg', true);
 	await idle();
-	await pad(13, 'state.menuRow?.id === arg', 'car');
+	await pad(13, 'state.menuRow?.id === arg', 'screenshot');
+	const menuPicture = await view.screenshot();
+	await pad(0, 'state.screenshotView === arg', true);
+	const frozen = await status(page);
+	await expect(page.locator('.terrain-stage canvas').first()).toHaveCSS('cursor', 'none');
+	await expect(page.locator('[data-road-preview]')).toBeHidden();
+	await expect(page.locator('.terrain-control-hints')).toBeHidden();
+	await expect(page.locator('.terrain-panel')).toBeHidden();
+	await expect(page.locator('[data-music-credit]')).toBeHidden();
+	await idle();
+	const picture = await view.screenshot();
+	expect(picture.equals(menuPicture)).toBe(false);
+	await page.keyboard.down('Control');
+	await page.keyboard.press('Shift+s');
+	await page.keyboard.up('Control');
+	await page.keyboard.press('w');
+	await expect.poll(async() => (await status(page)).screenshotView).toBe(true);
+	expect((await status(page)).time).toBe(frozen.time);
+	expect((await view.screenshot()).equals(picture)).toBe(true);
+	await pad(1, 'state.screenshotView === arg', false);
+	expect((await status(page)).paused).toBe(true);
+	await key('Enter', '@back');
+	await view.click({position: {x: 20, y: 20}});
+	await until('state.menuRow?.id === arg', 'screenshot');
+	expect((await status(page)).paused).toBe(true);
 	await pad(9, 'state.menu === arg', false);
 
 	// The pause button opens it too. Settings sets the flight speed in knots, and the Explore slider follows.

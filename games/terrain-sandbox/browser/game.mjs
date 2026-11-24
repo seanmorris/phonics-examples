@@ -620,7 +620,7 @@ export function activate({module, canvas, session, services})
 			event.preventDefault();
 		}
 
-		if(event.code === 'KeyH' && !event.repeat)
+		if(event.code === 'KeyH' && !event.repeat && !latest?.menu)
 		{
 			const panel = frame.querySelector('.terrain-panel');
 			panel.open = !panel.open;
@@ -648,6 +648,8 @@ export function activate({module, canvas, session, services})
 		focus();
 		const touch = event.pointerType === 'touch';
 		useTheme(touch ? 'touch' : 'keyboard');
+		// Let SDL receive the mouse events synthesized from a click or tap while the menu owns input.
+		if(latest?.menu) return;
 
 		if(event.button === 2 || touch)
 		{
@@ -975,7 +977,8 @@ export function activate({module, canvas, session, services})
 			air.show(state);
 
 			// The pause menu draws in the canvas, so screen readers hear its selected row from here.
-			const menuRow = state.menuRow ? state.menuRow.page + ': ' + state.menuRow.label : '';
+			const menuRow = state.screenshotView ? 'Screenshot view. Escape, B or a tap returns to the pause menu.'
+				: state.menuRow ? state.menuRow.page + ': ' + state.menuRow.label : '';
 
 			if(menuLive.textContent !== menuRow) menuLive.textContent = menuRow;
 
@@ -1162,7 +1165,8 @@ export function activate({module, canvas, session, services})
 				lastRoadProjection = projection;
 			}
 
-			canvas.style.cursor = state.mode === 'fly' && state.settings.tool !== 'navigate' ? 'crosshair' : 'grab';
+			canvas.style.cursor = state.screenshotView ? 'none'
+				: state.mode === 'fly' && state.settings.tool !== 'navigate' ? 'crosshair' : 'grab';
 			const [x,y,z] = state.camera.position;
 
 			const mode = {fly: 'FLIGHT', craft: 'WATERCRAFT', car: 'CAR', jet: 'F5'}[state.mode];
@@ -2359,7 +2363,7 @@ function markup()
 	.terrain-menu-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-menu-button i{width:4px;height:15px;border-radius:1px;background:#fff7de}
 	.terrain-sandbox:has(.terrain-panel[open]) .terrain-menu-button{right:calc(var(--lab-inset) + var(--lab-width) + 8px)}
-	.terrain-menu-open :is(.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-panel,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
+	.terrain-menu-open :is(.terrain-road-preview,.terrain-hud,.terrain-control-hints,.terrain-speedometer,.terrain-flight-map,.terrain-instruments,.terrain-race,.terrain-panel,.terrain-menu-button,.terrain-credit-space){visibility:hidden}
 	.terrain-panel:not([open])>summary{height:42px;padding:0;justify-content:center}
 	.terrain-panel:not([open]) .lab-title{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 	.terrain-panel>summary:focus-visible{outline-offset:-4px;border-radius:inherit}

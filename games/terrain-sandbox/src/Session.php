@@ -496,6 +496,8 @@ final class Session
 				else $this->setting((string)$name, $value);
 			}
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
+			// A pending survey or boarding search can move the camera and resume the simulation.
+			if($this->menu) { $this->showPausedHeadlights($switch); return; }
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($this->roadWork !== null) $this->advanceRoad(min(4.,$pickMs));
 			else $this->advanceOnward(min(4.,$pickMs));

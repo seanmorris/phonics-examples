@@ -20,6 +20,7 @@ use Phonics\Ui\MenuRenderer;
 final class SandboxMenu
 {
 	public const TITLE = 'PAUSED';
+	private const SCREENSHOT = 'Screenshot view';
 	/** Headings for each mode's controls. */
 	private const MODES = ['fly' => 'Free flight', 'car' => 'Car', 'craft' => 'Watercraft', 'jet' => 'F5'];
 	public Menu $menu;
@@ -104,7 +105,14 @@ final class SandboxMenu
 	 */
 	public function items(Session $session): array
 	{
-		$items = ['resume' => ['label' => 'Resume', 'callback' => fn() => $this->close()]];
+		$items = [
+			'resume' => ['label' => 'Resume', 'callback' => fn() => $this->close()],
+			'screenshot' => [
+				'label' => self::SCREENSHOT,
+				'subtext' => 'Hide the interface. Esc, B or a tap returns here.',
+				'children' => [],
+			],
+		];
 		$act = fn(string $label, string $action): array => [
 			'label' => $label
 			, 'callback' => function() use ($action): void {
@@ -331,8 +339,16 @@ final class SandboxMenu
 			break;
 		}
 
-		$this->controls->update($this->menu, $this->withPad($frame['buttons'], $pad), $dt, $frame['events'],
-			$this->renderer?->regions ?? []);
+		$regions = $this->renderer?->regions ?? [];
+		if($this->screenshotView())
+		{
+			// Ctrl is normally Back. Leave it available for the operating system's screenshot shortcuts.
+			$frame['buttons']['back'] = $engine->input->gamepads->button(SDL_CONTROLLER_BUTTON_B)
+				|| in_array('Escape', array_column($frame['events'], 'key'), true);
+			// The entire canvas is the screenshot page's Back row, including on touchscreens.
+			$regions = [['id' => '@back', 'rect' => [0, 0, INF, INF]]];
+		}
+		$this->controls->update($this->menu, $this->withPad($frame['buttons'], $pad), $dt, $frame['events'], $regions);
 
 		if($this->finish($session))
 		{
@@ -397,6 +413,9 @@ final class SandboxMenu
 		return true;
 	}
 
+	/** The screenshot page keeps menu input and the simulation pause while showing only the scene. */
+	public function screenshotView(): bool { return $this->menu->isOpen && $this->menu->title === self::SCREENSHOT; }
+
 	/**
 	 * Draw the menu over the finished frame.
 	 * @param int $width Drawing-buffer width in pixels.
@@ -406,7 +425,7 @@ final class SandboxMenu
 	 */
 	public function render(int $width, int $height, string $theme): void
 	{
-		if(!$this->menu->isOpen) return;
+		if(!$this->menu->isOpen || $this->screenshotView()) return;
 
 		if($this->renderer === null)
 		{

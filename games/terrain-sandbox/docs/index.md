@@ -209,7 +209,9 @@ The sandbox reads gamepads that the browser maps to the standard layout, such as
 
 ## Pause menu
 
-Press **Escape**, press **Start** on a gamepad, or select the pause button beside the Landscape Lab button to open the pause menu. It freezes the world. Choose **Resume**, or press Escape, Start or **B** again, to carry on. The menu lists what you can do from where you are:
+Press **Escape**, press **Start** on a gamepad, or select the pause button beside the Landscape Lab button to open the pause menu. It freezes the world. Choose **Resume**, or press Escape, Start or **B** again, to carry on. Choose **Screenshot view** to hide the menu, HUD, and cursor while the scene stays frozen. Take a screenshot with your usual shortcut. Press **Escape** or **B**, or tap the scene, to return to the pause menu. **Start** resumes play directly.
+
+The menu also offers these actions:
 
 - In free flight: **Drive car**, **Watercraft**, **Fly F5** and **Package run**. In a vehicle: **Return to flight**, plus **Restart race** during a race, and **Balloon practice** and **Reset balloons** in the F5.
 - **Controls** lists the buttons for what you are doing, drawn for the keyboard or gamepad you used last.

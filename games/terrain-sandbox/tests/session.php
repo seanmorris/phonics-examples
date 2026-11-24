@@ -2429,6 +2429,14 @@ expect($paused->menu && $paused->paused && $paused->status()['menu'] === true &&
 	&& array_intersect(['car', 'craft', 'jet', 'delivery'], $rows) === ['car', 'craft', 'jet', 'delivery']
 	&& !in_array('fly', $rows, true) && !in_array('race', $rows, true) && array_slice($rows, -5) === ['controls', 'audio', 'settings', 'lab', 'quit'],
 	'In free flight the menu offers the vehicles and a package run, then controls, audio, settings, the Lab and Quit');
+$pauseMenu->menu->press('screenshot');
+$photoTime = $paused->time;
+$paused->step(.25);
+expect($pauseMenu->screenshotView() && $paused->paused && $paused->time === $photoTime
+	&& array_keys($pauseMenu->menu->rows()) === ['@back'], 'The screenshot page holds the scene and takes only menu input');
+$pauseMenu->menu->back();
+expect(!$pauseMenu->screenshotView() && $paused->paused && $pauseMenu->menu->selected === 'screenshot',
+	'Leaving the screenshot returns to the same pause-menu row');
 $paused->mode = 'jet';
 $jetRows = array_keys($pauseMenu->items($paused));
 expect(in_array('fly', $jetRows, true) && in_array('balloons', $jetRows, true) && !in_array('car', $jetRows, true)

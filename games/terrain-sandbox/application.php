@@ -119,7 +119,7 @@ $lastAuthoringFrame = 0;
 $workOnSearch = static function() use (
 	$session, $engine, $stopSearchTimer, &$lastAuthoringFrame, &$statusPending, &$urgentStatus
 ): void {
-	if($engine->paused) { $stopSearchTimer(); return; }
+	if($engine->paused || $session->menu) { $stopSearchTimer(); return; }
 	if($session->findingCircuit() || $session->preparingRoad())
 	{
 		// At normal frame rates input already services the editor. Reclaim a short slice only between slow frames.
@@ -162,7 +162,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		$height = max(1, min(2160, (int)$h));
 		$dirty = true;
 	}
-	$prepared = $scene->takePreparedLandscape();
+	$prepared = $session->menu ? null : $scene->takePreparedLandscape();
 	if($prepared !== null) $session->publishLandscape($prepared);
 	$wasPicking = $session->picking;
 	$wasSearching = $session->findingCarSite();
@@ -183,7 +183,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		$input['pad'] = $menuOpen ? [] : $heldPad;
 		$moving = $heldKeys || $heldPad || in_array($session->mode, ['craft','jet'], true) || !empty($input['look'][0]) || !empty($input['look'][1]);
 		$session->input($input, min(.1, $frameSeconds), $width / $height, $moving ? 1.0 : 7.5);
-		if($session->findingCircuit() || $session->preparingRoad())
+		if(!$menuOpen && ($session->findingCircuit() || $session->preparingRoad()))
 		{
 			$lastAuthoringFrame = hrtime(true);
 			$startSearchTimer();
@@ -290,7 +290,7 @@ $engine->start(
 	): void {
 		$shotAlpha = $session->paused ? 1.0 : $alpha;
 		$lastVehicle = $vehiclePose;
-		[$viewCamera,$vehiclePose] = $session->view($alpha);
+		[$viewCamera,$vehiclePose] = $session->view($shotAlpha);
 		$sound = $session->mode === 'car' && !$session->paused && !$vehiclePose['floodedHold']
 			? [(int)round($vehiclePose['rpm']), round($vehiclePose['engineLoad'],3), round($vehiclePose['tireSqueal'],3)] : [0,0,0];
 		if($sound !== $lastSound)
@@ -312,7 +312,7 @@ $engine->start(
 			$dirty = true;
 		}
 		$pose = [$viewCamera->position,$viewCamera->yaw,$viewCamera->pitch,$viewCamera->roll,$viewCamera->fov];
-		$moving = $session->mode === 'craft' || $pose !== $lastBudgetPose;
+		$moving = ($session->mode === 'craft' && !$session->paused) || $pose !== $lastBudgetPose;
 		// High-refresh frames can advance the presentation fraction without a new simulation tick.
 		if($vehiclePose !== null && ($lastVehicle !== $vehiclePose || $moving)) $dirty = true;
 		$budget = $moving ? 2.0 : 8.0;
@@ -391,10 +391,11 @@ $engine->start(
 				($trailRenderer ??= new TrailRenderer)->draw($trails,$shotAlpha,$viewCamera,$width,$height,
 					$session->atmosphere->uniforms()['nightVisibility']);
 			foreach($visibleSites as $site) ($beacon ??= new DeliveryBeacon)->smoke($site,$viewCamera,$width,$height,$session->time);
-			if($target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
-			$jet = $session->mode === 'jet';
-			$car = $session->mode === 'car';
-			$craft = $session->mode === 'craft';
+			$showHud = !$pauseMenu->screenshotView();
+			if($showHud && $target !== null) ($arrow ??= new NavigationArrow)->draw($target,$arrowBearing,$viewCamera,$width,$height);
+			$jet = $showHud && $session->mode === 'jet';
+			$car = $showHud && $session->mode === 'car';
+			$craft = $showHud && $session->mode === 'craft';
 			$raceGuidance = $session->race->showGuidance($session->course);
 			$waterRace = $craft && $raceGuidance && $session->usingFloodedCircuit();
 			$instrumentSize = $car || $craft ? (int)round(min(320, $width*.36, $height*.40)) : null;
@@ -439,7 +440,7 @@ $engine->start(
 		}
 		if($urgentStatus || $statusPending && $now - $lastStatus >= .2)
 		{
-			$status = $session->status() + ['renderer' => $scene->stats() + ($session->course->count() > 0
+			$status = $session->status() + ['screenshotView' => $pauseMenu->screenshotView(), 'renderer' => $scene->stats() + ($session->course->count() > 0
 					? ['gateDraws' => $gates->drawn, 'gateMs' => $gates->ms] : ['gateDraws' => 0, 'gateMs' => 0.0])
 					+ ['spotLights' => count($spotLights[0]),'curveSigns'=>$curveSigns->count,'curveSignsDrawn'=>$curveSigns->drawn],
 				'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
