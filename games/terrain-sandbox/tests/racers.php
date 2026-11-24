@@ -188,19 +188,30 @@ foreach([false,true] as $chicane) {
 		check($slide && $boostedAfterSlide === (!$chicane && $charge > 0.), 'Spend available nitrous only on an open exit.');
 	}
 
-	$driver->restart(0.,-700.);
-	$pose['speed'] = 160. * Car::MPS_PER_MPH;
-	$pose['nitrous'] = 1.;
-	[$pedal,,,$boost] = $driver->controls($pose + ['x'=>0.,'z'=>-700.,'yaw'=>0.,'drift'=>0.],1/60,false);
-	check($pedal === 1. && $boost, 'Keep accelerating with a full bottle at 160 mph on a clear straight.');
+	$straight = ['motion'=>'driving','roadHold'=>0.,'x'=>0.,'yaw'=>0.,'drift'=>0.];
+	foreach([[1.,true],[.25,true],[.02,false]] as [$charge,$expected]) {
+		$driver->restart(0.,-700.);
+		[$pedal,,,$boost] = $driver->controls($straight + ['z'=>-700.,'speed'=>160.*Car::MPS_PER_MPH,'nitrous'=>$charge],1/60,false);
+		check($pedal === 1. && $boost === $expected, 'Use a partial bottle at 160 mph and let an empty bottle recharge.');
+	}
+	$driver->restart(0.,-800.);
+	for($i=0; $i<=180; $i++) {
+		$t = $i/60;
+		[, , , $boost] = $driver->controls($straight + ['z'=>-800.+38.*$t,'speed'=>38.,'nitrous'=>1.-$t/4.],1/60,false);
+		check($boost, 'Hold nitrous while the straight stays open and usable charge remains.');
+	}
+	foreach([239.,237.] as $mph) {
+		[, , , $boost] = $driver->controls($straight + ['z'=>-680.,'speed'=>$mph*Car::MPS_PER_MPH,'nitrous'=>.25],1/60,false);
+		check(!$boost, 'Release nitrous near top speed and leave it off until it can buy acceleration again.');
+	}
 }
 echo "CPU exhibition laps, drift exits, records, pause and restart passed.\n";
 
-// Drive the same authored S-bends at two widths. The wide grading shoulder is outside the asphalt.
+// Drive the same authored S-bends at several widths. The wide grading shoulder is outside the asphalt.
 $points = [[-140,-80],[-140,55],[-130,84],[-104,100],[-40,100],[-22,88],[-14,66],[-5,47],
 	[22,40],[90,40],[110,26],[118,0],[110,-40],[75,-100],[-40,-132],[-100,-120]];
 $apexCuts = [];
-foreach([6,36] as $width) {
+foreach([6,9,12,36] as $width) {
 	$table = new Session(['worldSize'=>512,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12]);
 	$table->landscape->queue(CircuitRoad::closeLoop(['type'=>'road','material'=>'road','width'=>$width,'shoulder'=>15.,
 		'points'=>array_map(static fn($p)=>[$p[0],0.,$p[1]],$points)]));
@@ -234,7 +245,7 @@ foreach([6,36] as $width) {
 			}
 		}
 	}
-	check($table->race->state === 'finished' && $table->car->state()['recoveries'] === 0, 'Finish through every gate on both widths.');
+	check($table->race->state === 'finished' && $table->car->state()['recoveries'] === 0, 'Finish through every gate at each pavement width.');
 	// Reapplying the brakes within a fifth of a second at successive stations made each bend stutter.
 	check($brakeTaps <= 10, 'Brake continuously through both laps without pulsing at every route sample.');
 	$apexCuts[$width] = $cut;

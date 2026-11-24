@@ -126,11 +126,12 @@ final class RacingLine
 		return null;
 	}
 
-	/** Remaining distance inside the asphalt, excluding the graded shoulder. */
-	public static function edgeDistance(Landscape $land, float $x, float $z): float
+	/** Remaining distance inside the asphalt. Optionally report its half-width, excluding the graded shoulder. */
+	public static function edgeDistance(Landscape $land, float $x, float $z, ?float &$halfWidth = null): float
 	{
-		if($land->material($x,$z,$offset,$mark) !== 'road' || $mark === null) return 0.;
-		return max(0.,$mark[2]-abs($mark[0]));
+		$material = $land->material($x,$z,$offset,$mark);
+		$halfWidth = $material === 'road' ? ($mark[2] ?? 0.) : 0.;
+		return max(0.,$halfWidth-abs($mark[0] ?? 0.));
 	}
 
 	/** Narrow the allowed strip through an authored gate whose posts stand inside the road. */
