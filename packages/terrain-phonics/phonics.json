@@ -160,7 +160,7 @@
     "src/Edits.php": "sha256-Y3mpK+PodPy65u71QqHlH5wfegws7T/GVs1dzi+YFTQ=",
     "src/GpuPatch.php": "sha256-8kdiefan/EBdfM8uWp3Px/5X7ivt98tpjrYFTWq7oEU=",
     "src/HeightTile.php": "sha256-bsg9PQ3Lru3UVO5Z1aAYkxyQiWP4Tme8c+U6joTMvZ8=",
-    "src/JoinedTerrain.php": "sha256-CesGzcqYCY2BlGElwcVAK+9cfriE85zc4jBpNJIsC7g=",
+    "src/JoinedTerrain.php": "sha256-WBvpz/wv1XK407JYf9XDG5bJ6axYBg+VUv58K1oeYhg=",
     "src/LandformPreview.php": "sha256-KzH3N+Syjuz6QjZeOqHmTY5OR4zVZ6qv5DWB2L0OmxY=",
     "src/Landscape.php": "sha256-mJ1NljGXprdPQys8K3IQrSFVTXTBtup/XLfysoxw2ms=",
     "src/Lod.php": "sha256-SIkMk1JKydSW1VjOCVrlv9naHlMlAp92tsYGbMLAy0Y=",

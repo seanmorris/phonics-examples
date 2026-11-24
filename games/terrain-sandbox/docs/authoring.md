@@ -39,7 +39,7 @@ Under **Surface**, choose the **Fall line** pattern to run colored streaks downh
 Generating starts a new edit history; save a landscape first if you want to keep it.
 
 
-Choose **World size** in the **Landscape** tab before selecting **Generate**. The 40.7 mi setting doubles the side length and gives four times the playable area.
+Choose **World size** in the **Landscape** tab before selecting **Generate**. Standalone landscapes default to 20.4 miles per side. Choose 10.2 miles for a quarter of that area or 40.7 miles for four times the area.
 
 ## Sculpt and paint
 

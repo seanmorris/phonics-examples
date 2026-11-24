@@ -86,7 +86,7 @@ function driveStrip(Session $s,array $path): void {
 	throw new RuntimeException("The car did not reach the next landscape at ($c[x],$c[z]), speed $c[speed], station $index, target ($tx,$tz), desired $speed.");
 }
 
-foreach([[32768,['mountain']],[65536,['canyon','coast']]] as [$span,$destinations]) {
+foreach([[16384,['mountain']],[32768,['mountain']],[65536,['canyon','coast']]] as [$span,$destinations]) {
 	$s = new Session;
 	$s->input(['actions'=>[['type'=>'journey-build','west'=>'rolling-prairie','destinations'=>$destinations,'span'=>$span]]],0,1.);
 	while($s->preparingRoad()) $s->input([],0,1.,6.);

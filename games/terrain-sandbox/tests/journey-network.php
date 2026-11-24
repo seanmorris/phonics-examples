@@ -15,19 +15,20 @@ foreach(["A coast -> F","A coast -> B\nB mountain -> A","A coast -> B\nB coast\n
 	try { new JourneyNetwork($bad); throw new RuntimeException('Invalid topology accepted'); } catch(InvalidArgumentException) {}
 }
 $s=new Session;
-$s->input(['actions'=>[['type'=>'journey-build','network'=>$plan,'span'=>32768]]],0.,1.);
+$s->input(['actions'=>[['type'=>'journey-build','network'=>$plan]]],0.,1.);
 settleNetwork($s);
+networkCheck($s->landscape->recipe()['join']['span']===16384,'A new network defaults to 16,384 meters per square.');
 $initial=$s->save();
 
 /** Start on the actual incoming pavement with the car moving and cross the streaming handoff. */
 function onward(Session $s,int $branch,string $target): void {
 	$before=$s->landscape->recipe();
-	$half=$before['worldSize']/2;
+	$approachX=$before['worldSize']/2-1000.;
 	$network=new JourneyNetwork($s->journeyPlan());
 	$shift=$network->translation($s->status()['journeySquare'],$target,$before);
 	$site=null;
 	foreach($s->landscape->roads() as $road) foreach($road['_road']['samples'] as [$x,,$z,$tx,$tz]) {
-		if(abs($x-($half-2850.))>7. || count($before['join']['destinations'])>1 && ($z>0)!==(bool)$branch) continue;
+		if(abs($x-$approachX)>7. || count($before['join']['destinations'])>1 && ($z>0)!==(bool)$branch) continue;
 		$site=$s->car->checkedSite($s->landscape,$s->water->heightRange()[1],$x,$z,atan2($tx,$tz),[]);
 		if($site!==null) break 2;
 	}
@@ -53,6 +54,7 @@ foreach([[0,'B',1],[1,'C',0]] as [$branch,$parent,$toF]) {
 	onward($s,$branch,$parent);
 	onward($s,$toF,'F');
 	$r=$s->landscape->recipe();
+	networkCheck($r['join']['span']===16384,'Streamed squares keep the selected map width.');
 	if($shared!==null) networkCheck($shared===$r,'Both entries reach the same F landscape and onward destinations.');
 	$shared=$r; $file=$s->save(); $s->load($file);
 	networkCheck($s->status()['journeySquare']==='F' && $s->status()['journeyExits']===['H'],'Save and load keep the shared onward route.');

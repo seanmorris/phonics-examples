@@ -4201,7 +4201,11 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
 	await view.evaluate(el => el.terrainSandboxDebug.values({quality: .5}));
 	const section = await field(page, '[data-journey="fork"]');
+	const worldSize = page.locator('[name="worldSize"]');
+	await expect(worldSize).toHaveValue('32768');
+	await expect(worldSize.locator('option[value="16384"]')).toHaveText('10.2 mi per side');
 	await page.getByText('Landscape journey', {exact: true}).click();
+	await expect(page.locator('[data-journey="span"]')).toHaveValue('16384');
 	await section.selectOption('network');
 	const departureRow = page.locator('[data-journey-guide] tr[data-square="A"]');
 	await expect(departureRow.locator('td')).toHaveText(['B','C']);
@@ -4213,9 +4217,10 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await expect(page.locator('[data-journey-progress]')).toContainText(/survey|following|finding|fitting/i);
 	await expect.poll(async() => (await status(page)).mode, {timeout: 315_000}).toBe('car');
 	const west = await status(page);
-	expect(west.recipe.worldSize).toBe(69_632);
+	expect(west.recipe.join.span).toBe(16_384);
+	expect(west.recipe.worldSize).toBe(36_864);
 	expect(west.recipe.join.version).toBe(2);
-	expect(west.car.x).toBeLessThan(-34_700);
+	expect(west.car.x).toBeLessThan(-west.recipe.worldSize / 2 + 55);
 	await control(page, 'journey-fork').click();
 	await expect.poll(async() => (await status(page)).journeyForkAhead).toBe(true);
 	await expect(page.getByText('Left · River Valley & Floodplain / Right · Coast', {exact: true})).toBeVisible();

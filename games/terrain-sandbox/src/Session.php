@@ -1601,7 +1601,7 @@ final class Session
 					|| count($east)<1 || count($east)>2 || count(array_filter($east,'is_string'))!==count($east))
 					throw new \InvalidArgumentException('Select a departure and one or two destinations.');
 				$network=isset($action['network']) ? new JourneyNetwork($action['network']) : null;
-				$span=$action['span'] ?? 32768;
+				$span=$action['span'] ?? 16384;
 				$next = new Landscape($network ? $network->recipe($network->start,$span) : JourneyRoad::recipe($west,$east,$span));
 				$this->buildingNetwork=$network;
 				$this->message = $this->journeyBuildPhase = 'Surveying the highway and its forks…';

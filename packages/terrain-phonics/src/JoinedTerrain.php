@@ -15,7 +15,7 @@ final class JoinedTerrain
 		unset($source['join']);
 		$span = $join['span'] ?? null;
 		$east = $join['destinations'] ?? null;
-		if(!in_array($span,[32768,65536],true) || !is_array($east) || !array_is_list($east)
+		if(!in_array($span,[16384,32768,65536],true) || !is_array($east) || !array_is_list($east)
 			|| count($east)<1 || count($east)>2) throw new \InvalidArgumentException('Invalid landscape junction.');
 		$extent = 2*$span + self::GAP;
 		$source['worldSize'] = $span;

@@ -2729,7 +2729,8 @@ function markup()
 	<label class="terrain-field">Preset<select name="preset">${landscapeOptions.map(option).join('')}</select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
 	<label class="terrain-field">World size<select name="worldSize">
-		<option value="32768">20.4 mi per side</option>
+		<option value="16384">10.2 mi per side</option>
+		<option value="32768" selected>20.4 mi per side</option>
 		<option value="65536">40.7 mi per side</option>
 		<option data-loaded-size hidden></option>
 	</select></label>
@@ -2893,7 +2894,11 @@ function markup()
 	<details class="terrain-section"><summary>Landscape journey</summary>
 	<p class="terrain-note">Build surveys the terrain and lays the highway. When the road is ready, you start in the car at the western edge.</p>
 	<div class="terrain-row"><label class="terrain-field">Departure<select data-journey="west">${journeyOptions('rolling-prairie')}</select></label>
-	<label class="terrain-field">Map width<select data-journey="span"><option value="32768">20.4 mi (32 km class)</option><option value="65536">40.7 mi (64 km class)</option></select></label></div>
+	<label class="terrain-field">Map width<select data-journey="span">
+		<option value="16384" selected>10.2 mi (16 km class)</option>
+		<option value="32768">20.4 mi (32 km class)</option>
+		<option value="65536">40.7 mi (64 km class)</option>
+	</select></label></div>
 	<div class="terrain-row"><label class="terrain-field">Fork layout<select data-journey="fork"><option value="rejoin">Rejoin the highway</option><option value="divide">Separate destinations</option><option value="network">Linked landscape network</option></select></label>
 	<label class="terrain-field">Destination<select data-journey="east">${journeyOptions('mountain')}</select></label>
 	<label class="terrain-field" data-journey-south hidden>South branch destination<select data-journey="south">${landscapeOptions.map(option).join('')}</select></label></div>
