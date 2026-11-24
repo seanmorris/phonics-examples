@@ -309,11 +309,12 @@ final class TerrainAppearance
 			, 'rockSlopeStart' => .06
 			, 'rockSlopeEnd' => .16
 		]
-		// Young rice on wet terrace flats, bare earth on the risers and forest on the hill crowns.
+		// Young and yellowing rice on wet terrace flats, grassy earth bunds, and forest on the crowns and in the
+		// ravines.
 		, 'rice-terraces' => [
-			'grassColor' => '#58903a'
-			, 'meadowColor' => '#7ea648'
-			, 'soilColor' => '#6a4e32'
+			'grassColor' => '#557f36'
+			, 'meadowColor' => '#9a9e4a'
+			, 'soilColor' => '#5c5a34'
 			, 'forestColor' => '#2c4a26'
 
 			, 'rockSlopeStart' => .18

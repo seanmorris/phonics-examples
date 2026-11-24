@@ -236,7 +236,7 @@ foreach([
 	'painted-badlands'=>['cap-rock','Clay dust'], 'emerald-ridges'=>['mossy-cliffs','Trade-wind haze'],
 	'autumn-folds'=>['hemlock-stands','Blue ridge haze'], 'namib-coast'=>['wind-ripples','Atlantic fog'],
 	'black-sand-coast'=>['basalt-scree','North Atlantic haze'], 'yardang-desert'=>['clay-flanks','Dust haze'],
-	'rice-terraces'=>['earth-risers','Valley mist'], 'boreal-lakes'=>['bog-margins','Clear northern air'],
+	'rice-terraces'=>['earth-bunds','Valley mist'], 'boreal-lakes'=>['bog-margins','Clear northern air'],
 	'salt-pans'=>['salt-crust','Playa dust'], 'cinder-highlands'=>['oxidized-scoria','Highland haze'],
 ] as $preset=>[$layer,$air]) {
 	input($fresh,['actions'=>[['type'=>'generate','preset'=>$preset]]]);
