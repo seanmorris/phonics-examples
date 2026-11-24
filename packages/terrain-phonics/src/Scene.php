@@ -42,6 +42,7 @@ final class Scene
 	private TerrainAppearance $presetAppearance;
 	private array $layerBinding=[];
 	private array $materialPrograms = [];
+	private array $destinations = [];
 	private string $materialKey = '', $groundVertexSource, $groundFragmentSource;
 	private ?Program $chartProgram = null;
 	private ?Landscape $preparing = null;
@@ -182,6 +183,22 @@ final class Scene
 		$this->appearance = $this->presetAppearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$landscape->recipe()['preset']] ?? []);
 
 		$this->create();
+	}
+
+	/** Each endpoint keeps its own material stack, seed, and local elevation datum. */
+	private function regionalMaterials(): array
+	{
+		$r = $this->landscape->recipe();
+		$west = [$this->palette(),$r,[0.,0.,0.]];
+		if(!isset($r['join'])) return [$west];
+		$origins = JoinedTerrain::origins($r['join']['span'],count($r['join']['destinations']));
+		$west[2][0] = $origins[0][0];
+		if(!$this->destinations) foreach($r['join']['destinations'] as $i=>$form) {
+			$appearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$form['preset']] ?? []);
+			$this->destinations[] = [SurfaceLayers::landscape($form,$appearance),$form,
+				[$origins[$i+1][0],$r['waterLevel']-$form['waterLevel'],$origins[$i+1][1]]];
+		}
+		return [$west,...$this->destinations];
 	}
 
 	/**
@@ -431,7 +448,7 @@ final class Scene
 				$this->appearance = $this->presetAppearance = new TerrainAppearance($next);
 		}
 		$this->landscape = $landscape;
-		$this->defaultLayers=null; $this->layerBinding=[];
+		$this->defaultLayers=null; $this->layerBinding=[]; $this->destinations=[];
 		$this->lod = new Lod($landscape->recipe()['worldSize'], $landscape->recipe()['spacing']);
 		$this->revision = -1;
 		$this->selectionKey = '';
@@ -2381,68 +2398,78 @@ final class Scene
 
 		// Both pairs of programs are linked up front, and each lit program draws once in the first frame with patches
 		// (litDrawn), so changing pair later costs no more than drawing with the same one.
-		$palette = $this->palette();
-		$this->selectMaterial($palette);
 		$lit = ($this->spotLights?->count() ?? 0) > 0;
 		$warm = $this->clipmap !== null || $this->draw !== [];
-		$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
 		$waterProgram = $lit || $warm && !$this->litDrawn['water'] ? $this->litWaterProgram : $this->waterProgram;
-		$groundProgram->use();
-		$this->common($groundProgram, $camera, $width, $height, $environment);
-		$this->water->appearance->bind($groundProgram);
-
-		$id = spl_object_id($groundProgram);
-		$paint = $this->paint ?? $this->appearance;
-		if(($this->boundPaint[$id] ?? null) !== $paint) {
-			$paint->bindPaint($groundProgram);
-			$this->boundPaint[$id] = $paint;
-		}
-		if(($this->layerBinding[$id] ?? null) !== $palette) {
-			$palette->bind($groundProgram);
-			$recipe = $this->landscape->recipe();
-			$seed = crc32((string)$recipe['seed']);
-			glUniform2f($groundProgram->location('uPaletteOffset'),$seed & 65535,($seed >> 16) & 65535);
-			$this->scalar($groundProgram, 'uRockSlopeDamping', $recipe['damping'] / $recipe['slopeScale']**2);
-			$this->layerBinding[$id] = $palette;
-		}
-		$this->vector($groundProgram, 'uCraftRotation', [0,0,0]);
-		$this->scalar($groundProgram, 'uCraft', 0);
-
 		$planes = $camera->clipPlanes($width,$height);
 		$eye = $camera->position;
 		$this->groundDraws = $this->waterDraws = 0;
-		$lastBoundary = null;
-		$uPatch = $groundProgram->location('uPatch');
-		$uEdges = $groundProgram->location('uEdges');
-		$uCorners = $groundProgram->location('uCorners');
-		if($this->clipmap) {
-			$recipe = $this->landscape->recipe();
-			$floor = $bounds['minY'];
-			$ceiling = $bounds['maxY'];
-			if($recipe['surround'] === 'sea') $floor = min($floor, $recipe['waterLevel'] - 200);
-			if($recipe['surround'] === 'mountains') {
-				$floor = min($floor, -3 * $recipe['heightScale']);
-				$ceiling = max($ceiling, $recipe['heightScale']);
+		$materials = $this->regionalMaterials();
+		$regions = count($materials);
+		foreach($materials as $index=>[$palette,$form,$origin]) {
+			$this->selectMaterial($palette);
+			$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
+			$groundProgram->use();
+			glUniform3f($groundProgram->location('uJoinMaterial'), $regions>1 ? $regions : 0,$index,JoinedTerrain::GAP);
+			$this->vector($groundProgram,'uMaterialOrigin',$origin);
+			if($index>0) {
+				glEnable(GL_BLEND);
+				glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
+				glDepthFunc(GL_LEQUAL);
 			}
-			$this->groundDraws = $this->clipmap->draw($groundProgram, $camera, $planes, [$floor, $ceiling]);
-			// The craft shares the terrain program and has its own clipping.
-			glUniform1f($groundProgram->location('uPlayHalf'), 0);
-		}
-		foreach($this->draw as $n)
-		{
-			$key = $n['key'];
-			$p = $this->patches[$key];
-			$hidden = Camera::rejectingPlane($planes, $eye, $n, $p['minY'], $p['maxY'], $this->groundCull[$key] ?? -1);
-			if($hidden >= 0)
-			{
-				$this->groundCull[$key] = $hidden;
-				continue;
-			}
-			unset($this->groundCull[$key]);
-			$this->groundDraws++;
+			$this->common($groundProgram, $camera, $width, $height, $environment);
+			$this->water->appearance->bind($groundProgram);
 
-			$p['mesh']->draw($this->bindPatch($uPatch, $uEdges, $uCorners, $n, $lastBoundary));
+			$id = spl_object_id($groundProgram);
+			$paint = $this->paint ?? $this->appearance;
+			if(($this->boundPaint[$id] ?? null) !== $paint) {
+				$paint->bindPaint($groundProgram);
+				$this->boundPaint[$id] = $paint;
+			}
+			if(($this->layerBinding[$id] ?? null) !== $palette) {
+				$palette->bind($groundProgram);
+				$seed = crc32((string)$form['seed']);
+				glUniform2f($groundProgram->location('uPaletteOffset'),$seed & 65535,($seed >> 16) & 65535);
+				$this->scalar($groundProgram, 'uRockSlopeDamping', $form['damping'] / $form['slopeScale']**2);
+				$this->layerBinding[$id] = $palette;
+			}
+			$this->vector($groundProgram, 'uCraftRotation', [0,0,0]);
+			$this->scalar($groundProgram, 'uCraft', 0);
+
+			$lastBoundary = null;
+			$uPatch = $groundProgram->location('uPatch');
+			$uEdges = $groundProgram->location('uEdges');
+			$uCorners = $groundProgram->location('uCorners');
+			if($this->clipmap) {
+				$recipe = $this->landscape->recipe();
+				$floor = $bounds['minY'];
+				$ceiling = $bounds['maxY'];
+				if($recipe['surround'] === 'sea') $floor = min($floor, $recipe['waterLevel'] - 200);
+				if($recipe['surround'] === 'mountains') {
+					$floor = min($floor, -3 * $recipe['heightScale']);
+					$ceiling = max($ceiling, $recipe['heightScale']);
+				}
+				$this->groundDraws += $this->clipmap->draw($groundProgram, $camera, $planes, [$floor, $ceiling],materialRegion:$regions>1 ? $index : -1);
+				// The craft shares the terrain program and has its own clipping.
+				glUniform1f($groundProgram->location('uPlayHalf'), 0);
+			}
+			foreach($this->draw as $n)
+			{
+				$key = $n['key'];
+				$p = $this->patches[$key];
+				$hidden = Camera::rejectingPlane($planes, $eye, $n, $p['minY'], $p['maxY'], $this->groundCull[$key] ?? -1);
+				if($hidden >= 0)
+				{
+					$this->groundCull[$key] = $hidden;
+					continue;
+				}
+				unset($this->groundCull[$key]);
+				$this->groundDraws++;
+
+				$p['mesh']->draw($this->bindPatch($uPatch, $uEdges, $uCorners, $n, $lastBoundary));
+			}
 		}
+		if($regions>1) { glDisable(GL_BLEND); glDepthFunc(GL_LESS); }
 
 		if($craftState !== null)
 		{
@@ -2813,7 +2840,7 @@ final class Scene
 		$this->materialKey = $stack->structure;
 		[$this->groundProgram,$this->litGroundProgram] = $this->materialPrograms[$this->materialKey];
 		$this->chartProgram = $this->materialPrograms[$this->materialKey][2] ?? null;
-		$this->litDrawn['ground'] = false;
+		if(!isset($this->landscape->recipe()['join'])) $this->litDrawn['ground'] = false;
 	}
 
 	private function palette(): SurfaceLayers
@@ -2830,9 +2857,14 @@ final class Scene
 		?int $size = null, ?float $localSpan = null, bool $circular = false, ?float $fixedSpan = null): ?float
 	{
 		if(!$this->clipmap) return null;
-		$this->selectMaterial($this->palette());
-		return $this->clipmap->chart($this->chartProgram,$xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,
-			$this->palette(),$this->paint ?? $this->appearance,$size,$localSpan,$circular,$fixedSpan);
+		$materials=$this->regionalMaterials();
+		foreach($materials as $index=>[$layers,$form,$origin]) {
+			$this->selectMaterial($layers);
+			$span=$this->clipmap->chart($this->chartProgram,$xz,$bearing,$wide,$width,$height,$this->water->level(),$waterColor,
+				$layers,$this->paint ?? $this->appearance,$size,$localSpan,$circular,$fixedSpan,
+				count($materials),$index,$origin,$form['seed']);
+		}
+		return $span;
 	}
 
 	public function restore(): void

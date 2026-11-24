@@ -451,6 +451,13 @@ export function activate({module, canvas, session, services})
 			const type = field.dataset.action;
 
 			if(type === 'generate') push({type, ...generationValues(frame)});
+			else if(type === 'journey-build')
+			{
+				const value = key => journeyField(key).value;
+				const destinations = [value('east')];
+				if(value('fork') === 'divide') destinations.push(value('south'));
+				push({type, west: value('west'), destinations, span: Number(value('span'))});
+			}
 			else if(type === 'load') frame.querySelector('[data-file]').click();
 			else if(type === 'fullscreen')
 			void fullscreen.toggle().catch(error => {
@@ -461,6 +468,13 @@ export function activate({module, canvas, session, services})
 			if(type !== 'load') focus();
 		}, {signal});
 	}
+
+	const journeyField = key => frame.querySelector(`[data-journey="${key}"]`);
+	const junction = journeyField('fork');
+	const destinationNames = new Map([...journeyField('east').options].map(option => [option.value, option.text]));
+	const updateJunction = () => { frame.querySelector('[data-journey-south]').hidden = junction.value !== 'divide'; };
+	junction.addEventListener('change', updateJunction, {signal});
+	updateJunction();
 
 	const presetField = frame.querySelector('[name="preset"]');
 	const seedField = frame.querySelector('[name="seed"]');
@@ -944,6 +958,11 @@ export function activate({module, canvas, session, services})
 			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';
 			else if(state.cpuDriver && state.race.state !== 'finished')
 			status.textContent = 'CPU racer · ' + state.cpuDriver;
+			else if(state.mode === 'car' && state.journeyForkAhead && !state.delivery && state.race.state === 'idle')
+			{
+				const [north, south] = state.recipe.join.destinations.map(form => destinationNames.get(form.preset));
+				status.textContent = south ? `Left · ${north}   /   Right · ${south}` : `Both branches rejoin toward ${north}.`;
+			}
 			else status.textContent = state.message;
 
 			status.hidden = state.race.state === 'finished' && status.textContent === state.race.message;
@@ -981,6 +1000,12 @@ export function activate({module, canvas, session, services})
 			const circuit = state.circuit;
 			const editable = state.mode === 'fly' && !state.preparing && !state.picking && !circuit.searching;
 			button('circuit-find').disabled = !editable;
+			button('journey-build').disabled = !editable;
+			for(const key of ['journey-drive','journey-fork'])
+			{
+				button(key).hidden = !state.recipe.join;
+				button(key).disabled = state.preparing || state.picking;
+			}
 			button('circuit-cancel').hidden = !circuit.searching && !circuit.preview;
 			button('circuit-cancel').disabled = state.preparing;
 			button('circuit-dry').disabled = !editable || !circuit.points;
@@ -1046,11 +1071,21 @@ export function activate({module, canvas, session, services})
 
 			if(state.generation !== lastGeneration)
 			{
+				if(state.recipe.join)
+				{
+					const {span, destinations} = state.recipe.join;
+					journeyField('west').value = state.recipe.preset;
+					journeyField('span').value = String(span);
+					junction.value = destinations.length === 2 ? 'divide' : 'rejoin';
+					journeyField('east').value = destinations[0].preset;
+					if(destinations[1]) journeyField('south').value = destinations[1].preset;
+					updateJunction();
+				}
 				presetField.value = state.recipe.preset;
 				presetSeed = surface.presets[state.recipe.preset].seed;
 				const worldSize = frame.querySelector('[name="worldSize"]');
 				const customSize = worldSize.querySelector('[data-loaded-size]');
-				const size = String(state.recipe.worldSize);
+				const size = String(state.recipe.join?.span ?? state.recipe.worldSize);
 
 				customSize.hidden = [...worldSize.options].some(
 					option => option !== customSize && option.value === size
@@ -2167,6 +2202,10 @@ function markup()
 
 	const option = ([value, label]) => `<option value="${value}">${label}</option>`;
 
+	const journeyOptions = selected => landscapeOptions.map(([value, label]) =>
+		`<option value="${value}"${value === selected ? ' selected' : ''}>${label}</option>`
+	).join('');
+
 	const surfaceOptions = landscapeOptions.flatMap(
 		row => row[0] === 'canyon' ? [row, ['canyon-v1', 'Early Canyon']] : [row]
 	);
@@ -2461,6 +2500,14 @@ function markup()
 	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
 	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button><button data-action="cpu-demo" hidden>Watch CPU racer</button></div>
 	</div></details>
+	<details class="terrain-section"><summary>Landscape journey</summary>
+	<p class="terrain-note">Build a new landscape with an editable highway from the western edge to the eastern edge. Both maps keep their full width.</p>
+	<div class="terrain-row"><label class="terrain-field">Departure<select data-journey="west">${journeyOptions('rolling-prairie')}</select></label>
+	<label class="terrain-field">Map width<select data-journey="span"><option value="32768">20.4 mi (32 km class)</option><option value="65536">40.7 mi (64 km class)</option></select></label></div>
+	<div class="terrain-row"><label class="terrain-field">Fork layout<select data-journey="fork"><option value="rejoin">Rejoin the highway</option><option value="divide">Separate destinations</option></select></label>
+	<label class="terrain-field">Destination<select data-journey="east">${journeyOptions('mountain')}</select></label>
+	<label class="terrain-field" data-journey-south hidden>South branch destination<select data-journey="south">${landscapeOptions.map(option).join('')}</select></label></div>
+	<div class="terrain-row"><button data-action="journey-build">Build new journey</button><button data-action="journey-drive" hidden>Drive from west edge</button><button data-action="journey-fork" hidden>Drive from fork</button></div></details>
 	<div class="terrain-section" data-road-workspace></div></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>

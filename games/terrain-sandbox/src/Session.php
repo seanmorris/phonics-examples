@@ -359,7 +359,16 @@ final class Session
 	/** Whether a complete edited revision is awaiting its matching GPU representation. */
 	public bool $preparing = false;
 	private ?\Generator $roadWork = null;
-	public function preparingRoad(): bool { return $this->roadWork !== null; }
+	private ?Landscape $journeyReady = null;
+	private array $journeyEntrances = [];
+	public function preparingRoad(): bool { return $this->roadWork !== null || $this->journeyReady !== null; }
+
+	public function advanceRoadBetweenFrames(): void
+	{
+		if($this->roadWork === null) return;
+		try { $this->advanceRoad(4.); }
+		catch(\Throwable $error) { $this->message = $error->getMessage(); $this->dirty = true; }
+	}
 	/** Whether exact terrain picking is progressing without blocking a frame. */
 	public bool $picking = false;
 	/** Diagnostics for the last confirmed hit or completed miss. */
@@ -455,6 +464,18 @@ final class Session
 			foreach($input['actions'] ?? [] as $action) $this->action($action);
 			foreach($input['clicks'] ?? [] as $click) $this->pick((float)$click[0], (float)$click[1], $aspect);
 			if($this->roadWork !== null) $this->advanceRoad(min(4.,$pickMs));
+			// Publish a completed survey only at an input boundary, before the scene adopts the new world.
+			if($this->journeyReady !== null) {
+				$next = $this->journeyReady;
+				$this->journeyReady = null;
+				$previous = $this->landscape->recipe()['preset'];
+				$this->replace($next);
+				$this->course = new Course($this->gateShapes);
+				$this->surfaceLayers = $this->materialPreset = $this->paint = null;
+				$this->switchPresetLook($previous,$next->recipe()['preset']);
+				$this->preparing = false;
+				$this->driveJourney(false);
+			}
 			if($wasPicking) $this->advancePick($pickMs);
 			if($this->carSearch !== null) $this->advanceCarSearch();
 			if($this->circuitSearch !== null)
@@ -1349,7 +1370,7 @@ final class Session
 	private function action(mixed $action): void
 	{
 		if(!is_array($action)) $action = ['type' => $action];
-		if($this->preparing && in_array($action['type'] ?? '', ['undo','redo','generate','load','road-apply'], true))
+		if($this->preparing && in_array($action['type'] ?? '', ['undo','redo','generate','load','road-apply','journey-build','journey-drive','journey-fork'], true))
 		throw new \RuntimeException('Preparing the previous terrain edit. Please wait.');
 		if($this->picking && in_array($action['type'] ?? '', ['undo','redo','road-apply','save'], true))
 		{ $this->message = 'Finding the ground for the previous click. Please wait.'; return; }
@@ -1416,11 +1437,34 @@ final class Session
 				$this->paint = new TerrainAppearance([$key=>$action['color'] ?? null] + $this->paintInks());
 				$this->dirty = true;
 				break;
+			case 'journey-build':
+				if($this->mode !== 'fly' || $this->picking || $this->circuitSearch !== null) throw new \RuntimeException('Return to free flight and finish the current edit first.');
+				$west = $action['west'] ?? 'rolling-prairie';
+				$east = $action['destinations'] ?? ['mountain'];
+				if(!is_string($west) || !is_array($east) || !array_is_list($east)
+					|| count($east)<1 || count($east)>2 || count(array_filter($east,'is_string'))!==count($east))
+					throw new \InvalidArgumentException('Select a departure and one or two destinations.');
+				$next = new Landscape(JourneyRoad::recipe($west,$east,$action['span'] ?? 32768));
+				$this->message = 'Surveying the highway and its forks…';
+				$this->preparing = true;
+				$this->roadWork = (function() use ($next) {
+					try {
+						yield from JourneyRoad::build($next);
+						$this->journeyReady = $next;
+					} finally {
+						if($this->journeyReady !== $next) $next->close();
+					}
+				})();
+				break;
+			case 'journey-drive': case 'journey-fork':
+				if(isset($this->landscape->recipe()['join'])) $this->driveJourney($type==='journey-fork');
+				break;
 			case 'generate':
 				$preset=(string)($action['preset'] ?? 'coast');
 				$defaults=self::preset($preset);
 				$recipe=$defaults+$this->landscape->recipe();
 				$recipe['preset']=$preset;
+				if(isset($recipe['join'])) { $recipe['worldSize']=$recipe['join']['span']; unset($recipe['join']); }
 				unset($recipe['version']); // A new landscape uses the selected preset's current recipe version.
 				foreach($defaults + ['worldSize' => $recipe['worldSize']] as $key=>$default) if(array_key_exists($key,$action)) {
 					if(is_string($default)) $recipe[$key]=(string)$action[$key];
@@ -1480,6 +1524,8 @@ final class Session
 				if($road !== null) {
 					$proposal = $this->roadEditor->onCircuit();
 					$roads = $proposal ? $this->roadEditor->circuitRoads() : [$road];
+					if(!$proposal && isset($this->landscape->recipe()['join']) && ($action['op'] ?? '') === 'apply')
+						$roads = JourneyRoad::connectedEdits($this->landscape,$road);
 					$this->roadEditor->applyResult(null);
 					$this->prepareRoads($roads,function(Landscape $graded) use ($action,$road,$proposal) {
 						if(($action['op'] ?? '') === 'circuit') {
@@ -1885,6 +1931,24 @@ final class Session
 		$this->camera->position[1] = max($ground + 2, min(15000, $this->camera->position[1]));
 	}
 
+	private function driveJourney(bool $fork): void
+	{
+		$pose = $this->journeyEntrances[$fork ? 'fork' : 'west'] ?? null;
+		$site = $pose === null ? null : $this->car->checkedSite($this->landscape,$this->water->heightRange()[1],
+			$pose[0],$pose[1],$pose[2],$this->course->posts());
+		if($site === null) { $this->message = 'This highway entrance has no dry pavement.'; return; }
+		$this->stopDemo();
+		$this->cancelPick(); $this->carSearch = null; $this->delivery = null;
+		$this->releasePin();
+		$this->car->spawn($site,$this->landscape,$this->water->level());
+		$this->tireDust = new TireDust;
+		$this->lamps->reset();
+		$this->mode = 'car'; $this->paused = false; $this->boarding++;
+		$this->chase->board($this->camera,$this->car->state(),$this->landscape);
+		$this->message = $fork ? 'Choose either branch at the fork.' : 'Drive east to the landscape junction.';
+		$this->dirty = true;
+	}
+
 	private function startCarSearch(): void
 	{
 		$this->cancelPick();
@@ -2103,6 +2167,7 @@ final class Session
 		$this->releasePin();
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		$this->journeyEntrances = JourneyRoad::entrances($landscape);
 		$this->duck = null;
 		$this->balloons = new BalloonPractice;
 		$this->delivery = null;
@@ -2205,7 +2270,7 @@ final class Session
 			throw $error;
 		}
 		$this->roadWork = null;
-		$this->preparing = false;
+		$this->preparing = $this->journeyReady !== null;
 	}
 
 	/**
@@ -2242,6 +2307,7 @@ final class Session
 			$this->course->refit(self::ground($landscape), $landscape->changedRegion($this->landscape));
 		$this->landscape->close();
 		$this->landscape = $landscape;
+		$this->journeyEntrances = JourneyRoad::entrances($landscape);
 		$this->duck = null;
 		if($this->circuitCommit !== null)
 		{
@@ -2486,7 +2552,16 @@ final class Session
 	 */
 	public function status(): array
 	{
-		return ['mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,'time' => $this->time,'generation' => $this->generation,
+		$nearFork = false;
+		if($this->mode === 'car' && isset($this->journeyEntrances['junction'])) {
+			[$x,$z,$heading] = $this->journeyEntrances['junction'];
+			$car = $this->car->state();
+			$dx = $x - $car['x']; $dz = $z - $car['z'];
+			$ahead = $dx*sin($heading) + $dz*cos($heading);
+			$side = $dx*cos($heading) - $dz*sin($heading);
+			$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
+		}
+		return ['journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,
@@ -2574,6 +2649,7 @@ final class Session
 			if($this->systems->registry->alive($id)) $this->systems->registry->destroy($id);
 		$this->vehicles = [];
 		$this->roadWork = null;
+		$this->journeyReady?->close(); $this->journeyReady = null;
 		$this->cancelPick(); $this->carSearch = null;
 		$this->circuitSearch = null;
 		$this->releasePin(); $this->landscape->close(); $this->draft?->close(); $this->draft = null;

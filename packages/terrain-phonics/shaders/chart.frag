@@ -60,18 +60,21 @@ vec4 chartSample(vec2 pos,out vec4 ink) {
 	ivec2 a=ivec2(floor(q));
 	return chartCell(uOverview,uMapInk,clamp(a,0,256),clamp(a+1,0,256),fract(q),uExtent/256.,ink);
 }
+// REGIONS
 void main() {
 	vec2 uv=((gl_FragCoord.xy-uViewportOrigin)/uChart.w-.5)*vec2(1.,-1.);
 	if(uCircular && dot(uv,uv)>.25) discard;
 	vec2 pos=uChart.xy+mat2(uHeading.x,uHeading.y,-uHeading.y,uHeading.x)*uv*uChart.z;
 	if(any(greaterThan(abs(pos),vec2(uExtent*.5)))) { color=vec4(.07,.13,.15,1); return; }
+	float alpha=regionOpacity(pos);
+	if(alpha<=0.) discard;
 	vec4 ink;
 	vec4 h=chartSample(pos,ink);
 	vec3 n=h.xyz;
 	float footprint=uChart.z/uChart.w;
-	vec3 albedo=materialSurface(vec3(pos.x,h.w,pos.y),h.xyz,vec3(0.,1.,0.),footprint,uWaterLevel,landVariation(pos,footprint)*uMacroVariation,n);
+	vec3 albedo=materialSurface(vec3(pos.x,h.w,pos.y)-uMaterialOrigin,h.xyz,vec3(0.,1.,0.),footprint,uWaterLevel-uMaterialOrigin.y,landVariation(pos-uMaterialOrigin.xz,footprint)*uMacroVariation,n);
 	albedo=albedo*(1.-ink.a)+ink.rgb;
 	float shade=clamp(.96-.44*(h.x+h.z),.55,1.42);
 	if(h.w<uWaterLevel) { albedo=uWaterColor; shade=mix(1.25,.72,smoothstep(0.,80.,uWaterLevel-h.w)); }
-	color=vec4(pow(max(vec3(0),shade*albedo),vec3(1./2.2)),1.);
+	color=vec4(pow(max(vec3(0),shade*albedo),vec3(1./2.2)),alpha);
 }

@@ -4,6 +4,31 @@ precision highp int;
 uniform highp sampler2D uPermutation, uRoadAtlas;
 // Directory offset (zero when absent), blocks per row, signed minimum tile and tile size.
 uniform ivec4 uRoadGrid;
+uniform vec4 uRegion; // half extent, surround, transition, sea level
+#ifdef JOINED_TERRAIN
+uniform int uFormCount;
+uniform float uJoinWidth;
+uniform vec3 uFormOrigin[3]; // local X/Z origin, vertical offset to the common sea level
+int formIndex = 0;
+uniform vec4 uShapeSet[3];
+#define uShape uShapeSet[formIndex]
+uniform vec4 uProfileSet[3];
+#define uProfile uProfileSet[formIndex]
+uniform vec4 uFieldSet[3];
+#define uField uFieldSet[formIndex]
+uniform vec2 uFieldResidualSet[3];
+#define uFieldResidual uFieldResidualSet[formIndex]
+uniform vec2 uErosionSet[3];
+#define uErosion uErosionSet[formIndex]
+uniform vec4 uRockSet[3];
+#define uRock uRockSet[formIndex]
+uniform vec4 uDetailSet[3];
+#define uDetail uDetailSet[formIndex]
+uniform float uSlopeScaleSet[3];
+#define uSlopeScale uSlopeScaleSet[formIndex]
+uniform int uOctavesSet[3];
+#define uOctaves uOctavesSet[formIndex]
+#else
 uniform vec4 uShape; // bias, rolling, rise, ridge
 uniform vec4 uProfile; // ridge rounding, wall height, floor width, wall width
 uniform vec4 uField; // scale, frequency, warp amplitude, warp frequency
@@ -11,9 +36,9 @@ uniform vec2 uFieldResidual;
 uniform vec2 uErosion; // drainage frequency and its float rounding residual
 uniform vec4 uRock; // secondary, terrace spacing, strength, bedding
 uniform vec4 uDetail; // amplitude, persistence, lacunarity, damping
-uniform vec4 uRegion; // half extent, surround type, transition, sea level
 uniform float uSlopeScale;
 uniform int uOctaves;
+#endif
 uniform ivec2 uOriginCell, uPixelOrigin;
 uniform float uStep;
 uniform vec2 uWorldOffset;
@@ -26,7 +51,12 @@ const vec2 gradient[8] = vec2[8](vec2(1,0),vec2(-1,0),vec2(0,1),vec2(0,-1),
 	vec2(.7071067811865476,-.7071067811865476),vec2(-.7071067811865476));
 float fade(float x){ float t=min(x,1.-x); float y=t*t*t*(t*(6.*t-15.)+10.); return x>.5?1.-y:y; }
 float derivative(float x){return 30.*x*x*(x-1.)*(x-1.);}
-int perm(int i){return int(texelFetch(uPermutation,ivec2(i & 255,0),0).r*255.+.5);}
+#ifdef JOINED_TERRAIN
+#define PERM_ROW formIndex
+#else
+#define PERM_ROW 0
+#endif
+int perm(int i){return int(texelFetch(uPermutation,ivec2(i & 255,PERM_ROW),0).r*255.+.5);}
 vec2 grad(int column,int row){return gradient[perm(column+row)&7];}
 
 // Apply the integer part of each noise offset to the lattice address. Adding a large offset
@@ -179,6 +209,30 @@ float terrainHeight(vec2 world)
 	}
 	return h.x;
 }
+#ifdef JOINED_TERRAIN
+float regionalHeight(int index,vec2 world)
+{
+	formIndex=index;
+	vec3 origin=uFormOrigin[index];
+	return terrainHeight(world-origin.xy)+origin.z;
+}
+float joinedHeight(vec2 world)
+{
+	float edge=.5*uJoinWidth;
+	if(world.x<=-edge) return regionalHeight(0,world);
+	float east;
+	if(uFormCount==2 || world.y<=-edge) east=regionalHeight(1,world);
+	else if(world.y>=edge) east=regionalHeight(2,world);
+	else {
+		float north=regionalHeight(1,world);
+		float south=regionalHeight(2,world);
+		east=mix(north,south,fade(world.y/uJoinWidth+.5));
+	}
+	if(world.x>=edge) return east;
+	float west=regionalHeight(0,world);
+	return mix(west,east,fade(world.x/uJoinWidth+.5));
+}
+#endif
 vec4 roadRecord(int address)
 {
 	int width = textureSize(uRoadAtlas, 0).x;
@@ -297,8 +351,11 @@ void gradeRoads(vec2 world, inout float height, inout float material, inout vec3
 void main()
 {
 	vec2 world=uWorldOffset+vec2(uOriginCell+ivec2(gl_FragCoord.xy)-uPixelOrigin)*uStep;
-	float h=terrainHeight(world);
 	float outside=max(abs(world.x),abs(world.y))-uRegion.x;
+	#ifdef JOINED_TERRAIN
+	float h=joinedHeight(world);
+#else
+	float h=terrainHeight(world);
 	if(outside>0. && uRegion.y>0. && !(uRegion.y==3. && uNaturalMountains)) {
 		float broad=sampleNoise(world,vec2(0),.0005,0.,ivec2(31,7),vec2(0)).x;
 		float t=smoothstep(0.,uRegion.z*(1.+.35*broad),outside);
@@ -310,6 +367,7 @@ void main()
 		}
 		h=mix(h,target,t);
 	}
+	#endif
 	float material = 0.;
 	vec3 marking = vec3(0.);
 	if(uRoadGrid.x != 0 && outside <= 0.) gradeRoads(world,h,material,marking);

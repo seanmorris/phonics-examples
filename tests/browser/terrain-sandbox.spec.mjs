@@ -3800,3 +3800,35 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 	await page.waitForURL(url => !url.pathname.includes('terrain-sandbox'), {timeout: 30_000});
 	expect(new URL(page.url()).pathname).toBe('/');
 });
+
+test('a landscape journey boards the car on the western road and offers signed branches at the fork', async({page}) => {
+	test.setTimeout(240_000);
+	await page.setViewportSize({width: 620, height: 400});
+	await page.goto('/games/terrain-sandbox/');
+	const view = canvas(page);
+	await expect(view).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await view.evaluate(el => el.terrainSandboxDebug.values({quality: .5}));
+	const section = await field(page, '[data-journey="fork"]');
+	await page.getByText('Landscape journey', {exact: true}).click();
+	await section.selectOption('divide');
+	await page.locator('[data-journey="east"]').selectOption('river-valley');
+	await page.locator('[data-journey="south"]').selectOption('coast');
+	await control(page, 'journey-build').click();
+	await expect.poll(async() => (await status(page)).mode, {timeout: 150_000}).toBe('car');
+	const west = await status(page);
+	expect(west.recipe.worldSize).toBe(69_632);
+	expect(west.car.x).toBeLessThan(-34_700);
+	await control(page, 'journey-fork').click();
+	await expect.poll(async() => (await status(page)).journeyForkAhead).toBe(true);
+	await expect(page.getByText('Left · River Valley & Floodplain / Right · Coast', {exact: true})).toBeVisible();
+	await page.locator('.terrain-panel > summary').click();
+	await view.focus();
+	await page.keyboard.down('w');
+	try {
+		const departure = (await status(page)).car.x;
+		await expect.poll(async() => (await status(page)).car.x, {timeout: 90_000}).toBeGreaterThan(departure + 2);
+	} finally {
+		await page.keyboard.up('w');
+	}
+	expect(await view.evaluate(el => el.getContext('webgl2').getError())).toBe(0);
+});

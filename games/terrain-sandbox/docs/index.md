@@ -158,6 +158,14 @@ During a road race, click the right stick if you leave the road. Right-stick rec
 
 Yellow chevrons mark paved bends that turn at least 30° with a radius of 300 ft or less. Their faces measure about 13 by 16 ft. The signs stand about six yards apart along the outside shoulder and point into the bend from either direction. At night the faces and the printed checkpoint banners reflect the car’s headlights back toward the driver. You can drive straight through the signs and their posts.
 
+### Drive between landscapes
+
+In free flight, open **Roads → Landscape journey**. Choose a departure landscape, the width of each map, and a destination. **Rejoin the highway** gives you two routes around the fork that meet again before the next map. **Separate destinations** sends the northern branch to **Destination** and the southern branch to **South branch destination**.
+
+Choose **Build new journey** to generate a new landscape and start the car at its western edge. Each map contributes its full width of 20.4 or 40.7 miles. Between them, a separate 2.55-mile stretch blends the land and its surface colors around a common sea level. **Drive from fork** places the car just before the split so you can try either route immediately.
+
+Return to free flight to reshape the highway with the road editor. Edits to a shared endpoint move the adjoining roads together. Use **Landscape → Save file** to keep the terrain, roads and forks together.
+
 ### Generate a circuit
 
 In free flight, open **Roads → Circuit generator**. Set **Minimum feature height difference** to a positive value to circle high ground or a negative value to circle a lake below the road. For example, **+656 ft** in the default Canyon looks for a feature whose high point rises at least 656 ft above the road. **−197 ft** in the default Mountain Ridges looks for a road at least 197 ft above a lake at the current water level.

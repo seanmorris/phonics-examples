@@ -64,7 +64,7 @@ final class RoadGrading
 		$room = self::availableKnots($points);
 		if(!$room) return $road;
 		$recipe = $land->recipe();
-		if($recipe['heightScale']==0. && ($recipe['detailAmplitude']==0. || !$recipe['detailOctaves'])
+		if(!isset($recipe['join']) && $recipe['heightScale']==0. && ($recipe['detailAmplitude']==0. || !$recipe['detailOctaves'])
 			&& $land->heightEditIndex()->isEmpty()) return $road;
 
 		$tangents = [];

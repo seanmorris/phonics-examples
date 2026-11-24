@@ -8,6 +8,7 @@ use Phonics\Render\Program;
 final class Clipmap
 {
 	private Program $generator;
+	private bool $joined = false;
 	private ?TerrainAppearance $chartAppearance = null;
 	private ?TriangleShadows $shadows = null;
 	private ?SurfaceLayers $chartLayers = null;
@@ -53,16 +54,19 @@ final class Clipmap
 
 	public function __construct()
 	{
-		$root = dirname(__DIR__) . '/shaders/';
-
-		$this->generator = new Program(
-			file_get_contents($root . 'shadows.vert')
-			, file_get_contents($root . 'elevation.frag')
-		);
+		$this->generator = self::elevationProgram(false);
 
 		glGenVertexArrays(1, $this->vao);
 		glGenFramebuffers(1, $this->framebuffer);
 		glGenTextures(1, $this->permutation);
+	}
+
+	private static function elevationProgram(bool $joined): Program
+	{
+		$root = dirname(__DIR__).'/shaders/';
+		$fragment = file_get_contents($root.'elevation.frag');
+		if($joined) $fragment = str_replace('#version 300 es', "#version 300 es\n#define JOINED_TERRAIN", $fragment);
+		return new Program(file_get_contents($root.'shadows.vert'), $fragment);
 	}
 
 	private static function texture(int $id): void
@@ -108,33 +112,36 @@ final class Clipmap
 		// reconstruction across the complete edited footprint for this one texture.
 		$overviewStride = $r['worldSize'] / (256 * $r['spacing']);
 		$this->overviewEdits = $roads && $overviewStride !== floor($overviewStride) ? $land->editIndex() : null;
-		if($roads !== $this->roads || ($roads && $r['worldSize'] !== ($this->recipe['worldSize'] ?? null)))
+		$joined = isset($r['join']);
+		$switched = $joined !== $this->joined;
+		if($switched) {
+			$program = self::elevationProgram($joined);
+			$this->generator->close();
+			$this->generator = $program;
+			$this->generator->use();
+			$this->joined = $joined;
+		}
+		if($switched || $roads !== $this->roads || ($roads && $r['worldSize'] !== ($this->recipe['worldSize'] ?? null)))
 			$this->uploadRoads($roads, $r['worldSize']);
 
 		if(!$newRecipe) return;
 
 		$this->recipe = $r;
 		self::texture($this->permutation[0]);
-		$perm = (new Noise($r['seed']))->permutation();
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256, 1, 0, GL_RED, GL_UNSIGNED_BYTE, pack('C*', ...$perm));
 		$p = $this->generator;
-
-		foreach([
-			'uShape' => ['baseBias','rolling','directionalRise','ridgeHeight']
-			, 'uProfile' => ['ridgeRoundness','wallHeight','floorWidth','wallWidth']
-			, 'uField' => ['heightScale','baseFrequency','warpAmplitude','warpFrequency']
-			, 'uRock' => ['secondary','terraceSpacing','terraceStrength','bedding']
-			, 'uDetail' => ['detailAmplitude','persistence','lacunarity','damping']
-		] as $uniform => $fields) glUniform4f($p->location($uniform), ...array_map(static fn($key) => $r[$key], $fields));
-
-		$residual = static fn(float $f): float => $f - unpack('g', pack('g', $f))[1];
-		glUniform2f($p->location('uFieldResidual'), $residual($r['baseFrequency']), $residual($r['warpFrequency']));
-		// Rounding the already-converted base frequency times 22 moves the drainage
-		// contours at large coordinates. Pass the exact recipe product and its residual.
-		$erosion = 22 * $r['baseFrequency'];
-		glUniform2f($p->location('uErosion'), $erosion, $residual($erosion));
-		glUniform1f($p->location('uSlopeScale'), $r['slopeScale']);
-		glUniform1i($p->location('uOctaves'), $r['detailOctaves']);
+		$recipes = [$r, ...($r['join']['destinations'] ?? [])];
+		$bytes = '';
+		if($joined) {
+			$origins = JoinedTerrain::origins($r['join']['span'],count($recipes)-1);
+			glUniform1i($p->location('uFormCount'), count($recipes));
+			glUniform1f($p->location('uJoinWidth'), JoinedTerrain::GAP);
+		}
+		foreach($recipes as $i=>$form) {
+			$bytes .= pack('C*', ...(new Noise($form['seed']))->permutation());
+			$this->uploadForm($form,$joined ? "Set[$i]" : '');
+			if($joined) glUniform3f($p->location("uFormOrigin[$i]"),$origins[$i][0],$origins[$i][1],$r['waterLevel']-$form['waterLevel']);
+		}
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256, count($recipes), 0, GL_RED, GL_UNSIGNED_BYTE, $bytes);
 
 		glUniform4f(
 			$p->location('uRegion')
@@ -148,6 +155,28 @@ final class Clipmap
 			$p->location('uNaturalMountains')
 			, (int)($r['ridgeHeight'] > 0 && $r['wallHeight'] == 0 && $r['directionalRise'] == 0)
 		);
+	}
+
+	private function uploadForm(array $r,string $suffix): void
+	{
+		$p = $this->generator;
+		foreach([
+			'uShape' => ['baseBias','rolling','directionalRise','ridgeHeight']
+			, 'uProfile' => ['ridgeRoundness','wallHeight','floorWidth','wallWidth']
+			, 'uField' => ['heightScale','baseFrequency','warpAmplitude','warpFrequency']
+			, 'uRock' => ['secondary','terraceSpacing','terraceStrength','bedding']
+			, 'uDetail' => ['detailAmplitude','persistence','lacunarity','damping']
+		] as $uniform => $fields) glUniform4f($p->location($uniform.$suffix), ...array_map(static fn($key) => $r[$key], $fields));
+
+		$residual = static fn(float $f): float => $f - unpack('g', pack('g', $f))[1];
+		glUniform2f($p->location('uFieldResidual'.$suffix), $residual($r['baseFrequency']), $residual($r['warpFrequency']));
+		// Rounding the already-converted base frequency times 22 moves the drainage
+		// contours at large coordinates. Pass the exact recipe product and its residual.
+		$erosion = 22 * $r['baseFrequency'];
+		glUniform2f($p->location('uErosion'.$suffix), $erosion, $residual($erosion));
+		glUniform1f($p->location('uSlopeScale'.$suffix), $r['slopeScale']);
+		glUniform1i($p->location('uOctaves'.$suffix), $r['detailOctaves']);
+
 	}
 
 	/**
@@ -831,7 +860,7 @@ final class Clipmap
 	}
 
 	/** Draw a solid inner grid and rectangular strips around each finer level. */
-	public function draw(Program $p, Camera $camera, array $planes, array $vertical, bool $water = false): int
+	public function draw(Program $p, Camera $camera, array $planes, array $vertical, bool $water = false, int $materialRegion = -1): int
 	{
 		$count = 0;
 		$inner = null;
@@ -876,6 +905,19 @@ final class Clipmap
 					$top = max($top, -$limit);
 					$right = min($right, $limit);
 					$bottom = min($bottom, $limit);
+				}
+
+				// Clip the draw to the part where this material can contribute, including cells across the seam.
+				if($materialRegion >= 0) {
+					$edge = (int)ceil(JoinedTerrain::GAP/(2*$s));
+					if($materialRegion===0) $right = min($right,$edge);
+					else {
+						$left = max($left,-$edge);
+						if(count($this->recipe['join']['destinations'])===2) {
+							if($materialRegion===1) $bottom=min($bottom,$edge);
+							else $top=max($top,-$edge);
+						}
+					}
 				}
 
 				$width = $right - $left;
@@ -990,6 +1032,7 @@ final class Clipmap
 		, ?float $localView = null
 		, bool $circular = false
 		, ?float $fixedSpan = null
+		, int $regions = 1, int $regionIndex = 0, array $origin = [0.,0.,0.], ?string $seed = null
 	): ?float {
 		if(!$this->overview) return null;
 
@@ -1003,7 +1046,9 @@ final class Clipmap
 			$this->chartLayers = $layers;
 		}
 
-		$this->paletteOrigin($p);
+		$this->paletteOrigin($p,$seed);
+		glUniform3f($p->location('uJoinMaterial'),$regions>1 ? $regions : 0,$regionIndex,JoinedTerrain::GAP);
+		glUniform3f($p->location('uMaterialOrigin'),...$origin);
 		$n = min($size ?? (int)round(min(184, $w * .235, $h * .245)), $w - 10, $h - 10);
 
 		if($n <= 0) return null;
@@ -1060,18 +1105,22 @@ final class Clipmap
 		glViewport(10, 10, $n, $n);
 		glDisable(GL_SCISSOR_TEST);
 		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_BLEND);
+		if($regionIndex>0) {
+			glEnable(GL_BLEND);
+			glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
+		} else glDisable(GL_BLEND);
 		glDisable(GL_CULL_FACE);
 		glBindVertexArray($this->vao[0]);
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 		glViewport(0, 0, $w, $h);
+		if($regionIndex>0) glDisable(GL_BLEND);
 
 		return $span;
 	}
 
-	public function paletteOrigin(Program $p): void
+	public function paletteOrigin(Program $p, ?string $seed = null): void
 	{
-		$seed = crc32((string)$this->recipe['seed']);
+		$seed = crc32($seed ?? (string)$this->recipe['seed']);
 		glUniform2f($p->location('uPaletteOffset'), $seed & 65535, ($seed >> 16) & 65535);
 	}
 

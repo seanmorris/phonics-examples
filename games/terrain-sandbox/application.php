@@ -114,22 +114,23 @@ $stopSearchTimer = static function() use ($window, &$searchTimer): void {
 	if($searchTimer !== null) $window->clearInterval($searchTimer);
 	$searchTimer = null;
 };
-$lastCircuitFrame = 0;
+$lastAuthoringFrame = 0;
 $workOnSearch = static function() use (
-	$session, $engine, $stopSearchTimer, &$lastCircuitFrame, &$statusPending, &$urgentStatus
+	$session, $engine, $stopSearchTimer, &$lastAuthoringFrame, &$statusPending, &$urgentStatus
 ): void {
 	if($engine->paused) { $stopSearchTimer(); return; }
-	if($session->findingCircuit())
+	if($session->findingCircuit() || $session->preparingRoad())
 	{
 		// At normal frame rates input already services the editor. Reclaim a short slice only between slow frames.
-		if(hrtime(true)-$lastCircuitFrame >= 16_000_000)
+		if(hrtime(true)-$lastAuthoringFrame >= 16_000_000)
 		{
-			$session->advanceCircuit(5.);
-			if(!$session->findingCircuit()) $urgentStatus = $statusPending = true;
+			if($session->preparingRoad()) $session->advanceRoadBetweenFrames();
+			else $session->advanceCircuit(5.);
+			if(!$session->findingCircuit() && !$session->preparingRoad()) $urgentStatus = $statusPending = true;
 		}
 	}
 	$deliveryPending = !$session->paused && $session->delivery?->advanceSearch(5.);
-	if(!$deliveryPending && !$session->findingCircuit()) $stopSearchTimer();
+	if(!$deliveryPending && !$session->findingCircuit() && !$session->preparingRoad()) $stopSearchTimer();
 };
 $startSearchTimer = static function() use ($window, &$searchTimer, $workOnSearch): void {
 	if($searchTimer === null) $searchTimer = $window->setInterval($workOnSearch, 10);
@@ -140,7 +141,7 @@ $engine->systems->add('terrain-sandbox.delivery-search', static function() use (
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds,
-	&$heldKeys, &$heldPad, &$menuPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastCircuitFrame,
+	&$heldKeys, &$heldPad, &$menuPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastAuthoringFrame,
 	$pauseMenu
 ): bool {
 	$frameSeconds = max(0.0, $elapsed);
@@ -175,9 +176,9 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		$input['pad'] = $menuOpen ? [] : $heldPad;
 		$moving = $heldKeys || $heldPad || in_array($session->mode, ['craft','jet'], true) || !empty($input['look'][0]) || !empty($input['look'][1]);
 		$session->input($input, min(.1, $frameSeconds), $width / $height, $moving ? 1.0 : 7.5);
-		if($session->findingCircuit())
+		if($session->findingCircuit() || $session->preparingRoad())
 		{
-			$lastCircuitFrame = hrtime(true);
+			$lastAuthoringFrame = hrtime(true);
 			$startSearchTimer();
 		}
 	}

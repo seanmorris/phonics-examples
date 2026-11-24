@@ -155,8 +155,12 @@ vec3 dielectricReflection(vec3 diffuse,vec3 normal,vec2 finish,float painted,vec
 #endif
 uniform float uPlayHalf;
 uniform vec3 uPaintColor[5], uMaterialBounce;
+// REGIONS
 void main()
 {
+	float alpha = uCraft>.5 ? 1. : regionOpacity(vWorld.xz);
+	if(alpha<=0.) discard;
+	vec3 local = vWorld-uMaterialOrigin;
 	if(uPlayHalf>0. && max(abs(vWorld.x),abs(vWorld.z))>uPlayHalf) discard;
 	vec3 n = normalize(vNormal);
 	vec3 weights = pow(abs(n), vec3(4.0)); weights /= dot(weights, vec3(1.0));
@@ -177,14 +181,14 @@ void main()
 	// shoulder still evaluate its noise and derivatives all the way to the road edge.
 	float roadGradient = fwidth(vPaint1.y);
 	bool pavement = road >= .999999 && roadGradient <= .000001;
-	float macro = pavement ? 0. : landVariation(vWorld.xz, footprint) * uMacroVariation;
+	float macro = pavement ? 0. : landVariation(local.xz, footprint) * uMacroVariation;
 	vec3 lightingNormal=n;
 	vec3 albedo=uPaintColor[4];
 	#ifdef MATERIAL_REFLECTION
 	vec2 finish=vec2(0.);
-	if(!pavement) albedo=materialSurface(vWorld,n,vRelative,footprint,uWaterLevel,macro,lightingNormal,finish);
+	if(!pavement) albedo=materialSurface(local,n,vRelative,footprint,uWaterLevel-uMaterialOrigin.y,macro,lightingNormal,finish);
 	#else
-	if(!pavement) albedo=materialSurface(vWorld,n,vRelative,footprint,uWaterLevel,macro,lightingNormal);
+	if(!pavement) albedo=materialSurface(local,n,vRelative,footprint,uWaterLevel-uMaterialOrigin.y,macro,lightingNormal);
 	#endif
 	// Blend material weights, never categorical identifiers: a rock/road boundary must not become snow.
 	float painted = clamp(dot(vPaint0,vec3(1.)) + vPaint1.x + road + vPaint1.z, 0.0, 1.0);
@@ -234,5 +238,5 @@ void main()
 	lit = waterColumnLight(lit, vRelative, uEye.y, uWaterLevel,
 		vec3(illumination) + uNightAmbient + terrainSpotWaterColumn(uEye, vWorld, uWaterLevel));
 	vec3 aerial = terrainAtmosphere(normalize(vRelative), uEye.y, length(vRelative), lit);
-	color = vec4(terrainToneMap(aerial),1.0);
+	color = vec4(terrainToneMap(aerial),alpha);
 }

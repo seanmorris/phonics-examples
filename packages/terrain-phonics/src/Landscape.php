@@ -20,7 +20,7 @@ final class Landscape implements TerrainSurface
 	/** Names of the sixteen stencil nodes in row-major order, as HeightTile::layout() assigns them. */
 	private const SLOTS = ['a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p'];
 	/** Immutable procedural recipe and normalized parameters. */
-	private Recipe $generator;
+	private Recipe|JoinedTerrain $generator;
 	private array $parameters;
 	/** Half the world edge, the lattice spacing and the tile edge, copied out for the per-query path. */
 	private float $half, $spacing;
@@ -63,7 +63,7 @@ final class Landscape implements TerrainSurface
 	 */
 	public function __construct(array $recipe = [])
 	{
-		$this->generator = new Recipe($recipe);
+		$this->generator = isset($recipe['join']) ? new JoinedTerrain($recipe) : new Recipe($recipe);
 		$this->parameters = $this->generator->values();
 		$this->range = $this->generator->bounds();
 		$this->half = $this->parameters['worldSize'] / 2;

@@ -40,7 +40,8 @@ final class MaterialShader
 		foreach(array_unique(array_column($stack->layers,'pattern')) as $pattern)
 			$features .= '#define PATTERN_'.strtoupper($pattern)."\n";
 		$patterns = $features.($clipmap ? "#define SURFACE_LAYERS\n" : '').file_get_contents($path.'surface-layers.glsl');
-		return str_replace(['// LAYERS','// MATERIAL NOISE','// MATERIAL STACK'], [
+		return str_replace(['// REGIONS','// LAYERS','// MATERIAL NOISE','// MATERIAL STACK'], [
+			file_get_contents($path.'joined-material.glsl'),
 			$patterns, file_get_contents($path.'material-noise.glsl'), self::compose($stack,$chart),
 		],$source);
 	}

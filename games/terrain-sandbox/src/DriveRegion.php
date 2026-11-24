@@ -47,7 +47,7 @@ final class DriveRegion
 		$this->edits = $land->heightEditIndex();
 		$bounds = $land->bounds();
 		$this->dryRelief = $bounds['minY'] > $water+.12 ? $bounds['maxY']-$bounds['minY'] : INF;
-		$this->flatBase = $recipe['heightScale'] == 0 && ($recipe['detailAmplitude'] == 0 || $recipe['detailOctaves'] === 0);
+		$this->flatBase = !isset($recipe['join']) && $recipe['heightScale'] == 0 && ($recipe['detailAmplitude'] == 0 || $recipe['detailOctaves'] === 0);
 		$this->level = $this->flatBase && $this->edits->isEmpty();
 	}
 

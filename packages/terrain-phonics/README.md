@@ -24,6 +24,22 @@ Coordinates are meters, Y is up, and the square world's X/Z bounds are centered 
 Queries outside the bounded world are rejected. `height()` and `sample()` use the same authoritative
 Catmull–Rom reconstruction. A renderer can change its mesh resolution without changing these queries.
 
+### Join full-size landscapes
+
+A journey places a departure map west of one or two destinations. Each map is 32,768 or 65,536 meters across. A separate 4,096-meter strip blends heights and surface colors between their edges. Each map retains its local noise coordinates, and its elevations are offset to align its own sea level with the departure map's water level.
+
+```php
+$journey = new TerrainPhonics\Landscape([
+    'preset' => 'rolling-prairie',
+    'join' => [
+        'span' => 32768,
+        'destinations' => [['preset' => 'mountain'], ['preset' => 'coast']],
+    ],
+]);
+```
+
+With two destinations, the first sits northeast and the second southeast, with a second transition strip between them. The recipe and ordinary road edits travel together in the landscape save. The sandbox road editor can generate a highway across this layout.
+
 The generator combines finite smooth Perlin bands with a separate larger-scale slope guide.
 Steeper guide slopes attenuate fine-detail **amplitude**, especially at the finer octaves.
 The guide never feeds back from an already attenuated surface. Rounded mountain ridges avoid absolute-value cusps.
