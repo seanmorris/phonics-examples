@@ -291,6 +291,19 @@ final class Clipmap
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + $i, GL_TEXTURE_2D, $id, 0);
 		glDrawBuffers(2, [GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT0 + 1]);
 
+		foreach(self::wrapped($rects,$n) as [$x,$z,$u,$v,$w,$h]) {
+			glViewport($u, $v, $w, $h);
+			glUniform2i($p->location('uOriginCell'), $x, $z);
+			glUniform2i($p->location('uPixelOrigin'), $u, $v);
+			glDrawArrays(GL_TRIANGLES, 0, 3);
+			$this->texels += $w * $h;
+			$this->paintQueue[] = [$key, $x, $z, $w, $h, $step, $offset, null];
+		}
+	}
+
+	/** Split world-cell rectangles at texture boundaries, keeping both logical and physical origins. */
+	public static function wrapped(array $rects, int $n): \Generator
+	{
 		foreach($rects as [$x0,$z0,$x1,$z1])
 		{
 			for($z = $z0; $z < $z1; $z += $h)
@@ -300,12 +313,7 @@ final class Clipmap
 				$v = (($z % $n) + $n) % $n;
 				$w = min($x1 - $x, $n - $u);
 				$h = min($z1 - $z, $n - $v);
-				glViewport($u, $v, $w, $h);
-				glUniform2i($p->location('uOriginCell'), $x, $z);
-				glUniform2i($p->location('uPixelOrigin'), $u, $v);
-				glDrawArrays(GL_TRIANGLES, 0, 3);
-				$this->texels += $w * $h;
-				$this->paintQueue[] = [$key, $x, $z, $w, $h, $step, $offset, null];
+				yield [$x,$z,$u,$v,$w,$h];
 			}
 		}
 	}
@@ -892,16 +900,16 @@ final class Clipmap
 	/** Draw a solid inner grid and rectangular strips around each finer level. */
 	public function draw(Program $p, Camera $camera, array $planes, array $vertical, bool $water = false, int $materialRegion = -1): int
 	{
-		$count = 0;
+		return $this->drawGroups($p,$camera,$this->visibleGroups($camera,$planes,$vertical,$water,$materialRegion));
+	}
+
+	/** Cull once when multiple ground passes draw the same stitched geometry. */
+	public function visibleGroups(Camera $camera, array $planes, array $vertical, bool $water = false, int $materialRegion = -1): array
+	{
+		$groups = [];
 		$inner = null;
-		glBindVertexArray($this->vao[0]);
-		glUniform1i($p->location('uPacked'), (int)$this->packed);
-		glUniform1i($p->location('uElevations'), 7);
-		glUniform1i($p->location('uInk'), 8);
 		$halfWorld = $this->recipe['worldSize'] / 2;
 		$half = $this->recipe['surround'] === 'none' ? $halfWorld : 0;
-		glUniform1f($p->location('uPlayHalf'), $half);
-
 		foreach($this->levels as $index => $level)
 		{
 			if(!isset($level['origin'])) continue;
@@ -1016,8 +1024,24 @@ final class Clipmap
 					}
 				}
 			}
-			if(!$visible) continue;
-			$this->bindGrid($p, $camera, $index, $level);
+			if($visible) $groups[$index] = $visible;
+		}
+		return $groups;
+	}
+
+	public function drawGroups(Program $p, Camera $camera, array $groups): int
+	{
+		$count = 0;
+		glBindVertexArray($this->vao[0]);
+		glUniform1i($p->location('uPacked'), (int)$this->packed);
+		glUniform1i($p->location('uElevations'), 7);
+		glUniform1i($p->location('uInk'), 8);
+		$halfWorld = $this->recipe['worldSize'] / 2;
+		$half = $this->recipe['surround'] === 'none' ? $halfWorld : 0;
+		glUniform1f($p->location('uPlayHalf'), $half);
+
+		foreach($groups as $index => $visible) {
+			$this->bindGrid($p, $camera, $index, $this->levels[$index]);
 
 			foreach($visible as [$left,$top,$right,$bottom])
 			{

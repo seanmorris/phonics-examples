@@ -3,6 +3,11 @@ uniform bool uBlendProfile;
 vec3 journeySurface(vec3 world, vec3 normal, vec3 relative, float footprint, bool pavement,
 	out vec3 litNormal, out vec2 finish, out vec3 bounce)
 {
+	#ifdef WORLD_MATERIAL_FIELDS
+	vec2 cell=(world.xz-uFieldWindow.xy)/uFieldWindow.z;
+	fieldResident=all(greaterThanEqual(cell,vec2(0.))) && all(lessThan(cell,vec2(1./uFieldWindow.w-1.)));
+	fieldUV=(world.xz/uFieldWindow.z+.5)*uFieldWindow.w;
+	#endif
 	vec2 t = clamp(world.xz / uJoinWidth + .5, 0., 1.);
 	// Break up the material boundary in world space. The envelope vanishes at both pure landscapes.
 	bool blended=t.x>0. && t.x<1.;
@@ -10,10 +15,13 @@ vec3 journeySurface(vec3 world, vec3 normal, vec3 relative, float footprint, boo
 	blended=blended || (t.x>0. && t.y>0. && t.y<1.);
 	#endif
 	if(uBlendProfile && blended) {
-		vec2 uv=world.xz/360.;
 		float fine=1.-smoothstep(36.,144.,footprint);
-		vec2 scatter=vec2(layerValueNoise(uv*.37),layerValueNoise(uv*.37+23.))
-			+ .45*fine*vec2(layerValueNoise(uv+13.),layerValueNoise(uv-7.));
+		vec4 bands =
+			#ifdef WORLD_MATERIAL_FIELDS
+			fieldResident ? 2.*textureLod(uMaterialFields,vec3(fieldUV,3.),0.)-1. :
+			#endif
+			scatterBands(world.xz);
+		vec2 scatter=bands.xy + .45*fine*bands.zw;
 		t=clamp(t+.20*t*(1.-t)*scatter,0.,1.);
 	}
 	vec2 fade = clamp(t*t*t*(t*(t*6.-15.)+10.), 0., 1.);

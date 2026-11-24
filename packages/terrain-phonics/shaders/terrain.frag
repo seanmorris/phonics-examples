@@ -1,9 +1,23 @@
 #version 300 es
 precision highp float;
 precision highp int;
+// MATERIAL PASSES
 // ATMOSPHERE
 // OPTICS
 // SPOT LIGHTS
+#ifdef READ_RIB_FIELD
+uniform highp sampler2D uRibField;
+#endif
+#ifdef WRITE_RIB_FIELD
+vec3 ribField = vec3(0.);
+#endif
+#ifdef WORLD_MATERIAL_FIELDS
+uniform highp sampler2DArray uMaterialFields;
+uniform vec4 uFieldWindow; // world minimum XZ, meters per texel, reciprocal texture width
+bool fieldResident;
+vec2 fieldUV;
+vec4 fieldSample;
+#endif
 // LAYERS
 in vec3 vRelative, vWorld, vNormal;
 in vec3 vPaint0, vPaint1;
@@ -211,6 +225,10 @@ void main()
 	if(!pavement) albedo=materialSurface(local,n,vRelative,footprint,uWaterLevel-uMaterialOrigin.y,macro,lightingNormal);
 	#endif
 	#endif
+	#ifdef WRITE_RIB_FIELD
+	// Preserve faint slopes in RGBA8 and reserve one code on either side of the range.
+	color = vec4((128.+126.*ribField/(.02+abs(ribField)))/255.,1.);
+	#else
 	// Blend material weights, never categorical identifiers: a rock/road boundary must not become snow.
 	float painted = clamp(dot(vPaint0,vec3(1.)) + vPaint1.x + road + vPaint1.z, 0.0, 1.0);
 	vec3 craft = mix(vec3(0.06,0.12,0.17), vec3(0.95,0.28,0.03), step(0.15,vWorld.y - uWaterLevel));
@@ -261,4 +279,5 @@ void main()
 		vec3(illumination) + uNightAmbient + terrainSpotWaterColumn(uEye, vWorld, uWaterLevel));
 	vec3 aerial = terrainAtmosphere(normalize(vRelative), uEye.y, length(vRelative), lit);
 	color = vec4(terrainToneMap(aerial),alpha);
+	#endif
 }

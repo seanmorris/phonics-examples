@@ -137,6 +137,11 @@ Applications that reserve uniform-buffer binding zero for terrain scenes can pas
 `retainJourneyBinding: true` to `Scene`. The ground and chart then share the bound journey palette across
 frames. Drawing a different terrain scene switches to its palette.
 
+Joined clipmaps keep the broad color variation, grass patches and junction noise in a 1 MiB world-space
+texture near the camera. Moving the window fills the newly exposed strips. The shader evaluates the same
+fields outside the window. Sculpting, painting and grading roads reuse those noise values and draw from the
+current heights, normals and paint. Ridge relief depends on the camera footprint and is evaluated each frame.
+
 Recipe presets fill in a common set of shape coefficients. These coefficients can combine broad directional
 rise, rounded ridges, canyon walls, rolling relief and terracing. The `limestone` preset uses a 3,050 m
 base wavelength and a wide wall transition to give isolated peaks broad foothills. Partial terraces at

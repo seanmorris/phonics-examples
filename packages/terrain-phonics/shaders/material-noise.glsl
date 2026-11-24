@@ -11,15 +11,18 @@ float smoothNoise(vec2 p)
 	return mix(mix(hashCell(cell), hashCell(cell + vec2(1.0,0.0)), w.x),
 		mix(hashCell(cell + vec2(0.0,1.0)), hashCell(cell + vec2(1.0)), w.x), w.y);
 }
+vec3 macroBands(vec2 position)
+{
+	return vec3(smoothNoise(position / 420.),smoothNoise(position / 95. + 17.31),smoothNoise(position / 22. - 53.73));
+}
+float filteredVariation(vec3 bands, float footprint)
+{
+	vec3 fade = 1.-smoothstep(vec3(95.,20.,5.),vec3(420.,95.,22.),vec3(footprint));
+	return dot((bands-.5)*fade,vec3(1.2,.55,.25));
+}
 float landVariation(vec2 position, float footprint)
 {
-	float broad = (smoothNoise(position / 420.0) - 0.5)
-		* (1.0 - smoothstep(95.0,420.0,footprint));
-	float middle = (smoothNoise(position / 95.0 + 17.31) - 0.5)
-		* (1.0 - smoothstep(20.0,95.0,footprint));
-	float small = (smoothNoise(position / 22.0 - 53.73) - 0.5)
-		* (1.0 - smoothstep(5.0,22.0,footprint));
-	return broad * 1.2 + middle * 0.55 + small * 0.25;
+	return filteredVariation(macroBands(position),footprint);
 }
 // Project onto the two upright planes so weathering runs down exposed rock faces.
 float cliffNoise(vec3 p, vec2 scale, float xWeight)
@@ -42,17 +45,25 @@ vec3 coverCorner(ivec2 cell, vec2 d)
 // Signed simplex noise and its derivatives in the input coordinates. Salt the
 // lattice indices to keep neighboring samples precise even with a large palette seed.
 const float COVER_FREQUENCY = .66;
-vec3 coverNoise(vec2 p)
+vec3 seededCoverNoise(vec2 p, ivec2 seed)
 {
 	const float skew = .366025404, unskew = .211324865;
 	p *= COVER_FREQUENCY;
 	vec2 ij = floor(p + (p.x+p.y)*skew);
 	vec2 d = p - ij + (ij.x+ij.y)*unskew;
-	ivec2 cell = ivec2(ij) + ivec2(uPaletteOffset);
+	ivec2 cell = ivec2(ij) + seed;
 	ivec2 side = d.x > d.y ? ivec2(1,0) : ivec2(0,1);
 	vec3 sampleValue = coverCorner(cell,d) + coverCorner(cell+side,d-vec2(side)+unskew)
 		+ coverCorner(cell+1,d-1.+2.*unskew);
 	return 35.*sampleValue*vec3(1.,COVER_FREQUENCY,COVER_FREQUENCY);
+}
+
+vec3 coverNoise(vec2 p) { return seededCoverNoise(p,ivec2(uPaletteOffset)); }
+float grassStand(vec2 xz, ivec2 seed) { return seededCoverNoise(xz/105. + vec2(22.1,-7.3),seed).x; }
+vec4 scatterBands(vec2 world)
+{
+	vec2 uv=world/360.;
+	return vec4(layerValueNoise(uv*.37),layerValueNoise(uv*.37+23.),layerValueNoise(uv+13.),layerValueNoise(uv-7.));
 }
 
 // Area-filter a band by the number of lattice intervals a pixel spans.

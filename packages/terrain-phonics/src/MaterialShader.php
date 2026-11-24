@@ -77,7 +77,13 @@ final class MaterialShader
 					if(!pavement) {
 						vec4 origin = palettes[$i].originAndVariation;
 						vec3 local = world - origin.xyz;
+						#ifdef WORLD_MATERIAL_FIELDS
+						if(fieldResident) fieldSample = textureLod(uMaterialFields,vec3(fieldUV,$i.),0.);
+						float macro = (fieldResident ? {$prefix}filteredVariation(fieldSample.rgb,footprint)
+							: {$prefix}landVariation(local.xz,footprint)) * origin.w;
+						#else
 						float macro = {$prefix}landVariation(local.xz,footprint) * origin.w;
+						#endif
 						float water = uWaterLevel - origin.y;
 						vec3 regionNormal = normal;
 						vec2 regionFinish = vec2(0.);

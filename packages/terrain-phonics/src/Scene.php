@@ -3,6 +3,7 @@ declare(strict_types=1);
 namespace TerrainPhonics;
 
 use Phonics\Render\Program;
+use Phonics\Render\RenderTarget;
 
 /**
  * Incrementally prepared landscape, sky and water renderer.
@@ -45,7 +46,9 @@ final class Scene
 	private array $destinations = [], $paletteBuffer = [], $uploadedMaterials = [], $selectedMaterials = [];
 	private static ?int $journeyBindingOwner = null;
 	private string $materialKey = '', $groundVertexSource, $groundFragmentSource;
-	private ?Program $chartProgram = null;
+	private ?Program $chartProgram = null, $ribProgram = null;
+	private ?RenderTarget $ribTarget = null;
+	private ?MaterialFieldCache $materialFields = null;
 	private ?Landscape $preparing = null;
 	private int $preparingRevision = -1, $preparingSourceRevision = -1;
 	private array $replacementJobs = [], $replacements = [];
@@ -2372,7 +2375,7 @@ final class Scene
 	 */
 	public function render(Camera $camera, int $width, int $height, float $time, ?array $craftState = null, ?callable $drawOpaque = null): void
 	{
-		if($this->closed) return;
+		if($this->closed || $width < 1 || $height < 1) return;
 
 		$this->viewportHeight = max(1, $height);
 		$this->viewportAspect = $width / max(1, $height);
@@ -2391,6 +2394,12 @@ final class Scene
 			, $this->heightTextureRevision, $this->clipmap?->packed() ?? false, $bounds['minY'], $bounds['maxY']
 		);
 
+		$materials = $this->regionalMaterials();
+		$this->selectMaterials($materials);
+		if($this->clipmap && count($materials)>1) {
+			$this->materialFields ??= new MaterialFieldCache;
+			$this->materialFields->update($camera->position,$materials,$this->vao[0]);
+		}
 		glViewport(0, 0, $width, $height);
 		glDisable(GL_SCISSOR_TEST);
 		glDisable(GL_BLEND);
@@ -2407,10 +2416,23 @@ final class Scene
 		$planes = $camera->clipPlanes($width,$height);
 		$eye = $camera->position;
 		$this->groundDraws = $this->waterDraws = 0;
-		$materials = $this->regionalMaterials();
-		$this->selectMaterials($materials);
 		$groundProgram = $lit || $warm && !$this->litDrawn['ground'] ? $this->litGroundProgram : $this->groundProgram;
+		$groups = [];
+		if($this->clipmap) {
+			$recipe = $this->landscape->recipe();
+			$floor = $bounds['minY'];
+			$ceiling = $bounds['maxY'];
+			if($recipe['surround'] === 'sea') $floor = min($floor, $recipe['waterLevel'] - 200);
+			if($recipe['surround'] === 'mountains') {
+				$floor = min($floor, -3 * $recipe['heightScale']);
+				$ceiling = max($ceiling, $recipe['heightScale']);
+			}
+			$groups = $this->clipmap->visibleGroups($camera,$planes,[$floor,$ceiling]);
+			if($this->ribProgram) $this->drawRibField($camera,$width,$height,$materials,$groups);
+		}
 		$groundProgram->use();
+		$this->materialFields?->bind($groundProgram);
+		if($this->ribProgram) glUniform1i($groundProgram->location('uRibField'),11);
 		[$palette,$form] = $materials[0];
 		$joined = count($materials)>1;
 		if($joined) $this->bindJourney($groundProgram,$materials);
@@ -2439,15 +2461,7 @@ final class Scene
 		$uEdges = $groundProgram->location('uEdges');
 		$uCorners = $groundProgram->location('uCorners');
 		if($this->clipmap) {
-			$recipe = $this->landscape->recipe();
-			$floor = $bounds['minY'];
-			$ceiling = $bounds['maxY'];
-			if($recipe['surround'] === 'sea') $floor = min($floor, $recipe['waterLevel'] - 200);
-			if($recipe['surround'] === 'mountains') {
-				$floor = min($floor, -3 * $recipe['heightScale']);
-				$ceiling = max($ceiling, $recipe['heightScale']);
-			}
-			$this->groundDraws += $this->clipmap->draw($groundProgram, $camera, $planes, [$floor, $ceiling]);
+			$this->groundDraws += $this->clipmap->drawGroups($groundProgram,$camera,$groups);
 			// The craft shares the terrain program and has its own clipping.
 			glUniform1f($groundProgram->location('uPlayHalf'), 0);
 		}
@@ -2749,6 +2763,7 @@ final class Scene
 			, 'finestVisibleSpacing' => $finest
 			, 'visibleCoverage' => $coverage
 			, 'groundDraws' => $this->groundDraws, 'waterDraws' => $this->waterDraws
+			, 'materialFieldTexels' => $this->materialFields?->texelsWritten ?? 0
 			, 'visible' => count($this->draw)
 			, 'pending' => count($this->jobs)
 			, 'pendingEdits' => count($this->replacementJobs)
@@ -2801,20 +2816,60 @@ final class Scene
 		$this->preparePrograms($this->regionalMaterials($stack));
 	}
 
+	/** Capture this view's ridge relief on the same triangles, including committed edits and LOD morphing. */
+	private function drawRibField(Camera $camera, int $width, int $height, array $materials, array $groups): void
+	{
+		glActiveTexture(GL_TEXTURE0+11);
+		$this->ribTarget ??= new RenderTarget($width,$height,GL_NEAREST,true,'Terrain ridge relief');
+		$this->ribTarget->resize($width,$height);
+		// The parent can be multisampled. A pixel touched only at its edge needs a neutral slope.
+		$clearColor = glGetFloatv(GL_COLOR_CLEAR_VALUE);
+		$neutral = 128/255;
+		$this->ribTarget->bind([$neutral,$neutral,$neutral,1.]);
+		glClearColor(...$clearColor);
+		try {
+			$p = $this->ribProgram;
+			$p->use();
+			$this->bindJourney($p,$materials);
+			$this->vector($p,'uEye',$camera->position);
+			glUniformMatrix4fv($p->location('uViewProjection'),1,false,$camera->viewProjection($width,$height));
+			$this->clipmap->drawGroups($p,$camera,$groups);
+		} finally {
+			$this->ribTarget->unbind($width,$height);
+		}
+		glActiveTexture(GL_TEXTURE0+11);
+		glBindTexture(GL_TEXTURE_2D,$this->ribTarget->texture());
+	}
+
 	private function preparePrograms(array $materials): string
 	{
 		$stacks = array_column($materials,0);
 		$key = count($stacks)===1 ? $stacks[0]->structure : 'journey:'.json_encode(array_column($stacks,'structure'),JSON_THROW_ON_ERROR);
 		if(isset($this->materialPrograms[$key])) return $key;
 		$source = MaterialShader::assemble($this->groundFragmentSource,$stacks,clipmap:$this->useClipmap);
+		$joinedClipmap = $this->useClipmap && count($stacks)>1;
+		$read = $joinedClipmap ? "#define WORLD_MATERIAL_FIELDS\n" : '';
+		$capture = '';
+		if($joinedClipmap) foreach($stacks as $i=>$stack) {
+			if(!in_array('ribs',array_column($stack->layers,'relief'),true)) continue;
+			$region = "#define RIB_FIELD_REGION $i\n";
+			$read .= $region.'#define READ_RIB_FIELD';
+			$capture = $region.'#define WRITE_RIB_FIELD';
+			break;
+		}
+		$ground = str_replace('// MATERIAL PASSES',$read,$source);
 		$set = [];
 		try {
 			foreach([false,true] as $lamps)
-				$set[] = new Program($this->groundVertexSource,str_replace('// SPOT LIGHTS',SpotLights::shaderSource($lamps),$source));
+				$set[] = new Program($this->groundVertexSource,str_replace('// SPOT LIGHTS',SpotLights::shaderSource($lamps),$ground));
 			if($this->useClipmap) {
 				$root = dirname(__DIR__).'/shaders/';
 				$set[] = new Program(file_get_contents($root.'shadows.vert'),
 					MaterialShader::assemble(file_get_contents($root.'chart.frag'),$stacks,chart:true));
+				if($capture !== '') {
+					$field = str_replace(['// MATERIAL PASSES','// SPOT LIGHTS'],[$capture,SpotLights::shaderSource(false)],$source);
+					$set[] = new Program($this->groundVertexSource,$field);
+				}
 			}
 		} catch(\Throwable $error) {
 			foreach($set as $program) $program->close();
@@ -2845,6 +2900,9 @@ final class Scene
 		$this->materialKey = $key;
 		[$this->groundProgram,$this->litGroundProgram] = $this->materialPrograms[$key];
 		$this->chartProgram = $this->materialPrograms[$key][2] ?? null;
+		$this->ribProgram = $this->materialPrograms[$key][3] ?? null;
+		if(!$this->ribProgram) { $this->ribTarget?->close(); $this->ribTarget = null; }
+		if(count($materials) === 1) { $this->materialFields?->close(); $this->materialFields = null; }
 		$this->litDrawn['ground'] = false;
 	}
 
@@ -2904,6 +2962,9 @@ final class Scene
 		// The meshes are rebuilt in place, so a selection in flight would still be right. It is dropped anyway,
 		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
 		$this->abandonSelection();
+		$this->ribTarget?->restore();
+		$this->materialFields?->close();
+		$this->materialFields = null;
 		if($this->clipmap) { $this->clipmap->close(); $this->clipmap = new Clipmap; }
 		foreach($this->materialPrograms as $key=>$set) {
 			if($key === $this->materialKey) foreach($set as $program) $program->restore();
@@ -2975,6 +3036,8 @@ final class Scene
 		$this->clearPatches();
 
 		$this->clipmap?->close();
+		$this->materialFields?->close();
+		$this->ribTarget?->close();
 		if($this->paletteBuffer) glDeleteBuffers(1,$this->paletteBuffer);
 		foreach($this->materialPrograms as $set) foreach($set as $program) $program->close();
 		$this->materialPrograms = [];

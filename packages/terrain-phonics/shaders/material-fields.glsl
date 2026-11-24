@@ -32,7 +32,11 @@
 	// clumps and tufts break up their margins while each is large enough to resolve.
 	float standFade = coverBand(footprint,105.);
 	float stand = 0., clump = 0., tuft = 0.;
-	if(standFade > 0.) stand = standFade*coverNoise(pos.xz/105. + vec2(22.1,-7.3)).x;
+	if(standFade > 0.) stand = standFade*(
+		#ifdef WORLD_MATERIAL_FIELDS
+		fieldResident ? 2.*fieldSample.a-1. :
+		#endif
+		grassStand(pos.xz,ivec2(uPaletteOffset)));
 	if(clumpFade > 0.) clump = clumpFade*coverNoise(mat2(.8,.6,-.6,.8)*pos.xz/17. + vec2(-21.4,8.7) + vec2(1.4,-.8)*stand).x;
 	if(tuftFade > 0.) tuft = tuftFade*coverNoise(mat2(.6,-.8,.8,.6)*pos.xz/4.6 + vec2(5.2,9.7) + vec2(-.6,1.2)*clump).x;
 	float ragged = .72*clump + .32*tuft, raggedDetail = max(clumpFade, tuftFade);
@@ -194,5 +198,13 @@
 	float rills = .7 * (1.-smoothstep(2.4,6.,footprint)) * (1.0 - smoothstep(200.0, 700.0, viewDistance));
 	// Narrow flanks lose lighting contrast before their broad color pattern disappears.
 	float ribRelief = gullyFade*(1.-.65*smoothstep(.025,.13,footprint/sizes.x));
+	#if defined(READ_RIB_FIELD) && materialRegion == RIB_FIELD_REGION
+	vec3 compressed = (texelFetch(uRibField,ivec2(gl_FragCoord.xy),0).rgb*255.-128.)/126.;
+	vec3 lift = .02*compressed/max(vec3(.00001),1.-abs(compressed));
+	#else
 	vec3 lift = upright*(rockReliefWeight(sizes.x,smoothingWidth2)*ribRelief*ribSlope
 		+ rockReliefWeight(12.,smoothingWidth2)*rills*rillGradient.yzw);
+	#if defined(WRITE_RIB_FIELD) && materialRegion == RIB_FIELD_REGION
+	ribField = lift;
+	#endif
+	#endif
