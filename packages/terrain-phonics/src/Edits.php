@@ -518,7 +518,18 @@ final class Edits
 		return $sum > 0 ? [(1 - $outside) * ($coverage / $sum), $target / $sum] : [0.0, 0.0];
 	}
 
-	private static function centerOffset(float $x, float $z, array $road, ?array &$mark): ?array
+	/** Test the width of the prepared road splines, independently of shoulder grading and later paint. */
+	public static function onRoad(float $x, float $z, array $roads): bool
+	{
+		foreach($roads as $operation) {
+			$road = $operation['_road'];
+			$offset = self::centerOffset($x,$z,$road);
+			if($offset !== null && $offset[0]**2 + $offset[1]**2 <= $road['half']**2) return true;
+		}
+		return false;
+	}
+
+	private static function centerOffset(float $x, float $z, array $road, ?array &$mark = null): ?array
 	{
 		$r = $road['gridSize'];
 		$key = (int)floor($x/$r) . ',' . (int)floor($z/$r);
@@ -537,7 +548,7 @@ final class Edits
 			$side = $vx*$dz-$vz*$dx; $dot = $dx*$vx+$dz*$vz;
 		}
 		$mark = null;
-		if($offset === null || $nearest > $road['markReach']**2) return $offset;
+		if(func_num_args() < 4 || $offset === null || $nearest > $road['markReach']**2) return $offset;
 		$end = $index === 0 && $fraction === 0. ? 0 :
 			($index === $last || ($index+1 === $last && $fraction === 1.) ? 1 : null);
 		$extension = $road['ink']['ends'][$end] ?? [];

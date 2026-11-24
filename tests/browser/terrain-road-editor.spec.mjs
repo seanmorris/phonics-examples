@@ -19,12 +19,18 @@ test('road eyes, disclosure, deletion and undo are independent', async({page}) =
 	const canvas = page.locator('canvas[data-terrain-sandbox]');
 	const status = () => canvas.evaluate(el => JSON.parse(el.dataset.terrainSandbox));
 	await expect(canvas).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	const arc = Array.from({length:7}, (_,i) => [60*(Math.cos(i*Math.PI/12)-1),0,60*Math.sin(i*Math.PI/12)]);
+	const bend = {...road, points:[[0,0,-110],[0,0,-52],...arc,[-115,0,60]]};
 	await page.locator('[data-file]').setInputFiles({
 		name:'two-roads.json', mimeType:'application/json', buffer:Buffer.from(JSON.stringify({
-			...fixture, landscape:{...fixture.landscape, history:[[road,{...road,points:[[30,4,-30],[30,4,30]]}]]}
+			...fixture, landscape:{...fixture.landscape, history:[[bend,{...road,points:[[30,0,-30],[30,0,55]]}]]}
+			, camera:{position:[0,5,-55],yaw:Math.PI,pitch:-.035}
+			, course:{gates:[0,30].map((x,i) => ({role:'checkpoint',kind:'road',x,y:0,z:15,yaw:0,width:20,height:4,number:i+1}))}
 		}))
 	});
 	await expect.poll(async()=>(await status()).recipe.seed).toBe('road-lab');
+	await expect.poll(async()=>(await status()).renderer.gateDraws).toBe(2);
+	await expect.poll(async()=>(await status()).renderer.curveSignsDrawn).toBeGreaterThan(0);
 	await page.getByRole('tab',{name:'Roads',exact:true}).click();
 	const first = page.locator('[data-road-layer="0"]'), second = page.locator('[data-road-layer="1"]');
 	const eye = page.getByRole('button',{name:'Road 1 visibility',exact:true});
@@ -35,14 +41,23 @@ test('road eyes, disclosure, deletion and undo are independent', async({page}) =
 	await expect(first).not.toHaveAttribute('open','');
 	await expect(second).toHaveAttribute('open','');
 	const otherEye = page.getByRole('button',{name:'Road 2 visibility',exact:true});
+	await expect.poll(async()=>(await status()).renderer.gateDraws).toBe(1);
+	await expect.poll(async()=>(await status()).renderer.curveSigns).toBe(0);
 	await otherEye.click();
 	await expect.poll(async()=>(await status()).renderer.roadTextureBytes).toBe(0);
+	await expect.poll(async()=>(await status()).renderer.gateDraws).toBe(0);
+	expect((await status()).course.gates).toHaveLength(2);
 	expect((await status()).revision).toBe(1);
 	await second.locator(':scope > summary').click();
 	await expect(second).not.toHaveAttribute('open','');
 	await expect(otherEye).toHaveAttribute('aria-pressed','false');
 	await otherEye.click();
 	await expect.poll(async()=>(await status()).renderer.roadTextureBytes).toBeGreaterThan(0);
+	await expect.poll(async()=>(await status()).renderer.gateDraws).toBe(1);
+	await eye.click();
+	await expect.poll(async()=>(await status()).renderer.gateDraws).toBe(2);
+	await expect.poll(async()=>(await status()).renderer.curveSignsDrawn).toBeGreaterThan(0);
+	await eye.click();
 	await first.locator('summary').click();
 	await first.getByRole('button',{name:'Delete road'}).click();
 	await expect(first).toHaveCount(0);

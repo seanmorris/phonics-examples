@@ -2240,6 +2240,35 @@ expect($lab->roadEditor->displayedLandscape($lab->landscape) === $lab->landscape
 	'Undo restores the removed road as a visible layer');
 $command('close');
 expect($lab->roadEditor->packet($lab) === null && $lab->roadEditor->view === null, 'Closing the editor releases pending chart work');
+
+$crossing = new Session(['worldSize'=>512,'heightScale'=>0.,'detailAmplitude'=>0.]);
+$land = $crossing->landscape;
+foreach([[[0,0,-120],[0,0,120]],[[-120,0,0],[120,0,0]]] as $points)
+	$land->queue(['type'=>'road','points'=>$points,'width'=>12,'shoulder'=>6]);
+$land->queue(['type'=>'material','x'=>0,'z'=>60,'radius'=>18,'material'=>'grass']);
+$land->commit();
+$course = $crossing->course;
+$start = $course->place('start','road',0,0,60,0)['gate']['id'];
+$course->place('checkpoint','road',0,0,0,0);
+$course->place('checkpoint','road',60,0,0,0);
+$course->place('checkpoint','road',60,0,60,0);
+$course->place('checkpoint','air',0,180,60,0);
+$waterGate = $course->place('checkpoint','water',0,2,-60,0)['gate']['id'];
+$before = $course->export();
+$editor = $crossing->roadEditor;
+$editor->action($crossing,['op'=>'open']);
+$toggle = ['op'=>'visibility','id'=>0,'generation'=>$crossing->generation,'revision'=>$land->revision()];
+$editor->action($crossing,$toggle+['visible'=>false]);
+expect(count($before['gates']) === 6 && $editor->hiddenGates($land,$course,false) === [$start=>true],
+	'Only the gate on the hidden road disappears, even under a paint edit. The crossing, aircraft and standalone gates stay visible');
+expect($editor->hiddenGates($land,$course,true) === [$start=>true,$waterGate=>true] && $course->export() === $before,
+	'A flooded circuit also hides its water gate above the road and retains its complete course');
+$course->place('start','road',60,0,95,0);
+expect($editor->hiddenGates($land,$course,false) === [], 'Moving the gate off the hidden road refreshes its visibility');
+$editor->action($crossing,$toggle+['visible'=>true]);
+expect($editor->hiddenGates($land,$course,true) === [], 'Showing the road restores the flooded gate');
+$crossing->close();
+
 // Make a lap beyond the former 40 km limit directly from editor points, then edit and reload it.
 $manual = new Session(['worldSize'=>32768,'heightScale'=>0.,'detailAmplitude'=>0.]);
 input($manual,['values'=>['waterLevel'=>-10.,'gateLaps'=>3,'roadWidth'=>24.]]);

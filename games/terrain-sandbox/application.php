@@ -71,6 +71,7 @@ $spotLights = [[], 1.0]; // The lights given to the scene and their adaptation g
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $displayTerrain = $session->landscape;
+$hiddenGates = [];
 $pendingEdit = null;
 $lastStatus = 0.0;
 $lastJourneyPlan = null;
@@ -143,7 +144,7 @@ $engine->systems->add('terrain-sandbox.delivery-search', static function() use (
 }, ['terrain-sandbox.simulate']);
 
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
-	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds, &$displayTerrain, &$pendingEdit,
+	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds, &$displayTerrain, &$pendingEdit, &$hiddenGates,
 	&$heldKeys, &$heldPad, &$menuPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastAuthoringFrame,
 	$pauseMenu
 ): bool {
@@ -227,7 +228,9 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		$dirty = true;
 	}
 	$pendingEdit ??= $session->takeCandidate();
-	$preview = $session->roadEditor->displayedLandscape($pendingEdit ?? $session->landscape);
+	$source = $pendingEdit ?? $session->landscape;
+	$preview = $session->roadEditor->displayedLandscape($source);
+	$hiddenGates = $session->roadEditor->hiddenGates($source,$session->course,$session->usingFloodedCircuit());
 	if($displayTerrain !== $preview) {
 		$scene->prepareLandscape($preview);
 		$displayTerrain = $preview;
@@ -246,7 +249,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 });
 
 $shadow = null;
-$drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
+$drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$hiddenGates, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
 	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
 	foreach($visibleSites as $site)
 		if($site['kind'] !== 'smoke') ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
@@ -290,7 +293,7 @@ $drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$sp
 	if($streaks) ($tracers ??= new TracerBatch)->draw($streaks,$viewCamera,$width,$height);
 	// Gates draw in free flight too, where the course is edited.
 	if($session->course->count() > 0)
-		$gates->draw($session->course, $viewCamera, $session->atmosphere, $session->water, $width, $height, $spotLights);
+		$gates->draw($session->course, $viewCamera, $session->atmosphere, $session->water, $width, $height, $spotLights, $hiddenGates);
 };
 
 $engine->start(

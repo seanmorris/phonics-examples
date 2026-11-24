@@ -56,9 +56,11 @@ final class GateModel
 	 * @param int $width Viewport width in pixels.
 	 * @param int $height Viewport height in pixels.
 	 * @param array $lights Headlight beams and their exposure gain for the banner sheeting.
+	 * @param array $hiddenGates Gate IDs hidden by the road layer preview.
 	 * @return void Submits at most one draw per gate, grouped by kind.
 	 */
-	public function draw(Course $course, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height, array $lights = [[],1.]): void
+	public function draw(Course $course, Camera $camera, Atmosphere $sky, Water $water, int $width, int $height,
+		array $lights = [[],1.], array $hiddenGates = []): void
 	{
 		$started = hrtime(true);
 		$this->drawn = 0;
@@ -78,6 +80,7 @@ final class GateModel
 		$surface = null;
 		foreach($course->gates(false) as $gate)
 		{
+			if(isset($hiddenGates[$gate['id']])) continue;
 			$placed = $this->placed[$gate['id']];
 			// A floating gate stands somewhere within the water's height range. Culling against that range means only
 			// the gates that draw sample the waves for their exact height.

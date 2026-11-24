@@ -18,6 +18,7 @@ final class RoadEditor
 	private int $selection = -1, $generation = -1, $revision = -1, $sequence = 0, $sent = -1;
 	private bool $catalog = true, $applying = false;
 	private array $hidden = [];
+	private array $gateKey = [], $hiddenGates = [];
 	private ?Landscape $previewSource = null, $preview = null;
 	private array $lastSketch = [], $lastDefaults = [];
 	public ?array $captured = null;
@@ -96,6 +97,7 @@ final class RoadEditor
 	public function reset(): void
 	{
 		$this->hidden = [];
+		$this->gateKey = $this->hiddenGates = [];
 		$this->previewSource = $this->preview = null;
 		$this->target = $this->publishingSection = null;
 		$this->proposed = $this->generated = [];
@@ -188,6 +190,29 @@ final class RoadEditor
 			$this->previewSource = $source;
 		}
 		return $this->preview;
+	}
+
+	/** A shared crossing stays visible while any road under its gate is showing. */
+	public function hiddenGates(Landscape $source, Course $course, bool $flooded): array
+	{
+		$preview = $this->displayedLandscape($source);
+		if($preview === $source) {
+			$this->gateKey = $this->hiddenGates = [];
+			return [];
+		}
+		$key = [$preview,$course,$course->revision,$flooded];
+		if($this->gateKey !== $key) {
+			$authored = $source->roads();
+			$visible = $preview->roads();
+			$this->hiddenGates = [];
+			foreach($course->gates(false) as $gate) {
+				if($gate['kind'] !== 'road' && !($flooded && $gate['kind'] === 'water')) continue;
+				if(Edits::onRoad($gate['x'],$gate['z'],$authored) && !Edits::onRoad($gate['x'],$gate['z'],$visible))
+					$this->hiddenGates[$gate['id']] = true;
+			}
+			$this->gateKey = $key;
+		}
+		return $this->hiddenGates;
 	}
 
 	private static function number(mixed $value, float $min, float $max): float
