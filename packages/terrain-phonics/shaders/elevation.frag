@@ -210,12 +210,6 @@ float terrainHeight(vec2 world,vec4 profile,vec2 subcell)
 	return h.x;
 }
 #ifdef JOINED_TERRAIN
-float regionalHeight(int index,vec2 world)
-{
-	formIndex=index;
-	vec3 origin=uFormOrigin[index];
-	return terrainHeight(world-origin.xy,uProfile,vec2(0))+origin.z;
-}
 uniform bool uBlendProfile;
 vec3 contourProfile(int i)
 {
@@ -227,44 +221,38 @@ float extendEdge(float axis,float side)
 	float edge=.5*uJoinWidth, distance=edge-side*axis;
 	return distance<=0. ? axis : side*(edge-256.*distance/(256.+distance));
 }
-float blendedRegion(int i,vec2 world,vec3 shape)
-{
-	formIndex=i;
-	vec3 origin=uFormOrigin[i];
-	world.x=extendEdge(world.x,i==0 ? -1. : 1.);
-	if(i>0 && uFormCount==3) world.y=extendEdge(world.y,i==1 ? -1. : 1.);
-	// Keep the sub-meter edge extension separate when rebasing into a large map.
-	return terrainHeight(floor(world)-origin.xy,vec4(shape.x,uProfile.y,shape.yz),fract(world))+origin.z;
-}
 float joinedHeight(vec2 world)
 {
 	float edge=.5*uJoinWidth;
-	if(world.x<=-edge) return regionalHeight(0,world);
-	if(uBlendProfile) {
-		vec2 t=clamp(world/uJoinWidth+.5,0.,1.);
-		float x=clamp(fade(t.x),0.,1.), z=uFormCount==2 ? 0. : clamp(fade(t.y),0.,1.);
-		if(world.x>=edge && (uFormCount==2 || abs(world.y)>=edge))
-			return regionalHeight(uFormCount==2 || world.y<=-edge ? 1 : 2,world);
-		vec3 weights=vec3(1.-x,x*(1.-z),x*z);
-		vec3 shape=weights.x*contourProfile(0)+weights.y*contourProfile(1);
+	vec2 t=clamp(world/uJoinWidth+.5,0.,1.);
+	float x=fade(t.x), z=uFormCount==2 ? 0. : fade(t.y);
+	vec3 weights=vec3(1.-x,x*(1.-z),x*z);
+	bool mixed=uBlendProfile && world.x>-edge
+		&& (world.x<edge || (uFormCount==3 && abs(world.y)<edge));
+	vec3 shape=vec3(0.);
+	if(mixed) {
+		shape=weights.x*contourProfile(0)+weights.y*contourProfile(1);
 		if(uFormCount==3) shape+=weights.z*contourProfile(2);
-		float h=0.;
-		if(weights.x>0.) h+=weights.x*blendedRegion(0,world,shape);
-		if(weights.y>0.) h+=weights.y*blendedRegion(1,world,shape);
-		if(weights.z>0.) h+=weights.z*blendedRegion(2,world,shape);
-		return h;
 	}
-	float east;
-	if(uFormCount==2 || world.y<=-edge) east=regionalHeight(1,world);
-	else if(world.y>=edge) east=regionalHeight(2,world);
-	else {
-		float north=regionalHeight(1,world);
-		float south=regionalHeight(2,world);
-		east=mix(north,south,fade(world.y/uJoinWidth+.5));
+	// Keep one copy of the noise evaluator in the shader. A pure landscape runs it once.
+	vec3 heights=vec3(0.);
+	for(int i=0;i<uFormCount;i++) {
+		if(weights[i]<=0.) continue;
+		formIndex=i;
+		vec3 origin=uFormOrigin[i];
+		vec4 profile=uProfile;
+		vec2 at=world, fraction=vec2(0.);
+		if(mixed) {
+			profile=vec4(shape.x,profile.y,shape.yz);
+			at.x=extendEdge(at.x,i==0 ? -1. : 1.);
+			if(i>0 && uFormCount==3) at.y=extendEdge(at.y,i==1 ? -1. : 1.);
+			// Keep sub-meter offsets separate when rebasing onto a large map.
+			fraction=fract(at);
+			at=floor(at);
+		}
+		heights[i]=terrainHeight(at-origin.xy,profile,fraction)+origin.z;
 	}
-	if(world.x>=edge) return east;
-	float west=regionalHeight(0,world);
-	return mix(west,east,fade(world.x/uJoinWidth+.5));
+	return mix(heights.x,mix(heights.y,heights.z,z),x);
 }
 #endif
 vec4 roadRecord(int address)

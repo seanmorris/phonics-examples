@@ -126,7 +126,7 @@
     "shaders/atmosphere.glsl": "sha256-2sCjh/L+04hZ+4k+OG7XJdJ9i+rdzebRxYlxA8LpvaQ=",
     "shaders/chart.frag": "sha256-MyAs73SNQxO4ppvZsKCElceTl1xva8+SZ0JdSGsU5QM=",
     "shaders/clip-grid.glsl": "sha256-qVJdqd/ifnDD3SW2XdCGG7y7jxMN7/AdTSWufNlVtpk=",
-    "shaders/elevation.frag": "sha256-axwS317IfJhcdlHltGj5/hd0le0ajNPDhzYnlPb2VCs=",
+    "shaders/elevation.frag": "sha256-3mZIBLyh4AZOLm16WgxIVGb4DC5H/6ee4dpa++79TR8=",
     "shaders/joined-material.glsl": "sha256-bRMYy9t5XqyjGE34IHSzjrkn98GoSBU00/6+ZVz2bR0=",
     "shaders/journey-palette.glsl": "sha256-4/TOeKbnCu23uISxnEI1ZmLQzeULnYhewwsem8wVdOo=",
     "shaders/journey-surface.glsl": "sha256-QBCGmV6aKNO5cmyvOn8q89k1bwGWelOIjWpPHQ98oso=",
