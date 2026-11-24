@@ -7,6 +7,7 @@ use TerrainPhonics\Landscape;
 /** Drives a closed circuit with the same four controls available to a player. */
 final class CircuitDriver
 {
+	private const PLANNED_BRAKING = 14.; // m/s², below the car's full service braking on dry pavement.
 	private array $line, $speedLimit = [], $sight = [];
 	private array $bends = [], $nextBend = [];
 	private int $count, $segment;
@@ -49,10 +50,10 @@ final class CircuitDriver
 			$this->speedLimit[] = min(Car::TOP_SPEED_MPH * Car::MPS_PER_MPH, sqrt($grip/$k));
 		}
 		$this->planBends($curvatures);
-		// Work back from each bend using 12 m/s² of service braking. The second pass covers the lap seam.
+		// Work back from each bend at the planned deceleration. The second pass covers the lap seam.
 		for($i = 2 * $this->count - 1; $i >= 0; $i--) {
 			$j = $this->wrap($i);
-			$brakingSpeed = sqrt($this->speedLimit[$this->wrap($i + 1)] ** 2 + 24. * $this->spacing);
+			$brakingSpeed = sqrt($this->speedLimit[$this->wrap($i + 1)] ** 2 + 2. * self::PLANNED_BRAKING * $this->spacing);
 			$this->speedLimit[$j] = min($this->speedLimit[$j], $brakingSpeed);
 		}
 	}
@@ -131,44 +132,80 @@ final class CircuitDriver
 		$this->phase = 'Driving';
 	}
 
-	/** Slide into a tight bend, then boost as the steering unwinds and the braking plan allows. */
-	private function corner(float $dt, float $at, float $speed, float $limit, float $error, float $charge): void
+	/** Interpolate the braking envelope in distance, where speed squared varies linearly under constant braking. */
+	private function limitAt(float $station): float
 	{
+		$i = (int)floor($station);
+		$a = $this->speedLimit[$this->wrap($i)];
+		$b = $this->speedLimit[$this->wrap($i + 1)];
+		return sqrt($a*$a + ($station - $i)*($b*$b - $a*$a));
+	}
+
+	/** Choose the corner controls and return the target speed for the available grip. */
+	private function corner(array $car, float $dt, float $at, float $limit, float $error, float $noseError): float
+	{
+		$speed = $car['speed'];
+		$charge = $car['nitrous'];
 		$this->phaseTime += $dt;
 		$entry = $this->nextBend[$this->segment] ?? null;
-		$near = $pastApex = false;
+		$near = false;
+		$toApex = INF;
+		$side = 0;
 		if($entry !== null) {
 			$bend = $this->bends[$entry];
+			$side = $bend['side'];
 			$along = fmod($at - $entry + $this->count, $this->count) * $this->spacing;
 			if($along >= $bend['length']) $along -= $this->spacing * $this->count;
 			$near = $along >= -max(7., min(32., .65*$speed));
-			$pastApex = $along >= $bend['apex'];
-			if($near && !$pastApex && $this->activeBend !== $entry && $speed > 7. && $error*$bend['side'] > .045) {
+			$toApex = ($bend['apex']-$along)/max(1.,$speed);
+			if($near && $toApex > 0. && $toApex <= .46 && $this->activeBend !== $entry
+				&& $speed > 7. && $error*$side > .035) {
 				$this->activeBend = $entry;
 				$this->phase = 'Handbraking';
 				$this->phaseTime = 0.;
 			}
 		}
-		if($this->phase === 'Handbraking' && ($this->phaseTime >= .42 || $pastApex)) $this->phase = 'Cornering';
-		if($this->phase === 'Cornering' && ($pastApex || $entry !== $this->activeBend || !$near)) {
+		// Check both the immediate exit and the following braking zone before committing the bottle.
+		$travel = max(16.,$speed)/$this->spacing;
+		$exit = $this->limitAt($at+$travel);
+		$opening = $exit > $speed+3. && $this->limitAt($at+.45*$travel) > $speed-1.;
+		$unwinding = $this->limitAt($at+.25*$travel) >= $limit-.25;
+		// Nitrous pulls the velocity toward the nose. It should reduce the error to the exit heading.
+		$travelError = self::angle($noseError + $car['drift']);
+		$noseCloser = abs($noseError) < abs($travelError);
+		$aligned = abs($noseError) < .17 && ($noseCloser || abs($car['drift']) <= .008);
+		$inSlideTurn = $near && $entry === $this->activeBend;
+		// Carry a little extra speed into an open apex when there is enough charge to regain grip there.
+		$turnLimit = $limit;
+		if($inSlideTurn && $toApex <= .46 && $charge > .16 && $exit > $limit+6. && $this->sight[$this->segment] > 9.) {
+			$turnLimit = min(1.08*$limit, $exit-3.);
+		}
+		$catch = $inSlideTurn && $toApex <= .16 && $car['drift']*$side > .008
+			&& $aligned && $charge > .06 && $opening && $unwinding && $speed < 1.12*$limit;
+		if($this->phase === 'Handbraking' && (!$inSlideTurn || $catch || $toApex <= -.22 || $this->phaseTime >= .68)) {
+			$this->phase = 'Cornering';
+		}
+		if($this->phase === 'Cornering' && (!$inSlideTurn || $catch || $toApex <= 0.)) {
 			$this->phase = 'Corner exit';
 			$this->phaseTime = 0.;
 		}
 		if(!$near) $this->activeBend = null;
 
-		// Look a second down the exit. An immediate second bend can use all the available braking room.
-		$exitStation = $this->wrap((int)round($at + max(16., $speed) / $this->spacing));
-		$room = $this->speedLimit[$exitStation] > $speed + 3.;
 		if($this->phase === 'Corner exit' && $this->phaseTime > 1.4) $this->phase = 'Driving';
-		$onExit = $this->phase === 'Corner exit' && abs($error) < .32 && $charge > .04;
+		if($this->phase === 'Boosting') {
+			// Nitrous adds tire load while catching a slide. Return to the ordinary limit as the exit closes.
+			$boostLimit = $limit * ($inSlideTurn && $unwinding ? 1.20 : 1.03);
+			if($exit <= $speed || $speed >= $boostLimit || abs($noseError) > .42 || $charge < .005 || $this->phaseTime >= 2.4) $this->phase = 'Driving';
+			return $turnLimit;
+		}
+		$onExit = $this->phase === 'Corner exit' && $aligned && $charge > .04 && ($catch || $speed < $limit);
 		$onStraight = $this->phase === 'Driving' && !$near && $charge > .85 && $limit > 38.
-			&& $speed + 8. < $limit && abs($error) < .10;
-		if($room && $speed < $limit && ($onExit || $onStraight)) {
+			&& $speed + 8. < $limit && abs($error) < .10 && $aligned;
+		if($opening && ($onExit || $onStraight)) {
 			$this->phase = 'Boosting';
 			$this->phaseTime = 0.;
 		}
-		if($this->phase === 'Boosting' && (!$room || $this->phaseTime > 2.4 || $speed >= $limit
-			|| abs($error) > .42 || $charge < .005)) $this->phase = 'Driving';
+		return $turnLimit;
 	}
 
 	/** @return array{float,float,bool,bool} Pedal, steering, handbrake and nitrous. */
@@ -193,12 +230,25 @@ final class CircuitDriver
 		$dx = $ax + $t*($bx - $ax) - $car['x'];
 		$dz = $az + $t*($bz - $az) - $car['z'];
 		// Pure pursuit from the travel direction, which can differ from the nose during a slide.
-		$error = self::angle(atan2($dx, $dz) - ($car['yaw'] - $car['drift']));
+		$bearing = atan2($dx,$dz);
+		$error = self::angle($bearing - ($car['yaw'] - $car['drift']));
 		$wheel = atan2(2 * Car::WHEELBASE * sin($error), max(1., hypot($dx, $dz)));
 		$steer = max(-1., min(1., -$wheel / Car::steeringLimit($speed)));
-		$limit = min($this->speedLimit[$this->segment], $this->speedLimit[$this->wrap($this->segment + 1)]);
+		$limit = $this->limitAt($at);
+		// Point the sliding chassis into the outgoing line. Keep the correction tied to the
+		// pursuit point so a car wide of its line still steers back toward pavement.
+		$outgoing = self::angle(atan2($bx-$ax,$bz-$az) - $bearing);
+		$exitHeading = $bearing + max(-.30,min(.30,.70*$outgoing));
+		$noseError = self::angle($exitHeading - $car['yaw']);
+		$limit = $this->corner($car, $dt, $at, $limit, $error, $noseError);
 		$pedal = max(-1., min(1., .8 + ($limit - $speed)*.50));
-		$this->corner($dt, $at, $speed, $limit, $error, $car['nitrous']);
+		if($this->phase === 'Handbraking') {
+			// Turn the nose toward the exit while the rear wheels are locked, easing off as it lines up.
+			if($error*$noseError > 0.) {
+				$turnIn = max(-.42, min(.42, 2.4*$noseError));
+				$steer = max(-1., min(1., $steer - $turnIn));
+			}
+		}
 		$boost = $this->phase === 'Boosting';
 		return [$boost ? 1. : $pedal, $steer, $this->phase === 'Handbraking', $boost];
 	}

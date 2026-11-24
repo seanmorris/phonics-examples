@@ -119,21 +119,29 @@ foreach([-1,1] as $direction) {
 	$demo->step(1/60);
 	check($parked === $demo->car->state(), 'Pausing freezes the driver and car.');
 	$act('pause');
-	$exit = false;
-	$lastSlide = -1000;
-	$charge = $parked['nitrous'];
+	$testedHeading = false;
 	[$driverEntity] = $exhibition->query(CircuitDriver::class);
 	$driver = $exhibition->get($driverEntity,CircuitDriver::class);
 	for($i=0;$i<7000 && $demo->race->state !== 'finished';$i++) {
+		// Replay the release tick with the same travel direction but a nose pointing away from the exit.
+		$replay = !$testedHeading && $driver->phase === 'Handbraking' ? clone $driver : null;
+		$before = $demo->car->state();
 		$demo->step(1/60);
 		$car = $demo->car->state();
-		if($driver->phase === 'Handbraking' && abs($car['drift']) > .01) $lastSlide = $i;
-		if($driver->phase === 'Boosting' && $i-$lastSlide < 180 && $car['nitrous'] < $charge) $exit = true;
-		$charge = $car['nitrous'];
+		if($replay && $driver->phase === 'Boosting' && abs($before['drift']) > .008) {
+			check(abs($car['drift']) < abs($before['drift']) && $car['nitrous'] < $before['nitrous'],
+				'Nitrous brings the travel direction toward the nose on the release tick.');
+			$heading = $before['yaw']-$before['drift'];
+			$before['drift'] = -.5*($before['drift'] <=> 0.);
+			$before['yaw'] = $heading+$before['drift'];
+			[, , , $wrongWayBoost] = $replay->controls($before,1/60,false);
+			check(!$wrongWayBoost, 'Withhold nitrous when the chassis points across the exit.');
+			$testedHeading = true;
+		}
 	}
 	$result = $demo->race->status($demo->course,$demo->time);
-	check($demo->race->state==='finished' && count($result['lapTimes'])===2 && $exit,
-		'The CPU slides, spends nitrous on exit and earns two complete laps in either direction.');
+	check($demo->race->state==='finished' && count($result['lapTimes'])===2 && $testedHeading,
+		'Catch a live slide with nitrous on handbrake release and finish both laps in either direction.');
 	check($humanRace->status($demo->course,$demo->time)['best'] === null,'Demo finishes leave player records alone.');
 	$beforeRestart = $demo->car->state();
 	$demo->input(['values'=>['waterLevel'=>100.]],1/60,1.);
@@ -163,20 +171,27 @@ foreach([false,true] as $chicane) {
 	$exitLeg = $chicane ? [[45,30],[50,25],[50,0],[800,0]] : [[800,30]];
 	$route = new Circuit([[0,-1000],[0,0],[4,15],[15,26],[30,30],...$exitLeg,[800,-1000]],-2.,null);
 	$driver = new CircuitDriver($route,$course);
-	$driver->restart(0.,-50.);
-	$pose = ['motion'=>'driving','roadHold'=>0.,'drift'=>0.,'speed'=>17.,'nitrous'=>.65];
-	$slide = $boostedAfterSlide = false;
-	foreach($route->stations(range(950,1075)) as [$x,$z,$yaw]) {
-		[,,$handbrake,$boost] = $driver->controls($pose + compact('x','z','yaw'),1./$pose['speed'],false);
-		$boostedAfterSlide = $boostedAfterSlide || ($slide && $boost);
-		$slide = $slide || $handbrake;
+	$pose = ['motion'=>'driving','roadHold'=>0.,'speed'=>17.];
+	foreach([.65, 0.] as $charge) {
+		$driver->restart(0.,-50.);
+		$drift = 0.;
+		$slide = $boostedAfterSlide = false;
+		foreach($route->stations(range(950,1075)) as [$x,$z,$heading]) {
+			$yaw = $heading + $drift;
+			[, $steer, $handbrake, $boost] = $driver->controls(
+				$pose + compact('x','z','yaw','drift') + ['nitrous'=>$charge], 1./$pose['speed'], false);
+			$drift = $handbrake ? -.18*$steer : .6*$drift;
+			check(!($handbrake && $boost), 'Release the handbrake when catching a slide.');
+			$boostedAfterSlide = $boostedAfterSlide || ($slide && $boost);
+			$slide = $slide || $handbrake;
+		}
+		check($slide && $boostedAfterSlide === (!$chicane && $charge > 0.), 'Spend available nitrous only on an open exit.');
 	}
-	check($slide && $boostedAfterSlide === !$chicane, 'Slide into both bends and spend nitrous only on the open exit.');
 
 	$driver->restart(0.,-700.);
 	$pose['speed'] = 160. * Car::MPS_PER_MPH;
 	$pose['nitrous'] = 1.;
-	[$pedal,,,$boost] = $driver->controls($pose + ['x'=>0.,'z'=>-700.,'yaw'=>0.],1/60,false);
+	[$pedal,,,$boost] = $driver->controls($pose + ['x'=>0.,'z'=>-700.,'yaw'=>0.,'drift'=>0.],1/60,false);
 	check($pedal === 1. && $boost, 'Keep accelerating with a full bottle at 160 mph on a clear straight.');
 }
 echo "CPU exhibition laps, drift exits, records, pause and restart passed.\n";
@@ -197,9 +212,15 @@ foreach([6,36] as $width) {
 	$table->load(json_encode($save));
 	$table->input(['actions'=>['cpu-demo']],1/60,1.);
 	$cut = 0.;
+	$braking = false;
+	$releasedAt = -100;
+	$brakeTaps = 0;
 	for($i = 0; $i < 7000 && $table->race->state !== 'finished'; $i++) {
 		$table->step(1/60);
 		$p = $table->car->state();
+		if($braking && !$p['braking']) $releasedAt = $i;
+		if(!$braking && $p['braking'] && $i-$releasedAt <= 12) $brakeTaps++;
+		$braking = $p['braking'];
 		$sin = sin($p['yaw']); $cos = cos($p['yaw']);
 		foreach([Car::WHEELBASE/2,-Car::WHEELBASE/2] as $along) {
 			$track = $along > 0. ? Car::FRONT_TRACK : Car::REAR_TRACK;
@@ -214,6 +235,8 @@ foreach([6,36] as $width) {
 		}
 	}
 	check($table->race->state === 'finished' && $table->car->state()['recoveries'] === 0, 'Finish through every gate on both widths.');
+	// Reapplying the brakes within a fifth of a second at successive stations made each bend stutter.
+	check($brakeTaps <= 10, 'Brake continuously through both laps without pulsing at every route sample.');
 	$apexCuts[$width] = $cut;
 	if($width === 36) {
 		// A narrow gate on this broad apex must still admit the full car.
