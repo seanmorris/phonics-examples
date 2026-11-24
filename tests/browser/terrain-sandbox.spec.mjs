@@ -4232,7 +4232,10 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await page.locator('[data-exit="0"]').selectOption('+');
 	await expect(picker.locator('option')).toHaveCount(7);
 	await expect(picker).toHaveValue('D');
-	await page.locator('[data-outline-title]').click();
+	await expect(page.locator('[data-journey-outline]')).toHaveAttribute('open','');
+	const junctionCard=page.locator('[data-outline] [data-square="C"]');
+	await junctionCard.scrollIntoViewIfNeeded();
+	await expect(junctionCard.locator('canvas')).toHaveCount(1,{timeout:60000});
 	await page.locator('[data-stage-name]').fill('Lake');
 	await page.locator('[data-rename-stage]').click();
 	await expect(page.locator('[data-journey=network]')).toHaveValue(/F river-valley -> Lake/);

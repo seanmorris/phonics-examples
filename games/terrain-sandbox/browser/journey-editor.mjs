@@ -1,4 +1,4 @@
-/** The editor requests a PHP terrain chart only for the stage the player is inspecting. */
+/** Journey stages share terrain charts between the inspector and visible route cards. */
 const networkExample = `A rolling-prairie -> B,C
 B canyon -> E,F
 C mountain -> F,G
@@ -33,7 +33,10 @@ function markup(options) {
 	.journey-outline{padding:2px 10px 10px}.journey-level{display:grid;grid-template-columns:4.2em 1fr;gap:6px;
 		align-items:baseline;border-bottom:1px solid #355243;padding:6px 0}.journey-level:last-child{border:0}
 	.journey-level>span{font-size:12px;color:#b8cbbd}.journey-level>div{display:flex;gap:5px;flex-wrap:wrap}
-	.journey-rename{display:flex;align-items:end;gap:8px;margin:10px}.journey-rename label{flex:1}.journey-outline button{display:grid;text-align:left;gap:1px}.journey-outline button small{color:#c3d5c8;font-size:11px}.journey-outline [aria-current=location] small{color:#ffdc95}
+	.journey-rename{display:flex;align-items:end;gap:8px;margin:10px}.journey-rename label{flex:1}.journey-outline button{display:grid;grid-template-columns:42px 1fr;align-items:center;text-align:left;gap:1px 6px}
+	.journey-outline button>span,.journey-outline button>small{grid-column:2}
+	.journey-outline .journey-thumb{grid-column:1;grid-row:1/3;width:42px;height:42px;display:grid;place-items:center;
+		overflow:hidden;border-radius:3px;background:#19352a;color:#c0cfbd}.journey-thumb canvas{width:100%;height:100%}.journey-outline button small{color:#c3d5c8;font-size:11px}.journey-outline [aria-current=location] small{color:#ffdc95}
 	.journey-outline [aria-pressed=true]{border-color:#e6bb73;color:#ffe0a5}
 	.journey-planner .journey-source{padding:10px}.journey-source textarea{box-sizing:border-box;width:100%;resize:vertical;
 		background:#12271f;color:#e7f0df;font:13px/1.5 ui-monospace,monospace;border:1px solid #60796b;border-radius:4px;padding:8px}
@@ -65,7 +68,7 @@ function markup(options) {
 	<footer><span data-map-status role="status"></span><button type="button" data-survey-road hidden>Preview roads</button></footer></div>
 	<p class="terrain-note" data-journey-error role="status"></p>
 
-	<details data-network-only hidden><summary data-outline-title>Route outline</summary><div class="journey-outline" data-outline></div>
+	<details data-network-only data-journey-outline hidden open><summary data-outline-title>Route outline</summary><div class="journey-outline" data-outline></div>
 	<div class="journey-rename"><label class="terrain-field">Stage name<input type="text" data-stage-name required pattern="[A-Za-z][A-Za-z0-9_\\-]*" autocomplete="off"></label>
 	<button type="button" data-rename-stage disabled>Rename</button></div>
 	<div class="journey-actions"><button type="button" data-delete-stage>Remove stage</button>
@@ -114,9 +117,10 @@ function mount(frame, canvas, signal, roadMap) {
 	const picker = el('[data-stage-picker]'), stepBack = el('[data-stage-back]'), stepNext = el('[data-stage-next]');
 	const preset = el('[data-stage-preset]'), forks = [...tab.querySelectorAll('[data-exit]')];
 	const map = el('[data-journey-map]'), pins = el('[data-pins]'), info = el('[data-map-status]'), survey = el('[data-survey-road]');
-	const outline = el('[data-outline]'), remove = el('[data-delete-stage]'), undo = el('[data-undo-edit]');
+	const outline = el('[data-outline]'), outlineBox = el('[data-journey-outline]'), pages=frame.querySelector('.lab-pages'), remove = el('[data-delete-stage]'), undo = el('[data-undo-edit]');
 	const rename = el('[data-rename-stage]'), stageName = el('[data-stage-name]');
-	const cache = new Map(), history = [];
+	const cache = new Map(), history = [], thumbnails = new Map();
+	let serial=0, thumbnailJob=null, thumbnailTimer;
 	let nodes = {}, stage = 'A', lastGraphicPlan = null, valid = null, stageOrder = [], state, activeNetwork;
 	let pending = null, id = 0, timer, key = '', current, request, lastRoadMap, surveying = false, visible = false, busy = false;
 	const on = (node,event,fn)=>node.addEventListener(event,fn,{signal});
@@ -127,7 +131,7 @@ function mount(frame, canvas, signal, roadMap) {
 
 	function selectStage(next) {
 		if(!Object.hasOwn(nodes,next)) return;
-		stage=next; renderNetwork(); refresh();
+		stage=next; renderNetwork(); refresh();queueThumbnails();
 	}
 
 	function renderNetwork() {
@@ -135,14 +139,17 @@ function mount(frame, canvas, signal, roadMap) {
 		if(!Object.hasOwn(nodes,stage)) stage=Object.keys(nodes)[0];
 		const node=nodes[stage], layers=routeLayers(nodes);
 		stageOrder=layers.flat();
-		picker.replaceChildren(); outline.replaceChildren();
+		picker.replaceChildren(); outline.replaceChildren(); thumbnails.clear();
 		layers.forEach((ids,i)=>{
 			const group=document.createElement('optgroup'); group.label='Layer '+(i+1); picker.append(group);
 			const row=document.createElement('div'), heading=document.createElement('span'), links=document.createElement('div');
 			row.className='journey-level'; heading.textContent=group.label; row.append(heading,links); outline.append(row);
 			for(const id of ids) {
 				group.append(new Option(name(id),id));
-				const hop=button(name(id),()=>selectStage(id)); hop.dataset.square=id;
+				const hop=button('',()=>selectStage(id)), thumb=document.createElement('span'), label=document.createElement('span');
+				hop.dataset.square=id; thumb.className='journey-thumb';thumb.ariaHidden='true';thumb.textContent=id;
+				label.textContent=name(id);hop.append(thumb,label);
+				thumbnails.set(id,{thumb,key:null,path:null});
 				hop.setAttribute('aria-pressed',String(id===stage));
 				const exits=document.createElement('small');
 				exits.textContent=nodes[id].exits.length?'→ '+[...new Set(nodes[id].exits)].join(' / '):'End of route';
@@ -228,39 +235,84 @@ function mount(frame, canvas, signal, roadMap) {
 		valid=result?.nodes ?? null;
 		if(valid) {nodes=structuredClone(valid);lastGraphicPlan=result.plan;}
 		else if(lastGraphicPlan!==source.value) nodes={};
-		renderNetwork(); refresh();
+		renderNetwork(); refresh();queueThumbnails();
 	}
 
-	function spec() {
-		if(network() && (!valid || !nodes[stage]))return null;
-		const span=Number(extent.value), west=network()?nodes[stage].preset:select('west').value;
-		const exits=network()?[...new Set(nodes[stage].exits)]:layout.value==='divide'?['L','R']:['E'];
+	function spec(which=stage) {
+		if(network() && (!valid || !nodes[which]))return null;
+		const span=Number(extent.value), west=network()?nodes[which].preset:select('west').value;
+		const exits=network()?[...new Set(nodes[which].exits)]:layout.value==='divide'?['L','R']:['E'];
 		const destinations=network()?exits.map(e=>nodes[e].preset):[select('east').value,...(exits.length===2?[select('south').value]:[])];
 		const live=Boolean(state?.recipe.join && state.recipe.join.span===span && (network()
-			? activeNetwork?.plan===source.value && state.journeySquare===stage
+			? activeNetwork?.plan===source.value && state.journeySquare===which
 			: !state.journeySquare && state.recipe.preset===west && state.recipe.join.destinations.length===destinations.length
 				&& state.recipe.join.destinations.every((p,i)=>p.preset===destinations[i])));
-		const params=network()?{plan:source.value,stage,span}:{west,destinations,span};
+		const params=network()?{plan:source.value,stage:which,span}:{west,destinations,span};
 		if(live)params.generation=state.generation;
 		const version=live?[state.generation,state.revision,state.settings.waterColor,state.settings.waterLevel,
 			state.hiddenSurfaceLayers,state.surfaceLayers,state.surfaceFields,state.paintInks,roadMap()?.hidden]:null;
-		return {params,west,exits,destinations,live,signature:JSON.stringify([span,network()?stage:null,west,exits,destinations,version])};
+		return {params,west,exits,destinations,live,signature:JSON.stringify([span,network()?which:null,west,exits,destinations,version])};
 	}
 
-	function draw() {
-		const ctx=map.getContext('2d');
-		ctx.clearRect(0,0,map.width,map.height);
-		if(!current)return;
-		ctx.drawImage(current.image,0,0,map.width,map.height);
+	function drawMap(target, entry, path) {
+		const ctx=target.getContext('2d'), size=target.width;
+		ctx.clearRect(0,0,size,size);
+		if(!entry) return;
+		ctx.drawImage(entry.image,0,0,size,size);
+		if(!path) return;
+		ctx.save();
+		ctx.translate(size/2,size/2);
+		const scale=size/entry.extent;
+		ctx.scale(scale,scale);
+		ctx.lineJoin=ctx.lineCap='round';
+		ctx.strokeStyle='#362c1c';ctx.lineWidth=(size<100?1.8:3.4)/scale;ctx.stroke(path);
+		ctx.strokeStyle='#ffd272';ctx.lineWidth=(size<100?1:1.8)/scale;ctx.stroke(path);
+		ctx.restore();
+	}
+	function pathFor(entry, route) {
 		const highway=roadMap();
-		const path=request?.live && highway?.generation===state.generation ? highway.path : current.path;
-		if(path) {
-			ctx.save();ctx.translate(map.width/2,map.height/2);
-			const s=map.width/current.extent;ctx.scale(s,s);
-			ctx.lineJoin=ctx.lineCap='round';ctx.strokeStyle='#362c1c';ctx.lineWidth=3.4/s;ctx.stroke(path);
-			ctx.strokeStyle='#ffd272';ctx.lineWidth=1.8/s;ctx.stroke(path);ctx.restore();
+		return route?.live && highway?.generation===state.generation ? highway.path : entry?.path;
+	}
+	function draw() { drawMap(map,current,pathFor(current,request)); }
+	function storeChart(signature, data) {
+		const image=document.createElement('canvas');
+		image.width=image.height=data.size;
+		image.getContext('2d').drawImage(canvas,10,canvas.height-10-data.size,data.size,data.size,0,0,data.size,data.size);
+		const entry={image,extent:data.extent,pins:data.pins};
+		cache.set(signature,entry);
+		if(cache.size>18)cache.delete(cache.keys().next().value);
+		return entry;
+	}
+	// Fill only visible outline cards. A foreground inspection or survey always takes priority.
+	function fillThumbnails() {
+		if(!visible || !network() || !valid || !current || !outlineBox.open || busy || surveying || pending) return;
+		const viewport=pages.getBoundingClientRect();
+		let missing=null;
+		for(const [which,card] of thumbnails) {
+			const bounds=card.thumb.getBoundingClientRect();
+			if(!bounds.height || bounds.bottom<viewport.top || bounds.top>viewport.bottom)continue;
+			const route=spec(which), entry=cache.get(route.signature);
+			if(!entry) {
+				if(card.key!==route.signature) missing ??= route;
+				continue;
+			}
+			const path=pathFor(entry,route);
+			if(card.key===route.signature && card.path===path)continue;
+			const thumbnail=document.createElement('canvas');
+			thumbnail.width=thumbnail.height=72;
+			drawMap(thumbnail,entry,path);
+			card.thumb.replaceChildren(thumbnail);card.key=route.signature;card.path=path;
+		}
+		if(missing && !thumbnailJob && (state?.mode==='fly' || state?.paused)) {
+			thumbnailJob={id:++serial,key:missing.signature};
+			pending={id:thumbnailJob.id,...missing.params};
 		}
 	}
+	function queueThumbnails() {
+		clearTimeout(thumbnailTimer);
+		if(outlineBox.open) thumbnailTimer=setTimeout(fillThumbnails,160);
+	}
+
 	function describe() {
 		el('[data-map-width]').textContent=current?(current.extent/1609.344).toFixed(1)+' mi across':'';
 		survey.hidden=!current || !request?.exits.length || request.live || Boolean(current.path);
@@ -286,28 +338,32 @@ function mount(frame, canvas, signal, roadMap) {
 		const next=enabled && !busy?spec():null;
 		if(enabled===visible && (next?.signature ?? '')===key)return;
 		visible=enabled; key=next?.signature ?? '';request=next;surveying=false;
-		clearTimeout(timer);pending={id:++id};current=cache.get(key);draw();describe();
+		clearTimeout(timer);thumbnailJob=null;id=++serial;pending={id};current=cache.get(key);draw();describe();
 		pins.replaceChildren();
 		if(!next)return;
 		placePins(next);
 		map.setAttribute('aria-label','North-up map of '+[next.west,...next.destinations].map(p=>names.get(p)).join(' and '));
 		if(!current)timer=setTimeout(()=>{pending={id,...next.params};},100);
+		queueThumbnails();
 	}
 	on(survey,'click',()=>{
 		if(!request||!current)return;
-		surveying=!surveying;pending=surveying?{id:++id,...request.params,survey:true}:{id:++id};describe();
+		thumbnailJob=null;id=++serial;surveying=!surveying;pending=surveying?{id,...request.params,survey:true}:{id};describe();
 	});
 	function receive(token,json) {
-		if(token!==id || !visible || !request)return;
+		if(!visible || !request)return;
+		if(thumbnailJob?.id===token) {
+			const data=JSON.parse(json), signature=thumbnailJob.key;
+			thumbnailJob=null;
+			if(data.size) storeChart(signature,data);
+			else if(data.error) {for(const [which,card] of thumbnails) if(spec(which)?.signature===signature)card.key=signature;}
+			queueThumbnails();return;
+		}
+		if(token!==id)return;
 		const data=JSON.parse(json);
 		if(data.phase) {info.textContent=data.phase;return;}
 		if(data.error) {surveying=false;describe();info.textContent=data.error;return;}
-		if(data.size) {
-			const image=document.createElement('canvas');image.width=image.height=data.size;
-			image.getContext('2d').drawImage(canvas,10,canvas.height-10-data.size,data.size,data.size,0,0,data.size,data.size);
-			current={image,extent:data.extent,pins:data.pins};
-			cache.set(key,current);if(cache.size>18)cache.delete(cache.keys().next().value);
-		}
+		if(data.size) current=storeChart(key,data);
 		if(current && data.roads) {
 			const path=new Path2D();
 			for(const [start,...curves] of data.roads) {
@@ -317,7 +373,7 @@ function mount(frame, canvas, signal, roadMap) {
 			current.path=path;
 			surveying=false;
 		}
-		draw();placePins(request);describe();
+		draw();placePins(request);describe();queueThumbnails();
 	}
 	function layoutChanged() {
 		show('[data-network-only]',network());show('[data-simple]',!network());show('[data-south]',layout.value==='divide');
@@ -328,7 +384,15 @@ function mount(frame, canvas, signal, roadMap) {
 	const observer=new MutationObserver(refresh);observer.observe(panel,{attributes:true,attributeFilter:['open']});
 	observer.observe(tab,{attributes:true,attributeFilter:['hidden']});
 	on(document,'visibilitychange',refresh);
-	signal.addEventListener('abort',()=>{observer.disconnect();clearTimeout(timer);cache.clear();},{once:true});
+	on(outlineBox,'toggle',()=>{
+		if(!outlineBox.open && thumbnailJob) {
+			thumbnailJob=null;
+			pending={id:++serial};
+		}
+		queueThumbnails();
+	});
+	pages.addEventListener('scroll',queueThumbnails,{signal,passive:true});
+	signal.addEventListener('abort',()=>{observer.disconnect();clearTimeout(timer);clearTimeout(thumbnailTimer);cache.clear();},{once:true});
 	on(el('[data-edit-flight]'),'click',()=>frame.querySelector('[data-action=fly]').click());
 	// Published state changes only touch the editor when its map or location can have changed.
 	function sync(next,plan,building) {
