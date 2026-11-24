@@ -150,7 +150,7 @@ final class SurfaceLayers
 			$reflective = $reflective || ($row['channel'] !== 'relief' && $row['reflectivity'] > 0.);
 			// Premultiply the roughness by coating coverage so opaque snow can cleanly cover reflective ice.
 			array_push($this->finishes, $row['reflectivity'], $row['reflectivity']*$row['roughness']**2);
-			array_push($this->effects,$row['strength'],$row['flatten'],$row['opacity'], (float)($row['low'] <= -1e6 && $row['high'] >= 1e6 && $row['slopeLow'] == 0. && $row['slopeHigh'] == 1. && $row['period'] == 0.));
+			array_push($this->effects,$row['strength'],$row['flatten'],$row['opacity'], 1.);
 			array_push($this->colors, ...TerrainAppearance::linear($row['color']));
 			array_push($this->ranges, $row['low'], $row['high'], $row['slopeLow'], $row['slopeHigh']);
 			array_push($this->blends, $row['fade'], $row['slopeFade'], $row['noise'], $row['scale']);
@@ -174,7 +174,24 @@ final class SurfaceLayers
 	}
 
 	/** Whether the advanced shader needs an elevation or grade mask for this row. */
-	public function restricted(int $index): bool { return $this->effects[4*$index+3] < .5; }
+	public function restricted(int $index): bool
+	{
+		return self::hasRange($this->layers[$index]);
+	}
+
+	private static function hasRange(array $row): bool
+	{
+		return $row['low'] > -1e6 || $row['high'] < 1e6 || $row['slopeLow'] != 0. || $row['slopeHigh'] != 1. || $row['period'] != 0.;
+	}
+
+	/** Preview the stack with selected contributions hidden. Children still receive their authored parent masks. */
+	public function previewWithout(array $layerIds): self
+	{
+		$view = clone $this;
+		foreach($this->layers as $i=>$row)
+			$view->effects[4*$i+3] = in_array($row['id'],$layerIds,true) ? -1. : (float)!self::hasRange($row);
+		return $view;
+	}
 
 	/** A repeating section covers a full period. 1 continues the section and 2 closes it. */
 	public function section(int $index): int { return (int)$this->modes[4*$index+3]; }

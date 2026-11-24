@@ -83,7 +83,7 @@ The example is offline. Reproducible local terrain and edit replay do not, by th
 
 ## Author a surface
 
-Open **Surface** to see the material stack that draws the current landscape. Layers run from the base upward. Expand a named layer to edit it. Colors and numeric values preview immediately. Adding, moving or removing a layer, selecting a different pattern, or changing a parent starts a draft. Choose **Apply layers** to use the draft. Saving writes the last applied stack.
+Open **Surface** to see the material stack that draws the current landscape. Layers run from the base upward. Click the eye at the right of a layer title to hide or show its color, relief and reflections in the preview. Child layers keep their coverage masks. Saving keeps the authored surface. Click the layer name to expand its settings. Colors and numeric values preview immediately. Adding, moving or removing a layer, selecting a different pattern, or changing a parent starts a draft. Choose **Apply layers** to use the draft. Saving writes the last applied stack.
 
 Use a parent mask to put one material inside another. To add ripples to a beach, add a layer above **Sand**, choose **Sand** under **Within layer mask**, and set **Affects** to **Relief**, **Relief source** to **Pattern**, and **Pattern** to **Ripples**. Set the scale in feet and turn the sun to see the highlights. Choose **Both** to have the same pattern tint the surface. **Flatten underlying relief** smooths the previous lighting normal where the layer covers it.
 

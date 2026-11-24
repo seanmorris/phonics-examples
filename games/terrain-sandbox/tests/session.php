@@ -2043,6 +2043,14 @@ $look->close(); $other->close();
 
 $materials = new Session(['preset'=>'mountain']);
 $natural = $materials->activeLayers();
+$before = json_decode($materials->save(),true)['surface'];
+input($materials,['actions'=>[['type'=>'surface-visibility','id'=>'relief-ribs','visible'=>false]]]);
+$preview = $materials->displayedLayers();
+expect($preview !== $natural && $materials->displayedLayers() === $preview && $preview->structure === $natural->structure
+	&& $materials->activeLayers() === $natural, 'Hiding a relief layer reuses the shader and caches its preview uniforms.');
+expect(json_decode($materials->save(),true)['surface'] === $before, 'A visibility comparison preserves the authored surface and its preset origin.');
+input($materials,['actions'=>[['type'=>'surface-visibility','id'=>'relief-ribs','visible'=>true]]]);
+expect($materials->displayedLayers() === $natural, 'Showing the last hidden layer restores the original palette.');
 expect(array_column($natural->layers,'strength','id')['relief-ribs'] === .5,'Mountain Ridges starts with half-strength rib relief.');
 $granite = array_column($natural->layers,null,'id')['granite-slabs'];
 expect($granite['pattern'] === 'jointed' && $granite['channel'] === 'color' && $granite['color'] !== $granite['patternColor']

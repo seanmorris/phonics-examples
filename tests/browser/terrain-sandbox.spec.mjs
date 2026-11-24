@@ -2778,6 +2778,70 @@ test('the Landscape Lab explains each parameter, reflows, and folds to one round
 	expect(await pages.evaluate(el => el.scrollTop)).toBe(0);
 });
 
+test('surface title-bar eyes toggle the rendered layer independently of its editor', async({page}) => {
+	test.setTimeout(180_000);
+	await page.setViewportSize({width: 860, height: 600});
+	await boot(page);
+	const doc = fixture();
+	doc.settings.waterLevel = -30;
+	await load(page, doc);
+	await page.getByRole('tab', {name: 'Surface', exact: true}).click();
+	const view = canvas(page);
+	const pixel = async() => {
+		const png = PNG.sync.read(await view.screenshot({style: '.terrain-panel{visibility:hidden!important}'}));
+		const i = 4*(Math.floor(png.height/2)*png.width + Math.floor(png.width/2));
+		return [...png.data.subarray(i, i+3)];
+	};
+	const top = page.getByRole('button', {name: 'Leaves visibility'});
+	const base = page.getByRole('button', {name: 'Earth visibility'});
+	for(const channel of ['color','both']) {
+		const rows = [{id:'earth', name:'Earth', color:'#ff0000', channel},
+			{id:'leaves', name:'Leaves', color:'#00ff00', parent:'earth'}];
+		await view.evaluate((el, layers) => el.terrainSandboxDebug.action({type:'surface-layers',layers}),rows);
+		await expect.poll(async() => (await status(page)).surfaceLayers[0].channel).toBe(channel);
+		await expect(top).toHaveAttribute('aria-pressed','true');
+		const green = await pixel();
+		expect(green[1]).toBeGreaterThan(green[0]);
+		await top.click();
+		await expect.poll(async() => (await status(page)).hiddenSurfaceLayers).toEqual(['leaves']);
+		await expect(page.locator('[data-layer="leaves"]')).not.toHaveAttribute('open','');
+		const red = await pixel();
+		expect(red[0]).toBeGreaterThan(red[1]);
+		await base.click();
+		await expect.poll(async() => (await status(page)).hiddenSurfaceLayers).toHaveLength(2);
+		expect(await pixel()).not.toEqual(red);
+		await top.focus();
+		await page.keyboard.press('Space');
+		await expect.poll(async() => (await status(page)).hiddenSurfaceLayers).toEqual(['earth']);
+		expect(await pixel()).toEqual(green);
+		await base.click();
+		await expect.poll(async() => (await status(page)).hiddenSurfaceLayers).toEqual([]);
+	}
+
+	const row = page.locator('[data-layer="leaves"]');
+	await row.locator('summary').click();
+	await row.getByRole('textbox', {name:'Layer name'}).fill('Unsaved name');
+	await top.click();
+	await expect.poll(async() => (await status(page)).hiddenSurfaceLayers).toEqual(['leaves']);
+	await expect(row).toHaveAttribute('open','');
+	await expect(row.getByRole('textbox', {name:'Layer name'})).toHaveValue('Unsaved name');
+	await expect(page.getByRole('button',{name:'Apply layers',exact:true})).toBeEnabled();
+});
+
+test('sky sliders step and display tenths', async({page}) => {
+	await page.goto('/games/terrain-sandbox/');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout:60_000});
+	for(const key of ['azimuth','elevation','exposure']) {
+		const slider = await field(page, `[data-value="${key}"]`);
+		const value = Number(await slider.inputValue());
+		await slider.focus();
+		await page.keyboard.press('ArrowRight');
+		const next = (value+.1).toFixed(1);
+		await expect(page.locator(`[data-output="${key}"]`)).toHaveText(next);
+		await expect.poll(async() => (await status(page)).settings[key]).toBe(Number(next));
+	}
+});
+
 test('Surface keeps field help with its control and column widths steady when scrolling', async({page}) => {
 	await page.setViewportSize({width: 1180, height: 1280});
 	await boot(page);
@@ -2811,7 +2875,7 @@ test('Surface keeps field help with its control and column widths steady when sc
 	});
 
 	// Keep the first layer in view while opening the second makes the page scroll.
-	for(const [width, height] of [[1180, 1280], [375, 2048]])
+	for(const [width, height] of [[1180, 1350], [375, 2780]])
 	{
 		await page.setViewportSize({width, height});
 		const before = await layout();

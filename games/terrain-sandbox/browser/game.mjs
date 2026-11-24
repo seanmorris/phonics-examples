@@ -391,7 +391,7 @@ export function activate({module, canvas, session, services})
 
 			const output = frame.querySelector(`[data-output="${field.dataset.value}"]`);
 
-			if(output) output.textContent = readout(field.value);
+			if(output) output.textContent = readout(field.value, field.step);
 
 			if(field.dataset.value === 'tool') showToolControls();
 
@@ -1270,7 +1270,7 @@ export function activate({module, canvas, session, services})
 
 					const output = frame.querySelector(`[data-output="${name}"]`);
 
-					if(output) output.textContent = readout(field.value);
+					if(output) output.textContent = readout(field.value, field.step);
 				}
 
 				fog.value = String(fogPosition(state.settings.waterFogDensity));
@@ -1694,11 +1694,13 @@ function padTheme(id)
  * @param {string|number} value The field's value or a setting.
  * @returns {string} The readout, or the value unchanged when it is not a number.
  */
-function readout(value)
+function readout(value, step)
 {
 	const number = Number(value);
 
 	if(value === '' || !Number.isFinite(number)) return String(value);
+
+	if(Number(step) === .1) return number.toFixed(1);
 
 	const decimals = Math.abs(number) >= 100 ? 0 : Math.abs(number) >= 10 ? 1 : 4;
 
@@ -1910,6 +1912,8 @@ function materialEditor(frame, push, status)
 	const fieldBox = frame.querySelector('[data-shared-fields]');
 	const inkBox = frame.querySelector('[data-paint-inks]');
 	const applyLayers = frame.querySelector('[data-layer-apply]');
+	const rowElements = () => [...layerBox.querySelectorAll('details[data-layer]')];
+	let appliedIds = [], hiddenIds = [], eyeKey = '';
 	let draft = false, materialKey = '', lastValues = '', editorGeneration = -1, serial = 0, submitted = 0;
 
 	const entities = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'};
@@ -1975,11 +1979,15 @@ function materialEditor(frame, push, status)
 				<small id="${id}">${help}</small></div>`;
 		});
 
-		return `<details data-layer="${escaped(row.id)}"><summary>${escaped(row.name)}</summary>
+		return `<div class="surface-layer-row"><details data-layer="${escaped(row.id)}"><summary>${escaped(row.name)}</summary>
 			<div class="terrain-grid">${fields.join('')}</div><div class="terrain-row">
 			<button data-move="-1" ${index ? '' : 'disabled'}>Move up</button>
 			<button data-move="1" ${index + 1 < rows.length ? '' : 'disabled'}>Move down</button>
-			<button data-remove ${rows.length === 1 ? 'disabled' : ''}>Remove layer</button></div></details>`;
+			<button data-remove ${rows.length === 1 ? 'disabled' : ''}>Remove layer</button></div></details>
+			<button type="button" class="layer-eye" data-layer-eye aria-label="${escaped(row.name)} visibility">
+			<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">
+			<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>
+			<path class="eye-slash" d="m3 3 18 18"/></svg></button></div>`;
 	}
 
 	function layerControls(el, index)
@@ -2029,15 +2037,25 @@ function materialEditor(frame, push, status)
 		);
 	}
 
+	function showEye(row, visible)
+	{
+		const button = row.nextElementSibling;
+		const name = row.querySelector('summary').textContent;
+		button.disabled = !appliedIds.includes(row.dataset.layer);
+		button.setAttribute('aria-pressed', String(visible));
+		button.title = button.disabled ? 'Apply this layer to preview its visibility' : `${visible ? 'Hide' : 'Show'} ${name}`;
+	}
+
 	function drawRows(rows, preset = false)
 	{
 		const open = new Set([...layerBox.querySelectorAll('details[open]')].map(el => el.dataset.layer));
 		layerBox.innerHTML = rows.map(layerRow).join('');
 		configureUnits(layerBox, preset);
 
-		for(const [index,el] of [...layerBox.children].entries())
+		for(const [index,el] of rowElements().entries())
 		{
 			el.open = open.has(el.dataset.layer);
+			showEye(el, !hiddenIds.includes(el.dataset.layer));
 			layerControls(el, index);
 		}
 
@@ -2046,7 +2064,7 @@ function materialEditor(frame, push, status)
 
 	function editorRows()
 	{
-		return [...layerBox.children].map(el => ({
+		return rowElements().map(el => ({
 			id: el.dataset.layer
 			, ...Object.fromEntries(
 				[...el.querySelectorAll('[data-layer-key]')].map(field => [field.dataset.layerKey
@@ -2089,7 +2107,7 @@ function materialEditor(frame, push, status)
 		{
 			stageLayers();
 			const el = field.closest('[data-layer]');
-			layerControls(el, [...layerBox.children].indexOf(el));
+			layerControls(el, rowElements().indexOf(el));
 		}
 		else if(field.checkValidity())
 			push({
@@ -2104,6 +2122,15 @@ function materialEditor(frame, push, status)
 		const button = event.target.closest('button');
 
 		if(!button) return;
+
+		if(button.hasAttribute('data-layer-eye'))
+		{
+			const row = button.previousElementSibling;
+			const visible = button.getAttribute('aria-pressed') !== 'true';
+			showEye(row, visible);
+			push({type: 'surface-visibility', id: row.dataset.layer, visible});
+			return;
+		}
 
 		const rows = editorRows(), i = rows.findIndex(row => row.id===button.closest('[data-layer]').dataset.layer);
 
@@ -2146,7 +2173,7 @@ function materialEditor(frame, push, status)
 		rows.push({...surface.layerDefaults,id: 'layer-' + n,name: 'Layer ' + n,parent: ''});
 		stageLayers();
 		drawRows(rows);
-		layerBox.lastElementChild.open = true;
+		rowElements().at(-1).open = true;
 	};
 
 	applyLayers.onclick = sendRows;
@@ -2203,6 +2230,14 @@ function materialEditor(frame, push, status)
 			editorGeneration = state.generation;
 		}
 
+		appliedIds = state.surfaceLayers.map(row => row.id);
+		hiddenIds = state.hiddenSurfaceLayers;
+		const nextEyeKey = JSON.stringify([appliedIds, hiddenIds]);
+		if(eyeKey !== nextEyeKey) {
+			for(const row of rowElements()) showEye(row, !hiddenIds.includes(row.dataset.layer));
+			eyeKey = nextEyeKey;
+		}
+
 		const valuesKey = JSON.stringify(state.surfaceLayers);
 
 		if(!draft && valuesKey!==lastValues)
@@ -2222,7 +2257,7 @@ function materialEditor(frame, push, status)
 				materialKey = key;
 			}
 			else
-			for(const [i,el] of [...layerBox.children].entries())
+			for(const [i,el] of rowElements().entries())
 			{
 				for(const field of el.querySelectorAll('[data-layer-key]'))
 				{
@@ -2465,7 +2500,11 @@ function markup()
 	.terrain-panel .terrain-field{display:grid;gap:5px;align-content:start;color:#e8f0e7;font-weight:550}
 	.terrain-panel :is(input[type=number],input[type=text],select){width:100%;min-width:0;font-weight:400}
 	.terrain-surface-group{padding-block:12px;border-bottom:1px solid #3a5448}
-	.terrain-section [data-layer]+[data-layer]{margin-top:6px}
+	.surface-layer-row{position:relative}.surface-layer-row+.surface-layer-row{margin-top:6px}
+	.terrain-section .surface-layer-row summary{padding-right:48px;overflow-wrap:anywhere}
+	.terrain-panel .layer-eye{position:absolute;right:5px;top:4px;display:grid;place-items:center;width:32px;height:32px;min-height:32px;padding:5px;background:transparent;border-color:transparent;color:#e2ebe1}
+	.terrain-panel .layer-eye:hover{background:#355747}.layer-eye svg{width:20px;height:20px}
+	.layer-eye .eye-slash{display:none}.layer-eye[aria-pressed=false] .eye-slash{display:block;stroke-width:2.4}
 	.terrain-control{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 8px}
 	.terrain-control>input[type=range]{grid-row:2;grid-column:1/-1}
 	.terrain-control>output{grid-row:1;grid-column:2;font-variant-numeric:tabular-nums;color:#eed194;font-size:13px}
@@ -2733,14 +2772,14 @@ G coast</textarea><small>One square per line. Enter its name, preset ID, and up 
 		, 'azimuth'
 		, 0
 		, 360
-		, 1
+		, .1
 		, 125
 	)}${range(
 		'Sun elevation'
 		, 'elevation'
 		, -12
 		, 88
-		, 1
+		, .1
 		, 35
 	)}${range(
 		'Haze'

@@ -133,14 +133,14 @@ final class MaterialShader
 		$glsl[] = 'vec3 result=vec3(0.), delta=vec3(0.), section=vec3(0.); float sectionSum=0.;';
 		if($reflective) $glsl[] = 'vec2 sectionFinish=vec2(0.);';
 		foreach($stack->layers as $i=>$row) {
-			$glsl[] = "{ const int i=$i; vec4 effect=uLayerEffect[i];";
+			$glsl[] = "{ const int i=$i; vec4 effect=uLayerEffect[i]; float visible=step(0.,effect.w);";
 			$mask = self::MASK[$row['mask']];
 			$glsl[] = 'float edge=1., coverage=1.;';
 			if($i > 0 && $stack->restricted($i)) $glsl[] = 'materialRange(i,pos,slope,footprint,water,bed,edge,coverage);';
 			if($i > 0 && $row['parent'] >= 0) $glsl[] = 'coverage*=masks['.$row['parent'].'];';
 			$section = $stack->section($i);
-			$glsl[] = $i === 0 ? 'float amount=1.; masks[i]=1.;'
-				: "coverage*=($mask)*effect.z; float amount=edge*coverage; masks[i]=amount;";
+			$glsl[] = $i === 0 ? 'float amount=visible; masks[i]=1.;'
+				: "coverage*=($mask)*effect.z; float amount=edge*coverage; masks[i]=amount; amount*=visible;";
 			$pattern = match(true) {
 				$fields && $row['pattern'] === 'jointed' => 'jointedPigment(pos,normal,footprint,uLayerPattern[i],sizes.zw,breakup)',
 				$row['pattern'] !== 'none' => 'layerPatternWeight(i,pos,normal,footprint,bed,bedPixel)',
@@ -154,13 +154,13 @@ final class MaterialShader
 				$base = $row['field'] === 'shrubs' ? 'mix(uLayerColor[i],uLayerPatternColor[i],.55)' : 'uLayerColor[i]';
 				$tint = self::SHADE[$row['field']];
 				$glsl[] = "vec3 shade=mix($base,uLayerPatternColor[i],pattern)*$tint;";
-				if($i === 0) $glsl[] = 'result=shade;'.($reflective ? 'finish=uLayerFinish[i];' : '');
+				if($i === 0) $glsl[] = 'result=mix(vec3(.18),shade,visible);'.($reflective ? 'finish=uLayerFinish[i]*visible;' : '');
 				elseif(!$section) {
 					$glsl[] = 'result=mix(result,shade,amount);';
 					if($reflective) $glsl[] = 'finish=mix(finish,uLayerFinish[i],amount);';
 				} else {
-					$glsl[] = 'section+=shade*edge; sectionSum+=edge;';
-					if($reflective) $glsl[] = 'sectionFinish+=uLayerFinish[i]*edge;';
+					$glsl[] = 'section+=mix(result,shade,visible)*edge; sectionSum+=edge;';
+					if($reflective) $glsl[] = 'sectionFinish+=mix(finish,uLayerFinish[i],visible)*edge;';
 					if($section === 2) {
 						$glsl[] = 'if(sectionSum>0.) { result=mix(result,section/sectionSum,coverage);';
 						if($reflective) $glsl[] = 'finish=mix(finish,sectionFinish/sectionSum,coverage);';
@@ -174,8 +174,8 @@ final class MaterialShader
 				if($row['channel'] !== 'color') {
 					$kind = $row['relief'];
 					if($kind === 'pattern') $glsl[] = 'delta+=amount*effect.x*patternGradient(pos,normal,pattern);';
-					elseif($kind === 'ribs') $glsl[] = 'vec3 n=normalize(normal+delta); vec3 tangent=lift-n*dot(n,lift);
-						delta=normalize(n-amount*effect.x*relief*tangent/(1.+length(tangent)))-normal;';
+					elseif($kind === 'ribs') $glsl[] = 'if(visible>0.) { vec3 n=normalize(normal+delta); vec3 tangent=lift-n*dot(n,lift);
+						delta=normalize(n-amount*effect.x*relief*tangent/(1.+length(tangent)))-normal; }';
 					elseif(isset(self::RELIEF[$kind])) $glsl[] = 'delta+=('.self::RELIEF[$kind].')*relief*amount*effect.x;';
 				}
 			}

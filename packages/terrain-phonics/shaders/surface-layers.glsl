@@ -7,7 +7,7 @@ const int FRACTURE_PATTERN = 11;
 #ifndef JOURNEY_REGIONS
 uniform int uLayerCount;
 uniform vec4 uFieldScale;
-uniform vec4 uLayerEffect[16]; // relief strength, flattening, opacity, unrestricted range
+uniform vec4 uLayerEffect[16]; // relief strength, flattening, opacity, unrestricted range (negative hides the material)
 #ifdef MATERIAL_REFLECTION
 uniform vec2 uLayerFinish[16]; // coating coverage, coverage times squared roughness
 #endif
@@ -314,11 +314,18 @@ float repeatingMask(float height,vec2 range,float fade,float period,float footpr
 	return mix(mask,width/period,smoothstep(.16,.55,footprint/period));
 }
 
+float layerVisibility(int i) {
+#ifdef MATERIAL_STACK
+	return step(0.,uLayerEffect[i].w);
+#else
+	return 1.;
+#endif
+}
 vec3 layerSurface(vec3 pos,vec3 normal,float footprint,float water) {
 	float masks[16];
 	float beddingHeight=pos.y-dot(pos.xz,vec2(.006,-.003));
 	float beddingPixel=fwidth(beddingHeight);
-	vec3 result=layerColor(0,pos,normal,footprint,beddingHeight,beddingPixel);
+	vec3 result=mix(vec3(.18),layerColor(0,pos,normal,footprint,beddingHeight,beddingPixel),layerVisibility(0));
 	float slope=1.-clamp(normal.y,0.,1.);
 	vec3 sectionColor=vec3(0.);
 	float sectionCoverage=0.;
@@ -359,9 +366,9 @@ vec3 layerSurface(vec3 pos,vec3 normal,float footprint,float water) {
 
 		if(mask>0.) {
 			vec3 shade=layerColor(i,pos,normal,footprint,beddingHeight,beddingPixel);
-			if(m.w==0.) result=mix(result,shade,mask);
+			if(m.w==0.) result=mix(result,shade,mask*layerVisibility(i));
 			else {
-				sectionColor+=shade*heightMask;
+				sectionColor+=mix(result,shade,layerVisibility(i))*heightMask;
 				sectionCoverage+=heightMask;
 			}
 		}

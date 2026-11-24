@@ -240,6 +240,8 @@ final class Session
 	/** The terrain's colors, banding and blending, which the scene draws with. Its settings are part of $settings. */
 	public TerrainAppearance $terrainAppearance;
 	public ?SurfaceLayers $surfaceLayers=null;
+	private array $hiddenLayerIds = [];
+	private ?SurfaceLayers $previewSource = null, $previewLayers = null;
 	public ?TerrainAppearance $paint = null;
 	public ?\Closure $prepareMaterial = null;
 	private int $materialReply = 0;
@@ -282,6 +284,9 @@ final class Session
 			$origin = null;
 		}
 		if($this->prepareMaterial) ($this->prepareMaterial)($candidate);
+		$this->hiddenLayerIds = isset($action['layers']) || isset($action['fields'])
+			? array_values(array_intersect($this->hiddenLayerIds,array_column($candidate->layers,'id'))) : [];
+		$this->previewSource = $this->previewLayers = null;
 		$this->surfaceLayers = $origin === null ? null : $candidate;
 		$this->materialPreset = $origin;
 		if($origin === null) {
@@ -295,6 +300,17 @@ final class Session
 	private ?SurfaceLayers $generatedLayers=null;
 	private ?TerrainAppearance $layerAppearance=null;
 	private array $layerRecipe=[];
+
+	public function displayedLayers(): SurfaceLayers
+	{
+		$source = $this->activeLayers();
+		if(!$this->hiddenLayerIds) return $source;
+		if($source !== $this->previewSource) {
+			$this->previewLayers = $source->previewWithout($this->hiddenLayerIds);
+			$this->previewSource = $source;
+		}
+		return $this->previewLayers;
+	}
 
 	public function activeLayers(): SurfaceLayers
 	{
@@ -1467,6 +1483,17 @@ final class Session
 				$this->setMaterial($action);
 				$this->materialReply = (int)($action['request'] ?? 0);
 				break;
+			case 'surface-visibility':
+				$id = $action['id'] ?? null;
+				$visible = $action['visible'] ?? null;
+				if(!is_bool($visible) || !in_array($id,array_column($this->activeLayers()->layers,'id'),true))
+					throw new \InvalidArgumentException('Unknown surface layer or visibility.');
+				if($visible === !in_array($id,$this->hiddenLayerIds,true)) break;
+				if($visible) $this->hiddenLayerIds = array_values(array_diff($this->hiddenLayerIds,[$id]));
+				else $this->hiddenLayerIds[] = $id;
+				$this->previewSource = $this->previewLayers = null;
+				$this->dirty = true;
+				break;
 			case 'surface-edit':
 				$rows = $this->activeLayers()->layers;
 				$index = array_search($action['id'] ?? null,array_column($rows,'id'),true);
@@ -2304,6 +2331,8 @@ final class Session
 		$this->launches = 0;
 		$this->setting('waterLevel', $landscape->recipe()['waterLevel']);
 		$this->flightTrails = null;
+		$this->hiddenLayerIds = [];
+		$this->previewSource = $this->previewLayers = null;
 		$this->road = []; $this->generation++; $this->mode = 'fly';
 		$this->roadEditor->reset();
 		$this->circuit = $this->circuitPreview = null; $this->circuitVariant = null; $this->circuitSearch = null;
@@ -2724,7 +2753,7 @@ final class Session
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,
-			'settings' => $this->settings,'surfaceLayers'=>$this->activeLayers()->layers,'materialReply'=>$this->materialReply,'surfaceOrigin'=>$this->surfaceLayers ? 'authored' : 'preset',
+			'settings' => $this->settings,'hiddenSurfaceLayers'=>$this->hiddenLayerIds,'surfaceLayers'=>$this->activeLayers()->layers,'materialReply'=>$this->materialReply,'surfaceOrigin'=>$this->surfaceLayers ? 'authored' : 'preset',
 			'surfacePreset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),
 			'surfaceFields'=>$this->activeLayers()->fields,'paintInks'=>$this->paintInks(),
 			'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
