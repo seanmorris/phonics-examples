@@ -2904,8 +2904,8 @@ for(const [first, second] of [
 	, [{label: 'Karst Bay', name: 'karst-bay', layer: 'rain-streaks'}
 		, {label: 'Tepui Highlands', name: 'tepui-highlands', layer: 'algae-streaks'}
 	]
-	, [{label: 'Painted Badlands', name: 'painted-badlands', layer: 'cap-rock'}
-		, {label: 'Red Mesas', name: 'red-mesas', layer: 'cap-rock'}
+	, [{label: 'Painted Badlands', name: 'painted-badlands', layer: 'rills'}
+		, {label: 'Emerald Ridges', name: 'emerald-ridges', layer: 'mossy-cliffs'}
 	]
 ]) {
 	test(

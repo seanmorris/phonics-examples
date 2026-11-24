@@ -119,6 +119,7 @@ final class Session
 		// The cloud bank tops out a few hundred meters below the table rims, so the summits stand clear of it.
 		'tepui-highlands' => ['name'=>'Cloud forest', 'topFt'=>2300, 'densityPerMile'=>.16, 'color'=>'#e2e7e6'],
 		'painted-badlands' => ['name'=>'Clay dust', 'topFt'=>1200, 'densityPerMile'=>.04, 'color'=>'#e4cfb4'],
+		'emerald-ridges' => ['name'=>'Trade-wind haze', 'topFt'=>3000, 'densityPerMile'=>.06, 'color'=>'#dde7ea'],
 		'heather-moor' => ['name'=>'Moor mist', 'topFt'=>350, 'densityPerMile'=>.12, 'color'=>'#dfe3e2'],
 	];
 	public const LIMESTONE_SURFACE = TerrainAppearance::PRESET_DEFAULTS['limestone'];
@@ -197,6 +198,12 @@ final class Session
 		'painted-badlands' => TerrainAppearance::PRESET_DEFAULTS['painted-badlands'] + [
 			'azimuth'=>165., 'elevation'=>20., 'haze'=>.50, 'skyColor'=>'#3f6ea6', 'hazeColor'=>'#e2cfb8',
 		],
+		// Side light rakes the flutes; the sea is deep blue off the black-sand coves.
+		'emerald-ridges' => TerrainAppearance::PRESET_DEFAULTS['emerald-ridges'] + [
+			'azimuth'=>285., 'elevation'=>30., 'haze'=>.62, 'skyColor'=>'#4a84c0', 'hazeColor'=>'#d8e4e8',
+			'waterColor'=>'#1b5e86', 'waterTransparency'=>.85, 'waterReflectivity'=>.50,
+			'waterFogDensity'=>.06, 'waterChoppiness'=>34.,
+		],
 	];
 	/** Starting viewpoints in base wavelengths, with clearance above both land and water in meters. */
 	private const PRESET_VIEWS = [
@@ -218,7 +225,8 @@ final class Session
 		'karst-bay' => ['x'=>1.3333, 'z'=>-5.7778, 'heading'=>275., 'pitch'=>-.05, 'clearance'=>45., 'minimum'=>0.],
 		// On a summit rim, looking across the cloud-filled floor at the next table.
 		'tepui-highlands' => ['x'=>-.8030, 'z'=>-.1138, 'heading'=>255., 'pitch'=>-.12, 'clearance'=>25., 'minimum'=>0.],
-		'painted-badlands' => ['x'=>.2778, 'z'=>-2.5, 'heading'=>280., 'pitch'=>-.04, 'clearance'=>22., 'minimum'=>0.],
+		'painted-badlands' => ['x'=>1.8769, 'z'=>5.6306, 'heading'=>115., 'pitch'=>.02, 'clearance'=>40., 'minimum'=>-300.],
+		'emerald-ridges' => ['x'=>-1.5584, 'z'=>.9351, 'heading'=>40., 'pitch'=>-.02, 'clearance'=>150., 'minimum'=>0.],
 	];
 
 	/**
@@ -247,7 +255,7 @@ final class Session
 	private ?string $materialPreset = null;
 	public const SURFACES = ['coast','mountain','limestone','canyon','canyon-v1','basalt-fjords','amber-dunes','arctic-meltwater','tidal-lagoon','red-mesas','heather-moor','salt-pans','cinder-highlands',
 		'rolling-prairie','river-valley','wooded-foothills','high-desert-steppe','alaska-range','chalk-headlands',
-		'karst-bay','tepui-highlands','painted-badlands'];
+		'karst-bay','tepui-highlands','painted-badlands','emerald-ridges'];
 
 	private static function materialStyle(array $recipe): string
 	{

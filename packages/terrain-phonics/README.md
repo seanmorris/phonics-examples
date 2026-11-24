@@ -330,8 +330,13 @@ raise limestone towers up to about 290 m straight out of a bay about 20 m deep. 
 streaks the bare faces, and the water cuts a dark notch at the foot of each tower. `tepui-highlands` uses a 4 km
 wavelength and walls only a few tens of meters wide, so sandstone tables stand about 1,000 m above a rainforest floor.
 The treeline sits about 850 m up, which leaves scrub and mats on the summits, and black algae streaks run down the walls.
-`painted-badlands` uses wide walls on a 300 m wavelength to round the rings into mounds up to about 90 m high. Its
-8 m beds draw with the canyon program, like `red-mesas`, in maroon, lavender, gold and cream clays.
+`painted-badlands` runs sharp ridge crests over clusters of low mounds on a 222 m wavelength. The result is a maze of
+clay ridges about 60 m high with flat washes between them. Its 8 m beds draw with the canyon program, like `red-mesas`,
+in maroon, lavender, gold and cream clays. Dry grass holds the washes, and close rib relief rills every bare slope.
+`emerald-ridges` runs knife-edged crests on an 1,100 m wavelength and lowers the land toward negative x. The sea floods
+the valleys between ridges that rise to over 600 m. Fern and rainforest cover the gentler ground, and moss covers the
+steep faces, where 60 m rib relief draws vertical flutes. Red earth shows on the steepest faces, and black sand at the
+waterline.
 
 The table lists the appearance settings for the coastal, mountain and canyon recipes.
 

@@ -32,7 +32,8 @@ In **Surface**, open a named material layer to edit its color, coverage or relie
 - **Chalk Headlands** overlooks a cove between grass-topped white cliffs. Follow the shore by water to see the flint in the chalk and the shingle at its foot.
 - **Karst Bay** starts on the water among sheer limestone towers. Forest clings to their ledges, rain streaks the bare rock, and the tide cuts a dark notch at the foot of each tower. Board the watercraft to weave between them.
 - **Tepui Highlands** looks across a rainforest floor at flat-topped sandstone tables about 1,000 m high. Fly up through the cloud to land on a summit, where scrub replaces the forest.
-- **Painted Badlands** opens among bare clay mounds banded maroon, lavender, gold and cream. Drive between them on the dusty floor.
+- **Painted Badlands** opens in a dry wash below a maze of knife-edged clay ridges banded maroon, lavender, gold and cream. Rills run down every bare slope. Drive the grassy washes between them.
+- **Emerald Ridges** opens over a deep bay below knife-edged green ridges. Moss-covered flutes run down their steep faces, and black sand lines the coves. Board the watercraft to explore the inlets between them.
 
 ## Fly over the landscape
 

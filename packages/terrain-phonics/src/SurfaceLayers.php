@@ -46,6 +46,11 @@ final class SurfaceLayers
 	public const INKS = ['rockColor','grassColor','sandColor','snowColor','roadColor'];
 	public const SCALES = ['gullySize'=>[48.,1.,512.], 'blockSize'=>[3.,.25,64.],
 		'jointWidth'=>[13.,.5,128.], 'jointHeight'=>[23.,.5,256.]];
+	/**
+	 * Gully spacing in meters for presets whose rib relief needs its own scale. Badland rills sit a few meters apart
+	 * on slopes tens of meters high; the flutes of the emerald ridges run down walls hundreds of meters high.
+	 */
+	private const PRESET_GULLIES = ['painted-badlands' => 14., 'emerald-ridges' => 60.];
 	public const FIELD_KEYS = ['rockSlopeStart','rockSlopeEnd','beachHeight','beachWidth','snowline','snowTransition',
 		'alpineStart','alpineEnd','snowSlopeStart','snowSlopeEnd','macroVariation','treeline','tundraStart',
 		'talusAmount','stainAmount','lichenAmount'];
@@ -233,6 +238,7 @@ final class SurfaceLayers
 			'chalk-headlands' => self::chalkLayers($s),
 			'karst-bay' => self::karstLayers($s),
 			'tepui-highlands' => self::tepuiLayers($s),
+			'emerald-ridges' => self::emeraldLayers($s),
 			default => [['color'=>$s['grassColor']]],
 		};
 		if($style === 'coast')
@@ -260,6 +266,10 @@ final class SurfaceLayers
 			, 'noise' => 24.
 		];
 
+		// Badlands draw the canyon beds, then dry grass in the washes and rills down every bare slope.
+		$badlands = ($r['preset'] ?? '') === 'painted-badlands';
+		if($badlands) array_push($rows, ...self::badlandLayers($s));
+
 		$names = match($style) {
 			'canyon' => ['Canyon dust','Rust beds','Shale','Ledge','Lower sandstone','Red beds','Upper sandstone','Cap rock','Sand'],
 			'canyon-v1' => ['Soil','Light strata','Dark strata','Sand'],
@@ -285,6 +295,14 @@ final class SurfaceLayers
 				, 'Tidal notch'
 				, 'Cove sand'
 			],
+			'emerald-ridges' => [
+				'Fern slopes'
+				, 'Rainforest canopy'
+				, 'Mossy cliffs'
+				, 'Red earth'
+				, 'Black sand'
+				, 'Flutes'
+			],
 			'tepui-highlands' => [
 				'Rainforest canopy'
 				, 'Tree crowns'
@@ -295,6 +313,7 @@ final class SurfaceLayers
 			],
 			default => ['Grass','Exposed rock','Sand','Snow'],
 		};
+		if($badlands) array_push($names, 'Wash grass', 'Rills');
 		foreach($rows as $i=>&$row) {
 			$row['name'] = $names[$i];
 			$row['id'] = strtolower(str_replace(' ','-',$names[$i]));
@@ -303,8 +322,10 @@ final class SurfaceLayers
 		if($style === 'coast') $rows[] = ['id'=>'coastal-bands','name'=>'Coastal bands','color'=>$s['rockBandColor'],
 			'parent'=>'exposed-rock','pattern'=>'bedded','period'=>$s['bandSpacing'],'low'=>0.,'high'=>.45*$s['bandSpacing'],
 			'fade'=>.08*$s['bandSpacing'],'opacity'=>0.];
-		return new self($rows,array_intersect_key($s,array_flip(self::FIELD_KEYS)),
-			$style === 'canyon' ? $appearance->canyonColors()['bounce'] : [0.,0.,0.]);
+		$fields = array_intersect_key($s, array_flip(self::FIELD_KEYS));
+		$preset = $r['preset'] ?? '';
+		if(isset(self::PRESET_GULLIES[$preset])) $fields['gullySize'] = self::PRESET_GULLIES[$preset];
+		return new self($rows, $fields, $style === 'canyon' ? $appearance->canyonColors()['bounce'] : [0.,0.,0.]);
 	}
 
 	/** Every field is available to other recipes. A material can also use a different field's coverage. */
@@ -794,6 +815,107 @@ final class SurfaceLayers
 				, 'patternScale' => .8
 				, 'patternAmount' => .6
 			]
+		];
+	}
+
+	/**
+	 * Fern and forest cover what holds soil. Moss mottles the fluted cliffs, and red earth shows where the steepest
+	 * faces slip. The flutes are 60 m apart, so they need a strong relief to tilt the light as much as the badland
+	 * rills do.
+	 */
+	private static function emeraldLayers(array $s): array
+	{
+		$rock = $s['rockColor'];
+		$exposed = self::exposedRock($s);
+
+		return [
+			[
+				'color' => $s['grassColor']
+				, 'field' => 'meadow'
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 28.
+				, 'patternStretch' => 1.2
+				, 'patternAmount' => .65
+			]
+
+			, [
+				'mask' => 'trees'
+				, 'field' => 'crowns'
+				, 'channel' => 'both'
+				, 'relief' => 'crowns'
+				, 'strength' => .5
+				, 'color' => $s['forestColor']
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['meadowColor']
+				, 'patternScale' => 26.
+				, 'patternAmount' => .3
+			]
+
+			, $exposed + [
+				'color' => $rock
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['rockBandColor']
+				, 'patternScale' => 40.
+				, 'patternStretch' => 1.5
+				, 'patternAmount' => .5
+			]
+
+			, [
+				'color' => $s['soilColor']
+				, 'slopeLow' => min(.95, $s['rockSlopeEnd'] + .22)
+				, 'slopeFade' => .1
+				, 'opacity' => .4
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $rock
+				, 'patternScale' => 18.
+				, 'patternAmount' => .5
+			]
+
+			, [
+				'color' => $s['sandColor']
+				, 'datum' => 'water'
+				, 'low' => -1.5
+				, 'high' => $s['beachHeight']
+				, 'fade' => $s['beachWidth']
+				, 'slopeHigh' => .08
+				, 'slopeFade' => .08
+				, 'roughness' => .5
+				, 'reflectivity' => .1
+				, 'pattern' => 'gravel'
+				, 'patternColor' => self::tint($s['sandColor'], 1.6, 1.6, 1.6)
+				, 'patternScale' => .8
+				, 'patternAmount' => .5
+			]
+
+			// On gentler ground the cuts wander, so the flutes start where the cliffs do.
+			, [
+				'channel' => 'relief'
+				, 'relief' => 'ribs'
+				, 'mask' => 'all'
+				, 'strength' => 3.
+				, 'slopeLow' => $s['rockSlopeStart']
+				, 'slopeFade' => .1
+			]
+		];
+	}
+
+	/** Dry grass holds the flat washes with bare clay between its tufts. Rills cut down every steeper slope. */
+	private static function badlandLayers(array $s): array
+	{
+		return [
+			[
+				'color' => $s['grassColor']
+				, 'slopeHigh' => .025
+				, 'slopeFade' => .03
+				, 'opacity' => .85
+				, 'pattern' => 'fractal'
+				, 'patternColor' => $s['sandColor']
+				, 'patternScale' => 9.
+				, 'patternAmount' => .6
+			]
+
+			, ['channel' => 'relief', 'relief' => 'ribs', 'mask' => 'all', 'strength' => .8]
 		];
 	}
 
