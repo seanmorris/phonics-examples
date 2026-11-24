@@ -13,6 +13,14 @@ const fixture = {
 	, camera: {position: [0,4,32], yaw: 0, pitch: -.12}
 };
 
+// Standing grass changes the color of the ground near the eye. Tests start with it off unless a test has chosen
+// a level, so measurements of the ground keep their meaning.
+test.beforeEach(async({page}) => {
+	await page.addInitScript(() => {
+		if(localStorage.getItem('terrain-sandbox.grass') === null) localStorage.setItem('terrain-sandbox.grass', '0');
+	});
+});
+
 test('road eyes, disclosure, deletion and undo are independent', async({page}) => {
 	await page.setViewportSize({width: 800, height: 600});
 	await page.goto('/games/terrain-sandbox/');

@@ -295,7 +295,8 @@ final class Session
 		'material' => 'grass', 'roadWidth' => 25 * DisplayUnits::FOOT, 'roadShoulder' => 40 * DisplayUnits::FOOT, 'roadRaise' => 0.0,
 		'circuitRelief'=>400 * DisplayUnits::FOOT, 'circuitStartHeight'=>null, 'circuitCauseways'=>false,
 		'exposure' => 1.0,
-		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'speed' => 200 * DisplayUnits::KNOT,
+		'nightGlow' => Atmosphere::DEFAULT_NIGHT_GLOW, 'clock' => false, 'quality' => 1.0, 'grass' => 1.0,
+		'speed' => 200 * DisplayUnits::KNOT,
 		'waterLevel' => 0.0, 'waterChoppiness' => 100.0,
 		'balloonAltitude' => 325 * DisplayUnits::FOOT, 'balloonTool' => 'place',
 		'gateRole' => 'start', 'gateLaps' => 1, 'gateAltitude' => 0.0, 'gateWidth' => 0.0, 'gateHeight' => 0.0,
@@ -316,6 +317,17 @@ final class Session
 		'karst-bay','tepui-highlands','painted-badlands','emerald-ridges',
 		'autumn-folds','namib-coast','black-sand-coast','yardang-desert',
 		'rice-terraces','boreal-lakes'];
+
+	/**
+	 * Name the surface whose grass stands up near the eye.
+	 * @return string|null Surface preset for GrassShells::style(), or null on a journey, where the surface changes
+	 *   from region to region.
+	 */
+	public function grassStyle(): ?string
+	{
+		$recipe = $this->landscape->recipe();
+		return isset($recipe['join']) ? null : ($this->materialPreset ?? self::materialStyle($recipe));
+	}
 
 	private static function materialStyle(array $recipe): string
 	{
@@ -1385,7 +1397,7 @@ final class Session
 			'circuitStartTolerance'=>[0,20000], 'circuitTurnRadius'=>[1,INF],
 			'azimuth' => [0,360],'elevation' => [-12,88],'haze' => [0,5],'exposure' => [.1,4], 'nightGlow' => [0,1],
 			'skyLight' => [0.,3.],
-			'quality' => [.5,2],'speed' => [5,300],'gateAltitude' => [0.0,400.0],
+			'quality' => [.5,2],'grass' => [0,2],'speed' => [5,300],'gateAltitude' => [0.0,400.0],
 			'balloonAltitude' => [12.0,1200.0], 'gateWidth' => [0.0,300.0],'gateHeight' => [0.0,150.0],
 			'waterLevel' => [-10000,10000],'waterChoppiness' => [0,300]];
 		if(isset($ranges[$name]) && !($value === null && in_array($name,self::OPTIONAL_NUMBERS,true)))
@@ -1438,7 +1450,7 @@ final class Session
 		if($name === 'skyLight') $this->atmosphere->setSkyLight($value);
 		if($name === 'exposure') $this->atmosphere->setExposure($value);
 		if($name === 'azimuth' || $name === 'elevation') $this->sun();
-		$this->dirty = $this->dirty || in_array($name,['quality','exposure','nightGlow','haze','azimuth','elevation','clock',
+		$this->dirty = $this->dirty || in_array($name,['quality','grass','exposure','nightGlow','haze','azimuth','elevation','clock',
 			'skyColor','hazeColor','skyLight'],true);
 	}
 
@@ -3025,6 +3037,7 @@ final class Session
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,
 			'settings' => $this->settings,'hiddenSurfaceLayers'=>$this->hiddenLayerIds,'surfaceLayers'=>$this->activeLayers()->layers,'materialReply'=>$this->materialReply,'surfaceOrigin'=>$this->surfaceLayers ? 'authored' : 'preset',
 			'surfacePreset'=>$this->materialPreset ?? self::materialStyle($this->landscape->recipe()),
+			'grass'=>(int)round($this->settings['grass']),
 			'surfaceFields'=>$this->activeLayers()->fields,'paintInks'=>$this->paintInks(),
 			'surfaceStyle' => TerrainAppearance::style($this->landscape->recipe()),
 			'selectionInterval' => $this->selectionInterval,

@@ -309,6 +309,23 @@ foreach(['arctic-meltwater'=>'glacier-ice','tidal-lagoon'=>'seagrass-beds'] as $
 	expect($waterways->mode === 'craft' && abs($craft['x']-$x) < .01 && abs($craft['z']-$z) < .01,
 		"The jet ski boards directly at the $preset starting site.");
 }
+// Standing grass is on at its low level by default, follows its setting and names the surface that grows it.
+$grassy = new Session;
+expect($grassy->status()['grass'] === 1 && $grassy->grassStyle() === TerrainPhonics\TerrainAppearance::style($grassy->landscape->recipe()),
+	'Grass starts at its low level on the landscape\'s own surface.');
+input($grassy,['values'=>['grass'=>2]]);
+expect($grassy->status()['grass'] === 2 && $grassy->dirty, 'Raising the grass level redraws the view.');
+input($grassy,['values'=>['grass'=>7]]);
+expect($grassy->status()['grass'] === 2, 'The grass level stays within its range.');
+input($grassy,['values'=>['grass'=>0]]);
+expect($grassy->status()['grass'] === 0, 'Grass can be turned off.');
+input($grassy,['actions'=>[['type'=>'generate','preset'=>'painted-badlands']]]);
+expect($grassy->grassStyle() === 'painted-badlands' && TerrainPhonics\GrassShells::style($grassy->grassStyle()) !== null,
+	'A landscape that borrows another style grows its own grass.');
+input($grassy,['actions'=>[['type'=>'generate','preset'=>'canyon']]]);
+expect(TerrainPhonics\GrassShells::style($grassy->grassStyle()) === null, 'Bare rock grows no grass.');
+$grassy->close();
+
 input($waterways,['values'=>['waterColor'=>'#315468','snowSlopeStart'=>.30]]);
 input($waterways,['actions'=>[['type'=>'generate','preset'=>'arctic-meltwater']]]);
 expect($waterways->settings['waterColor'] === '#315468' && $waterways->settings['snowSlopeStart'] === .30

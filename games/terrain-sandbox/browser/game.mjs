@@ -892,6 +892,41 @@ export function activate({module, canvas, session, services})
 	jetControls.addEventListener('change', rememberJet, {signal});
 	invertPitch.addEventListener('change', rememberJet, {signal});
 
+	// Grass detail is the player's as well. The pause menu changes it in the session, so the page saves the level
+	// whenever the session reports a different one.
+	let grassLevel = null;
+
+	try
+	{
+		const saved = Number(localStorage.getItem(GRASS_PREFERENCE) ?? NaN);
+
+		if([0, 1, 2].includes(saved)) values.grass = saved;
+	}
+	catch
+	{
+		/* A missing or unreadable preference leaves the default level. */
+	}
+
+	const rememberGrass = level => {
+		if(level === grassLevel) return;
+
+		const first = grassLevel === null;
+
+		grassLevel = level;
+
+		// The first report is the default or the saved level itself, so there is nothing new to save.
+		if(first) return;
+
+		try
+		{
+			localStorage.setItem(GRASS_PREFERENCE, String(level));
+		}
+		catch
+		{
+			/* Storage can be unavailable; the choice then lasts for this visit. */
+		}
+	};
+
 	// The headlight switch is also the player's, remembered here and left out of landscape files.
 	const headlights = controls.get('headlights');
 
@@ -1076,6 +1111,9 @@ export function activate({module, canvas, session, services})
 
 			if(latest && state.demo.world !== latest.demo.world) lastGeneration = -1;
 			latest = state;
+
+			if(typeof state.grass === 'number') rememberGrass(state.grass);
+
 			const loaded = loadingGeneration != null && state.generation !== loadingGeneration;
 			if(loaded) loadingGeneration=null;
 			const networkChanged = 'journeyNetwork' in state && state.journeyNetwork?.plan !== activeNetwork?.plan;
@@ -1711,6 +1749,8 @@ function generationValues(frame)
 
 /** Local storage key for the jet handling preference. */
 const JET_PREFERENCE = 'terrain-sandbox.jet';
+/** Local storage key for the grass detail level: 0 off, 1 low, 2 high. */
+const GRASS_PREFERENCE = 'terrain-sandbox.grass';
 /** localStorage key for whether this browser shows the renderer's statistics under the HUD. */
 const DIAGNOSTICS_PREFERENCE = 'terrain-sandbox.diagnostics';
 

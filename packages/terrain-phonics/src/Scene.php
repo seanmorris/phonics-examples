@@ -2725,11 +2725,21 @@ final class Scene
 	 * @param Program $program Active overlay program using the vertex functions from Clipmap::gridShader().
 	 * @param Camera $camera Camera for the current terrain pass.
 	 * @param array $bounds Minimum X and Z, then maximum X and Z, in world meters.
+	 * @param int $shells Times to draw the rectangle's rows in one call, as Clipmap::drawGroundPatch() describes.
 	 * @return bool Whether the grid covered the whole rectangle and submitted a draw.
 	 */
-	public function drawGroundPatch(Program $program, Camera $camera, array $bounds): bool
+	public function drawGroundPatch(Program $program, Camera $camera, array $bounds, int $shells = 1): bool
 	{
-		return $this->clipmap?->drawGroundPatch($program, $camera, $bounds) ?? false;
+		return $this->clipmap?->drawGroundPatch($program, $camera, $bounds, $shells) ?? false;
+	}
+
+	/**
+	 * The rectangle drawGroundPatch() can cover right now.
+	 * @return array|null Minimum X and Z, then maximum X and Z, in world meters, or null without a resident grid.
+	 */
+	public function groundPatchWindow(): ?array
+	{
+		return $this->clipmap?->groundPatchWindow();
 	}
 
 	/**

@@ -168,6 +168,89 @@ async function stroke(page, tool, x = .5, y = .5)
 	await settled(page);
 }
 
+// Standing grass changes the color of the ground near the eye. Tests start with it off unless a test has chosen
+// a level, so measurements of the ground keep their meaning.
+test.beforeEach(async({page}) => {
+	await page.addInitScript(() => {
+		if(localStorage.getItem('terrain-sandbox.grass') === null) localStorage.setItem('terrain-sandbox.grass', '0');
+	});
+});
+
+test('standing grass textures the ground near the car, follows its setting and is remembered', async({page}) => {
+	test.setTimeout(360_000);
+	// Wide enough that the HUD leaves open ground beside the car.
+	await page.setViewportSize({width: 960, height: 540});
+	await page.goto('/games/terrain-sandbox/');
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await page.locator('[name="preset"]').selectOption({label: 'Rolling Prairie'});
+	await press(page, 'generate');
+	await expect.poll(async() => (await status(page)).surfacePreset, {timeout: 90_000}).toBe('rolling-prairie');
+
+	await press(page, 'car');
+	await expect.poll(async() => (await status(page)).mode).toBe('car');
+	await page.locator('.terrain-panel > summary').click();
+	await settled(page);
+	expect((await status(page)).grass).toBe(0);
+
+	/**
+	 * Brightness of the open ground between the chart and the car, clear of the car's shadow and the status line: its
+	 * mean, and its texture as the average step in brightness between neighboring pixels. Smooth ground has almost
+	 * none, whatever its slow change from near to far.
+	 */
+	const ground = async() => {
+		const image = PNG.sync.read(await canvas(page).screenshot());
+		const left = Math.round(.25 * image.width), right = Math.round(.39 * image.width);
+		const top = Math.round(.50 * image.height), bottom = Math.round(.72 * image.height);
+
+		const light = (x, y) => {
+			const i = 4 * (y * image.width + x);
+
+			return .2126 * image.data[i] + .7152 * image.data[i + 1] + .0722 * image.data[i + 2];
+		};
+
+		let sum = 0, steps = 0, count = 0;
+
+		for(let y = top; y < bottom; y++)
+		for(let x = left; x < right; x++)
+		{
+			sum += light(x, y);
+			steps += Math.abs(light(x + 1, y) - light(x, y));
+			count++;
+		}
+
+		return {mean: sum / count, texture: steps / count};
+	};
+
+	const level = async grass => {
+		await canvas(page).evaluate((element, value) => element.terrainSandboxDebug.values({grass: value}), grass);
+		await expect.poll(async() => (await status(page)).grass).toBe(grass);
+		await settled(page);
+
+		return ground();
+	};
+
+	const bare = await ground();
+	const grassy = await level(2);
+
+	// Strands and the shade between them texture the ground, while the grass keeps the ground's overall light.
+	expect(grassy.texture).toBeGreaterThan(Math.max(3, 3 * bare.texture));
+	expect(grassy.mean).toBeGreaterThan(.7 * bare.mean);
+	expect(grassy.mean).toBeLessThan(1.3 * bare.mean);
+	await expect.poll(() => page.evaluate(() => localStorage.getItem('terrain-sandbox.grass'))).toBe('2');
+
+	const cleared = await level(0);
+
+	expect(cleared.texture).toBeLessThan(.5 * grassy.texture);
+	await expect.poll(() => page.evaluate(() => localStorage.getItem('terrain-sandbox.grass'))).toBe('0');
+
+	// The level is the player's: it survives a reload.
+	await level(1);
+	await expect.poll(() => page.evaluate(() => localStorage.getItem('terrain-sandbox.grass'))).toBe('1');
+	await page.reload();
+	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
+	await expect.poll(async() => (await status(page)).grass, {timeout: 60_000}).toBe(1);
+});
+
 test('the default landscape produces visible terrain while input remains responsive', async({page}, testInfo) => {
 	test.setTimeout(90_000);
 	const errors = [];
@@ -4116,6 +4199,12 @@ test('the pause menu opens from Escape, Start and its button and acts through th
 	await key('ArrowUp', 'settings');
 	await key('Enter', 'headlights');
 	await key('End', '@back');
+	await key('ArrowUp', 'grass');
+
+	// Grass detail starts off in tests. Right raises it, and the session reports the new level.
+	await page.keyboard.down('ArrowRight');
+	await until('state.grass > arg', 0);
+	await page.keyboard.up('ArrowRight');
 	await key('ArrowUp', 'speed');
 
 	await page.keyboard.down('ArrowRight');

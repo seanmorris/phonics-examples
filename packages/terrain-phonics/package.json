@@ -24,6 +24,7 @@
     "src/CanyonBeds.php",
     "src/Edits.php",
     "src/GpuPatch.php",
+    "src/GrassShells.php",
     "src/HeightTile.php",
     "src/Landscape.php",
     "src/LandformPreview.php",

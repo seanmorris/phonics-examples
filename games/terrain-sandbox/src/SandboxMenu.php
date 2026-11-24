@@ -23,6 +23,8 @@ final class SandboxMenu
 	private const SCREENSHOT = 'Screenshot view';
 	/** Headings for each mode's controls. */
 	private const MODES = ['fly' => 'Free flight', 'car' => 'Car', 'craft' => 'Watercraft', 'jet' => 'F5'];
+	/** Grass detail levels in the order the session numbers them. */
+	private const GRASS = ['Off', 'Low', 'High'];
 	public Menu $menu;
 	public MenuInput $controls;
 	private ?MenuRenderer $renderer = null;
@@ -262,7 +264,7 @@ final class SandboxMenu
 	}
 
 	/**
-	 * Settings rows that live in the session: headlights, jet handling, pitch and flight speed.
+	 * Settings rows that live in the session: headlights, jet handling, pitch, flight speed and grass detail.
 	 * @param Session $session The running sandbox, read for current values.
 	 * @return array<string, array> Rows whose changes reach the session as input values.
 	 */
@@ -308,6 +310,14 @@ final class SandboxMenu
 				, 'subtext' => 'Free flight with Shift held goes faster.'
 				, 'get' => fn(): int => (int)round($session->settings['speed'] / DisplayUnits::KNOT)
 				, 'set' => fn(float $value): bool => $set('speed', $value * DisplayUnits::KNOT)
+			]
+			, 'grass' => [
+				'label' => 'Grass detail'
+				, 'input' => 'select'
+				, 'options' => self::GRASS
+				, 'subtext' => 'Standing grass near you. High draws finer layers.'
+				, 'get' => fn(): string => self::GRASS[(int)round($session->settings['grass'])]
+				, 'set' => fn(string $value): bool => $set('grass', (float)array_search($value, self::GRASS, true))
 			]
 		];
 	}

@@ -486,13 +486,46 @@ Natural rock relief follows the landform’s `damping` and `slopeScale`. Fine fr
 | `stainAmount` | 0.3 | 0 to 1 | Share of the granite stained with iron. |
 | `lichenAmount` | 0.5 | 0 to 1 | Strength of the lichen that tints the granite gray-green in patches. |
 
+### Standing grass
+
+`GrassShells` draws grass, rice and heath that stand up from the ground near the eye. It redraws the finest terrain
+grid as stacked shells through `Scene::drawGroundPatch()`, in one instanced call, after the terrain and before anything
+that stands on it:
+
+```php
+$style = GrassShells::style('rolling-prairie');
+if($style !== null) {
+	$shells = GrassShells::shells($style, 2);
+	$grass->draw($scene, $camera, $style, $waterLevel, $seconds, $shells, $width, $height, $eyeAboveGround);
+}
+```
+
+The shells do not light themselves. They multiply what the terrain pass drew: the lowest shell darkens the ground to
+the shade between the stalks, and each shell above it brightens the pixels its strands cover. The grass therefore keeps
+the terrain's sunlight, shadows, haze and tone mapping. Multiplying is order-independent, so the pass needs no
+sorting and writes no depth. A strand is a hash of its world cell. Each fragment follows the view ray through its
+shell's slab in three steps, which joins strands between shells when they are seen from the side.
+
+`GrassShells::STYLES` lists, per surface, the strand height, density, root shade, tip brightening and where grass
+grows: a slope limit, a height above the water and an optional upper limit. Styles without an entry grow nothing.
+Grass also stays off painted ground such as roads. `shells()` picks the shell count from the strand height, using
+slabs 9 cm thick at quality 1 and 6 cm at quality 2, between 3 and 14 shells. The pass reaches as far as the finest
+grid allows, up to 56 m, tapers to nothing at that edge, and is skipped when the eye is more than 45 m above the
+ground.
+
+On software WebGL at 640×360, from the car's chase view, the pass added 6.2% to the frame time over 0.8 m prairie
+grass at quality 1 (9 shells) and 9.2% at quality 2 (14 shells). Over 0.3 m heather it added 1.5% at either quality
+(4 and 5 shells). Software rendering is the worst case for a pass that costs fill, and as below it is evidence of
+relative cost, not of the hardware target.
+
 ## Verify changes
 
 From the engine checkout run `npm run test:terrain`. The appearance suite checks validation, the defaults against the
 old shader constants, and the uniform values `bind()` uploads. The surface suite checks derivatives and seams,
 transaction replay, roads, residency, and picking. Water tests cover derivative parity, wakes, buoyancy,
 shoreline contacts, and fixed-step behavior. Atmosphere tests cover optical depth, boundary cases and cache
-invalidation. Renderer tests check bounded residency, complete coverage and revision publication.
+invalidation. Renderer tests check bounded residency, complete coverage and revision publication. The grass suite
+checks every style's settings, the shell counts and the tip brightness reached through them.
 Run `npm run test:terrain:gpu` with Chromium installed to compare cached scattering against direct GLSL
 integration and to check GPU wave heights, derivatives, velocities, and normals against PHP. It also checks that every
 appearance uniform is read, that banded rock does not alias, that mountain rock has no bands, and that talus and stain

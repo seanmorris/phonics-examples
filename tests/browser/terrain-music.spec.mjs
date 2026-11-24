@@ -3,6 +3,14 @@ import {readFileSync} from 'node:fs';
 
 const catalog = JSON.parse(readFileSync(new URL('../../games/terrain-sandbox/assets/soundtrack.json', import.meta.url)));
 
+// Standing grass changes the color of the ground near the eye. Tests start with it off unless a test has chosen
+// a level, so measurements of the ground keep their meaning.
+test.beforeEach(async({page}) => {
+	await page.addInitScript(() => {
+		if(localStorage.getItem('terrain-sandbox.grass') === null) localStorage.setItem('terrain-sandbox.grass', '0');
+	});
+});
+
 test('streamed songs show their ID3 credits, clear the minimap, and remember the next title', async({page}, testInfo) => {
 	test.setTimeout(150_000);
 	await page.setViewportSize({width: 760,height: 490});

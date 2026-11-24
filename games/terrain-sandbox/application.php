@@ -13,6 +13,7 @@ use Phonics\Engine;
 use Phonics\FixedStep;
 use Phonics\Render\Device;
 use TerrainPhonics\Scene;
+use TerrainPhonics\GrassShells;
 use TerrainPhonics\AtmosphereLayers;
 use TerrainPhonics\Recipe;
 use TerrainSandbox\Car;
@@ -286,7 +287,18 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 });
 
 $shadow = null;
-$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use ($gates, $curveSigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites): void {
+$grass = null;
+$drawOpaque = static function(Session $session, Scene $scene, array $hiddenGates, array $events) use ($gates, $curveSigns, &$spotLights, &$models, &$tracers, &$shotAlpha, &$shadow, &$width, &$height, &$viewCamera, &$vehiclePose, &$beacon, &$visibleSites, &$grass): void {
+	// Grass multiplies the ground the terrain pass drew, so it comes first: signs, shadows and vehicles then cover it.
+	$grassQuality = (int)round($session->settings['grass']);
+	if($grassQuality > 0 && ($style = GrassShells::style($session->grassStyle() ?? '')) !== null)
+	{
+		$shells = GrassShells::shells($style, $grassQuality);
+		[$eyeX,$eyeY,$eyeZ] = $viewCamera->position;
+		$floor = max($session->landscape->height($eyeX,$eyeZ), $session->water->level());
+		($grass ??= new GrassShells)->draw($scene, $viewCamera, $style, $session->water->level(), $session->time, $shells,
+			$width, $height, $eyeY-$floor);
+	}
 	$curveSigns->draw($viewCamera,$session->atmosphere,$session->water->level(),$width,$height,$spotLights);
 	foreach($visibleSites as $site)
 		if($site['kind'] !== 'smoke') ($beacon ??= new DeliveryBeacon)->solid($site,$viewCamera,$width,$height);
@@ -568,7 +580,7 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, $pauseMenu, $journeyAtlas): void {
+	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$grass, $pauseMenu, $journeyAtlas): void {
 		$journeyAtlas->cancel();
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
@@ -576,6 +588,7 @@ $engine->start(
 		$tracers?->close(); $tracers = null;
 		$trailRenderer?->close(); $trailRenderer = null;
 		$shadow?->close();
+		$grass?->close();
 		$beacon?->close(); $arrow?->close();
 		$pauseMenu->release();
 		$gates->release();
@@ -583,7 +596,7 @@ $engine->start(
 		$playback?->close();
 		$scene->close(); $session->close();
 	},
-	static function() use ($scene, $session, &$playback, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$dirty, $pauseMenu): void {
+	static function() use ($scene, $session, &$playback, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, &$grass, &$dirty, $pauseMenu): void {
 		foreach($models as $model) $model->close();
 		$models = [];
 		$tracers?->close(); $tracers = null;
@@ -591,6 +604,8 @@ $engine->start(
 		// The lost context took the shadow's program and grid with it; the next frame that needs it builds them again.
 		$shadow?->close();
 		$shadow = null;
+		$grass?->close();
+		$grass = null;
 		$beacon?->close(); $beacon = null;
 		$arrow?->close(); $arrow = null;
 		$pauseMenu->release();
