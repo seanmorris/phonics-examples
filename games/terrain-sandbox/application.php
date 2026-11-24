@@ -35,6 +35,7 @@ use TerrainSandbox\Session;
 
 $app = new Context;
 $music = new BackgroundMusic($app);
+$app->browser(__DIR__ . '/browser/journey-editor.mjs');
 $app->browser(__DIR__ . '/browser/game.mjs');
 $app->browser(__DIR__ . '/browser/car-audio.mjs');
 $music->playlist(json_decode(file_get_contents(__DIR__.'/assets/soundtrack.json'), true, flags: JSON_THROW_ON_ERROR),
@@ -146,10 +147,12 @@ $engine->systems->add('terrain-sandbox.delivery-search', static function() use (
 
 $survey = null;
 $surveyId = 0;
+$journeyAtlas = new TerrainSandbox\JourneyAtlas;
+$atlasResult = vrzno_env('terrainJourneyMap');
 $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$session, $scene, &$width, &$height, &$dirty, &$generation, &$frameSeconds, &$displayTerrain, &$pendingEdit, &$hiddenGates,
 	&$heldKeys, &$heldPad, &$menuPad, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, $readInput, $startSearchTimer, &$lastAuthoringFrame,
-	$pauseMenu, &$survey, &$surveyId
+	$pauseMenu, &$survey, &$surveyId, $journeyAtlas, $atlasResult
 ): bool {
 	$frameSeconds = max(0.0, $elapsed);
 	$started = hrtime(true);
@@ -181,6 +184,8 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 			$survey=null;
 		}
 	}
+	if(isset($input['journeyMap'])) $journeyAtlas->request($input['journeyMap'],$session,$atlasResult);
+	$journeyAtlas->step($session,$atlasResult,$session->mode === 'fly' && !$heldKeys && !$heldPad && !$session->preparingRoad());
 	if(isset($input['journeyDraft'])) {
 		$plan = $input['journeyDraft'];
 		try { $preview = ['nodes' => (new TerrainSandbox\JourneyNetwork($plan))->nodes]; }
@@ -341,7 +346,7 @@ $engine->start(
 		$liveSession, $liveScene, &$playback, &$hiddenGates, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
 		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
-		$pauseMenu, &$displayTerrain
+		$pauseMenu, &$displayTerrain, $journeyAtlas, $atlasResult
 	): void {
 		$tape = $liveSession->demo;
 		$events = [];
@@ -460,7 +465,7 @@ $engine->start(
 				$session->settings['waterLevel'], $session->settings['waterColor'], $scene->layers, $scene->paint,
 				$scene->appearance, $scene->dirty()] : null;
 		$captureChart = $chartKey !== null && $chartKey !== $editor->captured;
-		$dirty = $dirty || $captureChart;
+		$dirty = $dirty || $captureChart || $journeyAtlas->needsChart;
 		$now = microtime(true);
 		if($dirty)
 		{
@@ -477,6 +482,7 @@ $engine->start(
 					$editor->captured = $chartKey;
 				}
 			}
+			if($journeyAtlas->needsChart) $journeyAtlas->capture($scene,$session,$width,$height,$atlasResult);
 			$engine->device->begin([.15,.25,.35,1]);
 			$scene->render($viewCamera, $width, $height, $session->time,
 				drawOpaque: $session->mode === 'fly' && $session->course->count() === 0 && !$curveSigns->count && !($events['balloons'] ?? $session->balloons->targets()) ? null
@@ -562,7 +568,8 @@ $engine->start(
 			$statusPending = $urgentStatus = false;
 		}
 	},
-	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, $pauseMenu): void {
+	static function() use ($engine, $session, $scene, &$playback, $stopSearchTimer, $gates, $curveSigns, &$models, &$tracers, &$trailRenderer, &$beacon, &$arrow, &$shadow, $pauseMenu, $journeyAtlas): void {
+		$journeyAtlas->cancel();
 		$stopSearchTimer();
 		$engine->systems->remove('terrain-sandbox.delivery-search');
 		foreach($models as $model) $model->close();

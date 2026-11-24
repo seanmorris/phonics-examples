@@ -46,6 +46,9 @@ final class Scene
 	private array $destinations = [], $paletteBuffer = [], $uploadedMaterials = [], $selectedMaterials = [];
 	private static ?int $journeyBindingOwner = null;
 	private string $materialKey = '', $groundVertexSource, $groundFragmentSource;
+	private ?Clipmap $recipeChart = null;
+	private array $recipeChartPrograms = [];
+
 	private ?Program $chartProgram = null, $ribProgram = null;
 	private ?RenderTarget $ribTarget = null;
 	private ?SurfaceSampleBuffer $surfaceSamples = null;
@@ -202,12 +205,19 @@ final class Scene
 		if(!isset($r['join'])) return [$west];
 		$origins = JoinedTerrain::origins($r['join']['span'],count($r['join']['destinations']));
 		$west[2][0] += $origins[0][0];
-		if(!$this->destinations) foreach($r['join']['destinations'] as $i=>$form) {
-			$appearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$form['preset']] ?? []);
-			$this->destinations[] = [SurfaceLayers::landscape($form,$appearance),$form,
-				[$origins[$i+1][0]-$form['noiseOffsetX'],$r['waterLevel']-$form['waterLevel'],$origins[$i+1][1]-$form['noiseOffsetZ']]];
-		}
+		if(!$this->destinations) $this->destinations = self::destinationMaterials($r,$origins);
 		return [$west,...$this->destinations];
+	}
+
+	private static function destinationMaterials(array $recipe, array $origins): array
+	{
+		$materials = [];
+		foreach($recipe['join']['destinations'] as $i=>$form) {
+			$appearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$form['preset']] ?? []);
+			$materials[] = [SurfaceLayers::landscape($form,$appearance),$form,
+				[$origins[$i+1][0]-$form['noiseOffsetX'],$recipe['waterLevel']-$form['waterLevel'],$origins[$i+1][1]-$form['noiseOffsetZ']]];
+		}
+		return $materials;
 	}
 
 	/**
@@ -2997,6 +3007,45 @@ final class Scene
 			$materials[0][0],$this->paint ?? $this->appearance,$size,$localSpan,$circular,$fixedSpan,origin:$materials[0][2],sharedPalette:$joined);
 	}
 
+	/** Draw one full, north-up road-editor map of a draft recipe without switching the playing landscape. */
+	public function drawRecipeChart(Landscape $draft, int $width, int $height, int $size, array $waterColor): ?float
+	{
+		$r = $draft->recipe();
+		$appearance = new TerrainAppearance(TerrainAppearance::PRESET_DEFAULTS[$r['preset']] ?? []);
+		$joined = isset($r['join']);
+		$origins = $joined ? JoinedTerrain::origins($r['join']['span'],count($r['join']['destinations'])) : [[0.,0.]];
+		$origin = [$origins[0][0]-$r['noiseOffsetX'],0.,$origins[0][1]-$r['noiseOffsetZ']];
+		$west = SurfaceLayers::landscape($r,$appearance);
+		$materials = [[$west,$r,$origin]];
+		if($joined) array_push($materials,...self::destinationMaterials($r,$origins));
+		$stacks = array_column($materials,0);
+		$key = json_encode(array_column($stacks,'structure'),JSON_THROW_ON_ERROR);
+		if(!isset($this->recipeChartPrograms[$key])) {
+			$root = dirname(__DIR__).'/shaders/';
+			$program = new Program(file_get_contents($root.'shadows.vert'),
+				MaterialShader::assemble(file_get_contents($root.'chart.frag'),$stacks,chart:true));
+			if(count($this->recipeChartPrograms)>=3) array_shift($this->recipeChartPrograms)->close();
+			$this->recipeChartPrograms[$key] = $program;
+		}
+		$program = $this->recipeChartPrograms[$key];
+		$this->recipeChart ??= new Clipmap;
+		$this->recipeChart->prepareOverview($draft);
+		if($joined) {
+			$program->use();
+			$this->bindJourney($program,$materials);
+		}
+		return $this->recipeChart->chart($program,[0.,0.],0.,false,$width,$height,$r['waterLevel'],$waterColor,
+			$west,$appearance,$size,fixedSpan:$r['worldSize'],origin:$origin,sharedPalette:$joined);
+	}
+
+	private function closeRecipeChart(): void
+	{
+		$this->recipeChart?->close();
+		$this->recipeChart = null;
+		foreach($this->recipeChartPrograms as $program) $program->close();
+		$this->recipeChartPrograms = [];
+	}
+
 	public function restore(): void
 	{
 		if($this->closed) return;
@@ -3004,6 +3053,7 @@ final class Scene
 		// The meshes are rebuilt in place, so a selection in flight would still be right. It is dropped anyway,
 		// like every selection whose surroundings were replaced, and its replacement is spread like any other.
 		$this->abandonSelection();
+		$this->closeRecipeChart();
 		$this->ribTarget?->restore();
 		$this->surfaceSamples?->close();
 		$this->surfaceSamples = null;
@@ -3077,6 +3127,7 @@ final class Scene
 		if($this->closed) return;
 
 		$this->closed = true;
+		$this->closeRecipeChart();
 		$this->clearPatches();
 
 		$this->clipmap?->close();

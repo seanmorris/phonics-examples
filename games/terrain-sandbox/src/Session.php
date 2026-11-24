@@ -449,7 +449,8 @@ final class Session
 	/** Whether a complete edited revision is awaiting its matching GPU representation. */
 	public bool $preparing = false;
 	private ?\Generator $roadWork = null;
-	private ?Landscape $journeyReady = null;
+	private ?Landscape $journeyReady = null, $surveyedDeparture = null;
+	private array $surveyedViews = [];
 	private array $journeyEntrances = [], $journeyViews = [], $preparedViews = [];
 	private ?string $journeyBuildPhase = null;
 	private ?JourneyNetwork $network = null, $buildingNetwork = null;
@@ -457,6 +458,14 @@ final class Session
 	private ?\Generator $onwardWork = null;
 	private ?Landscape $onwardReady = null;
 	private bool $transfer = false;
+
+	/** Retain one completed departure survey so Build can board the exact highway shown on its map. */
+	public function rememberJourneySurvey(Landscape $land, array $views): void
+	{
+		$this->surveyedDeparture?->close();
+		$this->surveyedDeparture = $land;
+		$this->surveyedViews = $views;
+	}
 
 	public function journeyPlan(): ?string { return $this->network?->plan; }
 	public function journeyNodes(): array { return $this->network?->nodes ?? []; }
@@ -1477,6 +1486,11 @@ final class Session
 			$this->setting($key, $value);
 	}
 
+	public static function presetWaterColor(string $preset): string
+	{
+		return self::PRESET_LOOK[$preset]['waterColor'] ?? WaterAppearance::DEFAULTS['waterColor'];
+	}
+
 	/** Values the Landscape tab fills when a preset is selected. */
 	public static function preset(string $name): array
 	{
@@ -1641,6 +1655,14 @@ final class Session
 				$span=$action['span'] ?? 16384;
 				$next = new Landscape($network ? $network->recipe($network->start,$span) : JourneyRoad::recipe($west,$east,$span));
 				$this->buildingNetwork=$network;
+				if($this->surveyedDeparture && $this->surveyedDeparture->recipe() === $next->recipe()) {
+					$next->close();
+					$this->journeyReady = $this->surveyedDeparture;
+					$this->preparedViews = $this->surveyedViews;
+					$this->surveyedDeparture = null;
+					$this->surveyedViews = [];
+					break;
+				}
 				$this->message = $this->journeyBuildPhase = 'Surveying the highway and its forks…';
 				$this->preparing = true;
 				$this->roadWork = (function() use ($next) {
@@ -3051,6 +3073,7 @@ final class Session
 		$this->roadWork = null;
 		$this->discardOnward();
 		$this->journeyReady?->close(); $this->journeyReady = null;
+		$this->surveyedDeparture?->close(); $this->surveyedDeparture = null;
 		$this->cancelPick(); $this->carSearch = null;
 		$this->circuitSearch = null;
 		$this->releasePin(); $this->landscape->close(); $this->draft?->close(); $this->draft = null;

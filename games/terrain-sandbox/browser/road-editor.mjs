@@ -976,7 +976,7 @@ export function activate({canvas, module, session})
 					highway.bezierCurveTo(b[0], b[2], c[0], c[2], d[0], d[2]);
 				}
 			}
-			module.journeyMap = {generation: next.generation, path: highway};
+			module.journeyMap = {generation: next.generation, path: highway, hidden: next.hidden};
 		}
 
 		state = next;

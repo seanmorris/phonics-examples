@@ -2917,7 +2917,7 @@ test('the panel tabs work from the keyboard and the Surface tab changes the grou
 	await expect(canvas(page)).toHaveAttribute('data-terrain-sandbox', /"recipe":/, {timeout: 60_000});
 
 	const tab = name => page.locator(`.terrain-sandbox #terrain-tab-${name}`);
-	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(7);
+	await expect(page.locator('.terrain-sandbox [role="tab"]')).toHaveCount(8);
 	await expect(tab('landscape')).toHaveAttribute('aria-selected', 'true');
 
 	// Arrow keys, Home and End move between tabs and wrap round; Home on a tab does not reset the camera.
@@ -4210,11 +4210,33 @@ test('a landscape journey boards the car on the western road and offers signed b
 	const worldSize = page.locator('[name="worldSize"]');
 	await expect(worldSize).toHaveValue('32768');
 	await expect(worldSize.locator('option[value="16384"]')).toHaveText('10.2 mi per side');
-	await page.getByText('Landscape journey', {exact: true}).click();
+	await expect(page.getByRole('tab',{name:'Journey',exact:true})).toHaveAttribute('aria-selected','true');
 	await expect(page.locator('[data-journey="span"]')).toHaveValue('16384');
 	await section.selectOption('network');
-	const departureRow = page.locator('[data-journey-guide] tr[data-square="A"]');
-	await expect(departureRow.locator('td')).toHaveText(['B','C']);
+	const picker=page.locator('[data-stage-picker]');
+	await expect(picker.locator('option')).toHaveCount(6);
+	await expect(page.locator('[data-exit="0"]')).toHaveValue('B');
+	await expect(page.locator('[data-exit="1"]')).toHaveValue('C');
+	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey',{timeout:60000});
+	const image=()=>page.locator('[data-journey-map]').evaluate(el=>el.toDataURL());
+	const departureMap=await image();
+	await page.getByRole('button',{name:'Inspect B · Canyon'}).click();
+	await expect(picker).toHaveValue('B');
+	await expect(page.locator('[data-map-status]')).toHaveText('Terrain before road survey',{timeout:60000});
+	expect(await image()).not.toBe(departureMap);
+	await picker.selectOption('F');
+	await expect(page.locator('[data-map-status]')).toHaveText('End of route',{timeout:60000});
+	await page.locator('[data-exit="0"]').selectOption('+');
+	await expect(picker.locator('option')).toHaveCount(7);
+	await expect(picker).toHaveValue('D');
+	await page.locator('[data-outline-title]').click();
+	await page.locator('[data-stage-name]').fill('Lake');
+	await page.locator('[data-rename-stage]').click();
+	await expect(page.locator('[data-journey=network]')).toHaveValue(/F river-valley -> Lake/);
+	await page.locator('[data-undo-edit]').click();
+	await expect(picker).toHaveValue('D');
+	await page.locator('[data-undo-edit]').click();
+	await expect(picker.locator('option')).toHaveCount(6);
 	await section.selectOption('divide');
 	await page.locator('[data-journey="east"]').selectOption('river-valley');
 	await page.locator('[data-journey="south"]').selectOption('coast');
@@ -4227,6 +4249,7 @@ test('a landscape journey boards the car on the western road and offers signed b
 	expect(west.recipe.worldSize).toBe(36_864);
 	expect(west.recipe.join.version).toBe(2);
 	expect(west.car.x).toBeLessThan(-west.recipe.worldSize / 2 + 55);
+	await expect(page.locator('[data-map-status]')).toHaveText('Current highway',{timeout:60000});
 	await control(page, 'journey-fork').click();
 	await expect.poll(async() => (await status(page)).journeyForkAhead).toBe(true);
 	await expect(page.getByText('Left · River Valley & Floodplain / Right · Coast', {exact: true})).toBeVisible();

@@ -628,15 +628,7 @@ final class Clipmap
 			|| $origins !== array_column($this->levels, 'origin') || $coverage !== array_column($this->levels,'base');
 		if(!$changed && !$this->pending && !$gridChanged && !$masks) return $this->fineFocus !== $previousFocus;
 
-		$previous = glGetIntegerv(GL_FRAMEBUFFER_BINDING);
-		glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffer[0]);
-		glBindVertexArray($this->vao[0]);
-		glDisable(GL_SCISSOR_TEST);
-		glDisable(GL_BLEND);
-		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_CULL_FACE);
-		glDisable(GL_DITHER);
-		$this->generator->use();
+		$previous = $this->beginElevation();
 
 		try
 		{
@@ -703,12 +695,7 @@ final class Clipmap
 
 			$half = $this->recipe['worldSize'] / 2;
 
-			if(!$this->overview || $changed)
-			{
-				if(!$this->overview) $this->overview = $this->allocate(257);
-
-				$this->refresh($this->overview, [0,0], $half / 128, -$half, $changed, $region, -1, $this->overview['n']);
-			}
+			$this->refreshOverview($half,$changed,$region);
 
 			$this->pending = false;
 			$newLevel = false;
@@ -789,6 +776,49 @@ final class Clipmap
 		$level['cells'] = $cells;
 		$level['rows'] = $rows;
 		$this->fill($level, $rects, $step, $offset, $key);
+	}
+
+	private function beginElevation(): mixed
+	{
+		$previous = glGetIntegerv(GL_FRAMEBUFFER_BINDING);
+		glBindFramebuffer(GL_FRAMEBUFFER, $this->framebuffer[0]);
+		glBindVertexArray($this->vao[0]);
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_BLEND);
+		glDisable(GL_DEPTH_TEST);
+		glDisable(GL_CULL_FACE);
+		glDisable(GL_DITHER);
+		$this->generator->use();
+		return $previous;
+	}
+
+	private function refreshOverview(float $half, bool $changed, ?array $region): void
+	{
+		if(!$this->overview || $changed)
+		{
+			if(!$this->overview) $this->overview = $this->allocate(257);
+
+			$this->refresh($this->overview, [0,0], $half / 128, -$half, $changed, $region, -1, $this->overview['n']);
+		}
+	}
+
+	/** Populate an unedited recipe's north-up chart without allocating camera rings or road meshes. */
+	public function prepareOverview(Landscape $land): void
+	{
+		if($land->revision() !== 0) throw new \InvalidArgumentException('A recipe overview requires unedited terrain.');
+		$previous = $this->beginElevation();
+		try {
+			glActiveTexture(GL_TEXTURE0);
+			$this->generate($land);
+			glActiveTexture(GL_TEXTURE0+2);
+			glBindTexture(GL_TEXTURE_2D,$this->permutation[0]);
+			glUniform1i($this->generator->location('uRoadAtlas'),2);
+			glActiveTexture(GL_TEXTURE0);
+			$this->refreshOverview($land->recipe()['worldSize']/2,true,null);
+			$this->paintQueue = [];
+		} finally {
+			glBindFramebuffer(GL_FRAMEBUFFER,is_array($previous) ? $previous[0] : $previous);
+		}
 	}
 
 	public function overview(): array {return $this->overview['textures'] ?? [0,0];}

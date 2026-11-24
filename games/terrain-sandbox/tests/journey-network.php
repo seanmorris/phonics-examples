@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require dirname(__DIR__).'/autoload.php';
 require dirname(__DIR__,3).'/packages/terrain-phonics/autoload.php';
-use TerrainSandbox\{JourneyNetwork,JourneyRoad,Session};
+use TerrainSandbox\{JourneyAtlas,JourneyNetwork,JourneyRoad,Session};
 
 function networkCheck(bool $ok,string $message): void { if(!$ok) throw new RuntimeException($message); }
 function settleNetwork(Session $s): void { while($s->preparingRoad()) $s->input([],0.,1.,9.); }
@@ -15,8 +15,24 @@ foreach(["A coast -> F","A coast -> B\nB mountain -> A","A coast -> B\nB coast\n
 	try { new JourneyNetwork($bad); throw new RuntimeException('Invalid topology accepted'); } catch(InvalidArgumentException) {}
 }
 $s=new Session;
+$original=$s->landscape;
+$atlas=new JourneyAtlas;
+$roads=null;
+$report=static function(int $id,string $json) use (&$roads): void {
+	$packet=json_decode($json,true,flags:JSON_THROW_ON_ERROR);
+	if(isset($packet['error'])) throw new RuntimeException($packet['error']);
+	if(isset($packet['roads'])) $roads=$packet['roads'];
+};
+$atlas->request(['id'=>1,'span'=>16384,'plan'=>$plan,'stage'=>'A','survey'=>true],$s,$report);
+$atlas->request(['id'=>2],$s,$report);
+$atlas->step($s,$report,true);
+networkCheck($roads===null && !$atlas->needsChart,'Closing an unbuilt preview cancels its road survey.');
+$atlas->request(['id'=>3,'span'=>16384,'plan'=>$plan,'stage'=>'A','survey'=>true],$s,$report);
+while($roads===null) $atlas->step($s,$report,true);
+networkCheck(count($roads)>=3 && count($roads[0][1])===6 && $s->landscape===$original && $s->mode==='fly',
+	'The preview produces road curves and leaves the playing landscape undisturbed.');
 $s->input(['actions'=>[['type'=>'journey-build','network'=>$plan]]],0.,1.);
-settleNetwork($s);
+networkCheck(!$s->preparingRoad() && $s->mode==='car','Build reuses the completed survey in one input tick.');
 networkCheck($s->landscape->recipe()['join']['span']===16384,'A new network defaults to 16,384 meters per square.');
 $initial=$s->save();
 

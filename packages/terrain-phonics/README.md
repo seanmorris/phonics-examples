@@ -132,6 +132,8 @@ PHP supplies the final samples in edit order. The world overview also uses PHP r
 areas when its pixels fall between terrain lattice nodes. `Scene::drawChart()` draws
 a heading-up chart at two zoom levels from the same elevation and surface layers. It keeps the vehicle centered
 and limits the wider view near the map boundary. Pass `circular: true` to draw a disc within the chart viewport.
+For a route planner, `Scene::drawRecipeChart()` draws a north-up map of an unedited landscape with the same
+height and material shaders. It allocates the overview on demand. The playing scene keeps its camera and terrain rings.
 
 Applications that reserve uniform-buffer binding zero for terrain scenes can pass
 `retainJourneyBinding: true` to `Scene`. The ground and chart then share the bound journey palette across

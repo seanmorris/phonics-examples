@@ -188,7 +188,7 @@ export function activate({module, canvas, session, services})
 	const {signal} = shell;
 	const frame = document.createElement('div');
 	frame.className = 'terrain-sandbox';
-	frame.innerHTML = markup();
+	frame.innerHTML = markup(module.terrainJourneyEditor.markup);
 	configureUnits(frame);
 
 	frame.addEventListener('input', ({target}) => {
@@ -440,6 +440,7 @@ export function activate({module, canvas, session, services})
 		}
 	};
 
+	frame.querySelector('[data-open-journey]').addEventListener('click',()=>selectTab(frame.querySelector('[data-tab=journey]'),true),{signal});
 	for(const tab of tabs) tab.addEventListener('click', () => selectTab(tab), {signal});
 
 	frame.querySelector('[role="tablist"]').addEventListener('keydown', event => {
@@ -611,33 +612,16 @@ export function activate({module, canvas, session, services})
 	const destinationNames = new Map([...journeyField('east').options].map(option => [option.value, option.text]));
 	const networkField = journeyField('network');
 	const journeyProgress = frame.querySelector('[data-journey-progress]');
-	const guideBody = frame.querySelector('[data-journey-guide] tbody');
+	const planner = module.terrainJourneyEditor.mount(frame,canvas,signal,()=>module.journeyMap);
+	shell.bridge('terrainJourneyMap',planner.receive);
 	const guideError = frame.querySelector('[data-journey-error]');
-	let activeNetwork = null, preview = null, pendingDraft = null, currentRow = null;
-	let journeyRequest = null, journeyResult = '';
+	let activeNetwork = null, preview = null, pendingDraft = null;
+	let journeyRequest = null, journeyResult = '', loadingGeneration = null;
 	const squareName = (id, nodes) => id + ' · ' + destinationNames.get(nodes[id].preset);
 	const showRoute = result => {
 		preview = result;
 		guideError.textContent = result?.error ?? '';
-		guideBody.closest('table').hidden = !result?.nodes;
-		guideBody.replaceChildren();
-		currentRow = null;
-		if(!result?.nodes) return;
-		for(const [id, node] of Object.entries(result.nodes)) {
-			const row = guideBody.insertRow();
-			row.dataset.square = id;
-			const title = document.createElement('th');
-			title.scope = 'row';
-			title.textContent = squareName(id, result.nodes);
-			row.append(title);
-			const exits = [...new Set(node.exits)];
-			if(exits.length === 2) for(const exit of exits) row.insertCell().textContent = exit;
-			else {
-				const cell = row.insertCell();
-				cell.colSpan = 2;
-				cell.textContent = exits.length ? 'Both roads to ' + exits[0] : 'End of route';
-			}
-		}
+		planner.validated(result);
 	};
 	const requestPreview = () => {
 		if(junction.value !== 'network' || preview?.plan === networkField.value) return;
@@ -650,13 +634,13 @@ export function activate({module, canvas, session, services})
 	};
 	shell.bridge('terrainJourneyPreview', json => {
 		const result = JSON.parse(json);
-		if(result.plan === networkField.value) showRoute(result);
+		if(junction.value === 'network' && result.plan === networkField.value) showRoute(result);
 	});
 	networkField.addEventListener('input', requestPreview, {signal});
 	const updateJunction = () => {
-		frame.querySelector('[data-journey-south]').hidden = junction.value !== 'divide';
-		frame.querySelector('[data-journey-network]').hidden = junction.value !== 'network';
-		for(const field of ['west', 'east']) journeyField(field).closest('label').hidden = junction.value === 'network';
+		guideError.hidden = junction.value !== 'network';
+		if(guideError.hidden) pendingDraft = null;
+		planner.layoutChanged();
 		requestPreview();
 	};
 	junction.addEventListener('change', updateJunction, {signal});
@@ -689,7 +673,10 @@ export function activate({module, canvas, session, services})
 
 			const json = await file.text();
 
-			if(!shell.closed) push({type, json});
+			if(!shell.closed) {
+				if(type==='load') loadingGeneration=latest?.generation;
+				push({type,json});
+			}
 		}
 		catch(error)
 		{
@@ -1006,10 +993,12 @@ export function activate({module, canvas, session, services})
 		const padsSame = padKey === previousPad && menuPadKey === previousMenuPad;
 
 		if(viewport === previousViewport && held === previousKeys && padsSame && !actions.length
-			&& pendingDraft === null && surveyRequest === null && !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
+			&& !planner.hasRequest() && pendingDraft === null && surveyRequest === null && !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
 		) return '';
 
 		const packet = {keys,values,actions,clicks,look};
+		const mapRequest=planner.takeRequest();
+		if(mapRequest) packet.journeyMap=mapRequest;
 		if(surveyRequest) { packet.landformSurvey = surveyRequest; surveyRequest = null; }
 		if(pendingDraft !== null) {
 			packet.journeyDraft = pendingDraft;
@@ -1087,19 +1076,16 @@ export function activate({module, canvas, session, services})
 
 			if(latest && state.demo.world !== latest.demo.world) lastGeneration = -1;
 			latest = state;
+			const loaded = loadingGeneration != null && state.generation !== loadingGeneration;
+			if(loaded) loadingGeneration=null;
+			const networkChanged = 'journeyNetwork' in state && state.journeyNetwork?.plan !== activeNetwork?.plan;
 			if('journeyNetwork' in state) activeNetwork = state.journeyNetwork;
-			if(activeNetwork && state.journeySquare && state.generation !== lastGeneration) {
+			if(activeNetwork && state.journeySquare && (networkChanged || loaded)) {
+				if(loaded || networkField.value!==activeNetwork.plan) planner.adopt(state.journeySquare);
 				networkField.value = activeNetwork.plan;
 				junction.value = 'network';
 				showRoute(activeNetwork);
 				updateJunction();
-			}
-			const location = state.journeyArrival ?? state.journeySquare;
-			if(currentRow?.dataset.square !== location || preview?.plan !== activeNetwork?.plan) {
-				currentRow?.removeAttribute('aria-current');
-				currentRow = location && activeNetwork && preview?.plan === activeNetwork.plan
-					? guideBody.querySelector('[data-square="' + CSS.escape(location) + '"]') : null;
-				currentRow?.setAttribute('aria-current','location');
 			}
 			const demo = state.demo, playing = demo.playhead !== null;
 			button('demo-record').hidden = playing || demo.recording;
@@ -1270,12 +1256,12 @@ export function activate({module, canvas, session, services})
 			if(state.journeyBuildPhase) journeyRequest = 'building';
 			else if(journeyRequest === 'sent' || journeyRequest === 'building') {
 				journeyResult = state.generation !== lastGeneration && state.recipe.join && state.mode === 'car'
-					? 'Road ready. Follow the gold highway, or choose Drive from fork to try the split.' : state.message;
+					? 'Highway ready. Driving from the west edge.' : state.message;
 				journeyRequest = null;
 			}
 			const progress = state.journeyBuildPhase ?? (journeyRequest ? 'Surveying the highway…' : journeyResult);
 			if(journeyProgress.textContent !== progress) journeyProgress.textContent = progress;
-			button('journey-build').textContent = journeyRequest ? 'Building journey…' : 'Build new journey';
+			button('journey-build').textContent = journeyRequest ? 'Building journey…' : 'Build and drive';
 			button('journey-build').disabled = !editable || Boolean(journeyRequest) || (junction.value === 'network' && !preview?.nodes);
 			for(const key of ['journey-drive','journey-fork'])
 			{
@@ -1348,7 +1334,7 @@ export function activate({module, canvas, session, services})
 			if(state.generation !== lastGeneration)
 			{
 				invalidateSurvey();
-				if(state.recipe.join)
+				if(state.recipe.join && (!state.journeySquare || networkChanged || loaded || lastGeneration<0))
 				{
 					const {span, destinations} = state.recipe.join;
 					journeyField('west').value = state.recipe.preset;
@@ -1408,6 +1394,7 @@ export function activate({module, canvas, session, services})
 				updateCircuitFields();
 				lastGeneration = state.generation;
 			}
+			planner.sync(state,activeNetwork,journeyRequest);
 
 			updateRace(race, state, finishTimer !== null);
 			updateGateTool(gateTool, state);
@@ -2498,7 +2485,7 @@ function range(label, key, min, max, step, value, unit = '')
 
 let labCount = 0;
 
-function markup()
+function markup(journeyMarkup)
 {
 	const hintPrefix = `landform-${++labCount}`;
 	const circuitNumber = (key, label, unit, initial, bounds, automatic = '') => {
@@ -2560,13 +2547,6 @@ function markup()
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #658271;border-radius:6px;min-height:34px;padding:5px 9px;font:inherit}
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}@media(pointer:coarse){.terrain-sandbox input[type=range]{min-height:32px}}
 	.terrain-note{color:#bdd2c7}.terrain-check{display:flex;align-items:center;gap:8px}.terrain-hud{position:absolute;left:16px;bottom:16px;box-sizing:border-box;max-width:calc(100% - 32px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
-	.terrain-route-scroll{max-height:18rem;overflow:auto}
-	[data-journey-guide]{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}
-	[data-journey-guide] caption{text-align:left;font-weight:700;margin:8px 0}
-	[data-journey-guide] :is(th,td){padding:5px 8px;border-bottom:1px solid #466056;overflow-wrap:anywhere}
-	[data-journey-guide] tbody th{font-weight:500}
-	[data-journey-guide] [aria-current="location"]{background:#284638;color:#ffe1a2}
-	[data-journey-guide] [aria-current="location"] th::after{content:" · You are here";font-size:.85em}
 	[data-journey-sign]{color:#ffe1a2;font-weight:600}
 	[data-journey-progress]:empty,[data-journey-error]:empty{display:none}
 	.terrain-panel{
@@ -2665,8 +2645,8 @@ function markup()
 	@container terrain-lab (min-width:380px){
 		.terrain-section,.terrain-grid,.terrain-surface-group{grid-template-columns:repeat(2,minmax(0,1fr))}
 	}
-	@container terrain-lab (min-width:440px){
-		.terrain-tabs{grid-template-columns:repeat(7,minmax(0,1fr))}
+	@container terrain-lab (min-width:490px){
+		.terrain-tabs{grid-template-columns:repeat(8,minmax(0,1fr))}
 	}
 	@container terrain-view (max-width:560px){
 		.terrain-panel{--lab-inset:8px;--lab-width:calc(100% - 16px);--lab-height:min(62cqh,calc(100cqh - 16px - var(--radar-room,0px)))}
@@ -2728,7 +2708,7 @@ function markup()
 	<button type="button" data-music-next aria-label="Next track" title="Next track"><i aria-hidden="true"></i></button>
 	</div>
 	<div class="lab-workspace">
-	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-roads" aria-controls="terrain-section-roads" data-tab="roads" aria-selected="false" tabindex="-1">Roads</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
+	<div class="terrain-tabs" role="tablist" aria-label="Landscape Lab sections"><button type="button" role="tab" id="terrain-tab-landscape" aria-controls="terrain-section-landscape" data-tab="landscape" aria-selected="true" tabindex="0">Landscape</button><button type="button" role="tab" id="terrain-tab-shape" aria-controls="terrain-section-shape" data-tab="shape" aria-selected="false" tabindex="-1">Shape</button><button type="button" role="tab" id="terrain-tab-roads" aria-controls="terrain-section-roads" data-tab="roads" aria-selected="false" tabindex="-1">Roads</button><button type="button" role="tab" id="terrain-tab-journey" aria-controls="terrain-section-journey" data-tab="journey" aria-selected="false" tabindex="-1">Journey</button><button type="button" role="tab" id="terrain-tab-surface" aria-controls="terrain-section-surface" data-tab="surface" aria-selected="false" tabindex="-1">Surface</button><button type="button" role="tab" id="terrain-tab-water" aria-controls="terrain-section-water" data-tab="water" aria-selected="false" tabindex="-1">Water</button><button type="button" role="tab" id="terrain-tab-sky" aria-controls="terrain-section-sky" data-tab="sky" aria-selected="false" tabindex="-1">Sky</button><button type="button" role="tab" id="terrain-tab-explore" aria-controls="terrain-section-explore" data-tab="explore" aria-selected="false" tabindex="-1">Explore</button></div>
 	<div class="lab-pages"><section class="terrain-section" role="tabpanel" id="terrain-section-landscape" aria-labelledby="terrain-tab-landscape" data-tab-panel="landscape">
 	<label class="terrain-field">Preset<select name="preset">${landscapeOptions.map(option).join('')}</select></label>
 	<label class="terrain-field">Seed<input name="seed" type="text" maxlength="256" value="first-light"></label>
@@ -2895,30 +2875,9 @@ function markup()
 	<canvas data-circuit-map width="272" height="154" role="img" aria-label="Circuit route and gates" style="width:100%;height:auto;background:#0c221c;border-radius:5px" hidden></canvas>
 	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button><button data-action="cpu-demo" hidden>Watch CPU racer</button></div>
 	</div></details>
-	<details class="terrain-section"><summary>Landscape journey</summary>
-	<p class="terrain-note">Build surveys the terrain and lays the highway. When the road is ready, you start in the car at the western edge.</p>
-	<div class="terrain-row"><label class="terrain-field">Departure<select data-journey="west">${journeyOptions('rolling-prairie')}</select></label>
-	<label class="terrain-field">Map width<select data-journey="span">
-		<option value="16384" selected>10.2 mi (16 km class)</option>
-		<option value="32768">20.4 mi (32 km class)</option>
-		<option value="65536">40.7 mi (64 km class)</option>
-	</select></label></div>
-	<div class="terrain-row"><label class="terrain-field">Fork layout<select data-journey="fork"><option value="rejoin">Rejoin the highway</option><option value="divide">Separate destinations</option><option value="network">Linked landscape network</option></select></label>
-	<label class="terrain-field">Destination<select data-journey="east">${journeyOptions('mountain')}</select></label>
-	<label class="terrain-field" data-journey-south hidden>South branch destination<select data-journey="south">${landscapeOptions.map(option).join('')}</select></label></div>
-	<div data-journey-network hidden><div class="terrain-route-scroll"><table data-journey-guide hidden><caption>Route network</caption>
-	<thead><tr><th scope="col">Square</th><th scope="col">Left fork</th><th scope="col">Right fork</th></tr></thead><tbody></tbody></table></div>
-	<p class="terrain-note">Start in the first square. Follow the gold road on the minimap and steer onto the branch you want. Two roads with the same destination meet again.</p>
-	<details><summary>Edit route network</summary><label class="terrain-field">Squares and exits
-	<textarea data-journey="network" rows="7" spellcheck="false">A rolling-prairie -> B,C
-B canyon -> E,F
-C mountain -> F,G
-E limestone
-F river-valley
-G coast</textarea><small>One square per line. Enter its name, preset ID, and up to two exits. Reuse a name as an exit to rejoin. A row without exits ends the drive.</small>
-	<small>Preset IDs: ${landscapeOptions.map(([id]) => id).join(', ')}</small></label></details><p class="terrain-note" data-journey-error role="status"></p></div>
-	<div class="terrain-row"><button data-action="journey-build">Build new journey</button><button data-action="journey-drive" hidden>Drive from west edge</button><button data-action="journey-fork" hidden>Drive from fork</button></div><p class="terrain-note" data-journey-progress role="status"></p></details>
+	<button type="button" class="terrain-wide" data-open-journey>Open journey planner</button>
 	<div class="terrain-section" data-road-workspace></div></section>
+	<section class="terrain-section" role="tabpanel" id="terrain-section-journey" aria-labelledby="terrain-tab-journey" data-tab-panel="journey" hidden>${journeyMarkup(journeyOptions)}</section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
 	<div class="terrain-row"><select data-layer-preset aria-label="Material preset" aria-describedby="${surfaceId}-preset">${surfaceOptions.map(
