@@ -239,3 +239,59 @@ foreach([6,36] as $width) {
 }
 check($apexCuts[36] > $apexCuts[6]+8., 'The wider road permits a deeper cut on the same right-hand apex.');
 echo "Width-aware racing lines and tire clearance passed.\n";
+
+// On this kilometer of alternating bends a 28 m road leaves one clear line, and a 14 m road does not.
+$weave = [[0,-1150],[0,-850],[0,-640],[12,-500],[-12,-350],[12,-190],[-12,-60],[12,130],[-12,270],
+	[12,430],[0,590],[0,830],[0,1050],[60,1150],[270,1150],[330,1050],[330,600],[330,0],[330,-600],
+	[330,-1150],[270,-1250],[60,-1250]];
+foreach([[28,false],[14,false],[36,true]] as [$width,$painted]) {
+	$table = new Session(['worldSize'=>4096,'spacing'=>2,'heightScale'=>0,'detailAmplitude'=>0,'waterLevel'=>-12]);
+	$table->landscape->queue(CircuitRoad::closeLoop(['type'=>'road','material'=>'road','width'=>$width,'shoulder'=>14.,
+		'points'=>array_map(static fn($p) => [$p[0],0.,$p[1]],$weave)]));
+	if($painted) $table->landscape->queue(['type'=>'material','x'=>0.,'z'=>-498.,'radius'=>4.,'material'=>'grass']);
+	$table->landscape->commit();
+	$route = CircuitRoad::manualCircuit($table->landscape,0,-12.);
+	// Put the start/finish line inside the open weave and observe it at speed on the second lap.
+	$laps = $width === 28 ? 2 : 1;
+	if($laps === 2) {
+		$seam = 0;
+		foreach($route->points as $k => [$x,$z]) {
+			if($x < 20. && abs($z) < abs($route->points[$seam][1])) $seam = $k;
+		}
+		$route = new Circuit(array_merge(array_slice($route->points,$seam),array_slice($route->points,0,$seam)),-12.,null);
+	}
+	$file = json_decode($table->save(),true);
+	$file['course'] = $route->course($table->landscape,$table->gateShapes,$laps,false)->export();
+	$file['circuit'] = ['route'=>$route->export(),'variant'=>'dry'];
+	$table->load(json_encode($file));
+	$table->input(['actions'=>['cpu-demo']],1/60,1.);
+	$steering = 0.; $brakes = $observations = 0;
+	$slowest = $minX = INF; $maxX = -INF;
+	$leftStart = false;
+	for($i = 0; $i < 18000 && $table->race->state !== 'finished'; $i++) {
+		$table->step(1/60);
+		$p = $table->car->state();
+		if($p['x'] > 150.) $leftStart = true;
+		if($p['x'] > 50. || $p['z'] < -510. || $p['z'] > 500.) continue;
+		$sin = sin($p['yaw']); $cos = cos($p['yaw']);
+		foreach([Car::WHEELBASE/2,-Car::WHEELBASE/2] as $along) {
+			$halfTrack = ($along > 0. ? Car::FRONT_TRACK : Car::REAR_TRACK)/2;
+			foreach([-$halfTrack,$halfTrack] as $across) {
+				$x = $p['x']+$along*$sin+$across*$cos; $z = $p['z']+$along*$cos-$across*$sin;
+				check(RacingLine::edgeDistance($table->landscape,$x,$z) > .12,"Tire clearance on the {$width} m serpentine at ($x, $z), frame $i.");
+			}
+		}
+		if($laps === 2 && !$leftStart) continue;
+		$observations++;
+		$minX = min($minX,$p['x']); $maxX = max($maxX,$p['x']);
+		$steering = max($steering,abs($p['steering']));
+		$brakes += (int)$p['braking'];
+		$slowest = min($slowest,$p['speed']);
+	}
+	check($table->race->state === 'finished' && $observations > 500,'Finish the serpentine circuit through its ordered gates.');
+	if($width === 28) check($maxX-$minX < .15 && $steering < .00025 && $brakes === 0 && $slowest > 190*Car::MPS_PER_MPH,
+		'Hold a single heading at speed through the open bends across the timing line.');
+	if($width === 14) check($steering > .003 && $brakes > 0,'Steer and brake where the narrower road prevents a straight.');
+	$table->close();
+}
+echo "Open, narrow and repainted serpentine race checks passed.\n";

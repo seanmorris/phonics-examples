@@ -15,7 +15,8 @@ final class RacingLine
 	{
 		$count = count($stations);
 		$extent = $land->recipe()['worldSize'] / 2;
-		$normals = $bounds = $points = [];
+		$edits = $land->editIndex(false);
+		$normals = $bounds = $straightBounds = $points = [];
 		foreach($stations as $i => [$x,$z,$yaw]) {
 			[$px,$pz] = $stations[($i+$count-1)%$count];
 			[$qx,$qz] = $stations[($i+1)%$count];
@@ -23,7 +24,7 @@ final class RacingLine
 			[$nx,$nz] = $length > .001 ? [($qz-$pz)/$length,($px-$qx)/$length] : [cos($yaw),-sin($yaw)];
 			$normals[] = [$nx,$nz];
 			$points[] = [$x,$z];
-			$low = $high = 0.;
+			$low = $high = $straightLow = $straightHigh = 0.;
 			if($land->material($x,$z,$offset,$mark) === 'road' && $mark !== null && $offset !== null) {
 				// A disc around the nearest point on the painted spline fits even on a skew crossing.
 				// The shoulder contributes to grading, but ends outside the asphalt half-width in mark[2].
@@ -32,6 +33,10 @@ final class RacingLine
 				$room = max(0., $mark[2] - self::CLEARANCE);
 				$half = sqrt(max(0., $room*$room - $along*$along));
 				$low = -$across-$half; $high = -$across+$half;
+				// A car holding one heading needs less side clearance than one sliding into a bend.
+				$room = max(0.,$mark[2]-Straightaways::CLEARANCE);
+				$half = sqrt(max(0.,$room*$room-$along*$along));
+				$straightLow = -$across-$half; $straightHigh = -$across+$half;
 				// Prevent a wide inside lane from folding back across the center of a tight hairpin.
 				$tx = $qx-$px; $tz = $qz-$pz;
 				$bend = ($x-$px)*$tz - ($z-$pz)*$tx;
@@ -45,11 +50,26 @@ final class RacingLine
 					$a = (-$extent-$pos)/$axis; $b = ($extent-$pos)/$axis;
 					$min = min($a,$b); $max = max($a,$b);
 					$low = max($min,min($max,$low)); $high = max($min,min($max,$high));
+					$straightLow = max($min,min($max,$straightLow)); $straightHigh = max($min,min($max,$straightHigh));
+				}
+				// A later brush may cut a hole inside the nominal asphalt. Keep the opening connected to the route.
+				$reach = max(abs($straightLow),abs($straightHigh)) + $spacing/2 + self::CLEARANCE;
+				if(!$edits->isEmpty() && $edits->intersect([$x-$reach,$z-$reach,$x+$reach,$z+$reach])) {
+					foreach([-1,1] as $side) {
+						$edge = $side < 0 ? -$straightLow : $straightHigh;
+						$limit = self::paintedEdge($land,$x,$z,$nx,$nz,$side,$edge,$spacing,$extent);
+						if($limit === null) continue;
+						$cornerRoom = max(0.,$limit-self::CLEARANCE);
+						$straightRoom = max(0.,$limit-Straightaways::CLEARANCE);
+						if($side < 0) { $low = max($low,-$cornerRoom); $straightLow = max($straightLow,-$straightRoom); }
+						else { $high = min($high,$cornerRoom); $straightHigh = min($straightHigh,$straightRoom); }
+					}
 				}
 			}
 			$bounds[] = [$low,$high];
+			$straightBounds[] = [$straightLow,$straightHigh];
 		}
-		self::fitGates($stations,$normals,$bounds,$course,$spacing);
+		self::fitGates($stations,$normals,$bounds,$straightBounds,$course,$spacing);
 
 		// Minimize changes of heading by moving only sideways. Broad spans set up the entry and exit,
 		// then shorter spans smooth the apex and transitions where the road narrows.
@@ -89,7 +109,21 @@ final class RacingLine
 			$inside = max(0.,$inside - Car::BODY_HALF_WIDTH/hypot($x-$cx,$z-$cz));
 			$points[$i] = [$cx+$inside*($x-$cx),$cz+$inside*($z-$cz)];
 		}
-		return $points;
+		return Straightaways::fit($points,$stations,$normals,$straightBounds,$land);
+	}
+
+	/** Walk outward from the route over the area represented by this cross section. */
+	private static function paintedEdge(Landscape $land, float $x, float $z, float $nx, float $nz,
+		int $side, float $edge, float $spacing, float $extent): ?float
+	{
+		for($d = 0.; $d <= $edge+self::CLEARANCE; $d += 1.) {
+			foreach([-.5,0.,.5] as $step) {
+				$sx = $x + $side*$d*$nx - $step*$spacing*$nz;
+				$sz = $z + $side*$d*$nz + $step*$spacing*$nx;
+				if(max(abs($sx),abs($sz)) > $extent || $land->material($sx,$sz) !== 'road') return max(0.,$d-1.);
+			}
+		}
+		return null;
 	}
 
 	/** Remaining distance inside the asphalt, excluding the graded shoulder. */
@@ -100,7 +134,7 @@ final class RacingLine
 	}
 
 	/** Narrow the allowed strip through an authored gate whose posts stand inside the road. */
-	private static function fitGates(array $stations, array $normals, array &$bounds, Course $course, float $spacing): void
+	private static function fitGates(array $stations, array $normals, array &$bounds, array &$straightBounds, Course $course, float $spacing): void
 	{
 		$count = count($stations);
 		foreach($course->gates(false) as $gate) {
@@ -122,6 +156,8 @@ final class RacingLine
 				$a = (-$half-$offset)/$dot; $b = ($half-$offset)/$dot;
 				[$low,$high] = $bounds[$i];
 				$bounds[$i] = [max($low,min($high,min($a,$b))),min($high,max($low,max($a,$b)))];
+				[$low,$high] = $straightBounds[$i];
+				$straightBounds[$i] = [max($low,min($high,min($a,$b))),min($high,max($low,max($a,$b)))];
 			}
 		}
 	}
