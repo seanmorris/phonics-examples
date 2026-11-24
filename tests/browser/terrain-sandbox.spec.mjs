@@ -3818,10 +3818,15 @@ test('a landscape journey boards the car on the western road and offers signed b
 	await view.evaluate(el => el.terrainSandboxDebug.values({quality: .5}));
 	const section = await field(page, '[data-journey="fork"]');
 	await page.getByText('Landscape journey', {exact: true}).click();
+	await section.selectOption('network');
+	const departureRow = page.locator('[data-journey-guide] tr[data-square="A"]');
+	await expect(departureRow.locator('td')).toHaveText(['B','C']);
 	await section.selectOption('divide');
 	await page.locator('[data-journey="east"]').selectOption('river-valley');
 	await page.locator('[data-journey="south"]').selectOption('coast');
 	await control(page, 'journey-build').click();
+	await expect(control(page, 'journey-build')).toBeDisabled();
+	await expect(page.locator('[data-journey-progress]')).toContainText(/survey|following|finding|fitting/i);
 	await expect.poll(async() => (await status(page)).mode, {timeout: 315_000}).toBe('car');
 	const west = await status(page);
 	expect(west.recipe.worldSize).toBe(69_632);

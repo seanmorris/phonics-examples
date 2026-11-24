@@ -361,6 +361,7 @@ final class Session
 	private ?\Generator $roadWork = null;
 	private ?Landscape $journeyReady = null;
 	private array $journeyEntrances = [], $journeyViews = [], $preparedViews = [];
+	private ?string $journeyBuildPhase = null;
 	private ?JourneyNetwork $network = null, $buildingNetwork = null;
 	private ?string $square = null, $nextSquare = null;
 	private ?\Generator $onwardWork = null;
@@ -368,6 +369,7 @@ final class Session
 	private bool $transfer = false;
 
 	public function journeyPlan(): ?string { return $this->network?->plan; }
+	public function journeyNodes(): array { return $this->network?->nodes ?? []; }
 	public function preparingRoad(): bool { return $this->roadWork !== null || $this->journeyReady !== null || $this->onwardWork !== null || $this->transfer; }
 
 	public function advanceRoadBetweenFrames(): void
@@ -479,6 +481,7 @@ final class Session
 				$this->journeyReady = null;
 				$network=$this->buildingNetwork;
 				$this->buildingNetwork=null;
+				$this->journeyBuildPhase=null;
 				$previous = $this->landscape->recipe()['preset'];
 				$this->replace($next);
 				$this->network=$network; $this->square=$network?->start;
@@ -1462,12 +1465,12 @@ final class Session
 				$span=$action['span'] ?? 32768;
 				$next = new Landscape($network ? $network->recipe($network->start,$span) : JourneyRoad::recipe($west,$east,$span));
 				$this->buildingNetwork=$network;
-				$this->message = 'Surveying the highway and its forks…';
+				$this->message = $this->journeyBuildPhase = 'Surveying the highway and its forks…';
 				$this->preparing = true;
 				$this->roadWork = (function() use ($next) {
 					try {
 						$this->preparedViews=yield from JourneyRoad::build($next,report:function(string $phase) {
-							$this->message=$phase; $this->dirty=true;
+							$this->message=$this->journeyBuildPhase=$phase; $this->dirty=true;
 						});
 						$this->journeyReady = $next;
 					} finally {
@@ -2357,6 +2360,8 @@ final class Session
 			if($this->roadWork->valid()) return;
 		} catch(\Throwable $error) {
 			$this->roadWork = null;
+			$this->journeyBuildPhase = null;
+			$this->buildingNetwork = null;
 			$this->preparing = false;
 			$this->roadEditor->applyResult($error->getMessage());
 			throw $error;
@@ -2666,15 +2671,21 @@ final class Session
 	public function status(): array
 	{
 		$nearFork = false;
+		$branch = $arrival = null;
 		if($this->mode === 'car' && isset($this->journeyEntrances['junction'])) {
 			[$x,$z,$heading] = $this->journeyEntrances['junction'];
 			$car = $this->car->state();
 			$dx = $x - $car['x']; $dz = $z - $car['z'];
 			$ahead = $dx*sin($heading) + $dz*cos($heading);
 			$side = $dx*cos($heading) - $dz*sin($heading);
+			if($this->network && $car['x'] >= -JourneyRoad::FORK) {
+				// Beyond the connector the two roads occupy separate destination squares.
+				$branch = $this->network->destination($this->square,$car);
+				if($branch === $this->nextSquare && !$this->network->nodes[$branch]['exits']) $arrival = $branch;
+			}
 			$nearFork = $ahead >= -40. && $ahead < 700. && abs($side) < 120. && cos($car['yaw']-$heading) > .5;
 		}
-		return ['journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,'time' => $this->time,'generation' => $this->generation,
+		return ['journeyBuildPhase'=>$this->journeyBuildPhase,'journeyBranch'=>$branch,'journeyArrival'=>$arrival,'journeyViews'=>$this->journeyViews,'journeySquare'=>$this->square,'journeyExits'=>$this->network?->nodes[$this->square]['exits'] ?? [],'journeyForkAhead'=>$nearFork,'mode' => $this->mode,'paused' => $this->paused,'menu' => $this->menu,'menuRow' => $this->menuRow,'time' => $this->time,'generation' => $this->generation,
 			'findingCarSite' => $this->findingCarSite(),'preparing' => $this->preparing,'picking' => $this->picking,
 			'pickProgress' => $this->pickQuery?->stats(),'lastPick' => $this->lastPick,'recipe' => $this->landscape->recipe(),'revision' => $this->landscape->revision(),
 			'atmosphereLayers'=>$this->atmosphere->layers(),'atmosphereOrigin'=>$this->atmosphereOrigin,'atmosphereReply'=>$this->atmosphereReply,

@@ -457,6 +457,11 @@ export function activate({module, canvas, session, services})
 				const destinations = [value('east')];
 				if(value('fork') === 'divide') destinations.push(value('south'));
 				const network = value('fork') === 'network' ? {network: value('network')} : {};
+				journeyRequest = 'queued';
+				journeyResult = '';
+				field.disabled = true;
+				field.textContent = 'Building journey…';
+				journeyProgress.textContent = 'Surveying the highway. You’ll start driving when the road is ready.';
 				push({type, west: value('west'), destinations, span: Number(value('span')), ...network});
 			}
 			else if(type === 'load') frame.querySelector('[data-file]').click();
@@ -473,10 +478,55 @@ export function activate({module, canvas, session, services})
 	const journeyField = key => frame.querySelector(`[data-journey="${key}"]`);
 	const junction = journeyField('fork');
 	const destinationNames = new Map([...journeyField('east').options].map(option => [option.value, option.text]));
+	const networkField = journeyField('network');
+	const journeyProgress = frame.querySelector('[data-journey-progress]');
+	const guideBody = frame.querySelector('[data-journey-guide] tbody');
+	const guideError = frame.querySelector('[data-journey-error]');
+	let activeNetwork = null, preview = null, pendingDraft = null, currentRow = null;
+	let journeyRequest = null, journeyResult = '';
+	const squareName = (id, nodes) => id + ' · ' + destinationNames.get(nodes[id].preset);
+	const showRoute = result => {
+		preview = result;
+		guideError.textContent = result?.error ?? '';
+		guideBody.closest('table').hidden = !result?.nodes;
+		guideBody.replaceChildren();
+		currentRow = null;
+		if(!result?.nodes) return;
+		for(const [id, node] of Object.entries(result.nodes)) {
+			const row = guideBody.insertRow();
+			row.dataset.square = id;
+			const title = document.createElement('th');
+			title.scope = 'row';
+			title.textContent = squareName(id, result.nodes);
+			row.append(title);
+			const exits = [...new Set(node.exits)];
+			if(exits.length === 2) for(const exit of exits) row.insertCell().textContent = exit;
+			else {
+				const cell = row.insertCell();
+				cell.colSpan = 2;
+				cell.textContent = exits.length ? 'Both roads to ' + exits[0] : 'End of route';
+			}
+		}
+	};
+	const requestPreview = () => {
+		if(junction.value !== 'network' || preview?.plan === networkField.value) return;
+		if(activeNetwork?.plan === networkField.value) showRoute(activeNetwork);
+		else {
+			showRoute(null);
+			button('journey-build').disabled = true;
+			pendingDraft = networkField.value;
+		}
+	};
+	shell.bridge('terrainJourneyPreview', json => {
+		const result = JSON.parse(json);
+		if(result.plan === networkField.value) showRoute(result);
+	});
+	networkField.addEventListener('input', requestPreview, {signal});
 	const updateJunction = () => {
 		frame.querySelector('[data-journey-south]').hidden = junction.value !== 'divide';
 		frame.querySelector('[data-journey-network]').hidden = junction.value !== 'network';
 		for(const field of ['west', 'east']) journeyField(field).closest('label').hidden = junction.value === 'network';
+		requestPreview();
 	};
 	junction.addEventListener('change', updateJunction, {signal});
 	updateJunction();
@@ -808,10 +858,15 @@ export function activate({module, canvas, session, services})
 		const padsSame = padKey === previousPad && menuPadKey === previousMenuPad;
 
 		if(viewport === previousViewport && held === previousKeys && padsSame && !actions.length
-			&& !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
+			&& pendingDraft === null && !clicks.length && !look[0] && !look[1] && !Object.keys(values).length
 		) return '';
 
 		const packet = {keys,values,actions,clicks,look};
+		if(pendingDraft !== null) {
+			packet.journeyDraft = pendingDraft;
+			pendingDraft = null;
+		}
+		if(journeyRequest === 'queued' && actions.some(action => action.type === 'journey-build')) journeyRequest = 'sent';
 
 		if(viewport !== previousViewport) packet.viewport = JSON.parse(viewport);
 
@@ -878,6 +933,20 @@ export function activate({module, canvas, session, services})
 			if(quietPause !== Boolean(latest?.paused && !latest.menu)) music.pause(quietPause);
 
 			latest = state;
+			if('journeyNetwork' in state) activeNetwork = state.journeyNetwork;
+			if(activeNetwork && state.journeySquare && state.generation !== lastGeneration) {
+				networkField.value = activeNetwork.plan;
+				junction.value = 'network';
+				showRoute(activeNetwork);
+				updateJunction();
+			}
+			const location = state.journeyArrival ?? state.journeySquare;
+			if(currentRow?.dataset.square !== location || preview?.plan !== activeNetwork?.plan) {
+				currentRow?.removeAttribute('aria-current');
+				currentRow = location && activeNetwork && preview?.plan === activeNetwork.plan
+					? guideBody.querySelector('[data-square="' + CSS.escape(location) + '"]') : null;
+				currentRow?.setAttribute('aria-current','location');
+			}
 			module.updateTerrainHints(state);
 
 			if(jetView !== state.jetView)
@@ -963,13 +1032,29 @@ export function activate({module, canvas, session, services})
 			else if(state.car?.motion === 'tumbling') status.textContent = 'Car tumbling…';
 			else if(state.cpuDriver && state.race.state !== 'finished')
 			status.textContent = 'CPU racer · ' + state.cpuDriver;
-			else if(state.mode === 'car' && state.journeyForkAhead && !state.delivery && state.race.state === 'idle')
+			else if(state.mode === 'car' && state.journeyForkAhead && !state.journeySquare && !state.delivery && state.race.state === 'idle')
 			{
 				const [north, south] = state.recipe.join.destinations.map((form, i) =>
 					[state.journeyExits?.[i], destinationNames.get(form.preset)].filter(Boolean).join(' · '));
 				status.textContent = south ? `Left · ${north}   /   Right · ${south}` : `Both branches rejoin toward ${north}.`;
 			}
 			else status.textContent = state.message;
+
+			const sign = frame.querySelector('[data-journey-sign]');
+			const showSign = activeNetwork && state.journeySquare && state.mode === 'car' && !state.delivery
+				&& !state.cpuDriver && state.race.state === 'idle';
+			sign.hidden = !showSign;
+			if(showSign) {
+				const name = id => squareName(id, activeNetwork.nodes);
+				const here = name(state.journeySquare);
+				const [left, right] = [...new Set(state.journeyExits)];
+				let text;
+				if(state.journeyArrival) text = 'Arrived at ' + name(state.journeyArrival) + ' · End of route';
+				else if(state.journeyBranch) text = here + ' → ' + name(state.journeyBranch);
+				else if(right) text = here + ' — Left to ' + name(left) + ' / Right to ' + name(right);
+				else text = here + ' — Both roads to ' + name(left);
+				if(sign.textContent !== text) sign.textContent = text;
+			}
 
 			status.hidden = state.race.state === 'finished' && status.textContent === state.race.message;
 
@@ -1006,11 +1091,20 @@ export function activate({module, canvas, session, services})
 			const circuit = state.circuit;
 			const editable = state.mode === 'fly' && !state.preparing && !state.picking && !circuit.searching;
 			button('circuit-find').disabled = !editable;
-			button('journey-build').disabled = !editable;
+			if(state.journeyBuildPhase) journeyRequest = 'building';
+			else if(journeyRequest === 'sent' || journeyRequest === 'building') {
+				journeyResult = state.generation !== lastGeneration && state.recipe.join && state.mode === 'car'
+					? 'Road ready. Follow the gold highway, or choose Drive from fork to try the split.' : state.message;
+				journeyRequest = null;
+			}
+			const progress = state.journeyBuildPhase ?? (journeyRequest ? 'Surveying the highway…' : journeyResult);
+			if(journeyProgress.textContent !== progress) journeyProgress.textContent = progress;
+			button('journey-build').textContent = journeyRequest ? 'Building journey…' : 'Build new journey';
+			button('journey-build').disabled = !editable || Boolean(journeyRequest) || (junction.value === 'network' && !preview?.nodes);
 			for(const key of ['journey-drive','journey-fork'])
 			{
 				button(key).hidden = !state.recipe.join;
-				button(key).disabled = state.preparing || state.picking;
+				button(key).disabled = Boolean(journeyRequest) || state.preparing || state.picking;
 			}
 			button('circuit-cancel').hidden = !circuit.searching && !circuit.preview;
 			button('circuit-cancel').disabled = state.preparing;
@@ -2226,6 +2320,15 @@ function markup()
 	.terrain-sandbox button,.terrain-sandbox select,.terrain-sandbox input[type=number],.terrain-sandbox input[type=text]{box-sizing:border-box;background:#244437;color:#fff;border:1px solid #658271;border-radius:6px;min-height:34px;padding:5px 9px;font:inherit}
 	.terrain-sandbox button{cursor:pointer}.terrain-sandbox button:hover{background:#355e4b}.terrain-sandbox button:disabled{opacity:.45;cursor:default}.terrain-sandbox :focus-visible{outline:2px solid #efc275;outline-offset:2px}.terrain-sandbox input{accent-color:#e5bc75}.terrain-sandbox input[type=range]{min-width:0;width:100%}@media(pointer:coarse){.terrain-sandbox input[type=range]{min-height:32px}}
 	.terrain-note{color:#bdd2c7}.terrain-check{display:flex;align-items:center;gap:8px}.terrain-hud{position:absolute;left:16px;bottom:16px;box-sizing:border-box;max-width:calc(100% - 32px);pointer-events:none;text-shadow:0 1px 4px #000;background:#102822ac;border-radius:8px;padding:10px 12px}.terrain-hud p{margin:2px 0}.terrain-hud pre{font:11px/1.5 ui-monospace,monospace;color:#c1d4c6;margin:8px 0 0;white-space:pre-wrap}.terrain-pending{color:#efc275}.terrain-race{font-variant-numeric:tabular-nums;font-weight:600;color:#fff}.terrain-sizes{white-space:pre-line}.terrain-sandbox [hidden]{display:none!important}
+	.terrain-route-scroll{max-height:18rem;overflow:auto}
+	[data-journey-guide]{width:100%;border-collapse:collapse;text-align:left;font-variant-numeric:tabular-nums}
+	[data-journey-guide] caption{text-align:left;font-weight:700;margin:8px 0}
+	[data-journey-guide] :is(th,td){padding:5px 8px;border-bottom:1px solid #466056;overflow-wrap:anywhere}
+	[data-journey-guide] tbody th{font-weight:500}
+	[data-journey-guide] [aria-current="location"]{background:#284638;color:#ffe1a2}
+	[data-journey-guide] [aria-current="location"] th::after{content:" · You are here";font-size:.85em}
+	[data-journey-sign]{color:#ffe1a2;font-weight:600}
+	[data-journey-progress]:empty,[data-journey-error]:empty{display:none}
 	.terrain-panel{
 		--header-height:48px;
 		position:absolute;z-index:1;top:var(--lab-inset);right:var(--lab-inset);width:var(--lab-width);
@@ -2507,21 +2610,24 @@ function markup()
 	<div class="terrain-row"><button data-action="circuit-dry" disabled>Apply dry course</button><button data-action="circuit-flooded" disabled>Apply flooded course</button><button data-action="cpu-demo" hidden>Watch CPU racer</button></div>
 	</div></details>
 	<details class="terrain-section"><summary>Landscape journey</summary>
-	<p class="terrain-note">Build a new landscape with an editable highway from the western edge to the eastern edge. Both maps keep their full width.</p>
+	<p class="terrain-note">Build surveys the terrain and lays the highway. When the road is ready, you start in the car at the western edge.</p>
 	<div class="terrain-row"><label class="terrain-field">Departure<select data-journey="west">${journeyOptions('rolling-prairie')}</select></label>
 	<label class="terrain-field">Map width<select data-journey="span"><option value="32768">20.4 mi (32 km class)</option><option value="65536">40.7 mi (64 km class)</option></select></label></div>
 	<div class="terrain-row"><label class="terrain-field">Fork layout<select data-journey="fork"><option value="rejoin">Rejoin the highway</option><option value="divide">Separate destinations</option><option value="network">Linked landscape network</option></select></label>
 	<label class="terrain-field">Destination<select data-journey="east">${journeyOptions('mountain')}</select></label>
 	<label class="terrain-field" data-journey-south hidden>South branch destination<select data-journey="south">${landscapeOptions.map(option).join('')}</select></label></div>
-	<label class="terrain-field" data-journey-network hidden>Route network
+	<div data-journey-network hidden><div class="terrain-route-scroll"><table data-journey-guide hidden><caption>Route network</caption>
+	<thead><tr><th scope="col">Square</th><th scope="col">Left fork</th><th scope="col">Right fork</th></tr></thead><tbody></tbody></table></div>
+	<p class="terrain-note">Start in the first square. Follow the gold road on the minimap and steer onto the branch you want. Two roads with the same destination meet again.</p>
+	<details><summary>Edit route network</summary><label class="terrain-field">Squares and exits
 	<textarea data-journey="network" rows="7" spellcheck="false">A rolling-prairie -> B,C
 B canyon -> E,F
 C mountain -> F,G
 E limestone
 F river-valley
 G coast</textarea><small>One square per line. Enter its name, preset ID, and up to two exits. Reuse a name as an exit to rejoin. A row without exits ends the drive.</small>
-	<small>Preset IDs: ${landscapeOptions.map(([id]) => id).join(', ')}</small></label>
-	<div class="terrain-row"><button data-action="journey-build">Build new journey</button><button data-action="journey-drive" hidden>Drive from west edge</button><button data-action="journey-fork" hidden>Drive from fork</button></div></details>
+	<small>Preset IDs: ${landscapeOptions.map(([id]) => id).join(', ')}</small></label></details><p class="terrain-note" data-journey-error role="status"></p></div>
+	<div class="terrain-row"><button data-action="journey-build">Build new journey</button><button data-action="journey-drive" hidden>Drive from west edge</button><button data-action="journey-fork" hidden>Drive from fork</button></div><p class="terrain-note" data-journey-progress role="status"></p></details>
 	<div class="terrain-section" data-road-workspace></div></section>
 	<section class="terrain-section" role="tabpanel" id="terrain-section-surface" aria-labelledby="terrain-tab-surface" data-tab-panel="surface" hidden>
 	<p class="terrain-note" data-surface-note></p>
@@ -2616,5 +2722,5 @@ G coast</textarea><small>One square per line. Enter its name, preset ID, and up 
 	<p class="terrain-note">D-pad ↑ boards the F5, ← boards the car and → boards the watercraft. In the F5, ↑ cycles balloons. On the watercraft, ↓ returns to free flight. Novice uses RT/LT for speed. Expert uses LT/RT for rudder and Y/B for speed. Tap Back for handling, Back + ↓ for free flight, or Back + Y to reset the race. Click the right stick to recover an off-road race car. Start opens the pause menu.</p>
 	</details><details><summary>Credits</summary><p class="terrain-note">Watercraft adapted from <a href="https://sketchfab.com/3d-models/jetski-15e79c65f67a468592cdc2ac1f5b389b" target="_blank" rel="noopener">Jetski by Futurealiti</a>  · Car adapted from <a href="https://sketchfab.com/3d-models/ferrari-testarossa-84-low-poly-2eb128eab34a4c25bfcdb2d75152d31a" target="_blank" rel="noopener">Ferrari-Testarossa-84-low-poly by XGLOL235</a> · Aircraft adapted from <a href="https://sketchfab.com/3d-models/f5-8089d66a8a8748b2a4b049b3c06f6a02" target="_blank" rel="noopener">F5 by manilov.ap</a> · <a href="https://sketchfab.com/3d-models/cc0-balloon-6068c15b20bc4d9689c72b9e15a78891" target="_blank" rel="noopener">Balloon by plaggy</a> · Race gates adapted from <a href="https://sketchfab.com/3d-models/finish-line-70aecb6bac234266bdebd22322396caa" target="_blank" rel="noopener">Finish Line by Kemal Çolak</a> and <a href="https://sketchfab.com/3d-models/davita-finish-line-2020-003d816301084f719897503bdb4ffbc3" target="_blank" rel="noopener">Davita Finish-Line 2020 by BrandXR</a> · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. <a href="https://sketchfab.com/3d-models/heatseeker-air-air-missile-e9c5bba6f3b34f73b22961a726667856" target="_blank" rel="noopener">Projectile by Martini-SF</a> · <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>. HUD reference: Airforce Delta, Konami.</p></details>
 	</section>
-	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><div class="terrain-hud"><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
+	</div></div></details><p class="terrain-menu-live" data-menu-live aria-live="polite"></p><div class="terrain-hud"><p data-journey-sign hidden></p><p data-status role="status">Preparing the landscape…</p><p class="terrain-race" data-race hidden></p><p class="terrain-pending" data-pending>Preparing terrain…</p><pre data-diagnostics></pre></div>`;
 }

@@ -71,6 +71,7 @@ $spotLights = [[], 1.0]; // The lights given to the scene and their adaptation g
 $width = 1280; $height = 720; $dirty = true;
 $generation = $session->generation;
 $lastStatus = 0.0;
+$lastJourneyPlan = null;
 $lastRender = null;
 $drawIntervalMs = null;
 $lastRenderedTime = -1.0;
@@ -148,6 +149,12 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 	$started = hrtime(true);
 	$packet = (string)$readInput();
 	$input = $packet === '' ? [] : json_decode($packet, true, flags: JSON_THROW_ON_ERROR);
+	if(isset($input['journeyDraft'])) {
+		$plan = $input['journeyDraft'];
+		try { $preview = ['nodes' => (new TerrainSandbox\JourneyNetwork($plan))->nodes]; }
+		catch(InvalidArgumentException $error) { $preview = ['error' => $error->getMessage()]; }
+		(vrzno_env('terrainJourneyPreview'))(json_encode(['plan'=>$plan] + $preview, JSON_THROW_ON_ERROR));
+	}
 	if(isset($input['viewport']))
 	{
 		[$w,$h] = $input['viewport'];
@@ -203,7 +210,7 @@ $engine->setInputHandler(static function(Engine $engine, float $elapsed) use (
 		|| $previousRoadPoints !== count($session->road) || $wasSearching !== $session->findingCarSite()
 		|| $wasFindingCircuit !== $session->findingCircuit();
 	$pickFrame = $wasPicking || $session->picking;
-	$statusPending = $statusPending || $packet !== '' || $wasPicking || $wasSearching || $wasFindingCircuit || $prepared !== null;
+	$statusPending = $statusPending || $session->preparingRoad() || $packet !== '' || $wasPicking || $wasSearching || $wasFindingCircuit || $prepared !== null;
 	$inputMs = (hrtime(true) - $started) / 1e6;
 	if($generation !== $session->generation)
 	{
@@ -276,7 +283,7 @@ $drawOpaque = static function() use ($scene, $session, $gates, $curveSigns, &$sp
 
 $engine->start(
 	static function(Engine $engine, float $alpha) use (
-		$session, $scene, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
+		$session, $scene, $drawOpaque, $gates, $curveSigns, &$viewCamera, &$vehiclePose, &$width, &$height, &$dirty, &$lastStatus, &$lastJourneyPlan, &$lastRender, &$drawIntervalMs, &$lastRenderedTime,
 		&$renderMs, &$frameSeconds, &$lastBudgetPose, &$statusPending, &$urgentStatus, &$inputMs, &$pickFrame, &$courseRevision, &$course,
 		&$carLamps, &$spotLights, &$shotAlpha, &$trailRenderer, &$beacon, &$arrow, &$arrowBearing, &$visibleSites, &$hudShown, $hud, $publish, $roadStatus, $roadCapture, $roadCamera, &$lastRoadCamera, $carSound, &$lastSound,
 		$pauseMenu
@@ -438,6 +445,12 @@ $engine->start(
 				'renderMs' => $renderMs, 'drawIntervalMs' => $drawIntervalMs,
 				'viewport' => [$width,$height],'simulationMs' => $engine->simulationCpuMs,
 				'generationBudgetMs' => $budget,'inputMs' => $inputMs,'frameIntervalMs' => $frameSeconds*1000];
+			// A large route graph crosses the UI bridge only when the active plan changes.
+			if($session->journeyPlan() !== $lastJourneyPlan) {
+				$lastJourneyPlan = $session->journeyPlan();
+				$status['journeyNetwork'] = $lastJourneyPlan === null ? null
+					: ['plan'=>$lastJourneyPlan,'nodes'=>$session->journeyNodes()];
+			}
 			$publish(json_encode($status, JSON_THROW_ON_ERROR));
 			$lastStatus = $now;
 			$statusPending = $urgentStatus = false;
