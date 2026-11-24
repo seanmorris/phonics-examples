@@ -61,7 +61,9 @@ float coverBand(float footprint, float scale)
 	return 1.-smoothstep(.18,1.55,COVER_FREQUENCY*footprint/scale);
 }
 
+#ifndef JOURNEY_REGIONS
 uniform float uRockSlopeDamping; // Landform damping divided by slope scale squared.
+#endif
 float rockReliefWeight(float width, float smoothingWidth2)
 {
 	return width*width / (width*width + smoothingWidth2);

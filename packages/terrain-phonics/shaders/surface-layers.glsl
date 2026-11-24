@@ -4,6 +4,7 @@ const int VEIN_PATTERN = 7;
 const int JOINTED_PATTERN = 9;
 const int CONTACT_PATTERN = 10;
 const int FRACTURE_PATTERN = 11;
+#ifndef JOURNEY_REGIONS
 uniform int uLayerCount;
 uniform vec4 uFieldScale;
 uniform vec4 uLayerEffect[16]; // relief strength, flattening, opacity, unrestricted range
@@ -15,6 +16,7 @@ uniform vec4 uLayerRange[16],uLayerBlend[16],uLayerMode[16];
 uniform vec4 uLayerPattern[16];
 uniform vec3 uLayerPatternColor[16];
 uniform vec2 uPaletteOffset;
+#endif
 // Fade pavement between 60 and 75 degrees from level. Both views use the actual terrain face.
 float roadSlopeMask(vec3 face) {
 	float squaredLength = dot(face,face);

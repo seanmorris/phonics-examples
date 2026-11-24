@@ -10,10 +10,12 @@ uniform vec2 uHeading,uViewportOrigin;
 uniform float uExtent,uWaterLevel;
 uniform vec3 uWaterColor;
 uniform vec3 uPaintColor[5];
+#ifndef JOURNEY_REGIONS
 uniform vec4 uSlopeBlend,uHeightBlend;
 uniform vec2 uSnowline,uMountainZones;
 uniform vec3 uMountainAmounts;
 uniform float uMacroVariation;
+#endif
 // MATERIAL NOISE
 // MATERIAL STACK
 out vec4 color;
@@ -66,13 +68,22 @@ void main() {
 	if(uCircular && dot(uv,uv)>.25) discard;
 	vec2 pos=uChart.xy+mat2(uHeading.x,uHeading.y,-uHeading.y,uHeading.x)*uv*uChart.z;
 	if(any(greaterThan(abs(pos),vec2(uExtent*.5)))) { color=vec4(.07,.13,.15,1); return; }
+	#ifdef JOURNEY_REGIONS
+	const float alpha=1.;
+	#else
 	float alpha=regionOpacity(pos);
 	if(alpha<=0.) discard;
+	#endif
 	vec4 ink;
 	vec4 h=chartSample(pos,ink);
 	vec3 n=h.xyz;
 	float footprint=uChart.z/uChart.w;
+	#ifdef JOURNEY_REGIONS
+	vec2 finish; vec3 bounce, litNormal;
+	vec3 albedo=journeySurface(vec3(pos.x,h.w,pos.y),n,vec3(0.,1.,0.),footprint,ink.a>=1.,litNormal,finish,bounce);
+	#else
 	vec3 albedo=materialSurface(vec3(pos.x,h.w,pos.y)-uMaterialOrigin,h.xyz,vec3(0.,1.,0.),footprint,uWaterLevel-uMaterialOrigin.y,landVariation(pos-uMaterialOrigin.xz,footprint)*uMacroVariation,n);
+	#endif
 	albedo=albedo*(1.-ink.a)+ink.rgb;
 	float shade=clamp(.96-.44*(h.x+h.z),.55,1.42);
 	if(h.w<uWaterLevel) { albedo=uWaterColor; shade=mix(1.25,.72,smoothstep(0.,80.,uWaterLevel-h.w)); }

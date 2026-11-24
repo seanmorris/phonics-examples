@@ -12,6 +12,7 @@ final class Clipmap
 	private ?TerrainAppearance $chartAppearance = null;
 	private ?TriangleShadows $shadows = null;
 	private ?SurfaceLayers $chartLayers = null;
+	private ?Program $boundChartProgram = null;
 	private array $vao = [], $framebuffer = [], $permutation = [], $levels = [], $overview = [];
 	private ?Landscape $source = null;
 	private EditIndex $edits;
@@ -1032,23 +1033,26 @@ final class Clipmap
 		, ?float $localView = null
 		, bool $circular = false
 		, ?float $fixedSpan = null
-		, int $regions = 1, int $regionIndex = 0, array $origin = [0.,0.,0.], ?string $seed = null
+		, int $regions = 1, int $regionIndex = 0, array $origin = [0.,0.,0.], ?string $seed = null, bool $sharedPalette = false
 	): ?float {
 		if(!$this->overview) return null;
 
 		$p->use();
 
-		if($layers !== $this->chartLayers || $appearance !== $this->chartAppearance)
+		if($p !== $this->boundChartProgram || $layers !== $this->chartLayers || $appearance !== $this->chartAppearance)
 		{
 			$appearance->bindPaint($p);
 			$this->chartAppearance = $appearance;
-			$layers->bind($p);
+			if(!$sharedPalette) $layers->bind($p);
 			$this->chartLayers = $layers;
+			$this->boundChartProgram = $p;
 		}
 
-		$this->paletteOrigin($p,$seed);
-		glUniform3f($p->location('uJoinMaterial'),$regions>1 ? $regions : 0,$regionIndex,JoinedTerrain::GAP);
-		glUniform3f($p->location('uMaterialOrigin'),...$origin);
+		if(!$sharedPalette) {
+			$this->paletteOrigin($p,$seed);
+			glUniform3f($p->location('uJoinMaterial'),$regions>1 ? $regions : 0,$regionIndex,JoinedTerrain::GAP);
+			glUniform3f($p->location('uMaterialOrigin'),...$origin);
+		}
 		$n = min($size ?? (int)round(min(184, $w * .235, $h * .245)), $w - 10, $h - 10);
 
 		if($n <= 0) return null;

@@ -164,11 +164,20 @@ final class SurfaceLayers
 		foreach($rows as $row) if($row['mask'] !== 'all' || $row['field'] !== 'plain' || $row['channel'] !== 'color') $ordinary = false;
 		$patterns = array_values(array_unique(array_column($rows,'pattern')));
 		sort($patterns);
-		$this->structure = $ordinary ? 'color/'.implode('/',$patterns)
-			: ($reflective ? 'reflective/' : '').json_encode($structure, JSON_THROW_ON_ERROR);
 		$this->layers = $rows;
 		$this->markRepeatingSections();
+		if(!$ordinary) foreach($rows as $i=>$row) {
+			$structure[$i][] = [$this->restricted($i),$row['parent'],$this->section($i)];
+		}
+		$this->structure = $ordinary ? 'color/'.implode('/',$patterns)
+			: ($reflective ? 'reflective/' : '').json_encode($structure, JSON_THROW_ON_ERROR);
 	}
+
+	/** Whether the advanced shader needs an elevation or grade mask for this row. */
+	public function restricted(int $index): bool { return $this->effects[4*$index+3] < .5; }
+
+	/** A repeating section covers a full period. 1 continues the section and 2 closes it. */
+	public function section(int $index): int { return (int)$this->modes[4*$index+3]; }
 
 	/** Blend a complete, contiguous section of sibling beds together at each contact. */
 	private function markRepeatingSections(): void
@@ -739,6 +748,23 @@ final class SurfaceLayers
 		}
 
 		return $rows;
+	}
+
+	/** Pack the matching std140 JourneyPalette in journey-palette.glsl, padding every array entry to a vec4. */
+	public function journeyBlock(array $form, array $origin): string
+	{
+		$f = $this->fieldUniforms;
+		$seed = crc32((string)$form['seed']);
+		$values = [...$origin,$f['uMacroVariation'][0], ...$f['uSlopeBlend'], ...$f['uHeightBlend'],
+			...$f['uSnowline'], ...$f['uMountainZones'], ...$f['uMountainAmounts'],$form['damping']/$form['slopeScale']**2,
+			...$f['uFieldScale'], $seed & 65535,($seed >> 16) & 65535,count($this->layers),0., ...$this->bounce,0.];
+		foreach([[$this->colors,3],[$this->ranges,4],[$this->blends,4],[$this->modes,4],[$this->effects,4],
+			[$this->finishes,2],[$this->patterns,4],[$this->patternColors,3]] as [$array,$components]) {
+			$padded = [];
+			foreach(array_chunk($array,$components) as $row) array_push($padded,...array_pad($row,4,0.));
+			array_push($values,...array_pad($padded,self::LIMIT*4,0.));
+		}
+		return pack('g*',...$values);
 	}
 
 	public function bind(Program $p): void

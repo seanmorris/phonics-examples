@@ -32,12 +32,14 @@ uniform vec2 uShadowReceiverRange;
 uniform float uCraft;
 uniform float uTerrainShadowExtent;
 uniform int uTerrainShadowReady;
+#ifndef JOURNEY_REGIONS
 uniform vec4 uSlopeBlend; // Start and end slopes of cover to rock, then of snow fading off steep ground.
 uniform vec4 uHeightBlend; // Sand start and end above the water, then alpine rock start and end from the snowline.
 uniform vec2 uSnowline; // Mean snowline and the height over which snow becomes complete.
 uniform float uMacroVariation;
 uniform vec2 uMountainZones; // Treeline and the foot of the tundra, in meters from the snowline.
 uniform vec3 uMountainAmounts; // Talus, stain and lichen.
+#endif
 uniform vec3 uSkyAmbient; // The sky's light on level ground over pi, already scaled by the sky-light setting.
 out vec4 color;
 float mountainShadow(vec3 position)
@@ -154,13 +156,20 @@ vec3 dielectricReflection(vec3 diffuse,vec3 normal,vec2 finish,float painted,vec
 }
 #endif
 uniform float uPlayHalf;
-uniform vec3 uPaintColor[5], uMaterialBounce;
+uniform vec3 uPaintColor[5];
+#ifndef JOURNEY_REGIONS
+uniform vec3 uMaterialBounce;
+#endif
 // REGIONS
 void main()
 {
+	#ifndef JOURNEY_REGIONS
 	float alpha = uCraft>.5 ? 1. : regionOpacity(vWorld.xz);
 	if(alpha<=0.) discard;
 	vec3 local = vWorld-uMaterialOrigin;
+	#else
+	const float alpha = 1.;
+	#endif
 	if(uPlayHalf>0. && max(abs(vWorld.x),abs(vWorld.z))>uPlayHalf) discard;
 	vec3 n = normalize(vNormal);
 	vec3 weights = pow(abs(n), vec3(4.0)); weights /= dot(weights, vec3(1.0));
@@ -181,6 +190,13 @@ void main()
 	// shoulder still evaluate its noise and derivatives all the way to the road edge.
 	float roadGradient = fwidth(vPaint1.y);
 	bool pavement = road >= .999999 && roadGradient <= .000001;
+	#ifdef JOURNEY_REGIONS
+	vec3 lightingNormal, bounce;
+	vec2 finish;
+	vec3 albedo = journeySurface(vWorld,n,vRelative,footprint,pavement,lightingNormal,finish,bounce);
+	if(pavement) albedo = uPaintColor[4];
+	#else
+	vec3 bounce = uMaterialBounce;
 	float macro = pavement ? 0. : landVariation(local.xz, footprint) * uMacroVariation;
 	vec3 lightingNormal=n;
 	vec3 albedo=uPaintColor[4];
@@ -189,6 +205,7 @@ void main()
 	if(!pavement) albedo=materialSurface(local,n,vRelative,footprint,uWaterLevel-uMaterialOrigin.y,macro,lightingNormal,finish);
 	#else
 	if(!pavement) albedo=materialSurface(local,n,vRelative,footprint,uWaterLevel-uMaterialOrigin.y,macro,lightingNormal);
+	#endif
 	#endif
 	// Blend material weights, never categorical identifiers: a rock/road boundary must not become snow.
 	float painted = clamp(dot(vPaint0,vec3(1.)) + vPaint1.x + road + vPaint1.z, 0.0, 1.0);
@@ -228,7 +245,7 @@ void main()
 	// Approximate diffuse sky fill follows solar irradiance and fades through twilight.
 	float illumination = uSunIntensity / 20.0 * smoothstep(-0.1,0.05,uSunDirection.y);
 	vec3 ambient = uSkyAmbient * (0.35 + 0.65 * max(0.0,n.y));
-	ambient += uMaterialBounce * illumination * (1.0-max(0.,n.y));
+	ambient += bounce * illumination * (1.0-max(0.,n.y));
 	vec3 lit = albedo * (ambient + direct * facing * shadow) + markingGlow;
 	lit += terrainNightMaterial(albedo, mix(lightingNormal,n,painted), uNightAmbient);
 	lit += albedo / 3.14159265 * terrainSpotLight(vWorld, mix(lightingNormal,n,painted), uWaterLevel, uWaterOptics.z);

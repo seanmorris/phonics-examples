@@ -32,21 +32,80 @@ final class MaterialShader
 		'blocks'=>'blockTilt',
 	];
 
-	public static function assemble(string $source, SurfaceLayers $stack, bool $chart = false, bool $clipmap = false): string
+	/** A joined view uses the same layer evaluators with a separate uniform-block record per region. */
+	public static function assemble(string $source, SurfaceLayers|array $stack, bool $chart = false, bool $clipmap = false): string
 	{
 		$path = dirname(__DIR__).'/shaders/';
+		$stacks = is_array($stack) ? $stack : [$stack];
+		$joined = count($stacks) > 1;
 		$features = "#define MATERIAL_STACK\n";
-		if($stack->reflective && !$chart) $features .= "#define MATERIAL_REFLECTION\n";
-		foreach(array_unique(array_column($stack->layers,'pattern')) as $pattern)
-			$features .= '#define PATTERN_'.strtoupper($pattern)."\n";
-		$patterns = $features.($clipmap ? "#define SURFACE_LAYERS\n" : '').file_get_contents($path.'surface-layers.glsl');
+		if($clipmap) $features .= "#define SURFACE_LAYERS\n";
+		if(!$chart && in_array(true,array_column($stacks,'reflective'),true)) $features .= "#define MATERIAL_REFLECTION\n";
+		$layers = file_get_contents($path.'surface-layers.glsl');
+		$noise = file_get_contents($path.'material-noise.glsl');
+		if(!$joined) {
+			$patterns = self::patternFlags($stacks[0]);
+			return str_replace(['// REGIONS','// LAYERS','// MATERIAL NOISE','// MATERIAL STACK'], [
+				file_get_contents($path.'joined-material.glsl'), $features.implode("\n",$patterns)."\n".$layers,
+				$noise, self::compose($stacks[0],$chart),
+			],$source);
+		}
+
+		// Each evaluator has a constant palette address and only its own pattern branches.
+		// Qualify file-scope GLSL declarations when including the material library more than once.
+		$library = $layers."\n".$noise;
+		preg_match_all('/^(?:const\h+)?\w+\h+(\w+)\h*[(=]/m',$library,$declared);
+		$symbols = array_unique($declared[1]);
+		$functions = $calls = [];
+		foreach($stacks as $i=>$surface) {
+			$prefix = $i === 0 ? '' : 'region'.$i.'_';
+			$patterns = self::patternFlags($surface);
+			$defines = ["#define materialRegion $i",...$patterns];
+			$undefines = ['#undef materialRegion'];
+			foreach(array_keys($patterns) as $flag) $undefines[] = "#undef $flag";
+			if($i > 0) foreach($symbols as $symbol) {
+				$defines[] = "#define $symbol $prefix$symbol";
+				$undefines[] = "#undef $symbol";
+			}
+			$name = $prefix.'materialSurface';
+			$functions[] = implode("\n",$defines)."\n".$library."\n".self::compose($surface,$chart,$name)."\n".implode("\n",$undefines);
+			$args = 'local,normal,relative,footprint,water,macro,regionNormal';
+			if($surface->reflective && !$chart) $args .= ',regionFinish';
+			$calls[] = <<<GLSL
+				if(weights[$i] > 0.) {
+					bounce += weights[$i] * palettes[$i].bounce.rgb;
+					if(!pavement) {
+						vec4 origin = palettes[$i].originAndVariation;
+						vec3 local = world - origin.xyz;
+						float macro = {$prefix}landVariation(local.xz,footprint) * origin.w;
+						float water = uWaterLevel - origin.y;
+						vec3 regionNormal = normal;
+						vec2 regionFinish = vec2(0.);
+						albedo += weights[$i] * $name($args);
+						litNormal += weights[$i] * regionNormal;
+						finish += weights[$i] * regionFinish;
+					}
+				}
+				GLSL;
+		}
+		$functions[] = str_replace('// SAMPLE REGIONS',implode("\n\t",$calls),file_get_contents($path.'journey-surface.glsl'));
+		$features .= '#define JOURNEY_REGIONS '.count($stacks)."\n".file_get_contents($path.'journey-palette.glsl');
 		return str_replace(['// REGIONS','// LAYERS','// MATERIAL NOISE','// MATERIAL STACK'], [
-			file_get_contents($path.'joined-material.glsl'),
-			$patterns, file_get_contents($path.'material-noise.glsl'), self::compose($stack,$chart),
+			'', $features, '', implode("\n",$functions),
 		],$source);
 	}
 
-	private static function compose(SurfaceLayers $stack, bool $chart): string
+	private static function patternFlags(SurfaceLayers $surface): array
+	{
+		$flags = [];
+		foreach(array_unique(array_column($surface->layers,'pattern')) as $pattern) {
+			$flag = 'PATTERN_'.strtoupper($pattern);
+			$flags[$flag] = "#define $flag";
+		}
+		return $flags;
+	}
+
+	private static function compose(SurfaceLayers $stack, bool $chart, string $name = 'materialSurface'): string
 	{
 		$fields = false;
 		$reflective = $stack->reflective && !$chart;
@@ -58,7 +117,7 @@ final class MaterialShader
 		}
 
 		$head =
-			'vec3 materialSurface(vec3 pos,vec3 normal,vec3 relative,float footprint,float water,float macro,inout vec3 litNormal'
+			"vec3 $name(vec3 pos,vec3 normal,vec3 relative,float footprint,float water,float macro,inout vec3 litNormal"
 			. ($reflective ? ',out vec2 finish' : '') . '){';
 
 		if(!$advanced)
@@ -74,33 +133,40 @@ final class MaterialShader
 		$glsl[] = 'vec3 result=vec3(0.), delta=vec3(0.), section=vec3(0.); float sectionSum=0.;';
 		if($reflective) $glsl[] = 'vec2 sectionFinish=vec2(0.);';
 		foreach($stack->layers as $i=>$row) {
-			$glsl[] = "{ const int i=$i; vec4 effect=uLayerEffect[i], mode=uLayerMode[i];";
+			$glsl[] = "{ const int i=$i; vec4 effect=uLayerEffect[i];";
 			$mask = self::MASK[$row['mask']];
 			$glsl[] = 'float edge=1., coverage=1.;';
-			if($i > 0) $glsl[] = 'if(effect.w<.5) materialRange(i,pos,slope,footprint,water,bed,edge,coverage);
-				if(mode.x>=0.) coverage*=masks[int(mode.x)];';
+			if($i > 0 && $stack->restricted($i)) $glsl[] = 'materialRange(i,pos,slope,footprint,water,bed,edge,coverage);';
+			if($i > 0 && $row['parent'] >= 0) $glsl[] = 'coverage*=masks['.$row['parent'].'];';
+			$section = $stack->section($i);
 			$glsl[] = $i === 0 ? 'float amount=1.; masks[i]=1.;'
 				: "coverage*=($mask)*effect.z; float amount=edge*coverage; masks[i]=amount;";
-			if($fields && $row['pattern'] === 'jointed')
-				$glsl[] = 'float pattern=jointedPigment(pos,normal,footprint,uLayerPattern[i],sizes.zw,breakup);';
-			elseif($row['pattern'] !== 'none')
-				$glsl[] = 'float pattern=layerPatternWeight(i,pos,normal,footprint,bed,bedPixel);';
-			else $glsl[] = 'float pattern=0.;';
+			$pattern = match(true) {
+				$fields && $row['pattern'] === 'jointed' => 'jointedPigment(pos,normal,footprint,uLayerPattern[i],sizes.zw,breakup)',
+				$row['pattern'] !== 'none' => 'layerPatternWeight(i,pos,normal,footprint,bed,bedPixel)',
+				default => '0.',
+			};
+			// Hidden pigment has no effect. A relief layer may still need its neighbors' pattern derivatives.
+			if($i && $pattern !== '0.' && $row['channel'] === 'color')
+				$pattern = ($section ? 'edge' : 'amount').'>0. ? '.$pattern.' : 0.';
+			$glsl[] = "float pattern=$pattern;";
 			if($row['channel'] !== 'relief') {
 				$base = $row['field'] === 'shrubs' ? 'mix(uLayerColor[i],uLayerPatternColor[i],.55)' : 'uLayerColor[i]';
 				$tint = self::SHADE[$row['field']];
 				$glsl[] = "vec3 shade=mix($base,uLayerPatternColor[i],pattern)*$tint;";
 				if($i === 0) $glsl[] = 'result=shade;'.($reflective ? 'finish=uLayerFinish[i];' : '');
-				else {
-					$glsl[] = 'if(mode.w==0.) { result=mix(result,shade,amount);';
+				elseif(!$section) {
+					$glsl[] = 'result=mix(result,shade,amount);';
 					if($reflective) $glsl[] = 'finish=mix(finish,uLayerFinish[i],amount);';
-					$glsl[] = '} else { section+=shade*edge; sectionSum+=edge;';
+				} else {
+					$glsl[] = 'section+=shade*edge; sectionSum+=edge;';
 					if($reflective) $glsl[] = 'sectionFinish+=uLayerFinish[i]*edge;';
-					$glsl[] = 'if(mode.w==2.) { if(sectionSum>0.) { result=mix(result,section/sectionSum,coverage);';
-					if($reflective) $glsl[] = 'finish=mix(finish,sectionFinish/sectionSum,coverage);';
-					$glsl[] = '} sectionSum=0.; section=vec3(0.);';
-					if($reflective) $glsl[] = 'sectionFinish=vec2(0.);';
-					$glsl[] = '} }';
+					if($section === 2) {
+						$glsl[] = 'if(sectionSum>0.) { result=mix(result,section/sectionSum,coverage);';
+						if($reflective) $glsl[] = 'finish=mix(finish,sectionFinish/sectionSum,coverage);';
+						$glsl[] = '} sectionSum=0.; section=vec3(0.);';
+						if($reflective) $glsl[] = 'sectionFinish=vec2(0.);';
+					}
 				}
 			}
 			if(!$chart) {
