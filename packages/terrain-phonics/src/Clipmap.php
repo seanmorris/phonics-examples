@@ -16,6 +16,8 @@ final class Clipmap
 	private ?SurfaceLayers $chartLayers = null;
 	private ?Program $boundChartProgram = null;
 	private array $vao = [], $framebuffer = [], $permutation = [], $levels = [], $overview = [];
+	private array $chartDetail = [];
+	private const CHART_DETAIL = -2;
 	private ?Landscape $source = null;
 	private EditIndex $edits;
 	private ?EditIndex $overviewEdits = null;
@@ -33,6 +35,8 @@ final class Clipmap
 	private ?array $fineFocus = null;
 	private int $revision = -1;
 	private array $spans = [];
+	private ?int $growingForkRing = null;
+	private array $forkSpans = [];
 	private array $shadowReceiverRange = [0.,0.];
 	private ?array $dirtyRegion = null;
 
@@ -108,6 +112,7 @@ final class Clipmap
 
 	private function generate(Landscape $land): void
 	{
+		if ($this->chartDetail) $this->chartDetail['origin'] = null;
 		$newRecipe = $this->recipe !== $land->recipe();
 		$this->source = $land;
 		$this->revision = $land->revision();
@@ -291,13 +296,14 @@ final class Clipmap
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + $i, GL_TEXTURE_2D, $id, 0);
 		glDrawBuffers(2, [GL_COLOR_ATTACHMENT0,GL_COLOR_ATTACHMENT0 + 1]);
 
+		$editIndex = $offset !== 0. && $this->overviewEdits ? $this->overviewEdits : $this->edits;
 		foreach(self::wrapped($rects,$n) as [$x,$z,$u,$v,$w,$h]) {
 			glViewport($u, $v, $w, $h);
 			glUniform2i($p->location('uOriginCell'), $x, $z);
 			glUniform2i($p->location('uPixelOrigin'), $u, $v);
 			glDrawArrays(GL_TRIANGLES, 0, 3);
 			$this->texels += $w * $h;
-			$this->paintQueue[] = [$key, $x, $z, $w, $h, $step, $offset, null];
+			if (!$editIndex->isEmpty()) $this->paintQueue[] = [$key, $x, $z, $w, $h, $step, $offset, null];
 		}
 	}
 
@@ -415,7 +421,11 @@ final class Clipmap
 			$visited = true;
 			$k = array_key_first($this->paintQueue);
 			[$key,$x,$z,$w,$h,$step,$offset,$regions] = $this->paintQueue[$k];
-			$level = $key < 0 ? $this->overview : ($this->levels[$key] ?? []);
+			$level = match ($key) {
+				self::CHART_DETAIL => $this->chartDetail,
+				-1 => $this->overview,
+				default => $this->levels[$key] ?? [],
+			};
 
 			if(!$level || ($level['step'] ?? null) !== $step || $level['origin'] === null)
 			{
@@ -562,6 +572,31 @@ final class Clipmap
 		return [$west,$north,$east,$south];
 	}
 
+	/** A cold view of a fork needs enough samples to distinguish its two shoulders. */
+	private function enteringFork(array $roads, Landscape $land, array $eye): bool
+	{
+		if (!$roads) return false;
+		if ($this->source === $land) {
+			$i = min(2,count($this->levels)-1);
+			$near = $this->levels[$i] ?? [];
+			if (isset($near['origin'])) {
+				[$x,$z] = $near['base'];
+				$s = $near['step'];
+				if ($eye[0] >= $x*$s && $eye[0] <= ($x+$this->spans[$i])*$s
+					&& $eye[2] >= $z*$s && $eye[2] <= ($z+$this->spans[$i])*$s) return false;
+			}
+		}
+		foreach ($roads as $road) {
+			$caps = $road['_road']['ink']['forkCaps'] ?? 0;
+			if (!$caps) continue;
+			$points = $road['points'];
+			foreach ([0,array_key_last($points)] as $end=>$i) {
+				if (($caps & (1 << $end)) && hypot($points[$i][0]-$eye[0],$points[$i][2]-$eye[2]) <= 512.) return true;
+			}
+		}
+		return false;
+	}
+
 	/** Refresh only cells newly exposed to the camera or changed by committed edits. */
 	public function update(Landscape $land, Camera $camera, float $quality, ?float $deadline = null, ?array $detailFocus = null): bool
 	{
@@ -572,13 +607,36 @@ final class Clipmap
 		$step = $recipe['spacing'];
 		$spans = self::spans($recipe, $quality, $detailFocus !== null);
 		$roads = $changed ? $land->roads() : $this->roads;
+		$bootstrap = $this->enteringFork($roads,$land,$camera->position);
+		if ($bootstrap) {
+			$this->growingForkRing = count($spans)-2;
+			$this->forkSpans = [];
+			$inner = 0;
+			foreach ($spans as $i=>$width) {
+				// Keep the approach and the point where the two arms diverge in view
+				// from above. Each temporary texture fits in at most 64 by 64 texels.
+				$size = min($width,max(24,min(56,4*(int)ceil(96/($step*(2**$i))))));
+				while ($size/2-self::transition($size) < $inner/4+4) $size += 4;
+				$this->forkSpans[$i] = $inner = $size;
+			}
+		}
+		elseif ($this->source !== $land) $this->growingForkRing = null;
+		elseif ($this->growingForkRing !== null) $this->growingForkRing = min($this->growingForkRing-1,count($spans)-1);
+		// A small, centered footprint at every spacing keeps the branches connected on the
+		// first frame. Grow one ring per update, outside in, preserving its stitched parent.
+		while ($this->growingForkRing !== null && $this->growingForkRing >= 0
+			&& ($spans[$this->growingForkRing] ?? 0) <= ($this->forkSpans[$this->growingForkRing] ?? 0)
+			&& !($detailFocus && $this->growingForkRing < 4)) --$this->growingForkRing;
+		if ($this->growingForkRing !== null && $this->growingForkRing < 0) $this->growingForkRing = null;
+		$compact = $this->growingForkRing ?? -1;
+		for ($i=0; $i<=$compact; $i++) $spans[$i] = min($spans[$i],$this->forkSpans[$i]);
 		if($changed && $roads !== $this->roads) {
 			$this->roadside = null;
 			$this->roadsideWindows = $this->roadsideBounds = [];
 		}
 		$previousFocus = $this->fineFocus;
 		$this->fineFocus = null;
-		if($detailFocus !== null) {
+		if($detailFocus !== null && $compact < 0) {
 			$dx = $detailFocus[0] - $camera->position[0];
 			$dz = $detailFocus[1] - $camera->position[2];
 			$distance = hypot($dx,$dz);
@@ -599,13 +657,14 @@ final class Clipmap
 			$z = 2*(int)floor($focus[1]/(2*$s))-intdiv($span,2);
 			$coverage[$l] = [$x,$z];
 			$origins[$l] = [$x-self::HALO,$z-self::HALO];
-			$pad = $detailFocus !== null && $roads && $l < 4 && isset($spans[$l+1]) ? self::roadsidePad($span,$s) : 0;
+			$pad = $detailFocus !== null && $roads && $l > $compact && $l < 4 && isset($spans[$l+1]) ? self::roadsidePad($span,$s) : 0;
 			$parentSpace = isset($spans[$l+1]) ? 2*($spans[$l+1]/2-self::transition($spans[$l+1])-3) : 0.;
 			// Reserve storage at boarding, so driving into a cut never discards a resident level.
 			// The parent lattice bounds the maximum rectangle even with the fine grid's forward lead.
 			$maxSpan = $pad ? max($span,min($span+2*$pad,(int)ceil(2*$parentSpace)+2)) : $span;
 			$capacities[$l] = self::storageSize($maxSpan);
-			$regular = $pad || ($l === 0 && $detailFocus !== null) ? $span+1+2*self::HALO : $capacities[$l];
+			$regular = $bootstrap || $l <= $compact || $pad || ($l === 0 && $detailFocus !== null)
+				? $span+1+2*self::HALO : $capacities[$l];
 			$sizes[$l] = [$regular,$regular];
 			if(!$pad) continue;
 
@@ -687,7 +746,7 @@ final class Clipmap
 					else self::release($level);
 				}
 				$this->paintQueue = array_values(array_filter($this->paintQueue,
-					static fn($entry) => $entry[0] === -1 || !empty($resident[$entry[0]])));
+					static fn($entry) => $entry[0] < 0 || !empty($resident[$entry[0]])));
 				$this->levels = $resident;
 				$this->spans = $spans;
 				$this->capacities = $capacities;
@@ -697,7 +756,7 @@ final class Clipmap
 
 			$this->refreshOverview($half,$changed,$region);
 
-			$this->pending = false;
+			$this->pending = $compact >= 0;
 			$newLevel = false;
 
 			for($l = $count - 1; $l >= 0; $l--)
@@ -711,7 +770,7 @@ final class Clipmap
 					|| abs($origin[0] - $origins[$l][0]) >= $cells
 					|| abs($origin[1] - $origins[$l][1]) >= $rows;
 
-				if($needsFull && $newLevel)
+				if($needsFull && $newLevel && !$bootstrap)
 				{
 					// Keep the newly centered coarse rings visible while finer rings reload.
 					for($finer = $l; $finer >= 0; $finer--)
@@ -1100,6 +1159,40 @@ final class Clipmap
 		return max(min($zoomedOut, 1.5*$local), min($zoomedOut, $fits));
 	}
 
+	/** Sample a zoomed editor view on its own lattice when the driving camera is elsewhere. */
+	private function editorLevel(array $center, float $span, array $resident, int $cells): array
+	{
+		$n = 128;
+		$step = $this->recipe['spacing'];
+		while (($n-4)*$step < $span) $step *= 2;
+		if ($step >= $this->overview['step']) return [$resident,$cells];
+		if ($cells && $resident['step'] <= $step) {
+			[$x,$z] = $resident['base'];
+			$s = $resident['step'];
+			if ($center[0]-$span/2 >= $x*$s && $center[0]+$span/2 < ($x+$cells-1)*$s
+				&& $center[1]-$span/2 >= $z*$s && $center[1]+$span/2 < ($z+$cells-1)*$s) return [$resident,$cells];
+		}
+		$base = [(int)floor($center[0]/$step)-intdiv($n,2),(int)floor($center[1]/$step)-intdiv($n,2)];
+		$old = $this->chartDetail;
+		if (($old['step'] ?? null) === $step && $old['origin'] === $base) return [$old,$n];
+		$previous = $this->beginElevation();
+		try {
+			glActiveTexture(GL_TEXTURE0);
+			if (!$old) $this->chartDetail = $this->allocate($n);
+			glActiveTexture(GL_TEXTURE0+2);
+			glBindTexture(GL_TEXTURE_2D,$this->roadTexture[0] ?? $this->permutation[0]);
+			glUniform1i($this->generator->location('uRoadAtlas'),2);
+			$refill = ($old['step'] ?? null) !== $step || $old['origin'] === null;
+			if ($refill) $this->paintQueue = array_values(array_filter($this->paintQueue,static fn($entry)=>$entry[0]!==self::CHART_DETAIL));
+			$this->refresh($this->chartDetail,$base,$step,0.,$refill,null,self::CHART_DETAIL,$n);
+			$this->chartDetail['base'] = $base;
+			if ($this->paintQueue) $this->pending = true;
+		} finally {
+			glBindFramebuffer(GL_FRAMEBUFFER,is_array($previous) ? $previous[0] : $previous);
+		}
+		return [$this->chartDetail,$n];
+	}
+
 	/** Return the drawn span for overlays that need the same world-to-chart scale. */
 	public function chart(
 		Program $p
@@ -1162,6 +1255,10 @@ final class Clipmap
 			if($level['step'] * $localSpan >= $span * 1.5) break;
 		}
 
+		if ($fixedSpan !== null && $bearing === 0. && $span < $extent) {
+			[$level,$localSpan] = $this->editorLevel($position,$span,$level,$localSpan);
+			$p->use();
+		}
 		$step = $level['step'];
 		glUniform2f($p->location('uHeading'), $c, $s);
 		glUniform1i($p->location('uCircular'), (int)$circular);
@@ -1215,7 +1312,7 @@ final class Clipmap
 	{
 		$live = array_filter($this->levels, static fn(array $level) => isset($level['origin']));
 		$spacing = $live ? reset($live)['step'] : null;
-		$texels = ($this->overview['n'] ?? 0) ** 2;
+		$texels = ($this->overview['n'] ?? 0) ** 2 + ($this->chartDetail['n'] ?? 0) ** 2;
 
 		foreach($this->levels as $level) $texels += ($level['n'] ?? 0) ** 2;
 		$coverage = $roadside = [];
@@ -1254,6 +1351,7 @@ final class Clipmap
 		foreach($this->roadsideTextures as $texture) glDeleteTextures(1,$texture);
 		foreach($this->levels as $level) self::release($level);
 		self::release($this->overview);
+		self::release($this->chartDetail);
 		if($this->roadTexture) glDeleteTextures(1, $this->roadTexture);
 		glDeleteTextures(1, $this->permutation);
 		glDeleteVertexArrays(1, $this->vao);
